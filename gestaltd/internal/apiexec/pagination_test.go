@@ -39,7 +39,10 @@ func TestDoPaginatedCursor(t *testing.T) {
 	}, PaginationConfig{
 		Style:       PaginationStyleCursor,
 		CursorParam: "cursor",
-		CursorPath:  "next_cursor",
+		Cursor: &ValueSelector{
+			Source: ValueSelectorSourceBody,
+			Path:   "next_cursor",
+		},
 		ResultsPath: "data",
 	})
 	if err != nil {
@@ -126,7 +129,10 @@ func TestDoPaginatedMaxPages(t *testing.T) {
 	}, PaginationConfig{
 		Style:       PaginationStyleCursor,
 		CursorParam: "cursor",
-		CursorPath:  "next_cursor",
+		Cursor: &ValueSelector{
+			Source: ValueSelectorSourceBody,
+			Path:   "next_cursor",
+		},
 		ResultsPath: "items",
 		MaxPages:    maxPages,
 	})
@@ -168,7 +174,10 @@ func TestDoPaginatedEmptyResults(t *testing.T) {
 	}, PaginationConfig{
 		Style:       PaginationStyleCursor,
 		CursorParam: "cursor",
-		CursorPath:  "next_cursor",
+		Cursor: &ValueSelector{
+			Source: ValueSelectorSourceBody,
+			Path:   "next_cursor",
+		},
 		ResultsPath: "data",
 	})
 	if err != nil {
@@ -208,9 +217,12 @@ func TestDoPaginatedCallerProvidedLimit(t *testing.T) {
 		Path:    "/items",
 		Params:  map[string]any{"per_page": callerLimit},
 	}, PaginationConfig{
-		Style:        PaginationStyleCursor,
-		CursorParam:  "cursor",
-		CursorPath:   "next_cursor",
+		Style:       PaginationStyleCursor,
+		CursorParam: "cursor",
+		Cursor: &ValueSelector{
+			Source: ValueSelectorSourceBody,
+			Path:   "next_cursor",
+		},
 		LimitParam:   "per_page",
 		DefaultLimit: 25,
 		ResultsPath:  "data",
@@ -296,7 +308,10 @@ func TestDoPaginatedNumericCursor(t *testing.T) {
 	}, PaginationConfig{
 		Style:       PaginationStyleCursor,
 		CursorParam: "cursor",
-		CursorPath:  "next_cursor",
+		Cursor: &ValueSelector{
+			Source: ValueSelectorSourceBody,
+			Path:   "next_cursor",
+		},
 		ResultsPath: "data",
 	})
 	if err != nil {
@@ -337,9 +352,12 @@ func TestDoPaginatedDoesNotMutateCallerParams(t *testing.T) {
 		Path:    "/items",
 		Params:  callerParams,
 	}, PaginationConfig{
-		Style:        PaginationStyleCursor,
-		CursorParam:  "cursor",
-		CursorPath:   "next_cursor",
+		Style:       PaginationStyleCursor,
+		CursorParam: "cursor",
+		Cursor: &ValueSelector{
+			Source: ValueSelectorSourceBody,
+			Path:   "next_cursor",
+		},
 		LimitParam:   "per_page",
 		DefaultLimit: 25,
 		ResultsPath:  "data",
@@ -392,7 +410,10 @@ func TestDoPaginatedNestedResultsPath(t *testing.T) {
 	}, PaginationConfig{
 		Style:       PaginationStyleCursor,
 		CursorParam: "cursor",
-		CursorPath:  "meta.next",
+		Cursor: &ValueSelector{
+			Source: ValueSelectorSourceBody,
+			Path:   "meta.next",
+		},
 		ResultsPath: "response.items",
 	})
 	if err != nil {

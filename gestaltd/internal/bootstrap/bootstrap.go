@@ -1361,8 +1361,8 @@ func applyProviderResponseMapping(def *provider.Definition, manifestPlugin *plug
 	}
 	if manifestPlugin.ResponseMapping.Pagination != nil {
 		rm.Pagination = &provider.PaginationMappingDef{
-			HasMorePath: manifestPlugin.ResponseMapping.Pagination.HasMorePath,
-			CursorPath:  manifestPlugin.ResponseMapping.Pagination.CursorPath,
+			HasMore: cloneManifestValueSelectorDef(manifestPlugin.ResponseMapping.Pagination.HasMore),
+			Cursor:  cloneManifestValueSelectorDef(manifestPlugin.ResponseMapping.Pagination.Cursor),
 		}
 	}
 	def.ResponseMapping = rm
@@ -1384,7 +1384,7 @@ func applyProviderPagination(def *provider.Definition, manifestPlugin *pluginman
 		op.Pagination = &provider.PaginationDef{
 			Style:        pgn.Style,
 			CursorParam:  pgn.CursorParam,
-			CursorPath:   pgn.CursorPath,
+			Cursor:       cloneManifestValueSelectorDef(pgn.Cursor),
 			LimitParam:   pgn.LimitParam,
 			DefaultLimit: pgn.DefaultLimit,
 			ResultsPath:  pgn.ResultsPath,
@@ -1411,8 +1411,8 @@ func mergedPaginationConfig(base, override *pluginmanifestv1.ManifestPaginationC
 	if override.CursorParam != "" {
 		merged.CursorParam = override.CursorParam
 	}
-	if override.CursorPath != "" {
-		merged.CursorPath = override.CursorPath
+	if override.Cursor != nil {
+		merged.Cursor = cloneManifestValueSelector(override.Cursor)
 	}
 	if override.LimitParam != "" {
 		merged.LimitParam = override.LimitParam
@@ -1427,6 +1427,26 @@ func mergedPaginationConfig(base, override *pluginmanifestv1.ManifestPaginationC
 		merged.MaxPages = override.MaxPages
 	}
 	return &merged
+}
+
+func cloneManifestValueSelector(in *pluginmanifestv1.ManifestValueSelector) *pluginmanifestv1.ManifestValueSelector {
+	if in == nil {
+		return nil
+	}
+	return &pluginmanifestv1.ManifestValueSelector{
+		Source: in.Source,
+		Path:   in.Path,
+	}
+}
+
+func cloneManifestValueSelectorDef(in *pluginmanifestv1.ManifestValueSelector) *provider.ValueSelectorDef {
+	if in == nil {
+		return nil
+	}
+	return &provider.ValueSelectorDef{
+		Source: in.Source,
+		Path:   in.Path,
+	}
 }
 
 func firstProviderIconSVG(providers ...core.Provider) string {

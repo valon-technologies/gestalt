@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/valon-technologies/gestalt/server/internal/apiexec"
 )
 
 func TestResponseMappingExtractsDataAndPagination(t *testing.T) {
@@ -26,9 +28,17 @@ func TestResponseMappingExtractsDataAndPagination(t *testing.T) {
 		Auth:    mockAuth{},
 		BaseURL: srv.URL,
 		ResponseMapping: &ResponseMappingConfig{
-			DataPath:              "results",
-			PaginationHasMorePath: "moreDataAvailable",
-			PaginationCursorPath:  "nextCursor",
+			DataPath: "results",
+			Pagination: &PaginationProjectionConfig{
+				HasMore: &apiexec.ValueSelector{
+					Source: apiexec.ValueSelectorSourceBody,
+					Path:   "moreDataAvailable",
+				},
+				Cursor: &apiexec.ValueSelector{
+					Source: apiexec.ValueSelectorSourceBody,
+					Path:   "nextCursor",
+				},
+			},
 		},
 	}
 	setTestCatalog(b, restCatalogOp("list", http.MethodPost, "/list"))

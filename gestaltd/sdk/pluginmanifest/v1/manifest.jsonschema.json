@@ -421,11 +421,11 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
-            "has_more_path": {
-              "type": "string"
+            "has_more": {
+              "$ref": "#/$defs/value_selector"
             },
-            "cursor_path": {
-              "type": "string"
+            "cursor": {
+              "$ref": "#/$defs/value_selector"
             }
           }
         }
@@ -669,6 +669,27 @@
         }
       }
     },
+    "value_selector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "path"
+      ],
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": [
+            "body",
+            "header"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
     "pagination_config": {
       "type": "object",
       "additionalProperties": false,
@@ -687,8 +708,8 @@
         "cursor_param": {
           "type": "string"
         },
-        "cursor_path": {
-          "type": "string"
+        "cursor": {
+          "$ref": "#/$defs/value_selector"
         },
         "limit_param": {
           "type": "string"

@@ -315,7 +315,9 @@ provider:
   pagination:
     style: cursor
     cursor_param: cursor
-    cursor_path: nextCursor
+    cursor:
+      source: header
+      path: X-After-Cursor
     results_path: results
     max_pages: 10
   allowed_operations:
@@ -349,7 +351,7 @@ provider:
 	if manifest.Entrypoints.Provider != nil {
 		t.Fatalf("expected declarative/spec provider to omit provider entrypoint, got %+v", manifest.Entrypoints.Provider)
 	}
-	if pgn := manifest.Plugin.Pagination; pgn == nil || pgn.Style != "cursor" || pgn.CursorPath != "nextCursor" || pgn.MaxPages != 10 {
+	if pgn := manifest.Plugin.Pagination; pgn == nil || pgn.Style != "cursor" || pgn.Cursor == nil || pgn.Cursor.Source != "header" || pgn.Cursor.Path != "X-After-Cursor" || pgn.MaxPages != 10 {
 		t.Fatalf("unexpected pagination config: %+v", manifest.Plugin.Pagination)
 	}
 	if op := manifest.Plugin.AllowedOperations["items.list"]; op == nil || !op.Paginate {

@@ -97,14 +97,19 @@ type AuthMappingDef struct {
 	Headers map[string]string `yaml:"headers" json:"headers"`
 }
 
+type ValueSelectorDef struct {
+	Source string `yaml:"source" json:"source"`
+	Path   string `yaml:"path" json:"path"`
+}
+
 type PaginationDef struct {
-	Style        string `yaml:"style" json:"style"`
-	CursorParam  string `yaml:"cursor_param" json:"cursor_param"`
-	CursorPath   string `yaml:"cursor_path" json:"cursor_path"`
-	LimitParam   string `yaml:"limit_param" json:"limit_param"`
-	DefaultLimit int    `yaml:"default_limit" json:"default_limit"`
-	ResultsPath  string `yaml:"results_path" json:"results_path"`
-	MaxPages     int    `yaml:"max_pages" json:"max_pages"`
+	Style        string            `yaml:"style" json:"style"`
+	CursorParam  string            `yaml:"cursor_param" json:"cursor_param"`
+	Cursor       *ValueSelectorDef `yaml:"cursor" json:"cursor,omitempty"`
+	LimitParam   string            `yaml:"limit_param" json:"limit_param"`
+	DefaultLimit int               `yaml:"default_limit" json:"default_limit"`
+	ResultsPath  string            `yaml:"results_path" json:"results_path"`
+	MaxPages     int               `yaml:"max_pages" json:"max_pages"`
 }
 
 type CredentialFieldDef struct {
@@ -120,8 +125,8 @@ type ResponseMappingDef struct {
 }
 
 type PaginationMappingDef struct {
-	HasMorePath string `yaml:"has_more_path" json:"has_more_path"`
-	CursorPath  string `yaml:"cursor_path" json:"cursor_path"`
+	HasMore *ValueSelectorDef `yaml:"has_more" json:"has_more,omitempty"`
+	Cursor  *ValueSelectorDef `yaml:"cursor" json:"cursor,omitempty"`
 }
 
 type ParameterDef struct {

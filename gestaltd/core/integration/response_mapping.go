@@ -9,9 +9,13 @@ import (
 )
 
 type ResponseMappingConfig struct {
-	DataPath              string
-	PaginationHasMorePath string
-	PaginationCursorPath  string
+	DataPath   string
+	Pagination *PaginationProjectionConfig
+}
+
+type PaginationProjectionConfig struct {
+	HasMore *apiexec.ValueSelector
+	Cursor  *apiexec.ValueSelector
 }
 
 func applyResponseMapping(result *core.OperationResult, cfg *ResponseMappingConfig) *core.OperationResult {
@@ -34,17 +38,13 @@ func applyResponseMapping(result *core.OperationResult, cfg *ResponseMappingConf
 		}
 	}
 
-	if cfg.PaginationHasMorePath != "" || cfg.PaginationCursorPath != "" {
+	if cfg.Pagination != nil {
 		pgn := make(map[string]any)
-		if cfg.PaginationHasMorePath != "" {
-			if v, ok := apiexec.ExtractJSONPath(raw, cfg.PaginationHasMorePath); ok {
-				pgn["has_more"] = v
-			}
+		if v, ok := apiexec.SelectValue(result, raw, cfg.Pagination.HasMore); ok {
+			pgn["has_more"] = v
 		}
-		if cfg.PaginationCursorPath != "" {
-			if v, ok := apiexec.ExtractJSONPath(raw, cfg.PaginationCursorPath); ok {
-				pgn["cursor"] = v
-			}
+		if v, ok := apiexec.SelectValue(result, raw, cfg.Pagination.Cursor); ok {
+			pgn["cursor"] = v
 		}
 		if len(pgn) > 0 {
 			output["pagination"] = pgn
