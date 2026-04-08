@@ -1,28 +1,67 @@
 # Getting Started
 
+This tutorial walks you through running a Gestalt server, adding a plugin, and invoking an operation. It takes about five minutes.
+
 ## Prerequisites
 
-`gestaltd` and `gestalt` have been installed via the [installation instructions](/install).
+Install `gestaltd` (the server) and `gestalt` (the client CLI) using the [installation instructions](/install).
 
-## Run a local server
+## Start the server
 
-Start a local Gestalt server with a single command:
+Run `gestaltd` with no arguments:
 
 ```sh
 gestaltd
 ```
 
-When no configuration file is provided, `gestaltd` generates a default local config and starts immediately. The server is now running at `http://localhost:8080`.
+When no config file exists, `gestaltd` generates one at `~/.gestaltd/config.yaml` and starts immediately. The generated config uses SQLite for storage, no authentication, and listens on port 8080.
 
-## Add a plugin
+You now have a Gestalt server running at `http://localhost:8080`.
 
-Create a file called `config.yaml` with a plugin definition. This example points at a local provider package checked out next to your Gestalt repo:
+## Write a config file
+
+The generated config is fine for a first look, but let's write one explicitly so you can see what is going on. Create a file called `config.yaml`:
 
 ```yaml
 server:
   port: 8080
   base_url: http://localhost:8080
   encryption_key: dev-only-change-me
+
+auth:
+  provider: none
+
+datastore:
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+      version: 0.0.1-alpha.1
+  config:
+    path: ./gestalt.db
+
+plugins: {}
+```
+
+A few things to note. `auth.provider: none` disables platform login, which is what you want for local development. `datastore.provider` points at a first-party SQLite provider published to `github.com/valon-technologies/gestalt-providers/`. The `plugins` map is empty for now.
+
+Start the server with your config:
+
+```sh
+gestaltd serve --config ./config.yaml
+```
+
+## Add a plugin
+
+Plugins are where the interesting things happen. Each entry under `plugins:` registers an integration backed by a provider package. Let's add the first-party `httpbin` provider, which wraps httpbin.org and is useful for testing:
+
+```yaml
+server:
+  port: 8080
+  base_url: http://localhost:8080
+  encryption_key: dev-only-change-me
+
+auth:
+  provider: none
 
 datastore:
   provider:
@@ -33,58 +72,66 @@ datastore:
     path: ./gestalt.db
 
 plugins:
-  example:
-    display_name: Example
+  httpbin:
+    display_name: HTTPBin
     provider:
       source:
-        path: ../my-provider/plugin.yaml
-    config:
-      greeting: Hello from example plugin
-    mcp:
-      enabled: true
-      tool_prefix: example_
+        ref: github.com/valon-technologies/gestalt-providers/plugins/httpbin
+        version: 0.0.1-alpha.1
 ```
 
-Start the server with your config:
+The `provider.source.ref` tells Gestalt where to fetch the plugin package. On first startup, Gestalt downloads the package and caches it locally.
 
-```sh
-gestaltd serve --config ./config.yaml
-```
+Restart the server so it picks up the new config.
 
 ## Connect the CLI
 
-Point the `gestalt` client at your running server:
+In a separate terminal, point the `gestalt` client at your running server:
 
 ```sh
 gestalt init
 ```
 
-The wizard prompts for the server URL and saves it to your local config. It can also create a project-local `.gestalt/config.json` so a specific checkout keeps using the same server without changing your machine-wide default. You can also set the URL directly:
+The wizard prompts for the server URL and saves it to your local config. You can skip the wizard and set the URL directly:
 
 ```sh
 gestalt config set url http://localhost:8080
 ```
 
-## Call an integration
-
-Once the server is running and the CLI is configured, you can invoke the provider through any surface.
-
-**Client CLI**
+Verify the connection by listing available integrations:
 
 ```sh
-gestalt invoke example status
+gestalt integrations list
 ```
 
-**HTTP API**
+You should see `httpbin` in the output.
+
+## Invoke an operation
+
+List the operations available on the httpbin integration:
 
 ```sh
-curl http://localhost:8080/api/v1/example/status
+gestalt invoke httpbin
 ```
 
-**Web UI**
+Then invoke one:
 
-Open `http://localhost:8080` in a browser to explore and invoke integrations interactively.
+```sh
+gestalt invoke httpbin get_headers
+```
+
+The same operation is available over HTTP. Here is the curl equivalent:
+
+```sh
+curl http://localhost:8080/api/v1/httpbin/get_headers
+```
+
+Both return the same response from the provider.
 
 ## Next steps
 
-Read [Configuration](/configuration) for the full config model, environment expansion, and locked startup. If you want to build your own executable provider package, see [Plugins](/plugins).
+You have a running Gestalt server with a plugin, and you know how to invoke operations from the CLI and over HTTP. From here:
+
+- [Configuration](/configuration) covers the full config model, environment variable expansion, and secret references.
+- [Plugins](/plugins) explains how to write your own provider package.
+- [Deploy](/deploy) walks through production deployment with Helm and Docker.

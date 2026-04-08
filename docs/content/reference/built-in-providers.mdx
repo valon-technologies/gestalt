@@ -1,10 +1,12 @@
-# Built-in Providers
+# First-Party Providers
 
-`gestaltd` still includes a small set of host-native providers for secrets and telemetry. Auth providers, datastore providers, and integration plugins are no longer compiled into the server binary; they are published separately and loaded through the provider runtime.
+Gestalt does not compile auth or datastore providers into the `gestaltd` binary. Both are loaded at startup as external plugins through the same plugin runtime that powers integration plugins. The first-party implementations are published from [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers) and maintained alongside the server.
 
-## First-Party Auth Providers
+Secrets, telemetry, and audit remain built into the binary because they must be available before the plugin runtime starts.
 
-These ship from [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers) and are referenced via `auth.provider.source.ref`.
+## Auth Providers
+
+Auth providers handle platform login. They are configured under `auth.provider` in your config file, using the `provider:` key to reference the plugin source.
 
 | Name | Purpose |
 | --- | --- |
@@ -12,11 +14,22 @@ These ship from [`valon-technologies/gestalt-providers`](https://github.com/valo
 | `google` | Google OAuth 2.0 platform login. Supports `allowed_domains` restriction. |
 | `oidc` | Generic OpenID Connect. Works with Okta, Auth0, Azure AD, Keycloak, and others. |
 
-To disable platform auth entirely, omit the `auth` block or set `auth.provider: none`. That is a host-side special case rather than a published auth provider package.
+```yaml
+auth:
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/auth-google
+      version: 1.0.0
+  config:
+    allowed_domains:
+      - example.com
+```
 
-## First-Party Datastore Providers
+To disable platform auth entirely, omit the `auth` block or set `auth.provider: none`.
 
-These also ship from [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers) and are referenced via `datastore.provider.source.ref`.
+## Datastore Providers
+
+Datastore providers back the persistent state layer. They are configured under `datastore.provider` in your config file, also using the `provider:` key.
 
 | Name | Purpose |
 | --- | --- |
@@ -29,7 +42,19 @@ These also ship from [`valon-technologies/gestalt-providers`](https://github.com
 | `firestore` | Firestore-backed datastore. |
 | `sqlserver` | SQL Server-backed datastore. |
 
-## Secret Managers
+```yaml
+datastore:
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/datastore-postgres
+      version: 1.0.0
+  config:
+    dsn: ${POSTGRES_DSN}
+```
+
+## Secret Managers (built-in)
+
+Secret managers are compiled into the binary. They resolve `secret://` references and `${VAR}` expansions during bootstrap, before the plugin runtime is available.
 
 | Name | Purpose |
 | --- | --- |
@@ -40,7 +65,9 @@ These also ship from [`valon-technologies/gestalt-providers`](https://github.com
 | `vault` | Resolves secrets from HashiCorp Vault (KV v2). |
 | `azure_key_vault` | Resolves secrets from Azure Key Vault. |
 
-## Telemetry Providers
+## Telemetry Providers (built-in)
+
+Telemetry providers are compiled into the binary.
 
 | Name | Purpose |
 | --- | --- |
@@ -48,6 +75,19 @@ These also ship from [`valon-technologies/gestalt-providers`](https://github.com
 | `otlp` | Exports traces, metrics, and logs via OpenTelemetry Protocol. |
 | `noop` | Disables all telemetry collection. |
 
-## Named Providers
+## Integration Plugins
 
-No named providers are built into the binary. Integration plugins like BigQuery, Jira, Slack, and others are published separately from [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers) and referenced in your config via `plugins.<name>.provider.source.ref`.
+Integration plugins (BigQuery, Jira, Slack, and others) are published separately from [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers). They use the `provider:` key under each named entry in the `plugins` map:
+
+```yaml
+plugins:
+  jira:
+    provider:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/jira
+        version: 1.0.0
+```
+
+## Community and Custom Providers
+
+Third-party auth providers, datastore providers, and integration plugins use the same plugin model as the first-party packages. Package your implementation as a plugin manifest with the appropriate `kinds` (`auth`, `datastore`, or `plugin`), publish it to a Git-accessible source, and reference it in your config the same way you would reference any first-party provider.
