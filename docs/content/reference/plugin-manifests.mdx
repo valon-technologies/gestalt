@@ -4,106 +4,285 @@ import { Tabs } from 'nextra/components'
 
 Gestalt plugins and release archives are described by a manifest file: `plugin.yaml`, `plugin.yml`, or `plugin.json`. YAML is the easiest format to author by hand.
 
-## Top-level shape
+## Manifest Kinds
 
-A manifest defines exactly one of `provider` or `webui`.
+Every manifest defines exactly one of four kinds, determined by which metadata block is present at the top level:
+
+| Kind | Top-level key | Purpose |
+| --- | --- | --- |
+| `plugin` | `plugin` | Integration plugin (REST, OpenAPI, GraphQL, MCP, or executable). |
+| `auth` | `auth` | Platform auth provider (Google, OIDC, local, or custom). |
+| `datastore` | `datastore` | Persistence backend (Postgres, SQLite, DynamoDB, or custom). |
+| `webui` | `webui` | Static UI package served by `gestaltd`. |
+
+The JSON schema enforces `oneOf` across these four keys: a manifest must include exactly one.
 
 ## Common Fields
 
-| Field | Purpose |
+These fields appear at the top level of every manifest regardless of kind.
+
+| Field | Type | Required | Purpose |
+| --- | --- | --- | --- |
+| `source` | string | yes | Canonical plugin source identifier. Use `github.com/<org>/<repo>/<path>`. The final path segment is the plugin name; preceding segments are used for release tags and source resolution. |
+| `version` | string | yes | Semver version. Pre-release suffixes like `-alpha.1` are allowed. |
+| `kinds` | string[] | no | Explicit kind list. When omitted, the kind is inferred from which metadata block is present. |
+| `display_name` | string | no | Human-readable label shown in the UI. |
+| `description` | string | no | Human-readable description. |
+| `icon_file` | string | no | Relative path to an SVG icon bundled with the package. |
+| `artifacts` | Artifact[] | no | Packaged executable artifacts keyed by platform. Omit for declarative-only plugin packages or source manifests used during local development. |
+| `entrypoints` | Entrypoints | no | Executable entrypoints for each kind the manifest provides. |
+
+## Entrypoints
+
+The `entrypoints` block declares executable binaries. Each key corresponds to a kind.
+
+| Key | Kind | Purpose |
+| --- | --- | --- |
+| `plugin` | plugin | Executable entrypoint for an integration plugin. |
+| `auth` | auth | Executable entrypoint for an auth provider. |
+| `datastore` | datastore | Executable entrypoint for a datastore provider. |
+
+Note that the JSON/YAML tag for the integration-plugin entrypoint is `plugin`, not `provider`. Each entrypoint has two fields:
+
+| Field | Type | Required | Purpose |
+| --- | --- | --- | --- |
+| `artifact_path` | string | yes | Path to the binary inside the package. |
+| `args` | string[] | no | Additional arguments passed to the binary at startup. |
+
+```yaml
+entrypoints:
+  plugin:
+    artifact_path: artifacts/linux/amd64/plugin
+    args: ["--verbose"]
+```
+
+## Plugin Metadata
+
+The `plugin` block describes an integration plugin. It supports declarative REST operations, spec-loaded surfaces (OpenAPI, GraphQL, MCP), executable code, or any combination.
+
+### Core Fields
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `config_schema_path` | string | Path to a JSON/YAML schema that validates `plugins.<name>.config` in the server config. |
+| `auth` | ProviderAuth | Default connection auth when no `connections` map is defined. |
+| `connection_mode` | string | Default connection mode when no `connections` map is defined. One of `none`, `user`, `identity`, `either`. |
+| `mcp` | bool | When true, the plugin exposes its operations as MCP tools. |
+| `base_url` | string | Base URL for declarative REST operations. |
+| `headers` | map[string]string | Static headers injected into every outbound request. |
+| `operations` | ProviderOperation[] | Declarative REST operations. Presence of this field makes the plugin declarative. |
+| `default_connection` | string | Name of the connection to use when none is specified. |
+
+### Connections
+
+The `connections` map defines named connection profiles. Each connection has a `mode` and an `auth` block.
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `mode` | string | One of `none`, `user`, `identity`, `either`. |
+| `auth` | ProviderAuth | Authentication configuration for this connection. |
+
+Only the `default` connection may define `connection_params` and `post_connect_discovery`.
+
+### Surfaces
+
+Surfaces load operation catalogs from external specifications. The following top-level `plugin` fields configure surfaces:
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `openapi` | string | Path to a bundled OpenAPI document. |
+| `openapi_connection` | string | Connection name used for OpenAPI calls. |
+| `graphql_url` | string | URL of the upstream GraphQL endpoint. |
+| `graphql_connection` | string | Connection name used for GraphQL calls. |
+| `mcp_url` | string | URL of the upstream MCP server. |
+| `mcp_connection` | string | Connection name used for MCP calls. |
+
+The `rest`/`openapi`/`graphql` surface types are mutually exclusive (use `openapi` or `graphql_url`, not both), but `mcp_url` may be combined with any of them.
+
+### Auth Types
+
+The `auth.type` field on a connection accepts these values:
+
+| Type | Purpose |
 | --- | --- |
-| `source` | Canonical plugin source identifier. Required. Use `github.com/<org>/<repo>/<path-after-repo>`. The final path segment remains the plugin name; any preceding segments are preserved for release tags and source resolution. |
-| `version` | Plugin version. Required. |
-| `display_name` | Human-readable label. |
-| `description` | Human-readable description. |
-| `icon_file` | Relative path to an SVG icon bundled with the package. |
-| `provider` | Provider metadata and optional declarative surfaces. |
-| `webui` | UI metadata for UI-only packages. |
-| `artifacts` | Packaged executable artifacts keyed by platform. Linux artifacts may also set `libc` to distinguish `glibc` and `musl` builds. Source manifests used for local development or `plugin release` may omit them for pure executable providers. |
+| `oauth2` | Standard OAuth 2.0. Requires `authorization_url` and `token_url`. |
+| `mcp_oauth` | MCP-native OAuth. The plugin must also declare `mcp_url` (either directly or via a surface). A manifest that uses `mcp_oauth` without an MCP surface fails validation. |
+| `bearer` | Static bearer token. Define `credentials` to prompt the user for the token value. |
+| `manual` | Custom credential fields. Define `credentials` to describe each field. |
+| `none` | No authentication. |
 
-## Basic manifest
+### Pagination
 
-This example is a declarative-only provider package. It does not need a binary.
+Plugin-level pagination configuration applies to all operations by default. Individual operations can override this through `allowed_operations`.
 
-<Tabs items={['YAML', 'JSON']}>
-  <Tabs.Tab>
-    ```yaml
-    source: github.com/acme/plugins/support-api
-    version: 0.0.1-alpha.1
-    display_name: Support API
-    description: Small ticket API
-    icon_file: assets/icon.svg
-    provider:
-      connections:
-        default:
-          auth:
-            type: bearer
-            credentials:
-              - name: token
-                label: API Token
-      surfaces:
-        rest:
-          base_url: https://api.support.example.com
-          operations:
-            - name: list_tickets
-              description: Return open tickets
-              method: GET
-              path: /tickets
-            - name: get_ticket
-              description: Return one ticket
-              method: GET
-              path: /tickets/{ticket_id}
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```json
-    {
-      "source": "github.com/acme/plugins/support-api",
-      "version": "0.0.1-alpha.1",
-      "display_name": "Support API",
-      "description": "Small ticket API",
-      "icon_file": "assets/icon.svg",
-      "provider": {
-        "connections": {
-          "default": {
-            "auth": {
-              "type": "bearer",
-              "credentials": [
-                { "name": "token", "label": "API Token" }
-              ]
-            }
-          }
-        },
-        "surfaces": {
-          "rest": {
-            "base_url": "https://api.support.example.com",
-            "operations": [
-              {
-                "name": "list_tickets",
-                "description": "Return open tickets",
-                "method": "GET",
-                "path": "/tickets"
-              },
-              {
-                "name": "get_ticket",
-                "description": "Return one ticket",
-                "method": "GET",
-                "path": "/tickets/{ticket_id}"
-              }
-            ]
-          }
-        }
-      }
-    }
-    ```
-  </Tabs.Tab>
-</Tabs>
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `style` | string | Required. One of `cursor`, `offset`, `page`. |
+| `cursor_param` | string | Query parameter name for the cursor value. |
+| `cursor_path` | string | JSON path to the next-cursor value in the response. |
+| `limit_param` | string | Query parameter name for page size. |
+| `default_limit` | int | Default page size when the caller does not specify one. |
+| `results_path` | string | JSON path to the array of results in the response. |
+| `max_pages` | int | Maximum number of pages to fetch in a single paginated request. |
 
-Use this style when the provider can be described entirely in YAML, requires no custom code, and you want a reusable package that several configs can import.
+```yaml
+plugin:
+  pagination:
+    style: cursor
+    cursor_param: starting_after
+    cursor_path: next_cursor
+    limit_param: limit
+    default_limit: 100
+    max_pages: 10
+```
 
-## Advanced manifest
+### Allowed Operations
 
-This example shows a provider package with a config schema, an executable entrypoint, OpenAPI and upstream MCP surfaces, managed parameters, allowed operation aliases, and multiple connections.
+The `allowed_operations` map selectively exposes and customizes operations from a spec-loaded surface. Keys are the original operation IDs from the OpenAPI/GraphQL/MCP spec.
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `alias` | string | Rename the operation for Gestalt consumers. |
+| `description` | string | Override the operation description. |
+| `paginate` | bool | Enable automatic pagination for this operation. Uses the plugin-level pagination config. |
+| `pagination` | ManifestPaginationConfig | Per-operation pagination config that overrides the plugin-level default. |
+
+```yaml
+plugin:
+  allowed_operations:
+    tickets.list:
+      alias: list_tickets
+      paginate: true
+    tickets.get:
+      alias: get_ticket
+```
+
+### Response Mapping
+
+The `response_mapping` block extracts a data array and pagination metadata from API responses that wrap results in an envelope.
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `data_path` | string | Required. JSON path to the results array. |
+| `pagination.has_more_path` | string | JSON path to a boolean indicating more pages exist. |
+| `pagination.cursor_path` | string | JSON path to the next-page cursor value. |
+
+### Managed Parameters
+
+Managed parameters inject fixed values into every request, removing them from the caller-facing operation signature.
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `in` | string | Required. One of `header`, `path`. |
+| `name` | string | Required. Parameter name. |
+| `value` | string | Required. Fixed value. |
+
+### Post-Connect Discovery
+
+The `post_connect_discovery` block performs an authenticated lookup immediately after a connection is established. Gestalt calls the configured URL with the new access token, parses the response, and turns each item into a candidate connection.
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `url` | string | Required. Endpoint to call after connect. |
+| `id_path` | string | JSON path to the item identifier. |
+| `name_path` | string | JSON path to the item display name. |
+| `metadata_mapping` | map[string]string | Maps connection parameter names to JSON paths in each discovered item. |
+
+If discovery returns exactly one item, Gestalt merges its metadata into the stored connection automatically. Multiple items prompt the user to choose. Zero items fails the connection.
+
+### Connection Params
+
+The `connection_params` map on the `default` connection defines parameters that are populated during or after connect rather than from user input.
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `required` | bool | Whether the parameter must be present for a valid connection. |
+| `description` | string | Describes the parameter to the user. |
+| `from` | string | Set to `discovery` to populate the value from post-connect discovery metadata. |
+
+## Auth Provider Metadata
+
+The `auth` block describes a platform auth provider package.
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `config_schema_path` | string | Path to a JSON/YAML schema that validates the `auth.config` block in the server config. |
+
+Auth providers require an executable entrypoint. Declare it under `entrypoints.auth`.
+
+```yaml
+source: github.com/valon-technologies/gestalt-providers/auth-google
+version: 1.0.0
+display_name: Google Auth
+auth:
+  config_schema_path: schemas/config.schema.json
+entrypoints:
+  auth:
+    artifact_path: artifacts/linux/amd64/auth
+artifacts:
+  - os: linux
+    arch: amd64
+    path: artifacts/linux/amd64/auth
+```
+
+## Datastore Provider Metadata
+
+The `datastore` block describes a persistence backend package.
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `config_schema_path` | string | Path to a JSON/YAML schema that validates the `datastore.config` block in the server config. |
+
+Datastore providers require an executable entrypoint. Declare it under `entrypoints.datastore`.
+
+```yaml
+source: github.com/valon-technologies/gestalt-providers/datastore-postgres
+version: 1.0.0
+display_name: PostgreSQL
+datastore:
+  config_schema_path: schemas/config.schema.json
+entrypoints:
+  datastore:
+    artifact_path: artifacts/linux/amd64/datastore
+artifacts:
+  - os: linux
+    arch: amd64
+    path: artifacts/linux/amd64/datastore
+```
+
+## Web UI Metadata
+
+The `webui` block describes a static UI package.
+
+| Field | Type | Required | Purpose |
+| --- | --- | --- | --- |
+| `asset_root` | string | yes | Directory containing the built static assets. |
+
+```yaml
+source: github.com/acme/plugins/gestalt-ui
+version: 1.0.0
+display_name: Custom UI
+webui:
+  asset_root: ui/out
+```
+
+## Artifacts
+
+The `artifacts` array lists platform-specific binaries included in the package.
+
+| Field | Type | Required | Purpose |
+| --- | --- | --- | --- |
+| `os` | string | yes | Target operating system (e.g. `linux`, `darwin`). |
+| `arch` | string | yes | Target architecture (e.g. `amd64`, `arm64`). |
+| `libc` | string | no | C library variant. Either `glibc` or `musl`. Only relevant for Linux. |
+| `path` | string | yes | Path to the binary inside the package. |
+| `sha256` | string | no | SHA-256 hex digest for integrity verification. |
+
+Declarative-only plugin packages do not require `artifacts`. Pure executable source manifests used with `plugins.*.plugin.source.path` or `gestaltd plugin release` may omit them.
+
+## Full Example
+
+This manifest shows an integration plugin with an executable entrypoint, multiple connections, OpenAPI and MCP surfaces, pagination, allowed operations, and managed parameters.
 
 <Tabs items={['YAML', 'JSON']}>
   <Tabs.Tab>
@@ -113,10 +292,8 @@ This example shows a provider package with a config schema, an executable entryp
     display_name: Support
     description: Tickets, knowledge base, and MCP workspace tools
     icon_file: assets/icon.svg
-    provider:
+    plugin:
       config_schema_path: schemas/config.schema.yaml
-      exec:
-        artifact_path: artifacts/linux/amd64/provider
       headers:
         X-App-Version: "2026-04-01"
       managed_parameters:
@@ -135,36 +312,45 @@ This example shows a provider package with a config schema, an executable entryp
             scopes:
               - tickets.read
               - tickets.write
-          params:
-            workspace_id:
-              required: true
-              from: discovery
-          discovery:
-            url: https://api.support.example.com/workspaces
-            id_path: id
-            name_path: name
-            metadata:
-              workspace_id: id
         mcp:
           mode: user
           auth:
             type: mcp_oauth
-      surfaces:
-        openapi:
-          document: openapi.yaml
-        mcp:
-          url: https://mcp.support.example.com/mcp
-          connection: mcp
+      connection_params:
+        workspace_id:
+          required: true
+          from: discovery
+      post_connect_discovery:
+        url: https://api.support.example.com/workspaces
+        id_path: id
+        name_path: name
+        metadata_mapping:
+          workspace_id: id
+      openapi: openapi.yaml
+      openapi_connection: default
+      mcp_url: https://mcp.support.example.com/mcp
+      mcp_connection: mcp
+      pagination:
+        style: cursor
+        cursor_param: starting_after
+        cursor_path: next_cursor
+        limit_param: limit
+        default_limit: 50
+        max_pages: 5
       allowed_operations:
         tickets.list:
           alias: list_tickets
+          paginate: true
         tickets.get:
           alias: get_ticket
+    entrypoints:
+      plugin:
+        artifact_path: artifacts/linux/amd64/plugin
     artifacts:
       - os: linux
         arch: amd64
         libc: glibc
-        path: artifacts/linux/amd64/provider
+        path: artifacts/linux/amd64/plugin
         sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     ```
   </Tabs.Tab>
@@ -176,11 +362,8 @@ This example shows a provider package with a config schema, an executable entryp
       "display_name": "Support",
       "description": "Tickets, knowledge base, and MCP workspace tools",
       "icon_file": "assets/icon.svg",
-      "provider": {
+      "plugin": {
         "config_schema_path": "schemas/config.schema.yaml",
-        "exec": {
-          "artifact_path": "artifacts/linux/amd64/provider"
-        },
         "headers": {
           "X-App-Version": "2026-04-01"
         },
@@ -197,15 +380,6 @@ This example shows a provider package with a config schema, an executable entryp
               "client_id": "${SUPPORT_CLIENT_ID}",
               "client_secret": "${SUPPORT_CLIENT_SECRET}",
               "scopes": ["tickets.read", "tickets.write"]
-            },
-            "params": {
-              "workspace_id": { "required": true, "from": "discovery" }
-            },
-            "discovery": {
-              "url": "https://api.support.example.com/workspaces",
-              "id_path": "id",
-              "name_path": "name",
-              "metadata": { "workspace_id": "id" }
             }
           },
           "mcp": {
@@ -213,143 +387,88 @@ This example shows a provider package with a config schema, an executable entryp
             "auth": { "type": "mcp_oauth" }
           }
         },
-        "surfaces": {
-          "openapi": { "document": "openapi.yaml" },
-          "mcp": {
-            "url": "https://mcp.support.example.com/mcp",
-            "connection": "mcp"
-          }
+        "connection_params": {
+          "workspace_id": { "required": true, "from": "discovery" }
+        },
+        "post_connect_discovery": {
+          "url": "https://api.support.example.com/workspaces",
+          "id_path": "id",
+          "name_path": "name",
+          "metadata_mapping": { "workspace_id": "id" }
+        },
+        "openapi": "openapi.yaml",
+        "openapi_connection": "default",
+        "mcp_url": "https://mcp.support.example.com/mcp",
+        "mcp_connection": "mcp",
+        "pagination": {
+          "style": "cursor",
+          "cursor_param": "starting_after",
+          "cursor_path": "next_cursor",
+          "limit_param": "limit",
+          "default_limit": 50,
+          "max_pages": 5
         },
         "allowed_operations": {
-          "tickets.list": { "alias": "list_tickets" },
+          "tickets.list": { "alias": "list_tickets", "paginate": true },
           "tickets.get": { "alias": "get_ticket" }
         }
       },
-        "artifacts": [
-          {
-            "os": "linux",
-            "arch": "amd64",
-            "libc": "glibc",
-            "path": "artifacts/linux/amd64/provider",
-            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-          }
+      "entrypoints": {
+        "plugin": {
+          "artifact_path": "artifacts/linux/amd64/plugin"
+        }
+      },
+      "artifacts": [
+        {
+          "os": "linux",
+          "arch": "amd64",
+          "libc": "glibc",
+          "path": "artifacts/linux/amd64/plugin",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
       ]
     }
     ```
   </Tabs.Tab>
 </Tabs>
 
-Use this style when the provider includes executable logic, should ship its own connection model as a reusable package, or combines custom code with spec-backed operations.
+## Declarative-Only Example
 
-When an executable provider defines helper operations in Go, Gestalt
-materializes that executable catalog automatically during local source-plugin
-execution and package/release. See [Writing a Plugin](/plugins/writing-a-plugin)
-for the end-to-end authoring flow.
+This plugin requires no binary. It defines REST operations entirely in the manifest.
 
-## Post-Connect Discovery
+```yaml
+source: github.com/acme/plugins/support-api
+version: 0.0.1-alpha.1
+display_name: Support API
+description: Small ticket API
+icon_file: assets/icon.svg
+plugin:
+  auth:
+    type: bearer
+    credentials:
+      - name: token
+        label: API Token
+  base_url: https://api.support.example.com
+  operations:
+    - name: list_tickets
+      description: Return open tickets
+      method: GET
+      path: /tickets
+    - name: get_ticket
+      description: Return one ticket
+      method: GET
+      path: /tickets/{ticket_id}
+```
 
-Providers can define `provider.connections.default.discovery` to perform one
-extra authenticated lookup immediately after OAuth or manual connect succeeds.
-Gestalt calls the configured URL with the freshly acquired access token, parses
-the returned items, and turns them into candidate connections.
+## Authoring Notes
 
-Use this when a provider issues user credentials first, but the final stored
-connection still needs one discovered identifier such as a site, tenant, or
-workspace.
+Manifest paths must stay inside the package. `source` and `version` are required. A manifest defines exactly one of `plugin`, `auth`, `datastore`, or `webui`.
 
-<Tabs items={['YAML', 'JSON']}>
-  <Tabs.Tab>
-    ```yaml
-    provider:
-      connections:
-        default:
-          auth:
-            type: oauth2
-            authorization_url: https://auth.example.com/authorize
-            token_url: https://auth.example.com/token
-          params:
-            workspace_id:
-              required: true
-              description: Workspace identifier discovered after connect
-              from: discovery
-          discovery:
-            url: https://api.example.com/me/workspaces
-            id_path: id
-            name_path: display_name
-            metadata:
-              workspace_id: id
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```json
-    {
-      "provider": {
-        "connections": {
-          "default": {
-            "auth": {
-              "type": "oauth2",
-              "authorization_url": "https://auth.example.com/authorize",
-              "token_url": "https://auth.example.com/token"
-            },
-            "params": {
-              "workspace_id": {
-                "required": true,
-                "description": "Workspace identifier discovered after connect",
-                "from": "discovery"
-              }
-            },
-            "discovery": {
-              "url": "https://api.example.com/me/workspaces",
-              "id_path": "id",
-              "name_path": "display_name",
-              "metadata": { "workspace_id": "id" }
-            }
-          }
-        }
-      }
-    }
-    ```
-  </Tabs.Tab>
-</Tabs>
+`config_schema_path` validates per-plugin config and may be written in JSON or YAML. Only the `default` connection may define `connection_params` and `post_connect_discovery`. The OpenAPI/GraphQL surface types are mutually exclusive, but MCP may be added alongside either.
 
-If discovery returns exactly one item, Gestalt merges its mapped metadata into the stored connection automatically. If discovery returns multiple items, Gestalt asks the user to choose one. If discovery returns zero items, connect fails.
+A connection using `mcp_oauth` auth requires the plugin to declare an MCP surface (via `mcp_url` or an equivalent). Manifests that set `auth.type: mcp_oauth` without an MCP surface fail validation.
 
-`metadata` populates connection metadata, and connection fields marked
-with `from: discovery` are satisfied from that metadata instead of user input.
-
-## Web UI manifest
-
-<Tabs items={['YAML', 'JSON']}>
-  <Tabs.Tab>
-    ```yaml
-    source: github.com/acme/plugins/gestalt-ui
-    version: 1.0.0
-    display_name: Custom UI
-    webui:
-      asset_root: ui/out
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```json
-    {
-      "source": "github.com/acme/plugins/gestalt-ui",
-      "version": "1.0.0",
-      "display_name": "Custom UI",
-      "webui": {
-        "asset_root": "ui/out"
-      }
-    }
-    ```
-  </Tabs.Tab>
-</Tabs>
-
-## Authoring notes
-
-Manifest paths must stay inside the package. `source` and `version` are required, and a manifest defines either `provider` or `webui`, not both.
-
-Declarative-only provider packages do not require `artifacts`. Pure executable source manifests used with `plugins.*.provider.source.path` or `gestaltd plugin release` may omit `artifacts` and `provider.exec.artifact_path`, but executable provider packages do require both.
-
-`config_schema_path` validates `providers.*.config` and may be written in JSON or YAML. Only `provider.connections.default` may define `params` and `discovery`. The surface types `rest`, `openapi`, and `graphql` are mutually exclusive, but `mcp` may be added alongside any of them.
+When an executable plugin defines helper operations in Go or Python, Gestalt materializes the executable catalog automatically during local source-plugin execution and `plugin release`. See [Writing a Plugin](/plugins/writing-a-plugin) for the end-to-end authoring flow.
 
 ## Release
 
@@ -359,12 +478,4 @@ Build a release from a plugin source directory:
 gestaltd plugin release --version 1.2.3
 ```
 
-`gestaltd plugin release` preserves the source manifest format, so
-`plugin.yaml` stays YAML and `plugin.json` stays JSON in the release archive.
-For executable Go plugins, release materializes the executable catalog
-automatically from the provider's typed router before packaging. For Python
-source plugins, release loads the module declared in `[tool.gestalt].plugin`,
-materializes the executable catalog automatically. Go and Python source plugins
-both build the host-platform artifact by default. Pass `--platform` for an
-explicit `os/arch[/libc]` target list, or `--platform all` in CI to build the
-full supported release matrix.
+`gestaltd plugin release` preserves the source manifest format, so `plugin.yaml` stays YAML and `plugin.json` stays JSON in the release archive. For executable Go plugins, release materializes the executable catalog automatically from the provider's typed router before packaging. For Python source plugins, release loads the module declared in `[tool.gestalt].plugin` and materializes the executable catalog automatically. Go and Python source plugins both build the host-platform artifact by default. Pass `--platform` for an explicit `os/arch[/libc]` target list, or `--platform all` in CI to build the full supported release matrix.

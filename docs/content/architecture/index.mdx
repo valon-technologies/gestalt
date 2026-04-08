@@ -14,17 +14,17 @@ First, the YAML config file is loaded and `${ENV_VAR}` placeholders are expanded
 
 Next, Gestalt initializes the secret manager from the `secrets` block. This is the one part of config that *cannot* use `secret://` references, because the secret manager doesn't exist yet. Credentials for the secret manager itself have to come in through `${ENV_VAR}` or `${ENV_VAR_FILE}`.
 
-Once the secret manager is ready, Gestalt resolves every `secret://` reference across the rest of the config: server, auth, datastore, telemetry, audit, and all provider configs. The `secrets.config` block is skipped to avoid a circular dependency.
+Once the secret manager is ready, Gestalt resolves every `secret://` reference across the rest of the config: server, auth, datastore, telemetry, audit, and all plugin configs. The `secrets.config` block is skipped to avoid a circular dependency.
 
 With secrets resolved, `server.encryption_key` gets converted into a 32-byte AES key. A 64-character hex string is decoded directly; anything else goes through Argon2id derivation. This derived key protects all stored tokens.
 
-From there: auth provider, datastore (with schema migrations), provider plugins, then HTTP listeners. The `/ready` endpoint returns 503 until all providers report ready.
+From there, the auth and datastore plugins are spawned as child processes over gRPC (they use the same plugin runtime as integration plugins), schema migrations run, integration plugins start, and the HTTP listeners come up. The `/ready` endpoint returns 503 until everything reports ready.
 
 ## How requests flow
 
-Auth middleware runs first on every request. It checks for a `session_token` cookie, then for a `Bearer` header. If the bearer token starts with `gst_api_`, it's hashed with SHA-256 and looked up in the `api_tokens` table. Any other bearer value is treated as a raw provider token.
+Auth middleware runs first on every request. It checks for a `session_token` cookie, then for a `Bearer` header. If the bearer token starts with `gst_api_`, it's hashed with SHA-256 and looked up in the datastore. Any other bearer value is treated as a raw provider token.
 
-For operation invocations (`/api/v1/{integration}/{operation}` or `/mcp`), the request reaches the *broker*. The broker resolves the caller's integration token from the datastore, decrypts it, refreshes it if needed, and dispatches to the provider (plugin gRPC, REST, GraphQL, or MCP upstream). The same broker handles both HTTP and MCP calls.
+For operation invocations (`/api/v1/{integration}/{operation}` or `/mcp`), the request reaches the *broker*. The broker resolves the caller's integration token from the datastore, decrypts it, refreshes it if needed, and dispatches to the plugin (over gRPC, or to a REST/GraphQL/MCP upstream). The same broker handles both HTTP and MCP calls.
 
 ## Further reading
 

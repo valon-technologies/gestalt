@@ -55,7 +55,7 @@ Authenticated routes accept a `session_token` cookie or an `Authorization: Beare
 
 ## MCP
 
-If at least one provider contributes MCP-visible tools or an upstream MCP
+If at least one plugin contributes MCP-visible tools or an upstream MCP
 surface, Gestalt also mounts:
 
 | Method | Path | Purpose |
@@ -72,7 +72,7 @@ When you call:
 /api/v1/{integration}/{operation}
 ```
 
-Gestalt authenticates the caller, resolves the target provider and operation, then resolves credentials based on the connection's `mode`. If the user has exactly one stored instance it is selected automatically; if there are multiple and none is specified, the call fails with an ambiguity error. OAuth tokens are refreshed when needed before the provider operation executes.
+Gestalt authenticates the caller, resolves the target plugin and operation, then resolves credentials based on the connection's `mode`. If the user has exactly one stored instance it is selected automatically; if there are multiple and none is specified, the call fails with an ambiguity error. OAuth tokens are refreshed when needed before the provider operation executes.
 
 ## Parameter conventions
 

@@ -8,7 +8,7 @@ The server image `valontechnologies/gestaltd:latest` is published for `linux/amd
 
 ## Production considerations
 
-**Database.** SQLite works for single-instance deployments. For multi-replica or horizontally scaled deployments, use Postgres, MySQL, or another supported datastore. See [Built-in Providers](/reference/built-in-providers) for the full list.
+**Database.** SQLite works for single-instance deployments. For multi-replica or horizontally scaled deployments, use Postgres, MySQL, or another supported datastore. See [First-Party Providers](/reference/built-in-providers) for the full list.
 
 **Secrets.** Use a dedicated secret manager (`google_secret_manager`, `aws_secrets_manager`, `vault`, `azure_key_vault`, or `file`) instead of `env` in production. Gestalt config supports `secret://` references that are resolved at boot time through the configured secret manager.
 

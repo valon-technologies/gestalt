@@ -6,17 +6,17 @@ When `gestaltd serve --locked` reports that prepared artifacts are missing or st
 
 The validation error `server.encryption_key is required` means the config is missing its root deployment secret. Set `server.encryption_key` to a `secret://` reference or other secret-backed value. The encryption key is used for token encryption and derived session material, so the server refuses to start without it.
 
-Set `server.encryption_key` for every real deployment. Gestalt derives token and session encryption from it even when you use the built-in auth and datastore provider binaries.
+Set `server.encryption_key` for every real deployment. Gestalt derives token and session encryption from it regardless of which auth and datastore plugins you use.
 
-If the `/mcp` endpoint is not mounted, the server found no provider that exposes tools. At least one integration must surface operations through inline declarative REST, OpenAPI, GraphQL, upstream MCP, or an MCP-enabled packaged provider before `/mcp` becomes available.
+If the `/mcp` endpoint is not mounted, the server found no plugin that exposes tools. At least one integration plugin must surface MCP-visible operations before `/mcp` becomes available.
 
-When `/ready` returns `503`, the server has not finished initialization. Readiness stays false until all configured providers finish loading and the datastore answers a ping. Check server logs for provider bootstrap errors or datastore connectivity problems.
+When `/ready` returns `503`, the server has not finished initialization. Readiness stays false until all configured plugins finish loading and the datastore answers a ping. Check server logs for plugin bootstrap errors or datastore connectivity problems.
 
 ## Operation invocation
 
-A "provider not found" error means the integration key in the request does not match any entry in the `plugins` config map. Verify the spelling and confirm the provider loaded without errors at startup.
+A "provider not found" error means the integration key in the request does not match any entry in the `plugins` config map. Verify the spelling and confirm the plugin loaded without errors at startup.
 
-An "operation not found" error means the operation ID does not exist in the provider's catalog. Check that the surface exposes the operation and that `allowed_operations`, if set, includes it.
+An "operation not found" error means the operation ID does not exist in the plugin's catalog. Check that the operation is exposed and that `allowed_operations`, if set, includes it.
 
 A "not authenticated" error on an API or MCP request means no valid session or API token was presented. Log in through the web UI or pass a bearer token in the `Authorization` header.
 
@@ -38,7 +38,7 @@ A "failed to reach" error means the outbound connection could not be established
 
 When a plugin fails to start, check that the binary exists at the expected path, is executable, and that any required runtime dependencies are available. For Python source plugins, verify the virtualenv is intact and the module declared in `[tool.gestalt].plugin` is importable. Plugin startup errors appear in the server log with the provider name.
 
-A sandbox 403 means the plugin made an outbound request to a host not listed in `provider.allowed_hosts`. Add every upstream domain the plugin contacts to the allowlist in your plugin config.
+A sandbox 403 means the plugin made an outbound request to a host not listed in `plugin.allowed_hosts`. Add every upstream domain the plugin contacts to the allowlist in your plugin config.
 
 An input decode error means the operation received a request body that does not match the expected schema. Check the operation's parameter definitions and ensure the caller is sending the correct types and required fields.
 
@@ -48,6 +48,6 @@ An invocation depth error means a plugin-to-plugin call chain exceeded the maxim
 
 ## Connections
 
-When an integration requires an explicit connection, the provider has more than one configured connection and no default. Set `surfaces.*.connection` in the provider config when there is no `connections.default`, or pass `_connection` on the invocation request, or use `--connection` in the client CLI.
+When an integration requires an explicit connection, the plugin has more than one configured connection and no default. Pass `_connection` on the invocation request or use `--connection` in the client CLI to disambiguate.
 
 If a managed path parameter still appears in the operation schema, the operation path template does not contain the expected placeholder. Verify that the path includes the parameter in braces, such as `/workspaces/{workspace_id}/tickets`, rather than omitting it.
