@@ -24,7 +24,7 @@ require (
 	github.com/landlock-lsm/go-landlock v0.7.0
 	github.com/mark3labs/mcp-go v0.45.0
 	github.com/microsoft/go-mssqldb v1.9.8
-	github.com/pb33f/libopenapi v0.34.3
+	github.com/pb33f/libopenapi v0.35.1
 	github.com/prometheus/client_golang v1.23.2
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/sijms/go-ora/v2 v2.9.0
@@ -120,8 +120,8 @@ require (
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
-	github.com/pb33f/jsonpath v0.8.1 // indirect
-	github.com/pb33f/ordered-map/v2 v2.3.0 // indirect
+	github.com/pb33f/jsonpath v0.8.2 // indirect
+	github.com/pb33f/ordered-map/v2 v2.3.1 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/prometheus/client_model v0.6.2 // indirect
 	github.com/prometheus/common v0.67.5 // indirect
