@@ -5,34 +5,34 @@ require_relative "lib/private_strategy"
 class Gestalt < Formula
   desc "CLI for Gestalt API - authentication, integration management, and operation invocation"
   homepage "https://github.com/valon-technologies/gestalt"
-  version "0.0.1-alpha.10"
+  version "0.0.1-alpha.11"
   license "Apache-2.0"
 
   on_macos do
     on_arm do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.1-alpha.10/gestalt-macos-arm64.tar.gz",
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.1-alpha.11/gestalt-macos-arm64.tar.gz",
           using: GitHubPrivateRepositoryReleaseDownloadStrategy
-      sha256 "ea74574965c76f77c29ed4985f879ce7fa524c9b7ca33bf1d3e114268169789d"
+      sha256 "11c4c34e056ec7b853ff6d238803714723b3c5bffb84230f602bf7ece48c7bb4"
     end
 
     on_intel do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.1-alpha.10/gestalt-macos-x86_64.tar.gz",
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.1-alpha.11/gestalt-macos-x86_64.tar.gz",
           using: GitHubPrivateRepositoryReleaseDownloadStrategy
-      sha256 "566be25dd3c13220c4b0ee7f379e6ecdf39ee8c0fcd3b892ce917895eb533e2f"
+      sha256 "72ca4d0c8b6ea6050c358a3cdf0a760a61d72a77a91ab4fbbe79a8c41c23c62a"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.1-alpha.10/gestalt-linux-arm64.tar.gz",
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.1-alpha.11/gestalt-linux-arm64.tar.gz",
           using: GitHubPrivateRepositoryReleaseDownloadStrategy
-      sha256 "838d7bd71f7cb5173c715045d5b21588504bc13374767390a1fec7a6b2e8e2fb"
+      sha256 "8f5e103c2279bdf54deb06998fa4ffcb04d78730fcc82612553e60bcfcb959bf"
     end
 
     on_intel do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.1-alpha.10/gestalt-linux-x86_64.tar.gz",
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.1-alpha.11/gestalt-linux-x86_64.tar.gz",
           using: GitHubPrivateRepositoryReleaseDownloadStrategy
-      sha256 "d244b9a3bf088d9f09b5e9d591d327dcb9ca2081b4c0c4afb1d4adb72643630a"
+      sha256 "adc37c199cfe96de6ddfafb87ca23140cc2c9319799ca2e20f9c82ac2480efb7"
     end
   end
 
