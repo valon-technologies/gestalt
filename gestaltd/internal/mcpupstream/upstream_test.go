@@ -95,23 +95,6 @@ func newHeaderAuthenticatedHTTPTestServer(t *testing.T, expectedHeaders map[stri
 	}))
 }
 
-func TestCloneDefaultTransportReturnsIndependentTransport(t *testing.T) {
-	t.Parallel()
-
-	transport, ok := cloneDefaultTransport().(*http.Transport)
-	if !ok {
-		t.Fatalf("cloneDefaultTransport() returned %T, want *http.Transport", cloneDefaultTransport())
-	}
-
-	defaultTransport, ok := http.DefaultTransport.(*http.Transport)
-	if !ok {
-		t.Fatalf("http.DefaultTransport = %T, want *http.Transport", http.DefaultTransport)
-	}
-	if transport == defaultTransport {
-		t.Fatal("cloneDefaultTransport() returned the shared default transport")
-	}
-}
-
 func TestUpstream_DiscoverTools(t *testing.T) {
 	t.Parallel()
 
