@@ -1162,6 +1162,26 @@ func setupDatastoreProviderDir(t *testing.T, baseDir, name string) string {
 	return providerDir
 }
 
+func setupSourceOnlyDatastoreProviderDir(t *testing.T, baseDir, name string) string {
+	t.Helper()
+
+	providerDir := filepath.Join(baseDir, "datastore", name)
+	if err := os.MkdirAll(providerDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", providerDir, err)
+	}
+	writeTestFile(t, providerDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/datastore/"+name)), 0o644)
+	writeTestFile(t, providerDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
+	writeTestFile(t, providerDir, "datastore.go", []byte(testutil.GeneratedDatastorePackageSource()), 0o644)
+	writeManifestFile(t, providerDir, &pluginmanifestv1.Manifest{
+		Source:      "github.com/valon-technologies/gestalt-providers/datastore/" + name,
+		Version:     "0.0.1-alpha.1",
+		DisplayName: "Test Datastore " + name,
+		Kinds:       []string{pluginmanifestv1.KindDatastore},
+		Datastore:   &pluginmanifestv1.DatastoreMetadata{},
+	})
+	return providerDir
+}
+
 func componentProviderManifestPath(t *testing.T, providerDir string) string {
 	t.Helper()
 

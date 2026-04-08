@@ -572,6 +572,54 @@ func TestResolveGitHubTokenEnvFallback(t *testing.T) {
 	}
 }
 
+func TestResolveHomebrewTokenEnvFallback(t *testing.T) {
+	envToken := "ghp_homebrew_token"
+	t.Setenv(envHomebrewToken, envToken)
+
+	var log requestLog
+	srv := newTestServer(t, currentPlatformAssetName(), withAuthLog(&log))
+	defer srv.Close()
+
+	resolver := &GitHubResolver{BaseURL: srv.URL}
+	pkg, err := resolver.Resolve(context.Background(), testSource, testVersion)
+	if err != nil {
+		t.Fatalf("Resolve() error: %v", err)
+	}
+	defer pkg.Cleanup()
+
+	wantAuth := authTokenPrefix + envToken
+	for i, got := range log.all() {
+		if got != wantAuth {
+			t.Errorf("request %d: Authorization = %q, want %q", i, got, wantAuth)
+		}
+	}
+}
+
+func TestResolveGHCLITokenFallback(t *testing.T) {
+	var log requestLog
+	srv := newTestServer(t, currentPlatformAssetName(), withAuthLog(&log))
+	defer srv.Close()
+
+	resolver := &GitHubResolver{
+		BaseURL: srv.URL,
+		TokenLookup: func() string {
+			return "ghp_from_gh_cli"
+		},
+	}
+	pkg, err := resolver.Resolve(context.Background(), testSource, testVersion)
+	if err != nil {
+		t.Fatalf("Resolve() error: %v", err)
+	}
+	defer pkg.Cleanup()
+
+	wantAuth := authTokenPrefix + "ghp_from_gh_cli"
+	for i, got := range log.all() {
+		if got != wantAuth {
+			t.Errorf("request %d: Authorization = %q, want %q", i, got, wantAuth)
+		}
+	}
+}
+
 func TestResolveDownloadError(t *testing.T) {
 	t.Parallel()
 

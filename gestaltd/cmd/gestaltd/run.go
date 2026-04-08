@@ -99,6 +99,12 @@ func runStartCommand(name string, usage func(io.Writer), args []string, locked b
 					*configPath = generated
 				}
 			}
+		} else if err == nil {
+			if defaultPath := operator.DefaultLocalConfigPath(); defaultPath != "" && filepath.Clean(resolved) == filepath.Clean(defaultPath) {
+				if _, repairErr := operator.RepairDefaultConfig(resolved); repairErr != nil {
+					return fmt.Errorf("repairing default local config: %w", repairErr)
+				}
+			}
 		}
 	}
 
