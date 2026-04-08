@@ -1,3 +1,5 @@
+import { Tabs } from 'nextra/components'
+
 # Troubleshooting
 
 ## Startup
@@ -36,7 +38,39 @@ A "failed to reach" error means the outbound connection could not be established
 
 ## Plugins
 
-When a plugin fails to start, check that the binary exists at the expected path, is executable, and that any required runtime dependencies are available. For Python source plugins, verify the virtualenv is intact and the module declared in `[tool.gestalt].plugin` is importable. Plugin startup errors appear in the server log with the provider name.
+When a plugin fails to start, check that the binary exists at the expected path, is executable, and that any required runtime dependencies are available. Plugin startup errors appear in the server log with the provider name.
+
+Common source-package checks:
+
+<Tabs items={['Go', 'Python', 'Rust']}>
+  <Tabs.Tab>
+    Verify the package builds from the plugin root:
+
+    ```sh
+    go build ./...
+    ```
+
+    The source package should include `go.mod`, `plugin.yaml`, and provider code at the module root.
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Verify the virtualenv is intact and the configured module is importable:
+
+    ```sh
+    uv run python -c "import provider"
+    ```
+
+    Also confirm `[tool.gestalt].plugin` in `pyproject.toml` points at the module Gestalt should load.
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Verify the crate builds from the plugin root:
+
+    ```sh
+    cargo check
+    ```
+
+    The plugin root needs a real `Cargo.toml` package with a `[package]` section, not just a workspace manifest, and `src/lib.rs` should export the provider with `gestalt::export_provider!(...)`, `gestalt::export_auth_provider!(...)`, or `gestalt::export_datastore_provider!(...)`.
+  </Tabs.Tab>
+</Tabs>
 
 A sandbox 403 means the plugin made an outbound request to a host not listed in `plugin.allowed_hosts`. Add every upstream domain the plugin contacts to the allowlist in your plugin config.
 
