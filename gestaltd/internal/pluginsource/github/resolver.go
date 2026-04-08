@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
-	"os/exec"
 	"runtime"
 	"strings"
 
@@ -21,9 +19,6 @@ const (
 	headerAccept        = "Accept"
 	headerAuthorization = "Authorization"
 	acceptOctetStream   = "application/octet-stream"
-	envGitHubToken      = "GITHUB_TOKEN"
-	envGHToken          = "GH_TOKEN"
-	envHomebrewToken    = "HOMEBREW_GITHUB_API_TOKEN"
 	authTokenPrefix     = "token "
 	platformAssetPrefix = "gestalt-plugin-"
 )
@@ -48,7 +43,6 @@ var (
 		"amd64": {"amd64", "x86_64"},
 		"arm64": {"arm64", "aarch64"},
 	}
-	ghAuthTokenLookup = ghCLIToken
 )
 
 type releaseResponse struct {
@@ -62,10 +56,8 @@ type releaseAsset struct {
 }
 
 type GitHubResolver struct {
-	Token       string
-	TokenLookup func() string
-	BaseURL     string
-	HTTPClient  *http.Client
+	BaseURL    string
+	HTTPClient *http.Client
 }
 
 func (r *GitHubResolver) Resolve(ctx context.Context, src pluginsource.Source, version string) (*pluginsource.ResolvedPackage, error) {
@@ -77,7 +69,7 @@ func (r *GitHubResolver) Resolve(ctx context.Context, src pluginsource.Source, v
 	if client == nil {
 		client = http.DefaultClient
 	}
-	token := resolveTokenWithLookup(explicitToken(src, r.Token), r.TokenLookup)
+	token := strings.TrimSpace(src.Token)
 
 	tag := src.ReleaseTag(version)
 	releaseURL := fmt.Sprintf("%s/repos/%s/releases/tags/%s", baseURL, src.RepoSlug(), url.PathEscape(tag))
@@ -103,58 +95,6 @@ func (r *GitHubResolver) Resolve(ctx context.Context, src pluginsource.Source, v
 		ArchiveSHA256: dl.SHA256Hex,
 		ResolvedURL:   asset.URL,
 	}, nil
-}
-
-func explicitToken(src pluginsource.Source, fallback string) string {
-	if strings.TrimSpace(src.Token) != "" {
-		return src.Token
-	}
-	return fallback
-}
-
-func resolveToken(explicit string) string {
-	return resolveTokenWithLookup(explicit, nil)
-}
-
-func resolveTokenWithLookup(explicit string, lookup func() string) string {
-	if explicit != "" {
-		return explicit
-	}
-	for _, envName := range []string{envGitHubToken, envGHToken, envHomebrewToken} {
-		if token := strings.TrimSpace(os.Getenv(envName)); token != "" {
-			return token
-		}
-	}
-	if lookup != nil {
-		if token := strings.TrimSpace(lookup()); token != "" {
-			return token
-		}
-	}
-	return ghAuthTokenLookup()
-}
-
-func ghCLIToken() string {
-	ghPath := findGHCLI()
-	if ghPath == "" {
-		return ""
-	}
-	out, err := exec.Command(ghPath, "auth", "token").Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
-}
-
-func findGHCLI() string {
-	if ghPath, err := exec.LookPath("gh"); err == nil {
-		return ghPath
-	}
-	for _, candidate := range []string{"/opt/homebrew/bin/gh", "/usr/local/bin/gh"} {
-		if _, err := os.Stat(candidate); err == nil {
-			return candidate
-		}
-	}
-	return ""
 }
 
 func (r *GitHubResolver) fetchRelease(ctx context.Context, client *http.Client, url, token, tag, slug string) (*releaseResponse, error) {
@@ -365,7 +305,7 @@ func DownloadResolvedAsset(ctx context.Context, client *http.Client, assetURL, t
 	if client == nil {
 		client = http.DefaultClient
 	}
-	token = resolveToken(token)
+	token = strings.TrimSpace(token)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, assetURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create asset download request: %w", err)
