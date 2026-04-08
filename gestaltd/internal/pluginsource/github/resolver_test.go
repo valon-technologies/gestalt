@@ -530,8 +530,10 @@ func TestResolveAuthenticatedRequest(t *testing.T) {
 	srv := newTestServer(t, currentPlatformAssetName(), withAuthLog(&log))
 	defer srv.Close()
 
-	resolver := &GitHubResolver{BaseURL: srv.URL, Token: testToken}
-	pkg, err := resolver.Resolve(context.Background(), testSource, testVersion)
+	resolver := &GitHubResolver{BaseURL: srv.URL}
+	src := testSource
+	src.Token = testToken
+	pkg, err := resolver.Resolve(context.Background(), src, testVersion)
 	if err != nil {
 		t.Fatalf("Resolve() error: %v", err)
 	}
@@ -549,13 +551,14 @@ func TestResolveAuthenticatedRequest(t *testing.T) {
 	}
 }
 
-func TestResolveGitHubTokenEnvFallback(t *testing.T) {
-	envToken := "ghp_env_fallback_token"
-	t.Setenv(envGitHubToken, envToken)
-
+func TestResolveDoesNotUseEnvironmentTokenFallback(t *testing.T) {
 	var log requestLog
 	srv := newTestServer(t, currentPlatformAssetName(), withAuthLog(&log))
 	defer srv.Close()
+
+	t.Setenv("GITHUB_TOKEN", "ghp_env_fallback_token")
+	t.Setenv("GH_TOKEN", "ghp_gh_token")
+	t.Setenv("HOMEBREW_GITHUB_API_TOKEN", "ghp_homebrew_token")
 
 	resolver := &GitHubResolver{BaseURL: srv.URL}
 	pkg, err := resolver.Resolve(context.Background(), testSource, testVersion)
@@ -564,10 +567,13 @@ func TestResolveGitHubTokenEnvFallback(t *testing.T) {
 	}
 	defer pkg.Cleanup()
 
-	wantAuth := authTokenPrefix + envToken
-	for i, got := range log.all() {
-		if got != wantAuth {
-			t.Errorf("request %d: Authorization = %q, want %q", i, got, wantAuth)
+	headers := log.all()
+	if len(headers) != 2 {
+		t.Fatalf("expected 2 requests, got %d", len(headers))
+	}
+	for i, got := range headers {
+		if got != "" {
+			t.Errorf("request %d: Authorization = %q, want empty header", i, got)
 		}
 	}
 }

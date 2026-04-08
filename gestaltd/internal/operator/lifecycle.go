@@ -428,7 +428,7 @@ func (l *Lifecycle) writeComponentArtifact(ctx context.Context, paths initPaths,
 }
 
 func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, paths initPaths, kind, name, destDir string, plugin *config.PluginDef, configMap map[string]any) (LockEntry, error) {
-	src, err := pluginsource.Parse(plugin.SourceRef())
+	src, err := sourceForPlugin(plugin)
 	if err != nil {
 		return LockEntry{}, fmt.Errorf("%s %q plugin.source.ref %q: %w", kind, name, plugin.SourceRef(), err)
 	}
@@ -486,7 +486,7 @@ func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, paths initP
 }
 
 func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths initPaths, name string, plugin *config.PluginDef, configMap map[string]any) (LockProviderEntry, error) {
-	src, err := pluginsource.Parse(plugin.SourceRef())
+	src, err := sourceForPlugin(plugin)
 	if err != nil {
 		return LockProviderEntry{}, fmt.Errorf("provider %q plugin.source.ref %q: %w", name, plugin.SourceRef(), err)
 	}
@@ -596,6 +596,18 @@ func (l *Lifecycle) writeUIPluginArtifact(ctx context.Context, cfg *config.Confi
 	}
 
 	return LockUIEntry{}, fmt.Errorf("ui plugin requires source")
+}
+
+func sourceForPlugin(plugin *config.PluginDef) (pluginsource.Source, error) {
+	src, err := pluginsource.Parse(plugin.SourceRef())
+	if err != nil {
+		return pluginsource.Source{}, err
+	}
+	if plugin != nil && plugin.Source != nil && plugin.Source.Auth != nil {
+		auth := plugin.Source.Auth
+		src.Token = auth.Token
+	}
+	return src, nil
 }
 
 func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *config.Config, locked bool) error {
@@ -800,7 +812,7 @@ func (l *Lifecycle) applyLockedProviderEntry(paths initPaths, lock *Lockfile, na
 		}
 	}
 	if needMaterialize {
-		if err := l.materializeLockedProvider(context.Background(), paths, name, entry); err != nil {
+		if err := l.materializeLockedProvider(context.Background(), paths, name, plugin, entry); err != nil {
 			return err
 		}
 	}
@@ -853,7 +865,7 @@ func (l *Lifecycle) applyLockedComponentEntry(paths initPaths, entry *LockEntry,
 		}
 	}
 	if needMaterialize {
-		if err := l.materializeLockedComponent(context.Background(), paths, kind, name, *entry); err != nil {
+		if err := l.materializeLockedComponent(context.Background(), paths, kind, name, plugin, *entry); err != nil {
 			return err
 		}
 	}
@@ -908,18 +920,21 @@ func bindResolvedComponentManifest(kind, name string, plugin *config.PluginDef, 
 	return nil
 }
 
-func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPaths, name string, entry LockProviderEntry) error {
+func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPaths, name string, plugin *config.PluginDef, entry LockProviderEntry) error {
 	if entry.ResolvedURL == "" || entry.ArchiveSHA256 == "" {
 		return fmt.Errorf("prepared artifact for provider %q is missing or stale; run `gestaltd init --config %s`", name, paths.configPath)
 	}
 
-	src, parseErr := pluginsource.Parse(entry.Source)
+	src, parseErr := sourceForPlugin(plugin)
+	if parseErr != nil {
+		src, parseErr = pluginsource.Parse(entry.Source)
+	}
 	var (
 		download *pluginpkg.DownloadResult
 		err      error
 	)
 	if parseErr == nil && src.Host == pluginsource.HostGitHub {
-		download, err = ghresolver.DownloadResolvedAsset(ctx, http.DefaultClient, entry.ResolvedURL, "")
+		download, err = ghresolver.DownloadResolvedAsset(ctx, http.DefaultClient, entry.ResolvedURL, src.Token)
 	} else {
 		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, entry.ResolvedURL, nil)
 		if reqErr != nil {
@@ -952,18 +967,21 @@ func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPat
 	return nil
 }
 
-func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPaths, kind, name string, entry LockEntry) error {
+func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPaths, kind, name string, plugin *config.PluginDef, entry LockEntry) error {
 	if entry.ResolvedURL == "" || entry.ArchiveSHA256 == "" {
 		return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init --config %s`", kind, name, paths.configPath)
 	}
 
-	src, parseErr := pluginsource.Parse(entry.Source)
+	src, parseErr := sourceForPlugin(plugin)
+	if parseErr != nil {
+		src, parseErr = pluginsource.Parse(entry.Source)
+	}
 	var (
 		download *pluginpkg.DownloadResult
 		err      error
 	)
 	if parseErr == nil && src.Host == pluginsource.HostGitHub {
-		download, err = ghresolver.DownloadResolvedAsset(ctx, http.DefaultClient, entry.ResolvedURL, "")
+		download, err = ghresolver.DownloadResolvedAsset(ctx, http.DefaultClient, entry.ResolvedURL, src.Token)
 	} else {
 		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, entry.ResolvedURL, nil)
 		if reqErr != nil {

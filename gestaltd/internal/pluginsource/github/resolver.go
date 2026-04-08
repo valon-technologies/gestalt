@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"runtime"
 	"strings"
 
@@ -20,7 +19,6 @@ const (
 	headerAccept        = "Accept"
 	headerAuthorization = "Authorization"
 	acceptOctetStream   = "application/octet-stream"
-	envGitHubToken      = "GITHUB_TOKEN"
 	authTokenPrefix     = "token "
 	platformAssetPrefix = "gestalt-plugin-"
 )
@@ -58,7 +56,6 @@ type releaseAsset struct {
 }
 
 type GitHubResolver struct {
-	Token      string
 	BaseURL    string
 	HTTPClient *http.Client
 }
@@ -72,7 +69,7 @@ func (r *GitHubResolver) Resolve(ctx context.Context, src pluginsource.Source, v
 	if client == nil {
 		client = http.DefaultClient
 	}
-	token := resolveToken(r.Token)
+	token := strings.TrimSpace(src.Token)
 
 	tag := src.ReleaseTag(version)
 	releaseURL := fmt.Sprintf("%s/repos/%s/releases/tags/%s", baseURL, src.RepoSlug(), url.PathEscape(tag))
@@ -98,13 +95,6 @@ func (r *GitHubResolver) Resolve(ctx context.Context, src pluginsource.Source, v
 		ArchiveSHA256: dl.SHA256Hex,
 		ResolvedURL:   asset.URL,
 	}, nil
-}
-
-func resolveToken(explicit string) string {
-	if explicit != "" {
-		return explicit
-	}
-	return os.Getenv(envGitHubToken)
 }
 
 func (r *GitHubResolver) fetchRelease(ctx context.Context, client *http.Client, url, token, tag, slug string) (*releaseResponse, error) {
@@ -315,7 +305,7 @@ func DownloadResolvedAsset(ctx context.Context, client *http.Client, assetURL, t
 	if client == nil {
 		client = http.DefaultClient
 	}
-	token = resolveToken(token)
+	token = strings.TrimSpace(token)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, assetURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create asset download request: %w", err)
