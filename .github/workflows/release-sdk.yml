@@ -6,6 +6,7 @@ on:
       - 'sdk/go/v*'
       - 'sdk/python/v*'
       - 'sdk/rust/v*'
+      - 'sdk/typescript/v*'
 
 permissions:
   contents: write
@@ -170,3 +171,94 @@ jobs:
           fi
 
           uv publish --publish-url "${GESTALT_PYTHON_PUBLISH_URL}"
+
+  publish-typescript-sdk:
+    if: ${{ startsWith(github.ref_name, 'sdk/typescript/v') }}
+    name: Publish TypeScript SDK
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: sdk/typescript
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Normalize package version from tag
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          path = Path("package.json")
+          data = json.loads(path.read_text())
+          data["version"] = os.environ["VERSION"].removeprefix("sdk/typescript/v")
+          path.write_text(json.dumps(data, indent=2) + "\n")
+          PY
+
+      - name: Run SDK checks
+        run: bun run check
+
+      - name: Configure registry auth
+        env:
+          GESTALT_TYPESCRIPT_PUBLISH_URL: ${{ secrets.GESTALT_TYPESCRIPT_PUBLISH_URL }}
+          GESTALT_TYPESCRIPT_PUBLISH_TOKEN: ${{ secrets.GESTALT_TYPESCRIPT_PUBLISH_TOKEN }}
+          GESTALT_TYPESCRIPT_PUBLISH_USERNAME: ${{ secrets.GESTALT_TYPESCRIPT_PUBLISH_USERNAME }}
+          GESTALT_TYPESCRIPT_PUBLISH_PASSWORD: ${{ secrets.GESTALT_TYPESCRIPT_PUBLISH_PASSWORD }}
+        run: |
+          if [ -z "${GESTALT_TYPESCRIPT_PUBLISH_URL}" ]; then
+            echo "GESTALT_TYPESCRIPT_PUBLISH_URL must be configured" >&2
+            exit 1
+          fi
+
+          if [ -z "${GESTALT_TYPESCRIPT_PUBLISH_TOKEN}" ] && { [ -z "${GESTALT_TYPESCRIPT_PUBLISH_USERNAME}" ] || [ -z "${GESTALT_TYPESCRIPT_PUBLISH_PASSWORD}" ]; }; then
+            echo "configure GESTALT_TYPESCRIPT_PUBLISH_TOKEN or GESTALT_TYPESCRIPT_PUBLISH_USERNAME and GESTALT_TYPESCRIPT_PUBLISH_PASSWORD" >&2
+            exit 1
+          fi
+
+          registry_host="$(python3 - <<'PY'
+          import os
+          from urllib.parse import urlparse
+
+          url = urlparse(os.environ["GESTALT_TYPESCRIPT_PUBLISH_URL"])
+          path = url.path or "/"
+          if not path.endswith("/"):
+            path += "/"
+          print(f"//{url.netloc}{path}")
+          PY
+          )"
+
+          userconfig="$RUNNER_TEMP/.npmrc"
+          {
+            printf "registry=%s\n" "$GESTALT_TYPESCRIPT_PUBLISH_URL"
+            printf "always-auth=true\n"
+            if [ -n "${GESTALT_TYPESCRIPT_PUBLISH_TOKEN}" ]; then
+              printf "%s:_authToken=%s\n" "$registry_host" "$GESTALT_TYPESCRIPT_PUBLISH_TOKEN"
+            else
+              password_b64="$(printf '%s' "$GESTALT_TYPESCRIPT_PUBLISH_PASSWORD" | base64 | tr -d '\n')"
+              printf "%s:username=%s\n" "$registry_host" "$GESTALT_TYPESCRIPT_PUBLISH_USERNAME"
+              printf "%s:_password=%s\n" "$registry_host" "$password_b64"
+              printf "%s:email=%s\n" "$registry_host" "gestalt-ci@valon.com"
+            fi
+          } > "$userconfig"
+
+          echo "NPM_CONFIG_USERCONFIG=$userconfig" >> "$GITHUB_ENV"
+
+      - name: Dry-run publish
+        env:
+          GESTALT_TYPESCRIPT_PUBLISH_URL: ${{ secrets.GESTALT_TYPESCRIPT_PUBLISH_URL }}
+        run: bun publish --dry-run --registry "${GESTALT_TYPESCRIPT_PUBLISH_URL}"
+
+      - name: Publish package
+        env:
+          GESTALT_TYPESCRIPT_PUBLISH_URL: ${{ secrets.GESTALT_TYPESCRIPT_PUBLISH_URL }}
+        run: bun publish --registry "${GESTALT_TYPESCRIPT_PUBLISH_URL}"

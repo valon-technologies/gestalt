@@ -38,9 +38,9 @@ import { defineDatastoreProvider } from "../src/index.ts";
 import { fixturePath, makeTempDir, removeTempDir } from "./helpers.ts";
 
 test("runtime arg parsing requires root and target", () => {
-  expect(parseRuntimeArgs(["root", "plugin:./provider.ts#plugin"])).toEqual({
+  expect(parseRuntimeArgs(["root", "integration:./provider.ts#plugin"])).toEqual({
     root: "root",
-    target: "plugin:./provider.ts#plugin",
+    target: "integration:./provider.ts#plugin",
   });
   expect(parseRuntimeArgs(["root"])).toBeUndefined();
 });
@@ -53,7 +53,7 @@ test("runtime main writes a static catalog in catalog mode", async () => {
 
   process.env[ENV_WRITE_CATALOG] = catalogPath;
   try {
-    const code = await main([root, "plugin:./provider.ts#plugin"]);
+    const code = await main([root, "integration:./provider.ts#plugin"]);
     expect(code).toBe(0);
     const catalog = readFileSync(catalogPath, "utf8");
     expect(catalog).toContain("name: basic-provider");

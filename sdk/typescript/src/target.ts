@@ -25,8 +25,7 @@ type PackageProviderConfig =
       target?: string;
     };
 
-const EXTERNAL_PROVIDER_KIND_TOKENS = new Set<string>([
-  "plugin",
+const KNOWN_PROVIDER_KINDS = new Set<ProviderKind>([
   "integration",
   "auth",
   "datastore",
@@ -121,7 +120,7 @@ export function readPackageProviderTarget(root: string): ProviderTarget {
 export function readPackagePluginTarget(root: string): string {
   const target = readPackageProviderTarget(root);
   if (target.kind !== "integration") {
-    throw new Error(`package.json provider kind ${JSON.stringify(target.kind)} is not a plugin provider`);
+    throw new Error(`package.json provider kind ${JSON.stringify(target.kind)} is not an integration provider`);
   }
   return formatModuleTarget(target);
 }
@@ -150,7 +149,7 @@ export function resolveProviderImportUrl(root: string, target: ProviderTarget | 
 export const resolvePluginImportUrl = resolveProviderImportUrl;
 
 export function formatProviderTarget(target: ProviderTarget): string {
-  return `${formatProviderKind(target.kind)}:${formatModuleTarget(target)}`;
+  return `${target.kind}:${formatModuleTarget(target)}`;
 }
 
 export function formatModuleTarget(target: ModuleTarget): string {
@@ -158,7 +157,7 @@ export function formatModuleTarget(target: ModuleTarget): string {
 }
 
 function parseKindPrefixedTarget(target: string): ProviderTarget | undefined {
-  const match = target.match(/^(plugin|integration|auth|datastore|secrets|telemetry):(.*)$/);
+  const match = target.match(/^(integration|auth|datastore|secrets|telemetry):(.*)$/);
   if (!match) {
     return undefined;
   }
@@ -169,21 +168,11 @@ function parseKindPrefixedTarget(target: string): ProviderTarget | undefined {
 }
 
 function parseProviderKind(value: string): ProviderKind {
-  const normalized = value.trim().toLowerCase();
-  if (!EXTERNAL_PROVIDER_KIND_TOKENS.has(normalized)) {
+  const normalized = value.trim().toLowerCase() as ProviderKind;
+  if (!KNOWN_PROVIDER_KINDS.has(normalized)) {
     throw new Error(`unsupported provider kind ${JSON.stringify(value)}`);
   }
-  if (normalized === "plugin") {
-    return "integration";
-  }
-  return normalized as ProviderKind;
-}
-
-function formatProviderKind(kind: ProviderKind): string {
-  if (kind === "integration") {
-    return "plugin";
-  }
-  return kind;
+  return normalized;
 }
 
 function isProviderConfigObject(value: unknown): value is { kind?: string; target?: string } {

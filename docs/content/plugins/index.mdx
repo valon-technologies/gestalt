@@ -29,7 +29,13 @@ Plugins run in process isolation. They cannot access the host process memory, ot
 
 ## SDK support
 
-Gestalt ships SDKs for Go (`sdk/go`), Python (`sdk/python`), and Rust (`sdk/rust`). The underlying protocol is gRPC, so other languages are possible, but the documented authoring flow uses those three.
+Gestalt ships first-party SDKs for Go (`sdk/go`), Python (`sdk/python`),
+Rust (`sdk/rust`), and TypeScript (`sdk/typescript`). The underlying protocol
+is gRPC, so other languages are still possible, but the documented authoring
+flow is centered on those SDKs.
+
+Go, Rust, and TypeScript support plugin, auth, and datastore providers.
+Python remains focused on plugin providers.
 
 ## Common pitfalls
 

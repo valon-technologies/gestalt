@@ -29,18 +29,8 @@ test("module target parsing validates relative module paths", () => {
   );
 });
 
-test("provider target parsing supports plugin defaults and kind prefixes", () => {
+test("provider target parsing supports integration defaults and kind prefixes", () => {
   expect(parseProviderTarget("./provider.ts#plugin")).toEqual({
-    kind: "integration",
-    modulePath: "./provider.ts",
-    exportName: "plugin",
-  });
-  expect(parseProviderTarget("plugin:./provider.ts#plugin")).toEqual({
-    kind: "integration",
-    modulePath: "./provider.ts",
-    exportName: "plugin",
-  });
-  expect(parseProviderTarget("integration:./provider.ts#plugin")).toEqual({
     kind: "integration",
     modulePath: "./provider.ts",
     exportName: "plugin",
@@ -62,9 +52,6 @@ test("package config reads legacy plugin targets and provider targets", () => {
       exportName: "plugin",
     },
   });
-  expect(formatProviderTarget(readPackageProviderTarget(pluginRoot))).toBe(
-    "plugin:./provider.ts#plugin",
-  );
   expect(readPackagePluginTarget(pluginRoot)).toBe("./provider.ts#plugin");
   expect(defaultProviderName(pluginRoot)).toBe("basic-provider");
   expect(
