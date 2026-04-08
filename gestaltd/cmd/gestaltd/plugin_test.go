@@ -48,15 +48,15 @@ const (
 	pythonDatastoreReleaseSource     = "github.com/testowner/plugins/python-datastore-release"
 )
 
-func TestRun_PluginHelpExitsCleanly(t *testing.T) {
+func TestRun_ProviderHelpExitsCleanly(t *testing.T) {
 	t.Parallel()
 
 	out, err := runPluginCommandResult("", "--help")
 	if err != nil {
-		t.Fatalf("expected exit 0 for 'plugin --help', got error: %v\noutput: %s", err, out)
+		t.Fatalf("expected exit 0 for 'provider --help', got error: %v\noutput: %s", err, out)
 	}
-	if !strings.Contains(string(out), "gestaltd plugin <command> [flags]") {
-		t.Fatalf("expected plugin usage output, got: %s", out)
+	if !strings.Contains(string(out), "gestaltd provider <command> [flags]") {
+		t.Fatalf("expected provider usage output, got: %s", out)
 	}
 	if !strings.Contains(string(out), "release") {
 		t.Fatalf("expected release in help output, got: %s", out)
@@ -68,50 +68,50 @@ func TestRun_PluginHelpExitsCleanly(t *testing.T) {
 	}
 }
 
-func TestRun_PluginReleaseHelpExitsCleanly(t *testing.T) {
+func TestRun_ProviderReleaseHelpExitsCleanly(t *testing.T) {
 	t.Parallel()
 
 	out, err := runPluginCommandResult("", "release", "--help")
 	if err != nil {
-		t.Fatalf("expected exit 0 for 'plugin release --help', got error: %v\noutput: %s", err, out)
+		t.Fatalf("expected exit 0 for 'provider release --help', got error: %v\noutput: %s", err, out)
 	}
 	if !strings.Contains(string(out), "--version") {
 		t.Fatalf("expected --version in release help, got: %s", out)
 	}
 }
 
-func TestRun_PluginRootReturnsHelpWhenNoSubcommandProvided(t *testing.T) {
+func TestRun_ProviderRootReturnsHelpWhenNoSubcommandProvided(t *testing.T) {
 	t.Parallel()
 
 	out, err := runPluginCommandResult("")
 	if err != nil {
-		t.Fatalf("expected exit 0 for 'plugin', got error: %v\noutput: %s", err, out)
+		t.Fatalf("expected exit 0 for 'provider', got error: %v\noutput: %s", err, out)
 	}
-	if !strings.Contains(string(out), "gestaltd plugin <command> [flags]") {
-		t.Fatalf("expected plugin usage output, got: %s", out)
+	if !strings.Contains(string(out), "gestaltd provider <command> [flags]") {
+		t.Fatalf("expected provider usage output, got: %s", out)
 	}
 }
 
-func TestRun_PluginRejectsUnknownSubcommand(t *testing.T) {
+func TestRun_ProviderRejectsUnknownSubcommand(t *testing.T) {
 	t.Parallel()
 
 	out, err := runPluginCommandResult("", "bogus")
 	if err == nil {
-		t.Fatal("expected error for unknown plugin subcommand")
+		t.Fatal("expected error for unknown provider subcommand")
 	}
-	if !strings.Contains(string(out), "unknown plugin command") || !strings.Contains(string(out), "bogus") {
+	if !strings.Contains(string(out), "unknown provider command") || !strings.Contains(string(out), "bogus") {
 		t.Fatalf("unexpected output: %s", out)
 	}
 }
 
-func TestRun_PluginRejectsRemovedPackageSubcommand(t *testing.T) {
+func TestRun_ProviderRejectsRemovedPackageSubcommand(t *testing.T) {
 	t.Parallel()
 
 	out, err := runPluginCommandResult("", "package")
 	if err == nil {
-		t.Fatal("expected error for removed plugin package subcommand")
+		t.Fatal("expected error for removed provider package subcommand")
 	}
-	if !strings.Contains(string(out), "unknown plugin command") || !strings.Contains(string(out), "package") {
+	if !strings.Contains(string(out), "unknown provider command") || !strings.Contains(string(out), "package") {
 		t.Fatalf("unexpected output: %s", out)
 	}
 }
@@ -203,7 +203,7 @@ func TestE2EPluginReleaseBigquery(t *testing.T) {
 	const testVersion = "0.0.1-test"
 	const testPlatform = "linux/amd64"
 
-	cmd := exec.Command(gestaltdBin, "plugin", "release",
+	cmd := exec.Command(gestaltdBin, "provider", "release",
 		"--version", testVersion,
 		"--platform", testPlatform,
 		"--output", outputDir,
@@ -211,7 +211,7 @@ func TestE2EPluginReleaseBigquery(t *testing.T) {
 	cmd.Dir = bigqueryDir
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("plugin release failed: %v\n%s", err, out)
+		t.Fatalf("provider release failed: %v\n%s", err, out)
 	}
 
 	archiveName := "gestalt-plugin-bigquery_v" + testVersion + "_linux_amd64.tar.gz"
@@ -1260,6 +1260,67 @@ func TestRun_PluginReleaseCopiesWebUISupportFiles(t *testing.T) {
 	}
 }
 
+func TestRun_ProviderReleaseBuildsProviderSupportFilesBeforePackaging(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("release build fixture uses POSIX shell")
+	}
+
+	pluginDir := newBuiltSourceProviderReleaseFixture(t, t.TempDir())
+	outputDir := t.TempDir()
+	const testVersion = "0.0.3-build-provider"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
+		"--output", outputDir,
+	)
+
+	archiveName := "gestalt-plugin-release-test_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	extractDir := extractReleasedArchive(t, outputDir, archiveName)
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+	if manifest.Release != nil {
+		t.Fatalf("released manifest unexpectedly retained release metadata: %+v", manifest.Release)
+	}
+	if _, err := os.Stat(filepath.Join(extractDir, releaseProviderSchemaPath)); err != nil {
+		t.Fatalf("expected %s in archive: %v", releaseProviderSchemaPath, err)
+	}
+}
+
+func TestRun_ProviderReleaseBuildsWebUIAssetsBeforePackaging(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("release build fixture uses POSIX shell")
+	}
+
+	pluginDir := newBuiltWebUIReleaseFixture(t, t.TempDir())
+	outputDir := t.TempDir()
+	const testVersion = "0.0.3-build-webui"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--output", outputDir,
+	)
+
+	archiveName := "gestalt-plugin-webui-test_v" + testVersion + ".tar.gz"
+	extractDir := extractReleasedArchive(t, outputDir, archiveName)
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+	if manifest.Release != nil {
+		t.Fatalf("released manifest unexpectedly retained release metadata: %+v", manifest.Release)
+	}
+	for _, rel := range []string{
+		"branding/icon.svg",
+		"ui/out/index.html",
+		"ui/out/static/app.js",
+	} {
+		if _, err := os.Stat(filepath.Join(extractDir, filepath.FromSlash(rel))); err != nil {
+			t.Fatalf("expected %s in archive: %v", rel, err)
+		}
+	}
+}
+
 func TestRun_PluginReleaseAllowsOverlappingSupportPaths(t *testing.T) {
 	t.Parallel()
 
@@ -1419,7 +1480,7 @@ func TestRun_PluginReleaseRejectsOutputInsideWebUIAssetRoot(t *testing.T) {
 
 	out, err := runPluginReleaseCommandResult(pluginDir, "--version", "1.0.0", "--output", outputDir)
 	if err == nil {
-		t.Fatalf("expected plugin release to fail, got output: %s", out)
+		t.Fatalf("expected provider release to fail, got output: %s", out)
 	}
 	if !strings.Contains(string(out), "must not be inside webui.asset_root") {
 		t.Fatalf("expected overlap error, got: %s", out)
@@ -2154,6 +2215,17 @@ func newSourceProviderReleaseFixture(t *testing.T, dir string) string {
 	return pluginDir
 }
 
+func newBuiltSourceProviderReleaseFixture(t *testing.T, dir string) string {
+	t.Helper()
+
+	pluginDir := newSourceProviderReleaseFixture(t, dir)
+	if err := os.Remove(filepath.Join(pluginDir, releaseProviderSchemaPath)); err != nil {
+		t.Fatalf("Remove(%s): %v", releaseProviderSchemaPath, err)
+	}
+	addReleaseBuild(t, pluginDir, filepath.Join("scripts", "build.sh"), "", "mkdir -p schemas\nprintf '{\"type\":\"object\"}\\n' > "+releaseProviderSchemaPath+"\n")
+	return pluginDir
+}
+
 func newGoSourceReleaseFixture(t *testing.T, dir string) string {
 	t.Helper()
 
@@ -2490,6 +2562,34 @@ func newWebUIReleaseFixture(t *testing.T, dir string) string {
 	return newWebUIReleaseFixtureWithAssetRoot(t, dir, webUITestAssetRoot)
 }
 
+func newBuiltWebUIReleaseFixture(t *testing.T, dir string) string {
+	t.Helper()
+
+	pluginDir := filepath.Join(dir, webUITestPluginName)
+	if err := os.MkdirAll(pluginDir, 0755); err != nil {
+		t.Fatalf("MkdirAll(pluginDir): %v", err)
+	}
+	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
+		Source:      webUITestSource,
+		Version:     "0.0.1",
+		DisplayName: "WebUI Test",
+		IconFile:    releaseTestIconPath,
+		Kinds:       []string{pluginmanifestv1.KindWebUI},
+		Release: &pluginmanifestv1.ReleaseMetadata{
+			Build: &pluginmanifestv1.ReleaseBuild{
+				Workdir: "ui",
+				Command: []string{"sh", "./build.sh"},
+			},
+		},
+		WebUI: &pluginmanifestv1.WebUIMetadata{
+			AssetRoot: "ui/out",
+		},
+	})
+	writeTestFile(t, pluginDir, releaseTestIconPath, []byte("<svg></svg>\n"), 0644)
+	writeReleaseBuildScript(t, pluginDir, filepath.Join("ui", "build.sh"), "mkdir -p out/static\nprintf '<html></html>\\n' > out/index.html\nprintf 'console.log(\"ok\")\\n' > out/static/app.js\n")
+	return pluginDir
+}
+
 func newWebUIReleaseFixtureWithAssetRoot(t *testing.T, dir, assetRoot string) string {
 	t.Helper()
 
@@ -2513,18 +2613,41 @@ func newWebUIReleaseFixtureWithAssetRoot(t *testing.T, dir, assetRoot string) st
 	return pluginDir
 }
 
+func addReleaseBuild(t *testing.T, pluginDir, scriptPath, workdir, body string) {
+	t.Helper()
+
+	_, manifest, err := pluginpkg.ReadSourceManifestFile(filepath.Join(pluginDir, pluginpkg.ManifestFile))
+	if err != nil {
+		t.Fatalf("ReadSourceManifestFile(%s): %v", pluginpkg.ManifestFile, err)
+	}
+	manifest.Release = &pluginmanifestv1.ReleaseMetadata{
+		Build: &pluginmanifestv1.ReleaseBuild{
+			Workdir: workdir,
+			Command: []string{"sh", "./" + filepath.ToSlash(scriptPath)},
+		},
+	}
+	writeReleaseTestManifest(t, pluginDir, manifest)
+	writeReleaseBuildScript(t, pluginDir, scriptPath, body)
+}
+
+func writeReleaseBuildScript(t *testing.T, dir, rel, body string) {
+	t.Helper()
+
+	writeTestFile(t, dir, rel, []byte("#!/bin/sh\nset -eu\n"+body), 0o755)
+}
+
 func runPluginReleaseCommand(t *testing.T, pluginDir string, args ...string) string {
 	t.Helper()
 
 	out, err := runPluginReleaseCommandResult(pluginDir, args...)
 	if err != nil {
-		t.Fatalf("plugin release failed: %v\n%s", err, out)
+		t.Fatalf("provider release failed: %v\n%s", err, out)
 	}
 	return string(out)
 }
 
 func runPluginCommandResult(pluginDir string, args ...string) ([]byte, error) {
-	cmdArgs := append([]string{"plugin"}, args...)
+	cmdArgs := append([]string{"provider"}, args...)
 	cmd := exec.Command(gestaltdBin, cmdArgs...)
 	cmd.Dir = pluginDir
 	return cmd.CombinedOutput()

@@ -230,10 +230,10 @@ You can also use it to check startup behavior directly:
 docker run --rm valontechnologies/gestaltd:latest --help
 ```
 
-## Releasing plugins
+## Releasing providers
 
-If you build a plugin release in Docker, run `gestaltd plugin release` from the
-plugin source directory:
+If you build a provider release in Docker, run `gestaltd provider release` from
+the provider source directory:
 
 ```dockerfile
 FROM valontechnologies/gestaltd:latest AS gestaltd
@@ -244,7 +244,7 @@ COPY --from=gestaltd /gestaltd /usr/local/bin/gestaltd
 WORKDIR /src
 COPY . .
 RUN cd ./my-plugin && \
-    gestaltd plugin release --version 0.0.1-alpha.1 --platform all && \
+    gestaltd provider release --version 0.0.1-alpha.1 --platform all && \
     gestaltd init --config ./deploy/config.yaml
 ```
 

@@ -11,15 +11,16 @@ import (
 )
 
 type providerManifestWireRoot struct {
-	Source      string                          `json:"source,omitempty" yaml:"source,omitempty"`
-	Version     string                          `json:"version" yaml:"version"`
-	DisplayName string                          `json:"display_name,omitempty" yaml:"display_name,omitempty"`
-	Description string                          `json:"description,omitempty" yaml:"description,omitempty"`
-	IconFile    string                          `json:"icon_file,omitempty" yaml:"icon_file,omitempty"`
-	Kinds       []string                        `json:"kinds,omitempty" yaml:"kinds,omitempty"`
-	Provider    *providerManifestWire           `json:"provider,omitempty" yaml:"provider,omitempty"`
-	WebUI       *pluginmanifestv1.WebUIMetadata `json:"webui,omitempty" yaml:"webui,omitempty"`
-	Artifacts   []pluginmanifestv1.Artifact     `json:"artifacts,omitempty" yaml:"artifacts,omitempty"`
+	Source      string                            `json:"source,omitempty" yaml:"source,omitempty"`
+	Version     string                            `json:"version" yaml:"version"`
+	DisplayName string                            `json:"display_name,omitempty" yaml:"display_name,omitempty"`
+	Description string                            `json:"description,omitempty" yaml:"description,omitempty"`
+	IconFile    string                            `json:"icon_file,omitempty" yaml:"icon_file,omitempty"`
+	Kinds       []string                          `json:"kinds,omitempty" yaml:"kinds,omitempty"`
+	Release     *pluginmanifestv1.ReleaseMetadata `json:"release,omitempty" yaml:"release,omitempty"`
+	Provider    *providerManifestWire             `json:"provider,omitempty" yaml:"provider,omitempty"`
+	WebUI       *pluginmanifestv1.WebUIMetadata   `json:"webui,omitempty" yaml:"webui,omitempty"`
+	Artifacts   []pluginmanifestv1.Artifact       `json:"artifacts,omitempty" yaml:"artifacts,omitempty"`
 }
 
 type providerManifestWire struct {
@@ -120,6 +121,7 @@ func providerWireToInternal(wire *providerManifestWireRoot) *pluginmanifestv1.Ma
 		Description: wire.Description,
 		IconFile:    wire.IconFile,
 		Kinds:       append([]string(nil), wire.Kinds...),
+		Release:     wire.Release,
 		WebUI:       wire.WebUI,
 		Artifacts:   append([]pluginmanifestv1.Artifact(nil), wire.Artifacts...),
 	}
@@ -227,6 +229,7 @@ func internalProviderManifestToWire(manifest *pluginmanifestv1.Manifest) *provid
 		DisplayName: manifest.DisplayName,
 		Description: manifest.Description,
 		IconFile:    manifest.IconFile,
+		Release:     manifest.Release,
 		WebUI:       manifest.WebUI,
 		Artifacts:   append([]pluginmanifestv1.Artifact(nil), manifest.Artifacts...),
 	}

@@ -1,6 +1,6 @@
 # Server CLI
 
-`gestaltd` manages server lifecycle and plugin releases.
+`gestaltd` manages server lifecycle and provider releases.
 
 ## Server commands
 
@@ -13,11 +13,11 @@
 | `gestaltd validate --config PATH` | Validate config without serving. |
 | `gestaltd --version` | Print the server version. |
 
-## Plugin commands
+## Provider commands
 
 | Command | Purpose |
 | --- | --- |
-| `gestaltd plugin release --version VERSION` | Build and package a plugin release. Go, Rust, and Python integration source plugins default to the host platform; Go and Rust auth/datastore source packages do too. Pass `--platform ...` with `os/arch[/libc]` targets or `--platform all` for multi-platform builds. |
+| `gestaltd provider release --version VERSION` | Build and package a provider release. Go, Rust, and Python integration source plugins default to the host platform; Go and Rust auth/datastore source packages do too. Pass `--platform ...` with `os/arch[/libc]` targets or `--platform all` for multi-platform builds. |
 
 ## Examples
 
@@ -26,9 +26,9 @@ gestaltd
 gestaltd init --config ./config.yaml
 gestaltd serve --locked --config ./config.yaml
 gestaltd validate --config ./config.yaml
-gestaltd plugin release --version 0.0.1-alpha.1
-gestaltd plugin release --version 0.0.1-alpha.1 --platform all
-gestaltd plugin release --version 0.0.1-alpha.1 --platform linux/amd64/glibc,linux/amd64/musl
+gestaltd provider release --version 0.0.1-alpha.1
+gestaltd provider release --version 0.0.1-alpha.1 --platform all
+gestaltd provider release --version 0.0.1-alpha.1 --platform linux/amd64/glibc,linux/amd64/musl
 ```
 
 See [Configuration](/configuration) for the relationship between `init`, `serve --locked`, and `validate`.

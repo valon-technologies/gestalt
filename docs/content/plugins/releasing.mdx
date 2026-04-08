@@ -12,7 +12,7 @@ Gestalt uses the same release system for executable provider packages, auth and 
 
 ## Source manifests vs release manifests
 
-During local development and `gestaltd plugin release`, source manifests can
+During local development and `gestaltd provider release`, source manifests can
 omit `artifacts` and executable `entrypoints`. Release packaging materializes
 those fields for you.
 
@@ -91,6 +91,27 @@ source execution and release packaging.
   </Tabs.Tab>
 </Tabs>
 
+### Source release builds
+
+Source manifests may optionally define a `release.build` command. Gestalt runs
+it before source-manifest preparation, which lets web UI packages generate
+static assets and lets provider/auth/datastore packages generate support files
+such as config schemas before packaging.
+
+```yaml
+source: github.com/acme/plugins/gestalt-ui
+version: 1.2.0
+release:
+  build:
+    workdir: ui
+    command:
+      - npm
+      - run
+      - build
+webui:
+  asset_root: ui/out
+```
+
 ### Release manifest for an executable provider
 
 Released executable providers add concrete `entrypoints.provider` and
@@ -127,17 +148,17 @@ webui:
 
 ## Build a release
 
-Use `gestaltd plugin release` to build a plugin release and produce release archives:
+Use `gestaltd provider release` to build a provider release and produce release archives:
 
 ```sh
-gestaltd plugin release --version 0.0.1-alpha.1
+gestaltd provider release --version 0.0.1-alpha.1
 ```
 
-Run this from the plugin source directory. It produces release archives and writes a checksums file.
+Run this from the provider source directory. It produces release archives and writes a checksums file.
 
 Release tags are derived from the package path after the repository. For example, `source: github.com/acme/plugins/catalog/support-api` releases from the tag `plugins/catalog/support-api/v0.1.0`.
 
-For executable Go, Rust, and Python integration source plugins, `plugin release`
+For executable Go, Rust, and Python integration source plugins, `provider release`
 materializes the executable catalog automatically and builds the host-platform
 artifact by default. Go and Rust auth/datastore source packages use the same
 release flow without catalog generation. Pass `--platform` with a

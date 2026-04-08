@@ -39,8 +39,8 @@ func run(args []string) error {
 		case "version", "--version", "-v":
 			fmt.Println(version)
 			return nil
-		case "plugin":
-			return runPlugin(args[1:])
+		case "provider":
+			return runProvider(args[1:])
 		case "serve":
 			return runServe(args[1:])
 		case "init":
@@ -497,13 +497,13 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd [--config PATH] [--artifacts-dir PATH]")
 	writeUsageLine(w, "  gestaltd init [--config PATH] [--artifacts-dir PATH]")
 	writeUsageLine(w, "  gestaltd serve [--config PATH] [--artifacts-dir PATH] [--locked]")
-	writeUsageLine(w, "  gestaltd plugin <command> [flags]")
+	writeUsageLine(w, "  gestaltd provider <command> [flags]")
 	writeUsageLine(w, "  gestaltd validate [--config PATH] [--artifacts-dir PATH]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Commands:")
 	writeUsageLine(w, "  init        Resolve providers and plugins and write lock state")
+	writeUsageLine(w, "  provider    Build provider release archives")
 	writeUsageLine(w, "  serve       Start the server (use --locked for production)")
-	writeUsageLine(w, "  plugin      Build plugin release archives")
 	writeUsageLine(w, "  validate    Load and validate configuration without starting the server")
 	writeUsageLine(w, "  version     Print the version and exit")
 	writeUsageLine(w, "")
