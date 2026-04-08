@@ -496,7 +496,7 @@ See [Plugin Manifests](/reference/plugin-manifests) for the manifest schema and 
 
 ## Writing an Auth Provider
 
-Auth providers handle platform login. They implement the same plugin runtime as integration providers but serve a different gRPC contract. Auth and datastore provider SDKs are available for Go and Rust. Python support for these provider kinds is coming soon.
+Auth providers handle platform login. They implement the same plugin runtime as integration providers but serve a different gRPC contract.
 
 ### Manifest
 
@@ -519,7 +519,7 @@ The optional `auth.config_schema_path` field points to a JSON Schema that valida
 
 An auth provider implements `Configure`, `BeginLogin`, and `CompleteLogin`. `BeginLogin` receives the callback URL and a host-generated state parameter and returns an authorization URL. `CompleteLogin` receives the query parameters from the callback and returns the authenticated user's identity.
 
-<Tabs items={['Go', 'Rust']}>
+<Tabs items={['Go', 'Python', 'Rust']}>
   <Tabs.Tab>
     ```go
     package main
@@ -577,6 +577,40 @@ An auth provider implements `Configure`, `BeginLogin`, and `CompleteLogin`. `Beg
     ```
 
     Two optional interfaces extend the base contract: `ExternalTokenValidator` (lets API clients present a token directly instead of browser login) and `SessionTTLProvider` (controls session lifetime, default 24 hours).
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    import gestalt
+
+    class MyAuth(gestalt.AuthProvider):
+        def configure(self, name: str, config: dict) -> None:
+            self.client_id = config.get("client_id", "")
+            self.issuer_url = config.get("issuer_url", "")
+
+        def begin_login(self, request: gestalt.BeginLoginRequest) -> gestalt.BeginLoginResponse:
+            auth_url = (
+                f"{self.issuer_url}/authorize"
+                f"?client_id={self.client_id}"
+                f"&redirect_uri={request.callback_url}"
+                f"&state={request.host_state}"
+                f"&response_type=code"
+            )
+            return gestalt.BeginLoginResponse(authorization_url=auth_url)
+
+        def complete_login(self, request: gestalt.CompleteLoginRequest) -> gestalt.AuthenticatedUser:
+            code = request.query.get("code", "")
+            # Exchange code for tokens, extract user info.
+            return gestalt.AuthenticatedUser(
+                subject="user-123",
+                email="user@example.com",
+                email_verified=True,
+                display_name="Example User",
+            )
+
+    MyAuth().serve()
+    ```
+
+    Optional mixins: inherit from `gestalt.ExternalTokenValidator` to support direct token validation, or `gestalt.SessionTTLProvider` to control session lifetime.
   </Tabs.Tab>
   <Tabs.Tab>
     ```rust
@@ -675,7 +709,7 @@ datastore:
 
 A datastore provider is a larger interface. It composes user storage, integration token storage, and API token storage, plus `Migrate` for schema setup and `HealthCheck` for readiness. The host encrypts tokens before passing them to the datastore, so the datastore stores sealed bytes without needing the encryption key.
 
-<Tabs items={['Go', 'Rust']}>
+<Tabs items={['Go', 'Python', 'Rust']}>
   <Tabs.Tab>
     ```go
     package main
@@ -730,6 +764,41 @@ A datastore provider is a larger interface. It composes user storage, integratio
     ```
 
     Optionally implement `OAuthRegistrationStore` (`GetOAuthRegistration`, `PutOAuthRegistration`, `DeleteOAuthRegistration`) to support MCP OAuth dynamic client registration.
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    import gestalt
+
+    class MyDatastore(gestalt.DatastoreProvider):
+        def configure(self, name: str, config: dict) -> None:
+            self.dsn = config.get("dsn", "")
+            # Initialize database connection.
+
+        def migrate(self) -> None:
+            # Create users, integration_tokens, and api_tokens tables.
+            pass
+
+        # UserStore
+        def get_user(self, id: str) -> gestalt.StoredUser | None: ...
+        def find_or_create_user(self, email: str) -> gestalt.StoredUser: ...
+
+        # IntegrationTokenStore (tokens are pre-sealed by the host)
+        def put_integration_token(self, token: gestalt.StoredIntegrationToken) -> None: ...
+        def get_integration_token(self, user_id: str, integration: str, connection: str, instance: str) -> gestalt.StoredIntegrationToken | None: ...
+        def list_integration_tokens(self, user_id: str, integration: str, connection: str) -> list[gestalt.StoredIntegrationToken]: ...
+        def delete_integration_token(self, id: str) -> None: ...
+
+        # APITokenStore (tokens are SHA-256 hashed, not encrypted)
+        def put_api_token(self, token: gestalt.StoredAPIToken) -> None: ...
+        def get_api_token_by_hash(self, hashed_token: str) -> gestalt.StoredAPIToken | None: ...
+        def list_api_tokens(self, user_id: str) -> list[gestalt.StoredAPIToken]: ...
+        def revoke_api_token(self, user_id: str, id: str) -> None: ...
+        def revoke_all_api_tokens(self, user_id: str) -> int: ...
+
+    MyDatastore().serve()
+    ```
+
+    Optionally inherit from `gestalt.OAuthRegistrationStore` to support MCP OAuth dynamic client registration.
   </Tabs.Tab>
   <Tabs.Tab>
     ```rust
