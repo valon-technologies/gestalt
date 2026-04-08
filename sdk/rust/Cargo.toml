@@ -31,4 +31,4 @@ protoc-bin-vendored = "3"
 tonic-build = "0.11"
 
 [dev-dependencies]
-tower = "0.4"
+tower = "0.5"
