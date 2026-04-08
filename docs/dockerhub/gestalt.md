@@ -106,6 +106,6 @@ of the Docker image.
 
 ## Learn more
 
-- Docs: https://docs.valon.tools
-- CLI reference: https://docs.valon.tools/reference/cli
+- Docs: https://gestaltd.ai
+- CLI reference: https://gestaltd.ai/reference/cli
 - Source: https://github.com/valon-technologies/gestalt

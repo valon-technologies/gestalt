@@ -61,5 +61,5 @@ If you add a new built-in auth provider, datastore, secret manager, or named pro
 
 1. Register it in the relevant `gestaltd/cmd/gestaltd` file.
 2. Add or update tests.
-3. Update [Built-in Providers](https://docs.valon.tools/reference/built-in-providers).
+3. Update [Built-in Providers](https://gestaltd.ai/reference/built-in-providers).
 4. Update any docs or examples that describe the supported inventory.
