@@ -5,7 +5,6 @@ use async_trait::async_trait;
 
 use crate::catalog::Catalog;
 use crate::error::{Error, Result};
-use crate::runtime_types::RuntimeMetadata;
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Request {
@@ -38,7 +37,7 @@ impl<T> Response<T> {
 }
 
 pub fn ok<T>(body: T) -> Response<T> {
-    Response::new(http::StatusCode::OK.as_u16(), body)
+    Response::new(200, body)
 }
 
 pub trait IntoResponse<T> {
@@ -55,6 +54,14 @@ impl<T> IntoResponse<T> for T {
     fn into_response(self) -> Response<T> {
         ok(self)
     }
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct RuntimeMetadata {
+    pub name: String,
+    pub display_name: String,
+    pub description: String,
+    pub version: String,
 }
 
 #[async_trait]

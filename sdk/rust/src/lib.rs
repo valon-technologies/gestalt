@@ -11,10 +11,8 @@ mod error;
 mod provider_server;
 mod router;
 mod rpc_status;
-mod runtime_server;
-mod runtime_types;
-
 pub mod runtime;
+mod runtime_server;
 
 /// The shared protobuf package name used by the Gestalt SDK protocol surface.
 pub const PROTO_PACKAGE: &str = "gestalt.plugin.v1";
@@ -30,6 +28,7 @@ pub mod proto {
     pub use crate::generated::v1;
 }
 
+pub use api::RuntimeMetadata;
 pub use api::{IntoResponse, Provider, Request, Response, ok};
 pub use async_trait::async_trait;
 pub use auth::{
@@ -48,7 +47,6 @@ pub use env::{
 pub use error::{Error, Result};
 pub use provider_server::{OperationResult, ProviderServer};
 pub use router::{Operation, Router};
-pub use runtime_types::RuntimeMetadata;
 
 #[doc(hidden)]
 pub trait IntoRouterResult<P> {

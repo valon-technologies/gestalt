@@ -135,18 +135,12 @@ impl<P> Router<P> {
         request: Request,
     ) -> OperationResult {
         let Some(handler) = self.handlers.get(operation) else {
-            return OperationResult::error(
-                http::StatusCode::NOT_FOUND.as_u16(),
-                "unknown operation",
-            );
+            return OperationResult::error(404, "unknown operation");
         };
 
         match tokio::spawn(handler(provider, params, request)).await {
             Ok(result) => result,
-            Err(error) => OperationResult::error(
-                http::StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
-                join_error_message(error),
-            ),
+            Err(error) => OperationResult::error(500, join_error_message(error)),
         }
     }
 }
@@ -229,12 +223,12 @@ where
 }
 
 fn decode_params<In: DeserializeOwned>(operation_id: &str, raw_params: Value) -> Result<In> {
-    match serde_json::from_value::<In>(raw_params.clone()) {
+    let empty = is_empty_object(&raw_params);
+    match serde_json::from_value::<In>(raw_params) {
         Ok(input) => Ok(input),
-        Err(error) if is_empty_object(&raw_params) => serde_json::from_value::<In>(Value::Null)
-            .map_err(|_| {
-                Error::bad_request(format!("decode params for {:?}: {}", operation_id, error))
-            }),
+        Err(error) if empty => serde_json::from_value::<In>(Value::Null).map_err(|_| {
+            Error::bad_request(format!("decode params for {:?}: {}", operation_id, error))
+        }),
         Err(error) => Err(Error::bad_request(format!(
             "decode params for {:?}: {}",
             operation_id, error
@@ -291,7 +285,7 @@ mod tests {
                 Request::default(),
             )
             .await;
-        assert_eq!(result.status, http::StatusCode::NOT_FOUND.as_u16());
+        assert_eq!(result.status, 404);
     }
 
     #[test]

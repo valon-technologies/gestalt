@@ -5,6 +5,11 @@ pub struct Error {
     message: String,
 }
 
+pub(crate) const HTTP_BAD_REQUEST: u16 = 400;
+pub(crate) const HTTP_NOT_FOUND: u16 = 404;
+pub(crate) const HTTP_INTERNAL_SERVER_ERROR: u16 = 500;
+pub(crate) const HTTP_NOT_IMPLEMENTED: u16 = 501;
+
 pub type Result<T> = std::result::Result<T, Error>;
 
 impl Error {
@@ -23,19 +28,19 @@ impl Error {
     }
 
     pub fn bad_request(message: impl Into<String>) -> Self {
-        Self::with_status(http::StatusCode::BAD_REQUEST.as_u16(), message)
+        Self::with_status(HTTP_BAD_REQUEST, message)
     }
 
     pub fn internal(message: impl Into<String>) -> Self {
-        Self::with_status(http::StatusCode::INTERNAL_SERVER_ERROR.as_u16(), message)
+        Self::with_status(HTTP_INTERNAL_SERVER_ERROR, message)
     }
 
     pub fn not_found(message: impl Into<String>) -> Self {
-        Self::with_status(http::StatusCode::NOT_FOUND.as_u16(), message)
+        Self::with_status(HTTP_NOT_FOUND, message)
     }
 
     pub fn unimplemented(message: impl Into<String>) -> Self {
-        Self::with_status(http::StatusCode::NOT_IMPLEMENTED.as_u16(), message)
+        Self::with_status(HTTP_NOT_IMPLEMENTED, message)
     }
 
     pub fn status(&self) -> Option<u16> {
