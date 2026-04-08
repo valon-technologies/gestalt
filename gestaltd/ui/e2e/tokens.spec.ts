@@ -86,6 +86,54 @@ test.describe("Token Management", () => {
     ).toBeVisible();
   });
 
+  test("keeps the created token visible when stale list requests finish later", async ({
+    authenticatedPage,
+  }) => {
+    const page = authenticatedPage;
+    let tokens: APIToken[] = [];
+    let getCount = 0;
+
+    await page.route("**/api/v1/tokens", async (route, request) => {
+      if (request.method() === "GET") {
+        getCount += 1;
+        if (getCount === 1) {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          await route.fulfill({ json: [] });
+          return;
+        }
+        await route.fulfill({ json: tokens });
+        return;
+      }
+
+      if (request.method() === "POST") {
+        tokens = [
+          {
+            id: "tok-race",
+            name: "race-token",
+            scopes: "",
+            created_at: new Date().toISOString(),
+          },
+        ];
+        await route.fulfill({
+          status: 201,
+          json: { id: "tok-race", name: "race-token", token: "gestalt_race_secret" },
+        });
+        return;
+      }
+
+      await route.continue();
+    });
+    await mockIntegrations(page, []);
+
+    await page.goto("/tokens");
+    await page.getByLabel("Token name").fill("race-token");
+    await page.getByRole("button", { name: "Create Token" }).click();
+
+    await expect(page.getByText("Copy this token now")).toBeVisible();
+    await expect(page.locator("tr", { hasText: "race-token" })).toBeVisible();
+    await expect(page.getByText("No API tokens yet.")).toBeHidden();
+  });
+
   test("revokes a token", async ({ authenticatedPage }) => {
     const page = authenticatedPage;
     let tokens = [...sampleTokens];

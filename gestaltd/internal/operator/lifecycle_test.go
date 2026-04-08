@@ -182,6 +182,68 @@ plugins:
 	}
 }
 
+func TestLoadForExecutionAtPath_ResolvesLocalMCPOAuthManifestPluginWithoutLockfile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manifestPath := filepath.Join(dir, "plugin.yaml")
+	manifest := []byte(`
+source: github.com/testowner/plugins/notion
+version: 0.0.1-alpha.1
+display_name: Notion
+provider:
+  connections:
+    mcp:
+      mode: user
+      auth:
+        type: mcp_oauth
+  surfaces:
+    mcp:
+      url: https://mcp.notion.com/mcp
+      connection: mcp
+`)
+	if err := os.WriteFile(manifestPath, manifest, 0o644); err != nil {
+		t.Fatalf("WriteFile manifest: %v", err)
+	}
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `server:
+  encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+plugins:
+  notion:
+    provider:
+      source:
+        path: ./plugin.yaml
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	lc := NewLifecycle(nil)
+	loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath: %v", err)
+	}
+
+	intg := loaded.Integrations["notion"]
+	if intg.Plugin == nil || intg.Plugin.ResolvedManifest == nil || intg.Plugin.ResolvedManifest.Plugin == nil {
+		t.Fatalf("ResolvedManifest = %+v", intg.Plugin)
+	}
+	if got := intg.Plugin.ResolvedManifest.Plugin.MCPURL; got != "https://mcp.notion.com/mcp" {
+		t.Fatalf("MCPURL = %q, want %q", got, "https://mcp.notion.com/mcp")
+	}
+	conn := intg.Plugin.ResolvedManifest.Plugin.Connections["mcp"]
+	if conn == nil || conn.Auth == nil {
+		t.Fatalf("MCP connection = %#v", conn)
+	}
+	if got := conn.Auth.Type; got != pluginmanifestv1.AuthTypeMCPOAuth {
+		t.Fatalf("MCP auth type = %q, want %q", got, pluginmanifestv1.AuthTypeMCPOAuth)
+	}
+	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); !os.IsNotExist(err) {
+		t.Fatalf("lockfile should not be created, got err=%v", err)
+	}
+}
+
 func TestLockProviderEntryForSource_RejectsManifestWithoutProviderKind(t *testing.T) {
 	t.Parallel()
 

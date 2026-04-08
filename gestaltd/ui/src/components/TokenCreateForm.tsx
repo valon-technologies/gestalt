@@ -6,7 +6,7 @@ import { INPUT_CLASSES } from "@/lib/constants";
 import Button from "./Button";
 
 interface TokenCreateFormProps {
-  onCreated: () => void;
+  onCreated: () => void | Promise<void>;
 }
 
 export default function TokenCreateForm({ onCreated }: TokenCreateFormProps) {
@@ -28,7 +28,7 @@ export default function TokenCreateForm({ onCreated }: TokenCreateFormProps) {
       const result = await createToken(name);
       setPlaintext(result.token);
       form.reset();
-      onCreated();
+      await onCreated();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create token");
     } finally {

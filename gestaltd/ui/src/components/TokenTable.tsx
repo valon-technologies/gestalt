@@ -6,7 +6,7 @@ import { useState } from "react";
 
 interface TokenTableProps {
   tokens: APIToken[];
-  onRevoked: () => void;
+  onRevoked: () => void | Promise<void>;
 }
 
 export default function TokenTable({ tokens, onRevoked }: TokenTableProps) {
@@ -18,7 +18,7 @@ export default function TokenTable({ tokens, onRevoked }: TokenTableProps) {
     setError(null);
     try {
       await revokeToken(id);
-      onRevoked();
+      await onRevoked();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to revoke token");
     } finally {
