@@ -70,10 +70,15 @@ func (p *UIPluginDef) HasManagedArtifacts() bool {
 	return p != nil && p.Source != ""
 }
 
+type PluginSourceAuthDef struct {
+	Token string `yaml:"token"`
+}
+
 type PluginSourceDef struct {
-	Path    string `yaml:"path"`
-	Ref     string `yaml:"ref"`
-	Version string `yaml:"version"`
+	Path    string               `yaml:"path"`
+	Ref     string               `yaml:"ref"`
+	Version string               `yaml:"version"`
+	Auth    *PluginSourceAuthDef `yaml:"auth,omitempty"`
 }
 
 type EgressConfig struct {
@@ -161,6 +166,13 @@ func (p *PluginDef) SourceVersion() string {
 		return ""
 	}
 	return p.Source.Version
+}
+
+func (p *PluginDef) SourceAuth() *PluginSourceAuthDef {
+	if p == nil || p.Source == nil {
+		return nil
+	}
+	return p.Source.Auth
 }
 
 func (p *PluginDef) HasResolvedManifest() bool {
@@ -1131,6 +1143,17 @@ func validateExternalPlugin(kind, name string, plugin *PluginDef) error {
 
 	if plugin.HasLocalSource() && plugin.SourceVersion() != "" {
 		return fmt.Errorf("config validation: %s %q plugin.source.version is only valid with plugin.source.ref", kind, name)
+	}
+	if plugin.Source != nil && plugin.Source.Auth != nil {
+		if !plugin.HasManagedSource() {
+			return fmt.Errorf("config validation: %s %q plugin.source.auth is only valid with plugin.source.ref", kind, name)
+		}
+		if strings.TrimSpace(plugin.Source.Auth.Token) == "" {
+			return fmt.Errorf("config validation: %s %q plugin.source.auth.token is required when plugin.source.auth is set", kind, name)
+		}
+		if strings.HasPrefix(plugin.Source.Auth.Token, "secret://") {
+			return fmt.Errorf("config validation: %s %q plugin.source.auth.token does not support secret:// references; use environment expansion instead", kind, name)
+		}
 	}
 
 	if kind != "integration" {

@@ -545,6 +545,19 @@ plugins:
 `,
 		},
 		{
+			name: "plugin source auth token with managed source is valid",
+			yaml: `
+plugins:
+  external:
+    provider:
+      source:
+        ref: github.com/acme-corp/tools/widget
+        version: 1.2.3
+        auth:
+          token: ghp_widget_token
+`,
+		},
+		{
 			name: "plugin source with base_url override is rejected",
 			yaml: `
 plugins:
@@ -567,6 +580,47 @@ plugins:
         ref: github.com/acme-corp/tools/widget
 `,
 			wantErr: "plugin.source.version is required",
+		},
+		{
+			name: "plugin source auth is rejected for local path sources",
+			yaml: `
+plugins:
+  external:
+    provider:
+      source:
+        path: ./plugins/dummy/plugin.yaml
+        auth:
+          token: not-used
+`,
+			wantErr: "plugin.source.auth is only valid with plugin.source.ref",
+		},
+		{
+			name: "plugin source auth token is required",
+			yaml: `
+plugins:
+  external:
+    provider:
+      source:
+        ref: github.com/acme-corp/tools/widget
+        version: 1.2.3
+        auth:
+          token: ${MISSING_WIDGET_TOKEN}
+`,
+			wantErr: "plugin.source.auth.token is required",
+		},
+		{
+			name: "plugin source auth token rejects secret refs",
+			yaml: `
+plugins:
+  external:
+    provider:
+      source:
+        ref: github.com/acme-corp/tools/widget
+        version: 1.2.3
+        auth:
+          token: secret://widget-token
+`,
+			wantErr: "plugin.source.auth.token does not support secret:// references",
 		},
 		{
 			name: "non-default connection params are rejected",
@@ -660,6 +714,38 @@ egress:
 				t.Fatalf("Load: %v", err)
 			}
 		})
+	}
+}
+
+func TestBuildComponentRuntimeConfigNodeStripsSourceAuth(t *testing.T) {
+	t.Parallel()
+
+	node, err := BuildComponentRuntimeConfigNode("provider", "integration", &PluginDef{
+		Source: &PluginSourceDef{
+			Ref:     "github.com/acme-corp/tools/widget",
+			Version: "1.2.3",
+			Auth: &PluginSourceAuthDef{
+				Token: "ghp_should_not_leak",
+			},
+		},
+	}, yaml.Node{Kind: yaml.MappingNode})
+	if err != nil {
+		t.Fatalf("BuildComponentRuntimeConfigNode: %v", err)
+	}
+
+	decoded := mustDecodeNode(t, node)
+	source, ok := decoded["source"].(map[string]any)
+	if !ok {
+		t.Fatalf("source = %#v, want map", decoded["source"])
+	}
+	if got := source["ref"]; got != "github.com/acme-corp/tools/widget" {
+		t.Fatalf("source.ref = %v", got)
+	}
+	if got := source["version"]; got != "1.2.3" {
+		t.Fatalf("source.version = %v", got)
+	}
+	if _, ok := source["auth"]; ok {
+		t.Fatalf("source.auth should be omitted from runtime config: %#v", source)
 	}
 }
 

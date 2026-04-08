@@ -428,14 +428,14 @@ func (l *Lifecycle) writeComponentArtifact(ctx context.Context, paths initPaths,
 }
 
 func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, paths initPaths, kind, name, destDir string, plugin *config.PluginDef, configMap map[string]any) (LockEntry, error) {
-	src, err := pluginsource.Parse(plugin.SourceRef())
+	req, err := sourceResolveRequest(plugin)
 	if err != nil {
 		return LockEntry{}, fmt.Errorf("%s %q plugin.source.ref %q: %w", kind, name, plugin.SourceRef(), err)
 	}
 	if l.sourceResolver == nil {
 		return LockEntry{}, fmt.Errorf("%s %q: source plugin resolution requires a source resolver", kind, name)
 	}
-	resolved, err := l.sourceResolver.Resolve(ctx, src, plugin.SourceVersion())
+	resolved, err := l.sourceResolver.Resolve(ctx, req)
 	if err != nil {
 		return LockEntry{}, fmt.Errorf("%s %q resolve source %q@%s: %w", kind, name, plugin.SourceRef(), plugin.SourceVersion(), err)
 	}
@@ -486,14 +486,14 @@ func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, paths initP
 }
 
 func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths initPaths, name string, plugin *config.PluginDef, configMap map[string]any) (LockProviderEntry, error) {
-	src, err := pluginsource.Parse(plugin.SourceRef())
+	req, err := sourceResolveRequest(plugin)
 	if err != nil {
 		return LockProviderEntry{}, fmt.Errorf("provider %q plugin.source.ref %q: %w", name, plugin.SourceRef(), err)
 	}
 	if l.sourceResolver == nil {
 		return LockProviderEntry{}, fmt.Errorf("provider %q: source plugin resolution requires a source resolver", name)
 	}
-	resolved, err := l.sourceResolver.Resolve(ctx, src, plugin.SourceVersion())
+	resolved, err := l.sourceResolver.Resolve(ctx, req)
 	if err != nil {
 		return LockProviderEntry{}, fmt.Errorf("provider %q resolve source %q@%s: %w", name, plugin.SourceRef(), plugin.SourceVersion(), err)
 	}
@@ -561,7 +561,10 @@ func (l *Lifecycle) writeUIPluginArtifact(ctx context.Context, cfg *config.Confi
 		if l.sourceResolver == nil {
 			return LockUIEntry{}, fmt.Errorf("ui plugin: source resolution requires a source resolver")
 		}
-		resolved, err := l.sourceResolver.Resolve(ctx, src, plugin.Version)
+		resolved, err := l.sourceResolver.Resolve(ctx, pluginsource.ResolveRequest{
+			Source:  src,
+			Version: plugin.Version,
+		})
 		if err != nil {
 			return LockUIEntry{}, fmt.Errorf("ui plugin resolve source %q@%s: %w", plugin.Source, plugin.Version, err)
 		}
@@ -596,6 +599,21 @@ func (l *Lifecycle) writeUIPluginArtifact(ctx context.Context, cfg *config.Confi
 	}
 
 	return LockUIEntry{}, fmt.Errorf("ui plugin requires source")
+}
+
+func sourceResolveRequest(plugin *config.PluginDef) (pluginsource.ResolveRequest, error) {
+	src, err := pluginsource.Parse(plugin.SourceRef())
+	if err != nil {
+		return pluginsource.ResolveRequest{}, err
+	}
+	req := pluginsource.ResolveRequest{
+		Source:  src,
+		Version: plugin.SourceVersion(),
+	}
+	if auth := plugin.SourceAuth(); auth != nil {
+		req.Auth = &pluginsource.Auth{Token: auth.Token}
+	}
+	return req, nil
 }
 
 func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *config.Config, locked bool) error {

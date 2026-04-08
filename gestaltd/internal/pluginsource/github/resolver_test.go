@@ -31,6 +31,13 @@ var testSource = pluginsource.Source{
 	Path:  "plugins/" + testPlugin,
 }
 
+func testResolveRequest() pluginsource.ResolveRequest {
+	return pluginsource.ResolveRequest{
+		Source:  testSource,
+		Version: testVersion,
+	}
+}
+
 func currentPlatformAssetName() string {
 	return platformAssetNameFor(testPlugin, testVersion)
 }
@@ -434,7 +441,7 @@ func TestResolveSuccess(t *testing.T) {
 	defer srv.Close()
 
 	resolver := &GitHubResolver{BaseURL: srv.URL}
-	pkg, err := resolver.Resolve(context.Background(), testSource, testVersion)
+	pkg, err := resolver.Resolve(context.Background(), testResolveRequest())
 	if err != nil {
 		t.Fatalf("Resolve() error: %v", err)
 	}
@@ -465,7 +472,7 @@ func TestResolveBackwardCompatAsset(t *testing.T) {
 	defer srv.Close()
 
 	resolver := &GitHubResolver{BaseURL: srv.URL}
-	pkg, err := resolver.Resolve(context.Background(), testSource, testVersion)
+	pkg, err := resolver.Resolve(context.Background(), testResolveRequest())
 	if err != nil {
 		t.Fatalf("Resolve() error: %v", err)
 	}
@@ -485,7 +492,7 @@ func TestResolveReleaseNotFound(t *testing.T) {
 	defer srv.Close()
 
 	resolver := &GitHubResolver{BaseURL: srv.URL}
-	_, err := resolver.Resolve(context.Background(), testSource, testVersion)
+	_, err := resolver.Resolve(context.Background(), testResolveRequest())
 	if err == nil {
 		t.Fatal("expected error for 404 release")
 	}
@@ -509,7 +516,7 @@ func TestResolveAssetNameMismatch(t *testing.T) {
 	defer srv.Close()
 
 	resolver := &GitHubResolver{BaseURL: srv.URL}
-	_, err := resolver.Resolve(context.Background(), testSource, testVersion)
+	_, err := resolver.Resolve(context.Background(), testResolveRequest())
 	if err == nil {
 		t.Fatal("expected error for asset mismatch")
 	}
@@ -531,7 +538,7 @@ func TestResolveAuthenticatedRequest(t *testing.T) {
 	defer srv.Close()
 
 	resolver := &GitHubResolver{BaseURL: srv.URL, Token: testToken}
-	pkg, err := resolver.Resolve(context.Background(), testSource, testVersion)
+	pkg, err := resolver.Resolve(context.Background(), testResolveRequest())
 	if err != nil {
 		t.Fatalf("Resolve() error: %v", err)
 	}
@@ -549,6 +556,30 @@ func TestResolveAuthenticatedRequest(t *testing.T) {
 	}
 }
 
+func TestResolveInlineAuthTokenOverridesResolverFallbacks(t *testing.T) {
+	t.Parallel()
+
+	var log requestLog
+	srv := newTestServer(t, currentPlatformAssetName(), withAuthLog(&log))
+	defer srv.Close()
+
+	resolver := &GitHubResolver{BaseURL: srv.URL, Token: testToken}
+	req := testResolveRequest()
+	req.Auth = &pluginsource.Auth{Token: "ghp_inline_source_token"}
+	pkg, err := resolver.Resolve(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Resolve() error: %v", err)
+	}
+	defer pkg.Cleanup()
+
+	wantAuth := authTokenPrefix + "ghp_inline_source_token"
+	for i, got := range log.all() {
+		if got != wantAuth {
+			t.Errorf("request %d: Authorization = %q, want %q", i, got, wantAuth)
+		}
+	}
+}
+
 func TestResolveGitHubTokenEnvFallback(t *testing.T) {
 	envToken := "ghp_env_fallback_token"
 	t.Setenv(envGitHubToken, envToken)
@@ -558,7 +589,7 @@ func TestResolveGitHubTokenEnvFallback(t *testing.T) {
 	defer srv.Close()
 
 	resolver := &GitHubResolver{BaseURL: srv.URL}
-	pkg, err := resolver.Resolve(context.Background(), testSource, testVersion)
+	pkg, err := resolver.Resolve(context.Background(), testResolveRequest())
 	if err != nil {
 		t.Fatalf("Resolve() error: %v", err)
 	}
@@ -581,7 +612,7 @@ func TestResolveHomebrewTokenEnvFallback(t *testing.T) {
 	defer srv.Close()
 
 	resolver := &GitHubResolver{BaseURL: srv.URL}
-	pkg, err := resolver.Resolve(context.Background(), testSource, testVersion)
+	pkg, err := resolver.Resolve(context.Background(), testResolveRequest())
 	if err != nil {
 		t.Fatalf("Resolve() error: %v", err)
 	}
@@ -606,7 +637,7 @@ func TestResolveGHCLITokenFallback(t *testing.T) {
 			return "ghp_from_gh_cli"
 		},
 	}
-	pkg, err := resolver.Resolve(context.Background(), testSource, testVersion)
+	pkg, err := resolver.Resolve(context.Background(), testResolveRequest())
 	if err != nil {
 		t.Fatalf("Resolve() error: %v", err)
 	}
@@ -627,7 +658,7 @@ func TestResolveDownloadError(t *testing.T) {
 	defer srv.Close()
 
 	resolver := &GitHubResolver{BaseURL: srv.URL}
-	_, err := resolver.Resolve(context.Background(), testSource, testVersion)
+	_, err := resolver.Resolve(context.Background(), testResolveRequest())
 	if err == nil {
 		t.Fatal("expected error for download failure")
 	}

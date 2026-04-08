@@ -36,10 +36,12 @@ type fakeResolver struct {
 	resolvedURL string
 	sha256      string
 	calls       int
+	lastReq     pluginsource.ResolveRequest
 }
 
-func (f *fakeResolver) Resolve(_ context.Context, _ pluginsource.Source, _ string) (*pluginsource.ResolvedPackage, error) {
+func (f *fakeResolver) Resolve(_ context.Context, req pluginsource.ResolveRequest) (*pluginsource.ResolvedPackage, error) {
 	f.calls++
+	f.lastReq = req
 	return &pluginsource.ResolvedPackage{
 		LocalPath:     f.archivePath,
 		Cleanup:       func() {},
@@ -193,6 +195,31 @@ func writeConfigYAML(t *testing.T, dir, source, version, artifactsDir string) st
 	return configPath
 }
 
+func writeConfigYAMLWithAuthToken(t *testing.T, dir, source, version, token, artifactsDir string) string {
+	t.Helper()
+
+	lines := []string{
+		"server:",
+		"  artifacts_dir: " + artifactsDir,
+		"plugins:",
+		"  alpha:",
+		"    provider:",
+		"      source:",
+		"        ref: " + source,
+		"        version: " + version,
+		"        auth:",
+		"          token: " + token,
+	}
+
+	yaml := strings.Join(lines, "\n") + "\n"
+
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(configPath, []byte(yaml), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	return configPath
+}
+
 func TestSourcePluginEndToEnd(t *testing.T) {
 	t.Parallel()
 
@@ -291,6 +318,53 @@ func TestSourcePluginEndToEnd(t *testing.T) {
 	readEntry := readBack.Providers["alpha"]
 	if readEntry.Source != source {
 		t.Errorf("readback Source = %q, want %q", readEntry.Source, source)
+	}
+}
+
+func TestSourcePluginInlineAuthTokenPassesToResolver(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	source := "github.com/acme/tools/widget"
+	version := "1.0.0"
+	binaryContent := "fake-binary-v1"
+	resolvedURL := "https://github.com/acme/tools/releases/download/v1.0.0/gestalt-plugin-widget_v1.0.0.tar.gz"
+
+	archivePath := buildV2Archive(t, dir, source, version, binaryContent)
+	archiveData, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("read archive: %v", err)
+	}
+	archiveSum := sha256.Sum256(archiveData)
+	archiveSHA := hex.EncodeToString(archiveSum[:])
+
+	resolver := &fakeResolver{
+		archivePath: archivePath,
+		resolvedURL: resolvedURL,
+		sha256:      archiveSHA,
+	}
+
+	configPath := writeConfigYAMLWithAuthToken(t, dir, source, version, "ghp_inline_source_token", filepath.Join(dir, "prepared-artifacts"))
+
+	lc := NewLifecycle(resolver)
+	if _, err := lc.InitAtPath(configPath); err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+
+	if resolver.calls != 1 {
+		t.Fatalf("resolver called %d times, want 1", resolver.calls)
+	}
+	if resolver.lastReq.Source.String() != source {
+		t.Fatalf("resolver source = %q, want %q", resolver.lastReq.Source.String(), source)
+	}
+	if resolver.lastReq.Version != version {
+		t.Fatalf("resolver version = %q, want %q", resolver.lastReq.Version, version)
+	}
+	if resolver.lastReq.Auth == nil {
+		t.Fatal("resolver auth is nil, want inline token")
+	}
+	if resolver.lastReq.Auth.Token != "ghp_inline_source_token" {
+		t.Fatalf("resolver auth token = %q, want %q", resolver.lastReq.Auth.Token, "ghp_inline_source_token")
 	}
 }
 
