@@ -8,6 +8,26 @@ import {
 
 const hasBackend = !!process.env.PLAYWRIGHT_BASE_URL;
 
+function encodeWrappedState(hostState: string): string {
+  return Buffer.from(
+    JSON.stringify({ host_state: hostState }),
+    "utf8",
+  ).toString("base64url");
+}
+
+async function seedOAuthState(
+  page: import("@playwright/test").Page,
+  oauthState?: string,
+) {
+  await page.addInitScript((state) => {
+    localStorage.clear();
+    sessionStorage.clear();
+    if (state) {
+      sessionStorage.setItem("oauth_state", state);
+    }
+  }, oauthState);
+}
+
 test.describe("Authentication", () => {
   test.skip(
     hasBackend,
@@ -225,11 +245,7 @@ gestaltd_operation_duration_seconds_count{gestalt_provider="slack",gestalt_opera
   test("auth callback rejects mismatched OAuth state (CSRF protection)", async ({
     page,
   }) => {
-    await page.addInitScript(() => {
-      localStorage.clear();
-      sessionStorage.clear();
-      sessionStorage.setItem("oauth_state", "correct-state");
-    });
+    await seedOAuthState(page, "correct-state");
 
     await page.goto("/auth/callback?code=test-code&state=wrong-state");
     await expect(page.getByText(/Invalid OAuth state/)).toBeVisible();
@@ -239,12 +255,79 @@ gestaltd_operation_duration_seconds_count{gestalt_provider="slack",gestalt_opera
   test("auth callback rejects when no OAuth state was saved (CSRF protection)", async ({
     page,
   }) => {
-    await page.addInitScript(() => {
-      localStorage.clear();
-      sessionStorage.clear();
-    });
+    await seedOAuthState(page);
     await page.goto("/auth/callback?code=attacker-code&state=attacker-state");
     await expect(page.getByText(/Invalid OAuth state/)).toBeVisible();
+  });
+
+  test("auth callback accepts wrapped host_state and completes login", async ({
+    page,
+  }) => {
+    const wrappedState = encodeWrappedState("correct-state");
+
+    await seedOAuthState(page, "correct-state");
+    await mockIntegrations(page, []);
+    await mockTokens(page, []);
+
+    let callbackState: string | null = null;
+    await page.route("**/api/v1/auth/login/callback?**", (route, request) => {
+      callbackState = new URL(request.url()).searchParams.get("state");
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          email: "test@gestalt.dev",
+          display_name: "Test User",
+        }),
+      });
+    });
+
+    await page.goto(`/auth/callback?code=test-code&state=${wrappedState}`);
+
+    await expect.poll(() => callbackState).toBe(wrappedState);
+    await expect(page).toHaveURL("/");
+    await expect(page.getByText("test@gestalt.dev")).toBeVisible();
+  });
+
+  test("auth callback redirects wrapped CLI state to the local listener", async ({
+    page,
+  }) => {
+    const port = 43123;
+    const cliState = "cli-original-state";
+    const wrappedState = encodeWrappedState(`cli:${port}:${cliState}`);
+
+    await seedOAuthState(page);
+
+    let localCallbackURL: string | null = null;
+    let serverCallbackCalled = false;
+
+    await page.route(`http://127.0.0.1:${port}/**`, (route, request) => {
+      localCallbackURL = request.url();
+      route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: "<!doctype html><title>CLI callback</title><p>ok</p>",
+      });
+    });
+    await page.route("**/api/v1/auth/login/callback?**", (route) => {
+      serverCallbackCalled = true;
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          email: "unexpected@gestalt.dev",
+          display_name: "Unexpected",
+        }),
+      });
+    });
+
+    await page.goto(`/auth/callback?code=test-code&state=${wrappedState}`);
+
+    await expect(page).toHaveURL(new RegExp(`^http://127\\.0\\.0\\.1:${port}/\\?`));
+    await expect.poll(() => localCallbackURL).not.toBeNull();
+    expect(new URL(localCallbackURL!).searchParams.get("code")).toBe("test-code");
+    expect(new URL(localCallbackURL!).searchParams.get("state")).toBe(cliState);
+    expect(serverCallbackCalled).toBe(false);
   });
 
   test("401 response clears session and redirects to login", async ({
