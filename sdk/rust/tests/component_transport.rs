@@ -1,8 +1,10 @@
+#[allow(dead_code)]
+mod helpers;
+
 use std::collections::BTreeMap;
-use std::ffi::OsString;
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, OnceLock};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::path::Path;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use async_trait::async_trait;
 use gestalt_plugin_sdk::proto::v1::auth_plugin_client::AuthPluginClient;
@@ -17,7 +19,7 @@ use gestalt_plugin_sdk::proto::v1::{
     StoredIntegrationToken, StoredUser, ValidateExternalTokenRequest,
 };
 use gestalt_plugin_sdk::{AuthProvider, DatastoreProvider, RuntimeMetadata};
-use prost_types::{Struct, Timestamp, Value};
+use prost_types::Timestamp;
 use tokio::net::UnixStream;
 use tonic::Code;
 use tonic::transport::Endpoint;
@@ -111,9 +113,10 @@ impl AuthProvider for TestAuthProvider {
 
 #[tokio::test]
 async fn serves_auth_provider_and_runtime_over_unix_socket() {
-    let _env_lock = env_lock().lock().await;
-    let socket = temp_socket("gestalt-rust-auth.sock");
-    let _socket_guard = EnvGuard::set(gestalt_plugin_sdk::ENV_PLUGIN_SOCKET, socket.as_os_str());
+    let _env_lock = helpers::env_lock().lock().await;
+    let socket = helpers::temp_socket("gestalt-rust-auth.sock");
+    let _socket_guard =
+        helpers::EnvGuard::set(gestalt_plugin_sdk::ENV_PLUGIN_SOCKET, socket.as_os_str());
 
     let provider = Arc::new(TestAuthProvider::default());
     let serve_provider = Arc::clone(&provider);
@@ -123,7 +126,7 @@ async fn serves_auth_provider_and_runtime_over_unix_socket() {
             .expect("serve auth provider");
     });
 
-    wait_for_socket(&socket).await;
+    helpers::wait_for_socket(&socket).await;
 
     let channel = connect_unix(&socket).await;
     let mut runtime = PluginRuntimeClient::new(channel.clone());
@@ -146,7 +149,7 @@ async fn serves_auth_provider_and_runtime_over_unix_socket() {
     let configured = runtime
         .configure_plugin(ConfigurePluginRequest {
             name: "auth-runtime".to_string(),
-            config: Some(struct_from_json(
+            config: Some(helpers::struct_from_json(
                 serde_json::json!({ "issuer": "https://issuer" }),
             )),
             protocol_version: gestalt_plugin_sdk::CURRENT_PROTOCOL_VERSION,
@@ -431,9 +434,10 @@ impl DatastoreProvider for TestDatastoreProvider {
 
 #[tokio::test]
 async fn serves_datastore_provider_and_runtime_over_unix_socket() {
-    let _env_lock = env_lock().lock().await;
-    let socket = temp_socket("gestalt-rust-datastore.sock");
-    let _socket_guard = EnvGuard::set(gestalt_plugin_sdk::ENV_PLUGIN_SOCKET, socket.as_os_str());
+    let _env_lock = helpers::env_lock().lock().await;
+    let socket = helpers::temp_socket("gestalt-rust-datastore.sock");
+    let _socket_guard =
+        helpers::EnvGuard::set(gestalt_plugin_sdk::ENV_PLUGIN_SOCKET, socket.as_os_str());
 
     let provider = Arc::new(TestDatastoreProvider::default());
     let serve_provider = Arc::clone(&provider);
@@ -443,7 +447,7 @@ async fn serves_datastore_provider_and_runtime_over_unix_socket() {
             .expect("serve datastore provider");
     });
 
-    wait_for_socket(&socket).await;
+    helpers::wait_for_socket(&socket).await;
 
     let channel = connect_unix(&socket).await;
     let mut runtime = PluginRuntimeClient::new(channel.clone());
@@ -472,7 +476,7 @@ async fn serves_datastore_provider_and_runtime_over_unix_socket() {
     runtime
         .configure_plugin(ConfigurePluginRequest {
             name: "datastore-runtime".to_string(),
-            config: Some(struct_from_json(
+            config: Some(helpers::struct_from_json(
                 serde_json::json!({ "dsn": "sqlite://memory" }),
             )),
             protocol_version: gestalt_plugin_sdk::CURRENT_PROTOCOL_VERSION,
@@ -643,86 +647,4 @@ async fn connect_unix(path: &Path) -> tonic::transport::Channel {
         }))
         .await
         .expect("connect channel")
-}
-
-struct EnvGuard {
-    key: &'static str,
-    previous: Option<OsString>,
-}
-
-fn env_lock() -> &'static tokio::sync::Mutex<()> {
-    static ENV_LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
-    ENV_LOCK.get_or_init(|| tokio::sync::Mutex::new(()))
-}
-
-impl EnvGuard {
-    fn set(key: &'static str, value: impl AsRef<std::ffi::OsStr>) -> Self {
-        let previous = std::env::var_os(key);
-        unsafe {
-            std::env::set_var(key, value);
-        }
-        Self { key, previous }
-    }
-}
-
-impl Drop for EnvGuard {
-    fn drop(&mut self) {
-        unsafe {
-            if let Some(previous) = &self.previous {
-                std::env::set_var(self.key, previous);
-            } else {
-                std::env::remove_var(self.key);
-            }
-        }
-    }
-}
-
-fn struct_from_json(value: serde_json::Value) -> Struct {
-    let object = value.as_object().expect("json object");
-    Struct {
-        fields: object
-            .iter()
-            .map(|(key, value)| (key.clone(), json_to_prost(value)))
-            .collect(),
-    }
-}
-
-fn json_to_prost(value: &serde_json::Value) -> Value {
-    use prost_types::value::Kind;
-
-    let kind = match value {
-        serde_json::Value::Null => Kind::NullValue(0),
-        serde_json::Value::Bool(boolean) => Kind::BoolValue(*boolean),
-        serde_json::Value::Number(number) => Kind::NumberValue(number.as_f64().expect("f64")),
-        serde_json::Value::String(string) => Kind::StringValue(string.clone()),
-        serde_json::Value::Array(items) => Kind::ListValue(prost_types::ListValue {
-            values: items.iter().map(json_to_prost).collect(),
-        }),
-        serde_json::Value::Object(object) => Kind::StructValue(Struct {
-            fields: object
-                .iter()
-                .map(|(key, value)| (key.clone(), json_to_prost(value)))
-                .collect(),
-        }),
-    };
-    Value { kind: Some(kind) }
-}
-
-async fn wait_for_socket(path: &Path) {
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
-    while tokio::time::Instant::now() < deadline {
-        if path.exists() {
-            return;
-        }
-        tokio::time::sleep(Duration::from_millis(25)).await;
-    }
-    panic!("socket {} was not created", path.display());
-}
-
-fn temp_socket(name: &str) -> PathBuf {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("unix epoch")
-        .as_nanos();
-    std::env::temp_dir().join(format!("{nanos}-{name}"))
 }
