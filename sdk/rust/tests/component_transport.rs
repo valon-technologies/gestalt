@@ -648,4 +648,3 @@ async fn connect_unix(path: &Path) -> tonic::transport::Channel {
         .await
         .expect("connect channel")
 }
-

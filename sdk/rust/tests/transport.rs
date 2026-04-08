@@ -136,7 +136,9 @@ async fn serves_provider_requests_over_unix_socket() {
     let started = client
         .start_provider(StartProviderRequest {
             name: "example".to_string(),
-            config: Some(helpers::struct_from_json(serde_json::json!({ "greeting": "Hi" }))),
+            config: Some(helpers::struct_from_json(
+                serde_json::json!({ "greeting": "Hi" }),
+            )),
             protocol_version: gestalt_plugin_sdk::CURRENT_PROTOCOL_VERSION,
         })
         .await
@@ -150,7 +152,9 @@ async fn serves_provider_requests_over_unix_socket() {
     let response = client
         .execute(ExecuteRequest {
             operation: "greet".to_string(),
-            params: Some(helpers::struct_from_json(serde_json::json!({ "name": "Rust" }))),
+            params: Some(helpers::struct_from_json(
+                serde_json::json!({ "name": "Rust" }),
+            )),
             token: String::new(),
             connection_params: Default::default(),
             invocation_id: String::new(),
@@ -185,4 +189,3 @@ async fn serves_provider_requests_over_unix_socket() {
     serve_task.abort();
     let _ = serve_task.await;
 }
-
