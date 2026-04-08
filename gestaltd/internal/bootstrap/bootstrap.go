@@ -1279,7 +1279,8 @@ func applyManagedParameters(def *provider.Definition, manifestPlugin *pluginmani
 		}
 	}
 
-	for opName, op := range def.Operations {
+	for opName := range def.Operations {
+		op := def.Operations[opName]
 		for _, param := range manifestPlugin.ManagedParameters {
 			if strings.EqualFold(strings.TrimSpace(param.In), "path") {
 				op.Path = strings.ReplaceAll(op.Path, "{"+strings.TrimSpace(param.Name)+"}", param.Value)
