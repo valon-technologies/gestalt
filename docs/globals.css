@@ -194,13 +194,19 @@ pre code > span {
   white-space: pre !important;
 }
 
-.nextra-nav-container {
+.nextra-navbar > nav,
+body > .nextra-skip-nav ~ div,
+footer {
+  max-width: 100% !important;
+}
+
+.nextra-navbar {
   background: rgba(255, 255, 255, 0.84) !important;
   border-bottom: 1px solid var(--valon-line);
   backdrop-filter: blur(16px);
 }
 
-.nextra-nav-container-blur {
+.nextra-navbar + div {
   display: none;
 }
 
@@ -210,27 +216,23 @@ footer > div {
   padding-right: 0 !important;
 }
 
-.nextra-nav-container nav {
-  max-width: 90rem !important;
-  width: 100% !important;
-  margin-left: auto !important;
-  margin-right: auto !important;
-  padding-left: 1rem !important;
-  padding-right: 1rem !important;
+.nextra-navbar nav {
+  padding-left: max(env(safe-area-inset-left), 1.5rem) !important;
+  padding-right: max(env(safe-area-inset-right), 1.5rem) !important;
   box-sizing: border-box !important;
 }
 
-.nextra-nav-container nav a,
-.nextra-nav-container nav button {
+.nextra-navbar nav a,
+.nextra-navbar nav button {
   color: var(--valon-secondary) !important;
 }
 
-.nextra-nav-container nav a:hover,
-.nextra-nav-container nav button:hover {
+.nextra-navbar nav a:hover,
+.nextra-navbar nav button:hover {
   color: rgba(var(--valon-ink), 1) !important;
 }
 
-.nextra-nav-container input[type='search'] {
+.nextra-navbar input[type='search'] {
   border: 1px solid var(--valon-line) !important;
   border-radius: 8px !important;
   background: rgba(248, 246, 243, 0.9) !important;
@@ -238,7 +240,7 @@ footer > div {
   box-shadow: none !important;
 }
 
-.nextra-nav-container input[type='search']::placeholder {
+.nextra-navbar input[type='search']::placeholder {
   color: var(--valon-muted) !important;
 }
 
@@ -428,7 +430,7 @@ footer {
 }
 
 button[title='Change theme'],
-.nextra-nav-container [aria-label='Menu'] + div button[title='Change theme'] {
+.nextra-navbar [aria-label='Menu'] + div button[title='Change theme'] {
   display: none !important;
 }
 
