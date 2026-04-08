@@ -27,8 +27,8 @@ func (l *StaticCredentialGrantLoader) LoadCredentialGrants(_ context.Context) ([
 // finding the first matching grant, and materializing it via secret lookup.
 // Loaders are evaluated in order; within each loader the first matching grant wins.
 type CredentialGrantResolver struct {
-	Loaders  []CredentialGrantLoader
-	Secrets  core.SecretManager
+	Loaders []CredentialGrantLoader
+	Secrets core.SecretManager
 }
 
 func (r *CredentialGrantResolver) ResolveCredential(ctx context.Context, subject Subject, target Target) (CredentialMaterialization, error) {
