@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, bail};
 use reqwest::{StatusCode, header};
 
-use crate::api::{self, ApiClient};
+use crate::api::{self, AUTH_LOGIN_CALLBACK_PATH, AUTH_LOGIN_PATH, ApiClient};
 use crate::credentials::{CredentialStore, Credentials};
 use crate::http;
 use crate::output::{self, Format};
@@ -64,7 +64,7 @@ where
     let port = listener.local_addr()?.port();
     let state = random_hex_string();
 
-    let login_url = format!("{}/api/v1/auth/login", base_url);
+    let login_url = format!("{}{}", base_url, AUTH_LOGIN_PATH);
     let client = reqwest::blocking::Client::builder()
         .timeout(std::time::Duration::from_secs(10))
         .cookie_store(true)
@@ -142,7 +142,7 @@ where
         .map(|(_, v)| v.into_owned())
         .context("callback did not contain an authorization code")?;
 
-    let mut callback_url = url::Url::parse(&format!("{}/api/v1/auth/login/callback", base_url))
+    let mut callback_url = url::Url::parse(&format!("{}{}", base_url, AUTH_LOGIN_CALLBACK_PATH))
         .context("failed to build callback URL")?;
     callback_url
         .query_pairs_mut()

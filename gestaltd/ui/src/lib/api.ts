@@ -119,6 +119,7 @@ export async function fetchAPI<T>(
 export interface AuthInfo {
   provider: string;
   display_name: string;
+  login_supported: boolean;
 }
 
 export async function getAuthInfo(): Promise<AuthInfo> {

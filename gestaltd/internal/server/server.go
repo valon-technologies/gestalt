@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -44,6 +45,7 @@ type Server struct {
 	integrationDefs    map[string]config.IntegrationDef
 	noAuth             bool
 	anonymousPrincipal *principal.Principal
+	publicBaseURL      string
 	secureCookies      bool
 	encryptor          *cryptoutil.AESGCMEncryptor
 	stateCodec         *integrationOAuthStateCodec
@@ -67,6 +69,7 @@ type Config struct {
 	CatalogConnection map[string]string
 	ConnectionAuth    func() map[string]map[string]bootstrap.OAuthHandler
 	IntegrationDefs   map[string]config.IntegrationDef
+	PublicBaseURL     string
 	SecureCookies     bool
 	StateSecret       []byte
 	APITokenTTL       time.Duration
@@ -122,6 +125,7 @@ func New(cfg Config) (*Server, error) {
 		connectionAuth:    cfg.ConnectionAuth,
 		integrationDefs:   cfg.IntegrationDefs,
 		noAuth:            noAuth,
+		publicBaseURL:     strings.TrimRight(cfg.PublicBaseURL, "/"),
 		secureCookies:     cfg.SecureCookies,
 		encryptor:         encryptor,
 		stateCodec:        stateCodec,

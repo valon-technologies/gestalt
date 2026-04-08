@@ -42,8 +42,39 @@ test.describe("Authentication", () => {
     ).toBeVisible();
   });
 
+  test("no-auth server redirects to dashboard without showing logout", async ({
+    page,
+  }) => {
+    await mockAuthInfo(page, {
+      provider: "none",
+      display_name: "none",
+      login_supported: false,
+    });
+    await mockIntegrations(page, []);
+    await mockTokens(page, []);
+
+    await page.goto("/login");
+    await expect(page).toHaveURL("/");
+    await expect(page.getByText("anonymous@gestalt")).toBeVisible();
+    await expect(page.getByRole("button", { name: /Logout/i })).toHaveCount(0);
+
+    await page.evaluate(() => {
+      localStorage.clear();
+      localStorage.setItem("user_email", "anonymous@gestalt");
+      sessionStorage.clear();
+    });
+
+    await page.goto("/");
+    await expect(page).toHaveURL("/");
+    await expect(page.getByText("anonymous@gestalt")).toBeVisible();
+    await expect(page.getByRole("button", { name: /Logout/i })).toHaveCount(0);
+  });
+
   test("authenticated user sees dashboard", async ({ authenticatedPage }) => {
     const page = authenticatedPage;
+    await page.route("**/api/v1/auth/info", (route) => {
+      route.abort();
+    });
     await mockIntegrations(page, [
       { name: "test-svc", display_name: "Test Service" },
     ]);
@@ -58,6 +89,9 @@ test.describe("Authentication", () => {
     ).toBeVisible();
     await expect(
       page.getByRole("link", { name: "API Tokens", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Logout/i }),
     ).toBeVisible();
   });
 
