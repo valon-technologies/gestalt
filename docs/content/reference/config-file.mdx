@@ -382,7 +382,7 @@ provider:
     path: ./plugin.yaml
 ```
 
-`source.path` loads a local source plugin from its manifest path. Gestalt synthesizes the Go executable wrapper automatically when needed and runs Python source plugins from the module declared in `[tool.gestalt].plugin`. `source.ref` resolves a versioned plugin source during `init` using the format `github.com/<org>/<repo>/<path-after-repo>`, and requires `source.version`. `source.path` and `source.ref` are mutually exclusive. Integration plugins do not support `provider.builtin`.
+`source.path` loads a local source plugin from its manifest path. Gestalt synthesizes Go and Rust executable wrappers automatically when needed and runs Python source plugins from the module declared in `[tool.gestalt].plugin`. `source.ref` resolves a versioned plugin source during `init` using the format `github.com/<org>/<repo>/<path-after-repo>`, and requires `source.version`. `source.path` and `source.ref` are mutually exclusive. Integration plugins do not support `provider.builtin`.
 
 `env` passes extra environment variables to executable providers. `allowed_hosts` sets an optional network allowlist for sandboxed plugin processes.
 

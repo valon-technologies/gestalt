@@ -347,7 +347,7 @@ with `from: discovery` are satisfied from that metadata instead of user input.
 
 Manifest paths must stay inside the package. `source` and `version` are required, and a manifest defines either `provider` or `webui`, not both.
 
-Declarative-only provider packages do not require `artifacts`. Pure executable source manifests used with `plugins.*.provider.source.path` or `gestaltd plugin release` may omit `artifacts` and `provider.exec.artifact_path`, but executable provider packages do require both.
+Declarative-only provider packages do not require `artifacts`. Pure executable source manifests used with `plugins.*.provider.source.path`, `auth.provider.source.path`, `datastore.provider.source.path`, or `gestaltd plugin release` may omit `artifacts` and the matching executable entrypoint path (`provider.exec.artifact_path`, `auth.exec.artifact_path`, or `datastore.exec.artifact_path`). Prebuilt executable packages do require both.
 
 `config_schema_path` validates `providers.*.config` and may be written in JSON or YAML. Only `provider.connections.default` may define `params` and `discovery`. The surface types `rest`, `openapi`, and `graphql` are mutually exclusive, but `mcp` may be added alongside any of them.
 
@@ -361,10 +361,12 @@ gestaltd plugin release --version 1.2.3
 
 `gestaltd plugin release` preserves the source manifest format, so
 `plugin.yaml` stays YAML and `plugin.json` stays JSON in the release archive.
-For executable Go plugins, release materializes the executable catalog
-automatically from the provider's typed router before packaging. For Python
-source plugins, release loads the module declared in `[tool.gestalt].plugin`,
-materializes the executable catalog automatically. Go and Python source plugins
-both build the host-platform artifact by default. Pass `--platform` for an
-explicit `os/arch[/libc]` target list, or `--platform all` in CI to build the
-full supported release matrix.
+For executable Go, Rust, and Python integration plugins, release materializes
+the executable catalog automatically before packaging. Python source plugins
+load the module declared in `[tool.gestalt].plugin`, while Go and Rust source
+plugins synthesize the executable wrapper from the source package itself.
+Auth and datastore source packages support the same release flow for Go and
+Rust, but they do not generate catalogs. Source packages build the
+host-platform artifact by default. Pass `--platform` for an explicit
+`os/arch[/libc]` target list, or `--platform all` in CI to build the full
+supported release matrix.

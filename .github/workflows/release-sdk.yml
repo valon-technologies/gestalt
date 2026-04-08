@@ -5,6 +5,7 @@ on:
     tags:
       - 'sdk/go/v*'
       - 'sdk/python/v*'
+      - 'sdk/rust/v*'
 
 permissions:
   contents: write
@@ -69,6 +70,55 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           GOPROXY=proxy.golang.org go list -m "${SDK_MODULE}@v${VERSION}" || true
+
+  validate-rust-sdk:
+    if: ${{ startsWith(github.ref_name, 'sdk/rust/v') }}
+    name: Validate Rust SDK
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: sdk/rust
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            sdk/rust/target/
+          key: ${{ runner.os }}-cargo-rust-sdk-${{ hashFiles('sdk/rust/Cargo.toml', 'sdk/rust/Cargo.lock', 'sdk/rust/**/Cargo.toml') }}
+      - name: Check formatting
+        run: cargo fmt --check
+      - name: Run tests
+        run: cargo test
+      - name: Run clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+  release-rust-sdk:
+    if: ${{ startsWith(github.ref_name, 'sdk/rust/v') }}
+    name: Publish Release
+    needs: validate-rust-sdk
+    uses: ./.github/workflows/publish-scoped-github-release.yml
+    with:
+      component-name: Gestalt Rust SDK
+      version-prefix: 'sdk/rust/v'
+      tag-glob: 'sdk/rust/v*'
+      path-filters: |
+        sdk/rust
+        sdk/proto
+      component-summary: |
+        Rust SDK for building Gestalt executable providers, including integration, auth, and datastore surfaces, against the shared protocol bindings in this repository.
+      install-markdown: |
+        - Crate name: `gestalt_plugin_sdk`
+        - Crates.io publishing is not enabled for this release yet.
+        - Consume the crate source from `sdk/rust` at tag `${tag}` until registry publishing is added.
 
   publish-python-sdk:
     if: ${{ startsWith(github.ref_name, 'sdk/python/v') }}
