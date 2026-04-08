@@ -428,9 +428,6 @@ func catalogParameterType(t reflect.Type) (string, error) {
 	t = underlyingType(t)
 	switch t.Kind() {
 	case reflect.String:
-		if t.PkgPath() == "time" && t.Name() == "Time" {
-			return "string", nil
-		}
 		return "string", nil
 	case reflect.Bool:
 		return "boolean", nil
@@ -464,7 +461,7 @@ func underlyingType(t reflect.Type) reflect.Type {
 }
 
 func isOptionalType(t reflect.Type) bool {
-	for t.Kind() == reflect.Pointer {
+	if t.Kind() == reflect.Pointer {
 		return true
 	}
 	switch t.Kind() {

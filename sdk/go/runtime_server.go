@@ -2,7 +2,6 @@ package gestalt
 
 import (
 	"context"
-	"fmt"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"google.golang.org/grpc/codes"
@@ -58,11 +57,7 @@ func (s *RuntimeServer) ConfigurePlugin(ctx context.Context, req *proto.Configur
 			proto.CurrentProtocolVersion,
 		)
 	}
-	config := mapFromStruct(req.GetConfig())
-	if config == nil {
-		config = map[string]any{}
-	}
-	if err := s.provider.Configure(ctx, req.GetName(), config); err != nil {
+	if err := s.provider.Configure(ctx, req.GetName(), configFromRequest(req.GetConfig())); err != nil {
 		return nil, status.Errorf(codes.Unknown, "configure plugin: %v", err)
 	}
 	return &proto.ConfigurePluginResponse{ProtocolVersion: proto.CurrentProtocolVersion}, nil
@@ -101,24 +96,5 @@ func providerKindToProto(kind ProviderKind) proto.PluginKind {
 		return proto.PluginKind_PLUGIN_KIND_TELEMETRY
 	default:
 		return proto.PluginKind_PLUGIN_KIND_UNSPECIFIED
-	}
-}
-
-func protoKindToProvider(kind proto.PluginKind) (ProviderKind, error) {
-	switch kind {
-	case proto.PluginKind_PLUGIN_KIND_INTEGRATION:
-		return ProviderKindIntegration, nil
-	case proto.PluginKind_PLUGIN_KIND_AUTH:
-		return ProviderKindAuth, nil
-	case proto.PluginKind_PLUGIN_KIND_DATASTORE:
-		return ProviderKindDatastore, nil
-	case proto.PluginKind_PLUGIN_KIND_SECRETS:
-		return ProviderKindSecrets, nil
-	case proto.PluginKind_PLUGIN_KIND_TELEMETRY:
-		return ProviderKindTelemetry, nil
-	case proto.PluginKind_PLUGIN_KIND_UNSPECIFIED:
-		return "", nil
-	default:
-		return "", fmt.Errorf("unsupported plugin kind %q", kind.String())
 	}
 }
