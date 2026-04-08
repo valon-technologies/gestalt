@@ -65,6 +65,7 @@
   --valon-secondary: rgba(35, 24, 16, 0.8);
   --valon-gold: #e19614;
   --valon-content-width: 46rem;
+  --nextra-content-width: 100%;
   --nextra-primary-hue: 37deg;
   --nextra-primary-saturation: 84%;
 }
@@ -211,12 +212,10 @@ footer > div {
 }
 
 .nextra-nav-container nav {
-  max-width: 90rem !important;
+  max-width: 100% !important;
   width: 100% !important;
-  margin-left: auto !important;
-  margin-right: auto !important;
-  padding-left: 1rem !important;
-  padding-right: 1rem !important;
+  padding-left: max(env(safe-area-inset-left), 1.5rem) !important;
+  padding-right: max(env(safe-area-inset-right), 1.5rem) !important;
   box-sizing: border-box !important;
 }
 
