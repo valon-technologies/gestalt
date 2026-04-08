@@ -587,9 +587,12 @@ func (s *Server) authInfo(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) startLogin(w http.ResponseWriter, r *http.Request) {
+	startedAt := time.Now()
 	auditAllowed := false
 	auditErr := errors.New("login start failed")
+	providerName := s.authProviderName()
 	defer func() {
+		metricutil.RecordAuthMetrics(r.Context(), startedAt, providerName, "begin_login", auditErr != nil)
 		s.auditHTTPEvent(r.Context(), nil, s.authProviderName(), "auth.login.start", auditAllowed, auditErr)
 	}()
 
@@ -742,10 +745,13 @@ type RequestCallbackHandler interface {
 }
 
 func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
+	startedAt := time.Now()
 	auditAllowed := false
 	auditErr := errors.New("login callback failed")
 	auditUserID := ""
+	providerName := s.authProviderName()
 	defer func() {
+		metricutil.RecordAuthMetrics(r.Context(), startedAt, providerName, "complete_login", auditErr != nil)
 		if auditUserID != "" {
 			s.auditHTTPEventWithUserID(r.Context(), auditUserID, principal.SourceSession.String(), s.authProviderName(), "auth.login.complete", auditAllowed, auditErr)
 			return
@@ -889,10 +895,14 @@ type startOAuthRequest struct {
 }
 
 func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
+	startedAt := time.Now()
 	auditAllowed := false
 	auditErr := errors.New("oauth start failed")
 	providerName := ""
+	metricProviderName := metricutil.UnknownAttrValue
+	connectionMode := metricutil.UnknownAttrValue
 	defer func() {
+		metricutil.RecordConnectionAuthMetrics(r.Context(), startedAt, metricProviderName, "oauth", "start", connectionMode, auditErr != nil)
 		s.auditHTTPEvent(r.Context(), PrincipalFromContext(r.Context()), providerName, "connection.oauth.start", auditAllowed, auditErr)
 	}()
 
@@ -909,6 +919,8 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		auditErr = errors.New("integration not found")
 		return
 	}
+	metricProviderName = req.Integration
+	connectionMode = metricutil.NormalizeConnectionMode(prov.ConnectionMode())
 
 	connection, ok := s.resolveRequestedConnection(w, req.Integration, req.Connection)
 	if !ok {
@@ -995,15 +1007,15 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request) {
-	metricProvider := metricutil.UnknownAttrValue
-	callbackFailed := true
+	startedAt := time.Now()
 	auditAllowed := false
 	auditErr := errors.New("oauth callback failed")
 	auditUserID := ""
 	stateAuthSource := ""
 	providerName := ""
+	connectionMode := metricutil.UnknownAttrValue
 	defer func() {
-		recordOAuthCallbackMetric(r.Context(), metricProvider, callbackFailed)
+		metricutil.RecordConnectionAuthMetrics(r.Context(), startedAt, providerName, "oauth", "complete", connectionMode, auditErr != nil)
 		if auditUserID != "" {
 			s.auditHTTPEventWithUserID(r.Context(), auditUserID, stateAuthSource, providerName, "connection.oauth.complete", auditAllowed, auditErr)
 			return
@@ -1062,7 +1074,6 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	providerName = state.Integration
 	auditUserID = state.UserID
 	stateAuthSource = state.AuthSource
-	metricProvider = providerName
 	handler, ok := s.requireOAuthHandler(w, providerName, state.Connection)
 	if !ok {
 		auditErr = errors.New("oauth is not configured")
@@ -1070,6 +1081,9 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	}
 
 	prov, _ := s.providers.Get(providerName)
+	if prov != nil {
+		connectionMode = metricutil.NormalizeConnectionMode(prov.ConnectionMode())
+	}
 
 	var exchangeOpts []oauth.ExchangeOption
 	connParams := state.ConnectionParams
@@ -1154,10 +1168,8 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 		auditAllowed = true
 		auditErr = nil
 		s.writePendingConnectionSelectionPage(w, state, result.PendingToken)
-		callbackFailed = false
 		return
 	}
-	callbackFailed = false
 	auditAllowed = true
 	auditErr = nil
 	http.Redirect(w, r, "/integrations?connected="+url.QueryEscape(providerName), http.StatusSeeOther)
@@ -1173,10 +1185,14 @@ type connectManualRequest struct {
 }
 
 func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
+	startedAt := time.Now()
 	auditAllowed := false
 	auditErr := errors.New("manual connection failed")
 	providerName := ""
+	metricProviderName := metricutil.UnknownAttrValue
+	connectionMode := metricutil.UnknownAttrValue
 	defer func() {
+		metricutil.RecordConnectionAuthMetrics(r.Context(), startedAt, metricProviderName, "manual", "complete", connectionMode, auditErr != nil)
 		s.auditHTTPEvent(r.Context(), PrincipalFromContext(r.Context()), providerName, "connection.manual.connect", auditAllowed, auditErr)
 	}()
 
@@ -1219,6 +1235,8 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		auditErr = errors.New("integration not found")
 		return
 	}
+	metricProviderName = req.Integration
+	connectionMode = metricutil.NormalizeConnectionMode(prov.ConnectionMode())
 
 	mp, ok := prov.(core.ManualProvider)
 	if !ok || !mp.SupportsManualAuth() {

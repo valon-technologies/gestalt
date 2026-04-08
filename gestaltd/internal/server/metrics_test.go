@@ -5,13 +5,17 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/core/session"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"go.opentelemetry.io/otel"
@@ -74,6 +78,29 @@ func requireInt64Sum(t *testing.T, rm metricdata.ResourceMetrics, name string, w
 	t.Fatalf("metric %q with attrs %v not found", name, attrs)
 }
 
+func requireFloat64Histogram(t *testing.T, rm metricdata.ResourceMetrics, name string, attrs map[string]string) {
+	t.Helper()
+
+	for _, scope := range rm.ScopeMetrics {
+		for _, metric := range scope.Metrics {
+			if metric.Name != name {
+				continue
+			}
+			histogram, ok := metric.Data.(metricdata.Histogram[float64])
+			if !ok {
+				t.Fatalf("metric %q is %T, want Histogram[float64]", name, metric.Data)
+			}
+			for _, point := range histogram.DataPoints {
+				if attrsMatch(point.Attributes, attrs) {
+					return
+				}
+			}
+		}
+	}
+
+	t.Fatalf("metric %q with attrs %v not found", name, attrs)
+}
+
 func attrsMatch(set attribute.Set, want map[string]string) bool {
 	for key, expected := range want {
 		value, ok := set.Value(attribute.Key(key))
@@ -84,7 +111,68 @@ func attrsMatch(set attribute.Set, want map[string]string) bool {
 	return true
 }
 
-func TestCustomAuthMetrics(t *testing.T) {
+type namedStubDatastore struct {
+	coretesting.StubDatastore
+	name            string
+	listAPITokensFn func(context.Context, string) ([]*core.APIToken, error)
+}
+
+func (s *namedStubDatastore) Name() string { return s.name }
+
+func (s *namedStubDatastore) ListAPITokens(ctx context.Context, userID string) ([]*core.APIToken, error) {
+	if s.listAPITokensFn != nil {
+		return s.listAPITokensFn(ctx, userID)
+	}
+	return s.StubDatastore.ListAPITokens(ctx, userID)
+}
+
+type manualMetricsProvider struct {
+	name string
+}
+
+func (p *manualMetricsProvider) Name() string                        { return p.name }
+func (p *manualMetricsProvider) DisplayName() string                 { return p.name }
+func (p *manualMetricsProvider) Description() string                 { return "" }
+func (p *manualMetricsProvider) ConnectionMode() core.ConnectionMode { return core.ConnectionModeUser }
+func (p *manualMetricsProvider) Catalog() *catalog.Catalog {
+	return serverTestCatalogFromOperations(p.name, nil)
+}
+func (p *manualMetricsProvider) Execute(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
+	return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
+}
+func (p *manualMetricsProvider) SupportsManualAuth() bool { return true }
+
+type metricsHostIssuedSessionAuth struct {
+	secret []byte
+	name   string
+}
+
+func (s *metricsHostIssuedSessionAuth) Name() string { return s.name }
+
+func (s *metricsHostIssuedSessionAuth) LoginURL(state string) (string, error) {
+	return "https://idp.example.test/login?state=" + url.QueryEscape(state), nil
+}
+
+func (s *metricsHostIssuedSessionAuth) HandleCallback(context.Context, string) (*core.UserIdentity, error) {
+	return nil, context.DeadlineExceeded
+}
+
+func (s *metricsHostIssuedSessionAuth) HandleCallbackWithState(_ context.Context, code, state string) (*core.UserIdentity, string, error) {
+	if code != "good-code" {
+		return nil, "", context.DeadlineExceeded
+	}
+	return &core.UserIdentity{Email: "host@example.com", DisplayName: "Host Issued"}, state, nil
+}
+
+func (s *metricsHostIssuedSessionAuth) ValidateToken(_ context.Context, token string) (*core.UserIdentity, error) {
+	return session.ValidateToken(token, s.secret)
+}
+
+func (s *metricsHostIssuedSessionAuth) SessionTokenTTL() time.Duration {
+	return time.Hour
+}
+
+func TestConnectionAuthMetrics(t *testing.T) {
 	t.Parallel()
 
 	reader := useManualMeterProvider(t)
@@ -156,13 +244,28 @@ func TestCustomAuthMetrics(t *testing.T) {
 	}
 
 	rm := collectMetrics(t, reader)
-	requireInt64Sum(t, rm, "gestaltd.oauth.callback.count", 1, map[string]string{
-		"gestalt.provider": providerName,
-		"gestalt.result":   "success",
+	requireInt64Sum(t, rm, "gestaltd.connection.auth.count", 2, map[string]string{
+		"gestalt.provider":        providerName,
+		"gestalt.type":            "oauth",
+		"gestalt.action":          "start",
+		"gestalt.connection_mode": "user",
 	})
-	requireInt64Sum(t, rm, "gestaltd.oauth.callback.count", 1, map[string]string{
+	requireInt64Sum(t, rm, "gestaltd.connection.auth.count", 2, map[string]string{
+		"gestalt.provider":        providerName,
+		"gestalt.type":            "oauth",
+		"gestalt.action":          "complete",
+		"gestalt.connection_mode": "user",
+	})
+	requireInt64Sum(t, rm, "gestaltd.connection.auth.error_count", 1, map[string]string{
+		"gestalt.provider":        providerName,
+		"gestalt.type":            "oauth",
+		"gestalt.action":          "complete",
+		"gestalt.connection_mode": "user",
+	})
+	requireFloat64Histogram(t, rm, "gestaltd.connection.auth.duration", map[string]string{
 		"gestalt.provider": providerName,
-		"gestalt.result":   "error",
+		"gestalt.type":     "oauth",
+		"gestalt.action":   "complete",
 	})
 }
 
@@ -268,15 +371,22 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 	}
 
 	rm := collectMetrics(t, reader)
-	requireInt64Sum(t, rm, "gestaltd.oauth.token_refresh.count", 1, map[string]string{
+	requireInt64Sum(t, rm, "gestaltd.connection.auth.count", 2, map[string]string{
 		"gestalt.provider":        providerName,
+		"gestalt.type":            "oauth",
+		"gestalt.action":          "refresh",
 		"gestalt.connection_mode": "user",
-		"gestalt.result":          "success",
 	})
-	requireInt64Sum(t, rm, "gestaltd.oauth.token_refresh.count", 1, map[string]string{
+	requireInt64Sum(t, rm, "gestaltd.connection.auth.error_count", 1, map[string]string{
 		"gestalt.provider":        providerName,
+		"gestalt.type":            "oauth",
+		"gestalt.action":          "refresh",
 		"gestalt.connection_mode": "user",
-		"gestalt.result":          "error",
+	})
+	requireFloat64Histogram(t, rm, "gestaltd.connection.auth.duration", map[string]string{
+		"gestalt.provider": providerName,
+		"gestalt.type":     "oauth",
+		"gestalt.action":   "refresh",
 	})
 	requireInt64Sum(t, rm, "gestaltd.operation.count", 2, map[string]string{
 		"gestalt.provider":        providerName,
@@ -289,5 +399,224 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 		"gestalt.operation":       "list",
 		"gestalt.transport":       "rest",
 		"gestalt.connection_mode": "user",
+	})
+}
+
+func TestManualConnectionMetrics(t *testing.T) {
+	t.Parallel()
+
+	reader := useManualMeterProvider(t)
+	const providerName = "manual-metrics"
+
+	ds := &namedStubDatastore{
+		name: "metrics-store",
+		StubDatastore: coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			StoreTokenFn: func(_ context.Context, token *core.IntegrationToken) error {
+				if token.AccessToken != `{"api_key":"secret"}` {
+					t.Fatalf("unexpected stored credential %q", token.AccessToken)
+				}
+				return nil
+			},
+		},
+	}
+
+	srv := newTestServer(t, func(cfg *server.Config) {
+		cfg.Datastore = ds
+		cfg.Providers = testutil.NewProviderRegistry(t, &manualMetricsProvider{name: providerName})
+		cfg.DefaultConnection = map[string]string{providerName: testDefaultConnection}
+	})
+	testutil.CloseOnCleanup(t, srv)
+
+	body := bytes.NewBufferString(`{"integration":"` + providerName + `","credentials":{"api_key":"secret"}}`)
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/auth/connect-manual", body)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("manual connect request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("manual connect status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	rm := collectMetrics(t, reader)
+	requireInt64Sum(t, rm, "gestaltd.connection.auth.count", 1, map[string]string{
+		"gestalt.provider":        providerName,
+		"gestalt.type":            "manual",
+		"gestalt.action":          "complete",
+		"gestalt.connection_mode": "user",
+	})
+	requireInt64Sum(t, rm, "gestaltd.datastore.count", 1, map[string]string{
+		"gestalt.provider": "metrics-store",
+		"gestalt.method":   "store_token",
+	})
+	requireFloat64Histogram(t, rm, "gestaltd.datastore.duration", map[string]string{
+		"gestalt.provider": "metrics-store",
+		"gestalt.method":   "store_token",
+	})
+}
+
+func TestConnectionAuthMetricsUseUnknownProviderForMissingIntegration(t *testing.T) {
+	t.Parallel()
+
+	reader := useManualMeterProvider(t)
+	srv := newTestServer(t)
+	testutil.CloseOnCleanup(t, srv)
+
+	startBody := bytes.NewBufferString(`{"integration":"typo-oauth"}`)
+	startReq, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/auth/start-oauth", startBody)
+	startReq.Header.Set("Content-Type", "application/json")
+	startResp, err := http.DefaultClient.Do(startReq)
+	if err != nil {
+		t.Fatalf("start oauth request: %v", err)
+	}
+	defer func() { _ = startResp.Body.Close() }()
+	if startResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("start oauth status = %d, want %d", startResp.StatusCode, http.StatusNotFound)
+	}
+
+	manualBody := bytes.NewBufferString(`{"integration":"typo-manual","credential":"secret"}`)
+	manualReq, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/auth/connect-manual", manualBody)
+	manualReq.Header.Set("Content-Type", "application/json")
+	manualResp, err := http.DefaultClient.Do(manualReq)
+	if err != nil {
+		t.Fatalf("manual connect request: %v", err)
+	}
+	defer func() { _ = manualResp.Body.Close() }()
+	if manualResp.StatusCode != http.StatusNotFound {
+		t.Fatalf("manual connect status = %d, want %d", manualResp.StatusCode, http.StatusNotFound)
+	}
+
+	rm := collectMetrics(t, reader)
+	requireInt64Sum(t, rm, "gestaltd.connection.auth.count", 1, map[string]string{
+		"gestalt.provider":        "unknown",
+		"gestalt.type":            "oauth",
+		"gestalt.action":          "start",
+		"gestalt.connection_mode": "unknown",
+	})
+	requireInt64Sum(t, rm, "gestaltd.connection.auth.error_count", 1, map[string]string{
+		"gestalt.provider":        "unknown",
+		"gestalt.type":            "oauth",
+		"gestalt.action":          "start",
+		"gestalt.connection_mode": "unknown",
+	})
+	requireInt64Sum(t, rm, "gestaltd.connection.auth.count", 1, map[string]string{
+		"gestalt.provider":        "unknown",
+		"gestalt.type":            "manual",
+		"gestalt.action":          "complete",
+		"gestalt.connection_mode": "unknown",
+	})
+	requireInt64Sum(t, rm, "gestaltd.connection.auth.error_count", 1, map[string]string{
+		"gestalt.provider":        "unknown",
+		"gestalt.type":            "manual",
+		"gestalt.action":          "complete",
+		"gestalt.connection_mode": "unknown",
+	})
+}
+
+func TestPlatformAuthMetrics(t *testing.T) {
+	t.Parallel()
+
+	reader := useManualMeterProvider(t)
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	var auditBuf bytes.Buffer
+
+	ds := &namedStubDatastore{
+		name: "auth-metrics-store",
+		StubDatastore: coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		},
+		listAPITokensFn: func(context.Context, string) ([]*core.APIToken, error) { return nil, nil },
+	}
+
+	client := &http.Client{}
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("cookie jar: %v", err)
+	}
+	client.Jar = jar
+
+	srv := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &metricsHostIssuedSessionAuth{secret: secret, name: "metrics-host-issued"}
+		cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
+		cfg.StateSecret = secret
+		cfg.Datastore = ds
+	})
+	testutil.CloseOnCleanup(t, srv)
+
+	loginBody := bytes.NewBufferString(`{"state":"login-state"}`)
+	loginReq, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/auth/login", loginBody)
+	loginReq.Header.Set("Content-Type", "application/json")
+	loginResp, err := client.Do(loginReq)
+	if err != nil {
+		t.Fatalf("login request: %v", err)
+	}
+	defer func() { _ = loginResp.Body.Close() }()
+	if loginResp.StatusCode != http.StatusOK {
+		t.Fatalf("login status = %d, want %d", loginResp.StatusCode, http.StatusOK)
+	}
+
+	var loginResult map[string]string
+	if err := json.NewDecoder(loginResp.Body).Decode(&loginResult); err != nil {
+		t.Fatalf("decode login response: %v", err)
+	}
+	loginURL, err := url.Parse(loginResult["url"])
+	if err != nil {
+		t.Fatalf("parse login url: %v", err)
+	}
+
+	callbackReq, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/auth/login/callback?code=good-code&state="+url.QueryEscape(loginURL.Query().Get("state")), nil)
+	callbackResp, err := client.Do(callbackReq)
+	if err != nil {
+		t.Fatalf("login callback request: %v", err)
+	}
+	defer func() { _ = callbackResp.Body.Close() }()
+	if callbackResp.StatusCode != http.StatusOK {
+		t.Fatalf("login callback status = %d, want %d", callbackResp.StatusCode, http.StatusOK)
+	}
+	auditBuf.Reset()
+
+	tokensReq, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/tokens", nil)
+	tokensResp, err := client.Do(tokensReq)
+	if err != nil {
+		t.Fatalf("list tokens request: %v", err)
+	}
+	defer func() { _ = tokensResp.Body.Close() }()
+	if tokensResp.StatusCode != http.StatusOK {
+		t.Fatalf("list tokens status = %d, want %d", tokensResp.StatusCode, http.StatusOK)
+	}
+	if got := bytes.TrimSpace(auditBuf.Bytes()); len(got) != 0 {
+		t.Fatalf("validate-token and datastore read should not emit audit logs, got: %s", got)
+	}
+
+	rm := collectMetrics(t, reader)
+	requireInt64Sum(t, rm, "gestaltd.auth.count", 1, map[string]string{
+		"gestalt.provider": "metrics-host-issued",
+		"gestalt.action":   "begin_login",
+	})
+	requireInt64Sum(t, rm, "gestaltd.auth.count", 1, map[string]string{
+		"gestalt.provider": "metrics-host-issued",
+		"gestalt.action":   "complete_login",
+	})
+	requireInt64Sum(t, rm, "gestaltd.auth.count", 1, map[string]string{
+		"gestalt.provider": "metrics-host-issued",
+		"gestalt.action":   "validate_token",
+	})
+	requireFloat64Histogram(t, rm, "gestaltd.auth.duration", map[string]string{
+		"gestalt.provider": "metrics-host-issued",
+		"gestalt.action":   "complete_login",
+	})
+	requireInt64Sum(t, rm, "gestaltd.datastore.count", 2, map[string]string{
+		"gestalt.provider": "auth-metrics-store",
+		"gestalt.method":   "find_or_create_user",
+	})
+	requireInt64Sum(t, rm, "gestaltd.datastore.count", 1, map[string]string{
+		"gestalt.provider": "auth-metrics-store",
+		"gestalt.method":   "list_api_tokens",
 	})
 }

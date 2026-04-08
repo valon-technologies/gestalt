@@ -13,6 +13,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -110,7 +111,8 @@ func New(cfg Config) (*Server, error) {
 		now = time.Now
 	}
 
-	resolver := principal.NewResolver(cfg.Auth, cfg.Datastore)
+	datastore := metricutil.WrapDatastore(cfg.Datastore)
+	resolver := principal.NewResolver(cfg.Auth, datastore)
 
 	router := chi.NewRouter()
 	s := &Server{
@@ -118,7 +120,7 @@ func New(cfg Config) (*Server, error) {
 		handler:           otelhttp.NewHandler(router, "gestaltd"),
 		auth:              cfg.Auth,
 		auditSink:         cfg.AuditSink,
-		datastore:         cfg.Datastore,
+		datastore:         datastore,
 		providers:         cfg.Providers,
 		resolver:          resolver,
 		invoker:           cfg.Invoker,

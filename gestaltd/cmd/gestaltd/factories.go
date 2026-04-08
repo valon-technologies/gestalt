@@ -24,6 +24,7 @@ import (
 	telemetryotlp "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/otlp"
 	telemetrystdout "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/stdout"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
 )
 
@@ -63,7 +64,7 @@ func setupBootstrapWithArtifactsDir(configFlag, artifactsDir string, locked bool
 	}()
 	logDatastoreWarnings(result.Datastore)
 
-	if err := result.Datastore.Migrate(ctx); err != nil {
+	if err := metricutil.WrapDatastore(result.Datastore).Migrate(ctx); err != nil {
 		stop()
 		closeCtx, cancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
 		defer cancel()

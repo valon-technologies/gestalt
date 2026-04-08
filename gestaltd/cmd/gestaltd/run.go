@@ -20,6 +20,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	gestaltmcp "github.com/valon-technologies/gestalt/server/internal/mcp"
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	"github.com/valon-technologies/gestalt/server/internal/sandbox"
@@ -590,6 +591,7 @@ func composeReadiness(checks ...server.ReadinessChecker) server.ReadinessChecker
 }
 
 func datastoreReadiness(ds core.Datastore) server.ReadinessChecker {
+	ds = metricutil.WrapDatastore(ds)
 	return func() string {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()

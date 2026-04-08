@@ -1,0 +1,81 @@
+package metricutil
+
+import (
+	"reflect"
+	"strconv"
+	"sync"
+
+	"github.com/valon-technologies/gestalt/server/core"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
+	noopmetric "go.opentelemetry.io/otel/metric/noop"
+)
+
+type MeterCache[T any] struct {
+	mu      sync.Mutex
+	key     string
+	metrics T
+}
+
+func (c *MeterCache[T]) Load(meterName string, build func(metric.Meter) T) T {
+	provider := otel.GetMeterProvider()
+	if key, ok := meterProviderCacheKey(provider); ok {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		if c.key == key {
+			return c.metrics
+		}
+		metrics := build(provider.Meter(meterName))
+		c.key = key
+		c.metrics = metrics
+		return metrics
+	}
+	return build(provider.Meter(meterName))
+}
+
+func NewInt64Counter(meter metric.Meter, name, desc string) metric.Int64Counter {
+	counter, err := meter.Int64Counter(name, metric.WithDescription(desc))
+	if err != nil {
+		otel.Handle(err)
+		return noopmetric.Int64Counter{}
+	}
+	return counter
+}
+
+func NewFloat64Histogram(meter metric.Meter, name, desc, unit string) metric.Float64Histogram {
+	histogram, err := meter.Float64Histogram(
+		name,
+		metric.WithDescription(desc),
+		metric.WithUnit(unit),
+	)
+	if err != nil {
+		otel.Handle(err)
+		return noopmetric.Float64Histogram{}
+	}
+	return histogram
+}
+
+func NormalizeConnectionMode(mode core.ConnectionMode) string {
+	if mode == "" {
+		return string(core.ConnectionModeUser)
+	}
+	return string(mode)
+}
+
+func meterProviderCacheKey(provider metric.MeterProvider) (string, bool) {
+	if provider == nil {
+		return "", false
+	}
+
+	value := reflect.ValueOf(provider)
+	if !value.IsValid() {
+		return "", false
+	}
+
+	switch value.Kind() {
+	case reflect.Pointer, reflect.UnsafePointer:
+		return value.Type().String() + ":" + strconv.FormatUint(uint64(value.Pointer()), 16), true
+	default:
+		return "", false
+	}
+}
