@@ -39,7 +39,7 @@ type Config struct {
 	Secrets      SecretsConfig             `yaml:"secrets"`
 	Telemetry    TelemetryConfig           `yaml:"telemetry"`
 	Audit        AuditConfig               `yaml:"audit"`
-	Integrations map[string]IntegrationDef `yaml:"providers"`
+	Integrations map[string]IntegrationDef `yaml:"plugins"`
 	Server       ServerConfig              `yaml:"server"`
 	Egress       EgressConfig              `yaml:"egress"`
 	UI           UIConfig                  `yaml:"ui"`
@@ -110,48 +110,24 @@ type PluginDef struct {
 	Args    []string          `yaml:"-"`
 	Env     map[string]string `yaml:"env"`
 
-	Config       yaml.Node `yaml:"config"`
+	Config       yaml.Node `yaml:"-"`
 	AllowedHosts []string  `yaml:"allowed_hosts"`
 
-	OpenAPI              string                                         `yaml:"openapi"`
-	GraphQLURL           string                                         `yaml:"graphql_url"`
-	MCPURL               string                                         `yaml:"mcp_url"`
-	BaseURL              string                                         `yaml:"base_url"`
-	Headers              map[string]string                              `yaml:"headers"`
-	ManagedParameters    []ManagedParameterDef                          `yaml:"managed_parameters"`
 	PostConnectDiscovery *pluginmanifestv1.ProviderPostConnectDiscovery `yaml:"-"`
 
-	Auth            *ConnectionAuthDef        `yaml:"auth"`
-	ConnectionMode  string                    `yaml:"-"`
-	Connections     map[string]*ConnectionDef `yaml:"connections"`
-	Operations      []InlineOperationDef      `yaml:"operations"`
-	ResponseMapping *ResponseMappingDef       `yaml:"response_mapping"`
+	Auth              *ConnectionAuthDef        `yaml:"-"`
+	ConnectionMode    string                    `yaml:"-"`
+	Connections       map[string]*ConnectionDef `yaml:"-"`
+	DefaultConnection string                    `yaml:"-"`
 
-	OpenAPIConnection string `yaml:"openapi_connection"`
-	GraphQLConnection string `yaml:"graphql_connection"`
-	MCPConnection     string `yaml:"mcp_connection"`
-	DefaultConnection string `yaml:"default_connection"`
-
-	ConnectionParams  map[string]ConnectionParamDef `yaml:"connection_params"`
-	MCP               bool                          `yaml:"mcp"`
-	AllowedOperations map[string]*OperationOverride `yaml:"allowed_operations"`
+	ConnectionParams  map[string]ConnectionParamDef `yaml:"-"`
+	MCP               bool                          `yaml:"-"`
+	AllowedOperations map[string]*OperationOverride `yaml:"-"`
 
 	ResolvedManifestPath string                     `yaml:"-"`
 	ResolvedManifest     *pluginmanifestv1.Manifest `yaml:"-"`
 	ResolvedIconFile     string                     `yaml:"-"`
-	IsDeclarative        bool                       `yaml:"-"`
 	HostBinary           string                     `yaml:"-"`
-}
-
-func (p *PluginDef) IsInline() bool {
-	if p == nil {
-		return false
-	}
-	if p.Source != nil {
-		return false
-	}
-	return p.OpenAPI != "" || p.GraphQLURL != "" || p.MCPURL != "" || len(p.Operations) > 0 ||
-		p.BaseURL != "" || p.Auth != nil || len(p.Connections) > 0
 }
 
 func (p *PluginDef) HasManagedArtifacts() bool {
@@ -202,26 +178,18 @@ func (p *PluginDef) DeclaresMCP() bool {
 	if p == nil {
 		return false
 	}
-	if p.MCP || p.MCPURL != "" || p.OpenAPI != "" || p.GraphQLURL != "" || len(p.Operations) > 0 {
+	if p.MCP {
 		return true
 	}
 	if !p.HasResolvedManifest() {
-		return true
+		return false
 	}
 	provider := p.ManifestProvider()
 	if provider == nil {
 		return false
 	}
-	return provider.MCP || provider.IsSpecLoaded() || len(provider.Operations) > 0
+	return provider.MCP
 }
-
-type InlineOperationDef = pluginmanifestv1.ProviderOperation
-type InlineOperationParam = pluginmanifestv1.ProviderParameter
-
-type ManagedParameterDef = pluginmanifestv1.ManagedParameter
-
-type ResponseMappingDef = pluginmanifestv1.ManifestResponseMapping
-type PaginationMapping = pluginmanifestv1.ManifestPaginationMapping
 
 type SecretsConfig struct {
 	Provider string    `yaml:"provider"`
@@ -229,13 +197,82 @@ type SecretsConfig struct {
 }
 
 type AuthConfig struct {
-	Provider string    `yaml:"provider"`
-	Config   yaml.Node `yaml:"config"`
+	Provider *PluginDef `yaml:"provider"`
+	Config   yaml.Node  `yaml:"config"`
 }
 
 type DatastoreConfig struct {
-	Provider string    `yaml:"provider"`
-	Config   yaml.Node `yaml:"config"`
+	Provider *PluginDef `yaml:"provider"`
+	Config   yaml.Node  `yaml:"config"`
+}
+
+func (c *AuthConfig) UnmarshalYAML(value *yaml.Node) error {
+	return unmarshalTopLevelComponentConfig(value, "AuthConfig", "auth", &c.Provider, &c.Config)
+}
+
+func (c *DatastoreConfig) UnmarshalYAML(value *yaml.Node) error {
+	return unmarshalTopLevelComponentConfig(value, "DatastoreConfig", "datastore", &c.Provider, &c.Config)
+}
+
+func unmarshalTopLevelComponentConfig(value *yaml.Node, typeName, kind string, provider **PluginDef, cfg *yaml.Node) error {
+	if value == nil || value.Kind == 0 {
+		*provider = nil
+		*cfg = yaml.Node{}
+		return nil
+	}
+	if value.Kind != yaml.MappingNode {
+		var probe map[string]any
+		return value.Decode(&probe)
+	}
+	for i := 0; i+1 < len(value.Content); i += 2 {
+		key := value.Content[i].Value
+		switch key {
+		case "provider", "config":
+		default:
+			return fmt.Errorf("field %s not found in type config.%s", key, typeName)
+		}
+	}
+	*provider = nil
+	*cfg = yaml.Node{}
+	if providerNode := mappingValueNode(value, "provider"); providerNode != nil {
+		decoded, err := decodeTopLevelComponentProvider(kind, providerNode)
+		if err != nil {
+			return err
+		}
+		*provider = decoded
+	}
+	if configNode := mappingValueNode(value, "config"); configNode != nil {
+		*cfg = *configNode
+	}
+	return nil
+}
+
+func decodeTopLevelComponentProvider(kind string, node *yaml.Node) (*PluginDef, error) {
+	if node == nil || node.Kind == 0 {
+		return nil, nil
+	}
+	if node.Kind == yaml.ScalarNode {
+		value := strings.TrimSpace(node.Value)
+		if node.Tag == "!!null" || value == "" {
+			return nil, nil
+		}
+		if kind == "auth" && value == "none" {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("config validation: %s.provider must be a provider reference mapping%s", kind, authProviderScalarHint(kind))
+	}
+	var provider PluginDef
+	if err := node.Decode(&provider); err != nil {
+		return nil, err
+	}
+	return &provider, nil
+}
+
+func authProviderScalarHint(kind string) string {
+	if kind == "auth" {
+		return ` or the string "none"`
+	}
+	return ""
 }
 
 type ListenerConfig struct {
@@ -560,35 +597,62 @@ func OverlayManagedPluginConfig(path string, cfg *Config) error {
 	if err := dec.Decode(&root); err != nil && err != io.EOF {
 		return fmt.Errorf("parsing config YAML: %w", err)
 	}
-	providers := mappingValueNode(documentValueNode(&root), "providers")
-	if providers == nil {
-		return nil
-	}
-
+	plugins := mappingValueNode(documentValueNode(&root), "plugins")
 	for name := range cfg.Integrations {
 		intg := cfg.Integrations[name]
 		if intg.Plugin == nil || !intg.Plugin.HasManagedArtifacts() {
 			continue
 		}
-
-		raw := mappingValueNode(providers, name)
-		if raw == nil {
-			continue
+		if err := overlayManagedPluginConfigNode(mappingValueNode(plugins, name), intg.Plugin, "integration "+strconv.Quote(name)); err != nil {
+			return err
 		}
-		configNode := mappingValueNode(raw, "config")
-		if configNode == nil || configNode.Kind == 0 {
-			continue
-		}
-
-		node, err := overlayEnvIntoNode(*configNode, os.LookupEnv, true)
-		if err != nil {
-			return fmt.Errorf("expanding managed plugin config for integration %q: %w", name, err)
-		}
-
-		intg.Plugin.Config = node
 		cfg.Integrations[name] = intg
 	}
+	if err := overlayManagedComponentConfigNode(mappingValueNode(documentValueNode(&root), "auth"), cfg.Auth.Provider, &cfg.Auth.Config, "auth"); err != nil {
+		return err
+	}
+	if err := overlayManagedComponentConfigNode(mappingValueNode(documentValueNode(&root), "datastore"), cfg.Datastore.Provider, &cfg.Datastore.Config, "datastore"); err != nil {
+		return err
+	}
+	return nil
+}
 
+func overlayManagedPluginConfigNode(raw *yaml.Node, plugin *PluginDef, subject string) error {
+	if plugin == nil || !plugin.HasManagedArtifacts() || raw == nil {
+		return nil
+	}
+	providerNode := mappingValueNode(raw, "provider")
+	if providerNode == nil {
+		return nil
+	}
+	configNode := mappingValueNode(raw, "config")
+	if configNode == nil || configNode.Kind == 0 {
+		configNode = mappingValueNode(providerNode, "config")
+	}
+	if configNode == nil || configNode.Kind == 0 {
+		return nil
+	}
+	node, err := overlayEnvIntoNode(*configNode, os.LookupEnv, true)
+	if err != nil {
+		return fmt.Errorf("expanding managed plugin config for %s: %w", subject, err)
+	}
+	plugin.Config = node
+	return nil
+}
+
+func overlayManagedComponentConfigNode(raw *yaml.Node, provider *PluginDef, target *yaml.Node, subject string) error {
+	if provider == nil || !provider.HasManagedArtifacts() || raw == nil {
+		return nil
+	}
+	configNode := mappingValueNode(raw, "config")
+	if configNode == nil || configNode.Kind == 0 {
+		return nil
+	}
+	node, err := overlayEnvIntoNode(*configNode, os.LookupEnv, true)
+	if err != nil {
+		return fmt.Errorf("expanding managed provider config for %s: %w", subject, err)
+	}
+	*target = node
 	return nil
 }
 
@@ -736,17 +800,14 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 			if intg.Plugin.Source != nil {
 				intg.Plugin.Source.Path = resolveRelativePath(baseDir, intg.Plugin.Source.Path)
 			}
-			if intg.Plugin.OpenAPI != "" {
-				intg.Plugin.OpenAPI = resolveUpstreamURL(baseDir, intg.Plugin.OpenAPI)
-			}
-			if intg.Plugin.GraphQLURL != "" {
-				intg.Plugin.GraphQLURL = resolveUpstreamURL(baseDir, intg.Plugin.GraphQLURL)
-			}
-			if intg.Plugin.MCPURL != "" {
-				intg.Plugin.MCPURL = resolveUpstreamURL(baseDir, intg.Plugin.MCPURL)
-			}
 		}
 		cfg.Integrations[name] = intg
+	}
+	if cfg.Auth.Provider != nil && cfg.Auth.Provider.Source != nil {
+		cfg.Auth.Provider.Source.Path = resolveRelativePath(baseDir, cfg.Auth.Provider.Source.Path)
+	}
+	if cfg.Datastore.Provider != nil && cfg.Datastore.Provider.Source != nil {
+		cfg.Datastore.Provider.Source.Path = resolveRelativePath(baseDir, cfg.Datastore.Provider.Source.Path)
 	}
 
 }
@@ -758,17 +819,10 @@ func resolveRelativePath(baseDir, value string) string {
 	return filepath.Clean(filepath.Join(baseDir, value))
 }
 
-func resolveUpstreamURL(baseDir, value string) string {
-	if value == "" || filepath.IsAbs(value) || strings.HasPrefix(value, "https://") || strings.HasPrefix(value, "http://") {
-		return value
-	}
-	return filepath.Clean(filepath.Join(baseDir, value))
-}
-
 // ValidateStructure checks config shape: integration references, plugin
 // declarations, connection references, URL template params, egress rules.
 // Called by Load (and therefore by init, validate, and serve). Does not require
-// runtime secrets like encryption_key, auth.provider, or datastore.provider.
+// runtime secrets like encryption_key.
 func ValidateStructure(cfg *Config) error {
 	if err := validateServerListeners(cfg.Server); err != nil {
 		return err
@@ -785,6 +839,12 @@ func ValidateStructure(cfg *Config) error {
 		return err
 	}
 	if err := validateUIPlugin(cfg.UI.Plugin); err != nil {
+		return err
+	}
+	if err := validateTopLevelComponentConfig("auth", cfg.Auth.Provider, cfg.Auth.Config); err != nil {
+		return err
+	}
+	if err := validateTopLevelComponentConfig("datastore", cfg.Datastore.Provider, cfg.Datastore.Config); err != nil {
 		return err
 	}
 	for name := range cfg.Integrations {
@@ -844,6 +904,26 @@ func validateAudit(cfg AuditConfig) error {
 	}
 }
 
+func validateTopLevelComponentProvider(kind string, provider *PluginDef) error {
+	if provider == nil {
+		return nil
+	}
+	if provider.Config.Kind != 0 {
+		return fmt.Errorf("config validation: %s.provider.config is not supported; use %s.config", kind, kind)
+	}
+	return validateExternalPlugin(kind, kind, provider)
+}
+
+func validateTopLevelComponentConfig(kind string, provider *PluginDef, cfg yaml.Node) error {
+	if provider == nil {
+		if cfg.Kind != 0 {
+			return fmt.Errorf("config validation: %s.config is not supported when %s.provider is unset", kind, kind)
+		}
+		return nil
+	}
+	return validateTopLevelComponentProvider(kind, provider)
+}
+
 // ValidateResolvedStructure checks integration fields whose support depends on
 // resolved managed plugin manifests. Callers should use this after init has
 // applied locked plugin artifacts into the config. It intentionally does not
@@ -854,26 +934,24 @@ func ValidateResolvedStructure(cfg *Config) error {
 		if intg.Plugin == nil {
 			return fmt.Errorf("config validation: integration %q requires a plugin", name)
 		}
-		if err := validateSupportedPluginFields(name, intg.Plugin); err != nil {
+		if err := validateManifestBackedIntegration(name, intg.Plugin); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-// ValidateRuntime checks runtime-only requirements: encryption key, auth
-// provider, and datastore provider. Callers that need a fully operational
-// config (serve) should call this after Load. Callers that only need
-// structural correctness (init, validate) should not.
+// ValidateRuntime checks runtime-only requirements: encryption key plus the
+// required top-level datastore provider. Platform auth is optional; omitting it
+// or setting auth.provider to "none" disables authentication. Callers that need a fully
+// operational config (serve) should call this after Load. Callers that only
+// need structural correctness (init, validate) should not.
 func ValidateRuntime(cfg *Config) error {
-	if cfg.Auth.Provider == "" {
-		return fmt.Errorf("config validation: auth.provider is required")
-	}
-	if cfg.Datastore.Provider == "" {
+	if cfg.Datastore.Provider == nil {
 		return fmt.Errorf("config validation: datastore.provider is required")
 	}
-	if cfg.Server.EncryptionKey == "" && cfg.Auth.Provider != "none" {
-		return fmt.Errorf("config validation: server.encryption_key is required when auth is enabled (auth.provider is %q)", cfg.Auth.Provider)
+	if cfg.Server.EncryptionKey == "" {
+		return fmt.Errorf("config validation: server.encryption_key is required")
 	}
 	return nil
 }
@@ -883,46 +961,10 @@ func validatePluginIntegration(name string, intg IntegrationDef) error {
 		return fmt.Errorf("config validation: integration %q requires a plugin", name)
 	}
 	p := intg.Plugin
-	if p.IsInline() {
-		if err := validateInlinePlugin(name, p); err != nil {
-			return err
-		}
-	} else {
-		if err := validateExternalPlugin("integration", name, p); err != nil {
-			return err
-		}
-	}
-	return validateSupportedPluginFields(name, p)
-}
-
-func validateInlinePlugin(name string, p *PluginDef) error {
-	if p.OpenAPI == "" && p.GraphQLURL == "" && p.MCPURL == "" && len(p.Operations) == 0 {
-		return fmt.Errorf("config validation: inline integration %q requires at least one of openapi, graphql_url, mcp_url, or operations", name)
-	}
-	if len(p.Operations) > 0 && (p.OpenAPI != "" || p.GraphQLURL != "" || p.MCPURL != "") {
-		return fmt.Errorf("config validation: inline integration %q plugin.operations are only valid when no openapi, graphql_url, or mcp_url is configured", name)
-	}
-	if err := validateManagedParameterConfig("config validation: integration "+strconv.Quote(name), p.Headers, p.ManagedParameters); err != nil {
+	if err := validateExternalPlugin("integration", name, p); err != nil {
 		return err
 	}
-	for i, op := range p.Operations {
-		if op.Name == "" {
-			return fmt.Errorf("config validation: integration %q operations[%d].name is required", name, i)
-		}
-		if op.Method == "" {
-			return fmt.Errorf("config validation: integration %q operations[%d].method is required", name, i)
-		}
-		if op.Path == "" {
-			return fmt.Errorf("config validation: integration %q operations[%d].path is required", name, i)
-		}
-	}
-	if err := validateInlineConnectionReferences(name, p); err != nil {
-		return err
-	}
-	if err := validateInlineConnectionDefaults(name, p); err != nil {
-		return err
-	}
-	return nil
+	return validateManifestBackedIntegration(name, p)
 }
 
 type inlineConnectionReference struct {
@@ -932,91 +974,24 @@ type inlineConnectionReference struct {
 	context  string
 }
 
-func inlineConnectionReferences(p *PluginDef) []inlineConnectionReference {
-	if p == nil {
-		return nil
-	}
-
-	var refs []inlineConnectionReference
-	if p.DefaultConnection != "" || len(p.Operations) > 0 {
-		refs = append(refs, inlineConnectionReference{
-			field:    "plugin.default_connection",
-			name:     p.DefaultConnection,
-			required: len(p.Operations) > 0,
-			context:  "using inline operations with named connections",
-		})
-	}
-	if p.Auth != nil {
-		return refs
-	}
-	for _, surface := range OrderedSpecSurfaces {
-		if p.SurfaceURL(surface) == "" {
-			continue
-		}
-		refs = append(refs, inlineConnectionReference{
-			field:    "plugin." + surface.ConnectionField(),
-			name:     p.SurfaceConnectionName(surface),
-			required: true,
-			context:  surface.NamedConnectionRequirementContext(),
-		})
-	}
-	return refs
-}
-
 func manifestBackedConnectionReferences(plugin *PluginDef, provider *pluginmanifestv1.Provider) []inlineConnectionReference {
 	if provider == nil {
 		return nil
 	}
 
-	var refs []inlineConnectionReference
 	defaultConnection := provider.DefaultConnection
 	if plugin != nil && plugin.DefaultConnection != "" {
 		defaultConnection = plugin.DefaultConnection
 	}
-	if defaultConnection != "" || len(provider.Operations) > 0 {
-		refs = append(refs, inlineConnectionReference{
-			field:    "plugin.default_connection",
-			name:     defaultConnection,
-			required: len(provider.Operations) > 0,
-			context:  "using declarative operations with named connections",
-		})
+	if defaultConnection == "" {
+		return nil
 	}
-	if provider.Auth != nil || (plugin != nil && plugin.Auth != nil) {
-		return refs
+	return []inlineConnectionReference{
+		{
+			field: "plugin.default_connection",
+			name:  defaultConnection,
+		},
 	}
-	for _, surface := range OrderedSpecSurfaces {
-		url := ManifestProviderSurfaceURL(provider, surface)
-		if plugin != nil {
-			if overrideURL := plugin.SurfaceURL(surface); overrideURL != "" {
-				url = overrideURL
-			}
-		}
-		if url == "" {
-			continue
-		}
-		connectionName := ManifestProviderSurfaceConnectionName(provider, surface)
-		if plugin != nil {
-			if overrideName := plugin.SurfaceConnectionName(surface); overrideName != "" {
-				connectionName = overrideName
-			}
-		}
-		refs = append(refs, inlineConnectionReference{
-			field:    "plugin." + surface.ConnectionField(),
-			name:     connectionName,
-			required: true,
-			context:  surface.NamedConnectionRequirementContext(),
-		})
-	}
-	return refs
-}
-
-func validateInlineConnectionReferences(name string, p *PluginDef) error {
-	return validateConnectionReferences(name, declaredInlineConnections(p), inlineConnectionReferences(p))
-}
-
-func validateInlineConnectionDefaults(name string, p *PluginDef) error {
-	declared := declaredInlineConnections(p)
-	return validateConnectionDefaults(name, "inline integration", len(declared), inlineConnectionReferences(p))
 }
 
 func validateManifestBackedConnectionReferences(name string, plugin *PluginDef, provider *pluginmanifestv1.Provider) error {
@@ -1025,6 +1000,27 @@ func validateManifestBackedConnectionReferences(name string, plugin *PluginDef, 
 
 func validateManifestBackedConnectionDefaults(name string, plugin *PluginDef, provider *pluginmanifestv1.Provider) error {
 	return validateConnectionDefaults(name, "integration", len(declaredManifestBackedConnections(plugin, provider)), manifestBackedConnectionReferences(plugin, provider))
+}
+
+func validateExecutableConnectionAuthSupport(name string, plugin *PluginDef, provider *pluginmanifestv1.Provider) error {
+	if conn := EffectivePluginConnectionDef(plugin, provider); conn.Auth.Type == pluginmanifestv1.AuthTypeMCPOAuth {
+		return fmt.Errorf("config validation: integration %q plugin auth type %q is not supported for executable providers", name, pluginmanifestv1.AuthTypeMCPOAuth)
+	}
+
+	declared := declaredManifestBackedConnections(plugin, provider)
+	declaredNames := make([]string, 0, len(declared))
+	for connName := range declared {
+		declaredNames = append(declaredNames, connName)
+	}
+	slices.Sort(declaredNames)
+	for _, connName := range declaredNames {
+		conn, ok := EffectiveNamedConnectionDef(plugin, provider, connName)
+		if !ok || conn.Auth.Type != pluginmanifestv1.AuthTypeMCPOAuth {
+			continue
+		}
+		return fmt.Errorf("config validation: integration %q connection %q auth type %q is not supported for executable providers", name, connName, pluginmanifestv1.AuthTypeMCPOAuth)
+	}
+	return nil
 }
 
 func validateConnectionReferences(name string, declared map[string]struct{}, refs []inlineConnectionReference) error {
@@ -1054,17 +1050,6 @@ func validateConnectionDefaults(name, subject string, declaredCount int, refs []
 		}
 	}
 	return nil
-}
-
-func declaredInlineConnections(plugin *PluginDef) map[string]struct{} {
-	if plugin == nil {
-		return nil
-	}
-	declared := make(map[string]struct{}, len(plugin.Connections))
-	for rawName := range plugin.Connections {
-		addDeclaredConnection(declared, rawName)
-	}
-	return declared
 }
 
 func declaredManifestBackedConnections(plugin *PluginDef, provider *pluginmanifestv1.Provider) map[string]struct{} {
@@ -1101,9 +1086,6 @@ func validateExternalPlugin(kind, name string, plugin *PluginDef) error {
 	if plugin == nil {
 		return nil
 	}
-	if err := validateManagedParameterConfig("config validation: "+kind+" "+strconv.Quote(name), plugin.Headers, plugin.ManagedParameters); err != nil {
-		return err
-	}
 	if plugin.Source != nil {
 		modeCount := 0
 		if plugin.Source.Path != "" {
@@ -1119,20 +1101,19 @@ func validateExternalPlugin(kind, name string, plugin *PluginDef) error {
 			return fmt.Errorf("config validation: %s %q plugin.source.path and plugin.source.ref are mutually exclusive", kind, name)
 		}
 	}
-	sourceCount := 0
+	modeCount := 0
 	if plugin.HasLocalSource() {
-		sourceCount++
+		modeCount++
 	}
 	if plugin.HasManagedSource() {
-		sourceCount++
+		modeCount++
 	}
 	switch {
-	case sourceCount == 0:
-		return fmt.Errorf("config validation: %s %q plugin.source is required", kind, name)
-	case sourceCount > 1:
-		return fmt.Errorf("config validation: %s %q plugin.source.path and plugin.source.ref are mutually exclusive", kind, name)
+	case modeCount == 0:
+		return fmt.Errorf("config validation: %s %q provider.source.path or provider.source.ref is required", kind, name)
+	case modeCount > 1:
+		return fmt.Errorf("config validation: %s %q provider.source.path and provider.source.ref are mutually exclusive", kind, name)
 	}
-
 	if plugin.HasManagedSource() {
 		if _, err := pluginsource.Parse(plugin.SourceRef()); err != nil {
 			return fmt.Errorf("config validation: %s %q plugin.source.ref: %w", kind, name, err)
@@ -1149,124 +1130,24 @@ func validateExternalPlugin(kind, name string, plugin *PluginDef) error {
 		return fmt.Errorf("config validation: %s %q plugin.source.version is only valid with plugin.source.ref", kind, name)
 	}
 
-	if len(plugin.Operations) > 0 {
-		return fmt.Errorf("config validation: %s %q external plugin cannot use inline operations", kind, name)
-	}
-
 	if kind != "integration" {
-		hasInline := plugin.OpenAPI != "" || plugin.GraphQLURL != "" || plugin.MCPURL != "" ||
-			plugin.BaseURL != "" || plugin.Auth != nil || len(plugin.Connections) > 0
-		if hasInline {
-			return fmt.Errorf("config validation: %s %q plugin cannot use inline fields", kind, name)
+		hasIntegrationConfig := plugin.Auth != nil || len(plugin.Connections) > 0 ||
+			len(plugin.ConnectionParams) > 0 || plugin.MCP || len(plugin.AllowedOperations) > 0 ||
+			plugin.DefaultConnection != "" || plugin.PostConnectDiscovery != nil
+		if hasIntegrationConfig {
+			return fmt.Errorf("config validation: %s %q provider cannot use integration-only fields", kind, name)
 		}
 	}
 
 	return nil
 }
 
-func validateSupportedPluginFields(name string, plugin *PluginDef) error {
+func validateManifestBackedIntegration(name string, plugin *PluginDef) error {
 	if plugin == nil {
 		return nil
 	}
-	if plugin.HasManagedArtifacts() && !plugin.HasResolvedManifest() {
-		// Managed-source plugins may gain supported surfaces or declarative
-		// behavior from the resolved manifest. Validate those fields once init has
-		// prepared the artifact and loaded the manifest.
-		return nil
-	}
-
 	effectiveProvider := plugin.ManifestProvider()
-	hasDirectOpenAPI := plugin.OpenAPI != ""
-	hasDirectGraphQL := plugin.GraphQLURL != ""
-	hasDirectMCP := plugin.MCPURL != ""
-	hasOpenAPI := hasDirectOpenAPI || ManifestProviderSurfaceURL(effectiveProvider, SpecSurfaceOpenAPI) != ""
-	hasGraphQL := hasDirectGraphQL || ManifestProviderSurfaceURL(effectiveProvider, SpecSurfaceGraphQL) != ""
-	hasMCP := hasDirectMCP || ManifestProviderSurfaceURL(effectiveProvider, SpecSurfaceMCP) != ""
-	hasAPISurface := hasOpenAPI || hasGraphQL
-	hasSpecSurface := hasAPISurface || hasMCP
-	hasExecutableProcess := !plugin.IsInline() && !plugin.IsDeclarative
-	hasInlineOperations := plugin.IsInline() && len(plugin.Operations) > 0
-	hasDeclarativeRuntime := hasInlineOperations || (!hasExecutableProcess && effectiveProvider != nil && effectiveProvider.IsDeclarative())
-
-	supportsBaseURL := hasDeclarativeRuntime || hasDirectOpenAPI || hasDirectGraphQL || (!plugin.IsInline() && hasAPISurface)
-	supportsHeaders := false
-	switch {
-	case plugin.IsInline():
-		supportsHeaders = hasInlineOperations || hasSpecSurface
-	case hasExecutableProcess:
-		supportsHeaders = hasSpecSurface
-	default:
-		supportsHeaders = effectiveProvider != nil && effectiveProvider.IsManifestBacked()
-	}
-	supportsResponseMapping := hasAPISurface
-
-	checks := []struct {
-		field     string
-		present   bool
-		supported bool
-		reason    string
-	}{
-		{
-			field:     "plugin.env",
-			present:   len(plugin.Env) > 0,
-			supported: hasExecutableProcess,
-			reason:    "is only valid when the plugin runs as an executable process; remove plugin.env or switch this integration to plugin.source",
-		},
-		{
-			field:     "plugin.allowed_hosts",
-			present:   len(plugin.AllowedHosts) > 0,
-			supported: hasExecutableProcess,
-			reason:    "is only valid when the plugin runs as an executable process; remove plugin.allowed_hosts or switch this integration to plugin.source",
-		},
-		{
-			field:     "plugin.openapi_connection",
-			present:   plugin.OpenAPIConnection != "",
-			supported: hasOpenAPI,
-			reason:    "is only valid when openapi is configured; remove plugin.openapi_connection or configure an OpenAPI surface",
-		},
-		{
-			field:     "plugin.graphql_connection",
-			present:   plugin.GraphQLConnection != "",
-			supported: hasGraphQL,
-			reason:    "is only valid when graphql_url is configured; remove plugin.graphql_connection or configure a GraphQL surface",
-		},
-		{
-			field:     "plugin.mcp_connection",
-			present:   plugin.MCPConnection != "",
-			supported: hasMCP,
-			reason:    "is only valid when mcp_url is configured; remove plugin.mcp_connection or configure an MCP surface",
-		},
-		{
-			field:     "plugin.base_url",
-			present:   plugin.BaseURL != "",
-			supported: supportsBaseURL,
-			reason:    "is only valid when the resolved provider actually uses a base URL; remove plugin.base_url or configure inline operations, OpenAPI, or GraphQL",
-		},
-		{
-			field:     "plugin.headers",
-			present:   len(plugin.Headers) > 0,
-			supported: supportsHeaders,
-			reason:    "are only valid when the plugin exposes declarative operations or a spec surface; remove plugin.headers or configure declarative operations, OpenAPI, GraphQL, or MCP",
-		},
-		{
-			field:     "plugin.managed_parameters",
-			present:   len(plugin.ManagedParameters) > 0,
-			supported: hasAPISurface,
-			reason:    "are only valid with openapi/graphql surfaces; remove plugin.managed_parameters or configure OpenAPI or GraphQL",
-		},
-		{
-			field:     "plugin.response_mapping",
-			present:   plugin.ResponseMapping != nil,
-			supported: supportsResponseMapping,
-			reason:    "is only valid for openapi/graphql integrations; remove plugin.response_mapping or configure an OpenAPI or GraphQL surface",
-		},
-	}
-	for _, check := range checks {
-		if check.present && !check.supported {
-			return fmt.Errorf("config validation: integration %q %s %s", name, check.field, check.reason)
-		}
-	}
-	if !plugin.IsInline() && effectiveProvider != nil {
+	if effectiveProvider != nil {
 		if err := validateManifestBackedConnectionReferences(name, plugin, effectiveProvider); err != nil {
 			return err
 		}
@@ -1274,18 +1155,8 @@ func validateSupportedPluginFields(name string, plugin *PluginDef) error {
 			return err
 		}
 	}
-	return nil
-}
-
-func validateManagedParameterConfig(prefix string, headers map[string]string, params []ManagedParameterDef) error {
-	if len(params) == 0 {
-		return nil
-	}
-	if err := ValidateManagedParameters(params); err != nil {
-		return fmt.Errorf("%s %w", prefix, err)
-	}
-	if err := ValidateManagedParameterHeaderConflicts(NormalizeHeaders(headers), params); err != nil {
-		return fmt.Errorf("%s %w", prefix, err)
+	if err := validateExecutableConnectionAuthSupport(name, plugin, effectiveProvider); err != nil {
+		return err
 	}
 	return nil
 }

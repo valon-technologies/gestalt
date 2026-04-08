@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"text/template"
 
@@ -20,97 +21,204 @@ const goProviderPackageTarget = "."
 const goReadonlyFlag = "-mod=readonly"
 
 var ErrNoGoProviderPackage = errors.New("no Go provider package found")
+var ErrNoSourceComponentPackage = errors.New("no source component package found")
 var ErrGoToolUnavailable = errors.New("go tool unavailable")
 var goProviderNameSlugPattern = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
 
-//go:embed go_provider_wrapper.go.tmpl
-var goProviderWrapperSource string
+type goExecutableWrapperData struct {
+	ImportPath string
+	ServeCall  string
+}
 
-var goProviderWrapperTemplate = template.Must(template.New("go-provider-wrapper").Parse(goProviderWrapperSource))
+//go:embed go_executable_wrapper.go.tmpl
+var goExecutableWrapperSource string
+
+var goExecutableWrapperTemplate = template.Must(template.New("go-executable-wrapper").Parse(goExecutableWrapperSource))
 
 func DetectGoProviderImportPath(root, goos, goarch string) (string, error) {
-	importPath, err := goPackageField(root, goProviderPackageTarget, "{{.ImportPath}}", goos, goarch)
+	return detectGoPackageImportPath(root, goProviderPackageTarget, ErrNoGoProviderPackage, goProviderSourceExists, goos, goarch)
+}
+
+func BuildGoProviderTempBinary(root, goos, goarch string) (string, func(), error) {
+	pluginName := sourcePluginName(root)
+	return buildGoTempBinary("gestalt-go-provider-bin-*", "provider", goos, func(outputPath string) error {
+		return BuildGoProviderBinary(root, outputPath, pluginName, goos, goarch)
+	})
+}
+
+func BuildGoProviderBinary(root, outputPath, pluginName, goos, goarch string) error {
+	return buildGoSourceBinary(root, outputPath, goos, goarch, ErrNoGoProviderPackage, goProviderSourceExists, "gestalt-go-provider-*.go", "Go provider wrapper", func(importPath string) (goExecutableWrapperData, error) {
+		return goExecutableWrapperData{
+			ImportPath: importPath,
+			ServeCall:  fmt.Sprintf("gestalt.ServeProvider(ctx, pluginpkg.New(), pluginpkg.Router.WithName(%q))", pluginName),
+		}, nil
+	})
+}
+
+func DetectGoComponentImportPath(root, kind, goos, goarch string) (string, error) {
+	if err := validateSourceComponentKind(kind); err != nil {
+		return "", err
+	}
+	return detectGoPackageImportPath(root, goProviderPackageTarget, ErrNoSourceComponentPackage, goComponentSourceExists, goos, goarch)
+}
+
+func BuildGoComponentTempBinary(root, kind, goos, goarch string) (string, func(), error) {
+	return buildGoTempBinary("gestalt-go-component-bin-*", kind, goos, func(outputPath string) error {
+		return BuildGoComponentBinary(root, outputPath, kind, goos, goarch)
+	})
+}
+
+func BuildGoComponentBinary(root, outputPath, kind, goos, goarch string) error {
+	if err := validateSourceComponentKind(kind); err != nil {
+		return err
+	}
+	return buildGoSourceBinary(root, outputPath, goos, goarch, ErrNoSourceComponentPackage, goComponentSourceExists, "gestalt-go-component-*.go", fmt.Sprintf("Go %s wrapper", kind), func(importPath string) (goExecutableWrapperData, error) {
+		serveCall, err := componentServeCall(kind)
+		if err != nil {
+			return goExecutableWrapperData{}, err
+		}
+		return goExecutableWrapperData{
+			ImportPath: importPath,
+			ServeCall:  serveCall,
+		}, nil
+	})
+}
+
+func SourceComponentExecutionCommand(root, kind, goos, goarch string) (string, []string, func(), error) {
+	if err := validateSourceComponentKind(kind); err != nil {
+		return "", nil, nil, err
+	}
+	command, cleanup, err := BuildGoComponentTempBinary(root, kind, goos, goarch)
+	if err != nil {
+		if errors.Is(err, ErrNoSourceComponentPackage) {
+			return "", nil, nil, err
+		}
+		return "", nil, nil, fmt.Errorf("build source %s temp binary: %w", kind, err)
+	}
+	return command, nil, cleanup, nil
+}
+
+func ValidateSourceComponentRelease(root, kind, goos, goarch string) error {
+	_, err := DetectGoComponentImportPath(root, kind, goos, goarch)
+	return err
+}
+
+func BuildSourceComponentReleaseBinary(root, outputPath, kind, goos, goarch string) error {
+	if err := ValidateSourceComponentRelease(root, kind, goos, goarch); err != nil {
+		return err
+	}
+	return BuildGoComponentBinary(root, outputPath, kind, goos, goarch)
+}
+
+func HasSourceComponentPackage(root, kind string) (bool, error) {
+	_, err := DetectGoComponentImportPath(root, kind, runtime.GOOS, runtime.GOARCH)
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, ErrNoSourceComponentPackage):
+		return false, nil
+	default:
+		return false, err
+	}
+}
+
+func detectGoPackageImportPath(root, buildTarget string, noSourceErr error, sourceExists func(string) bool, goos, goarch string) (string, error) {
+	importPath, err := goPackageField(root, buildTarget, "{{.ImportPath}}", goos, goarch)
 	if err != nil {
 		if errors.Is(err, ErrGoToolUnavailable) {
-			if !goProviderSourceExists(root) {
-				return "", ErrNoGoProviderPackage
+			if !sourceExists(root) {
+				return "", noSourceErr
 			}
 			return "", err
 		}
 		if isMissingGoPackageError(err) {
-			return "", ErrNoGoProviderPackage
+			return "", noSourceErr
 		}
-		return "", fmt.Errorf("%s: %w", goProviderPackageTarget, err)
+		return "", fmt.Errorf("%s: %w", buildTarget, err)
 	}
-	return strings.TrimSpace(importPath), nil
+	importPath = strings.TrimSpace(importPath)
+	if importPath != "" && importPath != "." {
+		return importPath, nil
+	}
+
+	modulePath, err := goPackageField(root, buildTarget, "{{if .Module}}{{.Module.Path}}{{end}}", goos, goarch)
+	if err == nil {
+		modulePath = strings.TrimSpace(modulePath)
+		if modulePath != "" {
+			return modulePath, nil
+		}
+	}
+	return importPath, nil
 }
 
-func NewGoProviderWrapper(root, pluginName, goos, goarch string) (string, func(), error) {
-	importPath, err := DetectGoProviderImportPath(root, goos, goarch)
+func newGoSourceWrapper(root, goos, goarch string, noSourceErr error, sourceExists func(string) bool, tempPattern, description string, wrapperData func(string) (goExecutableWrapperData, error)) (string, func(), error) {
+	importPath, err := detectGoPackageImportPath(root, goProviderPackageTarget, noSourceErr, sourceExists, goos, goarch)
 	if err != nil {
 		return "", nil, err
 	}
-
-	file, err := os.CreateTemp("", "gestalt-go-provider-*.go")
+	data, err := wrapperData(importPath)
 	if err != nil {
-		return "", nil, fmt.Errorf("create Go provider wrapper: %w", err)
+		return "", nil, err
+	}
+	return newGoWrapper(tempPattern, description, goExecutableWrapperTemplate, data)
+}
+
+func buildGoSourceBinary(root, outputPath, goos, goarch string, noSourceErr error, sourceExists func(string) bool, tempPattern, description string, wrapperData func(string) (goExecutableWrapperData, error)) error {
+	wrapperPath, cleanup, err := newGoSourceWrapper(root, goos, goarch, noSourceErr, sourceExists, tempPattern, description, wrapperData)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	return buildGoWrapperBinary(root, outputPath, wrapperPath, goos, goarch)
+}
+
+func newGoWrapper(tempPattern, description string, tmpl *template.Template, data any) (string, func(), error) {
+	file, err := os.CreateTemp("", tempPattern)
+	if err != nil {
+		return "", nil, fmt.Errorf("create %s: %w", description, err)
 	}
 	path := file.Name()
 	cleanup := func() { _ = os.Remove(path) }
-	defer func() {
-		_ = file.Close()
-	}()
+	defer func() { _ = file.Close() }()
 
 	var buf bytes.Buffer
-	if err := goProviderWrapperTemplate.Execute(&buf, struct {
-		ImportPath string
-		PluginName string
-	}{
-		ImportPath: importPath,
-		PluginName: pluginName,
-	}); err != nil {
+	if err := tmpl.Execute(&buf, data); err != nil {
 		cleanup()
-		return "", nil, fmt.Errorf("render Go provider wrapper: %w", err)
+		return "", nil, fmt.Errorf("render %s: %w", description, err)
 	}
 	source, err := format.Source(buf.Bytes())
 	if err != nil {
 		cleanup()
-		return "", nil, fmt.Errorf("format Go provider wrapper: %w", err)
+		return "", nil, fmt.Errorf("format %s: %w", description, err)
 	}
 	if _, err := file.Write(source); err != nil {
 		cleanup()
-		return "", nil, fmt.Errorf("write Go provider wrapper: %w", err)
+		return "", nil, fmt.Errorf("write %s: %w", description, err)
 	}
 	return path, cleanup, nil
 }
 
-func BuildGoProviderTempBinary(root, goos, goarch string) (string, func(), error) {
-	tempDir, err := os.MkdirTemp("", "gestalt-go-provider-bin-*")
+func buildGoTempBinary(tempDirPattern, binaryBaseName, goos string, build func(outputPath string) error) (string, func(), error) {
+	tempDir, err := os.MkdirTemp("", tempDirPattern)
 	if err != nil {
-		return "", nil, fmt.Errorf("create Go provider temp dir: %w", err)
+		return "", nil, fmt.Errorf("create temp dir: %w", err)
 	}
 	cleanup := func() { _ = os.RemoveAll(tempDir) }
-	pluginName := sourcePluginName(root)
 
-	binaryName := "provider"
+	binaryName := binaryBaseName
 	if goos == "windows" {
 		binaryName += ".exe"
 	}
 	binaryPath := filepath.Join(tempDir, binaryName)
-	if err := BuildGoProviderBinary(root, binaryPath, pluginName, goos, goarch); err != nil {
+	if err := build(binaryPath); err != nil {
 		cleanup()
 		return "", nil, err
 	}
 	return binaryPath, cleanup, nil
 }
 
-func BuildGoProviderBinary(root, outputPath, pluginName, goos, goarch string) error {
-	wrapperPath, cleanup, err := NewGoProviderWrapper(root, pluginName, goos, goarch)
-	if err != nil {
-		return err
-	}
-	defer cleanup()
-
+func buildGoWrapperBinary(root, outputPath, wrapperPath, goos, goarch string) error {
 	cmd := exec.Command("go", "-C", root, "build", goReadonlyFlag, "-trimpath", "-ldflags", "-s -w", "-o", outputPath, wrapperPath)
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS="+goos, "GOARCH="+goarch)
 	cmd.Stdout = os.Stdout
@@ -156,13 +264,20 @@ func isMissingGoToolError(err error) bool {
 }
 
 func goProviderSourceExists(root string) bool {
-	providerDir := filepath.Join(root, "provider")
-	if _, err := os.Stat(providerDir); err != nil {
+	return goSourceExists(filepath.Join(root, "provider"))
+}
+
+func goComponentSourceExists(root string) bool {
+	return goSourceExists(root)
+}
+
+func goSourceExists(root string) bool {
+	if _, err := os.Stat(root); err != nil {
 		return false
 	}
 
-	stop := errors.New("found go provider source")
-	err := filepath.WalkDir(providerDir, func(path string, d os.DirEntry, err error) error {
+	stop := errors.New("found go source")
+	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -224,4 +339,24 @@ func slugPluginName(value string) string {
 		return "plugin"
 	}
 	return cleaned
+}
+
+func validateSourceComponentKind(kind string) error {
+	switch kind {
+	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore:
+		return nil
+	default:
+		return fmt.Errorf("unsupported source component kind %q", kind)
+	}
+}
+
+func componentServeCall(kind string) (string, error) {
+	switch kind {
+	case pluginmanifestv1.KindAuth:
+		return "gestalt.ServeAuthProvider(ctx, pluginpkg.New())", nil
+	case pluginmanifestv1.KindDatastore:
+		return "gestalt.ServeDatastoreProvider(ctx, pluginpkg.New())", nil
+	default:
+		return "", fmt.Errorf("unsupported source component kind %q", kind)
+	}
 }

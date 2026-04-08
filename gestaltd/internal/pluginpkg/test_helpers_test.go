@@ -13,7 +13,6 @@ import (
 	"testing"
 
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
-	"gopkg.in/yaml.v3"
 )
 
 type archiveTestFile struct {
@@ -90,14 +89,12 @@ func mustWriteManifest(t *testing.T, dir string, manifest *pluginmanifestv1.Mani
 	return data
 }
 
-func mustProviderManifest(source, version, osName, arch, artifactPath, sha string) *manifestWire {
-	return &manifestWire{
-		Source:  source,
-		Version: version,
-		Provider: &providerManifestWire{
-			Exec:     &providerExecWire{ArtifactPath: artifactPath},
-			Surfaces: providerManifestSurfacesWire{},
-		},
+func mustProviderManifest(source, version, osName, arch, artifactPath, sha string) *pluginmanifestv1.Manifest {
+	return &pluginmanifestv1.Manifest{
+		Source:   source,
+		Version:  version,
+		Kinds:    []string{pluginmanifestv1.KindProvider},
+		Provider: &pluginmanifestv1.Provider{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     osName,
@@ -106,27 +103,35 @@ func mustProviderManifest(source, version, osName, arch, artifactPath, sha strin
 				SHA256: sha,
 			},
 		},
+		Entrypoints: pluginmanifestv1.Entrypoints{
+			Provider: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactPath},
+		},
 	}
 }
 
-func mustManifestJSON(t *testing.T, wire *manifestWire) []byte {
+func mustManifestJSON(t *testing.T, manifest *pluginmanifestv1.Manifest) []byte {
 	t.Helper()
-	return mustManifestJSONBytes(wire)
-}
-
-func mustManifestYAML(t *testing.T, wire *manifestWire) []byte {
-	t.Helper()
-	data, err := yaml.Marshal(wire)
+	data, err := EncodeSourceManifestFormat(manifest, ManifestFormatJSON)
 	if err != nil {
-		t.Fatalf("yaml.Marshal: %v", err)
+		t.Fatalf("EncodeSourceManifestFormat(JSON): %v", err)
 	}
 	return data
 }
 
-func mustManifestJSONBytes(wire *manifestWire) []byte {
-	data, err := json.MarshalIndent(wire, "", "  ")
+func mustManifestYAML(t *testing.T, manifest *pluginmanifestv1.Manifest) []byte {
+	t.Helper()
+	data, err := EncodeSourceManifestFormat(manifest, ManifestFormatYAML)
 	if err != nil {
-		panic(err)
+		t.Fatalf("EncodeSourceManifestFormat(YAML): %v", err)
+	}
+	return data
+}
+
+func mustRawManifestJSON(t *testing.T, manifest *pluginmanifestv1.Manifest) []byte {
+	t.Helper()
+	data, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		t.Fatalf("json.MarshalIndent: %v", err)
 	}
 	return append(data, '\n')
 }

@@ -10,7 +10,7 @@ func TestPackageRoundTripWithIconFile(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	sourceDir, manifest := mustWriteProviderPackageDir(t, root, "github.com/acme/plugins/provider", "0.1.0", "provider")
+	sourceDir, manifest := mustWriteProviderPackageDir(t, root, "github.com/acme/plugins/provider", "0.0.1-alpha.1", "provider")
 	manifest.IconFile = "assets/icon.svg"
 	mustWriteManifest(t, sourceDir, manifest)
 
@@ -74,13 +74,13 @@ func TestCreatePackageFromDirAndReadManifest(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(src, filepath.FromSlash(artifactPath)), []byte("provider"), 0755); err != nil {
 		t.Fatalf("WriteFile(provider): %v", err)
 	}
-	manifest := mustManifestJSON(t, mustProviderManifest("github.com/acme/plugins/provider", "0.1.0", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider")))
+	manifest := mustManifestJSON(t, mustProviderManifest("github.com/acme/plugins/provider", "0.0.1-alpha.1", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider")))
 	if err := os.WriteFile(filepath.Join(src, ManifestFile), manifest, 0644); err != nil {
 		t.Fatalf("WriteFile(plugin.json): %v", err)
 	}
 	mustWriteFile(t, filepath.Join(src, "catalog.yaml"), []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n"), 0644)
 
-	archivePath := filepath.Join(dir, "acme-provider-0.1.0.tar.gz")
+	archivePath := filepath.Join(dir, "acme-provider-0.0.1-alpha.1.tar.gz")
 	if err := CreatePackageFromDir(src, archivePath); err != nil {
 		t.Fatalf("CreatePackageFromDir: %v", err)
 	}

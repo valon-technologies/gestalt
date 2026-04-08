@@ -22,8 +22,9 @@
 - Default config path: `/etc/gestalt/config.yaml`
 - Default writable data and artifacts dir: `/data`
 - This image is not zero-config. Mount or bake a config file before starting it.
-- Locked startup is the default. If your config uses `providers.*.from.source.ref`
-  or `ui.plugin.source`, run `init` first.
+- Locked startup is the default. If your config uses
+  `plugins.*.provider.source.ref`, `auth.provider.source.ref`,
+  `datastore.provider.source.ref`, or `ui.plugin.source`, run `init` first.
 
 ## Supported tags
 
@@ -40,9 +41,9 @@ The image is Alpine-based and includes `gestaltd`, a shell, and
 `ca-certificates`. It runs as `nobody:nobody` by default and pre-creates
 `/data` as a writable directory for SQLite and prepared artifacts.
 
-## Run a simple static config
+## Run a simple config
 
-If your config does not need prepared artifacts, mount it directly:
+Mount a config file and writable `/data` volume before starting the container:
 
 ```sh
 docker run --rm \
@@ -65,15 +66,15 @@ server:
     port: 8080
   encryption_key: ${GESTALT_ENCRYPTION_KEY}
 
-auth:
-  provider: none
-
 datastore:
-  provider: sqlite
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+      version: 0.0.1-alpha.1
   config:
     path: /data/gestalt.db
 
-providers: {}
+plugins: {}
 ```
 
 Example with a separate internal-only management listener:
@@ -88,15 +89,15 @@ server:
     port: 9090
   encryption_key: ${GESTALT_ENCRYPTION_KEY}
 
-auth:
-  provider: none
-
 datastore:
-  provider: sqlite
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+      version: 0.0.1-alpha.1
   config:
     path: /data/gestalt.db
 
-providers: {}
+plugins: {}
 ```
 
 ```sh
@@ -243,7 +244,7 @@ COPY --from=gestaltd /gestaltd /usr/local/bin/gestaltd
 WORKDIR /src
 COPY . .
 RUN cd ./my-plugin && \
-    gestaltd plugin release --version 0.1.0 --platform all && \
+    gestaltd plugin release --version 0.0.1-alpha.1 --platform all && \
     gestaltd init --config ./deploy/config.yaml
 ```
 

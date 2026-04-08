@@ -15,6 +15,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	ghresolver "github.com/valon-technologies/gestalt/server/internal/pluginsource/github"
@@ -106,7 +107,64 @@ func buildV2ArchiveForArtifact(t *testing.T, dir, source, version, artifactPath,
 
 	archivePath := filepath.Join(dir, safeName+".tar.gz")
 	if err := pluginpkg.CreatePackageFromDir(srcDir, archivePath); err != nil {
-		t.Fatalf("CreatePackageFromDir provider: %v", err)
+		t.Fatalf("CreatePackageFromDir plugin: %v", err)
+	}
+
+	return archivePath
+}
+
+func buildExecutableArchive(t *testing.T, dir, srcDirName, source, version, kind, binaryName, binaryContent string) string {
+	t.Helper()
+
+	artPath := artifactRelPath(binaryName)
+	srcDir := filepath.Join(dir, srcDirName)
+	if err := os.MkdirAll(filepath.Join(srcDir, filepath.Dir(filepath.FromSlash(artPath))), 0755); err != nil {
+		t.Fatalf("create plugin src dir: %v", err)
+	}
+	manifest := &pluginmanifestv1.Manifest{
+		Source:  source,
+		Version: version,
+		Kinds:   []string{kind},
+		Artifacts: []pluginmanifestv1.Artifact{
+			{
+				OS:     runtime.GOOS,
+				Arch:   runtime.GOARCH,
+				Path:   artPath,
+				SHA256: sha256hex(binaryContent),
+			},
+		},
+	}
+	switch kind {
+	case pluginmanifestv1.KindProvider:
+		manifest.Provider = &pluginmanifestv1.Provider{}
+		manifest.Entrypoints.Provider = &pluginmanifestv1.Entrypoint{ArtifactPath: artPath}
+	case pluginmanifestv1.KindAuth:
+		manifest.Auth = &pluginmanifestv1.AuthMetadata{}
+		manifest.Entrypoints.Auth = &pluginmanifestv1.Entrypoint{ArtifactPath: artPath}
+	case pluginmanifestv1.KindDatastore:
+		manifest.Datastore = &pluginmanifestv1.DatastoreMetadata{}
+		manifest.Entrypoints.Datastore = &pluginmanifestv1.Entrypoint{ArtifactPath: artPath}
+	default:
+		t.Fatalf("unsupported kind %q", kind)
+	}
+
+	manifestBytes, err := pluginpkg.EncodeManifest(manifest)
+	if err != nil {
+		t.Fatalf("encode manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "plugin.json"), manifestBytes, 0644); err != nil {
+		t.Fatalf("write provider manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "catalog.yaml"), []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n"), 0644); err != nil {
+		t.Fatalf("write provider catalog: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, filepath.FromSlash(artPath)), []byte(binaryContent), 0755); err != nil {
+		t.Fatalf("write provider artifact: %v", err)
+	}
+
+	archivePath := filepath.Join(dir, "plugin.tar.gz")
+	if err := pluginpkg.CreatePackageFromDir(srcDir, archivePath); err != nil {
+		t.Fatalf("CreatePackageFromDir plugin: %v", err)
 	}
 
 	return archivePath
@@ -118,9 +176,9 @@ func writeConfigYAML(t *testing.T, dir, source, version, artifactsDir string) st
 	lines := []string{
 		"server:",
 		"  artifacts_dir: " + artifactsDir,
-		"providers:",
+		"plugins:",
 		"  alpha:",
-		"    from:",
+		"    provider:",
 		"      source:",
 		"        ref: " + source,
 		"        version: " + version,
@@ -286,19 +344,13 @@ func TestSourcePluginLoadForExecution(t *testing.T) {
 	}
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
-	yaml := strings.Join([]string{
-		"auth:",
-		"  provider: noop",
-		"datastore:",
-		"  provider: sqlite",
-		"  config:",
-		"    path: " + filepath.Join(dir, "data.db"),
+	yaml := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
 		"server:",
 		"  artifacts_dir: " + artifactsDir,
 		"  encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		"providers:",
+		"plugins:",
 		"  gadget:",
-		"    from:",
+		"    provider:",
 		"      source:",
 		"        ref: " + source,
 		"        version: " + version,
@@ -357,6 +409,114 @@ func TestSourcePluginLoadForExecution(t *testing.T) {
 	}
 	if cfg.Integrations["gadget"].Plugin.Command != executablePath {
 		t.Fatalf("plugin command = %q, want %q", cfg.Integrations["gadget"].Plugin.Command, executablePath)
+	}
+}
+
+func TestSourceAuthPluginLoadForExecution(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	source := "github.com/acme/tools/auth-widget"
+	version := "2.0.0"
+	binaryContent := "fake-auth-binary"
+
+	archivePath := buildExecutableArchive(t, dir, "auth-src", source, version, pluginmanifestv1.KindAuth, "auth-plugin", binaryContent)
+	archiveData, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("read archive: %v", err)
+	}
+	archiveSum := sha256.Sum256(archiveData)
+	archiveSHA := hex.EncodeToString(archiveSum[:])
+
+	var downloadCount atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		downloadCount.Add(1)
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(archiveData)
+	}))
+	defer srv.Close()
+
+	resolver := &fakeResolver{
+		archivePath: archivePath,
+		resolvedURL: srv.URL + "/plugin.tar.gz",
+		sha256:      archiveSHA,
+	}
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	yaml := strings.Join([]string{
+		requiredDatastoreConfigYAML(t, dir, filepath.Join(dir, "data.db")),
+		"auth:",
+		"  provider:",
+		"    source:",
+		"      ref: " + source,
+		"      version: " + version,
+		"  config:",
+		"    client_id: managed-auth-client",
+		"server:",
+		"  artifacts_dir: " + artifactsDir,
+		"  encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(configPath, []byte(yaml), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle(resolver)
+	lock, err := lc.InitAtPath(configPath)
+	if err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+	if lock.Auth == nil {
+		t.Fatal("lock auth entry not found")
+	}
+	if lock.Auth.Source != source {
+		t.Fatalf("lock.Auth.Source = %q, want %q", lock.Auth.Source, source)
+	}
+	if lock.Auth.Executable == "" {
+		t.Fatal("lock.Auth.Executable is empty")
+	}
+
+	callsBefore := resolver.calls
+	_, _, err = lc.LoadForExecutionAtPath(configPath, true)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
+	}
+	if resolver.calls != callsBefore {
+		t.Errorf("resolver called during LoadForExecution (locked), want no additional calls")
+	}
+
+	authRoot := filepath.Join(artifactsDir, ".gestaltd", "auth")
+	if err := os.RemoveAll(authRoot); err != nil {
+		t.Fatalf("RemoveAll auth root: %v", err)
+	}
+
+	downloadsBefore := downloadCount.Load()
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath after cache removal: %v", err)
+	}
+	if got := downloadCount.Load() - downloadsBefore; got != 1 {
+		t.Fatalf("download count during locked rehydration = %d, want 1", got)
+	}
+
+	if cfg.Auth.Provider == nil {
+		t.Fatal("auth provider is nil after load")
+	}
+	executablePath := resolveLockPath(artifactsDir, lock.Auth.Executable)
+	if cfg.Auth.Provider.Command != executablePath {
+		t.Fatalf("auth provider command = %q, want %q", cfg.Auth.Provider.Command, executablePath)
+	}
+	authCfg, err := config.NodeToMap(cfg.Auth.Config)
+	if err != nil {
+		t.Fatalf("NodeToMap(auth config): %v", err)
+	}
+	if authCfg["command"] != executablePath {
+		t.Fatalf("auth config command = %v, want %q", authCfg["command"], executablePath)
+	}
+	nested, ok := authCfg["config"].(map[string]any)
+	if !ok || nested["client_id"] != "managed-auth-client" {
+		t.Fatalf("auth nested config = %#v", authCfg["config"])
 	}
 }
 
@@ -434,19 +594,13 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 	defer srv.Close()
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
-	configYAML := strings.Join([]string{
-		"auth:",
-		"  provider: noop",
-		"datastore:",
-		"  provider: sqlite",
-		"  config:",
-		"    path: " + filepath.Join(dir, "data.db"),
+	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
 		"server:",
 		"  artifacts_dir: " + artifactsDir,
 		"  encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		"providers:",
+		"plugins:",
 		"  alpha:",
-		"    from:",
+		"    provider:",
 		"      source:",
 		"        ref: " + testSource,
 		"        version: " + testVersion,

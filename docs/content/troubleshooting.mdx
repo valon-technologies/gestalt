@@ -4,7 +4,9 @@
 
 When `gestaltd serve --locked` reports that prepared artifacts are missing or stale, the lock state has drifted from the current config. Run `gestaltd init --config ./config.yaml` to re-resolve and re-prepare all references, then start the server again with `gestaltd serve --locked --config ./config.yaml`.
 
-The validation error `server.encryption_key is required` means the config is missing its root deployment secret. Set `server.encryption_key` to a `secret://` reference whenever `auth.provider` is not `none`. The encryption key is used for token encryption and derived session material, so the server refuses to start without it.
+The validation error `server.encryption_key is required` means the config is missing its root deployment secret. Set `server.encryption_key` to a `secret://` reference or other secret-backed value. The encryption key is used for token encryption and derived session material, so the server refuses to start without it.
+
+Set `server.encryption_key` for every real deployment. Gestalt derives token and session encryption from it even when you use the built-in auth and datastore provider binaries.
 
 If the `/mcp` endpoint is not mounted, the server found no provider that exposes tools. At least one integration must surface operations through inline declarative REST, OpenAPI, GraphQL, upstream MCP, or an MCP-enabled packaged provider before `/mcp` becomes available.
 
@@ -12,7 +14,7 @@ When `/ready` returns `503`, the server has not finished initialization. Readine
 
 ## Operation invocation
 
-A "provider not found" error means the integration key in the request does not match any entry in the `providers` config map. Verify the spelling and confirm the provider loaded without errors at startup.
+A "provider not found" error means the integration key in the request does not match any entry in the `plugins` config map. Verify the spelling and confirm the provider loaded without errors at startup.
 
 An "operation not found" error means the operation ID does not exist in the provider's catalog. Check that the surface exposes the operation and that `allowed_operations`, if set, includes it.
 
@@ -36,7 +38,7 @@ A "failed to reach" error means the outbound connection could not be established
 
 When a plugin fails to start, check that the binary exists at the expected path, is executable, and that any required runtime dependencies are available. For Python source plugins, verify the virtualenv is intact and the module declared in `[tool.gestalt].plugin` is importable. Plugin startup errors appear in the server log with the provider name.
 
-A sandbox 403 means the plugin made an outbound request to a host not listed in `from.allowed_hosts`. Add every upstream domain the plugin contacts to the allowlist in your provider config.
+A sandbox 403 means the plugin made an outbound request to a host not listed in `provider.allowed_hosts`. Add every upstream domain the plugin contacts to the allowlist in your plugin config.
 
 An input decode error means the operation received a request body that does not match the expected schema. Check the operation's parameter definitions and ensure the caller is sending the correct types and required fields.
 

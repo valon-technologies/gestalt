@@ -10,7 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -23,90 +23,6 @@ import (
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 	"gopkg.in/yaml.v3"
 )
-
-func TestE2EValidateRejectsInvalidInlineConnectionConfigs(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name       string
-		pluginYAML string
-		wantError  string
-	}{
-		{
-			name: "openapi requires explicit surface connection",
-			pluginYAML: `connections:
-  workspace:
-    auth:
-      type: manual
-surfaces:
-  openapi:
-    document: https://api.example.test/openapi.json`,
-			wantError: "surfaces.openapi.connection is required when using named connections without connections.default",
-		},
-		{
-			name: "graphql requires explicit surface connection",
-			pluginYAML: `connections:
-  workspace:
-    auth:
-      type: manual
-surfaces:
-  graphql:
-    url: https://api.example.test/graphql`,
-			wantError: "surfaces.graphql.connection is required when using named connections without connections.default",
-		},
-		{
-			name: "default connection reference must exist",
-			pluginYAML: `connections:
-  workspace:
-    auth:
-      type: manual
-surfaces:
-  rest:
-    connection: missing
-    base_url: https://api.example.test
-    operations:
-      - name: list_items
-        method: GET
-        path: /items`,
-			wantError: "surfaces.rest.connection references undeclared connection",
-		},
-	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			dir := t.TempDir()
-			cfgPath := filepath.Join(dir, "config.yaml")
-			cfg := fmt.Sprintf(`auth:
-  provider: none
-datastore:
-  provider: sqlite
-  config:
-    path: %s
-server:
-  port: 18080
-  encryption_key: test-e2e-key
-providers:
-  example:
-    %s
-`, filepath.Join(dir, "gestalt.db"), strings.ReplaceAll(tc.pluginYAML, "\n", "\n    "))
-
-			if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
-				t.Fatalf("write config: %v", err)
-			}
-
-			out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
-			if err == nil {
-				t.Fatalf("expected gestaltd validate to fail, got success\n%s", out)
-			}
-			if !strings.Contains(string(out), tc.wantError) {
-				t.Fatalf("expected %q, got: %s", tc.wantError, out)
-			}
-		})
-	}
-}
 
 func TestE2EValidateRejectsAuditConfigWhenProviderInheritsTelemetry(t *testing.T) {
 	t.Parallel()
@@ -833,13 +749,7 @@ func TestE2EBareGestaltdUsesDotGestaltdHomeConfig(t *testing.T) {
 	}
 
 	port := allocateTestPort(t)
-	cfg := `auth:
-  provider: none
-datastore:
-  provider: sqlite
-  config:
-    path: ` + filepath.Join(configDir, "gestalt.db") + `
-server:
+	cfg := authDatastoreConfigYAML(t, dir, "", "sqlite", filepath.Join(configDir, "gestalt.db")) + `server:
   port: ` + fmt.Sprintf("%d", port) + `
   encryption_key: test-key
 `
@@ -852,7 +762,11 @@ server:
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	cmd.Env = withoutEnvVar(os.Environ(), "GESTALT_CONFIG")
-	cmd.Env = append(cmd.Env, "HOME="+homeDir)
+	cmd.Env = append(cmd.Env,
+		"HOME="+homeDir,
+		"GOMODCACHE="+goEnvPath(t, "GOMODCACHE"),
+		"GOCACHE="+goEnvPath(t, "GOCACHE"),
+	)
 	if err := cmd.Start(); err != nil {
 		t.Fatalf("start gestaltd: %v", err)
 	}
@@ -863,6 +777,16 @@ server:
 
 	baseURL := fmt.Sprintf("http://localhost:%d", port)
 	waitForHealth(t, baseURL, 20*time.Second)
+}
+
+func goEnvPath(t *testing.T, key string) string {
+	t.Helper()
+
+	out, err := exec.Command("go", "env", key).Output()
+	if err != nil {
+		t.Fatalf("go env %s: %v", key, err)
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func TestE2EValidateNonMutating(t *testing.T) {
@@ -884,8 +808,6 @@ func TestE2EValidateNonMutating(t *testing.T) {
 }
 
 func TestE2EHelmChart(t *testing.T) {
-	t.Parallel()
-
 	helmPath, err := exec.LookPath("helm")
 	if err != nil {
 		t.Skip("helm not installed")
@@ -899,8 +821,12 @@ func TestE2EHelmChart(t *testing.T) {
 		dir := t.TempDir()
 		port := allocateTestPort(t)
 		dbPath := filepath.Join(dir, "gestalt.db")
+		datastoreManifestPath := componentProviderManifestPath(t, setupDatastoreProviderDir(t, dir, "sqlite"))
 		rendered := renderHelmChart(t, helmPath, chartDir,
 			"--set", fmt.Sprintf("config.server.port=%d", port),
+			"--set-string", "config.datastore.provider.source.path="+datastoreManifestPath,
+			"--set-string", "config.datastore.provider.source.ref=",
+			"--set-string", "config.datastore.provider.source.version=",
 			"--set-string", "config.datastore.config.path="+dbPath,
 		)
 
@@ -1037,7 +963,7 @@ func TestE2EValidateRejectsUnknownYAMLField(t *testing.T) {
 	}{
 		{
 			name: "bogus field",
-			pluginYAML: `from:
+			pluginYAML: `provider:
   source:
     path: /tmp/plugin.yaml
 bogus: true`,
@@ -1045,7 +971,7 @@ bogus: true`,
 		},
 		{
 			name: "removed plugin connection field",
-			pluginYAML: `from:
+			pluginYAML: `provider:
   source:
     path: /tmp/plugin.yaml
 connection: default`,
@@ -1053,7 +979,7 @@ connection: default`,
 		},
 		{
 			name: "removed provider params field",
-			pluginYAML: `from:
+			pluginYAML: `provider:
   source:
     path: /tmp/plugin.yaml
 params:
@@ -1070,18 +996,12 @@ params:
 
 			dir := t.TempDir()
 			cfgPath := filepath.Join(dir, "config.yaml")
-			cfg := fmt.Sprintf(`auth:
-  provider: local
-datastore:
-  provider: sqlite
-  config:
-    path: %s
-server:
+			cfg := authDatastoreConfigYAML(t, dir, "local", "sqlite", filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`server:
   encryption_key: test-key
-providers:
+plugins:
   example:
     %s
-`, filepath.Join(dir, "gestalt.db"), strings.ReplaceAll(tc.pluginYAML, "\n", "\n    "))
+`, strings.ReplaceAll(tc.pluginYAML, "\n", "\n    "))
 			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 				t.Fatalf("WriteFile config: %v", err)
 			}
@@ -1098,222 +1018,16 @@ providers:
 	}
 }
 
-func TestE2EValidateRejectsUnsupportedPluginFields(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name       string
-		pluginYAML string
-		wantError  string
-	}{
-		{
-			name: "env unsupported for inline plugin",
-			pluginYAML: `from:
-  env:
-    API_KEY: secret
-surfaces:
-  openapi:
-    document: https://api.example.test/openapi.json`,
-			wantError: "plugin.env is only valid when the plugin runs as an executable process; remove plugin.env or switch this integration to plugin.source",
-		},
-		{
-			name: "allowed hosts unsupported for inline plugin",
-			pluginYAML: `from:
-  allowed_hosts:
-    - api.example.test
-surfaces:
-  openapi:
-    document: https://api.example.test/openapi.json`,
-			wantError: "plugin.allowed_hosts is only valid when the plugin runs as an executable process; remove plugin.allowed_hosts or switch this integration to plugin.source",
-		},
-		{
-			name: "headers unsupported without declarative ops or spec surface",
-			pluginYAML: `from:
-  source:
-    path: /tmp/plugin.yaml
-headers:
-  x-test: value`,
-			wantError: "plugin.headers are only valid when the plugin exposes declarative operations or a spec surface; remove plugin.headers or configure declarative operations, OpenAPI, GraphQL, or MCP",
-		},
-		{
-			name: "managed parameters unsupported without api surface",
-			pluginYAML: `from:
-  source:
-    path: /tmp/plugin.yaml
-managed_parameters:
-  - in: header
-    name: x-version
-    value: "1"`,
-			wantError: "plugin.managed_parameters are only valid with openapi/graphql surfaces; remove plugin.managed_parameters or configure OpenAPI or GraphQL",
-		},
-		{
-			name: "response mapping unsupported for inline operations only",
-			pluginYAML: `response_mapping:
-  data_path: items
-surfaces:
-  rest:
-    base_url: https://api.example.test
-    operations:
-      - name: list_items
-        method: GET
-        path: /items`,
-			wantError: "plugin.response_mapping is only valid for openapi/graphql integrations; remove plugin.response_mapping or configure an OpenAPI or GraphQL surface",
-		},
-		{
-			name: "multiple api surfaces are rejected",
-			pluginYAML: `surfaces:
-  rest:
-    base_url: https://api.example.test
-    operations:
-      - name: list_items
-        method: GET
-        path: /items
-  openapi:
-    document: https://api.example.test/openapi.json`,
-			wantError: "provider config can define only one of surfaces.rest, surfaces.openapi, or surfaces.graphql",
-		},
-		{
-			name: "rest surface requires operations",
-			pluginYAML: `surfaces:
-  rest:
-    base_url: https://api.example.test`,
-			wantError: "surfaces.rest.operations is required when surfaces.rest is configured",
-		},
-		{
-			name: "mcp connection requires mcp url",
-			pluginYAML: `connections:
-  workspace:
-    auth:
-      type: manual
-surfaces:
-  openapi:
-    document: https://api.example.test/openapi.json
-    connection: workspace
-  mcp:
-    connection: workspace`,
-			wantError: "surfaces.mcp.url is required when surfaces.mcp is configured",
-		},
-		{
-			name: "mcp tool prefix requires enabled",
-			pluginYAML: `mcp:
-  tool_prefix: github_`,
-			wantError: "mcp.tool_prefix is only valid when mcp.enabled is true",
-		},
-	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			dir := t.TempDir()
-			cfgPath := filepath.Join(dir, "config.yaml")
-			cfg := fmt.Sprintf(`auth:
-  provider: local
-datastore:
-  provider: sqlite
-  config:
-    path: %s
-server:
-  encryption_key: test-key
-providers:
-  example:
-    %s
-`, filepath.Join(dir, "gestalt.db"), strings.ReplaceAll(tc.pluginYAML, "\n", "\n    "))
-
-			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-				t.Fatalf("WriteFile config: %v", err)
-			}
-
-			out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
-			if err == nil {
-				t.Fatalf("expected validate to fail for unsupported plugin field, output: %s", out)
-			}
-			if !strings.Contains(string(out), tc.wantError) {
-				t.Fatalf("expected output to mention %q, got: %s", tc.wantError, out)
-			}
-		})
-	}
-}
-
-func TestE2EValidateRejectsUnsupportedSourcePluginFields(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name       string
-		setup      func(t *testing.T, dir string) string
-		pluginYAML string
-		wantError  string
-	}{
-		{
-			name:  "config headers unsupported for executable-only source plugin",
-			setup: setupPluginDir,
-			pluginYAML: `from:
-  source:
-    path: %s
-headers:
-  x-test: value`,
-			wantError: "plugin.headers are only valid when the plugin exposes declarative operations or a spec surface; remove plugin.headers or configure declarative operations, OpenAPI, GraphQL, or MCP",
-		},
-	}
-
-	for _, tc := range cases {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			dir := t.TempDir()
-			pluginDir := tc.setup(t, dir)
-			manifestPath, err := pluginpkg.FindManifestFile(pluginDir)
-			if err != nil {
-				t.Fatalf("FindManifestFile(%s): %v", pluginDir, err)
-			}
-			cfgPath := filepath.Join(dir, "config.yaml")
-			pluginYAML := fmt.Sprintf(tc.pluginYAML, manifestPath)
-			cfg := fmt.Sprintf(`auth:
-  provider: local
-datastore:
-  provider: sqlite
-  config:
-    path: %s
-server:
-  encryption_key: test-key
-providers:
-  example:
-    %s
-`, filepath.Join(dir, "gestalt.db"), strings.ReplaceAll(pluginYAML, "\n", "\n    "))
-
-			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-				t.Fatalf("WriteFile config: %v", err)
-			}
-
-			out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
-			if err == nil {
-				t.Fatalf("expected validate to fail for unsupported source plugin field, output: %s", out)
-			}
-			if !strings.Contains(string(out), tc.wantError) {
-				t.Fatalf("expected output to mention %q, got: %s", tc.wantError, out)
-			}
-		})
-	}
-}
-
 //nolint:paralleltest // Spawns the CLI binary; keeping it serial avoids package-level e2e flake.
 func TestE2EDefaultStartRejectsUnknownYAMLField(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `auth:
-  provider: local
-datastore:
-  provider: sqlite
-  config:
-    path: ` + filepath.Join(dir, "gestalt.db") + `
-server:
+	cfg := authDatastoreConfigYAML(t, dir, "local", "sqlite", filepath.Join(dir, "gestalt.db")) + `server:
   encryption_key: test-key
   typo: true
-providers:
+plugins:
   example:
-    from:
+    provider:
       source:
         path: /tmp/plugin.yaml
 `
@@ -1349,7 +1063,7 @@ func TestE2EValidateRejectsMalformedYAML(t *testing.T) {
 
 func setupPluginDir(t *testing.T, baseDir string) string {
 	t.Helper()
-	return setupPluginDirWithVersion(t, baseDir, "0.1.0")
+	return setupPluginDirWithVersion(t, baseDir, "0.0.1-alpha.1")
 }
 
 func setupPluginDirWithVersion(t *testing.T, baseDir, version string) string {
@@ -1367,6 +1081,117 @@ func setupPluginDirWithVersion(t *testing.T, baseDir, version string) string {
 	}
 	writeManifestFile(t, pluginDir, manifest)
 	return pluginDir
+}
+
+func setupAuthProviderDir(t *testing.T, baseDir, name string) string {
+	t.Helper()
+
+	providerDir := filepath.Join(baseDir, "components", "auth", name)
+	if err := os.MkdirAll(providerDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", providerDir, err)
+	}
+	writeTestFile(t, providerDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/components/auth/"+name)), 0o644)
+	writeTestFile(t, providerDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
+	writeTestFile(t, providerDir, "auth.go", []byte(authProviderSource(name)), 0o644)
+	artifactRel := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "auth-provider"))
+	artifactPath := filepath.Join(providerDir, filepath.FromSlash(artifactRel))
+	if err := os.MkdirAll(filepath.Dir(artifactPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", filepath.Dir(artifactPath), err)
+	}
+	if err := pluginpkg.BuildSourceComponentReleaseBinary(providerDir, artifactPath, pluginmanifestv1.KindAuth, runtime.GOOS, runtime.GOARCH); err != nil {
+		t.Fatalf("BuildSourceComponentReleaseBinary(%s): %v", providerDir, err)
+	}
+	writeManifestFile(t, providerDir, &pluginmanifestv1.Manifest{
+		Source:      "github.com/test/providers/auth/" + name,
+		Version:     "0.0.1-alpha.1",
+		DisplayName: "Test Auth " + name,
+		Kinds:       []string{pluginmanifestv1.KindAuth},
+		Auth:        &pluginmanifestv1.AuthMetadata{},
+		Artifacts: []pluginmanifestv1.Artifact{
+			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: artifactRel},
+		},
+		Entrypoints: pluginmanifestv1.Entrypoints{
+			Auth: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactRel},
+		},
+	})
+	return providerDir
+}
+
+func authProviderSource(name string) string {
+	source := testutil.GeneratedAuthPackageSource()
+	displayName := name
+	if name != "" {
+		displayName = strings.ToUpper(name[:1]) + name[1:]
+	}
+	source = strings.Replace(source, `Name:        "generated-auth"`, fmt.Sprintf(`Name:        %q`, name), 1)
+	source = strings.Replace(source, `DisplayName: "Generated Auth"`, fmt.Sprintf(`DisplayName: %q`, displayName), 1)
+	return source
+}
+
+func setupDatastoreProviderDir(t *testing.T, baseDir, name string) string {
+	t.Helper()
+
+	providerDir := filepath.Join(baseDir, "components", "datastore", name)
+	if err := os.MkdirAll(providerDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", providerDir, err)
+	}
+	writeTestFile(t, providerDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/components/datastore/"+name)), 0o644)
+	writeTestFile(t, providerDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
+	writeTestFile(t, providerDir, "datastore.go", []byte(testutil.GeneratedDatastorePackageSource()), 0o644)
+	artifactRel := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "datastore-provider"))
+	artifactPath := filepath.Join(providerDir, filepath.FromSlash(artifactRel))
+	if err := os.MkdirAll(filepath.Dir(artifactPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", filepath.Dir(artifactPath), err)
+	}
+	if err := pluginpkg.BuildSourceComponentReleaseBinary(providerDir, artifactPath, pluginmanifestv1.KindDatastore, runtime.GOOS, runtime.GOARCH); err != nil {
+		t.Fatalf("BuildSourceComponentReleaseBinary(%s): %v", providerDir, err)
+	}
+	writeManifestFile(t, providerDir, &pluginmanifestv1.Manifest{
+		Source:      "github.com/test/providers/datastore/" + name,
+		Version:     "0.0.1-alpha.1",
+		DisplayName: "Test Datastore " + name,
+		Kinds:       []string{pluginmanifestv1.KindDatastore},
+		Datastore:   &pluginmanifestv1.DatastoreMetadata{},
+		Artifacts: []pluginmanifestv1.Artifact{
+			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: artifactRel},
+		},
+		Entrypoints: pluginmanifestv1.Entrypoints{
+			Datastore: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactRel},
+		},
+	})
+	return providerDir
+}
+
+func componentProviderManifestPath(t *testing.T, providerDir string) string {
+	t.Helper()
+
+	manifestPath, err := pluginpkg.FindManifestFile(providerDir)
+	if err != nil {
+		t.Fatalf("FindManifestFile(%s): %v", providerDir, err)
+	}
+	return manifestPath
+}
+
+func authDatastoreConfigYAML(t *testing.T, dir, authName, datastoreName, dbPath string) string {
+	t.Helper()
+
+	datastoreManifestPath := componentProviderManifestPath(t, setupDatastoreProviderDir(t, dir, datastoreName))
+	authBlock := ""
+	if authName != "" {
+		authManifestPath := componentProviderManifestPath(t, setupAuthProviderDir(t, dir, authName))
+		authBlock = fmt.Sprintf(`auth:
+  provider:
+    source:
+      path: %s
+`, authManifestPath)
+	}
+	return fmt.Sprintf(`%sdatastore:
+  provider:
+    source:
+      path: %s
+  config:
+    path: %s
+`, authBlock, datastoreManifestPath, dbPath)
 }
 
 func writeManifestFile(t *testing.T, pluginDir string, manifest *pluginmanifestv1.Manifest) {
@@ -1400,13 +1225,7 @@ func writeSplitListenerE2EConfig(t *testing.T, dir, pluginDir string, publicPort
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`auth:
-  provider: none
-datastore:
-  provider: sqlite
-  config:
-    path: %s
-server:
+	cfg := authDatastoreConfigYAML(t, dir, "", "sqlite", filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`server:
   encryption_key: test-e2e-key
   base_url: https://gestalt.example.test
   public:
@@ -1414,12 +1233,12 @@ server:
   management:
     host: 127.0.0.1
     port: %d
-providers:
+plugins:
   example:
-    from:
+    provider:
       source:
         path: %s
-`, filepath.Join(dir, "gestalt.db"), publicPort, managementPort, manifestPath)
+`, publicPort, managementPort, manifestPath)
 
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -1446,18 +1265,12 @@ func writeE2EConfigWithPaths(t *testing.T, dir, pluginDir, dbPath, artifactsDir 
 	if artifactsDir != "" {
 		serverBlock += fmt.Sprintf("  artifacts_dir: %s\n", artifactsDir)
 	}
-	cfg := fmt.Sprintf(`auth:
-  provider: none
-datastore:
-  provider: sqlite
-  config:
-    path: %s
-%sproviders:
+	cfg := authDatastoreConfigYAML(t, dir, "", "sqlite", dbPath) + fmt.Sprintf(`%splugins:
   example:
-    from:
+    provider:
       source:
         path: %s
-`, dbPath, serverBlock, manifestPath)
+`, serverBlock, manifestPath)
 
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -1652,372 +1465,4 @@ func waitForEndpoint(t *testing.T, url string, timeout time.Duration) {
 		time.Sleep(200 * time.Millisecond)
 	}
 	t.Fatalf("%s did not return 200 within %s", url, timeout)
-}
-
-func TestE2EHybridAPIPluginIntegration(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	pluginDir := setupPluginDir(t, dir)
-
-	port := allocateTestPort(t)
-	cfgPath := writeHybridAPIPluginConfig(t, dir, pluginDir, port)
-
-	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd init: %v\n%s", err, out)
-	}
-
-	out, err = exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd validate failed for hybrid api+plugin config: %v\n%s", err, out)
-	}
-	if !strings.Contains(string(out), "config ok") {
-		t.Fatalf("expected 'config ok' in validate output, got: %s", out)
-	}
-
-	cmd := exec.Command(gestaltdBin, "serve", "--locked", "--config", cfgPath)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start serve: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = cmd.Process.Signal(os.Interrupt)
-		_ = cmd.Wait()
-	})
-
-	baseURL := fmt.Sprintf("http://localhost:%d", port)
-	waitForReady(t, baseURL, 30*time.Second)
-}
-
-func TestE2EHybridSpecLoadedSourceKeepsExecutableAndAllowedOperations(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	pluginDir := setupHybridSpecLoadedPluginDir(t, dir)
-
-	port := allocateTestPort(t)
-	cfgPath := writeE2EConfig(t, dir, pluginDir, port)
-
-	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd init: %v\n%s", err, out)
-	}
-
-	cmd := exec.Command(gestaltdBin, "serve", "--locked", "--config", cfgPath)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start serve: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = cmd.Process.Signal(os.Interrupt)
-		_ = cmd.Wait()
-	})
-
-	baseURL := fmt.Sprintf("http://localhost:%d", port)
-	waitForReady(t, baseURL, 30*time.Second)
-
-	resp, err := http.Get(baseURL + "/api/v1/integrations/example/operations")
-	if err != nil {
-		t.Fatalf("list operations: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("list operations returned %d: %s", resp.StatusCode, body)
-	}
-
-	var ops []struct {
-		ID string `json:"id"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&ops); err != nil {
-		t.Fatalf("decode operations: %v", err)
-	}
-
-	ids := make([]string, 0, len(ops))
-	for _, op := range ops {
-		ids = append(ids, op.ID)
-	}
-	sort.Strings(ids)
-	if !containsString(ids, "echo") {
-		t.Fatalf("operation ids = %v, want echo from the executable provider", ids)
-	}
-	if !containsString(ids, "messages.list") || !containsString(ids, "getProfile") {
-		t.Fatalf("operation ids = %v, want aliased spec operations", ids)
-	}
-	if containsString(ids, "gmail.users.labels.list") {
-		t.Fatalf("operation ids = %v, did not expect disallowed raw spec operation", ids)
-	}
-
-	toolNames := listMCPTools(t, baseURL)
-	for _, want := range []string{
-		"example_echo",
-		"example_messages.list",
-		"example_getProfile",
-	} {
-		if !containsString(toolNames, want) {
-			t.Fatalf("mcp tool names = %v, want %s", toolNames, want)
-		}
-	}
-	if containsString(toolNames, "example_gmail.users.labels.list") {
-		t.Fatalf("mcp tool names = %v, did not expect disallowed raw spec tool", toolNames)
-	}
-}
-
-func TestE2EGraphQLOperationsExposeDisplayReadyParameters(t *testing.T) {
-	t.Parallel()
-
-	schemaSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"data":{"__schema":{"queryType":{"name":"Query"},"mutationType":{"name":"Mutation"},"types":[{"kind":"OBJECT","name":"Query","description":"","fields":[],"inputFields":null,"enumValues":null},{"kind":"OBJECT","name":"Mutation","description":"","fields":[{"name":"createIssue","description":"Create an issue","args":[{"name":"input","description":"","type":{"kind":"NON_NULL","name":null,"ofType":{"kind":"INPUT_OBJECT","name":"CreateIssueInput","ofType":null}},"defaultValue":null}],"type":{"kind":"OBJECT","name":"IssuePayload","ofType":null}}],"inputFields":null,"enumValues":null},{"kind":"INPUT_OBJECT","name":"CreateIssueInput","description":"","fields":null,"inputFields":[{"name":"title","description":"","type":{"kind":"NON_NULL","name":null,"ofType":{"kind":"SCALAR","name":"String","ofType":null}},"defaultValue":null},{"name":"teamId","description":"","type":{"kind":"NON_NULL","name":null,"ofType":{"kind":"SCALAR","name":"String","ofType":null}},"defaultValue":null},{"name":"priority","description":"","type":{"kind":"ENUM","name":"IssuePriority","ofType":null},"defaultValue":null}],"enumValues":null},{"kind":"ENUM","name":"IssuePriority","description":"","fields":null,"inputFields":null,"enumValues":[{"name":"low","description":""},{"name":"high","description":""}]},{"kind":"OBJECT","name":"IssuePayload","description":"","fields":[{"name":"success","description":"","args":[],"type":{"kind":"SCALAR","name":"Boolean","ofType":null}}],"inputFields":null,"enumValues":null}]}}}`)
-	}))
-	defer schemaSrv.Close()
-
-	dir := t.TempDir()
-	port := allocateTestPort(t)
-	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`auth:
-  provider: none
-datastore:
-  provider: sqlite
-  config:
-    path: %s
-server:
-  port: %d
-  encryption_key: test-graphql-key
-providers:
-  example:
-    surfaces:
-      graphql:
-        url: %s
-`, filepath.Join(dir, "gestalt.db"), port, schemaSrv.URL)
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-
-	cmd := exec.Command(gestaltdBin, "serve", "--config", cfgPath)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start serve: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = cmd.Process.Signal(os.Interrupt)
-		_ = cmd.Wait()
-	})
-
-	baseURL := fmt.Sprintf("http://localhost:%d", port)
-	waitForReady(t, baseURL, 30*time.Second)
-
-	var ops []struct {
-		ID         string `json:"id"`
-		Parameters []struct {
-			Name     string `json:"name"`
-			Type     string `json:"type"`
-			Required bool   `json:"required"`
-		} `json:"parameters"`
-	}
-	if err := json.Unmarshal(getEndpointBody(t, baseURL+"/api/v1/integrations/example/operations", http.StatusOK), &ops); err != nil {
-		t.Fatalf("decode operations: %v", err)
-	}
-
-	var createIssueParams []struct {
-		Name     string `json:"name"`
-		Type     string `json:"type"`
-		Required bool   `json:"required"`
-	}
-	for _, op := range ops {
-		if op.ID != "createIssue" {
-			continue
-		}
-		createIssueParams = op.Parameters
-		break
-	}
-	if len(createIssueParams) != 1 {
-		t.Fatalf("createIssue parameters = %+v, want 1", createIssueParams)
-	}
-	if createIssueParams[0].Name != "input" || createIssueParams[0].Type != "object{title!, teamId!, priority}" || !createIssueParams[0].Required {
-		t.Fatalf("createIssue parameter = %+v", createIssueParams[0])
-	}
-}
-
-func writeHybridAPIPluginConfig(t *testing.T, dir, pluginDir string, port int) string {
-	t.Helper()
-	manifestPath, err := pluginpkg.FindManifestFile(pluginDir)
-	if err != nil {
-		t.Fatalf("FindManifestFile(%s): %v", pluginDir, err)
-	}
-
-	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := fmt.Sprintf(`auth:
-  provider: none
-datastore:
-  provider: sqlite
-  config:
-    path: %s
-server:
-  port: %d
-  encryption_key: test-hybrid-key
-providers:
-  hybrid:
-    display_name: Hybrid Test
-    from:
-      source:
-        path: %s
-`, filepath.Join(dir, "gestalt.db"), port, manifestPath)
-
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-	return cfgPath
-}
-
-func setupHybridSpecLoadedPluginDir(t *testing.T, baseDir string) string {
-	t.Helper()
-
-	pluginDir := setupPluginDir(t, baseDir)
-	specRel := filepath.ToSlash(filepath.Join("specs", "openapi.yaml"))
-	if err := os.MkdirAll(filepath.Join(pluginDir, "specs"), 0o755); err != nil {
-		t.Fatalf("MkdirAll specs dir: %v", err)
-	}
-
-	spec := `openapi: 3.0.0
-info:
-  title: Hybrid Allowed Ops API
-  version: 1.0.0
-servers:
-  - url: https://api.hybrid.example/v1
-paths:
-  /messages:
-    get:
-      operationId: gmail.users.messages.list
-      responses:
-        "200":
-          description: ok
-  /profile:
-    get:
-      operationId: gmail.users.getProfile
-      responses:
-        "200":
-          description: ok
-  /labels:
-    get:
-      operationId: gmail.users.labels.list
-      responses:
-        "200":
-          description: ok
-`
-	if err := os.WriteFile(filepath.Join(pluginDir, filepath.FromSlash(specRel)), []byte(spec), 0o644); err != nil {
-		t.Fatalf("write spec: %v", err)
-	}
-
-	manifest := &pluginmanifestv1.Manifest{
-		Source:      "github.com/test/plugins/hybrid-spec-loaded",
-		Version:     "0.1.0",
-		DisplayName: "Example Provider",
-		Description: "A minimal example provider built with the public SDK",
-		Kinds:       []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{
-			OpenAPI: specRel,
-			AllowedOperations: map[string]*pluginmanifestv1.ManifestOperationOverride{
-				"gmail.users.messages.list": {Alias: "messages.list"},
-				"gmail.users.getProfile":    {Alias: "getProfile"},
-			},
-		},
-	}
-	writeManifestFile(t, pluginDir, manifest)
-
-	return pluginDir
-}
-
-func containsString(values []string, want string) bool {
-	for _, value := range values {
-		if value == want {
-			return true
-		}
-	}
-	return false
-}
-
-func listMCPTools(t *testing.T, baseURL string) []string {
-	t.Helper()
-
-	status, resp := mcpJSONRPC(t, baseURL, map[string]any{
-		"jsonrpc": "2.0",
-		"id":      1,
-		"method":  "initialize",
-		"params": map[string]any{
-			"protocolVersion": "2025-03-26",
-			"capabilities":    map[string]any{},
-			"clientInfo":      map[string]any{"name": "test", "version": "1.0"},
-		},
-	})
-	if status != http.StatusOK {
-		t.Fatalf("initialize: expected 200, got %d", status)
-	}
-	if _, ok := resp["result"].(map[string]any); !ok {
-		t.Fatalf("initialize: expected result object, got %v", resp)
-	}
-
-	status, resp = mcpJSONRPC(t, baseURL, map[string]any{
-		"jsonrpc": "2.0",
-		"id":      2,
-		"method":  "tools/list",
-	})
-	if status != http.StatusOK {
-		t.Fatalf("tools/list: expected 200, got %d", status)
-	}
-	result, ok := resp["result"].(map[string]any)
-	if !ok {
-		t.Fatalf("tools/list: expected result object, got %v", resp)
-	}
-	rawTools, ok := result["tools"].([]any)
-	if !ok {
-		t.Fatalf("tools/list: expected tools array, got %v", result)
-	}
-
-	toolNames := make([]string, 0, len(rawTools))
-	for _, rawTool := range rawTools {
-		tool, ok := rawTool.(map[string]any)
-		if !ok {
-			t.Fatalf("tools/list: expected tool object, got %T", rawTool)
-		}
-		name, ok := tool["name"].(string)
-		if !ok {
-			t.Fatalf("tools/list: expected string tool name, got %v", tool)
-		}
-		toolNames = append(toolNames, name)
-	}
-	sort.Strings(toolNames)
-	return toolNames
-}
-
-func mcpJSONRPC(t *testing.T, baseURL string, body map[string]any) (int, map[string]any) {
-	t.Helper()
-
-	payload, err := json.Marshal(body)
-	if err != nil {
-		t.Fatalf("marshal mcp body: %v", err)
-	}
-	req, _ := http.NewRequest(http.MethodPost, baseURL+"/mcp", bytes.NewReader(payload))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("POST /mcp: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read /mcp response: %v", err)
-	}
-
-	var result map[string]any
-	if len(raw) > 0 {
-		if err := json.Unmarshal(raw, &result); err != nil {
-			t.Fatalf("decode /mcp response: %v\nbody: %s", err, raw)
-		}
-	}
-	return resp.StatusCode, result
 }

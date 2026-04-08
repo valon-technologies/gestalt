@@ -18,18 +18,13 @@ import (
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
 
-const (
-	hybridProviderArg     = "--serve-provider"
-	hybridProviderBaseURL = "https://api.example.com"
-	hybridOperationName   = "list_items"
-	testCatalogYAML       = "name: provider\noperations:\n  - id: echo\n    method: POST\n"
-)
+const testCatalogYAML = "name: provider\noperations:\n  - id: echo\n    method: POST\n"
 
 func TestInstall(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	pkg1 := mustBuildPackage(t, dir, "github.com/testowner/plugins/provider", "0.1.0", "hello from testowner")
+	pkg1 := mustBuildPackage(t, dir, "github.com/testowner/plugins/provider", "0.0.1-alpha.1", "hello from testowner")
 	pkg2 := mustBuildPackage(t, dir, "github.com/beta/plugins/provider", "1.2.3", "hello from beta")
 
 	dest1 := filepath.Join(dir, "plugins", "integration_example")
@@ -70,11 +65,40 @@ func TestInstall(t *testing.T) {
 	}
 }
 
+func TestExecutablePathForManifestPrefersProviderEntrypoint(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	providerArtifact := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider"))
+	authArtifact := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "auth"))
+	manifest := &pluginmanifestv1.Manifest{
+		Source:  "github.com/testowner/plugins/multi-kind",
+		Version: "0.0.1-alpha.1",
+		Kinds:   []string{pluginmanifestv1.KindAuth, pluginmanifestv1.KindProvider},
+		Auth:    &pluginmanifestv1.AuthMetadata{},
+		Provider: &pluginmanifestv1.Provider{
+			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
+		},
+		Entrypoints: pluginmanifestv1.Entrypoints{
+			Auth:     &pluginmanifestv1.Entrypoint{ArtifactPath: authArtifact},
+			Provider: &pluginmanifestv1.Entrypoint{ArtifactPath: providerArtifact},
+		},
+	}
+
+	executablePath, err := executablePathForManifest(root, manifest)
+	if err != nil {
+		t.Fatalf("executablePathForManifest: %v", err)
+	}
+	if executablePath != filepath.Join(root, filepath.FromSlash(providerArtifact)) {
+		t.Fatalf("ExecutablePath = %q, want %q", executablePath, filepath.Join(root, filepath.FromSlash(providerArtifact)))
+	}
+}
+
 func TestInstallRejectsDigestMismatch(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	pkg := mustBuildMismatchPackage(t, dir, "github.com/testowner/plugins/provider", "0.1.0", "hello", strings.Repeat("deadbeef", 8))
+	pkg := mustBuildMismatchPackage(t, dir, "github.com/testowner/plugins/provider", "0.0.1-alpha.1", "hello", strings.Repeat("deadbeef", 8))
 	dest := filepath.Join(dir, "plugins", "integration_example")
 	_, err := Install(pkg, dest)
 	if err == nil {
@@ -89,7 +113,7 @@ func TestInstallRejectsDuplicateArtifactEntries(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	pkg := mustBuildPackageWithDuplicateArtifact(t, dir, "github.com/testowner/plugins/provider", "0.1.0", "good", "evil")
+	pkg := mustBuildPackageWithDuplicateArtifact(t, dir, "github.com/testowner/plugins/provider", "0.0.1-alpha.1", "good", "evil")
 	dest := filepath.Join(dir, "plugins", "integration_example")
 	_, err := Install(pkg, dest)
 	if err == nil {
@@ -104,7 +128,7 @@ func TestInstallFromDirValidatesAndCopies(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	srcDir := mustBuildPluginDir(t, dir, "github.com/testowner/plugins/provider", "0.1.0", "dir-content", "")
+	srcDir := mustBuildPluginDir(t, dir, "github.com/testowner/plugins/provider", "0.0.1-alpha.1", "dir-content", "")
 
 	dest := filepath.Join(dir, "plugins", "integration_example")
 	installed, err := InstallFromDir(srcDir, dest)
@@ -215,7 +239,7 @@ func TestInstallFromDirCopiesManifestAndArtifact(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	srcDir := mustBuildPluginDir(t, dir, "github.com/testowner/plugins/fullcopy", "0.1.0", "test-binary", "")
+	srcDir := mustBuildPluginDir(t, dir, "github.com/testowner/plugins/fullcopy", "0.0.1-alpha.1", "test-binary", "")
 
 	dest := filepath.Join(dir, "plugins", "integration_fullcopy")
 	installed, err := InstallFromDir(srcDir, dest)
@@ -245,34 +269,6 @@ func TestInstallFromDirCopiesManifestAndArtifact(t *testing.T) {
 	}
 }
 
-func TestInstallFromDirKeepsExecutableForHybridProvider(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	srcDir := mustBuildHybridPluginDir(t, dir, "github.com/testowner/plugins/hybrid", "0.1.0", "hybrid-binary")
-
-	dest := filepath.Join(dir, "plugins", "integration_hybrid")
-	installed, err := InstallFromDir(srcDir, dest)
-	if err != nil {
-		t.Fatalf("InstallFromDir: %v", err)
-	}
-	if installed.ExecutablePath == "" {
-		t.Fatal("ExecutablePath is empty")
-	}
-	if installed.Manifest == nil {
-		t.Fatal("Manifest is nil")
-	}
-	if installed.Manifest.IsDeclarativeOnlyProvider() {
-		t.Fatal("expected hybrid provider manifest to remain executable")
-	}
-	if installed.Manifest.Entrypoints.Provider == nil {
-		t.Fatal("expected provider entrypoint")
-	}
-	if len(installed.Manifest.Entrypoints.Provider.Args) != 1 || installed.Manifest.Entrypoints.Provider.Args[0] != hybridProviderArg {
-		t.Fatalf("provider args = %v", installed.Manifest.Entrypoints.Provider.Args)
-	}
-}
-
 func TestInstallFromDirSetsSource(t *testing.T) {
 	t.Parallel()
 
@@ -296,7 +292,7 @@ func TestInstall_ArchiveArtifactDigestVerified(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	pkg := mustBuildPackage(t, dir, "github.com/testowner/plugins/digcheck", "0.1.0", "correct-content")
+	pkg := mustBuildPackage(t, dir, "github.com/testowner/plugins/digcheck", "0.0.1-alpha.1", "correct-content")
 
 	dest := filepath.Join(dir, "plugins", "integration_digcheck")
 	installed, err := Install(pkg, dest)
@@ -545,32 +541,6 @@ func mustBuildPluginDir(t *testing.T, dir, source, version, content, schema stri
 	}
 	if err := os.WriteFile(filepath.Join(srcDir, "catalog.yaml"), []byte(testCatalogYAML), 0644); err != nil {
 		t.Fatalf("WriteFile catalog: %v", err)
-	}
-	return srcDir
-}
-
-func mustBuildHybridPluginDir(t *testing.T, dir, source, version, content string) string {
-	t.Helper()
-
-	srcDir := mustBuildPluginDir(t, dir, source, version, content, "")
-	manifestPath := filepath.Join(srcDir, pluginpkg.ManifestFile)
-	_, manifest, err := pluginpkg.ReadManifestFile(manifestPath)
-	if err != nil {
-		t.Fatalf("ReadManifestFile: %v", err)
-	}
-
-	manifest.Provider.BaseURL = hybridProviderBaseURL
-	manifest.Provider.Operations = []pluginmanifestv1.ProviderOperation{
-		{Name: hybridOperationName, Method: "GET", Path: "/items"},
-	}
-	manifest.Entrypoints.Provider.Args = []string{hybridProviderArg}
-
-	manifestBytes, err := pluginpkg.EncodeManifest(manifest)
-	if err != nil {
-		t.Fatalf("EncodeManifest: %v", err)
-	}
-	if err := os.WriteFile(manifestPath, manifestBytes, 0644); err != nil {
-		t.Fatalf("WriteFile manifest: %v", err)
 	}
 	return srcDir
 }

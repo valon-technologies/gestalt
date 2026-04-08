@@ -28,6 +28,12 @@
     "provider": {
       "$ref": "#/$defs/provider"
     },
+    "auth": {
+      "$ref": "#/$defs/auth"
+    },
+    "datastore": {
+      "$ref": "#/$defs/datastore"
+    },
     "webui": {
       "$ref": "#/$defs/webui"
     },
@@ -42,6 +48,16 @@
     {
       "required": [
         "provider"
+      ]
+    },
+    {
+      "required": [
+        "auth"
+      ]
+    },
+    {
+      "required": [
+        "datastore"
       ]
     },
     {
@@ -115,6 +131,32 @@
         "asset_root": {
           "type": "string",
           "minLength": 1
+        }
+      }
+    },
+    "auth": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "config_schema_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "exec": {
+          "$ref": "#/$defs/exec"
+        }
+      }
+    },
+    "datastore": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "config_schema_path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "exec": {
+          "$ref": "#/$defs/exec"
         }
       }
     },

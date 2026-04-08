@@ -93,7 +93,17 @@ jobs:
       - name: Build (cross)
         if: matrix.platform.cross
         working-directory: ${{ inputs.working-directory }}
-        run: cross build --release --target ${{ matrix.platform.target }}
+        run: |
+          for attempt in 1 2 3; do
+            if cross build --release --target ${{ matrix.platform.target }}; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              exit 1
+            fi
+            echo "cross build failed on attempt $attempt; retrying after backoff"
+            sleep $((attempt * 10))
+          done
 
       - name: Run tests
         if: ${{ !matrix.platform.cross && inputs.run-tests }}

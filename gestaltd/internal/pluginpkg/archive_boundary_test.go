@@ -10,8 +10,8 @@ func TestLoadManifestFromPath_DirectoryManifestFileAndArchive(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	sourceDir, manifest := mustWriteProviderPackageDir(t, dir, "github.com/acme/plugins/provider", "0.1.0", "provider")
-	archivePath := filepath.Join(dir, "acme-provider-0.1.0.tar.gz")
+	sourceDir, manifest := mustWriteProviderPackageDir(t, dir, "github.com/acme/plugins/provider", "0.0.1-alpha.1", "provider")
+	archivePath := filepath.Join(dir, "acme-provider-0.0.1-alpha.1.tar.gz")
 	if err := CreatePackageFromDir(sourceDir, archivePath); err != nil {
 		t.Fatalf("CreatePackageFromDir: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestCreatePackageFromDirRejectsOutputInsideSource(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	sourceDir, _ := mustWriteProviderPackageDir(t, dir, "github.com/acme/plugins/provider", "0.1.0", "provider")
+	sourceDir, _ := mustWriteProviderPackageDir(t, dir, "github.com/acme/plugins/provider", "0.0.1-alpha.1", "provider")
 	archivePath := filepath.Join(sourceDir, "provider.tar.gz")
 
 	err := CreatePackageFromDir(sourceDir, archivePath)
@@ -80,7 +80,7 @@ func TestValidatePackageDirRejectsMissingProviderSchema(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	sourceDir, manifest := mustWriteProviderPackageDir(t, dir, "github.com/acme/plugins/provider", "0.1.0", "provider")
+	sourceDir, manifest := mustWriteProviderPackageDir(t, dir, "github.com/acme/plugins/provider", "0.0.1-alpha.1", "provider")
 	manifest.Provider.ConfigSchemaPath = "schemas/config.schema.json"
 	mustWriteManifest(t, sourceDir, manifest)
 

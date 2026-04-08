@@ -12,10 +12,20 @@ helm upgrade --install gestalt \
   -f values.yaml
 ```
 
-Provide a `values.yaml` file that sets the required auth, datastore, and server
-settings along with the matching `extraEnv` entries.
+Provide a `values.yaml` file that sets the required datastore and server
+settings, and auth settings when you enable platform login, along with the
+matching `extraEnv` entries.
 
-The default chart profile is intentionally minimal: `auth.provider: none`, SQLite on a PVC mounted at `/data`, a static dev-only `server.encryption_key`, one replica, and no ingress. That profile is suitable for local development and trusted internal clusters but is not a production-ready security posture.
+The default chart profile is intentionally minimal:
+
+- platform auth disabled
+- SQLite on a PVC mounted at `/data`
+- a static dev-only `server.encryption_key`
+- one replica
+- no ingress
+
+That profile is suitable for local development and trusted internal clusters.
+It is not a production-ready security posture.
 
 ## Production Install Pattern
 
@@ -30,13 +40,19 @@ config:
     base_url: "${GESTALT_BASE_URL}"
     encryption_key: "${GESTALT_ENCRYPTION_KEY}"
   auth:
-    provider: oidc
+    provider:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/auth/oidc
+        version: 0.0.1-alpha.1
     config:
       issuer_url: "${OIDC_ISSUER_URL}"
       client_id: "${OIDC_CLIENT_ID}"
       client_secret: "${OIDC_CLIENT_SECRET}"
   datastore:
-    provider: postgres
+    provider:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/datastore/postgres
+        version: 0.0.1-alpha.1
     config:
       dsn: "${DATABASE_URL}"
 
@@ -75,7 +91,7 @@ helm upgrade --install gestalt \
 | `config` | Rendered as `/etc/gestalt/config.yaml`. |
 | `extraEnv` | Environment variables used by `${VAR}` placeholders in `config`. |
 | `persistence` | PVC settings for SQLite or other local state. |
-| `pluginInit.enabled` | Runs `gestaltd init` in an init container before the main server starts. Use it when the chart should prepare locked state for published packages, packaged UI bundles, or remote REST and GraphQL upstreams. |
+| `pluginInit.enabled` | Runs `gestaltd init` in an init container before the main server starts. Use it when the chart should prepare locked state for published provider packages or packaged UI bundles. |
 | `ingress` | Standard ingress settings. |
 | `ingress.hosts[].paths` | Per-host ingress paths and path types. |
 | `managementService` | Optional internal Service for a separate management listener. |
@@ -102,14 +118,20 @@ config:
     base_url: "${GESTALT_BASE_URL}"
     encryption_key: "${GESTALT_ENCRYPTION_KEY}"
   auth:
-    provider: oidc
+    provider:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/auth/oidc
+        version: 0.0.1-alpha.1
     config:
       issuer_url: "${OIDC_ISSUER_URL}"
       client_id: "${OIDC_CLIENT_ID}"
       client_secret: "${OIDC_CLIENT_SECRET}"
       redirect_url: "${OIDC_REDIRECT_URL}"
   datastore:
-    provider: postgres
+    provider:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/datastore/postgres
+        version: 0.0.1-alpha.1
     config:
       dsn: "${DATABASE_URL}"
 
@@ -155,7 +177,7 @@ client UI hostname.
 
 ## When to enable `pluginInit`
 
-Enable the init container when your config uses `providers.*.from.source.ref`, `ui.plugin.source`, or remote REST/GraphQL upstreams that you want prepared into locked state. The init container copies the rendered config and runs:
+Enable the init container when your config uses `plugins.*.provider.source.ref` or `ui.plugin.source` and you want that state prepared before the main container starts. The init container copies the rendered config and runs:
 
 `/gestaltd init --config /etc/gestalt/config.yaml`
 

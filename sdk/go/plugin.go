@@ -5,12 +5,17 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"strconv"
+	"sync"
+	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"google.golang.org/grpc"
 )
 
 const envWriteCatalog = "GESTALT_PLUGIN_WRITE_CATALOG"
+
+type pluginCloserContextKey struct{}
 
 type executableProvider interface {
 	Provider
@@ -57,9 +62,17 @@ func ServeProvider[P any, PP interface {
 		}
 		return writeCatalogYAML(router.Catalog(), catalogPath)
 	}
+	ctx = withPluginCloser(ctx, provider)
 	return servePlugin(ctx, func(srv *grpc.Server) {
 		proto.RegisterProviderPluginServer(srv, NewProviderServer(provider, router))
 	})
+}
+
+func withPluginCloser(ctx context.Context, provider any) context.Context {
+	if closer, ok := provider.(Closer); ok {
+		return context.WithValue(ctx, pluginCloserContextKey{}, closer)
+	}
+	return ctx
 }
 
 func servePlugin(ctx context.Context, register func(*grpc.Server)) error {
@@ -83,12 +96,25 @@ func servePlugin(ctx context.Context, register func(*grpc.Server)) error {
 	srv := grpc.NewServer()
 	register(srv)
 
+	closer, _ := ctx.Value(pluginCloserContextKey{}).(Closer)
+	var closeOnce sync.Once
+	closeProvider := func() {
+		if closer != nil {
+			_ = closer.Close()
+		}
+	}
+	defer closeOnce.Do(closeProvider)
+
 	stopped := make(chan struct{})
 	go func() {
 		defer close(stopped)
 		<-ctx.Done()
 		srv.GracefulStop()
+		closeOnce.Do(closeProvider)
 	}()
+	if parentPID := pluginParentPID(); parentPID > 0 {
+		go watchPluginParent(parentPID, srv)
+	}
 
 	err = srv.Serve(lis)
 	if ctx.Err() != nil {
@@ -96,4 +122,28 @@ func servePlugin(ctx context.Context, register func(*grpc.Server)) error {
 		return nil
 	}
 	return err
+}
+
+func pluginParentPID() int {
+	raw := os.Getenv(proto.EnvPluginParentPID)
+	if raw == "" {
+		return 0
+	}
+	pid, err := strconv.Atoi(raw)
+	if err != nil || pid <= 0 {
+		return 0
+	}
+	return pid
+}
+
+func watchPluginParent(parentPID int, srv *grpc.Server) {
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+	for range ticker.C {
+		if os.Getppid() == parentPID {
+			continue
+		}
+		srv.GracefulStop()
+		return
+	}
 }

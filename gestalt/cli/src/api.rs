@@ -197,27 +197,38 @@ pub struct ApiClient {
 
 impl ApiClient {
     pub fn from_env(url_override: Option<&str>) -> Result<Self> {
-        if let Some(key) = std::env::var(ENV_API_KEY).ok().filter(|v| !v.is_empty()) {
-            let base_url = resolve_url(url_override)?;
-            let mut client = Self::new(&base_url, &key)?;
-            client.token_source = TokenSource::EnvVar;
-            return Ok(client);
-        }
+        let (token, source, stored_credentials) =
+            if let Some(key) = std::env::var(ENV_API_KEY).ok().filter(|v| !v.is_empty()) {
+                (key, TokenSource::EnvVar, None)
+            } else {
+                let store = CredentialStore::new()?;
+                match store.load()? {
+                    Some(creds) => (
+                        creds.api_token.clone(),
+                        TokenSource::StoredCredentials,
+                        Some(creds),
+                    ),
+                    None => {
+                        bail!(
+                            "not authenticated: set {} or run 'gestalt auth login'",
+                            ENV_API_KEY
+                        )
+                    }
+                }
+            };
 
-        let store = CredentialStore::new()?;
-        let creds = match store.load()? {
-            Some(creds) => creds,
-            None => {
-                bail!(
-                    "not authenticated: set {} or run 'gestalt auth login'",
-                    ENV_API_KEY
-                )
-            }
+        let base_url = match resolve_url(url_override) {
+            Ok(url) => url,
+            Err(err) => match stored_credentials
+                .as_ref()
+                .and_then(|creds| creds.api_url())
+            {
+                Some(url) => normalize_url(url),
+                None => return Err(err),
+            },
         };
-
-        let base_url = resolve_url_with_fallback(url_override, creds.api_url())?;
-        let mut client = Self::new(&base_url, &creds.api_token)?;
-        client.token_source = TokenSource::StoredCredentials;
+        let mut client = Self::new(&base_url, &token)?;
+        client.token_source = source;
         Ok(client)
     }
 

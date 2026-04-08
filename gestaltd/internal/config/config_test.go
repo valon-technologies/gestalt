@@ -6,12 +6,13 @@ import (
 	"strings"
 	"testing"
 
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 	"gopkg.in/yaml.v3"
 )
 
-func mustDecodeNode(t *testing.T, node yaml.Node) map[string]string {
+func mustDecodeNode(t *testing.T, node yaml.Node) map[string]any {
 	t.Helper()
-	m := make(map[string]string)
+	m := make(map[string]any)
 	if err := node.Decode(&m); err != nil {
 		t.Fatalf("decoding yaml.Node: %v", err)
 	}
@@ -33,12 +34,20 @@ func TestLoadConfigGenericFixture(t *testing.T) {
 
 	path := mustWriteConfigFile(t, `
 auth:
-  provider: auth-provider
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/auth/google
+      version: 1.0.0
   config:
     client_id: client-1
     client_secret: secret-1
 datastore:
-  provider: data-store
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+      version: 1.0.0
+  config:
+    path: /tmp/gestalt.db
 server:
   encryption_key: server-key
   public:
@@ -47,10 +56,10 @@ server:
   management:
     host: 127.0.0.1
     port: 9191
-providers:
+plugins:
   service-a:
     display_name: Service A
-    from:
+    provider:
       source:
         path: /tmp/plugin.yaml
 `)
@@ -60,12 +69,6 @@ providers:
 		t.Fatalf("Load: %v", err)
 	}
 
-	if cfg.Auth.Provider != "auth-provider" {
-		t.Fatalf("Auth.Provider = %q", cfg.Auth.Provider)
-	}
-	if cfg.Datastore.Provider != "data-store" {
-		t.Fatalf("Datastore.Provider = %q", cfg.Datastore.Provider)
-	}
 	if cfg.Server.Port != 9090 {
 		t.Fatalf("Server.Port = %d", cfg.Server.Port)
 	}
@@ -89,16 +92,24 @@ func TestLoadConfigDefaultsAndEnv(t *testing.T) {
 
 	path := mustWriteConfigFile(t, `
 auth:
-  provider: auth-provider
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/auth/google
+      version: 1.0.0
   config:
     client_id: ${TEST_CLIENT_ID}
 datastore:
-  provider: data-store
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+      version: 1.0.0
+  config:
+    path: /tmp/gestalt.db
 server:
   encryption_key: ${TEST_ENCRYPTION}
-providers:
+plugins:
   service-a:
-    from:
+    provider:
       source:
         path: /tmp/plugin.yaml
 `)
@@ -118,9 +129,12 @@ providers:
 		t.Fatalf("Server.EncryptionKey = %q", cfg.Server.EncryptionKey)
 	}
 
+	if cfg.Auth.Provider == nil {
+		t.Fatal("Auth.Provider = nil")
+	}
 	authCfg := mustDecodeNode(t, cfg.Auth.Config)
 	if authCfg["client_id"] != "client-from-env" {
-		t.Fatalf("Auth.Config.client_id = %q", authCfg["client_id"])
+		t.Fatalf("Auth.Config.client_id = %#v", authCfg["client_id"])
 	}
 }
 
@@ -134,10 +148,11 @@ func TestLoadConfigEnvFileFallback(t *testing.T) {
 	}
 
 	path := mustWriteConfigFile(t, `
-auth:
-  provider: auth-provider
 datastore:
-  provider: data-store
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+      version: 1.0.0
 server:
   encryption_key: ${TEST_ENCRYPTION}
 `)
@@ -163,35 +178,58 @@ func TestValidateRuntime(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name string
-		yaml string
+		name    string
+		yaml    string
+		wantErr bool
 	}{
 		{
-			name: "missing auth provider",
+			name: "missing auth provider is allowed",
 			yaml: `
 datastore:
-  provider: data-store
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+      version: 1.0.0
 server:
   encryption_key: server-key
 `,
+			wantErr: false,
 		},
 		{
 			name: "missing datastore provider",
 			yaml: `
 auth:
-  provider: auth-provider
+  provider: none
 server:
   encryption_key: server-key
 `,
+			wantErr: true,
 		},
 		{
-			name: "missing encryption key with auth enabled",
+			name: "missing encryption key",
+			yaml: `
+datastore:
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+      version: 1.0.0
+`,
+			wantErr: true,
+		},
+		{
+			name: "auth provider none is allowed",
 			yaml: `
 auth:
-  provider: auth-provider
+  provider: none
 datastore:
-  provider: data-store
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+      version: 1.0.0
+server:
+  encryption_key: server-key
 `,
+			wantErr: false,
 		},
 	}
 
@@ -203,28 +241,121 @@ datastore:
 			if err != nil {
 				t.Fatalf("Load: %v", err)
 			}
-			if err := ValidateRuntime(cfg); err == nil {
-				t.Fatal("ValidateRuntime: expected error, got nil")
+			err = ValidateRuntime(cfg)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("ValidateRuntime: expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ValidateRuntime: %v", err)
+			}
+			if tc.name == "auth provider none is allowed" && cfg.Auth.Provider != nil {
+				t.Fatalf("Auth.Provider = %#v, want nil", cfg.Auth.Provider)
 			}
 		})
 	}
 }
 
-func TestValidateRuntimeAllowsNoEncryptionKeyWithAuthNone(t *testing.T) {
+func TestLoadRejectsLegacyTopLevelAuthDatastoreFields(t *testing.T) {
 	t.Parallel()
 
-	path := mustWriteConfigFile(t, `
+	cases := []struct {
+		name    string
+		yaml    string
+		wantErr string
+	}{
+		{
+			name: "legacy auth plugin field rejected",
+			yaml: `
+auth:
+  plugin:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/auth/oidc
+      version: 1.0.0
+datastore:
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+      version: 1.0.0
+server:
+  encryption_key: server-key
+`,
+			wantErr: "field plugin not found in type config.AuthConfig",
+		},
+		{
+			name: "legacy datastore plugin field rejected",
+			yaml: `
 auth:
   provider: none
 datastore:
-  provider: data-store
-`)
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
+  plugin:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+      version: 1.0.0
+server:
+  encryption_key: server-key
+`,
+			wantErr: "field plugin not found in type config.DatastoreConfig",
+		},
+		{
+			name: "auth config accepted",
+			yaml: `
+auth:
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/auth/oidc
+      version: 1.0.0
+  config:
+    issuer_url: https://issuer.example.test
+datastore:
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+      version: 1.0.0
+server:
+  encryption_key: server-key
+`,
+			wantErr: "",
+		},
+		{
+			name: "datastore config accepted",
+			yaml: `
+auth:
+  provider: none
+datastore:
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+      version: 1.0.0
+  config:
+    path: /tmp/gestalt.db
+server:
+  encryption_key: server-key
+`,
+			wantErr: "",
+		},
 	}
-	if err := ValidateRuntime(cfg); err != nil {
-		t.Fatalf("ValidateRuntime: unexpected error: %v", err)
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			path := mustWriteConfigFile(t, tc.yaml)
+			_, err := Load(path)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("Load: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatal("Load: expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("expected error containing %q, got: %v", tc.wantErr, err)
+			}
+		})
 	}
 }
 
@@ -232,9 +363,9 @@ func TestLoadSucceedsWithoutRuntimeFields(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
-providers:
+plugins:
   custom_tool:
-    from:
+    provider:
       source:
         path: ./plugin.yaml
 `)
@@ -258,7 +389,7 @@ func TestLoadConfigValidation(t *testing.T) {
 		{
 			name: "provider with no source or surfaces",
 			yaml: `
-providers:
+plugins:
   service-a:
     display_name: Service A
 `,
@@ -294,9 +425,9 @@ func TestValidConfigurations(t *testing.T) {
 		{
 			name: "managed source plugin only",
 			yaml: `
-providers:
+plugins:
   custom_tool:
-    from:
+    provider:
       source:
         ref: github.com/acme-corp/tools/widget
         version: 1.2.3
@@ -305,42 +436,11 @@ providers:
 		{
 			name: "plugin with local source",
 			yaml: `
-providers:
+plugins:
   service:
-    from:
+    provider:
       source:
         path: /usr/bin/provider.yaml
-`,
-		},
-		{
-			name: "inline plugin with openapi",
-			yaml: `
-providers:
-  service:
-    connections:
-      default:
-        auth:
-          type: oauth2
-          authorization_url: https://example.test/auth
-          token_url: https://example.test/token
-    surfaces:
-      openapi:
-        document: https://example.test/spec.json
-        base_url: https://api.example.test
-`,
-		},
-		{
-			name: "inline plugin with operations",
-			yaml: `
-providers:
-  service:
-    surfaces:
-      rest:
-        base_url: https://api.example.test
-        operations:
-          - name: list_users
-            method: GET
-            path: /users
 `,
 		},
 	}
@@ -363,14 +463,14 @@ func TestPluginValidation(t *testing.T) {
 	cases := []struct {
 		name    string
 		yaml    string
-		wantErr bool
+		wantErr string
 	}{
 		{
 			name: "integration plugin source path is valid",
 			yaml: `
-providers:
+plugins:
   external:
-    from:
+    provider:
       source:
         path: ./plugins/dummy/plugin.yaml
 `,
@@ -378,22 +478,22 @@ providers:
 		{
 			name: "plugin source path and ref are mutually exclusive",
 			yaml: `
-providers:
+plugins:
   external:
-    from:
+    provider:
       source:
         path: ./plugins/dummy/plugin.yaml
         ref: github.com/acme-corp/tools/widget
         version: 1.2.3
 `,
-			wantErr: true,
+			wantErr: "mutually exclusive",
 		},
 		{
 			name: "plugin env with local source is valid",
 			yaml: `
-providers:
+plugins:
   external:
-    from:
+    provider:
       source:
         path: ./plugins/dummy/plugin.yaml
       env:
@@ -403,9 +503,9 @@ providers:
 		{
 			name: "plugin config with source is valid",
 			yaml: `
-providers:
+plugins:
   external:
-    from:
+    provider:
       source:
         path: ./plugins/dummy/plugin.yaml
     config:
@@ -415,57 +515,108 @@ providers:
 		{
 			name: "plugin source is required for external",
 			yaml: `
-providers:
+plugins:
   external:
     {}
 `,
-			wantErr: true,
+			wantErr: "requires a plugin",
 		},
 		{
 			name: "plugin source path with version is rejected",
 			yaml: `
-providers:
+plugins:
   external:
-    from:
+    provider:
       source:
         path: ./plugins/dummy/plugin.yaml
         version: 1.0.0
 `,
-			wantErr: true,
+			wantErr: "plugin.source.version is only valid",
 		},
 		{
 			name: "plugin source with version is valid",
 			yaml: `
-providers:
+plugins:
   external:
-    from:
+    provider:
       source:
         ref: github.com/acme-corp/tools/widget
         version: 1.2.3
 `,
 		},
 		{
-			name: "plugin source with base_url override is valid",
+			name: "plugin source with base_url override is rejected",
 			yaml: `
-providers:
+plugins:
   external:
-    from:
+    provider:
       source:
         ref: github.com/acme-corp/tools/widget
         version: 1.2.3
     base_url: https://api.example.com
 `,
+			wantErr: "field base_url not found",
 		},
 		{
 			name: "plugin source without version is rejected",
 			yaml: `
-providers:
+plugins:
   external:
-    from:
+    provider:
       source:
         ref: github.com/acme-corp/tools/widget
 `,
-			wantErr: true,
+			wantErr: "plugin.source.version is required",
+		},
+		{
+			name: "non-default connection params are rejected",
+			yaml: `
+plugins:
+  external:
+    provider:
+      source:
+        path: ./plugins/dummy/plugin.yaml
+    connections:
+      named:
+        mode: user
+        auth:
+          type: none
+        params:
+          team:
+            required: true
+`,
+			wantErr: "connections.named.params are only supported on connections.default",
+		},
+		{
+			name: "non-default connection discovery is rejected",
+			yaml: `
+plugins:
+  external:
+    provider:
+      source:
+        path: ./plugins/dummy/plugin.yaml
+    connections:
+      named:
+        mode: user
+        auth:
+          type: none
+        discovery:
+          url: https://example.com/connections
+`,
+			wantErr: "connections.named.discovery is only supported on connections.default",
+		},
+		{
+			name: "mcp tool prefix requires mcp enabled",
+			yaml: `
+plugins:
+  external:
+    provider:
+      source:
+        path: ./plugins/dummy/plugin.yaml
+    mcp:
+      tool_prefix: external_
+`,
+			wantErr: "mcp.tool_prefix is only valid when mcp.enabled is true",
 		},
 		{
 			name: "egress default_action allow is valid",
@@ -487,7 +638,7 @@ egress:
 egress:
   default_action: block
 `,
-			wantErr: true,
+			wantErr: "default_action must be \"allow\" or \"deny\"",
 		},
 	}
 
@@ -496,9 +647,12 @@ egress:
 			t.Parallel()
 			path := mustWriteConfigFile(t, tc.yaml)
 			_, err := Load(path)
-			if tc.wantErr {
+			if tc.wantErr != "" {
 				if err == nil {
 					t.Fatal("Load: expected error, got nil")
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("expected error containing %q, got: %v", tc.wantErr, err)
 				}
 				return
 			}
@@ -570,23 +724,72 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			wantErr: "plugin.source.path or plugin.source.ref is required",
 		},
 		{
-			name: "inline plugin with openapi accepted",
+			name: "auth provider valid",
 			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
-					"sample": {Plugin: &PluginDef{OpenAPI: "https://example.com/spec.json"}},
+				Auth: AuthConfig{
+					Provider: &PluginDef{Source: &PluginSourceDef{Ref: "github.com/test-org/test-repo/test-auth", Version: "1.0.0"}},
 				},
 			},
 		},
 		{
-			name: "inline plugin with auth and openapi accepted",
+			name: "auth provider none valid",
+			cfg:  &Config{},
+		},
+		{
+			name: "datastore provider valid",
 			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
-					"sample": {Plugin: &PluginDef{
-						OpenAPI: "https://example.com/spec.json",
-						Auth:    &ConnectionAuthDef{Type: "oauth2"},
-					}},
+				Datastore: DatastoreConfig{
+					Provider: &PluginDef{Source: &PluginSourceDef{Path: "./some-dir/plugin.yaml"}},
 				},
 			},
+		},
+		{
+			name: "auth provider invalid when source missing",
+			cfg: &Config{
+				Auth: AuthConfig{
+					Provider: &PluginDef{},
+				},
+			},
+			wantErr: `provider.source.path or provider.source.ref is required`,
+		},
+		{
+			name: "auth config invalid when auth disabled",
+			cfg: &Config{
+				Auth: AuthConfig{
+					Config: yaml.Node{Kind: yaml.MappingNode},
+				},
+			},
+			wantErr: `auth.config is not supported when auth.provider is unset`,
+		},
+		{
+			name: "plugin auth rejects mcp oauth early",
+			cfg: &Config{
+				Integrations: map[string]IntegrationDef{
+					"sample": {
+						Plugin: &PluginDef{
+							Source: &PluginSourceDef{Path: "./plugin.yaml"},
+							Auth:   &ConnectionAuthDef{Type: pluginmanifestv1.AuthTypeMCPOAuth},
+						},
+					},
+				},
+			},
+			wantErr: `plugin auth type "mcp_oauth" is not supported`,
+		},
+		{
+			name: "named connection rejects mcp oauth early",
+			cfg: &Config{
+				Integrations: map[string]IntegrationDef{
+					"sample": {
+						Plugin: &PluginDef{
+							Source: &PluginSourceDef{Path: "./plugin.yaml"},
+							Connections: map[string]*ConnectionDef{
+								"default": {Auth: ConnectionAuthDef{Type: pluginmanifestv1.AuthTypeMCPOAuth}},
+							},
+						},
+					},
+				},
+			},
+			wantErr: `connection "default" auth type "mcp_oauth" is not supported`,
 		},
 	}
 
@@ -628,10 +831,18 @@ func TestLoadConfigResolvesRelativePaths(t *testing.T) {
 		t.Fatalf("MkdirAll config dir: %v", err)
 	}
 	if err := os.WriteFile(cfgPath, []byte(`
-providers:
+auth:
+  provider:
+    source:
+      path: ../auth-plugin/plugin.yaml
+datastore:
+  provider:
+    source:
+      path: ../datastore-plugin/plugin.yaml
+plugins:
   service-a:
     icon_file: ../assets/service.svg
-    from:
+    provider:
       source:
         path: ../bin/plugin.yaml
 `), 0o644); err != nil {
@@ -646,6 +857,12 @@ providers:
 	if got := cfg.Integrations["service-a"].IconFile; got != iconPath {
 		t.Fatalf("IconFile = %q, want %q", got, iconPath)
 	}
+	if got := cfg.Auth.Provider.SourcePath(); got != filepath.Join(dir, "auth-plugin", "plugin.yaml") {
+		t.Fatalf("auth plugin source path = %q, want %q", got, filepath.Join(dir, "auth-plugin", "plugin.yaml"))
+	}
+	if got := cfg.Datastore.Provider.SourcePath(); got != filepath.Join(dir, "datastore-plugin", "plugin.yaml") {
+		t.Fatalf("datastore plugin source path = %q, want %q", got, filepath.Join(dir, "datastore-plugin", "plugin.yaml"))
+	}
 	if got := cfg.Integrations["service-a"].Plugin.SourcePath(); got != filepath.Join(dir, "bin", "plugin.yaml") {
 		t.Fatalf("integration plugin source path = %q, want %q", got, filepath.Join(dir, "bin", "plugin.yaml"))
 	}
@@ -656,13 +873,19 @@ func TestAuthConfigMap(t *testing.T) {
 
 	path := mustWriteConfigFile(t, `
 auth:
-  provider: auth-provider
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/auth/google
+      version: 1.0.0
   config:
     client_id: client-1
     client_secret: secret-1
     allowed_domain: example.test
 datastore:
-  provider: data-store
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+      version: 1.0.0
 server:
   encryption_key: server-key
 `)
@@ -672,9 +895,21 @@ server:
 		t.Fatalf("Load: %v", err)
 	}
 
+	if cfg.Auth.Provider == nil {
+		t.Fatal("Auth.Provider = nil")
+	}
 	authCfg := mustDecodeNode(t, cfg.Auth.Config)
 	if len(authCfg) != 3 {
 		t.Fatalf("Auth.Config length = %d, want 3", len(authCfg))
+	}
+	if authCfg["client_id"] != "client-1" {
+		t.Fatalf("Auth.Config.client_id = %#v", authCfg["client_id"])
+	}
+	if authCfg["client_secret"] != "secret-1" {
+		t.Fatalf("Auth.Config.client_secret = %#v", authCfg["client_secret"])
+	}
+	if authCfg["allowed_domain"] != "example.test" {
+		t.Fatalf("Auth.Config.allowed_domain = %#v", authCfg["allowed_domain"])
 	}
 }
 
@@ -740,9 +975,9 @@ func TestLoad_ResolvesRelativePluginSourcePath(t *testing.T) {
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `providers:
+	cfg := `plugins:
   sample:
-    from:
+    provider:
       source:
         path: ./my-plugin/plugin.yaml
 `
@@ -768,75 +1003,54 @@ func TestLoad_ResolvesRelativePluginSourcePath(t *testing.T) {
 	}
 }
 
-func TestIsInline(t *testing.T) {
+func TestLoadRejectsLegacyInlinePluginFields(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name   string
-		plugin *PluginDef
-		want   bool
+		name    string
+		yaml    string
+		wantErr string
 	}{
-		{name: "nil plugin", plugin: nil, want: false},
-		{name: "external source", plugin: &PluginDef{Source: &PluginSourceDef{Ref: "github.com/a/b/c", Version: "1.0.0"}}, want: false},
-		{name: "inline openapi", plugin: &PluginDef{OpenAPI: "https://example.com/spec.json"}, want: true},
-		{name: "inline graphql", plugin: &PluginDef{GraphQLURL: "https://example.com/graphql"}, want: true},
-		{name: "inline mcp", plugin: &PluginDef{MCPURL: "https://example.com/mcp"}, want: true},
-		{name: "base_url only", plugin: &PluginDef{BaseURL: "https://api.example.com"}, want: true},
-		{name: "inline operations", plugin: &PluginDef{Operations: []InlineOperationDef{{Name: "op"}}}, want: true},
-		{name: "auth only", plugin: &PluginDef{Auth: &ConnectionAuthDef{Type: "oauth2"}}, want: true},
-		{name: "connections only", plugin: &PluginDef{Connections: map[string]*ConnectionDef{"default": {}}}, want: true},
-		{name: "openapi with base_url", plugin: &PluginDef{OpenAPI: "https://example.com/spec.json", BaseURL: "https://api.example.com"}, want: true},
-		{name: "operations with auth", plugin: &PluginDef{Operations: []InlineOperationDef{{Name: "op"}}, Auth: &ConnectionAuthDef{Type: "oauth2"}}, want: true},
-		{name: "empty plugin", plugin: &PluginDef{}, want: false},
+		{
+			name: "legacy openapi field rejected",
+			yaml: `
+plugins:
+  example:
+    provider:
+      source:
+        path: ./plugin.yaml
+      openapi: https://example.com/spec.json
+`,
+			wantErr: "field openapi not found",
+		},
+		{
+			name: "legacy operations field rejected",
+			yaml: `
+plugins:
+  example:
+    provider:
+      source:
+        path: ./plugin.yaml
+      operations:
+        - name: get_thing
+          method: GET
+          path: /things
+`,
+			wantErr: "field operations not found",
+		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got := tc.plugin.IsInline()
-			if got != tc.want {
-				t.Fatalf("IsInline() = %v, want %v", got, tc.want)
+			path := mustWriteConfigFile(t, tc.yaml)
+			_, err := Load(path)
+			if err == nil {
+				t.Fatal("Load: expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("expected error containing %q, got: %v", tc.wantErr, err)
 			}
 		})
-	}
-}
-
-func TestExternalPluginRejectsInlineOperations(t *testing.T) {
-	t.Parallel()
-	cfg := &Config{
-		Integrations: map[string]IntegrationDef{
-			"bad": {
-				Plugin: &PluginDef{
-					Source: &PluginSourceDef{Path: "plugin.yaml"},
-					Operations: []InlineOperationDef{
-						{Name: "op", Method: "GET", Path: "/op"},
-					},
-				},
-			},
-		},
-	}
-	err := ValidateStructure(cfg)
-	if err == nil {
-		t.Fatal("expected validation error for source plugin + inline operations")
-	}
-	if !strings.Contains(err.Error(), "external plugin cannot use inline operations") {
-		t.Fatalf("error = %q, want to contain 'external plugin cannot use inline operations'", err)
-	}
-}
-
-func TestExternalPluginAllowsSpecURL(t *testing.T) {
-	t.Parallel()
-	cfg := &Config{
-		Integrations: map[string]IntegrationDef{
-			"ok": {
-				Plugin: &PluginDef{
-					Source:  &PluginSourceDef{Path: "plugin.yaml"},
-					OpenAPI: "https://example.com/spec.json",
-				},
-			},
-		},
-	}
-	if err := ValidateStructure(cfg); err != nil {
-		t.Fatalf("unexpected validation error: %v", err)
 	}
 }

@@ -8,7 +8,7 @@
 #   ./dev.sh [config.yaml]
 #
 # Examples:
-#   ./dev.sh                              # auto-generates ~/.gestalt/config.yaml
+#   ./dev.sh                              # auto-generates ~/.gestaltd/config.yaml
 #   ./dev.sh gestalt.local.yaml           # custom config
 #   API_PORT=9090 ./dev.sh                # custom port
 
@@ -65,6 +65,7 @@ fi
 
 if [[ -z "$CONFIG" && "$API_PORT" != "8080" ]]; then
     DEV_STATE_DIR="${HOME}/.gestaltd-dev/api-${API_PORT}"
+    PROVIDERS_DIR="${GESTALT_PROVIDERS_DIR:-$GESTALTD_DIR/../../gestalt-providers}"
     mkdir -p "$DEV_STATE_DIR"
     KEY_FILE="$DEV_STATE_DIR/encryption_key"
     if [[ ! -f "$KEY_FILE" ]]; then
@@ -76,10 +77,10 @@ if [[ -z "$CONFIG" && "$API_PORT" != "8080" ]]; then
     fi
     CONFIG="$DEV_STATE_DIR/config.yaml"
     cat > "$CONFIG" <<EOF
-auth:
-  provider: none
 datastore:
-  provider: sqlite
+  provider:
+    source:
+      path: "$PROVIDERS_DIR/datastore/sqlite"
   config:
     path: "$DEV_STATE_DIR/gestalt.db"
 secrets:
@@ -101,13 +102,20 @@ fi
 info "Building client UI export..."
 npm run build
 
+BIN_DIR="$GESTALTD_DIR/.dev-bin"
+rm -rf "$BIN_DIR"
+mkdir -p "$BIN_DIR"
+
+info "Building Go server..."
+(cd "$GESTALTD_DIR" && go build -o "$BIN_DIR/gestaltd" ./cmd/gestaltd)
+
 info "Starting Go API server on port $API_PORT..."
-warn "Dev mode - use 'Dev Login' on the login page (no Google OAuth needed)."
+warn "Dev mode - auth is disabled in the generated config."
 warn "Client UI is served by gestaltd from $SCRIPT_DIR/out. Re-run this script after UI changes."
 if [[ -n "$CONFIG" ]]; then
-    (cd "$GESTALTD_DIR" && GESTALTD_CLIENT_UI_DIR="$SCRIPT_DIR/out" go run ./cmd/gestaltd --config "$CONFIG") &
+    (cd "$GESTALTD_DIR" && GESTALTD_CLIENT_UI_DIR="$SCRIPT_DIR/out" "$BIN_DIR/gestaltd" --config "$CONFIG") &
 else
-    (cd "$GESTALTD_DIR" && GESTALTD_CLIENT_UI_DIR="$SCRIPT_DIR/out" go run ./cmd/gestaltd) &
+    (cd "$GESTALTD_DIR" && GESTALTD_CLIENT_UI_DIR="$SCRIPT_DIR/out" "$BIN_DIR/gestaltd") &
 fi
 API_PID=$!
 

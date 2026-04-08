@@ -21,6 +21,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coreintegration "github.com/valon-technologies/gestalt/server/core/integration"
+	"github.com/valon-technologies/gestalt/server/core/session"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/apiexec"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
@@ -3468,11 +3469,19 @@ type stubAuthWithLoginURL struct {
 	coretesting.StubAuthProvider
 	loginURL      string
 	capturedState string
+	loginURLCtxFn func(context.Context, string) (string, error)
 }
 
 func (s *stubAuthWithLoginURL) LoginURL(state string) (string, error) {
 	s.capturedState = state
 	return s.loginURL, nil
+}
+
+func (s *stubAuthWithLoginURL) LoginURLContext(ctx context.Context, state string) (string, error) {
+	if s.loginURLCtxFn != nil {
+		return s.loginURLCtxFn(ctx, state)
+	}
+	return s.LoginURL(state)
 }
 
 type stubIntegrationWithAuthURL struct {
@@ -5986,6 +5995,35 @@ func (s *stubAuthWithToken) SessionTokenTTL() time.Duration {
 	return time.Hour
 }
 
+type stubHostIssuedSessionAuth struct {
+	secret []byte
+}
+
+func (s *stubHostIssuedSessionAuth) Name() string { return "host-issued" }
+
+func (s *stubHostIssuedSessionAuth) LoginURL(state string) (string, error) {
+	return "https://idp.example.test/login?state=" + url.QueryEscape(state), nil
+}
+
+func (s *stubHostIssuedSessionAuth) HandleCallback(_ context.Context, _ string) (*core.UserIdentity, error) {
+	return nil, fmt.Errorf("use HandleCallbackWithState")
+}
+
+func (s *stubHostIssuedSessionAuth) HandleCallbackWithState(_ context.Context, code, state string) (*core.UserIdentity, string, error) {
+	if code != "good-code" {
+		return nil, "", fmt.Errorf("unexpected code %q", code)
+	}
+	return &core.UserIdentity{Email: "host@example.com", DisplayName: "Host Issued"}, state, nil
+}
+
+func (s *stubHostIssuedSessionAuth) ValidateToken(_ context.Context, token string) (*core.UserIdentity, error) {
+	return session.ValidateToken(token, s.secret)
+}
+
+func (s *stubHostIssuedSessionAuth) SessionTokenTTL() time.Duration {
+	return time.Hour
+}
+
 func TestCookieAuth(t *testing.T) {
 	t.Parallel()
 
@@ -6044,6 +6082,70 @@ func TestCookieAuth(t *testing.T) {
 
 	if fallbackResp.StatusCode == http.StatusUnauthorized {
 		t.Fatal("valid Authorization header should have passed middleware after invalid cookie")
+	}
+}
+
+func TestLoginCallback_HostIssuesSessionWhenProviderDoesNot(t *testing.T) {
+	t.Parallel()
+
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	auth := &stubHostIssuedSessionAuth{secret: secret}
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("cookiejar.New: %v", err)
+	}
+	client := &http.Client{Jar: jar}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = auth
+		cfg.StateSecret = secret
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	startBody := bytes.NewBufferString(`{"state":"test-state"}`)
+	startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/login", startBody)
+	startReq.Header.Set("Content-Type", "application/json")
+	startResp, err := client.Do(startReq)
+	if err != nil {
+		t.Fatalf("start request: %v", err)
+	}
+	_ = startResp.Body.Close()
+	if startResp.StatusCode != http.StatusOK {
+		t.Fatalf("start status = %d, want %d", startResp.StatusCode, http.StatusOK)
+	}
+
+	callbackResp, err := client.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=test-state")
+	if err != nil {
+		t.Fatalf("callback request: %v", err)
+	}
+	defer func() { _ = callbackResp.Body.Close() }()
+	if callbackResp.StatusCode != http.StatusOK {
+		t.Fatalf("callback status = %d, want %d", callbackResp.StatusCode, http.StatusOK)
+	}
+
+	foundSession := false
+	for _, cookie := range jar.Cookies(callbackResp.Request.URL) {
+		if cookie.Name == "session_token" && cookie.Value != "" {
+			foundSession = true
+		}
+	}
+	if !foundSession {
+		t.Fatal("expected session_token cookie to be issued by host")
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("integrations request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusUnauthorized {
+		t.Fatal("host-issued session cookie should authenticate subsequent requests")
 	}
 }
 

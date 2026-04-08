@@ -119,19 +119,9 @@ func TestE2ECLIValidateWithStrictProviderErrors(t *testing.T) {
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `auth:
-  provider: google
-  config:
-    client_id: test-client
-    client_secret: test-secret
-    redirect_url: http://localhost:8080/api/v1/auth/login/callback
-datastore:
-  provider: sqlite
-  config:
-    path: ` + filepath.Join(dir, "gestalt.db") + `
-server:
+	cfg := authDatastoreConfigYAML(t, dir, "google", "sqlite", filepath.Join(dir, "gestalt.db")) + `server:
   encryption_key: test-key
-providers:
+plugins:
   broken:
     display_name: Broken
 `
@@ -143,7 +133,7 @@ providers:
 	if err == nil {
 		t.Fatal("expected validation error, got nil")
 	}
-	if !strings.Contains(string(out), `plugin.source is required`) {
-		t.Fatalf("expected provider-source validation error, got: %s", out)
+	if !strings.Contains(string(out), `requires a plugin`) {
+		t.Fatalf("expected missing-provider validation error, got: %s", out)
 	}
 }

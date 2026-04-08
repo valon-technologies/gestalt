@@ -55,7 +55,7 @@ properties:
 			}
 			manifest := &pluginmanifestv1.Manifest{
 				Source:  "github.com/acme/plugins/provider",
-				Version: "0.1.0",
+				Version: "0.0.1-alpha.1",
 				Kinds:   []string{pluginmanifestv1.KindProvider},
 				Provider: &pluginmanifestv1.Provider{
 					ConfigSchemaPath: tc.schemaPath,

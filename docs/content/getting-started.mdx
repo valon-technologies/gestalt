@@ -14,9 +14,9 @@ gestaltd
 
 When no configuration file is provided, `gestaltd` generates a default local config and starts immediately. The server is now running at `http://localhost:8080`.
 
-## Add a provider
+## Add a plugin
 
-Create a file called `config.yaml` with a provider definition. This example adds [HTTPBin](https://httpbin.org), a public API that requires no authentication:
+Create a file called `config.yaml` with a plugin definition. This example points at a local provider package checked out next to your Gestalt repo:
 
 ```yaml
 server:
@@ -24,54 +24,25 @@ server:
   base_url: http://localhost:8080
   encryption_key: dev-only-change-me
 
-auth:
-  provider: none
-
 datastore:
-  provider: sqlite
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+      version: 0.0.1-alpha.1
   config:
     path: ./gestalt.db
 
-providers:
-  httpbin:
-    display_name: HTTPBin
-    description: Public request and response inspection API
-    connections:
-      public:
-        mode: none
-        auth:
-          type: none
-    surfaces:
-      openapi:
-        document: ./openapi/httpbin.yaml
-        connection: public
+plugins:
+  example:
+    display_name: Example
+    provider:
+      source:
+        path: ../my-provider/plugin.yaml
+    config:
+      greeting: Hello from example plugin
     mcp:
       enabled: true
-      tool_prefix: httpbin_
-```
-
-Save the following OpenAPI spec as `openapi/httpbin.yaml`:
-
-```yaml
-openapi: 3.0.3
-info:
-  title: HTTPBin
-  version: 1.0.0
-servers:
-  - url: https://httpbin.org
-paths:
-  /ip:
-    get:
-      operationId: get_ip
-      responses:
-        "200":
-          description: OK
-  /headers:
-    get:
-      operationId: get_headers
-      responses:
-        "200":
-          description: OK
+      tool_prefix: example_
 ```
 
 Start the server with your config:
@@ -101,14 +72,13 @@ Once the server is running and the CLI is configured, you can invoke the provide
 **Client CLI**
 
 ```sh
-gestalt invoke httpbin get_ip
-gestalt invoke httpbin get_headers
+gestalt invoke example status
 ```
 
 **HTTP API**
 
 ```sh
-curl http://localhost:8080/api/v1/httpbin/get_ip
+curl http://localhost:8080/api/v1/example/status
 ```
 
 **Web UI**
@@ -117,4 +87,4 @@ Open `http://localhost:8080` in a browser to explore and invoke integrations int
 
 ## Next steps
 
-Read [Configuration](/configuration) for the full config model, environment expansion, and locked startup. If your provider needs custom logic beyond what YAML can express, see [Plugins](/plugins).
+Read [Configuration](/configuration) for the full config model, environment expansion, and locked startup. If you want to build your own executable provider package, see [Plugins](/plugins).

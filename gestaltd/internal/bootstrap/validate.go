@@ -61,7 +61,6 @@ func validateMCPCatalogs(providers *registry.PluginMap[core.Provider]) error {
 func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.PluginMap[core.Provider], map[string]map[string]OAuthHandler, error) {
 	reg := registry.New()
 	connAuth := make(map[string]map[string]OAuthHandler)
-	regStore := &lazyRegStore{deps: deps}
 
 	for _, builtin := range factories.Builtins {
 		if err := reg.Providers.Register(builtin.Name(), builtin); errors.Is(err, core.ErrAlreadyRegistered) {
@@ -77,7 +76,7 @@ func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *Fa
 	var errs []error
 	for _, name := range names {
 		intgDef := cfg.Integrations[name]
-		result, err := buildProviderForValidation(ctx, name, intgDef, deps, regStore)
+		result, err := buildProviderForValidation(ctx, name, intgDef, deps)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("integration %q: %w", name, err))
 			continue
@@ -99,9 +98,9 @@ func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *Fa
 	return &reg.Providers, connAuth, nil
 }
 
-func buildProviderForValidation(ctx context.Context, name string, intg config.IntegrationDef, deps Deps, regStore *lazyRegStore) (*ProviderBuildResult, error) {
+func buildProviderForValidation(ctx context.Context, name string, intg config.IntegrationDef, deps Deps) (*ProviderBuildResult, error) {
 	if intg.Plugin == nil || !intg.Plugin.HasManagedArtifacts() || !intg.Plugin.HasResolvedManifest() {
-		return buildProvider(ctx, name, intg, deps, regStore)
+		return buildProvider(ctx, name, intg, deps)
 	}
 	prov, err := newPreparedProviderStub(name, intg)
 	if err != nil {
@@ -157,16 +156,21 @@ func connectionModeFromPlugin(intg config.IntegrationDef) core.ConnectionMode {
 	if intg.Plugin == nil {
 		return core.ConnectionModeUser
 	}
+
+	plan := pluginConnectionPlan{
+		namedConnections: make(map[string]config.ConnectionDef, len(intg.Plugin.Connections)),
+	}
 	if intg.Plugin.ConnectionMode != "" {
-		return core.ConnectionMode(intg.Plugin.ConnectionMode)
+		plan.pluginConnection.Mode = intg.Plugin.ConnectionMode
 	}
-	if intg.Plugin.Auth != nil && intg.Plugin.Auth.Type == "none" {
-		return core.ConnectionModeNone
+	if intg.Plugin.Auth != nil {
+		plan.pluginConnection.Auth = *intg.Plugin.Auth
 	}
-	for _, conn := range intg.Plugin.Connections {
-		if conn != nil && conn.Mode != "" {
-			return core.ConnectionMode(conn.Mode)
+	for name, conn := range intg.Plugin.Connections {
+		if conn == nil {
+			continue
 		}
+		plan.namedConnections[name] = *conn
 	}
-	return core.ConnectionModeUser
+	return plan.connectionMode()
 }
