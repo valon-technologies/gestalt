@@ -50,7 +50,8 @@ type SecretsMetadata struct {
 }
 
 type WebUIMetadata struct {
-	AssetRoot string `json:"asset_root" yaml:"asset_root"`
+	AssetRoot        string `json:"asset_root" yaml:"asset_root"`
+	ConfigSchemaPath string `json:"config_schema_path,omitempty" yaml:"config_schema_path,omitempty"`
 }
 
 type Plugin struct {

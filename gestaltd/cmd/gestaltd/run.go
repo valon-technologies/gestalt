@@ -316,13 +316,16 @@ func resolveClientUIHandler(cfg *config.Config) (http.Handler, error) {
 	if dir := strings.TrimSpace(os.Getenv(clientUIDirEnv)); dir != "" {
 		return webui.DirHandler(dir)
 	}
-	if cfg.UI.Plugin == nil {
-		return webui.EmbeddedHandler(), nil
+	if cfg.UI.Disabled {
+		return http.NotFoundHandler(), nil
 	}
-	if cfg.UI.Plugin.ResolvedAssetRoot != "" {
-		return webui.DirHandler(cfg.UI.Plugin.ResolvedAssetRoot)
+	if cfg.UI.ResolvedAssetRoot != "" {
+		return webui.DirHandler(cfg.UI.ResolvedAssetRoot)
 	}
-	return nil, fmt.Errorf("ui plugin configured but asset root not resolved")
+	if cfg.UI.Provider == nil {
+		return http.NotFoundHandler(), nil
+	}
+	return nil, fmt.Errorf("ui provider configured but asset root not resolved")
 }
 
 func resolveAdminUIHandler(opts adminui.Options) (http.Handler, error) {

@@ -7,12 +7,12 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+
+	"github.com/valon-technologies/gestalt/server/internal/config"
 )
 
 const (
-	localConfigDirName     = ".gestaltd"
-	defaultProviderRepo    = "github.com/valon-technologies/gestalt-providers"
-	defaultProviderVersion = "0.0.1-alpha.1"
+	localConfigDirName = ".gestaltd"
 )
 
 func DefaultLocalConfigPath() string {
@@ -70,7 +70,7 @@ server:
   public:
     port: 8080
   encryption_key: %q
-`, defaultProviderRepo, defaultProviderVersion, dbPath, encryptionKey)
+`, config.DefaultProviderRepo, config.DefaultProviderVersion, dbPath, encryptionKey)
 }
 
 func defaultLocalSourceConfig(providersDir, dbPath, encryptionKey string) string {
@@ -80,11 +80,15 @@ func defaultLocalSourceConfig(providersDir, dbPath, encryptionKey string) string
       path: %q
   config:
     path: %q
+ui:
+  provider:
+    source:
+      path: %q
 secrets:
   provider: env
 server:
   public:
     port: 8080
   encryption_key: %q
-`, filepath.Join(providersDir, "datastore", "sqlite", "plugin.yaml"), dbPath, encryptionKey)
+`, filepath.Join(providersDir, "datastore", "sqlite", "plugin.yaml"), dbPath, filepath.Join(providersDir, "web", "default", "plugin.yaml"), encryptionKey)
 }

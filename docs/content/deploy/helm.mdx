@@ -177,7 +177,7 @@ client UI hostname.
 
 ## When to enable `pluginInit`
 
-Enable the init container when your config uses `plugins.*.provider.source.ref` or `ui.plugin.source` and you want that state prepared before the main container starts. The init container copies the rendered config and runs:
+Enable the init container when your config uses `plugins.*.provider.source.ref`, `auth.provider.source.ref`, `datastore.provider.source.ref`, or `ui.provider.source.ref` and you want that state prepared before the main container starts. The init container copies the rendered config and runs:
 
 `/gestaltd init --config /etc/gestalt/config.yaml`
 

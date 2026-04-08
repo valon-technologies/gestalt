@@ -3,7 +3,7 @@
 `gestaltd` is a platform for self-hostable, configurable integrations and tooling. You describe your platform in one YAML file, and `gestaltd` turns that file into a running server with:
 
 - an HTTP API
-- a client UI at `/`
+- a public client UI at `/` when enabled
 - a built-in admin UI at `/admin`
 - `/health` and `/ready` endpoints
 - an `/mcp` endpoint when providers expose tools
@@ -24,7 +24,8 @@
 - This image is not zero-config. Mount or bake a config file before starting it.
 - Locked startup is the default. If your config uses
   `plugins.*.provider.source.ref`, `auth.provider.source.ref`,
-  `datastore.provider.source.ref`, or `ui.plugin.source`, run `init` first.
+  `datastore.provider.source.ref`, or `ui.provider.source.ref`, run `init`
+  first.
 
 ## Supported tags
 
@@ -75,6 +76,8 @@ datastore:
     path: /data/gestalt.db
 
 plugins: {}
+ui:
+  provider: none
 ```
 
 Example with a separate internal-only management listener:
@@ -98,6 +101,8 @@ datastore:
     path: /data/gestalt.db
 
 plugins: {}
+ui:
+  provider: none
 ```
 
 ```sh
@@ -198,11 +203,13 @@ The container exposes:
 - `GET /health` for liveness
 - `GET /ready` for readiness
 
-By default the client UI is served from `/` and the built-in admin UI is served
-from `/admin` on the public listener. If you configure `server.management`, then
-`/admin`, `/metrics`, `/health`, and `/ready` move to the management listener
-instead. That split is the recommended production deployment shape; the
-single-listener mode is mainly for local development and trusted-network use.
+The built-in admin UI is served from `/admin`. The public client UI at `/` is
+controlled by `ui.provider`: set `ui.provider: none` to disable it, omit `ui`
+to use the pinned first-party default bundle, or point `ui.provider.source` at
+your own packaged UI. If you configure `server.management`, then `/admin`,
+`/metrics`, `/health`, and `/ready` move to the management listener instead.
+That split is the recommended production deployment shape; the single-listener
+mode is mainly for local development and trusted-network use.
 
 ## SQLite and `/data`
 

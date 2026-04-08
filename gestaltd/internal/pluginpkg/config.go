@@ -55,6 +55,11 @@ func configSchemaForManifest(manifestPath string, manifest *pluginmanifestv1.Man
 			return "", "", false, nil
 		}
 		return filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(manifest.Secrets.ConfigSchemaPath)), manifest.Secrets.ConfigSchemaPath, true, nil
+	case pluginmanifestv1.KindWebUI:
+		if manifest.WebUI == nil || manifest.WebUI.ConfigSchemaPath == "" {
+			return "", "", false, nil
+		}
+		return filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(manifest.WebUI.ConfigSchemaPath)), manifest.WebUI.ConfigSchemaPath, true, nil
 	default:
 		return "", "", false, fmt.Errorf("unsupported manifest config kind %q", kind)
 	}

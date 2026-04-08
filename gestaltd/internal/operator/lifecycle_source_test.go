@@ -180,6 +180,8 @@ func writeConfigYAML(t *testing.T, dir, source, version, artifactsDir string) st
 	t.Helper()
 
 	lines := []string{
+		"ui:",
+		"  provider: none",
 		"server:",
 		"  artifacts_dir: " + artifactsDir,
 		"plugins:",

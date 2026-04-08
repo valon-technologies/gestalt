@@ -1468,11 +1468,11 @@ func setupPluginDirWithVersion(t *testing.T, baseDir, version string) string {
 func setupAuthProviderDir(t *testing.T, baseDir, name string) string {
 	t.Helper()
 
-	providerDir := filepath.Join(baseDir, "components", "auth", name)
+	providerDir := filepath.Join(baseDir, "auth", name)
 	if err := os.MkdirAll(providerDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(%s): %v", providerDir, err)
 	}
-	writeTestFile(t, providerDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/components/auth/"+name)), 0o644)
+	writeTestFile(t, providerDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/providers/auth/"+name)), 0o644)
 	writeTestFile(t, providerDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
 	writeTestFile(t, providerDir, "auth.go", []byte(authProviderSource(name)), 0o644)
 	artifactRel := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "auth-provider"))
@@ -1512,11 +1512,11 @@ func authProviderSource(name string) string {
 func setupDatastoreProviderDir(t *testing.T, baseDir, name string) string {
 	t.Helper()
 
-	providerDir := filepath.Join(baseDir, "components", "datastore", name)
+	providerDir := filepath.Join(baseDir, "datastore", name)
 	if err := os.MkdirAll(providerDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(%s): %v", providerDir, err)
 	}
-	writeTestFile(t, providerDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/components/datastore/"+name)), 0o644)
+	writeTestFile(t, providerDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/providers/datastore/"+name)), 0o644)
 	writeTestFile(t, providerDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
 	writeTestFile(t, providerDir, "datastore.go", []byte(testutil.GeneratedDatastorePackageSource()), 0o644)
 	artifactRel := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "datastore-provider"))
@@ -1537,6 +1537,26 @@ func setupDatastoreProviderDir(t *testing.T, baseDir, name string) string {
 		},
 		Entrypoints: pluginmanifestv1.Entrypoints{
 			Datastore: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactRel},
+		},
+	})
+	return providerDir
+}
+
+func setupWebProviderDir(t *testing.T, baseDir, name string) string {
+	t.Helper()
+
+	providerDir := filepath.Join(baseDir, "web", name)
+	if err := os.MkdirAll(providerDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", providerDir, err)
+	}
+	writeTestFile(t, providerDir, "out/index.html", []byte("<!doctype html><title>test web ui</title>"), 0o644)
+	writeManifestFile(t, providerDir, &pluginmanifestv1.Manifest{
+		Source:      "github.com/test/providers/web/" + name,
+		Version:     "0.0.1-alpha.1",
+		DisplayName: "Test Web " + name,
+		Kinds:       []string{pluginmanifestv1.KindWebUI},
+		WebUI: &pluginmanifestv1.WebUIMetadata{
+			AssetRoot: "out",
 		},
 	})
 	return providerDir
@@ -1571,6 +1591,8 @@ func authDatastoreConfigYAML(t *testing.T, dir, authName, datastoreName, dbPath 
       path: %s
   config:
     path: %s
+ui:
+  provider: none
 `, authBlock, datastoreManifestPath, dbPath)
 }
 

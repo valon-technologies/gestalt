@@ -22,6 +22,12 @@ const (
 	IntegrationCallbackPath = "/api/v1/auth/callback"
 )
 
+const (
+	DefaultProviderRepo    = "github.com/valon-technologies/gestalt-providers"
+	DefaultProviderVersion = "0.0.1-alpha.1"
+	DefaultWebUIProvider   = DefaultProviderRepo + "/web/default"
+)
+
 // PluginConnectionName is the implicit connection name used when storing
 // tokens for plugin-only integrations that do not declare YAML connections.
 const PluginConnectionName = "_plugin"
@@ -54,18 +60,10 @@ type AuditConfig struct {
 }
 
 type UIConfig struct {
-	Plugin *UIPluginDef `yaml:"plugin"`
-}
-
-type UIPluginDef struct {
-	Source  string `yaml:"source"`
-	Version string `yaml:"version"`
-
-	ResolvedAssetRoot string `yaml:"-"`
-}
-
-func (p *UIPluginDef) HasManagedArtifacts() bool {
-	return p != nil && p.Source != ""
+	Provider          *PluginDef `yaml:"provider"`
+	Config            yaml.Node  `yaml:"config"`
+	Disabled          bool       `yaml:"-"`
+	ResolvedAssetRoot string     `yaml:"-"`
 }
 
 type PluginSourceAuthDef struct {
@@ -217,6 +215,40 @@ func (c *DatastoreConfig) UnmarshalYAML(value *yaml.Node) error {
 	return unmarshalTopLevelComponentConfig(value, "DatastoreConfig", "datastore", &c.Provider, &c.Config)
 }
 
+func (c *UIConfig) UnmarshalYAML(value *yaml.Node) error {
+	if value == nil || value.Kind == 0 {
+		*c = UIConfig{}
+		return nil
+	}
+	if value.Kind != yaml.MappingNode {
+		var probe map[string]any
+		return value.Decode(&probe)
+	}
+	for i := 0; i+1 < len(value.Content); i += 2 {
+		key := value.Content[i].Value
+		switch key {
+		case "provider", "config":
+		default:
+			return fmt.Errorf("field %s not found in type config.UIConfig", key)
+		}
+	}
+	c.Provider = nil
+	c.Config = yaml.Node{}
+	c.Disabled = false
+	if providerNode := mappingValueNode(value, "provider"); providerNode != nil {
+		decoded, disabled, err := decodeUIProvider(providerNode)
+		if err != nil {
+			return err
+		}
+		c.Provider = decoded
+		c.Disabled = disabled
+	}
+	if configNode := mappingValueNode(value, "config"); configNode != nil {
+		c.Config = *configNode
+	}
+	return nil
+}
+
 func unmarshalTopLevelComponentConfig(value *yaml.Node, typeName, kind string, provider **PluginDef, cfg *yaml.Node) error {
 	if value == nil || value.Kind == 0 {
 		*provider = nil
@@ -269,6 +301,27 @@ func decodeTopLevelComponentProvider(kind string, node *yaml.Node) (*PluginDef, 
 		return nil, err
 	}
 	return &provider, nil
+}
+
+func decodeUIProvider(node *yaml.Node) (*PluginDef, bool, error) {
+	if node == nil || node.Kind == 0 {
+		return nil, false, nil
+	}
+	if node.Kind == yaml.ScalarNode {
+		value := strings.TrimSpace(node.Value)
+		if node.Tag == "!!null" || value == "" {
+			return nil, false, nil
+		}
+		if value == "none" {
+			return nil, true, nil
+		}
+		return nil, false, fmt.Errorf(`config validation: ui.provider must be a provider reference mapping or the string "none"`)
+	}
+	var provider PluginDef
+	if err := node.Decode(&provider); err != nil {
+		return nil, false, err
+	}
+	return &provider, false, nil
 }
 
 func authProviderScalarHint(kind string) string {
@@ -624,6 +677,9 @@ func OverlayManagedPluginConfig(path string, cfg *Config) error {
 	if err := overlayManagedComponentConfigNode(mappingValueNode(documentValueNode(&root), "datastore"), cfg.Datastore.Provider, &cfg.Datastore.Config, "datastore"); err != nil {
 		return err
 	}
+	if err := overlayManagedComponentConfigNode(mappingValueNode(documentValueNode(&root), "ui"), cfg.UI.Provider, &cfg.UI.Config, "ui"); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -782,6 +838,18 @@ func applyDefaults(cfg *Config) {
 	if cfg.Audit.Provider == "" {
 		cfg.Audit.Provider = "inherit"
 	}
+	if !cfg.UI.Disabled && cfg.UI.Provider == nil {
+		cfg.UI.Provider = defaultUIProvider()
+	}
+}
+
+func defaultUIProvider() *PluginDef {
+	return &PluginDef{
+		Source: &PluginSourceDef{
+			Ref:     DefaultWebUIProvider,
+			Version: DefaultProviderVersion,
+		},
+	}
 }
 
 func resolveBaseURL(cfg *Config) {
@@ -815,6 +883,9 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 	}
 	if cfg.Datastore.Provider != nil && cfg.Datastore.Provider.Source != nil {
 		cfg.Datastore.Provider.Source.Path = resolveRelativePath(baseDir, cfg.Datastore.Provider.Source.Path)
+	}
+	if cfg.UI.Provider != nil && cfg.UI.Provider.Source != nil {
+		cfg.UI.Provider.Source.Path = resolveRelativePath(baseDir, cfg.UI.Provider.Source.Path)
 	}
 
 }

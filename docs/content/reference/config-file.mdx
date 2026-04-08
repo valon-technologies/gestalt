@@ -707,17 +707,20 @@ egress:
 
 ```yaml
 ui:
-  plugin:
-    source: github.com/your-org/your-repo/console
-    version: 1.0.0
+  provider:
+    source:
+      ref: github.com/your-org/your-repo/web/console
+      version: 1.0.0
+  config:
+    brand_name: Acme
 ```
 
-`plugin.source` is a managed plugin source address and requires `plugin.version`, which must be valid SemVer without a leading `v`. `ui.plugin` provides the public client UI at `/`, while the built-in admin UI remains available at `/admin`. See [Releasing](/providers/releasing) for the full workflow.
+`ui.provider` controls the public client UI at `/`, while the built-in admin UI remains available at `/admin`. Omit `ui` to use the pinned first-party default UI bundle. Set `ui.provider: none` to disable the public UI entirely. Or set `ui.provider.source` to a packaged `webui` bundle. See [Releasing](/providers/releasing) for the full workflow.
 
 | Field | Description |
 | --- | --- |
-| `plugin.source` | **Required** when `ui.plugin` is configured. Managed plugin source address. |
-| `plugin.version` | **Required** with `plugin.source`. SemVer without a leading `v`. |
+| `provider` | `none` to disable the public UI, or a provider mapping with `source.path` or `source.ref`. |
+| `config` | Optional UI-provider config validated against the bundle schema when present. |
 
 ## Validation rules
 
@@ -731,7 +734,7 @@ Auth and datastore providers use the same PluginDef shape. When `auth.provider` 
 
 Only `connections.default` may define `params` or `discovery`. `mcp.tool_prefix` is valid only when `mcp.enabled` is `true`. All connections in an integration must share the same mode.
 
-`ui.plugin.source` is required when `ui.plugin` is configured, and `ui.plugin.version` is required with `ui.plugin.source`.
+`ui.provider` must be either `none` or a provider mapping with exactly one loading mode: local `ui.provider.source.path` or managed `ui.provider.source.ref`. `ui.provider.source.version` is required with `ui.provider.source.ref` and invalid with `ui.provider.source.path`. `ui.config` is only allowed when `ui.provider` is not `none`.
 
 `egress.default_action` must be `allow` or `deny`. Each egress policy rule requires an `action`. Each egress credential grant requires `secret_ref` (as a bare name, not a `secret://` URI) and at least one match criterion.
 

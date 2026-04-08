@@ -98,6 +98,10 @@ config:
         version: 0.0.1-alpha.1
     config:
       path: /data/gestalt.db
+  # Keep the default chart profile self-contained. Set this to a managed
+  # provider source when you want a public web UI.
+  ui:
+    provider: none
 
 # Extra environment variables for the container. These are only required
 # when your config uses ${VAR} placeholders for auth, base_url, or

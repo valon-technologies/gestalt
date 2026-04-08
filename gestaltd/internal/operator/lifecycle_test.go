@@ -104,6 +104,8 @@ func requiredComponentConfigYAML(t *testing.T, dir, dbPath string) string {
       path: %q
   config:
     path: %q
+ui:
+  provider: none
 `, datastorePath, dbPath)
 }
 
@@ -116,6 +118,8 @@ func requiredDatastoreConfigYAML(t *testing.T, dir, dbPath string) string {
       path: %q
   config:
     path: %q
+ui:
+  provider: none
 `, datastorePath, dbPath)
 }
 
@@ -335,7 +339,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalTopLevelPluginsWithoutLockfile(t *t
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `auth:
+cfg := `auth:
   provider:
     source:
       path: ./auth-plugin.yaml
@@ -347,6 +351,8 @@ datastore:
       path: ./datastore-plugin.yaml
   config:
     bucket: local-datastore
+ui:
+  provider: none
 server:
   encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `
@@ -448,7 +454,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalSourceTopLevelPluginsWithoutArtifac
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `auth:
+cfg := `auth:
   provider:
     source:
       path: ./auth-plugin.yaml
@@ -456,6 +462,8 @@ datastore:
   provider:
     source:
       path: ./datastore-plugin.yaml
+ui:
+  provider: none
 server:
   encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `
