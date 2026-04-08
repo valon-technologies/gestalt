@@ -61,6 +61,24 @@ Non-invocation HTTP audit events use explicit operation names:
 - `api_token.revoke`
 - `api_token.revoke_all`
 
+## Metrics Vs Audit
+
+`gestaltd` intentionally does not mirror every metric as an audit record.
+
+| Surface | Metrics | Audit Logs | Notes |
+| --- | --- | --- | --- |
+| Provider operation invocation | Yes: `gestaltd.operation.*` | Yes | Guarded invocations are both metered and audited. |
+| Platform login start and completion | Yes: `gestaltd.auth.*` | Yes | Login is both operational telemetry and a security event. |
+| Platform token validation | Yes: `gestaltd.auth.*` with `action=validate_token` | No | Request-by-request token validation is metrics-only. |
+| Connection auth start and completion | Yes: `gestaltd.connection.auth.*` | Yes | Covers OAuth start and completion plus manual connect completion. |
+| Connection credential refresh | Yes: `gestaltd.connection.auth.*` with `action=refresh` | No | Refresh remains metrics-only to avoid audit noise. |
+| Datastore methods | Yes: `gestaltd.datastore.*` | No | Datastore calls are internal implementation telemetry, not audit events. |
+| API token lifecycle | No dedicated semantic metric family | Yes | Audit records exist for create and revoke flows. |
+| Logout, pending selection, disconnect | No dedicated semantic metric family | Yes | These remain audit-only workflow events. |
+
+See [Observability](/observability) for the metric families and attribute
+definitions.
+
 ## Example
 
 ```json

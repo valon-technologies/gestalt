@@ -36,7 +36,6 @@ const (
 	attrTransport      = attribute.Key("gestalt.transport")
 	attrUserID         = attribute.Key("gestalt.user_id")
 	attrConnectionMode = attribute.Key("gestalt.connection_mode")
-	attrResult         = attribute.Key("gestalt.result")
 )
 
 type connectionCtxKey struct{}
@@ -109,7 +108,7 @@ func WithConnectionAuth(r RefresherResolver) BrokerOption {
 }
 
 func NewBroker(providers *registry.PluginMap[core.Provider], ds core.Datastore, opts ...BrokerOption) *Broker {
-	b := &Broker{providers: providers, datastore: ds}
+	b := &Broker{providers: providers, datastore: metricutil.WrapDatastore(ds)}
 	for _, o := range opts {
 		o(b)
 	}
@@ -181,7 +180,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	}
 
 	metricProvider = providerName
-	metricConnectionMode = normalizeConnectionMode(prov.ConnectionMode())
+	metricConnectionMode = metricutil.NormalizeConnectionMode(prov.ConnectionMode())
 	span.SetAttributes(attrConnectionMode.String(metricConnectionMode))
 
 	if p == nil {
@@ -432,7 +431,7 @@ func (b *Broker) resolveUserToken(ctx context.Context, prov core.Provider, userI
 		}
 	}
 
-	accessToken, err := b.refreshTokenIfNeeded(ctx, storedToken, providerName, connection, normalizeConnectionMode(prov.ConnectionMode()))
+	accessToken, err := b.refreshTokenIfNeeded(ctx, storedToken, providerName, connection, metricutil.NormalizeConnectionMode(prov.ConnectionMode()))
 	return ctx, accessToken, err
 }
 
@@ -452,8 +451,9 @@ func (b *Broker) refreshTokenIfNeeded(ctx context.Context, token *core.Integrati
 	key := token.UserID + ":" + providerName + ":" + connection + ":" + token.Instance
 	v, err, _ := b.refreshGroup.Do(key, func() (any, error) {
 		refreshCtx := context.WithoutCancel(ctx)
+		startedAt := time.Now()
 		resp, err := b.refreshOAuth(refreshCtx, refresher, token.RefreshToken)
-		recordTokenRefreshMetrics(refreshCtx, providerName, connectionMode, err != nil)
+		metricutil.RecordConnectionAuthMetrics(refreshCtx, startedAt, providerName, "oauth", "refresh", connectionMode, err != nil)
 		return resp, err
 	})
 	if err != nil {

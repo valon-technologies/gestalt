@@ -111,6 +111,10 @@ func (s *remoteDatastore) configure(ctx context.Context, name string, config map
 	return nil
 }
 
+func (s *remoteDatastore) Name() string {
+	return s.name
+}
+
 func (s *remoteDatastore) supportsOAuthRegistration(ctx context.Context) (bool, error) {
 	ctx, cancel := pluginCallContext(ctx)
 	defer cancel()

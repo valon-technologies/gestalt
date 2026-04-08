@@ -8,8 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 )
 
 type TokenType int
@@ -65,7 +67,18 @@ func (r *Resolver) ResolveToken(ctx context.Context, token string) (*Principal, 
 		return r.resolveAPIToken(ctx, token)
 	}
 
+	startedAt := time.Now()
+	provider := "none"
+	if r.auth != nil {
+		provider = r.auth.Name()
+	}
+	if r.auth == nil {
+		metricutil.RecordAuthMetrics(ctx, startedAt, provider, "validate_token", true)
+		return nil, ErrInvalidToken
+	}
+
 	identity, err := r.auth.ValidateToken(ctx, token)
+	metricutil.RecordAuthMetrics(ctx, startedAt, provider, "validate_token", err != nil || identity == nil)
 	if err == nil && identity != nil {
 		return &Principal{Identity: identity, Source: SourceSession}, nil
 	}
