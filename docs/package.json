@@ -19,8 +19,8 @@
   },
   "devDependencies": {
     "@types/node": "25.5.2",
-    "pagefind": "^1.3.2",
     "@types/react": "^19.2.14",
-    "typescript": "5.9.3"
+    "pagefind": "^1.3.2",
+    "typescript": "6.0.2"
   }
 }

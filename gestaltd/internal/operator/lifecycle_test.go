@@ -613,6 +613,10 @@ func createLocalPythonSDKVenv(t *testing.T, pythonPath, venvPath, sdkPath string
 		"pip",
 		"install",
 		"--disable-pip-version-check",
+		"--retries",
+		"5",
+		"--timeout",
+		"120",
 		"--quiet",
 		sdkPath,
 	)
