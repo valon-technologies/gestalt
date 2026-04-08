@@ -3,6 +3,7 @@ import json
 import pathlib
 import tempfile
 import unittest
+from typing import Any
 from unittest import mock
 
 import grpc
@@ -32,7 +33,15 @@ from gestalt import (
     _bootstrap,
     _runtime,
 )
-from gestalt.gen.v1 import auth_pb2, datastore_pb2, plugin_pb2, runtime_pb2
+from gestalt.gen.v1 import auth_pb2 as _auth_pb2
+from gestalt.gen.v1 import datastore_pb2 as _datastore_pb2
+from gestalt.gen.v1 import plugin_pb2 as _plugin_pb2
+from gestalt.gen.v1 import runtime_pb2 as _runtime_pb2
+
+auth_pb2: Any = _auth_pb2
+datastore_pb2: Any = _datastore_pb2
+plugin_pb2: Any = _plugin_pb2
+runtime_pb2: Any = _runtime_pb2
 
 UTC = dt.timezone.utc
 
@@ -226,7 +235,7 @@ class AuthRuntimeTests(unittest.TestCase):
         def __init__(self) -> None:
             self.configured: list[tuple[str, dict[str, object]]] = []
 
-        def configure(self, name: str, config: dict[str, object]) -> None:
+        def configure(self, name: str, config: dict[str, Any]) -> None:
             self.configured.append((name, dict(config)))
 
         def metadata(self) -> ProviderMetadata:
@@ -392,17 +401,17 @@ class DatastoreRuntimeTests(unittest.TestCase):
         def get_integration_token(
             self,
             user_id: str,
-            _integration: str,
-            _connection: str,
-            _instance: str,
+            integration: str,
+            connection: str,
+            instance: str,
         ) -> StoredIntegrationToken | None:
             return self.tokens.get(user_id)
 
         def list_integration_tokens(
             self,
             user_id: str,
-            _integration: str,
-            _connection: str,
+            integration: str,
+            connection: str,
         ) -> list[StoredIntegrationToken]:
             token = self.tokens.get(user_id)
             return [] if token is None else [token]
@@ -425,10 +434,10 @@ class DatastoreRuntimeTests(unittest.TestCase):
                 return []
             return [token]
 
-        def revoke_api_token(self, _user_id: str, _id: str) -> None:
+        def revoke_api_token(self, user_id: str, id: str) -> None:
             self.api_token = None
 
-        def revoke_all_api_tokens(self, _user_id: str) -> int:
+        def revoke_all_api_tokens(self, user_id: str) -> int:
             self.api_token = None
             return 1
 
@@ -505,7 +514,7 @@ class DatastoreRuntimeTests(unittest.TestCase):
             def migrate(self) -> None:
                 return None
 
-            def get_user(self, _id: str) -> StoredUser | None:
+            def get_user(self, id: str) -> StoredUser | None:
                 return None
 
             def find_or_create_user(self, email: str) -> StoredUser:
@@ -591,7 +600,7 @@ class GrpcHandlerDecoratorTests(unittest.TestCase):
 
     def test_provider_exception_maps_to_unknown(self) -> None:
         class FailingProvider(DatastoreRuntimeTests.StubDatastoreProvider):
-            def get_user(self, _id: str) -> StoredUser | None:
+            def get_user(self, id: str) -> StoredUser | None:
                 raise RuntimeError("db connection lost")
 
         servicer = _runtime._datastore_servicer(provider=FailingProvider())

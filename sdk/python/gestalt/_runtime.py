@@ -12,7 +12,9 @@ from http import HTTPStatus
 from typing import Any, Final, cast
 
 import grpc
-from google.protobuf import empty_pb2, json_format, timestamp_pb2
+from google.protobuf import empty_pb2 as _empty_pb2
+from google.protobuf import json_format
+from google.protobuf import timestamp_pb2 as _timestamp_pb2
 
 from ._api import Request
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
@@ -41,16 +43,25 @@ from ._providers import (
     WarningsProvider,
 )
 from ._serialization import json_body
-from .gen.v1 import (
-    auth_pb2,
-    auth_pb2_grpc,
-    datastore_pb2,
-    datastore_pb2_grpc,
-    plugin_pb2,
-    plugin_pb2_grpc,
-    runtime_pb2,
-    runtime_pb2_grpc,
-)
+from .gen.v1 import auth_pb2 as _auth_pb2
+from .gen.v1 import auth_pb2_grpc as _auth_pb2_grpc
+from .gen.v1 import datastore_pb2 as _datastore_pb2
+from .gen.v1 import datastore_pb2_grpc as _datastore_pb2_grpc
+from .gen.v1 import plugin_pb2 as _plugin_pb2
+from .gen.v1 import plugin_pb2_grpc as _plugin_pb2_grpc
+from .gen.v1 import runtime_pb2 as _runtime_pb2
+from .gen.v1 import runtime_pb2_grpc as _runtime_pb2_grpc
+
+empty_pb2: Any = _empty_pb2
+timestamp_pb2: Any = _timestamp_pb2
+plugin_pb2: Any = _plugin_pb2
+plugin_pb2_grpc: Any = _plugin_pb2_grpc
+runtime_pb2: Any = _runtime_pb2
+runtime_pb2_grpc: Any = _runtime_pb2_grpc
+auth_pb2: Any = _auth_pb2
+auth_pb2_grpc: Any = _auth_pb2_grpc
+datastore_pb2: Any = _datastore_pb2
+datastore_pb2_grpc: Any = _datastore_pb2_grpc
 
 UTC = dt.timezone.utc
 

@@ -24,7 +24,7 @@ class ProviderMetadata:
 
 
 class RuntimeProvider:
-    def configure(self, _name: str, _config: dict[str, Any]) -> None:
+    def configure(self, name: str, config: dict[str, Any]) -> None:
         pass
 
 
