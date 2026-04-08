@@ -9,7 +9,7 @@ use crate::params;
 #[command(version)]
 pub struct Cli {
     #[command(subcommand)]
-    pub command: Commands,
+    pub command: Option<Commands>,
 
     /// Output format
     #[arg(long, global = true, value_enum, default_value_t = Format::Table)]
