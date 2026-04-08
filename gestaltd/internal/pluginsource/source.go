@@ -22,6 +22,7 @@ type Source struct {
 	Owner string
 	Repo  string
 	Path  string
+	Token string
 }
 
 func Parse(raw string) (Source, error) {

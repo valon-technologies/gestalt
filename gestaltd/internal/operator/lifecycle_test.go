@@ -27,7 +27,7 @@ type staticSourceResolver struct {
 	localPath string
 }
 
-func (r staticSourceResolver) Resolve(context.Context, pluginsource.ResolveRequest) (*pluginsource.ResolvedPackage, error) {
+func (r staticSourceResolver) Resolve(context.Context, pluginsource.Source, string) (*pluginsource.ResolvedPackage, error) {
 	return &pluginsource.ResolvedPackage{
 		LocalPath: r.localPath,
 		Cleanup:   func() {},

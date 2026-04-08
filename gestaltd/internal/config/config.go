@@ -168,13 +168,6 @@ func (p *PluginDef) SourceVersion() string {
 	return p.Source.Version
 }
 
-func (p *PluginDef) SourceAuth() *PluginSourceAuthDef {
-	if p == nil || p.Source == nil {
-		return nil
-	}
-	return p.Source.Auth
-}
-
 func (p *PluginDef) HasResolvedManifest() bool {
 	return p != nil && p.ResolvedManifest != nil
 }

@@ -2,16 +2,6 @@ package pluginsource
 
 import "context"
 
-type Auth struct {
-	Token string
-}
-
-type ResolveRequest struct {
-	Source  Source
-	Version string
-	Auth    *Auth
-}
-
 type ResolvedPackage struct {
 	LocalPath     string
 	Cleanup       func()
@@ -20,5 +10,5 @@ type ResolvedPackage struct {
 }
 
 type Resolver interface {
-	Resolve(ctx context.Context, req ResolveRequest) (*ResolvedPackage, error)
+	Resolve(ctx context.Context, src Source, version string) (*ResolvedPackage, error)
 }

@@ -68,7 +68,7 @@ type GitHubResolver struct {
 	HTTPClient  *http.Client
 }
 
-func (r *GitHubResolver) Resolve(ctx context.Context, req pluginsource.ResolveRequest) (*pluginsource.ResolvedPackage, error) {
+func (r *GitHubResolver) Resolve(ctx context.Context, src pluginsource.Source, version string) (*pluginsource.ResolvedPackage, error) {
 	baseURL := r.BaseURL
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
@@ -77,17 +77,17 @@ func (r *GitHubResolver) Resolve(ctx context.Context, req pluginsource.ResolveRe
 	if client == nil {
 		client = http.DefaultClient
 	}
-	token := resolveTokenWithLookup(explicitToken(req, r.Token), r.TokenLookup)
+	token := resolveTokenWithLookup(explicitToken(src, r.Token), r.TokenLookup)
 
-	tag := req.Source.ReleaseTag(req.Version)
-	releaseURL := fmt.Sprintf("%s/repos/%s/releases/tags/%s", baseURL, req.Source.RepoSlug(), url.PathEscape(tag))
+	tag := src.ReleaseTag(version)
+	releaseURL := fmt.Sprintf("%s/repos/%s/releases/tags/%s", baseURL, src.RepoSlug(), url.PathEscape(tag))
 
-	release, err := r.fetchRelease(ctx, client, releaseURL, token, tag, req.Source.RepoSlug())
+	release, err := r.fetchRelease(ctx, client, releaseURL, token, tag, src.RepoSlug())
 	if err != nil {
 		return nil, err
 	}
 
-	asset, err := findAsset(release.Assets, req.Source.PluginName(), req.Version)
+	asset, err := findAsset(release.Assets, src.PluginName(), version)
 	if err != nil {
 		return nil, err
 	}
@@ -105,9 +105,9 @@ func (r *GitHubResolver) Resolve(ctx context.Context, req pluginsource.ResolveRe
 	}, nil
 }
 
-func explicitToken(req pluginsource.ResolveRequest, fallback string) string {
-	if req.Auth != nil && strings.TrimSpace(req.Auth.Token) != "" {
-		return req.Auth.Token
+func explicitToken(src pluginsource.Source, fallback string) string {
+	if strings.TrimSpace(src.Token) != "" {
+		return src.Token
 	}
 	return fallback
 }

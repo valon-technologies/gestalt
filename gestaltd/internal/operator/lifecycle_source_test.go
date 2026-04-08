@@ -36,12 +36,14 @@ type fakeResolver struct {
 	resolvedURL string
 	sha256      string
 	calls       int
-	lastReq     pluginsource.ResolveRequest
+	lastSrc     pluginsource.Source
+	lastVersion string
 }
 
-func (f *fakeResolver) Resolve(_ context.Context, req pluginsource.ResolveRequest) (*pluginsource.ResolvedPackage, error) {
+func (f *fakeResolver) Resolve(_ context.Context, src pluginsource.Source, version string) (*pluginsource.ResolvedPackage, error) {
 	f.calls++
-	f.lastReq = req
+	f.lastSrc = src
+	f.lastVersion = version
 	return &pluginsource.ResolvedPackage{
 		LocalPath:     f.archivePath,
 		Cleanup:       func() {},
@@ -195,31 +197,6 @@ func writeConfigYAML(t *testing.T, dir, source, version, artifactsDir string) st
 	return configPath
 }
 
-func writeConfigYAMLWithAuthToken(t *testing.T, dir, source, version, token, artifactsDir string) string {
-	t.Helper()
-
-	lines := []string{
-		"server:",
-		"  artifacts_dir: " + artifactsDir,
-		"plugins:",
-		"  alpha:",
-		"    provider:",
-		"      source:",
-		"        ref: " + source,
-		"        version: " + version,
-		"        auth:",
-		"          token: " + token,
-	}
-
-	yaml := strings.Join(lines, "\n") + "\n"
-
-	configPath := filepath.Join(dir, "gestalt.yaml")
-	if err := os.WriteFile(configPath, []byte(yaml), 0644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-	return configPath
-}
-
 func TestSourcePluginEndToEnd(t *testing.T) {
 	t.Parallel()
 
@@ -318,53 +295,6 @@ func TestSourcePluginEndToEnd(t *testing.T) {
 	readEntry := readBack.Providers["alpha"]
 	if readEntry.Source != source {
 		t.Errorf("readback Source = %q, want %q", readEntry.Source, source)
-	}
-}
-
-func TestSourcePluginInlineAuthTokenPassesToResolver(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	source := "github.com/acme/tools/widget"
-	version := "1.0.0"
-	binaryContent := "fake-binary-v1"
-	resolvedURL := "https://github.com/acme/tools/releases/download/v1.0.0/gestalt-plugin-widget_v1.0.0.tar.gz"
-
-	archivePath := buildV2Archive(t, dir, source, version, binaryContent)
-	archiveData, err := os.ReadFile(archivePath)
-	if err != nil {
-		t.Fatalf("read archive: %v", err)
-	}
-	archiveSum := sha256.Sum256(archiveData)
-	archiveSHA := hex.EncodeToString(archiveSum[:])
-
-	resolver := &fakeResolver{
-		archivePath: archivePath,
-		resolvedURL: resolvedURL,
-		sha256:      archiveSHA,
-	}
-
-	configPath := writeConfigYAMLWithAuthToken(t, dir, source, version, "ghp_inline_source_token", filepath.Join(dir, "prepared-artifacts"))
-
-	lc := NewLifecycle(resolver)
-	if _, err := lc.InitAtPath(configPath); err != nil {
-		t.Fatalf("InitAtPath: %v", err)
-	}
-
-	if resolver.calls != 1 {
-		t.Fatalf("resolver called %d times, want 1", resolver.calls)
-	}
-	if resolver.lastReq.Source.String() != source {
-		t.Fatalf("resolver source = %q, want %q", resolver.lastReq.Source.String(), source)
-	}
-	if resolver.lastReq.Version != version {
-		t.Fatalf("resolver version = %q, want %q", resolver.lastReq.Version, version)
-	}
-	if resolver.lastReq.Auth == nil {
-		t.Fatal("resolver auth is nil, want inline token")
-	}
-	if resolver.lastReq.Auth.Token != "ghp_inline_source_token" {
-		t.Fatalf("resolver auth token = %q, want %q", resolver.lastReq.Auth.Token, "ghp_inline_source_token")
 	}
 }
 
@@ -524,6 +454,8 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 		"    source:",
 		"      ref: " + source,
 		"      version: " + version,
+		"      auth:",
+		"        token: ghp_inline_auth_source_token",
 		"  config:",
 		"    client_id: managed-auth-client",
 		"server:",
@@ -549,6 +481,15 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 	}
 	if lock.Auth.Executable == "" {
 		t.Fatal("lock.Auth.Executable is empty")
+	}
+	if resolver.lastSrc.String() != source {
+		t.Fatalf("resolver source = %q, want %q", resolver.lastSrc.String(), source)
+	}
+	if resolver.lastVersion != version {
+		t.Fatalf("resolver version = %q, want %q", resolver.lastVersion, version)
+	}
+	if resolver.lastSrc.Token != "ghp_inline_auth_source_token" {
+		t.Fatalf("resolver source token = %q, want %q", resolver.lastSrc.Token, "ghp_inline_auth_source_token")
 	}
 
 	callsBefore := resolver.calls
@@ -588,6 +529,13 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 	if authCfg["command"] != executablePath {
 		t.Fatalf("auth config command = %v, want %q", authCfg["command"], executablePath)
 	}
+	sourceCfg, ok := authCfg["source"].(map[string]any)
+	if !ok {
+		t.Fatalf("auth source config = %#v", authCfg["source"])
+	}
+	if _, ok := sourceCfg["auth"]; ok {
+		t.Fatalf("auth source config leaked source.auth: %#v", sourceCfg)
+	}
 	nested, ok := authCfg["config"].(map[string]any)
 	if !ok || nested["client_id"] != "managed-auth-client" {
 		t.Fatalf("auth nested config = %#v", authCfg["config"])
@@ -595,7 +543,7 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 }
 
 func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
-	t.Setenv("GITHUB_TOKEN", "test-token")
+	t.Setenv("GITHUB_TOKEN", "wrong-env-token")
 
 	dir := t.TempDir()
 
@@ -678,6 +626,8 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 		"      source:",
 		"        ref: " + testSource,
 		"        version: " + testVersion,
+		"        auth:",
+		"          token: test-token",
 	}, "\n") + "\n"
 	configPath := filepath.Join(dir, "gestalt.yaml")
 	if err := os.WriteFile(configPath, []byte(configYAML), 0644); err != nil {

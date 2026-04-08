@@ -428,14 +428,14 @@ func (l *Lifecycle) writeComponentArtifact(ctx context.Context, paths initPaths,
 }
 
 func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, paths initPaths, kind, name, destDir string, plugin *config.PluginDef, configMap map[string]any) (LockEntry, error) {
-	req, err := sourceResolveRequest(plugin)
+	src, err := sourceForPlugin(plugin)
 	if err != nil {
 		return LockEntry{}, fmt.Errorf("%s %q plugin.source.ref %q: %w", kind, name, plugin.SourceRef(), err)
 	}
 	if l.sourceResolver == nil {
 		return LockEntry{}, fmt.Errorf("%s %q: source plugin resolution requires a source resolver", kind, name)
 	}
-	resolved, err := l.sourceResolver.Resolve(ctx, req)
+	resolved, err := l.sourceResolver.Resolve(ctx, src, plugin.SourceVersion())
 	if err != nil {
 		return LockEntry{}, fmt.Errorf("%s %q resolve source %q@%s: %w", kind, name, plugin.SourceRef(), plugin.SourceVersion(), err)
 	}
@@ -486,14 +486,14 @@ func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, paths initP
 }
 
 func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths initPaths, name string, plugin *config.PluginDef, configMap map[string]any) (LockProviderEntry, error) {
-	req, err := sourceResolveRequest(plugin)
+	src, err := sourceForPlugin(plugin)
 	if err != nil {
 		return LockProviderEntry{}, fmt.Errorf("provider %q plugin.source.ref %q: %w", name, plugin.SourceRef(), err)
 	}
 	if l.sourceResolver == nil {
 		return LockProviderEntry{}, fmt.Errorf("provider %q: source plugin resolution requires a source resolver", name)
 	}
-	resolved, err := l.sourceResolver.Resolve(ctx, req)
+	resolved, err := l.sourceResolver.Resolve(ctx, src, plugin.SourceVersion())
 	if err != nil {
 		return LockProviderEntry{}, fmt.Errorf("provider %q resolve source %q@%s: %w", name, plugin.SourceRef(), plugin.SourceVersion(), err)
 	}
@@ -561,10 +561,7 @@ func (l *Lifecycle) writeUIPluginArtifact(ctx context.Context, cfg *config.Confi
 		if l.sourceResolver == nil {
 			return LockUIEntry{}, fmt.Errorf("ui plugin: source resolution requires a source resolver")
 		}
-		resolved, err := l.sourceResolver.Resolve(ctx, pluginsource.ResolveRequest{
-			Source:  src,
-			Version: plugin.Version,
-		})
+		resolved, err := l.sourceResolver.Resolve(ctx, src, plugin.Version)
 		if err != nil {
 			return LockUIEntry{}, fmt.Errorf("ui plugin resolve source %q@%s: %w", plugin.Source, plugin.Version, err)
 		}
@@ -601,19 +598,16 @@ func (l *Lifecycle) writeUIPluginArtifact(ctx context.Context, cfg *config.Confi
 	return LockUIEntry{}, fmt.Errorf("ui plugin requires source")
 }
 
-func sourceResolveRequest(plugin *config.PluginDef) (pluginsource.ResolveRequest, error) {
+func sourceForPlugin(plugin *config.PluginDef) (pluginsource.Source, error) {
 	src, err := pluginsource.Parse(plugin.SourceRef())
 	if err != nil {
-		return pluginsource.ResolveRequest{}, err
+		return pluginsource.Source{}, err
 	}
-	req := pluginsource.ResolveRequest{
-		Source:  src,
-		Version: plugin.SourceVersion(),
+	if plugin != nil && plugin.Source != nil && plugin.Source.Auth != nil {
+		auth := plugin.Source.Auth
+		src.Token = auth.Token
 	}
-	if auth := plugin.SourceAuth(); auth != nil {
-		req.Auth = &pluginsource.Auth{Token: auth.Token}
-	}
-	return req, nil
+	return src, nil
 }
 
 func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *config.Config, locked bool) error {
@@ -818,7 +812,7 @@ func (l *Lifecycle) applyLockedProviderEntry(paths initPaths, lock *Lockfile, na
 		}
 	}
 	if needMaterialize {
-		if err := l.materializeLockedProvider(context.Background(), paths, name, entry); err != nil {
+		if err := l.materializeLockedProvider(context.Background(), paths, name, plugin, entry); err != nil {
 			return err
 		}
 	}
@@ -871,7 +865,7 @@ func (l *Lifecycle) applyLockedComponentEntry(paths initPaths, entry *LockEntry,
 		}
 	}
 	if needMaterialize {
-		if err := l.materializeLockedComponent(context.Background(), paths, kind, name, *entry); err != nil {
+		if err := l.materializeLockedComponent(context.Background(), paths, kind, name, plugin, *entry); err != nil {
 			return err
 		}
 	}
@@ -926,18 +920,21 @@ func bindResolvedComponentManifest(kind, name string, plugin *config.PluginDef, 
 	return nil
 }
 
-func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPaths, name string, entry LockProviderEntry) error {
+func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPaths, name string, plugin *config.PluginDef, entry LockProviderEntry) error {
 	if entry.ResolvedURL == "" || entry.ArchiveSHA256 == "" {
 		return fmt.Errorf("prepared artifact for provider %q is missing or stale; run `gestaltd init --config %s`", name, paths.configPath)
 	}
 
-	src, parseErr := pluginsource.Parse(entry.Source)
+	src, parseErr := sourceForPlugin(plugin)
+	if parseErr != nil {
+		src, parseErr = pluginsource.Parse(entry.Source)
+	}
 	var (
 		download *pluginpkg.DownloadResult
 		err      error
 	)
 	if parseErr == nil && src.Host == pluginsource.HostGitHub {
-		download, err = ghresolver.DownloadResolvedAsset(ctx, http.DefaultClient, entry.ResolvedURL, "")
+		download, err = ghresolver.DownloadResolvedAsset(ctx, http.DefaultClient, entry.ResolvedURL, src.Token)
 	} else {
 		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, entry.ResolvedURL, nil)
 		if reqErr != nil {
@@ -970,18 +967,21 @@ func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPat
 	return nil
 }
 
-func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPaths, kind, name string, entry LockEntry) error {
+func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPaths, kind, name string, plugin *config.PluginDef, entry LockEntry) error {
 	if entry.ResolvedURL == "" || entry.ArchiveSHA256 == "" {
 		return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init --config %s`", kind, name, paths.configPath)
 	}
 
-	src, parseErr := pluginsource.Parse(entry.Source)
+	src, parseErr := sourceForPlugin(plugin)
+	if parseErr != nil {
+		src, parseErr = pluginsource.Parse(entry.Source)
+	}
 	var (
 		download *pluginpkg.DownloadResult
 		err      error
 	)
 	if parseErr == nil && src.Host == pluginsource.HostGitHub {
-		download, err = ghresolver.DownloadResolvedAsset(ctx, http.DefaultClient, entry.ResolvedURL, "")
+		download, err = ghresolver.DownloadResolvedAsset(ctx, http.DefaultClient, entry.ResolvedURL, src.Token)
 	} else {
 		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, entry.ResolvedURL, nil)
 		if reqErr != nil {
