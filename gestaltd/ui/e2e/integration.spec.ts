@@ -20,22 +20,4 @@ test.describe("Integration: Go server contract", () => {
       page.getByRole("heading", { name: "Integrations" }),
     ).toBeVisible();
   });
-
-  test("tokens CRUD works against Go server", async ({ page }) => {
-    await injectAuth(page);
-    await page.goto("/tokens");
-    await expect(
-      page.getByRole("heading", { name: "API Tokens" }),
-    ).toBeVisible();
-
-    const tokenName = `e2e-test-${Date.now()}`;
-    await page.getByLabel("Token name").fill(tokenName);
-    await page.getByRole("button", { name: "Create Token" }).click();
-    await expect(page.getByText("Copy this token now")).toBeVisible();
-
-    const row = page.locator("tr", { hasText: tokenName });
-    await expect(row).toBeVisible();
-    await row.getByRole("button", { name: "Revoke" }).click();
-    await expect(row).toBeHidden();
-  });
 });

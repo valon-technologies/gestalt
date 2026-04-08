@@ -386,7 +386,7 @@ func validateProviderAuth(path string, auth *pluginmanifestv1.ProviderAuth) erro
 		if auth.TokenURL == "" {
 			return fmt.Errorf("%s.token_url is required for oauth2", path)
 		}
-	case pluginmanifestv1.AuthTypeBearer, pluginmanifestv1.AuthTypeManual, pluginmanifestv1.AuthTypeNone:
+	case pluginmanifestv1.AuthTypeMCPOAuth, pluginmanifestv1.AuthTypeBearer, pluginmanifestv1.AuthTypeManual, pluginmanifestv1.AuthTypeNone:
 	default:
 		return fmt.Errorf("unsupported %s.type %q", path, auth.Type)
 	}
@@ -400,12 +400,18 @@ func validateExecutableProviderMetadata(provider *pluginmanifestv1.Plugin) error
 	if err := validateProviderAuth("provider.auth", provider.Auth); err != nil {
 		return err
 	}
+	if provider.Auth != nil && provider.Auth.Type == pluginmanifestv1.AuthTypeMCPOAuth && provider.MCPURL == "" {
+		return fmt.Errorf("provider.auth.type %q requires an MCP surface", pluginmanifestv1.AuthTypeMCPOAuth)
+	}
 	for name, conn := range provider.Connections {
 		if conn == nil {
 			continue
 		}
 		if err := validateProviderAuth(fmt.Sprintf("provider.connections.%s.auth", name), conn.Auth); err != nil {
 			return err
+		}
+		if conn.Auth != nil && conn.Auth.Type == pluginmanifestv1.AuthTypeMCPOAuth && provider.MCPURL == "" {
+			return fmt.Errorf("provider.connections.%s.auth.type %q requires an MCP surface", name, pluginmanifestv1.AuthTypeMCPOAuth)
 		}
 		if conn.Mode == "" {
 			continue

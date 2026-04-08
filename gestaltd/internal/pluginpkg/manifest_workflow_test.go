@@ -340,3 +340,78 @@ provider:
 		t.Fatalf("expected declarative/spec provider to omit provider entrypoint, got %+v", manifest.Entrypoints.Provider)
 	}
 }
+
+func TestManifestWorkflow_AcceptsProviderWireMCPOAuthManifestAcrossDirectoryAndArchive(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	sourceDir := filepath.Join(root, "plugin-mcp-oauth")
+	manifestPath := mustWriteManifestData(t, sourceDir, "plugin.yaml", []byte(`
+source: github.com/acme/plugins/notion
+version: 0.0.1-alpha.1
+display_name: Notion
+provider:
+  connections:
+    mcp:
+      mode: user
+      auth:
+        type: mcp_oauth
+  surfaces:
+    mcp:
+      url: https://mcp.notion.com/mcp
+      connection: mcp
+`))
+
+	_, dirManifest, err := ReadManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadManifestFile(dir): %v", err)
+	}
+	if dirManifest.Plugin == nil {
+		t.Fatal("expected plugin metadata")
+	}
+	if dirManifest.Plugin.MCPURL != "https://mcp.notion.com/mcp" {
+		t.Fatalf("plugin mcp_url = %q", dirManifest.Plugin.MCPURL)
+	}
+	if dirManifest.Plugin.MCPConnection != "mcp" {
+		t.Fatalf("plugin mcp_connection = %q, want mcp", dirManifest.Plugin.MCPConnection)
+	}
+	if conn := dirManifest.Plugin.Connections["mcp"]; conn == nil || conn.Auth == nil || conn.Auth.Type != pluginmanifestv1.AuthTypeMCPOAuth {
+		t.Fatalf("plugin connection auth = %#v", dirManifest.Plugin.Connections["mcp"])
+	}
+
+	archivePath := filepath.Join(root, "plugin-mcp-oauth.tar.gz")
+	if err := CreatePackageFromDir(sourceDir, archivePath); err != nil {
+		t.Fatalf("CreatePackageFromDir: %v", err)
+	}
+
+	_, archiveManifest, _, err := LoadManifestFromPath(archivePath)
+	if err != nil {
+		t.Fatalf("LoadManifestFromPath(archive): %v", err)
+	}
+	if !ManifestEqual(dirManifest, archiveManifest) {
+		t.Fatalf("directory and archive manifests differ:\ndir=%#v\narchive=%#v", dirManifest, archiveManifest)
+	}
+}
+
+func TestManifestWorkflow_RejectsMCPOAuthManifestWithoutMCPSurface(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manifestPath := mustWriteManifestData(t, dir, "plugin.yaml", []byte(`
+source: github.com/acme/plugins/bad-mcp-oauth
+version: 0.0.1-alpha.1
+provider:
+  connections:
+    mcp:
+      auth:
+        type: mcp_oauth
+`))
+
+	_, _, err := ReadManifestFile(manifestPath)
+	if err == nil {
+		t.Fatal("expected invalid manifest")
+	}
+	if !strings.Contains(err.Error(), `provider.connections.mcp.auth.type "mcp_oauth" requires an MCP surface`) {
+		t.Fatalf("error = %v", err)
+	}
+}

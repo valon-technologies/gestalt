@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { getTokens, APIToken } from "@/lib/api";
 import Nav from "@/components/Nav";
 import TokenTable from "@/components/TokenTable";
@@ -11,17 +11,30 @@ export default function TokensPage() {
   const [tokens, setTokens] = useState<APIToken[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const loadRequestIdRef = useRef(0);
 
-  function loadTokens() {
-    getTokens()
-      .then(setTokens)
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : "Failed to load tokens");
-      })
-      .finally(() => setLoading(false));
+  async function loadTokens() {
+    const requestID = loadRequestIdRef.current + 1;
+    loadRequestIdRef.current = requestID;
+
+    try {
+      const nextTokens = await getTokens();
+      if (loadRequestIdRef.current !== requestID) return;
+      setTokens(nextTokens);
+      setError(null);
+    } catch (err) {
+      if (loadRequestIdRef.current !== requestID) return;
+      setError(err instanceof Error ? err.message : "Failed to load tokens");
+    } finally {
+      if (loadRequestIdRef.current === requestID) {
+        setLoading(false);
+      }
+    }
   }
 
-  useEffect(() => { loadTokens(); }, []);
+  useEffect(() => {
+    void loadTokens();
+  }, []);
 
   return (
     <AuthGuard>
