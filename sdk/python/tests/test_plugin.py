@@ -111,6 +111,17 @@ class PluginOperationTests(unittest.TestCase):
         self.assertEqual(body["token"], "tok-abc")
         self.assertEqual(body["region"], "us-east-1")
 
+    def test_async_handler(self) -> None:
+        plugin = Plugin("test-plugin")
+
+        @plugin.operation
+        async def fetch() -> dict[str, str]:
+            return {"async": "result"}
+
+        result = plugin.execute("fetch", {}, Request())
+        self.assertEqual(result.status, 200)
+        self.assertEqual(json.loads(result.body), {"async": "result"})
+
     def test_handler_exception_returns_500(self) -> None:
         """A handler that raises should return 500 with the error message."""
         plugin = Plugin("test-plugin")
