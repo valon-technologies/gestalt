@@ -38,5 +38,6 @@ test.describe("Docs page", () => {
     await expect(
       page.getByRole("cell", { name: "http://localhost:8080/mcp" }),
     ).toBeVisible();
+    await expect(page.getByText("Claude Code")).toBeVisible();
   });
 });

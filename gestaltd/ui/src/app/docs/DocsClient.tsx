@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import Nav from "@/components/Nav";
+import { CopyIcon, CheckIcon } from "@/components/icons";
 
 const FALLBACK_ORIGIN = "https://your-gestalt-host";
 
@@ -35,7 +36,18 @@ const sections: Section[] = [
     subsections: [{ id: "invoke-http", label: "Invoke over HTTP" }],
   },
   { id: "tokens", label: "Manage API Tokens", subsections: [] },
-  { id: "mcp", label: "Use With MCP", subsections: [] },
+  {
+    id: "mcp",
+    label: "Use With MCP",
+    subsections: [
+      { id: "mcp-claude-code", label: "Claude Code" },
+      { id: "mcp-claude-desktop", label: "Claude Desktop" },
+      { id: "mcp-cursor", label: "Cursor" },
+      { id: "mcp-vscode-copilot", label: "VS Code Copilot" },
+      { id: "mcp-windsurf", label: "Windsurf" },
+      { id: "mcp-other", label: "Other Clients" },
+    ],
+  },
   {
     id: "troubleshooting",
     label: "Troubleshooting",
@@ -138,7 +150,9 @@ export default function DocsClient() {
                 <code className="font-mono text-sm text-primary">gestalt</code>{" "}
                 CLI, point it at this deployment, sign in, connect
                 integrations, invoke operations, mint API tokens, and attach an
-                MCP-aware client to the same server.
+                MCP-aware client to the same server. No command-line
+                experience is required — follow the steps below and copy the
+                commands as-is.
               </p>
               <div className="mt-8 rounded-xl border border-alpha bg-base-100 p-5 dark:bg-surface">
                 <p className="text-xs font-medium uppercase tracking-[0.16em] text-faint">
@@ -165,6 +179,14 @@ export default function DocsClient() {
                 <code className="font-mono text-sm text-primary">gestalt</code>{" "}
                 CLI. <code className="font-mono text-sm text-primary">gestaltd</code>{" "}
                 is the server binary used by whoever operates the deployment.
+              </p>
+              <p className="doc-copy">
+                The recommended way to install is with{" "}
+                <a href="https://brew.sh" target="_blank" rel="noreferrer" className="doc-link">Homebrew</a>
+                , a free package manager for macOS and Linux.
+                If you do not have Homebrew yet, visit{" "}
+                <a href="https://brew.sh" target="_blank" rel="noreferrer" className="doc-link">brew.sh</a>
+                {" "}to install it first.
               </p>
               <CodeBlock
                 code={`brew install valon-technologies/gestalt/gestalt`}
@@ -239,8 +261,10 @@ export GESTALT_URL=${origin}`}
 
               <Subheading id="authenticate" title="Authenticate" />
               <p className="doc-copy">
-                Browser login is the normal path for interactive use. For
-                scripts, you can also set a Gestalt API token directly.
+                Browser login is the normal path for interactive use. Running
+                the command below opens your browser automatically — just
+                approve the sign-in when prompted. For scripts, you can also
+                set a Gestalt API token directly.
               </p>
               <CodeBlock
                 code={`gestalt auth login
@@ -336,14 +360,34 @@ gestalt tokens revoke <token-id>`}
             <DocSection
               id="mcp"
               title="Use With MCP"
-              description="Gestalt exposes one authenticated MCP endpoint at `/mcp` whenever at least one integration enables MCP."
+              description="Gestalt exposes a single MCP endpoint that gives AI tools access to all your connected integrations. Create an API token on the API Tokens page first, then configure your preferred tool below."
             >
+              <InfoTable
+                rows={[
+                  ["Endpoint", `${origin}/mcp`],
+                  ["Authentication", "Authorization: Bearer gst_api_..."],
+                  [
+                    "If no tools appear",
+                    "Confirm that the integration is MCP-enabled and connected for your user.",
+                  ],
+                ]}
+              />
+
+              <Subheading id="mcp-claude-code" title="Claude Code" />
               <p className="doc-copy">
-                The endpoint for this deployment is{" "}
+                Add Gestalt as an MCP server in your Claude Code settings. You
+                can configure it globally or per-project.
+              </p>
+              <p className="doc-copy">
+                Config file:{" "}
                 <code className="font-mono text-sm text-primary">
-                  {origin}/mcp
-                </code>
-                .
+                  .claude/settings.json
+                </code>{" "}
+                (global) or{" "}
+                <code className="font-mono text-sm text-primary">
+                  .claude/settings.local.json
+                </code>{" "}
+                (project)
               </p>
               <CodeBlock
                 code={`{
@@ -358,21 +402,135 @@ gestalt tokens revoke <token-id>`}
 }`}
               />
               <p className="doc-copy">
-                Exact client config keys vary, but the important parts do not:
-                use the deployed{" "}
-                <code className="font-mono text-sm text-primary">/mcp</code>{" "}
-                URL and send the same bearer token format accepted by the HTTP
-                API.
+                You can also run{" "}
+                <code className="font-mono text-sm text-primary">
+                  gestalt init
+                </code>{" "}
+                to configure this automatically.
+              </p>
+
+              <Subheading id="mcp-claude-desktop" title="Claude Desktop" />
+              <p className="doc-copy">
+                Add the same server block to Claude Desktop&apos;s config file:
               </p>
               <InfoTable
                 rows={[
-                  ["Endpoint", `${origin}/mcp`],
-                  ["Authentication", "Authorization: Bearer gst_api_..."],
                   [
-                    "If no tools appear",
-                    "Confirm that the integration is MCP-enabled and connected for your user.",
+                    "macOS",
+                    "~/Library/Application Support/Claude/claude_desktop_config.json",
+                  ],
+                  [
+                    "Windows",
+                    "%APPDATA%\\Claude\\claude_desktop_config.json",
                   ],
                 ]}
+              />
+              <CodeBlock
+                code={`{
+  "mcpServers": {
+    "gestalt": {
+      "url": "${origin}/mcp",
+      "headers": {
+        "Authorization": "Bearer gst_api_your_token_here"
+      }
+    }
+  }
+}`}
+              />
+              <p className="doc-copy">
+                Restart Claude Desktop after editing the config file.
+              </p>
+
+              <Subheading id="mcp-cursor" title="Cursor" />
+              <p className="doc-copy">
+                Config file:{" "}
+                <code className="font-mono text-sm text-primary">
+                  .cursor/mcp.json
+                </code>{" "}
+                in your project root, or{" "}
+                <code className="font-mono text-sm text-primary">
+                  ~/.cursor/mcp.json
+                </code>{" "}
+                globally.
+              </p>
+              <CodeBlock
+                code={`{
+  "mcpServers": {
+    "gestalt": {
+      "url": "${origin}/mcp",
+      "headers": {
+        "Authorization": "Bearer gst_api_your_token_here"
+      }
+    }
+  }
+}`}
+              />
+
+              <Subheading id="mcp-vscode-copilot" title="VS Code Copilot" />
+              <p className="doc-copy">
+                Config file:{" "}
+                <code className="font-mono text-sm text-primary">
+                  .vscode/settings.json
+                </code>
+              </p>
+              <CodeBlock
+                code={`{
+  "github.copilot.chat.mcp.servers": [
+    {
+      "name": "gestalt",
+      "type": "http",
+      "url": "${origin}/mcp",
+      "headers": {
+        "Authorization": "Bearer gst_api_your_token_here"
+      }
+    }
+  ]
+}`}
+              />
+
+              <Subheading id="mcp-windsurf" title="Windsurf" />
+              <p className="doc-copy">
+                Config file:{" "}
+                <code className="font-mono text-sm text-primary">
+                  ~/.codeium/windsurf/mcp_config.json
+                </code>
+              </p>
+              <CodeBlock
+                code={`{
+  "mcpServers": {
+    "gestalt": {
+      "url": "${origin}/mcp",
+      "headers": {
+        "Authorization": "Bearer gst_api_your_token_here"
+      }
+    }
+  }
+}`}
+              />
+
+              <Subheading id="mcp-other" title="Other Clients" />
+              <p className="doc-copy">
+                Any MCP-compatible client can connect to Gestalt. You need
+                three pieces of information:
+              </p>
+              <InfoTable
+                rows={[
+                  ["URL", `${origin}/mcp`],
+                  ["Header", "Authorization: Bearer gst_api_..."],
+                  ["Config key", "usually mcpServers"],
+                ]}
+              />
+              <CodeBlock
+                code={`{
+  "mcpServers": {
+    "gestalt": {
+      "url": "${origin}/mcp",
+      "headers": {
+        "Authorization": "Bearer gst_api_your_token_here"
+      }
+    }
+  }
+}`}
               />
             </DocSection>
 
@@ -498,10 +656,32 @@ function Subheading({ id, title }: { id?: string; title: string }) {
 }
 
 function CodeBlock({ code }: { code: string }) {
+  const [copied, setCopied] = useState(false);
+
+  function handleCopy() {
+    navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
+
   return (
-    <pre className="overflow-x-auto rounded-xl border border-alpha bg-base-100 px-4 py-4 font-mono text-sm leading-6 text-primary dark:bg-surface">
-      <code>{code}</code>
-    </pre>
+    <div className="relative group">
+      <pre className="overflow-x-auto rounded-xl border border-alpha bg-base-100 px-4 py-4 pr-12 font-mono text-sm leading-6 text-primary dark:bg-surface">
+        <code>{code}</code>
+      </pre>
+      <button
+        onClick={handleCopy}
+        className="absolute right-3 top-3 rounded-md p-1.5 text-muted opacity-0 transition-all duration-150 hover:bg-alpha-5 hover:text-primary group-hover:opacity-100"
+        title="Copy to clipboard"
+        aria-label="Copy to clipboard"
+      >
+        {copied ? (
+          <CheckIcon className="h-4 w-4 text-grove-600 dark:text-grove-400" />
+        ) : (
+          <CopyIcon className="h-4 w-4" />
+        )}
+      </button>
+    </div>
   );
 }
 
