@@ -58,6 +58,9 @@ where
     }
 
     let base_url = api::resolve_url(url_override)?;
+    if matches!(api::fetch_auth_info(&base_url), Ok(info) if !info.login_supported) {
+        bail!("authentication is disabled on this server");
+    }
 
     let listener =
         std::net::TcpListener::bind("127.0.0.1:0").context("failed to bind callback listener")?;

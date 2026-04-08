@@ -1,16 +1,10 @@
 use anyhow::{Context, Result};
-use serde::Deserialize;
 
-use crate::api::{self, AUTH_INFO_PATH, DEFAULT_URL, PROJECT_CONFIG_DIR, PROJECT_CONFIG_FILE};
+use crate::api::{self, DEFAULT_URL, PROJECT_CONFIG_DIR, PROJECT_CONFIG_FILE};
 use crate::commands::auth;
 use crate::config::ConfigStore;
 use crate::interactive::{InputPrompt, prompt_confirm, prompt_input};
 use crate::output;
-
-#[derive(Debug, Deserialize)]
-struct AuthInfo {
-    login_supported: bool,
-}
 
 pub fn run(url_override: Option<&str>) -> Result<()> {
     eprintln!("Welcome to Gestalt! Let's get you set up.\n");
@@ -53,22 +47,5 @@ pub fn run(url_override: Option<&str>) -> Result<()> {
 }
 
 fn server_auth_disabled(url: &str) -> bool {
-    let auth_info_url = format!("{url}{AUTH_INFO_PATH}");
-    let client = reqwest::blocking::Client::builder()
-        .timeout(std::time::Duration::from_secs(5))
-        .build()
-        .ok();
-    let Some(client) = client else {
-        return false;
-    };
-    let resp = client.get(&auth_info_url).send().ok();
-    let Some(resp) = resp else {
-        return false;
-    };
-    if !resp.status().is_success() {
-        return false;
-    }
-    resp.json::<AuthInfo>()
-        .map(|info| !info.login_supported)
-        .unwrap_or(false)
+    matches!(api::fetch_auth_info(url), Ok(info) if !info.login_supported)
 }

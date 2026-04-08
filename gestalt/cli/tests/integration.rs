@@ -13,6 +13,7 @@ use reqwest::{Method, StatusCode, header};
 use tempfile::TempDir;
 
 const TEST_TOKEN: &str = "test-token";
+const LOGIN_FLOW_REQUEST_COUNT: usize = 4;
 
 macro_rules! json_mock {
     ($server:expr, $method:expr, $path:expr, $status:expr) => {
@@ -126,7 +127,7 @@ fn spawn_login_server() -> LoginServer {
     let server_state = Arc::clone(&state);
     let handle = std::thread::spawn(move || {
         let mut workers = Vec::new();
-        for _ in 0..3 {
+        for _ in 0..LOGIN_FLOW_REQUEST_COUNT {
             let (stream, _) = listener.accept().unwrap();
             let state = Arc::clone(&server_state);
             let login_response_url = login_response_url.clone();
@@ -152,6 +153,14 @@ fn handle_login_request(
 ) {
     let request = read_http_request(&mut stream);
     match request.target.as_str() {
+        "/api/v1/auth/info" if request.method == Method::GET => {
+            write_http_response(
+                &mut stream,
+                StatusCode::OK,
+                http::APPLICATION_JSON,
+                r#"{"provider":"local","display_name":"local","login_supported":true}"#,
+            );
+        }
         "/api/v1/auth/login" if request.method == Method::POST => {
             let body: serde_json::Value = serde_json::from_slice(&request.body).unwrap();
             let mut state = state.lock().unwrap();
@@ -615,6 +624,28 @@ fn test_auth_login_stores_credentials_and_serves_styled_browser_page() {
     assert_eq!(credentials["api_url"], base_url);
     assert_eq!(credentials["api_token"], "cli-secret");
     assert_eq!(credentials["api_token_id"], "tok-123");
+}
+
+#[test]
+fn test_auth_login_fails_when_server_auth_is_disabled() {
+    let _lock = env_lock();
+    let tempdir = tempfile::tempdir().unwrap();
+    let _env = EnvGuard::new(tempdir.path());
+    let mut server = Server::new();
+    let _auth_info = json_mock!(server, Method::GET, "/api/v1/auth/info", StatusCode::OK)
+        .with_body(r#"{"provider":"none","display_name":"none","login_supported":false}"#)
+        .create();
+    let login = json_mock!(server, Method::POST, "/api/v1/auth/login", StatusCode::OK)
+        .expect(0)
+        .create();
+
+    let err = gestalt::commands::auth::login_with_browser_opener(Some(&server.url()), |_| {
+        panic!("browser should not open when auth is disabled");
+    })
+    .unwrap_err();
+
+    assert_eq!(err.to_string(), "authentication is disabled on this server");
+    login.assert();
 }
 
 #[test]
