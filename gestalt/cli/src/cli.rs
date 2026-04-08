@@ -48,8 +48,8 @@ pub enum Commands {
         /// Integration name (e.g., github, slack)
         integration: String,
 
-        /// Operation name (e.g., search_code, list_channels). Omit to list available operations.
-        operation: Option<String>,
+        /// Operation name segments joined by "." (e.g., "chat postMessage" or "chat.postMessage"). Omit to list available operations.
+        operation: Vec<String>,
 
         /// Parameters as key=value or key:=json pairs
         #[arg(short = 'p', long = "param", value_parser = params::parse_param_entry)]

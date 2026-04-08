@@ -1229,6 +1229,22 @@ fn catalog_body() -> &'static str {
     }]"#
 }
 
+fn multi_operation_catalog() -> &'static str {
+    r#"[
+        {"id": "widgets.create", "description": "Create a widget", "method": "POST", "parameters": [
+            {"name": "name", "type": "string", "required": true},
+            {"name": "color", "type": "string", "required": true}
+        ]},
+        {"id": "widgets.delete", "description": "Delete a widget", "method": "POST", "parameters": []},
+        {"id": "widgets.list", "description": "List widgets", "method": "GET", "parameters": []},
+        {"id": "gadgets.fetch", "description": "Fetch a gadget", "method": "GET", "parameters": []},
+        {"id": "gadgets.update", "description": "Update a gadget", "method": "POST", "parameters": []},
+        {"id": "status.check", "description": "Check status", "method": "GET", "parameters": []},
+        {"id": "widgets.bulk.create", "description": "Bulk create widgets", "method": "POST", "parameters": []},
+        {"id": "widgets.bulk.delete", "description": "Bulk delete widgets", "method": "POST", "parameters": []}
+    ]"#
+}
+
 fn single_operation_catalog(id: &str) -> String {
     format!(r#"[{{"id":"{id}"}}]"#)
 }
@@ -1625,4 +1641,166 @@ fn test_cli_invoke_rejects_duplicate_scalar_params() {
     cmd.assert().failure().stderr(predicate::str::contains(
         "parameter 'name' is not an array type but was specified multiple times",
     ));
+}
+
+#[test]
+fn test_prefix_match_shows_filtered_table() {
+    let mut server = Server::new();
+    let _catalog_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/test_svc/operations",
+        StatusCode::OK
+    )
+    .with_body(multi_operation_catalog())
+    .create();
+
+    let output = run_cli(&server, &["invoke", "test_svc", "widgets"]);
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("widgets.create"), "stdout: {stdout}");
+    assert!(stdout.contains("widgets.delete"), "stdout: {stdout}");
+    assert!(stdout.contains("widgets.list"), "stdout: {stdout}");
+    assert!(
+        !stdout.contains("gadgets.fetch"),
+        "should not contain non-matching ops: {stdout}"
+    );
+    assert!(
+        !stdout.contains("status.check"),
+        "should not contain non-matching ops: {stdout}"
+    );
+
+    // Middle-tier prefix: "widgets.bulk" filters to three-segment operations only
+    let output = run_cli(&server, &["invoke", "test_svc", "widgets", "bulk"]);
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(stdout.contains("widgets.bulk.create"), "stdout: {stdout}");
+    assert!(stdout.contains("widgets.bulk.delete"), "stdout: {stdout}");
+    assert!(
+        !stdout.contains("widgets.create"),
+        "should not contain shallower ops: {stdout}"
+    );
+    assert!(
+        !stdout.contains("widgets.list"),
+        "should not contain shallower ops: {stdout}"
+    );
+}
+
+#[test]
+fn test_space_separated_segments_invoke() {
+    let mut server = Server::new();
+    let _catalog_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/test_svc/operations",
+        StatusCode::OK
+    )
+    .with_body(multi_operation_catalog())
+    .create();
+
+    let invoke_mock = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/test_svc/widgets.create",
+        StatusCode::OK
+    )
+    .with_body(r#"{"ok": true}"#)
+    .create();
+
+    let output = run_cli(
+        &server,
+        &[
+            "invoke",
+            "test_svc",
+            "widgets",
+            "create",
+            "-p",
+            "name=foo",
+            "-p",
+            "color=red",
+        ],
+    );
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    invoke_mock.assert();
+
+    // Three segments join to "widgets.bulk.create"
+    let deep_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/test_svc/widgets.bulk.create",
+        StatusCode::OK
+    )
+    .with_body(r#"{"ok": true}"#)
+    .create();
+
+    let output = run_cli(
+        &server,
+        &["invoke", "test_svc", "widgets", "bulk", "create"],
+    );
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    deep_mock.assert();
+}
+
+#[test]
+fn test_no_match_returns_error() {
+    let mut server = Server::new();
+    let _catalog_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/test_svc/operations",
+        StatusCode::OK
+    )
+    .with_body(multi_operation_catalog())
+    .create();
+
+    let output = run_cli(&server, &["invoke", "test_svc", "nonexistent"]);
+    assert!(!output.status.success());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("no operation matching"), "stderr: {stderr}");
+}
+
+#[test]
+fn test_prefix_match_with_params_warns() {
+    let mut server = Server::new();
+    let _catalog_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/test_svc/operations",
+        StatusCode::OK
+    )
+    .with_body(multi_operation_catalog())
+    .create();
+
+    let output = run_cli(
+        &server,
+        &["invoke", "test_svc", "widgets", "-p", "name=foo"],
+    );
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("parameters ignored"), "stderr: {stderr}");
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        stdout.contains("widgets.create"),
+        "should still show filtered table: {stdout}"
+    );
 }

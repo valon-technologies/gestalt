@@ -40,6 +40,32 @@ operations:
 	}
 }
 
+func TestLoadCatalogYAMLRejectsMalformedOperationIDs(t *testing.T) {
+	t.Parallel()
+
+	invalid := []string{
+		"chat..post",
+		".chat",
+		"chat.",
+		"-foo",
+		"foo-",
+		"foo.-bar",
+		"foo.bar-",
+		"foo bar",
+		"foo@bar",
+		"foo/bar",
+	}
+	for _, id := range invalid {
+		t.Run(id, func(t *testing.T) {
+			t.Parallel()
+			_, err := LoadCatalogYAML([]byte("name: bad\noperations:\n  - id: \"" + id + "\"\n    method: GET\n    path: /test\n"))
+			if err == nil {
+				t.Fatalf("expected error for operation id %q", id)
+			}
+		})
+	}
+}
+
 func TestLoadCatalogYAMLRejectsDuplicateOperationIDs(t *testing.T) {
 	t.Parallel()
 

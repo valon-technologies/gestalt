@@ -1,7 +1,9 @@
 use anyhow::{Context, Result};
 
 use crate::api::ApiClient;
-use crate::catalog;
+use crate::catalog::{
+    self, CatalogOperation, CatalogParameter, OperationsCatalog, ResolvedOperation,
+};
 use crate::output::{self, Format};
 use crate::params::{self, ParamEntry};
 
@@ -13,6 +15,38 @@ pub struct InvokeOptions<'a> {
     pub input_file: Option<&'a str>,
 }
 
+pub fn run(
+    client: &ApiClient,
+    integration: &str,
+    segments: &[String],
+    params: &[ParamEntry],
+    options: InvokeOptions<'_>,
+    format: Format,
+) -> Result<()> {
+    let cat = catalog::fetch_catalog(client, integration)?;
+    let query = segments.join(".");
+
+    match cat.resolve(&query)? {
+        ResolvedOperation::All(ops) => {
+            warn_ignored_params(params, "no operation specified");
+            display_operations(ops, format)
+        }
+        ResolvedOperation::Exact(_) => {
+            execute(client, &cat, integration, &query, params, options, format)
+        }
+        ResolvedOperation::Prefix(matches) => {
+            let n = matches.len();
+            let reason = format!(
+                "prefix matched {} operation{}",
+                n,
+                if n == 1 { "" } else { "s" }
+            );
+            warn_ignored_params(params, &reason);
+            display_operations(matches, format)
+        }
+    }
+}
+
 pub fn invoke(
     client: &ApiClient,
     integration: &str,
@@ -22,7 +56,32 @@ pub fn invoke(
     format: Format,
 ) -> Result<()> {
     let cat = catalog::fetch_catalog(client, integration)?;
-    let mut param_map = params::assemble_params(params, Some(&cat), operation)?;
+    execute(
+        client,
+        &cat,
+        integration,
+        operation,
+        params,
+        options,
+        format,
+    )
+}
+
+pub fn list_operations(client: &ApiClient, integration: &str, format: Format) -> Result<()> {
+    let cat = catalog::fetch_catalog(client, integration)?;
+    display_operations(cat.operations(), format)
+}
+
+fn execute(
+    client: &ApiClient,
+    cat: &OperationsCatalog,
+    integration: &str,
+    operation: &str,
+    params: &[ParamEntry],
+    options: InvokeOptions<'_>,
+    format: Format,
+) -> Result<()> {
+    let mut param_map = params::assemble_params(params, Some(cat), operation)?;
 
     if let Some(file_path) = options.input_file {
         let file_map = params::load_input_file(file_path)?;
@@ -85,24 +144,25 @@ pub fn invoke(
     Ok(())
 }
 
-pub fn list_operations(client: &ApiClient, integration: &str, format: Format) -> Result<()> {
-    let cat = catalog::fetch_catalog(client, integration)?;
+fn display_operations<'a>(
+    operations: impl IntoIterator<Item = &'a CatalogOperation>,
+    format: Format,
+) -> Result<()> {
+    let ops: Vec<&CatalogOperation> = operations.into_iter().collect();
 
     match format {
         Format::Json => {
-            output::print_json(&serde_json::to_value(cat.operations()).unwrap());
+            output::print_json(&serde_json::to_value(&ops).unwrap());
         }
         Format::Table => {
-            let rows: Vec<Vec<String>> = cat
-                .operations()
+            let rows: Vec<Vec<String>> = ops
                 .iter()
                 .map(|op| {
-                    let params = format_parameters(&op.parameters);
                     vec![
                         op.id.clone(),
                         op.description.clone(),
                         op.method.clone(),
-                        params,
+                        format_parameters(&op.parameters),
                     ]
                 })
                 .collect();
@@ -113,7 +173,13 @@ pub fn list_operations(client: &ApiClient, integration: &str, format: Format) ->
     Ok(())
 }
 
-fn format_parameters(params: &[catalog::CatalogParameter]) -> String {
+fn warn_ignored_params(params: &[ParamEntry], reason: &str) {
+    if !params.is_empty() {
+        output::print_warning(&format!("parameters ignored; {}", reason));
+    }
+}
+
+fn format_parameters(params: &[CatalogParameter]) -> String {
     params
         .iter()
         .map(|p| {

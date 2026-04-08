@@ -3,10 +3,13 @@ package catalog
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"gopkg.in/yaml.v3"
 )
+
+var validSegment = regexp.MustCompile(`^[a-zA-Z0-9_]([a-zA-Z0-9_-]*[a-zA-Z0-9_])?$`)
 
 const (
 	TransportMCPPassthrough = "mcp-passthrough"
@@ -143,6 +146,9 @@ func (c *Catalog) Validate() error {
 		if strings.TrimSpace(op.ID) == "" {
 			return fmt.Errorf("catalog %q has operation with empty id", c.Name)
 		}
+		if err := validateOperationID(op.ID); err != nil {
+			return fmt.Errorf("catalog %q operation %q: %w", c.Name, op.ID, err)
+		}
 		if _, ok := seen[op.ID]; ok {
 			return fmt.Errorf("catalog %q has duplicate operation id %q", c.Name, op.ID)
 		}
@@ -158,5 +164,14 @@ func (c *Catalog) Validate() error {
 		}
 	}
 
+	return nil
+}
+
+func validateOperationID(id string) error {
+	for _, seg := range strings.Split(id, ".") {
+		if !validSegment.MatchString(seg) {
+			return fmt.Errorf("id contains invalid characters; each segment must be alphanumeric, underscore, or hyphen (no leading/trailing hyphen)")
+		}
+	}
 	return nil
 }

@@ -65,27 +65,19 @@ fn run() -> anyhow::Result<()> {
             input_file,
         } => {
             let client = ApiClient::from_env(url)?;
-            match operation {
-                Some(op) => commands::invoke::invoke(
-                    &client,
-                    &integration,
-                    &op,
-                    &params,
-                    commands::invoke::InvokeOptions {
-                        connection: connection.as_deref(),
-                        instance: instance.as_deref(),
-                        select: select.as_deref(),
-                        input_file: input_file.as_deref(),
-                    },
-                    format,
-                ),
-                None => {
-                    if !params.is_empty() {
-                        output::print_warning("parameters ignored; no operation specified");
-                    }
-                    commands::invoke::list_operations(&client, &integration, format)
-                }
-            }
+            commands::invoke::run(
+                &client,
+                &integration,
+                &operation,
+                &params,
+                commands::invoke::InvokeOptions {
+                    connection: connection.as_deref(),
+                    instance: instance.as_deref(),
+                    select: select.as_deref(),
+                    input_file: input_file.as_deref(),
+                },
+                format,
+            )
         }
         Commands::Describe {
             integration,
