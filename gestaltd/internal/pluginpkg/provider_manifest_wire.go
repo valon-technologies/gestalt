@@ -29,6 +29,7 @@ type providerManifestWire struct {
 	Headers           map[string]string                                      `json:"headers,omitempty" yaml:"headers,omitempty"`
 	ManagedParameters []pluginmanifestv1.ManagedParameter                    `json:"managed_parameters,omitempty" yaml:"managed_parameters,omitempty"`
 	ResponseMapping   *pluginmanifestv1.ManifestResponseMapping              `json:"response_mapping,omitempty" yaml:"response_mapping,omitempty"`
+	Pagination        *pluginmanifestv1.ManifestPaginationConfig             `json:"pagination,omitempty" yaml:"pagination,omitempty"`
 	AllowedOperations map[string]*pluginmanifestv1.ManifestOperationOverride `json:"allowed_operations,omitempty" yaml:"allowed_operations,omitempty"`
 	Surfaces          providerManifestSurfacesWire                           `json:"surfaces,omitempty" yaml:"surfaces,omitempty"`
 	MCP               *providerManifestMCPWire                               `json:"mcp,omitempty" yaml:"mcp,omitempty"`
@@ -129,6 +130,7 @@ func providerWireToInternal(wire *providerManifestWireRoot) *pluginmanifestv1.Ma
 			Headers:           wire.Provider.Headers,
 			ManagedParameters: wire.Provider.ManagedParameters,
 			ResponseMapping:   wire.Provider.ResponseMapping,
+			Pagination:        wire.Provider.Pagination,
 			AllowedOperations: wire.Provider.AllowedOperations,
 		}
 		if len(manifest.Kinds) == 0 {
@@ -237,6 +239,7 @@ func internalProviderManifestToWire(manifest *pluginmanifestv1.Manifest) *provid
 		Headers:           manifest.Plugin.Headers,
 		ManagedParameters: manifest.Plugin.ManagedParameters,
 		ResponseMapping:   manifest.Plugin.ResponseMapping,
+		Pagination:        manifest.Plugin.Pagination,
 		AllowedOperations: manifest.Plugin.AllowedOperations,
 	}
 	if manifest.Entrypoints.Provider != nil {

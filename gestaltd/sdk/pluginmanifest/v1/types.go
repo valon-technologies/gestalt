@@ -60,6 +60,7 @@ type Plugin struct {
 	DefaultConnection string                                `json:"default_connection,omitempty" yaml:"default_connection,omitempty"`
 	Connections       map[string]*ManifestConnectionDef     `json:"connections,omitempty" yaml:"connections,omitempty"`
 	ResponseMapping   *ManifestResponseMapping              `json:"response_mapping,omitempty" yaml:"response_mapping,omitempty"`
+	Pagination        *ManifestPaginationConfig             `json:"pagination,omitempty" yaml:"pagination,omitempty"`
 }
 
 func (p *Plugin) IsDeclarative() bool {
@@ -105,9 +106,21 @@ type ProviderConnectionParam struct {
 	From        string `json:"from,omitempty" yaml:"from,omitempty"`
 }
 
+type ManifestPaginationConfig struct {
+	Style        string `json:"style" yaml:"style"`
+	CursorParam  string `json:"cursor_param,omitempty" yaml:"cursor_param,omitempty"`
+	CursorPath   string `json:"cursor_path,omitempty" yaml:"cursor_path,omitempty"`
+	LimitParam   string `json:"limit_param,omitempty" yaml:"limit_param,omitempty"`
+	DefaultLimit int    `json:"default_limit,omitempty" yaml:"default_limit,omitempty"`
+	ResultsPath  string `json:"results_path,omitempty" yaml:"results_path,omitempty"`
+	MaxPages     int    `json:"max_pages,omitempty" yaml:"max_pages,omitempty"`
+}
+
 type ManifestOperationOverride struct {
-	Alias       string `json:"alias,omitempty" yaml:"alias,omitempty"`
-	Description string `json:"description,omitempty" yaml:"description,omitempty"`
+	Alias       string                    `json:"alias,omitempty" yaml:"alias,omitempty"`
+	Description string                    `json:"description,omitempty" yaml:"description,omitempty"`
+	Paginate    bool                      `json:"paginate,omitempty" yaml:"paginate,omitempty"`
+	Pagination  *ManifestPaginationConfig `json:"pagination,omitempty" yaml:"pagination,omitempty"`
 }
 
 type ManifestConnectionDef struct {
