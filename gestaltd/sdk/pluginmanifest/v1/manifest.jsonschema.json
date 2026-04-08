@@ -25,6 +25,9 @@
     "icon_file": {
       "type": "string"
     },
+    "release": {
+      "$ref": "#/$defs/release"
+    },
     "plugin": {
       "$ref": "#/$defs/plugin"
     },
@@ -67,6 +70,36 @@
     }
   ],
   "$defs": {
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "build": {
+          "$ref": "#/$defs/release_build"
+        }
+      }
+    },
+    "release_build": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "command"
+      ],
+      "properties": {
+        "workdir": {
+          "type": "string",
+          "minLength": 1
+        },
+        "command": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
     "plugin": {
       "type": "object",
       "additionalProperties": false,

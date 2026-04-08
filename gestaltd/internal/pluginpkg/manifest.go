@@ -105,6 +105,14 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 			return err
 		}
 	}
+	if manifest.Release != nil {
+		if !sourceMode {
+			return fmt.Errorf("release metadata is only allowed in source manifests")
+		}
+		if err := validateReleaseMetadata(manifest.Release); err != nil {
+			return err
+		}
+	}
 	if len(manifest.Kinds) == 0 {
 		if manifest.Plugin != nil {
 			manifest.Kinds = append(manifest.Kinds, pluginmanifestv1.KindPlugin)
@@ -363,6 +371,44 @@ func validateRelativePackagePath(value, label string) error {
 	}
 	cleaned := path.Clean(value)
 	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, "../") {
+		return fmt.Errorf("%s must stay within the package", label)
+	}
+	if strings.Contains(value, "\\") {
+		return fmt.Errorf("%s must use forward slashes", label)
+	}
+	if cleaned != value {
+		return fmt.Errorf("%s must be normalized", label)
+	}
+	return nil
+}
+
+func validateReleaseMetadata(release *pluginmanifestv1.ReleaseMetadata) error {
+	if release == nil || release.Build == nil {
+		return nil
+	}
+	if err := validateRelativePackageDirectory(release.Build.Workdir, "release.build.workdir"); err != nil {
+		return err
+	}
+	if len(release.Build.Command) == 0 {
+		return fmt.Errorf("release.build.command is required")
+	}
+	for i, arg := range release.Build.Command {
+		if strings.TrimSpace(arg) == "" {
+			return fmt.Errorf("release.build.command[%d] is required", i)
+		}
+	}
+	return nil
+}
+
+func validateRelativePackageDirectory(value, label string) error {
+	if value == "" {
+		return nil
+	}
+	if strings.HasPrefix(value, "/") {
+		return fmt.Errorf("%s must be relative", label)
+	}
+	cleaned := path.Clean(value)
+	if cleaned == ".." || strings.HasPrefix(cleaned, "../") {
 		return fmt.Errorf("%s must stay within the package", label)
 	}
 	if strings.Contains(value, "\\") {

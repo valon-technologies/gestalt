@@ -481,7 +481,7 @@ gestalt invoke my-plugin greet -p name=Gestalt
 ## Release
 
 ```sh
-gestaltd plugin release --version 0.0.1-alpha.1
+gestaltd provider release --version 0.0.1-alpha.1
 ```
 
 Gestalt materializes the executable catalog automatically during release. Go, Python, and Rust source plugins build the host-platform artifact by default. Pass `--platform` with a comma-separated target list to build explicit platforms, or `--platform all` in CI to build the full supported release matrix.

@@ -18,12 +18,22 @@ type Manifest struct {
 	Description string             `json:"description,omitempty" yaml:"description,omitempty"`
 	IconFile    string             `json:"icon_file,omitempty" yaml:"icon_file,omitempty"`
 	Kinds       []string           `json:"kinds" yaml:"kinds"`
+	Release     *ReleaseMetadata   `json:"release,omitempty" yaml:"release,omitempty"`
 	Plugin      *Plugin            `json:"plugin,omitempty" yaml:"plugin,omitempty"`
 	Auth        *AuthMetadata      `json:"auth,omitempty" yaml:"auth,omitempty"`
 	Datastore   *DatastoreMetadata `json:"datastore,omitempty" yaml:"datastore,omitempty"`
 	WebUI       *WebUIMetadata     `json:"webui,omitempty" yaml:"webui,omitempty"`
 	Artifacts   []Artifact         `json:"artifacts,omitempty" yaml:"artifacts,omitempty"`
 	Entrypoints Entrypoints        `json:"entrypoints,omitzero" yaml:"entrypoints,omitempty"`
+}
+
+type ReleaseMetadata struct {
+	Build *ReleaseBuild `json:"build,omitempty" yaml:"build,omitempty"`
+}
+
+type ReleaseBuild struct {
+	Workdir string   `json:"workdir,omitempty" yaml:"workdir,omitempty"`
+	Command []string `json:"command" yaml:"command"`
 }
 
 type AuthMetadata struct {

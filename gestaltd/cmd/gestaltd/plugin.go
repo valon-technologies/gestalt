@@ -18,20 +18,20 @@ import (
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
 
-func runPlugin(args []string) error {
+func runProvider(args []string) error {
 	if len(args) == 0 {
-		printPluginUsage(os.Stderr)
+		printProviderUsage(os.Stderr)
 		return flag.ErrHelp
 	}
 
 	switch args[0] {
 	case "-h", "--help", "help":
-		printPluginUsage(os.Stderr)
+		printProviderUsage(os.Stderr)
 		return flag.ErrHelp
 	case "release":
-		return runPluginRelease(args[1:])
+		return runProviderRelease(args[1:])
 	default:
-		return fmt.Errorf("unknown plugin command %q", args[0])
+		return fmt.Errorf("unknown provider command %q", args[0])
 	}
 }
 
@@ -52,9 +52,9 @@ type releaseBuildTarget struct {
 	Kind string
 }
 
-func runPluginRelease(args []string) error {
-	fs := flag.NewFlagSet("gestaltd plugin release", flag.ContinueOnError)
-	fs.Usage = func() { printPluginReleaseUsage(fs.Output()) }
+func runProviderRelease(args []string) error {
+	fs := flag.NewFlagSet("gestaltd provider release", flag.ContinueOnError)
+	fs.Usage = func() { printProviderReleaseUsage(fs.Output()) }
 	version := fs.String("version", "", "semantic version string (required)")
 	outputDir := fs.String("output", defaultReleaseOutputDir, "output directory")
 	platforms := fs.String("platform", "", "comma-separated platforms (os/arch[/libc]) or 'all'")
@@ -82,6 +82,17 @@ func runPluginRelease(args []string) error {
 	if err != nil {
 		return err
 	}
+	sourceDir := filepath.Dir(manifestPath)
+	_, releaseManifest, err := pluginpkg.ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		return fmt.Errorf("read %s: %w", manifestPath, err)
+	}
+	if err := validateReleaseOutputDir(releaseManifest, sourceDir, *outputDir); err != nil {
+		return err
+	}
+	if err := pluginpkg.RunSourceReleaseBuild(manifestPath, releaseManifest); err != nil {
+		return err
+	}
 	_, srcManifest, err := pluginpkg.PrepareSourceManifest(manifestPath)
 	if err != nil {
 		return fmt.Errorf("prepare %s: %w", manifestPath, err)
@@ -95,19 +106,16 @@ func runPluginRelease(args []string) error {
 	}
 	pluginName := src.PluginName()
 
-	if err := validateReleaseOutputDir(srcManifest, ".", *outputDir); err != nil {
-		return err
-	}
 	if err := os.MkdirAll(*outputDir, 0755); err != nil {
 		return fmt.Errorf("create output dir: %w", err)
 	}
 
-	buildTarget, err := resolveReleaseBuildTarget(".", srcManifest)
+	buildTarget, err := resolveReleaseBuildTarget(sourceDir, srcManifest)
 	if err != nil {
 		return err
 	}
 
-	buildPlatforms, err := resolveReleaseBuildPlatforms(".", srcManifest, buildTarget, *platforms, platformFlagExplicit)
+	buildPlatforms, err := resolveReleaseBuildPlatforms(sourceDir, srcManifest, buildTarget, *platforms, platformFlagExplicit)
 	if err != nil {
 		return err
 	}
@@ -115,14 +123,14 @@ func runPluginRelease(args []string) error {
 	var archivePaths []string
 	if len(buildPlatforms) > 0 {
 		for _, platform := range buildPlatforms {
-			archivePath, err := buildPlatformArchive(srcManifest, pluginName, *version, buildTarget.Kind, platform, *outputDir, manifestFile, manifestFormat)
+			archivePath, err := buildPlatformArchive(sourceDir, srcManifest, pluginName, *version, buildTarget.Kind, platform, *outputDir, manifestFile, manifestFormat)
 			if err != nil {
 				return fmt.Errorf("build %s: %w", pluginpkg.PlatformString(platform.GOOS, platform.GOARCH, platform.LibC), err)
 			}
 			archivePaths = append(archivePaths, archivePath)
 		}
 	} else {
-		archivePath, err := buildSourceArchive(srcManifest, pluginName, *version, *outputDir, manifestFile, manifestFormat)
+		archivePath, err := buildSourceArchive(sourceDir, srcManifest, pluginName, *version, *outputDir, manifestFile, manifestFormat)
 		if err != nil {
 			return err
 		}
@@ -159,11 +167,11 @@ func resolveReleaseBuildTarget(root string, manifest *pluginmanifestv1.Manifest)
 	}
 
 	if len(buildKinds) > 1 {
-		return nil, fmt.Errorf("plugin release does not support building multiple executable kinds from source in one package: %s", strings.Join(buildKinds, ", "))
+		return nil, fmt.Errorf("provider release does not support building multiple executable kinds from source in one package: %s", strings.Join(buildKinds, ", "))
 	}
 	if len(requiredMissing) > 0 {
 		if len(buildKinds) > 0 {
-			return nil, fmt.Errorf("plugin release does not support mixing source-built %q with missing executable source kinds %s in one package", buildKinds[0], strings.Join(requiredMissing, ", "))
+			return nil, fmt.Errorf("provider release does not support mixing source-built %q with missing executable source kinds %s in one package", buildKinds[0], strings.Join(requiredMissing, ", "))
 		}
 		return nil, missingReleaseSourceBuildTargetError(requiredMissing)
 	}
@@ -230,14 +238,14 @@ func expandReleasePlatformValue(value string) (string, error) {
 	}
 }
 
-func buildPlatformArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, version, buildKind string, platform releasePlatform, outputDir, manifestFile, manifestFormat string) (string, error) {
+func buildPlatformArchive(sourceDir string, srcManifest *pluginmanifestv1.Manifest, pluginName, version, buildKind string, platform releasePlatform, outputDir, manifestFile, manifestFormat string) (string, error) {
 	stagingDir, err := os.MkdirTemp("", "gestalt-release-*")
 	if err != nil {
 		return "", err
 	}
 	defer func() { _ = os.RemoveAll(stagingDir) }()
 
-	manifest, plat, err := prepareBuiltPackageDir(stagingDir, ".", srcManifest, version, pluginName, buildKind, platform)
+	manifest, plat, err := prepareBuiltPackageDir(stagingDir, sourceDir, srcManifest, version, pluginName, buildKind, platform)
 	if err != nil {
 		return "", err
 	}
@@ -410,14 +418,14 @@ func currentReleasePlatform() string {
 	return runtime.GOOS + "/" + runtime.GOARCH
 }
 
-func buildSourceArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, version, outputDir, manifestFile, manifestFormat string) (string, error) {
+func buildSourceArchive(sourceDir string, srcManifest *pluginmanifestv1.Manifest, pluginName, version, outputDir, manifestFile, manifestFormat string) (string, error) {
 	archiveName := fmt.Sprintf("gestalt-plugin-%s_v%s.tar.gz", pluginName, version)
 	return createReleaseArchive(outputDir, archiveName, manifestFile, manifestFormat, func(stagingDir string) (*pluginmanifestv1.Manifest, error) {
-		manifest, err := buildSourceReleaseManifest(srcManifest, version, ".")
+		manifest, err := buildSourceReleaseManifest(srcManifest, version, sourceDir)
 		if err != nil {
 			return nil, err
 		}
-		if err := copyReleasePackageFiles(manifest, ".", stagingDir, true); err != nil {
+		if err := copyReleasePackageFiles(manifest, sourceDir, stagingDir, true); err != nil {
 			return nil, err
 		}
 		return manifest, nil
@@ -459,6 +467,7 @@ func buildSourceReleaseManifest(srcManifest *pluginmanifestv1.Manifest, version,
 		return nil, fmt.Errorf("clone manifest: %w", err)
 	}
 	manifest.Version = version
+	manifest.Release = nil
 
 	for i, artifact := range srcManifest.Artifacts {
 		digest, err := pluginpkg.FileSHA256(filepath.Join(sourceDir, filepath.FromSlash(artifact.Path)))
@@ -480,6 +489,7 @@ func buildReleaseManifest(srcManifest *pluginmanifestv1.Manifest, version, binar
 		return nil, fmt.Errorf("clone manifest: %w", err)
 	}
 	manifest.Version = version
+	manifest.Release = nil
 	manifest.Artifacts = []pluginmanifestv1.Artifact{
 		{OS: plat.GOOS, Arch: plat.GOARCH, LibC: plat.LibC, Path: binaryName, SHA256: digest},
 	}
@@ -732,22 +742,22 @@ func normalizeReleasePath(rel string) (string, error) {
 	return cleanPath, nil
 }
 
-func printPluginUsage(w io.Writer) {
+func printProviderUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd plugin <command> [flags]")
+	writeUsageLine(w, "  gestaltd provider <command> [flags]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Commands:")
-	writeUsageLine(w, "  release     Build plugin release archives")
+	writeUsageLine(w, "  release     Build provider release archives")
 }
 
-func printPluginReleaseUsage(w io.Writer) {
+func printProviderReleaseUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd plugin release --version VERSION [--output DIR] [--platform PLATFORMS]")
+	writeUsageLine(w, "  gestaltd provider release --version VERSION [--output DIR] [--platform PLATFORMS]")
 	writeUsageLine(w, "")
-	writeUsageLine(w, "Build a plugin release archive for the host platform by default.")
+	writeUsageLine(w, "Build a provider release archive for the host platform by default.")
 	writeUsageLine(w, "Pass --platform with a comma-separated os/arch[/libc] list or --platform all")
 	writeUsageLine(w, "to build multiple per-platform tar.gz archives plus a checksums file.")
-	writeUsageLine(w, "Run from the plugin source directory.")
+	writeUsageLine(w, "Run from the provider source directory.")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")
 	writeUsageLine(w, "  --version    Semantic version string (required)")
