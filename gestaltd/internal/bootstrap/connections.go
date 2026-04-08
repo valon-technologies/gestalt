@@ -172,8 +172,8 @@ func (plan pluginConnectionPlan) connectionMode() core.ConnectionMode {
 	}
 
 	addMode(connectionModeForConnection(plan.pluginConnection))
-	for _, conn := range plan.namedConnections {
-		addMode(connectionModeForConnection(conn))
+	for name := range plan.namedConnections {
+		addMode(connectionModeForConnection(plan.namedConnections[name]))
 	}
 
 	switch {
