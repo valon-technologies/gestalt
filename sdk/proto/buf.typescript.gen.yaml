@@ -1,0 +1,6 @@
+version: v2
+plugins:
+  - remote: buf.build/bufbuild/es
+    out: ../typescript/gen
+    opt:
+      - target=ts
