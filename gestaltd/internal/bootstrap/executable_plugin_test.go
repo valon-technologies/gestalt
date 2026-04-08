@@ -563,7 +563,7 @@ func TestExecutablePluginRequiresManifest(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected buildProvidersStrict to reject executable plugin without manifest")
 	}
-	if got := err.Error(); got != `bootstrap: provider validation failed: integration "echoext": integration "echoext" must resolve to an executable plugin manifest` {
+	if got := err.Error(); got != `bootstrap: provider validation failed: integration "echoext": integration "echoext" must resolve to a provider manifest` {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }

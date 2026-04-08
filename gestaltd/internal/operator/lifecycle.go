@@ -518,10 +518,6 @@ func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths initPa
 	if err := pluginpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, pluginmanifestv1.KindProvider, configMap); err != nil {
 		return LockProviderEntry{}, fmt.Errorf("plugin config validation for provider %q: %w", name, err)
 	}
-	entrypoint := pluginpkg.EntrypointForKind(installed.Manifest, pluginmanifestv1.KindProvider)
-	if entrypoint == nil {
-		return LockProviderEntry{}, fmt.Errorf("provider %q manifest does not define a %s entrypoint", name, pluginmanifestv1.KindProvider)
-	}
 	fingerprint, err := PluginFingerprint(name, plugin, paths.configDir)
 	if err != nil {
 		return LockProviderEntry{}, fmt.Errorf("fingerprinting provider %q plugin: %w", name, err)
@@ -530,10 +526,12 @@ func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths initPa
 	if err != nil {
 		return LockProviderEntry{}, fmt.Errorf("compute manifest path for provider %q: %w", name, err)
 	}
-	executablePath := filepath.Join(installed.Root, filepath.FromSlash(entrypoint.ArtifactPath))
-	executableRel, err := filepath.Rel(paths.artifactsDir, executablePath)
-	if err != nil {
-		return LockProviderEntry{}, fmt.Errorf("compute executable path for provider %q: %w", name, err)
+	executableRel := ""
+	if installed.ExecutablePath != "" {
+		executableRel, err = filepath.Rel(paths.artifactsDir, installed.ExecutablePath)
+		if err != nil {
+			return LockProviderEntry{}, fmt.Errorf("compute executable path for provider %q: %w", name, err)
+		}
 	}
 	return LockProviderEntry{
 		Fingerprint:   fingerprint,
@@ -731,7 +729,20 @@ func applyLocalProviderManifest(name string, plugin *config.PluginDef, configMap
 	if err != nil {
 		return fmt.Errorf("prepare manifest for provider %q: %w", name, err)
 	}
-	return bindResolvedProviderManifest(name, plugin, manifestPath, manifest, configMap)
+	if err := bindResolvedProviderManifest(name, plugin, manifestPath, manifest, configMap); err != nil {
+		return err
+	}
+	if plugin.Command != "" {
+		return nil
+	}
+	if entry := pluginpkg.EntrypointForKind(plugin.ResolvedManifest, pluginmanifestv1.KindProvider); entry != nil {
+		candidate := filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(entry.ArtifactPath))
+		if _, err := os.Stat(candidate); err == nil {
+			plugin.Command = candidate
+			plugin.Args = append([]string(nil), entry.Args...)
+		}
+	}
+	return nil
 }
 
 func applyLocalComponentManifest(kind, name string, plugin *config.PluginDef, configMap map[string]any) error {
@@ -804,17 +815,17 @@ func (l *Lifecycle) applyLockedProviderEntry(paths initPaths, lock *Lockfile, na
 	if err := bindResolvedProviderManifest(name, plugin, manifestPath, manifest, configMap); err != nil {
 		return err
 	}
-	if _, err := os.Stat(executablePath); err != nil {
-		return fmt.Errorf("prepared executable for provider %q not found at %s; run `gestaltd init --config %s`", name, executablePath, paths.configPath)
+	if entry.Executable != "" {
+		if _, err := os.Stat(executablePath); err != nil {
+			return fmt.Errorf("prepared executable for provider %q not found at %s; run `gestaltd init --config %s`", name, executablePath, paths.configPath)
+		}
+		args, err := providerEntrypointArgs(manifest)
+		if err != nil {
+			return fmt.Errorf("resolve entrypoint for provider %q: %w", name, err)
+		}
+		plugin.Command = executablePath
+		plugin.Args = append([]string(nil), args...)
 	}
-
-	args, err := providerEntrypointArgs(manifest)
-	if err != nil {
-		return fmt.Errorf("resolve entrypoint for provider %q: %w", name, err)
-	}
-
-	plugin.Command = executablePath
-	plugin.Args = append([]string(nil), args...)
 	return nil
 }
 

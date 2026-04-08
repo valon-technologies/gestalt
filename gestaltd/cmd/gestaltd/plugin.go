@@ -287,7 +287,7 @@ func writeReleaseManifestFile(stagingDir, manifestFile, manifestFormat string, m
 func releaseRequiresBuildTarget(manifest *pluginmanifestv1.Manifest, kind string) bool {
 	switch kind {
 	case pluginmanifestv1.KindProvider:
-		return manifestHasKind(manifest, kind) && manifest.Entrypoints.Provider == nil
+		return manifestHasKind(manifest, kind) && manifest.Entrypoints.Provider == nil && (manifest == nil || manifest.Provider == nil || !manifest.Provider.IsManifestBacked())
 	case pluginmanifestv1.KindAuth:
 		return manifestHasKind(manifest, kind) && manifest.Entrypoints.Auth == nil
 	case pluginmanifestv1.KindDatastore:
@@ -644,10 +644,12 @@ func copyReleasePackageFiles(manifest *pluginmanifestv1.Manifest, sourceDir, sta
 	if err := copyPath(manifest.IconFile, false); err != nil {
 		return err
 	}
-	if manifest.Provider != nil {
-		if err := copyPath(manifest.Provider.ConfigSchemaPath, false); err != nil {
+	for _, ref := range pluginpkg.LocalPackageReferences(manifest) {
+		if err := copyPath(ref.Path, false); err != nil {
 			return err
 		}
+	}
+	if manifest.Provider != nil {
 		if err := copyPath(pluginpkg.StaticCatalogFile, !pluginpkg.StaticCatalogRequired(manifest)); err != nil {
 			return err
 		}

@@ -131,7 +131,7 @@ func TestRun_PluginReleaseRejectsInvalidManifest(t *testing.T) {
 		wantError    string
 	}{
 		{
-			name: "legacy surfaces block is rejected",
+			name: "rest surface requires base_url",
 			manifestYAML: `
 source: github.com/testowner/plugins/invalid
 version: 0.0.1-alpha.1
@@ -140,12 +140,15 @@ kinds:
 provider:
   surfaces:
     rest:
-      base_url: https://api.example.com
+      operations:
+        - name: list_items
+          method: GET
+          path: /items
 `,
-			wantError: "field surfaces not found",
+			wantError: "provider.base_url is required",
 		},
 		{
-			name: "legacy exec block is rejected",
+			name: "exec block requires artifact path",
 			manifestYAML: `
 source: github.com/testowner/plugins/invalid
 version: 0.0.1-alpha.1
@@ -154,19 +157,7 @@ kinds:
 provider:
   exec: {}
 `,
-			wantError: "field exec not found",
-		},
-		{
-			name: "legacy mcp block is rejected",
-			manifestYAML: `
-source: github.com/testowner/plugins/invalid
-version: 0.0.1-alpha.1
-kinds:
-  - provider
-provider:
-  mcp: {}
-`,
-			wantError: "cannot unmarshal !!map into bool",
+			wantError: "provider entrypoint artifact path is required",
 		},
 	}
 
@@ -906,12 +897,17 @@ func TestRun_PluginReleasePreservesYAMLManifestFormatAndConnectionDefaults(t *te
 	if err != nil {
 		t.Fatalf("read released manifest: %v", err)
 	}
-	if !strings.Contains(string(manifestData), "mcp: true") || !strings.Contains(string(manifestData), "connection_params:") || !strings.Contains(string(manifestData), "connection_mode: identity") {
-		t.Fatalf("expected released manifest to preserve executable provider config, got: %s", manifestData)
-	}
-	for _, legacy := range []string{"enabled:", "\n  connections:", "\n  params:"} {
-		if strings.Contains(string(manifestData), legacy) {
-			t.Fatalf("expected released manifest to omit legacy compatibility fields %q, got: %s", legacy, manifestData)
+	for _, expected := range []string{
+		"exec:",
+		"connections:",
+		"default:",
+		"mode: identity",
+		"params:",
+		"mcp:",
+		"enabled: true",
+	} {
+		if !strings.Contains(string(manifestData), expected) {
+			t.Fatalf("expected released manifest to preserve provider wire field %q, got: %s", expected, manifestData)
 		}
 	}
 }

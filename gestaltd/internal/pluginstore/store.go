@@ -28,6 +28,25 @@ func isWebUIOnly(manifest *pluginmanifestv1.Manifest) bool {
 	return len(manifest.Kinds) == 1 && manifest.Kinds[0] == pluginmanifestv1.KindWebUI
 }
 
+func manifestNeedsExecutableArtifact(manifest *pluginmanifestv1.Manifest) bool {
+	if manifest == nil {
+		return false
+	}
+	for _, kind := range []string{
+		pluginmanifestv1.KindProvider,
+		pluginmanifestv1.KindAuth,
+		pluginmanifestv1.KindDatastore,
+	} {
+		if !manifestDeclaresKind(manifest, kind) {
+			continue
+		}
+		if pluginpkg.EntrypointForKind(manifest, kind) != nil {
+			return true
+		}
+	}
+	return false
+}
+
 func Install(packagePath, destDir string) (*InstalledPlugin, error) {
 	_, manifest, err := pluginpkg.ReadPackageManifest(packagePath)
 	if err != nil {
@@ -50,17 +69,20 @@ func Install(packagePath, destDir string) (*InstalledPlugin, error) {
 		return installed, nil
 	}
 
-	artifact, err := pluginpkg.CurrentPlatformArtifact(manifest)
-	if err != nil {
-		return nil, err
-	}
-	artifactBytes, err := pluginpkg.ReadArchiveEntry(packagePath, artifact.Path)
-	if err != nil {
-		return nil, err
-	}
-	sum := sha256.Sum256(artifactBytes)
-	if got := hex.EncodeToString(sum[:]); got != artifact.SHA256 {
-		return nil, fmt.Errorf("artifact digest mismatch for %s: package has %s, manifest expects %s", artifact.Path, got, artifact.SHA256)
+	var artifact *pluginmanifestv1.Artifact
+	if manifestNeedsExecutableArtifact(manifest) {
+		artifact, err = pluginpkg.CurrentPlatformArtifact(manifest)
+		if err != nil {
+			return nil, err
+		}
+		artifactBytes, err := pluginpkg.ReadArchiveEntry(packagePath, artifact.Path)
+		if err != nil {
+			return nil, err
+		}
+		sum := sha256.Sum256(artifactBytes)
+		if got := hex.EncodeToString(sum[:]); got != artifact.SHA256 {
+			return nil, fmt.Errorf("artifact digest mismatch for %s: package has %s, manifest expects %s", artifact.Path, got, artifact.SHA256)
+		}
 	}
 
 	if err := os.MkdirAll(destDir, 0755); err != nil {
@@ -106,24 +128,27 @@ func InstallFromDir(dirPath, destDir string) (*InstalledPlugin, error) {
 		return installed, nil
 	}
 
-	artifact, err := pluginpkg.CurrentPlatformArtifact(manifest)
-	if err != nil {
-		return nil, err
-	}
+	var artifact *pluginmanifestv1.Artifact
+	if manifestNeedsExecutableArtifact(manifest) {
+		artifact, err = pluginpkg.CurrentPlatformArtifact(manifest)
+		if err != nil {
+			return nil, err
+		}
 
-	artifactPath := filepath.Join(dirPath, filepath.FromSlash(artifact.Path))
-	artifactFile, err := os.Open(artifactPath)
-	if err != nil {
-		return nil, fmt.Errorf("open artifact %s: %w", artifact.Path, err)
-	}
-	sum := sha256.New()
-	if _, err := io.Copy(sum, artifactFile); err != nil {
+		artifactPath := filepath.Join(dirPath, filepath.FromSlash(artifact.Path))
+		artifactFile, err := os.Open(artifactPath)
+		if err != nil {
+			return nil, fmt.Errorf("open artifact %s: %w", artifact.Path, err)
+		}
+		sum := sha256.New()
+		if _, err := io.Copy(sum, artifactFile); err != nil {
+			_ = artifactFile.Close()
+			return nil, fmt.Errorf("read artifact %s: %w", artifact.Path, err)
+		}
 		_ = artifactFile.Close()
-		return nil, fmt.Errorf("read artifact %s: %w", artifact.Path, err)
-	}
-	_ = artifactFile.Close()
-	if got := hex.EncodeToString(sum.Sum(nil)); got != artifact.SHA256 {
-		return nil, fmt.Errorf("artifact digest mismatch for %s: directory has %s, manifest expects %s", artifact.Path, got, artifact.SHA256)
+		if got := hex.EncodeToString(sum.Sum(nil)); got != artifact.SHA256 {
+			return nil, fmt.Errorf("artifact digest mismatch for %s: directory has %s, manifest expects %s", artifact.Path, got, artifact.SHA256)
+		}
 	}
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		return nil, fmt.Errorf("create plugin directory: %w", err)
@@ -138,12 +163,15 @@ func InstallFromDir(dirPath, destDir string) (*InstalledPlugin, error) {
 		return nil, fmt.Errorf("copy manifest: %w", err)
 	}
 
-	artifactDest := filepath.Join(destDir, filepath.FromSlash(artifact.Path))
-	if err := os.MkdirAll(filepath.Dir(artifactDest), 0755); err != nil {
-		return nil, fmt.Errorf("create artifact directory: %w", err)
-	}
-	if err := copyFile(artifactPath, artifactDest); err != nil {
-		return nil, fmt.Errorf("copy artifact: %w", err)
+	if artifact != nil {
+		artifactPath := filepath.Join(dirPath, filepath.FromSlash(artifact.Path))
+		artifactDest := filepath.Join(destDir, filepath.FromSlash(artifact.Path))
+		if err := os.MkdirAll(filepath.Dir(artifactDest), 0755); err != nil {
+			return nil, fmt.Errorf("create artifact directory: %w", err)
+		}
+		if err := copyFile(artifactPath, artifactDest); err != nil {
+			return nil, fmt.Errorf("copy artifact: %w", err)
+		}
 	}
 
 	if err := copyManifestReferencedFiles(dirPath, destDir, manifest); err != nil {
@@ -199,6 +227,9 @@ func executablePathForManifest(root string, manifest *pluginmanifestv1.Manifest)
 		}
 	}
 	if entry == nil {
+		if manifest.Provider != nil && manifest.Provider.IsManifestBacked() {
+			return "", nil
+		}
 		return "", fmt.Errorf("manifest does not define an executable entrypoint")
 	}
 	if entry.ArtifactPath == "" {
