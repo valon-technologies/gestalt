@@ -90,6 +90,10 @@ pub fn fetch_auth_info(base_url: &str) -> Result<AuthInfo> {
         .with_context(|| format!("server at {} returned non-JSON auth info", base_url))
 }
 
+pub fn server_auth_disabled(base_url: &str) -> Result<bool> {
+    Ok(!fetch_auth_info(base_url)?.login_supported)
+}
+
 fn find_configured_url(url_override: Option<&str>) -> Result<Option<String>> {
     if let Some(url) = url_override {
         return Ok(Some(normalize_url(url)));

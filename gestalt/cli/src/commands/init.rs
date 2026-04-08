@@ -23,7 +23,7 @@ pub fn run(url_override: Option<&str>) -> Result<()> {
     store.set("url", &url)?;
     eprintln!("Saved to global config.\n");
 
-    if server_auth_disabled(&url) {
+    if api::server_auth_disabled(&url).unwrap_or(false) {
         eprintln!("Authentication is disabled on this server; skipping login.\n");
     } else if prompt_confirm("Log in now?", true)? {
         eprintln!();
@@ -44,8 +44,4 @@ pub fn run(url_override: Option<&str>) -> Result<()> {
     eprintln!();
     output::print_success("You're all set! Run 'gestalt --help' to see available commands.");
     Ok(())
-}
-
-fn server_auth_disabled(url: &str) -> bool {
-    matches!(api::fetch_auth_info(url), Ok(info) if !info.login_supported)
 }
