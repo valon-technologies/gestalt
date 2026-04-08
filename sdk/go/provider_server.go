@@ -57,7 +57,10 @@ func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest)
 	if len(req.GetConnectionParams()) > 0 {
 		ctx = WithConnectionParams(ctx, req.GetConnectionParams())
 	}
-	result, _ := s.provider.execute(ctx, req.GetOperation(), mapFromStruct(req.GetParams()), req.GetToken())
+	result, err := s.provider.execute(ctx, req.GetOperation(), mapFromStruct(req.GetParams()), req.GetToken())
+	if err != nil {
+		return operationResultProto(operationResultFromError(err)), nil
+	}
 	if result == nil {
 		return operationResultProto(operationResult(http.StatusInternalServerError, nilResultMessage)), nil
 	}
