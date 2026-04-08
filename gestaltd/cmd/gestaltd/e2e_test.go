@@ -429,7 +429,7 @@ func TestE2EInitServeLockedOTLPExportsTracesAndMetricsButKeepsLogsOnStdout(t *te
 		if bytes.Contains(adminBody, []byte("Raw Prometheus output")) {
 			t.Fatalf("did not expect raw prometheus section in embedded admin UI: %s", adminBody)
 		}
-		if !bytes.Contains(adminBody, []byte("echarts.simple.min.js")) {
+		if !bytes.Contains(adminBody, []byte("echarts.min.js")) {
 			t.Fatalf("expected admin ui to include echarts asset: %s", adminBody)
 		}
 		if !bytes.Contains(adminBody, []byte("theme.css")) {
@@ -600,7 +600,7 @@ func TestE2EInitServeLockedStdoutExposesPrometheusAndEmbeddedAdminUIByDefault(t 
 		if bytes.Contains(adminBody, []byte("Raw Prometheus output")) {
 			t.Fatalf("did not expect raw prometheus section in embedded admin UI: %s", adminBody)
 		}
-		if !bytes.Contains(adminBody, []byte("echarts.simple.min.js")) {
+		if !bytes.Contains(adminBody, []byte("echarts.min.js")) {
 			t.Fatalf("expected admin ui to include echarts asset: %s", adminBody)
 		}
 		if !bytes.Contains(adminBody, []byte("theme.css")) {
@@ -649,7 +649,7 @@ func TestE2EInitServeLockedNoopKeepsAdminUIAndReturnsMetricsUnavailable(t *testi
 		if !bytes.Contains(adminBody, []byte("Prometheus metrics")) {
 			t.Fatalf("expected embedded admin UI at /admin: %s", adminBody)
 		}
-		if !bytes.Contains(adminBody, []byte("echarts.simple.min.js")) {
+		if !bytes.Contains(adminBody, []byte("echarts.min.js")) {
 			t.Fatalf("expected admin ui to include echarts asset: %s", adminBody)
 		}
 		if !bytes.Contains(adminBody, []byte("theme.css")) {
