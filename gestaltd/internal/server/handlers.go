@@ -1204,29 +1204,9 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	}
 	providerName = req.Integration
 
-	var effectiveCredential string
-	if len(req.Credentials) > 0 {
-		for k, v := range req.Credentials {
-			if v == "" {
-				auditErr = fmt.Errorf("credential %q must not be empty", k)
-				writeError(w, http.StatusBadRequest, fmt.Sprintf("credential %q must not be empty", k))
-				return
-			}
-		}
-		b, err := json.Marshal(req.Credentials)
-		if err != nil {
-			auditErr = errors.New("invalid credentials map")
-			writeError(w, http.StatusBadRequest, "invalid credentials map")
-			return
-		}
-		effectiveCredential = string(b)
-	} else {
-		effectiveCredential = req.Credential
-	}
-
-	if req.Integration == "" || effectiveCredential == "" {
-		auditErr = errors.New("integration and credential are required")
-		writeError(w, http.StatusBadRequest, "integration and credential are required")
+	if req.Integration == "" {
+		auditErr = errors.New("integration is required")
+		writeError(w, http.StatusBadRequest, "integration is required")
 		return
 	}
 
@@ -1260,6 +1240,19 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	manualConnection, ok := s.resolveRequestedConnection(w, req.Integration, req.Connection)
 	if !ok {
 		auditErr = errors.New("invalid connection")
+		return
+	}
+
+	auth := s.effectiveConnectionAuth(req.Integration, manualConnection)
+	effectiveCredential, credErr := buildEffectiveManualCredential(req, auth)
+	if credErr != nil {
+		auditErr = credErr
+		writeError(w, http.StatusBadRequest, credErr.Error())
+		return
+	}
+	if effectiveCredential == "" {
+		auditErr = errors.New("credential is required")
+		writeError(w, http.StatusBadRequest, "credential is required")
 		return
 	}
 
@@ -1515,6 +1508,57 @@ func connectionInfoFromAuth(name string, auth config.ConnectionAuthDef, integrat
 		info.CredentialFields = append([]credentialFieldInfo(nil), defaultCredentialFields...)
 	}
 	return info, true
+}
+
+func (s *Server) effectiveConnectionAuth(integration, connection string) config.ConnectionAuthDef {
+	intg, ok := s.integrationDefs[integration]
+	if !ok || intg.Plugin == nil {
+		return config.ConnectionAuthDef{}
+	}
+	manifestProvider := intg.Plugin.ManifestPlugin()
+	if connection == config.PluginConnectionName {
+		return config.EffectivePluginConnectionDef(intg.Plugin, manifestProvider).Auth
+	}
+	conn, ok := config.EffectiveNamedConnectionDef(intg.Plugin, manifestProvider, connection)
+	if !ok {
+		return config.ConnectionAuthDef{}
+	}
+	return conn.Auth
+}
+
+func buildEffectiveManualCredential(req connectManualRequest, auth config.ConnectionAuthDef) (string, error) {
+	if len(req.Credentials) > 0 {
+		return marshalManualCredentials(req.Credentials)
+	}
+
+	structured := auth.AuthMapping != nil && (len(auth.AuthMapping.Headers) > 0 || auth.AuthMapping.Basic != nil)
+	if !structured {
+		return req.Credential, nil
+	}
+
+	switch {
+	case req.Credential != "" && len(auth.Credentials) == 1:
+		return marshalManualCredentials(map[string]string{auth.Credentials[0].Name: req.Credential})
+	case req.Credential != "":
+		return "", errors.New("manual connection requires named credentials")
+	}
+	return "", nil
+}
+
+func marshalManualCredentials(creds map[string]string) (string, error) {
+	if len(creds) == 0 {
+		return "", nil
+	}
+	for name, value := range creds {
+		if value == "" {
+			return "", fmt.Errorf("credential %q must not be empty", name)
+		}
+	}
+	data, err := json.Marshal(creds)
+	if err != nil {
+		return "", errors.New("invalid credentials map")
+	}
+	return string(data), nil
 }
 
 func connectionAuthTypes(authType string, integrationAuthTypes []string) []string {

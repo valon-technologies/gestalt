@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -121,22 +122,45 @@ func Build(def *Definition, conn config.ConnectionDef, opts ...BuildOption) (cor
 	}
 
 	switch {
-	case def.AuthMapping != nil && len(def.AuthMapping.Headers) > 0:
-		mapping := def.AuthMapping.Headers
+	case def.AuthMapping != nil && (len(def.AuthMapping.Headers) > 0 || def.AuthMapping.Basic != nil):
+		if base.AuthStyle != coreintegration.AuthStyleBasic {
+			if def.AuthMapping.Basic != nil {
+				return nil, fmt.Errorf("%s: auth_mapping.basic requires auth_style basic", def.Provider)
+			}
+		}
+		mapping := def.AuthMapping
 		base.TokenParser = func(token string) (string, map[string]string, error) {
-			var tokenData map[string]any
-			if err := json.Unmarshal([]byte(token), &tokenData); err != nil {
-				return "", nil, fmt.Errorf("parsing token as JSON for auth_mapping: %w", err)
-			}
-			headers := make(map[string]string, len(mapping))
-			for headerName, jsonField := range mapping {
-				val, ok := tokenData[jsonField]
-				if !ok || val == nil {
-					return "", nil, fmt.Errorf("auth_mapping: token field %q for header %q is missing or null", jsonField, headerName)
+			var (
+				tokenData map[string]any
+				headers   map[string]string
+			)
+			if len(mapping.Headers) > 0 {
+				headers = make(map[string]string, len(mapping.Headers))
+				for headerName, value := range mapping.Headers {
+					resolved, err := resolveAuthValue(value, token, &tokenData)
+					if err != nil {
+						return "", nil, fmt.Errorf("auth_mapping.headers[%q]: %w", headerName, err)
+					}
+					headers[headerName] = resolved
 				}
-				headers[headerName] = fmt.Sprintf("%v", val)
 			}
-			return "", headers, nil
+			authToken := ""
+			if mapping.Basic != nil {
+				username, err := resolveAuthValue(mapping.Basic.Username, token, &tokenData)
+				if err != nil {
+					return "", nil, fmt.Errorf("auth_mapping.basic.username: %w", err)
+				}
+				password, err := resolveAuthValue(mapping.Basic.Password, token, &tokenData)
+				if err != nil {
+					return "", nil, fmt.Errorf("auth_mapping.basic.password: %w", err)
+				}
+				credential := fmt.Sprintf("%s:%s", username, password)
+				authToken = "Basic " + base64.StdEncoding.EncodeToString([]byte(credential))
+			}
+			if len(headers) == 0 {
+				headers = nil
+			}
+			return authToken, headers, nil
 		}
 	case def.AuthHeader != "":
 		headerName := def.AuthHeader
@@ -256,9 +280,74 @@ func ApplyConnectionAuth(def *Definition, conn config.ConnectionDef) {
 			}
 		}
 	}
-	if o.AuthMapping != nil && len(o.AuthMapping.Headers) > 0 {
-		def.AuthMapping = &AuthMappingDef{Headers: o.AuthMapping.Headers}
+	if o.AuthMapping != nil {
+		def.AuthMapping = cloneConfigAuthMapping(o.AuthMapping)
 	}
+}
+
+func parseMappedToken(token string) (map[string]any, error) {
+	var tokenData map[string]any
+	if err := json.Unmarshal([]byte(token), &tokenData); err != nil {
+		return nil, fmt.Errorf("parsing token as JSON for auth_mapping: %w", err)
+	}
+	return tokenData, nil
+}
+
+func resolveAuthValue(value AuthValueDef, token string, tokenData *map[string]any) (string, error) {
+	hasValue := value.Value != ""
+	hasValueFrom := value.ValueFrom != nil
+	if hasValue == hasValueFrom {
+		return "", fmt.Errorf("must set exactly one of value or valueFrom.credentialFieldRef")
+	}
+	if hasValue {
+		return value.Value, nil
+	}
+	if value.ValueFrom == nil || value.ValueFrom.CredentialFieldRef == nil {
+		return "", fmt.Errorf("must set exactly one of value or valueFrom.credentialFieldRef")
+	}
+	if *tokenData == nil {
+		parsed, err := parseMappedToken(token)
+		if err != nil {
+			return "", err
+		}
+		*tokenData = parsed
+	}
+	fieldName := value.ValueFrom.CredentialFieldRef.Name
+	val, ok := (*tokenData)[fieldName]
+	if !ok || val == nil {
+		return "", fmt.Errorf("token field %q is missing or null", fieldName)
+	}
+	return fmt.Sprintf("%v", val), nil
+}
+
+func cloneConfigAuthMapping(src *config.AuthMappingDef) *AuthMappingDef {
+	if src == nil {
+		return nil
+	}
+	dst := &AuthMappingDef{}
+	if len(src.Headers) > 0 {
+		dst.Headers = make(map[string]AuthValueDef, len(src.Headers))
+		for name, value := range src.Headers {
+			dst.Headers[name] = cloneConfigAuthValue(value)
+		}
+	}
+	if src.Basic != nil {
+		dst.Basic = &BasicAuthMappingDef{
+			Username: cloneConfigAuthValue(src.Basic.Username),
+			Password: cloneConfigAuthValue(src.Basic.Password),
+		}
+	}
+	return dst
+}
+
+func cloneConfigAuthValue(src config.AuthValueDef) AuthValueDef {
+	dst := AuthValueDef{Value: src.Value}
+	if src.ValueFrom != nil && src.ValueFrom.CredentialFieldRef != nil {
+		dst.ValueFrom = &AuthValueFromDef{
+			CredentialFieldRef: &CredentialFieldRefDef{Name: src.ValueFrom.CredentialFieldRef.Name},
+		}
+	}
+	return dst
 }
 
 func setStr(dst *string, val string) {
