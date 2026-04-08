@@ -451,6 +451,17 @@ fn test_error_response_nested_message() {
 }
 
 #[test]
+fn test_connection_error_shows_actionable_message() {
+    let client = gestalt::api::ApiClient::new("http://127.0.0.1:1", TEST_TOKEN).unwrap();
+    let err = client.get("/api/v1/tokens").unwrap_err().to_string();
+    assert!(
+        err.contains("could not reach server at http://127.0.0.1:1"),
+        "unexpected error: {err}"
+    );
+    assert!(err.contains("gestalt auth status"));
+}
+
+#[test]
 fn test_list_operations_formats_parameters() {
     let mut server = Server::new();
     let mock = authed_json_mock!(
@@ -738,12 +749,95 @@ fn test_auth_status_reports_auth_disabled_before_stored_credentials() {
         .args(["auth", "status"])
         .assert()
         .success()
+        .stderr(predicate::str::contains("Auth:        disabled"))
+        .stderr(predicate::str::contains("Credentials: stored CLI token"))
+        .stderr(predicate::str::contains("Reachable:   yes"))
+        .stderr(predicate::str::contains("URL source:  --url flag"));
+}
+
+#[test]
+fn test_auth_status_reports_unreachable_server() {
+    let home = tempfile::tempdir().unwrap();
+    write_credentials(
+        home.path(),
+        serde_json::json!({
+            "api_url": "http://127.0.0.1:1",
+            "api_token": TEST_TOKEN,
+            "api_token_id": "tok-123",
+        }),
+    );
+
+    cli_command(home.path())
+        .arg("--url")
+        .arg("http://127.0.0.1:1")
+        .args(["auth", "status"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Server:      http://127.0.0.1:1"))
+        .stderr(predicate::str::contains("Reachable:   no"))
+        .stderr(predicate::str::contains("Credentials: stored CLI token"));
+}
+
+#[test]
+fn test_auth_status_no_url_configured() {
+    let home = tempfile::tempdir().unwrap();
+
+    cli_command(home.path())
+        .args(["auth", "status"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Server:      not configured"))
+        .stderr(predicate::str::contains("Credentials: none"))
+        .stderr(predicate::str::contains("gestalt init"));
+}
+
+#[test]
+fn test_auth_status_json_includes_server_fields() {
+    let mut server = Server::new();
+    let _auth_info = json_mock!(server, Method::GET, "/api/v1/auth/info", StatusCode::OK)
+        .with_body(r#"{"login_supported":true}"#)
+        .create();
+
+    let home = tempfile::tempdir().unwrap();
+
+    let output = cli_command(home.path())
+        .arg("--url")
+        .arg(server.url())
+        .args(["auth", "status", "--format", "json"])
+        .output()
+        .unwrap();
+
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(json["server_reachable"], serde_json::json!(true));
+    assert_eq!(json["login_supported"], serde_json::json!(true));
+    assert_eq!(json["server_url"], serde_json::json!(server.url()));
+    assert_eq!(json["url_source"], serde_json::json!("--url flag"));
+    assert_eq!(json["authenticated"], serde_json::json!(false));
+}
+
+#[test]
+fn test_bare_command_shows_server_footer() {
+    let home = tempfile::tempdir().unwrap();
+
+    cli_command(home.path())
+        .arg("--url")
+        .arg("http://localhost:9999")
+        .assert()
+        .success()
         .stderr(predicate::str::contains(
-            "Authentication is disabled on this server.",
+            "Target server: http://localhost:9999",
         ))
-        .stderr(predicate::str::contains(
-            "Stored CLI credentials are present. Run 'gestalt auth logout' to clear them.",
-        ));
+        .stderr(predicate::str::contains("Config source: --url flag"));
+}
+
+#[test]
+fn test_bare_command_shows_not_configured_when_no_url() {
+    let home = tempfile::tempdir().unwrap();
+
+    cli_command(home.path())
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Target server: not configured"));
 }
 
 #[test]

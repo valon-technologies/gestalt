@@ -5,7 +5,7 @@ use reqwest::blocking::Client;
 use reqwest::header::{self, HeaderValue};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::config::ConfigStore;
 use crate::credentials::CredentialStore;
@@ -13,6 +13,7 @@ use crate::http;
 
 pub const DEFAULT_URL: &str = "http://localhost:8080";
 pub const ENV_API_KEY: &str = "GESTALT_API_KEY";
+pub const ENV_URL: &str = "GESTALT_URL";
 pub const PROJECT_CONFIG_DIR: &str = ".gestalt";
 pub const PROJECT_CONFIG_FILE: &str = ".gestalt/config.json";
 pub const AUTH_INFO_PATH: &str = "/api/v1/auth/info";
@@ -95,37 +96,60 @@ pub fn server_auth_disabled(base_url: &str) -> Result<bool> {
 }
 
 fn find_configured_url(url_override: Option<&str>) -> Result<Option<String>> {
+    Ok(find_configured_url_with_source(url_override)?.map(|(url, _)| url))
+}
+
+fn find_configured_url_with_source(url_override: Option<&str>) -> Result<Option<(String, String)>> {
     if let Some(url) = url_override {
-        return Ok(Some(normalize_url(url)));
+        return Ok(Some((normalize_url(url), "--url flag".to_string())));
     }
-    if let Ok(url) = std::env::var("GESTALT_URL")
+    if let Ok(url) = std::env::var(ENV_URL)
         && !url.trim().is_empty()
     {
-        return Ok(Some(normalize_url(&url)));
+        return Ok(Some((
+            normalize_url(&url),
+            format!("{ENV_URL} environment variable"),
+        )));
     }
-    if let Some(url) = find_project_config_value("url")? {
-        return Ok(Some(normalize_url(&url)));
+    if let Some((url, path)) = find_project_config_value("url")? {
+        return Ok(Some((
+            normalize_url(&url),
+            format!("project config ({})", path.display()),
+        )));
     }
 
     let config_store = ConfigStore::new()?;
-    Ok(config_store.get("url")?.map(|url| normalize_url(&url)))
+    match config_store.get("url")? {
+        Some(url) => Ok(Some((
+            normalize_url(&url),
+            format!("global config ({})", config_store.path().display()),
+        ))),
+        None => Ok(None),
+    }
+}
+
+/// Returns the configured server URL and a human-readable description of its source,
+/// or `None` if no URL is configured. Never fails — config parse errors are ignored.
+pub fn describe_server_config(url_override: Option<&str>) -> Option<(String, String)> {
+    find_configured_url_with_source(url_override).ok().flatten()
 }
 
 fn bail_no_url_configured() -> Result<String> {
     let config_store = ConfigStore::new()?;
     bail!(
-        "no URL configured: use --url, GESTALT_URL, {}, or the user-local config file at {}",
+        "no URL configured: use --url, {}, {}, or the user-local config file at {}",
+        ENV_URL,
         PROJECT_CONFIG_FILE,
         config_store.path().display()
     )
 }
 
-fn find_project_config_value(key: &str) -> Result<Option<String>> {
+fn find_project_config_value(key: &str) -> Result<Option<(String, PathBuf)>> {
     let mut dir = std::env::current_dir().context("failed to determine current directory")?;
     loop {
         let candidate = dir.join(PROJECT_CONFIG_FILE);
         if let Some(value) = read_project_config_value(&candidate, key)? {
-            return Ok(Some(value));
+            return Ok(Some((value, candidate)));
         }
         if !dir.pop() {
             return Ok(None);
@@ -275,7 +299,7 @@ impl ApiClient {
             )
             .body(encoded)
             .send()
-            .with_context(|| format!("request to {} failed", url))?;
+            .map_err(|e| self.wrap_send_error(e, &url))?;
         self.handle_text_response(resp)
     }
 
@@ -294,10 +318,20 @@ impl ApiClient {
             Some(body) => request.json(body),
             None => request,
         };
-        let resp = request
-            .send()
-            .with_context(|| format!("request to {} failed", url))?;
+        let resp = request.send().map_err(|e| self.wrap_send_error(e, &url))?;
         self.handle_response(resp)
+    }
+
+    fn wrap_send_error(&self, err: reqwest::Error, url: &str) -> anyhow::Error {
+        if err.is_connect() || err.is_timeout() {
+            anyhow::anyhow!(
+                "could not reach server at {}\n  \
+                 Run 'gestalt auth status' for diagnostics.",
+                self.base_url
+            )
+        } else {
+            anyhow::anyhow!(err).context(format!("request to {} failed", url))
+        }
     }
 
     fn handle_response(&self, resp: reqwest::blocking::Response) -> Result<serde_json::Value> {

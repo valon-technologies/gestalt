@@ -248,16 +248,19 @@ pub fn logout() -> Result<()> {
 }
 
 pub fn status(url_override: Option<&str>, format: Format) -> Result<()> {
+    let server_config = api::describe_server_config(url_override);
+    let server_reachable = server_config.as_ref().map(|(url, _)| {
+        api::fetch_auth_info(url)
+            .ok()
+            .map(|info| info.login_supported)
+    });
+
     let has_env_key = api::env_api_key_is_set();
     let (has_stored_credentials, stored_credentials_error) = match CredentialStore::new()?.load() {
         Ok(Some(_)) => (true, None),
         Ok(None) => (false, None),
         Err(err) => (false, Some(err.to_string())),
     };
-    let server_auth_disabled = api::resolve_url(url_override)
-        .ok()
-        .and_then(|url| api::server_auth_disabled(&url).ok())
-        .unwrap_or(false);
     let configured = has_env_key || has_stored_credentials;
 
     match format {
@@ -269,62 +272,82 @@ pub fn status(url_override: Option<&str>, format: Format) -> Result<()> {
             } else {
                 "none"
             };
+            let (server_url, url_source) = match &server_config {
+                Some((url, src)) => (serde_json::json!(url), serde_json::json!(src)),
+                None => (serde_json::json!(null), serde_json::json!(null)),
+            };
+            let (reachable, login_supported) = match server_reachable {
+                Some(Some(login)) => (serde_json::json!(true), serde_json::json!(login)),
+                Some(None) => (serde_json::json!(false), serde_json::json!(null)),
+                None => (serde_json::json!(null), serde_json::json!(null)),
+            };
             output::print_json(&serde_json::json!({
                 "authenticated": configured,
-                "login_supported": !server_auth_disabled,
+                "login_supported": login_supported,
                 "source": source,
                 "env_var_set": has_env_key,
                 "stored_credentials": has_stored_credentials,
+                "server_url": server_url,
+                "url_source": url_source,
+                "server_reachable": reachable,
             }));
         }
         Format::Table => {
-            if server_auth_disabled {
-                eprintln!("Authentication is disabled on this server.");
-                if has_env_key {
-                    output::print_warning(&format!(
-                        "{} is set, but browser login is unavailable on this server.",
-                        api::ENV_API_KEY,
-                    ));
-                } else if has_stored_credentials {
-                    output::print_warning(
-                        "Stored CLI credentials are present. Run 'gestalt auth logout' to clear them.",
-                    );
+            match &server_config {
+                Some((url, source)) => {
+                    eprintln!("Server:      {}", url);
+                    eprintln!("URL source:  {}", source);
+                    match server_reachable {
+                        Some(Some(login_supported)) => {
+                            eprintln!("Reachable:   yes");
+                            if login_supported {
+                                eprintln!("Auth:        login supported");
+                            } else {
+                                eprintln!("Auth:        disabled");
+                            }
+                        }
+                        _ => {
+                            eprintln!("Reachable:   no");
+                        }
+                    }
                 }
-                if let Some(err) = &stored_credentials_error {
-                    output::print_warning(&format!(
-                        "Stored CLI credentials could not be read: {}",
-                        err
-                    ));
+                None => {
+                    eprintln!("Server:      not configured");
                 }
-            } else if has_env_key {
-                eprintln!("Configured via {} environment variable.", api::ENV_API_KEY);
+            }
+
+            if has_env_key {
+                eprintln!("Credentials: {} set", api::ENV_API_KEY);
                 if has_stored_credentials {
                     output::print_warning(&format!(
                         "Stored CLI credentials also exist but are being ignored. \
-                         Unset {} to use it.",
+                         Unset {} to use them.",
                         api::ENV_API_KEY,
                     ));
                 }
-                if let Some(err) = &stored_credentials_error {
-                    output::print_warning(&format!(
-                        "Stored CLI credentials could not be read: {}",
-                        err
-                    ));
-                }
             } else if has_stored_credentials {
-                eprintln!("Stored CLI credentials are present.");
-            } else if let Some(err) = &stored_credentials_error {
+                eprintln!("Credentials: stored CLI token");
+            } else {
+                eprintln!("Credentials: none");
+            }
+
+            if let Some(err) = &stored_credentials_error {
                 output::print_warning(&format!(
                     "Stored CLI credentials could not be read: {}",
                     err
                 ));
+            }
+
+            if server_config.is_none() {
+                eprintln!();
                 eprintln!(
-                    "Not configured. Run 'gestalt auth login' or set {}.",
-                    api::ENV_API_KEY
+                    "Run 'gestalt init' or set {} to configure a server.",
+                    api::ENV_URL,
                 );
-            } else {
+            } else if !configured {
+                eprintln!();
                 eprintln!(
-                    "Not configured. Run 'gestalt auth login' or set {}.",
+                    "Run 'gestalt auth login' or set {} to authenticate.",
                     api::ENV_API_KEY,
                 );
             }

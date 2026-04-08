@@ -1,5 +1,5 @@
-use clap::Parser;
-use gestalt::api::ApiClient;
+use clap::{CommandFactory, Parser};
+use gestalt::api::{self, ApiClient};
 use gestalt::cli::{
     AuthCommands, Cli, Commands, ConfigCommands, IntegrationCommands, TokenCommands,
 };
@@ -11,7 +11,12 @@ fn run() -> anyhow::Result<()> {
     let format = cli.format;
     let url = cli.url.as_deref();
 
-    match cli.command {
+    let command = match cli.command {
+        Some(cmd) => cmd,
+        None => return print_help_with_context(url),
+    };
+
+    match command {
         Commands::Auth { command } => match command {
             AuthCommands::Login => commands::auth::login(url),
             AuthCommands::Logout => commands::auth::logout(),
@@ -100,6 +105,21 @@ fn run() -> anyhow::Result<()> {
             }
         }
     }
+}
+
+fn print_help_with_context(url_override: Option<&str>) -> anyhow::Result<()> {
+    Cli::command().print_help()?;
+    eprintln!();
+    match api::describe_server_config(url_override) {
+        Some((server_url, source)) => {
+            eprintln!("Target server: {server_url}");
+            eprintln!("Config source: {source}");
+        }
+        None => {
+            eprintln!("Target server: not configured");
+        }
+    }
+    Ok(())
 }
 
 fn main() {
