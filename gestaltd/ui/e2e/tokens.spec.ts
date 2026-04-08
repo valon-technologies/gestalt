@@ -81,7 +81,9 @@ test.describe("Token Management", () => {
       page.getByText("Copy this token now"),
     ).toBeVisible();
     await expect(page.getByText("gestalt_abc123secret")).toBeVisible();
-    await expect(page.getByText("my-new-token")).toBeVisible();
+    await expect(
+      page.locator("tr", { hasText: "my-new-token" }),
+    ).toBeVisible();
   });
 
   test("revokes a token", async ({ authenticatedPage }) => {

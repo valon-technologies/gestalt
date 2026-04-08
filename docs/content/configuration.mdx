@@ -9,6 +9,7 @@ When `--config` is not supplied, `gestaltd` looks for config in this order:
 1. `GESTALT_CONFIG`
 2. `./config.yaml`
 3. `~/.gestaltd/config.yaml`
+4. `/etc/gestalt/config.yaml`
 
 If nothing is found, `gestaltd` generates a default local config at `~/.gestaltd/config.yaml`.
 
@@ -16,100 +17,81 @@ Gestalt expands `${ENV_VAR}` placeholders before YAML decode, falling back to `E
 
 ## Top-level blocks
 
-A config file is organized into a handful of top-level blocks: `server` (HTTP listener, base URL, encryption key, API token TTL, prepared artifacts dir), `auth` (platform login for the web UI, HTTP API, and `/mcp`), `datastore` (persistent storage for users, sessions, API tokens, and integration credentials), `secrets` (resolution for `secret://` references), `telemetry` (structured logs, metrics, traces, and OTLP export), `providers` (the integrations users actually invoke), and optionally `egress` (outbound policy rules and credential grants) and `ui` (packaged web UI bundle). The full example and minimal config at the bottom of this page show the structure in practice.
+A config file is organized into a handful of top-level blocks: `server` (HTTP listener, base URL, encryption key, API token TTL, prepared artifacts dir), `auth` (platform login for the web UI, HTTP API, and `/mcp`), `datastore` (persistent storage for users, sessions, API tokens, and integration credentials), `secrets` (resolution for `secret://` references), `telemetry` (structured logs, metrics, traces, and OTLP export), `plugins` (the integrations users actually invoke), and optionally `egress` (outbound policy rules and credential grants) and `ui` (packaged web UI bundle). The full example and minimal config at the bottom of this page show the structure in practice.
 
 ## Defaults and required fields
 
-Gestalt defaults `server.port` to `8080`, `secrets.provider` to `env`, and `telemetry.provider` to `stdout`. You must always set `auth.provider`, `datastore.provider`, and `server.encryption_key`.
+Gestalt defaults `server.port` to `8080`, `secrets.provider` to `env`, and `telemetry.provider` to `stdout`. The most important required fields are `datastore.provider` and `server.encryption_key`. Platform auth is optional.
 
 `server.encryption_key` is the root deployment secret. Gestalt derives token encryption and related session material from it, so changing it is a meaningful deployment event rather than a cosmetic config update.
 
-## Providers
+## Plugins
 
-Each entry under `providers:` becomes a runtime provider. A provider can be assembled from inline REST operations in YAML, an OpenAPI document, a GraphQL endpoint, an upstream MCP server, or a local or published [plugin source](/plugins). A single provider can mix executable plugin logic with spec-backed or MCP surfaces, which is the main composition model in Gestalt.
+Each entry under `plugins:` becomes a runtime provider backed by a provider package. That package can come from a local source manifest during development or a versioned published package resolved during `init`. The executable provider process is the source of truth for operations; the server config supplies only provider selection, provider config, connection policy, and MCP exposure settings.
 
 ## Provider patterns
 
-An inline REST provider defines operations directly in YAML.
+A builtin or first-party provider shorthand keeps local setup small.
 
 ```yaml
-providers:
-  support:
+plugins:
+  github:
+    provider:
+      source:
+        ref: github.com/valon-technologies/gestalt/github
+        version: 1.2.3
+    config:
+      api_base_url: https://api.github.com
     connections:
       default:
+        mode: user
+        auth:
+          type: oauth2
+    mcp:
+      enabled: true
+      tool_prefix: github_
+```
+
+A local source provider manifest is convenient while iterating on a provider in the same repo.
+
+```yaml
+plugins:
+  support:
+    display_name: Support
+    provider:
+      source:
+        path: ./plugins/support/plugin.yaml
+    config:
+      workspace: primary
+    connections:
+      default:
+        mode: identity
         auth:
           type: bearer
           credentials:
             - name: token
               label: API Token
-    surfaces:
-      rest:
-        base_url: https://api.support.example.com
-        operations:
-          - name: list_tickets
-            description: Return open support tickets
-            method: GET
-            path: /tickets
 ```
 
-An OpenAPI-backed provider references an external spec document and can selectively expose operations.
+A provider package can also expose a larger catalog and use `allowed_operations` to publish only the subset you want users to see.
 
 ```yaml
-providers:
-  httpbin:
-    connections:
-      public:
-        mode: none
-        auth:
-          type: none
-    surfaces:
-      openapi:
-        document: ./openapi/httpbin.yaml
-        connection: public
-    allowed_operations:
-      get_ip:
-        alias: get_ip
-    mcp:
-      enabled: true
-      tool_prefix: httpbin_
-```
-
-A local source plugin loads its definition from a plugin manifest on disk.
-
-```yaml
-providers:
-  gmail:
-    display_name: Gmail
-    from:
-      source:
-        path: ./plugins/gmail/plugin.yaml
-    mcp:
-      enabled: true
-      tool_prefix: gmail_
-```
-
-A hybrid provider combines a plugin source with additional surfaces like OpenAPI specs and upstream MCP servers.
-
-```yaml
-providers:
+plugins:
   support:
-    from:
+    provider:
       source:
-        path: ./plugins/support/plugin.yaml
+        ref: github.com/acme/providers/support
+        version: 2.4.0
     connections:
-      mcp:
+      default:
         mode: user
         auth:
-          type: mcp_oauth
-    surfaces:
-      openapi:
-        document: ./openapi/support.yaml
-      mcp:
-        url: https://mcp.support.example.com/mcp
-        connection: mcp
+          type: oauth2
     allowed_operations:
       tickets.list:
         alias: list_tickets
+      tickets.get:
+        alias: get_ticket
 ```
 
 ## Connections and auth
@@ -122,21 +104,26 @@ Connections define how Gestalt authenticates to upstream systems.
 
 ### Connection naming
 
-`connections.default` is common but not required. If you use only named connections, each configured surface must explicitly name which connection it uses. Users can also store multiple instances of the same connection; the [HTTP API](/reference/http-api) exposes `_connection` and `_instance` selectors so callers can disambiguate which stored credential to use.
+`connections.default` is common but not required. When a provider package defines more than one connection, callers can pass `_connection` and `_instance` through the [HTTP API](/reference/http-api) to select which stored credential to use.
 
 ### Auth types
 
 Common connection auth types are `oauth2`, `mcp_oauth`, `bearer`, `manual`, and `none`.
 
-Gestalt stores upstream credentials by user, provider, connection name, and instance. Renaming a `providers:` key is therefore a breaking change for stored connections.
+Gestalt stores upstream credentials by user, plugin name, connection name, and instance. Renaming a `plugins:` key is therefore a breaking change for stored connections.
 
 ### Choosing an auth strategy
 
-For local development, set `auth.provider: none`. A single-user dev server that needs login flows can use `auth.provider: local`, while real multi-user deployments should use `auth.provider: google` or `auth.provider: oidc`. On provider connections, set `mode: user` when each person should authenticate with their own upstream credential, or `mode: identity` when a single shared service credential is appropriate.
+| Scenario | Recommended configuration |
+| --- | --- |
+| Local development | omit `auth` or set `auth.provider: none` |
+| Multi-user deployment | `auth.provider.source.ref: .../auth/google` or `.../auth/oidc` |
+| Per-user upstream access | `mode: user` on provider connections |
+| Shared service credential | `mode: identity` on provider connections |
 
 ## Platform auth and API tokens
 
-Platform auth controls access to the web UI, HTTP API, and `/mcp`. Set `auth.provider: none` for local development, `auth.provider: local` for a single-user dev environment, or `auth.provider: google` / `auth.provider: oidc` for multi-user setups. See [Security](/security) for trust boundaries and token handling details.
+Platform auth controls access to the web UI, HTTP API, and `/mcp`. For local development, omit the `auth` block entirely or set `auth.provider: none`. Use `.../auth/google` or `.../auth/oidc` for authenticated multi-user setups. Put backend-specific settings in `auth.config`. See [Security](/security) for trust boundaries and token handling details.
 
 For programmatic access, Gestalt issues API tokens prefixed with `gst_api_`. They are accepted through `Authorization: Bearer ...` and use the same auth middleware as browser sessions.
 
@@ -145,38 +132,14 @@ For programmatic access, Gestalt issues API tokens prefixed with `gst_api_`. The
 Gestalt exposes a single MCP endpoint at `/mcp`, using the same auth model as the rest of the HTTP surface. Control tool naming with the provider-level `mcp` block.
 
 ```yaml
-providers:
+plugins:
   github:
     mcp:
       enabled: true
       tool_prefix: github_
 ```
 
-Tool exposure follows the provider surfaces and catalog that Gestalt builds at startup. Declarative REST, OpenAPI, GraphQL, upstream MCP, and plugin-backed operations can all contribute tools.
-
-## Managed parameters and response mapping
-
-Use `managed_parameters` when OpenAPI- or GraphQL-backed operations need fixed header or path values injected before they are exposed to callers.
-
-```yaml
-managed_parameters:
-  - in: header
-    name: X-API-Version
-    value: "2026-04-01"
-  - in: path
-    name: account_id
-    value: primary
-```
-
-Use `response_mapping` when the upstream response needs explicit data or pagination extraction.
-
-```yaml
-response_mapping:
-  data_path: data.items
-  pagination:
-    has_more_path: pageInfo.hasNextPage
-    cursor_path: pageInfo.endCursor
-```
+Tool exposure follows the packaged provider catalog loaded at startup. If you need static request shaping, response mapping, or OpenAPI/MCP passthrough behavior, define it in the provider package rather than the deployment config.
 
 ## Startup workflows
 
@@ -222,9 +185,9 @@ The config declares intent, while the lockfile records the exact prepared result
 For a source-backed plugin, the YAML config says which release you intend to use.
 
 ```yaml
-providers:
+plugins:
   example:
-    from:
+    provider:
       source:
         ref: github.com/acme/plugins/example
         version: 1.2.3
@@ -270,15 +233,24 @@ server:
   encryption_key: secret://gestalt-encryption-key
 
 auth:
-  provider: oidc
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/auth/oidc
+      version: 0.0.1-alpha.1
   config:
     issuer_url: https://login.example.com
     client_id: ${OIDC_CLIENT_ID}
     client_secret: secret://oidc-client-secret
 
-providers:
+plugins:
   github:
     display_name: GitHub
+    provider:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/plugins/github
+        version: 0.0.1-alpha.1
+    config:
+      api_base_url: https://api.github.com
     mcp:
       enabled: true
       tool_prefix: github_
@@ -294,13 +266,6 @@ providers:
         mode: user
         auth:
           type: mcp_oauth
-    surfaces:
-      openapi:
-        document: ./openapi/github.yaml
-        connection: api
-      mcp:
-        url: https://api.githubcopilot.com/mcp/
-        connection: mcp
 ```
 
 ## Minimal config
@@ -313,13 +278,13 @@ server:
   base_url: http://localhost:8080
   encryption_key: change-me
 
-auth:
-  provider: none
-
 datastore:
-  provider: sqlite
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+      version: 0.0.1-alpha.1
   config:
     path: ./gestalt.db
 
-providers: {}
+plugins: {}
 ```

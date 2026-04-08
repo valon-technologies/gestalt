@@ -24,7 +24,7 @@ Create and revoke API tokens for programmatic access. Each token shows its name,
 
 ## Authentication
 
-When `auth.provider` is set to `google` or `oidc`, the web UI redirects to your identity provider for login. With `auth.provider: local`, login is automatic. With `auth.provider: none`, every request is anonymous.
+When the configured auth provider is Google or OIDC, the web UI redirects to your identity provider for login. When platform auth is omitted or set to `auth.provider: none`, every request is anonymous.
 
 ## Custom UI bundles
 

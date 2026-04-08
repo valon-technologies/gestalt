@@ -608,7 +608,7 @@ func (s *Server) startLogin(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "auth is disabled")
 		return
 	}
-	url, err := s.auth.LoginURL(state)
+	url, err := loginURLForRequest(r.Context(), s.auth, state)
 	if err != nil {
 		auditErr = errors.New("failed to generate login URL")
 		writeError(w, http.StatusInternalServerError, "failed to generate login URL")
@@ -643,6 +643,13 @@ func (s *Server) startLogin(w http.ResponseWriter, r *http.Request) {
 	auditAllowed = true
 	auditErr = nil
 	writeJSON(w, http.StatusOK, map[string]string{"url": loginURL})
+}
+
+func loginURLForRequest(ctx context.Context, provider core.AuthProvider, state string) (string, error) {
+	if providerWithContext, ok := provider.(core.LoginURLContextProvider); ok {
+		return providerWithContext.LoginURLContext(ctx, state)
+	}
+	return provider.LoginURL(state)
 }
 
 func (s *Server) resolvePublicURL(r *http.Request, raw string) (string, error) {
@@ -727,6 +734,13 @@ type StatefulCallbackHandler interface {
 	HandleCallbackWithState(ctx context.Context, code, state string) (*core.UserIdentity, string, error)
 }
 
+// RequestCallbackHandler is an optional interface for auth providers that need
+// the full callback query map. This is used by executable auth plugins so the
+// host can preserve callback state and provider-specific query parameters.
+type RequestCallbackHandler interface {
+	HandleCallbackRequest(ctx context.Context, query url.Values) (*core.UserIdentity, string, error)
+}
+
 func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	auditAllowed := false
 	auditErr := errors.New("login callback failed")
@@ -755,7 +769,9 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	var originalState string
 	var err error
 
-	if stateful, ok := s.auth.(StatefulCallbackHandler); ok {
+	if handler, ok := s.auth.(RequestCallbackHandler); ok {
+		identity, originalState, err = handler.HandleCallbackRequest(r.Context(), r.URL.Query())
+	} else if stateful, ok := s.auth.(StatefulCallbackHandler); ok {
 		state := r.URL.Query().Get("state")
 		identity, originalState, err = stateful.HandleCallbackWithState(r.Context(), code, state)
 	} else {
@@ -821,13 +837,7 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 		"display_name": identity.DisplayName,
 	}
 
-	issuer, ok := s.auth.(SessionTokenIssuer)
-	if !ok {
-		auditErr = errors.New("auth provider does not support session tokens")
-		writeError(w, http.StatusInternalServerError, "auth provider does not support session tokens")
-		return
-	}
-	token, err := issuer.IssueSessionToken(identity)
+	token, err := s.issueSessionToken(identity)
 	if err != nil {
 		auditErr = errors.New("failed to issue session token")
 		writeError(w, http.StatusInternalServerError, "failed to issue session token")

@@ -2,7 +2,9 @@ package gestalt_test
 
 import (
 	"context"
+	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -13,17 +15,30 @@ import (
 )
 
 func TestServeProviderRoundTrip(t *testing.T) {
-	socket := filepath.Join(t.TempDir(), "plugin.sock")
+	socket := newSocketPath(t, "plugin.sock")
 	t.Setenv(proto.EnvPluginSocket, socket)
 
 	ctx, cancel := context.WithCancel(context.Background())
+	provider := &closeableStubProvider{}
+	router := gestalt.MustRouter(
+		gestalt.Register(
+			gestalt.Operation[stubInput, stubOutput]{
+				ID:     "test_op",
+				Method: "POST",
+			},
+			(*closeableStubProvider).testOp,
+		),
+	)
 	errCh := make(chan error, 1)
 	go func() {
-		errCh <- gestalt.ServeProvider(ctx, &stubProvider{}, stubRouter)
+		errCh <- gestalt.ServeProvider(ctx, provider, router)
 	}()
 	t.Cleanup(func() {
 		cancel()
 		waitServeResult(t, errCh)
+		if !provider.closed.Load() {
+			t.Fatal("provider Close was not called")
+		}
 	})
 
 	conn := newUnixConn(t, socket)
@@ -39,4 +54,79 @@ func TestServeProviderRoundTrip(t *testing.T) {
 	if meta.GetSupportsSessionCatalog() {
 		t.Fatalf("unexpected metadata: %+v", meta)
 	}
+}
+
+func TestServeAuthProviderClosesProviderOnShutdown(t *testing.T) {
+	socket := newSocketPath(t, "a.sock")
+	t.Setenv(proto.EnvPluginSocket, socket)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	auth := &closeableStubAuthProvider{}
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- gestalt.ServeAuthProvider(ctx, auth)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		waitServeResult(t, errCh)
+		if !auth.closed.Load() {
+			t.Fatal("auth provider Close was not called")
+		}
+	})
+
+	conn := newUnixConn(t, socket)
+	client := proto.NewAuthPluginClient(conn)
+
+	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), time.Second)
+	defer rpcCancel()
+
+	resp, err := client.BeginLogin(rpcCtx, &proto.BeginLoginRequest{CallbackUrl: "https://gestalt.example.test/callback"}, grpc.WaitForReady(true))
+	if err != nil {
+		t.Fatalf("BeginLogin: %v", err)
+	}
+	if resp.GetAuthorizationUrl() == "" {
+		t.Fatal("BeginLogin returned empty authorization URL")
+	}
+}
+
+type closeableStubProvider struct {
+	stubProvider
+	closed atomic.Bool
+}
+
+func (p *closeableStubProvider) Close() error {
+	p.closed.Store(true)
+	return nil
+}
+
+type closeableStubAuthProvider struct {
+	closed atomic.Bool
+}
+
+func (p *closeableStubAuthProvider) Configure(context.Context, string, map[string]any) error {
+	return nil
+}
+
+func (p *closeableStubAuthProvider) BeginLogin(context.Context, gestalt.BeginLoginRequest) (*gestalt.BeginLoginResponse, error) {
+	return &gestalt.BeginLoginResponse{AuthorizationURL: "https://auth.example.test/login"}, nil
+}
+
+func (p *closeableStubAuthProvider) CompleteLogin(context.Context, gestalt.CompleteLoginRequest) (*gestalt.AuthenticatedUser, error) {
+	return &gestalt.AuthenticatedUser{Email: "user@example.com"}, nil
+}
+
+func (p *closeableStubAuthProvider) Close() error {
+	p.closed.Store(true)
+	return nil
+}
+
+func newSocketPath(t *testing.T, name string) string {
+	t.Helper()
+
+	dir, err := os.MkdirTemp("", "gst-sdk-")
+	if err != nil {
+		t.Fatalf("MkdirTemp: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return filepath.Join(dir, name)
 }

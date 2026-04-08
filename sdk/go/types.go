@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 )
 
-// Provider is the core interface that every executable provider plugin must
+// Provider is the core interface that every executable integration provider must
 // implement.
 //
 // Static metadata still comes from the manifest. Executable helper operations
 // are declared separately through the typed router passed to [ServeProvider].
 type Provider interface {
-	Configure(ctx context.Context, name string, config map[string]any) error
+	RuntimeProvider
 }
 
 type SessionCatalogProvider interface {

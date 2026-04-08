@@ -290,6 +290,15 @@ fn cli_command_for_server(home: &Path, server: &Server) -> Command {
     cmd
 }
 
+fn write_cli_credentials(home: &Path, json: &str) {
+    let path = home
+        .join("xdg-config")
+        .join("gestalt")
+        .join("credentials.json");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(path, json).unwrap();
+}
+
 #[test]
 fn test_list_integrations() {
     let mut server = Server::new();
@@ -703,6 +712,71 @@ fn test_auth_logout_revokes_token_using_credential_url_even_when_configured_url_
             .join("credentials.json")
             .exists()
     );
+}
+
+#[test]
+fn test_cli_reuses_stored_credentials_api_url() {
+    let mut server = Server::new();
+    let _tokens = authed_json_mock!(server, Method::GET, "/api/v1/tokens", StatusCode::OK)
+        .with_body("[]")
+        .create();
+
+    let home = tempfile::tempdir().unwrap();
+    write_cli_credentials(
+        home.path(),
+        &format!(
+            r#"{{"api_url":"{}","api_token":"{}","api_token_id":"tok-123"}}"#,
+            server.url(),
+            TEST_TOKEN
+        ),
+    );
+
+    cli_command(home.path())
+        .args(["tokens", "list"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn test_cli_ignores_blank_stored_credentials_api_url() {
+    let home = tempfile::tempdir().unwrap();
+    write_cli_credentials(
+        home.path(),
+        &format!(
+            r#"{{"api_url":"   ","api_token":"{}","api_token_id":"tok-123"}}"#,
+            TEST_TOKEN
+        ),
+    );
+
+    cli_command(home.path())
+        .args(["tokens", "list"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("no URL configured"));
+}
+
+#[test]
+fn test_cli_accepts_legacy_credentials_without_api_url_when_url_is_provided() {
+    let mut server = Server::new();
+    let _tokens = authed_json_mock!(server, Method::GET, "/api/v1/tokens", StatusCode::OK)
+        .with_body("[]")
+        .create();
+
+    let home = tempfile::tempdir().unwrap();
+    write_cli_credentials(
+        home.path(),
+        &format!(
+            r#"{{"api_token":"{}","api_token_id":"tok-123"}}"#,
+            TEST_TOKEN
+        ),
+    );
+
+    cli_command(home.path())
+        .arg("--url")
+        .arg(server.url())
+        .args(["tokens", "list"])
+        .assert()
+        .success();
 }
 
 #[test]

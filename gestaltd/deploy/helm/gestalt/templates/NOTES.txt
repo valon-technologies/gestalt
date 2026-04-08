@@ -49,7 +49,7 @@ Then visit:
 {{- end }}
 
 Default chart profile:
-  auth.provider=none, SQLite on /data, single replica
+  auth.plugin.builtin=none, SQLite on /data, single replica
   static dev-only encryption key
   Suitable for local development or trusted internal clusters
   Replace server.encryption_key and auth settings before production use
@@ -59,13 +59,13 @@ environment variables via extraEnv.
 
 Common env vars:
   GESTALT_BASE_URL         Public URL of this Gestalt instance
-  GESTALT_ENCRYPTION_KEY   Required when auth.provider is not "none"
+  GESTALT_ENCRYPTION_KEY   Required for Gestalt auth/datastore encryption
 
 For Google OAuth:
   GOOGLE_CLIENT_ID         Google OAuth client ID
   GOOGLE_CLIENT_SECRET     Google OAuth client secret
 
-For OIDC, override config.auth.provider and config.auth.config in your values file.
+For OIDC, override config.auth.plugin in your values file.
 {{- if .Values.pluginInit.enabled }}
 
 Plugin init is enabled. An init container runs `gestaltd init` before

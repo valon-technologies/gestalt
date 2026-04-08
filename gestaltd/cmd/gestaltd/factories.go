@@ -12,18 +12,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/drivers/auth/google"
-	"github.com/valon-technologies/gestalt/server/internal/drivers/auth/local"
-	authnone "github.com/valon-technologies/gestalt/server/internal/drivers/auth/none"
-	"github.com/valon-technologies/gestalt/server/internal/drivers/auth/oidc"
-	dynamodbstore "github.com/valon-technologies/gestalt/server/internal/drivers/datastore/dynamodb"
-	"github.com/valon-technologies/gestalt/server/internal/drivers/datastore/firestore"
-	"github.com/valon-technologies/gestalt/server/internal/drivers/datastore/mongodb"
-	"github.com/valon-technologies/gestalt/server/internal/drivers/datastore/mysql"
-	"github.com/valon-technologies/gestalt/server/internal/drivers/datastore/oracle"
-	"github.com/valon-technologies/gestalt/server/internal/drivers/datastore/postgres"
-	"github.com/valon-technologies/gestalt/server/internal/drivers/datastore/sqlite"
-	"github.com/valon-technologies/gestalt/server/internal/drivers/datastore/sqlserver"
+	authplugin "github.com/valon-technologies/gestalt/server/internal/drivers/auth/plugin"
+	datastoreplugin "github.com/valon-technologies/gestalt/server/internal/drivers/datastore/plugin"
 	secretsaws "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/aws"
 	secretsazure "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/azure"
 	secretsenv "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/env"
@@ -133,18 +123,8 @@ func buildFactories() *bootstrap.FactoryRegistry {
 			return nil, nil, fmt.Errorf("unknown audit provider %q", cfg.Provider)
 		}
 	}
-	factories.Auth["google"] = google.Factory
-	factories.Auth["local"] = local.Factory
-	factories.Auth["none"] = authnone.Factory
-	factories.Auth["oidc"] = oidc.Factory
-	factories.Datastores["sqlite"] = sqlite.Factory
-	factories.Datastores["postgres"] = postgres.Factory
-	factories.Datastores["mysql"] = mysql.Factory
-	factories.Datastores["dynamodb"] = dynamodbstore.Factory
-	factories.Datastores["mongodb"] = mongodb.Factory
-	factories.Datastores["oracle"] = oracle.Factory
-	factories.Datastores["firestore"] = firestore.Factory
-	factories.Datastores["sqlserver"] = sqlserver.Factory
+	factories.Auth["plugin"] = authplugin.Factory
+	factories.Datastores["plugin"] = datastoreplugin.Factory
 	factories.Secrets["env"] = secretsenv.Factory
 	factories.Secrets["file"] = secretsfile.Factory
 	factories.Secrets["google_secret_manager"] = secretsgoogle.Factory
@@ -164,12 +144,18 @@ func resolveConfigPath(flagValue string) string {
 	if _, err := os.Stat("config.yaml"); err == nil {
 		return "config.yaml"
 	}
-	if homePath := operator.DefaultLocalConfigPath(); homePath != "" {
-		if _, err := os.Stat(homePath); err == nil {
-			return homePath
+	for _, p := range operator.LocalConfigPaths() {
+		if p == "" {
+			continue
+		}
+		if _, err := os.Stat(p); err == nil {
+			return p
 		}
 	}
-	return operator.DefaultLocalConfigPath()
+	if p := operator.DefaultLocalConfigPath(); p != "" {
+		return p
+	}
+	return "/etc/gestalt/config.yaml"
 }
 
 func logDatastoreWarnings(ds core.Datastore) {

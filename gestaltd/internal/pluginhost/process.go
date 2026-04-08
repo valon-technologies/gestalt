@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -128,7 +129,8 @@ func startPluginProcess(ctx context.Context, cfg ExecConfig, registerHost func(*
 	}
 	pluginSocket := filepath.Join(dir, "plugin.sock")
 	env := mergeExecEnv(cfg.Env, map[string]string{
-		proto.EnvPluginSocket: pluginSocket,
+		proto.EnvPluginSocket:    pluginSocket,
+		proto.EnvPluginParentPID: strconv.Itoa(os.Getpid()),
 	})
 
 	proc := &pluginProcess{dir: dir}

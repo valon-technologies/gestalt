@@ -48,6 +48,10 @@ type releasePlatform struct {
 	LibC   string
 }
 
+type releaseBuildTarget struct {
+	Kind string
+}
+
 func runPluginRelease(args []string) error {
 	fs := flag.NewFlagSet("gestaltd plugin release", flag.ContinueOnError)
 	fs.Usage = func() { printPluginReleaseUsage(fs.Output()) }
@@ -98,7 +102,12 @@ func runPluginRelease(args []string) error {
 		return fmt.Errorf("create output dir: %w", err)
 	}
 
-	buildPlatforms, err := resolveReleaseBuildPlatforms(".", srcManifest, *platforms, platformFlagExplicit)
+	buildTarget, err := resolveReleaseBuildTarget(".", srcManifest)
+	if err != nil {
+		return err
+	}
+
+	buildPlatforms, err := resolveReleaseBuildPlatforms(".", srcManifest, buildTarget, *platforms, platformFlagExplicit)
 	if err != nil {
 		return err
 	}
@@ -106,7 +115,7 @@ func runPluginRelease(args []string) error {
 	var archivePaths []string
 	if len(buildPlatforms) > 0 {
 		for _, platform := range buildPlatforms {
-			archivePath, err := buildPlatformArchive(srcManifest, pluginName, *version, platform, *outputDir, manifestFile, manifestFormat)
+			archivePath, err := buildPlatformArchive(srcManifest, pluginName, *version, buildTarget.Kind, platform, *outputDir, manifestFile, manifestFormat)
 			if err != nil {
 				return fmt.Errorf("build %s: %w", pluginpkg.PlatformString(platform.GOOS, platform.GOARCH, platform.LibC), err)
 			}
@@ -127,17 +136,52 @@ func runPluginRelease(args []string) error {
 	return nil
 }
 
-func resolveReleaseBuildPlatforms(root string, manifest *pluginmanifestv1.Manifest, value string, explicit bool) ([]releasePlatform, error) {
-	hasProviderKind := manifestHasKind(manifest, pluginmanifestv1.KindProvider)
-	if !hasProviderKind {
+func resolveReleaseBuildTarget(root string, manifest *pluginmanifestv1.Manifest) (*releaseBuildTarget, error) {
+	executableKinds := releaseExecutableKinds(manifest)
+	if len(executableKinds) == 0 {
 		return nil, nil
 	}
 
-	providerBuildRequired := releaseRequiresBuildTarget(manifest)
-	if !providerBuildRequired && !explicit {
+	var (
+		buildKinds      []string
+		requiredMissing []string
+	)
+	for _, kind := range executableKinds {
+		hasSource, err := detectReleaseSourceBuildTarget(root, kind)
+		switch {
+		case err != nil:
+			return nil, fmt.Errorf("detect source %s package: %w", kind, err)
+		case hasSource:
+			buildKinds = append(buildKinds, kind)
+		case releaseRequiresBuildTarget(manifest, kind):
+			requiredMissing = append(requiredMissing, kind)
+		}
+	}
+
+	if len(buildKinds) > 1 {
+		return nil, fmt.Errorf("plugin release does not support building multiple executable kinds from source in one package: %s", strings.Join(buildKinds, ", "))
+	}
+	if len(requiredMissing) > 0 {
+		if len(buildKinds) > 0 {
+			return nil, fmt.Errorf("plugin release does not support mixing source-built %q with missing executable source kinds %s in one package", buildKinds[0], strings.Join(requiredMissing, ", "))
+		}
+		return nil, missingReleaseSourceBuildTargetError(requiredMissing)
+	}
+	if len(buildKinds) == 0 {
+		return nil, nil
+	}
+	return &releaseBuildTarget{Kind: buildKinds[0]}, nil
+}
+
+func resolveReleaseBuildPlatforms(root string, manifest *pluginmanifestv1.Manifest, target *releaseBuildTarget, value string, explicit bool) ([]releasePlatform, error) {
+	if target == nil {
 		return nil, nil
 	}
 
+	buildRequired := releaseRequiresBuildTarget(manifest, target.Kind)
+	if !buildRequired && !explicit {
+		return nil, nil
+	}
 	if explicit {
 		var err error
 		value, err = expandReleasePlatformValue(value)
@@ -145,7 +189,7 @@ func resolveReleaseBuildPlatforms(root string, manifest *pluginmanifestv1.Manife
 			return nil, err
 		}
 	} else {
-		value = runtime.GOOS + "/" + runtime.GOARCH
+		value = currentReleasePlatform()
 	}
 	platforms, err := parseReleasePlatforms(value)
 	if err != nil {
@@ -153,28 +197,23 @@ func resolveReleaseBuildPlatforms(root string, manifest *pluginmanifestv1.Manife
 	}
 
 	builds := make([]releasePlatform, 0, len(platforms))
-	var missingProvider bool
+	var missingSource bool
 	for _, platform := range platforms {
-		if err := pluginpkg.ValidateSourceProviderRelease(root, platform.GOOS, platform.GOARCH); err != nil {
-			if errors.Is(err, pluginpkg.ErrNoSourceProviderPackage) {
-				if providerBuildRequired {
-					missingProvider = true
-				}
+		if err := validateReleaseBuildTarget(root, target.Kind, platform.GOOS, platform.GOARCH); err != nil {
+			if isMissingReleaseSourceBuildTarget(err, target.Kind) {
+				missingSource = true
 				continue
 			}
-			return nil, fmt.Errorf("detect source provider package for %s/%s: %w", platform.GOOS, platform.GOARCH, err)
+			return nil, fmt.Errorf("detect source %s package for %s/%s: %w", target.Kind, platform.GOOS, platform.GOARCH, err)
 		}
 		builds = append(builds, platform)
 	}
 
 	if len(builds) == 0 {
-		if providerBuildRequired {
-			return nil, fmt.Errorf("no Go or Python provider package found")
-		}
-		return nil, nil
+		return nil, missingReleaseSourceBuildTargetError([]string{target.Kind})
 	}
-	if missingProvider {
-		return nil, fmt.Errorf("no Go or Python provider package found")
+	if missingSource {
+		return nil, missingReleaseSourceBuildTargetError([]string{target.Kind})
 	}
 	return builds, nil
 }
@@ -191,14 +230,14 @@ func expandReleasePlatformValue(value string) (string, error) {
 	}
 }
 
-func buildPlatformArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, version string, platform releasePlatform, outputDir, manifestFile, manifestFormat string) (string, error) {
+func buildPlatformArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, version, buildKind string, platform releasePlatform, outputDir, manifestFile, manifestFormat string) (string, error) {
 	stagingDir, err := os.MkdirTemp("", "gestalt-release-*")
 	if err != nil {
 		return "", err
 	}
 	defer func() { _ = os.RemoveAll(stagingDir) }()
 
-	manifest, plat, err := prepareBuiltPackageDir(stagingDir, ".", srcManifest, version, pluginName, platform)
+	manifest, plat, err := prepareBuiltPackageDir(stagingDir, ".", srcManifest, version, pluginName, buildKind, platform)
 	if err != nil {
 		return "", err
 	}
@@ -245,8 +284,88 @@ func writeReleaseManifestFile(stagingDir, manifestFile, manifestFormat string, m
 	return os.WriteFile(filepath.Join(stagingDir, manifestFile), data, 0644)
 }
 
-func releaseRequiresBuildTarget(manifest *pluginmanifestv1.Manifest) bool {
-	return manifestHasKind(manifest, pluginmanifestv1.KindProvider) && (manifest.Provider == nil || !manifest.Provider.IsManifestBacked())
+func releaseRequiresBuildTarget(manifest *pluginmanifestv1.Manifest, kind string) bool {
+	switch kind {
+	case pluginmanifestv1.KindProvider:
+		return manifestHasKind(manifest, kind) && manifest.Entrypoints.Provider == nil
+	case pluginmanifestv1.KindAuth:
+		return manifestHasKind(manifest, kind) && manifest.Entrypoints.Auth == nil
+	case pluginmanifestv1.KindDatastore:
+		return manifestHasKind(manifest, kind) && manifest.Entrypoints.Datastore == nil
+	default:
+		return false
+	}
+}
+
+func releaseExecutableKinds(manifest *pluginmanifestv1.Manifest) []string {
+	var kinds []string
+	for _, kind := range []string{pluginmanifestv1.KindProvider, pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore} {
+		if manifestHasKind(manifest, kind) {
+			kinds = append(kinds, kind)
+		}
+	}
+	return kinds
+}
+
+func detectReleaseSourceBuildTarget(root, kind string) (bool, error) {
+	switch kind {
+	case pluginmanifestv1.KindProvider:
+		return pluginpkg.HasSourceProviderPackage(root)
+	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore:
+		return pluginpkg.HasSourceComponentPackage(root, kind)
+	default:
+		return false, fmt.Errorf("unsupported release build target kind %q", kind)
+	}
+}
+
+func validateReleaseBuildTarget(root, kind, goos, goarch string) error {
+	switch kind {
+	case pluginmanifestv1.KindProvider:
+		return pluginpkg.ValidateSourceProviderRelease(root, goos, goarch)
+	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore:
+		return pluginpkg.ValidateSourceComponentRelease(root, kind, goos, goarch)
+	default:
+		return fmt.Errorf("unsupported release build target kind %q", kind)
+	}
+}
+
+func buildReleaseTargetBinary(root, outputPath, pluginName, kind, goos, goarch string) (string, error) {
+	switch kind {
+	case pluginmanifestv1.KindProvider:
+		return pluginpkg.BuildSourceProviderReleaseBinary(root, outputPath, pluginName, goos, goarch)
+	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore:
+		return "", pluginpkg.BuildSourceComponentReleaseBinary(root, outputPath, kind, goos, goarch)
+	default:
+		return "", fmt.Errorf("unsupported release build target kind %q", kind)
+	}
+}
+
+func isMissingReleaseSourceBuildTarget(err error, kind string) bool {
+	switch kind {
+	case pluginmanifestv1.KindProvider:
+		return errors.Is(err, pluginpkg.ErrNoSourceProviderPackage)
+	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore:
+		return errors.Is(err, pluginpkg.ErrNoSourceComponentPackage)
+	default:
+		return false
+	}
+}
+
+func missingReleaseSourceBuildTargetError(kinds []string) error {
+	switch len(kinds) {
+	case 0:
+		return nil
+	case 1:
+		switch kinds[0] {
+		case pluginmanifestv1.KindProvider:
+			return fmt.Errorf("no Go or Python provider package found")
+		case pluginmanifestv1.KindAuth:
+			return fmt.Errorf("no Go auth source package found")
+		case pluginmanifestv1.KindDatastore:
+			return fmt.Errorf("no Go datastore source package found")
+		}
+	}
+	return fmt.Errorf("missing source packages for executable kinds: %s", strings.Join(kinds, ", "))
 }
 
 func manifestHasKind(manifest *pluginmanifestv1.Manifest, kind string) bool {
@@ -287,6 +406,10 @@ func parseReleasePlatforms(value string) ([]releasePlatform, error) {
 	return platforms, nil
 }
 
+func currentReleasePlatform() string {
+	return runtime.GOOS + "/" + runtime.GOARCH
+}
+
 func buildSourceArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, version, outputDir, manifestFile, manifestFormat string) (string, error) {
 	archiveName := fmt.Sprintf("gestalt-plugin-%s_v%s.tar.gz", pluginName, version)
 	return createReleaseArchive(outputDir, archiveName, manifestFile, manifestFormat, func(stagingDir string) (*pluginmanifestv1.Manifest, error) {
@@ -301,20 +424,18 @@ func buildSourceArchive(srcManifest *pluginmanifestv1.Manifest, pluginName, vers
 	})
 }
 
-func prepareBuiltPackageDir(stagingDir, sourceDir string, srcManifest *pluginmanifestv1.Manifest, version, pluginName string, platform releasePlatform) (*pluginmanifestv1.Manifest, releasePlatform, error) {
+func prepareBuiltPackageDir(stagingDir, sourceDir string, srcManifest *pluginmanifestv1.Manifest, version, pluginName, buildKind string, platform releasePlatform) (*pluginmanifestv1.Manifest, releasePlatform, error) {
 	plat := platform
 	binaryName := releaseBinaryName(pluginName, plat.GOOS)
 	binaryPath := filepath.Join(stagingDir, binaryName)
-	builtLibC, err := pluginpkg.BuildSourceProviderReleaseBinary(sourceDir, binaryPath, pluginName, plat.GOOS, plat.GOARCH)
+	builtLibC, err := buildReleaseTargetBinary(sourceDir, binaryPath, pluginName, buildKind, plat.GOOS, plat.GOARCH)
 	if err != nil {
 		return nil, releasePlatform{}, err
 	}
 	switch {
 	case plat.LibC == "":
 		plat.LibC = builtLibC
-	case builtLibC == "":
-		return nil, releasePlatform{}, fmt.Errorf("requested linux libc %q but the built artifact does not report a libc", plat.LibC)
-	case builtLibC != plat.LibC:
+	case builtLibC != "" && builtLibC != plat.LibC:
 		return nil, releasePlatform{}, fmt.Errorf("requested linux libc %q but built artifact targets %q", plat.LibC, builtLibC)
 	}
 
@@ -325,7 +446,7 @@ func prepareBuiltPackageDir(stagingDir, sourceDir string, srcManifest *pluginman
 	if err := copyReleasePackageFiles(srcManifest, sourceDir, stagingDir, false); err != nil {
 		return nil, releasePlatform{}, err
 	}
-	manifest, err := buildReleaseManifest(srcManifest, version, binaryName, plat, digest)
+	manifest, err := buildReleaseManifest(srcManifest, version, binaryName, buildKind, plat, digest)
 	if err != nil {
 		return nil, releasePlatform{}, err
 	}
@@ -353,7 +474,7 @@ func buildSourceReleaseManifest(srcManifest *pluginmanifestv1.Manifest, version,
 	return manifest, nil
 }
 
-func buildReleaseManifest(srcManifest *pluginmanifestv1.Manifest, version, binaryName string, plat releasePlatform, digest string) (*pluginmanifestv1.Manifest, error) {
+func buildReleaseManifest(srcManifest *pluginmanifestv1.Manifest, version, binaryName, buildKind string, plat releasePlatform, digest string) (*pluginmanifestv1.Manifest, error) {
 	manifest, err := cloneManifest(srcManifest)
 	if err != nil {
 		return nil, fmt.Errorf("clone manifest: %w", err)
@@ -363,13 +484,22 @@ func buildReleaseManifest(srcManifest *pluginmanifestv1.Manifest, version, binar
 		{OS: plat.GOOS, Arch: plat.GOARCH, LibC: plat.LibC, Path: binaryName, SHA256: digest},
 	}
 
-	for _, kind := range manifest.Kinds {
-		if kind == pluginmanifestv1.KindProvider {
-			if manifest.Entrypoints.Provider == nil {
-				manifest.Entrypoints.Provider = &pluginmanifestv1.Entrypoint{}
-			}
-			manifest.Entrypoints.Provider.ArtifactPath = binaryName
+	switch buildKind {
+	case pluginmanifestv1.KindProvider:
+		if manifest.Entrypoints.Provider == nil {
+			manifest.Entrypoints.Provider = &pluginmanifestv1.Entrypoint{}
 		}
+		manifest.Entrypoints.Provider.ArtifactPath = binaryName
+	case pluginmanifestv1.KindAuth:
+		if manifest.Entrypoints.Auth == nil {
+			manifest.Entrypoints.Auth = &pluginmanifestv1.Entrypoint{}
+		}
+		manifest.Entrypoints.Auth.ArtifactPath = binaryName
+	case pluginmanifestv1.KindDatastore:
+		if manifest.Entrypoints.Datastore == nil {
+			manifest.Entrypoints.Datastore = &pluginmanifestv1.Entrypoint{}
+		}
+		manifest.Entrypoints.Datastore.ArtifactPath = binaryName
 	}
 
 	return manifest, nil
@@ -511,13 +641,6 @@ func copyReleasePackageFiles(manifest *pluginmanifestv1.Manifest, sourceDir, sta
 		return nil
 	}
 
-	copyMaybeLocalPath := func(value string, optional bool) error {
-		if value == "" || filepath.IsAbs(value) || strings.Contains(value, "://") {
-			return nil
-		}
-		return copyPath(value, optional)
-	}
-
 	if err := copyPath(manifest.IconFile, false); err != nil {
 		return err
 	}
@@ -528,13 +651,14 @@ func copyReleasePackageFiles(manifest *pluginmanifestv1.Manifest, sourceDir, sta
 		if err := copyPath(pluginpkg.StaticCatalogFile, !pluginpkg.StaticCatalogRequired(manifest)); err != nil {
 			return err
 		}
-		if err := copyMaybeLocalPath(manifest.Provider.OpenAPI, false); err != nil {
+	}
+	if manifest.Auth != nil {
+		if err := copyPath(manifest.Auth.ConfigSchemaPath, false); err != nil {
 			return err
 		}
-		if err := copyMaybeLocalPath(manifest.Provider.GraphQLURL, false); err != nil {
-			return err
-		}
-		if err := copyMaybeLocalPath(manifest.Provider.MCPURL, false); err != nil {
+	}
+	if manifest.Datastore != nil {
+		if err := copyPath(manifest.Datastore.ConfigSchemaPath, false); err != nil {
 			return err
 		}
 	}

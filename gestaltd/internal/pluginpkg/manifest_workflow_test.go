@@ -18,11 +18,11 @@ func TestManifestWorkflow_RoundTripsProviderPackagesAcrossDirectoryAndArchive(t 
 		root := t.TempDir()
 		sourceDir := filepath.Join(root, "provider-json")
 		artifactPath := testArtifactPath("provider")
-		wire := mustProviderManifest("github.com/acme/plugins/provider-json", "1.2.3", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider-json"))
-		wire.IconFile = "assets/icon.svg"
-		wire.Provider.ConfigSchemaPath = "schemas/config.schema.json"
+		manifest := mustProviderManifest("github.com/acme/plugins/provider-json", "1.2.3", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider-json"))
+		manifest.IconFile = "assets/icon.svg"
+		manifest.Provider.ConfigSchemaPath = "schemas/config.schema.json"
 
-		mustWriteManifestData(t, sourceDir, ManifestFile, mustManifestJSON(t, wire))
+		mustWriteManifestData(t, sourceDir, ManifestFile, mustManifestJSON(t, manifest))
 		mustWriteFile(t, filepath.Join(sourceDir, filepath.FromSlash(artifactPath)), []byte("provider-json"), 0o755)
 		mustWriteFile(t, filepath.Join(sourceDir, "assets", "icon.svg"), []byte("<svg/>"), 0o644)
 		mustWriteFile(t, filepath.Join(sourceDir, "schemas", "config.schema.json"), []byte(`{"type":"object"}`), 0o644)
@@ -67,101 +67,6 @@ func TestManifestWorkflow_RoundTripsProviderPackagesAcrossDirectoryAndArchive(t 
 		}
 	})
 
-	t.Run("yaml spec provider", func(t *testing.T) {
-		t.Parallel()
-
-		root := t.TempDir()
-		sourceDir := filepath.Join(root, "provider-yaml")
-		wire := &manifestWire{
-			Source:      "github.com/acme/plugins/provider-yaml",
-			Version:     "2.0.0",
-			DisplayName: "Support",
-			Description: "Spec-backed provider",
-			Provider: &providerManifestWire{
-				Headers: map[string]string{"X-App-Version": "2026-04-01"},
-				ManagedParameters: []pluginmanifestv1.ManagedParameter{
-					{In: "header", Name: "x-api-version", Value: "2026-04-01"},
-				},
-				ResponseMapping: &pluginmanifestv1.ManifestResponseMapping{
-					DataPath: "items",
-					Pagination: &pluginmanifestv1.ManifestPaginationMapping{
-						HasMorePath: "has_more",
-						CursorPath:  "next_cursor",
-					},
-				},
-				AllowedOperations: map[string]*pluginmanifestv1.ManifestOperationOverride{
-					"tickets.list": {Alias: "list_tickets"},
-				},
-				Connections: map[string]*providerManifestConnectionWire{
-					"default": {
-						Mode: "user",
-						Auth: &pluginmanifestv1.ProviderAuth{
-							Type:             pluginmanifestv1.AuthTypeOAuth2,
-							AuthorizationURL: "https://auth.example.com/authorize",
-							TokenURL:         "https://auth.example.com/token",
-						},
-					},
-					"mcp": {
-						Mode: "user",
-						Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeMCPOAuth},
-					},
-				},
-				Surfaces: providerManifestSurfacesWire{
-					OpenAPI: &providerManifestOpenAPISurfaceWire{Document: "openapi.yaml"},
-					MCP:     &providerManifestMCPSurfaceWire{URL: "https://mcp.example.com/mcp", Connection: "mcp"},
-				},
-				MCP: &providerManifestMCPWire{Enabled: true},
-			},
-		}
-
-		mustWriteManifestData(t, sourceDir, "plugin.yaml", mustManifestYAML(t, wire))
-		mustWriteFile(t, filepath.Join(sourceDir, "openapi.yaml"), []byte("openapi: 3.1.0\ninfo:\n  title: Example\n  version: 1.0.0\npaths: {}\n"), 0o644)
-
-		_, dirManifest, gotPath, err := LoadManifestFromPath(sourceDir)
-		if err != nil {
-			t.Fatalf("LoadManifestFromPath(dir): %v", err)
-		}
-		if filepath.Base(gotPath) != "plugin.yaml" {
-			t.Fatalf("manifest path = %q, want plugin.yaml", gotPath)
-		}
-		if dirManifest.Provider == nil {
-			t.Fatal("expected provider manifest")
-		}
-		if !dirManifest.Provider.IsSpecLoaded() {
-			t.Fatal("expected spec-backed provider")
-		}
-		if !dirManifest.Provider.MCP {
-			t.Fatal("expected mcp to be enabled")
-		}
-		if dirManifest.Provider.ConnectionMode != "user" {
-			t.Fatalf("ConnectionMode = %q", dirManifest.Provider.ConnectionMode)
-		}
-		if dirManifest.Provider.Auth == nil || dirManifest.Provider.Auth.Type != pluginmanifestv1.AuthTypeOAuth2 {
-			t.Fatalf("unexpected default auth: %#v", dirManifest.Provider.Auth)
-		}
-		if dirManifest.Provider.MCPURL != "https://mcp.example.com/mcp" || dirManifest.Provider.MCPConnection != "mcp" {
-			t.Fatalf("unexpected mcp surface: %#v", dirManifest.Provider)
-		}
-		if got := dirManifest.Provider.AllowedOperations["tickets.list"]; got == nil || got.Alias != "list_tickets" {
-			t.Fatalf("unexpected allowed operations: %#v", dirManifest.Provider.AllowedOperations)
-		}
-		if dirManifest.Provider.ResponseMapping == nil || dirManifest.Provider.ResponseMapping.DataPath != "items" {
-			t.Fatalf("unexpected response mapping: %#v", dirManifest.Provider.ResponseMapping)
-		}
-
-		archivePath := filepath.Join(root, "provider-yaml.tar.gz")
-		if err := CreatePackageFromDir(sourceDir, archivePath); err != nil {
-			t.Fatalf("CreatePackageFromDir: %v", err)
-		}
-
-		_, archiveManifest, _, err := LoadManifestFromPath(archivePath)
-		if err != nil {
-			t.Fatalf("LoadManifestFromPath(archive): %v", err)
-		}
-		if !ManifestEqual(dirManifest, archiveManifest) {
-			t.Fatalf("directory and archive manifests differ:\ndir=%#v\narchive=%#v", dirManifest, archiveManifest)
-		}
-	})
 }
 
 func TestManifestWorkflow_RoundTripsWebUIPackage(t *testing.T) {
@@ -169,13 +74,14 @@ func TestManifestWorkflow_RoundTripsWebUIPackage(t *testing.T) {
 
 	root := t.TempDir()
 	sourceDir := filepath.Join(root, "webui")
-	wire := &manifestWire{
+	manifest := &pluginmanifestv1.Manifest{
 		Source:  "github.com/acme/plugins/webui",
 		Version: "1.0.0",
+		Kinds:   []string{pluginmanifestv1.KindWebUI},
 		WebUI:   &pluginmanifestv1.WebUIMetadata{AssetRoot: "ui/dist"},
 	}
 
-	mustWriteManifestData(t, sourceDir, "plugin.yml", mustManifestYAML(t, wire))
+	mustWriteManifestData(t, sourceDir, "plugin.yml", mustManifestYAML(t, manifest))
 	mustWriteFile(t, filepath.Join(sourceDir, "ui", "dist", "index.html"), []byte("<!doctype html><title>ui</title>"), 0o644)
 
 	_, manifest, gotPath, err := LoadManifestFromPath(sourceDir)
@@ -209,8 +115,8 @@ func TestManifestWorkflow_AllowsSourceArtifactsWithoutDigestsUntilPackaging(t *t
 	root := t.TempDir()
 	sourceDir := filepath.Join(root, "source-plugin")
 	artifactPath := testArtifactPath("provider")
-	wire := mustProviderManifest("github.com/acme/plugins/source-only", "0.1.0", testArtifactOS, testArtifactArch, artifactPath, "")
-	manifestPath := mustWriteManifestData(t, sourceDir, ManifestFile, mustManifestJSON(t, wire))
+	manifest := mustProviderManifest("github.com/acme/plugins/source-only", "0.0.1-alpha.1", testArtifactOS, testArtifactArch, artifactPath, "")
+	manifestPath := mustWriteManifestData(t, sourceDir, ManifestFile, mustManifestJSON(t, manifest))
 	mustWriteFile(t, filepath.Join(sourceDir, filepath.FromSlash(artifactPath)), []byte("source-only"), 0o755)
 
 	_, manifest, err := ReadSourceManifestFile(manifestPath)
@@ -266,14 +172,15 @@ func TestLoadManifestFromPath_PrefersManifestFileOrder(t *testing.T) {
 				case "plugin.yaml":
 					source = "github.com/acme/plugins/yaml-first"
 				}
-				wire := &manifestWire{
+				manifest := &pluginmanifestv1.Manifest{
 					Source:  source,
 					Version: "1.0.0",
+					Kinds:   []string{pluginmanifestv1.KindWebUI},
 					WebUI:   &pluginmanifestv1.WebUIMetadata{AssetRoot: "ui"},
 				}
-				data := mustManifestYAML(t, wire)
+				data := mustManifestYAML(t, manifest)
 				if filepath.Ext(name) == ".json" {
-					data = mustManifestJSON(t, wire)
+					data = mustManifestJSON(t, manifest)
 				}
 				mustWriteManifestData(t, dir, name, data)
 			}
@@ -303,21 +210,21 @@ func TestManifestWorkflow_RejectsInvalidPackageInputs(t *testing.T) {
 		{
 			name: "missing provider and webui",
 			buildData: func(t *testing.T, dir string) string {
-				return mustWriteManifestData(t, dir, ManifestFile, mustManifestJSON(t, &manifestWire{
+				return mustWriteManifestData(t, dir, ManifestFile, mustRawManifestJSON(t, &pluginmanifestv1.Manifest{
 					Source:  "github.com/acme/plugins/missing-kind",
 					Version: "1.0.0",
 				}))
 			},
-			wantError: "manifest validation failed",
+			wantError: "manifest kinds are required",
 		},
 		{
 			name: "entrypoint references unknown artifact",
 			buildData: func(t *testing.T, dir string) string {
 				artifactPath := testArtifactPath("provider")
-				wire := mustProviderManifest("github.com/acme/plugins/bad-entrypoint", "1.0.0", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider"))
-				wire.Provider.Exec.ArtifactPath = unknownSiblingArtifactPath(artifactPath)
+				manifest := mustProviderManifest("github.com/acme/plugins/bad-entrypoint", "1.0.0", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider"))
+				manifest.Entrypoints.Provider.ArtifactPath = unknownSiblingArtifactPath(artifactPath)
 				mustWriteFile(t, filepath.Join(dir, filepath.FromSlash(artifactPath)), []byte("provider"), 0o755)
-				return mustWriteManifestData(t, dir, ManifestFile, mustManifestJSON(t, wire))
+				return mustWriteManifestData(t, dir, ManifestFile, mustRawManifestJSON(t, manifest))
 			},
 			wantError: "references unknown artifact",
 		},
@@ -325,10 +232,10 @@ func TestManifestWorkflow_RejectsInvalidPackageInputs(t *testing.T) {
 			name: "icon file escapes package root",
 			buildData: func(t *testing.T, dir string) string {
 				artifactPath := testArtifactPath("provider")
-				wire := mustProviderManifest("github.com/acme/plugins/bad-icon", "1.0.0", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider"))
-				wire.IconFile = "../icon.svg"
+				manifest := mustProviderManifest("github.com/acme/plugins/bad-icon", "1.0.0", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider"))
+				manifest.IconFile = "../icon.svg"
 				mustWriteFile(t, filepath.Join(dir, filepath.FromSlash(artifactPath)), []byte("provider"), 0o755)
-				return mustWriteManifestData(t, dir, ManifestFile, mustManifestJSON(t, wire))
+				return mustWriteManifestData(t, dir, ManifestFile, mustRawManifestJSON(t, manifest))
 			},
 			wantError: "icon_file must stay within the package",
 		},
@@ -336,82 +243,56 @@ func TestManifestWorkflow_RejectsInvalidPackageInputs(t *testing.T) {
 			name: "rejects unsupported auth type",
 			buildData: func(t *testing.T, dir string) string {
 				artifactPath := testArtifactPath("provider")
-				wire := mustProviderManifest("github.com/acme/plugins/bad-auth", "1.0.0", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider"))
-				wire.Provider.Connections = map[string]*providerManifestConnectionWire{
+				manifest := mustProviderManifest("github.com/acme/plugins/bad-auth", "1.0.0", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider"))
+				manifest.Provider.Connections = map[string]*pluginmanifestv1.ManifestConnectionDef{
 					"default": {
 						Auth: &pluginmanifestv1.ProviderAuth{Type: "bogus"},
 					},
 				}
 				mustWriteFile(t, filepath.Join(dir, filepath.FromSlash(artifactPath)), []byte("provider"), 0o755)
-				return mustWriteManifestData(t, dir, ManifestFile, mustManifestJSON(t, wire))
+				return mustWriteManifestData(t, dir, ManifestFile, mustRawManifestJSON(t, manifest))
 			},
-			wantError: "value must be one of 'oauth2', 'mcp_oauth', 'bearer', 'manual', 'none'",
+			wantError: "unsupported provider.connections.default.auth.type",
 		},
 		{
 			name: "rejects oauth2 auth without token url",
 			buildData: func(t *testing.T, dir string) string {
 				artifactPath := testArtifactPath("provider")
-				wire := mustProviderManifest("github.com/acme/plugins/missing-token-url", "1.0.0", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider"))
-				wire.Provider.Connections = map[string]*providerManifestConnectionWire{
-					"default": {
-						Auth: &pluginmanifestv1.ProviderAuth{
-							Type:             pluginmanifestv1.AuthTypeOAuth2,
-							AuthorizationURL: "https://auth.example.com/authorize",
-						},
-					},
+				manifest := mustProviderManifest("github.com/acme/plugins/missing-token-url", "1.0.0", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider"))
+				manifest.Provider.Auth = &pluginmanifestv1.ProviderAuth{
+					Type:             pluginmanifestv1.AuthTypeOAuth2,
+					AuthorizationURL: "https://auth.example.com/authorize",
 				}
 				mustWriteFile(t, filepath.Join(dir, filepath.FromSlash(artifactPath)), []byte("provider"), 0o755)
-				return mustWriteManifestData(t, dir, ManifestFile, mustManifestJSON(t, wire))
+				return mustWriteManifestData(t, dir, ManifestFile, mustRawManifestJSON(t, manifest))
 			},
-			wantError: "missing property 'token_url'",
+			wantError: "provider.auth.token_url is required for oauth2",
 		},
 		{
-			name: "rejects duplicate declarative operation names",
+			name: "rejects legacy declarative provider fields",
 			buildData: func(t *testing.T, dir string) string {
-				return mustWriteManifestData(t, dir, ManifestFile, mustManifestJSON(t, &manifestWire{
-					Source:  "github.com/acme/plugins/duplicate-ops",
-					Version: "1.0.0",
-					Provider: &providerManifestWire{
-						Surfaces: providerManifestSurfacesWire{
-							REST: &providerManifestRESTSurfaceWire{
-								BaseURL: "https://api.example.com",
-								Operations: []pluginmanifestv1.ProviderOperation{
-									{Name: "list_items", Method: "GET", Path: "/items"},
-									{Name: "list_items", Method: "POST", Path: "/items"},
-								},
-							},
-						},
-					},
-				}))
+				artifactPath := testArtifactPath("provider")
+				manifest := mustProviderManifest("github.com/acme/plugins/legacy-declarative", "1.0.0", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider"))
+				manifest.Provider.BaseURL = "https://api.example.com"
+				manifest.Provider.Operations = []pluginmanifestv1.ProviderOperation{
+					{Name: "list_items", Method: "GET", Path: "/items"},
+				}
+				mustWriteFile(t, filepath.Join(dir, filepath.FromSlash(artifactPath)), []byte("provider"), 0o755)
+				return mustWriteManifestData(t, dir, ManifestFile, mustRawManifestJSON(t, manifest))
 			},
-			wantError: `duplicate operation name "list_items"`,
+			wantError: "provider.base_url is no longer supported",
 		},
 		{
-			name: "rejects orphaned path parameters",
+			name: "rejects legacy spec provider fields",
 			buildData: func(t *testing.T, dir string) string {
-				return mustWriteManifestData(t, dir, ManifestFile, mustManifestJSON(t, &manifestWire{
-					Source:  "github.com/acme/plugins/orphaned-path-param",
-					Version: "1.0.0",
-					Provider: &providerManifestWire{
-						Surfaces: providerManifestSurfacesWire{
-							REST: &providerManifestRESTSurfaceWire{
-								BaseURL: "https://api.example.com",
-								Operations: []pluginmanifestv1.ProviderOperation{
-									{
-										Name:   "get_item",
-										Method: "GET",
-										Path:   "/items",
-										Parameters: []pluginmanifestv1.ProviderParameter{
-											{Name: "id", Type: "string", In: "path"},
-										},
-									},
-								},
-							},
-						},
-					},
-				}))
+				artifactPath := testArtifactPath("provider")
+				manifest := mustProviderManifest("github.com/acme/plugins/legacy-spec", "1.0.0", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider"))
+				manifest.Provider.OpenAPI = "openapi.yaml"
+				mustWriteFile(t, filepath.Join(dir, filepath.FromSlash(artifactPath)), []byte("provider"), 0o755)
+				mustWriteFile(t, filepath.Join(dir, "openapi.yaml"), []byte("openapi: 3.1.0\ninfo:\n  title: Example\n  version: 1.0.0\npaths: {}\n"), 0o644)
+				return mustWriteManifestData(t, dir, ManifestFile, mustRawManifestJSON(t, manifest))
 			},
-			wantError: `declared as path param but "/items" has no {id} placeholder`,
+			wantError: "provider.openapi is no longer supported",
 		},
 	}
 

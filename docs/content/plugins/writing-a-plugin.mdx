@@ -57,7 +57,7 @@ The host still owns auth, token storage, connection selection, and HTTP or MCP r
     ```toml
     [project]
     name = "my-plugin"
-    version = "0.1.0"
+    version = "0.0.1-alpha.1"
     dependencies = ["gestalt"]
 
     [tool.uv]
@@ -77,7 +77,7 @@ Static metadata, auth, and passthrough surfaces live in a manifest file. Gestalt
   <Tabs.Tab>
     ```yaml
     source: github.com/example/plugins/my-plugin
-    version: 0.1.0
+    version: 0.0.1-alpha.1
     display_name: My Plugin
     description: A custom provider plugin
     provider:
@@ -91,7 +91,7 @@ Static metadata, auth, and passthrough surfaces live in a manifest file. Gestalt
     ```json
     {
       "source": "github.com/example/plugins/my-plugin",
-      "version": "0.1.0",
+      "version": "0.0.1-alpha.1",
       "display_name": "My Plugin",
       "description": "A custom provider plugin",
       "provider": {
@@ -300,9 +300,9 @@ gestaltd serve --config ./config.yaml
 ```
 
 ```yaml
-providers:
+plugins:
   my-plugin:
-    from:
+    provider:
       source:
         path: ./plugin.yaml
     config:
@@ -321,7 +321,7 @@ gestalt invoke my-plugin greet -p name=Gestalt
 ## Release
 
 ```sh
-gestaltd plugin release --version 0.1.0
+gestaltd plugin release --version 0.0.1-alpha.1
 ```
 
 Gestalt materializes the executable catalog automatically during release. Both Go and Python source plugins build the host-platform artifact by default. Pass `--platform` with a comma-separated target list to build explicit platforms, or `--platform all` in CI to build the full supported release matrix.

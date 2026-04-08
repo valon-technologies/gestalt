@@ -32,10 +32,10 @@ test.describe("Integration: Go server contract", () => {
     await page.getByLabel("Token name").fill(tokenName);
     await page.getByRole("button", { name: "Create Token" }).click();
     await expect(page.getByText("Copy this token now")).toBeVisible();
-    await expect(page.getByText(tokenName)).toBeVisible();
 
     const row = page.locator("tr", { hasText: tokenName });
+    await expect(row).toBeVisible();
     await row.getByRole("button", { name: "Revoke" }).click();
-    await expect(page.getByText(tokenName)).toBeHidden();
+    await expect(row).toBeHidden();
   });
 });

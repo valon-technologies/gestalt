@@ -31,7 +31,7 @@ func TestMain(m *testing.M) {
 	var wg sync.WaitGroup
 	errs := make([]error, 2)
 	wg.Add(2)
-	go func() { defer wg.Done(); errs[0] = buildGo(".", gestaltdBin) }()
+	go func() { defer wg.Done(); errs[0] = buildTarget(".", ".", gestaltdBin) }()
 	go func() {
 		defer wg.Done()
 		errs[1] = pluginpkg.BuildGoProviderBinary(testutil.MustExampleProviderPluginPath(), pluginBin, "provider-go", runtime.GOOS, runtime.GOARCH)
@@ -51,8 +51,8 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-func buildGo(dir, output string) error {
-	return runGo(dir, "build", "-o", output, ".")
+func buildTarget(dir, target, output string) error {
+	return runGo(dir, "build", "-o", output, target)
 }
 
 func runGo(dir string, args ...string) error {

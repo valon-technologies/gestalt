@@ -2,23 +2,23 @@
 
 Once a provider or UI package works locally, you can publish a release archive
 for distribution. Release archives are self-contained and include a manifest,
-optional executable artifacts, and optional static assets.
+the executable artifacts for packaged providers, and optional static assets.
 
 ## What can be released
 
-Gestalt uses the same release system for declarative provider packages, executable provider plugins, and packaged web UI bundles. Every package is described by `plugin.yaml`, `plugin.yml`, or `plugin.json`.
+Gestalt uses the same release system for executable provider packages, auth and datastore component packages, and packaged web UI bundles. Every package is described by `plugin.yaml`, `plugin.yml`, or `plugin.json`.
 
 ## Source manifests vs release manifests
 
-During local development and `gestaltd plugin release`, executable source
-manifests can omit `artifacts` and `provider.exec.artifact_path`. Release
-packaging materializes those fields for you.
+During local development and `gestaltd plugin release`, source manifests can
+omit `artifacts` and executable `entrypoints`. Release packaging materializes
+those fields for you.
 
 ### Minimal executable source manifest
 
 ```yaml
 source: github.com/acme/plugins/my-plugin
-version: 0.1.0
+version: 0.0.1-alpha.1
 provider:
   connections:
     default:
@@ -31,43 +31,19 @@ source plugins, Gestalt loads the module declared in
 `[tool.gestalt].plugin`. In both cases, Gestalt synthesizes the runnable
 wrapper for local source execution and release packaging.
 
-### Declarative provider package
-
-A manifest can describe a declarative provider that requires no compiled binary.
-This is useful for distributing reusable REST providers or OpenAPI-backed
-integrations:
-
-```yaml
-source: github.com/acme/plugins/support-api
-version: 0.1.0
-provider:
-  connections:
-    default:
-      auth:
-        type: bearer
-        credentials:
-          - name: token
-            label: API Token
-  surfaces:
-    openapi:
-      document: openapi.yaml
-```
-
 ### Release manifest for an executable provider
 
-Released executable providers add `provider.exec.artifact_path` plus concrete
+Released executable providers add concrete `entrypoints.provider` and
 `artifacts` entries:
 
 ```yaml
 source: github.com/acme/plugins/my-plugin
-version: 0.1.0
-provider:
-  exec:
+version: 0.0.1-alpha.1
+kinds:
+  - provider
+entrypoints:
+  provider:
     artifact_path: artifacts/linux/amd64/provider
-  connections:
-    default:
-      auth:
-        type: none
 artifacts:
   - os: linux
     arch: amd64
@@ -94,7 +70,7 @@ webui:
 Use `gestaltd plugin release` to build a plugin release and produce release archives:
 
 ```sh
-gestaltd plugin release --version 0.1.0
+gestaltd plugin release --version 0.0.1-alpha.1
 ```
 
 Run this from the plugin source directory. It produces release archives and writes a checksums file.
@@ -107,7 +83,6 @@ default. Pass `--platform` with a comma-separated list such as
 `--platform linux/amd64,darwin/arm64` to build explicit targets. Pass
 `--platform all` in CI release jobs to build the full supported platform matrix
 for both Go and Python source plugins.
-
 Pass `--platform` with a comma-separated list such as
 `--platform linux/amd64/glibc,linux/amd64/musl,darwin/arm64` to build explicit targets.
 
@@ -125,9 +100,9 @@ For non-host Python targets, point Gestalt at a matching interpreter with
 Use the source tree directly during development:
 
 ```yaml
-providers:
+plugins:
   my-plugin:
-    from:
+    provider:
       source:
         path: ./plugins/my-plugin/plugin.yaml
 ```
@@ -138,12 +113,12 @@ Reference a published release by source and version. `gestaltd init` resolves
 the release archive and writes it to lock state:
 
 ```yaml
-providers:
+plugins:
   my-plugin:
-    from:
+    provider:
       source:
         ref: github.com/your-org/your-plugins/my-plugin
-        version: 0.1.0
+        version: 0.0.1-alpha.1
 ```
 
 This is the recommended approach for production deployments.

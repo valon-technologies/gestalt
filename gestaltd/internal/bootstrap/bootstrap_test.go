@@ -4,9 +4,8 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -15,8 +14,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	telemetrynoop "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/noop"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
-	"github.com/valon-technologies/gestalt/server/internal/testutil"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 	"gopkg.in/yaml.v3"
 )
 
@@ -44,26 +41,29 @@ func stubTelemetryFactory() bootstrap.TelemetryFactory {
 	}
 }
 
-func pluginIntegration() config.IntegrationDef {
-	return config.IntegrationDef{
-		Plugin: &config.PluginDef{
-			BaseURL: "https://api.example.test",
-			Operations: []config.InlineOperationDef{
-				{Name: "list_items", Method: "GET", Path: "/items"},
-			},
-		},
-	}
+type closableAuthProvider struct {
+	*coretesting.StubAuthProvider
+	closed *atomic.Bool
+}
+
+func (p *closableAuthProvider) Close() error {
+	p.closed.Store(true)
+	return nil
 }
 
 func validConfig() *config.Config {
 	return &config.Config{
-		Auth:      config.AuthConfig{Provider: "test-auth"},
-		Datastore: config.DatastoreConfig{Provider: "test-store"},
-		Secrets:   config.SecretsConfig{Provider: "test-secrets"},
-		Telemetry: config.TelemetryConfig{Provider: "test-telemetry"},
-		Integrations: map[string]config.IntegrationDef{
-			"alpha": pluginIntegration(),
+		Auth: config.AuthConfig{
+			Provider: &config.PluginDef{Source: &config.PluginSourceDef{Ref: "github.com/valon-technologies/gestalt-providers/auth/oidc", Version: "0.0.1-alpha.1"}},
+			Config:   yaml.Node{Kind: yaml.MappingNode},
 		},
+		Datastore: config.DatastoreConfig{
+			Provider: &config.PluginDef{Source: &config.PluginSourceDef{Ref: "github.com/valon-technologies/gestalt-providers/datastore/sqlite", Version: "0.0.1-alpha.1"}},
+			Config:   yaml.Node{Kind: yaml.MappingNode},
+		},
+		Secrets:      config.SecretsConfig{Provider: "test-secrets"},
+		Telemetry:    config.TelemetryConfig{Provider: "test-telemetry"},
+		Integrations: map[string]config.IntegrationDef{},
 		Server: config.ServerConfig{
 			Port:          8080,
 			EncryptionKey: "test-key",
@@ -73,8 +73,8 @@ func validConfig() *config.Config {
 
 func validFactories() *bootstrap.FactoryRegistry {
 	f := bootstrap.NewFactoryRegistry()
-	f.Auth["test-auth"] = stubAuthFactory("test-auth")
-	f.Datastores["test-store"] = stubDatastoreFactory()
+	f.Auth["plugin"] = stubAuthFactory("test-auth")
+	f.Datastores["plugin"] = stubDatastoreFactory()
 	f.Secrets["test-secrets"] = stubSecretManagerFactory()
 	f.Telemetry["test-telemetry"] = stubTelemetryFactory()
 	return f
@@ -120,6 +120,30 @@ func TestBootstrap(t *testing.T) {
 	}
 }
 
+func TestResultCloseClosesAuthProvider(t *testing.T) {
+	t.Parallel()
+
+	closed := &atomic.Bool{}
+	factories := validFactories()
+	factories.Auth["plugin"] = func(yaml.Node, bootstrap.Deps) (core.AuthProvider, error) {
+		return &closableAuthProvider{
+			StubAuthProvider: &coretesting.StubAuthProvider{N: "test-auth"},
+			closed:           closed,
+		}, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), validConfig(), factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	if err := result.Close(context.Background()); err != nil {
+		t.Fatalf("Result.Close: %v", err)
+	}
+	if !closed.Load() {
+		t.Fatal("auth provider was not closed")
+	}
+}
+
 func TestValidate(t *testing.T) {
 	t.Parallel()
 
@@ -130,188 +154,6 @@ func TestValidate(t *testing.T) {
 			t.Fatalf("Validate: %v", err)
 		}
 	})
-
-	t.Run("allows resolved manifest local overrides", func(t *testing.T) {
-		t.Parallel()
-
-		specSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			writeTestJSON(w, map[string]any{
-				"openapi": "3.0.0",
-				"info":    map[string]string{"title": "Reports API"},
-				"servers": []any{map[string]string{"url": "https://api.example.test"}},
-				"paths": map[string]any{
-					"/reports": map[string]any{
-						"get": map[string]any{
-							"operationId": "list_reports",
-							"summary":     "List reports",
-						},
-					},
-				},
-			})
-		}))
-		testutil.CloseOnCleanup(t, specSrv)
-
-		plugin := &config.PluginDef{
-			Source:            &config.PluginSourceDef{Ref: "github.com/acme/plugins/reports", Version: "1.0.0"},
-			IsDeclarative:     true,
-			OpenAPIConnection: "reports",
-			ResponseMapping: &config.ResponseMappingDef{
-				DataPath: "results.items",
-			},
-			Connections: map[string]*config.ConnectionDef{
-				"reports": {
-					Mode: "user",
-					Auth: config.ConnectionAuthDef{Type: pluginmanifestv1.AuthTypeManual},
-				},
-			},
-			ResolvedManifest: &pluginmanifestv1.Manifest{
-				Kinds: []string{pluginmanifestv1.KindProvider},
-				Provider: &pluginmanifestv1.Provider{
-					OpenAPI: specSrv.URL,
-				},
-			},
-		}
-
-		cfg := validConfig()
-		cfg.Integrations["reports"] = config.IntegrationDef{
-			Plugin: plugin,
-		}
-
-		if _, err := bootstrap.Validate(context.Background(), cfg, validFactories()); err != nil {
-			t.Fatalf("Validate: %v", err)
-		}
-	})
-
-	t.Run("allows local connection params when manifest omits them", func(t *testing.T) {
-		t.Parallel()
-
-		specSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			writeTestJSON(w, map[string]any{
-				"openapi": "3.0.0",
-				"info":    map[string]string{"title": "Reports API"},
-				"servers": []any{map[string]string{"url": "https://api.example.test"}},
-				"paths": map[string]any{
-					"/reports": map[string]any{
-						"get": map[string]any{
-							"operationId": "list_reports",
-							"summary":     "List reports",
-						},
-					},
-				},
-			})
-		}))
-		testutil.CloseOnCleanup(t, specSrv)
-
-		plugin := &config.PluginDef{
-			Source:        &config.PluginSourceDef{Ref: "github.com/acme/plugins/reports", Version: "1.0.0"},
-			IsDeclarative: true,
-			ConnectionParams: map[string]config.ConnectionParamDef{
-				"tenant": {Required: true},
-			},
-			ResolvedManifest: &pluginmanifestv1.Manifest{
-				Kinds: []string{pluginmanifestv1.KindProvider},
-				Provider: &pluginmanifestv1.Provider{
-					OpenAPI: specSrv.URL,
-				},
-			},
-		}
-
-		cfg := validConfig()
-		cfg.Integrations["reports"] = config.IntegrationDef{
-			Plugin: plugin,
-		}
-
-		if _, err := bootstrap.Validate(context.Background(), cfg, validFactories()); err != nil {
-			t.Fatalf("Validate: %v", err)
-		}
-	})
-
-	t.Run("config validation rejects undeclared resolved manifest connection override", func(t *testing.T) {
-		t.Parallel()
-
-		specSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			writeTestJSON(w, map[string]any{
-				"openapi": "3.0.0",
-				"info":    map[string]string{"title": "Reports API"},
-				"servers": []any{map[string]string{"url": "https://api.example.test"}},
-				"paths": map[string]any{
-					"/reports": map[string]any{
-						"get": map[string]any{
-							"operationId": "list_reports",
-							"summary":     "List reports",
-						},
-					},
-				},
-			})
-		}))
-		testutil.CloseOnCleanup(t, specSrv)
-
-		cfg := validConfig()
-		cfg.Integrations["reports"] = config.IntegrationDef{
-			Plugin: &config.PluginDef{
-				Source:            &config.PluginSourceDef{Ref: "github.com/acme/plugins/reports", Version: "1.0.0"},
-				IsDeclarative:     true,
-				OpenAPIConnection: "reports",
-				ResolvedManifest: &pluginmanifestv1.Manifest{
-					Kinds: []string{pluginmanifestv1.KindProvider},
-					Provider: &pluginmanifestv1.Provider{
-						OpenAPI: specSrv.URL,
-					},
-				},
-			},
-		}
-
-		err := config.ValidateStructure(cfg)
-		if err == nil {
-			t.Fatal("expected validation error")
-		}
-		if !strings.Contains(err.Error(), `openapi_connection references undeclared connection "reports"`) {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-}
-
-func TestValidateRejectsInvalidManagedParameters(t *testing.T) {
-	t.Parallel()
-
-	cfg := validConfig()
-	cfg.Integrations["alpha"] = config.IntegrationDef{
-		Plugin: &config.PluginDef{
-			BaseURL: "https://api.example.test",
-			Operations: []config.InlineOperationDef{
-				{Name: "list_items", Method: "GET", Path: "/items"},
-			},
-			ManagedParameters: []config.ManagedParameterDef{
-				{
-					In:    "query",
-					Name:  "api_version",
-					Value: "2026-04-01",
-				},
-			},
-		},
-	}
-
-	err := config.ValidateStructure(cfg)
-	if err == nil {
-		t.Fatal("expected invalid managed parameters")
-	}
-	if !strings.Contains(err.Error(), `managed_parameters[0].in "query" must be "header" or "path"`) {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
-func TestBootstrapMultipleProviders(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	cfg := validConfig()
-	cfg.Integrations["beta"] = pluginIntegration()
-
-	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	<-result.ProvidersReady
 }
 
 func TestBootstrapNoIntegrations(t *testing.T) {
@@ -331,43 +173,81 @@ func TestBootstrapNoIntegrations(t *testing.T) {
 	}
 }
 
-func TestBootstrapProvidesInvoker(t *testing.T) {
+func TestBootstrap_ReusesPreparedComponentRuntimeConfig(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 
-	result, err := bootstrap.Bootstrap(ctx, validConfig(), validFactories())
+	cfg := validConfig()
+
+	authRuntime, err := config.BuildComponentRuntimeConfigNode("auth", "auth", cfg.Auth.Provider, yaml.Node{
+		Kind: yaml.MappingNode,
+		Content: []*yaml.Node{
+			{Kind: yaml.ScalarNode, Tag: "!!str", Value: "client_id"},
+			{Kind: yaml.ScalarNode, Tag: "!!str", Value: "prepared-auth"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildComponentRuntimeConfigNode(auth): %v", err)
+	}
+	datastoreRuntime, err := config.BuildComponentRuntimeConfigNode("datastore", "datastore", cfg.Datastore.Provider, yaml.Node{
+		Kind: yaml.MappingNode,
+		Content: []*yaml.Node{
+			{Kind: yaml.ScalarNode, Tag: "!!str", Value: "dsn"},
+			{Kind: yaml.ScalarNode, Tag: "!!str", Value: "prepared-datastore"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("BuildComponentRuntimeConfigNode(datastore): %v", err)
+	}
+	cfg.Auth.Config = authRuntime
+	cfg.Datastore.Config = datastoreRuntime
+
+	var gotAuthNode yaml.Node
+	var gotDatastoreNode yaml.Node
+	factories := validFactories()
+	factories.Auth["plugin"] = func(node yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
+		gotAuthNode = node
+		return &coretesting.StubAuthProvider{N: "test-auth"}, nil
+	}
+	factories.Datastores["plugin"] = func(node yaml.Node, deps bootstrap.Deps) (core.Datastore, error) {
+		gotDatastoreNode = node
+		return &coretesting.StubDatastore{}, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
 	if err != nil {
 		t.Fatalf("Bootstrap: %v", err)
 	}
-	if result.Invoker == nil {
-		t.Fatal("expected Invoker to be non-nil")
-	}
-	if result.CapabilityLister == nil {
-		t.Fatal("expected CapabilityLister to be non-nil")
-	}
-	<-result.ProvidersReady
-	names := result.Providers.List()
-	if len(names) != 1 || names[0] != "alpha" {
-		t.Errorf("Providers.List: got %v, want [alpha]", names)
-	}
-}
+	t.Cleanup(func() { _ = result.Close(context.Background()) })
 
-func TestBootstrapPluginOnlySkipsFactory(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	cfg := validConfig()
-	cfg.Integrations["alpha"] = config.IntegrationDef{
-		Plugin: &config.PluginDef{
-			Command: "echo",
-		},
-	}
-
-	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+	authMap, err := config.NodeToMap(gotAuthNode)
 	if err != nil {
-		t.Fatalf("Bootstrap should succeed for plugin-only: %v", err)
+		t.Fatalf("NodeToMap(auth): %v", err)
 	}
-	<-result.ProvidersReady
+	authConfig, ok := authMap["config"].(map[string]any)
+	if !ok {
+		t.Fatalf("auth runtime config = %#v", authMap["config"])
+	}
+	if _, nested := authConfig["config"]; nested {
+		t.Fatalf("auth config was rewrapped: %#v", authConfig)
+	}
+	if authConfig["client_id"] != "prepared-auth" {
+		t.Fatalf("auth config = %#v", authConfig)
+	}
+
+	datastoreMap, err := config.NodeToMap(gotDatastoreNode)
+	if err != nil {
+		t.Fatalf("NodeToMap(datastore): %v", err)
+	}
+	datastoreConfig, ok := datastoreMap["config"].(map[string]any)
+	if !ok {
+		t.Fatalf("datastore runtime config = %#v", datastoreMap["config"])
+	}
+	if _, nested := datastoreConfig["config"]; nested {
+		t.Fatalf("datastore config was rewrapped: %#v", datastoreConfig)
+	}
+	if datastoreConfig["dsn"] != "prepared-datastore" {
+		t.Fatalf("datastore config = %#v", datastoreConfig)
+	}
 }
 
 func TestBootstrapFactoryError(t *testing.T) {
@@ -381,7 +261,7 @@ func TestBootstrapFactoryError(t *testing.T) {
 		{
 			name: "auth factory error",
 			mutate: func(f *bootstrap.FactoryRegistry) {
-				f.Auth["test-auth"] = func(yaml.Node, bootstrap.Deps) (core.AuthProvider, error) {
+				f.Auth["plugin"] = func(yaml.Node, bootstrap.Deps) (core.AuthProvider, error) {
 					return nil, fmt.Errorf("auth broke")
 				}
 			},
@@ -389,7 +269,7 @@ func TestBootstrapFactoryError(t *testing.T) {
 		{
 			name: "datastore factory error",
 			mutate: func(f *bootstrap.FactoryRegistry) {
-				f.Datastores["test-store"] = func(yaml.Node, bootstrap.Deps) (core.Datastore, error) {
+				f.Datastores["plugin"] = func(yaml.Node, bootstrap.Deps) (core.Datastore, error) {
 					return nil, fmt.Errorf("datastore broke")
 				}
 			},
@@ -418,7 +298,7 @@ func TestBootstrapEncryptionKeyDerivation(t *testing.T) {
 
 		var receivedKey []byte
 		factories := validFactories()
-		factories.Auth["test-auth"] = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
+		factories.Auth["plugin"] = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
 			receivedKey = deps.EncryptionKey
 			return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 		}
@@ -447,7 +327,7 @@ func TestBootstrapEncryptionKeyDerivation(t *testing.T) {
 
 		var receivedKey []byte
 		factories := validFactories()
-		factories.Auth["test-auth"] = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
+		factories.Auth["plugin"] = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
 			receivedKey = deps.EncryptionKey
 			return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 		}
@@ -471,7 +351,7 @@ func TestBootstrapEncryptionKeyDerivation(t *testing.T) {
 		var keys [][]byte
 		for i := 0; i < 2; i++ {
 			factories := validFactories()
-			factories.Auth["test-auth"] = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
+			factories.Auth["plugin"] = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
 				keys = append(keys, deps.EncryptionKey)
 				return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 			}
@@ -503,7 +383,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 				Secrets: map[string]string{"enc-key": "resolved-passphrase"},
 			}, nil
 		}
-		factories.Auth["test-auth"] = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
+		factories.Auth["plugin"] = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
 			receivedKey = deps.EncryptionKey
 			return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 		}
@@ -585,7 +465,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 
 		var receivedNode yaml.Node
-		factories.Auth["test-auth"] = func(node yaml.Node, _ bootstrap.Deps) (core.AuthProvider, error) {
+		factories.Auth["plugin"] = func(node yaml.Node, _ bootstrap.Deps) (core.AuthProvider, error) {
 			receivedNode = node
 			return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 		}
@@ -605,12 +485,111 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 		<-result.ProvidersReady
 
-		var decoded map[string]string
+		var decoded struct {
+			Source *config.PluginSourceDef `yaml:"source"`
+			Config map[string]string       `yaml:"config"`
+		}
 		if err := receivedNode.Decode(&decoded); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
-		if decoded["client_secret"] != "resolved-auth-secret" {
-			t.Errorf("client_secret: got %q, want %q", decoded["client_secret"], "resolved-auth-secret")
+		if decoded.Source == nil || decoded.Source.Ref != "github.com/valon-technologies/gestalt-providers/auth/oidc" {
+			t.Fatalf("source = %+v", decoded.Source)
+		}
+		if decoded.Config["client_secret"] != "resolved-auth-secret" {
+			t.Errorf("client_secret: got %q, want %q", decoded.Config["client_secret"], "resolved-auth-secret")
+		}
+	})
+
+	t.Run("passes top-level provider selection to component factories", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := validConfig()
+		cfg.Auth.Provider = &config.PluginDef{Source: &config.PluginSourceDef{Ref: "github.com/valon-technologies/gestalt-providers/auth/oidc", Version: "0.0.1-alpha.1"}}
+		cfg.Datastore.Provider = &config.PluginDef{Source: &config.PluginSourceDef{Ref: "github.com/valon-technologies/gestalt-providers/datastore/postgres", Version: "0.0.1-alpha.1"}}
+		cfg.Auth.Config = yaml.Node{
+			Kind: yaml.MappingNode,
+			Content: []*yaml.Node{
+				{Kind: yaml.ScalarNode, Value: "issuer_url", Tag: "!!str"},
+				{Kind: yaml.ScalarNode, Value: "https://issuer.example.test", Tag: "!!str"},
+			},
+		}
+		cfg.Datastore.Config = yaml.Node{
+			Kind: yaml.MappingNode,
+			Content: []*yaml.Node{
+				{Kind: yaml.ScalarNode, Value: "dsn", Tag: "!!str"},
+				{Kind: yaml.ScalarNode, Value: "postgres://db.example.test/app", Tag: "!!str"},
+			},
+		}
+
+		var authNode, datastoreNode yaml.Node
+		factories := validFactories()
+		factories.Auth["plugin"] = func(node yaml.Node, _ bootstrap.Deps) (core.AuthProvider, error) {
+			authNode = node
+			return &coretesting.StubAuthProvider{N: "test-auth"}, nil
+		}
+		factories.Datastores["plugin"] = func(node yaml.Node, _ bootstrap.Deps) (core.Datastore, error) {
+			datastoreNode = node
+			return &coretesting.StubDatastore{}, nil
+		}
+
+		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+		if err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		<-result.ProvidersReady
+
+		var authCfg struct {
+			Source *config.PluginSourceDef `yaml:"source"`
+			Config map[string]string       `yaml:"config"`
+		}
+		if err := authNode.Decode(&authCfg); err != nil {
+			t.Fatalf("decode auth node: %v", err)
+		}
+		if authCfg.Source == nil || authCfg.Source.Ref != "github.com/valon-technologies/gestalt-providers/auth/oidc" {
+			t.Fatalf("auth source = %+v", authCfg.Source)
+		}
+		if authCfg.Config["issuer_url"] != "https://issuer.example.test" {
+			t.Fatalf("auth config = %+v", authCfg.Config)
+		}
+
+		var datastoreCfg struct {
+			Source *config.PluginSourceDef `yaml:"source"`
+			Config map[string]string       `yaml:"config"`
+		}
+		if err := datastoreNode.Decode(&datastoreCfg); err != nil {
+			t.Fatalf("decode datastore node: %v", err)
+		}
+		if datastoreCfg.Source == nil || datastoreCfg.Source.Ref != "github.com/valon-technologies/gestalt-providers/datastore/postgres" {
+			t.Fatalf("datastore source = %+v", datastoreCfg.Source)
+		}
+		if datastoreCfg.Config["dsn"] != "postgres://db.example.test/app" {
+			t.Fatalf("datastore config = %+v", datastoreCfg.Config)
+		}
+	})
+
+	t.Run("omits auth when auth provider is unset", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := validConfig()
+		cfg.Auth.Provider = nil
+
+		var authFactoryCalled atomic.Bool
+		factories := validFactories()
+		factories.Auth["plugin"] = func(yaml.Node, bootstrap.Deps) (core.AuthProvider, error) {
+			authFactoryCalled.Store(true)
+			return &coretesting.StubAuthProvider{N: "unexpected"}, nil
+		}
+
+		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+		if err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		<-result.ProvidersReady
+		if result.Auth != nil {
+			t.Fatalf("Auth = %T, want nil", result.Auth)
+		}
+		if authFactoryCalled.Load() {
+			t.Fatal("auth factory was called")
 		}
 	})
 

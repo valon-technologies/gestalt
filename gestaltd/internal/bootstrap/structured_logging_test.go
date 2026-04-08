@@ -12,66 +12,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 )
 
-func TestBootstrapProducesStructuredLogs(t *testing.T) { //nolint:paralleltest // mutates slog.Default
-
-	var buf bytes.Buffer
-	prev := slog.Default()
-	slog.SetDefault(slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug})))
-	t.Cleanup(func() { slog.SetDefault(prev) })
-
-	cfg := validConfig()
-	cfg.Integrations = map[string]config.IntegrationDef{
-		"alpha": {
-			Plugin: &config.PluginDef{
-				BaseURL: "https://api.example.test",
-				Operations: []config.InlineOperationDef{
-					{Name: "list_items", Method: "GET", Path: "/items"},
-				},
-			},
-		},
-	}
-
-	result, err := bootstrap.Bootstrap(context.Background(), cfg, validFactories())
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	<-result.ProvidersReady
-
-	output := buf.String()
-	if output == "" {
-		t.Fatal("expected structured log output from bootstrap, got empty string")
-	}
-
-	var foundProviderLog bool
-	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
-		var record map[string]any
-		if err := json.Unmarshal([]byte(line), &record); err != nil {
-			t.Fatalf("log line is not valid JSON: %q: %v", line, err)
-		}
-
-		if _, ok := record["time"]; !ok {
-			t.Errorf("log record missing 'time' field: %v", record)
-		}
-		if _, ok := record["level"]; !ok {
-			t.Errorf("log record missing 'level' field: %v", record)
-		}
-		if _, ok := record["msg"]; !ok {
-			t.Errorf("log record missing 'msg' field: %v", record)
-		}
-
-		if record["msg"] == "loaded provider" {
-			foundProviderLog = true
-			if record["provider"] != "alpha" {
-				t.Errorf("expected provider=alpha, got provider=%v", record["provider"])
-			}
-		}
-	}
-
-	if !foundProviderLog {
-		t.Errorf("did not find 'loaded provider' log line in output:\n%s", output)
-	}
-}
-
 func TestBootstrapSkippedProviderLogsWarning(t *testing.T) { //nolint:paralleltest // mutates slog.Default
 
 	var buf bytes.Buffer
@@ -83,7 +23,7 @@ func TestBootstrapSkippedProviderLogsWarning(t *testing.T) { //nolint:parallelte
 	cfg.Integrations = map[string]config.IntegrationDef{
 		"broken": {
 			Plugin: &config.PluginDef{
-				Command: "/nonexistent/path/to/plugin",
+				Source: &config.PluginSourceDef{Path: "./plugin.yaml"},
 			},
 		},
 	}

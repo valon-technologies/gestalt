@@ -1,17 +1,22 @@
 # Built-in Providers
 
-These components are compiled into the `gestaltd` binary and available at startup.
+`gestaltd` still includes a small set of host-native providers for secrets and telemetry. Auth providers, datastore providers, and integration plugins are no longer compiled into the server binary; they are published separately and loaded through the provider runtime.
 
-## Auth Providers
+## First-Party Auth Providers
+
+These ship from [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers) and are referenced via `auth.provider.source.ref`.
 
 | Name | Purpose |
 | --- | --- |
-| `none` | Disables platform authentication. Every request is treated as anonymous. |
 | `local` | Single-user auth for local development. No external identity provider required. |
 | `google` | Google OAuth 2.0 platform login. Supports `allowed_domains` restriction. |
 | `oidc` | Generic OpenID Connect. Works with Okta, Auth0, Azure AD, Keycloak, and others. |
 
-## Datastores
+To disable platform auth entirely, omit the `auth` block or set `auth.provider: none`. That is a host-side special case rather than a published auth provider package.
+
+## First-Party Datastore Providers
+
+These also ship from [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers) and are referenced via `datastore.provider.source.ref`.
 
 | Name | Purpose |
 | --- | --- |
@@ -45,4 +50,4 @@ These components are compiled into the `gestaltd` binary and available at startu
 
 ## Named Providers
 
-No named providers are built into the binary. Integration plugins like BigQuery, Jira, Slack, and others are published separately from [`valon-technologies/gestalt-plugins`](https://github.com/valon-technologies/gestalt-plugins) and referenced in your config via `from.source.ref`.
+No named providers are built into the binary. Integration plugins like BigQuery, Jira, Slack, and others are published separately from [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers) and referenced in your config via `plugins.<name>.provider.source.ref`.

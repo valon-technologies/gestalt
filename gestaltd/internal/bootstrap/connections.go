@@ -2,11 +2,9 @@ package bootstrap
 
 import (
 	"fmt"
-	"path/filepath"
-	"strings"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/provider"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
 
@@ -46,17 +44,9 @@ func BuildConnectionMaps(cfg *config.Config) (ConnectionMaps, error) {
 	return maps, nil
 }
 
-type resolvedSpecSurface struct {
-	surface        config.SpecSurface
-	url            string
-	connectionName string
-	connection     config.ConnectionDef
-}
-
 type pluginConnectionPlan struct {
 	pluginConnection  config.ConnectionDef
 	namedConnections  map[string]config.ConnectionDef
-	surfaces          map[config.SpecSurface]resolvedSpecSurface
 	defaultConnection string
 }
 
@@ -65,7 +55,6 @@ func buildPluginConnectionPlan(plugin *config.PluginDef, manifestProvider *plugi
 	plan := pluginConnectionPlan{
 		pluginConnection: config.EffectivePluginConnectionDef(plugin, manifestProvider),
 		namedConnections: make(map[string]config.ConnectionDef),
-		surfaces:         make(map[config.SpecSurface]resolvedSpecSurface),
 	}
 
 	for name := range declaredNames {
@@ -74,24 +63,6 @@ func buildPluginConnectionPlan(plugin *config.PluginDef, manifestProvider *plugi
 			continue
 		}
 		plan.namedConnections[name] = conn
-	}
-
-	for _, surface := range config.OrderedSpecSurfaces {
-		url := surfaceURL(plugin, manifestProvider, surface)
-		if url == "" {
-			continue
-		}
-		resolved := resolvedSpecSurface{
-			surface:        surface,
-			url:            url,
-			connectionName: resolveSurfaceConnectionName(plugin, manifestProvider, surface),
-		}
-		conn, err := plan.connectionDef(resolved.connectionName)
-		if err != nil {
-			return pluginConnectionPlan{}, fmt.Errorf("%s references undeclared connection %q", surface.ConnectionField(), resolved.connectionName)
-		}
-		resolved.connection = conn
-		plan.surfaces[surface] = resolved
 	}
 
 	defaultConnection := resolveDefaultConnectionName(plugin, manifestProvider)
@@ -105,42 +76,15 @@ func buildPluginConnectionPlan(plugin *config.PluginDef, manifestProvider *plugi
 	return plan, nil
 }
 
-func (plan pluginConnectionPlan) configuredAPISurface() (resolvedSpecSurface, bool) {
-	for _, surface := range []config.SpecSurface{config.SpecSurfaceOpenAPI, config.SpecSurfaceGraphQL} {
-		if resolved, ok := plan.resolvedSurface(surface); ok {
-			return resolved, true
-		}
-	}
-	return resolvedSpecSurface{}, false
-}
-
-func (plan pluginConnectionPlan) configuredSpecSurface() (resolvedSpecSurface, bool) {
-	if resolved, ok := plan.configuredAPISurface(); ok {
-		return resolved, true
-	}
-	return plan.resolvedSurface(config.SpecSurfaceMCP)
-}
-
-func (plan pluginConnectionPlan) resolvedSurface(surface config.SpecSurface) (resolvedSpecSurface, bool) {
-	resolved, ok := plan.surfaces[surface]
-	return resolved, ok
-}
-
 func (plan pluginConnectionPlan) authDefaultConnection() string {
 	return plan.fallbackConnection()
 }
 
 func (plan pluginConnectionPlan) apiConnection() string {
-	if resolved, ok := plan.configuredAPISurface(); ok {
-		return resolved.connectionName
-	}
 	return plan.fallbackConnection()
 }
 
 func (plan pluginConnectionPlan) mcpConnection() string {
-	if resolved, ok := plan.resolvedSurface(config.SpecSurfaceMCP); ok {
-		return resolved.connectionName
-	}
 	return plan.fallbackConnection()
 }
 
@@ -154,6 +98,51 @@ func (plan pluginConnectionPlan) fallbackConnection() string {
 	return ""
 }
 
+func (plan pluginConnectionPlan) connectionMode() core.ConnectionMode {
+	needUser := false
+	needIdentity := false
+
+	addMode := func(mode core.ConnectionMode) {
+		switch mode {
+		case core.ConnectionModeUser:
+			needUser = true
+		case core.ConnectionModeIdentity:
+			needIdentity = true
+		case core.ConnectionModeEither:
+			needUser = true
+			needIdentity = true
+		}
+	}
+
+	addMode(connectionModeForConnection(plan.pluginConnection))
+	for _, conn := range plan.namedConnections {
+		addMode(connectionModeForConnection(conn))
+	}
+
+	switch {
+	case needUser && needIdentity:
+		return core.ConnectionModeEither
+	case needUser:
+		return core.ConnectionModeUser
+	case needIdentity:
+		return core.ConnectionModeIdentity
+	default:
+		return core.ConnectionModeNone
+	}
+}
+
+func connectionModeForConnection(conn config.ConnectionDef) core.ConnectionMode {
+	if conn.Mode != "" {
+		return core.ConnectionMode(conn.Mode)
+	}
+	switch conn.Auth.Type {
+	case "", pluginmanifestv1.AuthTypeNone:
+		return core.ConnectionModeNone
+	default:
+		return core.ConnectionModeUser
+	}
+}
+
 func (plan pluginConnectionPlan) connectionDef(name string) (config.ConnectionDef, error) {
 	if name == "" || name == config.PluginConnectionName {
 		return plan.pluginConnection, nil
@@ -163,28 +152,6 @@ func (plan pluginConnectionPlan) connectionDef(name string) (config.ConnectionDe
 		return config.ConnectionDef{}, fmt.Errorf("undeclared connection %q", name)
 	}
 	return conn, nil
-}
-
-func surfaceURL(plugin *config.PluginDef, manifestProvider *pluginmanifestv1.Provider, surface config.SpecSurface) string {
-	if pluginURL := plugin.SurfaceURL(surface); pluginURL != "" {
-		return pluginURL
-	}
-	url := config.ManifestProviderSurfaceURL(manifestProvider, surface)
-	if url == "" {
-		return ""
-	}
-	return resolveManifestRelativeSpecURL(plugin, url)
-}
-
-func resolveSurfaceConnectionName(plugin *config.PluginDef, manifestProvider *pluginmanifestv1.Provider, surface config.SpecSurface) string {
-	name := config.ResolveConnectionAlias(plugin.SurfaceConnectionName(surface))
-	if name == "" {
-		name = config.ResolveConnectionAlias(config.ManifestProviderSurfaceConnectionName(manifestProvider, surface))
-	}
-	if name == "" {
-		return config.PluginConnectionName
-	}
-	return name
 }
 
 func resolveDefaultConnectionName(plugin *config.PluginDef, manifestProvider *pluginmanifestv1.Provider) string {
@@ -201,24 +168,7 @@ func resolveDefaultConnectionName(plugin *config.PluginDef, manifestProvider *pl
 	return ""
 }
 
-func resolveManifestRelativeSpecURL(plugin *config.PluginDef, raw string) string {
-	if plugin == nil || plugin.ResolvedManifestPath == "" || raw == "" {
-		return raw
-	}
-	if filepath.IsAbs(raw) || strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
-		return raw
-	}
-	if strings.HasPrefix(raw, "file://") {
-		path := strings.TrimPrefix(raw, "file://")
-		if filepath.IsAbs(path) {
-			return raw
-		}
-		return "file://" + filepath.Clean(filepath.Join(filepath.Dir(plugin.ResolvedManifestPath), path))
-	}
-	return filepath.Clean(filepath.Join(filepath.Dir(plugin.ResolvedManifestPath), raw))
-}
-
-func buildConnectionAuthMap(name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, authFallback *specAuthFallback, deps Deps, regStore *lazyRegStore) (map[string]OAuthHandler, error) {
+func buildConnectionAuthMap(name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, deps Deps) (map[string]OAuthHandler, error) {
 	manifestProvider := (*pluginmanifestv1.Provider)(nil)
 	if manifest != nil {
 		manifestProvider = manifest.Provider
@@ -227,20 +177,9 @@ func buildConnectionAuthMap(name string, intg config.IntegrationDef, manifest *p
 	if err != nil {
 		return nil, fmt.Errorf("resolve connections for %q: %w", name, err)
 	}
-	mcpURL := ""
-	if resolved, ok := plan.resolvedSurface(config.SpecSurfaceMCP); ok {
-		mcpURL = resolved.url
-	}
-
-	specAuthForConnection := func(connectionName string) *provider.Definition {
-		if authFallback == nil || authFallback.definition == nil || authFallback.connectionName != connectionName {
-			return nil
-		}
-		return authFallback.definition
-	}
 
 	handlers := make(map[string]OAuthHandler)
-	if handler, err := buildConnectionHandler(plan.pluginConnection, mcpURL, pluginConfig, specAuthForConnection(config.PluginConnectionName), deps, regStore); err != nil {
+	if handler, err := buildConnectionHandler(plan.pluginConnection, pluginConfig, deps); err != nil {
 		return nil, fmt.Errorf("build plugin connection auth for %q: %w", name, err)
 	} else if handler != nil {
 		handlers[config.PluginConnectionName] = handler
@@ -248,7 +187,7 @@ func buildConnectionAuthMap(name string, intg config.IntegrationDef, manifest *p
 
 	for resolvedName := range plan.namedConnections {
 		conn := plan.namedConnections[resolvedName]
-		handler, err := buildConnectionHandler(conn, mcpURL, pluginConfig, specAuthForConnection(resolvedName), deps, regStore)
+		handler, err := buildConnectionHandler(conn, pluginConfig, deps)
 		if err != nil {
 			return nil, fmt.Errorf("build named connection auth for %q/%q: %w", name, resolvedName, err)
 		}
@@ -284,22 +223,12 @@ func namedConnectionNames(plugin *config.PluginDef, manifestProvider *pluginmani
 	return names
 }
 
-func buildConnectionHandler(conn config.ConnectionDef, mcpURL string, pluginConfig map[string]any, specDef *provider.Definition, deps Deps, regStore *lazyRegStore) (OAuthHandler, error) {
+func buildConnectionHandler(conn config.ConnectionDef, pluginConfig map[string]any, deps Deps) (OAuthHandler, error) {
 	switch conn.Auth.Type {
 	case "", pluginmanifestv1.AuthTypeOAuth2:
-		handler, err := buildOAuthHandlerFromAuth(&conn.Auth, pluginConfig, deps)
-		if err != nil || handler != nil || conn.Auth.Type == pluginmanifestv1.AuthTypeOAuth2 {
-			return handler, err
-		}
-		return buildOAuthHandlerFromDefinition(specDef, conn, pluginConfig, deps)
+		return buildOAuthHandlerFromAuth(&conn.Auth, pluginConfig, deps)
 	case pluginmanifestv1.AuthTypeMCPOAuth:
-		if mcpURL == "" {
-			return nil, fmt.Errorf("mcp_oauth auth requires mcp_url")
-		}
-		if regStore == nil {
-			return buildMCPOAuthHandler(conn, mcpURL, nil, deps), nil
-		}
-		return buildMCPOAuthHandler(conn, mcpURL, regStore.get(), deps), nil
+		return nil, fmt.Errorf("mcp_oauth auth is no longer supported for executable providers")
 	default:
 		return nil, nil
 	}

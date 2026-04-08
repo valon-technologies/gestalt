@@ -50,22 +50,6 @@ func Install(packagePath, destDir string) (*InstalledPlugin, error) {
 		return installed, nil
 	}
 
-	if manifest.IsDeclarativeOnlyProvider() {
-		if err := os.MkdirAll(destDir, 0755); err != nil {
-			return nil, fmt.Errorf("create plugin directory: %w", err)
-		}
-		if err := pluginpkg.ExtractPackage(packagePath, destDir); err != nil {
-			return nil, err
-		}
-		manifestPath, err := pluginpkg.FindManifestFile(destDir)
-		if err != nil {
-			manifestPath = filepath.Join(destDir, pluginpkg.ManifestFile)
-		}
-		manifest = pluginpkg.ResolveManifestLocalReferences(manifest, manifestPath)
-		installed := buildInstalledPlugin(manifest, destDir, manifestPath, "", nil, "")
-		return installed, nil
-	}
-
 	artifact, err := pluginpkg.CurrentPlatformArtifact(manifest)
 	if err != nil {
 		return nil, err
@@ -119,26 +103,6 @@ func InstallFromDir(dirPath, destDir string) (*InstalledPlugin, error) {
 		}
 		assetRoot := filepath.Join(destDir, filepath.FromSlash(manifest.WebUI.AssetRoot))
 		installed := buildInstalledPlugin(manifest, destDir, mfPath, "", nil, assetRoot)
-		return installed, nil
-	}
-
-	if manifest.IsDeclarativeOnlyProvider() {
-		if err := os.MkdirAll(destDir, 0755); err != nil {
-			return nil, fmt.Errorf("create plugin directory: %w", err)
-		}
-		manifestSrc, err := pluginpkg.FindManifestFile(dirPath)
-		if err != nil {
-			return nil, fmt.Errorf("find manifest: %w", err)
-		}
-		manifestDest := filepath.Join(destDir, filepath.Base(manifestSrc))
-		if err := copyFile(manifestSrc, manifestDest); err != nil {
-			return nil, fmt.Errorf("copy manifest: %w", err)
-		}
-		if err := copyManifestReferencedFiles(dirPath, destDir, manifest); err != nil {
-			return nil, err
-		}
-		manifest = pluginpkg.ResolveManifestLocalReferences(manifest, manifestDest)
-		installed := buildInstalledPlugin(manifest, destDir, manifestDest, "", nil, "")
 		return installed, nil
 	}
 
@@ -220,17 +184,16 @@ func executablePathForManifest(root string, manifest *pluginmanifestv1.Manifest)
 	if isWebUIOnly(manifest) {
 		return "", nil
 	}
-	if manifest.IsDeclarativeOnlyProvider() {
-		return "", nil
-	}
 	var entry *pluginmanifestv1.Entrypoint
-	for _, kind := range manifest.Kinds {
-		switch kind {
-		case pluginmanifestv1.KindProvider:
-			entry = manifest.Entrypoints.Provider
-		default:
+	for _, kind := range []string{
+		pluginmanifestv1.KindProvider,
+		pluginmanifestv1.KindAuth,
+		pluginmanifestv1.KindDatastore,
+	} {
+		if !manifestDeclaresKind(manifest, kind) {
 			continue
 		}
+		entry = pluginpkg.EntrypointForKind(manifest, kind)
 		if entry != nil {
 			break
 		}
@@ -242,6 +205,18 @@ func executablePathForManifest(root string, manifest *pluginmanifestv1.Manifest)
 		return "", fmt.Errorf("manifest entrypoint artifact_path is required")
 	}
 	return filepath.Join(root, filepath.FromSlash(entry.ArtifactPath)), nil
+}
+
+func manifestDeclaresKind(manifest *pluginmanifestv1.Manifest, kind string) bool {
+	if manifest == nil {
+		return false
+	}
+	for _, declared := range manifest.Kinds {
+		if declared == kind {
+			return true
+		}
+	}
+	return false
 }
 
 func copyManifestReferencedFiles(srcDir, destDir string, manifest *pluginmanifestv1.Manifest) error {

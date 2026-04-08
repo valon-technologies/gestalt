@@ -122,6 +122,186 @@ var Router = gestalt.MustRouter(
 `
 }
 
+func GeneratedAuthPackageSource() string {
+	return `package auth
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+)
+
+type Provider struct{}
+
+func New() *Provider { return &Provider{} }
+
+func (p *Provider) Configure(context.Context, string, map[string]any) error { return nil }
+
+func (p *Provider) Metadata() gestalt.ProviderMetadata {
+	return gestalt.ProviderMetadata{
+		Kind:        gestalt.ProviderKindAuth,
+		Name:        "generated-auth",
+		DisplayName: "Generated Auth",
+	}
+}
+
+func (p *Provider) BeginLogin(context.Context, gestalt.BeginLoginRequest) (*gestalt.BeginLoginResponse, error) {
+	return &gestalt.BeginLoginResponse{
+		AuthorizationURL: "https://auth.example.test/login?state=idp-state&prompt=consent",
+	}, nil
+}
+
+func (p *Provider) CompleteLogin(_ context.Context, req gestalt.CompleteLoginRequest) (*gestalt.AuthenticatedUser, error) {
+	if req.Query["state"] != "idp-state" {
+		return nil, fmt.Errorf("unexpected state %q", req.Query["state"])
+	}
+	if req.Query["prompt"] != "consent" {
+		return nil, fmt.Errorf("unexpected prompt %q", req.Query["prompt"])
+	}
+	return &gestalt.AuthenticatedUser{
+		Email:       "generated-auth@example.com",
+		DisplayName: "Generated Auth User",
+	}, nil
+}
+
+func (p *Provider) ValidateExternalToken(_ context.Context, token string) (*gestalt.AuthenticatedUser, error) {
+	if token == "" {
+		return nil, fmt.Errorf("token is required")
+	}
+	if strings.Count(token, ".") == 2 {
+		return &gestalt.AuthenticatedUser{
+			Email:       "jwt@example.com",
+			DisplayName: "Validated JWT User",
+		}, nil
+	}
+	return &gestalt.AuthenticatedUser{
+		Email:       token + "@example.com",
+		DisplayName: "Validated User",
+	}, nil
+}
+
+func (p *Provider) SessionTTL() time.Duration { return 90 * time.Minute }
+`
+}
+
+func GeneratedDatastorePackageSource() string {
+	return `package datastore
+
+import (
+	"context"
+	"time"
+
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+)
+
+type Provider struct {
+	users  map[string]*gestalt.StoredUser
+	tokens map[string]*gestalt.StoredIntegrationToken
+}
+
+func New() *Provider {
+	return &Provider{
+		users:  map[string]*gestalt.StoredUser{},
+		tokens: map[string]*gestalt.StoredIntegrationToken{},
+	}
+}
+
+func (p *Provider) Configure(context.Context, string, map[string]any) error { return nil }
+
+func (p *Provider) Metadata() gestalt.ProviderMetadata {
+	return gestalt.ProviderMetadata{
+		Kind:        gestalt.ProviderKindDatastore,
+		Name:        "generated-datastore",
+		DisplayName: "Generated Datastore",
+	}
+}
+
+func (p *Provider) Warnings() []string { return []string{"generated datastore warning"} }
+
+func (p *Provider) HealthCheck(context.Context) error { return nil }
+
+func (p *Provider) Migrate(context.Context) error { return nil }
+
+func (p *Provider) GetUser(_ context.Context, id string) (*gestalt.StoredUser, error) {
+	return p.users[id], nil
+}
+
+func (p *Provider) FindOrCreateUser(_ context.Context, email string) (*gestalt.StoredUser, error) {
+	if user, ok := p.users[email]; ok {
+		return user, nil
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	user := &gestalt.StoredUser{
+		ID:        email,
+		Email:     email,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	p.users[email] = user
+	return user, nil
+}
+
+func (p *Provider) PutIntegrationToken(_ context.Context, token *gestalt.StoredIntegrationToken) error {
+	cloned := *token
+	cloned.AccessTokenSealed = append([]byte(nil), token.AccessTokenSealed...)
+	cloned.RefreshTokenSealed = append([]byte(nil), token.RefreshTokenSealed...)
+	cloned.ConnectionParams = cloneStringMap(token.ConnectionParams)
+	p.tokens[token.UserID] = &cloned
+	return nil
+}
+
+func (p *Provider) GetIntegrationToken(_ context.Context, userID, _, _, _ string) (*gestalt.StoredIntegrationToken, error) {
+	if token, ok := p.tokens[userID]; ok {
+		cloned := *token
+		cloned.AccessTokenSealed = append([]byte(nil), token.AccessTokenSealed...)
+		cloned.RefreshTokenSealed = append([]byte(nil), token.RefreshTokenSealed...)
+		cloned.ConnectionParams = cloneStringMap(token.ConnectionParams)
+		return &cloned, nil
+	}
+	return nil, nil
+}
+
+func (p *Provider) ListIntegrationTokens(_ context.Context, userID, _, _ string) ([]*gestalt.StoredIntegrationToken, error) {
+	token, err := p.GetIntegrationToken(context.Background(), userID, "", "", "")
+	if err != nil || token == nil {
+		return nil, err
+	}
+	return []*gestalt.StoredIntegrationToken{token}, nil
+}
+
+func (p *Provider) DeleteIntegrationToken(_ context.Context, id string) error {
+	delete(p.tokens, id)
+	return nil
+}
+
+func (p *Provider) PutAPIToken(context.Context, *gestalt.StoredAPIToken) error { return nil }
+func (p *Provider) GetAPITokenByHash(context.Context, string) (*gestalt.StoredAPIToken, error) {
+	return nil, nil
+}
+func (p *Provider) ListAPITokens(context.Context, string) ([]*gestalt.StoredAPIToken, error) {
+	return nil, nil
+}
+func (p *Provider) RevokeAPIToken(context.Context, string, string) error { return nil }
+func (p *Provider) RevokeAllAPITokens(context.Context, string) (int64, error) {
+	return 0, nil
+}
+
+func cloneStringMap(values map[string]string) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(values))
+	for key, value := range values {
+		out[key] = value
+	}
+	return out
+}
+`
+}
+
 func GeneratedProviderModuleSource(t *testing.T, module string) string {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join(ExampleProviderPluginPath(t), "go.mod"))

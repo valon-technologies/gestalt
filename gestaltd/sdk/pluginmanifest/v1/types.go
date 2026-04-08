@@ -5,21 +5,33 @@ import (
 )
 
 const (
-	KindProvider = "provider"
-	KindWebUI    = "webui"
+	KindProvider  = "provider"
+	KindAuth      = "auth"
+	KindDatastore = "datastore"
+	KindWebUI     = "webui"
 )
 
 type Manifest struct {
-	Source      string         `json:"source,omitempty" yaml:"source,omitempty"`
-	Version     string         `json:"version" yaml:"version"`
-	DisplayName string         `json:"display_name,omitempty" yaml:"display_name,omitempty"`
-	Description string         `json:"description,omitempty" yaml:"description,omitempty"`
-	IconFile    string         `json:"icon_file,omitempty" yaml:"icon_file,omitempty"`
-	Kinds       []string       `json:"kinds" yaml:"kinds"`
-	Provider    *Provider      `json:"provider,omitempty" yaml:"provider,omitempty"`
-	WebUI       *WebUIMetadata `json:"webui,omitempty" yaml:"webui,omitempty"`
-	Artifacts   []Artifact     `json:"artifacts,omitempty" yaml:"artifacts,omitempty"`
-	Entrypoints Entrypoints    `json:"entrypoints,omitzero" yaml:"entrypoints,omitempty"`
+	Source      string             `json:"source,omitempty" yaml:"source,omitempty"`
+	Version     string             `json:"version" yaml:"version"`
+	DisplayName string             `json:"display_name,omitempty" yaml:"display_name,omitempty"`
+	Description string             `json:"description,omitempty" yaml:"description,omitempty"`
+	IconFile    string             `json:"icon_file,omitempty" yaml:"icon_file,omitempty"`
+	Kinds       []string           `json:"kinds" yaml:"kinds"`
+	Provider    *Provider          `json:"provider,omitempty" yaml:"provider,omitempty"`
+	Auth        *AuthMetadata      `json:"auth,omitempty" yaml:"auth,omitempty"`
+	Datastore   *DatastoreMetadata `json:"datastore,omitempty" yaml:"datastore,omitempty"`
+	WebUI       *WebUIMetadata     `json:"webui,omitempty" yaml:"webui,omitempty"`
+	Artifacts   []Artifact         `json:"artifacts,omitempty" yaml:"artifacts,omitempty"`
+	Entrypoints Entrypoints        `json:"entrypoints,omitzero" yaml:"entrypoints,omitempty"`
+}
+
+type AuthMetadata struct {
+	ConfigSchemaPath string `json:"config_schema_path,omitempty" yaml:"config_schema_path,omitempty"`
+}
+
+type DatastoreMetadata struct {
+	ConfigSchemaPath string `json:"config_schema_path,omitempty" yaml:"config_schema_path,omitempty"`
 }
 
 type WebUIMetadata struct {
@@ -71,26 +83,6 @@ type ProviderConnectionParam struct {
 	Required    bool   `json:"required,omitempty" yaml:"required,omitempty"`
 	Description string `json:"description,omitempty" yaml:"description,omitempty"`
 	From        string `json:"from,omitempty" yaml:"from,omitempty"`
-}
-
-func (p *Provider) IsDeclarative() bool {
-	return p != nil && len(p.Operations) > 0
-}
-
-func (p *Provider) IsSpecLoaded() bool {
-	return p != nil && (p.OpenAPI != "" || p.GraphQLURL != "" || p.MCPURL != "")
-}
-
-func (p *Provider) IsManifestBacked() bool {
-	return p != nil && (p.IsDeclarative() || p.IsSpecLoaded())
-}
-
-func (m *Manifest) IsHybridProvider() bool {
-	return m != nil && m.Provider != nil && m.Provider.IsManifestBacked() && m.Entrypoints.Provider != nil
-}
-
-func (m *Manifest) IsDeclarativeOnlyProvider() bool {
-	return m != nil && m.Provider != nil && m.Provider.IsManifestBacked() && m.Entrypoints.Provider == nil
 }
 
 type ManifestOperationOverride struct {
@@ -170,7 +162,9 @@ type Artifact struct {
 }
 
 type Entrypoints struct {
-	Provider *Entrypoint `json:"provider,omitempty" yaml:"provider,omitempty"`
+	Provider  *Entrypoint `json:"provider,omitempty" yaml:"provider,omitempty"`
+	Auth      *Entrypoint `json:"auth,omitempty" yaml:"auth,omitempty"`
+	Datastore *Entrypoint `json:"datastore,omitempty" yaml:"datastore,omitempty"`
 }
 
 type Entrypoint struct {

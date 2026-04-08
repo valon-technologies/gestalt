@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package gestalt.plugin.v1;
+
+option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
+
+import "google/protobuf/empty.proto";
+
+message AuthenticatedUser {
+  string subject = 1;
+  string email = 2;
+  bool email_verified = 3;
+  string display_name = 4;
+  string avatar_url = 5;
+  map<string, string> claims = 6;
+}
+
+message BeginLoginRequest {
+  string callback_url = 1;
+  string host_state = 2;
+  repeated string scopes = 3;
+  map<string, string> options = 4;
+}
+
+message BeginLoginResponse {
+  string authorization_url = 1;
+  bytes plugin_state = 2;
+}
+
+message CompleteLoginRequest {
+  map<string, string> query = 1;
+  bytes plugin_state = 2;
+  string callback_url = 3;
+}
+
+message ValidateExternalTokenRequest {
+  string token = 1;
+}
+
+message AuthSessionSettings {
+  int64 session_ttl_seconds = 1;
+}
+
+service AuthPlugin {
+  rpc BeginLogin(BeginLoginRequest) returns (BeginLoginResponse);
+  rpc CompleteLogin(CompleteLoginRequest) returns (AuthenticatedUser);
+  rpc ValidateExternalToken(ValidateExternalTokenRequest) returns (AuthenticatedUser);
+  rpc GetSessionSettings(google.protobuf.Empty) returns (AuthSessionSettings);
+}

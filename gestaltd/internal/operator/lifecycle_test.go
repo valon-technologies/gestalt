@@ -1,7 +1,11 @@
 package operator
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
@@ -13,50 +17,140 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
+	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	"gopkg.in/yaml.v3"
 )
+
+type staticSourceResolver struct {
+	localPath string
+}
+
+func (r staticSourceResolver) Resolve(context.Context, pluginsource.Source, string) (*pluginsource.ResolvedPackage, error) {
+	return &pluginsource.ResolvedPackage{
+		LocalPath: r.localPath,
+		Cleanup:   func() {},
+	}, nil
+}
+
+func decodeNodeMap(t *testing.T, node any) map[string]any {
+	t.Helper()
+	var out map[string]any
+	switch n := node.(type) {
+	case yaml.Node:
+		if err := n.Decode(&out); err != nil {
+			t.Fatalf("Decode: %v", err)
+		}
+	case *yaml.Node:
+		if n == nil {
+			return nil
+		}
+		if err := n.Decode(&out); err != nil {
+			t.Fatalf("Decode: %v", err)
+		}
+	case interface{ Decode(any) error }:
+		if err := n.Decode(&out); err != nil {
+			t.Fatalf("Decode: %v", err)
+		}
+	default:
+		t.Fatalf("unsupported node type %T", node)
+	}
+	return out
+}
+
+func writeRequiredComponentManifests(t *testing.T, dir string) (string, string) {
+	t.Helper()
+
+	writeManifest := func(relPath, source, kind string) string {
+		t.Helper()
+
+		manifestPath := filepath.Join(dir, relPath)
+		if err := os.MkdirAll(filepath.Dir(manifestPath), 0o755); err != nil {
+			t.Fatalf("MkdirAll(%s): %v", manifestPath, err)
+		}
+		manifest := &pluginmanifestv1.Manifest{
+			Source:  source,
+			Version: "0.0.1-alpha.1",
+			Kinds:   []string{kind},
+		}
+		switch kind {
+		case pluginmanifestv1.KindAuth:
+			manifest.Auth = &pluginmanifestv1.AuthMetadata{}
+		case pluginmanifestv1.KindDatastore:
+			manifest.Datastore = &pluginmanifestv1.DatastoreMetadata{}
+		default:
+			t.Fatalf("unsupported component kind %q", kind)
+		}
+		data, err := pluginpkg.EncodeSourceManifestFormat(manifest, pluginpkg.ManifestFormatYAML)
+		if err != nil {
+			t.Fatalf("EncodeSourceManifestFormat(%s): %v", relPath, err)
+		}
+		if err := os.WriteFile(manifestPath, data, 0o644); err != nil {
+			t.Fatalf("WriteFile(%s): %v", manifestPath, err)
+		}
+		return manifestPath
+	}
+
+	datastorePath := writeManifest("datastore/sqlite/plugin.yaml", "github.com/testowner/providers/datastore/sqlite", pluginmanifestv1.KindDatastore)
+	return "", datastorePath
+}
+
+func requiredComponentConfigYAML(t *testing.T, dir, dbPath string) string {
+	t.Helper()
+	_, datastorePath := writeRequiredComponentManifests(t, dir)
+	return fmt.Sprintf(`datastore:
+  provider:
+    source:
+      path: %q
+  config:
+    path: %q
+`, datastorePath, dbPath)
+}
+
+func requiredDatastoreConfigYAML(t *testing.T, dir, dbPath string) string {
+	t.Helper()
+	_, datastorePath := writeRequiredComponentManifests(t, dir)
+	return fmt.Sprintf(`datastore:
+  provider:
+    source:
+      path: %q
+  config:
+    path: %q
+`, datastorePath, dbPath)
+}
 
 func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	manifestPath := filepath.Join(dir, "plugin.yaml")
-	manifest, err := pluginpkg.EncodeManifest(&pluginmanifestv1.Manifest{
+	manifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
 		Source:      "github.com/testowner/plugins/local-provider",
-		Version:     "0.1.0",
+		Version:     "0.0.1-alpha.1",
 		DisplayName: "Local Provider",
-		Description: "Local manifest-backed provider",
+		Description: "Local executable provider",
 		Kinds:       []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
-			Auth:    &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
-			BaseURL: "https://example.com",
-			Operations: []pluginmanifestv1.ProviderOperation{
-				{
-					Name:   "ping",
-					Method: "GET",
-					Path:   "/ping",
-				},
-			},
+			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
 		},
-	})
+	}, pluginpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("EncodeManifest: %v", err)
 	}
 	if err := os.WriteFile(manifestPath, manifest, 0o644); err != nil {
 		t.Fatalf("WriteFile manifest: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(dir, "catalog.yaml"), []byte("name: provider\noperations:\n  - id: ping\n    method: GET\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile catalog: %v", err)
+	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `auth:
-  provider: none
-datastore:
-  provider: sqlite
-  config:
-    path: ./gestalt.db
-providers:
+	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `server:
+  encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+plugins:
   example:
-    from:
+    provider:
       source:
         path: ./plugin.yaml
 `
@@ -74,7 +168,7 @@ providers:
 	if intg.DisplayName != "Local Provider" {
 		t.Fatalf("DisplayName = %q", intg.DisplayName)
 	}
-	if intg.Description != "Local manifest-backed provider" {
+	if intg.Description != "Local executable provider" {
 		t.Fatalf("Description = %q", intg.Description)
 	}
 	if intg.Plugin == nil || intg.Plugin.ResolvedManifest == nil {
@@ -83,11 +177,269 @@ providers:
 	if intg.Plugin.ResolvedManifestPath != manifestPath {
 		t.Fatalf("ResolvedManifestPath = %q, want %q", intg.Plugin.ResolvedManifestPath, manifestPath)
 	}
-	if !intg.Plugin.IsDeclarative {
-		t.Fatal("expected manifest-backed source plugin to resolve as declarative")
-	}
 	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); !os.IsNotExist(err) {
 		t.Fatalf("lockfile should not be created, got err=%v", err)
+	}
+}
+
+func TestLockProviderEntryForSource_RejectsManifestWithoutProviderKind(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	pkgPath := mustBuildManagedProviderPackage(t, dir, &pluginmanifestv1.Manifest{
+		Source:  "github.com/testowner/gestalt-providers/plugins/auth-only",
+		Version: "0.0.1-alpha.1",
+		Kinds:   []string{pluginmanifestv1.KindAuth},
+		Auth:    &pluginmanifestv1.AuthMetadata{},
+		Entrypoints: pluginmanifestv1.Entrypoints{
+			Auth: &pluginmanifestv1.Entrypoint{ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "auth"))},
+		},
+	}, map[string]string{
+		filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "auth")): "auth-binary",
+	}, false)
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	paths := initPathsForConfig(cfgPath)
+	lc := NewLifecycle(staticSourceResolver{localPath: pkgPath})
+	plugin := &config.PluginDef{
+		Source: &config.PluginSourceDef{
+			Ref:     "github.com/testowner/gestalt-providers/plugins/auth-only",
+			Version: "0.0.1-alpha.1",
+		},
+	}
+
+	_, err := lc.lockProviderEntryForSource(context.Background(), paths, "example", plugin, map[string]any{})
+	if err == nil {
+		t.Fatal("expected provider kind validation error")
+	}
+	if !strings.Contains(err.Error(), `manifest does not declare kind "provider"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadForExecutionAtPath_ResolvesLocalTopLevelPluginsWithoutLockfile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	authArtifact := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "auth-plugin"))
+	authManifestPath := filepath.Join(dir, "auth-plugin.yaml")
+	authManifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
+		Source:  "github.com/testowner/plugins/local-auth",
+		Version: "0.0.1-alpha.1",
+		Kinds:   []string{pluginmanifestv1.KindAuth},
+		Auth:    &pluginmanifestv1.AuthMetadata{},
+		Artifacts: []pluginmanifestv1.Artifact{
+			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: authArtifact},
+		},
+		Entrypoints: pluginmanifestv1.Entrypoints{
+			Auth: &pluginmanifestv1.Entrypoint{ArtifactPath: authArtifact, Args: []string{"serve-auth"}},
+		},
+	}, pluginpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeSourceManifestFormat auth: %v", err)
+	}
+	if err := os.WriteFile(authManifestPath, authManifest, 0o644); err != nil {
+		t.Fatalf("WriteFile auth manifest: %v", err)
+	}
+	authExecutablePath := filepath.Join(dir, filepath.FromSlash(authArtifact))
+	if err := os.MkdirAll(filepath.Dir(authExecutablePath), 0o755); err != nil {
+		t.Fatalf("MkdirAll auth artifact: %v", err)
+	}
+	if err := os.WriteFile(authExecutablePath, []byte("auth-binary"), 0o755); err != nil {
+		t.Fatalf("WriteFile auth artifact: %v", err)
+	}
+
+	datastoreArtifact := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "datastore-plugin"))
+	datastoreManifestPath := filepath.Join(dir, "datastore-plugin.yaml")
+	datastoreManifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
+		Source:    "github.com/testowner/plugins/local-datastore",
+		Version:   "0.0.1-alpha.1",
+		Kinds:     []string{pluginmanifestv1.KindDatastore},
+		Datastore: &pluginmanifestv1.DatastoreMetadata{},
+		Artifacts: []pluginmanifestv1.Artifact{
+			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: datastoreArtifact},
+		},
+		Entrypoints: pluginmanifestv1.Entrypoints{
+			Datastore: &pluginmanifestv1.Entrypoint{ArtifactPath: datastoreArtifact, Args: []string{"serve-datastore"}},
+		},
+	}, pluginpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeSourceManifestFormat datastore: %v", err)
+	}
+	if err := os.WriteFile(datastoreManifestPath, datastoreManifest, 0o644); err != nil {
+		t.Fatalf("WriteFile datastore manifest: %v", err)
+	}
+	datastoreExecutablePath := filepath.Join(dir, filepath.FromSlash(datastoreArtifact))
+	if err := os.MkdirAll(filepath.Dir(datastoreExecutablePath), 0o755); err != nil {
+		t.Fatalf("MkdirAll datastore artifact: %v", err)
+	}
+	if err := os.WriteFile(datastoreExecutablePath, []byte("datastore-binary"), 0o755); err != nil {
+		t.Fatalf("WriteFile datastore artifact: %v", err)
+	}
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := `auth:
+  provider:
+    source:
+      path: ./auth-plugin.yaml
+  config:
+    client_id: local-auth-client
+datastore:
+  provider:
+    source:
+      path: ./datastore-plugin.yaml
+  config:
+    bucket: local-datastore
+server:
+  encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	lc := NewLifecycle(nil)
+	loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath: %v", err)
+	}
+
+	if loaded.Auth.Provider == nil || loaded.Auth.Provider.ResolvedManifest == nil {
+		t.Fatalf("auth resolved manifest = %+v", loaded.Auth.Provider)
+	}
+	if loaded.Auth.Provider.Command != authExecutablePath {
+		t.Fatalf("auth command = %q, want %q", loaded.Auth.Provider.Command, authExecutablePath)
+	}
+	if got := loaded.Auth.Provider.Args; len(got) != 1 || got[0] != "serve-auth" {
+		t.Fatalf("auth args = %v, want [serve-auth]", got)
+	}
+	authCfg := decodeNodeMap(t, loaded.Auth.Config)
+	if authCfg["command"] != authExecutablePath {
+		t.Fatalf("auth config command = %v, want %q", authCfg["command"], authExecutablePath)
+	}
+	authPluginCfg, ok := authCfg["config"].(map[string]any)
+	if !ok || authPluginCfg["client_id"] != "local-auth-client" {
+		t.Fatalf("auth nested config = %#v", authCfg["config"])
+	}
+
+	if loaded.Datastore.Provider == nil || loaded.Datastore.Provider.ResolvedManifest == nil {
+		t.Fatalf("datastore resolved manifest = %+v", loaded.Datastore.Provider)
+	}
+	if loaded.Datastore.Provider.Command != datastoreExecutablePath {
+		t.Fatalf("datastore command = %q, want %q", loaded.Datastore.Provider.Command, datastoreExecutablePath)
+	}
+	if got := loaded.Datastore.Provider.Args; len(got) != 1 || got[0] != "serve-datastore" {
+		t.Fatalf("datastore args = %v, want [serve-datastore]", got)
+	}
+	datastoreCfg := decodeNodeMap(t, loaded.Datastore.Config)
+	if datastoreCfg["command"] != datastoreExecutablePath {
+		t.Fatalf("datastore config command = %v, want %q", datastoreCfg["command"], datastoreExecutablePath)
+	}
+	datastorePluginCfg, ok := datastoreCfg["config"].(map[string]any)
+	if !ok || datastorePluginCfg["bucket"] != "local-datastore" {
+		t.Fatalf("datastore nested config = %#v", datastoreCfg["config"])
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); !os.IsNotExist(err) {
+		t.Fatalf("lockfile should not be created, got err=%v", err)
+	}
+}
+
+func TestLoadForExecutionAtPath_ResolvesLocalSourceTopLevelPluginsWithoutArtifacts(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	writeTestSourceFile := func(rel string, data []byte, mode os.FileMode) {
+		t.Helper()
+		path := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("MkdirAll(%s): %v", rel, err)
+		}
+		if err := os.WriteFile(path, data, mode); err != nil {
+			t.Fatalf("WriteFile(%s): %v", rel, err)
+		}
+	}
+
+	writeTestSourceFile("go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/local-components")), 0o644)
+	writeTestSourceFile("go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
+
+	authManifestPath := filepath.Join(dir, "auth-plugin.yaml")
+	writeTestSourceFile("auth.go", []byte(testutil.GeneratedAuthPackageSource()), 0o644)
+	authManifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
+		Source:  "github.com/testowner/plugins/local-source-auth",
+		Version: "0.0.1-alpha.1",
+		Kinds:   []string{pluginmanifestv1.KindAuth},
+		Auth:    &pluginmanifestv1.AuthMetadata{},
+	}, pluginpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeSourceManifestFormat auth: %v", err)
+	}
+	if err := os.WriteFile(authManifestPath, authManifest, 0o644); err != nil {
+		t.Fatalf("WriteFile auth manifest: %v", err)
+	}
+
+	datastoreManifestPath := filepath.Join(dir, "datastore-plugin.yaml")
+	writeTestSourceFile("datastore.go", []byte(testutil.GeneratedDatastorePackageSource()), 0o644)
+	datastoreManifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
+		Source:    "github.com/testowner/plugins/local-source-datastore",
+		Version:   "0.0.1-alpha.1",
+		Kinds:     []string{pluginmanifestv1.KindDatastore},
+		Datastore: &pluginmanifestv1.DatastoreMetadata{},
+	}, pluginpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeSourceManifestFormat datastore: %v", err)
+	}
+	if err := os.WriteFile(datastoreManifestPath, datastoreManifest, 0o644); err != nil {
+		t.Fatalf("WriteFile datastore manifest: %v", err)
+	}
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := `auth:
+  provider:
+    source:
+      path: ./auth-plugin.yaml
+datastore:
+  provider:
+    source:
+      path: ./datastore-plugin.yaml
+server:
+  encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	lc := NewLifecycle(nil)
+	loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath: %v", err)
+	}
+
+	if loaded.Auth.Provider == nil || loaded.Auth.Provider.ResolvedManifest == nil {
+		t.Fatalf("auth resolved manifest = %+v", loaded.Auth.Provider)
+	}
+	if loaded.Auth.Provider.Command != "" {
+		t.Fatalf("auth command = %q, want empty", loaded.Auth.Provider.Command)
+	}
+	authCfg := decodeNodeMap(t, loaded.Auth.Config)
+	if authCfg["manifest_path"] != authManifestPath {
+		t.Fatalf("auth manifest_path = %v, want %q", authCfg["manifest_path"], authManifestPath)
+	}
+	if authCfg["command"] != "" {
+		t.Fatalf("auth config command = %v, want empty", authCfg["command"])
+	}
+
+	if loaded.Datastore.Provider == nil || loaded.Datastore.Provider.ResolvedManifest == nil {
+		t.Fatalf("datastore resolved manifest = %+v", loaded.Datastore.Provider)
+	}
+	if loaded.Datastore.Provider.Command != "" {
+		t.Fatalf("datastore command = %q, want empty", loaded.Datastore.Provider.Command)
+	}
+	datastoreCfg := decodeNodeMap(t, loaded.Datastore.Config)
+	if datastoreCfg["manifest_path"] != datastoreManifestPath {
+		t.Fatalf("datastore manifest_path = %v, want %q", datastoreCfg["manifest_path"], datastoreManifestPath)
+	}
+	if datastoreCfg["command"] != "" {
+		t.Fatalf("datastore config command = %v, want empty", datastoreCfg["command"])
 	}
 }
 
@@ -111,7 +463,7 @@ func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalSourceHybridPlugin
 	writeTestFile("provider.go", []byte(testutil.GeneratedProviderPackageSource()), 0o644)
 	manifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
 		Source:      "github.com/testowner/plugins/local-generated-provider",
-		Version:     "0.1.0",
+		Version:     "0.0.1-alpha.1",
 		DisplayName: "Generated Local Provider",
 		Kinds:       []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
@@ -124,15 +476,11 @@ func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalSourceHybridPlugin
 	writeTestFile("plugin.yaml", manifest, 0o644)
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `auth:
-  provider: none
-datastore:
-  provider: sqlite
-  config:
-    path: ./gestalt.db
-providers:
+	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `server:
+  encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+plugins:
   example:
-    from:
+    provider:
       source:
         path: ./plugin.yaml
 `
@@ -147,9 +495,6 @@ providers:
 	intg := loaded.Integrations["example"]
 	if intg.Plugin == nil || intg.Plugin.ResolvedManifest == nil {
 		t.Fatalf("ResolvedManifest = %+v", intg.Plugin)
-	}
-	if intg.Plugin.IsDeclarative {
-		t.Fatal("expected executable manifest-backed plugin to remain non-declarative")
 	}
 	catalogData, err := os.ReadFile(filepath.Join(dir, "catalog.yaml"))
 	if err != nil {
@@ -291,15 +636,11 @@ def session_catalog(request: gestalt.Request) -> gestalt.Catalog:
 
 	manifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
 		Source:      "github.com/testowner/plugins/local-python-provider",
-		Version:     "0.1.0",
+		Version:     "0.0.1-alpha.1",
 		DisplayName: "Generated Local Python Provider",
 		Kinds:       []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
-			Auth:    &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
-			BaseURL: "https://example.com",
-			Operations: []pluginmanifestv1.ProviderOperation{
-				{Name: "ping", Method: "GET", Path: "/ping"},
-			},
+			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
 		},
 	}, pluginpkg.ManifestFormatYAML)
 	if err != nil {
@@ -307,15 +648,11 @@ def session_catalog(request: gestalt.Request) -> gestalt.Catalog:
 	}
 	writeTestFile("plugin.yaml", manifest, 0o644)
 
-	cfg := `auth:
-  provider: none
-datastore:
-  provider: sqlite
-  config:
-    path: ./gestalt.db
-providers:
+	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `server:
+  encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+plugins:
   example:
-    from:
+    provider:
       source:
         path: ./plugin.yaml
 `
@@ -385,9 +722,6 @@ print(json.dumps({
 	intg := loaded.Integrations["example"]
 	if intg.Plugin == nil || intg.Plugin.ResolvedManifest == nil {
 		t.Fatalf("ResolvedManifest = %+v", intg.Plugin)
-	}
-	if intg.Plugin.IsDeclarative {
-		t.Fatal("expected executable Python source plugin to remain non-declarative")
 	}
 	catalogData, err := os.ReadFile(filepath.Join(dir, "catalog.yaml"))
 	if err != nil {
@@ -627,36 +961,31 @@ func TestApplyLockedPlugins_SkipsNilIntegrationPlugins(t *testing.T) {
 
 	dir := t.TempDir()
 	manifestPath := filepath.Join(dir, "plugin.yaml")
-	manifest, err := pluginpkg.EncodeManifest(&pluginmanifestv1.Manifest{
+	manifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
 		Source:      "github.com/testowner/plugins/local-provider",
-		Version:     "0.1.0",
+		Version:     "0.0.1-alpha.1",
 		DisplayName: "Local Provider",
 		Kinds:       []string{pluginmanifestv1.KindProvider},
 		Provider: &pluginmanifestv1.Provider{
-			Auth:    &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
-			BaseURL: "https://example.com",
-			Operations: []pluginmanifestv1.ProviderOperation{
-				{Name: "ping", Method: "GET", Path: "/ping"},
-			},
+			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
 		},
-	})
+	}, pluginpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("EncodeManifest: %v", err)
 	}
 	if err := os.WriteFile(manifestPath, manifest, 0o644); err != nil {
 		t.Fatalf("WriteFile manifest: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(dir, "catalog.yaml"), []byte("name: provider\noperations:\n  - id: ping\n    method: GET\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile catalog: %v", err)
+	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `auth:
-  provider: none
-datastore:
-  provider: sqlite
-  config:
-    path: ./gestalt.db
-providers:
+	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `server:
+  encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+plugins:
   example:
-    from:
+    provider:
       source:
         path: ./plugin.yaml
 `
@@ -757,6 +1086,53 @@ func TestReadLockfile_RejectsUnsupportedVersion(t *testing.T) {
 	if !strings.Contains(err.Error(), "unsupported lockfile version") {
 		t.Fatalf("unexpected error: %v", err)
 	}
+}
+
+func mustBuildManagedProviderPackage(t *testing.T, dir string, manifest *pluginmanifestv1.Manifest, artifacts map[string]string, includeCatalog bool) string {
+	t.Helper()
+
+	srcDir := filepath.Join(dir, strings.NewReplacer("/", "-", "@", "-", ".", "_").Replace(manifest.Source+"-"+manifest.Version)+"-pkg")
+	if err := os.MkdirAll(srcDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll source dir: %v", err)
+	}
+
+	manifestCopy := *manifest
+	manifestCopy.Artifacts = nil
+	for artifactPath, content := range artifacts {
+		fullPath := filepath.Join(srcDir, filepath.FromSlash(artifactPath))
+		if err := os.MkdirAll(filepath.Dir(fullPath), 0o755); err != nil {
+			t.Fatalf("MkdirAll artifact dir: %v", err)
+		}
+		if err := os.WriteFile(fullPath, []byte(content), 0o755); err != nil {
+			t.Fatalf("WriteFile artifact: %v", err)
+		}
+		sum := sha256.Sum256([]byte(content))
+		manifestCopy.Artifacts = append(manifestCopy.Artifacts, pluginmanifestv1.Artifact{
+			OS:     runtime.GOOS,
+			Arch:   runtime.GOARCH,
+			Path:   artifactPath,
+			SHA256: hex.EncodeToString(sum[:]),
+		})
+	}
+
+	manifestBytes, err := pluginpkg.EncodeManifest(&manifestCopy)
+	if err != nil {
+		t.Fatalf("EncodeManifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, pluginpkg.ManifestFile), manifestBytes, 0o644); err != nil {
+		t.Fatalf("WriteFile manifest: %v", err)
+	}
+	if includeCatalog {
+		if err := os.WriteFile(filepath.Join(srcDir, "catalog.yaml"), []byte("name: example\noperations:\n  - id: ping\n    method: GET\n"), 0o644); err != nil {
+			t.Fatalf("WriteFile catalog: %v", err)
+		}
+	}
+
+	pkgPath := filepath.Join(dir, filepath.Base(srcDir)+".tar.gz")
+	if err := pluginpkg.CreatePackageFromDir(srcDir, pkgPath); err != nil {
+		t.Fatalf("CreatePackageFromDir: %v", err)
+	}
+	return pkgPath
 }
 
 func TestReadWriteLockfile_RoundTrip(t *testing.T) {

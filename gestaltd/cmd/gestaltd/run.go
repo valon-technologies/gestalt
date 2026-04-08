@@ -450,20 +450,31 @@ func logConfigSummary(path string, cfg *config.Config) {
 		"server_management_addr", maskEmpty(cfg.Server.ManagementAddr()),
 		"server_base_url", maskEmpty(cfg.Server.BaseURL),
 		"server_encryption", maskSecret(cfg.Server.EncryptionKey),
-		"auth_provider", cfg.Auth.Provider,
-		"datastore_provider", cfg.Datastore.Provider,
+		"auth_provider", providerLabel(cfg.Auth.Provider),
+		"datastore_provider", providerLabel(cfg.Datastore.Provider),
 		"secrets_provider", cfg.Secrets.Provider,
 		"telemetry_provider", cfg.Telemetry.Provider,
 	)
 
 	for name, intg := range cfg.Integrations {
-		if intg.Plugin != nil && intg.Plugin.IsInline() {
-			slog.Info("integration configured", "integration", name, "type", "inline")
-		} else {
+		if intg.Plugin != nil {
 			slog.Info("integration configured", "integration", name, "type", "plugin")
 		}
 	}
 
+}
+
+func providerLabel(provider *config.PluginDef) string {
+	switch {
+	case provider == nil:
+		return "(not set)"
+	case provider.Source != nil && provider.Source.Ref != "":
+		return provider.Source.Ref
+	case provider.Source != nil && provider.Source.Path != "":
+		return provider.Source.Path
+	default:
+		return "custom"
+	}
 }
 
 func maskSecret(s string) string {

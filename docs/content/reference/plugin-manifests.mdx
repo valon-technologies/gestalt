@@ -29,7 +29,7 @@ This example is a declarative-only provider package. It does not need a binary.
   <Tabs.Tab>
     ```yaml
     source: github.com/acme/plugins/support-api
-    version: 0.1.0
+    version: 0.0.1-alpha.1
     display_name: Support API
     description: Small ticket API
     icon_file: assets/icon.svg
@@ -59,7 +59,7 @@ This example is a declarative-only provider package. It does not need a binary.
     ```json
     {
       "source": "github.com/acme/plugins/support-api",
-      "version": "0.1.0",
+      "version": "0.0.1-alpha.1",
       "display_name": "Support API",
       "description": "Small ticket API",
       "icon_file": "assets/icon.svg",
@@ -347,7 +347,7 @@ with `from: discovery` are satisfied from that metadata instead of user input.
 
 Manifest paths must stay inside the package. `source` and `version` are required, and a manifest defines either `provider` or `webui`, not both.
 
-Declarative-only provider packages do not require `artifacts`. Pure executable source manifests used with `from.source.path` or `gestaltd plugin release` may omit `artifacts` and `provider.exec.artifact_path`, but executable provider packages do require both.
+Declarative-only provider packages do not require `artifacts`. Pure executable source manifests used with `plugins.*.provider.source.path` or `gestaltd plugin release` may omit `artifacts` and `provider.exec.artifact_path`, but executable provider packages do require both.
 
 `config_schema_path` validates `providers.*.config` and may be written in JSON or YAML. Only `provider.connections.default` may define `params` and `discovery`. The surface types `rest`, `openapi`, and `graphql` are mutually exclusive, but `mcp` may be added alongside any of them.
 

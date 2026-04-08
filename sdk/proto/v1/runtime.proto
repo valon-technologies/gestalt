@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package gestalt.plugin.v1;
+
+option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/struct.proto";
+
+enum PluginKind {
+  PLUGIN_KIND_UNSPECIFIED = 0;
+  PLUGIN_KIND_INTEGRATION = 1;
+  PLUGIN_KIND_AUTH = 2;
+  PLUGIN_KIND_DATASTORE = 3;
+  PLUGIN_KIND_SECRETS = 4;
+  PLUGIN_KIND_TELEMETRY = 5;
+}
+
+message PluginMetadata {
+  PluginKind kind = 1;
+  string name = 2;
+  string display_name = 3;
+  string description = 4;
+  string version = 5;
+  repeated string warnings = 6;
+  int32 min_protocol_version = 10;
+  int32 max_protocol_version = 11;
+}
+
+message ConfigurePluginRequest {
+  string name = 1;
+  google.protobuf.Struct config = 2;
+  int32 protocol_version = 3;
+}
+
+message ConfigurePluginResponse {
+  int32 protocol_version = 1;
+}
+
+message HealthCheckResponse {
+  bool ready = 1;
+  string message = 2;
+}
+
+service PluginRuntime {
+  rpc GetPluginMetadata(google.protobuf.Empty) returns (PluginMetadata);
+  rpc ConfigurePlugin(ConfigurePluginRequest) returns (ConfigurePluginResponse);
+  rpc HealthCheck(google.protobuf.Empty) returns (HealthCheckResponse);
+}

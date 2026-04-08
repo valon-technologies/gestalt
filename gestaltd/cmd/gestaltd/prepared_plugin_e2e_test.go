@@ -19,7 +19,7 @@ func TestE2EValidateUsesUpdatedManagedPluginConfigAfterInit(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	pluginDir := buildPreparedPluginRequiringAPIKey(t, dir, "github.com/acme/plugins/provider", "0.1.0")
+	pluginDir := buildPreparedPluginRequiringAPIKey(t, dir, "github.com/acme/plugins/provider", "0.0.1-alpha.1")
 	cfgPath := writePreparedSourceConfig(t, dir, pluginDir, map[string]string{
 		"api_key": "one",
 	}, []string{
@@ -52,7 +52,7 @@ func TestE2EServeLockedResolvesLateBoundManagedPluginEnv(t *testing.T) {
 	dir := t.TempDir()
 	apiKeyEnv := "TEST_API_KEY_" + strings.ToUpper(strings.ReplaceAll(t.Name(), "/", "_"))
 	portEnv := apiKeyEnv + "_PORT"
-	pluginDir := buildPreparedPluginRequiringAPIKey(t, dir, "github.com/acme/plugins/provider", "0.1.0")
+	pluginDir := buildPreparedPluginRequiringAPIKey(t, dir, "github.com/acme/plugins/provider", "0.0.1-alpha.1")
 	cfgPath := writePreparedSourceConfig(t, dir, pluginDir, map[string]string{
 		"api_key": "${" + apiKeyEnv + "}",
 	}, []string{
@@ -92,6 +92,9 @@ func TestE2EDefaultStartAutoGeneratesHomeConfig(t *testing.T) {
 	t.Parallel()
 
 	homeDir := filepath.Join(t.TempDir(), "home:with#special")
+	providersDir := filepath.Join(t.TempDir(), "providers")
+	_ = setupAuthProviderDir(t, providersDir, "none")
+	_ = setupDatastoreProviderDir(t, providersDir, "sqlite")
 	configPath := filepath.Join(homeDir, ".gestaltd", "config.yaml")
 	legacyConfigDir := filepath.Join(homeDir, ".gestalt")
 	if err := os.MkdirAll(legacyConfigDir, 0o755); err != nil {
@@ -103,7 +106,12 @@ func TestE2EDefaultStartAutoGeneratesHomeConfig(t *testing.T) {
 
 	cmd := exec.Command(gestaltdBin)
 	cmd.Env = withoutEnvVar(os.Environ(), "GESTALT_CONFIG")
-	cmd.Env = append(cmd.Env, "HOME="+homeDir)
+	cmd.Env = append(cmd.Env,
+		"HOME="+homeDir,
+		"GESTALT_PROVIDERS_DIR="+filepath.Join(providersDir, "components"),
+		"GOMODCACHE="+goEnvPath(t, "GOMODCACHE"),
+		"GOCACHE="+goEnvPath(t, "GOCACHE"),
+	)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
@@ -189,18 +197,12 @@ func writePreparedSourceConfig(t *testing.T, dir, pluginDir string, pluginConfig
 		}
 	}
 
-	cfg := fmt.Sprintf(`auth:
-  provider: none
-datastore:
-  provider: sqlite
-  config:
-    path: %s
-%sproviders:
+	cfg := authDatastoreConfigYAML(t, dir, "none", "sqlite", filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`%splugins:
   example:
-    from:
+    provider:
       source:
         path: %s
-%s`, filepath.Join(dir, "gestalt.db"), serverBlock.String(), manifestPath, configBlock.String())
+%s`, serverBlock.String(), manifestPath, configBlock.String())
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
 	}

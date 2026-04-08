@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/core"
 	cryptoutil "github.com/valon-technologies/gestalt/server/core/crypto"
+	"github.com/valon-technologies/gestalt/server/core/session"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
@@ -48,6 +49,7 @@ type Server struct {
 	publicBaseURL      string
 	secureCookies      bool
 	encryptor          *cryptoutil.AESGCMEncryptor
+	sessionIssuer      []byte
 	stateCodec         *integrationOAuthStateCodec
 	apiTokenTTL        time.Duration
 	now                func() time.Time
@@ -128,6 +130,7 @@ func New(cfg Config) (*Server, error) {
 		publicBaseURL:     strings.TrimRight(cfg.PublicBaseURL, "/"),
 		secureCookies:     cfg.SecureCookies,
 		encryptor:         encryptor,
+		sessionIssuer:     cfg.StateSecret,
 		stateCodec:        stateCodec,
 		apiTokenTTL:       cfg.APITokenTTL,
 		now:               now,
@@ -144,6 +147,20 @@ func New(cfg Config) (*Server, error) {
 
 	s.routes()
 	return s, nil
+}
+
+func (s *Server) issueSessionToken(identity *core.UserIdentity) (string, error) {
+	if issuer, ok := s.auth.(SessionTokenIssuer); ok {
+		return issuer.IssueSessionToken(identity)
+	}
+	if len(s.sessionIssuer) == 0 {
+		return "", fmt.Errorf("session secret is not configured")
+	}
+	ttl := defaultSessionCookieTTL
+	if p, ok := s.auth.(SessionTokenTTLProvider); ok {
+		ttl = p.SessionTokenTTL()
+	}
+	return session.IssueToken(identity, s.sessionIssuer, ttl)
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {

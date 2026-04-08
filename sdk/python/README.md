@@ -83,7 +83,7 @@ export UV_INDEX_VALON_INTERNAL_USERNAME=...
 export UV_INDEX_VALON_INTERNAL_PASSWORD=...
 ```
 
-That lets `~/src/gestalt-plugins` depend on `gestalt` like any other Python
+That lets `~/src/gestalt-providers` depend on `gestalt` like any other Python
 package while keeping the SDK off the public package indexes.
 
 ## Local SDK Checks

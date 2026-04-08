@@ -73,10 +73,13 @@ jobs:
           GOARCH: ${{ matrix.platform.goarch }}
         run: |
           mkdir -p build
-          cd gestaltd && go build \
-            -ldflags "-X main.version=${{ steps.version.outputs.version }}" \
-            -o ../build/gestaltd \
-            ./cmd/gestaltd
+          (
+            cd gestaltd
+            go build \
+              -ldflags "-X main.version=${{ steps.version.outputs.version }}" \
+              -o ../build/gestaltd \
+              ./cmd/gestaltd
+          )
       - name: Package
         run: |
           tar -czvf gestaltd-${{ matrix.platform.suffix }}.tar.gz -C build gestaltd
