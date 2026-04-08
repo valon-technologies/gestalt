@@ -716,6 +716,37 @@ fn test_init_skips_login_when_server_auth_is_disabled() {
 }
 
 #[test]
+fn test_auth_status_reports_auth_disabled_before_stored_credentials() {
+    let mut server = Server::new();
+    let _auth_info = json_mock!(server, Method::GET, "/api/v1/auth/info", StatusCode::OK)
+        .with_body(r#"{"login_supported":false}"#)
+        .create();
+
+    let home = tempfile::tempdir().unwrap();
+    write_credentials(
+        home.path(),
+        serde_json::json!({
+            "api_url": server.url(),
+            "api_token": TEST_TOKEN,
+            "api_token_id": "tok-123",
+        }),
+    );
+
+    cli_command(home.path())
+        .arg("--url")
+        .arg(server.url())
+        .args(["auth", "status"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "Authentication is disabled on this server.",
+        ))
+        .stderr(predicate::str::contains(
+            "Stored CLI credentials are present. Run 'gestalt auth logout' to clear them.",
+        ));
+}
+
+#[test]
 fn test_connect_includes_connection_and_instance() {
     let mut server = Server::new();
     let _integrations =
