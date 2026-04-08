@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
 
 var (
@@ -33,7 +34,7 @@ func TestMain(m *testing.M) {
 	go func() { defer wg.Done(); errs[0] = buildGo(".", gestaltdBin) }()
 	go func() {
 		defer wg.Done()
-		errs[1] = pluginpkg.BuildGoProviderBinary("../../../examples/plugins/provider-go", pluginBin, "provider-go", runtime.GOOS, runtime.GOARCH)
+		errs[1] = pluginpkg.BuildGoProviderBinary(testutil.MustExampleProviderPluginPath(), pluginBin, "provider-go", runtime.GOOS, runtime.GOARCH)
 	}()
 	wg.Wait()
 

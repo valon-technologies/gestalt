@@ -21,11 +21,15 @@ func SDKGoModulePath(t *testing.T) string {
 
 func ExampleProviderPluginPath(t *testing.T) string {
 	t.Helper()
+	return MustExampleProviderPluginPath()
+}
+
+func MustExampleProviderPluginPath() string {
 	root, ok := repoRoot()
 	if !ok {
-		t.Fatal("runtime.Caller failed")
+		panic("runtime.Caller failed")
 	}
-	return filepath.Join(root, "examples", "plugins", "provider-go")
+	return filepath.Join(root, "gestaltd", "internal", "testutil", "testdata", "provider-go")
 }
 
 func CopyExampleProviderPlugin(t *testing.T, dst string) {
@@ -74,7 +78,12 @@ func CopyExampleProviderPlugin(t *testing.T, dst string) {
 	if err != nil {
 		t.Fatalf("read %s: %v", goModPath, err)
 	}
-	updated := strings.ReplaceAll(string(goMod), "../../../sdk/go", SDKGoModulePath(t))
+	updated := rewriteModuleLine(
+		t,
+		string(goMod),
+		"replace github.com/valon-technologies/gestalt/sdk/go => ",
+		"replace github.com/valon-technologies/gestalt/sdk/go => "+SDKGoModulePath(t),
+	)
 	if err := os.WriteFile(goModPath, []byte(updated), 0o644); err != nil {
 		t.Fatalf("write %s: %v", goModPath, err)
 	}
