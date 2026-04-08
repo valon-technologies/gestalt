@@ -17,8 +17,20 @@ use tonic::transport::Server;
 use crate::env::{ENV_PLUGIN_NAME, ENV_PLUGIN_PARENT_PID, ENV_PLUGIN_SOCKET, ENV_WRITE_CATALOG};
 use crate::error::{Error, Result};
 #[cfg(unix)]
+use crate::generated::v1::auth_plugin_server::AuthPluginServer;
+#[cfg(unix)]
+use crate::generated::v1::datastore_plugin_server::DatastorePluginServer;
+#[cfg(unix)]
+use crate::generated::v1::plugin_runtime_server::PluginRuntimeServer;
+#[cfg(unix)]
 use crate::generated::v1::provider_plugin_server::ProviderPluginServer;
+#[cfg(unix)]
+use crate::{AuthProvider, DatastoreProvider};
 use crate::{Provider, ProviderServer, Router, write_catalog};
+#[cfg(unix)]
+use crate::{
+    auth_server::AuthServer, datastore_server::DatastoreServer, runtime_server::RuntimeServer,
+};
 
 pub fn run_provider<P>(provider: Arc<P>, router: Router<P>) -> Result<()>
 where
@@ -29,6 +41,28 @@ where
         .build()
         .map_err(|error| Error::internal(error.to_string()))?;
     runtime.block_on(serve_provider(provider, router))
+}
+
+pub fn run_auth_provider<P>(provider: Arc<P>) -> Result<()>
+where
+    P: AuthProvider,
+{
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .map_err(|error| Error::internal(error.to_string()))?;
+    runtime.block_on(serve_auth_provider(provider))
+}
+
+pub fn run_datastore_provider<P>(provider: Arc<P>) -> Result<()>
+where
+    P: DatastoreProvider,
+{
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .map_err(|error| Error::internal(error.to_string()))?;
+    runtime.block_on(serve_datastore_provider(provider))
 }
 
 pub fn write_catalog_path<P>(router: &Router<P>, path: impl AsRef<Path>) -> Result<()> {
@@ -75,7 +109,84 @@ where
     let incoming = UnixListenerStream::new(listener);
     let server = ProviderServer::new(Arc::clone(&provider), router);
     let serve_result = Server::builder()
+        .add_service(PluginRuntimeServer::new(RuntimeServer::for_provider(
+            Arc::clone(&provider),
+        )))
         .add_service(ProviderPluginServer::new(server))
+        .serve_with_incoming_shutdown(incoming, shutdown_signal(parent_pid()))
+        .await
+        .map_err(Error::from);
+
+    let close_result = provider.close().await;
+    let _ = remove_socket(&socket);
+
+    serve_result?;
+    close_result
+}
+
+#[cfg(unix)]
+pub async fn serve_auth_provider<P>(provider: Arc<P>) -> Result<()>
+where
+    P: AuthProvider,
+{
+    let socket = env::var_os(ENV_PLUGIN_SOCKET)
+        .ok_or_else(|| Error::internal(format!("{ENV_PLUGIN_SOCKET} is required")))?;
+    let socket = PathBuf::from(socket);
+    if socket.exists() {
+        std::fs::remove_file(&socket)?;
+    }
+    if let Some(parent) = socket.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    let listener = UnixListener::bind(&socket)?;
+    let incoming = UnixListenerStream::new(listener);
+    let serve_result = Server::builder()
+        .add_service(PluginRuntimeServer::new(RuntimeServer::for_auth(
+            Arc::clone(&provider),
+        )))
+        .add_service(AuthPluginServer::new(AuthServer::new(Arc::clone(
+            &provider,
+        ))))
+        .serve_with_incoming_shutdown(incoming, shutdown_signal(parent_pid()))
+        .await
+        .map_err(Error::from);
+
+    let close_result = provider.close().await;
+    let _ = remove_socket(&socket);
+
+    serve_result?;
+    close_result
+}
+
+#[cfg(unix)]
+pub async fn serve_datastore_provider<P>(provider: Arc<P>) -> Result<()>
+where
+    P: DatastoreProvider,
+{
+    let socket = env::var_os(ENV_PLUGIN_SOCKET)
+        .ok_or_else(|| Error::internal(format!("{ENV_PLUGIN_SOCKET} is required")))?;
+    let socket = PathBuf::from(socket);
+    if socket.exists() {
+        std::fs::remove_file(&socket)?;
+    }
+    if let Some(parent) = socket.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    let listener = UnixListener::bind(&socket)?;
+    let incoming = UnixListenerStream::new(listener);
+    let serve_result = Server::builder()
+        .add_service(PluginRuntimeServer::new(RuntimeServer::for_datastore(
+            Arc::clone(&provider),
+        )))
+        .add_service(DatastorePluginServer::new(DatastoreServer::new(
+            Arc::clone(&provider),
+        )))
         .serve_with_incoming_shutdown(incoming, shutdown_signal(parent_pid()))
         .await
         .map_err(Error::from);
@@ -95,6 +206,26 @@ where
     if maybe_write_catalog(&router)? {
         return Ok(());
     }
+    Err(Error::internal(
+        "unix sockets are unsupported on this platform",
+    ))
+}
+
+#[cfg(not(unix))]
+pub async fn serve_auth_provider<P>(_provider: Arc<P>) -> Result<()>
+where
+    P: AuthProvider,
+{
+    Err(Error::internal(
+        "unix sockets are unsupported on this platform",
+    ))
+}
+
+#[cfg(not(unix))]
+pub async fn serve_datastore_provider<P>(_provider: Arc<P>) -> Result<()>
+where
+    P: DatastoreProvider,
+{
     Err(Error::internal(
         "unix sockets are unsupported on this platform",
     ))

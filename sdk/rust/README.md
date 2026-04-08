@@ -1,6 +1,6 @@
 # Gestalt Rust SDK
 
-This directory contains the Rust SDK for Gestalt executable provider plugins.
+This directory contains the Rust SDK for Gestalt executable providers.
 
 Current scope:
 
@@ -8,13 +8,10 @@ Current scope:
 - build-time protobuf/gRPC generation from `sdk/proto/v1/*.proto`
 - vendored `protoc` via `protoc-bin-vendored`
 - generated protocol bindings exposed via `proto::v1`
-- typed provider authoring helpers for requests, responses, catalogs, and routing
-- a runtime server that speaks the executable provider protocol over the Unix socket exposed by `gestaltd`
-- an `export_provider!` macro for source-plugin builds that lets `gestaltd` synthesize the executable wrapper
-
-Out of scope for this branch:
-
-- auth/datastore SDK ergonomics beyond generated protocol bindings
+- typed integration-provider authoring helpers for requests, responses, catalogs, and routing
+- auth-provider and datastore-provider traits that map to the shared executable runtime protocol
+- runtime servers for the integration, auth, and datastore provider surfaces over the Unix socket exposed by `gestaltd`
+- `export_provider!`, `export_auth_provider!`, and `export_datastore_provider!` macros for source builds that let `gestaltd` synthesize the executable wrapper
 
 ## Codegen strategy
 
@@ -33,11 +30,16 @@ To regenerate the bindings from a clean slate and run the smoke tests:
 
 The crate is intentionally small:
 
-- `Provider`, `Request`, `Response`, and `ok(...)` model provider handlers
+- `Provider`, `Request`, `Response`, and `ok(...)` model integration-provider handlers
+- `AuthProvider`, `BeginLoginRequest`, `BeginLoginResponse`, `CompleteLoginRequest`, and `AuthenticatedUser` model auth providers
+- `DatastoreProvider`, `StoredUser`, `StoredIntegrationToken`, `StoredApiToken`, and `OAuthRegistration` model datastore providers
 - `Router` and `Operation` register typed operations and derive catalog metadata from `serde` + `schemars`
 - `Catalog` types expose explicit static or session-scoped catalogs when needed
-- `runtime` runs the gRPC plugin server or writes the static catalog when `GESTALT_PLUGIN_WRITE_CATALOG` is set
-- `export_provider!` exports the `__gestalt_serve` and `__gestalt_write_catalog` functions that the host-side Rust wrapper calls
+- `RuntimeMetadata` lets any provider kind describe its runtime name/display metadata and version
+- `runtime` runs the integration, auth, or datastore gRPC servers, or writes the static catalog when `GESTALT_PLUGIN_WRITE_CATALOG` is set
+- `export_provider!` exports `__gestalt_serve` and `__gestalt_write_catalog` for integration providers
+- `export_auth_provider!` exports `__gestalt_serve_auth` for auth providers
+- `export_datastore_provider!` exports `__gestalt_serve_datastore` for datastore providers
 
 ## Package layout
 

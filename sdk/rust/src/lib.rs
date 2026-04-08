@@ -1,11 +1,18 @@
 #![doc = include_str!("../README.md")]
 
 mod api;
+mod auth;
+mod auth_server;
 mod catalog;
+mod datastore;
+mod datastore_server;
 mod env;
 mod error;
 mod provider_server;
 mod router;
+mod rpc_status;
+mod runtime_server;
+mod runtime_types;
 
 pub mod runtime;
 
@@ -25,8 +32,14 @@ pub mod proto {
 
 pub use api::{IntoResponse, Provider, Request, Response, ok};
 pub use async_trait::async_trait;
+pub use auth::{
+    AuthProvider, AuthenticatedUser, BeginLoginRequest, BeginLoginResponse, CompleteLoginRequest,
+};
 pub use catalog::{
     Catalog, CatalogOperation, CatalogParameter, OperationAnnotations, write_catalog,
+};
+pub use datastore::{
+    DatastoreProvider, OAuthRegistration, StoredApiToken, StoredIntegrationToken, StoredUser,
 };
 pub use env::{
     CURRENT_PROTOCOL_VERSION, ENV_PLUGIN_NAME, ENV_PLUGIN_PARENT_PID, ENV_PLUGIN_SOCKET,
@@ -35,6 +48,7 @@ pub use env::{
 pub use error::{Error, Result};
 pub use provider_server::{OperationResult, ProviderServer};
 pub use router::{Operation, Router};
+pub use runtime_types::RuntimeMetadata;
 
 #[doc(hidden)]
 pub trait IntoRouterResult<P> {
@@ -73,6 +87,26 @@ macro_rules! export_provider {
         pub fn __gestalt_write_catalog(name: &str, path: &str) -> $crate::Result<()> {
             let router = $crate::into_router_result($router())?.with_name(name);
             $crate::runtime::write_catalog_path(&router, path)
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! export_auth_provider {
+    (constructor = $constructor:path $(,)?) => {
+        pub fn __gestalt_serve_auth(_name: &str) -> $crate::Result<()> {
+            let provider = std::sync::Arc::new($constructor());
+            $crate::runtime::run_auth_provider(provider)
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! export_datastore_provider {
+    (constructor = $constructor:path $(,)?) => {
+        pub fn __gestalt_serve_datastore(_name: &str) -> $crate::Result<()> {
+            let provider = std::sync::Arc::new($constructor());
+            $crate::runtime::run_datastore_provider(provider)
         }
     };
 }
