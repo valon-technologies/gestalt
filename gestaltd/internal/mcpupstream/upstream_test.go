@@ -95,6 +95,30 @@ func newHeaderAuthenticatedHTTPTestServer(t *testing.T, expectedHeaders map[stri
 	}))
 }
 
+func TestManagedMCPClientCloseRunsTransportCleanup(t *testing.T) {
+	t.Parallel()
+
+	client, err := mcpclient.NewInProcessClient(newTestServer())
+	if err != nil {
+		t.Fatalf("creating in-process client: %v", err)
+	}
+
+	closedIdleConnections := false
+	managed := &managedMCPClient{
+		MCPClient: client,
+		onClose: func() {
+			closedIdleConnections = true
+		},
+	}
+
+	if err := managed.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+	if !closedIdleConnections {
+		t.Fatal("expected Close to run transport cleanup")
+	}
+}
+
 func TestUpstream_DiscoverTools(t *testing.T) {
 	t.Parallel()
 

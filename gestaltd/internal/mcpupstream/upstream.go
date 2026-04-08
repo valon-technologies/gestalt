@@ -26,6 +26,19 @@ var (
 	_ core.ManualProvider         = (*Upstream)(nil)
 )
 
+type managedMCPClient struct {
+	mcpclient.MCPClient
+	onClose func()
+}
+
+func (c *managedMCPClient) Close() error {
+	err := c.MCPClient.Close()
+	if c.onClose != nil {
+		c.onClose()
+	}
+	return err
+}
+
 type Upstream struct {
 	name     string
 	display  string
@@ -162,10 +175,12 @@ func (u *Upstream) connect(ctx context.Context, token string) (mcpclient.MCPClie
 		return u.client, nil
 	}
 
+	baseTransport := cloneDefaultTransport()
 	httpClient := &http.Client{
 		Timeout:   httpTimeout,
-		Transport: egress.NewResolvingRoundTripper(http.DefaultTransport, u.resolver),
+		Transport: egress.NewResolvingRoundTripper(baseTransport, u.resolver),
 	}
+	closeIdleConnections := func() { baseTransport.CloseIdleConnections() }
 
 	client, err := mcpclient.NewStreamableHttpClient(u.url,
 		transport.WithHTTPBasicClient(httpClient),
@@ -178,11 +193,13 @@ func (u *Upstream) connect(ctx context.Context, token string) (mcpclient.MCPClie
 		}),
 	)
 	if err != nil {
+		closeIdleConnections()
 		return nil, fmt.Errorf("mcpupstream %s: creating client: %w", u.name, err)
 	}
 
 	if err := client.Start(ctx); err != nil {
 		_ = client.Close()
+		closeIdleConnections()
 		return nil, fmt.Errorf("mcpupstream %s: starting client: %w", u.name, err)
 	}
 
@@ -191,10 +208,18 @@ func (u *Upstream) connect(ctx context.Context, token string) (mcpclient.MCPClie
 	initReq.Params.ClientInfo = mcpgo.Implementation{Name: "gestalt", Version: "0.1.0"}
 	if _, err := client.Initialize(ctx, initReq); err != nil {
 		_ = client.Close()
+		closeIdleConnections()
 		return nil, fmt.Errorf("mcpupstream %s: initialize: %w", u.name, err)
 	}
 
-	return client, nil
+	return &managedMCPClient{MCPClient: client, onClose: closeIdleConnections}, nil
+}
+
+func cloneDefaultTransport() *http.Transport {
+	if transport, ok := http.DefaultTransport.(*http.Transport); ok {
+		return transport.Clone()
+	}
+	return &http.Transport{}
 }
 
 func (u *Upstream) discover(ctx context.Context, token string) (*catalog.Catalog, error) {
