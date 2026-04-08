@@ -12,7 +12,7 @@ from ._bootstrap import (
     write_bundled_plugin_config,
 )
 
-USAGE: Final[str] = "usage: python -m gestalt._build ROOT MODULE[:ATTRIBUTE] OUTPUT PLUGIN_NAME GOOS GOARCH"
+USAGE: Final[str] = "usage: python -m gestalt._build ROOT MODULE[:ATTRIBUTE] OUTPUT PLUGIN_NAME RUNTIME_KIND GOOS GOARCH"
 
 
 @dataclass(frozen=True)
@@ -21,6 +21,7 @@ class BuildArgs:
     target: str
     output_path: pathlib.Path
     plugin_name: str
+    runtime_kind: str
     goos: str
     goarch: str
 
@@ -36,15 +37,16 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _parse_build_args(args: list[str]) -> BuildArgs | None:
-    if len(args) != 6:
+    if len(args) != 7:
         return None
 
-    root, target, output_path, plugin_name, goos, goarch = args
+    root, target, output_path, plugin_name, runtime_kind, goos, goarch = args
     return BuildArgs(
         root=pathlib.Path(root),
         target=target,
         output_path=pathlib.Path(output_path),
         plugin_name=plugin_name,
+        runtime_kind=runtime_kind,
         goos=goos,
         goarch=goarch,
     )
@@ -63,6 +65,7 @@ def build_plugin_binary(args: BuildArgs) -> None:
             bundle_config_path,
             target=args.target,
             plugin_name=args.plugin_name,
+            runtime_kind=args.runtime_kind,
         )
 
         subprocess.run(
