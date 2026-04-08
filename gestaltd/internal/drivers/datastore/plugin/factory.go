@@ -19,7 +19,7 @@ var Factory bootstrap.DatastoreFactory = func(node yaml.Node, deps bootstrap.Dep
 	prepared, err := componentplugin.PrepareExecution(componentplugin.PrepareParams{
 		Kind:                 pluginmanifestv1.KindDatastore,
 		Subject:              "plugin datastore",
-		SourceMissingMessage: "no Go or Rust datastore source package found",
+		SourceMissingMessage: "no Go, Rust, or Python datastore source package found",
 		Config:               cfg,
 	})
 	if err != nil {

@@ -360,9 +360,9 @@ func missingReleaseSourceBuildTargetError(kinds []string) error {
 		case pluginmanifestv1.KindPlugin:
 			return fmt.Errorf("no Go, Rust, or Python provider package found")
 		case pluginmanifestv1.KindAuth:
-			return fmt.Errorf("no Go or Rust auth source package found")
+			return fmt.Errorf("no Go, Rust, or Python auth source package found")
 		case pluginmanifestv1.KindDatastore:
-			return fmt.Errorf("no Go or Rust datastore source package found")
+			return fmt.Errorf("no Go, Rust, or Python datastore source package found")
 		}
 	}
 	return fmt.Errorf("missing source packages for executable kinds: %s", strings.Join(kinds, ", "))

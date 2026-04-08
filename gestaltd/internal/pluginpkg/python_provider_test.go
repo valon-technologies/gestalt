@@ -6,6 +6,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
 
 func TestDetectPythonInterpreter_CurrentPlatformFallsBackToGenericVenv(t *testing.T) {
@@ -52,6 +54,79 @@ func TestDetectPythonInterpreter_CrossTargetRequiresExplicitInterpreter(t *testi
 	}
 	if want := pythonInterpreterEnvVar(goos, goarch); !containsString(err.Error(), want) {
 		t.Fatalf("error = %q, want mention of %s", err, want)
+	}
+}
+
+func TestDetectPythonComponentTarget(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte(`[tool.gestalt]
+plugin = "provider"
+auth = "provider:auth_provider"
+datastore = "provider:datastore_provider"
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile(pyproject.toml): %v", err)
+	}
+
+	authTarget, err := DetectPythonComponentTarget(root, pluginmanifestv1.KindAuth)
+	if err != nil {
+		t.Fatalf("DetectPythonComponentTarget(auth): %v", err)
+	}
+	if authTarget != "provider:auth_provider" {
+		t.Fatalf("auth target = %q, want %q", authTarget, "provider:auth_provider")
+	}
+
+	datastoreTarget, err := DetectPythonComponentTarget(root, pluginmanifestv1.KindDatastore)
+	if err != nil {
+		t.Fatalf("DetectPythonComponentTarget(datastore): %v", err)
+	}
+	if datastoreTarget != "provider:datastore_provider" {
+		t.Fatalf("datastore target = %q, want %q", datastoreTarget, "provider:datastore_provider")
+	}
+}
+
+func TestDetectPythonComponentTarget_MissingKindReturnsNoSourceComponentPackage(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte(`[tool.gestalt]
+plugin = "provider"
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile(pyproject.toml): %v", err)
+	}
+
+	_, err := DetectPythonComponentTarget(root, pluginmanifestv1.KindAuth)
+	if err == nil {
+		t.Fatal("expected missing auth target error")
+	}
+	if !strings.Contains(err.Error(), ErrNoPythonSourceComponentPackage.Error()) {
+		t.Fatalf("error = %q, want %q", err, ErrNoPythonSourceComponentPackage)
+	}
+}
+
+func TestPythonComponentExecutionCommand_PassesRuntimeKind(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	pythonPath := pythonTestInterpreterPath(root, runtime.GOOS, ".venv")
+	mustWritePythonInterpreter(t, pythonPath)
+
+	command, args, cleanup, err := pythonComponentExecutionCommand(root, "provider:auth_provider", pythonRuntimeKindAuth)
+	if err != nil {
+		t.Fatalf("pythonComponentExecutionCommand: %v", err)
+	}
+	if cleanup != nil {
+		t.Fatal("pythonComponentExecutionCommand cleanup = non-nil, want nil")
+	}
+	if command != pythonPath {
+		t.Fatalf("command = %q, want %q", command, pythonPath)
+	}
+	if len(args) != 5 {
+		t.Fatalf("args = %q, want 5 args", args)
+	}
+	if got := strings.Join(args, " "); got != "-m gestalt._runtime "+root+" provider:auth_provider auth" {
+		t.Fatalf("args = %q", got)
 	}
 }
 

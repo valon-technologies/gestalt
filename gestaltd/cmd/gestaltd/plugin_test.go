@@ -23,25 +23,29 @@ import (
 )
 
 const (
-	releaseTestPluginName      = "release-test"
-	releaseTestSource          = "github.com/testowner/plugins/catalog/release-test"
-	releaseTestModule          = "example.com/release-test"
-	releaseTestIconPath        = "branding/icon.svg"
-	releaseProviderSchemaPath  = "schemas/provider.schema.json"
-	webUITestPluginName        = "webui-test"
-	webUITestSource            = "github.com/testowner/plugins/catalog/webui-test"
-	webUITestAssetRoot         = "out"
-	prebuiltProviderPluginName = "prebuilt-provider"
-	prebuiltProviderSource     = "github.com/testowner/plugins/prebuilt-provider"
-	prebuiltProviderBinaryPath = "bin/provider"
-	authReleasePluginName      = "auth-release"
-	authReleaseSource          = "github.com/testowner/plugins/auth-release"
-	authReleaseSchemaPath      = "schemas/auth.schema.json"
-	datastoreReleasePluginName = "datastore-release"
-	datastoreReleaseSource     = "github.com/testowner/plugins/datastore-release"
-	datastoreReleaseSchemaPath = "schemas/datastore.schema.json"
-	rustReleasePluginName      = "provider-rust"
-	rustWrapperBinaryName      = "gestalt-provider-wrapper"
+	releaseTestPluginName            = "release-test"
+	releaseTestSource                = "github.com/testowner/plugins/catalog/release-test"
+	releaseTestModule                = "example.com/release-test"
+	releaseTestIconPath              = "branding/icon.svg"
+	releaseProviderSchemaPath        = "schemas/provider.schema.json"
+	webUITestPluginName              = "webui-test"
+	webUITestSource                  = "github.com/testowner/plugins/catalog/webui-test"
+	webUITestAssetRoot               = "out"
+	prebuiltProviderPluginName       = "prebuilt-provider"
+	prebuiltProviderSource           = "github.com/testowner/plugins/prebuilt-provider"
+	prebuiltProviderBinaryPath       = "bin/provider"
+	authReleasePluginName            = "auth-release"
+	authReleaseSource                = "github.com/testowner/plugins/auth-release"
+	authReleaseSchemaPath            = "schemas/auth.schema.json"
+	datastoreReleasePluginName       = "datastore-release"
+	datastoreReleaseSource           = "github.com/testowner/plugins/datastore-release"
+	datastoreReleaseSchemaPath       = "schemas/datastore.schema.json"
+	rustReleasePluginName            = "provider-rust"
+	rustWrapperBinaryName            = "gestalt-provider-wrapper"
+	pythonAuthReleasePluginName      = "python-auth-release"
+	pythonAuthReleaseSource          = "github.com/testowner/plugins/python-auth-release"
+	pythonDatastoreReleasePluginName = "python-datastore-release"
+	pythonDatastoreReleaseSource     = "github.com/testowner/plugins/python-datastore-release"
 )
 
 func TestRun_PluginHelpExitsCleanly(t *testing.T) {
@@ -1064,6 +1068,142 @@ func TestRun_PluginReleaseBuildsRustSourceDatastorePlugin(t *testing.T) {
 	}
 }
 
+func TestRun_PluginReleaseBuildsPythonSourceAuthPlugin(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake Python build fixture is POSIX-only")
+	}
+
+	goFixtureDir := newSourceAuthReleaseFixture(t, t.TempDir())
+	t.Setenv("GESTALT_TEST_PYINSTALLER_BINARY", buildGoSourceComponentBinaryForTest(t, goFixtureDir, pluginmanifestv1.KindAuth))
+	t.Setenv("PATH", pathWithoutGo(t))
+
+	pluginDir := newPythonSourceAuthReleaseFixture(t, t.TempDir())
+	outputDir := t.TempDir()
+	const testVersion = "0.0.16-python-auth"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
+		"--output", outputDir,
+	)
+
+	archiveName := expectedPythonArchiveNameFor(pythonAuthReleasePluginName, testVersion, runtime.GOOS, runtime.GOARCH)
+	extractDir := extractReleasedArchive(t, outputDir, archiveName)
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+	binaryName := releaseBinaryName(pythonAuthReleasePluginName, runtime.GOOS)
+
+	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
+		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
+	}
+	if manifest.Entrypoints.Auth == nil || manifest.Entrypoints.Auth.ArtifactPath != binaryName {
+		t.Fatalf("auth entrypoint = %+v, want artifact path %q", manifest.Entrypoints.Auth, binaryName)
+	}
+	if _, err := os.Stat(filepath.Join(extractDir, authReleaseSchemaPath)); err != nil {
+		t.Fatalf("expected %s in archive: %v", authReleaseSchemaPath, err)
+	}
+
+	auth, err := pluginhost.NewExecutableAuthProvider(context.Background(), pluginhost.AuthExecConfig{
+		Command:     filepath.Join(extractDir, binaryName),
+		Name:        pythonAuthReleasePluginName,
+		CallbackURL: "https://gestalt.example.test/api/v1/auth/login/callback",
+		SessionKey:  []byte("0123456789abcdef0123456789abcdef"),
+	})
+	if err != nil {
+		t.Fatalf("NewExecutableAuthProvider: %v", err)
+	}
+	defer func() {
+		if closer, ok := auth.(interface{ Close() error }); ok {
+			_ = closer.Close()
+		}
+	}()
+
+	loginURL, err := auth.LoginURL("host-state")
+	if err != nil {
+		t.Fatalf("LoginURL: %v", err)
+	}
+	parsed, err := url.Parse(loginURL)
+	if err != nil {
+		t.Fatalf("url.Parse(loginURL): %v", err)
+	}
+	state := parsed.Query().Get("state")
+	if state == "" {
+		t.Fatal("login URL did not include state")
+	}
+
+	callbackHandler, ok := auth.(interface {
+		HandleCallbackRequest(context.Context, url.Values) (*core.UserIdentity, string, error)
+	})
+	if !ok {
+		t.Fatal("auth provider did not expose HandleCallbackRequest")
+	}
+	identity, originalState, err := callbackHandler.HandleCallbackRequest(context.Background(), url.Values{
+		"code":   {"callback-code"},
+		"state":  {state},
+		"prompt": {parsed.Query().Get("prompt")},
+	})
+	if err != nil {
+		t.Fatalf("HandleCallbackRequest: %v", err)
+	}
+	if originalState != "host-state" {
+		t.Fatalf("original state = %q, want %q", originalState, "host-state")
+	}
+	if identity == nil || identity.Email != "generated-auth@example.com" {
+		t.Fatalf("identity = %+v", identity)
+	}
+}
+
+func TestRun_PluginReleaseBuildsPythonSourceDatastorePlugin(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake Python build fixture is POSIX-only")
+	}
+
+	goFixtureDir := newSourceDatastoreReleaseFixture(t, t.TempDir())
+	t.Setenv("GESTALT_TEST_PYINSTALLER_BINARY", buildGoSourceComponentBinaryForTest(t, goFixtureDir, pluginmanifestv1.KindDatastore))
+	t.Setenv("PATH", pathWithoutGo(t))
+
+	pluginDir := newPythonSourceDatastoreReleaseFixture(t, t.TempDir())
+	outputDir := t.TempDir()
+	const testVersion = "0.0.16-python-datastore"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
+		"--output", outputDir,
+	)
+
+	archiveName := expectedPythonArchiveNameFor(pythonDatastoreReleasePluginName, testVersion, runtime.GOOS, runtime.GOARCH)
+	extractDir := extractReleasedArchive(t, outputDir, archiveName)
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+	binaryName := releaseBinaryName(pythonDatastoreReleasePluginName, runtime.GOOS)
+
+	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
+		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
+	}
+	if manifest.Entrypoints.Datastore == nil || manifest.Entrypoints.Datastore.ArtifactPath != binaryName {
+		t.Fatalf("datastore entrypoint = %+v, want artifact path %q", manifest.Entrypoints.Datastore, binaryName)
+	}
+	if _, err := os.Stat(filepath.Join(extractDir, datastoreReleaseSchemaPath)); err != nil {
+		t.Fatalf("expected %s in archive: %v", datastoreReleaseSchemaPath, err)
+	}
+
+	store, err := pluginhost.NewExecutableDatastore(context.Background(), pluginhost.DatastoreExecConfig{
+		Command:       filepath.Join(extractDir, binaryName),
+		Name:          pythonDatastoreReleasePluginName,
+		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
+	})
+	if err != nil {
+		t.Fatalf("NewExecutableDatastore: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	if err := store.Ping(context.Background()); err != nil {
+		t.Fatalf("Ping: %v", err)
+	}
+	if err := store.Migrate(context.Background()); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+}
+
 func TestRun_PluginReleaseCopiesCompiledSupportFiles(t *testing.T) {
 	t.Parallel()
 
@@ -1349,7 +1489,7 @@ func TestRun_PluginReleaseRejectsRequiredExecutableKindsWithoutSourceOrEntrypoin
 				Kinds:       []string{pluginmanifestv1.KindAuth},
 				Auth:        &pluginmanifestv1.AuthMetadata{},
 			},
-			wantError: "no Go or Rust auth source package found",
+			wantError: "no Go, Rust, or Python auth source package found",
 		},
 		{
 			name: "datastore",
@@ -1360,7 +1500,7 @@ func TestRun_PluginReleaseRejectsRequiredExecutableKindsWithoutSourceOrEntrypoin
 				Kinds:       []string{pluginmanifestv1.KindDatastore},
 				Datastore:   &pluginmanifestv1.DatastoreMetadata{},
 			},
-			wantError: "no Go or Rust datastore source package found",
+			wantError: "no Go, Rust, or Python datastore source package found",
 		},
 	}
 
@@ -1570,7 +1710,114 @@ def dynamic_catalog(request: gestalt.Request) -> gestalt.Catalog:
 	return pluginDir
 }
 
+func newPythonSourceAuthReleaseFixture(t *testing.T, dir string) string {
+	t.Helper()
+
+	pluginDir := filepath.Join(dir, pythonAuthReleasePluginName)
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(pluginDir): %v", err)
+	}
+	writeTestFile(t, pluginDir, "pyproject.toml", []byte(`[build-system]
+requires = ["setuptools==82.0.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "`+pythonAuthReleasePluginName+`"
+version = "0.0.1-alpha.1"
+dependencies = ["gestalt"]
+
+[tool.gestalt]
+auth = "provider:auth_provider"
+`), 0o644)
+	writeTestFile(t, pluginDir, "provider.py", []byte(`auth_provider = object()
+`), 0o644)
+	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
+		Source:      pythonAuthReleaseSource,
+		Version:     "0.0.1",
+		DisplayName: "Python Auth Release",
+		Kinds:       []string{pluginmanifestv1.KindAuth},
+		Auth: &pluginmanifestv1.AuthMetadata{
+			ConfigSchemaPath: authReleaseSchemaPath,
+		},
+	})
+	writeTestFile(t, pluginDir, authReleaseSchemaPath, []byte(`{"type":"object"}`), 0o644)
+	writeFakePythonReleaseInterpreterForKind(
+		t,
+		filepath.Join(pluginDir, ".venv", "bin", "python"),
+		"provider:auth_provider",
+		"auth",
+		pythonAuthReleasePluginName,
+		runtime.GOOS,
+		runtime.GOARCH,
+	)
+	return pluginDir
+}
+
+func newPythonSourceDatastoreReleaseFixture(t *testing.T, dir string) string {
+	t.Helper()
+
+	pluginDir := filepath.Join(dir, pythonDatastoreReleasePluginName)
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(pluginDir): %v", err)
+	}
+	writeTestFile(t, pluginDir, "pyproject.toml", []byte(`[build-system]
+requires = ["setuptools==82.0.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "`+pythonDatastoreReleasePluginName+`"
+version = "0.0.1-alpha.1"
+dependencies = ["gestalt"]
+
+[tool.gestalt]
+datastore = "provider:datastore_provider"
+`), 0o644)
+	writeTestFile(t, pluginDir, "provider.py", []byte(`datastore_provider = object()
+`), 0o644)
+	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
+		Source:      pythonDatastoreReleaseSource,
+		Version:     "0.0.1",
+		DisplayName: "Python Datastore Release",
+		Kinds:       []string{pluginmanifestv1.KindDatastore},
+		Datastore: &pluginmanifestv1.DatastoreMetadata{
+			ConfigSchemaPath: datastoreReleaseSchemaPath,
+		},
+	})
+	writeTestFile(t, pluginDir, datastoreReleaseSchemaPath, []byte(`{"type":"object"}`), 0o644)
+	writeFakePythonReleaseInterpreterForKind(
+		t,
+		filepath.Join(pluginDir, ".venv", "bin", "python"),
+		"provider:datastore_provider",
+		"datastore",
+		pythonDatastoreReleasePluginName,
+		runtime.GOOS,
+		runtime.GOARCH,
+	)
+	return pluginDir
+}
+
 func writeFakePythonReleaseInterpreter(t *testing.T, path, expectedGOOS, expectedGOARCH string) {
+	t.Helper()
+	writeFakePythonReleaseInterpreterForKind(
+		t,
+		path,
+		"provider",
+		"integration",
+		"python-release",
+		expectedGOOS,
+		expectedGOARCH,
+	)
+}
+
+func writeFakePythonReleaseInterpreterForKind(
+	t *testing.T,
+	path string,
+	expectedTarget string,
+	expectedRuntimeKind string,
+	expectedName string,
+	expectedGOOS string,
+	expectedGOARCH string,
+) {
 	t.Helper()
 
 	script := `#!/bin/sh
@@ -1581,7 +1828,7 @@ if [ "$#" -ge 2 ] && [ "$1" = "-m" ] && [ "$2" = "gestalt._build" ]; then
     echo "missing GESTALT_TEST_PYINSTALLER_BINARY" >&2
     exit 1
   fi
-  if [ "$#" -ne 8 ]; then
+  if [ "$#" -ne 9 ]; then
     echo "unexpected gestalt._build args: $*" >&2
     exit 1
   fi
@@ -1589,14 +1836,19 @@ if [ "$#" -ge 2 ] && [ "$1" = "-m" ] && [ "$2" = "gestalt._build" ]; then
   target="$4"
   output="$5"
   name="$6"
-  goos="$7"
-  goarch="$8"
-  if [ "$target" != "provider" ]; then
+  runtime_kind="$7"
+  goos="$8"
+  goarch="$9"
+  if [ "$target" != "` + expectedTarget + `" ]; then
     echo "unexpected provider target: $target" >&2
     exit 1
   fi
-  if [ "$name" != "python-release" ]; then
+  if [ "$name" != "` + expectedName + `" ]; then
     echo "unexpected plugin name: $name" >&2
+    exit 1
+  fi
+  if [ "$runtime_kind" != "` + expectedRuntimeKind + `" ]; then
+    echo "unexpected runtime kind: $runtime_kind" >&2
     exit 1
   fi
   if [ "$goos" != "` + expectedGOOS + `" ] || [ "$goarch" != "` + expectedGOARCH + `" ]; then
@@ -1614,6 +1866,20 @@ if [ "$#" -ge 2 ] && [ "$1" = "-m" ] && [ "$2" = "gestalt._build" ]; then
 fi
 
 if [ "$#" -ge 2 ] && [ "$1" = "-m" ] && [ "$2" = "gestalt._runtime" ]; then
+  if [ "$#" -ne 5 ]; then
+    echo "unexpected gestalt._runtime args: $*" >&2
+    exit 1
+  fi
+  target="$4"
+  runtime_kind="$5"
+  if [ "$target" != "` + expectedTarget + `" ]; then
+    echo "unexpected runtime target: $target" >&2
+    exit 1
+  fi
+  if [ "$runtime_kind" != "` + expectedRuntimeKind + `" ]; then
+    echo "unexpected runtime kind: $runtime_kind" >&2
+    exit 1
+  fi
   if [ -z "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ]; then
     echo "missing GESTALT_PLUGIN_WRITE_CATALOG" >&2
     exit 1
@@ -1658,8 +1924,12 @@ func expectedPythonReleasePlatform(goos, goarch string) releasePlatform {
 	return plat
 }
 
+func expectedPythonArchiveNameFor(pluginName, version, goos, goarch string) string {
+	return platformArchiveName(pluginName, version, expectedPythonReleasePlatform(goos, goarch))
+}
+
 func expectedPythonArchiveName(version, goos, goarch string) string {
-	return platformArchiveName("python-release", version, expectedPythonReleasePlatform(goos, goarch))
+	return expectedPythonArchiveNameFor("python-release", version, goos, goarch)
 }
 
 func expectedGoReleasePlatform(goos, goarch, libc string) releasePlatform {
@@ -1822,6 +2092,17 @@ func newRustSourceDatastoreReleaseFixture(t *testing.T, dir string) string {
 	})
 	writeTestFile(t, pluginDir, datastoreReleaseSchemaPath, []byte(`{"type":"object"}`), 0o644)
 	return pluginDir
+}
+
+func buildGoSourceComponentBinaryForTest(t *testing.T, pluginDir, kind string) string {
+	t.Helper()
+
+	outputDir := t.TempDir()
+	outputPath := filepath.Join(outputDir, releaseBinaryName(filepath.Base(pluginDir), runtime.GOOS))
+	if _, err := pluginpkg.BuildSourceComponentReleaseBinary(pluginDir, outputPath, kind, runtime.GOOS, runtime.GOARCH, ""); err != nil {
+		t.Fatalf("BuildSourceComponentReleaseBinary(%s): %v", kind, err)
+	}
+	return outputPath
 }
 
 func pathWithoutGo(t *testing.T) string {

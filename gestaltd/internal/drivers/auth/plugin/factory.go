@@ -26,7 +26,7 @@ var Factory bootstrap.AuthFactory = func(node yaml.Node, deps bootstrap.Deps) (c
 	prepared, err := componentplugin.PrepareExecution(componentplugin.PrepareParams{
 		Kind:                 pluginmanifestv1.KindAuth,
 		Subject:              "plugin auth",
-		SourceMissingMessage: "no Go or Rust auth source package found",
+		SourceMissingMessage: "no Go, Rust, or Python auth source package found",
 		Config:               cfg.YAMLConfig,
 	})
 	if err != nil {

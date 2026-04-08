@@ -12,6 +12,8 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
 
 const (
@@ -22,14 +24,36 @@ const (
 )
 
 var ErrNoPythonProviderPackage = errors.New("no Python provider package found")
+var ErrNoPythonSourceComponentPackage = errors.New("no Python source component package found")
 
 var pythonIdentifierPattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
 func DetectPythonProviderTarget(root string) (string, error) {
+	target, err := detectPythonProjectTarget(root, "plugin")
+	if err != nil {
+		if errors.Is(err, ErrNoPythonSourceComponentPackage) {
+			return "", ErrNoPythonProviderPackage
+		}
+		return "", err
+	}
+	return target, nil
+}
+
+func DetectPythonComponentTarget(root, kind string) (string, error) {
+	if err := validateSourceComponentKind(kind); err != nil {
+		return "", err
+	}
+	return detectPythonProjectTarget(root, kind)
+}
+
+func detectPythonProjectTarget(root, key string) (string, error) {
 	projectPath := filepath.Join(root, pythonProjectFile)
 	if _, err := os.Stat(projectPath); err != nil {
 		if os.IsNotExist(err) {
-			return "", ErrNoPythonProviderPackage
+			if key == "plugin" {
+				return "", ErrNoPythonProviderPackage
+			}
+			return "", ErrNoPythonSourceComponentPackage
 		}
 		return "", fmt.Errorf("stat %s: %w", pythonProjectFile, err)
 	}
@@ -39,35 +63,50 @@ func DetectPythonProviderTarget(root string) (string, error) {
 		return "", fmt.Errorf("read %s: %w", pythonProjectFile, err)
 	}
 
-	target, err := pythonProjectPluginTarget(data)
+	target, err := pythonProjectTarget(data, key)
 	if err != nil {
 		return "", fmt.Errorf("parse %s: %w", pythonProjectFile, err)
 	}
 	target = strings.TrimSpace(target)
 	if target == "" {
-		return "", ErrNoPythonProviderPackage
+		if key == "plugin" {
+			return "", ErrNoPythonProviderPackage
+		}
+		return "", ErrNoPythonSourceComponentPackage
 	}
 	if _, _, err := SplitPythonProviderTarget(target); err != nil {
-		return "", fmt.Errorf("%s tool.gestalt.plugin: %w", pythonProjectFile, err)
+		return "", fmt.Errorf("%s tool.gestalt.%s: %w", pythonProjectFile, key, err)
 	}
 	return target, nil
 }
 
 func pythonProviderExecutionCommand(root, target string) (string, []string, func(), error) {
+	return pythonExecutionCommand(root, target, pythonRuntimeKindIntegration)
+}
+
+func pythonComponentExecutionCommand(root, target, runtimeKind string) (string, []string, func(), error) {
+	return pythonExecutionCommand(root, target, runtimeKind)
+}
+
+func pythonExecutionCommand(root, target, runtimeKind string) (string, []string, func(), error) {
 	interpreter, err := DetectPythonInterpreter(root, runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		return "", nil, nil, err
 	}
-	return interpreter, []string{"-m", pythonRuntimeModule, root, target}, nil, nil
+	return interpreter, []string{"-m", pythonRuntimeModule, root, target, runtimeKind}, nil, nil
 }
 
 func BuildPythonProviderBinary(sourceDir, binaryPath, pluginName, target, goos, goarch string) (string, error) {
+	return BuildPythonComponentBinary(sourceDir, binaryPath, pluginName, target, pythonRuntimeKindIntegration, goos, goarch)
+}
+
+func BuildPythonComponentBinary(sourceDir, binaryPath, pluginName, target, runtimeKind, goos, goarch string) (string, error) {
 	interpreter, err := DetectPythonInterpreter(sourceDir, goos, goarch)
 	if err != nil {
 		return "", fmt.Errorf("detect Python release interpreter for %s/%s: %w", goos, goarch, err)
 	}
 
-	cmd := exec.Command(interpreter, "-m", pythonBuildModule, sourceDir, target, binaryPath, pluginName, goos, goarch)
+	cmd := exec.Command(interpreter, "-m", pythonBuildModule, sourceDir, target, binaryPath, pluginName, runtimeKind, goos, goarch)
 	cmd.Dir = sourceDir
 	cmd.Env = append(os.Environ(), pythonBackendEnv()...)
 	cmd.Stdout = os.Stdout
@@ -203,6 +242,25 @@ func SplitPythonProviderTarget(target string) (module string, attr string, err e
 	}
 }
 
+const (
+	pythonRuntimeKindIntegration = "integration"
+	pythonRuntimeKindAuth        = "auth"
+	pythonRuntimeKindDatastore   = "datastore"
+)
+
+func pythonRuntimeKind(kind string) (string, error) {
+	switch kind {
+	case pluginmanifestv1.KindPlugin:
+		return pythonRuntimeKindIntegration, nil
+	case pluginmanifestv1.KindAuth:
+		return pythonRuntimeKindAuth, nil
+	case pluginmanifestv1.KindDatastore:
+		return pythonRuntimeKindDatastore, nil
+	default:
+		return "", fmt.Errorf("unsupported Python runtime kind %q", kind)
+	}
+}
+
 func isPythonModulePath(value string) bool {
 	parts := strings.Split(value, ".")
 	if len(parts) == 0 {
@@ -220,7 +278,7 @@ func isPythonIdentifier(value string) bool {
 	return pythonIdentifierPattern.MatchString(value)
 }
 
-func pythonProjectPluginTarget(data []byte) (string, error) {
+func pythonProjectTarget(data []byte, wantedKey string) (string, error) {
 	scanner := bufio.NewScanner(bytes.NewReader(data))
 	inGestaltSection := false
 	for scanner.Scan() {
@@ -237,7 +295,7 @@ func pythonProjectPluginTarget(data []byte) (string, error) {
 			continue
 		}
 		key, value, ok := strings.Cut(line, "=")
-		if !ok || strings.TrimSpace(key) != "plugin" {
+		if !ok || strings.TrimSpace(key) != wantedKey {
 			continue
 		}
 		return parseTOMLString(value)
