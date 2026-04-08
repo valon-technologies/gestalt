@@ -16,6 +16,7 @@ class PluginTarget:
 class BundledPluginConfig:
     target: str
     plugin_name: str | None = None
+    runtime_kind: str | None = None
 
 
 def parse_plugin_target(target: str) -> PluginTarget:
@@ -47,9 +48,14 @@ def read_bundled_plugin_config(*, bundle_root: pathlib.Path) -> BundledPluginCon
     if plugin_name is not None:
         plugin_name = str(plugin_name).strip() or None
 
+    runtime_kind = data.get("runtime_kind")
+    if runtime_kind is not None:
+        runtime_kind = str(runtime_kind).strip() or None
+
     return BundledPluginConfig(
         target=target,
         plugin_name=plugin_name,
+        runtime_kind=runtime_kind,
     )
 
 
@@ -58,12 +64,14 @@ def write_bundled_plugin_config(
     *,
     target: str,
     plugin_name: str,
+    runtime_kind: str,
 ) -> None:
     path.write_text(
         json.dumps(
             {
                 "target": target,
                 "plugin_name": plugin_name,
+                "runtime_kind": runtime_kind,
             }
         ),
         encoding="utf-8",

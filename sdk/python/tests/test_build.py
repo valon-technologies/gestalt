@@ -64,6 +64,7 @@ class BuildTests(unittest.TestCase):
                                 target="provider",
                                 output_path=output,
                                 plugin_name="released-plugin",
+                                runtime_kind="integration",
                                 goos=target_goos,
                                 goarch=target_goarch,
                             )
@@ -82,6 +83,7 @@ class BuildTests(unittest.TestCase):
                     {
                         "target": "provider",
                         "plugin_name": "released-plugin",
+                        "runtime_kind": "integration",
                     },
                 )
                 self.assertIn(
@@ -95,11 +97,22 @@ class BuildTests(unittest.TestCase):
         self.assertIsNone(_build._parse_build_args(["one"]))
         self.assertIsNone(_build._parse_build_args(["one", "two", "three"]))
         self.assertIsNone(_build._parse_build_args(["one", "two", "three", "four", "five"]))
+        self.assertIsNone(
+            _build._parse_build_args(["one", "two", "three", "four", "five", "six"])
+        )
 
-    def test_parse_build_args_accepts_six_args(self) -> None:
+    def test_parse_build_args_accepts_seven_args(self) -> None:
         """Build arg parser should accept the release build argument list."""
         result = _build._parse_build_args(
-            ["/root", "mod:attr", "/out/bin", "my-plugin", "linux", "amd64"]
+            [
+                "/root",
+                "mod:attr",
+                "/out/bin",
+                "my-plugin",
+                "integration",
+                "linux",
+                "amd64",
+            ]
         )
 
         self.assertIsNotNone(result)
@@ -108,6 +121,7 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(result.target, "mod:attr")
         self.assertEqual(result.output_path, pathlib.Path("/out/bin"))
         self.assertEqual(result.plugin_name, "my-plugin")
+        self.assertEqual(result.runtime_kind, "integration")
         self.assertEqual(result.goos, "linux")
         self.assertEqual(result.goarch, "amd64")
 

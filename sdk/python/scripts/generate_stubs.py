@@ -4,13 +4,17 @@ import sys
 import tempfile
 from pathlib import Path
 
-EXPECTED_GRPC_IMPORT = "from v1 import plugin_pb2 as v1_dot_plugin__pb2\n"
-RELATIVE_GRPC_IMPORT = "from . import plugin_pb2 as v1_dot_plugin__pb2\n"
-GRPC_RUNTIME_HEADER = """import grpc
+PROTO_MODULES = ("auth", "datastore", "plugin", "runtime")
+GRPC_RUNTIME_IMPORT_PREFIX = "from v1 import "
+GRPC_RUNTIME_IMPORT_REPLACEMENT_PREFIX = "from . import "
+
+
+def grpc_runtime_header(module_name: str) -> str:
+    return f"""import grpc
 import warnings
 
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
-from . import plugin_pb2 as v1_dot_plugin__pb2
+from . import {module_name}_pb2 as v1_dot_{module_name}__pb2
 
 GRPC_GENERATED_VERSION = '1.80.0'
 GRPC_VERSION = grpc.__version__
@@ -24,11 +28,11 @@ except ImportError:
 
 if _version_not_supported:
     raise RuntimeError(
-        f'The grpc package installed is at version {GRPC_VERSION},'
-        + ' but the generated code in v1/plugin_pb2_grpc.py depends on'
-        + f' grpcio>={GRPC_GENERATED_VERSION}.'
-        + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
-        + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
+        f'The grpc package installed is at version {{GRPC_VERSION}},'
+        + ' but the generated code in v1/{module_name}_pb2_grpc.py depends on'
+        + f' grpcio>={{GRPC_GENERATED_VERSION}}.'
+        + f' Please upgrade your grpc module to grpcio>={{GRPC_GENERATED_VERSION}}'
+        + f' or downgrade your generated code using grpcio-tools<={{GRPC_VERSION}}.'
     )
 """
 
@@ -59,37 +63,46 @@ def main() -> int:
         )
 
         generated_dir = work_path / "gen/v1"
-        pb2_path = generated_dir / "plugin_pb2.py"
-        pb2_grpc_path = generated_dir / "plugin_pb2_grpc.py"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        for module_name in PROTO_MODULES:
+            pb2_path = generated_dir / f"{module_name}_pb2.py"
+            pb2_grpc_path = generated_dir / f"{module_name}_pb2_grpc.py"
 
-        pb2_source = pb2_path.read_text(encoding="utf-8")
-        if "Protobuf Python Version: 6.33.1" not in pb2_source:
-            raise RuntimeError(
-                "buf generated plugin_pb2.py without the expected protobuf 6.33.1 runtime floor"
+            pb2_source = pb2_path.read_text(encoding="utf-8")
+            if "Protobuf Python Version: 6.33.1" not in pb2_source:
+                raise RuntimeError(
+                    f"buf generated {module_name}_pb2.py without the expected protobuf 6.33.1 runtime floor"
+                )
+
+            pb2_grpc_source = pb2_grpc_path.read_text(encoding="utf-8")
+            expected_import = (
+                f"{GRPC_RUNTIME_IMPORT_PREFIX}{module_name}_pb2 as v1_dot_{module_name}__pb2\n"
+            )
+            if expected_import not in pb2_grpc_source:
+                raise RuntimeError(
+                    f"unexpected grpc Python import layout in generated {module_name} stub"
+                )
+
+            # Buf's grpc Python plugin emits a top-level import, but these stubs
+            # are vendored under gestalt.gen.v1 and need package-relative imports.
+            pb2_grpc_source = pb2_grpc_source.replace(
+                expected_import,
+                f"{GRPC_RUNTIME_IMPORT_REPLACEMENT_PREFIX}{module_name}_pb2 as v1_dot_{module_name}__pb2\n",
+                1,
+            )
+            pb2_grpc_source = pb2_grpc_source.replace(
+                "import grpc\n\n"
+                "from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2\n"
+                f"from . import {module_name}_pb2 as v1_dot_{module_name}__pb2\n",
+                grpc_runtime_header(module_name),
+                1,
             )
 
-        pb2_grpc_source = pb2_grpc_path.read_text(encoding="utf-8")
-        if EXPECTED_GRPC_IMPORT not in pb2_grpc_source:
-            raise RuntimeError("unexpected grpc Python import layout in generated stub")
-
-        # Buf's grpc Python plugin emits a top-level import, but these stubs are
-        # vendored under gestalt.gen.v1 and need a package-relative import.
-        pb2_grpc_source = pb2_grpc_source.replace(
-            EXPECTED_GRPC_IMPORT,
-            RELATIVE_GRPC_IMPORT,
-            1,
-        )
-        pb2_grpc_source = pb2_grpc_source.replace(
-            'import grpc\n\n'
-            'from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2\n'
-            'from . import plugin_pb2 as v1_dot_plugin__pb2\n',
-            GRPC_RUNTIME_HEADER,
-            1,
-        )
-
-        target_dir.mkdir(parents=True, exist_ok=True)
-        (target_dir / "plugin_pb2.py").write_text(pb2_source, encoding="utf-8")
-        (target_dir / "plugin_pb2_grpc.py").write_text(pb2_grpc_source, encoding="utf-8")
+            (target_dir / f"{module_name}_pb2.py").write_text(pb2_source, encoding="utf-8")
+            (target_dir / f"{module_name}_pb2_grpc.py").write_text(
+                pb2_grpc_source,
+                encoding="utf-8",
+            )
 
     return 0
 
