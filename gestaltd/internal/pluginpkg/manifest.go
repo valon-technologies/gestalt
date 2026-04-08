@@ -386,8 +386,10 @@ func validateReleaseMetadata(release *pluginmanifestv1.ReleaseMetadata) error {
 	if release == nil || release.Build == nil {
 		return nil
 	}
-	if err := validateRelativePackageDirectory(release.Build.Workdir, "release.build.workdir"); err != nil {
-		return err
+	if release.Build.Workdir != "" {
+		if err := validateRelativePackagePath(release.Build.Workdir, "release.build.workdir"); err != nil {
+			return err
+		}
 	}
 	if len(release.Build.Command) == 0 {
 		return fmt.Errorf("release.build.command is required")
@@ -396,26 +398,6 @@ func validateReleaseMetadata(release *pluginmanifestv1.ReleaseMetadata) error {
 		if strings.TrimSpace(arg) == "" {
 			return fmt.Errorf("release.build.command[%d] is required", i)
 		}
-	}
-	return nil
-}
-
-func validateRelativePackageDirectory(value, label string) error {
-	if value == "" {
-		return nil
-	}
-	if strings.HasPrefix(value, "/") {
-		return fmt.Errorf("%s must be relative", label)
-	}
-	cleaned := path.Clean(value)
-	if cleaned == ".." || strings.HasPrefix(cleaned, "../") {
-		return fmt.Errorf("%s must stay within the package", label)
-	}
-	if strings.Contains(value, "\\") {
-		return fmt.Errorf("%s must use forward slashes", label)
-	}
-	if cleaned != value {
-		return fmt.Errorf("%s must be normalized", label)
 	}
 	return nil
 }
