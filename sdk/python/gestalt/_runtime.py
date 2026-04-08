@@ -77,6 +77,8 @@ def _grpc_handler(label: str):
             try:
                 return fn(self, request, context)
             except Exception as error:
+                if context.code() is not None:
+                    raise
                 traceback.print_exception(error)
                 context.abort(grpc.StatusCode.UNKNOWN, f"{label}: {error}")
         return wrapper

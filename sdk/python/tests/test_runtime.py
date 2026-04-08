@@ -558,5 +558,50 @@ class DatastoreRuntimeTests(unittest.TestCase):
         self.assertEqual(health.message, "datastore provider must implement HealthChecker")
 
 
+class GrpcHandlerDecoratorTests(unittest.TestCase):
+    """Verify _grpc_handler preserves abort status codes.
+
+    In real gRPC, context.abort() raises an exception after setting the
+    status code. The decorator must re-raise abort exceptions rather than
+    catching them and overwriting the code with UNKNOWN.
+    """
+
+    def _make_aborting_context(self):
+        """Create a mock context where abort() raises like real gRPC."""
+        ctx = mock.Mock()
+        ctx.code.return_value = None
+
+        def fake_abort(code, details):
+            ctx.code.return_value = code
+            raise Exception(details)
+
+        ctx.abort.side_effect = fake_abort
+        return ctx
+
+    def test_abort_preserves_not_found_status(self) -> None:
+        servicer = _runtime._datastore_servicer(
+            provider=DatastoreRuntimeTests.StubDatastoreProvider(),
+        )
+        ctx = self._make_aborting_context()
+        with self.assertRaises(Exception):
+            servicer.GetUser(datastore_pb2.GetUserRequest(id="missing"), ctx)
+        ctx.abort.assert_called_once_with(
+            grpc.StatusCode.NOT_FOUND, "user not found"
+        )
+
+    def test_provider_exception_maps_to_unknown(self) -> None:
+        class FailingProvider(DatastoreRuntimeTests.StubDatastoreProvider):
+            def get_user(self, _id: str) -> StoredUser | None:
+                raise RuntimeError("db connection lost")
+
+        servicer = _runtime._datastore_servicer(provider=FailingProvider())
+        ctx = self._make_aborting_context()
+        with self.assertRaises(Exception):
+            servicer.GetUser(datastore_pb2.GetUserRequest(id="any"), ctx)
+        ctx.abort.assert_called_once_with(
+            grpc.StatusCode.UNKNOWN, "get user: db connection lost"
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
