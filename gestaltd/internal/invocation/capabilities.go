@@ -6,6 +6,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/core/integration"
 )
 
 func capabilitiesForProvider(name string, prov core.Provider) []core.Capability {
@@ -23,17 +24,6 @@ func capabilitiesFromCatalog(name string, cat *catalog.Catalog) []core.Capabilit
 			continue
 		}
 
-		params := make([]core.Parameter, 0, len(op.Parameters))
-		for _, p := range op.Parameters {
-			params = append(params, core.Parameter{
-				Name:        p.Name,
-				Type:        p.Type,
-				Description: p.Description,
-				Required:    p.Required,
-				Default:     p.Default,
-			})
-		}
-
 		method := strings.ToUpper(strings.TrimSpace(op.Method))
 		transport := strings.TrimSpace(op.Transport)
 		if transport == "" && method != "" {
@@ -45,7 +35,7 @@ func capabilitiesFromCatalog(name string, cat *catalog.Catalog) []core.Capabilit
 			Operation:   op.ID,
 			Title:       op.Title,
 			Description: op.Description,
-			Parameters:  params,
+			Parameters:  integration.ConvertParameters(op.Parameters),
 			InputSchema: bytes.Clone(op.InputSchema),
 			Method:      method,
 			Transport:   transport,

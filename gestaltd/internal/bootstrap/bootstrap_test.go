@@ -73,8 +73,8 @@ func validConfig() *config.Config {
 
 func validFactories() *bootstrap.FactoryRegistry {
 	f := bootstrap.NewFactoryRegistry()
-	f.Auth["plugin"] = stubAuthFactory("test-auth")
-	f.Datastores["plugin"] = stubDatastoreFactory()
+	f.Auth = stubAuthFactory("test-auth")
+	f.Datastore = stubDatastoreFactory()
 	f.Secrets["test-secrets"] = stubSecretManagerFactory()
 	f.Telemetry["test-telemetry"] = stubTelemetryFactory()
 	return f
@@ -125,7 +125,7 @@ func TestResultCloseClosesAuthProvider(t *testing.T) {
 
 	closed := &atomic.Bool{}
 	factories := validFactories()
-	factories.Auth["plugin"] = func(yaml.Node, bootstrap.Deps) (core.AuthProvider, error) {
+	factories.Auth = func(yaml.Node, bootstrap.Deps) (core.AuthProvider, error) {
 		return &closableAuthProvider{
 			StubAuthProvider: &coretesting.StubAuthProvider{N: "test-auth"},
 			closed:           closed,
@@ -204,11 +204,11 @@ func TestBootstrap_ReusesPreparedComponentRuntimeConfig(t *testing.T) {
 	var gotAuthNode yaml.Node
 	var gotDatastoreNode yaml.Node
 	factories := validFactories()
-	factories.Auth["plugin"] = func(node yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
+	factories.Auth = func(node yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
 		gotAuthNode = node
 		return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 	}
-	factories.Datastores["plugin"] = func(node yaml.Node, deps bootstrap.Deps) (core.Datastore, error) {
+	factories.Datastore = func(node yaml.Node, deps bootstrap.Deps) (core.Datastore, error) {
 		gotDatastoreNode = node
 		return &coretesting.StubDatastore{}, nil
 	}
@@ -261,7 +261,7 @@ func TestBootstrapFactoryError(t *testing.T) {
 		{
 			name: "auth factory error",
 			mutate: func(f *bootstrap.FactoryRegistry) {
-				f.Auth["plugin"] = func(yaml.Node, bootstrap.Deps) (core.AuthProvider, error) {
+				f.Auth = func(yaml.Node, bootstrap.Deps) (core.AuthProvider, error) {
 					return nil, fmt.Errorf("auth broke")
 				}
 			},
@@ -269,7 +269,7 @@ func TestBootstrapFactoryError(t *testing.T) {
 		{
 			name: "datastore factory error",
 			mutate: func(f *bootstrap.FactoryRegistry) {
-				f.Datastores["plugin"] = func(yaml.Node, bootstrap.Deps) (core.Datastore, error) {
+				f.Datastore = func(yaml.Node, bootstrap.Deps) (core.Datastore, error) {
 					return nil, fmt.Errorf("datastore broke")
 				}
 			},
@@ -298,7 +298,7 @@ func TestBootstrapEncryptionKeyDerivation(t *testing.T) {
 
 		var receivedKey []byte
 		factories := validFactories()
-		factories.Auth["plugin"] = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
+		factories.Auth = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
 			receivedKey = deps.EncryptionKey
 			return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 		}
@@ -327,7 +327,7 @@ func TestBootstrapEncryptionKeyDerivation(t *testing.T) {
 
 		var receivedKey []byte
 		factories := validFactories()
-		factories.Auth["plugin"] = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
+		factories.Auth = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
 			receivedKey = deps.EncryptionKey
 			return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 		}
@@ -351,7 +351,7 @@ func TestBootstrapEncryptionKeyDerivation(t *testing.T) {
 		var keys [][]byte
 		for i := 0; i < 2; i++ {
 			factories := validFactories()
-			factories.Auth["plugin"] = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
+			factories.Auth = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
 				keys = append(keys, deps.EncryptionKey)
 				return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 			}
@@ -383,7 +383,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 				Secrets: map[string]string{"enc-key": "resolved-passphrase"},
 			}, nil
 		}
-		factories.Auth["plugin"] = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
+		factories.Auth = func(_ yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
 			receivedKey = deps.EncryptionKey
 			return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 		}
@@ -465,7 +465,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 
 		var receivedNode yaml.Node
-		factories.Auth["plugin"] = func(node yaml.Node, _ bootstrap.Deps) (core.AuthProvider, error) {
+		factories.Auth = func(node yaml.Node, _ bootstrap.Deps) (core.AuthProvider, error) {
 			receivedNode = node
 			return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 		}
@@ -523,11 +523,11 @@ func TestBootstrapSecretResolution(t *testing.T) {
 
 		var authNode, datastoreNode yaml.Node
 		factories := validFactories()
-		factories.Auth["plugin"] = func(node yaml.Node, _ bootstrap.Deps) (core.AuthProvider, error) {
+		factories.Auth = func(node yaml.Node, _ bootstrap.Deps) (core.AuthProvider, error) {
 			authNode = node
 			return &coretesting.StubAuthProvider{N: "test-auth"}, nil
 		}
-		factories.Datastores["plugin"] = func(node yaml.Node, _ bootstrap.Deps) (core.Datastore, error) {
+		factories.Datastore = func(node yaml.Node, _ bootstrap.Deps) (core.Datastore, error) {
 			datastoreNode = node
 			return &coretesting.StubDatastore{}, nil
 		}
@@ -575,7 +575,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 
 		var authFactoryCalled atomic.Bool
 		factories := validFactories()
-		factories.Auth["plugin"] = func(yaml.Node, bootstrap.Deps) (core.AuthProvider, error) {
+		factories.Auth = func(yaml.Node, bootstrap.Deps) (core.AuthProvider, error) {
 			authFactoryCalled.Store(true)
 			return &coretesting.StubAuthProvider{N: "unexpected"}, nil
 		}

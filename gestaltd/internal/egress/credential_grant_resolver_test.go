@@ -7,12 +7,12 @@ import (
 	"testing"
 )
 
-type stubSecretResolver struct {
+type stubSecretManager struct {
 	secrets map[string]string
 	lookups []string
 }
 
-func (s *stubSecretResolver) GetSecret(_ context.Context, name string) (string, error) {
+func (s *stubSecretManager) GetSecret(_ context.Context, name string) (string, error) {
 	s.lookups = append(s.lookups, name)
 	return s.secrets[name], nil
 }
@@ -20,7 +20,7 @@ func (s *stubSecretResolver) GetSecret(_ context.Context, name string) (string, 
 func TestCredentialGrantResolver_ConfigGrant(t *testing.T) {
 	t.Parallel()
 
-	secrets := &stubSecretResolver{
+	secrets := &stubSecretManager{
 		secrets: map[string]string{"vendor-api-key": "sk-test-secret-abc123"},
 	}
 	resolver := &CredentialGrantResolver{
@@ -37,7 +37,7 @@ func TestCredentialGrantResolver_ConfigGrant(t *testing.T) {
 				},
 			},
 		},
-		SecretResolver: secrets,
+		Secrets: secrets,
 	}
 
 	materialized, err := resolver.ResolveCredential(context.Background(),
@@ -60,7 +60,7 @@ func TestCredentialGrantResolver_ConfigGrant(t *testing.T) {
 func TestCredentialGrantResolver_MultiTenantHostMatching(t *testing.T) {
 	t.Parallel()
 
-	secrets := &stubSecretResolver{
+	secrets := &stubSecretManager{
 		secrets: map[string]string{
 			"shop-1-key": "sk-shop-one",
 			"shop-2-key": "sk-shop-two",
@@ -87,7 +87,7 @@ func TestCredentialGrantResolver_MultiTenantHostMatching(t *testing.T) {
 				},
 			},
 		},
-		SecretResolver: secrets,
+		Secrets: secrets,
 	}
 
 	resolve := func(host string) string {
@@ -113,7 +113,7 @@ func TestCredentialGrantResolver_MultiTenantHostMatching(t *testing.T) {
 func TestCredentialGrantResolver_RejectsSecretURIPrefix(t *testing.T) {
 	t.Parallel()
 
-	secrets := &stubSecretResolver{
+	secrets := &stubSecretManager{
 		secrets: map[string]string{"prefixed-key": "sk-with-prefix"},
 	}
 	resolver := &CredentialGrantResolver{
@@ -130,7 +130,7 @@ func TestCredentialGrantResolver_RejectsSecretURIPrefix(t *testing.T) {
 				},
 			},
 		},
-		SecretResolver: secrets,
+		Secrets: secrets,
 	}
 
 	materialized, err := resolver.ResolveCredential(context.Background(),

@@ -151,20 +151,18 @@ type TelemetryFactory func(node yaml.Node) (core.TelemetryProvider, error)
 type AuditFactory func(ctx context.Context, cfg config.AuditConfig, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error)
 
 type FactoryRegistry struct {
-	Auth       map[string]AuthFactory
-	Datastores map[string]DatastoreFactory
-	Secrets    map[string]SecretManagerFactory
-	Telemetry  map[string]TelemetryFactory
-	Audit      AuditFactory
-	Builtins   []core.Provider
+	Auth      AuthFactory
+	Datastore DatastoreFactory
+	Secrets   map[string]SecretManagerFactory
+	Telemetry map[string]TelemetryFactory
+	Audit     AuditFactory
+	Builtins  []core.Provider
 }
 
 func NewFactoryRegistry() *FactoryRegistry {
 	return &FactoryRegistry{
-		Auth:       make(map[string]AuthFactory),
-		Datastores: make(map[string]DatastoreFactory),
-		Secrets:    make(map[string]SecretManagerFactory),
-		Telemetry:  make(map[string]TelemetryFactory),
+		Secrets:   make(map[string]SecretManagerFactory),
+		Telemetry: make(map[string]TelemetryFactory),
 	}
 }
 
@@ -655,9 +653,8 @@ func buildAuth(cfg *config.Config, factories *FactoryRegistry, deps Deps) (core.
 	if cfg.Auth.Provider == nil {
 		return nil, nil
 	}
-	factory, ok := factories.Auth["plugin"]
-	if !ok {
-		return nil, fmt.Errorf("bootstrap: auth plugin factory is not registered")
+	if factories.Auth == nil {
+		return nil, fmt.Errorf("bootstrap: auth factory is not registered")
 	}
 	node := cfg.Auth.Config
 	if !config.IsComponentRuntimeConfigNode(node) {
@@ -667,7 +664,7 @@ func buildAuth(cfg *config.Config, factories *FactoryRegistry, deps Deps) (core.
 			return nil, fmt.Errorf("bootstrap: auth plugin: %w", err)
 		}
 	}
-	auth, err := factory(node, deps)
+	auth, err := factories.Auth(node, deps)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: auth plugin: %w", err)
 	}
@@ -675,9 +672,8 @@ func buildAuth(cfg *config.Config, factories *FactoryRegistry, deps Deps) (core.
 }
 
 func buildDatastore(cfg *config.Config, factories *FactoryRegistry, deps Deps) (core.Datastore, error) {
-	factory, ok := factories.Datastores["plugin"]
-	if !ok {
-		return nil, fmt.Errorf("bootstrap: datastore plugin factory is not registered")
+	if factories.Datastore == nil {
+		return nil, fmt.Errorf("bootstrap: datastore factory is not registered")
 	}
 	node := cfg.Datastore.Config
 	if !config.IsComponentRuntimeConfigNode(node) {
@@ -687,7 +683,7 @@ func buildDatastore(cfg *config.Config, factories *FactoryRegistry, deps Deps) (
 			return nil, fmt.Errorf("bootstrap: datastore plugin: %w", err)
 		}
 	}
-	ds, err := factory(node, deps)
+	ds, err := factories.Datastore(node, deps)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: datastore plugin: %w", err)
 	}
