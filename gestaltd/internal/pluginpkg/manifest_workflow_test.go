@@ -89,8 +89,15 @@ func TestManifestWorkflow_RoundTripsProviderPackagesAcrossDirectoryAndArchive(t 
 						CursorPath:  "next_cursor",
 					},
 				},
+				Pagination: &pluginmanifestv1.ManifestPaginationConfig{
+					Style:       "cursor",
+					CursorParam: "cursor",
+					CursorPath:  "nextCursor",
+					ResultsPath: "results",
+					MaxPages:    10,
+				},
 				AllowedOperations: map[string]*pluginmanifestv1.ManifestOperationOverride{
-					"tickets.list": {Alias: "list_tickets"},
+					"tickets.list": {Alias: "list_tickets", Paginate: true},
 				},
 				Connections: map[string]*providerManifestConnectionWire{
 					"default": {
@@ -142,8 +149,11 @@ func TestManifestWorkflow_RoundTripsProviderPackagesAcrossDirectoryAndArchive(t 
 		if dirManifest.Provider.MCPURL != "https://mcp.example.com/mcp" || dirManifest.Provider.MCPConnection != "mcp" {
 			t.Fatalf("unexpected mcp surface: %#v", dirManifest.Provider)
 		}
-		if got := dirManifest.Provider.AllowedOperations["tickets.list"]; got == nil || got.Alias != "list_tickets" {
+		if got := dirManifest.Provider.AllowedOperations["tickets.list"]; got == nil || got.Alias != "list_tickets" || !got.Paginate {
 			t.Fatalf("unexpected allowed operations: %#v", dirManifest.Provider.AllowedOperations)
+		}
+		if pgn := dirManifest.Provider.Pagination; pgn == nil || pgn.Style != "cursor" || pgn.CursorPath != "nextCursor" {
+			t.Fatalf("unexpected pagination config: %+v", dirManifest.Provider.Pagination)
 		}
 		if dirManifest.Provider.ResponseMapping == nil || dirManifest.Provider.ResponseMapping.DataPath != "items" {
 			t.Fatalf("unexpected response mapping: %#v", dirManifest.Provider.ResponseMapping)

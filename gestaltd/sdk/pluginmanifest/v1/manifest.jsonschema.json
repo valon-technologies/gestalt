@@ -91,6 +91,9 @@
         "response_mapping": {
           "$ref": "#/$defs/response_mapping"
         },
+        "pagination": {
+          "$ref": "#/$defs/pagination_config"
+        },
         "allowed_operations": {
           "type": "object",
           "additionalProperties": {
@@ -624,6 +627,43 @@
         }
       }
     },
+    "pagination_config": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "style"
+      ],
+      "properties": {
+        "style": {
+          "type": "string",
+          "enum": [
+            "cursor",
+            "offset",
+            "page"
+          ]
+        },
+        "cursor_param": {
+          "type": "string"
+        },
+        "cursor_path": {
+          "type": "string"
+        },
+        "limit_param": {
+          "type": "string"
+        },
+        "default_limit": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "results_path": {
+          "type": "string"
+        },
+        "max_pages": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
     "manifest_operation_override": {
       "type": "object",
       "additionalProperties": false,
@@ -633,6 +673,12 @@
         },
         "description": {
           "type": "string"
+        },
+        "paginate": {
+          "type": "boolean"
+        },
+        "pagination": {
+          "$ref": "#/$defs/pagination_config"
         }
       }
     },

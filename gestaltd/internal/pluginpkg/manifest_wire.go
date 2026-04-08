@@ -28,6 +28,7 @@ type providerManifestWire struct {
 	Headers           map[string]string                                      `json:"headers,omitempty" yaml:"headers,omitempty"`
 	ManagedParameters []pluginmanifestv1.ManagedParameter                    `json:"managed_parameters,omitempty" yaml:"managed_parameters,omitempty"`
 	ResponseMapping   *pluginmanifestv1.ManifestResponseMapping              `json:"response_mapping,omitempty" yaml:"response_mapping,omitempty"`
+	Pagination        *pluginmanifestv1.ManifestPaginationConfig             `json:"pagination,omitempty" yaml:"pagination,omitempty"`
 	AllowedOperations map[string]*pluginmanifestv1.ManifestOperationOverride `json:"allowed_operations,omitempty" yaml:"allowed_operations,omitempty"`
 	Surfaces          providerManifestSurfacesWire                           `json:"surfaces" yaml:"surfaces"`
 	MCP               *providerManifestMCPWire                               `json:"mcp,omitempty" yaml:"mcp,omitempty"`
@@ -135,6 +136,7 @@ func wireManifestToInternal(wire *manifestWire) *pluginmanifestv1.Manifest {
 			Headers:           wire.Provider.Headers,
 			ManagedParameters: wire.Provider.ManagedParameters,
 			ResponseMapping:   wire.Provider.ResponseMapping,
+			Pagination:        wire.Provider.Pagination,
 			AllowedOperations: wire.Provider.AllowedOperations,
 		}
 		if wire.Provider.MCP != nil {
@@ -226,6 +228,7 @@ func internalManifestToWire(manifest *pluginmanifestv1.Manifest) *manifestWire {
 		Headers:           manifest.Provider.Headers,
 		ManagedParameters: manifest.Provider.ManagedParameters,
 		ResponseMapping:   manifest.Provider.ResponseMapping,
+		Pagination:        manifest.Provider.Pagination,
 		AllowedOperations: manifest.Provider.AllowedOperations,
 		Surfaces:          providerManifestSurfacesWire{},
 	}

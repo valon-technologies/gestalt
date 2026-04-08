@@ -911,6 +911,7 @@ func loadConfiguredAPIDefinition(ctx context.Context, name string, resolved reso
 	if cfg.applyResponseMapping {
 		applyProviderResponseMapping(def, cfg.manifestProvider, cfg.plugin)
 	}
+	applyProviderPagination(def, cfg.manifestProvider, cfg.plugin, cfg.allowedOperations)
 	meta.applyToDefinition(def)
 	return def, nil
 }
@@ -1458,6 +1459,68 @@ func applyProviderResponseMapping(def *provider.Definition, manifestProvider *pl
 		}
 	}
 	def.ResponseMapping = rm
+}
+
+func applyProviderPagination(def *provider.Definition, manifestProvider *pluginmanifestv1.Provider, plugin *config.PluginDef, allowedOperations map[string]*config.OperationOverride) {
+	providerPgn := config.MergedProviderPagination(manifestProvider, plugin)
+
+	for opName, override := range allowedOperations {
+		if override == nil || !override.Paginate {
+			continue
+		}
+
+		pgn := mergedPaginationConfig(providerPgn, override.Pagination)
+		if pgn == nil {
+			continue
+		}
+
+		op := def.Operations[opName]
+		op.Pagination = &provider.PaginationDef{
+			Style:        pgn.Style,
+			CursorParam:  pgn.CursorParam,
+			CursorPath:   pgn.CursorPath,
+			LimitParam:   pgn.LimitParam,
+			DefaultLimit: pgn.DefaultLimit,
+			ResultsPath:  pgn.ResultsPath,
+			MaxPages:     pgn.MaxPages,
+		}
+		def.Operations[opName] = op
+	}
+}
+
+func mergedPaginationConfig(base, override *pluginmanifestv1.ManifestPaginationConfig) *pluginmanifestv1.ManifestPaginationConfig {
+	if base == nil && override == nil {
+		return nil
+	}
+	if base == nil {
+		return override
+	}
+	if override == nil {
+		return base
+	}
+	merged := *base
+	if override.Style != "" {
+		merged.Style = override.Style
+	}
+	if override.CursorParam != "" {
+		merged.CursorParam = override.CursorParam
+	}
+	if override.CursorPath != "" {
+		merged.CursorPath = override.CursorPath
+	}
+	if override.LimitParam != "" {
+		merged.LimitParam = override.LimitParam
+	}
+	if override.DefaultLimit != 0 {
+		merged.DefaultLimit = override.DefaultLimit
+	}
+	if override.ResultsPath != "" {
+		merged.ResultsPath = override.ResultsPath
+	}
+	if override.MaxPages != 0 {
+		merged.MaxPages = override.MaxPages
+	}
+	return &merged
 }
 
 func lazyRefreshers(ready <-chan struct{}, resolver func() map[string]map[string]OAuthHandler) invocation.RefresherResolver {

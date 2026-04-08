@@ -19,6 +19,7 @@ type providerWire struct {
 	Headers           map[string]string                  `yaml:"headers"`
 	ManagedParameters []ManagedParameterDef              `yaml:"managed_parameters"`
 	ResponseMapping   *ResponseMappingDef                `yaml:"response_mapping"`
+	Pagination        *PaginationConfigDef               `yaml:"pagination"`
 	AllowedOperations map[string]*OperationOverride      `yaml:"allowed_operations"`
 	Surfaces          providerSurfacesWire               `yaml:"surfaces"`
 	MCP               *providerMCPWire                   `yaml:"mcp"`
@@ -109,6 +110,7 @@ func (i *IntegrationDef) UnmarshalYAML(value *yaml.Node) error {
 		Headers:           wire.Headers,
 		ManagedParameters: wire.ManagedParameters,
 		ResponseMapping:   wire.ResponseMapping,
+		Pagination:        wire.Pagination,
 		AllowedOperations: wire.AllowedOperations,
 	}
 	if wire.MCP != nil {

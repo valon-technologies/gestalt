@@ -126,6 +126,7 @@ type PluginDef struct {
 	Connections     map[string]*ConnectionDef `yaml:"connections"`
 	Operations      []InlineOperationDef      `yaml:"operations"`
 	ResponseMapping *ResponseMappingDef       `yaml:"response_mapping"`
+	Pagination      *PaginationConfigDef      `yaml:"pagination"`
 
 	OpenAPIConnection string `yaml:"openapi_connection"`
 	GraphQLConnection string `yaml:"graphql_connection"`
@@ -222,6 +223,7 @@ type ManagedParameterDef = pluginmanifestv1.ManagedParameter
 
 type ResponseMappingDef = pluginmanifestv1.ManifestResponseMapping
 type PaginationMapping = pluginmanifestv1.ManifestPaginationMapping
+type PaginationConfigDef = pluginmanifestv1.ManifestPaginationConfig
 
 type SecretsConfig struct {
 	Provider string    `yaml:"provider"`

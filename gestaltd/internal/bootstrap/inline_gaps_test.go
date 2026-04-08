@@ -744,6 +744,91 @@ func TestInlineResponseMapping(t *testing.T) {
 	}
 }
 
+func TestInlinePagination(t *testing.T) {
+	t.Parallel()
+
+	pageCount := 0
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/openapi.json":
+			writeTestJSON(w, map[string]any{
+				"openapi": "3.0.0",
+				"info":    map[string]string{"title": "Paginated API"},
+				"servers": []any{map[string]string{"url": "http://" + r.Host}},
+				"paths": map[string]any{
+					"/items": map[string]any{
+						"get": map[string]any{
+							"operationId": "list_items",
+							"summary":     "List items",
+						},
+					},
+					"/items/{id}": map[string]any{
+						"get": map[string]any{
+							"operationId": "get_item",
+							"summary":     "Get item",
+						},
+					},
+				},
+			})
+		case "/items":
+			pageCount++
+			cursor := r.URL.Query().Get("cursor")
+			switch cursor {
+			case "":
+				writeTestJSON(w, map[string]any{
+					"data":       []string{"a", "b"},
+					"nextCursor": "page2",
+				})
+			case "page2":
+				writeTestJSON(w, map[string]any{
+					"data":       []string{"c"},
+					"nextCursor": nil,
+				})
+			}
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	testutil.CloseOnCleanup(t, apiSrv)
+
+	prov := bootstrapInlineProvider(t, "paginated", &config.PluginDef{
+		OpenAPI: apiSrv.URL + "/openapi.json",
+		Auth:    &config.ConnectionAuthDef{Type: "none"},
+		Pagination: &config.PaginationConfigDef{
+			Style:       "cursor",
+			CursorParam: "cursor",
+			CursorPath:  "nextCursor",
+			ResultsPath: "data",
+			LimitParam:  "limit",
+		},
+		AllowedOperations: map[string]*config.OperationOverride{
+			"list_items": {Paginate: true},
+			"get_item":   {},
+		},
+	})
+
+	ctx := context.Background()
+
+	result, err := prov.Execute(ctx, "list_items", nil, "")
+	if err != nil {
+		t.Fatalf("Execute list_items: %v", err)
+	}
+	if result.Status != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", result.Status, result.Body)
+	}
+
+	var items []string
+	if err := json.Unmarshal([]byte(result.Body), &items); err != nil {
+		t.Fatalf("unmarshal: %v (body = %s)", err, result.Body)
+	}
+	if len(items) != 3 {
+		t.Fatalf("got %d items %v, want 3 (auto-pagination should combine pages)", len(items), items)
+	}
+	if pageCount != 2 {
+		t.Fatalf("expected 2 page fetches, got %d", pageCount)
+	}
+}
+
 func TestInlineOpenAPI_NamedConnectionAuthMapping(t *testing.T) {
 	t.Parallel()
 

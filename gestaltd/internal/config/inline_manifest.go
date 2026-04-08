@@ -32,6 +32,7 @@ func InlineToManifest(name string, p *PluginDef) (*pluginmanifestv1.Manifest, er
 			PostConnectDiscovery: p.PostConnectDiscovery,
 			Operations:           cloneInlineOperations(p.Operations),
 			ResponseMapping:      p.ResponseMapping,
+			Pagination:           p.Pagination,
 			ConnectionParams:     maps.Clone(p.ConnectionParams),
 			AllowedOperations:    maps.Clone(p.AllowedOperations),
 		},

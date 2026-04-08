@@ -90,6 +90,16 @@ func MergedProviderResponseMapping(manifestProvider *pluginmanifestv1.Provider, 
 	return manifestProvider.ResponseMapping
 }
 
+func MergedProviderPagination(manifestProvider *pluginmanifestv1.Provider, plugin *PluginDef) *pluginmanifestv1.ManifestPaginationConfig {
+	if plugin != nil && plugin.Pagination != nil {
+		return plugin.Pagination
+	}
+	if manifestProvider == nil {
+		return nil
+	}
+	return manifestProvider.Pagination
+}
+
 func mergedManifestProviderAuth(base *pluginmanifestv1.ProviderAuth, override *ConnectionAuthDef) *pluginmanifestv1.ProviderAuth {
 	if base == nil && override == nil {
 		return nil
@@ -137,7 +147,8 @@ func mergeManifestProviderRuntimeConfig(manifest *pluginmanifestv1.Manifest, plu
 		len(plugin.ManagedParameters) == 0 &&
 		plugin.Auth == nil &&
 		plugin.ConnectionParams == nil &&
-		plugin.ResponseMapping == nil {
+		plugin.ResponseMapping == nil &&
+		plugin.Pagination == nil {
 		return manifest
 	}
 
@@ -149,6 +160,7 @@ func mergeManifestProviderRuntimeConfig(manifest *pluginmanifestv1.Manifest, plu
 	providerCopy.ManagedParameters = MergedProviderManagedParameters(provider, plugin)
 	providerCopy.ConnectionParams = mergedProviderConnectionParams(provider, plugin)
 	providerCopy.ResponseMapping = MergedProviderResponseMapping(provider, plugin)
+	providerCopy.Pagination = MergedProviderPagination(provider, plugin)
 	if plugin.Auth != nil {
 		providerCopy.Auth = mergedManifestProviderAuth(provider.Auth, plugin.Auth)
 	}
