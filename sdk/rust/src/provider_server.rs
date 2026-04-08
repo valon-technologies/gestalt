@@ -38,10 +38,7 @@ impl OperationResult {
     }
 
     pub fn from_error(error: Error) -> Self {
-        Self::error(
-            error.status().unwrap_or(500),
-            error.message().to_owned(),
-        )
+        Self::error(error.status().unwrap_or(500), error.message().to_owned())
     }
 
     pub fn error(status: u16, message: impl Into<String>) -> Self {

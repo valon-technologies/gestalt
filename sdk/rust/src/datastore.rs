@@ -1,10 +1,10 @@
 use async_trait::async_trait;
 
+use crate::api::RuntimeMetadata;
 use crate::error::{Error, Result};
 pub use crate::generated::v1::{
     OAuthRegistration, StoredApiToken, StoredIntegrationToken, StoredUser,
 };
-use crate::api::RuntimeMetadata;
 
 #[async_trait]
 pub trait DatastoreProvider: Send + Sync + 'static {

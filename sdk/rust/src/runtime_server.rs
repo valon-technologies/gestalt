@@ -3,6 +3,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
+use crate::api::RuntimeMetadata;
 use crate::auth::AuthProvider;
 use crate::datastore::DatastoreProvider;
 use crate::error::Result;
@@ -11,7 +12,6 @@ use crate::generated::v1::{
     ConfigurePluginRequest, ConfigurePluginResponse, HealthCheckResponse, PluginKind,
     PluginMetadata,
 };
-use crate::api::RuntimeMetadata;
 use crate::{CURRENT_PROTOCOL_VERSION, Provider};
 
 #[async_trait]

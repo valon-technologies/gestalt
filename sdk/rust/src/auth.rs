@@ -2,11 +2,11 @@ use std::time::Duration;
 
 use async_trait::async_trait;
 
+use crate::api::RuntimeMetadata;
 use crate::error::{Error, Result};
 pub use crate::generated::v1::{
     AuthenticatedUser, BeginLoginRequest, BeginLoginResponse, CompleteLoginRequest,
 };
-use crate::api::RuntimeMetadata;
 
 #[async_trait]
 pub trait AuthProvider: Send + Sync + 'static {
