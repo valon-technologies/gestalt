@@ -433,7 +433,7 @@ export default function IntegrationSettingsModal({
 const LINK_RE = /(\[[^\]]+\]\(https?:\/\/[^)]+\))/;
 const LINK_MATCH_RE = /^\[([^\]]+)\]\((https?:\/\/[^)]+)\)$/;
 
-function renderLinkedText(text: string): (string | JSX.Element)[] {
+function renderLinkedText(text: string): React.ReactNode[] {
   return text.split(LINK_RE).map((seg, i) => {
     const m = seg.match(LINK_MATCH_RE);
     if (!m) return seg;
