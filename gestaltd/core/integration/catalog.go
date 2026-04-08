@@ -8,6 +8,20 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 )
 
+func ConvertParameters(params []catalog.CatalogParameter) []core.Parameter {
+	out := make([]core.Parameter, 0, len(params))
+	for _, p := range params {
+		out = append(out, core.Parameter{
+			Name:        p.Name,
+			Type:        p.Type,
+			Description: p.Description,
+			Required:    p.Required,
+			Default:     p.Default,
+		})
+	}
+	return out
+}
+
 func OperationsList(c *catalog.Catalog) []core.Operation {
 	if c == nil {
 		return nil
@@ -18,16 +32,6 @@ func OperationsList(c *catalog.Catalog) []core.Operation {
 		if op.Transport == transportGraphQL && op.Query == "" {
 			continue
 		}
-		params := make([]core.Parameter, 0, len(op.Parameters))
-		for _, param := range op.Parameters {
-			params = append(params, core.Parameter{
-				Name:        param.Name,
-				Type:        param.Type,
-				Description: param.Description,
-				Required:    param.Required,
-				Default:     param.Default,
-			})
-		}
 		method := strings.ToUpper(strings.TrimSpace(op.Method))
 		if method == "" && op.Query != "" {
 			method = http.MethodPost
@@ -36,7 +40,7 @@ func OperationsList(c *catalog.Catalog) []core.Operation {
 			Name:        op.ID,
 			Description: op.Description,
 			Method:      method,
-			Parameters:  params,
+			Parameters:  ConvertParameters(op.Parameters),
 		})
 	}
 	return ops

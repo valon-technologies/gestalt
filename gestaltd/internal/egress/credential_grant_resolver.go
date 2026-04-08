@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+
+	"github.com/valon-technologies/gestalt/server/core"
 )
 
 // CredentialGrantLoader loads credential grants for resolution. Implementations
@@ -25,8 +27,8 @@ func (l *StaticCredentialGrantLoader) LoadCredentialGrants(_ context.Context) ([
 // finding the first matching grant, and materializing it via secret lookup.
 // Loaders are evaluated in order; within each loader the first matching grant wins.
 type CredentialGrantResolver struct {
-	Loaders        []CredentialGrantLoader
-	SecretResolver SecretResolver
+	Loaders  []CredentialGrantLoader
+	Secrets  core.SecretManager
 }
 
 func (r *CredentialGrantResolver) ResolveCredential(ctx context.Context, subject Subject, target Target) (CredentialMaterialization, error) {
@@ -41,7 +43,7 @@ func (r *CredentialGrantResolver) ResolveCredential(ctx context.Context, subject
 			continue
 		}
 
-		mat, err := resolveSecretGrant(ctx, r.SecretResolver, grant)
+		mat, err := resolveSecretGrant(ctx, r.Secrets, grant)
 		if err != nil {
 			return CredentialMaterialization{}, err
 		}
@@ -65,7 +67,7 @@ func firstMatchingGrant(grants []CredentialGrant, subject Subject, target Target
 	return nil, false
 }
 
-func resolveSecretGrant(ctx context.Context, sr SecretResolver, grant *CredentialGrant) (CredentialMaterialization, error) {
+func resolveSecretGrant(ctx context.Context, sr core.SecretManager, grant *CredentialGrant) (CredentialMaterialization, error) {
 	if sr == nil {
 		return CredentialMaterialization{}, fmt.Errorf("egress credentials: no secret resolver configured")
 	}

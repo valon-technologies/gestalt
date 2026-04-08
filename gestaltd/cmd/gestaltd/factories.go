@@ -124,8 +124,8 @@ func buildFactories() *bootstrap.FactoryRegistry {
 			return nil, nil, fmt.Errorf("unknown audit provider %q", cfg.Provider)
 		}
 	}
-	factories.Auth["plugin"] = authplugin.Factory
-	factories.Datastores["plugin"] = datastoreplugin.Factory
+	factories.Auth = authplugin.Factory
+	factories.Datastore = datastoreplugin.Factory
 	factories.Secrets["env"] = secretsenv.Factory
 	factories.Secrets["file"] = secretsfile.Factory
 	factories.Secrets["google_secret_manager"] = secretsgoogle.Factory

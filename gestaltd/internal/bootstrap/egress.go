@@ -42,7 +42,7 @@ func newEgressDeps(cfg *config.Config, sm core.SecretManager) EgressDeps {
 			Loaders: []egress.CredentialGrantLoader{
 				&egress.StaticCredentialGrantLoader{Grants: grants},
 			},
-			SecretResolver: sm,
+			Secrets: sm,
 		}
 	}
 
