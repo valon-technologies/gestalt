@@ -50,9 +50,9 @@ func (p *fakeProvider) Close() error { p.closed = true; return nil }
 func TestNewMergedRejectsOperationCollision(t *testing.T) {
 	t.Parallel()
 
-	_, err := composite.NewMerged("test", "Test", "desc", "",
-		&fakeProvider{name: "api", ops: []core.Operation{{Name: "search"}}},
-		&fakeProvider{name: "plugin", ops: []core.Operation{{Name: "search"}}},
+	_, err := composite.NewMergedWithConnections("test", "Test", "desc", "",
+		composite.BoundProvider{Provider: &fakeProvider{name: "api", ops: []core.Operation{{Name: "search"}}}},
+		composite.BoundProvider{Provider: &fakeProvider{name: "plugin", ops: []core.Operation{{Name: "search"}}}},
 	)
 	if err == nil {
 		t.Fatal("expected error for duplicate operation name")
@@ -68,23 +68,23 @@ func TestNewMergedRoutesExecuteByOperationName(t *testing.T) {
 
 	apiHit := false
 	pluginHit := false
-	merged, err := composite.NewMerged("test", "Test", "desc", "",
-		&fakeProvider{
+	merged, err := composite.NewMergedWithConnections("test", "Test", "desc", "",
+		composite.BoundProvider{Provider: &fakeProvider{
 			name: "api",
 			ops:  []core.Operation{{Name: "list_items"}},
 			execFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
 				apiHit = true
 				return &core.OperationResult{Status: http.StatusOK, Body: `{"from":"api"}`}, nil
 			},
-		},
-		&fakeProvider{
+		}},
+		composite.BoundProvider{Provider: &fakeProvider{
 			name: "plugin",
 			ops:  []core.Operation{{Name: "query"}},
 			execFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
 				pluginHit = true
 				return &core.OperationResult{Status: http.StatusOK, Body: `{"from":"plugin"}`}, nil
 			},
-		},
+		}},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -112,9 +112,9 @@ func TestNewMergedRoutesExecuteByOperationName(t *testing.T) {
 func TestNewMergedConnectionModeNone(t *testing.T) {
 	t.Parallel()
 
-	merged, err := composite.NewMerged("test", "Test", "desc", "",
-		&fakeProvider{name: "a", connMode: core.ConnectionModeNone, ops: []core.Operation{{Name: "a"}}},
-		&fakeProvider{name: "b", connMode: core.ConnectionModeNone, ops: []core.Operation{{Name: "b"}}},
+	merged, err := composite.NewMergedWithConnections("test", "Test", "desc", "",
+		composite.BoundProvider{Provider: &fakeProvider{name: "a", connMode: core.ConnectionModeNone, ops: []core.Operation{{Name: "a"}}}},
+		composite.BoundProvider{Provider: &fakeProvider{name: "b", connMode: core.ConnectionModeNone, ops: []core.Operation{{Name: "b"}}}},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -124,34 +124,12 @@ func TestNewMergedConnectionModeNone(t *testing.T) {
 	}
 }
 
-func TestMergedDisownProvider(t *testing.T) {
-	t.Parallel()
-
-	api := &fakeProvider{name: "api", ops: []core.Operation{{Name: "a"}}}
-	plugin := &fakeProvider{name: "plugin", ops: []core.Operation{{Name: "b"}}}
-
-	merged, err := composite.NewMerged("test", "Test", "desc", "", api, plugin)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	merged.DisownProvider(api)
-	_ = merged.Close()
-
-	if api.closed {
-		t.Error("disowned provider should not be closed by merged")
-	}
-	if !plugin.closed {
-		t.Error("owned provider should be closed by merged")
-	}
-}
-
 func TestMergedCatalogIncludesConstructorMetadata(t *testing.T) {
 	t.Parallel()
 
-	merged, err := composite.NewMerged("test", "Override", "Override description", "<svg/>",
-		&fakeProvider{name: "api", ops: []core.Operation{{Name: "list_items"}}},
-		&fakeProvider{name: "plugin", ops: []core.Operation{{Name: "query"}}},
+	merged, err := composite.NewMergedWithConnections("test", "Override", "Override description", "<svg/>",
+		composite.BoundProvider{Provider: &fakeProvider{name: "api", ops: []core.Operation{{Name: "list_items"}}}},
+		composite.BoundProvider{Provider: &fakeProvider{name: "plugin", ops: []core.Operation{{Name: "query"}}}},
 	)
 	if err != nil {
 		t.Fatal(err)

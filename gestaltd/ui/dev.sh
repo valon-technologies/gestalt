@@ -86,7 +86,8 @@ datastore:
 secrets:
   provider: env
 server:
-  port: $API_PORT
+  public:
+    port: $API_PORT
   encryption_key: "$(cat "$KEY_FILE")"
 EOF
 fi

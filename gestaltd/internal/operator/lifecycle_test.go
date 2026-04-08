@@ -1075,7 +1075,7 @@ func TestLockMatchesConfig_FalseWithNilLock(t *testing.T) {
 
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(cfgPath, []byte("server:\n  port: 8080\n"), 0644); err != nil {
+	if err := os.WriteFile(cfgPath, []byte("server:\n  public:\n    port: 8080\n"), 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 

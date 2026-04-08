@@ -3,7 +3,6 @@ package session
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -57,19 +56,4 @@ func ValidateToken(tokenStr string, secret []byte) (*core.UserIdentity, error) {
 		DisplayName: c.DisplayName,
 		AvatarURL:   c.AvatarURL,
 	}, nil
-}
-
-func CheckDomain(allowed map[string]bool, email string) error {
-	if len(allowed) == 0 {
-		return nil
-	}
-	parts := strings.SplitN(email, "@", 2)
-	if len(parts) != 2 {
-		return fmt.Errorf("invalid email: %s", email)
-	}
-	domain := strings.ToLower(parts[1])
-	if !allowed[domain] {
-		return fmt.Errorf("domain %q not allowed", domain)
-	}
-	return nil
 }

@@ -286,7 +286,6 @@ type ListenerConfig struct {
 }
 
 type ServerConfig struct {
-	Port          int            `yaml:"port"`
 	Public        ListenerConfig `yaml:"public"`
 	Management    ListenerConfig `yaml:"management"`
 	BaseURL       string         `yaml:"base_url"`
@@ -297,9 +296,6 @@ type ServerConfig struct {
 
 func (s ServerConfig) PublicListener() ListenerConfig {
 	port := s.Public.Port
-	if port == 0 {
-		port = s.Port
-	}
 	if port == 0 {
 		port = 8080
 	}
@@ -598,14 +594,6 @@ func Load(path string) (*Config, error) {
 	return loadWithLookup(path, os.LookupEnv, false)
 }
 
-func LoadWithMapping(path string, getenv func(string) string) (*Config, error) {
-	return loadWithLookup(path, func(key string) (string, bool) {
-		// Preserve the legacy os.Expand-style contract for callers that only
-		// provide a string mapping: the mapped value wins even when it is empty.
-		return getenv(key), true
-	}, false)
-}
-
 func LoadWithLookup(path string, lookup func(string) (string, bool)) (*Config, error) {
 	return loadWithLookup(path, lookup, false)
 }
@@ -784,11 +772,8 @@ func overlayEnvIntoNode(node yaml.Node, lookup func(string) (string, bool), pres
 }
 
 func applyDefaults(cfg *Config) {
-	if cfg.Server.Port == 0 {
-		cfg.Server.Port = 8080
-	}
-	if cfg.Server.Public.Port != 0 {
-		cfg.Server.Port = cfg.Server.Public.Port
+	if cfg.Server.Public.Port == 0 {
+		cfg.Server.Public.Port = 8080
 	}
 	if cfg.Secrets.Provider == "" {
 		cfg.Secrets.Provider = "env"

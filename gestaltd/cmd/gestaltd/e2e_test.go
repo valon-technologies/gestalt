@@ -251,7 +251,8 @@ plugin:
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := authDatastoreConfigYAML(t, dir, "", "sqlite", filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`server:
-  port: %d
+  public:
+    port: %d
   encryption_key: test-e2e-key
 plugins:
   pager:
@@ -386,7 +387,8 @@ plugin:
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := authDatastoreConfigYAML(t, dir, "session-auth", "sqlite", filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`server:
-  port: %d
+  public:
+    port: %d
   encryption_key: test-e2e-key
 plugins:
   mt:
@@ -1136,7 +1138,8 @@ func TestE2EBareGestaltdUsesDotGestaltdHomeConfig(t *testing.T) {
 
 	port := allocateTestPort(t)
 	cfg := authDatastoreConfigYAML(t, dir, "", "sqlite", filepath.Join(configDir, "gestalt.db")) + `server:
-  port: ` + fmt.Sprintf("%d", port) + `
+  public:
+    port: ` + fmt.Sprintf("%d", port) + `
   encryption_key: test-key
 `
 	cfgPath := filepath.Join(configDir, "config.yaml")
@@ -1209,7 +1212,7 @@ func TestE2EHelmChart(t *testing.T) {
 		dbPath := filepath.Join(dir, "gestalt.db")
 		datastoreManifestPath := componentProviderManifestPath(t, setupDatastoreProviderDir(t, dir, "sqlite"))
 		rendered := renderHelmChart(t, helmPath, chartDir,
-			"--set", fmt.Sprintf("config.server.port=%d", port),
+			"--set", fmt.Sprintf("config.server.public.port=%d", port),
 			"--set-string", "config.datastore.provider.source.path="+datastoreManifestPath,
 			"--set-string", "config.datastore.provider.source.ref=",
 			"--set-string", "config.datastore.provider.source.version=",
@@ -1645,7 +1648,8 @@ func writeE2EConfigWithPaths(t *testing.T, dir, pluginDir, dbPath, artifactsDir 
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	serverBlock := fmt.Sprintf(`server:
-  port: %d
+  public:
+    port: %d
   encryption_key: test-e2e-key
 `, port)
 	if artifactsDir != "" {

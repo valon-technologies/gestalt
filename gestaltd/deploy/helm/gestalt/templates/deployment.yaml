@@ -87,7 +87,7 @@ spec:
             - /etc/gestalt/config.yaml
           ports:
             - name: http
-              containerPort: {{ get $public "port" | default (.Values.config.server.port | default 8080) }}
+              containerPort: {{ get $public "port" | default 8080 }}
               protocol: TCP
             {{- if get $management "port" }}
             - name: management

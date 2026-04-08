@@ -143,7 +143,7 @@ func TestDo_GETWithArrayQueryFallback(t *testing.T) {
 	}
 }
 
-func TestDo_QueryParamsNil_PreservesLegacy(t *testing.T) {
+func TestDo_QueryParamsNil_DefaultPOSTBehavior(t *testing.T) {
 	t.Parallel()
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

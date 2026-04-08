@@ -8,8 +8,6 @@ import (
 	"io"
 	"net/http"
 	"time"
-
-	"github.com/valon-technologies/gestalt/server/core"
 )
 
 type Registration struct {
@@ -52,7 +50,7 @@ func RegisterClient(ctx context.Context, endpoint, redirectURI, clientName, toke
 	if err != nil {
 		return nil, fmt.Errorf("creating DCR request: %w", err)
 	}
-	req.Header.Set("Content-Type", core.ContentTypeJSON)
+	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{Timeout: discoveryTimeout}
 	resp, err := client.Do(req)

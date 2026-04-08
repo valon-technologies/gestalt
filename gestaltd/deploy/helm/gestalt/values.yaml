@@ -74,12 +74,8 @@ persistence:
 # you enable OAuth/OIDC or an external datastore below.
 config:
   server:
-    port: 8080
-    # Explicit public listener config. When set, public.port takes precedence
-    # over server.port.
-    # public:
-    #   host: 0.0.0.0
-    #   port: 8080
+    public:
+      port: 8080
     # Configure a separate internal-only management listener for /admin and
     # /metrics. Keep the management service disabled unless you also expose a
     # matching internal Kubernetes Service below.

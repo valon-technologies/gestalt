@@ -89,7 +89,7 @@ func probeForResourceMetadata(ctx context.Context, client *http.Client, mcpURL s
 	if err != nil {
 		return "", fmt.Errorf("creating probe request: %w", err)
 	}
-	req.Header.Set("Content-Type", core.ContentTypeJSON)
+	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
 	if err != nil {
@@ -153,8 +153,8 @@ func resolveMetadata(ctx context.Context, client *http.Client, resourceMeta map[
 		}
 	}
 
-	// Direct endpoint embedding (ClickHouse compat): resource metadata
-	// directly contains authorization_endpoint, token_endpoint, etc.
+	// Fallback: resource metadata may embed endpoints directly when
+	// authorization_servers is absent.
 	if md.AuthorizationEndpoint == "" {
 		if v, ok := resourceMeta["authorization_endpoint"].(string); ok {
 			md.AuthorizationEndpoint = v
@@ -185,7 +185,7 @@ func resolveMetadata(ctx context.Context, client *http.Client, resourceMeta map[
 	}
 
 	// Derive AuthServerURL from the authorization endpoint origin when not
-	// set via the authorization_servers field (ClickHouse compat path).
+	// set via the authorization_servers field.
 	if md.AuthServerURL == "" {
 		if u, err := url.Parse(md.AuthorizationEndpoint); err == nil {
 			md.AuthServerURL = u.Scheme + "://" + u.Host
@@ -229,7 +229,7 @@ func fetchJSON(ctx context.Context, client *http.Client, rawURL string) (map[str
 	if err != nil {
 		return nil, fmt.Errorf("creating request for %s: %w", rawURL, err)
 	}
-	req.Header.Set("Accept", core.ContentTypeJSON)
+	req.Header.Set("Accept", "application/json")
 
 	resp, err := client.Do(req)
 	if err != nil {

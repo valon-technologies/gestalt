@@ -109,7 +109,7 @@ type Request struct {
 	// QueryParams are always applied as URL query parameters, regardless of
 	// HTTP method. When set on a POST/PUT/PATCH, these go on the URL while
 	// Params become the JSON body. When nil, the existing method-based
-	// routing applies (backward compatible).
+	// routing applies.
 	QueryParams map[string]any
 
 	// CheckResponse, when set, replaces the default status >= 400 check.
@@ -154,7 +154,7 @@ func Do(ctx context.Context, client *http.Client, req Request) (*core.OperationR
 		}
 		contentType = req.ContentType
 		if contentType == "" {
-			contentType = core.ContentTypeJSON
+			contentType = "application/json"
 		}
 	}
 
@@ -339,7 +339,7 @@ func DoGraphQL(ctx context.Context, client *http.Client, req GraphQLRequest) (*c
 	if err != nil {
 		return nil, fmt.Errorf("creating graphql request: %w", err)
 	}
-	httpReq.Header.Set("Content-Type", core.ContentTypeJSON)
+	httpReq.Header.Set("Content-Type", "application/json")
 
 	for k, v := range req.CustomHeaders {
 		httpReq.Header.Set(k, v)

@@ -168,27 +168,6 @@ func (s *StubAuthProvider) ValidateToken(ctx context.Context, token string) (*co
 	}
 	return nil, nil
 }
-
-type StubRuntime struct {
-	N       string
-	StartFn func(context.Context) error
-	StopFn  func(context.Context) error
-}
-
-func (r *StubRuntime) Name() string { return r.N }
-func (r *StubRuntime) Start(ctx context.Context) error {
-	if r.StartFn != nil {
-		return r.StartFn(ctx)
-	}
-	return nil
-}
-func (r *StubRuntime) Stop(ctx context.Context) error {
-	if r.StopFn != nil {
-		return r.StopFn(ctx)
-	}
-	return nil
-}
-
 type StubIntegration struct {
 	N              string
 	DN             string

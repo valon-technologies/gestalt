@@ -9,7 +9,6 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 )
@@ -102,7 +101,7 @@ func (r *GitHubResolver) fetchRelease(ctx context.Context, client *http.Client, 
 	if err != nil {
 		return nil, fmt.Errorf("create release request: %w", err)
 	}
-	req.Header.Set(headerAccept, core.ContentTypeJSON)
+	req.Header.Set(headerAccept, "application/json")
 	if token != "" {
 		req.Header.Set(headerAuthorization, authTokenPrefix+token)
 	}
@@ -137,8 +136,6 @@ func findAsset(assets []releaseAsset, plugin, version string) (releaseAsset, err
 			return asset, nil
 		}
 	}
-	oldName := pluginsource.Source{Path: plugin}.AssetName(version)
-	oldAsset, hasOldAsset := findAssetByName(assets, oldName)
 
 	versionedMatches := make([]releaseAsset, 0, 1)
 	pluginOnlyMatches := make([]releaseAsset, 0, 1)
@@ -156,9 +153,6 @@ func findAsset(assets []releaseAsset, plugin, version string) (releaseAsset, err
 		return versionedMatches[0], nil
 	case 0:
 	default:
-		if hasOldAsset {
-			return oldAsset, nil
-		}
 		return releaseAsset{}, fmt.Errorf(
 			"multiple %s/%s assets found for plugin %q version %q: %s",
 			runtime.GOOS, runtime.GOARCH, plugin, version, joinAssetNames(versionedMatches),
@@ -170,17 +164,10 @@ func findAsset(assets []releaseAsset, plugin, version string) (releaseAsset, err
 		return pluginOnlyMatches[0], nil
 	case 0:
 	default:
-		if hasOldAsset {
-			return oldAsset, nil
-		}
 		return releaseAsset{}, fmt.Errorf(
 			"multiple %s/%s assets found for plugin %q version %q: %s",
 			runtime.GOOS, runtime.GOARCH, plugin, version, joinAssetNames(pluginOnlyMatches),
 		)
-	}
-
-	if hasOldAsset {
-		return oldAsset, nil
 	}
 
 	return releaseAsset{}, fmt.Errorf(

@@ -26,11 +26,3 @@ func (ContextSubjectResolver) ResolveSubject(ctx context.Context, _ Target) (Sub
 	subject, _ := SubjectFromContext(ctx)
 	return subject, nil
 }
-
-type StaticSubjectResolver struct {
-	Subject Subject
-}
-
-func (r StaticSubjectResolver) ResolveSubject(_ context.Context, _ Target) (Subject, error) {
-	return r.Subject, nil
-}

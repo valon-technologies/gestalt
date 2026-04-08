@@ -60,10 +60,6 @@ func secondaryPlatformName(aliases []string) string {
 	return aliases[0]
 }
 
-func oldStyleAssetName() string {
-	return testSource.AssetName(testVersion)
-}
-
 func releaseJSON(t *testing.T, assets []releaseAsset) []byte {
 	t.Helper()
 	b, err := json.Marshal(releaseResponse{Assets: assets})
@@ -180,21 +176,6 @@ func TestFindAssetPlatformMatch(t *testing.T) {
 	}
 }
 
-func TestFindAssetBackwardCompat(t *testing.T) {
-	t.Parallel()
-
-	assets := []releaseAsset{
-		{Name: oldStyleAssetName(), URL: "http://x", BrowserDownloadURL: "http://x"},
-	}
-	got, err := findAsset(assets, testPlugin, testVersion)
-	if err != nil {
-		t.Fatalf("findAsset() error: %v", err)
-	}
-	if got.Name != oldStyleAssetName() {
-		t.Errorf("findAsset() = %q, want %q", got.Name, oldStyleAssetName())
-	}
-}
-
 func TestFindAssetNoMatch(t *testing.T) {
 	t.Parallel()
 
@@ -256,67 +237,12 @@ func TestFindAssetRejectsAmbiguousMatches(t *testing.T) {
 	}
 }
 
-func TestFindAssetAmbiguousPatternFallsBackToLegacyName(t *testing.T) {
-	t.Parallel()
-
-	goos := secondaryPlatformName(platformAliases(platformOSAliases, runtime.GOOS))
-	goarch := secondaryPlatformName(platformAliases(platformArchAliases, runtime.GOARCH))
-	assets := []releaseAsset{
-		{Name: aliasedPlatformAssetName(platformAssetPrefix+testPlugin+".v"+testVersion, ".", "-", ".tar.gz", goos, goarch), URL: "http://x", BrowserDownloadURL: "http://x"},
-		{Name: aliasedPlatformAssetName(platformAssetPrefix+"v"+testVersion+"-"+testPlugin, "-", ".", ".tgz", goos, goarch), URL: "http://y", BrowserDownloadURL: "http://y"},
-		{Name: oldStyleAssetName(), URL: "http://z", BrowserDownloadURL: "http://z"},
-	}
-	got, err := findAsset(assets, testPlugin, testVersion)
-	if err != nil {
-		t.Fatalf("findAsset() error: %v", err)
-	}
-	if got.Name != oldStyleAssetName() {
-		t.Errorf("findAsset() = %q, want %q", got.Name, oldStyleAssetName())
-	}
-}
-
-func TestFindAssetAmbiguousPluginOnlyPatternFallsBackToLegacyName(t *testing.T) {
-	t.Parallel()
-
-	goos := secondaryPlatformName(platformAliases(platformOSAliases, runtime.GOOS))
-	goarch := secondaryPlatformName(platformAliases(platformArchAliases, runtime.GOARCH))
-	assets := []releaseAsset{
-		{Name: aliasedPlatformAssetName(platformAssetPrefix+testPlugin, ".", "-", ".tar.gz", goos, goarch), URL: "http://x", BrowserDownloadURL: "http://x"},
-		{Name: aliasedPlatformAssetName(platformAssetPrefix+testPlugin, "-", ".", ".tgz", goos, goarch), URL: "http://y", BrowserDownloadURL: "http://y"},
-		{Name: oldStyleAssetName(), URL: "http://z", BrowserDownloadURL: "http://z"},
-	}
-	got, err := findAsset(assets, testPlugin, testVersion)
-	if err != nil {
-		t.Fatalf("findAsset() error: %v", err)
-	}
-	if got.Name != oldStyleAssetName() {
-		t.Errorf("findAsset() = %q, want %q", got.Name, oldStyleAssetName())
-	}
-}
-
 func TestFindAssetVersionBeforePluginMatch(t *testing.T) {
 	t.Parallel()
 
 	want := variantPlatformAssetName(platformAssetPrefix+"v"+testVersion+"-"+testPlugin, ".", "-", ".tgz")
 	assets := []releaseAsset{
 		{Name: want, URL: "http://x", BrowserDownloadURL: "http://x"},
-	}
-	got, err := findAsset(assets, testPlugin, testVersion)
-	if err != nil {
-		t.Fatalf("findAsset() error: %v", err)
-	}
-	if got.Name != want {
-		t.Errorf("findAsset() = %q, want %q", got.Name, want)
-	}
-}
-
-func TestFindAssetPrefersPatternMatchOverLegacyFallback(t *testing.T) {
-	t.Parallel()
-
-	want := variantPlatformAssetName(platformAssetPrefix+testPlugin+".v"+testVersion, ".", "-", ".tgz")
-	assets := []releaseAsset{
-		{Name: want, URL: "http://x", BrowserDownloadURL: "http://x"},
-		{Name: oldStyleAssetName(), URL: "http://y", BrowserDownloadURL: "http://y"},
 	}
 	got, err := findAsset(assets, testPlugin, testVersion)
 	if err != nil {
@@ -454,25 +380,6 @@ func TestResolveSuccess(t *testing.T) {
 	pkg.Cleanup()
 	if _, err := os.Stat(pkg.LocalPath); !os.IsNotExist(err) {
 		t.Error("temp file should be removed after Cleanup()")
-	}
-}
-
-func TestResolveBackwardCompatAsset(t *testing.T) {
-	t.Parallel()
-
-	assetName := oldStyleAssetName()
-	srv := newTestServer(t, assetName)
-	defer srv.Close()
-
-	resolver := &GitHubResolver{BaseURL: srv.URL}
-	pkg, err := resolver.Resolve(context.Background(), testSource, testVersion)
-	if err != nil {
-		t.Fatalf("Resolve() error: %v", err)
-	}
-	defer pkg.Cleanup()
-
-	if pkg.ArchiveSHA256 != testAssetSHA256() {
-		t.Errorf("SHA256 = %s, want %s", pkg.ArchiveSHA256, testAssetSHA256())
 	}
 }
 

@@ -67,7 +67,8 @@ func defaultManagedConfig(dbPath, encryptionKey string) string {
 secrets:
   provider: env
 server:
-  port: 8080
+  public:
+    port: 8080
   encryption_key: %q
 `, defaultProviderRepo, defaultProviderVersion, dbPath, encryptionKey)
 }
@@ -82,7 +83,8 @@ func defaultLocalSourceConfig(providersDir, dbPath, encryptionKey string) string
 secrets:
   provider: env
 server:
-  port: 8080
+  public:
+    port: 8080
   encryption_key: %q
 `, filepath.Join(providersDir, "datastore", "sqlite", "plugin.yaml"), dbPath, encryptionKey)
 }
