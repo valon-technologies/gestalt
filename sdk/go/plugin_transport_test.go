@@ -89,18 +89,22 @@ func TestServeAuthProviderClosesProviderOnShutdown(t *testing.T) {
 	}
 }
 
-type closeableStubProvider struct {
-	stubProvider
+type closeTracker struct {
 	closed atomic.Bool
 }
 
-func (p *closeableStubProvider) Close() error {
-	p.closed.Store(true)
+func (c *closeTracker) Close() error {
+	c.closed.Store(true)
 	return nil
 }
 
+type closeableStubProvider struct {
+	stubProvider
+	closeTracker
+}
+
 type closeableStubAuthProvider struct {
-	closed atomic.Bool
+	closeTracker
 }
 
 func (p *closeableStubAuthProvider) Configure(context.Context, string, map[string]any) error {
@@ -113,11 +117,6 @@ func (p *closeableStubAuthProvider) BeginLogin(context.Context, gestalt.BeginLog
 
 func (p *closeableStubAuthProvider) CompleteLogin(context.Context, gestalt.CompleteLoginRequest) (*gestalt.AuthenticatedUser, error) {
 	return &gestalt.AuthenticatedUser{Email: "user@example.com"}, nil
-}
-
-func (p *closeableStubAuthProvider) Close() error {
-	p.closed.Store(true)
-	return nil
 }
 
 func newSocketPath(t *testing.T, name string) string {

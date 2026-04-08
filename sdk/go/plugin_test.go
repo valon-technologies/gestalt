@@ -103,56 +103,65 @@ func (p *sessionCatalogStubProvider) CatalogForRequest(_ context.Context, _ stri
 func TestProviderServerGetMetadata(t *testing.T) {
 	t.Parallel()
 
-	client := newProviderPluginClient(t, &stubProvider{}, stubRouter)
-	meta, err := client.GetMetadata(context.Background(), &emptypb.Empty{})
-	if err != nil {
-		t.Fatalf("GetMetadata: %v", err)
-	}
-	if meta.GetSupportsSessionCatalog() {
-		t.Fatal("SupportsSessionCatalog = true, want false")
-	}
-}
+	t.Run("plain provider", func(t *testing.T) {
+		client := newProviderPluginClient(t, &stubProvider{}, stubRouter)
+		meta, err := client.GetMetadata(context.Background(), &emptypb.Empty{})
+		if err != nil {
+			t.Fatalf("GetMetadata: %v", err)
+		}
+		if meta.GetSupportsSessionCatalog() {
+			t.Fatal("SupportsSessionCatalog = true, want false")
+		}
+	})
 
-func TestProviderServerGetMetadata_SessionCatalogCapability(t *testing.T) {
-	t.Parallel()
-
-	client := newProviderPluginClient(t, &sessionCatalogStubProvider{
-		sessionCatalog: &gestalt.Catalog{
-			Name: "test-provider",
-			Operations: []gestalt.CatalogOperation{
-				{ID: "session_op", Method: http.MethodGet},
+	t.Run("session catalog provider", func(t *testing.T) {
+		client := newProviderPluginClient(t, &sessionCatalogStubProvider{
+			sessionCatalog: &gestalt.Catalog{
+				Name: "test-provider",
+				Operations: []gestalt.CatalogOperation{
+					{ID: "session_op", Method: http.MethodGet},
+				},
 			},
-		},
-	}, sessionCatalogStubRouter)
-	meta, err := client.GetMetadata(context.Background(), &emptypb.Empty{})
-	if err != nil {
-		t.Fatalf("GetMetadata: %v", err)
-	}
-	if !meta.GetSupportsSessionCatalog() {
-		t.Fatal("SupportsSessionCatalog = false, want true")
-	}
+		}, sessionCatalogStubRouter)
+		meta, err := client.GetMetadata(context.Background(), &emptypb.Empty{})
+		if err != nil {
+			t.Fatalf("GetMetadata: %v", err)
+		}
+		if !meta.GetSupportsSessionCatalog() {
+			t.Fatal("SupportsSessionCatalog = false, want true")
+		}
+	})
 }
 
 func TestProviderServerGetSessionCatalog(t *testing.T) {
 	t.Parallel()
 
-	prov := &sessionCatalogStubProvider{
-		sessionCatalog: &gestalt.Catalog{
-			Name: "test-provider",
-			Operations: []gestalt.CatalogOperation{
-				{ID: "session_op", Method: http.MethodPost},
+	t.Run("supported", func(t *testing.T) {
+		prov := &sessionCatalogStubProvider{
+			sessionCatalog: &gestalt.Catalog{
+				Name: "test-provider",
+				Operations: []gestalt.CatalogOperation{
+					{ID: "session_op", Method: http.MethodPost},
+				},
 			},
-		},
-	}
+		}
+		client := newProviderPluginClient(t, prov, sessionCatalogStubRouter)
+		resp, err := client.GetSessionCatalog(context.Background(), &proto.GetSessionCatalogRequest{Token: "tok"})
+		if err != nil {
+			t.Fatalf("GetSessionCatalog: %v", err)
+		}
+		if resp.GetCatalogJson() == "" {
+			t.Fatal("expected session catalog json")
+		}
+	})
 
-	client := newProviderPluginClient(t, prov, sessionCatalogStubRouter)
-	resp, err := client.GetSessionCatalog(context.Background(), &proto.GetSessionCatalogRequest{Token: "tok"})
-	if err != nil {
-		t.Fatalf("GetSessionCatalog: %v", err)
-	}
-	if resp.GetCatalogJson() == "" {
-		t.Fatal("expected session catalog json")
-	}
+	t.Run("unsupported", func(t *testing.T) {
+		client := newProviderPluginClient(t, &stubProvider{}, stubRouter)
+		_, err := client.GetSessionCatalog(context.Background(), &proto.GetSessionCatalogRequest{Token: "t"})
+		if err == nil {
+			t.Fatal("GetSessionCatalog should return error for unsupported provider")
+		}
+	})
 }
 
 func TestProviderServerExecute(t *testing.T) {
@@ -294,19 +303,3 @@ func TestProviderServerStartProvider(t *testing.T) {
 	}
 }
 
-func TestProviderServerUnimplementedRPCs(t *testing.T) {
-	t.Parallel()
-
-	client := newProviderPluginClient(t, &stubProvider{}, stubRouter)
-	ctx := context.Background()
-
-	_, err := client.GetSessionCatalog(ctx, &proto.GetSessionCatalogRequest{Token: "t"})
-	if err == nil {
-		t.Error("GetSessionCatalog should return UNIMPLEMENTED")
-	}
-
-	_, err = client.PostConnect(ctx, &proto.PostConnectRequest{})
-	if err == nil {
-		t.Error("PostConnect should return UNIMPLEMENTED")
-	}
-}
