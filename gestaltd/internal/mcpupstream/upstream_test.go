@@ -95,30 +95,6 @@ func newHeaderAuthenticatedHTTPTestServer(t *testing.T, expectedHeaders map[stri
 	}))
 }
 
-func TestManagedMCPClientCloseRunsTransportCleanup(t *testing.T) {
-	t.Parallel()
-
-	client, err := mcpclient.NewInProcessClient(newTestServer())
-	if err != nil {
-		t.Fatalf("creating in-process client: %v", err)
-	}
-
-	closedIdleConnections := false
-	managed := &managedMCPClient{
-		MCPClient: client,
-		onClose: func() {
-			closedIdleConnections = true
-		},
-	}
-
-	if err := managed.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
-	if !closedIdleConnections {
-		t.Fatal("expected Close to run transport cleanup")
-	}
-}
-
 func TestUpstream_DiscoverTools(t *testing.T) {
 	t.Parallel()
 
@@ -414,20 +390,45 @@ func TestUpstream_StaticHeadersReachUpstream(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	cat, err := u.CatalogForRequest(context.Background(), "")
-	if err != nil {
-		t.Fatalf("CatalogForRequest: %v", err)
-	}
-	if len(cat.Operations) != 2 {
-		t.Fatalf("expected 2 operations, got %d", len(cat.Operations))
+	defaultTransport, ok := http.DefaultTransport.(*http.Transport)
+	if !ok {
+		t.Fatalf("http.DefaultTransport = %T, want *http.Transport", http.DefaultTransport)
 	}
 
-	result, err := u.CallTool(context.Background(), "run_query", map[string]any{"sql": "SELECT 1"})
-	if err != nil {
-		t.Fatalf("CallTool: %v", err)
-	}
-	if result.IsError {
-		t.Fatalf("unexpected tool error: %v", result.Content)
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				defaultTransport.CloseIdleConnections()
+			}
+		}
+	}()
+	t.Cleanup(func() {
+		close(stop)
+		<-done
+	})
+
+	for i := range 5 {
+		cat, err := u.CatalogForRequest(context.Background(), "")
+		if err != nil {
+			t.Fatalf("CatalogForRequest #%d: %v", i+1, err)
+		}
+		if len(cat.Operations) != 2 {
+			t.Fatalf("expected 2 operations, got %d", len(cat.Operations))
+		}
+
+		result, err := u.CallTool(context.Background(), "run_query", map[string]any{"sql": "SELECT 1"})
+		if err != nil {
+			t.Fatalf("CallTool #%d: %v", i+1, err)
+		}
+		if result.IsError {
+			t.Fatalf("unexpected tool error on iteration %d: %v", i+1, result.Content)
+		}
 	}
 }
 
