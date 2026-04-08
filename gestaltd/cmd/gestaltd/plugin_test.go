@@ -19,7 +19,7 @@ import (
 
 const (
 	releaseTestPluginName      = "release-test"
-	releaseTestSource          = "github.com/testowner/plugins/release-test"
+	releaseTestSource          = "github.com/testowner/plugins/catalog/release-test"
 	releaseTestModule          = "example.com/release-test"
 	releaseTestIconPath        = "branding/icon.svg"
 	releaseProviderSchemaPath  = "schemas/provider.schema.json"
@@ -28,13 +28,13 @@ const (
 	releaseHybridOperationName = "list_items"
 	releaseSourceArtifactPath  = "artifacts/source-plugin"
 	webUITestPluginName        = "webui-test"
-	webUITestSource            = "github.com/testowner/plugins/webui-test"
+	webUITestSource            = "github.com/testowner/plugins/catalog/webui-test"
 	webUITestAssetRoot         = "out"
 	prebuiltHybridPluginName   = "prebuilt-hybrid"
-	prebuiltHybridSource       = "github.com/testowner/plugins/prebuilt-hybrid"
+	prebuiltHybridSource       = "github.com/testowner/plugins/catalog/prebuilt-hybrid"
 	prebuiltHybridArtifactPath = "bin/provider"
 	specLoadedHybridPluginName = "spec-loaded-hybrid"
-	specLoadedHybridSource     = "github.com/testowner/plugins/spec-loaded-hybrid"
+	specLoadedHybridSource     = "github.com/testowner/plugins/catalog/spec-loaded-hybrid"
 )
 
 func TestRun_PluginHelpExitsCleanly(t *testing.T) {
@@ -1359,7 +1359,7 @@ func newDeclarativeProviderReleaseFixture(t *testing.T, dir string) string {
 		t.Fatalf("MkdirAll(pluginDir): %v", err)
 	}
 	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
-		Source:      "github.com/testowner/plugins/declarative-provider",
+		Source:      "github.com/testowner/plugins/catalog/declarative-provider",
 		Version:     "0.0.1",
 		DisplayName: "Declarative Provider",
 		IconFile:    releaseTestIconPath,
@@ -1385,7 +1385,7 @@ func newSpecLoadedProviderReleaseFixture(t *testing.T, dir string) string {
 		t.Fatalf("MkdirAll(pluginDir): %v", err)
 	}
 	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
-		Source:      "github.com/testowner/plugins/spec-loaded-provider",
+		Source:      "github.com/testowner/plugins/catalog/spec-loaded-provider",
 		Version:     "0.0.1",
 		DisplayName: "Spec Loaded Provider",
 		IconFile:    releaseTestIconPath,

@@ -89,7 +89,7 @@ func runPluginRelease(args []string) error {
 	if err != nil {
 		return fmt.Errorf("invalid source in manifest: %w", err)
 	}
-	pluginName := src.Plugin
+	pluginName := src.PluginName()
 
 	if err := validateReleaseOutputDir(srcManifest, ".", *outputDir); err != nil {
 		return err

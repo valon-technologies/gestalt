@@ -12,7 +12,7 @@ A manifest defines exactly one of `provider` or `webui`.
 
 | Field | Purpose |
 | --- | --- |
-| `source` | Canonical plugin source identifier. Required. Use `github.com/<org>/<repo>/<plugin>`. |
+| `source` | Canonical plugin source identifier. Required. Use `github.com/<org>/<repo>/<path-after-repo>`. The final path segment remains the plugin name; any preceding segments are preserved for release tags and source resolution. |
 | `version` | Plugin version. Required. |
 | `display_name` | Human-readable label. |
 | `description` | Human-readable description. |
