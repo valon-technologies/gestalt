@@ -1,0 +1,32 @@
+---
+asIndexPage: true
+---
+
+# Architecture
+
+This section covers the internal design of Gestalt: how the server starts up, how it stores and protects credentials, and how requests flow through to upstream APIs. For day-to-day configuration, see [Configuration](/configuration). For operator-facing security guidance, see [Security](/security).
+
+## How startup works
+
+When `gestaltd serve` starts, it goes through a specific sequence that matters when you're debugging boot failures.
+
+First, the YAML config file is loaded and `${ENV_VAR}` placeholders are expanded. If a variable isn't set, Gestalt checks for a corresponding `_FILE` variable and reads that file instead (this is how Docker secrets work). Unknown fields are rejected.
+
+Next, Gestalt initializes the secret manager from the `secrets` block. This is the one part of config that *cannot* use `secret://` references, because the secret manager doesn't exist yet. Credentials for the secret manager itself have to come in through `${ENV_VAR}` or `${ENV_VAR_FILE}`.
+
+Once the secret manager is ready, Gestalt resolves every `secret://` reference across the rest of the config: server, auth, datastore, telemetry, audit, and all provider configs. The `secrets.config` block is skipped to avoid a circular dependency.
+
+With secrets resolved, `server.encryption_key` gets converted into a 32-byte AES key. A 64-character hex string is decoded directly; anything else goes through Argon2id derivation. This derived key protects all stored tokens.
+
+From there: auth provider, datastore (with schema migrations), provider plugins, then HTTP listeners. The `/ready` endpoint returns 503 until all providers report ready.
+
+## How requests flow
+
+Auth middleware runs first on every request. It checks for a `session_token` cookie, then for a `Bearer` header. If the bearer token starts with `gst_api_`, it's hashed with SHA-256 and looked up in the `api_tokens` table. Any other bearer value is treated as a raw provider token.
+
+For operation invocations (`/api/v1/{integration}/{operation}` or `/mcp`), the request reaches the *broker*. The broker resolves the caller's integration token from the datastore, decrypts it, refreshes it if needed, and dispatches to the provider (plugin gRPC, REST, GraphQL, or MCP upstream). The same broker handles both HTTP and MCP calls.
+
+## Further reading
+
+- [Data Model](/architecture/data-model): database tables, encryption boundaries, token storage granularity
+- [Security Internals](/architecture/security-internals): encryption implementation, token lifecycle, key rotation

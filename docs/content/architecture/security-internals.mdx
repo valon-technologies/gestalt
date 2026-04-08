@@ -1,0 +1,61 @@
+# Security Internals
+
+Implementation details of how Gestalt protects credentials. For operator guidance, see [Security](/security). For table schemas and encryption boundaries, see [Data Model](/architecture/data-model).
+
+## Key derivation
+
+`server.encryption_key` is converted to a 32-byte AES key at startup.
+
+If the key is a 64-character hex string, it's hex-decoded directly into 32 bytes. No derivation, no extra cost. Generate one with `openssl rand -hex 32`.
+
+If the key is anything else (a passphrase, `dev-only-change-me`), Gestalt runs it through Argon2id (3 iterations, 64 MiB, 4 threads). This adds a few hundred milliseconds to startup. A weak passphrase is still a weak passphrase; Argon2id makes brute-forcing harder, not impossible.
+
+The Argon2id path uses a fixed salt (`gestalt-derivekey-v1`), so two deployments with the same passphrase derive the same key. Use a unique random hex key in production.
+
+## Encryption
+
+All credential encryption uses AES-256-GCM, an authenticated mode that protects both confidentiality and integrity.
+
+Each encryption generates a fresh 12-byte nonce via `crypto/rand`, encrypts the plaintext, prepends the nonce to the ciphertext, and base64-encodes the result for storage. Tampered ciphertexts are detected at decryption. Access and refresh tokens are encrypted independently, each with their own nonce.
+
+## Integration token lifecycle
+
+### Creation
+
+For OAuth connections, Gestalt generates an encrypted state parameter (10-minute TTL) and optional PKCE verifier, redirects the user to the provider, then exchanges the authorization code for tokens on callback. Both the access token and refresh token are encrypted and stored in `integration_tokens`, keyed by `(user_id, integration, connection, instance)`.
+
+If the provider supports post-connect discovery (multiple workspaces or accounts), Gestalt fetches the resource list after the token exchange. One resource is auto-selected; multiple resources prompt the user.
+
+Manual connections store the user-provided credential as the access token with an empty refresh token. Same encryption, same storage.
+
+### Refresh
+
+Refresh is on-demand during invocation, not a background job. If a token expires within 5 minutes and has a refresh token, the broker attempts a refresh. Concurrent attempts for the same token are deduplicated via singleflight.
+
+On success: new tokens encrypted and stored, `refresh_error_count` reset. On failure: error count incremented. If the token is still technically valid, it's used anyway. If expired, the invocation fails. The persisted error count lets operators spot tokens stuck in a failure loop.
+
+### Revocation
+
+Disconnecting deletes the token row. No soft-delete, no upstream revocation. If you need to revoke at the provider level (e.g., a GitHub OAuth token), do that separately through the provider's interface.
+
+## API token lifecycle
+
+API tokens (`gst_api_*`) work differently: the plaintext is never stored.
+
+**Creation.** Gestalt generates 32 random bytes, formats them as `gst_api_` + hex, computes the SHA-256 hash, and stores only the hash. The plaintext is returned once. Default TTL is 30 days (`server.api_token_ttl`). CLI login tokens are non-expiring.
+
+**Validation.** On each request, Gestalt hashes the bearer token and looks up the hash. Match + not expired = authenticated.
+
+**Revocation.** `DELETE /api/v1/tokens/{id}` or `DELETE /api/v1/tokens` (all). Immediate, permanent.
+
+## Secret resolution
+
+`secret://` resolution is a one-shot operation at startup. Gestalt resolves every reference, replaces it in memory, and never consults the secret manager again. If a secret rotates after startup, restart Gestalt to pick it up.
+
+The `secrets.config` block is excluded from resolution. Use `${ENV_VAR}` or `${ENV_VAR_FILE}` for secret manager credentials.
+
+## Key rotation
+
+There is no automated key rotation. Changing `server.encryption_key` makes all stored encrypted values unreadable.
+
+To rotate: stop all instances, decrypt tokens with the old key, re-encrypt with the new key, update config, restart. This requires direct database access and the logic in `core/crypto`. There is no built-in tool for this.
