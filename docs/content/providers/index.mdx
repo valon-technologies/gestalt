@@ -31,14 +31,16 @@ Providers run in their own process. They cannot access the host process memory, 
 
 ## SDK support
 
-Gestalt ships SDKs for four languages:
+Gestalt ships first-party SDKs for four languages:
 
 - **Go** (`sdk/go`)
 - **Python** (`sdk/python`)
 - **Rust** (`sdk/rust`)
-- **TypeScript** (`@valon-technologies/gestalt`)
+- **TypeScript** (`sdk/typescript`, published as `@valon-technologies/gestalt`)
 
-The underlying protocol is gRPC, so other languages are possible, but the documented authoring flow targets Go, Python, Rust, and TypeScript.
+The underlying protocol is gRPC, so other languages are possible, but the documented authoring flow targets those SDKs.
+
+Go, Rust, and TypeScript support plugin, auth, and datastore providers. Python remains focused on plugin providers.
 
 ## Operation ID conventions
 

@@ -29,8 +29,9 @@ plugin:
 ```
 
 Executable source packages stay language-native. Gestalt loads the provider
-from the package root, then synthesizes the runnable wrapper during local
-source execution and release packaging.
+from the package root or the language-specific target declaration, then
+synthesizes the runnable wrapper during local source execution and release
+packaging.
 
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
@@ -100,6 +101,7 @@ source execution and release packaging.
     ```json
     {
       "name": "my-plugin",
+      "version": "0.0.1-alpha.1",
       "type": "module",
       "dependencies": {
         "@valon-technologies/gestalt": "0.0.1-alpha.1"
@@ -112,6 +114,9 @@ source execution and release packaging.
       }
     }
     ```
+
+    TypeScript auth and datastore providers use `gestalt.provider` objects
+    such as `{ "kind": "auth", "target": "./auth.ts#provider" }`.
   </Tabs.Tab>
 </Tabs>
 
@@ -181,18 +186,23 @@ Run this from the provider source directory. It produces release archives and wr
 
 Release tags are derived from the package path after the repository. For example, `source: github.com/acme/plugins/catalog/support-api` releases from the tag `plugins/catalog/support-api/v0.1.0`.
 
-For executable Go, Python, Rust, and TypeScript integration source plugins, `provider release`
-materializes the executable catalog automatically and builds the host-platform
-artifact by default. Auth and datastore source packages use the same
-release flow without catalog generation. Pass `--platform` with a
-comma-separated list such as
-`--platform linux/amd64/glibc,linux/amd64/musl,darwin/arm64` to build explicit
-targets. Pass `--platform all` in CI release jobs to build the full supported
-platform matrix for source builds.
+For executable Go, Rust, Python, and TypeScript source providers,
+`provider release` materializes the executable catalog automatically and builds
+the host-platform artifact by default. Go, Rust, and TypeScript auth/datastore
+source packages use the same release flow without catalog generation. Pass
+`--platform` with a comma-separated list such as
+`--platform linux/amd64,darwin/arm64` to build explicit targets, or
+`--platform linux/amd64/glibc,linux/amd64/musl,darwin/arm64` when you need
+Linux libc variants. Pass `--platform all` in CI release jobs to build the
+full supported platform matrix for source builds.
 
 For non-host Python targets, point Gestalt at a matching interpreter with
 `GESTALT_PYTHON_<GOOS>_<GOARCH>` or a target-specific virtualenv such as
 `.venv-<goos>-<goarch>/`.
+
+TypeScript source plugins require Bun for local source execution and
+packaging. The SDK uses Bun's compile flow to build standalone provider
+binaries during release.
 
 ## Reference releases from config
 

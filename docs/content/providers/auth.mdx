@@ -172,23 +172,32 @@ An auth provider implements three methods: `Configure`, `BeginLogin`, and `Compl
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    ```typescript
+    ```ts
     import { defineAuthProvider } from "@valon-technologies/gestalt";
 
     let clientId = "";
     let issuerUrl = "";
 
     export const provider = defineAuthProvider({
-      configure(_name, config) {
-        clientId = config.client_id as string;
-        issuerUrl = config.issuer_url as string;
+      async configure(_name, config) {
+        clientId = typeof config.client_id === "string" ? config.client_id : "";
+        issuerUrl = typeof config.issuer_url === "string" ? config.issuer_url : "";
       },
-      beginLogin(request) {
-        const authUrl = `${issuerUrl}/authorize?client_id=${clientId}&redirect_uri=${request.callbackUrl}&state=${request.hostState}&response_type=code`;
-        return { authorizationUrl: authUrl };
+      async beginLogin(request) {
+        return {
+          authorizationUrl:
+            `${issuerUrl}/authorize` +
+            `?client_id=${encodeURIComponent(clientId)}` +
+            `&redirect_uri=${encodeURIComponent(request.callbackUrl)}` +
+            `&state=${encodeURIComponent(request.hostState)}` +
+            `&response_type=code`,
+        };
       },
-      completeLogin(request) {
+      async completeLogin(request) {
         const code = request.query.code ?? "";
+        if (!code) {
+          throw new Error("missing authorization code");
+        }
         // Exchange code for tokens, extract user info.
         return {
           subject: "user-123",
@@ -200,7 +209,21 @@ An auth provider implements three methods: `Configure`, `BeginLogin`, and `Compl
     });
     ```
 
-    Optional handlers: `validateExternalToken` for direct token validation, `sessionSettings` to control session lifetime.
+    Point `package.json` at the auth provider with `gestalt.provider`:
+
+    ```json
+    {
+      "gestalt": {
+        "provider": {
+          "kind": "auth",
+          "target": "./auth.ts#provider"
+        }
+      }
+    }
+    ```
+
+    Optional handlers: `validateExternalToken` for direct token validation and
+    `sessionSettings` to control session lifetime.
   </Tabs.Tab>
 </Tabs>
 
@@ -208,9 +231,9 @@ An auth provider implements three methods: `Configure`, `BeginLogin`, and `Compl
 
 Two optional interfaces extend the base contract.
 
-**ExternalTokenValidator** lets API clients present a token directly instead of going through the browser login flow. In Go, implement the `ExternalTokenValidator` interface on your provider. In Python, inherit from `gestalt.ExternalTokenValidator`. In Rust, override the `validate_external_token` method, which returns an unimplemented error by default.
+**ExternalTokenValidator** lets API clients present a token directly instead of going through the browser login flow. In Go, implement the `ExternalTokenValidator` interface on your provider. In Python, inherit from `gestalt.ExternalTokenValidator`. In Rust, override the `validate_external_token` method, which returns an unimplemented error by default. In TypeScript, provide the optional `validateExternalToken` handler to `defineAuthProvider`.
 
-**SessionTTLProvider** controls session lifetime. The default is 24 hours. In Go, implement the `SessionTTLProvider` interface. In Python, inherit from `gestalt.SessionTTLProvider`. In Rust, override the `session_ttl` method, which returns `None` (the 24-hour default) by default.
+**SessionTTLProvider** controls session lifetime. The default is 24 hours. In Go, implement the `SessionTTLProvider` interface. In Python, inherit from `gestalt.SessionTTLProvider`. In Rust, override the `session_ttl` method, which returns `None` (the 24-hour default) by default. In TypeScript, provide the optional `sessionSettings` handler to `defineAuthProvider`.
 
 ## Config reference
 
