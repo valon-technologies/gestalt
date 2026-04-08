@@ -2,13 +2,11 @@ package gestalt
 
 import (
 	"context"
-	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type DatastoreServer struct {
@@ -87,13 +85,11 @@ func (s *DatastoreServer) ListStoredIntegrationTokens(ctx context.Context, req *
 	if err != nil {
 		return nil, providerRPCError("list integration tokens", err)
 	}
-	resp := &proto.ListStoredIntegrationTokensResponse{
-		Tokens: make([]*proto.StoredIntegrationToken, 0, len(tokens)),
+	protoTokens := make([]*proto.StoredIntegrationToken, len(tokens))
+	for i, token := range tokens {
+		protoTokens[i] = storedIntegrationTokenToProto(token)
 	}
-	for _, token := range tokens {
-		resp.Tokens = append(resp.Tokens, storedIntegrationTokenToProto(token))
-	}
-	return resp, nil
+	return &proto.ListStoredIntegrationTokensResponse{Tokens: protoTokens}, nil
 }
 
 func (s *DatastoreServer) DeleteStoredIntegrationToken(ctx context.Context, req *proto.DeleteStoredIntegrationTokenRequest) (*emptypb.Empty, error) {
@@ -138,13 +134,11 @@ func (s *DatastoreServer) ListAPITokens(ctx context.Context, req *proto.ListAPIT
 	if err != nil {
 		return nil, providerRPCError("list api tokens", err)
 	}
-	resp := &proto.ListAPITokensResponse{
-		Tokens: make([]*proto.StoredAPIToken, 0, len(tokens)),
+	protoTokens := make([]*proto.StoredAPIToken, len(tokens))
+	for i, token := range tokens {
+		protoTokens[i] = storedAPITokenToProto(token)
 	}
-	for _, token := range tokens {
-		resp.Tokens = append(resp.Tokens, storedAPITokenToProto(token))
-	}
-	return resp, nil
+	return &proto.ListAPITokensResponse{Tokens: protoTokens}, nil
 }
 
 func (s *DatastoreServer) RevokeAPIToken(ctx context.Context, req *proto.RevokeAPITokenRequest) (*emptypb.Empty, error) {
@@ -224,19 +218,6 @@ func storedUserToProto(user *StoredUser) *proto.StoredUser {
 		DisplayName: user.DisplayName,
 		CreatedAt:   timeToProto(user.CreatedAt),
 		UpdatedAt:   timeToProto(user.UpdatedAt),
-	}
-}
-
-func storedUserFromProto(user *proto.StoredUser) *StoredUser {
-	if user == nil {
-		return nil
-	}
-	return &StoredUser{
-		ID:          user.GetId(),
-		Email:       user.GetEmail(),
-		DisplayName: user.GetDisplayName(),
-		CreatedAt:   protoToTime(user.GetCreatedAt()),
-		UpdatedAt:   protoToTime(user.GetUpdatedAt()),
 	}
 }
 
@@ -348,33 +329,4 @@ func oauthRegistrationFromProto(registration *proto.OAuthRegistration) *OAuthReg
 		ScopesSupported:       registration.GetScopesSupported(),
 		DiscoveredAt:          protoToTime(registration.GetDiscoveredAt()),
 	}
-}
-
-func timeToProto(value time.Time) *timestamppb.Timestamp {
-	if value.IsZero() {
-		return nil
-	}
-	return timestamppb.New(value)
-}
-
-func timePtrToProto(value *time.Time) *timestamppb.Timestamp {
-	if value == nil {
-		return nil
-	}
-	return timestamppb.New(*value)
-}
-
-func protoToTime(value *timestamppb.Timestamp) time.Time {
-	if value == nil {
-		return time.Time{}
-	}
-	return value.AsTime()
-}
-
-func protoToTimePtr(value *timestamppb.Timestamp) *time.Time {
-	if value == nil {
-		return nil
-	}
-	t := value.AsTime()
-	return &t
 }

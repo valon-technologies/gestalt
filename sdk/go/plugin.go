@@ -80,7 +80,7 @@ func servePlugin(ctx context.Context, register func(*grpc.Server)) error {
 	if socket == "" {
 		return fmt.Errorf("%s is required", proto.EnvPluginSocket)
 	}
-	if err := os.RemoveAll(socket); err != nil {
+	if err := os.Remove(socket); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("remove stale socket %q: %w", socket, err)
 	}
 

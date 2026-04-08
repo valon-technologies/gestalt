@@ -3,9 +3,22 @@ package gestalt
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+func cloneStringMap(values map[string]string) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(values))
+	for key, value := range values {
+		out[key] = value
+	}
+	return out
+}
 
 func mapFromStruct(s *structpb.Struct) map[string]any {
 	if s == nil {
@@ -19,33 +32,9 @@ func catalogToJSON(cat *Catalog) (string, error) {
 		return "", nil
 	}
 
-	type wireParameter struct {
-		Name        string `json:"name"`
-		WireName    string `json:"wireName,omitempty"`
-		Type        string `json:"type"`
-		Location    string `json:"location,omitempty"`
-		Description string `json:"description,omitempty"`
-		Required    bool   `json:"required,omitempty"`
-		Default     any    `json:"default,omitempty"`
-	}
-
-	type wireOperation struct {
-		ID             string               `json:"id"`
-		ProviderID     string               `json:"providerId,omitempty"`
-		Method         string               `json:"method"`
-		Path           string               `json:"path"`
-		Title          string               `json:"title,omitempty"`
-		Description    string               `json:"description,omitempty"`
-		InputSchema    json.RawMessage      `json:"inputSchema,omitempty"`
-		OutputSchema   json.RawMessage      `json:"outputSchema,omitempty"`
-		Annotations    OperationAnnotations `json:"annotations,omitempty"`
-		Parameters     []wireParameter      `json:"parameters,omitempty"`
-		RequiredScopes []string             `json:"requiredScopes,omitempty"`
-		Tags           []string             `json:"tags,omitempty"`
-		ReadOnly       bool                 `json:"readOnly,omitempty"`
-		Visible        *bool                `json:"visible,omitempty"`
-		Transport      string               `json:"transport,omitempty"`
-		Query          string               `json:"query,omitempty"`
+	type opWithTransport struct {
+		CatalogOperation
+		Transport string `json:"transport,omitempty"`
 	}
 
 	type wireCatalog struct {
@@ -53,54 +42,60 @@ func catalogToJSON(cat *Catalog) (string, error) {
 		DisplayName string            `json:"displayName"`
 		Description string            `json:"description"`
 		IconSVG     string            `json:"iconSvg,omitempty"`
-		BaseURL     string            `json:"baseUrl,omitempty"`
-		AuthStyle   string            `json:"authStyle,omitempty"`
-		Headers     map[string]string `json:"headers,omitempty"`
-		Operations  []wireOperation   `json:"operations"`
+		Operations  []opWithTransport `json:"operations"`
 	}
 
-	wireOps := make([]wireOperation, len(cat.Operations))
-	for i := range cat.Operations {
-		op := cat.Operations[i]
-		wireParams := make([]wireParameter, len(op.Parameters))
-		for j := range op.Parameters {
-			param := op.Parameters[j]
-			wireParams[j] = wireParameter{
-				Name:        param.Name,
-				Type:        param.Type,
-				Description: param.Description,
-				Required:    param.Required,
-				Default:     param.Default,
-			}
-		}
-		wireOps[i] = wireOperation{
-			ID:             op.ID,
-			Method:         op.Method,
-			Title:          op.Title,
-			Description:    op.Description,
-			InputSchema:    op.InputSchema,
-			OutputSchema:   op.OutputSchema,
-			Annotations:    op.Annotations,
-			Parameters:     wireParams,
-			RequiredScopes: op.RequiredScopes,
-			Tags:           op.Tags,
-			ReadOnly:       op.ReadOnly,
-			Visible:        op.Visible,
-			Transport:      "plugin",
-		}
+	ops := make([]opWithTransport, len(cat.Operations))
+	for i, op := range cat.Operations {
+		ops[i] = opWithTransport{CatalogOperation: op, Transport: "plugin"}
 	}
 
-	wireCat := wireCatalog{
+	data, err := json.Marshal(wireCatalog{
 		Name:        cat.Name,
 		DisplayName: cat.DisplayName,
 		Description: cat.Description,
 		IconSVG:     cat.IconSVG,
-		Operations:  wireOps,
-	}
-
-	data, err := json.Marshal(wireCat)
+		Operations:  ops,
+	})
 	if err != nil {
 		return "", fmt.Errorf("marshal catalog: %w", err)
 	}
 	return string(data), nil
+}
+
+func configFromRequest(s *structpb.Struct) map[string]any {
+	config := mapFromStruct(s)
+	if config == nil {
+		config = map[string]any{}
+	}
+	return config
+}
+
+func timeToProto(value time.Time) *timestamppb.Timestamp {
+	if value.IsZero() {
+		return nil
+	}
+	return timestamppb.New(value)
+}
+
+func timePtrToProto(value *time.Time) *timestamppb.Timestamp {
+	if value == nil {
+		return nil
+	}
+	return timestamppb.New(*value)
+}
+
+func protoToTime(value *timestamppb.Timestamp) time.Time {
+	if value == nil {
+		return time.Time{}
+	}
+	return value.AsTime()
+}
+
+func protoToTimePtr(value *timestamppb.Timestamp) *time.Time {
+	if value == nil {
+		return nil
+	}
+	t := value.AsTime()
+	return &t
 }

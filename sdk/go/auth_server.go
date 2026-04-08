@@ -104,28 +104,3 @@ func authenticatedUserToProto(user *AuthenticatedUser) *proto.AuthenticatedUser 
 		Claims:        cloneStringMap(user.Claims),
 	}
 }
-
-func authenticatedUserFromProto(user *proto.AuthenticatedUser) *AuthenticatedUser {
-	if user == nil {
-		return nil
-	}
-	return &AuthenticatedUser{
-		Subject:       user.GetSubject(),
-		Email:         user.GetEmail(),
-		EmailVerified: user.GetEmailVerified(),
-		DisplayName:   user.GetDisplayName(),
-		AvatarURL:     user.GetAvatarUrl(),
-		Claims:        cloneStringMap(user.GetClaims()),
-	}
-}
-
-func cloneStringMap(values map[string]string) map[string]string {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(values))
-	for key, value := range values {
-		out[key] = value
-	}
-	return out
-}

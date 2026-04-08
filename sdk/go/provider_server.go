@@ -36,11 +36,7 @@ func (s *ProviderServer) StartProvider(ctx context.Context, req *proto.StartProv
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	config := mapFromStruct(req.GetConfig())
-	if config == nil {
-		config = map[string]any{}
-	}
-	if err := s.provider.Configure(ctx, req.GetName(), config); err != nil {
+	if err := s.provider.Configure(ctx, req.GetName(), configFromRequest(req.GetConfig())); err != nil {
 		return nil, status.Errorf(codes.Unknown, "configure provider: %v", err)
 	}
 	return &proto.StartProviderResponse{
@@ -54,16 +50,17 @@ func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*prot
 	}, nil
 }
 
-func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest) (resp *proto.OperationResult, err error) {
+func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest) (*proto.OperationResult, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
 	if len(req.GetConnectionParams()) > 0 {
 		ctx = WithConnectionParams(ctx, req.GetConnectionParams())
 	}
-	result := protectedOperationResult(req.GetOperation(), func() (*OperationResult, error) {
-		return s.provider.execute(ctx, req.GetOperation(), mapFromStruct(req.GetParams()), req.GetToken())
-	})
+	result, err := s.provider.execute(ctx, req.GetOperation(), mapFromStruct(req.GetParams()), req.GetToken())
+	if err != nil {
+		return operationResultProto(operationResultFromError(err)), nil
+	}
 	if result == nil {
 		return operationResultProto(operationResult(http.StatusInternalServerError, nilResultMessage)), nil
 	}
