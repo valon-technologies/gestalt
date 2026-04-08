@@ -116,6 +116,215 @@ func TestE2EValidateRejectsInvalidAuditSettings(t *testing.T) {
 	}
 }
 
+func TestE2EDeclarativeSelectorsSupportHeaderPaginationAndResponseMapping(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	port := allocateTestPort(t)
+
+	var (
+		mu              sync.Mutex
+		paginationCalls []string
+	)
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/paginated-items":
+			cursor := r.URL.Query().Get("after_cursor")
+			mu.Lock()
+			paginationCalls = append(paginationCalls, cursor)
+			mu.Unlock()
+			if cursor == "" {
+				w.Header().Set("X-After-Cursor", "cursor-2")
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"data": []any{
+						map[string]any{"id": "1"},
+						map[string]any{"id": "2"},
+					},
+				})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": []any{
+					map[string]any{"id": "3"},
+				},
+			})
+		case "/mapped-items":
+			w.Header().Set("X-After-Cursor", "cursor-map")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"results": []any{
+					map[string]any{"id": "7"},
+				},
+				"moreDataAvailable": true,
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	testutil.CloseOnCleanup(t, apiSrv)
+
+	pagerDir := filepath.Join(dir, "pager-plugin")
+	if err := os.MkdirAll(pagerDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll pager plugin: %v", err)
+	}
+	writeTestFile(t, pagerDir, "openapi.yaml", []byte(fmt.Sprintf(`openapi: 3.0.0
+info:
+  title: Pager
+  version: 1.0.0
+servers:
+  - url: %s
+paths:
+  /paginated-items:
+    get:
+      operationId: list_items
+      responses:
+        '200':
+          description: ok
+`, apiSrv.URL)), 0o644)
+	writeTestFile(t, pagerDir, "plugin.yaml", []byte(`
+source: github.com/test/plugins/pager
+version: 0.0.1-alpha.1
+display_name: Pager
+kinds:
+  - plugin
+plugin:
+  openapi: openapi.yaml
+  connection_mode: none
+  pagination:
+    style: cursor
+    cursor_param: after_cursor
+    cursor:
+      source: header
+      path: X-After-Cursor
+    results_path: data
+  allowed_operations:
+    list_items:
+      paginate: true
+`), 0o644)
+	pagerManifest, err := pluginpkg.FindManifestFile(pagerDir)
+	if err != nil {
+		t.Fatalf("FindManifestFile pager: %v", err)
+	}
+
+	mapperDir := filepath.Join(dir, "mapper-plugin")
+	if err := os.MkdirAll(mapperDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll mapper plugin: %v", err)
+	}
+	writeTestFile(t, mapperDir, "openapi.yaml", []byte(fmt.Sprintf(`openapi: 3.0.0
+info:
+  title: Mapper
+  version: 1.0.0
+servers:
+  - url: %s
+paths:
+  /mapped-items:
+    get:
+      operationId: list_items
+      responses:
+        '200':
+          description: ok
+`, apiSrv.URL)), 0o644)
+	writeTestFile(t, mapperDir, "plugin.yaml", []byte(`
+source: github.com/test/plugins/mapper
+version: 0.0.1-alpha.1
+display_name: Mapper
+kinds:
+  - plugin
+plugin:
+  openapi: openapi.yaml
+  connection_mode: none
+  response_mapping:
+    data_path: results
+    pagination:
+      has_more:
+        source: body
+        path: moreDataAvailable
+      cursor:
+        source: header
+        path: X-After-Cursor
+`), 0o644)
+	mapperManifest, err := pluginpkg.FindManifestFile(mapperDir)
+	if err != nil {
+		t.Fatalf("FindManifestFile mapper: %v", err)
+	}
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := authDatastoreConfigYAML(t, dir, "", "sqlite", filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`server:
+  port: %d
+  encryption_key: test-e2e-key
+plugins:
+  pager:
+    provider:
+      source:
+        path: %s
+  mapper:
+    provider:
+      source:
+        path: %s
+`, port, pagerManifest, mapperManifest)
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	serveLockedAndExerciseExample(t, cfgPath, port, "", func(t *testing.T, baseURL string) {
+		pagerReq, _ := http.NewRequest(http.MethodPost, baseURL+"/api/v1/pager/list_items", strings.NewReader(`{}`))
+		pagerReq.Header.Set("Content-Type", "application/json")
+		pagerResp, err := http.DefaultClient.Do(pagerReq)
+		if err != nil {
+			t.Fatalf("invoke pager: %v", err)
+		}
+		defer func() { _ = pagerResp.Body.Close() }()
+		if pagerResp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(pagerResp.Body)
+			t.Fatalf("pager status = %d: %s", pagerResp.StatusCode, body)
+		}
+
+		var pagerItems []map[string]any
+		if err := json.NewDecoder(pagerResp.Body).Decode(&pagerItems); err != nil {
+			t.Fatalf("decode pager response: %v", err)
+		}
+		if len(pagerItems) != 3 {
+			t.Fatalf("pager item count = %d, want 3", len(pagerItems))
+		}
+
+		mu.Lock()
+		gotCalls := append([]string(nil), paginationCalls...)
+		mu.Unlock()
+		if len(gotCalls) != 2 || gotCalls[0] != "" || gotCalls[1] != "cursor-2" {
+			t.Fatalf("pagination calls = %v, want [\"\", \"cursor-2\"]", gotCalls)
+		}
+
+		mapperReq, _ := http.NewRequest(http.MethodPost, baseURL+"/api/v1/mapper/list_items", strings.NewReader(`{}`))
+		mapperReq.Header.Set("Content-Type", "application/json")
+		mapperResp, err := http.DefaultClient.Do(mapperReq)
+		if err != nil {
+			t.Fatalf("invoke mapper: %v", err)
+		}
+		defer func() { _ = mapperResp.Body.Close() }()
+		if mapperResp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(mapperResp.Body)
+			t.Fatalf("mapper status = %d: %s", mapperResp.StatusCode, body)
+		}
+
+		var mapped struct {
+			Data       []map[string]any `json:"data"`
+			Pagination struct {
+				HasMore bool   `json:"has_more"`
+				Cursor  string `json:"cursor"`
+			} `json:"pagination"`
+		}
+		if err := json.NewDecoder(mapperResp.Body).Decode(&mapped); err != nil {
+			t.Fatalf("decode mapper response: %v", err)
+		}
+		if len(mapped.Data) != 1 || mapped.Data[0]["id"] != "7" {
+			t.Fatalf("mapped data = %+v, want single id=7 item", mapped.Data)
+		}
+		if !mapped.Pagination.HasMore || mapped.Pagination.Cursor != "cursor-map" {
+			t.Fatalf("mapped pagination = %+v", mapped.Pagination)
+		}
+	})
+}
+
 func TestE2EInitServeLockedGoldenPath(t *testing.T) {
 	t.Parallel()
 

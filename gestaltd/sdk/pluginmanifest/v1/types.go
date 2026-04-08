@@ -88,9 +88,14 @@ type ManifestResponseMapping struct {
 	Pagination *ManifestPaginationMapping `json:"pagination,omitempty" yaml:"pagination,omitempty"`
 }
 
+type ManifestValueSelector struct {
+	Source string `json:"source" yaml:"source"`
+	Path   string `json:"path" yaml:"path"`
+}
+
 type ManifestPaginationMapping struct {
-	HasMorePath string `json:"has_more_path" yaml:"has_more_path"`
-	CursorPath  string `json:"cursor_path" yaml:"cursor_path"`
+	HasMore *ManifestValueSelector `json:"has_more,omitempty" yaml:"has_more,omitempty"`
+	Cursor  *ManifestValueSelector `json:"cursor,omitempty" yaml:"cursor,omitempty"`
 }
 
 type ProviderPostConnectDiscovery struct {
@@ -107,13 +112,13 @@ type ProviderConnectionParam struct {
 }
 
 type ManifestPaginationConfig struct {
-	Style        string `json:"style" yaml:"style"`
-	CursorParam  string `json:"cursor_param,omitempty" yaml:"cursor_param,omitempty"`
-	CursorPath   string `json:"cursor_path,omitempty" yaml:"cursor_path,omitempty"`
-	LimitParam   string `json:"limit_param,omitempty" yaml:"limit_param,omitempty"`
-	DefaultLimit int    `json:"default_limit,omitempty" yaml:"default_limit,omitempty"`
-	ResultsPath  string `json:"results_path,omitempty" yaml:"results_path,omitempty"`
-	MaxPages     int    `json:"max_pages,omitempty" yaml:"max_pages,omitempty"`
+	Style        string                 `json:"style" yaml:"style"`
+	CursorParam  string                 `json:"cursor_param,omitempty" yaml:"cursor_param,omitempty"`
+	Cursor       *ManifestValueSelector `json:"cursor,omitempty" yaml:"cursor,omitempty"`
+	LimitParam   string                 `json:"limit_param,omitempty" yaml:"limit_param,omitempty"`
+	DefaultLimit int                    `json:"default_limit,omitempty" yaml:"default_limit,omitempty"`
+	ResultsPath  string                 `json:"results_path,omitempty" yaml:"results_path,omitempty"`
+	MaxPages     int                    `json:"max_pages,omitempty" yaml:"max_pages,omitempty"`
 }
 
 type ManifestOperationOverride struct {

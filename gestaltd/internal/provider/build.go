@@ -161,8 +161,10 @@ func Build(def *Definition, conn config.ConnectionDef, opts ...BuildOption) (cor
 			DataPath: def.ResponseMapping.DataPath,
 		}
 		if def.ResponseMapping.Pagination != nil {
-			rm.PaginationHasMorePath = def.ResponseMapping.Pagination.HasMorePath
-			rm.PaginationCursorPath = def.ResponseMapping.Pagination.CursorPath
+			rm.Pagination = &coreintegration.PaginationProjectionConfig{
+				HasMore: buildValueSelector(def.ResponseMapping.Pagination.HasMore),
+				Cursor:  buildValueSelector(def.ResponseMapping.Pagination.Cursor),
+			}
 		}
 		base.ResponseMapping = rm
 	}
@@ -427,7 +429,7 @@ func buildPaginationConfigs(def *Definition) map[string]apiexec.PaginationConfig
 		configs[name] = apiexec.PaginationConfig{
 			Style:        p.Style,
 			CursorParam:  p.CursorParam,
-			CursorPath:   p.CursorPath,
+			Cursor:       buildValueSelector(p.Cursor),
 			LimitParam:   p.LimitParam,
 			DefaultLimit: p.DefaultLimit,
 			ResultsPath:  p.ResultsPath,
@@ -435,6 +437,16 @@ func buildPaginationConfigs(def *Definition) map[string]apiexec.PaginationConfig
 		}
 	}
 	return configs
+}
+
+func buildValueSelector(def *ValueSelectorDef) *apiexec.ValueSelector {
+	if def == nil {
+		return nil
+	}
+	return &apiexec.ValueSelector{
+		Source: def.Source,
+		Path:   def.Path,
+	}
 }
 
 func resolveURL(baseURL, u string) string {

@@ -17,15 +17,23 @@ const (
 	PaginationStyleOffset = "offset"
 	PaginationStylePage   = "page"
 
+	ValueSelectorSourceBody   = "body"
+	ValueSelectorSourceHeader = "header"
+
 	defaultMaxPages    = 10
 	defaultStartPage   = 1
 	defaultStartOffset = 0
 )
 
+type ValueSelector struct {
+	Source string
+	Path   string
+}
+
 type PaginationConfig struct {
 	Style        string
 	CursorParam  string
-	CursorPath   string
+	Cursor       *ValueSelector
 	LimitParam   string
 	DefaultLimit int
 	ResultsPath  string
@@ -103,7 +111,7 @@ func doPaginated(ctx context.Context, client *http.Client, req Request, pgn Pagi
 
 		switch pgn.Style {
 		case PaginationStyleCursor:
-			cursor, ok := ExtractJSONPath(parsed, pgn.CursorPath)
+			cursor, ok := SelectValue(result, parsed, pgn.Cursor)
 			if !ok || cursor == nil {
 				return combinedResult(lastStatus, allResults)
 			}
@@ -140,6 +148,26 @@ func doPaginated(ctx context.Context, client *http.Client, req Request, pgn Pagi
 	}
 
 	return combinedResult(lastStatus, allResults)
+}
+
+func SelectValue(result *core.OperationResult, parsed any, selector *ValueSelector) (any, bool) {
+	if selector == nil || selector.Path == "" {
+		return nil, false
+	}
+	switch selector.Source {
+	case "", ValueSelectorSourceBody:
+		return ExtractJSONPath(parsed, selector.Path)
+	case ValueSelectorSourceHeader:
+		if result == nil {
+			return nil, false
+		}
+		if value := result.Headers.Get(selector.Path); value != "" {
+			return value, true
+		}
+		return nil, false
+	default:
+		return nil, false
+	}
 }
 
 func combinedResult(status int, results []any) (*core.OperationResult, error) {
