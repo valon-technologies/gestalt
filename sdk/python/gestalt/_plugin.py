@@ -286,32 +286,31 @@ def _derive_name_from_manifest(path: pathlib.Path) -> str:
     return _name_from_yaml_manifest(text, fallback_name)
 
 
+def _name_from_manifest_dict(data: Any, fallback_name: str) -> str:
+    if not isinstance(data, dict):
+        return _slug_name(fallback_name)
+    source = data.get("source")
+    if isinstance(source, str) and source.strip():
+        return _slug_name(source.rsplit("/", 1)[-1])
+    display_name = data.get("display_name")
+    if isinstance(display_name, str) and display_name.strip():
+        return _slug_name(display_name)
+    return _slug_name(fallback_name)
+
+
 def _name_from_json_manifest(text: str, fallback_name: str) -> str:
     try:
         data = json.loads(text)
     except json.JSONDecodeError:
         return _slug_name(fallback_name)
-
-    if not isinstance(data, dict):
-        return _slug_name(fallback_name)
-
-    source = data.get("source")
-    if isinstance(source, str) and source.strip():
-        return _slug_name(source.rsplit("/", 1)[-1])
-
-    display_name = data.get("display_name")
-    if isinstance(display_name, str) and display_name.strip():
-        return _slug_name(display_name)
-
-    return _slug_name(fallback_name)
+    return _name_from_manifest_dict(data, fallback_name)
 
 
 class _TagIgnoringLoader(yaml.SafeLoader):
     pass
 
 
-def _construct_ignore_tag(loader: yaml.SafeLoader, suffix: str, node: yaml.Node) -> Any:
-    del suffix
+def _construct_ignore_tag(loader: yaml.SafeLoader, _suffix: str, node: yaml.Node) -> Any:
     if isinstance(node, yaml.ScalarNode):
         return loader.construct_scalar(node)
     if isinstance(node, yaml.SequenceNode):
@@ -329,19 +328,7 @@ def _name_from_yaml_manifest(text: str, fallback_name: str) -> str:
         data = yaml.load(text, Loader=_TagIgnoringLoader)
     except yaml.YAMLError:
         return _slug_name(fallback_name)
-
-    if not isinstance(data, dict):
-        return _slug_name(fallback_name)
-
-    source = data.get("source", "")
-    if isinstance(source, str) and source.strip():
-        return _slug_name(source.rsplit("/", 1)[-1])
-
-    display_name = data.get("display_name", "")
-    if isinstance(display_name, str) and display_name.strip():
-        return _slug_name(display_name)
-
-    return _slug_name(fallback_name)
+    return _name_from_manifest_dict(data, fallback_name)
 
 
 def _slug_name(value: str) -> str:

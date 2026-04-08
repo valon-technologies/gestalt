@@ -17,6 +17,7 @@ import yaml
 
 from ._api import FIELD_DESCRIPTION_KEY, FIELD_REQUIRED_KEY, Request
 from ._operations import OperationDefinition, is_optional_type, strip_optional
+from ._serialization import python_value as _python_value
 
 _UNSET = object()
 
@@ -183,7 +184,7 @@ def _catalog_type(annotation: Any) -> str:
 
 def _catalog_python_dict(catalog: Catalog | Mapping[str, Any]) -> dict[str, Any]:
     if dataclasses.is_dataclass(catalog):
-        return _catalog_python_value(catalog)
+        return _python_value(catalog)
     if isinstance(catalog, Mapping):
         return _normalize_catalog_mapping(cast(Mapping[str, Any], catalog), _CATALOG_FIELDS)
     raise TypeError("catalog must be a gestalt.Catalog or mapping")
@@ -203,21 +204,6 @@ def _omit_catalog_value(key: str, value: Any) -> bool:
     if key != "operations" and value == []:
         return True
     return key in {"read_only", "required"} and value is False
-
-
-def _catalog_python_value(value: Any) -> Any:
-    if dataclasses.is_dataclass(value):
-        return {
-            field_definition.name: _catalog_python_value(getattr(value, field_definition.name))
-            for field_definition in dataclasses.fields(value)
-        }
-    if isinstance(value, pathlib.Path):
-        return str(value)
-    if isinstance(value, dict):
-        return {_catalog_python_value(key): _catalog_python_value(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple, set)):
-        return [_catalog_python_value(item) for item in value]
-    return value
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -247,16 +233,16 @@ def _normalize_catalog_mapping(
 
 def _normalize_catalog_value(value: Any, field_spec: _CatalogFieldSpec | None) -> Any:
     if field_spec is None or field_spec.children is None:
-        return _catalog_python_value(value)
+        return _python_value(value)
     if field_spec.sequence:
         items = value if isinstance(value, (list, tuple)) else []
         return [
-            _normalize_catalog_mapping(item, field_spec.children) if isinstance(item, Mapping) else _catalog_python_value(item)
+            _normalize_catalog_mapping(item, field_spec.children) if isinstance(item, Mapping) else _python_value(item)
             for item in items
         ]
     if isinstance(value, Mapping):
         return _normalize_catalog_mapping(value, field_spec.children)
-    return _catalog_python_value(value)
+    return _python_value(value)
 
 
 def _serialize_catalog_mapping(
@@ -277,17 +263,17 @@ def _serialize_catalog_mapping(
 
 def _serialize_catalog_value(value: Any, field_spec: _CatalogFieldSpec | None, *, field_style: str) -> Any:
     if field_spec is None or field_spec.children is None:
-        return _catalog_python_value(value)
+        return _python_value(value)
     if field_spec.sequence:
         return [
             _serialize_catalog_mapping(item, field_spec.children, field_style=field_style)
             if isinstance(item, Mapping)
-            else _catalog_python_value(item)
+            else _python_value(item)
             for item in value
         ]
     if isinstance(value, Mapping):
         return _serialize_catalog_mapping(value, field_spec.children, field_style=field_style)
-    return _catalog_python_value(value)
+    return _python_value(value)
 
 
 class _CatalogDumper(yaml.SafeDumper):
