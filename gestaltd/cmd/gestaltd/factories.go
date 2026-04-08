@@ -19,6 +19,7 @@ import (
 	secretsenv "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/env"
 	secretsfile "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/file"
 	secretsgoogle "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/google"
+	secretskeychain "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/keychain"
 	secretsvault "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/vault"
 	telemetrynoop "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/noop"
 	telemetryotlp "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/otlp"
@@ -131,6 +132,7 @@ func buildFactories() *bootstrap.FactoryRegistry {
 	factories.Secrets["aws_secrets_manager"] = secretsaws.Factory
 	factories.Secrets["vault"] = secretsvault.Factory
 	factories.Secrets["azure_key_vault"] = secretsazure.Factory
+	factories.Secrets["keychain"] = secretskeychain.Factory
 	return factories
 }
 
