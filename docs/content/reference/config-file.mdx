@@ -1,3 +1,5 @@
+import { Tabs } from 'nextra/components'
+
 # Config File
 
 Every `gestaltd` deployment reads a single YAML config file. The top-level keys map one-to-one with the subsystems they configure:
@@ -441,6 +443,48 @@ provider:
 ```
 
 Gestalt synthesizes Go and Rust executable wrappers automatically when needed and runs Python source plugins from the module declared in `[tool.gestalt].plugin`. Integration plugins do not support `provider.builtin`.
+
+<Tabs items={['Go', 'Python', 'Rust']}>
+  <Tabs.Tab>
+    A local Go source plugin typically looks like:
+
+    ```text
+    my-plugin/
+      go.mod
+      plugin.yaml
+      provider.go
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    A local Python source plugin typically looks like:
+
+    ```toml
+    [project]
+    name = "my-plugin"
+    version = "0.0.1-alpha.1"
+    dependencies = ["gestalt"]
+
+    [tool.gestalt]
+    plugin = "provider"
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    A local Rust source plugin typically looks like:
+
+    ```toml
+    [package]
+    name = "my-plugin"
+    version = "0.0.1-alpha.1"
+    edition = "2024"
+
+    [dependencies]
+    gestalt_plugin_sdk = { git = "https://github.com/valon-technologies/gestalt", tag = "sdk/rust/v0.0.1-alpha.1" }
+    schemars = { version = "0.8", features = ["derive"] }
+    serde = { version = "1", features = ["derive"] }
+    serde_json = "1"
+    ```
+  </Tabs.Tab>
+</Tabs>
 
 | Field | Description |
 | --- | --- |

@@ -86,7 +86,22 @@ The host still owns auth, token storage, connection selection, and HTTP or MCP r
         lib.rs
     ```
 
-    Add `gestalt_plugin_sdk`, `serde`, and `schemars` to `Cargo.toml`. The initial Rust SDK release is tagged from `sdk/rust/v*` and is not published to crates.io, so the exact dependency stanza depends on the release channel that ships with the SDK.
+    Add the SDK and schema dependencies to `Cargo.toml`:
+
+    ```toml
+    [package]
+    name = "my-plugin"
+    version = "0.0.1-alpha.1"
+    edition = "2024"
+
+    [dependencies]
+    gestalt_plugin_sdk = { git = "https://github.com/valon-technologies/gestalt", tag = "sdk/rust/v0.0.1-alpha.1" }
+    schemars = { version = "0.8", features = ["derive"] }
+    serde = { version = "1", features = ["derive"] }
+    serde_json = "1"
+    ```
+
+    Use the `sdk/rust/v*` tag that matches the SDK release you want to target.
   </Tabs.Tab>
 </Tabs>
 
@@ -134,8 +149,6 @@ The manifest stays the source of truth for display name, description, auth, the 
 `source` may include nested segments after the repository, such as `github.com/example/plugins/catalog/my-plugin`. Gestalt keeps the final segment as the plugin name and uses the full path for release tag resolution.
 
 ## Define operations
-
-Rust examples below show the intended shape of the first SDK release. Exact helper names may change slightly as the Rust API is finalized.
 
 <Tabs items={['Go', 'Python', 'Rust']}>
   <Tabs.Tab>
@@ -302,13 +315,12 @@ Rust examples below show the intended shape of the first SDK release. Exact help
         )
     }
 
-    // Placeholder: the exact export helper may change slightly before the first stable release.
     gestalt::export_provider!(constructor = new, router = router);
     ```
   </Tabs.Tab>
 </Tabs>
 
-You do not write an entrypoint. Gestalt synthesizes the executable wrapper automatically for local source execution and release.
+You do not write an entrypoint. Gestalt synthesizes the executable wrapper automatically for local source execution and release. Rust auth and datastore packages follow the same model with `gestalt::export_auth_provider!(constructor = new);` and `gestalt::export_datastore_provider!(constructor = new);`.
 
 By default, input decode failures return a structured `400` response, and unhandled errors return a structured `500` response. Return a non-2xx response explicitly when the operation wants to signal a deliberate application-level error.
 
