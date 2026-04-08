@@ -80,9 +80,10 @@ auth:
     redirect_url: https://gestalt.example.com/api/v1/auth/login/callback
     allowed_domains:
       - example.com
+    session_ttl: 24h
 ```
 
-`client_id` and `client_secret` are both required and identify your Google OAuth application. `redirect_url` defaults to a path derived from `server.base_url` when omitted. `allowed_domains` restricts login to specific email domains.
+`client_id` and `client_secret` are both required and identify your Google OAuth application. `redirect_url` defaults to a path derived from `server.base_url` when omitted. `allowed_domains` restricts login to specific email domains. `session_ttl` controls session token lifetime and defaults to `24h`.
 
 Google checks `email_verified` on every login. Unverified accounts are rejected.
 
