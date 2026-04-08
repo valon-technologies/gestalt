@@ -1,6 +1,7 @@
 package pluginpkg
 
 import (
+	"bufio"
 	"bytes"
 	_ "embed"
 	"errors"
@@ -85,33 +86,54 @@ func BuildGoComponentBinary(root, outputPath, kind, goos, goarch string) error {
 }
 
 func SourceComponentExecutionCommand(root, kind, goos, goarch string) (string, []string, func(), error) {
-	if err := validateSourceComponentKind(kind); err != nil {
+	sourceKind, err := detectSourceComponent(root, kind, goos, goarch)
+	if err != nil {
 		return "", nil, nil, err
 	}
-	command, cleanup, err := BuildGoComponentTempBinary(root, kind, goos, goarch)
-	if err != nil {
-		if errors.Is(err, ErrNoSourceComponentPackage) {
-			return "", nil, nil, err
+	switch sourceKind {
+	case sourceProviderKindGo:
+		command, cleanup, err := BuildGoComponentTempBinary(root, kind, goos, goarch)
+		if err != nil {
+			return "", nil, nil, fmt.Errorf("build source %s temp binary: %w", kind, err)
 		}
-		return "", nil, nil, fmt.Errorf("build source %s temp binary: %w", kind, err)
+		return command, nil, cleanup, nil
+	case sourceProviderKindRust:
+		return rustComponentExecutionCommand(root, kind, goos, goarch)
+	default:
+		return "", nil, nil, ErrNoSourceComponentPackage
 	}
-	return command, nil, cleanup, nil
 }
 
-func ValidateSourceComponentRelease(root, kind, goos, goarch string) error {
-	_, err := DetectGoComponentImportPath(root, kind, goos, goarch)
-	return err
-}
-
-func BuildSourceComponentReleaseBinary(root, outputPath, kind, goos, goarch string) error {
-	if err := ValidateSourceComponentRelease(root, kind, goos, goarch); err != nil {
+func ValidateSourceComponentRelease(root, kind, goos, goarch, libc string) error {
+	sourceKind, err := detectSourceComponent(root, kind, goos, goarch)
+	if err != nil {
 		return err
 	}
-	return BuildGoComponentBinary(root, outputPath, kind, goos, goarch)
+	switch sourceKind {
+	case sourceProviderKindRust:
+		return ValidateRustComponentRelease(root, kind, goos, goarch, libc)
+	default:
+		return nil
+	}
+}
+
+func BuildSourceComponentReleaseBinary(root, outputPath, kind, goos, goarch, libc string) (string, error) {
+	sourceKind, err := detectSourceComponent(root, kind, goos, goarch)
+	if err != nil {
+		return "", err
+	}
+	switch sourceKind {
+	case sourceProviderKindGo:
+		return "", BuildGoComponentBinary(root, outputPath, kind, goos, goarch)
+	case sourceProviderKindRust:
+		return BuildRustComponentBinary(root, outputPath, kind, goos, goarch, libc)
+	default:
+		return "", ErrNoSourceComponentPackage
+	}
 }
 
 func HasSourceComponentPackage(root, kind string) (bool, error) {
-	_, err := DetectGoComponentImportPath(root, kind, runtime.GOOS, runtime.GOARCH)
+	_, err := detectSourceComponent(root, kind, runtime.GOOS, runtime.GOARCH)
 	switch {
 	case err == nil:
 		return true, nil
@@ -141,6 +163,10 @@ func detectGoPackageImportPath(root, buildTarget string, noSourceErr error, sour
 		return importPath, nil
 	}
 
+	fallbackModulePath, moduleErr := goModulePathFromFile(root)
+	if moduleErr != nil {
+		return "", moduleErr
+	}
 	modulePath, err := goPackageField(root, buildTarget, "{{if .Module}}{{.Module.Path}}{{end}}", goos, goarch)
 	if err == nil {
 		modulePath = strings.TrimSpace(modulePath)
@@ -148,7 +174,45 @@ func detectGoPackageImportPath(root, buildTarget string, noSourceErr error, sour
 			return modulePath, nil
 		}
 	}
+	if fallbackModulePath != "" {
+		return fallbackModulePath, nil
+	}
 	return importPath, nil
+}
+
+func goModulePathFromFile(root string) (string, error) {
+	file, err := os.Open(filepath.Join(root, "go.mod"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", fmt.Errorf("read go.mod: %w", err)
+	}
+	defer func() { _ = file.Close() }()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(stripGoModComment(scanner.Text()))
+		if line == "" || !strings.HasPrefix(line, "module") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			return "", fmt.Errorf("parse go.mod: module path is required")
+		}
+		return strings.Trim(fields[1], `"`), nil
+	}
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("scan go.mod: %w", err)
+	}
+	return "", nil
+}
+
+func stripGoModComment(line string) string {
+	if idx := strings.Index(line, "//"); idx >= 0 {
+		return line[:idx]
+	}
+	return line
 }
 
 func newGoSourceWrapper(root, goos, goarch string, noSourceErr error, sourceExists func(string) bool, tempPattern, description string, wrapperData func(string) (goExecutableWrapperData, error)) (string, func(), error) {
@@ -339,6 +403,32 @@ func slugPluginName(value string) string {
 		return "plugin"
 	}
 	return cleaned
+}
+
+func detectSourceComponent(root, kind, goos, goarch string) (string, error) {
+	if err := validateSourceComponentKind(kind); err != nil {
+		return "", err
+	}
+
+	var goToolUnavailable error
+	if _, err := DetectGoComponentImportPath(root, kind, goos, goarch); err == nil {
+		return sourceProviderKindGo, nil
+	} else if errors.Is(err, ErrGoToolUnavailable) {
+		goToolUnavailable = err
+	} else if !errors.Is(err, ErrNoSourceComponentPackage) {
+		return "", err
+	}
+
+	if _, err := detectRustPackage(root); err == nil {
+		return sourceProviderKindRust, nil
+	} else if !errors.Is(err, ErrNoRustProviderPackage) {
+		return "", err
+	}
+
+	if goToolUnavailable != nil {
+		return "", goToolUnavailable
+	}
+	return "", ErrNoSourceComponentPackage
 }
 
 func validateSourceComponentKind(kind string) error {

@@ -5,6 +5,7 @@ use async_trait::async_trait;
 
 use crate::catalog::Catalog;
 use crate::error::{Error, Result};
+use crate::runtime_types::RuntimeMetadata;
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Request {
@@ -63,6 +64,18 @@ pub trait Provider: Send + Sync + 'static {
         _name: &str,
         _config: serde_json::Map<String, serde_json::Value>,
     ) -> Result<()> {
+        Ok(())
+    }
+
+    fn metadata(&self) -> Option<RuntimeMetadata> {
+        None
+    }
+
+    fn warnings(&self) -> Vec<String> {
+        Vec::new()
+    }
+
+    async fn health_check(&self) -> Result<()> {
         Ok(())
     }
 

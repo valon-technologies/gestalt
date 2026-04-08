@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"net/url"
 	"os"
 	"os/exec"
@@ -39,6 +40,8 @@ const (
 	datastoreReleasePluginName = "datastore-release"
 	datastoreReleaseSource     = "github.com/testowner/plugins/datastore-release"
 	datastoreReleaseSchemaPath = "schemas/datastore.schema.json"
+	rustReleasePluginName      = "provider-rust"
+	rustWrapperBinaryName      = "gestalt-provider-wrapper"
 )
 
 func TestRun_PluginHelpExitsCleanly(t *testing.T) {
@@ -462,6 +465,137 @@ func TestRun_PluginReleaseBuildsPythonSourcePluginForRequestedPlatforms(t *testi
 	}
 }
 
+func TestRun_PluginReleaseBuildsRustSourcePluginForCurrentPlatform(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake cargo test fixture is POSIX-only")
+	}
+
+	hostTarget, _, err := pluginpkgRustTargetTriple(runtime.GOOS, runtime.GOARCH, "")
+	if err != nil {
+		t.Fatalf("pluginpkgRustTargetTriple(host): %v", err)
+	}
+
+	fakeCargoDir := t.TempDir()
+	writeFakeRustReleaseCargo(t, filepath.Join(fakeCargoDir, "cargo"), fakeRustCargoConfig{
+		ExpectedPluginName:   rustReleasePluginName,
+		ExpectedServeExport:  "__gestalt_serve",
+		ExpectedCatalogWrite: true,
+		GeneratedCatalog:     rustReleasePluginName,
+		DelegateBinary:       pluginBin,
+		AllowedTargets:       []string{hostTarget},
+	})
+	t.Setenv("PATH", fakeCargoDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	pluginDir := newRustSourceReleaseFixture(t, t.TempDir())
+	outputDir := t.TempDir()
+	const testVersion = "0.0.12-rust-current"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
+		"--output", outputDir,
+	)
+
+	archiveName := expectedRustArchiveName(testVersion, runtime.GOOS, runtime.GOARCH, "")
+	extractDir := extractReleasedArchive(t, outputDir, archiveName)
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+	binaryName := releaseBinaryName(rustReleasePluginName, runtime.GOOS)
+
+	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
+		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
+	}
+	assertExpectedRustArtifactPlatform(t, manifest.Artifacts[0], runtime.GOOS, runtime.GOARCH, "")
+	if manifest.Entrypoints.Provider == nil || manifest.Entrypoints.Provider.ArtifactPath != binaryName {
+		t.Fatalf("provider entrypoint = %+v, want artifact path %q", manifest.Entrypoints.Provider, binaryName)
+	}
+
+	artifactPath := filepath.Join(extractDir, binaryName)
+	if _, err := os.Stat(artifactPath); err != nil {
+		t.Fatalf("expected %s in archive: %v", binaryName, err)
+	}
+	catalogPath := filepath.Join(extractDir, pluginpkg.StaticCatalogFile)
+	catalogData, err := os.ReadFile(catalogPath)
+	if err != nil {
+		t.Fatalf("read generated catalog: %v", err)
+	}
+	if !strings.Contains(string(catalogData), "id: greet") {
+		t.Fatalf("unexpected generated catalog: %s", catalogData)
+	}
+
+	ctx := context.Background()
+	prov, err := pluginhost.NewExecutableProvider(ctx, pluginhost.ExecConfig{
+		Command: artifactPath,
+		StaticSpec: pluginhost.StaticProviderSpec{
+			Name: rustReleasePluginName,
+		},
+		Config: map[string]any{"greeting": "Hi"},
+	})
+	if err != nil {
+		t.Fatalf("NewExecutableProvider: %v", err)
+	}
+	defer func() {
+		if closer, ok := prov.(interface{ Close() error }); ok {
+			_ = closer.Close()
+		}
+	}()
+
+	result, err := prov.Execute(ctx, "greet", map[string]any{"name": "Ada"}, "")
+	if err != nil {
+		t.Fatalf("Execute(greet): %v", err)
+	}
+	if result.Status != 200 {
+		t.Fatalf("status = %d, want 200", result.Status)
+	}
+	if !strings.Contains(result.Body, "Hi, Ada!") {
+		t.Fatalf("body = %q, want greeting", result.Body)
+	}
+}
+
+func TestRun_PluginReleaseBuildsRustSourcePluginForExplicitLinuxTarget(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake cargo test fixture is POSIX-only")
+	}
+
+	hostTarget, _, err := pluginpkgRustTargetTriple(runtime.GOOS, runtime.GOARCH, "")
+	if err != nil {
+		t.Fatalf("pluginpkgRustTargetTriple(host): %v", err)
+	}
+	explicitTarget, _, err := pluginpkgRustTargetTriple("linux", "amd64", pluginpkg.LinuxLibCMusl)
+	if err != nil {
+		t.Fatalf("pluginpkgRustTargetTriple(linux/amd64/musl): %v", err)
+	}
+
+	fakeCargoDir := t.TempDir()
+	writeFakeRustReleaseCargo(t, filepath.Join(fakeCargoDir, "cargo"), fakeRustCargoConfig{
+		ExpectedPluginName:   rustReleasePluginName,
+		ExpectedServeExport:  "__gestalt_serve",
+		ExpectedCatalogWrite: true,
+		GeneratedCatalog:     rustReleasePluginName,
+		DelegateBinary:       pluginBin,
+		AllowedTargets:       []string{hostTarget, explicitTarget},
+	})
+	t.Setenv("PATH", fakeCargoDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	pluginDir := newRustSourceReleaseFixture(t, t.TempDir())
+	outputDir := t.TempDir()
+	const testVersion = "0.0.12-rust-musl"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--platform", "linux/amd64/musl",
+		"--output", outputDir,
+	)
+
+	archiveName := expectedRustArchiveName(testVersion, "linux", "amd64", pluginpkg.LinuxLibCMusl)
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+	binaryName := releaseBinaryName(rustReleasePluginName, "linux")
+
+	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
+		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
+	}
+	assertExpectedRustArtifactPlatform(t, manifest.Artifacts[0], "linux", "amd64", pluginpkg.LinuxLibCMusl)
+}
+
 func TestRun_PluginReleaseRejectsMissingCrossTargetInterpreterForPythonSourcePlugin(t *testing.T) {
 	t.Parallel()
 
@@ -542,7 +676,7 @@ func TestRun_PluginReleaseBuildsGoSourceAuthPlugin(t *testing.T) {
 		"--output", outputDir,
 	)
 
-	archiveName := "gestalt-plugin-" + authReleasePluginName + "_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	archiveName := platformArchiveName(authReleasePluginName, testVersion, expectedGoReleasePlatform(runtime.GOOS, runtime.GOARCH, ""))
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	manifest := readReleasedManifest(t, outputDir, archiveName)
 	binaryName := releaseBinaryName(authReleasePluginName, runtime.GOOS)
@@ -550,6 +684,7 @@ func TestRun_PluginReleaseBuildsGoSourceAuthPlugin(t *testing.T) {
 	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
 		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
 	}
+	assertExpectedGoArtifactPlatform(t, manifest.Artifacts[0], runtime.GOOS, runtime.GOARCH, "")
 	if manifest.Entrypoints.Auth == nil || manifest.Entrypoints.Auth.ArtifactPath != binaryName {
 		t.Fatalf("auth entrypoint = %+v, want artifact path %q", manifest.Entrypoints.Auth, binaryName)
 	}
@@ -666,7 +801,7 @@ func TestRun_PluginReleaseBuildsGoSourceDatastorePlugin(t *testing.T) {
 		"--output", outputDir,
 	)
 
-	archiveName := "gestalt-plugin-" + datastoreReleasePluginName + "_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	archiveName := platformArchiveName(datastoreReleasePluginName, testVersion, expectedGoReleasePlatform(runtime.GOOS, runtime.GOARCH, ""))
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	manifest := readReleasedManifest(t, outputDir, archiveName)
 	binaryName := releaseBinaryName(datastoreReleasePluginName, runtime.GOOS)
@@ -674,6 +809,203 @@ func TestRun_PluginReleaseBuildsGoSourceDatastorePlugin(t *testing.T) {
 	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
 		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
 	}
+	assertExpectedGoArtifactPlatform(t, manifest.Artifacts[0], runtime.GOOS, runtime.GOARCH, "")
+	if manifest.Entrypoints.Datastore == nil || manifest.Entrypoints.Datastore.ArtifactPath != binaryName {
+		t.Fatalf("datastore entrypoint = %+v, want artifact path %q", manifest.Entrypoints.Datastore, binaryName)
+	}
+	if _, err := os.Stat(filepath.Join(extractDir, datastoreReleaseSchemaPath)); err != nil {
+		t.Fatalf("expected %s in archive: %v", datastoreReleaseSchemaPath, err)
+	}
+
+	store, err := pluginhost.NewExecutableDatastore(context.Background(), pluginhost.DatastoreExecConfig{
+		Command:       filepath.Join(extractDir, binaryName),
+		Name:          "datastore-release",
+		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
+	})
+	if err != nil {
+		t.Fatalf("NewExecutableDatastore: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	if err := store.Ping(context.Background()); err != nil {
+		t.Fatalf("Ping: %v", err)
+	}
+	if err := store.Migrate(context.Background()); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+
+	user, err := store.FindOrCreateUser(context.Background(), "datastore-user@example.com")
+	if err != nil {
+		t.Fatalf("FindOrCreateUser: %v", err)
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	token := &core.IntegrationToken{
+		ID:           "tok-1",
+		UserID:       user.ID,
+		Integration:  "github",
+		Connection:   "default",
+		Instance:     "prod",
+		AccessToken:  "plain-access",
+		RefreshToken: "plain-refresh",
+		MetadataJSON: `{"tenant":"acme"}`,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	if err := store.StoreToken(context.Background(), token); err != nil {
+		t.Fatalf("StoreToken: %v", err)
+	}
+	got, err := store.Token(context.Background(), user.ID, "github", "default", "prod")
+	if err != nil {
+		t.Fatalf("Token: %v", err)
+	}
+	if got == nil || got.AccessToken != "plain-access" || got.RefreshToken != "plain-refresh" {
+		t.Fatalf("token = %+v", got)
+	}
+	if warnings, ok := store.(interface{ Warnings() []string }); !ok {
+		t.Fatal("datastore did not expose Warnings()")
+	} else if gotWarnings := warnings.Warnings(); len(gotWarnings) != 1 || gotWarnings[0] != "generated datastore warning" {
+		t.Fatalf("Warnings() = %v", gotWarnings)
+	}
+}
+
+func TestRun_PluginReleaseBuildsRustSourceAuthPlugin(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake cargo test fixture is POSIX-only")
+	}
+
+	hostTarget, _, err := pluginpkgRustTargetTriple(runtime.GOOS, runtime.GOARCH, "")
+	if err != nil {
+		t.Fatalf("pluginpkgRustTargetTriple(host): %v", err)
+	}
+
+	fakeCargoDir := t.TempDir()
+	writeFakeRustReleaseCargo(t, filepath.Join(fakeCargoDir, "cargo"), fakeRustCargoConfig{
+		ExpectedPluginName:   authReleasePluginName,
+		ExpectedServeExport:  "__gestalt_serve_auth",
+		ExpectedCatalogWrite: false,
+		DelegateBinary:       buildGoSourceAuthBinary(t),
+		AllowedTargets:       []string{hostTarget},
+	})
+	t.Setenv("PATH", fakeCargoDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	pluginDir := newRustSourceAuthReleaseFixture(t, t.TempDir())
+	outputDir := t.TempDir()
+	const testVersion = "0.0.17-rust-auth"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
+		"--output", outputDir,
+	)
+
+	archiveName := platformArchiveName(authReleasePluginName, testVersion, expectedRustReleasePlatform(runtime.GOOS, runtime.GOARCH, ""))
+	extractDir := extractReleasedArchive(t, outputDir, archiveName)
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+	binaryName := releaseBinaryName(authReleasePluginName, runtime.GOOS)
+
+	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
+		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
+	}
+	assertExpectedRustArtifactPlatform(t, manifest.Artifacts[0], runtime.GOOS, runtime.GOARCH, "")
+	if manifest.Entrypoints.Auth == nil || manifest.Entrypoints.Auth.ArtifactPath != binaryName {
+		t.Fatalf("auth entrypoint = %+v, want artifact path %q", manifest.Entrypoints.Auth, binaryName)
+	}
+	if _, err := os.Stat(filepath.Join(extractDir, authReleaseSchemaPath)); err != nil {
+		t.Fatalf("expected %s in archive: %v", authReleaseSchemaPath, err)
+	}
+
+	auth, err := pluginhost.NewExecutableAuthProvider(context.Background(), pluginhost.AuthExecConfig{
+		Command:     filepath.Join(extractDir, binaryName),
+		Name:        "auth-release",
+		CallbackURL: "https://gestalt.example.test/api/v1/auth/login/callback",
+		SessionKey:  []byte("0123456789abcdef0123456789abcdef"),
+	})
+	if err != nil {
+		t.Fatalf("NewExecutableAuthProvider: %v", err)
+	}
+	defer func() {
+		if closer, ok := auth.(interface{ Close() error }); ok {
+			_ = closer.Close()
+		}
+	}()
+
+	loginURL, err := auth.LoginURL("host-state")
+	if err != nil {
+		t.Fatalf("LoginURL: %v", err)
+	}
+	parsed, err := url.Parse(loginURL)
+	if err != nil {
+		t.Fatalf("url.Parse(loginURL): %v", err)
+	}
+	state := parsed.Query().Get("state")
+	if state == "" {
+		t.Fatal("login URL did not include state")
+	}
+
+	callbackHandler, ok := auth.(interface {
+		HandleCallbackRequest(context.Context, url.Values) (*core.UserIdentity, string, error)
+	})
+	if !ok {
+		t.Fatal("auth provider did not expose HandleCallbackRequest")
+	}
+	identity, originalState, err := callbackHandler.HandleCallbackRequest(context.Background(), url.Values{
+		"code":   {"callback-code"},
+		"state":  {state},
+		"prompt": {parsed.Query().Get("prompt")},
+	})
+	if err != nil {
+		t.Fatalf("HandleCallbackRequest: %v", err)
+	}
+	if originalState != "host-state" {
+		t.Fatalf("original state = %q, want %q", originalState, "host-state")
+	}
+	if identity == nil || identity.Email != "generated-auth@example.com" {
+		t.Fatalf("identity = %+v", identity)
+	}
+	if ttlProvider, ok := auth.(interface{ SessionTokenTTL() time.Duration }); !ok || ttlProvider.SessionTokenTTL() != 90*time.Minute {
+		t.Fatalf("SessionTokenTTL = %v", ttlProvider)
+	}
+}
+
+func TestRun_PluginReleaseBuildsRustSourceDatastorePlugin(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake cargo test fixture is POSIX-only")
+	}
+
+	hostTarget, _, err := pluginpkgRustTargetTriple(runtime.GOOS, runtime.GOARCH, "")
+	if err != nil {
+		t.Fatalf("pluginpkgRustTargetTriple(host): %v", err)
+	}
+
+	fakeCargoDir := t.TempDir()
+	writeFakeRustReleaseCargo(t, filepath.Join(fakeCargoDir, "cargo"), fakeRustCargoConfig{
+		ExpectedPluginName:   datastoreReleasePluginName,
+		ExpectedServeExport:  "__gestalt_serve_datastore",
+		ExpectedCatalogWrite: false,
+		DelegateBinary:       buildGoSourceDatastoreBinary(t),
+		AllowedTargets:       []string{hostTarget},
+	})
+	t.Setenv("PATH", fakeCargoDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	pluginDir := newRustSourceDatastoreReleaseFixture(t, t.TempDir())
+	outputDir := t.TempDir()
+	const testVersion = "0.0.18-rust-datastore"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
+		"--output", outputDir,
+	)
+
+	archiveName := platformArchiveName(datastoreReleasePluginName, testVersion, expectedRustReleasePlatform(runtime.GOOS, runtime.GOARCH, ""))
+	extractDir := extractReleasedArchive(t, outputDir, archiveName)
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+	binaryName := releaseBinaryName(datastoreReleasePluginName, runtime.GOOS)
+
+	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
+		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
+	}
+	assertExpectedRustArtifactPlatform(t, manifest.Artifacts[0], runtime.GOOS, runtime.GOARCH, "")
 	if manifest.Entrypoints.Datastore == nil || manifest.Entrypoints.Datastore.ArtifactPath != binaryName {
 		t.Fatalf("datastore entrypoint = %+v, want artifact path %q", manifest.Entrypoints.Datastore, binaryName)
 	}
@@ -1006,7 +1338,7 @@ func TestRun_PluginReleaseRejectsRequiredExecutableKindsWithoutSourceOrEntrypoin
 				Kinds:       []string{pluginmanifestv1.KindPlugin},
 				Plugin:      &pluginmanifestv1.Plugin{},
 			},
-			wantError: "no Go or Python provider package found",
+			wantError: "no Go, Rust, or Python provider package found",
 		},
 		{
 			name: "auth",
@@ -1017,7 +1349,7 @@ func TestRun_PluginReleaseRejectsRequiredExecutableKindsWithoutSourceOrEntrypoin
 				Kinds:       []string{pluginmanifestv1.KindAuth},
 				Auth:        &pluginmanifestv1.AuthMetadata{},
 			},
-			wantError: "no Go auth source package found",
+			wantError: "no Go or Rust auth source package found",
 		},
 		{
 			name: "datastore",
@@ -1028,7 +1360,7 @@ func TestRun_PluginReleaseRejectsRequiredExecutableKindsWithoutSourceOrEntrypoin
 				Kinds:       []string{pluginmanifestv1.KindDatastore},
 				Datastore:   &pluginmanifestv1.DatastoreMetadata{},
 			},
-			wantError: "no Go datastore source package found",
+			wantError: "no Go or Rust datastore source package found",
 		},
 	}
 
@@ -1330,10 +1662,58 @@ func expectedPythonArchiveName(version, goos, goarch string) string {
 	return platformArchiveName("python-release", version, expectedPythonReleasePlatform(goos, goarch))
 }
 
+func expectedGoReleasePlatform(goos, goarch, libc string) releasePlatform {
+	return releasePlatform{GOOS: goos, GOARCH: goarch, LibC: libc}
+}
+
+func expectedRustReleasePlatform(goos, goarch, libc string) releasePlatform {
+	plat := releasePlatform{GOOS: goos, GOARCH: goarch, LibC: libc}
+	if plat.GOOS != "linux" || plat.LibC != "" {
+		return plat
+	}
+	if runtime.GOOS == "linux" && goos == "linux" {
+		plat.LibC = pluginpkg.CurrentRuntimeLibC()
+	}
+	if plat.LibC == "" {
+		plat.LibC = pluginpkg.LinuxLibCGLibC
+	}
+	return plat
+}
+
+func expectedRustArchiveName(version, goos, goarch, libc string) string {
+	return platformArchiveName(rustReleasePluginName, version, expectedRustReleasePlatform(goos, goarch, libc))
+}
+
 func assertExpectedPythonArtifactPlatform(t *testing.T, artifact pluginmanifestv1.Artifact, goos, goarch string) {
 	t.Helper()
 
 	want := expectedPythonReleasePlatform(goos, goarch)
+	if artifact.OS != want.GOOS || artifact.Arch != want.GOARCH || artifact.LibC != want.LibC {
+		t.Fatalf(
+			"artifact platform = %s/%s/%s, want %s/%s/%s",
+			artifact.OS, artifact.Arch, artifact.LibC,
+			want.GOOS, want.GOARCH, want.LibC,
+		)
+	}
+}
+
+func assertExpectedGoArtifactPlatform(t *testing.T, artifact pluginmanifestv1.Artifact, goos, goarch, libc string) {
+	t.Helper()
+
+	want := expectedGoReleasePlatform(goos, goarch, libc)
+	if artifact.OS != want.GOOS || artifact.Arch != want.GOARCH || artifact.LibC != want.LibC {
+		t.Fatalf(
+			"artifact platform = %s/%s/%s, want %s/%s/%s",
+			artifact.OS, artifact.Arch, artifact.LibC,
+			want.GOOS, want.GOARCH, want.LibC,
+		)
+	}
+}
+
+func assertExpectedRustArtifactPlatform(t *testing.T, artifact pluginmanifestv1.Artifact, goos, goarch, libc string) {
+	t.Helper()
+
+	want := expectedRustReleasePlatform(goos, goarch, libc)
 	if artifact.OS != want.GOOS || artifact.Arch != want.GOARCH || artifact.LibC != want.LibC {
 		t.Fatalf(
 			"artifact platform = %s/%s/%s, want %s/%s/%s",
@@ -1385,6 +1765,24 @@ func newSourceAuthReleaseFixture(t *testing.T, dir string) string {
 	return pluginDir
 }
 
+func newRustSourceAuthReleaseFixture(t *testing.T, dir string) string {
+	t.Helper()
+
+	pluginDir := filepath.Join(dir, authReleasePluginName)
+	copyFixtureTree(t, rustAuthProviderFixturePath(t), pluginDir)
+	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
+		Source:      authReleaseSource,
+		Version:     "0.0.1",
+		DisplayName: "Auth Release",
+		Kinds:       []string{pluginmanifestv1.KindAuth},
+		Auth: &pluginmanifestv1.AuthMetadata{
+			ConfigSchemaPath: authReleaseSchemaPath,
+		},
+	})
+	writeTestFile(t, pluginDir, authReleaseSchemaPath, []byte(`{"type":"object"}`), 0o644)
+	return pluginDir
+}
+
 func newSourceDatastoreReleaseFixture(t *testing.T, dir string) string {
 	t.Helper()
 
@@ -1395,6 +1793,24 @@ func newSourceDatastoreReleaseFixture(t *testing.T, dir string) string {
 	writeTestFile(t, pluginDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/"+datastoreReleasePluginName)), 0o644)
 	writeTestFile(t, pluginDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
 	writeTestFile(t, pluginDir, "datastore.go", []byte(testutil.GeneratedDatastorePackageSource()), 0o644)
+	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
+		Source:      datastoreReleaseSource,
+		Version:     "0.0.1",
+		DisplayName: "Datastore Release",
+		Kinds:       []string{pluginmanifestv1.KindDatastore},
+		Datastore: &pluginmanifestv1.DatastoreMetadata{
+			ConfigSchemaPath: datastoreReleaseSchemaPath,
+		},
+	})
+	writeTestFile(t, pluginDir, datastoreReleaseSchemaPath, []byte(`{"type":"object"}`), 0o644)
+	return pluginDir
+}
+
+func newRustSourceDatastoreReleaseFixture(t *testing.T, dir string) string {
+	t.Helper()
+
+	pluginDir := filepath.Join(dir, datastoreReleasePluginName)
+	copyFixtureTree(t, rustDatastoreProviderFixturePath(t), pluginDir)
 	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
 		Source:      datastoreReleaseSource,
 		Version:     "0.0.1",
@@ -1422,6 +1838,14 @@ func pathWithoutGo(t *testing.T) string {
 		}
 	}
 	return dir
+}
+
+func newRustSourceReleaseFixture(t *testing.T, dir string) string {
+	t.Helper()
+
+	pluginDir := filepath.Join(dir, rustReleasePluginName)
+	copyFixtureTree(t, rustProviderFixturePath(t), pluginDir)
+	return pluginDir
 }
 
 func newSourceProviderReleaseFixture(t *testing.T, dir string) string {
@@ -1488,6 +1912,262 @@ func writeStaticCatalogProviderMain(t *testing.T, dir string) {
 func writeStaticCatalogProviderMainAt(t *testing.T, dir, rel string) {
 	t.Helper()
 	writeTestFile(t, dir, rel, []byte(testutil.GeneratedProviderPackageSource()), 0644)
+}
+
+func rustProviderFixturePath(t *testing.T) string {
+	t.Helper()
+
+	root, ok := pluginTestRepoRoot()
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	return filepath.Join(root, "gestaltd", "internal", "testutil", "testdata", "provider-rust")
+}
+
+func rustAuthProviderFixturePath(t *testing.T) string {
+	t.Helper()
+
+	root, ok := pluginTestRepoRoot()
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	return filepath.Join(root, "gestaltd", "internal", "testutil", "testdata", "provider-rust-auth")
+}
+
+func rustDatastoreProviderFixturePath(t *testing.T) string {
+	t.Helper()
+
+	root, ok := pluginTestRepoRoot()
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	return filepath.Join(root, "gestaltd", "internal", "testutil", "testdata", "provider-rust-datastore")
+}
+
+func buildGoSourceAuthBinary(t *testing.T) string {
+	t.Helper()
+
+	providerDir := filepath.Join(t.TempDir(), "go-auth")
+	if err := os.MkdirAll(providerDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(providerDir): %v", err)
+	}
+	writeTestFile(t, providerDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/test-go-auth")), 0o644)
+	writeTestFile(t, providerDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
+	writeTestFile(t, providerDir, "auth.go", []byte(testutil.GeneratedAuthPackageSource()), 0o644)
+	outputPath := filepath.Join(t.TempDir(), "auth-provider")
+	if err := pluginpkg.BuildGoComponentBinary(providerDir, outputPath, pluginmanifestv1.KindAuth, runtime.GOOS, runtime.GOARCH); err != nil {
+		t.Fatalf("BuildGoComponentBinary(auth): %v", err)
+	}
+	return outputPath
+}
+
+func buildGoSourceDatastoreBinary(t *testing.T) string {
+	t.Helper()
+
+	providerDir := filepath.Join(t.TempDir(), "go-datastore")
+	if err := os.MkdirAll(providerDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(providerDir): %v", err)
+	}
+	writeTestFile(t, providerDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/test-go-datastore")), 0o644)
+	writeTestFile(t, providerDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
+	writeTestFile(t, providerDir, "datastore.go", []byte(testutil.GeneratedDatastorePackageSource()), 0o644)
+	outputPath := filepath.Join(t.TempDir(), "datastore-provider")
+	if err := pluginpkg.BuildGoComponentBinary(providerDir, outputPath, pluginmanifestv1.KindDatastore, runtime.GOOS, runtime.GOARCH); err != nil {
+		t.Fatalf("BuildGoComponentBinary(datastore): %v", err)
+	}
+	return outputPath
+}
+
+func copyFixtureTree(t *testing.T, src, dst string) {
+	t.Helper()
+
+	if err := filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, info.Mode())
+	}); err != nil {
+		t.Fatalf("copy fixture tree: %v", err)
+	}
+}
+
+type fakeRustCargoConfig struct {
+	ExpectedPluginName   string
+	ExpectedServeExport  string
+	ExpectedCatalogWrite bool
+	GeneratedCatalog     string
+	DelegateBinary       string
+	AllowedTargets       []string
+}
+
+func writeFakeRustReleaseCargo(t *testing.T, path string, cfg fakeRustCargoConfig) {
+	t.Helper()
+
+	allowedTargets := make([]string, 0, len(cfg.AllowedTargets))
+	for _, target := range cfg.AllowedTargets {
+		if target == "" {
+			continue
+		}
+		allowedTargets = append(allowedTargets, shellSingleQuoted(target))
+	}
+	script := `#!/bin/sh
+set -eu
+
+manifest=""
+target=""
+target_dir=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --manifest-path)
+      manifest="$2"
+      shift 2
+      ;;
+    --target)
+      target="$2"
+      shift 2
+      ;;
+    --target-dir)
+      target_dir="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
+
+if [ -z "$manifest" ] || [ -z "$target" ] || [ -z "$target_dir" ]; then
+  echo "missing cargo wrapper args" >&2
+  exit 1
+fi
+
+allowed=false
+for candidate in ` + strings.Join(allowedTargets, " ") + `; do
+  if [ "$target" = "$candidate" ]; then
+    allowed=true
+    break
+  fi
+done
+if [ "$allowed" != "true" ]; then
+  echo "unexpected target triple: $target" >&2
+  exit 1
+fi
+
+main_rs="$(dirname "$manifest")/src/main.rs"
+if ! grep -q 'const PLUGIN_NAME: &str = "` + cfg.ExpectedPluginName + `";' "$main_rs"; then
+  echo "missing plugin name in wrapper source" >&2
+  exit 1
+fi
+if ! grep -Fq 'provider_plugin::` + cfg.ExpectedServeExport + `(PLUGIN_NAME)?' "$main_rs"; then
+  echo "missing serve export in wrapper source" >&2
+  exit 1
+fi
+` + fakeRustReleaseCatalogCheck(cfg.ExpectedCatalogWrite) + `
+if ! grep -Fq 'Ok(())' "$main_rs"; then
+  echo "missing explicit Ok return in wrapper source" >&2
+  exit 1
+fi
+
+binary="$target_dir/$target/release/` + rustWrapperBinaryName + `"
+mkdir -p "$(dirname "$binary")"
+cat > "$binary" <<'EOF'
+#!/bin/sh
+set -eu
+if [ -n "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ]; then
+  cat > "$GESTALT_PLUGIN_WRITE_CATALOG" <<'YAML'
+name: ` + cfg.GeneratedCatalog + `
+operations:
+  - id: greet
+    method: GET
+YAML
+  exit 0
+fi
+exec ` + shellSingleQuoted(cfg.DelegateBinary) + ` "$@"
+EOF
+chmod +x "$binary"
+`
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatalf("WriteFile(%s): %v", path, err)
+	}
+}
+
+func fakeRustReleaseCatalogCheck(expectCatalog bool) string {
+	if expectCatalog {
+		return `if ! grep -Fq 'provider_plugin::__gestalt_write_catalog(PLUGIN_NAME, &path)?' "$main_rs"; then
+  echo "missing write-catalog export in wrapper source" >&2
+  exit 1
+fi`
+	}
+	return `if grep -Fq 'provider_plugin::__gestalt_write_catalog(PLUGIN_NAME, &path)?' "$main_rs"; then
+  echo "unexpected write-catalog export in wrapper source" >&2
+  exit 1
+fi`
+}
+
+func pluginpkgRustTargetTriple(goos, goarch, libc string) (string, string, error) {
+	switch goos {
+	case "darwin":
+		switch goarch {
+		case "amd64":
+			return "x86_64-apple-darwin", "", nil
+		case "arm64":
+			return "aarch64-apple-darwin", "", nil
+		}
+	case "linux":
+		normalizedLibC, err := pluginpkg.NormalizeArtifactLibC(goos, libc)
+		if err != nil {
+			return "", "", err
+		}
+		if normalizedLibC == "" {
+			normalizedLibC = expectedRustReleasePlatform(goos, goarch, "").LibC
+		}
+		switch goarch {
+		case "amd64":
+			if normalizedLibC == pluginpkg.LinuxLibCMusl {
+				return "x86_64-unknown-linux-musl", normalizedLibC, nil
+			}
+			return "x86_64-unknown-linux-gnu", normalizedLibC, nil
+		case "arm64":
+			if normalizedLibC == pluginpkg.LinuxLibCMusl {
+				return "aarch64-unknown-linux-musl", normalizedLibC, nil
+			}
+			return "aarch64-unknown-linux-gnu", normalizedLibC, nil
+		}
+	case "windows":
+		switch goarch {
+		case "amd64":
+			return "x86_64-pc-windows-gnu", "", nil
+		}
+	}
+	return "", "", fmt.Errorf("unsupported Rust target platform %s/%s", goos, goarch)
+}
+
+func shellSingleQuoted(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", `'"'"'`) + "'"
+}
+
+func pluginTestRepoRoot() (string, bool) {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		return "", false
+	}
+	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", "..")), true
 }
 
 func newPrebuiltProviderReleaseFixture(t *testing.T, dir string) string {
