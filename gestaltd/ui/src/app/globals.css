@@ -1,8 +1,6 @@
 @import "../../shared/theme.css";
-
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@config "../../tailwind.config.ts";
+@import "tailwindcss";
 
 @layer base {
   * {
