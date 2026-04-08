@@ -35,6 +35,15 @@ func LocalPackageReferences(manifest *pluginmanifestv1.Manifest) []LocalPackageR
 
 	if manifest.Provider != nil {
 		add(manifest.Provider.ConfigSchemaPath, "provider config schema")
+		if manifest.Provider.OpenAPI != "" && !strings.Contains(manifest.Provider.OpenAPI, "://") {
+			add(manifest.Provider.OpenAPI, "provider openapi document")
+		}
+		if manifest.Provider.GraphQLURL != "" && !strings.Contains(manifest.Provider.GraphQLURL, "://") {
+			add(manifest.Provider.GraphQLURL, "provider graphql document")
+		}
+		if manifest.Provider.MCPURL != "" && !strings.Contains(manifest.Provider.MCPURL, "://") {
+			add(manifest.Provider.MCPURL, "provider mcp document")
+		}
 	}
 	add(manifest.IconFile, "icon_file")
 	return refs

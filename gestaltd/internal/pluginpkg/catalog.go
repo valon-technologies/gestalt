@@ -19,7 +19,7 @@ func StaticCatalogPath(rootDir string) string {
 }
 
 func StaticCatalogRequired(manifest *pluginmanifestv1.Manifest) bool {
-	return manifest != nil && manifest.Provider != nil
+	return manifest != nil && manifest.Provider != nil && !manifest.Provider.IsManifestBacked()
 }
 
 func ReadStaticCatalog(rootDir, name string) (*catalog.Catalog, error) {

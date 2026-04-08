@@ -62,6 +62,26 @@ type Provider struct {
 	ResponseMapping   *ManifestResponseMapping              `json:"response_mapping,omitempty" yaml:"response_mapping,omitempty"`
 }
 
+func (p *Provider) IsDeclarative() bool {
+	return p != nil && len(p.Operations) > 0
+}
+
+func (p *Provider) IsSpecLoaded() bool {
+	return p != nil && (p.OpenAPI != "" || p.GraphQLURL != "" || p.MCPURL != "")
+}
+
+func (p *Provider) IsManifestBacked() bool {
+	return p != nil && (p.IsDeclarative() || p.IsSpecLoaded())
+}
+
+func (m *Manifest) IsHybridProvider() bool {
+	return m != nil && m.Provider != nil && m.Provider.IsManifestBacked() && m.Entrypoints.Provider != nil
+}
+
+func (m *Manifest) IsDeclarativeOnlyProvider() bool {
+	return m != nil && m.Provider != nil && m.Provider.IsManifestBacked() && m.Entrypoints.Provider == nil
+}
+
 type ManifestResponseMapping struct {
 	DataPath   string                     `json:"data_path" yaml:"data_path"`
 	Pagination *ManifestPaginationMapping `json:"pagination,omitempty" yaml:"pagination,omitempty"`

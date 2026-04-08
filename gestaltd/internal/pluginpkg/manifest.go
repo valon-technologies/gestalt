@@ -66,13 +66,20 @@ func DecodeManifestFormat(data []byte, format string) (*pluginmanifestv1.Manifes
 
 func decodeManifest(data []byte, format string, sourceMode bool) (*pluginmanifestv1.Manifest, error) {
 	var manifest pluginmanifestv1.Manifest
-	if err := decodeStrict(data, format, "manifest", &manifest); err != nil {
+	if err := decodeStrict(data, format, "manifest", &manifest); err == nil {
+		if err := validateManifest(&manifest, sourceMode); err != nil {
+			return nil, err
+		}
+		return &manifest, nil
+	}
+	providerManifest, err := decodeProviderManifestWire(data, format)
+	if err != nil {
+		return nil, decodeStrict(data, format, "manifest", &manifest)
+	}
+	if err := validateManifest(providerManifest, sourceMode); err != nil {
 		return nil, err
 	}
-	if err := validateManifest(&manifest, sourceMode); err != nil {
-		return nil, err
-	}
-	return &manifest, nil
+	return providerManifest, nil
 }
 
 func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
@@ -96,6 +103,20 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 	if manifest.IconFile != "" {
 		if err := validateRelativePackagePath(manifest.IconFile, "icon_file"); err != nil {
 			return err
+		}
+	}
+	if len(manifest.Kinds) == 0 {
+		if manifest.Provider != nil {
+			manifest.Kinds = append(manifest.Kinds, pluginmanifestv1.KindProvider)
+		}
+		if manifest.Auth != nil {
+			manifest.Kinds = append(manifest.Kinds, pluginmanifestv1.KindAuth)
+		}
+		if manifest.Datastore != nil {
+			manifest.Kinds = append(manifest.Kinds, pluginmanifestv1.KindDatastore)
+		}
+		if manifest.WebUI != nil {
+			manifest.Kinds = append(manifest.Kinds, pluginmanifestv1.KindWebUI)
 		}
 	}
 	if len(manifest.Kinds) == 0 {
@@ -135,7 +156,7 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 
 	needsArtifacts := len(manifest.Artifacts) > 0
 	for _, kind := range manifest.Kinds {
-		if kind == pluginmanifestv1.KindProvider && !allowsSourceExecutableEntrypointOmission {
+		if kind == pluginmanifestv1.KindProvider && manifest.Entrypoints.Provider != nil {
 			needsArtifacts = true
 			break
 		}
@@ -190,13 +211,21 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 					return err
 				}
 			}
-			if manifest.Entrypoints.Provider == nil && !allowsSourceExecutableEntrypointOmission {
-				return fmt.Errorf("%s entrypoint is required", kind)
+			if manifest.Provider.IsDeclarative() {
+				if err := validateDeclarativeProvider(manifest.Provider); err != nil {
+					return err
+				}
 			}
-			if manifest.Entrypoints.Provider != nil {
+			switch {
+			case manifest.Entrypoints.Provider != nil:
 				if err := validateEntrypoint(kind, manifest.Entrypoints.Provider, artifactPaths); err != nil {
 					return err
 				}
+			case manifest.IsDeclarativeOnlyProvider():
+			case manifest.Provider.IsSpecLoaded():
+			case allowsSourceExecutableEntrypointOmission:
+			default:
+				return fmt.Errorf("%s entrypoint is required", kind)
 			}
 		case pluginmanifestv1.KindAuth:
 			if manifest.Auth == nil {
@@ -369,13 +398,13 @@ func validateExecutableProviderMetadata(provider *pluginmanifestv1.Provider) err
 			continue
 		}
 		switch conn.Mode {
-		case "none", "user", "identity":
+		case "none", "user", "identity", "either":
 		default:
 			return fmt.Errorf("unsupported provider.connections.%s.mode %q", name, conn.Mode)
 		}
 	}
 	switch provider.ConnectionMode {
-	case "", "none", "user", "identity":
+	case "", "none", "user", "identity", "either":
 	default:
 		return fmt.Errorf("unsupported provider.connection_mode %q", provider.ConnectionMode)
 	}
@@ -395,21 +424,65 @@ func validateExecutableProviderMetadata(provider *pluginmanifestv1.Provider) err
 		field   string
 		present bool
 	}{
-		{field: "provider.base_url", present: provider.BaseURL != ""},
-		{field: "provider.headers", present: len(provider.Headers) > 0},
-		{field: "provider.managed_parameters", present: len(provider.ManagedParameters) > 0},
-		{field: "provider.operations", present: len(provider.Operations) > 0},
-		{field: "provider.openapi", present: provider.OpenAPI != ""},
-		{field: "provider.graphql_url", present: provider.GraphQLURL != ""},
-		{field: "provider.mcp_url", present: provider.MCPURL != ""},
-		{field: "provider.openapi_connection", present: provider.OpenAPIConnection != ""},
-		{field: "provider.graphql_connection", present: provider.GraphQLConnection != ""},
-		{field: "provider.mcp_connection", present: provider.MCPConnection != ""},
-		{field: "provider.response_mapping", present: provider.ResponseMapping != nil},
+		{field: "provider.base_url", present: provider.BaseURL != "" && !provider.IsDeclarative() && provider.OpenAPI == ""},
+		{field: "provider.operations", present: len(provider.Operations) > 0 && !provider.IsDeclarative()},
 	}
 	for _, check := range checks {
 		if check.present {
 			return fmt.Errorf("%s is no longer supported for executable providers", check.field)
+		}
+	}
+	return nil
+}
+
+var validParamIn = map[string]bool{
+	"query": true,
+	"body":  true,
+	"path":  true,
+}
+
+var validHTTPMethods = map[string]bool{
+	"GET":    true,
+	"POST":   true,
+	"PUT":    true,
+	"PATCH":  true,
+	"DELETE": true,
+}
+
+func validateDeclarativeProvider(provider *pluginmanifestv1.Provider) error {
+	if provider.BaseURL == "" {
+		return fmt.Errorf("provider.base_url is required for declarative providers")
+	}
+	seen := make(map[string]struct{}, len(provider.Operations))
+	for i, op := range provider.Operations {
+		if op.Name == "" {
+			return fmt.Errorf("provider.operations[%d].name is required", i)
+		}
+		if _, exists := seen[op.Name]; exists {
+			return fmt.Errorf("duplicate operation name %q", op.Name)
+		}
+		seen[op.Name] = struct{}{}
+		if !validHTTPMethods[op.Method] {
+			return fmt.Errorf("provider.operations[%d].method %q is not a valid HTTP method", i, op.Method)
+		}
+		if op.Path == "" {
+			return fmt.Errorf("provider.operations[%d].path is required", i)
+		}
+		seenParams := make(map[string]struct{}, len(op.Parameters))
+		for j, param := range op.Parameters {
+			if param.Name == "" {
+				return fmt.Errorf("provider.operations[%d].parameters[%d].name is required", i, j)
+			}
+			if _, dup := seenParams[param.Name]; dup {
+				return fmt.Errorf("provider.operations[%d] has duplicate parameter name %q", i, param.Name)
+			}
+			seenParams[param.Name] = struct{}{}
+			if !validParamIn[param.In] {
+				return fmt.Errorf("provider.operations[%d].parameters[%d].in %q must be query, body, or path", i, j, param.In)
+			}
+			if param.In == "path" && !strings.Contains(op.Path, "{"+param.Name+"}") {
+				return fmt.Errorf("provider.operations[%d].parameters[%d] %q declared as path param but %q has no {%s} placeholder", i, j, param.Name, op.Path, param.Name)
+			}
 		}
 	}
 	return nil
@@ -430,6 +503,9 @@ func EncodeSourceManifestFormat(manifest *pluginmanifestv1.Manifest, format stri
 func encodeManifestFormat(manifest *pluginmanifestv1.Manifest, format string, sourceMode bool) ([]byte, error) {
 	if err := validateManifest(manifest, sourceMode); err != nil {
 		return nil, err
+	}
+	if manifest != nil && manifest.Provider != nil && manifest.Auth == nil && manifest.Datastore == nil {
+		return encodeProviderManifestWire(manifest, format)
 	}
 	switch format {
 	case ManifestFormatJSON:

@@ -268,32 +268,6 @@ func TestManifestWorkflow_RejectsInvalidPackageInputs(t *testing.T) {
 			},
 			wantError: "provider.auth.token_url is required for oauth2",
 		},
-		{
-			name: "rejects legacy declarative provider fields",
-			buildData: func(t *testing.T, dir string) string {
-				artifactPath := testArtifactPath("provider")
-				manifest := mustProviderManifest("github.com/acme/plugins/legacy-declarative", "1.0.0", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider"))
-				manifest.Provider.BaseURL = "https://api.example.com"
-				manifest.Provider.Operations = []pluginmanifestv1.ProviderOperation{
-					{Name: "list_items", Method: "GET", Path: "/items"},
-				}
-				mustWriteFile(t, filepath.Join(dir, filepath.FromSlash(artifactPath)), []byte("provider"), 0o755)
-				return mustWriteManifestData(t, dir, ManifestFile, mustRawManifestJSON(t, manifest))
-			},
-			wantError: "provider.base_url is no longer supported",
-		},
-		{
-			name: "rejects legacy spec provider fields",
-			buildData: func(t *testing.T, dir string) string {
-				artifactPath := testArtifactPath("provider")
-				manifest := mustProviderManifest("github.com/acme/plugins/legacy-spec", "1.0.0", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider"))
-				manifest.Provider.OpenAPI = "openapi.yaml"
-				mustWriteFile(t, filepath.Join(dir, filepath.FromSlash(artifactPath)), []byte("provider"), 0o755)
-				mustWriteFile(t, filepath.Join(dir, "openapi.yaml"), []byte("openapi: 3.1.0\ninfo:\n  title: Example\n  version: 1.0.0\npaths: {}\n"), 0o644)
-				return mustWriteManifestData(t, dir, ManifestFile, mustRawManifestJSON(t, manifest))
-			},
-			wantError: "provider.openapi is no longer supported",
-		},
 	}
 
 	for _, tc := range tests {
@@ -312,5 +286,57 @@ func TestManifestWorkflow_RejectsInvalidPackageInputs(t *testing.T) {
 				t.Fatalf("error = %v, want %q", err, tc.wantError)
 			}
 		})
+	}
+}
+
+func TestManifestWorkflow_AcceptsProviderWireSurfaceManifest(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manifestPath := mustWriteManifestData(t, dir, "plugin.yaml", []byte(`
+source: github.com/acme/plugins/provider-wire
+version: 1.0.0
+display_name: Provider Wire
+provider:
+  config_schema_path: schemas/config.schema.json
+  connections:
+    default:
+      auth:
+        type: none
+    api:
+      auth:
+        type: oauth2
+        authorization_url: https://auth.example.com/authorize
+        token_url: https://auth.example.com/token
+  managed_parameters:
+    - in: path
+      name: workspaceId
+      value: ws_123
+  surfaces:
+    openapi:
+      document: openapi.yaml
+      connection: api
+`))
+	mustWriteFile(t, filepath.Join(dir, "schemas", "config.schema.json"), []byte(`{"type":"object"}`), 0o644)
+	mustWriteFile(t, filepath.Join(dir, "openapi.yaml"), []byte("openapi: 3.1.0\ninfo:\n  title: Example\n  version: 1.0.0\npaths: {}\n"), 0o644)
+
+	_, manifest, err := ReadManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadManifestFile: %v", err)
+	}
+	if manifest.Provider == nil {
+		t.Fatal("expected provider metadata")
+	}
+	if manifest.Provider.OpenAPI != "openapi.yaml" {
+		t.Fatalf("provider openapi = %q", manifest.Provider.OpenAPI)
+	}
+	if manifest.Provider.OpenAPIConnection != "api" {
+		t.Fatalf("provider openapi_connection = %q, want api", manifest.Provider.OpenAPIConnection)
+	}
+	if len(manifest.Provider.ManagedParameters) != 1 {
+		t.Fatalf("managed_parameters = %+v", manifest.Provider.ManagedParameters)
+	}
+	if manifest.Entrypoints.Provider != nil {
+		t.Fatalf("expected declarative/spec provider to omit provider entrypoint, got %+v", manifest.Entrypoints.Provider)
 	}
 }

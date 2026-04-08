@@ -773,7 +773,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 					},
 				},
 			},
-			wantErr: `plugin auth type "mcp_oauth" is not supported`,
+			wantErr: `plugin auth type "mcp_oauth" requires an MCP surface`,
 		},
 		{
 			name: "named connection rejects mcp oauth early",
@@ -789,7 +789,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 					},
 				},
 			},
-			wantErr: `connection "default" auth type "mcp_oauth" is not supported`,
+			wantErr: `connection "default" auth type "mcp_oauth" requires an MCP surface`,
 		},
 	}
 

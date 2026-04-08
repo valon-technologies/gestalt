@@ -1003,8 +1003,9 @@ func validateManifestBackedConnectionDefaults(name string, plugin *PluginDef, pr
 }
 
 func validateExecutableConnectionAuthSupport(name string, plugin *PluginDef, provider *pluginmanifestv1.Provider) error {
-	if conn := EffectivePluginConnectionDef(plugin, provider); conn.Auth.Type == pluginmanifestv1.AuthTypeMCPOAuth {
-		return fmt.Errorf("config validation: integration %q plugin auth type %q is not supported for executable providers", name, pluginmanifestv1.AuthTypeMCPOAuth)
+	supportsMCPOAuth := provider != nil && provider.MCPURL != ""
+	if conn := EffectivePluginConnectionDef(plugin, provider); conn.Auth.Type == pluginmanifestv1.AuthTypeMCPOAuth && !supportsMCPOAuth {
+		return fmt.Errorf("config validation: integration %q plugin auth type %q requires an MCP surface", name, pluginmanifestv1.AuthTypeMCPOAuth)
 	}
 
 	declared := declaredManifestBackedConnections(plugin, provider)
@@ -1018,7 +1019,9 @@ func validateExecutableConnectionAuthSupport(name string, plugin *PluginDef, pro
 		if !ok || conn.Auth.Type != pluginmanifestv1.AuthTypeMCPOAuth {
 			continue
 		}
-		return fmt.Errorf("config validation: integration %q connection %q auth type %q is not supported for executable providers", name, connName, pluginmanifestv1.AuthTypeMCPOAuth)
+		if !supportsMCPOAuth {
+			return fmt.Errorf("config validation: integration %q connection %q auth type %q requires an MCP surface", name, connName, pluginmanifestv1.AuthTypeMCPOAuth)
+		}
 	}
 	return nil
 }
