@@ -99,9 +99,7 @@ fn find_configured_url(url_override: Option<&str>) -> Result<Option<String>> {
     Ok(find_configured_url_with_source(url_override)?.map(|(url, _)| url))
 }
 
-fn find_configured_url_with_source(
-    url_override: Option<&str>,
-) -> Result<Option<(String, String)>> {
+fn find_configured_url_with_source(url_override: Option<&str>) -> Result<Option<(String, String)>> {
     if let Some(url) = url_override {
         return Ok(Some((normalize_url(url), "--url flag".to_string())));
     }

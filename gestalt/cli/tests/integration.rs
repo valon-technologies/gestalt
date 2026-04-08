@@ -824,7 +824,9 @@ fn test_bare_command_shows_server_footer() {
         .arg("http://localhost:9999")
         .assert()
         .success()
-        .stderr(predicate::str::contains("Target server: http://localhost:9999"))
+        .stderr(predicate::str::contains(
+            "Target server: http://localhost:9999",
+        ))
         .stderr(predicate::str::contains("Config source: --url flag"));
 }
 
