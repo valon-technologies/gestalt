@@ -54,8 +54,26 @@ func TestCatalogFilters(t *testing.T) {
 	}
 
 	r := coreintegration.NewRestricted(inner, map[string]string{"list_channels": "", "send_message": ""})
-	ops := coreintegration.OperationsList(r.Catalog())
 
+	cat := r.Catalog()
+	if cat == nil {
+		t.Fatal("Catalog() returned nil")
+	}
+	if len(cat.Operations) != 2 {
+		t.Fatalf("Catalog().Operations: got %d, want 2", len(cat.Operations))
+	}
+	catIDs := make(map[string]bool, len(cat.Operations))
+	for _, op := range cat.Operations {
+		catIDs[op.ID] = true
+	}
+	if !catIDs["list_channels"] {
+		t.Error("expected list_channels in Catalog().Operations")
+	}
+	if !catIDs["send_message"] {
+		t.Error("expected send_message in Catalog().Operations")
+	}
+
+	ops := coreintegration.OperationsList(cat)
 	if len(ops) != 2 {
 		t.Fatalf("OperationsList: got %d ops, want 2", len(ops))
 	}
@@ -259,56 +277,6 @@ func (s *stubOAuth) RefreshToken(ctx context.Context, refreshToken string) (*cor
 		return s.refreshTokenFn(ctx, refreshToken)
 	}
 	return nil, nil
-}
-
-func TestCatalogFiltersOperations(t *testing.T) {
-	t.Parallel()
-
-	inner := &stubCatalogProvider{
-		stubWithOps: stubWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "test_provider"},
-			ops: []core.Operation{
-				{Name: "op_alpha"},
-				{Name: "op_beta"},
-				{Name: "op_gamma"},
-			},
-		},
-		cat: &catalog.Catalog{
-			Name: "test_provider",
-			Operations: []catalog.CatalogOperation{
-				{ID: "op_alpha", Title: "Alpha"},
-				{ID: "op_beta", Title: "Beta"},
-				{ID: "op_gamma", Title: "Gamma"},
-			},
-		},
-	}
-
-	r := coreintegration.NewRestricted(inner, map[string]string{
-		"op_alpha": "",
-		"op_gamma": "",
-	})
-
-	cat := r.Catalog()
-	if cat == nil {
-		t.Fatal("Catalog() returned nil")
-	}
-	if len(cat.Operations) != 2 {
-		t.Fatalf("Catalog().Operations: got %d, want 2", len(cat.Operations))
-	}
-
-	ids := make(map[string]bool, len(cat.Operations))
-	for _, op := range cat.Operations {
-		ids[op.ID] = true
-	}
-	if !ids["op_alpha"] {
-		t.Error("expected op_alpha in catalog")
-	}
-	if !ids["op_gamma"] {
-		t.Error("expected op_gamma in catalog")
-	}
-	if ids["op_beta"] {
-		t.Error("op_beta should not appear in filtered catalog")
-	}
 }
 
 func TestCatalogRenamesAliasedOperations(t *testing.T) {

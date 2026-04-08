@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
-	"sync"
 	"testing"
 	"time"
 
@@ -18,113 +17,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
-	"go.opentelemetry.io/otel/sdk/metric/metricdata"
+	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 )
-
-var meterProviderTestMu sync.Mutex
-
-func useManualMeterProvider(t *testing.T) *sdkmetric.ManualReader {
-	t.Helper()
-
-	meterProviderTestMu.Lock()
-	prev := otel.GetMeterProvider()
-	reader := sdkmetric.NewManualReader()
-	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
-	otel.SetMeterProvider(provider)
-	t.Cleanup(func() {
-		_ = provider.Shutdown(context.Background())
-		otel.SetMeterProvider(prev)
-		meterProviderTestMu.Unlock()
-	})
-	return reader
-}
-
-func collectMetrics(t *testing.T, reader *sdkmetric.ManualReader) metricdata.ResourceMetrics {
-	t.Helper()
-
-	var rm metricdata.ResourceMetrics
-	if err := reader.Collect(context.Background(), &rm); err != nil {
-		t.Fatalf("collect metrics: %v", err)
-	}
-	return rm
-}
-
-func requireInt64Sum(t *testing.T, rm metricdata.ResourceMetrics, name string, want int64, attrs map[string]string) {
-	t.Helper()
-
-	for _, scope := range rm.ScopeMetrics {
-		for _, metric := range scope.Metrics {
-			if metric.Name != name {
-				continue
-			}
-			sum, ok := metric.Data.(metricdata.Sum[int64])
-			if !ok {
-				t.Fatalf("metric %q is %T, want Sum[int64]", name, metric.Data)
-			}
-			for _, point := range sum.DataPoints {
-				if attrsMatch(point.Attributes, attrs) {
-					if point.Value != want {
-						t.Fatalf("metric %q attrs %v = %d, want %d", name, attrs, point.Value, want)
-					}
-					return
-				}
-			}
-		}
-	}
-
-	t.Fatalf("metric %q with attrs %v not found", name, attrs)
-}
-
-func requireFloat64Histogram(t *testing.T, rm metricdata.ResourceMetrics, name string, attrs map[string]string) {
-	t.Helper()
-
-	for _, scope := range rm.ScopeMetrics {
-		for _, metric := range scope.Metrics {
-			if metric.Name != name {
-				continue
-			}
-			histogram, ok := metric.Data.(metricdata.Histogram[float64])
-			if !ok {
-				t.Fatalf("metric %q is %T, want Histogram[float64]", name, metric.Data)
-			}
-			for _, point := range histogram.DataPoints {
-				if attrsMatch(point.Attributes, attrs) {
-					return
-				}
-			}
-		}
-	}
-
-	t.Fatalf("metric %q with attrs %v not found", name, attrs)
-}
-
-func attrsMatch(set attribute.Set, want map[string]string) bool {
-	for key, expected := range want {
-		value, ok := set.Value(attribute.Key(key))
-		if !ok || value.AsString() != expected {
-			return false
-		}
-	}
-	return true
-}
-
-type namedStubDatastore struct {
-	coretesting.StubDatastore
-	name            string
-	listAPITokensFn func(context.Context, string) ([]*core.APIToken, error)
-}
-
-func (s *namedStubDatastore) Name() string { return s.name }
-
-func (s *namedStubDatastore) ListAPITokens(ctx context.Context, userID string) ([]*core.APIToken, error) {
-	if s.listAPITokensFn != nil {
-		return s.listAPITokensFn(ctx, userID)
-	}
-	return s.StubDatastore.ListAPITokens(ctx, userID)
-}
 
 type manualMetricsProvider struct {
 	name string
@@ -175,7 +69,7 @@ func (s *metricsHostIssuedSessionAuth) SessionTokenTTL() time.Duration {
 func TestConnectionAuthMetrics(t *testing.T) {
 	t.Parallel()
 
-	reader := useManualMeterProvider(t)
+	reader := metrictest.UseManualMeterProvider(t)
 	const providerName = "metrics-slack"
 
 	handler := &testOAuthHandler{
@@ -243,26 +137,26 @@ func TestConnectionAuthMetrics(t *testing.T) {
 		t.Fatalf("failed oauth callback status = %d, want %d", status, http.StatusBadGateway)
 	}
 
-	rm := collectMetrics(t, reader)
-	requireInt64Sum(t, rm, "gestaltd.connection.auth.count", 2, map[string]string{
+	rm := metrictest.CollectMetrics(t, reader)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.connection.auth.count", 2, map[string]string{
 		"gestalt.provider":        providerName,
 		"gestalt.type":            "oauth",
 		"gestalt.action":          "start",
 		"gestalt.connection_mode": "user",
 	})
-	requireInt64Sum(t, rm, "gestaltd.connection.auth.count", 2, map[string]string{
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.connection.auth.count", 2, map[string]string{
 		"gestalt.provider":        providerName,
 		"gestalt.type":            "oauth",
 		"gestalt.action":          "complete",
 		"gestalt.connection_mode": "user",
 	})
-	requireInt64Sum(t, rm, "gestaltd.connection.auth.error_count", 1, map[string]string{
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.connection.auth.error_count", 1, map[string]string{
 		"gestalt.provider":        providerName,
 		"gestalt.type":            "oauth",
 		"gestalt.action":          "complete",
 		"gestalt.connection_mode": "user",
 	})
-	requireFloat64Histogram(t, rm, "gestaltd.connection.auth.duration", map[string]string{
+	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.connection.auth.duration", map[string]string{
 		"gestalt.provider": providerName,
 		"gestalt.type":     "oauth",
 		"gestalt.action":   "complete",
@@ -272,7 +166,7 @@ func TestConnectionAuthMetrics(t *testing.T) {
 func TestRefreshAndOperationResultMetrics(t *testing.T) {
 	t.Parallel()
 
-	reader := useManualMeterProvider(t)
+	reader := metrictest.UseManualMeterProvider(t)
 	const providerName = "metrics-fake"
 
 	successStub := &stubOAuthIntegration{
@@ -370,31 +264,31 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 		t.Fatalf("refresh error status = %d, want %d", errorResp.StatusCode, http.StatusBadGateway)
 	}
 
-	rm := collectMetrics(t, reader)
-	requireInt64Sum(t, rm, "gestaltd.connection.auth.count", 2, map[string]string{
+	rm := metrictest.CollectMetrics(t, reader)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.connection.auth.count", 2, map[string]string{
 		"gestalt.provider":        providerName,
 		"gestalt.type":            "oauth",
 		"gestalt.action":          "refresh",
 		"gestalt.connection_mode": "user",
 	})
-	requireInt64Sum(t, rm, "gestaltd.connection.auth.error_count", 1, map[string]string{
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.connection.auth.error_count", 1, map[string]string{
 		"gestalt.provider":        providerName,
 		"gestalt.type":            "oauth",
 		"gestalt.action":          "refresh",
 		"gestalt.connection_mode": "user",
 	})
-	requireFloat64Histogram(t, rm, "gestaltd.connection.auth.duration", map[string]string{
+	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.connection.auth.duration", map[string]string{
 		"gestalt.provider": providerName,
 		"gestalt.type":     "oauth",
 		"gestalt.action":   "refresh",
 	})
-	requireInt64Sum(t, rm, "gestaltd.operation.count", 2, map[string]string{
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.operation.count", 2, map[string]string{
 		"gestalt.provider":        providerName,
 		"gestalt.operation":       "list",
 		"gestalt.transport":       "rest",
 		"gestalt.connection_mode": "user",
 	})
-	requireInt64Sum(t, rm, "gestaltd.operation.error_count", 1, map[string]string{
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.operation.error_count", 1, map[string]string{
 		"gestalt.provider":        providerName,
 		"gestalt.operation":       "list",
 		"gestalt.transport":       "rest",
@@ -405,23 +299,20 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 func TestManualConnectionMetrics(t *testing.T) {
 	t.Parallel()
 
-	reader := useManualMeterProvider(t)
+	reader := metrictest.UseManualMeterProvider(t)
 	const providerName = "manual-metrics"
 
-	ds := &namedStubDatastore{
-		name: "metrics-store",
-		StubDatastore: coretesting.StubDatastore{
-			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
-				return &core.User{ID: "u1", Email: email}, nil
-			},
-			StoreTokenFn: func(_ context.Context, token *core.IntegrationToken) error {
-				if token.AccessToken != `{"api_key":"secret"}` {
-					t.Fatalf("unexpected stored credential %q", token.AccessToken)
-				}
-				return nil
-			},
+	ds := metrictest.NewNamedStubDatastore("metrics-store", coretesting.StubDatastore{
+		FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+			return &core.User{ID: "u1", Email: email}, nil
 		},
-	}
+		StoreTokenFn: func(_ context.Context, token *core.IntegrationToken) error {
+			if token.AccessToken != `{"api_key":"secret"}` {
+				t.Fatalf("unexpected stored credential %q", token.AccessToken)
+			}
+			return nil
+		},
+	})
 
 	srv := newTestServer(t, func(cfg *server.Config) {
 		cfg.Datastore = ds
@@ -442,18 +333,18 @@ func TestManualConnectionMetrics(t *testing.T) {
 		t.Fatalf("manual connect status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 
-	rm := collectMetrics(t, reader)
-	requireInt64Sum(t, rm, "gestaltd.connection.auth.count", 1, map[string]string{
+	rm := metrictest.CollectMetrics(t, reader)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.connection.auth.count", 1, map[string]string{
 		"gestalt.provider":        providerName,
 		"gestalt.type":            "manual",
 		"gestalt.action":          "complete",
 		"gestalt.connection_mode": "user",
 	})
-	requireInt64Sum(t, rm, "gestaltd.datastore.count", 1, map[string]string{
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.datastore.count", 1, map[string]string{
 		"gestalt.provider": "metrics-store",
 		"gestalt.method":   "store_token",
 	})
-	requireFloat64Histogram(t, rm, "gestaltd.datastore.duration", map[string]string{
+	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.datastore.duration", map[string]string{
 		"gestalt.provider": "metrics-store",
 		"gestalt.method":   "store_token",
 	})
@@ -462,7 +353,7 @@ func TestManualConnectionMetrics(t *testing.T) {
 func TestConnectionAuthMetricsUseUnknownProviderForMissingIntegration(t *testing.T) {
 	t.Parallel()
 
-	reader := useManualMeterProvider(t)
+	reader := metrictest.UseManualMeterProvider(t)
 	srv := newTestServer(t)
 	testutil.CloseOnCleanup(t, srv)
 
@@ -490,26 +381,26 @@ func TestConnectionAuthMetricsUseUnknownProviderForMissingIntegration(t *testing
 		t.Fatalf("manual connect status = %d, want %d", manualResp.StatusCode, http.StatusNotFound)
 	}
 
-	rm := collectMetrics(t, reader)
-	requireInt64Sum(t, rm, "gestaltd.connection.auth.count", 1, map[string]string{
+	rm := metrictest.CollectMetrics(t, reader)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.connection.auth.count", 1, map[string]string{
 		"gestalt.provider":        "unknown",
 		"gestalt.type":            "oauth",
 		"gestalt.action":          "start",
 		"gestalt.connection_mode": "unknown",
 	})
-	requireInt64Sum(t, rm, "gestaltd.connection.auth.error_count", 1, map[string]string{
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.connection.auth.error_count", 1, map[string]string{
 		"gestalt.provider":        "unknown",
 		"gestalt.type":            "oauth",
 		"gestalt.action":          "start",
 		"gestalt.connection_mode": "unknown",
 	})
-	requireInt64Sum(t, rm, "gestaltd.connection.auth.count", 1, map[string]string{
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.connection.auth.count", 1, map[string]string{
 		"gestalt.provider":        "unknown",
 		"gestalt.type":            "manual",
 		"gestalt.action":          "complete",
 		"gestalt.connection_mode": "unknown",
 	})
-	requireInt64Sum(t, rm, "gestaltd.connection.auth.error_count", 1, map[string]string{
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.connection.auth.error_count", 1, map[string]string{
 		"gestalt.provider":        "unknown",
 		"gestalt.type":            "manual",
 		"gestalt.action":          "complete",
@@ -520,19 +411,16 @@ func TestConnectionAuthMetricsUseUnknownProviderForMissingIntegration(t *testing
 func TestPlatformAuthMetrics(t *testing.T) {
 	t.Parallel()
 
-	reader := useManualMeterProvider(t)
+	reader := metrictest.UseManualMeterProvider(t)
 	secret := []byte("0123456789abcdef0123456789abcdef")
 	var auditBuf bytes.Buffer
 
-	ds := &namedStubDatastore{
-		name: "auth-metrics-store",
-		StubDatastore: coretesting.StubDatastore{
-			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
-				return &core.User{ID: "u1", Email: email}, nil
-			},
+	ds := metrictest.NewNamedStubDatastore("auth-metrics-store", coretesting.StubDatastore{
+		FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+			return &core.User{ID: "u1", Email: email}, nil
 		},
-		listAPITokensFn: func(context.Context, string) ([]*core.APIToken, error) { return nil, nil },
-	}
+	})
+	ds.ListAPITokensFn = func(context.Context, string) ([]*core.APIToken, error) { return nil, nil }
 
 	client := &http.Client{}
 	jar, err := cookiejar.New(nil)
@@ -594,28 +482,28 @@ func TestPlatformAuthMetrics(t *testing.T) {
 		t.Fatalf("validate-token and datastore read should not emit audit logs, got: %s", got)
 	}
 
-	rm := collectMetrics(t, reader)
-	requireInt64Sum(t, rm, "gestaltd.auth.count", 1, map[string]string{
+	rm := metrictest.CollectMetrics(t, reader)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.auth.count", 1, map[string]string{
 		"gestalt.provider": "metrics-host-issued",
 		"gestalt.action":   "begin_login",
 	})
-	requireInt64Sum(t, rm, "gestaltd.auth.count", 1, map[string]string{
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.auth.count", 1, map[string]string{
 		"gestalt.provider": "metrics-host-issued",
 		"gestalt.action":   "complete_login",
 	})
-	requireInt64Sum(t, rm, "gestaltd.auth.count", 1, map[string]string{
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.auth.count", 1, map[string]string{
 		"gestalt.provider": "metrics-host-issued",
 		"gestalt.action":   "validate_token",
 	})
-	requireFloat64Histogram(t, rm, "gestaltd.auth.duration", map[string]string{
+	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.auth.duration", map[string]string{
 		"gestalt.provider": "metrics-host-issued",
 		"gestalt.action":   "complete_login",
 	})
-	requireInt64Sum(t, rm, "gestaltd.datastore.count", 2, map[string]string{
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.datastore.count", 2, map[string]string{
 		"gestalt.provider": "auth-metrics-store",
 		"gestalt.method":   "find_or_create_user",
 	})
-	requireInt64Sum(t, rm, "gestaltd.datastore.count", 1, map[string]string{
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.datastore.count", 1, map[string]string{
 		"gestalt.provider": "auth-metrics-store",
 		"gestalt.method":   "list_api_tokens",
 	})
