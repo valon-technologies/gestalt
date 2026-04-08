@@ -481,3 +481,306 @@ See [Plugin Manifests](/reference/plugin-manifests) for the manifest schema and 
 ## Hybrid providers
 
 `plugin.yaml` can define passthrough surfaces (`provider.surfaces.openapi`, `provider.surfaces.rest`, `provider.surfaces.graphql`, or `provider.surfaces.mcp`) alongside executable operations. The executable operations handle only the custom logic. Do not define the same operation ID in both places.
+
+## Writing an Auth Provider
+
+Auth providers handle platform login. They implement the same plugin runtime as integration providers but serve a different gRPC contract. Auth and datastore provider SDKs are available for Go and Rust. Python support for these provider kinds is coming soon.
+
+### Manifest
+
+An auth provider manifest declares `kinds: [auth]` instead of `kinds: [plugin]`:
+
+```yaml
+source: github.com/example/plugins/my-auth
+version: 0.0.1-alpha.1
+display_name: My Auth Provider
+description: Custom OAuth 2.0 authentication
+kinds:
+  - auth
+auth:
+  config_schema_path: ./auth_config.json
+```
+
+The optional `auth.config_schema_path` field points to a JSON Schema that validates the `auth.config` block in the server config.
+
+### Interface
+
+An auth provider implements `Configure`, `BeginLogin`, and `CompleteLogin`. `BeginLogin` receives the callback URL and a host-generated state parameter and returns an authorization URL. `CompleteLogin` receives the query parameters from the callback and returns the authenticated user's identity.
+
+<Tabs items={['Go', 'Rust']}>
+  <Tabs.Tab>
+    ```go
+    package main
+
+    import (
+    	"context"
+    	"fmt"
+    	"net/url"
+
+    	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
+
+    type MyAuth struct {
+    	clientID  string
+    	issuerURL string
+    }
+
+    func (a *MyAuth) Configure(_ context.Context, _ string, config map[string]any) error {
+    	a.clientID, _ = config["client_id"].(string)
+    	a.issuerURL, _ = config["issuer_url"].(string)
+    	if a.clientID == "" || a.issuerURL == "" {
+    		return fmt.Errorf("client_id and issuer_url are required")
+    	}
+    	return nil
+    }
+
+    func (a *MyAuth) BeginLogin(_ context.Context, req gestalt.BeginLoginRequest) (*gestalt.BeginLoginResponse, error) {
+    	authURL := fmt.Sprintf(
+    		"%s/authorize?client_id=%s&redirect_uri=%s&state=%s&response_type=code",
+    		a.issuerURL,
+    		url.QueryEscape(a.clientID),
+    		url.QueryEscape(req.CallbackURL),
+    		url.QueryEscape(req.HostState),
+    	)
+    	return &gestalt.BeginLoginResponse{AuthorizationURL: authURL}, nil
+    }
+
+    func (a *MyAuth) CompleteLogin(_ context.Context, req gestalt.CompleteLoginRequest) (*gestalt.AuthenticatedUser, error) {
+    	code := req.Query["code"]
+    	if code == "" {
+    		return nil, fmt.Errorf("missing authorization code")
+    	}
+    	// Exchange code for tokens, extract user info.
+    	return &gestalt.AuthenticatedUser{
+    		Subject:       "user-123",
+    		Email:         "user@example.com",
+    		EmailVerified: true,
+    		DisplayName:   "Example User",
+    	}, nil
+    }
+
+    func main() {
+    	gestalt.ServeAuthProvider(context.Background(), &MyAuth{})
+    }
+    ```
+
+    Two optional interfaces extend the base contract: `ExternalTokenValidator` (lets API clients present a token directly instead of browser login) and `SessionTTLProvider` (controls session lifetime, default 24 hours).
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use std::sync::Mutex;
+
+    use gestalt_plugin_sdk as gestalt;
+    use gestalt::{AuthProvider, AuthenticatedUser, BeginLoginRequest, BeginLoginResponse, CompleteLoginRequest};
+
+    pub struct MyAuth {
+        client_id: Mutex<String>,
+        issuer_url: Mutex<String>,
+    }
+
+    #[gestalt::async_trait]
+    impl AuthProvider for MyAuth {
+        async fn configure(
+            &self,
+            _name: &str,
+            config: serde_json::Map<String, serde_json::Value>,
+        ) -> gestalt::Result<()> {
+            *self.client_id.lock().unwrap() = config
+                .get("client_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            *self.issuer_url.lock().unwrap() = config
+                .get("issuer_url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            Ok(())
+        }
+
+        async fn begin_login(&self, req: BeginLoginRequest) -> gestalt::Result<BeginLoginResponse> {
+            let issuer = self.issuer_url.lock().unwrap().clone();
+            let client_id = self.client_id.lock().unwrap().clone();
+            Ok(BeginLoginResponse {
+                authorization_url: format!(
+                    "{issuer}/authorize?client_id={client_id}&redirect_uri={}&state={}&response_type=code",
+                    req.callback_url, req.host_state,
+                ),
+                provider_state: vec![],
+            })
+        }
+
+        async fn complete_login(&self, req: CompleteLoginRequest) -> gestalt::Result<AuthenticatedUser> {
+            let code = req.query.get("code").cloned().unwrap_or_default();
+            if code.is_empty() {
+                return Err(gestalt::Error::invalid_argument("missing authorization code"));
+            }
+            // Exchange code for tokens, extract user info.
+            Ok(AuthenticatedUser {
+                subject: "user-123".into(),
+                email: "user@example.com".into(),
+                email_verified: true,
+                display_name: "Example User".into(),
+                ..Default::default()
+            })
+        }
+    }
+
+    gestalt::export_auth_provider!(constructor = MyAuth::default);
+    ```
+
+    Optional methods with default implementations: `validate_external_token` (returns unimplemented by default) and `session_ttl` (returns `None` for the 24-hour default).
+  </Tabs.Tab>
+</Tabs>
+
+### Config reference
+
+To use your auth provider in a Gestalt deployment:
+
+```yaml
+auth:
+  provider:
+    source:
+      path: ./my-auth/plugin.yaml
+  config:
+    issuer_url: https://login.example.com
+    client_id: ${OIDC_CLIENT_ID}
+    client_secret: secret://oidc-client-secret
+```
+
+## Writing a Datastore Provider
+
+Datastore providers back the persistent state layer: users, integration tokens, API tokens, and OAuth registrations.
+
+### Manifest
+
+```yaml
+source: github.com/example/plugins/my-datastore
+version: 0.0.1-alpha.1
+display_name: My Datastore
+description: Custom persistent storage backend
+kinds:
+  - datastore
+datastore:
+  config_schema_path: ./datastore_config.json
+```
+
+### Interface
+
+A datastore provider is a larger interface. It composes user storage, integration token storage, and API token storage, plus `Migrate` for schema setup and `HealthCheck` for readiness. The host encrypts tokens before passing them to the datastore, so the datastore stores sealed bytes without needing the encryption key.
+
+<Tabs items={['Go', 'Rust']}>
+  <Tabs.Tab>
+    ```go
+    package main
+
+    import (
+    	"context"
+    	"database/sql"
+
+    	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
+
+    type MyDatastore struct {
+    	db *sql.DB
+    }
+
+    func (ds *MyDatastore) Configure(_ context.Context, _ string, config map[string]any) error {
+    	dsn, _ := config["dsn"].(string)
+    	var err error
+    	ds.db, err = sql.Open("postgres", dsn)
+    	return err
+    }
+
+    func (ds *MyDatastore) HealthCheck(ctx context.Context) error {
+    	return ds.db.PingContext(ctx)
+    }
+
+    func (ds *MyDatastore) Migrate(ctx context.Context) error {
+    	// Create users, integration_tokens, and api_tokens tables.
+    	return nil
+    }
+
+    // UserStore
+    func (ds *MyDatastore) GetUser(ctx context.Context, id string) (*gestalt.StoredUser, error) { ... }
+    func (ds *MyDatastore) FindOrCreateUser(ctx context.Context, email string) (*gestalt.StoredUser, error) { ... }
+
+    // IntegrationTokenStore (tokens are pre-sealed by the host)
+    func (ds *MyDatastore) PutIntegrationToken(ctx context.Context, token *gestalt.StoredIntegrationToken) error { ... }
+    func (ds *MyDatastore) GetIntegrationToken(ctx context.Context, userID, integration, connection, instance string) (*gestalt.StoredIntegrationToken, error) { ... }
+    func (ds *MyDatastore) ListIntegrationTokens(ctx context.Context, userID, integration, connection string) ([]*gestalt.StoredIntegrationToken, error) { ... }
+    func (ds *MyDatastore) DeleteIntegrationToken(ctx context.Context, id string) error { ... }
+
+    // APITokenStore (tokens are SHA-256 hashed, not encrypted)
+    func (ds *MyDatastore) PutAPIToken(ctx context.Context, token *gestalt.StoredAPIToken) error { ... }
+    func (ds *MyDatastore) GetAPITokenByHash(ctx context.Context, hashedToken string) (*gestalt.StoredAPIToken, error) { ... }
+    func (ds *MyDatastore) ListAPITokens(ctx context.Context, userID string) ([]*gestalt.StoredAPIToken, error) { ... }
+    func (ds *MyDatastore) RevokeAPIToken(ctx context.Context, userID, id string) error { ... }
+    func (ds *MyDatastore) RevokeAllAPITokens(ctx context.Context, userID string) (int64, error) { ... }
+
+    func main() {
+    	gestalt.ServeDatastoreProvider(context.Background(), &MyDatastore{})
+    }
+    ```
+
+    Optionally implement `OAuthRegistrationStore` (`GetOAuthRegistration`, `PutOAuthRegistration`, `DeleteOAuthRegistration`) to support MCP OAuth dynamic client registration.
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use gestalt_plugin_sdk as gestalt;
+    use gestalt::{DatastoreProvider, StoredUser, StoredIntegrationToken, StoredApiToken};
+
+    pub struct MyDatastore {
+        // Your database connection.
+    }
+
+    #[gestalt::async_trait]
+    impl DatastoreProvider for MyDatastore {
+        async fn configure(
+            &self,
+            _name: &str,
+            config: serde_json::Map<String, serde_json::Value>,
+        ) -> gestalt::Result<()> {
+            // Initialize database connection from config["dsn"].
+            Ok(())
+        }
+
+        async fn health_check(&self) -> gestalt::Result<()> {
+            // Ping the database.
+            Ok(())
+        }
+
+        async fn migrate(&self) -> gestalt::Result<()> {
+            // Create users, integration_tokens, and api_tokens tables.
+            Ok(())
+        }
+
+        // UserStore
+        async fn get_user(&self, id: &str) -> gestalt::Result<Option<StoredUser>> { ... }
+        async fn find_or_create_user(&self, email: &str) -> gestalt::Result<StoredUser> { ... }
+
+        // IntegrationTokenStore (tokens are pre-sealed by the host)
+        async fn put_integration_token(&self, token: StoredIntegrationToken) -> gestalt::Result<()> { ... }
+        async fn get_integration_token(&self, user_id: &str, integration: &str, connection: &str, instance: &str) -> gestalt::Result<Option<StoredIntegrationToken>> { ... }
+        async fn list_integration_tokens(&self, user_id: &str, integration: &str, connection: &str) -> gestalt::Result<Vec<StoredIntegrationToken>> { ... }
+        async fn delete_integration_token(&self, id: &str) -> gestalt::Result<()> { ... }
+
+        // APITokenStore (tokens are SHA-256 hashed, not encrypted)
+        async fn put_api_token(&self, token: StoredApiToken) -> gestalt::Result<()> { ... }
+        async fn get_api_token_by_hash(&self, hashed_token: &str) -> gestalt::Result<Option<StoredApiToken>> { ... }
+        async fn list_api_tokens(&self, user_id: &str) -> gestalt::Result<Vec<StoredApiToken>> { ... }
+        async fn revoke_api_token(&self, user_id: &str, id: &str) -> gestalt::Result<()> { ... }
+        async fn revoke_all_api_tokens(&self, user_id: &str) -> gestalt::Result<i64> { ... }
+    }
+
+    gestalt::export_datastore_provider!(constructor = MyDatastore::default);
+    ```
+
+    OAuth registration methods (`get_oauth_registration`, `put_oauth_registration`, `delete_oauth_registration`) have default implementations that return unimplemented errors. Override them to support MCP OAuth.
+  </Tabs.Tab>
+</Tabs>
+
+### Config reference
+
+```yaml
+datastore:
+  provider:
+    source:
+      path: ./my-datastore/plugin.yaml
+  config:
+    dsn: ${DATABASE_URL}
+```
