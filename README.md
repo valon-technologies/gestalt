@@ -47,8 +47,8 @@ Write your own plugins or point Gestalt at any OpenAPI spec, MCP server, or Grap
 
 ## Getting started
 
-See the [Getting Started](https://docs.valon.tools/getting-started) guide.
+See the [Getting Started](https://gestaltd.ai/getting-started) guide.
 
 ## Documentation
 
-[docs.valon.tools](https://docs.valon.tools)
+[gestaltd.ai](https://gestaltd.ai)

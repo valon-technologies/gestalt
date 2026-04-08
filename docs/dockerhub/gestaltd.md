@@ -257,7 +257,7 @@ RUN cd ./my-plugin && \
 
 ## Learn more
 
-- Docs: https://docs.valon.tools
-- CLI reference: https://docs.valon.tools/reference/cli
-- Deployment docs: https://docs.valon.tools/deploy
+- Docs: https://gestaltd.ai
+- CLI reference: https://gestaltd.ai/reference/cli
+- Deployment docs: https://gestaltd.ai/deploy
 - Source: https://github.com/valon-technologies/gestalt

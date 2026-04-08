@@ -114,11 +114,43 @@ resource "google_compute_global_forwarding_rule" "docs" {
   ip_address            = google_compute_global_address.docs.address
 }
 
+# ---------- HTTP-to-HTTPS Redirect ----------
+
+resource "google_compute_url_map" "docs_http_redirect" {
+  name = "toolshed-docs-http-redirect"
+
+  default_url_redirect {
+    https_redirect         = true
+    strip_query            = false
+    redirect_response_code = "MOVED_PERMANENTLY_DEFAULT"
+  }
+}
+
+resource "google_compute_target_http_proxy" "docs_redirect" {
+  name    = "toolshed-docs-http-proxy"
+  url_map = google_compute_url_map.docs_http_redirect.id
+}
+
+resource "google_compute_global_forwarding_rule" "docs_http" {
+  name                  = "toolshed-docs-http-forwarding-rule"
+  load_balancing_scheme = "EXTERNAL_MANAGED"
+  target                = google_compute_target_http_proxy.docs_redirect.id
+  port_range            = "80"
+  ip_address            = google_compute_global_address.docs.address
+}
+
 # ---------- DNS ----------
+
+resource "google_dns_managed_zone" "docs" {
+  provider    = google.dns
+  name        = "gestaltd-ai"
+  dns_name    = "${var.domain}."
+  description = "DNS zone for ${var.domain}"
+}
 
 resource "google_dns_record_set" "docs" {
   provider     = google.dns
-  managed_zone = var.dns_zone_name
+  managed_zone = google_dns_managed_zone.docs.name
   name         = "${var.domain}."
   type         = "A"
   ttl          = 300

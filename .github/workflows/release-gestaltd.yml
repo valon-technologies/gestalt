@@ -107,7 +107,7 @@ jobs:
       install-markdown: |
         - Homebrew: `brew upgrade gestaltd`
         - Docker: `docker pull valontechnologies/gestaltd:${version}`
-        - Docs: [Deployment guide](https://docs.valon.tools/deploy)
+        - Docs: [Deployment guide](https://gestaltd.ai/deploy)
       exclude-subject-patterns: |
         ^Update gestaltd formula and chart to v
       download-artifact-pattern: 'gestaltd-*'

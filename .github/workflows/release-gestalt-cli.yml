@@ -36,7 +36,7 @@ jobs:
       install-markdown: |
         - Homebrew: `brew upgrade gestalt`
         - Docker: `docker pull valontechnologies/gestalt:${version}`
-        - Docs: [CLI reference](https://docs.valon.tools/reference/cli)
+        - Docs: [CLI reference](https://gestaltd.ai/reference/cli)
       exclude-subject-patterns: |
         ^Update gestalt formula to v
       download-artifact-pattern: 'gestalt-*'

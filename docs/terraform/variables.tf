@@ -21,16 +21,10 @@ variable "dns_project_id" {
   default     = "serviceone"
 }
 
-variable "dns_zone_name" {
-  description = "Cloud DNS managed zone name"
-  type        = string
-  default     = "valon-tools"
-}
-
 variable "domain" {
   description = "Docs site domain"
   type        = string
-  default     = "docs.valon.tools"
+  default     = "gestaltd.ai"
 }
 
 variable "docs_image" {

@@ -2,7 +2,7 @@ ARG GESTALT_VERSION=dev
 ARG GESTALT_REVISION=unknown
 ARG GESTALT_CREATED=unknown
 ARG GESTALT_SOURCE=https://github.com/valon-technologies/gestalt
-ARG GESTALT_DOCUMENTATION=https://docs.valon.tools
+ARG GESTALT_DOCUMENTATION=https://gestaltd.ai
 ARG GESTALT_URL=https://hub.docker.com/r/valontechnologies/gestaltd
 
 FROM --platform=$BUILDPLATFORM node:25.9.0-alpine3.23@sha256:ad82ecad30371c43f4057aaa4800a8ed88f9446553a2d21323710c7b937177fc AS frontend
