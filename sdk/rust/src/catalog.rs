@@ -100,6 +100,9 @@ pub fn write_catalog(catalog: &Catalog, path: impl AsRef<Path>) -> Result<()> {
     for op in &mut yaml_catalog.operations {
         op.input_schema = None;
         op.output_schema = None;
+        if op.annotations.as_ref().is_some_and(|a| a.is_empty()) {
+            op.annotations = None;
+        }
     }
     let yaml = serde_yaml::to_string(&yaml_catalog)?;
     std::fs::write(path, yaml)?;
@@ -235,16 +238,14 @@ pub(crate) fn catalog_json(catalog: &Catalog) -> Result<String> {
                 description: &op.description,
                 input_schema: &op.input_schema,
                 output_schema: &op.output_schema,
-                annotations: op
-                    .annotations
-                    .as_ref()
-                    .filter(|a| !a.is_empty())
-                    .map(|a| WireAnnotations {
+                annotations: op.annotations.as_ref().filter(|a| !a.is_empty()).map(|a| {
+                    WireAnnotations {
                         read_only_hint: &a.read_only_hint,
                         idempotent_hint: &a.idempotent_hint,
                         destructive_hint: &a.destructive_hint,
                         open_world_hint: &a.open_world_hint,
-                    }),
+                    }
+                }),
                 parameters: op
                     .parameters
                     .iter()
