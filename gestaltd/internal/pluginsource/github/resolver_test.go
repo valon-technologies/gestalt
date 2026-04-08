@@ -25,10 +25,10 @@ const (
 )
 
 var testSource = pluginsource.Source{
-	Host:   pluginsource.HostGitHub,
-	Owner:  testOwner,
-	Repo:   testRepo,
-	Plugin: testPlugin,
+	Host:  pluginsource.HostGitHub,
+	Owner: testOwner,
+	Repo:  testRepo,
+	Path:  "plugins/" + testPlugin,
 }
 
 func currentPlatformAssetName() string {

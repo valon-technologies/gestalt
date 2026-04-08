@@ -16,17 +16,22 @@ func TestParse(t *testing.T) {
 		{
 			name:  "valid basic",
 			input: "github.com/testowner/testrepo/testplugin",
-			want:  Source{Host: HostGitHub, Owner: "testowner", Repo: "testrepo", Plugin: "testplugin"},
+			want:  Source{Host: HostGitHub, Owner: "testowner", Repo: "testrepo", Path: "testplugin"},
 		},
 		{
 			name:  "valid with hyphens",
 			input: "github.com/test-org/test-repo/test-plugin",
-			want:  Source{Host: HostGitHub, Owner: "test-org", Repo: "test-repo", Plugin: "test-plugin"},
+			want:  Source{Host: HostGitHub, Owner: "test-org", Repo: "test-repo", Path: "test-plugin"},
 		},
 		{
 			name:  "valid with dots hyphens underscores",
 			input: "github.com/my-org/my.repo/my_plugin",
-			want:  Source{Host: HostGitHub, Owner: "my-org", Repo: "my.repo", Plugin: "my_plugin"},
+			want:  Source{Host: HostGitHub, Owner: "my-org", Repo: "my.repo", Path: "my_plugin"},
+		},
+		{
+			name:  "valid nested package path",
+			input: "github.com/testowner/testrepo/plugins/testplugin",
+			want:  Source{Host: HostGitHub, Owner: "testowner", Repo: "testrepo", Path: "plugins/testplugin"},
 		},
 		{
 			name:    "reject uppercase",
@@ -36,11 +41,6 @@ func TestParse(t *testing.T) {
 		{
 			name:    "reject missing plugin segment",
 			input:   "github.com/testowner/testrepo",
-			wantErr: true,
-		},
-		{
-			name:    "reject extra segments",
-			input:   "github.com/testowner/testrepo/testplugin/extra",
 			wantErr: true,
 		},
 		{
@@ -61,6 +61,11 @@ func TestParse(t *testing.T) {
 		{
 			name:    "reject trailing whitespace",
 			input:   "github.com/testowner/testrepo/testplugin ",
+			wantErr: true,
+		},
+		{
+			name:    "reject invalid nested segment",
+			input:   "github.com/testowner/testrepo/plugins/TestPlugin",
 			wantErr: true,
 		},
 	}
@@ -88,7 +93,7 @@ func TestParse(t *testing.T) {
 func TestSourceStringRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	const input = "github.com/testowner/testrepo/testplugin"
+	const input = "github.com/testowner/testrepo/plugins/testplugin"
 	src, err := Parse(input)
 	if err != nil {
 		t.Fatalf("Parse(%q) error: %v", input, err)
@@ -101,7 +106,7 @@ func TestSourceStringRoundTrip(t *testing.T) {
 func TestSourceAssetName(t *testing.T) {
 	t.Parallel()
 
-	src := Source{Host: HostGitHub, Owner: "testowner", Repo: "testrepo", Plugin: "testplugin"}
+	src := Source{Host: HostGitHub, Owner: "testowner", Repo: "testrepo", Path: "plugins/testplugin"}
 	const want = "gestalt-plugin-testplugin_v1.2.3.tar.gz"
 	if got := src.AssetName("1.2.3"); got != want {
 		t.Errorf("AssetName(1.2.3) = %q, want %q", got, want)
@@ -111,17 +116,26 @@ func TestSourceAssetName(t *testing.T) {
 func TestSourceReleaseTag(t *testing.T) {
 	t.Parallel()
 
-	src := Source{Host: HostGitHub, Owner: "testowner", Repo: "testrepo", Plugin: "testplugin"}
-	const want = "testplugin/v1.2.3"
+	src := Source{Host: HostGitHub, Owner: "testowner", Repo: "testrepo", Path: "plugins/testplugin"}
+	const want = "plugins/testplugin/v1.2.3"
 	if got := src.ReleaseTag("1.2.3"); got != want {
 		t.Errorf("ReleaseTag(1.2.3) = %q, want %q", got, want)
+	}
+}
+
+func TestSourcePluginName(t *testing.T) {
+	t.Parallel()
+
+	src := Source{Host: HostGitHub, Owner: "testowner", Repo: "testrepo", Path: "plugins/testplugin"}
+	if got := src.PluginName(); got != "testplugin" {
+		t.Errorf("PluginName() = %q, want %q", got, "testplugin")
 	}
 }
 
 func TestSourceRepoSlug(t *testing.T) {
 	t.Parallel()
 
-	src := Source{Host: HostGitHub, Owner: "testowner", Repo: "testrepo", Plugin: "testplugin"}
+	src := Source{Host: HostGitHub, Owner: "testowner", Repo: "testrepo", Path: "testplugin"}
 	const want = "testowner/testrepo"
 	if got := src.RepoSlug(); got != want {
 		t.Errorf("RepoSlug() = %q, want %q", got, want)

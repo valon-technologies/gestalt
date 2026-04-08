@@ -82,7 +82,7 @@ func (r *GitHubResolver) Resolve(ctx context.Context, src pluginsource.Source, v
 		return nil, err
 	}
 
-	asset, err := findAsset(release.Assets, src.Plugin, version)
+	asset, err := findAsset(release.Assets, src.PluginName(), version)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +147,7 @@ func findAsset(assets []releaseAsset, plugin, version string) (releaseAsset, err
 			return asset, nil
 		}
 	}
-	oldName := pluginsource.Source{Plugin: plugin}.AssetName(version)
+	oldName := pluginsource.Source{Path: plugin}.AssetName(version)
 	oldAsset, hasOldAsset := findAssetByName(assets, oldName)
 
 	versionedMatches := make([]releaseAsset, 0, 1)

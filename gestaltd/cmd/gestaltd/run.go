@@ -361,7 +361,7 @@ func buildMCPSurface(cfg *config.Config, connMaps bootstrap.ConnectionMaps) mcpS
 		surface.mcpConnection[name] = connMaps.MCPConnection[name]
 		if intg.MCPToolPrefix == "" && intg.Plugin.HasManagedSource() {
 			if src, err := pluginsource.Parse(intg.Plugin.SourceRef()); err == nil {
-				surface.toolPrefixes[name] = src.Plugin + "_"
+				surface.toolPrefixes[name] = src.PluginName() + "_"
 			}
 		}
 		if intg.MCPToolPrefix != "" {

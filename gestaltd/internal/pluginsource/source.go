@@ -2,25 +2,26 @@ package pluginsource
 
 import (
 	"fmt"
+	"path"
 	"regexp"
 	"strings"
 )
 
 const (
-	HostGitHub    = "github.com"
-	segmentCount  = 4
-	assetPrefix   = "gestalt-plugin-"
-	assetSuffix   = ".tar.gz"
-	versionPrefix = "v"
+	HostGitHub      = "github.com"
+	minSegmentCount = 4
+	assetPrefix     = "gestalt-plugin-"
+	assetSuffix     = ".tar.gz"
+	versionPrefix   = "v"
 )
 
 var segmentRe = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
 
 type Source struct {
-	Host   string
-	Owner  string
-	Repo   string
-	Plugin string
+	Host  string
+	Owner string
+	Repo  string
+	Path  string
 }
 
 func Parse(raw string) (Source, error) {
@@ -29,35 +30,45 @@ func Parse(raw string) (Source, error) {
 	}
 
 	parts := strings.Split(raw, "/")
-	if len(parts) != segmentCount {
-		return Source{}, fmt.Errorf("pluginsource: expected %d segments, got %d", segmentCount, len(parts))
+	if len(parts) < minSegmentCount {
+		return Source{}, fmt.Errorf("pluginsource: expected at least %d segments, got %d", minSegmentCount, len(parts))
 	}
 
-	host, owner, repo, plugin := parts[0], parts[1], parts[2], parts[3]
+	host, owner, repo := parts[0], parts[1], parts[2]
 
 	if host != HostGitHub {
 		return Source{}, fmt.Errorf("pluginsource: unsupported host %q (only %s is supported)", host, HostGitHub)
 	}
 
-	for _, seg := range []string{owner, repo, plugin} {
+	for _, seg := range parts[1:] {
 		if !segmentRe.MatchString(seg) {
 			return Source{}, fmt.Errorf("pluginsource: invalid segment %q", seg)
 		}
 	}
 
-	return Source{Host: host, Owner: owner, Repo: repo, Plugin: plugin}, nil
+	packagePath := strings.Join(parts[3:], "/")
+
+	return Source{Host: host, Owner: owner, Repo: repo, Path: packagePath}, nil
+}
+
+func (s Source) PackagePath() string {
+	return s.Path
+}
+
+func (s Source) PluginName() string {
+	return path.Base(s.Path)
 }
 
 func (s Source) String() string {
-	return s.Host + "/" + s.Owner + "/" + s.Repo + "/" + s.Plugin
+	return s.Host + "/" + s.Owner + "/" + s.Repo + "/" + s.PackagePath()
 }
 
 func (s Source) AssetName(version string) string {
-	return assetPrefix + s.Plugin + "_" + versionPrefix + version + assetSuffix
+	return assetPrefix + s.PluginName() + "_" + versionPrefix + version + assetSuffix
 }
 
 func (s Source) ReleaseTag(version string) string {
-	return s.Plugin + "/" + versionPrefix + version
+	return s.PackagePath() + "/" + versionPrefix + version
 }
 
 func (s Source) RepoSlug() string {

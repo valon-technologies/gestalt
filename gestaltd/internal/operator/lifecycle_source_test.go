@@ -26,7 +26,7 @@ const (
 	testRepo    = "testrepo"
 	testPlugin  = "testplugin"
 	testVersion = "1.0.0"
-	testSource  = "github.com/" + testOwner + "/" + testRepo + "/" + testPlugin
+	testSource  = "github.com/" + testOwner + "/" + testRepo + "/plugins/" + testPlugin
 	testBinary  = "fake-binary-content"
 )
 
@@ -366,10 +366,10 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 	dir := t.TempDir()
 
 	src := pluginsource.Source{
-		Host:   pluginsource.HostGitHub,
-		Owner:  testOwner,
-		Repo:   testRepo,
-		Plugin: testPlugin,
+		Host:  pluginsource.HostGitHub,
+		Owner: testOwner,
+		Repo:  testRepo,
+		Path:  "plugins/" + testPlugin,
 	}
 	expectedAssetName := src.AssetName(testVersion)
 	expectedTag := src.ReleaseTag(testVersion)
@@ -569,10 +569,10 @@ func TestSourcePluginGitHubResolverPrefersCurrentLinuxLibcAsset(t *testing.T) {
 	}
 
 	src := pluginsource.Source{
-		Host:   pluginsource.HostGitHub,
-		Owner:  testOwner,
-		Repo:   testRepo,
-		Plugin: testPlugin,
+		Host:  pluginsource.HostGitHub,
+		Owner: testOwner,
+		Repo:  testRepo,
+		Path:  "plugins/" + testPlugin,
 	}
 	dir := t.TempDir()
 	exactPath := artifactRelPath("provider-" + currentLibC)

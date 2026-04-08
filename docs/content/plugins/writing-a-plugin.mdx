@@ -110,6 +110,8 @@ Static metadata, auth, and passthrough surfaces live in a manifest file. Gestalt
 
 The manifest stays the source of truth for display name, description, auth, the connection model, and any passthrough API surfaces (REST, OpenAPI, GraphQL, or MCP).
 
+`source` may include nested segments after the repository, such as `github.com/example/plugins/catalog/my-plugin`. Gestalt keeps the final segment as the plugin name and uses the full path for release tag resolution.
+
 ## Define operations
 
 <Tabs items={['Go', 'Python']}>

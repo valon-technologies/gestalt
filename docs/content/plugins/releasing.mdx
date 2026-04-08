@@ -99,6 +99,8 @@ gestaltd plugin release --version 0.1.0
 
 Run this from the plugin source directory. It produces release archives and writes a checksums file.
 
+Release tags are derived from the package path after the repository. For example, `source: github.com/acme/plugins/catalog/support-api` releases from the tag `plugins/catalog/support-api/v0.1.0`.
+
 For executable Go and Python source plugins, `plugin release` materializes the
 executable catalog automatically and builds the host-platform artifact by
 default. Pass `--platform` with a comma-separated list such as

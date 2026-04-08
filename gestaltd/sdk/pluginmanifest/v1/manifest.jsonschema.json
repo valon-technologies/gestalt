@@ -10,7 +10,7 @@
   "properties": {
     "source": {
       "type": "string",
-      "pattern": "^github\\.com/[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$"
+      "pattern": "^github\\.com/[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*(/[a-z0-9][a-z0-9._-]*)*$"
     },
     "version": {
       "type": "string",
