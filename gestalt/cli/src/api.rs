@@ -40,22 +40,44 @@ pub fn normalize_url(url: &str) -> String {
 }
 
 pub fn resolve_url(url_override: Option<&str>) -> Result<String> {
+    match find_configured_url(url_override)? {
+        Some(url) => Ok(url),
+        None => bail_no_url_configured(),
+    }
+}
+
+pub fn resolve_url_with_fallback(
+    url_override: Option<&str>,
+    fallback_url: Option<&str>,
+) -> Result<String> {
+    match find_configured_url(url_override)? {
+        Some(url) => Ok(url),
+        None => match fallback_url {
+            Some(url) => Ok(normalize_url(url)),
+            None => bail_no_url_configured(),
+        },
+    }
+}
+
+fn find_configured_url(url_override: Option<&str>) -> Result<Option<String>> {
     if let Some(url) = url_override {
-        return Ok(normalize_url(url));
+        return Ok(Some(normalize_url(url)));
     }
     if let Ok(url) = std::env::var("GESTALT_URL")
         && !url.trim().is_empty()
     {
-        return Ok(normalize_url(&url));
+        return Ok(Some(normalize_url(&url)));
     }
     if let Some(url) = find_project_config_value("url")? {
-        return Ok(normalize_url(&url));
-    }
-    let config_store = ConfigStore::new()?;
-    if let Some(url) = config_store.get("url")? {
-        return Ok(normalize_url(&url));
+        return Ok(Some(normalize_url(&url)));
     }
 
+    let config_store = ConfigStore::new()?;
+    Ok(config_store.get("url")?.map(|url| normalize_url(&url)))
+}
+
+fn bail_no_url_configured() -> Result<String> {
+    let config_store = ConfigStore::new()?;
     bail!(
         "no URL configured: use --url, GESTALT_URL, {}, or the user-local config file at {}",
         PROJECT_CONFIG_FILE,
@@ -116,25 +138,27 @@ pub struct ApiClient {
 
 impl ApiClient {
     pub fn from_env(url_override: Option<&str>) -> Result<Self> {
-        let (token, source) =
-            if let Some(key) = std::env::var(ENV_API_KEY).ok().filter(|v| !v.is_empty()) {
-                (key, TokenSource::EnvVar)
-            } else {
-                let store = CredentialStore::new()?;
-                match store.load()? {
-                    Some(creds) => (creds.api_token, TokenSource::StoredCredentials),
-                    None => {
-                        bail!(
-                            "not authenticated: set {} or run 'gestalt auth login'",
-                            ENV_API_KEY
-                        )
-                    }
-                }
-            };
+        if let Some(key) = std::env::var(ENV_API_KEY).ok().filter(|v| !v.is_empty()) {
+            let base_url = resolve_url(url_override)?;
+            let mut client = Self::new(&base_url, &key)?;
+            client.token_source = TokenSource::EnvVar;
+            return Ok(client);
+        }
 
-        let base_url = resolve_url(url_override)?;
-        let mut client = Self::new(&base_url, &token)?;
-        client.token_source = source;
+        let store = CredentialStore::new()?;
+        let creds = match store.load()? {
+            Some(creds) => creds,
+            None => {
+                bail!(
+                    "not authenticated: set {} or run 'gestalt auth login'",
+                    ENV_API_KEY
+                )
+            }
+        };
+
+        let base_url = resolve_url_with_fallback(url_override, creds.api_url())?;
+        let mut client = Self::new(&base_url, &creds.api_token)?;
+        client.token_source = TokenSource::StoredCredentials;
         Ok(client)
     }
 

@@ -181,7 +181,7 @@ where
 
     let store = CredentialStore::new()?;
     store.save(&Credentials {
-        api_url: base_url,
+        api_url: Some(base_url),
         api_token: api_token.to_string(),
         api_token_id: api_token_id.to_string(),
     })?;
@@ -218,15 +218,21 @@ fn build_browser_response_html(title: &str, detail: &str) -> String {
 pub fn logout() -> Result<()> {
     let store = CredentialStore::new()?;
     match store.load() {
-        Ok(Some(creds)) => {
-            let client = ApiClient::new(&creds.api_url, &creds.api_token)?;
-            if let Err(err) = client.revoke_api_token(&creds.api_token_id) {
-                output::print_warning(&format!(
-                    "Failed to revoke stored CLI token {}: {}",
-                    creds.api_token_id, err
-                ));
+        Ok(Some(creds)) => match creds.api_url() {
+            Some(api_url) => {
+                let client = ApiClient::new(api_url, &creds.api_token)?;
+                if let Err(err) = client.revoke_api_token(&creds.api_token_id) {
+                    output::print_warning(&format!(
+                        "Failed to revoke stored CLI token {}: {}",
+                        creds.api_token_id, err
+                    ));
+                }
             }
-        }
+            None => output::print_warning(&format!(
+                "Stored CLI token {} has no associated API URL; removing credentials locally without remote revoke.",
+                creds.api_token_id
+            )),
+        },
         Ok(None) => {}
         Err(err) => output::print_warning(&format!(
             "Stored credentials could not be read; removing them locally without remote revoke: {}",
