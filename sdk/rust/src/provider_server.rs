@@ -30,21 +30,16 @@ pub struct OperationResult {
 
 impl OperationResult {
     pub fn from_response<T: Serialize>(response: Response<T>) -> Self {
-        let status = response.status.unwrap_or(http::StatusCode::OK.as_u16());
+        let status = response.status.unwrap_or(200);
         match serde_json::to_string(&response.body) {
             Ok(body) => Self { status, body },
-            Err(error) => Self::error(
-                http::StatusCode::INTERNAL_SERVER_ERROR.as_u16(),
-                error.to_string(),
-            ),
+            Err(error) => Self::error(500, error.to_string()),
         }
     }
 
     pub fn from_error(error: Error) -> Self {
         Self::error(
-            error
-                .status()
-                .unwrap_or(http::StatusCode::INTERNAL_SERVER_ERROR.as_u16()),
+            error.status().unwrap_or(500),
             error.message().to_owned(),
         )
     }

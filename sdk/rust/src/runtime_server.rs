@@ -11,7 +11,7 @@ use crate::generated::v1::{
     ConfigurePluginRequest, ConfigurePluginResponse, HealthCheckResponse, PluginKind,
     PluginMetadata,
 };
-use crate::runtime_types::RuntimeMetadata;
+use crate::api::RuntimeMetadata;
 use crate::{CURRENT_PROTOCOL_VERSION, Provider};
 
 #[async_trait]

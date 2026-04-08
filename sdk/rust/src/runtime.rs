@@ -34,37 +34,28 @@ use crate::{
     auth_server::AuthServer, datastore_server::DatastoreServer, runtime_server::RuntimeServer,
 };
 
-pub fn run_provider<P>(provider: Arc<P>, router: Router<P>) -> Result<()>
+fn build_runtime_and_block_on<F, Fut>(f: F) -> Result<()>
 where
-    P: Provider,
+    F: FnOnce() -> Fut,
+    Fut: std::future::Future<Output = Result<()>>,
 {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .map_err(|error| Error::internal(error.to_string()))?;
-    runtime.block_on(serve_provider(provider, router))
+    runtime.block_on(f())
 }
 
-pub fn run_auth_provider<P>(provider: Arc<P>) -> Result<()>
-where
-    P: AuthProvider,
-{
-    let runtime = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .map_err(|error| Error::internal(error.to_string()))?;
-    runtime.block_on(serve_auth_provider(provider))
+pub fn run_provider<P: Provider>(provider: Arc<P>, router: Router<P>) -> Result<()> {
+    build_runtime_and_block_on(|| serve_provider(provider, router))
 }
 
-pub fn run_datastore_provider<P>(provider: Arc<P>) -> Result<()>
-where
-    P: DatastoreProvider,
-{
-    let runtime = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .map_err(|error| Error::internal(error.to_string()))?;
-    runtime.block_on(serve_datastore_provider(provider))
+pub fn run_auth_provider<P: AuthProvider>(provider: Arc<P>) -> Result<()> {
+    build_runtime_and_block_on(|| serve_auth_provider(provider))
+}
+
+pub fn run_datastore_provider<P: DatastoreProvider>(provider: Arc<P>) -> Result<()> {
+    build_runtime_and_block_on(|| serve_datastore_provider(provider))
 }
 
 pub fn write_catalog_path<P>(router: &Router<P>, path: impl AsRef<Path>) -> Result<()> {
@@ -76,13 +67,13 @@ pub fn maybe_write_catalog<P>(router: &Router<P>) -> Result<bool> {
         return Ok(false);
     };
 
-    let router = if let Ok(name) = env::var(ENV_PLUGIN_NAME) {
-        (*router).clone().with_name(name)
+    let catalog = if let Ok(name) = env::var(ENV_PLUGIN_NAME) {
+        router.catalog().with_name(name)
     } else {
-        (*router).clone()
+        router.catalog()
     };
 
-    write_catalog(&router.catalog(), PathBuf::from(path))?;
+    write_catalog(&catalog, PathBuf::from(path))?;
     Ok(true)
 }
 

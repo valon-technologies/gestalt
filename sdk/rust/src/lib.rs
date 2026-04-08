@@ -12,8 +12,6 @@ mod provider_server;
 mod router;
 mod rpc_status;
 mod runtime_server;
-mod runtime_types;
-
 pub mod runtime;
 
 /// The shared protobuf package name used by the Gestalt SDK protocol surface.
@@ -48,7 +46,7 @@ pub use env::{
 pub use error::{Error, Result};
 pub use provider_server::{OperationResult, ProviderServer};
 pub use router::{Operation, Router};
-pub use runtime_types::RuntimeMetadata;
+pub use api::RuntimeMetadata;
 
 #[doc(hidden)]
 pub trait IntoRouterResult<P> {
