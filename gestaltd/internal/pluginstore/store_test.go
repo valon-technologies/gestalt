@@ -74,9 +74,9 @@ func TestExecutablePathForManifestPrefersProviderEntrypoint(t *testing.T) {
 	manifest := &pluginmanifestv1.Manifest{
 		Source:  "github.com/testowner/plugins/multi-kind",
 		Version: "0.0.1-alpha.1",
-		Kinds:   []string{pluginmanifestv1.KindAuth, pluginmanifestv1.KindProvider},
+		Kinds:   []string{pluginmanifestv1.KindAuth, pluginmanifestv1.KindPlugin},
 		Auth:    &pluginmanifestv1.AuthMetadata{},
-		Provider: &pluginmanifestv1.Provider{
+		Plugin: &pluginmanifestv1.Plugin{
 			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
 		},
 		Entrypoints: pluginmanifestv1.Entrypoints{
@@ -514,8 +514,8 @@ func mustBuildPluginDir(t *testing.T, dir, source, version, content, schema stri
 	manifest := &pluginmanifestv1.Manifest{
 		Source:  source,
 		Version: version,
-		Kinds:   []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{
+		Kinds:   []string{pluginmanifestv1.KindPlugin},
+		Plugin: &pluginmanifestv1.Plugin{
 			ConfigSchemaPath: schemaPath,
 		},
 		Artifacts: []pluginmanifestv1.Artifact{
@@ -557,10 +557,10 @@ func mustBuildPluginDirWithDigest(t *testing.T, dir, source, version, content, d
 	}
 
 	manifest := &pluginmanifestv1.Manifest{
-		Source:   source,
-		Version:  version,
-		Kinds:    []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{},
+		Source:  source,
+		Version: version,
+		Kinds:   []string{pluginmanifestv1.KindPlugin},
+		Plugin:  &pluginmanifestv1.Plugin{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -610,10 +610,10 @@ func mustBuildPackageWithDigest(t *testing.T, dir, source, version, content, dig
 		digest = digestOverride
 	}
 	manifest := &pluginmanifestv1.Manifest{
-		Source:   source,
-		Version:  version,
-		Kinds:    []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{},
+		Source:  source,
+		Version: version,
+		Kinds:   []string{pluginmanifestv1.KindPlugin},
+		Plugin:  &pluginmanifestv1.Plugin{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -650,10 +650,10 @@ func mustBuildMismatchPackage(t *testing.T, dir, source, version, content, diges
 	t.Helper()
 
 	manifest := &pluginmanifestv1.Manifest{
-		Source:   source,
-		Version:  version,
-		Kinds:    []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{},
+		Source:  source,
+		Version: version,
+		Kinds:   []string{pluginmanifestv1.KindPlugin},
+		Plugin:  &pluginmanifestv1.Plugin{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -712,10 +712,10 @@ func mustBuildPackageWithDuplicateArtifact(t *testing.T, dir, source, version, f
 	artifactName := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider"))
 	sum := sha256.Sum256([]byte(firstContent))
 	manifest := &pluginmanifestv1.Manifest{
-		Source:   source,
-		Version:  version,
-		Kinds:    []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{},
+		Source:  source,
+		Version: version,
+		Kinds:   []string{pluginmanifestv1.KindPlugin},
+		Plugin:  &pluginmanifestv1.Plugin{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -773,10 +773,10 @@ func newV2Manifest(source, version, content string) *pluginmanifestv1.Manifest {
 	artifactPath := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider"))
 	sum := sha256.Sum256([]byte(content))
 	return &pluginmanifestv1.Manifest{
-		Source:   source,
-		Version:  version,
-		Kinds:    []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{},
+		Source:  source,
+		Version: version,
+		Kinds:   []string{pluginmanifestv1.KindPlugin},
+		Plugin:  &pluginmanifestv1.Plugin{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,

@@ -1076,8 +1076,8 @@ func setupPluginDirWithVersion(t *testing.T, baseDir, version string) string {
 		Version:     version,
 		DisplayName: "Example Provider",
 		Description: "A minimal example provider built with the public SDK",
-		Kinds:       []string{pluginmanifestv1.KindProvider},
-		Provider:    &pluginmanifestv1.Provider{},
+		Kinds:       []string{pluginmanifestv1.KindPlugin},
+		Plugin:      &pluginmanifestv1.Plugin{},
 	}
 	writeManifestFile(t, pluginDir, manifest)
 	return pluginDir

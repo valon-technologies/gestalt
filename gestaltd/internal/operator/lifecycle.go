@@ -504,7 +504,7 @@ func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths initPa
 	if err != nil {
 		return LockProviderEntry{}, fmt.Errorf("provider %q install source plugin: %w", name, err)
 	}
-	if err := validateInstalledManifestKind(pluginmanifestv1.KindProvider, name, installed.Manifest); err != nil {
+	if err := validateInstalledManifestKind(pluginmanifestv1.KindPlugin, name, installed.Manifest); err != nil {
 		return LockProviderEntry{}, err
 	}
 
@@ -515,7 +515,7 @@ func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths initPa
 		return LockProviderEntry{}, fmt.Errorf("provider %q: manifest version %q does not match config version %q", name, installed.Manifest.Version, plugin.SourceVersion())
 	}
 
-	if err := pluginpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, pluginmanifestv1.KindProvider, configMap); err != nil {
+	if err := pluginpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, pluginmanifestv1.KindPlugin, configMap); err != nil {
 		return LockProviderEntry{}, fmt.Errorf("plugin config validation for provider %q: %w", name, err)
 	}
 	fingerprint, err := PluginFingerprint(name, plugin, paths.configDir)
@@ -735,7 +735,7 @@ func applyLocalProviderManifest(name string, plugin *config.PluginDef, configMap
 	if plugin.Command != "" {
 		return nil
 	}
-	if entry := pluginpkg.EntrypointForKind(plugin.ResolvedManifest, pluginmanifestv1.KindProvider); entry != nil {
+	if entry := pluginpkg.EntrypointForKind(plugin.ResolvedManifest, pluginmanifestv1.KindPlugin); entry != nil {
 		candidate := filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(entry.ArtifactPath))
 		if _, err := os.Stat(candidate); err == nil {
 			plugin.Command = candidate
@@ -882,10 +882,10 @@ func (l *Lifecycle) applyLockedComponentEntry(paths initPaths, entry *LockEntry,
 
 func bindResolvedProviderManifest(name string, plugin *config.PluginDef, manifestPath string, manifest *pluginmanifestv1.Manifest, configMap map[string]any) error {
 	manifest = pluginpkg.ResolveManifestLocalReferences(manifest, manifestPath)
-	if err := validateInstalledManifestKind(pluginmanifestv1.KindProvider, name, manifest); err != nil {
+	if err := validateInstalledManifestKind(pluginmanifestv1.KindPlugin, name, manifest); err != nil {
 		return err
 	}
-	if err := pluginpkg.ValidateConfigForManifest(manifestPath, manifest, pluginmanifestv1.KindProvider, configMap); err != nil {
+	if err := pluginpkg.ValidateConfigForManifest(manifestPath, manifest, pluginmanifestv1.KindPlugin, configMap); err != nil {
 		return fmt.Errorf("plugin config validation for provider %q: %w", name, err)
 	}
 	resolvePluginIcon(manifest, manifestPath, plugin)

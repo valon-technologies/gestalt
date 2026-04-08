@@ -56,8 +56,8 @@ properties:
 			manifest := &pluginmanifestv1.Manifest{
 				Source:  "github.com/acme/plugins/provider",
 				Version: "0.0.1-alpha.1",
-				Kinds:   []string{pluginmanifestv1.KindProvider},
-				Provider: &pluginmanifestv1.Provider{
+				Kinds:   []string{pluginmanifestv1.KindPlugin},
+				Plugin: &pluginmanifestv1.Plugin{
 					ConfigSchemaPath: tc.schemaPath,
 				},
 				Artifacts: []pluginmanifestv1.Artifact{
@@ -83,10 +83,10 @@ properties:
 				t.Fatalf("WriteFile(catalog): %v", err)
 			}
 
-			if err := ValidateConfigForManifest(manifestPath, manifest, pluginmanifestv1.KindProvider, map[string]any{"api_key": "sk-test"}); err != nil {
+			if err := ValidateConfigForManifest(manifestPath, manifest, pluginmanifestv1.KindPlugin, map[string]any{"api_key": "sk-test"}); err != nil {
 				t.Fatalf("ValidateConfigForManifest(valid): %v", err)
 			}
-			if err := ValidateConfigForManifest(manifestPath, manifest, pluginmanifestv1.KindProvider, map[string]any{"missing": true}); err == nil {
+			if err := ValidateConfigForManifest(manifestPath, manifest, pluginmanifestv1.KindPlugin, map[string]any{"missing": true}); err == nil {
 				t.Fatal("expected schema validation failure")
 			}
 		})

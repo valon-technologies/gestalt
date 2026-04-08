@@ -29,7 +29,7 @@ func (s SpecSurface) ConnectionField() string {
 	}
 }
 
-func ManifestProviderSurfaceURL(provider *pluginmanifestv1.Provider, surface SpecSurface) string {
+func ManifestProviderSurfaceURL(provider *pluginmanifestv1.Plugin, surface SpecSurface) string {
 	if provider == nil {
 		return ""
 	}
@@ -45,7 +45,7 @@ func ManifestProviderSurfaceURL(provider *pluginmanifestv1.Provider, surface Spe
 	}
 }
 
-func ManifestProviderSurfaceConnectionName(provider *pluginmanifestv1.Provider, surface SpecSurface) string {
+func ManifestProviderSurfaceConnectionName(provider *pluginmanifestv1.Plugin, surface SpecSurface) string {
 	if provider == nil {
 		return ""
 	}

@@ -48,10 +48,10 @@ func unknownSiblingArtifactPath(artifactPath string) string {
 
 func newProviderManifest(source, version, artifactPath, digest string) *pluginmanifestv1.Manifest {
 	return &pluginmanifestv1.Manifest{
-		Source:   source,
-		Version:  version,
-		Kinds:    []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{},
+		Source:  source,
+		Version: version,
+		Kinds:   []string{pluginmanifestv1.KindPlugin},
+		Plugin:  &pluginmanifestv1.Plugin{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     testArtifactOS,
@@ -91,10 +91,10 @@ func mustWriteManifest(t *testing.T, dir string, manifest *pluginmanifestv1.Mani
 
 func mustProviderManifest(source, version, osName, arch, artifactPath, sha string) *pluginmanifestv1.Manifest {
 	return &pluginmanifestv1.Manifest{
-		Source:   source,
-		Version:  version,
-		Kinds:    []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{},
+		Source:  source,
+		Version: version,
+		Kinds:   []string{pluginmanifestv1.KindPlugin},
+		Plugin:  &pluginmanifestv1.Plugin{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     osName,
@@ -155,7 +155,7 @@ func mustWriteManifestData(t *testing.T, dir, name string, data []byte) string {
 
 func mustWriteStaticCatalog(t *testing.T, dir string, manifest *pluginmanifestv1.Manifest) {
 	t.Helper()
-	if manifest == nil || manifest.Provider == nil {
+	if manifest == nil || manifest.Plugin == nil {
 		return
 	}
 	mustWriteFile(t, filepath.Join(dir, StaticCatalogFile), []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n"), 0644)

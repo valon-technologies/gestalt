@@ -286,8 +286,8 @@ func writeReleaseManifestFile(stagingDir, manifestFile, manifestFormat string, m
 
 func releaseRequiresBuildTarget(manifest *pluginmanifestv1.Manifest, kind string) bool {
 	switch kind {
-	case pluginmanifestv1.KindProvider:
-		return manifestHasKind(manifest, kind) && manifest.Entrypoints.Provider == nil && (manifest == nil || manifest.Provider == nil || !manifest.Provider.IsManifestBacked())
+	case pluginmanifestv1.KindPlugin:
+		return manifestHasKind(manifest, kind) && manifest.Entrypoints.Provider == nil && (manifest == nil || manifest.Plugin == nil || !manifest.Plugin.IsManifestBacked())
 	case pluginmanifestv1.KindAuth:
 		return manifestHasKind(manifest, kind) && manifest.Entrypoints.Auth == nil
 	case pluginmanifestv1.KindDatastore:
@@ -299,7 +299,7 @@ func releaseRequiresBuildTarget(manifest *pluginmanifestv1.Manifest, kind string
 
 func releaseExecutableKinds(manifest *pluginmanifestv1.Manifest) []string {
 	var kinds []string
-	for _, kind := range []string{pluginmanifestv1.KindProvider, pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore} {
+	for _, kind := range []string{pluginmanifestv1.KindPlugin, pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore} {
 		if manifestHasKind(manifest, kind) {
 			kinds = append(kinds, kind)
 		}
@@ -309,7 +309,7 @@ func releaseExecutableKinds(manifest *pluginmanifestv1.Manifest) []string {
 
 func detectReleaseSourceBuildTarget(root, kind string) (bool, error) {
 	switch kind {
-	case pluginmanifestv1.KindProvider:
+	case pluginmanifestv1.KindPlugin:
 		return pluginpkg.HasSourceProviderPackage(root)
 	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore:
 		return pluginpkg.HasSourceComponentPackage(root, kind)
@@ -320,7 +320,7 @@ func detectReleaseSourceBuildTarget(root, kind string) (bool, error) {
 
 func validateReleaseBuildTarget(root, kind, goos, goarch string) error {
 	switch kind {
-	case pluginmanifestv1.KindProvider:
+	case pluginmanifestv1.KindPlugin:
 		return pluginpkg.ValidateSourceProviderRelease(root, goos, goarch)
 	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore:
 		return pluginpkg.ValidateSourceComponentRelease(root, kind, goos, goarch)
@@ -331,7 +331,7 @@ func validateReleaseBuildTarget(root, kind, goos, goarch string) error {
 
 func buildReleaseTargetBinary(root, outputPath, pluginName, kind, goos, goarch string) (string, error) {
 	switch kind {
-	case pluginmanifestv1.KindProvider:
+	case pluginmanifestv1.KindPlugin:
 		return pluginpkg.BuildSourceProviderReleaseBinary(root, outputPath, pluginName, goos, goarch)
 	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore:
 		return "", pluginpkg.BuildSourceComponentReleaseBinary(root, outputPath, kind, goos, goarch)
@@ -342,7 +342,7 @@ func buildReleaseTargetBinary(root, outputPath, pluginName, kind, goos, goarch s
 
 func isMissingReleaseSourceBuildTarget(err error, kind string) bool {
 	switch kind {
-	case pluginmanifestv1.KindProvider:
+	case pluginmanifestv1.KindPlugin:
 		return errors.Is(err, pluginpkg.ErrNoSourceProviderPackage)
 	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore:
 		return errors.Is(err, pluginpkg.ErrNoSourceComponentPackage)
@@ -357,7 +357,7 @@ func missingReleaseSourceBuildTargetError(kinds []string) error {
 		return nil
 	case 1:
 		switch kinds[0] {
-		case pluginmanifestv1.KindProvider:
+		case pluginmanifestv1.KindPlugin:
 			return fmt.Errorf("no Go or Python provider package found")
 		case pluginmanifestv1.KindAuth:
 			return fmt.Errorf("no Go auth source package found")
@@ -485,7 +485,7 @@ func buildReleaseManifest(srcManifest *pluginmanifestv1.Manifest, version, binar
 	}
 
 	switch buildKind {
-	case pluginmanifestv1.KindProvider:
+	case pluginmanifestv1.KindPlugin:
 		if manifest.Entrypoints.Provider == nil {
 			manifest.Entrypoints.Provider = &pluginmanifestv1.Entrypoint{}
 		}
@@ -649,7 +649,7 @@ func copyReleasePackageFiles(manifest *pluginmanifestv1.Manifest, sourceDir, sta
 			return err
 		}
 	}
-	if manifest.Provider != nil {
+	if manifest.Plugin != nil {
 		if err := copyPath(pluginpkg.StaticCatalogFile, !pluginpkg.StaticCatalogRequired(manifest)); err != nil {
 			return err
 		}

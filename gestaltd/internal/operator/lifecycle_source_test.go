@@ -73,10 +73,10 @@ func buildV2ArchiveForArtifact(t *testing.T, dir, source, version, artifactPath,
 		t.Fatalf("create provider src dir: %v", err)
 	}
 	manifest := &pluginmanifestv1.Manifest{
-		Source:   source,
-		Version:  version,
-		Kinds:    []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{},
+		Source:  source,
+		Version: version,
+		Kinds:   []string{pluginmanifestv1.KindPlugin},
+		Plugin:  &pluginmanifestv1.Plugin{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -135,8 +135,8 @@ func buildExecutableArchive(t *testing.T, dir, srcDirName, source, version, kind
 		},
 	}
 	switch kind {
-	case pluginmanifestv1.KindProvider:
-		manifest.Provider = &pluginmanifestv1.Provider{}
+	case pluginmanifestv1.KindPlugin:
+		manifest.Plugin = &pluginmanifestv1.Plugin{}
 		manifest.Entrypoints.Provider = &pluginmanifestv1.Entrypoint{ArtifactPath: artPath}
 	case pluginmanifestv1.KindAuth:
 		manifest.Auth = &pluginmanifestv1.AuthMetadata{}

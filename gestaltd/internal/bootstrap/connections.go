@@ -30,7 +30,7 @@ func BuildConnectionMaps(cfg *config.Config) (ConnectionMaps, error) {
 		mcpConnection := config.PluginConnectionName
 
 		if intg.Plugin != nil {
-			plan, err := buildPluginConnectionPlan(intg.Plugin, intg.Plugin.ManifestProvider())
+			plan, err := buildPluginConnectionPlan(intg.Plugin, intg.Plugin.ManifestPlugin())
 			if err != nil {
 				return ConnectionMaps{}, fmt.Errorf("integration %q: %w", name, err)
 			}
@@ -61,16 +61,16 @@ type resolvedSpecSurface struct {
 	connection     config.ConnectionDef
 }
 
-func buildPluginConnectionPlan(plugin *config.PluginDef, manifestProvider *pluginmanifestv1.Provider) (pluginConnectionPlan, error) {
-	declaredNames := namedConnectionNames(plugin, manifestProvider)
+func buildPluginConnectionPlan(plugin *config.PluginDef, manifestPlugin *pluginmanifestv1.Plugin) (pluginConnectionPlan, error) {
+	declaredNames := namedConnectionNames(plugin, manifestPlugin)
 	plan := pluginConnectionPlan{
-		pluginConnection: config.EffectivePluginConnectionDef(plugin, manifestProvider),
+		pluginConnection: config.EffectivePluginConnectionDef(plugin, manifestPlugin),
 		namedConnections: make(map[string]config.ConnectionDef),
 		surfaces:         make(map[config.SpecSurface]resolvedSpecSurface),
 	}
 
 	for name := range declaredNames {
-		conn, ok := config.EffectiveNamedConnectionDef(plugin, manifestProvider, name)
+		conn, ok := config.EffectiveNamedConnectionDef(plugin, manifestPlugin, name)
 		if !ok {
 			continue
 		}
@@ -78,14 +78,14 @@ func buildPluginConnectionPlan(plugin *config.PluginDef, manifestProvider *plugi
 	}
 
 	for _, surface := range config.OrderedSpecSurfaces {
-		url := surfaceURL(plugin, manifestProvider, surface)
+		url := surfaceURL(plugin, manifestPlugin, surface)
 		if url == "" {
 			continue
 		}
 		resolved := resolvedSpecSurface{
 			surface:        surface,
 			url:            url,
-			connectionName: resolveSurfaceConnectionName(plugin, manifestProvider, surface),
+			connectionName: resolveSurfaceConnectionName(plugin, manifestPlugin, surface),
 		}
 		conn, err := plan.connectionDef(resolved.connectionName)
 		if err != nil {
@@ -95,7 +95,7 @@ func buildPluginConnectionPlan(plugin *config.PluginDef, manifestProvider *plugi
 		plan.surfaces[surface] = resolved
 	}
 
-	defaultConnection := resolveDefaultConnectionName(plugin, manifestProvider)
+	defaultConnection := resolveDefaultConnectionName(plugin, manifestPlugin)
 	if defaultConnection != "" {
 		if _, err := plan.connectionDef(defaultConnection); err != nil {
 			return pluginConnectionPlan{}, fmt.Errorf("default_connection references undeclared connection %q", defaultConnection)
@@ -211,33 +211,33 @@ func (plan pluginConnectionPlan) connectionDef(name string) (config.ConnectionDe
 	return conn, nil
 }
 
-func resolveDefaultConnectionName(plugin *config.PluginDef, manifestProvider *pluginmanifestv1.Provider) string {
+func resolveDefaultConnectionName(plugin *config.PluginDef, manifestPlugin *pluginmanifestv1.Plugin) string {
 	if plugin != nil {
 		if name := config.ResolveConnectionAlias(plugin.DefaultConnection); name != "" {
 			return name
 		}
 	}
-	if manifestProvider != nil {
-		if name := config.ResolveConnectionAlias(manifestProvider.DefaultConnection); name != "" {
+	if manifestPlugin != nil {
+		if name := config.ResolveConnectionAlias(manifestPlugin.DefaultConnection); name != "" {
 			return name
 		}
 	}
 	return ""
 }
 
-func surfaceURL(plugin *config.PluginDef, manifestProvider *pluginmanifestv1.Provider, surface config.SpecSurface) string {
-	if manifestProvider == nil {
+func surfaceURL(plugin *config.PluginDef, manifestPlugin *pluginmanifestv1.Plugin, surface config.SpecSurface) string {
+	if manifestPlugin == nil {
 		return ""
 	}
-	url := config.ManifestProviderSurfaceURL(manifestProvider, surface)
+	url := config.ManifestProviderSurfaceURL(manifestPlugin, surface)
 	if url == "" {
 		return ""
 	}
 	return resolveManifestRelativeSpecURL(plugin, url)
 }
 
-func resolveSurfaceConnectionName(plugin *config.PluginDef, manifestProvider *pluginmanifestv1.Provider, surface config.SpecSurface) string {
-	name := config.ResolveConnectionAlias(config.ManifestProviderSurfaceConnectionName(manifestProvider, surface))
+func resolveSurfaceConnectionName(plugin *config.PluginDef, manifestPlugin *pluginmanifestv1.Plugin, surface config.SpecSurface) string {
+	name := config.ResolveConnectionAlias(config.ManifestProviderSurfaceConnectionName(manifestPlugin, surface))
 	if name == "" {
 		return config.PluginConnectionName
 	}
@@ -262,11 +262,11 @@ func resolveManifestRelativeSpecURL(plugin *config.PluginDef, raw string) string
 }
 
 func buildConnectionAuthMap(name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, authFallback *specAuthFallback, deps Deps) (map[string]OAuthHandler, error) {
-	manifestProvider := (*pluginmanifestv1.Provider)(nil)
+	manifestPlugin := (*pluginmanifestv1.Plugin)(nil)
 	if manifest != nil {
-		manifestProvider = manifest.Provider
+		manifestPlugin = manifest.Plugin
 	}
-	plan, err := buildPluginConnectionPlan(intg.Plugin, manifestProvider)
+	plan, err := buildPluginConnectionPlan(intg.Plugin, manifestPlugin)
 	if err != nil {
 		return nil, fmt.Errorf("resolve connections for %q: %w", name, err)
 	}
@@ -307,7 +307,7 @@ func buildConnectionAuthMap(name string, intg config.IntegrationDef, manifest *p
 	return handlers, nil
 }
 
-func namedConnectionNames(plugin *config.PluginDef, manifestProvider *pluginmanifestv1.Provider) map[string]struct{} {
+func namedConnectionNames(plugin *config.PluginDef, manifestPlugin *pluginmanifestv1.Plugin) map[string]struct{} {
 	names := make(map[string]struct{})
 	add := func(name string) {
 		resolved := config.ResolveConnectionAlias(name)
@@ -315,8 +315,8 @@ func namedConnectionNames(plugin *config.PluginDef, manifestProvider *pluginmani
 			names[resolved] = struct{}{}
 		}
 	}
-	if manifestProvider != nil {
-		for name := range manifestProvider.Connections {
+	if manifestPlugin != nil {
+		for name := range manifestPlugin.Connections {
 			add(name)
 		}
 	}

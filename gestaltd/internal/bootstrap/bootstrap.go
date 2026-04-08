@@ -754,21 +754,21 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 	}
 
 	manifest := intg.Plugin.ResolvedManifest
-	manifestProvider := intg.Plugin.ManifestProvider()
-	if manifest == nil || manifestProvider == nil {
+	manifestPlugin := intg.Plugin.ManifestPlugin()
+	if manifest == nil || manifestPlugin == nil {
 		return nil, fmt.Errorf("integration %q must resolve to a provider manifest", name)
 	}
 
 	allowedOperations := intg.Plugin.AllowedOperations
 	if allowedOperations == nil {
-		allowedOperations = maps.Clone(manifestProvider.AllowedOperations)
+		allowedOperations = maps.Clone(manifestPlugin.AllowedOperations)
 	}
 
 	switch {
-	case manifestProvider.IsSpecLoaded() && manifest.Entrypoints.Provider == nil:
+	case manifestPlugin.IsSpecLoaded() && manifest.Entrypoints.Provider == nil:
 		return buildSpecLoadedProvider(ctx, name, intg, manifest, pluginConfig, meta, deps, allowedOperations)
-	case manifestProvider.IsDeclarative() && manifest.Entrypoints.Provider == nil:
-		plan, err := buildPluginConnectionPlan(intg.Plugin, manifestProvider)
+	case manifestPlugin.IsDeclarative() && manifest.Entrypoints.Provider == nil:
+		plan, err := buildPluginConnectionPlan(intg.Plugin, manifestPlugin)
 		if err != nil {
 			return nil, fmt.Errorf("build declarative provider %q: %w", name, err)
 		}
@@ -794,8 +794,8 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 
 func buildExecutablePluginProvider(ctx context.Context, name string, intg config.IntegrationDef, pluginConfig map[string]any, meta providerMetadata, deps Deps) (*ProviderBuildResult, error) {
 	manifest := intg.Plugin.ResolvedManifest
-	manifestProvider := intg.Plugin.ManifestProvider()
-	if manifest == nil || manifestProvider == nil {
+	manifestPlugin := intg.Plugin.ManifestPlugin()
+	if manifest == nil || manifestPlugin == nil {
 		return nil, fmt.Errorf("build executable plugin provider %q: resolved manifest is required", name)
 	}
 	staticSpec, err := buildPluginStaticSpec(name, intg, manifest, meta)
@@ -806,17 +806,17 @@ func buildExecutablePluginProvider(ctx context.Context, name string, intg config
 	if err != nil {
 		return nil, err
 	}
-	plan, err := buildPluginConnectionPlan(intg.Plugin, manifestProvider)
+	plan, err := buildPluginConnectionPlan(intg.Plugin, manifestPlugin)
 	if err != nil {
 		closeIfPossible(pluginProv)
 		return nil, fmt.Errorf("build executable plugin provider %q: %w", name, err)
 	}
 	allowedOperations := intg.Plugin.AllowedOperations
-	if allowedOperations == nil && manifestProvider != nil {
-		allowedOperations = maps.Clone(manifestProvider.AllowedOperations)
+	if allowedOperations == nil && manifestPlugin != nil {
+		allowedOperations = maps.Clone(manifestPlugin.AllowedOperations)
 	}
 
-	if manifestProvider.IsDeclarative() {
+	if manifestPlugin.IsDeclarative() {
 		declarative, err := pluginhost.NewDeclarativeProvider(
 			manifest,
 			nil,
@@ -858,12 +858,12 @@ func buildExecutablePluginProvider(ctx context.Context, name string, intg config
 	}
 
 	specProv, specDef, err := buildConfiguredSpecProvider(ctx, name, resolved, meta, specProviderConfig{
-		manifestProvider:     manifestProvider,
+		manifestPlugin:       manifestPlugin,
 		allowedOperations:    allowedOperations,
-		baseURL:              manifestProvider.BaseURL,
+		baseURL:              manifestPlugin.BaseURL,
 		applyResponseMapping: true,
 		providerBuildOptions: func(conn config.ConnectionDef) []provider.BuildOption {
-			return mcpOAuthBuildOpts(conn, manifestProvider, deps)
+			return mcpOAuthBuildOpts(conn, manifestPlugin, deps)
 		},
 	}, deps)
 	if err != nil {
@@ -893,7 +893,7 @@ func buildExecutablePluginProvider(ctx context.Context, name string, intg config
 }
 
 type specProviderConfig struct {
-	manifestProvider     *pluginmanifestv1.Provider
+	manifestPlugin       *pluginmanifestv1.Plugin
 	allowedOperations    map[string]*config.OperationOverride
 	baseURL              string
 	providerBuildOptions func(config.ConnectionDef) []provider.BuildOption
@@ -917,7 +917,7 @@ func newProviderBuildResult(name string, intg config.IntegrationDef, manifest *p
 }
 
 func buildSpecLoadedProvider(ctx context.Context, name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, meta providerMetadata, deps Deps, allowedOperations map[string]*config.OperationOverride) (*ProviderBuildResult, error) {
-	mp := manifest.Provider
+	mp := manifest.Plugin
 	plan, err := buildPluginConnectionPlan(intg.Plugin, mp)
 	if err != nil {
 		return nil, fmt.Errorf("build spec-loaded provider %q: %w", name, err)
@@ -930,7 +930,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Integ
 
 	buildSpec := func(resolved resolvedSpecSurface, allowed map[string]*config.OperationOverride) (core.Provider, *provider.Definition, error) {
 		return buildConfiguredSpecProvider(ctx, name, resolved, meta, specProviderConfig{
-			manifestProvider:     mp,
+			manifestPlugin:       mp,
 			allowedOperations:    allowed,
 			baseURL:              mp.BaseURL,
 			applyResponseMapping: true,
@@ -998,12 +998,12 @@ func loadConfiguredAPIDefinition(ctx context.Context, name string, resolved reso
 	if cfg.baseURL != "" {
 		def.BaseURL = cfg.baseURL
 	}
-	applyProviderHeaders(def, cfg.manifestProvider)
-	if err := applyManagedParameters(def, cfg.manifestProvider); err != nil {
+	applyProviderHeaders(def, cfg.manifestPlugin)
+	if err := applyManagedParameters(def, cfg.manifestPlugin); err != nil {
 		return nil, err
 	}
 	if cfg.applyResponseMapping {
-		applyProviderResponseMapping(def, cfg.manifestProvider)
+		applyProviderResponseMapping(def, cfg.manifestPlugin)
 	}
 	if meta.displayName != "" {
 		def.DisplayName = meta.displayName
@@ -1044,7 +1044,7 @@ func buildConfiguredSpecProvider(ctx context.Context, name string, resolved reso
 			name,
 			resolved.url,
 			connMode,
-			manifestHeaders(cfg.manifestProvider),
+			manifestHeaders(cfg.manifestPlugin),
 			deps.Egress.Resolver,
 			mcpupstream.WithMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
 		)
@@ -1151,10 +1151,10 @@ func clonePluginEnv(src map[string]string) map[string]string {
 }
 
 func buildPluginStaticSpec(name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, meta providerMetadata) (pluginhost.StaticProviderSpec, error) {
-	if manifest == nil || manifest.Provider == nil {
+	if manifest == nil || manifest.Plugin == nil {
 		return pluginhost.StaticProviderSpec{}, fmt.Errorf("resolved manifest is required")
 	}
-	plan, err := buildPluginConnectionPlan(intg.Plugin, manifest.Provider)
+	plan, err := buildPluginConnectionPlan(intg.Plugin, manifest.Plugin)
 	if err != nil {
 		return pluginhost.StaticProviderSpec{}, err
 	}
@@ -1174,7 +1174,7 @@ func buildPluginStaticSpec(name string, intg config.IntegrationDef, manifest *pl
 		}
 	}
 
-	conn := config.EffectivePluginConnectionDef(intg.Plugin, manifest.Provider)
+	conn := config.EffectivePluginConnectionDef(intg.Plugin, manifest.Plugin)
 	connMode := plan.connectionMode()
 
 	var staticCatalog *catalog.Catalog
@@ -1213,7 +1213,7 @@ func buildPluginStaticSpec(name string, intg config.IntegrationDef, manifest *pl
 		AuthTypes:        staticAuthTypes(conn.Auth.Type),
 		ConnectionParams: pluginhost.ConnectionParamDefsFromManifest(conn.ConnectionParams),
 		CredentialFields: pluginhost.CredentialFieldsFromManifest(conn.Auth.Credentials),
-		DiscoveryConfig:  pluginhost.DiscoveryConfigFromManifest(manifest.Provider.PostConnectDiscovery),
+		DiscoveryConfig:  pluginhost.DiscoveryConfigFromManifest(manifest.Plugin.PostConnectDiscovery),
 	}, nil
 }
 
@@ -1228,42 +1228,42 @@ func staticAuthTypes(authType string) []string {
 	}
 }
 
-func mcpOAuthBuildOpts(conn config.ConnectionDef, manifestProvider *pluginmanifestv1.Provider, deps Deps) []provider.BuildOption {
-	if manifestProvider == nil || conn.Auth.Type != pluginmanifestv1.AuthTypeMCPOAuth || manifestProvider.MCPURL == "" {
+func mcpOAuthBuildOpts(conn config.ConnectionDef, manifestPlugin *pluginmanifestv1.Plugin, deps Deps) []provider.BuildOption {
+	if manifestPlugin == nil || conn.Auth.Type != pluginmanifestv1.AuthTypeMCPOAuth || manifestPlugin.MCPURL == "" {
 		return nil
 	}
 	return []provider.BuildOption{
-		provider.WithAuthHandler(buildMCPOAuthHandler(conn, manifestProvider.MCPURL, buildRegistrationStore(deps), deps)),
+		provider.WithAuthHandler(buildMCPOAuthHandler(conn, manifestPlugin.MCPURL, buildRegistrationStore(deps), deps)),
 	}
 }
 
-func manifestHeaders(manifestProvider *pluginmanifestv1.Provider) map[string]string {
-	if manifestProvider == nil || len(manifestProvider.Headers) == 0 {
+func manifestHeaders(manifestPlugin *pluginmanifestv1.Plugin) map[string]string {
+	if manifestPlugin == nil || len(manifestPlugin.Headers) == 0 {
 		return nil
 	}
-	return maps.Clone(manifestProvider.Headers)
+	return maps.Clone(manifestPlugin.Headers)
 }
 
-func applyProviderHeaders(def *provider.Definition, manifestProvider *pluginmanifestv1.Provider) {
+func applyProviderHeaders(def *provider.Definition, manifestPlugin *pluginmanifestv1.Plugin) {
 	if def == nil {
 		return
 	}
-	headers := manifestHeaders(manifestProvider)
+	headers := manifestHeaders(manifestPlugin)
 	if len(headers) == 0 {
 		return
 	}
 	def.Headers = headers
 }
 
-func applyManagedParameters(def *provider.Definition, manifestProvider *pluginmanifestv1.Provider) error {
-	if def == nil || manifestProvider == nil || len(manifestProvider.ManagedParameters) == 0 {
+func applyManagedParameters(def *provider.Definition, manifestPlugin *pluginmanifestv1.Plugin) error {
+	if def == nil || manifestPlugin == nil || len(manifestPlugin.ManagedParameters) == 0 {
 		return nil
 	}
 
 	if def.Headers == nil {
 		def.Headers = make(map[string]string)
 	}
-	for _, param := range manifestProvider.ManagedParameters {
+	for _, param := range manifestPlugin.ManagedParameters {
 		location := strings.ToLower(strings.TrimSpace(param.In))
 		name := strings.TrimSpace(param.Name)
 		switch location {
@@ -1279,14 +1279,14 @@ func applyManagedParameters(def *provider.Definition, manifestProvider *pluginma
 	}
 
 	for opName, op := range def.Operations {
-		for _, param := range manifestProvider.ManagedParameters {
+		for _, param := range manifestPlugin.ManagedParameters {
 			if strings.EqualFold(strings.TrimSpace(param.In), "path") {
 				op.Path = strings.ReplaceAll(op.Path, "{"+strings.TrimSpace(param.Name)+"}", param.Value)
 			}
 		}
 		filtered := op.Parameters[:0]
 		for _, param := range op.Parameters {
-			if isManagedOperationParameter(param, manifestProvider.ManagedParameters) {
+			if isManagedOperationParameter(param, manifestPlugin.ManagedParameters) {
 				continue
 			}
 			filtered = append(filtered, param)
@@ -1317,17 +1317,17 @@ func isManagedOperationParameter(param provider.ParameterDef, managed []pluginma
 	return false
 }
 
-func applyProviderResponseMapping(def *provider.Definition, manifestProvider *pluginmanifestv1.Provider) {
-	if def == nil || manifestProvider == nil || manifestProvider.ResponseMapping == nil {
+func applyProviderResponseMapping(def *provider.Definition, manifestPlugin *pluginmanifestv1.Plugin) {
+	if def == nil || manifestPlugin == nil || manifestPlugin.ResponseMapping == nil {
 		return
 	}
 	rm := &provider.ResponseMappingDef{
-		DataPath: manifestProvider.ResponseMapping.DataPath,
+		DataPath: manifestPlugin.ResponseMapping.DataPath,
 	}
-	if manifestProvider.ResponseMapping.Pagination != nil {
+	if manifestPlugin.ResponseMapping.Pagination != nil {
 		rm.Pagination = &provider.PaginationMappingDef{
-			HasMorePath: manifestProvider.ResponseMapping.Pagination.HasMorePath,
-			CursorPath:  manifestProvider.ResponseMapping.Pagination.CursorPath,
+			HasMorePath: manifestPlugin.ResponseMapping.Pagination.HasMorePath,
+			CursorPath:  manifestPlugin.ResponseMapping.Pagination.CursorPath,
 		}
 	}
 	def.ResponseMapping = rm
