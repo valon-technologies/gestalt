@@ -5,34 +5,34 @@ require_relative "lib/private_strategy"
 class Gestaltd < Formula
   desc "Gestalt server daemon"
   homepage "https://github.com/valon-technologies/gestalt"
-  version "0.0.1-alpha.17"
+  version "0.0.1-alpha.18"
   license "Apache-2.0"
 
   on_macos do
     on_arm do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestaltd/v0.0.1-alpha.17/gestaltd-macos-arm64.tar.gz",
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestaltd/v0.0.1-alpha.18/gestaltd-macos-arm64.tar.gz",
           using: GitHubPrivateRepositoryReleaseDownloadStrategy
-      sha256 "9f73014265ac946a2da015bb0ee102ce0b133a6303c12c40fac1893ce7c6e76f"
+      sha256 "f5e813599e6f944f877642529c2778f96746f33367e6eb1b173f6e7114e63621"
     end
 
     on_intel do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestaltd/v0.0.1-alpha.17/gestaltd-macos-x86_64.tar.gz",
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestaltd/v0.0.1-alpha.18/gestaltd-macos-x86_64.tar.gz",
           using: GitHubPrivateRepositoryReleaseDownloadStrategy
-      sha256 "7f909d9f8c1b8b8575691debc223ea81bd66626c8cecbc93d4f39ba484040f97"
+      sha256 "ed5e3917aceb4661574ff0b0be2089e3fa3f88d1a337901992bf06fac420eb3e"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestaltd/v0.0.1-alpha.17/gestaltd-linux-arm64.tar.gz",
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestaltd/v0.0.1-alpha.18/gestaltd-linux-arm64.tar.gz",
           using: GitHubPrivateRepositoryReleaseDownloadStrategy
-      sha256 "ce2f238bba6d4570990648a9741cd495ddd4d7aaa2ce6b6a4836dee1ed98b2f4"
+      sha256 "d3edf65dcaf17d96f42511f9044b7cf0c9a91b45c05bcfc0e8f0d2303b6ff627"
     end
 
     on_intel do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestaltd/v0.0.1-alpha.17/gestaltd-linux-x86_64.tar.gz",
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestaltd/v0.0.1-alpha.18/gestaltd-linux-x86_64.tar.gz",
           using: GitHubPrivateRepositoryReleaseDownloadStrategy
-      sha256 "c7981dd3599a9f0584d6de98bec264f97a90dc5de4d5625d140e4cf95c9dc13b"
+      sha256 "05013b1ce30fa923cd32353d4f37149c5d3aa43f9264ca49cf300595fdabad9f"
     end
   end
 
