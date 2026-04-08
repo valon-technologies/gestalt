@@ -81,7 +81,7 @@ func TestValidatePackageDirRejectsMissingProviderSchema(t *testing.T) {
 
 	dir := t.TempDir()
 	sourceDir, manifest := mustWriteProviderPackageDir(t, dir, "github.com/acme/plugins/provider", "0.0.1-alpha.1", "provider")
-	manifest.Provider.ConfigSchemaPath = "schemas/config.schema.json"
+	manifest.Plugin.ConfigSchemaPath = "schemas/config.schema.json"
 	mustWriteManifest(t, sourceDir, manifest)
 
 	_, err := ValidatePackageDir(sourceDir)

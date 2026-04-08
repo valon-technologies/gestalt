@@ -5,7 +5,7 @@ import (
 )
 
 const (
-	KindProvider  = "provider"
+	KindPlugin    = "plugin"
 	KindAuth      = "auth"
 	KindDatastore = "datastore"
 	KindWebUI     = "webui"
@@ -18,7 +18,7 @@ type Manifest struct {
 	Description string             `json:"description,omitempty" yaml:"description,omitempty"`
 	IconFile    string             `json:"icon_file,omitempty" yaml:"icon_file,omitempty"`
 	Kinds       []string           `json:"kinds" yaml:"kinds"`
-	Provider    *Provider          `json:"provider,omitempty" yaml:"provider,omitempty"`
+	Plugin      *Plugin            `json:"plugin,omitempty" yaml:"plugin,omitempty"`
 	Auth        *AuthMetadata      `json:"auth,omitempty" yaml:"auth,omitempty"`
 	Datastore   *DatastoreMetadata `json:"datastore,omitempty" yaml:"datastore,omitempty"`
 	WebUI       *WebUIMetadata     `json:"webui,omitempty" yaml:"webui,omitempty"`
@@ -38,7 +38,7 @@ type WebUIMetadata struct {
 	AssetRoot string `json:"asset_root" yaml:"asset_root"`
 }
 
-type Provider struct {
+type Plugin struct {
 	ConfigSchemaPath     string                             `json:"config_schema_path,omitempty" yaml:"config_schema_path,omitempty"`
 	Auth                 *ProviderAuth                      `json:"auth,omitempty" yaml:"auth,omitempty"`
 	ConnectionMode       string                             `json:"connection_mode,omitempty" yaml:"connection_mode,omitempty"`
@@ -62,24 +62,24 @@ type Provider struct {
 	ResponseMapping   *ManifestResponseMapping              `json:"response_mapping,omitempty" yaml:"response_mapping,omitempty"`
 }
 
-func (p *Provider) IsDeclarative() bool {
+func (p *Plugin) IsDeclarative() bool {
 	return p != nil && len(p.Operations) > 0
 }
 
-func (p *Provider) IsSpecLoaded() bool {
+func (p *Plugin) IsSpecLoaded() bool {
 	return p != nil && (p.OpenAPI != "" || p.GraphQLURL != "" || p.MCPURL != "")
 }
 
-func (p *Provider) IsManifestBacked() bool {
+func (p *Plugin) IsManifestBacked() bool {
 	return p != nil && (p.IsDeclarative() || p.IsSpecLoaded())
 }
 
 func (m *Manifest) IsHybridProvider() bool {
-	return m != nil && m.Provider != nil && m.Provider.IsManifestBacked() && m.Entrypoints.Provider != nil
+	return m != nil && m.Plugin != nil && m.Plugin.IsManifestBacked() && m.Entrypoints.Provider != nil
 }
 
 func (m *Manifest) IsDeclarativeOnlyProvider() bool {
-	return m != nil && m.Provider != nil && m.Provider.IsManifestBacked() && m.Entrypoints.Provider == nil
+	return m != nil && m.Plugin != nil && m.Plugin.IsManifestBacked() && m.Entrypoints.Provider == nil
 }
 
 type ManifestResponseMapping struct {
@@ -182,7 +182,7 @@ type Artifact struct {
 }
 
 type Entrypoints struct {
-	Provider  *Entrypoint `json:"provider,omitempty" yaml:"provider,omitempty"`
+	Provider  *Entrypoint `json:"plugin,omitempty" yaml:"plugin,omitempty"`
 	Auth      *Entrypoint `json:"auth,omitempty" yaml:"auth,omitempty"`
 	Datastore *Entrypoint `json:"datastore,omitempty" yaml:"datastore,omitempty"`
 }

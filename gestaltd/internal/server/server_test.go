@@ -842,7 +842,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 			},
 		},
 		ResolvedManifest: &pluginmanifestv1.Manifest{
-			Provider: &pluginmanifestv1.Provider{
+			Plugin: &pluginmanifestv1.Plugin{
 				Auth: &pluginmanifestv1.ProviderAuth{
 					Type: pluginmanifestv1.AuthTypeManual,
 					Credentials: []pluginmanifestv1.CredentialField{

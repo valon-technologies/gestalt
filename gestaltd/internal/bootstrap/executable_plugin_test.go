@@ -111,8 +111,8 @@ func TestPythonSourcePluginFallsBackWithoutGoOnPath(t *testing.T) {
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Python Source",
 		Description: "Python source provider fixture",
-		Kinds:       []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{
+		Kinds:       []string{pluginmanifestv1.KindPlugin},
+		Plugin: &pluginmanifestv1.Plugin{
 			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
 		},
 	}
@@ -306,10 +306,10 @@ func newExecutableManifest(displayName, description string) *pluginmanifestv1.Ma
 	return &pluginmanifestv1.Manifest{
 		Source:      "github.com/acme/plugins/test",
 		Version:     "1.0.0",
-		Kinds:       []string{pluginmanifestv1.KindProvider},
+		Kinds:       []string{pluginmanifestv1.KindPlugin},
 		DisplayName: displayName,
 		Description: description,
-		Provider:    &pluginmanifestv1.Provider{},
+		Plugin:      &pluginmanifestv1.Plugin{},
 	}
 }
 
@@ -325,7 +325,7 @@ func TestPluginManifestOAuthWiresConnectionAuth(t *testing.T) {
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-	manifest.Provider.Auth = &pluginmanifestv1.ProviderAuth{
+	manifest.Plugin.Auth = &pluginmanifestv1.ProviderAuth{
 		Type:             pluginmanifestv1.AuthTypeOAuth2,
 		AuthorizationURL: "https://example.com/authorize",
 		TokenURL:         "https://example.com/token",

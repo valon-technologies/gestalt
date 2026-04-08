@@ -33,16 +33,16 @@ func LocalPackageReferences(manifest *pluginmanifestv1.Manifest) []LocalPackageR
 		})
 	}
 
-	if manifest.Provider != nil {
-		add(manifest.Provider.ConfigSchemaPath, "provider config schema")
-		if manifest.Provider.OpenAPI != "" && !strings.Contains(manifest.Provider.OpenAPI, "://") {
-			add(manifest.Provider.OpenAPI, "provider openapi document")
+	if manifest.Plugin != nil {
+		add(manifest.Plugin.ConfigSchemaPath, "provider config schema")
+		if manifest.Plugin.OpenAPI != "" && !strings.Contains(manifest.Plugin.OpenAPI, "://") {
+			add(manifest.Plugin.OpenAPI, "provider openapi document")
 		}
-		if manifest.Provider.GraphQLURL != "" && !strings.Contains(manifest.Provider.GraphQLURL, "://") {
-			add(manifest.Provider.GraphQLURL, "provider graphql document")
+		if manifest.Plugin.GraphQLURL != "" && !strings.Contains(manifest.Plugin.GraphQLURL, "://") {
+			add(manifest.Plugin.GraphQLURL, "provider graphql document")
 		}
-		if manifest.Provider.MCPURL != "" && !strings.Contains(manifest.Provider.MCPURL, "://") {
-			add(manifest.Provider.MCPURL, "provider mcp document")
+		if manifest.Plugin.MCPURL != "" && !strings.Contains(manifest.Plugin.MCPURL, "://") {
+			add(manifest.Plugin.MCPURL, "provider mcp document")
 		}
 	}
 	add(manifest.IconFile, "icon_file")
@@ -50,7 +50,7 @@ func LocalPackageReferences(manifest *pluginmanifestv1.Manifest) []LocalPackageR
 }
 
 func ResolveManifestLocalReferences(manifest *pluginmanifestv1.Manifest, manifestPath string) *pluginmanifestv1.Manifest {
-	if manifest == nil || manifest.Provider == nil || manifestPath == "" {
+	if manifest == nil || manifest.Plugin == nil || manifestPath == "" {
 		return manifest
 	}
 
@@ -61,7 +61,7 @@ func ResolveManifestLocalReferences(manifest *pluginmanifestv1.Manifest, manifes
 		return filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(value))
 	}
 
-	provider := *manifest.Provider
+	provider := *manifest.Plugin
 	changed := false
 
 	if resolved := resolve(provider.OpenAPI); resolved != provider.OpenAPI {
@@ -82,6 +82,6 @@ func ResolveManifestLocalReferences(manifest *pluginmanifestv1.Manifest, manifes
 	}
 
 	cloned := *manifest
-	cloned.Provider = &provider
+	cloned.Plugin = &provider
 	return &cloned
 }

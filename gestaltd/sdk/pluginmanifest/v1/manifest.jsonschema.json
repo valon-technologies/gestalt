@@ -25,8 +25,8 @@
     "icon_file": {
       "type": "string"
     },
-    "provider": {
-      "$ref": "#/$defs/provider"
+    "plugin": {
+      "$ref": "#/$defs/plugin"
     },
     "auth": {
       "$ref": "#/$defs/auth"
@@ -47,7 +47,7 @@
   "oneOf": [
     {
       "required": [
-        "provider"
+        "plugin"
       ]
     },
     {
@@ -67,7 +67,7 @@
     }
   ],
   "$defs": {
-    "provider": {
+    "plugin": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -82,14 +82,14 @@
           "type": "object",
           "properties": {
             "default": {
-              "$ref": "#/$defs/provider_default_connection"
+              "$ref": "#/$defs/plugin_default_connection"
             }
           },
           "propertyNames": {
             "minLength": 1
           },
           "additionalProperties": {
-            "$ref": "#/$defs/provider_named_connection"
+            "$ref": "#/$defs/plugin_named_connection"
           }
         },
         "headers": {
@@ -193,16 +193,16 @@
           ]
         },
         "auth": {
-          "$ref": "#/$defs/provider_auth"
+          "$ref": "#/$defs/plugin_auth"
         },
         "params": {
           "type": "object",
           "additionalProperties": {
-            "$ref": "#/$defs/provider_connection_param"
+            "$ref": "#/$defs/plugin_connection_param"
           }
         },
         "discovery": {
-          "$ref": "#/$defs/provider_discovery"
+          "$ref": "#/$defs/plugin_discovery"
         }
       }
     },
@@ -220,7 +220,7 @@
           ]
         },
         "auth": {
-          "$ref": "#/$defs/provider_auth"
+          "$ref": "#/$defs/plugin_auth"
         }
       }
     },
@@ -331,7 +331,7 @@
           "type": "array",
           "minItems": 1,
           "items": {
-            "$ref": "#/$defs/provider_operation"
+            "$ref": "#/$defs/plugin_operation"
           }
         }
       }
@@ -596,7 +596,7 @@
         "parameters": {
           "type": "array",
           "items": {
-            "$ref": "#/$defs/provider_parameter"
+            "$ref": "#/$defs/plugin_parameter"
           }
         }
       }

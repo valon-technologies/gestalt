@@ -136,7 +136,7 @@ func TestRun_PluginReleaseRejectsInvalidManifest(t *testing.T) {
 source: github.com/testowner/plugins/invalid
 version: 0.0.1-alpha.1
 kinds:
-  - provider
+  - plugin
 provider:
   surfaces:
     rest:
@@ -153,11 +153,11 @@ provider:
 source: github.com/testowner/plugins/invalid
 version: 0.0.1-alpha.1
 kinds:
-  - provider
+  - plugin
 provider:
   exec: {}
 `,
-			wantError: "provider entrypoint artifact path is required",
+			wantError: "entrypoints.provider.artifact_path is required",
 		},
 	}
 
@@ -510,8 +510,8 @@ plugin = "os import path\nimport os;os.system('cmd')#:attr"
 	manifestData, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
 		Source:  "github.com/testowner/plugins/invalid-python-release",
 		Version: "0.0.1",
-		Kinds:   []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{
+		Kinds:   []string{pluginmanifestv1.KindPlugin},
+		Plugin: &pluginmanifestv1.Plugin{
 			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
 		},
 	}, pluginpkg.ManifestFormatYAML)
@@ -858,8 +858,8 @@ func TestRun_PluginReleasePreservesYAMLManifestFormatAndConnectionDefaults(t *te
 		Source:      "github.com/testowner/plugins/provider-yaml",
 		Version:     "0.0.1",
 		DisplayName: "Provider YAML",
-		Kinds:       []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{
+		Kinds:       []string{pluginmanifestv1.KindPlugin},
+		Plugin: &pluginmanifestv1.Plugin{
 			ConfigSchemaPath: releaseProviderSchemaPath,
 			MCP:              true,
 			ConnectionMode:   "identity",
@@ -886,11 +886,11 @@ func TestRun_PluginReleasePreservesYAMLManifestFormatAndConnectionDefaults(t *te
 	if filepath.Base(manifestPath) != "plugin.yaml" {
 		t.Fatalf("released manifest = %q, want plugin.yaml", filepath.Base(manifestPath))
 	}
-	if manifest.Provider == nil || len(manifest.Provider.ConnectionParams) != 1 || !manifest.Provider.ConnectionParams["tenant"].Required {
-		t.Fatalf("provider connection_params = %+v", manifest.Provider)
+	if manifest.Plugin == nil || len(manifest.Plugin.ConnectionParams) != 1 || !manifest.Plugin.ConnectionParams["tenant"].Required {
+		t.Fatalf("provider connection_params = %+v", manifest.Plugin)
 	}
-	if manifest.Provider.ConnectionMode != "identity" {
-		t.Fatalf("provider connection_mode = %q, want %q", manifest.Provider.ConnectionMode, "identity")
+	if manifest.Plugin.ConnectionMode != "identity" {
+		t.Fatalf("provider connection_mode = %q, want %q", manifest.Plugin.ConnectionMode, "identity")
 	}
 
 	manifestData, err := os.ReadFile(manifestPath)
@@ -977,8 +977,8 @@ func TestRun_PluginReleaseCompilesProviderWithoutSourceArtifacts(t *testing.T) {
 	if manifest.Entrypoints.Provider == nil || manifest.Entrypoints.Provider.ArtifactPath != releaseBinaryName(releaseTestPluginName, runtime.GOOS) {
 		t.Fatalf("provider entrypoint = %+v", manifest.Entrypoints.Provider)
 	}
-	if manifest.Provider == nil || manifest.Provider.ConfigSchemaPath != releaseProviderSchemaPath {
-		t.Fatalf("provider metadata = %#v, want config schema path %q", manifest.Provider, releaseProviderSchemaPath)
+	if manifest.Plugin == nil || manifest.Plugin.ConfigSchemaPath != releaseProviderSchemaPath {
+		t.Fatalf("provider metadata = %#v, want config schema path %q", manifest.Plugin, releaseProviderSchemaPath)
 	}
 	data, err := os.ReadFile(filepath.Join(extractDir, pluginpkg.StaticCatalogFile))
 	if err != nil {
@@ -1003,8 +1003,8 @@ func TestRun_PluginReleaseRejectsRequiredExecutableKindsWithoutSourceOrEntrypoin
 				Source:      "github.com/testowner/plugins/missing-provider",
 				Version:     "0.0.1",
 				DisplayName: "Missing Provider",
-				Kinds:       []string{pluginmanifestv1.KindProvider},
-				Provider:    &pluginmanifestv1.Provider{},
+				Kinds:       []string{pluginmanifestv1.KindPlugin},
+				Plugin:      &pluginmanifestv1.Plugin{},
 			},
 			wantError: "no Go or Python provider package found",
 		},
@@ -1079,8 +1079,8 @@ func TestRun_PluginReleasePreservesPrebuiltProvider(t *testing.T) {
 	if manifest.Entrypoints.Provider.ArtifactPath != prebuiltProviderBinaryPath {
 		t.Fatalf("provider artifact path = %q", manifest.Entrypoints.Provider.ArtifactPath)
 	}
-	if manifest.Provider == nil || manifest.Provider.ConfigSchemaPath != releaseProviderSchemaPath {
-		t.Fatalf("provider metadata = %#v, want config schema path %q", manifest.Provider, releaseProviderSchemaPath)
+	if manifest.Plugin == nil || manifest.Plugin.ConfigSchemaPath != releaseProviderSchemaPath {
+		t.Fatalf("provider metadata = %#v, want config schema path %q", manifest.Plugin, releaseProviderSchemaPath)
 	}
 	if _, err := os.Stat(filepath.Join(extractDir, filepath.FromSlash(prebuiltProviderBinaryPath))); err != nil {
 		t.Fatalf("expected prebuilt artifact in archive: %v", err)
@@ -1225,8 +1225,8 @@ def dynamic_catalog(request: gestalt.Request) -> gestalt.Catalog:
 	manifestData, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
 		Source:  "github.com/testowner/plugins/python-release",
 		Version: "0.0.1",
-		Kinds:   []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{
+		Kinds:   []string{pluginmanifestv1.KindPlugin},
+		Plugin: &pluginmanifestv1.Plugin{
 			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
 		},
 	}, pluginpkg.ManifestFormatYAML)
@@ -1439,8 +1439,8 @@ func newSourceProviderReleaseFixture(t *testing.T, dir string) string {
 		Version:     "0.0.1",
 		DisplayName: "Release Test",
 		IconFile:    releaseTestIconPath,
-		Kinds:       []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{
+		Kinds:       []string{pluginmanifestv1.KindPlugin},
+		Plugin: &pluginmanifestv1.Plugin{
 			ConfigSchemaPath: releaseProviderSchemaPath,
 		},
 	})
@@ -1463,8 +1463,8 @@ func newGoSourceReleaseFixture(t *testing.T, dir string) string {
 		Source:      releaseTestSource,
 		Version:     "0.0.1",
 		DisplayName: "Release Test",
-		Kinds:       []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{
+		Kinds:       []string{pluginmanifestv1.KindPlugin},
+		Plugin: &pluginmanifestv1.Plugin{
 			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
 		},
 	})
@@ -1504,8 +1504,8 @@ func newPrebuiltProviderReleaseFixture(t *testing.T, dir string) string {
 		Version:     "0.0.1",
 		DisplayName: "Prebuilt Provider",
 		IconFile:    releaseTestIconPath,
-		Kinds:       []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{
+		Kinds:       []string{pluginmanifestv1.KindPlugin},
+		Plugin: &pluginmanifestv1.Plugin{
 			ConfigSchemaPath: releaseProviderSchemaPath,
 		},
 		Artifacts: []pluginmanifestv1.Artifact{
@@ -1629,7 +1629,7 @@ func writeReleaseTestManifestFormat(t *testing.T, dir, manifestFile string, mani
 		t.Fatalf("encodeTestManifestFormat(%s): %v", manifestFile, err)
 	}
 	writeTestFile(t, dir, manifestFile, data, 0644)
-	if manifest.Provider != nil {
+	if manifest.Plugin != nil {
 		writeTestFile(t, dir, pluginpkg.StaticCatalogFile, []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n"), 0644)
 	}
 }

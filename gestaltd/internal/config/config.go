@@ -167,11 +167,11 @@ func (p *PluginDef) HasResolvedManifest() bool {
 	return p != nil && p.ResolvedManifest != nil
 }
 
-func (p *PluginDef) ManifestProvider() *pluginmanifestv1.Provider {
+func (p *PluginDef) ManifestPlugin() *pluginmanifestv1.Plugin {
 	if p == nil || p.ResolvedManifest == nil {
 		return nil
 	}
-	return p.ResolvedManifest.Provider
+	return p.ResolvedManifest.Plugin
 }
 
 func (p *PluginDef) DeclaresMCP() bool {
@@ -184,7 +184,7 @@ func (p *PluginDef) DeclaresMCP() bool {
 	if !p.HasResolvedManifest() {
 		return false
 	}
-	provider := p.ManifestProvider()
+	provider := p.ManifestPlugin()
 	if provider == nil {
 		return false
 	}
@@ -515,15 +515,15 @@ func ManifestAuthToConnectionAuthDef(auth *pluginmanifestv1.ProviderAuth) Connec
 	return out
 }
 
-func EffectivePluginConnectionDef(plugin *PluginDef, manifestProvider *pluginmanifestv1.Provider) ConnectionDef {
+func EffectivePluginConnectionDef(plugin *PluginDef, manifestPlugin *pluginmanifestv1.Plugin) ConnectionDef {
 	conn := ConnectionDef{}
-	if manifestProvider != nil {
-		conn.Mode = manifestProvider.ConnectionMode
-		if len(manifestProvider.ConnectionParams) > 0 {
-			conn.ConnectionParams = maps.Clone(manifestProvider.ConnectionParams)
+	if manifestPlugin != nil {
+		conn.Mode = manifestPlugin.ConnectionMode
+		if len(manifestPlugin.ConnectionParams) > 0 {
+			conn.ConnectionParams = maps.Clone(manifestPlugin.ConnectionParams)
 		}
-		if manifestProvider.Auth != nil {
-			MergeConnectionAuth(&conn.Auth, ManifestAuthToConnectionAuthDef(manifestProvider.Auth))
+		if manifestPlugin.Auth != nil {
+			MergeConnectionAuth(&conn.Auth, ManifestAuthToConnectionAuthDef(manifestPlugin.Auth))
 		}
 	}
 	if plugin != nil {
@@ -539,12 +539,12 @@ func EffectivePluginConnectionDef(plugin *PluginDef, manifestProvider *pluginman
 	return conn
 }
 
-func EffectiveNamedConnectionDef(plugin *PluginDef, manifestProvider *pluginmanifestv1.Provider, name string) (ConnectionDef, bool) {
+func EffectiveNamedConnectionDef(plugin *PluginDef, manifestPlugin *pluginmanifestv1.Plugin, name string) (ConnectionDef, bool) {
 	conn := ConnectionDef{}
 	found := false
 
-	if manifestProvider != nil && manifestProvider.Connections != nil {
-		if def, ok := manifestProvider.Connections[name]; ok && def != nil {
+	if manifestPlugin != nil && manifestPlugin.Connections != nil {
+		if def, ok := manifestPlugin.Connections[name]; ok && def != nil {
 			found = true
 			if def.Mode != "" {
 				conn.Mode = def.Mode
@@ -974,7 +974,7 @@ type inlineConnectionReference struct {
 	context  string
 }
 
-func manifestBackedConnectionReferences(plugin *PluginDef, provider *pluginmanifestv1.Provider) []inlineConnectionReference {
+func manifestBackedConnectionReferences(plugin *PluginDef, provider *pluginmanifestv1.Plugin) []inlineConnectionReference {
 	if provider == nil {
 		return nil
 	}
@@ -994,15 +994,15 @@ func manifestBackedConnectionReferences(plugin *PluginDef, provider *pluginmanif
 	}
 }
 
-func validateManifestBackedConnectionReferences(name string, plugin *PluginDef, provider *pluginmanifestv1.Provider) error {
+func validateManifestBackedConnectionReferences(name string, plugin *PluginDef, provider *pluginmanifestv1.Plugin) error {
 	return validateConnectionReferences(name, declaredManifestBackedConnections(plugin, provider), manifestBackedConnectionReferences(plugin, provider))
 }
 
-func validateManifestBackedConnectionDefaults(name string, plugin *PluginDef, provider *pluginmanifestv1.Provider) error {
+func validateManifestBackedConnectionDefaults(name string, plugin *PluginDef, provider *pluginmanifestv1.Plugin) error {
 	return validateConnectionDefaults(name, "integration", len(declaredManifestBackedConnections(plugin, provider)), manifestBackedConnectionReferences(plugin, provider))
 }
 
-func validateExecutableConnectionAuthSupport(name string, plugin *PluginDef, provider *pluginmanifestv1.Provider) error {
+func validateExecutableConnectionAuthSupport(name string, plugin *PluginDef, provider *pluginmanifestv1.Plugin) error {
 	supportsMCPOAuth := provider != nil && provider.MCPURL != ""
 	if conn := EffectivePluginConnectionDef(plugin, provider); conn.Auth.Type == pluginmanifestv1.AuthTypeMCPOAuth && !supportsMCPOAuth {
 		return fmt.Errorf("config validation: integration %q plugin auth type %q requires an MCP surface", name, pluginmanifestv1.AuthTypeMCPOAuth)
@@ -1055,7 +1055,7 @@ func validateConnectionDefaults(name, subject string, declaredCount int, refs []
 	return nil
 }
 
-func declaredManifestBackedConnections(plugin *PluginDef, provider *pluginmanifestv1.Provider) map[string]struct{} {
+func declaredManifestBackedConnections(plugin *PluginDef, provider *pluginmanifestv1.Plugin) map[string]struct{} {
 	size := 0
 	if plugin != nil {
 		size += len(plugin.Connections)
@@ -1149,7 +1149,7 @@ func validateManifestBackedIntegration(name string, plugin *PluginDef) error {
 	if plugin == nil {
 		return nil
 	}
-	effectiveProvider := plugin.ManifestProvider()
+	effectiveProvider := plugin.ManifestPlugin()
 	if effectiveProvider != nil {
 		if err := validateManifestBackedConnectionReferences(name, plugin, effectiveProvider); err != nil {
 			return err

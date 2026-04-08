@@ -130,8 +130,8 @@ func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *te
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Local Provider",
 		Description: "Local executable provider",
-		Kinds:       []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{
+		Kinds:       []string{pluginmanifestv1.KindPlugin},
+		Plugin: &pluginmanifestv1.Plugin{
 			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
 		},
 	}, pluginpkg.ManifestFormatYAML)
@@ -212,7 +212,7 @@ func TestLockProviderEntryForSource_RejectsManifestWithoutProviderKind(t *testin
 	if err == nil {
 		t.Fatal("expected provider kind validation error")
 	}
-	if !strings.Contains(err.Error(), `manifest does not declare kind "provider"`) {
+	if !strings.Contains(err.Error(), `manifest does not declare kind "plugin"`) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -465,8 +465,8 @@ func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalSourceHybridPlugin
 		Source:      "github.com/testowner/plugins/local-generated-provider",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Generated Local Provider",
-		Kinds:       []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{
+		Kinds:       []string{pluginmanifestv1.KindPlugin},
+		Plugin: &pluginmanifestv1.Plugin{
 			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
 		},
 	}, pluginpkg.ManifestFormatYAML)
@@ -638,8 +638,8 @@ def session_catalog(request: gestalt.Request) -> gestalt.Catalog:
 		Source:      "github.com/testowner/plugins/local-python-provider",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Generated Local Python Provider",
-		Kinds:       []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{
+		Kinds:       []string{pluginmanifestv1.KindPlugin},
+		Plugin: &pluginmanifestv1.Plugin{
 			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
 		},
 	}, pluginpkg.ManifestFormatYAML)
@@ -965,8 +965,8 @@ func TestApplyLockedPlugins_SkipsNilIntegrationPlugins(t *testing.T) {
 		Source:      "github.com/testowner/plugins/local-provider",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Local Provider",
-		Kinds:       []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{
+		Kinds:       []string{pluginmanifestv1.KindPlugin},
+		Plugin: &pluginmanifestv1.Plugin{
 			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
 		},
 	}, pluginpkg.ManifestFormatYAML)

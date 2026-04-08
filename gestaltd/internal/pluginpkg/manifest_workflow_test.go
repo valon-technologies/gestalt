@@ -20,7 +20,7 @@ func TestManifestWorkflow_RoundTripsProviderPackagesAcrossDirectoryAndArchive(t 
 		artifactPath := testArtifactPath("provider")
 		manifest := mustProviderManifest("github.com/acme/plugins/provider-json", "1.2.3", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider-json"))
 		manifest.IconFile = "assets/icon.svg"
-		manifest.Provider.ConfigSchemaPath = "schemas/config.schema.json"
+		manifest.Plugin.ConfigSchemaPath = "schemas/config.schema.json"
 
 		mustWriteManifestData(t, sourceDir, ManifestFile, mustManifestJSON(t, manifest))
 		mustWriteFile(t, filepath.Join(sourceDir, filepath.FromSlash(artifactPath)), []byte("provider-json"), 0o755)
@@ -40,8 +40,8 @@ func TestManifestWorkflow_RoundTripsProviderPackagesAcrossDirectoryAndArchive(t 
 		if dirManifest.IconFile != "assets/icon.svg" {
 			t.Fatalf("IconFile = %q", dirManifest.IconFile)
 		}
-		if dirManifest.Provider == nil || dirManifest.Provider.ConfigSchemaPath != "schemas/config.schema.json" {
-			t.Fatalf("unexpected provider config schema: %#v", dirManifest.Provider)
+		if dirManifest.Plugin == nil || dirManifest.Plugin.ConfigSchemaPath != "schemas/config.schema.json" {
+			t.Fatalf("unexpected provider config schema: %#v", dirManifest.Plugin)
 		}
 		if dirManifest.Entrypoints.Provider == nil || dirManifest.Entrypoints.Provider.ArtifactPath != artifactPath {
 			t.Fatalf("unexpected provider entrypoint: %#v", dirManifest.Entrypoints.Provider)
@@ -244,7 +244,7 @@ func TestManifestWorkflow_RejectsInvalidPackageInputs(t *testing.T) {
 			buildData: func(t *testing.T, dir string) string {
 				artifactPath := testArtifactPath("provider")
 				manifest := mustProviderManifest("github.com/acme/plugins/bad-auth", "1.0.0", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider"))
-				manifest.Provider.Connections = map[string]*pluginmanifestv1.ManifestConnectionDef{
+				manifest.Plugin.Connections = map[string]*pluginmanifestv1.ManifestConnectionDef{
 					"default": {
 						Auth: &pluginmanifestv1.ProviderAuth{Type: "bogus"},
 					},
@@ -259,7 +259,7 @@ func TestManifestWorkflow_RejectsInvalidPackageInputs(t *testing.T) {
 			buildData: func(t *testing.T, dir string) string {
 				artifactPath := testArtifactPath("provider")
 				manifest := mustProviderManifest("github.com/acme/plugins/missing-token-url", "1.0.0", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider"))
-				manifest.Provider.Auth = &pluginmanifestv1.ProviderAuth{
+				manifest.Plugin.Auth = &pluginmanifestv1.ProviderAuth{
 					Type:             pluginmanifestv1.AuthTypeOAuth2,
 					AuthorizationURL: "https://auth.example.com/authorize",
 				}
@@ -324,17 +324,17 @@ provider:
 	if err != nil {
 		t.Fatalf("ReadManifestFile: %v", err)
 	}
-	if manifest.Provider == nil {
+	if manifest.Plugin == nil {
 		t.Fatal("expected provider metadata")
 	}
-	if manifest.Provider.OpenAPI != "openapi.yaml" {
-		t.Fatalf("provider openapi = %q", manifest.Provider.OpenAPI)
+	if manifest.Plugin.OpenAPI != "openapi.yaml" {
+		t.Fatalf("provider openapi = %q", manifest.Plugin.OpenAPI)
 	}
-	if manifest.Provider.OpenAPIConnection != "api" {
-		t.Fatalf("provider openapi_connection = %q, want api", manifest.Provider.OpenAPIConnection)
+	if manifest.Plugin.OpenAPIConnection != "api" {
+		t.Fatalf("provider openapi_connection = %q, want api", manifest.Plugin.OpenAPIConnection)
 	}
-	if len(manifest.Provider.ManagedParameters) != 1 {
-		t.Fatalf("managed_parameters = %+v", manifest.Provider.ManagedParameters)
+	if len(manifest.Plugin.ManagedParameters) != 1 {
+		t.Fatalf("managed_parameters = %+v", manifest.Plugin.ManagedParameters)
 	}
 	if manifest.Entrypoints.Provider != nil {
 		t.Fatalf("expected declarative/spec provider to omit provider entrypoint, got %+v", manifest.Entrypoints.Provider)

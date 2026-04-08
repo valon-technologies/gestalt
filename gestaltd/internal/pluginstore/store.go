@@ -33,7 +33,7 @@ func manifestNeedsExecutableArtifact(manifest *pluginmanifestv1.Manifest) bool {
 		return false
 	}
 	for _, kind := range []string{
-		pluginmanifestv1.KindProvider,
+		pluginmanifestv1.KindPlugin,
 		pluginmanifestv1.KindAuth,
 		pluginmanifestv1.KindDatastore,
 	} {
@@ -214,7 +214,7 @@ func executablePathForManifest(root string, manifest *pluginmanifestv1.Manifest)
 	}
 	var entry *pluginmanifestv1.Entrypoint
 	for _, kind := range []string{
-		pluginmanifestv1.KindProvider,
+		pluginmanifestv1.KindPlugin,
 		pluginmanifestv1.KindAuth,
 		pluginmanifestv1.KindDatastore,
 	} {
@@ -227,7 +227,7 @@ func executablePathForManifest(root string, manifest *pluginmanifestv1.Manifest)
 		}
 	}
 	if entry == nil {
-		if manifest.Provider != nil && manifest.Provider.IsManifestBacked() {
+		if manifest.Plugin != nil && manifest.Plugin.IsManifestBacked() {
 			return "", nil
 		}
 		return "", fmt.Errorf("manifest does not define an executable entrypoint")
@@ -261,7 +261,7 @@ func copyManifestReferencedFiles(srcDir, destDir string, manifest *pluginmanifes
 			return fmt.Errorf("copy %s %s: %w", ref.Description, ref.Path, err)
 		}
 	}
-	if manifest != nil && manifest.Provider != nil {
+	if manifest != nil && manifest.Plugin != nil {
 		src := pluginpkg.StaticCatalogPath(srcDir)
 		dest := pluginpkg.StaticCatalogPath(destDir)
 		if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {

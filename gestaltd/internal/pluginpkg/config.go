@@ -34,11 +34,11 @@ func configSchemaForManifest(manifestPath string, manifest *pluginmanifestv1.Man
 	}
 
 	switch kind {
-	case pluginmanifestv1.KindProvider:
-		if manifest.Provider == nil || manifest.Provider.ConfigSchemaPath == "" {
+	case pluginmanifestv1.KindPlugin:
+		if manifest.Plugin == nil || manifest.Plugin.ConfigSchemaPath == "" {
 			return "", "", false, nil
 		}
-		return filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(manifest.Provider.ConfigSchemaPath)), manifest.Provider.ConfigSchemaPath, true, nil
+		return filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(manifest.Plugin.ConfigSchemaPath)), manifest.Plugin.ConfigSchemaPath, true, nil
 	case pluginmanifestv1.KindAuth:
 		if manifest.Auth == nil || manifest.Auth.ConfigSchemaPath == "" {
 			return "", "", false, nil

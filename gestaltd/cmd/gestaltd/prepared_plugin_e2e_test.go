@@ -156,8 +156,8 @@ func buildPreparedPluginRequiringAPIKey(t *testing.T, dir, source, version strin
 		Version:     version,
 		DisplayName: "Example Provider",
 		Description: "A minimal example provider built with the public SDK",
-		Kinds:       []string{pluginmanifestv1.KindProvider},
-		Provider: &pluginmanifestv1.Provider{
+		Kinds:       []string{pluginmanifestv1.KindPlugin},
+		Plugin: &pluginmanifestv1.Plugin{
 			ConfigSchemaPath: schemaRel,
 		},
 	}

@@ -124,7 +124,7 @@ func providerWireToInternal(wire *providerManifestWireRoot) *pluginmanifestv1.Ma
 	}
 
 	if wire.Provider != nil {
-		manifest.Provider = &pluginmanifestv1.Provider{
+		manifest.Plugin = &pluginmanifestv1.Plugin{
 			ConfigSchemaPath:  wire.Provider.ConfigSchemaPath,
 			Headers:           wire.Provider.Headers,
 			ManagedParameters: wire.Provider.ManagedParameters,
@@ -132,10 +132,10 @@ func providerWireToInternal(wire *providerManifestWireRoot) *pluginmanifestv1.Ma
 			AllowedOperations: wire.Provider.AllowedOperations,
 		}
 		if len(manifest.Kinds) == 0 {
-			manifest.Kinds = append(manifest.Kinds, pluginmanifestv1.KindProvider)
+			manifest.Kinds = append(manifest.Kinds, pluginmanifestv1.KindPlugin)
 		}
 		if wire.Provider.MCP != nil {
-			manifest.Provider.MCP = wire.Provider.MCP.Enabled
+			manifest.Plugin.MCP = wire.Provider.MCP.Enabled
 		}
 		if wire.Provider.Exec != nil {
 			manifest.Entrypoints.Provider = &pluginmanifestv1.Entrypoint{
@@ -144,49 +144,49 @@ func providerWireToInternal(wire *providerManifestWireRoot) *pluginmanifestv1.Ma
 			}
 		}
 		if defaultConn, ok := wire.Provider.Connections["default"]; ok && defaultConn != nil {
-			manifest.Provider.Auth = defaultConn.Auth
-			manifest.Provider.ConnectionMode = defaultConn.Mode
-			manifest.Provider.ConnectionParams = defaultConn.Params
-			manifest.Provider.PostConnectDiscovery = defaultConn.toInternalDiscovery()
+			manifest.Plugin.Auth = defaultConn.Auth
+			manifest.Plugin.ConnectionMode = defaultConn.Mode
+			manifest.Plugin.ConnectionParams = defaultConn.Params
+			manifest.Plugin.PostConnectDiscovery = defaultConn.toInternalDiscovery()
 		}
 		if len(wire.Provider.Connections) > 0 {
-			manifest.Provider.Connections = make(map[string]*pluginmanifestv1.ManifestConnectionDef, len(wire.Provider.Connections))
+			manifest.Plugin.Connections = make(map[string]*pluginmanifestv1.ManifestConnectionDef, len(wire.Provider.Connections))
 			for name, conn := range wire.Provider.Connections {
 				if name == "default" {
 					continue
 				}
 				if conn == nil {
-					manifest.Provider.Connections[name] = nil
+					manifest.Plugin.Connections[name] = nil
 					continue
 				}
-				manifest.Provider.Connections[name] = &pluginmanifestv1.ManifestConnectionDef{
+				manifest.Plugin.Connections[name] = &pluginmanifestv1.ManifestConnectionDef{
 					Mode: conn.Mode,
 					Auth: conn.Auth,
 				}
 			}
-			if len(manifest.Provider.Connections) == 0 {
-				manifest.Provider.Connections = nil
+			if len(manifest.Plugin.Connections) == 0 {
+				manifest.Plugin.Connections = nil
 			}
 		}
 		if s := wire.Provider.Surfaces.REST; s != nil {
-			manifest.Provider.BaseURL = s.BaseURL
-			manifest.Provider.Operations = s.Operations
-			manifest.Provider.DefaultConnection = remapManifestWireConnectionName(s.Connection)
+			manifest.Plugin.BaseURL = s.BaseURL
+			manifest.Plugin.Operations = s.Operations
+			manifest.Plugin.DefaultConnection = remapManifestWireConnectionName(s.Connection)
 		}
 		if s := wire.Provider.Surfaces.OpenAPI; s != nil {
-			manifest.Provider.OpenAPI = s.Document
+			manifest.Plugin.OpenAPI = s.Document
 			if s.BaseURL != "" {
-				manifest.Provider.BaseURL = s.BaseURL
+				manifest.Plugin.BaseURL = s.BaseURL
 			}
-			manifest.Provider.OpenAPIConnection = remapManifestWireConnectionName(s.Connection)
+			manifest.Plugin.OpenAPIConnection = remapManifestWireConnectionName(s.Connection)
 		}
 		if s := wire.Provider.Surfaces.GraphQL; s != nil {
-			manifest.Provider.GraphQLURL = s.URL
-			manifest.Provider.GraphQLConnection = remapManifestWireConnectionName(s.Connection)
+			manifest.Plugin.GraphQLURL = s.URL
+			manifest.Plugin.GraphQLConnection = remapManifestWireConnectionName(s.Connection)
 		}
 		if s := wire.Provider.Surfaces.MCP; s != nil {
-			manifest.Provider.MCPURL = s.URL
-			manifest.Provider.MCPConnection = remapManifestWireConnectionName(s.Connection)
+			manifest.Plugin.MCPURL = s.URL
+			manifest.Plugin.MCPConnection = remapManifestWireConnectionName(s.Connection)
 		}
 	}
 	if wire.WebUI != nil && len(manifest.Kinds) == 0 {
@@ -228,16 +228,16 @@ func internalProviderManifestToWire(manifest *pluginmanifestv1.Manifest) *provid
 		WebUI:       manifest.WebUI,
 		Artifacts:   append([]pluginmanifestv1.Artifact(nil), manifest.Artifacts...),
 	}
-	if manifest.Provider == nil {
+	if manifest.Plugin == nil {
 		return wire
 	}
 
 	provider := &providerManifestWire{
-		ConfigSchemaPath:  manifest.Provider.ConfigSchemaPath,
-		Headers:           manifest.Provider.Headers,
-		ManagedParameters: manifest.Provider.ManagedParameters,
-		ResponseMapping:   manifest.Provider.ResponseMapping,
-		AllowedOperations: manifest.Provider.AllowedOperations,
+		ConfigSchemaPath:  manifest.Plugin.ConfigSchemaPath,
+		Headers:           manifest.Plugin.Headers,
+		ManagedParameters: manifest.Plugin.ManagedParameters,
+		ResponseMapping:   manifest.Plugin.ResponseMapping,
+		AllowedOperations: manifest.Plugin.AllowedOperations,
 	}
 	if manifest.Entrypoints.Provider != nil {
 		provider.Exec = &providerExecWire{
@@ -245,24 +245,24 @@ func internalProviderManifestToWire(manifest *pluginmanifestv1.Manifest) *provid
 			Args:         append([]string(nil), manifest.Entrypoints.Provider.Args...),
 		}
 	}
-	if manifest.Provider.MCP {
+	if manifest.Plugin.MCP {
 		provider.MCP = &providerManifestMCPWire{Enabled: true}
 	}
-	if manifest.Provider.ConnectionMode != "" || manifest.Provider.Auth != nil || len(manifest.Provider.ConnectionParams) > 0 || manifest.Provider.PostConnectDiscovery != nil {
+	if manifest.Plugin.ConnectionMode != "" || manifest.Plugin.Auth != nil || len(manifest.Plugin.ConnectionParams) > 0 || manifest.Plugin.PostConnectDiscovery != nil {
 		provider.Connections = map[string]*providerManifestConnectionWire{
 			"default": {
-				Mode:      manifest.Provider.ConnectionMode,
-				Auth:      manifest.Provider.Auth,
-				Params:    manifest.Provider.ConnectionParams,
-				Discovery: internalDiscoveryToWire(manifest.Provider.PostConnectDiscovery),
+				Mode:      manifest.Plugin.ConnectionMode,
+				Auth:      manifest.Plugin.Auth,
+				Params:    manifest.Plugin.ConnectionParams,
+				Discovery: internalDiscoveryToWire(manifest.Plugin.PostConnectDiscovery),
 			},
 		}
 	}
-	if len(manifest.Provider.Connections) > 0 {
+	if len(manifest.Plugin.Connections) > 0 {
 		if provider.Connections == nil {
-			provider.Connections = make(map[string]*providerManifestConnectionWire, len(manifest.Provider.Connections))
+			provider.Connections = make(map[string]*providerManifestConnectionWire, len(manifest.Plugin.Connections))
 		}
-		for name, conn := range manifest.Provider.Connections {
+		for name, conn := range manifest.Plugin.Connections {
 			if conn == nil {
 				provider.Connections[name] = nil
 				continue
@@ -274,28 +274,28 @@ func internalProviderManifestToWire(manifest *pluginmanifestv1.Manifest) *provid
 		}
 	}
 	switch {
-	case manifest.Provider.IsDeclarative():
+	case manifest.Plugin.IsDeclarative():
 		provider.Surfaces.REST = &providerManifestRESTSurfaceWire{
-			Connection: manifestDefaultConnectionToWire(manifest.Provider.DefaultConnection),
-			BaseURL:    manifest.Provider.BaseURL,
-			Operations: manifest.Provider.Operations,
+			Connection: manifestDefaultConnectionToWire(manifest.Plugin.DefaultConnection),
+			BaseURL:    manifest.Plugin.BaseURL,
+			Operations: manifest.Plugin.Operations,
 		}
-	case manifest.Provider.OpenAPI != "":
+	case manifest.Plugin.OpenAPI != "":
 		provider.Surfaces.OpenAPI = &providerManifestOpenAPISurfaceWire{
-			Connection: manifestDefaultConnectionToWire(manifest.Provider.OpenAPIConnection),
-			Document:   manifest.Provider.OpenAPI,
-			BaseURL:    manifest.Provider.BaseURL,
+			Connection: manifestDefaultConnectionToWire(manifest.Plugin.OpenAPIConnection),
+			Document:   manifest.Plugin.OpenAPI,
+			BaseURL:    manifest.Plugin.BaseURL,
 		}
-	case manifest.Provider.GraphQLURL != "":
+	case manifest.Plugin.GraphQLURL != "":
 		provider.Surfaces.GraphQL = &providerManifestGraphQLSurfaceWire{
-			Connection: manifestDefaultConnectionToWire(manifest.Provider.GraphQLConnection),
-			URL:        manifest.Provider.GraphQLURL,
+			Connection: manifestDefaultConnectionToWire(manifest.Plugin.GraphQLConnection),
+			URL:        manifest.Plugin.GraphQLURL,
 		}
 	}
-	if manifest.Provider.MCPURL != "" {
+	if manifest.Plugin.MCPURL != "" {
 		provider.Surfaces.MCP = &providerManifestMCPSurfaceWire{
-			Connection: manifestDefaultConnectionToWire(manifest.Provider.MCPConnection),
-			URL:        manifest.Provider.MCPURL,
+			Connection: manifestDefaultConnectionToWire(manifest.Plugin.MCPConnection),
+			URL:        manifest.Plugin.MCPURL,
 		}
 	}
 	wire.Provider = provider

@@ -106,8 +106,8 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 		}
 	}
 	if len(manifest.Kinds) == 0 {
-		if manifest.Provider != nil {
-			manifest.Kinds = append(manifest.Kinds, pluginmanifestv1.KindProvider)
+		if manifest.Plugin != nil {
+			manifest.Kinds = append(manifest.Kinds, pluginmanifestv1.KindPlugin)
 		}
 		if manifest.Auth != nil {
 			manifest.Kinds = append(manifest.Kinds, pluginmanifestv1.KindAuth)
@@ -129,9 +129,9 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 		}
 		seenKinds[kind] = struct{}{}
 	}
-	if manifest.Provider != nil {
-		if _, ok := seenKinds[pluginmanifestv1.KindProvider]; !ok {
-			return fmt.Errorf("provider metadata requires kind %q", pluginmanifestv1.KindProvider)
+	if manifest.Plugin != nil {
+		if _, ok := seenKinds[pluginmanifestv1.KindPlugin]; !ok {
+			return fmt.Errorf("provider metadata requires kind %q", pluginmanifestv1.KindPlugin)
 		}
 	}
 	if manifest.Auth != nil {
@@ -156,7 +156,7 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 
 	needsArtifacts := len(manifest.Artifacts) > 0
 	for _, kind := range manifest.Kinds {
-		if kind == pluginmanifestv1.KindProvider && manifest.Entrypoints.Provider != nil {
+		if kind == pluginmanifestv1.KindPlugin && manifest.Entrypoints.Provider != nil {
 			needsArtifacts = true
 			break
 		}
@@ -199,20 +199,20 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 
 	for _, kind := range manifest.Kinds {
 		switch kind {
-		case pluginmanifestv1.KindProvider:
-			if manifest.Provider == nil {
-				return fmt.Errorf("provider metadata is required when kind %q is present", pluginmanifestv1.KindProvider)
+		case pluginmanifestv1.KindPlugin:
+			if manifest.Plugin == nil {
+				return fmt.Errorf("provider metadata is required when kind %q is present", pluginmanifestv1.KindPlugin)
 			}
-			if err := validateExecutableProviderMetadata(manifest.Provider); err != nil {
+			if err := validateExecutableProviderMetadata(manifest.Plugin); err != nil {
 				return err
 			}
-			if manifest.Provider.ConfigSchemaPath != "" {
-				if err := validateRelativePackagePath(manifest.Provider.ConfigSchemaPath, "provider config schema path"); err != nil {
+			if manifest.Plugin.ConfigSchemaPath != "" {
+				if err := validateRelativePackagePath(manifest.Plugin.ConfigSchemaPath, "provider config schema path"); err != nil {
 					return err
 				}
 			}
-			if manifest.Provider.IsDeclarative() {
-				if err := validateDeclarativeProvider(manifest.Provider); err != nil {
+			if manifest.Plugin.IsDeclarative() {
+				if err := validateDeclarativeProvider(manifest.Plugin); err != nil {
 					return err
 				}
 			}
@@ -222,10 +222,10 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 					return err
 				}
 			case manifest.IsDeclarativeOnlyProvider():
-			case manifest.Provider.IsSpecLoaded():
+			case manifest.Plugin.IsSpecLoaded():
 			case allowsSourceExecutableEntrypointOmission:
 			default:
-				return fmt.Errorf("%s entrypoint is required", kind)
+				return fmt.Errorf("%s is required", EntrypointFieldForKind(kind))
 			}
 		case pluginmanifestv1.KindAuth:
 			if manifest.Auth == nil {
@@ -237,7 +237,7 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 				}
 			}
 			if manifest.Entrypoints.Auth == nil && !allowsSourceAuthEntrypointOmission {
-				return fmt.Errorf("%s entrypoint is required", kind)
+				return fmt.Errorf("%s is required", EntrypointFieldForKind(kind))
 			}
 			if manifest.Entrypoints.Auth != nil {
 				if err := validateEntrypoint(kind, manifest.Entrypoints.Auth, artifactPaths); err != nil {
@@ -254,7 +254,7 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 				}
 			}
 			if manifest.Entrypoints.Datastore == nil && !allowsSourceDatastoreEntrypointOmission {
-				return fmt.Errorf("%s entrypoint is required", kind)
+				return fmt.Errorf("%s is required", EntrypointFieldForKind(kind))
 			}
 			if manifest.Entrypoints.Datastore != nil {
 				if err := validateEntrypoint(kind, manifest.Entrypoints.Datastore, artifactPaths); err != nil {
@@ -306,12 +306,25 @@ func CurrentPlatformArtifact(manifest *pluginmanifestv1.Manifest) (*pluginmanife
 	return nil, fmt.Errorf("no artifact for current platform %s/%s", runtime.GOOS, runtime.GOARCH)
 }
 
+func EntrypointFieldForKind(kind string) string {
+	switch kind {
+	case pluginmanifestv1.KindPlugin:
+		return "entrypoints.provider"
+	case pluginmanifestv1.KindAuth:
+		return "entrypoints.auth"
+	case pluginmanifestv1.KindDatastore:
+		return "entrypoints.datastore"
+	default:
+		return "entrypoints." + kind
+	}
+}
+
 func EntrypointForKind(manifest *pluginmanifestv1.Manifest, kind string) *pluginmanifestv1.Entrypoint {
 	if manifest == nil {
 		return nil
 	}
 	switch kind {
-	case pluginmanifestv1.KindProvider:
+	case pluginmanifestv1.KindPlugin:
 		return manifest.Entrypoints.Provider
 	case pluginmanifestv1.KindAuth:
 		return manifest.Entrypoints.Auth
@@ -324,19 +337,19 @@ func EntrypointForKind(manifest *pluginmanifestv1.Manifest, kind string) *plugin
 
 func validateEntrypoint(kind string, entry *pluginmanifestv1.Entrypoint, artifactPaths map[string]struct{}) error {
 	if entry == nil {
-		return fmt.Errorf("%s entrypoint is required", kind)
+		return fmt.Errorf("%s is required", EntrypointFieldForKind(kind))
 	}
 	if entry.ArtifactPath == "" {
-		return fmt.Errorf("%s entrypoint artifact path is required", kind)
+		return fmt.Errorf("%s.artifact_path is required", EntrypointFieldForKind(kind))
 	}
-	if err := validateRelativePackagePath(entry.ArtifactPath, kind+" entrypoint artifact path"); err != nil {
+	if err := validateRelativePackagePath(entry.ArtifactPath, EntrypointFieldForKind(kind)+".artifact_path"); err != nil {
 		return err
 	}
 	if len(artifactPaths) == 0 {
-		return fmt.Errorf("%s entrypoint references unknown artifact %q", kind, entry.ArtifactPath)
+		return fmt.Errorf("%s references unknown artifact %q", EntrypointFieldForKind(kind), entry.ArtifactPath)
 	}
 	if _, ok := artifactPaths[entry.ArtifactPath]; !ok {
-		return fmt.Errorf("%s entrypoint references unknown artifact %q", kind, entry.ArtifactPath)
+		return fmt.Errorf("%s references unknown artifact %q", EntrypointFieldForKind(kind), entry.ArtifactPath)
 	}
 	return nil
 }
@@ -380,7 +393,7 @@ func validateProviderAuth(path string, auth *pluginmanifestv1.ProviderAuth) erro
 	return nil
 }
 
-func validateExecutableProviderMetadata(provider *pluginmanifestv1.Provider) error {
+func validateExecutableProviderMetadata(provider *pluginmanifestv1.Plugin) error {
 	if provider == nil {
 		return nil
 	}
@@ -449,7 +462,7 @@ var validHTTPMethods = map[string]bool{
 	"DELETE": true,
 }
 
-func validateDeclarativeProvider(provider *pluginmanifestv1.Provider) error {
+func validateDeclarativeProvider(provider *pluginmanifestv1.Plugin) error {
 	if provider.BaseURL == "" {
 		return fmt.Errorf("provider.base_url is required for declarative providers")
 	}
@@ -504,7 +517,7 @@ func encodeManifestFormat(manifest *pluginmanifestv1.Manifest, format string, so
 	if err := validateManifest(manifest, sourceMode); err != nil {
 		return nil, err
 	}
-	if manifest != nil && manifest.Provider != nil && manifest.Auth == nil && manifest.Datastore == nil {
+	if manifest != nil && manifest.Plugin != nil && manifest.Auth == nil && manifest.Datastore == nil {
 		return encodeProviderManifestWire(manifest, format)
 	}
 	switch format {

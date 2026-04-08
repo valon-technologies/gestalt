@@ -54,7 +54,7 @@ func NewDeclarativeProvider(manifest *pluginmanifestv1.Manifest, httpClient *htt
 	if manifest == nil {
 		return nil, fmt.Errorf("manifest is required")
 	}
-	if manifest.Provider == nil || !manifest.Provider.IsDeclarative() {
+	if manifest.Plugin == nil || !manifest.Plugin.IsDeclarative() {
 		return nil, fmt.Errorf("manifest is not a declarative provider")
 	}
 
@@ -67,19 +67,19 @@ func NewDeclarativeProvider(manifest *pluginmanifestv1.Manifest, httpClient *htt
 			Name:        manifest.Source,
 			DisplayName: manifest.DisplayName,
 			Description: manifest.Description,
-			Headers:     maps.Clone(manifest.Provider.Headers),
-			Operations:  make([]catalog.CatalogOperation, 0, len(manifest.Provider.Operations)),
+			Headers:     maps.Clone(manifest.Plugin.Headers),
+			Operations:  make([]catalog.CatalogOperation, 0, len(manifest.Plugin.Operations)),
 		},
-		opsByName:            make(map[string]*catalog.CatalogOperation, len(manifest.Provider.Operations)),
-		baseURL:              manifest.Provider.BaseURL,
-		auth:                 manifest.Provider.Auth,
+		opsByName:            make(map[string]*catalog.CatalogOperation, len(manifest.Plugin.Operations)),
+		baseURL:              manifest.Plugin.BaseURL,
+		auth:                 manifest.Plugin.Auth,
 		httpClient:           httpClient,
-		postConnectDiscovery: manifest.Provider.PostConnectDiscovery,
-		connectionDefs:       manifest.Provider.ConnectionParams,
+		postConnectDiscovery: manifest.Plugin.PostConnectDiscovery,
+		connectionDefs:       manifest.Plugin.ConnectionParams,
 	}
 
-	for i := range manifest.Provider.Operations {
-		mop := &manifest.Provider.Operations[i]
+	for i := range manifest.Plugin.Operations {
+		mop := &manifest.Plugin.Operations[i]
 		catOp := catalog.CatalogOperation{
 			ID:          mop.Name,
 			Method:      mop.Method,
