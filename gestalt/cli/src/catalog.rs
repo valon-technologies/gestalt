@@ -1,7 +1,13 @@
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 use serde::{Deserialize, Serialize};
 
 use crate::api::ApiClient;
+
+pub enum ResolvedOperation<'a> {
+    All(&'a [CatalogOperation]),
+    Exact(&'a CatalogOperation),
+    Prefix(Vec<&'a CatalogOperation>),
+}
 
 fn default_type() -> String {
     "string".to_string()
@@ -57,6 +63,48 @@ impl OperationsCatalog {
     pub fn operations(&self) -> &[CatalogOperation] {
         &self.operations
     }
+
+    pub fn resolve(&self, query: &str) -> Result<ResolvedOperation<'_>> {
+        if query.is_empty() {
+            return Ok(ResolvedOperation::All(&self.operations));
+        }
+
+        ensure!(
+            is_valid_operation_query(query),
+            "invalid operation '{}': segments must be alphanumeric, underscore, or hyphen (no leading/trailing hyphen)",
+            query,
+        );
+
+        if let Some(op) = self.find_operation(query) {
+            return Ok(ResolvedOperation::Exact(op));
+        }
+
+        let prefix = format!("{}.", query);
+        let matches: Vec<_> = self
+            .operations
+            .iter()
+            .filter(|op| op.id.starts_with(&prefix))
+            .collect();
+
+        ensure!(
+            !matches.is_empty(),
+            "no operation matching '{}' found",
+            query
+        );
+
+        Ok(ResolvedOperation::Prefix(matches))
+    }
+}
+
+fn is_valid_operation_query(query: &str) -> bool {
+    query.split('.').all(|seg| {
+        !seg.is_empty()
+            && !seg.starts_with('-')
+            && !seg.ends_with('-')
+            && seg
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+    })
 }
 
 pub fn fetch_catalog(client: &ApiClient, integration: &str) -> Result<OperationsCatalog> {
