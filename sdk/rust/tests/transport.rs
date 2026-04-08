@@ -1,7 +1,7 @@
-use std::ffi::OsString;
-use std::path::{Path, PathBuf};
+#[allow(dead_code)]
+mod helpers;
+
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use async_trait::async_trait;
 use gestalt_plugin_sdk::proto::v1::provider_plugin_client::ProviderPluginClient;
@@ -11,7 +11,6 @@ use gestalt_plugin_sdk::proto::v1::{
 use gestalt_plugin_sdk::{
     Catalog, CatalogOperation, Operation, Provider, Request, Response, Router, ok,
 };
-use prost_types::{Struct, Value};
 use tokio::net::UnixStream;
 use tonic::Code;
 use tonic::transport::Endpoint;
@@ -81,8 +80,10 @@ struct Output {
 
 #[tokio::test]
 async fn serves_provider_requests_over_unix_socket() {
-    let socket = temp_socket("gestalt-rust-sdk.sock");
-    let _socket_guard = EnvGuard::set(gestalt_plugin_sdk::ENV_PLUGIN_SOCKET, socket.as_os_str());
+    let _env_lock = helpers::env_lock().lock().await;
+    let socket = helpers::temp_socket("gestalt-rust-sdk.sock");
+    let _socket_guard =
+        helpers::EnvGuard::set(gestalt_plugin_sdk::ENV_PLUGIN_SOCKET, socket.as_os_str());
 
     let router = Router::new()
         .register(
@@ -105,7 +106,7 @@ async fn serves_provider_requests_over_unix_socket() {
             .expect("serve provider");
     });
 
-    wait_for_socket(&socket).await;
+    helpers::wait_for_socket(&socket).await;
 
     let channel = Endpoint::try_from("http://[::]:50051")
         .expect("endpoint")
@@ -135,7 +136,7 @@ async fn serves_provider_requests_over_unix_socket() {
     let started = client
         .start_provider(StartProviderRequest {
             name: "example".to_string(),
-            config: Some(struct_from_json(serde_json::json!({ "greeting": "Hi" }))),
+            config: Some(helpers::struct_from_json(serde_json::json!({ "greeting": "Hi" }))),
             protocol_version: gestalt_plugin_sdk::CURRENT_PROTOCOL_VERSION,
         })
         .await
@@ -149,7 +150,7 @@ async fn serves_provider_requests_over_unix_socket() {
     let response = client
         .execute(ExecuteRequest {
             operation: "greet".to_string(),
-            params: Some(struct_from_json(serde_json::json!({ "name": "Rust" }))),
+            params: Some(helpers::struct_from_json(serde_json::json!({ "name": "Rust" }))),
             token: String::new(),
             connection_params: Default::default(),
             invocation_id: String::new(),
@@ -185,79 +186,3 @@ async fn serves_provider_requests_over_unix_socket() {
     let _ = serve_task.await;
 }
 
-struct EnvGuard {
-    key: &'static str,
-    previous: Option<OsString>,
-}
-
-impl EnvGuard {
-    fn set(key: &'static str, value: impl AsRef<std::ffi::OsStr>) -> Self {
-        let previous = std::env::var_os(key);
-        unsafe {
-            std::env::set_var(key, value);
-        }
-        Self { key, previous }
-    }
-}
-
-impl Drop for EnvGuard {
-    fn drop(&mut self) {
-        unsafe {
-            if let Some(previous) = &self.previous {
-                std::env::set_var(self.key, previous);
-            } else {
-                std::env::remove_var(self.key);
-            }
-        }
-    }
-}
-
-fn struct_from_json(value: serde_json::Value) -> Struct {
-    let object = value.as_object().expect("json object");
-    Struct {
-        fields: object
-            .iter()
-            .map(|(key, value)| (key.clone(), json_to_prost(value)))
-            .collect(),
-    }
-}
-
-fn json_to_prost(value: &serde_json::Value) -> Value {
-    use prost_types::value::Kind;
-
-    let kind = match value {
-        serde_json::Value::Null => Kind::NullValue(0),
-        serde_json::Value::Bool(boolean) => Kind::BoolValue(*boolean),
-        serde_json::Value::Number(number) => Kind::NumberValue(number.as_f64().expect("f64")),
-        serde_json::Value::String(string) => Kind::StringValue(string.clone()),
-        serde_json::Value::Array(items) => Kind::ListValue(prost_types::ListValue {
-            values: items.iter().map(json_to_prost).collect(),
-        }),
-        serde_json::Value::Object(object) => Kind::StructValue(Struct {
-            fields: object
-                .iter()
-                .map(|(key, value)| (key.clone(), json_to_prost(value)))
-                .collect(),
-        }),
-    };
-    Value { kind: Some(kind) }
-}
-
-async fn wait_for_socket(path: &Path) {
-    let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
-    while tokio::time::Instant::now() < deadline {
-        if path.exists() {
-            return;
-        }
-        tokio::time::sleep(Duration::from_millis(25)).await;
-    }
-    panic!("socket {} was not created", path.display());
-}
-
-fn temp_socket(name: &str) -> PathBuf {
-    let nanos = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("unix epoch")
-        .as_nanos();
-    std::env::temp_dir().join(format!("{nanos}-{name}"))
-}
