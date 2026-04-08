@@ -244,11 +244,21 @@ fn write_http_response(stream: &mut TcpStream, status: StatusCode, content_type:
 fn cli_command(home: &Path) -> Command {
     std::fs::create_dir_all(home).unwrap();
     let mut cmd = Command::cargo_bin("gestalt").unwrap();
-    cmd.env("HOME", home)
+    cmd.current_dir(home)
+        .env("HOME", home)
         .env("XDG_CONFIG_HOME", home.join("xdg-config"))
         .env_remove(gestalt::api::ENV_API_KEY)
         .env_remove("GESTALT_URL");
     cmd
+}
+
+fn write_credentials(home: &Path, credentials: serde_json::Value) {
+    let path = home
+        .join("xdg-config")
+        .join("gestalt")
+        .join("credentials.json");
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(path, serde_json::to_string_pretty(&credentials).unwrap()).unwrap();
 }
 
 fn run_cli(server: &Server, args: &[&str]) -> std::process::Output {
@@ -608,6 +618,52 @@ fn test_auth_login_stores_credentials_and_serves_styled_browser_page() {
 }
 
 #[test]
+fn test_auth_logout_revokes_token_using_credential_url_even_when_configured_url_differs() {
+    let mut token_server = Server::new();
+    let revoke = authed_json_mock!(
+        token_server,
+        Method::DELETE,
+        "/api/v1/tokens/tok-123",
+        StatusCode::OK
+    )
+    .with_body(r#"{"status":"ok"}"#)
+    .create();
+    let wrong_server = Server::new();
+
+    let home = tempfile::tempdir().unwrap();
+    write_credentials(
+        home.path(),
+        serde_json::json!({
+            "api_url": token_server.url(),
+            "api_token": TEST_TOKEN,
+            "api_token_id": "tok-123",
+        }),
+    );
+
+    cli_command(home.path())
+        .args(["config", "set", "url", &wrong_server.url()])
+        .assert()
+        .success();
+
+    cli_command(home.path())
+        .args(["auth", "logout"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Logged out. Credentials removed."))
+        .stderr(predicate::str::contains("Failed to revoke stored CLI token").not());
+
+    revoke.assert();
+    assert!(
+        !home
+            .path()
+            .join("xdg-config")
+            .join("gestalt")
+            .join("credentials.json")
+            .exists()
+    );
+}
+
+#[test]
 fn test_init_skips_login_when_server_auth_is_disabled() {
     let mut server = Server::new();
     let _auth_info = json_mock!(server, Method::GET, "/api/v1/auth/info", StatusCode::OK)
@@ -662,11 +718,11 @@ fn test_connect_includes_connection_and_instance() {
 }
 
 #[test]
-fn test_connect_omits_null_connection_and_instance() {
+fn test_connect_prefers_oauth_when_manual_also_exists_and_omits_null_connection_and_instance() {
     let mut server = Server::new();
     let _integrations =
         authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
-            .with_body(r#"[{"name":"github","auth_types":["oauth"],"connected":false}]"#)
+            .with_body(r#"[{"name":"github","auth_types":["oauth","manual"],"connected":false}]"#)
             .create();
     let mock = authed_json_mock!(
         server,
@@ -682,16 +738,25 @@ fn test_connect_omits_null_connection_and_instance() {
     .create();
 
     let client = create_client(&server);
+    let opened_url = Arc::new(Mutex::new(None));
+    let opened_url_handle = Arc::clone(&opened_url);
     let result = gestalt::commands::integrations::connect_with_browser_opener(
         &client,
         "github",
         None,
         None,
-        |_| Ok(()),
+        move |url| {
+            *opened_url_handle.lock().unwrap() = Some(url.to_string());
+            Ok(())
+        },
     );
 
     mock.assert();
     assert!(result.is_ok());
+    assert_eq!(
+        opened_url.lock().unwrap().as_deref(),
+        Some("https://example.com/oauth")
+    );
 }
 
 #[test]
@@ -868,73 +933,6 @@ fn test_manual_connect_prompts_for_connection_and_finishes_candidate_selection()
             "Gestalt found more than one manual-svc connection. Choose one to save:",
         ))
         .stderr(predicate::str::contains("Connected manual-svc (Site B)"));
-}
-
-#[test]
-fn test_oauth_connect_still_prefers_browser_flow_when_manual_also_exists() {
-    let mut server = Server::new();
-    let _integrations =
-        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
-            .with_body(
-                r#"[{
-                "name":"github",
-                "display_name":"GitHub",
-                "auth_types":["oauth","manual"],
-                "connection_params":{"site":{"description":"GitHub site","required":true}},
-                "credential_fields":[{"name":"token","label":"Token"}]
-            }]"#,
-            )
-            .create();
-    let _oauth = authed_json_mock!(
-        server,
-        Method::POST,
-        "/api/v1/auth/start-oauth",
-        StatusCode::OK
-    )
-    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
-    .match_body(Matcher::JsonString(
-        r#"{"connection_params":{"site":"github.valon.com"},"integration":"github"}"#.to_string(),
-    ))
-    .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
-    .create();
-
-    let home = tempfile::tempdir().unwrap();
-    let browser_bin = tempfile::tempdir().unwrap();
-    for command in ["open", "xdg-open"] {
-        let path = browser_bin.path().join(command);
-        std::fs::write(&path, "#!/bin/sh\nexit 0\n").unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-
-            let mut perms = std::fs::metadata(&path).unwrap().permissions();
-            perms.set_mode(0o755);
-            std::fs::set_permissions(&path, perms).unwrap();
-        }
-    }
-
-    let path = std::env::join_paths(
-        std::iter::once(browser_bin.path().to_path_buf()).chain(
-            std::env::var_os("PATH")
-                .into_iter()
-                .flat_map(|value| std::env::split_paths(&value).collect::<Vec<_>>()),
-        ),
-    )
-    .unwrap();
-
-    cli_command_for_server(home.path(), &server)
-        .env("PATH", path)
-        .args(["integrations", "connect", "github"])
-        .write_stdin("github.valon.com\n")
-        .assert()
-        .success()
-        .stderr(predicate::str::contains("GitHub site"))
-        .stderr(predicate::str::contains(
-            "Opening browser to connect github...",
-        ))
-        .stderr(predicate::str::contains(
-            "If the browser doesn't open, visit: https://example.com/oauth",
-        ));
 }
 
 #[test]
@@ -1138,7 +1136,7 @@ fn test_cli_config_set_and_get_json() {
 }
 
 #[test]
-fn test_resolve_url_prefers_project_config_file() {
+fn test_resolve_url_prefers_project_config_file_and_propagates_project_config_errors() {
     let _lock = env_lock();
     let config_root = TempDir::new().unwrap();
     let _env = EnvGuard::new(config_root.path());
@@ -1160,10 +1158,19 @@ fn test_resolve_url_prefers_project_config_file() {
 
     let resolved = gestalt::api::resolve_url(None).unwrap();
     assert_eq!(resolved, "https://project.example.com");
+
+    std::fs::write(repo_root.join(".gestalt/config.json"), "{\n  invalid\n}\n").unwrap();
+
+    let err = gestalt::api::resolve_url_with_fallback(None, Some("https://fallback.example.com"))
+        .unwrap_err();
+    assert!(
+        err.to_string().contains("failed to parse project config"),
+        "{err:#}"
+    );
 }
 
 #[test]
-fn test_resolve_url_ignores_legacy_project_file_and_uses_global_config() {
+fn test_resolve_url_does_not_read_unsupported_dot_gestalt_json_file() {
     let _lock = env_lock();
     let config_root = TempDir::new().unwrap();
     let _env = EnvGuard::new(config_root.path());
@@ -1191,6 +1198,14 @@ fn test_resolve_url_ignores_legacy_project_file_and_uses_global_config() {
 fn test_cli_integrations_list_table_output() {
     let mut server = Server::new();
     let home = TempDir::new().unwrap();
+    write_credentials(
+        home.path(),
+        serde_json::json!({
+            "api_url": server.url(),
+            "api_token": TEST_TOKEN,
+            "api_token_id": "tok-123",
+        }),
+    );
     let mock = authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
         .with_body(
             r#"[{"name":"github","description":"GitHub integration with a longer description","connected":true}]"#,
@@ -1198,8 +1213,7 @@ fn test_cli_integrations_list_table_output() {
         .create();
 
     let mut cmd = cli_command(home.path());
-    cmd.env("GESTALT_API_KEY", TEST_TOKEN)
-        .args(["--url", &server.url(), "integrations", "list"]);
+    cmd.args(["integrations", "list"]);
     cmd.assert()
         .success()
         .stdout(predicate::str::contains("GITHUB").or(predicate::str::contains("github")))
@@ -1209,6 +1223,36 @@ fn test_cli_integrations_list_table_output() {
                 .or(predicate::str::contains("CONNECTED"))
                 .or(predicate::str::contains("connected")),
         );
+
+    mock.assert();
+}
+
+#[test]
+fn test_cli_integrations_list_accepts_legacy_credentials_without_api_url() {
+    let mut server = Server::new();
+    let home = TempDir::new().unwrap();
+    write_credentials(
+        home.path(),
+        serde_json::json!({
+            "api_token": TEST_TOKEN,
+            "api_token_id": "tok-123",
+        }),
+    );
+    let mock = authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
+        .with_body(
+            r#"[{"name":"github","description":"GitHub integration with a longer description","connected":true}]"#,
+        )
+        .create();
+
+    let mut config_cmd = cli_command(home.path());
+    config_cmd.args(["config", "set", "url", &server.url()]);
+    config_cmd.assert().success();
+
+    let mut cmd = cli_command(home.path());
+    cmd.args(["integrations", "list"]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("GitHub integration"));
 
     mock.assert();
 }
