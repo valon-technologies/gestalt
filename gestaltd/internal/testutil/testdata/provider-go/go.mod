@@ -1,4 +1,4 @@
-module github.com/valon-technologies/gestalt/examples/plugins/provider-go
+module github.com/valon-technologies/gestalt/testdata/provider-go
 
 go 1.26
 
@@ -14,4 +14,4 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/valon-technologies/gestalt/sdk/go => ../../../sdk/go
+replace github.com/valon-technologies/gestalt/sdk/go => ../../../../../sdk/go

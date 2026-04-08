@@ -277,11 +277,7 @@ func buildExampleProviderBinary(t *testing.T) string {
 
 func exampleProviderRoot(t *testing.T) string {
 	t.Helper()
-	root, err := repoRootForBootstrapTests()
-	if err != nil {
-		t.Fatalf("repoRootForBootstrapTests: %v", err)
-	}
-	return filepath.Join(root, "examples", "plugins", "provider-go")
+	return testutil.ExampleProviderPluginPath(t)
 }
 
 func mustNode(t *testing.T, value any) yaml.Node {

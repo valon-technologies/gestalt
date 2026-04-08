@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
 
 var (
@@ -52,7 +53,7 @@ func TestMain(m *testing.M) {
 		},
 		{
 			name:   "example provider",
-			dir:    filepath.Join(root, "examples", "plugins", "provider-go"),
+			dir:    testutil.MustExampleProviderPluginPath(),
 			target: "",
 			output: sharedExampleProviderBin,
 		},

@@ -21,6 +21,13 @@ updates:
     commit-message:
       prefix: build
 
+  - package-ecosystem: cargo
+    directory: /gestalt
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
+
   - package-ecosystem: gomod
     directory: /gestaltd
     schedule:
@@ -44,6 +51,13 @@ updates:
 
   - package-ecosystem: npm
     directory: /docs
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
+
+  - package-ecosystem: pip
+    directory: /sdk/python
     schedule:
       interval: weekly
     commit-message:

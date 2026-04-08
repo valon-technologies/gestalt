@@ -36,6 +36,5 @@
 // [MustNamedRouter] only when you need an explicit catalog name outside that
 // manifest-backed flow.
 //
-// See the public example under `examples/plugins/provider-go` and
-// `/docs/plugins/writing-a-plugin` for the full typed authoring flow.
+// See `/docs/plugins/writing-a-plugin` for the full typed authoring flow.
 package gestalt
