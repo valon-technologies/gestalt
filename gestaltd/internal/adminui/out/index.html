@@ -6,23 +6,57 @@
     <title>Gestalt Admin</title>
     <script>
       (function () {
-        const media = window.matchMedia("(prefers-color-scheme: dark)");
-        const applyTheme = function () {
-          document.documentElement.classList.toggle("dark", media.matches);
-          window.dispatchEvent(new Event("gestalt-themechange"));
-        };
-
-        applyTheme();
-        media.addEventListener("change", applyTheme);
+        var stored = localStorage.getItem('gestalt-admin-theme');
+        var theme = (stored === 'light' || stored === 'dark' || stored === 'system') ? stored : 'system';
+        var media = window.matchMedia('(prefers-color-scheme: dark)');
+        function apply() {
+          var useDark = theme === 'dark' || (theme === 'system' && media.matches);
+          document.documentElement.classList.toggle('dark', useDark);
+          window.dispatchEvent(new Event('gestalt-themechange'));
+        }
+        apply();
+        media.addEventListener('change', function () { if (theme === 'system') apply(); });
+        window.__gestaltTheme = { get: function() { return theme; }, set: function(t) { theme = t; localStorage.setItem('gestalt-admin-theme', t); apply(); } };
       })();
     </script>
     <link rel="stylesheet" href="./theme.css" />
     <style>
+      @font-face {
+        font-family: 'SeasonSerif';
+        src: url('./fonts/SeasonSerif_Regular.woff') format('woff');
+        font-weight: 400;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: 'MelangeGrotesk';
+        src: url('./fonts/KMRMelangeGrotesk_Regular.woff') format('woff');
+        font-weight: 400;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: 'MelangeGrotesk';
+        src: url('./fonts/KMRMelangeGrotesk_Bold.woff') format('woff');
+        font-weight: 700;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: 'GeistMono';
+        src: url('./fonts/GeistMono_Regular.woff2') format('woff2');
+        font-weight: 400;
+        font-display: swap;
+      }
+
       body {
         margin: 0;
         min-height: 100vh;
-        font: 16px/1.5 system-ui, sans-serif;
+        font: 16px/1.5 'MelangeGrotesk', system-ui, sans-serif;
         color: hsl(var(--foreground) / 1);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      code {
+        font-family: 'GeistMono', monospace;
+        font-size: 0.875em;
       }
 
       a {
@@ -36,12 +70,17 @@
       }
 
       .topbar {
-        border-bottom: 1px solid hsl(var(--border) / 1);
-        background: color-mix(in srgb, hsl(var(--background)) 88%, transparent);
+        border-bottom: 1px solid rgba(var(--alpha-dark), 0.1);
+        background: hsl(var(--background) / 0.8);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        position: sticky;
+        top: 0;
+        z-index: 50;
       }
 
       .topbar .shell {
-        min-height: 60px;
+        min-height: 52px;
         display: flex;
         align-items: center;
         justify-content: space-between;
@@ -50,30 +89,46 @@
       }
 
       .brand {
-        font: 700 1.125rem/1 Georgia, serif;
+        font: 700 1.125rem/1 'SeasonSerif', Georgia, serif;
         text-decoration: none;
       }
 
       .links {
         display: flex;
         align-items: center;
-        gap: 12px;
+        gap: 20px;
+        font-size: 0.875rem;
         color: rgba(var(--alpha-dark), 0.6);
       }
 
       .links a {
         text-decoration: none;
+        transition: color 150ms;
+      }
+
+      .links a:hover {
+        color: rgba(var(--alpha-dark), 0.8);
       }
 
       main {
         padding: 36px 0 56px;
       }
 
-      .card,
-      .status {
-        border: 1px solid hsl(var(--border) / 1);
+      .card, .status {
+        border: 1px solid rgba(var(--alpha-dark), 0.1);
         border-radius: 12px;
-        background: color-mix(in srgb, hsl(var(--surface)) 90%, white);
+        background: #FFFFFF;
+        transition: all 150ms ease;
+      }
+      .card:hover {
+        border-color: rgba(var(--alpha-dark), 0.2);
+        box-shadow: 0 1px 3px rgba(35, 24, 16, 0.04);
+      }
+      .dark .card, .dark .status {
+        background: hsl(var(--surface) / 1);
+      }
+      .dark .card:hover {
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
       }
 
       .hero,
@@ -87,23 +142,28 @@
       h1,
       h2,
       .metric-value {
-        font-family: Georgia, serif;
+        font-family: 'SeasonSerif', Georgia, serif;
       }
 
       h1 {
         margin: 8px 0 0;
-        font-size: clamp(2rem, 4vw, 2.6rem);
-        line-height: 1;
+        font-size: 1.5rem;
+        line-height: 1.2;
+        font-weight: 700;
+        letter-spacing: -0.02em;
       }
 
       h2 {
         margin: 6px 0 0;
-        font-size: 1.3rem;
+        font-size: 1.125rem;
+        font-weight: 700;
+        letter-spacing: -0.01em;
       }
 
       p {
         margin: 12px 0 0;
         color: rgba(var(--alpha-dark), 0.6);
+        font-size: 0.875rem;
       }
 
       .status {
@@ -159,11 +219,32 @@
       }
 
       .control-select {
-        border: 1px solid hsl(var(--border) / 1);
-        border-radius: 999px;
-        background: color-mix(in srgb, hsl(var(--surface-raised)) 48%, white);
-        color: hsl(var(--foreground) / 1);
+        border: 1px solid rgba(var(--alpha-dark), 0.1);
+        border-radius: 6px;
+        background: #FFFFFF;
+        color: rgba(var(--alpha-dark), 1);
         font: inherit;
+        font-size: 0.875rem;
+        transition: border-color 150ms, box-shadow 150ms;
+        cursor: pointer;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5l3 3 3-3' fill='none' stroke='%23231810' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 10px center;
+        padding-right: 32px;
+        appearance: none;
+        -webkit-appearance: none;
+      }
+
+      .control-select:focus {
+        outline: none;
+        border-color: rgba(var(--alpha-dark), 0.3);
+        box-shadow: 0 0 0 2px rgba(var(--alpha-dark), 0.05);
+      }
+
+      .dark .control-select {
+        background-color: hsl(var(--surface) / 1);
+        color: hsl(var(--foreground) / 1);
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5l3 3 3-3' fill='none' stroke='%23ffffff' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
       }
 
       .control-select {
@@ -178,12 +259,15 @@
 
       .metric-value {
         margin-top: 14px;
-        font-size: 2rem;
+        font-size: 1.875rem;
+        font-weight: 700;
         line-height: 1;
+        transition: opacity 0.15s ease-out;
       }
 
       .metric-note {
-        font-size: 0.92rem;
+        font-size: 0.8125rem;
+        line-height: 1.5;
       }
 
       .chart {
@@ -243,6 +327,51 @@
         background: linear-gradient(90deg, var(--brand) 0%, var(--brand-soft) 100%);
       }
 
+      @keyframes fade-in-up {
+        0% { opacity: 0; transform: translateY(12px); }
+        100% { opacity: 1; transform: translateY(0); }
+      }
+      .animate-fade-in-up {
+        animation: fade-in-up 0.5s cubic-bezier(0.19, 1, 0.22, 1) both;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .animate-fade-in-up { animation: none !important; opacity: 1 !important; }
+      }
+
+      .live-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--success);
+        animation: pulse 2s ease-in-out infinite;
+        margin-right: 6px;
+        vertical-align: middle;
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.4; }
+      }
+
+      .theme-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border: none;
+        border-radius: 8px;
+        background: transparent;
+        color: rgba(var(--alpha-dark), 0.4);
+        cursor: pointer;
+        transition: all 150ms;
+        padding: 0;
+      }
+      .theme-btn:hover {
+        background: rgba(var(--alpha-dark), 0.05);
+        color: rgba(var(--alpha-dark), 0.6);
+      }
+
       @media (max-width: 900px) {
         .summary-grid,
         .panel-grid {
@@ -278,12 +407,17 @@
         <div class="links">
           <a href="/">Client UI</a>
           <a href="/metrics" target="_blank" rel="noreferrer">Raw /metrics</a>
+          <button id="theme-toggle" class="theme-btn" title="Toggle theme" aria-label="Toggle theme">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+            </svg>
+          </button>
         </div>
       </div>
     </nav>
 
     <main class="shell">
-      <section class="card hero">
+      <section class="card hero animate-fade-in-up">
         <span class="label-text">Admin</span>
         <h1>Prometheus metrics</h1>
         <p>
@@ -294,9 +428,9 @@
         </p>
       </section>
 
-      <section class="status" id="status">Loading metrics...</section>
+      <section class="status animate-fade-in-up" style="animation-delay:40ms" id="status">Loading metrics...</section>
 
-      <section class="summary-grid">
+      <section class="summary-grid animate-fade-in-up" style="animation-delay:60ms">
         <article class="card summary-card">
           <span class="label-text">Total requests</span>
           <div class="metric-value" id="summary-requests">--</div>
@@ -319,7 +453,7 @@
         </article>
       </section>
 
-      <section class="card controls">
+      <section class="card controls animate-fade-in-up" style="animation-delay:80ms">
         <div class="control-cluster">
           <label class="control-group" for="time-window-select">
             <span class="label-text">Time window</span>
@@ -335,6 +469,8 @@
           <label class="control-group" for="refresh-interval-select">
             <span class="label-text">Refresh cadence</span>
             <select class="control-select" id="refresh-interval-select">
+              <option value="2000">2 seconds (Live)</option>
+              <option value="5000" selected>5 seconds</option>
               <option value="15000">15 seconds</option>
               <option value="30000">30 seconds</option>
               <option value="60000">1 minute</option>
@@ -349,7 +485,7 @@
         </p>
       </section>
 
-      <section class="panel-grid">
+      <section class="panel-grid animate-fade-in-up" style="animation-delay:100ms">
         <article class="card panel-card">
           <span class="label-text">Recent activity</span>
           <h2>Requests and failures</h2>
@@ -381,12 +517,12 @@
         </article>
       </section>
     </main>
-    <script src="./echarts.simple.min.js"></script>
+    <script src="./echarts.min.js"></script>
     <script>
       (function () {
         const METRIC_LINE =
           /^([a-zA-Z_:][a-zA-Z0-9_:]*)(\{[^}]*\})?\s+([+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:[eE][+-]?\d+)?|NaN|[+-]?Inf)$/;
-        const DEFAULT_REFRESH_INTERVAL_MS = 15000;
+        const DEFAULT_REFRESH_INTERVAL_MS = 5000;
         const HISTORY_RETENTION_MS = 24 * 60 * 60 * 1000;
         const TIME_WINDOWS = [
           {
@@ -416,6 +552,8 @@
           },
         ];
         const REFRESH_OPTIONS = [
+          { value: 2000, label: "2 seconds (Live)" },
+          { value: 5000, label: "5 seconds" },
           { value: 15000, label: "15 seconds" },
           { value: 30000, label: "30 seconds" },
           { value: 60000, label: "1 minute" },
@@ -433,8 +571,13 @@
         }
 
         function setStatus(message, kind) {
-          byId("status").className = kind ? `status ${kind}` : "status";
-          byId("status").textContent = message;
+          var el = byId("status");
+          el.className = kind ? "status " + kind : "status";
+          if (kind === "ok" && refreshIntervalMs === 2000) {
+            el.innerHTML = '<span class="live-dot"></span>' + message.replace(/^Last refreshed/, "Live \u00b7");
+          } else {
+            el.textContent = message;
+          }
         }
 
         function formatCount(value) {
@@ -802,12 +945,16 @@
           const colorsByTheme = theme();
           chart.setOption(
             {
-              animation: false,
+              animation: true,
+              animationDuration: 400,
+              animationDurationUpdate: 400,
+              animationEasing: 'cubicOut',
+              animationEasingUpdate: 'cubicOut',
               aria: { enabled: true },
               color: colors.map(function (name) {
                 return colorsByTheme[name];
               }),
-              grid: { left: 48, right: 18, top: 42, bottom: 24 },
+              grid: { left: 48, right: 18, top: 42, bottom: 52 },
               legend: {
                 top: 8,
                 textStyle: { color: colorsByTheme.muted },
@@ -816,10 +963,12 @@
               },
               tooltip: {
                 trigger: "axis",
+                axisPointer: { type: "cross", label: { show: true } },
                 backgroundColor: colorsByTheme.surfaceRaised,
                 borderColor: colorsByTheme.border,
                 textStyle: { color: colorsByTheme.foreground },
                 valueFormatter: formatter,
+                confine: true,
               },
               xAxis: {
                 type: "time",
@@ -841,9 +990,22 @@
                 axisLabel: { color: colorsByTheme.faint, formatter },
                 splitLine: { lineStyle: { color: colorsByTheme.border } },
               },
+              dataZoom: [
+                { type: 'inside', xAxisIndex: 0, filterMode: 'none' },
+                {
+                  type: 'slider',
+                  xAxisIndex: 0,
+                  height: 20,
+                  bottom: 0,
+                  borderColor: colorsByTheme.border,
+                  fillerColor: 'rgba(122, 79, 16, 0.06)',
+                  handleStyle: { color: colorsByTheme.brand },
+                  textStyle: { color: colorsByTheme.faint },
+                  filterMode: 'none',
+                },
+              ],
               series,
             },
-            true,
           );
         }
 
@@ -860,7 +1022,11 @@
           const colors = theme();
           chart.setOption(
             {
-              animation: false,
+              animation: true,
+              animationDuration: 400,
+              animationDurationUpdate: 400,
+              animationEasing: 'cubicOut',
+              animationEasingUpdate: 'cubicOut',
               aria: { enabled: true },
               grid: { left: 140, right: 20, top: 20, bottom: 20 },
               tooltip: {
@@ -901,6 +1067,9 @@
                     borderRadius: [0, 999, 999, 0],
                     color: colors.brand,
                   },
+                  emphasis: {
+                    itemStyle: { color: colors.brandSoft },
+                  },
                   label: {
                     show: true,
                     position: "right",
@@ -912,7 +1081,6 @@
                 },
               ],
             },
-            true,
           );
         }
 
@@ -947,8 +1115,8 @@
             "latency-chart",
             windowedHistory,
             [
-              lineSeries(windowedHistory, "Average", "avgLatencyMs"),
-              lineSeries(windowedHistory, "P95", "p95LatencyMs"),
+              lineSeries(windowedHistory, "Average", "avgLatencyMs", { areaStyle: { opacity: 0.08 } }),
+              lineSeries(windowedHistory, "P95", "p95LatencyMs", { areaStyle: { opacity: 0.05 } }),
             ],
             ["success", "brandSoft"],
             function (value) {
@@ -1016,6 +1184,29 @@
             renderCharts(latestSnapshot);
           }
         });
+
+        (function() {
+          var btn = document.getElementById('theme-toggle');
+          if (!btn) return;
+          var icons = {
+            light: '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>',
+            dark: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>',
+            system: '<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>',
+          };
+          var titles = { light: 'Light mode (click for dark)', dark: 'Dark mode (click for system)', system: 'System mode (click for light)' };
+          function update() {
+            var t = window.__gestaltTheme.get();
+            btn.querySelector('svg').innerHTML = icons[t];
+            btn.title = titles[t];
+          }
+          update();
+          btn.addEventListener('click', function() {
+            var current = window.__gestaltTheme.get();
+            var next = current === 'light' ? 'dark' : current === 'dark' ? 'system' : 'light';
+            window.__gestaltTheme.set(next);
+            update();
+          });
+        })();
       })();
     </script>
   </body>
