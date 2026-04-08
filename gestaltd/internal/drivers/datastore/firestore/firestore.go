@@ -21,6 +21,9 @@ const (
 	usersByEmailCollection         = "users_by_email"
 	integrationTokenKeysCollection = "integration_token_keys"
 	apiTokensByHashCollection      = "api_tokens_by_hash"
+	findUserByEmailRetryAttempts   = 4
+	findUserByEmailRetryBackoff    = 25 * time.Millisecond
+	createUserRetryAttempts        = 3
 )
 
 type Store struct {
@@ -124,49 +127,58 @@ func (s *Store) FindOrCreateUser(ctx context.Context, email string) (*core.User,
 	lookupRef := s.client.Collection(usersByEmailCollection).Doc(email)
 	userRef := s.client.Collection(datastore.UsersCollection).Doc(id)
 
-	var created bool
-	err = s.client.RunTransaction(ctx, func(_ context.Context, tx *gcpfirestore.Transaction) error {
-		snap, err := tx.Get(lookupRef)
-		if err != nil && status.Code(err) != codes.NotFound {
-			return fmt.Errorf("checking email lookup: %w", err)
+	for attempt := 0; attempt < createUserRetryAttempts; attempt++ {
+		created := false
+		err = s.client.RunTransaction(ctx, func(_ context.Context, tx *gcpfirestore.Transaction) error {
+			snap, err := tx.Get(lookupRef)
+			if err != nil && status.Code(err) != codes.NotFound {
+				return fmt.Errorf("checking email lookup: %w", err)
+			}
+			if snap != nil && snap.Exists() {
+				created = false
+				return nil
+			}
+			if err := tx.Create(lookupRef, userLookupDoc{UserID: id}); err != nil {
+				return err
+			}
+			created = true
+			return tx.Create(userRef, doc)
+		})
+		if err == nil {
+			if !created {
+				user, err = s.findUserByEmail(ctx, email)
+				if err != nil {
+					return nil, fmt.Errorf("firestore: querying existing user: %w", err)
+				}
+				if user == nil {
+					return nil, fmt.Errorf("firestore: email lookup exists but user not found")
+				}
+				return user, nil
+			}
+
+			return &core.User{
+				ID:        id,
+				Email:     email,
+				CreatedAt: now,
+				UpdatedAt: now,
+			}, nil
 		}
-		if snap != nil && snap.Exists() {
-			created = false
-			return nil
-		}
-		if err := tx.Create(lookupRef, userLookupDoc{UserID: id}); err != nil {
-			return err
-		}
-		created = true
-		return tx.Create(userRef, doc)
-	})
-	if err != nil {
-		user, err2 := s.findUserByEmail(ctx, email)
+
+		user, err2 := s.waitForUserByEmail(ctx, email, findUserByEmailRetryAttempts)
 		if err2 != nil {
 			return nil, fmt.Errorf("firestore: re-querying user after conflict: %w", err2)
 		}
 		if user != nil {
 			return user, nil
 		}
-		return nil, fmt.Errorf("firestore: creating user: %w", err)
-	}
-	if !created {
-		user, err = s.findUserByEmail(ctx, email)
-		if err != nil {
-			return nil, fmt.Errorf("firestore: querying existing user: %w", err)
+		if !isRetryableCreateUserError(err) || attempt == createUserRetryAttempts-1 {
+			return nil, fmt.Errorf("firestore: creating user: %w", err)
 		}
-		if user == nil {
-			return nil, fmt.Errorf("firestore: email lookup exists but user not found")
+		if err := sleepWithContext(ctx, findUserByEmailRetryBackoff*time.Duration(attempt+1)); err != nil {
+			return nil, err
 		}
-		return user, nil
 	}
-
-	return &core.User{
-		ID:        id,
-		Email:     email,
-		CreatedAt: now,
-		UpdatedAt: now,
-	}, nil
+	return nil, fmt.Errorf("firestore: creating user: exhausted retries")
 }
 
 func (s *Store) findUserByEmail(ctx context.Context, email string) (*core.User, error) {
@@ -191,6 +203,38 @@ func (s *Store) findUserByEmail(ctx context.Context, email string) (*core.User, 
 		return nil, fmt.Errorf("firestore: getting user from email lookup: %w", err)
 	}
 	return user, nil
+}
+
+func (s *Store) waitForUserByEmail(ctx context.Context, email string, attempts int) (*core.User, error) {
+	for attempt := 0; attempt < attempts; attempt++ {
+		user, err := s.findUserByEmail(ctx, email)
+		if err != nil || user != nil {
+			return user, err
+		}
+		if attempt == attempts-1 {
+			break
+		}
+		if err := sleepWithContext(ctx, findUserByEmailRetryBackoff*time.Duration(attempt+1)); err != nil {
+			return nil, err
+		}
+	}
+	return nil, nil
+}
+
+func isRetryableCreateUserError(err error) bool {
+	return status.Code(err) == codes.Aborted
+}
+
+func sleepWithContext(ctx context.Context, d time.Duration) error {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 func snapToUser(snap *gcpfirestore.DocumentSnapshot) (*core.User, error) {
