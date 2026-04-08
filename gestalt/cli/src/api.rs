@@ -3,7 +3,7 @@ use reqwest::Method;
 use reqwest::StatusCode;
 use reqwest::blocking::Client;
 use reqwest::header::{self, HeaderValue};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -18,6 +18,11 @@ pub const PROJECT_CONFIG_FILE: &str = ".gestalt/config.json";
 pub const AUTH_INFO_PATH: &str = "/api/v1/auth/info";
 pub const AUTH_LOGIN_PATH: &str = "/api/v1/auth/login";
 pub const AUTH_LOGIN_CALLBACK_PATH: &str = "/api/v1/auth/login/callback";
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct AuthInfo {
+    pub login_supported: bool,
+}
 
 pub fn normalize_url(url: &str) -> String {
     let trimmed = url.trim().trim_end_matches('/');
@@ -57,6 +62,32 @@ pub fn resolve_url_with_fallback(
             None => bail_no_url_configured(),
         },
     }
+}
+
+pub fn fetch_auth_info(base_url: &str) -> Result<AuthInfo> {
+    let auth_info_url = format!("{}{}", base_url.trim_end_matches('/'), AUTH_INFO_PATH);
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .context("failed to build HTTP client")?;
+    let resp = client
+        .get(&auth_info_url)
+        .send()
+        .with_context(|| format!("failed to reach {}", auth_info_url))?;
+    let status = resp.status();
+    let body = resp.text().context("failed to read response body")?;
+
+    if !status.is_success() {
+        bail!(
+            "request to {} failed (HTTP {}): {}",
+            auth_info_url,
+            status.as_u16(),
+            body.chars().take(200).collect::<String>()
+        );
+    }
+
+    serde_json::from_str(&body)
+        .with_context(|| format!("server at {} returned non-JSON auth info", base_url))
 }
 
 fn find_configured_url(url_override: Option<&str>) -> Result<Option<String>> {
