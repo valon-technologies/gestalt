@@ -33,9 +33,9 @@ func EmbeddedHandler() http.Handler {
 
 func DirHandler(path string) (http.Handler, error) {
 	root := os.DirFS(path)
-	handler, err := staticui.Handler(staticui.Config{FS: root})
+	handler, err := staticui.Handler(staticui.Config{FS: root, DynamicIndex: true})
 	if err != nil {
-		return nil, fmt.Errorf("webui asset root %s does not contain index.html", path)
+		return nil, fmt.Errorf("webui: %s: %w", path, err)
 	}
 	return handler, nil
 }
