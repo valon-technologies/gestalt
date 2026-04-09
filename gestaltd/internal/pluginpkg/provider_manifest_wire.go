@@ -28,7 +28,7 @@ type providerManifestWire struct {
 	Connections       map[string]*providerManifestConnectionWire             `json:"connections,omitempty" yaml:"connections,omitempty"`
 	Headers           map[string]string                                      `json:"headers,omitempty" yaml:"headers,omitempty"`
 	ManagedParameters []pluginmanifestv1.ManagedParameter                    `json:"managed_parameters,omitempty" yaml:"managed_parameters,omitempty"`
-	ResponseMapping   *pluginmanifestv1.ManifestResponseMapping              `json:"response_mapping,omitempty" yaml:"response_mapping,omitempty"`
+	ResponseMapping   *providerManifestResponseMappingWire                   `json:"response_mapping,omitempty" yaml:"response_mapping,omitempty"`
 	Pagination        *pluginmanifestv1.ManifestPaginationConfig             `json:"pagination,omitempty" yaml:"pagination,omitempty"`
 	AllowedOperations map[string]*pluginmanifestv1.ManifestOperationOverride `json:"allowed_operations,omitempty" yaml:"allowed_operations,omitempty"`
 	Surfaces          providerManifestSurfacesWire                           `json:"surfaces,omitempty" yaml:"surfaces,omitempty"`
@@ -87,6 +87,18 @@ type providerManifestMCPWire struct {
 	Enabled bool `json:"enabled,omitempty" yaml:"enabled,omitempty"`
 }
 
+type providerManifestResponseMappingWire struct {
+	DataPath   string                                 `json:"data_path" yaml:"data_path"`
+	Pagination *providerManifestPaginationMappingWire `json:"pagination,omitempty" yaml:"pagination,omitempty"`
+}
+
+type providerManifestPaginationMappingWire struct {
+	HasMore     *pluginmanifestv1.ManifestValueSelector `json:"has_more,omitempty" yaml:"has_more,omitempty"`
+	Cursor      *pluginmanifestv1.ManifestValueSelector `json:"cursor,omitempty" yaml:"cursor,omitempty"`
+	HasMorePath string                                  `json:"has_more_path,omitempty" yaml:"has_more_path,omitempty"`
+	CursorPath  string                                  `json:"cursor_path,omitempty" yaml:"cursor_path,omitempty"`
+}
+
 func decodeProviderManifestWire(data []byte, format string) (*pluginmanifestv1.Manifest, error) {
 	var wire providerManifestWireRoot
 	switch format {
@@ -129,7 +141,7 @@ func providerWireToInternal(wire *providerManifestWireRoot) *pluginmanifestv1.Ma
 			ConfigSchemaPath:  wire.Provider.ConfigSchemaPath,
 			Headers:           wire.Provider.Headers,
 			ManagedParameters: wire.Provider.ManagedParameters,
-			ResponseMapping:   wire.Provider.ResponseMapping,
+			ResponseMapping:   wire.Provider.ResponseMapping.toInternal(),
 			Pagination:        wire.Provider.Pagination,
 			AllowedOperations: wire.Provider.AllowedOperations,
 		}
@@ -238,7 +250,7 @@ func internalProviderManifestToWire(manifest *pluginmanifestv1.Manifest) *provid
 		ConfigSchemaPath:  manifest.Plugin.ConfigSchemaPath,
 		Headers:           manifest.Plugin.Headers,
 		ManagedParameters: manifest.Plugin.ManagedParameters,
-		ResponseMapping:   manifest.Plugin.ResponseMapping,
+		ResponseMapping:   internalResponseMappingToWire(manifest.Plugin.ResponseMapping),
 		Pagination:        manifest.Plugin.Pagination,
 		AllowedOperations: manifest.Plugin.AllowedOperations,
 	}
@@ -345,4 +357,53 @@ func manifestDefaultConnectionToWire(name string) string {
 	default:
 		return name
 	}
+}
+
+func (w *providerManifestResponseMappingWire) toInternal() *pluginmanifestv1.ManifestResponseMapping {
+	if w == nil {
+		return nil
+	}
+	internal := &pluginmanifestv1.ManifestResponseMapping{
+		DataPath: w.DataPath,
+	}
+	if pagination := w.Pagination.toInternal(); pagination != nil {
+		internal.Pagination = pagination
+	}
+	return internal
+}
+
+func (w *providerManifestPaginationMappingWire) toInternal() *pluginmanifestv1.ManifestPaginationMapping {
+	if w == nil {
+		return nil
+	}
+	internal := &pluginmanifestv1.ManifestPaginationMapping{
+		HasMore: w.HasMore,
+		Cursor:  w.Cursor,
+	}
+	if internal.HasMore == nil && w.HasMorePath != "" {
+		internal.HasMore = &pluginmanifestv1.ManifestValueSelector{Path: w.HasMorePath}
+	}
+	if internal.Cursor == nil && w.CursorPath != "" {
+		internal.Cursor = &pluginmanifestv1.ManifestValueSelector{Path: w.CursorPath}
+	}
+	if internal.HasMore == nil && internal.Cursor == nil {
+		return nil
+	}
+	return internal
+}
+
+func internalResponseMappingToWire(in *pluginmanifestv1.ManifestResponseMapping) *providerManifestResponseMappingWire {
+	if in == nil {
+		return nil
+	}
+	wire := &providerManifestResponseMappingWire{
+		DataPath: in.DataPath,
+	}
+	if in.Pagination != nil {
+		wire.Pagination = &providerManifestPaginationMappingWire{
+			HasMore: in.Pagination.HasMore,
+			Cursor:  in.Pagination.Cursor,
+		}
+	}
+	return wire
 }

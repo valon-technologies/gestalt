@@ -385,6 +385,37 @@ type AuthValueDef struct {
 	ValueFrom *AuthValueFromDef `yaml:"valueFrom"`
 }
 
+func (a *AuthValueDef) UnmarshalYAML(value *yaml.Node) error {
+	if value == nil || value.Kind == 0 {
+		*a = AuthValueDef{}
+		return nil
+	}
+	if value.Kind == yaml.ScalarNode {
+		var fieldName string
+		if err := value.Decode(&fieldName); err != nil {
+			return err
+		}
+		if fieldName == "" {
+			*a = AuthValueDef{}
+			return nil
+		}
+		*a = AuthValueDef{
+			ValueFrom: &AuthValueFromDef{
+				CredentialFieldRef: &CredentialFieldRefDef{Name: fieldName},
+			},
+		}
+		return nil
+	}
+
+	type rawAuthValueDef AuthValueDef
+	var decoded rawAuthValueDef
+	if err := value.Decode(&decoded); err != nil {
+		return err
+	}
+	*a = AuthValueDef(decoded)
+	return nil
+}
+
 type AuthValueFromDef struct {
 	CredentialFieldRef *CredentialFieldRefDef `yaml:"credentialFieldRef"`
 }

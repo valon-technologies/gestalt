@@ -138,6 +138,59 @@ plugins:
 	}
 }
 
+func TestLoadAcceptsLegacyAuthMappingCredentialShorthand(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+datastore:
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+      version: 1.0.0
+server:
+  encryption_key: server-key
+plugins:
+  datadog:
+    provider:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/plugins/datadog
+        version: 1.0.0
+    connections:
+      default:
+        auth:
+          type: manual
+          credentials:
+            - name: api_key
+            - name: app_key
+          auth_mapping:
+            headers:
+              DD-API-KEY: api_key
+              DD-APPLICATION-KEY: app_key
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	plugin := cfg.Integrations["datadog"].Plugin
+	if plugin == nil || plugin.Auth == nil || plugin.Auth.AuthMapping == nil {
+		t.Fatalf("unexpected plugin auth mapping: %#v", plugin)
+	}
+	headers := plugin.Auth.AuthMapping.Headers
+	assertCredentialFieldRef := func(name, want string) {
+		t.Helper()
+		got := headers[name]
+		if got.ValueFrom == nil || got.ValueFrom.CredentialFieldRef == nil || got.ValueFrom.CredentialFieldRef.Name != want {
+			t.Fatalf("%s credentialFieldRef = %#v, want %q", name, got.ValueFrom, want)
+		}
+		if got.Value != "" {
+			t.Fatalf("%s value = %q, want empty", name, got.Value)
+		}
+	}
+	assertCredentialFieldRef("DD-API-KEY", "api_key")
+	assertCredentialFieldRef("DD-APPLICATION-KEY", "app_key")
+}
+
 func TestLoadConfigEnvFileFallback(t *testing.T) {
 	t.Parallel()
 

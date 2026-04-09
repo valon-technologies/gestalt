@@ -359,6 +359,46 @@ provider:
 	}
 }
 
+func TestManifestWorkflow_AcceptsLegacyProviderWireResponseMappingPaginationPaths(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manifestPath := mustWriteManifestData(t, dir, "plugin.yaml", []byte(`
+source: github.com/acme/plugins/provider-wire-legacy-pagination
+version: 1.0.0
+display_name: Provider Wire Legacy Pagination
+provider:
+  exec:
+    artifact_path: gestalt-plugin-provider
+  response_mapping:
+    data_path: results
+    pagination:
+      has_more_path: moreDataAvailable
+      cursor_path: nextCursor
+artifacts:
+  - os: `+testArtifactOS+`
+    arch: `+testArtifactArch+`
+    path: gestalt-plugin-provider
+    sha256: `+sha256Hex("provider-wire-legacy-pagination")+`
+`))
+	mustWriteFile(t, filepath.Join(dir, "gestalt-plugin-provider"), []byte("provider-wire-legacy-pagination"), 0o755)
+
+	_, manifest, err := ReadManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadManifestFile: %v", err)
+	}
+	if manifest.Plugin == nil || manifest.Plugin.ResponseMapping == nil || manifest.Plugin.ResponseMapping.Pagination == nil {
+		t.Fatalf("unexpected response mapping: %#v", manifest.Plugin)
+	}
+	pagination := manifest.Plugin.ResponseMapping.Pagination
+	if pagination.HasMore == nil || pagination.HasMore.Path != "moreDataAvailable" || pagination.HasMore.Source != "" {
+		t.Fatalf("unexpected has_more selector: %#v", pagination.HasMore)
+	}
+	if pagination.Cursor == nil || pagination.Cursor.Path != "nextCursor" || pagination.Cursor.Source != "" {
+		t.Fatalf("unexpected cursor selector: %#v", pagination.Cursor)
+	}
+}
+
 func TestManifestWorkflow_AcceptsProviderWireMCPOAuthManifestAcrossDirectoryAndArchive(t *testing.T) {
 	t.Parallel()
 
