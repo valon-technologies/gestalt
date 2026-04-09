@@ -12,7 +12,7 @@ dependencies = [
   "pyyaml==6.0.3",
   "pyinstaller<7",
   "protobuf>=6.33.1,<8",
-  "typing-extensions==4.12.2",
+  "typing-extensions==4.15.0",
 ]
 
 [dependency-groups]
