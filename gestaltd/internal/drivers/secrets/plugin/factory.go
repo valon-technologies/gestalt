@@ -36,5 +36,6 @@ var Factory bootstrap.SecretManagerFactory = func(node yaml.Node) (core.SecretMa
 		AllowedHosts: cfg.AllowedHosts,
 		HostBinary:   cfg.HostBinary,
 		Cleanup:      prepared.Cleanup,
+		Name:         cfg.Name,
 	})
 }

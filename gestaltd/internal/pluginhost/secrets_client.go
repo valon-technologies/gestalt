@@ -17,6 +17,7 @@ type SecretsExecConfig struct {
 	AllowedHosts []string
 	HostBinary   string
 	Cleanup      func()
+	Name         string
 }
 
 type remoteSecretManager struct {
@@ -42,7 +43,7 @@ func NewExecutableSecretManager(ctx context.Context, cfg SecretsExecConfig) (cor
 	runtimeClient := proto.NewPluginRuntimeClient(proc.conn)
 	secretsClient := proto.NewSecretsProviderClient(proc.conn)
 
-	_, err = configureRuntimePlugin(ctx, runtimeClient, proto.PluginKind_PLUGIN_KIND_SECRETS, "", cfg.Config)
+	_, err = configureRuntimePlugin(ctx, runtimeClient, proto.PluginKind_PLUGIN_KIND_SECRETS, cfg.Name, cfg.Config)
 	if err != nil {
 		_ = proc.Close()
 		return nil, err
