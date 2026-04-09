@@ -329,8 +329,23 @@ jobs:
       - name: Build frontend
         run: cd gestaltd/ui && npm ci && npm run build
 
-      - name: Copy frontend assets
-        run: rm -rf gestaltd/internal/webui/out && cp -r gestaltd/ui/out gestaltd/internal/webui/out
+      - name: Create local default web UI provider fixture
+        run: |
+          provider_dir="$GITHUB_WORKSPACE/gestalt-providers/web/default"
+          mkdir -p "$provider_dir"
+          rm -rf "$provider_dir/out"
+          cp -r "$GITHUB_WORKSPACE/gestaltd/ui/out" "$provider_dir/out"
+
+          cat >"$provider_dir/plugin.yaml" <<'EOF'
+          source: github.com/valon-technologies/gestalt-providers/web/default
+          version: 0.0.1-alpha.1
+          display_name: Default Web UI
+          description: Local CI web UI fixture
+          kinds:
+            - webui
+          webui:
+            asset_root: out
+          EOF
 
       - name: Build Go server
         run: |

@@ -339,7 +339,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalTopLevelPluginsWithoutLockfile(t *t
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-cfg := `auth:
+	cfg := `auth:
   provider:
     source:
       path: ./auth-plugin.yaml
@@ -454,7 +454,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalSourceTopLevelPluginsWithoutArtifac
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-cfg := `auth:
+	cfg := `auth:
   provider:
     source:
       path: ./auth-plugin.yaml
