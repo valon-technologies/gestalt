@@ -14,7 +14,6 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/internal/apiexec"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/mcpupstream"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
@@ -224,13 +223,11 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		}
 		opResult, err := toolResultToOperationResult(result)
 		if err != nil {
-			var operationErr *apiexec.UpstreamOperationError
-			if errors.As(err, &operationErr) {
-				return fail(err)
-			}
 			return fail(fmt.Errorf("%w: converting tool result: %v", ErrInternal, err))
 		}
-		opResult.MCPResult = result
+		if result != nil {
+			opResult.MCPResult = result
+		}
 		return opResult, nil
 	}
 

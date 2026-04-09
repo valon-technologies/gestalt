@@ -1380,4 +1380,68 @@ func TestNewServer_PassthroughToolPreservesErrorResultStructure(t *testing.T) {
 	}
 }
 
+func TestNewServer_PassthroughToolTreatsNilResultAsEmptyJSON(t *testing.T) {
+	t.Parallel()
+
+	const (
+		providerName  = "svc"
+		operationName = "do_thing"
+		toolName      = providerName + "_" + operationName
+	)
+
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{N: providerName},
+		ops:             []core.Operation{{Name: operationName, Description: "A passthrough operation"}},
+		cat: &catalog.Catalog{
+			Name: providerName,
+			Operations: []catalog.CatalogOperation{
+				{
+					ID:          operationName,
+					Description: "A passthrough operation",
+					Transport:   catalog.TransportMCPPassthrough,
+				},
+			},
+		},
+		callFn: func(_ context.Context, _ string, _ map[string]any) (*mcpgo.CallToolResult, error) {
+			return nil, nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	broker := invocation.NewBroker(providers, stubDatastoreWithToken())
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:       broker,
+		TokenResolver: broker,
+		Providers:     providers,
+	})
+
+	tool := srv.GetTool(toolName)
+	if tool == nil {
+		t.Fatalf("tool %q not found", toolName)
+	}
+
+	req := mcpgo.CallToolRequest{}
+	req.Params.Name = toolName
+	result, err := tool.Handler(ctxWithPrincipal(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil MCP result")
+	}
+	if result.IsError {
+		t.Fatalf("unexpected MCP error result: %v", result.Content)
+	}
+	if len(result.Content) != 1 {
+		t.Fatalf("expected 1 content item, got %d", len(result.Content))
+	}
+	text, ok := mcpgo.AsTextContent(result.Content[0])
+	if !ok {
+		t.Fatalf("expected text content, got %T", result.Content[0])
+	}
+	if text.Text != "{}" {
+		t.Fatalf("text content = %q, want %q", text.Text, "{}")
+	}
+}
+
 func boolPtr(v bool) *bool { return &v }

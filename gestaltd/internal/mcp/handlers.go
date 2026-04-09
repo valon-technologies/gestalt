@@ -36,7 +36,7 @@ func makeHandler(invoker invocation.Invoker, provName, opName, connection string
 			return mcpgo.NewToolResultText("{}"), nil
 		}
 
-		if orig, ok := result.MCPResult.(*mcpgo.CallToolResult); ok {
+		if orig, ok := result.MCPResult.(*mcpgo.CallToolResult); ok && orig != nil {
 			return orig, nil
 		}
 
