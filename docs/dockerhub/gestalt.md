@@ -19,7 +19,7 @@
 - `latest`
 - `<version>`
 
-The image is published for `linux/amd64` and `linux/arm64`.
+The image is published for `linux/amd64`, `linux/arm64`, and `linux/arm/v7`.
 
 ## What the image includes
 
