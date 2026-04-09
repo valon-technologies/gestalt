@@ -168,6 +168,7 @@ func (s *StubAuthProvider) ValidateToken(ctx context.Context, token string) (*co
 	}
 	return nil, nil
 }
+
 type StubIntegration struct {
 	N              string
 	DN             string
