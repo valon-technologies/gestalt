@@ -36,6 +36,7 @@ from ._providers import (
     PluginProviderAdapter,
     ProviderKind,
     ProviderMetadata,
+    SecretsProvider,
     SessionTTLProvider,
     StoredAPIToken,
     StoredIntegrationToken,
@@ -51,6 +52,8 @@ from .gen.v1 import plugin_pb2 as _plugin_pb2
 from .gen.v1 import plugin_pb2_grpc as _plugin_pb2_grpc
 from .gen.v1 import runtime_pb2 as _runtime_pb2
 from .gen.v1 import runtime_pb2_grpc as _runtime_pb2_grpc
+from .gen.v1 import secrets_pb2 as _secrets_pb2
+from .gen.v1 import secrets_pb2_grpc as _secrets_pb2_grpc
 
 empty_pb2: Any = _empty_pb2
 timestamp_pb2: Any = _timestamp_pb2
@@ -62,6 +65,8 @@ auth_pb2: Any = _auth_pb2
 auth_pb2_grpc: Any = _auth_pb2_grpc
 datastore_pb2: Any = _datastore_pb2
 datastore_pb2_grpc: Any = _datastore_pb2_grpc
+secrets_pb2: Any = _secrets_pb2
+secrets_pb2_grpc: Any = _secrets_pb2_grpc
 
 UTC = dt.timezone.utc
 
@@ -189,9 +194,11 @@ def _load_target(args: RuntimeArgs) -> Plugin | PluginProviderAdapter | PluginPr
         return _auth_runtime_plugin(target)
     if resolved_kind == ProviderKind.DATASTORE and isinstance(target, DatastoreProvider):
         return _datastore_runtime_plugin(target)
+    if resolved_kind == ProviderKind.SECRETS and isinstance(target, SecretsProvider):
+        return _secrets_runtime_plugin(target)
     if isinstance(target, PluginProvider):
         raise RuntimeError(
-            "providers must be wrapped in gestalt.PluginProviderAdapter unless runtime_kind is auth or datastore"
+            "providers must be wrapped in gestalt.PluginProviderAdapter unless runtime_kind is auth, datastore, or secrets"
         )
     raise RuntimeError(f"{args.target} did not resolve to a supported gestalt target")
 
@@ -270,6 +277,8 @@ def _servable_target(
         return _auth_runtime_plugin(target)
     if kind == ProviderKind.DATASTORE and isinstance(target, DatastoreProvider):
         return _datastore_runtime_plugin(target)
+    if kind == ProviderKind.SECRETS and isinstance(target, SecretsProvider):
+        return _secrets_runtime_plugin(target)
     raise RuntimeError("unsupported runtime target")
 
 
@@ -307,6 +316,25 @@ def _register_datastore_services(server: Any, provider: PluginProvider) -> None:
     )
     datastore_pb2_grpc.add_DatastoreProviderServicer_to_server(
         _datastore_servicer(provider=provider),
+        server,
+    )
+
+
+def _secrets_runtime_plugin(provider: SecretsProvider) -> PluginProviderAdapter:
+    return PluginProviderAdapter(
+        kind=ProviderKind.SECRETS,
+        provider=provider,
+        register_services=_register_secrets_services,
+    )
+
+
+def _register_secrets_services(server: Any, provider: PluginProvider) -> None:
+    runtime_pb2_grpc.add_ProviderLifecycleServicer_to_server(
+        _runtime_servicer(provider=provider, kind=ProviderKind.SECRETS),
+        server,
+    )
+    secrets_pb2_grpc.add_SecretsProviderServicer_to_server(
+        _secrets_servicer(provider=provider),
         server,
     )
 
@@ -666,6 +694,18 @@ def _datastore_servicer(*, provider: PluginProvider) -> Any:
             return empty_pb2.Empty()
 
     return DatastoreServicer()
+
+
+def _secrets_servicer(*, provider: PluginProvider) -> Any:
+    secrets_provider = cast(SecretsProvider, provider)
+
+    class SecretsServicer(secrets_pb2_grpc.SecretsProviderServicer):
+        @_grpc_handler("get secret")
+        def GetSecret(self, request: Any, context: Any) -> Any:
+            value = secrets_provider.get_secret(request.name)
+            return secrets_pb2.GetSecretResponse(value=value)
+
+    return SecretsServicer()
 
 
 def _plugin_request(request: Any) -> Request:
