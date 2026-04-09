@@ -10,7 +10,7 @@ Pre-built binaries are published for every release on GitHub.
 
 ### Install
 
-<Tabs items={['macOS Apple Silicon', 'macOS Intel', 'Linux x86_64', 'Linux ARM64']}>
+<Tabs items={['macOS Apple Silicon', 'macOS Intel', 'Linux x86_64', 'Linux ARM64', 'Linux ARMv7']}>
   <Tabs.Tab>
     Download `gestaltd-macos-arm64.tar.gz` from the [latest release](https://github.com/valon-technologies/gestalt/releases?q=gestaltd).
 
@@ -43,6 +43,14 @@ Pre-built binaries are published for every release on GitHub.
     sudo mv gestaltd /usr/local/bin/
     ```
   </Tabs.Tab>
+  <Tabs.Tab>
+    Download `gestaltd-linux-armv7.tar.gz` from the [latest release](https://github.com/valon-technologies/gestalt/releases?q=gestaltd).
+
+    ```sh
+    tar xzf gestaltd-linux-armv7.tar.gz
+    sudo mv gestaltd /usr/local/bin/
+    ```
+  </Tabs.Tab>
 </Tabs>
 
 ### Verify
@@ -59,7 +67,7 @@ Linux CLI releases now use portable `musl` tarballs in the install examples belo
 
 ### Install
 
-<Tabs items={['macOS Apple Silicon', 'macOS Intel', 'Linux x86_64', 'Linux ARM64', 'Windows x86_64']}>
+<Tabs items={['macOS Apple Silicon', 'macOS Intel', 'Linux x86_64', 'Linux ARM64', 'Linux ARMv7', 'Windows x86_64']}>
   <Tabs.Tab>
     Download `gestalt-macos-arm64.tar.gz` from the [latest release](https://github.com/valon-technologies/gestalt/releases?q=gestalt+CLI).
 
@@ -89,6 +97,14 @@ Linux CLI releases now use portable `musl` tarballs in the install examples belo
 
     ```sh
     tar xzf gestalt-linux-arm64-musl.tar.gz
+    sudo mv gestalt /usr/local/bin/
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Download `gestalt-linux-armv7-musl.tar.gz` from the [latest release](https://github.com/valon-technologies/gestalt/releases?q=gestalt+CLI).
+
+    ```sh
+    tar xzf gestalt-linux-armv7-musl.tar.gz
     sudo mv gestalt /usr/local/bin/
     ```
   </Tabs.Tab>

@@ -138,15 +138,6 @@ provider:
 
 func TestCurrentPlatformArtifact_AllowsSingleLinuxLibCSpecificArtifactWhenLibCUnknown(t *testing.T) {
 	t.Parallel()
-	if runtime.GOOS != "linux" {
-		t.Skip("linux-specific artifact selection")
-	}
-
-	previous := currentArtifactRuntimeLibC
-	currentArtifactRuntimeLibC = func() string { return "" }
-	t.Cleanup(func() {
-		currentArtifactRuntimeLibC = previous
-	})
 
 	manifest := &pluginmanifestv1.Manifest{
 		Source:    "github.com/acme/providers/datastore",
@@ -154,7 +145,7 @@ func TestCurrentPlatformArtifact_AllowsSingleLinuxLibCSpecificArtifactWhenLibCUn
 		Datastore: &pluginmanifestv1.DatastoreMetadata{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
-				OS:     runtime.GOOS,
+				OS:     "linux",
 				Arch:   runtime.GOARCH,
 				LibC:   LinuxLibCGLibC,
 				Path:   "gestalt-plugin-datastore",
@@ -163,7 +154,13 @@ func TestCurrentPlatformArtifact_AllowsSingleLinuxLibCSpecificArtifactWhenLibCUn
 		},
 	}
 
-	artifact, err := CurrentPlatformArtifact(manifest)
+	artifact, err := CurrentPlatformArtifact(manifest, "")
+	if runtime.GOOS != "linux" {
+		if err == nil {
+			t.Fatal("expected error on non-linux platform")
+		}
+		return
+	}
 	if err != nil {
 		t.Fatalf("CurrentPlatformArtifact: %v", err)
 	}
@@ -174,15 +171,6 @@ func TestCurrentPlatformArtifact_AllowsSingleLinuxLibCSpecificArtifactWhenLibCUn
 
 func TestCurrentPlatformArtifact_RejectsAmbiguousLinuxLibCSpecificArtifactsWhenLibCUnknown(t *testing.T) {
 	t.Parallel()
-	if runtime.GOOS != "linux" {
-		t.Skip("linux-specific artifact selection")
-	}
-
-	previous := currentArtifactRuntimeLibC
-	currentArtifactRuntimeLibC = func() string { return "" }
-	t.Cleanup(func() {
-		currentArtifactRuntimeLibC = previous
-	})
 
 	manifest := &pluginmanifestv1.Manifest{
 		Source:    "github.com/acme/providers/datastore",
@@ -190,14 +178,14 @@ func TestCurrentPlatformArtifact_RejectsAmbiguousLinuxLibCSpecificArtifactsWhenL
 		Datastore: &pluginmanifestv1.DatastoreMetadata{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
-				OS:     runtime.GOOS,
+				OS:     "linux",
 				Arch:   runtime.GOARCH,
 				LibC:   LinuxLibCGLibC,
 				Path:   "gestalt-plugin-datastore-glibc",
 				SHA256: "deadbeef",
 			},
 			{
-				OS:     runtime.GOOS,
+				OS:     "linux",
 				Arch:   runtime.GOARCH,
 				LibC:   LinuxLibCMusl,
 				Path:   "gestalt-plugin-datastore-musl",
@@ -206,7 +194,13 @@ func TestCurrentPlatformArtifact_RejectsAmbiguousLinuxLibCSpecificArtifactsWhenL
 		},
 	}
 
-	if _, err := CurrentPlatformArtifact(manifest); err == nil {
+	if runtime.GOOS != "linux" {
+		if _, err := CurrentPlatformArtifact(manifest, ""); err == nil {
+			t.Fatal("expected error on non-linux platform")
+		}
+		return
+	}
+	if _, err := CurrentPlatformArtifact(manifest, ""); err == nil {
 		t.Fatal("expected ambiguous linux libc-specific artifacts to fail")
 	}
 }

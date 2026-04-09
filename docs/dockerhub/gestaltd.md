@@ -29,18 +29,25 @@
 
 ## Supported tags
 
-Docker Hub publishes these stable tag shapes:
+Docker Hub publishes these tag shapes for each release:
 
-- `latest` for the latest stable release
-- `<version>` for a specific stable release
+| Tag | Base | Shell | Size |
+| --- | --- | --- | --- |
+| `latest`, `<version>` | `scratch` (static) | No | Smallest |
+| `latest-alpine`, `<version>-alpine` | Alpine 3.23 | Yes | Small |
+| `latest-debian`, `<version>-debian` | Debian bookworm-slim | Yes | Medium |
 
-The image is published for `linux/amd64` and `linux/arm64`.
+All tags are published for `linux/amd64`, `linux/arm64`, and `linux/arm/v7`.
 
 ## What the image includes
 
-The image is Alpine-based and includes `gestaltd`, a shell, and
-`ca-certificates`. It runs as `nobody:nobody` by default and pre-creates
-`/data` as a writable directory for SQLite and prepared artifacts.
+The default image is a static build: just the `gestaltd` binary and CA
+certificates on a `scratch` base. There is no shell, no package manager, and
+minimal attack surface.
+
+For debugging access or plugin compatibility, use the `-alpine` or `-debian`
+variants. These include a shell, `ca-certificates`, and a writable `/data`
+directory owned by `nobody`.
 
 ## Run a simple config
 
@@ -141,12 +148,13 @@ deploy/
 Build the image from that prepared directory:
 
 ```dockerfile
-FROM valontechnologies/gestaltd:latest
+FROM valontechnologies/gestaltd:latest-alpine
 COPY deploy/ /app/
 CMD ["serve", "--locked", "--config", "/app/config.yaml"]
 ```
 
-This is the recommended production pattern.
+This is the recommended production pattern. Use the `-alpine` variant as the
+base for derived images since it includes a shell for build steps.
 
 If you intentionally want the image build itself to generate prepared state,
 `RUN gestaltd init` in a build stage also works, but it is a build-time
@@ -226,13 +234,14 @@ For horizontally scaled deployments, prefer Postgres or MySQL.
 
 ## Debugging
 
-The image includes a shell, so you can exec into a running container or start an interactive session:
+The default static image does not include a shell. Use the `-alpine` variant
+for interactive debugging:
 
 ```sh
-docker run --rm -it --entrypoint sh valontechnologies/gestaltd:latest
+docker run --rm -it --entrypoint sh valontechnologies/gestaltd:latest-alpine
 ```
 
-You can also use it to check startup behavior directly:
+To check startup behavior:
 
 ```sh
 docker run --rm valontechnologies/gestaltd:latest --help
@@ -244,7 +253,7 @@ If you build a provider release in Docker, run `gestaltd provider release` from
 the provider source directory:
 
 ```dockerfile
-FROM valontechnologies/gestaltd:latest AS gestaltd
+FROM valontechnologies/gestaltd:latest-alpine AS gestaltd
 
 FROM golang:1.26-alpine AS build
 RUN apk add --no-cache git
@@ -260,7 +269,7 @@ RUN cd ./my-plugin && \
 
 - The published image defaults to locked startup. A missing config file or missing prepared state causes startup to fail fast.
 - `docker run valontechnologies/gestaltd:latest` by itself is expected to fail because the image does not auto-generate config in-container.
-- The image includes a shell for debugging.
+- The default image does not include a shell. Use `-alpine` or `-debian` for debugging.
 - If you use SQLite, do not scale to multiple replicas.
 
 ## Learn more

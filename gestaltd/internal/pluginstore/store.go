@@ -61,7 +61,7 @@ func Install(packagePath, destDir string) (*InstalledPlugin, error) {
 
 	var artifact *pluginmanifestv1.Artifact
 	if manifestNeedsExecutableArtifact(manifest) {
-		artifact, err = pluginpkg.CurrentPlatformArtifact(manifest)
+		artifact, err = pluginpkg.CurrentPlatformArtifact(manifest, pluginpkg.CurrentRuntimeLibC())
 		if err != nil {
 			return nil, err
 		}
@@ -120,7 +120,7 @@ func InstallFromDir(dirPath, destDir string) (*InstalledPlugin, error) {
 
 	var artifact *pluginmanifestv1.Artifact
 	if manifestNeedsExecutableArtifact(manifest) {
-		artifact, err = pluginpkg.CurrentPlatformArtifact(manifest)
+		artifact, err = pluginpkg.CurrentPlatformArtifact(manifest, pluginpkg.CurrentRuntimeLibC())
 		if err != nil {
 			return nil, err
 		}

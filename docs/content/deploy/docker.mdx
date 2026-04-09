@@ -36,14 +36,14 @@ volumes:
 | Property | Value |
 | --- | --- |
 | Image | `valontechnologies/gestaltd:latest` |
-| Platforms | `linux/amd64`, `linux/arm64` |
-| Base | Alpine with `ca-certificates` and a shell |
+| Platforms | `linux/amd64`, `linux/arm64`, `linux/arm/v7` |
+| Base | Static (`scratch` with CA certificates) |
+| Variants | `:latest-alpine` (Alpine, has shell), `:latest-debian` (Debian bookworm-slim, has shell) |
 | Port | `8080` |
 | Entrypoint | `/gestaltd` |
 | Default command | `serve --locked --config /etc/gestalt/config.yaml --artifacts-dir /data` |
 | Config path | `/etc/gestalt/config.yaml` |
 | Data directory | `/data` |
-| User | `nobody:nobody` |
 
 For the CLI client image, see [Client Docker Image](/client/cli/docker).
 
@@ -60,7 +60,7 @@ deploy/
 ```
 
 ```dockerfile
-FROM valontechnologies/gestaltd:latest
+FROM valontechnologies/gestaltd:latest-alpine
 COPY deploy/ /app/
 CMD ["serve", "--locked", "--config", "/app/config.yaml"]
 ```
