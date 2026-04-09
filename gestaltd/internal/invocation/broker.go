@@ -267,6 +267,10 @@ func (b *Broker) resolveTransport(ctx context.Context, p *principal.Principal, p
 	return "", fmt.Errorf("%w: %q on provider %q", ErrOperationNotFound, operation, providerName)
 }
 
+func (b *Broker) ResolveTransport(ctx context.Context, p *principal.Principal, prov core.Provider, providerName, operation, connection, instance string) (string, error) {
+	return b.resolveTransport(ctx, p, prov, providerName, operation, connection, instance)
+}
+
 func (b *Broker) mcpConnection(providerName string) string {
 	if b.mcpMapper != nil {
 		if conn := b.mcpMapper.ConnectionForProvider(providerName); conn != "" {

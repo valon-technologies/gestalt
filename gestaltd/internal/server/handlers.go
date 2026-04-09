@@ -545,6 +545,20 @@ func catalogOperationTransport(op catalog.CatalogOperation) string {
 }
 
 func (s *Server) resolveHTTPOperationTransport(ctx context.Context, p *principal.Principal, prov core.Provider, providerName, operationName, connection, instance string) (string, bool, error) {
+	type transportResolver interface {
+		ResolveTransport(ctx context.Context, p *principal.Principal, prov core.Provider, providerName, operation, connection, instance string) (string, error)
+	}
+	if r, ok := s.invoker.(transportResolver); ok {
+		transport, err := r.ResolveTransport(ctx, p, prov, providerName, operationName, connection, instance)
+		if err == nil {
+			return transport, true, nil
+		}
+		if errors.Is(err, invocation.ErrOperationNotFound) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+
 	if transport, ok := invocation.CatalogOperationTransport(prov.Catalog(), operationName); ok {
 		return transport, true, nil
 	}
