@@ -38,7 +38,9 @@ func (e *operationError) Unwrap() error {
 }
 
 func newOperationError(status int, message string, cause error) error {
-	message = stringOr(message, http.StatusText(status))
+	if message == "" {
+		message = http.StatusText(status)
+	}
 	return &operationError{
 		status:  status,
 		message: message,
@@ -57,7 +59,10 @@ func operationResultFromError(err error) *OperationResult {
 		if opErr.status != 0 {
 			status = opErr.status
 		}
-		message = stringOr(opErr.message, opErr.Error())
+		message = opErr.message
+		if message == "" {
+			message = opErr.Error()
+		}
 	}
 	return operationResult(status, message)
 }
@@ -99,13 +104,6 @@ func operationErrorBody(message string) string {
 		return internalErrorBodyFallback
 	}
 	return string(data)
-}
-
-func stringOr(value, fallback string) string {
-	if value != "" {
-		return value
-	}
-	return fallback
 }
 
 var (

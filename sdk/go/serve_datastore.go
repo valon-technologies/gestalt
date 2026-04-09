@@ -10,7 +10,7 @@ import (
 // ServeDatastoreProvider starts a gRPC server for a [DatastoreProvider].
 func ServeDatastoreProvider(ctx context.Context, store DatastoreProvider) error {
 	return servePlugin(withPluginCloser(ctx, store), func(srv *grpc.Server) {
-		proto.RegisterPluginRuntimeServer(srv, NewRuntimeProviderServer(ProviderKindDatastore, store))
-		proto.RegisterDatastorePluginServer(srv, NewDatastoreProviderServer(store))
+		proto.RegisterPluginRuntimeServer(srv, newRuntimeProviderServer(ProviderKindDatastore, store))
+		proto.RegisterDatastorePluginServer(srv, newDatastoreProviderServer(store))
 	})
 }

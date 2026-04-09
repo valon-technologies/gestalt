@@ -107,15 +107,6 @@ func NewRouter[P any](registrations ...Registration[P]) (*Router[P], error) {
 	return newRouter("", registrations...)
 }
 
-// NewNamedRouter constructs a typed router with an explicit catalog name.
-func NewNamedRouter[P any](name string, registrations ...Registration[P]) (*Router[P], error) {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return nil, fmt.Errorf("router name is required")
-	}
-	return newRouter(name, registrations...)
-}
-
 func newRouter[P any](name string, registrations ...Registration[P]) (*Router[P], error) {
 	router := &Router[P]{
 		catalog: Catalog{
@@ -134,7 +125,7 @@ func newRouter[P any](name string, registrations ...Registration[P]) (*Router[P]
 			return nil, fmt.Errorf("duplicate operation id %q", opID)
 		}
 		router.handlers[opID] = reg.execute
-		router.catalog.Operations = append(router.catalog.Operations, cloneCatalogOperation(reg.catalogOp))
+		router.catalog.Operations = append(router.catalog.Operations, reg.catalogOp)
 	}
 	return router, nil
 }
@@ -148,42 +139,31 @@ func MustRouter[P any](registrations ...Registration[P]) *Router[P] {
 	return router
 }
 
-// MustNamedRouter panics if [NewNamedRouter] returns an error.
-func MustNamedRouter[P any](name string, registrations ...Registration[P]) *Router[P] {
-	router, err := NewNamedRouter(name, registrations...)
-	if err != nil {
-		panic(err)
-	}
-	return router
-}
-
-// Catalog returns a clone of the router's static executable catalog.
 func (r *Router[P]) Catalog() *Catalog {
 	if r == nil {
 		return nil
 	}
-	return cloneCatalog(&r.catalog)
+	c := r.catalog
+	c.Operations = append([]CatalogOperation(nil), c.Operations...)
+	return &c
 }
 
-// WithName returns a clone of the router with the provided catalog name.
-// Empty names preserve the existing router name.
 func (r *Router[P]) WithName(name string) *Router[P] {
 	if r == nil {
 		return nil
 	}
-	cloned := cloneCatalog(&r.catalog)
-	if cloned == nil {
-		cloned = &Catalog{}
-	}
-	if trimmed := strings.TrimSpace(name); trimmed != "" {
-		cloned.Name = trimmed
+	trimmed := strings.TrimSpace(name)
+	catalog := r.catalog
+	catalog.Operations = append([]CatalogOperation(nil), catalog.Operations...)
+	if trimmed != "" {
+		catalog.Name = trimmed
 	}
 	handlers := make(map[string]func(context.Context, *P, map[string]any, Request) (*OperationResult, error), len(r.handlers))
 	for opID, handler := range r.handlers {
 		handlers[opID] = handler
 	}
 	return &Router[P]{
-		catalog:  *cloned,
+		catalog:  catalog,
 		handlers: handlers,
 	}
 }
@@ -270,10 +250,7 @@ func catalogOperationFor[In any, Out any](op Operation[In, Out]) (CatalogOperati
 }
 
 func catalogParametersFor[In any]() ([]CatalogParameter, error) {
-	t := reflect.TypeFor[In]()
-	for t.Kind() == reflect.Pointer {
-		t = t.Elem()
-	}
+	t := underlyingType(reflect.TypeFor[In]())
 	if t.Kind() != reflect.Struct {
 		return nil, fmt.Errorf("input type %s must be a struct", t)
 	}
@@ -470,34 +447,6 @@ func isOptionalType(t reflect.Type) bool {
 	default:
 		return false
 	}
-}
-
-func cloneCatalog(src *Catalog) *Catalog {
-	if src == nil {
-		return nil
-	}
-	out := &Catalog{
-		Name:        src.Name,
-		DisplayName: src.DisplayName,
-		Description: src.Description,
-		IconSVG:     src.IconSVG,
-		Operations:  make([]CatalogOperation, len(src.Operations)),
-	}
-	for i := range src.Operations {
-		out.Operations[i] = cloneCatalogOperation(src.Operations[i])
-	}
-	return out
-}
-
-func cloneCatalogOperation(src CatalogOperation) CatalogOperation {
-	out := src
-	out.InputSchema = append(json.RawMessage(nil), src.InputSchema...)
-	out.OutputSchema = append(json.RawMessage(nil), src.OutputSchema...)
-	out.Parameters = append([]CatalogParameter(nil), src.Parameters...)
-	out.RequiredScopes = append([]string(nil), src.RequiredScopes...)
-	out.Tags = append([]string(nil), src.Tags...)
-	out.Visible = cloneBoolPtr(src.Visible)
-	return out
 }
 
 func cloneBoolPtr(src *bool) *bool {

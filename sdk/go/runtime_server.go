@@ -9,20 +9,20 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-type RuntimeServer struct {
+type runtimeServer struct {
 	proto.UnimplementedPluginRuntimeServer
 	kind     proto.PluginKind
 	provider RuntimeProvider
 }
 
-func NewRuntimeProviderServer(kind ProviderKind, provider RuntimeProvider) *RuntimeServer {
-	return &RuntimeServer{
+func newRuntimeProviderServer(kind ProviderKind, provider RuntimeProvider) *runtimeServer {
+	return &runtimeServer{
 		kind:     providerKindToProto(kind),
 		provider: provider,
 	}
 }
 
-func (s *RuntimeServer) GetPluginMetadata(_ context.Context, _ *emptypb.Empty) (*proto.PluginMetadata, error) {
+func (s *runtimeServer) GetPluginMetadata(_ context.Context, _ *emptypb.Empty) (*proto.PluginMetadata, error) {
 	meta := proto.PluginMetadata{
 		Kind:               s.kind,
 		MinProtocolVersion: proto.CurrentProtocolVersion,
@@ -45,7 +45,7 @@ func (s *RuntimeServer) GetPluginMetadata(_ context.Context, _ *emptypb.Empty) (
 	return &meta, nil
 }
 
-func (s *RuntimeServer) ConfigurePlugin(ctx context.Context, req *proto.ConfigurePluginRequest) (*proto.ConfigurePluginResponse, error) {
+func (s *runtimeServer) ConfigurePlugin(ctx context.Context, req *proto.ConfigurePluginRequest) (*proto.ConfigurePluginResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -57,13 +57,17 @@ func (s *RuntimeServer) ConfigurePlugin(ctx context.Context, req *proto.Configur
 			proto.CurrentProtocolVersion,
 		)
 	}
-	if err := s.provider.Configure(ctx, req.GetName(), configFromRequest(req.GetConfig())); err != nil {
+	config := req.GetConfig().AsMap()
+	if config == nil {
+		config = map[string]any{}
+	}
+	if err := s.provider.Configure(ctx, req.GetName(), config); err != nil {
 		return nil, status.Errorf(codes.Unknown, "configure plugin: %v", err)
 	}
 	return &proto.ConfigurePluginResponse{ProtocolVersion: proto.CurrentProtocolVersion}, nil
 }
 
-func (s *RuntimeServer) HealthCheck(ctx context.Context, _ *emptypb.Empty) (*proto.HealthCheckResponse, error) {
+func (s *runtimeServer) HealthCheck(ctx context.Context, _ *emptypb.Empty) (*proto.HealthCheckResponse, error) {
 	if checker, ok := s.provider.(HealthChecker); ok {
 		if err := checker.HealthCheck(ctx); err != nil {
 			return &proto.HealthCheckResponse{
@@ -90,10 +94,6 @@ func providerKindToProto(kind ProviderKind) proto.PluginKind {
 		return proto.PluginKind_PLUGIN_KIND_AUTH
 	case ProviderKindDatastore:
 		return proto.PluginKind_PLUGIN_KIND_DATASTORE
-	case ProviderKindSecrets:
-		return proto.PluginKind_PLUGIN_KIND_SECRETS
-	case ProviderKindTelemetry:
-		return proto.PluginKind_PLUGIN_KIND_TELEMETRY
 	default:
 		return proto.PluginKind_PLUGIN_KIND_UNSPECIFIED
 	}
