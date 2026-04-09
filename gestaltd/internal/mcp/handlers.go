@@ -40,6 +40,9 @@ func makeHandler(invoker invocation.Invoker, provName, opName, connection string
 			return mcpgo.NewToolResultError(result.Body), nil
 		}
 
+		if orig, ok := result.MCPResult.(*mcpgo.CallToolResult); ok {
+			return orig, nil
+		}
 		return mcpgo.NewToolResultText(result.Body), nil
 	}
 }

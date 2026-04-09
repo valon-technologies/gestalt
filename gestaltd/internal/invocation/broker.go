@@ -230,6 +230,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 			}
 			return fail(fmt.Errorf("%w: converting tool result: %v", ErrInternal, err))
 		}
+		opResult.MCPResult = result
 		return opResult, nil
 	}
 
@@ -302,7 +303,7 @@ func toolResultToOperationResult(result *mcpgo.CallToolResult) (*core.OperationR
 	}
 
 	if len(result.Content) == 1 {
-		if text, ok := mcpgo.AsTextContent(result.Content[0]); ok {
+		if text, ok := mcpgo.AsTextContent(result.Content[0]); ok && json.Valid([]byte(strings.TrimSpace(text.Text))) {
 			return &core.OperationResult{Status: http.StatusOK, Headers: headers, Body: text.Text}, nil
 		}
 	}
