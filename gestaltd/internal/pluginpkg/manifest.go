@@ -212,7 +212,7 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 				return err
 			}
 		}
-		if manifest.Entrypoints.Auth != nil || manifest.Entrypoints.Datastore != nil {
+		if manifest.Entrypoints.Auth != nil || manifest.Entrypoints.Datastore != nil || manifest.Entrypoints.Secrets != nil {
 			return fmt.Errorf("plugin manifests may only define entrypoints.provider")
 		}
 		switch {
@@ -232,7 +232,7 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 				return err
 			}
 		}
-		if manifest.Entrypoints.Provider != nil || manifest.Entrypoints.Datastore != nil {
+		if manifest.Entrypoints.Provider != nil || manifest.Entrypoints.Datastore != nil || manifest.Entrypoints.Secrets != nil {
 			return fmt.Errorf("auth manifests may only define entrypoints.auth")
 		}
 		if manifest.Entrypoints.Auth == nil && !allowsSourceAuthEntrypointOmission {
@@ -249,7 +249,7 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 				return err
 			}
 		}
-		if manifest.Entrypoints.Provider != nil || manifest.Entrypoints.Auth != nil {
+		if manifest.Entrypoints.Provider != nil || manifest.Entrypoints.Auth != nil || manifest.Entrypoints.Secrets != nil {
 			return fmt.Errorf("datastore manifests may only define entrypoints.datastore")
 		}
 		if manifest.Entrypoints.Datastore == nil && !allowsSourceDatastoreEntrypointOmission {
@@ -278,7 +278,7 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 			}
 		}
 	case pluginmanifestv1.KindWebUI:
-		if manifest.Entrypoints.Provider != nil || manifest.Entrypoints.Auth != nil || manifest.Entrypoints.Datastore != nil {
+		if manifest.Entrypoints.Provider != nil || manifest.Entrypoints.Auth != nil || manifest.Entrypoints.Datastore != nil || manifest.Entrypoints.Secrets != nil {
 			return fmt.Errorf("webui manifests may not define executable entrypoints")
 		}
 		if err := validateRelativePackagePath(manifest.WebUI.AssetRoot, "webui asset root"); err != nil {
