@@ -78,14 +78,14 @@ The `plugin` block describes an integration plugin. It supports declarative REST
 
 ### Connections
 
-The `connections` map defines named connection profiles. Each connection has a `mode` and an `auth` block.
+The `connections` map defines named connection profiles. Each connection supports the following fields:
 
 | Field | Type | Purpose |
 | --- | --- | --- |
 | `mode` | string | One of `none`, `user`, `identity`, `either`. |
 | `auth` | ProviderAuth | Authentication configuration for this connection. |
-
-Only the `default` connection may define `connection_params` and `post_connect_discovery`.
+| `params` | map[string]ConnectionParam | Connection parameters populated during or after connect. |
+| `discovery` | Discovery | Post-connect discovery configuration. |
 
 ### Surfaces
 
@@ -208,22 +208,22 @@ Managed parameters inject fixed values into every request, removing them from th
 | `name` | string | Required. Parameter name. |
 | `value` | string | Required. Fixed value. |
 
-### Post-Connect Discovery
+### Discovery
 
-The `post_connect_discovery` block performs an authenticated lookup immediately after a connection is established. Gestalt calls the configured URL with the new access token, parses the response, and turns each item into a candidate connection.
+The `discovery` block on a connection performs an authenticated lookup immediately after a connection is established. Gestalt calls the configured URL with the new access token, parses the response, and turns each item into a candidate connection.
 
 | Field | Type | Purpose |
 | --- | --- | --- |
 | `url` | string | Required. Endpoint to call after connect. |
 | `id_path` | string | JSON path to the item identifier. |
 | `name_path` | string | JSON path to the item display name. |
-| `metadata_mapping` | map[string]string | Maps connection parameter names to JSON paths in each discovered item. |
+| `metadata` | map[string]string | Maps connection parameter names to JSON paths in each discovered item. |
 
 If discovery returns exactly one item, Gestalt merges its metadata into the stored connection automatically. Multiple items prompt the user to choose. Zero items fails the connection.
 
 ### Connection Params
 
-The `connection_params` map on the `default` connection defines parameters that are populated during or after connect rather than from user input.
+The `params` map on a connection defines parameters that are populated during or after connect rather than from user input.
 
 | Field | Type | Purpose |
 | --- | --- | --- |
@@ -343,20 +343,20 @@ This manifest shows an integration plugin with an executable entrypoint, multipl
             scopes:
               - tickets.read
               - tickets.write
+          params:
+            workspace_id:
+              required: true
+              from: discovery
+          discovery:
+            url: https://api.support.example.com/workspaces
+            id_path: id
+            name_path: name
+            metadata:
+              workspace_id: id
         mcp:
           mode: user
           auth:
             type: mcp_oauth
-      connection_params:
-        workspace_id:
-          required: true
-          from: discovery
-      post_connect_discovery:
-        url: https://api.support.example.com/workspaces
-        id_path: id
-        name_path: name
-        metadata_mapping:
-          workspace_id: id
       openapi: openapi.yaml
       openapi_connection: default
       mcp_url: https://mcp.support.example.com/mcp
@@ -413,21 +413,21 @@ This manifest shows an integration plugin with an executable entrypoint, multipl
               "client_id": "${SUPPORT_CLIENT_ID}",
               "client_secret": "${SUPPORT_CLIENT_SECRET}",
               "scopes": ["tickets.read", "tickets.write"]
+            },
+            "params": {
+              "workspace_id": { "required": true, "from": "discovery" }
+            },
+            "discovery": {
+              "url": "https://api.support.example.com/workspaces",
+              "id_path": "id",
+              "name_path": "name",
+              "metadata": { "workspace_id": "id" }
             }
           },
           "mcp": {
             "mode": "user",
             "auth": { "type": "mcp_oauth" }
           }
-        },
-        "connection_params": {
-          "workspace_id": { "required": true, "from": "discovery" }
-        },
-        "post_connect_discovery": {
-          "url": "https://api.support.example.com/workspaces",
-          "id_path": "id",
-          "name_path": "name",
-          "metadata_mapping": { "workspace_id": "id" }
         },
         "openapi": "openapi.yaml",
         "openapi_connection": "default",
@@ -500,7 +500,7 @@ plugin:
 
 Manifest paths must stay inside the package. `source` and `version` are required. A manifest defines exactly one provider kind: `plugin`, `auth`, `datastore`, `secrets`, or `webui`.
 
-`config_schema_path` validates per-plugin config and may be written in JSON or YAML. Only the `default` connection may define `connection_params` and `post_connect_discovery`. The OpenAPI/GraphQL surface types are mutually exclusive, but MCP may be added alongside either.
+`config_schema_path` validates per-plugin config and may be written in JSON or YAML. Any connection may define `params` and `discovery`. The OpenAPI/GraphQL surface types are mutually exclusive, but MCP may be added alongside either.
 
 A connection using `mcp_oauth` auth requires the plugin to declare an MCP surface (via `mcp_url` or an equivalent). Manifests that set `auth.type: mcp_oauth` without an MCP surface fail validation.
 
