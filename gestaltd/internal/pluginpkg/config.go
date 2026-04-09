@@ -5,8 +5,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/valon-technologies/gestalt/server/internal/configschema"
+	"github.com/santhosh-tekuri/jsonschema/v6"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	"gopkg.in/yaml.v3"
 )
 
 func ValidateConfigForManifest(manifestPath string, manifest *pluginmanifestv1.Manifest, kind string, config map[string]any) error {
@@ -25,7 +26,7 @@ func ValidateConfigForManifest(manifestPath string, manifest *pluginmanifestv1.M
 	if config == nil {
 		config = map[string]any{}
 	}
-	return configschema.Validate(config, string(data))
+	return validateConfigSchema(config, string(data))
 }
 
 func configSchemaForManifest(manifestPath string, manifest *pluginmanifestv1.Manifest, kind string) (path string, name string, ok bool, err error) {
@@ -52,4 +53,26 @@ func configSchemaForManifest(manifestPath string, manifest *pluginmanifestv1.Man
 	default:
 		return "", "", false, fmt.Errorf("unsupported manifest config kind %q", kind)
 	}
+}
+
+func validateConfigSchema(config map[string]any, schemaText string) error {
+	var schemaDoc any
+	if err := yaml.Unmarshal([]byte(schemaText), &schemaDoc); err != nil {
+		return fmt.Errorf("invalid config schema: %w", err)
+	}
+
+	compiler := jsonschema.NewCompiler()
+	if err := compiler.AddResource("config.schema", schemaDoc); err != nil {
+		return fmt.Errorf("invalid config schema: %w", err)
+	}
+
+	schema, err := compiler.Compile("config.schema")
+	if err != nil {
+		return fmt.Errorf("compile config schema: %w", err)
+	}
+
+	if err := schema.Validate(config); err != nil {
+		return fmt.Errorf("config validation failed: %w", err)
+	}
+	return nil
 }
