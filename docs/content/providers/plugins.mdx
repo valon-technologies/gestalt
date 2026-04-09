@@ -52,7 +52,7 @@ The manifest stays the source of truth for display name, description, auth, the 
 
 ## Creating a project
 
-<Tabs items={['Go', 'Python', 'Rust']}>
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
     You need Go 1.26+ and a running `gestaltd` instance for testing.
 
@@ -137,13 +137,46 @@ The manifest stays the source of truth for display name, description, auth, the 
 
     Use the `sdk/rust/v*` tag that matches the SDK release you want to target.
   </Tabs.Tab>
+  <Tabs.Tab>
+    You need Bun (or Node.js 22+) and a running `gestaltd` instance for testing.
+
+    ```sh
+    mkdir my-plugin && cd my-plugin
+    bun init
+    bun add @valon-technologies/gestalt
+    ```
+
+    Recommended layout:
+
+    ```text
+    my-plugin/
+      package.json
+      plugin.yaml
+      provider.ts
+    ```
+
+    Point `package.json` at the module that Gestalt should load:
+
+    ```json
+    {
+      "name": "my-plugin",
+      "type": "module",
+      "dependencies": {
+        "@valon-technologies/gestalt": "0.0.1-alpha.1"
+      },
+      "gestalt": {
+        "plugin": "./provider.ts#plugin"
+      }
+    }
+    ```
+  </Tabs.Tab>
 </Tabs>
 
 ## Defining operations
 
 Operations are the callable units of a plugin. Each operation has an ID, an HTTP method, input and output types, and a handler function. You do not write an entrypoint. Gestalt synthesizes the executable wrapper automatically for local source execution and release.
 
-<Tabs items={['Go', 'Python', 'Rust']}>
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
     ```go
     package provider
@@ -311,6 +344,36 @@ Operations are the callable units of a plugin. Each operation has an ID, an HTTP
     gestalt::export_provider!(constructor = new, router = router);
     ```
   </Tabs.Tab>
+  <Tabs.Tab>
+    ```typescript
+    import { definePlugin, ok, operation, s } from "@valon-technologies/gestalt";
+
+    let greeting = "Hello";
+
+    export const plugin = definePlugin({
+      configure(_name, config) {
+        greeting = (config.greeting as string) ?? "Hello";
+      },
+      operations: [
+        operation({
+          id: "greet",
+          method: "GET",
+          description: "Return a greeting message",
+          readOnly: true,
+          input: s.object({
+            name: s.optional(s.string({ description: "Name to greet", default: "World" })),
+          }),
+          output: s.object({
+            message: s.string(),
+          }),
+          handler(input) {
+            return ok({ message: `${greeting}, ${input.name}!` });
+          },
+        }),
+      ],
+    });
+    ```
+  </Tabs.Tab>
 </Tabs>
 
 By default, input decode failures return a structured `400` response, and unhandled errors return a structured `500` response. Return a non-2xx response explicitly when the operation wants to signal a deliberate application-level error.
@@ -319,7 +382,7 @@ By default, input decode failures return a structured `400` response, and unhand
 
 The router derives catalog parameters from the input type. Fields are required by default unless marked optional. Nested types are emitted as `object` parameters and collections as `array`.
 
-<Tabs items={['Go', 'Python', 'Rust']}>
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
     ```go
     type SearchInput struct {
@@ -361,13 +424,28 @@ The router derives catalog parameters from the input type. Fields are required b
 
     Fields are required unless you model them as `Option<T>` or provide a serde default. Use `schemars(description = "...")` for catalog descriptions and serde defaults for scalar defaults.
   </Tabs.Tab>
+  <Tabs.Tab>
+    ```typescript
+    import { s } from "@valon-technologies/gestalt";
+
+    const searchInput = s.object({
+      query: s.string({ description: "Search query" }),
+      max_items: s.optional(s.integer({ description: "Maximum results", default: 10 })),
+      filters: s.optional(s.object({
+        status: s.optional(s.string()),
+      })),
+    });
+    ```
+
+    Fields are required by default. Wrap with `s.optional()` for optional fields. Use `s.object()` for nested types and `s.array()` for collections.
+  </Tabs.Tab>
 </Tabs>
 
 ## Dynamic catalogs
 
 By default, the operation catalog is static and materialized at startup. If your plugin needs to expose different operations depending on the caller's credentials or runtime state, implement a session catalog.
 
-<Tabs items={['Go', 'Python', 'Rust']}>
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
     Implement the `SessionCatalogProvider` interface on your provider:
 
@@ -438,6 +516,24 @@ By default, the operation catalog is static and materialized at startup. If your
             }))
         }
     }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Export a `sessionCatalog` function from your plugin definition:
+
+    ```typescript
+    export const plugin = definePlugin({
+      sessionCatalog(request) {
+        return {
+          name: "my-plugin-session",
+          displayName: request.token,
+          operations: [
+            { id: "search_private", method: "POST", readOnly: true },
+          ],
+        };
+      },
+      operations: [/* ... */],
+    });
     ```
   </Tabs.Tab>
 </Tabs>

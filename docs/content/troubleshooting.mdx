@@ -42,7 +42,7 @@ When a plugin fails to start, check that the binary exists at the expected path,
 
 Common source-package checks:
 
-<Tabs items={['Go', 'Python', 'Rust']}>
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
     Verify the package builds from the plugin root:
 
@@ -69,6 +69,15 @@ Common source-package checks:
     ```
 
     The plugin root needs a real `Cargo.toml` package with a `[package]` section, not just a workspace manifest, and `src/lib.rs` should export the provider with `gestalt::export_provider!(...)`, `gestalt::export_auth_provider!(...)`, or `gestalt::export_datastore_provider!(...)`.
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Verify the module resolves from the plugin root:
+
+    ```sh
+    bun run -e "import('./provider.ts')"
+    ```
+
+    Confirm `package.json` has a `gestalt.plugin` or `gestalt.provider` entry pointing at the correct `./file.ts#export` target. The target path must start with `./` and the export name must match a named export in the module.
   </Tabs.Tab>
 </Tabs>
 

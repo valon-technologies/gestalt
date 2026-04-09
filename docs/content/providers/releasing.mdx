@@ -32,7 +32,7 @@ Executable source packages stay language-native. Gestalt loads the provider
 from the package root, then synthesizes the runnable wrapper during local
 source execution and release packaging.
 
-<Tabs items={['Go', 'Python', 'Rust']}>
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
     ```text
     my-plugin/
@@ -87,6 +87,27 @@ source execution and release packaging.
     schemars = { version = "0.8", features = ["derive"] }
     serde = { version = "1", features = ["derive"] }
     serde_json = "1"
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```text
+    my-plugin/
+      package.json
+      plugin.yaml
+      provider.ts
+    ```
+
+    ```json
+    {
+      "name": "my-plugin",
+      "type": "module",
+      "dependencies": {
+        "@valon-technologies/gestalt": "0.0.1-alpha.1"
+      },
+      "gestalt": {
+        "plugin": "./provider.ts#plugin"
+      }
+    }
     ```
   </Tabs.Tab>
 </Tabs>
@@ -158,9 +179,9 @@ Run this from the provider source directory. It produces release archives and wr
 
 Release tags are derived from the package path after the repository. For example, `source: github.com/acme/plugins/catalog/support-api` releases from the tag `plugins/catalog/support-api/v0.1.0`.
 
-For executable Go, Rust, and Python integration source plugins, `provider release`
+For executable Go, Python, Rust, and TypeScript integration source plugins, `provider release`
 materializes the executable catalog automatically and builds the host-platform
-artifact by default. Go and Rust auth/datastore source packages use the same
+artifact by default. Auth and datastore source packages use the same
 release flow without catalog generation. Pass `--platform` with a
 comma-separated list such as
 `--platform linux/amd64/glibc,linux/amd64/musl,darwin/arm64` to build explicit
