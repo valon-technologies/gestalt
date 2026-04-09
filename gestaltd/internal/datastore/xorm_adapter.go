@@ -12,9 +12,9 @@ import (
 )
 
 type userRow struct {
-	ID          string    `xorm:"pk 'id'"`
-	Email       string    `xorm:"unique notnull 'email'"`
-	DisplayName string    `xorm:"'display_name'"`
+	ID          string    `xorm:"varchar(36) pk 'id'"`
+	Email       string    `xorm:"varchar(255) unique notnull 'email'"`
+	DisplayName string    `xorm:"varchar(255) 'display_name'"`
 	CreatedAt   time.Time `xorm:"created 'created_at'"`
 	UpdatedAt   time.Time `xorm:"updated 'updated_at'"`
 }
@@ -22,18 +22,18 @@ type userRow struct {
 func (userRow) TableName() string { return "users" }
 
 type integrationTokenRow struct {
-	ID                 string     `xorm:"pk 'id'"`
-	UserID             string     `xorm:"notnull index 'user_id'"`
-	Integration        string     `xorm:"notnull 'integration'"`
-	Connection         string     `xorm:"notnull 'connection'"`
-	Instance           string     `xorm:"'instance'"`
-	AccessTokenSealed  string     `xorm:"'access_token_sealed'"`
-	RefreshTokenSealed string     `xorm:"'refresh_token_sealed'"`
-	Scopes             string     `xorm:"'scopes'"`
+	ID                 string     `xorm:"varchar(36) pk 'id'"`
+	UserID             string     `xorm:"varchar(36) notnull index 'user_id'"`
+	Integration        string     `xorm:"varchar(255) notnull 'integration'"`
+	Connection         string     `xorm:"varchar(255) notnull 'connection'"`
+	Instance           string     `xorm:"varchar(255) 'instance'"`
+	AccessTokenSealed  string     `xorm:"text 'access_token_sealed'"`
+	RefreshTokenSealed string     `xorm:"text 'refresh_token_sealed'"`
+	Scopes             string     `xorm:"text 'scopes'"`
 	ExpiresAt          *time.Time `xorm:"'expires_at'"`
 	LastRefreshedAt    *time.Time `xorm:"'last_refreshed_at'"`
 	RefreshErrorCount  int        `xorm:"'refresh_error_count'"`
-	MetadataJSON       string     `xorm:"'metadata_json'"`
+	MetadataJSON       string     `xorm:"text 'metadata_json'"`
 	CreatedAt          time.Time  `xorm:"created 'created_at'"`
 	UpdatedAt          time.Time  `xorm:"updated 'updated_at'"`
 }
@@ -41,11 +41,11 @@ type integrationTokenRow struct {
 func (integrationTokenRow) TableName() string { return "integration_tokens" }
 
 type apiTokenRow struct {
-	ID          string     `xorm:"pk 'id'"`
-	UserID      string     `xorm:"notnull 'user_id'"`
-	Name        string     `xorm:"'name'"`
-	HashedToken string     `xorm:"unique notnull 'hashed_token'"`
-	Scopes      string     `xorm:"'scopes'"`
+	ID          string     `xorm:"varchar(36) pk 'id'"`
+	UserID      string     `xorm:"varchar(36) notnull 'user_id'"`
+	Name        string     `xorm:"varchar(255) 'name'"`
+	HashedToken string     `xorm:"varchar(255) unique notnull 'hashed_token'"`
+	Scopes      string     `xorm:"text 'scopes'"`
 	ExpiresAt   *time.Time `xorm:"'expires_at'"`
 	CreatedAt   time.Time  `xorm:"created 'created_at'"`
 	UpdatedAt   time.Time  `xorm:"updated 'updated_at'"`
