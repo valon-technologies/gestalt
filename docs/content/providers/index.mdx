@@ -15,15 +15,16 @@ A provider's kind is implied by the one top-level metadata block in its manifest
 | `plugin` | Integration provider. Exposes operations that users invoke through the CLI, the HTTP API, or MCP. |
 | `auth` | Platform auth backend. Handles login, session validation, and external token verification. |
 | `datastore` | Persistent storage. Stores users, integration tokens, API tokens, and OAuth registrations. |
+| `secrets` | Secret manager. Resolves `secret://` references at bootstrap. Go SDK only for now. |
 | `webui` | Replacement web UI served at `/`. |
 
-First-party auth and datastore providers are published at `github.com/valon-technologies/gestalt-providers/`. You can write your own for any kind.
+First-party auth, datastore, and secrets providers are published at `github.com/valon-technologies/gestalt-providers/`. You can write your own for any kind.
 
 ## How the runtime works
 
 When a provider entry resolves to an executable, `gestaltd` starts it as a child process. The host creates a temporary Unix socket, passes the socket path through the `GESTALT_PLUGIN_SOCKET` environment variable, and waits for the provider to connect back over gRPC. At startup the provider receives the configured provider name and the `config` block from the server config. For integration plugins, each invocation also receives the current request context (caller identity, decrypted token, and operation parameters).
 
-The host owns auth, token storage, connection selection, and HTTP or MCP routing. Integration providers do not interact with the datastore. Auth providers implement `BeginLogin` and `CompleteLogin`. Datastore providers implement user, token, and API-token storage interfaces. Each kind has its own gRPC service contract, but they all share the same process lifecycle.
+The host owns auth, token storage, connection selection, and HTTP or MCP routing. Integration providers do not interact with the datastore. Auth providers implement `BeginLogin` and `CompleteLogin`. Datastore providers implement user, token, and API-token storage interfaces. Secrets providers implement `GetSecret` for resolving `secret://` references. Each kind has its own gRPC service contract, but they all share the same process lifecycle.
 
 ## Process isolation
 

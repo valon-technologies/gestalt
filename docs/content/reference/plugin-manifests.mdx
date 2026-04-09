@@ -8,16 +8,17 @@ Providers are the umbrella concept in Gestalt. Auth providers, datastore provide
 
 ## Manifest Kinds
 
-Every manifest defines exactly one of four provider kinds, determined by which metadata block is present at the top level:
+Every manifest defines exactly one provider kind, determined by which metadata block is present at the top level:
 
 | Kind | Top-level key | Purpose |
 | --- | --- | --- |
 | `plugin` | `plugin` | Integration plugin (REST, OpenAPI, GraphQL, MCP, or executable). |
 | `auth` | `auth` | Platform auth provider (Google, OIDC, local, or custom). |
 | `datastore` | `datastore` | Persistence backend (Postgres, SQLite, DynamoDB, or custom). |
+| `secrets` | `secrets` | Secret manager for resolving `secret://` references. |
 | `webui` | `webui` | Static UI package served by `gestaltd`. |
 
-The JSON schema enforces `oneOf` across these four keys: a manifest must include exactly one. There is no separate `kind` or `kinds` field.
+A manifest must include exactly one of these keys. There is no separate `kind` or `kinds` field.
 
 ## Common Fields
 
@@ -42,6 +43,7 @@ The `entrypoints` block declares executable binaries. Each key corresponds to a 
 | `plugin` | plugin | Executable entrypoint for an integration plugin. |
 | `auth` | auth | Executable entrypoint for an auth provider. |
 | `datastore` | datastore | Executable entrypoint for a datastore provider. |
+| `secrets` | secrets | Executable entrypoint for a secrets provider. |
 
 Note that the JSON/YAML tag for the integration-plugin entrypoint is `plugin`, not `provider`. Each entrypoint has two fields:
 
@@ -473,7 +475,7 @@ plugin:
 
 ## Authoring Notes
 
-Manifest paths must stay inside the package. `source` and `version` are required. A manifest defines exactly one provider kind: `plugin`, `auth`, `datastore`, or `webui`.
+Manifest paths must stay inside the package. `source` and `version` are required. A manifest defines exactly one provider kind: `plugin`, `auth`, `datastore`, `secrets`, or `webui`.
 
 `config_schema_path` validates per-plugin config and may be written in JSON or YAML. Only the `default` connection may define `connection_params` and `post_connect_discovery`. The OpenAPI/GraphQL surface types are mutually exclusive, but MCP may be added alongside either.
 
