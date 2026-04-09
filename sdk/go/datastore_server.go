@@ -9,23 +9,23 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-type DatastoreServer struct {
+type datastoreServer struct {
 	proto.UnimplementedDatastorePluginServer
 	store DatastoreProvider
 }
 
-func NewDatastoreProviderServer(store DatastoreProvider) *DatastoreServer {
-	return &DatastoreServer{store: store}
+func newDatastoreProviderServer(store DatastoreProvider) *datastoreServer {
+	return &datastoreServer{store: store}
 }
 
-func (s *DatastoreServer) Migrate(ctx context.Context, _ *emptypb.Empty) (*emptypb.Empty, error) {
+func (s *datastoreServer) Migrate(ctx context.Context, _ *emptypb.Empty) (*emptypb.Empty, error) {
 	if err := s.store.Migrate(ctx); err != nil {
 		return nil, providerRPCError("migrate", err)
 	}
 	return &emptypb.Empty{}, nil
 }
 
-func (s *DatastoreServer) GetUser(ctx context.Context, req *proto.GetUserRequest) (*proto.StoredUser, error) {
+func (s *datastoreServer) GetUser(ctx context.Context, req *proto.GetUserRequest) (*proto.StoredUser, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -39,7 +39,7 @@ func (s *DatastoreServer) GetUser(ctx context.Context, req *proto.GetUserRequest
 	return storedUserToProto(user), nil
 }
 
-func (s *DatastoreServer) FindOrCreateUser(ctx context.Context, req *proto.FindOrCreateUserRequest) (*proto.StoredUser, error) {
+func (s *datastoreServer) FindOrCreateUser(ctx context.Context, req *proto.FindOrCreateUserRequest) (*proto.StoredUser, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -53,7 +53,7 @@ func (s *DatastoreServer) FindOrCreateUser(ctx context.Context, req *proto.FindO
 	return storedUserToProto(user), nil
 }
 
-func (s *DatastoreServer) PutStoredIntegrationToken(ctx context.Context, req *proto.StoredIntegrationToken) (*emptypb.Empty, error) {
+func (s *datastoreServer) PutStoredIntegrationToken(ctx context.Context, req *proto.StoredIntegrationToken) (*emptypb.Empty, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -63,7 +63,7 @@ func (s *DatastoreServer) PutStoredIntegrationToken(ctx context.Context, req *pr
 	return &emptypb.Empty{}, nil
 }
 
-func (s *DatastoreServer) GetStoredIntegrationToken(ctx context.Context, req *proto.GetStoredIntegrationTokenRequest) (*proto.StoredIntegrationToken, error) {
+func (s *datastoreServer) GetStoredIntegrationToken(ctx context.Context, req *proto.GetStoredIntegrationTokenRequest) (*proto.StoredIntegrationToken, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -77,7 +77,7 @@ func (s *DatastoreServer) GetStoredIntegrationToken(ctx context.Context, req *pr
 	return storedIntegrationTokenToProto(token), nil
 }
 
-func (s *DatastoreServer) ListStoredIntegrationTokens(ctx context.Context, req *proto.ListStoredIntegrationTokensRequest) (*proto.ListStoredIntegrationTokensResponse, error) {
+func (s *datastoreServer) ListStoredIntegrationTokens(ctx context.Context, req *proto.ListStoredIntegrationTokensRequest) (*proto.ListStoredIntegrationTokensResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -92,7 +92,7 @@ func (s *DatastoreServer) ListStoredIntegrationTokens(ctx context.Context, req *
 	return &proto.ListStoredIntegrationTokensResponse{Tokens: protoTokens}, nil
 }
 
-func (s *DatastoreServer) DeleteStoredIntegrationToken(ctx context.Context, req *proto.DeleteStoredIntegrationTokenRequest) (*emptypb.Empty, error) {
+func (s *datastoreServer) DeleteStoredIntegrationToken(ctx context.Context, req *proto.DeleteStoredIntegrationTokenRequest) (*emptypb.Empty, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -102,7 +102,7 @@ func (s *DatastoreServer) DeleteStoredIntegrationToken(ctx context.Context, req 
 	return &emptypb.Empty{}, nil
 }
 
-func (s *DatastoreServer) PutAPIToken(ctx context.Context, req *proto.StoredAPIToken) (*emptypb.Empty, error) {
+func (s *datastoreServer) PutAPIToken(ctx context.Context, req *proto.StoredAPIToken) (*emptypb.Empty, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -112,7 +112,7 @@ func (s *DatastoreServer) PutAPIToken(ctx context.Context, req *proto.StoredAPIT
 	return &emptypb.Empty{}, nil
 }
 
-func (s *DatastoreServer) GetAPITokenByHash(ctx context.Context, req *proto.GetAPITokenByHashRequest) (*proto.StoredAPIToken, error) {
+func (s *datastoreServer) GetAPITokenByHash(ctx context.Context, req *proto.GetAPITokenByHashRequest) (*proto.StoredAPIToken, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -126,7 +126,7 @@ func (s *DatastoreServer) GetAPITokenByHash(ctx context.Context, req *proto.GetA
 	return storedAPITokenToProto(token), nil
 }
 
-func (s *DatastoreServer) ListAPITokens(ctx context.Context, req *proto.ListAPITokensRequest) (*proto.ListAPITokensResponse, error) {
+func (s *datastoreServer) ListAPITokens(ctx context.Context, req *proto.ListAPITokensRequest) (*proto.ListAPITokensResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -141,7 +141,7 @@ func (s *DatastoreServer) ListAPITokens(ctx context.Context, req *proto.ListAPIT
 	return &proto.ListAPITokensResponse{Tokens: protoTokens}, nil
 }
 
-func (s *DatastoreServer) RevokeAPIToken(ctx context.Context, req *proto.RevokeAPITokenRequest) (*emptypb.Empty, error) {
+func (s *datastoreServer) RevokeAPIToken(ctx context.Context, req *proto.RevokeAPITokenRequest) (*emptypb.Empty, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -151,7 +151,7 @@ func (s *DatastoreServer) RevokeAPIToken(ctx context.Context, req *proto.RevokeA
 	return &emptypb.Empty{}, nil
 }
 
-func (s *DatastoreServer) RevokeAllAPITokens(ctx context.Context, req *proto.RevokeAllAPITokensRequest) (*proto.RevokeAllAPITokensResponse, error) {
+func (s *datastoreServer) RevokeAllAPITokens(ctx context.Context, req *proto.RevokeAllAPITokensRequest) (*proto.RevokeAllAPITokensResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -162,7 +162,7 @@ func (s *DatastoreServer) RevokeAllAPITokens(ctx context.Context, req *proto.Rev
 	return &proto.RevokeAllAPITokensResponse{Revoked: revoked}, nil
 }
 
-func (s *DatastoreServer) GetOAuthRegistration(ctx context.Context, req *proto.GetOAuthRegistrationRequest) (*proto.OAuthRegistration, error) {
+func (s *datastoreServer) GetOAuthRegistration(ctx context.Context, req *proto.GetOAuthRegistrationRequest) (*proto.OAuthRegistration, error) {
 	store, ok := s.store.(OAuthRegistrationStore)
 	if !ok {
 		return nil, providerRPCError("get oauth registration", ErrOAuthRegistrationStoreUnsupported)
@@ -180,7 +180,7 @@ func (s *DatastoreServer) GetOAuthRegistration(ctx context.Context, req *proto.G
 	return oauthRegistrationToProto(registration), nil
 }
 
-func (s *DatastoreServer) PutOAuthRegistration(ctx context.Context, req *proto.OAuthRegistration) (*emptypb.Empty, error) {
+func (s *datastoreServer) PutOAuthRegistration(ctx context.Context, req *proto.OAuthRegistration) (*emptypb.Empty, error) {
 	store, ok := s.store.(OAuthRegistrationStore)
 	if !ok {
 		return nil, providerRPCError("put oauth registration", ErrOAuthRegistrationStoreUnsupported)
@@ -194,7 +194,7 @@ func (s *DatastoreServer) PutOAuthRegistration(ctx context.Context, req *proto.O
 	return &emptypb.Empty{}, nil
 }
 
-func (s *DatastoreServer) DeleteOAuthRegistration(ctx context.Context, req *proto.DeleteOAuthRegistrationRequest) (*emptypb.Empty, error) {
+func (s *datastoreServer) DeleteOAuthRegistration(ctx context.Context, req *proto.DeleteOAuthRegistrationRequest) (*emptypb.Empty, error) {
 	store, ok := s.store.(OAuthRegistrationStore)
 	if !ok {
 		return nil, providerRPCError("delete oauth registration", ErrOAuthRegistrationStoreUnsupported)

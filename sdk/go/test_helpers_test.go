@@ -16,7 +16,7 @@ import (
 
 func newProviderPluginClient[P any, PP interface {
 	*P
-	gestalt.Provider
+	gestalt.RuntimeProvider
 }](t *testing.T, prov PP, router *gestalt.Router[P]) proto.ProviderPluginClient {
 	t.Helper()
 

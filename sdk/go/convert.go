@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -18,13 +17,6 @@ func cloneStringMap(values map[string]string) map[string]string {
 		out[key] = value
 	}
 	return out
-}
-
-func mapFromStruct(s *structpb.Struct) map[string]any {
-	if s == nil {
-		return nil
-	}
-	return s.AsMap()
 }
 
 func catalogToJSON(cat *Catalog) (string, error) {
@@ -61,14 +53,6 @@ func catalogToJSON(cat *Catalog) (string, error) {
 		return "", fmt.Errorf("marshal catalog: %w", err)
 	}
 	return string(data), nil
-}
-
-func configFromRequest(s *structpb.Struct) map[string]any {
-	config := mapFromStruct(s)
-	if config == nil {
-		config = map[string]any{}
-	}
-	return config
 }
 
 func timeToProto(value time.Time) *timestamppb.Timestamp {

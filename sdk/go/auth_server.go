@@ -10,16 +10,16 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-type AuthServer struct {
+type authServer struct {
 	proto.UnimplementedAuthPluginServer
 	auth AuthProvider
 }
 
-func NewAuthProviderServer(auth AuthProvider) *AuthServer {
-	return &AuthServer{auth: auth}
+func newAuthProviderServer(auth AuthProvider) *authServer {
+	return &authServer{auth: auth}
 }
 
-func (s *AuthServer) BeginLogin(ctx context.Context, req *proto.BeginLoginRequest) (*proto.BeginLoginResponse, error) {
+func (s *authServer) BeginLogin(ctx context.Context, req *proto.BeginLoginRequest) (*proto.BeginLoginResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -41,7 +41,7 @@ func (s *AuthServer) BeginLogin(ctx context.Context, req *proto.BeginLoginReques
 	}, nil
 }
 
-func (s *AuthServer) CompleteLogin(ctx context.Context, req *proto.CompleteLoginRequest) (*proto.AuthenticatedUser, error) {
+func (s *authServer) CompleteLogin(ctx context.Context, req *proto.CompleteLoginRequest) (*proto.AuthenticatedUser, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -59,7 +59,7 @@ func (s *AuthServer) CompleteLogin(ctx context.Context, req *proto.CompleteLogin
 	return authenticatedUserToProto(user), nil
 }
 
-func (s *AuthServer) ValidateExternalToken(ctx context.Context, req *proto.ValidateExternalTokenRequest) (*proto.AuthenticatedUser, error) {
+func (s *authServer) ValidateExternalToken(ctx context.Context, req *proto.ValidateExternalTokenRequest) (*proto.AuthenticatedUser, error) {
 	validator, ok := s.auth.(ExternalTokenValidator)
 	if !ok {
 		return nil, providerRPCError("validate external token", ErrExternalTokenValidationUnsupported)
@@ -77,7 +77,7 @@ func (s *AuthServer) ValidateExternalToken(ctx context.Context, req *proto.Valid
 	return authenticatedUserToProto(user), nil
 }
 
-func (s *AuthServer) GetSessionSettings(context.Context, *emptypb.Empty) (*proto.AuthSessionSettings, error) {
+func (s *authServer) GetSessionSettings(context.Context, *emptypb.Empty) (*proto.AuthSessionSettings, error) {
 	provider, ok := s.auth.(SessionTTLProvider)
 	if !ok {
 		return nil, status.Error(codes.Unimplemented, "auth provider does not expose session settings")

@@ -1,7 +1,7 @@
 // Package gestalt provides a Go SDK for building Gestalt executable plugins.
 //
 // Gestalt plugins extend the platform with new integrations and automations.
-// A [Provider] is the current runtime contract for integration plugins: it
+// [RuntimeProvider] is the runtime contract for integration plugins: it
 // receives startup config and serves typed executable operations when the host
 // invokes them.
 //
@@ -9,7 +9,7 @@
 // operations are authored in Go and materialized automatically by the SDK and
 // host. The recommended authoring flow is:
 //
-//  1. Implement [Provider.Configure].
+//  1. Implement [RuntimeProvider.Configure].
 //  2. Define typed operations and handlers in Go with [Operation], [Register],
 //     and [Router].
 //  3. Export `New()` plus `Router` from the provider package.
@@ -36,10 +36,6 @@
 //	var Router = gestalt.MustRouter(
 //		gestalt.Register(myOperation, (*MyProvider).myHandler),
 //	)
-//
-// Source-plugin flows derive the executable catalog name from plugin.yaml. Use
-// [MustNamedRouter] only when you need an explicit catalog name outside that
-// manifest-backed flow.
 //
 // See `/docs/plugins/writing-a-plugin` for the full typed authoring flow.
 package gestalt

@@ -12,8 +12,6 @@ const (
 	ProviderKindIntegration ProviderKind = "integration"
 	ProviderKindAuth        ProviderKind = "auth"
 	ProviderKindDatastore   ProviderKind = "datastore"
-	ProviderKindSecrets     ProviderKind = "secrets"
-	ProviderKindTelemetry   ProviderKind = "telemetry"
 )
 
 // ProviderMetadata describes a provider instance independent of its concrete
@@ -52,15 +50,6 @@ type Closer interface {
 // environment warnings the host should surface.
 type WarningsProvider interface {
 	Warnings() []string
-}
-
-// Provider is the core interface that every executable integration provider must
-// implement.
-//
-// Static metadata still comes from the manifest. Executable helper operations
-// are declared separately through the typed router passed to [ServeProvider].
-type Provider interface {
-	RuntimeProvider
 }
 
 type SessionCatalogProvider interface {
