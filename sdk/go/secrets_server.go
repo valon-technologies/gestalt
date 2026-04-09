@@ -9,11 +9,11 @@ import (
 )
 
 type SecretsServer struct {
-	proto.UnimplementedSecretsPluginServer
+	proto.UnimplementedSecretsProviderServer
 	secrets SecretsProvider
 }
 
-func NewSecretsServer(secrets SecretsProvider) *SecretsServer {
+func NewSecretsProviderServer(secrets SecretsProvider) *SecretsServer {
 	return &SecretsServer{secrets: secrets}
 }
 

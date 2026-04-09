@@ -19,101 +19,101 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	SecretsPlugin_GetSecret_FullMethodName = "/gestalt.plugin.v1.SecretsPlugin/GetSecret"
+	SecretsProvider_GetSecret_FullMethodName = "/gestalt.plugin.v1.SecretsProvider/GetSecret"
 )
 
-// SecretsPluginClient is the client API for SecretsPlugin service.
+// SecretsProviderClient is the client API for SecretsProvider service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type SecretsPluginClient interface {
+type SecretsProviderClient interface {
 	GetSecret(ctx context.Context, in *GetSecretRequest, opts ...grpc.CallOption) (*GetSecretResponse, error)
 }
 
-type secretsPluginClient struct {
+type secretsProviderClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewSecretsPluginClient(cc grpc.ClientConnInterface) SecretsPluginClient {
-	return &secretsPluginClient{cc}
+func NewSecretsProviderClient(cc grpc.ClientConnInterface) SecretsProviderClient {
+	return &secretsProviderClient{cc}
 }
 
-func (c *secretsPluginClient) GetSecret(ctx context.Context, in *GetSecretRequest, opts ...grpc.CallOption) (*GetSecretResponse, error) {
+func (c *secretsProviderClient) GetSecret(ctx context.Context, in *GetSecretRequest, opts ...grpc.CallOption) (*GetSecretResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetSecretResponse)
-	err := c.cc.Invoke(ctx, SecretsPlugin_GetSecret_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, SecretsProvider_GetSecret_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// SecretsPluginServer is the server API for SecretsPlugin service.
-// All implementations must embed UnimplementedSecretsPluginServer
+// SecretsProviderServer is the server API for SecretsProvider service.
+// All implementations must embed UnimplementedSecretsProviderServer
 // for forward compatibility.
-type SecretsPluginServer interface {
+type SecretsProviderServer interface {
 	GetSecret(context.Context, *GetSecretRequest) (*GetSecretResponse, error)
-	mustEmbedUnimplementedSecretsPluginServer()
+	mustEmbedUnimplementedSecretsProviderServer()
 }
 
-// UnimplementedSecretsPluginServer must be embedded to have
+// UnimplementedSecretsProviderServer must be embedded to have
 // forward compatible implementations.
 //
 // NOTE: this should be embedded by value instead of pointer to avoid a nil
 // pointer dereference when methods are called.
-type UnimplementedSecretsPluginServer struct{}
+type UnimplementedSecretsProviderServer struct{}
 
-func (UnimplementedSecretsPluginServer) GetSecret(context.Context, *GetSecretRequest) (*GetSecretResponse, error) {
+func (UnimplementedSecretsProviderServer) GetSecret(context.Context, *GetSecretRequest) (*GetSecretResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetSecret not implemented")
 }
-func (UnimplementedSecretsPluginServer) mustEmbedUnimplementedSecretsPluginServer() {}
-func (UnimplementedSecretsPluginServer) testEmbeddedByValue()                       {}
+func (UnimplementedSecretsProviderServer) mustEmbedUnimplementedSecretsProviderServer() {}
+func (UnimplementedSecretsProviderServer) testEmbeddedByValue()                         {}
 
-// UnsafeSecretsPluginServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to SecretsPluginServer will
+// UnsafeSecretsProviderServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to SecretsProviderServer will
 // result in compilation errors.
-type UnsafeSecretsPluginServer interface {
-	mustEmbedUnimplementedSecretsPluginServer()
+type UnsafeSecretsProviderServer interface {
+	mustEmbedUnimplementedSecretsProviderServer()
 }
 
-func RegisterSecretsPluginServer(s grpc.ServiceRegistrar, srv SecretsPluginServer) {
-	// If the following call panics, it indicates UnimplementedSecretsPluginServer was
+func RegisterSecretsProviderServer(s grpc.ServiceRegistrar, srv SecretsProviderServer) {
+	// If the following call panics, it indicates UnimplementedSecretsProviderServer was
 	// embedded by pointer and is nil.  This will cause panics if an
 	// unimplemented method is ever invoked, so we test this at initialization
 	// time to prevent it from happening at runtime later due to I/O.
 	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
 		t.testEmbeddedByValue()
 	}
-	s.RegisterService(&SecretsPlugin_ServiceDesc, srv)
+	s.RegisterService(&SecretsProvider_ServiceDesc, srv)
 }
 
-func _SecretsPlugin_GetSecret_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _SecretsProvider_GetSecret_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetSecretRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(SecretsPluginServer).GetSecret(ctx, in)
+		return srv.(SecretsProviderServer).GetSecret(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: SecretsPlugin_GetSecret_FullMethodName,
+		FullMethod: SecretsProvider_GetSecret_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SecretsPluginServer).GetSecret(ctx, req.(*GetSecretRequest))
+		return srv.(SecretsProviderServer).GetSecret(ctx, req.(*GetSecretRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// SecretsPlugin_ServiceDesc is the grpc.ServiceDesc for SecretsPlugin service.
+// SecretsProvider_ServiceDesc is the grpc.ServiceDesc for SecretsProvider service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var SecretsPlugin_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "gestalt.plugin.v1.SecretsPlugin",
-	HandlerType: (*SecretsPluginServer)(nil),
+var SecretsProvider_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "gestalt.plugin.v1.SecretsProvider",
+	HandlerType: (*SecretsProviderServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "GetSecret",
-			Handler:    _SecretsPlugin_GetSecret_Handler,
+			Handler:    _SecretsProvider_GetSecret_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
