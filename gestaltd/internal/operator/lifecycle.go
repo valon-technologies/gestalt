@@ -26,8 +26,7 @@ const (
 	PreparedProvidersDir = ".gestaltd/providers"
 	PreparedAuthDir      = ".gestaltd/auth"
 	PreparedDatastoreDir = ".gestaltd/datastore"
-	PreparedSecretsDir   = ".gestaltd/secrets"
-	PreparedUIDir        = ".gestaltd/ui"
+	PreparedUIDir = ".gestaltd/ui"
 	LockVersion          = 1
 )
 
@@ -36,8 +35,7 @@ type Lockfile struct {
 	Providers map[string]LockProviderEntry `json:"providers"`
 	Auth      *LockEntry                   `json:"auth,omitempty"`
 	Datastore *LockEntry                   `json:"datastore,omitempty"`
-	Secrets   *LockEntry                   `json:"secrets,omitempty"`
-	UI        *LockUIEntry                 `json:"ui,omitempty"`
+	UI *LockUIEntry `json:"ui,omitempty"`
 }
 
 type LockEntry struct {
@@ -182,8 +180,7 @@ type initPaths struct {
 	providersDir string
 	authDir      string
 	datastoreDir string
-	secretsDir   string
-	uiDir        string
+	uiDir string
 }
 
 type pluginFingerprintInput struct {
@@ -263,8 +260,7 @@ func initPathsForConfigWithArtifactsDir(configPath, artifactsDir string) initPat
 		providersDir: filepath.Join(artifactsDir, filepath.FromSlash(PreparedProvidersDir)),
 		authDir:      filepath.Join(artifactsDir, filepath.FromSlash(PreparedAuthDir)),
 		datastoreDir: filepath.Join(artifactsDir, filepath.FromSlash(PreparedDatastoreDir)),
-		secretsDir:   filepath.Join(artifactsDir, filepath.FromSlash(PreparedSecretsDir)),
-		uiDir:        filepath.Join(artifactsDir, filepath.FromSlash(PreparedUIDir)),
+		uiDir: filepath.Join(artifactsDir, filepath.FromSlash(PreparedUIDir)),
 	}
 }
 
@@ -282,10 +278,6 @@ func authDestDir(paths initPaths) string {
 
 func datastoreDestDir(paths initPaths) string {
 	return paths.datastoreDir
-}
-
-func secretsDestDir(paths initPaths) string {
-	return paths.secretsDir
 }
 
 func writeJSONFile(path string, v any) error {
@@ -737,8 +729,6 @@ func (l *Lifecycle) applyComponentProvider(paths initPaths, lock *Lockfile, kind
 			entry = lock.Auth
 		case pluginmanifestv1.KindDatastore:
 			entry = lock.Datastore
-		case pluginmanifestv1.KindSecrets:
-			entry = lock.Secrets
 		}
 		if err := l.applyLockedComponentEntry(paths, entry, kind, name, provider, configMap); err != nil {
 			return err
@@ -1035,8 +1025,6 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 		destDir = authDestDir(paths)
 	case pluginmanifestv1.KindDatastore:
 		destDir = datastoreDestDir(paths)
-	case pluginmanifestv1.KindSecrets:
-		destDir = secretsDestDir(paths)
 	default:
 		return fmt.Errorf("unsupported component kind %q", kind)
 	}
