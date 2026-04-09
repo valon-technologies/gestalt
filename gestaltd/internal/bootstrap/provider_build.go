@@ -484,6 +484,16 @@ func buildPluginProvider(ctx context.Context, intg config.IntegrationDef, plugin
 		if err != nil {
 			return nil, fmt.Errorf("prepare synthesized source provider execution: %w", err)
 		}
+		execEnv, err := pluginpkg.SourceProviderExecutionEnv(rootDir, runtime.GOOS, runtime.GOARCH)
+		if err != nil {
+			return nil, fmt.Errorf("prepare synthesized source provider environment: %w", err)
+		}
+		if len(execEnv) > 0 {
+			if env == nil {
+				env = make(map[string]string, len(execEnv))
+			}
+			maps.Copy(env, execEnv)
+		}
 	}
 	if cleanup != nil {
 		defer func() {

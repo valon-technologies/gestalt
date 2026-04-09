@@ -96,13 +96,14 @@ func TestE2EDefaultStartAutoGeneratesHomeConfig(t *testing.T) {
 	providersDir := filepath.Join(t.TempDir(), "providers")
 	_ = setupAuthProviderDir(t, providersDir, "none")
 	_ = setupDatastoreProviderDir(t, providersDir, "sqlite")
+	_ = setupWebProviderDir(t, providersDir, "default")
 	configPath := filepath.Join(homeDir, ".gestaltd", "config.yaml")
 
 	cmd := exec.Command(gestaltdBin)
 	cmd.Env = withoutEnvVar(os.Environ(), "GESTALT_CONFIG")
 	cmd.Env = append(cmd.Env,
 		"HOME="+homeDir,
-		"GESTALT_PROVIDERS_DIR="+filepath.Join(providersDir, "components"),
+		"GESTALT_PROVIDERS_DIR="+providersDir,
 		"GOMODCACHE="+goEnvPath(t, "GOMODCACHE"),
 		"GOCACHE="+goEnvPath(t, "GOCACHE"),
 	)

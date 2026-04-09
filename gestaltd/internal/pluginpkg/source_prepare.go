@@ -61,6 +61,13 @@ func generateSourceStaticCatalog(rootDir, catalogPath string) error {
 
 	cmd := exec.Command(command, args...)
 	cmd.Env = append(os.Environ(), envWriteCatalog+"="+catalogPath)
+	execEnv, err := SourceProviderExecutionEnv(rootDir, runtime.GOOS, runtime.GOARCH)
+	if err != nil {
+		return fmt.Errorf("prepare synthesized source provider environment for static catalog: %w", err)
+	}
+	for key, value := range execEnv {
+		cmd.Env = append(cmd.Env, key+"="+value)
+	}
 	var output bytes.Buffer
 	cmd.Stdout = &output
 	cmd.Stderr = &output

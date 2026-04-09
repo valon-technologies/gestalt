@@ -104,6 +104,8 @@ func requiredComponentConfigYAML(t *testing.T, dir, dbPath string) string {
       path: %q
   config:
     path: %q
+ui:
+  provider: none
 `, datastorePath, dbPath)
 }
 
@@ -116,6 +118,8 @@ func requiredDatastoreConfigYAML(t *testing.T, dir, dbPath string) string {
       path: %q
   config:
     path: %q
+ui:
+  provider: none
 `, datastorePath, dbPath)
 }
 
@@ -347,6 +351,8 @@ datastore:
       path: ./datastore-plugin.yaml
   config:
     bucket: local-datastore
+ui:
+  provider: none
 server:
   encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `
@@ -456,6 +462,8 @@ datastore:
   provider:
     source:
       path: ./datastore-plugin.yaml
+ui:
+  provider: none
 server:
   encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `

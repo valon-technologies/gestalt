@@ -28,4 +28,10 @@ When `auth.provider` is set to `google` or `oidc`, the web UI redirects to your 
 
 ## Custom UI bundles
 
-The built-in web UI ships with `gestaltd`. To replace it with a custom frontend, configure `ui.plugin` in your server config to point at a packaged UI bundle. The built-in admin UI at `/admin` remains available regardless. See [Releasing](/providers/releasing) for the bundle format.
+The public web UI is configured through `ui.provider`.
+
+- Omit `ui` to use the pinned first-party default UI bundle.
+- Set `ui.provider: none` to run headless with no public UI at `/`.
+- Set `ui.provider.source` to a packaged `webui` bundle to bring your own frontend.
+
+The built-in admin UI at `/admin` remains available regardless. See [Releasing](/providers/releasing) for the bundle format.

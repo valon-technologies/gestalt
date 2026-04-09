@@ -167,6 +167,10 @@
         "asset_root": {
           "type": "string",
           "minLength": 1
+        },
+        "config_schema_path": {
+          "type": "string",
+          "minLength": 1
         }
       }
     },

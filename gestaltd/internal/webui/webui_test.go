@@ -187,12 +187,3 @@ func TestDirHandler_RejectsDirectoryWithoutIndex(t *testing.T) {
 		t.Fatal("expected error for directory without index.html")
 	}
 }
-
-func TestEmbeddedHandler_NilWhenNotBuilt(t *testing.T) {
-	t.Parallel()
-
-	handler := EmbeddedHandler()
-	if handler != nil {
-		t.Fatal("expected nil handler when embedded frontend has not been built")
-	}
-}

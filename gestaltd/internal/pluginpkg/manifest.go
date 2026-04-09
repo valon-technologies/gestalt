@@ -284,6 +284,11 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 		if err := validateRelativePackagePath(manifest.WebUI.AssetRoot, "webui asset root"); err != nil {
 			return err
 		}
+		if manifest.WebUI.ConfigSchemaPath != "" {
+			if err := validateRelativePackagePath(manifest.WebUI.ConfigSchemaPath, "webui config schema path"); err != nil {
+				return err
+			}
+		}
 	default:
 		return fmt.Errorf("unsupported manifest kind %q", kind)
 	}

@@ -3,6 +3,7 @@ package componentplugin
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"runtime"
 
@@ -52,6 +53,16 @@ func PrepareExecution(params PrepareParams) (PreparedConfig, error) {
 		}
 		if err != nil {
 			return PreparedConfig{}, fmt.Errorf("%s: prepare synthesized source execution: %w", params.Subject, err)
+		}
+		execEnv, err := pluginpkg.SourceComponentExecutionEnv(filepath.Dir(cfg.ManifestPath), params.Kind, runtime.GOOS, runtime.GOARCH)
+		if err != nil {
+			return PreparedConfig{}, fmt.Errorf("%s: prepare synthesized source environment: %w", params.Subject, err)
+		}
+		if len(execEnv) > 0 {
+			if cfg.Env == nil {
+				cfg.Env = make(map[string]string, len(execEnv))
+			}
+			maps.Copy(cfg.Env, execEnv)
 		}
 		cfg.Command = command
 		cfg.Args = args

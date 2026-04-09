@@ -32,7 +32,7 @@ func ValidateStructure(cfg *Config) error {
 	if err := validateEgress(&cfg.Egress); err != nil {
 		return err
 	}
-	if err := validateUIPlugin(cfg.UI.Plugin); err != nil {
+	if err := validateUIConfig(cfg.UI); err != nil {
 		return err
 	}
 	if err := validateTopLevelComponentConfig("auth", cfg.Auth.Provider, cfg.Auth.Config); err != nil {
@@ -435,27 +435,17 @@ func validateAuthValueDef(integration, subject, path string, value AuthValueDef,
 	return nil
 }
 
-func validateUIPlugin(plugin *UIPluginDef) error {
-	if plugin == nil {
+func validateUIConfig(cfg UIConfig) error {
+	if cfg.Disabled {
+		if cfg.Config.Kind != 0 {
+			return fmt.Errorf(`config validation: ui.config is not supported when ui.provider is "none"`)
+		}
 		return nil
 	}
-	if plugin.Source == "" {
-		return fmt.Errorf("config validation: ui plugin.source is required")
+	if cfg.Provider == nil {
+		return nil
 	}
-
-	if plugin.Source != "" {
-		if _, err := pluginsource.Parse(plugin.Source); err != nil {
-			return fmt.Errorf("config validation: ui plugin.source: %w", err)
-		}
-		if plugin.Version == "" {
-			return fmt.Errorf("config validation: ui plugin.version is required when plugin.source is set")
-		}
-		if err := pluginsource.ValidateVersion(plugin.Version); err != nil {
-			return fmt.Errorf("config validation: ui plugin.version: %w", err)
-		}
-	}
-
-	return nil
+	return validateExternalPlugin("ui", "provider", cfg.Provider)
 }
 
 func validateServerListeners(cfg ServerConfig) error {

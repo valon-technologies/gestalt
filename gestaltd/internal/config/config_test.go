@@ -382,6 +382,124 @@ plugins:
 	}
 }
 
+func TestLoadConfigUIProviderModes(t *testing.T) {
+	t.Parallel()
+
+	t.Run("omitted ui uses default provider", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+datastore:
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+      version: 1.0.0
+server:
+  encryption_key: server-key
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if cfg.UI.Disabled {
+			t.Fatal("UI.Disabled = true, want false")
+		}
+		if cfg.UI.Provider == nil || cfg.UI.Provider.Source == nil {
+			t.Fatalf("UI.Provider = %#v, want default provider", cfg.UI.Provider)
+		}
+		if got := cfg.UI.Provider.Source.Ref; got != DefaultWebUIProvider {
+			t.Fatalf("UI.Provider.Source.Ref = %q, want %q", got, DefaultWebUIProvider)
+		}
+		if got := cfg.UI.Provider.Source.Version; got != DefaultProviderVersion {
+			t.Fatalf("UI.Provider.Source.Version = %q, want %q", got, DefaultProviderVersion)
+		}
+	})
+
+	t.Run("ui provider none disables public ui", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+ui:
+  provider: none
+datastore:
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+      version: 1.0.0
+server:
+  encryption_key: server-key
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if !cfg.UI.Disabled {
+			t.Fatal("UI.Disabled = false, want true")
+		}
+		if cfg.UI.Provider != nil {
+			t.Fatalf("UI.Provider = %#v, want nil", cfg.UI.Provider)
+		}
+	})
+
+	t.Run("ui config is rejected with provider none", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+ui:
+  provider: none
+  config:
+    brand_name: Acme
+datastore:
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+      version: 1.0.0
+server:
+  encryption_key: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `ui.config is not supported when ui.provider is "none"`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("relative ui provider path resolves from config directory", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+ui:
+  provider:
+    source:
+      path: ./web/default/plugin.yaml
+datastore:
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+      version: 1.0.0
+server:
+  encryption_key: server-key
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if cfg.UI.Provider == nil || cfg.UI.Provider.Source == nil {
+			t.Fatalf("UI.Provider = %#v", cfg.UI.Provider)
+		}
+		wantPath := filepath.Join(filepath.Dir(path), "web", "default", "plugin.yaml")
+		if got := cfg.UI.Provider.Source.Path; got != wantPath {
+			t.Fatalf("UI.Provider.Source.Path = %q, want %q", got, wantPath)
+		}
+	})
+}
+
 func TestLoadConfigValidation(t *testing.T) {
 	t.Parallel()
 

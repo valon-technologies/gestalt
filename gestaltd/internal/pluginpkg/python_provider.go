@@ -154,6 +154,14 @@ func pythonBackendImportPaths() []string {
 }
 
 func pythonBackendEnv() []string {
+	env := pythonBackendEnvMap()
+	if len(env) == 0 {
+		return nil
+	}
+	return []string{"PYTHONPATH=" + env["PYTHONPATH"]}
+}
+
+func pythonBackendEnvMap() map[string]string {
 	paths := pythonBackendImportPaths()
 	if len(paths) == 0 {
 		return nil
@@ -162,7 +170,7 @@ func pythonBackendEnv() []string {
 	if existing := os.Getenv("PYTHONPATH"); existing != "" {
 		value += string(os.PathListSeparator) + existing
 	}
-	return []string{"PYTHONPATH=" + value}
+	return map[string]string{"PYTHONPATH": value}
 }
 
 func localPythonSDKPath() string {

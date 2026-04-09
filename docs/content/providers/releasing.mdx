@@ -161,13 +161,16 @@ artifacts:
 UI packages use the same manifest system:
 
 ```yaml
-source: github.com/acme/plugins/gestalt-ui
+source: github.com/acme/plugins/web/default
 version: 1.2.0
+kinds:
+  - webui
 webui:
   asset_root: ui/out
+  config_schema_path: schemas/ui-config.schema.json
 ```
 
-`gestaltd init` prepares the released UI and records it in `gestalt.lock.json`. `gestaltd serve --locked` then serves the prepared asset root at `/`. If `ui.plugin` is omitted, Gestalt falls back to the built-in client UI. The built-in admin UI remains available at `/admin` regardless.
+`gestaltd init` prepares the released UI and records it in `gestalt.lock.json`. `gestaltd serve --locked` then serves the prepared asset root at `/`. Omit `ui` to use the pinned first-party default UI bundle, or set `ui.provider: none` to disable the public UI. The built-in admin UI remains available at `/admin` regardless.
 
 ## Build a release
 
@@ -226,13 +229,16 @@ This is the recommended approach for production deployments.
 
 ### UI bundle
 
-Reference a released UI bundle separately under `ui.plugin`:
+Reference a released UI bundle separately under `ui.provider`:
 
 ```yaml
 ui:
-  plugin:
-    source: github.com/acme/plugins/gestalt-ui
-    version: 1.2.0
+  provider:
+    source:
+      ref: github.com/acme/plugins/web/default
+      version: 1.2.0
+  config:
+    brand_name: Acme
 ```
 
 ## Prepared state

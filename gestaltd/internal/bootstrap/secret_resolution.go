@@ -70,8 +70,8 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 			return err
 		}
 	}
-	if cfg.UI.Plugin != nil {
-		if err := resolveStringFields(cfg.UI.Plugin, resolve); err != nil {
+	if cfg.UI.Provider != nil {
+		if err := resolveStringFields(cfg.UI.Provider, resolve); err != nil {
 			return err
 		}
 	}
@@ -81,6 +81,9 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 		return err
 	}
 	if err := resolveYAMLNode(&cfg.Datastore.Config, resolve); err != nil {
+		return err
+	}
+	if err := resolveYAMLNode(&cfg.UI.Config, resolve); err != nil {
 		return err
 	}
 	if err := resolveYAMLNode(&cfg.Telemetry.Config, resolve); err != nil {

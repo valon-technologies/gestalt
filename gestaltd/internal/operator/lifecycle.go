@@ -113,8 +113,8 @@ func (l *Lifecycle) InitAtPathWithArtifactsDir(configPath, artifactsDir string) 
 		}
 		lock.Datastore = &entry
 	}
-	if cfg.UI.Plugin.HasManagedArtifacts() {
-		uiEntry, err := l.writeUIPluginArtifact(context.Background(), cfg, paths)
+	if cfg.UI.Provider != nil && cfg.UI.Provider.HasManagedArtifacts() {
+		uiEntry, err := l.writeUIProviderArtifact(context.Background(), cfg, paths)
 		if err != nil {
 			return nil, err
 		}
@@ -202,7 +202,7 @@ func configHasPluginLoading(cfg *config.Config) bool {
 	if cfg.Datastore.Provider != nil && (cfg.Datastore.Provider.HasManagedArtifacts() || cfg.Datastore.Provider.HasLocalSource()) {
 		return true
 	}
-	return cfg.UI.Plugin.HasManagedArtifacts()
+	return cfg.UI.Provider != nil && (cfg.UI.Provider.HasManagedArtifacts() || cfg.UI.Provider.HasLocalSource())
 }
 
 func configHasManagedPlugins(cfg *config.Config) bool {
@@ -217,7 +217,7 @@ func configHasManagedPlugins(cfg *config.Config) bool {
 	if cfg.Datastore.Provider != nil && cfg.Datastore.Provider.HasManagedArtifacts() {
 		return true
 	}
-	return cfg.UI.Plugin.HasManagedArtifacts()
+	return cfg.UI.Provider != nil && cfg.UI.Provider.HasManagedArtifacts()
 }
 
 func resolveLockPath(baseDir, provider string) string {
@@ -338,11 +338,11 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 			return false
 		}
 	}
-	if cfg.UI.Plugin.HasManagedArtifacts() {
+	if cfg.UI.Provider != nil && cfg.UI.Provider.HasManagedArtifacts() {
 		if lock.UI == nil {
 			return false
 		}
-		fingerprint, err := UIPluginFingerprint(cfg.UI.Plugin)
+		fingerprint, err := UIProviderFingerprint(cfg.UI.Provider)
 		if err != nil || lock.UI.Fingerprint != fingerprint {
 			return false
 		}
@@ -377,20 +377,8 @@ func PluginFingerprint(name string, plugin *config.PluginDef, configDir string) 
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func UIPluginFingerprint(plugin *config.UIPluginDef) (string, error) {
-	input := struct {
-		Source  string `json:"source,omitempty"`
-		Version string `json:"version,omitempty"`
-	}{
-		Source:  plugin.Source,
-		Version: plugin.Version,
-	}
-	payload, err := json.Marshal(input)
-	if err != nil {
-		return "", err
-	}
-	sum := sha256.Sum256(payload)
-	return hex.EncodeToString(sum[:]), nil
+func UIProviderFingerprint(plugin *config.PluginDef) (string, error) {
+	return PluginFingerprint("ui", plugin, "")
 }
 
 func lockEntryMatches(paths initPaths, name string, plugin *config.PluginDef, entry LockEntry, found bool) bool {
@@ -566,58 +554,67 @@ func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths initPa
 	}, nil
 }
 
-func (l *Lifecycle) writeUIPluginArtifact(ctx context.Context, cfg *config.Config, paths initPaths) (LockUIEntry, error) {
-	plugin := cfg.UI.Plugin
-	fingerprint, err := UIPluginFingerprint(plugin)
+func (l *Lifecycle) writeUIProviderArtifact(ctx context.Context, cfg *config.Config, paths initPaths) (LockUIEntry, error) {
+	plugin := cfg.UI.Provider
+	if plugin == nil || !plugin.HasManagedSource() {
+		return LockUIEntry{}, fmt.Errorf("ui provider requires managed source")
+	}
+	configMap, err := config.NodeToMap(cfg.UI.Config)
 	if err != nil {
-		return LockUIEntry{}, fmt.Errorf("fingerprinting ui plugin: %w", err)
+		return LockUIEntry{}, fmt.Errorf("decode ui provider config: %w", err)
+	}
+	fingerprint, err := UIProviderFingerprint(plugin)
+	if err != nil {
+		return LockUIEntry{}, fmt.Errorf("fingerprinting ui provider: %w", err)
 	}
 
 	destDir := uiDestDir(paths)
-	var installed *pluginstore.InstalledPlugin
-	if plugin.Source != "" {
-		src, err := pluginsource.Parse(plugin.Source)
-		if err != nil {
-			return LockUIEntry{}, fmt.Errorf("ui plugin.source %q: %w", plugin.Source, err)
-		}
-		if l.sourceResolver == nil {
-			return LockUIEntry{}, fmt.Errorf("ui plugin: source resolution requires a source resolver")
-		}
-		resolved, err := l.sourceResolver.Resolve(ctx, src, plugin.Version)
-		if err != nil {
-			return LockUIEntry{}, fmt.Errorf("ui plugin resolve source %q@%s: %w", plugin.Source, plugin.Version, err)
-		}
-		defer resolved.Cleanup()
-		installed, err = pluginstore.Install(resolved.LocalPath, destDir)
-		if err != nil {
-			return LockUIEntry{}, fmt.Errorf("ui plugin install source: %w", err)
-		}
-		if installed.Manifest.Source != plugin.Source {
-			return LockUIEntry{}, fmt.Errorf("ui plugin manifest source %q does not match config source %q", installed.Manifest.Source, plugin.Source)
-		}
-		if installed.Manifest.Version != plugin.Version {
-			return LockUIEntry{}, fmt.Errorf("ui plugin manifest version %q does not match config version %q", installed.Manifest.Version, plugin.Version)
-		}
-		manifestPath, err := filepath.Rel(paths.artifactsDir, installed.ManifestPath)
-		if err != nil {
-			return LockUIEntry{}, fmt.Errorf("compute manifest path for ui plugin: %w", err)
-		}
-		assetRoot, err := filepath.Rel(paths.artifactsDir, installed.AssetRoot)
-		if err != nil {
-			return LockUIEntry{}, fmt.Errorf("compute asset root path for ui plugin: %w", err)
-		}
-		return LockUIEntry{
-			Fingerprint:   fingerprint,
-			Source:        plugin.Source,
-			Version:       plugin.Version,
-			ResolvedURL:   resolved.ResolvedURL,
-			ArchiveSHA256: resolved.ArchiveSHA256,
-			Manifest:      filepath.ToSlash(manifestPath),
-			AssetRoot:     filepath.ToSlash(assetRoot),
-		}, nil
+	src, err := sourceForPlugin(plugin)
+	if err != nil {
+		return LockUIEntry{}, fmt.Errorf("ui provider source.ref %q: %w", plugin.SourceRef(), err)
 	}
+	if l.sourceResolver == nil {
+		return LockUIEntry{}, fmt.Errorf("ui provider: source resolution requires a source resolver")
+	}
+	resolved, err := l.sourceResolver.Resolve(ctx, src, plugin.SourceVersion())
+	if err != nil {
+		return LockUIEntry{}, fmt.Errorf("ui provider resolve source %q@%s: %w", plugin.SourceRef(), plugin.SourceVersion(), err)
+	}
+	defer resolved.Cleanup()
 
-	return LockUIEntry{}, fmt.Errorf("ui plugin requires source")
+	installed, err := pluginstore.Install(resolved.LocalPath, destDir)
+	if err != nil {
+		return LockUIEntry{}, fmt.Errorf("ui provider install source: %w", err)
+	}
+	if err := validateInstalledManifestKind(pluginmanifestv1.KindWebUI, "provider", installed.Manifest); err != nil {
+		return LockUIEntry{}, err
+	}
+	if installed.Manifest.Source != plugin.SourceRef() {
+		return LockUIEntry{}, fmt.Errorf("ui provider manifest source %q does not match config source %q", installed.Manifest.Source, plugin.SourceRef())
+	}
+	if installed.Manifest.Version != plugin.SourceVersion() {
+		return LockUIEntry{}, fmt.Errorf("ui provider manifest version %q does not match config version %q", installed.Manifest.Version, plugin.SourceVersion())
+	}
+	if err := pluginpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, pluginmanifestv1.KindWebUI, configMap); err != nil {
+		return LockUIEntry{}, fmt.Errorf("plugin config validation for ui provider: %w", err)
+	}
+	manifestPath, err := filepath.Rel(paths.artifactsDir, installed.ManifestPath)
+	if err != nil {
+		return LockUIEntry{}, fmt.Errorf("compute manifest path for ui provider: %w", err)
+	}
+	assetRoot, err := filepath.Rel(paths.artifactsDir, installed.AssetRoot)
+	if err != nil {
+		return LockUIEntry{}, fmt.Errorf("compute asset root path for ui provider: %w", err)
+	}
+	return LockUIEntry{
+		Fingerprint:   fingerprint,
+		Source:        plugin.SourceRef(),
+		Version:       plugin.SourceVersion(),
+		ResolvedURL:   resolved.ResolvedURL,
+		ArchiveSHA256: resolved.ArchiveSHA256,
+		Manifest:      filepath.ToSlash(manifestPath),
+		AssetRoot:     filepath.ToSlash(assetRoot),
+	}, nil
 }
 
 func sourceForPlugin(plugin *config.PluginDef) (pluginsource.Source, error) {
@@ -688,23 +685,41 @@ func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *con
 			return err
 		}
 	}
-	if cfg.UI.Plugin.HasManagedArtifacts() {
-		if lock.UI == nil {
-			return fmt.Errorf("prepared artifact for ui plugin is missing or stale; run `gestaltd init --config %s`", paths.configPath)
+	if cfg.UI.Provider != nil {
+		configMap, err := config.NodeToMap(cfg.UI.Config)
+		if err != nil {
+			return fmt.Errorf("decode ui provider config: %w", err)
 		}
-		fingerprint, err := UIPluginFingerprint(cfg.UI.Plugin)
-		if err != nil || lock.UI.Fingerprint != fingerprint {
-			return fmt.Errorf("prepared artifact for ui plugin is missing or stale; run `gestaltd init --config %s`", paths.configPath)
+		switch {
+		case cfg.UI.Provider.HasManagedArtifacts():
+			if lock.UI == nil {
+				return fmt.Errorf("prepared artifact for ui provider is missing or stale; run `gestaltd init --config %s`", paths.configPath)
+			}
+			fingerprint, err := UIProviderFingerprint(cfg.UI.Provider)
+			if err != nil || lock.UI.Fingerprint != fingerprint {
+				return fmt.Errorf("prepared artifact for ui provider is missing or stale; run `gestaltd init --config %s`", paths.configPath)
+			}
+			manifestPath := resolveLockPath(paths.artifactsDir, lock.UI.Manifest)
+			assetRootPath := resolveLockPath(paths.artifactsDir, lock.UI.AssetRoot)
+			if _, err := os.Stat(manifestPath); err != nil {
+				return fmt.Errorf("prepared manifest for ui provider not found at %s", manifestPath)
+			}
+			if _, err := os.Stat(assetRootPath); err != nil {
+				return fmt.Errorf("prepared asset root for ui provider not found at %s", assetRootPath)
+			}
+			_, manifest, err := pluginpkg.ReadManifestFile(manifestPath)
+			if err != nil {
+				return fmt.Errorf("read prepared manifest for ui provider: %w", err)
+			}
+			if err := bindResolvedUIManifest(cfg.UI.Provider, manifestPath, manifest, configMap); err != nil {
+				return err
+			}
+			cfg.UI.ResolvedAssetRoot = assetRootPath
+		case cfg.UI.Provider.HasLocalSource():
+			if err := applyLocalUIManifest(cfg.UI.Provider, configMap, &cfg.UI.ResolvedAssetRoot); err != nil {
+				return err
+			}
 		}
-		manifestPath := resolveLockPath(paths.artifactsDir, lock.UI.Manifest)
-		assetRootPath := resolveLockPath(paths.artifactsDir, lock.UI.AssetRoot)
-		if _, err := os.Stat(manifestPath); err != nil {
-			return fmt.Errorf("prepared manifest for ui plugin not found at %s", manifestPath)
-		}
-		if _, err := os.Stat(assetRootPath); err != nil {
-			return fmt.Errorf("prepared asset root for ui plugin not found at %s", assetRootPath)
-		}
-		cfg.UI.Plugin.ResolvedAssetRoot = assetRootPath
 	}
 
 	return nil
@@ -806,6 +821,31 @@ func applyLocalComponentManifest(kind, name string, plugin *config.PluginDef, co
 			plugin.Args = append([]string(nil), entry.Args...)
 		}
 	}
+	return nil
+}
+
+func applyLocalUIManifest(plugin *config.PluginDef, configMap map[string]any, resolvedAssetRoot *string) error {
+	if plugin == nil || !plugin.HasLocalSource() {
+		return nil
+	}
+
+	manifestPath := plugin.SourcePath()
+	if _, err := os.Stat(manifestPath); err != nil {
+		return fmt.Errorf("manifest for ui provider not found at %s: %w", manifestPath, err)
+	}
+
+	_, manifest, err := pluginpkg.ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		return fmt.Errorf("prepare manifest for ui provider: %w", err)
+	}
+	if err := bindResolvedUIManifest(plugin, manifestPath, manifest, configMap); err != nil {
+		return err
+	}
+	assetRoot := filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(manifest.WebUI.AssetRoot))
+	if _, err := os.Stat(assetRoot); err != nil {
+		return fmt.Errorf("ui provider asset root not found at %s: %w", assetRoot, err)
+	}
+	*resolvedAssetRoot = assetRoot
 	return nil
 }
 
@@ -935,6 +975,20 @@ func bindResolvedComponentManifest(kind, name string, plugin *config.PluginDef, 
 	}
 	if err := pluginpkg.ValidateConfigForManifest(manifestPath, manifest, kind, configMap); err != nil {
 		return fmt.Errorf("plugin config validation for %s %q: %w", kind, name, err)
+	}
+	resolvePluginIcon(manifest, manifestPath, plugin)
+	plugin.ResolvedManifestPath = manifestPath
+	plugin.ResolvedManifest = manifest
+	return nil
+}
+
+func bindResolvedUIManifest(plugin *config.PluginDef, manifestPath string, manifest *pluginmanifestv1.Manifest, configMap map[string]any) error {
+	manifest = pluginpkg.ResolveManifestLocalReferences(manifest, manifestPath)
+	if err := validateInstalledManifestKind(pluginmanifestv1.KindWebUI, "provider", manifest); err != nil {
+		return err
+	}
+	if err := pluginpkg.ValidateConfigForManifest(manifestPath, manifest, pluginmanifestv1.KindWebUI, configMap); err != nil {
+		return fmt.Errorf("plugin config validation for ui provider: %w", err)
 	}
 	resolvePluginIcon(manifest, manifestPath, plugin)
 	plugin.ResolvedManifestPath = manifestPath

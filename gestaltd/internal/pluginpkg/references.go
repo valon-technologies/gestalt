@@ -45,6 +45,9 @@ func LocalPackageReferences(manifest *pluginmanifestv1.Manifest) []LocalPackageR
 			add(manifest.Plugin.MCPURL, "provider mcp document")
 		}
 	}
+	if manifest.WebUI != nil {
+		add(manifest.WebUI.ConfigSchemaPath, "webui config schema")
+	}
 	add(manifest.IconFile, "icon_file")
 	return refs
 }
