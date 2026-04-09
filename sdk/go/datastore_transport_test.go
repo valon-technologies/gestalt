@@ -71,26 +71,26 @@ func (p *fullDatastoreProvider) FindOrCreateUser(_ context.Context, email string
 		}
 	}
 	p.nextID++
-	now := time.Now().UTC().Truncate(time.Second)
+	now := timestamppb.New(time.Now().UTC().Truncate(time.Second))
 	user := &gestalt.StoredUser{
-		ID:          fmt.Sprintf("user-%d", p.nextID),
+		Id:          fmt.Sprintf("user-%d", p.nextID),
 		Email:       email,
 		DisplayName: email,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
-	p.users[user.ID] = user
+	p.users[user.Id] = user
 	return user, nil
 }
 
 func (p *fullDatastoreProvider) PutIntegrationToken(_ context.Context, token *gestalt.StoredIntegrationToken) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if token.ID == "" {
+	if token.Id == "" {
 		p.nextID++
-		token.ID = fmt.Sprintf("itoken-%d", p.nextID)
+		token.Id = fmt.Sprintf("itoken-%d", p.nextID)
 	}
-	p.tokens[token.ID] = token
+	p.tokens[token.Id] = token
 	return nil
 }
 
@@ -98,7 +98,7 @@ func (p *fullDatastoreProvider) GetIntegrationToken(_ context.Context, userID, i
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for _, t := range p.tokens {
-		if t.UserID == userID && t.Integration == integration && t.Connection == connection && t.Instance == instance {
+		if t.UserId == userID && t.Integration == integration && t.Connection == connection && t.Instance == instance {
 			return t, nil
 		}
 	}
@@ -110,7 +110,7 @@ func (p *fullDatastoreProvider) ListIntegrationTokens(_ context.Context, userID,
 	defer p.mu.Unlock()
 	var result []*gestalt.StoredIntegrationToken
 	for _, t := range p.tokens {
-		if t.UserID == userID && t.Integration == integration && t.Connection == connection {
+		if t.UserId == userID && t.Integration == integration && t.Connection == connection {
 			result = append(result, t)
 		}
 	}
@@ -127,11 +127,11 @@ func (p *fullDatastoreProvider) DeleteIntegrationToken(_ context.Context, id str
 func (p *fullDatastoreProvider) PutAPIToken(_ context.Context, token *gestalt.StoredAPIToken) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if token.ID == "" {
+	if token.Id == "" {
 		p.nextID++
-		token.ID = fmt.Sprintf("apitoken-%d", p.nextID)
+		token.Id = fmt.Sprintf("apitoken-%d", p.nextID)
 	}
-	p.apiTokens[token.ID] = token
+	p.apiTokens[token.Id] = token
 	return nil
 }
 
@@ -151,7 +151,7 @@ func (p *fullDatastoreProvider) ListAPITokens(_ context.Context, userID string) 
 	defer p.mu.Unlock()
 	var result []*gestalt.StoredAPIToken
 	for _, t := range p.apiTokens {
-		if t.UserID == userID {
+		if t.UserId == userID {
 			result = append(result, t)
 		}
 	}
@@ -161,7 +161,7 @@ func (p *fullDatastoreProvider) ListAPITokens(_ context.Context, userID string) 
 func (p *fullDatastoreProvider) RevokeAPIToken(_ context.Context, userID, id string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if t, ok := p.apiTokens[id]; ok && t.UserID == userID {
+	if t, ok := p.apiTokens[id]; ok && t.UserId == userID {
 		delete(p.apiTokens, id)
 	}
 	return nil
@@ -172,7 +172,7 @@ func (p *fullDatastoreProvider) RevokeAllAPITokens(_ context.Context, userID str
 	defer p.mu.Unlock()
 	var count int64
 	for id, t := range p.apiTokens {
-		if t.UserID == userID {
+		if t.UserId == userID {
 			delete(p.apiTokens, id)
 			count++
 		}
@@ -193,7 +193,7 @@ func (p *fullDatastoreProvider) GetOAuthRegistration(_ context.Context, authServ
 func (p *fullDatastoreProvider) PutOAuthRegistration(_ context.Context, registration *gestalt.OAuthRegistration) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.oauthRegs[registration.AuthServerURL+"|"+registration.RedirectURI] = registration
+	p.oauthRegs[registration.AuthServerUrl+"|"+registration.RedirectUri] = registration
 	return nil
 }
 

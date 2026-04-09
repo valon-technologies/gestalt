@@ -7,28 +7,22 @@ from typing import Any
 from unittest import mock
 
 import grpc
+from google.protobuf import timestamp_pb2 as _timestamp_pb2
 
 from gestalt import (
-    AuthenticatedUser,
     AuthProvider,
-    BeginLoginRequest,
-    BeginLoginResponse,
     Catalog,
     CatalogOperation,
     DatastoreProvider,
     ExternalTokenValidator,
     HealthChecker,
     MetadataProvider,
-    OAuthRegistration,
     OAuthRegistrationStore,
     Plugin,
     ProviderKind,
     ProviderMetadata,
     Request,
     SessionTTLProvider,
-    StoredAPIToken,
-    StoredIntegrationToken,
-    StoredUser,
     WarningsProvider,
     _bootstrap,
     _runtime,
@@ -42,8 +36,15 @@ auth_pb2: Any = _auth_pb2
 datastore_pb2: Any = _datastore_pb2
 plugin_pb2: Any = _plugin_pb2
 runtime_pb2: Any = _runtime_pb2
+timestamp_pb2: Any = _timestamp_pb2
 
 UTC = dt.timezone.utc
+
+
+def _ts(epoch_seconds: int) -> Any:
+    ts = timestamp_pb2.Timestamp()
+    ts.FromDatetime(dt.datetime.fromtimestamp(epoch_seconds, tz=UTC))
+    return ts
 
 
 class ParseRuntimeArgsTests(unittest.TestCase):
@@ -247,21 +248,21 @@ class AuthRuntimeTests(unittest.TestCase):
         def health_check(self) -> None:
             return None
 
-        def begin_login(self, request: BeginLoginRequest) -> BeginLoginResponse:
-            return BeginLoginResponse(
+        def begin_login(self, request: Any) -> Any:
+            return auth_pb2.BeginLoginResponse(
                 authorization_url=f"https://auth.example.test/login?state={request.host_state}",
                 provider_state=b"provider-state",
             )
 
-        def complete_login(self, request: _runtime.CompleteLoginRequest) -> AuthenticatedUser:
-            return AuthenticatedUser(
+        def complete_login(self, request: Any) -> Any:
+            return auth_pb2.AuthenticatedUser(
                 email=request.query.get("email", ""),
                 display_name="Runtime User",
             )
 
-        def validate_external_token(self, token: str) -> AuthenticatedUser | None:
+        def validate_external_token(self, token: str) -> Any:
             if token == "known-token":
-                return AuthenticatedUser(email="token@example.com")
+                return auth_pb2.AuthenticatedUser(email="token@example.com")
             return None
 
         def session_ttl(self) -> dt.timedelta:
@@ -290,12 +291,12 @@ class AuthRuntimeTests(unittest.TestCase):
             mock.Mock(),
         )
         self.assertEqual(login.authorization_url, "https://auth.example.test/login?state=host-state")
-        self.assertEqual(bytes(login.plugin_state), b"provider-state")
+        self.assertEqual(bytes(login.provider_state), b"provider-state")
 
         user = auth_servicer.CompleteLogin(
             auth_pb2.CompleteLoginRequest(
                 query={"email": "user@example.com"},
-                plugin_state=b"provider-state",
+                provider_state=b"provider-state",
                 callback_url="https://cb.example.test",
             ),
             mock.Mock(),
@@ -314,11 +315,11 @@ class AuthRuntimeTests(unittest.TestCase):
 
     def test_auth_validator_missing_or_unknown_token(self) -> None:
         class NoValidator(AuthProvider):
-            def begin_login(self, request: BeginLoginRequest) -> BeginLoginResponse:
-                return BeginLoginResponse(authorization_url="https://example.test")
+            def begin_login(self, request: Any) -> Any:
+                return auth_pb2.BeginLoginResponse(authorization_url="https://example.test")
 
-            def complete_login(self, request: _runtime.CompleteLoginRequest) -> AuthenticatedUser:
-                return AuthenticatedUser(email="user@example.com")
+            def complete_login(self, request: Any) -> Any:
+                return auth_pb2.AuthenticatedUser(email="user@example.com")
 
         no_validator_servicer = _runtime._auth_servicer(
             provider=NoValidator(),
@@ -355,8 +356,8 @@ class DatastoreRuntimeTests(unittest.TestCase):
     ):
         def __init__(self) -> None:
             self.migrated = False
-            self.users: dict[str, StoredUser] = {}
-            self.tokens: dict[str, StoredIntegrationToken] = {}
+            self.users: dict[str, Any] = {}
+            self.tokens: dict[str, Any] = {}
 
         def metadata(self) -> ProviderMetadata:
             return ProviderMetadata(
@@ -374,22 +375,22 @@ class DatastoreRuntimeTests(unittest.TestCase):
         def migrate(self) -> None:
             self.migrated = True
 
-        def get_user(self, id: str) -> StoredUser | None:
+        def get_user(self, id: str) -> Any:
             return self.users.get(id)
 
-        def find_or_create_user(self, email: str) -> StoredUser:
+        def find_or_create_user(self, email: str) -> Any:
             user = self.users.get(email)
             if user is None:
-                user = StoredUser(
+                user = datastore_pb2.StoredUser(
                     id=email,
                     email=email,
-                    created_at=dt.datetime.fromtimestamp(1, tz=UTC),
-                    updated_at=dt.datetime.fromtimestamp(2, tz=UTC),
+                    created_at=_ts(1),
+                    updated_at=_ts(2),
                 )
                 self.users[email] = user
             return user
 
-        def put_integration_token(self, token: StoredIntegrationToken) -> None:
+        def put_integration_token(self, token: Any) -> None:
             self.tokens[token.user_id] = token
 
         def get_integration_token(
@@ -398,7 +399,7 @@ class DatastoreRuntimeTests(unittest.TestCase):
             integration: str,
             connection: str,
             instance: str,
-        ) -> StoredIntegrationToken | None:
+        ) -> Any:
             return self.tokens.get(user_id)
 
         def list_integration_tokens(
@@ -406,23 +407,23 @@ class DatastoreRuntimeTests(unittest.TestCase):
             user_id: str,
             integration: str,
             connection: str,
-        ) -> list[StoredIntegrationToken]:
+        ) -> list[Any]:
             token = self.tokens.get(user_id)
             return [] if token is None else [token]
 
         def delete_integration_token(self, id: str) -> None:
             self.tokens.pop(id, None)
 
-        def put_api_token(self, token: StoredAPIToken) -> None:
+        def put_api_token(self, token: Any) -> None:
             self.api_token = token
 
-        def get_api_token_by_hash(self, hashed_token: str) -> StoredAPIToken | None:
+        def get_api_token_by_hash(self, hashed_token: str) -> Any:
             token = getattr(self, "api_token", None)
             if token is not None and token.hashed_token == hashed_token:
                 return token
             return None
 
-        def list_api_tokens(self, user_id: str) -> list[StoredAPIToken]:
+        def list_api_tokens(self, user_id: str) -> list[Any]:
             token = getattr(self, "api_token", None)
             if token is None or token.user_id != user_id:
                 return []
@@ -439,17 +440,17 @@ class DatastoreRuntimeTests(unittest.TestCase):
             self,
             auth_server_url: str,
             redirect_uri: str,
-        ) -> OAuthRegistration | None:
+        ) -> Any:
             if auth_server_url == "https://issuer.example.test":
-                return OAuthRegistration(
+                return datastore_pb2.OAuthRegistration(
                     auth_server_url=auth_server_url,
                     redirect_uri=redirect_uri,
                     client_id="client-123",
-                    discovered_at=dt.datetime.fromtimestamp(3, tz=UTC),
+                    discovered_at=_ts(3),
                 )
             return None
 
-        def put_oauth_registration(self, registration: OAuthRegistration) -> None:
+        def put_oauth_registration(self, registration: Any) -> None:
             self.registration = registration
 
         def delete_oauth_registration(self, auth_server_url: str, redirect_uri: str) -> None:
@@ -468,7 +469,7 @@ class DatastoreRuntimeTests(unittest.TestCase):
         )
         self.assertEqual(created.email, "user@example.com")
 
-        token = StoredIntegrationToken(
+        token = datastore_pb2.StoredIntegrationToken(
             id="tok-1",
             user_id="user@example.com",
             integration="github",
@@ -476,13 +477,10 @@ class DatastoreRuntimeTests(unittest.TestCase):
             instance="prod",
             access_token_sealed=b"access",
             refresh_token_sealed=b"refresh",
-            created_at=dt.datetime.fromtimestamp(4, tz=UTC),
-            updated_at=dt.datetime.fromtimestamp(5, tz=UTC),
+            created_at=_ts(4),
+            updated_at=_ts(5),
         )
-        servicer.PutStoredIntegrationToken(
-            _runtime._stored_integration_token_to_proto(token),
-            mock.Mock(),
-        )
+        servicer.PutStoredIntegrationToken(token, mock.Mock())
         listed = servicer.ListStoredIntegrationTokens(
             datastore_pb2.ListStoredIntegrationTokensRequest(
                 user_id="user@example.com",
@@ -508,42 +506,31 @@ class DatastoreRuntimeTests(unittest.TestCase):
             def migrate(self) -> None:
                 return None
 
-            def get_user(self, id: str) -> StoredUser | None:
+            def get_user(self, id: str) -> Any:
                 return None
 
-            def find_or_create_user(self, email: str) -> StoredUser:
+            def find_or_create_user(self, email: str) -> Any:
                 raise NotImplementedError
 
-            def put_integration_token(self, token: StoredIntegrationToken) -> None:
+            def put_integration_token(self, token: Any) -> None:
                 raise NotImplementedError
 
-            def get_integration_token(
-                self,
-                user_id: str,
-                integration: str,
-                connection: str,
-                instance: str,
-            ) -> StoredIntegrationToken | None:
+            def get_integration_token(self, user_id: str, integration: str, connection: str, instance: str) -> Any:
                 raise NotImplementedError
 
-            def list_integration_tokens(
-                self,
-                user_id: str,
-                integration: str,
-                connection: str,
-            ) -> list[StoredIntegrationToken]:
+            def list_integration_tokens(self, user_id: str, integration: str, connection: str) -> list[Any]:
                 raise NotImplementedError
 
             def delete_integration_token(self, id: str) -> None:
                 raise NotImplementedError
 
-            def put_api_token(self, token: StoredAPIToken) -> None:
+            def put_api_token(self, token: Any) -> None:
                 raise NotImplementedError
 
-            def get_api_token_by_hash(self, hashed_token: str) -> StoredAPIToken | None:
+            def get_api_token_by_hash(self, hashed_token: str) -> Any:
                 raise NotImplementedError
 
-            def list_api_tokens(self, user_id: str) -> list[StoredAPIToken]:
+            def list_api_tokens(self, user_id: str) -> list[Any]:
                 raise NotImplementedError
 
             def revoke_api_token(self, user_id: str, id: str) -> None:
@@ -562,15 +549,9 @@ class DatastoreRuntimeTests(unittest.TestCase):
 
 
 class GrpcHandlerDecoratorTests(unittest.TestCase):
-    """Verify _grpc_handler preserves abort status codes.
-
-    In real gRPC, context.abort() raises an exception after setting the
-    status code. The decorator must re-raise abort exceptions rather than
-    catching them and overwriting the code with UNKNOWN.
-    """
+    """Verify _grpc_handler preserves abort status codes."""
 
     def _make_aborting_context(self):
-        """Create a mock context where abort() raises like real gRPC."""
         ctx = mock.Mock()
         ctx.code.return_value = None
 
@@ -594,7 +575,7 @@ class GrpcHandlerDecoratorTests(unittest.TestCase):
 
     def test_provider_exception_maps_to_unknown(self) -> None:
         class FailingProvider(DatastoreRuntimeTests.StubDatastoreProvider):
-            def get_user(self, id: str) -> StoredUser | None:
+            def get_user(self, id: str) -> Any:
                 raise RuntimeError("db connection lost")
 
         servicer = _runtime._datastore_servicer(provider=FailingProvider())

@@ -68,7 +68,7 @@ impl AuthProvider for TestAuthProvider {
     ) -> gestalt_plugin_sdk::Result<gestalt_plugin_sdk::BeginLoginResponse> {
         Ok(gestalt_plugin_sdk::BeginLoginResponse {
             authorization_url: format!("https://example.com/login?state={}", req.host_state),
-            plugin_state: b"provider-state".to_vec(),
+            provider_state: b"provider-state".to_vec(),
         })
     }
 
@@ -174,12 +174,12 @@ async fn serves_auth_provider_and_runtime_over_unix_socket() {
         .expect("begin login")
         .into_inner();
     assert!(begin.authorization_url.contains("host-state"));
-    assert_eq!(begin.plugin_state, b"provider-state");
+    assert_eq!(begin.provider_state, b"provider-state");
 
     let completed = auth
         .complete_login(CompleteLoginRequest {
             query: BTreeMap::from([("email".to_string(), "complete@example.com".to_string())]),
-            plugin_state: b"provider-state".to_vec(),
+            provider_state: b"provider-state".to_vec(),
             callback_url: "https://host/callback".to_string(),
         })
         .await

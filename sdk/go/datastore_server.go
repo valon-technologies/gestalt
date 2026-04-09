@@ -36,7 +36,7 @@ func (s *datastoreServer) GetUser(ctx context.Context, req *proto.GetUserRequest
 	if user == nil {
 		return nil, status.Error(codes.NotFound, "user not found")
 	}
-	return storedUserToProto(user), nil
+	return user, nil
 }
 
 func (s *datastoreServer) FindOrCreateUser(ctx context.Context, req *proto.FindOrCreateUserRequest) (*proto.StoredUser, error) {
@@ -50,14 +50,14 @@ func (s *datastoreServer) FindOrCreateUser(ctx context.Context, req *proto.FindO
 	if user == nil {
 		return nil, status.Error(codes.Internal, "datastore provider returned nil user")
 	}
-	return storedUserToProto(user), nil
+	return user, nil
 }
 
 func (s *datastoreServer) PutStoredIntegrationToken(ctx context.Context, req *proto.StoredIntegrationToken) (*emptypb.Empty, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	if err := s.store.PutIntegrationToken(ctx, storedIntegrationTokenFromProto(req)); err != nil {
+	if err := s.store.PutIntegrationToken(ctx, req); err != nil {
 		return nil, providerRPCError("put integration token", err)
 	}
 	return &emptypb.Empty{}, nil
@@ -74,7 +74,7 @@ func (s *datastoreServer) GetStoredIntegrationToken(ctx context.Context, req *pr
 	if token == nil {
 		return nil, status.Error(codes.NotFound, "integration token not found")
 	}
-	return storedIntegrationTokenToProto(token), nil
+	return token, nil
 }
 
 func (s *datastoreServer) ListStoredIntegrationTokens(ctx context.Context, req *proto.ListStoredIntegrationTokensRequest) (*proto.ListStoredIntegrationTokensResponse, error) {
@@ -85,11 +85,7 @@ func (s *datastoreServer) ListStoredIntegrationTokens(ctx context.Context, req *
 	if err != nil {
 		return nil, providerRPCError("list integration tokens", err)
 	}
-	protoTokens := make([]*proto.StoredIntegrationToken, len(tokens))
-	for i, token := range tokens {
-		protoTokens[i] = storedIntegrationTokenToProto(token)
-	}
-	return &proto.ListStoredIntegrationTokensResponse{Tokens: protoTokens}, nil
+	return &proto.ListStoredIntegrationTokensResponse{Tokens: tokens}, nil
 }
 
 func (s *datastoreServer) DeleteStoredIntegrationToken(ctx context.Context, req *proto.DeleteStoredIntegrationTokenRequest) (*emptypb.Empty, error) {
@@ -106,7 +102,7 @@ func (s *datastoreServer) PutAPIToken(ctx context.Context, req *proto.StoredAPIT
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	if err := s.store.PutAPIToken(ctx, storedAPITokenFromProto(req)); err != nil {
+	if err := s.store.PutAPIToken(ctx, req); err != nil {
 		return nil, providerRPCError("put api token", err)
 	}
 	return &emptypb.Empty{}, nil
@@ -123,7 +119,7 @@ func (s *datastoreServer) GetAPITokenByHash(ctx context.Context, req *proto.GetA
 	if token == nil {
 		return nil, status.Error(codes.NotFound, "api token not found")
 	}
-	return storedAPITokenToProto(token), nil
+	return token, nil
 }
 
 func (s *datastoreServer) ListAPITokens(ctx context.Context, req *proto.ListAPITokensRequest) (*proto.ListAPITokensResponse, error) {
@@ -134,11 +130,7 @@ func (s *datastoreServer) ListAPITokens(ctx context.Context, req *proto.ListAPIT
 	if err != nil {
 		return nil, providerRPCError("list api tokens", err)
 	}
-	protoTokens := make([]*proto.StoredAPIToken, len(tokens))
-	for i, token := range tokens {
-		protoTokens[i] = storedAPITokenToProto(token)
-	}
-	return &proto.ListAPITokensResponse{Tokens: protoTokens}, nil
+	return &proto.ListAPITokensResponse{Tokens: tokens}, nil
 }
 
 func (s *datastoreServer) RevokeAPIToken(ctx context.Context, req *proto.RevokeAPITokenRequest) (*emptypb.Empty, error) {
@@ -177,7 +169,7 @@ func (s *datastoreServer) GetOAuthRegistration(ctx context.Context, req *proto.G
 	if registration == nil {
 		return nil, status.Error(codes.NotFound, "oauth registration not found")
 	}
-	return oauthRegistrationToProto(registration), nil
+	return registration, nil
 }
 
 func (s *datastoreServer) PutOAuthRegistration(ctx context.Context, req *proto.OAuthRegistration) (*emptypb.Empty, error) {
@@ -188,7 +180,7 @@ func (s *datastoreServer) PutOAuthRegistration(ctx context.Context, req *proto.O
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	if err := store.PutOAuthRegistration(ctx, oauthRegistrationFromProto(req)); err != nil {
+	if err := store.PutOAuthRegistration(ctx, req); err != nil {
 		return nil, providerRPCError("put oauth registration", err)
 	}
 	return &emptypb.Empty{}, nil
@@ -206,127 +198,4 @@ func (s *datastoreServer) DeleteOAuthRegistration(ctx context.Context, req *prot
 		return nil, providerRPCError("delete oauth registration", err)
 	}
 	return &emptypb.Empty{}, nil
-}
-
-func storedUserToProto(user *StoredUser) *proto.StoredUser {
-	if user == nil {
-		return nil
-	}
-	return &proto.StoredUser{
-		Id:          user.ID,
-		Email:       user.Email,
-		DisplayName: user.DisplayName,
-		CreatedAt:   timeToProto(user.CreatedAt),
-		UpdatedAt:   timeToProto(user.UpdatedAt),
-	}
-}
-
-func storedIntegrationTokenToProto(token *StoredIntegrationToken) *proto.StoredIntegrationToken {
-	if token == nil {
-		return nil
-	}
-	return &proto.StoredIntegrationToken{
-		Id:                 token.ID,
-		UserId:             token.UserID,
-		Integration:        token.Integration,
-		Connection:         token.Connection,
-		Instance:           token.Instance,
-		AccessTokenSealed:  append([]byte(nil), token.AccessTokenSealed...),
-		RefreshTokenSealed: append([]byte(nil), token.RefreshTokenSealed...),
-		Scopes:             token.Scopes,
-		ExpiresAt:          timePtrToProto(token.ExpiresAt),
-		LastRefreshedAt:    timePtrToProto(token.LastRefreshedAt),
-		RefreshErrorCount:  token.RefreshErrorCount,
-		ConnectionParams:   cloneStringMap(token.ConnectionParams),
-		CreatedAt:          timeToProto(token.CreatedAt),
-		UpdatedAt:          timeToProto(token.UpdatedAt),
-	}
-}
-
-func storedIntegrationTokenFromProto(token *proto.StoredIntegrationToken) *StoredIntegrationToken {
-	if token == nil {
-		return nil
-	}
-	return &StoredIntegrationToken{
-		ID:                 token.GetId(),
-		UserID:             token.GetUserId(),
-		Integration:        token.GetIntegration(),
-		Connection:         token.GetConnection(),
-		Instance:           token.GetInstance(),
-		AccessTokenSealed:  append([]byte(nil), token.GetAccessTokenSealed()...),
-		RefreshTokenSealed: append([]byte(nil), token.GetRefreshTokenSealed()...),
-		Scopes:             token.GetScopes(),
-		ExpiresAt:          protoToTimePtr(token.GetExpiresAt()),
-		LastRefreshedAt:    protoToTimePtr(token.GetLastRefreshedAt()),
-		RefreshErrorCount:  token.GetRefreshErrorCount(),
-		ConnectionParams:   cloneStringMap(token.GetConnectionParams()),
-		CreatedAt:          protoToTime(token.GetCreatedAt()),
-		UpdatedAt:          protoToTime(token.GetUpdatedAt()),
-	}
-}
-
-func storedAPITokenToProto(token *StoredAPIToken) *proto.StoredAPIToken {
-	if token == nil {
-		return nil
-	}
-	return &proto.StoredAPIToken{
-		Id:          token.ID,
-		UserId:      token.UserID,
-		Name:        token.Name,
-		HashedToken: token.HashedToken,
-		Scopes:      token.Scopes,
-		ExpiresAt:   timePtrToProto(token.ExpiresAt),
-		CreatedAt:   timeToProto(token.CreatedAt),
-		UpdatedAt:   timeToProto(token.UpdatedAt),
-	}
-}
-
-func storedAPITokenFromProto(token *proto.StoredAPIToken) *StoredAPIToken {
-	if token == nil {
-		return nil
-	}
-	return &StoredAPIToken{
-		ID:          token.GetId(),
-		UserID:      token.GetUserId(),
-		Name:        token.GetName(),
-		HashedToken: token.GetHashedToken(),
-		Scopes:      token.GetScopes(),
-		ExpiresAt:   protoToTimePtr(token.GetExpiresAt()),
-		CreatedAt:   protoToTime(token.GetCreatedAt()),
-		UpdatedAt:   protoToTime(token.GetUpdatedAt()),
-	}
-}
-
-func oauthRegistrationToProto(registration *OAuthRegistration) *proto.OAuthRegistration {
-	if registration == nil {
-		return nil
-	}
-	return &proto.OAuthRegistration{
-		AuthServerUrl:         registration.AuthServerURL,
-		RedirectUri:           registration.RedirectURI,
-		ClientId:              registration.ClientID,
-		ClientSecretSealed:    append([]byte(nil), registration.ClientSecretSealed...),
-		ExpiresAt:             timePtrToProto(registration.ExpiresAt),
-		AuthorizationEndpoint: registration.AuthorizationEndpoint,
-		TokenEndpoint:         registration.TokenEndpoint,
-		ScopesSupported:       registration.ScopesSupported,
-		DiscoveredAt:          timeToProto(registration.DiscoveredAt),
-	}
-}
-
-func oauthRegistrationFromProto(registration *proto.OAuthRegistration) *OAuthRegistration {
-	if registration == nil {
-		return nil
-	}
-	return &OAuthRegistration{
-		AuthServerURL:         registration.GetAuthServerUrl(),
-		RedirectURI:           registration.GetRedirectUri(),
-		ClientID:              registration.GetClientId(),
-		ClientSecretSealed:    append([]byte(nil), registration.GetClientSecretSealed()...),
-		ExpiresAt:             protoToTimePtr(registration.GetExpiresAt()),
-		AuthorizationEndpoint: registration.GetAuthorizationEndpoint(),
-		TokenEndpoint:         registration.GetTokenEndpoint(),
-		ScopesSupported:       registration.GetScopesSupported(),
-		DiscoveredAt:          protoToTime(registration.GetDiscoveredAt()),
-	}
 }

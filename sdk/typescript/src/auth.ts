@@ -19,12 +19,12 @@ export interface BeginLoginRequest {
 
 export interface BeginLoginResponse {
   authorizationUrl: string;
-  pluginState?: Uint8Array;
+  providerState?: Uint8Array;
 }
 
 export interface CompleteLoginRequest {
   query: Record<string, string>;
-  pluginState: Uint8Array;
+  providerState: Uint8Array;
   callbackUrl: string;
 }
 

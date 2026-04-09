@@ -177,7 +177,7 @@ func (x *BeginLoginRequest) GetOptions() map[string]string {
 type BeginLoginResponse struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	AuthorizationUrl string                 `protobuf:"bytes,1,opt,name=authorization_url,json=authorizationUrl,proto3" json:"authorization_url,omitempty"`
-	PluginState      []byte                 `protobuf:"bytes,2,opt,name=plugin_state,json=pluginState,proto3" json:"plugin_state,omitempty"`
+	ProviderState    []byte                 `protobuf:"bytes,2,opt,name=provider_state,json=providerState,proto3" json:"provider_state,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -219,9 +219,9 @@ func (x *BeginLoginResponse) GetAuthorizationUrl() string {
 	return ""
 }
 
-func (x *BeginLoginResponse) GetPluginState() []byte {
+func (x *BeginLoginResponse) GetProviderState() []byte {
 	if x != nil {
-		return x.PluginState
+		return x.ProviderState
 	}
 	return nil
 }
@@ -229,7 +229,7 @@ func (x *BeginLoginResponse) GetPluginState() []byte {
 type CompleteLoginRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Query         map[string]string      `protobuf:"bytes,1,rep,name=query,proto3" json:"query,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	PluginState   []byte                 `protobuf:"bytes,2,opt,name=plugin_state,json=pluginState,proto3" json:"plugin_state,omitempty"`
+	ProviderState []byte                 `protobuf:"bytes,2,opt,name=provider_state,json=providerState,proto3" json:"provider_state,omitempty"`
 	CallbackUrl   string                 `protobuf:"bytes,3,opt,name=callback_url,json=callbackUrl,proto3" json:"callback_url,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -272,9 +272,9 @@ func (x *CompleteLoginRequest) GetQuery() map[string]string {
 	return nil
 }
 
-func (x *CompleteLoginRequest) GetPluginState() []byte {
+func (x *CompleteLoginRequest) GetProviderState() []byte {
 	if x != nil {
-		return x.PluginState
+		return x.ProviderState
 	}
 	return nil
 }
@@ -398,13 +398,13 @@ const file_v1_auth_proto_rawDesc = "" +
 	"\aoptions\x18\x04 \x03(\v21.gestalt.plugin.v1.BeginLoginRequest.OptionsEntryR\aoptions\x1a:\n" +
 	"\fOptionsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"d\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"h\n" +
 	"\x12BeginLoginResponse\x12+\n" +
-	"\x11authorization_url\x18\x01 \x01(\tR\x10authorizationUrl\x12!\n" +
-	"\fplugin_state\x18\x02 \x01(\fR\vpluginState\"\xe0\x01\n" +
+	"\x11authorization_url\x18\x01 \x01(\tR\x10authorizationUrl\x12%\n" +
+	"\x0eprovider_state\x18\x02 \x01(\fR\rproviderState\"\xe4\x01\n" +
 	"\x14CompleteLoginRequest\x12H\n" +
-	"\x05query\x18\x01 \x03(\v22.gestalt.plugin.v1.CompleteLoginRequest.QueryEntryR\x05query\x12!\n" +
-	"\fplugin_state\x18\x02 \x01(\fR\vpluginState\x12!\n" +
+	"\x05query\x18\x01 \x03(\v22.gestalt.plugin.v1.CompleteLoginRequest.QueryEntryR\x05query\x12%\n" +
+	"\x0eprovider_state\x18\x02 \x01(\fR\rproviderState\x12!\n" +
 	"\fcallback_url\x18\x03 \x01(\tR\vcallbackUrl\x1a8\n" +
 	"\n" +
 	"QueryEntry\x12\x10\n" +

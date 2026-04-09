@@ -154,7 +154,7 @@ test("auth provider supports runtime metadata, login flows, and token validation
         code: "code-123",
       },
       callbackUrl: "https://app.example.test/callback",
-      pluginState: new Uint8Array([1, 2, 3]),
+      providerState: new Uint8Array([1, 2, 3]),
     }),
   );
   expect(user.subject).toBe("code-123");

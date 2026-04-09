@@ -111,11 +111,11 @@ func (p *closeableStubAuthProvider) Configure(context.Context, string, map[strin
 	return nil
 }
 
-func (p *closeableStubAuthProvider) BeginLogin(context.Context, gestalt.BeginLoginRequest) (*gestalt.BeginLoginResponse, error) {
-	return &gestalt.BeginLoginResponse{AuthorizationURL: "https://auth.example.test/login"}, nil
+func (p *closeableStubAuthProvider) BeginLogin(_ context.Context, _ *gestalt.BeginLoginRequest) (*gestalt.BeginLoginResponse, error) {
+	return &gestalt.BeginLoginResponse{AuthorizationUrl: "https://auth.example.test/login"}, nil
 }
 
-func (p *closeableStubAuthProvider) CompleteLogin(context.Context, gestalt.CompleteLoginRequest) (*gestalt.AuthenticatedUser, error) {
+func (p *closeableStubAuthProvider) CompleteLogin(_ context.Context, _ *gestalt.CompleteLoginRequest) (*gestalt.AuthenticatedUser, error) {
 	return &gestalt.AuthenticatedUser{Email: "user@example.com"}, nil
 }
 

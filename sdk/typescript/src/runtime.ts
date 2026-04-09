@@ -494,7 +494,7 @@ export function createAuthService(
       }
       return create(BeginLoginResponseSchema, {
         authorizationUrl: response.authorizationUrl,
-        pluginState: response.pluginState ?? new Uint8Array(),
+        providerState: response.providerState ?? new Uint8Array(),
       });
     },
     async completeLogin(request: AuthCompleteLoginRequest) {
@@ -502,7 +502,7 @@ export function createAuthService(
         query: {
           ...request.query,
         },
-        pluginState: cloneUint8Array(request.pluginState),
+        providerState: cloneUint8Array(request.providerState),
         callbackUrl: request.callbackUrl,
       });
       if (!user) {

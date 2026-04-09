@@ -1,9 +1,18 @@
-import dataclasses
 import datetime as dt
 from enum import Enum
 from typing import Any, Callable
 
-UTC = dt.timezone.utc
+from .gen.v1 import auth_pb2 as _auth_pb2
+from .gen.v1 import datastore_pb2 as _datastore_pb2
+
+AuthenticatedUser: Any = _auth_pb2.AuthenticatedUser  # ty: ignore[unresolved-attribute]
+BeginLoginRequest: Any = _auth_pb2.BeginLoginRequest  # ty: ignore[unresolved-attribute]
+BeginLoginResponse: Any = _auth_pb2.BeginLoginResponse  # ty: ignore[unresolved-attribute]
+CompleteLoginRequest: Any = _auth_pb2.CompleteLoginRequest  # ty: ignore[unresolved-attribute]
+StoredUser: Any = _datastore_pb2.StoredUser  # ty: ignore[unresolved-attribute]
+StoredIntegrationToken: Any = _datastore_pb2.StoredIntegrationToken  # ty: ignore[unresolved-attribute]
+StoredAPIToken: Any = _datastore_pb2.StoredAPIToken  # ty: ignore[unresolved-attribute]
+OAuthRegistration: Any = _datastore_pb2.OAuthRegistration  # ty: ignore[unresolved-attribute]
 
 
 class ProviderKind(str, Enum):
@@ -14,13 +23,22 @@ class ProviderKind(str, Enum):
     TELEMETRY = "telemetry"
 
 
-@dataclasses.dataclass(slots=True)
 class ProviderMetadata:
-    kind: ProviderKind | str
-    name: str = ""
-    display_name: str = ""
-    description: str = ""
-    version: str = ""
+    __slots__ = ("kind", "name", "display_name", "description", "version")
+
+    def __init__(
+        self,
+        kind: ProviderKind | str,
+        name: str = "",
+        display_name: str = "",
+        description: str = "",
+        version: str = "",
+    ) -> None:
+        self.kind = kind
+        self.name = name
+        self.display_name = display_name
+        self.description = description
+        self.version = version
 
 
 class PluginProvider:
@@ -51,11 +69,18 @@ class Closer:
 RegisterServices = Callable[[Any, PluginProvider], None]
 
 
-@dataclasses.dataclass(slots=True)
 class PluginProviderAdapter:
-    kind: ProviderKind | str
-    provider: PluginProvider
-    register_services: RegisterServices
+    __slots__ = ("kind", "provider", "register_services")
+
+    def __init__(
+        self,
+        kind: ProviderKind | str,
+        provider: PluginProvider,
+        register_services: RegisterServices,
+    ) -> None:
+        self.kind = kind
+        self.provider = provider
+        self.register_services = register_services
 
     def serve(self) -> None:
         from . import _runtime
@@ -63,42 +88,11 @@ class PluginProviderAdapter:
         _runtime.serve(self)
 
 
-@dataclasses.dataclass(slots=True)
-class BeginLoginRequest:
-    callback_url: str = ""
-    host_state: str = ""
-    scopes: list[str] = dataclasses.field(default_factory=list)
-    options: dict[str, str] = dataclasses.field(default_factory=dict)
-
-
-@dataclasses.dataclass(slots=True)
-class BeginLoginResponse:
-    authorization_url: str
-    provider_state: bytes = b""
-
-
-@dataclasses.dataclass(slots=True)
-class CompleteLoginRequest:
-    query: dict[str, str] = dataclasses.field(default_factory=dict)
-    provider_state: bytes = b""
-    callback_url: str = ""
-
-
-@dataclasses.dataclass(slots=True)
-class AuthenticatedUser:
-    subject: str = ""
-    email: str = ""
-    email_verified: bool = False
-    display_name: str = ""
-    avatar_url: str = ""
-    claims: dict[str, str] = dataclasses.field(default_factory=dict)
-
-
 class AuthProvider(PluginProvider):
-    def begin_login(self, request: BeginLoginRequest) -> BeginLoginResponse:
+    def begin_login(self, request: Any) -> Any:
         raise NotImplementedError
 
-    def complete_login(self, request: CompleteLoginRequest) -> AuthenticatedUser:
+    def complete_login(self, request: Any) -> Any:
         raise NotImplementedError
 
     def serve(self) -> None:
@@ -108,79 +102,13 @@ class AuthProvider(PluginProvider):
 
 
 class ExternalTokenValidator:
-    def validate_external_token(self, token: str) -> AuthenticatedUser | None:
+    def validate_external_token(self, token: str) -> Any:
         raise NotImplementedError
 
 
 class SessionTTLProvider:
     def session_ttl(self) -> dt.timedelta:
         raise NotImplementedError
-
-
-@dataclasses.dataclass(slots=True)
-class StoredUser:
-    id: str = ""
-    email: str = ""
-    display_name: str = ""
-    created_at: dt.datetime = dataclasses.field(
-        default_factory=lambda: dt.datetime.fromtimestamp(0, tz=UTC)
-    )
-    updated_at: dt.datetime = dataclasses.field(
-        default_factory=lambda: dt.datetime.fromtimestamp(0, tz=UTC)
-    )
-
-
-@dataclasses.dataclass(slots=True)
-class StoredIntegrationToken:
-    id: str = ""
-    user_id: str = ""
-    integration: str = ""
-    connection: str = ""
-    instance: str = ""
-    access_token_sealed: bytes = b""
-    refresh_token_sealed: bytes = b""
-    scopes: str = ""
-    expires_at: dt.datetime | None = None
-    last_refreshed_at: dt.datetime | None = None
-    refresh_error_count: int = 0
-    connection_params: dict[str, str] = dataclasses.field(default_factory=dict)
-    created_at: dt.datetime = dataclasses.field(
-        default_factory=lambda: dt.datetime.fromtimestamp(0, tz=UTC)
-    )
-    updated_at: dt.datetime = dataclasses.field(
-        default_factory=lambda: dt.datetime.fromtimestamp(0, tz=UTC)
-    )
-
-
-@dataclasses.dataclass(slots=True)
-class StoredAPIToken:
-    id: str = ""
-    user_id: str = ""
-    name: str = ""
-    hashed_token: str = ""
-    scopes: str = ""
-    expires_at: dt.datetime | None = None
-    created_at: dt.datetime = dataclasses.field(
-        default_factory=lambda: dt.datetime.fromtimestamp(0, tz=UTC)
-    )
-    updated_at: dt.datetime = dataclasses.field(
-        default_factory=lambda: dt.datetime.fromtimestamp(0, tz=UTC)
-    )
-
-
-@dataclasses.dataclass(slots=True)
-class OAuthRegistration:
-    auth_server_url: str = ""
-    redirect_uri: str = ""
-    client_id: str = ""
-    client_secret_sealed: bytes = b""
-    expires_at: dt.datetime | None = None
-    authorization_endpoint: str = ""
-    token_endpoint: str = ""
-    scopes_supported: str = ""
-    discovered_at: dt.datetime = dataclasses.field(
-        default_factory=lambda: dt.datetime.fromtimestamp(0, tz=UTC)
-    )
 
 
 class SecretsProvider(PluginProvider):
@@ -197,13 +125,13 @@ class DatastoreProvider(PluginProvider):
     def migrate(self) -> None:
         raise NotImplementedError
 
-    def get_user(self, id: str) -> StoredUser | None:
+    def get_user(self, id: str) -> Any:
         raise NotImplementedError
 
-    def find_or_create_user(self, email: str) -> StoredUser:
+    def find_or_create_user(self, email: str) -> Any:
         raise NotImplementedError
 
-    def put_integration_token(self, token: StoredIntegrationToken) -> None:
+    def put_integration_token(self, token: Any) -> None:
         raise NotImplementedError
 
     def get_integration_token(
@@ -212,7 +140,7 @@ class DatastoreProvider(PluginProvider):
         integration: str,
         connection: str,
         instance: str,
-    ) -> StoredIntegrationToken | None:
+    ) -> Any:
         raise NotImplementedError
 
     def list_integration_tokens(
@@ -220,19 +148,19 @@ class DatastoreProvider(PluginProvider):
         user_id: str,
         integration: str,
         connection: str,
-    ) -> list[StoredIntegrationToken]:
+    ) -> list[Any]:
         raise NotImplementedError
 
     def delete_integration_token(self, id: str) -> None:
         raise NotImplementedError
 
-    def put_api_token(self, token: StoredAPIToken) -> None:
+    def put_api_token(self, token: Any) -> None:
         raise NotImplementedError
 
-    def get_api_token_by_hash(self, hashed_token: str) -> StoredAPIToken | None:
+    def get_api_token_by_hash(self, hashed_token: str) -> Any:
         raise NotImplementedError
 
-    def list_api_tokens(self, user_id: str) -> list[StoredAPIToken]:
+    def list_api_tokens(self, user_id: str) -> list[Any]:
         raise NotImplementedError
 
     def revoke_api_token(self, user_id: str, id: str) -> None:
@@ -252,10 +180,10 @@ class OAuthRegistrationStore:
         self,
         auth_server_url: str,
         redirect_uri: str,
-    ) -> OAuthRegistration | None:
+    ) -> Any:
         raise NotImplementedError
 
-    def put_oauth_registration(self, registration: OAuthRegistration) -> None:
+    def put_oauth_registration(self, registration: Any) -> None:
         raise NotImplementedError
 
     def delete_oauth_registration(self, auth_server_url: str, redirect_uri: str) -> None:
