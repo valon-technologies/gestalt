@@ -246,9 +246,9 @@ def _rename_key(key: str, field_style: str) -> str:
 
 
 def _normalize_mapping(value: Any, *, opaque: bool = False) -> Any:
+    if opaque:
+        return _python_value(value)
     if isinstance(value, dict):
-        if opaque:
-            return _python_value(value)
         return {
             _YAML_RENAMES.get(k, k): _normalize_mapping(v, opaque=k in _OPAQUE_KEYS)
             for k, v in value.items()
