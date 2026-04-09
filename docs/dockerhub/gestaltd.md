@@ -9,6 +9,10 @@
 - an `/mcp` endpoint when providers expose tools
 - support for REST, GraphQL, MCP, and source or published plugins
 
+> **Alpha.** Gestalt is under active development. Images are tagged
+> with alpha versions and may introduce breaking changes. See the
+> [documentation](https://gestaltd.ai) for the latest guidance.
+
 ## Quick reference
 
 - Image: `valontechnologies/gestaltd`

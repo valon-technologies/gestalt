@@ -1,5 +1,9 @@
 # Gestalt
 
+[![Stability: Alpha](https://img.shields.io/badge/stability-alpha-f4d03f.svg)](https://github.com/valon-technologies/gestalt/issues)
+
+> **Alpha.** Gestalt is under active development. APIs and configuration may change between releases. We welcome feedback and bug reports via [GitHub Issues](https://github.com/valon-technologies/gestalt/issues).
+
 Gestalt is a platform for self-hostable, configurable integrations and tooling, with authentication and execution out-of-the-box.
 
 ## How does Gestalt work?
