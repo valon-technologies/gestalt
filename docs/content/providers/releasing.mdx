@@ -144,8 +144,7 @@ Released executable integration providers add concrete `entrypoints.plugin` and
 ```yaml
 source: github.com/acme/plugins/my-plugin
 version: 0.0.1-alpha.1
-kinds:
-  - plugin
+plugin: {}
 entrypoints:
   plugin:
     artifact_path: artifacts/linux/amd64/provider

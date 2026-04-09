@@ -111,7 +111,6 @@ func TestPythonSourcePluginFallsBackWithoutGoOnPath(t *testing.T) {
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Python Source",
 		Description: "Python source provider fixture",
-		Kinds:       []string{pluginmanifestv1.KindPlugin},
 		Plugin: &pluginmanifestv1.Plugin{
 			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
 		},
@@ -306,7 +305,6 @@ func newExecutableManifest(displayName, description string) *pluginmanifestv1.Ma
 	return &pluginmanifestv1.Manifest{
 		Source:      "github.com/acme/plugins/test",
 		Version:     "1.0.0",
-		Kinds:       []string{pluginmanifestv1.KindPlugin},
 		DisplayName: displayName,
 		Description: description,
 		Plugin:      &pluginmanifestv1.Plugin{},

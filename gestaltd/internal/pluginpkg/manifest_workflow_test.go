@@ -77,7 +77,6 @@ func TestManifestWorkflow_RoundTripsWebUIPackage(t *testing.T) {
 	manifest := &pluginmanifestv1.Manifest{
 		Source:  "github.com/acme/plugins/webui",
 		Version: "1.0.0",
-		Kinds:   []string{pluginmanifestv1.KindWebUI},
 		WebUI:   &pluginmanifestv1.WebUIMetadata{AssetRoot: "ui/dist"},
 	}
 
@@ -175,7 +174,6 @@ func TestLoadManifestFromPath_PrefersManifestFileOrder(t *testing.T) {
 				manifest := &pluginmanifestv1.Manifest{
 					Source:  source,
 					Version: "1.0.0",
-					Kinds:   []string{pluginmanifestv1.KindWebUI},
 					WebUI:   &pluginmanifestv1.WebUIMetadata{AssetRoot: "ui"},
 				}
 				data := mustManifestYAML(t, manifest)
@@ -215,7 +213,16 @@ func TestManifestWorkflow_RejectsInvalidPackageInputs(t *testing.T) {
 					Version: "1.0.0",
 				}))
 			},
-			wantError: "manifest kinds are required",
+			wantError: "manifest must define exactly one of plugin, auth, datastore, or webui",
+		},
+		{
+			name: "multiple metadata blocks",
+			buildData: func(t *testing.T, dir string) string {
+				manifest := mustProviderManifest("github.com/acme/plugins/too-many-kinds", "1.0.0", testArtifactOS, testArtifactArch, testArtifactPath("provider"), sha256Hex("provider"))
+				manifest.Auth = &pluginmanifestv1.AuthMetadata{}
+				return mustWriteManifestData(t, dir, ManifestFile, mustRawManifestJSON(t, manifest))
+			},
+			wantError: "manifest must define exactly one of plugin, auth, datastore, or webui",
 		},
 		{
 			name: "entrypoint references unknown artifact",

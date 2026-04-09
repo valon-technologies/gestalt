@@ -1079,12 +1079,14 @@ func validateInstalledManifestKind(kind, name string, manifest *pluginmanifestv1
 	if manifest == nil {
 		return fmt.Errorf("manifest for %s %q is required", kind, name)
 	}
-	for _, declared := range manifest.Kinds {
-		if declared == kind {
-			return nil
-		}
+	declared, err := pluginpkg.ManifestKind(manifest)
+	if err != nil {
+		return fmt.Errorf("%s %q manifest is invalid: %w", kind, name, err)
 	}
-	return fmt.Errorf("%s %q manifest does not declare kind %q", kind, name, kind)
+	if declared != kind {
+		return fmt.Errorf("%s %q manifest has kind %q, want %q", kind, name, declared, kind)
+	}
+	return nil
 }
 
 func buildComponentRuntimeConfigNode(name, kind string, provider *config.PluginDef, providerConfig yaml.Node) (yaml.Node, error) {

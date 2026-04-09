@@ -2,7 +2,7 @@ import { Tabs } from 'nextra/components'
 
 # Integration Plugins
 
-Integration plugins are one provider kind. They use `plugin:` metadata in the manifest and appear under the top-level `plugins:` map in deployment config. A plugin can define operations as executable code, as passthrough surfaces (REST, OpenAPI, GraphQL, or MCP endpoints forwarded by the host), or both.
+Integration plugins are one provider kind. Their manifests use a top-level `plugin:` block, and deployments reference them under the top-level `plugins:` map. A plugin can define operations as executable code (handled by the provider process), as passthrough surfaces (REST, OpenAPI, GraphQL, or MCP endpoints forwarded by the host), or both.
 
 ## Manifest
 
@@ -15,8 +15,6 @@ Static metadata, auth, and passthrough surfaces live in a manifest file. Gestalt
     version: 0.0.1-alpha.1
     display_name: My Plugin
     description: A custom integration plugin
-    kinds:
-      - plugin
     plugin:
       connections:
         default:
@@ -31,7 +29,6 @@ Static metadata, auth, and passthrough surfaces live in a manifest file. Gestalt
       "version": "0.0.1-alpha.1",
       "display_name": "My Plugin",
       "description": "A custom integration plugin",
-      "kinds": ["plugin"],
       "plugin": {
         "connections": {
           "default": {

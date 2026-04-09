@@ -17,7 +17,6 @@ type Manifest struct {
 	DisplayName string             `json:"display_name,omitempty" yaml:"display_name,omitempty"`
 	Description string             `json:"description,omitempty" yaml:"description,omitempty"`
 	IconFile    string             `json:"icon_file,omitempty" yaml:"icon_file,omitempty"`
-	Kinds       []string           `json:"kinds" yaml:"kinds"`
 	Release     *ReleaseMetadata   `json:"release,omitempty" yaml:"release,omitempty"`
 	Plugin      *Plugin            `json:"plugin,omitempty" yaml:"plugin,omitempty"`
 	Auth        *AuthMetadata      `json:"auth,omitempty" yaml:"auth,omitempty"`

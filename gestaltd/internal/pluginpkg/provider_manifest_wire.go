@@ -16,7 +16,6 @@ type providerManifestWireRoot struct {
 	DisplayName string                            `json:"display_name,omitempty" yaml:"display_name,omitempty"`
 	Description string                            `json:"description,omitempty" yaml:"description,omitempty"`
 	IconFile    string                            `json:"icon_file,omitempty" yaml:"icon_file,omitempty"`
-	Kinds       []string                          `json:"kinds,omitempty" yaml:"kinds,omitempty"`
 	Release     *pluginmanifestv1.ReleaseMetadata `json:"release,omitempty" yaml:"release,omitempty"`
 	Provider    *providerManifestWire             `json:"provider,omitempty" yaml:"provider,omitempty"`
 	WebUI       *pluginmanifestv1.WebUIMetadata   `json:"webui,omitempty" yaml:"webui,omitempty"`
@@ -120,7 +119,6 @@ func providerWireToInternal(wire *providerManifestWireRoot) *pluginmanifestv1.Ma
 		DisplayName: wire.DisplayName,
 		Description: wire.Description,
 		IconFile:    wire.IconFile,
-		Kinds:       append([]string(nil), wire.Kinds...),
 		Release:     wire.Release,
 		WebUI:       wire.WebUI,
 		Artifacts:   append([]pluginmanifestv1.Artifact(nil), wire.Artifacts...),
@@ -134,9 +132,6 @@ func providerWireToInternal(wire *providerManifestWireRoot) *pluginmanifestv1.Ma
 			ResponseMapping:   wire.Provider.ResponseMapping,
 			Pagination:        wire.Provider.Pagination,
 			AllowedOperations: wire.Provider.AllowedOperations,
-		}
-		if len(manifest.Kinds) == 0 {
-			manifest.Kinds = append(manifest.Kinds, pluginmanifestv1.KindPlugin)
 		}
 		if wire.Provider.MCP != nil {
 			manifest.Plugin.MCP = wire.Provider.MCP.Enabled
@@ -192,9 +187,6 @@ func providerWireToInternal(wire *providerManifestWireRoot) *pluginmanifestv1.Ma
 			manifest.Plugin.MCPURL = s.URL
 			manifest.Plugin.MCPConnection = remapManifestWireConnectionName(s.Connection)
 		}
-	}
-	if wire.WebUI != nil && len(manifest.Kinds) == 0 {
-		manifest.Kinds = append(manifest.Kinds, pluginmanifestv1.KindWebUI)
 	}
 	return manifest
 }

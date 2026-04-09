@@ -25,26 +25,16 @@ type InstalledPlugin struct {
 }
 
 func isWebUIOnly(manifest *pluginmanifestv1.Manifest) bool {
-	return len(manifest.Kinds) == 1 && manifest.Kinds[0] == pluginmanifestv1.KindWebUI
+	kind, err := pluginpkg.ManifestKind(manifest)
+	return err == nil && kind == pluginmanifestv1.KindWebUI
 }
 
 func manifestNeedsExecutableArtifact(manifest *pluginmanifestv1.Manifest) bool {
-	if manifest == nil {
+	kind, err := pluginpkg.ManifestKind(manifest)
+	if err != nil {
 		return false
 	}
-	for _, kind := range []string{
-		pluginmanifestv1.KindPlugin,
-		pluginmanifestv1.KindAuth,
-		pluginmanifestv1.KindDatastore,
-	} {
-		if !manifestDeclaresKind(manifest, kind) {
-			continue
-		}
-		if pluginpkg.EntrypointForKind(manifest, kind) != nil {
-			return true
-		}
-	}
-	return false
+	return pluginpkg.EntrypointForKind(manifest, kind) != nil
 }
 
 func Install(packagePath, destDir string) (*InstalledPlugin, error) {
@@ -212,20 +202,11 @@ func executablePathForManifest(root string, manifest *pluginmanifestv1.Manifest)
 	if isWebUIOnly(manifest) {
 		return "", nil
 	}
-	var entry *pluginmanifestv1.Entrypoint
-	for _, kind := range []string{
-		pluginmanifestv1.KindPlugin,
-		pluginmanifestv1.KindAuth,
-		pluginmanifestv1.KindDatastore,
-	} {
-		if !manifestDeclaresKind(manifest, kind) {
-			continue
-		}
-		entry = pluginpkg.EntrypointForKind(manifest, kind)
-		if entry != nil {
-			break
-		}
+	kind, err := pluginpkg.ManifestKind(manifest)
+	if err != nil {
+		return "", err
 	}
+	entry := pluginpkg.EntrypointForKind(manifest, kind)
 	if entry == nil {
 		if manifest.Plugin != nil && manifest.Plugin.IsManifestBacked() {
 			return "", nil
@@ -236,18 +217,6 @@ func executablePathForManifest(root string, manifest *pluginmanifestv1.Manifest)
 		return "", fmt.Errorf("manifest entrypoint artifact_path is required")
 	}
 	return filepath.Join(root, filepath.FromSlash(entry.ArtifactPath)), nil
-}
-
-func manifestDeclaresKind(manifest *pluginmanifestv1.Manifest, kind string) bool {
-	if manifest == nil {
-		return false
-	}
-	for _, declared := range manifest.Kinds {
-		if declared == kind {
-			return true
-		}
-	}
-	return false
 }
 
 func copyManifestReferencedFiles(srcDir, destDir string, manifest *pluginmanifestv1.Manifest) error {

@@ -8,15 +8,13 @@ Beyond the core login flow, an auth provider can optionally validate externally 
 
 ## Manifest
 
-An auth provider manifest declares `kinds: [auth]` instead of `kinds: [plugin]`:
+An auth provider manifest uses an `auth` block:
 
 ```yaml
 source: github.com/example/plugins/my-auth
 version: 0.0.1-alpha.1
 display_name: My Auth Provider
 description: Custom OAuth 2.0 authentication
-kinds:
-  - auth
 auth:
   config_schema_path: ./auth_config.json
 ```

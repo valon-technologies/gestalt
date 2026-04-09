@@ -291,8 +291,6 @@ jobs:
           version: 0.0.1-alpha.1
           display_name: SQLite
           description: Local CI sqlite datastore fixture
-          kinds:
-            - datastore
           datastore: {}
           artifacts:
             - os: __GOOS__

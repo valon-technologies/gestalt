@@ -65,35 +65,6 @@ func TestInstall(t *testing.T) {
 	}
 }
 
-func TestExecutablePathForManifestPrefersProviderEntrypoint(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	providerArtifact := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider"))
-	authArtifact := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "auth"))
-	manifest := &pluginmanifestv1.Manifest{
-		Source:  "github.com/testowner/plugins/multi-kind",
-		Version: "0.0.1-alpha.1",
-		Kinds:   []string{pluginmanifestv1.KindAuth, pluginmanifestv1.KindPlugin},
-		Auth:    &pluginmanifestv1.AuthMetadata{},
-		Plugin: &pluginmanifestv1.Plugin{
-			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
-		},
-		Entrypoints: pluginmanifestv1.Entrypoints{
-			Auth:     &pluginmanifestv1.Entrypoint{ArtifactPath: authArtifact},
-			Provider: &pluginmanifestv1.Entrypoint{ArtifactPath: providerArtifact},
-		},
-	}
-
-	executablePath, err := executablePathForManifest(root, manifest)
-	if err != nil {
-		t.Fatalf("executablePathForManifest: %v", err)
-	}
-	if executablePath != filepath.Join(root, filepath.FromSlash(providerArtifact)) {
-		t.Fatalf("ExecutablePath = %q, want %q", executablePath, filepath.Join(root, filepath.FromSlash(providerArtifact)))
-	}
-}
-
 func TestInstallRejectsDigestMismatch(t *testing.T) {
 	t.Parallel()
 
@@ -514,7 +485,6 @@ func mustBuildPluginDir(t *testing.T, dir, source, version, content, schema stri
 	manifest := &pluginmanifestv1.Manifest{
 		Source:  source,
 		Version: version,
-		Kinds:   []string{pluginmanifestv1.KindPlugin},
 		Plugin: &pluginmanifestv1.Plugin{
 			ConfigSchemaPath: schemaPath,
 		},
@@ -559,7 +529,6 @@ func mustBuildPluginDirWithDigest(t *testing.T, dir, source, version, content, d
 	manifest := &pluginmanifestv1.Manifest{
 		Source:  source,
 		Version: version,
-		Kinds:   []string{pluginmanifestv1.KindPlugin},
 		Plugin:  &pluginmanifestv1.Plugin{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
@@ -612,7 +581,6 @@ func mustBuildPackageWithDigest(t *testing.T, dir, source, version, content, dig
 	manifest := &pluginmanifestv1.Manifest{
 		Source:  source,
 		Version: version,
-		Kinds:   []string{pluginmanifestv1.KindPlugin},
 		Plugin:  &pluginmanifestv1.Plugin{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
@@ -652,7 +620,6 @@ func mustBuildMismatchPackage(t *testing.T, dir, source, version, content, diges
 	manifest := &pluginmanifestv1.Manifest{
 		Source:  source,
 		Version: version,
-		Kinds:   []string{pluginmanifestv1.KindPlugin},
 		Plugin:  &pluginmanifestv1.Plugin{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
@@ -714,7 +681,6 @@ func mustBuildPackageWithDuplicateArtifact(t *testing.T, dir, source, version, f
 	manifest := &pluginmanifestv1.Manifest{
 		Source:  source,
 		Version: version,
-		Kinds:   []string{pluginmanifestv1.KindPlugin},
 		Plugin:  &pluginmanifestv1.Plugin{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
@@ -775,7 +741,6 @@ func newV2Manifest(source, version, content string) *pluginmanifestv1.Manifest {
 	return &pluginmanifestv1.Manifest{
 		Source:  source,
 		Version: version,
-		Kinds:   []string{pluginmanifestv1.KindPlugin},
 		Plugin:  &pluginmanifestv1.Plugin{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
