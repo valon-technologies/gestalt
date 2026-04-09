@@ -4,6 +4,12 @@ package gestalt.plugin.v1;
 
 option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
 
+// SDK Naming Convention (all languages):
+//   Base provider interface:  PluginProvider
+//   Auth provider:            AuthProvider
+//   Datastore provider:       DatastoreProvider
+//   Lifecycle service:        ProviderLifecycle (internal, not user-facing)
+
 import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
 
@@ -42,7 +48,7 @@ message HealthCheckResponse {
   string message = 2;
 }
 
-service PluginRuntime {
+service ProviderLifecycle {
   rpc GetPluginMetadata(google.protobuf.Empty) returns (PluginMetadata);
   rpc ConfigurePlugin(ConfigurePluginRequest) returns (ConfigurePluginResponse);
   rpc HealthCheck(google.protobuf.Empty) returns (HealthCheckResponse);

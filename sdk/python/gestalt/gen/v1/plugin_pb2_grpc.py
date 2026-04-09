@@ -26,7 +26,7 @@ if _version_not_supported:
     )
 
 
-class ProviderPluginStub(object):
+class PluginProviderStub(object):
     """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
@@ -36,33 +36,33 @@ class ProviderPluginStub(object):
             channel: A grpc.Channel.
         """
         self.GetMetadata = channel.unary_unary(
-                '/gestalt.plugin.v1.ProviderPlugin/GetMetadata',
+                '/gestalt.plugin.v1.PluginProvider/GetMetadata',
                 request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
                 response_deserializer=v1_dot_plugin__pb2.ProviderMetadata.FromString,
                 _registered_method=True)
         self.StartProvider = channel.unary_unary(
-                '/gestalt.plugin.v1.ProviderPlugin/StartProvider',
+                '/gestalt.plugin.v1.PluginProvider/StartProvider',
                 request_serializer=v1_dot_plugin__pb2.StartProviderRequest.SerializeToString,
                 response_deserializer=v1_dot_plugin__pb2.StartProviderResponse.FromString,
                 _registered_method=True)
         self.Execute = channel.unary_unary(
-                '/gestalt.plugin.v1.ProviderPlugin/Execute',
+                '/gestalt.plugin.v1.PluginProvider/Execute',
                 request_serializer=v1_dot_plugin__pb2.ExecuteRequest.SerializeToString,
                 response_deserializer=v1_dot_plugin__pb2.OperationResult.FromString,
                 _registered_method=True)
         self.GetSessionCatalog = channel.unary_unary(
-                '/gestalt.plugin.v1.ProviderPlugin/GetSessionCatalog',
+                '/gestalt.plugin.v1.PluginProvider/GetSessionCatalog',
                 request_serializer=v1_dot_plugin__pb2.GetSessionCatalogRequest.SerializeToString,
                 response_deserializer=v1_dot_plugin__pb2.GetSessionCatalogResponse.FromString,
                 _registered_method=True)
         self.PostConnect = channel.unary_unary(
-                '/gestalt.plugin.v1.ProviderPlugin/PostConnect',
+                '/gestalt.plugin.v1.PluginProvider/PostConnect',
                 request_serializer=v1_dot_plugin__pb2.PostConnectRequest.SerializeToString,
                 response_deserializer=v1_dot_plugin__pb2.PostConnectResponse.FromString,
                 _registered_method=True)
 
 
-class ProviderPluginServicer(object):
+class PluginProviderServicer(object):
     """Missing associated documentation comment in .proto file."""
 
     def GetMetadata(self, request, context):
@@ -96,7 +96,7 @@ class ProviderPluginServicer(object):
         raise NotImplementedError('Method not implemented!')
 
 
-def add_ProviderPluginServicer_to_server(servicer, server):
+def add_PluginProviderServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'GetMetadata': grpc.unary_unary_rpc_method_handler(
                     servicer.GetMetadata,
@@ -125,13 +125,13 @@ def add_ProviderPluginServicer_to_server(servicer, server):
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'gestalt.plugin.v1.ProviderPlugin', rpc_method_handlers)
+            'gestalt.plugin.v1.PluginProvider', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('gestalt.plugin.v1.ProviderPlugin', rpc_method_handlers)
+    server.add_registered_method_handlers('gestalt.plugin.v1.PluginProvider', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
-class ProviderPlugin(object):
+class PluginProvider(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
@@ -148,7 +148,7 @@ class ProviderPlugin(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.ProviderPlugin/GetMetadata',
+            '/gestalt.plugin.v1.PluginProvider/GetMetadata',
             google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             v1_dot_plugin__pb2.ProviderMetadata.FromString,
             options,
@@ -175,7 +175,7 @@ class ProviderPlugin(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.ProviderPlugin/StartProvider',
+            '/gestalt.plugin.v1.PluginProvider/StartProvider',
             v1_dot_plugin__pb2.StartProviderRequest.SerializeToString,
             v1_dot_plugin__pb2.StartProviderResponse.FromString,
             options,
@@ -202,7 +202,7 @@ class ProviderPlugin(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.ProviderPlugin/Execute',
+            '/gestalt.plugin.v1.PluginProvider/Execute',
             v1_dot_plugin__pb2.ExecuteRequest.SerializeToString,
             v1_dot_plugin__pb2.OperationResult.FromString,
             options,
@@ -229,7 +229,7 @@ class ProviderPlugin(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.ProviderPlugin/GetSessionCatalog',
+            '/gestalt.plugin.v1.PluginProvider/GetSessionCatalog',
             v1_dot_plugin__pb2.GetSessionCatalogRequest.SerializeToString,
             v1_dot_plugin__pb2.GetSessionCatalogResponse.FromString,
             options,
@@ -256,7 +256,7 @@ class ProviderPlugin(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.ProviderPlugin/PostConnect',
+            '/gestalt.plugin.v1.PluginProvider/PostConnect',
             v1_dot_plugin__pb2.PostConnectRequest.SerializeToString,
             v1_dot_plugin__pb2.PostConnectResponse.FromString,
             options,

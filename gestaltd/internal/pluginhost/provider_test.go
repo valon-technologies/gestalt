@@ -110,7 +110,7 @@ func manualOnlyStaticSpec() StaticProviderSpec {
 func TestRemoteProviderRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	client := newProviderPluginClient(t, NewProviderServer(&roundTripProvider{}))
+	client := newPluginProviderClient(t, NewProviderServer(&roundTripProvider{}))
 	prov, err := NewRemoteProvider(context.Background(), client, roundTripStaticSpec(), nil)
 	if err != nil {
 		t.Fatalf("NewRemoteProvider: %v", err)
@@ -173,7 +173,7 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 func TestRemoteProviderManualAuthOnly(t *testing.T) {
 	t.Parallel()
 
-	client := newProviderPluginClient(t, sdkgestalt.NewProviderServer(&manualOnlySDKProvider{}, (*sdkgestalt.Router[manualOnlySDKProvider])(nil)))
+	client := newPluginProviderClient(t, sdkgestalt.NewProviderServer(&manualOnlySDKProvider{}, (*sdkgestalt.Router[manualOnlySDKProvider])(nil)))
 	prov, err := NewRemoteProvider(context.Background(), client, manualOnlyStaticSpec(), nil)
 	if err != nil {
 		t.Fatalf("NewRemoteProvider: %v", err)

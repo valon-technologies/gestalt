@@ -8,7 +8,7 @@ import (
 // DatastoreProvider is the runtime contract for pluggable persistence
 // backends.
 type DatastoreProvider interface {
-	RuntimeProvider
+	PluginProvider
 	HealthChecker
 	Migrate(ctx context.Context) error
 	UserStore

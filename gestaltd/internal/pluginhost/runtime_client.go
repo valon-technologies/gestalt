@@ -25,7 +25,7 @@ type runtimePluginMetadata struct {
 	Warnings    []string
 }
 
-func configureRuntimePlugin(ctx context.Context, client proto.PluginRuntimeClient, expectedKind proto.PluginKind, name string, config map[string]any) (*runtimePluginMetadata, error) {
+func configureRuntimePlugin(ctx context.Context, client proto.ProviderLifecycleClient, expectedKind proto.PluginKind, name string, config map[string]any) (*runtimePluginMetadata, error) {
 	if client == nil {
 		return nil, fmt.Errorf("runtime client is required")
 	}
@@ -85,7 +85,7 @@ func validateRuntimeProtocol(meta *proto.PluginMetadata) error {
 	return nil
 }
 
-func pingRuntimePlugin(ctx context.Context, client proto.PluginRuntimeClient) error {
+func pingRuntimePlugin(ctx context.Context, client proto.ProviderLifecycleClient) error {
 	if client == nil {
 		return fmt.Errorf("runtime client is required")
 	}

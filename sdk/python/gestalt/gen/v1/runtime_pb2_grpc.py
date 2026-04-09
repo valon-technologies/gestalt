@@ -26,7 +26,7 @@ if _version_not_supported:
     )
 
 
-class PluginRuntimeStub(object):
+class ProviderLifecycleStub(object):
     """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
@@ -36,23 +36,23 @@ class PluginRuntimeStub(object):
             channel: A grpc.Channel.
         """
         self.GetPluginMetadata = channel.unary_unary(
-                '/gestalt.plugin.v1.PluginRuntime/GetPluginMetadata',
+                '/gestalt.plugin.v1.ProviderLifecycle/GetPluginMetadata',
                 request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
                 response_deserializer=v1_dot_runtime__pb2.PluginMetadata.FromString,
                 _registered_method=True)
         self.ConfigurePlugin = channel.unary_unary(
-                '/gestalt.plugin.v1.PluginRuntime/ConfigurePlugin',
+                '/gestalt.plugin.v1.ProviderLifecycle/ConfigurePlugin',
                 request_serializer=v1_dot_runtime__pb2.ConfigurePluginRequest.SerializeToString,
                 response_deserializer=v1_dot_runtime__pb2.ConfigurePluginResponse.FromString,
                 _registered_method=True)
         self.HealthCheck = channel.unary_unary(
-                '/gestalt.plugin.v1.PluginRuntime/HealthCheck',
+                '/gestalt.plugin.v1.ProviderLifecycle/HealthCheck',
                 request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
                 response_deserializer=v1_dot_runtime__pb2.HealthCheckResponse.FromString,
                 _registered_method=True)
 
 
-class PluginRuntimeServicer(object):
+class ProviderLifecycleServicer(object):
     """Missing associated documentation comment in .proto file."""
 
     def GetPluginMetadata(self, request, context):
@@ -74,7 +74,7 @@ class PluginRuntimeServicer(object):
         raise NotImplementedError('Method not implemented!')
 
 
-def add_PluginRuntimeServicer_to_server(servicer, server):
+def add_ProviderLifecycleServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'GetPluginMetadata': grpc.unary_unary_rpc_method_handler(
                     servicer.GetPluginMetadata,
@@ -93,13 +93,13 @@ def add_PluginRuntimeServicer_to_server(servicer, server):
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'gestalt.plugin.v1.PluginRuntime', rpc_method_handlers)
+            'gestalt.plugin.v1.ProviderLifecycle', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('gestalt.plugin.v1.PluginRuntime', rpc_method_handlers)
+    server.add_registered_method_handlers('gestalt.plugin.v1.ProviderLifecycle', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
-class PluginRuntime(object):
+class ProviderLifecycle(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
@@ -116,7 +116,7 @@ class PluginRuntime(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.PluginRuntime/GetPluginMetadata',
+            '/gestalt.plugin.v1.ProviderLifecycle/GetPluginMetadata',
             google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             v1_dot_runtime__pb2.PluginMetadata.FromString,
             options,
@@ -143,7 +143,7 @@ class PluginRuntime(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.PluginRuntime/ConfigurePlugin',
+            '/gestalt.plugin.v1.ProviderLifecycle/ConfigurePlugin',
             v1_dot_runtime__pb2.ConfigurePluginRequest.SerializeToString,
             v1_dot_runtime__pb2.ConfigurePluginResponse.FromString,
             options,
@@ -170,7 +170,7 @@ class PluginRuntime(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.PluginRuntime/HealthCheck',
+            '/gestalt.plugin.v1.ProviderLifecycle/HealthCheck',
             google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             v1_dot_runtime__pb2.HealthCheckResponse.FromString,
             options,

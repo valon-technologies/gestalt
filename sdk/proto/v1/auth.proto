@@ -41,7 +41,7 @@ message AuthSessionSettings {
   int64 session_ttl_seconds = 1;
 }
 
-service AuthPlugin {
+service AuthProvider {
   rpc BeginLogin(BeginLoginRequest) returns (BeginLoginResponse);
   rpc CompleteLogin(CompleteLoginRequest) returns (AuthenticatedUser);
   rpc ValidateExternalToken(ValidateExternalTokenRequest) returns (AuthenticatedUser);

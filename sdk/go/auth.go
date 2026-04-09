@@ -9,7 +9,7 @@ import (
 // owns Gestalt session issuance; auth providers return authenticated identity
 // only.
 type AuthProvider interface {
-	RuntimeProvider
+	PluginProvider
 	BeginLogin(ctx context.Context, req BeginLoginRequest) (*BeginLoginResponse, error)
 	CompleteLogin(ctx context.Context, req CompleteLoginRequest) (*AuthenticatedUser, error)
 }

@@ -20,177 +20,177 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	PluginRuntime_GetPluginMetadata_FullMethodName = "/gestalt.plugin.v1.PluginRuntime/GetPluginMetadata"
-	PluginRuntime_ConfigurePlugin_FullMethodName   = "/gestalt.plugin.v1.PluginRuntime/ConfigurePlugin"
-	PluginRuntime_HealthCheck_FullMethodName       = "/gestalt.plugin.v1.PluginRuntime/HealthCheck"
+	ProviderLifecycle_GetPluginMetadata_FullMethodName = "/gestalt.plugin.v1.ProviderLifecycle/GetPluginMetadata"
+	ProviderLifecycle_ConfigurePlugin_FullMethodName   = "/gestalt.plugin.v1.ProviderLifecycle/ConfigurePlugin"
+	ProviderLifecycle_HealthCheck_FullMethodName       = "/gestalt.plugin.v1.ProviderLifecycle/HealthCheck"
 )
 
-// PluginRuntimeClient is the client API for PluginRuntime service.
+// ProviderLifecycleClient is the client API for ProviderLifecycle service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type PluginRuntimeClient interface {
+type ProviderLifecycleClient interface {
 	GetPluginMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*PluginMetadata, error)
 	ConfigurePlugin(ctx context.Context, in *ConfigurePluginRequest, opts ...grpc.CallOption) (*ConfigurePluginResponse, error)
 	HealthCheck(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*HealthCheckResponse, error)
 }
 
-type pluginRuntimeClient struct {
+type providerLifecycleClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewPluginRuntimeClient(cc grpc.ClientConnInterface) PluginRuntimeClient {
-	return &pluginRuntimeClient{cc}
+func NewProviderLifecycleClient(cc grpc.ClientConnInterface) ProviderLifecycleClient {
+	return &providerLifecycleClient{cc}
 }
 
-func (c *pluginRuntimeClient) GetPluginMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*PluginMetadata, error) {
+func (c *providerLifecycleClient) GetPluginMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*PluginMetadata, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(PluginMetadata)
-	err := c.cc.Invoke(ctx, PluginRuntime_GetPluginMetadata_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, ProviderLifecycle_GetPluginMetadata_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *pluginRuntimeClient) ConfigurePlugin(ctx context.Context, in *ConfigurePluginRequest, opts ...grpc.CallOption) (*ConfigurePluginResponse, error) {
+func (c *providerLifecycleClient) ConfigurePlugin(ctx context.Context, in *ConfigurePluginRequest, opts ...grpc.CallOption) (*ConfigurePluginResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ConfigurePluginResponse)
-	err := c.cc.Invoke(ctx, PluginRuntime_ConfigurePlugin_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, ProviderLifecycle_ConfigurePlugin_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *pluginRuntimeClient) HealthCheck(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*HealthCheckResponse, error) {
+func (c *providerLifecycleClient) HealthCheck(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*HealthCheckResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(HealthCheckResponse)
-	err := c.cc.Invoke(ctx, PluginRuntime_HealthCheck_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, ProviderLifecycle_HealthCheck_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// PluginRuntimeServer is the server API for PluginRuntime service.
-// All implementations must embed UnimplementedPluginRuntimeServer
+// ProviderLifecycleServer is the server API for ProviderLifecycle service.
+// All implementations must embed UnimplementedProviderLifecycleServer
 // for forward compatibility.
-type PluginRuntimeServer interface {
+type ProviderLifecycleServer interface {
 	GetPluginMetadata(context.Context, *emptypb.Empty) (*PluginMetadata, error)
 	ConfigurePlugin(context.Context, *ConfigurePluginRequest) (*ConfigurePluginResponse, error)
 	HealthCheck(context.Context, *emptypb.Empty) (*HealthCheckResponse, error)
-	mustEmbedUnimplementedPluginRuntimeServer()
+	mustEmbedUnimplementedProviderLifecycleServer()
 }
 
-// UnimplementedPluginRuntimeServer must be embedded to have
+// UnimplementedProviderLifecycleServer must be embedded to have
 // forward compatible implementations.
 //
 // NOTE: this should be embedded by value instead of pointer to avoid a nil
 // pointer dereference when methods are called.
-type UnimplementedPluginRuntimeServer struct{}
+type UnimplementedProviderLifecycleServer struct{}
 
-func (UnimplementedPluginRuntimeServer) GetPluginMetadata(context.Context, *emptypb.Empty) (*PluginMetadata, error) {
+func (UnimplementedProviderLifecycleServer) GetPluginMetadata(context.Context, *emptypb.Empty) (*PluginMetadata, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetPluginMetadata not implemented")
 }
-func (UnimplementedPluginRuntimeServer) ConfigurePlugin(context.Context, *ConfigurePluginRequest) (*ConfigurePluginResponse, error) {
+func (UnimplementedProviderLifecycleServer) ConfigurePlugin(context.Context, *ConfigurePluginRequest) (*ConfigurePluginResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ConfigurePlugin not implemented")
 }
-func (UnimplementedPluginRuntimeServer) HealthCheck(context.Context, *emptypb.Empty) (*HealthCheckResponse, error) {
+func (UnimplementedProviderLifecycleServer) HealthCheck(context.Context, *emptypb.Empty) (*HealthCheckResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method HealthCheck not implemented")
 }
-func (UnimplementedPluginRuntimeServer) mustEmbedUnimplementedPluginRuntimeServer() {}
-func (UnimplementedPluginRuntimeServer) testEmbeddedByValue()                       {}
+func (UnimplementedProviderLifecycleServer) mustEmbedUnimplementedProviderLifecycleServer() {}
+func (UnimplementedProviderLifecycleServer) testEmbeddedByValue()                           {}
 
-// UnsafePluginRuntimeServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to PluginRuntimeServer will
+// UnsafeProviderLifecycleServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to ProviderLifecycleServer will
 // result in compilation errors.
-type UnsafePluginRuntimeServer interface {
-	mustEmbedUnimplementedPluginRuntimeServer()
+type UnsafeProviderLifecycleServer interface {
+	mustEmbedUnimplementedProviderLifecycleServer()
 }
 
-func RegisterPluginRuntimeServer(s grpc.ServiceRegistrar, srv PluginRuntimeServer) {
-	// If the following call panics, it indicates UnimplementedPluginRuntimeServer was
+func RegisterProviderLifecycleServer(s grpc.ServiceRegistrar, srv ProviderLifecycleServer) {
+	// If the following call panics, it indicates UnimplementedProviderLifecycleServer was
 	// embedded by pointer and is nil.  This will cause panics if an
 	// unimplemented method is ever invoked, so we test this at initialization
 	// time to prevent it from happening at runtime later due to I/O.
 	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
 		t.testEmbeddedByValue()
 	}
-	s.RegisterService(&PluginRuntime_ServiceDesc, srv)
+	s.RegisterService(&ProviderLifecycle_ServiceDesc, srv)
 }
 
-func _PluginRuntime_GetPluginMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _ProviderLifecycle_GetPluginMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(PluginRuntimeServer).GetPluginMetadata(ctx, in)
+		return srv.(ProviderLifecycleServer).GetPluginMetadata(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: PluginRuntime_GetPluginMetadata_FullMethodName,
+		FullMethod: ProviderLifecycle_GetPluginMetadata_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PluginRuntimeServer).GetPluginMetadata(ctx, req.(*emptypb.Empty))
+		return srv.(ProviderLifecycleServer).GetPluginMetadata(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _PluginRuntime_ConfigurePlugin_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _ProviderLifecycle_ConfigurePlugin_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ConfigurePluginRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(PluginRuntimeServer).ConfigurePlugin(ctx, in)
+		return srv.(ProviderLifecycleServer).ConfigurePlugin(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: PluginRuntime_ConfigurePlugin_FullMethodName,
+		FullMethod: ProviderLifecycle_ConfigurePlugin_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PluginRuntimeServer).ConfigurePlugin(ctx, req.(*ConfigurePluginRequest))
+		return srv.(ProviderLifecycleServer).ConfigurePlugin(ctx, req.(*ConfigurePluginRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _PluginRuntime_HealthCheck_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _ProviderLifecycle_HealthCheck_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(PluginRuntimeServer).HealthCheck(ctx, in)
+		return srv.(ProviderLifecycleServer).HealthCheck(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: PluginRuntime_HealthCheck_FullMethodName,
+		FullMethod: ProviderLifecycle_HealthCheck_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(PluginRuntimeServer).HealthCheck(ctx, req.(*emptypb.Empty))
+		return srv.(ProviderLifecycleServer).HealthCheck(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// PluginRuntime_ServiceDesc is the grpc.ServiceDesc for PluginRuntime service.
+// ProviderLifecycle_ServiceDesc is the grpc.ServiceDesc for ProviderLifecycle service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var PluginRuntime_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "gestalt.plugin.v1.PluginRuntime",
-	HandlerType: (*PluginRuntimeServer)(nil),
+var ProviderLifecycle_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "gestalt.plugin.v1.ProviderLifecycle",
+	HandlerType: (*ProviderLifecycleServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "GetPluginMetadata",
-			Handler:    _PluginRuntime_GetPluginMetadata_Handler,
+			Handler:    _ProviderLifecycle_GetPluginMetadata_Handler,
 		},
 		{
 			MethodName: "ConfigurePlugin",
-			Handler:    _PluginRuntime_ConfigurePlugin_Handler,
+			Handler:    _ProviderLifecycle_ConfigurePlugin_Handler,
 		},
 		{
 			MethodName: "HealthCheck",
-			Handler:    _PluginRuntime_HealthCheck_Handler,
+			Handler:    _ProviderLifecycle_HealthCheck_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

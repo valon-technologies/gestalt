@@ -17,14 +17,14 @@ const envWriteCatalog = "GESTALT_PLUGIN_WRITE_CATALOG"
 
 type pluginCloserContextKey struct{}
 
-// ServeProvider starts a gRPC server for the given [RuntimeProvider] and typed
+// ServeProvider starts a gRPC server for the given [PluginProvider] and typed
 // router on the Unix socket specified by the GESTALT_PLUGIN_SOCKET environment
 // variable. It blocks until ctx is cancelled, at which point it drains
 // in-flight requests and returns nil. This is the main entry point for
 // integration providers.
 func ServeProvider[P any, PP interface {
 	*P
-	RuntimeProvider
+	PluginProvider
 }](ctx context.Context, provider PP, router *Router[P]) error {
 	if catalogPath := os.Getenv(envWriteCatalog); catalogPath != "" {
 		if router == nil {
@@ -34,7 +34,7 @@ func ServeProvider[P any, PP interface {
 	}
 	ctx = withPluginCloser(ctx, provider)
 	return servePlugin(ctx, func(srv *grpc.Server) {
-		proto.RegisterProviderPluginServer(srv, NewProviderServer(provider, router))
+		proto.RegisterPluginProviderServer(srv, NewProviderServer(provider, router))
 	})
 }
 

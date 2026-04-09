@@ -1235,8 +1235,8 @@ const file_v1_datastore_proto_rawDesc = "" +
 	"\fredirect_uri\x18\x02 \x01(\tR\vredirectUri\"k\n" +
 	"\x1eDeleteOAuthRegistrationRequest\x12&\n" +
 	"\x0fauth_server_url\x18\x01 \x01(\tR\rauthServerUrl\x12!\n" +
-	"\fredirect_uri\x18\x02 \x01(\tR\vredirectUri2\xd8\v\n" +
-	"\x0fDatastorePlugin\x129\n" +
+	"\fredirect_uri\x18\x02 \x01(\tR\vredirectUri2\xda\v\n" +
+	"\x11DatastoreProvider\x129\n" +
 	"\aMigrate\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty\x12K\n" +
 	"\aGetUser\x12!.gestalt.plugin.v1.GetUserRequest\x1a\x1d.gestalt.plugin.v1.StoredUser\x12]\n" +
 	"\x10FindOrCreateUser\x12*.gestalt.plugin.v1.FindOrCreateUserRequest\x1a\x1d.gestalt.plugin.v1.StoredUser\x12^\n" +
@@ -1305,36 +1305,36 @@ var file_v1_datastore_proto_depIdxs = []int32{
 	19, // 11: gestalt.plugin.v1.OAuthRegistration.discovered_at:type_name -> google.protobuf.Timestamp
 	1,  // 12: gestalt.plugin.v1.ListStoredIntegrationTokensResponse.tokens:type_name -> gestalt.plugin.v1.StoredIntegrationToken
 	2,  // 13: gestalt.plugin.v1.ListAPITokensResponse.tokens:type_name -> gestalt.plugin.v1.StoredAPIToken
-	20, // 14: gestalt.plugin.v1.DatastorePlugin.Migrate:input_type -> google.protobuf.Empty
-	4,  // 15: gestalt.plugin.v1.DatastorePlugin.GetUser:input_type -> gestalt.plugin.v1.GetUserRequest
-	5,  // 16: gestalt.plugin.v1.DatastorePlugin.FindOrCreateUser:input_type -> gestalt.plugin.v1.FindOrCreateUserRequest
-	1,  // 17: gestalt.plugin.v1.DatastorePlugin.PutStoredIntegrationToken:input_type -> gestalt.plugin.v1.StoredIntegrationToken
-	6,  // 18: gestalt.plugin.v1.DatastorePlugin.GetStoredIntegrationToken:input_type -> gestalt.plugin.v1.GetStoredIntegrationTokenRequest
-	7,  // 19: gestalt.plugin.v1.DatastorePlugin.ListStoredIntegrationTokens:input_type -> gestalt.plugin.v1.ListStoredIntegrationTokensRequest
-	9,  // 20: gestalt.plugin.v1.DatastorePlugin.DeleteStoredIntegrationToken:input_type -> gestalt.plugin.v1.DeleteStoredIntegrationTokenRequest
-	2,  // 21: gestalt.plugin.v1.DatastorePlugin.PutAPIToken:input_type -> gestalt.plugin.v1.StoredAPIToken
-	10, // 22: gestalt.plugin.v1.DatastorePlugin.GetAPITokenByHash:input_type -> gestalt.plugin.v1.GetAPITokenByHashRequest
-	11, // 23: gestalt.plugin.v1.DatastorePlugin.ListAPITokens:input_type -> gestalt.plugin.v1.ListAPITokensRequest
-	13, // 24: gestalt.plugin.v1.DatastorePlugin.RevokeAPIToken:input_type -> gestalt.plugin.v1.RevokeAPITokenRequest
-	14, // 25: gestalt.plugin.v1.DatastorePlugin.RevokeAllAPITokens:input_type -> gestalt.plugin.v1.RevokeAllAPITokensRequest
-	16, // 26: gestalt.plugin.v1.DatastorePlugin.GetOAuthRegistration:input_type -> gestalt.plugin.v1.GetOAuthRegistrationRequest
-	3,  // 27: gestalt.plugin.v1.DatastorePlugin.PutOAuthRegistration:input_type -> gestalt.plugin.v1.OAuthRegistration
-	17, // 28: gestalt.plugin.v1.DatastorePlugin.DeleteOAuthRegistration:input_type -> gestalt.plugin.v1.DeleteOAuthRegistrationRequest
-	20, // 29: gestalt.plugin.v1.DatastorePlugin.Migrate:output_type -> google.protobuf.Empty
-	0,  // 30: gestalt.plugin.v1.DatastorePlugin.GetUser:output_type -> gestalt.plugin.v1.StoredUser
-	0,  // 31: gestalt.plugin.v1.DatastorePlugin.FindOrCreateUser:output_type -> gestalt.plugin.v1.StoredUser
-	20, // 32: gestalt.plugin.v1.DatastorePlugin.PutStoredIntegrationToken:output_type -> google.protobuf.Empty
-	1,  // 33: gestalt.plugin.v1.DatastorePlugin.GetStoredIntegrationToken:output_type -> gestalt.plugin.v1.StoredIntegrationToken
-	8,  // 34: gestalt.plugin.v1.DatastorePlugin.ListStoredIntegrationTokens:output_type -> gestalt.plugin.v1.ListStoredIntegrationTokensResponse
-	20, // 35: gestalt.plugin.v1.DatastorePlugin.DeleteStoredIntegrationToken:output_type -> google.protobuf.Empty
-	20, // 36: gestalt.plugin.v1.DatastorePlugin.PutAPIToken:output_type -> google.protobuf.Empty
-	2,  // 37: gestalt.plugin.v1.DatastorePlugin.GetAPITokenByHash:output_type -> gestalt.plugin.v1.StoredAPIToken
-	12, // 38: gestalt.plugin.v1.DatastorePlugin.ListAPITokens:output_type -> gestalt.plugin.v1.ListAPITokensResponse
-	20, // 39: gestalt.plugin.v1.DatastorePlugin.RevokeAPIToken:output_type -> google.protobuf.Empty
-	15, // 40: gestalt.plugin.v1.DatastorePlugin.RevokeAllAPITokens:output_type -> gestalt.plugin.v1.RevokeAllAPITokensResponse
-	3,  // 41: gestalt.plugin.v1.DatastorePlugin.GetOAuthRegistration:output_type -> gestalt.plugin.v1.OAuthRegistration
-	20, // 42: gestalt.plugin.v1.DatastorePlugin.PutOAuthRegistration:output_type -> google.protobuf.Empty
-	20, // 43: gestalt.plugin.v1.DatastorePlugin.DeleteOAuthRegistration:output_type -> google.protobuf.Empty
+	20, // 14: gestalt.plugin.v1.DatastoreProvider.Migrate:input_type -> google.protobuf.Empty
+	4,  // 15: gestalt.plugin.v1.DatastoreProvider.GetUser:input_type -> gestalt.plugin.v1.GetUserRequest
+	5,  // 16: gestalt.plugin.v1.DatastoreProvider.FindOrCreateUser:input_type -> gestalt.plugin.v1.FindOrCreateUserRequest
+	1,  // 17: gestalt.plugin.v1.DatastoreProvider.PutStoredIntegrationToken:input_type -> gestalt.plugin.v1.StoredIntegrationToken
+	6,  // 18: gestalt.plugin.v1.DatastoreProvider.GetStoredIntegrationToken:input_type -> gestalt.plugin.v1.GetStoredIntegrationTokenRequest
+	7,  // 19: gestalt.plugin.v1.DatastoreProvider.ListStoredIntegrationTokens:input_type -> gestalt.plugin.v1.ListStoredIntegrationTokensRequest
+	9,  // 20: gestalt.plugin.v1.DatastoreProvider.DeleteStoredIntegrationToken:input_type -> gestalt.plugin.v1.DeleteStoredIntegrationTokenRequest
+	2,  // 21: gestalt.plugin.v1.DatastoreProvider.PutAPIToken:input_type -> gestalt.plugin.v1.StoredAPIToken
+	10, // 22: gestalt.plugin.v1.DatastoreProvider.GetAPITokenByHash:input_type -> gestalt.plugin.v1.GetAPITokenByHashRequest
+	11, // 23: gestalt.plugin.v1.DatastoreProvider.ListAPITokens:input_type -> gestalt.plugin.v1.ListAPITokensRequest
+	13, // 24: gestalt.plugin.v1.DatastoreProvider.RevokeAPIToken:input_type -> gestalt.plugin.v1.RevokeAPITokenRequest
+	14, // 25: gestalt.plugin.v1.DatastoreProvider.RevokeAllAPITokens:input_type -> gestalt.plugin.v1.RevokeAllAPITokensRequest
+	16, // 26: gestalt.plugin.v1.DatastoreProvider.GetOAuthRegistration:input_type -> gestalt.plugin.v1.GetOAuthRegistrationRequest
+	3,  // 27: gestalt.plugin.v1.DatastoreProvider.PutOAuthRegistration:input_type -> gestalt.plugin.v1.OAuthRegistration
+	17, // 28: gestalt.plugin.v1.DatastoreProvider.DeleteOAuthRegistration:input_type -> gestalt.plugin.v1.DeleteOAuthRegistrationRequest
+	20, // 29: gestalt.plugin.v1.DatastoreProvider.Migrate:output_type -> google.protobuf.Empty
+	0,  // 30: gestalt.plugin.v1.DatastoreProvider.GetUser:output_type -> gestalt.plugin.v1.StoredUser
+	0,  // 31: gestalt.plugin.v1.DatastoreProvider.FindOrCreateUser:output_type -> gestalt.plugin.v1.StoredUser
+	20, // 32: gestalt.plugin.v1.DatastoreProvider.PutStoredIntegrationToken:output_type -> google.protobuf.Empty
+	1,  // 33: gestalt.plugin.v1.DatastoreProvider.GetStoredIntegrationToken:output_type -> gestalt.plugin.v1.StoredIntegrationToken
+	8,  // 34: gestalt.plugin.v1.DatastoreProvider.ListStoredIntegrationTokens:output_type -> gestalt.plugin.v1.ListStoredIntegrationTokensResponse
+	20, // 35: gestalt.plugin.v1.DatastoreProvider.DeleteStoredIntegrationToken:output_type -> google.protobuf.Empty
+	20, // 36: gestalt.plugin.v1.DatastoreProvider.PutAPIToken:output_type -> google.protobuf.Empty
+	2,  // 37: gestalt.plugin.v1.DatastoreProvider.GetAPITokenByHash:output_type -> gestalt.plugin.v1.StoredAPIToken
+	12, // 38: gestalt.plugin.v1.DatastoreProvider.ListAPITokens:output_type -> gestalt.plugin.v1.ListAPITokensResponse
+	20, // 39: gestalt.plugin.v1.DatastoreProvider.RevokeAPIToken:output_type -> google.protobuf.Empty
+	15, // 40: gestalt.plugin.v1.DatastoreProvider.RevokeAllAPITokens:output_type -> gestalt.plugin.v1.RevokeAllAPITokensResponse
+	3,  // 41: gestalt.plugin.v1.DatastoreProvider.GetOAuthRegistration:output_type -> gestalt.plugin.v1.OAuthRegistration
+	20, // 42: gestalt.plugin.v1.DatastoreProvider.PutOAuthRegistration:output_type -> google.protobuf.Empty
+	20, // 43: gestalt.plugin.v1.DatastoreProvider.DeleteOAuthRegistration:output_type -> google.protobuf.Empty
 	29, // [29:44] is the sub-list for method output_type
 	14, // [14:29] is the sub-list for method input_type
 	14, // [14:14] is the sub-list for extension type_name

@@ -20,17 +20,17 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ProviderPlugin_GetMetadata_FullMethodName       = "/gestalt.plugin.v1.ProviderPlugin/GetMetadata"
-	ProviderPlugin_StartProvider_FullMethodName     = "/gestalt.plugin.v1.ProviderPlugin/StartProvider"
-	ProviderPlugin_Execute_FullMethodName           = "/gestalt.plugin.v1.ProviderPlugin/Execute"
-	ProviderPlugin_GetSessionCatalog_FullMethodName = "/gestalt.plugin.v1.ProviderPlugin/GetSessionCatalog"
-	ProviderPlugin_PostConnect_FullMethodName       = "/gestalt.plugin.v1.ProviderPlugin/PostConnect"
+	PluginProvider_GetMetadata_FullMethodName       = "/gestalt.plugin.v1.PluginProvider/GetMetadata"
+	PluginProvider_StartProvider_FullMethodName     = "/gestalt.plugin.v1.PluginProvider/StartProvider"
+	PluginProvider_Execute_FullMethodName           = "/gestalt.plugin.v1.PluginProvider/Execute"
+	PluginProvider_GetSessionCatalog_FullMethodName = "/gestalt.plugin.v1.PluginProvider/GetSessionCatalog"
+	PluginProvider_PostConnect_FullMethodName       = "/gestalt.plugin.v1.PluginProvider/PostConnect"
 )
 
-// ProviderPluginClient is the client API for ProviderPlugin service.
+// PluginProviderClient is the client API for PluginProvider service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type ProviderPluginClient interface {
+type PluginProviderClient interface {
 	GetMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ProviderMetadata, error)
 	StartProvider(ctx context.Context, in *StartProviderRequest, opts ...grpc.CallOption) (*StartProviderResponse, error)
 	Execute(ctx context.Context, in *ExecuteRequest, opts ...grpc.CallOption) (*OperationResult, error)
@@ -38,235 +38,235 @@ type ProviderPluginClient interface {
 	PostConnect(ctx context.Context, in *PostConnectRequest, opts ...grpc.CallOption) (*PostConnectResponse, error)
 }
 
-type providerPluginClient struct {
+type pluginProviderClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewProviderPluginClient(cc grpc.ClientConnInterface) ProviderPluginClient {
-	return &providerPluginClient{cc}
+func NewPluginProviderClient(cc grpc.ClientConnInterface) PluginProviderClient {
+	return &pluginProviderClient{cc}
 }
 
-func (c *providerPluginClient) GetMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ProviderMetadata, error) {
+func (c *pluginProviderClient) GetMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ProviderMetadata, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ProviderMetadata)
-	err := c.cc.Invoke(ctx, ProviderPlugin_GetMetadata_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, PluginProvider_GetMetadata_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *providerPluginClient) StartProvider(ctx context.Context, in *StartProviderRequest, opts ...grpc.CallOption) (*StartProviderResponse, error) {
+func (c *pluginProviderClient) StartProvider(ctx context.Context, in *StartProviderRequest, opts ...grpc.CallOption) (*StartProviderResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(StartProviderResponse)
-	err := c.cc.Invoke(ctx, ProviderPlugin_StartProvider_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, PluginProvider_StartProvider_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *providerPluginClient) Execute(ctx context.Context, in *ExecuteRequest, opts ...grpc.CallOption) (*OperationResult, error) {
+func (c *pluginProviderClient) Execute(ctx context.Context, in *ExecuteRequest, opts ...grpc.CallOption) (*OperationResult, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(OperationResult)
-	err := c.cc.Invoke(ctx, ProviderPlugin_Execute_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, PluginProvider_Execute_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *providerPluginClient) GetSessionCatalog(ctx context.Context, in *GetSessionCatalogRequest, opts ...grpc.CallOption) (*GetSessionCatalogResponse, error) {
+func (c *pluginProviderClient) GetSessionCatalog(ctx context.Context, in *GetSessionCatalogRequest, opts ...grpc.CallOption) (*GetSessionCatalogResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(GetSessionCatalogResponse)
-	err := c.cc.Invoke(ctx, ProviderPlugin_GetSessionCatalog_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, PluginProvider_GetSessionCatalog_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *providerPluginClient) PostConnect(ctx context.Context, in *PostConnectRequest, opts ...grpc.CallOption) (*PostConnectResponse, error) {
+func (c *pluginProviderClient) PostConnect(ctx context.Context, in *PostConnectRequest, opts ...grpc.CallOption) (*PostConnectResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(PostConnectResponse)
-	err := c.cc.Invoke(ctx, ProviderPlugin_PostConnect_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, PluginProvider_PostConnect_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// ProviderPluginServer is the server API for ProviderPlugin service.
-// All implementations must embed UnimplementedProviderPluginServer
+// PluginProviderServer is the server API for PluginProvider service.
+// All implementations must embed UnimplementedPluginProviderServer
 // for forward compatibility.
-type ProviderPluginServer interface {
+type PluginProviderServer interface {
 	GetMetadata(context.Context, *emptypb.Empty) (*ProviderMetadata, error)
 	StartProvider(context.Context, *StartProviderRequest) (*StartProviderResponse, error)
 	Execute(context.Context, *ExecuteRequest) (*OperationResult, error)
 	GetSessionCatalog(context.Context, *GetSessionCatalogRequest) (*GetSessionCatalogResponse, error)
 	PostConnect(context.Context, *PostConnectRequest) (*PostConnectResponse, error)
-	mustEmbedUnimplementedProviderPluginServer()
+	mustEmbedUnimplementedPluginProviderServer()
 }
 
-// UnimplementedProviderPluginServer must be embedded to have
+// UnimplementedPluginProviderServer must be embedded to have
 // forward compatible implementations.
 //
 // NOTE: this should be embedded by value instead of pointer to avoid a nil
 // pointer dereference when methods are called.
-type UnimplementedProviderPluginServer struct{}
+type UnimplementedPluginProviderServer struct{}
 
-func (UnimplementedProviderPluginServer) GetMetadata(context.Context, *emptypb.Empty) (*ProviderMetadata, error) {
+func (UnimplementedPluginProviderServer) GetMetadata(context.Context, *emptypb.Empty) (*ProviderMetadata, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetMetadata not implemented")
 }
-func (UnimplementedProviderPluginServer) StartProvider(context.Context, *StartProviderRequest) (*StartProviderResponse, error) {
+func (UnimplementedPluginProviderServer) StartProvider(context.Context, *StartProviderRequest) (*StartProviderResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method StartProvider not implemented")
 }
-func (UnimplementedProviderPluginServer) Execute(context.Context, *ExecuteRequest) (*OperationResult, error) {
+func (UnimplementedPluginProviderServer) Execute(context.Context, *ExecuteRequest) (*OperationResult, error) {
 	return nil, status.Error(codes.Unimplemented, "method Execute not implemented")
 }
-func (UnimplementedProviderPluginServer) GetSessionCatalog(context.Context, *GetSessionCatalogRequest) (*GetSessionCatalogResponse, error) {
+func (UnimplementedPluginProviderServer) GetSessionCatalog(context.Context, *GetSessionCatalogRequest) (*GetSessionCatalogResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetSessionCatalog not implemented")
 }
-func (UnimplementedProviderPluginServer) PostConnect(context.Context, *PostConnectRequest) (*PostConnectResponse, error) {
+func (UnimplementedPluginProviderServer) PostConnect(context.Context, *PostConnectRequest) (*PostConnectResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method PostConnect not implemented")
 }
-func (UnimplementedProviderPluginServer) mustEmbedUnimplementedProviderPluginServer() {}
-func (UnimplementedProviderPluginServer) testEmbeddedByValue()                        {}
+func (UnimplementedPluginProviderServer) mustEmbedUnimplementedPluginProviderServer() {}
+func (UnimplementedPluginProviderServer) testEmbeddedByValue()                        {}
 
-// UnsafeProviderPluginServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to ProviderPluginServer will
+// UnsafePluginProviderServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to PluginProviderServer will
 // result in compilation errors.
-type UnsafeProviderPluginServer interface {
-	mustEmbedUnimplementedProviderPluginServer()
+type UnsafePluginProviderServer interface {
+	mustEmbedUnimplementedPluginProviderServer()
 }
 
-func RegisterProviderPluginServer(s grpc.ServiceRegistrar, srv ProviderPluginServer) {
-	// If the following call panics, it indicates UnimplementedProviderPluginServer was
+func RegisterPluginProviderServer(s grpc.ServiceRegistrar, srv PluginProviderServer) {
+	// If the following call panics, it indicates UnimplementedPluginProviderServer was
 	// embedded by pointer and is nil.  This will cause panics if an
 	// unimplemented method is ever invoked, so we test this at initialization
 	// time to prevent it from happening at runtime later due to I/O.
 	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
 		t.testEmbeddedByValue()
 	}
-	s.RegisterService(&ProviderPlugin_ServiceDesc, srv)
+	s.RegisterService(&PluginProvider_ServiceDesc, srv)
 }
 
-func _ProviderPlugin_GetMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _PluginProvider_GetMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ProviderPluginServer).GetMetadata(ctx, in)
+		return srv.(PluginProviderServer).GetMetadata(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: ProviderPlugin_GetMetadata_FullMethodName,
+		FullMethod: PluginProvider_GetMetadata_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProviderPluginServer).GetMetadata(ctx, req.(*emptypb.Empty))
+		return srv.(PluginProviderServer).GetMetadata(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ProviderPlugin_StartProvider_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _PluginProvider_StartProvider_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(StartProviderRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ProviderPluginServer).StartProvider(ctx, in)
+		return srv.(PluginProviderServer).StartProvider(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: ProviderPlugin_StartProvider_FullMethodName,
+		FullMethod: PluginProvider_StartProvider_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProviderPluginServer).StartProvider(ctx, req.(*StartProviderRequest))
+		return srv.(PluginProviderServer).StartProvider(ctx, req.(*StartProviderRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ProviderPlugin_Execute_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _PluginProvider_Execute_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ExecuteRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ProviderPluginServer).Execute(ctx, in)
+		return srv.(PluginProviderServer).Execute(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: ProviderPlugin_Execute_FullMethodName,
+		FullMethod: PluginProvider_Execute_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProviderPluginServer).Execute(ctx, req.(*ExecuteRequest))
+		return srv.(PluginProviderServer).Execute(ctx, req.(*ExecuteRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ProviderPlugin_GetSessionCatalog_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _PluginProvider_GetSessionCatalog_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetSessionCatalogRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ProviderPluginServer).GetSessionCatalog(ctx, in)
+		return srv.(PluginProviderServer).GetSessionCatalog(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: ProviderPlugin_GetSessionCatalog_FullMethodName,
+		FullMethod: PluginProvider_GetSessionCatalog_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProviderPluginServer).GetSessionCatalog(ctx, req.(*GetSessionCatalogRequest))
+		return srv.(PluginProviderServer).GetSessionCatalog(ctx, req.(*GetSessionCatalogRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ProviderPlugin_PostConnect_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _PluginProvider_PostConnect_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(PostConnectRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ProviderPluginServer).PostConnect(ctx, in)
+		return srv.(PluginProviderServer).PostConnect(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: ProviderPlugin_PostConnect_FullMethodName,
+		FullMethod: PluginProvider_PostConnect_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProviderPluginServer).PostConnect(ctx, req.(*PostConnectRequest))
+		return srv.(PluginProviderServer).PostConnect(ctx, req.(*PostConnectRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// ProviderPlugin_ServiceDesc is the grpc.ServiceDesc for ProviderPlugin service.
+// PluginProvider_ServiceDesc is the grpc.ServiceDesc for PluginProvider service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var ProviderPlugin_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "gestalt.plugin.v1.ProviderPlugin",
-	HandlerType: (*ProviderPluginServer)(nil),
+var PluginProvider_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "gestalt.plugin.v1.PluginProvider",
+	HandlerType: (*PluginProviderServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "GetMetadata",
-			Handler:    _ProviderPlugin_GetMetadata_Handler,
+			Handler:    _PluginProvider_GetMetadata_Handler,
 		},
 		{
 			MethodName: "StartProvider",
-			Handler:    _ProviderPlugin_StartProvider_Handler,
+			Handler:    _PluginProvider_StartProvider_Handler,
 		},
 		{
 			MethodName: "Execute",
-			Handler:    _ProviderPlugin_Execute_Handler,
+			Handler:    _PluginProvider_Execute_Handler,
 		},
 		{
 			MethodName: "GetSessionCatalog",
-			Handler:    _ProviderPlugin_GetSessionCatalog_Handler,
+			Handler:    _PluginProvider_GetSessionCatalog_Handler,
 		},
 		{
 			MethodName: "PostConnect",
-			Handler:    _ProviderPlugin_PostConnect_Handler,
+			Handler:    _PluginProvider_PostConnect_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

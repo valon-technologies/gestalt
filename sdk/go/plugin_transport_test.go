@@ -42,7 +42,7 @@ func TestServeProviderRoundTrip(t *testing.T) {
 	})
 
 	conn := newUnixConn(t, socket)
-	client := proto.NewProviderPluginClient(conn)
+	client := proto.NewPluginProviderClient(conn)
 
 	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), time.Second)
 	defer rpcCancel()
@@ -75,7 +75,7 @@ func TestServeAuthProviderClosesProviderOnShutdown(t *testing.T) {
 	})
 
 	conn := newUnixConn(t, socket)
-	client := proto.NewAuthPluginClient(conn)
+	client := proto.NewAuthProviderClient(conn)
 
 	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), time.Second)
 	defer rpcCancel()

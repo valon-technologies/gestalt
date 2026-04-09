@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
 use crate::auth::AuthProvider;
-use crate::generated::v1::auth_plugin_server::AuthPlugin;
+use crate::generated::v1::auth_provider_server::AuthProvider as AuthProviderGrpc;
 use crate::generated::v1::{
     AuthSessionSettings, AuthenticatedUser, BeginLoginRequest, BeginLoginResponse,
     CompleteLoginRequest, ValidateExternalTokenRequest,
@@ -22,7 +22,7 @@ impl<P> AuthServer<P> {
 }
 
 #[tonic::async_trait]
-impl<P> AuthPlugin for AuthServer<P>
+impl<P> AuthProviderGrpc for AuthServer<P>
 where
     P: AuthProvider,
 {

@@ -1,10 +1,9 @@
 import dataclasses
 import datetime as dt
 from enum import Enum
-from typing import Any, Callable, Final
+from typing import Any, Callable
 
 UTC = dt.timezone.utc
-UNIX_EPOCH: Final[dt.datetime] = dt.datetime.fromtimestamp(0, tz=UTC)
 
 
 class ProviderKind(str, Enum):
@@ -24,7 +23,7 @@ class ProviderMetadata:
     version: str = ""
 
 
-class RuntimeProvider:
+class PluginProvider:
     def configure(self, name: str, config: dict[str, Any]) -> None:
         pass
 
@@ -49,22 +48,19 @@ class Closer:
         raise NotImplementedError
 
 
-RegisterServices = Callable[[Any, RuntimeProvider], None]
+RegisterServices = Callable[[Any, PluginProvider], None]
 
 
 @dataclasses.dataclass(slots=True)
-class RuntimeProviderAdapter:
+class PluginProviderAdapter:
     kind: ProviderKind | str
-    provider: RuntimeProvider
+    provider: PluginProvider
     register_services: RegisterServices
 
     def serve(self) -> None:
         from . import _runtime
 
         _runtime.serve(self)
-
-
-RuntimePlugin = RuntimeProviderAdapter
 
 
 @dataclasses.dataclass(slots=True)
@@ -98,7 +94,7 @@ class AuthenticatedUser:
     claims: dict[str, str] = dataclasses.field(default_factory=dict)
 
 
-class AuthProvider(RuntimeProvider):
+class AuthProvider(PluginProvider):
     def begin_login(self, request: BeginLoginRequest) -> BeginLoginResponse:
         raise NotImplementedError
 
@@ -126,8 +122,12 @@ class StoredUser:
     id: str = ""
     email: str = ""
     display_name: str = ""
-    created_at: dt.datetime = UNIX_EPOCH
-    updated_at: dt.datetime = UNIX_EPOCH
+    created_at: dt.datetime = dataclasses.field(
+        default_factory=lambda: dt.datetime.fromtimestamp(0, tz=UTC)
+    )
+    updated_at: dt.datetime = dataclasses.field(
+        default_factory=lambda: dt.datetime.fromtimestamp(0, tz=UTC)
+    )
 
 
 @dataclasses.dataclass(slots=True)
@@ -144,8 +144,12 @@ class StoredIntegrationToken:
     last_refreshed_at: dt.datetime | None = None
     refresh_error_count: int = 0
     connection_params: dict[str, str] = dataclasses.field(default_factory=dict)
-    created_at: dt.datetime = UNIX_EPOCH
-    updated_at: dt.datetime = UNIX_EPOCH
+    created_at: dt.datetime = dataclasses.field(
+        default_factory=lambda: dt.datetime.fromtimestamp(0, tz=UTC)
+    )
+    updated_at: dt.datetime = dataclasses.field(
+        default_factory=lambda: dt.datetime.fromtimestamp(0, tz=UTC)
+    )
 
 
 @dataclasses.dataclass(slots=True)
@@ -156,8 +160,12 @@ class StoredAPIToken:
     hashed_token: str = ""
     scopes: str = ""
     expires_at: dt.datetime | None = None
-    created_at: dt.datetime = UNIX_EPOCH
-    updated_at: dt.datetime = UNIX_EPOCH
+    created_at: dt.datetime = dataclasses.field(
+        default_factory=lambda: dt.datetime.fromtimestamp(0, tz=UTC)
+    )
+    updated_at: dt.datetime = dataclasses.field(
+        default_factory=lambda: dt.datetime.fromtimestamp(0, tz=UTC)
+    )
 
 
 @dataclasses.dataclass(slots=True)
@@ -170,10 +178,12 @@ class OAuthRegistration:
     authorization_endpoint: str = ""
     token_endpoint: str = ""
     scopes_supported: str = ""
-    discovered_at: dt.datetime = UNIX_EPOCH
+    discovered_at: dt.datetime = dataclasses.field(
+        default_factory=lambda: dt.datetime.fromtimestamp(0, tz=UTC)
+    )
 
 
-class DatastoreProvider(RuntimeProvider):
+class DatastoreProvider(PluginProvider):
     def migrate(self) -> None:
         raise NotImplementedError
 

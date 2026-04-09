@@ -8,7 +8,7 @@ use crate::api::{Request, Response};
 use crate::catalog::{catalog_json, object_map};
 use crate::env::CURRENT_PROTOCOL_VERSION;
 use crate::error::Error;
-use crate::generated::v1::provider_plugin_server::ProviderPlugin;
+use crate::generated::v1::plugin_provider_server::PluginProvider;
 use crate::generated::v1::{
     ExecuteRequest, GetSessionCatalogRequest, GetSessionCatalogResponse,
     OperationResult as ProtoOperationResult, PostConnectRequest, PostConnectResponse,
@@ -56,7 +56,7 @@ impl<P> ProviderServer<P> {
 }
 
 #[tonic::async_trait]
-impl<P> ProviderPlugin for ProviderServer<P>
+impl<P> PluginProvider for ProviderServer<P>
 where
     P: Provider,
 {

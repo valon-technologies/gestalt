@@ -29,8 +29,8 @@ type DatastoreExecConfig struct {
 }
 
 type remoteDatastore struct {
-	runtime     proto.PluginRuntimeClient
-	client      proto.DatastorePluginClient
+	runtime     proto.ProviderLifecycleClient
+	client      proto.DatastoreProviderClient
 	name        string
 	displayName string
 	description string
@@ -61,8 +61,8 @@ func NewExecutableDatastore(ctx context.Context, cfg DatastoreExecConfig) (core.
 		return nil, err
 	}
 
-	runtimeClient := proto.NewPluginRuntimeClient(proc.conn)
-	datastoreClient := proto.NewDatastorePluginClient(proc.conn)
+	runtimeClient := proto.NewProviderLifecycleClient(proc.conn)
+	datastoreClient := proto.NewDatastoreProviderClient(proc.conn)
 	store, err := newRemoteDatastore(ctx, runtimeClient, datastoreClient, cfg.Name, cfg.Config, enc)
 	if err != nil {
 		_ = proc.Close()
@@ -75,7 +75,7 @@ func NewExecutableDatastore(ctx context.Context, cfg DatastoreExecConfig) (core.
 	return store, nil
 }
 
-func newRemoteDatastore(ctx context.Context, runtimeClient proto.PluginRuntimeClient, client proto.DatastorePluginClient, name string, config map[string]any, enc *corecrypto.AESGCMEncryptor) (*remoteDatastore, error) {
+func newRemoteDatastore(ctx context.Context, runtimeClient proto.ProviderLifecycleClient, client proto.DatastoreProviderClient, name string, config map[string]any, enc *corecrypto.AESGCMEncryptor) (*remoteDatastore, error) {
 	store := &remoteDatastore{
 		runtime: runtimeClient,
 		client:  client,

@@ -24,8 +24,8 @@ type ProviderMetadata struct {
 	Version     string
 }
 
-// RuntimeProvider is the common startup contract shared by every provider kind.
-type RuntimeProvider interface {
+// PluginProvider is the common startup contract shared by every provider kind.
+type PluginProvider interface {
 	Configure(ctx context.Context, name string, config map[string]any) error
 }
 

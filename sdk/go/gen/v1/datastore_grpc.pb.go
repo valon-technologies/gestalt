@@ -20,27 +20,27 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	DatastorePlugin_Migrate_FullMethodName                      = "/gestalt.plugin.v1.DatastorePlugin/Migrate"
-	DatastorePlugin_GetUser_FullMethodName                      = "/gestalt.plugin.v1.DatastorePlugin/GetUser"
-	DatastorePlugin_FindOrCreateUser_FullMethodName             = "/gestalt.plugin.v1.DatastorePlugin/FindOrCreateUser"
-	DatastorePlugin_PutStoredIntegrationToken_FullMethodName    = "/gestalt.plugin.v1.DatastorePlugin/PutStoredIntegrationToken"
-	DatastorePlugin_GetStoredIntegrationToken_FullMethodName    = "/gestalt.plugin.v1.DatastorePlugin/GetStoredIntegrationToken"
-	DatastorePlugin_ListStoredIntegrationTokens_FullMethodName  = "/gestalt.plugin.v1.DatastorePlugin/ListStoredIntegrationTokens"
-	DatastorePlugin_DeleteStoredIntegrationToken_FullMethodName = "/gestalt.plugin.v1.DatastorePlugin/DeleteStoredIntegrationToken"
-	DatastorePlugin_PutAPIToken_FullMethodName                  = "/gestalt.plugin.v1.DatastorePlugin/PutAPIToken"
-	DatastorePlugin_GetAPITokenByHash_FullMethodName            = "/gestalt.plugin.v1.DatastorePlugin/GetAPITokenByHash"
-	DatastorePlugin_ListAPITokens_FullMethodName                = "/gestalt.plugin.v1.DatastorePlugin/ListAPITokens"
-	DatastorePlugin_RevokeAPIToken_FullMethodName               = "/gestalt.plugin.v1.DatastorePlugin/RevokeAPIToken"
-	DatastorePlugin_RevokeAllAPITokens_FullMethodName           = "/gestalt.plugin.v1.DatastorePlugin/RevokeAllAPITokens"
-	DatastorePlugin_GetOAuthRegistration_FullMethodName         = "/gestalt.plugin.v1.DatastorePlugin/GetOAuthRegistration"
-	DatastorePlugin_PutOAuthRegistration_FullMethodName         = "/gestalt.plugin.v1.DatastorePlugin/PutOAuthRegistration"
-	DatastorePlugin_DeleteOAuthRegistration_FullMethodName      = "/gestalt.plugin.v1.DatastorePlugin/DeleteOAuthRegistration"
+	DatastoreProvider_Migrate_FullMethodName                      = "/gestalt.plugin.v1.DatastoreProvider/Migrate"
+	DatastoreProvider_GetUser_FullMethodName                      = "/gestalt.plugin.v1.DatastoreProvider/GetUser"
+	DatastoreProvider_FindOrCreateUser_FullMethodName             = "/gestalt.plugin.v1.DatastoreProvider/FindOrCreateUser"
+	DatastoreProvider_PutStoredIntegrationToken_FullMethodName    = "/gestalt.plugin.v1.DatastoreProvider/PutStoredIntegrationToken"
+	DatastoreProvider_GetStoredIntegrationToken_FullMethodName    = "/gestalt.plugin.v1.DatastoreProvider/GetStoredIntegrationToken"
+	DatastoreProvider_ListStoredIntegrationTokens_FullMethodName  = "/gestalt.plugin.v1.DatastoreProvider/ListStoredIntegrationTokens"
+	DatastoreProvider_DeleteStoredIntegrationToken_FullMethodName = "/gestalt.plugin.v1.DatastoreProvider/DeleteStoredIntegrationToken"
+	DatastoreProvider_PutAPIToken_FullMethodName                  = "/gestalt.plugin.v1.DatastoreProvider/PutAPIToken"
+	DatastoreProvider_GetAPITokenByHash_FullMethodName            = "/gestalt.plugin.v1.DatastoreProvider/GetAPITokenByHash"
+	DatastoreProvider_ListAPITokens_FullMethodName                = "/gestalt.plugin.v1.DatastoreProvider/ListAPITokens"
+	DatastoreProvider_RevokeAPIToken_FullMethodName               = "/gestalt.plugin.v1.DatastoreProvider/RevokeAPIToken"
+	DatastoreProvider_RevokeAllAPITokens_FullMethodName           = "/gestalt.plugin.v1.DatastoreProvider/RevokeAllAPITokens"
+	DatastoreProvider_GetOAuthRegistration_FullMethodName         = "/gestalt.plugin.v1.DatastoreProvider/GetOAuthRegistration"
+	DatastoreProvider_PutOAuthRegistration_FullMethodName         = "/gestalt.plugin.v1.DatastoreProvider/PutOAuthRegistration"
+	DatastoreProvider_DeleteOAuthRegistration_FullMethodName      = "/gestalt.plugin.v1.DatastoreProvider/DeleteOAuthRegistration"
 )
 
-// DatastorePluginClient is the client API for DatastorePlugin service.
+// DatastoreProviderClient is the client API for DatastoreProvider service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
-type DatastorePluginClient interface {
+type DatastoreProviderClient interface {
 	Migrate(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	GetUser(ctx context.Context, in *GetUserRequest, opts ...grpc.CallOption) (*StoredUser, error)
 	FindOrCreateUser(ctx context.Context, in *FindOrCreateUserRequest, opts ...grpc.CallOption) (*StoredUser, error)
@@ -58,168 +58,168 @@ type DatastorePluginClient interface {
 	DeleteOAuthRegistration(ctx context.Context, in *DeleteOAuthRegistrationRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 }
 
-type datastorePluginClient struct {
+type datastoreProviderClient struct {
 	cc grpc.ClientConnInterface
 }
 
-func NewDatastorePluginClient(cc grpc.ClientConnInterface) DatastorePluginClient {
-	return &datastorePluginClient{cc}
+func NewDatastoreProviderClient(cc grpc.ClientConnInterface) DatastoreProviderClient {
+	return &datastoreProviderClient{cc}
 }
 
-func (c *datastorePluginClient) Migrate(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *datastoreProviderClient) Migrate(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, DatastorePlugin_Migrate_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, DatastoreProvider_Migrate_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *datastorePluginClient) GetUser(ctx context.Context, in *GetUserRequest, opts ...grpc.CallOption) (*StoredUser, error) {
+func (c *datastoreProviderClient) GetUser(ctx context.Context, in *GetUserRequest, opts ...grpc.CallOption) (*StoredUser, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(StoredUser)
-	err := c.cc.Invoke(ctx, DatastorePlugin_GetUser_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, DatastoreProvider_GetUser_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *datastorePluginClient) FindOrCreateUser(ctx context.Context, in *FindOrCreateUserRequest, opts ...grpc.CallOption) (*StoredUser, error) {
+func (c *datastoreProviderClient) FindOrCreateUser(ctx context.Context, in *FindOrCreateUserRequest, opts ...grpc.CallOption) (*StoredUser, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(StoredUser)
-	err := c.cc.Invoke(ctx, DatastorePlugin_FindOrCreateUser_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, DatastoreProvider_FindOrCreateUser_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *datastorePluginClient) PutStoredIntegrationToken(ctx context.Context, in *StoredIntegrationToken, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *datastoreProviderClient) PutStoredIntegrationToken(ctx context.Context, in *StoredIntegrationToken, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, DatastorePlugin_PutStoredIntegrationToken_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, DatastoreProvider_PutStoredIntegrationToken_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *datastorePluginClient) GetStoredIntegrationToken(ctx context.Context, in *GetStoredIntegrationTokenRequest, opts ...grpc.CallOption) (*StoredIntegrationToken, error) {
+func (c *datastoreProviderClient) GetStoredIntegrationToken(ctx context.Context, in *GetStoredIntegrationTokenRequest, opts ...grpc.CallOption) (*StoredIntegrationToken, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(StoredIntegrationToken)
-	err := c.cc.Invoke(ctx, DatastorePlugin_GetStoredIntegrationToken_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, DatastoreProvider_GetStoredIntegrationToken_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *datastorePluginClient) ListStoredIntegrationTokens(ctx context.Context, in *ListStoredIntegrationTokensRequest, opts ...grpc.CallOption) (*ListStoredIntegrationTokensResponse, error) {
+func (c *datastoreProviderClient) ListStoredIntegrationTokens(ctx context.Context, in *ListStoredIntegrationTokensRequest, opts ...grpc.CallOption) (*ListStoredIntegrationTokensResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListStoredIntegrationTokensResponse)
-	err := c.cc.Invoke(ctx, DatastorePlugin_ListStoredIntegrationTokens_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, DatastoreProvider_ListStoredIntegrationTokens_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *datastorePluginClient) DeleteStoredIntegrationToken(ctx context.Context, in *DeleteStoredIntegrationTokenRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *datastoreProviderClient) DeleteStoredIntegrationToken(ctx context.Context, in *DeleteStoredIntegrationTokenRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, DatastorePlugin_DeleteStoredIntegrationToken_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, DatastoreProvider_DeleteStoredIntegrationToken_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *datastorePluginClient) PutAPIToken(ctx context.Context, in *StoredAPIToken, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *datastoreProviderClient) PutAPIToken(ctx context.Context, in *StoredAPIToken, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, DatastorePlugin_PutAPIToken_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, DatastoreProvider_PutAPIToken_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *datastorePluginClient) GetAPITokenByHash(ctx context.Context, in *GetAPITokenByHashRequest, opts ...grpc.CallOption) (*StoredAPIToken, error) {
+func (c *datastoreProviderClient) GetAPITokenByHash(ctx context.Context, in *GetAPITokenByHashRequest, opts ...grpc.CallOption) (*StoredAPIToken, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(StoredAPIToken)
-	err := c.cc.Invoke(ctx, DatastorePlugin_GetAPITokenByHash_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, DatastoreProvider_GetAPITokenByHash_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *datastorePluginClient) ListAPITokens(ctx context.Context, in *ListAPITokensRequest, opts ...grpc.CallOption) (*ListAPITokensResponse, error) {
+func (c *datastoreProviderClient) ListAPITokens(ctx context.Context, in *ListAPITokensRequest, opts ...grpc.CallOption) (*ListAPITokensResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(ListAPITokensResponse)
-	err := c.cc.Invoke(ctx, DatastorePlugin_ListAPITokens_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, DatastoreProvider_ListAPITokens_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *datastorePluginClient) RevokeAPIToken(ctx context.Context, in *RevokeAPITokenRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *datastoreProviderClient) RevokeAPIToken(ctx context.Context, in *RevokeAPITokenRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, DatastorePlugin_RevokeAPIToken_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, DatastoreProvider_RevokeAPIToken_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *datastorePluginClient) RevokeAllAPITokens(ctx context.Context, in *RevokeAllAPITokensRequest, opts ...grpc.CallOption) (*RevokeAllAPITokensResponse, error) {
+func (c *datastoreProviderClient) RevokeAllAPITokens(ctx context.Context, in *RevokeAllAPITokensRequest, opts ...grpc.CallOption) (*RevokeAllAPITokensResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(RevokeAllAPITokensResponse)
-	err := c.cc.Invoke(ctx, DatastorePlugin_RevokeAllAPITokens_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, DatastoreProvider_RevokeAllAPITokens_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *datastorePluginClient) GetOAuthRegistration(ctx context.Context, in *GetOAuthRegistrationRequest, opts ...grpc.CallOption) (*OAuthRegistration, error) {
+func (c *datastoreProviderClient) GetOAuthRegistration(ctx context.Context, in *GetOAuthRegistrationRequest, opts ...grpc.CallOption) (*OAuthRegistration, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(OAuthRegistration)
-	err := c.cc.Invoke(ctx, DatastorePlugin_GetOAuthRegistration_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, DatastoreProvider_GetOAuthRegistration_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *datastorePluginClient) PutOAuthRegistration(ctx context.Context, in *OAuthRegistration, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *datastoreProviderClient) PutOAuthRegistration(ctx context.Context, in *OAuthRegistration, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, DatastorePlugin_PutOAuthRegistration_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, DatastoreProvider_PutOAuthRegistration_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *datastorePluginClient) DeleteOAuthRegistration(ctx context.Context, in *DeleteOAuthRegistrationRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+func (c *datastoreProviderClient) DeleteOAuthRegistration(ctx context.Context, in *DeleteOAuthRegistrationRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(emptypb.Empty)
-	err := c.cc.Invoke(ctx, DatastorePlugin_DeleteOAuthRegistration_FullMethodName, in, out, cOpts...)
+	err := c.cc.Invoke(ctx, DatastoreProvider_DeleteOAuthRegistration_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-// DatastorePluginServer is the server API for DatastorePlugin service.
-// All implementations must embed UnimplementedDatastorePluginServer
+// DatastoreProviderServer is the server API for DatastoreProvider service.
+// All implementations must embed UnimplementedDatastoreProviderServer
 // for forward compatibility.
-type DatastorePluginServer interface {
+type DatastoreProviderServer interface {
 	Migrate(context.Context, *emptypb.Empty) (*emptypb.Empty, error)
 	GetUser(context.Context, *GetUserRequest) (*StoredUser, error)
 	FindOrCreateUser(context.Context, *FindOrCreateUserRequest) (*StoredUser, error)
@@ -235,418 +235,418 @@ type DatastorePluginServer interface {
 	GetOAuthRegistration(context.Context, *GetOAuthRegistrationRequest) (*OAuthRegistration, error)
 	PutOAuthRegistration(context.Context, *OAuthRegistration) (*emptypb.Empty, error)
 	DeleteOAuthRegistration(context.Context, *DeleteOAuthRegistrationRequest) (*emptypb.Empty, error)
-	mustEmbedUnimplementedDatastorePluginServer()
+	mustEmbedUnimplementedDatastoreProviderServer()
 }
 
-// UnimplementedDatastorePluginServer must be embedded to have
+// UnimplementedDatastoreProviderServer must be embedded to have
 // forward compatible implementations.
 //
 // NOTE: this should be embedded by value instead of pointer to avoid a nil
 // pointer dereference when methods are called.
-type UnimplementedDatastorePluginServer struct{}
+type UnimplementedDatastoreProviderServer struct{}
 
-func (UnimplementedDatastorePluginServer) Migrate(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
+func (UnimplementedDatastoreProviderServer) Migrate(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method Migrate not implemented")
 }
-func (UnimplementedDatastorePluginServer) GetUser(context.Context, *GetUserRequest) (*StoredUser, error) {
+func (UnimplementedDatastoreProviderServer) GetUser(context.Context, *GetUserRequest) (*StoredUser, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetUser not implemented")
 }
-func (UnimplementedDatastorePluginServer) FindOrCreateUser(context.Context, *FindOrCreateUserRequest) (*StoredUser, error) {
+func (UnimplementedDatastoreProviderServer) FindOrCreateUser(context.Context, *FindOrCreateUserRequest) (*StoredUser, error) {
 	return nil, status.Error(codes.Unimplemented, "method FindOrCreateUser not implemented")
 }
-func (UnimplementedDatastorePluginServer) PutStoredIntegrationToken(context.Context, *StoredIntegrationToken) (*emptypb.Empty, error) {
+func (UnimplementedDatastoreProviderServer) PutStoredIntegrationToken(context.Context, *StoredIntegrationToken) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method PutStoredIntegrationToken not implemented")
 }
-func (UnimplementedDatastorePluginServer) GetStoredIntegrationToken(context.Context, *GetStoredIntegrationTokenRequest) (*StoredIntegrationToken, error) {
+func (UnimplementedDatastoreProviderServer) GetStoredIntegrationToken(context.Context, *GetStoredIntegrationTokenRequest) (*StoredIntegrationToken, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetStoredIntegrationToken not implemented")
 }
-func (UnimplementedDatastorePluginServer) ListStoredIntegrationTokens(context.Context, *ListStoredIntegrationTokensRequest) (*ListStoredIntegrationTokensResponse, error) {
+func (UnimplementedDatastoreProviderServer) ListStoredIntegrationTokens(context.Context, *ListStoredIntegrationTokensRequest) (*ListStoredIntegrationTokensResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListStoredIntegrationTokens not implemented")
 }
-func (UnimplementedDatastorePluginServer) DeleteStoredIntegrationToken(context.Context, *DeleteStoredIntegrationTokenRequest) (*emptypb.Empty, error) {
+func (UnimplementedDatastoreProviderServer) DeleteStoredIntegrationToken(context.Context, *DeleteStoredIntegrationTokenRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteStoredIntegrationToken not implemented")
 }
-func (UnimplementedDatastorePluginServer) PutAPIToken(context.Context, *StoredAPIToken) (*emptypb.Empty, error) {
+func (UnimplementedDatastoreProviderServer) PutAPIToken(context.Context, *StoredAPIToken) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method PutAPIToken not implemented")
 }
-func (UnimplementedDatastorePluginServer) GetAPITokenByHash(context.Context, *GetAPITokenByHashRequest) (*StoredAPIToken, error) {
+func (UnimplementedDatastoreProviderServer) GetAPITokenByHash(context.Context, *GetAPITokenByHashRequest) (*StoredAPIToken, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetAPITokenByHash not implemented")
 }
-func (UnimplementedDatastorePluginServer) ListAPITokens(context.Context, *ListAPITokensRequest) (*ListAPITokensResponse, error) {
+func (UnimplementedDatastoreProviderServer) ListAPITokens(context.Context, *ListAPITokensRequest) (*ListAPITokensResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListAPITokens not implemented")
 }
-func (UnimplementedDatastorePluginServer) RevokeAPIToken(context.Context, *RevokeAPITokenRequest) (*emptypb.Empty, error) {
+func (UnimplementedDatastoreProviderServer) RevokeAPIToken(context.Context, *RevokeAPITokenRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method RevokeAPIToken not implemented")
 }
-func (UnimplementedDatastorePluginServer) RevokeAllAPITokens(context.Context, *RevokeAllAPITokensRequest) (*RevokeAllAPITokensResponse, error) {
+func (UnimplementedDatastoreProviderServer) RevokeAllAPITokens(context.Context, *RevokeAllAPITokensRequest) (*RevokeAllAPITokensResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method RevokeAllAPITokens not implemented")
 }
-func (UnimplementedDatastorePluginServer) GetOAuthRegistration(context.Context, *GetOAuthRegistrationRequest) (*OAuthRegistration, error) {
+func (UnimplementedDatastoreProviderServer) GetOAuthRegistration(context.Context, *GetOAuthRegistrationRequest) (*OAuthRegistration, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetOAuthRegistration not implemented")
 }
-func (UnimplementedDatastorePluginServer) PutOAuthRegistration(context.Context, *OAuthRegistration) (*emptypb.Empty, error) {
+func (UnimplementedDatastoreProviderServer) PutOAuthRegistration(context.Context, *OAuthRegistration) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method PutOAuthRegistration not implemented")
 }
-func (UnimplementedDatastorePluginServer) DeleteOAuthRegistration(context.Context, *DeleteOAuthRegistrationRequest) (*emptypb.Empty, error) {
+func (UnimplementedDatastoreProviderServer) DeleteOAuthRegistration(context.Context, *DeleteOAuthRegistrationRequest) (*emptypb.Empty, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteOAuthRegistration not implemented")
 }
-func (UnimplementedDatastorePluginServer) mustEmbedUnimplementedDatastorePluginServer() {}
-func (UnimplementedDatastorePluginServer) testEmbeddedByValue()                         {}
+func (UnimplementedDatastoreProviderServer) mustEmbedUnimplementedDatastoreProviderServer() {}
+func (UnimplementedDatastoreProviderServer) testEmbeddedByValue()                           {}
 
-// UnsafeDatastorePluginServer may be embedded to opt out of forward compatibility for this service.
-// Use of this interface is not recommended, as added methods to DatastorePluginServer will
+// UnsafeDatastoreProviderServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to DatastoreProviderServer will
 // result in compilation errors.
-type UnsafeDatastorePluginServer interface {
-	mustEmbedUnimplementedDatastorePluginServer()
+type UnsafeDatastoreProviderServer interface {
+	mustEmbedUnimplementedDatastoreProviderServer()
 }
 
-func RegisterDatastorePluginServer(s grpc.ServiceRegistrar, srv DatastorePluginServer) {
-	// If the following call panics, it indicates UnimplementedDatastorePluginServer was
+func RegisterDatastoreProviderServer(s grpc.ServiceRegistrar, srv DatastoreProviderServer) {
+	// If the following call panics, it indicates UnimplementedDatastoreProviderServer was
 	// embedded by pointer and is nil.  This will cause panics if an
 	// unimplemented method is ever invoked, so we test this at initialization
 	// time to prevent it from happening at runtime later due to I/O.
 	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
 		t.testEmbeddedByValue()
 	}
-	s.RegisterService(&DatastorePlugin_ServiceDesc, srv)
+	s.RegisterService(&DatastoreProvider_ServiceDesc, srv)
 }
 
-func _DatastorePlugin_Migrate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _DatastoreProvider_Migrate_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DatastorePluginServer).Migrate(ctx, in)
+		return srv.(DatastoreProviderServer).Migrate(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: DatastorePlugin_Migrate_FullMethodName,
+		FullMethod: DatastoreProvider_Migrate_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DatastorePluginServer).Migrate(ctx, req.(*emptypb.Empty))
+		return srv.(DatastoreProviderServer).Migrate(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _DatastorePlugin_GetUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _DatastoreProvider_GetUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetUserRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DatastorePluginServer).GetUser(ctx, in)
+		return srv.(DatastoreProviderServer).GetUser(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: DatastorePlugin_GetUser_FullMethodName,
+		FullMethod: DatastoreProvider_GetUser_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DatastorePluginServer).GetUser(ctx, req.(*GetUserRequest))
+		return srv.(DatastoreProviderServer).GetUser(ctx, req.(*GetUserRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _DatastorePlugin_FindOrCreateUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _DatastoreProvider_FindOrCreateUser_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(FindOrCreateUserRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DatastorePluginServer).FindOrCreateUser(ctx, in)
+		return srv.(DatastoreProviderServer).FindOrCreateUser(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: DatastorePlugin_FindOrCreateUser_FullMethodName,
+		FullMethod: DatastoreProvider_FindOrCreateUser_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DatastorePluginServer).FindOrCreateUser(ctx, req.(*FindOrCreateUserRequest))
+		return srv.(DatastoreProviderServer).FindOrCreateUser(ctx, req.(*FindOrCreateUserRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _DatastorePlugin_PutStoredIntegrationToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _DatastoreProvider_PutStoredIntegrationToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(StoredIntegrationToken)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DatastorePluginServer).PutStoredIntegrationToken(ctx, in)
+		return srv.(DatastoreProviderServer).PutStoredIntegrationToken(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: DatastorePlugin_PutStoredIntegrationToken_FullMethodName,
+		FullMethod: DatastoreProvider_PutStoredIntegrationToken_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DatastorePluginServer).PutStoredIntegrationToken(ctx, req.(*StoredIntegrationToken))
+		return srv.(DatastoreProviderServer).PutStoredIntegrationToken(ctx, req.(*StoredIntegrationToken))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _DatastorePlugin_GetStoredIntegrationToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _DatastoreProvider_GetStoredIntegrationToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetStoredIntegrationTokenRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DatastorePluginServer).GetStoredIntegrationToken(ctx, in)
+		return srv.(DatastoreProviderServer).GetStoredIntegrationToken(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: DatastorePlugin_GetStoredIntegrationToken_FullMethodName,
+		FullMethod: DatastoreProvider_GetStoredIntegrationToken_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DatastorePluginServer).GetStoredIntegrationToken(ctx, req.(*GetStoredIntegrationTokenRequest))
+		return srv.(DatastoreProviderServer).GetStoredIntegrationToken(ctx, req.(*GetStoredIntegrationTokenRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _DatastorePlugin_ListStoredIntegrationTokens_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _DatastoreProvider_ListStoredIntegrationTokens_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListStoredIntegrationTokensRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DatastorePluginServer).ListStoredIntegrationTokens(ctx, in)
+		return srv.(DatastoreProviderServer).ListStoredIntegrationTokens(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: DatastorePlugin_ListStoredIntegrationTokens_FullMethodName,
+		FullMethod: DatastoreProvider_ListStoredIntegrationTokens_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DatastorePluginServer).ListStoredIntegrationTokens(ctx, req.(*ListStoredIntegrationTokensRequest))
+		return srv.(DatastoreProviderServer).ListStoredIntegrationTokens(ctx, req.(*ListStoredIntegrationTokensRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _DatastorePlugin_DeleteStoredIntegrationToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _DatastoreProvider_DeleteStoredIntegrationToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(DeleteStoredIntegrationTokenRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DatastorePluginServer).DeleteStoredIntegrationToken(ctx, in)
+		return srv.(DatastoreProviderServer).DeleteStoredIntegrationToken(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: DatastorePlugin_DeleteStoredIntegrationToken_FullMethodName,
+		FullMethod: DatastoreProvider_DeleteStoredIntegrationToken_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DatastorePluginServer).DeleteStoredIntegrationToken(ctx, req.(*DeleteStoredIntegrationTokenRequest))
+		return srv.(DatastoreProviderServer).DeleteStoredIntegrationToken(ctx, req.(*DeleteStoredIntegrationTokenRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _DatastorePlugin_PutAPIToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _DatastoreProvider_PutAPIToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(StoredAPIToken)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DatastorePluginServer).PutAPIToken(ctx, in)
+		return srv.(DatastoreProviderServer).PutAPIToken(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: DatastorePlugin_PutAPIToken_FullMethodName,
+		FullMethod: DatastoreProvider_PutAPIToken_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DatastorePluginServer).PutAPIToken(ctx, req.(*StoredAPIToken))
+		return srv.(DatastoreProviderServer).PutAPIToken(ctx, req.(*StoredAPIToken))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _DatastorePlugin_GetAPITokenByHash_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _DatastoreProvider_GetAPITokenByHash_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetAPITokenByHashRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DatastorePluginServer).GetAPITokenByHash(ctx, in)
+		return srv.(DatastoreProviderServer).GetAPITokenByHash(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: DatastorePlugin_GetAPITokenByHash_FullMethodName,
+		FullMethod: DatastoreProvider_GetAPITokenByHash_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DatastorePluginServer).GetAPITokenByHash(ctx, req.(*GetAPITokenByHashRequest))
+		return srv.(DatastoreProviderServer).GetAPITokenByHash(ctx, req.(*GetAPITokenByHashRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _DatastorePlugin_ListAPITokens_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _DatastoreProvider_ListAPITokens_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ListAPITokensRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DatastorePluginServer).ListAPITokens(ctx, in)
+		return srv.(DatastoreProviderServer).ListAPITokens(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: DatastorePlugin_ListAPITokens_FullMethodName,
+		FullMethod: DatastoreProvider_ListAPITokens_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DatastorePluginServer).ListAPITokens(ctx, req.(*ListAPITokensRequest))
+		return srv.(DatastoreProviderServer).ListAPITokens(ctx, req.(*ListAPITokensRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _DatastorePlugin_RevokeAPIToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _DatastoreProvider_RevokeAPIToken_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(RevokeAPITokenRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DatastorePluginServer).RevokeAPIToken(ctx, in)
+		return srv.(DatastoreProviderServer).RevokeAPIToken(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: DatastorePlugin_RevokeAPIToken_FullMethodName,
+		FullMethod: DatastoreProvider_RevokeAPIToken_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DatastorePluginServer).RevokeAPIToken(ctx, req.(*RevokeAPITokenRequest))
+		return srv.(DatastoreProviderServer).RevokeAPIToken(ctx, req.(*RevokeAPITokenRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _DatastorePlugin_RevokeAllAPITokens_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _DatastoreProvider_RevokeAllAPITokens_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(RevokeAllAPITokensRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DatastorePluginServer).RevokeAllAPITokens(ctx, in)
+		return srv.(DatastoreProviderServer).RevokeAllAPITokens(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: DatastorePlugin_RevokeAllAPITokens_FullMethodName,
+		FullMethod: DatastoreProvider_RevokeAllAPITokens_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DatastorePluginServer).RevokeAllAPITokens(ctx, req.(*RevokeAllAPITokensRequest))
+		return srv.(DatastoreProviderServer).RevokeAllAPITokens(ctx, req.(*RevokeAllAPITokensRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _DatastorePlugin_GetOAuthRegistration_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _DatastoreProvider_GetOAuthRegistration_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetOAuthRegistrationRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DatastorePluginServer).GetOAuthRegistration(ctx, in)
+		return srv.(DatastoreProviderServer).GetOAuthRegistration(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: DatastorePlugin_GetOAuthRegistration_FullMethodName,
+		FullMethod: DatastoreProvider_GetOAuthRegistration_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DatastorePluginServer).GetOAuthRegistration(ctx, req.(*GetOAuthRegistrationRequest))
+		return srv.(DatastoreProviderServer).GetOAuthRegistration(ctx, req.(*GetOAuthRegistrationRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _DatastorePlugin_PutOAuthRegistration_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _DatastoreProvider_PutOAuthRegistration_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(OAuthRegistration)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DatastorePluginServer).PutOAuthRegistration(ctx, in)
+		return srv.(DatastoreProviderServer).PutOAuthRegistration(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: DatastorePlugin_PutOAuthRegistration_FullMethodName,
+		FullMethod: DatastoreProvider_PutOAuthRegistration_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DatastorePluginServer).PutOAuthRegistration(ctx, req.(*OAuthRegistration))
+		return srv.(DatastoreProviderServer).PutOAuthRegistration(ctx, req.(*OAuthRegistration))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _DatastorePlugin_DeleteOAuthRegistration_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _DatastoreProvider_DeleteOAuthRegistration_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(DeleteOAuthRegistrationRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(DatastorePluginServer).DeleteOAuthRegistration(ctx, in)
+		return srv.(DatastoreProviderServer).DeleteOAuthRegistration(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: DatastorePlugin_DeleteOAuthRegistration_FullMethodName,
+		FullMethod: DatastoreProvider_DeleteOAuthRegistration_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DatastorePluginServer).DeleteOAuthRegistration(ctx, req.(*DeleteOAuthRegistrationRequest))
+		return srv.(DatastoreProviderServer).DeleteOAuthRegistration(ctx, req.(*DeleteOAuthRegistrationRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-// DatastorePlugin_ServiceDesc is the grpc.ServiceDesc for DatastorePlugin service.
+// DatastoreProvider_ServiceDesc is the grpc.ServiceDesc for DatastoreProvider service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
-var DatastorePlugin_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "gestalt.plugin.v1.DatastorePlugin",
-	HandlerType: (*DatastorePluginServer)(nil),
+var DatastoreProvider_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "gestalt.plugin.v1.DatastoreProvider",
+	HandlerType: (*DatastoreProviderServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
 			MethodName: "Migrate",
-			Handler:    _DatastorePlugin_Migrate_Handler,
+			Handler:    _DatastoreProvider_Migrate_Handler,
 		},
 		{
 			MethodName: "GetUser",
-			Handler:    _DatastorePlugin_GetUser_Handler,
+			Handler:    _DatastoreProvider_GetUser_Handler,
 		},
 		{
 			MethodName: "FindOrCreateUser",
-			Handler:    _DatastorePlugin_FindOrCreateUser_Handler,
+			Handler:    _DatastoreProvider_FindOrCreateUser_Handler,
 		},
 		{
 			MethodName: "PutStoredIntegrationToken",
-			Handler:    _DatastorePlugin_PutStoredIntegrationToken_Handler,
+			Handler:    _DatastoreProvider_PutStoredIntegrationToken_Handler,
 		},
 		{
 			MethodName: "GetStoredIntegrationToken",
-			Handler:    _DatastorePlugin_GetStoredIntegrationToken_Handler,
+			Handler:    _DatastoreProvider_GetStoredIntegrationToken_Handler,
 		},
 		{
 			MethodName: "ListStoredIntegrationTokens",
-			Handler:    _DatastorePlugin_ListStoredIntegrationTokens_Handler,
+			Handler:    _DatastoreProvider_ListStoredIntegrationTokens_Handler,
 		},
 		{
 			MethodName: "DeleteStoredIntegrationToken",
-			Handler:    _DatastorePlugin_DeleteStoredIntegrationToken_Handler,
+			Handler:    _DatastoreProvider_DeleteStoredIntegrationToken_Handler,
 		},
 		{
 			MethodName: "PutAPIToken",
-			Handler:    _DatastorePlugin_PutAPIToken_Handler,
+			Handler:    _DatastoreProvider_PutAPIToken_Handler,
 		},
 		{
 			MethodName: "GetAPITokenByHash",
-			Handler:    _DatastorePlugin_GetAPITokenByHash_Handler,
+			Handler:    _DatastoreProvider_GetAPITokenByHash_Handler,
 		},
 		{
 			MethodName: "ListAPITokens",
-			Handler:    _DatastorePlugin_ListAPITokens_Handler,
+			Handler:    _DatastoreProvider_ListAPITokens_Handler,
 		},
 		{
 			MethodName: "RevokeAPIToken",
-			Handler:    _DatastorePlugin_RevokeAPIToken_Handler,
+			Handler:    _DatastoreProvider_RevokeAPIToken_Handler,
 		},
 		{
 			MethodName: "RevokeAllAPITokens",
-			Handler:    _DatastorePlugin_RevokeAllAPITokens_Handler,
+			Handler:    _DatastoreProvider_RevokeAllAPITokens_Handler,
 		},
 		{
 			MethodName: "GetOAuthRegistration",
-			Handler:    _DatastorePlugin_GetOAuthRegistration_Handler,
+			Handler:    _DatastoreProvider_GetOAuthRegistration_Handler,
 		},
 		{
 			MethodName: "PutOAuthRegistration",
-			Handler:    _DatastorePlugin_PutOAuthRegistration_Handler,
+			Handler:    _DatastoreProvider_PutOAuthRegistration_Handler,
 		},
 		{
 			MethodName: "DeleteOAuthRegistration",
-			Handler:    _DatastorePlugin_DeleteOAuthRegistration_Handler,
+			Handler:    _DatastoreProvider_DeleteOAuthRegistration_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

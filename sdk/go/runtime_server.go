@@ -10,12 +10,12 @@ import (
 )
 
 type runtimeServer struct {
-	proto.UnimplementedPluginRuntimeServer
+	proto.UnimplementedProviderLifecycleServer
 	kind     proto.PluginKind
-	provider RuntimeProvider
+	provider PluginProvider
 }
 
-func newRuntimeProviderServer(kind ProviderKind, provider RuntimeProvider) *runtimeServer {
+func newPluginProviderServer(kind ProviderKind, provider PluginProvider) *runtimeServer {
 	return &runtimeServer{
 		kind:     providerKindToProto(kind),
 		provider: provider,

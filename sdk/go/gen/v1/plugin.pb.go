@@ -928,7 +928,7 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"\x14CONNECTION_MODE_USER\x10\x02\x12\x1c\n" +
 	"\x18CONNECTION_MODE_IDENTITY\x10\x03\x12\x1a\n" +
 	"\x16CONNECTION_MODE_EITHER\x10\x042\xe0\x03\n" +
-	"\x0eProviderPlugin\x12J\n" +
+	"\x0ePluginProvider\x12J\n" +
 	"\vGetMetadata\x12\x16.google.protobuf.Empty\x1a#.gestalt.plugin.v1.ProviderMetadata\x12b\n" +
 	"\rStartProvider\x12'.gestalt.plugin.v1.StartProviderRequest\x1a(.gestalt.plugin.v1.StartProviderResponse\x12P\n" +
 	"\aExecute\x12!.gestalt.plugin.v1.ExecuteRequest\x1a\".gestalt.plugin.v1.OperationResult\x12n\n" +
@@ -985,16 +985,16 @@ var file_v1_plugin_proto_depIdxs = []int32{
 	15, // 10: gestalt.plugin.v1.PostConnectResponse.metadata:type_name -> gestalt.plugin.v1.PostConnectResponse.MetadataEntry
 	17, // 11: gestalt.plugin.v1.StartProviderRequest.config:type_name -> google.protobuf.Struct
 	1,  // 12: gestalt.plugin.v1.ProviderMetadata.ConnectionParamsEntry.value:type_name -> gestalt.plugin.v1.ConnectionParamDef
-	18, // 13: gestalt.plugin.v1.ProviderPlugin.GetMetadata:input_type -> google.protobuf.Empty
-	10, // 14: gestalt.plugin.v1.ProviderPlugin.StartProvider:input_type -> gestalt.plugin.v1.StartProviderRequest
-	5,  // 15: gestalt.plugin.v1.ProviderPlugin.Execute:input_type -> gestalt.plugin.v1.ExecuteRequest
-	6,  // 16: gestalt.plugin.v1.ProviderPlugin.GetSessionCatalog:input_type -> gestalt.plugin.v1.GetSessionCatalogRequest
-	8,  // 17: gestalt.plugin.v1.ProviderPlugin.PostConnect:input_type -> gestalt.plugin.v1.PostConnectRequest
-	2,  // 18: gestalt.plugin.v1.ProviderPlugin.GetMetadata:output_type -> gestalt.plugin.v1.ProviderMetadata
-	11, // 19: gestalt.plugin.v1.ProviderPlugin.StartProvider:output_type -> gestalt.plugin.v1.StartProviderResponse
-	3,  // 20: gestalt.plugin.v1.ProviderPlugin.Execute:output_type -> gestalt.plugin.v1.OperationResult
-	7,  // 21: gestalt.plugin.v1.ProviderPlugin.GetSessionCatalog:output_type -> gestalt.plugin.v1.GetSessionCatalogResponse
-	9,  // 22: gestalt.plugin.v1.ProviderPlugin.PostConnect:output_type -> gestalt.plugin.v1.PostConnectResponse
+	18, // 13: gestalt.plugin.v1.PluginProvider.GetMetadata:input_type -> google.protobuf.Empty
+	10, // 14: gestalt.plugin.v1.PluginProvider.StartProvider:input_type -> gestalt.plugin.v1.StartProviderRequest
+	5,  // 15: gestalt.plugin.v1.PluginProvider.Execute:input_type -> gestalt.plugin.v1.ExecuteRequest
+	6,  // 16: gestalt.plugin.v1.PluginProvider.GetSessionCatalog:input_type -> gestalt.plugin.v1.GetSessionCatalogRequest
+	8,  // 17: gestalt.plugin.v1.PluginProvider.PostConnect:input_type -> gestalt.plugin.v1.PostConnectRequest
+	2,  // 18: gestalt.plugin.v1.PluginProvider.GetMetadata:output_type -> gestalt.plugin.v1.ProviderMetadata
+	11, // 19: gestalt.plugin.v1.PluginProvider.StartProvider:output_type -> gestalt.plugin.v1.StartProviderResponse
+	3,  // 20: gestalt.plugin.v1.PluginProvider.Execute:output_type -> gestalt.plugin.v1.OperationResult
+	7,  // 21: gestalt.plugin.v1.PluginProvider.GetSessionCatalog:output_type -> gestalt.plugin.v1.GetSessionCatalogResponse
+	9,  // 22: gestalt.plugin.v1.PluginProvider.PostConnect:output_type -> gestalt.plugin.v1.PostConnectResponse
 	18, // [18:23] is the sub-list for method output_type
 	13, // [13:18] is the sub-list for method input_type
 	13, // [13:13] is the sub-list for extension type_name

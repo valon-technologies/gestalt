@@ -26,7 +26,7 @@ if _version_not_supported:
     )
 
 
-class AuthPluginStub(object):
+class AuthProviderStub(object):
     """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
@@ -36,28 +36,28 @@ class AuthPluginStub(object):
             channel: A grpc.Channel.
         """
         self.BeginLogin = channel.unary_unary(
-                '/gestalt.plugin.v1.AuthPlugin/BeginLogin',
+                '/gestalt.plugin.v1.AuthProvider/BeginLogin',
                 request_serializer=v1_dot_auth__pb2.BeginLoginRequest.SerializeToString,
                 response_deserializer=v1_dot_auth__pb2.BeginLoginResponse.FromString,
                 _registered_method=True)
         self.CompleteLogin = channel.unary_unary(
-                '/gestalt.plugin.v1.AuthPlugin/CompleteLogin',
+                '/gestalt.plugin.v1.AuthProvider/CompleteLogin',
                 request_serializer=v1_dot_auth__pb2.CompleteLoginRequest.SerializeToString,
                 response_deserializer=v1_dot_auth__pb2.AuthenticatedUser.FromString,
                 _registered_method=True)
         self.ValidateExternalToken = channel.unary_unary(
-                '/gestalt.plugin.v1.AuthPlugin/ValidateExternalToken',
+                '/gestalt.plugin.v1.AuthProvider/ValidateExternalToken',
                 request_serializer=v1_dot_auth__pb2.ValidateExternalTokenRequest.SerializeToString,
                 response_deserializer=v1_dot_auth__pb2.AuthenticatedUser.FromString,
                 _registered_method=True)
         self.GetSessionSettings = channel.unary_unary(
-                '/gestalt.plugin.v1.AuthPlugin/GetSessionSettings',
+                '/gestalt.plugin.v1.AuthProvider/GetSessionSettings',
                 request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
                 response_deserializer=v1_dot_auth__pb2.AuthSessionSettings.FromString,
                 _registered_method=True)
 
 
-class AuthPluginServicer(object):
+class AuthProviderServicer(object):
     """Missing associated documentation comment in .proto file."""
 
     def BeginLogin(self, request, context):
@@ -85,7 +85,7 @@ class AuthPluginServicer(object):
         raise NotImplementedError('Method not implemented!')
 
 
-def add_AuthPluginServicer_to_server(servicer, server):
+def add_AuthProviderServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'BeginLogin': grpc.unary_unary_rpc_method_handler(
                     servicer.BeginLogin,
@@ -109,13 +109,13 @@ def add_AuthPluginServicer_to_server(servicer, server):
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'gestalt.plugin.v1.AuthPlugin', rpc_method_handlers)
+            'gestalt.plugin.v1.AuthProvider', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('gestalt.plugin.v1.AuthPlugin', rpc_method_handlers)
+    server.add_registered_method_handlers('gestalt.plugin.v1.AuthProvider', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
-class AuthPlugin(object):
+class AuthProvider(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
@@ -132,7 +132,7 @@ class AuthPlugin(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.AuthPlugin/BeginLogin',
+            '/gestalt.plugin.v1.AuthProvider/BeginLogin',
             v1_dot_auth__pb2.BeginLoginRequest.SerializeToString,
             v1_dot_auth__pb2.BeginLoginResponse.FromString,
             options,
@@ -159,7 +159,7 @@ class AuthPlugin(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.AuthPlugin/CompleteLogin',
+            '/gestalt.plugin.v1.AuthProvider/CompleteLogin',
             v1_dot_auth__pb2.CompleteLoginRequest.SerializeToString,
             v1_dot_auth__pb2.AuthenticatedUser.FromString,
             options,
@@ -186,7 +186,7 @@ class AuthPlugin(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.AuthPlugin/ValidateExternalToken',
+            '/gestalt.plugin.v1.AuthProvider/ValidateExternalToken',
             v1_dot_auth__pb2.ValidateExternalTokenRequest.SerializeToString,
             v1_dot_auth__pb2.AuthenticatedUser.FromString,
             options,
@@ -213,7 +213,7 @@ class AuthPlugin(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.AuthPlugin/GetSessionSettings',
+            '/gestalt.plugin.v1.AuthProvider/GetSessionSettings',
             google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             v1_dot_auth__pb2.AuthSessionSettings.FromString,
             options,
