@@ -135,11 +135,11 @@ The manifest stays the source of truth for display name, description, auth, the 
     Use the `sdk/rust/v*` tag that matches the SDK release you want to target.
   </Tabs.Tab>
   <Tabs.Tab>
-    You need Bun (or Node.js 22+) and a running `gestaltd` instance for testing.
+    You need Bun 1.3+ and a running `gestaltd` instance for testing.
 
     ```sh
     mkdir my-plugin && cd my-plugin
-    bun init
+    bun init -y
     bun add @valon-technologies/gestalt
     ```
 
@@ -152,11 +152,13 @@ The manifest stays the source of truth for display name, description, auth, the 
       provider.ts
     ```
 
-    Point `package.json` at the module that Gestalt should load:
+    Point `package.json` at the source file Gestalt should load:
 
     ```json
     {
       "name": "my-plugin",
+      "version": "0.0.1-alpha.1",
+      "private": true,
       "type": "module",
       "dependencies": {
         "@valon-technologies/gestalt": "0.0.1-alpha.1"
@@ -169,6 +171,24 @@ The manifest stays the source of truth for display name, description, auth, the 
       }
     }
     ```
+
+    A string `gestalt.provider` target defaults to a plugin provider. For auth
+    or datastore providers, use an object with an explicit kind:
+
+    ```json
+    {
+      "gestalt": {
+        "provider": {
+          "kind": "auth",
+          "target": "./auth.ts#provider"
+        }
+      }
+    }
+    ```
+
+    Use `"plugin"` when you need to spell the plugin kind explicitly. The
+    legacy `integration` spelling and the older `gestalt.plugin` shorthand are
+    still accepted.
   </Tabs.Tab>
 </Tabs>
 
@@ -361,7 +381,7 @@ Operations are the callable units of a plugin. Each operation has an ID, an HTTP
           description: "Return a greeting message",
           readOnly: true,
           input: s.object({
-            name: s.optional(s.string({ description: "Name to greet", default: "World" })),
+            name: s.string({ description: "Name to greet", default: "World" }),
           }),
           output: s.object({
             message: s.string(),
@@ -373,6 +393,11 @@ Operations are the callable units of a plugin. Each operation has an ID, an HTTP
       ],
     });
     ```
+
+    The `package.json` field `gestalt.provider` points Gestalt at the provider
+    module and optional export. Use a string target such as
+    `./provider.ts#provider` for plugin providers, or an object with `kind` and
+    `target` for auth and datastore providers.
   </Tabs.Tab>
 </Tabs>
 
@@ -425,19 +450,24 @@ The router derives catalog parameters from the input type. Fields are required b
     Fields are required unless you model them as `Option<T>` or provide a serde default. Use `schemars(description = "...")` for catalog descriptions and serde defaults for scalar defaults.
   </Tabs.Tab>
   <Tabs.Tab>
-    ```typescript
-    import { s } from "@valon-technologies/gestalt";
-
-    const searchInput = s.object({
+    ```ts
+    const SearchInput = s.object({
       query: s.string({ description: "Search query" }),
-      max_items: s.optional(s.integer({ description: "Maximum results", default: 10 })),
-      filters: s.optional(s.object({
-        status: s.optional(s.string()),
-      })),
+      max_items: s.integer({ description: "Maximum results", default: 10 }),
+      filters: s.optional(
+        s.object(
+          {
+            status: s.optional(s.string()),
+          },
+          { description: "Optional filter set" },
+        ),
+      ),
     });
     ```
 
-    Fields are required by default. Wrap with `s.optional()` for optional fields. Use `s.object()` for nested types and `s.array()` for collections.
+    TypeScript plugins describe runtime input schemas explicitly. Requiredness,
+    descriptions, defaults, nested objects, and arrays come from that schema
+    definition rather than from erased TypeScript types.
   </Tabs.Tab>
 </Tabs>
 
@@ -528,7 +558,11 @@ By default, the operation catalog is static and materialized at startup. If your
           name: "my-plugin-session",
           displayName: request.token,
           operations: [
-            { id: "search_private", method: "POST", readOnly: true },
+            {
+              id: "search_private",
+              method: "POST",
+              readOnly: true,
+            },
           ],
         };
       },

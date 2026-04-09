@@ -170,43 +170,65 @@ A datastore provider is a larger interface than auth or integration providers. I
     OAuth registration methods (`get_oauth_registration`, `put_oauth_registration`, `delete_oauth_registration`) have default implementations that return unimplemented errors. Override them to support MCP OAuth.
   </Tabs.Tab>
   <Tabs.Tab>
-    ```typescript
-    import { defineDatastoreProvider, type StoredUser, type StoredIntegrationToken, type StoredAPIToken } from "@valon-technologies/gestalt";
+    ```ts
+    import { defineDatastoreProvider } from "@valon-technologies/gestalt";
+
+    const users = new Map<string, { id: string; email: string }>();
 
     export const provider = defineDatastoreProvider({
-      configure(_name, config) {
-        // Initialize database connection from config.dsn
+      async healthCheck() {},
+      async migrate() {},
+      async getUser(id) {
+        return users.get(id) ?? null;
       },
-      migrate() {
-        // Create users, integration_tokens, and api_tokens tables.
+      async findOrCreateUser(email) {
+        const user = users.get(email) ?? { id: email, email };
+        users.set(email, user);
+        return user;
       },
-
-      // UserStore
-      getUser(id) { /* ... */ },
-      findOrCreateUser(email) { /* ... */ },
-
-      // IntegrationTokenStore (tokens are pre-sealed by the host)
-      putIntegrationToken(token) { /* ... */ },
-      getIntegrationToken(userId, integration, connection, instance) { /* ... */ },
-      listIntegrationTokens(userId, integration, connection) { /* ... */ },
-      deleteIntegrationToken(id) { /* ... */ },
-
-      // APITokenStore (tokens are SHA-256 hashed, not encrypted)
-      putApiToken(token) { /* ... */ },
-      getApiTokenByHash(hashedToken) { /* ... */ },
-      listApiTokens(userId) { /* ... */ },
-      revokeApiToken(userId, id) { /* ... */ },
-      revokeAllApiTokens(userId) { /* ... */ },
+      async putIntegrationToken() {},
+      async getIntegrationToken() {
+        return null;
+      },
+      async listIntegrationTokens() {
+        return [];
+      },
+      async deleteIntegrationToken() {},
+      async putApiToken() {},
+      async getApiTokenByHash() {
+        return null;
+      },
+      async listApiTokens() {
+        return [];
+      },
+      async revokeApiToken() {},
+      async revokeAllApiTokens() {
+        return 0;
+      },
     });
     ```
 
-    Optional handlers: `getOAuthRegistration`, `putOAuthRegistration`, `deleteOAuthRegistration` for MCP OAuth dynamic client registration.
+    Point `package.json` at the datastore provider with `gestalt.provider`:
+
+    ```json
+    {
+      "gestalt": {
+        "provider": {
+          "kind": "datastore",
+          "target": "./datastore.ts#provider"
+        }
+      }
+    }
+    ```
+
+    Optional handlers: `getOAuthRegistration`, `putOAuthRegistration`, and
+    `deleteOAuthRegistration` support MCP OAuth dynamic client registration.
   </Tabs.Tab>
 </Tabs>
 
 ## OAuthRegistrationStore
 
-If your deployment uses MCP OAuth with dynamic client registration, the datastore needs to store OAuth client registrations. This is an optional interface. Implement `GetOAuthRegistration`, `PutOAuthRegistration`, and `DeleteOAuthRegistration` in Go, inherit from `gestalt.OAuthRegistrationStore` in Python, or override the default methods in Rust.
+If your deployment uses MCP OAuth with dynamic client registration, the datastore needs to store OAuth client registrations. This is an optional interface. Implement `GetOAuthRegistration`, `PutOAuthRegistration`, and `DeleteOAuthRegistration` in Go, inherit from `gestalt.OAuthRegistrationStore` in Python, override the default methods in Rust, or provide the optional `getOAuthRegistration`, `putOAuthRegistration`, and `deleteOAuthRegistration` handlers in TypeScript.
 
 Deployments that do not use MCP OAuth can skip this entirely. The default implementations return unimplemented errors, which is the correct behavior when MCP OAuth is not configured.
 
