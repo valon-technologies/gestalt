@@ -11,7 +11,7 @@ export const provider = defineAuthProvider({
   beginLogin(request) {
     return {
       authorizationUrl: `${configuredIssuer}/authorize?state=upstream-state&host=${encodeURIComponent(request.hostState)}`,
-      pluginState: new Uint8Array([1, 2, 3]),
+      providerState: new Uint8Array([1, 2, 3]),
     };
   },
   completeLogin(request) {

@@ -5,11 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/timestamppb"
 	"gopkg.in/yaml.v3"
 )
 
@@ -38,44 +36,4 @@ func writeCatalogYAML(cat *proto.Catalog, path string) error {
 		return fmt.Errorf("close YAML encoder: %w", err)
 	}
 	return os.WriteFile(path, buf.Bytes(), 0o644)
-}
-
-func cloneStringMap(values map[string]string) map[string]string {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(values))
-	for key, value := range values {
-		out[key] = value
-	}
-	return out
-}
-
-func timeToProto(value time.Time) *timestamppb.Timestamp {
-	if value.IsZero() {
-		return nil
-	}
-	return timestamppb.New(value)
-}
-
-func timePtrToProto(value *time.Time) *timestamppb.Timestamp {
-	if value == nil {
-		return nil
-	}
-	return timestamppb.New(*value)
-}
-
-func protoToTime(value *timestamppb.Timestamp) time.Time {
-	if value == nil {
-		return time.Time{}
-	}
-	return value.AsTime()
-}
-
-func protoToTimePtr(value *timestamppb.Timestamp) *time.Time {
-	if value == nil {
-		return nil
-	}
-	t := value.AsTime()
-	return &t
 }

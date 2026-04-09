@@ -23,40 +23,28 @@ func (s *authServer) BeginLogin(ctx context.Context, req *proto.BeginLoginReques
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	resp, err := s.auth.BeginLogin(ctx, BeginLoginRequest{
-		CallbackURL: req.GetCallbackUrl(),
-		HostState:   req.GetHostState(),
-		Scopes:      append([]string(nil), req.GetScopes()...),
-		Options:     cloneStringMap(req.GetOptions()),
-	})
+	resp, err := s.auth.BeginLogin(ctx, req)
 	if err != nil {
 		return nil, providerRPCError("begin login", err)
 	}
 	if resp == nil {
 		return nil, status.Error(codes.Internal, "auth provider returned nil response")
 	}
-	return &proto.BeginLoginResponse{
-		AuthorizationUrl: resp.AuthorizationURL,
-		PluginState:      append([]byte(nil), resp.ProviderState...),
-	}, nil
+	return resp, nil
 }
 
 func (s *authServer) CompleteLogin(ctx context.Context, req *proto.CompleteLoginRequest) (*proto.AuthenticatedUser, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	user, err := s.auth.CompleteLogin(ctx, CompleteLoginRequest{
-		Query:         cloneStringMap(req.GetQuery()),
-		ProviderState: append([]byte(nil), req.GetPluginState()...),
-		CallbackURL:   req.GetCallbackUrl(),
-	})
+	user, err := s.auth.CompleteLogin(ctx, req)
 	if err != nil {
 		return nil, providerRPCError("complete login", err)
 	}
 	if user == nil {
 		return nil, status.Error(codes.Internal, "auth provider returned nil user")
 	}
-	return authenticatedUserToProto(user), nil
+	return user, nil
 }
 
 func (s *authServer) ValidateExternalToken(ctx context.Context, req *proto.ValidateExternalTokenRequest) (*proto.AuthenticatedUser, error) {
@@ -74,7 +62,7 @@ func (s *authServer) ValidateExternalToken(ctx context.Context, req *proto.Valid
 	if user == nil {
 		return nil, status.Error(codes.NotFound, "token not recognized")
 	}
-	return authenticatedUserToProto(user), nil
+	return user, nil
 }
 
 func (s *authServer) GetSessionSettings(context.Context, *emptypb.Empty) (*proto.AuthSessionSettings, error) {
@@ -89,18 +77,4 @@ func (s *authServer) GetSessionSettings(context.Context, *emptypb.Empty) (*proto
 	return &proto.AuthSessionSettings{
 		SessionTtlSeconds: int64(ttl / time.Second),
 	}, nil
-}
-
-func authenticatedUserToProto(user *AuthenticatedUser) *proto.AuthenticatedUser {
-	if user == nil {
-		return nil
-	}
-	return &proto.AuthenticatedUser{
-		Subject:       user.Subject,
-		Email:         user.Email,
-		EmailVerified: user.EmailVerified,
-		DisplayName:   user.DisplayName,
-		AvatarUrl:     user.AvatarURL,
-		Claims:        cloneStringMap(user.Claims),
-	}
 }

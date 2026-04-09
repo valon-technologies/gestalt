@@ -51,14 +51,14 @@ func (p *fullAuthProvider) SessionTTL() time.Duration {
 	return 30 * time.Minute
 }
 
-func (p *fullAuthProvider) BeginLogin(_ context.Context, _ gestalt.BeginLoginRequest) (*gestalt.BeginLoginResponse, error) {
+func (p *fullAuthProvider) BeginLogin(_ context.Context, _ *gestalt.BeginLoginRequest) (*gestalt.BeginLoginResponse, error) {
 	return &gestalt.BeginLoginResponse{
-		AuthorizationURL: "https://auth.example.test/login",
+		AuthorizationUrl: "https://auth.example.test/login",
 		ProviderState:    []byte("state-data"),
 	}, nil
 }
 
-func (p *fullAuthProvider) CompleteLogin(_ context.Context, _ gestalt.CompleteLoginRequest) (*gestalt.AuthenticatedUser, error) {
+func (p *fullAuthProvider) CompleteLogin(_ context.Context, _ *gestalt.CompleteLoginRequest) (*gestalt.AuthenticatedUser, error) {
 	return testAuthUser(), nil
 }
 
@@ -75,7 +75,7 @@ func testAuthUser() *gestalt.AuthenticatedUser {
 		Email:         "user@example.test",
 		EmailVerified: true,
 		DisplayName:   "Test User",
-		AvatarURL:     "https://example.test/avatar.png",
+		AvatarUrl:     "https://example.test/avatar.png",
 		Claims:        map[string]string{"role": "admin"},
 	}
 }
@@ -168,14 +168,14 @@ func TestAuthProviderRoundTrip(t *testing.T) {
 	if beginResp.GetAuthorizationUrl() != "https://auth.example.test/login" {
 		t.Fatalf("authorization_url = %q, want %q", beginResp.GetAuthorizationUrl(), "https://auth.example.test/login")
 	}
-	if !bytes.Equal(beginResp.GetPluginState(), []byte("state-data")) {
-		t.Fatalf("plugin_state = %q, want %q", beginResp.GetPluginState(), "state-data")
+	if !bytes.Equal(beginResp.GetProviderState(), []byte("state-data")) {
+		t.Fatalf("provider_state = %q, want %q", beginResp.GetProviderState(), "state-data")
 	}
 
 	completeResp, err := authClient.CompleteLogin(rpcCtx, &proto.CompleteLoginRequest{
-		Query:       map[string]string{"code": "auth-code"},
-		PluginState: []byte("state-data"),
-		CallbackUrl: "https://app.example.test/callback",
+		Query:         map[string]string{"code": "auth-code"},
+		ProviderState: []byte("state-data"),
+		CallbackUrl:   "https://app.example.test/callback",
 	})
 	if err != nil {
 		t.Fatalf("CompleteLogin: %v", err)

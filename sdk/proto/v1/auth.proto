@@ -24,12 +24,12 @@ message BeginLoginRequest {
 
 message BeginLoginResponse {
   string authorization_url = 1;
-  bytes plugin_state = 2;
+  bytes provider_state = 2;
 }
 
 message CompleteLoginRequest {
   map<string, string> query = 1;
-  bytes plugin_state = 2;
+  bytes provider_state = 2;
   string callback_url = 3;
 }
 

@@ -1,4 +1,3 @@
-import datetime as dt
 import functools
 import importlib
 import os
@@ -14,23 +13,18 @@ from typing import Any, Final, cast
 import grpc
 from google.protobuf import empty_pb2 as _empty_pb2
 from google.protobuf import json_format
-from google.protobuf import timestamp_pb2 as _timestamp_pb2
 
 from ._api import Request
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._catalog import catalog_to_proto
 from ._plugin import Plugin, _module_plugin
 from ._providers import (
-    AuthenticatedUser,
     AuthProvider,
-    BeginLoginRequest,
     Closer,
-    CompleteLoginRequest,
     DatastoreProvider,
     ExternalTokenValidator,
     HealthChecker,
     MetadataProvider,
-    OAuthRegistration,
     OAuthRegistrationStore,
     PluginProvider,
     PluginProviderAdapter,
@@ -38,9 +32,6 @@ from ._providers import (
     ProviderMetadata,
     SecretsProvider,
     SessionTTLProvider,
-    StoredAPIToken,
-    StoredIntegrationToken,
-    StoredUser,
     WarningsProvider,
 )
 from ._serialization import json_body
@@ -56,7 +47,6 @@ from .gen.v1 import secrets_pb2 as _secrets_pb2
 from .gen.v1 import secrets_pb2_grpc as _secrets_pb2_grpc
 
 empty_pb2: Any = _empty_pb2
-timestamp_pb2: Any = _timestamp_pb2
 plugin_pb2: Any = _plugin_pb2
 plugin_pb2_grpc: Any = _plugin_pb2_grpc
 runtime_pb2: Any = _runtime_pb2
@@ -67,8 +57,6 @@ datastore_pb2: Any = _datastore_pb2
 datastore_pb2_grpc: Any = _datastore_pb2_grpc
 secrets_pb2: Any = _secrets_pb2
 secrets_pb2_grpc: Any = _secrets_pb2_grpc
-
-UTC = dt.timezone.utc
 
 ENV_PLUGIN_SOCKET: Final[str] = "GESTALT_PLUGIN_SOCKET"
 ENV_WRITE_CATALOG: Final[str] = "GESTALT_PLUGIN_WRITE_CATALOG"
@@ -468,39 +456,23 @@ def _auth_servicer(*, provider: PluginProvider) -> Any:
     class AuthServicer(auth_pb2_grpc.AuthProviderServicer):
         @_grpc_handler("begin login")
         def BeginLogin(self, request: Any, context: Any) -> Any:
-            response = auth_provider.begin_login(
-                BeginLoginRequest(
-                    callback_url=request.callback_url,
-                    host_state=request.host_state,
-                    scopes=list(request.scopes),
-                    options=dict(request.options),
-                )
-            )
+            response = auth_provider.begin_login(request)
             if response is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
                     "auth provider returned nil response",
                 )
-            return auth_pb2.BeginLoginResponse(
-                authorization_url=response.authorization_url,
-                plugin_state=response.provider_state,
-            )
+            return response
 
         @_grpc_handler("complete login")
         def CompleteLogin(self, request: Any, context: Any) -> Any:
-            user = auth_provider.complete_login(
-                CompleteLoginRequest(
-                    query=dict(request.query),
-                    provider_state=request.plugin_state,
-                    callback_url=request.callback_url,
-                )
-            )
+            user = auth_provider.complete_login(request)
             if user is None:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
                     "auth provider returned nil user",
                 )
-            return _authenticated_user_to_proto(user)
+            return user
 
         def ValidateExternalToken(self, request: Any, context: Any) -> Any:
             if not isinstance(auth_provider, ExternalTokenValidator):
@@ -521,7 +493,7 @@ def _auth_servicer(*, provider: PluginProvider) -> Any:
                     grpc.StatusCode.NOT_FOUND,
                     "token not recognized",
                 )
-            return _authenticated_user_to_proto(user)
+            return user
 
         def GetSessionSettings(self, _request: Any, context: Any) -> Any:
             if not isinstance(auth_provider, SessionTTLProvider):
@@ -552,7 +524,7 @@ def _datastore_servicer(*, provider: PluginProvider) -> Any:
             user = datastore_provider.get_user(request.id)
             if user is None:
                 return context.abort(grpc.StatusCode.NOT_FOUND, "user not found")
-            return _stored_user_to_proto(user)
+            return user
 
         @_grpc_handler("find or create user")
         def FindOrCreateUser(self, request: Any, context: Any) -> Any:
@@ -562,13 +534,11 @@ def _datastore_servicer(*, provider: PluginProvider) -> Any:
                     grpc.StatusCode.INTERNAL,
                     "datastore plugin returned nil user",
                 )
-            return _stored_user_to_proto(user)
+            return user
 
         @_grpc_handler("put integration token")
         def PutStoredIntegrationToken(self, request: Any, context: Any) -> Any:
-            datastore_provider.put_integration_token(
-                _stored_integration_token_from_proto(request)
-            )
+            datastore_provider.put_integration_token(request)
             return empty_pb2.Empty()
 
         @_grpc_handler("get integration token")
@@ -584,7 +554,7 @@ def _datastore_servicer(*, provider: PluginProvider) -> Any:
                     grpc.StatusCode.NOT_FOUND,
                     "integration token not found",
                 )
-            return _stored_integration_token_to_proto(token)
+            return token
 
         @_grpc_handler("list integration tokens")
         def ListStoredIntegrationTokens(self, request: Any, context: Any) -> Any:
@@ -593,12 +563,7 @@ def _datastore_servicer(*, provider: PluginProvider) -> Any:
                 request.integration,
                 request.connection,
             )
-            return datastore_pb2.ListStoredIntegrationTokensResponse(
-                tokens=[
-                    _stored_integration_token_to_proto(token)
-                    for token in tokens
-                ]
-            )
+            return datastore_pb2.ListStoredIntegrationTokensResponse(tokens=tokens)
 
         @_grpc_handler("delete integration token")
         def DeleteStoredIntegrationToken(self, request: Any, context: Any) -> Any:
@@ -607,7 +572,7 @@ def _datastore_servicer(*, provider: PluginProvider) -> Any:
 
         @_grpc_handler("put api token")
         def PutAPIToken(self, request: Any, context: Any) -> Any:
-            datastore_provider.put_api_token(_stored_api_token_from_proto(request))
+            datastore_provider.put_api_token(request)
             return empty_pb2.Empty()
 
         @_grpc_handler("get api token by hash")
@@ -615,14 +580,12 @@ def _datastore_servicer(*, provider: PluginProvider) -> Any:
             token = datastore_provider.get_api_token_by_hash(request.hashed_token)
             if token is None:
                 return context.abort(grpc.StatusCode.NOT_FOUND, "api token not found")
-            return _stored_api_token_to_proto(token)
+            return token
 
         @_grpc_handler("list api tokens")
         def ListAPITokens(self, request: Any, context: Any) -> Any:
             tokens = datastore_provider.list_api_tokens(request.user_id)
-            return datastore_pb2.ListAPITokensResponse(
-                tokens=[_stored_api_token_to_proto(token) for token in tokens]
-            )
+            return datastore_pb2.ListAPITokensResponse(tokens=tokens)
 
         @_grpc_handler("revoke api token")
         def RevokeAPIToken(self, request: Any, context: Any) -> Any:
@@ -655,7 +618,7 @@ def _datastore_servicer(*, provider: PluginProvider) -> Any:
                     grpc.StatusCode.NOT_FOUND,
                     "oauth registration not found",
                 )
-            return _oauth_registration_to_proto(registration)
+            return registration
 
         def PutOAuthRegistration(self, request: Any, context: Any) -> Any:
             if not isinstance(datastore_provider, OAuthRegistrationStore):
@@ -664,9 +627,7 @@ def _datastore_servicer(*, provider: PluginProvider) -> Any:
                     "datastore provider does not support oauth registrations",
                 )
             try:
-                datastore_provider.put_oauth_registration(
-                    _oauth_registration_from_proto(request),
-                )
+                datastore_provider.put_oauth_registration(request)
             except Exception as error:
                 traceback.print_exception(error)
                 return context.abort(
@@ -764,150 +725,6 @@ def _normalized_runtime_kind(kind: ProviderKind | str | None) -> ProviderKind:
         except ValueError:
             return ProviderKind.INTEGRATION
     return ProviderKind.INTEGRATION
-
-
-def _authenticated_user_to_proto(user: AuthenticatedUser) -> Any:
-    return auth_pb2.AuthenticatedUser(
-        subject=user.subject,
-        email=user.email,
-        email_verified=user.email_verified,
-        display_name=user.display_name,
-        avatar_url=user.avatar_url,
-        claims=dict(user.claims),
-    )
-
-
-def _stored_user_to_proto(user: StoredUser) -> Any:
-    message = datastore_pb2.StoredUser(
-        id=user.id,
-        email=user.email,
-        display_name=user.display_name,
-    )
-    message.created_at.CopyFrom(_datetime_to_proto(user.created_at))
-    message.updated_at.CopyFrom(_datetime_to_proto(user.updated_at))
-    return message
-
-
-def _stored_integration_token_to_proto(token: StoredIntegrationToken) -> Any:
-    message = datastore_pb2.StoredIntegrationToken(
-        id=token.id,
-        user_id=token.user_id,
-        integration=token.integration,
-        connection=token.connection,
-        instance=token.instance,
-        access_token_sealed=token.access_token_sealed,
-        refresh_token_sealed=token.refresh_token_sealed,
-        scopes=token.scopes,
-        refresh_error_count=token.refresh_error_count,
-        connection_params=dict(token.connection_params),
-    )
-    _copy_optional_timestamp(message, "expires_at", _datetime_to_proto(token.expires_at))
-    _copy_optional_timestamp(message, "last_refreshed_at", _datetime_to_proto(token.last_refreshed_at))
-    message.created_at.CopyFrom(_datetime_to_proto(token.created_at))
-    message.updated_at.CopyFrom(_datetime_to_proto(token.updated_at))
-    return message
-
-
-def _stored_integration_token_from_proto(token: Any) -> StoredIntegrationToken:
-    return StoredIntegrationToken(
-        id=token.id,
-        user_id=token.user_id,
-        integration=token.integration,
-        connection=token.connection,
-        instance=token.instance,
-        access_token_sealed=bytes(token.access_token_sealed),
-        refresh_token_sealed=bytes(token.refresh_token_sealed),
-        scopes=token.scopes,
-        expires_at=_proto_to_datetime(token.expires_at),
-        last_refreshed_at=_proto_to_datetime(token.last_refreshed_at),
-        refresh_error_count=token.refresh_error_count,
-        connection_params=dict(token.connection_params),
-        created_at=_proto_to_datetime(token.created_at) or _unix_epoch(),
-        updated_at=_proto_to_datetime(token.updated_at) or _unix_epoch(),
-    )
-
-
-def _stored_api_token_to_proto(token: StoredAPIToken) -> Any:
-    message = datastore_pb2.StoredAPIToken(
-        id=token.id,
-        user_id=token.user_id,
-        name=token.name,
-        hashed_token=token.hashed_token,
-        scopes=token.scopes,
-    )
-    _copy_optional_timestamp(message, "expires_at", _datetime_to_proto(token.expires_at))
-    message.created_at.CopyFrom(_datetime_to_proto(token.created_at))
-    message.updated_at.CopyFrom(_datetime_to_proto(token.updated_at))
-    return message
-
-
-def _stored_api_token_from_proto(token: Any) -> StoredAPIToken:
-    return StoredAPIToken(
-        id=token.id,
-        user_id=token.user_id,
-        name=token.name,
-        hashed_token=token.hashed_token,
-        scopes=token.scopes,
-        expires_at=_proto_to_datetime(token.expires_at),
-        created_at=_proto_to_datetime(token.created_at) or _unix_epoch(),
-        updated_at=_proto_to_datetime(token.updated_at) or _unix_epoch(),
-    )
-
-
-def _oauth_registration_to_proto(registration: OAuthRegistration) -> Any:
-    message = datastore_pb2.OAuthRegistration(
-        auth_server_url=registration.auth_server_url,
-        redirect_uri=registration.redirect_uri,
-        client_id=registration.client_id,
-        client_secret_sealed=registration.client_secret_sealed,
-        authorization_endpoint=registration.authorization_endpoint,
-        token_endpoint=registration.token_endpoint,
-        scopes_supported=registration.scopes_supported,
-    )
-    _copy_optional_timestamp(message, "expires_at", _datetime_to_proto(registration.expires_at))
-    message.discovered_at.CopyFrom(_datetime_to_proto(registration.discovered_at))
-    return message
-
-
-def _oauth_registration_from_proto(registration: Any) -> OAuthRegistration:
-    return OAuthRegistration(
-        auth_server_url=registration.auth_server_url,
-        redirect_uri=registration.redirect_uri,
-        client_id=registration.client_id,
-        client_secret_sealed=bytes(registration.client_secret_sealed),
-        expires_at=_proto_to_datetime(registration.expires_at),
-        authorization_endpoint=registration.authorization_endpoint,
-        token_endpoint=registration.token_endpoint,
-        scopes_supported=registration.scopes_supported,
-        discovered_at=_proto_to_datetime(registration.discovered_at) or _unix_epoch(),
-    )
-
-
-def _datetime_to_proto(value: Any) -> Any:
-    if value is None:
-        return None
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=UTC)
-    timestamp = timestamp_pb2.Timestamp()
-    timestamp.FromDatetime(value.astimezone(UTC))
-    return timestamp
-
-
-def _proto_to_datetime(value: Any) -> Any:
-    if value is None:
-        return None
-    if hasattr(value, "seconds") and hasattr(value, "nanos") and value.seconds == 0 and value.nanos == 0:
-        return None
-    return value.ToDatetime(tzinfo=UTC)
-
-
-def _unix_epoch() -> Any:
-    return dt.datetime.fromtimestamp(0, tz=UTC)
-
-
-def _copy_optional_timestamp(message: Any, field_name: str, value: Any) -> None:
-    if value is not None:
-        getattr(message, field_name).CopyFrom(value)
 
 
 if __name__ == "__main__":

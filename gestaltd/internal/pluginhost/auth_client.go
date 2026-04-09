@@ -147,7 +147,7 @@ func (p *remoteAuthProvider) LoginURLContext(ctx context.Context, state string) 
 	if err != nil {
 		return "", err
 	}
-	encodedState, err := encodeAuthCallbackState(state, resp.GetPluginState(), upstreamState)
+	encodedState, err := encodeAuthCallbackState(state, resp.GetProviderState(), upstreamState)
 	if err != nil {
 		return "", err
 	}
@@ -193,9 +193,9 @@ func (p *remoteAuthProvider) HandleCallbackRequest(ctx context.Context, query ur
 	defer cancel()
 
 	resp, err := p.client.CompleteLogin(ctx, &proto.CompleteLoginRequest{
-		Query:       firstQueryValues(normalizedQuery),
-		PluginState: append([]byte(nil), pluginState...),
-		CallbackUrl: p.callbackURL,
+		Query:         firstQueryValues(normalizedQuery),
+		ProviderState: append([]byte(nil), pluginState...),
+		CallbackUrl:   p.callbackURL,
 	})
 	if err != nil {
 		return nil, "", fmt.Errorf("complete login: %w", err)
@@ -276,17 +276,6 @@ func authenticatedUserFromProto(user *proto.AuthenticatedUser) *core.UserIdentit
 		DisplayName: user.GetDisplayName(),
 		AvatarURL:   user.GetAvatarUrl(),
 	}
-}
-
-func cloneStringMapRuntime(values map[string]string) map[string]string {
-	if len(values) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(values))
-	for key, value := range values {
-		out[key] = value
-	}
-	return out
 }
 
 type authCallbackState struct {

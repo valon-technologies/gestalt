@@ -137,6 +137,7 @@ provider:
 }
 
 func TestCurrentPlatformArtifact_AllowsSingleLinuxLibCSpecificArtifactWhenLibCUnknown(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS != "linux" {
 		t.Skip("linux-specific artifact selection")
 	}
@@ -172,6 +173,7 @@ func TestCurrentPlatformArtifact_AllowsSingleLinuxLibCSpecificArtifactWhenLibCUn
 }
 
 func TestCurrentPlatformArtifact_RejectsAmbiguousLinuxLibCSpecificArtifactsWhenLibCUnknown(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS != "linux" {
 		t.Skip("linux-specific artifact selection")
 	}

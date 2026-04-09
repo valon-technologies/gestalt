@@ -195,9 +195,9 @@ jobs:
 
           import (
           	"context"
-          	"time"
 
           	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+          	"google.golang.org/protobuf/types/known/timestamppb"
           )
 
           type Provider struct{}
@@ -221,9 +221,9 @@ jobs:
           func (p *Provider) GetUser(context.Context, string) (*gestalt.StoredUser, error) { return nil, nil }
 
           func (p *Provider) FindOrCreateUser(_ context.Context, email string) (*gestalt.StoredUser, error) {
-          	now := time.Now().UTC()
+          	now := timestamppb.Now()
           	return &gestalt.StoredUser{
-          		ID:        email,
+          		Id:        email,
           		Email:     email,
           		CreatedAt: now,
           		UpdatedAt: now,

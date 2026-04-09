@@ -148,18 +148,18 @@ func (p *Provider) Metadata() gestalt.ProviderMetadata {
 	}
 }
 
-func (p *Provider) BeginLogin(context.Context, gestalt.BeginLoginRequest) (*gestalt.BeginLoginResponse, error) {
+func (p *Provider) BeginLogin(_ context.Context, req *gestalt.BeginLoginRequest) (*gestalt.BeginLoginResponse, error) {
 	return &gestalt.BeginLoginResponse{
-		AuthorizationURL: "https://auth.example.test/login?state=idp-state&prompt=consent",
+		AuthorizationUrl: "https://auth.example.test/login?state=idp-state&prompt=consent",
 	}, nil
 }
 
-func (p *Provider) CompleteLogin(_ context.Context, req gestalt.CompleteLoginRequest) (*gestalt.AuthenticatedUser, error) {
-	if req.Query["state"] != "idp-state" {
-		return nil, fmt.Errorf("unexpected state %q", req.Query["state"])
+func (p *Provider) CompleteLogin(_ context.Context, req *gestalt.CompleteLoginRequest) (*gestalt.AuthenticatedUser, error) {
+	if req.GetQuery()["state"] != "idp-state" {
+		return nil, fmt.Errorf("unexpected state %q", req.GetQuery()["state"])
 	}
-	if req.Query["prompt"] != "consent" {
-		return nil, fmt.Errorf("unexpected prompt %q", req.Query["prompt"])
+	if req.GetQuery()["prompt"] != "consent" {
+		return nil, fmt.Errorf("unexpected prompt %q", req.GetQuery()["prompt"])
 	}
 	return &gestalt.AuthenticatedUser{
 		Email:       "generated-auth@example.com",
@@ -192,9 +192,9 @@ func GeneratedDatastorePackageSource() string {
 
 import (
 	"context"
-	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type Provider struct {
@@ -233,9 +233,9 @@ func (p *Provider) FindOrCreateUser(_ context.Context, email string) (*gestalt.S
 	if user, ok := p.users[email]; ok {
 		return user, nil
 	}
-	now := time.Now().UTC().Truncate(time.Second)
+	now := timestamppb.Now()
 	user := &gestalt.StoredUser{
-		ID:        email,
+		Id:        email,
 		Email:     email,
 		CreatedAt: now,
 		UpdatedAt: now,
@@ -249,7 +249,7 @@ func (p *Provider) PutIntegrationToken(_ context.Context, token *gestalt.StoredI
 	cloned.AccessTokenSealed = append([]byte(nil), token.AccessTokenSealed...)
 	cloned.RefreshTokenSealed = append([]byte(nil), token.RefreshTokenSealed...)
 	cloned.ConnectionParams = cloneStringMap(token.ConnectionParams)
-	p.tokens[token.UserID] = &cloned
+	p.tokens[token.UserId] = &cloned
 	return nil
 }
 
