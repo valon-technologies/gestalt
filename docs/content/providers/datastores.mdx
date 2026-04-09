@@ -2,7 +2,7 @@ import { Tabs } from 'nextra/components'
 
 # Datastores
 
-Datastore providers back the persistent state layer. Gestalt stores users, integration tokens, API tokens, and OAuth registrations through the datastore interface, keeping the storage backend fully replaceable. The built-in SQLite datastore works for single-node deployments. For anything else, write or install a datastore provider plugin.
+Datastore providers back the persistent state layer. Gestalt stores users, integration tokens, API tokens, and OAuth registrations through the datastore interface, keeping the storage backend fully replaceable. The first-party SQLite provider works for single-node deployments. For production or multi-replica setups, use Postgres, MySQL, or another datastore provider.
 
 The host encrypts all integration tokens before passing them to the datastore using AES-256-GCM, so the datastore stores sealed bytes without needing access to the encryption key. API tokens are stored as one-way SHA-256 hashes. User emails and display names are stored in plaintext.
 
