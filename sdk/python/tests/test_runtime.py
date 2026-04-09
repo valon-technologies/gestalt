@@ -3,7 +3,10 @@ import json
 import pathlib
 import tempfile
 import unittest
+from typing import Any
 from unittest import mock
+
+import grpc
 
 from gestalt import (
     AuthenticatedUser,
@@ -13,26 +16,38 @@ from gestalt import (
     Catalog,
     CatalogOperation,
     DatastoreProvider,
+    ExternalTokenValidator,
+    HealthChecker,
+    MetadataProvider,
     OAuthRegistration,
+    OAuthRegistrationStore,
     Plugin,
     ProviderKind,
     ProviderMetadata,
     Request,
+    SessionTTLProvider,
     StoredAPIToken,
     StoredIntegrationToken,
     StoredUser,
+    WarningsProvider,
     _bootstrap,
     _runtime,
 )
+from gestalt.gen.v1 import auth_pb2 as _auth_pb2
+from gestalt.gen.v1 import datastore_pb2 as _datastore_pb2
+from gestalt.gen.v1 import plugin_pb2 as _plugin_pb2
+from gestalt.gen.v1 import runtime_pb2 as _runtime_pb2
+
+auth_pb2: Any = _auth_pb2
+datastore_pb2: Any = _datastore_pb2
+plugin_pb2: Any = _plugin_pb2
+runtime_pb2: Any = _runtime_pb2
 
 UTC = dt.timezone.utc
 
 
 class ParseRuntimeArgsTests(unittest.TestCase):
-    """Tests for _parse_runtime_args, a pure function."""
-
     def test_explicit_root_and_target(self) -> None:
-        """Explicit runtime invocation should keep the provided source root."""
         runtime_args = _runtime._parse_runtime_args(
             ["/tmp/plugin", "example.plugin:PLUGIN", "auth"]
         )
@@ -47,11 +62,9 @@ class ParseRuntimeArgsTests(unittest.TestCase):
         )
 
     def test_rejects_single_argument(self) -> None:
-        """Runtime invocation should reject incomplete explicit arguments."""
         self.assertIsNone(_runtime._parse_runtime_args(["/tmp/plugin"]))
 
     def test_bundled_config_fallback(self) -> None:
-        """Empty args should fall back to bundled config when present."""
         with tempfile.TemporaryDirectory() as tmpdir:
             bundle_dir = pathlib.Path(tmpdir)
             (bundle_dir / _bootstrap.BUNDLED_CONFIG_NAME).write_text(
@@ -78,24 +91,19 @@ class ParseRuntimeArgsTests(unittest.TestCase):
         )
 
     def test_defaults_runtime_kind_to_integration(self) -> None:
-        """Legacy two-argument invocation should still default to integration plugins."""
         runtime_args = _runtime._parse_runtime_args(["/tmp/plugin", "example.plugin:PLUGIN"])
         self.assertIsNotNone(runtime_args)
         assert runtime_args is not None
         self.assertEqual(runtime_args.runtime_kind, "integration")
 
     def test_returns_none_without_args_or_bundled_config(self) -> None:
-        """Empty args without a bundled config should return None."""
         with tempfile.TemporaryDirectory() as tmpdir:
             with mock.patch.object(_runtime.sys, "_MEIPASS", tmpdir, create=True):
                 self.assertIsNone(_runtime._parse_runtime_args([]))
 
 
 class ManifestNameTests(unittest.TestCase):
-    """Tests for manifest-derived plugin names."""
-
     def test_display_name_variants(self) -> None:
-        """Manifest-derived plugins should normalize manifest names across formats."""
         with tempfile.TemporaryDirectory() as tmpdir:
             temp_root = pathlib.Path(tmpdir)
 
@@ -135,10 +143,7 @@ class ManifestNameTests(unittest.TestCase):
 
 
 class RequestTests(unittest.TestCase):
-    """Tests for the Request helper type."""
-
     def test_connection_param_returns_value_or_empty_string(self) -> None:
-        """Request helpers should return the configured value or an empty string."""
         request = Request(connection_params={"region": "us-east-1"})
 
         self.assertEqual(request.connection_param("region"), "us-east-1")
@@ -146,10 +151,7 @@ class RequestTests(unittest.TestCase):
 
 
 class MainEntrypointTests(unittest.TestCase):
-    """Tests for the main() entrypoint, mocking only serve (gRPC)."""
-
     def test_writes_catalog_when_env_is_set(self) -> None:
-        """Catalog export should write to the requested path when enabled."""
         plugin = Plugin("test-plugin")
 
         @plugin.operation
@@ -169,12 +171,10 @@ class MainEntrypointTests(unittest.TestCase):
             self.assertTrue(catalog_path.exists())
 
     def test_returns_usage_error_for_bad_args(self) -> None:
-        """Invalid args should return exit code 2."""
         result = _runtime.main(["/only-one-arg"])
         self.assertEqual(result, 2)
 
     def test_provider_servicer_reports_and_serves_session_catalogs(self) -> None:
-        """Runtime gRPC servicer should advertise and encode session catalogs."""
         plugin = Plugin("source-name")
 
         @plugin.session_catalog
@@ -185,11 +185,10 @@ class MainEntrypointTests(unittest.TestCase):
                 operations=[CatalogOperation(id="private_search", method="POST")],
             )
 
-        runtime = _runtime._runtime_imports()
-        servicer = _runtime._provider_servicer(plugin=plugin, runtime=runtime)
+        servicer = _runtime._provider_servicer(plugin=plugin)
         metadata = servicer.GetMetadata(mock.Mock(), mock.Mock())
         response = servicer.GetSessionCatalog(
-            runtime.plugin_pb2.GetSessionCatalogRequest(
+            plugin_pb2.GetSessionCatalogRequest(
                 token="secret-token",
                 connection_params={"tenant": "acme"},
             ),
@@ -212,26 +211,31 @@ class MainEntrypointTests(unittest.TestCase):
         )
 
     def test_provider_servicer_rejects_missing_session_catalog_support(self) -> None:
-        """Runtime gRPC servicer should surface UNIMPLEMENTED when no session catalog handler exists."""
         plugin = Plugin("source-name")
-        runtime = _runtime._runtime_imports()
-        servicer = _runtime._provider_servicer(plugin=plugin, runtime=runtime)
+        servicer = _runtime._provider_servicer(plugin=plugin)
         context = mock.Mock()
 
-        servicer.GetSessionCatalog(runtime.plugin_pb2.GetSessionCatalogRequest(), context)
+        servicer.GetSessionCatalog(plugin_pb2.GetSessionCatalogRequest(), context)
 
         context.abort.assert_called_once_with(
-            runtime.grpc.StatusCode.UNIMPLEMENTED,
+            grpc.StatusCode.UNIMPLEMENTED,
             "provider does not support session catalogs",
         )
 
 
 class AuthRuntimeTests(unittest.TestCase):
-    class StubAuthProvider(AuthProvider):
+    class StubAuthProvider(
+        AuthProvider,
+        ExternalTokenValidator,
+        SessionTTLProvider,
+        MetadataProvider,
+        WarningsProvider,
+        HealthChecker,
+    ):
         def __init__(self) -> None:
             self.configured: list[tuple[str, dict[str, object]]] = []
 
-        def configure(self, name: str, config: dict[str, object]) -> None:
+        def configure(self, name: str, config: dict[str, Any]) -> None:
             self.configured.append((name, dict(config)))
 
         def metadata(self) -> ProviderMetadata:
@@ -271,21 +275,19 @@ class AuthRuntimeTests(unittest.TestCase):
 
     def test_runtime_metadata_and_auth_servicer(self) -> None:
         provider = self.StubAuthProvider()
-        runtime = _runtime._runtime_imports()
 
         runtime_servicer = _runtime._runtime_servicer(
             provider=provider,
             kind=ProviderKind.AUTH,
-            runtime=runtime,
         )
         meta = runtime_servicer.GetPluginMetadata(mock.Mock(), mock.Mock())
-        self.assertEqual(meta.kind, runtime.runtime_pb2.PluginKind.PLUGIN_KIND_AUTH)
+        self.assertEqual(meta.kind, runtime_pb2.PluginKind.PLUGIN_KIND_AUTH)
         self.assertEqual(meta.name, "stub-auth")
         self.assertEqual(list(meta.warnings), ["set AUTH_ENV"])
 
-        auth_servicer = _runtime._auth_servicer(provider=provider, runtime=runtime)
+        auth_servicer = _runtime._auth_servicer(provider=provider)
         login = auth_servicer.BeginLogin(
-            runtime.auth_pb2.BeginLoginRequest(
+            auth_pb2.BeginLoginRequest(
                 callback_url="https://cb.example.test",
                 host_state="host-state",
                 scopes=["profile"],
@@ -297,7 +299,7 @@ class AuthRuntimeTests(unittest.TestCase):
         self.assertEqual(bytes(login.plugin_state), b"provider-state")
 
         user = auth_servicer.CompleteLogin(
-            runtime.auth_pb2.CompleteLoginRequest(
+            auth_pb2.CompleteLoginRequest(
                 query={"email": "user@example.com"},
                 plugin_state=b"provider-state",
                 callback_url="https://cb.example.test",
@@ -308,7 +310,7 @@ class AuthRuntimeTests(unittest.TestCase):
         self.assertEqual(user.display_name, "Runtime User")
 
         validated = auth_servicer.ValidateExternalToken(
-            runtime.auth_pb2.ValidateExternalTokenRequest(token="known-token"),
+            auth_pb2.ValidateExternalTokenRequest(token="known-token"),
             mock.Mock(),
         )
         self.assertEqual(validated.email, "token@example.com")
@@ -317,39 +319,46 @@ class AuthRuntimeTests(unittest.TestCase):
         self.assertEqual(session_settings.session_ttl_seconds, 45 * 60)
 
     def test_auth_validator_missing_or_unknown_token(self) -> None:
-        runtime = _runtime._runtime_imports()
+        class NoValidator(AuthProvider):
+            def begin_login(self, request: BeginLoginRequest) -> BeginLoginResponse:
+                return BeginLoginResponse(authorization_url="https://example.test")
 
-        class NoValidator(self.StubAuthProvider):
-            validate_external_token = None  # type: ignore[assignment]
+            def complete_login(self, request: _runtime.CompleteLoginRequest) -> AuthenticatedUser:
+                return AuthenticatedUser(email="user@example.com")
 
         no_validator_servicer = _runtime._auth_servicer(
             provider=NoValidator(),
-            runtime=runtime,
         )
         context = mock.Mock()
         no_validator_servicer.ValidateExternalToken(
-            runtime.auth_pb2.ValidateExternalTokenRequest(token="missing"),
+            auth_pb2.ValidateExternalTokenRequest(token="missing"),
             context,
         )
         context.abort.assert_called_once_with(
-            runtime.grpc.StatusCode.UNIMPLEMENTED,
+            grpc.StatusCode.UNIMPLEMENTED,
             "auth provider does not support external token validation",
         )
 
         unknown_context = mock.Mock()
-        servicer = _runtime._auth_servicer(provider=self.StubAuthProvider(), runtime=runtime)
+        servicer = _runtime._auth_servicer(provider=self.StubAuthProvider())
         servicer.ValidateExternalToken(
-            runtime.auth_pb2.ValidateExternalTokenRequest(token="unknown"),
+            auth_pb2.ValidateExternalTokenRequest(token="unknown"),
             unknown_context,
         )
         unknown_context.abort.assert_called_once_with(
-            runtime.grpc.StatusCode.NOT_FOUND,
+            grpc.StatusCode.NOT_FOUND,
             "token not recognized",
         )
 
 
 class DatastoreRuntimeTests(unittest.TestCase):
-    class StubDatastoreProvider(DatastoreProvider):
+    class StubDatastoreProvider(
+        DatastoreProvider,
+        MetadataProvider,
+        HealthChecker,
+        WarningsProvider,
+        OAuthRegistrationStore,
+    ):
         def __init__(self) -> None:
             self.migrated = False
             self.users: dict[str, StoredUser] = {}
@@ -396,7 +405,6 @@ class DatastoreRuntimeTests(unittest.TestCase):
             connection: str,
             instance: str,
         ) -> StoredIntegrationToken | None:
-            del integration, connection, instance
             return self.tokens.get(user_id)
 
         def list_integration_tokens(
@@ -405,7 +413,6 @@ class DatastoreRuntimeTests(unittest.TestCase):
             integration: str,
             connection: str,
         ) -> list[StoredIntegrationToken]:
-            del integration, connection
             token = self.tokens.get(user_id)
             return [] if token is None else [token]
 
@@ -428,11 +435,9 @@ class DatastoreRuntimeTests(unittest.TestCase):
             return [token]
 
         def revoke_api_token(self, user_id: str, id: str) -> None:
-            del user_id, id
             self.api_token = None
 
         def revoke_all_api_tokens(self, user_id: str) -> int:
-            del user_id
             self.api_token = None
             return 1
 
@@ -458,14 +463,13 @@ class DatastoreRuntimeTests(unittest.TestCase):
 
     def test_datastore_servicer_round_trip(self) -> None:
         provider = self.StubDatastoreProvider()
-        runtime = _runtime._runtime_imports()
-        servicer = _runtime._datastore_servicer(provider=provider, runtime=runtime)
+        servicer = _runtime._datastore_servicer(provider=provider)
 
         servicer.Migrate(mock.Mock(), mock.Mock())
         self.assertTrue(provider.migrated)
 
         created = servicer.FindOrCreateUser(
-            runtime.datastore_pb2.FindOrCreateUserRequest(email="user@example.com"),
+            datastore_pb2.FindOrCreateUserRequest(email="user@example.com"),
             mock.Mock(),
         )
         self.assertEqual(created.email, "user@example.com")
@@ -482,11 +486,11 @@ class DatastoreRuntimeTests(unittest.TestCase):
             updated_at=dt.datetime.fromtimestamp(5, tz=UTC),
         )
         servicer.PutStoredIntegrationToken(
-            _runtime._stored_integration_token_to_proto(runtime, token),
+            _runtime._stored_integration_token_to_proto(token),
             mock.Mock(),
         )
         listed = servicer.ListStoredIntegrationTokens(
-            runtime.datastore_pb2.ListStoredIntegrationTokensRequest(
+            datastore_pb2.ListStoredIntegrationTokensRequest(
                 user_id="user@example.com",
                 integration="github",
                 connection="default",
@@ -497,7 +501,7 @@ class DatastoreRuntimeTests(unittest.TestCase):
         self.assertEqual(listed.tokens[0].id, "tok-1")
 
         registration = servicer.GetOAuthRegistration(
-            runtime.datastore_pb2.GetOAuthRegistrationRequest(
+            datastore_pb2.GetOAuthRegistrationRequest(
                 auth_server_url="https://issuer.example.test",
                 redirect_uri="https://cb.example.test",
             ),
@@ -506,14 +510,11 @@ class DatastoreRuntimeTests(unittest.TestCase):
         self.assertEqual(registration.client_id, "client-123")
 
     def test_datastore_healthcheck_requires_checker(self) -> None:
-        runtime = _runtime._runtime_imports()
-
         class NoHealthDatastore(DatastoreProvider):
             def migrate(self) -> None:
                 return None
 
             def get_user(self, id: str) -> StoredUser | None:
-                del id
                 return None
 
             def find_or_create_user(self, email: str) -> StoredUser:
@@ -560,11 +561,55 @@ class DatastoreRuntimeTests(unittest.TestCase):
         servicer = _runtime._runtime_servicer(
             provider=NoHealthDatastore(),
             kind=ProviderKind.DATASTORE,
-            runtime=runtime,
         )
         health = servicer.HealthCheck(mock.Mock(), mock.Mock())
         self.assertFalse(health.ready)
         self.assertEqual(health.message, "datastore provider must implement HealthChecker")
+
+
+class GrpcHandlerDecoratorTests(unittest.TestCase):
+    """Verify _grpc_handler preserves abort status codes.
+
+    In real gRPC, context.abort() raises an exception after setting the
+    status code. The decorator must re-raise abort exceptions rather than
+    catching them and overwriting the code with UNKNOWN.
+    """
+
+    def _make_aborting_context(self):
+        """Create a mock context where abort() raises like real gRPC."""
+        ctx = mock.Mock()
+        ctx.code.return_value = None
+
+        def fake_abort(code, details):
+            ctx.code.return_value = code
+            raise Exception(details)
+
+        ctx.abort.side_effect = fake_abort
+        return ctx
+
+    def test_abort_preserves_not_found_status(self) -> None:
+        servicer = _runtime._datastore_servicer(
+            provider=DatastoreRuntimeTests.StubDatastoreProvider(),
+        )
+        ctx = self._make_aborting_context()
+        with self.assertRaises(Exception):
+            servicer.GetUser(datastore_pb2.GetUserRequest(id="missing"), ctx)
+        ctx.abort.assert_called_once_with(
+            grpc.StatusCode.NOT_FOUND, "user not found"
+        )
+
+    def test_provider_exception_maps_to_unknown(self) -> None:
+        class FailingProvider(DatastoreRuntimeTests.StubDatastoreProvider):
+            def get_user(self, id: str) -> StoredUser | None:
+                raise RuntimeError("db connection lost")
+
+        servicer = _runtime._datastore_servicer(provider=FailingProvider())
+        ctx = self._make_aborting_context()
+        with self.assertRaises(Exception):
+            servicer.GetUser(datastore_pb2.GetUserRequest(id="any"), ctx)
+        ctx.abort.assert_called_once_with(
+            grpc.StatusCode.UNKNOWN, "get user: db connection lost"
+        )
 
 
 if __name__ == "__main__":

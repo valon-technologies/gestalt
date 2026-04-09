@@ -25,7 +25,7 @@ class ProviderMetadata:
 
 class RuntimeProvider:
     def configure(self, name: str, config: dict[str, Any]) -> None:
-        del name, config
+        pass
 
 
 class MetadataProvider:
@@ -48,7 +48,7 @@ class Closer:
         raise NotImplementedError
 
 
-RegisterServices = Callable[[Any, Any, RuntimeProvider], None]
+RegisterServices = Callable[[Any, RuntimeProvider], None]
 
 
 @dataclasses.dataclass(slots=True)
