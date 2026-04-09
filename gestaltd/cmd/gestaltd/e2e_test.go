@@ -1554,7 +1554,6 @@ func setupWebProviderDir(t *testing.T, baseDir, name string) string {
 		Source:      "github.com/test/providers/web/" + name,
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Test Web " + name,
-		Kinds:       []string{pluginmanifestv1.KindWebUI},
 		WebUI: &pluginmanifestv1.WebUIMetadata{
 			AssetRoot: "out",
 		},
