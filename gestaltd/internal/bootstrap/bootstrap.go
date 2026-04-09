@@ -120,6 +120,7 @@ type Deps struct {
 	BaseURL       string
 	SecretManager core.SecretManager
 	Datastore     core.Datastore
+	Datastores    map[string]core.ResourceProvider
 	SQLDB         any // *sql.DB when available, nil otherwise
 	SQLDialect    any // Placeholder(int)string when available, nil otherwise
 	Egress        EgressDeps
@@ -153,6 +154,7 @@ func NewFactoryRegistry() *FactoryRegistry {
 type Result struct {
 	Auth             core.AuthProvider
 	Datastore        core.Datastore
+	Datastores       map[string]core.ResourceProvider
 	Providers        *registry.PluginMap[core.Provider]
 	ProvidersReady   <-chan struct{}
 	ConnectionAuth   func() map[string]map[string]OAuthHandler
@@ -199,6 +201,9 @@ func (r *Result) Close(ctx context.Context) error {
 		closeDatastore(r.Datastore),
 		closeSecretManager(r.SecretManager),
 	)
+	for _, ds := range r.Datastores {
+		errs = append(errs, ds.Close())
+	}
 	if r.auditClose != nil {
 		errs = append(errs, r.auditClose(ctx))
 	}
@@ -220,6 +225,7 @@ func closeIfPossible(values ...any) {
 type preparedCore struct {
 	Auth          core.AuthProvider
 	Datastore     core.Datastore
+	Datastores    *datastoreBuildResult
 	SecretManager core.SecretManager
 	Telemetry     core.TelemetryProvider
 	Deps          Deps
@@ -285,6 +291,12 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	if err != nil {
 		return nil, err
 	}
+	cleanupAuth := true
+	defer func() {
+		if cleanupAuth {
+			_ = closeAuth(auth)
+		}
+	}()
 
 	ds, err := buildDatastore(cfg, factories, deps)
 	if err != nil {
@@ -297,6 +309,18 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		}
 	}()
 
+	datastores, err := buildDatastores(ctx, cfg, deps)
+	if err != nil {
+		return nil, err
+	}
+	closeDatastores := true
+	defer func() {
+		if closeDatastores {
+			_ = datastores.Close()
+		}
+	}()
+
+	deps.Datastores = datastores.providers
 	deps.Egress = newEgressDeps(cfg, sm)
 	deps.Datastore = ds
 	if acc, ok := ds.(sqlDBAccessor); ok {
@@ -308,10 +332,13 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 
 	closeSM = false
 	shutdownTelemetry = false
+	cleanupAuth = false
 	closeDS = false
+	closeDatastores = false
 	return &preparedCore{
 		Auth:          auth,
 		Datastore:     ds,
+		Datastores:    datastores,
 		SecretManager: sm,
 		Telemetry:     tp,
 		Deps:          deps,
@@ -329,6 +356,9 @@ func (p *preparedCore) Close(ctx context.Context) error {
 		closeDatastore(p.Datastore),
 		closeSecretManager(p.SecretManager),
 	)
+	if p.Datastores != nil {
+		errs = append(errs, p.Datastores.Close())
+	}
 	if p.Telemetry != nil {
 		errs = append(errs, p.Telemetry.Shutdown(ctx))
 	}
@@ -385,6 +415,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	return &Result{
 		Auth:             prepared.Auth,
 		Datastore:        prepared.Datastore,
+		Datastores:       prepared.Datastores.providers,
 		Providers:        providers,
 		ProvidersReady:   providersReady,
 		ConnectionAuth:   connAuthResolver,
