@@ -55,16 +55,16 @@ type WebUIMetadata struct {
 }
 
 type Plugin struct {
-	ConfigSchemaPath     string                             `json:"config_schema_path,omitempty" yaml:"config_schema_path,omitempty"`
-	Auth                 *ProviderAuth                      `json:"auth,omitempty" yaml:"auth,omitempty"`
-	ConnectionMode       string                             `json:"connection_mode,omitempty" yaml:"connection_mode,omitempty"`
-	MCP                  bool                               `json:"mcp,omitempty" yaml:"mcp,omitempty"`
-	BaseURL              string                             `json:"base_url,omitempty" yaml:"base_url,omitempty"`
-	Headers              map[string]string                  `json:"headers,omitempty" yaml:"headers,omitempty"`
-	ManagedParameters    []ManagedParameter                 `json:"managed_parameters,omitempty" yaml:"managed_parameters,omitempty"`
-	Operations           []ProviderOperation                `json:"operations,omitempty" yaml:"operations,omitempty"`
-	Discovery *ProviderDiscovery `json:"discovery,omitempty" yaml:"discovery,omitempty"`
-	ConnectionParams     map[string]ProviderConnectionParam `json:"connection_params,omitempty" yaml:"connection_params,omitempty"`
+	ConfigSchemaPath  string                             `json:"config_schema_path,omitempty" yaml:"config_schema_path,omitempty"`
+	Auth              *ProviderAuth                      `json:"auth,omitempty" yaml:"auth,omitempty"`
+	ConnectionMode    string                             `json:"connection_mode,omitempty" yaml:"connection_mode,omitempty"`
+	MCP               bool                               `json:"mcp,omitempty" yaml:"mcp,omitempty"`
+	BaseURL           string                             `json:"base_url,omitempty" yaml:"base_url,omitempty"`
+	Headers           map[string]string                  `json:"headers,omitempty" yaml:"headers,omitempty"`
+	ManagedParameters []ManagedParameter                 `json:"managed_parameters,omitempty" yaml:"managed_parameters,omitempty"`
+	Operations        []ProviderOperation                `json:"operations,omitempty" yaml:"operations,omitempty"`
+	Discovery         *ProviderDiscovery                 `json:"discovery,omitempty" yaml:"discovery,omitempty"`
+	ConnectionParams  map[string]ProviderConnectionParam `json:"connection_params,omitempty" yaml:"connection_params,omitempty"`
 
 	OpenAPI           string                                `json:"openapi,omitempty" yaml:"openapi,omitempty"`
 	GraphQLURL        string                                `json:"graphql_url,omitempty" yaml:"graphql_url,omitempty"`

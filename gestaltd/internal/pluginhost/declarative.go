@@ -41,14 +41,14 @@ func WithDeclarativeConnectionMode(mode core.ConnectionMode) DeclarativeProvider
 }
 
 type DeclarativeProvider struct {
-	catalog              *catalog.Catalog
-	opsByName            map[string]*catalog.CatalogOperation
-	baseURL              string
-	auth                 *pluginmanifestv1.ProviderAuth
-	httpClient           *http.Client
-	discovery *pluginmanifestv1.ProviderDiscovery
-	connectionDefs       map[string]pluginmanifestv1.ProviderConnectionParam
-	connectionMode       core.ConnectionMode
+	catalog        *catalog.Catalog
+	opsByName      map[string]*catalog.CatalogOperation
+	baseURL        string
+	auth           *pluginmanifestv1.ProviderAuth
+	httpClient     *http.Client
+	discovery      *pluginmanifestv1.ProviderDiscovery
+	connectionDefs map[string]pluginmanifestv1.ProviderConnectionParam
+	connectionMode core.ConnectionMode
 }
 
 func NewDeclarativeProvider(manifest *pluginmanifestv1.Manifest, httpClient *http.Client, opts ...DeclarativeProviderOption) (*DeclarativeProvider, error) {
@@ -71,12 +71,12 @@ func NewDeclarativeProvider(manifest *pluginmanifestv1.Manifest, httpClient *htt
 			Headers:     maps.Clone(manifest.Plugin.Headers),
 			Operations:  make([]catalog.CatalogOperation, 0, len(manifest.Plugin.Operations)),
 		},
-		opsByName:            make(map[string]*catalog.CatalogOperation, len(manifest.Plugin.Operations)),
-		baseURL:              manifest.Plugin.BaseURL,
-		auth:                 manifest.Plugin.Auth,
-		httpClient:           httpClient,
-		discovery: manifest.Plugin.Discovery,
-		connectionDefs:       manifest.Plugin.ConnectionParams,
+		opsByName:      make(map[string]*catalog.CatalogOperation, len(manifest.Plugin.Operations)),
+		baseURL:        manifest.Plugin.BaseURL,
+		auth:           manifest.Plugin.Auth,
+		httpClient:     httpClient,
+		discovery:      manifest.Plugin.Discovery,
+		connectionDefs: manifest.Plugin.ConnectionParams,
 	}
 
 	for i := range manifest.Plugin.Operations {
