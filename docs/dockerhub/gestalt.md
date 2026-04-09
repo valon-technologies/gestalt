@@ -8,7 +8,7 @@
 - invoking integration operations
 - managing configuration and credentials
 
-> **Alpha software** -- Gestalt is under active development. Images are tagged
+> **Alpha.** Gestalt is under active development. Images are tagged
 > with alpha versions and may introduce breaking changes. See the
 > [documentation](https://gestaltd.ai) for the latest guidance.
 
