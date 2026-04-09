@@ -31,7 +31,6 @@ from gestalt import (
     StoredIntegrationToken,
     StoredUser,
     WarningsProvider,
-    _bootstrap,
     _runtime,
 )
 from gestalt.gen.v1 import auth_pb2 as _auth_pb2
@@ -68,7 +67,7 @@ class ParseRuntimeArgsTests(unittest.TestCase):
     def test_bundled_config_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             bundle_dir = pathlib.Path(tmpdir)
-            (bundle_dir / _bootstrap.BUNDLED_CONFIG_NAME).write_text(
+            (bundle_dir / _runtime.BUNDLED_CONFIG_NAME).write_text(
                 json.dumps(
                     {
                         "target": "provider",

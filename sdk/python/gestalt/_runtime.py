@@ -1,6 +1,7 @@
 import datetime as dt
 import functools
 import importlib
+import json
 import os
 import pathlib
 import signal
@@ -17,10 +18,10 @@ from google.protobuf import json_format
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 
 from ._api import Request
-from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._catalog import catalog_to_json
 from ._plugin import Plugin, _module_plugin
 from ._providers import (
+    UNIX_EPOCH,
     AuthenticatedUser,
     AuthProvider,
     BeginLoginRequest,
@@ -53,6 +54,8 @@ from .gen.v1 import plugin_pb2_grpc as _plugin_pb2_grpc
 from .gen.v1 import runtime_pb2 as _runtime_pb2
 from .gen.v1 import runtime_pb2_grpc as _runtime_pb2_grpc
 
+# Any-typed aliases suppress ty/mypy errors on generated protobuf modules
+# whose attributes are not statically visible to type checkers.
 empty_pb2: Any = _empty_pb2
 timestamp_pb2: Any = _timestamp_pb2
 plugin_pb2: Any = _plugin_pb2
@@ -66,6 +69,7 @@ datastore_pb2_grpc: Any = _datastore_pb2_grpc
 
 UTC = dt.timezone.utc
 
+BUNDLED_CONFIG_NAME: Final[str] = "gestalt-runtime.json"
 ENV_PLUGIN_SOCKET: Final[str] = "GESTALT_PLUGIN_SOCKET"
 ENV_WRITE_CATALOG: Final[str] = "GESTALT_PLUGIN_WRITE_CATALOG"
 CURRENT_PROTOCOL_VERSION: Final[int] = 2
@@ -75,11 +79,64 @@ USAGE: Final[str] = "usage: python -m gestalt._runtime ROOT MODULE[:ATTRIBUTE] [
 
 
 @dataclass(frozen=True)
+class PluginTarget:
+    module_name: str
+    attribute_name: str | None = None
+
+
+@dataclass(frozen=True)
+class BundledPluginConfig:
+    target: str
+    plugin_name: str | None = None
+    runtime_kind: str | None = None
+
+
+@dataclass(frozen=True)
 class RuntimeArgs:
     target: str
     root: pathlib.Path | None = None
     plugin_name: str | None = None
     runtime_kind: str | None = None
+
+
+def parse_plugin_target(target: str) -> PluginTarget:
+    module_name, sep, attribute_name = target.partition(":")
+    module_name = module_name.strip()
+    attribute_name = attribute_name.strip() or None
+    if not module_name:
+        raise RuntimeError("tool.gestalt.plugin must be in module or module:attribute form")
+    if sep and attribute_name is None:
+        raise RuntimeError("tool.gestalt.plugin attribute is required when ':' is present")
+
+    return PluginTarget(
+        module_name=module_name,
+        attribute_name=attribute_name,
+    )
+
+
+def read_bundled_plugin_config(*, bundle_root: pathlib.Path) -> BundledPluginConfig | None:
+    config_path = bundle_root / BUNDLED_CONFIG_NAME
+    if not config_path.exists():
+        return None
+
+    data = json.loads(config_path.read_text(encoding="utf-8"))
+    target = str(data.get("target", "")).strip()
+    if not target:
+        raise RuntimeError(f"{config_path} is missing target")
+
+    plugin_name = data.get("plugin_name")
+    if plugin_name is not None:
+        plugin_name = str(plugin_name).strip() or None
+
+    runtime_kind = data.get("runtime_kind")
+    if runtime_kind is not None:
+        runtime_kind = str(runtime_kind).strip() or None
+
+    return BundledPluginConfig(
+        target=target,
+        plugin_name=plugin_name,
+        runtime_kind=runtime_kind,
+    )
 
 
 def _grpc_handler(label: str):
@@ -607,63 +664,27 @@ def _datastore_servicer(*, provider: RuntimeProvider) -> Any:
             revoked = datastore_provider.revoke_all_api_tokens(request.user_id)
             return datastore_pb2.RevokeAllAPITokensResponse(revoked=revoked)
 
+        @_grpc_handler("get oauth registration")
         def GetOAuthRegistration(self, request: Any, context: Any) -> Any:
             if not isinstance(datastore_provider, OAuthRegistrationStore):
-                return context.abort(
-                    grpc.StatusCode.UNIMPLEMENTED,
-                    "datastore provider does not support oauth registrations",
-                )
-            try:
-                registration = datastore_provider.get_oauth_registration(
-                    request.auth_server_url, request.redirect_uri,
-                )
-            except Exception as error:
-                traceback.print_exception(error)
-                return context.abort(
-                    grpc.StatusCode.UNKNOWN,
-                    f"get oauth registration: {error}",
-                )
+                return context.abort(grpc.StatusCode.UNIMPLEMENTED, "datastore provider does not support oauth registrations")
+            registration = datastore_provider.get_oauth_registration(request.auth_server_url, request.redirect_uri)
             if registration is None:
-                return context.abort(
-                    grpc.StatusCode.NOT_FOUND,
-                    "oauth registration not found",
-                )
+                return context.abort(grpc.StatusCode.NOT_FOUND, "oauth registration not found")
             return _oauth_registration_to_proto(registration)
 
+        @_grpc_handler("put oauth registration")
         def PutOAuthRegistration(self, request: Any, context: Any) -> Any:
             if not isinstance(datastore_provider, OAuthRegistrationStore):
-                return context.abort(
-                    grpc.StatusCode.UNIMPLEMENTED,
-                    "datastore provider does not support oauth registrations",
-                )
-            try:
-                datastore_provider.put_oauth_registration(
-                    _oauth_registration_from_proto(request),
-                )
-            except Exception as error:
-                traceback.print_exception(error)
-                return context.abort(
-                    grpc.StatusCode.UNKNOWN,
-                    f"put oauth registration: {error}",
-                )
+                return context.abort(grpc.StatusCode.UNIMPLEMENTED, "datastore provider does not support oauth registrations")
+            datastore_provider.put_oauth_registration(_oauth_registration_from_proto(request))
             return empty_pb2.Empty()
 
+        @_grpc_handler("delete oauth registration")
         def DeleteOAuthRegistration(self, request: Any, context: Any) -> Any:
             if not isinstance(datastore_provider, OAuthRegistrationStore):
-                return context.abort(
-                    grpc.StatusCode.UNIMPLEMENTED,
-                    "datastore provider does not support oauth registrations",
-                )
-            try:
-                datastore_provider.delete_oauth_registration(
-                    request.auth_server_url, request.redirect_uri,
-                )
-            except Exception as error:
-                traceback.print_exception(error)
-                return context.abort(
-                    grpc.StatusCode.UNKNOWN,
-                    f"delete oauth registration: {error}",
-                )
+                return context.abort(grpc.StatusCode.UNIMPLEMENTED, "datastore provider does not support oauth registrations")
+            datastore_provider.delete_oauth_registration(request.auth_server_url, request.redirect_uri)
             return empty_pb2.Empty()
 
     return DatastoreServicer()
@@ -783,8 +804,8 @@ def _stored_integration_token_from_proto(token: Any) -> StoredIntegrationToken:
         last_refreshed_at=_proto_to_datetime(token.last_refreshed_at),
         refresh_error_count=token.refresh_error_count,
         connection_params=dict(token.connection_params),
-        created_at=_proto_to_datetime(token.created_at) or _unix_epoch(),
-        updated_at=_proto_to_datetime(token.updated_at) or _unix_epoch(),
+        created_at=_proto_to_datetime(token.created_at) or UNIX_EPOCH,
+        updated_at=_proto_to_datetime(token.updated_at) or UNIX_EPOCH,
     )
 
 
@@ -810,8 +831,8 @@ def _stored_api_token_from_proto(token: Any) -> StoredAPIToken:
         hashed_token=token.hashed_token,
         scopes=token.scopes,
         expires_at=_proto_to_datetime(token.expires_at),
-        created_at=_proto_to_datetime(token.created_at) or _unix_epoch(),
-        updated_at=_proto_to_datetime(token.updated_at) or _unix_epoch(),
+        created_at=_proto_to_datetime(token.created_at) or UNIX_EPOCH,
+        updated_at=_proto_to_datetime(token.updated_at) or UNIX_EPOCH,
     )
 
 
@@ -840,7 +861,7 @@ def _oauth_registration_from_proto(registration: Any) -> OAuthRegistration:
         authorization_endpoint=registration.authorization_endpoint,
         token_endpoint=registration.token_endpoint,
         scopes_supported=registration.scopes_supported,
-        discovered_at=_proto_to_datetime(registration.discovered_at) or _unix_epoch(),
+        discovered_at=_proto_to_datetime(registration.discovered_at) or UNIX_EPOCH,
     )
 
 
@@ -860,10 +881,6 @@ def _proto_to_datetime(value: Any) -> Any:
     if hasattr(value, "seconds") and hasattr(value, "nanos") and value.seconds == 0 and value.nanos == 0:
         return None
     return value.ToDatetime(tzinfo=UTC)
-
-
-def _unix_epoch() -> Any:
-    return dt.datetime.fromtimestamp(0, tz=UTC)
 
 
 def _copy_optional_timestamp(message: Any, field_name: str, value: Any) -> None:
