@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build && pagefind --site out",
+    "build": "next build && pagefind --site out --output-subdir _pagefind",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "lint": "next lint"
