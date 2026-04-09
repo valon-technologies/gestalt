@@ -1,7 +1,6 @@
 package adminui
 
 import (
-	"bytes"
 	"embed"
 	"fmt"
 	"html"
@@ -9,7 +8,8 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
+
+	"github.com/valon-technologies/gestalt/server/internal/staticui"
 )
 
 //go:embed all:out
@@ -21,7 +21,14 @@ type Options struct {
 }
 
 func EmbeddedHandler(opts Options) http.Handler {
-	handler, err := subdirHandler(assets, "out", opts)
+	sub, err := fs.Sub(assets, "out")
+	if err != nil {
+		return nil
+	}
+	handler, err := staticui.Handler(staticui.Config{
+		FS:          sub,
+		RenderIndex: renderFunc(opts),
+	})
 	if err != nil {
 		return nil
 	}
@@ -29,41 +36,16 @@ func EmbeddedHandler(opts Options) http.Handler {
 }
 
 func DirHandler(path string, opts Options) (http.Handler, error) {
-	return newHandler(os.DirFS(path), opts)
+	return staticui.Handler(staticui.Config{
+		FS:          os.DirFS(path),
+		RenderIndex: renderFunc(opts),
+	})
 }
 
-func subdirHandler(root fs.FS, dir string, opts Options) (http.Handler, error) {
-	sub, err := fs.Sub(root, dir)
-	if err != nil {
-		return nil, err
+func renderFunc(opts Options) func([]byte) []byte {
+	return func(indexHTML []byte) []byte {
+		return renderIndexHTML(indexHTML, opts)
 	}
-	return newHandler(sub, opts)
-}
-
-func newHandler(root fs.FS, opts Options) (http.Handler, error) {
-	if _, err := fs.Stat(root, "index.html"); err != nil {
-		return nil, fmt.Errorf("admin ui asset root does not contain index.html")
-	}
-
-	indexHTML, err := fs.ReadFile(root, "index.html")
-	if err != nil {
-		return nil, fmt.Errorf("read admin ui index: %w", err)
-	}
-	renderedIndex := renderIndexHTML(indexHTML, opts)
-	fileServer := http.FileServer(http.FS(root))
-
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := strings.TrimPrefix(r.URL.Path, "/")
-		if path != "" && strings.Contains(path, ".") && path != "index.html" {
-			if info, err := fs.Stat(root, path); err == nil && !info.IsDir() {
-				fileServer.ServeHTTP(w, r)
-				return
-			}
-		}
-
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		http.ServeContent(w, r, "index.html", time.Time{}, bytes.NewReader(renderedIndex))
-	}), nil
 }
 
 func renderIndexHTML(indexHTML []byte, opts Options) []byte {
