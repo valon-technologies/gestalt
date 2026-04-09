@@ -26,6 +26,7 @@ const (
 	PreparedProvidersDir = ".gestaltd/providers"
 	PreparedAuthDir      = ".gestaltd/auth"
 	PreparedDatastoreDir = ".gestaltd/datastore"
+	PreparedSecretsDir   = ".gestaltd/secrets"
 	PreparedUIDir        = ".gestaltd/ui"
 	LockVersion          = 1
 )
@@ -35,6 +36,7 @@ type Lockfile struct {
 	Providers map[string]LockProviderEntry `json:"providers"`
 	Auth      *LockEntry                   `json:"auth,omitempty"`
 	Datastore *LockEntry                   `json:"datastore,omitempty"`
+	Secrets   *LockEntry                   `json:"secrets,omitempty"`
 	UI        *LockUIEntry                 `json:"ui,omitempty"`
 }
 
@@ -113,6 +115,13 @@ func (l *Lifecycle) InitAtPathWithArtifactsDir(configPath, artifactsDir string) 
 		}
 		lock.Datastore = &entry
 	}
+	if cfg.Secrets.Provider != nil && cfg.Secrets.Provider.HasManagedArtifacts() {
+		entry, err := l.writeComponentArtifact(context.Background(), paths, pluginmanifestv1.KindSecrets, "secrets", secretsDestDir(paths), cfg.Secrets.Provider, cfg.Secrets.Config)
+		if err != nil {
+			return nil, err
+		}
+		lock.Secrets = &entry
+	}
 	if cfg.UI.Provider != nil && cfg.UI.Provider.HasManagedArtifacts() {
 		uiEntry, err := l.writeUIProviderArtifact(context.Background(), cfg, paths)
 		if err != nil {
@@ -131,7 +140,7 @@ func (l *Lifecycle) InitAtPathWithArtifactsDir(configPath, artifactsDir string) 
 		return nil, err
 	}
 
-	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "auth", lock.Auth != nil, "datastore", lock.Datastore != nil, "ui", lock.UI != nil)
+	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "auth", lock.Auth != nil, "datastore", lock.Datastore != nil, "secrets", lock.Secrets != nil, "ui", lock.UI != nil)
 	slog.Info("wrote lockfile", "path", paths.lockfilePath)
 	return lock, nil
 }
@@ -180,6 +189,7 @@ type initPaths struct {
 	providersDir string
 	authDir      string
 	datastoreDir string
+	secretsDir   string
 	uiDir        string
 }
 
@@ -202,6 +212,9 @@ func configHasPluginLoading(cfg *config.Config) bool {
 	if cfg.Datastore.Provider != nil && (cfg.Datastore.Provider.HasManagedArtifacts() || cfg.Datastore.Provider.HasLocalSource()) {
 		return true
 	}
+	if cfg.Secrets.Provider != nil && (cfg.Secrets.Provider.HasManagedArtifacts() || cfg.Secrets.Provider.HasLocalSource()) {
+		return true
+	}
 	return cfg.UI.Provider != nil && (cfg.UI.Provider.HasManagedArtifacts() || cfg.UI.Provider.HasLocalSource())
 }
 
@@ -215,6 +228,9 @@ func configHasManagedPlugins(cfg *config.Config) bool {
 		return true
 	}
 	if cfg.Datastore.Provider != nil && cfg.Datastore.Provider.HasManagedArtifacts() {
+		return true
+	}
+	if cfg.Secrets.Provider != nil && cfg.Secrets.Provider.HasManagedArtifacts() {
 		return true
 	}
 	return cfg.UI.Provider != nil && cfg.UI.Provider.HasManagedArtifacts()
@@ -260,6 +276,7 @@ func initPathsForConfigWithArtifactsDir(configPath, artifactsDir string) initPat
 		providersDir: filepath.Join(artifactsDir, filepath.FromSlash(PreparedProvidersDir)),
 		authDir:      filepath.Join(artifactsDir, filepath.FromSlash(PreparedAuthDir)),
 		datastoreDir: filepath.Join(artifactsDir, filepath.FromSlash(PreparedDatastoreDir)),
+		secretsDir:   filepath.Join(artifactsDir, filepath.FromSlash(PreparedSecretsDir)),
 		uiDir:        filepath.Join(artifactsDir, filepath.FromSlash(PreparedUIDir)),
 	}
 }
@@ -278,6 +295,10 @@ func authDestDir(paths initPaths) string {
 
 func datastoreDestDir(paths initPaths) string {
 	return paths.datastoreDir
+}
+
+func secretsDestDir(paths initPaths) string {
+	return paths.secretsDir
 }
 
 func writeJSONFile(path string, v any) error {
@@ -338,6 +359,11 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 			return false
 		}
 	}
+	if cfg.Secrets.Provider != nil && cfg.Secrets.Provider.HasManagedArtifacts() {
+		if lock.Secrets == nil || !lockEntryMatches(paths, "secrets", cfg.Secrets.Provider, *lock.Secrets, true) {
+			return false
+		}
+	}
 	if cfg.UI.Provider != nil && cfg.UI.Provider.HasManagedArtifacts() {
 		if lock.UI == nil {
 			return false
@@ -358,7 +384,7 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 	return true
 }
 
-func PluginFingerprint(name string, plugin *config.PluginDef, configDir string) (string, error) {
+func PluginFingerprint(name string, plugin *config.ProviderDef, configDir string) (string, error) {
 	if plugin == nil {
 		return "", nil
 	}
@@ -377,11 +403,11 @@ func PluginFingerprint(name string, plugin *config.PluginDef, configDir string) 
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func UIProviderFingerprint(plugin *config.PluginDef) (string, error) {
+func UIProviderFingerprint(plugin *config.ProviderDef) (string, error) {
 	return PluginFingerprint("ui", plugin, "")
 }
 
-func lockEntryMatches(paths initPaths, name string, plugin *config.PluginDef, entry LockEntry, found bool) bool {
+func lockEntryMatches(paths initPaths, name string, plugin *config.ProviderDef, entry LockEntry, found bool) bool {
 	if !found {
 		return false
 	}
@@ -429,7 +455,7 @@ func (l *Lifecycle) writeProviderArtifacts(ctx context.Context, cfg *config.Conf
 	return written, nil
 }
 
-func (l *Lifecycle) writeComponentArtifact(ctx context.Context, paths initPaths, kind, name, destDir string, plugin *config.PluginDef, configNode yaml.Node) (LockEntry, error) {
+func (l *Lifecycle) writeComponentArtifact(ctx context.Context, paths initPaths, kind, name, destDir string, plugin *config.ProviderDef, configNode yaml.Node) (LockEntry, error) {
 	configMap, err := config.NodeToMap(configNode)
 	if err != nil {
 		return LockEntry{}, fmt.Errorf("decode plugin config for %s %q: %w", kind, name, err)
@@ -437,7 +463,7 @@ func (l *Lifecycle) writeComponentArtifact(ctx context.Context, paths initPaths,
 	return l.lockComponentEntryForSource(ctx, paths, kind, name, destDir, plugin, configMap)
 }
 
-func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, paths initPaths, kind, name, destDir string, plugin *config.PluginDef, configMap map[string]any) (LockEntry, error) {
+func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, paths initPaths, kind, name, destDir string, plugin *config.ProviderDef, configMap map[string]any) (LockEntry, error) {
 	src, err := sourceForPlugin(plugin)
 	if err != nil {
 		return LockEntry{}, fmt.Errorf("%s %q plugin.source.ref %q: %w", kind, name, plugin.SourceRef(), err)
@@ -495,7 +521,7 @@ func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, paths initP
 	}, nil
 }
 
-func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths initPaths, name string, plugin *config.PluginDef, configMap map[string]any) (LockProviderEntry, error) {
+func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths initPaths, name string, plugin *config.ProviderDef, configMap map[string]any) (LockProviderEntry, error) {
 	src, err := sourceForPlugin(plugin)
 	if err != nil {
 		return LockProviderEntry{}, fmt.Errorf("provider %q plugin.source.ref %q: %w", name, plugin.SourceRef(), err)
@@ -617,7 +643,7 @@ func (l *Lifecycle) writeUIProviderArtifact(ctx context.Context, cfg *config.Con
 	}, nil
 }
 
-func sourceForPlugin(plugin *config.PluginDef) (pluginsource.Source, error) {
+func sourceForPlugin(plugin *config.ProviderDef) (pluginsource.Source, error) {
 	src, err := pluginsource.Parse(plugin.SourceRef())
 	if err != nil {
 		return pluginsource.Source{}, err
@@ -685,6 +711,11 @@ func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *con
 			return err
 		}
 	}
+	if cfg.Secrets.Provider != nil {
+		if err := l.applyComponentProvider(paths, lock, pluginmanifestv1.KindSecrets, "secrets", cfg.Secrets.Provider, cfg.Secrets.Config, &cfg.Secrets.Config); err != nil {
+			return err
+		}
+	}
 	if cfg.UI.Provider != nil {
 		configMap, err := config.NodeToMap(cfg.UI.Config)
 		if err != nil {
@@ -725,7 +756,7 @@ func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *con
 	return nil
 }
 
-func (l *Lifecycle) applyComponentProvider(paths initPaths, lock *Lockfile, kind, name string, provider *config.PluginDef, providerConfig yaml.Node, targetNode *yaml.Node) error {
+func (l *Lifecycle) applyComponentProvider(paths initPaths, lock *Lockfile, kind, name string, provider *config.ProviderDef, providerConfig yaml.Node, targetNode *yaml.Node) error {
 	if provider == nil {
 		return nil
 	}
@@ -744,6 +775,8 @@ func (l *Lifecycle) applyComponentProvider(paths initPaths, lock *Lockfile, kind
 			entry = lock.Auth
 		case pluginmanifestv1.KindDatastore:
 			entry = lock.Datastore
+		case pluginmanifestv1.KindSecrets:
+			entry = lock.Secrets
 		}
 		if err := l.applyLockedComponentEntry(paths, entry, kind, name, provider, configMap); err != nil {
 			return err
@@ -764,7 +797,7 @@ func (l *Lifecycle) applyComponentProvider(paths initPaths, lock *Lockfile, kind
 	return nil
 }
 
-func applyLocalProviderManifest(name string, plugin *config.PluginDef, configMap map[string]any) error {
+func applyLocalProviderManifest(name string, plugin *config.ProviderDef, configMap map[string]any) error {
 	if plugin == nil || !plugin.HasLocalSource() {
 		return nil
 	}
@@ -794,7 +827,7 @@ func applyLocalProviderManifest(name string, plugin *config.PluginDef, configMap
 	return nil
 }
 
-func applyLocalComponentManifest(kind, name string, plugin *config.PluginDef, configMap map[string]any) error {
+func applyLocalComponentManifest(kind, name string, plugin *config.ProviderDef, configMap map[string]any) error {
 	if plugin == nil || !plugin.HasLocalSource() {
 		return nil
 	}
@@ -824,7 +857,7 @@ func applyLocalComponentManifest(kind, name string, plugin *config.PluginDef, co
 	return nil
 }
 
-func applyLocalUIManifest(plugin *config.PluginDef, configMap map[string]any, resolvedAssetRoot *string) error {
+func applyLocalUIManifest(plugin *config.ProviderDef, configMap map[string]any, resolvedAssetRoot *string) error {
 	if plugin == nil || !plugin.HasLocalSource() {
 		return nil
 	}
@@ -849,7 +882,7 @@ func applyLocalUIManifest(plugin *config.PluginDef, configMap map[string]any, re
 	return nil
 }
 
-func (l *Lifecycle) applyLockedProviderEntry(paths initPaths, lock *Lockfile, name string, plugin *config.PluginDef, configMap map[string]any) error {
+func (l *Lifecycle) applyLockedProviderEntry(paths initPaths, lock *Lockfile, name string, plugin *config.ProviderDef, configMap map[string]any) error {
 	entry, ok := lock.Providers[name]
 	if !ok {
 		return fmt.Errorf("prepared artifact for provider %q is missing or stale; run `gestaltd init --config %s`", name, paths.configPath)
@@ -903,7 +936,7 @@ func (l *Lifecycle) applyLockedProviderEntry(paths initPaths, lock *Lockfile, na
 	return nil
 }
 
-func (l *Lifecycle) applyLockedComponentEntry(paths initPaths, entry *LockEntry, kind, name string, plugin *config.PluginDef, configMap map[string]any) error {
+func (l *Lifecycle) applyLockedComponentEntry(paths initPaths, entry *LockEntry, kind, name string, plugin *config.ProviderDef, configMap map[string]any) error {
 	if entry == nil {
 		return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init --config %s`", kind, name, paths.configPath)
 	}
@@ -954,7 +987,7 @@ func (l *Lifecycle) applyLockedComponentEntry(paths initPaths, entry *LockEntry,
 	return nil
 }
 
-func bindResolvedProviderManifest(name string, plugin *config.PluginDef, manifestPath string, manifest *pluginmanifestv1.Manifest, configMap map[string]any) error {
+func bindResolvedProviderManifest(name string, plugin *config.ProviderDef, manifestPath string, manifest *pluginmanifestv1.Manifest, configMap map[string]any) error {
 	manifest = pluginpkg.ResolveManifestLocalReferences(manifest, manifestPath)
 	if err := validateInstalledManifestKind(pluginmanifestv1.KindPlugin, name, manifest); err != nil {
 		return err
@@ -968,7 +1001,7 @@ func bindResolvedProviderManifest(name string, plugin *config.PluginDef, manifes
 	return nil
 }
 
-func bindResolvedComponentManifest(kind, name string, plugin *config.PluginDef, manifestPath string, manifest *pluginmanifestv1.Manifest, configMap map[string]any) error {
+func bindResolvedComponentManifest(kind, name string, plugin *config.ProviderDef, manifestPath string, manifest *pluginmanifestv1.Manifest, configMap map[string]any) error {
 	manifest = pluginpkg.ResolveManifestLocalReferences(manifest, manifestPath)
 	if err := validateInstalledManifestKind(kind, name, manifest); err != nil {
 		return err
@@ -982,7 +1015,7 @@ func bindResolvedComponentManifest(kind, name string, plugin *config.PluginDef, 
 	return nil
 }
 
-func bindResolvedUIManifest(plugin *config.PluginDef, manifestPath string, manifest *pluginmanifestv1.Manifest, configMap map[string]any) error {
+func bindResolvedUIManifest(plugin *config.ProviderDef, manifestPath string, manifest *pluginmanifestv1.Manifest, configMap map[string]any) error {
 	manifest = pluginpkg.ResolveManifestLocalReferences(manifest, manifestPath)
 	if err := validateInstalledManifestKind(pluginmanifestv1.KindWebUI, "provider", manifest); err != nil {
 		return err
@@ -996,7 +1029,7 @@ func bindResolvedUIManifest(plugin *config.PluginDef, manifestPath string, manif
 	return nil
 }
 
-func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPaths, name string, plugin *config.PluginDef, entry LockProviderEntry) error {
+func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPaths, name string, plugin *config.ProviderDef, entry LockProviderEntry) error {
 	if entry.ResolvedURL == "" || entry.ArchiveSHA256 == "" {
 		return fmt.Errorf("prepared artifact for provider %q is missing or stale; run `gestaltd init --config %s`", name, paths.configPath)
 	}
@@ -1043,7 +1076,7 @@ func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPat
 	return nil
 }
 
-func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPaths, kind, name string, plugin *config.PluginDef, entry LockEntry) error {
+func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPaths, kind, name string, plugin *config.ProviderDef, entry LockEntry) error {
 	if entry.ResolvedURL == "" || entry.ArchiveSHA256 == "" {
 		return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init --config %s`", kind, name, paths.configPath)
 	}
@@ -1079,6 +1112,8 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 		destDir = authDestDir(paths)
 	case pluginmanifestv1.KindDatastore:
 		destDir = datastoreDestDir(paths)
+	case pluginmanifestv1.KindSecrets:
+		destDir = secretsDestDir(paths)
 	default:
 		return fmt.Errorf("unsupported component kind %q", kind)
 	}
@@ -1101,7 +1136,7 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 	return nil
 }
 
-func resolvePluginIcon(manifest *pluginmanifestv1.Manifest, manifestPath string, plugin *config.PluginDef) {
+func resolvePluginIcon(manifest *pluginmanifestv1.Manifest, manifestPath string, plugin *config.ProviderDef) {
 	if manifest.IconFile == "" {
 		return
 	}
@@ -1143,6 +1178,6 @@ func validateInstalledManifestKind(kind, name string, manifest *pluginmanifestv1
 	return nil
 }
 
-func buildComponentRuntimeConfigNode(name, kind string, provider *config.PluginDef, providerConfig yaml.Node) (yaml.Node, error) {
+func buildComponentRuntimeConfigNode(name, kind string, provider *config.ProviderDef, providerConfig yaml.Node) (yaml.Node, error) {
 	return config.BuildComponentRuntimeConfigNode(name, kind, provider, providerConfig)
 }

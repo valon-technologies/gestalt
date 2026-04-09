@@ -452,7 +452,7 @@ func logConfigSummary(path string, cfg *config.Config) {
 		"server_encryption", maskSecret(cfg.Server.EncryptionKey),
 		"auth_provider", providerLabel(cfg.Auth.Provider),
 		"datastore_provider", providerLabel(cfg.Datastore.Provider),
-		"secrets_provider", cfg.Secrets.Provider,
+		"secrets_provider", secretsProviderLabel(cfg.Secrets),
 		"telemetry_provider", cfg.Telemetry.Provider,
 	)
 
@@ -464,7 +464,7 @@ func logConfigSummary(path string, cfg *config.Config) {
 
 }
 
-func providerLabel(provider *config.PluginDef) string {
+func providerLabel(provider *config.ProviderDef) string {
 	switch {
 	case provider == nil:
 		return "(not set)"
@@ -475,6 +475,16 @@ func providerLabel(provider *config.PluginDef) string {
 	default:
 		return "custom"
 	}
+}
+
+func secretsProviderLabel(secrets config.SecretsConfig) string {
+	if secrets.Provider != nil {
+		return providerLabel(secrets.Provider)
+	}
+	if secrets.BuiltinProvider != "" {
+		return secrets.BuiltinProvider
+	}
+	return "env"
 }
 
 func maskSecret(s string) string {

@@ -264,7 +264,7 @@ func TestLockProviderEntryForSource_RejectsManifestWithoutProviderKind(t *testin
 	cfgPath := filepath.Join(dir, "config.yaml")
 	paths := initPathsForConfig(cfgPath)
 	lc := NewLifecycle(staticSourceResolver{localPath: pkgPath})
-	plugin := &config.PluginDef{
+	plugin := &config.ProviderDef{
 		Source: &config.PluginSourceDef{
 			Ref:     "github.com/testowner/gestalt-providers/plugins/auth-only",
 			Version: "0.0.1-alpha.1",
@@ -1091,7 +1091,7 @@ func TestLockMatchesConfig_FalseWithNilLock(t *testing.T) {
 func TestPluginFingerprint_Stable(t *testing.T) {
 	t.Parallel()
 
-	plugin := &config.PluginDef{
+	plugin := &config.ProviderDef{
 		Source: &config.PluginSourceDef{Ref: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"},
 	}
 	first, err := PluginFingerprint("example", plugin, ".")
@@ -1110,7 +1110,7 @@ func TestPluginFingerprint_Stable(t *testing.T) {
 func TestPluginFingerprint_ChangesWithName(t *testing.T) {
 	t.Parallel()
 
-	plugin := &config.PluginDef{
+	plugin := &config.ProviderDef{
 		Source: &config.PluginSourceDef{Ref: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"},
 	}
 	first, err := PluginFingerprint("alpha", plugin, ".")

@@ -61,7 +61,7 @@ type resolvedSpecSurface struct {
 	connection     config.ConnectionDef
 }
 
-func buildPluginConnectionPlan(plugin *config.PluginDef, manifestPlugin *pluginmanifestv1.Plugin) (pluginConnectionPlan, error) {
+func buildPluginConnectionPlan(plugin *config.ProviderDef, manifestPlugin *pluginmanifestv1.Plugin) (pluginConnectionPlan, error) {
 	declaredNames := namedConnectionNames(plugin, manifestPlugin)
 	plan := pluginConnectionPlan{
 		pluginConnection: config.EffectivePluginConnectionDef(plugin, manifestPlugin),
@@ -211,7 +211,7 @@ func (plan pluginConnectionPlan) connectionDef(name string) (config.ConnectionDe
 	return conn, nil
 }
 
-func resolveDefaultConnectionName(plugin *config.PluginDef, manifestPlugin *pluginmanifestv1.Plugin) string {
+func resolveDefaultConnectionName(plugin *config.ProviderDef, manifestPlugin *pluginmanifestv1.Plugin) string {
 	if plugin != nil {
 		if name := config.ResolveConnectionAlias(plugin.DefaultConnection); name != "" {
 			return name
@@ -225,7 +225,7 @@ func resolveDefaultConnectionName(plugin *config.PluginDef, manifestPlugin *plug
 	return ""
 }
 
-func surfaceURL(plugin *config.PluginDef, manifestPlugin *pluginmanifestv1.Plugin, surface config.SpecSurface) string {
+func surfaceURL(plugin *config.ProviderDef, manifestPlugin *pluginmanifestv1.Plugin, surface config.SpecSurface) string {
 	if manifestPlugin == nil {
 		return ""
 	}
@@ -236,7 +236,7 @@ func surfaceURL(plugin *config.PluginDef, manifestPlugin *pluginmanifestv1.Plugi
 	return resolveManifestRelativeSpecURL(plugin, url)
 }
 
-func resolveSurfaceConnectionName(plugin *config.PluginDef, manifestPlugin *pluginmanifestv1.Plugin, surface config.SpecSurface) string {
+func resolveSurfaceConnectionName(plugin *config.ProviderDef, manifestPlugin *pluginmanifestv1.Plugin, surface config.SpecSurface) string {
 	name := config.ResolveConnectionAlias(config.ManifestProviderSurfaceConnectionName(manifestPlugin, surface))
 	if name == "" {
 		return config.PluginConnectionName
@@ -244,7 +244,7 @@ func resolveSurfaceConnectionName(plugin *config.PluginDef, manifestPlugin *plug
 	return name
 }
 
-func resolveManifestRelativeSpecURL(plugin *config.PluginDef, raw string) string {
+func resolveManifestRelativeSpecURL(plugin *config.ProviderDef, raw string) string {
 	if plugin == nil || plugin.ResolvedManifestPath == "" || raw == "" {
 		return raw
 	}
@@ -307,7 +307,7 @@ func buildConnectionAuthMap(name string, intg config.IntegrationDef, manifest *p
 	return handlers, nil
 }
 
-func namedConnectionNames(plugin *config.PluginDef, manifestPlugin *pluginmanifestv1.Plugin) map[string]struct{} {
+func namedConnectionNames(plugin *config.ProviderDef, manifestPlugin *pluginmanifestv1.Plugin) map[string]struct{} {
 	names := make(map[string]struct{})
 	add := func(name string) {
 		resolved := config.ResolveConnectionAlias(name)

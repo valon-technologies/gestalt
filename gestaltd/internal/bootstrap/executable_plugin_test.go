@@ -28,7 +28,7 @@ func TestExecutableSDKExampleProviderReceivesStartConfig(t *testing.T) {
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
 			"example": {
-				Plugin: &config.PluginDef{
+				Plugin: &config.ProviderDef{
 					Command:              bin,
 					ResolvedManifest:     manifest,
 					ResolvedManifestPath: filepath.Join(manifestRoot, "plugin.yaml"),
@@ -153,7 +153,7 @@ plugin = "provider"
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
 			"python-source": {
-				Plugin: &config.PluginDef{
+				Plugin: &config.ProviderDef{
 					ResolvedManifest:     manifest,
 					ResolvedManifestPath: manifestPath,
 					Config: mustNode(t, map[string]any{
@@ -215,7 +215,7 @@ func TestExecutableSDKExampleProviderAppliesConfigMetadataOverrides(t *testing.T
 				DisplayName: "Config Display",
 				Description: "Config Description",
 				IconFile:    iconPath,
-				Plugin: &config.PluginDef{
+				Plugin: &config.ProviderDef{
 					Command:              bin,
 					ResolvedManifest:     manifest,
 					ResolvedManifestPath: filepath.Join(manifestRoot, "plugin.yaml"),
@@ -332,7 +332,7 @@ func TestPluginManifestOAuthWiresConnectionAuth(t *testing.T) {
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
 			"echoauth": {
-				Plugin: &config.PluginDef{
+				Plugin: &config.ProviderDef{
 					Command: bin,
 					Args:    []string{"provider"},
 					Config: mustNode(t, map[string]any{
@@ -395,7 +395,7 @@ func TestPluginManifestNoAuthSkipsConnectionAuth(t *testing.T) {
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
 			"echonoauth": {
-				Plugin: &config.PluginDef{
+				Plugin: &config.ProviderDef{
 					Command:              bin,
 					Args:                 []string{"provider"},
 					ResolvedManifest:     manifest,
@@ -432,7 +432,7 @@ func TestPluginManifestNamedOAuthKeepsProviderTokenMode(t *testing.T) {
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
 			"echoauth": {
-				Plugin: &config.PluginDef{
+				Plugin: &config.ProviderDef{
 					Command:           bin,
 					Args:              []string{"provider"},
 					Source:            &config.PluginSourceDef{Ref: "github.com/acme/plugins/test", Version: "1.0.0"},
@@ -491,7 +491,7 @@ func TestPluginProcessEnvIsolation(t *testing.T) {
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
 			"echoext": {
-				Plugin: &config.PluginDef{
+				Plugin: &config.ProviderDef{
 					Command:              bin,
 					Args:                 []string{"provider"},
 					ResolvedManifest:     manifest,
@@ -548,7 +548,7 @@ func TestExecutablePluginRequiresManifest(t *testing.T) {
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
 			"echoext": {
-				Plugin: &config.PluginDef{
+				Plugin: &config.ProviderDef{
 					Command: bin,
 					Args:    []string{"provider"},
 				},

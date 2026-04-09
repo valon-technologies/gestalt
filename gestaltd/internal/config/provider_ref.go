@@ -18,7 +18,7 @@ type integrationWire struct {
 	DisplayName       string                            `yaml:"display_name"`
 	Description       string                            `yaml:"description"`
 	IconFile          string                            `yaml:"icon_file"`
-	Provider          *PluginDef                        `yaml:"provider"`
+	Provider          *ProviderDef                      `yaml:"provider"`
 	Config            yaml.Node                         `yaml:"config"`
 	Connections       map[string]*integrationConnection `yaml:"connections"`
 	AllowedOperations map[string]*OperationOverride     `yaml:"allowed_operations"`
@@ -44,9 +44,9 @@ type integrationMCPWire struct {
 	ToolPrefix string `yaml:"tool_prefix"`
 }
 
-func (p *PluginDef) UnmarshalYAML(value *yaml.Node) error {
+func (p *ProviderDef) UnmarshalYAML(value *yaml.Node) error {
 	if value == nil || value.Kind == 0 {
-		*p = PluginDef{}
+		*p = ProviderDef{}
 		return nil
 	}
 	if value.Kind == yaml.ScalarNode {
@@ -61,7 +61,7 @@ func (p *PluginDef) UnmarshalYAML(value *yaml.Node) error {
 	if err := decodeKnownYAMLNode(value, &wire); err != nil {
 		return err
 	}
-	*p = PluginDef{
+	*p = ProviderDef{
 		Source:       wire.Source,
 		Env:          wire.Env,
 		AllowedHosts: wire.AllowedHosts,

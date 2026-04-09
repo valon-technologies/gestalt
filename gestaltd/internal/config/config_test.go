@@ -125,8 +125,8 @@ plugins:
 	if cfg.Server.Public.Port != 8080 {
 		t.Fatalf("Server.Public.Port = %d, want 8080", cfg.Server.Public.Port)
 	}
-	if cfg.Secrets.Provider != "env" {
-		t.Fatalf("Secrets.Provider = %q, want env", cfg.Secrets.Provider)
+	if cfg.Secrets.BuiltinProvider != "env" {
+		t.Fatalf("Secrets.BuiltinProvider = %q, want env", cfg.Secrets.BuiltinProvider)
 	}
 	if cfg.Server.EncryptionKey != "encryption-from-env" {
 		t.Fatalf("Server.EncryptionKey = %q", cfg.Server.EncryptionKey)
@@ -796,7 +796,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			name: "local source valid",
 			cfg: &Config{
 				Integrations: map[string]IntegrationDef{
-					"sample": {Plugin: &PluginDef{Source: &PluginSourceDef{Path: "./some-dir/plugin.yaml"}}},
+					"sample": {Plugin: &ProviderDef{Source: &PluginSourceDef{Path: "./some-dir/plugin.yaml"}}},
 				},
 			},
 		},
@@ -804,7 +804,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			name: "source valid",
 			cfg: &Config{
 				Integrations: map[string]IntegrationDef{
-					"sample": {Plugin: &PluginDef{Source: &PluginSourceDef{Ref: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}}},
+					"sample": {Plugin: &ProviderDef{Source: &PluginSourceDef{Ref: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}}},
 				},
 			},
 		},
@@ -812,7 +812,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			name: "source path and ref rejected",
 			cfg: &Config{
 				Integrations: map[string]IntegrationDef{
-					"sample": {Plugin: &PluginDef{Source: &PluginSourceDef{Path: "./plugin.yaml", Ref: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}}},
+					"sample": {Plugin: &ProviderDef{Source: &PluginSourceDef{Path: "./plugin.yaml", Ref: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}}},
 				},
 			},
 			wantErr: "mutually exclusive",
@@ -830,7 +830,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			name: "source without version rejected",
 			cfg: &Config{
 				Integrations: map[string]IntegrationDef{
-					"sample": {Plugin: &PluginDef{Source: &PluginSourceDef{Ref: "github.com/test-org/test-repo/test-plugin"}}},
+					"sample": {Plugin: &ProviderDef{Source: &PluginSourceDef{Ref: "github.com/test-org/test-repo/test-plugin"}}},
 				},
 			},
 			wantErr: "plugin.source.version is required",
@@ -839,7 +839,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			name: "source version without ref rejected",
 			cfg: &Config{
 				Integrations: map[string]IntegrationDef{
-					"sample": {Plugin: &PluginDef{Source: &PluginSourceDef{Version: "1.0.0"}}},
+					"sample": {Plugin: &ProviderDef{Source: &PluginSourceDef{Version: "1.0.0"}}},
 				},
 			},
 			wantErr: "plugin.source.path or plugin.source.ref is required",
@@ -848,7 +848,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			name: "auth provider valid",
 			cfg: &Config{
 				Auth: AuthConfig{
-					Provider: &PluginDef{Source: &PluginSourceDef{Ref: "github.com/test-org/test-repo/test-auth", Version: "1.0.0"}},
+					Provider: &ProviderDef{Source: &PluginSourceDef{Ref: "github.com/test-org/test-repo/test-auth", Version: "1.0.0"}},
 				},
 			},
 		},
@@ -860,7 +860,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			name: "datastore provider valid",
 			cfg: &Config{
 				Datastore: DatastoreConfig{
-					Provider: &PluginDef{Source: &PluginSourceDef{Path: "./some-dir/plugin.yaml"}},
+					Provider: &ProviderDef{Source: &PluginSourceDef{Path: "./some-dir/plugin.yaml"}},
 				},
 			},
 		},
@@ -868,7 +868,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			name: "auth provider invalid when source missing",
 			cfg: &Config{
 				Auth: AuthConfig{
-					Provider: &PluginDef{},
+					Provider: &ProviderDef{},
 				},
 			},
 			wantErr: `provider.source.path or provider.source.ref is required`,
@@ -887,7 +887,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			cfg: &Config{
 				Integrations: map[string]IntegrationDef{
 					"sample": {
-						Plugin: &PluginDef{
+						Plugin: &ProviderDef{
 							Source: &PluginSourceDef{Path: "./plugin.yaml"},
 							Auth:   &ConnectionAuthDef{Type: pluginmanifestv1.AuthTypeMCPOAuth},
 						},
@@ -901,7 +901,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			cfg: &Config{
 				Integrations: map[string]IntegrationDef{
 					"sample": {
-						Plugin: &PluginDef{
+						Plugin: &ProviderDef{
 							Source: &PluginSourceDef{Path: "./plugin.yaml"},
 							Connections: map[string]*ConnectionDef{
 								"default": {Auth: ConnectionAuthDef{Type: pluginmanifestv1.AuthTypeMCPOAuth}},

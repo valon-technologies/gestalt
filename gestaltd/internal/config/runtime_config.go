@@ -30,7 +30,7 @@ func sanitizeRuntimeSource(src *PluginSourceDef) *PluginSourceDef {
 	}
 }
 
-func BuildComponentRuntimeConfigNode(name, kind string, provider *PluginDef, providerConfig yaml.Node) (yaml.Node, error) {
+func BuildComponentRuntimeConfigNode(name, kind string, provider *ProviderDef, providerConfig yaml.Node) (yaml.Node, error) {
 	if provider == nil {
 		return yaml.Node{}, fmt.Errorf("%s %q provider is required", kind, name)
 	}
