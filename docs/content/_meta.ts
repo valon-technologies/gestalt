@@ -4,7 +4,7 @@ export default {
   "getting-started": "Getting Started",
   "-- server": { type: "separator", title: "Server" },
   configuration: "Configuration",
-  plugins: "Plugins",
+  providers: "Providers",
   security: "Security",
   observability: "Observability",
   "audit-logging": "Audit Logging",

@@ -1,0 +1,197 @@
+import { Tabs } from 'nextra/components'
+
+# Datastores
+
+Datastore providers back the persistent state layer. Gestalt stores users, integration tokens, API tokens, and OAuth registrations through the datastore interface, keeping the storage backend fully replaceable. The built-in SQLite datastore works for single-node deployments. For anything else, write or install a datastore provider plugin.
+
+The host encrypts all integration tokens before passing them to the datastore using AES-256-GCM, so the datastore stores sealed bytes without needing access to the encryption key. API tokens are stored as one-way SHA-256 hashes. User emails and display names are stored in plaintext.
+
+## Manifest
+
+A datastore provider manifest declares `kinds: [datastore]`:
+
+```yaml
+source: github.com/example/plugins/my-datastore
+version: 0.0.1-alpha.1
+display_name: My Datastore
+description: Custom persistent storage backend
+kinds:
+  - datastore
+datastore:
+  config_schema_path: ./datastore_config.json
+```
+
+The optional `datastore.config_schema_path` field points to a JSON Schema that validates the `datastore.config` block in the server config. If you provide one, Gestalt rejects invalid config at startup.
+
+## Interface
+
+A datastore provider is a larger interface than auth or integration providers. It composes user storage, integration token storage, and API token storage, plus `Migrate` for schema setup and `HealthCheck` for readiness probes.
+
+<Tabs items={['Go', 'Python', 'Rust']}>
+  <Tabs.Tab>
+    ```go
+    package main
+
+    import (
+    	"context"
+    	"database/sql"
+
+    	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
+
+    type MyDatastore struct {
+    	db *sql.DB
+    }
+
+    func (ds *MyDatastore) Configure(_ context.Context, _ string, config map[string]any) error {
+    	dsn, _ := config["dsn"].(string)
+    	var err error
+    	ds.db, err = sql.Open("postgres", dsn)
+    	return err
+    }
+
+    func (ds *MyDatastore) HealthCheck(ctx context.Context) error {
+    	return ds.db.PingContext(ctx)
+    }
+
+    func (ds *MyDatastore) Migrate(ctx context.Context) error {
+    	// Create users, integration_tokens, and api_tokens tables.
+    	return nil
+    }
+
+    // UserStore
+    func (ds *MyDatastore) GetUser(ctx context.Context, id string) (*gestalt.StoredUser, error) { ... }
+    func (ds *MyDatastore) FindOrCreateUser(ctx context.Context, email string) (*gestalt.StoredUser, error) { ... }
+
+    // IntegrationTokenStore (tokens are pre-sealed by the host)
+    func (ds *MyDatastore) PutIntegrationToken(ctx context.Context, token *gestalt.StoredIntegrationToken) error { ... }
+    func (ds *MyDatastore) GetIntegrationToken(ctx context.Context, userID, integration, connection, instance string) (*gestalt.StoredIntegrationToken, error) { ... }
+    func (ds *MyDatastore) ListIntegrationTokens(ctx context.Context, userID, integration, connection string) ([]*gestalt.StoredIntegrationToken, error) { ... }
+    func (ds *MyDatastore) DeleteIntegrationToken(ctx context.Context, id string) error { ... }
+
+    // APITokenStore (tokens are SHA-256 hashed, not encrypted)
+    func (ds *MyDatastore) PutAPIToken(ctx context.Context, token *gestalt.StoredAPIToken) error { ... }
+    func (ds *MyDatastore) GetAPITokenByHash(ctx context.Context, hashedToken string) (*gestalt.StoredAPIToken, error) { ... }
+    func (ds *MyDatastore) ListAPITokens(ctx context.Context, userID string) ([]*gestalt.StoredAPIToken, error) { ... }
+    func (ds *MyDatastore) RevokeAPIToken(ctx context.Context, userID, id string) error { ... }
+    func (ds *MyDatastore) RevokeAllAPITokens(ctx context.Context, userID string) (int64, error) { ... }
+
+    func main() {
+    	gestalt.ServeDatastoreProvider(context.Background(), &MyDatastore{})
+    }
+    ```
+
+    Optionally implement `OAuthRegistrationStore` (`GetOAuthRegistration`, `PutOAuthRegistration`, `DeleteOAuthRegistration`) to support MCP OAuth dynamic client registration.
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    import gestalt
+
+    class MyDatastore(gestalt.DatastoreProvider):
+        def configure(self, name: str, config: dict) -> None:
+            self.dsn = config.get("dsn", "")
+            # Initialize database connection.
+
+        def migrate(self) -> None:
+            # Create users, integration_tokens, and api_tokens tables.
+            pass
+
+        # UserStore
+        def get_user(self, id: str) -> gestalt.StoredUser | None: ...
+        def find_or_create_user(self, email: str) -> gestalt.StoredUser: ...
+
+        # IntegrationTokenStore (tokens are pre-sealed by the host)
+        def put_integration_token(self, token: gestalt.StoredIntegrationToken) -> None: ...
+        def get_integration_token(self, user_id: str, integration: str, connection: str, instance: str) -> gestalt.StoredIntegrationToken | None: ...
+        def list_integration_tokens(self, user_id: str, integration: str, connection: str) -> list[gestalt.StoredIntegrationToken]: ...
+        def delete_integration_token(self, id: str) -> None: ...
+
+        # APITokenStore (tokens are SHA-256 hashed, not encrypted)
+        def put_api_token(self, token: gestalt.StoredAPIToken) -> None: ...
+        def get_api_token_by_hash(self, hashed_token: str) -> gestalt.StoredAPIToken | None: ...
+        def list_api_tokens(self, user_id: str) -> list[gestalt.StoredAPIToken]: ...
+        def revoke_api_token(self, user_id: str, id: str) -> None: ...
+        def revoke_all_api_tokens(self, user_id: str) -> int: ...
+
+    MyDatastore().serve()
+    ```
+
+    Optionally inherit from `gestalt.OAuthRegistrationStore` to support MCP OAuth dynamic client registration.
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use gestalt_plugin_sdk as gestalt;
+    use gestalt::{DatastoreProvider, StoredUser, StoredIntegrationToken, StoredApiToken};
+
+    pub struct MyDatastore {
+        // Your database connection.
+    }
+
+    #[gestalt::async_trait]
+    impl DatastoreProvider for MyDatastore {
+        async fn configure(
+            &self,
+            _name: &str,
+            config: serde_json::Map<String, serde_json::Value>,
+        ) -> gestalt::Result<()> {
+            // Initialize database connection from config["dsn"].
+            Ok(())
+        }
+
+        async fn health_check(&self) -> gestalt::Result<()> {
+            // Ping the database.
+            Ok(())
+        }
+
+        async fn migrate(&self) -> gestalt::Result<()> {
+            // Create users, integration_tokens, and api_tokens tables.
+            Ok(())
+        }
+
+        // UserStore
+        async fn get_user(&self, id: &str) -> gestalt::Result<Option<StoredUser>> { ... }
+        async fn find_or_create_user(&self, email: &str) -> gestalt::Result<StoredUser> { ... }
+
+        // IntegrationTokenStore (tokens are pre-sealed by the host)
+        async fn put_integration_token(&self, token: StoredIntegrationToken) -> gestalt::Result<()> { ... }
+        async fn get_integration_token(&self, user_id: &str, integration: &str, connection: &str, instance: &str) -> gestalt::Result<Option<StoredIntegrationToken>> { ... }
+        async fn list_integration_tokens(&self, user_id: &str, integration: &str, connection: &str) -> gestalt::Result<Vec<StoredIntegrationToken>> { ... }
+        async fn delete_integration_token(&self, id: &str) -> gestalt::Result<()> { ... }
+
+        // APITokenStore (tokens are SHA-256 hashed, not encrypted)
+        async fn put_api_token(&self, token: StoredApiToken) -> gestalt::Result<()> { ... }
+        async fn get_api_token_by_hash(&self, hashed_token: &str) -> gestalt::Result<Option<StoredApiToken>> { ... }
+        async fn list_api_tokens(&self, user_id: &str) -> gestalt::Result<Vec<StoredApiToken>> { ... }
+        async fn revoke_api_token(&self, user_id: &str, id: &str) -> gestalt::Result<()> { ... }
+        async fn revoke_all_api_tokens(&self, user_id: &str) -> gestalt::Result<i64> { ... }
+    }
+
+    gestalt::export_datastore_provider!(constructor = MyDatastore::default);
+    ```
+
+    OAuth registration methods (`get_oauth_registration`, `put_oauth_registration`, `delete_oauth_registration`) have default implementations that return unimplemented errors. Override them to support MCP OAuth.
+  </Tabs.Tab>
+</Tabs>
+
+## OAuthRegistrationStore
+
+If your deployment uses MCP OAuth with dynamic client registration, the datastore needs to store OAuth client registrations. This is an optional interface. Implement `GetOAuthRegistration`, `PutOAuthRegistration`, and `DeleteOAuthRegistration` in Go, inherit from `gestalt.OAuthRegistrationStore` in Python, or override the default methods in Rust.
+
+Deployments that do not use MCP OAuth can skip this entirely. The default implementations return unimplemented errors, which is the correct behavior when MCP OAuth is not configured.
+
+## Config reference
+
+To use your datastore provider in a Gestalt deployment, reference it in the `datastore` block:
+
+```yaml
+datastore:
+  provider:
+    source:
+      path: ./my-datastore/plugin.yaml
+  config:
+    dsn: ${DATABASE_URL}
+```
+
+`provider.source.path` points at the datastore provider's `plugin.yaml` during development. For production, use `provider.source.ref` and `version` to reference a published release. The `config` block is passed to `Configure` at startup and validated against the config schema if one was declared in the manifest.
+
+Gestalt calls `Migrate` once at startup before any other datastore methods. Use it to create tables, run migrations, or verify that the schema is up to date. `HealthCheck` is called periodically and should return quickly; a database ping is the typical implementation.

@@ -1,0 +1,60 @@
+---
+asIndexPage: true
+---
+
+# Providers
+
+Gestalt has a unified runtime model: integration plugins, auth backends, datastores, and web UIs all run as providers. The server binary (`gestaltd`) does not compile any of these in. Instead, each provider is a separate package with a manifest and an executable (or a passthrough surface definition) that the host loads at startup.
+
+## Provider kinds
+
+A provider declares one or more `kinds` in its manifest:
+
+| Kind | Purpose |
+| --- | --- |
+| `plugin` | Integration provider. Exposes operations that users invoke through the CLI, the HTTP API, or MCP. |
+| `auth` | Platform auth backend. Handles login, session validation, and external token verification. |
+| `datastore` | Persistent storage. Stores users, integration tokens, API tokens, and OAuth registrations. |
+| `webui` | Replacement web UI served at `/`. |
+
+First-party auth and datastore providers are published at `github.com/valon-technologies/gestalt-providers/`. You can write your own for any kind.
+
+## How the runtime works
+
+When a provider entry resolves to an executable, `gestaltd` starts it as a child process. The host creates a temporary Unix socket, passes the socket path through the `GESTALT_PLUGIN_SOCKET` environment variable, and waits for the provider to connect back over gRPC. At startup the provider receives the configured provider name and the `config` block from the server config. For integration plugins, each invocation also receives the current request context (caller identity, decrypted token, and operation parameters).
+
+The host owns auth, token storage, connection selection, and HTTP or MCP routing. Integration providers do not interact with the datastore. Auth providers implement `BeginLogin` and `CompleteLogin`. Datastore providers implement user, token, and API-token storage interfaces. Each kind has its own gRPC service contract, but they all share the same process lifecycle.
+
+## Process isolation
+
+Providers run in their own process. They cannot access the host process memory, other users' credentials, or (for integration plugins) the datastore directly. Integration plugins also run inside a network sandbox: outbound requests to hosts not listed in `plugin.allowed_hosts` in the manifest are rejected with a 403.
+
+## SDK support
+
+Gestalt ships SDKs for three languages:
+
+- **Go** (`sdk/go`)
+- **Python** (`sdk/python`)
+- **Rust** (`sdk/rust`)
+
+The underlying protocol is gRPC, so other languages are possible, but the documented authoring flow targets Go, Python, and Rust.
+
+## Operation ID conventions
+
+Operation IDs should use period-separated hierarchical names. For example, a Slack integration might use `messages.list`, `messages.send`, `channels.list`, and `channels.archive`.
+
+This convention enables prefix matching in the CLI. When you run `gestalt invoke slack messages`, the CLI joins the space-separated segments with periods and shows all operations whose ID starts with `messages.`. This makes large catalogs navigable without memorizing every operation name.
+
+## Common pitfalls
+
+**Duplicate operation IDs.** Operation IDs must be unique within a provider. If two surfaces (for example, an OpenAPI passthrough and an executable operation) expose the same ID, the provider fails validation at startup. Use `allowed_operations` to filter or alias collisions.
+
+**Sandbox 403 errors.** Executable providers run inside a network sandbox. Outbound HTTP requests to hosts not listed in `plugin.allowed_hosts` are rejected with a 403. Add every upstream domain the provider contacts to the allowlist in the manifest.
+
+## What to read next
+
+- [Plugins](/providers/plugins): integration providers that expose operations
+- [Auth](/providers/auth): platform login providers
+- [Datastores](/providers/datastores): persistent storage backends
+- [Web UIs](/providers/web-uis): custom web frontends
+- [Releasing](/providers/releasing): packaging and publishing providers

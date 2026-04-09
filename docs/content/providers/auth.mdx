@@ -1,0 +1,203 @@
+import { Tabs } from 'nextra/components'
+
+# Auth
+
+Auth providers handle platform login. When a user visits the Gestalt web UI or hits the HTTP API without a valid session, the auth provider drives the login flow, validates the callback, and returns an authenticated identity. Gestalt then issues a session cookie and manages session lifetime on its own.
+
+Beyond the core login flow, an auth provider can optionally validate externally issued tokens (so API clients can present a bearer token directly instead of going through the browser) and control session TTL.
+
+## Manifest
+
+An auth provider manifest declares `kinds: [auth]` instead of `kinds: [plugin]`:
+
+```yaml
+source: github.com/example/plugins/my-auth
+version: 0.0.1-alpha.1
+display_name: My Auth Provider
+description: Custom OAuth 2.0 authentication
+kinds:
+  - auth
+auth:
+  config_schema_path: ./auth_config.json
+```
+
+The optional `auth.config_schema_path` field points to a JSON Schema that validates the `auth.config` block in the server config. If you provide one, Gestalt rejects invalid config at startup rather than letting bad values reach the provider at runtime.
+
+## Interface
+
+An auth provider implements three methods: `Configure`, `BeginLogin`, and `CompleteLogin`. `BeginLogin` receives the callback URL and a host-generated state parameter and returns an authorization URL that Gestalt redirects the user to. `CompleteLogin` receives the query parameters from the identity provider callback and returns the authenticated user's identity.
+
+<Tabs items={['Go', 'Python', 'Rust']}>
+  <Tabs.Tab>
+    ```go
+    package main
+
+    import (
+    	"context"
+    	"fmt"
+    	"net/url"
+
+    	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
+
+    type MyAuth struct {
+    	clientID  string
+    	issuerURL string
+    }
+
+    func (a *MyAuth) Configure(_ context.Context, _ string, config map[string]any) error {
+    	a.clientID, _ = config["client_id"].(string)
+    	a.issuerURL, _ = config["issuer_url"].(string)
+    	if a.clientID == "" || a.issuerURL == "" {
+    		return fmt.Errorf("client_id and issuer_url are required")
+    	}
+    	return nil
+    }
+
+    func (a *MyAuth) BeginLogin(_ context.Context, req gestalt.BeginLoginRequest) (*gestalt.BeginLoginResponse, error) {
+    	authURL := fmt.Sprintf(
+    		"%s/authorize?client_id=%s&redirect_uri=%s&state=%s&response_type=code",
+    		a.issuerURL,
+    		url.QueryEscape(a.clientID),
+    		url.QueryEscape(req.CallbackURL),
+    		url.QueryEscape(req.HostState),
+    	)
+    	return &gestalt.BeginLoginResponse{AuthorizationURL: authURL}, nil
+    }
+
+    func (a *MyAuth) CompleteLogin(_ context.Context, req gestalt.CompleteLoginRequest) (*gestalt.AuthenticatedUser, error) {
+    	code := req.Query["code"]
+    	if code == "" {
+    		return nil, fmt.Errorf("missing authorization code")
+    	}
+    	// Exchange code for tokens, extract user info.
+    	return &gestalt.AuthenticatedUser{
+    		Subject:       "user-123",
+    		Email:         "user@example.com",
+    		EmailVerified: true,
+    		DisplayName:   "Example User",
+    	}, nil
+    }
+
+    func main() {
+    	gestalt.ServeAuthProvider(context.Background(), &MyAuth{})
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    import gestalt
+
+    class MyAuth(gestalt.AuthProvider):
+        def configure(self, name: str, config: dict) -> None:
+            self.client_id = config.get("client_id", "")
+            self.issuer_url = config.get("issuer_url", "")
+
+        def begin_login(self, request: gestalt.BeginLoginRequest) -> gestalt.BeginLoginResponse:
+            auth_url = (
+                f"{self.issuer_url}/authorize"
+                f"?client_id={self.client_id}"
+                f"&redirect_uri={request.callback_url}"
+                f"&state={request.host_state}"
+                f"&response_type=code"
+            )
+            return gestalt.BeginLoginResponse(authorization_url=auth_url)
+
+        def complete_login(self, request: gestalt.CompleteLoginRequest) -> gestalt.AuthenticatedUser:
+            code = request.query.get("code", "")
+            # Exchange code for tokens, extract user info.
+            return gestalt.AuthenticatedUser(
+                subject="user-123",
+                email="user@example.com",
+                email_verified=True,
+                display_name="Example User",
+            )
+
+    MyAuth().serve()
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    use std::sync::Mutex;
+
+    use gestalt_plugin_sdk as gestalt;
+    use gestalt::{AuthProvider, AuthenticatedUser, BeginLoginRequest, BeginLoginResponse, CompleteLoginRequest};
+
+    pub struct MyAuth {
+        client_id: Mutex<String>,
+        issuer_url: Mutex<String>,
+    }
+
+    #[gestalt::async_trait]
+    impl AuthProvider for MyAuth {
+        async fn configure(
+            &self,
+            _name: &str,
+            config: serde_json::Map<String, serde_json::Value>,
+        ) -> gestalt::Result<()> {
+            *self.client_id.lock().unwrap() = config
+                .get("client_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            *self.issuer_url.lock().unwrap() = config
+                .get("issuer_url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            Ok(())
+        }
+
+        async fn begin_login(&self, req: BeginLoginRequest) -> gestalt::Result<BeginLoginResponse> {
+            let issuer = self.issuer_url.lock().unwrap().clone();
+            let client_id = self.client_id.lock().unwrap().clone();
+            Ok(BeginLoginResponse {
+                authorization_url: format!(
+                    "{issuer}/authorize?client_id={client_id}&redirect_uri={}&state={}&response_type=code",
+                    req.callback_url, req.host_state,
+                ),
+                provider_state: vec![],
+            })
+        }
+
+        async fn complete_login(&self, req: CompleteLoginRequest) -> gestalt::Result<AuthenticatedUser> {
+            let code = req.query.get("code").cloned().unwrap_or_default();
+            if code.is_empty() {
+                return Err(gestalt::Error::invalid_argument("missing authorization code"));
+            }
+            // Exchange code for tokens, extract user info.
+            Ok(AuthenticatedUser {
+                subject: "user-123".into(),
+                email: "user@example.com".into(),
+                email_verified: true,
+                display_name: "Example User".into(),
+                ..Default::default()
+            })
+        }
+    }
+
+    gestalt::export_auth_provider!(constructor = MyAuth::default);
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+## Optional interfaces
+
+Two optional interfaces extend the base contract.
+
+**ExternalTokenValidator** lets API clients present a token directly instead of going through the browser login flow. In Go, implement the `ExternalTokenValidator` interface on your provider. In Python, inherit from `gestalt.ExternalTokenValidator`. In Rust, override the `validate_external_token` method, which returns an unimplemented error by default.
+
+**SessionTTLProvider** controls session lifetime. The default is 24 hours. In Go, implement the `SessionTTLProvider` interface. In Python, inherit from `gestalt.SessionTTLProvider`. In Rust, override the `session_ttl` method, which returns `None` (the 24-hour default) by default.
+
+## Config reference
+
+To use your auth provider in a Gestalt deployment, reference it in the `auth` block:
+
+```yaml
+auth:
+  provider:
+    source:
+      path: ./my-auth/plugin.yaml
+  config:
+    issuer_url: https://login.example.com
+    client_id: ${OIDC_CLIENT_ID}
+    client_secret: secret://oidc-client-secret
+```
+
+`provider.source.path` points at the auth provider's `plugin.yaml` during development. For production, use `provider.source.ref` and `version` to reference a published release. The `config` block is passed to `Configure` at startup and validated against the config schema if one was declared in the manifest.
+
+Secret references like `secret://oidc-client-secret` are resolved through the configured secret manager before reaching the provider. Environment variable placeholders like `${OIDC_CLIENT_ID}` are expanded during config loading. See [Configuration](/configuration) for details on both.
