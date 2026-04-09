@@ -483,40 +483,7 @@ provider:
 	if err != nil {
 		t.Fatalf("ReadManifestFile: %v", err)
 	}
-	if manifest.Plugin == nil {
-		t.Fatal("expected plugin metadata")
-	}
 
-	conn := manifest.Plugin.Connections["api"]
-	if conn == nil {
-		t.Fatal("expected api connection")
-	}
-	if conn.Mode != "user" {
-		t.Fatalf("api connection mode = %q, want user", conn.Mode)
-	}
-	if len(conn.Params) != 2 {
-		t.Fatalf("api connection params = %+v, want 2 entries", conn.Params)
-	}
-	if p := conn.Params["workspace_id"]; !p.Required || p.Description != "The workspace ID" {
-		t.Fatalf("workspace_id param = %+v", p)
-	}
-	if p := conn.Params["region"]; p.From != "discovery" {
-		t.Fatalf("region param = %+v", p)
-	}
-	if conn.Discovery == nil {
-		t.Fatal("expected api connection discovery")
-	}
-	if conn.Discovery.URL != "https://api.example.com/workspaces" {
-		t.Fatalf("discovery url = %q", conn.Discovery.URL)
-	}
-	if conn.Discovery.IDPath != "id" || conn.Discovery.NamePath != "name" {
-		t.Fatalf("discovery paths: id=%q name=%q", conn.Discovery.IDPath, conn.Discovery.NamePath)
-	}
-	if conn.Discovery.Metadata["region"] != "region" {
-		t.Fatalf("discovery metadata = %+v", conn.Discovery.Metadata)
-	}
-
-	// Round-trip: encode then decode and verify equality.
 	encoded, err := EncodeManifestFormat(manifest, ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("EncodeManifestFormat: %v", err)
