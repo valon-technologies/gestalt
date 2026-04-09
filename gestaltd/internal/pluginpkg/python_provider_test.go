@@ -169,6 +169,32 @@ func TestPythonComponentExecutionCommand_PassesRuntimeKind(t *testing.T) {
 	}
 }
 
+func TestSourceProviderExecutionEnv_PythonUsesLocalSDK(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte(`[tool.gestalt]
+provider = "provider"
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile(pyproject.toml): %v", err)
+	}
+
+	env, err := SourceProviderExecutionEnv(root, runtime.GOOS, runtime.GOARCH)
+	if err != nil {
+		t.Fatalf("SourceProviderExecutionEnv: %v", err)
+	}
+	if len(env) == 0 {
+		t.Fatal("SourceProviderExecutionEnv returned no environment overrides")
+	}
+	want := localPythonSDKPath()
+	if want == "" {
+		t.Fatal("localPythonSDKPath returned empty path")
+	}
+	if got := env["PYTHONPATH"]; !strings.Contains(got, want) {
+		t.Fatalf("PYTHONPATH = %q, want to contain %q", got, want)
+	}
+}
+
 func pythonTestOtherPlatform() (string, string) {
 	if runtime.GOOS != "darwin" || runtime.GOARCH != "arm64" {
 		return "darwin", "arm64"

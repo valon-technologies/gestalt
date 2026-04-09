@@ -115,6 +115,17 @@ func SourceComponentExecutionCommand(root, kind, goos, goarch string) (string, [
 	}
 }
 
+func SourceComponentExecutionEnv(root, kind, goos, goarch string) (map[string]string, error) {
+	sourceKind, _, err := detectSourceComponent(root, kind, goos, goarch)
+	if err != nil {
+		return nil, err
+	}
+	if sourceKind != sourceProviderKindPython {
+		return nil, nil
+	}
+	return pythonBackendEnvMap(), nil
+}
+
 func ValidateSourceComponentRelease(root, kind, goos, goarch, libc string) error {
 	sourceKind, _, err := detectSourceComponent(root, kind, goos, goarch)
 	if err != nil {

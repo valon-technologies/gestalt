@@ -74,6 +74,17 @@ func SourceProviderExecutionCommand(root, goos, goarch string) (string, []string
 	}
 }
 
+func SourceProviderExecutionEnv(root, goos, goarch string) (map[string]string, error) {
+	kind, _, err := detectSourceProvider(root, goos, goarch)
+	if err != nil {
+		return nil, err
+	}
+	if kind != sourceProviderKindPython {
+		return nil, nil
+	}
+	return pythonBackendEnvMap(), nil
+}
+
 func ValidateSourceProviderRelease(root, goos, goarch, libc string) error {
 	kind, _, err := detectSourceProvider(root, goos, goarch)
 	if err != nil {
