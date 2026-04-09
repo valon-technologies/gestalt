@@ -315,6 +315,8 @@ func rustServeFunction(kind string) (string, bool, error) {
 		return "__gestalt_serve_auth", false, nil
 	case pluginmanifestv1.KindDatastore:
 		return "__gestalt_serve_datastore", false, nil
+	case pluginmanifestv1.KindSecrets:
+		return "__gestalt_serve_secrets", false, nil
 	default:
 		return "", false, fmt.Errorf("unsupported Rust provider kind %q", kind)
 	}
@@ -322,7 +324,7 @@ func rustServeFunction(kind string) (string, bool, error) {
 
 func rustBinaryName(kind string) string {
 	switch kind {
-	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore:
+	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore, pluginmanifestv1.KindSecrets:
 		return kind
 	default:
 		return "provider"

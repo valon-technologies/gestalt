@@ -8,6 +8,7 @@ const (
 	KindPlugin    = "plugin"
 	KindAuth      = "auth"
 	KindDatastore = "datastore"
+	KindSecrets   = "secrets"
 	KindWebUI     = "webui"
 )
 
@@ -21,6 +22,7 @@ type Manifest struct {
 	Plugin      *Plugin            `json:"plugin,omitempty" yaml:"plugin,omitempty"`
 	Auth        *AuthMetadata      `json:"auth,omitempty" yaml:"auth,omitempty"`
 	Datastore   *DatastoreMetadata `json:"datastore,omitempty" yaml:"datastore,omitempty"`
+	Secrets     *SecretsMetadata   `json:"secrets,omitempty" yaml:"secrets,omitempty"`
 	WebUI       *WebUIMetadata     `json:"webui,omitempty" yaml:"webui,omitempty"`
 	Artifacts   []Artifact         `json:"artifacts,omitempty" yaml:"artifacts,omitempty"`
 	Entrypoints Entrypoints        `json:"entrypoints,omitzero" yaml:"entrypoints,omitempty"`
@@ -40,6 +42,10 @@ type AuthMetadata struct {
 }
 
 type DatastoreMetadata struct {
+	ConfigSchemaPath string `json:"config_schema_path,omitempty" yaml:"config_schema_path,omitempty"`
+}
+
+type SecretsMetadata struct {
 	ConfigSchemaPath string `json:"config_schema_path,omitempty" yaml:"config_schema_path,omitempty"`
 }
 
@@ -212,6 +218,7 @@ type Entrypoints struct {
 	Provider  *Entrypoint `json:"plugin,omitempty" yaml:"plugin,omitempty"`
 	Auth      *Entrypoint `json:"auth,omitempty" yaml:"auth,omitempty"`
 	Datastore *Entrypoint `json:"datastore,omitempty" yaml:"datastore,omitempty"`
+	Secrets   *Entrypoint `json:"secrets,omitempty" yaml:"secrets,omitempty"`
 }
 
 type Entrypoint struct {
