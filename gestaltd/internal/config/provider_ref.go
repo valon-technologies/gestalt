@@ -99,7 +99,7 @@ func (i *IntegrationDef) UnmarshalYAML(value *yaml.Node) error {
 			plugin.Auth = &auth
 			plugin.ConnectionMode = defaultConn.Mode
 			plugin.ConnectionParams = defaultConn.Params
-			plugin.PostConnectDiscovery = defaultConn.toManifestDiscovery()
+			plugin.Discovery = defaultConn.toManifestDiscovery()
 		}
 		if len(wire.Connections) > 0 {
 			plugin.Connections = make(map[string]*ConnectionDef, len(wire.Connections))
@@ -115,6 +115,7 @@ func (i *IntegrationDef) UnmarshalYAML(value *yaml.Node) error {
 					Mode:             conn.Mode,
 					Auth:             conn.Auth,
 					ConnectionParams: conn.Params,
+					Discovery:        conn.toManifestDiscovery(),
 				}
 			}
 			if len(plugin.Connections) == 0 {
@@ -150,31 +151,17 @@ func validateIntegrationWire(wire *integrationWire) error {
 		return fmt.Errorf("mcp.tool_prefix is only valid when mcp.enabled is true")
 	}
 
-	for name, conn := range wire.Connections {
-		if conn == nil {
-			continue
-		}
-		if name != "default" {
-			if len(conn.Params) > 0 {
-				return fmt.Errorf("connections.%s.params are only supported on connections.default", name)
-			}
-			if conn.Discovery != nil {
-				return fmt.Errorf("connections.%s.discovery is only supported on connections.default", name)
-			}
-		}
-	}
-
 	return nil
 }
 
-func (w *integrationConnection) toManifestDiscovery() *pluginmanifestv1.ProviderPostConnectDiscovery {
+func (w *integrationConnection) toManifestDiscovery() *pluginmanifestv1.ProviderDiscovery {
 	if w == nil || w.Discovery == nil {
 		return nil
 	}
-	return &pluginmanifestv1.ProviderPostConnectDiscovery{
-		URL:             w.Discovery.URL,
-		IDPath:          w.Discovery.IDPath,
-		NamePath:        w.Discovery.NamePath,
-		MetadataMapping: w.Discovery.Metadata,
+	return &pluginmanifestv1.ProviderDiscovery{
+		URL:      w.Discovery.URL,
+		IDPath:   w.Discovery.IDPath,
+		NamePath: w.Discovery.NamePath,
+		Metadata: w.Discovery.Metadata,
 	}
 }

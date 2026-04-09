@@ -788,7 +788,7 @@ plugins:
 			wantErr: "plugin.source.version is required",
 		},
 		{
-			name: "non-default connection params are rejected",
+			name: "non-default connection params are accepted",
 			yaml: `
 plugins:
   external:
@@ -804,10 +804,9 @@ plugins:
           team:
             required: true
 `,
-			wantErr: "connections.named.params are only supported on connections.default",
 		},
 		{
-			name: "non-default connection discovery is rejected",
+			name: "non-default connection discovery is accepted",
 			yaml: `
 plugins:
   external:
@@ -822,7 +821,6 @@ plugins:
         discovery:
           url: https://example.com/connections
 `,
-			wantErr: "connections.named.discovery is only supported on connections.default",
 		},
 		{
 			name: "mcp tool prefix requires mcp enabled",

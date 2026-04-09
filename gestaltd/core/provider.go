@@ -88,7 +88,7 @@ type DiscoveryConfig struct {
 	ItemsPath       string
 	IDPath          string
 	NamePath        string
-	MetadataMapping map[string]string
+	Metadata map[string]string
 }
 
 type DiscoveryConfigProvider interface {

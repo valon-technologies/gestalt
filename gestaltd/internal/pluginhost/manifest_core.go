@@ -38,14 +38,14 @@ func CredentialFieldsFromManifest(fields []pluginmanifestv1.CredentialField) []c
 	return out
 }
 
-func DiscoveryConfigFromManifest(discovery *pluginmanifestv1.ProviderPostConnectDiscovery) *core.DiscoveryConfig {
+func DiscoveryConfigFromManifest(discovery *pluginmanifestv1.ProviderDiscovery) *core.DiscoveryConfig {
 	if discovery == nil {
 		return nil
 	}
 	return &core.DiscoveryConfig{
-		URL:             discovery.URL,
-		IDPath:          discovery.IDPath,
-		NamePath:        discovery.NamePath,
-		MetadataMapping: maps.Clone(discovery.MetadataMapping),
+		URL:      discovery.URL,
+		IDPath:   discovery.IDPath,
+		NamePath: discovery.NamePath,
+		Metadata: maps.Clone(discovery.Metadata),
 	}
 }

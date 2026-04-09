@@ -2922,7 +2922,7 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 				URL:             discoverySrv.URL,
 				IDPath:          "id",
 				NamePath:        "name",
-				MetadataMapping: map[string]string{"workspace": "workspace"},
+				Metadata: map[string]string{"workspace": "workspace"},
 			},
 		}
 
@@ -4886,7 +4886,7 @@ func TestConnectManual(t *testing.T) {
 					URL:             discoverySrv.URL,
 					IDPath:          "id",
 					NamePath:        "name",
-					MetadataMapping: map[string]string{"workspace": "workspace"},
+					Metadata: map[string]string{"workspace": "workspace"},
 				},
 			})
 			cfg.DefaultConnection = map[string]string{"manual-svc": config.PluginConnectionName}

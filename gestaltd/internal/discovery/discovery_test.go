@@ -25,7 +25,7 @@ func TestRun_TopLevelArray(t *testing.T) {
 		URL:      srv.URL,
 		IDPath:   "site_id",
 		NamePath: "site_name",
-		MetadataMapping: map[string]string{
+		Metadata: map[string]string{
 			"region": "region",
 		},
 	}

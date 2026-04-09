@@ -146,7 +146,7 @@ func providerWireToInternal(wire *providerManifestWireRoot) *pluginmanifestv1.Ma
 			manifest.Plugin.Auth = defaultConn.Auth
 			manifest.Plugin.ConnectionMode = defaultConn.Mode
 			manifest.Plugin.ConnectionParams = defaultConn.Params
-			manifest.Plugin.PostConnectDiscovery = defaultConn.toInternalDiscovery()
+			manifest.Plugin.Discovery = defaultConn.toInternalDiscovery()
 		}
 		if len(wire.Provider.Connections) > 0 {
 			manifest.Plugin.Connections = make(map[string]*pluginmanifestv1.ManifestConnectionDef, len(wire.Provider.Connections))
@@ -159,8 +159,10 @@ func providerWireToInternal(wire *providerManifestWireRoot) *pluginmanifestv1.Ma
 					continue
 				}
 				manifest.Plugin.Connections[name] = &pluginmanifestv1.ManifestConnectionDef{
-					Mode: conn.Mode,
-					Auth: conn.Auth,
+					Mode:      conn.Mode,
+					Auth:      conn.Auth,
+					Params:    conn.Params,
+					Discovery: conn.toInternalDiscovery(),
 				}
 			}
 			if len(manifest.Plugin.Connections) == 0 {
@@ -246,13 +248,13 @@ func internalProviderManifestToWire(manifest *pluginmanifestv1.Manifest) *provid
 	if manifest.Plugin.MCP {
 		provider.MCP = &providerManifestMCPWire{Enabled: true}
 	}
-	if manifest.Plugin.ConnectionMode != "" || manifest.Plugin.Auth != nil || len(manifest.Plugin.ConnectionParams) > 0 || manifest.Plugin.PostConnectDiscovery != nil {
+	if manifest.Plugin.ConnectionMode != "" || manifest.Plugin.Auth != nil || len(manifest.Plugin.ConnectionParams) > 0 || manifest.Plugin.Discovery != nil {
 		provider.Connections = map[string]*providerManifestConnectionWire{
 			"default": {
 				Mode:      manifest.Plugin.ConnectionMode,
 				Auth:      manifest.Plugin.Auth,
 				Params:    manifest.Plugin.ConnectionParams,
-				Discovery: internalDiscoveryToWire(manifest.Plugin.PostConnectDiscovery),
+				Discovery: internalDiscoveryToWire(manifest.Plugin.Discovery),
 			},
 		}
 	}
@@ -266,8 +268,10 @@ func internalProviderManifestToWire(manifest *pluginmanifestv1.Manifest) *provid
 				continue
 			}
 			provider.Connections[name] = &providerManifestConnectionWire{
-				Mode: conn.Mode,
-				Auth: conn.Auth,
+				Mode:      conn.Mode,
+				Auth:      conn.Auth,
+				Params:    conn.Params,
+				Discovery: internalDiscoveryToWire(conn.Discovery),
 			}
 		}
 	}
@@ -300,19 +304,19 @@ func internalProviderManifestToWire(manifest *pluginmanifestv1.Manifest) *provid
 	return wire
 }
 
-func (w *providerManifestConnectionWire) toInternalDiscovery() *pluginmanifestv1.ProviderPostConnectDiscovery {
+func (w *providerManifestConnectionWire) toInternalDiscovery() *pluginmanifestv1.ProviderDiscovery {
 	if w == nil || w.Discovery == nil {
 		return nil
 	}
-	return &pluginmanifestv1.ProviderPostConnectDiscovery{
-		URL:             w.Discovery.URL,
-		IDPath:          w.Discovery.IDPath,
-		NamePath:        w.Discovery.NamePath,
-		MetadataMapping: w.Discovery.Metadata,
+	return &pluginmanifestv1.ProviderDiscovery{
+		URL:      w.Discovery.URL,
+		IDPath:   w.Discovery.IDPath,
+		NamePath: w.Discovery.NamePath,
+		Metadata: w.Discovery.Metadata,
 	}
 }
 
-func internalDiscoveryToWire(discovery *pluginmanifestv1.ProviderPostConnectDiscovery) *providerManifestDiscoveryWire {
+func internalDiscoveryToWire(discovery *pluginmanifestv1.ProviderDiscovery) *providerManifestDiscoveryWire {
 	if discovery == nil {
 		return nil
 	}
@@ -320,7 +324,7 @@ func internalDiscoveryToWire(discovery *pluginmanifestv1.ProviderPostConnectDisc
 		URL:      discovery.URL,
 		IDPath:   discovery.IDPath,
 		NamePath: discovery.NamePath,
-		Metadata: discovery.MetadataMapping,
+		Metadata: discovery.Metadata,
 	}
 }
 

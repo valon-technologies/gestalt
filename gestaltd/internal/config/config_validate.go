@@ -343,7 +343,7 @@ func validateExternalPlugin(kind, name string, plugin *ProviderDef) error {
 	if kind != "integration" {
 		hasIntegrationConfig := plugin.Auth != nil || len(plugin.Connections) > 0 ||
 			len(plugin.ConnectionParams) > 0 || plugin.MCP || len(plugin.AllowedOperations) > 0 ||
-			plugin.DefaultConnection != "" || plugin.PostConnectDiscovery != nil
+			plugin.DefaultConnection != "" || plugin.Discovery != nil
 		if hasIntegrationConfig {
 			return fmt.Errorf("config validation: %s %q provider cannot use integration-only fields", kind, name)
 		}

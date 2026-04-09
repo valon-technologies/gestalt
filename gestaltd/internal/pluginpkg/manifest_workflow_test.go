@@ -440,3 +440,92 @@ provider:
 		t.Fatalf("error = %v", err)
 	}
 }
+
+func TestManifestWorkflow_NamedConnectionParamsAndDiscovery(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manifestPath := mustWriteManifestData(t, dir, "plugin.yaml", []byte(`
+source: github.com/acme/plugins/multi-conn
+version: 1.0.0
+display_name: Multi Connection
+provider:
+  connections:
+    default:
+      auth:
+        type: none
+    api:
+      mode: user
+      auth:
+        type: oauth2
+        authorization_url: https://auth.example.com/authorize
+        token_url: https://auth.example.com/token
+      params:
+        workspace_id:
+          required: true
+          description: The workspace ID
+        region:
+          from: discovery
+      discovery:
+        url: https://api.example.com/workspaces
+        id_path: id
+        name_path: name
+        metadata:
+          region: region
+  surfaces:
+    openapi:
+      document: openapi.yaml
+      connection: api
+`))
+	mustWriteFile(t, filepath.Join(dir, "openapi.yaml"), []byte("openapi: 3.1.0\ninfo:\n  title: Example\n  version: 1.0.0\npaths: {}\n"), 0o644)
+
+	_, manifest, err := ReadManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadManifestFile: %v", err)
+	}
+	if manifest.Plugin == nil {
+		t.Fatal("expected plugin metadata")
+	}
+
+	conn := manifest.Plugin.Connections["api"]
+	if conn == nil {
+		t.Fatal("expected api connection")
+	}
+	if conn.Mode != "user" {
+		t.Fatalf("api connection mode = %q, want user", conn.Mode)
+	}
+	if len(conn.Params) != 2 {
+		t.Fatalf("api connection params = %+v, want 2 entries", conn.Params)
+	}
+	if p := conn.Params["workspace_id"]; !p.Required || p.Description != "The workspace ID" {
+		t.Fatalf("workspace_id param = %+v", p)
+	}
+	if p := conn.Params["region"]; p.From != "discovery" {
+		t.Fatalf("region param = %+v", p)
+	}
+	if conn.Discovery == nil {
+		t.Fatal("expected api connection discovery")
+	}
+	if conn.Discovery.URL != "https://api.example.com/workspaces" {
+		t.Fatalf("discovery url = %q", conn.Discovery.URL)
+	}
+	if conn.Discovery.IDPath != "id" || conn.Discovery.NamePath != "name" {
+		t.Fatalf("discovery paths: id=%q name=%q", conn.Discovery.IDPath, conn.Discovery.NamePath)
+	}
+	if conn.Discovery.Metadata["region"] != "region" {
+		t.Fatalf("discovery metadata = %+v", conn.Discovery.Metadata)
+	}
+
+	// Round-trip: encode then decode and verify equality.
+	encoded, err := EncodeManifestFormat(manifest, ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeManifestFormat: %v", err)
+	}
+	roundTripped, err := DecodeManifestFormat(encoded, ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("DecodeManifestFormat: %v", err)
+	}
+	if !ManifestEqual(manifest, roundTripped) {
+		t.Fatalf("round-trip mismatch:\noriginal=%#v\nround-tripped=%#v", manifest, roundTripped)
+	}
+}

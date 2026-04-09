@@ -261,6 +261,15 @@
         },
         "auth": {
           "$ref": "#/$defs/plugin_auth"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/plugin_connection_param"
+          }
+        },
+        "discovery": {
+          "$ref": "#/$defs/plugin_discovery"
         }
       }
     },

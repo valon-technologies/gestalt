@@ -46,7 +46,7 @@ type DeclarativeProvider struct {
 	baseURL              string
 	auth                 *pluginmanifestv1.ProviderAuth
 	httpClient           *http.Client
-	postConnectDiscovery *pluginmanifestv1.ProviderPostConnectDiscovery
+	discovery *pluginmanifestv1.ProviderDiscovery
 	connectionDefs       map[string]pluginmanifestv1.ProviderConnectionParam
 	connectionMode       core.ConnectionMode
 }
@@ -75,7 +75,7 @@ func NewDeclarativeProvider(manifest *pluginmanifestv1.Manifest, httpClient *htt
 		baseURL:              manifest.Plugin.BaseURL,
 		auth:                 manifest.Plugin.Auth,
 		httpClient:           httpClient,
-		postConnectDiscovery: manifest.Plugin.PostConnectDiscovery,
+		discovery: manifest.Plugin.Discovery,
 		connectionDefs:       manifest.Plugin.ConnectionParams,
 	}
 
@@ -259,5 +259,5 @@ func (p *DeclarativeProvider) ConnectionParamDefs() map[string]core.ConnectionPa
 }
 
 func (p *DeclarativeProvider) DiscoveryConfig() *core.DiscoveryConfig {
-	return DiscoveryConfigFromManifest(p.postConnectDiscovery)
+	return DiscoveryConfigFromManifest(p.discovery)
 }

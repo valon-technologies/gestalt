@@ -63,7 +63,7 @@ type Plugin struct {
 	Headers              map[string]string                  `json:"headers,omitempty" yaml:"headers,omitempty"`
 	ManagedParameters    []ManagedParameter                 `json:"managed_parameters,omitempty" yaml:"managed_parameters,omitempty"`
 	Operations           []ProviderOperation                `json:"operations,omitempty" yaml:"operations,omitempty"`
-	PostConnectDiscovery *ProviderPostConnectDiscovery      `json:"post_connect_discovery,omitempty" yaml:"post_connect_discovery,omitempty"`
+	Discovery *ProviderDiscovery `json:"discovery,omitempty" yaml:"discovery,omitempty"`
 	ConnectionParams     map[string]ProviderConnectionParam `json:"connection_params,omitempty" yaml:"connection_params,omitempty"`
 
 	OpenAPI           string                                `json:"openapi,omitempty" yaml:"openapi,omitempty"`
@@ -114,11 +114,11 @@ type ManifestPaginationMapping struct {
 	Cursor  *ManifestValueSelector `json:"cursor,omitempty" yaml:"cursor,omitempty"`
 }
 
-type ProviderPostConnectDiscovery struct {
-	URL             string            `json:"url" yaml:"url"`
-	IDPath          string            `json:"id_path,omitempty" yaml:"id_path,omitempty"`
-	NamePath        string            `json:"name_path,omitempty" yaml:"name_path,omitempty"`
-	MetadataMapping map[string]string `json:"metadata_mapping,omitempty" yaml:"metadata_mapping,omitempty"`
+type ProviderDiscovery struct {
+	URL      string            `json:"url" yaml:"url"`
+	IDPath   string            `json:"id_path,omitempty" yaml:"id_path,omitempty"`
+	NamePath string            `json:"name_path,omitempty" yaml:"name_path,omitempty"`
+	Metadata map[string]string `json:"metadata,omitempty" yaml:"metadata,omitempty"`
 }
 
 type ProviderConnectionParam struct {
@@ -145,8 +145,10 @@ type ManifestOperationOverride struct {
 }
 
 type ManifestConnectionDef struct {
-	Mode string        `json:"mode,omitempty" yaml:"mode,omitempty"`
-	Auth *ProviderAuth `json:"auth,omitempty" yaml:"auth,omitempty"`
+	Mode      string                             `json:"mode,omitempty" yaml:"mode,omitempty"`
+	Auth      *ProviderAuth                      `json:"auth,omitempty" yaml:"auth,omitempty"`
+	Params    map[string]ProviderConnectionParam `json:"params,omitempty" yaml:"params,omitempty"`
+	Discovery *ProviderDiscovery                 `json:"discovery,omitempty" yaml:"discovery,omitempty"`
 }
 
 type ProviderOperation struct {
