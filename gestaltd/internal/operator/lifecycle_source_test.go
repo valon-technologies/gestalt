@@ -325,11 +325,11 @@ func TestSourcePluginEndToEnd(t *testing.T) {
 	if entry.Version != version {
 		t.Errorf("entry.Version = %q, want %q", entry.Version, version)
 	}
-	if entry.ResolvedURL != resolvedURL {
-		t.Errorf("entry.ResolvedURL = %q, want %q", entry.ResolvedURL, resolvedURL)
+	if entry.Archives[pluginpkg.CurrentPlatformString()].URL != resolvedURL {
+		t.Errorf("entry archive URL = %q, want %q", entry.Archives[pluginpkg.CurrentPlatformString()].URL, resolvedURL)
 	}
-	if entry.ArchiveSHA256 != archiveSHA {
-		t.Errorf("entry.ArchiveSHA256 = %q, want %q", entry.ArchiveSHA256, archiveSHA)
+	if entry.Archives[pluginpkg.CurrentPlatformString()].SHA256 != archiveSHA {
+		t.Errorf("entry archive SHA256 = %q, want %q", entry.Archives[pluginpkg.CurrentPlatformString()].SHA256, archiveSHA)
 	}
 	if entry.Manifest == "" {
 		t.Error("entry.Manifest is empty")
@@ -940,18 +940,18 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 	if entry.Version != testVersion {
 		t.Errorf("entry.Version = %q, want %q", entry.Version, testVersion)
 	}
-	if entry.ResolvedURL == "" {
-		t.Error("entry.ResolvedURL is empty")
+	if entry.Archives[pluginpkg.CurrentPlatformString()].URL == "" {
+		t.Error("entry archive URL is empty")
 	}
-	if entry.ResolvedURL != srv.URL+"/asset-dl" {
-		t.Errorf("entry.ResolvedURL = %q, want %q", entry.ResolvedURL, srv.URL+"/asset-dl")
+	if entry.Archives[pluginpkg.CurrentPlatformString()].URL != srv.URL+"/asset-dl" {
+		t.Errorf("entry archive URL = %q, want %q", entry.Archives[pluginpkg.CurrentPlatformString()].URL, srv.URL+"/asset-dl")
 	}
-	if entry.ArchiveSHA256 == "" {
-		t.Error("entry.ArchiveSHA256 is empty")
+	if entry.Archives[pluginpkg.CurrentPlatformString()].SHA256 == "" {
+		t.Error("entry archive SHA256 is empty")
 	}
 	wantSHA := sha256hex(string(archiveData))
-	if entry.ArchiveSHA256 != wantSHA {
-		t.Errorf("entry.ArchiveSHA256 = %q, want %q", entry.ArchiveSHA256, wantSHA)
+	if entry.Archives[pluginpkg.CurrentPlatformString()].SHA256 != wantSHA {
+		t.Errorf("entry archive SHA256 = %q, want %q", entry.Archives[pluginpkg.CurrentPlatformString()].SHA256, wantSHA)
 	}
 
 	configDir := filepath.Dir(configPath)
@@ -1087,8 +1087,8 @@ func TestSourcePluginGitHubResolverPrefersCurrentLinuxLibcAsset(t *testing.T) {
 	}
 
 	entry := lock.Providers["alpha"]
-	if entry.ResolvedURL != srv.URL+"/exact-dl" {
-		t.Fatalf("ResolvedURL = %q, want %q", entry.ResolvedURL, srv.URL+"/exact-dl")
+	if entry.Archives[pluginpkg.CurrentPlatformString()].URL != srv.URL+"/exact-dl" {
+		t.Fatalf("archive URL = %q, want %q", entry.Archives[pluginpkg.CurrentPlatformString()].URL, srv.URL+"/exact-dl")
 	}
 	executablePath := resolveLockPath(artifactsDir, entry.Executable)
 	data, err := os.ReadFile(executablePath)

@@ -60,3 +60,29 @@ func PlatformArchiveSuffix(goos, goarch, libc string) string {
 	}
 	return fmt.Sprintf("%s_%s", goos, goarch)
 }
+
+// CurrentPlatformString returns the platform string for the host running
+// this process (e.g. "darwin/arm64", "linux/amd64/glibc").
+func CurrentPlatformString() string {
+	return PlatformString(runtime.GOOS, runtime.GOARCH, CurrentRuntimeLibC())
+}
+
+// ParsePlatformString is the inverse of PlatformString. It parses
+// "darwin/arm64" or "linux/amd64/glibc" into (goos, goarch, libc).
+func ParsePlatformString(s string) (goos, goarch, libc string, err error) {
+	parts := strings.Split(s, "/")
+	switch len(parts) {
+	case 2:
+		if parts[0] == "" || parts[1] == "" {
+			return "", "", "", fmt.Errorf("invalid platform string %q: empty component", s)
+		}
+		return parts[0], parts[1], "", nil
+	case 3:
+		if parts[0] == "" || parts[1] == "" || parts[2] == "" {
+			return "", "", "", fmt.Errorf("invalid platform string %q: empty component", s)
+		}
+		return parts[0], parts[1], parts[2], nil
+	default:
+		return "", "", "", fmt.Errorf("invalid platform string %q: expected os/arch or os/arch/libc", s)
+	}
+}

@@ -32,10 +32,10 @@ var testSource = pluginsource.Source{
 }
 
 func currentPlatformAssetName() string {
-	return platformAssetNameFor(testPlugin, testVersion)
+	return testPlatformAssetName(testPlugin, testVersion)
 }
 
-func platformAssetNameFor(plugin, version string, extras ...string) string {
+func testPlatformAssetName(plugin, version string, extras ...string) string {
 	base := platformAssetPrefix + plugin + "_v" + version
 	for _, extra := range extras {
 		if extra != "" {
@@ -165,7 +165,7 @@ func TestFindAssetPlatformMatch(t *testing.T) {
 	assets := []releaseAsset{
 		{Name: variantPlatformAssetName(platformAssetPrefix+"my-"+testPlugin, "_", "_", ".tar.gz"), URL: "http://z", BrowserDownloadURL: "http://z"},
 		{Name: want, URL: "http://x", BrowserDownloadURL: "http://x"},
-		{Name: platformAssetNameFor(testPlugin, "1.2.2"), URL: "http://y", BrowserDownloadURL: "http://y"},
+		{Name: testPlatformAssetName(testPlugin, "1.2.2"), URL: "http://y", BrowserDownloadURL: "http://y"},
 	}
 	got, err := findAsset(assets, testPlugin, testVersion)
 	if err != nil {
@@ -200,7 +200,7 @@ func TestFindAssetRejectsWrongVersion(t *testing.T) {
 	t.Parallel()
 
 	assets := []releaseAsset{
-		{Name: platformAssetNameFor(testPlugin, "1.2.2"), URL: "http://x", BrowserDownloadURL: "http://x"},
+		{Name: testPlatformAssetName(testPlugin, "1.2.2"), URL: "http://x", BrowserDownloadURL: "http://x"},
 	}
 	_, err := findAsset(assets, testPlugin, testVersion)
 	if err == nil {
@@ -210,7 +210,7 @@ func TestFindAssetRejectsWrongVersion(t *testing.T) {
 	if !strings.Contains(errMsg, testVersion) {
 		t.Errorf("error should mention requested version, got: %s", errMsg)
 	}
-	if !strings.Contains(errMsg, platformAssetNameFor(testPlugin, "1.2.2")) {
+	if !strings.Contains(errMsg, testPlatformAssetName(testPlugin, "1.2.2")) {
 		t.Errorf("error should list available assets, got: %s", errMsg)
 	}
 }
@@ -266,12 +266,12 @@ func TestFindAssetMatchesLinuxLibCSpecificArchiveWhenLibCUnknown(t *testing.T) {
 		{Name: want, URL: "http://x", BrowserDownloadURL: "http://x"},
 	}
 
-	got, err := findAssetForLibC(assets, testPlugin, testVersion, "")
+	got, err := findAssetForPlatform(assets, runtime.GOOS, runtime.GOARCH, testPlugin, testVersion, "")
 	if err != nil {
-		t.Fatalf("findAssetForLibC() error: %v", err)
+		t.Fatalf("findAssetForPlatform() error: %v", err)
 	}
 	if got.Name != want {
-		t.Fatalf("findAssetForLibC() = %q, want %q", got.Name, want)
+		t.Fatalf("findAssetForPlatform() = %q, want %q", got.Name, want)
 	}
 }
 
@@ -288,12 +288,12 @@ func TestFindAssetPrefersMuslLinuxAssetWhenLibCUnknownAndBothSpecificArchivesExi
 		{Name: want, URL: "http://musl", BrowserDownloadURL: "http://musl"},
 	}
 
-	got, err := findAssetForLibC(assets, testPlugin, testVersion, "")
+	got, err := findAssetForPlatform(assets, runtime.GOOS, runtime.GOARCH, testPlugin, testVersion, "")
 	if err != nil {
-		t.Fatalf("findAssetForLibC() error: %v", err)
+		t.Fatalf("findAssetForPlatform() error: %v", err)
 	}
 	if got.Name != want {
-		t.Fatalf("findAssetForLibC() = %q, want %q", got.Name, want)
+		t.Fatalf("findAssetForPlatform() = %q, want %q", got.Name, want)
 	}
 }
 
@@ -558,5 +558,105 @@ func TestResolveDownloadError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "unexpected status 500") {
 		t.Errorf("error = %q, want mention of status 500", err.Error())
+	}
+}
+
+func TestExtractPlatformFromAssetName_Canonical(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		asset    string
+		wantPlat string
+		wantOK   bool
+	}{
+		{"darwin_arm64", "gestalt-plugin-linter_v1.2.3_darwin_arm64.tar.gz", "darwin/arm64", true},
+		{"linux_amd64", "gestalt-plugin-linter_v1.2.3_linux_amd64.tar.gz", "linux/amd64", true},
+		{"linux_amd64_glibc", "gestalt-plugin-linter_v1.2.3_linux_amd64_glibc.tar.gz", "linux/amd64/glibc", true},
+		{"linux_arm64_musl", "gestalt-plugin-linter_v1.2.3_linux_arm64_musl.tar.gz", "linux/arm64/musl", true},
+		{"windows_amd64", "gestalt-plugin-linter_v1.2.3_windows_amd64.tar.gz", "windows/amd64", true},
+		{"macos_alias", "gestalt-plugin-linter_v1.2.3_macos_aarch64.tar.gz", "darwin/arm64", true},
+		{"x86_64_alias", "gestalt-plugin-linter_v1.2.3_linux_x86_64.tar.gz", "linux/amd64", true},
+		{"generic", "gestalt-plugin-linter_v1.2.3.tar.gz", "", false},
+		{"wrong_plugin", "gestalt-plugin-other_v1.2.3_darwin_arm64.tar.gz", "", false},
+		{"wrong_version", "gestalt-plugin-linter_v9.9.9_darwin_arm64.tar.gz", "", false},
+		{"not_plugin", "random-file.tar.gz", "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got, ok := extractPlatformFromAssetName(tt.asset, testPlugin, testVersion)
+			if ok != tt.wantOK {
+				t.Fatalf("extractPlatformFromAssetName(%q) ok = %v, want %v", tt.asset, ok, tt.wantOK)
+			}
+			if got != tt.wantPlat {
+				t.Errorf("extractPlatformFromAssetName(%q) = %q, want %q", tt.asset, got, tt.wantPlat)
+			}
+		})
+	}
+}
+
+func TestClassifyReleaseAssets(t *testing.T) {
+	t.Parallel()
+	assets := []releaseAsset{
+		{Name: "gestalt-plugin-linter_v1.2.3_darwin_arm64.tar.gz", URL: "https://example.com/darwin-arm64"},
+		{Name: "gestalt-plugin-linter_v1.2.3_linux_amd64.tar.gz", URL: "https://example.com/linux-amd64"},
+		{Name: "gestalt-plugin-linter_v1.2.3_linux_amd64_glibc.tar.gz", URL: "https://example.com/linux-amd64-glibc"},
+		{Name: "gestalt-plugin-linter_v1.2.3.tar.gz", URL: "https://example.com/generic"},
+		{Name: "unrelated-file.zip", URL: "https://example.com/unrelated"},
+		{Name: "checksums.txt", URL: "https://example.com/checksums"},
+	}
+
+	result := classifyReleaseAssets(assets, testPlugin, testVersion)
+
+	expected := map[string]string{
+		"darwin/arm64":      "https://example.com/darwin-arm64",
+		"linux/amd64":       "https://example.com/linux-amd64",
+		"linux/amd64/glibc": "https://example.com/linux-amd64-glibc",
+		"generic":           "https://example.com/generic",
+	}
+
+	if len(result) != len(expected) {
+		t.Fatalf("classifyReleaseAssets returned %d entries, want %d", len(result), len(expected))
+	}
+	for platform, wantURL := range expected {
+		asset, ok := result[platform]
+		if !ok {
+			t.Errorf("missing platform %q", platform)
+			continue
+		}
+		if asset.URL != wantURL {
+			t.Errorf("platform %q URL = %q, want %q", platform, asset.URL, wantURL)
+		}
+	}
+}
+
+func TestListPlatformArchives(t *testing.T) {
+	t.Parallel()
+
+	assetName := currentPlatformAssetName()
+	srv := newTestServer(t, assetName)
+	defer srv.Close()
+
+	resolver := &GitHubResolver{BaseURL: srv.URL}
+	archives, err := resolver.ListPlatformArchives(context.Background(), testSource, testVersion)
+	if err != nil {
+		t.Fatalf("ListPlatformArchives: %v", err)
+	}
+
+	if len(archives) == 0 {
+		t.Fatal("ListPlatformArchives returned no archives")
+	}
+
+	found := false
+	for _, a := range archives {
+		if a.Platform == runtime.GOOS+"/"+runtime.GOARCH || strings.HasPrefix(a.Platform, runtime.GOOS+"/"+runtime.GOARCH) {
+			found = true
+			if a.URL == "" {
+				t.Error("current platform archive has empty URL")
+			}
+		}
+	}
+	if !found {
+		t.Errorf("current platform %s/%s not found in archives", runtime.GOOS, runtime.GOARCH)
 	}
 }

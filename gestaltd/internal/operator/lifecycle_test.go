@@ -1204,23 +1204,25 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 		Version: LockVersion,
 		Providers: map[string]LockProviderEntry{
 			"example": {
-				Fingerprint:   "provider-fp",
-				Source:        "github.com/test-org/test-repo/test-plugin",
-				Version:       "1.0.0",
-				ResolvedURL:   "https://example.com/example.tar.gz",
-				ArchiveSHA256: "abc123",
-				Manifest:      ".gestaltd/providers/example/manifest.json",
-				Executable:    ".gestaltd/providers/example/artifacts/darwin/arm64/provider",
+				Fingerprint: "provider-fp",
+				Source:      "github.com/test-org/test-repo/test-plugin",
+				Version:     "1.0.0",
+				Archives: map[string]LockArchive{
+					"darwin/arm64": {URL: "https://example.com/example.tar.gz", SHA256: "abc123"},
+				},
+				Manifest:   ".gestaltd/providers/example/manifest.json",
+				Executable: ".gestaltd/providers/example/artifacts/darwin/arm64/provider",
 			},
 		},
 		UI: &LockUIEntry{
-			Fingerprint:   "ui-fp",
-			Source:        "github.com/test-org/test-repo/test-ui",
-			Version:       "2.0.0",
-			ResolvedURL:   "https://example.com/ui.tar.gz",
-			ArchiveSHA256: "def456",
-			Manifest:      ".gestaltd/ui/manifest.json",
-			AssetRoot:     ".gestaltd/ui/assets",
+			Fingerprint: "ui-fp",
+			Source:      "github.com/test-org/test-repo/test-ui",
+			Version:     "2.0.0",
+			Archives: map[string]LockArchive{
+				"generic": {URL: "https://example.com/ui.tar.gz", SHA256: "def456"},
+			},
+			Manifest:  ".gestaltd/ui/manifest.json",
+			AssetRoot: ".gestaltd/ui/assets",
 		},
 	}
 	if err := WriteLockfile(lockPath, want); err != nil {
@@ -1242,5 +1244,48 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	}
 	if got.UI == nil || got.UI.Source != want.UI.Source || got.UI.Version != want.UI.Version {
 		t.Fatal("ui lock entry mismatch")
+	}
+}
+
+func TestResolveArchiveForPlatform(t *testing.T) {
+	t.Parallel()
+
+	entry := LockEntry{
+		Archives: map[string]LockArchive{
+			"darwin/arm64":      {URL: "https://example.com/darwin-arm64", SHA256: "abc"},
+			"linux/amd64":       {URL: "https://example.com/linux-amd64", SHA256: "def"},
+			"linux/amd64/glibc": {URL: "https://example.com/linux-amd64-glibc", SHA256: "ghi"},
+			"generic":           {URL: "https://example.com/generic", SHA256: "xyz"},
+		},
+	}
+
+	tests := []struct {
+		name     string
+		platform string
+		wantURL  string
+		wantOK   bool
+	}{
+		{"exact match", "darwin/arm64", "https://example.com/darwin-arm64", true},
+		{"exact match with libc", "linux/amd64/glibc", "https://example.com/linux-amd64-glibc", true},
+		{"fallback without libc", "linux/amd64/musl", "https://example.com/linux-amd64", true},
+		{"no match falls to generic", "windows/amd64", "https://example.com/generic", true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			archive, ok := resolveArchiveForPlatform(entry, tt.platform)
+			if ok != tt.wantOK {
+				t.Fatalf("ok = %v, want %v", ok, tt.wantOK)
+			}
+			if ok && archive.URL != tt.wantURL {
+				t.Errorf("URL = %q, want %q", archive.URL, tt.wantURL)
+			}
+		})
+	}
+
+	// No match at all
+	sparse := LockEntry{Archives: map[string]LockArchive{"windows/amd64": {URL: "x"}}}
+	if _, ok := resolveArchiveForPlatform(sparse, "darwin/arm64"); ok {
+		t.Error("expected no match for darwin/arm64 when only windows is available")
 	}
 }

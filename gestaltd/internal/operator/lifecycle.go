@@ -28,7 +28,9 @@ const (
 	PreparedDatastoreDir = ".gestaltd/datastore"
 	PreparedSecretsDir   = ".gestaltd/secrets"
 	PreparedUIDir        = ".gestaltd/ui"
-	LockVersion          = 1
+	LockVersion          = 2
+
+	platformKeyGeneric = "generic"
 )
 
 type Lockfile struct {
@@ -40,15 +42,20 @@ type Lockfile struct {
 	UI        *LockUIEntry                 `json:"ui,omitempty"`
 }
 
+// LockArchive records a platform-specific archive URL and optional integrity hash.
+type LockArchive struct {
+	URL    string `json:"url"`
+	SHA256 string `json:"sha256,omitempty"`
+}
+
 type LockEntry struct {
-	Fingerprint   string `json:"fingerprint"`
-	Source        string `json:"source,omitempty"`
-	Version       string `json:"version,omitempty"`
-	ResolvedURL   string `json:"resolved_url,omitempty"`
-	ArchiveSHA256 string `json:"archive_sha256,omitempty"`
-	Manifest      string `json:"manifest"`
-	Executable    string `json:"executable,omitempty"`
-	AssetRoot     string `json:"asset_root,omitempty"`
+	Fingerprint string                 `json:"fingerprint"`
+	Source      string                 `json:"source,omitempty"`
+	Version     string                 `json:"version,omitempty"`
+	Archives    map[string]LockArchive `json:"archives,omitempty"`
+	Manifest    string                 `json:"manifest"`
+	Executable  string                 `json:"executable,omitempty"`
+	AssetRoot   string                 `json:"asset_root,omitempty"`
 }
 
 type LockProviderEntry = LockEntry
@@ -69,27 +76,56 @@ func (l *Lifecycle) WithConfigSecretResolver(resolve func(context.Context, *conf
 }
 
 func (l *Lifecycle) InitAtPath(configPath string) (*Lockfile, error) {
-	return l.InitAtPathWithArtifactsDir(configPath, "")
+	lock, _, err := l.initAtPath(configPath, "")
+	return lock, err
 }
 
 func (l *Lifecycle) InitAtPathWithArtifactsDir(configPath, artifactsDir string) (*Lockfile, error) {
+	lock, _, err := l.initAtPath(configPath, artifactsDir)
+	return lock, err
+}
+
+// InitAtPathWithPlatforms runs init and additionally downloads and hashes
+// archives for the specified extra platforms.
+func (l *Lifecycle) InitAtPathWithPlatforms(configPath, artifactsDir string, platforms []struct{ GOOS, GOARCH, LibC string }) (*Lockfile, error) {
+	lock, cfg, err := l.initAtPath(configPath, artifactsDir)
+	if err != nil {
+		return nil, err
+	}
+	if len(platforms) == 0 {
+		return lock, nil
+	}
+
+	tokenForSource := buildSourceTokenMap(cfg)
+	if err := downloadPlatformArchives(context.Background(), lock, platforms, tokenForSource); err != nil {
+		return nil, err
+	}
+
+	lockPath := lockfilePathForConfig(configPath)
+	if err := WriteLockfile(lockPath, lock); err != nil {
+		return nil, err
+	}
+	return lock, nil
+}
+
+func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *config.Config, error) {
 	cfg, err := config.LoadAllowMissingEnv(configPath)
 	if err != nil {
-		return nil, fmt.Errorf("loading config: %v", err)
+		return nil, nil, fmt.Errorf("loading config: %v", err)
 	}
 	if err := config.OverlayManagedPluginConfig(configPath, cfg); err != nil {
-		return nil, fmt.Errorf("loading config: %v", err)
+		return nil, nil, fmt.Errorf("loading config: %v", err)
 	}
 	paths := initPathsForConfigWithArtifactsDir(configPath, resolveArtifactsDir(configPath, cfg, artifactsDir))
 	secretsEntry, err := l.primeSecretsProviderForConfigResolution(context.Background(), paths, cfg, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := l.resolveConfigSecrets(context.Background(), cfg); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := os.MkdirAll(paths.providersDir, 0o755); err != nil {
-		return nil, fmt.Errorf("creating providers dir: %w", err)
+		return nil, nil, fmt.Errorf("creating providers dir: %w", err)
 	}
 
 	lock := &Lockfile{
@@ -99,7 +135,7 @@ func (l *Lifecycle) InitAtPathWithArtifactsDir(configPath, artifactsDir string) 
 
 	resolvedProviders, err := l.writeProviderArtifacts(context.Background(), cfg, paths)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	for name := range resolvedProviders {
 		lock.Providers[name] = resolvedProviders[name]
@@ -107,14 +143,14 @@ func (l *Lifecycle) InitAtPathWithArtifactsDir(configPath, artifactsDir string) 
 	if cfg.Auth.Provider != nil && cfg.Auth.Provider.HasManagedArtifacts() {
 		entry, err := l.writeComponentArtifact(context.Background(), paths, pluginmanifestv1.KindAuth, "auth", authDestDir(paths), cfg.Auth.Provider, cfg.Auth.Config)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		lock.Auth = &entry
 	}
 	if cfg.Datastore.Provider != nil && cfg.Datastore.Provider.HasManagedArtifacts() {
 		entry, err := l.writeComponentArtifact(context.Background(), paths, pluginmanifestv1.KindDatastore, "datastore", datastoreDestDir(paths), cfg.Datastore.Provider, cfg.Datastore.Config)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		lock.Datastore = &entry
 	}
@@ -124,24 +160,52 @@ func (l *Lifecycle) InitAtPathWithArtifactsDir(configPath, artifactsDir string) 
 	if cfg.UI.Provider != nil && cfg.UI.Provider.HasManagedArtifacts() {
 		uiEntry, err := l.writeUIProviderArtifact(context.Background(), cfg, paths)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		lock.UI = &uiEntry
 	}
 
 	if err := WriteLockfile(paths.lockfilePath, lock); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := l.applyLockedPlugins(configPath, artifactsDir, cfg, true); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := config.ValidateResolvedStructure(cfg); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "auth", lock.Auth != nil, "datastore", lock.Datastore != nil, "secrets", lock.Secrets != nil, "ui", lock.UI != nil)
 	slog.Info("wrote lockfile", "path", paths.lockfilePath)
-	return lock, nil
+	return lock, cfg, nil
+}
+
+func buildSourceTokenMap(cfg *config.Config) map[string]string {
+	tokens := make(map[string]string)
+	for _, intg := range cfg.Integrations {
+		if intg.Plugin != nil && intg.Plugin.Source != nil && intg.Plugin.Source.Auth != nil {
+			tokens[intg.Plugin.SourceRef()] = intg.Plugin.Source.Auth.Token
+		}
+	}
+	for _, p := range []*config.ProviderDef{cfg.Auth.Provider, cfg.Datastore.Provider, cfg.Secrets.Provider} {
+		if p != nil && p.Source != nil && p.Source.Auth != nil {
+			tokens[p.SourceRef()] = p.Source.Auth.Token
+		}
+	}
+	if cfg.UI.Provider != nil && cfg.UI.Provider.Source != nil && cfg.UI.Provider.Source.Auth != nil {
+		tokens[cfg.UI.Provider.SourceRef()] = cfg.UI.Provider.Source.Auth.Token
+	}
+	return tokens
+}
+
+func lockfilePathForConfig(configPath string) string {
+	dir := filepath.Dir(configPath)
+	if !filepath.IsAbs(dir) {
+		if abs, err := filepath.Abs(dir); err == nil {
+			dir = abs
+		}
+	}
+	return filepath.Join(dir, InitLockfileName)
 }
 
 func (l *Lifecycle) LoadForExecutionAtPath(configPath string, locked bool) (*config.Config, map[string]string, error) {
@@ -220,7 +284,7 @@ func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context,
 	switch {
 	case provider.HasManagedArtifacts():
 		if lock != nil {
-			if err := l.applyLockedComponentEntry(paths, lock.Secrets, pluginmanifestv1.KindSecrets, "secrets", provider, configMap); err != nil {
+			if err := l.applyLockedComponentEntry(paths, lock.Secrets, pluginmanifestv1.KindSecrets, "secrets", provider, configMap, false); err != nil {
 				return nil, err
 			}
 			return nil, nil
@@ -229,7 +293,7 @@ func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context,
 		if err != nil {
 			return nil, err
 		}
-		if err := l.applyLockedComponentEntry(paths, &entry, pluginmanifestv1.KindSecrets, "secrets", provider, configMap); err != nil {
+		if err := l.applyLockedComponentEntry(paths, &entry, pluginmanifestv1.KindSecrets, "secrets", provider, configMap, false); err != nil {
 			return nil, err
 		}
 		return &entry, nil
@@ -381,7 +445,7 @@ func ReadLockfile(path string) (*Lockfile, error) {
 		return nil, fmt.Errorf("parsing lockfile %s: %w", path, err)
 	}
 	if lock.Version != LockVersion {
-		return nil, fmt.Errorf("unsupported lockfile version %d", lock.Version)
+		return nil, fmt.Errorf("unsupported lockfile version %d; run `gestaltd init` to upgrade", lock.Version)
 	}
 	if lock.Providers == nil {
 		lock.Providers = make(map[string]LockProviderEntry)
@@ -479,6 +543,12 @@ func lockEntryMatches(paths initPaths, name string, plugin *config.ProviderDef, 
 	if entry.Source != plugin.SourceRef() || entry.Version != plugin.SourceVersion() {
 		return false
 	}
+	if len(entry.Archives) > 0 {
+		platform := pluginpkg.CurrentPlatformString()
+		if _, ok := resolveArchiveForPlatform(entry, platform); !ok {
+			return false
+		}
+	}
 	manifestPath := resolveLockPath(paths.artifactsDir, entry.Manifest)
 	if _, err := os.Stat(manifestPath); err != nil {
 		return false
@@ -490,6 +560,53 @@ func lockEntryMatches(paths initPaths, name string, plugin *config.ProviderDef, 
 		}
 	}
 	return true
+}
+
+// resolveArchiveForPlatform looks up a LockArchive for the given platform
+// string using a fallback chain: exact match → without libc → generic.
+func resolveArchiveForPlatform(entry LockEntry, platform string) (LockArchive, bool) {
+	if a, ok := entry.Archives[platform]; ok {
+		return a, true
+	}
+	goos, goarch, _, err := pluginpkg.ParsePlatformString(platform)
+	if err == nil {
+		key := pluginpkg.PlatformString(goos, goarch, "")
+		if key != platform {
+			if a, ok := entry.Archives[key]; ok {
+				return a, true
+			}
+		}
+	}
+	if a, ok := entry.Archives[platformKeyGeneric]; ok {
+		return a, true
+	}
+	return LockArchive{}, false
+}
+
+// buildArchivesMap constructs the Archives map for a lock entry. It enumerates
+// all platform archives from the resolver (if supported) and records the
+// verified SHA256 for the current platform.
+func (l *Lifecycle) buildArchivesMap(ctx context.Context, src pluginsource.Source, version, currentURL, currentSHA256 string) map[string]LockArchive {
+	currentPlatform := pluginpkg.CurrentPlatformString()
+	archives := map[string]LockArchive{
+		currentPlatform: {URL: currentURL, SHA256: currentSHA256},
+	}
+	enumerator, ok := l.sourceResolver.(pluginsource.PlatformEnumerator)
+	if !ok {
+		return archives
+	}
+	platformArchives, err := enumerator.ListPlatformArchives(ctx, src, version)
+	if err != nil {
+		slog.Warn("failed to enumerate platform archives; lockfile will only contain current platform", "error", err)
+		return archives
+	}
+	for _, pa := range platformArchives {
+		if _, exists := archives[pa.Platform]; exists {
+			continue
+		}
+		archives[pa.Platform] = LockArchive{URL: pa.URL}
+	}
+	return archives
 }
 
 func (l *Lifecycle) writeProviderArtifacts(ctx context.Context, cfg *config.Config, paths initPaths) (map[string]LockProviderEntry, error) {
@@ -571,14 +688,14 @@ func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, paths initP
 	if err != nil {
 		return LockEntry{}, fmt.Errorf("compute executable path for %s %q: %w", kind, name, err)
 	}
+	archives := l.buildArchivesMap(ctx, src, plugin.SourceVersion(), resolved.ResolvedURL, resolved.ArchiveSHA256)
 	return LockEntry{
-		Fingerprint:   fingerprint,
-		Source:        plugin.SourceRef(),
-		Version:       plugin.SourceVersion(),
-		ResolvedURL:   resolved.ResolvedURL,
-		ArchiveSHA256: resolved.ArchiveSHA256,
-		Manifest:      filepath.ToSlash(manifestPath),
-		Executable:    filepath.ToSlash(executablePath),
+		Fingerprint: fingerprint,
+		Source:      plugin.SourceRef(),
+		Version:     plugin.SourceVersion(),
+		Archives:    archives,
+		Manifest:    filepath.ToSlash(manifestPath),
+		Executable:  filepath.ToSlash(executablePath),
 	}, nil
 }
 
@@ -630,14 +747,14 @@ func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths initPa
 			return LockProviderEntry{}, fmt.Errorf("compute executable path for provider %q: %w", name, err)
 		}
 	}
+	archives := l.buildArchivesMap(ctx, src, plugin.SourceVersion(), resolved.ResolvedURL, resolved.ArchiveSHA256)
 	return LockProviderEntry{
-		Fingerprint:   fingerprint,
-		Source:        plugin.SourceRef(),
-		Version:       plugin.SourceVersion(),
-		ResolvedURL:   resolved.ResolvedURL,
-		ArchiveSHA256: resolved.ArchiveSHA256,
-		Manifest:      filepath.ToSlash(manifestPath),
-		Executable:    filepath.ToSlash(executableRel),
+		Fingerprint: fingerprint,
+		Source:      plugin.SourceRef(),
+		Version:     plugin.SourceVersion(),
+		Archives:    archives,
+		Manifest:    filepath.ToSlash(manifestPath),
+		Executable:  filepath.ToSlash(executableRel),
 	}, nil
 }
 
@@ -693,14 +810,14 @@ func (l *Lifecycle) writeUIProviderArtifact(ctx context.Context, cfg *config.Con
 	if err != nil {
 		return LockUIEntry{}, fmt.Errorf("compute asset root path for ui provider: %w", err)
 	}
+	archives := l.buildArchivesMap(ctx, src, plugin.SourceVersion(), resolved.ResolvedURL, resolved.ArchiveSHA256)
 	return LockUIEntry{
-		Fingerprint:   fingerprint,
-		Source:        plugin.SourceRef(),
-		Version:       plugin.SourceVersion(),
-		ResolvedURL:   resolved.ResolvedURL,
-		ArchiveSHA256: resolved.ArchiveSHA256,
-		Manifest:      filepath.ToSlash(manifestPath),
-		AssetRoot:     filepath.ToSlash(assetRoot),
+		Fingerprint: fingerprint,
+		Source:      plugin.SourceRef(),
+		Version:     plugin.SourceVersion(),
+		Archives:    archives,
+		Manifest:    filepath.ToSlash(manifestPath),
+		AssetRoot:   filepath.ToSlash(assetRoot),
 	}, nil
 }
 
@@ -745,7 +862,7 @@ func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *con
 		}
 		switch {
 		case provider.Plugin.HasManagedArtifacts():
-			if err := l.applyLockedProviderEntry(paths, lock, name, provider.Plugin, configMap); err != nil {
+			if err := l.applyLockedProviderEntry(paths, lock, name, provider.Plugin, configMap, locked); err != nil {
 				return err
 			}
 		case provider.Plugin.HasLocalSource():
@@ -763,17 +880,17 @@ func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *con
 		cfg.Integrations[name] = provider
 	}
 	if cfg.Auth.Provider != nil {
-		if err := l.applyComponentProvider(paths, lock, pluginmanifestv1.KindAuth, "auth", cfg.Auth.Provider, cfg.Auth.Config, &cfg.Auth.Config); err != nil {
+		if err := l.applyComponentProvider(paths, lock, pluginmanifestv1.KindAuth, "auth", cfg.Auth.Provider, cfg.Auth.Config, &cfg.Auth.Config, locked); err != nil {
 			return err
 		}
 	}
 	if cfg.Datastore.Provider != nil {
-		if err := l.applyComponentProvider(paths, lock, pluginmanifestv1.KindDatastore, "datastore", cfg.Datastore.Provider, cfg.Datastore.Config, &cfg.Datastore.Config); err != nil {
+		if err := l.applyComponentProvider(paths, lock, pluginmanifestv1.KindDatastore, "datastore", cfg.Datastore.Provider, cfg.Datastore.Config, &cfg.Datastore.Config, locked); err != nil {
 			return err
 		}
 	}
 	if cfg.Secrets.Provider != nil {
-		if err := l.applyComponentProvider(paths, lock, pluginmanifestv1.KindSecrets, "secrets", cfg.Secrets.Provider, cfg.Secrets.Config, &cfg.Secrets.Config); err != nil {
+		if err := l.applyComponentProvider(paths, lock, pluginmanifestv1.KindSecrets, "secrets", cfg.Secrets.Provider, cfg.Secrets.Config, &cfg.Secrets.Config, locked); err != nil {
 			return err
 		}
 	}
@@ -817,7 +934,7 @@ func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *con
 	return nil
 }
 
-func (l *Lifecycle) applyComponentProvider(paths initPaths, lock *Lockfile, kind, name string, provider *config.ProviderDef, providerConfig yaml.Node, targetNode *yaml.Node) error {
+func (l *Lifecycle) applyComponentProvider(paths initPaths, lock *Lockfile, kind, name string, provider *config.ProviderDef, providerConfig yaml.Node, targetNode *yaml.Node, locked bool) error {
 	if provider == nil {
 		return nil
 	}
@@ -839,7 +956,7 @@ func (l *Lifecycle) applyComponentProvider(paths initPaths, lock *Lockfile, kind
 		case pluginmanifestv1.KindSecrets:
 			entry = lock.Secrets
 		}
-		if err := l.applyLockedComponentEntry(paths, entry, kind, name, provider, configMap); err != nil {
+		if err := l.applyLockedComponentEntry(paths, entry, kind, name, provider, configMap, locked); err != nil {
 			return err
 		}
 	case provider.HasLocalSource():
@@ -943,7 +1060,7 @@ func applyLocalUIManifest(plugin *config.ProviderDef, configMap map[string]any, 
 	return nil
 }
 
-func (l *Lifecycle) applyLockedProviderEntry(paths initPaths, lock *Lockfile, name string, plugin *config.ProviderDef, configMap map[string]any) error {
+func (l *Lifecycle) applyLockedProviderEntry(paths initPaths, lock *Lockfile, name string, plugin *config.ProviderDef, configMap map[string]any, locked bool) error {
 	entry, ok := lock.Providers[name]
 	if !ok {
 		return fmt.Errorf("prepared artifact for provider %q is missing or stale; run `gestaltd init --config %s`", name, paths.configPath)
@@ -968,7 +1085,7 @@ func (l *Lifecycle) applyLockedProviderEntry(paths initPaths, lock *Lockfile, na
 		}
 	}
 	if needMaterialize {
-		if err := l.materializeLockedProvider(context.Background(), paths, name, plugin, entry); err != nil {
+		if err := l.materializeLockedProvider(context.Background(), paths, name, plugin, entry, locked); err != nil {
 			return err
 		}
 	}
@@ -997,7 +1114,7 @@ func (l *Lifecycle) applyLockedProviderEntry(paths initPaths, lock *Lockfile, na
 	return nil
 }
 
-func (l *Lifecycle) applyLockedComponentEntry(paths initPaths, entry *LockEntry, kind, name string, plugin *config.ProviderDef, configMap map[string]any) error {
+func (l *Lifecycle) applyLockedComponentEntry(paths initPaths, entry *LockEntry, kind, name string, plugin *config.ProviderDef, configMap map[string]any, locked bool) error {
 	if entry == nil {
 		return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init --config %s`", kind, name, paths.configPath)
 	}
@@ -1021,7 +1138,7 @@ func (l *Lifecycle) applyLockedComponentEntry(paths initPaths, entry *LockEntry,
 		}
 	}
 	if needMaterialize {
-		if err := l.materializeLockedComponent(context.Background(), paths, kind, name, plugin, *entry); err != nil {
+		if err := l.materializeLockedComponent(context.Background(), paths, kind, name, plugin, *entry, locked); err != nil {
 			return err
 		}
 	}
@@ -1090,9 +1207,14 @@ func bindResolvedUIManifest(plugin *config.ProviderDef, manifestPath string, man
 	return nil
 }
 
-func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPaths, name string, plugin *config.ProviderDef, entry LockProviderEntry) error {
-	if entry.ResolvedURL == "" || entry.ArchiveSHA256 == "" {
-		return fmt.Errorf("prepared artifact for provider %q is missing or stale; run `gestaltd init --config %s`", name, paths.configPath)
+func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPaths, name string, plugin *config.ProviderDef, entry LockProviderEntry, locked bool) error {
+	platform := pluginpkg.CurrentPlatformString()
+	archive, ok := resolveArchiveForPlatform(entry, platform)
+	if !ok || archive.URL == "" {
+		return fmt.Errorf("no archive for platform %s for provider %q; run `gestaltd init --config %s`", platform, name, paths.configPath)
+	}
+	if locked && archive.SHA256 == "" {
+		return fmt.Errorf("no verified hash for platform %s for provider %q; run `gestaltd init --platform %s`", platform, name, platform)
 	}
 
 	src, parseErr := sourceForPlugin(plugin)
@@ -1104,9 +1226,9 @@ func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPat
 		err      error
 	)
 	if parseErr == nil && src.Host == pluginsource.HostGitHub {
-		download, err = ghresolver.DownloadResolvedAsset(ctx, http.DefaultClient, entry.ResolvedURL, src.Token)
+		download, err = ghresolver.DownloadResolvedAsset(ctx, http.DefaultClient, archive.URL, src.Token)
 	} else {
-		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, entry.ResolvedURL, nil)
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, archive.URL, nil)
 		if reqErr != nil {
 			return fmt.Errorf("create locked source plugin request for provider %q: %w", name, reqErr)
 		}
@@ -1116,8 +1238,8 @@ func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPat
 		return fmt.Errorf("download locked source plugin for provider %q: %w", name, err)
 	}
 	defer download.Cleanup()
-	if download.SHA256Hex != entry.ArchiveSHA256 {
-		return fmt.Errorf("locked source plugin digest mismatch for provider %q: got %s, want %s", name, download.SHA256Hex, entry.ArchiveSHA256)
+	if archive.SHA256 != "" && download.SHA256Hex != archive.SHA256 {
+		return fmt.Errorf("locked source plugin digest mismatch for provider %q: got %s, want %s", name, download.SHA256Hex, archive.SHA256)
 	}
 
 	destDir := providerDestDir(paths, name)
@@ -1137,9 +1259,14 @@ func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPat
 	return nil
 }
 
-func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPaths, kind, name string, plugin *config.ProviderDef, entry LockEntry) error {
-	if entry.ResolvedURL == "" || entry.ArchiveSHA256 == "" {
-		return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init --config %s`", kind, name, paths.configPath)
+func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPaths, kind, name string, plugin *config.ProviderDef, entry LockEntry, locked bool) error {
+	platform := pluginpkg.CurrentPlatformString()
+	archive, ok := resolveArchiveForPlatform(entry, platform)
+	if !ok || archive.URL == "" {
+		return fmt.Errorf("no archive for platform %s for %s %q; run `gestaltd init --config %s`", platform, kind, name, paths.configPath)
+	}
+	if locked && archive.SHA256 == "" {
+		return fmt.Errorf("no verified hash for platform %s for %s %q; run `gestaltd init --platform %s`", platform, kind, name, platform)
 	}
 
 	src, parseErr := sourceForPlugin(plugin)
@@ -1151,9 +1278,9 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 		err      error
 	)
 	if parseErr == nil && src.Host == pluginsource.HostGitHub {
-		download, err = ghresolver.DownloadResolvedAsset(ctx, http.DefaultClient, entry.ResolvedURL, src.Token)
+		download, err = ghresolver.DownloadResolvedAsset(ctx, http.DefaultClient, archive.URL, src.Token)
 	} else {
-		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, entry.ResolvedURL, nil)
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, archive.URL, nil)
 		if reqErr != nil {
 			return fmt.Errorf("create locked source plugin request for %s %q: %w", kind, name, reqErr)
 		}
@@ -1163,8 +1290,8 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 		return fmt.Errorf("download locked source plugin for %s %q: %w", kind, name, err)
 	}
 	defer download.Cleanup()
-	if download.SHA256Hex != entry.ArchiveSHA256 {
-		return fmt.Errorf("locked source plugin digest mismatch for %s %q: got %s, want %s", kind, name, download.SHA256Hex, entry.ArchiveSHA256)
+	if archive.SHA256 != "" && download.SHA256Hex != archive.SHA256 {
+		return fmt.Errorf("locked source plugin digest mismatch for %s %q: got %s, want %s", kind, name, download.SHA256Hex, archive.SHA256)
 	}
 
 	var destDir string
@@ -1194,6 +1321,66 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 	if installed.Manifest.Version != entry.Version {
 		return fmt.Errorf("locked source plugin manifest version mismatch for %s %q: got %q, want %q", kind, name, installed.Manifest.Version, entry.Version)
 	}
+	return nil
+}
+
+func downloadPlatformArchives(ctx context.Context, lock *Lockfile, platforms []struct{ GOOS, GOARCH, LibC string }, tokenForSource map[string]string) error {
+	for _, plat := range platforms {
+		platformKey := pluginpkg.PlatformString(plat.GOOS, plat.GOARCH, plat.LibC)
+		if err := hashPlatformInEntries(ctx, lock, platformKey, tokenForSource); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func hashPlatformInEntries(ctx context.Context, lock *Lockfile, platformKey string, tokenForSource map[string]string) error {
+	for name, entry := range lock.Providers {
+		if err := hashArchiveEntry(ctx, &entry, platformKey, tokenForSource); err != nil {
+			return err
+		}
+		lock.Providers[name] = entry
+	}
+	for _, entry := range []*LockEntry{lock.Auth, lock.Datastore, lock.Secrets, lock.UI} {
+		if entry == nil {
+			continue
+		}
+		if err := hashArchiveEntry(ctx, entry, platformKey, tokenForSource); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func hashArchiveEntry(ctx context.Context, entry *LockEntry, platformKey string, tokenForSource map[string]string) error {
+	if entry.Archives == nil {
+		return nil
+	}
+	archive, ok := entry.Archives[platformKey]
+	if !ok || archive.URL == "" || archive.SHA256 != "" {
+		return nil
+	}
+	token := tokenForSource[entry.Source]
+	src, parseErr := pluginsource.Parse(entry.Source)
+	var (
+		dl  *pluginpkg.DownloadResult
+		err error
+	)
+	if parseErr == nil && src.Host == pluginsource.HostGitHub {
+		dl, err = ghresolver.DownloadResolvedAsset(ctx, http.DefaultClient, archive.URL, token)
+	} else {
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, archive.URL, nil)
+		if reqErr != nil {
+			return fmt.Errorf("create request for platform %s, source %s: %w", platformKey, entry.Source, reqErr)
+		}
+		dl, err = pluginpkg.DownloadRequest(http.DefaultClient, req)
+	}
+	if err != nil {
+		return fmt.Errorf("download archive for platform %s, source %s: %w", platformKey, entry.Source, err)
+	}
+	archive.SHA256 = dl.SHA256Hex
+	dl.Cleanup()
+	entry.Archives[platformKey] = archive
 	return nil
 }
 

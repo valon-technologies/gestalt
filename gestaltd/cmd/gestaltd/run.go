@@ -398,6 +398,7 @@ func runInit(args []string) error {
 	fs.Usage = func() { printInitUsage(fs.Output()) }
 	configPath := fs.String("config", "", "path to config file")
 	artifactsDir := fs.String("artifacts-dir", "", "path to writable prepared-artifacts directory")
+	platformFlag := fs.String("platform", "", "additional platforms to verify hashes for (comma-separated os/arch[/libc] or \"all\")")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -405,7 +406,7 @@ func runInit(args []string) error {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
 	}
 
-	return initConfigWithArtifactsDir(*configPath, *artifactsDir)
+	return initConfigWithArtifactsDir(*configPath, *artifactsDir, *platformFlag)
 }
 
 func runValidate(args []string) error {
@@ -504,7 +505,7 @@ func maskEmpty(s string) string {
 func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
 	writeUsageLine(w, "  gestaltd [--config PATH] [--artifacts-dir PATH]")
-	writeUsageLine(w, "  gestaltd init [--config PATH] [--artifacts-dir PATH]")
+	writeUsageLine(w, "  gestaltd init [--config PATH] [--artifacts-dir PATH] [--platform PLATFORMS]")
 	writeUsageLine(w, "  gestaltd serve [--config PATH] [--artifacts-dir PATH] [--locked]")
 	writeUsageLine(w, "  gestaltd provider <command> [flags]")
 	writeUsageLine(w, "  gestaltd validate [--config PATH] [--artifacts-dir PATH]")
@@ -532,16 +533,19 @@ func printServeUsage(w io.Writer) {
 
 func printInitUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd init [--config PATH] [--artifacts-dir PATH]")
+	writeUsageLine(w, "  gestaltd init [--config PATH] [--artifacts-dir PATH] [--platform PLATFORMS]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Resolve managed plugin sources and write lock state.")
 	writeUsageLine(w, "Creates gestalt.lock.json in the config directory and prepared artifacts")
-	writeUsageLine(w, "in the artifacts directory.")
+	writeUsageLine(w, "in the artifacts directory. The lockfile records archive URLs for all")
+	writeUsageLine(w, "discovered platforms and verified SHA256 hashes for the current platform.")
+	writeUsageLine(w, "Use --platform to pre-verify hashes for additional deploy targets.")
 	writeUsageLine(w, "Use this before `gestaltd serve --locked` for production deployments.")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")
 	writeUsageLine(w, "  --config          Path to the config file")
 	writeUsageLine(w, "  --artifacts-dir   Path to writable prepared-artifacts directory")
+	writeUsageLine(w, "  --platform        Additional platforms to verify (comma-separated os/arch[/libc] or \"all\")")
 }
 
 func printValidateUsage(w io.Writer) {
