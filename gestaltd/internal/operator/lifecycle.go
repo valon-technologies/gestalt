@@ -118,16 +118,8 @@ func (l *Lifecycle) InitAtPathWithArtifactsDir(configPath, artifactsDir string) 
 		}
 		lock.Datastore = &entry
 	}
-	if cfg.Secrets.Provider != nil && cfg.Secrets.Provider.HasManagedArtifacts() {
-		if secretsEntry != nil {
-			lock.Secrets = secretsEntry
-		} else {
-			entry, err := l.writeComponentArtifact(context.Background(), paths, pluginmanifestv1.KindSecrets, "secrets", secretsDestDir(paths), cfg.Secrets.Provider, cfg.Secrets.Config)
-			if err != nil {
-				return nil, err
-			}
-			lock.Secrets = &entry
-		}
+	if secretsEntry != nil {
+		lock.Secrets = secretsEntry
 	}
 	if cfg.UI.Provider != nil && cfg.UI.Provider.HasManagedArtifacts() {
 		uiEntry, err := l.writeUIProviderArtifact(context.Background(), cfg, paths)

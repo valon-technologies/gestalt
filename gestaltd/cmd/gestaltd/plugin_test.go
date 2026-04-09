@@ -684,7 +684,16 @@ plugin = "os import path\nimport os;os.system('cmd')#:attr"
 func TestRun_PluginReleaseBuildsGoSourceAuthPlugin(t *testing.T) {
 	t.Parallel()
 
-	pluginDir := newSourceAuthReleaseFixture(t, t.TempDir())
+	pluginDir := newSourceComponentReleaseFixture(t, t.TempDir(), sourceComponentReleaseFixtureParams{
+		pluginName: authReleasePluginName,
+		schemaPath: authReleaseSchemaPath,
+		sourceFile: "auth.go",
+		sourceCode: testutil.GeneratedAuthPackageSource(),
+		manifest: &pluginmanifestv1.Manifest{
+			Source: authReleaseSource, Version: "0.0.1", DisplayName: "Auth Release",
+			Auth: &pluginmanifestv1.AuthMetadata{ConfigSchemaPath: authReleaseSchemaPath},
+		},
+	})
 	outputDir := t.TempDir()
 	const testVersion = "0.0.15-test"
 
@@ -786,7 +795,16 @@ func TestRun_PluginReleaseBuildsGoSourceAuthPluginForExplicitLinuxLibC(t *testin
 		t.Skip("current linux runtime libc is unknown")
 	}
 
-	pluginDir := newSourceAuthReleaseFixture(t, t.TempDir())
+	pluginDir := newSourceComponentReleaseFixture(t, t.TempDir(), sourceComponentReleaseFixtureParams{
+		pluginName: authReleasePluginName,
+		schemaPath: authReleaseSchemaPath,
+		sourceFile: "auth.go",
+		sourceCode: testutil.GeneratedAuthPackageSource(),
+		manifest: &pluginmanifestv1.Manifest{
+			Source: authReleaseSource, Version: "0.0.1", DisplayName: "Auth Release",
+			Auth: &pluginmanifestv1.AuthMetadata{ConfigSchemaPath: authReleaseSchemaPath},
+		},
+	})
 	outputDir := t.TempDir()
 	const testVersion = "0.0.15-linux-libc"
 
@@ -809,7 +827,16 @@ func TestRun_PluginReleaseBuildsGoSourceAuthPluginForExplicitLinuxLibC(t *testin
 func TestRun_PluginReleaseBuildsGoSourceDatastorePlugin(t *testing.T) {
 	t.Parallel()
 
-	pluginDir := newSourceDatastoreReleaseFixture(t, t.TempDir())
+	pluginDir := newSourceComponentReleaseFixture(t, t.TempDir(), sourceComponentReleaseFixtureParams{
+		pluginName: datastoreReleasePluginName,
+		schemaPath: datastoreReleaseSchemaPath,
+		sourceFile: "datastore.go",
+		sourceCode: testutil.GeneratedDatastorePackageSource(),
+		manifest: &pluginmanifestv1.Manifest{
+			Source: datastoreReleaseSource, Version: "0.0.1", DisplayName: "Datastore Release",
+			Datastore: &pluginmanifestv1.DatastoreMetadata{ConfigSchemaPath: datastoreReleaseSchemaPath},
+		},
+	})
 	outputDir := t.TempDir()
 	const testVersion = "0.0.16-test"
 
@@ -889,7 +916,16 @@ func TestRun_PluginReleaseBuildsGoSourceDatastorePlugin(t *testing.T) {
 func TestRun_PluginReleaseBuildsGoSourceSecretsPlugin(t *testing.T) {
 	t.Parallel()
 
-	pluginDir := newSourceSecretsReleaseFixture(t, t.TempDir())
+	pluginDir := newSourceComponentReleaseFixture(t, t.TempDir(), sourceComponentReleaseFixtureParams{
+		pluginName: secretsReleasePluginName,
+		schemaPath: secretsReleaseSchemaPath,
+		sourceFile: "secrets.go",
+		sourceCode: testutil.GeneratedSecretsPackageSource(),
+		manifest: &pluginmanifestv1.Manifest{
+			Source: secretsReleaseSource, Version: "0.0.1", DisplayName: "Secrets Release",
+			Secrets: &pluginmanifestv1.SecretsMetadata{ConfigSchemaPath: secretsReleaseSchemaPath},
+		},
+	})
 	outputDir := t.TempDir()
 	const testVersion = "0.0.19-test"
 
@@ -1138,7 +1174,16 @@ func TestRun_PluginReleaseBuildsPythonSourceAuthPlugin(t *testing.T) {
 		t.Skip("fake Python build fixture is POSIX-only")
 	}
 
-	goFixtureDir := newSourceAuthReleaseFixture(t, t.TempDir())
+	goFixtureDir := newSourceComponentReleaseFixture(t, t.TempDir(), sourceComponentReleaseFixtureParams{
+		pluginName: authReleasePluginName,
+		schemaPath: authReleaseSchemaPath,
+		sourceFile: "auth.go",
+		sourceCode: testutil.GeneratedAuthPackageSource(),
+		manifest: &pluginmanifestv1.Manifest{
+			Source: authReleaseSource, Version: "0.0.1", DisplayName: "Auth Release",
+			Auth: &pluginmanifestv1.AuthMetadata{ConfigSchemaPath: authReleaseSchemaPath},
+		},
+	})
 	t.Setenv("GESTALT_TEST_PYINSTALLER_BINARY", buildGoSourceComponentBinaryForTest(t, goFixtureDir, pluginmanifestv1.KindAuth))
 	t.Setenv("PATH", pathWithoutGo(t))
 
@@ -1222,7 +1267,16 @@ func TestRun_PluginReleaseBuildsPythonSourceDatastorePlugin(t *testing.T) {
 		t.Skip("fake Python build fixture is POSIX-only")
 	}
 
-	goFixtureDir := newSourceDatastoreReleaseFixture(t, t.TempDir())
+	goFixtureDir := newSourceComponentReleaseFixture(t, t.TempDir(), sourceComponentReleaseFixtureParams{
+		pluginName: datastoreReleasePluginName,
+		schemaPath: datastoreReleaseSchemaPath,
+		sourceFile: "datastore.go",
+		sourceCode: testutil.GeneratedDatastorePackageSource(),
+		manifest: &pluginmanifestv1.Manifest{
+			Source: datastoreReleaseSource, Version: "0.0.1", DisplayName: "Datastore Release",
+			Datastore: &pluginmanifestv1.DatastoreMetadata{ConfigSchemaPath: datastoreReleaseSchemaPath},
+		},
+	})
 	t.Setenv("GESTALT_TEST_PYINSTALLER_BINARY", buildGoSourceComponentBinaryForTest(t, goFixtureDir, pluginmanifestv1.KindDatastore))
 	t.Setenv("PATH", pathWithoutGo(t))
 
@@ -2426,25 +2480,26 @@ func pluginpkgPythonEnvVar(goos, goarch string) string {
 	return "GESTALT_PYTHON_" + strings.ToUpper(replacer.Replace(goos)) + "_" + strings.ToUpper(replacer.Replace(goarch))
 }
 
-func newSourceAuthReleaseFixture(t *testing.T, dir string) string {
+type sourceComponentReleaseFixtureParams struct {
+	pluginName string
+	schemaPath string
+	sourceFile string
+	sourceCode string
+	manifest   *pluginmanifestv1.Manifest
+}
+
+func newSourceComponentReleaseFixture(t *testing.T, dir string, p sourceComponentReleaseFixtureParams) string {
 	t.Helper()
 
-	pluginDir := filepath.Join(dir, authReleasePluginName)
+	pluginDir := filepath.Join(dir, p.pluginName)
 	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll(pluginDir): %v", err)
 	}
-	writeTestFile(t, pluginDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/"+authReleasePluginName)), 0o644)
+	writeTestFile(t, pluginDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/"+p.pluginName)), 0o644)
 	writeTestFile(t, pluginDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
-	writeTestFile(t, pluginDir, "auth.go", []byte(testutil.GeneratedAuthPackageSource()), 0o644)
-	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
-		Source:      authReleaseSource,
-		Version:     "0.0.1",
-		DisplayName: "Auth Release",
-		Auth: &pluginmanifestv1.AuthMetadata{
-			ConfigSchemaPath: authReleaseSchemaPath,
-		},
-	})
-	writeTestFile(t, pluginDir, authReleaseSchemaPath, []byte(`{"type":"object"}`), 0o644)
+	writeTestFile(t, pluginDir, p.sourceFile, []byte(p.sourceCode), 0o644)
+	writeReleaseTestManifest(t, pluginDir, p.manifest)
+	writeTestFile(t, pluginDir, p.schemaPath, []byte(`{"type":"object"}`), 0o644)
 	return pluginDir
 }
 
@@ -2465,49 +2520,6 @@ func newRustSourceAuthReleaseFixture(t *testing.T, dir string) string {
 	return pluginDir
 }
 
-func newSourceDatastoreReleaseFixture(t *testing.T, dir string) string {
-	t.Helper()
-
-	pluginDir := filepath.Join(dir, datastoreReleasePluginName)
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll(pluginDir): %v", err)
-	}
-	writeTestFile(t, pluginDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/"+datastoreReleasePluginName)), 0o644)
-	writeTestFile(t, pluginDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
-	writeTestFile(t, pluginDir, "datastore.go", []byte(testutil.GeneratedDatastorePackageSource()), 0o644)
-	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
-		Source:      datastoreReleaseSource,
-		Version:     "0.0.1",
-		DisplayName: "Datastore Release",
-		Datastore: &pluginmanifestv1.DatastoreMetadata{
-			ConfigSchemaPath: datastoreReleaseSchemaPath,
-		},
-	})
-	writeTestFile(t, pluginDir, datastoreReleaseSchemaPath, []byte(`{"type":"object"}`), 0o644)
-	return pluginDir
-}
-
-func newSourceSecretsReleaseFixture(t *testing.T, dir string) string {
-	t.Helper()
-
-	pluginDir := filepath.Join(dir, secretsReleasePluginName)
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll(pluginDir): %v", err)
-	}
-	writeTestFile(t, pluginDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/"+secretsReleasePluginName)), 0o644)
-	writeTestFile(t, pluginDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
-	writeTestFile(t, pluginDir, "secrets.go", []byte(testutil.GeneratedSecretsPackageSource()), 0o644)
-	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
-		Source:      secretsReleaseSource,
-		Version:     "0.0.1",
-		DisplayName: "Secrets Release",
-		Secrets: &pluginmanifestv1.SecretsMetadata{
-			ConfigSchemaPath: secretsReleaseSchemaPath,
-		},
-	})
-	writeTestFile(t, pluginDir, secretsReleaseSchemaPath, []byte(`{"type":"object"}`), 0o644)
-	return pluginDir
-}
 
 func newRustSourceDatastoreReleaseFixture(t *testing.T, dir string) string {
 	t.Helper()

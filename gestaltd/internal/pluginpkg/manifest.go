@@ -354,6 +354,33 @@ func EntrypointForKind(manifest *pluginmanifestv1.Manifest, kind string) *plugin
 	}
 }
 
+func EnsureEntrypointForKind(manifest *pluginmanifestv1.Manifest, kind string) *pluginmanifestv1.Entrypoint {
+	switch kind {
+	case pluginmanifestv1.KindPlugin:
+		if manifest.Entrypoints.Provider == nil {
+			manifest.Entrypoints.Provider = &pluginmanifestv1.Entrypoint{}
+		}
+		return manifest.Entrypoints.Provider
+	case pluginmanifestv1.KindAuth:
+		if manifest.Entrypoints.Auth == nil {
+			manifest.Entrypoints.Auth = &pluginmanifestv1.Entrypoint{}
+		}
+		return manifest.Entrypoints.Auth
+	case pluginmanifestv1.KindDatastore:
+		if manifest.Entrypoints.Datastore == nil {
+			manifest.Entrypoints.Datastore = &pluginmanifestv1.Entrypoint{}
+		}
+		return manifest.Entrypoints.Datastore
+	case pluginmanifestv1.KindSecrets:
+		if manifest.Entrypoints.Secrets == nil {
+			manifest.Entrypoints.Secrets = &pluginmanifestv1.Entrypoint{}
+		}
+		return manifest.Entrypoints.Secrets
+	default:
+		return nil
+	}
+}
+
 func validateEntrypoint(kind string, entry *pluginmanifestv1.Entrypoint, artifactPaths map[string]struct{}) error {
 	if entry == nil {
 		return fmt.Errorf("%s is required", EntrypointFieldForKind(kind))

@@ -284,12 +284,8 @@ func releaseRequiresBuildTarget(manifest *pluginmanifestv1.Manifest) bool {
 	switch kind {
 	case pluginmanifestv1.KindPlugin:
 		return manifest.Entrypoints.Provider == nil && !manifest.Plugin.IsManifestBacked()
-	case pluginmanifestv1.KindAuth:
-		return manifest.Entrypoints.Auth == nil
-	case pluginmanifestv1.KindDatastore:
-		return manifest.Entrypoints.Datastore == nil
-	case pluginmanifestv1.KindSecrets:
-		return manifest.Entrypoints.Secrets == nil
+	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore, pluginmanifestv1.KindSecrets:
+		return pluginpkg.EntrypointForKind(manifest, kind) == nil
 	default:
 		return false
 	}
@@ -343,12 +339,8 @@ func missingReleaseSourceBuildTargetError(kind string) error {
 	switch kind {
 	case pluginmanifestv1.KindPlugin:
 		return fmt.Errorf("no Go, Rust, Python, or TypeScript provider package found")
-	case pluginmanifestv1.KindAuth:
-		return fmt.Errorf("no Go, Rust, Python, or TypeScript auth source package found")
-	case pluginmanifestv1.KindDatastore:
-		return fmt.Errorf("no Go, Rust, Python, or TypeScript datastore source package found")
-	case pluginmanifestv1.KindSecrets:
-		return fmt.Errorf("no Go, Rust, Python, or TypeScript secrets source package found")
+	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore, pluginmanifestv1.KindSecrets:
+		return fmt.Errorf("no Go, Rust, Python, or TypeScript %s source package found", kind)
 	default:
 		return fmt.Errorf("unsupported release build target kind %q", kind)
 	}
@@ -460,28 +452,7 @@ func buildReleaseManifest(srcManifest *pluginmanifestv1.Manifest, version, binar
 		{OS: plat.GOOS, Arch: plat.GOARCH, LibC: plat.LibC, Path: binaryName, SHA256: digest},
 	}
 
-	switch buildKind {
-	case pluginmanifestv1.KindPlugin:
-		if manifest.Entrypoints.Provider == nil {
-			manifest.Entrypoints.Provider = &pluginmanifestv1.Entrypoint{}
-		}
-		manifest.Entrypoints.Provider.ArtifactPath = binaryName
-	case pluginmanifestv1.KindAuth:
-		if manifest.Entrypoints.Auth == nil {
-			manifest.Entrypoints.Auth = &pluginmanifestv1.Entrypoint{}
-		}
-		manifest.Entrypoints.Auth.ArtifactPath = binaryName
-	case pluginmanifestv1.KindDatastore:
-		if manifest.Entrypoints.Datastore == nil {
-			manifest.Entrypoints.Datastore = &pluginmanifestv1.Entrypoint{}
-		}
-		manifest.Entrypoints.Datastore.ArtifactPath = binaryName
-	case pluginmanifestv1.KindSecrets:
-		if manifest.Entrypoints.Secrets == nil {
-			manifest.Entrypoints.Secrets = &pluginmanifestv1.Entrypoint{}
-		}
-		manifest.Entrypoints.Secrets.ArtifactPath = binaryName
-	}
+	pluginpkg.EnsureEntrypointForKind(manifest, buildKind).ArtifactPath = binaryName
 
 	return manifest, nil
 }
