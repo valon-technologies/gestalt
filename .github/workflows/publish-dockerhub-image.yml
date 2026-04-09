@@ -48,9 +48,8 @@ on:
         default: ''
         type: string
       target:
-        description: Dockerfile build target (e.g. "alpine", "debian", "scratch"). Omit to build the default target.
-        required: false
-        default: ''
+        description: Dockerfile build target (e.g. "alpine", "debian", "scratch").
+        required: true
         type: string
     secrets:
       DOCKERHUB_USERNAME:
