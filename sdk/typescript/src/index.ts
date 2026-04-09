@@ -54,6 +54,7 @@ export {
   operation,
   type ConnectionMode,
   type ConnectionParamDefinition,
+  type IntegrationProviderOptions,
   type OperationDefinition,
   type OperationOptions,
   type PluginDefinitionOptions,

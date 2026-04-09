@@ -8,7 +8,7 @@
 | `gestaltd/core` | Public interfaces for auth, datastore, secrets, and providers. |
 | `gestaltd/internal` | Bootstrap, config loading, invocation, server routing, plugin process management, and other server internals. |
 | `plugins` | External plugin source trees and release archives. |
-| `sdk` | Public SDKs and plugin manifest definitions. |
+| `sdk` | Public SDKs and provider manifest definitions. |
 | `gestaltd/ui` | Frontend that is embedded into the server build. |
 | `docs` | Documentation site. |
 | `gestaltd/deploy` | Docker and Helm deployment assets. |

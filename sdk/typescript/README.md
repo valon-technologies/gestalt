@@ -34,8 +34,8 @@ accepts:
 - `gestalt.provider` as a string like `"plugin:./provider.ts#provider"` or `"auth:./auth.ts#provider"`
 - legacy integration-only `gestalt.plugin`
 
-Use `"plugin"` as the kind token for executable plugins. The older
-`"integration"` spelling is still accepted for compatibility.
+Use `"plugin"` as the kind token for executable integration providers. The
+older `"integration"` spelling is still accepted for compatibility.
 
 If the export suffix is omitted, the runtime looks for `provider`, then
 `plugin`, then the default export.
@@ -46,13 +46,13 @@ Use explicit runtime schemas to define plugin operation inputs and outputs:
 
 ```ts
 import {
-  definePlugin,
+  defineIntegrationProvider,
   ok,
   operation,
   s,
 } from "@valon-technologies/gestalt";
 
-export const plugin = definePlugin({
+export const provider = defineIntegrationProvider({
   displayName: "Example Provider",
   description: "A provider implemented with the Gestalt TypeScript SDK",
   configure(name, config) {

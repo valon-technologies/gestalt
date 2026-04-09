@@ -1,12 +1,12 @@
 # First-Party Providers
 
-Gestalt does not compile auth or datastore providers into the `gestaltd` binary. Both are loaded at startup as external plugins through the same plugin runtime that powers integration plugins. The first-party implementations are published from [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers) and maintained alongside the server.
+Gestalt does not compile auth or datastore providers into the `gestaltd` binary. Both are loaded at startup as external provider processes through the same runtime model that also powers integration plugins. The first-party implementations are published from [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers) and maintained alongside the server.
 
-Secrets, telemetry, and audit remain built into the binary because they must be available before the plugin runtime starts.
+Secrets, telemetry, and audit remain built into the binary because they must be available before provider runtime bootstrapping starts.
 
 ## Auth Providers
 
-Auth providers handle platform login. They are configured under `auth.provider` in your config file, using the `provider:` key to reference the plugin source.
+Auth providers handle platform login. They are configured under `auth.provider` in your config file, using the `provider:` key to reference the provider source.
 
 | Name | Purpose |
 | --- | --- |
@@ -54,7 +54,7 @@ datastore:
 
 ## Secret Managers (built-in)
 
-Secret managers are compiled into the binary. They resolve `secret://` references and `${VAR}` expansions during bootstrap, before the plugin runtime is available.
+Secret managers are compiled into the binary. They resolve `secret://` references and `${VAR}` expansions during bootstrap, before provider runtime bootstrapping is available.
 
 | Name | Purpose |
 | --- | --- |
@@ -90,4 +90,4 @@ plugins:
 
 ## Community and Custom Providers
 
-Third-party auth providers, datastore providers, and integration plugins use the same plugin model as the first-party packages. Package your implementation as a plugin manifest with the appropriate `kinds` (`auth`, `datastore`, or `plugin`), publish it to a Git-accessible source, and reference it in your config the same way you would reference any first-party provider.
+Third-party auth providers, datastore providers, and integration plugins use the same provider package model as the first-party packages. Package your implementation with a provider manifest and the appropriate kind (`auth`, `datastore`, or `plugin`), publish it to a Git-accessible source, and reference it in your config the same way you would reference any first-party provider.

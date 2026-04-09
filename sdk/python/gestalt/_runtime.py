@@ -34,6 +34,7 @@ from ._providers import (
     OAuthRegistrationStore,
     ProviderKind,
     ProviderMetadata,
+    RuntimeProviderAdapter,
     RuntimePlugin,
     RuntimeProvider,
     SessionTTLProvider,
@@ -191,7 +192,7 @@ def _load_target(args: RuntimeArgs) -> Plugin | RuntimePlugin | RuntimeProvider:
         return _datastore_runtime_plugin(target)
     if isinstance(target, RuntimeProvider):
         raise RuntimeError(
-            "runtime providers must be wrapped in gestalt.RuntimePlugin unless runtime_kind is auth or datastore"
+            "runtime providers must be wrapped in gestalt.RuntimeProviderAdapter (or the legacy gestalt.RuntimePlugin alias) unless runtime_kind is auth or datastore"
         )
     raise RuntimeError(f"{args.target} did not resolve to a supported gestalt target")
 
@@ -273,16 +274,16 @@ def _servable_target(
     raise RuntimeError("unsupported runtime target")
 
 
-def _auth_runtime_plugin(provider: AuthProvider) -> RuntimePlugin:
-    return RuntimePlugin(
+def _auth_runtime_plugin(provider: AuthProvider) -> RuntimeProviderAdapter:
+    return RuntimeProviderAdapter(
         kind=ProviderKind.AUTH,
         provider=provider,
         register_services=_register_auth_services,
     )
 
 
-def _datastore_runtime_plugin(provider: DatastoreProvider) -> RuntimePlugin:
-    return RuntimePlugin(
+def _datastore_runtime_plugin(provider: DatastoreProvider) -> RuntimeProviderAdapter:
+    return RuntimeProviderAdapter(
         kind=ProviderKind.DATASTORE,
         provider=provider,
         register_services=_register_datastore_services,

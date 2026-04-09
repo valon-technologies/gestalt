@@ -12,6 +12,9 @@ class PluginTarget:
     attribute_name: str | None = None
 
 
+ProviderTarget = PluginTarget
+
+
 @dataclass(frozen=True)
 class BundledPluginConfig:
     target: str
@@ -19,19 +22,26 @@ class BundledPluginConfig:
     runtime_kind: str | None = None
 
 
+BundledProviderConfig = BundledPluginConfig
+
+
 def parse_plugin_target(target: str) -> PluginTarget:
     module_name, sep, attribute_name = target.partition(":")
     module_name = module_name.strip()
     attribute_name = attribute_name.strip() or None
     if not module_name:
-        raise RuntimeError("tool.gestalt.plugin must be in module or module:attribute form")
+        raise RuntimeError("tool.gestalt.provider or tool.gestalt.plugin must be in module or module:attribute form")
     if sep and attribute_name is None:
-        raise RuntimeError("tool.gestalt.plugin attribute is required when ':' is present")
+        raise RuntimeError("tool.gestalt.provider or tool.gestalt.plugin attribute is required when ':' is present")
 
     return PluginTarget(
         module_name=module_name,
         attribute_name=attribute_name,
     )
+
+
+def parse_provider_target(target: str) -> ProviderTarget:
+    return parse_plugin_target(target)
 
 
 def read_bundled_plugin_config(*, bundle_root: pathlib.Path) -> BundledPluginConfig | None:
@@ -59,6 +69,10 @@ def read_bundled_plugin_config(*, bundle_root: pathlib.Path) -> BundledPluginCon
     )
 
 
+def read_bundled_provider_config(*, bundle_root: pathlib.Path) -> BundledProviderConfig | None:
+    return read_bundled_plugin_config(bundle_root=bundle_root)
+
+
 def write_bundled_plugin_config(
     path: pathlib.Path,
     *,
@@ -75,4 +89,19 @@ def write_bundled_plugin_config(
             }
         ),
         encoding="utf-8",
+    )
+
+
+def write_bundled_provider_config(
+    path: pathlib.Path,
+    *,
+    target: str,
+    plugin_name: str,
+    runtime_kind: str,
+) -> None:
+    write_bundled_plugin_config(
+        path,
+        target=target,
+        plugin_name=plugin_name,
+        runtime_kind=runtime_kind,
     )

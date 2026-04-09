@@ -52,7 +52,7 @@ RegisterServices = Callable[[Any, RuntimeProvider], None]
 
 
 @dataclasses.dataclass(slots=True)
-class RuntimePlugin:
+class RuntimeProviderAdapter:
     kind: ProviderKind | str
     provider: RuntimeProvider
     register_services: RegisterServices
@@ -61,6 +61,9 @@ class RuntimePlugin:
         from . import _runtime
 
         _runtime.serve(self)
+
+
+RuntimePlugin = RuntimeProviderAdapter
 
 
 @dataclasses.dataclass(slots=True)

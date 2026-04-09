@@ -30,7 +30,7 @@ To regenerate the bindings from a clean slate and run the smoke tests:
 
 The crate is intentionally small:
 
-- `Provider`, `Request`, `Response`, and `ok(...)` model integration-provider handlers
+- `Provider`, `Request`, `Response`, and `ok(...)` model integration providers
 - `AuthProvider`, `BeginLoginRequest`, `BeginLoginResponse`, `CompleteLoginRequest`, and `AuthenticatedUser` model auth providers
 - `DatastoreProvider`, `StoredUser`, `StoredIntegrationToken`, `StoredApiToken`, and `OAuthRegistration` model datastore providers
 - `Router` and `Operation` register typed operations and derive catalog metadata from `serde` + `schemars`

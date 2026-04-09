@@ -48,7 +48,7 @@ func (s *datastoreServer) FindOrCreateUser(ctx context.Context, req *proto.FindO
 		return nil, providerRPCError("find or create user", err)
 	}
 	if user == nil {
-		return nil, status.Error(codes.Internal, "datastore plugin returned nil user")
+		return nil, status.Error(codes.Internal, "datastore provider returned nil user")
 	}
 	return storedUserToProto(user), nil
 }

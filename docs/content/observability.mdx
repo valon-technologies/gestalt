@@ -93,7 +93,7 @@ the stream by filtering on `log.type=audit`.
 The built-in metric surface covers Prometheus exporter metadata, inbound HTTP
 requests handled by `gestaltd`, broker operation execution, connection auth
 flows, platform auth actions, datastore calls, and outbound gRPC calls from
-`gestaltd` to plugin processes.
+`gestaltd` to provider processes.
 
 Gestalt documents metric names using their OpenTelemetry instrument names. The
 Prometheus scrape endpoint translates those names to Prometheus-style metric
@@ -286,18 +286,18 @@ If the process is started with
 `OTEL_SEMCONV_STABILITY_OPT_IN=http/dup`, the underlying HTTP instrumentation
 also emits the older legacy HTTP metric families alongside the current ones.
 
-### Plugin gRPC Client Metrics
+### Provider gRPC Client Metrics
 
 These come from the OpenTelemetry gRPC client stats handler used for outbound
-gRPC traffic from `gestaltd` to plugin processes. They only apply to
-plugin-backed components.
+gRPC traffic from `gestaltd` to provider processes. They only apply to
+provider-backed components.
 
 <Tabs items={['OpenTelemetry', 'Prometheus']}>
   <Tabs.Tab>
     | Metric | Type | Meaning |
     | --- | --- | --- |
-    | `rpc.client.duration` | Histogram | Outbound plugin RPC duration |
-    | `rpc.client.request.size` | Histogram | Outbound plugin request message size |
+    | `rpc.client.duration` | Histogram | Outbound provider RPC duration |
+    | `rpc.client.request.size` | Histogram | Outbound provider request message size |
     | `rpc.client.response.size` | Histogram | Inbound plugin response message size |
     | `rpc.client.requests_per_rpc` | Histogram | Request messages per RPC |
     | `rpc.client.responses_per_rpc` | Histogram | Response messages per RPC |

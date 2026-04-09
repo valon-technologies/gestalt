@@ -29,7 +29,7 @@ func (r Request) ConnectionParam(name string) string {
 	return r.ConnectionParams[name]
 }
 
-// Response is the typed handler result marshaled into the plugin response body.
+// Response is the typed handler result marshaled into the provider response body.
 // A zero Status defaults to 200.
 type Response[T any] struct {
 	Status int
@@ -101,7 +101,7 @@ type Router[P any] struct {
 	handlers map[string]func(context.Context, *P, map[string]any, Request) (*OperationResult, error)
 }
 
-// NewRouter constructs a typed router from registrations. Source-plugin flows
+// NewRouter constructs a typed router from registrations. Source-provider flows
 // derive the router name from plugin.yaml at build time.
 func NewRouter[P any](registrations ...Registration[P]) (*Router[P], error) {
 	return newRouter("", registrations...)

@@ -121,7 +121,7 @@ export function readPackageProviderTarget(root: string): ProviderTarget {
 export function readPackagePluginTarget(root: string): string {
   const target = readPackageProviderTarget(root);
   if (target.kind !== "integration") {
-    throw new Error(`package.json provider kind ${JSON.stringify(target.kind)} is not a plugin provider`);
+    throw new Error(`package.json provider kind ${JSON.stringify(target.kind)} is not an integration provider`);
   }
   return formatModuleTarget(target);
 }

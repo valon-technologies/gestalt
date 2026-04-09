@@ -8,11 +8,11 @@ When `gestaltd serve --locked` reports that prepared artifacts are missing or st
 
 The validation error `server.encryption_key is required` means the config is missing its root deployment secret. Set `server.encryption_key` to a `secret://` reference or other secret-backed value. The encryption key is used for token encryption and derived session material, so the server refuses to start without it.
 
-Set `server.encryption_key` for every real deployment. Gestalt derives token and session encryption from it regardless of which auth and datastore plugins you use.
+Set `server.encryption_key` for every real deployment. Gestalt derives token and session encryption from it regardless of which auth and datastore providers you use.
 
 If the `/mcp` endpoint is not mounted, the server found no plugin that exposes tools. At least one integration plugin must surface MCP-visible operations before `/mcp` becomes available.
 
-When `/ready` returns `503`, the server has not finished initialization. Readiness stays false until all configured plugins finish loading and the datastore answers a ping. Check server logs for plugin bootstrap errors or datastore connectivity problems.
+When `/ready` returns `503`, the server has not finished initialization. Readiness stays false until all configured providers finish loading and the datastore answers a ping. Check server logs for provider bootstrap errors or datastore connectivity problems.
 
 ## Operation invocation
 
@@ -36,15 +36,15 @@ A "timed out" error means the outbound request to the upstream service exceeded 
 
 A "failed to reach" error means the outbound connection could not be established at all. Verify that the upstream host is correct, DNS resolves, and any egress firewall rules or sandbox allowlists permit the connection.
 
-## Plugins
+## Provider Packages
 
-When a plugin fails to start, check that the binary exists at the expected path, is executable, and that any required runtime dependencies are available. Plugin startup errors appear in the server log with the provider name.
+When a provider package fails to start, check that the binary exists at the expected path, is executable, and that any required runtime dependencies are available. Startup errors appear in the server log with the provider name.
 
 Common source-package checks:
 
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
-    Verify the package builds from the plugin root:
+    Verify the package builds from the provider root:
 
     ```sh
     go build ./...
@@ -59,10 +59,10 @@ Common source-package checks:
     uv run python -c "import provider"
     ```
 
-    Also confirm `[tool.gestalt].plugin` in `pyproject.toml` points at the module Gestalt should load.
+    Also confirm `[tool.gestalt].provider` or the legacy `[tool.gestalt].plugin` entry in `pyproject.toml` points at the module Gestalt should load.
   </Tabs.Tab>
   <Tabs.Tab>
-    Verify the crate builds from the plugin root:
+    Verify the crate builds from the provider root:
 
     ```sh
     cargo check
@@ -71,7 +71,7 @@ Common source-package checks:
     The plugin root needs a real `Cargo.toml` package with a `[package]` section, not just a workspace manifest, and `src/lib.rs` should export the provider with `gestalt::export_provider!(...)`, `gestalt::export_auth_provider!(...)`, or `gestalt::export_datastore_provider!(...)`.
   </Tabs.Tab>
   <Tabs.Tab>
-    Verify the module resolves from the plugin root:
+    Verify the module resolves from the provider root:
 
     ```sh
     bun run -e "import('./provider.ts')"
@@ -81,7 +81,7 @@ Common source-package checks:
   </Tabs.Tab>
 </Tabs>
 
-A sandbox 403 means the plugin made an outbound request to a host not listed in `plugin.allowed_hosts`. Add every upstream domain the plugin contacts to the allowlist in your plugin config.
+A sandbox 403 means the provider process made an outbound request to a host not listed in `plugin.allowed_hosts`. Add every upstream domain the integration plugin contacts to the allowlist in your plugin config.
 
 An input decode error means the operation received a request body that does not match the expected schema. Check the operation's parameter definitions and ensure the caller is sending the correct types and required fields.
 

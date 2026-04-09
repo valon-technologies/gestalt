@@ -8,7 +8,7 @@ the executable artifacts for packaged providers, and optional static assets.
 
 ## What can be released
 
-Gestalt uses the same release system for executable provider packages, auth and datastore component packages, and packaged web UI bundles. Every package is described by `plugin.yaml`, `plugin.yml`, or `plugin.json`.
+Gestalt uses the same release system for executable provider packages, auth and datastore component packages, and packaged web UI bundles. Every package is described by a provider manifest file: `plugin.yaml`, `plugin.yml`, or `plugin.json`.
 
 ## Source manifests vs release manifests
 
@@ -21,7 +21,7 @@ those fields for you.
 ```yaml
 source: github.com/acme/plugins/my-plugin
 version: 0.0.1-alpha.1
-provider:
+plugin:
   connections:
     default:
       auth:
@@ -64,7 +64,7 @@ source execution and release packaging.
     dependencies = ["gestalt"]
 
     [tool.gestalt]
-    plugin = "provider"
+    provider = "provider"
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -105,7 +105,10 @@ source execution and release packaging.
         "@valon-technologies/gestalt": "0.0.1-alpha.1"
       },
       "gestalt": {
-        "plugin": "./provider.ts#plugin"
+        "provider": {
+          "kind": "plugin",
+          "target": "./provider.ts#provider"
+        }
       }
     }
     ```
@@ -135,16 +138,16 @@ webui:
 
 ### Release manifest for an executable provider
 
-Released executable providers add concrete `entrypoints.provider` and
+Released executable integration providers add concrete `entrypoints.plugin` and
 `artifacts` entries:
 
 ```yaml
 source: github.com/acme/plugins/my-plugin
 version: 0.0.1-alpha.1
 kinds:
-  - provider
+  - plugin
 entrypoints:
-  provider:
+  plugin:
     artifact_path: artifacts/linux/amd64/provider
 artifacts:
   - os: linux
@@ -266,5 +269,5 @@ The exact structure is determined by the manifest. `schemas/` is optional and
 used for provider config validation. `assets/` is optional and used for icons or
 other static files.
 
-Use [Plugin Manifests](/reference/plugin-manifests) for the canonical manifest
+Use [Provider Manifests](/reference/plugin-manifests) for the canonical manifest
 reference.

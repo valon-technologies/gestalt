@@ -24,6 +24,7 @@ from gestalt import (
     Plugin,
     ProviderKind,
     ProviderMetadata,
+    RuntimeProviderAdapter,
     Request,
     SessionTTLProvider,
     StoredAPIToken,
@@ -100,6 +101,11 @@ class ParseRuntimeArgsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             with mock.patch.object(_runtime.sys, "_MEIPASS", tmpdir, create=True):
                 self.assertIsNone(_runtime._parse_runtime_args([]))
+
+
+class RuntimeAliasTests(unittest.TestCase):
+    def test_runtime_provider_adapter_aliases_runtime_plugin(self) -> None:
+        self.assertIs(RuntimeProviderAdapter, _runtime.RuntimePlugin)
 
 
 class ManifestNameTests(unittest.TestCase):

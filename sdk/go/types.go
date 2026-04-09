@@ -64,9 +64,9 @@ type Catalog struct {
 	Operations  []CatalogOperation `json:"operations" yaml:"operations"`
 }
 
-// CatalogOperation describes a single executable operation exposed by a provider
-// plugin. Operations are invoked by ID; executable plugins do not declare
-// HTTP routes.
+// CatalogOperation describes a single executable operation exposed by an
+// integration provider. Operations are invoked by ID; executable providers do
+// not declare HTTP routes.
 type CatalogOperation struct {
 	ID             string               `json:"id" yaml:"id"`
 	Method         string               `json:"method" yaml:"method"`
