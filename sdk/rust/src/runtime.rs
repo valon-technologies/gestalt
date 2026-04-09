@@ -17,7 +17,9 @@ use tokio_stream::wrappers::UnixListenerStream;
 use tonic::transport::Server;
 
 use crate::catalog::write_catalog;
-use crate::env::{ENV_PROVIDER_NAME, ENV_PROVIDER_PARENT_PID, ENV_PROVIDER_SOCKET, ENV_WRITE_CATALOG};
+use crate::env::{
+    ENV_PROVIDER_NAME, ENV_PROVIDER_PARENT_PID, ENV_PROVIDER_SOCKET, ENV_WRITE_CATALOG,
+};
 use crate::error::{Error, Result};
 #[cfg(unix)]
 use crate::generated::v1::auth_provider_server::AuthProviderServer;

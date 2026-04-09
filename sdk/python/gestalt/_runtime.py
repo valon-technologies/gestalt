@@ -58,8 +58,6 @@ datastore_pb2_grpc: Any = _datastore_pb2_grpc
 secrets_pb2: Any = _secrets_pb2
 secrets_pb2_grpc: Any = _secrets_pb2_grpc
 
-UTC = dt.timezone.utc
-
 ENV_PROVIDER_SOCKET: Final[str] = "GESTALT_PLUGIN_SOCKET"
 ENV_WRITE_CATALOG: Final[str] = "GESTALT_PLUGIN_WRITE_CATALOG"
 CURRENT_PROTOCOL_VERSION: Final[int] = 2
