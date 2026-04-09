@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -217,18 +216,23 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	requestedInstance, ok := resolveHTTPControlQueryParam(w, r.URL.Query(), httpInstanceParam, "instance", "instance", true)
-	if !ok {
-		auditErr = errors.New("invalid instance parameter")
-		return
+	requestedInstance := r.URL.Query().Get(httpInstanceParam)
+	if requestedInstance != "" {
+		var ok bool
+		requestedInstance, ok = resolveRequestedInstance(w, requestedInstance)
+		if !ok {
+			auditErr = errors.New("invalid instance parameter")
+			return
+		}
 	}
-	requestedConnection, ok := resolveHTTPControlQueryParam(w, r.URL.Query(), httpConnectionParam, "connection", "connection", true)
-	if !ok {
-		auditErr = errors.New("invalid connection parameter")
-		return
-	}
+	requestedConnection := r.URL.Query().Get(httpConnectionParam)
 	if requestedConnection != "" {
-		requestedConnection = config.ResolveConnectionAlias(requestedConnection)
+		var ok bool
+		requestedConnection, ok = s.resolveRequestedConnection(w, name, requestedConnection)
+		if !ok {
+			auditErr = errors.New("invalid connection parameter")
+			return
+		}
 	}
 
 	tokens, err := s.datastore.ListTokensForIntegration(r.Context(), userID, name)
@@ -359,39 +363,6 @@ func resolveRequestedInstance(w http.ResponseWriter, requested string) (string, 
 	return instance, true
 }
 
-func resolveHTTPControlQueryParam(w http.ResponseWriter, values url.Values, canonical, legacy, label string, allowLegacy bool) (string, bool) {
-	canonicalValue := values.Get(canonical)
-	legacyValue := ""
-	if allowLegacy {
-		legacyValue = values.Get(legacy)
-	}
-	if canonicalValue != "" && legacyValue != "" && canonicalValue != legacyValue {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("conflicting %s parameters %q and %q; use %q", label, legacy, canonical, canonical))
-		return "", false
-	}
-
-	value := canonicalValue
-	if value == "" {
-		value = legacyValue
-	}
-	if value != "" && !safeParamValue.MatchString(value) {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("%s name contains invalid characters", label))
-		return "", false
-	}
-	return value, true
-}
-
-func mergeHTTPControlParam(w http.ResponseWriter, label, key, queryValue, bodyValue string) (string, bool) {
-	if queryValue != "" && bodyValue != "" && queryValue != bodyValue {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("conflicting %s parameter %q in query string and JSON body", label, key))
-		return "", false
-	}
-	if bodyValue != "" {
-		return bodyValue, true
-	}
-	return queryValue, true
-}
-
 func resolveConnectionParams(w http.ResponseWriter, prov core.Provider, provided map[string]string) (map[string]string, bool) {
 	cpp, ok := prov.(core.ConnectionParamProvider)
 	if !ok {
@@ -412,13 +383,21 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	requestedConnection, ok := resolveHTTPControlQueryParam(w, r.URL.Query(), httpConnectionParam, "connection", "connection", true)
-	if !ok {
-		return
+	requestedConnection := r.URL.Query().Get(httpConnectionParam)
+	if requestedConnection != "" {
+		var ok bool
+		requestedConnection, ok = s.resolveRequestedConnection(w, name, requestedConnection)
+		if !ok {
+			return
+		}
 	}
-	requestedInstance, ok := resolveHTTPControlQueryParam(w, r.URL.Query(), httpInstanceParam, "instance", "instance", true)
-	if !ok {
-		return
+	requestedInstance := r.URL.Query().Get(httpInstanceParam)
+	if requestedInstance != "" {
+		var ok bool
+		requestedInstance, ok = resolveRequestedInstance(w, requestedInstance)
+		if !ok {
+			return
+		}
 	}
 	p := PrincipalFromContext(r.Context())
 	var resolver invocation.TokenResolver
@@ -450,13 +429,21 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	requestedConnection, ok := resolveHTTPControlQueryParam(w, r.URL.Query(), httpConnectionParam, "connection", "connection", false)
-	if !ok {
-		return
+	requestedConnection := r.URL.Query().Get(httpConnectionParam)
+	if requestedConnection != "" {
+		var ok bool
+		requestedConnection, ok = s.resolveRequestedConnection(w, providerName, requestedConnection)
+		if !ok {
+			return
+		}
 	}
-	requestedInstance, ok := resolveHTTPControlQueryParam(w, r.URL.Query(), httpInstanceParam, "instance", "instance", false)
-	if !ok {
-		return
+	requestedInstance := r.URL.Query().Get(httpInstanceParam)
+	if requestedInstance != "" {
+		var ok bool
+		requestedInstance, ok = resolveRequestedInstance(w, requestedInstance)
+		if !ok {
+			return
+		}
 	}
 
 	params := make(map[string]any)
@@ -481,17 +468,36 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	bodyConnection, _ := params[httpConnectionParam].(string)
 	delete(params, httpConnectionParam)
 
-	instance, ok := mergeHTTPControlParam(w, "instance", httpInstanceParam, requestedInstance, bodyInstance)
-	if !ok {
+	if bodyInstance != "" {
+		var ok bool
+		bodyInstance, ok = resolveRequestedInstance(w, bodyInstance)
+		if !ok {
+			return
+		}
+	}
+	if requestedInstance != "" && bodyInstance != "" && requestedInstance != bodyInstance {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("conflicting instance parameter %q in query string and JSON body", httpInstanceParam))
 		return
 	}
-	if instance != "" && !safeParamValue.MatchString(instance) {
-		writeError(w, http.StatusBadRequest, "instance name contains invalid characters")
+	instance := bodyInstance
+	if instance == "" {
+		instance = requestedInstance
+	}
+
+	if bodyConnection != "" {
+		var ok bool
+		bodyConnection, ok = s.resolveRequestedConnection(w, providerName, bodyConnection)
+		if !ok {
+			return
+		}
+	}
+	if requestedConnection != "" && bodyConnection != "" && requestedConnection != bodyConnection {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("conflicting connection parameter %q in query string and JSON body", httpConnectionParam))
 		return
 	}
-	connection, ok := mergeHTTPControlParam(w, "connection", httpConnectionParam, requestedConnection, bodyConnection)
-	if !ok {
-		return
+	connection := bodyConnection
+	if connection == "" {
+		connection = requestedConnection
 	}
 	ctx := r.Context()
 	if connection != "" {

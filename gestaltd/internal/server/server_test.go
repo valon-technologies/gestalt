@@ -1708,6 +1708,34 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 	if gotInstance != altInstance {
 		t.Fatalf("override list instance = %q, want %q", gotInstance, altInstance)
 	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/test-int/operations?connection="+altCatalogConnection+"&instance="+altInstance, nil)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("legacy override list request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("legacy override list: expected 200, got %d: %s", resp.StatusCode, respBody)
+	}
+	ops = nil
+	if err := json.NewDecoder(resp.Body).Decode(&ops); err != nil {
+		t.Fatalf("decoding legacy override response: %v", err)
+	}
+	if len(ops) != 2 {
+		t.Fatalf("expected 2 legacy override operations, got %d", len(ops))
+	}
+	if ops[0]["id"] != "alpha_rest" {
+		t.Fatalf("expected first id 'alpha_rest' for legacy override, got %v", ops[0]["id"])
+	}
+	if ops[1]["id"] != "zeta_rest" {
+		t.Fatalf("expected second id 'zeta_rest' for legacy override, got %v", ops[1]["id"])
+	}
+	if gotConnection != testCatalogConnection {
+		t.Fatalf("legacy override list connection = %q, want %q", gotConnection, testCatalogConnection)
+	}
 }
 
 func TestListOperations_NotFound(t *testing.T) {
