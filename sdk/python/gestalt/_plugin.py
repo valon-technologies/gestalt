@@ -265,13 +265,21 @@ def _inspect_session_catalog_handler(func: Any) -> bool:
 def _module_plugin_name(module: types.ModuleType) -> str:
     file_path = getattr(module, "__file__", None)
     if file_path:
-        manifest_path = pathlib.Path(file_path).resolve().parent / "plugin.yaml"
+        parent = pathlib.Path(file_path).resolve().parent
+        manifest_path = parent / "provider.yaml"
+        if not manifest_path.exists():
+            manifest_path = parent / "plugin.yaml"
         return _derive_name_from_manifest(manifest_path)
     return _slug_name(module.__name__.rsplit(".", 1)[-1])
 
 
 def _derive_name_from_manifest(path: pathlib.Path) -> str:
-    manifest_path = path / "plugin.yaml" if path.is_dir() else path
+    if path.is_dir():
+        manifest_path = path / "provider.yaml"
+        if not manifest_path.exists():
+            manifest_path = path / "plugin.yaml"
+    else:
+        manifest_path = path
     fallback_name = manifest_path.parent.name or "plugin"
     manifest_format = manifest_path.suffix.lower()
 

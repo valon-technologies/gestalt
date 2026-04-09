@@ -180,7 +180,7 @@ provider:
 			if err := os.MkdirAll(pluginDir, 0755); err != nil {
 				t.Fatalf("MkdirAll(pluginDir): %v", err)
 			}
-			writeTestFile(t, pluginDir, "plugin.yaml", []byte(tc.manifestYAML), 0644)
+			writeTestFile(t, pluginDir, "provider.yaml", []byte(tc.manifestYAML), 0644)
 
 			out, err := runPluginReleaseCommandResult(pluginDir, "--version", "0.0.1-test")
 			if err == nil {
@@ -670,7 +670,7 @@ plugin = "os import path\nimport os;os.system('cmd')#:attr"
 	if err != nil {
 		t.Fatalf("EncodeSourceManifestFormat: %v", err)
 	}
-	writeTestFile(t, pluginDir, "plugin.yaml", manifestData, 0o644)
+	writeTestFile(t, pluginDir, "provider.yaml", manifestData, 0o644)
 
 	out, err := runPluginReleaseCommandResult(pluginDir, "--version", "0.0.14-test", "--output", t.TempDir())
 	if err == nil {
@@ -1651,7 +1651,7 @@ func TestRun_PluginReleasePreservesYAMLManifestFormatAndConnectionDefaults(t *te
 	t.Parallel()
 
 	pluginDir := newSourceProviderReleaseFixture(t, t.TempDir())
-	writeReleaseTestManifestFormat(t, pluginDir, "plugin.yaml", &pluginmanifestv1.Manifest{
+	writeReleaseTestManifestFormat(t, pluginDir, "provider.yaml", &pluginmanifestv1.Manifest{
 		Source:      "github.com/testowner/plugins/provider-yaml",
 		Version:     "0.0.1",
 		DisplayName: "Provider YAML",
@@ -1665,7 +1665,7 @@ func TestRun_PluginReleasePreservesYAMLManifestFormatAndConnectionDefaults(t *te
 		},
 	})
 	if err := os.Remove(filepath.Join(pluginDir, pluginpkg.ManifestFile)); err != nil {
-		t.Fatalf("remove plugin.json: %v", err)
+		t.Fatalf("remove provider.json: %v", err)
 	}
 
 	outputDir := t.TempDir()
@@ -1679,8 +1679,8 @@ func TestRun_PluginReleasePreservesYAMLManifestFormatAndConnectionDefaults(t *te
 	archiveName := "gestalt-plugin-provider-yaml_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
 	extractDir := extractReleasedArchive(t, outputDir, archiveName)
 	manifestPath, manifest := readManifestFromDir(t, extractDir)
-	if filepath.Base(manifestPath) != "plugin.yaml" {
-		t.Fatalf("released manifest = %q, want plugin.yaml", filepath.Base(manifestPath))
+	if filepath.Base(manifestPath) != "provider.yaml" {
+		t.Fatalf("released manifest = %q, want provider.yaml", filepath.Base(manifestPath))
 	}
 	if manifest.Plugin == nil || len(manifest.Plugin.ConnectionParams) != 1 || !manifest.Plugin.ConnectionParams["tenant"].Required {
 		t.Fatalf("provider connection_params = %+v", manifest.Plugin)
@@ -1926,7 +1926,7 @@ func TestRun_PluginReleaseRejectsStaleSourceArtifactDigest(t *testing.T) {
 
 	_, manifest, err := pluginpkg.ReadSourceManifestFile(filepath.Join(pluginDir, pluginpkg.ManifestFile))
 	if err != nil {
-		t.Fatalf("ReadSourceManifestFile(plugin.json): %v", err)
+		t.Fatalf("ReadSourceManifestFile(provider.json): %v", err)
 	}
 	manifest.Artifacts = []pluginmanifestv1.Artifact{
 		{
@@ -2035,7 +2035,7 @@ def dynamic_catalog(request: gestalt.Request) -> gestalt.Catalog:
 	if err != nil {
 		t.Fatalf("EncodeSourceManifestFormat: %v", err)
 	}
-	writeTestFile(t, pluginDir, "plugin.yaml", manifestData, 0o644)
+	writeTestFile(t, pluginDir, "provider.yaml", manifestData, 0o644)
 	writeFakePythonReleaseInterpreter(t, filepath.Join(pluginDir, ".venv", "bin", "python"), runtime.GOOS, runtime.GOARCH)
 	return pluginDir
 }

@@ -212,10 +212,10 @@ class PluginNameTests(unittest.TestCase):
     def test_from_manifest_with_base_dir(self) -> None:
         """from_manifest with base_dir should resolve relative paths against it."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            manifest = pathlib.Path(tmpdir) / "plugin.yaml"
+            manifest = pathlib.Path(tmpdir) / "provider.yaml"
             manifest.write_text('display_name: "Test Plugin"\n', encoding="utf-8")
 
-            plugin = Plugin.from_manifest("plugin.yaml", base_dir=pathlib.Path(tmpdir))
+            plugin = Plugin.from_manifest("provider.yaml", base_dir=pathlib.Path(tmpdir))
             self.assertEqual(plugin.name, "Test-Plugin")
 
 

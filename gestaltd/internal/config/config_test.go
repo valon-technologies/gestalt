@@ -62,7 +62,7 @@ plugins:
     display_name: Service A
     provider:
       source:
-        path: /tmp/plugin.yaml
+        path: /tmp/provider.yaml
 `)
 
 	cfg, err := Load(path)
@@ -112,7 +112,7 @@ plugins:
   service-a:
     provider:
       source:
-        path: /tmp/plugin.yaml
+        path: /tmp/provider.yaml
 `)
 
 	cfg, err := LoadWithLookup(path, func(key string) (string, bool) {
@@ -468,14 +468,14 @@ plugins:
   custom_tool:
     provider:
       source:
-        path: ./plugin.yaml
+        path: ./provider.yaml
 `)
 
 	cfg, err := Load(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if got := cfg.Integrations["custom_tool"].Plugin.SourcePath(); got != filepath.Join(filepath.Dir(path), "plugin.yaml") {
+	if got := cfg.Integrations["custom_tool"].Plugin.SourcePath(); got != filepath.Join(filepath.Dir(path), "provider.yaml") {
 		t.Fatalf("unexpected plugin source path: %q", got)
 	}
 }
@@ -574,7 +574,7 @@ server:
 ui:
   provider:
     source:
-      path: ./web/default/plugin.yaml
+      path: ./web/default/provider.yaml
 datastore:
   provider:
     source:
@@ -591,7 +591,7 @@ server:
 		if cfg.UI.Provider == nil || cfg.UI.Provider.Source == nil {
 			t.Fatalf("UI.Provider = %#v", cfg.UI.Provider)
 		}
-		wantPath := filepath.Join(filepath.Dir(path), "web", "default", "plugin.yaml")
+		wantPath := filepath.Join(filepath.Dir(path), "web", "default", "provider.yaml")
 		if got := cfg.UI.Provider.Source.Path; got != wantPath {
 			t.Fatalf("UI.Provider.Source.Path = %q, want %q", got, wantPath)
 		}
@@ -691,7 +691,7 @@ plugins:
   external:
     provider:
       source:
-        path: ./plugins/dummy/plugin.yaml
+        path: ./plugins/dummy/provider.yaml
 `,
 		},
 		{
@@ -701,7 +701,7 @@ plugins:
   external:
     provider:
       source:
-        path: ./plugins/dummy/plugin.yaml
+        path: ./plugins/dummy/provider.yaml
         ref: github.com/acme-corp/tools/widget
         version: 1.2.3
 `,
@@ -714,7 +714,7 @@ plugins:
   external:
     provider:
       source:
-        path: ./plugins/dummy/plugin.yaml
+        path: ./plugins/dummy/provider.yaml
       env:
         FOO: bar
 `,
@@ -726,7 +726,7 @@ plugins:
   external:
     provider:
       source:
-        path: ./plugins/dummy/plugin.yaml
+        path: ./plugins/dummy/provider.yaml
     config:
       base_url: https://example.com
 `,
@@ -747,7 +747,7 @@ plugins:
   external:
     provider:
       source:
-        path: ./plugins/dummy/plugin.yaml
+        path: ./plugins/dummy/provider.yaml
         version: 1.0.0
 `,
 			wantErr: "plugin.source.version is only valid",
@@ -794,7 +794,7 @@ plugins:
   external:
     provider:
       source:
-        path: ./plugins/dummy/plugin.yaml
+        path: ./plugins/dummy/provider.yaml
     connections:
       named:
         mode: user
@@ -813,7 +813,7 @@ plugins:
   external:
     provider:
       source:
-        path: ./plugins/dummy/plugin.yaml
+        path: ./plugins/dummy/provider.yaml
     connections:
       named:
         mode: user
@@ -831,7 +831,7 @@ plugins:
   external:
     provider:
       source:
-        path: ./plugins/dummy/plugin.yaml
+        path: ./plugins/dummy/provider.yaml
     mcp:
       tool_prefix: external_
 `,
@@ -894,7 +894,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			name: "local source valid",
 			cfg: &Config{
 				Integrations: map[string]IntegrationDef{
-					"sample": {Plugin: &ProviderDef{Source: &PluginSourceDef{Path: "./some-dir/plugin.yaml"}}},
+					"sample": {Plugin: &ProviderDef{Source: &PluginSourceDef{Path: "./some-dir/provider.yaml"}}},
 				},
 			},
 		},
@@ -910,7 +910,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			name: "source path and ref rejected",
 			cfg: &Config{
 				Integrations: map[string]IntegrationDef{
-					"sample": {Plugin: &ProviderDef{Source: &PluginSourceDef{Path: "./plugin.yaml", Ref: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}}},
+					"sample": {Plugin: &ProviderDef{Source: &PluginSourceDef{Path: "./provider.yaml", Ref: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}}},
 				},
 			},
 			wantErr: "mutually exclusive",
@@ -958,7 +958,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			name: "datastore provider valid",
 			cfg: &Config{
 				Datastore: DatastoreConfig{
-					Provider: &ProviderDef{Source: &PluginSourceDef{Path: "./some-dir/plugin.yaml"}},
+					Provider: &ProviderDef{Source: &PluginSourceDef{Path: "./some-dir/provider.yaml"}},
 				},
 			},
 		},
@@ -986,7 +986,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 				Integrations: map[string]IntegrationDef{
 					"sample": {
 						Plugin: &ProviderDef{
-							Source: &PluginSourceDef{Path: "./plugin.yaml"},
+							Source: &PluginSourceDef{Path: "./provider.yaml"},
 							Auth:   &ConnectionAuthDef{Type: pluginmanifestv1.AuthTypeMCPOAuth},
 						},
 					},
@@ -1000,7 +1000,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 				Integrations: map[string]IntegrationDef{
 					"sample": {
 						Plugin: &ProviderDef{
-							Source: &PluginSourceDef{Path: "./plugin.yaml"},
+							Source: &PluginSourceDef{Path: "./provider.yaml"},
 							Connections: map[string]*ConnectionDef{
 								"default": {Auth: ConnectionAuthDef{Type: pluginmanifestv1.AuthTypeMCPOAuth}},
 							},
@@ -1053,17 +1053,17 @@ func TestLoadConfigResolvesRelativePaths(t *testing.T) {
 auth:
   provider:
     source:
-      path: ../auth-plugin/plugin.yaml
+      path: ../auth-plugin/provider.yaml
 datastore:
   provider:
     source:
-      path: ../datastore-plugin/plugin.yaml
+      path: ../datastore-plugin/provider.yaml
 plugins:
   service-a:
     icon_file: ../assets/service.svg
     provider:
       source:
-        path: ../bin/plugin.yaml
+        path: ../bin/provider.yaml
 `), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
 	}
@@ -1076,14 +1076,14 @@ plugins:
 	if got := cfg.Integrations["service-a"].IconFile; got != iconPath {
 		t.Fatalf("IconFile = %q, want %q", got, iconPath)
 	}
-	if got := cfg.Auth.Provider.SourcePath(); got != filepath.Join(dir, "auth-plugin", "plugin.yaml") {
-		t.Fatalf("auth plugin source path = %q, want %q", got, filepath.Join(dir, "auth-plugin", "plugin.yaml"))
+	if got := cfg.Auth.Provider.SourcePath(); got != filepath.Join(dir, "auth-plugin", "provider.yaml") {
+		t.Fatalf("auth plugin source path = %q, want %q", got, filepath.Join(dir, "auth-plugin", "provider.yaml"))
 	}
-	if got := cfg.Datastore.Provider.SourcePath(); got != filepath.Join(dir, "datastore-plugin", "plugin.yaml") {
-		t.Fatalf("datastore plugin source path = %q, want %q", got, filepath.Join(dir, "datastore-plugin", "plugin.yaml"))
+	if got := cfg.Datastore.Provider.SourcePath(); got != filepath.Join(dir, "datastore-plugin", "provider.yaml") {
+		t.Fatalf("datastore plugin source path = %q, want %q", got, filepath.Join(dir, "datastore-plugin", "provider.yaml"))
 	}
-	if got := cfg.Integrations["service-a"].Plugin.SourcePath(); got != filepath.Join(dir, "bin", "plugin.yaml") {
-		t.Fatalf("integration plugin source path = %q, want %q", got, filepath.Join(dir, "bin", "plugin.yaml"))
+	if got := cfg.Integrations["service-a"].Plugin.SourcePath(); got != filepath.Join(dir, "bin", "provider.yaml") {
+		t.Fatalf("integration plugin source path = %q, want %q", got, filepath.Join(dir, "bin", "provider.yaml"))
 	}
 }
 
@@ -1198,7 +1198,7 @@ func TestLoad_ResolvesRelativePluginSourcePath(t *testing.T) {
   sample:
     provider:
       source:
-        path: ./my-plugin/plugin.yaml
+        path: ./my-plugin/provider.yaml
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
@@ -1216,7 +1216,7 @@ func TestLoad_ResolvesRelativePluginSourcePath(t *testing.T) {
 	if !filepath.IsAbs(plugin.SourcePath()) {
 		t.Fatalf("expected absolute path, got: %q", plugin.SourcePath())
 	}
-	wantPath := filepath.Join(pluginDir, "plugin.yaml")
+	wantPath := filepath.Join(pluginDir, "provider.yaml")
 	if plugin.SourcePath() != wantPath {
 		t.Fatalf("plugin.SourcePath() = %q, want %q", plugin.SourcePath(), wantPath)
 	}

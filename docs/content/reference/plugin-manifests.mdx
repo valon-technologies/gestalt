@@ -2,7 +2,7 @@ import { Tabs } from 'nextra/components'
 
 # Provider Manifests
 
-Gestalt provider packages and release archives are described by a manifest file: `plugin.yaml`, `plugin.yml`, or `plugin.json`. YAML is the easiest format to author by hand.
+Gestalt provider packages and release archives are described by a manifest file: `provider.yaml`, `provider.yml`, or `provider.json`. YAML is the easiest format to author by hand.
 
 Providers are the umbrella concept in Gestalt. Auth providers, datastore providers, and integration plugins all use this manifest format. The `plugin` manifest kind is reserved for integration providers that expose callable operations.
 
@@ -516,7 +516,7 @@ for the end-to-end authoring flow.
     ```text
     my-plugin/
       go.mod
-      plugin.yaml
+      provider.yaml
       provider.go
     ```
   </Tabs.Tab>
@@ -524,7 +524,7 @@ for the end-to-end authoring flow.
     ```text
     my-plugin/
       pyproject.toml
-      plugin.yaml
+      provider.yaml
       provider.py
     ```
 
@@ -537,7 +537,7 @@ for the end-to-end authoring flow.
     ```text
     my-plugin/
       Cargo.toml
-      plugin.yaml
+      provider.yaml
       src/
         lib.rs
     ```
@@ -550,7 +550,7 @@ for the end-to-end authoring flow.
     ```text
     my-plugin/
       package.json
-      plugin.yaml
+      provider.yaml
       provider.ts
     ```
 
@@ -595,7 +595,7 @@ gestaltd provider release --version 1.2.3
 ```
 
 `gestaltd provider release` preserves the source manifest format, so
-`plugin.yaml` stays YAML and `plugin.json` stays JSON in the release archive.
+`provider.yaml` stays YAML and `provider.json` stays JSON in the release archive.
 For executable Go and Rust plugins, release materializes the executable
 catalog automatically before packaging. Python source plugins load the module
 declared in `[tool.gestalt].plugin` and materialize the executable catalog

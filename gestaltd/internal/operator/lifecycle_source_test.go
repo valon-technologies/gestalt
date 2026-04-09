@@ -135,7 +135,7 @@ func buildV2ArchiveForArtifact(t *testing.T, dir, source, version, artifactPath,
 	if err != nil {
 		t.Fatalf("encode manifest: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(srcDir, "plugin.json"), manifestBytes, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(srcDir, "provider.json"), manifestBytes, 0644); err != nil {
 		t.Fatalf("write provider manifest: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(srcDir, "catalog.yaml"), []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n"), 0644); err != nil {
@@ -213,7 +213,7 @@ func buildExecutableArchiveData(t *testing.T, dir, srcDirName, source, version, 
 	if err != nil {
 		t.Fatalf("encode manifest: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(srcDir, "plugin.json"), manifestBytes, 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(srcDir, "provider.json"), manifestBytes, 0644); err != nil {
 		t.Fatalf("write provider manifest: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(srcDir, "catalog.yaml"), []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n"), 0644); err != nil {
