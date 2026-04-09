@@ -221,11 +221,16 @@ _JSON_RENAMES: Final[dict[str, str]] = {
 
 _YAML_RENAMES: Final[dict[str, str]] = {v: k for k, v in _JSON_RENAMES.items()}
 
+_OPAQUE_KEYS: Final[frozenset[str]] = frozenset({"input_schema", "output_schema"})
+
 
 def _serialize_catalog(value: Any, *, field_style: str) -> Any:
     if isinstance(value, dict):
         return {
-            _rename_key(k, field_style): _serialize_catalog(v, field_style=field_style)
+            _rename_key(k, field_style): (
+                _python_value(v) if k in _OPAQUE_KEYS
+                else _serialize_catalog(v, field_style=field_style)
+            )
             for k, v in value.items()
             if not _omit_catalog_value(k, v)
         }
@@ -240,10 +245,12 @@ def _rename_key(key: str, field_style: str) -> str:
     return key
 
 
-def _normalize_mapping(value: Any) -> Any:
+def _normalize_mapping(value: Any, *, opaque: bool = False) -> Any:
     if isinstance(value, dict):
+        if opaque:
+            return _python_value(value)
         return {
-            _YAML_RENAMES.get(k, k): _normalize_mapping(v)
+            _YAML_RENAMES.get(k, k): _normalize_mapping(v, opaque=k in _OPAQUE_KEYS)
             for k, v in value.items()
         }
     if isinstance(value, (list, tuple)):
