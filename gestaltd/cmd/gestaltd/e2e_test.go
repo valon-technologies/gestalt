@@ -596,6 +596,11 @@ plugins:
 		t.Fatalf("write config: %v", err)
 	}
 
+	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd init: %v\n%s", err, out)
+	}
+
 	serveLockedAndExerciseExample(t, cfgPath, port, "", func(t *testing.T, baseURL string) {
 		listReq, _ := http.NewRequest(http.MethodGet, baseURL+"/api/v1/integrations", nil)
 		listReq.Header.Set("Authorization", "Bearer alice")
