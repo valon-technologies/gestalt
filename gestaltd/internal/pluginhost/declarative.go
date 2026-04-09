@@ -172,6 +172,9 @@ func (p *DeclarativeProvider) Execute(ctx context.Context, operation string, par
 		}
 		authHeader = resolvedAuth
 		token = ""
+		if headers == nil && len(extraHeaders) > 0 {
+			headers = make(map[string]string, len(extraHeaders))
+		}
 		for k, v := range extraHeaders {
 			headers[k] = v
 		}

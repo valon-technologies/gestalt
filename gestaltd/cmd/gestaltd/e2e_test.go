@@ -508,7 +508,8 @@ func TestE2EManifestManualAuthMappingValueFromBasicAuth(t *testing.T) {
 		upstreamAuth.Store(r.Header.Get("Authorization"))
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"auth": r.Header.Get("Authorization"),
+			"auth":      r.Header.Get("Authorization"),
+			"x_app_key": r.Header.Get("X-App-Key"),
 		})
 	}))
 	testutil.CloseOnCleanup(t, upstream)
@@ -552,7 +553,14 @@ plugin:
         label: Organization ID
       - name: api_key
         label: API Key
+      - name: app_key
+        label: App Key
     auth_mapping:
+      headers:
+        X-App-Key:
+          valueFrom:
+            credentialFieldRef:
+              name: app_key
       basic:
         username:
           valueFrom:
@@ -612,11 +620,11 @@ plugins:
 			t.Fatalf("unexpected integrations payload: %+v", integrations)
 		}
 		fields := integrations[0].Connections[0].CredentialFields
-		if len(fields) != 2 || fields[0].Name != "organization_id" || fields[1].Name != "api_key" {
-			t.Fatalf("credential fields = %+v, want organization_id and api_key", fields)
+		if len(fields) != 3 || fields[0].Name != "organization_id" || fields[1].Name != "api_key" || fields[2].Name != "app_key" {
+			t.Fatalf("credential fields = %+v, want organization_id, api_key, and app_key", fields)
 		}
 
-		connectReq, _ := http.NewRequest(http.MethodPost, baseURL+"/api/v1/auth/connect-manual", strings.NewReader(`{"integration":"mt","credentials":{"organization_id":"org-123","api_key":"api-key-123"}}`))
+		connectReq, _ := http.NewRequest(http.MethodPost, baseURL+"/api/v1/auth/connect-manual", strings.NewReader(`{"integration":"mt","credentials":{"organization_id":"org-123","api_key":"api-key-123","app_key":"app-key-123"}}`))
 		connectReq.Header.Set("Authorization", "Bearer alice")
 		connectReq.Header.Set("Content-Type", "application/json")
 		connectResp, err := http.DefaultClient.Do(connectReq)
@@ -651,6 +659,9 @@ plugins:
 		if result["auth"] != wantAuth {
 			t.Fatalf("invoke auth = %v, want %v", result["auth"], wantAuth)
 		}
+		if result["x_app_key"] != "app-key-123" {
+			t.Fatalf("invoke x_app_key = %v, want %v", result["x_app_key"], "app-key-123")
+		}
 		if got, _ := upstreamAuth.Load().(string); got != wantAuth {
 			t.Fatalf("upstream auth = %q, want %q", got, wantAuth)
 		}
@@ -667,7 +678,8 @@ func TestE2EDeclarativeManifestManualAuthMappingValueFromBasicAuth(t *testing.T)
 		upstreamAuth.Store(r.Header.Get("Authorization"))
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"auth": r.Header.Get("Authorization"),
+			"auth":      r.Header.Get("Authorization"),
+			"x_app_key": r.Header.Get("X-App-Key"),
 		})
 	}))
 	testutil.CloseOnCleanup(t, upstream)
@@ -690,7 +702,14 @@ plugin:
         label: Organization ID
       - name: api_key
         label: API Key
+      - name: app_key
+        label: App Key
     auth_mapping:
+      headers:
+        X-App-Key:
+          valueFrom:
+            credentialFieldRef:
+              name: app_key
       basic:
         username:
           valueFrom:
@@ -727,7 +746,7 @@ plugins:
 	}
 
 	serveLockedAndExerciseExample(t, cfgPath, port, "", func(t *testing.T, baseURL string) {
-		connectReq, _ := http.NewRequest(http.MethodPost, baseURL+"/api/v1/auth/connect-manual", strings.NewReader(`{"integration":"mt","credentials":{"organization_id":"org-456","api_key":"api-key-456"}}`))
+		connectReq, _ := http.NewRequest(http.MethodPost, baseURL+"/api/v1/auth/connect-manual", strings.NewReader(`{"integration":"mt","credentials":{"organization_id":"org-456","api_key":"api-key-456","app_key":"app-key-456"}}`))
 		connectReq.Header.Set("Authorization", "Bearer alice")
 		connectReq.Header.Set("Content-Type", "application/json")
 		connectResp, err := http.DefaultClient.Do(connectReq)
@@ -761,6 +780,9 @@ plugins:
 		wantAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte("org-456:api-key-456"))
 		if result["auth"] != wantAuth {
 			t.Fatalf("invoke auth = %v, want %v", result["auth"], wantAuth)
+		}
+		if result["x_app_key"] != "app-key-456" {
+			t.Fatalf("invoke x_app_key = %v, want %v", result["x_app_key"], "app-key-456")
 		}
 		if got, _ := upstreamAuth.Load().(string); got != wantAuth {
 			t.Fatalf("upstream auth = %q, want %q", got, wantAuth)
