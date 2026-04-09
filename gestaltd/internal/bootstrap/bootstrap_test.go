@@ -12,6 +12,7 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	_ "github.com/valon-technologies/gestalt/server/internal/datastore"
 	telemetrynoop "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/noop"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"gopkg.in/yaml.v3"
@@ -20,12 +21,6 @@ import (
 func stubAuthFactory(name string) bootstrap.AuthFactory {
 	return func(yaml.Node, bootstrap.Deps) (core.AuthProvider, error) {
 		return &coretesting.StubAuthProvider{N: name}, nil
-	}
-}
-
-func stubDatastoreFactory() bootstrap.DatastoreFactory {
-	return func(yaml.Node, bootstrap.Deps) (core.Datastore, error) {
-		return &coretesting.StubDatastore{}, nil
 	}
 }
 
@@ -58,8 +53,10 @@ func validConfig() *config.Config {
 			Config:   yaml.Node{Kind: yaml.MappingNode},
 		},
 		Datastore: config.DatastoreConfig{
-			Provider: &config.ProviderDef{Source: &config.PluginSourceDef{Ref: "github.com/valon-technologies/gestalt-providers/datastore/sqlite", Version: "0.0.1-alpha.1"}},
-			Config:   yaml.Node{Kind: yaml.MappingNode},
+			Resource: "sqlite",
+		},
+		Datastores: map[string]config.DatastoreDef{
+			"sqlite": {Driver: "sqlite", DSN: ":memory:"},
 		},
 		Secrets:      config.SecretsConfig{BuiltinProvider: "test-secrets"},
 		Telemetry:    config.TelemetryConfig{Provider: "test-telemetry"},
@@ -74,7 +71,6 @@ func validConfig() *config.Config {
 func validFactories() *bootstrap.FactoryRegistry {
 	f := bootstrap.NewFactoryRegistry()
 	f.Auth = stubAuthFactory("test-auth")
-	f.Datastore = stubDatastoreFactory()
 	f.Secrets["test-secrets"] = stubSecretManagerFactory()
 	f.Telemetry["test-telemetry"] = stubTelemetryFactory()
 	return f
@@ -188,29 +184,13 @@ func TestBootstrap_ReusesPreparedComponentRuntimeConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildComponentRuntimeConfigNode(auth): %v", err)
 	}
-	datastoreRuntime, err := config.BuildComponentRuntimeConfigNode("datastore", "datastore", cfg.Datastore.Provider, yaml.Node{
-		Kind: yaml.MappingNode,
-		Content: []*yaml.Node{
-			{Kind: yaml.ScalarNode, Tag: "!!str", Value: "dsn"},
-			{Kind: yaml.ScalarNode, Tag: "!!str", Value: "prepared-datastore"},
-		},
-	})
-	if err != nil {
-		t.Fatalf("BuildComponentRuntimeConfigNode(datastore): %v", err)
-	}
 	cfg.Auth.Config = authRuntime
-	cfg.Datastore.Config = datastoreRuntime
 
 	var gotAuthNode yaml.Node
-	var gotDatastoreNode yaml.Node
 	factories := validFactories()
 	factories.Auth = func(node yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
 		gotAuthNode = node
 		return &coretesting.StubAuthProvider{N: "test-auth"}, nil
-	}
-	factories.Datastore = func(node yaml.Node, deps bootstrap.Deps) (core.Datastore, error) {
-		gotDatastoreNode = node
-		return &coretesting.StubDatastore{}, nil
 	}
 
 	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
@@ -234,20 +214,6 @@ func TestBootstrap_ReusesPreparedComponentRuntimeConfig(t *testing.T) {
 		t.Fatalf("auth config = %#v", authConfig)
 	}
 
-	datastoreMap, err := config.NodeToMap(gotDatastoreNode)
-	if err != nil {
-		t.Fatalf("NodeToMap(datastore): %v", err)
-	}
-	datastoreConfig, ok := datastoreMap["config"].(map[string]any)
-	if !ok {
-		t.Fatalf("datastore runtime config = %#v", datastoreMap["config"])
-	}
-	if _, nested := datastoreConfig["config"]; nested {
-		t.Fatalf("datastore config was rewrapped: %#v", datastoreConfig)
-	}
-	if datastoreConfig["dsn"] != "prepared-datastore" {
-		t.Fatalf("datastore config = %#v", datastoreConfig)
-	}
 }
 
 func TestBootstrapFactoryError(t *testing.T) {
@@ -263,14 +229,6 @@ func TestBootstrapFactoryError(t *testing.T) {
 			mutate: func(f *bootstrap.FactoryRegistry) {
 				f.Auth = func(yaml.Node, bootstrap.Deps) (core.AuthProvider, error) {
 					return nil, fmt.Errorf("auth broke")
-				}
-			},
-		},
-		{
-			name: "datastore factory error",
-			mutate: func(f *bootstrap.FactoryRegistry) {
-				f.Datastore = func(yaml.Node, bootstrap.Deps) (core.Datastore, error) {
-					return nil, fmt.Errorf("datastore broke")
 				}
 			},
 		},
@@ -500,12 +458,11 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 	})
 
-	t.Run("passes top-level provider selection to component factories", func(t *testing.T) {
+	t.Run("passes top-level provider selection to auth factory", func(t *testing.T) {
 		t.Parallel()
 
 		cfg := validConfig()
 		cfg.Auth.Provider = &config.ProviderDef{Source: &config.PluginSourceDef{Ref: "github.com/valon-technologies/gestalt-providers/auth/oidc", Version: "0.0.1-alpha.1"}}
-		cfg.Datastore.Provider = &config.ProviderDef{Source: &config.PluginSourceDef{Ref: "github.com/valon-technologies/gestalt-providers/datastore/postgres", Version: "0.0.1-alpha.1"}}
 		cfg.Auth.Config = yaml.Node{
 			Kind: yaml.MappingNode,
 			Content: []*yaml.Node{
@@ -513,23 +470,12 @@ func TestBootstrapSecretResolution(t *testing.T) {
 				{Kind: yaml.ScalarNode, Value: "https://issuer.example.test", Tag: "!!str"},
 			},
 		}
-		cfg.Datastore.Config = yaml.Node{
-			Kind: yaml.MappingNode,
-			Content: []*yaml.Node{
-				{Kind: yaml.ScalarNode, Value: "dsn", Tag: "!!str"},
-				{Kind: yaml.ScalarNode, Value: "postgres://db.example.test/app", Tag: "!!str"},
-			},
-		}
 
-		var authNode, datastoreNode yaml.Node
+		var authNode yaml.Node
 		factories := validFactories()
 		factories.Auth = func(node yaml.Node, _ bootstrap.Deps) (core.AuthProvider, error) {
 			authNode = node
 			return &coretesting.StubAuthProvider{N: "test-auth"}, nil
-		}
-		factories.Datastore = func(node yaml.Node, _ bootstrap.Deps) (core.Datastore, error) {
-			datastoreNode = node
-			return &coretesting.StubDatastore{}, nil
 		}
 
 		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
@@ -550,20 +496,6 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 		if authCfg.Config["issuer_url"] != "https://issuer.example.test" {
 			t.Fatalf("auth config = %+v", authCfg.Config)
-		}
-
-		var datastoreCfg struct {
-			Source *config.PluginSourceDef `yaml:"source"`
-			Config map[string]string       `yaml:"config"`
-		}
-		if err := datastoreNode.Decode(&datastoreCfg); err != nil {
-			t.Fatalf("decode datastore node: %v", err)
-		}
-		if datastoreCfg.Source == nil || datastoreCfg.Source.Ref != "github.com/valon-technologies/gestalt-providers/datastore/postgres" {
-			t.Fatalf("datastore source = %+v", datastoreCfg.Source)
-		}
-		if datastoreCfg.Config["dsn"] != "postgres://db.example.test/app" {
-			t.Fatalf("datastore config = %+v", datastoreCfg.Config)
 		}
 	})
 

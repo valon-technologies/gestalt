@@ -7,8 +7,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-
-	"github.com/valon-technologies/gestalt/server/internal/config"
 )
 
 const (
@@ -57,29 +55,26 @@ func GenerateDefaultConfig(configDir string) (string, error) {
 }
 
 func defaultManagedConfig(dbPath, encryptionKey string) string {
-	return fmt.Sprintf(`datastore:
-  provider:
-    source:
-      ref: %s/datastore/sqlite
-      version: %s
-  config:
-    path: %q
+	return fmt.Sprintf(`datastores:
+  sqlite:
+    driver: sqlite3
+    dsn: %q
+datastore: sqlite
 secrets:
   provider: env
 server:
   public:
     port: 8080
   encryption_key: %q
-`, config.DefaultProviderRepo, config.DefaultProviderVersion, dbPath, encryptionKey)
+`, dbPath, encryptionKey)
 }
 
 func defaultLocalSourceConfig(providersDir, dbPath, encryptionKey string) string {
-	return fmt.Sprintf(`datastore:
-  provider:
-    source:
-      path: %q
-  config:
-    path: %q
+	return fmt.Sprintf(`datastores:
+  sqlite:
+    driver: sqlite3
+    dsn: %q
+datastore: sqlite
 ui:
   provider:
     source:
@@ -90,5 +85,5 @@ server:
   public:
     port: 8080
   encryption_key: %q
-`, filepath.Join(providersDir, "datastore", "sqlite", "manifest.yaml"), dbPath, filepath.Join(providersDir, "web", "default", "manifest.yaml"), encryptionKey)
+`, dbPath, filepath.Join(providersDir, "web", "default", "provider.yaml"), encryptionKey)
 }

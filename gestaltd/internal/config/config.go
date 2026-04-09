@@ -40,6 +40,7 @@ const PluginConnectionAlias = "plugin"
 type Config struct {
 	Auth         AuthConfig                `yaml:"auth"`
 	Datastore    DatastoreConfig           `yaml:"datastore"`
+	Datastores   map[string]DatastoreDef   `yaml:"datastores"`
 	Secrets      SecretsConfig             `yaml:"secrets"`
 	Telemetry    TelemetryConfig           `yaml:"telemetry"`
 	Audit        AuditConfig               `yaml:"audit"`
@@ -205,8 +206,14 @@ type AuthConfig struct {
 }
 
 type DatastoreConfig struct {
+	Resource string       `yaml:"-"`
 	Provider *ProviderDef `yaml:"provider"`
 	Config   yaml.Node    `yaml:"config"`
+}
+
+type DatastoreDef struct {
+	Driver string `yaml:"driver"`
+	DSN    string `yaml:"dsn"`
 }
 
 func (c *AuthConfig) UnmarshalYAML(value *yaml.Node) error {
@@ -214,7 +221,46 @@ func (c *AuthConfig) UnmarshalYAML(value *yaml.Node) error {
 }
 
 func (c *DatastoreConfig) UnmarshalYAML(value *yaml.Node) error {
-	return unmarshalTopLevelComponentConfig(value, "DatastoreConfig", "datastore", &c.Provider, &c.Config)
+	if value == nil || value.Kind == 0 {
+		c.Provider = nil
+		c.Config = yaml.Node{}
+		c.Resource = ""
+		return nil
+	}
+	if value.Kind == yaml.ScalarNode {
+		v := strings.TrimSpace(value.Value)
+		if value.Tag == "!!null" || v == "" {
+			return nil
+		}
+		c.Resource = v
+		return nil
+	}
+	if value.Kind != yaml.MappingNode {
+		var probe map[string]any
+		return value.Decode(&probe)
+	}
+	for i := 0; i+1 < len(value.Content); i += 2 {
+		key := value.Content[i].Value
+		switch key {
+		case "provider", "config":
+		default:
+			return fmt.Errorf("field %s not found in type config.DatastoreConfig", key)
+		}
+	}
+	c.Provider = nil
+	c.Config = yaml.Node{}
+	c.Resource = ""
+	if providerNode := mappingValueNode(value, "provider"); providerNode != nil {
+		decoded, err := decodeTopLevelComponentProvider("datastore", providerNode)
+		if err != nil {
+			return err
+		}
+		c.Provider = decoded
+	}
+	if configNode := mappingValueNode(value, "config"); configNode != nil {
+		c.Config = *configNode
+	}
+	return nil
 }
 
 func (c *UIConfig) UnmarshalYAML(value *yaml.Node) error {
@@ -422,11 +468,12 @@ func (s ServerConfig) ManagementAddr() string {
 }
 
 type IntegrationDef struct {
-	Plugin        *ProviderDef `yaml:"plugin"`
-	DisplayName   string       `yaml:"display_name"`
-	Description   string       `yaml:"description"`
-	MCPToolPrefix string       `yaml:"-"`
-	IconFile      string       `yaml:"icon_file"`
+	Plugin        *ProviderDef      `yaml:"plugin"`
+	DisplayName   string            `yaml:"display_name"`
+	Description   string            `yaml:"description"`
+	MCPToolPrefix string            `yaml:"-"`
+	IconFile      string            `yaml:"icon_file"`
+	Datastores    map[string]string `yaml:"-"`
 }
 
 // ConnectionDef owns authentication and connection parameters for a named

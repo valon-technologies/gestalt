@@ -95,7 +95,6 @@ func TestE2EDefaultStartAutoGeneratesHomeConfig(t *testing.T) {
 	homeDir := filepath.Join(t.TempDir(), "home:with#special")
 	providersDir := filepath.Join(t.TempDir(), "providers")
 	_ = setupAuthProviderDir(t, providersDir, "none")
-	_ = setupDatastoreProviderDir(t, providersDir, "sqlite")
 	_ = setupWebProviderDir(t, providersDir, "default")
 	configPath := filepath.Join(homeDir, ".gestaltd", "config.yaml")
 

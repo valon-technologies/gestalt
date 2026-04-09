@@ -23,36 +23,29 @@ import (
 )
 
 const (
-	releaseTestPluginName            = "release-test"
-	releaseTestSource                = "github.com/testowner/plugins/catalog/release-test"
-	releaseTestModule                = "example.com/release-test"
-	releaseTestIconPath              = "branding/icon.svg"
-	releaseProviderSchemaPath        = "schemas/provider.schema.json"
-	webUITestPluginName              = "webui-test"
-	webUITestSource                  = "github.com/testowner/plugins/catalog/webui-test"
-	webUITestAssetRoot               = "out"
-	prebuiltProviderPluginName       = "prebuilt-provider"
-	prebuiltProviderSource           = "github.com/testowner/plugins/prebuilt-provider"
-	prebuiltProviderBinaryPath       = "bin/provider"
-	authReleasePluginName            = "auth-release"
-	authReleaseSource                = "github.com/testowner/plugins/auth-release"
-	authReleaseSchemaPath            = "schemas/auth.schema.json"
-	datastoreReleasePluginName       = "datastore-release"
-	datastoreReleaseSource           = "github.com/testowner/plugins/datastore-release"
-	datastoreReleaseSchemaPath       = "schemas/datastore.schema.json"
-	secretsReleasePluginName         = "secrets-release"
-	secretsReleaseSource             = "github.com/testowner/plugins/secrets-release"
-	secretsReleaseSchemaPath         = "schemas/secrets.schema.json"
-	rustReleasePluginName            = "provider-rust"
-	rustWrapperBinaryName            = "gestalt-provider-wrapper"
-	pythonAuthReleasePluginName      = "python-auth-release"
-	pythonAuthReleaseSource          = "github.com/testowner/plugins/python-auth-release"
-	pythonDatastoreReleasePluginName = "python-datastore-release"
-	pythonDatastoreReleaseSource     = "github.com/testowner/plugins/python-datastore-release"
-	authReleaseTypeScriptModule      = "./auth.ts#auth"
-	authReleaseTypeScriptTarget      = "auth:./auth.ts#auth"
-	datastoreReleaseTypeScriptModule = "./datastore.ts#datastore"
-	datastoreReleaseTypeScriptTarget = "datastore:./datastore.ts#datastore"
+	releaseTestPluginName       = "release-test"
+	releaseTestSource           = "github.com/testowner/plugins/catalog/release-test"
+	releaseTestModule           = "example.com/release-test"
+	releaseTestIconPath         = "branding/icon.svg"
+	releaseProviderSchemaPath   = "schemas/provider.schema.json"
+	webUITestPluginName         = "webui-test"
+	webUITestSource             = "github.com/testowner/plugins/catalog/webui-test"
+	webUITestAssetRoot          = "out"
+	prebuiltProviderPluginName  = "prebuilt-provider"
+	prebuiltProviderSource      = "github.com/testowner/plugins/prebuilt-provider"
+	prebuiltProviderBinaryPath  = "bin/provider"
+	authReleasePluginName       = "auth-release"
+	authReleaseSource           = "github.com/testowner/plugins/auth-release"
+	authReleaseSchemaPath       = "schemas/auth.schema.json"
+	secretsReleasePluginName    = "secrets-release"
+	secretsReleaseSource        = "github.com/testowner/plugins/secrets-release"
+	secretsReleaseSchemaPath    = "schemas/secrets.schema.json"
+	rustReleasePluginName       = "provider-rust"
+	rustWrapperBinaryName       = "gestalt-provider-wrapper"
+	pythonAuthReleasePluginName = "python-auth-release"
+	pythonAuthReleaseSource     = "github.com/testowner/plugins/python-auth-release"
+	authReleaseTypeScriptModule = "./auth.ts#auth"
+	authReleaseTypeScriptTarget = "auth:./auth.ts#auth"
 )
 
 func TestRun_ProviderHelpExitsCleanly(t *testing.T) {
@@ -824,95 +817,6 @@ func TestRun_PluginReleaseBuildsGoSourceAuthPluginForExplicitLinuxLibC(t *testin
 	}
 }
 
-func TestRun_PluginReleaseBuildsGoSourceDatastorePlugin(t *testing.T) {
-	t.Parallel()
-
-	pluginDir := newSourceComponentReleaseFixture(t, t.TempDir(), sourceComponentReleaseFixtureParams{
-		pluginName: datastoreReleasePluginName,
-		schemaPath: datastoreReleaseSchemaPath,
-		sourceFile: "datastore.go",
-		sourceCode: testutil.GeneratedDatastorePackageSource(),
-		manifest: &pluginmanifestv1.Manifest{
-			Source: datastoreReleaseSource, Version: "0.0.1", DisplayName: "Datastore Release",
-			Datastore: &pluginmanifestv1.DatastoreMetadata{ConfigSchemaPath: datastoreReleaseSchemaPath},
-		},
-	})
-	outputDir := t.TempDir()
-	const testVersion = "0.0.16-test"
-
-	runPluginReleaseCommand(t, pluginDir,
-		"--version", testVersion,
-		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
-		"--output", outputDir,
-	)
-
-	archiveName := platformArchiveName(datastoreReleasePluginName, testVersion, expectedGoReleasePlatform(runtime.GOOS, runtime.GOARCH, ""))
-	extractDir := extractReleasedArchive(t, outputDir, archiveName)
-	manifest := readReleasedManifest(t, outputDir, archiveName)
-	binaryName := releaseBinaryName(datastoreReleasePluginName, runtime.GOOS)
-
-	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
-		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
-	}
-	assertExpectedGoArtifactPlatform(t, manifest.Artifacts[0], runtime.GOOS, runtime.GOARCH, "")
-	if manifest.Entrypoints.Datastore == nil || manifest.Entrypoints.Datastore.ArtifactPath != binaryName {
-		t.Fatalf("datastore entrypoint = %+v, want artifact path %q", manifest.Entrypoints.Datastore, binaryName)
-	}
-	if _, err := os.Stat(filepath.Join(extractDir, datastoreReleaseSchemaPath)); err != nil {
-		t.Fatalf("expected %s in archive: %v", datastoreReleaseSchemaPath, err)
-	}
-
-	store, err := pluginhost.NewExecutableDatastore(context.Background(), pluginhost.DatastoreExecConfig{
-		Command:       filepath.Join(extractDir, binaryName),
-		Name:          "datastore-release",
-		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
-	})
-	if err != nil {
-		t.Fatalf("NewExecutableDatastore: %v", err)
-	}
-	defer func() { _ = store.Close() }()
-
-	if err := store.Ping(context.Background()); err != nil {
-		t.Fatalf("Ping: %v", err)
-	}
-	if err := store.Migrate(context.Background()); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
-
-	user, err := store.FindOrCreateUser(context.Background(), "datastore-user@example.com")
-	if err != nil {
-		t.Fatalf("FindOrCreateUser: %v", err)
-	}
-	now := time.Now().UTC().Truncate(time.Second)
-	token := &core.IntegrationToken{
-		ID:           "tok-1",
-		UserID:       user.ID,
-		Integration:  "github",
-		Connection:   "default",
-		Instance:     "prod",
-		AccessToken:  "plain-access",
-		RefreshToken: "plain-refresh",
-		MetadataJSON: `{"tenant":"acme"}`,
-		CreatedAt:    now,
-		UpdatedAt:    now,
-	}
-	if err := store.StoreToken(context.Background(), token); err != nil {
-		t.Fatalf("StoreToken: %v", err)
-	}
-	got, err := store.Token(context.Background(), user.ID, "github", "default", "prod")
-	if err != nil {
-		t.Fatalf("Token: %v", err)
-	}
-	if got == nil || got.AccessToken != "plain-access" || got.RefreshToken != "plain-refresh" {
-		t.Fatalf("token = %+v", got)
-	}
-	if warnings, ok := store.(interface{ Warnings() []string }); !ok {
-		t.Fatal("datastore did not expose Warnings()")
-	} else if gotWarnings := warnings.Warnings(); len(gotWarnings) != 1 || gotWarnings[0] != "generated datastore warning" {
-		t.Fatalf("Warnings() = %v", gotWarnings)
-	}
-}
-
 func TestRun_PluginReleaseBuildsGoSourceSecretsPlugin(t *testing.T) {
 	t.Parallel()
 
@@ -1072,103 +976,6 @@ func TestRun_PluginReleaseBuildsRustSourceAuthPlugin(t *testing.T) {
 	}
 }
 
-func TestRun_PluginReleaseBuildsRustSourceDatastorePlugin(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("fake cargo test fixture is POSIX-only")
-	}
-
-	hostTarget, _, err := pluginpkgRustTargetTriple(runtime.GOOS, runtime.GOARCH, "")
-	if err != nil {
-		t.Fatalf("pluginpkgRustTargetTriple(host): %v", err)
-	}
-
-	fakeCargoDir := t.TempDir()
-	writeFakeRustReleaseCargo(t, filepath.Join(fakeCargoDir, "cargo"), fakeRustCargoConfig{
-		ExpectedPluginName:   datastoreReleasePluginName,
-		ExpectedServeExport:  "__gestalt_serve_datastore",
-		ExpectedCatalogWrite: false,
-		DelegateBinary:       buildGoSourceDatastoreBinary(t),
-		AllowedTargets:       []string{hostTarget},
-	})
-	t.Setenv("PATH", fakeCargoDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	pluginDir := newRustSourceDatastoreReleaseFixture(t, t.TempDir())
-	outputDir := t.TempDir()
-	const testVersion = "0.0.18-rust-datastore"
-
-	runPluginReleaseCommand(t, pluginDir,
-		"--version", testVersion,
-		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
-		"--output", outputDir,
-	)
-
-	archiveName := platformArchiveName(datastoreReleasePluginName, testVersion, expectedRustReleasePlatform(runtime.GOOS, runtime.GOARCH, ""))
-	extractDir := extractReleasedArchive(t, outputDir, archiveName)
-	manifest := readReleasedManifest(t, outputDir, archiveName)
-	binaryName := releaseBinaryName(datastoreReleasePluginName, runtime.GOOS)
-
-	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
-		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
-	}
-	assertExpectedRustArtifactPlatform(t, manifest.Artifacts[0], runtime.GOOS, runtime.GOARCH, "")
-	if manifest.Entrypoints.Datastore == nil || manifest.Entrypoints.Datastore.ArtifactPath != binaryName {
-		t.Fatalf("datastore entrypoint = %+v, want artifact path %q", manifest.Entrypoints.Datastore, binaryName)
-	}
-	if _, err := os.Stat(filepath.Join(extractDir, datastoreReleaseSchemaPath)); err != nil {
-		t.Fatalf("expected %s in archive: %v", datastoreReleaseSchemaPath, err)
-	}
-
-	store, err := pluginhost.NewExecutableDatastore(context.Background(), pluginhost.DatastoreExecConfig{
-		Command:       filepath.Join(extractDir, binaryName),
-		Name:          "datastore-release",
-		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
-	})
-	if err != nil {
-		t.Fatalf("NewExecutableDatastore: %v", err)
-	}
-	defer func() { _ = store.Close() }()
-
-	if err := store.Ping(context.Background()); err != nil {
-		t.Fatalf("Ping: %v", err)
-	}
-	if err := store.Migrate(context.Background()); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
-
-	user, err := store.FindOrCreateUser(context.Background(), "datastore-user@example.com")
-	if err != nil {
-		t.Fatalf("FindOrCreateUser: %v", err)
-	}
-	now := time.Now().UTC().Truncate(time.Second)
-	token := &core.IntegrationToken{
-		ID:           "tok-1",
-		UserID:       user.ID,
-		Integration:  "github",
-		Connection:   "default",
-		Instance:     "prod",
-		AccessToken:  "plain-access",
-		RefreshToken: "plain-refresh",
-		MetadataJSON: `{"tenant":"acme"}`,
-		CreatedAt:    now,
-		UpdatedAt:    now,
-	}
-	if err := store.StoreToken(context.Background(), token); err != nil {
-		t.Fatalf("StoreToken: %v", err)
-	}
-	got, err := store.Token(context.Background(), user.ID, "github", "default", "prod")
-	if err != nil {
-		t.Fatalf("Token: %v", err)
-	}
-	if got == nil || got.AccessToken != "plain-access" || got.RefreshToken != "plain-refresh" {
-		t.Fatalf("token = %+v", got)
-	}
-	if warnings, ok := store.(interface{ Warnings() []string }); !ok {
-		t.Fatal("datastore did not expose Warnings()")
-	} else if gotWarnings := warnings.Warnings(); len(gotWarnings) != 1 || gotWarnings[0] != "generated datastore warning" {
-		t.Fatalf("Warnings() = %v", gotWarnings)
-	}
-}
-
 func TestRun_PluginReleaseBuildsPythonSourceAuthPlugin(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake Python build fixture is POSIX-only")
@@ -1262,67 +1069,6 @@ func TestRun_PluginReleaseBuildsPythonSourceAuthPlugin(t *testing.T) {
 	}
 }
 
-func TestRun_PluginReleaseBuildsPythonSourceDatastorePlugin(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("fake Python build fixture is POSIX-only")
-	}
-
-	goFixtureDir := newSourceComponentReleaseFixture(t, t.TempDir(), sourceComponentReleaseFixtureParams{
-		pluginName: datastoreReleasePluginName,
-		schemaPath: datastoreReleaseSchemaPath,
-		sourceFile: "datastore.go",
-		sourceCode: testutil.GeneratedDatastorePackageSource(),
-		manifest: &pluginmanifestv1.Manifest{
-			Source: datastoreReleaseSource, Version: "0.0.1", DisplayName: "Datastore Release",
-			Datastore: &pluginmanifestv1.DatastoreMetadata{ConfigSchemaPath: datastoreReleaseSchemaPath},
-		},
-	})
-	t.Setenv("GESTALT_TEST_PYINSTALLER_BINARY", buildGoSourceComponentBinaryForTest(t, goFixtureDir, pluginmanifestv1.KindDatastore))
-	t.Setenv("PATH", pathWithoutGo(t))
-
-	pluginDir := newPythonSourceDatastoreReleaseFixture(t, t.TempDir())
-	outputDir := t.TempDir()
-	const testVersion = "0.0.16-python-datastore"
-
-	runPluginReleaseCommand(t, pluginDir,
-		"--version", testVersion,
-		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
-		"--output", outputDir,
-	)
-
-	archiveName := expectedPythonArchiveNameFor(pythonDatastoreReleasePluginName, testVersion, runtime.GOOS, runtime.GOARCH)
-	extractDir := extractReleasedArchive(t, outputDir, archiveName)
-	manifest := readReleasedManifest(t, outputDir, archiveName)
-	binaryName := releaseBinaryName(pythonDatastoreReleasePluginName, runtime.GOOS)
-
-	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
-		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
-	}
-	if manifest.Entrypoints.Datastore == nil || manifest.Entrypoints.Datastore.ArtifactPath != binaryName {
-		t.Fatalf("datastore entrypoint = %+v, want artifact path %q", manifest.Entrypoints.Datastore, binaryName)
-	}
-	if _, err := os.Stat(filepath.Join(extractDir, datastoreReleaseSchemaPath)); err != nil {
-		t.Fatalf("expected %s in archive: %v", datastoreReleaseSchemaPath, err)
-	}
-
-	store, err := pluginhost.NewExecutableDatastore(context.Background(), pluginhost.DatastoreExecConfig{
-		Command:       filepath.Join(extractDir, binaryName),
-		Name:          pythonDatastoreReleasePluginName,
-		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
-	})
-	if err != nil {
-		t.Fatalf("NewExecutableDatastore: %v", err)
-	}
-	defer func() { _ = store.Close() }()
-
-	if err := store.Ping(context.Background()); err != nil {
-		t.Fatalf("Ping: %v", err)
-	}
-	if err := store.Migrate(context.Background()); err != nil {
-		t.Fatalf("Migrate: %v", err)
-	}
-}
-
 func TestRun_PluginReleaseBuildsTypeScriptSourceAuthPlugin(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake Bun build fixture is POSIX-only")
@@ -1409,63 +1155,6 @@ func TestRun_PluginReleaseBuildsTypeScriptSourceAuthPlugin(t *testing.T) {
 	}
 	if identity == nil || identity.Email != "generated-auth@example.com" {
 		t.Fatalf("identity = %+v", identity)
-	}
-}
-
-func TestRun_PluginReleaseBuildsTypeScriptSourceDatastorePlugin(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("fake Bun build fixture is POSIX-only")
-	}
-
-	builtBinary := buildGoSourceDatastoreBinary(t)
-	t.Setenv("PATH", pathWithoutGo(t))
-
-	pluginDir := newTypeScriptSourceDatastoreReleaseFixture(t, t.TempDir())
-	bunPath := writeFakeTypeScriptComponentReleaseBun(t, filepath.Join(pluginDir, "fake-bun"), datastoreReleaseTypeScriptTarget, datastoreReleasePluginName, runtime.GOOS, runtime.GOARCH, builtBinary)
-	t.Setenv("GESTALT_BUN", bunPath)
-
-	outputDir := t.TempDir()
-	const testVersion = "0.0.16-ts-datastore"
-
-	runPluginReleaseCommand(t, pluginDir,
-		"--version", testVersion,
-		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
-		"--output", outputDir,
-	)
-
-	archiveName := platformArchiveName(datastoreReleasePluginName, testVersion, expectedScriptReleasePlatform(runtime.GOOS, runtime.GOARCH))
-	extractDir := extractReleasedArchive(t, outputDir, archiveName)
-	manifest := readReleasedManifest(t, outputDir, archiveName)
-	binaryName := releaseBinaryName(datastoreReleasePluginName, runtime.GOOS)
-
-	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
-		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
-	}
-	if runtime.GOOS == "linux" && manifest.Artifacts[0].LibC != pluginpkg.CurrentRuntimeLibC() {
-		t.Fatalf("artifact libc = %q, want %q", manifest.Artifacts[0].LibC, pluginpkg.CurrentRuntimeLibC())
-	}
-	if manifest.Entrypoints.Datastore == nil || manifest.Entrypoints.Datastore.ArtifactPath != binaryName {
-		t.Fatalf("datastore entrypoint = %+v, want artifact path %q", manifest.Entrypoints.Datastore, binaryName)
-	}
-	if _, err := os.Stat(filepath.Join(extractDir, datastoreReleaseSchemaPath)); err != nil {
-		t.Fatalf("expected %s in archive: %v", datastoreReleaseSchemaPath, err)
-	}
-
-	store, err := pluginhost.NewExecutableDatastore(context.Background(), pluginhost.DatastoreExecConfig{
-		Command:       filepath.Join(extractDir, binaryName),
-		Name:          datastoreReleasePluginName,
-		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
-	})
-	if err != nil {
-		t.Fatalf("NewExecutableDatastore: %v", err)
-	}
-	defer func() { _ = store.Close() }()
-
-	if err := store.Ping(context.Background()); err != nil {
-		t.Fatalf("Ping: %v", err)
-	}
-	if err := store.Migrate(context.Background()); err != nil {
-		t.Fatalf("Migrate: %v", err)
 	}
 }
 
@@ -1850,16 +1539,6 @@ func TestRun_PluginReleaseRejectsRequiredExecutableKindsWithoutSourceOrEntrypoin
 			wantError: "no Go, Rust, Python, or TypeScript auth source package found",
 		},
 		{
-			name: "datastore",
-			manifest: &pluginmanifestv1.Manifest{
-				Source:      "github.com/testowner/plugins/missing-datastore",
-				Version:     "0.0.1",
-				DisplayName: "Missing Datastore",
-				Datastore:   &pluginmanifestv1.DatastoreMetadata{},
-			},
-			wantError: "no Go, Rust, Python, or TypeScript datastore source package found",
-		},
-		{
 			name: "secrets",
 			manifest: &pluginmanifestv1.Manifest{
 				Source:      "github.com/testowner/plugins/missing-secrets",
@@ -2118,48 +1797,6 @@ auth = "provider:auth_provider"
 	return pluginDir
 }
 
-func newPythonSourceDatastoreReleaseFixture(t *testing.T, dir string) string {
-	t.Helper()
-
-	pluginDir := filepath.Join(dir, pythonDatastoreReleasePluginName)
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll(pluginDir): %v", err)
-	}
-	writeTestFile(t, pluginDir, "pyproject.toml", []byte(`[build-system]
-requires = ["setuptools==82.0.1"]
-build-backend = "setuptools.build_meta"
-
-[project]
-name = "`+pythonDatastoreReleasePluginName+`"
-version = "0.0.1-alpha.1"
-dependencies = ["gestalt"]
-
-[tool.gestalt]
-datastore = "provider:datastore_provider"
-`), 0o644)
-	writeTestFile(t, pluginDir, "provider.py", []byte(`datastore_provider = object()
-`), 0o644)
-	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
-		Source:      pythonDatastoreReleaseSource,
-		Version:     "0.0.1",
-		DisplayName: "Python Datastore Release",
-		Datastore: &pluginmanifestv1.DatastoreMetadata{
-			ConfigSchemaPath: datastoreReleaseSchemaPath,
-		},
-	})
-	writeTestFile(t, pluginDir, datastoreReleaseSchemaPath, []byte(`{"type":"object"}`), 0o644)
-	writeFakePythonReleaseInterpreterForKind(
-		t,
-		filepath.Join(pluginDir, ".venv", "bin", "python"),
-		"provider:datastore_provider",
-		"datastore",
-		pythonDatastoreReleasePluginName,
-		runtime.GOOS,
-		runtime.GOARCH,
-	)
-	return pluginDir
-}
-
 func newTypeScriptSourceAuthReleaseFixture(t *testing.T, dir string) string {
 	t.Helper()
 
@@ -2188,37 +1825,6 @@ func newTypeScriptSourceAuthReleaseFixture(t *testing.T, dir string) string {
 		},
 	})
 	writeTestFile(t, pluginDir, authReleaseSchemaPath, []byte(`{"type":"object"}`), 0o644)
-	return pluginDir
-}
-
-func newTypeScriptSourceDatastoreReleaseFixture(t *testing.T, dir string) string {
-	t.Helper()
-
-	pluginDir := filepath.Join(dir, datastoreReleasePluginName)
-	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll(pluginDir): %v", err)
-	}
-	writeTestFile(t, pluginDir, "package.json", []byte(`{
-  "name": "`+datastoreReleasePluginName+`",
-  "version": "0.0.1",
-  "gestalt": {
-    "provider": {
-      "kind": "datastore",
-      "target": "`+datastoreReleaseTypeScriptModule+`"
-    }
-  }
-}
-`), 0o644)
-	writeTestFile(t, pluginDir, "datastore.ts", []byte("export const datastore = {};\n"), 0o644)
-	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
-		Source:      datastoreReleaseSource,
-		Version:     "0.0.1",
-		DisplayName: "Datastore Release",
-		Datastore: &pluginmanifestv1.DatastoreMetadata{
-			ConfigSchemaPath: datastoreReleaseSchemaPath,
-		},
-	})
-	writeTestFile(t, pluginDir, datastoreReleaseSchemaPath, []byte(`{"type":"object"}`), 0o644)
 	return pluginDir
 }
 
@@ -2266,7 +1872,7 @@ case "$entry_base" in
       echo "unexpected build cwd: $cwd != $source_dir" >&2
       exit 1
     fi
-    if [ "$target" != "` + authReleaseTypeScriptTarget + `" ] && [ "$target" != "` + datastoreReleaseTypeScriptTarget + `" ]; then
+    if [ "$target" != "` + authReleaseTypeScriptTarget + `" ]; then
       echo "unexpected build target: $target" >&2
       exit 1
     fi
@@ -2556,23 +2162,6 @@ func newRustSourceAuthReleaseFixture(t *testing.T, dir string) string {
 	return pluginDir
 }
 
-func newRustSourceDatastoreReleaseFixture(t *testing.T, dir string) string {
-	t.Helper()
-
-	pluginDir := filepath.Join(dir, datastoreReleasePluginName)
-	copyFixtureTree(t, rustDatastoreProviderFixturePath(t), pluginDir)
-	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
-		Source:      datastoreReleaseSource,
-		Version:     "0.0.1",
-		DisplayName: "Datastore Release",
-		Datastore: &pluginmanifestv1.DatastoreMetadata{
-			ConfigSchemaPath: datastoreReleaseSchemaPath,
-		},
-	})
-	writeTestFile(t, pluginDir, datastoreReleaseSchemaPath, []byte(`{"type":"object"}`), 0o644)
-	return pluginDir
-}
-
 func buildGoSourceComponentBinaryForTest(t *testing.T, pluginDir, kind string) string {
 	t.Helper()
 
@@ -2703,16 +2292,6 @@ func rustAuthProviderFixturePath(t *testing.T) string {
 	return filepath.Join(root, "gestaltd", "internal", "testutil", "testdata", "provider-rust-auth")
 }
 
-func rustDatastoreProviderFixturePath(t *testing.T) string {
-	t.Helper()
-
-	root, ok := pluginTestRepoRoot()
-	if !ok {
-		t.Fatal("runtime.Caller failed")
-	}
-	return filepath.Join(root, "gestaltd", "internal", "testutil", "testdata", "provider-rust-datastore")
-}
-
 func buildGoSourceAuthBinary(t *testing.T) string {
 	t.Helper()
 
@@ -2726,23 +2305,6 @@ func buildGoSourceAuthBinary(t *testing.T) string {
 	outputPath := filepath.Join(t.TempDir(), "auth-provider")
 	if err := pluginpkg.BuildGoComponentBinary(providerDir, outputPath, pluginmanifestv1.KindAuth, runtime.GOOS, runtime.GOARCH); err != nil {
 		t.Fatalf("BuildGoComponentBinary(auth): %v", err)
-	}
-	return outputPath
-}
-
-func buildGoSourceDatastoreBinary(t *testing.T) string {
-	t.Helper()
-
-	providerDir := filepath.Join(t.TempDir(), "go-datastore")
-	if err := os.MkdirAll(providerDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll(providerDir): %v", err)
-	}
-	writeTestFile(t, providerDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/test-go-datastore")), 0o644)
-	writeTestFile(t, providerDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
-	writeTestFile(t, providerDir, "datastore.go", []byte(testutil.GeneratedDatastorePackageSource()), 0o644)
-	outputPath := filepath.Join(t.TempDir(), "datastore-provider")
-	if err := pluginpkg.BuildGoComponentBinary(providerDir, outputPath, pluginmanifestv1.KindDatastore, runtime.GOOS, runtime.GOARCH); err != nil {
-		t.Fatalf("BuildGoComponentBinary(datastore): %v", err)
 	}
 	return outputPath
 }

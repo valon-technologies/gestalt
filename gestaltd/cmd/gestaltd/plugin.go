@@ -284,7 +284,7 @@ func releaseRequiresBuildTarget(manifest *pluginmanifestv1.Manifest) bool {
 	switch kind {
 	case pluginmanifestv1.KindPlugin:
 		return manifest.Entrypoints.Provider == nil && !manifest.Plugin.IsManifestBacked()
-	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore, pluginmanifestv1.KindSecrets:
+	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindSecrets:
 		return pluginpkg.EntrypointForKind(manifest, kind) == nil
 	default:
 		return false
@@ -295,7 +295,7 @@ func detectReleaseSourceBuildTarget(root, kind string) (bool, error) {
 	switch kind {
 	case pluginmanifestv1.KindPlugin:
 		return pluginpkg.HasSourceProviderPackage(root)
-	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore, pluginmanifestv1.KindSecrets:
+	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindSecrets:
 		return pluginpkg.HasSourceComponentPackage(root, kind)
 	default:
 		return false, fmt.Errorf("unsupported release build target kind %q", kind)
@@ -306,7 +306,7 @@ func validateReleaseBuildTarget(root, kind, goos, goarch, libc string) error {
 	switch kind {
 	case pluginmanifestv1.KindPlugin:
 		return pluginpkg.ValidateSourceProviderRelease(root, goos, goarch, libc)
-	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore, pluginmanifestv1.KindSecrets:
+	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindSecrets:
 		return pluginpkg.ValidateSourceComponentRelease(root, kind, goos, goarch, libc)
 	default:
 		return fmt.Errorf("unsupported release build target kind %q", kind)
@@ -317,7 +317,7 @@ func buildReleaseTargetBinary(root, outputPath, pluginName, kind, goos, goarch, 
 	switch kind {
 	case pluginmanifestv1.KindPlugin:
 		return pluginpkg.BuildSourceProviderReleaseBinary(root, outputPath, pluginName, goos, goarch, libc)
-	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore, pluginmanifestv1.KindSecrets:
+	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindSecrets:
 		return pluginpkg.BuildSourceComponentReleaseBinary(root, outputPath, kind, goos, goarch, libc)
 	default:
 		return "", fmt.Errorf("unsupported release build target kind %q", kind)
@@ -328,7 +328,7 @@ func isMissingReleaseSourceBuildTarget(err error, kind string) bool {
 	switch kind {
 	case pluginmanifestv1.KindPlugin:
 		return errors.Is(err, pluginpkg.ErrNoSourceProviderPackage)
-	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore, pluginmanifestv1.KindSecrets:
+	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindSecrets:
 		return errors.Is(err, pluginpkg.ErrNoSourceComponentPackage)
 	default:
 		return false
@@ -339,7 +339,7 @@ func missingReleaseSourceBuildTargetError(kind string) error {
 	switch kind {
 	case pluginmanifestv1.KindPlugin:
 		return fmt.Errorf("no Go, Rust, Python, or TypeScript provider package found")
-	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore, pluginmanifestv1.KindSecrets:
+	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindSecrets:
 		return fmt.Errorf("no Go, Rust, Python, or TypeScript %s source package found", kind)
 	default:
 		return fmt.Errorf("unsupported release build target kind %q", kind)

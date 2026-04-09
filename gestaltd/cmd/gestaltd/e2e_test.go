@@ -22,7 +22,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
-	"gopkg.in/yaml.v3"
 )
 
 func TestE2EValidateRejectsAuditConfigWhenProviderInheritsTelemetry(t *testing.T) {
@@ -1508,17 +1507,21 @@ func TestE2EHelmChart(t *testing.T) {
 		dir := t.TempDir()
 		port := allocateTestPort(t)
 		dbPath := filepath.Join(dir, "gestalt.db")
-		datastoreManifestPath := componentProviderManifestPath(t, setupDatastoreProviderDir(t, dir, "sqlite"))
-		rendered := renderHelmChart(t, helmPath, chartDir,
-			"--set", fmt.Sprintf("config.server.public.port=%d", port),
-			"--set-string", "config.datastore.provider.source.path="+datastoreManifestPath,
-			"--set-string", "config.datastore.provider.source.ref=",
-			"--set-string", "config.datastore.provider.source.version=",
-			"--set-string", "config.datastore.config.path="+dbPath,
-		)
 
 		cfgPath := filepath.Join(dir, "config.yaml")
-		if err := os.WriteFile(cfgPath, []byte(extractRenderedConfig(t, rendered)), 0o644); err != nil {
+		cfg := fmt.Sprintf(`datastores:
+  sqlite:
+    driver: sqlite3
+    dsn: %s
+datastore: sqlite
+server:
+  encryption_key: test-helm-key
+  public:
+    port: %d
+ui:
+  provider: none
+`, dbPath, port)
+		if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 			t.Fatalf("write config: %v", err)
 		}
 
@@ -1608,35 +1611,6 @@ func renderHelmChart(t *testing.T, helmPath, chartDir string, extraArgs ...strin
 		t.Fatalf("helm template: %v\n%s", err, out)
 	}
 	return string(out)
-}
-
-func extractRenderedConfig(t *testing.T, rendered string) string {
-	t.Helper()
-
-	var doc struct {
-		Kind string            `yaml:"kind"`
-		Data map[string]string `yaml:"data"`
-	}
-
-	dec := yaml.NewDecoder(strings.NewReader(rendered))
-	for {
-		doc = struct {
-			Kind string            `yaml:"kind"`
-			Data map[string]string `yaml:"data"`
-		}{}
-		if err := dec.Decode(&doc); err != nil {
-			if err == io.EOF {
-				break
-			}
-			t.Fatalf("decode rendered manifest: %v", err)
-		}
-		if doc.Kind == "ConfigMap" && doc.Data["config.yaml"] != "" {
-			return doc.Data["config.yaml"]
-		}
-	}
-
-	t.Fatal("rendered chart missing config.yaml ConfigMap")
-	return ""
 }
 
 //nolint:paralleltest // Spawns the CLI binary; keeping it serial avoids package-level e2e flake.
@@ -1813,39 +1787,6 @@ func authProviderSource(name string) string {
 	return source
 }
 
-func setupDatastoreProviderDir(t *testing.T, baseDir, name string) string {
-	t.Helper()
-
-	providerDir := filepath.Join(baseDir, "datastore", name)
-	if err := os.MkdirAll(providerDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll(%s): %v", providerDir, err)
-	}
-	writeTestFile(t, providerDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/providers/datastore/"+name)), 0o644)
-	writeTestFile(t, providerDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
-	writeTestFile(t, providerDir, "datastore.go", []byte(testutil.GeneratedDatastorePackageSource()), 0o644)
-	artifactRel := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "datastore-provider"))
-	artifactPath := filepath.Join(providerDir, filepath.FromSlash(artifactRel))
-	if err := os.MkdirAll(filepath.Dir(artifactPath), 0o755); err != nil {
-		t.Fatalf("MkdirAll(%s): %v", filepath.Dir(artifactPath), err)
-	}
-	if _, err := pluginpkg.BuildSourceComponentReleaseBinary(providerDir, artifactPath, pluginmanifestv1.KindDatastore, runtime.GOOS, runtime.GOARCH, ""); err != nil {
-		t.Fatalf("BuildSourceComponentReleaseBinary(%s): %v", providerDir, err)
-	}
-	writeManifestFile(t, providerDir, &pluginmanifestv1.Manifest{
-		Source:      "github.com/test/providers/datastore/" + name,
-		Version:     "0.0.1-alpha.1",
-		DisplayName: "Test Datastore " + name,
-		Datastore:   &pluginmanifestv1.DatastoreMetadata{},
-		Artifacts: []pluginmanifestv1.Artifact{
-			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: artifactRel},
-		},
-		Entrypoints: pluginmanifestv1.Entrypoints{
-			Datastore: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactRel},
-		},
-	})
-	return providerDir
-}
-
 func setupWebProviderDir(t *testing.T, baseDir, name string) string {
 	t.Helper()
 
@@ -1878,7 +1819,6 @@ func componentProviderManifestPath(t *testing.T, providerDir string) string {
 func authDatastoreConfigYAML(t *testing.T, dir, authName, datastoreName, dbPath string) string {
 	t.Helper()
 
-	datastoreManifestPath := componentProviderManifestPath(t, setupDatastoreProviderDir(t, dir, datastoreName))
 	authBlock := ""
 	if authName != "" {
 		authManifestPath := componentProviderManifestPath(t, setupAuthProviderDir(t, dir, authName))
@@ -1888,15 +1828,14 @@ func authDatastoreConfigYAML(t *testing.T, dir, authName, datastoreName, dbPath 
       path: %s
 `, authManifestPath)
 	}
-	return fmt.Sprintf(`%sdatastore:
-  provider:
-    source:
-      path: %s
-  config:
-    path: %s
+	return fmt.Sprintf(`%sdatastores:
+  %s:
+    driver: sqlite3
+    dsn: %s
+datastore: %s
 ui:
   provider: none
-`, authBlock, datastoreManifestPath, dbPath)
+`, authBlock, datastoreName, dbPath, datastoreName)
 }
 
 func writeManifestFile(t *testing.T, pluginDir string, manifest *pluginmanifestv1.Manifest) {
