@@ -52,7 +52,7 @@ func (s *runtimeServer) ConfigurePlugin(ctx context.Context, req *proto.Configur
 	if req.GetProtocolVersion() != proto.CurrentProtocolVersion {
 		return nil, status.Errorf(
 			codes.FailedPrecondition,
-			"host requested protocol version %d, plugin requires %d",
+			"host requested protocol version %d, provider requires %d",
 			req.GetProtocolVersion(),
 			proto.CurrentProtocolVersion,
 		)
@@ -62,7 +62,7 @@ func (s *runtimeServer) ConfigurePlugin(ctx context.Context, req *proto.Configur
 		config = map[string]any{}
 	}
 	if err := s.provider.Configure(ctx, req.GetName(), config); err != nil {
-		return nil, status.Errorf(codes.Unknown, "configure plugin: %v", err)
+		return nil, status.Errorf(codes.Unknown, "configure provider: %v", err)
 	}
 	return &proto.ConfigurePluginResponse{ProtocolVersion: proto.CurrentProtocolVersion}, nil
 }

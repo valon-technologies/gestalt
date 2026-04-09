@@ -82,7 +82,7 @@ First-party providers are published to `github.com/valon-technologies/gestalt-pr
 
 ### Local source provider
 
-During development, point at a local plugin manifest instead.
+During development, point at a local provider manifest instead.
 
 ```yaml
 plugins:
@@ -130,7 +130,7 @@ Each entry can set an `alias` to rename the operation as it appears to callers.
 
 ### Network sandbox
 
-Executable plugins run inside a network sandbox. Outbound requests to hosts not listed in `provider.allowed_hosts` are rejected. Add every upstream domain the plugin contacts to the allowlist.
+Executable provider processes run inside a network sandbox. Outbound requests to hosts not listed in `provider.allowed_hosts` are rejected. Add every upstream domain the integration plugin contacts to the allowlist.
 
 ```yaml
 plugins:
@@ -166,7 +166,7 @@ Gestalt stores upstream credentials keyed by user, plugin name, connection name,
 
 ## Auth
 
-The `auth` block selects a platform login provider that protects the web UI, HTTP API, and `/mcp` endpoint. Auth providers run as external gRPC plugin processes, following the same architecture as integration providers.
+The `auth` block selects a platform login provider that protects the web UI, HTTP API, and `/mcp` endpoint. Auth providers run as external gRPC provider processes, following the same architecture as integration plugins.
 
 For local development, omit the `auth` block entirely or use the `none` shorthand:
 
@@ -191,7 +191,7 @@ auth:
     client_secret: secret://oidc-client-secret
 ```
 
-The `auth.provider` field is a PluginDef with `source.ref` and `version`, the same shape as integration providers. The `none` scalar shorthand is the only exception.
+The `auth.provider` field is a provider reference with `source.ref` and `version`, the same shape used for integration plugins. The `none` scalar shorthand is the only exception.
 
 ### API tokens
 
@@ -199,7 +199,7 @@ For programmatic access, Gestalt issues API tokens prefixed with `gst_api_`. The
 
 ## Datastore
 
-The `datastore` block selects persistent storage for users, sessions, API tokens, and integration credentials. Like auth, the datastore runs as an external gRPC plugin process.
+The `datastore` block selects persistent storage for users, sessions, API tokens, and integration credentials. Like auth, the datastore runs as an external gRPC provider process.
 
 ```yaml
 datastore:
@@ -229,7 +229,7 @@ plugins:
 
 ## Managed parameters and response mapping
 
-Operations, request schemas, response schemas, managed parameters, and response mappings are defined in the provider plugin manifest, not in the deployment config. Inline configuration surfaces that existed in earlier versions of Gestalt (such as `openapi`, `graphql_url`, `mcp_url`, `base_url`, `headers`, `managed_parameters`, `operations`, and `response_mapping`) have been removed from config. See [Plugin Manifests](/reference/plugin-manifests) for the manifest schema.
+Operations, request schemas, response schemas, managed parameters, and response mappings are defined in the provider manifest, not in the deployment config. Inline configuration surfaces that existed in earlier versions of Gestalt (such as `openapi`, `graphql_url`, `mcp_url`, `base_url`, `headers`, `managed_parameters`, `operations`, and `response_mapping`) have been removed from config. See [Provider Manifests](/reference/plugin-manifests) for the manifest schema.
 
 ## Startup workflows
 

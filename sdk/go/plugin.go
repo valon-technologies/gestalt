@@ -21,7 +21,7 @@ type pluginCloserContextKey struct{}
 // router on the Unix socket specified by the GESTALT_PLUGIN_SOCKET environment
 // variable. It blocks until ctx is cancelled, at which point it drains
 // in-flight requests and returns nil. This is the main entry point for
-// provider plugins.
+// integration providers.
 func ServeProvider[P any, PP interface {
 	*P
 	RuntimeProvider

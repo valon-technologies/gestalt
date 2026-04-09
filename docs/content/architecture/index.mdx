@@ -18,7 +18,7 @@ Once the secret manager is ready, Gestalt resolves every `secret://` reference a
 
 With secrets resolved, `server.encryption_key` gets converted into a 32-byte AES key. A 64-character hex string is decoded directly; anything else goes through Argon2id derivation. This derived key protects all stored tokens.
 
-From there, the auth and datastore plugins are spawned as child processes over gRPC (they use the same plugin runtime as integration plugins), schema migrations run, integration plugins start, and the HTTP listeners come up. The `/ready` endpoint returns 503 until everything reports ready.
+From there, the auth and datastore providers are spawned as child processes over gRPC, schema migrations run, integration plugins start, and the HTTP listeners come up. The `/ready` endpoint returns 503 until everything reports ready.
 
 ## How requests flow
 

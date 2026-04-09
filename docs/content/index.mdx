@@ -8,7 +8,7 @@ exposed through the HTTP API, web UI, and `/mcp`.
 
 ## How it works
 
-You define plugins in a YAML config, connect users or shared identities to upstream systems through OAuth or manual auth, then invoke the same catalog through the browser, HTTP API, CLI, or MCP. Auth, datastores, and integrations all run as plugins with the same runtime model, whether they come from a local source or a published package.
+You define integration plugins in a YAML config, connect users or shared identities to upstream systems through OAuth or manual auth, then invoke the same catalog through the browser, HTTP API, CLI, or MCP. Auth providers, datastore providers, and integration plugins all run as providers with the same runtime model, whether they come from a local source tree or a published package.
 
 ## Start here
 
@@ -17,7 +17,7 @@ You define plugins in a YAML config, connect users or shared identities to upstr
     Run Gestalt locally, invoke a sample integration, and verify the core flow.
   </Cards.Card>
   <Cards.Card title="Configuration" href="/configuration">
-    Learn the configuration model, plugin setup, auth, connections, and MCP.
+    Learn the configuration model, integration setup, auth, connections, and MCP.
   </Cards.Card>
   <Cards.Card title="Providers" href="/providers">
     Write, release, and configure providers for integrations, auth, datastores, and custom UIs.

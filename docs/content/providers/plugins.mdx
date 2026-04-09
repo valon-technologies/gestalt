@@ -2,7 +2,7 @@ import { Tabs } from 'nextra/components'
 
 # Integration Plugins
 
-Integration plugins are providers with `kinds: [plugin]`. They expose operations that users invoke through the CLI, the HTTP API, or MCP. A plugin can define operations as executable code (handled by the provider process), as passthrough surfaces (REST, OpenAPI, GraphQL, or MCP endpoints forwarded by the host), or both.
+Integration plugins are one provider kind. They use `plugin:` metadata in the manifest and appear under the top-level `plugins:` map in deployment config. A plugin can define operations as executable code, as passthrough surfaces (REST, OpenAPI, GraphQL, or MCP endpoints forwarded by the host), or both.
 
 ## Manifest
 
@@ -14,10 +14,10 @@ Static metadata, auth, and passthrough surfaces live in a manifest file. Gestalt
     source: github.com/example/plugins/my-plugin
     version: 0.0.1-alpha.1
     display_name: My Plugin
-    description: A custom provider plugin
+    description: A custom integration plugin
     kinds:
       - plugin
-    provider:
+    plugin:
       connections:
         default:
           auth:
@@ -30,9 +30,9 @@ Static metadata, auth, and passthrough surfaces live in a manifest file. Gestalt
       "source": "github.com/example/plugins/my-plugin",
       "version": "0.0.1-alpha.1",
       "display_name": "My Plugin",
-      "description": "A custom provider plugin",
+      "description": "A custom integration plugin",
       "kinds": ["plugin"],
-      "provider": {
+      "plugin": {
         "connections": {
           "default": {
             "auth": {
@@ -99,7 +99,7 @@ The manifest stays the source of truth for display name, description, auth, the 
     package = false
 
     [tool.gestalt]
-    plugin = "provider"
+    provider = "provider"
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -165,7 +165,10 @@ The manifest stays the source of truth for display name, description, auth, the 
         "@valon-technologies/gestalt": "0.0.1-alpha.1"
       },
       "gestalt": {
-        "plugin": "./provider.ts#plugin"
+        "provider": {
+          "kind": "plugin",
+          "target": "./provider.ts#provider"
+        }
       }
     }
     ```
@@ -346,11 +349,11 @@ Operations are the callable units of a plugin. Each operation has an ID, an HTTP
   </Tabs.Tab>
   <Tabs.Tab>
     ```typescript
-    import { definePlugin, ok, operation, s } from "@valon-technologies/gestalt";
+    import { defineIntegrationProvider, ok, operation, s } from "@valon-technologies/gestalt";
 
     let greeting = "Hello";
 
-    export const plugin = definePlugin({
+    export const provider = defineIntegrationProvider({
       configure(_name, config) {
         greeting = (config.greeting as string) ?? "Hello";
       },
@@ -519,10 +522,10 @@ By default, the operation catalog is static and materialized at startup. If your
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    Export a `sessionCatalog` function from your plugin definition:
+    Export a `sessionCatalog` function from your integration provider definition:
 
     ```typescript
-    export const plugin = definePlugin({
+    export const provider = defineIntegrationProvider({
       sessionCatalog(request) {
         return {
           name: "my-plugin-session",
@@ -567,6 +570,6 @@ gestalt invoke my-plugin greet -p name=Gestalt
 
 ## Hybrid providers
 
-A manifest can define passthrough surfaces (`provider.surfaces.openapi`, `provider.surfaces.rest`, `provider.surfaces.graphql`, or `provider.surfaces.mcp`) alongside executable operations. The passthrough surfaces are forwarded by the host directly to the upstream API, while the executable operations are handled by the provider process. This is useful when a plugin adds custom logic on top of an existing API.
+A manifest can define passthrough surfaces (`plugin.openapi`, `plugin.base_url` plus `plugin.operations`, `plugin.graphql_url`, or `plugin.mcp_url`) alongside executable operations. The passthrough surfaces are forwarded by the host directly to the upstream API, while the executable operations are handled by the provider process. This is useful when a plugin adds custom logic on top of an existing API.
 
 Do not define the same operation ID in both a passthrough surface and an executable operation. If two surfaces expose the same ID, the provider fails validation at startup. Use `allowed_operations` to filter or alias collisions when needed.

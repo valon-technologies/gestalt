@@ -45,6 +45,8 @@ export interface PluginDefinitionOptions extends RuntimeProviderOptions {
   sessionCatalog?: SessionCatalogHandler;
 }
 
+export type IntegrationProviderOptions = PluginDefinitionOptions;
+
 export function operation<In, Out>(options: OperationOptions<In, Out>): OperationDefinition<In, Out> {
   return {
     ...options,

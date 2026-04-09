@@ -34,7 +34,7 @@ Gestalt exposes every configured integration via an optionally enabled, self-hos
 
 ### Extensible
 
-Write your own plugins or point Gestalt at any OpenAPI spec, MCP server, or GraphQL endpoint to add a new provider in minutes.
+Write your own provider packages or point Gestalt at any OpenAPI spec, MCP server, or GraphQL endpoint to add a new integration plugin in minutes.
 
 ## Project layout
 
@@ -42,7 +42,7 @@ Write your own plugins or point Gestalt at any OpenAPI spec, MCP server, or Grap
 | --- | --- |
 | [`gestaltd`](./gestaltd) | The Go server daemon. Loads config, serves the HTTP API, MCP surface, the client UI, and the built-in admin UI. |
 | [`gestalt`](./gestalt) | The Rust CLI client. Connects to a running `gestaltd` instance for authentication and operations. |
-| [`sdk`](./sdk) | Shared SDKs and plugin manifest definitions. |
+| [`sdk`](./sdk) | Shared SDKs and provider manifest definitions. |
 | [`docs`](./docs) | The documentation site. |
 
 ## Getting started

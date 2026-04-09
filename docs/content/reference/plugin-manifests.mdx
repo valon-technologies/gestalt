@@ -1,12 +1,14 @@
 import { Tabs } from 'nextra/components'
 
-# Plugin Manifests
+# Provider Manifests
 
-Gestalt plugins and release archives are described by a manifest file: `plugin.yaml`, `plugin.yml`, or `plugin.json`. YAML is the easiest format to author by hand.
+Gestalt provider packages and release archives are described by a manifest file: `plugin.yaml`, `plugin.yml`, or `plugin.json`. YAML is the easiest format to author by hand.
+
+Providers are the umbrella concept in Gestalt. Auth providers, datastore providers, and integration plugins all use this manifest format. The `plugin` manifest kind is reserved for integration providers that expose callable operations.
 
 ## Manifest Kinds
 
-Every manifest defines exactly one of four kinds, determined by which metadata block is present at the top level:
+Every manifest defines exactly one of four provider kinds, determined by which metadata block is present at the top level:
 
 | Kind | Top-level key | Purpose |
 | --- | --- | --- |
@@ -23,18 +25,18 @@ These fields appear at the top level of every manifest regardless of kind.
 
 | Field | Type | Required | Purpose |
 | --- | --- | --- | --- |
-| `source` | string | yes | Canonical plugin source identifier. Use `github.com/<org>/<repo>/<path>`. The final path segment is the plugin name; preceding segments are used for release tags and source resolution. |
+| `source` | string | yes | Canonical provider source identifier. Use `github.com/<org>/<repo>/<path>`. The final path segment is the provider package name; preceding segments are used for release tags and source resolution. |
 | `version` | string | yes | Semver version. Pre-release suffixes like `-alpha.1` are allowed. |
 | `kinds` | string[] | no | Explicit kind list. When omitted, the kind is inferred from which metadata block is present. |
 | `display_name` | string | no | Human-readable label shown in the UI. |
 | `description` | string | no | Human-readable description. |
 | `icon_file` | string | no | Relative path to an SVG icon bundled with the package. |
-| `artifacts` | Artifact[] | no | Packaged executable artifacts keyed by platform. Omit for declarative-only plugin packages or source manifests used during local development. |
+| `artifacts` | Artifact[] | no | Packaged executable artifacts keyed by platform. Omit for declarative-only integration plugin packages or source manifests used during local development. |
 | `entrypoints` | Entrypoints | no | Executable entrypoints for each kind the manifest provides. |
 
 ## Entrypoints
 
-The `entrypoints` block declares executable binaries. Each key corresponds to a kind.
+The `entrypoints` block declares executable binaries. Each key corresponds to a provider kind.
 
 | Key | Kind | Purpose |
 | --- | --- | --- |
@@ -56,7 +58,7 @@ entrypoints:
     args: ["--verbose"]
 ```
 
-## Plugin Metadata
+## Integration Plugin Metadata
 
 The `plugin` block describes an integration plugin. It supports declarative REST operations, spec-loaded surfaces (OpenAPI, GraphQL, MCP), executable code, or any combination.
 
@@ -283,7 +285,7 @@ The `artifacts` array lists platform-specific binaries included in the package.
 | `path` | string | yes | Path to the binary inside the package. |
 | `sha256` | string | no | SHA-256 hex digest for integrity verification. |
 
-Declarative-only plugin packages do not require `artifacts`. Pure executable source manifests used with `plugins.*.plugin.source.path` or `gestaltd provider release` may omit them.
+Declarative-only integration plugin packages do not require `artifacts`. Pure executable source manifests used with `plugins.*.provider.source.path` or `gestaltd provider release` may omit them.
 
 ## Full Example
 
@@ -472,7 +474,7 @@ plugin:
 
 ## Authoring Notes
 
-Manifest paths must stay inside the package. `source` and `version` are required. A manifest defines exactly one of `plugin`, `auth`, `datastore`, or `webui`.
+Manifest paths must stay inside the package. `source` and `version` are required. A manifest defines exactly one provider kind: `plugin`, `auth`, `datastore`, or `webui`.
 
 `config_schema_path` validates per-plugin config and may be written in JSON or YAML. Only the `default` connection may define `connection_params` and `post_connect_discovery`. The OpenAPI/GraphQL surface types are mutually exclusive, but MCP may be added alongside either.
 
@@ -499,7 +501,7 @@ When an executable plugin defines operations in Go, Python, Rust, or TypeScript,
 
     ```toml
     [tool.gestalt]
-    plugin = "provider"
+    provider = "provider"
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -526,7 +528,10 @@ When an executable plugin defines operations in Go, Python, Rust, or TypeScript,
     ```json
     {
       "gestalt": {
-        "plugin": "./provider.ts#plugin"
+        "provider": {
+          "kind": "plugin",
+          "target": "./provider.ts#provider"
+        }
       }
     }
     ```

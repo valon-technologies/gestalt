@@ -75,7 +75,11 @@ func detectPythonProjectTarget(root, key string) (string, error) {
 		return "", ErrNoPythonSourceComponentPackage
 	}
 	if _, _, err := SplitPythonProviderTarget(target); err != nil {
-		return "", fmt.Errorf("%s tool.gestalt.%s: %w", pythonProjectFile, key, err)
+		label := key
+		if key == "plugin" {
+			label = "provider/plugin"
+		}
+		return "", fmt.Errorf("%s tool.gestalt.%s: %w", pythonProjectFile, label, err)
 	}
 	return target, nil
 }
@@ -279,6 +283,16 @@ func isPythonIdentifier(value string) bool {
 }
 
 func pythonProjectTarget(data []byte, wantedKey string) (string, error) {
+	if wantedKey == "plugin" {
+		target, err := pythonProjectTargetValue(data, "provider")
+		if err != nil || target != "" {
+			return target, err
+		}
+	}
+	return pythonProjectTargetValue(data, wantedKey)
+}
+
+func pythonProjectTargetValue(data []byte, wantedKey string) (string, error) {
 	scanner := bufio.NewScanner(bytes.NewReader(data))
 	inGestaltSection := false
 	for scanner.Scan() {

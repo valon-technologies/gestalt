@@ -11,6 +11,9 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
+// ProviderServer adapts a [RuntimeProvider] implementation to the gRPC
+// ProviderPlugin service. Most integration-provider authors should use
+// [ServeProvider] instead of constructing this directly.
 type ProviderServer struct {
 	proto.UnimplementedProviderPluginServer
 	provider   RuntimeProvider

@@ -137,7 +137,7 @@ export async function loadProviderFromTarget(
   switch (target.kind) {
     case "integration": {
       if (!isIntegrationProvider(candidate)) {
-        throw new Error(`${targetValue} did not resolve to a Gestalt plugin provider`);
+        throw new Error(`${targetValue} did not resolve to a Gestalt integration provider`);
       }
       candidate.resolveName(defaultName);
       return candidate;
@@ -167,7 +167,7 @@ export async function loadPluginFromTarget(
 ): Promise<IntegrationProvider> {
   const provider = await loadProviderFromTarget(root, rawTarget);
   if (!isIntegrationProvider(provider)) {
-    throw new Error("target did not resolve to a plugin provider");
+    throw new Error("target did not resolve to an integration provider");
   }
   return provider;
 }
@@ -188,7 +188,7 @@ export async function runLoadedProvider(
   const catalogPath = process.env[ENV_WRITE_CATALOG];
   if (catalogPath) {
     if (!isIntegrationProvider(provider)) {
-      throw new Error("static catalog generation is only supported for plugin providers");
+      throw new Error("static catalog generation is only supported for integration providers");
     }
     writeFileSync(catalogPath, pluginCatalogYaml(provider), "utf8");
     return;
@@ -226,7 +226,7 @@ export async function runBundledProvider(
   switch (kind) {
     case "integration":
       if (!isIntegrationProvider(provider)) {
-        throw new Error("bundled target did not resolve to a Gestalt plugin provider");
+        throw new Error("bundled target did not resolve to a Gestalt integration provider");
       }
       loaded = provider;
       break;

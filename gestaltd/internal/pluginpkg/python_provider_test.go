@@ -86,6 +86,45 @@ datastore = "provider:datastore_provider"
 	}
 }
 
+func TestDetectPythonProviderTarget_AcceptsProviderKey(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte(`[tool.gestalt]
+provider = "provider"
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile(pyproject.toml): %v", err)
+	}
+
+	target, err := DetectPythonProviderTarget(root)
+	if err != nil {
+		t.Fatalf("DetectPythonProviderTarget: %v", err)
+	}
+	if target != "provider" {
+		t.Fatalf("target = %q, want %q", target, "provider")
+	}
+}
+
+func TestDetectPythonProviderTarget_PrefersProviderKeyOverLegacyPluginKey(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte(`[tool.gestalt]
+provider = "provider"
+plugin = "legacy_provider"
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile(pyproject.toml): %v", err)
+	}
+
+	target, err := DetectPythonProviderTarget(root)
+	if err != nil {
+		t.Fatalf("DetectPythonProviderTarget: %v", err)
+	}
+	if target != "provider" {
+		t.Fatalf("target = %q, want %q", target, "provider")
+	}
+}
+
 func TestDetectPythonComponentTarget_MissingKindReturnsNoSourceComponentPackage(t *testing.T) {
 	t.Parallel()
 

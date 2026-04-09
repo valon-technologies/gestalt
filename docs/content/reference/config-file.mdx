@@ -407,7 +407,7 @@ plugins:
 
 The config key is `plugins`, but the HTTP API and client CLI still refer to these named entries as integrations.
 
-### Plugin fields
+### Integration Plugin Fields
 
 | Field | Description |
 | --- | --- |
@@ -423,7 +423,7 @@ The config key is `plugins`, but the HTTP API and client CLI still refer to thes
 
 ### `plugins.*.provider`
 
-Every plugin uses a nested `provider` block to declare its source.
+Every integration plugin uses a nested `provider` block to declare its source.
 
 ```yaml
 provider:
@@ -432,9 +432,9 @@ provider:
     version: 1.2.3
 ```
 
-`source.ref` resolves a versioned plugin source during `init` using the format `github.com/<org>/<repo>/<path-after-repo>`, and requires `source.version`. `source.path` loads a local source plugin from its manifest path instead. `source.path` and `source.ref` are mutually exclusive.
+`source.ref` resolves a versioned provider source during `init` using the format `github.com/<org>/<repo>/<path-after-repo>`, and requires `source.version`. `source.path` loads a local provider manifest instead. `source.path` and `source.ref` are mutually exclusive.
 
-For local development with a source plugin:
+For local development with a source provider package:
 
 ```yaml
 provider:
@@ -442,7 +442,7 @@ provider:
     path: ./plugin.yaml
 ```
 
-Gestalt synthesizes Go and Rust executable wrappers automatically when needed and runs Python source plugins from the module declared in `[tool.gestalt].plugin`. Integration plugins do not support `provider.builtin`.
+Gestalt synthesizes Go and Rust executable wrappers automatically when needed and runs Python source providers from the module declared in `[tool.gestalt].provider` or the legacy `[tool.gestalt].plugin`. Integration plugins do not support `provider.builtin`.
 
 <Tabs items={['Go', 'Python', 'Rust']}>
   <Tabs.Tab>
@@ -465,7 +465,7 @@ Gestalt synthesizes Go and Rust executable wrappers automatically when needed an
     dependencies = ["gestalt"]
 
     [tool.gestalt]
-    plugin = "provider"
+    provider = "provider"
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -490,9 +490,9 @@ Gestalt synthesizes Go and Rust executable wrappers automatically when needed an
 | --- | --- |
 | `source.ref` | Managed provider source address. Mutually exclusive with `source.path`. |
 | `source.version` | Required with `source.ref`. SemVer without a leading `v`. Invalid with `source.path`. |
-| `source.path` | Path to a local plugin manifest. Mutually exclusive with `source.ref`. |
+| `source.path` | Path to a local provider manifest. Mutually exclusive with `source.ref`. |
 | `env` | Extra environment variables passed to the provider process. |
-| `allowed_hosts` | Network allowlist for sandboxed plugin processes. |
+| `allowed_hosts` | Network allowlist for sandboxed provider processes. |
 
 ### `connections`
 

@@ -1,14 +1,15 @@
 # Gestalt Python SDK
 
 This package provides the Python authoring surface for executable Gestalt
-provider plugins.
+providers.
 
-It is intended to be used by source plugins discovered through
-`[tool.gestalt]` in `pyproject.toml` and by packaged plugins built from that
+It is intended to be used by source providers discovered through
+`[tool.gestalt].provider` in `pyproject.toml` (or the legacy
+`[tool.gestalt].plugin` key) and by packaged providers built from that
 same source tree.
 
-Python source plugins are developed locally via `from.source.path` and
-released through `gestaltd plugin release` for the host platform by default,
+Python source providers are developed locally via `from.source.path` and
+released through `gestaltd provider release` for the host platform by default,
 or for every requested target platform when you pass `--platform`. In CI,
 prefer `--platform all` to build the full supported release matrix.
 
@@ -20,9 +21,9 @@ For non-host targets, configure a matching Python build interpreter with
 
 The checked-in Python protobuf stubs live in `gestalt/gen/v1`.
 
-This is an SDK maintainer workflow. Plugin authors consume the checked-in
+This is an SDK maintainer workflow. Provider authors consume the checked-in
 stubs through the `gestalt` package and do not need to regenerate them in
-plugin repositories.
+provider repositories.
 
 Regenerate them from the repo root with:
 
@@ -58,7 +59,7 @@ The GitHub Actions workflow expects these repository secrets:
 
 ## Consuming From A Private Index
 
-In an internal plugin repo, pin `gestalt` to the private index with `uv` so
+In an internal provider repo, pin `gestalt` to the private index with `uv` so
 the package does not fall back to PyPI:
 
 ```toml
