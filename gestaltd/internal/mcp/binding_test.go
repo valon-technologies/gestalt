@@ -1018,7 +1018,7 @@ func TestNewServer_DirectCallerInvokerError(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
-		Invoker: &testutil.StubInvoker{Err: fmt.Errorf("invoke failed")},
+		Invoker:   &testutil.StubInvoker{Err: fmt.Errorf("invoke failed")},
 		Providers: providers,
 	})
 
