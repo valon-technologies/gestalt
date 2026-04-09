@@ -3,8 +3,7 @@ import { createServer } from "node:http2";
 import { dirname, resolve } from "node:path";
 
 import { create } from "@bufbuild/protobuf";
-import type { Timestamp } from "@bufbuild/protobuf/wkt";
-import { EmptySchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
+import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError, type ServiceImpl } from "@connectrpc/connect";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 
@@ -16,25 +15,6 @@ import {
   type CompleteLoginRequest as AuthCompleteLoginRequest,
   type ValidateExternalTokenRequest,
 } from "../gen/v1/auth_pb.ts";
-import {
-  DatastoreProvider as DatastoreProviderService,
-  ListAPITokensResponseSchema,
-  ListStoredIntegrationTokensResponseSchema,
-  OAuthRegistrationSchema,
-  RevokeAllAPITokensResponseSchema,
-  StoredAPITokenSchema,
-  StoredIntegrationTokenSchema,
-  StoredUserSchema,
-  type DeleteStoredIntegrationTokenRequest,
-  type FindOrCreateUserRequest,
-  type GetAPITokenByHashRequest,
-  type GetStoredIntegrationTokenRequest,
-  type GetUserRequest,
-  type ListAPITokensRequest,
-  type ListStoredIntegrationTokensRequest,
-  type RevokeAPITokenRequest,
-  type RevokeAllAPITokensRequest,
-} from "../gen/v1/datastore_pb.ts";
 import {
   SecretsProvider as SecretsProviderService,
   GetSecretResponseSchema,
@@ -64,14 +44,6 @@ import {
 } from "../gen/v1/runtime_pb.ts";
 import { errorMessage, type Request } from "./api.ts";
 import { AuthProvider, isAuthProvider, type AuthenticatedUser } from "./auth.ts";
-import {
-  DatastoreProvider,
-  isDatastoreProvider,
-  type OAuthRegistration,
-  type StoredAPIToken,
-  type StoredIntegrationToken,
-  type StoredUser,
-} from "./datastore.ts";
 import { SecretsProvider, isSecretsProvider } from "./secrets.ts";
 import { catalogToYaml, type Catalog } from "./catalog.ts";
 import {
@@ -101,7 +73,7 @@ export type RuntimeArgs = {
   target: string;
 };
 
-export type LoadedProvider = IntegrationProvider | AuthProvider | DatastoreProvider | SecretsProvider;
+export type LoadedProvider = IntegrationProvider | AuthProvider | SecretsProvider;
 
 export async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
   const args = parseRuntimeArgs(argv);
@@ -154,13 +126,6 @@ export async function loadProviderFromTarget(
     case "auth": {
       if (!isAuthProvider(candidate)) {
         throw new Error(`${targetValue} did not resolve to a Gestalt auth provider`);
-      }
-      candidate.resolveName(defaultName);
-      return candidate;
-    }
-    case "datastore": {
-      if (!isDatastoreProvider(candidate)) {
-        throw new Error(`${targetValue} did not resolve to a Gestalt datastore provider`);
       }
       candidate.resolveName(defaultName);
       return candidate;
@@ -252,12 +217,6 @@ export async function runBundledProvider(
       }
       loaded = provider;
       break;
-    case "datastore":
-      if (!isDatastoreProvider(provider)) {
-        throw new Error("bundled target did not resolve to a Gestalt datastore provider");
-      }
-      loaded = provider;
-      break;
     case "secrets":
       if (!isSecretsProvider(provider)) {
         throw new Error("bundled target did not resolve to a Gestalt secrets provider");
@@ -296,8 +255,6 @@ export async function serve(provider: LoadedProvider): Promise<void> {
         router.service(IntegrationProviderService, createProviderService(provider));
       } else if (isAuthProvider(provider)) {
         router.service(AuthProviderService, createAuthService(provider));
-      } else if (isDatastoreProvider(provider)) {
-        router.service(DatastoreProviderService, createDatastoreService(provider));
       } else if (isSecretsProvider(provider)) {
         router.service(SecretsProviderService, createSecretsService(provider));
       }
@@ -385,12 +342,6 @@ export function createRuntimeService(
     },
     async healthCheck() {
       if (!provider.supportsHealthCheck()) {
-        if (provider.kind === "datastore") {
-          return create(HealthCheckResponseSchema, {
-            ready: false,
-            message: "datastore provider must implement HealthChecker",
-          });
-        }
         return create(HealthCheckResponseSchema, {
           ready: true,
         });
@@ -538,123 +489,6 @@ export function createAuthService(
   };
 }
 
-export function createDatastoreService(
-  provider: DatastoreProvider,
-): Partial<ServiceImpl<typeof DatastoreProviderService>> {
-  return {
-    async migrate() {
-      await provider.migrate();
-      return create(EmptySchema, {});
-    },
-    async getUser(request: GetUserRequest) {
-      const user = await provider.getUser(request.id);
-      if (!user) {
-        throw new ConnectError("user not found", Code.NotFound);
-      }
-      return storedUserToProto(user);
-    },
-    async findOrCreateUser(request: FindOrCreateUserRequest) {
-      const user = await provider.findOrCreateUser(request.email);
-      if (!user) {
-        throw new ConnectError("datastore provider returned nil user", Code.Internal);
-      }
-      return storedUserToProto(user);
-    },
-    async putStoredIntegrationToken(request) {
-      await provider.putIntegrationToken(storedIntegrationTokenFromProto(request));
-      return create(EmptySchema, {});
-    },
-    async getStoredIntegrationToken(request: GetStoredIntegrationTokenRequest) {
-      const token = await provider.getIntegrationToken(
-        request.userId,
-        request.integration,
-        request.connection,
-        request.instance,
-      );
-      if (!token) {
-        throw new ConnectError("integration token not found", Code.NotFound);
-      }
-      return storedIntegrationTokenToProto(token);
-    },
-    async listStoredIntegrationTokens(request: ListStoredIntegrationTokensRequest) {
-      const tokens = await provider.listIntegrationTokens(
-        request.userId,
-        request.integration,
-        request.connection,
-      );
-      return create(ListStoredIntegrationTokensResponseSchema, {
-        tokens: tokens.map(storedIntegrationTokenToProto),
-      });
-    },
-    async deleteStoredIntegrationToken(request: DeleteStoredIntegrationTokenRequest) {
-      await provider.deleteIntegrationToken(request.id);
-      return create(EmptySchema, {});
-    },
-    async putAPIToken(request) {
-      await provider.putApiToken(storedApiTokenFromProto(request));
-      return create(EmptySchema, {});
-    },
-    async getAPITokenByHash(request: GetAPITokenByHashRequest) {
-      const token = await provider.getApiTokenByHash(request.hashedToken);
-      if (!token) {
-        throw new ConnectError("api token not found", Code.NotFound);
-      }
-      return storedApiTokenToProto(token);
-    },
-    async listAPITokens(request: ListAPITokensRequest) {
-      const tokens = await provider.listApiTokens(request.userId);
-      return create(ListAPITokensResponseSchema, {
-        tokens: tokens.map(storedApiTokenToProto),
-      });
-    },
-    async revokeAPIToken(request: RevokeAPITokenRequest) {
-      await provider.revokeApiToken(request.userId, request.id);
-      return create(EmptySchema, {});
-    },
-    async revokeAllAPITokens(request: RevokeAllAPITokensRequest) {
-      return create(RevokeAllAPITokensResponseSchema, {
-        revoked: normalizeBigInt(await provider.revokeAllApiTokens(request.userId)),
-      });
-    },
-    async getOAuthRegistration(request) {
-      if (!provider.supportsOAuthRegistrations()) {
-        throw new ConnectError(
-          "datastore provider does not support oauth registrations",
-          Code.Unimplemented,
-        );
-      }
-      const registration = await provider.getOAuthRegistration(
-        request.authServerUrl,
-        request.redirectUri,
-      );
-      if (!registration) {
-        throw new ConnectError("oauth registration not found", Code.NotFound);
-      }
-      return oauthRegistrationToProto(registration);
-    },
-    async putOAuthRegistration(request) {
-      if (!provider.supportsOAuthRegistrations()) {
-        throw new ConnectError(
-          "datastore provider does not support oauth registrations",
-          Code.Unimplemented,
-        );
-      }
-      await provider.putOAuthRegistration(oauthRegistrationFromProto(request));
-      return create(EmptySchema, {});
-    },
-    async deleteOAuthRegistration(request) {
-      if (!provider.supportsOAuthRegistrations()) {
-        throw new ConnectError(
-          "datastore provider does not support oauth registrations",
-          Code.Unimplemented,
-        );
-      }
-      await provider.deleteOAuthRegistration(request.authServerUrl, request.redirectUri);
-      return create(EmptySchema, {});
-    },
-  };
-}
-
 export function createSecretsService(
   provider: SecretsProvider,
 ): Partial<ServiceImpl<typeof SecretsProviderService>> {
@@ -687,8 +521,6 @@ function providerKindToProto(kind: ProviderKind): ProtoProviderKind {
       return ProtoProviderKind.INTEGRATION;
     case "auth":
       return ProtoProviderKind.AUTH;
-    case "datastore":
-      return ProtoProviderKind.DATASTORE;
     case "secrets":
       return ProtoProviderKind.SECRETS;
     case "telemetry":
@@ -750,176 +582,6 @@ function authenticatedUserToProto(user: AuthenticatedUser) {
       ...(user.claims ?? {}),
     },
   });
-}
-
-function storedUserToProto(user: StoredUser) {
-  return create(StoredUserSchema, {
-    id: user.id,
-    email: user.email,
-    displayName: user.displayName ?? "",
-    ...(user.createdAt ? { createdAt: timestampFromDate(user.createdAt)! } : {}),
-    ...(user.updatedAt ? { updatedAt: timestampFromDate(user.updatedAt)! } : {}),
-  });
-}
-
-function storedIntegrationTokenToProto(token: StoredIntegrationToken) {
-  return create(StoredIntegrationTokenSchema, {
-    id: token.id,
-    userId: token.userId,
-    integration: token.integration,
-    connection: token.connection,
-    instance: token.instance,
-    accessTokenSealed: cloneUint8Array(token.accessTokenSealed),
-    refreshTokenSealed: cloneUint8Array(token.refreshTokenSealed),
-    scopes: token.scopes,
-    refreshErrorCount: token.refreshErrorCount ?? 0,
-    connectionParams: {
-      ...(token.connectionParams ?? {}),
-    },
-    ...(token.expiresAt ? { expiresAt: timestampFromDate(token.expiresAt)! } : {}),
-    ...(token.lastRefreshedAt ? { lastRefreshedAt: timestampFromDate(token.lastRefreshedAt)! } : {}),
-    ...(token.createdAt ? { createdAt: timestampFromDate(token.createdAt)! } : {}),
-    ...(token.updatedAt ? { updatedAt: timestampFromDate(token.updatedAt)! } : {}),
-  });
-}
-
-function storedIntegrationTokenFromProto(
-  token: ReturnType<typeof create<typeof StoredIntegrationTokenSchema>>,
-): StoredIntegrationToken {
-  const result: StoredIntegrationToken = {
-    id: token.id,
-    userId: token.userId,
-    integration: token.integration,
-    connection: token.connection,
-    instance: token.instance,
-    accessTokenSealed: cloneUint8Array(token.accessTokenSealed),
-    refreshTokenSealed: cloneUint8Array(token.refreshTokenSealed),
-    scopes: token.scopes,
-    refreshErrorCount: token.refreshErrorCount,
-    connectionParams: {
-      ...token.connectionParams,
-    },
-  };
-  const expiresAt = dateFromTimestamp(token.expiresAt);
-  if (expiresAt) {
-    result.expiresAt = expiresAt;
-  }
-  const lastRefreshedAt = dateFromTimestamp(token.lastRefreshedAt);
-  if (lastRefreshedAt) {
-    result.lastRefreshedAt = lastRefreshedAt;
-  }
-  const createdAt = dateFromTimestamp(token.createdAt);
-  if (createdAt) {
-    result.createdAt = createdAt;
-  }
-  const updatedAt = dateFromTimestamp(token.updatedAt);
-  if (updatedAt) {
-    result.updatedAt = updatedAt;
-  }
-  return result;
-}
-
-function storedApiTokenToProto(token: StoredAPIToken) {
-  return create(StoredAPITokenSchema, {
-    id: token.id,
-    userId: token.userId,
-    name: token.name,
-    hashedToken: token.hashedToken,
-    scopes: token.scopes,
-    ...(token.expiresAt ? { expiresAt: timestampFromDate(token.expiresAt)! } : {}),
-    ...(token.createdAt ? { createdAt: timestampFromDate(token.createdAt)! } : {}),
-    ...(token.updatedAt ? { updatedAt: timestampFromDate(token.updatedAt)! } : {}),
-  });
-}
-
-function storedApiTokenFromProto(
-  token: ReturnType<typeof create<typeof StoredAPITokenSchema>>,
-): StoredAPIToken {
-  const result: StoredAPIToken = {
-    id: token.id,
-    userId: token.userId,
-    name: token.name,
-    hashedToken: token.hashedToken,
-    scopes: token.scopes,
-  };
-  const expiresAt = dateFromTimestamp(token.expiresAt);
-  if (expiresAt) {
-    result.expiresAt = expiresAt;
-  }
-  const createdAt = dateFromTimestamp(token.createdAt);
-  if (createdAt) {
-    result.createdAt = createdAt;
-  }
-  const updatedAt = dateFromTimestamp(token.updatedAt);
-  if (updatedAt) {
-    result.updatedAt = updatedAt;
-  }
-  return result;
-}
-
-function oauthRegistrationToProto(registration: OAuthRegistration) {
-  return create(OAuthRegistrationSchema, {
-    authServerUrl: registration.authServerUrl,
-    redirectUri: registration.redirectUri,
-    clientId: registration.clientId,
-    clientSecretSealed: cloneUint8Array(registration.clientSecretSealed),
-    authorizationEndpoint: registration.authorizationEndpoint ?? "",
-    tokenEndpoint: registration.tokenEndpoint ?? "",
-    scopesSupported: registration.scopesSupported ?? "",
-    ...(registration.expiresAt ? { expiresAt: timestampFromDate(registration.expiresAt)! } : {}),
-    ...(registration.discoveredAt
-      ? { discoveredAt: timestampFromDate(registration.discoveredAt)! }
-      : {}),
-  });
-}
-
-function oauthRegistrationFromProto(
-  registration: ReturnType<typeof create<typeof OAuthRegistrationSchema>>,
-): OAuthRegistration {
-  const result: OAuthRegistration = {
-    authServerUrl: registration.authServerUrl,
-    redirectUri: registration.redirectUri,
-    clientId: registration.clientId,
-    clientSecretSealed: cloneUint8Array(registration.clientSecretSealed),
-  };
-  if (registration.authorizationEndpoint) {
-    result.authorizationEndpoint = registration.authorizationEndpoint;
-  }
-  if (registration.tokenEndpoint) {
-    result.tokenEndpoint = registration.tokenEndpoint;
-  }
-  if (registration.scopesSupported) {
-    result.scopesSupported = registration.scopesSupported;
-  }
-  const expiresAt = dateFromTimestamp(registration.expiresAt);
-  if (expiresAt) {
-    result.expiresAt = expiresAt;
-  }
-  const discoveredAt = dateFromTimestamp(registration.discoveredAt);
-  if (discoveredAt) {
-    result.discoveredAt = discoveredAt;
-  }
-  return result;
-}
-
-function timestampFromDate(value: Date | undefined): Timestamp | undefined {
-  if (!value) {
-    return undefined;
-  }
-  const millis = value.getTime();
-  const seconds = Math.floor(millis / 1000);
-  const nanos = Math.trunc((millis - seconds * 1000) * 1_000_000);
-  return create(TimestampSchema, {
-    seconds: BigInt(seconds),
-    nanos,
-  });
-}
-
-function dateFromTimestamp(value: Timestamp | undefined): Date | undefined {
-  if (!value) {
-    return undefined;
-  }
-  return new Date(Number(value.seconds) * 1000 + Math.trunc(value.nanos / 1_000_000));
 }
 
 function normalizeBigInt(value: number | bigint): bigint {

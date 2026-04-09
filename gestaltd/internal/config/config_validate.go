@@ -38,7 +38,10 @@ func ValidateStructure(cfg *Config) error {
 	if err := validateTopLevelComponentConfig("auth", cfg.Auth.Provider, cfg.Auth.Config); err != nil {
 		return err
 	}
-	if err := validateTopLevelComponentConfig("datastore", cfg.Datastore.Provider, cfg.Datastore.Config); err != nil {
+	if err := validateDatastoreConfig(cfg); err != nil {
+		return err
+	}
+	if err := validateDatastores(cfg); err != nil {
 		return err
 	}
 	if cfg.Secrets.Provider != nil {
@@ -146,8 +149,14 @@ func ValidateResolvedStructure(cfg *Config) error {
 // operational config (serve) should call this after Load. Callers that only
 // need structural correctness (init, validate) should not.
 func ValidateRuntime(cfg *Config) error {
-	if cfg.Datastore.Provider == nil {
-		return fmt.Errorf("config validation: datastore.provider is required")
+	if cfg.Datastore.Provider != nil {
+		return fmt.Errorf("config validation: datastore.provider is no longer supported; use the datastores section with datastore: <name>")
+	}
+	if cfg.Datastore.Resource == "" {
+		return fmt.Errorf("config validation: datastore is required (set datastore: <name> referencing a datastores entry)")
+	}
+	if _, ok := cfg.Datastores[cfg.Datastore.Resource]; !ok {
+		return fmt.Errorf("config validation: datastore references unknown datastore %q", cfg.Datastore.Resource)
 	}
 	if cfg.Server.EncryptionKey == "" {
 		return fmt.Errorf("config validation: server.encryption_key is required")
@@ -478,6 +487,57 @@ func validateServerListeners(cfg ServerConfig) error {
 	}
 	if managementAddr == cfg.PublicAddr() {
 		return fmt.Errorf("config validation: server.management must differ from server.public")
+	}
+	return nil
+}
+
+func validateDatastoreConfig(cfg *Config) error {
+	if cfg.Datastore.Provider != nil {
+		return fmt.Errorf("config validation: datastore.provider is no longer supported; use the datastores section with datastore: <name>")
+	}
+	if cfg.Datastore.Resource != "" {
+		if _, ok := cfg.Datastores[cfg.Datastore.Resource]; !ok {
+			return fmt.Errorf("config validation: datastore references unknown datastore %q", cfg.Datastore.Resource)
+		}
+	}
+	return nil
+}
+
+var validDatastoreDrivers = map[string]bool{
+	"postgres": true,
+	"pgx":      true,
+	"mysql":    true,
+	"sqlite3":  true,
+	"sqlite":   true,
+}
+
+func validateDatastores(cfg *Config) error {
+	for name := range cfg.Datastores {
+		ds := cfg.Datastores[name]
+		if ds.Driver == "" {
+			return fmt.Errorf("config validation: datastores.%s.driver is required", name)
+		}
+		if !validDatastoreDrivers[ds.Driver] {
+			return fmt.Errorf("config validation: datastores.%s.driver %q is not recognized (expected postgres, mysql, or sqlite3)", name, ds.Driver)
+		}
+		if ds.DSN == "" {
+			return fmt.Errorf("config validation: datastores.%s.dsn is required", name)
+		}
+	}
+	for name := range cfg.Integrations {
+		intg := cfg.Integrations[name]
+		if err := validateDatastoreBindings(name, intg.Datastores, cfg); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateDatastoreBindings(integrationName string, bindings map[string]string, cfg *Config) error {
+	for alias, resourceName := range bindings {
+		if _, ok := cfg.Datastores[resourceName]; !ok {
+			return fmt.Errorf("config validation: integration %q datastore binding %q references unknown datastore %q", integrationName, alias, resourceName)
+		}
 	}
 	return nil
 }

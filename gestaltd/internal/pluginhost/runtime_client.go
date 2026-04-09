@@ -85,23 +85,6 @@ func validateRuntimeProtocol(meta *proto.ProviderIdentity) error {
 	return nil
 }
 
-func pingRuntimeProvider(ctx context.Context, client proto.ProviderLifecycleClient) error {
-	if client == nil {
-		return fmt.Errorf("runtime client is required")
-	}
-	resp, err := client.HealthCheck(ctx, &emptypb.Empty{})
-	if err != nil {
-		return fmt.Errorf("provider health check: %w", err)
-	}
-	if resp.GetReady() {
-		return nil
-	}
-	if resp.GetMessage() == "" {
-		return fmt.Errorf("provider is not ready")
-	}
-	return fmt.Errorf("provider is not ready: %s", resp.GetMessage())
-}
-
 func providerCallContext(parent context.Context) (context.Context, context.CancelFunc) {
 	if parent == nil {
 		parent = context.Background()
@@ -114,11 +97,4 @@ func providerConfigureContext(parent context.Context) (context.Context, context.
 		parent = context.Background()
 	}
 	return context.WithTimeout(parent, providerConfigureTimeout)
-}
-
-func providerMigrateContext(parent context.Context) (context.Context, context.CancelFunc) {
-	if parent == nil {
-		parent = context.Background()
-	}
-	return context.WithTimeout(parent, providerMigrateTimeout)
 }

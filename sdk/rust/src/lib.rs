@@ -4,8 +4,6 @@ mod api;
 mod auth;
 mod auth_server;
 mod catalog;
-mod datastore;
-mod datastore_server;
 mod env;
 mod error;
 mod provider_server;
@@ -33,9 +31,6 @@ pub use auth::{
     AuthProvider, AuthenticatedUser, BeginLoginRequest, BeginLoginResponse, CompleteLoginRequest,
 };
 pub use catalog::{Catalog, CatalogOperation};
-pub use datastore::{
-    DatastoreProvider, OAuthRegistration, StoredApiToken, StoredIntegrationToken, StoredUser,
-};
 pub use env::{CURRENT_PROTOCOL_VERSION, ENV_PROVIDER_SOCKET};
 pub use error::{Error, Result};
 #[doc(hidden)]
@@ -91,16 +86,6 @@ macro_rules! export_auth_provider {
         pub fn __gestalt_serve_auth(_name: &str) -> $crate::Result<()> {
             let provider = std::sync::Arc::new($constructor());
             $crate::runtime::run_auth_provider(provider)
-        }
-    };
-}
-
-#[macro_export]
-macro_rules! export_datastore_provider {
-    (constructor = $constructor:path $(,)?) => {
-        pub fn __gestalt_serve_datastore(_name: &str) -> $crate::Result<()> {
-            let provider = std::sync::Arc::new($constructor());
-            $crate::runtime::run_datastore_provider(provider)
         }
     };
 }

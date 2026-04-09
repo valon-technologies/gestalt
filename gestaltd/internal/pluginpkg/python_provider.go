@@ -257,7 +257,6 @@ func SplitPythonProviderTarget(target string) (module string, attr string, err e
 const (
 	pythonRuntimeKindIntegration = "integration"
 	pythonRuntimeKindAuth        = "auth"
-	pythonRuntimeKindDatastore   = "datastore"
 	pythonRuntimeKindSecrets     = "secrets"
 )
 
@@ -267,8 +266,6 @@ func pythonRuntimeKind(kind string) (string, error) {
 		return pythonRuntimeKindIntegration, nil
 	case pluginmanifestv1.KindAuth:
 		return pythonRuntimeKindAuth, nil
-	case pluginmanifestv1.KindDatastore:
-		return pythonRuntimeKindDatastore, nil
 	case pluginmanifestv1.KindSecrets:
 		return pythonRuntimeKindSecrets, nil
 	default:

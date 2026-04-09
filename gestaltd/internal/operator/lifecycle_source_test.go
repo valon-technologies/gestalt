@@ -199,9 +199,6 @@ func buildExecutableArchiveData(t *testing.T, dir, srcDirName, source, version, 
 	case pluginmanifestv1.KindAuth:
 		manifest.Auth = &pluginmanifestv1.AuthMetadata{}
 		manifest.Entrypoints.Auth = &pluginmanifestv1.Entrypoint{ArtifactPath: artPath}
-	case pluginmanifestv1.KindDatastore:
-		manifest.Datastore = &pluginmanifestv1.DatastoreMetadata{}
-		manifest.Entrypoints.Datastore = &pluginmanifestv1.Entrypoint{ArtifactPath: artPath}
 	case pluginmanifestv1.KindSecrets:
 		manifest.Secrets = &pluginmanifestv1.SecretsMetadata{}
 		manifest.Entrypoints.Secrets = &pluginmanifestv1.Entrypoint{ArtifactPath: artPath}

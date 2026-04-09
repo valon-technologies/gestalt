@@ -25,7 +25,6 @@ const (
 	InitLockfileName     = "gestalt.lock.json"
 	PreparedProvidersDir = ".gestaltd/providers"
 	PreparedAuthDir      = ".gestaltd/auth"
-	PreparedDatastoreDir = ".gestaltd/datastore"
 	PreparedSecretsDir   = ".gestaltd/secrets"
 	PreparedUIDir        = ".gestaltd/ui"
 	LockVersion          = 2
@@ -147,13 +146,6 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 		}
 		lock.Auth = &entry
 	}
-	if cfg.Datastore.Provider != nil && cfg.Datastore.Provider.HasManagedArtifacts() {
-		entry, err := l.writeComponentArtifact(context.Background(), paths, pluginmanifestv1.KindDatastore, "datastore", datastoreDestDir(paths), cfg.Datastore.Provider, cfg.Datastore.Config)
-		if err != nil {
-			return nil, nil, err
-		}
-		lock.Datastore = &entry
-	}
 	if secretsEntry != nil {
 		lock.Secrets = secretsEntry
 	}
@@ -175,7 +167,7 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 		return nil, nil, err
 	}
 
-	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "auth", lock.Auth != nil, "datastore", lock.Datastore != nil, "secrets", lock.Secrets != nil, "ui", lock.UI != nil)
+	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "auth", lock.Auth != nil, "secrets", lock.Secrets != nil, "ui", lock.UI != nil)
 	slog.Info("wrote lockfile", "path", paths.lockfilePath)
 	return lock, cfg, nil
 }
@@ -313,7 +305,6 @@ type initPaths struct {
 	lockfilePath string
 	providersDir string
 	authDir      string
-	datastoreDir string
 	secretsDir   string
 	uiDir        string
 }
@@ -334,9 +325,6 @@ func configHasPluginLoading(cfg *config.Config) bool {
 	if cfg.Auth.Provider != nil && (cfg.Auth.Provider.HasManagedArtifacts() || cfg.Auth.Provider.HasLocalSource()) {
 		return true
 	}
-	if cfg.Datastore.Provider != nil && (cfg.Datastore.Provider.HasManagedArtifacts() || cfg.Datastore.Provider.HasLocalSource()) {
-		return true
-	}
 	if cfg.Secrets.Provider != nil && (cfg.Secrets.Provider.HasManagedArtifacts() || cfg.Secrets.Provider.HasLocalSource()) {
 		return true
 	}
@@ -350,9 +338,6 @@ func configHasManagedPlugins(cfg *config.Config) bool {
 		}
 	}
 	if cfg.Auth.Provider != nil && cfg.Auth.Provider.HasManagedArtifacts() {
-		return true
-	}
-	if cfg.Datastore.Provider != nil && cfg.Datastore.Provider.HasManagedArtifacts() {
 		return true
 	}
 	if cfg.Secrets.Provider != nil && cfg.Secrets.Provider.HasManagedArtifacts() {
@@ -400,7 +385,6 @@ func initPathsForConfigWithArtifactsDir(configPath, artifactsDir string) initPat
 		lockfilePath: filepath.Join(configDir, InitLockfileName),
 		providersDir: filepath.Join(artifactsDir, filepath.FromSlash(PreparedProvidersDir)),
 		authDir:      filepath.Join(artifactsDir, filepath.FromSlash(PreparedAuthDir)),
-		datastoreDir: filepath.Join(artifactsDir, filepath.FromSlash(PreparedDatastoreDir)),
 		secretsDir:   filepath.Join(artifactsDir, filepath.FromSlash(PreparedSecretsDir)),
 		uiDir:        filepath.Join(artifactsDir, filepath.FromSlash(PreparedUIDir)),
 	}
@@ -416,10 +400,6 @@ func uiDestDir(paths initPaths) string {
 
 func authDestDir(paths initPaths) string {
 	return paths.authDir
-}
-
-func datastoreDestDir(paths initPaths) string {
-	return paths.datastoreDir
 }
 
 func secretsDestDir(paths initPaths) string {
@@ -476,11 +456,6 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 	}
 	if cfg.Auth.Provider != nil && cfg.Auth.Provider.HasManagedArtifacts() {
 		if lock.Auth == nil || !lockEntryMatches(paths, "auth", cfg.Auth.Provider, *lock.Auth, true) {
-			return false
-		}
-	}
-	if cfg.Datastore.Provider != nil && cfg.Datastore.Provider.HasManagedArtifacts() {
-		if lock.Datastore == nil || !lockEntryMatches(paths, "datastore", cfg.Datastore.Provider, *lock.Datastore, true) {
 			return false
 		}
 	}
@@ -884,11 +859,6 @@ func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *con
 			return err
 		}
 	}
-	if cfg.Datastore.Provider != nil {
-		if err := l.applyComponentProvider(paths, lock, pluginmanifestv1.KindDatastore, "datastore", cfg.Datastore.Provider, cfg.Datastore.Config, &cfg.Datastore.Config, locked); err != nil {
-			return err
-		}
-	}
 	if cfg.Secrets.Provider != nil {
 		if err := l.applyComponentProvider(paths, lock, pluginmanifestv1.KindSecrets, "secrets", cfg.Secrets.Provider, cfg.Secrets.Config, &cfg.Secrets.Config, locked); err != nil {
 			return err
@@ -951,8 +921,6 @@ func (l *Lifecycle) applyComponentProvider(paths initPaths, lock *Lockfile, kind
 		switch kind {
 		case pluginmanifestv1.KindAuth:
 			entry = lock.Auth
-		case pluginmanifestv1.KindDatastore:
-			entry = lock.Datastore
 		case pluginmanifestv1.KindSecrets:
 			entry = lock.Secrets
 		}
@@ -1298,8 +1266,6 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 	switch kind {
 	case pluginmanifestv1.KindAuth:
 		destDir = authDestDir(paths)
-	case pluginmanifestv1.KindDatastore:
-		destDir = datastoreDestDir(paths)
 	case pluginmanifestv1.KindSecrets:
 		destDir = secretsDestDir(paths)
 	default:

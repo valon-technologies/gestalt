@@ -172,7 +172,7 @@ func buildExecutablePluginProvider(ctx context.Context, name string, intg config
 	if err != nil {
 		return nil, fmt.Errorf("build executable plugin provider %q: %w", name, err)
 	}
-	pluginProv, err := buildPluginProvider(ctx, intg, pluginConfig, staticSpec)
+	pluginProv, err := buildPluginProvider(ctx, intg, pluginConfig, staticSpec, deps)
 	if err != nil {
 		return nil, err
 	}
@@ -466,10 +466,18 @@ func catalogOperationCount(cat *catalog.Catalog) int {
 	return len(cat.Operations)
 }
 
-func buildPluginProvider(ctx context.Context, intg config.IntegrationDef, pluginConfig map[string]any, spec pluginhost.StaticProviderSpec) (core.Provider, error) {
+func buildPluginProvider(ctx context.Context, intg config.IntegrationDef, pluginConfig map[string]any, spec pluginhost.StaticProviderSpec, deps Deps) (core.Provider, error) {
 	command := intg.Plugin.Command
 	args := intg.Plugin.Args
 	env := clonePluginEnv(intg.Plugin.Env)
+	for alias, resourceName := range intg.Datastores {
+		if def, ok := deps.Datastores[resourceName]; ok {
+			if env == nil {
+				env = make(map[string]string)
+			}
+			env["GESTALT_DATASTORE_"+strings.ToUpper(alias)] = def.DSN
+		}
+	}
 	var cleanup func()
 	if command == "" {
 		if intg.Plugin.ResolvedManifestPath == "" {

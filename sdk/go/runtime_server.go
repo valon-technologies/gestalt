@@ -77,12 +77,6 @@ func (s *runtimeServer) HealthCheck(ctx context.Context, _ *emptypb.Empty) (*pro
 		}
 		return &proto.HealthCheckResponse{Ready: true}, nil
 	}
-	if s.kind == proto.ProviderKind_PROVIDER_KIND_DATASTORE {
-		return &proto.HealthCheckResponse{
-			Ready:   false,
-			Message: "datastore provider must implement HealthChecker",
-		}, nil
-	}
 	return &proto.HealthCheckResponse{Ready: true}, nil
 }
 
@@ -92,8 +86,6 @@ func providerKindToProto(kind ProviderKind) proto.ProviderKind {
 		return proto.ProviderKind_PROVIDER_KIND_INTEGRATION
 	case ProviderKindAuth:
 		return proto.ProviderKind_PROVIDER_KIND_AUTH
-	case ProviderKindDatastore:
-		return proto.ProviderKind_PROVIDER_KIND_DATASTORE
 	case ProviderKindSecrets:
 		return proto.ProviderKind_PROVIDER_KIND_SECRETS
 	default:

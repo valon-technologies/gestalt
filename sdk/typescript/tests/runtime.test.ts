@@ -10,14 +10,6 @@ import {
   ValidateExternalTokenRequestSchema,
 } from "../gen/v1/auth_pb.ts";
 import {
-  OAuthRegistrationSchema,
-  GetAPITokenByHashRequestSchema,
-  GetOAuthRegistrationRequestSchema,
-  GetStoredIntegrationTokenRequestSchema,
-  StoredAPITokenSchema,
-  StoredIntegrationTokenSchema,
-} from "../gen/v1/datastore_pb.ts";
-import {
   ExecuteRequestSchema,
   GetSessionCatalogRequestSchema,
   StartProviderRequestSchema,
@@ -26,7 +18,6 @@ import { ConfigureProviderRequestSchema } from "../gen/v1/runtime_pb.ts";
 import {
   ENV_WRITE_CATALOG,
   createAuthService,
-  createDatastoreService,
   createProviderService,
   createRuntimeService,
   loadPluginFromTarget,
@@ -34,7 +25,6 @@ import {
   main,
   parseRuntimeArgs,
 } from "../src/runtime.ts";
-import { defineDatastoreProvider } from "../src/index.ts";
 import { fixturePath, makeTempDir, removeTempDir } from "./helpers.ts";
 
 test("runtime arg parsing requires root and target", () => {
@@ -168,122 +158,3 @@ test("auth provider supports runtime metadata, login flows, and token validation
   expect(validated.email).toBe("api-token@example.com");
 });
 
-test("datastore provider supports user, token, and oauth registration operations", async () => {
-  const provider = await loadProviderFromTarget(fixturePath("datastore-provider"));
-  const runtime = createRuntimeService(provider);
-  const datastore = createDatastoreService(provider as any);
-
-  const metadata = await (runtime.getProviderIdentity as any)(create(EmptySchema, {}));
-  expect(metadata.kind).toBe(3);
-  expect(metadata.warnings).toEqual(["fixture datastore warning"]);
-
-  const createdUser = await (datastore.findOrCreateUser as any)(
-    create((await import("../gen/v1/datastore_pb.ts")).FindOrCreateUserRequestSchema, {
-      email: "user@example.com",
-    }),
-  );
-  expect(createdUser.id).toBe("user@example.com");
-
-  await (datastore.putStoredIntegrationToken as any)(
-    create(StoredIntegrationTokenSchema, {
-      id: "tok-1",
-      userId: "user@example.com",
-      integration: "github",
-      connection: "default",
-      instance: "tok-1",
-      accessTokenSealed: new Uint8Array([9]),
-      refreshTokenSealed: new Uint8Array([8]),
-      scopes: "repo",
-    }),
-  );
-
-  const token = await (datastore.getStoredIntegrationToken as any)(
-    create(GetStoredIntegrationTokenRequestSchema, {
-      userId: "user@example.com",
-      integration: "github",
-      connection: "default",
-      instance: "tok-1",
-    }),
-  );
-  expect(token.id).toBe("tok-1");
-
-  await (datastore.putAPIToken as any)(
-    create(StoredAPITokenSchema, {
-      id: "api-1",
-      userId: "user@example.com",
-      name: "fixture",
-      hashedToken: "hash-1",
-      scopes: "read",
-    }),
-  );
-  const apiToken = await (datastore.getAPITokenByHash as any)(
-    create(GetAPITokenByHashRequestSchema, {
-      hashedToken: "hash-1",
-    }),
-  );
-  expect(apiToken.name).toBe("fixture");
-
-  await (datastore.putOAuthRegistration as any)(
-    create(OAuthRegistrationSchema, {
-      authServerUrl: "https://auth.example.test",
-      redirectUri: "https://app.example.test/callback",
-      clientId: "client-1",
-      clientSecretSealed: new Uint8Array([1, 2]),
-    }),
-  );
-  const registration = await (datastore.getOAuthRegistration as any)(
-    create(GetOAuthRegistrationRequestSchema, {
-      authServerUrl: "https://auth.example.test",
-      redirectUri: "https://app.example.test/callback",
-    }),
-  );
-  expect(registration.clientId).toBe("client-1");
-});
-
-test("datastore service normalizes pre-epoch dates to non-negative protobuf nanos", async () => {
-  const provider = defineDatastoreProvider({
-    migrate() {},
-    getUser() {
-      return null;
-    },
-    findOrCreateUser(email) {
-      return {
-        id: email,
-        email,
-        createdAt: new Date(-1),
-        updatedAt: new Date(-1001),
-      };
-    },
-    putIntegrationToken() {},
-    getIntegrationToken() {
-      return null;
-    },
-    listIntegrationTokens() {
-      return [];
-    },
-    deleteIntegrationToken() {},
-    putApiToken() {},
-    getApiTokenByHash() {
-      return null;
-    },
-    listApiTokens() {
-      return [];
-    },
-    revokeApiToken() {},
-    revokeAllApiTokens() {
-      return 0;
-    },
-  });
-  const datastore = createDatastoreService(provider);
-
-  const user = await (datastore.findOrCreateUser as any)(
-    create((await import("../gen/v1/datastore_pb.ts")).FindOrCreateUserRequestSchema, {
-      email: "pre-epoch@example.com",
-    }),
-  );
-
-  expect(user.createdAt?.seconds).toBe(-1n);
-  expect(user.createdAt?.nanos).toBe(999000000);
-  expect(user.updatedAt?.seconds).toBe(-2n);
-  expect(user.updatedAt?.nanos).toBe(999000000);
-});

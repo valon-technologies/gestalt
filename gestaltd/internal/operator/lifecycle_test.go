@@ -59,68 +59,26 @@ func decodeNodeMap(t *testing.T, node any) map[string]any {
 	return out
 }
 
-func writeRequiredComponentManifests(t *testing.T, dir string) (string, string) {
-	t.Helper()
-
-	writeManifest := func(relPath, source, kind string) string {
-		t.Helper()
-
-		manifestPath := filepath.Join(dir, relPath)
-		if err := os.MkdirAll(filepath.Dir(manifestPath), 0o755); err != nil {
-			t.Fatalf("MkdirAll(%s): %v", manifestPath, err)
-		}
-		manifest := &pluginmanifestv1.Manifest{
-			Source:  source,
-			Version: "0.0.1-alpha.1",
-		}
-		switch kind {
-		case pluginmanifestv1.KindAuth:
-			manifest.Auth = &pluginmanifestv1.AuthMetadata{}
-		case pluginmanifestv1.KindDatastore:
-			manifest.Datastore = &pluginmanifestv1.DatastoreMetadata{}
-		default:
-			t.Fatalf("unsupported component kind %q", kind)
-		}
-		data, err := pluginpkg.EncodeSourceManifestFormat(manifest, pluginpkg.ManifestFormatYAML)
-		if err != nil {
-			t.Fatalf("EncodeSourceManifestFormat(%s): %v", relPath, err)
-		}
-		if err := os.WriteFile(manifestPath, data, 0o644); err != nil {
-			t.Fatalf("WriteFile(%s): %v", manifestPath, err)
-		}
-		return manifestPath
-	}
-
-	datastorePath := writeManifest("datastore/sqlite/manifest.yaml", "github.com/testowner/providers/datastore/sqlite", pluginmanifestv1.KindDatastore)
-	return "", datastorePath
-}
-
-func requiredComponentConfigYAML(t *testing.T, dir, dbPath string) string {
-	t.Helper()
-	_, datastorePath := writeRequiredComponentManifests(t, dir)
-	return fmt.Sprintf(`datastore:
-  provider:
-    source:
-      path: %q
-  config:
-    path: %q
+func requiredComponentConfigYAML(_ *testing.T, _, dbPath string) string {
+	return fmt.Sprintf(`datastores:
+  sqlite:
+    driver: sqlite3
+    dsn: %q
+datastore: sqlite
 ui:
   provider: none
-`, datastorePath, dbPath)
+`, dbPath)
 }
 
-func requiredDatastoreConfigYAML(t *testing.T, dir, dbPath string) string {
-	t.Helper()
-	_, datastorePath := writeRequiredComponentManifests(t, dir)
-	return fmt.Sprintf(`datastore:
-  provider:
-    source:
-      path: %q
-  config:
-    path: %q
+func requiredDatastoreConfigYAML(_ *testing.T, _, dbPath string) string {
+	return fmt.Sprintf(`datastores:
+  sqlite:
+    driver: sqlite3
+    dsn: %q
+datastore: sqlite
 ui:
   provider: none
-`, datastorePath, dbPath)
+`, dbPath)
 }
 
 func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *testing.T) {
@@ -311,51 +269,24 @@ func TestLoadForExecutionAtPath_ResolvesLocalTopLevelPluginsWithoutLockfile(t *t
 		t.Fatalf("WriteFile auth artifact: %v", err)
 	}
 
-	datastoreArtifact := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "datastore-plugin"))
-	datastoreManifestPath := filepath.Join(dir, "datastore-manifest.yaml")
-	datastoreManifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
-		Source:    "github.com/testowner/plugins/local-datastore",
-		Version:   "0.0.1-alpha.1",
-		Datastore: &pluginmanifestv1.DatastoreMetadata{},
-		Artifacts: []pluginmanifestv1.Artifact{
-			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: datastoreArtifact},
-		},
-		Entrypoints: pluginmanifestv1.Entrypoints{
-			Datastore: &pluginmanifestv1.Entrypoint{ArtifactPath: datastoreArtifact, Args: []string{"serve-datastore"}},
-		},
-	}, pluginpkg.ManifestFormatYAML)
-	if err != nil {
-		t.Fatalf("EncodeSourceManifestFormat datastore: %v", err)
-	}
-	if err := os.WriteFile(datastoreManifestPath, datastoreManifest, 0o644); err != nil {
-		t.Fatalf("WriteFile datastore manifest: %v", err)
-	}
-	datastoreExecutablePath := filepath.Join(dir, filepath.FromSlash(datastoreArtifact))
-	if err := os.MkdirAll(filepath.Dir(datastoreExecutablePath), 0o755); err != nil {
-		t.Fatalf("MkdirAll datastore artifact: %v", err)
-	}
-	if err := os.WriteFile(datastoreExecutablePath, []byte("datastore-binary"), 0o755); err != nil {
-		t.Fatalf("WriteFile datastore artifact: %v", err)
-	}
-
+	dbPath := filepath.Join(dir, "gestalt.db")
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `auth:
+	cfg := fmt.Sprintf(`auth:
   provider:
     source:
       path: ./auth-manifest.yaml
   config:
     client_id: local-auth-client
-datastore:
-  provider:
-    source:
-      path: ./datastore-manifest.yaml
-  config:
-    bucket: local-datastore
+datastores:
+  sqlite:
+    driver: sqlite3
+    dsn: %s
+datastore: sqlite
 ui:
   provider: none
 server:
   encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`
+`, dbPath)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
 	}
@@ -382,24 +313,6 @@ server:
 	authPluginCfg, ok := authCfg["config"].(map[string]any)
 	if !ok || authPluginCfg["client_id"] != "local-auth-client" {
 		t.Fatalf("auth nested config = %#v", authCfg["config"])
-	}
-
-	if loaded.Datastore.Provider == nil || loaded.Datastore.Provider.ResolvedManifest == nil {
-		t.Fatalf("datastore resolved manifest = %+v", loaded.Datastore.Provider)
-	}
-	if loaded.Datastore.Provider.Command != datastoreExecutablePath {
-		t.Fatalf("datastore command = %q, want %q", loaded.Datastore.Provider.Command, datastoreExecutablePath)
-	}
-	if got := loaded.Datastore.Provider.Args; len(got) != 1 || got[0] != "serve-datastore" {
-		t.Fatalf("datastore args = %v, want [serve-datastore]", got)
-	}
-	datastoreCfg := decodeNodeMap(t, loaded.Datastore.Config)
-	if datastoreCfg["command"] != datastoreExecutablePath {
-		t.Fatalf("datastore config command = %v, want %q", datastoreCfg["command"], datastoreExecutablePath)
-	}
-	datastorePluginCfg, ok := datastoreCfg["config"].(map[string]any)
-	if !ok || datastorePluginCfg["bucket"] != "local-datastore" {
-		t.Fatalf("datastore nested config = %#v", datastoreCfg["config"])
 	}
 
 	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); !os.IsNotExist(err) {
@@ -439,34 +352,22 @@ func TestLoadForExecutionAtPath_ResolvesLocalSourceTopLevelPluginsWithoutArtifac
 		t.Fatalf("WriteFile auth manifest: %v", err)
 	}
 
-	datastoreManifestPath := filepath.Join(dir, "datastore-manifest.yaml")
-	writeTestSourceFile("datastore.go", []byte(testutil.GeneratedDatastorePackageSource()), 0o644)
-	datastoreManifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
-		Source:    "github.com/testowner/plugins/local-source-datastore",
-		Version:   "0.0.1-alpha.1",
-		Datastore: &pluginmanifestv1.DatastoreMetadata{},
-	}, pluginpkg.ManifestFormatYAML)
-	if err != nil {
-		t.Fatalf("EncodeSourceManifestFormat datastore: %v", err)
-	}
-	if err := os.WriteFile(datastoreManifestPath, datastoreManifest, 0o644); err != nil {
-		t.Fatalf("WriteFile datastore manifest: %v", err)
-	}
-
+	dbPath := filepath.Join(dir, "gestalt.db")
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `auth:
+	cfg := fmt.Sprintf(`auth:
   provider:
     source:
-      path: ./auth-manifest.yaml
-datastore:
-  provider:
-    source:
-      path: ./datastore-manifest.yaml
+      path: ./auth-provider.yaml
+datastores:
+  sqlite:
+    driver: sqlite3
+    dsn: %s
+datastore: sqlite
 ui:
   provider: none
 server:
   encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`
+`, dbPath)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
 	}
@@ -491,19 +392,6 @@ server:
 		t.Fatalf("auth config command = %v, want empty", authCfg["command"])
 	}
 
-	if loaded.Datastore.Provider == nil || loaded.Datastore.Provider.ResolvedManifest == nil {
-		t.Fatalf("datastore resolved manifest = %+v", loaded.Datastore.Provider)
-	}
-	if loaded.Datastore.Provider.Command != "" {
-		t.Fatalf("datastore command = %q, want empty", loaded.Datastore.Provider.Command)
-	}
-	datastoreCfg := decodeNodeMap(t, loaded.Datastore.Config)
-	if datastoreCfg["manifest_path"] != datastoreManifestPath {
-		t.Fatalf("datastore manifest_path = %v, want %q", datastoreCfg["manifest_path"], datastoreManifestPath)
-	}
-	if datastoreCfg["command"] != "" {
-		t.Fatalf("datastore config command = %v, want empty", datastoreCfg["command"])
-	}
 }
 
 func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalSourceHybridPlugin(t *testing.T) {
