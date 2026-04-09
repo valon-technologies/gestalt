@@ -6,6 +6,7 @@ use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 use crate::api::RuntimeMetadata;
 use crate::auth::AuthProvider;
 use crate::datastore::DatastoreProvider;
+use crate::secrets::SecretsProvider;
 use crate::error::Result;
 use crate::generated::v1::provider_lifecycle_server::ProviderLifecycle;
 use crate::generated::v1::{
@@ -38,6 +39,10 @@ struct AuthRuntime<P> {
 }
 
 struct DatastoreRuntime<P> {
+    provider: Arc<P>,
+}
+
+struct SecretsRuntime<P> {
     provider: Arc<P>,
 }
 
@@ -74,6 +79,7 @@ macro_rules! impl_runtime_hooks {
 impl_runtime_hooks!(ProviderRuntime, Provider);
 impl_runtime_hooks!(AuthRuntime, AuthProvider);
 impl_runtime_hooks!(DatastoreRuntime, DatastoreProvider);
+impl_runtime_hooks!(SecretsRuntime, SecretsProvider);
 
 #[derive(Clone)]
 pub struct RuntimeServer {
@@ -109,6 +115,16 @@ impl RuntimeServer {
         Self {
             kind: PluginKind::Datastore,
             provider: Arc::new(DatastoreRuntime { provider }),
+        }
+    }
+
+    pub fn for_secrets<P>(provider: Arc<P>) -> Self
+    where
+        P: SecretsProvider,
+    {
+        Self {
+            kind: PluginKind::Secrets,
+            provider: Arc::new(SecretsRuntime { provider }),
         }
     }
 }

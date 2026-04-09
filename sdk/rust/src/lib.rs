@@ -6,6 +6,8 @@ mod auth_server;
 mod catalog;
 mod datastore;
 mod datastore_server;
+mod secrets;
+mod secrets_server;
 mod env;
 mod error;
 mod provider_server;
@@ -34,6 +36,7 @@ pub use catalog::{Catalog, CatalogOperation};
 pub use datastore::{
     DatastoreProvider, OAuthRegistration, StoredApiToken, StoredIntegrationToken, StoredUser,
 };
+pub use secrets::SecretsProvider;
 pub use env::{CURRENT_PROTOCOL_VERSION, ENV_PLUGIN_SOCKET};
 pub use error::{Error, Result};
 #[doc(hidden)]
@@ -98,6 +101,16 @@ macro_rules! export_datastore_provider {
         pub fn __gestalt_serve_datastore(_name: &str) -> $crate::Result<()> {
             let provider = std::sync::Arc::new($constructor());
             $crate::runtime::run_datastore_provider(provider)
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! export_secrets_provider {
+    (constructor = $constructor:path $(,)?) => {
+        pub fn __gestalt_serve_secrets(_name: &str) -> $crate::Result<()> {
+            let provider = std::sync::Arc::new($constructor());
+            $crate::runtime::run_secrets_provider(provider)
         }
     };
 }
