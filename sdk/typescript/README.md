@@ -49,6 +49,7 @@ import {
   defineIntegrationProvider,
   ok,
   operation,
+  response,
   s,
 } from "@valon-technologies/gestalt";
 
@@ -90,6 +91,10 @@ export const provider = defineIntegrationProvider({
   ],
 });
 ```
+
+Use `ok(body)` for normal responses and `response(status, body)` when a handler
+needs to set a non-200 status. Plain objects with `status` and `body` fields
+are treated as user data.
 
 Auth providers and datastore providers use dedicated helpers:
 

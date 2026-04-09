@@ -1,5 +1,5 @@
 import { type Catalog, type CatalogOperation, type CatalogSchema, catalogToJson, schemaToCatalogSchema, schemaToParameters, writeCatalogYaml } from "./catalog.ts";
-import { errorMessage, type MaybePromise, type OperationResult, type Request, type Response } from "./api.ts";
+import { errorMessage, type MaybePromise, type OperationResult, type Request, responseBrand, type Response } from "./api.ts";
 import { RuntimeProvider, type RuntimeProviderOptions } from "./provider.ts";
 import type { Schema } from "./schema.ts";
 
@@ -248,7 +248,7 @@ function isResponse(value: unknown): value is Response<unknown> {
   if (typeof value !== "object" || value === null) {
     return false;
   }
-  if (!("body" in value) || !("status" in value)) {
+  if (!(responseBrand in value)) {
     return false;
   }
   const status = (value as { status?: unknown }).status;
