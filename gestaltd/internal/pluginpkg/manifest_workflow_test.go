@@ -213,7 +213,7 @@ func TestManifestWorkflow_RejectsInvalidPackageInputs(t *testing.T) {
 					Version: "1.0.0",
 				}))
 			},
-			wantError: "manifest must define exactly one of plugin, auth, datastore, or webui",
+			wantError: "manifest must define exactly one of plugin, auth, datastore, secrets, or webui",
 		},
 		{
 			name: "multiple metadata blocks",
@@ -222,7 +222,7 @@ func TestManifestWorkflow_RejectsInvalidPackageInputs(t *testing.T) {
 				manifest.Auth = &pluginmanifestv1.AuthMetadata{}
 				return mustWriteManifestData(t, dir, ManifestFile, mustRawManifestJSON(t, manifest))
 			},
-			wantError: "manifest must define exactly one of plugin, auth, datastore, or webui",
+			wantError: "manifest must define exactly one of plugin, auth, datastore, secrets, or webui",
 		},
 		{
 			name: "entrypoint references unknown artifact",
