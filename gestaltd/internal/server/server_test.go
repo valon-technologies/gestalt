@@ -1378,6 +1378,95 @@ func TestDisconnectIntegration_NotConnected(t *testing.T) {
 	}
 }
 
+func TestDisconnectIntegration_AcceptsUnderscoredParameters(t *testing.T) {
+	t.Parallel()
+
+	var deletedTokenID string
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "slack", DN: "Slack"})
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, _ string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: "dev@example.com"}, nil
+			},
+			ListTokensForIntegrationFn: func(_ context.Context, userID, integration string) ([]*core.IntegrationToken, error) {
+				if userID != "u1" {
+					return nil, fmt.Errorf("unexpected user ID %q", userID)
+				}
+				if integration != "slack" {
+					return nil, fmt.Errorf("unexpected integration %q", integration)
+				}
+				return []*core.IntegrationToken{
+					{ID: "tok-a", UserID: "u1", Integration: "slack", Connection: "workspace", Instance: "team-a"},
+					{ID: "tok-b", UserID: "u1", Integration: "slack", Connection: "workspace", Instance: "team-b"},
+				}, nil
+			},
+			DeleteTokenFn: func(_ context.Context, id string) error {
+				deletedTokenID = id
+				return nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/integrations/slack?_connection=workspace&_instance=team-b", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+	if deletedTokenID != "tok-b" {
+		t.Fatalf("deleted token = %q, want %q", deletedTokenID, "tok-b")
+	}
+}
+
+func TestDisconnectIntegration_AmbiguousErrorMentionsCanonicalParameter(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "slack", DN: "Slack"})
+		cfg.Datastore = &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, _ string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: "dev@example.com"}, nil
+			},
+			ListTokensForIntegrationFn: func(_ context.Context, _, integration string) ([]*core.IntegrationToken, error) {
+				if integration != "slack" {
+					return nil, fmt.Errorf("unexpected integration %q", integration)
+				}
+				return []*core.IntegrationToken{
+					{ID: "tok-a", UserID: "u1", Integration: "slack", Connection: "workspace", Instance: "team-a"},
+					{ID: "tok-b", UserID: "u1", Integration: "slack", Connection: "workspace", Instance: "team-b"},
+				}, nil
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/integrations/slack?_connection=workspace", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusConflict {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 409, got %d: %s", resp.StatusCode, body)
+	}
+	var result map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if !strings.Contains(result["error"], "?_instance=NAME") {
+		t.Fatalf("expected canonical parameter hint, got %q", result["error"])
+	}
+}
+
 func TestListOperations(t *testing.T) {
 	t.Parallel()
 
@@ -1714,6 +1803,13 @@ func TestListOperations_TokenSelectionErrors(t *testing.T) {
 			body, _ := io.ReadAll(resp.Body)
 			t.Fatalf("expected 409, got %d: %s", resp.StatusCode, body)
 		}
+		var result map[string]string
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			t.Fatalf("decoding error response: %v", err)
+		}
+		if !strings.Contains(result["error"], `"_instance"`) {
+			t.Fatalf("expected error to mention _instance, got %q", result["error"])
+		}
 	})
 }
 
@@ -1774,8 +1870,10 @@ func TestExecuteOperation_UsesInjectedInvoker(t *testing.T) {
 
 	var called bool
 	var gotProvider string
+	var gotInstance string
 	var gotOperation string
 	var gotParams map[string]any
+	var gotConnection string
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, &stubIntegrationWithOps{
@@ -1785,11 +1883,13 @@ func TestExecuteOperation_UsesInjectedInvoker(t *testing.T) {
 			},
 		})
 		cfg.Invoker = &testutil.StubInvoker{
-			InvokeFn: func(_ context.Context, p *principal.Principal, providerName, _, operation string, params map[string]any) (*core.OperationResult, error) {
+			InvokeFn: func(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error) {
 				called = true
 				gotProvider = providerName
+				gotInstance = instance
 				gotOperation = operation
 				gotParams = params
+				gotConnection = invocation.ConnectionFromContext(ctx)
 				if p == nil || p.Identity == nil || p.Identity.Email == "" {
 					t.Fatal("expected authenticated principal")
 				}
@@ -1799,7 +1899,7 @@ func TestExecuteOperation_UsesInjectedInvoker(t *testing.T) {
 	})
 	defer ts.Close()
 
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/custom-provider/custom-operation", bytes.NewBufferString(`{"foo":"bar"}`))
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/custom-provider/custom-operation?_connection=workspace&_instance=tenant-a", bytes.NewBufferString(`{"foo":"bar"}`))
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -1815,11 +1915,23 @@ func TestExecuteOperation_UsesInjectedInvoker(t *testing.T) {
 	if gotProvider != "custom-provider" {
 		t.Fatalf("expected provider custom-provider, got %q", gotProvider)
 	}
+	if gotInstance != "tenant-a" {
+		t.Fatalf("expected instance tenant-a, got %q", gotInstance)
+	}
 	if gotOperation != "custom-operation" {
 		t.Fatalf("expected operation custom-operation, got %q", gotOperation)
 	}
+	if gotConnection != "workspace" {
+		t.Fatalf("expected connection workspace, got %q", gotConnection)
+	}
 	if gotParams["foo"] != "bar" {
 		t.Fatalf("expected params to include foo=bar, got %v", gotParams)
+	}
+	if _, ok := gotParams["_instance"]; ok {
+		t.Fatalf("expected _instance to be stripped from params, got %v", gotParams)
+	}
+	if _, ok := gotParams["_connection"]; ok {
+		t.Fatalf("expected _connection to be stripped from params, got %v", gotParams)
 	}
 }
 
