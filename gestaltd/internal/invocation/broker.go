@@ -291,7 +291,12 @@ func toolResultToOperationResult(result *mcpgo.CallToolResult) (*core.OperationR
 	}
 
 	if result.IsError {
-		return nil, fmt.Errorf("%w: %s", &apiexec.UpstreamOperationError{Message: "operation failed"}, ToolErrorMessage(result))
+		return &core.OperationResult{
+			Status:    http.StatusBadGateway,
+			Headers:   headers,
+			Body:      ToolErrorMessage(result),
+			MCPResult: result,
+		}, nil
 	}
 
 	if result.StructuredContent != nil {

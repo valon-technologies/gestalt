@@ -833,7 +833,6 @@ func TestNewServer_RESTCatalogToolsUseOperationConnections(t *testing.T) {
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
 		Providers:     providers,
-		APIConnection: map[string]string{"hybrid": testAPIConnectionName},
 	})
 
 	callTool := func(name string) string {

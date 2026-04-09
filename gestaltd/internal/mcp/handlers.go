@@ -36,12 +36,12 @@ func makeHandler(invoker invocation.Invoker, provName, opName, connection string
 			return mcpgo.NewToolResultText("{}"), nil
 		}
 
-		if result.Status >= http.StatusBadRequest {
-			return mcpgo.NewToolResultError(result.Body), nil
-		}
-
 		if orig, ok := result.MCPResult.(*mcpgo.CallToolResult); ok {
 			return orig, nil
+		}
+
+		if result.Status >= http.StatusBadRequest {
+			return mcpgo.NewToolResultError(result.Body), nil
 		}
 		return mcpgo.NewToolResultText(result.Body), nil
 	}
