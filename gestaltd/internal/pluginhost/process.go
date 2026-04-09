@@ -400,11 +400,16 @@ func waitForPluginConn(ctx context.Context, socket string, waitCh <-chan error) 
 
 func dialUnixSocket(ctx context.Context, socket string) (*grpc.ClientConn, error) {
 	conn, err := grpc.NewClient(
-		"passthrough:///"+socket,
+		"passthrough:///localhost",
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
+		// grpc-go uses the dial target as the HTTP/2 authority by default. Passing
+		// the raw Unix socket path here works for Go plugins, but tonic rejects that
+		// authority and resets the stream with PROTOCOL_ERROR before any RPC handler
+		// runs. Dial the Unix socket explicitly and present a stable authority value.
+		grpc.WithAuthority("localhost"),
+		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 			var d net.Dialer
-			return d.DialContext(ctx, "unix", addr)
+			return d.DialContext(ctx, "unix", socket)
 		}),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
 	)
