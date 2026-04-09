@@ -13,7 +13,7 @@ export default function LoginPage() {
   const [authLabel, setAuthLabel] = useState("Sign in");
 
   useEffect(() => {
-    if (isAuthenticated()) {
+    if (typeof window !== "undefined" && isAuthenticated()) {
       window.location.replace("/");
       return;
     }

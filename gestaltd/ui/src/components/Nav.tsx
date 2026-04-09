@@ -18,9 +18,13 @@ const links = [
 
 export default function Nav() {
   const pathname = usePathname();
-  const email = getUserEmail();
-  const [loginSupported, setLoginSupported] = useState(() => email !== null);
+  const [email, setEmail] = useState<string | null>(null);
+  const [loginSupported, setLoginSupported] = useState(false);
   const { theme, setTheme } = useTheme();
+
+  useEffect(() => {
+    setEmail(getUserEmail());
+  }, []);
   const ThemeIcon = theme === "light" ? SunIcon : theme === "dark" ? MoonIcon : SunMoonIcon;
 
   useEffect(() => {
