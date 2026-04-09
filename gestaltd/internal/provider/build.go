@@ -238,9 +238,7 @@ func ApplyConnectionAuth(def *Definition, conn config.ConnectionDef) {
 	}
 	if len(o.Credentials) > 0 {
 		def.CredentialFields = make([]CredentialFieldDef, len(o.Credentials))
-		for i, cf := range o.Credentials {
-			def.CredentialFields[i] = CredentialFieldDef(cf)
-		}
+		copy(def.CredentialFields, o.Credentials)
 	}
 	if o.AuthMapping != nil {
 		def.AuthMapping = config.CloneAuthMapping(o.AuthMapping)

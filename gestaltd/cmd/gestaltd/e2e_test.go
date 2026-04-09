@@ -498,9 +498,8 @@ plugins:
 	})
 }
 
+//nolint:paralleltest // Spawns gestaltd and is flaky under package-wide parallel load in CI.
 func TestE2EManifestManualAuthMappingValueFromBasicAuth(t *testing.T) {
-	t.Parallel()
-
 	dir := t.TempDir()
 	port := allocateTestPort(t)
 
@@ -658,9 +657,8 @@ plugins:
 	})
 }
 
+//nolint:paralleltest // Spawns gestaltd and is flaky under package-wide parallel load in CI.
 func TestE2EDeclarativeManifestManualAuthMappingValueFromBasicAuth(t *testing.T) {
-	t.Parallel()
-
 	dir := t.TempDir()
 	port := allocateTestPort(t)
 
