@@ -107,6 +107,7 @@ func operationErrorBody(message string) string {
 }
 
 var (
+	ErrSecretNotFound                     = errors.New("secret not found")
 	ErrExternalTokenValidationUnsupported = errors.New("auth provider does not support external token validation")
 	ErrOAuthRegistrationStoreUnsupported  = errors.New("datastore provider does not support oauth registrations")
 )
@@ -116,6 +117,8 @@ func providerRPCError(operation string, err error) error {
 		return nil
 	}
 	switch {
+	case errors.Is(err, ErrSecretNotFound):
+		return status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, ErrExternalTokenValidationUnsupported),
 		errors.Is(err, ErrOAuthRegistrationStoreUnsupported):
 		return status.Error(codes.Unimplemented, err.Error())
