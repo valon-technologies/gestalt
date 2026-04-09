@@ -1,9 +1,10 @@
 import dataclasses
 import datetime as dt
 from enum import Enum
-from typing import Any, Callable
+from typing import Any, Callable, Final
 
 UTC = dt.timezone.utc
+UNIX_EPOCH: Final[dt.datetime] = dt.datetime.fromtimestamp(0, tz=UTC)
 
 
 class ProviderKind(str, Enum):
@@ -125,12 +126,8 @@ class StoredUser:
     id: str = ""
     email: str = ""
     display_name: str = ""
-    created_at: dt.datetime = dataclasses.field(
-        default_factory=lambda: dt.datetime.fromtimestamp(0, tz=UTC)
-    )
-    updated_at: dt.datetime = dataclasses.field(
-        default_factory=lambda: dt.datetime.fromtimestamp(0, tz=UTC)
-    )
+    created_at: dt.datetime = UNIX_EPOCH
+    updated_at: dt.datetime = UNIX_EPOCH
 
 
 @dataclasses.dataclass(slots=True)
@@ -147,12 +144,8 @@ class StoredIntegrationToken:
     last_refreshed_at: dt.datetime | None = None
     refresh_error_count: int = 0
     connection_params: dict[str, str] = dataclasses.field(default_factory=dict)
-    created_at: dt.datetime = dataclasses.field(
-        default_factory=lambda: dt.datetime.fromtimestamp(0, tz=UTC)
-    )
-    updated_at: dt.datetime = dataclasses.field(
-        default_factory=lambda: dt.datetime.fromtimestamp(0, tz=UTC)
-    )
+    created_at: dt.datetime = UNIX_EPOCH
+    updated_at: dt.datetime = UNIX_EPOCH
 
 
 @dataclasses.dataclass(slots=True)
@@ -163,12 +156,8 @@ class StoredAPIToken:
     hashed_token: str = ""
     scopes: str = ""
     expires_at: dt.datetime | None = None
-    created_at: dt.datetime = dataclasses.field(
-        default_factory=lambda: dt.datetime.fromtimestamp(0, tz=UTC)
-    )
-    updated_at: dt.datetime = dataclasses.field(
-        default_factory=lambda: dt.datetime.fromtimestamp(0, tz=UTC)
-    )
+    created_at: dt.datetime = UNIX_EPOCH
+    updated_at: dt.datetime = UNIX_EPOCH
 
 
 @dataclasses.dataclass(slots=True)
@@ -181,9 +170,7 @@ class OAuthRegistration:
     authorization_endpoint: str = ""
     token_endpoint: str = ""
     scopes_supported: str = ""
-    discovered_at: dt.datetime = dataclasses.field(
-        default_factory=lambda: dt.datetime.fromtimestamp(0, tz=UTC)
-    )
+    discovered_at: dt.datetime = UNIX_EPOCH
 
 
 class DatastoreProvider(RuntimeProvider):

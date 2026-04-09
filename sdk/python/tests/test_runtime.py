@@ -31,18 +31,9 @@ from gestalt import (
     StoredIntegrationToken,
     StoredUser,
     WarningsProvider,
-    _bootstrap,
     _runtime,
 )
-from gestalt.gen.v1 import auth_pb2 as _auth_pb2
-from gestalt.gen.v1 import datastore_pb2 as _datastore_pb2
-from gestalt.gen.v1 import plugin_pb2 as _plugin_pb2
-from gestalt.gen.v1 import runtime_pb2 as _runtime_pb2
-
-auth_pb2: Any = _auth_pb2
-datastore_pb2: Any = _datastore_pb2
-plugin_pb2: Any = _plugin_pb2
-runtime_pb2: Any = _runtime_pb2
+from gestalt.gen.v1 import auth_pb2, datastore_pb2, plugin_pb2, runtime_pb2
 
 UTC = dt.timezone.utc
 
@@ -68,7 +59,7 @@ class ParseRuntimeArgsTests(unittest.TestCase):
     def test_bundled_config_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             bundle_dir = pathlib.Path(tmpdir)
-            (bundle_dir / _bootstrap.BUNDLED_CONFIG_NAME).write_text(
+            (bundle_dir / _runtime.BUNDLED_CONFIG_NAME).write_text(
                 json.dumps(
                     {
                         "target": "provider",

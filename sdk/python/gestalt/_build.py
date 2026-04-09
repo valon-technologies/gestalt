@@ -1,3 +1,4 @@
+import json
 import os
 import pathlib
 import subprocess
@@ -6,13 +7,48 @@ import tempfile
 from dataclasses import dataclass
 from typing import Final
 
-from ._bootstrap import (
-    BUNDLED_CONFIG_NAME,
-    parse_plugin_target,
-    write_bundled_plugin_config,
-)
-
+BUNDLED_CONFIG_NAME: Final[str] = "gestalt-runtime.json"
 USAGE: Final[str] = "usage: python -m gestalt._build ROOT MODULE[:ATTRIBUTE] OUTPUT PLUGIN_NAME RUNTIME_KIND GOOS GOARCH"
+
+
+@dataclass(frozen=True)
+class PluginTarget:
+    module_name: str
+    attribute_name: str | None = None
+
+
+def parse_plugin_target(target: str) -> PluginTarget:
+    module_name, sep, attribute_name = target.partition(":")
+    module_name = module_name.strip()
+    attribute_name = attribute_name.strip() or None
+    if not module_name:
+        raise RuntimeError("tool.gestalt.plugin must be in module or module:attribute form")
+    if sep and attribute_name is None:
+        raise RuntimeError("tool.gestalt.plugin attribute is required when ':' is present")
+
+    return PluginTarget(
+        module_name=module_name,
+        attribute_name=attribute_name,
+    )
+
+
+def write_bundled_plugin_config(
+    path: pathlib.Path,
+    *,
+    target: str,
+    plugin_name: str,
+    runtime_kind: str,
+) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "target": target,
+                "plugin_name": plugin_name,
+                "runtime_kind": runtime_kind,
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 @dataclass(frozen=True)
