@@ -587,7 +587,7 @@ func mustWriteTypeScriptSourceManifest(t *testing.T, root, pluginName string) st
 		t.Fatalf("EncodeSourceManifestFormat: %v", err)
 	}
 
-	path := filepath.Join(root, "plugin.yaml")
+	path := filepath.Join(root, "provider.yaml")
 	mustWriteFile(t, path, data, 0o644)
 	return path
 }
@@ -613,7 +613,7 @@ func mustWriteTypeScriptSourceComponentManifest(t *testing.T, root, pluginName, 
 		t.Fatalf("EncodeSourceManifestFormat: %v", err)
 	}
 
-	path := filepath.Join(root, "plugin.yaml")
+	path := filepath.Join(root, "provider.yaml")
 	mustWriteFile(t, path, data, 0o644)
 	return path
 }

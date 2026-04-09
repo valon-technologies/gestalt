@@ -240,11 +240,11 @@ To use your datastore provider in a Gestalt deployment, reference it in the `dat
 datastore:
   provider:
     source:
-      path: ./my-datastore/plugin.yaml
+      path: ./my-datastore/provider.yaml
   config:
     dsn: ${DATABASE_URL}
 ```
 
-`provider.source.path` points at the datastore provider's `plugin.yaml` during development. For production, use `provider.source.ref` and `version` to reference a published release. The `config` block is passed to `Configure` at startup and validated against the config schema if one was declared in the manifest.
+`provider.source.path` points at the datastore provider's `provider.yaml` during development. For production, use `provider.source.ref` and `version` to reference a published release. The `config` block is passed to `Configure` at startup and validated against the config schema if one was declared in the manifest.
 
 Gestalt calls `Migrate` once at startup before any other datastore methods. Use it to create tables, run migrations, or verify that the schema is up to date. `HealthCheck` is called periodically and should return quickly; a database ping is the typical implementation.

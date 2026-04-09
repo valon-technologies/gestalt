@@ -16,9 +16,12 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const ManifestFile = "plugin.json"
+const ManifestFile = "provider.json"
 
-var ManifestFiles = []string{"plugin.json", "plugin.yaml", "plugin.yml"}
+var ManifestFiles = []string{
+	"provider.json", "provider.yaml", "provider.yml",
+	"plugin.json", "plugin.yaml", "plugin.yml",
+}
 
 const (
 	ManifestFormatJSON = "json"

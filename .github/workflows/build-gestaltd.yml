@@ -286,7 +286,7 @@ jobs:
           }
           EOF
 
-          cat >"$provider_dir/plugin.yaml" <<'EOF'
+          cat >"$provider_dir/provider.yaml" <<'EOF'
           source: github.com/valon-technologies/gestalt-providers/datastore/sqlite
           version: 0.0.1-alpha.1
           display_name: SQLite
@@ -304,7 +304,7 @@ jobs:
           import os
           import pathlib
 
-          plugin_path = pathlib.Path(os.environ["PROVIDER_DIR"]) / "plugin.yaml"
+          plugin_path = pathlib.Path(os.environ["PROVIDER_DIR"]) / "provider.yaml"
           text = plugin_path.read_text()
           text = text.replace("__GOOS__", os.environ["GOOS"])
           text = text.replace("__GOARCH__", os.environ["GOARCH"])
@@ -336,7 +336,7 @@ jobs:
           rm -rf "$provider_dir/out"
           cp -r "$GITHUB_WORKSPACE/gestaltd/ui/out" "$provider_dir/out"
 
-          cat >"$provider_dir/plugin.yaml" <<'EOF'
+          cat >"$provider_dir/provider.yaml" <<'EOF'
           source: github.com/valon-technologies/gestalt-providers/web/default
           version: 0.0.1-alpha.1
           display_name: Default Web UI

@@ -91,7 +91,7 @@ func writeRequiredComponentManifests(t *testing.T, dir string) (string, string) 
 		return manifestPath
 	}
 
-	datastorePath := writeManifest("datastore/sqlite/plugin.yaml", "github.com/testowner/providers/datastore/sqlite", pluginmanifestv1.KindDatastore)
+	datastorePath := writeManifest("datastore/sqlite/provider.yaml", "github.com/testowner/providers/datastore/sqlite", pluginmanifestv1.KindDatastore)
 	return "", datastorePath
 }
 
@@ -127,7 +127,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *te
 	t.Parallel()
 
 	dir := t.TempDir()
-	manifestPath := filepath.Join(dir, "plugin.yaml")
+	manifestPath := filepath.Join(dir, "provider.yaml")
 	manifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
 		Source:      "github.com/testowner/plugins/local-provider",
 		Version:     "0.0.1-alpha.1",
@@ -154,7 +154,7 @@ plugins:
   example:
     provider:
       source:
-        path: ./plugin.yaml
+        path: ./provider.yaml
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
@@ -188,7 +188,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalMCPOAuthManifestPluginWithoutLockfi
 	t.Parallel()
 
 	dir := t.TempDir()
-	manifestPath := filepath.Join(dir, "plugin.yaml")
+	manifestPath := filepath.Join(dir, "provider.yaml")
 	manifest := []byte(`
 source: github.com/testowner/plugins/notion
 version: 0.0.1-alpha.1
@@ -215,7 +215,7 @@ plugins:
   notion:
     provider:
       source:
-        path: ./plugin.yaml
+        path: ./provider.yaml
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
@@ -285,7 +285,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalTopLevelPluginsWithoutLockfile(t *t
 
 	dir := t.TempDir()
 	authArtifact := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "auth-plugin"))
-	authManifestPath := filepath.Join(dir, "auth-plugin.yaml")
+	authManifestPath := filepath.Join(dir, "auth-provider.yaml")
 	authManifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
 		Source:  "github.com/testowner/plugins/local-auth",
 		Version: "0.0.1-alpha.1",
@@ -312,7 +312,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalTopLevelPluginsWithoutLockfile(t *t
 	}
 
 	datastoreArtifact := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "datastore-plugin"))
-	datastoreManifestPath := filepath.Join(dir, "datastore-plugin.yaml")
+	datastoreManifestPath := filepath.Join(dir, "datastore-provider.yaml")
 	datastoreManifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
 		Source:    "github.com/testowner/plugins/local-datastore",
 		Version:   "0.0.1-alpha.1",
@@ -342,13 +342,13 @@ func TestLoadForExecutionAtPath_ResolvesLocalTopLevelPluginsWithoutLockfile(t *t
 	cfg := `auth:
   provider:
     source:
-      path: ./auth-plugin.yaml
+      path: ./auth-provider.yaml
   config:
     client_id: local-auth-client
 datastore:
   provider:
     source:
-      path: ./datastore-plugin.yaml
+      path: ./datastore-provider.yaml
   config:
     bucket: local-datastore
 ui:
@@ -425,7 +425,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalSourceTopLevelPluginsWithoutArtifac
 	writeTestSourceFile("go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/local-components")), 0o644)
 	writeTestSourceFile("go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
 
-	authManifestPath := filepath.Join(dir, "auth-plugin.yaml")
+	authManifestPath := filepath.Join(dir, "auth-provider.yaml")
 	writeTestSourceFile("auth.go", []byte(testutil.GeneratedAuthPackageSource()), 0o644)
 	authManifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
 		Source:  "github.com/testowner/plugins/local-source-auth",
@@ -439,7 +439,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalSourceTopLevelPluginsWithoutArtifac
 		t.Fatalf("WriteFile auth manifest: %v", err)
 	}
 
-	datastoreManifestPath := filepath.Join(dir, "datastore-plugin.yaml")
+	datastoreManifestPath := filepath.Join(dir, "datastore-provider.yaml")
 	writeTestSourceFile("datastore.go", []byte(testutil.GeneratedDatastorePackageSource()), 0o644)
 	datastoreManifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
 		Source:    "github.com/testowner/plugins/local-source-datastore",
@@ -457,11 +457,11 @@ func TestLoadForExecutionAtPath_ResolvesLocalSourceTopLevelPluginsWithoutArtifac
 	cfg := `auth:
   provider:
     source:
-      path: ./auth-plugin.yaml
+      path: ./auth-provider.yaml
 datastore:
   provider:
     source:
-      path: ./datastore-plugin.yaml
+      path: ./datastore-provider.yaml
 ui:
   provider: none
 server:
@@ -535,7 +535,7 @@ func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalSourceHybridPlugin
 	if err != nil {
 		t.Fatalf("EncodeManifestFormat: %v", err)
 	}
-	writeTestFile("plugin.yaml", manifest, 0o644)
+	writeTestFile("provider.yaml", manifest, 0o644)
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `server:
@@ -544,7 +544,7 @@ plugins:
   example:
     provider:
       source:
-        path: ./plugin.yaml
+        path: ./provider.yaml
 `
 	writeTestFile("config.yaml", []byte(cfg), 0o644)
 
@@ -707,7 +707,7 @@ def session_catalog(request: gestalt.Request) -> gestalt.Catalog:
 	if err != nil {
 		t.Fatalf("EncodeManifestFormat: %v", err)
 	}
-	writeTestFile("plugin.yaml", manifest, 0o644)
+	writeTestFile("provider.yaml", manifest, 0o644)
 
 	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `server:
   encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -715,7 +715,7 @@ plugins:
   example:
     provider:
       source:
-        path: ./plugin.yaml
+        path: ./provider.yaml
 `
 	writeTestFile("config.yaml", []byte(cfg), 0o644)
 	writeTestFile("exercise.py", []byte(`import json
@@ -1021,7 +1021,7 @@ func TestApplyLockedPlugins_SkipsNilIntegrationPlugins(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	manifestPath := filepath.Join(dir, "plugin.yaml")
+	manifestPath := filepath.Join(dir, "provider.yaml")
 	manifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
 		Source:      "github.com/testowner/plugins/local-provider",
 		Version:     "0.0.1-alpha.1",
@@ -1047,7 +1047,7 @@ plugins:
   example:
     provider:
       source:
-        path: ./plugin.yaml
+        path: ./provider.yaml
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
@@ -1209,7 +1209,7 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 				Version:       "1.0.0",
 				ResolvedURL:   "https://example.com/example.tar.gz",
 				ArchiveSHA256: "abc123",
-				Manifest:      ".gestaltd/providers/example/plugin.json",
+				Manifest:      ".gestaltd/providers/example/provider.json",
 				Executable:    ".gestaltd/providers/example/artifacts/darwin/arm64/provider",
 			},
 		},
@@ -1219,7 +1219,7 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 			Version:       "2.0.0",
 			ResolvedURL:   "https://example.com/ui.tar.gz",
 			ArchiveSHA256: "def456",
-			Manifest:      ".gestaltd/ui/plugin.json",
+			Manifest:      ".gestaltd/ui/provider.json",
 			AssetRoot:     ".gestaltd/ui/assets",
 		},
 	}

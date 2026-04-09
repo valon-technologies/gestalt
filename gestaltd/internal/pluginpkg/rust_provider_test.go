@@ -259,7 +259,7 @@ func TestPrepareSourceManifest_GeneratesStaticCatalogForRustProvider(t *testing.
 	})
 	t.Setenv("PATH", fakeCargoDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
-	manifestPath := filepath.Join(root, "plugin.yaml")
+	manifestPath := filepath.Join(root, "provider.yaml")
 	_, manifest, err := PrepareSourceManifest(manifestPath)
 	if err != nil {
 		t.Fatalf("PrepareSourceManifest: %v", err)

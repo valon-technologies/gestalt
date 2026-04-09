@@ -182,7 +182,7 @@ paths:
         '200':
           description: ok
 `, apiSrv.URL)), 0o644)
-	writeTestFile(t, pagerDir, "plugin.yaml", []byte(`
+	writeTestFile(t, pagerDir, "provider.yaml", []byte(`
 source: github.com/test/plugins/pager
 version: 0.0.1-alpha.1
 display_name: Pager
@@ -223,7 +223,7 @@ paths:
         '200':
           description: ok
 `, apiSrv.URL)), 0o644)
-	writeTestFile(t, mapperDir, "plugin.yaml", []byte(`
+	writeTestFile(t, mapperDir, "provider.yaml", []byte(`
 source: github.com/test/plugins/mapper
 version: 0.0.1-alpha.1
 display_name: Mapper
@@ -366,7 +366,7 @@ paths:
         '200':
           description: ok
 `, upstream.URL)), 0o644)
-	writeTestFile(t, pluginDir, "plugin.yaml", []byte(`
+	writeTestFile(t, pluginDir, "provider.yaml", []byte(`
 source: github.com/test/plugins/manual-basic
 version: 0.0.1-alpha.1
 display_name: Manual Basic Test
@@ -544,7 +544,7 @@ paths:
         '200':
           description: ok
 `, upstream.URL)), 0o644)
-	writeTestFile(t, pluginDir, "plugin.yaml", []byte(`
+	writeTestFile(t, pluginDir, "provider.yaml", []byte(`
 source: github.com/test/plugins/manifest-basic
 version: 0.0.1-alpha.1
 display_name: Manifest Basic Test
@@ -697,7 +697,7 @@ func TestE2EDeclarativeManifestManualAuthMappingValueFromBasicAuth(t *testing.T)
 	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll plugin dir: %v", err)
 	}
-	writeTestFile(t, pluginDir, "plugin.yaml", []byte(fmt.Sprintf(`
+	writeTestFile(t, pluginDir, "provider.yaml", []byte(fmt.Sprintf(`
 source: github.com/test/plugins/declarative-basic
 version: 0.0.1-alpha.1
 display_name: Declarative Basic Test
@@ -1652,7 +1652,7 @@ func TestE2EValidateRejectsUnknownYAMLField(t *testing.T) {
 			name: "bogus field",
 			pluginYAML: `provider:
   source:
-    path: /tmp/plugin.yaml
+    path: /tmp/provider.yaml
 bogus: true`,
 			wantError: "bogus",
 		},
@@ -1660,7 +1660,7 @@ bogus: true`,
 			name: "removed plugin connection field",
 			pluginYAML: `provider:
   source:
-    path: /tmp/plugin.yaml
+    path: /tmp/provider.yaml
 connection: default`,
 			wantError: "connection",
 		},
@@ -1668,7 +1668,7 @@ connection: default`,
 			name: "removed provider params field",
 			pluginYAML: `provider:
   source:
-    path: /tmp/plugin.yaml
+    path: /tmp/provider.yaml
 params:
   tenant:
     required: true`,
@@ -1716,7 +1716,7 @@ plugins:
   example:
     provider:
       source:
-        path: /tmp/plugin.yaml
+        path: /tmp/provider.yaml
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
@@ -1905,7 +1905,7 @@ func writeManifestFile(t *testing.T, pluginDir string, manifest *pluginmanifestv
 	if err != nil {
 		t.Fatalf("EncodeSourceManifestFormat: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(pluginDir, "plugin.yaml"), data, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(pluginDir, "provider.yaml"), data, 0o644); err != nil {
 		t.Fatalf("write manifest: %v", err)
 	}
 }
