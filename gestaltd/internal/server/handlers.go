@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/apiexec"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -395,10 +396,11 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 		s.writeInvocationError(w, r, name, "", err)
 		return
 	}
-	sort.Slice(cat.Operations, func(i, j int) bool {
-		return cat.Operations[i].ID < cat.Operations[j].ID
+	ops := httpVisibleCatalogOperations(cat.Operations)
+	sort.Slice(ops, func(i, j int) bool {
+		return ops[i].ID < ops[j].ID
 	})
-	writeJSON(w, http.StatusOK, cat.Operations)
+	writeJSON(w, http.StatusOK, ops)
 }
 
 func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
@@ -406,6 +408,10 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	operationName := chi.URLParam(r, "operation")
 
 	p := PrincipalFromContext(r.Context())
+	prov, ok := s.getProvider(w, providerName)
+	if !ok {
+		return
+	}
 
 	params := make(map[string]any)
 	if r.Method == http.MethodPost {
@@ -434,7 +440,18 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "connection name contains invalid characters")
 			return
 		}
-		ctx = invocation.WithConnection(ctx, config.ResolveConnectionAlias(connection))
+		connection = config.ResolveConnectionAlias(connection)
+		ctx = invocation.WithConnection(ctx, connection)
+	}
+
+	transport, ok, err := s.resolveHTTPOperationTransport(ctx, p, prov, providerName, operationName, connection, instance)
+	if err != nil {
+		s.writeInvocationError(w, r, providerName, operationName, err)
+		return
+	}
+	if ok && transport == catalog.TransportMCPPassthrough {
+		s.writeInvocationError(w, r, providerName, operationName, core.ErrMCPOnly)
+		return
 	}
 
 	result, err := s.invoker.Invoke(ctx, p, providerName, instance, operationName, params)
@@ -503,6 +520,48 @@ func (s *Server) catalogLookupConnection(providerName, explicit string) string {
 		return conn
 	}
 	return s.defaultConnection[providerName]
+}
+
+func httpVisibleCatalogOperations(ops []catalog.CatalogOperation) []catalog.CatalogOperation {
+	filtered := make([]catalog.CatalogOperation, 0, len(ops))
+	for i := range ops {
+		op := ops[i]
+		if catalogOperationTransport(op) == catalog.TransportMCPPassthrough {
+			continue
+		}
+		filtered = append(filtered, op)
+	}
+	return filtered
+}
+
+func catalogOperationTransport(op catalog.CatalogOperation) string {
+	transport := strings.TrimSpace(op.Transport)
+	if transport == "" && strings.TrimSpace(op.Method) != "" {
+		return catalog.TransportREST
+	}
+	return transport
+}
+
+func (s *Server) resolveHTTPOperationTransport(ctx context.Context, p *principal.Principal, prov core.Provider, providerName, operationName, connection, instance string) (string, bool, error) {
+	if transport, ok := invocation.CatalogOperationTransport(prov.Catalog(), operationName); ok {
+		return transport, true, nil
+	}
+
+	if _, ok := prov.(core.SessionCatalogProvider); !ok {
+		return "", false, nil
+	}
+
+	var resolver invocation.TokenResolver
+	if tr, ok := s.invoker.(invocation.TokenResolver); ok {
+		resolver = tr
+	}
+	cat, err := invocation.ResolveCatalog(ctx, prov, providerName, resolver, p, s.catalogLookupConnection(providerName, connection), instance)
+	if err != nil {
+		return "", false, err
+	}
+
+	transport, ok := invocation.CatalogOperationTransport(cat, operationName)
+	return transport, ok, nil
 }
 
 func safeOperationErrorMessage(err error) (string, bool) {

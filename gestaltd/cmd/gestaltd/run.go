@@ -114,12 +114,8 @@ func runServer(env *bootstrapEnv) error {
 	defer env.Close()
 
 	result := env.Result
-	broker, ok := result.Invoker.(*invocation.Broker)
-	if !ok {
-		return fmt.Errorf("unexpected invoker type %T", result.Invoker)
-	}
-	httpInvoker := invocation.NewAuditedInvoker(broker, "http", result.AuditSink)
-	mcpInvoker := invocation.NewAuditedInvoker(broker, "mcp", result.AuditSink)
+	httpInvoker := invocation.NewGuarded(result.Invoker, result.CapabilityLister, "http", result.AuditSink, invocation.WithoutRateLimit())
+	mcpInvoker := invocation.NewGuarded(result.Invoker, result.CapabilityLister, "mcp", result.AuditSink, invocation.WithoutRateLimit())
 	connMaps, err := bootstrap.BuildConnectionMaps(env.Config)
 	if err != nil {
 		return err

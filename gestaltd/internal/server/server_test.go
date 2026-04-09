@@ -29,7 +29,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	gestaltmcp "github.com/valon-technologies/gestalt/server/internal/mcp"
-	"github.com/valon-technologies/gestalt/server/internal/mcpupstream"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
@@ -1491,9 +1490,6 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 
 	var gotConnection string
 	var gotInstance string
-	var gotToken string
-	var gotArgs map[string]any
-	var gotTool string
 	stub := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeUser},
@@ -1510,27 +1506,21 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 				return &catalog.Catalog{
 					Name: "test-int",
 					Operations: []catalog.CatalogOperation{
-						{ID: "alpha_mcp", Description: "Session-only op", Method: http.MethodPost, Transport: catalog.TransportMCPPassthrough},
+						{ID: "alpha_mcp", Description: "Session-only MCP op", Method: http.MethodPost, Transport: catalog.TransportMCPPassthrough},
+						{ID: "alpha_rest", Description: "Session-only REST op", Method: http.MethodPost, Transport: catalog.TransportREST},
 					},
 				}, nil
 			case altCatalogToken:
 				return &catalog.Catalog{
 					Name: "test-int",
 					Operations: []catalog.CatalogOperation{
-						{ID: "beta_mcp_alt", Description: "Session-only alt op", Method: http.MethodPost, Transport: catalog.TransportMCPPassthrough},
+						{ID: "beta_mcp_alt", Description: "Session-only alt MCP op", Method: http.MethodPost, Transport: catalog.TransportMCPPassthrough},
+						{ID: "beta_rest_alt", Description: "Session-only alt REST op", Method: http.MethodPost, Transport: catalog.TransportREST},
 					},
 				}, nil
 			default:
 				return nil, fmt.Errorf("unexpected token %q", token)
 			}
-		},
-		callFn: func(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
-			gotTool = name
-			gotToken = mcpupstream.UpstreamTokenFromContext(ctx)
-			gotArgs = args
-			return &mcpgo.CallToolResult{
-				StructuredContent: map[string]any{"ok": true},
-			}, nil
 		},
 	}
 
@@ -1585,8 +1575,8 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 	if len(ops) != 2 {
 		t.Fatalf("expected 2 operations, got %d", len(ops))
 	}
-	if ops[0]["id"] != "alpha_mcp" {
-		t.Fatalf("expected first id 'alpha_mcp', got %v", ops[0]["id"])
+	if ops[0]["id"] != "alpha_rest" {
+		t.Fatalf("expected first id 'alpha_rest', got %v", ops[0]["id"])
 	}
 	if ops[1]["id"] != "zeta_rest" {
 		t.Fatalf("expected second id 'zeta_rest', got %v", ops[1]["id"])
@@ -1613,8 +1603,8 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 	if len(ops) != 2 {
 		t.Fatalf("expected 2 override operations, got %d", len(ops))
 	}
-	if ops[0]["id"] != "beta_mcp_alt" {
-		t.Fatalf("expected first id 'beta_mcp_alt', got %v", ops[0]["id"])
+	if ops[0]["id"] != "beta_rest_alt" {
+		t.Fatalf("expected first id 'beta_rest_alt', got %v", ops[0]["id"])
 	}
 	if ops[1]["id"] != "zeta_rest" {
 		t.Fatalf("expected second id 'zeta_rest', got %v", ops[1]["id"])
@@ -1624,88 +1614,6 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 	}
 	if gotInstance != altInstance {
 		t.Fatalf("override list instance = %q, want %q", gotInstance, altInstance)
-	}
-
-	body := bytes.NewBufferString(`{"query":"platform"}`)
-	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/api/v1/test-int/alpha_mcp", body)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("invoke request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("invoke: expected 200, got %d: %s", resp.StatusCode, respBody)
-	}
-	if gotTool != "alpha_mcp" {
-		t.Fatalf("expected tool alpha_mcp, got %q", gotTool)
-	}
-	if gotToken != testCatalogToken {
-		t.Fatalf("expected token %q, got %q", testCatalogToken, gotToken)
-	}
-	if gotArgs["query"] != "platform" {
-		t.Fatalf("expected args to include query=platform, got %v", gotArgs)
-	}
-
-	body = bytes.NewBufferString(fmt.Sprintf(`{"query":"expansion","_connection":%q,"_instance":%q}`, altCatalogConnection, altInstance))
-	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/api/v1/test-int/beta_mcp_alt", body)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("override invoke request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("override invoke: expected 200, got %d: %s", resp.StatusCode, respBody)
-	}
-	if gotConnection != altCatalogConnection {
-		t.Fatalf("override connection = %q, want %q", gotConnection, altCatalogConnection)
-	}
-	if gotInstance != altInstance {
-		t.Fatalf("override instance = %q, want %q", gotInstance, altInstance)
-	}
-	if gotTool != "beta_mcp_alt" {
-		t.Fatalf("expected tool beta_mcp_alt, got %q", gotTool)
-	}
-	if gotToken != altCatalogToken {
-		t.Fatalf("expected override token %q, got %q", altCatalogToken, gotToken)
-	}
-	if gotArgs["query"] != "expansion" {
-		t.Fatalf("expected args to include query=expansion, got %v", gotArgs)
-	}
-
-	stub.callFn = func(_ context.Context, _ string, _ map[string]any) (*mcpgo.CallToolResult, error) {
-		return &mcpgo.CallToolResult{
-			IsError:           true,
-			Content:           []mcpgo.Content{mcpgo.NewTextContent("query failed"), mcpgo.NewTextContent("try again")},
-			StructuredContent: map[string]any{"code": "bad_query"},
-		}, nil
-	}
-
-	body = bytes.NewBufferString(`{"query":"broken"}`)
-	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/api/v1/test-int/alpha_mcp", body)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("error invoke request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusBadGateway {
-		respBody, _ := io.ReadAll(resp.Body)
-		t.Fatalf("error invoke: expected 502, got %d: %s", resp.StatusCode, respBody)
-	}
-
-	var errorBody map[string]any
-	if err := json.NewDecoder(resp.Body).Decode(&errorBody); err != nil {
-		t.Fatalf("decode error invoke body: %v", err)
-	}
-	if errorBody["error"] != "operation failed" {
-		t.Fatalf("expected generic passthrough error body, got %v", errorBody)
 	}
 }
 
@@ -1870,6 +1778,12 @@ func TestExecuteOperation_UsesInjectedInvoker(t *testing.T) {
 	var gotParams map[string]any
 
 	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, &stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "custom-provider"},
+			ops: []core.Operation{
+				{Name: "custom-operation", Description: "Custom operation", Method: http.MethodPost},
+			},
+		})
 		cfg.Invoker = &testutil.StubInvoker{
 			InvokeFn: func(_ context.Context, p *principal.Principal, providerName, _, operation string, params map[string]any) (*core.OperationResult, error) {
 				called = true
@@ -2018,26 +1932,25 @@ func TestExecuteOperation_NoStoredToken(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/api/v1/test-int/session_only", bytes.NewBufferString(`{}`))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("session passthrough request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusPreconditionFailed {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("session passthrough: expected 412, got %d: %s", resp.StatusCode, body)
-	}
 }
 
-func TestExecuteOperation_SessionPassthroughAmbiguousInstance(t *testing.T) {
+func TestExecuteOperation_RejectsSessionPassthrough(t *testing.T) {
 	t.Parallel()
 
 	sessionStub := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeUser},
+		},
+		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			if token != "tok-a" {
+				return nil, fmt.Errorf("unexpected token %q", token)
+			}
+			return &catalog.Catalog{
+				Name: "test-int",
+				Operations: []catalog.CatalogOperation{
+					{ID: "session_only", Description: "Session-only op", Method: http.MethodPost, Transport: catalog.TransportMCPPassthrough},
+				},
+			}, nil
 		},
 	}
 
@@ -2052,10 +1965,7 @@ func TestExecuteOperation_SessionPassthroughAmbiguousInstance(t *testing.T) {
 				if connection != testCatalogConnection {
 					return nil, fmt.Errorf("unexpected connection %q", connection)
 				}
-				return []*core.IntegrationToken{
-					{AccessToken: "tok-a", Instance: "team-a"},
-					{AccessToken: "tok-b", Instance: "team-b"},
-				}, nil
+				return []*core.IntegrationToken{{AccessToken: "tok-a", Instance: "default"}}, nil
 			},
 		}
 	})
@@ -2069,9 +1979,17 @@ func TestExecuteOperation_SessionPassthroughAmbiguousInstance(t *testing.T) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusConflict {
+	if resp.StatusCode != http.StatusBadRequest {
 		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 409, got %d: %s", resp.StatusCode, body)
+		t.Fatalf("expected 400, got %d: %s", resp.StatusCode, body)
+	}
+
+	var errResp map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
+		t.Fatalf("decode error response: %v", err)
+	}
+	if errResp["error"] != "this integration is accessible only via MCP" {
+		t.Fatalf("expected MCP-only error, got %q", errResp["error"])
 	}
 }
 
@@ -5324,7 +5242,7 @@ func TestRefresh_UsesConnectionAuth(t *testing.T) {
 func newMCPHandler(t *testing.T, providers *registry.PluginMap[core.Provider], ds core.Datastore, auditSink core.AuditSink) http.Handler {
 	t.Helper()
 	broker := invocation.NewBroker(providers, ds)
-	mcpInvoker := invocation.NewAuditedInvoker(broker, "mcp", auditSink)
+	mcpInvoker := invocation.NewGuarded(broker, broker, "mcp", auditSink)
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       mcpInvoker,
 		TokenResolver: broker,
@@ -5775,65 +5693,6 @@ func TestErrorSanitization(t *testing.T) {
 		t.Fatalf("expected generic error message, got %q", errResp["error"])
 	}
 
-	passthroughStub := &stubIntegrationWithSessionCatalog{
-		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeUser},
-		},
-		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
-			if token != "tok" {
-				return nil, fmt.Errorf("unexpected token %q", token)
-			}
-			return &catalog.Catalog{
-				Name: "test-int",
-				Operations: []catalog.CatalogOperation{
-					{ID: "session_only", Description: "Session-only op", Method: http.MethodPost, Transport: catalog.TransportMCPPassthrough},
-				},
-			}, nil
-		},
-		callFn: func(_ context.Context, _ string, _ map[string]any) (*mcpgo.CallToolResult, error) {
-			return mcpgo.NewToolResultError(sensitiveMsg), nil
-		},
-	}
-
-	ts = newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, passthroughStub)
-		cfg.CatalogConnection = map[string]string{"test-int": testCatalogConnection}
-		cfg.Datastore = &coretesting.StubDatastore{
-			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
-				return &core.User{ID: "u1", Email: email}, nil
-			},
-			ListTokensForConnectionFn: func(_ context.Context, _, _, connection string) ([]*core.IntegrationToken, error) {
-				if connection != testCatalogConnection {
-					return nil, fmt.Errorf("unexpected connection %q", connection)
-				}
-				return []*core.IntegrationToken{{AccessToken: "tok", Instance: "default"}}, nil
-			},
-		}
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/api/v1/test-int/session_only", bytes.NewBufferString(`{}`))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err = http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("passthrough request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, _ = io.ReadAll(resp.Body)
-	if strings.Contains(string(body), sensitiveMsg) {
-		t.Fatalf("passthrough response body contains sensitive error details: %s", body)
-	}
-	if resp.StatusCode != http.StatusBadGateway {
-		t.Fatalf("expected 502, got %d: %s", resp.StatusCode, body)
-	}
-	errResp = map[string]string{}
-	if err := json.Unmarshal(body, &errResp); err != nil {
-		t.Fatalf("decoding passthrough error response: %v", err)
-	}
-	if errResp["error"] != "operation failed" {
-		t.Fatalf("expected generic passthrough error message, got %q", errResp["error"])
-	}
 }
 
 func TestUpstreamHTTPErrorPassthrough(t *testing.T) {
