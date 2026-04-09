@@ -75,7 +75,7 @@ test("integration provider service exposes metadata, configure, execute, and ses
   const metadata = await (service.getMetadata as any)();
   expect(metadata.name).toBe("basic-provider");
   expect(metadata.supportsSessionCatalog).toBe(true);
-  expect(metadata.staticCatalogJson).toContain("\"hello\"");
+  expect(metadata.staticCatalog?.operations?.some((op: any) => op.id === "hello")).toBe(true);
 
   await (service.startProvider as any)(
     create(StartProviderRequestSchema, {
@@ -113,16 +113,11 @@ test("integration provider service exposes metadata, configure, execute, and ses
       },
     }),
   );
-  expect(JSON.parse(sessionCatalog.catalogJson)).toEqual({
-    name: "fixture-session",
-    operations: [
-      {
-        id: "session-hello",
-        method: "GET",
-        title: "Session Hello ops",
-      },
-    ],
-  });
+  expect(sessionCatalog.catalog?.name).toBe("fixture-session");
+  expect(sessionCatalog.catalog?.operations).toHaveLength(1);
+  expect(sessionCatalog.catalog?.operations[0].id).toBe("session-hello");
+  expect(sessionCatalog.catalog?.operations[0].method).toBe("GET");
+  expect(sessionCatalog.catalog?.operations[0].title).toBe("Session Hello ops");
 });
 
 test("auth provider supports runtime metadata, login flows, and token validation", async () => {

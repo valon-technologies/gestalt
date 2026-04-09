@@ -1,12 +1,44 @@
 package gestalt
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"gopkg.in/yaml.v3"
 )
+
+func writeCatalogYAML(cat *proto.Catalog, path string) error {
+	if cat == nil {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("remove catalog %q: %w", path, err)
+		}
+		return nil
+	}
+	jsonData, err := protojson.MarshalOptions{UseProtoNames: true, EmitDefaultValues: false}.Marshal(cat)
+	if err != nil {
+		return fmt.Errorf("marshal catalog: %w", err)
+	}
+	var m any
+	if err := json.Unmarshal(jsonData, &m); err != nil {
+		return fmt.Errorf("unmarshal catalog JSON: %w", err)
+	}
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(m); err != nil {
+		return fmt.Errorf("encode catalog YAML: %w", err)
+	}
+	if err := enc.Close(); err != nil {
+		return fmt.Errorf("close YAML encoder: %w", err)
+	}
+	return os.WriteFile(path, buf.Bytes(), 0o644)
+}
 
 func cloneStringMap(values map[string]string) map[string]string {
 	if len(values) == 0 {
@@ -17,42 +49,6 @@ func cloneStringMap(values map[string]string) map[string]string {
 		out[key] = value
 	}
 	return out
-}
-
-func catalogToJSON(cat *Catalog) (string, error) {
-	if cat == nil {
-		return "", nil
-	}
-
-	type opWithTransport struct {
-		CatalogOperation
-		Transport string `json:"transport,omitempty"`
-	}
-
-	type wireCatalog struct {
-		Name        string            `json:"name"`
-		DisplayName string            `json:"displayName"`
-		Description string            `json:"description"`
-		IconSVG     string            `json:"iconSvg,omitempty"`
-		Operations  []opWithTransport `json:"operations"`
-	}
-
-	ops := make([]opWithTransport, len(cat.Operations))
-	for i, op := range cat.Operations {
-		ops[i] = opWithTransport{CatalogOperation: op, Transport: "plugin"}
-	}
-
-	data, err := json.Marshal(wireCatalog{
-		Name:        cat.Name,
-		DisplayName: cat.DisplayName,
-		Description: cat.Description,
-		IconSVG:     cat.IconSVG,
-		Operations:  ops,
-	})
-	if err != nil {
-		return "", fmt.Errorf("marshal catalog: %w", err)
-	}
-	return string(data), nil
 }
 
 func timeToProto(value time.Time) *timestamppb.Timestamp {

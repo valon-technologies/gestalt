@@ -1,18 +1,16 @@
 package gestalt
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
-	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
 
-	"gopkg.in/yaml.v3"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	"google.golang.org/protobuf/types/known/structpb"
 )
 
 // Request carries execution-scoped metadata into typed handlers.
@@ -54,7 +52,7 @@ type Operation[In any, Out any] struct {
 }
 
 type Registration[P any] struct {
-	catalogOp CatalogOperation
+	catalogOp *proto.CatalogOperation
 	execute   func(context.Context, *P, map[string]any, Request) (*OperationResult, error)
 	err       error
 }
@@ -64,12 +62,12 @@ func Register[P any, In any, Out any](
 	op Operation[In, Out],
 	handler func(*P, context.Context, In, Request) (Response[Out], error),
 ) Registration[P] {
-	catalogOp, err := catalogOperationFor(op)
+	catOp, err := catalogOperationFor(op)
 	if err != nil {
 		return Registration[P]{err: err}
 	}
 	return Registration[P]{
-		catalogOp: catalogOp,
+		catalogOp: catOp,
 		execute: func(ctx context.Context, provider *P, rawParams map[string]any, req Request) (*OperationResult, error) {
 			var input In
 			if err := decodeParams(rawParams, &input); err != nil {
@@ -97,7 +95,7 @@ func Register[P any, In any, Out any](
 // Router dispatches provider Execute calls against typed handlers and derives
 // the corresponding static executable catalog.
 type Router[P any] struct {
-	catalog  Catalog
+	catalog  *proto.Catalog
 	handlers map[string]func(context.Context, *P, map[string]any, Request) (*OperationResult, error)
 }
 
@@ -109,9 +107,9 @@ func NewRouter[P any](registrations ...Registration[P]) (*Router[P], error) {
 
 func newRouter[P any](name string, registrations ...Registration[P]) (*Router[P], error) {
 	router := &Router[P]{
-		catalog: Catalog{
+		catalog: &proto.Catalog{
 			Name:       name,
-			Operations: make([]CatalogOperation, 0, len(registrations)),
+			Operations: make([]*proto.CatalogOperation, 0, len(registrations)),
 		},
 		handlers: make(map[string]func(context.Context, *P, map[string]any, Request) (*OperationResult, error), len(registrations)),
 	}
@@ -120,7 +118,7 @@ func newRouter[P any](name string, registrations ...Registration[P]) (*Router[P]
 		if reg.err != nil {
 			return nil, reg.err
 		}
-		opID := reg.catalogOp.ID
+		opID := reg.catalogOp.GetId()
 		if _, exists := router.handlers[opID]; exists {
 			return nil, fmt.Errorf("duplicate operation id %q", opID)
 		}
@@ -139,32 +137,43 @@ func MustRouter[P any](registrations ...Registration[P]) *Router[P] {
 	return router
 }
 
-func (r *Router[P]) Catalog() *Catalog {
+func (r *Router[P]) Catalog() *proto.Catalog {
 	if r == nil {
 		return nil
 	}
-	c := r.catalog
-	c.Operations = append([]CatalogOperation(nil), c.Operations...)
-	return &c
+	return cloneCatalog(r.catalog)
 }
 
 func (r *Router[P]) WithName(name string) *Router[P] {
 	if r == nil {
 		return nil
 	}
-	trimmed := strings.TrimSpace(name)
-	catalog := r.catalog
-	catalog.Operations = append([]CatalogOperation(nil), catalog.Operations...)
-	if trimmed != "" {
-		catalog.Name = trimmed
+	cat := cloneCatalog(r.catalog)
+	if trimmed := strings.TrimSpace(name); trimmed != "" {
+		cat.Name = trimmed
 	}
 	handlers := make(map[string]func(context.Context, *P, map[string]any, Request) (*OperationResult, error), len(r.handlers))
 	for opID, handler := range r.handlers {
 		handlers[opID] = handler
 	}
 	return &Router[P]{
-		catalog:  catalog,
+		catalog:  cat,
 		handlers: handlers,
+	}
+}
+
+func cloneCatalog(src *proto.Catalog) *proto.Catalog {
+	if src == nil {
+		return &proto.Catalog{}
+	}
+	ops := make([]*proto.CatalogOperation, len(src.Operations))
+	copy(ops, src.Operations)
+	return &proto.Catalog{
+		Name:        src.Name,
+		DisplayName: src.DisplayName,
+		Description: src.Description,
+		IconSvg:     src.IconSvg,
+		Operations:  ops,
 	}
 }
 
@@ -189,67 +198,31 @@ func (r *Router[P]) Execute(ctx context.Context, provider *P, operation string, 
 	return result, nil
 }
 
-func encodeCatalogYAML(cat *Catalog) ([]byte, error) {
-	if cat == nil {
-		return nil, nil
-	}
-	var buf bytes.Buffer
-	enc := yaml.NewEncoder(&buf)
-	enc.SetIndent(2)
-	if err := enc.Encode(cat); err != nil {
-		return nil, err
-	}
-	if err := enc.Close(); err != nil {
-		return nil, err
-	}
-	return buf.Bytes(), nil
-}
-
-func writeCatalogYAML(cat *Catalog, path string) error {
-	if cat == nil {
-		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("remove catalog YAML %q: %w", path, err)
-		}
-		return nil
-	}
-	data, err := encodeCatalogYAML(cat)
-	if err != nil {
-		return err
-	}
-	dir := filepath.Dir(path)
-	if dir != "." && dir != "" {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return fmt.Errorf("create catalog directory %q: %w", dir, err)
-		}
-	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		return fmt.Errorf("write catalog YAML %q: %w", path, err)
-	}
-	return nil
-}
-
-func catalogOperationFor[In any, Out any](op Operation[In, Out]) (CatalogOperation, error) {
+func catalogOperationFor[In any, Out any](op Operation[In, Out]) (*proto.CatalogOperation, error) {
 	id := strings.TrimSpace(op.ID)
 	if id == "" {
-		return CatalogOperation{}, fmt.Errorf("operation id is required")
+		return nil, fmt.Errorf("operation id is required")
 	}
 	params, err := catalogParametersFor[In]()
 	if err != nil {
-		return CatalogOperation{}, fmt.Errorf("operation %q: %w", id, err)
+		return nil, fmt.Errorf("operation %q: %w", id, err)
 	}
-	return CatalogOperation{
-		ID:          id,
+	catOp := &proto.CatalogOperation{
+		Id:          id,
 		Method:      normalizeMethod(op.Method),
 		Title:       strings.TrimSpace(op.Title),
 		Description: strings.TrimSpace(op.Description),
 		Parameters:  params,
 		Tags:        append([]string(nil), op.Tags...),
 		ReadOnly:    op.ReadOnly,
-		Visible:     cloneBoolPtr(op.Visible),
-	}, nil
+	}
+	if op.Visible != nil {
+		catOp.Visible = op.Visible
+	}
+	return catOp, nil
 }
 
-func catalogParametersFor[In any]() ([]CatalogParameter, error) {
+func catalogParametersFor[In any]() ([]*proto.CatalogParameter, error) {
 	t := underlyingType(reflect.TypeFor[In]())
 	if t.Kind() != reflect.Struct {
 		return nil, fmt.Errorf("input type %s must be a struct", t)
@@ -258,7 +231,7 @@ func catalogParametersFor[In any]() ([]CatalogParameter, error) {
 		return nil, nil
 	}
 
-	params := make([]CatalogParameter, 0, t.NumField())
+	params := make([]*proto.CatalogParameter, 0, t.NumField())
 	for i := range t.NumField() {
 		field := t.Field(i)
 		if field.Anonymous {
@@ -279,7 +252,7 @@ func catalogParametersFor[In any]() ([]CatalogParameter, error) {
 		if err != nil {
 			return nil, fmt.Errorf("field %s: %w", field.Name, err)
 		}
-		param := CatalogParameter{
+		param := &proto.CatalogParameter{
 			Name:        name,
 			Type:        paramType,
 			Description: fieldDescription(field),
@@ -288,7 +261,11 @@ func catalogParametersFor[In any]() ([]CatalogParameter, error) {
 		if def, ok, err := fieldDefault(field); err != nil {
 			return nil, fmt.Errorf("field %s: %w", field.Name, err)
 		} else if ok {
-			param.Default = def
+			v, vErr := structpb.NewValue(def)
+			if vErr != nil {
+				return nil, fmt.Errorf("field %s: %w", field.Name, vErr)
+			}
+			param.Default = v
 		}
 		params = append(params, param)
 	}
@@ -449,10 +426,3 @@ func isOptionalType(t reflect.Type) bool {
 	}
 }
 
-func cloneBoolPtr(src *bool) *bool {
-	if src == nil {
-		return nil
-	}
-	value := *src
-	return &value
-}

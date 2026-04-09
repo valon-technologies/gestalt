@@ -56,14 +56,15 @@ impl Provider for TestProvider {
                 method: "POST".to_string(),
                 title: String::new(),
                 description: String::new(),
-                input_schema: None,
-                output_schema: None,
+                input_schema: String::new(),
+                output_schema: String::new(),
                 annotations: None,
                 parameters: Vec::new(),
                 required_scopes: Vec::new(),
                 tags: Vec::new(),
                 read_only: false,
                 visible: None,
+                transport: String::new(),
             }],
         }))
     }
@@ -181,8 +182,9 @@ async fn serves_provider_requests_over_unix_socket() {
         .await
         .expect("session catalog")
         .into_inner();
-    assert!(session_catalog.catalog_json.contains("session-example"));
-    assert!(session_catalog.catalog_json.contains("acme"));
+    let catalog = session_catalog.catalog.expect("session catalog");
+    assert_eq!(catalog.name, "session-example");
+    assert_eq!(catalog.display_name, "acme");
 
     let err = client
         .post_connect(PostConnectRequest::default())

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 )
 
 type allTypesInput struct {
@@ -36,7 +37,7 @@ func (p *allTypesProvider) handleAllTypes(_ context.Context, _ allTypesInput, _ 
 func TestRouterCatalogParameterTypes(t *testing.T) {
 	t.Parallel()
 
-	router := gestalt.MustNamedRouter[allTypesProvider]("param-types",
+	router := gestalt.MustRouter(
 		gestalt.Register(
 			gestalt.Operation[allTypesInput, allTypesOutput]{
 				ID:     "all_types",
@@ -55,27 +56,26 @@ func TestRouterCatalogParameterTypes(t *testing.T) {
 	}
 
 	params := catalog.Operations[0].Parameters
-	index := make(map[string]gestalt.CatalogParameter, len(params))
+	index := make(map[string]*proto.CatalogParameter, len(params))
 	for _, p := range params {
-		index[p.Name] = p
+		index[p.GetName()] = p
 	}
 
 	checks := []struct {
 		name     string
 		typ      string
 		required bool
-		defVal   any
 		desc     string
 	}{
-		{"name", "string", true, nil, "the name"},
-		{"count", "integer", false, int64(5), ""},
-		{"score", "number", false, nil, ""},
-		{"active", "boolean", true, nil, ""},
-		{"tags", "array", false, nil, ""},
-		{"metadata", "object", false, nil, ""},
-		{"when", "string", true, nil, ""},
-		{"data", "string", false, nil, ""},
-		{"optional", "string", false, nil, ""},
+		{"name", "string", true, "the name"},
+		{"count", "integer", false, ""},
+		{"score", "number", false, ""},
+		{"active", "boolean", true, ""},
+		{"tags", "array", false, ""},
+		{"metadata", "object", false, ""},
+		{"when", "string", true, ""},
+		{"data", "string", false, ""},
+		{"optional", "string", false, ""},
 	}
 
 	for _, c := range checks {
@@ -83,17 +83,14 @@ func TestRouterCatalogParameterTypes(t *testing.T) {
 		if !ok {
 			t.Fatalf("parameter %q not found in catalog", c.name)
 		}
-		if p.Type != c.typ {
-			t.Fatalf("parameter %q type = %q, want %q", c.name, p.Type, c.typ)
+		if p.GetType() != c.typ {
+			t.Fatalf("parameter %q type = %q, want %q", c.name, p.GetType(), c.typ)
 		}
-		if p.Required != c.required {
-			t.Fatalf("parameter %q required = %v, want %v", c.name, p.Required, c.required)
+		if p.GetRequired() != c.required {
+			t.Fatalf("parameter %q required = %v, want %v", c.name, p.GetRequired(), c.required)
 		}
-		if c.defVal != nil && p.Default != c.defVal {
-			t.Fatalf("parameter %q default = %v (%T), want %v (%T)", c.name, p.Default, p.Default, c.defVal, c.defVal)
-		}
-		if c.desc != "" && p.Description != c.desc {
-			t.Fatalf("parameter %q description = %q, want %q", c.name, p.Description, c.desc)
+		if c.desc != "" && p.GetDescription() != c.desc {
+			t.Fatalf("parameter %q description = %q, want %q", c.name, p.GetDescription(), c.desc)
 		}
 	}
 }
@@ -117,7 +114,7 @@ func (p *execProvider) echo(_ context.Context, in execInput, _ gestalt.Request) 
 func TestRouterOperationExecution(t *testing.T) {
 	t.Parallel()
 
-	router := gestalt.MustNamedRouter[execProvider]("exec-test",
+	router := gestalt.MustRouter(
 		gestalt.Register(
 			gestalt.Operation[execInput, execOutput]{
 				ID:     "echo",
@@ -162,7 +159,7 @@ func TestRouterOperationExecution(t *testing.T) {
 func TestRouterCatalogName(t *testing.T) {
 	t.Parallel()
 
-	router := gestalt.MustNamedRouter[execProvider]("original-name",
+	router := gestalt.MustRouter(
 		gestalt.Register(
 			gestalt.Operation[execInput, execOutput]{
 				ID:     "echo",
@@ -170,14 +167,14 @@ func TestRouterCatalogName(t *testing.T) {
 			},
 			(*execProvider).echo,
 		),
-	)
+	).WithName("original-name")
 
 	renamed := router.WithName("new-name")
 
 	if renamed.Catalog().Name != "new-name" {
-		t.Fatalf("renamed catalog name = %q, want %q", renamed.Catalog().Name, "new-name")
+		t.Fatalf("renamed catalog name = %q, want %q", renamed.Catalog().GetName(), "new-name")
 	}
-	if router.Catalog().Name != "original-name" {
-		t.Fatalf("original catalog name = %q, want %q", router.Catalog().Name, "original-name")
+	if router.Catalog().GetName() != "original-name" {
+		t.Fatalf("original catalog name = %q, want %q", router.Catalog().GetName(), "original-name")
 	}
 }

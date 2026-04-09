@@ -179,11 +179,12 @@ class MainEntrypointTests(unittest.TestCase):
 
         @plugin.session_catalog
         def dynamic_catalog(request: Request) -> Catalog:
-            return Catalog(
+            cat = Catalog(
                 name="session-source",
                 display_name=request.connection_param("tenant"),
-                operations=[CatalogOperation(id="private_search", method="POST")],
             )
+            cat.operations.append(CatalogOperation(id="private_search", method="POST"))
+            return cat
 
         servicer = _runtime._provider_servicer(plugin=plugin)
         metadata = servicer.GetMetadata(mock.Mock(), mock.Mock())
@@ -196,19 +197,12 @@ class MainEntrypointTests(unittest.TestCase):
         )
 
         self.assertTrue(metadata.supports_session_catalog)
-        self.assertEqual(
-            json.loads(response.catalog_json),
-            {
-                "name": "session-source",
-                "displayName": "acme",
-                "operations": [
-                    {
-                        "id": "private_search",
-                        "method": "POST",
-                    }
-                ],
-            },
-        )
+        catalog = response.catalog
+        self.assertEqual(catalog.name, "session-source")
+        self.assertEqual(catalog.display_name, "acme")
+        self.assertEqual(len(catalog.operations), 1)
+        self.assertEqual(catalog.operations[0].id, "private_search")
+        self.assertEqual(catalog.operations[0].method, "POST")
 
     def test_provider_servicer_rejects_missing_session_catalog_support(self) -> None:
         plugin = Plugin("source-name")

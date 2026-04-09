@@ -2,7 +2,8 @@ package gestalt
 
 import (
 	"context"
-	"encoding/json"
+
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 )
 
 // ProviderKind identifies the protocol surface a provider implements.
@@ -54,52 +55,9 @@ type WarningsProvider interface {
 }
 
 type SessionCatalogProvider interface {
-	CatalogForRequest(ctx context.Context, token string) (*Catalog, error)
+	CatalogForRequest(ctx context.Context, token string) (*proto.Catalog, error)
 }
 
-type Catalog struct {
-	Name        string             `json:"name" yaml:"name"`
-	DisplayName string             `json:"displayName" yaml:"display_name,omitempty"`
-	Description string             `json:"description" yaml:"description,omitempty"`
-	IconSVG     string             `json:"iconSvg,omitempty" yaml:"icon_svg,omitempty"`
-	Operations  []CatalogOperation `json:"operations" yaml:"operations"`
-}
-
-// CatalogOperation describes a single executable operation exposed by an
-// integration provider. Operations are invoked by ID; executable providers do
-// not declare HTTP routes.
-type CatalogOperation struct {
-	ID             string               `json:"id" yaml:"id"`
-	Method         string               `json:"method" yaml:"method"`
-	Title          string               `json:"title,omitempty" yaml:"title,omitempty"`
-	Description    string               `json:"description,omitempty" yaml:"description,omitempty"`
-	InputSchema    json.RawMessage      `json:"inputSchema,omitempty" yaml:"-"`
-	OutputSchema   json.RawMessage      `json:"outputSchema,omitempty" yaml:"-"`
-	Annotations    OperationAnnotations `json:"annotations,omitempty" yaml:"annotations,omitempty"`
-	Parameters     []CatalogParameter   `json:"parameters,omitempty" yaml:"parameters,omitempty"`
-	RequiredScopes []string             `json:"requiredScopes,omitempty" yaml:"required_scopes,omitempty"`
-	Tags           []string             `json:"tags,omitempty" yaml:"tags,omitempty"`
-	ReadOnly       bool                 `json:"readOnly,omitempty" yaml:"read_only,omitempty"`
-	Visible        *bool                `json:"visible,omitempty" yaml:"visible,omitempty"`
-}
-
-type OperationAnnotations struct {
-	ReadOnlyHint    *bool `json:"readOnlyHint,omitempty" yaml:"read_only_hint,omitempty"`
-	IdempotentHint  *bool `json:"idempotentHint,omitempty" yaml:"idempotent_hint,omitempty"`
-	DestructiveHint *bool `json:"destructiveHint,omitempty" yaml:"destructive_hint,omitempty"`
-	OpenWorldHint   *bool `json:"openWorldHint,omitempty" yaml:"open_world_hint,omitempty"`
-}
-
-type CatalogParameter struct {
-	Name        string `json:"name" yaml:"name"`
-	Type        string `json:"type" yaml:"type"`
-	Description string `json:"description,omitempty" yaml:"description,omitempty"`
-	Required    bool   `json:"required,omitempty" yaml:"required,omitempty"`
-	Default     any    `json:"default,omitempty" yaml:"default,omitempty"`
-}
-
-// OperationResult holds the response from an executable operation.
-// Status is an HTTP-like status code; Body is the response payload, typically JSON.
 type OperationResult struct {
 	Status int
 	Body   string

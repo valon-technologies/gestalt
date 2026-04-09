@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file v1/auth.proto.
  */
 export const file_v1_auth: GenFile = /*@__PURE__*/
-  fileDesc("Cg12MS9hdXRoLnByb3RvEhFnZXN0YWx0LnBsdWdpbi52MSLmAQoRQXV0aGVudGljYXRlZFVzZXISDwoHc3ViamVjdBgBIAEoCRINCgVlbWFpbBgCIAEoCRIWCg5lbWFpbF92ZXJpZmllZBgDIAEoCBIUCgxkaXNwbGF5X25hbWUYBCABKAkSEgoKYXZhdGFyX3VybBgFIAEoCRJACgZjbGFpbXMYBiADKAsyMC5nZXN0YWx0LnBsdWdpbi52MS5BdXRoZW50aWNhdGVkVXNlci5DbGFpbXNFbnRyeRotCgtDbGFpbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIsEBChFCZWdpbkxvZ2luUmVxdWVzdBIUCgxjYWxsYmFja191cmwYASABKAkSEgoKaG9zdF9zdGF0ZRgCIAEoCRIOCgZzY29wZXMYAyADKAkSQgoHb3B0aW9ucxgEIAMoCzIxLmdlc3RhbHQucGx1Z2luLnYxLkJlZ2luTG9naW5SZXF1ZXN0Lk9wdGlvbnNFbnRyeRouCgxPcHRpb25zRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJFChJCZWdpbkxvZ2luUmVzcG9uc2USGQoRYXV0aG9yaXphdGlvbl91cmwYASABKAkSFAoMcGx1Z2luX3N0YXRlGAIgASgMIrMBChRDb21wbGV0ZUxvZ2luUmVxdWVzdBJBCgVxdWVyeRgBIAMoCzIyLmdlc3RhbHQucGx1Z2luLnYxLkNvbXBsZXRlTG9naW5SZXF1ZXN0LlF1ZXJ5RW50cnkSFAoMcGx1Z2luX3N0YXRlGAIgASgMEhQKDGNhbGxiYWNrX3VybBgDIAEoCRosCgpRdWVyeUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiLQocVmFsaWRhdGVFeHRlcm5hbFRva2VuUmVxdWVzdBINCgV0b2tlbhgBIAEoCSIyChNBdXRoU2Vzc2lvblNldHRpbmdzEhsKE3Nlc3Npb25fdHRsX3NlY29uZHMYASABKAMyjQMKCkF1dGhQbHVnaW4SWQoKQmVnaW5Mb2dpbhIkLmdlc3RhbHQucGx1Z2luLnYxLkJlZ2luTG9naW5SZXF1ZXN0GiUuZ2VzdGFsdC5wbHVnaW4udjEuQmVnaW5Mb2dpblJlc3BvbnNlEl4KDUNvbXBsZXRlTG9naW4SJy5nZXN0YWx0LnBsdWdpbi52MS5Db21wbGV0ZUxvZ2luUmVxdWVzdBokLmdlc3RhbHQucGx1Z2luLnYxLkF1dGhlbnRpY2F0ZWRVc2VyEm4KFVZhbGlkYXRlRXh0ZXJuYWxUb2tlbhIvLmdlc3RhbHQucGx1Z2luLnYxLlZhbGlkYXRlRXh0ZXJuYWxUb2tlblJlcXVlc3QaJC5nZXN0YWx0LnBsdWdpbi52MS5BdXRoZW50aWNhdGVkVXNlchJUChJHZXRTZXNzaW9uU2V0dGluZ3MSFi5nb29nbGUucHJvdG9idWYuRW1wdHkaJi5nZXN0YWx0LnBsdWdpbi52MS5BdXRoU2Vzc2lvblNldHRpbmdzQjtaOWdpdGh1Yi5jb20vdmFsb24tdGVjaG5vbG9naWVzL2dlc3RhbHQvc2RrL2dvL2dlbi92MTtwcm90b2IGcHJvdG8z", [file_google_protobuf_empty]);
+  fileDesc("Cg12MS9hdXRoLnByb3RvEhFnZXN0YWx0LnBsdWdpbi52MSLmAQoRQXV0aGVudGljYXRlZFVzZXISDwoHc3ViamVjdBgBIAEoCRINCgVlbWFpbBgCIAEoCRIWCg5lbWFpbF92ZXJpZmllZBgDIAEoCBIUCgxkaXNwbGF5X25hbWUYBCABKAkSEgoKYXZhdGFyX3VybBgFIAEoCRJACgZjbGFpbXMYBiADKAsyMC5nZXN0YWx0LnBsdWdpbi52MS5BdXRoZW50aWNhdGVkVXNlci5DbGFpbXNFbnRyeRotCgtDbGFpbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIsEBChFCZWdpbkxvZ2luUmVxdWVzdBIUCgxjYWxsYmFja191cmwYASABKAkSEgoKaG9zdF9zdGF0ZRgCIAEoCRIOCgZzY29wZXMYAyADKAkSQgoHb3B0aW9ucxgEIAMoCzIxLmdlc3RhbHQucGx1Z2luLnYxLkJlZ2luTG9naW5SZXF1ZXN0Lk9wdGlvbnNFbnRyeRouCgxPcHRpb25zRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJFChJCZWdpbkxvZ2luUmVzcG9uc2USGQoRYXV0aG9yaXphdGlvbl91cmwYASABKAkSFAoMcGx1Z2luX3N0YXRlGAIgASgMIrMBChRDb21wbGV0ZUxvZ2luUmVxdWVzdBJBCgVxdWVyeRgBIAMoCzIyLmdlc3RhbHQucGx1Z2luLnYxLkNvbXBsZXRlTG9naW5SZXF1ZXN0LlF1ZXJ5RW50cnkSFAoMcGx1Z2luX3N0YXRlGAIgASgMEhQKDGNhbGxiYWNrX3VybBgDIAEoCRosCgpRdWVyeUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiLQocVmFsaWRhdGVFeHRlcm5hbFRva2VuUmVxdWVzdBINCgV0b2tlbhgBIAEoCSIyChNBdXRoU2Vzc2lvblNldHRpbmdzEhsKE3Nlc3Npb25fdHRsX3NlY29uZHMYASABKAMyjwMKDEF1dGhQcm92aWRlchJZCgpCZWdpbkxvZ2luEiQuZ2VzdGFsdC5wbHVnaW4udjEuQmVnaW5Mb2dpblJlcXVlc3QaJS5nZXN0YWx0LnBsdWdpbi52MS5CZWdpbkxvZ2luUmVzcG9uc2USXgoNQ29tcGxldGVMb2dpbhInLmdlc3RhbHQucGx1Z2luLnYxLkNvbXBsZXRlTG9naW5SZXF1ZXN0GiQuZ2VzdGFsdC5wbHVnaW4udjEuQXV0aGVudGljYXRlZFVzZXISbgoVVmFsaWRhdGVFeHRlcm5hbFRva2VuEi8uZ2VzdGFsdC5wbHVnaW4udjEuVmFsaWRhdGVFeHRlcm5hbFRva2VuUmVxdWVzdBokLmdlc3RhbHQucGx1Z2luLnYxLkF1dGhlbnRpY2F0ZWRVc2VyElQKEkdldFNlc3Npb25TZXR0aW5ncxIWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRomLmdlc3RhbHQucGx1Z2luLnYxLkF1dGhTZXNzaW9uU2V0dGluZ3NCO1o5Z2l0aHViLmNvbS92YWxvbi10ZWNobm9sb2dpZXMvZ2VzdGFsdC9zZGsvZ28vZ2VuL3YxO3Byb3RvYgZwcm90bzM", [file_google_protobuf_empty]);
 
 /**
  * @generated from message gestalt.plugin.v1.AuthenticatedUser
@@ -172,11 +172,11 @@ export const AuthSessionSettingsSchema: GenMessage<AuthSessionSettings> = /*@__P
   messageDesc(file_v1_auth, 5);
 
 /**
- * @generated from service gestalt.plugin.v1.AuthPlugin
+ * @generated from service gestalt.plugin.v1.AuthProvider
  */
-export const AuthPlugin: GenService<{
+export const AuthProvider: GenService<{
   /**
-   * @generated from rpc gestalt.plugin.v1.AuthPlugin.BeginLogin
+   * @generated from rpc gestalt.plugin.v1.AuthProvider.BeginLogin
    */
   beginLogin: {
     methodKind: "unary";
@@ -184,7 +184,7 @@ export const AuthPlugin: GenService<{
     output: typeof BeginLoginResponseSchema;
   },
   /**
-   * @generated from rpc gestalt.plugin.v1.AuthPlugin.CompleteLogin
+   * @generated from rpc gestalt.plugin.v1.AuthProvider.CompleteLogin
    */
   completeLogin: {
     methodKind: "unary";
@@ -192,7 +192,7 @@ export const AuthPlugin: GenService<{
     output: typeof AuthenticatedUserSchema;
   },
   /**
-   * @generated from rpc gestalt.plugin.v1.AuthPlugin.ValidateExternalToken
+   * @generated from rpc gestalt.plugin.v1.AuthProvider.ValidateExternalToken
    */
   validateExternalToken: {
     methodKind: "unary";
@@ -200,7 +200,7 @@ export const AuthPlugin: GenService<{
     output: typeof AuthenticatedUserSchema;
   },
   /**
-   * @generated from rpc gestalt.plugin.v1.AuthPlugin.GetSessionSettings
+   * @generated from rpc gestalt.plugin.v1.AuthProvider.GetSessionSettings
    */
   getSessionSettings: {
     methodKind: "unary";

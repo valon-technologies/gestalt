@@ -2,82 +2,14 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 use schemars::JsonSchema;
-use serde::Serialize;
-use serde_json::{Map as JsonMap, Value as JsonValue, json};
+use serde_json::{Value as JsonValue, json};
 
 use crate::error::{Error, Result};
+use crate::generated::v1;
 
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
-pub struct Catalog {
-    pub name: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub display_name: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub description: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub icon_svg: String,
-    pub operations: Vec<CatalogOperation>,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
-pub struct CatalogOperation {
-    pub id: String,
-    pub method: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub title: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub description: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub input_schema: Option<JsonValue>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub output_schema: Option<JsonValue>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub annotations: Option<OperationAnnotations>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub parameters: Vec<CatalogParameter>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub required_scopes: Vec<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub tags: Vec<String>,
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
-    pub read_only: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub visible: Option<bool>,
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
-pub struct OperationAnnotations {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub read_only_hint: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub idempotent_hint: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub destructive_hint: Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub open_world_hint: Option<bool>,
-}
-
-impl OperationAnnotations {
-    pub fn is_empty(&self) -> bool {
-        self.read_only_hint.is_none()
-            && self.idempotent_hint.is_none()
-            && self.destructive_hint.is_none()
-            && self.open_world_hint.is_none()
-    }
-}
-
-#[derive(Clone, Debug, Default, PartialEq, Serialize)]
-pub struct CatalogParameter {
-    pub name: String,
-    #[serde(rename = "type")]
-    pub kind: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub description: String,
-    #[serde(skip_serializing_if = "std::ops::Not::not")]
-    pub required: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub default: Option<JsonValue>,
-}
+pub type Catalog = v1::Catalog;
+pub type CatalogOperation = v1::CatalogOperation;
+pub type CatalogParameter = v1::CatalogParameter;
 
 impl Catalog {
     pub fn with_name(mut self, name: impl Into<String>) -> Self {
@@ -96,17 +28,109 @@ pub fn write_catalog(catalog: &Catalog, path: impl AsRef<Path>) -> Result<()> {
     {
         std::fs::create_dir_all(parent)?;
     }
-    let mut yaml_catalog = catalog.clone();
-    for op in &mut yaml_catalog.operations {
-        op.input_schema = None;
-        op.output_schema = None;
-        if op.annotations.as_ref().is_some_and(|a| a.is_empty()) {
-            op.annotations = None;
+    let json = serde_json::to_string_pretty(&catalog_to_json_value(catalog))?;
+    std::fs::write(path, json)?;
+    Ok(())
+}
+
+fn catalog_to_json_value(catalog: &Catalog) -> JsonValue {
+    let mut obj = serde_json::Map::new();
+    obj.insert("name".to_owned(), json!(catalog.name));
+    if !catalog.display_name.is_empty() {
+        obj.insert("displayName".to_owned(), json!(catalog.display_name));
+    }
+    if !catalog.description.is_empty() {
+        obj.insert("description".to_owned(), json!(catalog.description));
+    }
+    if !catalog.icon_svg.is_empty() {
+        obj.insert("iconSvg".to_owned(), json!(catalog.icon_svg));
+    }
+    let ops: Vec<JsonValue> = catalog
+        .operations
+        .iter()
+        .map(operation_to_json_value)
+        .collect();
+    obj.insert("operations".to_owned(), json!(ops));
+    JsonValue::Object(obj)
+}
+
+fn operation_to_json_value(op: &CatalogOperation) -> JsonValue {
+    let mut obj = serde_json::Map::new();
+    obj.insert("id".to_owned(), json!(op.id));
+    obj.insert("method".to_owned(), json!(op.method));
+    if !op.title.is_empty() {
+        obj.insert("title".to_owned(), json!(op.title));
+    }
+    if !op.description.is_empty() {
+        obj.insert("description".to_owned(), json!(op.description));
+    }
+    if !op.input_schema.is_empty() {
+        if let Ok(schema) = serde_json::from_str::<JsonValue>(&op.input_schema) {
+            obj.insert("inputSchema".to_owned(), schema);
         }
     }
-    let yaml = serde_json::to_string_pretty(&yaml_catalog)?;
-    std::fs::write(path, yaml)?;
-    Ok(())
+    if !op.output_schema.is_empty() {
+        if let Ok(schema) = serde_json::from_str::<JsonValue>(&op.output_schema) {
+            obj.insert("outputSchema".to_owned(), schema);
+        }
+    }
+    if !op.tags.is_empty() {
+        obj.insert("tags".to_owned(), json!(op.tags));
+    }
+    if !op.required_scopes.is_empty() {
+        obj.insert("requiredScopes".to_owned(), json!(op.required_scopes));
+    }
+    if op.read_only {
+        obj.insert("readOnly".to_owned(), json!(true));
+    }
+    if let Some(visible) = op.visible {
+        obj.insert("visible".to_owned(), json!(visible));
+    }
+    if !op.transport.is_empty() {
+        obj.insert("transport".to_owned(), json!(op.transport));
+    }
+    if !op.parameters.is_empty() {
+        let params: Vec<JsonValue> = op
+            .parameters
+            .iter()
+            .map(|p| {
+                let mut m = serde_json::Map::new();
+                m.insert("name".to_owned(), json!(p.name));
+                m.insert("type".to_owned(), json!(p.r#type));
+                if !p.description.is_empty() {
+                    m.insert("description".to_owned(), json!(p.description));
+                }
+                if p.required {
+                    m.insert("required".to_owned(), json!(true));
+                }
+                if let Some(ref default) = p.default {
+                    let val = proto_value_to_json(default.clone());
+                    m.insert("default".to_owned(), val);
+                }
+                JsonValue::Object(m)
+            })
+            .collect();
+        obj.insert("parameters".to_owned(), json!(params));
+    }
+    if let Some(ref ann) = op.annotations {
+        let mut a = serde_json::Map::new();
+        if let Some(v) = ann.read_only_hint {
+            a.insert("readOnlyHint".to_owned(), json!(v));
+        }
+        if let Some(v) = ann.idempotent_hint {
+            a.insert("idempotentHint".to_owned(), json!(v));
+        }
+        if let Some(v) = ann.destructive_hint {
+            a.insert("destructiveHint".to_owned(), json!(v));
+        }
+        if let Some(v) = ann.open_world_hint {
+            a.insert("openWorldHint".to_owned(), json!(v));
+        }
+        if !a.is_empty() {
+            obj.insert("annotations".to_owned(), JsonValue::Object(a));
+        }
+    }
+    JsonValue::Object(obj)
 }
 
 pub(crate) fn schema_json<T: JsonSchema>() -> Result<JsonValue> {
@@ -134,7 +158,7 @@ pub(crate) fn schema_parameters(schema: &JsonValue) -> Vec<CatalogParameter> {
         .iter()
         .map(|(name, property)| CatalogParameter {
             name: name.clone(),
-            kind: schema_type(property),
+            r#type: schema_type(property),
             description: property
                 .get("description")
                 .and_then(JsonValue::as_str)
@@ -142,139 +166,53 @@ pub(crate) fn schema_parameters(schema: &JsonValue) -> Vec<CatalogParameter> {
                 .trim()
                 .to_owned(),
             required: required.contains(name),
-            default: property.get("default").cloned(),
+            default: property.get("default").map(json_value_to_proto_value),
         })
         .collect()
 }
 
-fn is_false(value: &&bool) -> bool {
-    !**value
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct WireCatalog<'a> {
-    name: &'a str,
-    #[serde(skip_serializing_if = "str::is_empty")]
-    display_name: &'a str,
-    #[serde(skip_serializing_if = "str::is_empty")]
-    description: &'a str,
-    #[serde(skip_serializing_if = "str::is_empty")]
-    icon_svg: &'a str,
-    operations: Vec<WireOperation<'a>>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct WireOperation<'a> {
-    id: &'a str,
-    method: &'a str,
-    path: &'a str,
-    transport: &'a str,
-    #[serde(skip_serializing_if = "str::is_empty")]
-    title: &'a str,
-    #[serde(skip_serializing_if = "str::is_empty")]
-    description: &'a str,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    input_schema: &'a Option<JsonValue>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    output_schema: &'a Option<JsonValue>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    annotations: Option<WireAnnotations<'a>>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    parameters: Vec<WireParameter<'a>>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    required_scopes: &'a Vec<String>,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    tags: &'a Vec<String>,
-    #[serde(skip_serializing_if = "is_false")]
-    read_only: &'a bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    visible: &'a Option<bool>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct WireAnnotations<'a> {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    read_only_hint: &'a Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    idempotent_hint: &'a Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    destructive_hint: &'a Option<bool>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    open_world_hint: &'a Option<bool>,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct WireParameter<'a> {
-    name: &'a str,
-    #[serde(rename = "type")]
-    kind: &'a str,
-    #[serde(skip_serializing_if = "str::is_empty")]
-    description: &'a str,
-    #[serde(skip_serializing_if = "is_false")]
-    required: &'a bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    default: &'a Option<JsonValue>,
-}
-
-pub(crate) fn catalog_json(catalog: &Catalog) -> Result<String> {
-    let wire = WireCatalog {
-        name: &catalog.name,
-        display_name: &catalog.display_name,
-        description: &catalog.description,
-        icon_svg: &catalog.icon_svg,
-        operations: catalog
-            .operations
-            .iter()
-            .map(|op| WireOperation {
-                id: &op.id,
-                method: &op.method,
-                path: "",
-                transport: "plugin",
-                title: &op.title,
-                description: &op.description,
-                input_schema: &op.input_schema,
-                output_schema: &op.output_schema,
-                annotations: op.annotations.as_ref().filter(|a| !a.is_empty()).map(|a| {
-                    WireAnnotations {
-                        read_only_hint: &a.read_only_hint,
-                        idempotent_hint: &a.idempotent_hint,
-                        destructive_hint: &a.destructive_hint,
-                        open_world_hint: &a.open_world_hint,
-                    }
-                }),
-                parameters: op
-                    .parameters
+fn json_value_to_proto_value(value: &JsonValue) -> prost_types::Value {
+    match value {
+        JsonValue::Null => prost_types::Value {
+            kind: Some(prost_types::value::Kind::NullValue(0)),
+        },
+        JsonValue::Bool(b) => prost_types::Value {
+            kind: Some(prost_types::value::Kind::BoolValue(*b)),
+        },
+        JsonValue::Number(n) => prost_types::Value {
+            kind: Some(prost_types::value::Kind::NumberValue(
+                n.as_f64().unwrap_or(0.0),
+            )),
+        },
+        JsonValue::String(s) => prost_types::Value {
+            kind: Some(prost_types::value::Kind::StringValue(s.clone())),
+        },
+        JsonValue::Array(items) => prost_types::Value {
+            kind: Some(prost_types::value::Kind::ListValue(
+                prost_types::ListValue {
+                    values: items.iter().map(json_value_to_proto_value).collect(),
+                },
+            )),
+        },
+        JsonValue::Object(map) => prost_types::Value {
+            kind: Some(prost_types::value::Kind::StructValue(prost_types::Struct {
+                fields: map
                     .iter()
-                    .map(|p| WireParameter {
-                        name: &p.name,
-                        kind: &p.kind,
-                        description: &p.description,
-                        required: &p.required,
-                        default: &p.default,
-                    })
+                    .map(|(k, v)| (k.clone(), json_value_to_proto_value(v)))
                     .collect(),
-                required_scopes: &op.required_scopes,
-                tags: &op.tags,
-                read_only: &op.read_only,
-                visible: &op.visible,
-            })
-            .collect(),
-    };
-    serde_json::to_string(&wire).map_err(Error::from)
+            })),
+        },
+    }
 }
 
-pub(crate) fn object_map(value: Option<prost_types::Struct>) -> JsonMap<String, JsonValue> {
+pub(crate) fn object_map(value: Option<prost_types::Struct>) -> serde_json::Map<String, JsonValue> {
     value
         .map(|structure| {
             structure
                 .fields
                 .into_iter()
                 .map(|(key, value)| (key, proto_value_to_json(value)))
-                .collect::<JsonMap<_, _>>()
+                .collect::<serde_json::Map<_, _>>()
         })
         .unwrap_or_default()
 }
@@ -350,21 +288,5 @@ mod tests {
         assert_eq!(params[1].name, "query");
         assert!(params[1].required);
         assert_eq!(params[1].description, "Search query");
-    }
-
-    #[test]
-    fn catalog_json_includes_plugin_transport() {
-        let catalog = Catalog {
-            name: "example".to_owned(),
-            operations: vec![CatalogOperation {
-                id: "echo".to_owned(),
-                method: "POST".to_owned(),
-                ..CatalogOperation::default()
-            }],
-            ..Catalog::default()
-        };
-        let raw = catalog_json(&catalog).expect("catalog json");
-        assert!(raw.contains("\"transport\":\"plugin\""));
-        assert!(raw.contains("\"path\":\"\""));
     }
 }
