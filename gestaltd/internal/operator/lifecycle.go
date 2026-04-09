@@ -80,11 +80,14 @@ func (l *Lifecycle) InitAtPathWithArtifactsDir(configPath, artifactsDir string) 
 	if err := config.OverlayManagedPluginConfig(configPath, cfg); err != nil {
 		return nil, fmt.Errorf("loading config: %v", err)
 	}
+	paths := initPathsForConfigWithArtifactsDir(configPath, resolveArtifactsDir(configPath, cfg, artifactsDir))
+	secretsEntry, err := l.primeSecretsProviderForConfigResolution(context.Background(), paths, cfg, nil)
+	if err != nil {
+		return nil, err
+	}
 	if err := l.resolveConfigSecrets(context.Background(), cfg); err != nil {
 		return nil, err
 	}
-
-	paths := initPathsForConfigWithArtifactsDir(configPath, resolveArtifactsDir(configPath, cfg, artifactsDir))
 	if err := os.MkdirAll(paths.providersDir, 0o755); err != nil {
 		return nil, fmt.Errorf("creating providers dir: %w", err)
 	}
@@ -116,11 +119,15 @@ func (l *Lifecycle) InitAtPathWithArtifactsDir(configPath, artifactsDir string) 
 		lock.Datastore = &entry
 	}
 	if cfg.Secrets.Provider != nil && cfg.Secrets.Provider.HasManagedArtifacts() {
-		entry, err := l.writeComponentArtifact(context.Background(), paths, pluginmanifestv1.KindSecrets, "secrets", secretsDestDir(paths), cfg.Secrets.Provider, cfg.Secrets.Config)
-		if err != nil {
-			return nil, err
+		if secretsEntry != nil {
+			lock.Secrets = secretsEntry
+		} else {
+			entry, err := l.writeComponentArtifact(context.Background(), paths, pluginmanifestv1.KindSecrets, "secrets", secretsDestDir(paths), cfg.Secrets.Provider, cfg.Secrets.Config)
+			if err != nil {
+				return nil, err
+			}
+			lock.Secrets = &entry
 		}
-		lock.Secrets = &entry
 	}
 	if cfg.UI.Provider != nil && cfg.UI.Provider.HasManagedArtifacts() {
 		uiEntry, err := l.writeUIProviderArtifact(context.Background(), cfg, paths)
@@ -154,6 +161,14 @@ func (l *Lifecycle) LoadForExecutionAtPathWithArtifactsDir(configPath, artifacts
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading config: %v", err)
 	}
+	paths := initPathsForConfigWithArtifactsDir(configPath, resolveArtifactsDir(configPath, cfg, artifactsDir))
+	secretsLock, err := l.lockForSecretsBootstrap(configPath, artifactsDir, paths, cfg, locked)
+	if err != nil {
+		return nil, nil, err
+	}
+	if _, err := l.primeSecretsProviderForConfigResolution(context.Background(), paths, cfg, secretsLock); err != nil {
+		return nil, nil, err
+	}
 	if err := l.resolveConfigSecrets(context.Background(), cfg); err != nil {
 		return nil, nil, err
 	}
@@ -179,6 +194,60 @@ func (l *Lifecycle) resolveConfigSecrets(ctx context.Context, cfg *config.Config
 		return fmt.Errorf("resolving config secrets: %w", err)
 	}
 	return config.ValidateStructure(cfg)
+}
+
+func (l *Lifecycle) lockForSecretsBootstrap(configPath, artifactsDir string, paths initPaths, cfg *config.Config, locked bool) (*Lockfile, error) {
+	if cfg == nil || cfg.Secrets.Provider == nil || !cfg.Secrets.Provider.HasManagedArtifacts() {
+		return nil, nil
+	}
+	if !configHasManagedPlugins(cfg) {
+		return nil, nil
+	}
+
+	lock, err := ReadLockfile(paths.lockfilePath)
+	if !locked && (err != nil || !lockMatchesConfig(cfg, paths, lock)) {
+		lock, err = l.InitAtPathWithArtifactsDir(configPath, artifactsDir)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("managed plugins require prepared artifacts; run `gestaltd init --config %s`: %w", configPath, err)
+	}
+	return lock, nil
+}
+
+func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context, paths initPaths, cfg *config.Config, lock *Lockfile) (*LockEntry, error) {
+	if cfg == nil || cfg.Secrets.Provider == nil {
+		return nil, nil
+	}
+
+	provider := cfg.Secrets.Provider
+	configMap, err := config.NodeToMap(cfg.Secrets.Config)
+	if err != nil {
+		return nil, fmt.Errorf("decode provider config for %s %q: %w", pluginmanifestv1.KindSecrets, "secrets", err)
+	}
+
+	switch {
+	case provider.HasManagedArtifacts():
+		if lock != nil {
+			if err := l.applyLockedComponentEntry(paths, lock.Secrets, pluginmanifestv1.KindSecrets, "secrets", provider, configMap); err != nil {
+				return nil, err
+			}
+			return nil, nil
+		}
+		entry, err := l.writeComponentArtifact(ctx, paths, pluginmanifestv1.KindSecrets, "secrets", secretsDestDir(paths), provider, cfg.Secrets.Config)
+		if err != nil {
+			return nil, err
+		}
+		if err := l.applyLockedComponentEntry(paths, &entry, pluginmanifestv1.KindSecrets, "secrets", provider, configMap); err != nil {
+			return nil, err
+		}
+		return &entry, nil
+	case provider.HasLocalSource():
+		if err := applyLocalComponentManifest(pluginmanifestv1.KindSecrets, "secrets", provider, configMap); err != nil {
+			return nil, err
+		}
+	}
+
+	return nil, nil
 }
 
 type initPaths struct {

@@ -180,11 +180,16 @@ func platformAssetName(plugin, version, libc string) string {
 	return fmt.Sprintf("%s%s_v%s_%s.tar.gz", platformAssetPrefix, plugin, version, pluginpkg.PlatformArchiveSuffix(runtime.GOOS, runtime.GOARCH, libc))
 }
 
+func genericAssetName(plugin, version string) string {
+	return fmt.Sprintf("%s%s_v%s.tar.gz", platformAssetPrefix, plugin, version)
+}
+
 func candidatePlatformAssetNames(plugin, version, libc string) []string {
 	names := []string{platformAssetName(plugin, version, libc)}
 	if runtime.GOOS == "linux" && libc != "" {
 		names = append(names, fmt.Sprintf("%s%s_v%s_%s.tar.gz", platformAssetPrefix, plugin, version, pluginpkg.PlatformArchiveSuffix(runtime.GOOS, runtime.GOARCH, "")))
 	}
+	names = append(names, genericAssetName(plugin, version))
 	seen := make(map[string]struct{}, len(names))
 	out := make([]string, 0, len(names))
 	for _, name := range names {

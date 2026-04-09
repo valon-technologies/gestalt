@@ -237,6 +237,23 @@ func TestFindAssetRejectsAmbiguousMatches(t *testing.T) {
 	}
 }
 
+func TestFindAssetMatchesGenericArchiveName(t *testing.T) {
+	t.Parallel()
+
+	want := genericAssetName(testPlugin, testVersion)
+	assets := []releaseAsset{
+		{Name: want, URL: "http://x", BrowserDownloadURL: "http://x"},
+	}
+
+	got, err := findAsset(assets, testPlugin, testVersion)
+	if err != nil {
+		t.Fatalf("findAsset() error: %v", err)
+	}
+	if got.Name != want {
+		t.Fatalf("findAsset() = %q, want %q", got.Name, want)
+	}
+}
+
 func TestFindAssetVersionBeforePluginMatch(t *testing.T) {
 	t.Parallel()
 

@@ -19,9 +19,11 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	secretsplugin "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/plugin"
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	ghresolver "github.com/valon-technologies/gestalt/server/internal/pluginsource/github"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 	"gopkg.in/yaml.v3"
 )
@@ -44,6 +46,22 @@ type fakeResolver struct {
 	lastVersion string
 }
 
+type fakeResolverResult struct {
+	archivePath string
+	resolvedURL string
+	sha256      string
+}
+
+type fakeResolverCall struct {
+	src     pluginsource.Source
+	version string
+}
+
+type fakeMultiResolver struct {
+	results map[string]fakeResolverResult
+	calls   []fakeResolverCall
+}
+
 func (f *fakeResolver) Resolve(_ context.Context, src pluginsource.Source, version string) (*pluginsource.ResolvedPackage, error) {
 	f.calls++
 	f.lastSrc = src
@@ -53,6 +71,21 @@ func (f *fakeResolver) Resolve(_ context.Context, src pluginsource.Source, versi
 		Cleanup:       func() {},
 		ArchiveSHA256: f.sha256,
 		ResolvedURL:   f.resolvedURL,
+	}, nil
+}
+
+func (f *fakeMultiResolver) Resolve(_ context.Context, src pluginsource.Source, version string) (*pluginsource.ResolvedPackage, error) {
+	f.calls = append(f.calls, fakeResolverCall{src: src, version: version})
+
+	result, ok := f.results[src.String()]
+	if !ok {
+		return nil, fmt.Errorf("unexpected source %q", src.String())
+	}
+	return &pluginsource.ResolvedPackage{
+		LocalPath:     result.archivePath,
+		Cleanup:       func() {},
+		ArchiveSHA256: result.sha256,
+		ResolvedURL:   result.resolvedURL,
 	}, nil
 }
 
@@ -123,6 +156,22 @@ func buildV2ArchiveForArtifact(t *testing.T, dir, source, version, artifactPath,
 func buildExecutableArchive(t *testing.T, dir, srcDirName, source, version, kind, binaryName, binaryContent string) string {
 	t.Helper()
 
+	return buildExecutableArchiveData(t, dir, srcDirName, source, version, kind, binaryName, []byte(binaryContent))
+}
+
+func buildExecutableArchiveFromBinaryPath(t *testing.T, dir, srcDirName, source, version, kind, binaryName, binaryPath string) string {
+	t.Helper()
+
+	data, err := os.ReadFile(binaryPath)
+	if err != nil {
+		t.Fatalf("read binary %s: %v", binaryPath, err)
+	}
+	return buildExecutableArchiveData(t, dir, srcDirName, source, version, kind, binaryName, data)
+}
+
+func buildExecutableArchiveData(t *testing.T, dir, srcDirName, source, version, kind, binaryName string, binaryData []byte) string {
+	t.Helper()
+
 	artPath := artifactRelPath(binaryName)
 	srcDir := filepath.Join(dir, srcDirName)
 	if err := os.MkdirAll(filepath.Join(srcDir, filepath.Dir(filepath.FromSlash(artPath))), 0755); err != nil {
@@ -133,10 +182,13 @@ func buildExecutableArchive(t *testing.T, dir, srcDirName, source, version, kind
 		Version: version,
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
-				OS:     runtime.GOOS,
-				Arch:   runtime.GOARCH,
-				Path:   artPath,
-				SHA256: sha256hex(binaryContent),
+				OS:   runtime.GOOS,
+				Arch: runtime.GOARCH,
+				Path: artPath,
+				SHA256: func() string {
+					sum := sha256.Sum256(binaryData)
+					return hex.EncodeToString(sum[:])
+				}(),
 			},
 		},
 	}
@@ -150,6 +202,9 @@ func buildExecutableArchive(t *testing.T, dir, srcDirName, source, version, kind
 	case pluginmanifestv1.KindDatastore:
 		manifest.Datastore = &pluginmanifestv1.DatastoreMetadata{}
 		manifest.Entrypoints.Datastore = &pluginmanifestv1.Entrypoint{ArtifactPath: artPath}
+	case pluginmanifestv1.KindSecrets:
+		manifest.Secrets = &pluginmanifestv1.SecretsMetadata{}
+		manifest.Entrypoints.Secrets = &pluginmanifestv1.Entrypoint{ArtifactPath: artPath}
 	default:
 		t.Fatalf("unsupported kind %q", kind)
 	}
@@ -164,11 +219,11 @@ func buildExecutableArchive(t *testing.T, dir, srcDirName, source, version, kind
 	if err := os.WriteFile(filepath.Join(srcDir, "catalog.yaml"), []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n"), 0644); err != nil {
 		t.Fatalf("write provider catalog: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(srcDir, filepath.FromSlash(artPath)), []byte(binaryContent), 0755); err != nil {
+	if err := os.WriteFile(filepath.Join(srcDir, filepath.FromSlash(artPath)), binaryData, 0755); err != nil {
 		t.Fatalf("write provider artifact: %v", err)
 	}
 
-	archivePath := filepath.Join(dir, "plugin.tar.gz")
+	archivePath := filepath.Join(dir, srcDirName+".tar.gz")
 	if err := pluginpkg.CreatePackageFromDir(srcDir, archivePath); err != nil {
 		t.Fatalf("CreatePackageFromDir plugin: %v", err)
 	}
@@ -199,6 +254,29 @@ func writeConfigYAML(t *testing.T, dir, source, version, artifactsDir string) st
 		t.Fatalf("write config: %v", err)
 	}
 	return configPath
+}
+
+func buildGoSourceSecretsBinary(t *testing.T) string {
+	t.Helper()
+
+	providerDir := filepath.Join(t.TempDir(), "go-secrets")
+	if err := os.MkdirAll(providerDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(providerDir): %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(providerDir, "go.mod"), []byte(testutil.GeneratedProviderModuleSource(t, "example.com/test-go-secrets")), 0o644); err != nil {
+		t.Fatalf("write go.mod: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(providerDir, "go.sum"), testutil.GeneratedProviderModuleSum(t), 0o644); err != nil {
+		t.Fatalf("write go.sum: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(providerDir, "secrets.go"), []byte(testutil.GeneratedSecretsPackageSource()), 0o644); err != nil {
+		t.Fatalf("write secrets.go: %v", err)
+	}
+	outputPath := filepath.Join(t.TempDir(), "secrets-provider")
+	if err := pluginpkg.BuildGoComponentBinary(providerDir, outputPath, pluginmanifestv1.KindSecrets, runtime.GOOS, runtime.GOARCH); err != nil {
+		t.Fatalf("BuildGoComponentBinary(secrets): %v", err)
+	}
+	return outputPath
 }
 
 func TestSourcePluginEndToEnd(t *testing.T) {
@@ -554,6 +632,191 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 	nested, ok := authCfg["config"].(map[string]any)
 	if !ok || nested["client_id"] != "managed-auth-client" {
 		t.Fatalf("auth nested config = %#v", authCfg["config"])
+	}
+}
+
+func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	secretsSource := "github.com/acme/tools/secrets-widget"
+	secretsVersion := "1.0.0"
+	authSource := "github.com/acme/tools/auth-widget"
+	authVersion := "2.0.0"
+
+	secretsArchivePath := buildExecutableArchiveFromBinaryPath(
+		t,
+		dir,
+		"secrets-src",
+		secretsSource,
+		secretsVersion,
+		pluginmanifestv1.KindSecrets,
+		"secrets-plugin",
+		buildGoSourceSecretsBinary(t),
+	)
+	authArchivePath := buildExecutableArchive(
+		t,
+		dir,
+		"auth-src",
+		authSource,
+		authVersion,
+		pluginmanifestv1.KindAuth,
+		"auth-plugin",
+		"fake-auth-binary",
+	)
+
+	secretsArchiveData, err := os.ReadFile(secretsArchivePath)
+	if err != nil {
+		t.Fatalf("read secrets archive: %v", err)
+	}
+	secretsArchiveSum := sha256.Sum256(secretsArchiveData)
+	authArchiveData, err := os.ReadFile(authArchivePath)
+	if err != nil {
+		t.Fatalf("read auth archive: %v", err)
+	}
+	authArchiveSum := sha256.Sum256(authArchiveData)
+
+	var secretsDownloads atomic.Int64
+	var authDownloads atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/secrets.tar.gz":
+			secretsDownloads.Add(1)
+			if got := r.Header.Get("Authorization"); got != "" {
+				http.Error(w, "unexpected auth header for secrets download", http.StatusUnauthorized)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(secretsArchiveData)
+		case "/auth.tar.gz":
+			authDownloads.Add(1)
+			if got := r.Header.Get("Authorization"); got != "token ghp_inline_auth_source_token" {
+				http.Error(w, "bad auth header for auth download", http.StatusUnauthorized)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(authArchiveData)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	resolver := &fakeMultiResolver{
+		results: map[string]fakeResolverResult{
+			secretsSource: {
+				archivePath: secretsArchivePath,
+				resolvedURL: srv.URL + "/secrets.tar.gz",
+				sha256:      hex.EncodeToString(secretsArchiveSum[:]),
+			},
+			authSource: {
+				archivePath: authArchivePath,
+				resolvedURL: srv.URL + "/auth.tar.gz",
+				sha256:      hex.EncodeToString(authArchiveSum[:]),
+			},
+		},
+	}
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configYAML := strings.Join([]string{
+		requiredDatastoreConfigYAML(t, dir, filepath.Join(dir, "data.db")),
+		"secrets:",
+		"  provider:",
+		"    source:",
+		"      ref: " + secretsSource,
+		"      version: " + secretsVersion,
+		"auth:",
+		"  provider:",
+		"    source:",
+		"      ref: " + authSource,
+		"      version: " + authVersion,
+		"      auth:",
+		"        token: secret://source-token",
+		"  config:",
+		"    client_id: managed-auth-client",
+		"server:",
+		"  artifacts_dir: " + artifactsDir,
+		"  encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	factories := bootstrap.NewFactoryRegistry()
+	factories.Secrets["plugin"] = secretsplugin.Factory
+
+	lc := NewLifecycle(resolver).WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
+		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
+	})
+
+	lock, err := lc.InitAtPath(configPath)
+	if err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+	if lock.Secrets == nil {
+		t.Fatal("lock secrets entry not found")
+	}
+	if lock.Auth == nil {
+		t.Fatal("lock auth entry not found")
+	}
+	if got := len(resolver.calls); got != 2 {
+		t.Fatalf("resolver calls = %d, want 2", got)
+	}
+	if resolver.calls[0].src.String() != secretsSource {
+		t.Fatalf("first resolver source = %q, want %q", resolver.calls[0].src.String(), secretsSource)
+	}
+	if resolver.calls[0].src.Token != "" {
+		t.Fatalf("secrets resolver token = %q, want empty", resolver.calls[0].src.Token)
+	}
+	if resolver.calls[1].src.String() != authSource {
+		t.Fatalf("second resolver source = %q, want %q", resolver.calls[1].src.String(), authSource)
+	}
+	if resolver.calls[1].src.Token != "ghp_inline_auth_source_token" {
+		t.Fatalf("auth resolver token = %q, want %q", resolver.calls[1].src.Token, "ghp_inline_auth_source_token")
+	}
+
+	secretsRoot := filepath.Join(artifactsDir, ".gestaltd", "secrets")
+	if err := os.RemoveAll(secretsRoot); err != nil {
+		t.Fatalf("RemoveAll secrets root: %v", err)
+	}
+	authRoot := filepath.Join(artifactsDir, ".gestaltd", "auth")
+	if err := os.RemoveAll(authRoot); err != nil {
+		t.Fatalf("RemoveAll auth root: %v", err)
+	}
+
+	callsBefore := len(resolver.calls)
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
+	}
+	if got := len(resolver.calls); got != callsBefore {
+		t.Fatalf("resolver calls during locked load = %d, want %d", got, callsBefore)
+	}
+	if got := secretsDownloads.Load(); got != 1 {
+		t.Fatalf("secrets download count = %d, want 1", got)
+	}
+	if got := authDownloads.Load(); got != 1 {
+		t.Fatalf("auth download count = %d, want 1", got)
+	}
+	if cfg.Auth.Provider == nil || cfg.Auth.Provider.Source == nil || cfg.Auth.Provider.Source.Auth == nil {
+		t.Fatalf("auth provider source auth = %#v", cfg.Auth.Provider)
+	}
+	if cfg.Auth.Provider.Source.Auth.Token != "ghp_inline_auth_source_token" {
+		t.Fatalf("resolved auth source token = %q, want %q", cfg.Auth.Provider.Source.Auth.Token, "ghp_inline_auth_source_token")
+	}
+
+	secretsExecutablePath := resolveLockPath(artifactsDir, lock.Secrets.Executable)
+	if cfg.Secrets.Provider == nil {
+		t.Fatal("secrets provider is nil after load")
+	}
+	if cfg.Secrets.Provider.Command != secretsExecutablePath {
+		t.Fatalf("secrets provider command = %q, want %q", cfg.Secrets.Provider.Command, secretsExecutablePath)
+	}
+	authExecutablePath := resolveLockPath(artifactsDir, lock.Auth.Executable)
+	if cfg.Auth.Provider.Command != authExecutablePath {
+		t.Fatalf("auth provider command = %q, want %q", cfg.Auth.Provider.Command, authExecutablePath)
 	}
 }
 

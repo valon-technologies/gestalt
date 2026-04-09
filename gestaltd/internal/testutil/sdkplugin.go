@@ -302,6 +302,48 @@ func cloneStringMap(values map[string]string) map[string]string {
 `
 }
 
+func GeneratedSecretsPackageSource() string {
+	return `package secrets
+
+import (
+	"context"
+	"fmt"
+
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+)
+
+type Provider struct {
+	secrets map[string]string
+}
+
+func New() *Provider {
+	return &Provider{
+		secrets: map[string]string{
+			"generated-secret": "generated-secret-value",
+			"source-token":     "ghp_inline_auth_source_token",
+		},
+	}
+}
+
+func (p *Provider) Configure(context.Context, string, map[string]any) error { return nil }
+
+func (p *Provider) Metadata() gestalt.ProviderMetadata {
+	return gestalt.ProviderMetadata{
+		Kind:        gestalt.ProviderKindSecrets,
+		Name:        "generated-secrets",
+		DisplayName: "Generated Secrets",
+	}
+}
+
+func (p *Provider) GetSecret(_ context.Context, name string) (string, error) {
+	if value, ok := p.secrets[name]; ok {
+		return value, nil
+	}
+	return "", fmt.Errorf("secret %q not found", name)
+}
+`
+}
+
 func GeneratedProviderModuleSource(t *testing.T, module string) string {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join(ExampleProviderPluginPath(t), "go.mod"))

@@ -288,6 +288,8 @@ func releaseRequiresBuildTarget(manifest *pluginmanifestv1.Manifest) bool {
 		return manifest.Entrypoints.Auth == nil
 	case pluginmanifestv1.KindDatastore:
 		return manifest.Entrypoints.Datastore == nil
+	case pluginmanifestv1.KindSecrets:
+		return manifest.Entrypoints.Secrets == nil
 	default:
 		return false
 	}
@@ -297,7 +299,7 @@ func detectReleaseSourceBuildTarget(root, kind string) (bool, error) {
 	switch kind {
 	case pluginmanifestv1.KindPlugin:
 		return pluginpkg.HasSourceProviderPackage(root)
-	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore:
+	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore, pluginmanifestv1.KindSecrets:
 		return pluginpkg.HasSourceComponentPackage(root, kind)
 	default:
 		return false, fmt.Errorf("unsupported release build target kind %q", kind)
@@ -308,7 +310,7 @@ func validateReleaseBuildTarget(root, kind, goos, goarch, libc string) error {
 	switch kind {
 	case pluginmanifestv1.KindPlugin:
 		return pluginpkg.ValidateSourceProviderRelease(root, goos, goarch, libc)
-	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore:
+	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore, pluginmanifestv1.KindSecrets:
 		return pluginpkg.ValidateSourceComponentRelease(root, kind, goos, goarch, libc)
 	default:
 		return fmt.Errorf("unsupported release build target kind %q", kind)
@@ -319,7 +321,7 @@ func buildReleaseTargetBinary(root, outputPath, pluginName, kind, goos, goarch, 
 	switch kind {
 	case pluginmanifestv1.KindPlugin:
 		return pluginpkg.BuildSourceProviderReleaseBinary(root, outputPath, pluginName, goos, goarch, libc)
-	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore:
+	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore, pluginmanifestv1.KindSecrets:
 		return pluginpkg.BuildSourceComponentReleaseBinary(root, outputPath, kind, goos, goarch, libc)
 	default:
 		return "", fmt.Errorf("unsupported release build target kind %q", kind)
@@ -330,7 +332,7 @@ func isMissingReleaseSourceBuildTarget(err error, kind string) bool {
 	switch kind {
 	case pluginmanifestv1.KindPlugin:
 		return errors.Is(err, pluginpkg.ErrNoSourceProviderPackage)
-	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore:
+	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore, pluginmanifestv1.KindSecrets:
 		return errors.Is(err, pluginpkg.ErrNoSourceComponentPackage)
 	default:
 		return false
@@ -345,6 +347,8 @@ func missingReleaseSourceBuildTargetError(kind string) error {
 		return fmt.Errorf("no Go, Rust, Python, or TypeScript auth source package found")
 	case pluginmanifestv1.KindDatastore:
 		return fmt.Errorf("no Go, Rust, Python, or TypeScript datastore source package found")
+	case pluginmanifestv1.KindSecrets:
+		return fmt.Errorf("no Go, Rust, Python, or TypeScript secrets source package found")
 	default:
 		return fmt.Errorf("unsupported release build target kind %q", kind)
 	}
@@ -472,6 +476,11 @@ func buildReleaseManifest(srcManifest *pluginmanifestv1.Manifest, version, binar
 			manifest.Entrypoints.Datastore = &pluginmanifestv1.Entrypoint{}
 		}
 		manifest.Entrypoints.Datastore.ArtifactPath = binaryName
+	case pluginmanifestv1.KindSecrets:
+		if manifest.Entrypoints.Secrets == nil {
+			manifest.Entrypoints.Secrets = &pluginmanifestv1.Entrypoint{}
+		}
+		manifest.Entrypoints.Secrets.ArtifactPath = binaryName
 	}
 
 	return manifest, nil
@@ -633,6 +642,11 @@ func copyReleasePackageFiles(manifest *pluginmanifestv1.Manifest, sourceDir, sta
 	}
 	if manifest.Datastore != nil {
 		if err := copyPath(manifest.Datastore.ConfigSchemaPath, false); err != nil {
+			return err
+		}
+	}
+	if manifest.Secrets != nil {
+		if err := copyPath(manifest.Secrets.ConfigSchemaPath, false); err != nil {
 			return err
 		}
 	}

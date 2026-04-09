@@ -40,6 +40,9 @@ const (
 	datastoreReleasePluginName       = "datastore-release"
 	datastoreReleaseSource           = "github.com/testowner/plugins/datastore-release"
 	datastoreReleaseSchemaPath       = "schemas/datastore.schema.json"
+	secretsReleasePluginName         = "secrets-release"
+	secretsReleaseSource             = "github.com/testowner/plugins/secrets-release"
+	secretsReleaseSchemaPath         = "schemas/secrets.schema.json"
 	rustReleasePluginName            = "provider-rust"
 	rustWrapperBinaryName            = "gestalt-provider-wrapper"
 	pythonAuthReleasePluginName      = "python-auth-release"
@@ -883,6 +886,57 @@ func TestRun_PluginReleaseBuildsGoSourceDatastorePlugin(t *testing.T) {
 	}
 }
 
+func TestRun_PluginReleaseBuildsGoSourceSecretsPlugin(t *testing.T) {
+	t.Parallel()
+
+	pluginDir := newSourceSecretsReleaseFixture(t, t.TempDir())
+	outputDir := t.TempDir()
+	const testVersion = "0.0.19-test"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
+		"--output", outputDir,
+	)
+
+	archiveName := platformArchiveName(secretsReleasePluginName, testVersion, expectedGoReleasePlatform(runtime.GOOS, runtime.GOARCH, ""))
+	extractDir := extractReleasedArchive(t, outputDir, archiveName)
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+	binaryName := releaseBinaryName(secretsReleasePluginName, runtime.GOOS)
+
+	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
+		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
+	}
+	assertExpectedGoArtifactPlatform(t, manifest.Artifacts[0], runtime.GOOS, runtime.GOARCH, "")
+	if manifest.Entrypoints.Secrets == nil || manifest.Entrypoints.Secrets.ArtifactPath != binaryName {
+		t.Fatalf("secrets entrypoint = %+v, want artifact path %q", manifest.Entrypoints.Secrets, binaryName)
+	}
+	if _, err := os.Stat(filepath.Join(extractDir, secretsReleaseSchemaPath)); err != nil {
+		t.Fatalf("expected %s in archive: %v", secretsReleaseSchemaPath, err)
+	}
+
+	sm, err := pluginhost.NewExecutableSecretManager(context.Background(), pluginhost.SecretsExecConfig{
+		Command: filepath.Join(extractDir, binaryName),
+		Name:    secretsReleasePluginName,
+	})
+	if err != nil {
+		t.Fatalf("NewExecutableSecretManager: %v", err)
+	}
+	defer func() {
+		if closer, ok := sm.(interface{ Close() error }); ok {
+			_ = closer.Close()
+		}
+	}()
+
+	value, err := sm.GetSecret(context.Background(), "generated-secret")
+	if err != nil {
+		t.Fatalf("GetSecret(generated-secret): %v", err)
+	}
+	if value != "generated-secret-value" {
+		t.Fatalf("GetSecret(generated-secret) = %q, want %q", value, "generated-secret-value")
+	}
+}
+
 func TestRun_PluginReleaseBuildsRustSourceAuthPlugin(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake cargo test fixture is POSIX-only")
@@ -1715,6 +1769,16 @@ func TestRun_PluginReleaseRejectsRequiredExecutableKindsWithoutSourceOrEntrypoin
 			},
 			wantError: "no Go, Rust, Python, or TypeScript datastore source package found",
 		},
+		{
+			name: "secrets",
+			manifest: &pluginmanifestv1.Manifest{
+				Source:      "github.com/testowner/plugins/missing-secrets",
+				Version:     "0.0.1",
+				DisplayName: "Missing Secrets",
+				Secrets:     &pluginmanifestv1.SecretsMetadata{},
+			},
+			wantError: "no Go, Rust, Python, or TypeScript secrets source package found",
+		},
 	}
 
 	for _, tc := range cases {
@@ -2420,6 +2484,28 @@ func newSourceDatastoreReleaseFixture(t *testing.T, dir string) string {
 		},
 	})
 	writeTestFile(t, pluginDir, datastoreReleaseSchemaPath, []byte(`{"type":"object"}`), 0o644)
+	return pluginDir
+}
+
+func newSourceSecretsReleaseFixture(t *testing.T, dir string) string {
+	t.Helper()
+
+	pluginDir := filepath.Join(dir, secretsReleasePluginName)
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(pluginDir): %v", err)
+	}
+	writeTestFile(t, pluginDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/"+secretsReleasePluginName)), 0o644)
+	writeTestFile(t, pluginDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
+	writeTestFile(t, pluginDir, "secrets.go", []byte(testutil.GeneratedSecretsPackageSource()), 0o644)
+	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
+		Source:      secretsReleaseSource,
+		Version:     "0.0.1",
+		DisplayName: "Secrets Release",
+		Secrets: &pluginmanifestv1.SecretsMetadata{
+			ConfigSchemaPath: secretsReleaseSchemaPath,
+		},
+	})
+	writeTestFile(t, pluginDir, secretsReleaseSchemaPath, []byte(`{"type":"object"}`), 0o644)
 	return pluginDir
 }
 

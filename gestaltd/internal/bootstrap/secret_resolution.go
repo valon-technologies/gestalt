@@ -14,8 +14,10 @@ import (
 const secretPrefix = "secret://"
 
 // resolveSecretRefs walks the config struct and replaces any string value
-// starting with "secret://" with the resolved secret value. The SecretsConfig
-// node is skipped to avoid self-referential resolution.
+// starting with "secret://" with the resolved secret value. The
+// SecretsConfig.Config node is skipped to avoid self-referential resolution,
+// but secrets.provider metadata is still resolved after the secret manager has
+// been prepared so managed source auth can use secret-backed credentials.
 func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretManager) error {
 	resolve := func(val string) (string, error) {
 		name, ok := strings.CutPrefix(val, secretPrefix)
@@ -67,6 +69,11 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 	}
 	if cfg.Datastore.Provider != nil {
 		if err := resolveStringFields(cfg.Datastore.Provider, resolve); err != nil {
+			return err
+		}
+	}
+	if cfg.Secrets.Provider != nil {
+		if err := resolveStringFields(cfg.Secrets.Provider, resolve); err != nil {
 			return err
 		}
 	}
