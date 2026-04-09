@@ -33,14 +33,22 @@ on:
         default: ''
         type: string
       platforms:
-        description: Target platforms to publish.
-        required: false
-        default: 'linux/amd64,linux/arm64'
+        description: Target platforms to publish (e.g. "linux/amd64,linux/arm64,linux/arm/v7").
+        required: true
         type: string
       build-context:
         description: Docker build context relative to the repository root.
         required: false
         default: '.'
+        type: string
+      tag-suffix:
+        description: Optional suffix appended to image tags (e.g. "-debian" produces ":1.0-debian" and ":latest-debian").
+        required: false
+        default: ''
+        type: string
+      target:
+        description: Dockerfile build target (e.g. "static", "alpine", "debian").
+        required: true
         type: string
     secrets:
       DOCKERHUB_USERNAME:
@@ -98,11 +106,12 @@ jobs:
         with:
           context: ${{ inputs.build-context }}
           file: ${{ inputs.dockerfile }}
+          target: ${{ inputs.target }}
           push: true
           platforms: ${{ inputs.platforms }}
           tags: |
-            ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
-            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ inputs.tag-suffix }}
+            ${{ env.IMAGE_NAME }}:latest${{ inputs.tag-suffix }}
           build-args: |
             GESTALT_VERSION=${{ steps.version.outputs.version }}
             GESTALT_REVISION=${{ github.sha }}
@@ -118,13 +127,14 @@ jobs:
       - name: Scan image for vulnerabilities
         uses: aquasecurity/trivy-action@57a97c7e7821a5776cebc9bb87c984fa69cba8f1 # v0.35.0
         with:
-          image-ref: ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+          image-ref: ${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}${{ inputs.tag-suffix }}
           format: table
           exit-code: '1'
           severity: CRITICAL,HIGH
           ignore-unfixed: true
 
       - name: Update Docker Hub description
+        if: ${{ inputs.tag-suffix == '' }}
         uses: peter-evans/dockerhub-description@1b9a80c056b620d92cedb9d9b5a223409c68ddfa # v5
         with:
           username: ${{ secrets.DOCKERHUB_DESCRIPTION_USERNAME }}

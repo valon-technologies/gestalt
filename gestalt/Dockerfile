@@ -11,13 +11,14 @@ COPY dist/gestalt-linux-*.tar.gz /dist/
 RUN case "$TARGETARCH" in \
       amd64) archive=/dist/gestalt-linux-x86_64-musl.tar.gz ;; \
       arm64) archive=/dist/gestalt-linux-arm64-musl.tar.gz ;; \
+      arm)   archive=/dist/gestalt-linux-armv7-musl.tar.gz ;; \
       *) echo "unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
     esac && \
     mkdir -p /out && \
     tar -xzf "$archive" -C /out && \
     test -x /out/gestalt
 
-FROM gcr.io/distroless/cc-debian12@sha256:329e54034ce498f9c6b345044e8f530c6691f99e94a92446f68c0adf9baa8464
+FROM gcr.io/distroless/cc-debian12@sha256:329e54034ce498f9c6b345044e8f530c6691f99e94a92446f68c0adf9baa8464 AS distroless
 ARG GESTALT_VERSION
 ARG GESTALT_REVISION
 ARG GESTALT_CREATED

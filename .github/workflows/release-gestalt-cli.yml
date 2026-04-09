@@ -54,6 +54,8 @@ jobs:
       short-description: CLI client for managing Gestalt integrations, authentication, and operations.
       readme-filepath: docs/dockerhub/gestalt.md
       download-artifact-pattern: 'gestalt-linux-*'
+      platforms: 'linux/amd64,linux/arm64,linux/arm/v7'
+      target: distroless
 
   update-formula:
     name: Update Homebrew Formula

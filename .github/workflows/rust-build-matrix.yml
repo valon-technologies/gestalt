@@ -61,6 +61,16 @@ jobs:
             target: aarch64-unknown-linux-musl
             suffix: linux-arm64-musl
             cross: true
+          - name: Linux-ARMv7
+            runs-on: ubuntu-latest
+            target: armv7-unknown-linux-gnueabihf
+            suffix: linux-armv7
+            cross: true
+          - name: Linux-ARMv7-musl
+            runs-on: ubuntu-latest
+            target: armv7-unknown-linux-musleabihf
+            suffix: linux-armv7-musl
+            cross: true
           - name: Windows-x86_64
             runs-on: windows-latest
             target: x86_64-pc-windows-msvc
