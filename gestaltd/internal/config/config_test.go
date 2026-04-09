@@ -204,6 +204,30 @@ server:
 	}
 }
 
+func TestLoadAllowMissingEnvForInitSemantics(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+datastore:
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+      version: 1.0.0
+server:
+  encryption_key: test-key
+  public:
+    port: ${TEST_PORT}
+`)
+
+	cfg, err := LoadAllowMissingEnv(path)
+	if err != nil {
+		t.Fatalf("LoadAllowMissingEnv: %v", err)
+	}
+	if cfg.Server.Public.Port != 8080 {
+		t.Fatalf("Server.Public.Port = %d, want 8080", cfg.Server.Public.Port)
+	}
+}
+
 func TestLoadConfigEmptyDefaultEnvSyntax(t *testing.T) {
 	t.Parallel()
 
@@ -233,7 +257,7 @@ func TestExpandEnvVariablesPreservesMissingPlaceholder(t *testing.T) {
 
 	got, err := expandEnvVariables("value: ${MISSING}", func(string) (string, bool) {
 		return "", false
-	}, true)
+	}, missingEnvPreserve)
 	if err != nil {
 		t.Fatalf("expandEnvVariables: %v", err)
 	}
@@ -247,7 +271,7 @@ func TestExpandEnvVariablesRejectsNonEmptyDefault(t *testing.T) {
 
 	_, err := expandEnvVariables("value: ${MISSING:-fallback}", func(string) (string, bool) {
 		return "", false
-	}, false)
+	}, missingEnvError)
 	if err == nil {
 		t.Fatal("expandEnvVariables: expected error, got nil")
 	}

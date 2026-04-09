@@ -49,6 +49,14 @@ type Config struct {
 	UI           UIConfig                  `yaml:"ui"`
 }
 
+type missingEnvAction int
+
+const (
+	missingEnvError missingEnvAction = iota
+	missingEnvEmpty
+	missingEnvPreserve
+)
+
 type TelemetryConfig struct {
 	Provider string    `yaml:"provider"`
 	Config   yaml.Node `yaml:"config"`
@@ -700,11 +708,15 @@ func EffectiveNamedConnectionDef(plugin *ProviderDef, manifestPlugin *pluginmani
 type OperationOverride = pluginmanifestv1.ManifestOperationOverride
 
 func Load(path string) (*Config, error) {
-	return loadWithLookup(path, os.LookupEnv, false)
+	return loadWithLookup(path, os.LookupEnv, missingEnvError)
 }
 
 func LoadWithLookup(path string, lookup func(string) (string, bool)) (*Config, error) {
-	return loadWithLookup(path, lookup, false)
+	return loadWithLookup(path, lookup, missingEnvError)
+}
+
+func LoadAllowMissingEnv(path string) (*Config, error) {
+	return loadWithLookup(path, os.LookupEnv, missingEnvEmpty)
 }
 
 func OverlayManagedPluginConfig(path string, cfg *Config) error {
@@ -759,7 +771,7 @@ func overlayManagedPluginConfigNode(raw *yaml.Node, plugin *ProviderDef, subject
 	if configNode == nil || configNode.Kind == 0 {
 		return nil
 	}
-	node, err := overlayEnvIntoNode(*configNode, os.LookupEnv, true)
+	node, err := overlayEnvIntoNode(*configNode, os.LookupEnv, missingEnvPreserve)
 	if err != nil {
 		return fmt.Errorf("expanding managed plugin config for %s: %w", subject, err)
 	}
@@ -775,7 +787,7 @@ func overlayManagedComponentConfigNode(raw *yaml.Node, provider *ProviderDef, ta
 	if configNode == nil || configNode.Kind == 0 {
 		return nil
 	}
-	node, err := overlayEnvIntoNode(*configNode, os.LookupEnv, true)
+	node, err := overlayEnvIntoNode(*configNode, os.LookupEnv, missingEnvPreserve)
 	if err != nil {
 		return fmt.Errorf("expanding managed provider config for %s: %w", subject, err)
 	}
@@ -806,13 +818,13 @@ func mappingValueNode(node *yaml.Node, key string) *yaml.Node {
 	return nil
 }
 
-func loadWithLookup(path string, lookup func(string) (string, bool), preserveMissing bool) (*Config, error) {
+func loadWithLookup(path string, lookup func(string) (string, bool), missingEnv missingEnvAction) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading config file: %w", err)
 	}
 
-	resolved, err := expandEnvVariables(string(data), lookup, preserveMissing)
+	resolved, err := expandEnvVariables(string(data), lookup, missingEnv)
 	if err != nil {
 		return nil, err
 	}
@@ -849,7 +861,7 @@ func parseEnvPlaceholder(key string) (name string, allowEmptyDefault bool, err e
 	return name, true, nil
 }
 
-func expandEnvVariables(input string, lookup func(string) (string, bool), preserveMissing bool) (string, error) {
+func expandEnvVariables(input string, lookup func(string) (string, bool), missingEnv missingEnvAction) (string, error) {
 	var expandErr error
 	resolved := os.Expand(input, func(key string) string {
 		if expandErr != nil {
@@ -868,8 +880,11 @@ func expandEnvVariables(input string, lookup func(string) (string, bool), preser
 			if allowEmptyDefault {
 				return ""
 			}
-			if preserveMissing {
+			switch missingEnv {
+			case missingEnvPreserve:
 				return "${" + key + "}"
+			case missingEnvEmpty:
+				return ""
 			}
 			expandErr = fmt.Errorf("environment variable %q not set; use ${%s:-} to allow an empty default", name, name)
 			return ""
@@ -887,13 +902,13 @@ func expandEnvVariables(input string, lookup func(string) (string, bool), preser
 	return resolved, nil
 }
 
-func overlayEnvIntoNode(node yaml.Node, lookup func(string) (string, bool), preserveMissing bool) (yaml.Node, error) {
+func overlayEnvIntoNode(node yaml.Node, lookup func(string) (string, bool), missingEnv missingEnvAction) (yaml.Node, error) {
 	data, err := yaml.Marshal(&node)
 	if err != nil {
 		return yaml.Node{}, fmt.Errorf("marshaling config node: %w", err)
 	}
 
-	resolved, err := expandEnvVariables(string(data), lookup, preserveMissing)
+	resolved, err := expandEnvVariables(string(data), lookup, missingEnv)
 	if err != nil {
 		return yaml.Node{}, err
 	}
