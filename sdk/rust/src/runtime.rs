@@ -17,14 +17,16 @@ use tokio_stream::wrappers::UnixListenerStream;
 use tonic::transport::Server;
 
 use crate::catalog::write_catalog;
-use crate::env::{ENV_PLUGIN_NAME, ENV_PLUGIN_PARENT_PID, ENV_PLUGIN_SOCKET, ENV_WRITE_CATALOG};
+use crate::env::{
+    ENV_PROVIDER_NAME, ENV_PROVIDER_PARENT_PID, ENV_PROVIDER_SOCKET, ENV_WRITE_CATALOG,
+};
 use crate::error::{Error, Result};
 #[cfg(unix)]
 use crate::generated::v1::auth_provider_server::AuthProviderServer;
 #[cfg(unix)]
 use crate::generated::v1::datastore_provider_server::DatastoreProviderServer;
 #[cfg(unix)]
-use crate::generated::v1::plugin_provider_server::PluginProviderServer;
+use crate::generated::v1::integration_provider_server::IntegrationProviderServer;
 #[cfg(unix)]
 use crate::generated::v1::provider_lifecycle_server::ProviderLifecycleServer;
 #[cfg(unix)]
@@ -76,7 +78,7 @@ pub fn maybe_write_catalog<P>(router: &Router<P>) -> Result<bool> {
         return Ok(false);
     };
 
-    let catalog = if let Ok(name) = env::var(ENV_PLUGIN_NAME) {
+    let catalog = if let Ok(name) = env::var(ENV_PROVIDER_NAME) {
         router.catalog().clone().with_name(name)
     } else {
         router.catalog().clone()
@@ -95,14 +97,14 @@ where
         return Ok(());
     }
     let server = ProviderServer::new(Arc::clone(&provider), router);
-    serve_unix_plugin(
+    serve_unix_provider(
         provider,
         move |incoming, provider| {
             Server::builder()
                 .add_service(ProviderLifecycleServer::new(RuntimeServer::for_provider(
                     Arc::clone(&provider),
                 )))
-                .add_service(PluginProviderServer::new(server))
+                .add_service(IntegrationProviderServer::new(server))
                 .serve_with_incoming_shutdown(incoming, shutdown_signal(parent_pid()))
         },
         |provider| async move { provider.close().await },
@@ -115,7 +117,7 @@ pub async fn serve_auth_provider<P>(provider: Arc<P>) -> Result<()>
 where
     P: AuthProvider,
 {
-    serve_unix_plugin(
+    serve_unix_provider(
         provider,
         move |incoming, provider| {
             Server::builder()
@@ -137,7 +139,7 @@ pub async fn serve_datastore_provider<P>(provider: Arc<P>) -> Result<()>
 where
     P: DatastoreProvider,
 {
-    serve_unix_plugin(
+    serve_unix_provider(
         provider,
         move |incoming, provider| {
             Server::builder()
@@ -159,7 +161,7 @@ pub async fn serve_secrets_provider<P>(provider: Arc<P>) -> Result<()>
 where
     P: SecretsProvider,
 {
-    serve_unix_plugin(
+    serve_unix_provider(
         provider,
         move |incoming, provider| {
             Server::builder()
@@ -239,7 +241,7 @@ async fn shutdown_signal(parent_pid: Option<u32>) {
 }
 
 #[cfg(unix)]
-async fn serve_unix_plugin<P, F, S, C, CF>(provider: Arc<P>, serve: F, close: C) -> Result<()>
+async fn serve_unix_provider<P, F, S, C, CF>(provider: Arc<P>, serve: F, close: C) -> Result<()>
 where
     P: Send + Sync,
     F: FnOnce(UnixListenerStream, Arc<P>) -> S,
@@ -247,8 +249,8 @@ where
     C: FnOnce(Arc<P>) -> CF,
     CF: Future<Output = Result<()>>,
 {
-    let socket = env::var_os(ENV_PLUGIN_SOCKET)
-        .ok_or_else(|| Error::internal(format!("{ENV_PLUGIN_SOCKET} is required")))?;
+    let socket = env::var_os(ENV_PROVIDER_SOCKET)
+        .ok_or_else(|| Error::internal(format!("{ENV_PROVIDER_SOCKET} is required")))?;
     let socket = PathBuf::from(socket);
     if socket.exists() {
         std::fs::remove_file(&socket)?;
@@ -274,7 +276,7 @@ where
 
 #[cfg(unix)]
 fn parent_pid() -> Option<u32> {
-    env::var(ENV_PLUGIN_PARENT_PID)
+    env::var(ENV_PROVIDER_PARENT_PID)
         .ok()
         .and_then(|value| value.parse::<u32>().ok())
         .filter(|pid| *pid > 0)

@@ -5,7 +5,7 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 use gestalt_plugin_sdk as gestalt;
-use gestalt_plugin_sdk::proto::v1::plugin_provider_server::PluginProvider;
+use gestalt_plugin_sdk::proto::v1::integration_provider_server::IntegrationProvider;
 use gestalt_plugin_sdk::proto::v1::{ExecuteRequest, StartProviderRequest};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};

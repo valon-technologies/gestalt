@@ -28,7 +28,7 @@ type StaticProviderSpec struct {
 }
 
 type remoteProviderBase struct {
-	client      proto.PluginProviderClient
+	client      proto.IntegrationProviderClient
 	name        string
 	displayName string
 	description string
@@ -51,7 +51,7 @@ func WithCloser(c io.Closer) RemoteProviderOption {
 	return func(b *remoteProviderBase) { b.closer = c }
 }
 
-func NewRemoteProvider(ctx context.Context, client proto.PluginProviderClient, spec StaticProviderSpec, config map[string]any, opts ...RemoteProviderOption) (core.Provider, error) {
+func NewRemoteProvider(ctx context.Context, client proto.IntegrationProviderClient, spec StaticProviderSpec, config map[string]any, opts ...RemoteProviderOption) (core.Provider, error) {
 	supportsSessionCatalog, err := getSessionCatalogSupportWithRetry(ctx, client)
 	if err != nil {
 		return nil, err
@@ -83,7 +83,7 @@ func NewRemoteProvider(ctx context.Context, client proto.PluginProviderClient, s
 	return base, nil
 }
 
-func getSessionCatalogSupportWithRetry(ctx context.Context, client proto.PluginProviderClient) (bool, error) {
+func getSessionCatalogSupportWithRetry(ctx context.Context, client proto.IntegrationProviderClient) (bool, error) {
 	ticker := time.NewTicker(25 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -220,7 +220,7 @@ func (p *remoteProviderBase) decorateCatalog(cat *catalog.Catalog) *catalog.Cata
 	return decorated
 }
 
-func callStartProvider(ctx context.Context, client proto.PluginProviderClient, name string, config map[string]any) error {
+func callStartProvider(ctx context.Context, client proto.IntegrationProviderClient, name string, config map[string]any) error {
 	cfgStruct, err := structFromMap(config)
 	if err != nil {
 		return fmt.Errorf("encode provider config: %w", err)
@@ -237,7 +237,7 @@ func callStartProvider(ctx context.Context, client proto.PluginProviderClient, n
 		return fmt.Errorf("start provider: %w", err)
 	}
 	if v := resp.GetProtocolVersion(); v != proto.CurrentProtocolVersion {
-		return fmt.Errorf("plugin responded with protocol version %d, host requires %d",
+		return fmt.Errorf("provider responded with protocol version %d, host requires %d",
 			v, proto.CurrentProtocolVersion)
 	}
 	return nil

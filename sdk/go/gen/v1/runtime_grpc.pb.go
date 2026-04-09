@@ -20,17 +20,17 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ProviderLifecycle_GetPluginMetadata_FullMethodName = "/gestalt.plugin.v1.ProviderLifecycle/GetPluginMetadata"
-	ProviderLifecycle_ConfigurePlugin_FullMethodName   = "/gestalt.plugin.v1.ProviderLifecycle/ConfigurePlugin"
-	ProviderLifecycle_HealthCheck_FullMethodName       = "/gestalt.plugin.v1.ProviderLifecycle/HealthCheck"
+	ProviderLifecycle_GetProviderIdentity_FullMethodName = "/gestalt.plugin.v1.ProviderLifecycle/GetProviderIdentity"
+	ProviderLifecycle_ConfigureProvider_FullMethodName   = "/gestalt.plugin.v1.ProviderLifecycle/ConfigureProvider"
+	ProviderLifecycle_HealthCheck_FullMethodName         = "/gestalt.plugin.v1.ProviderLifecycle/HealthCheck"
 )
 
 // ProviderLifecycleClient is the client API for ProviderLifecycle service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ProviderLifecycleClient interface {
-	GetPluginMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*PluginMetadata, error)
-	ConfigurePlugin(ctx context.Context, in *ConfigurePluginRequest, opts ...grpc.CallOption) (*ConfigurePluginResponse, error)
+	GetProviderIdentity(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ProviderIdentity, error)
+	ConfigureProvider(ctx context.Context, in *ConfigureProviderRequest, opts ...grpc.CallOption) (*ConfigureProviderResponse, error)
 	HealthCheck(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*HealthCheckResponse, error)
 }
 
@@ -42,20 +42,20 @@ func NewProviderLifecycleClient(cc grpc.ClientConnInterface) ProviderLifecycleCl
 	return &providerLifecycleClient{cc}
 }
 
-func (c *providerLifecycleClient) GetPluginMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*PluginMetadata, error) {
+func (c *providerLifecycleClient) GetProviderIdentity(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ProviderIdentity, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(PluginMetadata)
-	err := c.cc.Invoke(ctx, ProviderLifecycle_GetPluginMetadata_FullMethodName, in, out, cOpts...)
+	out := new(ProviderIdentity)
+	err := c.cc.Invoke(ctx, ProviderLifecycle_GetProviderIdentity_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *providerLifecycleClient) ConfigurePlugin(ctx context.Context, in *ConfigurePluginRequest, opts ...grpc.CallOption) (*ConfigurePluginResponse, error) {
+func (c *providerLifecycleClient) ConfigureProvider(ctx context.Context, in *ConfigureProviderRequest, opts ...grpc.CallOption) (*ConfigureProviderResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(ConfigurePluginResponse)
-	err := c.cc.Invoke(ctx, ProviderLifecycle_ConfigurePlugin_FullMethodName, in, out, cOpts...)
+	out := new(ConfigureProviderResponse)
+	err := c.cc.Invoke(ctx, ProviderLifecycle_ConfigureProvider_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -76,8 +76,8 @@ func (c *providerLifecycleClient) HealthCheck(ctx context.Context, in *emptypb.E
 // All implementations must embed UnimplementedProviderLifecycleServer
 // for forward compatibility.
 type ProviderLifecycleServer interface {
-	GetPluginMetadata(context.Context, *emptypb.Empty) (*PluginMetadata, error)
-	ConfigurePlugin(context.Context, *ConfigurePluginRequest) (*ConfigurePluginResponse, error)
+	GetProviderIdentity(context.Context, *emptypb.Empty) (*ProviderIdentity, error)
+	ConfigureProvider(context.Context, *ConfigureProviderRequest) (*ConfigureProviderResponse, error)
 	HealthCheck(context.Context, *emptypb.Empty) (*HealthCheckResponse, error)
 	mustEmbedUnimplementedProviderLifecycleServer()
 }
@@ -89,11 +89,11 @@ type ProviderLifecycleServer interface {
 // pointer dereference when methods are called.
 type UnimplementedProviderLifecycleServer struct{}
 
-func (UnimplementedProviderLifecycleServer) GetPluginMetadata(context.Context, *emptypb.Empty) (*PluginMetadata, error) {
-	return nil, status.Error(codes.Unimplemented, "method GetPluginMetadata not implemented")
+func (UnimplementedProviderLifecycleServer) GetProviderIdentity(context.Context, *emptypb.Empty) (*ProviderIdentity, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetProviderIdentity not implemented")
 }
-func (UnimplementedProviderLifecycleServer) ConfigurePlugin(context.Context, *ConfigurePluginRequest) (*ConfigurePluginResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method ConfigurePlugin not implemented")
+func (UnimplementedProviderLifecycleServer) ConfigureProvider(context.Context, *ConfigureProviderRequest) (*ConfigureProviderResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ConfigureProvider not implemented")
 }
 func (UnimplementedProviderLifecycleServer) HealthCheck(context.Context, *emptypb.Empty) (*HealthCheckResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method HealthCheck not implemented")
@@ -119,38 +119,38 @@ func RegisterProviderLifecycleServer(s grpc.ServiceRegistrar, srv ProviderLifecy
 	s.RegisterService(&ProviderLifecycle_ServiceDesc, srv)
 }
 
-func _ProviderLifecycle_GetPluginMetadata_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _ProviderLifecycle_GetProviderIdentity_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(emptypb.Empty)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ProviderLifecycleServer).GetPluginMetadata(ctx, in)
+		return srv.(ProviderLifecycleServer).GetProviderIdentity(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: ProviderLifecycle_GetPluginMetadata_FullMethodName,
+		FullMethod: ProviderLifecycle_GetProviderIdentity_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProviderLifecycleServer).GetPluginMetadata(ctx, req.(*emptypb.Empty))
+		return srv.(ProviderLifecycleServer).GetProviderIdentity(ctx, req.(*emptypb.Empty))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _ProviderLifecycle_ConfigurePlugin_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ConfigurePluginRequest)
+func _ProviderLifecycle_ConfigureProvider_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConfigureProviderRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(ProviderLifecycleServer).ConfigurePlugin(ctx, in)
+		return srv.(ProviderLifecycleServer).ConfigureProvider(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: ProviderLifecycle_ConfigurePlugin_FullMethodName,
+		FullMethod: ProviderLifecycle_ConfigureProvider_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(ProviderLifecycleServer).ConfigurePlugin(ctx, req.(*ConfigurePluginRequest))
+		return srv.(ProviderLifecycleServer).ConfigureProvider(ctx, req.(*ConfigureProviderRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -181,12 +181,12 @@ var ProviderLifecycle_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*ProviderLifecycleServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "GetPluginMetadata",
-			Handler:    _ProviderLifecycle_GetPluginMetadata_Handler,
+			MethodName: "GetProviderIdentity",
+			Handler:    _ProviderLifecycle_GetProviderIdentity_Handler,
 		},
 		{
-			MethodName: "ConfigurePlugin",
-			Handler:    _ProviderLifecycle_ConfigurePlugin_Handler,
+			MethodName: "ConfigureProvider",
+			Handler:    _ProviderLifecycle_ConfigureProvider_Handler,
 		},
 		{
 			MethodName: "HealthCheck",

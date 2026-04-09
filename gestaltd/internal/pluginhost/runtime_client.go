@@ -10,14 +10,14 @@ import (
 )
 
 const (
-	pluginRPCTimeout     = 10 * time.Second
-	pluginMigrateTimeout = 2 * time.Minute
+	providerRPCTimeout     = 10 * time.Second
+	providerMigrateTimeout = 2 * time.Minute
 )
 
-var pluginConfigureTimeout = 30 * time.Second
+var providerConfigureTimeout = 30 * time.Second
 
-type runtimePluginMetadata struct {
-	Kind        proto.PluginKind
+type runtimeProviderMetadata struct {
+	Kind        proto.ProviderKind
 	Name        string
 	DisplayName string
 	Description string
@@ -25,18 +25,18 @@ type runtimePluginMetadata struct {
 	Warnings    []string
 }
 
-func configureRuntimePlugin(ctx context.Context, client proto.ProviderLifecycleClient, expectedKind proto.PluginKind, name string, config map[string]any) (*runtimePluginMetadata, error) {
+func configureRuntimeProvider(ctx context.Context, client proto.ProviderLifecycleClient, expectedKind proto.ProviderKind, name string, config map[string]any) (*runtimeProviderMetadata, error) {
 	if client == nil {
 		return nil, fmt.Errorf("runtime client is required")
 	}
-	metaCtx, cancel := pluginConfigureContext(ctx)
+	metaCtx, cancel := providerConfigureContext(ctx)
 	defer cancel()
-	meta, err := client.GetPluginMetadata(metaCtx, &emptypb.Empty{})
+	meta, err := client.GetProviderIdentity(metaCtx, &emptypb.Empty{})
 	if err != nil {
-		return nil, fmt.Errorf("get plugin metadata: %w", err)
+		return nil, fmt.Errorf("get provider identity: %w", err)
 	}
-	if expectedKind != proto.PluginKind_PLUGIN_KIND_UNSPECIFIED && meta.GetKind() != expectedKind {
-		return nil, fmt.Errorf("plugin kind mismatch: got %s, want %s", meta.GetKind().String(), expectedKind.String())
+	if expectedKind != proto.ProviderKind_PROVIDER_KIND_UNSPECIFIED && meta.GetKind() != expectedKind {
+		return nil, fmt.Errorf("provider kind mismatch: got %s, want %s", meta.GetKind().String(), expectedKind.String())
 	}
 	if err := validateRuntimeProtocol(meta); err != nil {
 		return nil, err
@@ -44,23 +44,23 @@ func configureRuntimePlugin(ctx context.Context, client proto.ProviderLifecycleC
 
 	cfgStruct, err := structFromMap(config)
 	if err != nil {
-		return nil, fmt.Errorf("encode plugin config: %w", err)
+		return nil, fmt.Errorf("encode provider config: %w", err)
 	}
-	configureCtx, configureCancel := pluginConfigureContext(ctx)
+	configureCtx, configureCancel := providerConfigureContext(ctx)
 	defer configureCancel()
-	resp, err := client.ConfigurePlugin(configureCtx, &proto.ConfigurePluginRequest{
+	resp, err := client.ConfigureProvider(configureCtx, &proto.ConfigureProviderRequest{
 		Name:            name,
 		Config:          cfgStruct,
 		ProtocolVersion: proto.CurrentProtocolVersion,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("configure plugin: %w", err)
+		return nil, fmt.Errorf("configure provider: %w", err)
 	}
 	if resp.GetProtocolVersion() != proto.CurrentProtocolVersion {
-		return nil, fmt.Errorf("plugin responded with protocol version %d, host requires %d", resp.GetProtocolVersion(), proto.CurrentProtocolVersion)
+		return nil, fmt.Errorf("provider responded with protocol version %d, host requires %d", resp.GetProtocolVersion(), proto.CurrentProtocolVersion)
 	}
 
-	return &runtimePluginMetadata{
+	return &runtimeProviderMetadata{
 		Kind:        meta.GetKind(),
 		Name:        meta.GetName(),
 		DisplayName: meta.GetDisplayName(),
@@ -70,55 +70,55 @@ func configureRuntimePlugin(ctx context.Context, client proto.ProviderLifecycleC
 	}, nil
 }
 
-func validateRuntimeProtocol(meta *proto.PluginMetadata) error {
+func validateRuntimeProtocol(meta *proto.ProviderIdentity) error {
 	if meta == nil {
-		return fmt.Errorf("plugin metadata is required")
+		return fmt.Errorf("provider identity is required")
 	}
 	minVersion := meta.GetMinProtocolVersion()
 	maxVersion := meta.GetMaxProtocolVersion()
 	if minVersion != 0 && proto.CurrentProtocolVersion < minVersion {
-		return fmt.Errorf("plugin requires protocol version >= %d, host has %d", minVersion, proto.CurrentProtocolVersion)
+		return fmt.Errorf("provider requires protocol version >= %d, host has %d", minVersion, proto.CurrentProtocolVersion)
 	}
 	if maxVersion != 0 && proto.CurrentProtocolVersion > maxVersion {
-		return fmt.Errorf("plugin supports protocol version <= %d, host has %d", maxVersion, proto.CurrentProtocolVersion)
+		return fmt.Errorf("provider supports protocol version <= %d, host has %d", maxVersion, proto.CurrentProtocolVersion)
 	}
 	return nil
 }
 
-func pingRuntimePlugin(ctx context.Context, client proto.ProviderLifecycleClient) error {
+func pingRuntimeProvider(ctx context.Context, client proto.ProviderLifecycleClient) error {
 	if client == nil {
 		return fmt.Errorf("runtime client is required")
 	}
 	resp, err := client.HealthCheck(ctx, &emptypb.Empty{})
 	if err != nil {
-		return fmt.Errorf("plugin health check: %w", err)
+		return fmt.Errorf("provider health check: %w", err)
 	}
 	if resp.GetReady() {
 		return nil
 	}
 	if resp.GetMessage() == "" {
-		return fmt.Errorf("plugin is not ready")
+		return fmt.Errorf("provider is not ready")
 	}
-	return fmt.Errorf("plugin is not ready: %s", resp.GetMessage())
+	return fmt.Errorf("provider is not ready: %s", resp.GetMessage())
 }
 
-func pluginCallContext(parent context.Context) (context.Context, context.CancelFunc) {
+func providerCallContext(parent context.Context) (context.Context, context.CancelFunc) {
 	if parent == nil {
 		parent = context.Background()
 	}
-	return context.WithTimeout(parent, pluginRPCTimeout)
+	return context.WithTimeout(parent, providerRPCTimeout)
 }
 
-func pluginConfigureContext(parent context.Context) (context.Context, context.CancelFunc) {
+func providerConfigureContext(parent context.Context) (context.Context, context.CancelFunc) {
 	if parent == nil {
 		parent = context.Background()
 	}
-	return context.WithTimeout(parent, pluginConfigureTimeout)
+	return context.WithTimeout(parent, providerConfigureTimeout)
 }
 
-func pluginMigrateContext(parent context.Context) (context.Context, context.CancelFunc) {
+func providerMigrateContext(parent context.Context) (context.Context, context.CancelFunc) {
 	if parent == nil {
 		parent = context.Background()
 	}
-	return context.WithTimeout(parent, pluginMigrateTimeout)
+	return context.WithTimeout(parent, providerMigrateTimeout)
 }

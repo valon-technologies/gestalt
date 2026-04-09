@@ -9,8 +9,8 @@ import (
 
 // ServeAuthProvider starts a gRPC server for an [AuthProvider].
 func ServeAuthProvider(ctx context.Context, auth AuthProvider) error {
-	return servePlugin(withPluginCloser(ctx, auth), func(srv *grpc.Server) {
-		proto.RegisterProviderLifecycleServer(srv, newPluginProviderServer(ProviderKindAuth, auth))
+	return serveProvider(withProviderCloser(ctx, auth), func(srv *grpc.Server) {
+		proto.RegisterProviderLifecycleServer(srv, newRuntimeServer(ProviderKindAuth, auth))
 		proto.RegisterAuthProviderServer(srv, newAuthProviderServer(auth))
 	})
 }

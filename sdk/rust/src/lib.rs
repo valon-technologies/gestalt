@@ -36,7 +36,7 @@ pub use catalog::{Catalog, CatalogOperation};
 pub use datastore::{
     DatastoreProvider, OAuthRegistration, StoredApiToken, StoredIntegrationToken, StoredUser,
 };
-pub use env::{CURRENT_PROTOCOL_VERSION, ENV_PLUGIN_SOCKET};
+pub use env::{CURRENT_PROTOCOL_VERSION, ENV_PROVIDER_SOCKET};
 pub use error::{Error, Result};
 #[doc(hidden)]
 pub use provider_server::{OperationResult, ProviderServer};

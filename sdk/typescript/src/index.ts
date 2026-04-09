@@ -95,8 +95,8 @@ export {
 } from "./schema.ts";
 export {
   CURRENT_PROTOCOL_VERSION,
-  ENV_PLUGIN_PARENT_PID,
-  ENV_PLUGIN_SOCKET,
+  ENV_PROVIDER_PARENT_PID,
+  ENV_PROVIDER_SOCKET,
   ENV_WRITE_CATALOG,
   createAuthService,
   createDatastoreService,

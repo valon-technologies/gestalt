@@ -136,7 +136,7 @@ message StartProviderResponse {
   int32 protocol_version = 1;
 }
 
-service PluginProvider {
+service IntegrationProvider {
   rpc GetMetadata(google.protobuf.Empty) returns (ProviderMetadata);
   rpc StartProvider(StartProviderRequest) returns (StartProviderResponse);
   rpc Execute(ExecuteRequest) returns (OperationResult);

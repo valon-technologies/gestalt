@@ -45,7 +45,7 @@ type remoteAuthProvider struct {
 }
 
 func NewExecutableAuthProvider(ctx context.Context, cfg AuthExecConfig) (core.AuthProvider, error) {
-	proc, err := startPluginProcess(ctx, ExecConfig{
+	proc, err := startProviderProcess(ctx, ExecConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
 		Env:          cfg.Env,
@@ -85,7 +85,7 @@ func newRemoteAuthProvider(ctx context.Context, runtimeClient proto.ProviderLife
 }
 
 func (p *remoteAuthProvider) configure(ctx context.Context, name string, config map[string]any) error {
-	meta, err := configureRuntimePlugin(ctx, p.runtime, proto.PluginKind_PLUGIN_KIND_AUTH, name, config)
+	meta, err := configureRuntimeProvider(ctx, p.runtime, proto.ProviderKind_PROVIDER_KIND_AUTH, name, config)
 	if err != nil {
 		return err
 	}
@@ -94,7 +94,7 @@ func (p *remoteAuthProvider) configure(ctx context.Context, name string, config 
 		p.name = meta.Name
 	}
 	if p.name == "" {
-		p.name = "plugin"
+		p.name = "auth"
 	}
 	if meta != nil {
 		p.displayName = meta.DisplayName
@@ -130,7 +130,7 @@ func (p *remoteAuthProvider) LoginURL(state string) (string, error) {
 }
 
 func (p *remoteAuthProvider) LoginURLContext(ctx context.Context, state string) (string, error) {
-	ctx, cancel := pluginCallContext(ctx)
+	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 
 	resp, err := p.client.BeginLogin(ctx, &proto.BeginLoginRequest{
@@ -141,7 +141,7 @@ func (p *remoteAuthProvider) LoginURLContext(ctx context.Context, state string) 
 		return "", fmt.Errorf("begin login: %w", err)
 	}
 	if resp == nil {
-		return "", fmt.Errorf("begin login: plugin returned nil response")
+		return "", fmt.Errorf("begin login: provider returned nil response")
 	}
 	rewrittenURL, upstreamState, err := withWrappedStateParam(resp.GetAuthorizationUrl(), "")
 	if err != nil {
@@ -178,7 +178,7 @@ func (p *remoteAuthProvider) HandleCallbackRequest(ctx context.Context, query ur
 	if query == nil {
 		query = url.Values{}
 	}
-	hostState, pluginState, upstreamState, err := decodeAuthCallbackState(query.Get("state"))
+	hostState, providerState, upstreamState, err := decodeAuthCallbackState(query.Get("state"))
 	if err != nil {
 		return nil, "", err
 	}
@@ -189,12 +189,12 @@ func (p *remoteAuthProvider) HandleCallbackRequest(ctx context.Context, query ur
 		normalizedQuery.Del("state")
 	}
 
-	ctx, cancel := pluginCallContext(ctx)
+	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 
 	resp, err := p.client.CompleteLogin(ctx, &proto.CompleteLoginRequest{
 		Query:         firstQueryValues(normalizedQuery),
-		ProviderState: append([]byte(nil), pluginState...),
+		ProviderState: append([]byte(nil), providerState...),
 		CallbackUrl:   p.callbackURL,
 	})
 	if err != nil {
@@ -202,7 +202,7 @@ func (p *remoteAuthProvider) HandleCallbackRequest(ctx context.Context, query ur
 	}
 	user := authenticatedUserFromProto(resp)
 	if user == nil {
-		return nil, "", fmt.Errorf("complete login: plugin returned nil user")
+		return nil, "", fmt.Errorf("complete login: provider returned nil user")
 	}
 	return user, hostState, nil
 }
@@ -213,7 +213,7 @@ func (p *remoteAuthProvider) ValidateToken(ctx context.Context, token string) (*
 		return identity, nil
 	}
 
-	ctx, cancel := pluginCallContext(ctx)
+	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 
 	user, err := p.client.ValidateExternalToken(ctx, &proto.ValidateExternalTokenRequest{Token: token})
@@ -251,7 +251,7 @@ func getAuthSessionTTL(ctx context.Context, client proto.AuthProviderClient) tim
 	if client == nil {
 		return 0
 	}
-	ctx, cancel := pluginCallContext(ctx)
+	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 
 	resp, err := client.GetSessionSettings(ctx, &emptypb.Empty{})
@@ -280,14 +280,14 @@ func authenticatedUserFromProto(user *proto.AuthenticatedUser) *core.UserIdentit
 
 type authCallbackState struct {
 	HostState     string `json:"host_state"`
-	PluginState   string `json:"plugin_state,omitempty"`
+	ProviderState string `json:"provider_state,omitempty"`
 	UpstreamState string `json:"upstream_state,omitempty"`
 }
 
-func encodeAuthCallbackState(hostState string, pluginState []byte, upstreamState string) (string, error) {
+func encodeAuthCallbackState(hostState string, providerState []byte, upstreamState string) (string, error) {
 	payload := authCallbackState{HostState: hostState}
-	if len(pluginState) > 0 {
-		payload.PluginState = base64.RawURLEncoding.EncodeToString(pluginState)
+	if len(providerState) > 0 {
+		payload.ProviderState = base64.RawURLEncoding.EncodeToString(providerState)
 	}
 	if upstreamState != "" {
 		payload.UpstreamState = upstreamState
@@ -311,14 +311,14 @@ func decodeAuthCallbackState(raw string) (string, []byte, string, error) {
 	if !ok {
 		return raw, nil, raw, nil
 	}
-	if payload.PluginState == "" {
+	if payload.ProviderState == "" {
 		return payload.HostState, nil, payload.UpstreamState, nil
 	}
-	pluginState, err := base64.RawURLEncoding.DecodeString(payload.PluginState)
+	providerState, err := base64.RawURLEncoding.DecodeString(payload.ProviderState)
 	if err != nil {
 		return "", nil, "", fmt.Errorf("decode auth callback state: %w", err)
 	}
-	return payload.HostState, pluginState, payload.UpstreamState, nil
+	return payload.HostState, providerState, payload.UpstreamState, nil
 }
 
 func decodeOptionalBase64URL(raw string) ([]byte, bool) {

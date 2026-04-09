@@ -9,7 +9,7 @@ import { Code, ConnectError, type ServiceImpl } from "@connectrpc/connect";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 
 import {
-  AuthPlugin,
+  AuthProvider as AuthProviderService,
   AuthSessionSettingsSchema,
   AuthenticatedUserSchema,
   BeginLoginResponseSchema,
@@ -17,7 +17,7 @@ import {
   type ValidateExternalTokenRequest,
 } from "../gen/v1/auth_pb.ts";
 import {
-  DatastorePlugin,
+  DatastoreProvider as DatastoreProviderService,
   ListAPITokensResponseSchema,
   ListStoredIntegrationTokensResponseSchema,
   OAuthRegistrationSchema,
@@ -36,7 +36,7 @@ import {
   type RevokeAllAPITokensRequest,
 } from "../gen/v1/datastore_pb.ts";
 import {
-  SecretsProvider as SecretsPlugin,
+  SecretsProvider as SecretsProviderService,
   GetSecretResponseSchema,
   type GetSecretRequest,
 } from "../gen/v1/secrets_pb.ts";
@@ -48,19 +48,19 @@ import {
   GetSessionCatalogResponseSchema,
   OperationResultSchema,
   ProviderMetadataSchema,
-  ProviderPlugin,
+  IntegrationProvider as IntegrationProviderService,
   StartProviderResponseSchema,
   type ExecuteRequest,
   type GetSessionCatalogRequest,
   type StartProviderRequest,
 } from "../gen/v1/plugin_pb.ts";
 import {
-  ConfigurePluginResponseSchema,
+  ConfigureProviderResponseSchema,
   HealthCheckResponseSchema,
-  PluginKind,
-  PluginMetadataSchema,
-  PluginRuntime,
-  type ConfigurePluginRequest,
+  ProviderIdentitySchema,
+  ProviderKind as ProtoProviderKind,
+  ProviderLifecycle,
+  type ConfigureProviderRequest,
 } from "../gen/v1/runtime_pb.ts";
 import { errorMessage, type Request } from "./api.ts";
 import { AuthProvider, isAuthProvider, type AuthenticatedUser } from "./auth.ts";
@@ -90,8 +90,8 @@ import {
   resolveProviderImportUrl,
 } from "./target.ts";
 
-export const ENV_PLUGIN_SOCKET = "GESTALT_PLUGIN_SOCKET";
-export const ENV_PLUGIN_PARENT_PID = "GESTALT_PLUGIN_PARENT_PID";
+export const ENV_PROVIDER_SOCKET = "GESTALT_PLUGIN_SOCKET";
+export const ENV_PROVIDER_PARENT_PID = "GESTALT_PLUGIN_PARENT_PID";
 export const ENV_WRITE_CATALOG = "GESTALT_PLUGIN_WRITE_CATALOG";
 export const CURRENT_PROTOCOL_VERSION = 2;
 export const USAGE = "usage: bun run runtime.ts ROOT PROVIDER_TARGET";
@@ -278,9 +278,9 @@ export async function runBundledPlugin(plugin: unknown, pluginName: string): Pro
 }
 
 export async function serve(provider: LoadedProvider): Promise<void> {
-  const socketPath = process.env[ENV_PLUGIN_SOCKET];
+  const socketPath = process.env[ENV_PROVIDER_SOCKET];
   if (!socketPath) {
-    throw new Error(`${ENV_PLUGIN_SOCKET} is required`);
+    throw new Error(`${ENV_PROVIDER_SOCKET} is required`);
   }
   if (existsSync(socketPath)) {
     rmSync(socketPath);
@@ -291,15 +291,15 @@ export async function serve(provider: LoadedProvider): Promise<void> {
     grpcWeb: false,
     connect: false,
     routes(router) {
-      router.service(PluginRuntime, createRuntimeService(provider));
+      router.service(ProviderLifecycle, createRuntimeService(provider));
       if (isIntegrationProvider(provider)) {
-        router.service(ProviderPlugin, createProviderService(provider));
+        router.service(IntegrationProviderService, createProviderService(provider));
       } else if (isAuthProvider(provider)) {
-        router.service(AuthPlugin, createAuthService(provider));
+        router.service(AuthProviderService, createAuthService(provider));
       } else if (isDatastoreProvider(provider)) {
-        router.service(DatastorePlugin, createDatastoreService(provider));
+        router.service(DatastoreProviderService, createDatastoreService(provider));
       } else if (isSecretsProvider(provider)) {
-        router.service(SecretsPlugin, createSecretsService(provider));
+        router.service(SecretsProviderService, createSecretsService(provider));
       }
     },
   });
@@ -353,10 +353,10 @@ export async function serve(provider: LoadedProvider): Promise<void> {
 
 export function createRuntimeService(
   provider: LoadedProvider,
-): Partial<ServiceImpl<typeof PluginRuntime>> {
+): Partial<ServiceImpl<typeof ProviderLifecycle>> {
   return {
-    async getPluginMetadata() {
-      return create(PluginMetadataSchema, {
+    async getProviderIdentity() {
+      return create(ProviderIdentitySchema, {
         kind: providerKindToProto(provider.kind),
         name: provider.name,
         displayName: provider.displayName,
@@ -367,19 +367,19 @@ export function createRuntimeService(
         maxProtocolVersion: CURRENT_PROTOCOL_VERSION,
       });
     },
-    async configurePlugin(request: ConfigurePluginRequest) {
+    async configureProvider(request: ConfigureProviderRequest) {
       if (request.protocolVersion !== CURRENT_PROTOCOL_VERSION) {
         throw new ConnectError(
-          `host requested protocol version ${request.protocolVersion}, plugin requires ${CURRENT_PROTOCOL_VERSION}`,
+          `host requested protocol version ${request.protocolVersion}, provider requires ${CURRENT_PROTOCOL_VERSION}`,
           Code.FailedPrecondition,
         );
       }
       try {
         await provider.configureProvider(request.name, objectFromUnknown(request.config));
       } catch (error) {
-        throw new ConnectError(`configure plugin: ${errorMessage(error)}`, Code.Unknown);
+        throw new ConnectError(`configure provider: ${errorMessage(error)}`, Code.Unknown);
       }
-      return create(ConfigurePluginResponseSchema, {
+      return create(ConfigureProviderResponseSchema, {
         protocolVersion: CURRENT_PROTOCOL_VERSION,
       });
     },
@@ -412,7 +412,7 @@ export function createRuntimeService(
 
 export function createProviderService(
   provider: IntegrationProvider,
-): Partial<ServiceImpl<typeof ProviderPlugin>> {
+): Partial<ServiceImpl<typeof IntegrationProviderService>> {
   return {
     getMetadata() {
       return create(ProviderMetadataSchema, {
@@ -478,7 +478,7 @@ export function createProviderService(
 
 export function createAuthService(
   provider: AuthProvider,
-): Partial<ServiceImpl<typeof AuthPlugin>> {
+): Partial<ServiceImpl<typeof AuthProviderService>> {
   return {
     async beginLogin(request) {
       const response = await provider.beginLogin({
@@ -540,7 +540,7 @@ export function createAuthService(
 
 export function createDatastoreService(
   provider: DatastoreProvider,
-): Partial<ServiceImpl<typeof DatastorePlugin>> {
+): Partial<ServiceImpl<typeof DatastoreProviderService>> {
   return {
     async migrate() {
       await provider.migrate();
@@ -657,7 +657,7 @@ export function createDatastoreService(
 
 export function createSecretsService(
   provider: SecretsProvider,
-): Partial<ServiceImpl<typeof SecretsPlugin>> {
+): Partial<ServiceImpl<typeof SecretsProviderService>> {
   return {
     async getSecret(request: GetSecretRequest) {
       const value = await provider.getSecret(request.name);
@@ -681,20 +681,20 @@ function providerRequest(token: string, connectionParams: Record<string, string>
   };
 }
 
-function providerKindToProto(kind: ProviderKind): PluginKind {
+function providerKindToProto(kind: ProviderKind): ProtoProviderKind {
   switch (kind) {
     case "integration":
-      return PluginKind.INTEGRATION;
+      return ProtoProviderKind.INTEGRATION;
     case "auth":
-      return PluginKind.AUTH;
+      return ProtoProviderKind.AUTH;
     case "datastore":
-      return PluginKind.DATASTORE;
+      return ProtoProviderKind.DATASTORE;
     case "secrets":
-      return PluginKind.SECRETS;
+      return ProtoProviderKind.SECRETS;
     case "telemetry":
-      return PluginKind.TELEMETRY;
+      return ProtoProviderKind.TELEMETRY;
     default:
-      return PluginKind.UNSPECIFIED;
+      return ProtoProviderKind.UNSPECIFIED;
   }
 }
 

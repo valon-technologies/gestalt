@@ -38,7 +38,7 @@ type ExecConfig struct {
 	Cleanup      func()
 }
 
-type pluginProcess struct {
+type providerProcess struct {
 	cmd            *exec.Cmd
 	dir            string
 	sandboxTmp     string
@@ -54,12 +54,12 @@ type pluginProcess struct {
 }
 
 func NewExecutableProvider(ctx context.Context, cfg ExecConfig) (core.Provider, error) {
-	proc, err := startPluginProcess(ctx, cfg, nil, "")
+	proc, err := startProviderProcess(ctx, cfg, nil, "")
 	if err != nil {
 		return nil, err
 	}
 
-	client := proto.NewPluginProviderClient(proc.conn)
+	client := proto.NewIntegrationProviderClient(proc.conn)
 	prov, err := NewRemoteProvider(
 		ctx,
 		client,
@@ -75,15 +75,15 @@ func NewExecutableProvider(ctx context.Context, cfg ExecConfig) (core.Provider, 
 }
 
 func ServeProvider(ctx context.Context, provider core.Provider) error {
-	return servePlugin(ctx, func(srv *grpc.Server) {
-		proto.RegisterPluginProviderServer(srv, NewProviderServer(provider))
+	return serveProvider(ctx, func(srv *grpc.Server) {
+		proto.RegisterIntegrationProviderServer(srv, NewProviderServer(provider))
 	})
 }
 
-func servePlugin(ctx context.Context, register func(*grpc.Server)) error {
-	socket := os.Getenv(proto.EnvPluginSocket)
+func serveProvider(ctx context.Context, register func(*grpc.Server)) error {
+	socket := os.Getenv(proto.EnvProviderSocket)
 	if socket == "" {
-		return fmt.Errorf("%s is required", proto.EnvPluginSocket)
+		return fmt.Errorf("%s is required", proto.EnvProviderSocket)
 	}
 	if err := os.Remove(socket); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("remove stale socket %q: %w", socket, err)
@@ -116,7 +116,7 @@ func servePlugin(ctx context.Context, register func(*grpc.Server)) error {
 	return err
 }
 
-func startPluginProcess(ctx context.Context, cfg ExecConfig, registerHost func(*grpc.Server), hostSocketEnv string) (*pluginProcess, error) {
+func startProviderProcess(ctx context.Context, cfg ExecConfig, registerHost func(*grpc.Server), hostSocketEnv string) (*providerProcess, error) {
 	if cfg.Command == "" {
 		return nil, fmt.Errorf("plugin command is required")
 	}
@@ -129,11 +129,11 @@ func startPluginProcess(ctx context.Context, cfg ExecConfig, registerHost func(*
 	}
 	pluginSocket := filepath.Join(dir, "plugin.sock")
 	env := mergeExecEnv(cfg.Env, map[string]string{
-		proto.EnvPluginSocket:    pluginSocket,
-		proto.EnvPluginParentPID: strconv.Itoa(os.Getpid()),
+		proto.EnvProviderSocket:    pluginSocket,
+		proto.EnvProviderParentPID: strconv.Itoa(os.Getpid()),
 	})
 
-	proc := &pluginProcess{dir: dir}
+	proc := &providerProcess{dir: dir}
 	proc.cleanup = cfg.Cleanup
 	if registerHost != nil {
 		hostSocket := filepath.Join(dir, "host.sock")
@@ -249,7 +249,7 @@ func buildPluginEnv(env map[string]string, sandboxActive bool) []string {
 	return append(base, envSlice(env)...)
 }
 
-func (p *pluginProcess) Close() error {
+func (p *providerProcess) Close() error {
 	if p == nil {
 		return nil
 	}

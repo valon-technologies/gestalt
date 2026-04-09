@@ -82,7 +82,7 @@ func testAuthUser() *gestalt.AuthenticatedUser {
 
 func TestAuthProviderRoundTrip(t *testing.T) {
 	socket := newSocketPath(t, "auth.sock")
-	t.Setenv(proto.EnvPluginSocket, socket)
+	t.Setenv(proto.EnvProviderSocket, socket)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	provider := &fullAuthProvider{}
@@ -105,11 +105,11 @@ func TestAuthProviderRoundTrip(t *testing.T) {
 	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer rpcCancel()
 
-	meta, err := runtimeClient.GetPluginMetadata(rpcCtx, &emptypb.Empty{}, grpc.WaitForReady(true))
+	meta, err := runtimeClient.GetProviderIdentity(rpcCtx, &emptypb.Empty{}, grpc.WaitForReady(true))
 	if err != nil {
-		t.Fatalf("GetPluginMetadata: %v", err)
+		t.Fatalf("GetProviderIdentity: %v", err)
 	}
-	if meta.GetKind() != proto.PluginKind_PLUGIN_KIND_AUTH {
+	if meta.GetKind() != proto.ProviderKind_PROVIDER_KIND_AUTH {
 		t.Fatalf("kind = %v, want AUTH", meta.GetKind())
 	}
 	if meta.GetName() != "stub-auth" {
@@ -130,13 +130,13 @@ func TestAuthProviderRoundTrip(t *testing.T) {
 	}
 
 	cfg, _ := structpb.NewStruct(map[string]any{"client_id": "abc"})
-	_, err = runtimeClient.ConfigurePlugin(rpcCtx, &proto.ConfigurePluginRequest{
+	_, err = runtimeClient.ConfigureProvider(rpcCtx, &proto.ConfigureProviderRequest{
 		Name:            "my-auth",
 		Config:          cfg,
 		ProtocolVersion: proto.CurrentProtocolVersion,
 	})
 	if err != nil {
-		t.Fatalf("ConfigurePlugin: %v", err)
+		t.Fatalf("ConfigureProvider: %v", err)
 	}
 	if len(provider.configured) != 1 {
 		t.Fatalf("configured calls = %d, want 1", len(provider.configured))
@@ -175,7 +175,7 @@ func TestAuthProviderRoundTrip(t *testing.T) {
 	completeResp, err := authClient.CompleteLogin(rpcCtx, &proto.CompleteLoginRequest{
 		Query:         map[string]string{"code": "auth-code"},
 		ProviderState: []byte("state-data"),
-		CallbackUrl:   "https://app.example.test/callback",
+		CallbackUrl: "https://app.example.test/callback",
 	})
 	if err != nil {
 		t.Fatalf("CompleteLogin: %v", err)

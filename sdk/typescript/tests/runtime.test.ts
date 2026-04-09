@@ -22,7 +22,7 @@ import {
   GetSessionCatalogRequestSchema,
   StartProviderRequestSchema,
 } from "../gen/v1/plugin_pb.ts";
-import { ConfigurePluginRequestSchema } from "../gen/v1/runtime_pb.ts";
+import { ConfigureProviderRequestSchema } from "../gen/v1/runtime_pb.ts";
 import {
   ENV_WRITE_CATALOG,
   createAuthService,
@@ -125,8 +125,8 @@ test("auth provider supports runtime metadata, login flows, and token validation
   const runtime = createRuntimeService(provider);
   const auth = createAuthService(provider as any);
 
-  await (runtime.configurePlugin as any)(
-    create(ConfigurePluginRequestSchema, {
+  await (runtime.configureProvider as any)(
+    create(ConfigureProviderRequestSchema, {
       name: "fixture-auth",
       config: {
         issuer: "https://login.example.test",
@@ -135,7 +135,7 @@ test("auth provider supports runtime metadata, login flows, and token validation
     }),
   );
 
-  const metadata = await (runtime.getPluginMetadata as any)(create(EmptySchema, {}));
+  const metadata = await (runtime.getProviderIdentity as any)(create(EmptySchema, {}));
   expect(metadata.kind).toBe(2);
   expect(metadata.displayName).toBe("Fixture Auth");
 
@@ -173,7 +173,7 @@ test("datastore provider supports user, token, and oauth registration operations
   const runtime = createRuntimeService(provider);
   const datastore = createDatastoreService(provider as any);
 
-  const metadata = await (runtime.getPluginMetadata as any)(create(EmptySchema, {}));
+  const metadata = await (runtime.getProviderIdentity as any)(create(EmptySchema, {}));
   expect(metadata.kind).toBe(3);
   expect(metadata.warnings).toEqual(["fixture datastore warning"]);
 

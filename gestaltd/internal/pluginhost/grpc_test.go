@@ -11,13 +11,13 @@ import (
 	"google.golang.org/grpc/test/bufconn"
 )
 
-func newPluginProviderClient(t *testing.T, server proto.PluginProviderServer) proto.PluginProviderClient {
+func newIntegrationProviderClient(t *testing.T, server proto.IntegrationProviderServer) proto.IntegrationProviderClient {
 	t.Helper()
 
 	conn := newBufconnConn(t, func(srv *grpc.Server) {
-		proto.RegisterPluginProviderServer(srv, server)
+		proto.RegisterIntegrationProviderServer(srv, server)
 	})
-	return proto.NewPluginProviderClient(conn)
+	return proto.NewIntegrationProviderClient(conn)
 }
 
 func newBufconnConn(t *testing.T, register func(*grpc.Server)) *grpc.ClientConn {

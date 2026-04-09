@@ -206,7 +206,7 @@ func (p *fullDatastoreProvider) DeleteOAuthRegistration(_ context.Context, authS
 
 func TestDatastoreProviderRoundTrip(t *testing.T) {
 	socket := newSocketPath(t, "datastore.sock")
-	t.Setenv(proto.EnvPluginSocket, socket)
+	t.Setenv(proto.EnvProviderSocket, socket)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	provider := newFullDatastoreProvider()

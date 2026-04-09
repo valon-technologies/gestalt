@@ -5,7 +5,7 @@ package gestalt.plugin.v1;
 option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
 
 // SDK Naming Convention (all languages):
-//   Base provider interface:  PluginProvider
+//   Base provider interface:  Provider
 //   Auth provider:            AuthProvider
 //   Datastore provider:       DatastoreProvider
 //   Lifecycle service:        ProviderLifecycle (internal, not user-facing)
@@ -13,17 +13,17 @@ option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
 import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
 
-enum PluginKind {
-  PLUGIN_KIND_UNSPECIFIED = 0;
-  PLUGIN_KIND_INTEGRATION = 1;
-  PLUGIN_KIND_AUTH = 2;
-  PLUGIN_KIND_DATASTORE = 3;
-  PLUGIN_KIND_SECRETS = 4;
-  PLUGIN_KIND_TELEMETRY = 5;
+enum ProviderKind {
+  PROVIDER_KIND_UNSPECIFIED = 0;
+  PROVIDER_KIND_INTEGRATION = 1;
+  PROVIDER_KIND_AUTH = 2;
+  PROVIDER_KIND_DATASTORE = 3;
+  PROVIDER_KIND_SECRETS = 4;
+  PROVIDER_KIND_TELEMETRY = 5;
 }
 
-message PluginMetadata {
-  PluginKind kind = 1;
+message ProviderIdentity {
+  ProviderKind kind = 1;
   string name = 2;
   string display_name = 3;
   string description = 4;
@@ -33,13 +33,13 @@ message PluginMetadata {
   int32 max_protocol_version = 11;
 }
 
-message ConfigurePluginRequest {
+message ConfigureProviderRequest {
   string name = 1;
   google.protobuf.Struct config = 2;
   int32 protocol_version = 3;
 }
 
-message ConfigurePluginResponse {
+message ConfigureProviderResponse {
   int32 protocol_version = 1;
 }
 
@@ -49,7 +49,7 @@ message HealthCheckResponse {
 }
 
 service ProviderLifecycle {
-  rpc GetPluginMetadata(google.protobuf.Empty) returns (PluginMetadata);
-  rpc ConfigurePlugin(ConfigurePluginRequest) returns (ConfigurePluginResponse);
+  rpc GetProviderIdentity(google.protobuf.Empty) returns (ProviderIdentity);
+  rpc ConfigureProvider(ConfigureProviderRequest) returns (ConfigureProviderResponse);
   rpc HealthCheck(google.protobuf.Empty) returns (HealthCheckResponse);
 }

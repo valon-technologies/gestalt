@@ -11,19 +11,19 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-// ProviderServer adapts a [PluginProvider] implementation to the gRPC
-// PluginProvider service. Most integration-provider authors should use
+// ProviderServer adapts a [Provider] implementation to the gRPC
+// IntegrationProvider service. Most integration-provider authors should use
 // [ServeProvider] instead of constructing this directly.
 type ProviderServer struct {
-	proto.UnimplementedPluginProviderServer
-	provider   PluginProvider
+	proto.UnimplementedIntegrationProviderServer
+	provider   Provider
 	executeFn  func(ctx context.Context, operation string, params map[string]any, token string) (*OperationResult, error)
 	sessionCat func() (SessionCatalogProvider, bool)
 }
 
 func NewProviderServer[P any, PP interface {
 	*P
-	PluginProvider
+	Provider
 }](provider PP, router *Router[P]) *ProviderServer {
 	return &ProviderServer{
 		provider: provider,

@@ -10,11 +10,11 @@ use gestalt_plugin_sdk::proto::v1::auth_provider_client::AuthProviderClient;
 use gestalt_plugin_sdk::proto::v1::datastore_provider_client::DatastoreProviderClient;
 use gestalt_plugin_sdk::proto::v1::provider_lifecycle_client::ProviderLifecycleClient;
 use gestalt_plugin_sdk::proto::v1::{
-    BeginLoginRequest, CompleteLoginRequest, ConfigurePluginRequest,
+    BeginLoginRequest, CompleteLoginRequest, ConfigureProviderRequest,
     DeleteOAuthRegistrationRequest, DeleteStoredIntegrationTokenRequest, FindOrCreateUserRequest,
     GetApiTokenByHashRequest, GetOAuthRegistrationRequest, GetStoredIntegrationTokenRequest,
     GetUserRequest, ListApiTokensRequest, ListStoredIntegrationTokensRequest, OAuthRegistration,
-    PluginKind, RevokeAllApiTokensRequest, RevokeApiTokenRequest, StoredApiToken,
+    ProviderKind, RevokeAllApiTokensRequest, RevokeApiTokenRequest, StoredApiToken,
     StoredIntegrationToken, StoredUser, ValidateExternalTokenRequest,
 };
 use gestalt_plugin_sdk::{AuthProvider, DatastoreProvider, RuntimeMetadata};
@@ -117,7 +117,7 @@ async fn serves_auth_provider_and_runtime_over_unix_socket() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("gestalt-rust-auth.sock");
     let _socket_guard =
-        helpers::EnvGuard::set(gestalt_plugin_sdk::ENV_PLUGIN_SOCKET, socket.as_os_str());
+        helpers::EnvGuard::set(gestalt_plugin_sdk::ENV_PROVIDER_SOCKET, socket.as_os_str());
 
     let provider = Arc::new(TestAuthProvider::default());
     let serve_provider = Arc::clone(&provider);
@@ -134,21 +134,21 @@ async fn serves_auth_provider_and_runtime_over_unix_socket() {
     let mut auth = AuthProviderClient::new(channel);
 
     let metadata = runtime
-        .get_plugin_metadata(())
+        .get_provider_identity(())
         .await
-        .expect("get plugin metadata")
+        .expect("get provider identity")
         .into_inner();
     assert_eq!(
-        PluginKind::try_from(metadata.kind)
-            .expect("valid plugin kind")
+        ProviderKind::try_from(metadata.kind)
+            .expect("valid provider kind")
             .as_str_name(),
-        "PLUGIN_KIND_AUTH"
+        "PROVIDER_KIND_AUTH"
     );
     assert_eq!(metadata.name, "auth-example");
     assert_eq!(metadata.warnings, vec!["set OIDC_BASE_URL"]);
 
     let configured = runtime
-        .configure_plugin(ConfigurePluginRequest {
+        .configure_provider(ConfigureProviderRequest {
             name: "auth-runtime".to_string(),
             config: Some(helpers::struct_from_json(
                 serde_json::json!({ "issuer": "https://issuer" }),
@@ -156,7 +156,7 @@ async fn serves_auth_provider_and_runtime_over_unix_socket() {
             protocol_version: gestalt_plugin_sdk::CURRENT_PROTOCOL_VERSION,
         })
         .await
-        .expect("configure plugin")
+        .expect("configure provider")
         .into_inner();
     assert_eq!(
         configured.protocol_version,
@@ -438,7 +438,7 @@ async fn serves_datastore_provider_and_runtime_over_unix_socket() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("gestalt-rust-datastore.sock");
     let _socket_guard =
-        helpers::EnvGuard::set(gestalt_plugin_sdk::ENV_PLUGIN_SOCKET, socket.as_os_str());
+        helpers::EnvGuard::set(gestalt_plugin_sdk::ENV_PROVIDER_SOCKET, socket.as_os_str());
 
     let provider = Arc::new(TestDatastoreProvider::default());
     let serve_provider = Arc::clone(&provider);
@@ -455,15 +455,15 @@ async fn serves_datastore_provider_and_runtime_over_unix_socket() {
     let mut datastore = DatastoreProviderClient::new(channel);
 
     let metadata = runtime
-        .get_plugin_metadata(())
+        .get_provider_identity(())
         .await
-        .expect("get plugin metadata")
+        .expect("get provider identity")
         .into_inner();
     assert_eq!(
-        PluginKind::try_from(metadata.kind)
-            .expect("valid plugin kind")
+        ProviderKind::try_from(metadata.kind)
+            .expect("valid provider kind")
             .as_str_name(),
-        "PLUGIN_KIND_DATASTORE"
+        "PROVIDER_KIND_DATASTORE"
     );
     assert_eq!(metadata.name, "datastore-example");
 
@@ -475,7 +475,7 @@ async fn serves_datastore_provider_and_runtime_over_unix_socket() {
     assert!(health.ready);
 
     runtime
-        .configure_plugin(ConfigurePluginRequest {
+        .configure_provider(ConfigureProviderRequest {
             name: "datastore-runtime".to_string(),
             config: Some(helpers::struct_from_json(
                 serde_json::json!({ "dsn": "sqlite://memory" }),
@@ -483,7 +483,7 @@ async fn serves_datastore_provider_and_runtime_over_unix_socket() {
             protocol_version: gestalt_plugin_sdk::CURRENT_PROTOCOL_VERSION,
         })
         .await
-        .expect("configure plugin");
+        .expect("configure provider");
 
     datastore.migrate(()).await.expect("migrate");
 

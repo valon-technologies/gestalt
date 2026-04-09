@@ -3,7 +3,7 @@ mod helpers;
 
 use std::sync::{Arc, Mutex};
 
-use gestalt_plugin_sdk::proto::v1::plugin_provider_client::PluginProviderClient;
+use gestalt_plugin_sdk::proto::v1::integration_provider_client::IntegrationProviderClient;
 use gestalt_plugin_sdk::proto::v1::{
     ExecuteRequest, GetSessionCatalogRequest, PostConnectRequest, StartProviderRequest,
 };
@@ -88,7 +88,7 @@ async fn serves_provider_requests_over_unix_socket() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("gestalt-rust-sdk.sock");
     let _socket_guard =
-        helpers::EnvGuard::set(gestalt_plugin_sdk::ENV_PLUGIN_SOCKET, socket.as_os_str());
+        helpers::EnvGuard::set(gestalt_plugin_sdk::ENV_PROVIDER_SOCKET, socket.as_os_str());
 
     let router = Router::new()
         .register(
@@ -124,7 +124,7 @@ async fn serves_provider_requests_over_unix_socket() {
         }))
         .await
         .expect("connect channel");
-    let mut client = PluginProviderClient::new(channel);
+    let mut client = IntegrationProviderClient::new(channel);
 
     let metadata = client
         .get_metadata(())

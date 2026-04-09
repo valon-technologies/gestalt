@@ -9,8 +9,8 @@ import (
 
 // ServeDatastoreProvider starts a gRPC server for a [DatastoreProvider].
 func ServeDatastoreProvider(ctx context.Context, store DatastoreProvider) error {
-	return servePlugin(withPluginCloser(ctx, store), func(srv *grpc.Server) {
-		proto.RegisterProviderLifecycleServer(srv, newPluginProviderServer(ProviderKindDatastore, store))
+	return serveProvider(withProviderCloser(ctx, store), func(srv *grpc.Server) {
+		proto.RegisterProviderLifecycleServer(srv, newRuntimeServer(ProviderKindDatastore, store))
 		proto.RegisterDatastoreProviderServer(srv, newDatastoreProviderServer(store))
 	})
 }

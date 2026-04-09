@@ -275,8 +275,8 @@ class AuthRuntimeTests(unittest.TestCase):
             provider=provider,
             kind=ProviderKind.AUTH,
         )
-        meta = runtime_servicer.GetPluginMetadata(mock.Mock(), mock.Mock())
-        self.assertEqual(meta.kind, runtime_pb2.PluginKind.PLUGIN_KIND_AUTH)
+        meta = runtime_servicer.GetProviderIdentity(mock.Mock(), mock.Mock())
+        self.assertEqual(meta.kind, runtime_pb2.ProviderKind.PROVIDER_KIND_AUTH)
         self.assertEqual(meta.name, "stub-auth")
         self.assertEqual(list(meta.warnings), ["set AUTH_ENV"])
 

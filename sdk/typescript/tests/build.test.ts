@@ -6,10 +6,10 @@ import { create } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { expect, test } from "bun:test";
 
-import { AuthPlugin, BeginLoginRequestSchema } from "../gen/v1/auth_pb.ts";
-import { ConfigurePluginRequestSchema, PluginKind, PluginRuntime } from "../gen/v1/runtime_pb.ts";
+import { AuthProvider as AuthProviderService, BeginLoginRequestSchema } from "../gen/v1/auth_pb.ts";
+import { ConfigureProviderRequestSchema, ProviderKind as ProtoProviderKind, ProviderLifecycle } from "../gen/v1/runtime_pb.ts";
 import { buildProviderBinary, bunTarget, parseBuildArgs } from "../src/build.ts";
-import { CURRENT_PROTOCOL_VERSION, ENV_PLUGIN_SOCKET } from "../src/runtime.ts";
+import { CURRENT_PROTOCOL_VERSION, ENV_PROVIDER_SOCKET } from "../src/runtime.ts";
 import {
   createUnixGrpcClient,
   fixturePath,
@@ -58,7 +58,7 @@ test("buildProviderBinary compiles a runnable auth provider executable", async (
     child = spawn(outputPath, [], {
       env: {
         ...process.env,
-        [ENV_PLUGIN_SOCKET]: socketPath,
+        [ENV_PROVIDER_SOCKET]: socketPath,
       },
       stdio: ["ignore", "ignore", "pipe"],
     });
@@ -69,15 +69,15 @@ test("buildProviderBinary compiles a runnable auth provider executable", async (
 
     await waitForPath(socketPath);
 
-    const runtime = createUnixGrpcClient(PluginRuntime, socketPath);
-    const auth = createUnixGrpcClient(AuthPlugin, socketPath);
+    const runtime = createUnixGrpcClient(ProviderLifecycle, socketPath);
+    const auth = createUnixGrpcClient(AuthProviderService, socketPath);
 
-    const metadata = await runtime.getPluginMetadata(create(EmptySchema, {}));
-    expect(metadata.kind).toBe(PluginKind.AUTH);
+    const metadata = await runtime.getProviderIdentity(create(EmptySchema, {}));
+    expect(metadata.kind).toBe(ProtoProviderKind.AUTH);
     expect(metadata.name).toBe("fixture-built");
 
-    await runtime.configurePlugin(
-      create(ConfigurePluginRequestSchema, {
+    await runtime.configureProvider(
+      create(ConfigureProviderRequestSchema, {
         name: "fixture-built",
         config: {
           issuer: "https://binary.example.test",

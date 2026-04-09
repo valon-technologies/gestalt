@@ -11,7 +11,7 @@ import (
 )
 
 type ProviderServer struct {
-	proto.UnimplementedPluginProviderServer
+	proto.UnimplementedIntegrationProviderServer
 	provider core.Provider
 }
 
