@@ -2520,7 +2520,6 @@ func newRustSourceAuthReleaseFixture(t *testing.T, dir string) string {
 	return pluginDir
 }
 
-
 func newRustSourceDatastoreReleaseFixture(t *testing.T, dir string) string {
 	t.Helper()
 
