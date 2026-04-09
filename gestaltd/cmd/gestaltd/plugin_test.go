@@ -46,6 +46,8 @@ const (
 	pythonAuthReleaseSource          = "github.com/testowner/plugins/python-auth-release"
 	pythonDatastoreReleasePluginName = "python-datastore-release"
 	pythonDatastoreReleaseSource     = "github.com/testowner/plugins/python-datastore-release"
+	providerReleaseTypeScriptModule  = "./provider.ts#plugin"
+	providerReleaseTypeScriptTarget  = "plugin:./provider.ts#plugin"
 	authReleaseTypeScriptModule      = "./auth.ts#auth"
 	authReleaseTypeScriptTarget      = "auth:./auth.ts#auth"
 	datastoreReleaseTypeScriptModule = "./datastore.ts#datastore"
@@ -1215,6 +1217,88 @@ func TestRun_PluginReleaseBuildsPythonSourceDatastorePlugin(t *testing.T) {
 	}
 }
 
+func TestRun_PluginReleaseBuildsTypeScriptSourcePluginForCurrentPlatform(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake Bun build fixture is POSIX-only")
+	}
+
+	builtBinary := buildGoSourceProviderBinary(t)
+	t.Setenv("PATH", pathWithoutGo(t))
+
+	pluginDir := newTypeScriptSourceReleaseFixture(t, t.TempDir())
+	bunPath := writeFakeTypeScriptProviderReleaseBun(
+		t,
+		filepath.Join(pluginDir, "fake-bun"),
+		providerReleaseTypeScriptTarget,
+		releaseTestPluginName,
+		runtime.GOOS,
+		runtime.GOARCH,
+		builtBinary,
+	)
+	t.Setenv("GESTALT_BUN", bunPath)
+
+	outputDir := t.TempDir()
+	const testVersion = "0.0.17-ts-provider"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
+		"--output", outputDir,
+	)
+
+	archiveName := platformArchiveName(releaseTestPluginName, testVersion, expectedScriptReleasePlatform(runtime.GOOS, runtime.GOARCH))
+	extractDir := extractReleasedArchive(t, outputDir, archiveName)
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+	binaryName := releaseBinaryName(releaseTestPluginName, runtime.GOOS)
+
+	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
+		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
+	}
+	if runtime.GOOS == "linux" && manifest.Artifacts[0].LibC != pluginpkg.CurrentRuntimeLibC() {
+		t.Fatalf("artifact libc = %q, want %q", manifest.Artifacts[0].LibC, pluginpkg.CurrentRuntimeLibC())
+	}
+	if manifest.Entrypoints.Provider == nil || manifest.Entrypoints.Provider.ArtifactPath != binaryName {
+		t.Fatalf("provider entrypoint = %+v, want artifact path %q", manifest.Entrypoints.Provider, binaryName)
+	}
+	if manifest.Plugin == nil || manifest.Plugin.ConfigSchemaPath != releaseProviderSchemaPath {
+		t.Fatalf("provider metadata = %#v, want config schema path %q", manifest.Plugin, releaseProviderSchemaPath)
+	}
+	if _, err := os.Stat(filepath.Join(extractDir, releaseProviderSchemaPath)); err != nil {
+		t.Fatalf("expected %s in archive: %v", releaseProviderSchemaPath, err)
+	}
+
+	catalogData, err := os.ReadFile(filepath.Join(extractDir, pluginpkg.StaticCatalogFile))
+	if err != nil {
+		t.Fatalf("read generated catalog: %v", err)
+	}
+	if !strings.Contains(string(catalogData), "generated_op") {
+		t.Fatalf("unexpected generated catalog: %s", catalogData)
+	}
+
+	prov, err := pluginhost.NewExecutableProvider(context.Background(), pluginhost.ExecConfig{
+		Command: filepath.Join(extractDir, binaryName),
+		StaticSpec: pluginhost.StaticProviderSpec{
+			Name: releaseTestPluginName,
+		},
+	})
+	if err != nil {
+		t.Fatalf("NewExecutableProvider: %v", err)
+	}
+	defer func() {
+		if closer, ok := prov.(interface{ Close() error }); ok {
+			_ = closer.Close()
+		}
+	}()
+
+	result, err := prov.Execute(context.Background(), "generated_op", map[string]any{}, "")
+	if err != nil {
+		t.Fatalf("Execute(generated_op): %v", err)
+	}
+	if result.Status != 200 {
+		t.Fatalf("status = %d, want 200", result.Status)
+	}
+}
+
 func TestRun_PluginReleaseBuildsTypeScriptSourceAuthPlugin(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake Bun build fixture is POSIX-only")
@@ -2006,6 +2090,35 @@ datastore = "provider:datastore_provider"
 	return pluginDir
 }
 
+func newTypeScriptSourceReleaseFixture(t *testing.T, dir string) string {
+	t.Helper()
+
+	pluginDir := filepath.Join(dir, releaseTestPluginName)
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(pluginDir): %v", err)
+	}
+	writeTestFile(t, pluginDir, "package.json", []byte(`{
+  "name": "`+releaseTestPluginName+`",
+  "version": "0.0.1",
+  "gestalt": {
+    "provider": "`+providerReleaseTypeScriptModule+`"
+  }
+}
+`), 0o644)
+	writeTestFile(t, pluginDir, "provider.ts", []byte("export const plugin = {};\n"), 0o644)
+	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
+		Source:      releaseTestSource,
+		Version:     "0.0.1",
+		DisplayName: "Release Test",
+		Plugin: &pluginmanifestv1.Plugin{
+			Auth:             &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
+			ConfigSchemaPath: releaseProviderSchemaPath,
+		},
+	})
+	writeTestFile(t, pluginDir, releaseProviderSchemaPath, []byte(`{"type":"object"}`), 0o644)
+	return pluginDir
+}
+
 func newTypeScriptSourceAuthReleaseFixture(t *testing.T, dir string) string {
 	t.Helper()
 
@@ -2066,6 +2179,115 @@ func newTypeScriptSourceDatastoreReleaseFixture(t *testing.T, dir string) string
 	})
 	writeTestFile(t, pluginDir, datastoreReleaseSchemaPath, []byte(`{"type":"object"}`), 0o644)
 	return pluginDir
+}
+
+func writeFakeTypeScriptProviderReleaseBun(t *testing.T, path, expectedTarget, expectedPluginName, expectedGOOS, expectedGOARCH, builtBinaryPath string) string {
+	t.Helper()
+
+	script := `#!/bin/sh
+set -eu
+
+if [ "$#" -lt 4 ] || [ "$1" != "--cwd" ]; then
+  echo "unexpected fake bun args: $*" >&2
+  exit 1
+fi
+
+cwd="$2"
+shift 2
+
+if [ "$1" != "run" ]; then
+  echo "unexpected bun subcommand: $1" >&2
+  exit 1
+fi
+shift
+
+entry="$1"
+shift
+
+if [ "$#" -gt 0 ] && [ "$1" = "--" ]; then
+  shift
+fi
+
+entry_base="${entry##*/}"
+case "$entry_base" in
+  gestalt-ts-runtime|runtime.ts)
+    if [ "$#" -ne 2 ]; then
+      echo "unexpected runtime args: $*" >&2
+      exit 1
+    fi
+    root="$1"
+    target="$2"
+    if [ "$cwd" != "$root" ]; then
+      echo "unexpected runtime cwd: $cwd != $root" >&2
+      exit 1
+    fi
+    if [ "$target" != "` + providerReleaseTypeScriptTarget + `" ]; then
+      echo "unexpected runtime target: $target" >&2
+      exit 1
+    fi
+    if [ "$target" != "` + expectedTarget + `" ]; then
+      echo "unexpected runtime target: $target" >&2
+      exit 1
+    fi
+    if [ -z "${GESTALT_PLUGIN_WRITE_CATALOG:-}" ]; then
+      echo "missing GESTALT_PLUGIN_WRITE_CATALOG" >&2
+      exit 1
+    fi
+    cat > "$GESTALT_PLUGIN_WRITE_CATALOG" <<'EOF'
+name: ` + releaseTestPluginName + `
+operations:
+  - id: generated_op
+    method: POST
+EOF
+    exit 0
+    ;;
+  gestalt-ts-build|build.ts)
+    if [ "$#" -ne 6 ]; then
+      echo "unexpected build args: $*" >&2
+      exit 1
+    fi
+    source_dir="$1"
+    target="$2"
+    output="$3"
+    name="$4"
+    goos="$5"
+    goarch="$6"
+    if [ "$cwd" != "$source_dir" ]; then
+      echo "unexpected build cwd: $cwd != $source_dir" >&2
+      exit 1
+    fi
+    if [ "$target" != "` + providerReleaseTypeScriptTarget + `" ]; then
+      echo "unexpected build target: $target" >&2
+      exit 1
+    fi
+    if [ "$target" != "` + expectedTarget + `" ]; then
+      echo "unexpected build target: $target" >&2
+      exit 1
+    fi
+    if [ "$name" != "` + expectedPluginName + `" ]; then
+      echo "unexpected plugin name: $name" >&2
+      exit 1
+    fi
+    if [ "$goos" != "` + expectedGOOS + `" ] || [ "$goarch" != "` + expectedGOARCH + `" ]; then
+      echo "unexpected target platform: $goos/$goarch" >&2
+      exit 1
+    fi
+    output_dir="${output%/*}"
+    if [ "$output_dir" = "$output" ]; then
+      output_dir="."
+    fi
+    mkdir -p "$output_dir"
+    cp "` + builtBinaryPath + `" "$output"
+    chmod +x "$output"
+    exit 0
+    ;;
+esac
+
+echo "unexpected fake bun entry: $entry ($*)" >&2
+exit 1
+`
+	writeTestFile(t, filepath.Dir(path), filepath.Base(path), []byte(script), 0o755)
+	return path
 }
 
 func writeFakeTypeScriptComponentReleaseBun(t *testing.T, path, expectedTarget, expectedPluginName, expectedGOOS, expectedGOARCH, builtBinaryPath string) string {
@@ -2593,6 +2815,23 @@ func buildGoSourceAuthBinary(t *testing.T) string {
 	outputPath := filepath.Join(t.TempDir(), "auth-provider")
 	if err := pluginpkg.BuildGoComponentBinary(providerDir, outputPath, pluginmanifestv1.KindAuth, runtime.GOOS, runtime.GOARCH); err != nil {
 		t.Fatalf("BuildGoComponentBinary(auth): %v", err)
+	}
+	return outputPath
+}
+
+func buildGoSourceProviderBinary(t *testing.T) string {
+	t.Helper()
+
+	providerDir := filepath.Join(t.TempDir(), "go-provider")
+	if err := os.MkdirAll(providerDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(providerDir): %v", err)
+	}
+	writeTestFile(t, providerDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/test-go-provider")), 0o644)
+	writeTestFile(t, providerDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
+	writeTestFile(t, providerDir, "provider.go", []byte(testutil.GeneratedProviderPackageSource()), 0o644)
+	outputPath := filepath.Join(t.TempDir(), "provider")
+	if err := pluginpkg.BuildGoProviderBinary(providerDir, outputPath, releaseTestPluginName, runtime.GOOS, runtime.GOARCH); err != nil {
+		t.Fatalf("BuildGoProviderBinary: %v", err)
 	}
 	return outputPath
 }
