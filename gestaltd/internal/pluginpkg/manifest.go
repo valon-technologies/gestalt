@@ -25,8 +25,6 @@ const (
 	ManifestFormatYAML = "yaml"
 )
 
-var currentArtifactRuntimeLibC = CurrentRuntimeLibC
-
 func FindManifestFile(dir string) (string, error) {
 	for _, name := range ManifestFiles {
 		p := filepath.Join(dir, name)
@@ -315,11 +313,11 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 	return nil
 }
 
-func CurrentPlatformArtifact(manifest *pluginmanifestv1.Manifest) (*pluginmanifestv1.Artifact, error) {
+func CurrentPlatformArtifact(manifest *pluginmanifestv1.Manifest, runtimeLibC string) (*pluginmanifestv1.Artifact, error) {
 	if manifest == nil {
 		return nil, fmt.Errorf("manifest is required")
 	}
-	currentLibC := currentArtifactRuntimeLibC()
+	currentLibC := runtimeLibC
 	var generic *pluginmanifestv1.Artifact
 	libcSpecific := make([]*pluginmanifestv1.Artifact, 0, 2)
 	for _, artifact := range manifest.Artifacts {
