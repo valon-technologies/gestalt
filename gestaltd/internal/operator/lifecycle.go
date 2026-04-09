@@ -76,85 +76,19 @@ func (l *Lifecycle) WithConfigSecretResolver(resolve func(context.Context, *conf
 }
 
 func (l *Lifecycle) InitAtPath(configPath string) (*Lockfile, error) {
-	return l.InitAtPathWithArtifactsDir(configPath, "")
+	lock, _, err := l.initAtPath(configPath, "")
+	return lock, err
 }
 
 func (l *Lifecycle) InitAtPathWithArtifactsDir(configPath, artifactsDir string) (*Lockfile, error) {
-	cfg, err := config.LoadAllowMissingEnv(configPath)
-	if err != nil {
-		return nil, fmt.Errorf("loading config: %v", err)
-	}
-	if err := config.OverlayManagedPluginConfig(configPath, cfg); err != nil {
-		return nil, fmt.Errorf("loading config: %v", err)
-	}
-	paths := initPathsForConfigWithArtifactsDir(configPath, resolveArtifactsDir(configPath, cfg, artifactsDir))
-	secretsEntry, err := l.primeSecretsProviderForConfigResolution(context.Background(), paths, cfg, nil)
-	if err != nil {
-		return nil, err
-	}
-	if err := l.resolveConfigSecrets(context.Background(), cfg); err != nil {
-		return nil, err
-	}
-	if err := os.MkdirAll(paths.providersDir, 0o755); err != nil {
-		return nil, fmt.Errorf("creating providers dir: %w", err)
-	}
-
-	lock := &Lockfile{
-		Version:   LockVersion,
-		Providers: make(map[string]LockProviderEntry),
-	}
-
-	resolvedProviders, err := l.writeProviderArtifacts(context.Background(), cfg, paths)
-	if err != nil {
-		return nil, err
-	}
-	for name := range resolvedProviders {
-		lock.Providers[name] = resolvedProviders[name]
-	}
-	if cfg.Auth.Provider != nil && cfg.Auth.Provider.HasManagedArtifacts() {
-		entry, err := l.writeComponentArtifact(context.Background(), paths, pluginmanifestv1.KindAuth, "auth", authDestDir(paths), cfg.Auth.Provider, cfg.Auth.Config)
-		if err != nil {
-			return nil, err
-		}
-		lock.Auth = &entry
-	}
-	if cfg.Datastore.Provider != nil && cfg.Datastore.Provider.HasManagedArtifacts() {
-		entry, err := l.writeComponentArtifact(context.Background(), paths, pluginmanifestv1.KindDatastore, "datastore", datastoreDestDir(paths), cfg.Datastore.Provider, cfg.Datastore.Config)
-		if err != nil {
-			return nil, err
-		}
-		lock.Datastore = &entry
-	}
-	if secretsEntry != nil {
-		lock.Secrets = secretsEntry
-	}
-	if cfg.UI.Provider != nil && cfg.UI.Provider.HasManagedArtifacts() {
-		uiEntry, err := l.writeUIProviderArtifact(context.Background(), cfg, paths)
-		if err != nil {
-			return nil, err
-		}
-		lock.UI = &uiEntry
-	}
-
-	if err := WriteLockfile(paths.lockfilePath, lock); err != nil {
-		return nil, err
-	}
-	if err := l.applyLockedPlugins(configPath, artifactsDir, cfg, true); err != nil {
-		return nil, err
-	}
-	if err := config.ValidateResolvedStructure(cfg); err != nil {
-		return nil, err
-	}
-
-	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "auth", lock.Auth != nil, "datastore", lock.Datastore != nil, "secrets", lock.Secrets != nil, "ui", lock.UI != nil)
-	slog.Info("wrote lockfile", "path", paths.lockfilePath)
-	return lock, nil
+	lock, _, err := l.initAtPath(configPath, artifactsDir)
+	return lock, err
 }
 
 // InitAtPathWithPlatforms runs init and additionally downloads and hashes
 // archives for the specified extra platforms.
 func (l *Lifecycle) InitAtPathWithPlatforms(configPath, artifactsDir string, platforms []struct{ GOOS, GOARCH, LibC string }) (*Lockfile, error) {
-	lock, err := l.InitAtPathWithArtifactsDir(configPath, artifactsDir)
+	lock, cfg, err := l.initAtPath(configPath, artifactsDir)
 	if err != nil {
 		return nil, err
 	}
@@ -162,12 +96,7 @@ func (l *Lifecycle) InitAtPathWithPlatforms(configPath, artifactsDir string, pla
 		return lock, nil
 	}
 
-	cfg, err := config.LoadAllowMissingEnv(configPath)
-	if err != nil {
-		return nil, fmt.Errorf("loading config for platform downloads: %w", err)
-	}
 	tokenForSource := buildSourceTokenMap(cfg)
-
 	if err := downloadPlatformArchives(context.Background(), lock, platforms, tokenForSource); err != nil {
 		return nil, err
 	}
@@ -177,6 +106,78 @@ func (l *Lifecycle) InitAtPathWithPlatforms(configPath, artifactsDir string, pla
 		return nil, err
 	}
 	return lock, nil
+}
+
+func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *config.Config, error) {
+	cfg, err := config.LoadAllowMissingEnv(configPath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("loading config: %v", err)
+	}
+	if err := config.OverlayManagedPluginConfig(configPath, cfg); err != nil {
+		return nil, nil, fmt.Errorf("loading config: %v", err)
+	}
+	paths := initPathsForConfigWithArtifactsDir(configPath, resolveArtifactsDir(configPath, cfg, artifactsDir))
+	secretsEntry, err := l.primeSecretsProviderForConfigResolution(context.Background(), paths, cfg, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := l.resolveConfigSecrets(context.Background(), cfg); err != nil {
+		return nil, nil, err
+	}
+	if err := os.MkdirAll(paths.providersDir, 0o755); err != nil {
+		return nil, nil, fmt.Errorf("creating providers dir: %w", err)
+	}
+
+	lock := &Lockfile{
+		Version:   LockVersion,
+		Providers: make(map[string]LockProviderEntry),
+	}
+
+	resolvedProviders, err := l.writeProviderArtifacts(context.Background(), cfg, paths)
+	if err != nil {
+		return nil, nil, err
+	}
+	for name := range resolvedProviders {
+		lock.Providers[name] = resolvedProviders[name]
+	}
+	if cfg.Auth.Provider != nil && cfg.Auth.Provider.HasManagedArtifacts() {
+		entry, err := l.writeComponentArtifact(context.Background(), paths, pluginmanifestv1.KindAuth, "auth", authDestDir(paths), cfg.Auth.Provider, cfg.Auth.Config)
+		if err != nil {
+			return nil, nil, err
+		}
+		lock.Auth = &entry
+	}
+	if cfg.Datastore.Provider != nil && cfg.Datastore.Provider.HasManagedArtifacts() {
+		entry, err := l.writeComponentArtifact(context.Background(), paths, pluginmanifestv1.KindDatastore, "datastore", datastoreDestDir(paths), cfg.Datastore.Provider, cfg.Datastore.Config)
+		if err != nil {
+			return nil, nil, err
+		}
+		lock.Datastore = &entry
+	}
+	if secretsEntry != nil {
+		lock.Secrets = secretsEntry
+	}
+	if cfg.UI.Provider != nil && cfg.UI.Provider.HasManagedArtifacts() {
+		uiEntry, err := l.writeUIProviderArtifact(context.Background(), cfg, paths)
+		if err != nil {
+			return nil, nil, err
+		}
+		lock.UI = &uiEntry
+	}
+
+	if err := WriteLockfile(paths.lockfilePath, lock); err != nil {
+		return nil, nil, err
+	}
+	if err := l.applyLockedPlugins(configPath, artifactsDir, cfg, true); err != nil {
+		return nil, nil, err
+	}
+	if err := config.ValidateResolvedStructure(cfg); err != nil {
+		return nil, nil, err
+	}
+
+	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "auth", lock.Auth != nil, "datastore", lock.Datastore != nil, "secrets", lock.Secrets != nil, "ui", lock.UI != nil)
+	slog.Info("wrote lockfile", "path", paths.lockfilePath)
+	return lock, cfg, nil
 }
 
 func buildSourceTokenMap(cfg *config.Config) map[string]string {
