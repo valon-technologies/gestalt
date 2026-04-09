@@ -83,7 +83,6 @@ func buildV2ArchiveForArtifact(t *testing.T, dir, source, version, artifactPath,
 	manifest := &pluginmanifestv1.Manifest{
 		Source:  source,
 		Version: version,
-		Kinds:   []string{pluginmanifestv1.KindPlugin},
 		Plugin:  &pluginmanifestv1.Plugin{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
@@ -132,7 +131,6 @@ func buildExecutableArchive(t *testing.T, dir, srcDirName, source, version, kind
 	manifest := &pluginmanifestv1.Manifest{
 		Source:  source,
 		Version: version,
-		Kinds:   []string{kind},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,

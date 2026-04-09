@@ -145,40 +145,24 @@ func runProviderRelease(args []string) error {
 }
 
 func resolveReleaseBuildTarget(root string, manifest *pluginmanifestv1.Manifest) (*releaseBuildTarget, error) {
-	executableKinds := releaseExecutableKinds(manifest)
-	if len(executableKinds) == 0 {
+	kind, err := pluginpkg.ManifestKind(manifest)
+	if err != nil {
+		return nil, err
+	}
+	if kind == pluginmanifestv1.KindWebUI {
 		return nil, nil
 	}
-
-	var (
-		buildKinds      []string
-		requiredMissing []string
-	)
-	for _, kind := range executableKinds {
-		hasSource, err := detectReleaseSourceBuildTarget(root, kind)
-		switch {
-		case err != nil:
-			return nil, fmt.Errorf("detect source %s package: %w", kind, err)
-		case hasSource:
-			buildKinds = append(buildKinds, kind)
-		case releaseRequiresBuildTarget(manifest, kind):
-			requiredMissing = append(requiredMissing, kind)
+	hasSource, err := detectReleaseSourceBuildTarget(root, kind)
+	if err != nil {
+		return nil, fmt.Errorf("detect source %s package: %w", kind, err)
+	}
+	if !hasSource {
+		if releaseRequiresBuildTarget(manifest) {
+			return nil, missingReleaseSourceBuildTargetError(kind)
 		}
-	}
-
-	if len(buildKinds) > 1 {
-		return nil, fmt.Errorf("provider release does not support building multiple executable kinds from source in one package: %s", strings.Join(buildKinds, ", "))
-	}
-	if len(requiredMissing) > 0 {
-		if len(buildKinds) > 0 {
-			return nil, fmt.Errorf("provider release does not support mixing source-built %q with missing executable source kinds %s in one package", buildKinds[0], strings.Join(requiredMissing, ", "))
-		}
-		return nil, missingReleaseSourceBuildTargetError(requiredMissing)
-	}
-	if len(buildKinds) == 0 {
 		return nil, nil
 	}
-	return &releaseBuildTarget{Kind: buildKinds[0]}, nil
+	return &releaseBuildTarget{Kind: kind}, nil
 }
 
 func resolveReleaseBuildPlatforms(root string, manifest *pluginmanifestv1.Manifest, target *releaseBuildTarget, value string, explicit bool) ([]releasePlatform, error) {
@@ -186,7 +170,7 @@ func resolveReleaseBuildPlatforms(root string, manifest *pluginmanifestv1.Manife
 		return nil, nil
 	}
 
-	buildRequired := releaseRequiresBuildTarget(manifest, target.Kind)
+	buildRequired := releaseRequiresBuildTarget(manifest)
 	if !buildRequired && !explicit {
 		return nil, nil
 	}
@@ -218,10 +202,10 @@ func resolveReleaseBuildPlatforms(root string, manifest *pluginmanifestv1.Manife
 	}
 
 	if len(builds) == 0 {
-		return nil, missingReleaseSourceBuildTargetError([]string{target.Kind})
+		return nil, missingReleaseSourceBuildTargetError(target.Kind)
 	}
 	if missingSource {
-		return nil, missingReleaseSourceBuildTargetError([]string{target.Kind})
+		return nil, missingReleaseSourceBuildTargetError(target.Kind)
 	}
 	return builds, nil
 }
@@ -292,27 +276,21 @@ func writeReleaseManifestFile(stagingDir, manifestFile, manifestFormat string, m
 	return os.WriteFile(filepath.Join(stagingDir, manifestFile), data, 0644)
 }
 
-func releaseRequiresBuildTarget(manifest *pluginmanifestv1.Manifest, kind string) bool {
+func releaseRequiresBuildTarget(manifest *pluginmanifestv1.Manifest) bool {
+	kind, err := pluginpkg.ManifestKind(manifest)
+	if err != nil {
+		return false
+	}
 	switch kind {
 	case pluginmanifestv1.KindPlugin:
-		return manifestHasKind(manifest, kind) && manifest.Entrypoints.Provider == nil && (manifest == nil || manifest.Plugin == nil || !manifest.Plugin.IsManifestBacked())
+		return manifest.Entrypoints.Provider == nil && (manifest.Plugin == nil || !manifest.Plugin.IsManifestBacked())
 	case pluginmanifestv1.KindAuth:
-		return manifestHasKind(manifest, kind) && manifest.Entrypoints.Auth == nil
+		return manifest.Entrypoints.Auth == nil
 	case pluginmanifestv1.KindDatastore:
-		return manifestHasKind(manifest, kind) && manifest.Entrypoints.Datastore == nil
+		return manifest.Entrypoints.Datastore == nil
 	default:
 		return false
 	}
-}
-
-func releaseExecutableKinds(manifest *pluginmanifestv1.Manifest) []string {
-	var kinds []string
-	for _, kind := range []string{pluginmanifestv1.KindPlugin, pluginmanifestv1.KindAuth, pluginmanifestv1.KindDatastore} {
-		if manifestHasKind(manifest, kind) {
-			kinds = append(kinds, kind)
-		}
-	}
-	return kinds
 }
 
 func detectReleaseSourceBuildTarget(root, kind string) (bool, error) {
@@ -359,33 +337,17 @@ func isMissingReleaseSourceBuildTarget(err error, kind string) bool {
 	}
 }
 
-func missingReleaseSourceBuildTargetError(kinds []string) error {
-	switch len(kinds) {
-	case 0:
+func missingReleaseSourceBuildTargetError(kind string) error {
+	switch kind {
+	case pluginmanifestv1.KindPlugin:
+		return fmt.Errorf("no Go, Rust, Python, or TypeScript provider package found")
+	case pluginmanifestv1.KindAuth:
+		return fmt.Errorf("no Go, Rust, Python, or TypeScript auth source package found")
+	case pluginmanifestv1.KindDatastore:
+		return fmt.Errorf("no Go, Rust, Python, or TypeScript datastore source package found")
+	default:
 		return nil
-	case 1:
-		switch kinds[0] {
-		case pluginmanifestv1.KindPlugin:
-			return fmt.Errorf("no Go, Rust, Python, or TypeScript provider package found")
-		case pluginmanifestv1.KindAuth:
-			return fmt.Errorf("no Go, Rust, Python, or TypeScript auth source package found")
-		case pluginmanifestv1.KindDatastore:
-			return fmt.Errorf("no Go, Rust, Python, or TypeScript datastore source package found")
-		}
 	}
-	return fmt.Errorf("missing source packages for executable kinds: %s", strings.Join(kinds, ", "))
-}
-
-func manifestHasKind(manifest *pluginmanifestv1.Manifest, kind string) bool {
-	if manifest == nil {
-		return false
-	}
-	for _, manifestKind := range manifest.Kinds {
-		if manifestKind == kind {
-			return true
-		}
-	}
-	return false
 }
 
 func parseReleasePlatforms(value string) ([]releasePlatform, error) {

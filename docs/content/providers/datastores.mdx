@@ -8,15 +8,13 @@ The host encrypts all integration tokens before passing them to the datastore us
 
 ## Manifest
 
-A datastore provider manifest declares `kinds: [datastore]`:
+A datastore provider manifest uses a `datastore` block:
 
 ```yaml
 source: github.com/example/plugins/my-datastore
 version: 0.0.1-alpha.1
 display_name: My Datastore
 description: Custom persistent storage backend
-kinds:
-  - datastore
 datastore:
   config_schema_path: ./datastore_config.json
 ```

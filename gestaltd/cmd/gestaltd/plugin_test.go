@@ -146,8 +146,6 @@ func TestRun_PluginReleaseRejectsInvalidManifest(t *testing.T) {
 			manifestYAML: `
 source: github.com/testowner/plugins/invalid
 version: 0.0.1-alpha.1
-kinds:
-  - plugin
 provider:
   surfaces:
     rest:
@@ -163,8 +161,6 @@ provider:
 			manifestYAML: `
 source: github.com/testowner/plugins/invalid
 version: 0.0.1-alpha.1
-kinds:
-  - plugin
 provider:
   exec: {}
 `,
@@ -652,7 +648,6 @@ plugin = "os import path\nimport os;os.system('cmd')#:attr"
 	manifestData, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
 		Source:  "github.com/testowner/plugins/invalid-python-release",
 		Version: "0.0.1",
-		Kinds:   []string{pluginmanifestv1.KindPlugin},
 		Plugin: &pluginmanifestv1.Plugin{
 			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
 		},
@@ -1483,7 +1478,6 @@ func TestRun_PluginReleaseAllowsOverlappingSupportPaths(t *testing.T) {
 		Version:     "0.0.1",
 		DisplayName: "WebUI Overlap",
 		IconFile:    "out/icon.svg",
-		Kinds:       []string{pluginmanifestv1.KindWebUI},
 		WebUI: &pluginmanifestv1.WebUIMetadata{
 			AssetRoot: "out",
 		},
@@ -1541,7 +1535,6 @@ func TestRun_PluginReleasePreservesYAMLManifestFormatAndConnectionDefaults(t *te
 		Source:      "github.com/testowner/plugins/provider-yaml",
 		Version:     "0.0.1",
 		DisplayName: "Provider YAML",
-		Kinds:       []string{pluginmanifestv1.KindPlugin},
 		Plugin: &pluginmanifestv1.Plugin{
 			ConfigSchemaPath: releaseProviderSchemaPath,
 			MCP:              true,
@@ -1686,7 +1679,6 @@ func TestRun_PluginReleaseRejectsRequiredExecutableKindsWithoutSourceOrEntrypoin
 				Source:      "github.com/testowner/plugins/missing-provider",
 				Version:     "0.0.1",
 				DisplayName: "Missing Provider",
-				Kinds:       []string{pluginmanifestv1.KindPlugin},
 				Plugin:      &pluginmanifestv1.Plugin{},
 			},
 			wantError: "no Go, Rust, Python, or TypeScript provider package found",
@@ -1697,7 +1689,6 @@ func TestRun_PluginReleaseRejectsRequiredExecutableKindsWithoutSourceOrEntrypoin
 				Source:      "github.com/testowner/plugins/missing-auth",
 				Version:     "0.0.1",
 				DisplayName: "Missing Auth",
-				Kinds:       []string{pluginmanifestv1.KindAuth},
 				Auth:        &pluginmanifestv1.AuthMetadata{},
 			},
 			wantError: "no Go, Rust, Python, or TypeScript auth source package found",
@@ -1708,7 +1699,6 @@ func TestRun_PluginReleaseRejectsRequiredExecutableKindsWithoutSourceOrEntrypoin
 				Source:      "github.com/testowner/plugins/missing-datastore",
 				Version:     "0.0.1",
 				DisplayName: "Missing Datastore",
-				Kinds:       []string{pluginmanifestv1.KindDatastore},
 				Datastore:   &pluginmanifestv1.DatastoreMetadata{},
 			},
 			wantError: "no Go, Rust, Python, or TypeScript datastore source package found",
@@ -1908,7 +1898,6 @@ def dynamic_catalog(request: gestalt.Request) -> gestalt.Catalog:
 	manifestData, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
 		Source:  "github.com/testowner/plugins/python-release",
 		Version: "0.0.1",
-		Kinds:   []string{pluginmanifestv1.KindPlugin},
 		Plugin: &pluginmanifestv1.Plugin{
 			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
 		},
@@ -1946,7 +1935,6 @@ auth = "provider:auth_provider"
 		Source:      pythonAuthReleaseSource,
 		Version:     "0.0.1",
 		DisplayName: "Python Auth Release",
-		Kinds:       []string{pluginmanifestv1.KindAuth},
 		Auth: &pluginmanifestv1.AuthMetadata{
 			ConfigSchemaPath: authReleaseSchemaPath,
 		},
@@ -1989,7 +1977,6 @@ datastore = "provider:datastore_provider"
 		Source:      pythonDatastoreReleaseSource,
 		Version:     "0.0.1",
 		DisplayName: "Python Datastore Release",
-		Kinds:       []string{pluginmanifestv1.KindDatastore},
 		Datastore: &pluginmanifestv1.DatastoreMetadata{
 			ConfigSchemaPath: datastoreReleaseSchemaPath,
 		},
@@ -2030,7 +2017,6 @@ func newTypeScriptSourceAuthReleaseFixture(t *testing.T, dir string) string {
 		Source:      authReleaseSource,
 		Version:     "0.0.1",
 		DisplayName: "Auth Release",
-		Kinds:       []string{pluginmanifestv1.KindAuth},
 		Auth: &pluginmanifestv1.AuthMetadata{
 			ConfigSchemaPath: authReleaseSchemaPath,
 		},
@@ -2062,7 +2048,6 @@ func newTypeScriptSourceDatastoreReleaseFixture(t *testing.T, dir string) string
 		Source:      datastoreReleaseSource,
 		Version:     "0.0.1",
 		DisplayName: "Datastore Release",
-		Kinds:       []string{pluginmanifestv1.KindDatastore},
 		Datastore: &pluginmanifestv1.DatastoreMetadata{
 			ConfigSchemaPath: datastoreReleaseSchemaPath,
 		},
@@ -2379,7 +2364,6 @@ func newSourceAuthReleaseFixture(t *testing.T, dir string) string {
 		Source:      authReleaseSource,
 		Version:     "0.0.1",
 		DisplayName: "Auth Release",
-		Kinds:       []string{pluginmanifestv1.KindAuth},
 		Auth: &pluginmanifestv1.AuthMetadata{
 			ConfigSchemaPath: authReleaseSchemaPath,
 		},
@@ -2397,7 +2381,6 @@ func newRustSourceAuthReleaseFixture(t *testing.T, dir string) string {
 		Source:      authReleaseSource,
 		Version:     "0.0.1",
 		DisplayName: "Auth Release",
-		Kinds:       []string{pluginmanifestv1.KindAuth},
 		Auth: &pluginmanifestv1.AuthMetadata{
 			ConfigSchemaPath: authReleaseSchemaPath,
 		},
@@ -2420,7 +2403,6 @@ func newSourceDatastoreReleaseFixture(t *testing.T, dir string) string {
 		Source:      datastoreReleaseSource,
 		Version:     "0.0.1",
 		DisplayName: "Datastore Release",
-		Kinds:       []string{pluginmanifestv1.KindDatastore},
 		Datastore: &pluginmanifestv1.DatastoreMetadata{
 			ConfigSchemaPath: datastoreReleaseSchemaPath,
 		},
@@ -2438,7 +2420,6 @@ func newRustSourceDatastoreReleaseFixture(t *testing.T, dir string) string {
 		Source:      datastoreReleaseSource,
 		Version:     "0.0.1",
 		DisplayName: "Datastore Release",
-		Kinds:       []string{pluginmanifestv1.KindDatastore},
 		Datastore: &pluginmanifestv1.DatastoreMetadata{
 			ConfigSchemaPath: datastoreReleaseSchemaPath,
 		},
@@ -2497,7 +2478,6 @@ func newSourceProviderReleaseFixture(t *testing.T, dir string) string {
 		Version:     "0.0.1",
 		DisplayName: "Release Test",
 		IconFile:    releaseTestIconPath,
-		Kinds:       []string{pluginmanifestv1.KindPlugin},
 		Plugin: &pluginmanifestv1.Plugin{
 			ConfigSchemaPath: releaseProviderSchemaPath,
 		},
@@ -2532,7 +2512,6 @@ func newGoSourceReleaseFixture(t *testing.T, dir string) string {
 		Source:      releaseTestSource,
 		Version:     "0.0.1",
 		DisplayName: "Release Test",
-		Kinds:       []string{pluginmanifestv1.KindPlugin},
 		Plugin: &pluginmanifestv1.Plugin{
 			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
 		},
@@ -2829,7 +2808,6 @@ func newPrebuiltProviderReleaseFixture(t *testing.T, dir string) string {
 		Version:     "0.0.1",
 		DisplayName: "Prebuilt Provider",
 		IconFile:    releaseTestIconPath,
-		Kinds:       []string{pluginmanifestv1.KindPlugin},
 		Plugin: &pluginmanifestv1.Plugin{
 			ConfigSchemaPath: releaseProviderSchemaPath,
 		},
@@ -2866,7 +2844,6 @@ func newBuiltWebUIReleaseFixture(t *testing.T, dir string) string {
 		Version:     "0.0.1",
 		DisplayName: "WebUI Test",
 		IconFile:    releaseTestIconPath,
-		Kinds:       []string{pluginmanifestv1.KindWebUI},
 		Release: &pluginmanifestv1.ReleaseMetadata{
 			Build: &pluginmanifestv1.ReleaseBuild{
 				Workdir: "ui",
@@ -2894,7 +2871,6 @@ func newWebUIReleaseFixtureWithAssetRoot(t *testing.T, dir, assetRoot string) st
 		Version:     "0.0.1",
 		DisplayName: "WebUI Test",
 		IconFile:    releaseTestIconPath,
-		Kinds:       []string{pluginmanifestv1.KindWebUI},
 		WebUI: &pluginmanifestv1.WebUIMetadata{
 			AssetRoot: assetRoot,
 		},

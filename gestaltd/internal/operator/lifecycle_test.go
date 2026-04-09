@@ -72,7 +72,6 @@ func writeRequiredComponentManifests(t *testing.T, dir string) (string, string) 
 		manifest := &pluginmanifestv1.Manifest{
 			Source:  source,
 			Version: "0.0.1-alpha.1",
-			Kinds:   []string{kind},
 		}
 		switch kind {
 		case pluginmanifestv1.KindAuth:
@@ -130,7 +129,6 @@ func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *te
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Local Provider",
 		Description: "Local executable provider",
-		Kinds:       []string{pluginmanifestv1.KindPlugin},
 		Plugin: &pluginmanifestv1.Plugin{
 			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
 		},
@@ -251,7 +249,6 @@ func TestLockProviderEntryForSource_RejectsManifestWithoutProviderKind(t *testin
 	pkgPath := mustBuildManagedProviderPackage(t, dir, &pluginmanifestv1.Manifest{
 		Source:  "github.com/testowner/gestalt-providers/plugins/auth-only",
 		Version: "0.0.1-alpha.1",
-		Kinds:   []string{pluginmanifestv1.KindAuth},
 		Auth:    &pluginmanifestv1.AuthMetadata{},
 		Entrypoints: pluginmanifestv1.Entrypoints{
 			Auth: &pluginmanifestv1.Entrypoint{ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "auth"))},
@@ -274,7 +271,7 @@ func TestLockProviderEntryForSource_RejectsManifestWithoutProviderKind(t *testin
 	if err == nil {
 		t.Fatal("expected provider kind validation error")
 	}
-	if !strings.Contains(err.Error(), `manifest does not declare kind "plugin"`) {
+	if !strings.Contains(err.Error(), `manifest has kind "auth", want "plugin"`) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -288,7 +285,6 @@ func TestLoadForExecutionAtPath_ResolvesLocalTopLevelPluginsWithoutLockfile(t *t
 	authManifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
 		Source:  "github.com/testowner/plugins/local-auth",
 		Version: "0.0.1-alpha.1",
-		Kinds:   []string{pluginmanifestv1.KindAuth},
 		Auth:    &pluginmanifestv1.AuthMetadata{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: authArtifact},
@@ -316,7 +312,6 @@ func TestLoadForExecutionAtPath_ResolvesLocalTopLevelPluginsWithoutLockfile(t *t
 	datastoreManifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
 		Source:    "github.com/testowner/plugins/local-datastore",
 		Version:   "0.0.1-alpha.1",
-		Kinds:     []string{pluginmanifestv1.KindDatastore},
 		Datastore: &pluginmanifestv1.DatastoreMetadata{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: datastoreArtifact},
@@ -429,7 +424,6 @@ func TestLoadForExecutionAtPath_ResolvesLocalSourceTopLevelPluginsWithoutArtifac
 	authManifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
 		Source:  "github.com/testowner/plugins/local-source-auth",
 		Version: "0.0.1-alpha.1",
-		Kinds:   []string{pluginmanifestv1.KindAuth},
 		Auth:    &pluginmanifestv1.AuthMetadata{},
 	}, pluginpkg.ManifestFormatYAML)
 	if err != nil {
@@ -444,7 +438,6 @@ func TestLoadForExecutionAtPath_ResolvesLocalSourceTopLevelPluginsWithoutArtifac
 	datastoreManifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
 		Source:    "github.com/testowner/plugins/local-source-datastore",
 		Version:   "0.0.1-alpha.1",
-		Kinds:     []string{pluginmanifestv1.KindDatastore},
 		Datastore: &pluginmanifestv1.DatastoreMetadata{},
 	}, pluginpkg.ManifestFormatYAML)
 	if err != nil {
@@ -527,7 +520,6 @@ func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalSourceHybridPlugin
 		Source:      "github.com/testowner/plugins/local-generated-provider",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Generated Local Provider",
-		Kinds:       []string{pluginmanifestv1.KindPlugin},
 		Plugin: &pluginmanifestv1.Plugin{
 			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
 		},
@@ -700,7 +692,6 @@ def session_catalog(request: gestalt.Request) -> gestalt.Catalog:
 		Source:      "github.com/testowner/plugins/local-python-provider",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Generated Local Python Provider",
-		Kinds:       []string{pluginmanifestv1.KindPlugin},
 		Plugin: &pluginmanifestv1.Plugin{
 			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
 		},
@@ -1027,7 +1018,6 @@ func TestApplyLockedPlugins_SkipsNilIntegrationPlugins(t *testing.T) {
 		Source:      "github.com/testowner/plugins/local-provider",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Local Provider",
-		Kinds:       []string{pluginmanifestv1.KindPlugin},
 		Plugin: &pluginmanifestv1.Plugin{
 			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
 		},

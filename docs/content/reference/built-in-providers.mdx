@@ -90,4 +90,4 @@ plugins:
 
 ## Community and Custom Providers
 
-Third-party auth providers, datastore providers, and integration plugins use the same provider package model as the first-party packages. Package your implementation with a provider manifest and the appropriate kind (`auth`, `datastore`, or `plugin`), publish it to a Git-accessible source, and reference it in your config the same way you would reference any first-party provider.
+Third-party auth providers, datastore providers, and integration plugins use the same provider package model as the first-party packages. Package your implementation with a provider manifest that includes the appropriate top-level block (`auth`, `datastore`, or `plugin`), publish it to a Git-accessible source, and reference it in your config the same way you would reference any first-party provider.

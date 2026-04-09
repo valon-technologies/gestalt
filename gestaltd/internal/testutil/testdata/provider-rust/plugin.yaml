@@ -2,8 +2,6 @@ source: github.com/valon-technologies/gestalt/provider-rust
 version: 0.0.1-alpha.1
 display_name: Example Rust Provider
 description: A minimal example provider built with the public Rust SDK
-kinds:
-  - plugin
 plugin:
   connections:
     default:

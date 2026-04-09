@@ -17,7 +17,7 @@ Every manifest defines exactly one of four provider kinds, determined by which m
 | `datastore` | `datastore` | Persistence backend (Postgres, SQLite, DynamoDB, or custom). |
 | `webui` | `webui` | Static UI package served by `gestaltd`. |
 
-The JSON schema enforces `oneOf` across these four keys: a manifest must include exactly one.
+The JSON schema enforces `oneOf` across these four keys: a manifest must include exactly one. There is no separate `kind` or `kinds` field.
 
 ## Common Fields
 
@@ -27,12 +27,11 @@ These fields appear at the top level of every manifest regardless of kind.
 | --- | --- | --- | --- |
 | `source` | string | yes | Canonical provider source identifier. Use `github.com/<org>/<repo>/<path>`. The final path segment is the provider package name; preceding segments are used for release tags and source resolution. |
 | `version` | string | yes | Semver version. Pre-release suffixes like `-alpha.1` are allowed. |
-| `kinds` | string[] | no | Explicit kind list. When omitted, the kind is inferred from which metadata block is present. |
 | `display_name` | string | no | Human-readable label shown in the UI. |
 | `description` | string | no | Human-readable description. |
 | `icon_file` | string | no | Relative path to an SVG icon bundled with the package. |
 | `artifacts` | Artifact[] | no | Packaged executable artifacts keyed by platform. Omit for declarative-only integration plugin packages or source manifests used during local development. |
-| `entrypoints` | Entrypoints | no | Executable entrypoints for each kind the manifest provides. |
+| `entrypoints` | Entrypoints | no | Executable entrypoint metadata for the manifest's kind. |
 
 ## Entrypoints
 

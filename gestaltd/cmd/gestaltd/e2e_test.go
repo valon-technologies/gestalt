@@ -186,8 +186,6 @@ paths:
 source: github.com/test/plugins/pager
 version: 0.0.1-alpha.1
 display_name: Pager
-kinds:
-  - plugin
 plugin:
   openapi: openapi.yaml
   connection_mode: none
@@ -229,8 +227,6 @@ paths:
 source: github.com/test/plugins/mapper
 version: 0.0.1-alpha.1
 display_name: Mapper
-kinds:
-  - plugin
 plugin:
   openapi: openapi.yaml
   connection_mode: none
@@ -374,8 +370,6 @@ paths:
 source: github.com/test/plugins/manual-basic
 version: 0.0.1-alpha.1
 display_name: Manual Basic Test
-kinds:
-  - plugin
 plugin:
   openapi: openapi.yaml
 `), 0o644)
@@ -1465,7 +1459,6 @@ func setupPluginDirWithVersion(t *testing.T, baseDir, version string) string {
 		Version:     version,
 		DisplayName: "Example Provider",
 		Description: "A minimal example provider built with the public SDK",
-		Kinds:       []string{pluginmanifestv1.KindPlugin},
 		Plugin:      &pluginmanifestv1.Plugin{},
 	}
 	writeManifestFile(t, pluginDir, manifest)
@@ -1494,7 +1487,6 @@ func setupAuthProviderDir(t *testing.T, baseDir, name string) string {
 		Source:      "github.com/test/providers/auth/" + name,
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Test Auth " + name,
-		Kinds:       []string{pluginmanifestv1.KindAuth},
 		Auth:        &pluginmanifestv1.AuthMetadata{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: artifactRel},
@@ -1539,7 +1531,6 @@ func setupDatastoreProviderDir(t *testing.T, baseDir, name string) string {
 		Source:      "github.com/test/providers/datastore/" + name,
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Test Datastore " + name,
-		Kinds:       []string{pluginmanifestv1.KindDatastore},
 		Datastore:   &pluginmanifestv1.DatastoreMetadata{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: artifactRel},

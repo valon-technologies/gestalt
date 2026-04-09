@@ -579,7 +579,6 @@ func mustWriteTypeScriptSourceManifest(t *testing.T, root, pluginName string) st
 	data, err := EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
 		Source:  "github.com/testowner/plugins/" + pluginName,
 		Version: "0.0.1",
-		Kinds:   []string{pluginmanifestv1.KindPlugin},
 		Plugin: &pluginmanifestv1.Plugin{
 			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
 		},
@@ -599,7 +598,6 @@ func mustWriteTypeScriptSourceComponentManifest(t *testing.T, root, pluginName, 
 	manifest := &pluginmanifestv1.Manifest{
 		Source:  "github.com/testowner/plugins/" + pluginName,
 		Version: "0.0.1",
-		Kinds:   []string{kind},
 	}
 	switch kind {
 	case pluginmanifestv1.KindAuth:

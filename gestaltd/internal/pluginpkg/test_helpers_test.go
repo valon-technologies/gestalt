@@ -50,7 +50,6 @@ func newProviderManifest(source, version, artifactPath, digest string) *pluginma
 	return &pluginmanifestv1.Manifest{
 		Source:  source,
 		Version: version,
-		Kinds:   []string{pluginmanifestv1.KindPlugin},
 		Plugin:  &pluginmanifestv1.Plugin{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
@@ -93,7 +92,6 @@ func mustProviderManifest(source, version, osName, arch, artifactPath, sha strin
 	return &pluginmanifestv1.Manifest{
 		Source:  source,
 		Version: version,
-		Kinds:   []string{pluginmanifestv1.KindPlugin},
 		Plugin:  &pluginmanifestv1.Plugin{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
