@@ -1289,4 +1289,3 @@ func TestResolveArchiveForPlatform(t *testing.T) {
 		t.Error("expected no match for darwin/arm64 when only windows is available")
 	}
 }
-

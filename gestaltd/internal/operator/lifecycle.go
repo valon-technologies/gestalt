@@ -609,7 +609,6 @@ func (l *Lifecycle) buildArchivesMap(ctx context.Context, src pluginsource.Sourc
 	return archives
 }
 
-
 func (l *Lifecycle) writeProviderArtifacts(ctx context.Context, cfg *config.Config, paths initPaths) (map[string]LockProviderEntry, error) {
 	written := make(map[string]LockProviderEntry)
 	for name := range cfg.Integrations {
