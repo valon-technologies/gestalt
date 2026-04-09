@@ -53,6 +53,11 @@ jobs:
             goos: linux
             goarch: arm64
             suffix: linux-arm64
+          - name: Linux-ARMv7
+            goos: linux
+            goarch: arm
+            goarm: '7'
+            suffix: linux-armv7
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
@@ -71,6 +76,7 @@ jobs:
           CGO_ENABLED: '0'
           GOOS: ${{ matrix.platform.goos }}
           GOARCH: ${{ matrix.platform.goarch }}
+          GOARM: ${{ matrix.platform.goarm }}
         run: |
           mkdir -p build
           (
@@ -113,7 +119,7 @@ jobs:
       download-artifact-pattern: 'gestaltd-*'
 
   publish-image:
-    name: Publish Docker Image
+    name: Publish Docker Image (Alpine)
     needs: build
     uses: ./.github/workflows/publish-dockerhub-image.yml
     secrets: inherit
@@ -124,10 +130,41 @@ jobs:
       version-prefix: 'gestaltd/v'
       short-description: Platform for self-hostable, configurable integrations and tooling
       readme-filepath: docs/dockerhub/gestaltd.md
+      platforms: 'linux/amd64,linux/arm64,linux/arm/v7'
+
+  publish-image-debian:
+    name: Publish Docker Image (Debian)
+    needs: build
+    uses: ./.github/workflows/publish-dockerhub-image.yml
+    secrets: inherit
+    with:
+      image-name: valontechnologies/gestaltd
+      image-url: https://hub.docker.com/r/valontechnologies/gestaltd
+      dockerfile: gestaltd/Dockerfile.debian
+      version-prefix: 'gestaltd/v'
+      short-description: Platform for self-hostable, configurable integrations and tooling
+      readme-filepath: docs/dockerhub/gestaltd.md
+      platforms: 'linux/amd64,linux/arm64,linux/arm/v7'
+      tag-suffix: '-debian'
+
+  publish-image-scratch:
+    name: Publish Docker Image (scratch)
+    needs: build
+    uses: ./.github/workflows/publish-dockerhub-image.yml
+    secrets: inherit
+    with:
+      image-name: valontechnologies/gestaltd
+      image-url: https://hub.docker.com/r/valontechnologies/gestaltd
+      dockerfile: gestaltd/Dockerfile.scratch
+      version-prefix: 'gestaltd/v'
+      short-description: Platform for self-hostable, configurable integrations and tooling
+      readme-filepath: docs/dockerhub/gestaltd.md
+      platforms: 'linux/amd64,linux/arm64,linux/arm/v7'
+      tag-suffix: '-scratch'
 
   update-formula:
     name: Update Homebrew Formula, Chart & OCI Publish
-    needs: [release, publish-image]
+    needs: [release, publish-image, publish-image-debian, publish-image-scratch]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -150,7 +187,7 @@ jobs:
       - name: Parse checksums
         id: checksums
         run: |
-          for platform in macos-arm64 macos-x86_64 linux-arm64 linux-x86_64; do
+          for platform in macos-arm64 macos-x86_64 linux-arm64 linux-armv7 linux-x86_64; do
             hash=$(awk '{print $1}' "checksums/gestaltd-${platform}.tar.gz.sha256")
             echo "${platform}=${hash}" >> "$GITHUB_OUTPUT"
           done
