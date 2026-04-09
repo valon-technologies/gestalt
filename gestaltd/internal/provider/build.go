@@ -239,16 +239,11 @@ func ApplyConnectionAuth(def *Definition, conn config.ConnectionDef) {
 	if len(o.Credentials) > 0 {
 		def.CredentialFields = make([]CredentialFieldDef, len(o.Credentials))
 		for i, cf := range o.Credentials {
-			def.CredentialFields[i] = CredentialFieldDef{
-				Name:        cf.Name,
-				Label:       cf.Label,
-				Description: cf.Description,
-				HelpURL:     cf.HelpURL,
-			}
+			def.CredentialFields[i] = CredentialFieldDef(cf)
 		}
 	}
 	if o.AuthMapping != nil {
-		def.AuthMapping = cloneConfigAuthMapping(o.AuthMapping)
+		def.AuthMapping = config.CloneAuthMapping(o.AuthMapping)
 	}
 }
 
@@ -321,36 +316,6 @@ func resolveAuthValue(value AuthValueDef, token string, tokenData *map[string]an
 		return "", fmt.Errorf("token field %q is missing or null", fieldName)
 	}
 	return fmt.Sprintf("%v", val), nil
-}
-
-func cloneConfigAuthMapping(src *config.AuthMappingDef) *AuthMappingDef {
-	if src == nil {
-		return nil
-	}
-	dst := &AuthMappingDef{}
-	if len(src.Headers) > 0 {
-		dst.Headers = make(map[string]AuthValueDef, len(src.Headers))
-		for name, value := range src.Headers {
-			dst.Headers[name] = cloneConfigAuthValue(value)
-		}
-	}
-	if src.Basic != nil {
-		dst.Basic = &BasicAuthMappingDef{
-			Username: cloneConfigAuthValue(src.Basic.Username),
-			Password: cloneConfigAuthValue(src.Basic.Password),
-		}
-	}
-	return dst
-}
-
-func cloneConfigAuthValue(src config.AuthValueDef) AuthValueDef {
-	dst := AuthValueDef{Value: src.Value}
-	if src.ValueFrom != nil && src.ValueFrom.CredentialFieldRef != nil {
-		dst.ValueFrom = &AuthValueFromDef{
-			CredentialFieldRef: &CredentialFieldRefDef{Name: src.ValueFrom.CredentialFieldRef.Name},
-		}
-	}
-	return dst
 }
 
 func setStr(dst *string, val string) {

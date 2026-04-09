@@ -511,12 +511,12 @@ func ManifestAuthToConnectionAuthDef(auth *pluginmanifestv1.ProviderAuth) Connec
 		AccessTokenPath:     auth.AccessTokenPath,
 		TokenMetadata:       slices.Clone(auth.TokenMetadata),
 		Credentials:         slices.Clone(auth.Credentials),
-		AuthMapping:         cloneManifestAuthMapping(auth.AuthMapping),
+		AuthMapping:         CloneAuthMapping(auth.AuthMapping),
 	}
 	return out
 }
 
-func cloneManifestAuthMapping(src *pluginmanifestv1.AuthMapping) *AuthMappingDef {
+func CloneAuthMapping(src *AuthMappingDef) *AuthMappingDef {
 	if src == nil {
 		return nil
 	}
@@ -524,19 +524,19 @@ func cloneManifestAuthMapping(src *pluginmanifestv1.AuthMapping) *AuthMappingDef
 	if len(src.Headers) > 0 {
 		dst.Headers = make(map[string]AuthValueDef, len(src.Headers))
 		for name, value := range src.Headers {
-			dst.Headers[name] = cloneManifestAuthValue(value)
+			dst.Headers[name] = cloneAuthValue(value)
 		}
 	}
 	if src.Basic != nil {
 		dst.Basic = &BasicAuthMappingDef{
-			Username: cloneManifestAuthValue(src.Basic.Username),
-			Password: cloneManifestAuthValue(src.Basic.Password),
+			Username: cloneAuthValue(src.Basic.Username),
+			Password: cloneAuthValue(src.Basic.Password),
 		}
 	}
 	return dst
 }
 
-func cloneManifestAuthValue(src pluginmanifestv1.AuthValue) AuthValueDef {
+func cloneAuthValue(src AuthValueDef) AuthValueDef {
 	dst := AuthValueDef{Value: src.Value}
 	if src.ValueFrom != nil && src.ValueFrom.CredentialFieldRef != nil {
 		dst.ValueFrom = &AuthValueFromDef{
