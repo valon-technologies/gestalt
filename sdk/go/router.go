@@ -144,6 +144,7 @@ func (r *Router[P]) Catalog() *Catalog {
 		return nil
 	}
 	c := r.catalog
+	c.Operations = append([]CatalogOperation(nil), c.Operations...)
 	return &c
 }
 
@@ -153,6 +154,7 @@ func (r *Router[P]) WithName(name string) *Router[P] {
 	}
 	trimmed := strings.TrimSpace(name)
 	catalog := r.catalog
+	catalog.Operations = append([]CatalogOperation(nil), catalog.Operations...)
 	if trimmed != "" {
 		catalog.Name = trimmed
 	}
