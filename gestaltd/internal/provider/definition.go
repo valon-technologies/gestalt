@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
 
 type Definition struct {
@@ -93,28 +94,11 @@ type OperationDef struct {
 	Pagination  *PaginationDef  `yaml:"pagination" json:"pagination"`
 }
 
-type AuthMappingDef struct {
-	Headers map[string]AuthValueDef `yaml:"headers" json:"headers"`
-	Basic   *BasicAuthMappingDef    `yaml:"basic" json:"basic,omitempty"`
-}
-
-type BasicAuthMappingDef struct {
-	Username AuthValueDef `yaml:"username" json:"username"`
-	Password AuthValueDef `yaml:"password" json:"password"`
-}
-
-type AuthValueDef struct {
-	Value     string            `yaml:"value" json:"value,omitempty"`
-	ValueFrom *AuthValueFromDef `yaml:"valueFrom" json:"valueFrom,omitempty"`
-}
-
-type AuthValueFromDef struct {
-	CredentialFieldRef *CredentialFieldRefDef `yaml:"credentialFieldRef" json:"credentialFieldRef,omitempty"`
-}
-
-type CredentialFieldRefDef struct {
-	Name string `yaml:"name" json:"name"`
-}
+type AuthMappingDef = pluginmanifestv1.AuthMapping
+type BasicAuthMappingDef = pluginmanifestv1.BasicAuthMapping
+type AuthValueDef = pluginmanifestv1.AuthValue
+type AuthValueFromDef = pluginmanifestv1.AuthValueFrom
+type CredentialFieldRefDef = pluginmanifestv1.CredentialFieldRef
 
 type ValueSelectorDef struct {
 	Source string `yaml:"source" json:"source"`
@@ -131,12 +115,7 @@ type PaginationDef struct {
 	MaxPages     int               `yaml:"max_pages" json:"max_pages"`
 }
 
-type CredentialFieldDef struct {
-	Name        string `yaml:"name" json:"name"`
-	Label       string `yaml:"label" json:"label,omitempty"`
-	Description string `yaml:"description" json:"description,omitempty"`
-	HelpURL     string `yaml:"help_url" json:"help_url,omitempty"`
-}
+type CredentialFieldDef = pluginmanifestv1.CredentialField
 
 type ResponseMappingDef struct {
 	DataPath   string                `yaml:"data_path" json:"data_path"`

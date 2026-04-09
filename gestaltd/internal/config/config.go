@@ -363,29 +363,11 @@ type ConnectionAuthDef struct {
 }
 
 type CredentialFieldDef = pluginmanifestv1.CredentialField
-
-type AuthMappingDef struct {
-	Headers map[string]AuthValueDef `yaml:"headers"`
-	Basic   *BasicAuthMappingDef    `yaml:"basic"`
-}
-
-type BasicAuthMappingDef struct {
-	Username AuthValueDef `yaml:"username"`
-	Password AuthValueDef `yaml:"password"`
-}
-
-type AuthValueDef struct {
-	Value     string            `yaml:"value"`
-	ValueFrom *AuthValueFromDef `yaml:"valueFrom"`
-}
-
-type AuthValueFromDef struct {
-	CredentialFieldRef *CredentialFieldRefDef `yaml:"credentialFieldRef"`
-}
-
-type CredentialFieldRefDef struct {
-	Name string `yaml:"name"`
-}
+type AuthMappingDef = pluginmanifestv1.AuthMapping
+type BasicAuthMappingDef = pluginmanifestv1.BasicAuthMapping
+type AuthValueDef = pluginmanifestv1.AuthValue
+type AuthValueFromDef = pluginmanifestv1.AuthValueFrom
+type CredentialFieldRefDef = pluginmanifestv1.CredentialFieldRef
 
 type ConnectionParamDef = pluginmanifestv1.ProviderConnectionParam
 
@@ -529,8 +511,39 @@ func ManifestAuthToConnectionAuthDef(auth *pluginmanifestv1.ProviderAuth) Connec
 		AccessTokenPath:     auth.AccessTokenPath,
 		TokenMetadata:       slices.Clone(auth.TokenMetadata),
 		Credentials:         slices.Clone(auth.Credentials),
+		AuthMapping:         cloneManifestAuthMapping(auth.AuthMapping),
 	}
 	return out
+}
+
+func cloneManifestAuthMapping(src *pluginmanifestv1.AuthMapping) *AuthMappingDef {
+	if src == nil {
+		return nil
+	}
+	dst := &AuthMappingDef{}
+	if len(src.Headers) > 0 {
+		dst.Headers = make(map[string]AuthValueDef, len(src.Headers))
+		for name, value := range src.Headers {
+			dst.Headers[name] = cloneManifestAuthValue(value)
+		}
+	}
+	if src.Basic != nil {
+		dst.Basic = &BasicAuthMappingDef{
+			Username: cloneManifestAuthValue(src.Basic.Username),
+			Password: cloneManifestAuthValue(src.Basic.Password),
+		}
+	}
+	return dst
+}
+
+func cloneManifestAuthValue(src pluginmanifestv1.AuthValue) AuthValueDef {
+	dst := AuthValueDef{Value: src.Value}
+	if src.ValueFrom != nil && src.ValueFrom.CredentialFieldRef != nil {
+		dst.ValueFrom = &AuthValueFromDef{
+			CredentialFieldRef: &CredentialFieldRefDef{Name: src.ValueFrom.CredentialFieldRef.Name},
+		}
+	}
+	return dst
 }
 
 func EffectivePluginConnectionDef(plugin *PluginDef, manifestPlugin *pluginmanifestv1.Plugin) ConnectionDef {

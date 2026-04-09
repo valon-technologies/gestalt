@@ -128,40 +128,7 @@ func Build(def *Definition, conn config.ConnectionDef, opts ...BuildOption) (cor
 				return nil, fmt.Errorf("%s: auth_mapping.basic requires auth_style basic", def.Provider)
 			}
 		}
-		mapping := def.AuthMapping
-		base.TokenParser = func(token string) (string, map[string]string, error) {
-			var (
-				tokenData map[string]any
-				headers   map[string]string
-			)
-			if len(mapping.Headers) > 0 {
-				headers = make(map[string]string, len(mapping.Headers))
-				for headerName, value := range mapping.Headers {
-					resolved, err := resolveAuthValue(value, token, &tokenData)
-					if err != nil {
-						return "", nil, fmt.Errorf("auth_mapping.headers[%q]: %w", headerName, err)
-					}
-					headers[headerName] = resolved
-				}
-			}
-			authToken := ""
-			if mapping.Basic != nil {
-				username, err := resolveAuthValue(mapping.Basic.Username, token, &tokenData)
-				if err != nil {
-					return "", nil, fmt.Errorf("auth_mapping.basic.username: %w", err)
-				}
-				password, err := resolveAuthValue(mapping.Basic.Password, token, &tokenData)
-				if err != nil {
-					return "", nil, fmt.Errorf("auth_mapping.basic.password: %w", err)
-				}
-				credential := fmt.Sprintf("%s:%s", username, password)
-				authToken = "Basic " + base64.StdEncoding.EncodeToString([]byte(credential))
-			}
-			if len(headers) == 0 {
-				headers = nil
-			}
-			return authToken, headers, nil
-		}
+		base.TokenParser = MappedCredentialParser(def.AuthMapping)
 	case def.AuthHeader != "":
 		headerName := def.AuthHeader
 		base.TokenParser = func(token string) (string, map[string]string, error) {
@@ -291,6 +258,42 @@ func parseMappedToken(token string) (map[string]any, error) {
 		return nil, fmt.Errorf("parsing token as JSON for auth_mapping: %w", err)
 	}
 	return tokenData, nil
+}
+
+func MappedCredentialParser(mapping *AuthMappingDef) func(string) (string, map[string]string, error) {
+	return func(token string) (string, map[string]string, error) {
+		var (
+			tokenData map[string]any
+			headers   map[string]string
+		)
+		if len(mapping.Headers) > 0 {
+			headers = make(map[string]string, len(mapping.Headers))
+			for headerName, value := range mapping.Headers {
+				resolved, err := resolveAuthValue(value, token, &tokenData)
+				if err != nil {
+					return "", nil, fmt.Errorf("auth_mapping.headers[%q]: %w", headerName, err)
+				}
+				headers[headerName] = resolved
+			}
+		}
+		authToken := ""
+		if mapping.Basic != nil {
+			username, err := resolveAuthValue(mapping.Basic.Username, token, &tokenData)
+			if err != nil {
+				return "", nil, fmt.Errorf("auth_mapping.basic.username: %w", err)
+			}
+			password, err := resolveAuthValue(mapping.Basic.Password, token, &tokenData)
+			if err != nil {
+				return "", nil, fmt.Errorf("auth_mapping.basic.password: %w", err)
+			}
+			credential := fmt.Sprintf("%s:%s", username, password)
+			authToken = "Basic " + base64.StdEncoding.EncodeToString([]byte(credential))
+		}
+		if len(headers) == 0 {
+			headers = nil
+		}
+		return authToken, headers, nil
+	}
 }
 
 func resolveAuthValue(value AuthValueDef, token string, tokenData *map[string]any) (string, error) {

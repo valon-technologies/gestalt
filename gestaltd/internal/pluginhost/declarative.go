@@ -12,6 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/integration"
 	"github.com/valon-technologies/gestalt/server/internal/apiexec"
 	"github.com/valon-technologies/gestalt/server/internal/paraminterp"
+	"github.com/valon-technologies/gestalt/server/internal/provider"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
 
@@ -163,6 +164,19 @@ func (p *DeclarativeProvider) Execute(ctx context.Context, operation string, par
 		}
 	}
 
+	authHeader := ""
+	if p.auth != nil && p.auth.AuthMapping != nil && (len(p.auth.AuthMapping.Headers) > 0 || p.auth.AuthMapping.Basic != nil) {
+		resolvedAuth, extraHeaders, err := provider.MappedCredentialParser(p.auth.AuthMapping)(token)
+		if err != nil {
+			return nil, err
+		}
+		authHeader = resolvedAuth
+		token = ""
+		for k, v := range extraHeaders {
+			headers[k] = v
+		}
+	}
+
 	req := apiexec.Request{
 		Method:        op.Method,
 		BaseURL:       baseURL,
@@ -170,6 +184,7 @@ func (p *DeclarativeProvider) Execute(ctx context.Context, operation string, par
 		Params:        bodyParams,
 		QueryParams:   queryParams,
 		CustomHeaders: headers,
+		AuthHeader:    authHeader,
 		Token:         token,
 		NoRetry:       true,
 	}

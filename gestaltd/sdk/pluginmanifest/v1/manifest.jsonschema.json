@@ -303,6 +303,97 @@
         }
       }
     },
+    "credential_field_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$"
+        }
+      }
+    },
+    "auth_value_from": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "credentialFieldRef"
+      ],
+      "properties": {
+        "credentialFieldRef": {
+          "$ref": "#/$defs/credential_field_ref"
+        }
+      }
+    },
+    "auth_value": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": "string"
+        },
+        "valueFrom": {
+          "$ref": "#/$defs/auth_value_from"
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "value"
+          ],
+          "not": {
+            "required": [
+              "valueFrom"
+            ]
+          }
+        },
+        {
+          "required": [
+            "valueFrom"
+          ],
+          "not": {
+            "required": [
+              "value"
+            ]
+          }
+        }
+      ]
+    },
+    "basic_auth_mapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "username",
+        "password"
+      ],
+      "properties": {
+        "username": {
+          "$ref": "#/$defs/auth_value"
+        },
+        "password": {
+          "$ref": "#/$defs/auth_value"
+        }
+      }
+    },
+    "auth_mapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/auth_value"
+          }
+        },
+        "basic": {
+          "$ref": "#/$defs/basic_auth_mapping"
+        }
+      }
+    },
     "surfaces": {
       "type": "object",
       "additionalProperties": false,
@@ -579,6 +670,9 @@
               }
             }
           }
+        },
+        "auth_mapping": {
+          "$ref": "#/$defs/auth_mapping"
         }
       },
       "allOf": [
