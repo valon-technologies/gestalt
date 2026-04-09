@@ -1,5 +1,0 @@
-grpcio<2,>=1.80.0
-pyyaml==6.0.3
-pyinstaller<7
-protobuf<8,>=6.33.1
-typing-extensions==4.12.2
