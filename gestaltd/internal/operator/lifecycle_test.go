@@ -1290,27 +1290,3 @@ func TestResolveArchiveForPlatform(t *testing.T) {
 	}
 }
 
-func TestMergeArchives(t *testing.T) {
-	t.Parallel()
-
-	into := map[string]LockArchive{
-		"darwin/arm64": {URL: "https://new.com/darwin", SHA256: "new-sha"},
-		"linux/amd64":  {URL: "https://new.com/linux"},
-	}
-	existing := map[string]LockArchive{
-		"darwin/arm64": {URL: "https://old.com/darwin", SHA256: "old-sha"},
-		"linux/arm64":  {URL: "https://old.com/linux-arm", SHA256: "old-arm-sha"},
-	}
-
-	mergeArchives(into, existing)
-
-	if into["darwin/arm64"].SHA256 != "new-sha" {
-		t.Error("mergeArchives should not overwrite existing entries in target")
-	}
-	if _, ok := into["linux/arm64"]; !ok {
-		t.Error("mergeArchives should add missing entries from existing")
-	}
-	if into["linux/arm64"].SHA256 != "old-arm-sha" {
-		t.Error("mergeArchives should preserve SHA256 from existing")
-	}
-}
