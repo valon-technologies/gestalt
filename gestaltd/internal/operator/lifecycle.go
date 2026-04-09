@@ -556,6 +556,9 @@ func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths initPa
 
 func (l *Lifecycle) writeUIProviderArtifact(ctx context.Context, cfg *config.Config, paths initPaths) (LockUIEntry, error) {
 	plugin := cfg.UI.Provider
+	if plugin == nil || !plugin.HasManagedSource() {
+		return LockUIEntry{}, fmt.Errorf("ui provider requires managed source")
+	}
 	configMap, err := config.NodeToMap(cfg.UI.Config)
 	if err != nil {
 		return LockUIEntry{}, fmt.Errorf("decode ui provider config: %w", err)
@@ -566,81 +569,52 @@ func (l *Lifecycle) writeUIProviderArtifact(ctx context.Context, cfg *config.Con
 	}
 
 	destDir := uiDestDir(paths)
-	var installed *pluginstore.InstalledPlugin
-	switch {
-	case plugin.HasManagedSource():
-		src, err := sourceForPlugin(plugin)
-		if err != nil {
-			return LockUIEntry{}, fmt.Errorf("ui provider source.ref %q: %w", plugin.SourceRef(), err)
-		}
-		if l.sourceResolver == nil {
-			return LockUIEntry{}, fmt.Errorf("ui provider: source resolution requires a source resolver")
-		}
-		resolved, err := l.sourceResolver.Resolve(ctx, src, plugin.SourceVersion())
-		if err != nil {
-			return LockUIEntry{}, fmt.Errorf("ui provider resolve source %q@%s: %w", plugin.SourceRef(), plugin.SourceVersion(), err)
-		}
-		defer resolved.Cleanup()
-		installed, err = pluginstore.Install(resolved.LocalPath, destDir)
-		if err != nil {
-			return LockUIEntry{}, fmt.Errorf("ui provider install source: %w", err)
-		}
-		if err := validateInstalledManifestKind(pluginmanifestv1.KindWebUI, "provider", installed.Manifest); err != nil {
-			return LockUIEntry{}, err
-		}
-		if installed.Manifest.Source != plugin.SourceRef() {
-			return LockUIEntry{}, fmt.Errorf("ui provider manifest source %q does not match config source %q", installed.Manifest.Source, plugin.SourceRef())
-		}
-		if installed.Manifest.Version != plugin.SourceVersion() {
-			return LockUIEntry{}, fmt.Errorf("ui provider manifest version %q does not match config version %q", installed.Manifest.Version, plugin.SourceVersion())
-		}
-		if err := pluginpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, pluginmanifestv1.KindWebUI, configMap); err != nil {
-			return LockUIEntry{}, fmt.Errorf("plugin config validation for ui provider: %w", err)
-		}
-		manifestPath, err := filepath.Rel(paths.artifactsDir, installed.ManifestPath)
-		if err != nil {
-			return LockUIEntry{}, fmt.Errorf("compute manifest path for ui provider: %w", err)
-		}
-		assetRoot, err := filepath.Rel(paths.artifactsDir, installed.AssetRoot)
-		if err != nil {
-			return LockUIEntry{}, fmt.Errorf("compute asset root path for ui provider: %w", err)
-		}
-		return LockUIEntry{
-			Fingerprint:   fingerprint,
-			Source:        plugin.SourceRef(),
-			Version:       plugin.SourceVersion(),
-			ResolvedURL:   resolved.ResolvedURL,
-			ArchiveSHA256: resolved.ArchiveSHA256,
-			Manifest:      filepath.ToSlash(manifestPath),
-			AssetRoot:     filepath.ToSlash(assetRoot),
-		}, nil
-	case plugin.HasLocalSource():
-		installed, err := pluginstore.InstallFromDir(filepath.Dir(plugin.SourcePath()), destDir)
-		if err != nil {
-			return LockUIEntry{}, fmt.Errorf("ui provider install local source: %w", err)
-		}
-		if err := validateInstalledManifestKind(pluginmanifestv1.KindWebUI, "provider", installed.Manifest); err != nil {
-			return LockUIEntry{}, err
-		}
-		if err := pluginpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, pluginmanifestv1.KindWebUI, configMap); err != nil {
-			return LockUIEntry{}, fmt.Errorf("plugin config validation for ui provider: %w", err)
-		}
-		manifestPath, err := filepath.Rel(paths.artifactsDir, installed.ManifestPath)
-		if err != nil {
-			return LockUIEntry{}, fmt.Errorf("compute manifest path for ui provider: %w", err)
-		}
-		assetRoot, err := filepath.Rel(paths.artifactsDir, installed.AssetRoot)
-		if err != nil {
-			return LockUIEntry{}, fmt.Errorf("compute asset root path for ui provider: %w", err)
-		}
-		return LockUIEntry{
-			Fingerprint: fingerprint,
-			Manifest:    filepath.ToSlash(manifestPath),
-			AssetRoot:   filepath.ToSlash(assetRoot),
-		}, nil
+	src, err := sourceForPlugin(plugin)
+	if err != nil {
+		return LockUIEntry{}, fmt.Errorf("ui provider source.ref %q: %w", plugin.SourceRef(), err)
 	}
+	if l.sourceResolver == nil {
+		return LockUIEntry{}, fmt.Errorf("ui provider: source resolution requires a source resolver")
+	}
+	resolved, err := l.sourceResolver.Resolve(ctx, src, plugin.SourceVersion())
+	if err != nil {
+		return LockUIEntry{}, fmt.Errorf("ui provider resolve source %q@%s: %w", plugin.SourceRef(), plugin.SourceVersion(), err)
+	}
+	defer resolved.Cleanup()
 
-	return LockUIEntry{}, fmt.Errorf("ui provider requires source")
+	installed, err := pluginstore.Install(resolved.LocalPath, destDir)
+	if err != nil {
+		return LockUIEntry{}, fmt.Errorf("ui provider install source: %w", err)
+	}
+	if err := validateInstalledManifestKind(pluginmanifestv1.KindWebUI, "provider", installed.Manifest); err != nil {
+		return LockUIEntry{}, err
+	}
+	if installed.Manifest.Source != plugin.SourceRef() {
+		return LockUIEntry{}, fmt.Errorf("ui provider manifest source %q does not match config source %q", installed.Manifest.Source, plugin.SourceRef())
+	}
+	if installed.Manifest.Version != plugin.SourceVersion() {
+		return LockUIEntry{}, fmt.Errorf("ui provider manifest version %q does not match config version %q", installed.Manifest.Version, plugin.SourceVersion())
+	}
+	if err := pluginpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, pluginmanifestv1.KindWebUI, configMap); err != nil {
+		return LockUIEntry{}, fmt.Errorf("plugin config validation for ui provider: %w", err)
+	}
+	manifestPath, err := filepath.Rel(paths.artifactsDir, installed.ManifestPath)
+	if err != nil {
+		return LockUIEntry{}, fmt.Errorf("compute manifest path for ui provider: %w", err)
+	}
+	assetRoot, err := filepath.Rel(paths.artifactsDir, installed.AssetRoot)
+	if err != nil {
+		return LockUIEntry{}, fmt.Errorf("compute asset root path for ui provider: %w", err)
+	}
+	return LockUIEntry{
+		Fingerprint:   fingerprint,
+		Source:        plugin.SourceRef(),
+		Version:       plugin.SourceVersion(),
+		ResolvedURL:   resolved.ResolvedURL,
+		ArchiveSHA256: resolved.ArchiveSHA256,
+		Manifest:      filepath.ToSlash(manifestPath),
+		AssetRoot:     filepath.ToSlash(assetRoot),
+	}, nil
 }
 
 func sourceForPlugin(plugin *config.PluginDef) (pluginsource.Source, error) {
