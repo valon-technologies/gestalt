@@ -2,50 +2,80 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 use schemars::JsonSchema;
+use serde::Serialize;
 use serde_json::{Map as JsonMap, Value as JsonValue, json};
-use serde_yaml::{Mapping as YamlMapping, Value as YamlValue};
 
 use crate::error::{Error, Result};
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct Catalog {
     pub name: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub display_name: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub description: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub icon_svg: String,
     pub operations: Vec<CatalogOperation>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct CatalogOperation {
     pub id: String,
     pub method: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub title: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub description: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub input_schema: Option<JsonValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub output_schema: Option<JsonValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub annotations: Option<OperationAnnotations>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub parameters: Vec<CatalogParameter>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub required_scopes: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<String>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub read_only: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub visible: Option<bool>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct OperationAnnotations {
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub read_only_hint: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub idempotent_hint: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub destructive_hint: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub open_world_hint: Option<bool>,
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+impl OperationAnnotations {
+    pub fn is_empty(&self) -> bool {
+        self.read_only_hint.is_none()
+            && self.idempotent_hint.is_none()
+            && self.destructive_hint.is_none()
+            && self.open_world_hint.is_none()
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize)]
 pub struct CatalogParameter {
     pub name: String,
+    #[serde(rename = "type")]
     pub kind: String,
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub description: String,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub required: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub default: Option<JsonValue>,
 }
 
@@ -66,7 +96,15 @@ pub fn write_catalog(catalog: &Catalog, path: impl AsRef<Path>) -> Result<()> {
     {
         std::fs::create_dir_all(parent)?;
     }
-    let yaml = serde_yaml::to_string(&catalog_yaml_value(catalog))?;
+    let mut yaml_catalog = catalog.clone();
+    for op in &mut yaml_catalog.operations {
+        op.input_schema = None;
+        op.output_schema = None;
+        if op.annotations.as_ref().is_some_and(|a| a.is_empty()) {
+            op.annotations = None;
+        }
+    }
+    let yaml = serde_yaml::to_string(&yaml_catalog)?;
     std::fs::write(path, yaml)?;
     Ok(())
 }
@@ -109,8 +147,124 @@ pub(crate) fn schema_parameters(schema: &JsonValue) -> Vec<CatalogParameter> {
         .collect()
 }
 
+fn is_false(value: &&bool) -> bool {
+    !**value
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WireCatalog<'a> {
+    name: &'a str,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    display_name: &'a str,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    description: &'a str,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    icon_svg: &'a str,
+    operations: Vec<WireOperation<'a>>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WireOperation<'a> {
+    id: &'a str,
+    method: &'a str,
+    path: &'a str,
+    transport: &'a str,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    title: &'a str,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    description: &'a str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    input_schema: &'a Option<JsonValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    output_schema: &'a Option<JsonValue>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    annotations: Option<WireAnnotations<'a>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    parameters: Vec<WireParameter<'a>>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    required_scopes: &'a Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    tags: &'a Vec<String>,
+    #[serde(skip_serializing_if = "is_false")]
+    read_only: &'a bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    visible: &'a Option<bool>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WireAnnotations<'a> {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    read_only_hint: &'a Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    idempotent_hint: &'a Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    destructive_hint: &'a Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    open_world_hint: &'a Option<bool>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct WireParameter<'a> {
+    name: &'a str,
+    #[serde(rename = "type")]
+    kind: &'a str,
+    #[serde(skip_serializing_if = "str::is_empty")]
+    description: &'a str,
+    #[serde(skip_serializing_if = "is_false")]
+    required: &'a bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    default: &'a Option<JsonValue>,
+}
+
 pub(crate) fn catalog_json(catalog: &Catalog) -> Result<String> {
-    serde_json::to_string(&catalog_json_value(catalog)).map_err(Error::from)
+    let wire = WireCatalog {
+        name: &catalog.name,
+        display_name: &catalog.display_name,
+        description: &catalog.description,
+        icon_svg: &catalog.icon_svg,
+        operations: catalog
+            .operations
+            .iter()
+            .map(|op| WireOperation {
+                id: &op.id,
+                method: &op.method,
+                path: "",
+                transport: "plugin",
+                title: &op.title,
+                description: &op.description,
+                input_schema: &op.input_schema,
+                output_schema: &op.output_schema,
+                annotations: op.annotations.as_ref().filter(|a| !a.is_empty()).map(|a| {
+                    WireAnnotations {
+                        read_only_hint: &a.read_only_hint,
+                        idempotent_hint: &a.idempotent_hint,
+                        destructive_hint: &a.destructive_hint,
+                        open_world_hint: &a.open_world_hint,
+                    }
+                }),
+                parameters: op
+                    .parameters
+                    .iter()
+                    .map(|p| WireParameter {
+                        name: &p.name,
+                        kind: &p.kind,
+                        description: &p.description,
+                        required: &p.required,
+                        default: &p.default,
+                    })
+                    .collect(),
+                required_scopes: &op.required_scopes,
+                tags: &op.tags,
+                read_only: &op.read_only,
+                visible: &op.visible,
+            })
+            .collect(),
+    };
+    serde_json::to_string(&wire).map_err(Error::from)
 }
 
 pub(crate) fn object_map(value: Option<prost_types::Struct>) -> JsonMap<String, JsonValue> {
@@ -138,251 +292,6 @@ pub(crate) fn proto_value_to_json(value: prost_types::Value) -> JsonValue {
             JsonValue::Array(list.values.into_iter().map(proto_value_to_json).collect())
         }
     }
-}
-
-fn catalog_json_value(catalog: &Catalog) -> JsonValue {
-    let mut map = JsonMap::new();
-    map.insert("name".to_owned(), json!(catalog.name));
-    insert_json_string(&mut map, "displayName", &catalog.display_name);
-    insert_json_string(&mut map, "description", &catalog.description);
-    insert_json_string(&mut map, "iconSvg", &catalog.icon_svg);
-    map.insert(
-        "operations".to_owned(),
-        JsonValue::Array(
-            catalog
-                .operations
-                .iter()
-                .map(operation_json_value)
-                .collect(),
-        ),
-    );
-    JsonValue::Object(map)
-}
-
-fn operation_json_value(operation: &CatalogOperation) -> JsonValue {
-    let mut map = JsonMap::new();
-    map.insert("id".to_owned(), json!(operation.id));
-    map.insert("method".to_owned(), json!(operation.method));
-    map.insert("path".to_owned(), json!(""));
-    map.insert("transport".to_owned(), json!("plugin"));
-    insert_json_string(&mut map, "title", &operation.title);
-    insert_json_string(&mut map, "description", &operation.description);
-    if let Some(schema) = &operation.input_schema {
-        map.insert("inputSchema".to_owned(), schema.clone());
-    }
-    if let Some(schema) = &operation.output_schema {
-        map.insert("outputSchema".to_owned(), schema.clone());
-    }
-    if let Some(annotations) = &operation.annotations {
-        let value = annotations_json_value(annotations);
-        if !is_empty_json_object(&value) {
-            map.insert("annotations".to_owned(), value);
-        }
-    }
-    if !operation.parameters.is_empty() {
-        map.insert(
-            "parameters".to_owned(),
-            JsonValue::Array(
-                operation
-                    .parameters
-                    .iter()
-                    .map(parameter_json_value)
-                    .collect(),
-            ),
-        );
-    }
-    if !operation.required_scopes.is_empty() {
-        map.insert(
-            "requiredScopes".to_owned(),
-            JsonValue::Array(
-                operation
-                    .required_scopes
-                    .iter()
-                    .map(|scope| json!(scope))
-                    .collect(),
-            ),
-        );
-    }
-    if !operation.tags.is_empty() {
-        map.insert(
-            "tags".to_owned(),
-            JsonValue::Array(operation.tags.iter().map(|tag| json!(tag)).collect()),
-        );
-    }
-    if operation.read_only {
-        map.insert("readOnly".to_owned(), json!(true));
-    }
-    if let Some(visible) = operation.visible {
-        map.insert("visible".to_owned(), json!(visible));
-    }
-    JsonValue::Object(map)
-}
-
-fn annotations_json_value(annotations: &OperationAnnotations) -> JsonValue {
-    let mut map = JsonMap::new();
-    insert_json_bool(&mut map, "readOnlyHint", annotations.read_only_hint);
-    insert_json_bool(&mut map, "idempotentHint", annotations.idempotent_hint);
-    insert_json_bool(&mut map, "destructiveHint", annotations.destructive_hint);
-    insert_json_bool(&mut map, "openWorldHint", annotations.open_world_hint);
-    JsonValue::Object(map)
-}
-
-fn parameter_json_value(parameter: &CatalogParameter) -> JsonValue {
-    let mut map = JsonMap::new();
-    map.insert("name".to_owned(), json!(parameter.name));
-    map.insert("type".to_owned(), json!(parameter.kind));
-    insert_json_string(&mut map, "description", &parameter.description);
-    if parameter.required {
-        map.insert("required".to_owned(), json!(true));
-    }
-    if let Some(default) = &parameter.default {
-        map.insert("default".to_owned(), default.clone());
-    }
-    JsonValue::Object(map)
-}
-
-fn catalog_yaml_value(catalog: &Catalog) -> YamlValue {
-    let mut map = YamlMapping::new();
-    insert_yaml_value(&mut map, "name", YamlValue::String(catalog.name.clone()));
-    insert_yaml_string(&mut map, "display_name", &catalog.display_name);
-    insert_yaml_string(&mut map, "description", &catalog.description);
-    insert_yaml_string(&mut map, "icon_svg", &catalog.icon_svg);
-    insert_yaml_value(
-        &mut map,
-        "operations",
-        YamlValue::Sequence(
-            catalog
-                .operations
-                .iter()
-                .map(operation_yaml_value)
-                .collect(),
-        ),
-    );
-    YamlValue::Mapping(map)
-}
-
-fn operation_yaml_value(operation: &CatalogOperation) -> YamlValue {
-    let mut map = YamlMapping::new();
-    insert_yaml_value(&mut map, "id", YamlValue::String(operation.id.clone()));
-    insert_yaml_value(
-        &mut map,
-        "method",
-        YamlValue::String(operation.method.clone()),
-    );
-    insert_yaml_string(&mut map, "title", &operation.title);
-    insert_yaml_string(&mut map, "description", &operation.description);
-    if let Some(annotations) = &operation.annotations {
-        let value = annotations_yaml_value(annotations);
-        if !is_empty_yaml_mapping(&value) {
-            insert_yaml_value(&mut map, "annotations", value);
-        }
-    }
-    if !operation.parameters.is_empty() {
-        insert_yaml_value(
-            &mut map,
-            "parameters",
-            YamlValue::Sequence(
-                operation
-                    .parameters
-                    .iter()
-                    .map(parameter_yaml_value)
-                    .collect(),
-            ),
-        );
-    }
-    if !operation.required_scopes.is_empty() {
-        insert_yaml_value(
-            &mut map,
-            "required_scopes",
-            YamlValue::Sequence(
-                operation
-                    .required_scopes
-                    .iter()
-                    .map(|scope| YamlValue::String(scope.clone()))
-                    .collect(),
-            ),
-        );
-    }
-    if !operation.tags.is_empty() {
-        insert_yaml_value(
-            &mut map,
-            "tags",
-            YamlValue::Sequence(
-                operation
-                    .tags
-                    .iter()
-                    .map(|tag| YamlValue::String(tag.clone()))
-                    .collect(),
-            ),
-        );
-    }
-    if operation.read_only {
-        insert_yaml_value(&mut map, "read_only", YamlValue::Bool(true));
-    }
-    if let Some(visible) = operation.visible {
-        insert_yaml_value(&mut map, "visible", YamlValue::Bool(visible));
-    }
-    YamlValue::Mapping(map)
-}
-
-fn annotations_yaml_value(annotations: &OperationAnnotations) -> YamlValue {
-    let mut map = YamlMapping::new();
-    insert_yaml_bool(&mut map, "read_only_hint", annotations.read_only_hint);
-    insert_yaml_bool(&mut map, "idempotent_hint", annotations.idempotent_hint);
-    insert_yaml_bool(&mut map, "destructive_hint", annotations.destructive_hint);
-    insert_yaml_bool(&mut map, "open_world_hint", annotations.open_world_hint);
-    YamlValue::Mapping(map)
-}
-
-fn parameter_yaml_value(parameter: &CatalogParameter) -> YamlValue {
-    let mut map = YamlMapping::new();
-    insert_yaml_value(&mut map, "name", YamlValue::String(parameter.name.clone()));
-    insert_yaml_value(&mut map, "type", YamlValue::String(parameter.kind.clone()));
-    insert_yaml_string(&mut map, "description", &parameter.description);
-    if parameter.required {
-        insert_yaml_value(&mut map, "required", YamlValue::Bool(true));
-    }
-    if let Some(default) = &parameter.default {
-        let value = serde_yaml::to_value(default).unwrap_or(YamlValue::Null);
-        insert_yaml_value(&mut map, "default", value);
-    }
-    YamlValue::Mapping(map)
-}
-
-fn insert_json_string(map: &mut JsonMap<String, JsonValue>, key: &str, value: &str) {
-    if !value.is_empty() {
-        map.insert(key.to_owned(), json!(value));
-    }
-}
-
-fn insert_json_bool(map: &mut JsonMap<String, JsonValue>, key: &str, value: Option<bool>) {
-    if let Some(value) = value {
-        map.insert(key.to_owned(), json!(value));
-    }
-}
-
-fn insert_yaml_value(map: &mut YamlMapping, key: &str, value: YamlValue) {
-    map.insert(YamlValue::String(key.to_owned()), value);
-}
-
-fn insert_yaml_string(map: &mut YamlMapping, key: &str, value: &str) {
-    if !value.is_empty() {
-        insert_yaml_value(map, key, YamlValue::String(value.to_owned()));
-    }
-}
-
-fn insert_yaml_bool(map: &mut YamlMapping, key: &str, value: Option<bool>) {
-    if let Some(value) = value {
-        insert_yaml_value(map, key, YamlValue::Bool(value));
-    }
-}
-
-fn is_empty_json_object(value: &JsonValue) -> bool {
-    matches!(value, JsonValue::Object(map) if map.is_empty())
-}
-
-fn is_empty_yaml_mapping(value: &YamlValue) -> bool {
-    matches!(value, YamlValue::Mapping(map) if map.is_empty())
 }
 
 fn schema_type(schema: &JsonValue) -> String {
