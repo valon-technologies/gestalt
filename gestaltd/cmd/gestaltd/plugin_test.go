@@ -46,6 +46,10 @@ const (
 	pythonAuthReleaseSource          = "github.com/testowner/plugins/python-auth-release"
 	pythonDatastoreReleasePluginName = "python-datastore-release"
 	pythonDatastoreReleaseSource     = "github.com/testowner/plugins/python-datastore-release"
+	authReleaseTypeScriptModule      = "./auth.ts#auth"
+	authReleaseTypeScriptTarget      = "auth:./auth.ts#auth"
+	datastoreReleaseTypeScriptModule = "./datastore.ts#datastore"
+	datastoreReleaseTypeScriptTarget = "datastore:./datastore.ts#datastore"
 )
 
 func TestRun_ProviderHelpExitsCleanly(t *testing.T) {
@@ -400,7 +404,7 @@ func TestRun_PluginReleaseDefaultsPythonSourcePluginToHostPlatform(t *testing.T)
 	if len(manifest.Artifacts) != 1 {
 		t.Fatalf("artifacts = %+v, want exactly one host-platform artifact", manifest.Artifacts)
 	}
-	assertExpectedPythonArtifactPlatform(t, manifest.Artifacts[0], runtime.GOOS, runtime.GOARCH)
+	assertExpectedScriptArtifactPlatform(t, manifest.Artifacts[0], runtime.GOOS, runtime.GOARCH)
 }
 
 func TestRun_PluginReleaseBuildsPythonSourcePluginForAllPlatforms(t *testing.T) {
@@ -429,7 +433,7 @@ func TestRun_PluginReleaseBuildsPythonSourcePluginForAllPlatforms(t *testing.T) 
 		if len(manifest.Artifacts) != 1 {
 			t.Fatalf("artifacts for %s/%s = %+v, want one artifact", platform.GOOS, platform.GOARCH, manifest.Artifacts)
 		}
-		assertExpectedPythonArtifactPlatform(t, manifest.Artifacts[0], platform.GOOS, platform.GOARCH)
+		assertExpectedScriptArtifactPlatform(t, manifest.Artifacts[0], platform.GOOS, platform.GOARCH)
 	}
 }
 
@@ -1204,6 +1208,152 @@ func TestRun_PluginReleaseBuildsPythonSourceDatastorePlugin(t *testing.T) {
 	}
 }
 
+func TestRun_PluginReleaseBuildsTypeScriptSourceAuthPlugin(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake Bun build fixture is POSIX-only")
+	}
+
+	builtBinary := buildGoSourceAuthBinary(t)
+	t.Setenv("PATH", pathWithoutGo(t))
+
+	pluginDir := newTypeScriptSourceAuthReleaseFixture(t, t.TempDir())
+	bunPath := writeFakeTypeScriptComponentReleaseBun(t, filepath.Join(pluginDir, "fake-bun"), authReleaseTypeScriptTarget, authReleasePluginName, runtime.GOOS, runtime.GOARCH, builtBinary)
+	t.Setenv("GESTALT_BUN", bunPath)
+
+	outputDir := t.TempDir()
+	const testVersion = "0.0.15-ts-auth"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
+		"--output", outputDir,
+	)
+
+	archiveName := platformArchiveName(authReleasePluginName, testVersion, expectedScriptReleasePlatform(runtime.GOOS, runtime.GOARCH))
+	extractDir := extractReleasedArchive(t, outputDir, archiveName)
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+	binaryName := releaseBinaryName(authReleasePluginName, runtime.GOOS)
+
+	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
+		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
+	}
+	if runtime.GOOS == "linux" && manifest.Artifacts[0].LibC != pluginpkg.CurrentRuntimeLibC() {
+		t.Fatalf("artifact libc = %q, want %q", manifest.Artifacts[0].LibC, pluginpkg.CurrentRuntimeLibC())
+	}
+	if manifest.Entrypoints.Auth == nil || manifest.Entrypoints.Auth.ArtifactPath != binaryName {
+		t.Fatalf("auth entrypoint = %+v, want artifact path %q", manifest.Entrypoints.Auth, binaryName)
+	}
+	if _, err := os.Stat(filepath.Join(extractDir, authReleaseSchemaPath)); err != nil {
+		t.Fatalf("expected %s in archive: %v", authReleaseSchemaPath, err)
+	}
+
+	auth, err := pluginhost.NewExecutableAuthProvider(context.Background(), pluginhost.AuthExecConfig{
+		Command:     filepath.Join(extractDir, binaryName),
+		Name:        authReleasePluginName,
+		CallbackURL: "https://gestalt.example.test/api/v1/auth/login/callback",
+		SessionKey:  []byte("0123456789abcdef0123456789abcdef"),
+	})
+	if err != nil {
+		t.Fatalf("NewExecutableAuthProvider: %v", err)
+	}
+	defer func() {
+		if closer, ok := auth.(interface{ Close() error }); ok {
+			_ = closer.Close()
+		}
+	}()
+
+	loginURL, err := auth.LoginURL("host-state")
+	if err != nil {
+		t.Fatalf("LoginURL: %v", err)
+	}
+	parsed, err := url.Parse(loginURL)
+	if err != nil {
+		t.Fatalf("url.Parse(loginURL): %v", err)
+	}
+	state := parsed.Query().Get("state")
+	if state == "" {
+		t.Fatal("login URL did not include state")
+	}
+
+	callbackHandler, ok := auth.(interface {
+		HandleCallbackRequest(context.Context, url.Values) (*core.UserIdentity, string, error)
+	})
+	if !ok {
+		t.Fatal("auth provider did not expose HandleCallbackRequest")
+	}
+	identity, originalState, err := callbackHandler.HandleCallbackRequest(context.Background(), url.Values{
+		"code":   {"callback-code"},
+		"state":  {state},
+		"prompt": {parsed.Query().Get("prompt")},
+	})
+	if err != nil {
+		t.Fatalf("HandleCallbackRequest: %v", err)
+	}
+	if originalState != "host-state" {
+		t.Fatalf("original state = %q, want %q", originalState, "host-state")
+	}
+	if identity == nil || identity.Email != "generated-auth@example.com" {
+		t.Fatalf("identity = %+v", identity)
+	}
+}
+
+func TestRun_PluginReleaseBuildsTypeScriptSourceDatastorePlugin(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake Bun build fixture is POSIX-only")
+	}
+
+	builtBinary := buildGoSourceDatastoreBinary(t)
+	t.Setenv("PATH", pathWithoutGo(t))
+
+	pluginDir := newTypeScriptSourceDatastoreReleaseFixture(t, t.TempDir())
+	bunPath := writeFakeTypeScriptComponentReleaseBun(t, filepath.Join(pluginDir, "fake-bun"), datastoreReleaseTypeScriptTarget, datastoreReleasePluginName, runtime.GOOS, runtime.GOARCH, builtBinary)
+	t.Setenv("GESTALT_BUN", bunPath)
+
+	outputDir := t.TempDir()
+	const testVersion = "0.0.16-ts-datastore"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
+		"--output", outputDir,
+	)
+
+	archiveName := platformArchiveName(datastoreReleasePluginName, testVersion, expectedScriptReleasePlatform(runtime.GOOS, runtime.GOARCH))
+	extractDir := extractReleasedArchive(t, outputDir, archiveName)
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+	binaryName := releaseBinaryName(datastoreReleasePluginName, runtime.GOOS)
+
+	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
+		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
+	}
+	if runtime.GOOS == "linux" && manifest.Artifacts[0].LibC != pluginpkg.CurrentRuntimeLibC() {
+		t.Fatalf("artifact libc = %q, want %q", manifest.Artifacts[0].LibC, pluginpkg.CurrentRuntimeLibC())
+	}
+	if manifest.Entrypoints.Datastore == nil || manifest.Entrypoints.Datastore.ArtifactPath != binaryName {
+		t.Fatalf("datastore entrypoint = %+v, want artifact path %q", manifest.Entrypoints.Datastore, binaryName)
+	}
+	if _, err := os.Stat(filepath.Join(extractDir, datastoreReleaseSchemaPath)); err != nil {
+		t.Fatalf("expected %s in archive: %v", datastoreReleaseSchemaPath, err)
+	}
+
+	store, err := pluginhost.NewExecutableDatastore(context.Background(), pluginhost.DatastoreExecConfig{
+		Command:       filepath.Join(extractDir, binaryName),
+		Name:          datastoreReleasePluginName,
+		EncryptionKey: []byte("0123456789abcdef0123456789abcdef"),
+	})
+	if err != nil {
+		t.Fatalf("NewExecutableDatastore: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	if err := store.Ping(context.Background()); err != nil {
+		t.Fatalf("Ping: %v", err)
+	}
+	if err := store.Migrate(context.Background()); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+}
+
 func TestRun_PluginReleaseCopiesCompiledSupportFiles(t *testing.T) {
 	t.Parallel()
 
@@ -1539,7 +1689,7 @@ func TestRun_PluginReleaseRejectsRequiredExecutableKindsWithoutSourceOrEntrypoin
 				Kinds:       []string{pluginmanifestv1.KindPlugin},
 				Plugin:      &pluginmanifestv1.Plugin{},
 			},
-			wantError: "no Go, Rust, or Python provider package found",
+			wantError: "no Go, Rust, Python, or TypeScript provider package found",
 		},
 		{
 			name: "auth",
@@ -1550,7 +1700,7 @@ func TestRun_PluginReleaseRejectsRequiredExecutableKindsWithoutSourceOrEntrypoin
 				Kinds:       []string{pluginmanifestv1.KindAuth},
 				Auth:        &pluginmanifestv1.AuthMetadata{},
 			},
-			wantError: "no Go, Rust, or Python auth source package found",
+			wantError: "no Go, Rust, Python, or TypeScript auth source package found",
 		},
 		{
 			name: "datastore",
@@ -1561,7 +1711,7 @@ func TestRun_PluginReleaseRejectsRequiredExecutableKindsWithoutSourceOrEntrypoin
 				Kinds:       []string{pluginmanifestv1.KindDatastore},
 				Datastore:   &pluginmanifestv1.DatastoreMetadata{},
 			},
-			wantError: "no Go, Rust, or Python datastore source package found",
+			wantError: "no Go, Rust, Python, or TypeScript datastore source package found",
 		},
 	}
 
@@ -1857,6 +2007,148 @@ datastore = "provider:datastore_provider"
 	return pluginDir
 }
 
+func newTypeScriptSourceAuthReleaseFixture(t *testing.T, dir string) string {
+	t.Helper()
+
+	pluginDir := filepath.Join(dir, authReleasePluginName)
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(pluginDir): %v", err)
+	}
+	writeTestFile(t, pluginDir, "package.json", []byte(`{
+  "name": "`+authReleasePluginName+`",
+  "version": "0.0.1",
+  "gestalt": {
+    "provider": {
+      "kind": "auth",
+      "target": "`+authReleaseTypeScriptModule+`"
+    }
+  }
+}
+`), 0o644)
+	writeTestFile(t, pluginDir, "auth.ts", []byte("export const auth = {};\n"), 0o644)
+	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
+		Source:      authReleaseSource,
+		Version:     "0.0.1",
+		DisplayName: "Auth Release",
+		Kinds:       []string{pluginmanifestv1.KindAuth},
+		Auth: &pluginmanifestv1.AuthMetadata{
+			ConfigSchemaPath: authReleaseSchemaPath,
+		},
+	})
+	writeTestFile(t, pluginDir, authReleaseSchemaPath, []byte(`{"type":"object"}`), 0o644)
+	return pluginDir
+}
+
+func newTypeScriptSourceDatastoreReleaseFixture(t *testing.T, dir string) string {
+	t.Helper()
+
+	pluginDir := filepath.Join(dir, datastoreReleasePluginName)
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(pluginDir): %v", err)
+	}
+	writeTestFile(t, pluginDir, "package.json", []byte(`{
+  "name": "`+datastoreReleasePluginName+`",
+  "version": "0.0.1",
+  "gestalt": {
+    "provider": {
+      "kind": "datastore",
+      "target": "`+datastoreReleaseTypeScriptModule+`"
+    }
+  }
+}
+`), 0o644)
+	writeTestFile(t, pluginDir, "datastore.ts", []byte("export const datastore = {};\n"), 0o644)
+	writeReleaseTestManifest(t, pluginDir, &pluginmanifestv1.Manifest{
+		Source:      datastoreReleaseSource,
+		Version:     "0.0.1",
+		DisplayName: "Datastore Release",
+		Kinds:       []string{pluginmanifestv1.KindDatastore},
+		Datastore: &pluginmanifestv1.DatastoreMetadata{
+			ConfigSchemaPath: datastoreReleaseSchemaPath,
+		},
+	})
+	writeTestFile(t, pluginDir, datastoreReleaseSchemaPath, []byte(`{"type":"object"}`), 0o644)
+	return pluginDir
+}
+
+func writeFakeTypeScriptComponentReleaseBun(t *testing.T, path, expectedTarget, expectedPluginName, expectedGOOS, expectedGOARCH, builtBinaryPath string) string {
+	t.Helper()
+
+	script := `#!/bin/sh
+set -eu
+
+if [ "$#" -lt 4 ] || [ "$1" != "--cwd" ]; then
+  echo "unexpected fake bun args: $*" >&2
+  exit 1
+fi
+
+cwd="$2"
+shift 2
+
+if [ "$1" != "run" ]; then
+  echo "unexpected bun subcommand: $1" >&2
+  exit 1
+fi
+shift
+
+entry="$1"
+shift
+
+if [ "$#" -gt 0 ] && [ "$1" = "--" ]; then
+  shift
+fi
+
+entry_base="${entry##*/}"
+case "$entry_base" in
+  gestalt-ts-build|build.ts)
+    if [ "$#" -ne 6 ]; then
+      echo "unexpected build args: $*" >&2
+      exit 1
+    fi
+    source_dir="$1"
+    target="$2"
+    output="$3"
+    name="$4"
+    goos="$5"
+    goarch="$6"
+    if [ "$cwd" != "$source_dir" ]; then
+      echo "unexpected build cwd: $cwd != $source_dir" >&2
+      exit 1
+    fi
+    if [ "$target" != "` + authReleaseTypeScriptTarget + `" ] && [ "$target" != "` + datastoreReleaseTypeScriptTarget + `" ]; then
+      echo "unexpected build target: $target" >&2
+      exit 1
+    fi
+    if [ "$target" != "` + expectedTarget + `" ]; then
+      echo "unexpected build target: $target" >&2
+      exit 1
+    fi
+    if [ "$name" != "` + expectedPluginName + `" ]; then
+      echo "unexpected plugin name: $name" >&2
+      exit 1
+    fi
+    if [ "$goos" != "` + expectedGOOS + `" ] || [ "$goarch" != "` + expectedGOARCH + `" ]; then
+      echo "unexpected target platform: $goos/$goarch" >&2
+      exit 1
+    fi
+    output_dir="${output%/*}"
+    if [ "$output_dir" = "$output" ]; then
+      output_dir="."
+    fi
+    mkdir -p "$output_dir"
+    cp "` + builtBinaryPath + `" "$output"
+    chmod +x "$output"
+    exit 0
+    ;;
+esac
+
+echo "unexpected fake bun entry: $entry ($*)" >&2
+exit 1
+`
+	writeTestFile(t, filepath.Dir(path), filepath.Base(path), []byte(script), 0o755)
+	return path
+}
+
 func writeFakePythonReleaseInterpreter(t *testing.T, path, expectedGOOS, expectedGOARCH string) {
 	t.Helper()
 	writeFakePythonReleaseInterpreterForKind(
@@ -1977,7 +2269,7 @@ func defaultReleasePlatformsForTest(t *testing.T) []releasePlatform {
 	return platforms
 }
 
-func expectedPythonReleasePlatform(goos, goarch string) releasePlatform {
+func expectedScriptReleasePlatform(goos, goarch string) releasePlatform {
 	plat := releasePlatform{GOOS: goos, GOARCH: goarch}
 	if runtime.GOOS == "linux" && goos == "linux" {
 		plat.LibC = pluginpkg.CurrentRuntimeLibC()
@@ -1986,7 +2278,7 @@ func expectedPythonReleasePlatform(goos, goarch string) releasePlatform {
 }
 
 func expectedPythonArchiveNameFor(pluginName, version, goos, goarch string) string {
-	return platformArchiveName(pluginName, version, expectedPythonReleasePlatform(goos, goarch))
+	return platformArchiveName(pluginName, version, expectedScriptReleasePlatform(goos, goarch))
 }
 
 func expectedPythonArchiveName(version, goos, goarch string) string {
@@ -2015,10 +2307,10 @@ func expectedRustArchiveName(version, goos, goarch, libc string) string {
 	return platformArchiveName(rustReleasePluginName, version, expectedRustReleasePlatform(goos, goarch, libc))
 }
 
-func assertExpectedPythonArtifactPlatform(t *testing.T, artifact pluginmanifestv1.Artifact, goos, goarch string) {
+func assertExpectedScriptArtifactPlatform(t *testing.T, artifact pluginmanifestv1.Artifact, goos, goarch string) {
 	t.Helper()
 
-	want := expectedPythonReleasePlatform(goos, goarch)
+	want := expectedScriptReleasePlatform(goos, goarch)
 	if artifact.OS != want.GOOS || artifact.Arch != want.GOARCH || artifact.LibC != want.LibC {
 		t.Fatalf(
 			"artifact platform = %s/%s/%s, want %s/%s/%s",

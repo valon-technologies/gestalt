@@ -86,7 +86,7 @@ func BuildGoComponentBinary(root, outputPath, kind, goos, goarch string) error {
 }
 
 func SourceComponentExecutionCommand(root, kind, goos, goarch string) (string, []string, func(), error) {
-	sourceKind, pythonTarget, err := detectSourceComponent(root, kind, goos, goarch)
+	sourceKind, target, err := detectSourceComponent(root, kind, goos, goarch)
 	if err != nil {
 		return "", nil, nil, err
 	}
@@ -107,7 +107,9 @@ func SourceComponentExecutionCommand(root, kind, goos, goarch string) (string, [
 		if err != nil {
 			return "", nil, nil, err
 		}
-		return pythonComponentExecutionCommand(root, pythonTarget, runtimeKind)
+		return pythonComponentExecutionCommand(root, target, runtimeKind)
+	case sourceProviderKindTypeScript:
+		return typeScriptExecutionCommand(root, target)
 	default:
 		return "", nil, nil, ErrNoSourceComponentPackage
 	}
@@ -124,13 +126,16 @@ func ValidateSourceComponentRelease(root, kind, goos, goarch, libc string) error
 		return err
 	case sourceProviderKindRust:
 		return ValidateRustComponentRelease(root, kind, goos, goarch, libc)
+	case sourceProviderKindTypeScript:
+		_, err = DetectBunExecutable()
+		return err
 	default:
 		return nil
 	}
 }
 
 func BuildSourceComponentReleaseBinary(root, outputPath, kind, goos, goarch, libc string) (string, error) {
-	sourceKind, pythonTarget, err := detectSourceComponent(root, kind, goos, goarch)
+	sourceKind, target, err := detectSourceComponent(root, kind, goos, goarch)
 	if err != nil {
 		return "", err
 	}
@@ -145,7 +150,9 @@ func BuildSourceComponentReleaseBinary(root, outputPath, kind, goos, goarch, lib
 			return "", err
 		}
 		pluginName := sourcePluginName(root)
-		return BuildPythonComponentBinary(root, outputPath, pluginName, pythonTarget, runtimeKind, goos, goarch)
+		return BuildPythonComponentBinary(root, outputPath, pluginName, target, runtimeKind, goos, goarch)
+	case sourceProviderKindTypeScript:
+		return BuildTypeScriptComponentBinary(root, outputPath, kind, target, goos, goarch)
 	default:
 		return "", ErrNoSourceComponentPackage
 	}
@@ -163,7 +170,7 @@ func HasSourceComponentPackage(root, kind string) (bool, error) {
 	}
 }
 
-func detectSourceComponent(root, kind, goos, goarch string) (sourceKind string, pythonTarget string, err error) {
+func detectSourceComponent(root, kind, goos, goarch string) (sourceKind string, target string, err error) {
 	if err := validateSourceComponentKind(kind); err != nil {
 		return "", "", err
 	}
@@ -183,16 +190,24 @@ func detectSourceComponent(root, kind, goos, goarch string) (sourceKind string, 
 		return "", "", err
 	}
 
-	target, err := DetectPythonComponentTarget(root, kind)
+	target, err = DetectPythonComponentTarget(root, kind)
 	switch {
 	case err == nil:
 		return sourceProviderKindPython, target, nil
 	case !errors.Is(err, ErrNoPythonSourceComponentPackage):
 		return "", "", err
-	case goToolUnavailable != nil:
-		return "", "", goToolUnavailable
 	default:
-		return "", "", ErrNoSourceComponentPackage
+		target, err = DetectTypeScriptComponentTarget(root, kind)
+		switch {
+		case err == nil:
+			return sourceProviderKindTypeScript, target, nil
+		case !errors.Is(err, ErrNoSourceComponentPackage):
+			return "", "", err
+		case goToolUnavailable != nil:
+			return "", "", goToolUnavailable
+		default:
+			return "", "", ErrNoSourceComponentPackage
+		}
 	}
 }
 

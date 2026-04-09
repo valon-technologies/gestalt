@@ -8,12 +8,13 @@ import (
 var ErrNoSourceProviderPackage = errors.New("no source provider package found")
 
 const (
-	sourceProviderKindGo     = "go"
-	sourceProviderKindRust   = "rust"
-	sourceProviderKindPython = "python"
+	sourceProviderKindGo         = "go"
+	sourceProviderKindRust       = "rust"
+	sourceProviderKindPython     = "python"
+	sourceProviderKindTypeScript = "typescript"
 )
 
-func detectSourceProvider(root, goos, goarch string) (kind string, pythonTarget string, err error) {
+func detectSourceProvider(root, goos, goarch string) (kind string, target string, err error) {
 	var goToolUnavailable error
 	if _, err := DetectGoProviderImportPath(root, goos, goarch); err == nil {
 		return sourceProviderKindGo, "", nil
@@ -29,21 +30,29 @@ func detectSourceProvider(root, goos, goarch string) (kind string, pythonTarget 
 		return "", "", err
 	}
 
-	target, err := DetectPythonProviderTarget(root)
+	target, err = DetectPythonProviderTarget(root)
 	switch {
 	case err == nil:
 		return sourceProviderKindPython, target, nil
 	case !errors.Is(err, ErrNoPythonProviderPackage):
 		return "", "", err
-	case goToolUnavailable != nil:
-		return "", "", goToolUnavailable
 	default:
-		return "", "", ErrNoSourceProviderPackage
+		target, err = DetectTypeScriptProviderTarget(root)
+		switch {
+		case err == nil:
+			return sourceProviderKindTypeScript, target, nil
+		case !errors.Is(err, ErrNoTypeScriptProviderPackage):
+			return "", "", err
+		case goToolUnavailable != nil:
+			return "", "", goToolUnavailable
+		default:
+			return "", "", ErrNoSourceProviderPackage
+		}
 	}
 }
 
 func SourceProviderExecutionCommand(root, goos, goarch string) (string, []string, func(), error) {
-	kind, pythonTarget, err := detectSourceProvider(root, goos, goarch)
+	kind, target, err := detectSourceProvider(root, goos, goarch)
 	if err != nil {
 		return "", nil, nil, err
 	}
@@ -57,7 +66,9 @@ func SourceProviderExecutionCommand(root, goos, goarch string) (string, []string
 	case sourceProviderKindRust:
 		return rustProviderExecutionCommand(root, goos, goarch)
 	case sourceProviderKindPython:
-		return pythonProviderExecutionCommand(root, pythonTarget)
+		return pythonProviderExecutionCommand(root, target)
+	case sourceProviderKindTypeScript:
+		return typeScriptExecutionCommand(root, target)
 	default:
 		return "", nil, nil, ErrNoSourceProviderPackage
 	}
@@ -74,12 +85,16 @@ func ValidateSourceProviderRelease(root, goos, goarch, libc string) error {
 	case sourceProviderKindPython:
 		_, err = DetectPythonInterpreter(root, goos, goarch)
 		return err
+	case sourceProviderKindTypeScript:
+		_, err = DetectBunExecutable()
+		return err
+	default:
+		return nil
 	}
-	return nil
 }
 
 func BuildSourceProviderReleaseBinary(root, outputPath, pluginName, goos, goarch, libc string) (string, error) {
-	kind, pythonTarget, err := detectSourceProvider(root, goos, goarch)
+	kind, target, err := detectSourceProvider(root, goos, goarch)
 	if err != nil {
 		return "", err
 	}
@@ -89,7 +104,9 @@ func BuildSourceProviderReleaseBinary(root, outputPath, pluginName, goos, goarch
 	case sourceProviderKindRust:
 		return BuildRustProviderBinary(root, outputPath, pluginName, goos, goarch, libc)
 	case sourceProviderKindPython:
-		return BuildPythonProviderBinary(root, outputPath, pluginName, pythonTarget, goos, goarch)
+		return BuildPythonProviderBinary(root, outputPath, pluginName, target, goos, goarch)
+	case sourceProviderKindTypeScript:
+		return BuildTypeScriptProviderBinary(root, outputPath, pluginName, target, goos, goarch)
 	default:
 		return "", ErrNoSourceProviderPackage
 	}
