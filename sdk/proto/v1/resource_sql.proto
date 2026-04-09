@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package gestalt.plugin.v1;
+
+option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
+
+import "google/protobuf/empty.proto";
+
+message SQLValue {
+  oneof kind {
+    string string_value = 1;
+    int64 int_value = 2;
+    double double_value = 3;
+    bool bool_value = 4;
+    bytes bytes_value = 5;
+    bool is_null = 6;
+  }
+}
+
+message SQLRow {
+  repeated SQLValue values = 1;
+}
+
+message SQLQueryRequest {
+  string namespace = 1;
+  string query = 2;
+  repeated SQLValue params = 3;
+}
+
+message SQLQueryResponse {
+  repeated string columns = 1;
+  repeated SQLRow rows = 2;
+}
+
+message SQLExecRequest {
+  string namespace = 1;
+  string query = 2;
+  repeated SQLValue params = 3;
+}
+
+message SQLExecResponse {
+  int64 rows_affected = 1;
+  int64 last_insert_id = 2;
+}
+
+message SQLMigration {
+  int32 version = 1;
+  string description = 2;
+  string up_sql = 3;
+}
+
+message SQLMigrateRequest {
+  string namespace = 1;
+  repeated SQLMigration migrations = 2;
+}
+
+service SQLResource {
+  rpc Query(SQLQueryRequest) returns (SQLQueryResponse);
+  rpc Exec(SQLExecRequest) returns (SQLExecResponse);
+  rpc Migrate(SQLMigrateRequest) returns (google.protobuf.Empty);
+}

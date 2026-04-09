@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package gestalt.plugin.v1;
+
+option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/struct.proto";
+
+enum ResourceCapability {
+  RESOURCE_CAPABILITY_UNSPECIFIED = 0;
+  RESOURCE_CAPABILITY_KEY_VALUE = 1;
+  RESOURCE_CAPABILITY_SQL = 2;
+  RESOURCE_CAPABILITY_BLOB_STORE = 3;
+}
+
+message ResourceMetadata {
+  string name = 1;
+  string display_name = 2;
+  string description = 3;
+  repeated ResourceCapability capabilities = 4;
+  int32 min_protocol_version = 5;
+  int32 max_protocol_version = 6;
+}
+
+message ConfigureResourceRequest {
+  string name = 1;
+  google.protobuf.Struct config = 2;
+  int32 protocol_version = 3;
+}
+
+message ConfigureResourceResponse {
+  int32 protocol_version = 1;
+}
+
+message ResourceHealthCheckResponse {
+  bool ready = 1;
+  string message = 2;
+}
+
+service ResourceRuntime {
+  rpc GetResourceMetadata(google.protobuf.Empty) returns (ResourceMetadata);
+  rpc ConfigureResource(ConfigureResourceRequest) returns (ConfigureResourceResponse);
+  rpc HealthCheck(google.protobuf.Empty) returns (ResourceHealthCheckResponse);
+}

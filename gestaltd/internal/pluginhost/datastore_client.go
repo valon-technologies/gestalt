@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 
-	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	corecrypto "github.com/valon-technologies/gestalt/server/core/crypto"
@@ -142,7 +141,7 @@ func (s *remoteDatastore) GetUser(ctx context.Context, id string) (*core.User, e
 		}
 		return nil, fmt.Errorf("get user: %w", err)
 	}
-	return storedUserToCore(storedUserFromProto(resp)), nil
+	return protoUserToCore(resp), nil
 }
 
 func (s *remoteDatastore) FindOrCreateUser(ctx context.Context, email string) (*core.User, error) {
@@ -153,18 +152,18 @@ func (s *remoteDatastore) FindOrCreateUser(ctx context.Context, email string) (*
 	if err != nil {
 		return nil, fmt.Errorf("find or create user: %w", err)
 	}
-	return storedUserToCore(storedUserFromProto(resp)), nil
+	return protoUserToCore(resp), nil
 }
 
 func (s *remoteDatastore) StoreToken(ctx context.Context, token *core.IntegrationToken) error {
-	wire, err := s.coreTokenToStored(token)
+	pb, err := s.coreTokenToProto(token)
 	if err != nil {
 		return err
 	}
 	ctx, cancel := pluginCallContext(ctx)
 	defer cancel()
 
-	_, err = s.client.PutStoredIntegrationToken(ctx, storedIntegrationTokenToProto(wire))
+	_, err = s.client.PutStoredIntegrationToken(ctx, pb)
 	if err != nil {
 		return fmt.Errorf("store integration token: %w", err)
 	}
@@ -187,7 +186,7 @@ func (s *remoteDatastore) Token(ctx context.Context, userID, integration, connec
 		}
 		return nil, fmt.Errorf("get integration token: %w", err)
 	}
-	return s.storedTokenToCore(storedIntegrationTokenFromProto(resp))
+	return s.protoTokenToCore(resp)
 }
 
 func (s *remoteDatastore) ListTokens(ctx context.Context, userID string) ([]*core.IntegrationToken, error) {
@@ -217,7 +216,7 @@ func (s *remoteDatastore) StoreAPIToken(ctx context.Context, token *core.APIToke
 	ctx, cancel := pluginCallContext(ctx)
 	defer cancel()
 
-	_, err := s.client.PutAPIToken(ctx, storedAPITokenToProto(storedAPITokenFromCore(token)))
+	_, err := s.client.PutAPIToken(ctx, coreAPITokenToProto(token))
 	if err != nil {
 		return fmt.Errorf("store api token: %w", err)
 	}
@@ -235,7 +234,7 @@ func (s *remoteDatastore) ValidateAPIToken(ctx context.Context, hashedToken stri
 		}
 		return nil, fmt.Errorf("validate api token: %w", err)
 	}
-	return storedAPITokenToCore(storedAPITokenFromProto(resp)), nil
+	return protoAPITokenToCore(resp), nil
 }
 
 func (s *remoteDatastore) ListAPITokens(ctx context.Context, userID string) ([]*core.APIToken, error) {
@@ -249,7 +248,7 @@ func (s *remoteDatastore) ListAPITokens(ctx context.Context, userID string) ([]*
 	tokens := resp.GetTokens()
 	out := make([]*core.APIToken, 0, len(tokens))
 	for _, token := range tokens {
-		out = append(out, storedAPITokenToCore(storedAPITokenFromProto(token)))
+		out = append(out, protoAPITokenToCore(token))
 	}
 	return out, nil
 }
@@ -312,18 +311,18 @@ func (s *remoteDatastoreWithOAuth) GetRegistration(ctx context.Context, authServ
 		}
 		return nil, fmt.Errorf("get oauth registration: %w", err)
 	}
-	return s.storedOAuthRegistrationToCore(oauthRegistrationFromProto(resp))
+	return s.protoOAuthRegistrationToCore(resp)
 }
 
 func (s *remoteDatastoreWithOAuth) StoreRegistration(ctx context.Context, registration *mcpoauth.Registration) error {
-	wire, err := s.coreOAuthRegistrationToStored(registration)
+	pb, err := s.coreOAuthRegistrationToProto(registration)
 	if err != nil {
 		return err
 	}
 	ctx, cancel := pluginCallContext(ctx)
 	defer cancel()
 
-	_, err = s.client.PutOAuthRegistration(ctx, oauthRegistrationToProto(wire))
+	_, err = s.client.PutOAuthRegistration(ctx, pb)
 	if err != nil {
 		if status.Code(err) == codes.Unimplemented {
 			return fmt.Errorf("store oauth registration: unsupported")
@@ -379,7 +378,7 @@ func (s *remoteDatastore) listTokens(ctx context.Context, userID, integration, c
 	tokens := resp.GetTokens()
 	out := make([]*core.IntegrationToken, 0, len(tokens))
 	for _, token := range tokens {
-		converted, convErr := s.storedTokenToCore(storedIntegrationTokenFromProto(token))
+		converted, convErr := s.protoTokenToCore(token)
 		if convErr != nil {
 			return nil, convErr
 		}
@@ -388,7 +387,7 @@ func (s *remoteDatastore) listTokens(ctx context.Context, userID, integration, c
 	return out, nil
 }
 
-func (s *remoteDatastore) coreTokenToStored(token *core.IntegrationToken) (*gestalt.StoredIntegrationToken, error) {
+func (s *remoteDatastore) coreTokenToProto(token *core.IntegrationToken) (*proto.StoredIntegrationToken, error) {
 	if token == nil {
 		return nil, nil
 	}
@@ -400,55 +399,55 @@ func (s *remoteDatastore) coreTokenToStored(token *core.IntegrationToken) (*gest
 	if err != nil {
 		return nil, fmt.Errorf("encode token metadata: %w", err)
 	}
-	return &gestalt.StoredIntegrationToken{
-		ID:                 token.ID,
-		UserID:             token.UserID,
+	return &proto.StoredIntegrationToken{
+		Id:                 token.ID,
+		UserId:             token.UserID,
 		Integration:        token.Integration,
 		Connection:         token.Connection,
 		Instance:           token.Instance,
 		AccessTokenSealed:  []byte(access),
 		RefreshTokenSealed: []byte(refresh),
 		Scopes:             token.Scopes,
-		ExpiresAt:          token.ExpiresAt,
-		LastRefreshedAt:    token.LastRefreshedAt,
+		ExpiresAt:          timePtrToProto(token.ExpiresAt),
+		LastRefreshedAt:    timePtrToProto(token.LastRefreshedAt),
 		RefreshErrorCount:  int32(token.RefreshErrorCount),
 		ConnectionParams:   params,
-		CreatedAt:          token.CreatedAt,
-		UpdatedAt:          token.UpdatedAt,
+		CreatedAt:          timeToProto(token.CreatedAt),
+		UpdatedAt:          timeToProto(token.UpdatedAt),
 	}, nil
 }
 
-func (s *remoteDatastore) storedTokenToCore(token *gestalt.StoredIntegrationToken) (*core.IntegrationToken, error) {
+func (s *remoteDatastore) protoTokenToCore(token *proto.StoredIntegrationToken) (*core.IntegrationToken, error) {
 	if token == nil {
 		return nil, core.ErrNotFound
 	}
-	access, refresh, err := s.enc.DecryptTokenPair(string(token.AccessTokenSealed), string(token.RefreshTokenSealed))
+	access, refresh, err := s.enc.DecryptTokenPair(string(token.GetAccessTokenSealed()), string(token.GetRefreshTokenSealed()))
 	if err != nil {
 		return nil, fmt.Errorf("decrypt token pair: %w", err)
 	}
-	metadataJSON, err := metadataMapToJSON(token.ConnectionParams)
+	metadataJSON, err := metadataMapToJSON(token.GetConnectionParams())
 	if err != nil {
 		return nil, fmt.Errorf("decode token metadata: %w", err)
 	}
 	return &core.IntegrationToken{
-		ID:                token.ID,
-		UserID:            token.UserID,
-		Integration:       token.Integration,
-		Connection:        token.Connection,
-		Instance:          token.Instance,
+		ID:                token.GetId(),
+		UserID:            token.GetUserId(),
+		Integration:       token.GetIntegration(),
+		Connection:        token.GetConnection(),
+		Instance:          token.GetInstance(),
 		AccessToken:       access,
 		RefreshToken:      refresh,
-		Scopes:            token.Scopes,
-		ExpiresAt:         token.ExpiresAt,
-		LastRefreshedAt:   token.LastRefreshedAt,
-		RefreshErrorCount: int(token.RefreshErrorCount),
+		Scopes:            token.GetScopes(),
+		ExpiresAt:         protoTimePtr(token.GetExpiresAt()),
+		LastRefreshedAt:   protoTimePtr(token.GetLastRefreshedAt()),
+		RefreshErrorCount: int(token.GetRefreshErrorCount()),
 		MetadataJSON:      metadataJSON,
-		CreatedAt:         token.CreatedAt,
-		UpdatedAt:         token.UpdatedAt,
+		CreatedAt:         protoTime(token.GetCreatedAt()),
+		UpdatedAt:         protoTime(token.GetUpdatedAt()),
 	}, nil
 }
 
-func (s *remoteDatastore) coreOAuthRegistrationToStored(registration *mcpoauth.Registration) (*gestalt.OAuthRegistration, error) {
+func (s *remoteDatastore) coreOAuthRegistrationToProto(registration *mcpoauth.Registration) (*proto.OAuthRegistration, error) {
 	if registration == nil {
 		return nil, nil
 	}
@@ -456,45 +455,45 @@ func (s *remoteDatastore) coreOAuthRegistrationToStored(registration *mcpoauth.R
 	if err != nil {
 		return nil, fmt.Errorf("encrypt oauth client secret: %w", err)
 	}
-	return &gestalt.OAuthRegistration{
-		AuthServerURL:         registration.AuthServerURL,
-		RedirectURI:           registration.RedirectURI,
-		ClientID:              registration.ClientID,
+	return &proto.OAuthRegistration{
+		AuthServerUrl:         registration.AuthServerURL,
+		RedirectUri:           registration.RedirectURI,
+		ClientId:              registration.ClientID,
 		ClientSecretSealed:    []byte(sealed),
-		ExpiresAt:             registration.ExpiresAt,
+		ExpiresAt:             timePtrToProto(registration.ExpiresAt),
 		AuthorizationEndpoint: registration.AuthorizationEndpoint,
 		TokenEndpoint:         registration.TokenEndpoint,
 		ScopesSupported:       registration.ScopesSupported,
-		DiscoveredAt:          registration.DiscoveredAt,
+		DiscoveredAt:          timeToProto(registration.DiscoveredAt),
 	}, nil
 }
 
-func (s *remoteDatastore) storedOAuthRegistrationToCore(registration *gestalt.OAuthRegistration) (*mcpoauth.Registration, error) {
+func (s *remoteDatastore) protoOAuthRegistrationToCore(registration *proto.OAuthRegistration) (*mcpoauth.Registration, error) {
 	if registration == nil {
 		return nil, nil
 	}
-	secret, err := s.enc.Decrypt(string(registration.ClientSecretSealed))
+	secret, err := s.enc.Decrypt(string(registration.GetClientSecretSealed()))
 	if err != nil {
 		return nil, fmt.Errorf("decrypt oauth client secret: %w", err)
 	}
 	return &mcpoauth.Registration{
-		AuthServerURL:         registration.AuthServerURL,
-		RedirectURI:           registration.RedirectURI,
-		ClientID:              registration.ClientID,
+		AuthServerURL:         registration.GetAuthServerUrl(),
+		RedirectURI:           registration.GetRedirectUri(),
+		ClientID:              registration.GetClientId(),
 		ClientSecret:          secret,
-		ExpiresAt:             registration.ExpiresAt,
-		AuthorizationEndpoint: registration.AuthorizationEndpoint,
-		TokenEndpoint:         registration.TokenEndpoint,
-		ScopesSupported:       registration.ScopesSupported,
-		DiscoveredAt:          registration.DiscoveredAt,
+		ExpiresAt:             protoTimePtr(registration.GetExpiresAt()),
+		AuthorizationEndpoint: registration.GetAuthorizationEndpoint(),
+		TokenEndpoint:         registration.GetTokenEndpoint(),
+		ScopesSupported:       registration.GetScopesSupported(),
+		DiscoveredAt:          protoTime(registration.GetDiscoveredAt()),
 	}, nil
 }
 
-func storedUserFromProto(user *proto.StoredUser) *gestalt.StoredUser {
+func protoUserToCore(user *proto.StoredUser) *core.User {
 	if user == nil {
 		return nil
 	}
-	return &gestalt.StoredUser{
+	return &core.User{
 		ID:          user.GetId(),
 		Email:       user.GetEmail(),
 		DisplayName: user.GetDisplayName(),
@@ -503,64 +502,7 @@ func storedUserFromProto(user *proto.StoredUser) *gestalt.StoredUser {
 	}
 }
 
-func storedUserToCore(user *gestalt.StoredUser) *core.User {
-	if user == nil {
-		return nil
-	}
-	return &core.User{
-		ID:          user.ID,
-		Email:       user.Email,
-		DisplayName: user.DisplayName,
-		CreatedAt:   user.CreatedAt,
-		UpdatedAt:   user.UpdatedAt,
-	}
-}
-
-func storedIntegrationTokenToProto(token *gestalt.StoredIntegrationToken) *proto.StoredIntegrationToken {
-	if token == nil {
-		return nil
-	}
-	return &proto.StoredIntegrationToken{
-		Id:                 token.ID,
-		UserId:             token.UserID,
-		Integration:        token.Integration,
-		Connection:         token.Connection,
-		Instance:           token.Instance,
-		AccessTokenSealed:  append([]byte(nil), token.AccessTokenSealed...),
-		RefreshTokenSealed: append([]byte(nil), token.RefreshTokenSealed...),
-		Scopes:             token.Scopes,
-		ExpiresAt:          timePtrToProto(token.ExpiresAt),
-		LastRefreshedAt:    timePtrToProto(token.LastRefreshedAt),
-		RefreshErrorCount:  token.RefreshErrorCount,
-		ConnectionParams:   cloneStringMapRuntime(token.ConnectionParams),
-		CreatedAt:          timeToProto(token.CreatedAt),
-		UpdatedAt:          timeToProto(token.UpdatedAt),
-	}
-}
-
-func storedIntegrationTokenFromProto(token *proto.StoredIntegrationToken) *gestalt.StoredIntegrationToken {
-	if token == nil {
-		return nil
-	}
-	return &gestalt.StoredIntegrationToken{
-		ID:                 token.GetId(),
-		UserID:             token.GetUserId(),
-		Integration:        token.GetIntegration(),
-		Connection:         token.GetConnection(),
-		Instance:           token.GetInstance(),
-		AccessTokenSealed:  append([]byte(nil), token.GetAccessTokenSealed()...),
-		RefreshTokenSealed: append([]byte(nil), token.GetRefreshTokenSealed()...),
-		Scopes:             token.GetScopes(),
-		ExpiresAt:          protoTimePtr(token.GetExpiresAt()),
-		LastRefreshedAt:    protoTimePtr(token.GetLastRefreshedAt()),
-		RefreshErrorCount:  token.GetRefreshErrorCount(),
-		ConnectionParams:   cloneStringMapRuntime(token.GetConnectionParams()),
-		CreatedAt:          protoTime(token.GetCreatedAt()),
-		UpdatedAt:          protoTime(token.GetUpdatedAt()),
-	}
-}
-
-func storedAPITokenToProto(token *gestalt.StoredAPIToken) *proto.StoredAPIToken {
+func coreAPITokenToProto(token *core.APIToken) *proto.StoredAPIToken {
 	if token == nil {
 		return nil
 	}
@@ -576,11 +518,11 @@ func storedAPITokenToProto(token *gestalt.StoredAPIToken) *proto.StoredAPIToken 
 	}
 }
 
-func storedAPITokenFromProto(token *proto.StoredAPIToken) *gestalt.StoredAPIToken {
+func protoAPITokenToCore(token *proto.StoredAPIToken) *core.APIToken {
 	if token == nil {
 		return nil
 	}
-	return &gestalt.StoredAPIToken{
+	return &core.APIToken{
 		ID:          token.GetId(),
 		UserID:      token.GetUserId(),
 		Name:        token.GetName(),
@@ -589,72 +531,6 @@ func storedAPITokenFromProto(token *proto.StoredAPIToken) *gestalt.StoredAPIToke
 		ExpiresAt:   protoTimePtr(token.GetExpiresAt()),
 		CreatedAt:   protoTime(token.GetCreatedAt()),
 		UpdatedAt:   protoTime(token.GetUpdatedAt()),
-	}
-}
-
-func storedAPITokenFromCore(token *core.APIToken) *gestalt.StoredAPIToken {
-	if token == nil {
-		return nil
-	}
-	return &gestalt.StoredAPIToken{
-		ID:          token.ID,
-		UserID:      token.UserID,
-		Name:        token.Name,
-		HashedToken: token.HashedToken,
-		Scopes:      token.Scopes,
-		ExpiresAt:   token.ExpiresAt,
-		CreatedAt:   token.CreatedAt,
-		UpdatedAt:   token.UpdatedAt,
-	}
-}
-
-func storedAPITokenToCore(token *gestalt.StoredAPIToken) *core.APIToken {
-	if token == nil {
-		return nil
-	}
-	return &core.APIToken{
-		ID:          token.ID,
-		UserID:      token.UserID,
-		Name:        token.Name,
-		HashedToken: token.HashedToken,
-		Scopes:      token.Scopes,
-		ExpiresAt:   token.ExpiresAt,
-		CreatedAt:   token.CreatedAt,
-		UpdatedAt:   token.UpdatedAt,
-	}
-}
-
-func oauthRegistrationToProto(registration *gestalt.OAuthRegistration) *proto.OAuthRegistration {
-	if registration == nil {
-		return nil
-	}
-	return &proto.OAuthRegistration{
-		AuthServerUrl:         registration.AuthServerURL,
-		RedirectUri:           registration.RedirectURI,
-		ClientId:              registration.ClientID,
-		ClientSecretSealed:    append([]byte(nil), registration.ClientSecretSealed...),
-		ExpiresAt:             timePtrToProto(registration.ExpiresAt),
-		AuthorizationEndpoint: registration.AuthorizationEndpoint,
-		TokenEndpoint:         registration.TokenEndpoint,
-		ScopesSupported:       registration.ScopesSupported,
-		DiscoveredAt:          timeToProto(registration.DiscoveredAt),
-	}
-}
-
-func oauthRegistrationFromProto(registration *proto.OAuthRegistration) *gestalt.OAuthRegistration {
-	if registration == nil {
-		return nil
-	}
-	return &gestalt.OAuthRegistration{
-		AuthServerURL:         registration.GetAuthServerUrl(),
-		RedirectURI:           registration.GetRedirectUri(),
-		ClientID:              registration.GetClientId(),
-		ClientSecretSealed:    append([]byte(nil), registration.GetClientSecretSealed()...),
-		ExpiresAt:             protoTimePtr(registration.GetExpiresAt()),
-		AuthorizationEndpoint: registration.GetAuthorizationEndpoint(),
-		TokenEndpoint:         registration.GetTokenEndpoint(),
-		ScopesSupported:       registration.GetScopesSupported(),
-		DiscoveredAt:          protoTime(registration.GetDiscoveredAt()),
 	}
 }
 

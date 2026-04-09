@@ -38,14 +38,20 @@ export {
   type CompleteLoginRequest,
 } from "./auth.ts";
 export {
-  defineDatastoreProvider,
-  isDatastoreProvider,
-  type DatastoreProviderOptions,
-  type OAuthRegistration,
-  type StoredAPIToken,
-  type StoredIntegrationToken,
-  type StoredUser,
-} from "./datastore.ts";
+  type BlobEntry,
+  type BlobStore,
+  type BlobStoreDatastoreProvider,
+  type DatastoreCapability,
+  type DatastoreProvider,
+  type KeyValueDatastoreProvider,
+  type KeyValueStore,
+  type KVEntry,
+  type SQLDatastoreProvider,
+  type SQLExecResult,
+  type SQLMigration,
+  type SQLRows,
+  type SQLStore,
+} from "./resource.ts";
 export {
   defineSecretsProvider,
   isSecretsProvider,
@@ -99,7 +105,6 @@ export {
   ENV_PLUGIN_SOCKET,
   ENV_WRITE_CATALOG,
   createAuthService,
-  createDatastoreService,
   createSecretsService,
   createProviderService,
   createRuntimeService,

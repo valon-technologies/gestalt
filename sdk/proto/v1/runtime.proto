@@ -20,6 +20,7 @@ enum PluginKind {
   PLUGIN_KIND_DATASTORE = 3;
   PLUGIN_KIND_SECRETS = 4;
   PLUGIN_KIND_TELEMETRY = 5;
+  PLUGIN_KIND_RESOURCE = 6;
 }
 
 message PluginMetadata {

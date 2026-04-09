@@ -4,11 +4,10 @@ mod api;
 mod auth;
 mod auth_server;
 mod catalog;
-mod datastore;
-mod datastore_server;
 mod env;
 mod error;
 mod provider_server;
+pub mod resource;
 mod router;
 mod rpc_status;
 pub mod runtime;
@@ -33,13 +32,15 @@ pub use auth::{
     AuthProvider, AuthenticatedUser, BeginLoginRequest, BeginLoginResponse, CompleteLoginRequest,
 };
 pub use catalog::{Catalog, CatalogOperation};
-pub use datastore::{
-    DatastoreProvider, OAuthRegistration, StoredApiToken, StoredIntegrationToken, StoredUser,
-};
 pub use env::{CURRENT_PROTOCOL_VERSION, ENV_PLUGIN_SOCKET};
 pub use error::{Error, Result};
 #[doc(hidden)]
 pub use provider_server::{OperationResult, ProviderServer};
+pub use resource::{
+    BlobEntry, BlobStore, BlobStoreDatastoreProvider, DatastoreCapability, DatastoreProvider,
+    KeyValueDatastoreProvider, KeyValueStore, KvEntry, SqlDatastoreProvider, SqlExecResult,
+    SqlMigration, SqlRows, SqlStore,
+};
 pub use router::{Operation, Router};
 pub use secrets::SecretsProvider;
 pub use tonic::codegen::async_trait;
@@ -91,16 +92,6 @@ macro_rules! export_auth_provider {
         pub fn __gestalt_serve_auth(_name: &str) -> $crate::Result<()> {
             let provider = std::sync::Arc::new($constructor());
             $crate::runtime::run_auth_provider(provider)
-        }
-    };
-}
-
-#[macro_export]
-macro_rules! export_datastore_provider {
-    (constructor = $constructor:path $(,)?) => {
-        pub fn __gestalt_serve_datastore(_name: &str) -> $crate::Result<()> {
-            let provider = std::sync::Arc::new($constructor());
-            $crate::runtime::run_datastore_provider(provider)
         }
     };
 }

@@ -32,6 +32,7 @@ const (
 	PluginKind_PLUGIN_KIND_DATASTORE   PluginKind = 3
 	PluginKind_PLUGIN_KIND_SECRETS     PluginKind = 4
 	PluginKind_PLUGIN_KIND_TELEMETRY   PluginKind = 5
+	PluginKind_PLUGIN_KIND_RESOURCE    PluginKind = 6
 )
 
 // Enum value maps for PluginKind.
@@ -43,6 +44,7 @@ var (
 		3: "PLUGIN_KIND_DATASTORE",
 		4: "PLUGIN_KIND_SECRETS",
 		5: "PLUGIN_KIND_TELEMETRY",
+		6: "PLUGIN_KIND_RESOURCE",
 	}
 	PluginKind_value = map[string]int32{
 		"PLUGIN_KIND_UNSPECIFIED": 0,
@@ -51,6 +53,7 @@ var (
 		"PLUGIN_KIND_DATASTORE":   3,
 		"PLUGIN_KIND_SECRETS":     4,
 		"PLUGIN_KIND_TELEMETRY":   5,
+		"PLUGIN_KIND_RESOURCE":    6,
 	}
 )
 
@@ -360,7 +363,7 @@ const file_v1_runtime_proto_rawDesc = "" +
 	"\x10protocol_version\x18\x01 \x01(\x05R\x0fprotocolVersion\"E\n" +
 	"\x13HealthCheckResponse\x12\x14\n" +
 	"\x05ready\x18\x01 \x01(\bR\x05ready\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage*\xab\x01\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage*\xc5\x01\n" +
 	"\n" +
 	"PluginKind\x12\x1b\n" +
 	"\x17PLUGIN_KIND_UNSPECIFIED\x10\x00\x12\x1b\n" +
@@ -368,7 +371,8 @@ const file_v1_runtime_proto_rawDesc = "" +
 	"\x10PLUGIN_KIND_AUTH\x10\x02\x12\x19\n" +
 	"\x15PLUGIN_KIND_DATASTORE\x10\x03\x12\x17\n" +
 	"\x13PLUGIN_KIND_SECRETS\x10\x04\x12\x19\n" +
-	"\x15PLUGIN_KIND_TELEMETRY\x10\x052\x9c\x02\n" +
+	"\x15PLUGIN_KIND_TELEMETRY\x10\x05\x12\x18\n" +
+	"\x14PLUGIN_KIND_RESOURCE\x10\x062\x9c\x02\n" +
 	"\x11ProviderLifecycle\x12N\n" +
 	"\x11GetPluginMetadata\x12\x16.google.protobuf.Empty\x1a!.gestalt.plugin.v1.PluginMetadata\x12h\n" +
 	"\x0fConfigurePlugin\x12).gestalt.plugin.v1.ConfigurePluginRequest\x1a*.gestalt.plugin.v1.ConfigurePluginResponse\x12M\n" +

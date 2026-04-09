@@ -195,68 +195,101 @@ jobs:
 
           import (
           	"context"
-          	"time"
 
-          	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+          	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+          	"google.golang.org/protobuf/types/known/emptypb"
+          	"google.golang.org/protobuf/types/known/timestamppb"
           )
 
-          type Provider struct{}
+          type Provider struct {
+          	proto.UnimplementedDatastoreProviderServer
+          	proto.UnimplementedProviderLifecycleServer
+          }
 
           func New() *Provider { return &Provider{} }
 
-          func (p *Provider) Configure(context.Context, string, map[string]any) error { return nil }
-
-          func (p *Provider) Metadata() gestalt.ProviderMetadata {
-          	return gestalt.ProviderMetadata{
-          		Kind:        gestalt.ProviderKindDatastore,
-          		Name:        "sqlite",
-          		DisplayName: "SQLite",
-          	}
+          func (p *Provider) GetPluginMetadata(context.Context, *emptypb.Empty) (*proto.PluginMetadata, error) {
+          	return &proto.PluginMetadata{
+          		Kind:               proto.PluginKind_PLUGIN_KIND_DATASTORE,
+          		Name:               "sqlite",
+          		DisplayName:        "SQLite",
+          		MinProtocolVersion: proto.CurrentProtocolVersion,
+          		MaxProtocolVersion: proto.CurrentProtocolVersion,
+          	}, nil
           }
 
-          func (p *Provider) Warnings() []string { return nil }
-          func (p *Provider) HealthCheck(context.Context) error { return nil }
-          func (p *Provider) Migrate(context.Context) error { return nil }
+          func (p *Provider) ConfigurePlugin(_ context.Context, req *proto.ConfigurePluginRequest) (*proto.ConfigurePluginResponse, error) {
+          	return &proto.ConfigurePluginResponse{ProtocolVersion: proto.CurrentProtocolVersion}, nil
+          }
 
-          func (p *Provider) GetUser(context.Context, string) (*gestalt.StoredUser, error) { return nil, nil }
+          func (p *Provider) HealthCheck(context.Context, *emptypb.Empty) (*proto.HealthCheckResponse, error) {
+          	return &proto.HealthCheckResponse{Ready: true}, nil
+          }
 
-          func (p *Provider) FindOrCreateUser(_ context.Context, email string) (*gestalt.StoredUser, error) {
-          	now := time.Now().UTC()
-          	return &gestalt.StoredUser{
-          		ID:        email,
-          		Email:     email,
+          func (p *Provider) Migrate(context.Context, *emptypb.Empty) (*emptypb.Empty, error) {
+          	return &emptypb.Empty{}, nil
+          }
+
+          func (p *Provider) GetUser(_ context.Context, _ *proto.GetUserRequest) (*proto.StoredUser, error) {
+          	return &proto.StoredUser{}, nil
+          }
+
+          func (p *Provider) FindOrCreateUser(_ context.Context, req *proto.FindOrCreateUserRequest) (*proto.StoredUser, error) {
+          	now := timestamppb.Now()
+          	return &proto.StoredUser{
+          		Id:        req.GetEmail(),
+          		Email:     req.GetEmail(),
           		CreatedAt: now,
           		UpdatedAt: now,
           	}, nil
           }
 
-          func (p *Provider) PutIntegrationToken(context.Context, *gestalt.StoredIntegrationToken) error {
-          	return nil
+          func (p *Provider) PutStoredIntegrationToken(context.Context, *proto.StoredIntegrationToken) (*emptypb.Empty, error) {
+          	return &emptypb.Empty{}, nil
           }
 
-          func (p *Provider) GetIntegrationToken(context.Context, string, string, string, string) (*gestalt.StoredIntegrationToken, error) {
-          	return nil, nil
+          func (p *Provider) GetStoredIntegrationToken(context.Context, *proto.GetStoredIntegrationTokenRequest) (*proto.StoredIntegrationToken, error) {
+          	return &proto.StoredIntegrationToken{}, nil
           }
 
-          func (p *Provider) ListIntegrationTokens(context.Context, string, string, string) ([]*gestalt.StoredIntegrationToken, error) {
-          	return nil, nil
+          func (p *Provider) ListStoredIntegrationTokens(context.Context, *proto.ListStoredIntegrationTokensRequest) (*proto.ListStoredIntegrationTokensResponse, error) {
+          	return &proto.ListStoredIntegrationTokensResponse{}, nil
           }
 
-          func (p *Provider) DeleteIntegrationToken(context.Context, string) error { return nil }
-          func (p *Provider) PutAPIToken(context.Context, *gestalt.StoredAPIToken) error { return nil }
-
-          func (p *Provider) GetAPITokenByHash(context.Context, string) (*gestalt.StoredAPIToken, error) {
-          	return nil, nil
+          func (p *Provider) DeleteStoredIntegrationToken(context.Context, *proto.DeleteStoredIntegrationTokenRequest) (*emptypb.Empty, error) {
+          	return &emptypb.Empty{}, nil
           }
 
-          func (p *Provider) ListAPITokens(context.Context, string) ([]*gestalt.StoredAPIToken, error) {
-          	return nil, nil
+          func (p *Provider) PutAPIToken(context.Context, *proto.StoredAPIToken) (*emptypb.Empty, error) {
+          	return &emptypb.Empty{}, nil
           }
 
-          func (p *Provider) RevokeAPIToken(context.Context, string, string) error { return nil }
+          func (p *Provider) GetAPITokenByHash(context.Context, *proto.GetAPITokenByHashRequest) (*proto.StoredAPIToken, error) {
+          	return &proto.StoredAPIToken{}, nil
+          }
 
-          func (p *Provider) RevokeAllAPITokens(context.Context, string) (int64, error) {
-          	return 0, nil
+          func (p *Provider) ListAPITokens(context.Context, *proto.ListAPITokensRequest) (*proto.ListAPITokensResponse, error) {
+          	return &proto.ListAPITokensResponse{}, nil
+          }
+
+          func (p *Provider) RevokeAPIToken(context.Context, *proto.RevokeAPITokenRequest) (*emptypb.Empty, error) {
+          	return &emptypb.Empty{}, nil
+          }
+
+          func (p *Provider) RevokeAllAPITokens(context.Context, *proto.RevokeAllAPITokensRequest) (*proto.RevokeAllAPITokensResponse, error) {
+          	return &proto.RevokeAllAPITokensResponse{}, nil
+          }
+
+          func (p *Provider) GetOAuthRegistration(context.Context, *proto.GetOAuthRegistrationRequest) (*proto.OAuthRegistration, error) {
+          	return &proto.OAuthRegistration{}, nil
+          }
+
+          func (p *Provider) PutOAuthRegistration(context.Context, *proto.OAuthRegistration) (*emptypb.Empty, error) {
+          	return &emptypb.Empty{}, nil
+          }
+
+          func (p *Provider) DeleteOAuthRegistration(context.Context, *proto.DeleteOAuthRegistrationRequest) (*emptypb.Empty, error) {
+          	return &emptypb.Empty{}, nil
           }
           EOF
 
@@ -265,24 +298,56 @@ jobs:
           package main
 
           import (
-            "context"
-            "fmt"
-            "os"
-            "os/signal"
-            "syscall"
+          	"fmt"
+          	"net"
+          	"os"
+          	"os/signal"
+          	"sync"
+          	"syscall"
 
-            componentpkg "github.com/valon-technologies/gestalt-providers/datastore/sqlite"
-            gestalt "github.com/valon-technologies/gestalt/sdk/go"
+          	componentpkg "github.com/valon-technologies/gestalt-providers/datastore/sqlite"
+          	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+          	"google.golang.org/grpc"
           )
 
           func main() {
-            ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-            defer stop()
+          	socket := os.Getenv(proto.EnvPluginSocket)
+          	if socket == "" {
+          		fmt.Fprintf(os.Stderr, "error: %s is required\n", proto.EnvPluginSocket)
+          		os.Exit(1)
+          	}
+          	if err := os.Remove(socket); err != nil && !os.IsNotExist(err) {
+          		fmt.Fprintf(os.Stderr, "error: remove stale socket: %v\n", err)
+          		os.Exit(1)
+          	}
 
-            if err := gestalt.ServeDatastoreProvider(ctx, componentpkg.New()); err != nil {
-              fmt.Fprintf(os.Stderr, "error: %v\n", err)
-              os.Exit(1)
-            }
+          	lis, err := net.Listen("unix", socket)
+          	if err != nil {
+          		fmt.Fprintf(os.Stderr, "error: listen: %v\n", err)
+          		os.Exit(1)
+          	}
+          	defer func() {
+          		_ = lis.Close()
+          		_ = os.Remove(socket)
+          	}()
+
+          	provider := componentpkg.New()
+          	srv := grpc.NewServer()
+          	proto.RegisterProviderLifecycleServer(srv, provider)
+          	proto.RegisterDatastoreProviderServer(srv, provider)
+
+          	sigCh := make(chan os.Signal, 1)
+          	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+          	var once sync.Once
+          	go func() {
+          		<-sigCh
+          		once.Do(srv.GracefulStop)
+          	}()
+
+          	if err := srv.Serve(lis); err != nil {
+          		fmt.Fprintf(os.Stderr, "error: serve: %v\n", err)
+          		os.Exit(1)
+          	}
           }
           EOF
 

@@ -440,7 +440,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalSourceTopLevelPluginsWithoutArtifac
 	}
 
 	datastoreManifestPath := filepath.Join(dir, "datastore-plugin.yaml")
-	writeTestSourceFile("datastore.go", []byte(testutil.GeneratedDatastorePackageSource()), 0o644)
+	writeTestSourceFile("datastore.go", []byte("package datastore\n"), 0o644)
 	datastoreManifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
 		Source:    "github.com/testowner/plugins/local-source-datastore",
 		Version:   "0.0.1-alpha.1",

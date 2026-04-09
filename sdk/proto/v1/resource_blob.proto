@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package gestalt.plugin.v1;
+
+option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+message BlobGetRequest {
+  string namespace = 1;
+  string key = 2;
+}
+
+message BlobGetResponse {
+  bytes data = 1;
+  string content_type = 2;
+  map<string, string> metadata = 3;
+}
+
+message BlobPutRequest {
+  string namespace = 1;
+  string key = 2;
+  bytes data = 3;
+  string content_type = 4;
+  map<string, string> metadata = 5;
+}
+
+message BlobDeleteRequest {
+  string namespace = 1;
+  string key = 2;
+}
+
+message BlobListRequest {
+  string namespace = 1;
+  string prefix = 2;
+  string cursor = 3;
+  int32 limit = 4;
+}
+
+message BlobEntry {
+  string key = 1;
+  int64 size = 2;
+  string content_type = 3;
+  google.protobuf.Timestamp last_modified = 4;
+}
+
+message BlobListResponse {
+  repeated BlobEntry entries = 1;
+  string next_cursor = 2;
+}
+
+service BlobStoreResource {
+  rpc Get(BlobGetRequest) returns (BlobGetResponse);
+  rpc Put(BlobPutRequest) returns (google.protobuf.Empty);
+  rpc Delete(BlobDeleteRequest) returns (google.protobuf.Empty);
+  rpc List(BlobListRequest) returns (BlobListResponse);
+}

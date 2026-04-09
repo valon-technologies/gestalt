@@ -1,0 +1,62 @@
+syntax = "proto3";
+
+package gestalt.plugin.v1;
+
+option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
+
+import "google/protobuf/empty.proto";
+
+message KVGetRequest {
+  string namespace = 1;
+  string key = 2;
+}
+
+message KVGetResponse {
+  bytes value = 1;
+  bool found = 2;
+}
+
+message KVPutRequest {
+  string namespace = 1;
+  string key = 2;
+  bytes value = 3;
+  int64 ttl_seconds = 4;
+}
+
+message KVDeleteRequest {
+  string namespace = 1;
+  string key = 2;
+}
+
+message KVDeleteResponse {
+  bool deleted = 1;
+}
+
+message KVListRequest {
+  string namespace = 1;
+  string prefix = 2;
+  string cursor = 3;
+  int32 limit = 4;
+}
+
+message KVEntry {
+  string key = 1;
+  bytes value = 2;
+}
+
+message KVListResponse {
+  repeated KVEntry entries = 1;
+  string next_cursor = 2;
+}
+
+message KVMigrateRequest {
+  string namespace = 1;
+}
+
+service KeyValueResource {
+  rpc Get(KVGetRequest) returns (KVGetResponse);
+  rpc Put(KVPutRequest) returns (google.protobuf.Empty);
+  rpc Delete(KVDeleteRequest) returns (KVDeleteResponse);
+  rpc List(KVListRequest) returns (KVListResponse);
+  rpc Migrate(KVMigrateRequest) returns (google.protobuf.Empty);
+}

@@ -22,7 +22,6 @@ use crate::error::{Error, Result};
 #[cfg(unix)]
 use crate::generated::v1::auth_provider_server::AuthProviderServer;
 #[cfg(unix)]
-use crate::generated::v1::datastore_provider_server::DatastoreProviderServer;
 #[cfg(unix)]
 use crate::generated::v1::plugin_provider_server::PluginProviderServer;
 #[cfg(unix)]
@@ -31,12 +30,11 @@ use crate::generated::v1::provider_lifecycle_server::ProviderLifecycleServer;
 use crate::generated::v1::secrets_provider_server::SecretsProviderServer;
 use crate::provider_server::ProviderServer;
 #[cfg(unix)]
-use crate::{AuthProvider, DatastoreProvider, SecretsProvider};
+use crate::{AuthProvider, SecretsProvider};
 use crate::{Provider, Router};
 #[cfg(unix)]
 use crate::{
-    auth_server::AuthServer, datastore_server::DatastoreServer, runtime_server::RuntimeServer,
-    secrets_server::SecretsServer,
+    auth_server::AuthServer, runtime_server::RuntimeServer, secrets_server::SecretsServer,
 };
 
 fn build_runtime_and_block_on<F, Fut>(f: F) -> Result<()>
@@ -57,10 +55,6 @@ pub fn run_provider<P: Provider>(provider: Arc<P>, router: Router<P>) -> Result<
 
 pub fn run_auth_provider<P: AuthProvider>(provider: Arc<P>) -> Result<()> {
     build_runtime_and_block_on(|| serve_auth_provider(provider))
-}
-
-pub fn run_datastore_provider<P: DatastoreProvider>(provider: Arc<P>) -> Result<()> {
-    build_runtime_and_block_on(|| serve_datastore_provider(provider))
 }
 
 pub fn run_secrets_provider<P: SecretsProvider>(provider: Arc<P>) -> Result<()> {
@@ -133,28 +127,6 @@ where
 }
 
 #[cfg(unix)]
-pub async fn serve_datastore_provider<P>(provider: Arc<P>) -> Result<()>
-where
-    P: DatastoreProvider,
-{
-    serve_unix_plugin(
-        provider,
-        move |incoming, provider| {
-            Server::builder()
-                .add_service(ProviderLifecycleServer::new(RuntimeServer::for_datastore(
-                    Arc::clone(&provider),
-                )))
-                .add_service(DatastoreProviderServer::new(DatastoreServer::new(
-                    Arc::clone(&provider),
-                )))
-                .serve_with_incoming_shutdown(incoming, shutdown_signal(parent_pid()))
-        },
-        |provider| async move { provider.close().await },
-    )
-    .await
-}
-
-#[cfg(unix)]
 pub async fn serve_secrets_provider<P>(provider: Arc<P>) -> Result<()>
 where
     P: SecretsProvider,
@@ -193,16 +165,6 @@ where
 pub async fn serve_auth_provider<P>(_provider: Arc<P>) -> Result<()>
 where
     P: AuthProvider,
-{
-    Err(Error::internal(
-        "unix sockets are unsupported on this platform",
-    ))
-}
-
-#[cfg(not(unix))]
-pub async fn serve_datastore_provider<P>(_provider: Arc<P>) -> Result<()>
-where
-    P: DatastoreProvider,
 {
     Err(Error::internal(
         "unix sockets are unsupported on this platform",
