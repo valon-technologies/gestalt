@@ -7,29 +7,9 @@ import tempfile
 from dataclasses import dataclass
 from typing import Final
 
-BUNDLED_CONFIG_NAME: Final[str] = "gestalt-runtime.json"
+from ._runtime import BUNDLED_CONFIG_NAME, parse_plugin_target
+
 USAGE: Final[str] = "usage: python -m gestalt._build ROOT MODULE[:ATTRIBUTE] OUTPUT PLUGIN_NAME RUNTIME_KIND GOOS GOARCH"
-
-
-@dataclass(frozen=True)
-class PluginTarget:
-    module_name: str
-    attribute_name: str | None = None
-
-
-def parse_plugin_target(target: str) -> PluginTarget:
-    module_name, sep, attribute_name = target.partition(":")
-    module_name = module_name.strip()
-    attribute_name = attribute_name.strip() or None
-    if not module_name:
-        raise RuntimeError("tool.gestalt.plugin must be in module or module:attribute form")
-    if sep and attribute_name is None:
-        raise RuntimeError("tool.gestalt.plugin attribute is required when ':' is present")
-
-    return PluginTarget(
-        module_name=module_name,
-        attribute_name=attribute_name,
-    )
 
 
 def write_bundled_plugin_config(
