@@ -119,6 +119,21 @@ jobs:
       download-artifact-pattern: 'gestaltd-*'
 
   publish-image:
+    name: Publish Docker Image (static)
+    needs: build
+    uses: ./.github/workflows/publish-dockerhub-image.yml
+    secrets: inherit
+    with:
+      image-name: valontechnologies/gestaltd
+      image-url: https://hub.docker.com/r/valontechnologies/gestaltd
+      dockerfile: gestaltd/Dockerfile
+      version-prefix: 'gestaltd/v'
+      short-description: Platform for self-hostable, configurable integrations and tooling
+      readme-filepath: docs/dockerhub/gestaltd.md
+      platforms: 'linux/amd64,linux/arm64,linux/arm/v7'
+      target: static
+
+  publish-image-alpine:
     name: Publish Docker Image (Alpine)
     needs: build
     uses: ./.github/workflows/publish-dockerhub-image.yml
@@ -131,6 +146,7 @@ jobs:
       short-description: Platform for self-hostable, configurable integrations and tooling
       readme-filepath: docs/dockerhub/gestaltd.md
       platforms: 'linux/amd64,linux/arm64,linux/arm/v7'
+      tag-suffix: '-alpine'
       target: alpine
 
   publish-image-debian:
@@ -149,25 +165,9 @@ jobs:
       tag-suffix: '-debian'
       target: debian
 
-  publish-image-scratch:
-    name: Publish Docker Image (scratch)
-    needs: build
-    uses: ./.github/workflows/publish-dockerhub-image.yml
-    secrets: inherit
-    with:
-      image-name: valontechnologies/gestaltd
-      image-url: https://hub.docker.com/r/valontechnologies/gestaltd
-      dockerfile: gestaltd/Dockerfile
-      version-prefix: 'gestaltd/v'
-      short-description: Platform for self-hostable, configurable integrations and tooling
-      readme-filepath: docs/dockerhub/gestaltd.md
-      platforms: 'linux/amd64,linux/arm64,linux/arm/v7'
-      tag-suffix: '-scratch'
-      target: scratch
-
   update-formula:
     name: Update Homebrew Formula, Chart & OCI Publish
-    needs: [release, publish-image, publish-image-debian, publish-image-scratch]
+    needs: [release, publish-image, publish-image-alpine, publish-image-debian]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

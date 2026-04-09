@@ -17,7 +17,29 @@ RUN mkdir -p /out && \
     cd gestaltd && \
     CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} GOARM=${TARGETVARIANT#v} go build -o /out/gestaltd ./cmd/gestaltd
 
-# --- Alpine (default) ---
+# --- Static (default) ---
+FROM scratch AS static
+ARG GESTALT_VERSION
+ARG GESTALT_REVISION
+ARG GESTALT_CREATED
+ARG GESTALT_SOURCE
+ARG GESTALT_DOCUMENTATION
+ARG GESTALT_URL
+COPY --from=build-binary /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
+COPY --from=build-binary /out/gestaltd /gestaltd
+LABEL org.opencontainers.image.title="gestaltd" \
+      org.opencontainers.image.description="Platform for self-hostable, configurable integrations and tooling" \
+      org.opencontainers.image.source="${GESTALT_SOURCE}" \
+      org.opencontainers.image.documentation="${GESTALT_DOCUMENTATION}" \
+      org.opencontainers.image.url="${GESTALT_URL}" \
+      org.opencontainers.image.version="${GESTALT_VERSION}" \
+      org.opencontainers.image.revision="${GESTALT_REVISION}" \
+      org.opencontainers.image.created="${GESTALT_CREATED}"
+EXPOSE 8080
+ENTRYPOINT ["/gestaltd"]
+CMD ["serve", "--locked", "--config", "/etc/gestalt/config.yaml", "--artifacts-dir", "/data"]
+
+# --- Alpine ---
 FROM alpine:3.23.3@sha256:25109184c71bdad752c8312a8623239686a9a2071e8825f20acb8f2198c3f659 AS alpine
 ARG GESTALT_VERSION
 ARG GESTALT_REVISION
@@ -52,7 +74,7 @@ ARG GESTALT_URL
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 COPY --from=build-binary /out/ /usr/local/bin/
-RUN mkdir -p /data && chown nobody:nobody /data
+RUN mkdir -p /data && chown nobody:nogroup /data
 LABEL org.opencontainers.image.title="gestaltd" \
       org.opencontainers.image.description="Platform for self-hostable, configurable integrations and tooling" \
       org.opencontainers.image.source="${GESTALT_SOURCE}" \
@@ -61,29 +83,7 @@ LABEL org.opencontainers.image.title="gestaltd" \
       org.opencontainers.image.version="${GESTALT_VERSION}" \
       org.opencontainers.image.revision="${GESTALT_REVISION}" \
       org.opencontainers.image.created="${GESTALT_CREATED}"
-USER nobody:nobody
+USER nobody:nogroup
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/gestaltd"]
-CMD ["serve", "--locked", "--config", "/etc/gestalt/config.yaml", "--artifacts-dir", "/data"]
-
-# --- Scratch (minimal) ---
-FROM scratch AS scratch
-ARG GESTALT_VERSION
-ARG GESTALT_REVISION
-ARG GESTALT_CREATED
-ARG GESTALT_SOURCE
-ARG GESTALT_DOCUMENTATION
-ARG GESTALT_URL
-COPY --from=build-binary /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=build-binary /out/gestaltd /gestaltd
-LABEL org.opencontainers.image.title="gestaltd" \
-      org.opencontainers.image.description="Platform for self-hostable, configurable integrations and tooling" \
-      org.opencontainers.image.source="${GESTALT_SOURCE}" \
-      org.opencontainers.image.documentation="${GESTALT_DOCUMENTATION}" \
-      org.opencontainers.image.url="${GESTALT_URL}" \
-      org.opencontainers.image.version="${GESTALT_VERSION}" \
-      org.opencontainers.image.revision="${GESTALT_REVISION}" \
-      org.opencontainers.image.created="${GESTALT_CREATED}"
-EXPOSE 8080
-ENTRYPOINT ["/gestaltd"]
 CMD ["serve", "--locked", "--config", "/etc/gestalt/config.yaml", "--artifacts-dir", "/data"]
