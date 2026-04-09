@@ -254,6 +254,27 @@ func TestFindAssetMatchesGenericArchiveName(t *testing.T) {
 	}
 }
 
+func TestFindAssetMatchesLinuxLibCSpecificArchiveWhenLibCUnknown(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("linux-specific libc archive matching")
+	}
+
+	t.Parallel()
+
+	want := platformAssetPrefix + testPlugin + "_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + "_glibc.tar.gz"
+	assets := []releaseAsset{
+		{Name: want, URL: "http://x", BrowserDownloadURL: "http://x"},
+	}
+
+	got, err := findAssetForLibC(assets, testPlugin, testVersion, "")
+	if err != nil {
+		t.Fatalf("findAssetForLibC() error: %v", err)
+	}
+	if got.Name != want {
+		t.Fatalf("findAssetForLibC() = %q, want %q", got.Name, want)
+	}
+}
+
 func TestFindAssetVersionBeforePluginMatch(t *testing.T) {
 	t.Parallel()
 

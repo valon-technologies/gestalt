@@ -25,6 +25,8 @@ const (
 	ManifestFormatYAML = "yaml"
 )
 
+var currentArtifactRuntimeLibC = CurrentRuntimeLibC
+
 func FindManifestFile(dir string) (string, error) {
 	for _, name := range ManifestFiles {
 		p := filepath.Join(dir, name)
@@ -71,15 +73,32 @@ func decodeManifest(data []byte, format string, sourceMode bool) (*pluginmanifes
 			return nil, err
 		}
 		return &manifest, nil
-	}
-	providerManifest, err := decodeProviderManifestWire(data, format)
-	if err != nil {
-		return nil, decodeStrict(data, format, "manifest", &manifest)
-	}
-	if err := validateManifest(providerManifest, sourceMode); err != nil {
+	} else {
+		if providerManifest, providerErr := decodeProviderManifestWire(data, format); providerErr == nil {
+			if err := validateManifest(providerManifest, sourceMode); err != nil {
+				return nil, err
+			}
+			return providerManifest, nil
+		}
+
+		compatData, changed, compatErr := normalizeLegacyManifestCompatibility(data, format)
+		if compatErr == nil && changed {
+			if compatStrictErr := decodeStrict(compatData, format, "manifest", &manifest); compatStrictErr == nil {
+				if err := validateManifest(&manifest, sourceMode); err != nil {
+					return nil, err
+				}
+				return &manifest, nil
+			}
+			if providerManifest, providerErr := decodeProviderManifestWire(compatData, format); providerErr == nil {
+				if err := validateManifest(providerManifest, sourceMode); err != nil {
+					return nil, err
+				}
+				return providerManifest, nil
+			}
+		}
+
 		return nil, err
 	}
-	return providerManifest, nil
 }
 
 func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
@@ -300,8 +319,9 @@ func CurrentPlatformArtifact(manifest *pluginmanifestv1.Manifest) (*pluginmanife
 	if manifest == nil {
 		return nil, fmt.Errorf("manifest is required")
 	}
-	currentLibC := CurrentRuntimeLibC()
+	currentLibC := currentArtifactRuntimeLibC()
 	var generic *pluginmanifestv1.Artifact
+	libcSpecific := make([]*pluginmanifestv1.Artifact, 0, 2)
 	for _, artifact := range manifest.Artifacts {
 		if artifact.OS != runtime.GOOS || artifact.Arch != runtime.GOARCH {
 			continue
@@ -310,6 +330,9 @@ func CurrentPlatformArtifact(manifest *pluginmanifestv1.Manifest) (*pluginmanife
 		case runtime.GOOS == "linux" && currentLibC != "" && artifact.LibC == currentLibC:
 			artifact := artifact
 			return &artifact, nil
+		case runtime.GOOS == "linux" && currentLibC == "" && artifact.LibC != "":
+			artifact := artifact
+			libcSpecific = append(libcSpecific, &artifact)
 		case artifact.LibC == "":
 			artifact := artifact
 			generic = &artifact
@@ -317,6 +340,15 @@ func CurrentPlatformArtifact(manifest *pluginmanifestv1.Manifest) (*pluginmanife
 	}
 	if generic != nil {
 		return generic, nil
+	}
+	if runtime.GOOS == "linux" && currentLibC == "" {
+		switch len(libcSpecific) {
+		case 1:
+			return libcSpecific[0], nil
+		case 0:
+		default:
+			return nil, fmt.Errorf("multiple artifacts for current platform %s/%s", runtime.GOOS, runtime.GOARCH)
+		}
 	}
 	return nil, fmt.Errorf("no artifact for current platform %s/%s", runtime.GOOS, runtime.GOARCH)
 }
@@ -610,6 +642,89 @@ func decodeStrict(data []byte, format, subject string, target any) error {
 	default:
 		return fmt.Errorf("unsupported %s format %q", subject, format)
 	}
+}
+
+func normalizeLegacyManifestCompatibility(data []byte, format string) ([]byte, bool, error) {
+	root := make(map[string]any)
+	switch format {
+	case ManifestFormatJSON:
+		if err := json.Unmarshal(data, &root); err != nil {
+			return nil, false, err
+		}
+	case ManifestFormatYAML:
+		if err := yaml.Unmarshal(data, &root); err != nil {
+			return nil, false, err
+		}
+	default:
+		return nil, false, fmt.Errorf("unsupported manifest format %q", format)
+	}
+
+	changed := false
+	if _, ok := root["kinds"]; ok {
+		delete(root, "kinds")
+		changed = true
+	}
+	if normalizeLegacyProviderResponseMapping(root) {
+		changed = true
+	}
+	if !changed {
+		return data, false, nil
+	}
+
+	switch format {
+	case ManifestFormatJSON:
+		normalized, err := json.MarshalIndent(root, "", "  ")
+		if err != nil {
+			return nil, false, err
+		}
+		return append(normalized, '\n'), true, nil
+	case ManifestFormatYAML:
+		normalized, err := yaml.Marshal(root)
+		if err != nil {
+			return nil, false, err
+		}
+		return normalized, true, nil
+	default:
+		return nil, false, fmt.Errorf("unsupported manifest format %q", format)
+	}
+}
+
+func normalizeLegacyProviderResponseMapping(root map[string]any) bool {
+	provider, ok := root["provider"].(map[string]any)
+	if !ok {
+		return false
+	}
+	responseMapping, ok := provider["response_mapping"].(map[string]any)
+	if !ok {
+		return false
+	}
+	pagination, ok := responseMapping["pagination"].(map[string]any)
+	if !ok {
+		return false
+	}
+
+	changed := false
+	if path, ok := pagination["has_more_path"].(string); ok {
+		delete(pagination, "has_more_path")
+		if _, exists := pagination["has_more"]; !exists {
+			pagination["has_more"] = map[string]any{
+				"source": "body",
+				"path":   path,
+			}
+		}
+		changed = true
+	}
+	if path, ok := pagination["cursor_path"].(string); ok {
+		delete(pagination, "cursor_path")
+		if _, exists := pagination["cursor"]; !exists {
+			pagination["cursor"] = map[string]any{
+				"source": "body",
+				"path":   path,
+			}
+		}
+		changed = true
+	}
+	return changed
 }
 
 func ManifestEqual(a, b *pluginmanifestv1.Manifest) bool {

@@ -127,11 +127,14 @@ func (r *GitHubResolver) fetchRelease(ctx context.Context, client *http.Client, 
 }
 
 func findAsset(assets []releaseAsset, plugin, version string) (releaseAsset, error) {
+	return findAssetForLibC(assets, plugin, version, pluginpkg.CurrentRuntimeLibC())
+}
+
+func findAssetForLibC(assets []releaseAsset, plugin, version, libc string) (releaseAsset, error) {
 	if plugin == "" {
 		return releaseAsset{}, fmt.Errorf("plugin name is required")
 	}
-	currentLibC := pluginpkg.CurrentRuntimeLibC()
-	for _, expectedName := range candidatePlatformAssetNames(plugin, version, currentLibC) {
+	for _, expectedName := range candidatePlatformAssetNames(plugin, version, libc) {
 		if asset, ok := findAssetByName(assets, expectedName); ok {
 			return asset, nil
 		}
@@ -257,7 +260,7 @@ func platformAliases(aliasMap map[string][]string, name string) []string {
 }
 
 func platformSuffixCandidates() []string {
-	suffixes := make([]string, 0, 8)
+	suffixes := make([]string, 0, 24)
 	goosAliases := platformAliases(platformOSAliases, runtime.GOOS)
 	goarchAliases := platformAliases(platformArchAliases, runtime.GOARCH)
 	for _, goos := range goosAliases {
@@ -265,6 +268,13 @@ func platformSuffixCandidates() []string {
 			for _, leadSep := range platformSeparators {
 				for _, midSep := range platformSeparators {
 					suffixes = append(suffixes, leadSep+goos+midSep+goarch)
+					if runtime.GOOS == "linux" {
+						for _, libc := range []string{pluginpkg.LinuxLibCGLibC, pluginpkg.LinuxLibCMusl} {
+							for _, libSep := range platformSeparators {
+								suffixes = append(suffixes, leadSep+goos+midSep+goarch+libSep+libc)
+							}
+						}
+					}
 				}
 			}
 		}
