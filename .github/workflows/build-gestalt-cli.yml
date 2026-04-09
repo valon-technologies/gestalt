@@ -7,9 +7,12 @@ on:
     paths:
       - 'gestalt/**'
       - '.github/workflows/build-gestalt-cli.yml'
+      - '.github/workflows/rust-build-matrix.yml'
   pull_request:
     paths:
       - 'gestalt/**'
+      - '.github/workflows/build-gestalt-cli.yml'
+      - '.github/workflows/rust-build-matrix.yml'
 
   workflow_dispatch:
 

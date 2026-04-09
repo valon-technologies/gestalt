@@ -85,41 +85,43 @@ jobs:
       - name: Parse checksums
         id: checksums
         run: |
-          for platform in macos-arm64 macos-x86_64 linux-arm64 linux-x86_64; do
-            hash=$(awk '{print $1}' "checksums/gestalt-${platform}.tar.gz.sha256")
-            echo "${platform}=${hash}" >> "$GITHUB_OUTPUT"
-          done
+          {
+            echo "macos_arm64=$(awk '{print $1}' checksums/gestalt-macos-arm64.tar.gz.sha256)"
+            echo "macos_x86_64=$(awk '{print $1}' checksums/gestalt-macos-x86_64.tar.gz.sha256)"
+            echo "linux_arm64_musl=$(awk '{print $1}' checksums/gestalt-linux-arm64-musl.tar.gz.sha256)"
+            echo "linux_x86_64_musl=$(awk '{print $1}' checksums/gestalt-linux-x86_64-musl.tar.gz.sha256)"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Update formula
         env:
           VERSION: ${{ steps.version.outputs.version }}
           TAG: ${{ github.ref_name }}
-          SHA_MACOS_ARM64: ${{ steps.checksums.outputs.macos-arm64 }}
-          SHA_MACOS_X86: ${{ steps.checksums.outputs.macos-x86_64 }}
-          SHA_LINUX_ARM64: ${{ steps.checksums.outputs.linux-arm64 }}
-          SHA_LINUX_X86: ${{ steps.checksums.outputs.linux-x86_64 }}
+          SHA_MACOS_ARM64: ${{ steps.checksums.outputs.macos_arm64 }}
+          SHA_MACOS_X86_64: ${{ steps.checksums.outputs.macos_x86_64 }}
+          SHA_LINUX_ARM64_MUSL: ${{ steps.checksums.outputs.linux_arm64_musl }}
+          SHA_LINUX_X86_64_MUSL: ${{ steps.checksums.outputs.linux_x86_64_musl }}
         run: |
           FORMULA="Formula/gestalt.rb"
           OLD_VERSION=$(grep '^\s*version ' "$FORMULA" | sed 's/.*version "\(.*\)"/\1/')
 
           sed -i "s/version \"${OLD_VERSION}\"/version \"${VERSION}\"/" "$FORMULA"
-          perl -0pi -e 's{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestalt-macos-arm64\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestalt-macos-arm64.tar.gz}g; s{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestalt-macos-x86_64\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestalt-macos-x86_64.tar.gz}g; s{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestalt-linux-arm64\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestalt-linux-arm64.tar.gz}g; s{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestalt-linux-x86_64\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestalt-linux-x86_64.tar.gz}g' "$FORMULA"
+          perl -0pi -e 's{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestalt-macos-arm64\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestalt-macos-arm64.tar.gz}g; s{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestalt-macos-x86_64\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestalt-macos-x86_64.tar.gz}g; s{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestalt-linux-arm64(?:-musl)?\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestalt-linux-arm64-musl.tar.gz}g; s{https://github.com/valon-technologies/gestalt/releases/download/[^"]+/gestalt-linux-x86_64(?:-musl)?\.tar\.gz}{https://github.com/valon-technologies/gestalt/releases/download/'"$TAG"'/gestalt-linux-x86_64-musl.tar.gz}g' "$FORMULA"
 
           # Update SHA256 for each platform by matching the URL above it
           awk -v sha_macos_arm64="$SHA_MACOS_ARM64" \
-              -v sha_macos_x86="$SHA_MACOS_X86" \
-              -v sha_linux_arm64="$SHA_LINUX_ARM64" \
-              -v sha_linux_x86="$SHA_LINUX_X86" \
+              -v sha_macos_x86_64="$SHA_MACOS_X86_64" \
+              -v sha_linux_arm64_musl="$SHA_LINUX_ARM64_MUSL" \
+              -v sha_linux_x86_64_musl="$SHA_LINUX_X86_64_MUSL" \
           '
           /gestalt-macos-arm64\.tar\.gz/ { found="macos-arm64" }
-          /gestalt-macos-x86_64\.tar\.gz/ { found="macos-x86" }
-          /gestalt-linux-arm64\.tar\.gz/ { found="linux-arm64" }
-          /gestalt-linux-x86_64\.tar\.gz/ { found="linux-x86" }
+          /gestalt-macos-x86_64\.tar\.gz/ { found="macos-x86_64" }
+          /gestalt-linux-arm64(-musl)?\.tar\.gz/ { found="linux-arm64-musl" }
+          /gestalt-linux-x86_64(-musl)?\.tar\.gz/ { found="linux-x86_64-musl" }
           /sha256 "/ {
             if (found == "macos-arm64") { sub(/"[^"]*"/, "\"" sha_macos_arm64 "\"") }
-            if (found == "macos-x86") { sub(/"[^"]*"/, "\"" sha_macos_x86 "\"") }
-            if (found == "linux-arm64") { sub(/"[^"]*"/, "\"" sha_linux_arm64 "\"") }
-            if (found == "linux-x86") { sub(/"[^"]*"/, "\"" sha_linux_x86 "\"") }
+            if (found == "macos-x86_64") { sub(/"[^"]*"/, "\"" sha_macos_x86_64 "\"") }
+            if (found == "linux-arm64-musl") { sub(/"[^"]*"/, "\"" sha_linux_arm64_musl "\"") }
+            if (found == "linux-x86_64-musl") { sub(/"[^"]*"/, "\"" sha_linux_x86_64_musl "\"") }
             found=""
           }
           { print }

@@ -9,8 +9,8 @@ FROM --platform=$BUILDPLATFORM alpine:3.23.3@sha256:25109184c71bdad752c8312a8623
 ARG TARGETARCH
 COPY dist/gestalt-linux-*.tar.gz /dist/
 RUN case "$TARGETARCH" in \
-      amd64) archive=/dist/gestalt-linux-x86_64.tar.gz ;; \
-      arm64) archive=/dist/gestalt-linux-arm64.tar.gz ;; \
+      amd64) archive=/dist/gestalt-linux-x86_64-musl.tar.gz ;; \
+      arm64) archive=/dist/gestalt-linux-arm64-musl.tar.gz ;; \
       *) echo "unsupported TARGETARCH: $TARGETARCH" >&2; exit 1 ;; \
     esac && \
     mkdir -p /out && \
