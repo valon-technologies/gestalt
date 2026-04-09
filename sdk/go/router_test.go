@@ -2,6 +2,7 @@ package gestalt_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 	"time"
@@ -122,6 +123,24 @@ func TestRouterOperationExecution(t *testing.T) {
 			},
 			(*execProvider).echo,
 		),
+		gestalt.Register(
+			gestalt.Operation[struct{}, struct{}]{
+				ID:     "bad_request",
+				Method: http.MethodPost,
+			},
+			func(*execProvider, context.Context, struct{}, gestalt.Request) (gestalt.Response[struct{}], error) {
+				return gestalt.Response[struct{}]{}, gestalt.Error(http.StatusBadRequest, "invalid input")
+			},
+		),
+		gestalt.Register(
+			gestalt.Operation[struct{}, struct{}]{
+				ID:     "plain_error",
+				Method: http.MethodPost,
+			},
+			func(*execProvider, context.Context, struct{}, gestalt.Request) (gestalt.Response[struct{}], error) {
+				return gestalt.Response[struct{}]{}, errors.New("boom")
+			},
+		),
 	)
 
 	provider := &execProvider{}
@@ -144,6 +163,28 @@ func TestRouterOperationExecution(t *testing.T) {
 	}
 	if result.Status != http.StatusNotFound {
 		t.Fatalf("nonexistent status = %d, want %d", result.Status, http.StatusNotFound)
+	}
+
+	result, err = router.Execute(ctx, provider, "bad_request", nil, "tok")
+	if err != nil {
+		t.Fatalf("Execute(bad_request): %v", err)
+	}
+	if result.Status != http.StatusBadRequest {
+		t.Fatalf("bad_request status = %d, want %d", result.Status, http.StatusBadRequest)
+	}
+	if result.Body != `{"error":"invalid input"}` {
+		t.Fatalf("bad_request body = %q, want %q", result.Body, `{"error":"invalid input"}`)
+	}
+
+	result, err = router.Execute(ctx, provider, "plain_error", nil, "tok")
+	if err != nil {
+		t.Fatalf("Execute(plain_error): %v", err)
+	}
+	if result.Status != http.StatusInternalServerError {
+		t.Fatalf("plain_error status = %d, want %d", result.Status, http.StatusInternalServerError)
+	}
+	if result.Body != `{"error":"boom"}` {
+		t.Fatalf("plain_error body = %q, want %q", result.Body, `{"error":"boom"}`)
 	}
 
 	var nilRouter *gestalt.Router[execProvider]

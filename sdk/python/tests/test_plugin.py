@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from dataclasses import dataclass
 
-from gestalt import OK, Plugin, Request, Response
+from gestalt import OK, Error, Plugin, Request, Response
 
 
 class PluginOperationTests(unittest.TestCase):
@@ -123,16 +123,24 @@ class PluginOperationTests(unittest.TestCase):
         self.assertEqual(json.loads(result.body), {"async": "result"})
 
     def test_handler_exception_returns_500(self) -> None:
-        """A handler that raises should return 500 with the error message."""
+        """Handler exceptions should preserve explicit statuses and default to 500 otherwise."""
         plugin = Plugin("test-plugin")
 
         @plugin.operation
         def broken() -> None:
             raise RuntimeError("something broke")
 
+        @plugin.operation
+        def missing() -> None:
+            raise Error(404, "record not found")
+
         result = plugin.execute("broken", {}, Request())
         self.assertEqual(result.status, 500)
         self.assertIn("something broke", json.loads(result.body)["error"])
+
+        result = plugin.execute("missing", {}, Request())
+        self.assertEqual(result.status, 404)
+        self.assertEqual(json.loads(result.body), {"error": "record not found"})
 
 
 class PluginConfigureTests(unittest.TestCase):
