@@ -52,9 +52,9 @@ datastore:
     dsn: ${POSTGRES_DSN}
 ```
 
-## Secret Managers (built-in)
+## Secret Managers
 
-Secret managers are compiled into the binary. They resolve `secret://` references and `${VAR}` expansions during bootstrap, before provider runtime bootstrapping is available.
+The following secret managers are compiled into the binary. They resolve `secret://` references during bootstrap. Custom secrets providers can also be written using the Go SDK's `SecretsProvider` interface and loaded as external provider processes, the same way auth and datastore providers work.
 
 | Name | Purpose |
 | --- | --- |
