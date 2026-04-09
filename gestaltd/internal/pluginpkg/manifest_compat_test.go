@@ -169,7 +169,7 @@ func TestCurrentPlatformArtifact_AllowsSingleLinuxLibCSpecificArtifactWhenLibCUn
 	}
 }
 
-func TestCurrentPlatformArtifact_RejectsAmbiguousLinuxLibCSpecificArtifactsWhenLibCUnknown(t *testing.T) {
+func TestCurrentPlatformArtifact_PrefersMuslWhenLinuxLibCUnknownAndMultipleSpecificArtifactsExist(t *testing.T) {
 	t.Parallel()
 
 	manifest := &pluginmanifestv1.Manifest{
@@ -200,8 +200,12 @@ func TestCurrentPlatformArtifact_RejectsAmbiguousLinuxLibCSpecificArtifactsWhenL
 		}
 		return
 	}
-	if _, err := CurrentPlatformArtifact(manifest, ""); err == nil {
-		t.Fatal("expected ambiguous linux libc-specific artifacts to fail")
+	artifact, err := CurrentPlatformArtifact(manifest, "")
+	if err != nil {
+		t.Fatalf("CurrentPlatformArtifact: %v", err)
+	}
+	if artifact.LibC != LinuxLibCMusl {
+		t.Fatalf("artifact libc = %q, want %q", artifact.LibC, LinuxLibCMusl)
 	}
 }
 

@@ -188,7 +188,19 @@ func genericAssetName(plugin, version string) string {
 }
 
 func candidatePlatformAssetNames(plugin, version, libc string) []string {
-	names := []string{platformAssetName(plugin, version, libc)}
+	names := make([]string, 0, 4)
+	switch {
+	case runtime.GOOS == "linux" && libc == "":
+		// Minimal Linux images may not expose libc detection helpers like ldd.
+		// Prefer musl when both libc-specific assets are present because it is the
+		// safer portable choice for scratch-style runtimes.
+		names = append(names,
+			platformAssetName(plugin, version, pluginpkg.LinuxLibCMusl),
+			platformAssetName(plugin, version, pluginpkg.LinuxLibCGLibC),
+		)
+	default:
+		names = append(names, platformAssetName(plugin, version, libc))
+	}
 	if runtime.GOOS == "linux" && libc != "" {
 		names = append(names, fmt.Sprintf("%s%s_v%s_%s.tar.gz", platformAssetPrefix, plugin, version, pluginpkg.PlatformArchiveSuffix(runtime.GOOS, runtime.GOARCH, "")))
 	}

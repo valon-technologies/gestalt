@@ -322,6 +322,7 @@ func CurrentPlatformArtifact(manifest *pluginmanifestv1.Manifest, runtimeLibC st
 	}
 	currentLibC := runtimeLibC
 	var generic *pluginmanifestv1.Artifact
+	var muslSpecific *pluginmanifestv1.Artifact
 	libcSpecific := make([]*pluginmanifestv1.Artifact, 0, 2)
 	for _, artifact := range manifest.Artifacts {
 		if artifact.OS != runtime.GOOS || artifact.Arch != runtime.GOARCH {
@@ -333,6 +334,9 @@ func CurrentPlatformArtifact(manifest *pluginmanifestv1.Manifest, runtimeLibC st
 			return &artifact, nil
 		case runtime.GOOS == "linux" && currentLibC == "" && artifact.LibC != "":
 			artifact := artifact
+			if artifact.LibC == LinuxLibCMusl {
+				muslSpecific = &artifact
+			}
 			libcSpecific = append(libcSpecific, &artifact)
 		case artifact.LibC == "":
 			artifact := artifact
@@ -343,6 +347,9 @@ func CurrentPlatformArtifact(manifest *pluginmanifestv1.Manifest, runtimeLibC st
 		return generic, nil
 	}
 	if runtime.GOOS == "linux" && currentLibC == "" {
+		if muslSpecific != nil {
+			return muslSpecific, nil
+		}
 		switch len(libcSpecific) {
 		case 1:
 			return libcSpecific[0], nil

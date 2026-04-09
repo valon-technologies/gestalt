@@ -275,6 +275,28 @@ func TestFindAssetMatchesLinuxLibCSpecificArchiveWhenLibCUnknown(t *testing.T) {
 	}
 }
 
+func TestFindAssetPrefersMuslLinuxAssetWhenLibCUnknownAndBothSpecificArchivesExist(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("linux-specific libc archive matching")
+	}
+
+	t.Parallel()
+
+	want := platformAssetPrefix + testPlugin + "_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + "_musl.tar.gz"
+	assets := []releaseAsset{
+		{Name: platformAssetPrefix + testPlugin + "_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + "_glibc.tar.gz", URL: "http://glibc", BrowserDownloadURL: "http://glibc"},
+		{Name: want, URL: "http://musl", BrowserDownloadURL: "http://musl"},
+	}
+
+	got, err := findAssetForLibC(assets, testPlugin, testVersion, "")
+	if err != nil {
+		t.Fatalf("findAssetForLibC() error: %v", err)
+	}
+	if got.Name != want {
+		t.Fatalf("findAssetForLibC() = %q, want %q", got.Name, want)
+	}
+}
+
 func TestFindAssetVersionBeforePluginMatch(t *testing.T) {
 	t.Parallel()
 
