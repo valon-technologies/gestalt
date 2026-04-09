@@ -101,15 +101,18 @@ type execInput struct {
 }
 
 type execOutput struct {
-	Echo string `json:"echo"`
+	Echo          string `json:"echo"`
+	Region        string `json:"region"`
+	RegionPresent bool   `json:"region_present"`
 }
 
 type execProvider struct{}
 
 func (p *execProvider) Configure(context.Context, string, map[string]any) error { return nil }
 
-func (p *execProvider) echo(_ context.Context, in execInput, _ gestalt.Request) (gestalt.Response[execOutput], error) {
-	return gestalt.OK(execOutput{Echo: in.Value}), nil
+func (p *execProvider) echo(_ context.Context, in execInput, req gestalt.Request) (gestalt.Response[execOutput], error) {
+	region, ok := req.ConnectionParam("region")
+	return gestalt.OK(execOutput{Echo: in.Value, Region: region, RegionPresent: ok}), nil
 }
 
 func TestRouterOperationExecution(t *testing.T) {
@@ -153,8 +156,16 @@ func TestRouterOperationExecution(t *testing.T) {
 	if result.Status != http.StatusOK {
 		t.Fatalf("status = %d, want %d", result.Status, http.StatusOK)
 	}
-	if result.Body != `{"echo":"hello"}` {
-		t.Fatalf("body = %q, want %q", result.Body, `{"echo":"hello"}`)
+	if result.Body != `{"echo":"hello","region":"","region_present":false}` {
+		t.Fatalf("body = %q, want %q", result.Body, `{"echo":"hello","region":"","region_present":false}`)
+	}
+
+	result, err = router.Execute(gestalt.WithConnectionParams(ctx, map[string]string{"region": "iad"}), provider, "echo", map[string]any{"value": "hello"}, "tok")
+	if err != nil {
+		t.Fatalf("Execute(with params): %v", err)
+	}
+	if result.Body != `{"echo":"hello","region":"iad","region_present":true}` {
+		t.Fatalf("body with params = %q, want %q", result.Body, `{"echo":"hello","region":"iad","region_present":true}`)
 	}
 
 	result, err = router.Execute(ctx, provider, "nonexistent", nil, "tok")

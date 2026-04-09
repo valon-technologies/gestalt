@@ -34,6 +34,8 @@ struct EchoOutput {
 
 #[tokio::test]
 async fn executes_registered_operation() {
+    assert_eq!(Request::default().connection_param("missing"), None);
+
     let router = Router::new()
         .register(
             Operation::<EchoInput, EchoOutput>::new("echo").description("Echo the message"),
@@ -125,7 +127,10 @@ async fn greet(
     let name = input.name.unwrap_or_else(|| "World".to_owned());
     Ok(gestalt::ok(GreetOutput {
         message: format!("{greeting}, {name}!"),
-        api_key: request.connection_param("api_key").to_owned(),
+        api_key: request
+            .connection_param("api_key")
+            .unwrap_or_default()
+            .to_owned(),
     }))
 }
 

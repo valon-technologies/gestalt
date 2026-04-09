@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { ok, request, response } from "../src/api.ts";
+import { connectionParam, ok, request, response } from "../src/api.ts";
 import { definePlugin, operation } from "../src/plugin.ts";
 import { s } from "../src/schema.ts";
 
@@ -48,6 +48,8 @@ test("plugin executes operations and exposes catalog metadata", async () => {
     total: 3,
     token: "tok",
   });
+  expect(connectionParam(request("tok", { region: "iad" }), "region")).toBe("iad");
+  expect(connectionParam(request(), "missing")).toBeUndefined();
 
   const invalid = await plugin.execute("sum", { a: "bad" }, request());
   expect(invalid.status).toBe(400);

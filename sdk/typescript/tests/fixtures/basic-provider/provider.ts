@@ -1,4 +1,4 @@
-import { definePlugin, ok, operation, s } from "../../../src/index.ts";
+import { connectionParam, definePlugin, ok, operation, s } from "../../../src/index.ts";
 
 let configuredName = "";
 let configuredConfig: Record<string, unknown> = {};
@@ -13,14 +13,15 @@ export const plugin = definePlugin({
     };
   },
   sessionCatalog(request) {
+    const scope = connectionParam(request, "scope");
     return {
       name: "fixture-session",
       operations: [
         {
           id: "session-hello",
           method: "GET",
-          title: request.connectionParams.scope
-            ? `Session Hello ${request.connectionParams.scope}`
+          title: scope
+            ? `Session Hello ${scope}`
             : "Session Hello",
         },
       ],
@@ -52,10 +53,11 @@ export const plugin = definePlugin({
         configuredRegion: s.string(),
       }),
       handler(input, request) {
+        const region = connectionParam(request, "region") ?? "";
         return ok({
           message: `Hello, ${input.name}${input.excited ? "!" : "."}`,
           configuredName,
-          region: request.connectionParams.region ?? "",
+          region,
           configuredRegion: String(configuredConfig.region ?? ""),
         });
       },

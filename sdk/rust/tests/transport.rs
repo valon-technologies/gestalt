@@ -48,7 +48,10 @@ impl Provider for TestProvider {
     ) -> gestalt_plugin_sdk::Result<Option<Catalog>> {
         Ok(Some(Catalog {
             name: "session-example".to_string(),
-            display_name: request.connection_param("tenant").to_string(),
+            display_name: request
+                .connection_param("tenant")
+                .unwrap_or_default()
+                .to_string(),
             description: String::new(),
             icon_svg: String::new(),
             operations: vec![CatalogOperation {

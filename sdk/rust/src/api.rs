@@ -13,11 +13,8 @@ pub struct Request {
 }
 
 impl Request {
-    pub fn connection_param(&self, name: &str) -> &str {
-        self.connection_params
-            .get(name)
-            .map(String::as_str)
-            .unwrap_or("")
+    pub fn connection_param(&self, name: &str) -> Option<&str> {
+        self.connection_params.get(name).map(String::as_str)
     }
 }
 

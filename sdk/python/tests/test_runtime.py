@@ -143,11 +143,11 @@ class ManifestNameTests(unittest.TestCase):
 
 
 class RequestTests(unittest.TestCase):
-    def test_connection_param_returns_value_or_empty_string(self) -> None:
+    def test_connection_param_returns_value_or_none(self) -> None:
         request = Request(connection_params={"region": "us-east-1"})
 
         self.assertEqual(request.connection_param("region"), "us-east-1")
-        self.assertEqual(request.connection_param("missing"), "")
+        self.assertIsNone(request.connection_param("missing"))
 
 
 class MainEntrypointTests(unittest.TestCase):
@@ -181,7 +181,7 @@ class MainEntrypointTests(unittest.TestCase):
         def dynamic_catalog(request: Request) -> Catalog:
             cat = Catalog(
                 name="session-source",
-                display_name=request.connection_param("tenant"),
+                display_name=request.connection_param("tenant") or "",
             )
             cat.operations.append(CatalogOperation(id="private_search", method="POST"))
             return cat
