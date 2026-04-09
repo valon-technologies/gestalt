@@ -20,18 +20,18 @@ Pre-built binaries are published for every release on GitHub.
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    Download `gestaltd-macos-amd64.tar.gz` from the [latest release](https://github.com/valon-technologies/gestalt/releases?q=gestaltd).
+    Download `gestaltd-macos-x86_64.tar.gz` from the [latest release](https://github.com/valon-technologies/gestalt/releases?q=gestaltd).
 
     ```sh
-    tar xzf gestaltd-macos-amd64.tar.gz
+    tar xzf gestaltd-macos-x86_64.tar.gz
     sudo mv gestaltd /usr/local/bin/
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    Download `gestaltd-linux-amd64.tar.gz` from the [latest release](https://github.com/valon-technologies/gestalt/releases?q=gestaltd).
+    Download `gestaltd-linux-x86_64.tar.gz` from the [latest release](https://github.com/valon-technologies/gestalt/releases?q=gestaltd).
 
     ```sh
-    tar xzf gestaltd-linux-amd64.tar.gz
+    tar xzf gestaltd-linux-x86_64.tar.gz
     sudo mv gestaltd /usr/local/bin/
     ```
   </Tabs.Tab>
@@ -55,6 +55,8 @@ gestaltd --version
 
 `gestalt` is the CLI for communicating with the Gestalt server.
 
+Linux CLI releases now use portable `musl` tarballs in the install examples below. If you are installing an older release that predates these artifacts, look for `gestalt-linux-x86_64.tar.gz` or `gestalt-linux-arm64.tar.gz` instead.
+
 ### Install
 
 <Tabs items={['macOS Apple Silicon', 'macOS Intel', 'Linux x86_64', 'Linux ARM64', 'Windows x86_64']}>
@@ -67,31 +69,31 @@ gestaltd --version
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    Download `gestalt-macos-amd64.tar.gz` from the [latest release](https://github.com/valon-technologies/gestalt/releases?q=gestalt+CLI).
+    Download `gestalt-macos-x86_64.tar.gz` from the [latest release](https://github.com/valon-technologies/gestalt/releases?q=gestalt+CLI).
 
     ```sh
-    tar xzf gestalt-macos-amd64.tar.gz
+    tar xzf gestalt-macos-x86_64.tar.gz
     sudo mv gestalt /usr/local/bin/
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    Download `gestalt-linux-amd64.tar.gz` from the [latest release](https://github.com/valon-technologies/gestalt/releases?q=gestalt+CLI).
+    Download `gestalt-linux-x86_64-musl.tar.gz` from the [latest release](https://github.com/valon-technologies/gestalt/releases?q=gestalt+CLI).
 
     ```sh
-    tar xzf gestalt-linux-amd64.tar.gz
+    tar xzf gestalt-linux-x86_64-musl.tar.gz
     sudo mv gestalt /usr/local/bin/
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    Download `gestalt-linux-arm64.tar.gz` from the [latest release](https://github.com/valon-technologies/gestalt/releases?q=gestalt+CLI).
+    Download `gestalt-linux-arm64-musl.tar.gz` from the [latest release](https://github.com/valon-technologies/gestalt/releases?q=gestalt+CLI).
 
     ```sh
-    tar xzf gestalt-linux-arm64.tar.gz
+    tar xzf gestalt-linux-arm64-musl.tar.gz
     sudo mv gestalt /usr/local/bin/
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    Download `gestalt-windows-amd64.zip` from the [latest release](https://github.com/valon-technologies/gestalt/releases?q=gestalt+CLI).
+    Download `gestalt-windows-x86_64.zip` from the [latest release](https://github.com/valon-technologies/gestalt/releases?q=gestalt+CLI).
 
     Extract the archive and place `gestalt.exe` on your `PATH`.
   </Tabs.Tab>
