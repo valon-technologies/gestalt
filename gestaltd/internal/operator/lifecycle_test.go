@@ -1247,33 +1247,7 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	}
 }
 
-func TestReadLockfile_RejectsV1(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	lockPath := filepath.Join(dir, "gestalt.lock.json")
-
-	lock := &Lockfile{
-		Version:   1,
-		Providers: make(map[string]LockProviderEntry),
-	}
-	if err := WriteLockfile(lockPath, lock); err != nil {
-		t.Fatalf("WriteLockfile: %v", err)
-	}
-
-	_, err := ReadLockfile(lockPath)
-	if err == nil {
-		t.Fatal("expected error for v1 lockfile")
-	}
-	if !strings.Contains(err.Error(), "unsupported lockfile version 1") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(err.Error(), "gestaltd init") {
-		t.Fatalf("error should mention gestaltd init: %v", err)
-	}
-}
-
-func TestResolveArchiveForPlatform_ExactMatch(t *testing.T) {
+func TestResolveArchiveForPlatform(t *testing.T) {
 	t.Parallel()
 
 	entry := LockEntry{
@@ -1281,66 +1255,38 @@ func TestResolveArchiveForPlatform_ExactMatch(t *testing.T) {
 			"darwin/arm64":      {URL: "https://example.com/darwin-arm64", SHA256: "abc"},
 			"linux/amd64":       {URL: "https://example.com/linux-amd64", SHA256: "def"},
 			"linux/amd64/glibc": {URL: "https://example.com/linux-amd64-glibc", SHA256: "ghi"},
+			"generic":           {URL: "https://example.com/generic", SHA256: "xyz"},
 		},
 	}
 
-	archive, ok := resolveArchiveForPlatform(entry, "darwin/arm64")
-	if !ok {
-		t.Fatal("expected match for darwin/arm64")
+	tests := []struct {
+		name     string
+		platform string
+		wantURL  string
+		wantOK   bool
+	}{
+		{"exact match", "darwin/arm64", "https://example.com/darwin-arm64", true},
+		{"exact match with libc", "linux/amd64/glibc", "https://example.com/linux-amd64-glibc", true},
+		{"fallback without libc", "linux/amd64/musl", "https://example.com/linux-amd64", true},
+		{"no match falls to generic", "windows/amd64", "https://example.com/generic", true},
 	}
-	if archive.URL != "https://example.com/darwin-arm64" {
-		t.Errorf("URL = %q, want darwin-arm64", archive.URL)
-	}
-}
-
-func TestResolveArchiveForPlatform_FallbackWithoutLibC(t *testing.T) {
-	t.Parallel()
-
-	entry := LockEntry{
-		Archives: map[string]LockArchive{
-			"linux/amd64": {URL: "https://example.com/linux-amd64", SHA256: "def"},
-		},
-	}
-
-	archive, ok := resolveArchiveForPlatform(entry, "linux/amd64/glibc")
-	if !ok {
-		t.Fatal("expected fallback match for linux/amd64/glibc -> linux/amd64")
-	}
-	if archive.URL != "https://example.com/linux-amd64" {
-		t.Errorf("URL = %q, want linux-amd64", archive.URL)
-	}
-}
-
-func TestResolveArchiveForPlatform_FallbackToGeneric(t *testing.T) {
-	t.Parallel()
-
-	entry := LockEntry{
-		Archives: map[string]LockArchive{
-			"generic": {URL: "https://example.com/generic", SHA256: "xyz"},
-		},
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			archive, ok := resolveArchiveForPlatform(entry, tt.platform)
+			if ok != tt.wantOK {
+				t.Fatalf("ok = %v, want %v", ok, tt.wantOK)
+			}
+			if ok && archive.URL != tt.wantURL {
+				t.Errorf("URL = %q, want %q", archive.URL, tt.wantURL)
+			}
+		})
 	}
 
-	archive, ok := resolveArchiveForPlatform(entry, "darwin/arm64")
-	if !ok {
-		t.Fatal("expected fallback to generic")
-	}
-	if archive.URL != "https://example.com/generic" {
-		t.Errorf("URL = %q, want generic", archive.URL)
-	}
-}
-
-func TestResolveArchiveForPlatform_NoMatch(t *testing.T) {
-	t.Parallel()
-
-	entry := LockEntry{
-		Archives: map[string]LockArchive{
-			"windows/amd64": {URL: "https://example.com/windows"},
-		},
-	}
-
-	_, ok := resolveArchiveForPlatform(entry, "darwin/arm64")
-	if ok {
-		t.Fatal("expected no match for darwin/arm64 when only windows is available")
+	// No match at all
+	sparse := LockEntry{Archives: map[string]LockArchive{"windows/amd64": {URL: "x"}}}
+	if _, ok := resolveArchiveForPlatform(sparse, "darwin/arm64"); ok {
+		t.Error("expected no match for darwin/arm64 when only windows is available")
 	}
 }
 

@@ -166,15 +166,21 @@ func (l *Lifecycle) InitAtPathWithPlatforms(configPath, artifactsDir string, pla
 		return nil, err
 	}
 
-	cfg, cfgErr := config.LoadAllowMissingEnv(configPath)
-	if cfgErr != nil {
-		return nil, cfgErr
-	}
-	paths := initPathsForConfigWithArtifactsDir(configPath, resolveArtifactsDir(configPath, cfg, artifactsDir))
-	if err := WriteLockfile(paths.lockfilePath, lock); err != nil {
+	lockPath := lockfilePathForConfig(configPath)
+	if err := WriteLockfile(lockPath, lock); err != nil {
 		return nil, err
 	}
 	return lock, nil
+}
+
+func lockfilePathForConfig(configPath string) string {
+	dir := filepath.Dir(configPath)
+	if !filepath.IsAbs(dir) {
+		if abs, err := filepath.Abs(dir); err == nil {
+			dir = abs
+		}
+	}
+	return filepath.Join(dir, InitLockfileName)
 }
 
 func (l *Lifecycle) LoadForExecutionAtPath(configPath string, locked bool) (*config.Config, map[string]string, error) {
@@ -1188,21 +1194,24 @@ func bindResolvedUIManifest(plugin *config.ProviderDef, manifestPath string, man
 }
 
 func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPaths, name string, plugin *config.ProviderDef, entry LockProviderEntry) error {
-	archive, archiveURL, archiveSHA, err := resolveLockedArchive(entry, name, "provider")
-	if err != nil {
-		return fmt.Errorf("provider %q: %w; run `gestaltd init --config %s`", name, err, paths.configPath)
+	platform := pluginpkg.CurrentPlatformString()
+	archive, ok := resolveArchiveForPlatform(entry, platform)
+	if !ok || archive.URL == "" {
+		return fmt.Errorf("no archive for platform %s for provider %q; run `gestaltd init --config %s`", platform, name, paths.configPath)
 	}
-	_ = archive
 
 	src, parseErr := sourceForPlugin(plugin)
 	if parseErr != nil {
 		src, parseErr = pluginsource.Parse(entry.Source)
 	}
-	var download *pluginpkg.DownloadResult
+	var (
+		download *pluginpkg.DownloadResult
+		err      error
+	)
 	if parseErr == nil && src.Host == pluginsource.HostGitHub {
-		download, err = ghresolver.DownloadResolvedAsset(ctx, http.DefaultClient, archiveURL, src.Token)
+		download, err = ghresolver.DownloadResolvedAsset(ctx, http.DefaultClient, archive.URL, src.Token)
 	} else {
-		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, archiveURL, nil)
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, archive.URL, nil)
 		if reqErr != nil {
 			return fmt.Errorf("create locked source plugin request for provider %q: %w", name, reqErr)
 		}
@@ -1212,8 +1221,8 @@ func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPat
 		return fmt.Errorf("download locked source plugin for provider %q: %w", name, err)
 	}
 	defer download.Cleanup()
-	if archiveSHA != "" && download.SHA256Hex != archiveSHA {
-		return fmt.Errorf("locked source plugin digest mismatch for provider %q: got %s, want %s", name, download.SHA256Hex, archiveSHA)
+	if archive.SHA256 != "" && download.SHA256Hex != archive.SHA256 {
+		return fmt.Errorf("locked source plugin digest mismatch for provider %q: got %s, want %s", name, download.SHA256Hex, archive.SHA256)
 	}
 
 	destDir := providerDestDir(paths, name)
@@ -1234,20 +1243,24 @@ func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPat
 }
 
 func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPaths, kind, name string, plugin *config.ProviderDef, entry LockEntry) error {
-	_, archiveURL, archiveSHA, err := resolveLockedArchive(entry, name, kind)
-	if err != nil {
-		return fmt.Errorf("%s %q: %w; run `gestaltd init --config %s`", kind, name, err, paths.configPath)
+	platform := pluginpkg.CurrentPlatformString()
+	archive, ok := resolveArchiveForPlatform(entry, platform)
+	if !ok || archive.URL == "" {
+		return fmt.Errorf("no archive for platform %s for %s %q; run `gestaltd init --config %s`", platform, kind, name, paths.configPath)
 	}
 
 	src, parseErr := sourceForPlugin(plugin)
 	if parseErr != nil {
 		src, parseErr = pluginsource.Parse(entry.Source)
 	}
-	var download *pluginpkg.DownloadResult
+	var (
+		download *pluginpkg.DownloadResult
+		err      error
+	)
 	if parseErr == nil && src.Host == pluginsource.HostGitHub {
-		download, err = ghresolver.DownloadResolvedAsset(ctx, http.DefaultClient, archiveURL, src.Token)
+		download, err = ghresolver.DownloadResolvedAsset(ctx, http.DefaultClient, archive.URL, src.Token)
 	} else {
-		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, archiveURL, nil)
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, archive.URL, nil)
 		if reqErr != nil {
 			return fmt.Errorf("create locked source plugin request for %s %q: %w", kind, name, reqErr)
 		}
@@ -1257,8 +1270,8 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 		return fmt.Errorf("download locked source plugin for %s %q: %w", kind, name, err)
 	}
 	defer download.Cleanup()
-	if archiveSHA != "" && download.SHA256Hex != archiveSHA {
-		return fmt.Errorf("locked source plugin digest mismatch for %s %q: got %s, want %s", kind, name, download.SHA256Hex, archiveSHA)
+	if archive.SHA256 != "" && download.SHA256Hex != archive.SHA256 {
+		return fmt.Errorf("locked source plugin digest mismatch for %s %q: got %s, want %s", kind, name, download.SHA256Hex, archive.SHA256)
 	}
 
 	var destDir string
@@ -1291,75 +1304,53 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 	return nil
 }
 
-// resolveLockedArchive resolves the archive URL and SHA256 for the current
-// platform from a lock entry's Archives map.
-func resolveLockedArchive(entry LockEntry, name, kind string) (LockArchive, string, string, error) {
-	platform := pluginpkg.CurrentPlatformString()
-	archive, ok := resolveArchiveForPlatform(entry, platform)
-	if !ok {
-		return LockArchive{}, "", "", fmt.Errorf("no archive for platform %s in lockfile for %s %q", platform, kind, name)
-	}
-	if archive.URL == "" {
-		return LockArchive{}, "", "", fmt.Errorf("archive URL missing for platform %s in lockfile for %s %q", platform, kind, name)
-	}
-	return archive, archive.URL, archive.SHA256, nil
-}
-
 // DownloadPlatformArchives downloads and hashes additional platform archives
 // from the lock entry URLs. It updates the Archives map in-place with the
 // verified SHA256 for each requested platform.
 func DownloadPlatformArchives(ctx context.Context, lock *Lockfile, platforms []struct{ GOOS, GOARCH, LibC string }) error {
-	allEntries := make([]*LockEntry, 0)
-	for i := range lock.Providers {
-		entry := lock.Providers[i]
-		allEntries = append(allEntries, &entry)
-		lock.Providers[i] = entry
-	}
-	if lock.Auth != nil {
-		allEntries = append(allEntries, lock.Auth)
-	}
-	if lock.Datastore != nil {
-		allEntries = append(allEntries, lock.Datastore)
-	}
-	if lock.Secrets != nil {
-		allEntries = append(allEntries, lock.Secrets)
-	}
-	if lock.UI != nil {
-		allEntries = append(allEntries, lock.UI)
-	}
-
 	for _, plat := range platforms {
 		platformKey := pluginpkg.PlatformString(plat.GOOS, plat.GOARCH, plat.LibC)
-		for _, entry := range allEntries {
-			if entry.Archives == nil {
-				continue
-			}
-			archive, ok := entry.Archives[platformKey]
-			if !ok || archive.URL == "" {
-				continue
-			}
-			if archive.SHA256 != "" {
-				continue
-			}
-			dl, err := ghresolver.DownloadResolvedAsset(ctx, http.DefaultClient, archive.URL, "")
-			if err != nil {
-				return fmt.Errorf("download archive for platform %s, source %s: %w", platformKey, entry.Source, err)
-			}
-			archive.SHA256 = dl.SHA256Hex
-			dl.Cleanup()
-			entry.Archives[platformKey] = archive
+		if err := hashPlatformInEntries(ctx, lock, platformKey); err != nil {
+			return err
 		}
 	}
+	return nil
+}
 
-	// Write back provider entries since we took copies
-	for i := range lock.Providers {
-		for _, e := range allEntries {
-			if lock.Providers[i].Source == e.Source && lock.Providers[i].Fingerprint == e.Fingerprint {
-				lock.Providers[i] = *e
-				break
-			}
+func hashPlatformInEntries(ctx context.Context, lock *Lockfile, platformKey string) error {
+	// Providers are a map — iterate, modify, write back.
+	for name, entry := range lock.Providers {
+		if err := hashArchiveEntry(ctx, &entry, platformKey); err != nil {
+			return err
+		}
+		lock.Providers[name] = entry
+	}
+	for _, entry := range []*LockEntry{lock.Auth, lock.Datastore, lock.Secrets, lock.UI} {
+		if entry == nil {
+			continue
+		}
+		if err := hashArchiveEntry(ctx, entry, platformKey); err != nil {
+			return err
 		}
 	}
+	return nil
+}
+
+func hashArchiveEntry(ctx context.Context, entry *LockEntry, platformKey string) error {
+	if entry.Archives == nil {
+		return nil
+	}
+	archive, ok := entry.Archives[platformKey]
+	if !ok || archive.URL == "" || archive.SHA256 != "" {
+		return nil
+	}
+	dl, err := ghresolver.DownloadResolvedAsset(ctx, http.DefaultClient, archive.URL, "")
+	if err != nil {
+		return fmt.Errorf("download archive for platform %s, source %s: %w", platformKey, entry.Source, err)
+	}
+	archive.SHA256 = dl.SHA256Hex
+	dl.Cleanup()
+	entry.Archives[platformKey] = archive
 	return nil
 }
 

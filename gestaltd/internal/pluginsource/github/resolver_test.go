@@ -266,12 +266,12 @@ func TestFindAssetMatchesLinuxLibCSpecificArchiveWhenLibCUnknown(t *testing.T) {
 		{Name: want, URL: "http://x", BrowserDownloadURL: "http://x"},
 	}
 
-	got, err := findAssetForLibC(assets, testPlugin, testVersion, "")
+	got, err := findAssetForPlatform(assets, runtime.GOOS, runtime.GOARCH, testPlugin, testVersion, "")
 	if err != nil {
-		t.Fatalf("findAssetForLibC() error: %v", err)
+		t.Fatalf("findAssetForPlatform() error: %v", err)
 	}
 	if got.Name != want {
-		t.Fatalf("findAssetForLibC() = %q, want %q", got.Name, want)
+		t.Fatalf("findAssetForPlatform() = %q, want %q", got.Name, want)
 	}
 }
 
@@ -288,12 +288,12 @@ func TestFindAssetPrefersMuslLinuxAssetWhenLibCUnknownAndBothSpecificArchivesExi
 		{Name: want, URL: "http://musl", BrowserDownloadURL: "http://musl"},
 	}
 
-	got, err := findAssetForLibC(assets, testPlugin, testVersion, "")
+	got, err := findAssetForPlatform(assets, runtime.GOOS, runtime.GOARCH, testPlugin, testVersion, "")
 	if err != nil {
-		t.Fatalf("findAssetForLibC() error: %v", err)
+		t.Fatalf("findAssetForPlatform() error: %v", err)
 	}
 	if got.Name != want {
-		t.Fatalf("findAssetForLibC() = %q, want %q", got.Name, want)
+		t.Fatalf("findAssetForPlatform() = %q, want %q", got.Name, want)
 	}
 }
 

@@ -159,11 +159,7 @@ func (r *GitHubResolver) fetchRelease(ctx context.Context, client *http.Client, 
 }
 
 func findAsset(assets []releaseAsset, plugin, version string) (releaseAsset, error) {
-	return findAssetForLibC(assets, plugin, version, pluginpkg.CurrentRuntimeLibC())
-}
-
-func findAssetForLibC(assets []releaseAsset, plugin, version, libc string) (releaseAsset, error) {
-	return findAssetForPlatform(assets, runtime.GOOS, runtime.GOARCH, plugin, version, libc)
+	return findAssetForPlatform(assets, runtime.GOOS, runtime.GOARCH, plugin, version, pluginpkg.CurrentRuntimeLibC())
 }
 
 func findAssetForPlatform(assets []releaseAsset, goos, goarch, plugin, version, libc string) (releaseAsset, error) {
@@ -215,20 +211,12 @@ func findAssetForPlatform(assets []releaseAsset, goos, goarch, plugin, version, 
 	)
 }
 
-func platformAssetName(plugin, version, libc string) string {
-	return platformAssetNameFor(runtime.GOOS, runtime.GOARCH, plugin, version, libc)
-}
-
 func platformAssetNameFor(goos, goarch, plugin, version, libc string) string {
 	return fmt.Sprintf("%s%s_v%s_%s.tar.gz", platformAssetPrefix, plugin, version, pluginpkg.PlatformArchiveSuffix(goos, goarch, libc))
 }
 
 func genericAssetName(plugin, version string) string {
 	return fmt.Sprintf("%s%s_v%s.tar.gz", platformAssetPrefix, plugin, version)
-}
-
-func candidatePlatformAssetNames(plugin, version, libc string) []string {
-	return candidatePlatformAssetNamesFor(runtime.GOOS, runtime.GOARCH, plugin, version, libc)
 }
 
 func candidatePlatformAssetNamesFor(goos, goarch, plugin, version, libc string) []string {
@@ -267,10 +255,6 @@ func findAssetByName(assets []releaseAsset, name string) (releaseAsset, bool) {
 	return releaseAsset{}, false
 }
 
-func matchesPlatformAsset(name, plugin, version string) platformAssetMatchKind {
-	return matchesPlatformAssetFor(name, runtime.GOOS, runtime.GOARCH, plugin, version)
-}
-
 func matchesPlatformAssetFor(name, goos, goarch, plugin, version string) platformAssetMatchKind {
 	stem, ok := trimPlatformArchiveFor(name, goos, goarch)
 	if !ok {
@@ -296,10 +280,6 @@ func matchesPlatformAssetFor(name, goos, goarch, plugin, version string) platfor
 	return noPlatformAssetMatch
 }
 
-func trimPlatformArchive(name string) (string, bool) {
-	return trimPlatformArchiveFor(name, runtime.GOOS, runtime.GOARCH)
-}
-
 func trimPlatformArchiveFor(name, goos, goarch string) (string, bool) {
 	base, ok := trimPackageArchiveExtension(name)
 	if !ok {
@@ -318,10 +298,6 @@ func platformAliases(aliasMap map[string][]string, name string) []string {
 		return aliases
 	}
 	return []string{name}
-}
-
-func platformSuffixCandidates() []string {
-	return platformSuffixCandidatesFor(runtime.GOOS, runtime.GOARCH)
 }
 
 func platformSuffixCandidatesFor(goos, goarch string) []string {
