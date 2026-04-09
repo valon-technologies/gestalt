@@ -283,7 +283,7 @@ func releaseRequiresBuildTarget(manifest *pluginmanifestv1.Manifest) bool {
 	}
 	switch kind {
 	case pluginmanifestv1.KindPlugin:
-		return manifest.Entrypoints.Provider == nil && (manifest.Plugin == nil || !manifest.Plugin.IsManifestBacked())
+		return manifest.Entrypoints.Provider == nil && !manifest.Plugin.IsManifestBacked()
 	case pluginmanifestv1.KindAuth:
 		return manifest.Entrypoints.Auth == nil
 	case pluginmanifestv1.KindDatastore:
@@ -346,7 +346,7 @@ func missingReleaseSourceBuildTargetError(kind string) error {
 	case pluginmanifestv1.KindDatastore:
 		return fmt.Errorf("no Go, Rust, Python, or TypeScript datastore source package found")
 	default:
-		return nil
+		return fmt.Errorf("unsupported release build target kind %q", kind)
 	}
 }
 

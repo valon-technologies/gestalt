@@ -190,6 +190,18 @@ provider:
 	}
 }
 
+func TestMissingReleaseSourceBuildTargetErrorRejectsUnsupportedKind(t *testing.T) {
+	t.Parallel()
+
+	err := missingReleaseSourceBuildTargetError(pluginmanifestv1.KindWebUI)
+	if err == nil {
+		t.Fatal("expected error for unsupported kind")
+	}
+	if !strings.Contains(err.Error(), "unsupported release build target kind") {
+		t.Fatalf("error = %q, want unsupported kind message", err)
+	}
+}
+
 func TestE2EPluginReleaseBigquery(t *testing.T) {
 	t.Parallel()
 
