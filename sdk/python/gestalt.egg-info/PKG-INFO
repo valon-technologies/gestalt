@@ -1,0 +1,10 @@
+Metadata-Version: 2.4
+Name: gestalt
+Version: 0.0.1a1
+Summary: Python SDK for Gestalt executable providers
+Requires-Python: >=3.10
+Requires-Dist: grpcio<2,>=1.80.0
+Requires-Dist: pyyaml==6.0.3
+Requires-Dist: pyinstaller<7
+Requires-Dist: protobuf<8,>=6.33.1
+Requires-Dist: typing-extensions==4.12.2

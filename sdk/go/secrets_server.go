@@ -8,16 +8,16 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-type SecretsServer struct {
+type secretsServer struct {
 	proto.UnimplementedSecretsProviderServer
 	secrets SecretsProvider
 }
 
-func NewSecretsProviderServer(secrets SecretsProvider) *SecretsServer {
-	return &SecretsServer{secrets: secrets}
+func newSecretsProviderServer(secrets SecretsProvider) *secretsServer {
+	return &secretsServer{secrets: secrets}
 }
 
-func (s *SecretsServer) GetSecret(ctx context.Context, req *proto.GetSecretRequest) (*proto.GetSecretResponse, error) {
+func (s *secretsServer) GetSecret(ctx context.Context, req *proto.GetSecretRequest) (*proto.GetSecretResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}

@@ -21,9 +21,8 @@ type SecretsExecConfig struct {
 }
 
 type remoteSecretManager struct {
-	runtime proto.PluginRuntimeClient
-	client  proto.SecretsProviderClient
-	closer  io.Closer
+	client proto.SecretsProviderClient
+	closer io.Closer
 }
 
 func NewExecutableSecretManager(ctx context.Context, cfg SecretsExecConfig) (core.SecretManager, error) {
@@ -50,9 +49,8 @@ func NewExecutableSecretManager(ctx context.Context, cfg SecretsExecConfig) (cor
 	}
 
 	return &remoteSecretManager{
-		runtime: runtimeClient,
-		client:  secretsClient,
-		closer:  proc,
+		client: secretsClient,
+		closer: proc,
 	}, nil
 }
 
