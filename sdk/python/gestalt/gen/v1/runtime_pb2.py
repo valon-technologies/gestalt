@@ -26,7 +26,7 @@ from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
 from google.protobuf import struct_pb2 as google_dot_protobuf_dot_struct__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10v1/runtime.proto\x12\x11gestalt.plugin.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\"\xb6\x02\n\x0ePluginMetadata\x12\x31\n\x04kind\x18\x01 \x01(\x0e\x32\x1d.gestalt.plugin.v1.PluginKindR\x04kind\x12\x12\n\x04name\x18\x02 \x01(\tR\x04name\x12!\n\x0c\x64isplay_name\x18\x03 \x01(\tR\x0b\x64isplayName\x12 \n\x0b\x64\x65scription\x18\x04 \x01(\tR\x0b\x64\x65scription\x12\x18\n\x07version\x18\x05 \x01(\tR\x07version\x12\x1a\n\x08warnings\x18\x06 \x03(\tR\x08warnings\x12\x30\n\x14min_protocol_version\x18\n \x01(\x05R\x12minProtocolVersion\x12\x30\n\x14max_protocol_version\x18\x0b \x01(\x05R\x12maxProtocolVersion\"\x88\x01\n\x16\x43onfigurePluginRequest\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12/\n\x06\x63onfig\x18\x02 \x01(\x0b\x32\x17.google.protobuf.StructR\x06\x63onfig\x12)\n\x10protocol_version\x18\x03 \x01(\x05R\x0fprotocolVersion\"D\n\x17\x43onfigurePluginResponse\x12)\n\x10protocol_version\x18\x01 \x01(\x05R\x0fprotocolVersion\"E\n\x13HealthCheckResponse\x12\x14\n\x05ready\x18\x01 \x01(\x08R\x05ready\x12\x18\n\x07message\x18\x02 \x01(\tR\x07message*\xab\x01\n\nPluginKind\x12\x1b\n\x17PLUGIN_KIND_UNSPECIFIED\x10\x00\x12\x1b\n\x17PLUGIN_KIND_INTEGRATION\x10\x01\x12\x14\n\x10PLUGIN_KIND_AUTH\x10\x02\x12\x19\n\x15PLUGIN_KIND_DATASTORE\x10\x03\x12\x17\n\x13PLUGIN_KIND_SECRETS\x10\x04\x12\x19\n\x15PLUGIN_KIND_TELEMETRY\x10\x05\x32\x9c\x02\n\x11ProviderLifecycle\x12N\n\x11GetPluginMetadata\x12\x16.google.protobuf.Empty\x1a!.gestalt.plugin.v1.PluginMetadata\x12h\n\x0f\x43onfigurePlugin\x12).gestalt.plugin.v1.ConfigurePluginRequest\x1a*.gestalt.plugin.v1.ConfigurePluginResponse\x12M\n\x0bHealthCheck\x12\x16.google.protobuf.Empty\x1a&.gestalt.plugin.v1.HealthCheckResponseB;Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;protob\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10v1/runtime.proto\x12\x11gestalt.plugin.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\"\xba\x02\n\x10ProviderIdentity\x12\x33\n\x04kind\x18\x01 \x01(\x0e\x32\x1f.gestalt.plugin.v1.ProviderKindR\x04kind\x12\x12\n\x04name\x18\x02 \x01(\tR\x04name\x12!\n\x0c\x64isplay_name\x18\x03 \x01(\tR\x0b\x64isplayName\x12 \n\x0b\x64\x65scription\x18\x04 \x01(\tR\x0b\x64\x65scription\x12\x18\n\x07version\x18\x05 \x01(\tR\x07version\x12\x1a\n\x08warnings\x18\x06 \x03(\tR\x08warnings\x12\x30\n\x14min_protocol_version\x18\n \x01(\x05R\x12minProtocolVersion\x12\x30\n\x14max_protocol_version\x18\x0b \x01(\x05R\x12maxProtocolVersion\"\x8a\x01\n\x18\x43onfigureProviderRequest\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12/\n\x06\x63onfig\x18\x02 \x01(\x0b\x32\x17.google.protobuf.StructR\x06\x63onfig\x12)\n\x10protocol_version\x18\x03 \x01(\x05R\x0fprotocolVersion\"F\n\x19\x43onfigureProviderResponse\x12)\n\x10protocol_version\x18\x01 \x01(\x05R\x0fprotocolVersion\"E\n\x13HealthCheckResponse\x12\x14\n\x05ready\x18\x01 \x01(\x08R\x05ready\x12\x18\n\x07message\x18\x02 \x01(\tR\x07message*\xb9\x01\n\x0cProviderKind\x12\x1d\n\x19PROVIDER_KIND_UNSPECIFIED\x10\x00\x12\x1d\n\x19PROVIDER_KIND_INTEGRATION\x10\x01\x12\x16\n\x12PROVIDER_KIND_AUTH\x10\x02\x12\x1b\n\x17PROVIDER_KIND_DATASTORE\x10\x03\x12\x19\n\x15PROVIDER_KIND_SECRETS\x10\x04\x12\x1b\n\x17PROVIDER_KIND_TELEMETRY\x10\x05\x32\xa6\x02\n\x11ProviderLifecycle\x12R\n\x13GetProviderIdentity\x12\x16.google.protobuf.Empty\x1a#.gestalt.plugin.v1.ProviderIdentity\x12n\n\x11\x43onfigureProvider\x12+.gestalt.plugin.v1.ConfigureProviderRequest\x1a,.gestalt.plugin.v1.ConfigureProviderResponse\x12M\n\x0bHealthCheck\x12\x16.google.protobuf.Empty\x1a&.gestalt.plugin.v1.HealthCheckResponseB;Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;protob\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,16 +34,16 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'v1.runtime_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto'
-  _globals['_PLUGINKIND']._serialized_start=692
-  _globals['_PLUGINKIND']._serialized_end=863
-  _globals['_PLUGINMETADATA']._serialized_start=99
-  _globals['_PLUGINMETADATA']._serialized_end=409
-  _globals['_CONFIGUREPLUGINREQUEST']._serialized_start=412
-  _globals['_CONFIGUREPLUGINREQUEST']._serialized_end=548
-  _globals['_CONFIGUREPLUGINRESPONSE']._serialized_start=550
-  _globals['_CONFIGUREPLUGINRESPONSE']._serialized_end=618
-  _globals['_HEALTHCHECKRESPONSE']._serialized_start=620
-  _globals['_HEALTHCHECKRESPONSE']._serialized_end=689
-  _globals['_PROVIDERLIFECYCLE']._serialized_start=866
-  _globals['_PROVIDERLIFECYCLE']._serialized_end=1150
+  _globals['_PROVIDERKIND']._serialized_start=700
+  _globals['_PROVIDERKIND']._serialized_end=885
+  _globals['_PROVIDERIDENTITY']._serialized_start=99
+  _globals['_PROVIDERIDENTITY']._serialized_end=413
+  _globals['_CONFIGUREPROVIDERREQUEST']._serialized_start=416
+  _globals['_CONFIGUREPROVIDERREQUEST']._serialized_end=554
+  _globals['_CONFIGUREPROVIDERRESPONSE']._serialized_start=556
+  _globals['_CONFIGUREPROVIDERRESPONSE']._serialized_end=626
+  _globals['_HEALTHCHECKRESPONSE']._serialized_start=628
+  _globals['_HEALTHCHECKRESPONSE']._serialized_end=697
+  _globals['_PROVIDERLIFECYCLE']._serialized_start=888
+  _globals['_PROVIDERLIFECYCLE']._serialized_end=1182
 # @@protoc_insertion_point(module_scope)

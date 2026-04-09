@@ -23,7 +23,7 @@ impl gestalt::AuthProvider for Provider {
         Ok(gestalt::BeginLoginResponse {
             authorization_url: "https://auth.example.test/login?state=idp-state&prompt=consent"
                 .to_string(),
-            plugin_state: Vec::new(),
+            provider_state: Vec::new(),
         })
     }
 

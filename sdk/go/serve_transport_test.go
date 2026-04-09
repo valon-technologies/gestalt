@@ -16,7 +16,7 @@ import (
 
 func TestServeProviderRoundTrip(t *testing.T) {
 	socket := newSocketPath(t, "plugin.sock")
-	t.Setenv(proto.EnvPluginSocket, socket)
+	t.Setenv(proto.EnvProviderSocket, socket)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	provider := &closeableStubProvider{}
@@ -42,7 +42,7 @@ func TestServeProviderRoundTrip(t *testing.T) {
 	})
 
 	conn := newUnixConn(t, socket)
-	client := proto.NewPluginProviderClient(conn)
+	client := proto.NewIntegrationProviderClient(conn)
 
 	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), time.Second)
 	defer rpcCancel()
@@ -58,7 +58,7 @@ func TestServeProviderRoundTrip(t *testing.T) {
 
 func TestServeAuthProviderClosesProviderOnShutdown(t *testing.T) {
 	socket := newSocketPath(t, "a.sock")
-	t.Setenv(proto.EnvPluginSocket, socket)
+	t.Setenv(proto.EnvProviderSocket, socket)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	auth := &closeableStubAuthProvider{}

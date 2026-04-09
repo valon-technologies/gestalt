@@ -47,7 +47,7 @@ func NewExecutableDatastore(ctx context.Context, cfg DatastoreExecConfig) (core.
 	if err != nil {
 		return nil, fmt.Errorf("create datastore encryptor: %w", err)
 	}
-	proc, err := startPluginProcess(ctx, ExecConfig{
+	proc, err := startProviderProcess(ctx, ExecConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
 		Env:          cfg.Env,
@@ -87,7 +87,7 @@ func newRemoteDatastore(ctx context.Context, runtimeClient proto.ProviderLifecyc
 }
 
 func (s *remoteDatastore) configure(ctx context.Context, name string, config map[string]any) error {
-	meta, err := configureRuntimePlugin(ctx, s.runtime, proto.PluginKind_PLUGIN_KIND_DATASTORE, name, config)
+	meta, err := configureRuntimeProvider(ctx, s.runtime, proto.ProviderKind_PROVIDER_KIND_DATASTORE, name, config)
 	if err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func (s *remoteDatastore) configure(ctx context.Context, name string, config map
 		s.name = meta.Name
 	}
 	if s.name == "" {
-		s.name = "plugin"
+		s.name = "datastore"
 	}
 	if meta != nil {
 		s.displayName = meta.DisplayName
@@ -115,7 +115,7 @@ func (s *remoteDatastore) Name() string {
 }
 
 func (s *remoteDatastore) supportsOAuthRegistration(ctx context.Context) (bool, error) {
-	ctx, cancel := pluginCallContext(ctx)
+	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 
 	_, err := s.client.GetOAuthRegistration(ctx, &proto.GetOAuthRegistrationRequest{})
@@ -129,7 +129,7 @@ func (s *remoteDatastore) supportsOAuthRegistration(ctx context.Context) (bool, 
 }
 
 func (s *remoteDatastore) GetUser(ctx context.Context, id string) (*core.User, error) {
-	ctx, cancel := pluginCallContext(ctx)
+	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 
 	resp, err := s.client.GetUser(ctx, &proto.GetUserRequest{Id: id})
@@ -143,7 +143,7 @@ func (s *remoteDatastore) GetUser(ctx context.Context, id string) (*core.User, e
 }
 
 func (s *remoteDatastore) FindOrCreateUser(ctx context.Context, email string) (*core.User, error) {
-	ctx, cancel := pluginCallContext(ctx)
+	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 
 	resp, err := s.client.FindOrCreateUser(ctx, &proto.FindOrCreateUserRequest{Email: email})
@@ -158,7 +158,7 @@ func (s *remoteDatastore) StoreToken(ctx context.Context, token *core.Integratio
 	if err != nil {
 		return err
 	}
-	ctx, cancel := pluginCallContext(ctx)
+	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 
 	_, err = s.client.PutStoredIntegrationToken(ctx, wire)
@@ -169,7 +169,7 @@ func (s *remoteDatastore) StoreToken(ctx context.Context, token *core.Integratio
 }
 
 func (s *remoteDatastore) Token(ctx context.Context, userID, integration, connection, instance string) (*core.IntegrationToken, error) {
-	ctx, cancel := pluginCallContext(ctx)
+	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 
 	resp, err := s.client.GetStoredIntegrationToken(ctx, &proto.GetStoredIntegrationTokenRequest{
@@ -200,7 +200,7 @@ func (s *remoteDatastore) ListTokensForConnection(ctx context.Context, userID, i
 }
 
 func (s *remoteDatastore) DeleteToken(ctx context.Context, id string) error {
-	ctx, cancel := pluginCallContext(ctx)
+	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 
 	_, err := s.client.DeleteStoredIntegrationToken(ctx, &proto.DeleteStoredIntegrationTokenRequest{Id: id})
@@ -211,7 +211,7 @@ func (s *remoteDatastore) DeleteToken(ctx context.Context, id string) error {
 }
 
 func (s *remoteDatastore) StoreAPIToken(ctx context.Context, token *core.APIToken) error {
-	ctx, cancel := pluginCallContext(ctx)
+	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 
 	_, err := s.client.PutAPIToken(ctx, coreAPITokenToProto(token))
@@ -222,7 +222,7 @@ func (s *remoteDatastore) StoreAPIToken(ctx context.Context, token *core.APIToke
 }
 
 func (s *remoteDatastore) ValidateAPIToken(ctx context.Context, hashedToken string) (*core.APIToken, error) {
-	ctx, cancel := pluginCallContext(ctx)
+	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 
 	resp, err := s.client.GetAPITokenByHash(ctx, &proto.GetAPITokenByHashRequest{HashedToken: hashedToken})
@@ -236,7 +236,7 @@ func (s *remoteDatastore) ValidateAPIToken(ctx context.Context, hashedToken stri
 }
 
 func (s *remoteDatastore) ListAPITokens(ctx context.Context, userID string) ([]*core.APIToken, error) {
-	ctx, cancel := pluginCallContext(ctx)
+	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 
 	resp, err := s.client.ListAPITokens(ctx, &proto.ListAPITokensRequest{UserId: userID})
@@ -252,7 +252,7 @@ func (s *remoteDatastore) ListAPITokens(ctx context.Context, userID string) ([]*
 }
 
 func (s *remoteDatastore) RevokeAPIToken(ctx context.Context, userID, id string) error {
-	ctx, cancel := pluginCallContext(ctx)
+	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 
 	_, err := s.client.RevokeAPIToken(ctx, &proto.RevokeAPITokenRequest{
@@ -266,7 +266,7 @@ func (s *remoteDatastore) RevokeAPIToken(ctx context.Context, userID, id string)
 }
 
 func (s *remoteDatastore) RevokeAllAPITokens(ctx context.Context, userID string) (int64, error) {
-	ctx, cancel := pluginCallContext(ctx)
+	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 
 	resp, err := s.client.RevokeAllAPITokens(ctx, &proto.RevokeAllAPITokensRequest{UserId: userID})
@@ -277,13 +277,13 @@ func (s *remoteDatastore) RevokeAllAPITokens(ctx context.Context, userID string)
 }
 
 func (s *remoteDatastore) Ping(ctx context.Context) error {
-	ctx, cancel := pluginCallContext(ctx)
+	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
-	return pingRuntimePlugin(ctx, s.runtime)
+	return pingRuntimeProvider(ctx, s.runtime)
 }
 
 func (s *remoteDatastore) Migrate(ctx context.Context) error {
-	ctx, cancel := pluginMigrateContext(ctx)
+	ctx, cancel := providerMigrateContext(ctx)
 	defer cancel()
 	_, err := s.client.Migrate(ctx, &emptypb.Empty{})
 	if err != nil {
@@ -293,7 +293,7 @@ func (s *remoteDatastore) Migrate(ctx context.Context) error {
 }
 
 func (s *remoteDatastoreWithOAuth) GetRegistration(ctx context.Context, authServerURL, redirectURI string) (*mcpoauth.Registration, error) {
-	ctx, cancel := pluginCallContext(ctx)
+	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 
 	resp, err := s.client.GetOAuthRegistration(ctx, &proto.GetOAuthRegistrationRequest{
@@ -317,7 +317,7 @@ func (s *remoteDatastoreWithOAuth) StoreRegistration(ctx context.Context, regist
 	if err != nil {
 		return err
 	}
-	ctx, cancel := pluginCallContext(ctx)
+	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 
 	_, err = s.client.PutOAuthRegistration(ctx, wire)
@@ -331,7 +331,7 @@ func (s *remoteDatastoreWithOAuth) StoreRegistration(ctx context.Context, regist
 }
 
 func (s *remoteDatastoreWithOAuth) DeleteRegistration(ctx context.Context, authServerURL, redirectURI string) error {
-	ctx, cancel := pluginCallContext(ctx)
+	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 
 	_, err := s.client.DeleteOAuthRegistration(ctx, &proto.DeleteOAuthRegistrationRequest{
@@ -362,7 +362,7 @@ func (s *remoteDatastore) Close() error {
 }
 
 func (s *remoteDatastore) listTokens(ctx context.Context, userID, integration, connection string) ([]*core.IntegrationToken, error) {
-	ctx, cancel := pluginCallContext(ctx)
+	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 
 	resp, err := s.client.ListStoredIntegrationTokens(ctx, &proto.ListStoredIntegrationTokensRequest{

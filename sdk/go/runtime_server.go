@@ -11,19 +11,19 @@ import (
 
 type runtimeServer struct {
 	proto.UnimplementedProviderLifecycleServer
-	kind     proto.PluginKind
-	provider PluginProvider
+	kind     proto.ProviderKind
+	provider Provider
 }
 
-func newPluginProviderServer(kind ProviderKind, provider PluginProvider) *runtimeServer {
+func newRuntimeServer(kind ProviderKind, provider Provider) *runtimeServer {
 	return &runtimeServer{
 		kind:     providerKindToProto(kind),
 		provider: provider,
 	}
 }
 
-func (s *runtimeServer) GetPluginMetadata(_ context.Context, _ *emptypb.Empty) (*proto.PluginMetadata, error) {
-	meta := proto.PluginMetadata{
+func (s *runtimeServer) GetProviderIdentity(_ context.Context, _ *emptypb.Empty) (*proto.ProviderIdentity, error) {
+	meta := proto.ProviderIdentity{
 		Kind:               s.kind,
 		MinProtocolVersion: proto.CurrentProtocolVersion,
 		MaxProtocolVersion: proto.CurrentProtocolVersion,
@@ -39,13 +39,13 @@ func (s *runtimeServer) GetPluginMetadata(_ context.Context, _ *emptypb.Empty) (
 	if provider, ok := s.provider.(WarningsProvider); ok {
 		meta.Warnings = append(meta.Warnings, provider.Warnings()...)
 	}
-	if meta.Kind == proto.PluginKind_PLUGIN_KIND_UNSPECIFIED {
+	if meta.Kind == proto.ProviderKind_PROVIDER_KIND_UNSPECIFIED {
 		meta.Kind = s.kind
 	}
 	return &meta, nil
 }
 
-func (s *runtimeServer) ConfigurePlugin(ctx context.Context, req *proto.ConfigurePluginRequest) (*proto.ConfigurePluginResponse, error) {
+func (s *runtimeServer) ConfigureProvider(ctx context.Context, req *proto.ConfigureProviderRequest) (*proto.ConfigureProviderResponse, error) {
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
@@ -64,7 +64,7 @@ func (s *runtimeServer) ConfigurePlugin(ctx context.Context, req *proto.Configur
 	if err := s.provider.Configure(ctx, req.GetName(), config); err != nil {
 		return nil, status.Errorf(codes.Unknown, "configure provider: %v", err)
 	}
-	return &proto.ConfigurePluginResponse{ProtocolVersion: proto.CurrentProtocolVersion}, nil
+	return &proto.ConfigureProviderResponse{ProtocolVersion: proto.CurrentProtocolVersion}, nil
 }
 
 func (s *runtimeServer) HealthCheck(ctx context.Context, _ *emptypb.Empty) (*proto.HealthCheckResponse, error) {
@@ -77,7 +77,7 @@ func (s *runtimeServer) HealthCheck(ctx context.Context, _ *emptypb.Empty) (*pro
 		}
 		return &proto.HealthCheckResponse{Ready: true}, nil
 	}
-	if s.kind == proto.PluginKind_PLUGIN_KIND_DATASTORE {
+	if s.kind == proto.ProviderKind_PROVIDER_KIND_DATASTORE {
 		return &proto.HealthCheckResponse{
 			Ready:   false,
 			Message: "datastore provider must implement HealthChecker",
@@ -86,17 +86,17 @@ func (s *runtimeServer) HealthCheck(ctx context.Context, _ *emptypb.Empty) (*pro
 	return &proto.HealthCheckResponse{Ready: true}, nil
 }
 
-func providerKindToProto(kind ProviderKind) proto.PluginKind {
+func providerKindToProto(kind ProviderKind) proto.ProviderKind {
 	switch kind {
 	case ProviderKindIntegration:
-		return proto.PluginKind_PLUGIN_KIND_INTEGRATION
+		return proto.ProviderKind_PROVIDER_KIND_INTEGRATION
 	case ProviderKindAuth:
-		return proto.PluginKind_PLUGIN_KIND_AUTH
+		return proto.ProviderKind_PROVIDER_KIND_AUTH
 	case ProviderKindDatastore:
-		return proto.PluginKind_PLUGIN_KIND_DATASTORE
+		return proto.ProviderKind_PROVIDER_KIND_DATASTORE
 	case ProviderKindSecrets:
-		return proto.PluginKind_PLUGIN_KIND_SECRETS
+		return proto.ProviderKind_PROVIDER_KIND_SECRETS
 	default:
-		return proto.PluginKind_PLUGIN_KIND_UNSPECIFIED
+		return proto.ProviderKind_PROVIDER_KIND_UNSPECIFIED
 	}
 }

@@ -23,67 +23,67 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type PluginKind int32
+type ProviderKind int32
 
 const (
-	PluginKind_PLUGIN_KIND_UNSPECIFIED PluginKind = 0
-	PluginKind_PLUGIN_KIND_INTEGRATION PluginKind = 1
-	PluginKind_PLUGIN_KIND_AUTH        PluginKind = 2
-	PluginKind_PLUGIN_KIND_DATASTORE   PluginKind = 3
-	PluginKind_PLUGIN_KIND_SECRETS     PluginKind = 4
-	PluginKind_PLUGIN_KIND_TELEMETRY   PluginKind = 5
+	ProviderKind_PROVIDER_KIND_UNSPECIFIED ProviderKind = 0
+	ProviderKind_PROVIDER_KIND_INTEGRATION ProviderKind = 1
+	ProviderKind_PROVIDER_KIND_AUTH        ProviderKind = 2
+	ProviderKind_PROVIDER_KIND_DATASTORE   ProviderKind = 3
+	ProviderKind_PROVIDER_KIND_SECRETS     ProviderKind = 4
+	ProviderKind_PROVIDER_KIND_TELEMETRY   ProviderKind = 5
 )
 
-// Enum value maps for PluginKind.
+// Enum value maps for ProviderKind.
 var (
-	PluginKind_name = map[int32]string{
-		0: "PLUGIN_KIND_UNSPECIFIED",
-		1: "PLUGIN_KIND_INTEGRATION",
-		2: "PLUGIN_KIND_AUTH",
-		3: "PLUGIN_KIND_DATASTORE",
-		4: "PLUGIN_KIND_SECRETS",
-		5: "PLUGIN_KIND_TELEMETRY",
+	ProviderKind_name = map[int32]string{
+		0: "PROVIDER_KIND_UNSPECIFIED",
+		1: "PROVIDER_KIND_INTEGRATION",
+		2: "PROVIDER_KIND_AUTH",
+		3: "PROVIDER_KIND_DATASTORE",
+		4: "PROVIDER_KIND_SECRETS",
+		5: "PROVIDER_KIND_TELEMETRY",
 	}
-	PluginKind_value = map[string]int32{
-		"PLUGIN_KIND_UNSPECIFIED": 0,
-		"PLUGIN_KIND_INTEGRATION": 1,
-		"PLUGIN_KIND_AUTH":        2,
-		"PLUGIN_KIND_DATASTORE":   3,
-		"PLUGIN_KIND_SECRETS":     4,
-		"PLUGIN_KIND_TELEMETRY":   5,
+	ProviderKind_value = map[string]int32{
+		"PROVIDER_KIND_UNSPECIFIED": 0,
+		"PROVIDER_KIND_INTEGRATION": 1,
+		"PROVIDER_KIND_AUTH":        2,
+		"PROVIDER_KIND_DATASTORE":   3,
+		"PROVIDER_KIND_SECRETS":     4,
+		"PROVIDER_KIND_TELEMETRY":   5,
 	}
 )
 
-func (x PluginKind) Enum() *PluginKind {
-	p := new(PluginKind)
+func (x ProviderKind) Enum() *ProviderKind {
+	p := new(ProviderKind)
 	*p = x
 	return p
 }
 
-func (x PluginKind) String() string {
+func (x ProviderKind) String() string {
 	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
 }
 
-func (PluginKind) Descriptor() protoreflect.EnumDescriptor {
+func (ProviderKind) Descriptor() protoreflect.EnumDescriptor {
 	return file_v1_runtime_proto_enumTypes[0].Descriptor()
 }
 
-func (PluginKind) Type() protoreflect.EnumType {
+func (ProviderKind) Type() protoreflect.EnumType {
 	return &file_v1_runtime_proto_enumTypes[0]
 }
 
-func (x PluginKind) Number() protoreflect.EnumNumber {
+func (x ProviderKind) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use PluginKind.Descriptor instead.
-func (PluginKind) EnumDescriptor() ([]byte, []int) {
+// Deprecated: Use ProviderKind.Descriptor instead.
+func (ProviderKind) EnumDescriptor() ([]byte, []int) {
 	return file_v1_runtime_proto_rawDescGZIP(), []int{0}
 }
 
-type PluginMetadata struct {
+type ProviderIdentity struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
-	Kind               PluginKind             `protobuf:"varint,1,opt,name=kind,proto3,enum=gestalt.plugin.v1.PluginKind" json:"kind,omitempty"`
+	Kind               ProviderKind           `protobuf:"varint,1,opt,name=kind,proto3,enum=gestalt.plugin.v1.ProviderKind" json:"kind,omitempty"`
 	Name               string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	DisplayName        string                 `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	Description        string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
@@ -95,20 +95,20 @@ type PluginMetadata struct {
 	sizeCache          protoimpl.SizeCache
 }
 
-func (x *PluginMetadata) Reset() {
-	*x = PluginMetadata{}
+func (x *ProviderIdentity) Reset() {
+	*x = ProviderIdentity{}
 	mi := &file_v1_runtime_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *PluginMetadata) String() string {
+func (x *ProviderIdentity) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*PluginMetadata) ProtoMessage() {}
+func (*ProviderIdentity) ProtoMessage() {}
 
-func (x *PluginMetadata) ProtoReflect() protoreflect.Message {
+func (x *ProviderIdentity) ProtoReflect() protoreflect.Message {
 	mi := &file_v1_runtime_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -120,68 +120,68 @@ func (x *PluginMetadata) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use PluginMetadata.ProtoReflect.Descriptor instead.
-func (*PluginMetadata) Descriptor() ([]byte, []int) {
+// Deprecated: Use ProviderIdentity.ProtoReflect.Descriptor instead.
+func (*ProviderIdentity) Descriptor() ([]byte, []int) {
 	return file_v1_runtime_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *PluginMetadata) GetKind() PluginKind {
+func (x *ProviderIdentity) GetKind() ProviderKind {
 	if x != nil {
 		return x.Kind
 	}
-	return PluginKind_PLUGIN_KIND_UNSPECIFIED
+	return ProviderKind_PROVIDER_KIND_UNSPECIFIED
 }
 
-func (x *PluginMetadata) GetName() string {
+func (x *ProviderIdentity) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-func (x *PluginMetadata) GetDisplayName() string {
+func (x *ProviderIdentity) GetDisplayName() string {
 	if x != nil {
 		return x.DisplayName
 	}
 	return ""
 }
 
-func (x *PluginMetadata) GetDescription() string {
+func (x *ProviderIdentity) GetDescription() string {
 	if x != nil {
 		return x.Description
 	}
 	return ""
 }
 
-func (x *PluginMetadata) GetVersion() string {
+func (x *ProviderIdentity) GetVersion() string {
 	if x != nil {
 		return x.Version
 	}
 	return ""
 }
 
-func (x *PluginMetadata) GetWarnings() []string {
+func (x *ProviderIdentity) GetWarnings() []string {
 	if x != nil {
 		return x.Warnings
 	}
 	return nil
 }
 
-func (x *PluginMetadata) GetMinProtocolVersion() int32 {
+func (x *ProviderIdentity) GetMinProtocolVersion() int32 {
 	if x != nil {
 		return x.MinProtocolVersion
 	}
 	return 0
 }
 
-func (x *PluginMetadata) GetMaxProtocolVersion() int32 {
+func (x *ProviderIdentity) GetMaxProtocolVersion() int32 {
 	if x != nil {
 		return x.MaxProtocolVersion
 	}
 	return 0
 }
 
-type ConfigurePluginRequest struct {
+type ConfigureProviderRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Config          *structpb.Struct       `protobuf:"bytes,2,opt,name=config,proto3" json:"config,omitempty"`
@@ -190,20 +190,20 @@ type ConfigurePluginRequest struct {
 	sizeCache       protoimpl.SizeCache
 }
 
-func (x *ConfigurePluginRequest) Reset() {
-	*x = ConfigurePluginRequest{}
+func (x *ConfigureProviderRequest) Reset() {
+	*x = ConfigureProviderRequest{}
 	mi := &file_v1_runtime_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ConfigurePluginRequest) String() string {
+func (x *ConfigureProviderRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ConfigurePluginRequest) ProtoMessage() {}
+func (*ConfigureProviderRequest) ProtoMessage() {}
 
-func (x *ConfigurePluginRequest) ProtoReflect() protoreflect.Message {
+func (x *ConfigureProviderRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_v1_runtime_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -215,53 +215,53 @@ func (x *ConfigurePluginRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ConfigurePluginRequest.ProtoReflect.Descriptor instead.
-func (*ConfigurePluginRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use ConfigureProviderRequest.ProtoReflect.Descriptor instead.
+func (*ConfigureProviderRequest) Descriptor() ([]byte, []int) {
 	return file_v1_runtime_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *ConfigurePluginRequest) GetName() string {
+func (x *ConfigureProviderRequest) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-func (x *ConfigurePluginRequest) GetConfig() *structpb.Struct {
+func (x *ConfigureProviderRequest) GetConfig() *structpb.Struct {
 	if x != nil {
 		return x.Config
 	}
 	return nil
 }
 
-func (x *ConfigurePluginRequest) GetProtocolVersion() int32 {
+func (x *ConfigureProviderRequest) GetProtocolVersion() int32 {
 	if x != nil {
 		return x.ProtocolVersion
 	}
 	return 0
 }
 
-type ConfigurePluginResponse struct {
+type ConfigureProviderResponse struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	ProtocolVersion int32                  `protobuf:"varint,1,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
 
-func (x *ConfigurePluginResponse) Reset() {
-	*x = ConfigurePluginResponse{}
+func (x *ConfigureProviderResponse) Reset() {
+	*x = ConfigureProviderResponse{}
 	mi := &file_v1_runtime_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ConfigurePluginResponse) String() string {
+func (x *ConfigureProviderResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ConfigurePluginResponse) ProtoMessage() {}
+func (*ConfigureProviderResponse) ProtoMessage() {}
 
-func (x *ConfigurePluginResponse) ProtoReflect() protoreflect.Message {
+func (x *ConfigureProviderResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_v1_runtime_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -273,12 +273,12 @@ func (x *ConfigurePluginResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ConfigurePluginResponse.ProtoReflect.Descriptor instead.
-func (*ConfigurePluginResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use ConfigureProviderResponse.ProtoReflect.Descriptor instead.
+func (*ConfigureProviderResponse) Descriptor() ([]byte, []int) {
 	return file_v1_runtime_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *ConfigurePluginResponse) GetProtocolVersion() int32 {
+func (x *ConfigureProviderResponse) GetProtocolVersion() int32 {
 	if x != nil {
 		return x.ProtocolVersion
 	}
@@ -341,9 +341,9 @@ var File_v1_runtime_proto protoreflect.FileDescriptor
 
 const file_v1_runtime_proto_rawDesc = "" +
 	"\n" +
-	"\x10v1/runtime.proto\x12\x11gestalt.plugin.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\"\xb6\x02\n" +
-	"\x0ePluginMetadata\x121\n" +
-	"\x04kind\x18\x01 \x01(\x0e2\x1d.gestalt.plugin.v1.PluginKindR\x04kind\x12\x12\n" +
+	"\x10v1/runtime.proto\x12\x11gestalt.plugin.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\"\xba\x02\n" +
+	"\x10ProviderIdentity\x123\n" +
+	"\x04kind\x18\x01 \x01(\x0e2\x1f.gestalt.plugin.v1.ProviderKindR\x04kind\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12!\n" +
 	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x12 \n" +
 	"\vdescription\x18\x04 \x01(\tR\vdescription\x12\x18\n" +
@@ -351,27 +351,26 @@ const file_v1_runtime_proto_rawDesc = "" +
 	"\bwarnings\x18\x06 \x03(\tR\bwarnings\x120\n" +
 	"\x14min_protocol_version\x18\n" +
 	" \x01(\x05R\x12minProtocolVersion\x120\n" +
-	"\x14max_protocol_version\x18\v \x01(\x05R\x12maxProtocolVersion\"\x88\x01\n" +
-	"\x16ConfigurePluginRequest\x12\x12\n" +
+	"\x14max_protocol_version\x18\v \x01(\x05R\x12maxProtocolVersion\"\x8a\x01\n" +
+	"\x18ConfigureProviderRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12/\n" +
 	"\x06config\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06config\x12)\n" +
-	"\x10protocol_version\x18\x03 \x01(\x05R\x0fprotocolVersion\"D\n" +
-	"\x17ConfigurePluginResponse\x12)\n" +
+	"\x10protocol_version\x18\x03 \x01(\x05R\x0fprotocolVersion\"F\n" +
+	"\x19ConfigureProviderResponse\x12)\n" +
 	"\x10protocol_version\x18\x01 \x01(\x05R\x0fprotocolVersion\"E\n" +
 	"\x13HealthCheckResponse\x12\x14\n" +
 	"\x05ready\x18\x01 \x01(\bR\x05ready\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage*\xab\x01\n" +
-	"\n" +
-	"PluginKind\x12\x1b\n" +
-	"\x17PLUGIN_KIND_UNSPECIFIED\x10\x00\x12\x1b\n" +
-	"\x17PLUGIN_KIND_INTEGRATION\x10\x01\x12\x14\n" +
-	"\x10PLUGIN_KIND_AUTH\x10\x02\x12\x19\n" +
-	"\x15PLUGIN_KIND_DATASTORE\x10\x03\x12\x17\n" +
-	"\x13PLUGIN_KIND_SECRETS\x10\x04\x12\x19\n" +
-	"\x15PLUGIN_KIND_TELEMETRY\x10\x052\x9c\x02\n" +
-	"\x11ProviderLifecycle\x12N\n" +
-	"\x11GetPluginMetadata\x12\x16.google.protobuf.Empty\x1a!.gestalt.plugin.v1.PluginMetadata\x12h\n" +
-	"\x0fConfigurePlugin\x12).gestalt.plugin.v1.ConfigurePluginRequest\x1a*.gestalt.plugin.v1.ConfigurePluginResponse\x12M\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage*\xb9\x01\n" +
+	"\fProviderKind\x12\x1d\n" +
+	"\x19PROVIDER_KIND_UNSPECIFIED\x10\x00\x12\x1d\n" +
+	"\x19PROVIDER_KIND_INTEGRATION\x10\x01\x12\x16\n" +
+	"\x12PROVIDER_KIND_AUTH\x10\x02\x12\x1b\n" +
+	"\x17PROVIDER_KIND_DATASTORE\x10\x03\x12\x19\n" +
+	"\x15PROVIDER_KIND_SECRETS\x10\x04\x12\x1b\n" +
+	"\x17PROVIDER_KIND_TELEMETRY\x10\x052\xa6\x02\n" +
+	"\x11ProviderLifecycle\x12R\n" +
+	"\x13GetProviderIdentity\x12\x16.google.protobuf.Empty\x1a#.gestalt.plugin.v1.ProviderIdentity\x12n\n" +
+	"\x11ConfigureProvider\x12+.gestalt.plugin.v1.ConfigureProviderRequest\x1a,.gestalt.plugin.v1.ConfigureProviderResponse\x12M\n" +
 	"\vHealthCheck\x12\x16.google.protobuf.Empty\x1a&.gestalt.plugin.v1.HealthCheckResponseB\xc6\x01\n" +
 	"\x15com.gestalt.plugin.v1B\fRuntimeProtoP\x01Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x11Gestalt.Plugin.V1\xca\x02\x11Gestalt\\Plugin\\V1\xe2\x02\x1dGestalt\\Plugin\\V1\\GPBMetadata\xea\x02\x13Gestalt::Plugin::V1b\x06proto3"
 
@@ -390,22 +389,22 @@ func file_v1_runtime_proto_rawDescGZIP() []byte {
 var file_v1_runtime_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_v1_runtime_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_v1_runtime_proto_goTypes = []any{
-	(PluginKind)(0),                 // 0: gestalt.plugin.v1.PluginKind
-	(*PluginMetadata)(nil),          // 1: gestalt.plugin.v1.PluginMetadata
-	(*ConfigurePluginRequest)(nil),  // 2: gestalt.plugin.v1.ConfigurePluginRequest
-	(*ConfigurePluginResponse)(nil), // 3: gestalt.plugin.v1.ConfigurePluginResponse
-	(*HealthCheckResponse)(nil),     // 4: gestalt.plugin.v1.HealthCheckResponse
-	(*structpb.Struct)(nil),         // 5: google.protobuf.Struct
-	(*emptypb.Empty)(nil),           // 6: google.protobuf.Empty
+	(ProviderKind)(0),                 // 0: gestalt.plugin.v1.ProviderKind
+	(*ProviderIdentity)(nil),          // 1: gestalt.plugin.v1.ProviderIdentity
+	(*ConfigureProviderRequest)(nil),  // 2: gestalt.plugin.v1.ConfigureProviderRequest
+	(*ConfigureProviderResponse)(nil), // 3: gestalt.plugin.v1.ConfigureProviderResponse
+	(*HealthCheckResponse)(nil),       // 4: gestalt.plugin.v1.HealthCheckResponse
+	(*structpb.Struct)(nil),           // 5: google.protobuf.Struct
+	(*emptypb.Empty)(nil),             // 6: google.protobuf.Empty
 }
 var file_v1_runtime_proto_depIdxs = []int32{
-	0, // 0: gestalt.plugin.v1.PluginMetadata.kind:type_name -> gestalt.plugin.v1.PluginKind
-	5, // 1: gestalt.plugin.v1.ConfigurePluginRequest.config:type_name -> google.protobuf.Struct
-	6, // 2: gestalt.plugin.v1.ProviderLifecycle.GetPluginMetadata:input_type -> google.protobuf.Empty
-	2, // 3: gestalt.plugin.v1.ProviderLifecycle.ConfigurePlugin:input_type -> gestalt.plugin.v1.ConfigurePluginRequest
+	0, // 0: gestalt.plugin.v1.ProviderIdentity.kind:type_name -> gestalt.plugin.v1.ProviderKind
+	5, // 1: gestalt.plugin.v1.ConfigureProviderRequest.config:type_name -> google.protobuf.Struct
+	6, // 2: gestalt.plugin.v1.ProviderLifecycle.GetProviderIdentity:input_type -> google.protobuf.Empty
+	2, // 3: gestalt.plugin.v1.ProviderLifecycle.ConfigureProvider:input_type -> gestalt.plugin.v1.ConfigureProviderRequest
 	6, // 4: gestalt.plugin.v1.ProviderLifecycle.HealthCheck:input_type -> google.protobuf.Empty
-	1, // 5: gestalt.plugin.v1.ProviderLifecycle.GetPluginMetadata:output_type -> gestalt.plugin.v1.PluginMetadata
-	3, // 6: gestalt.plugin.v1.ProviderLifecycle.ConfigurePlugin:output_type -> gestalt.plugin.v1.ConfigurePluginResponse
+	1, // 5: gestalt.plugin.v1.ProviderLifecycle.GetProviderIdentity:output_type -> gestalt.plugin.v1.ProviderIdentity
+	3, // 6: gestalt.plugin.v1.ProviderLifecycle.ConfigureProvider:output_type -> gestalt.plugin.v1.ConfigureProviderResponse
 	4, // 7: gestalt.plugin.v1.ProviderLifecycle.HealthCheck:output_type -> gestalt.plugin.v1.HealthCheckResponse
 	5, // [5:8] is the sub-list for method output_type
 	2, // [2:5] is the sub-list for method input_type

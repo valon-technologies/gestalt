@@ -16,16 +16,16 @@ import (
 
 const envWriteCatalog = "GESTALT_PLUGIN_WRITE_CATALOG"
 
-type pluginCloserContextKey struct{}
+type providerCloserContextKey struct{}
 
-// ServeProvider starts a gRPC server for the given [PluginProvider] and typed
+// ServeProvider starts a gRPC server for the given [Provider] and typed
 // router on the Unix socket specified by the GESTALT_PLUGIN_SOCKET environment
 // variable. It blocks until ctx is cancelled, at which point it drains
 // in-flight requests and returns nil. This is the main entry point for
 // integration providers.
 func ServeProvider[P any, PP interface {
 	*P
-	PluginProvider
+	Provider
 }](ctx context.Context, provider PP, router *Router[P]) error {
 	if catalogPath := os.Getenv(envWriteCatalog); catalogPath != "" {
 		cat := router.Catalog()
@@ -39,23 +39,23 @@ func ServeProvider[P any, PP interface {
 		}
 		return writeCatalogYAML(cat, catalogPath)
 	}
-	ctx = withPluginCloser(ctx, provider)
-	return servePlugin(ctx, func(srv *grpc.Server) {
-		proto.RegisterPluginProviderServer(srv, NewProviderServer(provider, router))
+	ctx = withProviderCloser(ctx, provider)
+	return serveProvider(ctx, func(srv *grpc.Server) {
+		proto.RegisterIntegrationProviderServer(srv, NewProviderServer(provider, router))
 	})
 }
 
-func withPluginCloser(ctx context.Context, provider any) context.Context {
+func withProviderCloser(ctx context.Context, provider any) context.Context {
 	if closer, ok := provider.(Closer); ok {
-		return context.WithValue(ctx, pluginCloserContextKey{}, closer)
+		return context.WithValue(ctx, providerCloserContextKey{}, closer)
 	}
 	return ctx
 }
 
-func servePlugin(ctx context.Context, register func(*grpc.Server)) error {
-	socket := os.Getenv(proto.EnvPluginSocket)
+func serveProvider(ctx context.Context, register func(*grpc.Server)) error {
+	socket := os.Getenv(proto.EnvProviderSocket)
 	if socket == "" {
-		return fmt.Errorf("%s is required", proto.EnvPluginSocket)
+		return fmt.Errorf("%s is required", proto.EnvProviderSocket)
 	}
 	if err := os.Remove(socket); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("remove stale socket %q: %w", socket, err)
@@ -73,7 +73,7 @@ func servePlugin(ctx context.Context, register func(*grpc.Server)) error {
 	srv := grpc.NewServer()
 	register(srv)
 
-	closer, _ := ctx.Value(pluginCloserContextKey{}).(Closer)
+	closer, _ := ctx.Value(providerCloserContextKey{}).(Closer)
 	var closeOnce sync.Once
 	closeProvider := func() {
 		if closer != nil {
@@ -89,8 +89,8 @@ func servePlugin(ctx context.Context, register func(*grpc.Server)) error {
 		srv.GracefulStop()
 		closeOnce.Do(closeProvider)
 	}()
-	if parentPID := pluginParentPID(); parentPID > 0 {
-		go watchPluginParent(parentPID, srv)
+	if parentPID := providerParentPID(); parentPID > 0 {
+		go watchProviderParent(parentPID, srv)
 	}
 
 	err = srv.Serve(lis)
@@ -101,8 +101,8 @@ func servePlugin(ctx context.Context, register func(*grpc.Server)) error {
 	return err
 }
 
-func pluginParentPID() int {
-	raw := os.Getenv(proto.EnvPluginParentPID)
+func providerParentPID() int {
+	raw := os.Getenv(proto.EnvProviderParentPID)
 	if raw == "" {
 		return 0
 	}
@@ -113,7 +113,7 @@ func pluginParentPID() int {
 	return pid
 }
 
-func watchPluginParent(parentPID int, srv *grpc.Server) {
+func watchProviderParent(parentPID int, srv *grpc.Server) {
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 	for range ticker.C {

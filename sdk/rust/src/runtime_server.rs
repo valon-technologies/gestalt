@@ -9,8 +9,8 @@ use crate::datastore::DatastoreProvider;
 use crate::error::Result;
 use crate::generated::v1::provider_lifecycle_server::ProviderLifecycle;
 use crate::generated::v1::{
-    ConfigurePluginRequest, ConfigurePluginResponse, HealthCheckResponse, PluginKind,
-    PluginMetadata,
+    ConfigureProviderRequest, ConfigureProviderResponse, HealthCheckResponse, ProviderIdentity,
+    ProviderKind,
 };
 use crate::secrets::SecretsProvider;
 use crate::{CURRENT_PROTOCOL_VERSION, Provider};
@@ -83,7 +83,7 @@ impl_runtime_hooks!(SecretsRuntime, SecretsProvider);
 
 #[derive(Clone)]
 pub struct RuntimeServer {
-    kind: PluginKind,
+    kind: ProviderKind,
     provider: Arc<dyn RuntimeHooks>,
 }
 
@@ -93,7 +93,7 @@ impl RuntimeServer {
         P: Provider,
     {
         Self {
-            kind: PluginKind::Integration,
+            kind: ProviderKind::Integration,
             provider: Arc::new(ProviderRuntime { provider }),
         }
     }
@@ -103,7 +103,7 @@ impl RuntimeServer {
         P: AuthProvider,
     {
         Self {
-            kind: PluginKind::Auth,
+            kind: ProviderKind::Auth,
             provider: Arc::new(AuthRuntime { provider }),
         }
     }
@@ -113,7 +113,7 @@ impl RuntimeServer {
         P: DatastoreProvider,
     {
         Self {
-            kind: PluginKind::Datastore,
+            kind: ProviderKind::Datastore,
             provider: Arc::new(DatastoreRuntime { provider }),
         }
     }
@@ -123,7 +123,7 @@ impl RuntimeServer {
         P: SecretsProvider,
     {
         Self {
-            kind: PluginKind::Secrets,
+            kind: ProviderKind::Secrets,
             provider: Arc::new(SecretsRuntime { provider }),
         }
     }
@@ -131,12 +131,12 @@ impl RuntimeServer {
 
 #[tonic::async_trait]
 impl ProviderLifecycle for RuntimeServer {
-    async fn get_plugin_metadata(
+    async fn get_provider_identity(
         &self,
         _request: GrpcRequest<()>,
-    ) -> std::result::Result<GrpcResponse<PluginMetadata>, Status> {
+    ) -> std::result::Result<GrpcResponse<ProviderIdentity>, Status> {
         let metadata = self.provider.metadata().unwrap_or_default();
-        Ok(GrpcResponse::new(PluginMetadata {
+        Ok(GrpcResponse::new(ProviderIdentity {
             kind: self.kind as i32,
             name: metadata.name,
             display_name: metadata.display_name,
@@ -148,14 +148,14 @@ impl ProviderLifecycle for RuntimeServer {
         }))
     }
 
-    async fn configure_plugin(
+    async fn configure_provider(
         &self,
-        request: GrpcRequest<ConfigurePluginRequest>,
-    ) -> std::result::Result<GrpcResponse<ConfigurePluginResponse>, Status> {
+        request: GrpcRequest<ConfigureProviderRequest>,
+    ) -> std::result::Result<GrpcResponse<ConfigureProviderResponse>, Status> {
         let request = request.into_inner();
         if request.protocol_version != CURRENT_PROTOCOL_VERSION {
             return Err(Status::failed_precondition(format!(
-                "host requested protocol version {}, plugin requires {}",
+                "host requested protocol version {}, provider requires {}",
                 request.protocol_version, CURRENT_PROTOCOL_VERSION
             )));
         }
@@ -163,8 +163,8 @@ impl ProviderLifecycle for RuntimeServer {
         self.provider
             .configure(&request.name, config)
             .await
-            .map_err(|error| Status::unknown(format!("configure plugin: {}", error.message())))?;
-        Ok(GrpcResponse::new(ConfigurePluginResponse {
+            .map_err(|error| Status::unknown(format!("configure provider: {}", error.message())))?;
+        Ok(GrpcResponse::new(ConfigureProviderResponse {
             protocol_version: CURRENT_PROTOCOL_VERSION,
         }))
     }

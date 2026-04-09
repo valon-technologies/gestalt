@@ -58,7 +58,9 @@ datastore_pb2_grpc: Any = _datastore_pb2_grpc
 secrets_pb2: Any = _secrets_pb2
 secrets_pb2_grpc: Any = _secrets_pb2_grpc
 
-ENV_PLUGIN_SOCKET: Final[str] = "GESTALT_PLUGIN_SOCKET"
+UTC = dt.timezone.utc
+
+ENV_PROVIDER_SOCKET: Final[str] = "GESTALT_PLUGIN_SOCKET"
 ENV_WRITE_CATALOG: Final[str] = "GESTALT_PLUGIN_WRITE_CATALOG"
 CURRENT_PROTOCOL_VERSION: Final[int] = 2
 GRPC_SERVER_MAX_WORKERS: Final[int] = 4
@@ -206,9 +208,9 @@ def _module_target(
 
 
 def _socket_path_from_env() -> pathlib.Path:
-    socket_path = os.environ.get(ENV_PLUGIN_SOCKET)
+    socket_path = os.environ.get(ENV_PROVIDER_SOCKET)
     if not socket_path:
-        raise RuntimeError(f"{ENV_PLUGIN_SOCKET} is required")
+        raise RuntimeError(f"{ENV_PROVIDER_SOCKET} is required")
     return pathlib.Path(socket_path)
 
 
@@ -228,7 +230,7 @@ def _register_shutdown_handlers(server: Any, close_provider: Any) -> None:
 
 def _register_services(*, server: Any, servable: Plugin | PluginProviderAdapter) -> None:
     if isinstance(servable, Plugin):
-        plugin_pb2_grpc.add_PluginProviderServicer_to_server(
+        plugin_pb2_grpc.add_IntegrationProviderServicer_to_server(
             _provider_servicer(plugin=servable),
             server,
         )
@@ -328,7 +330,7 @@ def _register_secrets_services(server: Any, provider: PluginProvider) -> None:
 
 
 def _provider_servicer(*, plugin: Plugin) -> Any:
-    class ProviderServicer(plugin_pb2_grpc.PluginProviderServicer):
+    class ProviderServicer(plugin_pb2_grpc.IntegrationProviderServicer):
         def GetMetadata(self, _request: Any, _context: Any) -> Any:
             return plugin_pb2.ProviderMetadata(
                 supports_session_catalog=plugin.supports_session_catalog(),
@@ -400,9 +402,9 @@ def _provider_servicer(*, plugin: Plugin) -> Any:
 
 def _runtime_servicer(*, provider: PluginProvider, kind: ProviderKind) -> Any:
     class RuntimeServicer(runtime_pb2_grpc.ProviderLifecycleServicer):
-        def GetPluginMetadata(self, _request: Any, _context: Any) -> Any:
+        def GetProviderIdentity(self, _request: Any, _context: Any) -> Any:
             metadata = _provider_metadata(provider=provider, kind=kind)
-            return runtime_pb2.PluginMetadata(
+            return runtime_pb2.ProviderIdentity(
                 kind=_provider_kind_to_proto(metadata.kind),
                 name=metadata.name,
                 display_name=metadata.display_name,
@@ -413,12 +415,12 @@ def _runtime_servicer(*, provider: PluginProvider, kind: ProviderKind) -> Any:
                 max_protocol_version=CURRENT_PROTOCOL_VERSION,
             )
 
-        @_grpc_handler("configure plugin")
-        def ConfigurePlugin(self, request: Any, context: Any) -> Any:
+        @_grpc_handler("configure provider")
+        def ConfigureProvider(self, request: Any, context: Any) -> Any:
             if request.protocol_version != CURRENT_PROTOCOL_VERSION:
                 return context.abort(
                     grpc.StatusCode.FAILED_PRECONDITION,
-                    f"host requested protocol version {request.protocol_version}, plugin requires {CURRENT_PROTOCOL_VERSION}",
+                    f"host requested protocol version {request.protocol_version}, provider requires {CURRENT_PROTOCOL_VERSION}",
                 )
             config = _message_to_dict(
                 field_name="config",
@@ -426,7 +428,7 @@ def _runtime_servicer(*, provider: PluginProvider, kind: ProviderKind) -> Any:
                 request=request,
             )
             provider.configure(request.name, config)
-            return runtime_pb2.ConfigurePluginResponse(
+            return runtime_pb2.ConfigureProviderResponse(
                 protocol_version=CURRENT_PROTOCOL_VERSION
             )
 
@@ -708,12 +710,12 @@ def _provider_warnings(provider: PluginProvider) -> list[str]:
 def _provider_kind_to_proto(kind: ProviderKind | str) -> Any:
     normalized = _normalized_runtime_kind(kind)
     return {
-        ProviderKind.INTEGRATION: runtime_pb2.PluginKind.PLUGIN_KIND_INTEGRATION,
-        ProviderKind.AUTH: runtime_pb2.PluginKind.PLUGIN_KIND_AUTH,
-        ProviderKind.DATASTORE: runtime_pb2.PluginKind.PLUGIN_KIND_DATASTORE,
-        ProviderKind.SECRETS: runtime_pb2.PluginKind.PLUGIN_KIND_SECRETS,
-        ProviderKind.TELEMETRY: runtime_pb2.PluginKind.PLUGIN_KIND_TELEMETRY,
-    }.get(normalized, runtime_pb2.PluginKind.PLUGIN_KIND_UNSPECIFIED)
+        ProviderKind.INTEGRATION: runtime_pb2.ProviderKind.PROVIDER_KIND_INTEGRATION,
+        ProviderKind.AUTH: runtime_pb2.ProviderKind.PROVIDER_KIND_AUTH,
+        ProviderKind.DATASTORE: runtime_pb2.ProviderKind.PROVIDER_KIND_DATASTORE,
+        ProviderKind.SECRETS: runtime_pb2.ProviderKind.PROVIDER_KIND_SECRETS,
+        ProviderKind.TELEMETRY: runtime_pb2.ProviderKind.PROVIDER_KIND_TELEMETRY,
+    }.get(normalized, runtime_pb2.ProviderKind.PROVIDER_KIND_UNSPECIFIED)
 
 
 def _normalized_runtime_kind(kind: ProviderKind | str | None) -> ProviderKind:

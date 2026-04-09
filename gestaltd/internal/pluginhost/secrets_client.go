@@ -26,7 +26,7 @@ type remoteSecretManager struct {
 }
 
 func NewExecutableSecretManager(ctx context.Context, cfg SecretsExecConfig) (core.SecretManager, error) {
-	proc, err := startPluginProcess(ctx, ExecConfig{
+	proc, err := startProviderProcess(ctx, ExecConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
 		Env:          cfg.Env,
@@ -42,7 +42,7 @@ func NewExecutableSecretManager(ctx context.Context, cfg SecretsExecConfig) (cor
 	runtimeClient := proto.NewProviderLifecycleClient(proc.conn)
 	secretsClient := proto.NewSecretsProviderClient(proc.conn)
 
-	_, err = configureRuntimePlugin(ctx, runtimeClient, proto.PluginKind_PLUGIN_KIND_SECRETS, cfg.Name, cfg.Config)
+	_, err = configureRuntimeProvider(ctx, runtimeClient, proto.ProviderKind_PROVIDER_KIND_SECRETS, cfg.Name, cfg.Config)
 	if err != nil {
 		_ = proc.Close()
 		return nil, err
@@ -55,7 +55,7 @@ func NewExecutableSecretManager(ctx context.Context, cfg SecretsExecConfig) (cor
 }
 
 func (r *remoteSecretManager) GetSecret(ctx context.Context, name string) (string, error) {
-	ctx, cancel := pluginCallContext(ctx)
+	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 
 	resp, err := r.client.GetSecret(ctx, &proto.GetSecretRequest{Name: name})

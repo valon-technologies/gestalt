@@ -26,10 +26,13 @@ type ProviderMetadata struct {
 	Version     string
 }
 
-// PluginProvider is the common startup contract shared by every provider kind.
-type PluginProvider interface {
+// Provider is the common startup contract shared by every provider kind.
+type Provider interface {
 	Configure(ctx context.Context, name string, config map[string]any) error
 }
+
+// PluginProvider is a deprecated alias for Provider.
+type PluginProvider = Provider
 
 // MetadataProvider is implemented by providers that can describe themselves
 // without consulting the manifest or host-side configuration.

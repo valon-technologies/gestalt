@@ -12,16 +12,16 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file v1/runtime.proto.
  */
 export const file_v1_runtime: GenFile = /*@__PURE__*/
-  fileDesc("ChB2MS9ydW50aW1lLnByb3RvEhFnZXN0YWx0LnBsdWdpbi52MSLVAQoOUGx1Z2luTWV0YWRhdGESKwoEa2luZBgBIAEoDjIdLmdlc3RhbHQucGx1Z2luLnYxLlBsdWdpbktpbmQSDAoEbmFtZRgCIAEoCRIUCgxkaXNwbGF5X25hbWUYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSDwoHdmVyc2lvbhgFIAEoCRIQCgh3YXJuaW5ncxgGIAMoCRIcChRtaW5fcHJvdG9jb2xfdmVyc2lvbhgKIAEoBRIcChRtYXhfcHJvdG9jb2xfdmVyc2lvbhgLIAEoBSJpChZDb25maWd1cmVQbHVnaW5SZXF1ZXN0EgwKBG5hbWUYASABKAkSJwoGY29uZmlnGAIgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIYChBwcm90b2NvbF92ZXJzaW9uGAMgASgFIjMKF0NvbmZpZ3VyZVBsdWdpblJlc3BvbnNlEhgKEHByb3RvY29sX3ZlcnNpb24YASABKAUiNQoTSGVhbHRoQ2hlY2tSZXNwb25zZRINCgVyZWFkeRgBIAEoCBIPCgdtZXNzYWdlGAIgASgJKqsBCgpQbHVnaW5LaW5kEhsKF1BMVUdJTl9LSU5EX1VOU1BFQ0lGSUVEEAASGwoXUExVR0lOX0tJTkRfSU5URUdSQVRJT04QARIUChBQTFVHSU5fS0lORF9BVVRIEAISGQoVUExVR0lOX0tJTkRfREFUQVNUT1JFEAMSFwoTUExVR0lOX0tJTkRfU0VDUkVUUxAEEhkKFVBMVUdJTl9LSU5EX1RFTEVNRVRSWRAFMpwCChFQcm92aWRlckxpZmVjeWNsZRJOChFHZXRQbHVnaW5NZXRhZGF0YRIWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRohLmdlc3RhbHQucGx1Z2luLnYxLlBsdWdpbk1ldGFkYXRhEmgKD0NvbmZpZ3VyZVBsdWdpbhIpLmdlc3RhbHQucGx1Z2luLnYxLkNvbmZpZ3VyZVBsdWdpblJlcXVlc3QaKi5nZXN0YWx0LnBsdWdpbi52MS5Db25maWd1cmVQbHVnaW5SZXNwb25zZRJNCgtIZWFsdGhDaGVjaxIWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRomLmdlc3RhbHQucGx1Z2luLnYxLkhlYWx0aENoZWNrUmVzcG9uc2VCO1o5Z2l0aHViLmNvbS92YWxvbi10ZWNobm9sb2dpZXMvZ2VzdGFsdC9zZGsvZ28vZ2VuL3YxO3Byb3RvYgZwcm90bzM", [file_google_protobuf_empty, file_google_protobuf_struct]);
+  fileDesc("ChB2MS9ydW50aW1lLnByb3RvEhFnZXN0YWx0LnBsdWdpbi52MSLZAQoQUHJvdmlkZXJJZGVudGl0eRItCgRraW5kGAEgASgOMh8uZ2VzdGFsdC5wbHVnaW4udjEuUHJvdmlkZXJLaW5kEgwKBG5hbWUYAiABKAkSFAoMZGlzcGxheV9uYW1lGAMgASgJEhMKC2Rlc2NyaXB0aW9uGAQgASgJEg8KB3ZlcnNpb24YBSABKAkSEAoId2FybmluZ3MYBiADKAkSHAoUbWluX3Byb3RvY29sX3ZlcnNpb24YCiABKAUSHAoUbWF4X3Byb3RvY29sX3ZlcnNpb24YCyABKAUiawoYQ29uZmlndXJlUHJvdmlkZXJSZXF1ZXN0EgwKBG5hbWUYASABKAkSJwoGY29uZmlnGAIgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIYChBwcm90b2NvbF92ZXJzaW9uGAMgASgFIjUKGUNvbmZpZ3VyZVByb3ZpZGVyUmVzcG9uc2USGAoQcHJvdG9jb2xfdmVyc2lvbhgBIAEoBSI1ChNIZWFsdGhDaGVja1Jlc3BvbnNlEg0KBXJlYWR5GAEgASgIEg8KB21lc3NhZ2UYAiABKAkquQEKDFByb3ZpZGVyS2luZBIdChlQUk9WSURFUl9LSU5EX1VOU1BFQ0lGSUVEEAASHQoZUFJPVklERVJfS0lORF9JTlRFR1JBVElPThABEhYKElBST1ZJREVSX0tJTkRfQVVUSBACEhsKF1BST1ZJREVSX0tJTkRfREFUQVNUT1JFEAMSGQoVUFJPVklERVJfS0lORF9TRUNSRVRTEAQSGwoXUFJPVklERVJfS0lORF9URUxFTUVUUlkQBTKmAgoRUHJvdmlkZXJMaWZlY3ljbGUSUgoTR2V0UHJvdmlkZXJJZGVudGl0eRIWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRojLmdlc3RhbHQucGx1Z2luLnYxLlByb3ZpZGVySWRlbnRpdHkSbgoRQ29uZmlndXJlUHJvdmlkZXISKy5nZXN0YWx0LnBsdWdpbi52MS5Db25maWd1cmVQcm92aWRlclJlcXVlc3QaLC5nZXN0YWx0LnBsdWdpbi52MS5Db25maWd1cmVQcm92aWRlclJlc3BvbnNlEk0KC0hlYWx0aENoZWNrEhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5GiYuZ2VzdGFsdC5wbHVnaW4udjEuSGVhbHRoQ2hlY2tSZXNwb25zZUI7WjlnaXRodWIuY29tL3ZhbG9uLXRlY2hub2xvZ2llcy9nZXN0YWx0L3Nkay9nby9nZW4vdjE7cHJvdG9iBnByb3RvMw", [file_google_protobuf_empty, file_google_protobuf_struct]);
 
 /**
- * @generated from message gestalt.plugin.v1.PluginMetadata
+ * @generated from message gestalt.plugin.v1.ProviderIdentity
  */
-export type PluginMetadata = Message<"gestalt.plugin.v1.PluginMetadata"> & {
+export type ProviderIdentity = Message<"gestalt.plugin.v1.ProviderIdentity"> & {
   /**
-   * @generated from field: gestalt.plugin.v1.PluginKind kind = 1;
+   * @generated from field: gestalt.plugin.v1.ProviderKind kind = 1;
    */
-  kind: PluginKind;
+  kind: ProviderKind;
 
   /**
    * @generated from field: string name = 2;
@@ -60,16 +60,16 @@ export type PluginMetadata = Message<"gestalt.plugin.v1.PluginMetadata"> & {
 };
 
 /**
- * Describes the message gestalt.plugin.v1.PluginMetadata.
- * Use `create(PluginMetadataSchema)` to create a new message.
+ * Describes the message gestalt.plugin.v1.ProviderIdentity.
+ * Use `create(ProviderIdentitySchema)` to create a new message.
  */
-export const PluginMetadataSchema: GenMessage<PluginMetadata> = /*@__PURE__*/
+export const ProviderIdentitySchema: GenMessage<ProviderIdentity> = /*@__PURE__*/
   messageDesc(file_v1_runtime, 0);
 
 /**
- * @generated from message gestalt.plugin.v1.ConfigurePluginRequest
+ * @generated from message gestalt.plugin.v1.ConfigureProviderRequest
  */
-export type ConfigurePluginRequest = Message<"gestalt.plugin.v1.ConfigurePluginRequest"> & {
+export type ConfigureProviderRequest = Message<"gestalt.plugin.v1.ConfigureProviderRequest"> & {
   /**
    * @generated from field: string name = 1;
    */
@@ -87,16 +87,16 @@ export type ConfigurePluginRequest = Message<"gestalt.plugin.v1.ConfigurePluginR
 };
 
 /**
- * Describes the message gestalt.plugin.v1.ConfigurePluginRequest.
- * Use `create(ConfigurePluginRequestSchema)` to create a new message.
+ * Describes the message gestalt.plugin.v1.ConfigureProviderRequest.
+ * Use `create(ConfigureProviderRequestSchema)` to create a new message.
  */
-export const ConfigurePluginRequestSchema: GenMessage<ConfigurePluginRequest> = /*@__PURE__*/
+export const ConfigureProviderRequestSchema: GenMessage<ConfigureProviderRequest> = /*@__PURE__*/
   messageDesc(file_v1_runtime, 1);
 
 /**
- * @generated from message gestalt.plugin.v1.ConfigurePluginResponse
+ * @generated from message gestalt.plugin.v1.ConfigureProviderResponse
  */
-export type ConfigurePluginResponse = Message<"gestalt.plugin.v1.ConfigurePluginResponse"> & {
+export type ConfigureProviderResponse = Message<"gestalt.plugin.v1.ConfigureProviderResponse"> & {
   /**
    * @generated from field: int32 protocol_version = 1;
    */
@@ -104,10 +104,10 @@ export type ConfigurePluginResponse = Message<"gestalt.plugin.v1.ConfigurePlugin
 };
 
 /**
- * Describes the message gestalt.plugin.v1.ConfigurePluginResponse.
- * Use `create(ConfigurePluginResponseSchema)` to create a new message.
+ * Describes the message gestalt.plugin.v1.ConfigureProviderResponse.
+ * Use `create(ConfigureProviderResponseSchema)` to create a new message.
  */
-export const ConfigurePluginResponseSchema: GenMessage<ConfigurePluginResponse> = /*@__PURE__*/
+export const ConfigureProviderResponseSchema: GenMessage<ConfigureProviderResponse> = /*@__PURE__*/
   messageDesc(file_v1_runtime, 2);
 
 /**
@@ -133,44 +133,44 @@ export const HealthCheckResponseSchema: GenMessage<HealthCheckResponse> = /*@__P
   messageDesc(file_v1_runtime, 3);
 
 /**
- * @generated from enum gestalt.plugin.v1.PluginKind
+ * @generated from enum gestalt.plugin.v1.ProviderKind
  */
-export enum PluginKind {
+export enum ProviderKind {
   /**
-   * @generated from enum value: PLUGIN_KIND_UNSPECIFIED = 0;
+   * @generated from enum value: PROVIDER_KIND_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
 
   /**
-   * @generated from enum value: PLUGIN_KIND_INTEGRATION = 1;
+   * @generated from enum value: PROVIDER_KIND_INTEGRATION = 1;
    */
   INTEGRATION = 1,
 
   /**
-   * @generated from enum value: PLUGIN_KIND_AUTH = 2;
+   * @generated from enum value: PROVIDER_KIND_AUTH = 2;
    */
   AUTH = 2,
 
   /**
-   * @generated from enum value: PLUGIN_KIND_DATASTORE = 3;
+   * @generated from enum value: PROVIDER_KIND_DATASTORE = 3;
    */
   DATASTORE = 3,
 
   /**
-   * @generated from enum value: PLUGIN_KIND_SECRETS = 4;
+   * @generated from enum value: PROVIDER_KIND_SECRETS = 4;
    */
   SECRETS = 4,
 
   /**
-   * @generated from enum value: PLUGIN_KIND_TELEMETRY = 5;
+   * @generated from enum value: PROVIDER_KIND_TELEMETRY = 5;
    */
   TELEMETRY = 5,
 }
 
 /**
- * Describes the enum gestalt.plugin.v1.PluginKind.
+ * Describes the enum gestalt.plugin.v1.ProviderKind.
  */
-export const PluginKindSchema: GenEnum<PluginKind> = /*@__PURE__*/
+export const ProviderKindSchema: GenEnum<ProviderKind> = /*@__PURE__*/
   enumDesc(file_v1_runtime, 0);
 
 /**
@@ -178,20 +178,20 @@ export const PluginKindSchema: GenEnum<PluginKind> = /*@__PURE__*/
  */
 export const ProviderLifecycle: GenService<{
   /**
-   * @generated from rpc gestalt.plugin.v1.ProviderLifecycle.GetPluginMetadata
+   * @generated from rpc gestalt.plugin.v1.ProviderLifecycle.GetProviderIdentity
    */
-  getPluginMetadata: {
+  getProviderIdentity: {
     methodKind: "unary";
     input: typeof EmptySchema;
-    output: typeof PluginMetadataSchema;
+    output: typeof ProviderIdentitySchema;
   },
   /**
-   * @generated from rpc gestalt.plugin.v1.ProviderLifecycle.ConfigurePlugin
+   * @generated from rpc gestalt.plugin.v1.ProviderLifecycle.ConfigureProvider
    */
-  configurePlugin: {
+  configureProvider: {
     methodKind: "unary";
-    input: typeof ConfigurePluginRequestSchema;
-    output: typeof ConfigurePluginResponseSchema;
+    input: typeof ConfigureProviderRequestSchema;
+    output: typeof ConfigureProviderResponseSchema;
   },
   /**
    * @generated from rpc gestalt.plugin.v1.ProviderLifecycle.HealthCheck
