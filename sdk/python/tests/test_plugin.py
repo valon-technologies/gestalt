@@ -203,6 +203,35 @@ class PluginCatalogTests(unittest.TestCase):
         self.assertEqual(op["outputSchema"]["required"], ["id"])
         self.assertFalse(op["outputSchema"]["read_only"])
 
+    def test_catalog_preserves_dict_defaults(self) -> None:
+        from gestalt._catalog import (
+            Catalog,
+            CatalogOperation,
+            CatalogParameter,
+            catalog_to_dict,
+        )
+
+        catalog = Catalog(
+            name="test",
+            operations=[
+                CatalogOperation(
+                    id="op",
+                    method="POST",
+                    parameters=[
+                        CatalogParameter(
+                            name="opts",
+                            type="object",
+                            required=True,
+                            default={"display_name": "x", "required": False, "read_only": True},
+                        ),
+                    ],
+                ),
+            ],
+        )
+        result = catalog_to_dict(catalog, field_style="json")
+        param = result["operations"][0]["parameters"][0]
+        self.assertEqual(param["default"], {"display_name": "x", "required": False, "read_only": True})
+
     def test_write_catalog(self) -> None:
         """write_catalog should produce a YAML file on disk."""
         plugin = Plugin("test-plugin")

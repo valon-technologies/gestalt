@@ -221,7 +221,7 @@ _JSON_RENAMES: Final[dict[str, str]] = {
 
 _YAML_RENAMES: Final[dict[str, str]] = {v: k for k, v in _JSON_RENAMES.items()}
 
-_OPAQUE_KEYS: Final[frozenset[str]] = frozenset({"input_schema", "output_schema"})
+_OPAQUE_KEYS: Final[frozenset[str]] = frozenset({"input_schema", "output_schema", "default"})
 
 
 def _serialize_catalog(value: Any, *, field_style: str) -> Any:
