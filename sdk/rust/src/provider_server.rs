@@ -5,7 +5,7 @@ use serde_json::Value;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
 use crate::api::{Request, Response};
-use crate::catalog::{Catalog, catalog_json, object_map};
+use crate::catalog::{catalog_json, object_map};
 use crate::env::CURRENT_PROTOCOL_VERSION;
 use crate::error::Error;
 use crate::generated::v1::provider_plugin_server::ProviderPlugin;
@@ -52,10 +52,6 @@ impl OperationResult {
 impl<P> ProviderServer<P> {
     pub fn new(provider: Arc<P>, router: Router<P>) -> Self {
         Self { provider, router }
-    }
-
-    pub fn catalog(&self) -> Catalog {
-        self.router.catalog()
     }
 }
 

@@ -58,12 +58,6 @@ impl From<serde_json::Error> for Error {
     }
 }
 
-impl From<serde_yaml::Error> for Error {
-    fn from(value: serde_yaml::Error) -> Self {
-        Self::internal(value.to_string())
-    }
-}
-
 impl From<std::io::Error> for Error {
     fn from(value: std::io::Error) -> Self {
         Self::internal(value.to_string())

@@ -16,6 +16,7 @@ use tokio_stream::wrappers::UnixListenerStream;
 #[cfg(unix)]
 use tonic::transport::Server;
 
+use crate::catalog::write_catalog;
 use crate::env::{ENV_PLUGIN_NAME, ENV_PLUGIN_PARENT_PID, ENV_PLUGIN_SOCKET, ENV_WRITE_CATALOG};
 use crate::error::{Error, Result};
 #[cfg(unix)]
@@ -26,9 +27,10 @@ use crate::generated::v1::datastore_plugin_server::DatastorePluginServer;
 use crate::generated::v1::plugin_runtime_server::PluginRuntimeServer;
 #[cfg(unix)]
 use crate::generated::v1::provider_plugin_server::ProviderPluginServer;
+use crate::provider_server::ProviderServer;
 #[cfg(unix)]
 use crate::{AuthProvider, DatastoreProvider};
-use crate::{Provider, ProviderServer, Router, write_catalog};
+use crate::{Provider, Router};
 #[cfg(unix)]
 use crate::{
     auth_server::AuthServer, datastore_server::DatastoreServer, runtime_server::RuntimeServer,
@@ -59,7 +61,7 @@ pub fn run_datastore_provider<P: DatastoreProvider>(provider: Arc<P>) -> Result<
 }
 
 pub fn write_catalog_path<P>(router: &Router<P>, path: impl AsRef<Path>) -> Result<()> {
-    write_catalog(&router.catalog(), path)
+    write_catalog(router.catalog(), path)
 }
 
 pub fn maybe_write_catalog<P>(router: &Router<P>) -> Result<bool> {
@@ -68,9 +70,9 @@ pub fn maybe_write_catalog<P>(router: &Router<P>) -> Result<bool> {
     };
 
     let catalog = if let Ok(name) = env::var(ENV_PLUGIN_NAME) {
-        router.catalog().with_name(name)
+        router.catalog().clone().with_name(name)
     } else {
-        router.catalog()
+        router.catalog().clone()
     };
 
     write_catalog(&catalog, PathBuf::from(path))?;

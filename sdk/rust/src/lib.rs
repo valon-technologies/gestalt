@@ -14,9 +14,6 @@ mod rpc_status;
 pub mod runtime;
 mod runtime_server;
 
-/// The shared protobuf package name used by the Gestalt SDK protocol surface.
-pub const PROTO_PACKAGE: &str = "gestalt.plugin.v1";
-
 /// Generated protobuf and gRPC bindings compiled from `sdk/proto/v1/*.proto`.
 mod generated {
     pub mod v1 {
@@ -29,22 +26,18 @@ pub mod proto {
 }
 
 pub use api::RuntimeMetadata;
-pub use api::{IntoResponse, Provider, Request, Response, ok};
+pub use api::{Provider, Request, Response, ok};
 pub use async_trait::async_trait;
 pub use auth::{
     AuthProvider, AuthenticatedUser, BeginLoginRequest, BeginLoginResponse, CompleteLoginRequest,
 };
-pub use catalog::{
-    Catalog, CatalogOperation, CatalogParameter, OperationAnnotations, write_catalog,
-};
+pub use catalog::{Catalog, CatalogOperation};
 pub use datastore::{
     DatastoreProvider, OAuthRegistration, StoredApiToken, StoredIntegrationToken, StoredUser,
 };
-pub use env::{
-    CURRENT_PROTOCOL_VERSION, ENV_PLUGIN_NAME, ENV_PLUGIN_PARENT_PID, ENV_PLUGIN_SOCKET,
-    ENV_WRITE_CATALOG,
-};
+pub use env::{CURRENT_PROTOCOL_VERSION, ENV_PLUGIN_SOCKET};
 pub use error::{Error, Result};
+#[doc(hidden)]
 pub use provider_server::{OperationResult, ProviderServer};
 pub use router::{Operation, Router};
 
