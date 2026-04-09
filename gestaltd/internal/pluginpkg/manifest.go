@@ -107,12 +107,16 @@ func ManifestKind(manifest *pluginmanifestv1.Manifest) (string, error) {
 		kind = pluginmanifestv1.KindDatastore
 		count++
 	}
+	if manifest.Secrets != nil {
+		kind = pluginmanifestv1.KindSecrets
+		count++
+	}
 	if manifest.WebUI != nil {
 		kind = pluginmanifestv1.KindWebUI
 		count++
 	}
 	if count != 1 {
-		return "", fmt.Errorf("manifest must define exactly one of plugin, auth, datastore, or webui")
+		return "", fmt.Errorf("manifest must define exactly one of plugin, auth, datastore, secrets, or webui")
 	}
 	return kind, nil
 }
@@ -152,6 +156,7 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 	allowsSourceExecutableEntrypointOmission := sourceMode && manifest.Entrypoints.Provider == nil
 	allowsSourceAuthEntrypointOmission := sourceMode && manifest.Entrypoints.Auth == nil
 	allowsSourceDatastoreEntrypointOmission := sourceMode && manifest.Entrypoints.Datastore == nil
+	allowsSourceSecretsEntrypointOmission := sourceMode && manifest.Entrypoints.Secrets == nil
 
 	needsArtifacts := len(manifest.Artifacts) > 0
 	switch kind {
@@ -161,6 +166,8 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 		needsArtifacts = needsArtifacts || !allowsSourceAuthEntrypointOmission
 	case pluginmanifestv1.KindDatastore:
 		needsArtifacts = needsArtifacts || !allowsSourceDatastoreEntrypointOmission
+	case pluginmanifestv1.KindSecrets:
+		needsArtifacts = needsArtifacts || !allowsSourceSecretsEntrypointOmission
 	}
 
 	var artifactPaths map[string]struct{}
@@ -205,7 +212,7 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 				return err
 			}
 		}
-		if manifest.Entrypoints.Auth != nil || manifest.Entrypoints.Datastore != nil {
+		if manifest.Entrypoints.Auth != nil || manifest.Entrypoints.Datastore != nil || manifest.Entrypoints.Secrets != nil {
 			return fmt.Errorf("plugin manifests may only define entrypoints.provider")
 		}
 		switch {
@@ -225,7 +232,7 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 				return err
 			}
 		}
-		if manifest.Entrypoints.Provider != nil || manifest.Entrypoints.Datastore != nil {
+		if manifest.Entrypoints.Provider != nil || manifest.Entrypoints.Datastore != nil || manifest.Entrypoints.Secrets != nil {
 			return fmt.Errorf("auth manifests may only define entrypoints.auth")
 		}
 		if manifest.Entrypoints.Auth == nil && !allowsSourceAuthEntrypointOmission {
@@ -242,7 +249,7 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 				return err
 			}
 		}
-		if manifest.Entrypoints.Provider != nil || manifest.Entrypoints.Auth != nil {
+		if manifest.Entrypoints.Provider != nil || manifest.Entrypoints.Auth != nil || manifest.Entrypoints.Secrets != nil {
 			return fmt.Errorf("datastore manifests may only define entrypoints.datastore")
 		}
 		if manifest.Entrypoints.Datastore == nil && !allowsSourceDatastoreEntrypointOmission {
@@ -253,8 +260,25 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 				return err
 			}
 		}
-	case pluginmanifestv1.KindWebUI:
+	case pluginmanifestv1.KindSecrets:
+		if manifest.Secrets.ConfigSchemaPath != "" {
+			if err := validateRelativePackagePath(manifest.Secrets.ConfigSchemaPath, "secrets config schema path"); err != nil {
+				return err
+			}
+		}
 		if manifest.Entrypoints.Provider != nil || manifest.Entrypoints.Auth != nil || manifest.Entrypoints.Datastore != nil {
+			return fmt.Errorf("secrets manifests may only define entrypoints.secrets")
+		}
+		if manifest.Entrypoints.Secrets == nil && !allowsSourceSecretsEntrypointOmission {
+			return fmt.Errorf("%s is required", EntrypointFieldForKind(kind))
+		}
+		if manifest.Entrypoints.Secrets != nil {
+			if err := validateEntrypoint(kind, manifest.Entrypoints.Secrets, artifactPaths); err != nil {
+				return err
+			}
+		}
+	case pluginmanifestv1.KindWebUI:
+		if manifest.Entrypoints.Provider != nil || manifest.Entrypoints.Auth != nil || manifest.Entrypoints.Datastore != nil || manifest.Entrypoints.Secrets != nil {
 			return fmt.Errorf("webui manifests may not define executable entrypoints")
 		}
 		if err := validateRelativePackagePath(manifest.WebUI.AssetRoot, "webui asset root"); err != nil {
@@ -300,6 +324,8 @@ func EntrypointFieldForKind(kind string) string {
 		return "entrypoints.auth"
 	case pluginmanifestv1.KindDatastore:
 		return "entrypoints.datastore"
+	case pluginmanifestv1.KindSecrets:
+		return "entrypoints.secrets"
 	default:
 		return "entrypoints." + kind
 	}
@@ -316,6 +342,8 @@ func EntrypointForKind(manifest *pluginmanifestv1.Manifest, kind string) *plugin
 		return manifest.Entrypoints.Auth
 	case pluginmanifestv1.KindDatastore:
 		return manifest.Entrypoints.Datastore
+	case pluginmanifestv1.KindSecrets:
+		return manifest.Entrypoints.Secrets
 	default:
 		return nil
 	}

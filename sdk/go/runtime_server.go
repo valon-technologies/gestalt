@@ -94,6 +94,8 @@ func providerKindToProto(kind ProviderKind) proto.PluginKind {
 		return proto.PluginKind_PLUGIN_KIND_AUTH
 	case ProviderKindDatastore:
 		return proto.PluginKind_PLUGIN_KIND_DATASTORE
+	case ProviderKindSecrets:
+		return proto.PluginKind_PLUGIN_KIND_SECRETS
 	default:
 		return proto.PluginKind_PLUGIN_KIND_UNSPECIFIED
 	}

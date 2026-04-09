@@ -176,6 +176,8 @@ func typeScriptComponentKind(kind string) (string, error) {
 		return "auth", nil
 	case pluginmanifestv1.KindDatastore:
 		return "datastore", nil
+	case pluginmanifestv1.KindSecrets:
+		return "secrets", nil
 	default:
 		return "", fmt.Errorf("unsupported source component kind %q", kind)
 	}

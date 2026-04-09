@@ -250,6 +250,7 @@ const (
 	pythonRuntimeKindIntegration = "integration"
 	pythonRuntimeKindAuth        = "auth"
 	pythonRuntimeKindDatastore   = "datastore"
+	pythonRuntimeKindSecrets     = "secrets"
 )
 
 func pythonRuntimeKind(kind string) (string, error) {
@@ -260,6 +261,8 @@ func pythonRuntimeKind(kind string) (string, error) {
 		return pythonRuntimeKindAuth, nil
 	case pluginmanifestv1.KindDatastore:
 		return pythonRuntimeKindDatastore, nil
+	case pluginmanifestv1.KindSecrets:
+		return pythonRuntimeKindSecrets, nil
 	default:
 		return "", fmt.Errorf("unsupported Python runtime kind %q", kind)
 	}
