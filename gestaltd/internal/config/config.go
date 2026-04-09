@@ -275,15 +275,16 @@ func (c *SecretsConfig) UnmarshalYAML(value *yaml.Node) error {
 	c.Config = yaml.Node{}
 	providerNode := mappingValueNode(value, "provider")
 	if providerNode != nil {
-		if providerNode.Kind == yaml.ScalarNode && providerNode.Tag != "!!null" {
+		switch {
+		case providerNode.Kind == yaml.ScalarNode && providerNode.Tag != "!!null":
 			c.BuiltinProvider = strings.TrimSpace(providerNode.Value)
-		} else if providerNode.Kind == yaml.MappingNode {
+		case providerNode.Kind == yaml.MappingNode:
 			decoded, err := decodeTopLevelComponentProvider("secrets", providerNode)
 			if err != nil {
 				return err
 			}
 			c.Provider = decoded
-		} else if providerNode.Kind != yaml.ScalarNode || providerNode.Tag != "!!null" {
+		case providerNode.Kind != yaml.ScalarNode || providerNode.Tag != "!!null":
 			return fmt.Errorf("secrets.provider must be a string or a provider reference mapping")
 		}
 	}
@@ -422,10 +423,10 @@ func (s ServerConfig) ManagementAddr() string {
 
 type IntegrationDef struct {
 	Plugin        *ProviderDef `yaml:"plugin"`
-	DisplayName   string     `yaml:"display_name"`
-	Description   string     `yaml:"description"`
-	MCPToolPrefix string     `yaml:"-"`
-	IconFile      string     `yaml:"icon_file"`
+	DisplayName   string       `yaml:"display_name"`
+	Description   string       `yaml:"description"`
+	MCPToolPrefix string       `yaml:"-"`
+	IconFile      string       `yaml:"icon_file"`
 }
 
 // ConnectionDef owns authentication and connection parameters for a named

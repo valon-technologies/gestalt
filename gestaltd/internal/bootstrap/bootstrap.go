@@ -428,7 +428,8 @@ func buildAuditSink(ctx context.Context, cfg *config.Config, factories *FactoryR
 
 func buildSecretManager(cfg *config.Config, factories *FactoryRegistry) (core.SecretManager, error) {
 	if cfg.Secrets.Provider != nil {
-		if factories.Auth == nil {
+		factory, ok := factories.Secrets["plugin"]
+		if !ok {
 			return nil, fmt.Errorf("bootstrap: secrets plugin factory is not registered")
 		}
 		node := cfg.Secrets.Config
@@ -438,10 +439,6 @@ func buildSecretManager(cfg *config.Config, factories *FactoryRegistry) (core.Se
 			if err != nil {
 				return nil, fmt.Errorf("bootstrap: secrets plugin: %w", err)
 			}
-		}
-		factory, ok := factories.Secrets["plugin"]
-		if !ok {
-			return nil, fmt.Errorf("bootstrap: secrets plugin factory is not registered")
 		}
 		sm, err := factory(node)
 		if err != nil {
