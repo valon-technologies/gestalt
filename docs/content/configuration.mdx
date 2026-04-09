@@ -15,7 +15,7 @@ If nothing is found, `gestaltd` generates a default config at `~/.gestaltd/confi
 
 ### Environment expansion
 
-Gestalt expands `${ENV_VAR}` placeholders before YAML decoding. When a referenced variable is unset but a corresponding `ENV_VAR_FILE` variable exists, Gestalt reads the value from that file path instead. This is useful for container runtimes that mount secrets as files.
+Gestalt expands `${ENV_VAR}` placeholders before YAML decoding. When a referenced variable is unset, Gestalt checks for a corresponding `ENV_VAR_FILE` variable and reads that file path instead. If neither is set, config loading fails. Use `${ENV_VAR:-}` when an explicit empty default is intentional. This is useful for container runtimes that mount secrets as files.
 
 ### Secret resolution
 

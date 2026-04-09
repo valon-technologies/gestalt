@@ -177,6 +177,7 @@ Gestalt expands `${VAR}` placeholders before YAML decode. The image also support
 
 - if `VAR` is set, `${VAR}` resolves to that value
 - otherwise, if `VAR_FILE` is set, `${VAR}` resolves to the contents of that file
+- otherwise, config loading fails unless you used `${VAR:-}` for an explicit empty default
 
 That means this works well with Docker secrets:
 

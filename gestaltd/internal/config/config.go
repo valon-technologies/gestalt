@@ -835,25 +835,48 @@ func loadWithLookup(path string, lookup func(string) (string, bool), preserveMis
 	return &cfg, nil
 }
 
+func parseEnvPlaceholder(key string) (name string, allowEmptyDefault bool, err error) {
+	if !strings.Contains(key, ":-") {
+		return key, false, nil
+	}
+	name, defaultValue, _ := strings.Cut(key, ":-")
+	if name == "" {
+		return "", false, fmt.Errorf("invalid environment placeholder ${%s}", key)
+	}
+	if defaultValue != "" {
+		return "", false, fmt.Errorf("unsupported environment placeholder ${%s}: only ${%s:-} is supported for empty defaults", key, name)
+	}
+	return name, true, nil
+}
+
 func expandEnvVariables(input string, lookup func(string) (string, bool), preserveMissing bool) (string, error) {
 	var expandErr error
 	resolved := os.Expand(input, func(key string) string {
 		if expandErr != nil {
 			return ""
 		}
-		if val, ok := lookup(key); ok {
+		name, allowEmptyDefault, err := parseEnvPlaceholder(key)
+		if err != nil {
+			expandErr = err
+			return ""
+		}
+		if val, ok := lookup(name); ok {
 			return val
 		}
-		filePath, ok := lookup(key + "_FILE")
+		filePath, ok := lookup(name + "_FILE")
 		if !ok || filePath == "" {
+			if allowEmptyDefault {
+				return ""
+			}
 			if preserveMissing {
 				return "${" + key + "}"
 			}
+			expandErr = fmt.Errorf("environment variable %q not set; use ${%s:-} to allow an empty default", name, name)
 			return ""
 		}
 		data, err := os.ReadFile(filePath)
 		if err != nil {
-			expandErr = fmt.Errorf("resolving %s_FILE: %w", key, err)
+			expandErr = fmt.Errorf("resolving %s_FILE: %w", name, err)
 			return ""
 		}
 		return strings.TrimRight(string(data), "\r\n")

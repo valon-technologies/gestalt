@@ -177,6 +177,85 @@ server:
 	}
 }
 
+func TestLoadConfigMissingEnvVariableFails(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+datastore:
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+      version: 1.0.0
+server:
+  encryption_key: ${TEST_ENCRYPTION}
+`)
+
+	_, err := LoadWithLookup(path, func(string) (string, bool) {
+		return "", false
+	})
+	if err == nil {
+		t.Fatal("LoadWithLookup: expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), `environment variable "TEST_ENCRYPTION" not set`) {
+		t.Fatalf("expected missing env error, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), `${TEST_ENCRYPTION:-}`) {
+		t.Fatalf("expected empty-default hint, got: %v", err)
+	}
+}
+
+func TestLoadConfigEmptyDefaultEnvSyntax(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+datastore:
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+      version: 1.0.0
+server:
+  encryption_key: ${TEST_ENCRYPTION:-}
+`)
+
+	cfg, err := LoadWithLookup(path, func(string) (string, bool) {
+		return "", false
+	})
+	if err != nil {
+		t.Fatalf("LoadWithLookup: %v", err)
+	}
+	if cfg.Server.EncryptionKey != "" {
+		t.Fatalf("Server.EncryptionKey = %q, want empty string", cfg.Server.EncryptionKey)
+	}
+}
+
+func TestExpandEnvVariablesPreservesMissingPlaceholder(t *testing.T) {
+	t.Parallel()
+
+	got, err := expandEnvVariables("value: ${MISSING}", func(string) (string, bool) {
+		return "", false
+	}, true)
+	if err != nil {
+		t.Fatalf("expandEnvVariables: %v", err)
+	}
+	if got != "value: ${MISSING}" {
+		t.Fatalf("expandEnvVariables = %q, want value: ${MISSING}", got)
+	}
+}
+
+func TestExpandEnvVariablesRejectsNonEmptyDefault(t *testing.T) {
+	t.Parallel()
+
+	_, err := expandEnvVariables("value: ${MISSING:-fallback}", func(string) (string, bool) {
+		return "", false
+	}, false)
+	if err == nil {
+		t.Fatal("expandEnvVariables: expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "only ${MISSING:-} is supported for empty defaults") {
+		t.Fatalf("expected unsupported default error, got: %v", err)
+	}
+}
+
 func TestValidateRuntime(t *testing.T) {
 	t.Parallel()
 
