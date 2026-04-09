@@ -183,6 +183,16 @@ class OAuthRegistration:
     )
 
 
+class SecretsProvider(PluginProvider):
+    def get_secret(self, name: str) -> str:
+        raise NotImplementedError
+
+    def serve(self) -> None:
+        from . import _runtime
+
+        _runtime.serve(self, runtime_kind=ProviderKind.SECRETS)
+
+
 class DatastoreProvider(PluginProvider):
     def migrate(self) -> None:
         raise NotImplementedError
