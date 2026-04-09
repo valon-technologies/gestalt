@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Any, Union, get_args, get_origin, get_type_hints
 
-from ._api import Request, Response
+from ._api import Error, Request, Response
 from ._serialization import json_body
 
 
@@ -87,6 +87,8 @@ def execute_operation(
             body = result
 
         return OperationResult(status=status, body=json_body(body))
+    except Error as error:
+        return _error_result(error.status, error.message)
     except Exception as error:
         traceback.print_exception(error)
         return _error_result(HTTPStatus.INTERNAL_SERVER_ERROR, str(error))
@@ -109,7 +111,7 @@ def run_sync(value: Any) -> Any:
     return value
 
 
-def _error_result(status: HTTPStatus, message: str) -> OperationResult:
+def _error_result(status: int, message: str) -> OperationResult:
     return OperationResult(status=status, body=json_body({"error": message}))
 
 

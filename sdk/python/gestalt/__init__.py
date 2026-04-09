@@ -1,4 +1,4 @@
-from ._api import OK, Model, Request, Response, field
+from ._api import OK, Error, Model, Request, Response, field
 from ._catalog import (
     Catalog,
     CatalogOperation,
@@ -43,6 +43,7 @@ __all__ = [
     "Closer",
     "CompleteLoginRequest",
     "DatastoreProvider",
+    "Error",
     "ExternalTokenValidator",
     "HealthChecker",
     "Model",

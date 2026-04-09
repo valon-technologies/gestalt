@@ -76,7 +76,7 @@ func Register[P any, In any, Out any](
 
 			resp, err := handler(provider, ctx, input, req)
 			if err != nil {
-				return nil, newOperationError(http.StatusInternalServerError, err.Error(), err)
+				return nil, err
 			}
 
 			status := resp.Status
@@ -425,4 +425,3 @@ func isOptionalType(t reflect.Type) bool {
 		return false
 	}
 }
-

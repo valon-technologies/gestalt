@@ -30,6 +30,19 @@ def OK(body: T) -> Response[T]:
     return Response(status=HTTPStatus.OK, body=body)
 
 
+class Error(Exception):
+    def __init__(self, status: int | HTTPStatus, message: str = "") -> None:
+        self.status = int(status)
+        if message:
+            self.message = message
+        else:
+            try:
+                self.message = HTTPStatus(self.status).phrase
+            except ValueError:
+                self.message = ""
+        super().__init__(self.message)
+
+
 def field(
     *,
     description: str = "",

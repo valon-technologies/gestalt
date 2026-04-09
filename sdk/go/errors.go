@@ -48,6 +48,12 @@ func newOperationError(status int, message string, cause error) error {
 	}
 }
 
+// Error returns an operation error that causes the handler response to use the
+// provided HTTP status and message.
+func Error(status int, message string) error {
+	return newOperationError(status, message, nil)
+}
+
 func operationResultFromError(err error) *OperationResult {
 	if err == nil {
 		return nil
