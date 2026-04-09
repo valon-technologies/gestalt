@@ -16,8 +16,8 @@ class Request:
     token: str = ""
     connection_params: dict[str, str] = dataclasses.field(default_factory=dict)
 
-    def connection_param(self, name: str) -> str:
-        return self.connection_params.get(name, "")
+    def connection_param(self, name: str) -> str | None:
+        return self.connection_params.get(name)
 
 
 @dataclasses.dataclass(slots=True)

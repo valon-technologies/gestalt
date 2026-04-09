@@ -39,8 +39,8 @@ export function request(token = "", connectionParams: Record<string, string> = {
   };
 }
 
-export function connectionParam(input: Request | undefined, name: string): string {
-  return input?.connectionParams[name] ?? "";
+export function connectionParam(input: Request | undefined, name: string): string | undefined {
+  return input?.connectionParams[name];
 }
 
 export function errorMessage(error: unknown): string {

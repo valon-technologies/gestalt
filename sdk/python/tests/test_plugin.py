@@ -100,7 +100,7 @@ class PluginOperationTests(unittest.TestCase):
 
         @plugin.operation
         def echo(req: Request) -> dict[str, str]:
-            return {"token": req.token, "region": req.connection_param("region")}
+            return {"token": req.token, "region": req.connection_param("region") or ""}
 
         result = plugin.execute(
             "echo",

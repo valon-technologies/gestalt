@@ -19,12 +19,14 @@ type Request struct {
 	ConnectionParams map[string]string
 }
 
-// ConnectionParam returns one resolved connection parameter by name.
-func (r Request) ConnectionParam(name string) string {
+// ConnectionParam returns one resolved connection parameter by name and whether
+// it was present in the request.
+func (r Request) ConnectionParam(name string) (string, bool) {
 	if r.ConnectionParams == nil {
-		return ""
+		return "", false
 	}
-	return r.ConnectionParams[name]
+	value, ok := r.ConnectionParams[name]
+	return value, ok
 }
 
 // Response is the typed handler result marshaled into the provider response body.
@@ -425,4 +427,3 @@ func isOptionalType(t reflect.Type) bool {
 		return false
 	}
 }
-
