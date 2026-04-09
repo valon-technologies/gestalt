@@ -83,6 +83,14 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 		}
 	}
 
+	for name := range cfg.Datastores {
+		ds := cfg.Datastores[name]
+		if err := resolveStringFields(&ds, resolve); err != nil {
+			return err
+		}
+		cfg.Datastores[name] = ds
+	}
+
 	// Skip cfg.Secrets.Config to avoid self-referential resolution.
 	if err := resolveYAMLNode(&cfg.Auth.Config, resolve); err != nil {
 		return err
