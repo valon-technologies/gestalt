@@ -39,7 +39,7 @@ func NewExecutableSecretManager(ctx context.Context, cfg SecretsExecConfig) (cor
 		return nil, err
 	}
 
-	runtimeClient := proto.NewPluginRuntimeClient(proc.conn)
+	runtimeClient := proto.NewProviderLifecycleClient(proc.conn)
 	secretsClient := proto.NewSecretsProviderClient(proc.conn)
 
 	_, err = configureRuntimePlugin(ctx, runtimeClient, proto.PluginKind_PLUGIN_KIND_SECRETS, cfg.Name, cfg.Config)

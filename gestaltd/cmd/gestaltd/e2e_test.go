@@ -416,6 +416,11 @@ plugins:
 		t.Fatalf("write config: %v", err)
 	}
 
+	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd init: %v\n%s", err, out)
+	}
+
 	serveLockedAndExerciseExample(t, cfgPath, port, "", func(t *testing.T, baseURL string) {
 		listReq, _ := http.NewRequest(http.MethodGet, baseURL+"/api/v1/integrations", nil)
 		listReq.Header.Set("Authorization", "Bearer alice")
@@ -543,8 +548,6 @@ paths:
 source: github.com/test/plugins/manifest-basic
 version: 0.0.1-alpha.1
 display_name: Manifest Basic Test
-kinds:
-  - plugin
 plugin:
   auth:
     type: manual
@@ -580,7 +583,8 @@ plugin:
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := authDatastoreConfigYAML(t, dir, "session-auth", "sqlite", filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`server:
-  port: %d
+  public:
+    port: %d
   encryption_key: test-e2e-key
 plugins:
   mt:
@@ -692,8 +696,6 @@ func TestE2EDeclarativeManifestManualAuthMappingValueFromBasicAuth(t *testing.T)
 source: github.com/test/plugins/declarative-basic
 version: 0.0.1-alpha.1
 display_name: Declarative Basic Test
-kinds:
-  - plugin
 plugin:
   auth:
     type: manual
@@ -733,7 +735,8 @@ plugin:
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := authDatastoreConfigYAML(t, dir, "session-auth", "sqlite", filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`server:
-  port: %d
+  public:
+    port: %d
   encryption_key: test-e2e-key
 plugins:
   mt:
@@ -743,6 +746,11 @@ plugins:
 `, port, manifestPath)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
+	}
+
+	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd init: %v\n%s", err, out)
 	}
 
 	serveLockedAndExerciseExample(t, cfgPath, port, "", func(t *testing.T, baseURL string) {
@@ -1388,9 +1396,8 @@ func TestE2EInitServeLockedSplitManagementListener(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // Spawns gestaltd and is flaky under package-wide parallel load in CI.
 func TestE2EBareGestaltdAutoInit(t *testing.T) {
-	t.Parallel()
-
 	dir := t.TempDir()
 	pluginDir := setupPluginDir(t, dir)
 

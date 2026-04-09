@@ -5,6 +5,6 @@ import (
 )
 
 type SecretsProvider interface {
-	RuntimeProvider
+	PluginProvider
 	GetSecret(ctx context.Context, name string) (string, error)
 }
