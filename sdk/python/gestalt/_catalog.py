@@ -5,9 +5,9 @@ from collections.abc import Mapping
 from dataclasses import MISSING
 from typing import (
     Any,
+    Final,
     Iterable,
     Protocol,
-    cast,
     get_origin,
     get_type_hints,
     runtime_checkable,
@@ -186,12 +186,12 @@ def _catalog_python_dict(catalog: Catalog | Mapping[str, Any]) -> dict[str, Any]
     if dataclasses.is_dataclass(catalog):
         return _python_value(catalog)
     if isinstance(catalog, Mapping):
-        return _normalize_catalog_mapping(cast(Mapping[str, Any], catalog), _CATALOG_FIELDS)
+        return _normalize_mapping(dict(catalog))
     raise TypeError("catalog must be a gestalt.Catalog or mapping")
 
 
 def _serialize_catalog_dict(value: dict[str, Any], *, field_style: str) -> dict[str, Any]:
-    return _serialize_catalog_mapping(value, _CATALOG_FIELDS, field_style=field_style)
+    return _serialize_catalog(value, field_style=field_style)
 
 
 def _omit_catalog_value(key: str, value: Any) -> bool:
@@ -206,73 +206,48 @@ def _omit_catalog_value(key: str, value: Any) -> bool:
     return key in {"read_only", "required"} and value is False
 
 
-@dataclasses.dataclass(frozen=True, slots=True)
-class _CatalogFieldSpec:
-    json_name: str | None = None
-    children: dict[str, "_CatalogFieldSpec"] | None = None
-    sequence: bool = False
+_JSON_RENAMES: Final[dict[str, str]] = {
+    "display_name": "displayName",
+    "icon_svg": "iconSvg",
+    "input_schema": "inputSchema",
+    "output_schema": "outputSchema",
+    "required_scopes": "requiredScopes",
+    "read_only": "readOnly",
+    "read_only_hint": "readOnlyHint",
+    "idempotent_hint": "idempotentHint",
+    "destructive_hint": "destructiveHint",
+    "open_world_hint": "openWorldHint",
+}
+
+_YAML_RENAMES: Final[dict[str, str]] = {v: k for k, v in _JSON_RENAMES.items()}
 
 
-def _normalize_catalog_mapping(
-    value: Mapping[str, Any],
-    fields: dict[str, _CatalogFieldSpec],
-) -> dict[str, Any]:
-    aliases = {
-        alias: name
-        for name, field_spec in fields.items()
-        for alias in (name, field_spec.json_name)
-        if alias
-    }
-    data: dict[str, Any] = {}
-    for raw_key, raw_value in value.items():
-        key = aliases.get(str(raw_key), str(raw_key))
-        field_spec = fields.get(key)
-        data[key] = _normalize_catalog_value(raw_value, field_spec)
-    return data
+def _serialize_catalog(value: Any, *, field_style: str) -> Any:
+    if isinstance(value, dict):
+        return {
+            _rename_key(k, field_style): _serialize_catalog(v, field_style=field_style)
+            for k, v in value.items()
+            if not _omit_catalog_value(k, v)
+        }
+    if isinstance(value, (list, tuple)):
+        return [_serialize_catalog(item, field_style=field_style) for item in value]
+    return value
 
 
-def _normalize_catalog_value(value: Any, field_spec: _CatalogFieldSpec | None) -> Any:
-    if field_spec is None or field_spec.children is None:
-        return _python_value(value)
-    if field_spec.sequence:
-        items = value if isinstance(value, (list, tuple)) else []
-        return [
-            _normalize_catalog_mapping(item, field_spec.children) if isinstance(item, Mapping) else _python_value(item)
-            for item in items
-        ]
-    if isinstance(value, Mapping):
-        return _normalize_catalog_mapping(value, field_spec.children)
-    return _python_value(value)
+def _rename_key(key: str, field_style: str) -> str:
+    if field_style == "json":
+        return _JSON_RENAMES.get(key, key)
+    return key
 
 
-def _serialize_catalog_mapping(
-    value: Mapping[str, Any],
-    fields: dict[str, _CatalogFieldSpec],
-    *,
-    field_style: str,
-) -> dict[str, Any]:
-    serialized: dict[str, Any] = {}
-    for key, item in value.items():
-        if _omit_catalog_value(key, item):
-            continue
-        field_spec = fields.get(key)
-        output_key = key if field_style == "yaml" or field_spec is None or field_spec.json_name is None else field_spec.json_name
-        serialized[output_key] = _serialize_catalog_value(item, field_spec, field_style=field_style)
-    return serialized
-
-
-def _serialize_catalog_value(value: Any, field_spec: _CatalogFieldSpec | None, *, field_style: str) -> Any:
-    if field_spec is None or field_spec.children is None:
-        return _python_value(value)
-    if field_spec.sequence:
-        return [
-            _serialize_catalog_mapping(item, field_spec.children, field_style=field_style)
-            if isinstance(item, Mapping)
-            else _python_value(item)
-            for item in value
-        ]
-    if isinstance(value, Mapping):
-        return _serialize_catalog_mapping(value, field_spec.children, field_style=field_style)
+def _normalize_mapping(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            _YAML_RENAMES.get(k, k): _normalize_mapping(v)
+            for k, v in value.items()
+        }
+    if isinstance(value, (list, tuple)):
+        return [_normalize_mapping(item) for item in value]
     return _python_value(value)
 
 
@@ -280,42 +255,3 @@ class _CatalogDumper(yaml.SafeDumper):
     def increase_indent(self, flow: bool = False, indentless: bool = False) -> Any:
         del indentless
         return super().increase_indent(flow, False)
-
-
-_CATALOG_ANNOTATION_FIELDS = {
-    "read_only_hint": _CatalogFieldSpec(json_name="readOnlyHint"),
-    "idempotent_hint": _CatalogFieldSpec(json_name="idempotentHint"),
-    "destructive_hint": _CatalogFieldSpec(json_name="destructiveHint"),
-    "open_world_hint": _CatalogFieldSpec(json_name="openWorldHint"),
-}
-
-_CATALOG_PARAMETER_FIELDS = {
-    "name": _CatalogFieldSpec(),
-    "type": _CatalogFieldSpec(),
-    "description": _CatalogFieldSpec(),
-    "required": _CatalogFieldSpec(),
-    "default": _CatalogFieldSpec(),
-}
-
-_CATALOG_OPERATION_FIELDS = {
-    "id": _CatalogFieldSpec(),
-    "method": _CatalogFieldSpec(),
-    "title": _CatalogFieldSpec(),
-    "description": _CatalogFieldSpec(),
-    "input_schema": _CatalogFieldSpec(json_name="inputSchema"),
-    "output_schema": _CatalogFieldSpec(json_name="outputSchema"),
-    "annotations": _CatalogFieldSpec(children=_CATALOG_ANNOTATION_FIELDS),
-    "parameters": _CatalogFieldSpec(children=_CATALOG_PARAMETER_FIELDS, sequence=True),
-    "required_scopes": _CatalogFieldSpec(json_name="requiredScopes"),
-    "tags": _CatalogFieldSpec(),
-    "read_only": _CatalogFieldSpec(json_name="readOnly"),
-    "visible": _CatalogFieldSpec(),
-}
-
-_CATALOG_FIELDS = {
-    "name": _CatalogFieldSpec(),
-    "display_name": _CatalogFieldSpec(json_name="displayName"),
-    "description": _CatalogFieldSpec(),
-    "icon_svg": _CatalogFieldSpec(json_name="iconSvg"),
-    "operations": _CatalogFieldSpec(children=_CATALOG_OPERATION_FIELDS, sequence=True),
-}
