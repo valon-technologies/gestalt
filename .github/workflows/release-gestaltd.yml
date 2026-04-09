@@ -131,6 +131,7 @@ jobs:
       short-description: Platform for self-hostable, configurable integrations and tooling
       readme-filepath: docs/dockerhub/gestaltd.md
       platforms: 'linux/amd64,linux/arm64,linux/arm/v7'
+      target: alpine
 
   publish-image-debian:
     name: Publish Docker Image (Debian)
@@ -140,12 +141,13 @@ jobs:
     with:
       image-name: valontechnologies/gestaltd
       image-url: https://hub.docker.com/r/valontechnologies/gestaltd
-      dockerfile: gestaltd/Dockerfile.debian
+      dockerfile: gestaltd/Dockerfile
       version-prefix: 'gestaltd/v'
       short-description: Platform for self-hostable, configurable integrations and tooling
       readme-filepath: docs/dockerhub/gestaltd.md
       platforms: 'linux/amd64,linux/arm64,linux/arm/v7'
       tag-suffix: '-debian'
+      target: debian
 
   publish-image-scratch:
     name: Publish Docker Image (scratch)
@@ -155,12 +157,13 @@ jobs:
     with:
       image-name: valontechnologies/gestaltd
       image-url: https://hub.docker.com/r/valontechnologies/gestaltd
-      dockerfile: gestaltd/Dockerfile.scratch
+      dockerfile: gestaltd/Dockerfile
       version-prefix: 'gestaltd/v'
       short-description: Platform for self-hostable, configurable integrations and tooling
       readme-filepath: docs/dockerhub/gestaltd.md
       platforms: 'linux/amd64,linux/arm64,linux/arm/v7'
       tag-suffix: '-scratch'
+      target: scratch
 
   update-formula:
     name: Update Homebrew Formula, Chart & OCI Publish
