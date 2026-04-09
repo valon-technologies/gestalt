@@ -11,9 +11,7 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use crate::api::{IntoResponse, Request};
-use crate::catalog::{
-    Catalog, CatalogOperation, OperationAnnotations, schema_json, schema_parameters,
-};
+use crate::catalog::{Catalog, CatalogOperation, schema_json, schema_parameters};
 use crate::error::{Error, Result};
 use crate::provider_server::OperationResult;
 
@@ -176,22 +174,26 @@ where
         let input_schema = schema_json::<In>()?;
         let output_schema = schema_json::<Out>()?;
         let parameters = schema_parameters(&input_schema);
+        let input_schema_str = serde_json::to_string(&input_schema).unwrap_or_default();
+        let output_schema_str = serde_json::to_string(&output_schema).unwrap_or_default();
+        let annotations = Some(crate::generated::v1::OperationAnnotations {
+            read_only_hint: operation.read_only.then_some(true),
+            ..Default::default()
+        });
         self.catalog.operations.push(CatalogOperation {
             id: operation_id.to_owned(),
             method: operation.method.clone(),
             title: operation.title.trim().to_owned(),
             description: operation.description.trim().to_owned(),
-            input_schema: Some(input_schema),
-            output_schema: Some(output_schema),
-            annotations: Some(OperationAnnotations {
-                read_only_hint: operation.read_only.then_some(true),
-                ..OperationAnnotations::default()
-            }),
+            input_schema: input_schema_str,
+            output_schema: output_schema_str,
+            annotations,
             parameters,
             required_scopes: Vec::new(),
             tags: operation.tags.clone(),
             read_only: operation.read_only,
             visible: operation.visible,
+            transport: String::new(),
         });
 
         let handler = Arc::new(handler);

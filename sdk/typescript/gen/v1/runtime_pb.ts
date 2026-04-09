@@ -12,7 +12,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file v1/runtime.proto.
  */
 export const file_v1_runtime: GenFile = /*@__PURE__*/
-  fileDesc("ChB2MS9ydW50aW1lLnByb3RvEhFnZXN0YWx0LnBsdWdpbi52MSLVAQoOUGx1Z2luTWV0YWRhdGESKwoEa2luZBgBIAEoDjIdLmdlc3RhbHQucGx1Z2luLnYxLlBsdWdpbktpbmQSDAoEbmFtZRgCIAEoCRIUCgxkaXNwbGF5X25hbWUYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSDwoHdmVyc2lvbhgFIAEoCRIQCgh3YXJuaW5ncxgGIAMoCRIcChRtaW5fcHJvdG9jb2xfdmVyc2lvbhgKIAEoBRIcChRtYXhfcHJvdG9jb2xfdmVyc2lvbhgLIAEoBSJpChZDb25maWd1cmVQbHVnaW5SZXF1ZXN0EgwKBG5hbWUYASABKAkSJwoGY29uZmlnGAIgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIYChBwcm90b2NvbF92ZXJzaW9uGAMgASgFIjMKF0NvbmZpZ3VyZVBsdWdpblJlc3BvbnNlEhgKEHByb3RvY29sX3ZlcnNpb24YASABKAUiNQoTSGVhbHRoQ2hlY2tSZXNwb25zZRINCgVyZWFkeRgBIAEoCBIPCgdtZXNzYWdlGAIgASgJKqsBCgpQbHVnaW5LaW5kEhsKF1BMVUdJTl9LSU5EX1VOU1BFQ0lGSUVEEAASGwoXUExVR0lOX0tJTkRfSU5URUdSQVRJT04QARIUChBQTFVHSU5fS0lORF9BVVRIEAISGQoVUExVR0lOX0tJTkRfREFUQVNUT1JFEAMSFwoTUExVR0lOX0tJTkRfU0VDUkVUUxAEEhkKFVBMVUdJTl9LSU5EX1RFTEVNRVRSWRAFMpgCCg1QbHVnaW5SdW50aW1lEk4KEUdldFBsdWdpbk1ldGFkYXRhEhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5GiEuZ2VzdGFsdC5wbHVnaW4udjEuUGx1Z2luTWV0YWRhdGESaAoPQ29uZmlndXJlUGx1Z2luEikuZ2VzdGFsdC5wbHVnaW4udjEuQ29uZmlndXJlUGx1Z2luUmVxdWVzdBoqLmdlc3RhbHQucGx1Z2luLnYxLkNvbmZpZ3VyZVBsdWdpblJlc3BvbnNlEk0KC0hlYWx0aENoZWNrEhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5GiYuZ2VzdGFsdC5wbHVnaW4udjEuSGVhbHRoQ2hlY2tSZXNwb25zZUI7WjlnaXRodWIuY29tL3ZhbG9uLXRlY2hub2xvZ2llcy9nZXN0YWx0L3Nkay9nby9nZW4vdjE7cHJvdG9iBnByb3RvMw", [file_google_protobuf_empty, file_google_protobuf_struct]);
+  fileDesc("ChB2MS9ydW50aW1lLnByb3RvEhFnZXN0YWx0LnBsdWdpbi52MSLVAQoOUGx1Z2luTWV0YWRhdGESKwoEa2luZBgBIAEoDjIdLmdlc3RhbHQucGx1Z2luLnYxLlBsdWdpbktpbmQSDAoEbmFtZRgCIAEoCRIUCgxkaXNwbGF5X25hbWUYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSDwoHdmVyc2lvbhgFIAEoCRIQCgh3YXJuaW5ncxgGIAMoCRIcChRtaW5fcHJvdG9jb2xfdmVyc2lvbhgKIAEoBRIcChRtYXhfcHJvdG9jb2xfdmVyc2lvbhgLIAEoBSJpChZDb25maWd1cmVQbHVnaW5SZXF1ZXN0EgwKBG5hbWUYASABKAkSJwoGY29uZmlnGAIgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdBIYChBwcm90b2NvbF92ZXJzaW9uGAMgASgFIjMKF0NvbmZpZ3VyZVBsdWdpblJlc3BvbnNlEhgKEHByb3RvY29sX3ZlcnNpb24YASABKAUiNQoTSGVhbHRoQ2hlY2tSZXNwb25zZRINCgVyZWFkeRgBIAEoCBIPCgdtZXNzYWdlGAIgASgJKqsBCgpQbHVnaW5LaW5kEhsKF1BMVUdJTl9LSU5EX1VOU1BFQ0lGSUVEEAASGwoXUExVR0lOX0tJTkRfSU5URUdSQVRJT04QARIUChBQTFVHSU5fS0lORF9BVVRIEAISGQoVUExVR0lOX0tJTkRfREFUQVNUT1JFEAMSFwoTUExVR0lOX0tJTkRfU0VDUkVUUxAEEhkKFVBMVUdJTl9LSU5EX1RFTEVNRVRSWRAFMpwCChFQcm92aWRlckxpZmVjeWNsZRJOChFHZXRQbHVnaW5NZXRhZGF0YRIWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRohLmdlc3RhbHQucGx1Z2luLnYxLlBsdWdpbk1ldGFkYXRhEmgKD0NvbmZpZ3VyZVBsdWdpbhIpLmdlc3RhbHQucGx1Z2luLnYxLkNvbmZpZ3VyZVBsdWdpblJlcXVlc3QaKi5nZXN0YWx0LnBsdWdpbi52MS5Db25maWd1cmVQbHVnaW5SZXNwb25zZRJNCgtIZWFsdGhDaGVjaxIWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRomLmdlc3RhbHQucGx1Z2luLnYxLkhlYWx0aENoZWNrUmVzcG9uc2VCO1o5Z2l0aHViLmNvbS92YWxvbi10ZWNobm9sb2dpZXMvZ2VzdGFsdC9zZGsvZ28vZ2VuL3YxO3Byb3RvYgZwcm90bzM", [file_google_protobuf_empty, file_google_protobuf_struct]);
 
 /**
  * @generated from message gestalt.plugin.v1.PluginMetadata
@@ -174,11 +174,11 @@ export const PluginKindSchema: GenEnum<PluginKind> = /*@__PURE__*/
   enumDesc(file_v1_runtime, 0);
 
 /**
- * @generated from service gestalt.plugin.v1.PluginRuntime
+ * @generated from service gestalt.plugin.v1.ProviderLifecycle
  */
-export const PluginRuntime: GenService<{
+export const ProviderLifecycle: GenService<{
   /**
-   * @generated from rpc gestalt.plugin.v1.PluginRuntime.GetPluginMetadata
+   * @generated from rpc gestalt.plugin.v1.ProviderLifecycle.GetPluginMetadata
    */
   getPluginMetadata: {
     methodKind: "unary";
@@ -186,7 +186,7 @@ export const PluginRuntime: GenService<{
     output: typeof PluginMetadataSchema;
   },
   /**
-   * @generated from rpc gestalt.plugin.v1.PluginRuntime.ConfigurePlugin
+   * @generated from rpc gestalt.plugin.v1.ProviderLifecycle.ConfigurePlugin
    */
   configurePlugin: {
     methodKind: "unary";
@@ -194,7 +194,7 @@ export const PluginRuntime: GenService<{
     output: typeof ConfigurePluginResponseSchema;
   },
   /**
-   * @generated from rpc gestalt.plugin.v1.PluginRuntime.HealthCheck
+   * @generated from rpc gestalt.plugin.v1.ProviderLifecycle.HealthCheck
    */
   healthCheck: {
     methodKind: "unary";

@@ -12,7 +12,7 @@ import (
 )
 
 // ProviderServer adapts a [PluginProvider] implementation to the gRPC
-// ProviderPlugin service. Most integration-provider authors should use
+// PluginProvider service. Most integration-provider authors should use
 // [ServeProvider] instead of constructing this directly.
 type ProviderServer struct {
 	proto.UnimplementedPluginProviderServer
@@ -92,11 +92,7 @@ func (s *ProviderServer) GetSessionCatalog(ctx context.Context, req *proto.GetSe
 	if err != nil {
 		return nil, status.Errorf(codes.Unknown, "session catalog: %v", err)
 	}
-	raw, err := catalogToJSON(cat)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "encode session catalog: %v", err)
-	}
-	return &proto.GetSessionCatalogResponse{CatalogJson: raw}, nil
+	return &proto.GetSessionCatalogResponse{Catalog: cat}, nil
 }
 
 func operationResultProto(result *OperationResult) *proto.OperationResult {

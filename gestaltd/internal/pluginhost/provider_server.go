@@ -54,11 +54,7 @@ func (s *ProviderServer) GetSessionCatalog(ctx context.Context, req *proto.GetSe
 	if err != nil {
 		return nil, status.Errorf(codes.Unknown, "session catalog: %v", err)
 	}
-	raw, err := catalogToJSON(cat)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "encode session catalog: %v", err)
-	}
-	return &proto.GetSessionCatalogResponse{CatalogJson: raw}, nil
+	return &proto.GetSessionCatalogResponse{Catalog: catalogToProto(cat)}, nil
 }
 
 func supportsSessionCatalog(prov core.Provider) bool {

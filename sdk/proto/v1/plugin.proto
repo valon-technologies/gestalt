@@ -8,6 +8,45 @@ import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
+message CatalogParameter {
+  string name = 1;
+  string type = 2;
+  string description = 3;
+  bool required = 4;
+  google.protobuf.Value default = 5;
+}
+
+message OperationAnnotations {
+  optional bool read_only_hint = 1;
+  optional bool idempotent_hint = 2;
+  optional bool destructive_hint = 3;
+  optional bool open_world_hint = 4;
+}
+
+message CatalogOperation {
+  string id = 1;
+  string method = 2;
+  string title = 3;
+  string description = 4;
+  string input_schema = 5;
+  string output_schema = 6;
+  OperationAnnotations annotations = 7;
+  repeated CatalogParameter parameters = 8;
+  repeated string required_scopes = 9;
+  repeated string tags = 10;
+  bool read_only = 11;
+  optional bool visible = 12;
+  string transport = 13;
+}
+
+message Catalog {
+  string name = 1;
+  string display_name = 2;
+  string description = 3;
+  string icon_svg = 4;
+  repeated CatalogOperation operations = 5;
+}
+
 enum ConnectionMode {
   CONNECTION_MODE_UNSPECIFIED = 0;
   CONNECTION_MODE_NONE = 1;
@@ -31,7 +70,7 @@ message ProviderMetadata {
   ConnectionMode connection_mode = 4;
   repeated string auth_types = 5;
   map<string, ConnectionParamDef> connection_params = 6;
-  string static_catalog_json = 7;
+  Catalog static_catalog = 7;
   bool supports_session_catalog = 8;
   bool supports_post_connect = 9;
   int32 min_protocol_version = 11;
@@ -76,7 +115,7 @@ message GetSessionCatalogRequest {
 }
 
 message GetSessionCatalogResponse {
-  string catalog_json = 1;
+  Catalog catalog = 1;
 }
 
 message PostConnectRequest {

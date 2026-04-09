@@ -93,10 +93,10 @@ func (p *startableStubProvider) Configure(_ context.Context, name string, config
 
 type sessionCatalogStubProvider struct {
 	stubProvider
-	sessionCatalog *gestalt.Catalog
+	sessionCatalog *proto.Catalog
 }
 
-func (p *sessionCatalogStubProvider) CatalogForRequest(_ context.Context, _ string) (*gestalt.Catalog, error) {
+func (p *sessionCatalogStubProvider) CatalogForRequest(_ context.Context, _ string) (*proto.Catalog, error) {
 	return p.sessionCatalog, nil
 }
 
@@ -116,10 +116,10 @@ func TestProviderServerGetMetadata(t *testing.T) {
 
 	t.Run("session catalog provider", func(t *testing.T) {
 		client := newPluginProviderClient(t, &sessionCatalogStubProvider{
-			sessionCatalog: &gestalt.Catalog{
+			sessionCatalog: &proto.Catalog{
 				Name: "test-provider",
-				Operations: []gestalt.CatalogOperation{
-					{ID: "session_op", Method: http.MethodGet},
+				Operations: []*proto.CatalogOperation{
+					{Id: "session_op", Method: http.MethodGet},
 				},
 			},
 		}, sessionCatalogStubRouter)
@@ -138,10 +138,10 @@ func TestProviderServerGetSessionCatalog(t *testing.T) {
 
 	t.Run("supported", func(t *testing.T) {
 		prov := &sessionCatalogStubProvider{
-			sessionCatalog: &gestalt.Catalog{
+			sessionCatalog: &proto.Catalog{
 				Name: "test-provider",
-				Operations: []gestalt.CatalogOperation{
-					{ID: "session_op", Method: http.MethodPost},
+				Operations: []*proto.CatalogOperation{
+					{Id: "session_op", Method: http.MethodPost},
 				},
 			},
 		}
@@ -150,8 +150,8 @@ func TestProviderServerGetSessionCatalog(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetSessionCatalog: %v", err)
 		}
-		if resp.GetCatalogJson() == "" {
-			t.Fatal("expected session catalog json")
+		if resp.GetCatalog() == nil {
+			t.Fatal("expected session catalog")
 		}
 	})
 

@@ -182,7 +182,7 @@ func (p *remoteProviderBase) sessionCatalog(ctx context.Context, token string) (
 	if err != nil {
 		return nil, err
 	}
-	cat, err := catalogFromJSON(resp.GetCatalogJson())
+	cat, err := catalogFromProto(resp.GetCatalog())
 	if err != nil {
 		return nil, err
 	}

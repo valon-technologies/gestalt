@@ -41,6 +41,9 @@ import {
   type GetSecretRequest,
 } from "../gen/v1/secrets_pb.ts";
 import {
+  CatalogOperationSchema as ProtoCatalogOperationSchema,
+  CatalogParameterSchema as ProtoCatalogParameterSchema,
+  CatalogSchema as ProtoCatalogSchema,
   ConnectionMode as ProviderConnectionMode,
   GetSessionCatalogResponseSchema,
   OperationResultSchema,
@@ -70,7 +73,7 @@ import {
   type StoredUser,
 } from "./datastore.ts";
 import { SecretsProvider, isSecretsProvider } from "./secrets.ts";
-import { catalogToJson, catalogToYaml, type Catalog } from "./catalog.ts";
+import { catalogToYaml, type Catalog } from "./catalog.ts";
 import {
   IntegrationProvider,
   connectionModeToProtoValue,
@@ -424,7 +427,7 @@ export function createProviderService(
             connectionParamToProto(value),
           ]),
         ),
-        staticCatalogJson: catalogToJson(provider.staticCatalog()),
+        staticCatalog: catalogToProto(provider.staticCatalog()),
         supportsSessionCatalog: provider.supportsSessionCatalog(),
         supportsPostConnect: false,
         minProtocolVersion: CURRENT_PROTOCOL_VERSION,
@@ -464,7 +467,7 @@ export function createProviderService(
         throw new ConnectError("provider does not support session catalogs", Code.Unimplemented);
       }
       return create(GetSessionCatalogResponseSchema, {
-        catalogJson: catalogToJson(catalog),
+        catalog: catalogToProto(catalog),
       });
     },
     async postConnect() {
@@ -702,6 +705,38 @@ function objectFromUnknown(value: unknown): Record<string, unknown> {
     };
   }
   return {};
+}
+
+function catalogToProto(catalog: Catalog | Record<string, unknown>) {
+  const typed = catalog as Catalog;
+  return create(ProtoCatalogSchema, {
+    name: typed.name ?? "",
+    displayName: typed.displayName ?? "",
+    description: typed.description ?? "",
+    iconSvg: typed.iconSvg ?? "",
+    operations: (typed.operations ?? []).map((op) => {
+      const protoOp = create(ProtoCatalogOperationSchema, {
+        id: op.id,
+        method: op.method,
+        title: op.title ?? "",
+        description: op.description ?? "",
+        tags: op.tags ?? [],
+        readOnly: op.readOnly ?? false,
+        parameters: (op.parameters ?? []).map((p) =>
+          create(ProtoCatalogParameterSchema, {
+            name: p.name,
+            type: p.type,
+            description: p.description ?? "",
+            required: p.required ?? false,
+          }),
+        ),
+      });
+      if (op.visible !== undefined) {
+        protoOp.visible = op.visible;
+      }
+      return protoOp;
+    }),
+  });
 }
 
 function authenticatedUserToProto(user: AuthenticatedUser) {

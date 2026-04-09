@@ -18,7 +18,7 @@ from google.protobuf import timestamp_pb2 as _timestamp_pb2
 
 from ._api import Request
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
-from ._catalog import catalog_to_json
+from ._catalog import catalog_to_proto
 from ._plugin import Plugin, _module_plugin
 from ._providers import (
     AuthenticatedUser,
@@ -398,14 +398,14 @@ def _provider_servicer(*, plugin: Plugin) -> Any:
                 )
 
             try:
-                raw_catalog = catalog_to_json(catalog)
+                proto_catalog = catalog_to_proto(catalog)
             except Exception as error:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
                     f"encode session catalog: {error}",
                 )
 
-            return plugin_pb2.GetSessionCatalogResponse(catalog_json=raw_catalog)
+            return plugin_pb2.GetSessionCatalogResponse(catalog=proto_catalog)
 
     return ProviderServicer()
 

@@ -5,7 +5,7 @@ use serde_json::Value;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
 use crate::api::{Request, Response};
-use crate::catalog::{catalog_json, object_map};
+use crate::catalog::object_map;
 use crate::env::CURRENT_PROTOCOL_VERSION;
 use crate::error::Error;
 use crate::generated::v1::plugin_provider_server::PluginProvider;
@@ -131,16 +131,8 @@ where
             .catalog_for_request(&request)
             .await
             .map_err(|error| Status::unknown(format!("session catalog: {}", error.message())))?;
-        let catalog_json = catalog
-            .as_ref()
-            .map(catalog_json)
-            .transpose()
-            .map_err(|error| Status::internal(format!("encode session catalog: {}", error)))?
-            .unwrap_or_default();
 
-        Ok(GrpcResponse::new(GetSessionCatalogResponse {
-            catalog_json,
-        }))
+        Ok(GrpcResponse::new(GetSessionCatalogResponse { catalog }))
     }
 
     async fn post_connect(

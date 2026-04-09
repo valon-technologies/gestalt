@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
@@ -27,10 +28,16 @@ func ServeProvider[P any, PP interface {
 	PluginProvider
 }](ctx context.Context, provider PP, router *Router[P]) error {
 	if catalogPath := os.Getenv(envWriteCatalog); catalogPath != "" {
-		if router == nil {
-			return writeCatalogYAML(nil, catalogPath)
+		cat := router.Catalog()
+		if cat == nil {
+			cat = &proto.Catalog{}
 		}
-		return writeCatalogYAML(router.Catalog(), catalogPath)
+		if dir := filepath.Dir(catalogPath); dir != "." && dir != "" {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				return fmt.Errorf("create catalog directory %q: %w", dir, err)
+			}
+		}
+		return writeCatalogYAML(cat, catalogPath)
 	}
 	ctx = withPluginCloser(ctx, provider)
 	return servePlugin(ctx, func(srv *grpc.Server) {

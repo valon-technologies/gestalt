@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file v1/datastore.proto.
  */
 export const file_v1_datastore: GenFile = /*@__PURE__*/
-  fileDesc("ChJ2MS9kYXRhc3RvcmUucHJvdG8SEWdlc3RhbHQucGx1Z2luLnYxIp0BCgpTdG9yZWRVc2VyEgoKAmlkGAEgASgJEg0KBWVtYWlsGAIgASgJEhQKDGRpc3BsYXlfbmFtZRgDIAEoCRIuCgpjcmVhdGVkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCK0BAoWU3RvcmVkSW50ZWdyYXRpb25Ub2tlbhIKCgJpZBgBIAEoCRIPCgd1c2VyX2lkGAIgASgJEhMKC2ludGVncmF0aW9uGAMgASgJEhIKCmNvbm5lY3Rpb24YBCABKAkSEAoIaW5zdGFuY2UYBSABKAkSGwoTYWNjZXNzX3Rva2VuX3NlYWxlZBgGIAEoDBIcChRyZWZyZXNoX3Rva2VuX3NlYWxlZBgHIAEoDBIOCgZzY29wZXMYCCABKAkSLgoKZXhwaXJlc19hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNQoRbGFzdF9yZWZyZXNoZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhsKE3JlZnJlc2hfZXJyb3JfY291bnQYCyABKAUSWgoRY29ubmVjdGlvbl9wYXJhbXMYDCADKAsyPy5nZXN0YWx0LnBsdWdpbi52MS5TdG9yZWRJbnRlZ3JhdGlvblRva2VuLkNvbm5lY3Rpb25QYXJhbXNFbnRyeRIuCgpjcmVhdGVkX2F0GA0gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GA4gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBo3ChVDb25uZWN0aW9uUGFyYW1zRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASLxAQoOU3RvcmVkQVBJVG9rZW4SCgoCaWQYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIMCgRuYW1lGAMgASgJEhQKDGhhc2hlZF90b2tlbhgEIAEoCRIOCgZzY29wZXMYBSABKAkSLgoKZXhwaXJlc19hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKY3JlYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiqAIKEU9BdXRoUmVnaXN0cmF0aW9uEhcKD2F1dGhfc2VydmVyX3VybBgBIAEoCRIUCgxyZWRpcmVjdF91cmkYAiABKAkSEQoJY2xpZW50X2lkGAMgASgJEhwKFGNsaWVudF9zZWNyZXRfc2VhbGVkGAQgASgMEi4KCmV4cGlyZXNfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEh4KFmF1dGhvcml6YXRpb25fZW5kcG9pbnQYBiABKAkSFgoOdG9rZW5fZW5kcG9pbnQYByABKAkSGAoQc2NvcGVzX3N1cHBvcnRlZBgIIAEoCRIxCg1kaXNjb3ZlcmVkX2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCIcCg5HZXRVc2VyUmVxdWVzdBIKCgJpZBgBIAEoCSIoChdGaW5kT3JDcmVhdGVVc2VyUmVxdWVzdBINCgVlbWFpbBgBIAEoCSJuCiBHZXRTdG9yZWRJbnRlZ3JhdGlvblRva2VuUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEhMKC2ludGVncmF0aW9uGAIgASgJEhIKCmNvbm5lY3Rpb24YAyABKAkSEAoIaW5zdGFuY2UYBCABKAkiXgoiTGlzdFN0b3JlZEludGVncmF0aW9uVG9rZW5zUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEhMKC2ludGVncmF0aW9uGAIgASgJEhIKCmNvbm5lY3Rpb24YAyABKAkiYAojTGlzdFN0b3JlZEludGVncmF0aW9uVG9rZW5zUmVzcG9uc2USOQoGdG9rZW5zGAEgAygLMikuZ2VzdGFsdC5wbHVnaW4udjEuU3RvcmVkSW50ZWdyYXRpb25Ub2tlbiIxCiNEZWxldGVTdG9yZWRJbnRlZ3JhdGlvblRva2VuUmVxdWVzdBIKCgJpZBgBIAEoCSIwChhHZXRBUElUb2tlbkJ5SGFzaFJlcXVlc3QSFAoMaGFzaGVkX3Rva2VuGAEgASgJIicKFExpc3RBUElUb2tlbnNSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkiSgoVTGlzdEFQSVRva2Vuc1Jlc3BvbnNlEjEKBnRva2VucxgBIAMoCzIhLmdlc3RhbHQucGx1Z2luLnYxLlN0b3JlZEFQSVRva2VuIjQKFVJldm9rZUFQSVRva2VuUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEgoKAmlkGAIgASgJIiwKGVJldm9rZUFsbEFQSVRva2Vuc1JlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCSItChpSZXZva2VBbGxBUElUb2tlbnNSZXNwb25zZRIPCgdyZXZva2VkGAEgASgDIkwKG0dldE9BdXRoUmVnaXN0cmF0aW9uUmVxdWVzdBIXCg9hdXRoX3NlcnZlcl91cmwYASABKAkSFAoMcmVkaXJlY3RfdXJpGAIgASgJIk8KHkRlbGV0ZU9BdXRoUmVnaXN0cmF0aW9uUmVxdWVzdBIXCg9hdXRoX3NlcnZlcl91cmwYASABKAkSFAoMcmVkaXJlY3RfdXJpGAIgASgJMtgLCg9EYXRhc3RvcmVQbHVnaW4SOQoHTWlncmF0ZRIWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRJLCgdHZXRVc2VyEiEuZ2VzdGFsdC5wbHVnaW4udjEuR2V0VXNlclJlcXVlc3QaHS5nZXN0YWx0LnBsdWdpbi52MS5TdG9yZWRVc2VyEl0KEEZpbmRPckNyZWF0ZVVzZXISKi5nZXN0YWx0LnBsdWdpbi52MS5GaW5kT3JDcmVhdGVVc2VyUmVxdWVzdBodLmdlc3RhbHQucGx1Z2luLnYxLlN0b3JlZFVzZXISXgoZUHV0U3RvcmVkSW50ZWdyYXRpb25Ub2tlbhIpLmdlc3RhbHQucGx1Z2luLnYxLlN0b3JlZEludGVncmF0aW9uVG9rZW4aFi5nb29nbGUucHJvdG9idWYuRW1wdHkSewoZR2V0U3RvcmVkSW50ZWdyYXRpb25Ub2tlbhIzLmdlc3RhbHQucGx1Z2luLnYxLkdldFN0b3JlZEludGVncmF0aW9uVG9rZW5SZXF1ZXN0GikuZ2VzdGFsdC5wbHVnaW4udjEuU3RvcmVkSW50ZWdyYXRpb25Ub2tlbhKMAQobTGlzdFN0b3JlZEludGVncmF0aW9uVG9rZW5zEjUuZ2VzdGFsdC5wbHVnaW4udjEuTGlzdFN0b3JlZEludGVncmF0aW9uVG9rZW5zUmVxdWVzdBo2Lmdlc3RhbHQucGx1Z2luLnYxLkxpc3RTdG9yZWRJbnRlZ3JhdGlvblRva2Vuc1Jlc3BvbnNlEm4KHERlbGV0ZVN0b3JlZEludGVncmF0aW9uVG9rZW4SNi5nZXN0YWx0LnBsdWdpbi52MS5EZWxldGVTdG9yZWRJbnRlZ3JhdGlvblRva2VuUmVxdWVzdBoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRJICgtQdXRBUElUb2tlbhIhLmdlc3RhbHQucGx1Z2luLnYxLlN0b3JlZEFQSVRva2VuGhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5EmMKEUdldEFQSVRva2VuQnlIYXNoEisuZ2VzdGFsdC5wbHVnaW4udjEuR2V0QVBJVG9rZW5CeUhhc2hSZXF1ZXN0GiEuZ2VzdGFsdC5wbHVnaW4udjEuU3RvcmVkQVBJVG9rZW4SYgoNTGlzdEFQSVRva2VucxInLmdlc3RhbHQucGx1Z2luLnYxLkxpc3RBUElUb2tlbnNSZXF1ZXN0GiguZ2VzdGFsdC5wbHVnaW4udjEuTGlzdEFQSVRva2Vuc1Jlc3BvbnNlElIKDlJldm9rZUFQSVRva2VuEiguZ2VzdGFsdC5wbHVnaW4udjEuUmV2b2tlQVBJVG9rZW5SZXF1ZXN0GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5EnEKElJldm9rZUFsbEFQSVRva2VucxIsLmdlc3RhbHQucGx1Z2luLnYxLlJldm9rZUFsbEFQSVRva2Vuc1JlcXVlc3QaLS5nZXN0YWx0LnBsdWdpbi52MS5SZXZva2VBbGxBUElUb2tlbnNSZXNwb25zZRJsChRHZXRPQXV0aFJlZ2lzdHJhdGlvbhIuLmdlc3RhbHQucGx1Z2luLnYxLkdldE9BdXRoUmVnaXN0cmF0aW9uUmVxdWVzdBokLmdlc3RhbHQucGx1Z2luLnYxLk9BdXRoUmVnaXN0cmF0aW9uElQKFFB1dE9BdXRoUmVnaXN0cmF0aW9uEiQuZ2VzdGFsdC5wbHVnaW4udjEuT0F1dGhSZWdpc3RyYXRpb24aFi5nb29nbGUucHJvdG9idWYuRW1wdHkSZAoXRGVsZXRlT0F1dGhSZWdpc3RyYXRpb24SMS5nZXN0YWx0LnBsdWdpbi52MS5EZWxldGVPQXV0aFJlZ2lzdHJhdGlvblJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHlCO1o5Z2l0aHViLmNvbS92YWxvbi10ZWNobm9sb2dpZXMvZ2VzdGFsdC9zZGsvZ28vZ2VuL3YxO3Byb3RvYgZwcm90bzM", [file_google_protobuf_empty, file_google_protobuf_timestamp]);
+  fileDesc("ChJ2MS9kYXRhc3RvcmUucHJvdG8SEWdlc3RhbHQucGx1Z2luLnYxIp0BCgpTdG9yZWRVc2VyEgoKAmlkGAEgASgJEg0KBWVtYWlsGAIgASgJEhQKDGRpc3BsYXlfbmFtZRgDIAEoCRIuCgpjcmVhdGVkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCK0BAoWU3RvcmVkSW50ZWdyYXRpb25Ub2tlbhIKCgJpZBgBIAEoCRIPCgd1c2VyX2lkGAIgASgJEhMKC2ludGVncmF0aW9uGAMgASgJEhIKCmNvbm5lY3Rpb24YBCABKAkSEAoIaW5zdGFuY2UYBSABKAkSGwoTYWNjZXNzX3Rva2VuX3NlYWxlZBgGIAEoDBIcChRyZWZyZXNoX3Rva2VuX3NlYWxlZBgHIAEoDBIOCgZzY29wZXMYCCABKAkSLgoKZXhwaXJlc19hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNQoRbGFzdF9yZWZyZXNoZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhsKE3JlZnJlc2hfZXJyb3JfY291bnQYCyABKAUSWgoRY29ubmVjdGlvbl9wYXJhbXMYDCADKAsyPy5nZXN0YWx0LnBsdWdpbi52MS5TdG9yZWRJbnRlZ3JhdGlvblRva2VuLkNvbm5lY3Rpb25QYXJhbXNFbnRyeRIuCgpjcmVhdGVkX2F0GA0gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GA4gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBo3ChVDb25uZWN0aW9uUGFyYW1zRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASLxAQoOU3RvcmVkQVBJVG9rZW4SCgoCaWQYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIMCgRuYW1lGAMgASgJEhQKDGhhc2hlZF90b2tlbhgEIAEoCRIOCgZzY29wZXMYBSABKAkSLgoKZXhwaXJlc19hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKY3JlYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiqAIKEU9BdXRoUmVnaXN0cmF0aW9uEhcKD2F1dGhfc2VydmVyX3VybBgBIAEoCRIUCgxyZWRpcmVjdF91cmkYAiABKAkSEQoJY2xpZW50X2lkGAMgASgJEhwKFGNsaWVudF9zZWNyZXRfc2VhbGVkGAQgASgMEi4KCmV4cGlyZXNfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEh4KFmF1dGhvcml6YXRpb25fZW5kcG9pbnQYBiABKAkSFgoOdG9rZW5fZW5kcG9pbnQYByABKAkSGAoQc2NvcGVzX3N1cHBvcnRlZBgIIAEoCRIxCg1kaXNjb3ZlcmVkX2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCIcCg5HZXRVc2VyUmVxdWVzdBIKCgJpZBgBIAEoCSIoChdGaW5kT3JDcmVhdGVVc2VyUmVxdWVzdBINCgVlbWFpbBgBIAEoCSJuCiBHZXRTdG9yZWRJbnRlZ3JhdGlvblRva2VuUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEhMKC2ludGVncmF0aW9uGAIgASgJEhIKCmNvbm5lY3Rpb24YAyABKAkSEAoIaW5zdGFuY2UYBCABKAkiXgoiTGlzdFN0b3JlZEludGVncmF0aW9uVG9rZW5zUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEhMKC2ludGVncmF0aW9uGAIgASgJEhIKCmNvbm5lY3Rpb24YAyABKAkiYAojTGlzdFN0b3JlZEludGVncmF0aW9uVG9rZW5zUmVzcG9uc2USOQoGdG9rZW5zGAEgAygLMikuZ2VzdGFsdC5wbHVnaW4udjEuU3RvcmVkSW50ZWdyYXRpb25Ub2tlbiIxCiNEZWxldGVTdG9yZWRJbnRlZ3JhdGlvblRva2VuUmVxdWVzdBIKCgJpZBgBIAEoCSIwChhHZXRBUElUb2tlbkJ5SGFzaFJlcXVlc3QSFAoMaGFzaGVkX3Rva2VuGAEgASgJIicKFExpc3RBUElUb2tlbnNSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkiSgoVTGlzdEFQSVRva2Vuc1Jlc3BvbnNlEjEKBnRva2VucxgBIAMoCzIhLmdlc3RhbHQucGx1Z2luLnYxLlN0b3JlZEFQSVRva2VuIjQKFVJldm9rZUFQSVRva2VuUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEgoKAmlkGAIgASgJIiwKGVJldm9rZUFsbEFQSVRva2Vuc1JlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCSItChpSZXZva2VBbGxBUElUb2tlbnNSZXNwb25zZRIPCgdyZXZva2VkGAEgASgDIkwKG0dldE9BdXRoUmVnaXN0cmF0aW9uUmVxdWVzdBIXCg9hdXRoX3NlcnZlcl91cmwYASABKAkSFAoMcmVkaXJlY3RfdXJpGAIgASgJIk8KHkRlbGV0ZU9BdXRoUmVnaXN0cmF0aW9uUmVxdWVzdBIXCg9hdXRoX3NlcnZlcl91cmwYASABKAkSFAoMcmVkaXJlY3RfdXJpGAIgASgJMtoLChFEYXRhc3RvcmVQcm92aWRlchI5CgdNaWdyYXRlEhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5EksKB0dldFVzZXISIS5nZXN0YWx0LnBsdWdpbi52MS5HZXRVc2VyUmVxdWVzdBodLmdlc3RhbHQucGx1Z2luLnYxLlN0b3JlZFVzZXISXQoQRmluZE9yQ3JlYXRlVXNlchIqLmdlc3RhbHQucGx1Z2luLnYxLkZpbmRPckNyZWF0ZVVzZXJSZXF1ZXN0Gh0uZ2VzdGFsdC5wbHVnaW4udjEuU3RvcmVkVXNlchJeChlQdXRTdG9yZWRJbnRlZ3JhdGlvblRva2VuEikuZ2VzdGFsdC5wbHVnaW4udjEuU3RvcmVkSW50ZWdyYXRpb25Ub2tlbhoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRJ7ChlHZXRTdG9yZWRJbnRlZ3JhdGlvblRva2VuEjMuZ2VzdGFsdC5wbHVnaW4udjEuR2V0U3RvcmVkSW50ZWdyYXRpb25Ub2tlblJlcXVlc3QaKS5nZXN0YWx0LnBsdWdpbi52MS5TdG9yZWRJbnRlZ3JhdGlvblRva2VuEowBChtMaXN0U3RvcmVkSW50ZWdyYXRpb25Ub2tlbnMSNS5nZXN0YWx0LnBsdWdpbi52MS5MaXN0U3RvcmVkSW50ZWdyYXRpb25Ub2tlbnNSZXF1ZXN0GjYuZ2VzdGFsdC5wbHVnaW4udjEuTGlzdFN0b3JlZEludGVncmF0aW9uVG9rZW5zUmVzcG9uc2USbgocRGVsZXRlU3RvcmVkSW50ZWdyYXRpb25Ub2tlbhI2Lmdlc3RhbHQucGx1Z2luLnYxLkRlbGV0ZVN0b3JlZEludGVncmF0aW9uVG9rZW5SZXF1ZXN0GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5EkgKC1B1dEFQSVRva2VuEiEuZ2VzdGFsdC5wbHVnaW4udjEuU3RvcmVkQVBJVG9rZW4aFi5nb29nbGUucHJvdG9idWYuRW1wdHkSYwoRR2V0QVBJVG9rZW5CeUhhc2gSKy5nZXN0YWx0LnBsdWdpbi52MS5HZXRBUElUb2tlbkJ5SGFzaFJlcXVlc3QaIS5nZXN0YWx0LnBsdWdpbi52MS5TdG9yZWRBUElUb2tlbhJiCg1MaXN0QVBJVG9rZW5zEicuZ2VzdGFsdC5wbHVnaW4udjEuTGlzdEFQSVRva2Vuc1JlcXVlc3QaKC5nZXN0YWx0LnBsdWdpbi52MS5MaXN0QVBJVG9rZW5zUmVzcG9uc2USUgoOUmV2b2tlQVBJVG9rZW4SKC5nZXN0YWx0LnBsdWdpbi52MS5SZXZva2VBUElUb2tlblJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkScQoSUmV2b2tlQWxsQVBJVG9rZW5zEiwuZ2VzdGFsdC5wbHVnaW4udjEuUmV2b2tlQWxsQVBJVG9rZW5zUmVxdWVzdBotLmdlc3RhbHQucGx1Z2luLnYxLlJldm9rZUFsbEFQSVRva2Vuc1Jlc3BvbnNlEmwKFEdldE9BdXRoUmVnaXN0cmF0aW9uEi4uZ2VzdGFsdC5wbHVnaW4udjEuR2V0T0F1dGhSZWdpc3RyYXRpb25SZXF1ZXN0GiQuZ2VzdGFsdC5wbHVnaW4udjEuT0F1dGhSZWdpc3RyYXRpb24SVAoUUHV0T0F1dGhSZWdpc3RyYXRpb24SJC5nZXN0YWx0LnBsdWdpbi52MS5PQXV0aFJlZ2lzdHJhdGlvbhoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRJkChdEZWxldGVPQXV0aFJlZ2lzdHJhdGlvbhIxLmdlc3RhbHQucGx1Z2luLnYxLkRlbGV0ZU9BdXRoUmVnaXN0cmF0aW9uUmVxdWVzdBoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eUI7WjlnaXRodWIuY29tL3ZhbG9uLXRlY2hub2xvZ2llcy9nZXN0YWx0L3Nkay9nby9nZW4vdjE7cHJvdG9iBnByb3RvMw", [file_google_protobuf_empty, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message gestalt.plugin.v1.StoredUser
@@ -521,11 +521,11 @@ export const DeleteOAuthRegistrationRequestSchema: GenMessage<DeleteOAuthRegistr
   messageDesc(file_v1_datastore, 17);
 
 /**
- * @generated from service gestalt.plugin.v1.DatastorePlugin
+ * @generated from service gestalt.plugin.v1.DatastoreProvider
  */
-export const DatastorePlugin: GenService<{
+export const DatastoreProvider: GenService<{
   /**
-   * @generated from rpc gestalt.plugin.v1.DatastorePlugin.Migrate
+   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.Migrate
    */
   migrate: {
     methodKind: "unary";
@@ -533,7 +533,7 @@ export const DatastorePlugin: GenService<{
     output: typeof EmptySchema;
   },
   /**
-   * @generated from rpc gestalt.plugin.v1.DatastorePlugin.GetUser
+   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.GetUser
    */
   getUser: {
     methodKind: "unary";
@@ -541,7 +541,7 @@ export const DatastorePlugin: GenService<{
     output: typeof StoredUserSchema;
   },
   /**
-   * @generated from rpc gestalt.plugin.v1.DatastorePlugin.FindOrCreateUser
+   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.FindOrCreateUser
    */
   findOrCreateUser: {
     methodKind: "unary";
@@ -549,7 +549,7 @@ export const DatastorePlugin: GenService<{
     output: typeof StoredUserSchema;
   },
   /**
-   * @generated from rpc gestalt.plugin.v1.DatastorePlugin.PutStoredIntegrationToken
+   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.PutStoredIntegrationToken
    */
   putStoredIntegrationToken: {
     methodKind: "unary";
@@ -557,7 +557,7 @@ export const DatastorePlugin: GenService<{
     output: typeof EmptySchema;
   },
   /**
-   * @generated from rpc gestalt.plugin.v1.DatastorePlugin.GetStoredIntegrationToken
+   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.GetStoredIntegrationToken
    */
   getStoredIntegrationToken: {
     methodKind: "unary";
@@ -565,7 +565,7 @@ export const DatastorePlugin: GenService<{
     output: typeof StoredIntegrationTokenSchema;
   },
   /**
-   * @generated from rpc gestalt.plugin.v1.DatastorePlugin.ListStoredIntegrationTokens
+   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.ListStoredIntegrationTokens
    */
   listStoredIntegrationTokens: {
     methodKind: "unary";
@@ -573,7 +573,7 @@ export const DatastorePlugin: GenService<{
     output: typeof ListStoredIntegrationTokensResponseSchema;
   },
   /**
-   * @generated from rpc gestalt.plugin.v1.DatastorePlugin.DeleteStoredIntegrationToken
+   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.DeleteStoredIntegrationToken
    */
   deleteStoredIntegrationToken: {
     methodKind: "unary";
@@ -581,7 +581,7 @@ export const DatastorePlugin: GenService<{
     output: typeof EmptySchema;
   },
   /**
-   * @generated from rpc gestalt.plugin.v1.DatastorePlugin.PutAPIToken
+   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.PutAPIToken
    */
   putAPIToken: {
     methodKind: "unary";
@@ -589,7 +589,7 @@ export const DatastorePlugin: GenService<{
     output: typeof EmptySchema;
   },
   /**
-   * @generated from rpc gestalt.plugin.v1.DatastorePlugin.GetAPITokenByHash
+   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.GetAPITokenByHash
    */
   getAPITokenByHash: {
     methodKind: "unary";
@@ -597,7 +597,7 @@ export const DatastorePlugin: GenService<{
     output: typeof StoredAPITokenSchema;
   },
   /**
-   * @generated from rpc gestalt.plugin.v1.DatastorePlugin.ListAPITokens
+   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.ListAPITokens
    */
   listAPITokens: {
     methodKind: "unary";
@@ -605,7 +605,7 @@ export const DatastorePlugin: GenService<{
     output: typeof ListAPITokensResponseSchema;
   },
   /**
-   * @generated from rpc gestalt.plugin.v1.DatastorePlugin.RevokeAPIToken
+   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.RevokeAPIToken
    */
   revokeAPIToken: {
     methodKind: "unary";
@@ -613,7 +613,7 @@ export const DatastorePlugin: GenService<{
     output: typeof EmptySchema;
   },
   /**
-   * @generated from rpc gestalt.plugin.v1.DatastorePlugin.RevokeAllAPITokens
+   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.RevokeAllAPITokens
    */
   revokeAllAPITokens: {
     methodKind: "unary";
@@ -621,7 +621,7 @@ export const DatastorePlugin: GenService<{
     output: typeof RevokeAllAPITokensResponseSchema;
   },
   /**
-   * @generated from rpc gestalt.plugin.v1.DatastorePlugin.GetOAuthRegistration
+   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.GetOAuthRegistration
    */
   getOAuthRegistration: {
     methodKind: "unary";
@@ -629,7 +629,7 @@ export const DatastorePlugin: GenService<{
     output: typeof OAuthRegistrationSchema;
   },
   /**
-   * @generated from rpc gestalt.plugin.v1.DatastorePlugin.PutOAuthRegistration
+   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.PutOAuthRegistration
    */
   putOAuthRegistration: {
     methodKind: "unary";
@@ -637,7 +637,7 @@ export const DatastorePlugin: GenService<{
     output: typeof EmptySchema;
   },
   /**
-   * @generated from rpc gestalt.plugin.v1.DatastorePlugin.DeleteOAuthRegistration
+   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.DeleteOAuthRegistration
    */
   deleteOAuthRegistration: {
     methodKind: "unary";
