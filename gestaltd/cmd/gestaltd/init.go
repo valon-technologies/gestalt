@@ -15,9 +15,28 @@ func operatorLifecycle() *operator.Lifecycle {
 	})
 }
 
-func initConfigWithArtifactsDir(configFlag, artifactsDir string) error {
+func initConfigWithArtifactsDir(configFlag, artifactsDir, platformFlag string) error {
 	configPath := resolveConfigPath(configFlag)
-	_, err := operatorLifecycle().InitAtPathWithArtifactsDir(configPath, artifactsDir)
+	if platformFlag == "" {
+		_, err := operatorLifecycle().InitAtPathWithArtifactsDir(configPath, artifactsDir)
+		return err
+	}
+
+	value, err := expandReleasePlatformValue(platformFlag)
+	if err != nil {
+		return err
+	}
+	platforms, err := parseReleasePlatforms(value)
+	if err != nil {
+		return err
+	}
+
+	platArgs := make([]struct{ GOOS, GOARCH, LibC string }, len(platforms))
+	for i, p := range platforms {
+		platArgs[i] = struct{ GOOS, GOARCH, LibC string }{p.GOOS, p.GOARCH, p.LibC}
+	}
+
+	_, err = operatorLifecycle().InitAtPathWithPlatforms(configPath, artifactsDir, platArgs)
 	return err
 }
 
