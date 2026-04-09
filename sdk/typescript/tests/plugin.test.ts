@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 
-import { ok, request } from "../src/api.ts";
+import { ok, request, response } from "../src/api.ts";
 import { definePlugin, operation } from "../src/plugin.ts";
 import { s } from "../src/schema.ts";
 
@@ -178,7 +178,34 @@ test("plugin treats raw outputs with a body field as plain output values", async
   });
 });
 
-test("plugin accepts explicit response wrappers with a status field", async () => {
+test("plugin treats raw outputs with status and body fields as plain output values", async () => {
+  const plugin = definePlugin({
+    operations: [
+      operation({
+        id: "echo",
+        output: s.object({
+          status: s.integer(),
+          body: s.string(),
+        }),
+        handler() {
+          return {
+            status: 42,
+            body: "payload",
+          };
+        },
+      }),
+    ],
+  });
+
+  const result = await plugin.execute("echo", {}, request());
+  expect(result.status).toBe(200);
+  expect(JSON.parse(result.body)).toEqual({
+    status: 42,
+    body: "payload",
+  });
+});
+
+test("plugin accepts explicit branded response wrappers with a status field", async () => {
   const plugin = definePlugin({
     operations: [
       operation({
@@ -187,12 +214,9 @@ test("plugin accepts explicit response wrappers with a status field", async () =
           id: s.string(),
         }),
         handler() {
-          return {
-            status: 201,
-            body: {
-              id: "new-id",
-            },
-          };
+          return response(201, {
+            id: "new-id",
+          });
         },
       }),
     ],

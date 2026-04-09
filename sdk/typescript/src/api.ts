@@ -3,7 +3,10 @@ export interface Request {
   connectionParams: Record<string, string>;
 }
 
+export const responseBrand: unique symbol = Symbol("gestalt.response");
+
 export interface Response<T> {
+  readonly [responseBrand]: true;
   status?: number;
   body: T;
 }
@@ -15,11 +18,16 @@ export interface OperationResult {
 
 export type MaybePromise<T> = T | Promise<T>;
 
-export function ok<T>(body: T): Response<T> {
+export function response<T>(status: number, body: T): Response<T> {
   return {
-    status: 200,
+    [responseBrand]: true,
+    status,
     body,
   };
+}
+
+export function ok<T>(body: T): Response<T> {
+  return response(200, body);
 }
 
 export function request(token = "", connectionParams: Record<string, string> = {}): Request {
