@@ -33,8 +33,8 @@ type AuthExecConfig struct {
 const defaultSessionTokenTTL = 24 * time.Hour
 
 type remoteAuthProvider struct {
-	runtime     proto.PluginRuntimeClient
-	client      proto.AuthPluginClient
+	runtime     proto.ProviderLifecycleClient
+	client      proto.AuthProviderClient
 	name        string
 	displayName string
 	description string
@@ -58,8 +58,8 @@ func NewExecutableAuthProvider(ctx context.Context, cfg AuthExecConfig) (core.Au
 		return nil, err
 	}
 
-	runtimeClient := proto.NewPluginRuntimeClient(proc.conn)
-	authClient := proto.NewAuthPluginClient(proc.conn)
+	runtimeClient := proto.NewProviderLifecycleClient(proc.conn)
+	authClient := proto.NewAuthProviderClient(proc.conn)
 	provider, err := newRemoteAuthProvider(ctx, runtimeClient, authClient, cfg)
 	if err != nil {
 		_ = proc.Close()
@@ -69,7 +69,7 @@ func NewExecutableAuthProvider(ctx context.Context, cfg AuthExecConfig) (core.Au
 	return provider, nil
 }
 
-func newRemoteAuthProvider(ctx context.Context, runtimeClient proto.PluginRuntimeClient, client proto.AuthPluginClient, cfg AuthExecConfig) (*remoteAuthProvider, error) {
+func newRemoteAuthProvider(ctx context.Context, runtimeClient proto.ProviderLifecycleClient, client proto.AuthProviderClient, cfg AuthExecConfig) (*remoteAuthProvider, error) {
 	provider := &remoteAuthProvider{
 		runtime:     runtimeClient,
 		client:      client,
@@ -247,7 +247,7 @@ func (p *remoteAuthProvider) validateSessionToken(token string) (*core.UserIdent
 	return session.ValidateToken(token, p.sessionKey)
 }
 
-func getAuthSessionTTL(ctx context.Context, client proto.AuthPluginClient) time.Duration {
+func getAuthSessionTTL(ctx context.Context, client proto.AuthProviderClient) time.Duration {
 	if client == nil {
 		return 0
 	}

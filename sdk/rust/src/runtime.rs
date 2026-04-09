@@ -20,13 +20,13 @@ use crate::catalog::write_catalog;
 use crate::env::{ENV_PLUGIN_NAME, ENV_PLUGIN_PARENT_PID, ENV_PLUGIN_SOCKET, ENV_WRITE_CATALOG};
 use crate::error::{Error, Result};
 #[cfg(unix)]
-use crate::generated::v1::auth_plugin_server::AuthPluginServer;
+use crate::generated::v1::auth_provider_server::AuthProviderServer;
 #[cfg(unix)]
-use crate::generated::v1::datastore_plugin_server::DatastorePluginServer;
+use crate::generated::v1::datastore_provider_server::DatastoreProviderServer;
 #[cfg(unix)]
-use crate::generated::v1::plugin_runtime_server::PluginRuntimeServer;
+use crate::generated::v1::plugin_provider_server::PluginProviderServer;
 #[cfg(unix)]
-use crate::generated::v1::provider_plugin_server::ProviderPluginServer;
+use crate::generated::v1::provider_lifecycle_server::ProviderLifecycleServer;
 use crate::provider_server::ProviderServer;
 #[cfg(unix)]
 use crate::{AuthProvider, DatastoreProvider};
@@ -92,10 +92,10 @@ where
         provider,
         move |incoming, provider| {
             Server::builder()
-                .add_service(PluginRuntimeServer::new(RuntimeServer::for_provider(
+                .add_service(ProviderLifecycleServer::new(RuntimeServer::for_provider(
                     Arc::clone(&provider),
                 )))
-                .add_service(ProviderPluginServer::new(server))
+                .add_service(PluginProviderServer::new(server))
                 .serve_with_incoming_shutdown(incoming, shutdown_signal(parent_pid()))
         },
         |provider| async move { provider.close().await },
@@ -112,10 +112,10 @@ where
         provider,
         move |incoming, provider| {
             Server::builder()
-                .add_service(PluginRuntimeServer::new(RuntimeServer::for_auth(
+                .add_service(ProviderLifecycleServer::new(RuntimeServer::for_auth(
                     Arc::clone(&provider),
                 )))
-                .add_service(AuthPluginServer::new(AuthServer::new(Arc::clone(
+                .add_service(AuthProviderServer::new(AuthServer::new(Arc::clone(
                     &provider,
                 ))))
                 .serve_with_incoming_shutdown(incoming, shutdown_signal(parent_pid()))
@@ -134,10 +134,10 @@ where
         provider,
         move |incoming, provider| {
             Server::builder()
-                .add_service(PluginRuntimeServer::new(RuntimeServer::for_datastore(
+                .add_service(ProviderLifecycleServer::new(RuntimeServer::for_datastore(
                     Arc::clone(&provider),
                 )))
-                .add_service(DatastorePluginServer::new(DatastoreServer::new(
+                .add_service(DatastoreProviderServer::new(DatastoreServer::new(
                     Arc::clone(&provider),
                 )))
                 .serve_with_incoming_shutdown(incoming, shutdown_signal(parent_pid()))

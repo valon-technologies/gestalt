@@ -3,7 +3,7 @@ mod helpers;
 
 use std::sync::{Arc, Mutex};
 
-use gestalt_plugin_sdk::proto::v1::provider_plugin_client::ProviderPluginClient;
+use gestalt_plugin_sdk::proto::v1::plugin_provider_client::PluginProviderClient;
 use gestalt_plugin_sdk::proto::v1::{
     ExecuteRequest, GetSessionCatalogRequest, PostConnectRequest, StartProviderRequest,
 };
@@ -120,7 +120,7 @@ async fn serves_provider_requests_over_unix_socket() {
         }))
         .await
         .expect("connect channel");
-    let mut client = ProviderPluginClient::new(channel);
+    let mut client = PluginProviderClient::new(channel);
 
     let metadata = client
         .get_metadata(())

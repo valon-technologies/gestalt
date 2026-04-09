@@ -25,12 +25,12 @@ from gestalt import (
     ProviderKind,
     ProviderMetadata,
     Request,
-    RuntimeProviderAdapter,
     SessionTTLProvider,
     StoredAPIToken,
     StoredIntegrationToken,
     StoredUser,
     WarningsProvider,
+    _bootstrap,
     _runtime,
 )
 from gestalt.gen.v1 import auth_pb2 as _auth_pb2
@@ -67,7 +67,7 @@ class ParseRuntimeArgsTests(unittest.TestCase):
     def test_bundled_config_fallback(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             bundle_dir = pathlib.Path(tmpdir)
-            (bundle_dir / _runtime.BUNDLED_CONFIG_NAME).write_text(
+            (bundle_dir / _bootstrap.BUNDLED_CONFIG_NAME).write_text(
                 json.dumps(
                     {
                         "target": "provider",
@@ -100,11 +100,6 @@ class ParseRuntimeArgsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             with mock.patch.object(_runtime.sys, "_MEIPASS", tmpdir, create=True):
                 self.assertIsNone(_runtime._parse_runtime_args([]))
-
-
-class RuntimeAliasTests(unittest.TestCase):
-    def test_runtime_provider_adapter_aliases_runtime_plugin(self) -> None:
-        self.assertIs(RuntimeProviderAdapter, _runtime.RuntimePlugin)
 
 
 class ManifestNameTests(unittest.TestCase):

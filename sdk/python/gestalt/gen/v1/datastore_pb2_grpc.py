@@ -26,7 +26,7 @@ if _version_not_supported:
     )
 
 
-class DatastorePluginStub(object):
+class DatastoreProviderStub(object):
     """Missing associated documentation comment in .proto file."""
 
     def __init__(self, channel):
@@ -36,83 +36,83 @@ class DatastorePluginStub(object):
             channel: A grpc.Channel.
         """
         self.Migrate = channel.unary_unary(
-                '/gestalt.plugin.v1.DatastorePlugin/Migrate',
+                '/gestalt.plugin.v1.DatastoreProvider/Migrate',
                 request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
         self.GetUser = channel.unary_unary(
-                '/gestalt.plugin.v1.DatastorePlugin/GetUser',
+                '/gestalt.plugin.v1.DatastoreProvider/GetUser',
                 request_serializer=v1_dot_datastore__pb2.GetUserRequest.SerializeToString,
                 response_deserializer=v1_dot_datastore__pb2.StoredUser.FromString,
                 _registered_method=True)
         self.FindOrCreateUser = channel.unary_unary(
-                '/gestalt.plugin.v1.DatastorePlugin/FindOrCreateUser',
+                '/gestalt.plugin.v1.DatastoreProvider/FindOrCreateUser',
                 request_serializer=v1_dot_datastore__pb2.FindOrCreateUserRequest.SerializeToString,
                 response_deserializer=v1_dot_datastore__pb2.StoredUser.FromString,
                 _registered_method=True)
         self.PutStoredIntegrationToken = channel.unary_unary(
-                '/gestalt.plugin.v1.DatastorePlugin/PutStoredIntegrationToken',
+                '/gestalt.plugin.v1.DatastoreProvider/PutStoredIntegrationToken',
                 request_serializer=v1_dot_datastore__pb2.StoredIntegrationToken.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
         self.GetStoredIntegrationToken = channel.unary_unary(
-                '/gestalt.plugin.v1.DatastorePlugin/GetStoredIntegrationToken',
+                '/gestalt.plugin.v1.DatastoreProvider/GetStoredIntegrationToken',
                 request_serializer=v1_dot_datastore__pb2.GetStoredIntegrationTokenRequest.SerializeToString,
                 response_deserializer=v1_dot_datastore__pb2.StoredIntegrationToken.FromString,
                 _registered_method=True)
         self.ListStoredIntegrationTokens = channel.unary_unary(
-                '/gestalt.plugin.v1.DatastorePlugin/ListStoredIntegrationTokens',
+                '/gestalt.plugin.v1.DatastoreProvider/ListStoredIntegrationTokens',
                 request_serializer=v1_dot_datastore__pb2.ListStoredIntegrationTokensRequest.SerializeToString,
                 response_deserializer=v1_dot_datastore__pb2.ListStoredIntegrationTokensResponse.FromString,
                 _registered_method=True)
         self.DeleteStoredIntegrationToken = channel.unary_unary(
-                '/gestalt.plugin.v1.DatastorePlugin/DeleteStoredIntegrationToken',
+                '/gestalt.plugin.v1.DatastoreProvider/DeleteStoredIntegrationToken',
                 request_serializer=v1_dot_datastore__pb2.DeleteStoredIntegrationTokenRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
         self.PutAPIToken = channel.unary_unary(
-                '/gestalt.plugin.v1.DatastorePlugin/PutAPIToken',
+                '/gestalt.plugin.v1.DatastoreProvider/PutAPIToken',
                 request_serializer=v1_dot_datastore__pb2.StoredAPIToken.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
         self.GetAPITokenByHash = channel.unary_unary(
-                '/gestalt.plugin.v1.DatastorePlugin/GetAPITokenByHash',
+                '/gestalt.plugin.v1.DatastoreProvider/GetAPITokenByHash',
                 request_serializer=v1_dot_datastore__pb2.GetAPITokenByHashRequest.SerializeToString,
                 response_deserializer=v1_dot_datastore__pb2.StoredAPIToken.FromString,
                 _registered_method=True)
         self.ListAPITokens = channel.unary_unary(
-                '/gestalt.plugin.v1.DatastorePlugin/ListAPITokens',
+                '/gestalt.plugin.v1.DatastoreProvider/ListAPITokens',
                 request_serializer=v1_dot_datastore__pb2.ListAPITokensRequest.SerializeToString,
                 response_deserializer=v1_dot_datastore__pb2.ListAPITokensResponse.FromString,
                 _registered_method=True)
         self.RevokeAPIToken = channel.unary_unary(
-                '/gestalt.plugin.v1.DatastorePlugin/RevokeAPIToken',
+                '/gestalt.plugin.v1.DatastoreProvider/RevokeAPIToken',
                 request_serializer=v1_dot_datastore__pb2.RevokeAPITokenRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
         self.RevokeAllAPITokens = channel.unary_unary(
-                '/gestalt.plugin.v1.DatastorePlugin/RevokeAllAPITokens',
+                '/gestalt.plugin.v1.DatastoreProvider/RevokeAllAPITokens',
                 request_serializer=v1_dot_datastore__pb2.RevokeAllAPITokensRequest.SerializeToString,
                 response_deserializer=v1_dot_datastore__pb2.RevokeAllAPITokensResponse.FromString,
                 _registered_method=True)
         self.GetOAuthRegistration = channel.unary_unary(
-                '/gestalt.plugin.v1.DatastorePlugin/GetOAuthRegistration',
+                '/gestalt.plugin.v1.DatastoreProvider/GetOAuthRegistration',
                 request_serializer=v1_dot_datastore__pb2.GetOAuthRegistrationRequest.SerializeToString,
                 response_deserializer=v1_dot_datastore__pb2.OAuthRegistration.FromString,
                 _registered_method=True)
         self.PutOAuthRegistration = channel.unary_unary(
-                '/gestalt.plugin.v1.DatastorePlugin/PutOAuthRegistration',
+                '/gestalt.plugin.v1.DatastoreProvider/PutOAuthRegistration',
                 request_serializer=v1_dot_datastore__pb2.OAuthRegistration.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
         self.DeleteOAuthRegistration = channel.unary_unary(
-                '/gestalt.plugin.v1.DatastorePlugin/DeleteOAuthRegistration',
+                '/gestalt.plugin.v1.DatastoreProvider/DeleteOAuthRegistration',
                 request_serializer=v1_dot_datastore__pb2.DeleteOAuthRegistrationRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
 
 
-class DatastorePluginServicer(object):
+class DatastoreProviderServicer(object):
     """Missing associated documentation comment in .proto file."""
 
     def Migrate(self, request, context):
@@ -206,7 +206,7 @@ class DatastorePluginServicer(object):
         raise NotImplementedError('Method not implemented!')
 
 
-def add_DatastorePluginServicer_to_server(servicer, server):
+def add_DatastoreProviderServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'Migrate': grpc.unary_unary_rpc_method_handler(
                     servicer.Migrate,
@@ -285,13 +285,13 @@ def add_DatastorePluginServicer_to_server(servicer, server):
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'gestalt.plugin.v1.DatastorePlugin', rpc_method_handlers)
+            'gestalt.plugin.v1.DatastoreProvider', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('gestalt.plugin.v1.DatastorePlugin', rpc_method_handlers)
+    server.add_registered_method_handlers('gestalt.plugin.v1.DatastoreProvider', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
-class DatastorePlugin(object):
+class DatastoreProvider(object):
     """Missing associated documentation comment in .proto file."""
 
     @staticmethod
@@ -308,7 +308,7 @@ class DatastorePlugin(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.DatastorePlugin/Migrate',
+            '/gestalt.plugin.v1.DatastoreProvider/Migrate',
             google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
@@ -335,7 +335,7 @@ class DatastorePlugin(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.DatastorePlugin/GetUser',
+            '/gestalt.plugin.v1.DatastoreProvider/GetUser',
             v1_dot_datastore__pb2.GetUserRequest.SerializeToString,
             v1_dot_datastore__pb2.StoredUser.FromString,
             options,
@@ -362,7 +362,7 @@ class DatastorePlugin(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.DatastorePlugin/FindOrCreateUser',
+            '/gestalt.plugin.v1.DatastoreProvider/FindOrCreateUser',
             v1_dot_datastore__pb2.FindOrCreateUserRequest.SerializeToString,
             v1_dot_datastore__pb2.StoredUser.FromString,
             options,
@@ -389,7 +389,7 @@ class DatastorePlugin(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.DatastorePlugin/PutStoredIntegrationToken',
+            '/gestalt.plugin.v1.DatastoreProvider/PutStoredIntegrationToken',
             v1_dot_datastore__pb2.StoredIntegrationToken.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
@@ -416,7 +416,7 @@ class DatastorePlugin(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.DatastorePlugin/GetStoredIntegrationToken',
+            '/gestalt.plugin.v1.DatastoreProvider/GetStoredIntegrationToken',
             v1_dot_datastore__pb2.GetStoredIntegrationTokenRequest.SerializeToString,
             v1_dot_datastore__pb2.StoredIntegrationToken.FromString,
             options,
@@ -443,7 +443,7 @@ class DatastorePlugin(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.DatastorePlugin/ListStoredIntegrationTokens',
+            '/gestalt.plugin.v1.DatastoreProvider/ListStoredIntegrationTokens',
             v1_dot_datastore__pb2.ListStoredIntegrationTokensRequest.SerializeToString,
             v1_dot_datastore__pb2.ListStoredIntegrationTokensResponse.FromString,
             options,
@@ -470,7 +470,7 @@ class DatastorePlugin(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.DatastorePlugin/DeleteStoredIntegrationToken',
+            '/gestalt.plugin.v1.DatastoreProvider/DeleteStoredIntegrationToken',
             v1_dot_datastore__pb2.DeleteStoredIntegrationTokenRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
@@ -497,7 +497,7 @@ class DatastorePlugin(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.DatastorePlugin/PutAPIToken',
+            '/gestalt.plugin.v1.DatastoreProvider/PutAPIToken',
             v1_dot_datastore__pb2.StoredAPIToken.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
@@ -524,7 +524,7 @@ class DatastorePlugin(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.DatastorePlugin/GetAPITokenByHash',
+            '/gestalt.plugin.v1.DatastoreProvider/GetAPITokenByHash',
             v1_dot_datastore__pb2.GetAPITokenByHashRequest.SerializeToString,
             v1_dot_datastore__pb2.StoredAPIToken.FromString,
             options,
@@ -551,7 +551,7 @@ class DatastorePlugin(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.DatastorePlugin/ListAPITokens',
+            '/gestalt.plugin.v1.DatastoreProvider/ListAPITokens',
             v1_dot_datastore__pb2.ListAPITokensRequest.SerializeToString,
             v1_dot_datastore__pb2.ListAPITokensResponse.FromString,
             options,
@@ -578,7 +578,7 @@ class DatastorePlugin(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.DatastorePlugin/RevokeAPIToken',
+            '/gestalt.plugin.v1.DatastoreProvider/RevokeAPIToken',
             v1_dot_datastore__pb2.RevokeAPITokenRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
@@ -605,7 +605,7 @@ class DatastorePlugin(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.DatastorePlugin/RevokeAllAPITokens',
+            '/gestalt.plugin.v1.DatastoreProvider/RevokeAllAPITokens',
             v1_dot_datastore__pb2.RevokeAllAPITokensRequest.SerializeToString,
             v1_dot_datastore__pb2.RevokeAllAPITokensResponse.FromString,
             options,
@@ -632,7 +632,7 @@ class DatastorePlugin(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.DatastorePlugin/GetOAuthRegistration',
+            '/gestalt.plugin.v1.DatastoreProvider/GetOAuthRegistration',
             v1_dot_datastore__pb2.GetOAuthRegistrationRequest.SerializeToString,
             v1_dot_datastore__pb2.OAuthRegistration.FromString,
             options,
@@ -659,7 +659,7 @@ class DatastorePlugin(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.DatastorePlugin/PutOAuthRegistration',
+            '/gestalt.plugin.v1.DatastoreProvider/PutOAuthRegistration',
             v1_dot_datastore__pb2.OAuthRegistration.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
@@ -686,7 +686,7 @@ class DatastorePlugin(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.DatastorePlugin/DeleteOAuthRegistration',
+            '/gestalt.plugin.v1.DatastoreProvider/DeleteOAuthRegistration',
             v1_dot_datastore__pb2.DeleteOAuthRegistrationRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,

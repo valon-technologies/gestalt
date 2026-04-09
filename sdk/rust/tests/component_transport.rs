@@ -6,9 +6,9 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use gestalt_plugin_sdk::proto::v1::auth_plugin_client::AuthPluginClient;
-use gestalt_plugin_sdk::proto::v1::datastore_plugin_client::DatastorePluginClient;
-use gestalt_plugin_sdk::proto::v1::plugin_runtime_client::PluginRuntimeClient;
+use gestalt_plugin_sdk::proto::v1::auth_provider_client::AuthProviderClient;
+use gestalt_plugin_sdk::proto::v1::datastore_provider_client::DatastoreProviderClient;
+use gestalt_plugin_sdk::proto::v1::provider_lifecycle_client::ProviderLifecycleClient;
 use gestalt_plugin_sdk::proto::v1::{
     BeginLoginRequest, CompleteLoginRequest, ConfigurePluginRequest,
     DeleteOAuthRegistrationRequest, DeleteStoredIntegrationTokenRequest, FindOrCreateUserRequest,
@@ -130,8 +130,8 @@ async fn serves_auth_provider_and_runtime_over_unix_socket() {
     helpers::wait_for_socket(&socket).await;
 
     let channel = connect_unix(&socket).await;
-    let mut runtime = PluginRuntimeClient::new(channel.clone());
-    let mut auth = AuthPluginClient::new(channel);
+    let mut runtime = ProviderLifecycleClient::new(channel.clone());
+    let mut auth = AuthProviderClient::new(channel);
 
     let metadata = runtime
         .get_plugin_metadata(())
@@ -451,8 +451,8 @@ async fn serves_datastore_provider_and_runtime_over_unix_socket() {
     helpers::wait_for_socket(&socket).await;
 
     let channel = connect_unix(&socket).await;
-    let mut runtime = PluginRuntimeClient::new(channel.clone());
-    let mut datastore = DatastorePluginClient::new(channel);
+    let mut runtime = ProviderLifecycleClient::new(channel.clone());
+    let mut datastore = DatastoreProviderClient::new(channel);
 
     let metadata = runtime
         .get_plugin_metadata(())

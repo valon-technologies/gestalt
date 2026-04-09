@@ -119,7 +119,7 @@ message DeleteOAuthRegistrationRequest {
   string redirect_uri = 2;
 }
 
-service DatastorePlugin {
+service DatastoreProvider {
   rpc Migrate(google.protobuf.Empty) returns (google.protobuf.Empty);
   rpc GetUser(GetUserRequest) returns (StoredUser);
   rpc FindOrCreateUser(FindOrCreateUserRequest) returns (StoredUser);

@@ -1,7 +1,6 @@
 import datetime as dt
 import functools
 import importlib
-import json
 import os
 import pathlib
 import signal
@@ -18,10 +17,10 @@ from google.protobuf import json_format
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 
 from ._api import Request
+from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._catalog import catalog_to_json
 from ._plugin import Plugin, _module_plugin
 from ._providers import (
-    UNIX_EPOCH,
     AuthenticatedUser,
     AuthProvider,
     BeginLoginRequest,
@@ -33,11 +32,10 @@ from ._providers import (
     MetadataProvider,
     OAuthRegistration,
     OAuthRegistrationStore,
+    PluginProvider,
+    PluginProviderAdapter,
     ProviderKind,
     ProviderMetadata,
-    RuntimePlugin,
-    RuntimeProvider,
-    RuntimeProviderAdapter,
     SessionTTLProvider,
     StoredAPIToken,
     StoredIntegrationToken,
@@ -54,8 +52,6 @@ from .gen.v1 import plugin_pb2_grpc as _plugin_pb2_grpc
 from .gen.v1 import runtime_pb2 as _runtime_pb2
 from .gen.v1 import runtime_pb2_grpc as _runtime_pb2_grpc
 
-# Any-typed aliases suppress ty/mypy errors on generated protobuf modules
-# whose attributes are not statically visible to type checkers.
 empty_pb2: Any = _empty_pb2
 timestamp_pb2: Any = _timestamp_pb2
 plugin_pb2: Any = _plugin_pb2
@@ -69,7 +65,6 @@ datastore_pb2_grpc: Any = _datastore_pb2_grpc
 
 UTC = dt.timezone.utc
 
-BUNDLED_CONFIG_NAME: Final[str] = "gestalt-runtime.json"
 ENV_PLUGIN_SOCKET: Final[str] = "GESTALT_PLUGIN_SOCKET"
 ENV_WRITE_CATALOG: Final[str] = "GESTALT_PLUGIN_WRITE_CATALOG"
 CURRENT_PROTOCOL_VERSION: Final[int] = 2
@@ -79,64 +74,11 @@ USAGE: Final[str] = "usage: python -m gestalt._runtime ROOT MODULE[:ATTRIBUTE] [
 
 
 @dataclass(frozen=True)
-class PluginTarget:
-    module_name: str
-    attribute_name: str | None = None
-
-
-@dataclass(frozen=True)
-class BundledPluginConfig:
-    target: str
-    plugin_name: str | None = None
-    runtime_kind: str | None = None
-
-
-@dataclass(frozen=True)
 class RuntimeArgs:
     target: str
     root: pathlib.Path | None = None
     plugin_name: str | None = None
     runtime_kind: str | None = None
-
-
-def parse_plugin_target(target: str) -> PluginTarget:
-    module_name, sep, attribute_name = target.partition(":")
-    module_name = module_name.strip()
-    attribute_name = attribute_name.strip() or None
-    if not module_name:
-        raise RuntimeError("tool.gestalt.plugin must be in module or module:attribute form")
-    if sep and attribute_name is None:
-        raise RuntimeError("tool.gestalt.plugin attribute is required when ':' is present")
-
-    return PluginTarget(
-        module_name=module_name,
-        attribute_name=attribute_name,
-    )
-
-
-def read_bundled_plugin_config(*, bundle_root: pathlib.Path) -> BundledPluginConfig | None:
-    config_path = bundle_root / BUNDLED_CONFIG_NAME
-    if not config_path.exists():
-        return None
-
-    data = json.loads(config_path.read_text(encoding="utf-8"))
-    target = str(data.get("target", "")).strip()
-    if not target:
-        raise RuntimeError(f"{config_path} is missing target")
-
-    plugin_name = data.get("plugin_name")
-    if plugin_name is not None:
-        plugin_name = str(plugin_name).strip() or None
-
-    runtime_kind = data.get("runtime_kind")
-    if runtime_kind is not None:
-        runtime_kind = str(runtime_kind).strip() or None
-
-    return BundledPluginConfig(
-        target=target,
-        plugin_name=plugin_name,
-        runtime_kind=runtime_kind,
-    )
 
 
 def _grpc_handler(label: str):
@@ -155,7 +97,7 @@ def _grpc_handler(label: str):
 
 
 def serve(
-    target: Plugin | RuntimePlugin | RuntimeProvider,
+    target: Plugin | PluginProviderAdapter | PluginProvider,
     *,
     runtime_kind: ProviderKind | str | None = None,
 ) -> None:
@@ -226,7 +168,7 @@ def _parse_runtime_args(args: list[str]) -> RuntimeArgs | None:
     )
 
 
-def _load_target(args: RuntimeArgs) -> Plugin | RuntimePlugin | RuntimeProvider:
+def _load_target(args: RuntimeArgs) -> Plugin | PluginProviderAdapter | PluginProvider:
     if args.root is not None:
         root = str(args.root)
         if root not in sys.path:
@@ -240,16 +182,16 @@ def _load_target(args: RuntimeArgs) -> Plugin | RuntimePlugin | RuntimeProvider:
     else:
         target = getattr(module, plugin_target.attribute_name, None)
 
-    if isinstance(target, (Plugin, RuntimePlugin)):
+    if isinstance(target, (Plugin, PluginProviderAdapter)):
         return target
 
     if resolved_kind == ProviderKind.AUTH and isinstance(target, AuthProvider):
         return _auth_runtime_plugin(target)
     if resolved_kind == ProviderKind.DATASTORE and isinstance(target, DatastoreProvider):
         return _datastore_runtime_plugin(target)
-    if isinstance(target, RuntimeProvider):
+    if isinstance(target, PluginProvider):
         raise RuntimeError(
-            "runtime providers must be wrapped in gestalt.RuntimeProviderAdapter (or the legacy gestalt.RuntimePlugin alias) unless runtime_kind is auth or datastore"
+            "providers must be wrapped in gestalt.PluginProviderAdapter unless runtime_kind is auth or datastore"
         )
     raise RuntimeError(f"{args.target} did not resolve to a supported gestalt target")
 
@@ -257,7 +199,7 @@ def _load_target(args: RuntimeArgs) -> Plugin | RuntimePlugin | RuntimeProvider:
 def _module_target(
     module: Any,
     runtime_kind: ProviderKind,
-) -> Plugin | RuntimePlugin | RuntimeProvider | Any:
+) -> Plugin | PluginProviderAdapter | PluginProvider | Any:
     if runtime_kind == ProviderKind.INTEGRATION:
         return _module_plugin(module)
 
@@ -289,9 +231,9 @@ def _register_shutdown_handlers(server: Any, close_provider: Any) -> None:
     signal.signal(signal.SIGINT, _shutdown)
 
 
-def _register_services(*, server: Any, servable: Plugin | RuntimePlugin) -> None:
+def _register_services(*, server: Any, servable: Plugin | PluginProviderAdapter) -> None:
     if isinstance(servable, Plugin):
-        plugin_pb2_grpc.add_ProviderPluginServicer_to_server(
+        plugin_pb2_grpc.add_PluginProviderServicer_to_server(
             _provider_servicer(plugin=servable),
             server,
         )
@@ -300,8 +242,8 @@ def _register_services(*, server: Any, servable: Plugin | RuntimePlugin) -> None
     servable.register_services(server, servable.provider)
 
 
-def _close_once_callable(target: Plugin | RuntimePlugin) -> Any:
-    provider = target.provider if isinstance(target, RuntimePlugin) else target
+def _close_once_callable(target: Plugin | PluginProviderAdapter) -> Any:
+    provider = target.provider if isinstance(target, PluginProviderAdapter) else target
     closed = False
 
     def _close() -> None:
@@ -316,11 +258,11 @@ def _close_once_callable(target: Plugin | RuntimePlugin) -> Any:
 
 
 def _servable_target(
-    target: Plugin | RuntimePlugin | RuntimeProvider,
+    target: Plugin | PluginProviderAdapter | PluginProvider,
     *,
     runtime_kind: ProviderKind | str | None,
-) -> Plugin | RuntimePlugin:
-    if isinstance(target, (Plugin, RuntimePlugin)):
+) -> Plugin | PluginProviderAdapter:
+    if isinstance(target, (Plugin, PluginProviderAdapter)):
         return target
 
     kind = _normalized_runtime_kind(runtime_kind)
@@ -331,46 +273,46 @@ def _servable_target(
     raise RuntimeError("unsupported runtime target")
 
 
-def _auth_runtime_plugin(provider: AuthProvider) -> RuntimeProviderAdapter:
-    return RuntimeProviderAdapter(
+def _auth_runtime_plugin(provider: AuthProvider) -> PluginProviderAdapter:
+    return PluginProviderAdapter(
         kind=ProviderKind.AUTH,
         provider=provider,
         register_services=_register_auth_services,
     )
 
 
-def _datastore_runtime_plugin(provider: DatastoreProvider) -> RuntimeProviderAdapter:
-    return RuntimeProviderAdapter(
+def _datastore_runtime_plugin(provider: DatastoreProvider) -> PluginProviderAdapter:
+    return PluginProviderAdapter(
         kind=ProviderKind.DATASTORE,
         provider=provider,
         register_services=_register_datastore_services,
     )
 
 
-def _register_auth_services(server: Any, provider: RuntimeProvider) -> None:
-    runtime_pb2_grpc.add_PluginRuntimeServicer_to_server(
+def _register_auth_services(server: Any, provider: PluginProvider) -> None:
+    runtime_pb2_grpc.add_ProviderLifecycleServicer_to_server(
         _runtime_servicer(provider=provider, kind=ProviderKind.AUTH),
         server,
     )
-    auth_pb2_grpc.add_AuthPluginServicer_to_server(
+    auth_pb2_grpc.add_AuthProviderServicer_to_server(
         _auth_servicer(provider=provider),
         server,
     )
 
 
-def _register_datastore_services(server: Any, provider: RuntimeProvider) -> None:
-    runtime_pb2_grpc.add_PluginRuntimeServicer_to_server(
+def _register_datastore_services(server: Any, provider: PluginProvider) -> None:
+    runtime_pb2_grpc.add_ProviderLifecycleServicer_to_server(
         _runtime_servicer(provider=provider, kind=ProviderKind.DATASTORE),
         server,
     )
-    datastore_pb2_grpc.add_DatastorePluginServicer_to_server(
+    datastore_pb2_grpc.add_DatastoreProviderServicer_to_server(
         _datastore_servicer(provider=provider),
         server,
     )
 
 
 def _provider_servicer(*, plugin: Plugin) -> Any:
-    class ProviderServicer(plugin_pb2_grpc.ProviderPluginServicer):
+    class ProviderServicer(plugin_pb2_grpc.PluginProviderServicer):
         def GetMetadata(self, _request: Any, _context: Any) -> Any:
             return plugin_pb2.ProviderMetadata(
                 supports_session_catalog=plugin.supports_session_catalog(),
@@ -440,8 +382,8 @@ def _provider_servicer(*, plugin: Plugin) -> Any:
     return ProviderServicer()
 
 
-def _runtime_servicer(*, provider: RuntimeProvider, kind: ProviderKind) -> Any:
-    class RuntimeServicer(runtime_pb2_grpc.PluginRuntimeServicer):
+def _runtime_servicer(*, provider: PluginProvider, kind: ProviderKind) -> Any:
+    class RuntimeServicer(runtime_pb2_grpc.ProviderLifecycleServicer):
         def GetPluginMetadata(self, _request: Any, _context: Any) -> Any:
             metadata = _provider_metadata(provider=provider, kind=kind)
             return runtime_pb2.PluginMetadata(
@@ -492,10 +434,10 @@ def _runtime_servicer(*, provider: RuntimeProvider, kind: ProviderKind) -> Any:
     return RuntimeServicer()
 
 
-def _auth_servicer(*, provider: RuntimeProvider) -> Any:
+def _auth_servicer(*, provider: PluginProvider) -> Any:
     auth_provider = cast(AuthProvider, provider)
 
-    class AuthServicer(auth_pb2_grpc.AuthPluginServicer):
+    class AuthServicer(auth_pb2_grpc.AuthProviderServicer):
         @_grpc_handler("begin login")
         def BeginLogin(self, request: Any, context: Any) -> Any:
             response = auth_provider.begin_login(
@@ -568,10 +510,10 @@ def _auth_servicer(*, provider: RuntimeProvider) -> Any:
     return AuthServicer()
 
 
-def _datastore_servicer(*, provider: RuntimeProvider) -> Any:
+def _datastore_servicer(*, provider: PluginProvider) -> Any:
     datastore_provider = cast(DatastoreProvider, provider)
 
-    class DatastoreServicer(datastore_pb2_grpc.DatastorePluginServicer):
+    class DatastoreServicer(datastore_pb2_grpc.DatastoreProviderServicer):
         @_grpc_handler("migrate")
         def Migrate(self, request: Any, context: Any) -> Any:
             datastore_provider.migrate()
@@ -664,27 +606,63 @@ def _datastore_servicer(*, provider: RuntimeProvider) -> Any:
             revoked = datastore_provider.revoke_all_api_tokens(request.user_id)
             return datastore_pb2.RevokeAllAPITokensResponse(revoked=revoked)
 
-        @_grpc_handler("get oauth registration")
         def GetOAuthRegistration(self, request: Any, context: Any) -> Any:
             if not isinstance(datastore_provider, OAuthRegistrationStore):
-                return context.abort(grpc.StatusCode.UNIMPLEMENTED, "datastore provider does not support oauth registrations")
-            registration = datastore_provider.get_oauth_registration(request.auth_server_url, request.redirect_uri)
+                return context.abort(
+                    grpc.StatusCode.UNIMPLEMENTED,
+                    "datastore provider does not support oauth registrations",
+                )
+            try:
+                registration = datastore_provider.get_oauth_registration(
+                    request.auth_server_url, request.redirect_uri,
+                )
+            except Exception as error:
+                traceback.print_exception(error)
+                return context.abort(
+                    grpc.StatusCode.UNKNOWN,
+                    f"get oauth registration: {error}",
+                )
             if registration is None:
-                return context.abort(grpc.StatusCode.NOT_FOUND, "oauth registration not found")
+                return context.abort(
+                    grpc.StatusCode.NOT_FOUND,
+                    "oauth registration not found",
+                )
             return _oauth_registration_to_proto(registration)
 
-        @_grpc_handler("put oauth registration")
         def PutOAuthRegistration(self, request: Any, context: Any) -> Any:
             if not isinstance(datastore_provider, OAuthRegistrationStore):
-                return context.abort(grpc.StatusCode.UNIMPLEMENTED, "datastore provider does not support oauth registrations")
-            datastore_provider.put_oauth_registration(_oauth_registration_from_proto(request))
+                return context.abort(
+                    grpc.StatusCode.UNIMPLEMENTED,
+                    "datastore provider does not support oauth registrations",
+                )
+            try:
+                datastore_provider.put_oauth_registration(
+                    _oauth_registration_from_proto(request),
+                )
+            except Exception as error:
+                traceback.print_exception(error)
+                return context.abort(
+                    grpc.StatusCode.UNKNOWN,
+                    f"put oauth registration: {error}",
+                )
             return empty_pb2.Empty()
 
-        @_grpc_handler("delete oauth registration")
         def DeleteOAuthRegistration(self, request: Any, context: Any) -> Any:
             if not isinstance(datastore_provider, OAuthRegistrationStore):
-                return context.abort(grpc.StatusCode.UNIMPLEMENTED, "datastore provider does not support oauth registrations")
-            datastore_provider.delete_oauth_registration(request.auth_server_url, request.redirect_uri)
+                return context.abort(
+                    grpc.StatusCode.UNIMPLEMENTED,
+                    "datastore provider does not support oauth registrations",
+                )
+            try:
+                datastore_provider.delete_oauth_registration(
+                    request.auth_server_url, request.redirect_uri,
+                )
+            except Exception as error:
+                traceback.print_exception(error)
+                return context.abort(
+                    grpc.StatusCode.UNKNOWN,
+                    f"delete oauth registration: {error}",
+                )
             return empty_pb2.Empty()
 
     return DatastoreServicer()
@@ -712,7 +690,7 @@ def _message_to_dict(
     )
 
 
-def _provider_metadata(*, provider: RuntimeProvider, kind: ProviderKind) -> ProviderMetadata:
+def _provider_metadata(*, provider: PluginProvider, kind: ProviderKind) -> ProviderMetadata:
     if isinstance(provider, MetadataProvider):
         metadata = provider.metadata()
         if isinstance(metadata, ProviderMetadata):
@@ -720,7 +698,7 @@ def _provider_metadata(*, provider: RuntimeProvider, kind: ProviderKind) -> Prov
     return ProviderMetadata(kind=kind)
 
 
-def _provider_warnings(provider: RuntimeProvider) -> list[str]:
+def _provider_warnings(provider: PluginProvider) -> list[str]:
     if isinstance(provider, WarningsProvider):
         return list(provider.warnings())
     return []
@@ -804,8 +782,8 @@ def _stored_integration_token_from_proto(token: Any) -> StoredIntegrationToken:
         last_refreshed_at=_proto_to_datetime(token.last_refreshed_at),
         refresh_error_count=token.refresh_error_count,
         connection_params=dict(token.connection_params),
-        created_at=_proto_to_datetime(token.created_at) or UNIX_EPOCH,
-        updated_at=_proto_to_datetime(token.updated_at) or UNIX_EPOCH,
+        created_at=_proto_to_datetime(token.created_at) or _unix_epoch(),
+        updated_at=_proto_to_datetime(token.updated_at) or _unix_epoch(),
     )
 
 
@@ -831,8 +809,8 @@ def _stored_api_token_from_proto(token: Any) -> StoredAPIToken:
         hashed_token=token.hashed_token,
         scopes=token.scopes,
         expires_at=_proto_to_datetime(token.expires_at),
-        created_at=_proto_to_datetime(token.created_at) or UNIX_EPOCH,
-        updated_at=_proto_to_datetime(token.updated_at) or UNIX_EPOCH,
+        created_at=_proto_to_datetime(token.created_at) or _unix_epoch(),
+        updated_at=_proto_to_datetime(token.updated_at) or _unix_epoch(),
     )
 
 
@@ -861,7 +839,7 @@ def _oauth_registration_from_proto(registration: Any) -> OAuthRegistration:
         authorization_endpoint=registration.authorization_endpoint,
         token_endpoint=registration.token_endpoint,
         scopes_supported=registration.scopes_supported,
-        discovered_at=_proto_to_datetime(registration.discovered_at) or UNIX_EPOCH,
+        discovered_at=_proto_to_datetime(registration.discovered_at) or _unix_epoch(),
     )
 
 
@@ -881,6 +859,10 @@ def _proto_to_datetime(value: Any) -> Any:
     if hasattr(value, "seconds") and hasattr(value, "nanos") and value.seconds == 0 and value.nanos == 0:
         return None
     return value.ToDatetime(tzinfo=UTC)
+
+
+def _unix_epoch() -> Any:
+    return dt.datetime.fromtimestamp(0, tz=UTC)
 
 
 def _copy_optional_timestamp(message: Any, field_name: str, value: Any) -> None:

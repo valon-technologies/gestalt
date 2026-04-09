@@ -104,7 +104,7 @@ func TestProviderServerGetMetadata(t *testing.T) {
 	t.Parallel()
 
 	t.Run("plain provider", func(t *testing.T) {
-		client := newProviderPluginClient(t, &stubProvider{}, stubRouter)
+		client := newPluginProviderClient(t, &stubProvider{}, stubRouter)
 		meta, err := client.GetMetadata(context.Background(), &emptypb.Empty{})
 		if err != nil {
 			t.Fatalf("GetMetadata: %v", err)
@@ -115,7 +115,7 @@ func TestProviderServerGetMetadata(t *testing.T) {
 	})
 
 	t.Run("session catalog provider", func(t *testing.T) {
-		client := newProviderPluginClient(t, &sessionCatalogStubProvider{
+		client := newPluginProviderClient(t, &sessionCatalogStubProvider{
 			sessionCatalog: &gestalt.Catalog{
 				Name: "test-provider",
 				Operations: []gestalt.CatalogOperation{
@@ -145,7 +145,7 @@ func TestProviderServerGetSessionCatalog(t *testing.T) {
 				},
 			},
 		}
-		client := newProviderPluginClient(t, prov, sessionCatalogStubRouter)
+		client := newPluginProviderClient(t, prov, sessionCatalogStubRouter)
 		resp, err := client.GetSessionCatalog(context.Background(), &proto.GetSessionCatalogRequest{Token: "tok"})
 		if err != nil {
 			t.Fatalf("GetSessionCatalog: %v", err)
@@ -156,7 +156,7 @@ func TestProviderServerGetSessionCatalog(t *testing.T) {
 	})
 
 	t.Run("unsupported", func(t *testing.T) {
-		client := newProviderPluginClient(t, &stubProvider{}, stubRouter)
+		client := newPluginProviderClient(t, &stubProvider{}, stubRouter)
 		_, err := client.GetSessionCatalog(context.Background(), &proto.GetSessionCatalogRequest{Token: "t"})
 		if err == nil {
 			t.Fatal("GetSessionCatalog should return error for unsupported provider")
@@ -255,7 +255,7 @@ func TestProviderServerExecute(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := newProviderPluginClient(t, &stubProvider{}, tt.router)
+			client := newPluginProviderClient(t, &stubProvider{}, tt.router)
 
 			resp, err := client.Execute(context.Background(), tt.request)
 			if err != nil {
@@ -280,7 +280,7 @@ func TestProviderServerStartProvider(t *testing.T) {
 	t.Parallel()
 
 	prov := &startableStubProvider{}
-	client := newProviderPluginClient(t, prov, startableStubRouter)
+	client := newPluginProviderClient(t, prov, startableStubRouter)
 	ctx := context.Background()
 
 	cfg, _ := structpb.NewStruct(map[string]any{"key": "val"})

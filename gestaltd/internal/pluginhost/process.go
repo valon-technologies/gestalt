@@ -59,7 +59,7 @@ func NewExecutableProvider(ctx context.Context, cfg ExecConfig) (core.Provider, 
 		return nil, err
 	}
 
-	client := proto.NewProviderPluginClient(proc.conn)
+	client := proto.NewPluginProviderClient(proc.conn)
 	prov, err := NewRemoteProvider(
 		ctx,
 		client,
@@ -76,7 +76,7 @@ func NewExecutableProvider(ctx context.Context, cfg ExecConfig) (core.Provider, 
 
 func ServeProvider(ctx context.Context, provider core.Provider) error {
 	return servePlugin(ctx, func(srv *grpc.Server) {
-		proto.RegisterProviderPluginServer(srv, NewProviderServer(provider))
+		proto.RegisterPluginProviderServer(srv, NewProviderServer(provider))
 	})
 }
 

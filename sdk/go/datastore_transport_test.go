@@ -223,8 +223,8 @@ func TestDatastoreProviderRoundTrip(t *testing.T) {
 	})
 
 	conn := newUnixConn(t, socket)
-	runtimeClient := proto.NewPluginRuntimeClient(conn)
-	dsClient := proto.NewDatastorePluginClient(conn)
+	runtimeClient := proto.NewProviderLifecycleClient(conn)
+	dsClient := proto.NewDatastoreProviderClient(conn)
 
 	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer rpcCancel()

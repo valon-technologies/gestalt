@@ -368,8 +368,8 @@ const file_v1_runtime_proto_rawDesc = "" +
 	"\x10PLUGIN_KIND_AUTH\x10\x02\x12\x19\n" +
 	"\x15PLUGIN_KIND_DATASTORE\x10\x03\x12\x17\n" +
 	"\x13PLUGIN_KIND_SECRETS\x10\x04\x12\x19\n" +
-	"\x15PLUGIN_KIND_TELEMETRY\x10\x052\x98\x02\n" +
-	"\rPluginRuntime\x12N\n" +
+	"\x15PLUGIN_KIND_TELEMETRY\x10\x052\x9c\x02\n" +
+	"\x11ProviderLifecycle\x12N\n" +
 	"\x11GetPluginMetadata\x12\x16.google.protobuf.Empty\x1a!.gestalt.plugin.v1.PluginMetadata\x12h\n" +
 	"\x0fConfigurePlugin\x12).gestalt.plugin.v1.ConfigurePluginRequest\x1a*.gestalt.plugin.v1.ConfigurePluginResponse\x12M\n" +
 	"\vHealthCheck\x12\x16.google.protobuf.Empty\x1a&.gestalt.plugin.v1.HealthCheckResponseB\xc6\x01\n" +
@@ -401,12 +401,12 @@ var file_v1_runtime_proto_goTypes = []any{
 var file_v1_runtime_proto_depIdxs = []int32{
 	0, // 0: gestalt.plugin.v1.PluginMetadata.kind:type_name -> gestalt.plugin.v1.PluginKind
 	5, // 1: gestalt.plugin.v1.ConfigurePluginRequest.config:type_name -> google.protobuf.Struct
-	6, // 2: gestalt.plugin.v1.PluginRuntime.GetPluginMetadata:input_type -> google.protobuf.Empty
-	2, // 3: gestalt.plugin.v1.PluginRuntime.ConfigurePlugin:input_type -> gestalt.plugin.v1.ConfigurePluginRequest
-	6, // 4: gestalt.plugin.v1.PluginRuntime.HealthCheck:input_type -> google.protobuf.Empty
-	1, // 5: gestalt.plugin.v1.PluginRuntime.GetPluginMetadata:output_type -> gestalt.plugin.v1.PluginMetadata
-	3, // 6: gestalt.plugin.v1.PluginRuntime.ConfigurePlugin:output_type -> gestalt.plugin.v1.ConfigurePluginResponse
-	4, // 7: gestalt.plugin.v1.PluginRuntime.HealthCheck:output_type -> gestalt.plugin.v1.HealthCheckResponse
+	6, // 2: gestalt.plugin.v1.ProviderLifecycle.GetPluginMetadata:input_type -> google.protobuf.Empty
+	2, // 3: gestalt.plugin.v1.ProviderLifecycle.ConfigurePlugin:input_type -> gestalt.plugin.v1.ConfigurePluginRequest
+	6, // 4: gestalt.plugin.v1.ProviderLifecycle.HealthCheck:input_type -> google.protobuf.Empty
+	1, // 5: gestalt.plugin.v1.ProviderLifecycle.GetPluginMetadata:output_type -> gestalt.plugin.v1.PluginMetadata
+	3, // 6: gestalt.plugin.v1.ProviderLifecycle.ConfigurePlugin:output_type -> gestalt.plugin.v1.ConfigurePluginResponse
+	4, // 7: gestalt.plugin.v1.ProviderLifecycle.HealthCheck:output_type -> gestalt.plugin.v1.HealthCheckResponse
 	5, // [5:8] is the sub-list for method output_type
 	2, // [2:5] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name

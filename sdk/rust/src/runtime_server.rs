@@ -7,7 +7,7 @@ use crate::api::RuntimeMetadata;
 use crate::auth::AuthProvider;
 use crate::datastore::DatastoreProvider;
 use crate::error::Result;
-use crate::generated::v1::plugin_runtime_server::PluginRuntime;
+use crate::generated::v1::provider_lifecycle_server::ProviderLifecycle;
 use crate::generated::v1::{
     ConfigurePluginRequest, ConfigurePluginResponse, HealthCheckResponse, PluginKind,
     PluginMetadata,
@@ -114,7 +114,7 @@ impl RuntimeServer {
 }
 
 #[tonic::async_trait]
-impl PluginRuntime for RuntimeServer {
+impl ProviderLifecycle for RuntimeServer {
     async fn get_plugin_metadata(
         &self,
         _request: GrpcRequest<()>,

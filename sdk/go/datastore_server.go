@@ -10,7 +10,7 @@ import (
 )
 
 type datastoreServer struct {
-	proto.UnimplementedDatastorePluginServer
+	proto.UnimplementedDatastoreProviderServer
 	store DatastoreProvider
 }
 

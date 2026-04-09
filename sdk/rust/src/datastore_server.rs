@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
 use crate::datastore::DatastoreProvider;
-use crate::generated::v1::datastore_plugin_server::DatastorePlugin;
+use crate::generated::v1::datastore_provider_server::DatastoreProvider as DatastoreProviderGrpc;
 use crate::generated::v1::{
     DeleteOAuthRegistrationRequest, DeleteStoredIntegrationTokenRequest, GetApiTokenByHashRequest,
     GetOAuthRegistrationRequest, GetStoredIntegrationTokenRequest, GetUserRequest,
@@ -26,7 +26,7 @@ impl<P> DatastoreServer<P> {
 }
 
 #[tonic::async_trait]
-impl<P> DatastorePlugin for DatastoreServer<P>
+impl<P> DatastoreProviderGrpc for DatastoreServer<P>
 where
     P: DatastoreProvider,
 {
