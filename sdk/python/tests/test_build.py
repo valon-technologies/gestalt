@@ -126,5 +126,19 @@ class BuildTests(unittest.TestCase):
         self.assertEqual(result.goarch, "amd64")
 
 
+class BuildRuntimeContractTests(unittest.TestCase):
+    def test_bundled_config_name_matches_runtime(self) -> None:
+        from gestalt import _runtime
+        self.assertEqual(_build.BUNDLED_CONFIG_NAME, _runtime.BUNDLED_CONFIG_NAME)
+
+    def test_parse_plugin_target_matches_runtime(self) -> None:
+        from gestalt import _runtime
+        for target in ("module", "module:attr"):
+            build_result = _build._parse_plugin_target(target)
+            runtime_result = _runtime.parse_plugin_target(target)
+            self.assertEqual(build_result.module_name, runtime_result.module_name)
+            self.assertEqual(build_result.attribute_name, runtime_result.attribute_name)
+
+
 if __name__ == "__main__":
     unittest.main()
