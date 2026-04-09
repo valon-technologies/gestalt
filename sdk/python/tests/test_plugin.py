@@ -176,6 +176,73 @@ class PluginCatalogTests(unittest.TestCase):
         self.assertEqual(catalog["operations"][0]["method"], "GET")
         self.assertTrue(catalog["operations"][0]["read_only"])
 
+    def test_catalog_preserves_opaque_schemas(self) -> None:
+        from gestalt._catalog import Catalog, CatalogOperation, catalog_to_dict
+
+        catalog = Catalog(
+            name="test",
+            operations=[
+                CatalogOperation(
+                    id="op",
+                    method="POST",
+                    input_schema={
+                        "type": "object",
+                        "required": [],
+                        "read_only": True,
+                        "display_name": "kept",
+                    },
+                    output_schema={"required": ["id"], "read_only": False},
+                ),
+            ],
+        )
+        result = catalog_to_dict(catalog, field_style="json")
+        op = result["operations"][0]
+        self.assertEqual(op["inputSchema"]["required"], [])
+        self.assertTrue(op["inputSchema"]["read_only"])
+        self.assertEqual(op["inputSchema"]["display_name"], "kept")
+        self.assertEqual(op["outputSchema"]["required"], ["id"])
+        self.assertFalse(op["outputSchema"]["read_only"])
+
+    def test_catalog_preserves_dict_defaults(self) -> None:
+        from gestalt._catalog import (
+            Catalog,
+            CatalogOperation,
+            CatalogParameter,
+            catalog_to_dict,
+        )
+
+        catalog = Catalog(
+            name="test",
+            operations=[
+                CatalogOperation(
+                    id="op",
+                    method="POST",
+                    parameters=[
+                        CatalogParameter(
+                            name="opts",
+                            type="object",
+                            required=True,
+                            default={"display_name": "x", "required": False, "read_only": True},
+                        ),
+                    ],
+                ),
+            ],
+        )
+        result = catalog_to_dict(catalog, field_style="json")
+        param = result["operations"][0]["parameters"][0]
+        self.assertEqual(param["default"], {"display_name": "x", "required": False, "read_only": True})
+
+    def test_catalog_preserves_list_valued_opaque_fields(self) -> None:
+        from gestalt._catalog import Catalog, CatalogOperation, catalog_to_dict
+
+        schema = {"items": [{"readOnly": True, "required": [], "display_name": "a"}]}
+        catalog = Catalog(
+            name="test",
+            operations=[CatalogOperation(id="op", method="POST", input_schema=schema)],
+        )
+        result = catalog_to_dict(catalog, field_style="yaml")
+        self.assertEqual(result["operations"][0]["input_schema"], schema)
+
     def test_write_catalog(self) -> None:
         """write_catalog should produce a YAML file on disk."""
         plugin = Plugin("test-plugin")
