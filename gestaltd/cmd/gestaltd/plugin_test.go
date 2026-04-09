@@ -1708,6 +1708,42 @@ func TestRun_PluginReleasePreservesYAMLManifestFormatAndConnectionDefaults(t *te
 	}
 }
 
+func TestRun_PluginReleaseSupportsSourcePackageManifestFile(t *testing.T) {
+	t.Parallel()
+
+	pluginDir := newSourceProviderReleaseFixture(t, t.TempDir())
+	if err := os.Remove(filepath.Join(pluginDir, pluginpkg.ManifestFile)); err != nil {
+		t.Fatalf("remove %s: %v", pluginpkg.ManifestFile, err)
+	}
+	writeReleaseTestManifestFormat(t, pluginDir, "manifest.yaml", &pluginmanifestv1.Manifest{
+		Source:      "github.com/testowner/plugins/source-manifest",
+		Version:     "0.0.1",
+		DisplayName: "Source Manifest",
+		Plugin: &pluginmanifestv1.Plugin{
+			ConfigSchemaPath: releaseProviderSchemaPath,
+			MCP:              true,
+		},
+	})
+
+	outputDir := t.TempDir()
+	const testVersion = "0.0.4-source.1"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--output", outputDir,
+	)
+
+	archiveName := "gestalt-plugin-source-manifest_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	extractDir := extractReleasedArchive(t, outputDir, archiveName)
+	manifestPath, manifest := readManifestFromDir(t, extractDir)
+	if filepath.Base(manifestPath) != "manifest.yaml" {
+		t.Fatalf("released manifest = %q, want manifest.yaml", filepath.Base(manifestPath))
+	}
+	if manifest.Source != "github.com/testowner/plugins/source-manifest" {
+		t.Fatalf("manifest source = %q, want %q", manifest.Source, "github.com/testowner/plugins/source-manifest")
+	}
+}
+
 func TestRun_PluginReleaseChecksumsOnlyCurrentArchives(t *testing.T) {
 	t.Parallel()
 

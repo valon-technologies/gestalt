@@ -21,6 +21,7 @@ const ManifestFile = "provider.json"
 var ManifestFiles = []string{
 	"provider.json", "provider.yaml", "provider.yml",
 	"plugin.json", "plugin.yaml", "plugin.yml",
+	"manifest.json", "manifest.yaml", "manifest.yml",
 }
 
 const (

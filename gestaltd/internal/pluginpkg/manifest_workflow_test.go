@@ -155,6 +155,18 @@ func TestLoadManifestFromPath_PrefersManifestFileOrder(t *testing.T) {
 			wantBase: "provider.yaml",
 			wantSrc:  "github.com/acme/plugins/yaml-first",
 		},
+		{
+			name:     "package manifest after packaged names",
+			files:    []string{"provider.yaml", "manifest.yaml"},
+			wantBase: "provider.yaml",
+			wantSrc:  "github.com/acme/plugins/yaml-first",
+		},
+		{
+			name:     "package manifest supported",
+			files:    []string{"manifest.yaml"},
+			wantBase: "manifest.yaml",
+			wantSrc:  "github.com/acme/plugins/source-package",
+		},
 	}
 
 	for _, tc := range tests {
@@ -170,6 +182,8 @@ func TestLoadManifestFromPath_PrefersManifestFileOrder(t *testing.T) {
 					source = "github.com/acme/plugins/json-first"
 				case "provider.yaml":
 					source = "github.com/acme/plugins/yaml-first"
+				case "manifest.yaml":
+					source = "github.com/acme/plugins/source-package"
 				}
 				manifest := &pluginmanifestv1.Manifest{
 					Source:  source,
