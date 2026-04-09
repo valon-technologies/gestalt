@@ -26,7 +26,7 @@ const (
 	PreparedProvidersDir = ".gestaltd/providers"
 	PreparedAuthDir      = ".gestaltd/auth"
 	PreparedDatastoreDir = ".gestaltd/datastore"
-	PreparedUIDir = ".gestaltd/ui"
+	PreparedUIDir        = ".gestaltd/ui"
 	LockVersion          = 1
 )
 
@@ -35,7 +35,7 @@ type Lockfile struct {
 	Providers map[string]LockProviderEntry `json:"providers"`
 	Auth      *LockEntry                   `json:"auth,omitempty"`
 	Datastore *LockEntry                   `json:"datastore,omitempty"`
-	UI *LockUIEntry `json:"ui,omitempty"`
+	UI        *LockUIEntry                 `json:"ui,omitempty"`
 }
 
 type LockEntry struct {
@@ -180,7 +180,7 @@ type initPaths struct {
 	providersDir string
 	authDir      string
 	datastoreDir string
-	uiDir string
+	uiDir        string
 }
 
 type pluginFingerprintInput struct {
@@ -260,7 +260,7 @@ func initPathsForConfigWithArtifactsDir(configPath, artifactsDir string) initPat
 		providersDir: filepath.Join(artifactsDir, filepath.FromSlash(PreparedProvidersDir)),
 		authDir:      filepath.Join(artifactsDir, filepath.FromSlash(PreparedAuthDir)),
 		datastoreDir: filepath.Join(artifactsDir, filepath.FromSlash(PreparedDatastoreDir)),
-		uiDir: filepath.Join(artifactsDir, filepath.FromSlash(PreparedUIDir)),
+		uiDir:        filepath.Join(artifactsDir, filepath.FromSlash(PreparedUIDir)),
 	}
 }
 
