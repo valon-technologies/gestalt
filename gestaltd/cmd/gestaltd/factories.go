@@ -14,13 +14,9 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	authplugin "github.com/valon-technologies/gestalt/server/internal/drivers/auth/plugin"
 	datastoreplugin "github.com/valon-technologies/gestalt/server/internal/drivers/datastore/plugin"
-	secretsaws "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/aws"
-	secretsazure "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/azure"
 	secretsenv "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/env"
 	secretsfile "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/file"
-	secretsgoogle "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/google"
 	secretsplugin "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/plugin"
-	secretsvault "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/vault"
 	telemetrynoop "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/noop"
 	telemetryotlp "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/otlp"
 	telemetrystdout "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/stdout"
@@ -129,10 +125,6 @@ func buildFactories() *bootstrap.FactoryRegistry {
 	factories.Datastore = datastoreplugin.Factory
 	factories.Secrets["env"] = secretsenv.Factory
 	factories.Secrets["file"] = secretsfile.Factory
-	factories.Secrets["google_secret_manager"] = secretsgoogle.Factory
-	factories.Secrets["aws_secrets_manager"] = secretsaws.Factory
-	factories.Secrets["vault"] = secretsvault.Factory
-	factories.Secrets["azure_key_vault"] = secretsazure.Factory
 	factories.Secrets["plugin"] = secretsplugin.Factory
 	return factories
 }

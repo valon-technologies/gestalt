@@ -64,7 +64,7 @@ func TestSandboxedPluginCannotReadUnauthorizedFile(t *testing.T) {
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
 			"sandboxed": {
-				Plugin: &config.PluginDef{
+				Plugin: &config.ProviderDef{
 					Command:              bin,
 					Args:                 []string{"provider"},
 					AllowedHosts:         []string{"localhost"},
@@ -110,7 +110,7 @@ func TestSandboxedPluginCanCommunicateViaGRPC(t *testing.T) {
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
 			"sandboxed": {
-				Plugin: &config.PluginDef{
+				Plugin: &config.ProviderDef{
 					Command:              bin,
 					Args:                 []string{"provider"},
 					AllowedHosts:         []string{"localhost"},
@@ -159,7 +159,7 @@ func TestSandboxedSynthesizedSourcePluginCanStart(t *testing.T) {
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
 			"example": {
-				Plugin: &config.PluginDef{
+				Plugin: &config.ProviderDef{
 					AllowedHosts:         []string{"localhost"},
 					HostBinary:           hostBin,
 					ResolvedManifest:     manifest,
@@ -213,7 +213,7 @@ func TestSandboxDisabledByDefault(t *testing.T) {
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
 			"nosandbox": {
-				Plugin: &config.PluginDef{
+				Plugin: &config.ProviderDef{
 					Command:              bin,
 					Args:                 []string{"provider"},
 					ResolvedManifest:     manifest,
@@ -262,7 +262,7 @@ func TestSandboxedPluginHTTPProxyAllowsConfiguredHosts(t *testing.T) {
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
 			"proxied": {
-				Plugin: &config.PluginDef{
+				Plugin: &config.ProviderDef{
 					Command:              bin,
 					Args:                 []string{"provider"},
 					AllowedHosts:         []string{host},
@@ -320,7 +320,7 @@ func TestSandboxedPluginHTTPProxyBlocksUnconfiguredHosts(t *testing.T) {
 	cfg := &config.Config{
 		Integrations: map[string]config.IntegrationDef{
 			"blocked": {
-				Plugin: &config.PluginDef{
+				Plugin: &config.ProviderDef{
 					Command:              bin,
 					Args:                 []string{"provider"},
 					AllowedHosts:         []string{"not-a-real-host.example.com"},

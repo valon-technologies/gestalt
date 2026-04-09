@@ -54,14 +54,14 @@ func (p *closableAuthProvider) Close() error {
 func validConfig() *config.Config {
 	return &config.Config{
 		Auth: config.AuthConfig{
-			Provider: &config.PluginDef{Source: &config.PluginSourceDef{Ref: "github.com/valon-technologies/gestalt-providers/auth/oidc", Version: "0.0.1-alpha.1"}},
+			Provider: &config.ProviderDef{Source: &config.PluginSourceDef{Ref: "github.com/valon-technologies/gestalt-providers/auth/oidc", Version: "0.0.1-alpha.1"}},
 			Config:   yaml.Node{Kind: yaml.MappingNode},
 		},
 		Datastore: config.DatastoreConfig{
-			Provider: &config.PluginDef{Source: &config.PluginSourceDef{Ref: "github.com/valon-technologies/gestalt-providers/datastore/sqlite", Version: "0.0.1-alpha.1"}},
+			Provider: &config.ProviderDef{Source: &config.PluginSourceDef{Ref: "github.com/valon-technologies/gestalt-providers/datastore/sqlite", Version: "0.0.1-alpha.1"}},
 			Config:   yaml.Node{Kind: yaml.MappingNode},
 		},
-		Secrets:      config.SecretsConfig{Provider: "test-secrets"},
+		Secrets:      config.SecretsConfig{BuiltinProvider: "test-secrets"},
 		Telemetry:    config.TelemetryConfig{Provider: "test-telemetry"},
 		Integrations: map[string]config.IntegrationDef{},
 		Server: config.ServerConfig{
@@ -504,8 +504,8 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		t.Parallel()
 
 		cfg := validConfig()
-		cfg.Auth.Provider = &config.PluginDef{Source: &config.PluginSourceDef{Ref: "github.com/valon-technologies/gestalt-providers/auth/oidc", Version: "0.0.1-alpha.1"}}
-		cfg.Datastore.Provider = &config.PluginDef{Source: &config.PluginSourceDef{Ref: "github.com/valon-technologies/gestalt-providers/datastore/postgres", Version: "0.0.1-alpha.1"}}
+		cfg.Auth.Provider = &config.ProviderDef{Source: &config.PluginSourceDef{Ref: "github.com/valon-technologies/gestalt-providers/auth/oidc", Version: "0.0.1-alpha.1"}}
+		cfg.Datastore.Provider = &config.ProviderDef{Source: &config.PluginSourceDef{Ref: "github.com/valon-technologies/gestalt-providers/datastore/postgres", Version: "0.0.1-alpha.1"}}
 		cfg.Auth.Config = yaml.Node{
 			Kind: yaml.MappingNode,
 			Content: []*yaml.Node{

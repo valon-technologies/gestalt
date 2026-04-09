@@ -167,7 +167,7 @@ func (s *Server) integrationConnectionInfos(name string, integrationAuthTypes []
 	return connectionInfosForPlugin(intg.Plugin, integrationAuthTypes, defaultCredentialFields)
 }
 
-func connectionInfosForPlugin(plugin *config.PluginDef, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo) []connectionDefInfo {
+func connectionInfosForPlugin(plugin *config.ProviderDef, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo) []connectionDefInfo {
 	if plugin == nil {
 		return nil
 	}

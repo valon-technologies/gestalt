@@ -60,10 +60,10 @@ type AuditConfig struct {
 }
 
 type UIConfig struct {
-	Provider          *PluginDef `yaml:"provider"`
-	Config            yaml.Node  `yaml:"config"`
-	Disabled          bool       `yaml:"-"`
-	ResolvedAssetRoot string     `yaml:"-"`
+	Provider          *ProviderDef `yaml:"provider"`
+	Config            yaml.Node    `yaml:"config"`
+	Disabled          bool         `yaml:"-"`
+	ResolvedAssetRoot string       `yaml:"-"`
 }
 
 type PluginSourceAuthDef struct {
@@ -105,7 +105,7 @@ type EgressCredentialGrant struct {
 	PathPrefix  string `yaml:"path_prefix"`
 }
 
-type PluginDef struct {
+type ProviderDef struct {
 	Command string            `yaml:"-"`
 	Source  *PluginSourceDef  `yaml:"source"`
 	Args    []string          `yaml:"-"`
@@ -131,51 +131,51 @@ type PluginDef struct {
 	HostBinary           string                     `yaml:"-"`
 }
 
-func (p *PluginDef) HasManagedArtifacts() bool {
+func (p *ProviderDef) HasManagedArtifacts() bool {
 	return p != nil && p.HasManagedSource()
 }
 
-func (p *PluginDef) HasLocalSource() bool {
+func (p *ProviderDef) HasLocalSource() bool {
 	return p != nil && p.Source != nil && p.Source.Path != ""
 }
 
-func (p *PluginDef) HasManagedSource() bool {
+func (p *ProviderDef) HasManagedSource() bool {
 	return p != nil && p.Source != nil && p.Source.Ref != ""
 }
 
-func (p *PluginDef) SourcePath() string {
+func (p *ProviderDef) SourcePath() string {
 	if p == nil || p.Source == nil {
 		return ""
 	}
 	return p.Source.Path
 }
 
-func (p *PluginDef) SourceRef() string {
+func (p *ProviderDef) SourceRef() string {
 	if p == nil || p.Source == nil {
 		return ""
 	}
 	return p.Source.Ref
 }
 
-func (p *PluginDef) SourceVersion() string {
+func (p *ProviderDef) SourceVersion() string {
 	if p == nil || p.Source == nil {
 		return ""
 	}
 	return p.Source.Version
 }
 
-func (p *PluginDef) HasResolvedManifest() bool {
+func (p *ProviderDef) HasResolvedManifest() bool {
 	return p != nil && p.ResolvedManifest != nil
 }
 
-func (p *PluginDef) ManifestPlugin() *pluginmanifestv1.Plugin {
+func (p *ProviderDef) ManifestPlugin() *pluginmanifestv1.Plugin {
 	if p == nil || p.ResolvedManifest == nil {
 		return nil
 	}
 	return p.ResolvedManifest.Plugin
 }
 
-func (p *PluginDef) DeclaresMCP() bool {
+func (p *ProviderDef) DeclaresMCP() bool {
 	if p == nil {
 		return false
 	}
@@ -193,18 +193,20 @@ func (p *PluginDef) DeclaresMCP() bool {
 }
 
 type SecretsConfig struct {
-	Provider string    `yaml:"provider"`
-	Config   yaml.Node `yaml:"config"`
+	Provider *ProviderDef `yaml:"provider"`
+	Config   yaml.Node    `yaml:"config"`
+
+	BuiltinProvider string `yaml:"-"`
 }
 
 type AuthConfig struct {
-	Provider *PluginDef `yaml:"provider"`
-	Config   yaml.Node  `yaml:"config"`
+	Provider *ProviderDef `yaml:"provider"`
+	Config   yaml.Node    `yaml:"config"`
 }
 
 type DatastoreConfig struct {
-	Provider *PluginDef `yaml:"provider"`
-	Config   yaml.Node  `yaml:"config"`
+	Provider *ProviderDef `yaml:"provider"`
+	Config   yaml.Node    `yaml:"config"`
 }
 
 func (c *AuthConfig) UnmarshalYAML(value *yaml.Node) error {
@@ -249,7 +251,50 @@ func (c *UIConfig) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-func unmarshalTopLevelComponentConfig(value *yaml.Node, typeName, kind string, provider **PluginDef, cfg *yaml.Node) error {
+func (c *SecretsConfig) UnmarshalYAML(value *yaml.Node) error {
+	if value == nil || value.Kind == 0 {
+		c.Provider = nil
+		c.BuiltinProvider = ""
+		c.Config = yaml.Node{}
+		return nil
+	}
+	if value.Kind != yaml.MappingNode {
+		var probe map[string]any
+		return value.Decode(&probe)
+	}
+	for i := 0; i+1 < len(value.Content); i += 2 {
+		key := value.Content[i].Value
+		switch key {
+		case "provider", "config":
+		default:
+			return fmt.Errorf("field %s not found in type config.SecretsConfig", key)
+		}
+	}
+	c.Provider = nil
+	c.BuiltinProvider = ""
+	c.Config = yaml.Node{}
+	providerNode := mappingValueNode(value, "provider")
+	if providerNode != nil {
+		switch {
+		case providerNode.Kind == yaml.ScalarNode && providerNode.Tag != "!!null":
+			c.BuiltinProvider = strings.TrimSpace(providerNode.Value)
+		case providerNode.Kind == yaml.MappingNode:
+			decoded, err := decodeTopLevelComponentProvider("secrets", providerNode)
+			if err != nil {
+				return err
+			}
+			c.Provider = decoded
+		case providerNode.Kind != yaml.ScalarNode || providerNode.Tag != "!!null":
+			return fmt.Errorf("secrets.provider must be a string or a provider reference mapping")
+		}
+	}
+	if configNode := mappingValueNode(value, "config"); configNode != nil {
+		c.Config = *configNode
+	}
+	return nil
+}
+
+func unmarshalTopLevelComponentConfig(value *yaml.Node, typeName, kind string, provider **ProviderDef, cfg *yaml.Node) error {
 	if value == nil || value.Kind == 0 {
 		*provider = nil
 		*cfg = yaml.Node{}
@@ -282,7 +327,7 @@ func unmarshalTopLevelComponentConfig(value *yaml.Node, typeName, kind string, p
 	return nil
 }
 
-func decodeTopLevelComponentProvider(kind string, node *yaml.Node) (*PluginDef, error) {
+func decodeTopLevelComponentProvider(kind string, node *yaml.Node) (*ProviderDef, error) {
 	if node == nil || node.Kind == 0 {
 		return nil, nil
 	}
@@ -296,14 +341,14 @@ func decodeTopLevelComponentProvider(kind string, node *yaml.Node) (*PluginDef, 
 		}
 		return nil, fmt.Errorf("config validation: %s.provider must be a provider reference mapping%s", kind, authProviderScalarHint(kind))
 	}
-	var provider PluginDef
+	var provider ProviderDef
 	if err := node.Decode(&provider); err != nil {
 		return nil, err
 	}
 	return &provider, nil
 }
 
-func decodeUIProvider(node *yaml.Node) (*PluginDef, bool, error) {
+func decodeUIProvider(node *yaml.Node) (*ProviderDef, bool, error) {
 	if node == nil || node.Kind == 0 {
 		return nil, false, nil
 	}
@@ -317,7 +362,7 @@ func decodeUIProvider(node *yaml.Node) (*PluginDef, bool, error) {
 		}
 		return nil, false, fmt.Errorf(`config validation: ui.provider must be a provider reference mapping or the string "none"`)
 	}
-	var provider PluginDef
+	var provider ProviderDef
 	if err := node.Decode(&provider); err != nil {
 		return nil, false, err
 	}
@@ -377,11 +422,11 @@ func (s ServerConfig) ManagementAddr() string {
 }
 
 type IntegrationDef struct {
-	Plugin        *PluginDef `yaml:"plugin"`
-	DisplayName   string     `yaml:"display_name"`
-	Description   string     `yaml:"description"`
-	MCPToolPrefix string     `yaml:"-"`
-	IconFile      string     `yaml:"icon_file"`
+	Plugin        *ProviderDef `yaml:"plugin"`
+	DisplayName   string       `yaml:"display_name"`
+	Description   string       `yaml:"description"`
+	MCPToolPrefix string       `yaml:"-"`
+	IconFile      string       `yaml:"icon_file"`
 }
 
 // ConnectionDef owns authentication and connection parameters for a named
@@ -599,7 +644,7 @@ func cloneAuthValue(src AuthValueDef) AuthValueDef {
 	return dst
 }
 
-func EffectivePluginConnectionDef(plugin *PluginDef, manifestPlugin *pluginmanifestv1.Plugin) ConnectionDef {
+func EffectivePluginConnectionDef(plugin *ProviderDef, manifestPlugin *pluginmanifestv1.Plugin) ConnectionDef {
 	conn := ConnectionDef{}
 	if manifestPlugin != nil {
 		conn.Mode = manifestPlugin.ConnectionMode
@@ -623,7 +668,7 @@ func EffectivePluginConnectionDef(plugin *PluginDef, manifestPlugin *pluginmanif
 	return conn
 }
 
-func EffectiveNamedConnectionDef(plugin *PluginDef, manifestPlugin *pluginmanifestv1.Plugin, name string) (ConnectionDef, bool) {
+func EffectiveNamedConnectionDef(plugin *ProviderDef, manifestPlugin *pluginmanifestv1.Plugin, name string) (ConnectionDef, bool) {
 	conn := ConnectionDef{}
 	found := false
 
@@ -690,13 +735,16 @@ func OverlayManagedPluginConfig(path string, cfg *Config) error {
 	if err := overlayManagedComponentConfigNode(mappingValueNode(documentValueNode(&root), "datastore"), cfg.Datastore.Provider, &cfg.Datastore.Config, "datastore"); err != nil {
 		return err
 	}
+	if err := overlayManagedComponentConfigNode(mappingValueNode(documentValueNode(&root), "secrets"), cfg.Secrets.Provider, &cfg.Secrets.Config, "secrets"); err != nil {
+		return err
+	}
 	if err := overlayManagedComponentConfigNode(mappingValueNode(documentValueNode(&root), "ui"), cfg.UI.Provider, &cfg.UI.Config, "ui"); err != nil {
 		return err
 	}
 	return nil
 }
 
-func overlayManagedPluginConfigNode(raw *yaml.Node, plugin *PluginDef, subject string) error {
+func overlayManagedPluginConfigNode(raw *yaml.Node, plugin *ProviderDef, subject string) error {
 	if plugin == nil || !plugin.HasManagedArtifacts() || raw == nil {
 		return nil
 	}
@@ -719,7 +767,7 @@ func overlayManagedPluginConfigNode(raw *yaml.Node, plugin *PluginDef, subject s
 	return nil
 }
 
-func overlayManagedComponentConfigNode(raw *yaml.Node, provider *PluginDef, target *yaml.Node, subject string) error {
+func overlayManagedComponentConfigNode(raw *yaml.Node, provider *ProviderDef, target *yaml.Node, subject string) error {
 	if provider == nil || !provider.HasManagedArtifacts() || raw == nil {
 		return nil
 	}
@@ -842,8 +890,8 @@ func applyDefaults(cfg *Config) {
 	if cfg.Server.Public.Port == 0 {
 		cfg.Server.Public.Port = 8080
 	}
-	if cfg.Secrets.Provider == "" {
-		cfg.Secrets.Provider = "env"
+	if cfg.Secrets.Provider == nil && cfg.Secrets.BuiltinProvider == "" {
+		cfg.Secrets.BuiltinProvider = "env"
 	}
 	if cfg.Telemetry.Provider == "" {
 		cfg.Telemetry.Provider = "stdout"
@@ -856,8 +904,8 @@ func applyDefaults(cfg *Config) {
 	}
 }
 
-func defaultUIProvider() *PluginDef {
-	return &PluginDef{
+func defaultUIProvider() *ProviderDef {
+	return &ProviderDef{
 		Source: &PluginSourceDef{
 			Ref:     DefaultWebUIProvider,
 			Version: DefaultProviderVersion,
@@ -897,10 +945,12 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 	if cfg.Datastore.Provider != nil && cfg.Datastore.Provider.Source != nil {
 		cfg.Datastore.Provider.Source.Path = resolveRelativePath(baseDir, cfg.Datastore.Provider.Source.Path)
 	}
+	if cfg.Secrets.Provider != nil && cfg.Secrets.Provider.Source != nil {
+		cfg.Secrets.Provider.Source.Path = resolveRelativePath(baseDir, cfg.Secrets.Provider.Source.Path)
+	}
 	if cfg.UI.Provider != nil && cfg.UI.Provider.Source != nil {
 		cfg.UI.Provider.Source.Path = resolveRelativePath(baseDir, cfg.UI.Provider.Source.Path)
 	}
-
 }
 
 func resolveRelativePath(baseDir, value string) string {

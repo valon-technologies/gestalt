@@ -427,13 +427,37 @@ func buildAuditSink(ctx context.Context, cfg *config.Config, factories *FactoryR
 }
 
 func buildSecretManager(cfg *config.Config, factories *FactoryRegistry) (core.SecretManager, error) {
-	factory, ok := factories.Secrets[cfg.Secrets.Provider]
+	if cfg.Secrets.Provider != nil {
+		factory, ok := factories.Secrets["plugin"]
+		if !ok {
+			return nil, fmt.Errorf("bootstrap: secrets plugin factory is not registered")
+		}
+		node := cfg.Secrets.Config
+		if !config.IsComponentRuntimeConfigNode(node) {
+			var err error
+			node, err = config.BuildComponentRuntimeConfigNode("secrets", "secrets", cfg.Secrets.Provider, cfg.Secrets.Config)
+			if err != nil {
+				return nil, fmt.Errorf("bootstrap: secrets plugin: %w", err)
+			}
+		}
+		sm, err := factory(node)
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: secrets plugin: %w", err)
+		}
+		return sm, nil
+	}
+
+	name := cfg.Secrets.BuiltinProvider
+	if name == "" {
+		name = "env"
+	}
+	factory, ok := factories.Secrets[name]
 	if !ok {
-		return nil, fmt.Errorf("bootstrap: unknown secrets provider %q", cfg.Secrets.Provider)
+		return nil, fmt.Errorf("bootstrap: unknown secrets provider %q", name)
 	}
 	sm, err := factory(cfg.Secrets.Config)
 	if err != nil {
-		return nil, fmt.Errorf("bootstrap: secrets provider %q: %w", cfg.Secrets.Provider, err)
+		return nil, fmt.Errorf("bootstrap: secrets provider %q: %w", name, err)
 	}
 	return sm, nil
 }

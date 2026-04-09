@@ -817,7 +817,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 	t.Parallel()
 
 	stub := &coretesting.StubIntegration{N: "example", DN: "Example"}
-	plugin := &config.PluginDef{
+	plugin := &config.ProviderDef{
 		Source: &config.PluginSourceDef{
 			Ref:     "github.com/acme/plugins/example",
 			Version: "1.0.0",
@@ -937,7 +937,7 @@ func TestListIntegrations_ConnectionInfosIncludeProviderManualAuth(t *testing.T)
 	cases := []struct {
 		name       string
 		provider   func(t *testing.T) core.Provider
-		plugin     *config.PluginDef
+		plugin     *config.ProviderDef
 		wantAuth   []string
 		wantFields []struct {
 			Name  string `json:"name"`
@@ -952,7 +952,7 @@ func TestListIntegrations_ConnectionInfosIncludeProviderManualAuth(t *testing.T)
 					StubIntegration: coretesting.StubIntegration{N: "example", DN: "Example"},
 				}
 			},
-			plugin: &config.PluginDef{
+			plugin: &config.ProviderDef{
 				Auth: &config.ConnectionAuthDef{
 					Type:             pluginmanifestv1.AuthTypeOAuth2,
 					AuthorizationURL: "https://example.com/oauth/authorize",
@@ -975,7 +975,7 @@ func TestListIntegrations_ConnectionInfosIncludeProviderManualAuth(t *testing.T)
 					StubIntegration: coretesting.StubIntegration{N: "example", DN: "Example"},
 				}
 			},
-			plugin: &config.PluginDef{
+			plugin: &config.ProviderDef{
 				Auth: &config.ConnectionAuthDef{
 					Type:             "",
 					AuthorizationURL: "https://example.com/oauth/authorize",
@@ -1011,7 +1011,7 @@ func TestListIntegrations_ConnectionInfosIncludeProviderManualAuth(t *testing.T)
 				}
 				return prov
 			},
-			plugin:   &config.PluginDef{},
+			plugin:   &config.ProviderDef{},
 			wantAuth: []string{"manual"},
 			wantFields: []struct {
 				Name  string `json:"name"`
@@ -1027,7 +1027,7 @@ func TestListIntegrations_ConnectionInfosIncludeProviderManualAuth(t *testing.T)
 				t.Helper()
 				return &coretesting.StubIntegration{N: "example", DN: "Example"}
 			},
-			plugin: &config.PluginDef{
+			plugin: &config.ProviderDef{
 				Auth: &config.ConnectionAuthDef{
 					Type: pluginmanifestv1.AuthTypeManual,
 					Credentials: []config.CredentialFieldDef{
@@ -6454,7 +6454,7 @@ func TestConnectManual_MultiCredential(t *testing.T) {
 			requestBody: `{"integration":"modern-treasury","credential":"api-key-abc"}`,
 			integrationDefs: map[string]config.IntegrationDef{
 				"modern-treasury": {
-					Plugin: &config.PluginDef{
+					Plugin: &config.ProviderDef{
 						Auth: &config.ConnectionAuthDef{
 							Type: pluginmanifestv1.AuthTypeManual,
 							Credentials: []config.CredentialFieldDef{

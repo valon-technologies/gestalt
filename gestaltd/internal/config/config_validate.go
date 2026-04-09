@@ -41,6 +41,11 @@ func ValidateStructure(cfg *Config) error {
 	if err := validateTopLevelComponentConfig("datastore", cfg.Datastore.Provider, cfg.Datastore.Config); err != nil {
 		return err
 	}
+	if cfg.Secrets.Provider != nil {
+		if err := validateTopLevelComponentConfig("secrets", cfg.Secrets.Provider, cfg.Secrets.Config); err != nil {
+			return err
+		}
+	}
 	for name := range cfg.Integrations {
 		intg := cfg.Integrations[name]
 		if err := validatePluginIntegration(name, intg); err != nil {
@@ -98,7 +103,7 @@ func validateAudit(cfg AuditConfig) error {
 	}
 }
 
-func validateTopLevelComponentProvider(kind string, provider *PluginDef) error {
+func validateTopLevelComponentProvider(kind string, provider *ProviderDef) error {
 	if provider == nil {
 		return nil
 	}
@@ -108,7 +113,7 @@ func validateTopLevelComponentProvider(kind string, provider *PluginDef) error {
 	return validateExternalPlugin(kind, kind, provider)
 }
 
-func validateTopLevelComponentConfig(kind string, provider *PluginDef, cfg yaml.Node) error {
+func validateTopLevelComponentConfig(kind string, provider *ProviderDef, cfg yaml.Node) error {
 	if provider == nil {
 		if cfg.Kind != 0 {
 			return fmt.Errorf("config validation: %s.config is not supported when %s.provider is unset", kind, kind)
@@ -168,7 +173,7 @@ type inlineConnectionReference struct {
 	context  string
 }
 
-func manifestBackedConnectionReferences(plugin *PluginDef, provider *pluginmanifestv1.Plugin) []inlineConnectionReference {
+func manifestBackedConnectionReferences(plugin *ProviderDef, provider *pluginmanifestv1.Plugin) []inlineConnectionReference {
 	if provider == nil {
 		return nil
 	}
@@ -188,15 +193,15 @@ func manifestBackedConnectionReferences(plugin *PluginDef, provider *pluginmanif
 	}
 }
 
-func validateManifestBackedConnectionReferences(name string, plugin *PluginDef, provider *pluginmanifestv1.Plugin) error {
+func validateManifestBackedConnectionReferences(name string, plugin *ProviderDef, provider *pluginmanifestv1.Plugin) error {
 	return validateConnectionReferences(name, declaredManifestBackedConnections(plugin, provider), manifestBackedConnectionReferences(plugin, provider))
 }
 
-func validateManifestBackedConnectionDefaults(name string, plugin *PluginDef, provider *pluginmanifestv1.Plugin) error {
+func validateManifestBackedConnectionDefaults(name string, plugin *ProviderDef, provider *pluginmanifestv1.Plugin) error {
 	return validateConnectionDefaults(name, "integration", len(declaredManifestBackedConnections(plugin, provider)), manifestBackedConnectionReferences(plugin, provider))
 }
 
-func validateExecutableConnectionAuthSupport(name string, plugin *PluginDef, provider *pluginmanifestv1.Plugin) error {
+func validateExecutableConnectionAuthSupport(name string, plugin *ProviderDef, provider *pluginmanifestv1.Plugin) error {
 	supportsMCPOAuth := provider != nil && provider.MCPURL != ""
 	if conn := EffectivePluginConnectionDef(plugin, provider); conn.Auth.Type == pluginmanifestv1.AuthTypeMCPOAuth && !supportsMCPOAuth {
 		return fmt.Errorf("config validation: integration %q plugin auth type %q requires an MCP surface", name, pluginmanifestv1.AuthTypeMCPOAuth)
@@ -249,7 +254,7 @@ func validateConnectionDefaults(name, subject string, declaredCount int, refs []
 	return nil
 }
 
-func declaredManifestBackedConnections(plugin *PluginDef, provider *pluginmanifestv1.Plugin) map[string]struct{} {
+func declaredManifestBackedConnections(plugin *ProviderDef, provider *pluginmanifestv1.Plugin) map[string]struct{} {
 	size := 0
 	if plugin != nil {
 		size += len(plugin.Connections)
@@ -279,7 +284,7 @@ func addDeclaredConnection(declared map[string]struct{}, rawName string) {
 	declared[resolved] = struct{}{}
 }
 
-func validateExternalPlugin(kind, name string, plugin *PluginDef) error {
+func validateExternalPlugin(kind, name string, plugin *ProviderDef) error {
 	if plugin == nil {
 		return nil
 	}
@@ -347,7 +352,7 @@ func validateExternalPlugin(kind, name string, plugin *PluginDef) error {
 	return nil
 }
 
-func validateManifestBackedIntegration(name string, plugin *PluginDef) error {
+func validateManifestBackedIntegration(name string, plugin *ProviderDef) error {
 	if plugin == nil {
 		return nil
 	}
