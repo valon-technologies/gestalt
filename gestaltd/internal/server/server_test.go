@@ -1307,46 +1307,139 @@ func TestListIntegrations_ListTokensError(t *testing.T) {
 func TestDisconnectIntegration(t *testing.T) {
 	t.Parallel()
 
-	stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
-	var deletedID string
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.Datastore = &coretesting.StubDatastore{
-			FindOrCreateUserFn: func(_ context.Context, _ string) (*core.User, error) {
-				return &core.User{ID: "u1", Email: "dev@example.com"}, nil
-			},
-			ListTokensFn: func(_ context.Context, _ string) ([]*core.IntegrationToken, error) {
-				return []*core.IntegrationToken{
-					{ID: "tok-1", UserID: "u1", Integration: "slack", Instance: "default"},
-				}, nil
-			},
-			ListTokensForIntegrationFn: func(_ context.Context, _, _ string) ([]*core.IntegrationToken, error) {
-				return []*core.IntegrationToken{
-					{ID: "tok-1", UserID: "u1", Integration: "slack", Instance: "default"},
-				}, nil
-			},
-			DeleteTokenFn: func(_ context.Context, id string) error {
-				deletedID = id
-				return nil
-			},
+	t.Run("default token", func(t *testing.T) {
+		t.Parallel()
+
+		stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
+		var deletedID string
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, stub)
+			cfg.Datastore = &coretesting.StubDatastore{
+				FindOrCreateUserFn: func(_ context.Context, _ string) (*core.User, error) {
+					return &core.User{ID: "u1", Email: "dev@example.com"}, nil
+				},
+				ListTokensFn: func(_ context.Context, _ string) ([]*core.IntegrationToken, error) {
+					return []*core.IntegrationToken{
+						{ID: "tok-1", UserID: "u1", Integration: "slack", Instance: "default"},
+					}, nil
+				},
+				ListTokensForIntegrationFn: func(_ context.Context, _, _ string) ([]*core.IntegrationToken, error) {
+					return []*core.IntegrationToken{
+						{ID: "tok-1", UserID: "u1", Integration: "slack", Instance: "default"},
+					}, nil
+				},
+				DeleteTokenFn: func(_ context.Context, id string) error {
+					deletedID = id
+					return nil
+				},
+			}
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/integrations/slack", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+		if deletedID != "tok-1" {
+			t.Fatalf("expected token tok-1 to be deleted, got %q", deletedID)
 		}
 	})
-	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/integrations/slack", nil)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
+	t.Run("underscored parameters", func(t *testing.T) {
+		t.Parallel()
 
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
-	}
-	if deletedID != "tok-1" {
-		t.Fatalf("expected token tok-1 to be deleted, got %q", deletedID)
-	}
+		var deletedTokenID string
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "slack", DN: "Slack"})
+			cfg.Datastore = &coretesting.StubDatastore{
+				FindOrCreateUserFn: func(_ context.Context, _ string) (*core.User, error) {
+					return &core.User{ID: "u1", Email: "dev@example.com"}, nil
+				},
+				ListTokensForIntegrationFn: func(_ context.Context, userID, integration string) ([]*core.IntegrationToken, error) {
+					if userID != "u1" {
+						return nil, fmt.Errorf("unexpected user ID %q", userID)
+					}
+					if integration != "slack" {
+						return nil, fmt.Errorf("unexpected integration %q", integration)
+					}
+					return []*core.IntegrationToken{
+						{ID: "tok-a", UserID: "u1", Integration: "slack", Connection: "workspace", Instance: "team-a"},
+						{ID: "tok-b", UserID: "u1", Integration: "slack", Connection: "workspace", Instance: "team-b"},
+					}, nil
+				},
+				DeleteTokenFn: func(_ context.Context, id string) error {
+					deletedTokenID = id
+					return nil
+				},
+			}
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/integrations/slack?_connection=workspace&_instance=team-b", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+		if deletedTokenID != "tok-b" {
+			t.Fatalf("deleted token = %q, want %q", deletedTokenID, "tok-b")
+		}
+	})
+
+	t.Run("ambiguous error uses canonical hint", func(t *testing.T) {
+		t.Parallel()
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "slack", DN: "Slack"})
+			cfg.Datastore = &coretesting.StubDatastore{
+				FindOrCreateUserFn: func(_ context.Context, _ string) (*core.User, error) {
+					return &core.User{ID: "u1", Email: "dev@example.com"}, nil
+				},
+				ListTokensForIntegrationFn: func(_ context.Context, _, integration string) ([]*core.IntegrationToken, error) {
+					if integration != "slack" {
+						return nil, fmt.Errorf("unexpected integration %q", integration)
+					}
+					return []*core.IntegrationToken{
+						{ID: "tok-a", UserID: "u1", Integration: "slack", Connection: "workspace", Instance: "team-a"},
+						{ID: "tok-b", UserID: "u1", Integration: "slack", Connection: "workspace", Instance: "team-b"},
+					}, nil
+				},
+			}
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/integrations/slack?_connection=workspace", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusConflict {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 409, got %d: %s", resp.StatusCode, body)
+		}
+		var result map[string]string
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			t.Fatalf("decoding: %v", err)
+		}
+		if !strings.Contains(result["error"], "?_instance=NAME") {
+			t.Fatalf("expected canonical parameter hint, got %q", result["error"])
+		}
+	})
 }
 
 func TestDisconnectIntegration_NotConnected(t *testing.T) {
@@ -1375,95 +1468,6 @@ func TestDisconnectIntegration_NotConnected(t *testing.T) {
 
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", resp.StatusCode)
-	}
-}
-
-func TestDisconnectIntegration_AcceptsUnderscoredParameters(t *testing.T) {
-	t.Parallel()
-
-	var deletedTokenID string
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "slack", DN: "Slack"})
-		cfg.Datastore = &coretesting.StubDatastore{
-			FindOrCreateUserFn: func(_ context.Context, _ string) (*core.User, error) {
-				return &core.User{ID: "u1", Email: "dev@example.com"}, nil
-			},
-			ListTokensForIntegrationFn: func(_ context.Context, userID, integration string) ([]*core.IntegrationToken, error) {
-				if userID != "u1" {
-					return nil, fmt.Errorf("unexpected user ID %q", userID)
-				}
-				if integration != "slack" {
-					return nil, fmt.Errorf("unexpected integration %q", integration)
-				}
-				return []*core.IntegrationToken{
-					{ID: "tok-a", UserID: "u1", Integration: "slack", Connection: "workspace", Instance: "team-a"},
-					{ID: "tok-b", UserID: "u1", Integration: "slack", Connection: "workspace", Instance: "team-b"},
-				}, nil
-			},
-			DeleteTokenFn: func(_ context.Context, id string) error {
-				deletedTokenID = id
-				return nil
-			},
-		}
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/integrations/slack?_connection=workspace&_instance=team-b", nil)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
-	}
-	if deletedTokenID != "tok-b" {
-		t.Fatalf("deleted token = %q, want %q", deletedTokenID, "tok-b")
-	}
-}
-
-func TestDisconnectIntegration_AmbiguousErrorMentionsCanonicalParameter(t *testing.T) {
-	t.Parallel()
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "slack", DN: "Slack"})
-		cfg.Datastore = &coretesting.StubDatastore{
-			FindOrCreateUserFn: func(_ context.Context, _ string) (*core.User, error) {
-				return &core.User{ID: "u1", Email: "dev@example.com"}, nil
-			},
-			ListTokensForIntegrationFn: func(_ context.Context, _, integration string) ([]*core.IntegrationToken, error) {
-				if integration != "slack" {
-					return nil, fmt.Errorf("unexpected integration %q", integration)
-				}
-				return []*core.IntegrationToken{
-					{ID: "tok-a", UserID: "u1", Integration: "slack", Connection: "workspace", Instance: "team-a"},
-					{ID: "tok-b", UserID: "u1", Integration: "slack", Connection: "workspace", Instance: "team-b"},
-				}, nil
-			},
-		}
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/integrations/slack?_connection=workspace", nil)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusConflict {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 409, got %d: %s", resp.StatusCode, body)
-	}
-	var result map[string]string
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		t.Fatalf("decoding: %v", err)
-	}
-	if !strings.Contains(result["error"], "?_instance=NAME") {
-		t.Fatalf("expected canonical parameter hint, got %q", result["error"])
 	}
 }
 
