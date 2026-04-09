@@ -49,14 +49,6 @@ type Config struct {
 	UI           UIConfig                  `yaml:"ui"`
 }
 
-type missingEnvAction int
-
-const (
-	missingEnvError missingEnvAction = iota
-	missingEnvEmpty
-	missingEnvPreserve
-)
-
 type TelemetryConfig struct {
 	Provider string    `yaml:"provider"`
 	Config   yaml.Node `yaml:"config"`
@@ -708,15 +700,15 @@ func EffectiveNamedConnectionDef(plugin *ProviderDef, manifestPlugin *pluginmani
 type OperationOverride = pluginmanifestv1.ManifestOperationOverride
 
 func Load(path string) (*Config, error) {
-	return loadWithLookup(path, os.LookupEnv, missingEnvError)
+	return loadWithLookup(path, os.LookupEnv, false)
 }
 
 func LoadWithLookup(path string, lookup func(string) (string, bool)) (*Config, error) {
-	return loadWithLookup(path, lookup, missingEnvError)
+	return loadWithLookup(path, lookup, false)
 }
 
 func LoadAllowMissingEnv(path string) (*Config, error) {
-	return loadWithLookup(path, os.LookupEnv, missingEnvEmpty)
+	return loadWithLookup(path, os.LookupEnv, true)
 }
 
 func OverlayManagedPluginConfig(path string, cfg *Config) error {
@@ -771,7 +763,7 @@ func overlayManagedPluginConfigNode(raw *yaml.Node, plugin *ProviderDef, subject
 	if configNode == nil || configNode.Kind == 0 {
 		return nil
 	}
-	node, err := overlayEnvIntoNode(*configNode, os.LookupEnv, missingEnvPreserve)
+	node, err := overlayEnvIntoNode(*configNode, os.LookupEnv, true)
 	if err != nil {
 		return fmt.Errorf("expanding managed plugin config for %s: %w", subject, err)
 	}
@@ -787,7 +779,7 @@ func overlayManagedComponentConfigNode(raw *yaml.Node, provider *ProviderDef, ta
 	if configNode == nil || configNode.Kind == 0 {
 		return nil
 	}
-	node, err := overlayEnvIntoNode(*configNode, os.LookupEnv, missingEnvPreserve)
+	node, err := overlayEnvIntoNode(*configNode, os.LookupEnv, true)
 	if err != nil {
 		return fmt.Errorf("expanding managed provider config for %s: %w", subject, err)
 	}
@@ -818,15 +810,18 @@ func mappingValueNode(node *yaml.Node, key string) *yaml.Node {
 	return nil
 }
 
-func loadWithLookup(path string, lookup func(string) (string, bool), missingEnv missingEnvAction) (*Config, error) {
+func loadWithLookup(path string, lookup func(string) (string, bool), allowMissing bool) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading config file: %w", err)
 	}
 
-	resolved, err := expandEnvVariables(string(data), lookup, missingEnv)
+	resolved, firstMissing, err := expandEnvVariables(string(data), lookup, !allowMissing)
 	if err != nil {
 		return nil, err
+	}
+	if !allowMissing && firstMissing != "" {
+		return nil, fmt.Errorf("expanding config environment variables: environment variable %q not set; use ${%s:-} to allow an empty default", firstMissing, firstMissing)
 	}
 
 	var cfg Config
@@ -861,8 +856,9 @@ func parseEnvPlaceholder(key string) (name string, allowEmptyDefault bool, err e
 	return name, true, nil
 }
 
-func expandEnvVariables(input string, lookup func(string) (string, bool), missingEnv missingEnvAction) (string, error) {
+func expandEnvVariables(input string, lookup func(string) (string, bool), preserveMissing bool) (string, string, error) {
 	var expandErr error
+	var firstMissing string
 	resolved := os.Expand(input, func(key string) string {
 		if expandErr != nil {
 			return ""
@@ -880,13 +876,12 @@ func expandEnvVariables(input string, lookup func(string) (string, bool), missin
 			if allowEmptyDefault {
 				return ""
 			}
-			switch missingEnv {
-			case missingEnvPreserve:
+			if preserveMissing {
+				if firstMissing == "" {
+					firstMissing = name
+				}
 				return "${" + key + "}"
-			case missingEnvEmpty:
-				return ""
 			}
-			expandErr = fmt.Errorf("environment variable %q not set; use ${%s:-} to allow an empty default", name, name)
 			return ""
 		}
 		data, err := os.ReadFile(filePath)
@@ -897,18 +892,18 @@ func expandEnvVariables(input string, lookup func(string) (string, bool), missin
 		return strings.TrimRight(string(data), "\r\n")
 	})
 	if expandErr != nil {
-		return "", fmt.Errorf("expanding config environment variables: %w", expandErr)
+		return "", "", fmt.Errorf("expanding config environment variables: %w", expandErr)
 	}
-	return resolved, nil
+	return resolved, firstMissing, nil
 }
 
-func overlayEnvIntoNode(node yaml.Node, lookup func(string) (string, bool), missingEnv missingEnvAction) (yaml.Node, error) {
+func overlayEnvIntoNode(node yaml.Node, lookup func(string) (string, bool), preserveMissing bool) (yaml.Node, error) {
 	data, err := yaml.Marshal(&node)
 	if err != nil {
 		return yaml.Node{}, fmt.Errorf("marshaling config node: %w", err)
 	}
 
-	resolved, err := expandEnvVariables(string(data), lookup, missingEnv)
+	resolved, _, err := expandEnvVariables(string(data), lookup, preserveMissing)
 	if err != nil {
 		return yaml.Node{}, err
 	}
