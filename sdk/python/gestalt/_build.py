@@ -7,9 +7,25 @@ import tempfile
 from dataclasses import dataclass
 from typing import Final
 
-from ._runtime import BUNDLED_CONFIG_NAME, parse_plugin_target
-
+BUNDLED_CONFIG_NAME: Final[str] = "gestalt-runtime.json"
 USAGE: Final[str] = "usage: python -m gestalt._build ROOT MODULE[:ATTRIBUTE] OUTPUT PLUGIN_NAME RUNTIME_KIND GOOS GOARCH"
+
+
+@dataclass(frozen=True)
+class _PluginTarget:
+    module_name: str
+    attribute_name: str | None = None
+
+
+def _parse_plugin_target(target: str) -> _PluginTarget:
+    module_name, sep, attribute_name = target.partition(":")
+    module_name = module_name.strip()
+    attribute_name = attribute_name.strip() or None
+    if not module_name:
+        raise RuntimeError("tool.gestalt.plugin must be in module or module:attribute form")
+    if sep and attribute_name is None:
+        raise RuntimeError("tool.gestalt.plugin attribute is required when ':' is present")
+    return _PluginTarget(module_name=module_name, attribute_name=attribute_name)
 
 
 def write_bundled_plugin_config(
@@ -71,7 +87,7 @@ def _parse_build_args(args: list[str]) -> BuildArgs | None:
 def build_plugin_binary(args: BuildArgs) -> None:
     root_path = args.root.resolve()
     output_path = args.output_path.resolve()
-    plugin_target = parse_plugin_target(args.target)
+    plugin_target = _parse_plugin_target(args.target)
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="gestalt-python-release-") as work_dir:
