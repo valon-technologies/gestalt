@@ -841,9 +841,6 @@ func applyLocalUIManifest(plugin *config.PluginDef, configMap map[string]any, re
 	if err := bindResolvedUIManifest(plugin, manifestPath, manifest, configMap); err != nil {
 		return err
 	}
-	if manifest == nil || manifest.WebUI == nil {
-		return fmt.Errorf("ui provider manifest is missing webui metadata")
-	}
 	assetRoot := filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(manifest.WebUI.AssetRoot))
 	if _, err := os.Stat(assetRoot); err != nil {
 		return fmt.Errorf("ui provider asset root not found at %s: %w", assetRoot, err)
