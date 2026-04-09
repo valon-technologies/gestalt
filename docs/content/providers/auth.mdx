@@ -27,7 +27,7 @@ The optional `auth.config_schema_path` field points to a JSON Schema that valida
 
 An auth provider implements three methods: `Configure`, `BeginLogin`, and `CompleteLogin`. `BeginLogin` receives the callback URL and a host-generated state parameter and returns an authorization URL that Gestalt redirects the user to. `CompleteLogin` receives the query parameters from the identity provider callback and returns the authenticated user's identity.
 
-<Tabs items={['Go', 'Python', 'Rust']}>
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
     ```go
     package main
@@ -172,6 +172,37 @@ An auth provider implements three methods: `Configure`, `BeginLogin`, and `Compl
 
     gestalt::export_auth_provider!(constructor = MyAuth::default);
     ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```typescript
+    import { defineAuthProvider } from "@valon-technologies/gestalt";
+
+    let clientId = "";
+    let issuerUrl = "";
+
+    export const provider = defineAuthProvider({
+      configure(_name, config) {
+        clientId = config.client_id as string;
+        issuerUrl = config.issuer_url as string;
+      },
+      beginLogin(request) {
+        const authUrl = `${issuerUrl}/authorize?client_id=${clientId}&redirect_uri=${request.callbackUrl}&state=${request.hostState}&response_type=code`;
+        return { authorizationUrl: authUrl };
+      },
+      completeLogin(request) {
+        const code = request.query.code ?? "";
+        // Exchange code for tokens, extract user info.
+        return {
+          subject: "user-123",
+          email: "user@example.com",
+          emailVerified: true,
+          displayName: "Example User",
+        };
+      },
+    });
+    ```
+
+    Optional handlers: `validateExternalToken` for direct token validation, `sessionSettings` to control session lifetime.
   </Tabs.Tab>
 </Tabs>
 

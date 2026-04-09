@@ -478,9 +478,9 @@ Manifest paths must stay inside the package. `source` and `version` are required
 
 A connection using `mcp_oauth` auth requires the plugin to declare an MCP surface (via `mcp_url` or an equivalent). Manifests that set `auth.type: mcp_oauth` without an MCP surface fail validation.
 
-When an executable plugin defines helper operations in Go, Rust, or Python, Gestalt materializes the executable catalog automatically during local source-plugin execution and `provider release`. Auth and datastore source packages use the same release flow for Go and Rust, but they do not generate catalogs. See [Plugins](/providers/plugins) for the end-to-end authoring flow.
+When an executable plugin defines operations in Go, Python, Rust, or TypeScript, Gestalt materializes the executable catalog automatically during local source-plugin execution and `provider release`. Auth and datastore source packages use the same release flow without catalog generation. See [Plugins](/providers/plugins) for the end-to-end authoring flow.
 
-<Tabs items={['Go', 'Python', 'Rust']}>
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
     ```text
     my-plugin/
@@ -515,6 +515,22 @@ When an executable plugin defines helper operations in Go, Rust, or Python, Gest
     gestalt::export_provider!(constructor = new, router = router);
     ```
   </Tabs.Tab>
+  <Tabs.Tab>
+    ```text
+    my-plugin/
+      package.json
+      plugin.yaml
+      provider.ts
+    ```
+
+    ```json
+    {
+      "gestalt": {
+        "plugin": "./provider.ts#plugin"
+      }
+    }
+    ```
+  </Tabs.Tab>
 </Tabs>
 
 Release-only build steps can be declared in source manifests with `release.build`.
@@ -544,4 +560,4 @@ Build a release from a provider source directory:
 gestaltd provider release --version 1.2.3
 ```
 
-`gestaltd provider release` preserves the source manifest format, so `plugin.yaml` stays YAML and `plugin.json` stays JSON in the release archive. For executable Go, Rust, and Python integration plugins, release materializes the executable catalog automatically before packaging. Python source plugins load the module declared in `[tool.gestalt].plugin`, while Go and Rust source plugins synthesize the executable wrapper from the source package itself. Auth and datastore source packages support the same release flow for Go and Rust, but they do not generate catalogs. Source packages build the host-platform artifact by default. Pass `--platform` for an explicit `os/arch[/libc]` target list, or `--platform all` in CI to build the full supported release matrix.
+`gestaltd provider release` preserves the source manifest format, so `plugin.yaml` stays YAML and `plugin.json` stays JSON in the release archive. For executable Go, Python, Rust, and TypeScript integration plugins, release materializes the executable catalog automatically before packaging. Auth and datastore source packages use the same release flow without catalog generation. Source packages build the host-platform artifact by default. Pass `--platform` for an explicit `os/arch[/libc]` target list, or `--platform all` in CI to build the full supported release matrix.

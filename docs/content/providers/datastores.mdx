@@ -27,7 +27,7 @@ The optional `datastore.config_schema_path` field points to a JSON Schema that v
 
 A datastore provider is a larger interface than auth or integration providers. It composes user storage, integration token storage, and API token storage, plus `Migrate` for schema setup and `HealthCheck` for readiness probes.
 
-<Tabs items={['Go', 'Python', 'Rust']}>
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
     ```go
     package main
@@ -170,6 +170,39 @@ A datastore provider is a larger interface than auth or integration providers. I
     ```
 
     OAuth registration methods (`get_oauth_registration`, `put_oauth_registration`, `delete_oauth_registration`) have default implementations that return unimplemented errors. Override them to support MCP OAuth.
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```typescript
+    import { defineDatastoreProvider, type StoredUser, type StoredIntegrationToken, type StoredAPIToken } from "@valon-technologies/gestalt";
+
+    export const provider = defineDatastoreProvider({
+      configure(_name, config) {
+        // Initialize database connection from config.dsn
+      },
+      migrate() {
+        // Create users, integration_tokens, and api_tokens tables.
+      },
+
+      // UserStore
+      getUser(id) { /* ... */ },
+      findOrCreateUser(email) { /* ... */ },
+
+      // IntegrationTokenStore (tokens are pre-sealed by the host)
+      putIntegrationToken(token) { /* ... */ },
+      getIntegrationToken(userId, integration, connection, instance) { /* ... */ },
+      listIntegrationTokens(userId, integration, connection) { /* ... */ },
+      deleteIntegrationToken(id) { /* ... */ },
+
+      // APITokenStore (tokens are SHA-256 hashed, not encrypted)
+      putApiToken(token) { /* ... */ },
+      getApiTokenByHash(hashedToken) { /* ... */ },
+      listApiTokens(userId) { /* ... */ },
+      revokeApiToken(userId, id) { /* ... */ },
+      revokeAllApiTokens(userId) { /* ... */ },
+    });
+    ```
+
+    Optional handlers: `getOAuthRegistration`, `putOAuthRegistration`, `deleteOAuthRegistration` for MCP OAuth dynamic client registration.
   </Tabs.Tab>
 </Tabs>
 
