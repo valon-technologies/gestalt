@@ -162,16 +162,6 @@ func (g *GuardedInvoker) ResolveToken(ctx context.Context, p *principal.Principa
 	return "", fmt.Errorf("token resolution not supported")
 }
 
-func (g *GuardedInvoker) ResolveTransport(ctx context.Context, p *principal.Principal, prov core.Provider, providerName, operation, connection, instance string) (string, error) {
-	type resolver interface {
-		ResolveTransport(ctx context.Context, p *principal.Principal, prov core.Provider, providerName, operation, connection, instance string) (string, error)
-	}
-	if r, ok := g.inner.(resolver); ok {
-		return r.ResolveTransport(ctx, p, prov, providerName, operation, connection, instance)
-	}
-	return "", fmt.Errorf("transport resolution not supported")
-}
-
 func (g *GuardedInvoker) logAudit(ctx context.Context, entry core.AuditEntry) {
 	if g.audit != nil {
 		g.audit.Log(ctx, entry)

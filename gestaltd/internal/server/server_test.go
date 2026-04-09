@@ -1937,148 +1937,159 @@ func TestExecuteOperation_NoStoredToken(t *testing.T) {
 func TestExecuteOperation_RejectsSessionPassthrough(t *testing.T) {
 	t.Parallel()
 
-	sessionStub := &stubIntegrationWithSessionCatalog{
-		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeUser},
-		},
-		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
-			if token != "tok-a" {
-				return nil, fmt.Errorf("unexpected token %q", token)
-			}
-			return &catalog.Catalog{
-				Name: "test-int",
-				Operations: []catalog.CatalogOperation{
-					{ID: "session_only", Description: "Session-only op", Method: http.MethodPost, Transport: catalog.TransportMCPPassthrough},
-				},
-			}, nil
-		},
-	}
+	assertMCPOnly := func(t *testing.T, ts *httptest.Server) {
+		t.Helper()
 
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, sessionStub)
-		cfg.CatalogConnection = map[string]string{"test-int": testCatalogConnection}
-		cfg.Datastore = &coretesting.StubDatastore{
-			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
-				return &core.User{ID: "u1", Email: email}, nil
-			},
-			ListTokensForConnectionFn: func(_ context.Context, _, _, connection string) ([]*core.IntegrationToken, error) {
-				if connection != testCatalogConnection {
-					return nil, fmt.Errorf("unexpected connection %q", connection)
-				}
-				return []*core.IntegrationToken{{AccessToken: "tok-a", Instance: "default"}}, nil
-			},
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/test-int/session_only", bytes.NewBufferString(`{}`))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
 		}
-	})
-	testutil.CloseOnCleanup(t, ts)
+		defer func() { _ = resp.Body.Close() }()
 
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/test-int/session_only", bytes.NewBufferString(`{}`))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
+		if resp.StatusCode != http.StatusBadRequest {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 400, got %d: %s", resp.StatusCode, body)
+		}
+
+		var errResp map[string]string
+		if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
+			t.Fatalf("decode error response: %v", err)
+		}
+		if errResp["error"] != "this integration is accessible only via MCP" {
+			t.Fatalf("expected MCP-only error, got %q", errResp["error"])
+		}
 	}
-	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 400, got %d: %s", resp.StatusCode, body)
-	}
+	t.Run("default session catalog connection", func(t *testing.T) {
+		t.Parallel()
 
-	var errResp map[string]string
-	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
-		t.Fatalf("decode error response: %v", err)
-	}
-	if errResp["error"] != "this integration is accessible only via MCP" {
-		t.Fatalf("expected MCP-only error, got %q", errResp["error"])
-	}
-}
-
-func TestExecuteOperation_RejectsSessionPassthroughWithDifferentServerCatalogConnection(t *testing.T) {
-	t.Parallel()
-
-	const tokenInstance = "default"
-
-	sessionStub := &stubIntegrationWithSessionCatalog{
-		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeUser},
-		},
-		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
-			switch token {
-			case "mcp-token":
+		var sessionCatalogCalls atomic.Int32
+		var resolvedToken atomic.Value
+		sessionStub := &stubIntegrationWithSessionCatalog{
+			stubIntegrationWithOps: stubIntegrationWithOps{
+				StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeUser},
+			},
+			catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+				sessionCatalogCalls.Add(1)
+				resolvedToken.Store(token)
+				if token != "tok-a" {
+					return nil, fmt.Errorf("unexpected token %q", token)
+				}
 				return &catalog.Catalog{
 					Name: "test-int",
 					Operations: []catalog.CatalogOperation{
 						{ID: "session_only", Description: "Session-only op", Method: http.MethodPost, Transport: catalog.TransportMCPPassthrough},
 					},
 				}, nil
-			case "catalog-token":
-				return &catalog.Catalog{
-					Name:       "test-int",
-					Operations: nil,
-				}, nil
-			default:
-				return nil, fmt.Errorf("unexpected token %q", token)
-			}
-		},
-	}
+			},
+		}
 
-	providers := testutil.NewProviderRegistry(t, sessionStub)
-	ds := &coretesting.StubDatastore{
-		FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
-			return &core.User{ID: "u1", Email: email}, nil
-		},
-		TokenFn: func(_ context.Context, _, integration, connection, instance string) (*core.IntegrationToken, error) {
-			if integration != "test-int" {
-				return nil, fmt.Errorf("unexpected integration %q", integration)
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, sessionStub)
+			cfg.CatalogConnection = map[string]string{"test-int": testCatalogConnection}
+			cfg.Datastore = &coretesting.StubDatastore{
+				FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+					return &core.User{ID: "u1", Email: email}, nil
+				},
+				ListTokensForConnectionFn: func(_ context.Context, _, _, connection string) ([]*core.IntegrationToken, error) {
+					if connection != testCatalogConnection {
+						return nil, fmt.Errorf("unexpected connection %q", connection)
+					}
+					return []*core.IntegrationToken{{AccessToken: "tok-a", Instance: "default"}}, nil
+				},
 			}
-			if instance != tokenInstance {
-				return nil, fmt.Errorf("unexpected instance %q", instance)
-			}
-			switch connection {
-			case "mcp-conn":
-				return &core.IntegrationToken{AccessToken: "mcp-token", Instance: tokenInstance}, nil
-			case "catalog-conn":
-				return &core.IntegrationToken{AccessToken: "catalog-token", Instance: tokenInstance}, nil
-			default:
-				return nil, fmt.Errorf("unexpected connection %q", connection)
-			}
-		},
-	}
+		})
+		testutil.CloseOnCleanup(t, ts)
 
-	broker := invocation.NewBroker(
-		providers,
-		ds,
-		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(map[string]string{"test-int": "mcp-conn"})),
-	)
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = providers
-		cfg.Datastore = ds
-		cfg.Invoker = broker
-		cfg.CatalogConnection = map[string]string{"test-int": "catalog-conn"}
+		assertMCPOnly(t, ts)
+		if got := sessionCatalogCalls.Load(); got != 1 {
+			t.Fatalf("session catalog calls = %d, want 1", got)
+		}
+		if got, _ := resolvedToken.Load().(string); got != "tok-a" {
+			t.Fatalf("resolved token = %q, want %q", got, "tok-a")
+		}
 	})
-	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/test-int/session_only", bytes.NewBufferString(`{}`))
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
+	t.Run("different catalog and broker MCP connections", func(t *testing.T) {
+		t.Parallel()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		body, _ := io.ReadAll(resp.Body)
-		t.Fatalf("expected 400, got %d: %s", resp.StatusCode, body)
-	}
+		const tokenInstance = "default"
+		var sessionCatalogCalls atomic.Int32
+		var resolvedToken atomic.Value
 
-	var errResp map[string]string
-	if err := json.NewDecoder(resp.Body).Decode(&errResp); err != nil {
-		t.Fatalf("decode error response: %v", err)
-	}
-	if errResp["error"] != "this integration is accessible only via MCP" {
-		t.Fatalf("expected MCP-only error, got %q", errResp["error"])
-	}
+		sessionStub := &stubIntegrationWithSessionCatalog{
+			stubIntegrationWithOps: stubIntegrationWithOps{
+				StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeUser},
+			},
+			catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+				sessionCatalogCalls.Add(1)
+				resolvedToken.Store(token)
+				switch token {
+				case "mcp-token":
+					return &catalog.Catalog{
+						Name: "test-int",
+						Operations: []catalog.CatalogOperation{
+							{ID: "session_only", Description: "Session-only op", Method: http.MethodPost, Transport: catalog.TransportMCPPassthrough},
+						},
+					}, nil
+				case "catalog-token":
+					return &catalog.Catalog{
+						Name:       "test-int",
+						Operations: nil,
+					}, nil
+				default:
+					return nil, fmt.Errorf("unexpected token %q", token)
+				}
+			},
+		}
+
+		providers := testutil.NewProviderRegistry(t, sessionStub)
+		ds := &coretesting.StubDatastore{
+			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
+				return &core.User{ID: "u1", Email: email}, nil
+			},
+			TokenFn: func(_ context.Context, _, integration, connection, instance string) (*core.IntegrationToken, error) {
+				if integration != "test-int" {
+					return nil, fmt.Errorf("unexpected integration %q", integration)
+				}
+				if instance != tokenInstance {
+					return nil, fmt.Errorf("unexpected instance %q", instance)
+				}
+				switch connection {
+				case "mcp-conn":
+					return &core.IntegrationToken{AccessToken: "mcp-token", Instance: tokenInstance}, nil
+				case "catalog-conn":
+					return &core.IntegrationToken{AccessToken: "catalog-token", Instance: tokenInstance}, nil
+				default:
+					return nil, fmt.Errorf("unexpected connection %q", connection)
+				}
+			},
+		}
+
+		broker := invocation.NewBroker(
+			providers,
+			ds,
+			invocation.WithMCPConnectionMapper(invocation.ConnectionMap(map[string]string{"test-int": "mcp-conn"})),
+		)
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = providers
+			cfg.Datastore = ds
+			cfg.Invoker = broker
+			cfg.CatalogConnection = map[string]string{"test-int": "catalog-conn"}
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		assertMCPOnly(t, ts)
+		if got := sessionCatalogCalls.Load(); got != 1 {
+			t.Fatalf("session catalog calls = %d, want 1", got)
+		}
+		if got, _ := resolvedToken.Load().(string); got != "mcp-token" {
+			t.Fatalf("resolved token = %q, want %q", got, "mcp-token")
+		}
+	})
 }
 
 func TestStartLogin(t *testing.T) {

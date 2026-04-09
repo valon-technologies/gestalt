@@ -19,7 +19,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
-	"github.com/valon-technologies/gestalt/server/internal/principal"
 
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -410,8 +409,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	operationName := chi.URLParam(r, "operation")
 
 	p := PrincipalFromContext(r.Context())
-	prov, ok := s.getProvider(w, providerName)
-	if !ok {
+	if _, ok := s.getProvider(w, providerName); !ok {
 		return
 	}
 
@@ -445,16 +443,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		connection = config.ResolveConnectionAlias(connection)
 		ctx = invocation.WithConnection(ctx, connection)
 	}
-
-	transport, ok, err := s.resolveHTTPOperationTransport(ctx, p, prov, providerName, operationName, connection, instance)
-	if err != nil {
-		s.writeInvocationError(w, r, providerName, operationName, err)
-		return
-	}
-	if ok && transport == catalog.TransportMCPPassthrough {
-		s.writeInvocationError(w, r, providerName, operationName, core.ErrMCPOnly)
-		return
-	}
+	ctx = invocation.WithInvocationSurface(ctx, invocation.InvocationSurfaceHTTP)
 
 	result, err := s.invoker.Invoke(ctx, p, providerName, instance, operationName, params)
 	if err != nil {
@@ -542,25 +531,6 @@ func catalogOperationTransport(op catalog.CatalogOperation) string {
 		return catalog.TransportREST
 	}
 	return transport
-}
-
-func (s *Server) resolveHTTPOperationTransport(ctx context.Context, p *principal.Principal, prov core.Provider, providerName, operationName, connection, instance string) (string, bool, error) {
-	type transportResolver interface {
-		ResolveTransport(ctx context.Context, p *principal.Principal, prov core.Provider, providerName, operation, connection, instance string) (string, error)
-	}
-	r, ok := s.invoker.(transportResolver)
-	if !ok {
-		transport, found := invocation.CatalogOperationTransport(prov.Catalog(), operationName)
-		return transport, found, nil
-	}
-	transport, err := r.ResolveTransport(ctx, p, prov, providerName, operationName, connection, instance)
-	if err == nil {
-		return transport, true, nil
-	}
-	if errors.Is(err, invocation.ErrOperationNotFound) {
-		return "", false, nil
-	}
-	return "", false, err
 }
 
 func safeOperationErrorMessage(err error) (string, bool) {

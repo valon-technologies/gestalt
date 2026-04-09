@@ -205,6 +205,10 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	metricTransport = metricutil.AttrValue(transport)
 	span.SetAttributes(attrTransport.String(metricTransport))
 
+	if transport == catalog.TransportMCPPassthrough && InvocationSurfaceFromContext(ctx) == InvocationSurfaceHTTP {
+		return fail(core.ErrMCPOnly)
+	}
+
 	if conn == "" {
 		if transport == catalog.TransportMCPPassthrough {
 			conn = b.mcpConnection(providerName)
@@ -265,10 +269,6 @@ func (b *Broker) resolveTransport(ctx context.Context, p *principal.Principal, p
 	}
 
 	return "", fmt.Errorf("%w: %q on provider %q", ErrOperationNotFound, operation, providerName)
-}
-
-func (b *Broker) ResolveTransport(ctx context.Context, p *principal.Principal, prov core.Provider, providerName, operation, connection, instance string) (string, error) {
-	return b.resolveTransport(ctx, p, prov, providerName, operation, connection, instance)
 }
 
 func (b *Broker) mcpConnection(providerName string) string {
