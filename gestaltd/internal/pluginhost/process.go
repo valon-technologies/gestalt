@@ -401,6 +401,7 @@ func waitForPluginConn(ctx context.Context, socket string, waitCh <-chan error) 
 func dialUnixSocket(ctx context.Context, socket string) (*grpc.ClientConn, error) {
 	conn, err := grpc.NewClient(
 		"passthrough:///"+socket,
+		grpc.WithAuthority("localhost"),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
 			var d net.Dialer
