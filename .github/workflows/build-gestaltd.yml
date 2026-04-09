@@ -341,8 +341,6 @@ jobs:
           version: 0.0.1-alpha.1
           display_name: Default Web UI
           description: Local CI web UI fixture
-          kinds:
-            - webui
           webui:
             asset_root: out
           EOF
