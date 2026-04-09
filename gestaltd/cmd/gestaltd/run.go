@@ -114,8 +114,9 @@ func runServer(env *bootstrapEnv) error {
 	defer env.Close()
 
 	result := env.Result
-	httpInvoker := invocation.NewGuarded(result.Invoker, result.CapabilityLister, "http", result.AuditSink, invocation.WithoutRateLimit())
-	mcpInvoker := invocation.NewGuarded(result.Invoker, result.CapabilityLister, "mcp", result.AuditSink, invocation.WithoutRateLimit())
+	broker := result.Invoker.(*invocation.Broker)
+	httpInvoker := invocation.NewAuditedInvoker(broker, "http", result.AuditSink)
+	mcpInvoker := invocation.NewAuditedInvoker(broker, "mcp", result.AuditSink)
 	connMaps, err := bootstrap.BuildConnectionMaps(env.Config)
 	if err != nil {
 		return err

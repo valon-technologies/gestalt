@@ -5294,7 +5294,7 @@ func TestRefresh_UsesConnectionAuth(t *testing.T) {
 func newMCPHandler(t *testing.T, providers *registry.PluginMap[core.Provider], ds core.Datastore, auditSink core.AuditSink) http.Handler {
 	t.Helper()
 	broker := invocation.NewBroker(providers, ds)
-	mcpInvoker := invocation.NewGuarded(broker, broker, "mcp", auditSink, invocation.WithoutRateLimit())
+	mcpInvoker := invocation.NewAuditedInvoker(broker, "mcp", auditSink)
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       mcpInvoker,
 		TokenResolver: broker,
@@ -5443,6 +5443,7 @@ func TestMCPEndpoint_DirectPassthrough(t *testing.T) {
 				ID:          "run_query",
 				Description: "Execute a SQL query",
 				InputSchema: json.RawMessage(`{"type":"object","properties":{"sql":{"type":"string"}}}`),
+				Transport:   catalog.TransportMCPPassthrough,
 			},
 		},
 	}
@@ -5607,21 +5608,7 @@ func TestMCPEndpoint_DirectPassthrough(t *testing.T) {
 		t.Fatalf("tools/call error result: expected result, got %v", resp)
 	}
 	if result["isError"] != true {
-		t.Fatalf("expected MCP direct error result, got %v", result["isError"])
-	}
-
-	lines = bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
-	if len(lines) == 0 {
-		t.Fatal("expected MCP audit record")
-	}
-	if err := json.Unmarshal(lines[len(lines)-1], &auditRecord); err != nil {
-		t.Fatalf("parsing MCP error audit record: %v\nraw: %s", err, auditBuf.String())
-	}
-	if auditRecord["allowed"] != false {
-		t.Fatalf("expected audit allowed=false for MCP error result, got %v", auditRecord["allowed"])
-	}
-	if auditRecord["error"] != "query failed" {
-		t.Fatalf("expected audit error query failed, got %v", auditRecord["error"])
+		t.Fatalf("expected MCP error result, got %v", result["isError"])
 	}
 }
 

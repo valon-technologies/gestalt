@@ -16,6 +16,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/apiexec"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
+	"github.com/valon-technologies/gestalt/server/internal/mcpupstream"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/paraminterp"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
@@ -217,7 +218,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	}
 
 	if transport == catalog.TransportMCPPassthrough {
-		result, err := CallDirectTool(ctx, b, p, prov, providerName, operation, conn, instance, params, nil)
+		result, err := CallDirectTool(ctx, b, p, prov, providerName, operation, conn, instance, params, mcpupstream.CallToolMetaFromContext(ctx))
 		if err != nil {
 			return fail(err)
 		}
@@ -301,7 +302,7 @@ func toolResultToOperationResult(result *mcpgo.CallToolResult) (*core.OperationR
 	}
 
 	if len(result.Content) == 1 {
-		if text, ok := mcpgo.AsTextContent(result.Content[0]); ok && json.Valid([]byte(strings.TrimSpace(text.Text))) {
+		if text, ok := mcpgo.AsTextContent(result.Content[0]); ok {
 			return &core.OperationResult{Status: http.StatusOK, Headers: headers, Body: text.Text}, nil
 		}
 	}

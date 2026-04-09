@@ -58,7 +58,7 @@ func hydrateSessionTools(ctx context.Context, cfg Config, providerNames []string
 			continue
 		}
 
-		m := buildToolMap(cfg, provName, prov, cat)
+		m := buildToolMap(cfg, provName, cat)
 		for name := range m {
 			tools[name] = m[name]
 		}

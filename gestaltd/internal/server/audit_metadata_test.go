@@ -40,7 +40,7 @@ func TestAuditMetadata_IPAndUserAgent(t *testing.T) {
 		},
 	}
 	broker := invocation.NewBroker(providers, ds)
-	guarded := invocation.NewGuarded(broker, broker, "http", auditSink, invocation.WithoutRateLimit())
+	guarded := invocation.NewAuditedInvoker(broker, "http", auditSink)
 
 	srv, err := server.New(server.Config{
 		Auth: &coretesting.StubAuthProvider{
@@ -132,7 +132,7 @@ func TestAuditMetadata_FallbackToRemoteAddr(t *testing.T) {
 	providers := testutil.NewProviderRegistry(t, stub)
 	ds := &coretesting.StubDatastore{}
 	broker := invocation.NewBroker(providers, ds)
-	guarded := invocation.NewGuarded(broker, broker, "http", auditSink, invocation.WithoutRateLimit())
+	guarded := invocation.NewAuditedInvoker(broker, "http", auditSink)
 
 	srv, err := server.New(server.Config{
 		Auth:        &coretesting.StubAuthProvider{N: "none"},
