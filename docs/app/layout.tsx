@@ -67,10 +67,8 @@ export default async function RootLayout({
           footer={footer}
           pageMap={await getPageMap()}
           docsRepositoryBase="https://github.com/valon-technologies/gestalt/tree/main/docs"
-          darkMode={false}
           nextThemes={{
-            defaultTheme: "light",
-            forcedTheme: "light",
+            defaultTheme: "system",
             storageKey: "gestalt-docs-theme",
           }}
           sidebar={{

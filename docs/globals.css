@@ -69,6 +69,18 @@
   --nextra-primary-saturation: 84%;
 }
 
+.dark {
+  --valon-ink: 232, 222, 212;
+  --valon-bg: #161110;
+  --valon-surface: #1e1916;
+  --valon-surface-strong: #2e2622;
+  --valon-line: rgba(232, 222, 212, 0.12);
+  --valon-line-strong: rgba(232, 222, 212, 0.2);
+  --valon-muted: rgba(232, 222, 212, 0.55);
+  --valon-secondary: rgba(232, 222, 212, 0.78);
+  --valon-gold: #f5ca78;
+}
+
 html {
   font-family: 'KMR Melange Grotesk', system-ui, sans-serif;
   background: var(--valon-bg);
@@ -77,6 +89,10 @@ html {
 body {
   color: var(--valon-secondary);
   background: linear-gradient(180deg, #ffffff 0%, #fdfcf9 100%);
+}
+
+.dark body {
+  background: linear-gradient(180deg, #161110 0%, #1a1510 100%);
 }
 
 a {
@@ -146,7 +162,7 @@ article li {
 
 article a:not(.nextra-card):not(.subheading-anchor) {
   color: rgba(var(--valon-ink), 1);
-  text-decoration-color: rgba(35, 24, 16, 0.24);
+  text-decoration-color: rgba(var(--valon-ink), 0.24);
   text-underline-offset: 0.18em;
 }
 
@@ -171,6 +187,10 @@ pre {
   box-shadow: none !important;
 }
 
+.dark pre {
+  background: rgba(30, 25, 22, 0.88) !important;
+}
+
 :not(pre) > code.nextra-code,
 p code,
 li code,
@@ -179,6 +199,14 @@ td code {
   border-radius: 6px;
   background: rgba(248, 246, 243, 0.9) !important;
   color: rgba(var(--valon-ink), 1) !important;
+}
+
+.dark :not(pre) > code.nextra-code,
+.dark p code,
+.dark li code,
+.dark td code {
+  border-color: rgba(232, 222, 212, 0.12);
+  background: rgba(30, 25, 22, 0.9) !important;
 }
 
 pre code {
@@ -204,6 +232,10 @@ footer {
   background: rgba(255, 255, 255, 0.84) !important;
   border-bottom: 1px solid var(--valon-line);
   backdrop-filter: blur(16px);
+}
+
+.dark .nextra-navbar {
+  background: rgba(22, 17, 16, 0.84) !important;
 }
 
 .nextra-navbar + div {
@@ -238,6 +270,10 @@ footer > div {
   background: rgba(248, 246, 243, 0.9) !important;
   color: rgba(var(--valon-ink), 1) !important;
   box-shadow: none !important;
+}
+
+.dark .nextra-navbar input[type='search'] {
+  background: rgba(30, 25, 22, 0.9) !important;
 }
 
 .nextra-navbar input[type='search']::placeholder {
@@ -277,7 +313,7 @@ footer > div {
 
 .nextra-menu-desktop li.active > a,
 .nextra-menu-mobile li.active > a {
-  background: rgba(35, 24, 16, 0.08) !important;
+  background: rgba(var(--valon-ink), 0.08) !important;
   color: rgba(var(--valon-ink), 1) !important;
   font-weight: 700 !important;
 }
@@ -330,6 +366,15 @@ article.nextra-content main::before {
   pointer-events: none;
 }
 
+.dark article.nextra-content main::before {
+  background: linear-gradient(
+    to bottom,
+    rgba(61, 40, 8, 0.3) 0%,
+    rgba(61, 40, 8, 0.1) 50%,
+    transparent 100%
+  );
+}
+
 .nextra-content main > p:first-of-type {
   max-width: var(--valon-content-width);
   font-size: 1.125rem;
@@ -354,11 +399,20 @@ article.nextra-content main::before {
   padding: 2rem !important;
 }
 
+.dark .nextra-card {
+  background: rgba(30, 25, 22, 0.9) !important;
+}
+
 .nextra-card:hover {
   border-color: var(--valon-line-strong) !important;
   background: rgba(248, 246, 243, 0.98) !important;
   box-shadow: 0 8px 24px rgba(35, 24, 16, 0.08) !important;
   transform: translateY(-1px);
+}
+
+.dark .nextra-card:hover {
+  background: rgba(30, 25, 22, 0.98) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3) !important;
 }
 
 .nextra-card {
@@ -379,7 +433,7 @@ article.nextra-content main::before {
   gap: 0.5rem;
   padding: 0 0 0.75rem !important;
   font-weight: 600 !important;
-  color: rgba(35, 24, 16, 1) !important;
+  color: rgba(var(--valon-ink), 1) !important;
   order: 1;
 }
 
@@ -398,9 +452,18 @@ article table {
   background: rgba(255, 255, 255, 0.78);
 }
 
+.dark article table {
+  background: rgba(30, 25, 22, 0.78);
+}
+
 thead tr,
 tbody tr:nth-child(even) {
   background: rgba(35, 24, 16, 0.03) !important;
+}
+
+.dark thead tr,
+.dark tbody tr:nth-child(even) {
+  background: rgba(232, 222, 212, 0.04) !important;
 }
 
 th,
@@ -424,14 +487,17 @@ footer {
   border-top: 1px solid var(--valon-line);
 }
 
+.dark footer {
+  background: rgba(22, 17, 16, 0.72) !important;
+}
+
 :focus-visible {
   outline: 2px solid #231810;
   outline-offset: 2px;
 }
 
-button[title='Change theme'],
-.nextra-navbar [aria-label='Menu'] + div button[title='Change theme'] {
-  display: none !important;
+.dark :focus-visible {
+  outline-color: rgba(232, 222, 212, 0.6);
 }
 
 @media (min-width: 768px) {
