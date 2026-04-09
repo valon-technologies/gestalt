@@ -388,7 +388,7 @@ func (s mcpSurface) handler(result *bootstrap.Result, invoker invocation.Invoker
 			Providers:        result.Providers,
 			AllowedProviders: s.providers,
 			ToolPrefixes:     s.toolPrefixes,
-			MCPConnection: s.mcpConnection,
+			MCPConnection:    s.mcpConnection,
 		}),
 		mcpserver.WithStateLess(true),
 	), nil

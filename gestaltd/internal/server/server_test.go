@@ -1677,6 +1677,36 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 	if gotArgs["query"] != "expansion" {
 		t.Fatalf("expected args to include query=expansion, got %v", gotArgs)
 	}
+
+	stub.callFn = func(_ context.Context, _ string, _ map[string]any) (*mcpgo.CallToolResult, error) {
+		return &mcpgo.CallToolResult{
+			IsError:           true,
+			Content:           []mcpgo.Content{mcpgo.NewTextContent("query failed"), mcpgo.NewTextContent("try again")},
+			StructuredContent: map[string]any{"code": "bad_query"},
+		}, nil
+	}
+
+	body = bytes.NewBufferString(`{"query":"broken"}`)
+	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/api/v1/test-int/alpha_mcp", body)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("error invoke request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusBadGateway {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("error invoke: expected 502, got %d: %s", resp.StatusCode, respBody)
+	}
+
+	var errorBody map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&errorBody); err != nil {
+		t.Fatalf("decode error invoke body: %v", err)
+	}
+	if errorBody["error"] != "operation failed" {
+		t.Fatalf("expected generic passthrough error body, got %v", errorBody)
+	}
 }
 
 func TestListOperations_NotFound(t *testing.T) {
@@ -5588,7 +5618,11 @@ func TestMCPEndpoint_DirectPassthrough(t *testing.T) {
 	}
 
 	prov.callFn = func(_ context.Context, _ string, _ map[string]any) (*mcpgo.CallToolResult, error) {
-		return mcpgo.NewToolResultError("query failed"), nil
+		return &mcpgo.CallToolResult{
+			IsError:           true,
+			Content:           []mcpgo.Content{mcpgo.NewTextContent("query failed"), mcpgo.NewTextContent("try again")},
+			StructuredContent: map[string]any{"code": "bad_query"},
+		}, nil
 	}
 
 	status, resp = mcpJSONRPC(t, ts, headers, map[string]any{
@@ -5609,6 +5643,18 @@ func TestMCPEndpoint_DirectPassthrough(t *testing.T) {
 	}
 	if result["isError"] != true {
 		t.Fatalf("expected MCP error result, got %v", result["isError"])
+	}
+	content, ok = result["content"].([]any)
+	if !ok || len(content) != 2 {
+		t.Fatalf("expected 2 content items on MCP error result, got %v", result)
+	}
+	firstText, ok := content[0].(map[string]any)
+	if !ok || firstText["text"] != "query failed" {
+		t.Fatalf("expected first MCP error block text query failed, got %v", content[0])
+	}
+	structured, ok := result["structuredContent"].(map[string]any)
+	if !ok || structured["code"] != "bad_query" {
+		t.Fatalf("expected structuredContent.code=bad_query, got %v", result["structuredContent"])
 	}
 }
 

@@ -831,8 +831,8 @@ func TestNewServer_RESTCatalogToolsUseOperationConnections(t *testing.T) {
 	)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
-		Invoker:       broker,
-		Providers:     providers,
+		Invoker:   broker,
+		Providers: providers,
 	})
 
 	callTool := func(name string) string {
@@ -1298,6 +1298,85 @@ func TestNewServer_MCPPassthroughContract(t *testing.T) {
 	}
 	if len(result.Content) != 1 {
 		t.Fatalf("expected 1 content item, got %d", len(result.Content))
+	}
+	structured, ok := result.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("expected structured content map, got %T", result.StructuredContent)
+	}
+	if structured["ok"] != true {
+		t.Fatalf("structured content = %v, want ok=true", structured)
+	}
+}
+
+func TestNewServer_PassthroughToolPreservesErrorResultStructure(t *testing.T) {
+	t.Parallel()
+
+	const (
+		providerName  = "svc"
+		operationName = "do_thing"
+		toolName      = providerName + "_" + operationName
+	)
+
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{N: providerName},
+		ops:             []core.Operation{{Name: operationName, Description: "A passthrough operation"}},
+		cat: &catalog.Catalog{
+			Name: providerName,
+			Operations: []catalog.CatalogOperation{
+				{
+					ID:          operationName,
+					Description: "A passthrough operation",
+					Transport:   catalog.TransportMCPPassthrough,
+				},
+			},
+		},
+		callFn: func(_ context.Context, _ string, _ map[string]any) (*mcpgo.CallToolResult, error) {
+			return &mcpgo.CallToolResult{
+				IsError:           true,
+				Content:           []mcpgo.Content{mcpgo.NewTextContent("query failed"), mcpgo.NewTextContent("try again")},
+				StructuredContent: map[string]any{"code": "bad_query"},
+			}, nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	broker := invocation.NewBroker(providers, stubDatastoreWithToken())
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:       broker,
+		TokenResolver: broker,
+		Providers:     providers,
+	})
+
+	tool := srv.GetTool(toolName)
+	if tool == nil {
+		t.Fatalf("tool %q not found", toolName)
+	}
+
+	req := mcpgo.CallToolRequest{}
+	req.Params.Name = toolName
+	result, err := tool.Handler(ctxWithPrincipal(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected MCP error result")
+	}
+	if len(result.Content) != 2 {
+		t.Fatalf("expected 2 content items, got %d", len(result.Content))
+	}
+	first, ok := mcpgo.AsTextContent(result.Content[0])
+	if !ok {
+		t.Fatalf("expected first content item to be text, got %T", result.Content[0])
+	}
+	if first.Text != "query failed" {
+		t.Fatalf("first error text = %q, want %q", first.Text, "query failed")
+	}
+	structured, ok := result.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("expected structured content map, got %T", result.StructuredContent)
+	}
+	if structured["code"] != "bad_query" {
+		t.Fatalf("structured content = %v, want code=bad_query", structured)
 	}
 }
 

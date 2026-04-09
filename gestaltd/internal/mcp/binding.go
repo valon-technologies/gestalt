@@ -25,7 +25,7 @@ type Config struct {
 	AllowedProviders []string
 	ToolPrefixes     map[string]string
 	IncludeREST      map[string]bool
-	MCPConnection map[string]string
+	MCPConnection    map[string]string
 }
 
 func NewServer(cfg Config) *mcpserver.MCPServer {

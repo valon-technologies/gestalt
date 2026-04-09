@@ -292,41 +292,40 @@ func toolResultToOperationResult(result *mcpgo.CallToolResult) (*core.OperationR
 
 	if result.IsError {
 		return &core.OperationResult{
-			Status:    http.StatusBadGateway,
-			Headers:   headers,
-			Body:      ToolErrorMessage(result),
-			MCPResult: result,
+			Status:  http.StatusBadGateway,
+			Headers: headers,
+			Body:    `{"error":"operation failed"}`,
 		}, nil
 	}
 
+	body, err := toolResultBody(result)
+	if err != nil {
+		return nil, err
+	}
+
+	return &core.OperationResult{Status: http.StatusOK, Headers: headers, Body: body}, nil
+}
+
+func toolResultBody(result *mcpgo.CallToolResult) (string, error) {
 	if result.StructuredContent != nil {
 		body, err := json.Marshal(result.StructuredContent)
 		if err != nil {
-			return nil, err
+			return "", err
 		}
-		return &core.OperationResult{Status: http.StatusOK, Headers: headers, Body: string(body)}, nil
+		return string(body), nil
 	}
 
 	if len(result.Content) == 1 {
 		if text, ok := mcpgo.AsTextContent(result.Content[0]); ok && json.Valid([]byte(strings.TrimSpace(text.Text))) {
-			return &core.OperationResult{Status: http.StatusOK, Headers: headers, Body: text.Text}, nil
+			return text.Text, nil
 		}
 	}
 
 	body, err := json.Marshal(map[string]any{"content": result.Content})
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	return &core.OperationResult{Status: http.StatusOK, Headers: headers, Body: string(body)}, nil
-}
-
-func ToolErrorMessage(result *mcpgo.CallToolResult) string {
-	for _, item := range result.Content {
-		if text, ok := mcpgo.AsTextContent(item); ok && strings.TrimSpace(text.Text) != "" {
-			return text.Text
-		}
-	}
-	return "operation failed"
+	return string(body), nil
 }
 
 func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (string, error) {
