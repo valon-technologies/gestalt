@@ -6,8 +6,6 @@ mod auth_server;
 mod catalog;
 mod datastore;
 mod datastore_server;
-mod secrets;
-mod secrets_server;
 mod env;
 mod error;
 mod provider_server;
@@ -15,6 +13,8 @@ mod router;
 mod rpc_status;
 pub mod runtime;
 mod runtime_server;
+mod secrets;
+mod secrets_server;
 
 /// Generated protobuf and gRPC bindings compiled from `sdk/proto/v1/*.proto`.
 mod generated {
@@ -36,12 +36,12 @@ pub use catalog::{Catalog, CatalogOperation};
 pub use datastore::{
     DatastoreProvider, OAuthRegistration, StoredApiToken, StoredIntegrationToken, StoredUser,
 };
-pub use secrets::SecretsProvider;
 pub use env::{CURRENT_PROTOCOL_VERSION, ENV_PLUGIN_SOCKET};
 pub use error::{Error, Result};
 #[doc(hidden)]
 pub use provider_server::{OperationResult, ProviderServer};
 pub use router::{Operation, Router};
+pub use secrets::SecretsProvider;
 pub use tonic::codegen::async_trait;
 
 #[doc(hidden)]

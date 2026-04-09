@@ -26,17 +26,17 @@ use crate::generated::v1::datastore_provider_server::DatastoreProviderServer;
 #[cfg(unix)]
 use crate::generated::v1::plugin_provider_server::PluginProviderServer;
 #[cfg(unix)]
-use crate::generated::v1::secrets_provider_server::SecretsProviderServer;
-#[cfg(unix)]
 use crate::generated::v1::provider_lifecycle_server::ProviderLifecycleServer;
+#[cfg(unix)]
+use crate::generated::v1::secrets_provider_server::SecretsProviderServer;
 use crate::provider_server::ProviderServer;
 #[cfg(unix)]
 use crate::{AuthProvider, DatastoreProvider, SecretsProvider};
 use crate::{Provider, Router};
 #[cfg(unix)]
 use crate::{
-    auth_server::AuthServer, datastore_server::DatastoreServer,
-    secrets_server::SecretsServer, runtime_server::RuntimeServer,
+    auth_server::AuthServer, datastore_server::DatastoreServer, runtime_server::RuntimeServer,
+    secrets_server::SecretsServer,
 };
 
 fn build_runtime_and_block_on<F, Fut>(f: F) -> Result<()>
@@ -166,9 +166,9 @@ where
                 .add_service(ProviderLifecycleServer::new(RuntimeServer::for_secrets(
                     Arc::clone(&provider),
                 )))
-                .add_service(SecretsProviderServer::new(SecretsServer::new(
-                    Arc::clone(&provider),
-                )))
+                .add_service(SecretsProviderServer::new(SecretsServer::new(Arc::clone(
+                    &provider,
+                ))))
                 .serve_with_incoming_shutdown(incoming, shutdown_signal(parent_pid()))
         },
         |provider| async move { provider.close().await },

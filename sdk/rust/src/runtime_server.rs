@@ -6,13 +6,13 @@ use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 use crate::api::RuntimeMetadata;
 use crate::auth::AuthProvider;
 use crate::datastore::DatastoreProvider;
-use crate::secrets::SecretsProvider;
 use crate::error::Result;
 use crate::generated::v1::provider_lifecycle_server::ProviderLifecycle;
 use crate::generated::v1::{
     ConfigurePluginRequest, ConfigurePluginResponse, HealthCheckResponse, PluginKind,
     PluginMetadata,
 };
+use crate::secrets::SecretsProvider;
 use crate::{CURRENT_PROTOCOL_VERSION, Provider};
 
 #[async_trait]
