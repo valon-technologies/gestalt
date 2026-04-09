@@ -26,8 +26,8 @@ type Definition struct {
 	ManualAuth       bool                 `yaml:"manual_auth" json:"manual_auth"`
 	CredentialFields []CredentialFieldDef `yaml:"credential_fields" json:"credential_fields,omitempty"`
 
-	Discovery *DiscoveryDef `yaml:"discovery" json:"discovery,omitempty"`
-	ResponseMapping      *ResponseMappingDef      `yaml:"response_mapping" json:"response_mapping,omitempty"`
+	Discovery       *DiscoveryDef       `yaml:"discovery" json:"discovery,omitempty"`
+	ResponseMapping *ResponseMappingDef `yaml:"response_mapping" json:"response_mapping,omitempty"`
 
 	Connection map[string]ConnectionParamDef `yaml:"connection" json:"connection"`
 	Operations map[string]OperationDef       `yaml:"operations" json:"operations"`
@@ -39,20 +39,20 @@ type ResponseCheckDef struct {
 }
 
 type DiscoveryDef struct {
-	URL      string            `yaml:"url" json:"url"`
-	ItemsPath string           `yaml:"items_path" json:"items_path"`
-	IDPath   string            `yaml:"id_path" json:"id_path"`
-	NamePath string            `yaml:"name_path" json:"name_path"`
-	Metadata map[string]string `yaml:"metadata" json:"metadata"`
+	URL       string            `yaml:"url" json:"url"`
+	ItemsPath string            `yaml:"items_path" json:"items_path"`
+	IDPath    string            `yaml:"id_path" json:"id_path"`
+	NamePath  string            `yaml:"name_path" json:"name_path"`
+	Metadata  map[string]string `yaml:"metadata" json:"metadata"`
 }
 
 func (d *DiscoveryDef) ToCore() *core.DiscoveryConfig {
 	return &core.DiscoveryConfig{
-		URL:             d.URL,
-		ItemsPath:       d.ItemsPath,
-		IDPath:          d.IDPath,
-		NamePath:        d.NamePath,
-		Metadata: d.Metadata,
+		URL:       d.URL,
+		ItemsPath: d.ItemsPath,
+		IDPath:    d.IDPath,
+		NamePath:  d.NamePath,
+		Metadata:  d.Metadata,
 	}
 }
 
