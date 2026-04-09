@@ -40,4 +40,21 @@ test.describe("Docs page", () => {
     ).toBeVisible();
     await expect(page.getByText("Claude Code")).toBeVisible();
   });
+
+  test("authenticated user can access docs without redirect", async ({
+    authenticatedPage,
+  }) => {
+    const page = authenticatedPage;
+    await mockAuthInfo(page, {
+      provider: "test-sso",
+      display_name: "Test SSO",
+    });
+
+    await page.goto("/docs");
+    await expect(page).toHaveURL(/\/docs/);
+    await expect(
+      page.getByRole("heading", { name: "Gestalt User Guide" }),
+    ).toBeVisible();
+    await expect(page.getByText("test@gestalt.dev")).toBeVisible();
+  });
 });
