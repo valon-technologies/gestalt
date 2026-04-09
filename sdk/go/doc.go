@@ -38,7 +38,7 @@
 //		gestalt.Register(myOperation, (*MyProvider).myHandler),
 //	)
 //
-// Source-provider flows derive the executable catalog name from provider.yaml. Use
+// Source-provider flows derive the executable catalog name from manifest.yaml. Use
 // [MustNamedRouter] only when you need an explicit catalog name outside that
 // manifest-backed flow.
 //

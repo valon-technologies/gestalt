@@ -108,12 +108,12 @@ class ManifestNameTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             temp_root = pathlib.Path(tmpdir)
 
-            manifest_path = temp_root / "provider.yaml"
+            manifest_path = temp_root / "manifest.yaml"
             manifest_path.write_text('display_name: "Released Plugin"\n', encoding="utf-8")
 
             manifest_dir = temp_root / "plugin.json"
             manifest_dir.mkdir()
-            (manifest_dir / "provider.yaml").write_text(
+            (manifest_dir / "manifest.yaml").write_text(
                 'display_name: "Directory Manifest"\n',
                 encoding="utf-8",
             )

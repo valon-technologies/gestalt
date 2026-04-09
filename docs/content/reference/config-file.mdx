@@ -439,7 +439,7 @@ For local development with a source provider package:
 ```yaml
 provider:
   source:
-    path: ./provider.yaml
+    path: ./manifest.yaml
 ```
 
 Gestalt synthesizes Go and Rust executable wrappers automatically when needed and runs Python source providers from the module declared in `[tool.gestalt].provider` or the legacy `[tool.gestalt].plugin`. Integration plugins do not support `provider.builtin`.
@@ -451,7 +451,7 @@ Gestalt synthesizes Go and Rust executable wrappers automatically when needed an
     ```text
     my-plugin/
       go.mod
-      provider.yaml
+      manifest.yaml
       provider.go
     ```
   </Tabs.Tab>

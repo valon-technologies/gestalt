@@ -102,7 +102,7 @@ type Router[P any] struct {
 }
 
 // NewRouter constructs a typed router from registrations. Source-provider flows
-// derive the router name from provider.yaml at build time.
+// derive the router name from manifest.yaml at build time.
 func NewRouter[P any](registrations ...Registration[P]) (*Router[P], error) {
 	return newRouter("", registrations...)
 }

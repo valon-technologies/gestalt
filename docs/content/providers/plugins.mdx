@@ -6,7 +6,7 @@ Integration plugins are one provider kind. Their manifests use a top-level `plug
 
 ## Manifest
 
-Static metadata, auth, and passthrough surfaces live in a manifest file. Gestalt accepts `provider.yaml`, `provider.yml`, or `provider.json`.
+Static metadata, auth, and passthrough surfaces live in a manifest file. Gestalt accepts `manifest.yaml`, `manifest.yml`, or `manifest.json`.
 
 <Tabs items={['YAML', 'JSON']}>
   <Tabs.Tab>
@@ -64,7 +64,7 @@ The manifest stays the source of truth for display name, description, auth, the 
     ```text
     my-plugin/
       go.mod
-      provider.yaml
+      manifest.yaml
       provider.go
     ```
   </Tabs.Tab>
@@ -80,7 +80,7 @@ The manifest stays the source of truth for display name, description, auth, the 
     ```text
     my-plugin/
       pyproject.toml
-      provider.yaml
+      manifest.yaml
       provider.py
     ```
 
@@ -112,7 +112,7 @@ The manifest stays the source of truth for display name, description, auth, the 
     ```text
     my-plugin/
       Cargo.toml
-      provider.yaml
+      manifest.yaml
       src/
         lib.rs
     ```
@@ -148,7 +148,7 @@ The manifest stays the source of truth for display name, description, auth, the 
     ```text
     my-plugin/
       package.json
-      provider.yaml
+      manifest.yaml
       provider.ts
     ```
 
@@ -581,7 +581,7 @@ plugins:
   my-plugin:
     provider:
       source:
-        path: ./provider.yaml
+        path: ./manifest.yaml
     config:
       greeting: Hello
     mcp:

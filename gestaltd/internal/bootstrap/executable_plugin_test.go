@@ -31,7 +31,7 @@ func TestExecutableSDKExampleProviderReceivesStartConfig(t *testing.T) {
 				Plugin: &config.ProviderDef{
 					Command:              bin,
 					ResolvedManifest:     manifest,
-					ResolvedManifestPath: filepath.Join(manifestRoot, "provider.yaml"),
+					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 					Config: mustNode(t, map[string]any{
 						"greeting": "Hello from config",
 					}),
@@ -119,9 +119,9 @@ func TestPythonSourcePluginFallsBackWithoutGoOnPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EncodeSourceManifestFormat: %v", err)
 	}
-	manifestPath := filepath.Join(root, "provider.yaml")
+	manifestPath := filepath.Join(root, "manifest.yaml")
 	if err := os.WriteFile(manifestPath, manifestData, 0o644); err != nil {
-		t.Fatalf("WriteFile(provider.yaml): %v", err)
+		t.Fatalf("WriteFile(manifest.yaml): %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte(`[tool.gestalt]
 plugin = "provider"
@@ -218,7 +218,7 @@ func TestExecutableSDKExampleProviderAppliesConfigMetadataOverrides(t *testing.T
 				Plugin: &config.ProviderDef{
 					Command:              bin,
 					ResolvedManifest:     manifest,
-					ResolvedManifestPath: filepath.Join(manifestRoot, "provider.yaml"),
+					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 				},
 			},
 		},
@@ -340,7 +340,7 @@ func TestPluginManifestOAuthWiresConnectionAuth(t *testing.T) {
 						"client_secret": "test-client-secret",
 					}),
 					ResolvedManifest:     manifest,
-					ResolvedManifestPath: filepath.Join(manifestRoot, "provider.yaml"),
+					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 				},
 			},
 		},
@@ -399,7 +399,7 @@ func TestPluginManifestNoAuthSkipsConnectionAuth(t *testing.T) {
 					Command:              bin,
 					Args:                 []string{"provider"},
 					ResolvedManifest:     manifest,
-					ResolvedManifestPath: filepath.Join(manifestRoot, "provider.yaml"),
+					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 				},
 			},
 		},
@@ -451,7 +451,7 @@ func TestPluginManifestNamedOAuthKeepsProviderTokenMode(t *testing.T) {
 						"client_secret": "test-client-secret",
 					}),
 					ResolvedManifest:     manifest,
-					ResolvedManifestPath: filepath.Join(manifestRoot, "provider.yaml"),
+					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 				},
 			},
 		},
@@ -495,7 +495,7 @@ func TestPluginProcessEnvIsolation(t *testing.T) {
 					Command:              bin,
 					Args:                 []string{"provider"},
 					ResolvedManifest:     manifest,
-					ResolvedManifestPath: filepath.Join(manifestRoot, "provider.yaml"),
+					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 				},
 			},
 		},

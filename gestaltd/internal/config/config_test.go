@@ -62,7 +62,7 @@ plugins:
     display_name: Service A
     provider:
       source:
-        path: /tmp/provider.yaml
+        path: /tmp/manifest.yaml
 `)
 
 	cfg, err := Load(path)
@@ -112,7 +112,7 @@ plugins:
   service-a:
     provider:
       source:
-        path: /tmp/provider.yaml
+        path: /tmp/manifest.yaml
 `)
 
 	cfg, err := LoadWithLookup(path, func(key string) (string, bool) {
@@ -468,14 +468,14 @@ plugins:
   custom_tool:
     provider:
       source:
-        path: ./provider.yaml
+        path: ./manifest.yaml
 `)
 
 	cfg, err := Load(path)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if got := cfg.Integrations["custom_tool"].Plugin.SourcePath(); got != filepath.Join(filepath.Dir(path), "provider.yaml") {
+	if got := cfg.Integrations["custom_tool"].Plugin.SourcePath(); got != filepath.Join(filepath.Dir(path), "manifest.yaml") {
 		t.Fatalf("unexpected plugin source path: %q", got)
 	}
 }
@@ -574,7 +574,7 @@ server:
 ui:
   provider:
     source:
-      path: ./web/default/provider.yaml
+      path: ./web/default/manifest.yaml
 datastore:
   provider:
     source:
@@ -591,7 +591,7 @@ server:
 		if cfg.UI.Provider == nil || cfg.UI.Provider.Source == nil {
 			t.Fatalf("UI.Provider = %#v", cfg.UI.Provider)
 		}
-		wantPath := filepath.Join(filepath.Dir(path), "web", "default", "provider.yaml")
+		wantPath := filepath.Join(filepath.Dir(path), "web", "default", "manifest.yaml")
 		if got := cfg.UI.Provider.Source.Path; got != wantPath {
 			t.Fatalf("UI.Provider.Source.Path = %q, want %q", got, wantPath)
 		}
@@ -659,7 +659,7 @@ plugins:
   service:
     provider:
       source:
-        path: /usr/bin/provider.yaml
+        path: /usr/bin/manifest.yaml
 `,
 		},
 	}
@@ -691,7 +691,7 @@ plugins:
   external:
     provider:
       source:
-        path: ./plugins/dummy/provider.yaml
+        path: ./plugins/dummy/manifest.yaml
 `,
 		},
 		{
@@ -701,7 +701,7 @@ plugins:
   external:
     provider:
       source:
-        path: ./plugins/dummy/provider.yaml
+        path: ./plugins/dummy/manifest.yaml
         ref: github.com/acme-corp/tools/widget
         version: 1.2.3
 `,
@@ -714,7 +714,7 @@ plugins:
   external:
     provider:
       source:
-        path: ./plugins/dummy/provider.yaml
+        path: ./plugins/dummy/manifest.yaml
       env:
         FOO: bar
 `,
@@ -726,7 +726,7 @@ plugins:
   external:
     provider:
       source:
-        path: ./plugins/dummy/provider.yaml
+        path: ./plugins/dummy/manifest.yaml
     config:
       base_url: https://example.com
 `,
@@ -747,7 +747,7 @@ plugins:
   external:
     provider:
       source:
-        path: ./plugins/dummy/provider.yaml
+        path: ./plugins/dummy/manifest.yaml
         version: 1.0.0
 `,
 			wantErr: "plugin.source.version is only valid",
@@ -794,7 +794,7 @@ plugins:
   external:
     provider:
       source:
-        path: ./plugins/dummy/provider.yaml
+        path: ./plugins/dummy/manifest.yaml
     connections:
       named:
         mode: user
@@ -812,7 +812,7 @@ plugins:
   external:
     provider:
       source:
-        path: ./plugins/dummy/provider.yaml
+        path: ./plugins/dummy/manifest.yaml
     connections:
       named:
         mode: user
@@ -829,7 +829,7 @@ plugins:
   external:
     provider:
       source:
-        path: ./plugins/dummy/provider.yaml
+        path: ./plugins/dummy/manifest.yaml
     mcp:
       tool_prefix: external_
 `,
@@ -892,7 +892,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			name: "local source valid",
 			cfg: &Config{
 				Integrations: map[string]IntegrationDef{
-					"sample": {Plugin: &ProviderDef{Source: &PluginSourceDef{Path: "./some-dir/provider.yaml"}}},
+					"sample": {Plugin: &ProviderDef{Source: &PluginSourceDef{Path: "./some-dir/manifest.yaml"}}},
 				},
 			},
 		},
@@ -908,7 +908,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			name: "source path and ref rejected",
 			cfg: &Config{
 				Integrations: map[string]IntegrationDef{
-					"sample": {Plugin: &ProviderDef{Source: &PluginSourceDef{Path: "./provider.yaml", Ref: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}}},
+					"sample": {Plugin: &ProviderDef{Source: &PluginSourceDef{Path: "./manifest.yaml", Ref: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}}},
 				},
 			},
 			wantErr: "mutually exclusive",
@@ -956,7 +956,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			name: "datastore provider valid",
 			cfg: &Config{
 				Datastore: DatastoreConfig{
-					Provider: &ProviderDef{Source: &PluginSourceDef{Path: "./some-dir/provider.yaml"}},
+					Provider: &ProviderDef{Source: &PluginSourceDef{Path: "./some-dir/manifest.yaml"}},
 				},
 			},
 		},
@@ -984,7 +984,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 				Integrations: map[string]IntegrationDef{
 					"sample": {
 						Plugin: &ProviderDef{
-							Source: &PluginSourceDef{Path: "./provider.yaml"},
+							Source: &PluginSourceDef{Path: "./manifest.yaml"},
 							Auth:   &ConnectionAuthDef{Type: pluginmanifestv1.AuthTypeMCPOAuth},
 						},
 					},
@@ -998,7 +998,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 				Integrations: map[string]IntegrationDef{
 					"sample": {
 						Plugin: &ProviderDef{
-							Source: &PluginSourceDef{Path: "./provider.yaml"},
+							Source: &PluginSourceDef{Path: "./manifest.yaml"},
 							Connections: map[string]*ConnectionDef{
 								"default": {Auth: ConnectionAuthDef{Type: pluginmanifestv1.AuthTypeMCPOAuth}},
 							},
@@ -1051,17 +1051,17 @@ func TestLoadConfigResolvesRelativePaths(t *testing.T) {
 auth:
   provider:
     source:
-      path: ../auth-plugin/provider.yaml
+      path: ../auth-plugin/manifest.yaml
 datastore:
   provider:
     source:
-      path: ../datastore-plugin/provider.yaml
+      path: ../datastore-plugin/manifest.yaml
 plugins:
   service-a:
     icon_file: ../assets/service.svg
     provider:
       source:
-        path: ../bin/provider.yaml
+        path: ../bin/manifest.yaml
 `), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
 	}
@@ -1074,14 +1074,14 @@ plugins:
 	if got := cfg.Integrations["service-a"].IconFile; got != iconPath {
 		t.Fatalf("IconFile = %q, want %q", got, iconPath)
 	}
-	if got := cfg.Auth.Provider.SourcePath(); got != filepath.Join(dir, "auth-plugin", "provider.yaml") {
-		t.Fatalf("auth plugin source path = %q, want %q", got, filepath.Join(dir, "auth-plugin", "provider.yaml"))
+	if got := cfg.Auth.Provider.SourcePath(); got != filepath.Join(dir, "auth-plugin", "manifest.yaml") {
+		t.Fatalf("auth plugin source path = %q, want %q", got, filepath.Join(dir, "auth-plugin", "manifest.yaml"))
 	}
-	if got := cfg.Datastore.Provider.SourcePath(); got != filepath.Join(dir, "datastore-plugin", "provider.yaml") {
-		t.Fatalf("datastore plugin source path = %q, want %q", got, filepath.Join(dir, "datastore-plugin", "provider.yaml"))
+	if got := cfg.Datastore.Provider.SourcePath(); got != filepath.Join(dir, "datastore-plugin", "manifest.yaml") {
+		t.Fatalf("datastore plugin source path = %q, want %q", got, filepath.Join(dir, "datastore-plugin", "manifest.yaml"))
 	}
-	if got := cfg.Integrations["service-a"].Plugin.SourcePath(); got != filepath.Join(dir, "bin", "provider.yaml") {
-		t.Fatalf("integration plugin source path = %q, want %q", got, filepath.Join(dir, "bin", "provider.yaml"))
+	if got := cfg.Integrations["service-a"].Plugin.SourcePath(); got != filepath.Join(dir, "bin", "manifest.yaml") {
+		t.Fatalf("integration plugin source path = %q, want %q", got, filepath.Join(dir, "bin", "manifest.yaml"))
 	}
 }
 
@@ -1196,7 +1196,7 @@ func TestLoad_ResolvesRelativePluginSourcePath(t *testing.T) {
   sample:
     provider:
       source:
-        path: ./my-plugin/provider.yaml
+        path: ./my-plugin/manifest.yaml
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
@@ -1214,7 +1214,7 @@ func TestLoad_ResolvesRelativePluginSourcePath(t *testing.T) {
 	if !filepath.IsAbs(plugin.SourcePath()) {
 		t.Fatalf("expected absolute path, got: %q", plugin.SourcePath())
 	}
-	wantPath := filepath.Join(pluginDir, "provider.yaml")
+	wantPath := filepath.Join(pluginDir, "manifest.yaml")
 	if plugin.SourcePath() != wantPath {
 		t.Fatalf("plugin.SourcePath() = %q, want %q", plugin.SourcePath(), wantPath)
 	}

@@ -76,7 +76,7 @@ func TestCreatePackageFromDirAndReadManifest(t *testing.T) {
 	}
 	manifest := mustManifestJSON(t, mustProviderManifest("github.com/acme/plugins/provider", "0.0.1-alpha.1", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider")))
 	if err := os.WriteFile(filepath.Join(src, ManifestFile), manifest, 0644); err != nil {
-		t.Fatalf("WriteFile(provider.json): %v", err)
+		t.Fatalf("WriteFile(manifest.json): %v", err)
 	}
 	mustWriteFile(t, filepath.Join(src, "catalog.yaml"), []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n"), 0644)
 
