@@ -57,7 +57,11 @@ func (s *runtimeServer) ConfigurePlugin(ctx context.Context, req *proto.Configur
 			proto.CurrentProtocolVersion,
 		)
 	}
-	if err := s.provider.Configure(ctx, req.GetName(), configFromRequest(req.GetConfig())); err != nil {
+	config := req.GetConfig().AsMap()
+	if config == nil {
+		config = map[string]any{}
+	}
+	if err := s.provider.Configure(ctx, req.GetName(), config); err != nil {
 		return nil, status.Errorf(codes.Unknown, "configure provider: %v", err)
 	}
 	return &proto.ConfigurePluginResponse{ProtocolVersion: proto.CurrentProtocolVersion}, nil
