@@ -420,8 +420,8 @@ func (b *Broker) resolveUserToken(ctx context.Context, prov core.Provider, userI
 			for i, t := range tokens {
 				instances[i] = t.Instance
 			}
-			return ctx, "", fmt.Errorf("%w: integration %q has %d connections (%v); specify which instance to use",
-				ErrAmbiguousInstance, providerName, len(tokens), instances)
+			return ctx, "", fmt.Errorf("%w: integration %q has %d connections (%v); specify which instance to use with the %q parameter",
+				ErrAmbiguousInstance, providerName, len(tokens), instances, "_instance")
 		}
 	}
 

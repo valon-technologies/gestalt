@@ -25,6 +25,8 @@ import (
 )
 
 const defaultTokenInstance = "default"
+const httpInstanceParam = "_instance"
+const httpConnectionParam = "_connection"
 
 const cliStatePrefix = "cli:"
 const maxPort = 65535
@@ -214,15 +216,23 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	requestedInstance := r.URL.Query().Get("instance")
-	requestedConnection := r.URL.Query().Get("connection")
-	if requestedConnection != "" {
-		if !safeParamValue.MatchString(requestedConnection) {
-			auditErr = errors.New("connection name contains invalid characters")
-			writeError(w, http.StatusBadRequest, "connection name contains invalid characters")
+	requestedInstance := r.URL.Query().Get(httpInstanceParam)
+	if requestedInstance != "" {
+		var ok bool
+		requestedInstance, ok = resolveRequestedInstance(w, requestedInstance)
+		if !ok {
+			auditErr = errors.New("invalid instance parameter")
 			return
 		}
-		requestedConnection = config.ResolveConnectionAlias(requestedConnection)
+	}
+	requestedConnection := r.URL.Query().Get(httpConnectionParam)
+	if requestedConnection != "" {
+		var ok bool
+		requestedConnection, ok = s.resolveRequestedConnection(w, name, requestedConnection)
+		if !ok {
+			auditErr = errors.New("invalid connection parameter")
+			return
+		}
 	}
 
 	tokens, err := s.datastore.ListTokensForIntegration(r.Context(), userID, name)
@@ -267,9 +277,9 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		for i, t := range matched {
 			labels[i] = fmt.Sprintf("%s/%s", t.Connection, t.Instance)
 		}
-		hint := "?instance=NAME"
+		hint := "?" + httpInstanceParam + "=NAME"
 		if requestedInstance != "" {
-			hint = "?connection=NAME"
+			hint = "?" + httpConnectionParam + "=NAME"
 		}
 		writeError(w, http.StatusConflict, fmt.Sprintf("multiple connections exist for %q (%v); specify %s", name, labels, hint))
 		return
@@ -373,15 +383,21 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	requestedConnection := r.URL.Query().Get("_connection")
-	if requestedConnection != "" && !safeParamValue.MatchString(requestedConnection) {
-		writeError(w, http.StatusBadRequest, "connection name contains invalid characters")
-		return
+	requestedConnection := r.URL.Query().Get(httpConnectionParam)
+	if requestedConnection != "" {
+		var ok bool
+		requestedConnection, ok = s.resolveRequestedConnection(w, name, requestedConnection)
+		if !ok {
+			return
+		}
 	}
-	requestedInstance := r.URL.Query().Get("_instance")
-	if requestedInstance != "" && !safeParamValue.MatchString(requestedInstance) {
-		writeError(w, http.StatusBadRequest, "instance name contains invalid characters")
-		return
+	requestedInstance := r.URL.Query().Get(httpInstanceParam)
+	if requestedInstance != "" {
+		var ok bool
+		requestedInstance, ok = resolveRequestedInstance(w, requestedInstance)
+		if !ok {
+			return
+		}
 	}
 	p := PrincipalFromContext(r.Context())
 	var resolver invocation.TokenResolver
@@ -413,6 +429,23 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	requestedConnection := r.URL.Query().Get(httpConnectionParam)
+	if requestedConnection != "" {
+		var ok bool
+		requestedConnection, ok = s.resolveRequestedConnection(w, providerName, requestedConnection)
+		if !ok {
+			return
+		}
+	}
+	requestedInstance := r.URL.Query().Get(httpInstanceParam)
+	if requestedInstance != "" {
+		var ok bool
+		requestedInstance, ok = resolveRequestedInstance(w, requestedInstance)
+		if !ok {
+			return
+		}
+	}
+
 	params := make(map[string]any)
 	if r.Method == http.MethodPost {
 		if r.Body != nil {
@@ -430,10 +463,42 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	instance, _ := params["_instance"].(string)
-	delete(params, "_instance")
-	connection, _ := params["_connection"].(string)
-	delete(params, "_connection")
+	bodyInstance, _ := params[httpInstanceParam].(string)
+	delete(params, httpInstanceParam)
+	bodyConnection, _ := params[httpConnectionParam].(string)
+	delete(params, httpConnectionParam)
+
+	if bodyInstance != "" {
+		var ok bool
+		bodyInstance, ok = resolveRequestedInstance(w, bodyInstance)
+		if !ok {
+			return
+		}
+	}
+	if requestedInstance != "" && bodyInstance != "" && requestedInstance != bodyInstance {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("conflicting instance parameter %q in query string and JSON body", httpInstanceParam))
+		return
+	}
+	instance := bodyInstance
+	if instance == "" {
+		instance = requestedInstance
+	}
+
+	if bodyConnection != "" {
+		var ok bool
+		bodyConnection, ok = s.resolveRequestedConnection(w, providerName, bodyConnection)
+		if !ok {
+			return
+		}
+	}
+	if requestedConnection != "" && bodyConnection != "" && requestedConnection != bodyConnection {
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("conflicting connection parameter %q in query string and JSON body", httpConnectionParam))
+		return
+	}
+	connection := bodyConnection
+	if connection == "" {
+		connection = requestedConnection
+	}
 	ctx := r.Context()
 	if connection != "" {
 		if !safeParamValue.MatchString(connection) {
