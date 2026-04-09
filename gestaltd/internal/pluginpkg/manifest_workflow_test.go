@@ -80,15 +80,15 @@ func TestManifestWorkflow_RoundTripsWebUIPackage(t *testing.T) {
 		WebUI:   &pluginmanifestv1.WebUIMetadata{AssetRoot: "ui/dist"},
 	}
 
-	mustWriteManifestData(t, sourceDir, "provider.yml", mustManifestYAML(t, manifest))
+	mustWriteManifestData(t, sourceDir, "manifest.yml", mustManifestYAML(t, manifest))
 	mustWriteFile(t, filepath.Join(sourceDir, "ui", "dist", "index.html"), []byte("<!doctype html><title>ui</title>"), 0o644)
 
 	_, manifest, gotPath, err := LoadManifestFromPath(sourceDir)
 	if err != nil {
 		t.Fatalf("LoadManifestFromPath(dir): %v", err)
 	}
-	if filepath.Base(gotPath) != "provider.yml" {
-		t.Fatalf("manifest path = %q, want provider.yml", gotPath)
+	if filepath.Base(gotPath) != "manifest.yml" {
+		t.Fatalf("manifest path = %q, want manifest.yml", gotPath)
 	}
 	if manifest.WebUI == nil || manifest.WebUI.AssetRoot != "ui/dist" {
 		t.Fatalf("unexpected webui manifest: %#v", manifest.WebUI)
@@ -145,27 +145,15 @@ func TestLoadManifestFromPath_PrefersManifestFileOrder(t *testing.T) {
 	}{
 		{
 			name:     "json before yaml",
-			files:    []string{"provider.json", "provider.yaml"},
-			wantBase: "provider.json",
+			files:    []string{"manifest.json", "manifest.yaml"},
+			wantBase: "manifest.json",
 			wantSrc:  "github.com/acme/plugins/json-first",
 		},
 		{
 			name:     "yaml before yml",
-			files:    []string{"provider.yaml", "provider.yml"},
-			wantBase: "provider.yaml",
-			wantSrc:  "github.com/acme/plugins/yaml-first",
-		},
-		{
-			name:     "package manifest after packaged names",
-			files:    []string{"provider.yaml", "manifest.yaml"},
-			wantBase: "provider.yaml",
-			wantSrc:  "github.com/acme/plugins/yaml-first",
-		},
-		{
-			name:     "package manifest supported",
-			files:    []string{"manifest.yaml"},
+			files:    []string{"manifest.yaml", "manifest.yml"},
 			wantBase: "manifest.yaml",
-			wantSrc:  "github.com/acme/plugins/source-package",
+			wantSrc:  "github.com/acme/plugins/yaml-first",
 		},
 	}
 
@@ -178,12 +166,10 @@ func TestLoadManifestFromPath_PrefersManifestFileOrder(t *testing.T) {
 			for _, name := range tc.files {
 				source := "github.com/acme/plugins/fallback"
 				switch name {
-				case "provider.json":
+				case "manifest.json":
 					source = "github.com/acme/plugins/json-first"
-				case "provider.yaml":
-					source = "github.com/acme/plugins/yaml-first"
 				case "manifest.yaml":
-					source = "github.com/acme/plugins/source-package"
+					source = "github.com/acme/plugins/yaml-first"
 				}
 				manifest := &pluginmanifestv1.Manifest{
 					Source:  source,
@@ -314,7 +300,7 @@ func TestManifestWorkflow_AcceptsProviderWireSurfaceManifest(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	manifestPath := mustWriteManifestData(t, dir, "provider.yaml", []byte(`
+	manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
 source: github.com/acme/plugins/provider-wire
 version: 1.0.0
 display_name: Provider Wire
@@ -385,7 +371,7 @@ func TestManifestWorkflow_AcceptsProviderWireMCPOAuthManifestAcrossDirectoryAndA
 
 	root := t.TempDir()
 	sourceDir := filepath.Join(root, "plugin-mcp-oauth")
-	manifestPath := mustWriteManifestData(t, sourceDir, "provider.yaml", []byte(`
+	manifestPath := mustWriteManifestData(t, sourceDir, "manifest.yaml", []byte(`
 source: github.com/acme/plugins/notion
 version: 0.0.1-alpha.1
 display_name: Notion
@@ -436,7 +422,7 @@ func TestManifestWorkflow_RejectsMCPOAuthManifestWithoutMCPSurface(t *testing.T)
 	t.Parallel()
 
 	dir := t.TempDir()
-	manifestPath := mustWriteManifestData(t, dir, "provider.yaml", []byte(`
+	manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
 source: github.com/acme/plugins/bad-mcp-oauth
 version: 0.0.1-alpha.1
 provider:

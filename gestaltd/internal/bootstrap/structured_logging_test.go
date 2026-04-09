@@ -23,7 +23,7 @@ func TestBootstrapSkippedProviderLogsWarning(t *testing.T) { //nolint:parallelte
 	cfg.Integrations = map[string]config.IntegrationDef{
 		"broken": {
 			Plugin: &config.ProviderDef{
-				Source: &config.PluginSourceDef{Path: "./provider.yaml"},
+				Source: &config.PluginSourceDef{Path: "./manifest.yaml"},
 			},
 		},
 	}

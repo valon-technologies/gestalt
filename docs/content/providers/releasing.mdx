@@ -8,7 +8,7 @@ the executable artifacts for packaged providers, and optional static assets.
 
 ## What can be released
 
-Gestalt uses the same release system for executable provider packages, auth and datastore component packages, and packaged web UI bundles. Every package is described by a provider manifest file: `provider.yaml`, `provider.yml`, or `provider.json`.
+Gestalt uses the same release system for executable provider packages, auth and datastore component packages, and packaged web UI bundles. Every package is described by a provider manifest file: `manifest.yaml`, `manifest.yml`, or `manifest.json`.
 
 ## Source manifests vs release manifests
 
@@ -38,7 +38,7 @@ packaging.
     ```text
     my-plugin/
       go.mod
-      provider.yaml
+      manifest.yaml
       provider.go
     ```
 
@@ -54,7 +54,7 @@ packaging.
     ```text
     my-plugin/
       pyproject.toml
-      provider.yaml
+      manifest.yaml
       provider.py
     ```
 
@@ -72,7 +72,7 @@ packaging.
     ```text
     my-plugin/
       Cargo.toml
-      provider.yaml
+      manifest.yaml
       src/
         lib.rs
     ```
@@ -94,7 +94,7 @@ packaging.
     ```text
     my-plugin/
       package.json
-      provider.yaml
+      manifest.yaml
       provider.ts
     ```
 
@@ -218,7 +218,7 @@ plugins:
   my-plugin:
     provider:
       source:
-        path: ./plugins/my-plugin/provider.yaml
+        path: ./plugins/my-plugin/manifest.yaml
 ```
 
 ### Published provider release
@@ -270,7 +270,7 @@ runtime. See [Configuration](/configuration) for the full startup model.
 A typical release archive contains:
 
 ```
-provider.yaml
+manifest.yaml
 artifacts/
   my-plugin-linux-amd64
   my-plugin-darwin-arm64
