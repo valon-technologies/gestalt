@@ -112,6 +112,29 @@ The `auth.type` field on a connection accepts these values:
 | `manual` | Custom credential fields. Define `credentials` to describe each field. |
 | `none` | No authentication. |
 
+Manual auth in provider manifests also supports `auth_mapping`, using the same `value` / `valueFrom.credentialFieldRef.name` shape as deploy config.
+
+```yaml
+plugin:
+  auth:
+    type: manual
+    credentials:
+      - name: organization_id
+        label: Organization ID
+      - name: api_key
+        label: API Key
+    auth_mapping:
+      basic:
+        username:
+          valueFrom:
+            credentialFieldRef:
+              name: organization_id
+        password:
+          valueFrom:
+            credentialFieldRef:
+              name: api_key
+```
+
 ### Pagination
 
 Plugin-level pagination configuration applies to all operations by default. Individual operations can override this through `allowed_operations`.

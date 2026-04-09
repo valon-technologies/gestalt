@@ -416,6 +416,11 @@ plugins:
 		t.Fatalf("write config: %v", err)
 	}
 
+	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd init: %v\n%s", err, out)
+	}
+
 	serveLockedAndExerciseExample(t, cfgPath, port, "", func(t *testing.T, baseURL string) {
 		listReq, _ := http.NewRequest(http.MethodGet, baseURL+"/api/v1/integrations", nil)
 		listReq.Header.Set("Authorization", "Bearer alice")
@@ -491,6 +496,306 @@ plugins:
 		}
 		if result["echo_header"] != "api-key-123" {
 			t.Fatalf("invoke echo_header = %v, want api-key-123", result["echo_header"])
+		}
+		if got, _ := upstreamAuth.Load().(string); got != wantAuth {
+			t.Fatalf("upstream auth = %q, want %q", got, wantAuth)
+		}
+	})
+}
+
+//nolint:paralleltest // Spawns gestaltd and is flaky under package-wide parallel load in CI.
+func TestE2EManifestManualAuthMappingValueFromBasicAuth(t *testing.T) {
+	dir := t.TempDir()
+	port := allocateTestPort(t)
+
+	var upstreamAuth atomic.Value
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamAuth.Store(r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"auth":      r.Header.Get("Authorization"),
+			"x_app_key": r.Header.Get("X-App-Key"),
+		})
+	}))
+	testutil.CloseOnCleanup(t, upstream)
+
+	pluginDir := filepath.Join(dir, "manifest-basic-plugin")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll plugin dir: %v", err)
+	}
+	writeTestFile(t, pluginDir, "openapi.yaml", []byte(fmt.Sprintf(`openapi: 3.0.0
+info:
+  title: Manifest Basic Test
+  version: 1.0.0
+servers:
+  - url: %s
+components:
+  securitySchemes:
+    basic_auth:
+      type: http
+      scheme: basic
+security:
+  - basic_auth: []
+paths:
+  /whoami:
+    get:
+      operationId: whoami
+      responses:
+        '200':
+          description: ok
+`, upstream.URL)), 0o644)
+	writeTestFile(t, pluginDir, "plugin.yaml", []byte(`
+source: github.com/test/plugins/manifest-basic
+version: 0.0.1-alpha.1
+display_name: Manifest Basic Test
+plugin:
+  auth:
+    type: manual
+    credentials:
+      - name: organization_id
+        label: Organization ID
+      - name: api_key
+        label: API Key
+      - name: app_key
+        label: App Key
+    auth_mapping:
+      headers:
+        X-App-Key:
+          valueFrom:
+            credentialFieldRef:
+              name: app_key
+      basic:
+        username:
+          valueFrom:
+            credentialFieldRef:
+              name: organization_id
+        password:
+          valueFrom:
+            credentialFieldRef:
+              name: api_key
+  openapi: openapi.yaml
+`), 0o644)
+
+	manifestPath, err := pluginpkg.FindManifestFile(pluginDir)
+	if err != nil {
+		t.Fatalf("FindManifestFile: %v", err)
+	}
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := authDatastoreConfigYAML(t, dir, "session-auth", "sqlite", filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`server:
+  public:
+    port: %d
+  encryption_key: test-e2e-key
+plugins:
+  mt:
+    provider:
+      source:
+        path: %s
+`, port, manifestPath)
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd init: %v\n%s", err, out)
+	}
+
+	serveLockedAndExerciseExample(t, cfgPath, port, "", func(t *testing.T, baseURL string) {
+		listReq, _ := http.NewRequest(http.MethodGet, baseURL+"/api/v1/integrations", nil)
+		listReq.Header.Set("Authorization", "Bearer alice")
+		listResp, err := http.DefaultClient.Do(listReq)
+		if err != nil {
+			t.Fatalf("list integrations: %v", err)
+		}
+		defer func() { _ = listResp.Body.Close() }()
+		if listResp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(listResp.Body)
+			t.Fatalf("list integrations status = %d: %s", listResp.StatusCode, body)
+		}
+
+		var integrations []struct {
+			Name        string `json:"name"`
+			Connections []struct {
+				CredentialFields []struct {
+					Name string `json:"name"`
+				} `json:"credential_fields"`
+			} `json:"connections"`
+		}
+		if err := json.NewDecoder(listResp.Body).Decode(&integrations); err != nil {
+			t.Fatalf("decode integrations: %v", err)
+		}
+		if len(integrations) != 1 || integrations[0].Name != "mt" {
+			t.Fatalf("unexpected integrations payload: %+v", integrations)
+		}
+		fields := integrations[0].Connections[0].CredentialFields
+		if len(fields) != 3 || fields[0].Name != "organization_id" || fields[1].Name != "api_key" || fields[2].Name != "app_key" {
+			t.Fatalf("credential fields = %+v, want organization_id, api_key, and app_key", fields)
+		}
+
+		connectReq, _ := http.NewRequest(http.MethodPost, baseURL+"/api/v1/auth/connect-manual", strings.NewReader(`{"integration":"mt","credentials":{"organization_id":"org-123","api_key":"api-key-123","app_key":"app-key-123"}}`))
+		connectReq.Header.Set("Authorization", "Bearer alice")
+		connectReq.Header.Set("Content-Type", "application/json")
+		connectResp, err := http.DefaultClient.Do(connectReq)
+		if err != nil {
+			t.Fatalf("connect manual: %v", err)
+		}
+		defer func() { _ = connectResp.Body.Close() }()
+		if connectResp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(connectResp.Body)
+			t.Fatalf("connect manual status = %d: %s", connectResp.StatusCode, body)
+		}
+
+		invokeReq, _ := http.NewRequest(http.MethodPost, baseURL+"/api/v1/mt/whoami", strings.NewReader(`{}`))
+		invokeReq.Header.Set("Authorization", "Bearer alice")
+		invokeReq.Header.Set("Content-Type", "application/json")
+		invokeResp, err := http.DefaultClient.Do(invokeReq)
+		if err != nil {
+			t.Fatalf("invoke whoami: %v", err)
+		}
+		defer func() { _ = invokeResp.Body.Close() }()
+		if invokeResp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(invokeResp.Body)
+			t.Fatalf("invoke whoami status = %d: %s", invokeResp.StatusCode, body)
+		}
+
+		var result map[string]any
+		if err := json.NewDecoder(invokeResp.Body).Decode(&result); err != nil {
+			t.Fatalf("decode invoke response: %v", err)
+		}
+
+		wantAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte("org-123:api-key-123"))
+		if result["auth"] != wantAuth {
+			t.Fatalf("invoke auth = %v, want %v", result["auth"], wantAuth)
+		}
+		if result["x_app_key"] != "app-key-123" {
+			t.Fatalf("invoke x_app_key = %v, want %v", result["x_app_key"], "app-key-123")
+		}
+		if got, _ := upstreamAuth.Load().(string); got != wantAuth {
+			t.Fatalf("upstream auth = %q, want %q", got, wantAuth)
+		}
+	})
+}
+
+//nolint:paralleltest // Spawns gestaltd and is flaky under package-wide parallel load in CI.
+func TestE2EDeclarativeManifestManualAuthMappingValueFromBasicAuth(t *testing.T) {
+	dir := t.TempDir()
+	port := allocateTestPort(t)
+
+	var upstreamAuth atomic.Value
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upstreamAuth.Store(r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"auth":      r.Header.Get("Authorization"),
+			"x_app_key": r.Header.Get("X-App-Key"),
+		})
+	}))
+	testutil.CloseOnCleanup(t, upstream)
+
+	pluginDir := filepath.Join(dir, "declarative-basic-plugin")
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll plugin dir: %v", err)
+	}
+	writeTestFile(t, pluginDir, "plugin.yaml", []byte(fmt.Sprintf(`
+source: github.com/test/plugins/declarative-basic
+version: 0.0.1-alpha.1
+display_name: Declarative Basic Test
+plugin:
+  auth:
+    type: manual
+    credentials:
+      - name: organization_id
+        label: Organization ID
+      - name: api_key
+        label: API Key
+      - name: app_key
+        label: App Key
+    auth_mapping:
+      headers:
+        X-App-Key:
+          valueFrom:
+            credentialFieldRef:
+              name: app_key
+      basic:
+        username:
+          valueFrom:
+            credentialFieldRef:
+              name: organization_id
+        password:
+          valueFrom:
+            credentialFieldRef:
+              name: api_key
+  base_url: %s
+  operations:
+    - name: whoami
+      method: GET
+      path: /whoami
+`, upstream.URL)), 0o644)
+
+	manifestPath, err := pluginpkg.FindManifestFile(pluginDir)
+	if err != nil {
+		t.Fatalf("FindManifestFile: %v", err)
+	}
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := authDatastoreConfigYAML(t, dir, "session-auth", "sqlite", filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`server:
+  public:
+    port: %d
+  encryption_key: test-e2e-key
+plugins:
+  mt:
+    provider:
+      source:
+        path: %s
+`, port, manifestPath)
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd init: %v\n%s", err, out)
+	}
+
+	serveLockedAndExerciseExample(t, cfgPath, port, "", func(t *testing.T, baseURL string) {
+		connectReq, _ := http.NewRequest(http.MethodPost, baseURL+"/api/v1/auth/connect-manual", strings.NewReader(`{"integration":"mt","credentials":{"organization_id":"org-456","api_key":"api-key-456","app_key":"app-key-456"}}`))
+		connectReq.Header.Set("Authorization", "Bearer alice")
+		connectReq.Header.Set("Content-Type", "application/json")
+		connectResp, err := http.DefaultClient.Do(connectReq)
+		if err != nil {
+			t.Fatalf("connect manual: %v", err)
+		}
+		defer func() { _ = connectResp.Body.Close() }()
+		if connectResp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(connectResp.Body)
+			t.Fatalf("connect manual status = %d: %s", connectResp.StatusCode, body)
+		}
+
+		invokeReq, _ := http.NewRequest(http.MethodPost, baseURL+"/api/v1/mt/whoami", strings.NewReader(`{}`))
+		invokeReq.Header.Set("Authorization", "Bearer alice")
+		invokeReq.Header.Set("Content-Type", "application/json")
+		invokeResp, err := http.DefaultClient.Do(invokeReq)
+		if err != nil {
+			t.Fatalf("invoke whoami: %v", err)
+		}
+		defer func() { _ = invokeResp.Body.Close() }()
+		if invokeResp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(invokeResp.Body)
+			t.Fatalf("invoke whoami status = %d: %s", invokeResp.StatusCode, body)
+		}
+
+		var result map[string]any
+		if err := json.NewDecoder(invokeResp.Body).Decode(&result); err != nil {
+			t.Fatalf("decode invoke response: %v", err)
+		}
+
+		wantAuth := "Basic " + base64.StdEncoding.EncodeToString([]byte("org-456:api-key-456"))
+		if result["auth"] != wantAuth {
+			t.Fatalf("invoke auth = %v, want %v", result["auth"], wantAuth)
+		}
+		if result["x_app_key"] != "app-key-456" {
+			t.Fatalf("invoke x_app_key = %v, want %v", result["x_app_key"], "app-key-456")
 		}
 		if got, _ := upstreamAuth.Load().(string); got != wantAuth {
 			t.Fatalf("upstream auth = %q, want %q", got, wantAuth)
@@ -1096,9 +1401,8 @@ func TestE2EInitServeLockedSplitManagementListener(t *testing.T) {
 	}
 }
 
+//nolint:paralleltest // Spawns gestaltd and is flaky under package-wide parallel load in CI.
 func TestE2EBareGestaltdAutoInit(t *testing.T) {
-	t.Parallel()
-
 	dir := t.TempDir()
 	pluginDir := setupPluginDir(t, dir)
 

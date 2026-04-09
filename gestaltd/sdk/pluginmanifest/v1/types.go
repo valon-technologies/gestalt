@@ -197,6 +197,7 @@ type ProviderAuth struct {
 	AcceptHeader        string            `json:"accept_header,omitempty" yaml:"accept_header,omitempty"`
 	TokenMetadata       []string          `json:"token_metadata,omitempty" yaml:"token_metadata,omitempty"`
 	Credentials         []CredentialField `json:"credentials,omitempty" yaml:"credentials,omitempty"`
+	AuthMapping         *AuthMapping      `json:"auth_mapping,omitempty" yaml:"auth_mapping,omitempty"`
 }
 
 type CredentialField struct {
@@ -204,6 +205,29 @@ type CredentialField struct {
 	Label       string `json:"label,omitempty" yaml:"label,omitempty"`
 	Description string `json:"description,omitempty" yaml:"description,omitempty"`
 	HelpURL     string `json:"help_url,omitempty" yaml:"help_url,omitempty"`
+}
+
+type AuthMapping struct {
+	Headers map[string]AuthValue `json:"headers,omitempty" yaml:"headers,omitempty"`
+	Basic   *BasicAuthMapping    `json:"basic,omitempty" yaml:"basic,omitempty"`
+}
+
+type BasicAuthMapping struct {
+	Username AuthValue `json:"username" yaml:"username"`
+	Password AuthValue `json:"password" yaml:"password"`
+}
+
+type AuthValue struct {
+	Value     string         `json:"value,omitempty" yaml:"value,omitempty"`
+	ValueFrom *AuthValueFrom `json:"valueFrom,omitempty" yaml:"valueFrom,omitempty"`
+}
+
+type AuthValueFrom struct {
+	CredentialFieldRef *CredentialFieldRef `json:"credentialFieldRef,omitempty" yaml:"credentialFieldRef,omitempty"`
+}
+
+type CredentialFieldRef struct {
+	Name string `json:"name" yaml:"name"`
 }
 
 type Artifact struct {
