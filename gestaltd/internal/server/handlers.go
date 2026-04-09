@@ -548,36 +548,19 @@ func (s *Server) resolveHTTPOperationTransport(ctx context.Context, p *principal
 	type transportResolver interface {
 		ResolveTransport(ctx context.Context, p *principal.Principal, prov core.Provider, providerName, operation, connection, instance string) (string, error)
 	}
-	if r, ok := s.invoker.(transportResolver); ok {
-		transport, err := r.ResolveTransport(ctx, p, prov, providerName, operationName, connection, instance)
-		if err == nil {
-			return transport, true, nil
-		}
-		if errors.Is(err, invocation.ErrOperationNotFound) {
-			return "", false, nil
-		}
-		return "", false, err
+	r, ok := s.invoker.(transportResolver)
+	if !ok {
+		transport, found := invocation.CatalogOperationTransport(prov.Catalog(), operationName)
+		return transport, found, nil
 	}
-
-	if transport, ok := invocation.CatalogOperationTransport(prov.Catalog(), operationName); ok {
+	transport, err := r.ResolveTransport(ctx, p, prov, providerName, operationName, connection, instance)
+	if err == nil {
 		return transport, true, nil
 	}
-
-	if _, ok := prov.(core.SessionCatalogProvider); !ok {
+	if errors.Is(err, invocation.ErrOperationNotFound) {
 		return "", false, nil
 	}
-
-	var resolver invocation.TokenResolver
-	if tr, ok := s.invoker.(invocation.TokenResolver); ok {
-		resolver = tr
-	}
-	cat, err := invocation.ResolveCatalog(ctx, prov, providerName, resolver, p, s.catalogLookupConnection(providerName, connection), instance)
-	if err != nil {
-		return "", false, err
-	}
-
-	transport, ok := invocation.CatalogOperationTransport(cat, operationName)
-	return transport, ok, nil
+	return "", false, err
 }
 
 func safeOperationErrorMessage(err error) (string, bool) {
