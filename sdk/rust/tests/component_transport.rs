@@ -6,7 +6,6 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use async_trait::async_trait;
 use gestalt_plugin_sdk::proto::v1::auth_plugin_client::AuthPluginClient;
 use gestalt_plugin_sdk::proto::v1::datastore_plugin_client::DatastorePluginClient;
 use gestalt_plugin_sdk::proto::v1::plugin_runtime_client::PluginRuntimeClient;
@@ -19,9 +18,11 @@ use gestalt_plugin_sdk::proto::v1::{
     StoredIntegrationToken, StoredUser, ValidateExternalTokenRequest,
 };
 use gestalt_plugin_sdk::{AuthProvider, DatastoreProvider, RuntimeMetadata};
+use hyper_util::rt::tokio::TokioIo;
 use prost_types::Timestamp;
 use tokio::net::UnixStream;
 use tonic::Code;
+use tonic::codegen::async_trait;
 use tonic::transport::Endpoint;
 use tower::service_fn;
 
@@ -643,7 +644,10 @@ async fn connect_unix(path: &Path) -> tonic::transport::Channel {
         .expect("endpoint")
         .connect_with_connector(service_fn({
             let path = path.to_path_buf();
-            move |_| UnixStream::connect(path.clone())
+            move |_| {
+                let path = path.clone();
+                async move { UnixStream::connect(path).await.map(TokioIo::new) }
+            }
         }))
         .await
         .expect("connect channel")

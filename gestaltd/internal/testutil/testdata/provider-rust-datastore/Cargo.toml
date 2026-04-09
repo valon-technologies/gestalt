@@ -8,4 +8,4 @@ path = "src/lib.rs"
 
 [dependencies]
 gestalt_plugin_sdk = { path = "../../../../../sdk/rust" }
-prost-types = "0.12"
+prost-types = "0.14"

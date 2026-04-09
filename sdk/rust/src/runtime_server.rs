@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use async_trait::async_trait;
+use tonic::codegen::async_trait;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
 use crate::api::RuntimeMetadata;
