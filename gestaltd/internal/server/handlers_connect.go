@@ -22,7 +22,7 @@ type connectManualRequest struct {
 	Instance         string            `json:"instance"`
 	Credential       string            `json:"credential"`
 	Credentials      map[string]string `json:"credentials"`
-	ConnectionParams map[string]string `json:"connection_params"`
+	ConnectionParams map[string]string `json:"connectionParams"`
 }
 
 func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
@@ -235,8 +235,8 @@ type tokenMaterial struct {
 type postConnectResult struct {
 	Status       string                   `json:"status"`
 	Integration  string                   `json:"integration,omitempty"`
-	SelectionURL string                   `json:"selection_url,omitempty"`
-	PendingToken string                   `json:"pending_token,omitempty"`
+	SelectionURL string                   `json:"selectionUrl,omitempty"`
+	PendingToken string                   `json:"pendingToken,omitempty"`
 	Candidates   []discoveryCandidateInfo `json:"candidates,omitempty"`
 }
 

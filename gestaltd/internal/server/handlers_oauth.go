@@ -20,7 +20,7 @@ type startOAuthRequest struct {
 	Connection       string            `json:"connection"`
 	Instance         string            `json:"instance"`
 	Scopes           []string          `json:"scopes"`
-	ConnectionParams map[string]string `json:"connection_params"`
+	ConnectionParams map[string]string `json:"connectionParams"`
 }
 
 func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {

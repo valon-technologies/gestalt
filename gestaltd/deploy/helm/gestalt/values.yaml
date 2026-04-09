@@ -84,11 +84,11 @@ config:
     #   port: 9090
     # Dev-only default so the default chart profile can boot. Override this with
     # a secret value before production use.
-    encryption_key: "dev-only-insecure-key-change-me"
-    # base_url is optional for the default local/dev profile.
+    encryptionKey: "dev-only-insecure-key-change-me"
+    # baseUrl is optional for the default local/dev profile.
     # Set it to your public HTTPS URL when auth callbacks or external
     # integrations need it.
-    # base_url: "${GESTALT_BASE_URL}"
+    # baseUrl: "${GESTALT_BASE_URL}"
   datastore:
     # SQLite is appropriate for local development or single-instance
     # deployments with mounted persistent storage at /data.

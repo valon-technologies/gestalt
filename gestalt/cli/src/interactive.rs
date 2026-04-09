@@ -12,7 +12,6 @@ pub struct PromptOption {
 pub struct InputPrompt {
     pub label: String,
     pub description: Option<String>,
-    pub help_url: Option<String>,
     pub default: Option<String>,
     pub required: bool,
     pub secret: bool,
@@ -64,9 +63,6 @@ pub fn prompt_input(prompt: &InputPrompt) -> Result<String> {
     writeln!(stderr, "{}", prompt.label)?;
     if let Some(description) = prompt.description.as_deref() {
         writeln!(stderr, "  {description}")?;
-    }
-    if let Some(help_url) = prompt.help_url.as_deref() {
-        writeln!(stderr, "  Help: {help_url}")?;
     }
 
     loop {

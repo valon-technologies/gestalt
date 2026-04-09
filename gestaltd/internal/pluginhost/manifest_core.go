@@ -32,7 +32,6 @@ func CredentialFieldsFromManifest(fields []pluginmanifestv1.CredentialField) []c
 			Name:        field.Name,
 			Label:       field.Label,
 			Description: field.Description,
-			HelpURL:     field.HelpURL,
 		}
 	}
 	return out

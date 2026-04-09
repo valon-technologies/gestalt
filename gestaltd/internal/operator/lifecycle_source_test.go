@@ -235,7 +235,7 @@ func writeConfigYAML(t *testing.T, dir, source, version, artifactsDir string) st
 		"ui:",
 		"  provider: none",
 		"server:",
-		"  artifacts_dir: " + artifactsDir,
+		"  artifactsDir: " + artifactsDir,
 		"plugins:",
 		"  alpha:",
 		"    provider:",
@@ -429,8 +429,8 @@ func TestSourcePluginLoadForExecution(t *testing.T) {
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	yaml := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
 		"server:",
-		"  artifacts_dir: " + artifactsDir,
-		"  encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		"plugins:",
 		"  gadget:",
 		"    provider:",
@@ -540,8 +540,8 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 		"  config:",
 		"    client_id: managed-auth-client",
 		"server:",
-		"  artifacts_dir: " + artifactsDir,
-		"  encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}, "\n") + "\n"
 
 	configPath := filepath.Join(dir, "gestalt.yaml")
@@ -732,8 +732,8 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 		"  config:",
 		"    client_id: managed-auth-client",
 		"server:",
-		"  artifacts_dir: " + artifactsDir,
-		"  encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}, "\n") + "\n"
 
 	configPath := filepath.Join(dir, "gestalt.yaml")
@@ -893,8 +893,8 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
 		"server:",
-		"  artifacts_dir: " + artifactsDir,
-		"  encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 		"plugins:",
 		"  alpha:",
 		"    provider:",

@@ -696,7 +696,7 @@ func TestListIntegrations(t *testing.T) {
 
 	var integrations []struct {
 		Name        string `json:"name"`
-		DisplayName string `json:"display_name"`
+		DisplayName string `json:"displayName"`
 		Description string `json:"description"`
 		Connected   bool   `json:"connected"`
 	}
@@ -792,7 +792,7 @@ func TestListIntegrations_AuthTypes(t *testing.T) {
 
 	var integrations []struct {
 		Name      string   `json:"name"`
-		AuthTypes []string `json:"auth_types"`
+		AuthTypes []string `json:"authTypes"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
 		t.Fatalf("decoding: %v", err)
@@ -895,8 +895,8 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 	}
 	type connectionInfo struct {
 		Name             string            `json:"name"`
-		AuthTypes        []string          `json:"auth_types"`
-		CredentialFields []credentialField `json:"credential_fields"`
+		AuthTypes        []string          `json:"authTypes"`
+		CredentialFields []credentialField `json:"credentialFields"`
 	}
 
 	var integrations []struct {
@@ -1090,11 +1090,11 @@ func TestListIntegrations_ConnectionInfosIncludeProviderManualAuth(t *testing.T)
 				Name        string `json:"name"`
 				Connections []struct {
 					Name             string   `json:"name"`
-					AuthTypes        []string `json:"auth_types"`
+					AuthTypes        []string `json:"authTypes"`
 					CredentialFields []struct {
 						Name  string `json:"name"`
 						Label string `json:"label"`
-					} `json:"credential_fields"`
+					} `json:"credentialFields"`
 				} `json:"connections"`
 			}
 			if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
@@ -1162,7 +1162,7 @@ func TestListIntegrationsWithIcon(t *testing.T) {
 		defer func() { _ = resp.Body.Close() }()
 
 		var integrations []struct {
-			IconSVG string `json:"icon_svg"`
+			IconSVG string `json:"iconSvg"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
 			t.Fatalf("decoding: %v", err)
@@ -2317,7 +2317,7 @@ func TestStartLoginWithCallbackPort(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	body := bytes.NewBufferString(`{"state":"abc","callback_port":12345}`)
+	body := bytes.NewBufferString(`{"state":"abc","callbackPort":12345}`)
 	resp, err := http.Post(ts.URL+"/api/v1/auth/login", "application/json", body)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -2345,7 +2345,7 @@ func TestStartLoginWithInvalidCallbackPort(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	body := bytes.NewBufferString(`{"state":"abc","callback_port":99999}`)
+	body := bytes.NewBufferString(`{"state":"abc","callbackPort":99999}`)
 	resp, err := http.Post(ts.URL+"/api/v1/auth/login", "application/json", body)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -3271,21 +3271,21 @@ func TestCreateAPIToken_DefaultExpiry(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		t.Fatalf("decoding: %v", err)
 	}
-	expiresAtRaw, ok := result["expires_at"]
+	expiresAtRaw, ok := result["expiresAt"]
 	if !ok || expiresAtRaw == nil {
-		t.Fatal("expected expires_at in response, got nil")
+		t.Fatal("expected expiresAt in response, got nil")
 	}
 	expiresAtStr, ok := expiresAtRaw.(string)
 	if !ok {
-		t.Fatalf("expected expires_at to be a string, got %T", expiresAtRaw)
+		t.Fatalf("expected expiresAt to be a string, got %T", expiresAtRaw)
 	}
 	expiresAt, err := time.Parse(time.RFC3339, expiresAtStr)
 	if err != nil {
-		t.Fatalf("parsing expires_at: %v", err)
+		t.Fatalf("parsing expiresAt: %v", err)
 	}
 	expected := fixedNow.Add(30 * 24 * time.Hour).UTC().Truncate(time.Second)
 	if !expiresAt.Equal(expected) {
-		t.Fatalf("expected expires_at %v, got %v", expected, expiresAt)
+		t.Fatalf("expected expiresAt %v, got %v", expected, expiresAt)
 	}
 
 	var auditRecord map[string]any
@@ -3401,17 +3401,17 @@ func TestCreateAPIToken_ConfigurableTTL(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		t.Fatalf("decoding: %v", err)
 	}
-	expiresAtStr, ok := result["expires_at"].(string)
+	expiresAtStr, ok := result["expiresAt"].(string)
 	if !ok {
-		t.Fatal("expected expires_at string in response")
+		t.Fatal("expected expiresAt string in response")
 	}
 	expiresAt, err := time.Parse(time.RFC3339, expiresAtStr)
 	if err != nil {
-		t.Fatalf("parsing expires_at: %v", err)
+		t.Fatalf("parsing expiresAt: %v", err)
 	}
 	expected := fixedNow.Add(customTTL).UTC().Truncate(time.Second)
 	if !expiresAt.Equal(expected) {
-		t.Fatalf("expected expires_at %v, got %v", expected, expiresAt)
+		t.Fatalf("expected expiresAt %v, got %v", expected, expiresAt)
 	}
 }
 
@@ -3571,11 +3571,11 @@ func TestAuthInfo(t *testing.T) {
 	if body["provider"] != "google" {
 		t.Fatalf("expected provider google, got %q", body["provider"])
 	}
-	if body["display_name"] != "Google" {
-		t.Fatalf("expected display_name Google, got %q", body["display_name"])
+	if body["displayName"] != "Google" {
+		t.Fatalf("expected displayName Google, got %q", body["displayName"])
 	}
-	if body["login_supported"] != true {
-		t.Fatalf("expected login_supported true, got %#v", body["login_supported"])
+	if body["loginSupported"] != true {
+		t.Fatalf("expected loginSupported true, got %#v", body["loginSupported"])
 	}
 }
 
@@ -3604,11 +3604,11 @@ func TestAuthInfoFallback(t *testing.T) {
 	if body["provider"] != "custom" {
 		t.Fatalf("expected provider custom, got %q", body["provider"])
 	}
-	if body["display_name"] != "custom" {
-		t.Fatalf("expected display_name to fall back to name custom, got %q", body["display_name"])
+	if body["displayName"] != "custom" {
+		t.Fatalf("expected displayName to fall back to name custom, got %q", body["displayName"])
 	}
-	if body["login_supported"] != true {
-		t.Fatalf("expected login_supported true, got %#v", body["login_supported"])
+	if body["loginSupported"] != true {
+		t.Fatalf("expected loginSupported true, got %#v", body["loginSupported"])
 	}
 }
 
@@ -3637,11 +3637,11 @@ func TestAuthInfoNoAuth(t *testing.T) {
 	if body["provider"] != "none" {
 		t.Fatalf("expected provider none, got %q", body["provider"])
 	}
-	if body["display_name"] != "none" {
-		t.Fatalf("expected display_name none, got %q", body["display_name"])
+	if body["displayName"] != "none" {
+		t.Fatalf("expected displayName none, got %q", body["displayName"])
 	}
-	if body["login_supported"] != false {
-		t.Fatalf("expected login_supported false, got %#v", body["login_supported"])
+	if body["loginSupported"] != false {
+		t.Fatalf("expected loginSupported false, got %#v", body["loginSupported"])
 	}
 }
 
@@ -4933,8 +4933,8 @@ func TestConnectManual(t *testing.T) {
 		var connectResult struct {
 			Status       string `json:"status"`
 			Integration  string `json:"integration"`
-			SelectionURL string `json:"selection_url"`
-			PendingToken string `json:"pending_token"`
+			SelectionURL string `json:"selectionUrl"`
+			PendingToken string `json:"pendingToken"`
 			Candidates   []struct {
 				ID   string `json:"id"`
 				Name string `json:"name"`

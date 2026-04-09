@@ -41,7 +41,7 @@ func applyResponseMapping(result *core.OperationResult, cfg *ResponseMappingConf
 	if cfg.Pagination != nil {
 		pgn := make(map[string]any)
 		if v, ok := apiexec.SelectValue(result, raw, cfg.Pagination.HasMore); ok {
-			pgn["has_more"] = v
+			pgn["hasMore"] = v
 		}
 		if v, ok := apiexec.SelectValue(result, raw, cfg.Pagination.Cursor); ok {
 			pgn["cursor"] = v

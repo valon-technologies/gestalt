@@ -79,31 +79,31 @@ type PluginSourceDef struct {
 }
 
 type EgressConfig struct {
-	DefaultAction string                  `yaml:"default_action"`
+	DefaultAction string                  `yaml:"defaultAction"`
 	Policies      []EgressPolicyRule      `yaml:"policies"`
 	Credentials   []EgressCredentialGrant `yaml:"credentials"`
 }
 
 type EgressPolicyRule struct {
 	Action      string `yaml:"action"`
-	SubjectKind string `yaml:"subject_kind"`
-	SubjectID   string `yaml:"subject_id"`
+	SubjectKind string `yaml:"subjectKind"`
+	SubjectID   string `yaml:"subjectId"`
 	Provider    string `yaml:"provider"`
 	Operation   string `yaml:"operation"`
 	Method      string `yaml:"method"`
 	Host        string `yaml:"host"`
-	PathPrefix  string `yaml:"path_prefix"`
+	PathPrefix  string `yaml:"pathPrefix"`
 }
 
 type EgressCredentialGrant struct {
-	SecretRef   string `yaml:"secret_ref"`
-	AuthStyle   string `yaml:"auth_style"`
-	SubjectKind string `yaml:"subject_kind"`
-	SubjectID   string `yaml:"subject_id"`
+	SecretRef   string `yaml:"secretRef"`
+	AuthStyle   string `yaml:"authStyle"`
+	SubjectKind string `yaml:"subjectKind"`
+	SubjectID   string `yaml:"subjectId"`
 	Operation   string `yaml:"operation"`
 	Method      string `yaml:"method"`
 	Host        string `yaml:"host"`
-	PathPrefix  string `yaml:"path_prefix"`
+	PathPrefix  string `yaml:"pathPrefix"`
 }
 
 type ProviderDef struct {
@@ -113,7 +113,7 @@ type ProviderDef struct {
 	Env     map[string]string `yaml:"env"`
 
 	Config       yaml.Node `yaml:"-"`
-	AllowedHosts []string  `yaml:"allowed_hosts"`
+	AllowedHosts []string  `yaml:"allowedHosts"`
 
 	Discovery *pluginmanifestv1.ProviderDiscovery `yaml:"-"`
 
@@ -430,10 +430,10 @@ type ListenerConfig struct {
 type ServerConfig struct {
 	Public        ListenerConfig `yaml:"public"`
 	Management    ListenerConfig `yaml:"management"`
-	BaseURL       string         `yaml:"base_url"`
-	EncryptionKey string         `yaml:"encryption_key"`
-	APITokenTTL   string         `yaml:"api_token_ttl"`
-	ArtifactsDir  string         `yaml:"artifacts_dir"`
+	BaseURL       string         `yaml:"baseUrl"`
+	EncryptionKey string         `yaml:"encryptionKey"`
+	APITokenTTL   string         `yaml:"apiTokenTtl"`
+	ArtifactsDir  string         `yaml:"artifactsDir"`
 }
 
 func (s ServerConfig) PublicListener() ListenerConfig {
@@ -469,10 +469,10 @@ func (s ServerConfig) ManagementAddr() string {
 
 type IntegrationDef struct {
 	Plugin        *ProviderDef      `yaml:"plugin"`
-	DisplayName   string            `yaml:"display_name"`
+	DisplayName   string            `yaml:"displayName"`
 	Description   string            `yaml:"description"`
 	MCPToolPrefix string            `yaml:"-"`
-	IconFile      string            `yaml:"icon_file"`
+	IconFile      string            `yaml:"iconFile"`
 	Datastores    map[string]string `yaml:"-"`
 }
 
@@ -487,25 +487,25 @@ type ConnectionDef struct {
 
 type ConnectionAuthDef struct {
 	Type                string               `yaml:"type"`
-	AuthorizationURL    string               `yaml:"authorization_url"`
-	TokenURL            string               `yaml:"token_url"`
-	ClientID            string               `yaml:"client_id"`
-	ClientSecret        string               `yaml:"client_secret"`
-	RedirectURL         string               `yaml:"redirect_url"`
-	ClientAuth          string               `yaml:"client_auth"`
-	TokenExchange       string               `yaml:"token_exchange"`
+	AuthorizationURL    string               `yaml:"authorizationUrl"`
+	TokenURL            string               `yaml:"tokenUrl"`
+	ClientID            string               `yaml:"clientId"`
+	ClientSecret        string               `yaml:"clientSecret"`
+	RedirectURL         string               `yaml:"redirectUrl"`
+	ClientAuth          string               `yaml:"clientAuth"`
+	TokenExchange       string               `yaml:"tokenExchange"`
 	Scopes              []string             `yaml:"scopes"`
-	ScopeParam          string               `yaml:"scope_param"`
-	ScopeSeparator      string               `yaml:"scope_separator"`
+	ScopeParam          string               `yaml:"scopeParam"`
+	ScopeSeparator      string               `yaml:"scopeSeparator"`
 	PKCE                bool                 `yaml:"pkce"`
-	AuthorizationParams map[string]string    `yaml:"authorization_params"`
-	TokenParams         map[string]string    `yaml:"token_params"`
-	RefreshParams       map[string]string    `yaml:"refresh_params"`
-	AcceptHeader        string               `yaml:"accept_header"`
-	AccessTokenPath     string               `yaml:"access_token_path"`
-	TokenMetadata       []string             `yaml:"token_metadata"`
+	AuthorizationParams map[string]string    `yaml:"authorizationParams"`
+	TokenParams         map[string]string    `yaml:"tokenParams"`
+	RefreshParams       map[string]string    `yaml:"refreshParams"`
+	AcceptHeader        string               `yaml:"acceptHeader"`
+	AccessTokenPath     string               `yaml:"accessTokenPath"`
+	TokenMetadata       []string             `yaml:"tokenMetadata"`
 	Credentials         []CredentialFieldDef `yaml:"credentials"`
-	AuthMapping         *AuthMappingDef      `yaml:"auth_mapping"`
+	AuthMapping         *AuthMappingDef      `yaml:"authMapping"`
 }
 
 type CredentialFieldDef = pluginmanifestv1.CredentialField
@@ -615,9 +615,6 @@ func mergeCredentialField(dst *CredentialFieldDef, src CredentialFieldDef) {
 	}
 	if src.Description != "" {
 		dst.Description = src.Description
-	}
-	if src.HelpURL != "" {
-		dst.HelpURL = src.HelpURL
 	}
 }
 

@@ -184,18 +184,18 @@ paths:
 	writeTestFile(t, pagerDir, "manifest.yaml", []byte(`
 source: github.com/test/plugins/pager
 version: 0.0.1-alpha.1
-display_name: Pager
+displayName: Pager
 plugin:
   openapi: openapi.yaml
-  connection_mode: none
+  connectionMode: none
   pagination:
     style: cursor
-    cursor_param: after_cursor
+    cursorParam: after_cursor
     cursor:
       source: header
       path: X-After-Cursor
-    results_path: data
-  allowed_operations:
+    resultsPath: data
+  allowedOperations:
     list_items:
       paginate: true
 `), 0o644)
@@ -225,14 +225,14 @@ paths:
 	writeTestFile(t, mapperDir, "manifest.yaml", []byte(`
 source: github.com/test/plugins/mapper
 version: 0.0.1-alpha.1
-display_name: Mapper
+displayName: Mapper
 plugin:
   openapi: openapi.yaml
-  connection_mode: none
-  response_mapping:
-    data_path: results
+  connectionMode: none
+  responseMapping:
+    dataPath: results
     pagination:
-      has_more:
+      hasMore:
         source: body
         path: moreDataAvailable
       cursor:
@@ -248,7 +248,7 @@ plugin:
 	cfg := authDatastoreConfigYAML(t, dir, "", "sqlite", filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`server:
   public:
     port: %d
-  encryption_key: test-e2e-key
+  encryptionKey: test-e2e-key
 plugins:
   pager:
     provider:
@@ -306,7 +306,7 @@ plugins:
 		var mapped struct {
 			Data       []map[string]any `json:"data"`
 			Pagination struct {
-				HasMore bool   `json:"has_more"`
+				HasMore bool   `json:"hasMore"`
 				Cursor  string `json:"cursor"`
 			} `json:"pagination"`
 		}
@@ -368,7 +368,7 @@ paths:
 	writeTestFile(t, pluginDir, "manifest.yaml", []byte(`
 source: github.com/test/plugins/manual-basic
 version: 0.0.1-alpha.1
-display_name: Manual Basic Test
+displayName: Manual Basic Test
 plugin:
   openapi: openapi.yaml
 `), 0o644)
@@ -382,7 +382,7 @@ plugin:
 	cfg := authDatastoreConfigYAML(t, dir, "session-auth", "sqlite", filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`server:
   public:
     port: %d
-  encryption_key: test-e2e-key
+  encryptionKey: test-e2e-key
 plugins:
   mt:
     provider:
@@ -395,7 +395,7 @@ plugins:
           credentials:
             - name: api_key
               label: API Key
-          auth_mapping:
+          authMapping:
             headers:
               X-Org-ID:
                 value: org-fixed
@@ -438,7 +438,7 @@ plugins:
 			Connections []struct {
 				CredentialFields []struct {
 					Name string `json:"name"`
-				} `json:"credential_fields"`
+				} `json:"credentialFields"`
 			} `json:"connections"`
 		}
 		if err := json.NewDecoder(listResp.Body).Decode(&integrations); err != nil {
@@ -546,7 +546,7 @@ paths:
 	writeTestFile(t, pluginDir, "manifest.yaml", []byte(`
 source: github.com/test/plugins/manifest-basic
 version: 0.0.1-alpha.1
-display_name: Manifest Basic Test
+displayName: Manifest Basic Test
 plugin:
   auth:
     type: manual
@@ -557,7 +557,7 @@ plugin:
         label: API Key
       - name: app_key
         label: App Key
-    auth_mapping:
+    authMapping:
       headers:
         X-App-Key:
           valueFrom:
@@ -584,7 +584,7 @@ plugin:
 	cfg := authDatastoreConfigYAML(t, dir, "session-auth", "sqlite", filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`server:
   public:
     port: %d
-  encryption_key: test-e2e-key
+  encryptionKey: test-e2e-key
 plugins:
   mt:
     provider:
@@ -618,7 +618,7 @@ plugins:
 			Connections []struct {
 				CredentialFields []struct {
 					Name string `json:"name"`
-				} `json:"credential_fields"`
+				} `json:"credentialFields"`
 			} `json:"connections"`
 		}
 		if err := json.NewDecoder(listResp.Body).Decode(&integrations); err != nil {
@@ -699,7 +699,7 @@ func TestE2EDeclarativeManifestManualAuthMappingValueFromBasicAuth(t *testing.T)
 	writeTestFile(t, pluginDir, "manifest.yaml", []byte(fmt.Sprintf(`
 source: github.com/test/plugins/declarative-basic
 version: 0.0.1-alpha.1
-display_name: Declarative Basic Test
+displayName: Declarative Basic Test
 plugin:
   auth:
     type: manual
@@ -710,7 +710,7 @@ plugin:
         label: API Key
       - name: app_key
         label: App Key
-    auth_mapping:
+    authMapping:
       headers:
         X-App-Key:
           valueFrom:
@@ -725,7 +725,7 @@ plugin:
           valueFrom:
             credentialFieldRef:
               name: api_key
-  base_url: %s
+  baseUrl: %s
   operations:
     - name: whoami
       method: GET
@@ -741,7 +741,7 @@ plugin:
 	cfg := authDatastoreConfigYAML(t, dir, "session-auth", "sqlite", filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`server:
   public:
     port: %d
-  encryption_key: test-e2e-key
+  encryptionKey: test-e2e-key
 plugins:
   mt:
     provider:
@@ -971,7 +971,7 @@ func TestE2EInitServeLockedOTLPExportsTracesAndMetricsButKeepsLogsOnStdout(t *te
     protocol: http
     insecure: true
     traces:
-      sampling_ratio: 1.0
+      samplingRatio: 1.0
     metrics:
       interval: 50ms
     logs:
@@ -1437,7 +1437,7 @@ func TestE2EBareGestaltdUsesDotGestaltdHomeConfig(t *testing.T) {
 	cfg := authDatastoreConfigYAML(t, dir, "", "sqlite", filepath.Join(configDir, "gestalt.db")) + `server:
   public:
     port: ` + fmt.Sprintf("%d", port) + `
-  encryption_key: test-key
+  encryptionKey: test-key
 `
 	cfgPath := filepath.Join(configDir, "config.yaml")
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
@@ -1515,7 +1515,7 @@ func TestE2EHelmChart(t *testing.T) {
     dsn: %s
 datastore: sqlite
 server:
-  encryption_key: test-helm-key
+  encryptionKey: test-helm-key
   public:
     port: %d
 ui:
@@ -1658,7 +1658,7 @@ params:
 			dir := t.TempDir()
 			cfgPath := filepath.Join(dir, "config.yaml")
 			cfg := authDatastoreConfigYAML(t, dir, "local", "sqlite", filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`server:
-  encryption_key: test-key
+  encryptionKey: test-key
 plugins:
   example:
     %s
@@ -1684,7 +1684,7 @@ func TestE2EDefaultStartRejectsUnknownYAMLField(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := authDatastoreConfigYAML(t, dir, "local", "sqlite", filepath.Join(dir, "gestalt.db")) + `server:
-  encryption_key: test-key
+  encryptionKey: test-key
   typo: true
 plugins:
   example:
@@ -1870,8 +1870,8 @@ func writeSplitListenerE2EConfig(t *testing.T, dir, pluginDir string, publicPort
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := authDatastoreConfigYAML(t, dir, "", "sqlite", filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`server:
-  encryption_key: test-e2e-key
-  base_url: https://gestalt.example.test
+  encryptionKey: test-e2e-key
+  baseUrl: https://gestalt.example.test
   public:
     port: %d
   management:
@@ -1905,10 +1905,10 @@ func writeE2EConfigWithPaths(t *testing.T, dir, pluginDir, dbPath, artifactsDir 
 	serverBlock := fmt.Sprintf(`server:
   public:
     port: %d
-  encryption_key: test-e2e-key
+  encryptionKey: test-e2e-key
 `, port)
 	if artifactsDir != "" {
-		serverBlock += fmt.Sprintf("  artifacts_dir: %s\n", artifactsDir)
+		serverBlock += fmt.Sprintf("  artifactsDir: %s\n", artifactsDir)
 	}
 	cfg := authDatastoreConfigYAML(t, dir, "", "sqlite", dbPath) + fmt.Sprintf(`%splugins:
   example:

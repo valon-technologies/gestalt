@@ -87,7 +87,7 @@ func Build(def *Definition, conn config.ConnectionDef, opts ...BuildOption) (cor
 			base.ConnMode = core.ConnectionMode(connMode)
 		}
 	default:
-		return nil, fmt.Errorf("%s: unknown connection_mode %q", def.Provider, connMode)
+		return nil, fmt.Errorf("%s: unknown connectionMode %q", def.Provider, connMode)
 	}
 
 	switch def.AuthStyle {
@@ -99,7 +99,7 @@ func Build(def *Definition, conn config.ConnectionDef, opts ...BuildOption) (cor
 	case "basic":
 		base.AuthStyle = coreintegration.AuthStyleBasic
 	default:
-		return nil, fmt.Errorf("%s: unknown auth_style %q", def.Provider, def.AuthStyle)
+		return nil, fmt.Errorf("%s: unknown authStyle %q", def.Provider, def.AuthStyle)
 	}
 
 	switch {
@@ -125,7 +125,7 @@ func Build(def *Definition, conn config.ConnectionDef, opts ...BuildOption) (cor
 	case def.AuthMapping != nil && (len(def.AuthMapping.Headers) > 0 || def.AuthMapping.Basic != nil):
 		if base.AuthStyle != coreintegration.AuthStyleBasic {
 			if def.AuthMapping.Basic != nil {
-				return nil, fmt.Errorf("%s: auth_mapping.basic requires auth_style basic", def.Provider)
+				return nil, fmt.Errorf("%s: authMapping.basic requires authStyle basic", def.Provider)
 			}
 		}
 		base.TokenParser = MappedCredentialParser(def.AuthMapping)
@@ -167,7 +167,6 @@ func Build(def *Definition, conn config.ConnectionDef, opts ...BuildOption) (cor
 				Name:        cf.Name,
 				Label:       cf.Label,
 				Description: cf.Description,
-				HelpURL:     cf.HelpURL,
 			}
 		}
 	}
@@ -248,7 +247,7 @@ func ApplyConnectionAuth(def *Definition, conn config.ConnectionDef) {
 func parseMappedToken(token string) (map[string]any, error) {
 	var tokenData map[string]any
 	if err := json.Unmarshal([]byte(token), &tokenData); err != nil {
-		return nil, fmt.Errorf("parsing token as JSON for auth_mapping: %w", err)
+		return nil, fmt.Errorf("parsing token as JSON for authMapping: %w", err)
 	}
 	return tokenData, nil
 }
@@ -264,7 +263,7 @@ func MappedCredentialParser(mapping *AuthMappingDef) func(string) (string, map[s
 			for headerName, value := range mapping.Headers {
 				resolved, err := resolveAuthValue(value, token, &tokenData)
 				if err != nil {
-					return "", nil, fmt.Errorf("auth_mapping.headers[%q]: %w", headerName, err)
+					return "", nil, fmt.Errorf("authMapping.headers[%q]: %w", headerName, err)
 				}
 				headers[headerName] = resolved
 			}
@@ -273,11 +272,11 @@ func MappedCredentialParser(mapping *AuthMappingDef) func(string) (string, map[s
 		if mapping.Basic != nil {
 			username, err := resolveAuthValue(mapping.Basic.Username, token, &tokenData)
 			if err != nil {
-				return "", nil, fmt.Errorf("auth_mapping.basic.username: %w", err)
+				return "", nil, fmt.Errorf("authMapping.basic.username: %w", err)
 			}
 			password, err := resolveAuthValue(mapping.Basic.Password, token, &tokenData)
 			if err != nil {
-				return "", nil, fmt.Errorf("auth_mapping.basic.password: %w", err)
+				return "", nil, fmt.Errorf("authMapping.basic.password: %w", err)
 			}
 			credential := fmt.Sprintf("%s:%s", username, password)
 			authToken = "Basic " + base64.StdEncoding.EncodeToString([]byte(credential))
@@ -347,7 +346,7 @@ func BuildOAuthUpstream(def *Definition, conn config.ConnectionDef, baseURL stri
 	case "json":
 		tokenExchange = oauth.TokenExchangeJSON
 	default:
-		return nil, fmt.Errorf("unknown token_exchange %q", def.Auth.TokenExchange)
+		return nil, fmt.Errorf("unknown tokenExchange %q", def.Auth.TokenExchange)
 	}
 
 	authURL := resolveURL(baseURL, def.Auth.AuthorizationURL)

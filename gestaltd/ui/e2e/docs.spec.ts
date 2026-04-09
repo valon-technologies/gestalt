@@ -17,7 +17,7 @@ test.describe("Docs page", () => {
     });
     await mockAuthInfo(page, {
       provider: "test-sso",
-      display_name: "Test SSO",
+      displayName: "Test SSO",
     });
 
     await page.goto("/login");

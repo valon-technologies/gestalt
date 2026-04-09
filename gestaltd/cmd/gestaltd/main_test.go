@@ -120,10 +120,10 @@ func TestE2ECLIValidateWithStrictProviderErrors(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := authDatastoreConfigYAML(t, dir, "google", "sqlite", filepath.Join(dir, "gestalt.db")) + `server:
-  encryption_key: test-key
+  encryptionKey: test-key
 plugins:
   broken:
-    display_name: Broken
+    displayName: Broken
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
 		t.Fatalf("WriteFile: %v", err)

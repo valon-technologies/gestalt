@@ -11,7 +11,6 @@ export interface CredentialFieldDef {
   name: string;
   label?: string;
   description?: string;
-  help_url?: string;
 }
 
 export interface InstanceInfo {
@@ -21,29 +20,29 @@ export interface InstanceInfo {
 
 export interface ConnectionDefInfo {
   name: string;
-  auth_types: ("oauth" | "manual")[];
-  credential_fields?: CredentialFieldDef[];
+  authTypes: ("oauth" | "manual")[];
+  credentialFields?: CredentialFieldDef[];
 }
 
 export interface Integration {
   name: string;
-  display_name?: string;
+  displayName?: string;
   description?: string;
-  icon_svg?: string;
+  iconSvg?: string;
   connected?: boolean;
   instances?: InstanceInfo[];
-  auth_types?: ("oauth" | "manual")[];
-  connection_params?: Record<string, ConnectionParamDef>;
+  authTypes?: ("oauth" | "manual")[];
+  connectionParams?: Record<string, ConnectionParamDef>;
   connections?: ConnectionDefInfo[];
-  credential_fields?: CredentialFieldDef[];
+  credentialFields?: CredentialFieldDef[];
 }
 
 export interface APIToken {
   id: string;
   name: string;
   scopes: string;
-  created_at: string;
-  expires_at?: string;
+  createdAt: string;
+  expiresAt?: string;
 }
 
 export interface CreateTokenResponse {
@@ -55,8 +54,8 @@ export interface CreateTokenResponse {
 export interface ConnectIntegrationResult {
   status: string;
   integration?: string;
-  selection_url?: string;
-  pending_token?: string;
+  selectionUrl?: string;
+  pendingToken?: string;
   candidates?: { id: string; name?: string }[];
 }
 
@@ -118,8 +117,8 @@ export async function fetchAPI<T>(
 
 export interface AuthInfo {
   provider: string;
-  display_name: string;
-  login_supported: boolean;
+  displayName: string;
+  loginSupported: boolean;
 }
 
 export async function getAuthInfo(): Promise<AuthInfo> {
@@ -136,7 +135,7 @@ export async function startLogin(state: string): Promise<{ url: string }> {
 export async function loginCallback(
   code: string,
   state?: string,
-): Promise<{ email: string; display_name: string }> {
+): Promise<{ email: string; displayName: string }> {
   const params = new URLSearchParams({ code });
   if (state) params.set("state", state);
   return fetchAPI(`/api/v1/auth/login/callback?${params}`);
@@ -164,7 +163,7 @@ export async function startIntegrationOAuth(
       instance,
       connection,
       scopes: scopes || [],
-      connection_params: connectionParams,
+      connectionParams,
     }),
   });
 }
@@ -180,7 +179,7 @@ export async function connectManualIntegration(
     integration,
     instance,
     connection,
-    connection_params: connectionParams,
+    connectionParams,
   };
   if (typeof credential === "string") {
     body.credential = credential;

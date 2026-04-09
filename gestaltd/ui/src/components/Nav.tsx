@@ -33,7 +33,7 @@ export default function Nav() {
     getAuthInfo()
       .then((info) => {
         if (active) {
-          setLoginSupported(info.login_supported);
+          setLoginSupported(info.loginSupported);
         }
       })
       .catch(() => {

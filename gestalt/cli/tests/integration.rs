@@ -158,13 +158,13 @@ fn handle_login_request(
                 &mut stream,
                 StatusCode::OK,
                 http::APPLICATION_JSON,
-                r#"{"provider":"local","display_name":"local","login_supported":true}"#,
+                r#"{"provider":"local","displayName":"local","loginSupported":true}"#,
             );
         }
         "/api/v1/auth/login" if request.method == Method::POST => {
             let body: serde_json::Value = serde_json::from_slice(&request.body).unwrap();
             let mut state = state.lock().unwrap();
-            state.callback_port = Some(body["callback_port"].as_u64().unwrap() as u16);
+            state.callback_port = Some(body["callbackPort"].as_u64().unwrap() as u16);
             state.expected_state = Some(body["state"].as_str().unwrap().to_string());
             write_http_response(
                 &mut stream,
@@ -304,7 +304,7 @@ fn test_list_integrations() {
     let mut server = Server::new();
     let mock = authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
         .with_body(
-            r#"[{"name":"github","display_name":"GitHub","description":"GitHub integration"}]"#,
+            r#"[{"name":"github","displayName":"GitHub","description":"GitHub integration"}]"#,
         )
         .create();
 
@@ -322,7 +322,7 @@ fn test_list_tokens() {
     let mut server = Server::new();
     let mock = authed_json_mock!(server, Method::GET, "/api/v1/tokens", StatusCode::OK)
         .with_body(
-            r#"[{"id":"1","name":"my-token","scopes":"","created_at":"2025-01-01T00:00:00Z"}]"#,
+            r#"[{"id":"1","name":"my-token","scopes":"","createdAt":"2025-01-01T00:00:00Z"}]"#,
         )
         .create();
 
@@ -653,7 +653,7 @@ fn test_auth_login_fails_when_server_auth_is_disabled() {
     let _env = EnvGuard::new(tempdir.path());
     let mut server = Server::new();
     let _auth_info = json_mock!(server, Method::GET, "/api/v1/auth/info", StatusCode::OK)
-        .with_body(r#"{"provider":"none","display_name":"none","login_supported":false}"#)
+        .with_body(r#"{"provider":"none","displayName":"none","loginSupported":false}"#)
         .create();
     let login = json_mock!(server, Method::POST, "/api/v1/auth/login", StatusCode::OK)
         .expect(0)
@@ -783,7 +783,7 @@ fn test_cli_accepts_legacy_credentials_without_api_url_when_url_is_provided() {
 fn test_init_skips_login_when_server_auth_is_disabled() {
     let mut server = Server::new();
     let _auth_info = json_mock!(server, Method::GET, "/api/v1/auth/info", StatusCode::OK)
-        .with_body(r#"{"provider":"none","display_name":"none","login_supported":false}"#)
+        .with_body(r#"{"provider":"none","displayName":"none","loginSupported":false}"#)
         .create();
 
     let home = tempfile::tempdir().unwrap();
@@ -804,7 +804,7 @@ fn test_init_skips_login_when_server_auth_is_disabled() {
 fn test_auth_status_reports_auth_disabled_before_stored_credentials() {
     let mut server = Server::new();
     let _auth_info = json_mock!(server, Method::GET, "/api/v1/auth/info", StatusCode::OK)
-        .with_body(r#"{"login_supported":false}"#)
+        .with_body(r#"{"loginSupported":false}"#)
         .create();
 
     let home = tempfile::tempdir().unwrap();
@@ -869,7 +869,7 @@ fn test_auth_status_no_url_configured() {
 fn test_auth_status_json_includes_server_fields() {
     let mut server = Server::new();
     let _auth_info = json_mock!(server, Method::GET, "/api/v1/auth/info", StatusCode::OK)
-        .with_body(r#"{"login_supported":true}"#)
+        .with_body(r#"{"loginSupported":true}"#)
         .create();
 
     let home = tempfile::tempdir().unwrap();
@@ -882,10 +882,10 @@ fn test_auth_status_json_includes_server_fields() {
         .unwrap();
 
     let json: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-    assert_eq!(json["server_reachable"], serde_json::json!(true));
-    assert_eq!(json["login_supported"], serde_json::json!(true));
-    assert_eq!(json["server_url"], serde_json::json!(server.url()));
-    assert_eq!(json["url_source"], serde_json::json!("--url flag"));
+    assert_eq!(json["serverReachable"], serde_json::json!(true));
+    assert_eq!(json["loginSupported"], serde_json::json!(true));
+    assert_eq!(json["serverUrl"], serde_json::json!(server.url()));
+    assert_eq!(json["urlSource"], serde_json::json!("--url flag"));
     assert_eq!(json["authenticated"], serde_json::json!(false));
 }
 
@@ -919,7 +919,7 @@ fn test_connect_includes_connection_and_instance() {
     let mut server = Server::new();
     let _integrations =
         authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
-            .with_body(r#"[{"name":"github","auth_types":["oauth"],"connected":false}]"#)
+            .with_body(r#"[{"name":"github","authTypes":["oauth"],"connected":false}]"#)
             .create();
     let mock = authed_json_mock!(
         server,
@@ -952,7 +952,7 @@ fn test_connect_prefers_oauth_when_manual_also_exists_and_omits_null_connection_
     let mut server = Server::new();
     let _integrations =
         authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
-            .with_body(r#"[{"name":"github","auth_types":["oauth","manual"],"connected":false}]"#)
+            .with_body(r#"[{"name":"github","authTypes":["oauth","manual"],"connected":false}]"#)
             .create();
     let mock = authed_json_mock!(
         server,
@@ -1059,11 +1059,11 @@ fn test_manual_connect_uses_prompted_credentials_and_connection_params() {
         .with_body(
             r#"[{
                 "name":"datadog",
-                "display_name":"Datadog",
+                "displayName":"Datadog",
                 "description":"Metrics and logs",
-                "auth_types":["manual"],
-                "connection_params":{"site":{"description":"Datadog site","default":"datadoghq.com","required":true}},
-                "credential_fields":[{"name":"api_key","label":"API key","description":"Use a personal API key","help_url":"https://docs.example.com/datadog"}]
+                "authTypes":["manual"],
+                "connectionParams":{"site":{"description":"Datadog site","default":"datadoghq.com","required":true}},
+                "credentialFields":[{"name":"api_key","label":"API key","description":"Use a personal API key"}]
             }]"#,
         )
         .create();
@@ -1075,7 +1075,7 @@ fn test_manual_connect_uses_prompted_credentials_and_connection_params() {
     )
         .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
         .match_body(Matcher::JsonString(
-            r#"{"connection_params":{"site":"datadoghq.eu"},"credential":"dd-key","integration":"datadog"}"#.to_string(),
+            r#"{"connectionParams":{"site":"datadoghq.eu"},"credential":"dd-key","integration":"datadog"}"#.to_string(),
         ))
         .with_body(r#"{"status":"connected","integration":"datadog"}"#)
         .create();
@@ -1098,11 +1098,11 @@ fn test_manual_connect_prompts_for_connection_and_finishes_candidate_selection()
         .with_body(
             r#"[{
                 "name":"manual-svc",
-                "display_name":"Manual Service",
-                "auth_types":["manual"],
+                "displayName":"Manual Service",
+                "authTypes":["manual"],
                 "connections":[
-                    {"name":"workspace","credential_fields":[{"name":"token","label":"Workspace token"}]},
-                    {"name":"plugin","auth_types":["oauth"]}
+                    {"name":"workspace","credentialFields":[{"name":"token","label":"Workspace token"}]},
+                    {"name":"plugin","authTypes":["oauth"]}
                 ]
             }]"#,
         )
@@ -1122,8 +1122,8 @@ fn test_manual_connect_prompts_for_connection_and_finishes_candidate_selection()
         r#"{
                 "status":"selection_required",
                 "integration":"manual-svc",
-                "selection_url":"/api/v1/auth/pending-connection",
-                "pending_token":"pending-123",
+                "selectionUrl":"/api/v1/auth/pending-connection",
+                "pendingToken":"pending-123",
                 "candidates":[
                     {"id":"site-a","name":"Site A"},
                     {"id":"site-b","name":"Site B"}
@@ -1170,7 +1170,7 @@ fn test_manual_connect_falls_back_to_generic_credential_prompt() {
     let mut server = Server::new();
     let _integrations =
         authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
-            .with_body(r#"[{"name":"manual-svc","auth_types":["manual"]}]"#)
+            .with_body(r#"[{"name":"manual-svc","authTypes":["manual"]}]"#)
             .create();
     let _connect = authed_json_mock!(
         server,
@@ -1200,7 +1200,7 @@ fn test_manual_connect_fails_when_stdin_closes_during_prompt() {
     let mut server = Server::new();
     let _integrations =
         authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
-            .with_body(r#"[{"name":"manual-svc","auth_types":["manual"]}]"#)
+            .with_body(r#"[{"name":"manual-svc","authTypes":["manual"]}]"#)
             .create();
 
     let home = tempfile::tempdir().unwrap();

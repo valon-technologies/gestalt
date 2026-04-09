@@ -21,6 +21,7 @@ pub const AUTH_LOGIN_PATH: &str = "/api/v1/auth/login";
 pub const AUTH_LOGIN_CALLBACK_PATH: &str = "/api/v1/auth/login/callback";
 
 #[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct AuthInfo {
     pub login_supported: bool,
 }

@@ -2,53 +2,53 @@ import { test, expect, mockIntegrations, mockManualConnect, mockTokens } from ".
 import type { Integration } from "../src/lib/api";
 
 const OAUTH_INTEGRATION: Integration = {
-  name: "oauth-svc", display_name: "OAuth Service", description: "Example OAuth integration",
+  name: "oauth-svc", displayName: "OAuth Service", description: "Example OAuth integration",
 };
 
 const MANUAL_INTEGRATION: Integration = {
-  name: "manual-svc", display_name: "Manual Service", description: "Example manual integration", auth_types: ["manual"],
-  credential_fields: [{ name: "token", label: "API Token" }],
+  name: "manual-svc", displayName: "Manual Service", description: "Example manual integration", authTypes: ["manual"],
+  credentialFields: [{ name: "token", label: "API Token" }],
 };
 
 const MANUAL_WITH_LINKED_DESC: Integration = {
-  name: "linked-svc", display_name: "Linked Service", auth_types: ["manual"],
-  credential_fields: [{ name: "api_key", label: "API Key", description: "Find yours in [Account Settings](https://example.com/settings)" }],
+  name: "linked-svc", displayName: "Linked Service", authTypes: ["manual"],
+  credentialFields: [{ name: "api_key", label: "API Key", description: "Find yours in [Account Settings](https://example.com/settings)" }],
 };
 
 const MULTI_CONNECTION_DUAL_AUTH_INTEGRATION: Integration = {
   name: "workspace-svc",
-  display_name: "Workspace Service",
-  auth_types: ["oauth", "manual"],
-  credential_fields: [{ name: "api_token", label: "API Token" }],
+  displayName: "Workspace Service",
+  authTypes: ["oauth", "manual"],
+  credentialFields: [{ name: "api_token", label: "API Token" }],
   connections: [
     {
       name: "workspace",
-      auth_types: ["oauth", "manual"],
-      credential_fields: [{ name: "api_token", label: "API Token" }],
+      authTypes: ["oauth", "manual"],
+      credentialFields: [{ name: "api_token", label: "API Token" }],
     },
     {
       name: "personal",
-      auth_types: ["manual"],
-      credential_fields: [{ name: "personal_token", label: "Personal Token" }],
+      authTypes: ["manual"],
+      credentialFields: [{ name: "personal_token", label: "Personal Token" }],
     },
   ],
 };
 
 const MULTI_CONNECTION_MULTI_OAUTH_INTEGRATION: Integration = {
   name: "team-svc",
-  display_name: "Team Service",
-  auth_types: ["oauth", "manual"],
-  credential_fields: [{ name: "api_token", label: "API Token" }],
+  displayName: "Team Service",
+  authTypes: ["oauth", "manual"],
+  credentialFields: [{ name: "api_token", label: "API Token" }],
   connections: [
     {
       name: "workspace",
-      auth_types: ["oauth", "manual"],
-      credential_fields: [{ name: "workspace_token", label: "Workspace Token" }],
+      authTypes: ["oauth", "manual"],
+      credentialFields: [{ name: "workspace_token", label: "Workspace Token" }],
     },
     {
       name: "personal",
-      auth_types: ["oauth", "manual"],
-      credential_fields: [{ name: "personal_token", label: "Personal Token" }],
+      authTypes: ["oauth", "manual"],
+      credentialFields: [{ name: "personal_token", label: "Personal Token" }],
     },
   ],
 };
@@ -56,7 +56,7 @@ const MULTI_CONNECTION_MULTI_OAUTH_INTEGRATION: Integration = {
 const sampleIntegrations: Integration[] = [
   OAUTH_INTEGRATION,
   MANUAL_INTEGRATION,
-  { name: "another-svc", display_name: "Another Service" },
+  { name: "another-svc", displayName: "Another Service" },
 ];
 
 test.describe("Integrations", () => {
@@ -69,8 +69,8 @@ test.describe("Integrations", () => {
     await expect(
       page.getByRole("heading", { name: "Integrations" }),
     ).toBeVisible();
-    await expect(page.getByText(OAUTH_INTEGRATION.display_name!)).toBeVisible();
-    await expect(page.getByText(MANUAL_INTEGRATION.display_name!)).toBeVisible();
+    await expect(page.getByText(OAUTH_INTEGRATION.displayName!)).toBeVisible();
+    await expect(page.getByText(MANUAL_INTEGRATION.displayName!)).toBeVisible();
     await expect(page.getByText("Another Service")).toBeVisible();
     await expect(page.getByText(OAUTH_INTEGRATION.description!)).toBeVisible();
     await expect(page.getByText(MANUAL_INTEGRATION.description!)).toBeVisible();
@@ -102,8 +102,8 @@ test.describe("Integrations", () => {
     ]);
 
     await page.goto("/integrations");
-    await expect(page.getByText(OAUTH_INTEGRATION.display_name!)).toBeVisible();
-    await expect(page.getByText(MANUAL_INTEGRATION.display_name!)).toBeVisible();
+    await expect(page.getByText(OAUTH_INTEGRATION.displayName!)).toBeVisible();
+    await expect(page.getByText(MANUAL_INTEGRATION.displayName!)).toBeVisible();
     await expect(page.getByRole("button", { name: "OAuth Service settings" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Manual Service settings" })).toBeVisible();
 

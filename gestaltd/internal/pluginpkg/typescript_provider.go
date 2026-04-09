@@ -174,6 +174,8 @@ func typeScriptComponentKind(kind string) (string, error) {
 	switch kind {
 	case pluginmanifestv1.KindAuth:
 		return "auth", nil
+	case pluginmanifestv1.KindDatastore:
+		return "datastore", nil
 	case pluginmanifestv1.KindSecrets:
 		return "secrets", nil
 	default:

@@ -45,6 +45,11 @@ func configSchemaForManifest(manifestPath string, manifest *pluginmanifestv1.Man
 			return "", "", false, nil
 		}
 		return filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(manifest.Auth.ConfigSchemaPath)), manifest.Auth.ConfigSchemaPath, true, nil
+	case pluginmanifestv1.KindDatastore:
+		if manifest.Datastore == nil || manifest.Datastore.ConfigSchemaPath == "" {
+			return "", "", false, nil
+		}
+		return filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(manifest.Datastore.ConfigSchemaPath)), manifest.Datastore.ConfigSchemaPath, true, nil
 	case pluginmanifestv1.KindSecrets:
 		if manifest.Secrets == nil || manifest.Secrets.ConfigSchemaPath == "" {
 			return "", "", false, nil

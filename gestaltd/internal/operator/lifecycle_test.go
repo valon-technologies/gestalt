@@ -107,7 +107,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *te
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `server:
-  encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 plugins:
   example:
     provider:
@@ -150,7 +150,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalMCPOAuthManifestPluginWithoutLockfi
 	manifest := []byte(`
 source: github.com/testowner/plugins/notion
 version: 0.0.1-alpha.1
-display_name: Notion
+displayName: Notion
 provider:
   connections:
     mcp:
@@ -168,7 +168,7 @@ provider:
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `server:
-  encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 plugins:
   notion:
     provider:
@@ -285,7 +285,7 @@ datastore: sqlite
 ui:
   provider: none
 server:
-  encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `, dbPath)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
@@ -357,7 +357,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalSourceTopLevelPluginsWithoutArtifac
 	cfg := fmt.Sprintf(`auth:
   provider:
     source:
-      path: ./auth-provider.yaml
+      path: ./auth-manifest.yaml
 datastores:
   sqlite:
     driver: sqlite3
@@ -366,7 +366,7 @@ datastore: sqlite
 ui:
   provider: none
 server:
-  encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `, dbPath)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
@@ -385,8 +385,8 @@ server:
 		t.Fatalf("auth command = %q, want empty", loaded.Auth.Provider.Command)
 	}
 	authCfg := decodeNodeMap(t, loaded.Auth.Config)
-	if authCfg["manifest_path"] != authManifestPath {
-		t.Fatalf("auth manifest_path = %v, want %q", authCfg["manifest_path"], authManifestPath)
+	if authCfg["manifestPath"] != authManifestPath {
+		t.Fatalf("auth manifest_path = %v, want %q", authCfg["manifestPath"], authManifestPath)
 	}
 	if authCfg["command"] != "" {
 		t.Fatalf("auth config command = %v, want empty", authCfg["command"])
@@ -427,7 +427,7 @@ func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalSourceHybridPlugin
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `server:
-  encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 plugins:
   example:
     provider:
@@ -598,7 +598,7 @@ def session_catalog(request: gestalt.Request) -> gestalt.Catalog:
 	writeTestFile("manifest.yaml", manifest, 0o644)
 
 	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `server:
-  encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 plugins:
   example:
     provider:
@@ -930,7 +930,7 @@ func TestApplyLockedPlugins_SkipsNilIntegrationPlugins(t *testing.T) {
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `server:
-  encryption_key: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 plugins:
   example:
     provider:

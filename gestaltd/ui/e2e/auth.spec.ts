@@ -40,7 +40,7 @@ test.describe("Authentication", () => {
     });
     await mockAuthInfo(page, {
       provider: "test-sso",
-      display_name: "Test SSO",
+      displayName: "Test SSO",
     });
     await page.goto("/");
     await expect(page).toHaveURL(/\/login/);
@@ -53,7 +53,7 @@ test.describe("Authentication", () => {
     });
     await mockAuthInfo(page, {
       provider: "test-sso",
-      display_name: "Test SSO",
+      displayName: "Test SSO",
     });
     await page.goto("/login");
     await expect(page.getByRole("heading", { name: "Gestalt" })).toBeVisible();
@@ -67,8 +67,8 @@ test.describe("Authentication", () => {
   }) => {
     await mockAuthInfo(page, {
       provider: "none",
-      display_name: "none",
-      login_supported: false,
+      displayName: "none",
+      loginSupported: false,
     });
     await mockIntegrations(page, []);
     await mockTokens(page, []);
@@ -96,7 +96,7 @@ test.describe("Authentication", () => {
       route.abort();
     });
     await mockIntegrations(page, [
-      { name: "test-svc", display_name: "Test Service" },
+      { name: "test-svc", displayName: "Test Service" },
     ]);
     await mockTokens(page, []);
 
@@ -222,7 +222,7 @@ gestaltd_operation_duration_seconds_count{gestalt_provider="slack",gestalt_opera
   test("logout clears session and redirects to login", async ({ page }) => {
     await mockAuthInfo(page, {
       provider: "test-sso",
-      display_name: "Test SSO",
+      displayName: "Test SSO",
     });
     await mockIntegrations(page, []);
     await mockTokens(page, []);
@@ -277,7 +277,7 @@ gestaltd_operation_duration_seconds_count{gestalt_provider="slack",gestalt_opera
         contentType: "application/json",
         body: JSON.stringify({
           email: "test@gestalt.dev",
-          display_name: "Test User",
+          displayName: "Test User",
         }),
       });
     });
@@ -316,7 +316,7 @@ gestaltd_operation_duration_seconds_count{gestalt_provider="slack",gestalt_opera
         contentType: "application/json",
         body: JSON.stringify({
           email: "unexpected@gestalt.dev",
-          display_name: "Unexpected",
+          displayName: "Unexpected",
         }),
       });
     });
@@ -350,7 +350,7 @@ gestaltd_operation_duration_seconds_count{gestalt_provider="slack",gestalt_opera
   }) => {
     await mockAuthInfo(page, {
       provider: "test-sso",
-      display_name: "Test SSO",
+      displayName: "Test SSO",
     });
     await page.route("**/metrics", (route) => {
       route.fulfill({
@@ -387,7 +387,7 @@ gestaltd_operation_duration_seconds_count{gestalt_provider="slack",gestalt_opera
   }) => {
     await mockAuthInfo(page, {
       provider: "test-sso",
-      display_name: "Test SSO",
+      displayName: "Test SSO",
     });
     await page.route("**/metrics", (route) => {
       route.fulfill({
@@ -421,7 +421,7 @@ gestaltd_operation_duration_seconds_count{gestalt_provider="slack",gestalt_opera
   }) => {
     await mockAuthInfo(page, {
       provider: "test-sso",
-      display_name: "Test SSO",
+      displayName: "Test SSO",
     });
     await page.route("**/metrics", (route) => {
       route.fulfill({

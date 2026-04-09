@@ -13,9 +13,9 @@ type componentRuntimeConfig struct {
 	Command      string            `yaml:"command"`
 	Args         []string          `yaml:"args,omitempty"`
 	Env          map[string]string `yaml:"env,omitempty"`
-	AllowedHosts []string          `yaml:"allowed_hosts,omitempty"`
-	HostBinary   string            `yaml:"host_binary,omitempty"`
-	ManifestPath string            `yaml:"manifest_path,omitempty"`
+	AllowedHosts []string          `yaml:"allowedHosts,omitempty"`
+	HostBinary   string            `yaml:"hostBinary,omitempty"`
+	ManifestPath string            `yaml:"manifestPath,omitempty"`
 	Config       yaml.Node         `yaml:"config,omitempty"`
 }
 
@@ -68,7 +68,7 @@ func IsComponentRuntimeConfigNode(node yaml.Node) bool {
 	if mappingValueNode(raw, "config") == nil {
 		return false
 	}
-	for _, key := range []string{"source", "command", "manifest_path", "host_binary"} {
+	for _, key := range []string{"source", "command", "manifestPath", "hostBinary"} {
 		if mappingValueNode(raw, key) != nil {
 			return true
 		}

@@ -11,17 +11,17 @@ import (
 type pluginDefWire struct {
 	Source       *PluginSourceDef  `yaml:"source"`
 	Env          map[string]string `yaml:"env"`
-	AllowedHosts []string          `yaml:"allowed_hosts"`
+	AllowedHosts []string          `yaml:"allowedHosts"`
 }
 
 type integrationWire struct {
-	DisplayName       string                            `yaml:"display_name"`
+	DisplayName       string                            `yaml:"displayName"`
 	Description       string                            `yaml:"description"`
-	IconFile          string                            `yaml:"icon_file"`
+	IconFile          string                            `yaml:"iconFile"`
 	Provider          *ProviderDef                      `yaml:"provider"`
 	Config            yaml.Node                         `yaml:"config"`
 	Connections       map[string]*integrationConnection `yaml:"connections"`
-	AllowedOperations map[string]*OperationOverride     `yaml:"allowed_operations"`
+	AllowedOperations map[string]*OperationOverride     `yaml:"allowedOperations"`
 	MCP               *integrationMCPWire               `yaml:"mcp"`
 	Datastores        map[string]string                 `yaml:"datastores"`
 }
@@ -35,14 +35,14 @@ type integrationConnection struct {
 
 type integrationDiscoveryWire struct {
 	URL      string            `yaml:"url"`
-	IDPath   string            `yaml:"id_path"`
-	NamePath string            `yaml:"name_path"`
+	IDPath   string            `yaml:"idPath"`
+	NamePath string            `yaml:"namePath"`
 	Metadata map[string]string `yaml:"metadata"`
 }
 
 type integrationMCPWire struct {
 	Enabled    bool   `yaml:"enabled"`
-	ToolPrefix string `yaml:"tool_prefix"`
+	ToolPrefix string `yaml:"toolPrefix"`
 }
 
 func (p *ProviderDef) UnmarshalYAML(value *yaml.Node) error {
@@ -150,7 +150,7 @@ func decodeKnownYAMLNode(value *yaml.Node, out any) error {
 
 func validateIntegrationWire(wire *integrationWire) error {
 	if wire.MCP != nil && wire.MCP.ToolPrefix != "" && !wire.MCP.Enabled {
-		return fmt.Errorf("mcp.tool_prefix is only valid when mcp.enabled is true")
+		return fmt.Errorf("mcp.toolPrefix is only valid when mcp.enabled is true")
 	}
 
 	return nil

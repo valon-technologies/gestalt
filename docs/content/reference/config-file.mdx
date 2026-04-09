@@ -32,21 +32,21 @@ server:
   management:
     host: 127.0.0.1
     port: 9090
-  base_url: https://gestalt.example.com
-  encryption_key: secret://gestalt-encryption-key
-  api_token_ttl: 30d
-  artifacts_dir: ./state
+  baseUrl: https://gestalt.example.com
+  encryptionKey: secret://gestalt-encryption-key
+  apiTokenTtl: 30d
+  artifactsDir: ./state
 ```
 
 `public.host` and `public.port` control the public listener address. Both default to all-interfaces on port `8080`. The legacy `port` shorthand still works but `public.port` takes precedence.
 
 `management.host` and `management.port` bind a separate listener for operator traffic. When `management.port` is omitted, `/admin` and `/metrics` stay on the public listener, a mode best kept to local development or other trusted-network deployments. For production, prefer configuring `server.management` so the operator surface leaves the public listener entirely.
 
-`base_url` derives OAuth callback URLs when explicit redirect URLs are omitted, and gives the management admin UI an absolute link back to the public client UI. When unset, the management admin UI omits the `Client UI` link rather than sending operators to a broken same-origin `/`.
+`baseUrl` derives OAuth callback URLs when explicit redirect URLs are omitted, and gives the management admin UI an absolute link back to the public client UI. When unset, the management admin UI omits the `Client UI` link rather than sending operators to a broken same-origin `/`.
 
-`encryption_key` is the only required server field. It is the root deployment secret, used for encryption and derived session material.
+`encryptionKey` is the only required server field. It is the root deployment secret, used for encryption and derived session material.
 
-`api_token_ttl` controls the lifetime of newly issued API tokens, defaulting to `30d`. It accepts Go duration strings (`1h`, `720h`) and day suffixes (`30d`). `artifacts_dir` is a writable directory for prepared artifacts produced by `init` and consumed by `serve --locked` when no CLI override is supplied; it defaults to the config file's directory. See [Configuration](/configuration) for the full `init`/`serve` lifecycle.
+`apiTokenTtl` controls the lifetime of newly issued API tokens, defaulting to `30d`. It accepts Go duration strings (`1h`, `720h`) and day suffixes (`30d`). `artifactsDir` is a writable directory for prepared artifacts produced by `init` and consumed by `serve --locked` when no CLI override is supplied; it defaults to the config file's directory. See [Configuration](/configuration) for the full `init`/`serve` lifecycle.
 
 | Field | Default | Description |
 | --- | --- | --- |
@@ -54,16 +54,16 @@ server:
 | `public.port` | `8080` | Port for the public listener. |
 | `management.host` | | Bind address for the management listener. |
 | `management.port` | | Port for the management listener. Required when `management.host` is set. |
-| `base_url` | | Public origin URL used for OAuth callbacks and admin UI links. |
-| `encryption_key` | | **Required.** Root encryption key. Typically a `secret://` reference. |
-| `api_token_ttl` | `30d` | Lifetime of newly issued API tokens. Go durations or day suffixes (`30d`). |
-| `artifacts_dir` | config directory | Directory for prepared `init` artifacts. |
+| `baseUrl` | | Public origin URL used for OAuth callbacks and admin UI links. |
+| `encryptionKey` | | **Required.** Root encryption key. Typically a `secret://` reference. |
+| `apiTokenTtl` | `30d` | Lifetime of newly issued API tokens. Go durations or day suffixes (`30d`). |
+| `artifactsDir` | config directory | Directory for prepared `init` artifacts. |
 
 When `server.management` is configured, Gestalt serves `/`, `/api/v1/*`, auth routes, and `/mcp` on the public listener, while `/admin`, `/metrics`, `/health`, and `/ready` move to the management listener. The management listener is intended to be protected by deployment infrastructure such as private networking, VPN, or an internal-only reverse proxy. Gestalt does not apply its own session or API-token auth to `/metrics` on the management listener.
 
 ## `auth`
 
-Top-level platform auth is optional. Omit the `auth` block entirely to disable platform authentication, or set `auth.provider: none` explicitly. When auth is enabled, configure it with `auth.provider` and `auth.config`. `auth.provider` uses the same provider-reference shape as integration plugins: a `source` block plus optional `env` and `allowed_hosts`.
+Top-level platform auth is optional. Omit the `auth` block entirely to disable platform authentication, or set `auth.provider: none` explicitly. When auth is enabled, configure it with `auth.provider` and `auth.config`. `auth.provider` uses the same provider-reference shape as integration plugins: a `source` block plus optional `env` and `allowedHosts`.
 
 ### `none`
 
@@ -83,15 +83,15 @@ auth:
       ref: github.com/valon-technologies/gestalt-providers/auth/google
       version: 0.0.1-alpha.1
   config:
-    client_id: ${GOOGLE_CLIENT_ID}
-    client_secret: secret://google-client-secret
-    redirect_url: https://gestalt.example.com/api/v1/auth/login/callback
-    allowed_domains:
+    clientId: ${GOOGLE_CLIENT_ID}
+    clientSecret: secret://google-client-secret
+    redirectUrl: https://gestalt.example.com/api/v1/auth/login/callback
+    allowedDomains:
       - example.com
-    session_ttl: 24h
+    sessionTtl: 24h
 ```
 
-`client_id` and `client_secret` are both required and identify your Google OAuth application. `redirect_url` defaults to a path derived from `server.base_url` when omitted. `allowed_domains` restricts login to specific email domains. `session_ttl` controls session token lifetime and defaults to `24h`.
+`clientId` and `clientSecret` are both required and identify your Google OAuth application. `redirectUrl` defaults to a path derived from `server.baseUrl` when omitted. `allowedDomains` restricts login to specific email domains. `sessionTtl` controls session token lifetime and defaults to `24h`.
 
 Google checks `email_verified` on every login. Unverified accounts are rejected.
 
@@ -104,26 +104,26 @@ auth:
       ref: github.com/valon-technologies/gestalt-providers/auth/oidc
       version: 0.0.1-alpha.1
   config:
-    issuer_url: https://login.example.com
-    client_id: ${OIDC_CLIENT_ID}
-    client_secret: secret://oidc-client-secret
-    redirect_url: https://gestalt.example.com/api/v1/auth/login/callback
-    allowed_domains:
+    issuerUrl: https://login.example.com
+    clientId: ${OIDC_CLIENT_ID}
+    clientSecret: secret://oidc-client-secret
+    redirectUrl: https://gestalt.example.com/api/v1/auth/login/callback
+    allowedDomains:
       - example.com
     scopes:
       - openid
       - email
       - profile
-    session_ttl: 24h
+    sessionTtl: 24h
     pkce: true
-    display_name: Company SSO
+    displayName: Company SSO
 ```
 
-Two fields are required: `issuer_url` (the OIDC discovery base URL) and `client_id`. `client_secret` may be omitted for PKCE-only public clients.
+Two fields are required: `issuerUrl` (the OIDC discovery base URL) and `clientId`. `clientSecret` may be omitted for PKCE-only public clients.
 
-`redirect_url` defaults to a path derived from `server.base_url`. `allowed_domains` restricts login by email domain. `scopes` defaults to `openid`, `email`, and `profile`.
+`redirectUrl` defaults to a path derived from `server.baseUrl`. `allowedDomains` restricts login by email domain. `scopes` defaults to `openid`, `email`, and `profile`.
 
-`session_ttl` controls session token lifetime and defaults to `24h`. Set `pkce` to `true` to enable Proof Key for Code Exchange. `display_name` controls the label shown in the login UI, defaulting to `SSO`.
+`sessionTtl` controls session token lifetime and defaults to `24h`. Set `pkce` to `true` to enable Proof Key for Code Exchange. `displayName` controls the label shown in the login UI, defaulting to `SSO`.
 
 OIDC checks `email_verified` when the claim is present. Unverified accounts are rejected.
 
@@ -136,7 +136,7 @@ Both `google` and `oidc` use the same PluginDef provider reference shape under `
 | `source.ref` | Managed provider source address. |
 | `source.version` | Required with `source.ref`. SemVer without a leading `v`. |
 | `env` | Extra environment variables passed to the provider process. |
-| `allowed_hosts` | Network allowlist for sandboxed provider processes. |
+| `allowedHosts` | Network allowlist for sandboxed provider processes. |
 
 ## `datastore`
 
@@ -160,7 +160,7 @@ datastore:
 | `dynamodb` | `table`, `region`, `endpoint` | `table` defaults to `gestalt`. |
 | `mongodb` | `uri`, `database` | `database` defaults to `gestalt`. |
 | `oracle` | `dsn` | Enterprise SQL option. |
-| `firestore` | `project_id`, `database` | Firestore-backed deployment. |
+| `firestore` | `projectId`, `database` | Firestore-backed deployment. |
 | `sqlserver` | `dsn` | SQL Server-backed deployment. |
 
 Gestalt auto-detects and validates the connected backend release series for the versioned datastores below. Only MySQL currently uses an explicit `version` override because its SQL dialect changes across supported series. For the other datastores, a legacy `version` field is ignored for backward compatibility.
@@ -189,9 +189,9 @@ secrets:
 | `env` | `prefix` | Reads secrets from environment variables. Default when `secrets` is omitted. |
 | `file` | `dir` | Reads one secret per file from a base directory. Works with Kubernetes volume-mounted secrets. |
 | `google_secret_manager` | `project`, `version` | Google Cloud Secret Manager. `version` defaults to `latest`. |
-| `aws_secrets_manager` | `region`, `version_stage`, `endpoint` | AWS Secrets Manager. `region` is required. `version_stage` defaults to `AWSCURRENT`. |
-| `vault` | `address`, `token`, `mount_path`, `namespace` | HashiCorp Vault KV v2. `address` and `token` are required. `mount_path` defaults to `secret`. |
-| `azure_key_vault` | `vault_url`, `version` | Azure Key Vault. `vault_url` is required. `version` defaults to latest. |
+| `aws_secrets_manager` | `region`, `versionStage`, `endpoint` | AWS Secrets Manager. `region` is required. `versionStage` defaults to `AWSCURRENT`. |
+| `vault` | `address`, `token`, `mountPath`, `namespace` | HashiCorp Vault KV v2. `address` and `token` are required. `mountPath` defaults to `secret`. |
+| `azure_key_vault` | `vaultUrl`, `version` | Azure Key Vault. `vaultUrl` is required. `version` defaults to latest. |
 
 ### Bootstrap credentials
 
@@ -222,7 +222,7 @@ telemetry:
   config:
     format: text
     level: info
-    service_name: gestaltd
+    serviceName: gestaltd
 ```
 
 Outputs structured logs to standard output. Traces remain disabled, but metrics are collected locally and exposed through the Prometheus-compatible `/metrics` endpoint. The built-in admin UI at `/admin` reads that same scrape surface. This is the default provider when `telemetry` is omitted.
@@ -231,8 +231,8 @@ Outputs structured logs to standard output. Traces remain disabled, but metrics 
 | --- | --- | --- |
 | `format` | `text` | Log format: `text` or `json`. |
 | `level` | `info` | Minimum log level: `debug`, `info`, `warn`, or `error`. |
-| `service_name` | `gestaltd` | Attached to locally exposed metrics. |
-| `resource_attributes` | | Extra key-value pairs attached to local metrics. |
+| `serviceName` | `gestaltd` | Attached to locally exposed metrics. |
+| `resourceAttributes` | | Extra key-value pairs attached to local metrics. |
 | `metrics.prometheus.enabled` | `true` | Toggle the `/metrics` scrape endpoint. |
 
 ### `otlp`
@@ -243,15 +243,15 @@ telemetry:
   config:
     endpoint: otel-collector:4317
     protocol: grpc
-    service_name: gestaltd
+    serviceName: gestaltd
     insecure: false
     headers:
       Authorization: Bearer ${OTEL_TOKEN}
-    resource_attributes:
+    resourceAttributes:
       deployment.environment: production
       service.version: "1.0.0"
     traces:
-      sampling_ratio: 1.0
+      samplingRatio: 1.0
     metrics:
       interval: 60s
     logs:
@@ -267,9 +267,9 @@ Exports to any OpenTelemetry-compatible collector (Jaeger, Grafana Alloy, Datado
 | `protocol` | `grpc` | Transport protocol: `grpc` or `http`. |
 | `insecure` | `false` | Skip TLS verification when `true`. |
 | `headers` | | Extra headers on every export request. |
-| `service_name` | `gestaltd` | OpenTelemetry service name. |
-| `resource_attributes` | | Arbitrary key-value pairs as OTel resource attributes. |
-| `traces.sampling_ratio` | `1.0` | Fraction of traces sampled, from `0.0` to `1.0`. |
+| `serviceName` | `gestaltd` | OpenTelemetry service name. |
+| `resourceAttributes` | | Arbitrary key-value pairs as OTel resource attributes. |
+| `traces.samplingRatio` | `1.0` | Fraction of traces sampled, from `0.0` to `1.0`. |
 | `metrics.interval` | `60s` | OTLP metric export interval. |
 | `metrics.prometheus.enabled` | `true` | Toggle the local `/metrics` scrape endpoint. |
 | `logs.exporter` | `otlp` | Where logs go: `otlp` or `stdout`. |
@@ -306,7 +306,7 @@ Disables all telemetry. Instrumentation points remain but produce zero overhead.
 | Layer | Span name | Key attributes |
 | --- | --- | --- |
 | HTTP | `gestaltd: {method} {route}` | Standard HTTP semantic conventions |
-| Broker | `broker.invoke` | `gestalt.provider`, `gestalt.operation`, `gestalt.user_id`, `gestalt.connection_mode` |
+| Broker | `broker.invoke` | `gestalt.provider`, `gestalt.operation`, `gestalt.userId`, `gestalt.connectionMode` |
 | gRPC plugin | Per-RPC spans | Standard gRPC semantic conventions |
 
 ## `audit`
@@ -348,11 +348,11 @@ audit:
   config:
     endpoint: audit-collector:4317
     protocol: grpc
-    service_name: gestaltd
+    serviceName: gestaltd
     insecure: false
     headers:
       Authorization: Bearer ${AUDIT_OTLP_TOKEN}
-    resource_attributes:
+    resourceAttributes:
       log.stream: audit
 ```
 
@@ -363,9 +363,9 @@ Exports audit records over OTLP without changing where application logs, metrics
 | `endpoint` | SDK default | OTLP collector address. |
 | `protocol` | `grpc` | Transport protocol: `grpc` or `http`. |
 | `insecure` | `false` | Skip TLS verification when `true`. |
-| `service_name` | `gestaltd` | Attached to exported audit logs. |
+| `serviceName` | `gestaltd` | Attached to exported audit logs. |
 | `headers` | | Extra headers on every export request. |
-| `resource_attributes` | | Extra key-value pairs attached to audit log exports. |
+| `resourceAttributes` | | Extra key-value pairs attached to audit log exports. |
 
 ### `noop`
 
@@ -383,26 +383,26 @@ Each entry in the top-level `plugins` map is a named integration instance backed
 ```yaml
 plugins:
   github:
-    display_name: GitHub
+    displayName: GitHub
     description: Public GitHub operations
-    icon_file: ./icons/github.svg
+    iconFile: ./icons/github.svg
     provider:
       source:
         ref: github.com/valon-technologies/gestalt-providers/github
         version: 1.2.3
     config:
-      api_base_url: https://api.github.com
+      apiBaseUrl: https://api.github.com
     connections:
       default:
         mode: user
         auth:
           type: oauth2
-    allowed_operations:
+    allowedOperations:
       repos.get:
         alias: get_repo
     mcp:
       enabled: true
-      tool_prefix: github_
+      toolPrefix: github_
 ```
 
 The config key is `plugins`, but the HTTP API and client CLI still refer to these named entries as integrations.
@@ -411,15 +411,15 @@ The config key is `plugins`, but the HTTP API and client CLI still refer to thes
 
 | Field | Description |
 | --- | --- |
-| `display_name` | Human-readable name shown in the UI and API. |
+| `displayName` | Human-readable name shown in the UI and API. |
 | `description` | Short description of the integration. |
-| `icon_file` | SVG icon path, resolved relative to the config directory. |
+| `iconFile` | SVG icon path, resolved relative to the config directory. |
 | `provider` | **Required.** The backing provider package. See [provider shape](#pluginsprovider) below. |
 | `config` | Provider-specific configuration passed into the provider package. |
 | `connections` | Named connection declarations. See [connections](#connections) below. |
-| `allowed_operations` | Allowlist with optional `alias` and `description` overrides per operation. |
+| `allowedOperations` | Allowlist with optional `alias` and `description` overrides per operation. |
 | `mcp.enabled` | Expose this integration over MCP. |
-| `mcp.tool_prefix` | Prefix for MCP tool names. Only valid when `mcp.enabled` is `true`. |
+| `mcp.toolPrefix` | Prefix for MCP tool names. Only valid when `mcp.enabled` is `true`. |
 
 ### `plugins.*.provider`
 
@@ -492,7 +492,7 @@ Gestalt synthesizes Go and Rust executable wrappers automatically when needed an
 | `source.version` | Required with `source.ref`. SemVer without a leading `v`. Invalid with `source.path`. |
 | `source.path` | Path to a local provider manifest. Mutually exclusive with `source.ref`. |
 | `env` | Extra environment variables passed to the provider process. |
-| `allowed_hosts` | Network allowlist for sandboxed provider processes. |
+| `allowedHosts` | Network allowlist for sandboxed provider processes. |
 
 ### `connections`
 
@@ -504,10 +504,10 @@ connections:
     mode: user
     auth:
       type: oauth2
-      authorization_url: https://accounts.example.com/oauth/authorize
-      token_url: https://accounts.example.com/oauth/token
-      client_id: ${CLIENT_ID}
-      client_secret: ${CLIENT_SECRET}
+      authorizationUrl: https://accounts.example.com/oauth/authorize
+      tokenUrl: https://accounts.example.com/oauth/token
+      clientId: ${CLIENT_ID}
+      clientSecret: ${CLIENT_SECRET}
     params:
       tenant:
         required: true
@@ -527,23 +527,23 @@ Every connection `auth` block uses the same shape. `type` selects the auth strat
 | Field | Default | Description |
 | --- | --- | --- |
 | `type` | | Auth strategy: `oauth2`, `manual`, `bearer`, `none`, or `mcp_oauth`. |
-| `authorization_url` | | OAuth2 authorization endpoint. |
-| `token_url` | | OAuth2 token endpoint. |
-| `client_id` | | OAuth2 client identifier. |
-| `client_secret` | | OAuth2 client secret. |
-| `redirect_url` | derived from `server.base_url` | OAuth2 callback URL. |
-| `client_auth` | `body` | How credentials are sent to the token endpoint: `body` or `header`. |
-| `token_exchange` | `form` | Token request encoding: `form` or `json`. |
+| `authorizationUrl` | | OAuth2 authorization endpoint. |
+| `tokenUrl` | | OAuth2 token endpoint. |
+| `clientId` | | OAuth2 client identifier. |
+| `clientSecret` | | OAuth2 client secret. |
+| `redirectUrl` | derived from `server.baseUrl` | OAuth2 callback URL. |
+| `clientAuth` | `body` | How credentials are sent to the token endpoint: `body` or `header`. |
+| `tokenExchange` | `form` | Token request encoding: `form` or `json`. |
 | `scopes` | | OAuth2 scopes to request. |
-| `scope_param` | `scope` | Query parameter name for scopes. Set to `user_scope` for Slack and other providers that use a non-standard parameter. |
-| `scope_separator` | space | Separator between scope values. |
+| `scopeParam` | `scope` | Query parameter name for scopes. Set to `user_scope` for Slack and other providers that use a non-standard parameter. |
+| `scopeSeparator` | space | Separator between scope values. |
 | `pkce` | `false` | Enable Proof Key for Code Exchange. |
-| `authorization_params` | | Extra parameters for the authorization request. |
-| `token_params` | | Extra parameters for the token request. |
-| `refresh_params` | | Extra parameters for the refresh request. |
-| `accept_header` | | `Accept` header for the token endpoint. |
-| `access_token_path` | | JSON path to the access token in the token response. |
-| `token_metadata` | | Fields to extract from the token response and store as connection metadata. |
+| `authorizationParams` | | Extra parameters for the authorization request. |
+| `tokenParams` | | Extra parameters for the token request. |
+| `refreshParams` | | Extra parameters for the refresh request. |
+| `acceptHeader` | | `Accept` header for the token endpoint. |
+| `accessTokenPath` | | JSON path to the access token in the token response. |
+| `tokenMetadata` | | Fields to extract from the token response and store as connection metadata. |
 
 `mcp_oauth` is an advanced mode for MCP-driven OAuth discovery. It delegates authorization URL and token URL resolution to the upstream MCP server.
 
@@ -561,10 +561,9 @@ connections:
       credentials:
         - name: token
           label: API Access Token
-          help_url: https://app.example.com/settings/tokens
 ```
 
-Multiple credentials require `auth_mapping` to map each field to an HTTP header:
+Multiple credentials require `authMapping` to map each field to an HTTP header:
 
 ```yaml
 connections:
@@ -574,11 +573,9 @@ connections:
       credentials:
         - name: api_key
           label: API Key
-          help_url: https://us5.datadoghq.com/organization-settings/api-keys
         - name: app_key
           label: Application Key
-          help_url: https://us5.datadoghq.com/organization-settings/application-keys
-      auth_mapping:
+      authMapping:
         headers:
           DD-API-KEY:
             valueFrom:
@@ -595,10 +592,9 @@ connections:
 | `credentials[].name` | Unique, lowercase-with-underscores identifier. Required when `auth.type` is `manual`. |
 | `credentials[].label` | UI display label. Falls back to `name` when omitted. |
 | `credentials[].description` | Hint text below the label. Supports inline links via `[text](url)`. |
-| `credentials[].help_url` | Link placed next to the label pointing to where the credential can be found. |
-| `auth_mapping.headers.<HEADER>.value` | Supplies a static deployer-managed value for a header. |
-| `auth_mapping.headers.<HEADER>.valueFrom.credentialFieldRef.name` | Reads a header value from the named manual credential field. |
-| `auth_mapping.basic.username` / `auth_mapping.basic.password` | Build the Basic auth username/password from either a static `value` or `valueFrom.credentialFieldRef.name`. |
+| `authMapping.headers.<HEADER>.value` | Supplies a static deployer-managed value for a header. |
+| `authMapping.headers.<HEADER>.valueFrom.credentialFieldRef.name` | Reads a header value from the named manual credential field. |
+| `authMapping.basic.username` / `authMapping.basic.password` | Build the Basic auth username/password from either a static `value` or `valueFrom.credentialFieldRef.name`. |
 
 For Basic auth providers that should collect only an API key while keeping the organization ID static, declare just the user-facing field and map the rest explicitly:
 
@@ -610,8 +606,7 @@ connections:
       credentials:
         - name: api_key
           label: API Key
-          help_url: https://app.moderntreasury.com/settings/api_keys
-      auth_mapping:
+      authMapping:
         basic:
           username:
             value: ${MODERN_TREASURY_ORG_ID}
@@ -631,8 +626,8 @@ connections:
     mode: user
     auth:
       type: oauth2
-      authorization_url: https://accounts.example.com/oauth/authorize
-      token_url: https://accounts.example.com/oauth/token
+      authorizationUrl: https://accounts.example.com/oauth/authorize
+      tokenUrl: https://accounts.example.com/oauth/token
     params:
       workspace_id:
         required: true
@@ -640,8 +635,8 @@ connections:
         from: discovery
     discovery:
       url: https://api.example.com/workspaces
-      id_path: id
-      name_path: name
+      idPath: id
+      namePath: name
       metadata:
         workspace_id: id
 ```
@@ -649,8 +644,8 @@ connections:
 | Field | Description |
 | --- | --- |
 | `discovery.url` | URL to fetch the list of resources after connect. |
-| `discovery.id_path` | JSON path to the resource identifier. |
-| `discovery.name_path` | JSON path to the resource display name. |
+| `discovery.idPath` | JSON path to the resource identifier. |
+| `discovery.namePath` | JSON path to the resource display name. |
 | `discovery.metadata` | Maps connection metadata keys to JSON paths in the discovery response. |
 
 ## `egress`
@@ -659,19 +654,19 @@ connections:
 
 ```yaml
 egress:
-  default_action: deny
+  defaultAction: deny
   policies:
     - action: allow
       provider: github
       method: GET
       host: api.github.com
   credentials:
-    - secret_ref: github-service-token
-      auth_style: bearer
+    - secretRef: github-service-token
+      authStyle: bearer
       host: api.github.com
 ```
 
-`default_action` sets the global fallback policy to `allow` or `deny`.
+`defaultAction` sets the global fallback policy to `allow` or `deny`.
 
 ### Policies
 
@@ -680,28 +675,28 @@ egress:
 | Field | Description |
 | --- | --- |
 | `action` | **Required.** `allow` or `deny`. |
-| `subject_kind` | Match by subject kind. |
-| `subject_id` | Match by subject identifier. |
+| `subjectKind` | Match by subject kind. |
+| `subjectId` | Match by subject identifier. |
 | `provider` | Match by integration name. |
 | `operation` | Match by operation name. |
 | `method` | Match by HTTP method. |
 | `host` | Match by destination host. |
-| `path_prefix` | Match by URL path prefix. |
+| `pathPrefix` | Match by URL path prefix. |
 
 ### Credentials
 
-`credentials` attaches secret-backed outbound credentials to requests matching at least one criterion. `secret_ref` is a bare secret name (not a `secret://` URI) resolved through the configured secret manager.
+`credentials` attaches secret-backed outbound credentials to requests matching at least one criterion. `secretRef` is a bare secret name (not a `secret://` URI) resolved through the configured secret manager.
 
 | Field | Description |
 | --- | --- |
-| `secret_ref` | **Required.** Bare secret name resolved through the secret manager. |
-| `auth_style` | How to inject the credential: `bearer`, `raw`, `basic`, or `none`. |
-| `subject_kind` | Match by subject kind. |
-| `subject_id` | Match by subject identifier. |
+| `secretRef` | **Required.** Bare secret name resolved through the secret manager. |
+| `authStyle` | How to inject the credential: `bearer`, `raw`, `basic`, or `none`. |
+| `subjectKind` | Match by subject kind. |
+| `subjectId` | Match by subject identifier. |
 | `operation` | Match by operation name. |
 | `method` | Match by HTTP method. |
 | `host` | Match by destination host. |
-| `path_prefix` | Match by URL path prefix. |
+| `pathPrefix` | Match by URL path prefix. |
 
 ## `ui`
 
@@ -712,7 +707,7 @@ ui:
       ref: github.com/your-org/your-repo/web/console
       version: 1.0.0
   config:
-    brand_name: Acme
+    brandName: Acme
 ```
 
 `ui.provider` controls the public client UI at `/`, while the built-in admin UI remains available at `/admin`. Omit `ui` to use the pinned first-party default UI bundle. Set `ui.provider: none` to disable the public UI entirely. Or set `ui.provider.source` to a packaged `webui` bundle. See [Releasing](/providers/releasing) for the full workflow.
@@ -732,14 +727,14 @@ Each plugin uses a nested `provider` block. Every plugin must use exactly one lo
 
 Auth and datastore providers use the same PluginDef shape. When `auth.provider` or `datastore.provider` is set, `source.ref` or `source.path` must be present. `auth.config` and `datastore.config` are only allowed when their corresponding provider is set.
 
-Only `connections.default` may define `params` or `discovery`. `mcp.tool_prefix` is valid only when `mcp.enabled` is `true`. All connections in an integration must share the same mode.
+Only `connections.default` may define `params` or `discovery`. `mcp.toolPrefix` is valid only when `mcp.enabled` is `true`. All connections in an integration must share the same mode.
 
 `ui.provider` must be either `none` or a provider mapping with exactly one loading mode: local `ui.provider.source.path` or managed `ui.provider.source.ref`. `ui.provider.source.version` is required with `ui.provider.source.ref` and invalid with `ui.provider.source.path`. `ui.config` is only allowed when `ui.provider` is not `none`.
 
-`egress.default_action` must be `allow` or `deny`. Each egress policy rule requires an `action`. Each egress credential grant requires `secret_ref` (as a bare name, not a `secret://` URI) and at least one match criterion.
+`egress.defaultAction` must be `allow` or `deny`. Each egress policy rule requires an `action`. Each egress credential grant requires `secretRef` (as a bare name, not a `secret://` URI) and at least one match criterion.
 
 Server listener ports must be greater than zero. When `server.management` is configured, it must differ from `server.public`.
 
 ### Runtime
 
-`datastore.provider` and `server.encryption_key` are required at `serve` time. `auth` is optional.
+`datastore.provider` and `server.encryptionKey` are required at `serve` time. `auth` is optional.

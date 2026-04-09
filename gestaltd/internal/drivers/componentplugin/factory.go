@@ -16,9 +16,9 @@ type YAMLConfig struct {
 	Command      string            `yaml:"command"`
 	Args         []string          `yaml:"args"`
 	Env          map[string]string `yaml:"env"`
-	AllowedHosts []string          `yaml:"allowed_hosts"`
-	HostBinary   string            `yaml:"host_binary"`
-	ManifestPath string            `yaml:"manifest_path"`
+	AllowedHosts []string          `yaml:"allowedHosts"`
+	HostBinary   string            `yaml:"hostBinary"`
+	ManifestPath string            `yaml:"manifestPath"`
 	Config       map[string]any    `yaml:"config"`
 }
 

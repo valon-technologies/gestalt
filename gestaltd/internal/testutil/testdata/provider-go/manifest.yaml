@@ -1,6 +1,6 @@
 source: github.com/valon-technologies/gestalt/provider-go
 version: 0.0.1-alpha.1
-display_name: Example Provider
+displayName: Example Provider
 description: A minimal example provider built with the public SDK
 plugin:
   connections:

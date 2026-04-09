@@ -23,7 +23,7 @@ func TestE2EValidateUsesUpdatedManagedPluginConfigAfterInit(t *testing.T) {
 	cfgPath := writePreparedSourceConfig(t, dir, pluginDir, map[string]string{
 		"api_key": "one",
 	}, []string{
-		"encryption_key: test-key",
+		"encryptionKey: test-key",
 	})
 
 	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
@@ -34,7 +34,7 @@ func TestE2EValidateUsesUpdatedManagedPluginConfigAfterInit(t *testing.T) {
 	writePreparedSourceConfig(t, dir, pluginDir, map[string]string{
 		"wrong_key": "two",
 	}, []string{
-		"encryption_key: test-key",
+		"encryptionKey: test-key",
 	})
 
 	out, err = exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
@@ -58,7 +58,7 @@ func TestE2EServeLockedResolvesLateBoundManagedPluginEnv(t *testing.T) {
 	}, []string{
 		"public:",
 		"  port: ${" + portEnv + "}",
-		"encryption_key: test-key",
+		"encryptionKey: test-key",
 	})
 
 	initCmd := exec.Command(gestaltdBin, "init", "--config", cfgPath)

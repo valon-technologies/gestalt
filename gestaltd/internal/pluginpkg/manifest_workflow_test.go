@@ -244,7 +244,7 @@ func TestManifestWorkflow_RejectsInvalidPackageInputs(t *testing.T) {
 				mustWriteFile(t, filepath.Join(dir, filepath.FromSlash(artifactPath)), []byte("provider"), 0o755)
 				return mustWriteManifestData(t, dir, ManifestFile, mustRawManifestJSON(t, manifest))
 			},
-			wantError: "icon_file must stay within the package",
+			wantError: "iconFile must stay within the package",
 		},
 		{
 			name: "rejects unsupported auth type",
@@ -273,7 +273,7 @@ func TestManifestWorkflow_RejectsInvalidPackageInputs(t *testing.T) {
 				mustWriteFile(t, filepath.Join(dir, filepath.FromSlash(artifactPath)), []byte("provider"), 0o755)
 				return mustWriteManifestData(t, dir, ManifestFile, mustRawManifestJSON(t, manifest))
 			},
-			wantError: "provider.auth.token_url is required for oauth2",
+			wantError: "provider.auth.tokenUrl is required for oauth2",
 		},
 	}
 
@@ -303,9 +303,9 @@ func TestManifestWorkflow_AcceptsProviderWireSurfaceManifest(t *testing.T) {
 	manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
 source: github.com/acme/plugins/provider-wire
 version: 1.0.0
-display_name: Provider Wire
+displayName: Provider Wire
 provider:
-  config_schema_path: schemas/config.schema.json
+  configSchemaPath: schemas/config.schema.json
   connections:
     default:
       auth:
@@ -313,21 +313,21 @@ provider:
     api:
       auth:
         type: oauth2
-        authorization_url: https://auth.example.com/authorize
-        token_url: https://auth.example.com/token
-  managed_parameters:
+        authorizationUrl: https://auth.example.com/authorize
+        tokenUrl: https://auth.example.com/token
+  managedParameters:
     - in: path
       name: workspaceId
       value: ws_123
   pagination:
     style: cursor
-    cursor_param: cursor
+    cursorParam: cursor
     cursor:
       source: header
       path: X-After-Cursor
-    results_path: results
-    max_pages: 10
-  allowed_operations:
+    resultsPath: results
+    maxPages: 10
+  allowedOperations:
     items.list:
       paginate: true
     items.info: {}
@@ -374,7 +374,7 @@ func TestManifestWorkflow_AcceptsProviderWireMCPOAuthManifestAcrossDirectoryAndA
 	manifestPath := mustWriteManifestData(t, sourceDir, "manifest.yaml", []byte(`
 source: github.com/acme/plugins/notion
 version: 0.0.1-alpha.1
-display_name: Notion
+displayName: Notion
 provider:
   connections:
     mcp:
@@ -448,7 +448,7 @@ func TestManifestWorkflow_NamedConnectionParamsAndDiscovery(t *testing.T) {
 	manifestPath := mustWriteManifestData(t, dir, "plugin.yaml", []byte(`
 source: github.com/acme/plugins/multi-conn
 version: 1.0.0
-display_name: Multi Connection
+displayName: Multi Connection
 provider:
   connections:
     default:
@@ -458,8 +458,8 @@ provider:
       mode: user
       auth:
         type: oauth2
-        authorization_url: https://auth.example.com/authorize
-        token_url: https://auth.example.com/token
+        authorizationUrl: https://auth.example.com/authorize
+        tokenUrl: https://auth.example.com/token
       params:
         workspace_id:
           required: true
@@ -468,8 +468,8 @@ provider:
           from: discovery
       discovery:
         url: https://api.example.com/workspaces
-        id_path: id
-        name_path: name
+        idPath: id
+        namePath: name
         metadata:
           region: region
   surfaces:

@@ -53,26 +53,25 @@ type credentialFieldInfo struct {
 	Name        string `json:"name"`
 	Label       string `json:"label,omitempty"`
 	Description string `json:"description,omitempty"`
-	HelpURL     string `json:"help_url,omitempty"`
 }
 
 type connectionDefInfo struct {
 	Name             string                `json:"name"`
-	AuthTypes        []string              `json:"auth_types"`
-	CredentialFields []credentialFieldInfo `json:"credential_fields,omitempty"`
+	AuthTypes        []string              `json:"authTypes"`
+	CredentialFields []credentialFieldInfo `json:"credentialFields,omitempty"`
 }
 
 type integrationInfo struct {
 	Name             string                         `json:"name"`
-	DisplayName      string                         `json:"display_name,omitempty"`
+	DisplayName      string                         `json:"displayName,omitempty"`
 	Description      string                         `json:"description,omitempty"`
-	IconSVG          string                         `json:"icon_svg,omitempty"`
+	IconSVG          string                         `json:"iconSvg,omitempty"`
 	Connected        bool                           `json:"connected"`
 	Instances        []instanceInfo                 `json:"instances,omitempty"`
-	AuthTypes        []string                       `json:"auth_types"`
-	ConnectionParams map[string]connectionParamInfo `json:"connection_params,omitempty"`
+	AuthTypes        []string                       `json:"authTypes"`
+	ConnectionParams map[string]connectionParamInfo `json:"connectionParams,omitempty"`
 	Connections      []connectionDefInfo            `json:"connections,omitempty"`
-	CredentialFields []credentialFieldInfo          `json:"credential_fields,omitempty"`
+	CredentialFields []credentialFieldInfo          `json:"credentialFields,omitempty"`
 }
 
 type connectionParamInfo struct {

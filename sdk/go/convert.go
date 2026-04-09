@@ -18,7 +18,7 @@ func writeCatalogYAML(cat *proto.Catalog, path string) error {
 		}
 		return nil
 	}
-	jsonData, err := protojson.MarshalOptions{UseProtoNames: true, EmitDefaultValues: false}.Marshal(cat)
+	jsonData, err := protojson.MarshalOptions{UseProtoNames: false, EmitDefaultValues: false}.Marshal(cat)
 	if err != nil {
 		return fmt.Errorf("marshal catalog: %w", err)
 	}

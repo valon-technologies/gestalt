@@ -59,16 +59,16 @@ function normalizeAuthTypes(authTypes?: AuthType[], fallbackToOAuth = true): Aut
 }
 
 function resolveAuthTargets(integration: Integration): AuthTarget[] {
-  const defaultCredentialFields = integration.credential_fields;
+  const defaultCredentialFields = integration.credentialFields;
   if (integration.connections?.length) {
     return integration.connections
       .map((connection) => ({
         key: connection.name,
         connection: connection.name,
         label: connection.name,
-        authTypes: normalizeAuthTypes(connection.auth_types, false),
-        credentialFields: connection.credential_fields?.length
-          ? connection.credential_fields
+        authTypes: normalizeAuthTypes(connection.authTypes, false),
+        credentialFields: connection.credentialFields?.length
+          ? connection.credentialFields
           : defaultCredentialFields,
       }))
       .filter((target) => target.authTypes.length > 0);
@@ -76,8 +76,8 @@ function resolveAuthTargets(integration: Integration): AuthTarget[] {
 
   return [{
     key: integration.name,
-    label: integration.display_name || integration.name,
-    authTypes: normalizeAuthTypes(integration.auth_types),
+    label: integration.displayName || integration.name,
+    authTypes: normalizeAuthTypes(integration.authTypes),
     credentialFields: defaultCredentialFields,
   }];
 }
@@ -157,13 +157,13 @@ export default function IntegrationSettingsModal({
     dialogRef.current?.showModal();
   }, []);
 
-  const displayName = integration.display_name || integration.name;
+  const displayName = integration.displayName || integration.name;
   const headingId = `settings-modal-heading-${integration.name}`;
   const authTargets = resolveAuthTargets(integration);
   const defaultTarget = authTargets.length === 1 ? authTargets[0] : undefined;
   const defaultConnection = defaultTarget?.connection;
   const connectionActions = buildAuthActions(authTargets, !!integration.connected);
-  const needsParams = integration.connection_params && Object.keys(integration.connection_params).length > 0;
+  const needsParams = integration.connectionParams && Object.keys(integration.connectionParams).length > 0;
 
   function handleCancel(e: React.SyntheticEvent<HTMLDialogElement>) {
     if (disconnecting || submitting) {
@@ -210,7 +210,7 @@ export default function IntegrationSettingsModal({
     const target = pendingAction?.connection
       ? authTargets.find((authTarget) => authTarget.connection === pendingAction.connection)
       : defaultTarget;
-    return target?.credentialFields ?? integration.credential_fields;
+    return target?.credentialFields ?? integration.credentialFields;
   }
 
   function isPendingAction(action: AuthAction): boolean {
@@ -242,9 +242,9 @@ export default function IntegrationSettingsModal({
     }
 
     let params: Record<string, string> | undefined;
-    if (integration.connection_params) {
+    if (integration.connectionParams) {
       const collected: Record<string, string> = {};
-      for (const name of Object.keys(integration.connection_params)) {
+      for (const name of Object.keys(integration.connectionParams)) {
         const val = (fd.get(`cp_${name}`) as string)?.trim();
         if (val) collected[name] = val;
       }
@@ -359,7 +359,7 @@ export default function IntegrationSettingsModal({
             integrationName={integration.name}
             headingId={headingId}
             credentialFields={resolveCredentialFields()}
-            connectionParams={needsParams ? integration.connection_params : undefined}
+            connectionParams={needsParams ? integration.connectionParams : undefined}
             error={error}
             submitting={submitting}
             onSubmit={handleTokenSubmit}
@@ -497,16 +497,6 @@ function TokenForm({
             className="label-text block"
           >
             {field.label || field.name}
-            {field.help_url && (
-              <a
-                href={field.help_url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="ml-1.5 normal-case tracking-normal text-gold-600 hover:underline dark:text-gold-400"
-              >
-                (where to find this)
-              </a>
-            )}
           </label>
           {field.description && (
             <p className="mt-1 text-xs text-faint normal-case tracking-normal">{renderLinkedText(field.description)}</p>

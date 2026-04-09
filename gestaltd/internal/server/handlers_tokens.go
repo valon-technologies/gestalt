@@ -23,7 +23,7 @@ type createTokenResponse struct {
 	ID        string     `json:"id"`
 	Name      string     `json:"name"`
 	Token     string     `json:"token"`
-	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
 }
 
 func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
@@ -83,8 +83,8 @@ type apiTokenInfo struct {
 	ID        string     `json:"id"`
 	Name      string     `json:"name"`
 	Scopes    string     `json:"scopes"`
-	CreatedAt time.Time  `json:"created_at"`
-	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	CreatedAt time.Time  `json:"createdAt"`
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
 }
 
 func (s *Server) listAPITokens(w http.ResponseWriter, r *http.Request) {
@@ -243,7 +243,6 @@ func credentialFieldInfosFromProvider(prov core.Provider) []credentialFieldInfo 
 			Name:        field.Name,
 			Label:       field.Label,
 			Description: field.Description,
-			HelpURL:     field.HelpURL,
 		}
 	})
 }
@@ -271,7 +270,6 @@ func connectionInfoFromAuth(name string, auth config.ConnectionAuthDef, integrat
 			Name:        field.Name,
 			Label:       field.Label,
 			Description: field.Description,
-			HelpURL:     field.HelpURL,
 		}
 	}); len(fields) > 0 {
 		info.CredentialFields = fields

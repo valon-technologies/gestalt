@@ -65,7 +65,7 @@ secrets:
 server:
   public:
     port: 8080
-  encryption_key: %q
+  encryptionKey: %q
 `, dbPath, encryptionKey)
 }
 
@@ -84,6 +84,6 @@ secrets:
 server:
   public:
     port: 8080
-  encryption_key: %q
-`, dbPath, filepath.Join(providersDir, "web", "default", "provider.yaml"), encryptionKey)
+  encryptionKey: %q
+`, dbPath, filepath.Join(providersDir, "web", "default", "manifest.yaml"), encryptionKey)
 }

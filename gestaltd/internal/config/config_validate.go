@@ -23,7 +23,7 @@ func ValidateStructure(cfg *Config) error {
 	}
 	if cfg.Server.APITokenTTL != "" {
 		if _, err := ParseDuration(cfg.Server.APITokenTTL); err != nil {
-			return fmt.Errorf("config validation: server.api_token_ttl: %w", err)
+			return fmt.Errorf("config validation: server.apiTokenTtl: %w", err)
 		}
 	}
 	if err := validateAudit(cfg.Audit); err != nil {
@@ -196,7 +196,7 @@ func manifestBackedConnectionReferences(plugin *ProviderDef, provider *pluginman
 	}
 	return []inlineConnectionReference{
 		{
-			field: "plugin.default_connection",
+			field: "plugin.defaultConnection",
 			name:  defaultConnection,
 		},
 	}
@@ -412,15 +412,15 @@ func validateConnectionAuthMappings(integration string, auth ConnectionAuthDef, 
 		return nil
 	}
 	for headerName, value := range auth.AuthMapping.Headers {
-		if err := validateAuthValueDef(integration, subject, fmt.Sprintf("auth_mapping.headers[%q]", headerName), value, credentialNames); err != nil {
+		if err := validateAuthValueDef(integration, subject, fmt.Sprintf("authMapping.headers[%q]", headerName), value, credentialNames); err != nil {
 			return err
 		}
 	}
 	if auth.AuthMapping.Basic != nil {
-		if err := validateAuthValueDef(integration, subject, "auth_mapping.basic.username", auth.AuthMapping.Basic.Username, credentialNames); err != nil {
+		if err := validateAuthValueDef(integration, subject, "authMapping.basic.username", auth.AuthMapping.Basic.Username, credentialNames); err != nil {
 			return err
 		}
-		if err := validateAuthValueDef(integration, subject, "auth_mapping.basic.password", auth.AuthMapping.Basic.Password, credentialNames); err != nil {
+		if err := validateAuthValueDef(integration, subject, "authMapping.basic.password", auth.AuthMapping.Basic.Password, credentialNames); err != nil {
 			return err
 		}
 	}
