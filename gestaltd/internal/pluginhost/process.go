@@ -53,8 +53,43 @@ type pluginProcess struct {
 	closeErr       error
 }
 
+type ResourceProxy struct {
+	KV   proto.KeyValueResourceServer
+	SQL  proto.SQLResourceServer
+	Blob proto.BlobStoreResourceServer
+}
+
+func (rp *ResourceProxy) Register(srv *grpc.Server) {
+	if rp.KV != nil {
+		proto.RegisterKeyValueResourceServer(srv, rp.KV)
+	}
+	if rp.SQL != nil {
+		proto.RegisterSQLResourceServer(srv, rp.SQL)
+	}
+	if rp.Blob != nil {
+		proto.RegisterBlobStoreResourceServer(srv, rp.Blob)
+	}
+}
+
 func NewExecutableProvider(ctx context.Context, cfg ExecConfig) (core.Provider, error) {
-	proc, err := startPluginProcess(ctx, cfg, nil, "")
+	return newExecutableProvider(ctx, cfg, nil)
+}
+
+func NewExecutableProviderWithResources(ctx context.Context, cfg ExecConfig, resources []*ResourceProxy) (core.Provider, error) {
+	registerHost := func(srv *grpc.Server) {
+		for _, rp := range resources {
+			rp.Register(srv)
+		}
+	}
+	return newExecutableProvider(ctx, cfg, registerHost)
+}
+
+func newExecutableProvider(ctx context.Context, cfg ExecConfig, registerHost func(*grpc.Server)) (core.Provider, error) {
+	var hostSocketEnv string
+	if registerHost != nil {
+		hostSocketEnv = proto.EnvResourceHostSocket
+	}
+	proc, err := startPluginProcess(ctx, cfg, registerHost, hostSocketEnv)
 	if err != nil {
 		return nil, err
 	}

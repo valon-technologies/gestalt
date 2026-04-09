@@ -172,7 +172,7 @@ func buildExecutablePluginProvider(ctx context.Context, name string, intg config
 	if err != nil {
 		return nil, fmt.Errorf("build executable plugin provider %q: %w", name, err)
 	}
-	pluginProv, err := buildPluginProvider(ctx, intg, pluginConfig, staticSpec)
+	pluginProv, err := buildPluginProvider(ctx, name, intg, pluginConfig, staticSpec, deps)
 	if err != nil {
 		return nil, err
 	}
@@ -466,7 +466,7 @@ func catalogOperationCount(cat *catalog.Catalog) int {
 	return len(cat.Operations)
 }
 
-func buildPluginProvider(ctx context.Context, intg config.IntegrationDef, pluginConfig map[string]any, spec pluginhost.StaticProviderSpec) (core.Provider, error) {
+func buildPluginProvider(ctx context.Context, name string, intg config.IntegrationDef, pluginConfig map[string]any, spec pluginhost.StaticProviderSpec, deps Deps) (core.Provider, error) {
 	command := intg.Plugin.Command
 	args := intg.Plugin.Args
 	env := clonePluginEnv(intg.Plugin.Env)
@@ -503,7 +503,12 @@ func buildPluginProvider(ctx context.Context, intg config.IntegrationDef, plugin
 		}()
 	}
 
-	prov, err := pluginhost.NewExecutableProvider(ctx, pluginhost.ExecConfig{
+	proxies, err := buildDatastoreProxies(intg, name, deps.Datastores)
+	if err != nil {
+		return nil, fmt.Errorf("build datastore proxies for %q: %w", name, err)
+	}
+
+	cfg := pluginhost.ExecConfig{
 		Command:      command,
 		Args:         args,
 		Env:          env,
@@ -512,12 +517,49 @@ func buildPluginProvider(ctx context.Context, intg config.IntegrationDef, plugin
 		AllowedHosts: intg.Plugin.AllowedHosts,
 		HostBinary:   intg.Plugin.HostBinary,
 		Cleanup:      cleanup,
-	})
+	}
+
+	var prov core.Provider
+	if len(proxies) > 0 {
+		prov, err = pluginhost.NewExecutableProviderWithResources(ctx, cfg, proxies)
+	} else {
+		prov, err = pluginhost.NewExecutableProvider(ctx, cfg)
+	}
 	if err != nil {
 		return nil, err
 	}
 	cleanup = nil
 	return prov, nil
+}
+
+func buildDatastoreProxies(intg config.IntegrationDef, intgName string, datastores map[string]core.ResourceProvider) ([]*pluginhost.ResourceProxy, error) {
+	if len(intg.Datastores) == 0 {
+		return nil, nil
+	}
+
+	proxies := make([]*pluginhost.ResourceProxy, 0, len(intg.Datastores))
+	for alias, binding := range intg.Datastores {
+		provider, ok := datastores[binding.Resource]
+		if !ok {
+			return nil, fmt.Errorf("resource %q not found for binding %q", binding.Resource, alias)
+		}
+		remote, ok := provider.(*pluginhost.RemoteResourceProvider)
+		if !ok {
+			return nil, fmt.Errorf("resource %q: unexpected provider type", binding.Resource)
+		}
+
+		ns := binding.Namespace
+		if ns == "" {
+			ns = intgName
+		}
+
+		rp, err := pluginhost.NewResourceProxy(remote, ns, binding.Capability)
+		if err != nil {
+			return nil, fmt.Errorf("binding %q: %w", alias, err)
+		}
+		proxies = append(proxies, rp)
+	}
+	return proxies, nil
 }
 
 func clonePluginEnv(src map[string]string) map[string]string {
