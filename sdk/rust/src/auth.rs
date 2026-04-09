@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use async_trait::async_trait;
+use tonic::codegen::async_trait;
 
 use crate::api::RuntimeMetadata;
 use crate::error::{Error, Result};

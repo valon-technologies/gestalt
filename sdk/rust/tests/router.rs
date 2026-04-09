@@ -4,7 +4,6 @@ mod helpers;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
-use async_trait::async_trait;
 use gestalt_plugin_sdk as gestalt;
 use gestalt_plugin_sdk::proto::v1::provider_plugin_server::ProviderPlugin;
 use gestalt_plugin_sdk::proto::v1::{ExecuteRequest, StartProviderRequest};
@@ -12,6 +11,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map as JsonMap, Value as JsonValue, json};
 use tonic::Request as GrpcRequest;
+use tonic::codegen::async_trait;
 
 use gestalt_plugin_sdk::{Operation, Provider, Request, Response, Router, ok};
 

@@ -11,22 +11,23 @@ keywords = ["gestalt", "grpc", "protobuf", "sdk"]
 categories = ["api-bindings", "development-tools"]
 
 [dependencies]
-async-trait = "0.1"
 libc = "0.2"
-prost = "0.12"
-prost-types = "0.12"
+prost = "0.14"
+prost-types = "0.14"
 schemars = { version = "0.8", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal", "time"] }
 tokio-stream = { version = "0.1", features = ["net"] }
-tonic = { version = "0.11", features = ["transport"] }
+tonic = { version = "0.14", features = ["transport"] }
+tonic-prost = "0.14"
 
 [build-dependencies]
-prost-build = "0.12"
+prost-build = "0.14"
 protoc-bin-vendored = "3"
-tonic-build = "0.11"
+tonic-prost-build = "0.14"
 
 [dev-dependencies]
-tower = "0.4"
+hyper-util = "0.1.20"
+tower = "0.5"

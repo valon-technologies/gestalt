@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 use std::convert::Infallible;
 
-use async_trait::async_trait;
+use tonic::codegen::async_trait;
 
 use crate::catalog::Catalog;
 use crate::error::{Error, Result};

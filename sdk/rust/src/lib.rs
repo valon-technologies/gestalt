@@ -27,7 +27,6 @@ pub mod proto {
 
 pub use api::RuntimeMetadata;
 pub use api::{Provider, Request, Response, ok};
-pub use async_trait::async_trait;
 pub use auth::{
     AuthProvider, AuthenticatedUser, BeginLoginRequest, BeginLoginResponse, CompleteLoginRequest,
 };
@@ -40,6 +39,7 @@ pub use error::{Error, Result};
 #[doc(hidden)]
 pub use provider_server::{OperationResult, ProviderServer};
 pub use router::{Operation, Router};
+pub use tonic::codegen::async_trait;
 
 #[doc(hidden)]
 pub trait IntoRouterResult<P> {

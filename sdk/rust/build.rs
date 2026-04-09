@@ -22,7 +22,7 @@ fn main() {
     // Stable ordering makes the generated bindings and any derived snapshots easier to inspect.
     prost_config.btree_map(["."]);
 
-    tonic_build::configure()
+    tonic_prost_build::configure()
         .build_client(true)
         .build_server(true)
         .compile_with_config(prost_config, &protos, &includes)

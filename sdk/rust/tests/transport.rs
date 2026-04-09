@@ -3,7 +3,6 @@ mod helpers;
 
 use std::sync::{Arc, Mutex};
 
-use async_trait::async_trait;
 use gestalt_plugin_sdk::proto::v1::provider_plugin_client::ProviderPluginClient;
 use gestalt_plugin_sdk::proto::v1::{
     ExecuteRequest, GetSessionCatalogRequest, PostConnectRequest, StartProviderRequest,
@@ -11,8 +10,10 @@ use gestalt_plugin_sdk::proto::v1::{
 use gestalt_plugin_sdk::{
     Catalog, CatalogOperation, Operation, Provider, Request, Response, Router, ok,
 };
+use hyper_util::rt::tokio::TokioIo;
 use tokio::net::UnixStream;
 use tonic::Code;
+use tonic::codegen::async_trait;
 use tonic::transport::Endpoint;
 use tower::service_fn;
 
@@ -112,7 +113,10 @@ async fn serves_provider_requests_over_unix_socket() {
         .expect("endpoint")
         .connect_with_connector(service_fn({
             let socket = socket.clone();
-            move |_| UnixStream::connect(socket.clone())
+            move |_| {
+                let socket = socket.clone();
+                async move { UnixStream::connect(socket).await.map(TokioIo::new) }
+            }
         }))
         .await
         .expect("connect channel");
