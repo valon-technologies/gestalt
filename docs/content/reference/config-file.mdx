@@ -18,7 +18,7 @@ ui: {}
 
 ## Load Semantics
 
-`${ENV_VAR}` references are expanded before YAML decoding. When a referenced variable is unset but a corresponding `ENV_VAR_FILE` variable exists, Gestalt reads the value from that file path instead. Unknown YAML fields are rejected.
+`${ENV_VAR}` references are expanded before YAML decoding. When a referenced variable is unset, Gestalt checks for a corresponding `ENV_VAR_FILE` variable and reads that file path instead. If neither is set, config loading fails. Use `${ENV_VAR:-}` when an explicit empty default is intentional. Unknown YAML fields are rejected.
 
 Several fields carry defaults when omitted: `server.public.port` defaults to `8080`, `secrets.provider` to `env`, and `telemetry.provider` to `stdout`. Relative paths resolve relative to the config file's directory. `secret://...` values are resolved during bootstrap, not during YAML parsing.
 

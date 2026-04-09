@@ -73,7 +73,7 @@ func (l *Lifecycle) InitAtPath(configPath string) (*Lockfile, error) {
 }
 
 func (l *Lifecycle) InitAtPathWithArtifactsDir(configPath, artifactsDir string) (*Lockfile, error) {
-	cfg, err := config.Load(configPath)
+	cfg, err := config.LoadAllowMissingEnv(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %v", err)
 	}

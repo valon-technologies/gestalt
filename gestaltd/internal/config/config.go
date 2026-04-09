@@ -707,6 +707,10 @@ func LoadWithLookup(path string, lookup func(string) (string, bool)) (*Config, e
 	return loadWithLookup(path, lookup, false)
 }
 
+func LoadAllowMissingEnv(path string) (*Config, error) {
+	return loadWithLookup(path, os.LookupEnv, true)
+}
+
 func OverlayManagedPluginConfig(path string, cfg *Config) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -806,15 +810,18 @@ func mappingValueNode(node *yaml.Node, key string) *yaml.Node {
 	return nil
 }
 
-func loadWithLookup(path string, lookup func(string) (string, bool), preserveMissing bool) (*Config, error) {
+func loadWithLookup(path string, lookup func(string) (string, bool), allowMissing bool) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading config file: %w", err)
 	}
 
-	resolved, err := expandEnvVariables(string(data), lookup, preserveMissing)
+	resolved, firstMissing, err := expandEnvVariables(string(data), lookup, !allowMissing)
 	if err != nil {
 		return nil, err
+	}
+	if !allowMissing && firstMissing != "" {
+		return nil, fmt.Errorf("expanding config environment variables: environment variable %q not set; use ${%s:-} to allow an empty default", firstMissing, firstMissing)
 	}
 
 	var cfg Config
@@ -835,33 +842,59 @@ func loadWithLookup(path string, lookup func(string) (string, bool), preserveMis
 	return &cfg, nil
 }
 
-func expandEnvVariables(input string, lookup func(string) (string, bool), preserveMissing bool) (string, error) {
+func parseEnvPlaceholder(key string) (name string, allowEmptyDefault bool, err error) {
+	if !strings.Contains(key, ":-") {
+		return key, false, nil
+	}
+	name, defaultValue, _ := strings.Cut(key, ":-")
+	if name == "" {
+		return "", false, fmt.Errorf("invalid environment placeholder ${%s}", key)
+	}
+	if defaultValue != "" {
+		return "", false, fmt.Errorf("unsupported environment placeholder ${%s}: only ${%s:-} is supported for empty defaults", key, name)
+	}
+	return name, true, nil
+}
+
+func expandEnvVariables(input string, lookup func(string) (string, bool), preserveMissing bool) (string, string, error) {
 	var expandErr error
+	var firstMissing string
 	resolved := os.Expand(input, func(key string) string {
 		if expandErr != nil {
 			return ""
 		}
-		if val, ok := lookup(key); ok {
+		name, allowEmptyDefault, err := parseEnvPlaceholder(key)
+		if err != nil {
+			expandErr = err
+			return ""
+		}
+		if val, ok := lookup(name); ok {
 			return val
 		}
-		filePath, ok := lookup(key + "_FILE")
+		filePath, ok := lookup(name + "_FILE")
 		if !ok || filePath == "" {
+			if allowEmptyDefault {
+				return ""
+			}
 			if preserveMissing {
+				if firstMissing == "" {
+					firstMissing = name
+				}
 				return "${" + key + "}"
 			}
 			return ""
 		}
 		data, err := os.ReadFile(filePath)
 		if err != nil {
-			expandErr = fmt.Errorf("resolving %s_FILE: %w", key, err)
+			expandErr = fmt.Errorf("resolving %s_FILE: %w", name, err)
 			return ""
 		}
 		return strings.TrimRight(string(data), "\r\n")
 	})
 	if expandErr != nil {
-		return "", fmt.Errorf("expanding config environment variables: %w", expandErr)
+		return "", "", fmt.Errorf("expanding config environment variables: %w", expandErr)
 	}
-	return resolved, nil
+	return resolved, firstMissing, nil
 }
 
 func overlayEnvIntoNode(node yaml.Node, lookup func(string) (string, bool), preserveMissing bool) (yaml.Node, error) {
@@ -870,7 +903,7 @@ func overlayEnvIntoNode(node yaml.Node, lookup func(string) (string, bool), pres
 		return yaml.Node{}, fmt.Errorf("marshaling config node: %w", err)
 	}
 
-	resolved, err := expandEnvVariables(string(data), lookup, preserveMissing)
+	resolved, _, err := expandEnvVariables(string(data), lookup, preserveMissing)
 	if err != nil {
 		return yaml.Node{}, err
 	}

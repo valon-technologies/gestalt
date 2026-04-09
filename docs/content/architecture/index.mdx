@@ -10,7 +10,7 @@ This section covers the internal design of Gestalt: how the server starts up, ho
 
 When `gestaltd serve` starts, it goes through a specific sequence that matters when you're debugging boot failures.
 
-First, the YAML config file is loaded and `${ENV_VAR}` placeholders are expanded. If a variable isn't set, Gestalt checks for a corresponding `_FILE` variable and reads that file instead (this is how Docker secrets work). Unknown fields are rejected.
+First, the YAML config file is loaded and `${ENV_VAR}` placeholders are expanded. If a variable isn't set, Gestalt checks for a corresponding `_FILE` variable and reads that file instead (this is how Docker secrets work). If neither exists, config loading fails. Use `${ENV_VAR:-}` when an explicit empty default is intentional. Unknown fields are rejected.
 
 Next, Gestalt initializes the secret manager from the `secrets` block. This is the one part of config that *cannot* use `secret://` references, because the secret manager doesn't exist yet. Credentials for the secret manager itself have to come in through `${ENV_VAR}` or `${ENV_VAR_FILE}`.
 
