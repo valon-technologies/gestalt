@@ -36,6 +36,11 @@ import {
   type RevokeAllAPITokensRequest,
 } from "../gen/v1/datastore_pb.ts";
 import {
+  SecretsProvider as SecretsPlugin,
+  GetSecretResponseSchema,
+  type GetSecretRequest,
+} from "../gen/v1/secrets_pb.ts";
+import {
   ConnectionMode as ProviderConnectionMode,
   GetSessionCatalogResponseSchema,
   OperationResultSchema,
@@ -64,6 +69,7 @@ import {
   type StoredIntegrationToken,
   type StoredUser,
 } from "./datastore.ts";
+import { SecretsProvider, isSecretsProvider } from "./secrets.ts";
 import { catalogToJson, catalogToYaml, type Catalog } from "./catalog.ts";
 import {
   IntegrationProvider,
@@ -92,7 +98,7 @@ export type RuntimeArgs = {
   target: string;
 };
 
-export type LoadedProvider = IntegrationProvider | AuthProvider | DatastoreProvider;
+export type LoadedProvider = IntegrationProvider | AuthProvider | DatastoreProvider | SecretsProvider;
 
 export async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
   const args = parseRuntimeArgs(argv);
@@ -152,6 +158,13 @@ export async function loadProviderFromTarget(
     case "datastore": {
       if (!isDatastoreProvider(candidate)) {
         throw new Error(`${targetValue} did not resolve to a Gestalt datastore provider`);
+      }
+      candidate.resolveName(defaultName);
+      return candidate;
+    }
+    case "secrets": {
+      if (!isSecretsProvider(candidate)) {
+        throw new Error(`${targetValue} did not resolve to a Gestalt secrets provider`);
       }
       candidate.resolveName(defaultName);
       return candidate;
@@ -242,6 +255,12 @@ export async function runBundledProvider(
       }
       loaded = provider;
       break;
+    case "secrets":
+      if (!isSecretsProvider(provider)) {
+        throw new Error("bundled target did not resolve to a Gestalt secrets provider");
+      }
+      loaded = provider;
+      break;
     default:
       throw new Error(`TypeScript SDK does not yet support provider kind ${JSON.stringify(kind)}`);
   }
@@ -276,6 +295,8 @@ export async function serve(provider: LoadedProvider): Promise<void> {
         router.service(AuthPlugin, createAuthService(provider));
       } else if (isDatastoreProvider(provider)) {
         router.service(DatastorePlugin, createDatastoreService(provider));
+      } else if (isSecretsProvider(provider)) {
+        router.service(SecretsPlugin, createSecretsService(provider));
       }
     },
   });
@@ -627,6 +648,19 @@ export function createDatastoreService(
       }
       await provider.deleteOAuthRegistration(request.authServerUrl, request.redirectUri);
       return create(EmptySchema, {});
+    },
+  };
+}
+
+export function createSecretsService(
+  provider: SecretsProvider,
+): Partial<ServiceImpl<typeof SecretsPlugin>> {
+  return {
+    async getSecret(request: GetSecretRequest) {
+      const value = await provider.getSecret(request.name);
+      return create(GetSecretResponseSchema, {
+        value,
+      });
     },
   };
 }

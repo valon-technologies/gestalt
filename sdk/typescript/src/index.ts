@@ -45,6 +45,11 @@ export {
   type StoredUser,
 } from "./datastore.ts";
 export {
+  defineSecretsProvider,
+  isSecretsProvider,
+  type SecretsProviderOptions,
+} from "./secrets.ts";
+export {
   Plugin,
   connectionModeToProtoValue,
   connectionParamToProto,
@@ -93,6 +98,7 @@ export {
   ENV_WRITE_CATALOG,
   createAuthService,
   createDatastoreService,
+  createSecretsService,
   createProviderService,
   createRuntimeService,
   loadPluginFromTarget,
