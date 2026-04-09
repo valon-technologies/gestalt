@@ -13,6 +13,8 @@ mod router;
 mod rpc_status;
 pub mod runtime;
 mod runtime_server;
+mod secrets;
+mod secrets_server;
 
 /// Generated protobuf and gRPC bindings compiled from `sdk/proto/v1/*.proto`.
 mod generated {
@@ -39,6 +41,7 @@ pub use error::{Error, Result};
 #[doc(hidden)]
 pub use provider_server::{OperationResult, ProviderServer};
 pub use router::{Operation, Router};
+pub use secrets::SecretsProvider;
 pub use tonic::codegen::async_trait;
 
 #[doc(hidden)]
@@ -98,6 +101,16 @@ macro_rules! export_datastore_provider {
         pub fn __gestalt_serve_datastore(_name: &str) -> $crate::Result<()> {
             let provider = std::sync::Arc::new($constructor());
             $crate::runtime::run_datastore_provider(provider)
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! export_secrets_provider {
+    (constructor = $constructor:path $(,)?) => {
+        pub fn __gestalt_serve_secrets(_name: &str) -> $crate::Result<()> {
+            let provider = std::sync::Arc::new($constructor());
+            $crate::runtime::run_secrets_provider(provider)
         }
     };
 }
