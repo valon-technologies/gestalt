@@ -56,7 +56,8 @@ func TestE2EServeLockedResolvesLateBoundManagedPluginEnv(t *testing.T) {
 	cfgPath := writePreparedSourceConfig(t, dir, pluginDir, map[string]string{
 		"api_key": "${" + apiKeyEnv + "}",
 	}, []string{
-		"port: ${" + portEnv + "}",
+		"public:",
+		"  port: ${" + portEnv + "}",
 		"encryption_key: test-key",
 	})
 
@@ -96,13 +97,6 @@ func TestE2EDefaultStartAutoGeneratesHomeConfig(t *testing.T) {
 	_ = setupAuthProviderDir(t, providersDir, "none")
 	_ = setupDatastoreProviderDir(t, providersDir, "sqlite")
 	configPath := filepath.Join(homeDir, ".gestaltd", "config.yaml")
-	legacyConfigDir := filepath.Join(homeDir, ".gestalt")
-	if err := os.MkdirAll(legacyConfigDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll legacy config dir: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(legacyConfigDir, "config.yaml"), []byte("not: [valid\n"), 0o644); err != nil {
-		t.Fatalf("WriteFile legacy config: %v", err)
-	}
 
 	cmd := exec.Command(gestaltdBin)
 	cmd.Env = withoutEnvVar(os.Environ(), "GESTALT_CONFIG")

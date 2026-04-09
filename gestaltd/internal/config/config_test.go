@@ -69,8 +69,8 @@ plugins:
 		t.Fatalf("Load: %v", err)
 	}
 
-	if cfg.Server.Port != 9090 {
-		t.Fatalf("Server.Port = %d", cfg.Server.Port)
+	if cfg.Server.Public.Port != 9090 {
+		t.Fatalf("Server.Public.Port = %d", cfg.Server.Public.Port)
 	}
 	if cfg.Server.EncryptionKey != "server-key" {
 		t.Fatalf("Server.EncryptionKey = %q", cfg.Server.EncryptionKey)
@@ -114,13 +114,16 @@ plugins:
         path: /tmp/plugin.yaml
 `)
 
-	cfg, err := LoadWithMapping(path, getenv)
+	cfg, err := LoadWithLookup(path, func(key string) (string, bool) {
+		v := getenv(key)
+		return v, v != ""
+	})
 	if err != nil {
-		t.Fatalf("LoadWithMapping: %v", err)
+		t.Fatalf("LoadWithLookup: %v", err)
 	}
 
-	if cfg.Server.Port != 8080 {
-		t.Fatalf("Server.Port = %d, want 8080", cfg.Server.Port)
+	if cfg.Server.Public.Port != 8080 {
+		t.Fatalf("Server.Public.Port = %d, want 8080", cfg.Server.Public.Port)
 	}
 	if cfg.Secrets.Provider != "env" {
 		t.Fatalf("Secrets.Provider = %q, want env", cfg.Secrets.Provider)
@@ -1000,57 +1003,5 @@ func TestLoad_ResolvesRelativePluginSourcePath(t *testing.T) {
 	wantPath := filepath.Join(pluginDir, "plugin.yaml")
 	if plugin.SourcePath() != wantPath {
 		t.Fatalf("plugin.SourcePath() = %q, want %q", plugin.SourcePath(), wantPath)
-	}
-}
-
-func TestLoadRejectsLegacyInlinePluginFields(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name    string
-		yaml    string
-		wantErr string
-	}{
-		{
-			name: "legacy openapi field rejected",
-			yaml: `
-plugins:
-  example:
-    provider:
-      source:
-        path: ./plugin.yaml
-      openapi: https://example.com/spec.json
-`,
-			wantErr: "field openapi not found",
-		},
-		{
-			name: "legacy operations field rejected",
-			yaml: `
-plugins:
-  example:
-    provider:
-      source:
-        path: ./plugin.yaml
-      operations:
-        - name: get_thing
-          method: GET
-          path: /things
-`,
-			wantErr: "field operations not found",
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			path := mustWriteConfigFile(t, tc.yaml)
-			_, err := Load(path)
-			if err == nil {
-				t.Fatal("Load: expected error, got nil")
-			}
-			if !strings.Contains(err.Error(), tc.wantErr) {
-				t.Fatalf("expected error containing %q, got: %v", tc.wantErr, err)
-			}
-		})
 	}
 }

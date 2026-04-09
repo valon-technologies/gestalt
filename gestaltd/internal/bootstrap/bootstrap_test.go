@@ -65,7 +65,7 @@ func validConfig() *config.Config {
 		Telemetry:    config.TelemetryConfig{Provider: "test-telemetry"},
 		Integrations: map[string]config.IntegrationDef{},
 		Server: config.ServerConfig{
-			Port:          8080,
+			Public:        config.ListenerConfig{Port: 8080},
 			EncryptionKey: "test-key",
 		},
 	}

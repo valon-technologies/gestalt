@@ -282,7 +282,7 @@ func (b *Broker) mcpConnection(providerName string) string {
 
 func toolResultToOperationResult(result *mcpgo.CallToolResult) (*core.OperationResult, error) {
 	headers := http.Header{}
-	headers.Set("Content-Type", core.ContentTypeJSON)
+	headers.Set("Content-Type", "application/json")
 
 	if result == nil {
 		return &core.OperationResult{Status: http.StatusOK, Headers: headers, Body: `{}`}, nil

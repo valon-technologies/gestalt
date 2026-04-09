@@ -8,7 +8,7 @@ import (
 )
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", core.ContentTypeJSON)
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(v)
 }
@@ -23,7 +23,7 @@ func writeOperationResult(w http.ResponseWriter, result *core.OperationResult) {
 		return
 	}
 
-	contentType := core.ContentTypeJSON
+	contentType := "application/json"
 	if result.Headers != nil {
 		if ct := result.Headers.Get("Content-Type"); ct != "" {
 			contentType = ct

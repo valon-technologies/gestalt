@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-
-	"gopkg.in/yaml.v3"
 )
 
 var validSegment = regexp.MustCompile(`^[a-zA-Z0-9_]([a-zA-Z0-9_-]*[a-zA-Z0-9_])?$`)
@@ -86,17 +84,6 @@ func (c *Catalog) Clone() *Catalog {
 	}
 	copy(out.Operations, c.Operations)
 	return out
-}
-
-func LoadCatalogYAML(data []byte) (*Catalog, error) {
-	var catalog Catalog
-	if err := yaml.Unmarshal(data, &catalog); err != nil {
-		return nil, fmt.Errorf("parsing catalog YAML: %w", err)
-	}
-	if err := catalog.Validate(); err != nil {
-		return nil, err
-	}
-	return &catalog, nil
 }
 
 var validAuthStyles = map[string]struct{}{

@@ -568,7 +568,7 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 		Repo:  testRepo,
 		Path:  "plugins/" + testPlugin,
 	}
-	expectedAssetName := src.AssetName(testVersion)
+	expectedAssetName := fmt.Sprintf("gestalt-plugin-%s_v%s_%s_%s.tar.gz", src.PluginName(), testVersion, runtime.GOOS, runtime.GOARCH)
 	expectedTag := src.ReleaseTag(testVersion)
 	releasePath := "/repos/" + testOwner + "/" + testRepo + "/releases/tags/" + expectedTag
 	archivePath := buildV2Archive(t, dir, testSource, testVersion, testBinary)

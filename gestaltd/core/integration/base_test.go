@@ -200,9 +200,7 @@ func TestBaseExecuteRESTRunsEgressResolutionOnFinalRequest(t *testing.T) {
 		IntegrationName: "test-provider",
 		BaseURL:         srv.URL,
 		EgressResolver: &egress.Resolver{
-			Subjects: egress.StaticSubjectResolver{
-				Subject: egress.Subject{Kind: egress.SubjectUser, ID: "user-1"},
-			},
+			Subjects: egress.ContextSubjectResolver{},
 			Policy: egresstest.PolicyFunc(func(_ context.Context, input egress.PolicyInput) error {
 				gotPolicy = input
 				return nil
@@ -211,7 +209,8 @@ func TestBaseExecuteRESTRunsEgressResolutionOnFinalRequest(t *testing.T) {
 	}
 	setTestCatalog(b, restCatalogOp("op", http.MethodGet, "/test"))
 
-	if _, err := b.Execute(context.Background(), "op", nil, "test-token"); err != nil {
+	ctx := egress.WithSubject(context.Background(), egress.Subject{Kind: egress.SubjectUser, ID: "user-1"})
+	if _, err := b.Execute(ctx, "op", nil, "test-token"); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 

@@ -29,14 +29,6 @@ var (
 	_ core.OperationConnectionProvider = (*MergedProvider)(nil)
 )
 
-func NewMerged(name, displayName, desc, iconSVG string, providers ...core.Provider) (*MergedProvider, error) {
-	bound := make([]BoundProvider, len(providers))
-	for i, p := range providers {
-		bound[i] = BoundProvider{Provider: p}
-	}
-	return NewMergedWithConnections(name, displayName, desc, iconSVG, bound...)
-}
-
 func NewMergedWithConnections(name, displayName, desc, iconSVG string, providers ...BoundProvider) (*MergedProvider, error) {
 	owned := make([]core.Provider, len(providers))
 	for i, p := range providers {
@@ -107,13 +99,4 @@ func (m *MergedProvider) Close() error {
 		}
 	}
 	return err
-}
-
-func (m *MergedProvider) DisownProvider(p core.Provider) {
-	for i, owned := range m.owned {
-		if owned == p {
-			m.owned = append(m.owned[:i], m.owned[i+1:]...)
-			return
-		}
-	}
 }

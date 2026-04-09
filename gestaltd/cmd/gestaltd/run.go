@@ -446,7 +446,7 @@ func validateConfigWithArtifactsDir(configFlag, artifactsDir string) error {
 func logConfigSummary(path string, cfg *config.Config) {
 	slog.Info("config loaded",
 		"config_file", path,
-		"server_port", cfg.Server.Port,
+		"server_port", cfg.Server.PublicListener().Port,
 		"server_public_addr", cfg.Server.PublicAddr(),
 		"server_management_addr", maskEmpty(cfg.Server.ManagementAddr()),
 		"server_base_url", maskEmpty(cfg.Server.BaseURL),
