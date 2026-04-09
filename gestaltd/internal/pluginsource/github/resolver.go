@@ -437,8 +437,10 @@ func possiblePlatformSplits(parts []string) []platformSplit {
 		splits = append(splits, platformSplit{parts[0], parts[1], ""})
 	case 3:
 		// os_arch_libc  OR  os_x86_64 (arch alias with underscore)
-		splits = append(splits, platformSplit{parts[0], parts[1], parts[2]})
-		splits = append(splits, platformSplit{parts[0], parts[1] + "_" + parts[2], ""})
+		splits = append(splits,
+			platformSplit{parts[0], parts[1], parts[2]},
+			platformSplit{parts[0], parts[1] + "_" + parts[2], ""},
+		)
 	case 4:
 		// os_x86_64_libc
 		splits = append(splits, platformSplit{parts[0], parts[1] + "_" + parts[2], parts[3]})

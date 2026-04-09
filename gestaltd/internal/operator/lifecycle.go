@@ -49,13 +49,13 @@ type LockArchive struct {
 }
 
 type LockEntry struct {
-	Fingerprint string                  `json:"fingerprint"`
-	Source      string                  `json:"source,omitempty"`
-	Version     string                  `json:"version,omitempty"`
-	Archives    map[string]LockArchive  `json:"archives,omitempty"`
-	Manifest    string                  `json:"manifest"`
-	Executable  string                  `json:"executable,omitempty"`
-	AssetRoot   string                  `json:"asset_root,omitempty"`
+	Fingerprint string                 `json:"fingerprint"`
+	Source      string                 `json:"source,omitempty"`
+	Version     string                 `json:"version,omitempty"`
+	Archives    map[string]LockArchive `json:"archives,omitempty"`
+	Manifest    string                 `json:"manifest"`
+	Executable  string                 `json:"executable,omitempty"`
+	AssetRoot   string                 `json:"asset_root,omitempty"`
 }
 
 type LockProviderEntry = LockEntry
@@ -162,7 +162,13 @@ func (l *Lifecycle) InitAtPathWithPlatforms(configPath, artifactsDir string, pla
 		return lock, nil
 	}
 
-	if err := DownloadPlatformArchives(context.Background(), lock, platforms); err != nil {
+	cfg, err := config.LoadAllowMissingEnv(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("loading config for platform downloads: %w", err)
+	}
+	tokenForSource := buildSourceTokenMap(cfg)
+
+	if err := downloadPlatformArchives(context.Background(), lock, platforms, tokenForSource); err != nil {
 		return nil, err
 	}
 
@@ -171,6 +177,24 @@ func (l *Lifecycle) InitAtPathWithPlatforms(configPath, artifactsDir string, pla
 		return nil, err
 	}
 	return lock, nil
+}
+
+func buildSourceTokenMap(cfg *config.Config) map[string]string {
+	tokens := make(map[string]string)
+	for _, intg := range cfg.Integrations {
+		if intg.Plugin != nil && intg.Plugin.Source != nil && intg.Plugin.Source.Auth != nil {
+			tokens[intg.Plugin.SourceRef()] = intg.Plugin.Source.Auth.Token
+		}
+	}
+	for _, p := range []*config.ProviderDef{cfg.Auth.Provider, cfg.Datastore.Provider, cfg.Secrets.Provider} {
+		if p != nil && p.Source != nil && p.Source.Auth != nil {
+			tokens[p.SourceRef()] = p.Source.Auth.Token
+		}
+	}
+	if cfg.UI.Provider != nil && cfg.UI.Provider.Source != nil && cfg.UI.Provider.Source.Auth != nil {
+		tokens[cfg.UI.Provider.SourceRef()] = cfg.UI.Provider.Source.Auth.Token
+	}
+	return tokens
 }
 
 func lockfilePathForConfig(configPath string) string {
@@ -1304,23 +1328,19 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 	return nil
 }
 
-// DownloadPlatformArchives downloads and hashes additional platform archives
-// from the lock entry URLs. It updates the Archives map in-place with the
-// verified SHA256 for each requested platform.
-func DownloadPlatformArchives(ctx context.Context, lock *Lockfile, platforms []struct{ GOOS, GOARCH, LibC string }) error {
+func downloadPlatformArchives(ctx context.Context, lock *Lockfile, platforms []struct{ GOOS, GOARCH, LibC string }, tokenForSource map[string]string) error {
 	for _, plat := range platforms {
 		platformKey := pluginpkg.PlatformString(plat.GOOS, plat.GOARCH, plat.LibC)
-		if err := hashPlatformInEntries(ctx, lock, platformKey); err != nil {
+		if err := hashPlatformInEntries(ctx, lock, platformKey, tokenForSource); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func hashPlatformInEntries(ctx context.Context, lock *Lockfile, platformKey string) error {
-	// Providers are a map — iterate, modify, write back.
+func hashPlatformInEntries(ctx context.Context, lock *Lockfile, platformKey string, tokenForSource map[string]string) error {
 	for name, entry := range lock.Providers {
-		if err := hashArchiveEntry(ctx, &entry, platformKey); err != nil {
+		if err := hashArchiveEntry(ctx, &entry, platformKey, tokenForSource); err != nil {
 			return err
 		}
 		lock.Providers[name] = entry
@@ -1329,14 +1349,14 @@ func hashPlatformInEntries(ctx context.Context, lock *Lockfile, platformKey stri
 		if entry == nil {
 			continue
 		}
-		if err := hashArchiveEntry(ctx, entry, platformKey); err != nil {
+		if err := hashArchiveEntry(ctx, entry, platformKey, tokenForSource); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func hashArchiveEntry(ctx context.Context, entry *LockEntry, platformKey string) error {
+func hashArchiveEntry(ctx context.Context, entry *LockEntry, platformKey string, tokenForSource map[string]string) error {
 	if entry.Archives == nil {
 		return nil
 	}
@@ -1344,7 +1364,8 @@ func hashArchiveEntry(ctx context.Context, entry *LockEntry, platformKey string)
 	if !ok || archive.URL == "" || archive.SHA256 != "" {
 		return nil
 	}
-	dl, err := ghresolver.DownloadResolvedAsset(ctx, http.DefaultClient, archive.URL, "")
+	token := tokenForSource[entry.Source]
+	dl, err := ghresolver.DownloadResolvedAsset(ctx, http.DefaultClient, archive.URL, token)
 	if err != nil {
 		return fmt.Errorf("download archive for platform %s, source %s: %w", platformKey, entry.Source, err)
 	}
