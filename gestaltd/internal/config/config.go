@@ -40,6 +40,7 @@ const PluginConnectionAlias = "plugin"
 type Config struct {
 	Auth         AuthConfig                `yaml:"auth"`
 	Datastore    DatastoreConfig           `yaml:"datastore"`
+	Datastores   map[string]DatastoreDef   `yaml:"datastores"`
 	Secrets      SecretsConfig             `yaml:"secrets"`
 	Telemetry    TelemetryConfig           `yaml:"telemetry"`
 	Audit        AuditConfig               `yaml:"audit"`
@@ -205,15 +206,75 @@ type AuthConfig struct {
 }
 
 type DatastoreConfig struct {
-	Provider *ProviderDef `yaml:"provider"`
-	Config   yaml.Node    `yaml:"config"`
+	Provider  *ProviderDef `yaml:"provider"`
+	Config    yaml.Node    `yaml:"config"`
+	Resource  string       `yaml:"resource"`
+	Namespace string       `yaml:"namespace"`
 }
+
+type DatastoreDef struct {
+	Provider     *ProviderDef `yaml:"provider"`
+	Capabilities []string     `yaml:"capabilities"`
+	Config       yaml.Node    `yaml:"config"`
+}
+
+type DatastoreBindingDef struct {
+	Resource   string `yaml:"resource"`
+	Capability string `yaml:"capability"`
+	Namespace  string `yaml:"namespace"`
+}
+
+var ValidDatastoreCapabilities = map[string]bool{
+	"key_value":  true,
+	"sql":        true,
+	"blob_store": true,
+}
+
+const ReservedNamespacePrefix = "_"
+const SystemNamespace = "_system"
 
 func (c *AuthConfig) UnmarshalYAML(value *yaml.Node) error {
 	return unmarshalTopLevelComponentConfig(value, "AuthConfig", "auth", &c.Provider, &c.Config)
 }
 
 func (c *DatastoreConfig) UnmarshalYAML(value *yaml.Node) error {
+	if value == nil || value.Kind == 0 {
+		*c = DatastoreConfig{}
+		return nil
+	}
+	if value.Kind != yaml.MappingNode {
+		var probe map[string]any
+		return value.Decode(&probe)
+	}
+
+	hasResource := false
+	for i := 0; i+1 < len(value.Content); i += 2 {
+		if value.Content[i].Value == "resource" {
+			hasResource = true
+			break
+		}
+	}
+
+	if hasResource {
+		for i := 0; i+1 < len(value.Content); i += 2 {
+			key := value.Content[i].Value
+			switch key {
+			case "resource", "namespace":
+			default:
+				return fmt.Errorf("field %s not found in type config.DatastoreConfig (resource mode)", key)
+			}
+		}
+		c.Provider = nil
+		c.Config = yaml.Node{}
+		if node := mappingValueNode(value, "resource"); node != nil {
+			c.Resource = node.Value
+		}
+		if node := mappingValueNode(value, "namespace"); node != nil {
+			c.Namespace = node.Value
+		}
+		return nil
+	}
+
 	return unmarshalTopLevelComponentConfig(value, "DatastoreConfig", "datastore", &c.Provider, &c.Config)
 }
 
@@ -422,11 +483,12 @@ func (s ServerConfig) ManagementAddr() string {
 }
 
 type IntegrationDef struct {
-	Plugin        *ProviderDef `yaml:"plugin"`
-	DisplayName   string       `yaml:"display_name"`
-	Description   string       `yaml:"description"`
-	MCPToolPrefix string       `yaml:"-"`
-	IconFile      string       `yaml:"icon_file"`
+	Plugin        *ProviderDef                    `yaml:"plugin"`
+	DisplayName   string                          `yaml:"display_name"`
+	Description   string                          `yaml:"description"`
+	MCPToolPrefix string                          `yaml:"-"`
+	IconFile      string                          `yaml:"icon_file"`
+	Datastores    map[string]DatastoreBindingDef  `yaml:"datastores"`
 }
 
 // ConnectionDef owns authentication and connection parameters for a named
@@ -971,6 +1033,13 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 			}
 		}
 		cfg.Integrations[name] = intg
+	}
+	for name := range cfg.Datastores {
+		ds := cfg.Datastores[name]
+		if ds.Provider != nil && ds.Provider.Source != nil {
+			ds.Provider.Source.Path = resolveRelativePath(baseDir, ds.Provider.Source.Path)
+		}
+		cfg.Datastores[name] = ds
 	}
 	if cfg.Auth.Provider != nil && cfg.Auth.Provider.Source != nil {
 		cfg.Auth.Provider.Source.Path = resolveRelativePath(baseDir, cfg.Auth.Provider.Source.Path)

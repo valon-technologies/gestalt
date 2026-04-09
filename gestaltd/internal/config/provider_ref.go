@@ -23,6 +23,7 @@ type integrationWire struct {
 	Connections       map[string]*integrationConnection `yaml:"connections"`
 	AllowedOperations map[string]*OperationOverride     `yaml:"allowed_operations"`
 	MCP               *integrationMCPWire               `yaml:"mcp"`
+	Datastores        map[string]DatastoreBindingDef    `yaml:"datastores"`
 }
 
 type integrationConnection struct {
@@ -128,6 +129,7 @@ func (i *IntegrationDef) UnmarshalYAML(value *yaml.Node) error {
 		DisplayName: wire.DisplayName,
 		Description: wire.Description,
 		IconFile:    wire.IconFile,
+		Datastores:  wire.Datastores,
 	}
 	if wire.MCP != nil {
 		i.MCPToolPrefix = wire.MCP.ToolPrefix

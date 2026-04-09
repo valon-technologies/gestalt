@@ -38,7 +38,10 @@ func ValidateStructure(cfg *Config) error {
 	if err := validateTopLevelComponentConfig("auth", cfg.Auth.Provider, cfg.Auth.Config); err != nil {
 		return err
 	}
-	if err := validateTopLevelComponentConfig("datastore", cfg.Datastore.Provider, cfg.Datastore.Config); err != nil {
+	if err := validateDatastoreConfig(cfg); err != nil {
+		return err
+	}
+	if err := validateDatastores(cfg); err != nil {
 		return err
 	}
 	if cfg.Secrets.Provider != nil {
@@ -513,6 +516,88 @@ func validateEgress(cfg *EgressConfig) error {
 			AuthStyle:   c.AuthStyle,
 		}); err != nil {
 			return fmt.Errorf("config validation: egress.credentials[%d]: %w", i, err)
+		}
+	}
+	return nil
+}
+
+func validateDatastoreConfig(cfg *Config) error {
+	if cfg.Datastore.Resource != "" && cfg.Datastore.Provider != nil {
+		return fmt.Errorf("config validation: datastore.resource and datastore.provider are mutually exclusive")
+	}
+	if cfg.Datastore.Resource != "" {
+		if _, ok := cfg.Datastores[cfg.Datastore.Resource]; !ok {
+			return fmt.Errorf("config validation: datastore.resource references undefined datastore %q", cfg.Datastore.Resource)
+		}
+	}
+	if cfg.Datastore.Resource == "" {
+		return validateTopLevelComponentConfig("datastore", cfg.Datastore.Provider, cfg.Datastore.Config)
+	}
+	return nil
+}
+
+func validateDatastores(cfg *Config) error {
+	if err := validateDatastoreBindings(cfg); err != nil {
+		return err
+	}
+	for name, ds := range cfg.Datastores {
+		if ds.Provider == nil {
+			return fmt.Errorf("config validation: datastores.%s.provider is required", name)
+		}
+		if err := validateExternalPlugin("datastore", name, ds.Provider); err != nil {
+			return err
+		}
+		for _, cap := range ds.Capabilities {
+			if !ValidDatastoreCapabilities[cap] {
+				return fmt.Errorf("config validation: datastores.%s: unknown capability %q", name, cap)
+			}
+		}
+	}
+	return nil
+}
+
+func validateDatastoreBindings(cfg *Config) error {
+	type nsKey struct {
+		resource  string
+		namespace string
+	}
+	seen := map[nsKey]string{}
+	for intgName, intg := range cfg.Integrations {
+		for bindName, bind := range intg.Datastores {
+			if bind.Resource == "" {
+				return fmt.Errorf("config validation: integration %q datastore %q: resource is required", intgName, bindName)
+			}
+			ds, ok := cfg.Datastores[bind.Resource]
+			if !ok {
+				return fmt.Errorf("config validation: integration %q datastore %q: references undefined datastore resource %q", intgName, bindName, bind.Resource)
+			}
+			if bind.Capability != "" && !ValidDatastoreCapabilities[bind.Capability] {
+				return fmt.Errorf("config validation: integration %q datastore %q: unknown capability %q", intgName, bindName, bind.Capability)
+			}
+			if bind.Capability != "" {
+				capFound := false
+				for _, cap := range ds.Capabilities {
+					if cap == bind.Capability {
+						capFound = true
+						break
+					}
+				}
+				if !capFound {
+					return fmt.Errorf("config validation: integration %q datastore %q: datastore resource %q does not declare capability %q", intgName, bindName, bind.Resource, bind.Capability)
+				}
+			}
+			ns := bind.Namespace
+			if ns == "" {
+				ns = intgName
+			}
+			if strings.HasPrefix(ns, ReservedNamespacePrefix) {
+				return fmt.Errorf("config validation: integration %q datastore %q: namespace %q uses reserved prefix %q", intgName, bindName, ns, ReservedNamespacePrefix)
+			}
+			key := nsKey{resource: bind.Resource, namespace: ns}
+			if prev, dup := seen[key]; dup {
+				return fmt.Errorf("config validation: integration %q datastore %q: namespace %q on resource %q already used by %s", intgName, bindName, ns, bind.Resource, prev)
+			}
+			seen[key] = fmt.Sprintf("integration %q datastore %q", intgName, bindName)
 		}
 	}
 	return nil
