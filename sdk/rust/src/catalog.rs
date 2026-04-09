@@ -104,7 +104,7 @@ pub fn write_catalog(catalog: &Catalog, path: impl AsRef<Path>) -> Result<()> {
             op.annotations = None;
         }
     }
-    let yaml = serde_yaml::to_string(&yaml_catalog)?;
+    let yaml = serde_json::to_string_pretty(&yaml_catalog)?;
     std::fs::write(path, yaml)?;
     Ok(())
 }

@@ -123,8 +123,8 @@ impl<P> Router<P> {
         self
     }
 
-    pub fn catalog(&self) -> Catalog {
-        self.catalog.clone()
+    pub fn catalog(&self) -> &Catalog {
+        &self.catalog
     }
 
     pub async fn execute(
@@ -175,18 +175,19 @@ where
 
         let input_schema = schema_json::<In>()?;
         let output_schema = schema_json::<Out>()?;
+        let parameters = schema_parameters(&input_schema);
         self.catalog.operations.push(CatalogOperation {
             id: operation_id.to_owned(),
             method: operation.method.clone(),
             title: operation.title.trim().to_owned(),
             description: operation.description.trim().to_owned(),
-            input_schema: Some(input_schema.clone()),
+            input_schema: Some(input_schema),
             output_schema: Some(output_schema),
             annotations: Some(OperationAnnotations {
                 read_only_hint: operation.read_only.then_some(true),
                 ..OperationAnnotations::default()
             }),
-            parameters: schema_parameters(&input_schema),
+            parameters,
             required_scopes: Vec::new(),
             tags: operation.tags.clone(),
             read_only: operation.read_only,
