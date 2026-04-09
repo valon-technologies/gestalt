@@ -29,9 +29,9 @@ func DownloadRequest(client *http.Client, req *http.Request) (*DownloadResult, e
 		return nil, fmt.Errorf("unexpected status %d from %s", resp.StatusCode, req.URL)
 	}
 
-	tmp, err := os.CreateTemp("", "gestalt-plugin-*.tar.gz")
+	tmp, err := createPackageTempFile("gestalt-plugin-*.tar.gz")
 	if err != nil {
-		return nil, fmt.Errorf("create temp file: %w", err)
+		return nil, err
 	}
 	tmpPath := tmp.Name()
 	removeTmp := func() { _ = os.Remove(tmpPath) }
