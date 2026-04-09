@@ -2919,10 +2919,10 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		stub := &stubDiscoveringProvider{
 			StubIntegration: coretesting.StubIntegration{N: "slack"},
 			discovery: &core.DiscoveryConfig{
-				URL:             discoverySrv.URL,
-				IDPath:          "id",
-				NamePath:        "name",
-				MetadataMapping: map[string]string{"workspace": "workspace"},
+				URL:      discoverySrv.URL,
+				IDPath:   "id",
+				NamePath: "name",
+				Metadata: map[string]string{"workspace": "workspace"},
 			},
 		}
 
@@ -4883,10 +4883,10 @@ func TestConnectManual(t *testing.T) {
 					StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
 				},
 				discovery: &core.DiscoveryConfig{
-					URL:             discoverySrv.URL,
-					IDPath:          "id",
-					NamePath:        "name",
-					MetadataMapping: map[string]string{"workspace": "workspace"},
+					URL:      discoverySrv.URL,
+					IDPath:   "id",
+					NamePath: "name",
+					Metadata: map[string]string{"workspace": "workspace"},
 				},
 			})
 			cfg.DefaultConnection = map[string]string{"manual-svc": config.PluginConnectionName}

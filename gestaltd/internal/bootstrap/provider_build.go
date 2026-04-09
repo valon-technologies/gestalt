@@ -594,7 +594,7 @@ func buildPluginStaticSpec(name string, intg config.IntegrationDef, manifest *pl
 		AuthTypes:        staticAuthTypes(conn.Auth.Type),
 		ConnectionParams: pluginhost.ConnectionParamDefsFromManifest(conn.ConnectionParams),
 		CredentialFields: pluginhost.CredentialFieldsFromManifest(conn.Auth.Credentials),
-		DiscoveryConfig:  pluginhost.DiscoveryConfigFromManifest(manifest.Plugin.PostConnectDiscovery),
+		DiscoveryConfig:  pluginhost.DiscoveryConfigFromManifest(manifest.Plugin.Discovery),
 	}, nil
 }
 

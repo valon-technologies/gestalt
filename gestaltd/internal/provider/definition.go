@@ -26,8 +26,8 @@ type Definition struct {
 	ManualAuth       bool                 `yaml:"manual_auth" json:"manual_auth"`
 	CredentialFields []CredentialFieldDef `yaml:"credential_fields" json:"credential_fields,omitempty"`
 
-	PostConnectDiscovery *PostConnectDiscoveryDef `yaml:"post_connect_discovery" json:"post_connect_discovery,omitempty"`
-	ResponseMapping      *ResponseMappingDef      `yaml:"response_mapping" json:"response_mapping,omitempty"`
+	Discovery       *DiscoveryDef       `yaml:"discovery" json:"discovery,omitempty"`
+	ResponseMapping *ResponseMappingDef `yaml:"response_mapping" json:"response_mapping,omitempty"`
 
 	Connection map[string]ConnectionParamDef `yaml:"connection" json:"connection"`
 	Operations map[string]OperationDef       `yaml:"operations" json:"operations"`
@@ -38,21 +38,21 @@ type ResponseCheckDef struct {
 	ErrorMessagePath string         `yaml:"error_message_path" json:"error_message_path,omitempty"`
 }
 
-type PostConnectDiscoveryDef struct {
-	URL             string            `yaml:"url" json:"url"`
-	ItemsPath       string            `yaml:"items_path" json:"items_path"`
-	IDPath          string            `yaml:"id_path" json:"id_path"`
-	NamePath        string            `yaml:"name_path" json:"name_path"`
-	MetadataMapping map[string]string `yaml:"metadata_mapping" json:"metadata_mapping"`
+type DiscoveryDef struct {
+	URL       string            `yaml:"url" json:"url"`
+	ItemsPath string            `yaml:"items_path" json:"items_path"`
+	IDPath    string            `yaml:"id_path" json:"id_path"`
+	NamePath  string            `yaml:"name_path" json:"name_path"`
+	Metadata  map[string]string `yaml:"metadata" json:"metadata"`
 }
 
-func (d *PostConnectDiscoveryDef) ToCore() *core.DiscoveryConfig {
+func (d *DiscoveryDef) ToCore() *core.DiscoveryConfig {
 	return &core.DiscoveryConfig{
-		URL:             d.URL,
-		ItemsPath:       d.ItemsPath,
-		IDPath:          d.IDPath,
-		NamePath:        d.NamePath,
-		MetadataMapping: d.MetadataMapping,
+		URL:       d.URL,
+		ItemsPath: d.ItemsPath,
+		IDPath:    d.IDPath,
+		NamePath:  d.NamePath,
+		Metadata:  d.Metadata,
 	}
 }
 

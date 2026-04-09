@@ -63,7 +63,7 @@ func Run(ctx context.Context, cfg *core.DiscoveryConfig, client *http.Client) ([
 				c.Name = fmt.Sprintf("%v", v)
 			}
 		}
-		for metaKey, jsonPath := range cfg.MetadataMapping {
+		for metaKey, jsonPath := range cfg.Metadata {
 			if v, ok := extractPath(obj, jsonPath); ok {
 				c.Metadata[metaKey] = fmt.Sprintf("%v", v)
 			}

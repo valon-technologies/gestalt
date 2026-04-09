@@ -141,8 +141,8 @@ func Build(def *Definition, conn config.ConnectionDef, opts ...BuildOption) (cor
 		}
 	}
 
-	if def.PostConnectDiscovery != nil {
-		base.DiscoveryDef = def.PostConnectDiscovery.ToCore()
+	if def.Discovery != nil {
+		base.DiscoveryDef = def.Discovery.ToCore()
 	}
 
 	base.ManualAuthEnabled = def.ManualAuth

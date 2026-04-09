@@ -84,11 +84,11 @@ type DiscoveryCandidate struct {
 }
 
 type DiscoveryConfig struct {
-	URL             string
-	ItemsPath       string
-	IDPath          string
-	NamePath        string
-	MetadataMapping map[string]string
+	URL       string
+	ItemsPath string
+	IDPath    string
+	NamePath  string
+	Metadata  map[string]string
 }
 
 type DiscoveryConfigProvider interface {

@@ -454,3 +454,59 @@ provider:
 		t.Fatalf("error = %v", err)
 	}
 }
+
+func TestManifestWorkflow_NamedConnectionParamsAndDiscovery(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	manifestPath := mustWriteManifestData(t, dir, "plugin.yaml", []byte(`
+source: github.com/acme/plugins/multi-conn
+version: 1.0.0
+display_name: Multi Connection
+provider:
+  connections:
+    default:
+      auth:
+        type: none
+    api:
+      mode: user
+      auth:
+        type: oauth2
+        authorization_url: https://auth.example.com/authorize
+        token_url: https://auth.example.com/token
+      params:
+        workspace_id:
+          required: true
+          description: The workspace ID
+        region:
+          from: discovery
+      discovery:
+        url: https://api.example.com/workspaces
+        id_path: id
+        name_path: name
+        metadata:
+          region: region
+  surfaces:
+    openapi:
+      document: openapi.yaml
+      connection: api
+`))
+	mustWriteFile(t, filepath.Join(dir, "openapi.yaml"), []byte("openapi: 3.1.0\ninfo:\n  title: Example\n  version: 1.0.0\npaths: {}\n"), 0o644)
+
+	_, manifest, err := ReadManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadManifestFile: %v", err)
+	}
+
+	encoded, err := EncodeManifestFormat(manifest, ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeManifestFormat: %v", err)
+	}
+	roundTripped, err := DecodeManifestFormat(encoded, ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("DecodeManifestFormat: %v", err)
+	}
+	if !ManifestEqual(manifest, roundTripped) {
+		t.Fatalf("round-trip mismatch:\noriginal=%#v\nround-tripped=%#v", manifest, roundTripped)
+	}
+}

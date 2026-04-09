@@ -114,7 +114,7 @@ type ProviderDef struct {
 	Config       yaml.Node `yaml:"-"`
 	AllowedHosts []string  `yaml:"allowed_hosts"`
 
-	PostConnectDiscovery *pluginmanifestv1.ProviderPostConnectDiscovery `yaml:"-"`
+	Discovery *pluginmanifestv1.ProviderDiscovery `yaml:"-"`
 
 	Auth              *ConnectionAuthDef        `yaml:"-"`
 	ConnectionMode    string                    `yaml:"-"`
@@ -432,9 +432,10 @@ type IntegrationDef struct {
 // ConnectionDef owns authentication and connection parameters for a named
 // connection. All connections in a single integration must share the same Mode.
 type ConnectionDef struct {
-	Mode             string                        `yaml:"mode"`
-	Auth             ConnectionAuthDef             `yaml:"auth"`
-	ConnectionParams map[string]ConnectionParamDef `yaml:"params"`
+	Mode             string                              `yaml:"mode"`
+	Auth             ConnectionAuthDef                   `yaml:"auth"`
+	ConnectionParams map[string]ConnectionParamDef       `yaml:"params"`
+	Discovery        *pluginmanifestv1.ProviderDiscovery `yaml:"-"`
 }
 
 type ConnectionAuthDef struct {
@@ -584,6 +585,9 @@ func MergeConnectionDef(dst *ConnectionDef, src *ConnectionDef) {
 	if len(src.ConnectionParams) > 0 {
 		dst.ConnectionParams = maps.Clone(src.ConnectionParams)
 	}
+	if src.Discovery != nil {
+		dst.Discovery = src.Discovery
+	}
 }
 
 func ManifestAuthToConnectionAuthDef(auth *pluginmanifestv1.ProviderAuth) ConnectionAuthDef {
@@ -680,6 +684,12 @@ func EffectiveNamedConnectionDef(plugin *ProviderDef, manifestPlugin *pluginmani
 			}
 			if def.Auth != nil {
 				MergeConnectionAuth(&conn.Auth, ManifestAuthToConnectionAuthDef(def.Auth))
+			}
+			if len(def.Params) > 0 {
+				conn.ConnectionParams = maps.Clone(def.Params)
+			}
+			if def.Discovery != nil {
+				conn.Discovery = def.Discovery
 			}
 		}
 	}
