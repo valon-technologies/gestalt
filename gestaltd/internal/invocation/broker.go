@@ -14,8 +14,8 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/internal/apiexec"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
+	"github.com/valon-technologies/gestalt/server/internal/mcpupstream"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/paraminterp"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
@@ -205,6 +205,10 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	metricTransport = metricutil.AttrValue(transport)
 	span.SetAttributes(attrTransport.String(metricTransport))
 
+	if transport == catalog.TransportMCPPassthrough && InvocationSurfaceFromContext(ctx) == InvocationSurfaceHTTP {
+		return fail(core.ErrMCPOnly)
+	}
+
 	if conn == "" {
 		if transport == catalog.TransportMCPPassthrough {
 			conn = b.mcpConnection(providerName)
@@ -217,17 +221,16 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	}
 
 	if transport == catalog.TransportMCPPassthrough {
-		result, err := CallDirectTool(ctx, b, p, prov, providerName, operation, conn, instance, params, nil)
+		result, err := CallDirectTool(ctx, b, p, prov, providerName, operation, conn, instance, params, mcpupstream.CallToolMetaFromContext(ctx))
 		if err != nil {
 			return fail(err)
 		}
 		opResult, err := toolResultToOperationResult(result)
 		if err != nil {
-			var operationErr *apiexec.UpstreamOperationError
-			if errors.As(err, &operationErr) {
-				return fail(err)
-			}
 			return fail(fmt.Errorf("%w: converting tool result: %v", ErrInternal, err))
+		}
+		if result != nil {
+			opResult.MCPResult = result
 		}
 		return opResult, nil
 	}
@@ -289,37 +292,41 @@ func toolResultToOperationResult(result *mcpgo.CallToolResult) (*core.OperationR
 	}
 
 	if result.IsError {
-		return nil, fmt.Errorf("%w: %s", &apiexec.UpstreamOperationError{Message: "operation failed"}, ToolErrorMessage(result))
+		return &core.OperationResult{
+			Status:  http.StatusBadGateway,
+			Headers: headers,
+			Body:    `{"error":"operation failed"}`,
+		}, nil
 	}
 
+	body, err := toolResultBody(result)
+	if err != nil {
+		return nil, err
+	}
+
+	return &core.OperationResult{Status: http.StatusOK, Headers: headers, Body: body}, nil
+}
+
+func toolResultBody(result *mcpgo.CallToolResult) (string, error) {
 	if result.StructuredContent != nil {
 		body, err := json.Marshal(result.StructuredContent)
 		if err != nil {
-			return nil, err
+			return "", err
 		}
-		return &core.OperationResult{Status: http.StatusOK, Headers: headers, Body: string(body)}, nil
+		return string(body), nil
 	}
 
 	if len(result.Content) == 1 {
 		if text, ok := mcpgo.AsTextContent(result.Content[0]); ok && json.Valid([]byte(strings.TrimSpace(text.Text))) {
-			return &core.OperationResult{Status: http.StatusOK, Headers: headers, Body: text.Text}, nil
+			return text.Text, nil
 		}
 	}
 
 	body, err := json.Marshal(map[string]any{"content": result.Content})
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	return &core.OperationResult{Status: http.StatusOK, Headers: headers, Body: string(body)}, nil
-}
-
-func ToolErrorMessage(result *mcpgo.CallToolResult) string {
-	for _, item := range result.Content {
-		if text, ok := mcpgo.AsTextContent(item); ok && strings.TrimSpace(text.Text) != "" {
-			return text.Text
-		}
-	}
-	return "operation failed"
+	return string(body), nil
 }
 
 func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (string, error) {

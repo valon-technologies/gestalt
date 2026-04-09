@@ -74,4 +74,9 @@ type OperationResult struct {
 	Status  int
 	Headers http.Header
 	Body    string
+
+	// MCPResult, when non-nil, carries the original MCP CallToolResult for
+	// passthrough operations so the MCP handler can return it without losing
+	// fields like StructuredContent.
+	MCPResult any
 }

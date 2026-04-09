@@ -54,9 +54,6 @@ func (u *stubMCPUpstream) CallTool(ctx context.Context, name string, args map[st
 func TestComposite_MCPPassthroughRouting(t *testing.T) {
 	t.Parallel()
 
-	var directCalled bool
-	var invokerCalled bool
-
 	apiCat := &catalog.Catalog{
 		Name: "notion",
 		Operations: []catalog.CatalogOperation{
@@ -64,15 +61,9 @@ func TestComposite_MCPPassthroughRouting(t *testing.T) {
 		},
 	}
 	apiProv := &catalogProvider{
-		StubIntegration: coretesting.StubIntegration{
-			N: "notion",
-			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
-				invokerCalled = true
-				return &core.OperationResult{Status: http.StatusOK, Body: `{"from":"api"}`}, nil
-			},
-		},
-		ops:     coreintegration.OperationsList(apiCat),
-		catalog: apiCat,
+		StubIntegration: coretesting.StubIntegration{N: "notion"},
+		ops:             coreintegration.OperationsList(apiCat),
+		catalog:         apiCat,
 	}
 
 	mcpUp := &stubMCPUpstream{
@@ -82,18 +73,16 @@ func TestComposite_MCPPassthroughRouting(t *testing.T) {
 				{ID: "search", Description: "Search Notion", InputSchema: json.RawMessage(`{"type":"object"}`)},
 			},
 		},
-		callFn: func(_ context.Context, _ string, _ map[string]any) (*mcpgo.CallToolResult, error) {
-			directCalled = true
-			return mcpgo.NewToolResultText("from-mcp"), nil
-		},
 	}
 
 	comp := composite.New("notion", apiProv, mcpUp)
 	providers := testutil.NewProviderRegistry(t, comp)
+	invoker := &testutil.StubInvoker{
+		Result: &core.OperationResult{Status: http.StatusOK, Body: `{"from":"invoker"}`},
+	}
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
-		Invoker:       &testutil.StubInvoker{},
-		TokenResolver: &stubTokenResolver{token: "t"},
-		Providers:     providers,
+		Invoker:   invoker,
+		Providers: providers,
 	})
 
 	tools := srv.ListTools()
@@ -116,11 +105,14 @@ func TestComposite_MCPPassthroughRouting(t *testing.T) {
 	if result.IsError {
 		t.Fatalf("unexpected tool error: %v", result.Content)
 	}
-	if !directCalled {
-		t.Fatal("expected MCP upstream CallTool to be invoked")
+	if !invoker.Invoked {
+		t.Fatal("expected invoker to be called for MCP passthrough tool")
 	}
-	if invokerCalled {
-		t.Fatal("API Execute should not have been called")
+	if invoker.Provider != "notion" {
+		t.Fatalf("provider = %q, want %q", invoker.Provider, "notion")
+	}
+	if invoker.Operation != "search" {
+		t.Fatalf("operation = %q, want %q", invoker.Operation, "search")
 	}
 }
 

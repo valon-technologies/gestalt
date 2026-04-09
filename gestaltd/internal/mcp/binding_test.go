@@ -831,9 +831,8 @@ func TestNewServer_RESTCatalogToolsUseOperationConnections(t *testing.T) {
 	)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
-		Invoker:       broker,
-		Providers:     providers,
-		APIConnection: map[string]string{"hybrid": testAPIConnectionName},
+		Invoker:   broker,
+		Providers: providers,
 	})
 
 	callTool := func(name string) string {
@@ -867,10 +866,9 @@ func TestNewServer_RESTCatalogToolsUseOperationConnections(t *testing.T) {
 	}
 }
 
-func TestNewServer_DirectCallerUsesAPIConnectionForNonPassthroughTools(t *testing.T) {
+func TestNewServer_DirectCallerRoutedThroughInvoker(t *testing.T) {
 	t.Parallel()
 
-	var gotConnection string
 	prov := &directCallerProvider{
 		StubIntegration: coretesting.StubIntegration{N: "notion"},
 		ops:             []core.Operation{{Name: "search", Description: "Search workspace"}},
@@ -884,29 +882,15 @@ func TestNewServer_DirectCallerUsesAPIConnectionForNonPassthroughTools(t *testin
 				},
 			},
 		},
-		callFn: func(_ context.Context, name string, _ map[string]any) (*mcpgo.CallToolResult, error) {
-			if name != "search" {
-				t.Fatalf("CallTool name = %q, want %q", name, "search")
-			}
-			return mcpgo.NewToolResultText("ok"), nil
-		},
 	}
 
+	invoker := &testutil.StubInvoker{
+		Result: &core.OperationResult{Status: 200, Body: `{"ok":true}`},
+	}
 	providers := testutil.NewProviderRegistry(t, prov)
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
-		Invoker: &testutil.StubInvoker{},
-		TokenResolver: &stubTokenResolver{resolveFn: func(_ context.Context, _ *principal.Principal, providerName, connection, instance string) (string, error) {
-			if providerName != "notion" {
-				t.Fatalf("provider = %q, want %q", providerName, "notion")
-			}
-			if instance != "" {
-				t.Fatalf("instance = %q, want empty", instance)
-			}
-			gotConnection = connection
-			return "upstream-token", nil
-		}},
-		Providers:     providers,
-		APIConnection: map[string]string{"notion": testAPIConnectionName},
+		Invoker:   invoker,
+		Providers: providers,
 	})
 
 	tool := srv.GetTool("notion_search")
@@ -923,8 +907,14 @@ func TestNewServer_DirectCallerUsesAPIConnectionForNonPassthroughTools(t *testin
 	if result.IsError {
 		t.Fatalf("unexpected tool error: %v", result.Content)
 	}
-	if gotConnection != testAPIConnectionName {
-		t.Fatalf("connection = %q, want %q", gotConnection, testAPIConnectionName)
+	if !invoker.Invoked {
+		t.Fatal("expected invoker to be called")
+	}
+	if invoker.Provider != "notion" {
+		t.Fatalf("provider = %q, want %q", invoker.Provider, "notion")
+	}
+	if invoker.Operation != "search" {
+		t.Fatalf("operation = %q, want %q", invoker.Operation, "search")
 	}
 }
 
@@ -963,10 +953,8 @@ func TestNewServer_DirectCallerNoPrincipal(t *testing.T) {
 	}
 }
 
-func TestNewServer_DirectCallerUsesIdentitySubjectEmail(t *testing.T) {
+func TestNewServer_DirectCallerInvokerReceivesPrincipal(t *testing.T) {
 	t.Parallel()
-
-	var gotSubject egress.Subject
 
 	cat := &catalog.Catalog{
 		Name: "sample",
@@ -978,21 +966,15 @@ func TestNewServer_DirectCallerUsesIdentitySubjectEmail(t *testing.T) {
 		StubIntegration: coretesting.StubIntegration{N: "sample"},
 		ops:             []core.Operation{{Name: "perform", Description: "Perform action"}},
 		cat:             cat,
-		callFn: func(ctx context.Context, _ string, _ map[string]any) (*mcpgo.CallToolResult, error) {
-			var ok bool
-			gotSubject, ok = egress.SubjectFromContext(ctx)
-			if !ok {
-				t.Fatal("expected egress subject in direct caller context")
-			}
-			return mcpgo.NewToolResultText("ok"), nil
-		},
 	}
 
+	invoker := &testutil.StubInvoker{
+		Result: &core.OperationResult{Status: 200, Body: `{"ok":true}`},
+	}
 	providers := testutil.NewProviderRegistry(t, prov)
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
-		Invoker:       &testutil.StubInvoker{},
-		TokenResolver: &stubTokenResolver{token: "test-token"},
-		Providers:     providers,
+		Invoker:   invoker,
+		Providers: providers,
 	})
 
 	tool := srv.GetTool("sample_perform")
@@ -1010,64 +992,15 @@ func TestNewServer_DirectCallerUsesIdentitySubjectEmail(t *testing.T) {
 	if result.IsError {
 		t.Fatalf("unexpected tool error: %v", result.Content)
 	}
-	if gotSubject != (egress.Subject{Kind: egress.SubjectIdentity, ID: "identity@example.invalid"}) {
-		t.Fatalf("subject = %+v, want identity email subject", gotSubject)
+	if !invoker.Invoked {
+		t.Fatal("expected invoker to be called")
+	}
+	if invoker.LastP == nil {
+		t.Fatal("expected principal to be passed to invoker")
 	}
 }
 
-func TestNewServer_DirectCallerUsesIdentitySubjectSentinel(t *testing.T) {
-	t.Parallel()
-
-	var gotSubject egress.Subject
-
-	cat := &catalog.Catalog{
-		Name: "sample",
-		Operations: []catalog.CatalogOperation{
-			{ID: "perform", Description: "Perform action"},
-		},
-	}
-	prov := &directCallerProvider{
-		StubIntegration: coretesting.StubIntegration{N: "sample"},
-		ops:             []core.Operation{{Name: "perform", Description: "Perform action"}},
-		cat:             cat,
-		callFn: func(ctx context.Context, _ string, _ map[string]any) (*mcpgo.CallToolResult, error) {
-			var ok bool
-			gotSubject, ok = egress.SubjectFromContext(ctx)
-			if !ok {
-				t.Fatal("expected egress subject in direct caller context")
-			}
-			return mcpgo.NewToolResultText("ok"), nil
-		},
-	}
-
-	providers := testutil.NewProviderRegistry(t, prov)
-	srv := gestaltmcp.NewServer(gestaltmcp.Config{
-		Invoker:       &testutil.StubInvoker{},
-		TokenResolver: &stubTokenResolver{token: "test-token"},
-		Providers:     providers,
-	})
-
-	tool := srv.GetTool("sample_perform")
-	if tool == nil {
-		t.Fatal("tool not found")
-	}
-
-	req := mcpgo.CallToolRequest{}
-	req.Params.Name = "sample_perform"
-
-	result, err := tool.Handler(ctxWithIdentityPrincipal("", principal.IdentityPrincipal), req)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.IsError {
-		t.Fatalf("unexpected tool error: %v", result.Content)
-	}
-	if gotSubject != (egress.Subject{Kind: egress.SubjectIdentity, ID: principal.IdentityPrincipal}) {
-		t.Fatalf("subject = %+v, want identity sentinel subject", gotSubject)
-	}
-}
-
-func TestNewServer_DirectCallerTokenResolveError(t *testing.T) {
+func TestNewServer_DirectCallerInvokerError(t *testing.T) {
 	t.Parallel()
 
 	cat := &catalog.Catalog{
@@ -1084,9 +1017,8 @@ func TestNewServer_DirectCallerTokenResolveError(t *testing.T) {
 
 	providers := testutil.NewProviderRegistry(t, prov)
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
-		Invoker:       &testutil.StubInvoker{},
-		TokenResolver: &stubTokenResolver{err: fmt.Errorf("no token stored")},
-		Providers:     providers,
+		Invoker:   &testutil.StubInvoker{Err: fmt.Errorf("invoke failed")},
+		Providers: providers,
 	})
 
 	tool := srv.GetTool("ch_op")
@@ -1099,7 +1031,7 @@ func TestNewServer_DirectCallerTokenResolveError(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !result.IsError {
-		t.Fatal("expected IsError for token resolve failure")
+		t.Fatal("expected IsError for invoker failure")
 	}
 }
 
@@ -1160,31 +1092,24 @@ func TestNewServer_DynamicCatalogProviderCallsSessionTool(t *testing.T) {
 	t.Parallel()
 
 	var calledName string
-	var gotToken string
-	var gotSubject egress.Subject
 
 	prov := &directCallerProvider{
 		StubIntegration: coretesting.StubIntegration{N: "clickhouse"},
-		sessionCatalogFn: func(ctx context.Context, _ string) (*catalog.Catalog, error) {
-			subject, ok := egress.SubjectFromContext(ctx)
-			if !ok {
-				t.Fatal("expected egress subject in session catalog context")
-			}
-			gotSubject = subject
+		sessionCatalogFn: func(_ context.Context, _ string) (*catalog.Catalog, error) {
 			return &catalog.Catalog{
 				Name: "clickhouse",
 				Operations: []catalog.CatalogOperation{
 					{
 						ID:          "run_query",
 						Description: "Execute a SQL query",
+						Transport:   catalog.TransportMCPPassthrough,
 						InputSchema: json.RawMessage(`{"type":"object","properties":{"sql":{"type":"string"}}}`),
 					},
 				},
 			}, nil
 		},
-		callFn: func(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
+		callFn: func(_ context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
 			calledName = name
-			gotToken = mcpupstream.UpstreamTokenFromContext(ctx)
 			if args["sql"] != "SELECT 1" {
 				t.Fatalf("expected sql argument, got %v", args)
 			}
@@ -1193,9 +1118,10 @@ func TestNewServer_DynamicCatalogProviderCallsSessionTool(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
+	broker := invocation.NewBroker(providers, stubDatastoreWithToken())
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
-		Invoker:       &testutil.StubInvoker{},
-		TokenResolver: &stubTokenResolver{token: "upstream-token"},
+		Invoker:       broker,
+		TokenResolver: broker,
 		Providers:     providers,
 	})
 
@@ -1205,12 +1131,6 @@ func TestNewServer_DynamicCatalogProviderCallsSessionTool(t *testing.T) {
 	}
 	if calledName != "run_query" {
 		t.Fatalf("expected run_query, got %q", calledName)
-	}
-	if gotToken != "upstream-token" {
-		t.Fatalf("expected upstream-token, got %q", gotToken)
-	}
-	if gotSubject != (egress.Subject{Kind: egress.SubjectUser, ID: "u1"}) {
-		t.Fatalf("subject = %+v, want user u1", gotSubject)
 	}
 }
 
@@ -1272,13 +1192,11 @@ func TestNewServer_MCPPassthroughContract(t *testing.T) {
 		providerName  = "svc"
 		operationName = "do_thing"
 		toolName      = providerName + "_" + operationName
-		tokenValue    = "test-token-abc"
 	)
 
 	var gotName string
 	var gotArgs map[string]any
 	var gotMeta *mcpgo.Meta
-	var gotToken string
 
 	inputSchema := json.RawMessage(`{"type":"object","properties":{"input":{"type":"string"}},"required":["input"]}`)
 	outputSchema := json.RawMessage(`{"type":"object","properties":{"items":{"type":"array"}}}`)
@@ -1304,7 +1222,6 @@ func TestNewServer_MCPPassthroughContract(t *testing.T) {
 			gotName = name
 			gotArgs = args
 			gotMeta = mcpupstream.CallToolMetaFromContext(ctx)
-			gotToken = mcpupstream.UpstreamTokenFromContext(ctx)
 			return &mcpgo.CallToolResult{
 				Content:           []mcpgo.Content{mcpgo.NewTextContent(`{"ok":true}`)},
 				StructuredContent: map[string]any{"ok": true},
@@ -1313,9 +1230,10 @@ func TestNewServer_MCPPassthroughContract(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
+	broker := invocation.NewBroker(providers, stubDatastoreWithToken())
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
-		Invoker:       &testutil.StubInvoker{},
-		TokenResolver: &stubTokenResolver{token: tokenValue},
+		Invoker:       broker,
+		TokenResolver: broker,
 		Providers:     providers,
 	})
 
@@ -1365,9 +1283,6 @@ func TestNewServer_MCPPassthroughContract(t *testing.T) {
 	if gotArgs["input"] != "hello" {
 		t.Fatalf("upstream received args %v, want input=hello", gotArgs)
 	}
-	if gotToken != tokenValue {
-		t.Fatalf("upstream received token %q, want %q", gotToken, tokenValue)
-	}
 	if gotMeta == nil {
 		t.Fatal("upstream did not receive _meta")
 	}
@@ -1381,11 +1296,151 @@ func TestNewServer_MCPPassthroughContract(t *testing.T) {
 	if result.IsError {
 		t.Fatalf("unexpected tool error: %v", result.Content)
 	}
-	if result.StructuredContent == nil {
-		t.Fatal("structuredContent not passed through from upstream")
+	if len(result.Content) != 1 {
+		t.Fatalf("expected 1 content item, got %d", len(result.Content))
+	}
+	structured, ok := result.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("expected structured content map, got %T", result.StructuredContent)
+	}
+	if structured["ok"] != true {
+		t.Fatalf("structured content = %v, want ok=true", structured)
+	}
+}
+
+func TestNewServer_PassthroughToolPreservesErrorResultStructure(t *testing.T) {
+	t.Parallel()
+
+	const (
+		providerName  = "svc"
+		operationName = "do_thing"
+		toolName      = providerName + "_" + operationName
+	)
+
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{N: providerName},
+		ops:             []core.Operation{{Name: operationName, Description: "A passthrough operation"}},
+		cat: &catalog.Catalog{
+			Name: providerName,
+			Operations: []catalog.CatalogOperation{
+				{
+					ID:          operationName,
+					Description: "A passthrough operation",
+					Transport:   catalog.TransportMCPPassthrough,
+				},
+			},
+		},
+		callFn: func(_ context.Context, _ string, _ map[string]any) (*mcpgo.CallToolResult, error) {
+			return &mcpgo.CallToolResult{
+				IsError:           true,
+				Content:           []mcpgo.Content{mcpgo.NewTextContent("query failed"), mcpgo.NewTextContent("try again")},
+				StructuredContent: map[string]any{"code": "bad_query"},
+			}, nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	broker := invocation.NewBroker(providers, stubDatastoreWithToken())
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:       broker,
+		TokenResolver: broker,
+		Providers:     providers,
+	})
+
+	tool := srv.GetTool(toolName)
+	if tool == nil {
+		t.Fatalf("tool %q not found", toolName)
+	}
+
+	req := mcpgo.CallToolRequest{}
+	req.Params.Name = toolName
+	result, err := tool.Handler(ctxWithPrincipal(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected MCP error result")
+	}
+	if len(result.Content) != 2 {
+		t.Fatalf("expected 2 content items, got %d", len(result.Content))
+	}
+	first, ok := mcpgo.AsTextContent(result.Content[0])
+	if !ok {
+		t.Fatalf("expected first content item to be text, got %T", result.Content[0])
+	}
+	if first.Text != "query failed" {
+		t.Fatalf("first error text = %q, want %q", first.Text, "query failed")
+	}
+	structured, ok := result.StructuredContent.(map[string]any)
+	if !ok {
+		t.Fatalf("expected structured content map, got %T", result.StructuredContent)
+	}
+	if structured["code"] != "bad_query" {
+		t.Fatalf("structured content = %v, want code=bad_query", structured)
+	}
+}
+
+func TestNewServer_PassthroughToolTreatsNilResultAsEmptyJSON(t *testing.T) {
+	t.Parallel()
+
+	const (
+		providerName  = "svc"
+		operationName = "do_thing"
+		toolName      = providerName + "_" + operationName
+	)
+
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{N: providerName},
+		ops:             []core.Operation{{Name: operationName, Description: "A passthrough operation"}},
+		cat: &catalog.Catalog{
+			Name: providerName,
+			Operations: []catalog.CatalogOperation{
+				{
+					ID:          operationName,
+					Description: "A passthrough operation",
+					Transport:   catalog.TransportMCPPassthrough,
+				},
+			},
+		},
+		callFn: func(_ context.Context, _ string, _ map[string]any) (*mcpgo.CallToolResult, error) {
+			return nil, nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	broker := invocation.NewBroker(providers, stubDatastoreWithToken())
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:       broker,
+		TokenResolver: broker,
+		Providers:     providers,
+	})
+
+	tool := srv.GetTool(toolName)
+	if tool == nil {
+		t.Fatalf("tool %q not found", toolName)
+	}
+
+	req := mcpgo.CallToolRequest{}
+	req.Params.Name = toolName
+	result, err := tool.Handler(ctxWithPrincipal(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil MCP result")
+	}
+	if result.IsError {
+		t.Fatalf("unexpected MCP error result: %v", result.Content)
 	}
 	if len(result.Content) != 1 {
 		t.Fatalf("expected 1 content item, got %d", len(result.Content))
+	}
+	text, ok := mcpgo.AsTextContent(result.Content[0])
+	if !ok {
+		t.Fatalf("expected text content, got %T", result.Content[0])
+	}
+	if text.Text != "{}" {
+		t.Fatalf("text content = %q, want %q", text.Text, "{}")
 	}
 }
 

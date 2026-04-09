@@ -3,26 +3,20 @@ package mcp
 import (
 	"strings"
 
-	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 )
 
-func addCatalogTools(srv *mcpserver.MCPServer, cfg Config, provName string, cat *catalog.Catalog, prov core.Provider) {
-	m := buildToolMap(cfg, provName, prov, cat)
+func addCatalogTools(srv *mcpserver.MCPServer, cfg Config, provName string, cat *catalog.Catalog) {
+	m := buildToolMap(cfg, provName, cat)
 	for name := range m {
 		srv.AddTool(m[name].Tool, m[name].Handler)
 	}
 }
 
-func buildToolMap(cfg Config, provName string, prov core.Provider, cat *catalog.Catalog) map[string]mcpserver.ServerTool {
-	directProv, isDirect := unwrapDirectProvider(prov)
-	if isDirect && cfg.TokenResolver == nil {
-		isDirect = false
-	}
-
+func buildToolMap(cfg Config, provName string, cat *catalog.Catalog) map[string]mcpserver.ServerTool {
 	tools := make(map[string]mcpserver.ServerTool, len(cat.Operations))
 	for i := range cat.Operations {
 		op := &cat.Operations[i]
@@ -53,33 +47,9 @@ func buildToolMap(cfg Config, provName string, prov core.Provider, cat *catalog.
 			tool.RawOutputSchema = op.OutputSchema
 		}
 
-		// Direct token resolution bypasses Invoke, so it needs an explicit
-		// connection instead of relying on broker-side provider defaults.
-		conn := connectionForCatalogTransport(cfg, provName, op.Transport)
-
-		var handler mcpserver.ToolHandlerFunc
-		if isDirect && op.Transport != catalog.TransportREST {
-			handler = makeDirectHandler(cfg, directProv, provName, op.ID, conn)
-		} else {
-			handler = makeHandler(cfg.Invoker, provName, op.ID, "")
-		}
-		tools[name] = mcpserver.ServerTool{Tool: tool, Handler: handler}
+		tools[name] = mcpserver.ServerTool{Tool: tool, Handler: makeHandler(cfg.Invoker, provName, op.ID, "")}
 	}
 	return tools
-}
-
-func unwrapDirectProvider(prov core.Provider) (core.Provider, bool) {
-	if _, ok := prov.(directToolCaller); ok {
-		return prov, true
-	}
-	type inner interface{ Inner() core.Provider }
-	if r, ok := prov.(inner); ok {
-		innerProv := r.Inner()
-		if _, ok := innerProv.(directToolCaller); ok {
-			return innerProv, true
-		}
-	}
-	return nil, false
 }
 
 func providerNameForTool(prefixes map[string]string, providers []string, tool string) string {

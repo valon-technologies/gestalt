@@ -9,10 +9,12 @@ import (
 	"net/http"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/apiexec"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -395,10 +397,11 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 		s.writeInvocationError(w, r, name, "", err)
 		return
 	}
-	sort.Slice(cat.Operations, func(i, j int) bool {
-		return cat.Operations[i].ID < cat.Operations[j].ID
+	ops := httpVisibleCatalogOperations(cat.Operations)
+	sort.Slice(ops, func(i, j int) bool {
+		return ops[i].ID < ops[j].ID
 	})
-	writeJSON(w, http.StatusOK, cat.Operations)
+	writeJSON(w, http.StatusOK, ops)
 }
 
 func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
@@ -406,6 +409,9 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	operationName := chi.URLParam(r, "operation")
 
 	p := PrincipalFromContext(r.Context())
+	if _, ok := s.getProvider(w, providerName); !ok {
+		return
+	}
 
 	params := make(map[string]any)
 	if r.Method == http.MethodPost {
@@ -434,8 +440,10 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "connection name contains invalid characters")
 			return
 		}
-		ctx = invocation.WithConnection(ctx, config.ResolveConnectionAlias(connection))
+		connection = config.ResolveConnectionAlias(connection)
+		ctx = invocation.WithConnection(ctx, connection)
 	}
+	ctx = invocation.WithInvocationSurface(ctx, invocation.InvocationSurfaceHTTP)
 
 	result, err := s.invoker.Invoke(ctx, p, providerName, instance, operationName, params)
 	if err != nil {
@@ -503,6 +511,26 @@ func (s *Server) catalogLookupConnection(providerName, explicit string) string {
 		return conn
 	}
 	return s.defaultConnection[providerName]
+}
+
+func httpVisibleCatalogOperations(ops []catalog.CatalogOperation) []catalog.CatalogOperation {
+	filtered := make([]catalog.CatalogOperation, 0, len(ops))
+	for i := range ops {
+		op := ops[i]
+		if catalogOperationTransport(op) == catalog.TransportMCPPassthrough {
+			continue
+		}
+		filtered = append(filtered, op)
+	}
+	return filtered
+}
+
+func catalogOperationTransport(op catalog.CatalogOperation) string {
+	transport := strings.TrimSpace(op.Transport)
+	if transport == "" && strings.TrimSpace(op.Method) != "" {
+		return catalog.TransportREST
+	}
+	return transport
 }
 
 func safeOperationErrorMessage(err error) (string, bool) {

@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 
 	mcpserver "github.com/mark3labs/mcp-go/server"
@@ -58,7 +57,7 @@ func hydrateSessionTools(ctx context.Context, cfg Config, providerNames []string
 			continue
 		}
 
-		m := buildToolMap(cfg, provName, prov, cat)
+		m := buildToolMap(cfg, provName, cat)
 		for name := range m {
 			tools[name] = m[name]
 		}
@@ -87,5 +86,5 @@ func resolveSessionToken(ctx context.Context, cfg Config, provName string, prov 
 	if p == nil {
 		return "", fmt.Errorf("not authenticated")
 	}
-	return cfg.TokenResolver.ResolveToken(ctx, p, provName, connectionForCatalogTransport(cfg, provName, catalog.TransportMCPPassthrough), "")
+	return cfg.TokenResolver.ResolveToken(ctx, p, provName, cfg.MCPConnection[provName], "")
 }

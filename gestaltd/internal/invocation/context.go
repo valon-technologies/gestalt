@@ -43,6 +43,12 @@ type RequestMeta struct {
 	UserAgent  string
 }
 
+type invocationSurfaceCtxKey struct{}
+
+type InvocationSurface string
+
+const InvocationSurfaceHTTP InvocationSurface = "http"
+
 func WithRequestMeta(ctx context.Context, meta RequestMeta) context.Context {
 	return context.WithValue(ctx, requestMetaCtxKey{}, meta)
 }
@@ -50,6 +56,15 @@ func WithRequestMeta(ctx context.Context, meta RequestMeta) context.Context {
 func RequestMetaFromContext(ctx context.Context) RequestMeta {
 	m, _ := ctx.Value(requestMetaCtxKey{}).(RequestMeta)
 	return m
+}
+
+func WithInvocationSurface(ctx context.Context, surface InvocationSurface) context.Context {
+	return context.WithValue(ctx, invocationSurfaceCtxKey{}, surface)
+}
+
+func InvocationSurfaceFromContext(ctx context.Context) InvocationSurface {
+	surface, _ := ctx.Value(invocationSurfaceCtxKey{}).(InvocationSurface)
+	return surface
 }
 
 const xForwardedForHeader = "X-Forwarded-For"

@@ -339,7 +339,6 @@ func resolveAdminUIHandler(opts adminui.Options) (http.Handler, error) {
 type mcpSurface struct {
 	providers     []string
 	toolPrefixes  map[string]string
-	apiConnection map[string]string
 	mcpConnection map[string]string
 }
 
@@ -347,7 +346,6 @@ func buildMCPSurface(cfg *config.Config, connMaps bootstrap.ConnectionMaps) mcpS
 	surface := mcpSurface{
 		providers:     []string{},
 		toolPrefixes:  make(map[string]string),
-		apiConnection: make(map[string]string),
 		mcpConnection: make(map[string]string),
 	}
 
@@ -359,7 +357,6 @@ func buildMCPSurface(cfg *config.Config, connMaps bootstrap.ConnectionMaps) mcpS
 			continue
 		}
 		surface.providers = append(surface.providers, name)
-		surface.apiConnection[name] = connMaps.APIConnection[name]
 		surface.mcpConnection[name] = connMaps.MCPConnection[name]
 		if intg.MCPToolPrefix == "" && intg.Plugin.HasManagedSource() {
 			if src, err := pluginsource.Parse(intg.Plugin.SourceRef()); err == nil {
@@ -387,7 +384,6 @@ func (s mcpSurface) handler(result *bootstrap.Result, invoker invocation.Invoker
 			Providers:        result.Providers,
 			AllowedProviders: s.providers,
 			ToolPrefixes:     s.toolPrefixes,
-			APIConnection:    s.apiConnection,
 			MCPConnection:    s.mcpConnection,
 		}),
 		mcpserver.WithStateLess(true),

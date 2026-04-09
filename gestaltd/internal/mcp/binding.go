@@ -17,10 +17,6 @@ const (
 	toolNameSep   = "_"
 )
 
-type directToolCaller interface {
-	CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error)
-}
-
 type Config struct {
 	Invoker          invocation.Invoker
 	TokenResolver    invocation.TokenResolver
@@ -29,7 +25,6 @@ type Config struct {
 	AllowedProviders []string
 	ToolPrefixes     map[string]string
 	IncludeREST      map[string]bool
-	APIConnection    map[string]string
 	MCPConnection    map[string]string
 }
 
@@ -65,7 +60,7 @@ func NewServer(cfg Config) *mcpserver.MCPServer {
 		}
 
 		if cat := prov.Catalog(); cat != nil {
-			addCatalogTools(srv, cfg, provName, cat, prov)
+			addCatalogTools(srv, cfg, provName, cat)
 		}
 	}
 
