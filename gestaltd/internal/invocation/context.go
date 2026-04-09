@@ -47,10 +47,7 @@ type invocationSurfaceCtxKey struct{}
 
 type InvocationSurface string
 
-const (
-	InvocationSurfaceHTTP InvocationSurface = "http"
-	InvocationSurfaceMCP  InvocationSurface = "mcp"
-)
+const InvocationSurfaceHTTP InvocationSurface = "http"
 
 func WithRequestMeta(ctx context.Context, meta RequestMeta) context.Context {
 	return context.WithValue(ctx, requestMetaCtxKey{}, meta)
