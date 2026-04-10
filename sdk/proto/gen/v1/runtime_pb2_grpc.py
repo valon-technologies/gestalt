@@ -16,17 +16,17 @@ class ProviderLifecycleStub(object):
             channel: A grpc.Channel.
         """
         self.GetProviderIdentity = channel.unary_unary(
-                '/gestalt.plugin.v1.ProviderLifecycle/GetProviderIdentity',
+                '/gestalt.provider.v1.ProviderLifecycle/GetProviderIdentity',
                 request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
                 response_deserializer=v1_dot_runtime__pb2.ProviderIdentity.FromString,
                 _registered_method=True)
         self.ConfigureProvider = channel.unary_unary(
-                '/gestalt.plugin.v1.ProviderLifecycle/ConfigureProvider',
+                '/gestalt.provider.v1.ProviderLifecycle/ConfigureProvider',
                 request_serializer=v1_dot_runtime__pb2.ConfigureProviderRequest.SerializeToString,
                 response_deserializer=v1_dot_runtime__pb2.ConfigureProviderResponse.FromString,
                 _registered_method=True)
         self.HealthCheck = channel.unary_unary(
-                '/gestalt.plugin.v1.ProviderLifecycle/HealthCheck',
+                '/gestalt.provider.v1.ProviderLifecycle/HealthCheck',
                 request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
                 response_deserializer=v1_dot_runtime__pb2.HealthCheckResponse.FromString,
                 _registered_method=True)
@@ -73,9 +73,9 @@ def add_ProviderLifecycleServicer_to_server(servicer, server):
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'gestalt.plugin.v1.ProviderLifecycle', rpc_method_handlers)
+            'gestalt.provider.v1.ProviderLifecycle', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('gestalt.plugin.v1.ProviderLifecycle', rpc_method_handlers)
+    server.add_registered_method_handlers('gestalt.provider.v1.ProviderLifecycle', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
@@ -96,7 +96,7 @@ class ProviderLifecycle(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.ProviderLifecycle/GetProviderIdentity',
+            '/gestalt.provider.v1.ProviderLifecycle/GetProviderIdentity',
             google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             v1_dot_runtime__pb2.ProviderIdentity.FromString,
             options,
@@ -123,7 +123,7 @@ class ProviderLifecycle(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.ProviderLifecycle/ConfigureProvider',
+            '/gestalt.provider.v1.ProviderLifecycle/ConfigureProvider',
             v1_dot_runtime__pb2.ConfigureProviderRequest.SerializeToString,
             v1_dot_runtime__pb2.ConfigureProviderResponse.FromString,
             options,
@@ -150,7 +150,7 @@ class ProviderLifecycle(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.ProviderLifecycle/HealthCheck',
+            '/gestalt.provider.v1.ProviderLifecycle/HealthCheck',
             google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             v1_dot_runtime__pb2.HealthCheckResponse.FromString,
             options,

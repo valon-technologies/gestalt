@@ -13,8 +13,8 @@ import (
 	coreintegration "github.com/valon-technologies/gestalt/server/core/integration"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/composite"
-	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	gestaltmcp "github.com/valon-technologies/gestalt/server/internal/mcp"
@@ -828,11 +828,11 @@ func TestNewServer_RESTCatalogToolsUseOperationConnections(t *testing.T) {
 	providers := testutil.NewProviderRegistry(t, merged)
 	ds, userID := stubServicesWithToken(t, "hybrid")
 	ctx := context.Background()
-	ds.Tokens.StoreToken(ctx, &core.IntegrationToken{
+	_ = ds.Tokens.StoreToken(ctx, &core.IntegrationToken{
 		ID: "tok-plugin", UserID: userID, Integration: "hybrid", Connection: config.PluginConnectionName, Instance: "default",
 		AccessToken: testPluginAccessToken,
 	})
-	ds.Tokens.StoreToken(ctx, &core.IntegrationToken{
+	_ = ds.Tokens.StoreToken(ctx, &core.IntegrationToken{
 		ID: "tok-api", UserID: userID, Integration: "hybrid", Connection: testAPIConnectionName, Instance: "default",
 		AccessToken: testNamedAPIAccessToken,
 	})

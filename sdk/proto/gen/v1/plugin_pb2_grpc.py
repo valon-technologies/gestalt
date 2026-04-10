@@ -16,27 +16,27 @@ class IntegrationProviderStub(object):
             channel: A grpc.Channel.
         """
         self.GetMetadata = channel.unary_unary(
-                '/gestalt.plugin.v1.IntegrationProvider/GetMetadata',
+                '/gestalt.provider.v1.IntegrationProvider/GetMetadata',
                 request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
                 response_deserializer=v1_dot_plugin__pb2.ProviderMetadata.FromString,
                 _registered_method=True)
         self.StartProvider = channel.unary_unary(
-                '/gestalt.plugin.v1.IntegrationProvider/StartProvider',
+                '/gestalt.provider.v1.IntegrationProvider/StartProvider',
                 request_serializer=v1_dot_plugin__pb2.StartProviderRequest.SerializeToString,
                 response_deserializer=v1_dot_plugin__pb2.StartProviderResponse.FromString,
                 _registered_method=True)
         self.Execute = channel.unary_unary(
-                '/gestalt.plugin.v1.IntegrationProvider/Execute',
+                '/gestalt.provider.v1.IntegrationProvider/Execute',
                 request_serializer=v1_dot_plugin__pb2.ExecuteRequest.SerializeToString,
                 response_deserializer=v1_dot_plugin__pb2.OperationResult.FromString,
                 _registered_method=True)
         self.GetSessionCatalog = channel.unary_unary(
-                '/gestalt.plugin.v1.IntegrationProvider/GetSessionCatalog',
+                '/gestalt.provider.v1.IntegrationProvider/GetSessionCatalog',
                 request_serializer=v1_dot_plugin__pb2.GetSessionCatalogRequest.SerializeToString,
                 response_deserializer=v1_dot_plugin__pb2.GetSessionCatalogResponse.FromString,
                 _registered_method=True)
         self.PostConnect = channel.unary_unary(
-                '/gestalt.plugin.v1.IntegrationProvider/PostConnect',
+                '/gestalt.provider.v1.IntegrationProvider/PostConnect',
                 request_serializer=v1_dot_plugin__pb2.PostConnectRequest.SerializeToString,
                 response_deserializer=v1_dot_plugin__pb2.PostConnectResponse.FromString,
                 _registered_method=True)
@@ -105,9 +105,9 @@ def add_IntegrationProviderServicer_to_server(servicer, server):
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'gestalt.plugin.v1.IntegrationProvider', rpc_method_handlers)
+            'gestalt.provider.v1.IntegrationProvider', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('gestalt.plugin.v1.IntegrationProvider', rpc_method_handlers)
+    server.add_registered_method_handlers('gestalt.provider.v1.IntegrationProvider', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
@@ -128,7 +128,7 @@ class IntegrationProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.IntegrationProvider/GetMetadata',
+            '/gestalt.provider.v1.IntegrationProvider/GetMetadata',
             google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             v1_dot_plugin__pb2.ProviderMetadata.FromString,
             options,
@@ -155,7 +155,7 @@ class IntegrationProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.IntegrationProvider/StartProvider',
+            '/gestalt.provider.v1.IntegrationProvider/StartProvider',
             v1_dot_plugin__pb2.StartProviderRequest.SerializeToString,
             v1_dot_plugin__pb2.StartProviderResponse.FromString,
             options,
@@ -182,7 +182,7 @@ class IntegrationProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.IntegrationProvider/Execute',
+            '/gestalt.provider.v1.IntegrationProvider/Execute',
             v1_dot_plugin__pb2.ExecuteRequest.SerializeToString,
             v1_dot_plugin__pb2.OperationResult.FromString,
             options,
@@ -209,7 +209,7 @@ class IntegrationProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.IntegrationProvider/GetSessionCatalog',
+            '/gestalt.provider.v1.IntegrationProvider/GetSessionCatalog',
             v1_dot_plugin__pb2.GetSessionCatalogRequest.SerializeToString,
             v1_dot_plugin__pb2.GetSessionCatalogResponse.FromString,
             options,
@@ -236,7 +236,7 @@ class IntegrationProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.IntegrationProvider/PostConnect',
+            '/gestalt.provider.v1.IntegrationProvider/PostConnect',
             v1_dot_plugin__pb2.PostConnectRequest.SerializeToString,
             v1_dot_plugin__pb2.PostConnectResponse.FromString,
             options,

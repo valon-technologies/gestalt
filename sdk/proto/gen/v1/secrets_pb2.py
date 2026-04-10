@@ -24,7 +24,7 @@ _sym_db = _symbol_database.Default()
 
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10v1/secrets.proto\x12\x11gestalt.plugin.v1\"&\n\x10GetSecretRequest\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\")\n\x11GetSecretResponse\x12\x14\n\x05value\x18\x01 \x01(\tR\x05value2i\n\x0fSecretsProvider\x12V\n\tGetSecret\x12#.gestalt.plugin.v1.GetSecretRequest\x1a$.gestalt.plugin.v1.GetSecretResponseB;Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;protob\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x10v1/secrets.proto\x12\x13gestalt.provider.v1\"&\n\x10GetSecretRequest\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\")\n\x11GetSecretResponse\x12\x14\n\x05value\x18\x01 \x01(\tR\x05value2m\n\x0fSecretsProvider\x12Z\n\tGetSecret\x12%.gestalt.provider.v1.GetSecretRequest\x1a&.gestalt.provider.v1.GetSecretResponseB;Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;protob\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -32,10 +32,10 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'v1.secrets_pb2', _globals)
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto'
-  _globals['_GETSECRETREQUEST']._serialized_start=39
-  _globals['_GETSECRETREQUEST']._serialized_end=77
-  _globals['_GETSECRETRESPONSE']._serialized_start=79
-  _globals['_GETSECRETRESPONSE']._serialized_end=120
-  _globals['_SECRETSPROVIDER']._serialized_start=122
-  _globals['_SECRETSPROVIDER']._serialized_end=227
+  _globals['_GETSECRETREQUEST']._serialized_start=41
+  _globals['_GETSECRETREQUEST']._serialized_end=79
+  _globals['_GETSECRETRESPONSE']._serialized_start=81
+  _globals['_GETSECRETRESPONSE']._serialized_end=122
+  _globals['_SECRETSPROVIDER']._serialized_start=124
+  _globals['_SECRETSPROVIDER']._serialized_end=233
 # @@protoc_insertion_point(module_scope)

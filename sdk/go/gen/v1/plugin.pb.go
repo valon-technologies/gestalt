@@ -520,7 +520,7 @@ type ProviderMetadata struct {
 	Name                   string                         `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	DisplayName            string                         `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	Description            string                         `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
-	ConnectionMode         ConnectionMode                 `protobuf:"varint,4,opt,name=connection_mode,json=connectionMode,proto3,enum=gestalt.plugin.v1.ConnectionMode" json:"connection_mode,omitempty"`
+	ConnectionMode         ConnectionMode                 `protobuf:"varint,4,opt,name=connection_mode,json=connectionMode,proto3,enum=gestalt.provider.v1.ConnectionMode" json:"connection_mode,omitempty"`
 	AuthTypes              []string                       `protobuf:"bytes,5,rep,name=auth_types,json=authTypes,proto3" json:"auth_types,omitempty"`
 	ConnectionParams       map[string]*ConnectionParamDef `protobuf:"bytes,6,rep,name=connection_params,json=connectionParams,proto3" json:"connection_params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	StaticCatalog          *Catalog                       `protobuf:"bytes,7,opt,name=static_catalog,json=staticCatalog,proto3" json:"static_catalog,omitempty"`
@@ -1207,7 +1207,7 @@ var File_v1_plugin_proto protoreflect.FileDescriptor
 
 const file_v1_plugin_proto_rawDesc = "" +
 	"\n" +
-	"\x0fv1/plugin.proto\x12\x11gestalt.plugin.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xaa\x01\n" +
+	"\x0fv1/plugin.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xaa\x01\n" +
 	"\x10CatalogParameter\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12 \n" +
@@ -1222,17 +1222,17 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"\x0f_read_only_hintB\x12\n" +
 	"\x10_idempotent_hintB\x13\n" +
 	"\x11_destructive_hintB\x12\n" +
-	"\x10_open_world_hint\"\xed\x03\n" +
+	"\x10_open_world_hint\"\xf1\x03\n" +
 	"\x10CatalogOperation\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
 	"\x06method\x18\x02 \x01(\tR\x06method\x12\x14\n" +
 	"\x05title\x18\x03 \x01(\tR\x05title\x12 \n" +
 	"\vdescription\x18\x04 \x01(\tR\vdescription\x12!\n" +
 	"\finput_schema\x18\x05 \x01(\tR\vinputSchema\x12#\n" +
-	"\routput_schema\x18\x06 \x01(\tR\foutputSchema\x12I\n" +
-	"\vannotations\x18\a \x01(\v2'.gestalt.plugin.v1.OperationAnnotationsR\vannotations\x12C\n" +
+	"\routput_schema\x18\x06 \x01(\tR\foutputSchema\x12K\n" +
+	"\vannotations\x18\a \x01(\v2).gestalt.provider.v1.OperationAnnotationsR\vannotations\x12E\n" +
 	"\n" +
-	"parameters\x18\b \x03(\v2#.gestalt.plugin.v1.CatalogParameterR\n" +
+	"parameters\x18\b \x03(\v2%.gestalt.provider.v1.CatalogParameterR\n" +
 	"parameters\x12'\n" +
 	"\x0frequired_scopes\x18\t \x03(\tR\x0erequiredScopes\x12\x12\n" +
 	"\x04tags\x18\n" +
@@ -1241,37 +1241,37 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"\avisible\x18\f \x01(\bH\x00R\avisible\x88\x01\x01\x12\x1c\n" +
 	"\ttransport\x18\r \x01(\tR\ttransportB\n" +
 	"\n" +
-	"\b_visible\"\xc2\x01\n" +
+	"\b_visible\"\xc4\x01\n" +
 	"\aCatalog\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x19\n" +
-	"\bicon_svg\x18\x04 \x01(\tR\aiconSvg\x12C\n" +
+	"\bicon_svg\x18\x04 \x01(\tR\aiconSvg\x12E\n" +
 	"\n" +
-	"operations\x18\x05 \x03(\v2#.gestalt.plugin.v1.CatalogOperationR\n" +
+	"operations\x18\x05 \x03(\v2%.gestalt.provider.v1.CatalogOperationR\n" +
 	"operations\"\xa1\x01\n" +
 	"\x12ConnectionParamDef\x12\x1a\n" +
 	"\brequired\x18\x01 \x01(\bR\brequired\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12#\n" +
 	"\rdefault_value\x18\x03 \x01(\tR\fdefaultValue\x12\x12\n" +
 	"\x04from\x18\x04 \x01(\tR\x04from\x12\x14\n" +
-	"\x05field\x18\x05 \x01(\tR\x05field\"\xbf\x05\n" +
+	"\x05field\x18\x05 \x01(\tR\x05field\"\xc7\x05\n" +
 	"\x10ProviderMetadata\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12 \n" +
-	"\vdescription\x18\x03 \x01(\tR\vdescription\x12J\n" +
-	"\x0fconnection_mode\x18\x04 \x01(\x0e2!.gestalt.plugin.v1.ConnectionModeR\x0econnectionMode\x12\x1d\n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12L\n" +
+	"\x0fconnection_mode\x18\x04 \x01(\x0e2#.gestalt.provider.v1.ConnectionModeR\x0econnectionMode\x12\x1d\n" +
 	"\n" +
-	"auth_types\x18\x05 \x03(\tR\tauthTypes\x12f\n" +
-	"\x11connection_params\x18\x06 \x03(\v29.gestalt.plugin.v1.ProviderMetadata.ConnectionParamsEntryR\x10connectionParams\x12A\n" +
-	"\x0estatic_catalog\x18\a \x01(\v2\x1a.gestalt.plugin.v1.CatalogR\rstaticCatalog\x128\n" +
+	"auth_types\x18\x05 \x03(\tR\tauthTypes\x12h\n" +
+	"\x11connection_params\x18\x06 \x03(\v2;.gestalt.provider.v1.ProviderMetadata.ConnectionParamsEntryR\x10connectionParams\x12C\n" +
+	"\x0estatic_catalog\x18\a \x01(\v2\x1c.gestalt.provider.v1.CatalogR\rstaticCatalog\x128\n" +
 	"\x18supports_session_catalog\x18\b \x01(\bR\x16supportsSessionCatalog\x122\n" +
 	"\x15supports_post_connect\x18\t \x01(\bR\x13supportsPostConnect\x120\n" +
 	"\x14min_protocol_version\x18\v \x01(\x05R\x12minProtocolVersion\x120\n" +
-	"\x14max_protocol_version\x18\f \x01(\x05R\x12maxProtocolVersion\x1aj\n" +
+	"\x14max_protocol_version\x18\f \x01(\x05R\x12maxProtocolVersion\x1al\n" +
 	"\x15ConnectionParamsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12;\n" +
-	"\x05value\x18\x02 \x01(\v2%.gestalt.plugin.v1.ConnectionParamDefR\x05value:\x028\x01\"=\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12=\n" +
+	"\x05value\x18\x02 \x01(\v2'.gestalt.provider.v1.ConnectionParamDefR\x05value:\x028\x01\"=\n" +
 	"\x0fOperationResult\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\x05R\x06status\x12\x12\n" +
 	"\x04body\x18\x02 \x01(\tR\x04body\"\xa7\x04\n" +
@@ -1292,29 +1292,29 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xc5\x02\n" +
+	"updated_at\x18\r \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xc7\x02\n" +
 	"\x0eExecuteRequest\x12\x1c\n" +
 	"\toperation\x18\x01 \x01(\tR\toperation\x12/\n" +
 	"\x06params\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06params\x12\x14\n" +
-	"\x05token\x18\x03 \x01(\tR\x05token\x12d\n" +
-	"\x11connection_params\x18\x04 \x03(\v27.gestalt.plugin.v1.ExecuteRequest.ConnectionParamsEntryR\x10connectionParams\x12#\n" +
+	"\x05token\x18\x03 \x01(\tR\x05token\x12f\n" +
+	"\x11connection_params\x18\x04 \x03(\v29.gestalt.provider.v1.ExecuteRequest.ConnectionParamsEntryR\x10connectionParams\x12#\n" +
 	"\rinvocation_id\x18\x05 \x01(\tR\finvocationId\x1aC\n" +
 	"\x15ConnectionParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8a\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8c\x02\n" +
 	"\x18GetSessionCatalogRequest\x12\x14\n" +
-	"\x05token\x18\x01 \x01(\tR\x05token\x12n\n" +
-	"\x11connection_params\x18\x02 \x03(\v2A.gestalt.plugin.v1.GetSessionCatalogRequest.ConnectionParamsEntryR\x10connectionParams\x12#\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token\x12p\n" +
+	"\x11connection_params\x18\x02 \x03(\v2C.gestalt.provider.v1.GetSessionCatalogRequest.ConnectionParamsEntryR\x10connectionParams\x12#\n" +
 	"\rinvocation_id\x18\x03 \x01(\tR\finvocationId\x1aC\n" +
 	"\x15ConnectionParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"Q\n" +
-	"\x19GetSessionCatalogResponse\x124\n" +
-	"\acatalog\x18\x01 \x01(\v2\x1a.gestalt.plugin.v1.CatalogR\acatalog\"O\n" +
-	"\x12PostConnectRequest\x129\n" +
-	"\x05token\x18\x01 \x01(\v2#.gestalt.plugin.v1.IntegrationTokenR\x05token\"\xa4\x01\n" +
-	"\x13PostConnectResponse\x12P\n" +
-	"\bmetadata\x18\x01 \x03(\v24.gestalt.plugin.v1.PostConnectResponse.MetadataEntryR\bmetadata\x1a;\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"S\n" +
+	"\x19GetSessionCatalogResponse\x126\n" +
+	"\acatalog\x18\x01 \x01(\v2\x1c.gestalt.provider.v1.CatalogR\acatalog\"Q\n" +
+	"\x12PostConnectRequest\x12;\n" +
+	"\x05token\x18\x01 \x01(\v2%.gestalt.provider.v1.IntegrationTokenR\x05token\"\xa6\x01\n" +
+	"\x13PostConnectResponse\x12R\n" +
+	"\bmetadata\x18\x01 \x03(\v26.gestalt.provider.v1.PostConnectResponse.MetadataEntryR\bmetadata\x1a;\n" +
 	"\rMetadataEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x86\x01\n" +
@@ -1329,14 +1329,14 @@ const file_v1_plugin_proto_rawDesc = "" +
 	"\x14CONNECTION_MODE_NONE\x10\x01\x12\x18\n" +
 	"\x14CONNECTION_MODE_USER\x10\x02\x12\x1c\n" +
 	"\x18CONNECTION_MODE_IDENTITY\x10\x03\x12\x1a\n" +
-	"\x16CONNECTION_MODE_EITHER\x10\x042\xe5\x03\n" +
-	"\x13IntegrationProvider\x12J\n" +
-	"\vGetMetadata\x12\x16.google.protobuf.Empty\x1a#.gestalt.plugin.v1.ProviderMetadata\x12b\n" +
-	"\rStartProvider\x12'.gestalt.plugin.v1.StartProviderRequest\x1a(.gestalt.plugin.v1.StartProviderResponse\x12P\n" +
-	"\aExecute\x12!.gestalt.plugin.v1.ExecuteRequest\x1a\".gestalt.plugin.v1.OperationResult\x12n\n" +
-	"\x11GetSessionCatalog\x12+.gestalt.plugin.v1.GetSessionCatalogRequest\x1a,.gestalt.plugin.v1.GetSessionCatalogResponse\x12\\\n" +
-	"\vPostConnect\x12%.gestalt.plugin.v1.PostConnectRequest\x1a&.gestalt.plugin.v1.PostConnectResponseB\xc5\x01\n" +
-	"\x15com.gestalt.plugin.v1B\vPluginProtoP\x01Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x11Gestalt.Plugin.V1\xca\x02\x11Gestalt\\Plugin\\V1\xe2\x02\x1dGestalt\\Plugin\\V1\\GPBMetadata\xea\x02\x13Gestalt::Plugin::V1b\x06proto3"
+	"\x16CONNECTION_MODE_EITHER\x10\x042\xf7\x03\n" +
+	"\x13IntegrationProvider\x12L\n" +
+	"\vGetMetadata\x12\x16.google.protobuf.Empty\x1a%.gestalt.provider.v1.ProviderMetadata\x12f\n" +
+	"\rStartProvider\x12).gestalt.provider.v1.StartProviderRequest\x1a*.gestalt.provider.v1.StartProviderResponse\x12T\n" +
+	"\aExecute\x12#.gestalt.provider.v1.ExecuteRequest\x1a$.gestalt.provider.v1.OperationResult\x12r\n" +
+	"\x11GetSessionCatalog\x12-.gestalt.provider.v1.GetSessionCatalogRequest\x1a..gestalt.provider.v1.GetSessionCatalogResponse\x12`\n" +
+	"\vPostConnect\x12'.gestalt.provider.v1.PostConnectRequest\x1a(.gestalt.provider.v1.PostConnectResponseB\xcf\x01\n" +
+	"\x17com.gestalt.provider.v1B\vPluginProtoP\x01Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (
 	file_v1_plugin_proto_rawDescOnce sync.Once
@@ -1353,61 +1353,61 @@ func file_v1_plugin_proto_rawDescGZIP() []byte {
 var file_v1_plugin_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_v1_plugin_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_v1_plugin_proto_goTypes = []any{
-	(ConnectionMode)(0),               // 0: gestalt.plugin.v1.ConnectionMode
-	(*CatalogParameter)(nil),          // 1: gestalt.plugin.v1.CatalogParameter
-	(*OperationAnnotations)(nil),      // 2: gestalt.plugin.v1.OperationAnnotations
-	(*CatalogOperation)(nil),          // 3: gestalt.plugin.v1.CatalogOperation
-	(*Catalog)(nil),                   // 4: gestalt.plugin.v1.Catalog
-	(*ConnectionParamDef)(nil),        // 5: gestalt.plugin.v1.ConnectionParamDef
-	(*ProviderMetadata)(nil),          // 6: gestalt.plugin.v1.ProviderMetadata
-	(*OperationResult)(nil),           // 7: gestalt.plugin.v1.OperationResult
-	(*IntegrationToken)(nil),          // 8: gestalt.plugin.v1.IntegrationToken
-	(*ExecuteRequest)(nil),            // 9: gestalt.plugin.v1.ExecuteRequest
-	(*GetSessionCatalogRequest)(nil),  // 10: gestalt.plugin.v1.GetSessionCatalogRequest
-	(*GetSessionCatalogResponse)(nil), // 11: gestalt.plugin.v1.GetSessionCatalogResponse
-	(*PostConnectRequest)(nil),        // 12: gestalt.plugin.v1.PostConnectRequest
-	(*PostConnectResponse)(nil),       // 13: gestalt.plugin.v1.PostConnectResponse
-	(*StartProviderRequest)(nil),      // 14: gestalt.plugin.v1.StartProviderRequest
-	(*StartProviderResponse)(nil),     // 15: gestalt.plugin.v1.StartProviderResponse
-	nil,                               // 16: gestalt.plugin.v1.ProviderMetadata.ConnectionParamsEntry
-	nil,                               // 17: gestalt.plugin.v1.ExecuteRequest.ConnectionParamsEntry
-	nil,                               // 18: gestalt.plugin.v1.GetSessionCatalogRequest.ConnectionParamsEntry
-	nil,                               // 19: gestalt.plugin.v1.PostConnectResponse.MetadataEntry
+	(ConnectionMode)(0),               // 0: gestalt.provider.v1.ConnectionMode
+	(*CatalogParameter)(nil),          // 1: gestalt.provider.v1.CatalogParameter
+	(*OperationAnnotations)(nil),      // 2: gestalt.provider.v1.OperationAnnotations
+	(*CatalogOperation)(nil),          // 3: gestalt.provider.v1.CatalogOperation
+	(*Catalog)(nil),                   // 4: gestalt.provider.v1.Catalog
+	(*ConnectionParamDef)(nil),        // 5: gestalt.provider.v1.ConnectionParamDef
+	(*ProviderMetadata)(nil),          // 6: gestalt.provider.v1.ProviderMetadata
+	(*OperationResult)(nil),           // 7: gestalt.provider.v1.OperationResult
+	(*IntegrationToken)(nil),          // 8: gestalt.provider.v1.IntegrationToken
+	(*ExecuteRequest)(nil),            // 9: gestalt.provider.v1.ExecuteRequest
+	(*GetSessionCatalogRequest)(nil),  // 10: gestalt.provider.v1.GetSessionCatalogRequest
+	(*GetSessionCatalogResponse)(nil), // 11: gestalt.provider.v1.GetSessionCatalogResponse
+	(*PostConnectRequest)(nil),        // 12: gestalt.provider.v1.PostConnectRequest
+	(*PostConnectResponse)(nil),       // 13: gestalt.provider.v1.PostConnectResponse
+	(*StartProviderRequest)(nil),      // 14: gestalt.provider.v1.StartProviderRequest
+	(*StartProviderResponse)(nil),     // 15: gestalt.provider.v1.StartProviderResponse
+	nil,                               // 16: gestalt.provider.v1.ProviderMetadata.ConnectionParamsEntry
+	nil,                               // 17: gestalt.provider.v1.ExecuteRequest.ConnectionParamsEntry
+	nil,                               // 18: gestalt.provider.v1.GetSessionCatalogRequest.ConnectionParamsEntry
+	nil,                               // 19: gestalt.provider.v1.PostConnectResponse.MetadataEntry
 	(*structpb.Value)(nil),            // 20: google.protobuf.Value
 	(*timestamppb.Timestamp)(nil),     // 21: google.protobuf.Timestamp
 	(*structpb.Struct)(nil),           // 22: google.protobuf.Struct
 	(*emptypb.Empty)(nil),             // 23: google.protobuf.Empty
 }
 var file_v1_plugin_proto_depIdxs = []int32{
-	20, // 0: gestalt.plugin.v1.CatalogParameter.default:type_name -> google.protobuf.Value
-	2,  // 1: gestalt.plugin.v1.CatalogOperation.annotations:type_name -> gestalt.plugin.v1.OperationAnnotations
-	1,  // 2: gestalt.plugin.v1.CatalogOperation.parameters:type_name -> gestalt.plugin.v1.CatalogParameter
-	3,  // 3: gestalt.plugin.v1.Catalog.operations:type_name -> gestalt.plugin.v1.CatalogOperation
-	0,  // 4: gestalt.plugin.v1.ProviderMetadata.connection_mode:type_name -> gestalt.plugin.v1.ConnectionMode
-	16, // 5: gestalt.plugin.v1.ProviderMetadata.connection_params:type_name -> gestalt.plugin.v1.ProviderMetadata.ConnectionParamsEntry
-	4,  // 6: gestalt.plugin.v1.ProviderMetadata.static_catalog:type_name -> gestalt.plugin.v1.Catalog
-	21, // 7: gestalt.plugin.v1.IntegrationToken.expires_at:type_name -> google.protobuf.Timestamp
-	21, // 8: gestalt.plugin.v1.IntegrationToken.last_refreshed_at:type_name -> google.protobuf.Timestamp
-	21, // 9: gestalt.plugin.v1.IntegrationToken.created_at:type_name -> google.protobuf.Timestamp
-	21, // 10: gestalt.plugin.v1.IntegrationToken.updated_at:type_name -> google.protobuf.Timestamp
-	22, // 11: gestalt.plugin.v1.ExecuteRequest.params:type_name -> google.protobuf.Struct
-	17, // 12: gestalt.plugin.v1.ExecuteRequest.connection_params:type_name -> gestalt.plugin.v1.ExecuteRequest.ConnectionParamsEntry
-	18, // 13: gestalt.plugin.v1.GetSessionCatalogRequest.connection_params:type_name -> gestalt.plugin.v1.GetSessionCatalogRequest.ConnectionParamsEntry
-	4,  // 14: gestalt.plugin.v1.GetSessionCatalogResponse.catalog:type_name -> gestalt.plugin.v1.Catalog
-	8,  // 15: gestalt.plugin.v1.PostConnectRequest.token:type_name -> gestalt.plugin.v1.IntegrationToken
-	19, // 16: gestalt.plugin.v1.PostConnectResponse.metadata:type_name -> gestalt.plugin.v1.PostConnectResponse.MetadataEntry
-	22, // 17: gestalt.plugin.v1.StartProviderRequest.config:type_name -> google.protobuf.Struct
-	5,  // 18: gestalt.plugin.v1.ProviderMetadata.ConnectionParamsEntry.value:type_name -> gestalt.plugin.v1.ConnectionParamDef
-	23, // 19: gestalt.plugin.v1.IntegrationProvider.GetMetadata:input_type -> google.protobuf.Empty
-	14, // 20: gestalt.plugin.v1.IntegrationProvider.StartProvider:input_type -> gestalt.plugin.v1.StartProviderRequest
-	9,  // 21: gestalt.plugin.v1.IntegrationProvider.Execute:input_type -> gestalt.plugin.v1.ExecuteRequest
-	10, // 22: gestalt.plugin.v1.IntegrationProvider.GetSessionCatalog:input_type -> gestalt.plugin.v1.GetSessionCatalogRequest
-	12, // 23: gestalt.plugin.v1.IntegrationProvider.PostConnect:input_type -> gestalt.plugin.v1.PostConnectRequest
-	6,  // 24: gestalt.plugin.v1.IntegrationProvider.GetMetadata:output_type -> gestalt.plugin.v1.ProviderMetadata
-	15, // 25: gestalt.plugin.v1.IntegrationProvider.StartProvider:output_type -> gestalt.plugin.v1.StartProviderResponse
-	7,  // 26: gestalt.plugin.v1.IntegrationProvider.Execute:output_type -> gestalt.plugin.v1.OperationResult
-	11, // 27: gestalt.plugin.v1.IntegrationProvider.GetSessionCatalog:output_type -> gestalt.plugin.v1.GetSessionCatalogResponse
-	13, // 28: gestalt.plugin.v1.IntegrationProvider.PostConnect:output_type -> gestalt.plugin.v1.PostConnectResponse
+	20, // 0: gestalt.provider.v1.CatalogParameter.default:type_name -> google.protobuf.Value
+	2,  // 1: gestalt.provider.v1.CatalogOperation.annotations:type_name -> gestalt.provider.v1.OperationAnnotations
+	1,  // 2: gestalt.provider.v1.CatalogOperation.parameters:type_name -> gestalt.provider.v1.CatalogParameter
+	3,  // 3: gestalt.provider.v1.Catalog.operations:type_name -> gestalt.provider.v1.CatalogOperation
+	0,  // 4: gestalt.provider.v1.ProviderMetadata.connection_mode:type_name -> gestalt.provider.v1.ConnectionMode
+	16, // 5: gestalt.provider.v1.ProviderMetadata.connection_params:type_name -> gestalt.provider.v1.ProviderMetadata.ConnectionParamsEntry
+	4,  // 6: gestalt.provider.v1.ProviderMetadata.static_catalog:type_name -> gestalt.provider.v1.Catalog
+	21, // 7: gestalt.provider.v1.IntegrationToken.expires_at:type_name -> google.protobuf.Timestamp
+	21, // 8: gestalt.provider.v1.IntegrationToken.last_refreshed_at:type_name -> google.protobuf.Timestamp
+	21, // 9: gestalt.provider.v1.IntegrationToken.created_at:type_name -> google.protobuf.Timestamp
+	21, // 10: gestalt.provider.v1.IntegrationToken.updated_at:type_name -> google.protobuf.Timestamp
+	22, // 11: gestalt.provider.v1.ExecuteRequest.params:type_name -> google.protobuf.Struct
+	17, // 12: gestalt.provider.v1.ExecuteRequest.connection_params:type_name -> gestalt.provider.v1.ExecuteRequest.ConnectionParamsEntry
+	18, // 13: gestalt.provider.v1.GetSessionCatalogRequest.connection_params:type_name -> gestalt.provider.v1.GetSessionCatalogRequest.ConnectionParamsEntry
+	4,  // 14: gestalt.provider.v1.GetSessionCatalogResponse.catalog:type_name -> gestalt.provider.v1.Catalog
+	8,  // 15: gestalt.provider.v1.PostConnectRequest.token:type_name -> gestalt.provider.v1.IntegrationToken
+	19, // 16: gestalt.provider.v1.PostConnectResponse.metadata:type_name -> gestalt.provider.v1.PostConnectResponse.MetadataEntry
+	22, // 17: gestalt.provider.v1.StartProviderRequest.config:type_name -> google.protobuf.Struct
+	5,  // 18: gestalt.provider.v1.ProviderMetadata.ConnectionParamsEntry.value:type_name -> gestalt.provider.v1.ConnectionParamDef
+	23, // 19: gestalt.provider.v1.IntegrationProvider.GetMetadata:input_type -> google.protobuf.Empty
+	14, // 20: gestalt.provider.v1.IntegrationProvider.StartProvider:input_type -> gestalt.provider.v1.StartProviderRequest
+	9,  // 21: gestalt.provider.v1.IntegrationProvider.Execute:input_type -> gestalt.provider.v1.ExecuteRequest
+	10, // 22: gestalt.provider.v1.IntegrationProvider.GetSessionCatalog:input_type -> gestalt.provider.v1.GetSessionCatalogRequest
+	12, // 23: gestalt.provider.v1.IntegrationProvider.PostConnect:input_type -> gestalt.provider.v1.PostConnectRequest
+	6,  // 24: gestalt.provider.v1.IntegrationProvider.GetMetadata:output_type -> gestalt.provider.v1.ProviderMetadata
+	15, // 25: gestalt.provider.v1.IntegrationProvider.StartProvider:output_type -> gestalt.provider.v1.StartProviderResponse
+	7,  // 26: gestalt.provider.v1.IntegrationProvider.Execute:output_type -> gestalt.provider.v1.OperationResult
+	11, // 27: gestalt.provider.v1.IntegrationProvider.GetSessionCatalog:output_type -> gestalt.provider.v1.GetSessionCatalogResponse
+	13, // 28: gestalt.provider.v1.IntegrationProvider.PostConnect:output_type -> gestalt.provider.v1.PostConnectResponse
 	24, // [24:29] is the sub-list for method output_type
 	19, // [19:24] is the sub-list for method input_type
 	19, // [19:19] is the sub-list for extension type_name

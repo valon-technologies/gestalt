@@ -12,7 +12,7 @@ type ProviderKind string
 const (
 	ProviderKindIntegration ProviderKind = "integration"
 	ProviderKindAuth       ProviderKind = "auth"
-	ProviderKindDatastore  ProviderKind = "datastore"
+	ProviderKindIndexedDB  ProviderKind = "datastore"
 	ProviderKindSecrets    ProviderKind = "secrets"
 )
 

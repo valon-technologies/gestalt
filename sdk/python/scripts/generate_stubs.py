@@ -4,7 +4,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-PROTO_MODULES = ("auth", "datastore", "plugin", "runtime")
+PROTO_MODULES = ("auth", "datastore", "plugin", "runtime", "secrets")
 GRPC_RUNTIME_IMPORT_PREFIX = "from v1 import "
 GRPC_RUNTIME_IMPORT_REPLACEMENT_PREFIX = "from . import "
 

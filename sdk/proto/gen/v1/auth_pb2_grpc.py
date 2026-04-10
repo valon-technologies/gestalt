@@ -16,22 +16,22 @@ class AuthProviderStub(object):
             channel: A grpc.Channel.
         """
         self.BeginLogin = channel.unary_unary(
-                '/gestalt.plugin.v1.AuthProvider/BeginLogin',
+                '/gestalt.provider.v1.AuthProvider/BeginLogin',
                 request_serializer=v1_dot_auth__pb2.BeginLoginRequest.SerializeToString,
                 response_deserializer=v1_dot_auth__pb2.BeginLoginResponse.FromString,
                 _registered_method=True)
         self.CompleteLogin = channel.unary_unary(
-                '/gestalt.plugin.v1.AuthProvider/CompleteLogin',
+                '/gestalt.provider.v1.AuthProvider/CompleteLogin',
                 request_serializer=v1_dot_auth__pb2.CompleteLoginRequest.SerializeToString,
                 response_deserializer=v1_dot_auth__pb2.AuthenticatedUser.FromString,
                 _registered_method=True)
         self.ValidateExternalToken = channel.unary_unary(
-                '/gestalt.plugin.v1.AuthProvider/ValidateExternalToken',
+                '/gestalt.provider.v1.AuthProvider/ValidateExternalToken',
                 request_serializer=v1_dot_auth__pb2.ValidateExternalTokenRequest.SerializeToString,
                 response_deserializer=v1_dot_auth__pb2.AuthenticatedUser.FromString,
                 _registered_method=True)
         self.GetSessionSettings = channel.unary_unary(
-                '/gestalt.plugin.v1.AuthProvider/GetSessionSettings',
+                '/gestalt.provider.v1.AuthProvider/GetSessionSettings',
                 request_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
                 response_deserializer=v1_dot_auth__pb2.AuthSessionSettings.FromString,
                 _registered_method=True)
@@ -89,9 +89,9 @@ def add_AuthProviderServicer_to_server(servicer, server):
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'gestalt.plugin.v1.AuthProvider', rpc_method_handlers)
+            'gestalt.provider.v1.AuthProvider', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('gestalt.plugin.v1.AuthProvider', rpc_method_handlers)
+    server.add_registered_method_handlers('gestalt.provider.v1.AuthProvider', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
@@ -112,7 +112,7 @@ class AuthProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.AuthProvider/BeginLogin',
+            '/gestalt.provider.v1.AuthProvider/BeginLogin',
             v1_dot_auth__pb2.BeginLoginRequest.SerializeToString,
             v1_dot_auth__pb2.BeginLoginResponse.FromString,
             options,
@@ -139,7 +139,7 @@ class AuthProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.AuthProvider/CompleteLogin',
+            '/gestalt.provider.v1.AuthProvider/CompleteLogin',
             v1_dot_auth__pb2.CompleteLoginRequest.SerializeToString,
             v1_dot_auth__pb2.AuthenticatedUser.FromString,
             options,
@@ -166,7 +166,7 @@ class AuthProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.AuthProvider/ValidateExternalToken',
+            '/gestalt.provider.v1.AuthProvider/ValidateExternalToken',
             v1_dot_auth__pb2.ValidateExternalTokenRequest.SerializeToString,
             v1_dot_auth__pb2.AuthenticatedUser.FromString,
             options,
@@ -193,7 +193,7 @@ class AuthProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.AuthProvider/GetSessionSettings',
+            '/gestalt.provider.v1.AuthProvider/GetSessionSettings',
             google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             v1_dot_auth__pb2.AuthSessionSettings.FromString,
             options,

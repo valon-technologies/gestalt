@@ -19,7 +19,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	SecretsProvider_GetSecret_FullMethodName = "/gestalt.plugin.v1.SecretsProvider/GetSecret"
+	SecretsProvider_GetSecret_FullMethodName = "/gestalt.provider.v1.SecretsProvider/GetSecret"
 )
 
 // SecretsProviderClient is the client API for SecretsProvider service.
@@ -108,7 +108,7 @@ func _SecretsProvider_GetSecret_Handler(srv interface{}, ctx context.Context, de
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var SecretsProvider_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "gestalt.plugin.v1.SecretsProvider",
+	ServiceName: "gestalt.provider.v1.SecretsProvider",
 	HandlerType: (*SecretsProviderServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

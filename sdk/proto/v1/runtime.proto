@@ -1,13 +1,13 @@
 syntax = "proto3";
 
-package gestalt.plugin.v1;
+package gestalt.provider.v1;
 
 option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
 
 // SDK Naming Convention (all languages):
 //   Base provider interface:  Provider
 //   Auth provider:            AuthProvider
-//   Datastore provider:       DatastoreProvider
+//   IndexedDB provider:       IndexedDBProvider
 //   Lifecycle service:        ProviderLifecycle (internal, not user-facing)
 
 import "google/protobuf/empty.proto";

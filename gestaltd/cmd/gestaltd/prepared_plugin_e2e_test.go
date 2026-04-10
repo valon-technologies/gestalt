@@ -116,4 +116,3 @@ func writePreparedSourceConfig(t *testing.T, dir, pluginDir string, pluginConfig
 	}
 	return cfgPath
 }
-

@@ -17,7 +17,7 @@ const (
 	typeScriptTestAuthModuleTarget      = "./auth.ts#auth"
 	typeScriptTestAuthTarget            = "auth:./auth.ts#auth"
 	typeScriptTestDatastoreModuleTarget = "./datastore.ts#datastore"
-	typeScriptTestDatastoreTarget       = "datastore:./datastore.ts#datastore"
+	typeScriptTestDatastoreTarget       = "indexeddb:./datastore.ts#datastore"
 )
 
 func TestSplitTypeScriptProviderTarget(t *testing.T) {
@@ -565,7 +565,7 @@ func mustWriteTypeScriptTargetModule(t *testing.T, root, target string) {
 
 func runtimeTargetModulePath(t *testing.T, target string) string {
 	t.Helper()
-	for _, prefix := range []string{"plugin:", "integration:", "auth:", "datastore:", "secrets:", "telemetry:"} {
+	for _, prefix := range []string{"plugin:", "integration:", "auth:", "indexeddb:", "secrets:", "telemetry:"} {
 		if strings.HasPrefix(target, prefix) {
 			return strings.TrimPrefix(target, prefix)
 		}
