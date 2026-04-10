@@ -723,7 +723,7 @@ func TestNewServer_DirectCallerPassthrough(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	broker := invocation.NewBroker(providers, stubServicesWithToken(t))
+	broker := invocation.NewBroker(providers, stubServicesWithToken(t).Users, stubServicesWithToken(t).Tokens)
 	caps := broker.ListCapabilities()
 	if len(caps) != 1 {
 		t.Fatalf("expected 1 capability, got %d", len(caps))
@@ -814,24 +814,20 @@ func TestNewServer_RESTCatalogToolsUseOperationConnections(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, merged)
-	datastore := coretesting.NewStubServices(t
-		TokenFn: func(_ context.Context, _, integration, connection, _ string) (*core.IntegrationToken, error) {
-			if integration != "hybrid" {
-				return nil, fmt.Errorf("unexpected integration %q", integration)
-			}
-			switch connection {
-			case config.PluginConnectionName:
-				return &core.IntegrationToken{AccessToken: testPluginAccessToken}, nil
-			case testAPIConnectionName:
-				return &core.IntegrationToken{AccessToken: testNamedAPIAccessToken}, nil
-			default:
-				return nil, fmt.Errorf("unexpected connection %q", connection)
-			}
-		},
-	}
+	ds := stubServicesWithToken(t)
+	ctx := context.Background()
+	ds.Users.FindOrCreateUser(ctx, "test@example.com")
+	ds.Tokens.StoreToken(ctx, &core.IntegrationToken{
+		ID: "tok-plugin", UserID: "u1", Integration: "hybrid", Connection: config.PluginConnectionName, Instance: "default",
+		AccessToken: testPluginAccessToken,
+	})
+	ds.Tokens.StoreToken(ctx, &core.IntegrationToken{
+		ID: "tok-api", UserID: "u1", Integration: "hybrid", Connection: testAPIConnectionName, Instance: "default",
+		AccessToken: testNamedAPIAccessToken,
+	})
 	broker := invocation.NewBroker(
 		providers,
-		datastore,
+		ds.Users, ds.Tokens,
 		invocation.WithConnectionMapper(invocation.ConnectionMap{"hybrid": testAPIConnectionName}),
 	)
 
@@ -1123,7 +1119,7 @@ func TestNewServer_DynamicCatalogProviderCallsSessionTool(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	broker := invocation.NewBroker(providers, stubServicesWithToken(t))
+	broker := invocation.NewBroker(providers, stubServicesWithToken(t).Users, stubServicesWithToken(t).Tokens)
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
 		TokenResolver: broker,
@@ -1235,7 +1231,7 @@ func TestNewServer_MCPPassthroughContract(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	broker := invocation.NewBroker(providers, stubServicesWithToken(t))
+	broker := invocation.NewBroker(providers, stubServicesWithToken(t).Users, stubServicesWithToken(t).Tokens)
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
 		TokenResolver: broker,
@@ -1345,7 +1341,7 @@ func TestNewServer_PassthroughToolPreservesErrorResultStructure(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	broker := invocation.NewBroker(providers, stubServicesWithToken(t))
+	broker := invocation.NewBroker(providers, stubServicesWithToken(t).Users, stubServicesWithToken(t).Tokens)
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
 		TokenResolver: broker,
@@ -1413,7 +1409,7 @@ func TestNewServer_PassthroughToolTreatsNilResultAsEmptyJSON(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	broker := invocation.NewBroker(providers, stubServicesWithToken(t))
+	broker := invocation.NewBroker(providers, stubServicesWithToken(t).Users, stubServicesWithToken(t).Tokens)
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
 		TokenResolver: broker,
