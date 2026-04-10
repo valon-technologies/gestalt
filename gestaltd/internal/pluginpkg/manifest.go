@@ -552,13 +552,13 @@ func validateExecutableProviderMetadata(provider *pluginmanifestv1.Plugin) error
 			return fmt.Errorf("%s is no longer supported for executable providers", check.field)
 		}
 	}
-	if err := validateSpecURLField(provider.OpenAPI, "provider.openapi"); err != nil {
+	if err := validateSpecURLField(provider.OpenAPIDocument(), "provider.surfaces.openapi.document"); err != nil {
 		return err
 	}
-	if err := validateSpecURLField(provider.GraphQLURL, "provider.graphqlUrl"); err != nil {
+	if err := validateSpecURLField(provider.GraphQLURL(), "provider.surfaces.graphql.url"); err != nil {
 		return err
 	}
-	if err := validateSpecURLField(provider.MCPURL, "provider.mcpUrl"); err != nil {
+	if err := validateSpecURLField(provider.MCPURL(), "provider.surfaces.mcp.url"); err != nil {
 		return err
 	}
 	return nil

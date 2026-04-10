@@ -17,6 +17,13 @@ func writeManifestRaw(t *testing.T, dir string, manifest *pluginmanifestv1.Manif
 	mustWriteStaticCatalog(t, dir, manifest)
 }
 
+func setOpenAPIDocument(manifest *pluginmanifestv1.Manifest, doc string) {
+	if manifest.Plugin.Surfaces == nil {
+		manifest.Plugin.Surfaces = &pluginmanifestv1.PluginSurfaces{}
+	}
+	manifest.Plugin.Surfaces.OpenAPI = &pluginmanifestv1.OpenAPISurface{Document: doc}
+}
+
 func TestValidatePackageDirRejectsTraversalInOpenAPIField(t *testing.T) {
 	t.Parallel()
 
@@ -27,7 +34,7 @@ func TestValidatePackageDirRejectsTraversalInOpenAPIField(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadManifestFromDir: %v", err)
 	}
-	manifest.Plugin.OpenAPI = "../../../etc/passwd"
+	setOpenAPIDocument(manifest, "../../../etc/passwd")
 	writeManifestRaw(t, sourceDir, manifest)
 
 	_, err = ValidatePackageDir(sourceDir)
@@ -49,7 +56,7 @@ func TestValidatePackageDirRejectsAbsolutePathInOpenAPIField(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadManifestFromDir: %v", err)
 	}
-	manifest.Plugin.OpenAPI = "/etc/passwd"
+	setOpenAPIDocument(manifest, "/etc/passwd")
 	writeManifestRaw(t, sourceDir, manifest)
 
 	_, err = ValidatePackageDir(sourceDir)
@@ -71,11 +78,11 @@ func TestValidatePackageDirAllowsHTTPOpenAPIURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loadManifestFromDir: %v", err)
 	}
-	manifest.Plugin.OpenAPI = "https://api.example.com/openapi.yaml"
+	setOpenAPIDocument(manifest, "https://api.example.com/openapi.yaml")
 	writeManifestRaw(t, sourceDir, manifest)
 
 	_, err = ValidatePackageDir(sourceDir)
-	if err != nil && strings.Contains(err.Error(), "provider.openapi") {
+	if err != nil && strings.Contains(err.Error(), "surfaces.openapi") {
 		t.Fatalf("HTTP URL should be accepted for openapi field: %v", err)
 	}
 }
@@ -86,7 +93,11 @@ func TestResolveManifestLocalReferencesRejectsTraversal(t *testing.T) {
 	manifestPath := filepath.Join("/opt", "providers", "github", "manifest.yaml")
 	manifest := &pluginmanifestv1.Manifest{
 		Plugin: &pluginmanifestv1.Plugin{
-			OpenAPI: "../../../etc/passwd",
+			Surfaces: &pluginmanifestv1.PluginSurfaces{
+				OpenAPI: &pluginmanifestv1.OpenAPISurface{
+					Document: "../../../etc/passwd",
+				},
+			},
 		},
 	}
 
@@ -105,7 +116,11 @@ func TestResolveManifestLocalReferencesResolvesValidRelativePath(t *testing.T) {
 	manifestPath := filepath.Join("/opt", "providers", "github", "manifest.yaml")
 	manifest := &pluginmanifestv1.Manifest{
 		Plugin: &pluginmanifestv1.Plugin{
-			OpenAPI: "openapi.yaml",
+			Surfaces: &pluginmanifestv1.PluginSurfaces{
+				OpenAPI: &pluginmanifestv1.OpenAPISurface{
+					Document: "openapi.yaml",
+				},
+			},
 		},
 	}
 
@@ -114,7 +129,7 @@ func TestResolveManifestLocalReferencesResolvesValidRelativePath(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	want := filepath.Join("/opt", "providers", "github", "openapi.yaml")
-	if got.Plugin.OpenAPI != want {
-		t.Fatalf("OpenAPI = %q, want %q", got.Plugin.OpenAPI, want)
+	if got.Plugin.OpenAPIDocument() != want {
+		t.Fatalf("OpenAPIDocument() = %q, want %q", got.Plugin.OpenAPIDocument(), want)
 	}
 }

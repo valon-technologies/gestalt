@@ -58,7 +58,7 @@ func ResolveManifestLocalReferences(manifest *pluginmanifestv1.Manifest, manifes
 		return manifest, nil
 	}
 	if manifest.Plugin.Surfaces == nil {
-		return manifest
+		return manifest, nil
 	}
 
 	manifestDir := filepath.Dir(manifestPath)
