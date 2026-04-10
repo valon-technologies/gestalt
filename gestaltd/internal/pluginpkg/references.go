@@ -64,7 +64,13 @@ func ResolveManifestLocalReferences(manifest *pluginmanifestv1.Manifest, manifes
 	manifestDir := filepath.Dir(manifestPath)
 	var resolveErr error
 	resolve := func(value string) string {
-		if resolveErr != nil || value == "" || filepath.IsAbs(value) || strings.Contains(value, "://") {
+		if resolveErr != nil || value == "" || strings.Contains(value, "://") {
+			return value
+		}
+		if filepath.IsAbs(value) {
+			if !isPathWithinDir(manifestDir, filepath.Clean(value)) {
+				resolveErr = fmt.Errorf("local reference %q is outside the manifest directory", value)
+			}
 			return value
 		}
 		resolved := filepath.Join(manifestDir, filepath.FromSlash(value))
