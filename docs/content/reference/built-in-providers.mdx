@@ -46,16 +46,19 @@ datastore: main
 
 ## Secret Managers
 
-The following secret managers are compiled into the binary. They resolve `secret://` references during bootstrap. Custom secrets providers can also be written using the Go SDK's `SecretsProvider` interface and loaded as external provider processes, the same way auth and datastore providers work.
+The following secret managers are compiled into the binary. They resolve `secret://` references during bootstrap. Cloud secret backends and other advanced secret managers are packaged as external providers and configured under `secrets.provider`.
 
 | Name | Purpose |
 | --- | --- |
 | `env` | Resolves secrets from environment variables. Default when `secrets` is omitted. |
 | `file` | Resolves secrets from files in a configured directory. Works with Kubernetes volume-mounted secrets. |
-| `google_secret_manager` | Resolves secrets from Google Cloud Secret Manager. |
-| `aws_secrets_manager` | Resolves secrets from AWS Secrets Manager. |
-| `vault` | Resolves secrets from HashiCorp Vault (KV v2). |
-| `azure_key_vault` | Resolves secrets from Azure Key Vault. |
+
+External secret provider packages include:
+
+- `github.com/valon-technologies/gestalt-providers/secrets/google`
+- `github.com/valon-technologies/gestalt-providers/secrets/aws`
+- `github.com/valon-technologies/gestalt-providers/secrets/vault`
+- `github.com/valon-technologies/gestalt-providers/secrets/azure`
 
 ## Telemetry Providers (built-in)
 
