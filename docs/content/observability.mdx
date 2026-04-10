@@ -133,7 +133,7 @@ These metrics are recorded around `broker.invoke`.
 </Tabs>
 
 These metrics carry low-cardinality attributes: `gestalt.provider` (the
-integration key), `gestalt.operation` (the catalog operation id),
+plugin key), `gestalt.operation` (the catalog operation id),
 `gestalt.transport` (how the operation is implemented: `plugin`, `rest`, or
 `mcp-passthrough`), and `gestalt.connection_mode` (the provider auth mode:
 `none`, `user`, `identity`, or `either`).
@@ -143,7 +143,7 @@ When a request references an unknown provider or operation, `gestaltd` records
 
 ### Connection Auth Metrics
 
-These metrics are recorded around integration connection auth flows including
+These metrics are recorded around plugin connection auth flows including
 OAuth start and completion, manual connect, and token refresh.
 
 <Tabs items={['OpenTelemetry', 'Prometheus']}>
@@ -164,12 +164,12 @@ OAuth start and completion, manual connect, and token refresh.
 </Tabs>
 
 These metrics carry low-cardinality attributes: `gestalt.provider` (the
-integration key), `gestalt.type` (`oauth` or `manual`),
+plugin key), `gestalt.type` (`oauth` or `manual`),
 `gestalt.action` (`start`, `complete`, or `refresh`), and
 `gestalt.connection_mode` (the provider auth mode: `none`, `user`,
 `identity`, or `either`).
 
-When a request references an unknown integration, `gestaltd` records
+When a request references an unknown plugin, `gestaltd` records
 `unknown` for the provider and connection mode metric attributes instead of
 using raw request input.
 
@@ -251,7 +251,7 @@ need actor, target, and outcome details.
 
 The built-in `gestaltd` metric surface does not yet emit per-operation upstream
 HTTP `status_code` or `status_class` metrics, nor deduplicated DAU, WAU, or MAU
-analytics for users or integrations. Those need separate semantic decisions or
+analytics for users or plugins. Those need separate semantic decisions or
 an analytics pipeline instead of more process-local counters.
 
 ### HTTP Server Metrics

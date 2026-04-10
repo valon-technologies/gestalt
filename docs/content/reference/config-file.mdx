@@ -38,7 +38,7 @@ server:
   artifactsDir: ./state
 ```
 
-`public.host` and `public.port` control the public listener address. Both default to all-interfaces on port `8080`. The legacy `port` shorthand still works but `public.port` takes precedence.
+`public.host` and `public.port` control the public listener address. Both default to all-interfaces on port `8080`.
 
 `management.host` and `management.port` bind a separate listener for operator traffic. When `management.port` is omitted, `/admin` and `/metrics` stay on the public listener, a mode best kept to local development or other trusted-network deployments. For production, prefer configuring `server.management` so the operator surface leaves the public listener entirely.
 
@@ -63,7 +63,7 @@ When `server.management` is configured, Gestalt serves `/`, `/api/v1/*`, auth ro
 
 ## `auth`
 
-Top-level platform auth is optional. Omit the `auth` block entirely to disable platform authentication, or set `auth.provider: none` explicitly. When auth is enabled, configure it with `auth.provider` and `auth.config`. `auth.provider` uses the same provider-reference shape as integration plugins: a `source` block plus optional `env` and `allowedHosts`.
+Top-level platform auth is optional. Omit the `auth` block entirely to disable platform authentication, or set `auth.provider: none` explicitly. When auth is enabled, configure it with `auth.provider` and `auth.config`. `auth.provider` uses the same provider-reference shape as plugins: a `source` block plus optional `env` and `allowedHosts`.
 
 ### `none`
 
@@ -378,7 +378,7 @@ Disables audit output explicitly. `audit.config` is not allowed when `audit.prov
 
 ## `plugins`
 
-Each entry in the top-level `plugins` map is a named integration instance backed by an executable provider package. The provider package is the source of truth for operations and transport details. Server config selects the provider, passes provider-specific config, declares connection policy, and controls MCP exposure.
+Each entry in the top-level `plugins` map is a named plugin backed by an executable provider package. The provider package is the source of truth for operations and transport details. Server config selects the provider, passes provider-specific config, declares connection policy, and controls MCP exposure. The HTTP API and client CLI use the synonym "integrations" in route paths and commands (e.g. `/api/v1/integrations`, `gestalt integrations list`), but `plugins` is the canonical config term.
 
 ```yaml
 plugins:
@@ -405,25 +405,23 @@ plugins:
       toolPrefix: github_
 ```
 
-The config key is `plugins`, but the HTTP API and client CLI still refer to these named entries as integrations.
-
-### Integration Plugin Fields
+### Plugin Fields
 
 | Field | Description |
 | --- | --- |
 | `displayName` | Human-readable name shown in the UI and API. |
-| `description` | Short description of the integration. |
+| `description` | Short description of the plugin. |
 | `iconFile` | SVG icon path, resolved relative to the config directory. |
 | `provider` | **Required.** The backing provider package. See [provider shape](#pluginsprovider) below. |
 | `config` | Provider-specific configuration passed into the provider package. |
 | `connections` | Named connection declarations. See [connections](#connections) below. |
 | `allowedOperations` | Allowlist with optional `alias` and `description` overrides per operation. |
-| `mcp.enabled` | Expose this integration over MCP. |
+| `mcp.enabled` | Expose this plugin over MCP. |
 | `mcp.toolPrefix` | Prefix for MCP tool names. Only valid when `mcp.enabled` is `true`. |
 
 ### `plugins.*.provider`
 
-Every integration plugin uses a nested `provider` block to declare its source.
+Every plugin uses a nested `provider` block to declare its source.
 
 ```yaml
 provider:
@@ -442,7 +440,7 @@ provider:
     path: ./manifest.yaml
 ```
 
-Gestalt synthesizes Go and Rust executable wrappers automatically when needed and runs Python source providers from the module declared in `[tool.gestalt].provider` or the legacy `[tool.gestalt].plugin`. Integration plugins do not support `provider.builtin`.
+Gestalt synthesizes Go and Rust executable wrappers automatically when needed and runs Python source providers from the module declared in `[tool.gestalt].provider` or the legacy `[tool.gestalt].plugin`. Plugins do not support `provider.builtin`.
 
 <Tabs items={['Go', 'Python', 'Rust']}>
   <Tabs.Tab>
@@ -496,7 +494,7 @@ Gestalt synthesizes Go and Rust executable wrappers automatically when needed an
 
 ### `connections`
 
-Connections declare how users authenticate to the upstream service. Only `connections.default` may define `params` and `discovery`.
+Connections declare how users authenticate to the upstream service. Only `connections.default` may define `params` and `discovery`. A provider manifest can also declare connections; when both the manifest and config define the same connection name, config values are merged on top of the manifest defaults. See [Provider Manifests](/reference/plugin-manifests#connections) for the manifest-side schema.
 
 ```yaml
 connections:
@@ -518,7 +516,7 @@ connections:
       type: mcp_oauth
 ```
 
-Connection `mode` determines how credentials are managed: `none` requires no credentials, `user` requires each user to connect individually, `identity` uses a shared operator credential, and `either` accepts both user and identity connections. All connections in a single integration must share the same mode.
+Connection `mode` determines how credentials are managed: `none` requires no credentials, `user` requires each user to connect individually, `identity` uses a shared operator credential, and `either` accepts both user and identity connections. All connections in a single plugin must share the same mode.
 
 #### Auth shapes
 
@@ -677,7 +675,7 @@ egress:
 | `action` | **Required.** `allow` or `deny`. |
 | `subjectKind` | Match by subject kind. |
 | `subjectId` | Match by subject identifier. |
-| `provider` | Match by integration name. |
+| `provider` | Match by plugin name. |
 | `operation` | Match by operation name. |
 | `method` | Match by HTTP method. |
 | `host` | Match by destination host. |
@@ -727,7 +725,7 @@ Each plugin uses a nested `provider` block. Every plugin must use exactly one lo
 
 Auth and datastore providers use the same PluginDef shape. When `auth.provider` or `datastore.provider` is set, `source.ref` or `source.path` must be present. `auth.config` and `datastore.config` are only allowed when their corresponding provider is set.
 
-Only `connections.default` may define `params` or `discovery`. `mcp.toolPrefix` is valid only when `mcp.enabled` is `true`. All connections in an integration must share the same mode.
+Only `connections.default` may define `params` or `discovery`. `mcp.toolPrefix` is valid only when `mcp.enabled` is `true`. All connections in a plugin must share the same mode.
 
 `ui.provider` must be either `none` or a provider mapping with exactly one loading mode: local `ui.provider.source.path` or managed `ui.provider.source.ref`. `ui.provider.source.version` is required with `ui.provider.source.ref` and invalid with `ui.provider.source.path`. `ui.config` is only allowed when `ui.provider` is not `none`.
 

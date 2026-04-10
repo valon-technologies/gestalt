@@ -35,22 +35,22 @@ A config file has the following top-level blocks:
 
 - `server` controls the HTTP listener, base URL, encryption key, API token TTL, and prepared artifacts directory.
 - `auth` selects the platform login provider for the web UI, HTTP API, and `/mcp`.
-- `datastore` selects persistent storage for users, sessions, API tokens, and integration credentials.
+- `datastore` selects persistent storage for users, sessions, API tokens, and plugin credentials.
 - `secrets` configures resolution for `secret://` references.
 - `telemetry` configures structured logs, metrics, traces, and OTLP export.
-- `plugins` declares the integrations users invoke.
+- `plugins` declares the plugins users invoke.
 - `egress` defines outbound policy rules and credential grants (optional).
 - `ui` references a packaged web UI bundle (optional).
 
 ## Defaults and required fields
 
-Gestalt defaults `server.port` to `8080`, `secrets.provider` to `env`, and `telemetry.provider` to `stdout`. The required fields are `datastore.provider` and `server.encryptionKey`. Platform auth is optional.
+Gestalt defaults `server.public.port` to `8080`, `secrets.provider` to `env`, and `telemetry.provider` to `stdout`. The required fields are `datastore.provider` and `server.encryptionKey`. Platform auth is optional.
 
 `server.encryptionKey` is the root deployment secret. Gestalt derives token encryption and session material from it. Changing this key invalidates all existing sessions and tokens, so treat it as a meaningful deployment event.
 
 ## Plugins
 
-Each entry under `plugins:` registers an integration backed by a provider package. The provider package is the source of truth for available operations, request schemas, and response schemas. The config supplies only provider selection, provider-level config, connection policy, and MCP exposure settings.
+Each entry under `plugins:` registers a plugin backed by a provider package. The provider package is the source of truth for available operations, request schemas, and response schemas. The config supplies only provider selection, provider-level config, connection policy, and MCP exposure settings.
 
 A provider package can come from two places: a versioned published package resolved by `source.ref`, or a local source manifest at `source.path` for development.
 
@@ -130,7 +130,7 @@ Each entry can set an `alias` to rename the operation as it appears to callers.
 
 ### Network sandbox
 
-Executable provider processes run inside a network sandbox. Outbound requests to hosts not listed in `provider.allowedHosts` are rejected. Add every upstream domain the integration plugin contacts to the allowlist.
+Executable provider processes run inside a network sandbox. Outbound requests to hosts not listed in `provider.allowedHosts` are rejected. Add every upstream domain the plugin contacts to the allowlist.
 
 ```yaml
 plugins:
@@ -166,7 +166,7 @@ Gestalt stores upstream credentials keyed by user, plugin name, connection name,
 
 ## Auth
 
-The `auth` block selects a platform login provider that protects the web UI, HTTP API, and `/mcp` endpoint. Auth providers run as external gRPC provider processes, following the same architecture as integration plugins.
+The `auth` block selects a platform login provider that protects the web UI, HTTP API, and `/mcp` endpoint. Auth providers run as external gRPC provider processes, following the same architecture as plugins.
 
 For local development, omit the `auth` block entirely or use the `none` shorthand:
 
@@ -191,7 +191,7 @@ auth:
     clientSecret: secret://oidc-client-secret
 ```
 
-The `auth.provider` field is a provider reference with `source.ref` and `version`, the same shape used for integration plugins. The `none` scalar shorthand is the only exception.
+The `auth.provider` field is a provider reference with `source.ref` and `version`, the same shape used for plugins. The `none` scalar shorthand is the only exception.
 
 ### API tokens
 
@@ -199,7 +199,7 @@ For programmatic access, Gestalt issues API tokens prefixed with `gst_api_`. The
 
 ## Datastore
 
-The `datastore` block selects persistent storage for users, sessions, API tokens, and integration credentials. Like auth, the datastore runs as an external gRPC provider process.
+The `datastore` block selects persistent storage for users, sessions, API tokens, and plugin credentials. Like auth, the datastore runs as an external gRPC provider process.
 
 ```yaml
 datastore:
@@ -211,7 +211,7 @@ datastore:
     path: ./gestalt.db
 ```
 
-`datastore.provider` is required. The `source.ref` and `version` fields work the same as for integration and auth providers. Provider-specific settings go in `datastore.config`.
+`datastore.provider` is required. The `source.ref` and `version` fields work the same as for plugin and auth providers. Provider-specific settings go in `datastore.config`.
 
 ## MCP
 
@@ -377,7 +377,8 @@ The smallest useful config sets up a local server with SQLite storage, no auth, 
 
 ```yaml
 server:
-  port: 8080
+  public:
+    port: 8080
   baseUrl: http://localhost:8080
   encryptionKey: change-me
 

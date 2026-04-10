@@ -10,25 +10,25 @@ The validation error `server.encryptionKey is required` means the config is miss
 
 Set `server.encryptionKey` for every real deployment. Gestalt derives token and session encryption from it regardless of which auth and datastore providers you use.
 
-If the `/mcp` endpoint is not mounted, the server found no plugin that exposes tools. At least one integration plugin must surface MCP-visible operations before `/mcp` becomes available.
+If the `/mcp` endpoint is not mounted, the server found no plugin that exposes tools. At least one plugin must surface MCP-visible operations before `/mcp` becomes available.
 
 When `/ready` returns `503`, the server has not finished initialization. Readiness stays false until all configured providers finish loading and the datastore answers a ping. Check server logs for provider bootstrap errors or datastore connectivity problems.
 
 ## Operation invocation
 
-A "provider not found" error means the integration key in the request does not match any entry in the `plugins` config map. Verify the spelling and confirm the plugin loaded without errors at startup.
+A "provider not found" error means the plugin key in the request does not match any entry in the `plugins` config map. Verify the spelling and confirm the plugin loaded without errors at startup.
 
 An "operation not found" error means the operation ID does not exist in the plugin's catalog. Check that the operation is exposed and that `allowed_operations`, if set, includes it.
 
 A "not authenticated" error on an API or MCP request means no valid session or API token was presented. Log in through the web UI or pass a bearer token in the `Authorization` header.
 
-A "no integration token" error means the user has not connected the integration. Complete the OAuth or manual-auth flow for the provider and connection before invoking operations.
+A "no integration token" error means the user has not connected the plugin. Complete the OAuth or manual-auth flow for the provider and connection before invoking operations.
 
-An "ambiguous instance" error means the user has more than one stored instance for that integration and connection. Pass `_instance` in the HTTP request body or `--instance` in the client CLI to select the correct one.
+An "ambiguous instance" error means the user has more than one stored instance for that plugin and connection. Pass `_instance` in the HTTP request body or `--instance` in the client CLI to select the correct one.
 
-A "token scope denied" error means the operation requires an OAuth scope that was not granted during the connection flow. Disconnect and reconnect the integration, ensuring all required scopes are approved.
+A "token scope denied" error means the operation requires an OAuth scope that was not granted during the connection flow. Disconnect and reconnect the plugin, ensuring all required scopes are approved.
 
-Token refresh failures indicate that the upstream provider rejected the stored refresh token. The refresh token may have been revoked, expired, or rotated by the provider. Disconnect and reconnect the integration to obtain fresh credentials.
+Token refresh failures indicate that the upstream provider rejected the stored refresh token. The refresh token may have been revoked, expired, or rotated by the provider. Disconnect and reconnect the plugin to obtain fresh credentials.
 
 ## Upstream errors
 
@@ -77,11 +77,11 @@ Common source-package checks:
     bun run -e "import('./provider.ts')"
     ```
 
-    Confirm `package.json` has a `gestalt.plugin` or `gestalt.provider` entry pointing at the correct `./file.ts#export` target. The target path must start with `./` and the export name must match a named export in the module.
+    Confirm `package.json` has a `gestalt.provider` entry pointing at the correct `./file.ts#export` target. The target path must start with `./` and the export name must match a named export in the module.
   </Tabs.Tab>
 </Tabs>
 
-A sandbox 403 means the provider process made an outbound request to a host not listed in `plugin.allowedHosts`. Add every upstream domain the integration plugin contacts to the allowlist in your plugin config.
+A sandbox 403 means the provider process made an outbound request to a host not listed in `plugin.allowedHosts`. Add every upstream domain the plugin contacts to the allowlist in your plugin config.
 
 An input decode error means the operation received a request body that does not match the expected schema. Check the operation's parameter definitions and ensure the caller is sending the correct types and required fields.
 
@@ -91,6 +91,6 @@ An invocation depth error means a plugin-to-plugin call chain exceeded the maxim
 
 ## Connections
 
-When an integration requires an explicit connection, the plugin has more than one configured connection and no default. Pass `_connection` on the invocation request or use `--connection` in the client CLI to disambiguate.
+When a plugin requires an explicit connection, it has more than one configured connection and no default. Pass `_connection` on the invocation request or use `--connection` in the client CLI to disambiguate.
 
 If a managed path parameter still appears in the operation schema, the operation path template does not contain the expected placeholder. Verify that the path includes the parameter in braces, such as `/workspaces/{workspace_id}/tickets`, rather than omitting it.
