@@ -38,8 +38,8 @@ func ValidateStructure(cfg *Config) error {
 	if err := validateUIConfig(cfg.UI); err != nil {
 		return err
 	}
-	if cfg.Auth.BuiltinProvider != "" {
-		return fmt.Errorf("config validation: auth.provider must be a provider reference mapping or the string \"none\"")
+	if cfg.Auth.Builtin != "" {
+		return fmt.Errorf("config validation: auth does not support builtin providers; use a provider reference or omit auth")
 	}
 	if err := validateTopLevelComponentConfig("auth", cfg.Auth.Provider, cfg.Auth.Config); err != nil {
 		return err
@@ -75,12 +75,12 @@ func validateAudit(cfg AuditConfig) error {
 	if cfg.Provider != nil {
 		return validateTopLevelComponentProvider("audit", cfg.Provider)
 	}
-	switch cfg.BuiltinProvider {
+	switch cfg.Builtin {
 	case "", "inherit", "noop":
 		if cfg.Config.Kind == 0 {
 			return nil
 		}
-		return fmt.Errorf("config validation: audit.config is not supported when audit.provider is %q", cfg.BuiltinProvider)
+		return fmt.Errorf("config validation: audit.config is not supported when audit.provider is %q", cfg.Builtin)
 	case "stdout":
 		if cfg.Config.Kind == 0 {
 			return nil
@@ -118,7 +118,7 @@ func validateAudit(cfg AuditConfig) error {
 		}
 		return nil
 	default:
-		return fmt.Errorf("config validation: unknown audit.provider %q", cfg.BuiltinProvider)
+		return fmt.Errorf("config validation: unknown audit.provider %q", cfg.Builtin)
 	}
 }
 
@@ -161,7 +161,7 @@ func ValidateResolvedStructure(cfg *Config) error {
 
 // ValidateRuntime checks runtime-only requirements: encryption key plus the
 // required top-level datastore provider. Platform auth is optional; omitting it
-// or setting auth.provider to "none" disables authentication. Callers that need a fully
+// or setting auth.disabled to true disables authentication. Callers that need a fully
 // operational config (serve) should call this after Load. Callers that only
 // need structural correctness (init, validate) should not.
 func ValidateRuntime(cfg *Config) error {
@@ -465,7 +465,7 @@ func validateAuthValueDef(integration, subject, path string, value AuthValueDef,
 func validateUIConfig(cfg UIConfig) error {
 	if cfg.Disabled {
 		if cfg.Config.Kind != 0 {
-			return fmt.Errorf(`config validation: ui.config is not supported when ui.provider is "none"`)
+			return fmt.Errorf("config validation: ui.config is not supported when ui is disabled")
 		}
 		return nil
 	}

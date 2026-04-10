@@ -407,40 +407,61 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 }
 
 func buildTelemetry(cfg *config.Config, factories *FactoryRegistry) (core.TelemetryProvider, error) {
+	if cfg.Telemetry.Disabled {
+		factory, ok := factories.Telemetry["noop"]
+		if !ok {
+			return nil, fmt.Errorf("bootstrap: noop telemetry factory is not registered")
+		}
+		return factory(cfg.Telemetry.Config)
+	}
 	if cfg.Telemetry.Provider != nil {
 		return nil, fmt.Errorf("bootstrap: plugin-based telemetry providers are not yet supported")
 	}
-	factory, ok := factories.Telemetry[cfg.Telemetry.BuiltinProvider]
+	factory, ok := factories.Telemetry[cfg.Telemetry.Builtin]
 	if !ok {
-		return nil, fmt.Errorf("bootstrap: unknown telemetry provider %q", cfg.Telemetry.BuiltinProvider)
+		return nil, fmt.Errorf("bootstrap: unknown telemetry provider %q", cfg.Telemetry.Builtin)
 	}
 	tp, err := factory(cfg.Telemetry.Config)
 	if err != nil {
-		return nil, fmt.Errorf("bootstrap: telemetry provider %q: %w", cfg.Telemetry.BuiltinProvider, err)
+		return nil, fmt.Errorf("bootstrap: telemetry provider %q: %w", cfg.Telemetry.Builtin, err)
 	}
 	return tp, nil
 }
 
 func buildAuditSink(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error) {
+	if cfg.Audit.Disabled {
+		return invocation.NewLoggerAuditSink(slog.New(slog.DiscardHandler)), nil, nil
+	}
 	if cfg.Audit.Provider != nil {
 		return nil, nil, fmt.Errorf("bootstrap: plugin-based audit providers are not yet supported")
 	}
 	if factories.Audit == nil {
-		switch cfg.Audit.BuiltinProvider {
+		switch cfg.Audit.Builtin {
 		case "", "inherit":
 			return invocation.NewLoggerAuditSink(telemetry.Logger()), nil, nil
 		default:
-			return nil, nil, fmt.Errorf("bootstrap: unknown audit provider %q", cfg.Audit.BuiltinProvider)
+			return nil, nil, fmt.Errorf("bootstrap: unknown audit provider %q", cfg.Audit.Builtin)
 		}
 	}
 	sink, closeFn, err := factories.Audit(ctx, cfg.Audit, telemetry)
 	if err != nil {
-		return nil, nil, fmt.Errorf("bootstrap: audit provider %q: %w", cfg.Audit.BuiltinProvider, err)
+		return nil, nil, fmt.Errorf("bootstrap: audit provider %q: %w", cfg.Audit.Builtin, err)
 	}
 	return sink, closeFn, nil
 }
 
+type disabledSecretManager struct{}
+
+var errSecretsDisabled = fmt.Errorf("%w: secrets provider is disabled", core.ErrSecretNotFound)
+
+func (disabledSecretManager) GetSecret(_ context.Context, _ string) (string, error) {
+	return "", errSecretsDisabled
+}
+
 func buildSecretManager(cfg *config.Config, factories *FactoryRegistry) (core.SecretManager, error) {
+	if cfg.Secrets.Disabled {
+		return disabledSecretManager{}, nil
+	}
 	if cfg.Secrets.Provider != nil {
 		factory, ok := factories.Secrets["plugin"]
 		if !ok {
@@ -461,7 +482,7 @@ func buildSecretManager(cfg *config.Config, factories *FactoryRegistry) (core.Se
 		return sm, nil
 	}
 
-	name := cfg.Secrets.BuiltinProvider
+	name := cfg.Secrets.Builtin
 	if name == "" {
 		name = "env"
 	}

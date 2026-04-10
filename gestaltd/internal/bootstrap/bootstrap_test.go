@@ -62,8 +62,8 @@ func validConfig() *config.Config {
 		Datastores: map[string]config.DatastoreDef{
 			"test": {Provider: &config.ProviderDef{Source: &config.PluginSourceDef{Path: "stub"}}},
 		},
-		Secrets:   config.SecretsConfig{BuiltinProvider: "test-secrets"},
-		Telemetry: config.TelemetryConfig{BuiltinProvider: "test-telemetry"},
+		Secrets:   config.SecretsConfig{Builtin: "test-secrets"},
+		Telemetry: config.TelemetryConfig{Builtin: "test-telemetry"},
 		Plugins:   map[string]config.PluginDef{},
 		Server: config.ServerConfig{
 			Public:        config.ListenerConfig{Port: 8080},
@@ -557,6 +557,59 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "secrets broke") {
 			t.Errorf("unexpected error: %v", err)
+		}
+	})
+}
+
+func TestBootstrapDisabledComponents(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+
+	t.Run("disabled telemetry uses noop", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := validConfig()
+		cfg.Telemetry = config.TelemetryConfig{Disabled: true}
+
+		factories := validFactories()
+		factories.Telemetry["noop"] = telemetrynoop.Factory
+
+		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+		if err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		<-result.ProvidersReady
+		if result.Telemetry == nil {
+			t.Fatal("Telemetry is nil")
+		}
+		if err := result.Close(context.Background()); err != nil {
+			t.Fatalf("Close: %v", err)
+		}
+	})
+
+	t.Run("disabled secrets returns not found", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := validConfig()
+		cfg.Secrets = config.SecretsConfig{Disabled: true}
+
+		result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+		if err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		<-result.ProvidersReady
+		if result.SecretManager == nil {
+			t.Fatal("SecretManager is nil")
+		}
+		_, getErr := result.SecretManager.GetSecret(ctx, "any-key")
+		if getErr == nil {
+			t.Fatal("expected error from disabled secret manager")
+		}
+		if !strings.Contains(getErr.Error(), "disabled") {
+			t.Fatalf("error should mention disabled: %v", getErr)
+		}
+		if err := result.Close(context.Background()); err != nil {
+			t.Fatalf("Close: %v", err)
 		}
 	})
 }

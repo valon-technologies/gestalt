@@ -65,7 +65,7 @@ func defaultManagedConfig(dbPath, encryptionKey string) string {
       dsn: %q
 datastore: main
 secrets:
-  provider: env
+  builtin: env
 server:
   public:
     port: 8080
@@ -88,7 +88,7 @@ ui:
     source:
       path: %q
 secrets:
-  provider: env
+  builtin: env
 server:
   public:
     port: 8080

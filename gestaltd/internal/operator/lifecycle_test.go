@@ -61,32 +61,32 @@ func decodeNodeMap(t *testing.T, node any) map[string]any {
 
 func requiredComponentConfigYAML(_ *testing.T, _, dbPath string) string {
 	return fmt.Sprintf(`datastores:
-  main:
+  sqlite:
     provider:
       source:
-        ref: github.com/valon-technologies/gestalt-providers/datastore/relationaldb
+        ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
         version: 0.0.1-alpha.1
     config:
-      dsn: %q
-datastore: main
+      path: %q
+datastore: sqlite
 ui:
-  provider: none
-`, "sqlite://"+dbPath)
+  disabled: true
+`, dbPath)
 }
 
 func requiredDatastoreConfigYAML(_ *testing.T, _, dbPath string) string {
 	return fmt.Sprintf(`datastores:
-  main:
+  sqlite:
     provider:
       source:
-        ref: github.com/valon-technologies/gestalt-providers/datastore/relationaldb
+        ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
         version: 0.0.1-alpha.1
     config:
-      dsn: %q
-datastore: main
+      path: %q
+datastore: sqlite
 ui:
-  provider: none
-`, "sqlite://"+dbPath)
+  disabled: true
+`, dbPath)
 }
 
 func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *testing.T) {
@@ -295,7 +295,7 @@ datastores:
       dsn: %q
 datastore: sqlite
 ui:
-  provider: none
+  disabled: true
 server:
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `, "sqlite://"+dbPath)
@@ -380,7 +380,7 @@ datastores:
       dsn: %q
 datastore: sqlite
 ui:
-  provider: none
+  disabled: true
 server:
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `, "sqlite://"+dbPath)

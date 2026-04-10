@@ -51,23 +51,16 @@ type Config struct {
 }
 
 // ComponentConfig is the unified configuration for top-level infrastructure
-// components (auth, secrets, telemetry, audit, ui). Each component's provider
-// can be a builtin (provider: { builtin: <name> } or the legacy scalar form
-// provider: <name>) or an external plugin (provider: { source: ... }).
+// components (auth, secrets, telemetry, audit, ui).
 type ComponentConfig struct {
-	Provider          *ProviderDef `yaml:"provider"`
-	Config            yaml.Node    `yaml:"config"`
-	BuiltinProvider   string       `yaml:"-"`
-	Disabled          bool         `yaml:"-"`
+	Builtin           string       `yaml:"builtin,omitempty"`
+	Provider          *ProviderDef `yaml:"provider,omitempty"`
+	Config            yaml.Node    `yaml:"config,omitempty"`
+	Disabled          bool         `yaml:"disabled,omitempty"`
 	ResolvedAssetRoot string       `yaml:"-"`
 }
 
 func (c *ComponentConfig) UnmarshalYAML(value *yaml.Node) error {
-	return c.unmarshalComponent(value)
-}
-
-func (c *ComponentConfig) unmarshalComponent(value *yaml.Node) error {
-	kind := "component"
 	if value == nil || value.Kind == 0 {
 		*c = ComponentConfig{}
 		return nil
@@ -79,38 +72,58 @@ func (c *ComponentConfig) unmarshalComponent(value *yaml.Node) error {
 	for i := 0; i+1 < len(value.Content); i += 2 {
 		key := value.Content[i].Value
 		switch key {
-		case "provider", "config":
+		case "builtin", "provider", "config", "disabled":
 		default:
-			return fmt.Errorf("field %s not found in type %s config", key, kind)
+			return fmt.Errorf("field %s not found in type component config", key)
 		}
 	}
-	*c = ComponentConfig{}
+
 	providerNode := mappingValueNode(value, "provider")
-	if providerNode != nil {
-		switch {
-		case providerNode.Kind == yaml.ScalarNode && providerNode.Tag != "!!null":
-			v := strings.TrimSpace(providerNode.Value)
-			if v == "none" {
-				c.Disabled = true
-			} else if v != "" {
-				c.BuiltinProvider = v
-			}
-		case providerNode.Kind == yaml.MappingNode:
-			if builtinNode := mappingValueNode(providerNode, "builtin"); builtinNode != nil && builtinNode.Kind == yaml.ScalarNode {
-				c.BuiltinProvider = strings.TrimSpace(builtinNode.Value)
-			} else {
-				decoded, err := decodeExternalProvider(providerNode)
-				if err != nil {
-					return err
-				}
-				c.Provider = decoded
-			}
-		case providerNode.Kind != yaml.ScalarNode || providerNode.Tag != "!!null":
-			return fmt.Errorf("%s.provider must be a string or a provider reference mapping", kind)
+	if providerNode != nil && providerNode.Kind == yaml.ScalarNode && providerNode.Tag != "!!null" {
+		v := strings.TrimSpace(providerNode.Value)
+		if v == "none" {
+			return fmt.Errorf("provider: \"none\" is no longer supported; use disabled: true")
 		}
+		return fmt.Errorf("provider: %q is no longer supported as a scalar string; use builtin: %s", v, v)
+	}
+	if providerNode != nil && providerNode.Kind == yaml.MappingNode {
+		if builtinNode := mappingValueNode(providerNode, "builtin"); builtinNode != nil && builtinNode.Kind == yaml.ScalarNode {
+			return fmt.Errorf("provider: { builtin: %s } is no longer supported; use builtin: %s", builtinNode.Value, builtinNode.Value)
+		}
+	}
+
+	*c = ComponentConfig{}
+	if builtinNode := mappingValueNode(value, "builtin"); builtinNode != nil && builtinNode.Kind == yaml.ScalarNode && builtinNode.Tag != "!!null" {
+		c.Builtin = strings.TrimSpace(builtinNode.Value)
+	}
+	if disabledNode := mappingValueNode(value, "disabled"); disabledNode != nil && disabledNode.Kind == yaml.ScalarNode {
+		if err := disabledNode.Decode(&c.Disabled); err != nil {
+			return fmt.Errorf("decoding disabled field: %w", err)
+		}
+	}
+	if providerNode != nil && providerNode.Kind == yaml.MappingNode {
+		decoded, err := decodeExternalProvider(providerNode)
+		if err != nil {
+			return err
+		}
+		c.Provider = decoded
 	}
 	if configNode := mappingValueNode(value, "config"); configNode != nil {
 		c.Config = *configNode
+	}
+
+	set := 0
+	if c.Builtin != "" {
+		set++
+	}
+	if c.Provider != nil {
+		set++
+	}
+	if c.Disabled {
+		set++
+	}
+	if set > 1 {
+		return fmt.Errorf("builtin, provider, and disabled are mutually exclusive")
 	}
 	return nil
 }
@@ -826,14 +839,14 @@ func applyDefaults(cfg *Config) {
 	if cfg.Server.Public.Port == 0 {
 		cfg.Server.Public.Port = 8080
 	}
-	if !cfg.Secrets.Disabled && cfg.Secrets.Provider == nil && cfg.Secrets.BuiltinProvider == "" {
-		cfg.Secrets.BuiltinProvider = "env"
+	if !cfg.Secrets.Disabled && cfg.Secrets.Provider == nil && cfg.Secrets.Builtin == "" {
+		cfg.Secrets.Builtin = "env"
 	}
-	if !cfg.Telemetry.Disabled && cfg.Telemetry.Provider == nil && cfg.Telemetry.BuiltinProvider == "" {
-		cfg.Telemetry.BuiltinProvider = "stdout"
+	if !cfg.Telemetry.Disabled && cfg.Telemetry.Provider == nil && cfg.Telemetry.Builtin == "" {
+		cfg.Telemetry.Builtin = "stdout"
 	}
-	if !cfg.Audit.Disabled && cfg.Audit.Provider == nil && cfg.Audit.BuiltinProvider == "" {
-		cfg.Audit.BuiltinProvider = "inherit"
+	if !cfg.Audit.Disabled && cfg.Audit.Provider == nil && cfg.Audit.Builtin == "" {
+		cfg.Audit.Builtin = "inherit"
 	}
 	if !cfg.UI.Disabled && cfg.UI.Provider == nil {
 		cfg.UI.Provider = defaultUIProvider()
