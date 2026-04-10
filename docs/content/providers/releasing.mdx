@@ -260,8 +260,10 @@ gestaltd init --config ./config.yaml
 
 This writes lock state (`gestalt.lock.json`) and extracts prepared artifacts
 under `.gestaltd/`. After init, `gestaltd serve --locked` starts the server
-using only the prepared state, without fetching or resolving anything at
-runtime. See [Configuration](/configuration) for the full startup model.
+from that lock state. If the prepared files are already present, Gestalt uses
+them directly. If they are missing, Gestalt can materialize them from the
+lockfile at runtime. See [Configuration](/configuration) for the full startup
+model and the tradeoffs between vendored artifacts and lockfile-only startup.
 
 ## Release archive layout
 

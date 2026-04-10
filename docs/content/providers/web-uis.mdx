@@ -59,7 +59,7 @@ ui:
     version: 1.2.0
 ```
 
-When a config references a published UI bundle, run `gestaltd init` to resolve and prepare it. This writes lock state to `gestalt.lock.json` and extracts the assets under `.gestaltd/`. After init, `gestaltd serve --locked` serves the prepared assets at `/` without fetching anything at runtime.
+When a config references a published UI bundle, run `gestaltd init` to resolve and prepare it. This writes lock state to `gestalt.lock.json` and extracts the assets under `.gestaltd/`. After init, `gestaltd serve --locked` serves the locked UI bundle at `/`. If the prepared UI files are already present, Gestalt uses them directly; if they are missing, Gestalt can materialize them from the lockfile at startup.
 
 If `ui.plugin` is omitted entirely, Gestalt falls back to the built-in client UI.
 

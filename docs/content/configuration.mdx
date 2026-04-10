@@ -246,7 +246,7 @@ gestaltd init --config ./config.yaml
 gestaltd serve --locked --config ./config.yaml
 ```
 
-`init` downloads and prepares published provider packages, packaged UI bundles, and other artifacts into a writable directory. `serve --locked` starts only from that prepared state and refuses to download anything at runtime.
+`init` downloads and prepares published provider packages, packaged UI bundles, and other artifacts into a writable directory. `serve --locked` validates startup against `gestalt.lock.json` and uses that lock state to start deterministically. If prepared files are already present under the configured artifacts directory, Gestalt reuses them. If they are missing, Gestalt can materialize them from the lockfile at startup, as long as the selected archives have verified hashes and the runtime can download them into a writable artifacts directory.
 
 ## Prepared state and lockfiles
 
@@ -260,7 +260,16 @@ deploy/
   .gestaltd/ui/...
 ```
 
-The config declares intent. The lockfile records the exact prepared result that `serve --locked` trusts. This lets Gestalt verify that prepared artifacts still match the current config instead of using whatever happens to exist on disk.
+The config declares intent. The lockfile records the exact prepared result that `serve --locked` trusts. This lets Gestalt verify that startup still matches the current config instead of using whatever happens to exist on disk.
+
+Two production patterns are valid:
+
+- Vendored prepared artifacts: bake `gestalt.lock.json` and `.gestaltd/` into the image. This avoids runtime downloads and usually gives faster cold starts, at the cost of larger images and generated-file churn.
+- Lockfile-only startup: ship `gestalt.lock.json` but do not ship `.gestaltd/`. Gestalt repopulates `.gestaltd/` from the lockfile at startup. This keeps the repo and image smaller, but requires runtime network access, source auth, verified archive hashes, and a writable artifacts directory.
+
+If you choose the lockfile-only model, treat `.gestaltd/` as a cache rather than source-controlled deployment input. In app repos, that usually means adding it to both `.gitignore` and `.dockerignore`.
+
+On ephemeral platforms, lockfile-only startup may redownload artifacts on cold start. If that is too slow or too dependent on external availability, vendor `.gestaltd/` into the image instead.
 
 ### Lockfile example
 
@@ -279,22 +288,26 @@ The lockfile records the concrete result of resolving that config.
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "providers": {
     "example": {
       "fingerprint": "...",
       "source": "github.com/acme/plugins/example",
       "version": "1.2.3",
-      "resolvedUrl": "https://github.com/...",
-      "archiveSha256": "...",
+      "archives": {
+        "linux/amd64": {
+          "url": "https://api.github.com/repos/acme/plugins/releases/assets/123456",
+          "sha256": "..."
+        }
+      },
       "manifest": ".gestaltd/providers/example/manifest.yaml",
-      "executable": ".gestaltd/providers/example/artifacts/linux/amd64/provider"
+      "executable": ".gestaltd/providers/example/example-plugin"
     }
   }
 }
 ```
 
-`serve --locked` uses the lockfile to verify that the prepared artifacts match the current config before starting.
+`serve --locked` uses the lockfile to verify that startup matches the current config before starting.
 
 ## Choosing an auth strategy
 

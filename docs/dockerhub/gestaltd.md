@@ -134,7 +134,23 @@ leaving `/admin` and `/metrics` on the public listener. If you also set
 `server.base_url`, the management admin UI can link back to the public client
 UI hostname; otherwise it omits that link.
 
-## Run a prepared production image
+## Run a locked production image
+
+For production deployments, use `gestaltd serve --locked` and ship
+`gestalt.lock.json` with the image. There are two valid ways to do that:
+
+- Vendored artifacts: run `gestaltd init` before `docker build` and copy both
+  `gestalt.lock.json` and `.gestaltd/` into the image.
+- Lockfile-only: ship `gestalt.lock.json` but exclude `.gestaltd/` from the
+  repo and build context. `gestaltd` recreates `.gestaltd/` from the lockfile
+  at startup.
+
+Vendored artifacts are more hermetic and usually give faster cold starts.
+Lockfile-only images are smaller and avoid generated-file churn, but require
+runtime network access, source auth, verified hashes in the lockfile, and a
+writable artifacts directory.
+
+### Vendored artifacts
 
 For deterministic production images, run `gestaltd init` before `docker build`
 and copy the prepared state into the image.
@@ -157,12 +173,39 @@ COPY deploy/ /app/
 CMD ["serve", "--locked", "--config", "/app/config.yaml"]
 ```
 
-This is the recommended production pattern. Use the `-alpine` variant as the
-base for derived images since it includes a shell for build steps.
+Use the `-alpine` variant as the base for derived images since it includes a
+shell for build steps.
 
 If you intentionally want the image build itself to generate prepared state,
 `RUN gestaltd init` in a build stage also works, but it is a build-time
 convenience rather than the primary deterministic workflow.
+
+### Lockfile-only images
+
+If you do not want to ship vendored artifacts, keep `gestalt.lock.json` in the
+image but exclude `.gestaltd/` from git and from the Docker build context:
+
+```gitignore
+deploy/.gestaltd/
+```
+
+```dockerignore
+deploy/.gestaltd
+```
+
+Then make sure the configured artifacts directory is writable by the runtime
+user. For example:
+
+```dockerfile
+FROM valontechnologies/gestaltd:latest-alpine
+USER root
+COPY --chown=nobody:nobody deploy/ /app/
+USER nobody
+CMD ["serve", "--locked", "--config", "/app/config.yaml"]
+```
+
+This model treats `.gestaltd/` as a runtime cache. On ephemeral platforms,
+artifacts may be redownloaded on cold start.
 
 ## Compose example
 
@@ -271,7 +314,7 @@ RUN cd ./my-plugin && \
 
 ## Caveats
 
-- The published image defaults to locked startup. A missing config file or missing prepared state causes startup to fail fast.
+- The published image defaults to locked startup. A missing config file, missing lockfile, missing verified archive hash, or unwritable artifacts directory causes startup to fail fast. Missing prepared artifacts alone do not, because `gestaltd` can materialize them from `gestalt.lock.json`.
 - `docker run valontechnologies/gestaltd:latest` by itself is expected to fail because the image does not auto-generate config in-container.
 - The default image does not include a shell. Use `-alpine` or `-debian` for debugging.
 - If you use SQLite, do not scale to multiple replicas.

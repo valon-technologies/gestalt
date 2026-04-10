@@ -8,7 +8,7 @@
 | --- | --- |
 | `gestaltd` | Local-friendly startup. Generates a config if needed and serves. |
 | `gestaltd serve --config PATH` | Start the server. |
-| `gestaltd serve --locked --config PATH` | Start from prepared state only. |
+| `gestaltd serve --locked --config PATH` | Start from lock state. Uses prepared artifacts when present and can materialize missing artifacts from the lockfile. |
 | `gestaltd init --config PATH` | Resolve published plugin sources and write lock state. |
 | `gestaltd validate --config PATH` | Validate config without serving. |
 | `gestaltd --version` | Print the server version. |
