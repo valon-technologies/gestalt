@@ -167,6 +167,15 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 		}
 		lock.Audit = &entry
 	}
+	for name, def := range cfg.IndexedDBs {
+		if def.Provider != nil && def.Provider.HasManagedArtifacts() {
+			entry, err := l.writeComponentArtifact(context.Background(), paths, pluginmanifestv1.KindIndexedDB, "indexeddb-"+name, indexeddbDestDir(paths, name), def.Provider, def.Config)
+			if err != nil {
+				return nil, nil, err
+			}
+			lock.Datastore = &entry
+		}
+	}
 	if cfg.UI.Provider != nil && cfg.UI.Provider.HasManagedArtifacts() {
 		uiEntry, err := l.writeUIProviderArtifact(context.Background(), cfg, paths)
 		if err != nil {
@@ -200,6 +209,11 @@ func buildSourceTokenMap(cfg *config.Config) map[string]string {
 	for _, p := range []*config.ProviderDef{cfg.Auth.Provider, cfg.Secrets.Provider, cfg.Telemetry.Provider, cfg.Audit.Provider} {
 		if p != nil && p.Source != nil && p.Source.Auth != nil {
 			tokens[p.SourceRef()] = p.Source.Auth.Token
+		}
+	}
+	for _, def := range cfg.IndexedDBs {
+		if def.Provider != nil && def.Provider.Source != nil && def.Provider.Source.Auth != nil {
+			tokens[def.Provider.SourceRef()] = def.Provider.Source.Auth.Token
 		}
 	}
 	if cfg.UI.Provider != nil && cfg.UI.Provider.Source != nil && cfg.UI.Provider.Source.Auth != nil {
@@ -347,6 +361,11 @@ func configHasPluginLoading(cfg *config.Config) bool {
 			return true
 		}
 	}
+	for _, def := range cfg.IndexedDBs {
+		if def.Provider != nil && (def.Provider.HasManagedArtifacts() || def.Provider.HasLocalSource()) {
+			return true
+		}
+	}
 	return false
 }
 
@@ -358,6 +377,11 @@ func configHasManagedPlugins(cfg *config.Config) bool {
 	}
 	for _, p := range []*config.ProviderDef{cfg.Auth.Provider, cfg.Secrets.Provider, cfg.UI.Provider, cfg.Telemetry.Provider, cfg.Audit.Provider} {
 		if p != nil && p.HasManagedArtifacts() {
+			return true
+		}
+	}
+	for _, def := range cfg.IndexedDBs {
+		if def.Provider != nil && def.Provider.HasManagedArtifacts() {
 			return true
 		}
 	}
@@ -432,6 +456,10 @@ func telemetryDestDir(paths initPaths) string {
 
 func auditDestDir(paths initPaths) string {
 	return paths.auditDir
+}
+
+func indexeddbDestDir(paths initPaths, name string) string {
+	return filepath.Join(paths.artifactsDir, "indexeddb", name)
 }
 
 func writeJSONFile(path string, v any) error {
@@ -910,6 +938,14 @@ func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *con
 	if cfg.Audit.Provider != nil {
 		if err := l.applyComponentProvider(paths, lock, pluginmanifestv1.KindPlugin, "audit", cfg.Audit.Provider, cfg.Audit.Config, &cfg.Audit.Config, locked); err != nil {
 			return err
+		}
+	}
+	for name, def := range cfg.IndexedDBs {
+		if def.Provider != nil {
+			if err := l.applyComponentProvider(paths, lock, pluginmanifestv1.KindIndexedDB, "indexeddb-"+name, def.Provider, def.Config, &def.Config, locked); err != nil {
+				return err
+			}
+			cfg.IndexedDBs[name] = def
 		}
 	}
 	if cfg.UI.Provider != nil {

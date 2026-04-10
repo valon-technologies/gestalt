@@ -499,7 +499,7 @@ func buildPluginProvider(ctx context.Context, intg config.PluginDef, pluginConfi
 		HostBinary:   intg.Plugin.HostBinary,
 		Cleanup:      cleanup,
 	}
-	if len(intg.Datastores) > 0 && deps.Services != nil {
+	if len(intg.IndexedDBs) > 0 && deps.Services != nil {
 		execCfg.RegisterHost = func(srv *grpc.Server) {
 			proto.RegisterIndexedDBServer(srv, pluginhost.NewIndexedDBServer(deps.Services.DB, intg.Plugin.Command))
 		}

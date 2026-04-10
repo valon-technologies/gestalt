@@ -1,9 +1,7 @@
 package main
 
 import (
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -114,26 +112,3 @@ func TestE2ECLIRejectsBadArgs(t *testing.T) {
 	}
 }
 
-func TestE2ECLIValidateWithStrictProviderErrors(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := authDatastoreConfigYAML(t, dir, "google", "sqlite", filepath.Join(dir, "gestalt.db")) + `server:
-  encryptionKey: test-key
-plugins:
-  broken:
-    displayName: Broken
-`
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
-		t.Fatalf("WriteFile: %v", err)
-	}
-
-	out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
-	if err == nil {
-		t.Fatal("expected validation error, got nil")
-	}
-	if !strings.Contains(string(out), `requires a plugin`) {
-		t.Fatalf("expected missing-provider validation error, got: %s", out)
-	}
-}

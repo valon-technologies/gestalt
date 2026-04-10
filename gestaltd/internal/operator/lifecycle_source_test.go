@@ -527,7 +527,7 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configYAML := strings.Join([]string{
-		requiredDatastoreConfigYAML(t, dir, filepath.Join(dir, "data.db")),
+		requiredIndexedDBConfigYAML(t, dir, filepath.Join(dir, "data.db")),
 		"secrets:",
 		"  builtin: test-secrets",
 		"auth:",
@@ -716,7 +716,7 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configYAML := strings.Join([]string{
-		requiredDatastoreConfigYAML(t, dir, filepath.Join(dir, "data.db")),
+		requiredIndexedDBConfigYAML(t, dir, filepath.Join(dir, "data.db")),
 		"secrets:",
 		"  provider:",
 		"    source:",

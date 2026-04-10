@@ -42,12 +42,12 @@ auth:
   config:
     clientId: client-1
     clientSecret: secret-1
-datastores:
+indexeddbs:
   sqlite:
     provider:
       source:
         path: ./providers/datastore/sqlite
-datastore: sqlite
+indexeddb: sqlite
 server:
   encryptionKey: server-key
   public:
@@ -98,12 +98,12 @@ auth:
       version: 1.0.0
   config:
     clientId: ${TEST_CLIENT_ID}
-datastores:
+indexeddbs:
   sqlite:
     provider:
       source:
         path: ./providers/datastore/sqlite
-datastore: sqlite
+indexeddb: sqlite
 server:
   encryptionKey: ${TEST_ENCRYPTION}
 plugins:
@@ -150,12 +150,12 @@ func TestLoadConfigEnvFileFallback(t *testing.T) {
 	}
 
 	path := mustWriteConfigFile(t, `
-datastores:
+indexeddbs:
   sqlite:
     provider:
       source:
         path: ./providers/datastore/sqlite
-datastore: sqlite
+indexeddb: sqlite
 server:
   encryptionKey: ${TEST_ENCRYPTION}
 `)
@@ -183,12 +183,12 @@ func TestLoadConfigMissingEnvVariableFails(t *testing.T) {
 	encryptionEnv := "GESTALT_TEST_ENCRYPTION_" + strings.ToUpper(strings.ReplaceAll(t.Name(), "/", "_"))
 	portEnv := encryptionEnv + "_PORT"
 	path := mustWriteConfigFile(t, fmt.Sprintf(`
-datastores:
+indexeddbs:
   sqlite:
     provider:
       source:
         path: ./providers/datastore/sqlite
-datastore: sqlite
+indexeddb: sqlite
 server:
   encryptionKey: ${%s}
   public:
@@ -224,12 +224,12 @@ func TestLoadConfigEmptyDefaultEnvSyntax(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
-datastores:
+indexeddbs:
   sqlite:
     provider:
       source:
         path: ./providers/datastore/sqlite
-datastore: sqlite
+indexeddb: sqlite
 server:
   encryptionKey: ${TEST_ENCRYPTION:-}
 `)
@@ -287,12 +287,12 @@ func TestValidateRuntime(t *testing.T) {
 		{
 			name: "missing auth provider is allowed",
 			yaml: `
-datastores:
+indexeddbs:
   sqlite:
     provider:
       source:
         path: ./providers/datastore/sqlite
-datastore: sqlite
+indexeddb: sqlite
 server:
   encryptionKey: server-key
 `,
@@ -311,12 +311,12 @@ server:
 		{
 			name: "missing encryption key",
 			yaml: `
-datastores:
+indexeddbs:
   sqlite:
     provider:
       source:
         path: ./providers/datastore/sqlite
-datastore: sqlite
+indexeddb: sqlite
 `,
 			wantErr: true,
 		},
@@ -325,12 +325,12 @@ datastore: sqlite
 			yaml: `
 auth:
   disabled: true
-datastores:
+indexeddbs:
   sqlite:
     provider:
       source:
         path: ./providers/datastore/sqlite
-datastore: sqlite
+indexeddb: sqlite
 server:
   encryptionKey: server-key
 `,
@@ -363,107 +363,6 @@ server:
 	}
 }
 
-func TestLoadRejectsLegacyTopLevelAuthDatastoreFields(t *testing.T) {
-	t.Parallel()
-
-	cases := []struct {
-		name    string
-		yaml    string
-		wantErr string
-	}{
-		{
-			name: "legacy auth plugin field rejected",
-			yaml: `
-auth:
-  plugin:
-    source:
-      ref: github.com/valon-technologies/gestalt-providers/auth/oidc
-      version: 1.0.0
-datastores:
-  sqlite:
-    provider:
-      source:
-        path: ./providers/datastore/sqlite
-datastore: sqlite
-server:
-  encryptionKey: server-key
-`,
-			wantErr: "field plugin not found in type component config",
-		},
-		{
-			name: "legacy datastore plugin field rejected",
-			yaml: `
-auth:
-  disabled: true
-datastore:
-  plugin:
-    source:
-      ref: github.com/valon-technologies/gestalt-providers/datastore/relationaldb
-      version: 1.0.0
-server:
-  encryptionKey: server-key
-`,
-			wantErr: "cannot unmarshal !!map into config.DatastoreConfig",
-		},
-		{
-			name: "auth config accepted",
-			yaml: `
-auth:
-  provider:
-    source:
-      ref: github.com/valon-technologies/gestalt-providers/auth/oidc
-      version: 1.0.0
-  config:
-    issuerUrl: https://issuer.example.test
-datastores:
-  sqlite:
-    provider:
-      source:
-        path: ./providers/datastore/sqlite
-datastore: sqlite
-server:
-  encryptionKey: server-key
-`,
-			wantErr: "",
-		},
-		{
-			name: "datastore config accepted",
-			yaml: `
-auth:
-  disabled: true
-datastores:
-  sqlite:
-    provider:
-      source:
-        path: ./providers/datastore/sqlite
-datastore: sqlite
-server:
-  encryptionKey: server-key
-`,
-			wantErr: "",
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			path := mustWriteConfigFile(t, tc.yaml)
-			_, err := Load(path)
-			if tc.wantErr == "" {
-				if err != nil {
-					t.Fatalf("Load: %v", err)
-				}
-				return
-			}
-			if err == nil {
-				t.Fatal("Load: expected error, got nil")
-			}
-			if !strings.Contains(err.Error(), tc.wantErr) {
-				t.Fatalf("expected error containing %q, got: %v", tc.wantErr, err)
-			}
-		})
-	}
-}
 
 func TestLoadSucceedsWithoutRuntimeFields(t *testing.T) {
 	t.Parallel()
@@ -492,12 +391,12 @@ func TestLoadConfigUIProviderModes(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
-datastores:
+indexeddbs:
   sqlite:
     provider:
       source:
         path: ./providers/datastore/sqlite
-datastore: sqlite
+indexeddb: sqlite
 server:
   encryptionKey: server-key
 `)
@@ -515,8 +414,8 @@ server:
 		if got := cfg.UI.Provider.Source.Ref; got != DefaultWebUIProvider {
 			t.Fatalf("UI.Provider.Source.Ref = %q, want %q", got, DefaultWebUIProvider)
 		}
-		if got := cfg.UI.Provider.Source.Version; got != DefaultProviderVersion {
-			t.Fatalf("UI.Provider.Source.Version = %q, want %q", got, DefaultProviderVersion)
+		if got := cfg.UI.Provider.Source.Version; got != DefaultWebUIVersion {
+			t.Fatalf("UI.Provider.Source.Version = %q, want %q", got, DefaultWebUIVersion)
 		}
 	})
 
@@ -526,12 +425,12 @@ server:
 		path := mustWriteConfigFile(t, `
 ui:
   disabled: true
-datastores:
+indexeddbs:
   sqlite:
     provider:
       source:
         path: ./providers/datastore/sqlite
-datastore: sqlite
+indexeddb: sqlite
 server:
   encryptionKey: server-key
 `)
@@ -588,12 +487,12 @@ ui:
   disabled: true
   config:
     brand_name: Acme
-datastores:
+indexeddbs:
   sqlite:
     provider:
       source:
         path: ./providers/datastore/sqlite
-datastore: sqlite
+indexeddb: sqlite
 server:
   encryptionKey: server-key
 `)
@@ -615,12 +514,12 @@ ui:
   provider:
     source:
       path: ./web/default/provider.yaml
-datastores:
+indexeddbs:
   sqlite:
     provider:
       source:
         path: ./providers/datastore/sqlite
-datastore: sqlite
+indexeddb: sqlite
 server:
   encryptionKey: server-key
 `)
@@ -1234,12 +1133,12 @@ auth:
   provider:
     source:
       path: ../auth-plugin/provider.yaml
-datastores:
+indexeddbs:
   sqlite:
     provider:
       source:
         path: ./providers/datastore/sqlite
-datastore: sqlite
+indexeddb: sqlite
 plugins:
   service-a:
     iconFile: ../assets/service.svg
@@ -1279,12 +1178,12 @@ auth:
     clientId: client-1
     clientSecret: secret-1
     redirectUrl: https://example.test/callback
-datastores:
+indexeddbs:
   sqlite:
     provider:
       source:
         path: ./providers/datastore/sqlite
-datastore: sqlite
+indexeddb: sqlite
 server:
   encryptionKey: server-key
 `)

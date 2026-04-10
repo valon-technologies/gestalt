@@ -44,10 +44,10 @@ func ValidateStructure(cfg *Config) error {
 	if err := validateTopLevelComponentConfig("auth", cfg.Auth.Provider, cfg.Auth.Config); err != nil {
 		return err
 	}
-	if err := validateDatastoreConfig(cfg); err != nil {
+	if err := validateIndexedDBConfig(cfg); err != nil {
 		return err
 	}
-	if err := validateDatastores(cfg); err != nil {
+	if err := validateIndexedDBs(cfg); err != nil {
 		return err
 	}
 	if cfg.Secrets.Provider != nil {
@@ -165,11 +165,11 @@ func ValidateResolvedStructure(cfg *Config) error {
 // operational config (serve) should call this after Load. Callers that only
 // need structural correctness (init, validate) should not.
 func ValidateRuntime(cfg *Config) error {
-	if string(cfg.Datastore) == "" {
-		return fmt.Errorf("config validation: datastore is required (set datastore: <name> referencing a datastores entry)")
+	if string(cfg.IndexedDB) == "" {
+		return fmt.Errorf("config validation: indexeddb is required (set indexeddb: <name> referencing a datastores entry)")
 	}
-	if _, ok := cfg.Datastores[string(cfg.Datastore)]; !ok {
-		return fmt.Errorf("config validation: datastore references unknown datastore %q", string(cfg.Datastore))
+	if _, ok := cfg.IndexedDBs[string(cfg.IndexedDB)]; !ok {
+		return fmt.Errorf("config validation: indexeddb references unknown indexeddb %q", string(cfg.IndexedDB))
 	}
 	if cfg.Server.EncryptionKey == "" {
 		return fmt.Errorf("config validation: server.encryption_key is required")
@@ -504,35 +504,35 @@ func validateServerListeners(cfg ServerConfig) error {
 	return nil
 }
 
-func validateDatastoreConfig(cfg *Config) error {
-	if string(cfg.Datastore) != "" {
-		if _, ok := cfg.Datastores[string(cfg.Datastore)]; !ok {
-			return fmt.Errorf("config validation: datastore references unknown datastore %q", string(cfg.Datastore))
+func validateIndexedDBConfig(cfg *Config) error {
+	if string(cfg.IndexedDB) != "" {
+		if _, ok := cfg.IndexedDBs[string(cfg.IndexedDB)]; !ok {
+			return fmt.Errorf("config validation: indexeddb references unknown indexeddb %q", string(cfg.IndexedDB))
 		}
 	}
 	return nil
 }
 
-func validateDatastores(cfg *Config) error {
-	for name := range cfg.Datastores {
-		ds := cfg.Datastores[name]
+func validateIndexedDBs(cfg *Config) error {
+	for name := range cfg.IndexedDBs {
+		ds := cfg.IndexedDBs[name]
 		if ds.Provider == nil {
-			return fmt.Errorf("config validation: datastores.%s.provider is required", name)
+			return fmt.Errorf("config validation: indexeddbs.%s.provider is required", name)
 		}
 	}
 	for name := range cfg.Plugins {
 		intg := cfg.Plugins[name]
-		if err := validateDatastoreBindings(name, intg.Datastores, cfg); err != nil {
+		if err := validateIndexedDBBindings(name, intg.IndexedDBs, cfg); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func validateDatastoreBindings(integrationName string, bindings map[string]string, cfg *Config) error {
+func validateIndexedDBBindings(integrationName string, bindings map[string]string, cfg *Config) error {
 	for alias, resourceName := range bindings {
-		if _, ok := cfg.Datastores[resourceName]; !ok {
-			return fmt.Errorf("config validation: integration %q datastore binding %q references unknown datastore %q", integrationName, alias, resourceName)
+		if _, ok := cfg.IndexedDBs[resourceName]; !ok {
+			return fmt.Errorf("config validation: integration %q indexeddb binding %q references unknown datastore %q", integrationName, alias, resourceName)
 		}
 	}
 	return nil

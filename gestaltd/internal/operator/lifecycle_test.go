@@ -60,30 +60,30 @@ func decodeNodeMap(t *testing.T, node any) map[string]any {
 }
 
 func requiredComponentConfigYAML(_ *testing.T, _, dbPath string) string {
-	return fmt.Sprintf(`datastores:
+	return fmt.Sprintf(`indexeddbs:
   sqlite:
     provider:
       source:
-        ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+        ref: github.com/valon-technologies/gestalt-providers/datastore/relationaldb
         version: 0.0.1-alpha.1
     config:
       path: %q
-datastore: sqlite
+indexeddb: sqlite
 ui:
   disabled: true
 `, dbPath)
 }
 
-func requiredDatastoreConfigYAML(_ *testing.T, _, dbPath string) string {
-	return fmt.Sprintf(`datastores:
+func requiredIndexedDBConfigYAML(_ *testing.T, _, dbPath string) string {
+	return fmt.Sprintf(`indexeddbs:
   sqlite:
     provider:
       source:
-        ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+        ref: github.com/valon-technologies/gestalt-providers/datastore/relationaldb
         version: 0.0.1-alpha.1
     config:
       path: %q
-datastore: sqlite
+indexeddb: sqlite
 ui:
   disabled: true
 `, dbPath)
@@ -285,7 +285,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalTopLevelPluginsWithoutLockfile(t *t
       path: ./auth-manifest.yaml
   config:
     clientId: local-auth-client
-datastores:
+indexeddbs:
   sqlite:
     provider:
       source:
@@ -293,7 +293,7 @@ datastores:
         version: 0.0.1-alpha.1
     config:
       dsn: %q
-datastore: sqlite
+indexeddb: sqlite
 ui:
   disabled: true
 server:
@@ -370,7 +370,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalSourceTopLevelPluginsWithoutArtifac
   provider:
     source:
       path: ./auth-manifest.yaml
-datastores:
+indexeddbs:
   sqlite:
     provider:
       source:
@@ -378,7 +378,7 @@ datastores:
         version: 0.0.1-alpha.1
     config:
       dsn: %q
-datastore: sqlite
+indexeddb: sqlite
 ui:
   disabled: true
 server:

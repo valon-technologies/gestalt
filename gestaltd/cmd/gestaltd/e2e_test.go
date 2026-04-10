@@ -1638,7 +1638,7 @@ params:
 
 			dir := t.TempDir()
 			cfgPath := filepath.Join(dir, "config.yaml")
-			cfg := authDatastoreConfigYAML(t, dir, "local", "sqlite", filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`server:
+			cfg := authIndexedDBConfigYAML(t, dir, "local", "sqlite", filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`server:
   encryptionKey: test-key
 plugins:
   example:
@@ -1752,7 +1752,7 @@ func componentProviderManifestPath(t *testing.T, providerDir string) string {
 	return manifestPath
 }
 
-func authDatastoreConfigYAML(t *testing.T, dir, authName, datastoreName, dbPath string) string {
+func authIndexedDBConfigYAML(t *testing.T, dir, authName, datastoreName, dbPath string) string {
 	t.Helper()
 
 	authBlock := ""
@@ -1764,7 +1764,7 @@ func authDatastoreConfigYAML(t *testing.T, dir, authName, datastoreName, dbPath 
       path: %s
 `, authManifestPath)
 	}
-	return fmt.Sprintf(`%sdatastores:
+	return fmt.Sprintf(`%sindexeddbs:
   %s:
     provider:
       source:
@@ -1772,7 +1772,7 @@ func authDatastoreConfigYAML(t *testing.T, dir, authName, datastoreName, dbPath 
         version: 0.0.1-alpha.1
     config:
       path: %s
-datastore: %s
+indexeddb: %s
 ui:
   disabled: true
 `, authBlock, datastoreName, dbPath, datastoreName)
@@ -1814,7 +1814,7 @@ func writeE2EConfigWithPaths(t *testing.T, dir, pluginDir, dbPath, artifactsDir 
 	if artifactsDir != "" {
 		serverBlock += fmt.Sprintf("  artifactsDir: %s\n", artifactsDir)
 	}
-	cfg := authDatastoreConfigYAML(t, dir, "", "sqlite", dbPath) + fmt.Sprintf(`%splugins:
+	cfg := authIndexedDBConfigYAML(t, dir, "", "sqlite", dbPath) + fmt.Sprintf(`%splugins:
   example:
     provider:
       source:

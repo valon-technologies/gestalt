@@ -122,7 +122,7 @@ type Deps struct {
 	BaseURL       string
 	SecretManager core.SecretManager
 	Services      *coredata.Services
-	Datastores    map[string]config.DatastoreDef
+	IndexedDBs    map[string]config.IndexedDBDef
 	Egress        EgressDeps
 }
 
@@ -277,7 +277,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		EncryptionKey: encKey,
 		BaseURL:       cfg.Server.BaseURL,
 		SecretManager: sm,
-		Datastores:    cfg.Datastores,
+		IndexedDBs:    cfg.IndexedDBs,
 	}
 
 	auth, err := buildAuth(cfg, factories, deps)
@@ -285,12 +285,12 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		return nil, err
 	}
 
-	if string(cfg.Datastore) == "" {
+	if string(cfg.IndexedDB) == "" {
 		return nil, fmt.Errorf("bootstrap: datastore resource name is required")
 	}
-	def, ok := cfg.Datastores[string(cfg.Datastore)]
+	def, ok := cfg.IndexedDBs[string(cfg.IndexedDB)]
 	if !ok {
-		return nil, fmt.Errorf("bootstrap: datastore.resource references unknown datastore %q", string(cfg.Datastore))
+		return nil, fmt.Errorf("bootstrap: indexeddb references unknown indexeddb %q", string(cfg.IndexedDB))
 	}
 	enc, encErr := crypto.NewAESGCM(encKey)
 	if encErr != nil {
@@ -298,11 +298,11 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	}
 	store, storeErr := buildIndexedDB(def, factories)
 	if storeErr != nil {
-		return nil, fmt.Errorf("bootstrap: system datastore from resource %q: %w", string(cfg.Datastore), storeErr)
+		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", string(cfg.IndexedDB), storeErr)
 	}
 	svc, svcErr := coredata.New(store, enc)
 	if svcErr != nil {
-		return nil, fmt.Errorf("bootstrap: system datastore from resource %q: %w", string(cfg.Datastore), svcErr)
+		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", string(cfg.IndexedDB), svcErr)
 	}
 	closeSvc := true
 	defer func() {
@@ -535,7 +535,7 @@ func buildAuth(cfg *config.Config, factories *FactoryRegistry, deps Deps) (core.
 	return auth, nil
 }
 
-func buildIndexedDB(def config.DatastoreDef, factories *FactoryRegistry) (indexeddb.IndexedDB, error) {
+func buildIndexedDB(def config.IndexedDBDef, factories *FactoryRegistry) (indexeddb.IndexedDB, error) {
 	if def.Provider == nil {
 		return nil, fmt.Errorf("datastore provider is required")
 	}

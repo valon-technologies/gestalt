@@ -23,9 +23,13 @@ const (
 )
 
 const (
-	DefaultProviderRepo    = "github.com/valon-technologies/gestalt-providers"
-	DefaultProviderVersion = "0.0.1-alpha.1"
-	DefaultWebUIProvider   = DefaultProviderRepo + "/web/default"
+	DefaultProviderRepo = "github.com/valon-technologies/gestalt-providers"
+
+	DefaultWebUIProvider = DefaultProviderRepo + "/web/default"
+	DefaultWebUIVersion  = "0.0.1-alpha.9"
+
+	DefaultIndexedDBProvider = DefaultProviderRepo + "/datastore/relationaldb"
+	DefaultIndexedDBVersion  = "0.0.1-alpha.1"
 )
 
 // PluginConnectionName is the implicit connection name used when storing
@@ -39,8 +43,8 @@ const PluginConnectionAlias = "plugin"
 
 type Config struct {
 	Auth       ComponentConfig         `yaml:"auth"`
-	Datastore  DatastoreConfig         `yaml:"datastore"`
-	Datastores map[string]DatastoreDef `yaml:"datastores"`
+	IndexedDB  IndexedDBConfig         `yaml:"indexeddb"`
+	IndexedDBs map[string]IndexedDBDef `yaml:"indexeddbs"`
 	Secrets    ComponentConfig         `yaml:"secrets"`
 	Telemetry  ComponentConfig         `yaml:"telemetry"`
 	Audit      ComponentConfig         `yaml:"audit"`
@@ -261,9 +265,9 @@ func (p *ProviderDef) DeclaresMCP() bool {
 	return provider.MCP
 }
 
-type DatastoreConfig string
+type IndexedDBConfig string
 
-type DatastoreDef struct {
+type IndexedDBDef struct {
 	Provider *ProviderDef `yaml:"provider"`
 	Config   yaml.Node    `yaml:"config"`
 }
@@ -330,7 +334,7 @@ type PluginDef struct {
 	Description   string            `yaml:"description"`
 	MCPToolPrefix string            `yaml:"-"`
 	IconFile      string            `yaml:"iconFile"`
-	Datastores    map[string]string `yaml:"-"`
+	IndexedDBs    map[string]string `yaml:"-"`
 }
 
 // ConnectionDef owns authentication and connection parameters for a named
@@ -857,7 +861,7 @@ func defaultUIProvider() *ProviderDef {
 	return &ProviderDef{
 		Source: &PluginSourceDef{
 			Ref:     DefaultWebUIProvider,
-			Version: DefaultProviderVersion,
+			Version: DefaultWebUIVersion,
 		},
 	}
 }

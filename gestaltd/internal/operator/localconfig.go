@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+
+	"github.com/valon-technologies/gestalt/server/internal/config"
 )
 
 const (
@@ -55,34 +57,34 @@ func GenerateDefaultConfig(configDir string) (string, error) {
 }
 
 func defaultManagedConfig(dbPath, encryptionKey string) string {
-	return fmt.Sprintf(`datastores:
+	return fmt.Sprintf(`indexeddbs:
   main:
     provider:
       source:
-        ref: github.com/valon-technologies/gestalt-providers/datastore/relationaldb
-        version: 0.0.1-alpha.1
+        ref: %s
+        version: %s
     config:
       dsn: %q
-datastore: main
+indexeddb: main
 secrets:
   builtin: env
 server:
   public:
     port: 8080
   encryptionKey: %q
-`, "sqlite://"+dbPath, encryptionKey)
+`, config.DefaultIndexedDBProvider, config.DefaultIndexedDBVersion, "sqlite://"+dbPath, encryptionKey)
 }
 
 func defaultLocalSourceConfig(providersDir, dbPath, encryptionKey string) string {
-	return fmt.Sprintf(`datastores:
+	return fmt.Sprintf(`indexeddbs:
   main:
     provider:
       source:
-        ref: github.com/valon-technologies/gestalt-providers/datastore/relationaldb
-        version: 0.0.1-alpha.1
+        ref: %s
+        version: %s
     config:
       dsn: %q
-datastore: main
+indexeddb: main
 ui:
   provider:
     source:
@@ -93,5 +95,5 @@ server:
   public:
     port: 8080
   encryptionKey: %q
-`, "sqlite://"+dbPath, filepath.Join(providersDir, "web", "default", "manifest.yaml"), encryptionKey)
+`, config.DefaultIndexedDBProvider, config.DefaultIndexedDBVersion, "sqlite://"+dbPath, filepath.Join(providersDir, "web", "default", "manifest.yaml"), encryptionKey)
 }
