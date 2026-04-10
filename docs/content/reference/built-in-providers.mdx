@@ -29,18 +29,7 @@ To disable platform auth entirely, omit the `auth` block or set `auth.provider: 
 
 ## Datastore Providers
 
-Datastore providers back the persistent state layer. They are configured under `datastore.provider` in your config file, also using the `provider:` key.
-
-| Name | Purpose |
-| --- | --- |
-| `sqlite` | File-backed. Best for local or single-node deployments. |
-| `postgres` | Recommended production datastore. |
-| `mysql` | SQL-backed production datastore. |
-| `dynamodb` | DynamoDB-backed datastore. |
-| `mongodb` | MongoDB-backed datastore. |
-| `oracle` | Oracle-backed datastore. |
-| `firestore` | Firestore-backed datastore. |
-| `sqlserver` | SQL Server-backed datastore. |
+Datastore providers back the persistent state layer. They are configured under `datastore.provider` in your config file, also using the `provider:` key. Gestalt does not compile datastore drivers into the binary; it starts the configured external datastore provider process at runtime.
 
 ```yaml
 datastore:

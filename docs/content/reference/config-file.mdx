@@ -152,26 +152,7 @@ datastore:
     dsn: ${DATABASE_URL}
 ```
 
-| First-party provider | Config fields | Purpose |
-| --- | --- | --- |
-| `sqlite` | `path` | Defaults to `./gestalt.db`. Single-node deployments. |
-| `postgres` | `dsn` | Recommended production datastore. |
-| `mysql` | `dsn`, `version` | SQL-backed production option. |
-| `dynamodb` | `table`, `region`, `endpoint` | `table` defaults to `gestalt`. |
-| `mongodb` | `uri`, `database` | `database` defaults to `gestalt`. |
-| `oracle` | `dsn` | Enterprise SQL option. |
-| `firestore` | `projectId`, `database` | Firestore-backed deployment. |
-| `sqlserver` | `dsn` | SQL Server-backed deployment. |
-
-Gestalt auto-detects and validates the connected backend release series for the versioned datastores below. Only MySQL currently uses an explicit `version` override because its SQL dialect changes across supported series. For the other datastores, a legacy `version` field is ignored for backward compatibility.
-
-- `postgres`: `15`, `16`, `17`, `18`
-- `mysql`: `8.0`, `8.4`, `9.6`
-- `mongodb`: `7`, `8`
-- `oracle`: `19c`, `26ai`
-- `sqlserver`: `2017`, `2019`, `2022`
-
-`sqlite` uses the bundled SQLite engine, and `dynamodb` / `firestore` are managed services, so those providers do not accept a `version` field. The `sqlserver` datastore targets SQL Server 2017, 2019, and 2022. Azure SQL Database, Azure SQL Managed Instance, Synapse, and Fabric are not supported.
+The exact config fields depend on the selected external datastore provider package. Gestalt itself does not have a built-in datastore driver matrix; it loads the configured provider process and passes the `datastore.config` block through to that provider.
 
 ## `secrets`
 
