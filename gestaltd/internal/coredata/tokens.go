@@ -8,15 +8,15 @@ import (
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
 	corecrypto "github.com/valon-technologies/gestalt/server/core/crypto"
-	"github.com/valon-technologies/gestalt/server/core/datastore"
+	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 )
 
 type TokenService struct {
-	store datastore.ObjectStore
+	store indexeddb.ObjectStore
 	enc   *corecrypto.AESGCMEncryptor
 }
 
-func NewTokenService(ds datastore.Datastore, enc *corecrypto.AESGCMEncryptor) *TokenService {
+func NewTokenService(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) *TokenService {
 	return &TokenService{
 		store: ds.ObjectStore(StoreIntegrationTokens),
 		enc:   enc,
@@ -32,7 +32,7 @@ func (s *TokenService) StoreToken(ctx context.Context, token *core.IntegrationTo
 		token.ID = uuid.New().String()
 	}
 	now := time.Now()
-	fields := datastore.Record{
+	fields := indexeddb.Record{
 		"user_id":              token.UserID,
 		"integration":          token.Integration,
 		"connection":           token.Connection,
@@ -48,7 +48,7 @@ func (s *TokenService) StoreToken(ctx context.Context, token *core.IntegrationTo
 	}
 
 	_, err = s.store.Get(ctx, token.ID)
-	if err == datastore.ErrNotFound {
+	if err == indexeddb.ErrNotFound {
 		fields["id"] = token.ID
 		fields["created_at"] = now
 		return s.store.Add(ctx, fields)
@@ -63,7 +63,7 @@ func (s *TokenService) StoreToken(ctx context.Context, token *core.IntegrationTo
 func (s *TokenService) Token(ctx context.Context, userID, integration, connection, instance string) (*core.IntegrationToken, error) {
 	rec, err := s.store.Index("by_lookup").Get(ctx, userID, integration, connection, instance)
 	if err != nil {
-		if err == datastore.ErrNotFound {
+		if err == indexeddb.ErrNotFound {
 			return nil, core.ErrNotFound
 		}
 		return nil, fmt.Errorf("get token: %w", err)
@@ -99,7 +99,7 @@ func (s *TokenService) DeleteToken(ctx context.Context, id string) error {
 	return s.store.Delete(ctx, id)
 }
 
-func (s *TokenService) recordToToken(rec datastore.Record) (*core.IntegrationToken, error) {
+func (s *TokenService) recordToToken(rec indexeddb.Record) (*core.IntegrationToken, error) {
 	access, refresh, err := s.enc.DecryptTokenPair(
 		recString(rec, "access_token_sealed"),
 		recString(rec, "refresh_token_sealed"),
@@ -125,7 +125,7 @@ func (s *TokenService) recordToToken(rec datastore.Record) (*core.IntegrationTok
 	}, nil
 }
 
-func (s *TokenService) recordsToTokens(recs []datastore.Record) ([]*core.IntegrationToken, error) {
+func (s *TokenService) recordsToTokens(recs []indexeddb.Record) ([]*core.IntegrationToken, error) {
 	out := make([]*core.IntegrationToken, 0, len(recs))
 	for _, rec := range recs {
 		t, err := s.recordToToken(rec)

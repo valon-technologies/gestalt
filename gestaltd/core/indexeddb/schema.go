@@ -1,4 +1,4 @@
-package datastore
+package indexeddb
 
 type ObjectStoreSchema struct {
 	Indexes []IndexSchema

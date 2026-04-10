@@ -6,14 +6,14 @@ import (
 	"io"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
-	"github.com/valon-technologies/gestalt/server/core/datastore"
+	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
-type DatastoreExecConfig struct {
+type IndexedDBExecConfig struct {
 	Command      string
 	Args         []string
 	Env          map[string]string
@@ -24,13 +24,13 @@ type DatastoreExecConfig struct {
 	Name         string
 }
 
-type remoteDatastore struct {
+type remoteIndexedDB struct {
 	client  proto.IndexedDBClient
 	runtime proto.ProviderLifecycleClient
 	closer  io.Closer
 }
 
-func NewExecutableDatastore(ctx context.Context, cfg DatastoreExecConfig) (datastore.Datastore, error) {
+func NewExecutableIndexedDB(ctx context.Context, cfg IndexedDBExecConfig) (indexeddb.IndexedDB, error) {
 	proc, err := startProviderProcess(ctx, ExecConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
@@ -53,14 +53,14 @@ func NewExecutableDatastore(ctx context.Context, cfg DatastoreExecConfig) (datas
 		return nil, err
 	}
 
-	return &remoteDatastore{client: dsClient, runtime: runtimeClient, closer: proc}, nil
+	return &remoteIndexedDB{client: dsClient, runtime: runtimeClient, closer: proc}, nil
 }
 
-func (r *remoteDatastore) ObjectStore(name string) datastore.ObjectStore {
+func (r *remoteIndexedDB) ObjectStore(name string) indexeddb.ObjectStore {
 	return &remoteObjectStore{client: r.client, store: name}
 }
 
-func (r *remoteDatastore) CreateObjectStore(ctx context.Context, name string, schema datastore.ObjectStoreSchema) error {
+func (r *remoteIndexedDB) CreateObjectStore(ctx context.Context, name string, schema indexeddb.ObjectStoreSchema) error {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 	indexes := make([]*proto.IndexSchema, len(schema.Indexes))
@@ -80,21 +80,21 @@ func (r *remoteDatastore) CreateObjectStore(ctx context.Context, name string, sc
 	return grpcToDatastoreErr(err)
 }
 
-func (r *remoteDatastore) DeleteObjectStore(ctx context.Context, name string) error {
+func (r *remoteIndexedDB) DeleteObjectStore(ctx context.Context, name string) error {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 	_, err := r.client.DeleteObjectStore(ctx, &proto.DeleteObjectStoreRequest{Name: name})
 	return grpcToDatastoreErr(err)
 }
 
-func (r *remoteDatastore) Ping(ctx context.Context) error {
+func (r *remoteIndexedDB) Ping(ctx context.Context) error {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 	_, err := r.runtime.HealthCheck(ctx, &emptypb.Empty{})
 	return err
 }
 
-func (r *remoteDatastore) Close() error {
+func (r *remoteIndexedDB) Close() error {
 	if r == nil || r.closer == nil {
 		return nil
 	}
@@ -108,7 +108,7 @@ type remoteObjectStore struct {
 	store  string
 }
 
-func (o *remoteObjectStore) Get(ctx context.Context, id string) (datastore.Record, error) {
+func (o *remoteObjectStore) Get(ctx context.Context, id string) (indexeddb.Record, error) {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 	resp, err := o.client.Get(ctx, &proto.ObjectStoreRequest{Store: o.store, Id: id})
@@ -128,7 +128,7 @@ func (o *remoteObjectStore) GetKey(ctx context.Context, id string) (string, erro
 	return resp.GetKey(), nil
 }
 
-func (o *remoteObjectStore) Add(ctx context.Context, record datastore.Record) error {
+func (o *remoteObjectStore) Add(ctx context.Context, record indexeddb.Record) error {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 	s, err := structpb.NewStruct(record)
@@ -139,7 +139,7 @@ func (o *remoteObjectStore) Add(ctx context.Context, record datastore.Record) er
 	return grpcToDatastoreErr(err)
 }
 
-func (o *remoteObjectStore) Put(ctx context.Context, record datastore.Record) error {
+func (o *remoteObjectStore) Put(ctx context.Context, record indexeddb.Record) error {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 	s, err := structpb.NewStruct(record)
@@ -164,7 +164,7 @@ func (o *remoteObjectStore) Clear(ctx context.Context) error {
 	return grpcToDatastoreErr(err)
 }
 
-func (o *remoteObjectStore) GetAll(ctx context.Context, r *datastore.KeyRange) ([]datastore.Record, error) {
+func (o *remoteObjectStore) GetAll(ctx context.Context, r *indexeddb.KeyRange) ([]indexeddb.Record, error) {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 	kr, err := keyRangeToProto(r)
@@ -178,7 +178,7 @@ func (o *remoteObjectStore) GetAll(ctx context.Context, r *datastore.KeyRange) (
 	return structsToRecords(resp.GetRecords()), nil
 }
 
-func (o *remoteObjectStore) GetAllKeys(ctx context.Context, r *datastore.KeyRange) ([]string, error) {
+func (o *remoteObjectStore) GetAllKeys(ctx context.Context, r *indexeddb.KeyRange) ([]string, error) {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 	kr, err := keyRangeToProto(r)
@@ -192,7 +192,7 @@ func (o *remoteObjectStore) GetAllKeys(ctx context.Context, r *datastore.KeyRang
 	return resp.GetKeys(), nil
 }
 
-func (o *remoteObjectStore) Count(ctx context.Context, r *datastore.KeyRange) (int64, error) {
+func (o *remoteObjectStore) Count(ctx context.Context, r *indexeddb.KeyRange) (int64, error) {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 	kr, err := keyRangeToProto(r)
@@ -206,7 +206,7 @@ func (o *remoteObjectStore) Count(ctx context.Context, r *datastore.KeyRange) (i
 	return resp.GetCount(), nil
 }
 
-func (o *remoteObjectStore) DeleteRange(ctx context.Context, r datastore.KeyRange) (int64, error) {
+func (o *remoteObjectStore) DeleteRange(ctx context.Context, r indexeddb.KeyRange) (int64, error) {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 	kr, err := keyRangeToProto(&r)
@@ -220,7 +220,7 @@ func (o *remoteObjectStore) DeleteRange(ctx context.Context, r datastore.KeyRang
 	return resp.GetDeleted(), nil
 }
 
-func (o *remoteObjectStore) Index(name string) datastore.Index {
+func (o *remoteObjectStore) Index(name string) indexeddb.Index {
 	return &remoteIndex{client: o.client, store: o.store, index: name}
 }
 
@@ -232,7 +232,7 @@ type remoteIndex struct {
 	index  string
 }
 
-func (idx *remoteIndex) Get(ctx context.Context, values ...any) (datastore.Record, error) {
+func (idx *remoteIndex) Get(ctx context.Context, values ...any) (indexeddb.Record, error) {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 	pbValues, err := toProtoValues(values)
@@ -264,7 +264,7 @@ func (idx *remoteIndex) GetKey(ctx context.Context, values ...any) (string, erro
 	return resp.GetKey(), nil
 }
 
-func (idx *remoteIndex) GetAll(ctx context.Context, r *datastore.KeyRange, values ...any) ([]datastore.Record, error) {
+func (idx *remoteIndex) GetAll(ctx context.Context, r *indexeddb.KeyRange, values ...any) ([]indexeddb.Record, error) {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 	pbValues, err := toProtoValues(values)
@@ -284,7 +284,7 @@ func (idx *remoteIndex) GetAll(ctx context.Context, r *datastore.KeyRange, value
 	return structsToRecords(resp.GetRecords()), nil
 }
 
-func (idx *remoteIndex) GetAllKeys(ctx context.Context, r *datastore.KeyRange, values ...any) ([]string, error) {
+func (idx *remoteIndex) GetAllKeys(ctx context.Context, r *indexeddb.KeyRange, values ...any) ([]string, error) {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 	pbValues, err := toProtoValues(values)
@@ -304,7 +304,7 @@ func (idx *remoteIndex) GetAllKeys(ctx context.Context, r *datastore.KeyRange, v
 	return resp.GetKeys(), nil
 }
 
-func (idx *remoteIndex) Count(ctx context.Context, r *datastore.KeyRange, values ...any) (int64, error) {
+func (idx *remoteIndex) Count(ctx context.Context, r *indexeddb.KeyRange, values ...any) (int64, error) {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
 	pbValues, err := toProtoValues(values)
@@ -342,15 +342,15 @@ func (idx *remoteIndex) Delete(ctx context.Context, values ...any) (int64, error
 
 // --- Helpers ---
 
-func structToRecord(s *structpb.Struct) datastore.Record {
+func structToRecord(s *structpb.Struct) indexeddb.Record {
 	if s == nil {
 		return nil
 	}
 	return s.AsMap()
 }
 
-func structsToRecords(ss []*structpb.Struct) []datastore.Record {
-	records := make([]datastore.Record, len(ss))
+func structsToRecords(ss []*structpb.Struct) []indexeddb.Record {
+	records := make([]indexeddb.Record, len(ss))
 	for i, s := range ss {
 		records[i] = structToRecord(s)
 	}
@@ -369,7 +369,7 @@ func toProtoValues(values []any) ([]*structpb.Value, error) {
 	return pbValues, nil
 }
 
-func keyRangeToProto(r *datastore.KeyRange) (*proto.KeyRange, error) {
+func keyRangeToProto(r *indexeddb.KeyRange) (*proto.KeyRange, error) {
 	if r == nil {
 		return nil, nil
 	}
@@ -404,12 +404,12 @@ func grpcToDatastoreErr(err error) error {
 	}
 	switch st.Code() {
 	case codes.NotFound:
-		return datastore.ErrNotFound
+		return indexeddb.ErrNotFound
 	case codes.AlreadyExists:
-		return datastore.ErrAlreadyExists
+		return indexeddb.ErrAlreadyExists
 	default:
 		return err
 	}
 }
 
-var _ datastore.Datastore = (*remoteDatastore)(nil)
+var _ indexeddb.IndexedDB = (*remoteIndexedDB)(nil)

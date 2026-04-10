@@ -7,21 +7,21 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/core/datastore"
+	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 )
 
 type UserService struct {
-	store datastore.ObjectStore
+	store indexeddb.ObjectStore
 }
 
-func NewUserService(ds datastore.Datastore) *UserService {
+func NewUserService(ds indexeddb.IndexedDB) *UserService {
 	return &UserService{store: ds.ObjectStore(StoreUsers)}
 }
 
 func (s *UserService) GetUser(ctx context.Context, id string) (*core.User, error) {
 	rec, err := s.store.Get(ctx, id)
 	if err != nil {
-		if err == datastore.ErrNotFound {
+		if err == indexeddb.ErrNotFound {
 			return nil, core.ErrNotFound
 		}
 		return nil, fmt.Errorf("get user: %w", err)
@@ -34,11 +34,11 @@ func (s *UserService) FindOrCreateUser(ctx context.Context, email string) (*core
 	if err == nil {
 		return recordToUser(rec), nil
 	}
-	if err != datastore.ErrNotFound {
+	if err != indexeddb.ErrNotFound {
 		return nil, fmt.Errorf("find user: %w", err)
 	}
 	now := time.Now()
-	newRec := datastore.Record{
+	newRec := indexeddb.Record{
 		"id":           uuid.New().String(),
 		"email":        email,
 		"display_name": "",
@@ -55,7 +55,7 @@ func (s *UserService) FindOrCreateUser(ctx context.Context, email string) (*core
 	return recordToUser(newRec), nil
 }
 
-func recordToUser(rec datastore.Record) *core.User {
+func recordToUser(rec indexeddb.Record) *core.User {
 	return &core.User{
 		ID:          recString(rec, "id"),
 		Email:       recString(rec, "email"),

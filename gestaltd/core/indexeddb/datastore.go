@@ -1,4 +1,4 @@
-package datastore
+package indexeddb
 
 import (
 	"context"
@@ -14,7 +14,7 @@ type Record = map[string]any
 
 // Datastore is the IndexedDB-inspired interface every provider implements.
 // Implementations must be safe for concurrent use.
-type Datastore interface {
+type IndexedDB interface {
 	ObjectStore(name string) ObjectStore
 	CreateObjectStore(ctx context.Context, name string, schema ObjectStoreSchema) error
 	DeleteObjectStore(ctx context.Context, name string) error

@@ -3,10 +3,10 @@ package coredata
 import (
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/core/datastore"
+	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 )
 
-func recString(rec datastore.Record, key string) string {
+func recString(rec indexeddb.Record, key string) string {
 	v, ok := rec[key]
 	if !ok || v == nil {
 		return ""
@@ -21,7 +21,7 @@ func recString(rec datastore.Record, key string) string {
 	}
 }
 
-func recInt(rec datastore.Record, key string) int {
+func recInt(rec indexeddb.Record, key string) int {
 	v, ok := rec[key]
 	if !ok || v == nil {
 		return 0
@@ -38,7 +38,7 @@ func recInt(rec datastore.Record, key string) int {
 	}
 }
 
-func recTime(rec datastore.Record, key string) time.Time {
+func recTime(rec indexeddb.Record, key string) time.Time {
 	v, ok := rec[key]
 	if !ok || v == nil {
 		return time.Time{}
@@ -62,7 +62,7 @@ func recTime(rec datastore.Record, key string) time.Time {
 	}
 }
 
-func recTimePtr(rec datastore.Record, key string) *time.Time {
+func recTimePtr(rec indexeddb.Record, key string) *time.Time {
 	v, ok := rec[key]
 	if !ok || v == nil {
 		return nil

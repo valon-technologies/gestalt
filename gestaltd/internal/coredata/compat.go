@@ -6,20 +6,20 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	corecrypto "github.com/valon-technologies/gestalt/server/core/crypto"
-	"github.com/valon-technologies/gestalt/server/core/datastore"
+	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 )
 
 // CompatDatastore implements core.Datastore using the IndexedDB-inspired
 // datastore abstraction. It delegates to UserService, TokenService, and
 // APITokenService which operate on ObjectStore and Index.
 type CompatDatastore struct {
-	ds        datastore.Datastore
+	ds        indexeddb.IndexedDB
 	Users     *UserService
 	Tokens    *TokenService
 	APITokens *APITokenService
 }
 
-func New(ds datastore.Datastore, enc *corecrypto.AESGCMEncryptor) (*CompatDatastore, error) {
+func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*CompatDatastore, error) {
 	ctx := context.Background()
 	if err := ds.CreateObjectStore(ctx, StoreUsers, UsersSchema); err != nil {
 		return nil, fmt.Errorf("create users store: %w", err)
@@ -38,7 +38,7 @@ func New(ds datastore.Datastore, enc *corecrypto.AESGCMEncryptor) (*CompatDatast
 	}, nil
 }
 
-func (d *CompatDatastore) Store() datastore.Datastore { return d.ds }
+func (d *CompatDatastore) Store() indexeddb.IndexedDB { return d.ds }
 
 func (d *CompatDatastore) GetUser(ctx context.Context, id string) (*core.User, error) {
 	return d.Users.GetUser(ctx, id)

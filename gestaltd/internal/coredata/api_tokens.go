@@ -7,14 +7,14 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/core/datastore"
+	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 )
 
 type APITokenService struct {
-	store datastore.ObjectStore
+	store indexeddb.ObjectStore
 }
 
-func NewAPITokenService(ds datastore.Datastore) *APITokenService {
+func NewAPITokenService(ds indexeddb.IndexedDB) *APITokenService {
 	return &APITokenService{store: ds.ObjectStore(StoreAPITokens)}
 }
 
@@ -23,7 +23,7 @@ func (s *APITokenService) StoreAPIToken(ctx context.Context, token *core.APIToke
 		token.ID = uuid.New().String()
 	}
 	now := time.Now()
-	rec := datastore.Record{
+	rec := indexeddb.Record{
 		"id":           token.ID,
 		"user_id":      token.UserID,
 		"name":         token.Name,
@@ -42,7 +42,7 @@ func (s *APITokenService) StoreAPIToken(ctx context.Context, token *core.APIToke
 func (s *APITokenService) ValidateAPIToken(ctx context.Context, hashedToken string) (*core.APIToken, error) {
 	rec, err := s.store.Index("by_hash").Get(ctx, hashedToken)
 	if err != nil {
-		if err == datastore.ErrNotFound {
+		if err == indexeddb.ErrNotFound {
 			return nil, core.ErrNotFound
 		}
 		return nil, fmt.Errorf("validate api token: %w", err)
@@ -85,7 +85,7 @@ func (s *APITokenService) RevokeAllAPITokens(ctx context.Context, userID string)
 	return deleted, nil
 }
 
-func recordToAPIToken(rec datastore.Record) *core.APIToken {
+func recordToAPIToken(rec indexeddb.Record) *core.APIToken {
 	return &core.APIToken{
 		ID:          recString(rec, "id"),
 		UserID:      recString(rec, "user_id"),

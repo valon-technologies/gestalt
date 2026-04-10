@@ -4,15 +4,15 @@ import (
 	"context"
 	"sync"
 
-	"github.com/valon-technologies/gestalt/server/core/datastore"
+	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 )
 
-type StubObjectDatastore struct {
+type StubIndexedDB struct {
 	mu     sync.RWMutex
 	stores map[string]*stubObjectStore
 }
 
-func (s *StubObjectDatastore) ObjectStore(name string) datastore.ObjectStore {
+func (s *StubIndexedDB) ObjectStore(name string) indexeddb.ObjectStore {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.stores == nil {
@@ -21,12 +21,12 @@ func (s *StubObjectDatastore) ObjectStore(name string) datastore.ObjectStore {
 	if st, ok := s.stores[name]; ok {
 		return st
 	}
-	st := &stubObjectStore{records: make(map[string]datastore.Record)}
+	st := &stubObjectStore{records: make(map[string]indexeddb.Record)}
 	s.stores[name] = st
 	return st
 }
 
-func (s *StubObjectDatastore) CreateObjectStore(_ context.Context, name string, schema datastore.ObjectStoreSchema) error {
+func (s *StubIndexedDB) CreateObjectStore(_ context.Context, name string, schema indexeddb.ObjectStoreSchema) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.stores == nil {
@@ -35,33 +35,33 @@ func (s *StubObjectDatastore) CreateObjectStore(_ context.Context, name string, 
 	if existing, ok := s.stores[name]; ok {
 		existing.schema = schema
 	} else {
-		s.stores[name] = &stubObjectStore{records: make(map[string]datastore.Record), schema: schema}
+		s.stores[name] = &stubObjectStore{records: make(map[string]indexeddb.Record), schema: schema}
 	}
 	return nil
 }
 
-func (s *StubObjectDatastore) DeleteObjectStore(_ context.Context, name string) error {
+func (s *StubIndexedDB) DeleteObjectStore(_ context.Context, name string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.stores, name)
 	return nil
 }
 
-func (s *StubObjectDatastore) Ping(context.Context) error { return nil }
-func (s *StubObjectDatastore) Close() error               { return nil }
+func (s *StubIndexedDB) Ping(context.Context) error { return nil }
+func (s *StubIndexedDB) Close() error               { return nil }
 
 type stubObjectStore struct {
 	mu      sync.RWMutex
-	records map[string]datastore.Record
-	schema  datastore.ObjectStoreSchema
+	records map[string]indexeddb.Record
+	schema  indexeddb.ObjectStoreSchema
 }
 
-func (o *stubObjectStore) Get(_ context.Context, id string) (datastore.Record, error) {
+func (o *stubObjectStore) Get(_ context.Context, id string) (indexeddb.Record, error) {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 	r, ok := o.records[id]
 	if !ok {
-		return nil, datastore.ErrNotFound
+		return nil, indexeddb.ErrNotFound
 	}
 	return r, nil
 }
@@ -70,23 +70,23 @@ func (o *stubObjectStore) GetKey(_ context.Context, id string) (string, error) {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 	if _, ok := o.records[id]; !ok {
-		return "", datastore.ErrNotFound
+		return "", indexeddb.ErrNotFound
 	}
 	return id, nil
 }
 
-func (o *stubObjectStore) Add(_ context.Context, record datastore.Record) error {
+func (o *stubObjectStore) Add(_ context.Context, record indexeddb.Record) error {
 	id, _ := record["id"].(string)
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if _, ok := o.records[id]; ok {
-		return datastore.ErrAlreadyExists
+		return indexeddb.ErrAlreadyExists
 	}
 	o.records[id] = record
 	return nil
 }
 
-func (o *stubObjectStore) Put(_ context.Context, record datastore.Record) error {
+func (o *stubObjectStore) Put(_ context.Context, record indexeddb.Record) error {
 	id, _ := record["id"].(string)
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -104,21 +104,21 @@ func (o *stubObjectStore) Delete(_ context.Context, id string) error {
 func (o *stubObjectStore) Clear(context.Context) error {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	o.records = make(map[string]datastore.Record)
+	o.records = make(map[string]indexeddb.Record)
 	return nil
 }
 
-func (o *stubObjectStore) GetAll(_ context.Context, _ *datastore.KeyRange) ([]datastore.Record, error) {
+func (o *stubObjectStore) GetAll(_ context.Context, _ *indexeddb.KeyRange) ([]indexeddb.Record, error) {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
-	out := make([]datastore.Record, 0, len(o.records))
+	out := make([]indexeddb.Record, 0, len(o.records))
 	for _, r := range o.records {
 		out = append(out, r)
 	}
 	return out, nil
 }
 
-func (o *stubObjectStore) GetAllKeys(_ context.Context, _ *datastore.KeyRange) ([]string, error) {
+func (o *stubObjectStore) GetAllKeys(_ context.Context, _ *indexeddb.KeyRange) ([]string, error) {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 	out := make([]string, 0, len(o.records))
@@ -128,24 +128,24 @@ func (o *stubObjectStore) GetAllKeys(_ context.Context, _ *datastore.KeyRange) (
 	return out, nil
 }
 
-func (o *stubObjectStore) Count(_ context.Context, _ *datastore.KeyRange) (int64, error) {
+func (o *stubObjectStore) Count(_ context.Context, _ *indexeddb.KeyRange) (int64, error) {
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 	return int64(len(o.records)), nil
 }
 
-func (o *stubObjectStore) DeleteRange(_ context.Context, _ datastore.KeyRange) (int64, error) {
+func (o *stubObjectStore) DeleteRange(_ context.Context, _ indexeddb.KeyRange) (int64, error) {
 	return 0, nil
 }
 
-func (o *stubObjectStore) Index(name string) datastore.Index {
+func (o *stubObjectStore) Index(name string) indexeddb.Index {
 	return &stubIndex{store: o, name: name, schema: o.schema}
 }
 
 type stubIndex struct {
 	store  *stubObjectStore
 	name   string
-	schema datastore.ObjectStoreSchema
+	schema indexeddb.ObjectStoreSchema
 }
 
 func (idx *stubIndex) keyPath() []string {
@@ -157,7 +157,7 @@ func (idx *stubIndex) keyPath() []string {
 	return nil
 }
 
-func (idx *stubIndex) matches(record datastore.Record, values []any) bool {
+func (idx *stubIndex) matches(record indexeddb.Record, values []any) bool {
 	kp := idx.keyPath()
 	if kp == nil {
 		return false
@@ -174,13 +174,13 @@ func (idx *stubIndex) matches(record datastore.Record, values []any) bool {
 	return true
 }
 
-func (idx *stubIndex) Get(ctx context.Context, values ...any) (datastore.Record, error) {
+func (idx *stubIndex) Get(ctx context.Context, values ...any) (indexeddb.Record, error) {
 	records, err := idx.GetAll(ctx, nil, values...)
 	if err != nil {
 		return nil, err
 	}
 	if len(records) == 0 {
-		return nil, datastore.ErrNotFound
+		return nil, indexeddb.ErrNotFound
 	}
 	return records[0], nil
 }
@@ -194,10 +194,10 @@ func (idx *stubIndex) GetKey(ctx context.Context, values ...any) (string, error)
 	return id, nil
 }
 
-func (idx *stubIndex) GetAll(_ context.Context, _ *datastore.KeyRange, values ...any) ([]datastore.Record, error) {
+func (idx *stubIndex) GetAll(_ context.Context, _ *indexeddb.KeyRange, values ...any) ([]indexeddb.Record, error) {
 	idx.store.mu.RLock()
 	defer idx.store.mu.RUnlock()
-	var out []datastore.Record
+	var out []indexeddb.Record
 	for _, r := range idx.store.records {
 		if idx.matches(r, values) {
 			out = append(out, r)
@@ -206,7 +206,7 @@ func (idx *stubIndex) GetAll(_ context.Context, _ *datastore.KeyRange, values ..
 	return out, nil
 }
 
-func (idx *stubIndex) GetAllKeys(ctx context.Context, r *datastore.KeyRange, values ...any) ([]string, error) {
+func (idx *stubIndex) GetAllKeys(ctx context.Context, r *indexeddb.KeyRange, values ...any) ([]string, error) {
 	records, err := idx.GetAll(ctx, r, values...)
 	if err != nil {
 		return nil, err
@@ -218,7 +218,7 @@ func (idx *stubIndex) GetAllKeys(ctx context.Context, r *datastore.KeyRange, val
 	return keys, nil
 }
 
-func (idx *stubIndex) Count(ctx context.Context, r *datastore.KeyRange, values ...any) (int64, error) {
+func (idx *stubIndex) Count(ctx context.Context, r *indexeddb.KeyRange, values ...any) (int64, error) {
 	records, err := idx.GetAll(ctx, r, values...)
 	if err != nil {
 		return 0, err
@@ -241,4 +241,4 @@ func (idx *stubIndex) Delete(_ context.Context, values ...any) (int64, error) {
 	return int64(len(toDelete)), nil
 }
 
-var _ datastore.Datastore = (*StubObjectDatastore)(nil)
+var _ indexeddb.IndexedDB = (*StubIndexedDB)(nil)

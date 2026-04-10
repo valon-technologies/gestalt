@@ -9,7 +9,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/crypto"
-	"github.com/valon-technologies/gestalt/server/core/datastore"
+	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
@@ -128,14 +128,14 @@ type Deps struct {
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthProvider, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
-type DatastoreFactory func(node yaml.Node) (datastore.Datastore, error)
+type IndexedDBFactory func(node yaml.Node) (indexeddb.IndexedDB, error)
 type TelemetryFactory func(node yaml.Node) (core.TelemetryProvider, error)
 type AuditFactory func(ctx context.Context, cfg config.AuditConfig, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error)
 
 type FactoryRegistry struct {
 	Auth      AuthFactory
 	Secrets   map[string]SecretManagerFactory
-	Datastore DatastoreFactory
+	IndexedDB IndexedDBFactory
 	Telemetry map[string]TelemetryFactory
 	Audit     AuditFactory
 	Builtins  []core.Provider
@@ -296,7 +296,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	if encErr != nil {
 		return nil, fmt.Errorf("bootstrap: create encryptor: %w", encErr)
 	}
-	store, storeErr := buildDatastore(def, factories)
+	store, storeErr := buildIndexedDB(def, factories)
 	if storeErr != nil {
 		return nil, fmt.Errorf("bootstrap: system datastore from resource %q: %w", cfg.Datastore.Resource, storeErr)
 	}
@@ -522,11 +522,11 @@ func buildAuth(cfg *config.Config, factories *FactoryRegistry, deps Deps) (core.
 	return auth, nil
 }
 
-func buildDatastore(def config.DatastoreDef, factories *FactoryRegistry) (datastore.Datastore, error) {
+func buildIndexedDB(def config.DatastoreDef, factories *FactoryRegistry) (indexeddb.IndexedDB, error) {
 	if def.Provider == nil {
 		return nil, fmt.Errorf("datastore provider is required")
 	}
-	if factories.Datastore == nil {
+	if factories.IndexedDB == nil {
 		return nil, fmt.Errorf("datastore factory is not registered")
 	}
 	node := def.Config
@@ -537,7 +537,7 @@ func buildDatastore(def config.DatastoreDef, factories *FactoryRegistry) (datast
 			return nil, fmt.Errorf("datastore plugin: %w", err)
 		}
 	}
-	ds, err := factories.Datastore(node)
+	ds, err := factories.IndexedDB(node)
 	if err != nil {
 		return nil, fmt.Errorf("datastore plugin: %w", err)
 	}

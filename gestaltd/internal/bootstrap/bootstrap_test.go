@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/core/datastore"
+	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -46,9 +46,9 @@ func (p *closableAuthProvider) Close() error {
 	return nil
 }
 
-func stubDatastoreFactory() bootstrap.DatastoreFactory {
-	return func(yaml.Node) (datastore.Datastore, error) {
-		return &coretesting.StubObjectDatastore{}, nil
+func stubIndexedDBFactory() bootstrap.IndexedDBFactory {
+	return func(yaml.Node) (indexeddb.IndexedDB, error) {
+		return &coretesting.StubIndexedDB{}, nil
 	}
 }
 
@@ -77,7 +77,7 @@ func validConfig() *config.Config {
 func validFactories() *bootstrap.FactoryRegistry {
 	f := bootstrap.NewFactoryRegistry()
 	f.Auth = stubAuthFactory("test-auth")
-	f.Datastore = stubDatastoreFactory()
+	f.IndexedDB = stubIndexedDBFactory()
 	f.Secrets["test-secrets"] = stubSecretManagerFactory()
 	f.Telemetry["test-telemetry"] = stubTelemetryFactory()
 	return f
