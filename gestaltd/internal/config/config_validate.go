@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -71,55 +72,79 @@ func validateTelemetry(cfg TelemetryConfig) error {
 	return nil
 }
 
+func noConfigAllowed(component, provider string) func(yaml.Node) error {
+	return func(cfg yaml.Node) error {
+		if cfg.Kind == 0 {
+			return nil
+		}
+		return fmt.Errorf("config validation: %s.config is not supported when %s.provider is %q", component, component, provider)
+	}
+}
+
+func validateStdoutAuditConfig(cfg yaml.Node) error {
+	if cfg.Kind == 0 {
+		return nil
+	}
+	var stdoutCfg struct {
+		Level  string `yaml:"level"`
+		Format string `yaml:"format"`
+	}
+	if err := cfg.Decode(&stdoutCfg); err != nil {
+		return fmt.Errorf("config validation: stdout audit: parsing config: %w", err)
+	}
+	return nil
+}
+
+func validateOTLPAuditConfig(cfg yaml.Node) error {
+	if cfg.Kind == 0 {
+		return nil
+	}
+	var otlpCfg struct {
+		Protocol string `yaml:"protocol"`
+		Logs     struct {
+			Exporter string `yaml:"exporter"`
+		} `yaml:"logs"`
+	}
+	if err := cfg.Decode(&otlpCfg); err != nil {
+		return fmt.Errorf("config validation: otlp audit: parsing config: %w", err)
+	}
+	if otlpCfg.Protocol != "" {
+		switch strings.ToLower(otlpCfg.Protocol) {
+		case "grpc", "http":
+		default:
+			return fmt.Errorf("config validation: otlp audit: unknown protocol %q (expected \"grpc\" or \"http\")", otlpCfg.Protocol)
+		}
+	}
+	if otlpCfg.Logs.Exporter != "" && !strings.EqualFold(otlpCfg.Logs.Exporter, "otlp") {
+		return fmt.Errorf("config validation: otlp audit: logs.exporter must be %q", "otlp")
+	}
+	return nil
+}
+
+var builtinAuditValidators = map[string]func(yaml.Node) error{
+	"":        noConfigAllowed("audit", ""),
+	"inherit": noConfigAllowed("audit", "inherit"),
+	"noop":    noConfigAllowed("audit", "noop"),
+	"stdout":  validateStdoutAuditConfig,
+	"otlp":    validateOTLPAuditConfig,
+}
+
 func validateAudit(cfg AuditConfig) error {
 	if cfg.Provider != nil {
 		return validateTopLevelComponentProvider("audit", cfg.Provider)
 	}
-	switch cfg.BuiltinProvider {
-	case "", "inherit", "noop":
-		if cfg.Config.Kind == 0 {
-			return nil
-		}
-		return fmt.Errorf("config validation: audit.config is not supported when audit.provider is %q", cfg.BuiltinProvider)
-	case "stdout":
-		if cfg.Config.Kind == 0 {
-			return nil
-		}
-		var stdoutCfg struct {
-			Level  string `yaml:"level"`
-			Format string `yaml:"format"`
-		}
-		if err := cfg.Config.Decode(&stdoutCfg); err != nil {
-			return fmt.Errorf("config validation: stdout audit: parsing config: %w", err)
-		}
-		return nil
-	case "otlp":
-		if cfg.Config.Kind == 0 {
-			return nil
-		}
-		var otlpCfg struct {
-			Protocol string `yaml:"protocol"`
-			Logs     struct {
-				Exporter string `yaml:"exporter"`
-			} `yaml:"logs"`
-		}
-		if err := cfg.Config.Decode(&otlpCfg); err != nil {
-			return fmt.Errorf("config validation: otlp audit: parsing config: %w", err)
-		}
-		if otlpCfg.Protocol != "" {
-			switch strings.ToLower(otlpCfg.Protocol) {
-			case "grpc", "http":
-			default:
-				return fmt.Errorf("config validation: otlp audit: unknown protocol %q (expected \"grpc\" or \"http\")", otlpCfg.Protocol)
+	validator, ok := builtinAuditValidators[cfg.BuiltinProvider]
+	if !ok {
+		validNames := make([]string, 0, len(builtinAuditValidators))
+		for name := range builtinAuditValidators {
+			if name != "" {
+				validNames = append(validNames, name)
 			}
 		}
-		if otlpCfg.Logs.Exporter != "" && !strings.EqualFold(otlpCfg.Logs.Exporter, "otlp") {
-			return fmt.Errorf("config validation: otlp audit: logs.exporter must be %q", "otlp")
-		}
-		return nil
-	default:
-		return fmt.Errorf("config validation: unknown audit.provider %q", cfg.BuiltinProvider)
+		sort.Strings(validNames)
+		return fmt.Errorf("config validation: unknown audit.provider %q (valid: %s)", cfg.BuiltinProvider, strings.Join(validNames, ", "))
 	}
+	return validator(cfg.Config)
 }
 
 func validateTopLevelComponentProvider(kind string, provider *ProviderDef) error {
