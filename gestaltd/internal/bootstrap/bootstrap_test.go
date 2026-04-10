@@ -58,9 +58,9 @@ func validConfig() *config.Config {
 		Datastores: map[string]config.DatastoreDef{
 			"sqlite": {Driver: "sqlite", DSN: ":memory:"},
 		},
-		Secrets:      config.SecretsConfig{BuiltinProvider: "test-secrets"},
-		Telemetry:    config.TelemetryConfig{BuiltinProvider: "test-telemetry"},
-		Plugins: map[string]config.PluginDef{},
+		Secrets:   config.SecretsConfig{BuiltinProvider: "test-secrets"},
+		Telemetry: config.TelemetryConfig{BuiltinProvider: "test-telemetry"},
+		Plugins:   map[string]config.PluginDef{},
 		Server: config.ServerConfig{
 			Public:        config.ListenerConfig{Port: 8080},
 			EncryptionKey: "test-key",

@@ -6577,11 +6577,11 @@ func TestConnectManual_MultiCredential(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name            string
-		integration     string
-		requestBody     string
-		pluginDefs map[string]config.PluginDef
-		wantTokenData   map[string]string
+		name          string
+		integration   string
+		requestBody   string
+		pluginDefs    map[string]config.PluginDef
+		wantTokenData map[string]string
 	}{
 		{
 			name:        "stores named credentials map",

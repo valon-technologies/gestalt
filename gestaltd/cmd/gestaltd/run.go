@@ -157,7 +157,7 @@ func runServer(env *bootstrapEnv) error {
 		DefaultConnection: connMaps.DefaultConnection,
 		CatalogConnection: connMaps.MCPConnection,
 		ConnectionAuth:    result.ConnectionAuth,
-		PluginDefs:   env.Config.Plugins,
+		PluginDefs:        env.Config.Plugins,
 		PublicBaseURL:     env.Config.Server.BaseURL,
 		SecureCookies:     strings.HasPrefix(env.Config.Server.BaseURL, "https://"),
 		StateSecret:       crypto.DeriveKey(env.Config.Server.EncryptionKey),

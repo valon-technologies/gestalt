@@ -38,16 +38,16 @@ const PluginConnectionName = "_plugin"
 const PluginConnectionAlias = "plugin"
 
 type Config struct {
-	Auth         AuthConfig                `yaml:"auth"`
-	Datastore    DatastoreConfig           `yaml:"datastore"`
-	Datastores   map[string]DatastoreDef   `yaml:"datastores"`
-	Secrets      SecretsConfig             `yaml:"secrets"`
-	Telemetry    TelemetryConfig           `yaml:"telemetry"`
-	Audit        AuditConfig               `yaml:"audit"`
-	Plugins map[string]PluginDef `yaml:"plugins"`
-	Server       ServerConfig              `yaml:"server"`
-	Egress       EgressConfig              `yaml:"egress"`
-	UI           UIConfig                  `yaml:"ui"`
+	Auth       AuthConfig              `yaml:"auth"`
+	Datastore  DatastoreConfig         `yaml:"datastore"`
+	Datastores map[string]DatastoreDef `yaml:"datastores"`
+	Secrets    SecretsConfig           `yaml:"secrets"`
+	Telemetry  TelemetryConfig         `yaml:"telemetry"`
+	Audit      AuditConfig             `yaml:"audit"`
+	Plugins    map[string]PluginDef    `yaml:"plugins"`
+	Server     ServerConfig            `yaml:"server"`
+	Egress     EgressConfig            `yaml:"egress"`
+	UI         UIConfig                `yaml:"ui"`
 }
 
 type TelemetryConfig struct {
@@ -1057,6 +1057,12 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 	}
 	if cfg.UI.Provider != nil && cfg.UI.Provider.Source != nil {
 		cfg.UI.Provider.Source.Path = resolveRelativePath(baseDir, cfg.UI.Provider.Source.Path)
+	}
+	if cfg.Telemetry.Provider != nil && cfg.Telemetry.Provider.Source != nil {
+		cfg.Telemetry.Provider.Source.Path = resolveRelativePath(baseDir, cfg.Telemetry.Provider.Source.Path)
+	}
+	if cfg.Audit.Provider != nil && cfg.Audit.Provider.Source != nil {
+		cfg.Audit.Provider.Source.Path = resolveRelativePath(baseDir, cfg.Audit.Provider.Source.Path)
 	}
 }
 
