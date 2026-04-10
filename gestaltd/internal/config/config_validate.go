@@ -224,7 +224,7 @@ func validateManifestBackedConnectionDefaults(name string, plugin *ProviderDef, 
 }
 
 func validateExecutableConnectionAuthSupport(name string, plugin *ProviderDef, provider *pluginmanifestv1.Plugin) error {
-	supportsMCPOAuth := provider != nil && provider.MCPURL != ""
+	supportsMCPOAuth := provider != nil && provider.MCPURL() != ""
 	if conn := EffectivePluginConnectionDef(plugin, provider); conn.Auth.Type == pluginmanifestv1.AuthTypeMCPOAuth && !supportsMCPOAuth {
 		return fmt.Errorf("config validation: integration %q plugin auth type %q requires an MCP surface", name, pluginmanifestv1.AuthTypeMCPOAuth)
 	}

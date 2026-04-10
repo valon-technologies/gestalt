@@ -331,8 +331,10 @@ plugin:
     items.list:
       paginate: true
     items.info: {}
-  openapi: openapi.yaml
-  openapiConnection: api
+  surfaces:
+    openapi:
+      document: openapi.yaml
+      connection: api
 `))
 	mustWriteFile(t, filepath.Join(dir, "schemas", "config.schema.json"), []byte(`{"type":"object"}`), 0o644)
 	mustWriteFile(t, filepath.Join(dir, "openapi.yaml"), []byte("openapi: 3.1.0\ninfo:\n  title: Example\n  version: 1.0.0\npaths: {}\n"), 0o644)
@@ -344,11 +346,11 @@ plugin:
 	if manifest.Plugin == nil {
 		t.Fatal("expected provider metadata")
 	}
-	if manifest.Plugin.OpenAPI != "openapi.yaml" {
-		t.Fatalf("provider openapi = %q", manifest.Plugin.OpenAPI)
+	if manifest.Plugin.OpenAPIDocument() != "openapi.yaml" {
+		t.Fatalf("provider openapi document = %q", manifest.Plugin.OpenAPIDocument())
 	}
-	if manifest.Plugin.OpenAPIConnection != "api" {
-		t.Fatalf("provider openapi_connection = %q, want api", manifest.Plugin.OpenAPIConnection)
+	if manifest.Plugin.SurfaceConnectionName("openapi") != "api" {
+		t.Fatalf("provider openapi connection = %q, want api", manifest.Plugin.SurfaceConnectionName("openapi"))
 	}
 	if len(manifest.Plugin.ManagedParameters) != 1 {
 		t.Fatalf("managed_parameters = %+v", manifest.Plugin.ManagedParameters)
@@ -356,7 +358,7 @@ plugin:
 	if manifest.Entrypoints.Plugin != nil {
 		t.Fatalf("expected declarative/spec provider to omit provider entrypoint, got %+v", manifest.Entrypoints.Plugin)
 	}
-	if pgn := manifest.Plugin.Pagination; pgn == nil || pgn.Style != "cursor" || pgn.Cursor == nil || pgn.Cursor.Source != "header" || pgn.Cursor.Path != "X-After-Cursor" || pgn.MaxPages != 10 {
+	if pgn := manifest.Plugin.Pagination; pgn == nil || pgn.Style != pluginmanifestv1.PaginationStyleCursor || pgn.Cursor == nil || pgn.Cursor.Source != "header" || pgn.Cursor.Path != "X-After-Cursor" || pgn.MaxPages != 10 {
 		t.Fatalf("unexpected pagination config: %+v", manifest.Plugin.Pagination)
 	}
 	if op := manifest.Plugin.AllowedOperations["items.list"]; op == nil || !op.Paginate {
@@ -379,8 +381,10 @@ plugin:
       mode: user
       auth:
         type: mcp_oauth
-  mcpUrl: https://mcp.notion.com/mcp
-  mcpConnection: mcp
+  surfaces:
+    mcp:
+      url: https://mcp.notion.com/mcp
+      connection: mcp
 `))
 
 	_, dirManifest, err := ReadManifestFile(manifestPath)
@@ -390,11 +394,11 @@ plugin:
 	if dirManifest.Plugin == nil {
 		t.Fatal("expected plugin metadata")
 	}
-	if dirManifest.Plugin.MCPURL != "https://mcp.notion.com/mcp" {
-		t.Fatalf("plugin mcp_url = %q", dirManifest.Plugin.MCPURL)
+	if dirManifest.Plugin.MCPURL() != "https://mcp.notion.com/mcp" {
+		t.Fatalf("plugin mcp_url = %q", dirManifest.Plugin.MCPURL())
 	}
-	if dirManifest.Plugin.MCPConnection != "mcp" {
-		t.Fatalf("plugin mcp_connection = %q, want mcp", dirManifest.Plugin.MCPConnection)
+	if dirManifest.Plugin.SurfaceConnectionName("mcp") != "mcp" {
+		t.Fatalf("plugin mcp_connection = %q, want mcp", dirManifest.Plugin.SurfaceConnectionName("mcp"))
 	}
 	if conn := dirManifest.Plugin.Connections["mcp"]; conn == nil || conn.Auth == nil || conn.Auth.Type != pluginmanifestv1.AuthTypeMCPOAuth {
 		t.Fatalf("plugin connection auth = %#v", dirManifest.Plugin.Connections["mcp"])
@@ -468,8 +472,10 @@ plugin:
         namePath: name
         metadata:
           region: region
-  openapi: openapi.yaml
-  openapiConnection: api
+  surfaces:
+    openapi:
+      document: openapi.yaml
+      connection: api
 `))
 	mustWriteFile(t, filepath.Join(dir, "openapi.yaml"), []byte("openapi: 3.1.0\ninfo:\n  title: Example\n  version: 1.0.0\npaths: {}\n"), 0o644)
 

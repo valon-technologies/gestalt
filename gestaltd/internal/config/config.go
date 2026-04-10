@@ -38,36 +38,89 @@ const PluginConnectionName = "_plugin"
 const PluginConnectionAlias = "plugin"
 
 type Config struct {
-	Auth       AuthConfig              `yaml:"auth"`
+	Auth       ComponentConfig         `yaml:"auth"`
 	Datastore  DatastoreConfig         `yaml:"datastore"`
 	Datastores map[string]DatastoreDef `yaml:"datastores"`
-	Secrets    SecretsConfig           `yaml:"secrets"`
-	Telemetry  TelemetryConfig         `yaml:"telemetry"`
-	Audit      AuditConfig             `yaml:"audit"`
+	Secrets    ComponentConfig         `yaml:"secrets"`
+	Telemetry  ComponentConfig         `yaml:"telemetry"`
+	Audit      ComponentConfig         `yaml:"audit"`
 	Plugins    map[string]PluginDef    `yaml:"plugins"`
 	Server     ServerConfig            `yaml:"server"`
 	Egress     EgressConfig            `yaml:"egress"`
-	UI         UIConfig                `yaml:"ui"`
+	UI         ComponentConfig         `yaml:"ui"`
 }
 
-type TelemetryConfig struct {
+// ComponentConfig is the unified configuration for top-level infrastructure
+// components (auth, secrets, telemetry, audit, ui). Each component's provider
+// can be a builtin (provider: { builtin: <name> } or the legacy scalar form
+// provider: <name>) or an external plugin (provider: { source: ... }).
+type ComponentConfig struct {
 	Provider        *ProviderDef `yaml:"provider"`
 	Config          yaml.Node    `yaml:"config"`
 	BuiltinProvider string       `yaml:"-"`
+	Disabled        bool         `yaml:"-"`
+	ResolvedAssetRoot string     `yaml:"-"`
 }
 
-type AuditConfig struct {
-	Provider        *ProviderDef `yaml:"provider"`
-	Config          yaml.Node    `yaml:"config"`
-	BuiltinProvider string       `yaml:"-"`
+func (c *ComponentConfig) UnmarshalYAML(value *yaml.Node) error {
+	return c.unmarshalComponent(value)
 }
 
-type UIConfig struct {
-	Provider          *ProviderDef `yaml:"provider"`
-	Config            yaml.Node    `yaml:"config"`
-	Disabled          bool         `yaml:"-"`
-	ResolvedAssetRoot string       `yaml:"-"`
+func (c *ComponentConfig) unmarshalComponent(value *yaml.Node) error {
+	kind := "component"
+	if value == nil || value.Kind == 0 {
+		*c = ComponentConfig{}
+		return nil
+	}
+	if value.Kind != yaml.MappingNode {
+		var probe map[string]any
+		return value.Decode(&probe)
+	}
+	for i := 0; i+1 < len(value.Content); i += 2 {
+		key := value.Content[i].Value
+		switch key {
+		case "provider", "config":
+		default:
+			return fmt.Errorf("field %s not found in type %s config", key, kind)
+		}
+	}
+	*c = ComponentConfig{}
+	providerNode := mappingValueNode(value, "provider")
+	if providerNode != nil {
+		switch {
+		case providerNode.Kind == yaml.ScalarNode && providerNode.Tag != "!!null":
+			v := strings.TrimSpace(providerNode.Value)
+			if v == "none" {
+				c.Disabled = true
+			} else if v != "" {
+				c.BuiltinProvider = v
+			}
+		case providerNode.Kind == yaml.MappingNode:
+			if builtinNode := mappingValueNode(providerNode, "builtin"); builtinNode != nil && builtinNode.Kind == yaml.ScalarNode {
+				c.BuiltinProvider = strings.TrimSpace(builtinNode.Value)
+			} else {
+				decoded, err := decodeExternalProvider(providerNode)
+				if err != nil {
+					return err
+				}
+				c.Provider = decoded
+			}
+		case providerNode.Kind != yaml.ScalarNode || providerNode.Tag != "!!null":
+			return fmt.Errorf("%s.provider must be a string or a provider reference mapping", kind)
+		}
+	}
+	if configNode := mappingValueNode(value, "config"); configNode != nil {
+		c.Config = *configNode
+	}
+	return nil
 }
+
+// Type aliases preserved for consumer compatibility.
+type TelemetryConfig = ComponentConfig
+type AuditConfig = ComponentConfig
+type UIConfig = ComponentConfig
+type SecretsConfig = ComponentConfig
+type AuthConfig = ComponentConfig
 
 type PluginSourceAuthDef struct {
 	Token string `yaml:"token"`
@@ -119,8 +172,8 @@ type ProviderDef struct {
 
 	Discovery *pluginmanifestv1.ProviderDiscovery `yaml:"-"`
 
-	Auth              *ConnectionAuthDef        `yaml:"-"`
-	ConnectionMode    string                    `yaml:"-"`
+	Auth              *ConnectionAuthDef                 `yaml:"-"`
+	ConnectionMode    pluginmanifestv1.ConnectionMode   `yaml:"-"`
 	Connections       map[string]*ConnectionDef `yaml:"-"`
 	DefaultConnection string                    `yaml:"-"`
 
@@ -195,18 +248,6 @@ func (p *ProviderDef) DeclaresMCP() bool {
 	return provider.MCP
 }
 
-type SecretsConfig struct {
-	Provider *ProviderDef `yaml:"provider"`
-	Config   yaml.Node    `yaml:"config"`
-
-	BuiltinProvider string `yaml:"-"`
-}
-
-type AuthConfig struct {
-	Provider *ProviderDef `yaml:"provider"`
-	Config   yaml.Node    `yaml:"config"`
-}
-
 type DatastoreConfig struct {
 	Resource string       `yaml:"-"`
 	Provider *ProviderDef `yaml:"provider"`
@@ -218,9 +259,6 @@ type DatastoreDef struct {
 	DSN    string `yaml:"dsn"`
 }
 
-func (c *AuthConfig) UnmarshalYAML(value *yaml.Node) error {
-	return unmarshalTopLevelComponentConfig(value, "AuthConfig", "auth", &c.Provider, &c.Config)
-}
 
 func (c *DatastoreConfig) UnmarshalYAML(value *yaml.Node) error {
 	if value == nil || value.Kind == 0 {
@@ -253,7 +291,7 @@ func (c *DatastoreConfig) UnmarshalYAML(value *yaml.Node) error {
 	c.Config = yaml.Node{}
 	c.Resource = ""
 	if providerNode := mappingValueNode(value, "provider"); providerNode != nil {
-		decoded, err := decodeTopLevelComponentProvider("datastore", providerNode)
+		decoded, err := decodeExternalProvider(providerNode)
 		if err != nil {
 			return err
 		}
@@ -265,175 +303,15 @@ func (c *DatastoreConfig) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-func (c *UIConfig) UnmarshalYAML(value *yaml.Node) error {
-	if value == nil || value.Kind == 0 {
-		*c = UIConfig{}
-		return nil
-	}
-	if value.Kind != yaml.MappingNode {
-		var probe map[string]any
-		return value.Decode(&probe)
-	}
-	for i := 0; i+1 < len(value.Content); i += 2 {
-		key := value.Content[i].Value
-		switch key {
-		case "provider", "config":
-		default:
-			return fmt.Errorf("field %s not found in type config.UIConfig", key)
-		}
-	}
-	c.Provider = nil
-	c.Config = yaml.Node{}
-	c.Disabled = false
-	if providerNode := mappingValueNode(value, "provider"); providerNode != nil {
-		decoded, disabled, err := decodeUIProvider(providerNode)
-		if err != nil {
-			return err
-		}
-		c.Provider = decoded
-		c.Disabled = disabled
-	}
-	if configNode := mappingValueNode(value, "config"); configNode != nil {
-		c.Config = *configNode
-	}
-	return nil
-}
-
-func unmarshalHybridProvider(value *yaml.Node, kind string, provider **ProviderDef, builtin *string, cfg *yaml.Node) error {
-	if value == nil || value.Kind == 0 {
-		*provider = nil
-		*builtin = ""
-		*cfg = yaml.Node{}
-		return nil
-	}
-	if value.Kind != yaml.MappingNode {
-		var probe map[string]any
-		return value.Decode(&probe)
-	}
-	for i := 0; i+1 < len(value.Content); i += 2 {
-		key := value.Content[i].Value
-		switch key {
-		case "provider", "config":
-		default:
-			return fmt.Errorf("field %s not found in type %s config", key, kind)
-		}
-	}
-	*provider = nil
-	*builtin = ""
-	*cfg = yaml.Node{}
-	providerNode := mappingValueNode(value, "provider")
-	if providerNode != nil {
-		switch {
-		case providerNode.Kind == yaml.ScalarNode && providerNode.Tag != "!!null":
-			*builtin = strings.TrimSpace(providerNode.Value)
-		case providerNode.Kind == yaml.MappingNode:
-			decoded, err := decodeTopLevelComponentProvider(kind, providerNode)
-			if err != nil {
-				return err
-			}
-			*provider = decoded
-		case providerNode.Kind != yaml.ScalarNode || providerNode.Tag != "!!null":
-			return fmt.Errorf("%s.provider must be a string or a provider reference mapping", kind)
-		}
-	}
-	if configNode := mappingValueNode(value, "config"); configNode != nil {
-		*cfg = *configNode
-	}
-	return nil
-}
-
-func (c *TelemetryConfig) UnmarshalYAML(value *yaml.Node) error {
-	return unmarshalHybridProvider(value, "telemetry", &c.Provider, &c.BuiltinProvider, &c.Config)
-}
-
-func (c *AuditConfig) UnmarshalYAML(value *yaml.Node) error {
-	return unmarshalHybridProvider(value, "audit", &c.Provider, &c.BuiltinProvider, &c.Config)
-}
-
-func (c *SecretsConfig) UnmarshalYAML(value *yaml.Node) error {
-	return unmarshalHybridProvider(value, "secrets", &c.Provider, &c.BuiltinProvider, &c.Config)
-}
-
-func unmarshalTopLevelComponentConfig(value *yaml.Node, typeName, kind string, provider **ProviderDef, cfg *yaml.Node) error {
-	if value == nil || value.Kind == 0 {
-		*provider = nil
-		*cfg = yaml.Node{}
-		return nil
-	}
-	if value.Kind != yaml.MappingNode {
-		var probe map[string]any
-		return value.Decode(&probe)
-	}
-	for i := 0; i+1 < len(value.Content); i += 2 {
-		key := value.Content[i].Value
-		switch key {
-		case "provider", "config":
-		default:
-			return fmt.Errorf("field %s not found in type config.%s", key, typeName)
-		}
-	}
-	*provider = nil
-	*cfg = yaml.Node{}
-	if providerNode := mappingValueNode(value, "provider"); providerNode != nil {
-		decoded, err := decodeTopLevelComponentProvider(kind, providerNode)
-		if err != nil {
-			return err
-		}
-		*provider = decoded
-	}
-	if configNode := mappingValueNode(value, "config"); configNode != nil {
-		*cfg = *configNode
-	}
-	return nil
-}
-
-func decodeTopLevelComponentProvider(kind string, node *yaml.Node) (*ProviderDef, error) {
+func decodeExternalProvider(node *yaml.Node) (*ProviderDef, error) {
 	if node == nil || node.Kind == 0 {
 		return nil, nil
-	}
-	if node.Kind == yaml.ScalarNode {
-		value := strings.TrimSpace(node.Value)
-		if node.Tag == "!!null" || value == "" {
-			return nil, nil
-		}
-		if kind == "auth" && value == "none" {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("config validation: %s.provider must be a provider reference mapping%s", kind, authProviderScalarHint(kind))
 	}
 	var provider ProviderDef
 	if err := node.Decode(&provider); err != nil {
 		return nil, err
 	}
 	return &provider, nil
-}
-
-func decodeUIProvider(node *yaml.Node) (*ProviderDef, bool, error) {
-	if node == nil || node.Kind == 0 {
-		return nil, false, nil
-	}
-	if node.Kind == yaml.ScalarNode {
-		value := strings.TrimSpace(node.Value)
-		if node.Tag == "!!null" || value == "" {
-			return nil, false, nil
-		}
-		if value == "none" {
-			return nil, true, nil
-		}
-		return nil, false, fmt.Errorf(`config validation: ui.provider must be a provider reference mapping or the string "none"`)
-	}
-	var provider ProviderDef
-	if err := node.Decode(&provider); err != nil {
-		return nil, false, err
-	}
-	return &provider, false, nil
-}
-
-func authProviderScalarHint(kind string) string {
-	if kind == "auth" {
-		return ` or the string "none"`
-	}
-	return ""
 }
 
 type ListenerConfig struct {
@@ -493,14 +371,14 @@ type PluginDef struct {
 // ConnectionDef owns authentication and connection parameters for a named
 // connection. All connections in a single integration must share the same Mode.
 type ConnectionDef struct {
-	Mode             string                              `yaml:"mode"`
+	Mode             pluginmanifestv1.ConnectionMode     `yaml:"mode"`
 	Auth             ConnectionAuthDef                   `yaml:"auth"`
 	ConnectionParams map[string]ConnectionParamDef       `yaml:"params"`
 	Discovery        *pluginmanifestv1.ProviderDiscovery `yaml:"-"`
 }
 
 type ConnectionAuthDef struct {
-	Type                string               `yaml:"type"`
+	Type                pluginmanifestv1.AuthType `yaml:"type"`
 	AuthorizationURL    string               `yaml:"authorizationUrl"`
 	TokenURL            string               `yaml:"tokenUrl"`
 	ClientID            string               `yaml:"clientId"`
@@ -552,7 +430,9 @@ func MergeConnectionAuth(dst *ConnectionAuthDef, src ConnectionAuthDef) {
 			*dst = src
 		}
 	}
-	setString(&dst.Type, src.Type)
+	if src.Type != "" {
+		dst.Type = src.Type
+	}
 	setString(&dst.AuthorizationURL, src.AuthorizationURL)
 	setString(&dst.TokenURL, src.TokenURL)
 	setString(&dst.ClientID, src.ClientID)

@@ -35,14 +35,14 @@ func LocalPackageReferences(manifest *pluginmanifestv1.Manifest) []LocalPackageR
 
 	if manifest.Plugin != nil {
 		add(manifest.Plugin.ConfigSchemaPath, "provider config schema")
-		if manifest.Plugin.OpenAPI != "" && !strings.Contains(manifest.Plugin.OpenAPI, "://") {
-			add(manifest.Plugin.OpenAPI, "provider openapi document")
+		if doc := manifest.Plugin.OpenAPIDocument(); doc != "" && !strings.Contains(doc, "://") {
+			add(doc, "provider openapi document")
 		}
-		if manifest.Plugin.GraphQLURL != "" && !strings.Contains(manifest.Plugin.GraphQLURL, "://") {
-			add(manifest.Plugin.GraphQLURL, "provider graphql document")
+		if url := manifest.Plugin.GraphQLURL(); url != "" && !strings.Contains(url, "://") {
+			add(url, "provider graphql document")
 		}
-		if manifest.Plugin.MCPURL != "" && !strings.Contains(manifest.Plugin.MCPURL, "://") {
-			add(manifest.Plugin.MCPURL, "provider mcp document")
+		if url := manifest.Plugin.MCPURL(); url != "" && !strings.Contains(url, "://") {
+			add(url, "provider mcp document")
 		}
 	}
 	if manifest.WebUI != nil {
@@ -56,6 +56,9 @@ func ResolveManifestLocalReferences(manifest *pluginmanifestv1.Manifest, manifes
 	if manifest == nil || manifest.Plugin == nil || manifestPath == "" {
 		return manifest
 	}
+	if manifest.Plugin.Surfaces == nil {
+		return manifest
+	}
 
 	resolve := func(value string) string {
 		if value == "" || filepath.IsAbs(value) || strings.Contains(value, "://") {
@@ -65,25 +68,39 @@ func ResolveManifestLocalReferences(manifest *pluginmanifestv1.Manifest, manifes
 	}
 
 	provider := *manifest.Plugin
+	surfaces := *provider.Surfaces
 	changed := false
 
-	if resolved := resolve(provider.OpenAPI); resolved != provider.OpenAPI {
-		provider.OpenAPI = resolved
-		changed = true
+	if surfaces.OpenAPI != nil {
+		s := *surfaces.OpenAPI
+		if resolved := resolve(s.Document); resolved != s.Document {
+			s.Document = resolved
+			surfaces.OpenAPI = &s
+			changed = true
+		}
 	}
-	if resolved := resolve(provider.GraphQLURL); resolved != provider.GraphQLURL {
-		provider.GraphQLURL = resolved
-		changed = true
+	if surfaces.GraphQL != nil {
+		s := *surfaces.GraphQL
+		if resolved := resolve(s.URL); resolved != s.URL {
+			s.URL = resolved
+			surfaces.GraphQL = &s
+			changed = true
+		}
 	}
-	if resolved := resolve(provider.MCPURL); resolved != provider.MCPURL {
-		provider.MCPURL = resolved
-		changed = true
+	if surfaces.MCP != nil {
+		s := *surfaces.MCP
+		if resolved := resolve(s.URL); resolved != s.URL {
+			s.URL = resolved
+			surfaces.MCP = &s
+			changed = true
+		}
 	}
 
 	if !changed {
 		return manifest
 	}
 
+	provider.Surfaces = &surfaces
 	cloned := *manifest
 	cloned.Plugin = &provider
 	return &cloned

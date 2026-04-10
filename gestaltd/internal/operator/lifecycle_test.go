@@ -152,8 +152,10 @@ source: github.com/testowner/plugins/notion
 version: 0.0.1-alpha.1
 displayName: Notion
 plugin:
-  mcpUrl: https://mcp.notion.com/mcp
-  mcpConnection: mcp
+  surfaces:
+    mcp:
+      url: https://mcp.notion.com/mcp
+      connection: mcp
   connections:
     mcp:
       mode: user
@@ -187,7 +189,7 @@ plugins:
 	if intg.Plugin == nil || intg.Plugin.ResolvedManifest == nil || intg.Plugin.ResolvedManifest.Plugin == nil {
 		t.Fatalf("ResolvedManifest = %+v", intg.Plugin)
 	}
-	if got := intg.Plugin.ResolvedManifest.Plugin.MCPURL; got != "https://mcp.notion.com/mcp" {
+	if got := intg.Plugin.ResolvedManifest.Plugin.MCPURL(); got != "https://mcp.notion.com/mcp" {
 		t.Fatalf("MCPURL = %q, want %q", got, "https://mcp.notion.com/mcp")
 	}
 	conn := intg.Plugin.ResolvedManifest.Plugin.Connections["mcp"]

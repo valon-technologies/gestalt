@@ -143,10 +143,12 @@ func TestRun_PluginReleaseRejectsInvalidManifest(t *testing.T) {
 source: github.com/testowner/plugins/invalid
 version: 0.0.1-alpha.1
 plugin:
-  operations:
-    - name: list_items
-      method: GET
-      path: /items
+  surfaces:
+    rest:
+      operations:
+        - name: list_items
+          method: GET
+          path: /items
 `,
 			wantError: "provider.baseUrl is required",
 		},

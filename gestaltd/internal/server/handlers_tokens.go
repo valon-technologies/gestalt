@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
 
 type createTokenRequest struct {
@@ -279,7 +280,7 @@ func connectionInfoFromAuth(name string, auth config.ConnectionAuthDef, integrat
 	return info, true
 }
 
-func connectionAuthTypes(authType string, integrationAuthTypes []string) []string {
+func connectionAuthTypes(authType pluginmanifestv1.AuthType, integrationAuthTypes []string) []string {
 	if authType == "" {
 		if len(integrationAuthTypes) == 0 {
 			return nil
@@ -287,7 +288,7 @@ func connectionAuthTypes(authType string, integrationAuthTypes []string) []strin
 		return append([]string(nil), integrationAuthTypes...)
 	}
 
-	authTypes := userFacingAuthTypes([]string{authType})
+	authTypes := userFacingAuthTypes([]string{string(authType)})
 	if len(authTypes) == 0 {
 		return nil
 	}

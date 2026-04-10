@@ -230,7 +230,7 @@ func buildExecutablePluginProvider(ctx context.Context, name string, intg config
 	specProv, specDef, err := buildConfiguredSpecProvider(ctx, name, resolved, meta, specProviderConfig{
 		manifestPlugin:       manifestPlugin,
 		allowedOperations:    allowedOperations,
-		baseURL:              manifestPlugin.BaseURL,
+		baseURL:              manifestPlugin.RESTBaseURL(),
 		applyResponseMapping: true,
 		providerBuildOptions: func(conn config.ConnectionDef) []provider.BuildOption {
 			return mcpOAuthBuildOpts(conn, manifestPlugin, deps)
@@ -302,7 +302,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Plugi
 		return buildConfiguredSpecProvider(ctx, name, resolved, meta, specProviderConfig{
 			manifestPlugin:       mp,
 			allowedOperations:    allowed,
-			baseURL:              mp.BaseURL,
+			baseURL:              mp.RESTBaseURL(),
 			applyResponseMapping: true,
 			providerBuildOptions: func(conn config.ConnectionDef) []provider.BuildOption {
 				return mcpOAuthBuildOpts(conn, mp, deps)
@@ -606,7 +606,7 @@ func buildPluginStaticSpec(name string, intg config.PluginDef, manifest *pluginm
 	}, nil
 }
 
-func staticAuthTypes(authType string) []string {
+func staticAuthTypes(authType pluginmanifestv1.AuthType) []string {
 	switch authType {
 	case "", pluginmanifestv1.AuthTypeNone:
 		return nil
@@ -618,11 +618,11 @@ func staticAuthTypes(authType string) []string {
 }
 
 func mcpOAuthBuildOpts(conn config.ConnectionDef, manifestPlugin *pluginmanifestv1.Plugin, deps Deps) []provider.BuildOption {
-	if manifestPlugin == nil || conn.Auth.Type != pluginmanifestv1.AuthTypeMCPOAuth || manifestPlugin.MCPURL == "" {
+	if manifestPlugin == nil || conn.Auth.Type != pluginmanifestv1.AuthTypeMCPOAuth || manifestPlugin.MCPURL() == "" {
 		return nil
 	}
 	return []provider.BuildOption{
-		provider.WithAuthHandler(buildMCPOAuthHandler(conn, manifestPlugin.MCPURL, buildRegistrationStore(deps), deps)),
+		provider.WithAuthHandler(buildMCPOAuthHandler(conn, manifestPlugin.MCPURL(), buildRegistrationStore(deps), deps)),
 	}
 }
 
@@ -737,7 +737,7 @@ func applyProviderPagination(def *provider.Definition, manifestPlugin *pluginman
 		}
 		op := def.Operations[opName]
 		op.Pagination = &provider.PaginationDef{
-			Style:        pgn.Style,
+			Style:        string(pgn.Style),
 			CursorParam:  pgn.CursorParam,
 			Cursor:       cloneManifestValueSelectorDef(pgn.Cursor),
 			LimitParam:   pgn.LimitParam,

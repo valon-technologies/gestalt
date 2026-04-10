@@ -186,7 +186,9 @@ source: github.com/test/plugins/pager
 version: 0.0.1-alpha.1
 displayName: Pager
 plugin:
-  openapi: openapi.yaml
+  surfaces:
+    openapi:
+      document: openapi.yaml
   connectionMode: none
   pagination:
     style: cursor
@@ -227,7 +229,9 @@ source: github.com/test/plugins/mapper
 version: 0.0.1-alpha.1
 displayName: Mapper
 plugin:
-  openapi: openapi.yaml
+  surfaces:
+    openapi:
+      document: openapi.yaml
   connectionMode: none
   responseMapping:
     dataPath: results
@@ -370,7 +374,9 @@ source: github.com/test/plugins/manual-basic
 version: 0.0.1-alpha.1
 displayName: Manual Basic Test
 plugin:
-  openapi: openapi.yaml
+  surfaces:
+    openapi:
+      document: openapi.yaml
 `), 0o644)
 
 	manifestPath, err := pluginpkg.FindManifestFile(pluginDir)
@@ -572,7 +578,9 @@ plugin:
           valueFrom:
             credentialFieldRef:
               name: api_key
-  openapi: openapi.yaml
+  surfaces:
+    openapi:
+      document: openapi.yaml
 `), 0o644)
 
 	manifestPath, err := pluginpkg.FindManifestFile(pluginDir)
@@ -725,11 +733,13 @@ plugin:
           valueFrom:
             credentialFieldRef:
               name: api_key
-  baseUrl: %s
-  operations:
-    - name: whoami
-      method: GET
-      path: /whoami
+  surfaces:
+    rest:
+      baseUrl: %s
+      operations:
+        - name: whoami
+          method: GET
+          path: /whoami
 `, upstream.URL)), 0o644)
 
 	manifestPath, err := pluginpkg.FindManifestFile(pluginDir)

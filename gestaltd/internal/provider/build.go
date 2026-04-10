@@ -15,6 +15,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
 
 // BuildOption configures optional aspects of provider construction.
@@ -79,10 +80,11 @@ func Build(def *Definition, conn config.ConnectionDef, opts ...BuildOption) (cor
 
 	connMode := conn.Mode
 	if connMode == "" {
-		connMode = def.ConnectionMode
+		connMode = pluginmanifestv1.ConnectionMode(def.ConnectionMode)
 	}
 	switch connMode {
-	case "", "none", "user", "identity", "either":
+	case "", pluginmanifestv1.ConnectionModeNone, pluginmanifestv1.ConnectionModeUser,
+		pluginmanifestv1.ConnectionModeIdentity, pluginmanifestv1.ConnectionModeEither:
 		if connMode != "" {
 			base.ConnMode = core.ConnectionMode(connMode)
 		}
@@ -208,7 +210,7 @@ func ReadIconFile(path string) (string, error) {
 // ApplyConnectionAuth merges connection auth overrides into the Definition.
 func ApplyConnectionAuth(def *Definition, conn config.ConnectionDef) {
 	o := conn.Auth
-	setStr(&def.Auth.Type, o.Type)
+	setStr(&def.Auth.Type, string(o.Type))
 	setStr(&def.Auth.AuthorizationURL, o.AuthorizationURL)
 	setStr(&def.Auth.TokenURL, o.TokenURL)
 	setStr(&def.Auth.ClientAuth, o.ClientAuth)

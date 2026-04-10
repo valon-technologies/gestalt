@@ -27,17 +27,10 @@ type integrationWire struct {
 }
 
 type integrationConnection struct {
-	Mode      string                        `yaml:"mode"`
-	Auth      ConnectionAuthDef             `yaml:"auth"`
-	Params    map[string]ConnectionParamDef `yaml:"params"`
-	Discovery *integrationDiscoveryWire     `yaml:"discovery"`
-}
-
-type integrationDiscoveryWire struct {
-	URL      string            `yaml:"url"`
-	IDPath   string            `yaml:"idPath"`
-	NamePath string            `yaml:"namePath"`
-	Metadata map[string]string `yaml:"metadata"`
+	Mode      pluginmanifestv1.ConnectionMode    `yaml:"mode"`
+	Auth      ConnectionAuthDef                  `yaml:"auth"`
+	Params    map[string]ConnectionParamDef      `yaml:"params"`
+	Discovery *pluginmanifestv1.ProviderDiscovery `yaml:"discovery"`
 }
 
 type integrationMCPWire struct {
@@ -100,7 +93,7 @@ func (i *PluginDef) UnmarshalYAML(value *yaml.Node) error {
 			plugin.Auth = &auth
 			plugin.ConnectionMode = defaultConn.Mode
 			plugin.ConnectionParams = defaultConn.Params
-			plugin.Discovery = defaultConn.toManifestDiscovery()
+			plugin.Discovery = defaultConn.Discovery
 		}
 		if len(wire.Connections) > 0 {
 			plugin.Connections = make(map[string]*ConnectionDef, len(wire.Connections))
@@ -116,7 +109,7 @@ func (i *PluginDef) UnmarshalYAML(value *yaml.Node) error {
 					Mode:             conn.Mode,
 					Auth:             conn.Auth,
 					ConnectionParams: conn.Params,
-					Discovery:        conn.toManifestDiscovery(),
+					Discovery:        conn.Discovery,
 				}
 			}
 			if len(plugin.Connections) == 0 {
@@ -152,18 +145,5 @@ func validateIntegrationWire(wire *integrationWire) error {
 	if wire.MCP != nil && wire.MCP.ToolPrefix != "" && !wire.MCP.Enabled {
 		return fmt.Errorf("mcp.toolPrefix is only valid when mcp.enabled is true")
 	}
-
 	return nil
-}
-
-func (w *integrationConnection) toManifestDiscovery() *pluginmanifestv1.ProviderDiscovery {
-	if w == nil || w.Discovery == nil {
-		return nil
-	}
-	return &pluginmanifestv1.ProviderDiscovery{
-		URL:      w.Discovery.URL,
-		IDPath:   w.Discovery.IDPath,
-		NamePath: w.Discovery.NamePath,
-		Metadata: w.Discovery.Metadata,
-	}
 }
