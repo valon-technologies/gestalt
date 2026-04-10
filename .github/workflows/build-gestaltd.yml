@@ -192,10 +192,10 @@ jobs:
           cat >"$provider_dir/manifest.yaml" <<'EOF'
           source: github.com/valon-technologies/gestalt-providers/web/default
           version: 0.0.1-alpha.1
-          display_name: Default Web UI
+          displayName: Default Web UI
           description: Local CI web UI fixture
           webui:
-            asset_root: out
+            assetRoot: out
           EOF
 
       - name: Build Go server
