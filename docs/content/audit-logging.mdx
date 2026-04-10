@@ -100,11 +100,11 @@ definitions.
 
 ## Routing
 
-By default, audit records follow the main telemetry log pipeline. With `telemetry.provider: stdout` they appear in local structured logs; with `telemetry.provider: otlp` they export through the OTLP log pipeline.
+By default, audit records follow the main telemetry log pipeline. With `telemetry: { builtin: stdout }` they appear in local structured logs; with `telemetry: { builtin: otlp }` they export through the OTLP log pipeline.
 
-If you need a dedicated audit route, configure the top-level `audit:` block. Set `audit.provider: stdout` to keep audit logs on stdout even when telemetry uses a different provider, `audit.provider: otlp` to export only audit records to a dedicated OTLP collector, or `audit.provider: noop` to disable audit output explicitly.
+If you need a dedicated audit route, configure the top-level `audit:` block. Set `audit: { builtin: stdout }` to keep audit logs on stdout even when telemetry uses a different builtin, `audit: { builtin: otlp }` to export only audit records to a dedicated OTLP collector, or `audit: { builtin: noop }` to disable audit output explicitly.
 
-With the default `audit.provider: inherit`, you can still split audit records downstream by filtering on `log.type=audit` in your collector. See [Config File](/reference/config-file) for the config surface and [Observability](/observability) for export options.
+With the default `audit: { builtin: inherit }`, you can still split audit records downstream by filtering on `log.type=audit` in your collector. See [Config File](/reference/config-file) for the config surface and [Observability](/observability) for export options.
 
 ## Metrics Notes
 
