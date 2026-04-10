@@ -11,14 +11,16 @@ import (
 )
 
 func TestSafeClientBlocksLoopbackServer(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
 
 	client := egress.SafeClient(&egress.PrivateNetworkPolicy{AllowPrivateNetworks: false}, 5*time.Second)
-	_, err := client.Get(srv.URL)
+	resp, err := client.Get(srv.URL) //nolint:bodyclose // closed below when non-nil
 	if err == nil {
+		resp.Body.Close()
 		t.Fatal("expected request to loopback server to be blocked")
 	}
 	if !errors.Is(err, egress.ErrEgressDenied) {
@@ -27,7 +29,8 @@ func TestSafeClientBlocksLoopbackServer(t *testing.T) {
 }
 
 func TestSafeClientAllowsLoopbackWhenPermitted(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
@@ -37,14 +40,15 @@ func TestSafeClientAllowsLoopbackWhenPermitted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected request to succeed with AllowPrivateNetworks=true, got: %v", err)
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected 200, got %d", resp.StatusCode)
 	}
 }
 
 func TestSafeClientNilPolicyAllowsLoopback(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
@@ -54,7 +58,7 @@ func TestSafeClientNilPolicyAllowsLoopback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected request to succeed with nil policy, got: %v", err)
 	}
-	resp.Body.Close()
+	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected 200, got %d", resp.StatusCode)
 	}

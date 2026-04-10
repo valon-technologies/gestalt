@@ -34,55 +34,55 @@ const (
 )
 
 type Server struct {
-	router             chi.Router
-	handler            http.Handler
-	auth               core.AuthProvider
-	auditSink          core.AuditSink
-	datastore          core.Datastore
-	providers          *registry.PluginMap[core.Provider]
-	resolver           *principal.Resolver
-	invoker            invocation.Invoker
-	defaultConnection  map[string]string
-	catalogConnection  map[string]string
-	connectionAuth     func() map[string]map[string]bootstrap.OAuthHandler
-	pluginDefs         map[string]config.PluginDef
-	noAuth             bool
-	anonymousPrincipal *principal.Principal
-	publicBaseURL      string
-	secureCookies      bool
-	encryptor          *cryptoutil.AESGCMEncryptor
-	sessionIssuer      []byte
-	stateCodec         *integrationOAuthStateCodec
-	apiTokenTTL        time.Duration
-	now                func() time.Time
-	readiness          ReadinessChecker
-	prometheusMetrics  http.Handler
-	mcpHandler         http.Handler
-	clientUI           http.Handler
+	router               chi.Router
+	handler              http.Handler
+	auth                 core.AuthProvider
+	auditSink            core.AuditSink
+	datastore            core.Datastore
+	providers            *registry.PluginMap[core.Provider]
+	resolver             *principal.Resolver
+	invoker              invocation.Invoker
+	defaultConnection    map[string]string
+	catalogConnection    map[string]string
+	connectionAuth       func() map[string]map[string]bootstrap.OAuthHandler
+	pluginDefs           map[string]config.PluginDef
+	noAuth               bool
+	anonymousPrincipal   *principal.Principal
+	publicBaseURL        string
+	secureCookies        bool
+	encryptor            *cryptoutil.AESGCMEncryptor
+	sessionIssuer        []byte
+	stateCodec           *integrationOAuthStateCodec
+	apiTokenTTL          time.Duration
+	now                  func() time.Time
+	readiness            ReadinessChecker
+	prometheusMetrics    http.Handler
+	mcpHandler           http.Handler
+	clientUI             http.Handler
 	adminUI              http.Handler
 	routeProfile         RouteProfile
 	privateNetworkPolicy *egress.PrivateNetworkPolicy
 }
 
 type Config struct {
-	Auth              core.AuthProvider
-	AuditSink         core.AuditSink
-	Datastore         core.Datastore
-	Providers         *registry.PluginMap[core.Provider]
-	Invoker           invocation.Invoker
-	DefaultConnection map[string]string
-	CatalogConnection map[string]string
-	ConnectionAuth    func() map[string]map[string]bootstrap.OAuthHandler
-	PluginDefs        map[string]config.PluginDef
-	PublicBaseURL     string
-	SecureCookies     bool
-	StateSecret       []byte
-	APITokenTTL       time.Duration
-	Now               func() time.Time
-	Readiness         ReadinessChecker
-	PrometheusMetrics http.Handler
-	MCPHandler        http.Handler
-	ClientUI          http.Handler
+	Auth                 core.AuthProvider
+	AuditSink            core.AuditSink
+	Datastore            core.Datastore
+	Providers            *registry.PluginMap[core.Provider]
+	Invoker              invocation.Invoker
+	DefaultConnection    map[string]string
+	CatalogConnection    map[string]string
+	ConnectionAuth       func() map[string]map[string]bootstrap.OAuthHandler
+	PluginDefs           map[string]config.PluginDef
+	PublicBaseURL        string
+	SecureCookies        bool
+	StateSecret          []byte
+	APITokenTTL          time.Duration
+	Now                  func() time.Time
+	Readiness            ReadinessChecker
+	PrometheusMetrics    http.Handler
+	MCPHandler           http.Handler
+	ClientUI             http.Handler
 	AdminUI              http.Handler
 	RouteProfile         RouteProfile
 	PrivateNetworkPolicy *egress.PrivateNetworkPolicy
@@ -119,30 +119,30 @@ func New(cfg Config) (*Server, error) {
 
 	router := chi.NewRouter()
 	s := &Server{
-		router:            router,
-		handler:           otelhttp.NewHandler(router, "gestaltd"),
-		auth:              cfg.Auth,
-		auditSink:         cfg.AuditSink,
-		datastore:         datastore,
-		providers:         cfg.Providers,
-		resolver:          resolver,
-		invoker:           cfg.Invoker,
-		defaultConnection: cfg.DefaultConnection,
-		catalogConnection: cfg.CatalogConnection,
-		connectionAuth:    cfg.ConnectionAuth,
-		pluginDefs:        cfg.PluginDefs,
-		noAuth:            noAuth,
-		publicBaseURL:     strings.TrimRight(cfg.PublicBaseURL, "/"),
-		secureCookies:     cfg.SecureCookies,
-		encryptor:         encryptor,
-		sessionIssuer:     cfg.StateSecret,
-		stateCodec:        stateCodec,
-		apiTokenTTL:       cfg.APITokenTTL,
-		now:               now,
-		readiness:         cfg.Readiness,
-		prometheusMetrics: cfg.PrometheusMetrics,
-		mcpHandler:        cfg.MCPHandler,
-		clientUI:          cfg.ClientUI,
+		router:               router,
+		handler:              otelhttp.NewHandler(router, "gestaltd"),
+		auth:                 cfg.Auth,
+		auditSink:            cfg.AuditSink,
+		datastore:            datastore,
+		providers:            cfg.Providers,
+		resolver:             resolver,
+		invoker:              cfg.Invoker,
+		defaultConnection:    cfg.DefaultConnection,
+		catalogConnection:    cfg.CatalogConnection,
+		connectionAuth:       cfg.ConnectionAuth,
+		pluginDefs:           cfg.PluginDefs,
+		noAuth:               noAuth,
+		publicBaseURL:        strings.TrimRight(cfg.PublicBaseURL, "/"),
+		secureCookies:        cfg.SecureCookies,
+		encryptor:            encryptor,
+		sessionIssuer:        cfg.StateSecret,
+		stateCodec:           stateCodec,
+		apiTokenTTL:          cfg.APITokenTTL,
+		now:                  now,
+		readiness:            cfg.Readiness,
+		prometheusMetrics:    cfg.PrometheusMetrics,
+		mcpHandler:           cfg.MCPHandler,
+		clientUI:             cfg.ClientUI,
 		adminUI:              cfg.AdminUI,
 		routeProfile:         cfg.RouteProfile,
 		privateNetworkPolicy: cfg.PrivateNetworkPolicy,

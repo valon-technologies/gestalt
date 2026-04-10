@@ -81,7 +81,12 @@ func SafeDialContext(policy *PrivateNetworkPolicy) func(ctx context.Context, net
 // the given policy before establishing connections. If policy is nil, private
 // networks are allowed (no filtering).
 func SafeTransport(policy *PrivateNetworkPolicy) *http.Transport {
-	t := http.DefaultTransport.(*http.Transport).Clone()
+	var t *http.Transport
+	if dt, ok := http.DefaultTransport.(*http.Transport); ok {
+		t = dt.Clone()
+	} else {
+		t = &http.Transport{}
+	}
 	if policy != nil && !policy.AllowPrivateNetworks {
 		t.DialContext = SafeDialContext(policy)
 	}

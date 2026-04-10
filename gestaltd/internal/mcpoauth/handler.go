@@ -99,6 +99,10 @@ func (h *Handler) ensure() (*oauth.UpstreamHandler, error) {
 		authMethod = oauth.ClientAuthBody
 	}
 
+	var upstreamOpts []oauth.Option
+	if h.cfg.HTTPClient != nil {
+		upstreamOpts = append(upstreamOpts, oauth.WithHTTPClient(h.cfg.HTTPClient))
+	}
 	upstream := oauth.NewUpstream(oauth.UpstreamConfig{
 		ClientID:         clientID,
 		ClientSecret:     clientSecret,
@@ -108,7 +112,7 @@ func (h *Handler) ensure() (*oauth.UpstreamHandler, error) {
 		ClientAuthMethod: authMethod,
 		PKCE:             md.SupportsPKCE(),
 		DefaultScopes:    md.ScopesSupported,
-	})
+	}, upstreamOpts...)
 
 	h.upstream = upstream
 	h.metadata = md

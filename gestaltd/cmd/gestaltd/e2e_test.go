@@ -1828,6 +1828,8 @@ func authDatastoreConfigYAML(t *testing.T, dir, authName, datastoreName, dbPath 
     config:
       path: %s
 datastore: %s
+egress:
+  allowPrivateNetworks: true
 ui:
   provider: none
 `, authBlock, datastoreName, dbPath, datastoreName)
