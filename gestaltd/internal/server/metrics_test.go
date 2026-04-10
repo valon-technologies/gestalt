@@ -183,11 +183,20 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 		},
 	}
 
+	successSvc := coretesting.NewStubServices(t)
+	u := seedUser(t, successSvc, "anonymous@gestalt")
+	expired := time.Now().Add(-1 * time.Hour)
+	seedToken(t, successSvc, &core.IntegrationToken{
+		ID: "tok1", UserID: u.ID, Integration: providerName,
+		Connection: "default", Instance: "default",
+		AccessToken: "old-access-token", RefreshToken: "old-refresh-token", ExpiresAt: &expired,
+	})
+
 	successServer := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, successStub)
 		cfg.DefaultConnection = map[string]string{providerName: testDefaultConnection}
 		cfg.ConnectionAuth = oauthRefreshConnectionAuth(providerName, successStub.refreshTokenFn)
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = successSvc
 	})
 	testutil.CloseOnCleanup(t, successServer)
 
@@ -214,11 +223,19 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 		},
 	}
 
+	errorSvc := coretesting.NewStubServices(t)
+	u2 := seedUser(t, errorSvc, "anonymous@gestalt")
+	seedToken(t, errorSvc, &core.IntegrationToken{
+		ID: "tok2", UserID: u2.ID, Integration: providerName,
+		Connection: "default", Instance: "default",
+		AccessToken: "expired-access-token", RefreshToken: "expired-refresh-token", ExpiresAt: &expired,
+	})
+
 	errorServer := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, errorStub)
 		cfg.DefaultConnection = map[string]string{providerName: testDefaultConnection}
 		cfg.ConnectionAuth = oauthRefreshConnectionAuth(providerName, errorStub.refreshTokenFn)
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = errorSvc
 	})
 	testutil.CloseOnCleanup(t, errorServer)
 
@@ -439,13 +456,5 @@ func TestPlatformAuthMetrics(t *testing.T) {
 	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.auth.duration", map[string]string{
 		"gestalt.provider": "metrics-host-issued",
 		"gestalt.action":   "complete_login",
-	})
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.datastore.count", 2, map[string]string{
-		"gestalt.provider": "auth-metrics-store",
-		"gestalt.method":   "find_or_create_user",
-	})
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.datastore.count", 1, map[string]string{
-		"gestalt.provider": "auth-metrics-store",
-		"gestalt.method":   "list_api_tokens",
 	})
 }

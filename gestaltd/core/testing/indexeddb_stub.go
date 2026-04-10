@@ -10,6 +10,7 @@ import (
 type StubIndexedDB struct {
 	mu     sync.RWMutex
 	stores map[string]*stubObjectStore
+	Err    error
 }
 
 func (s *StubIndexedDB) ObjectStore(name string) indexeddb.ObjectStore {
@@ -21,7 +22,7 @@ func (s *StubIndexedDB) ObjectStore(name string) indexeddb.ObjectStore {
 	if st, ok := s.stores[name]; ok {
 		return st
 	}
-	st := &stubObjectStore{records: make(map[string]indexeddb.Record)}
+	st := &stubObjectStore{db: s, records: make(map[string]indexeddb.Record)}
 	s.stores[name] = st
 	return st
 }
@@ -35,7 +36,7 @@ func (s *StubIndexedDB) CreateObjectStore(_ context.Context, name string, schema
 	if existing, ok := s.stores[name]; ok {
 		existing.schema = schema
 	} else {
-		s.stores[name] = &stubObjectStore{records: make(map[string]indexeddb.Record), schema: schema}
+		s.stores[name] = &stubObjectStore{db: s, records: make(map[string]indexeddb.Record), schema: schema}
 	}
 	return nil
 }
@@ -47,16 +48,20 @@ func (s *StubIndexedDB) DeleteObjectStore(_ context.Context, name string) error 
 	return nil
 }
 
-func (s *StubIndexedDB) Ping(context.Context) error { return nil }
+func (s *StubIndexedDB) Ping(context.Context) error { return s.Err }
 func (s *StubIndexedDB) Close() error               { return nil }
 
 type stubObjectStore struct {
+	db      *StubIndexedDB
 	mu      sync.RWMutex
 	records map[string]indexeddb.Record
 	schema  indexeddb.ObjectStoreSchema
 }
 
 func (o *stubObjectStore) Get(_ context.Context, id string) (indexeddb.Record, error) {
+	if o.db.Err != nil {
+		return nil, o.db.Err
+	}
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 	r, ok := o.records[id]
@@ -67,6 +72,9 @@ func (o *stubObjectStore) Get(_ context.Context, id string) (indexeddb.Record, e
 }
 
 func (o *stubObjectStore) GetKey(_ context.Context, id string) (string, error) {
+	if o.db.Err != nil {
+		return "", o.db.Err
+	}
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 	if _, ok := o.records[id]; !ok {
@@ -76,6 +84,9 @@ func (o *stubObjectStore) GetKey(_ context.Context, id string) (string, error) {
 }
 
 func (o *stubObjectStore) Add(_ context.Context, record indexeddb.Record) error {
+	if o.db.Err != nil {
+		return o.db.Err
+	}
 	id, _ := record["id"].(string)
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -87,6 +98,9 @@ func (o *stubObjectStore) Add(_ context.Context, record indexeddb.Record) error 
 }
 
 func (o *stubObjectStore) Put(_ context.Context, record indexeddb.Record) error {
+	if o.db.Err != nil {
+		return o.db.Err
+	}
 	id, _ := record["id"].(string)
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -95,13 +109,19 @@ func (o *stubObjectStore) Put(_ context.Context, record indexeddb.Record) error 
 }
 
 func (o *stubObjectStore) Delete(_ context.Context, id string) error {
+	if o.db.Err != nil {
+		return o.db.Err
+	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	delete(o.records, id)
 	return nil
 }
 
-func (o *stubObjectStore) Clear(context.Context) error {
+func (o *stubObjectStore) Clear(_ context.Context) error {
+	if o.db.Err != nil {
+		return o.db.Err
+	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	o.records = make(map[string]indexeddb.Record)
@@ -109,6 +129,9 @@ func (o *stubObjectStore) Clear(context.Context) error {
 }
 
 func (o *stubObjectStore) GetAll(_ context.Context, _ *indexeddb.KeyRange) ([]indexeddb.Record, error) {
+	if o.db.Err != nil {
+		return nil, o.db.Err
+	}
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 	out := make([]indexeddb.Record, 0, len(o.records))
@@ -119,6 +142,9 @@ func (o *stubObjectStore) GetAll(_ context.Context, _ *indexeddb.KeyRange) ([]in
 }
 
 func (o *stubObjectStore) GetAllKeys(_ context.Context, _ *indexeddb.KeyRange) ([]string, error) {
+	if o.db.Err != nil {
+		return nil, o.db.Err
+	}
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 	out := make([]string, 0, len(o.records))
@@ -129,12 +155,18 @@ func (o *stubObjectStore) GetAllKeys(_ context.Context, _ *indexeddb.KeyRange) (
 }
 
 func (o *stubObjectStore) Count(_ context.Context, _ *indexeddb.KeyRange) (int64, error) {
+	if o.db.Err != nil {
+		return 0, o.db.Err
+	}
 	o.mu.RLock()
 	defer o.mu.RUnlock()
 	return int64(len(o.records)), nil
 }
 
 func (o *stubObjectStore) DeleteRange(_ context.Context, _ indexeddb.KeyRange) (int64, error) {
+	if o.db.Err != nil {
+		return 0, o.db.Err
+	}
 	return 0, nil
 }
 
@@ -175,6 +207,9 @@ func (idx *stubIndex) matches(record indexeddb.Record, values []any) bool {
 }
 
 func (idx *stubIndex) Get(ctx context.Context, values ...any) (indexeddb.Record, error) {
+	if idx.store.db.Err != nil {
+		return nil, idx.store.db.Err
+	}
 	records, err := idx.GetAll(ctx, nil, values...)
 	if err != nil {
 		return nil, err
@@ -186,6 +221,9 @@ func (idx *stubIndex) Get(ctx context.Context, values ...any) (indexeddb.Record,
 }
 
 func (idx *stubIndex) GetKey(ctx context.Context, values ...any) (string, error) {
+	if idx.store.db.Err != nil {
+		return "", idx.store.db.Err
+	}
 	rec, err := idx.Get(ctx, values...)
 	if err != nil {
 		return "", err
@@ -195,6 +233,9 @@ func (idx *stubIndex) GetKey(ctx context.Context, values ...any) (string, error)
 }
 
 func (idx *stubIndex) GetAll(_ context.Context, _ *indexeddb.KeyRange, values ...any) ([]indexeddb.Record, error) {
+	if idx.store.db.Err != nil {
+		return nil, idx.store.db.Err
+	}
 	idx.store.mu.RLock()
 	defer idx.store.mu.RUnlock()
 	var out []indexeddb.Record
@@ -207,6 +248,9 @@ func (idx *stubIndex) GetAll(_ context.Context, _ *indexeddb.KeyRange, values ..
 }
 
 func (idx *stubIndex) GetAllKeys(ctx context.Context, r *indexeddb.KeyRange, values ...any) ([]string, error) {
+	if idx.store.db.Err != nil {
+		return nil, idx.store.db.Err
+	}
 	records, err := idx.GetAll(ctx, r, values...)
 	if err != nil {
 		return nil, err
@@ -219,6 +263,9 @@ func (idx *stubIndex) GetAllKeys(ctx context.Context, r *indexeddb.KeyRange, val
 }
 
 func (idx *stubIndex) Count(ctx context.Context, r *indexeddb.KeyRange, values ...any) (int64, error) {
+	if idx.store.db.Err != nil {
+		return 0, idx.store.db.Err
+	}
 	records, err := idx.GetAll(ctx, r, values...)
 	if err != nil {
 		return 0, err
@@ -227,6 +274,9 @@ func (idx *stubIndex) Count(ctx context.Context, r *indexeddb.KeyRange, values .
 }
 
 func (idx *stubIndex) Delete(_ context.Context, values ...any) (int64, error) {
+	if idx.store.db.Err != nil {
+		return 0, idx.store.db.Err
+	}
 	idx.store.mu.Lock()
 	defer idx.store.mu.Unlock()
 	var toDelete []string

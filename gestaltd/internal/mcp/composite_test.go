@@ -94,7 +94,7 @@ func TestComposite_MCPPassthroughRouting(t *testing.T) {
 	}
 
 	tool := srv.GetTool("notion_search")
-	ctx := ctxWithPrincipal()
+	ctx := ctxWithPrincipal("stub-user-id")
 	req := mcpgo.CallToolRequest{}
 	req.Params.Name = "notion_search"
 	req.Params.Arguments = map[string]any{"query": "hello"}
@@ -155,7 +155,7 @@ func TestComposite_MCPFromAPIExposesBothToolSets(t *testing.T) {
 
 	comp := composite.New("notion", apiProv, mcpUp)
 	providers := testutil.NewProviderRegistry(t, comp)
-	ds := stubServicesWithToken(t)
+	ds, userID := stubServicesWithToken(t, "notion")
 	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
@@ -171,7 +171,7 @@ func TestComposite_MCPFromAPIExposesBothToolSets(t *testing.T) {
 		t.Fatal("expected notion_list_pages from API (mcpFromAPI=true)")
 	}
 
-	ctx := ctxWithPrincipal()
+	ctx := ctxWithPrincipal(userID)
 
 	mcpTool := srv.GetTool("notion_search")
 	req := mcpgo.CallToolRequest{}

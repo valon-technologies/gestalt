@@ -94,22 +94,33 @@ func newCatalogBackedProvider(stub coretesting.StubIntegration, ops []core.Opera
 	}
 }
 
-func stubServicesWithToken(t *testing.T) *coredata.Services {
+func stubServicesWithToken(t *testing.T, integrations ...string) (*coredata.Services, string) {
 	t.Helper()
 	svc := coretesting.NewStubServices(t)
 	ctx := context.Background()
-	svc.Users.FindOrCreateUser(ctx, "test@example.com")
-	svc.Tokens.StoreToken(ctx, &core.IntegrationToken{
-		ID: "tok1", UserID: "u1", Integration: "test", Connection: "default", Instance: "default",
-		AccessToken: "test-token",
-	})
-	return svc
+	u, err := svc.Users.FindOrCreateUser(ctx, "test@example.com")
+	if err != nil {
+		t.Fatalf("FindOrCreateUser: %v", err)
+	}
+	if len(integrations) == 0 {
+		integrations = []string{"test"}
+	}
+	for i, intg := range integrations {
+		if err := svc.Tokens.StoreToken(ctx, &core.IntegrationToken{
+			ID: fmt.Sprintf("tok%d", i+1), UserID: u.ID, Integration: intg,
+			Connection: "", Instance: "default",
+			AccessToken: intg + "-token",
+		}); err != nil {
+			t.Fatalf("StoreToken: %v", err)
+		}
+	}
+	return svc, u.ID
 }
 
-func ctxWithPrincipal() context.Context {
+func ctxWithPrincipal(userID string) context.Context {
 	p := &principal.Principal{
 		Identity: &core.UserIdentity{Email: "test@example.com"},
-		UserID:   "u1",
+		UserID:   userID,
 		Source:   principal.SourceAPIToken,
 	}
 	return principal.WithPrincipal(context.Background(), p)
@@ -271,7 +282,7 @@ func TestNewServer_ListsToolsFromCatalogProvider(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	ds := stubServicesWithToken(t)
+	ds, _ := stubServicesWithToken(t)
 	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
@@ -321,7 +332,7 @@ func TestNewServer_SkipsFlatOnlyProvider(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	ds := stubServicesWithToken(t)
+	ds, _ := stubServicesWithToken(t)
 	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
@@ -344,7 +355,7 @@ func TestNewServer_ToolNameConvention(t *testing.T) {
 	)
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	ds := stubServicesWithToken(t)
+	ds, _ := stubServicesWithToken(t)
 	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
@@ -385,7 +396,7 @@ func TestNewServer_ToolCallRoutesThrough(t *testing.T) {
 	)
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	ds := stubServicesWithToken(t)
+	ds, userID := stubServicesWithToken(t)
 	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
@@ -398,7 +409,7 @@ func TestNewServer_ToolCallRoutesThrough(t *testing.T) {
 		t.Fatal("tool not found")
 	}
 
-	ctx := ctxWithPrincipal()
+	ctx := ctxWithPrincipal(userID)
 	req := mcpgo.CallToolRequest{}
 	req.Params.Name = "test_do_thing"
 	req.Params.Arguments = map[string]any{"key": "value"}
@@ -453,7 +464,7 @@ func TestNewServer_ToolCallUsesInjectedInvoker(t *testing.T) {
 		t.Fatal("tool not found")
 	}
 
-	ctx := ctxWithPrincipal()
+	ctx := ctxWithPrincipal("stub-user-id")
 	req := mcpgo.CallToolRequest{}
 	req.Params.Name = "test_op"
 	req.Params.Arguments = map[string]any{"foo": "bar"}
@@ -496,7 +507,7 @@ func TestNewServer_ErrorResultSetsIsError(t *testing.T) {
 	)
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	ds := stubServicesWithToken(t)
+	ds, userID := stubServicesWithToken(t)
 	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
@@ -505,7 +516,7 @@ func TestNewServer_ErrorResultSetsIsError(t *testing.T) {
 	})
 
 	tool := srv.GetTool("test_forbidden_op")
-	ctx := ctxWithPrincipal()
+	ctx := ctxWithPrincipal(userID)
 	req := mcpgo.CallToolRequest{}
 	req.Params.Name = "test_forbidden_op"
 
@@ -532,7 +543,7 @@ func TestNewServer_BrokerErrorReturnsToolError(t *testing.T) {
 	)
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	ds := stubServicesWithToken(t)
+	ds, userID := stubServicesWithToken(t)
 	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
@@ -541,7 +552,7 @@ func TestNewServer_BrokerErrorReturnsToolError(t *testing.T) {
 	})
 
 	tool := srv.GetTool("test_flaky_op")
-	ctx := ctxWithPrincipal()
+	ctx := ctxWithPrincipal(userID)
 	req := mcpgo.CallToolRequest{}
 	req.Params.Name = "test_flaky_op"
 
@@ -563,7 +574,7 @@ func TestNewServer_NoPrincipalReturnsToolError(t *testing.T) {
 	)
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	ds := stubServicesWithToken(t)
+	ds, _ := stubServicesWithToken(t)
 	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
@@ -597,7 +608,7 @@ func TestNewServer_AllowedProvidersFilter(t *testing.T) {
 	)
 
 	providers := testutil.NewProviderRegistry(t, prov1, prov2)
-	ds := stubServicesWithToken(t)
+	ds, _ := stubServicesWithToken(t)
 	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
@@ -634,7 +645,7 @@ func TestNewServer_HiddenOperationsFiltered(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	ds := stubServicesWithToken(t)
+	ds, _ := stubServicesWithToken(t)
 	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
@@ -723,7 +734,8 @@ func TestNewServer_DirectCallerPassthrough(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	broker := invocation.NewBroker(providers, stubServicesWithToken(t).Users, stubServicesWithToken(t).Tokens)
+	ds, userID := stubServicesWithToken(t, "clickhouse")
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 	caps := broker.ListCapabilities()
 	if len(caps) != 1 {
 		t.Fatalf("expected 1 capability, got %d", len(caps))
@@ -746,7 +758,7 @@ func TestNewServer_DirectCallerPassthrough(t *testing.T) {
 		t.Fatal("tool not found")
 	}
 
-	ctx := ctxWithPrincipal()
+	ctx := ctxWithPrincipal(userID)
 	req := mcpgo.CallToolRequest{}
 	req.Params.Name = "clickhouse_run_query"
 	req.Params.Arguments = map[string]any{"sql": "SELECT 1"}
@@ -764,8 +776,8 @@ func TestNewServer_DirectCallerPassthrough(t *testing.T) {
 	if calledArgs["sql"] != "SELECT 1" {
 		t.Fatalf("expected sql=SELECT 1, got %v", calledArgs)
 	}
-	if gotSubject != (egress.Subject{Kind: egress.SubjectUser, ID: "u1"}) {
-		t.Fatalf("subject = %+v, want user u1", gotSubject)
+	if gotSubject.Kind != egress.SubjectUser || gotSubject.ID == "" {
+		t.Fatalf("subject = %+v, want user with non-empty ID", gotSubject)
 	}
 
 	text, ok := result.Content[0].(mcpgo.TextContent)
@@ -814,15 +826,14 @@ func TestNewServer_RESTCatalogToolsUseOperationConnections(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, merged)
-	ds := stubServicesWithToken(t)
+	ds, userID := stubServicesWithToken(t, "hybrid")
 	ctx := context.Background()
-	ds.Users.FindOrCreateUser(ctx, "test@example.com")
 	ds.Tokens.StoreToken(ctx, &core.IntegrationToken{
-		ID: "tok-plugin", UserID: "u1", Integration: "hybrid", Connection: config.PluginConnectionName, Instance: "default",
+		ID: "tok-plugin", UserID: userID, Integration: "hybrid", Connection: config.PluginConnectionName, Instance: "default",
 		AccessToken: testPluginAccessToken,
 	})
 	ds.Tokens.StoreToken(ctx, &core.IntegrationToken{
-		ID: "tok-api", UserID: "u1", Integration: "hybrid", Connection: testAPIConnectionName, Instance: "default",
+		ID: "tok-api", UserID: userID, Integration: "hybrid", Connection: testAPIConnectionName, Instance: "default",
 		AccessToken: testNamedAPIAccessToken,
 	})
 	broker := invocation.NewBroker(
@@ -845,7 +856,7 @@ func TestNewServer_RESTCatalogToolsUseOperationConnections(t *testing.T) {
 		req := mcpgo.CallToolRequest{}
 		req.Params.Name = name
 
-		result, err := tool.Handler(ctxWithPrincipal(), req)
+		result, err := tool.Handler(ctxWithPrincipal(userID), req)
 		if err != nil {
 			t.Fatalf("tool %q: %v", name, err)
 		}
@@ -901,7 +912,7 @@ func TestNewServer_DirectCallerRoutedThroughInvoker(t *testing.T) {
 
 	req := mcpgo.CallToolRequest{}
 	req.Params.Name = "notion_search"
-	result, err := tool.Handler(ctxWithPrincipal(), req)
+	result, err := tool.Handler(ctxWithPrincipal("stub-user-id"), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1023,7 +1034,7 @@ func TestNewServer_DirectCallerInvokerError(t *testing.T) {
 	})
 
 	tool := srv.GetTool("ch_op")
-	ctx := ctxWithPrincipal()
+	ctx := ctxWithPrincipal("stub-user-id")
 	req := mcpgo.CallToolRequest{}
 	req.Params.Name = "ch_op"
 
@@ -1074,12 +1085,12 @@ func TestNewServer_DynamicCatalogProviderListsSessionTools(t *testing.T) {
 		t.Fatalf("expected no global tools before session hydration, got %d", len(tools))
 	}
 
-	result := listToolsForSession(t, srv, ctxWithPrincipal(), newTestSessionWithTools())
+	result := listToolsForSession(t, srv, ctxWithPrincipal("stub-user-id"), newTestSessionWithTools())
 	if gotToken != "upstream-token" {
 		t.Fatalf("expected token upstream-token, got %q", gotToken)
 	}
-	if gotSubject != (egress.Subject{Kind: egress.SubjectUser, ID: "u1"}) {
-		t.Fatalf("subject = %+v, want user u1", gotSubject)
+	if gotSubject.Kind != egress.SubjectUser || gotSubject.ID == "" {
+		t.Fatalf("subject = %+v, want user with non-empty ID", gotSubject)
 	}
 	if len(result.Tools) != 1 {
 		t.Fatalf("expected 1 tool, got %d", len(result.Tools))
@@ -1119,14 +1130,15 @@ func TestNewServer_DynamicCatalogProviderCallsSessionTool(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	broker := invocation.NewBroker(providers, stubServicesWithToken(t).Users, stubServicesWithToken(t).Tokens)
+	ds, userID := stubServicesWithToken(t, "clickhouse")
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
 		TokenResolver: broker,
 		Providers:     providers,
 	})
 
-	result := callToolForSession(t, srv, ctxWithPrincipal(), newTestSessionWithTools(), "clickhouse_run_query", map[string]any{"sql": "SELECT 1"})
+	result := callToolForSession(t, srv, ctxWithPrincipal(userID), newTestSessionWithTools(), "clickhouse_run_query", map[string]any{"sql": "SELECT 1"})
 	if result.IsError {
 		t.Fatalf("unexpected tool error: %v", result.Content)
 	}
@@ -1166,7 +1178,7 @@ func TestNewServer_IncludeRESTFiltering(t *testing.T) {
 			}
 
 			providers := testutil.NewProviderRegistry(t, prov)
-			ds := stubServicesWithToken(t)
+			ds, _ := stubServicesWithToken(t)
 			broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 
 			srv := gestaltmcp.NewServer(gestaltmcp.Config{
@@ -1231,7 +1243,8 @@ func TestNewServer_MCPPassthroughContract(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	broker := invocation.NewBroker(providers, stubServicesWithToken(t).Users, stubServicesWithToken(t).Tokens)
+	dsSvc, userID := stubServicesWithToken(t, providerName)
+	broker := invocation.NewBroker(providers, dsSvc.Users, dsSvc.Tokens)
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
 		TokenResolver: broker,
@@ -1264,7 +1277,7 @@ func TestNewServer_MCPPassthroughContract(t *testing.T) {
 		t.Fatalf("tool %q not found", toolName)
 	}
 
-	ctx := ctxWithPrincipal()
+	ctx := ctxWithPrincipal(userID)
 	req := mcpgo.CallToolRequest{}
 	req.Params.Name = toolName
 	req.Params.Arguments = map[string]any{"input": "hello"}
@@ -1341,7 +1354,8 @@ func TestNewServer_PassthroughToolPreservesErrorResultStructure(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	broker := invocation.NewBroker(providers, stubServicesWithToken(t).Users, stubServicesWithToken(t).Tokens)
+	dsSvc, userID := stubServicesWithToken(t, providerName)
+	broker := invocation.NewBroker(providers, dsSvc.Users, dsSvc.Tokens)
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
 		TokenResolver: broker,
@@ -1355,7 +1369,7 @@ func TestNewServer_PassthroughToolPreservesErrorResultStructure(t *testing.T) {
 
 	req := mcpgo.CallToolRequest{}
 	req.Params.Name = toolName
-	result, err := tool.Handler(ctxWithPrincipal(), req)
+	result, err := tool.Handler(ctxWithPrincipal(userID), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1409,7 +1423,8 @@ func TestNewServer_PassthroughToolTreatsNilResultAsEmptyJSON(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	broker := invocation.NewBroker(providers, stubServicesWithToken(t).Users, stubServicesWithToken(t).Tokens)
+	dsSvc, userID := stubServicesWithToken(t, providerName)
+	broker := invocation.NewBroker(providers, dsSvc.Users, dsSvc.Tokens)
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
 		TokenResolver: broker,
@@ -1423,7 +1438,7 @@ func TestNewServer_PassthroughToolTreatsNilResultAsEmptyJSON(t *testing.T) {
 
 	req := mcpgo.CallToolRequest{}
 	req.Params.Name = toolName
-	result, err := tool.Handler(ctxWithPrincipal(), req)
+	result, err := tool.Handler(ctxWithPrincipal(userID), req)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

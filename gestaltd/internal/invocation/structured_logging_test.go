@@ -35,13 +35,25 @@ func TestBrokerMalformedMetadataJSON_StructuredLog(t *testing.T) { //nolint:para
 	}
 
 	svc := coretesting.NewStubServices(t)
+	ctx := context.Background()
+	u, err := svc.Users.FindOrCreateUser(ctx, "test@example.com")
+	if err != nil {
+		t.Fatalf("FindOrCreateUser: %v", err)
+	}
+	if err := svc.Tokens.StoreToken(ctx, &core.IntegrationToken{
+		ID: "tok1", UserID: u.ID, Integration: "myservice",
+		Connection: "", Instance: "default", AccessToken: "test-token",
+		MetadataJSON: "not-valid-json{",
+	}); err != nil {
+		t.Fatalf("StoreToken: %v", err)
+	}
 
 	broker := invocation.NewBroker(testutil.NewProviderRegistry(t, prov), svc.Users, svc.Tokens)
 	p := &principal.Principal{
 		Identity: &core.UserIdentity{Email: "test@example.com"},
 	}
 
-	result, err := broker.Invoke(context.Background(), p, "myservice", "", "do_thing", nil)
+	result, err := broker.Invoke(ctx, p, "myservice", "", "do_thing", nil)
 	if err != nil {
 		t.Fatalf("Invoke: %v", err)
 	}
