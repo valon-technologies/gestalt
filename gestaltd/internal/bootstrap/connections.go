@@ -52,6 +52,7 @@ type pluginConnectionPlan struct {
 	namedConnections  map[string]config.ConnectionDef
 	surfaces          map[config.SpecSurface]resolvedSpecSurface
 	defaultConnection string
+	apiSurface        string
 }
 
 type resolvedSpecSurface struct {
@@ -95,6 +96,10 @@ func buildPluginConnectionPlan(plugin *config.ProviderDef, manifestPlugin *plugi
 		plan.surfaces[surface] = resolved
 	}
 
+	if manifestPlugin != nil {
+		plan.apiSurface = manifestPlugin.APISurface
+	}
+
 	defaultConnection := resolveDefaultConnectionName(plugin, manifestPlugin)
 	if defaultConnection != "" {
 		if _, err := plan.connectionDef(defaultConnection); err != nil {
@@ -107,6 +112,9 @@ func buildPluginConnectionPlan(plugin *config.ProviderDef, manifestPlugin *plugi
 }
 
 func (plan pluginConnectionPlan) configuredAPISurface() (resolvedSpecSurface, bool) {
+	if plan.apiSurface != "" {
+		return plan.resolvedSurface(config.SpecSurface(plan.apiSurface))
+	}
 	for _, surface := range []config.SpecSurface{config.SpecSurfaceOpenAPI, config.SpecSurfaceGraphQL} {
 		if resolved, ok := plan.resolvedSurface(surface); ok {
 			return resolved, true

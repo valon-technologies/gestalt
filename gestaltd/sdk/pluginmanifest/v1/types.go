@@ -65,6 +65,7 @@ type Plugin struct {
 	Discovery         *ProviderDiscovery                 `json:"discovery,omitempty" yaml:"discovery,omitempty"`
 	ConnectionParams  map[string]ProviderConnectionParam `json:"connectionParams,omitempty" yaml:"connectionParams,omitempty"`
 
+	APISurface        string                                `json:"apiSurface,omitempty" yaml:"apiSurface,omitempty"`
 	Surfaces          *PluginSurfaces                       `json:"surfaces,omitempty" yaml:"surfaces,omitempty"`
 	AllowedOperations map[string]*ManifestOperationOverride `json:"allowedOperations,omitempty" yaml:"allowedOperations,omitempty"`
 	DefaultConnection string                                `json:"defaultConnection,omitempty" yaml:"defaultConnection,omitempty"`
@@ -113,6 +114,24 @@ func (p *Plugin) IsSpecLoaded() bool {
 
 func (p *Plugin) IsManifestBacked() bool {
 	return p != nil && (p.IsDeclarative() || p.IsSpecLoaded())
+}
+
+func (p *Plugin) HasSurface(surface string) bool {
+	if p == nil || p.Surfaces == nil {
+		return false
+	}
+	switch surface {
+	case "openapi":
+		return p.Surfaces.OpenAPI != nil
+	case "graphql":
+		return p.Surfaces.GraphQL != nil
+	case "mcp":
+		return p.Surfaces.MCP != nil
+	case "rest":
+		return p.Surfaces.REST != nil
+	default:
+		return false
+	}
 }
 
 func (p *Plugin) OpenAPIDocument() string {

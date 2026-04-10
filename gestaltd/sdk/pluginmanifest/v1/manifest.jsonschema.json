@@ -159,6 +159,11 @@
             "$ref": "#/$defs/manifestOperationOverride"
           }
         },
+        "apiSurface": {
+          "type": "string",
+          "enum": ["openapi", "graphql", "mcp"],
+          "description": "Explicitly sets which surface is primary for API operations"
+        },
         "surfaces": {
           "$ref": "#/$defs/surfaces"
         },

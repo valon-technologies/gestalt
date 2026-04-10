@@ -389,6 +389,15 @@ func validateManifestBackedIntegration(name string, plugin *ProviderDef) error {
 		if err := validateManifestBackedConnectionDefaults(name, plugin, effectiveProvider); err != nil {
 			return err
 		}
+		if effectiveProvider.APISurface != "" {
+			validSurfaces := []string{"openapi", "graphql", "mcp"}
+			if !slices.Contains(validSurfaces, effectiveProvider.APISurface) {
+				return fmt.Errorf("config validation: integration %q plugin.apiSurface %q is not valid (must be one of: %s)", name, effectiveProvider.APISurface, strings.Join(validSurfaces, ", "))
+			}
+			if !effectiveProvider.HasSurface(effectiveProvider.APISurface) {
+				return fmt.Errorf("config validation: integration %q plugin.apiSurface %q references an undeclared surface", name, effectiveProvider.APISurface)
+			}
+		}
 	}
 	if err := validateExecutableConnectionAuthSupport(name, plugin, effectiveProvider); err != nil {
 		return err
