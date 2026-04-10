@@ -110,8 +110,7 @@ impl AuthProvider for TestAuthProvider {
 async fn serves_auth_provider_and_runtime_over_unix_socket() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("gestalt-rust-auth.sock");
-    let _socket_guard =
-        helpers::EnvGuard::set(gestalt::ENV_PROVIDER_SOCKET, socket.as_os_str());
+    let _socket_guard = helpers::EnvGuard::set(gestalt::ENV_PROVIDER_SOCKET, socket.as_os_str());
 
     let provider = Arc::new(TestAuthProvider::default());
     let serve_provider = Arc::clone(&provider);

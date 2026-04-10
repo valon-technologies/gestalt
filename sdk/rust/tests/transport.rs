@@ -7,9 +7,7 @@ use gestalt::proto::v1::integration_provider_client::IntegrationProviderClient;
 use gestalt::proto::v1::{
     ExecuteRequest, GetSessionCatalogRequest, PostConnectRequest, StartProviderRequest,
 };
-use gestalt::{
-    Catalog, CatalogOperation, Operation, Provider, Request, Response, Router, ok,
-};
+use gestalt::{Catalog, CatalogOperation, Operation, Provider, Request, Response, Router, ok};
 use hyper_util::rt::tokio::TokioIo;
 use tokio::net::UnixStream;
 use tonic::Code;
@@ -42,10 +40,7 @@ impl Provider for TestProvider {
         true
     }
 
-    async fn catalog_for_request(
-        &self,
-        request: &Request,
-    ) -> gestalt::Result<Option<Catalog>> {
+    async fn catalog_for_request(&self, request: &Request) -> gestalt::Result<Option<Catalog>> {
         Ok(Some(Catalog {
             name: "session-example".to_string(),
             display_name: request
@@ -87,8 +82,7 @@ struct Output {
 async fn serves_provider_requests_over_unix_socket() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("gestalt-rust-sdk.sock");
-    let _socket_guard =
-        helpers::EnvGuard::set(gestalt::ENV_PROVIDER_SOCKET, socket.as_os_str());
+    let _socket_guard = helpers::EnvGuard::set(gestalt::ENV_PROVIDER_SOCKET, socket.as_os_str());
 
     let router = Router::new()
         .register(
@@ -152,10 +146,7 @@ async fn serves_provider_requests_over_unix_socket() {
         .await
         .expect("start provider")
         .into_inner();
-    assert_eq!(
-        started.protocol_version,
-        gestalt::CURRENT_PROTOCOL_VERSION
-    );
+    assert_eq!(started.protocol_version, gestalt::CURRENT_PROTOCOL_VERSION);
 
     let response = client
         .execute(ExecuteRequest {
