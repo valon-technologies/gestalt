@@ -880,6 +880,20 @@ func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *con
 			}
 			manifestPath := resolveLockPath(paths.artifactsDir, lock.UI.Manifest)
 			assetRootPath := resolveLockPath(paths.artifactsDir, lock.UI.AssetRoot)
+			needMaterialize := false
+			if _, err := os.Stat(manifestPath); err != nil {
+				needMaterialize = true
+			}
+			if !needMaterialize {
+				if _, err := os.Stat(assetRootPath); err != nil {
+					needMaterialize = true
+				}
+			}
+			if needMaterialize {
+				if err := l.materializeLockedUIProvider(context.Background(), paths, cfg.UI.Provider, *lock.UI, locked); err != nil {
+					return err
+				}
+			}
 			if _, err := os.Stat(manifestPath); err != nil {
 				return fmt.Errorf("prepared manifest for ui provider not found at %s", manifestPath)
 			}
@@ -1286,6 +1300,55 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 	}
 	if installed.Manifest.Version != entry.Version {
 		return fmt.Errorf("locked source plugin manifest version mismatch for %s %q: got %q, want %q", kind, name, installed.Manifest.Version, entry.Version)
+	}
+	return nil
+}
+
+func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths initPaths, plugin *config.ProviderDef, entry LockUIEntry, locked bool) error {
+	platform := pluginpkg.CurrentPlatformString()
+	archive, ok := resolveArchiveForPlatform(entry, platform)
+	if !ok || archive.URL == "" {
+		return fmt.Errorf("no archive for platform %s for ui provider; run `gestaltd init --config %s`", platform, paths.configPath)
+	}
+	if locked && archive.SHA256 == "" {
+		return fmt.Errorf("no verified hash for platform %s for ui provider; run `gestaltd init --platform %s`", platform, platform)
+	}
+
+	src, parseErr := sourceForPlugin(plugin)
+	if parseErr != nil {
+		src, parseErr = pluginsource.Parse(entry.Source)
+	}
+	var (
+		download *pluginpkg.DownloadResult
+		err      error
+	)
+	if parseErr == nil && src.Host == pluginsource.HostGitHub {
+		download, err = ghresolver.DownloadResolvedAsset(ctx, http.DefaultClient, archive.URL, src.Token)
+	} else {
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, archive.URL, nil)
+		if reqErr != nil {
+			return fmt.Errorf("create locked source request for ui provider: %w", reqErr)
+		}
+		download, err = pluginpkg.DownloadRequest(http.DefaultClient, req)
+	}
+	if err != nil {
+		return fmt.Errorf("download locked source for ui provider: %w", err)
+	}
+	defer download.Cleanup()
+	if archive.SHA256 != "" && download.SHA256Hex != archive.SHA256 {
+		return fmt.Errorf("locked source digest mismatch for ui provider: got %s, want %s", download.SHA256Hex, archive.SHA256)
+	}
+
+	destDir := uiDestDir(paths)
+	if err := os.RemoveAll(destDir); err != nil {
+		return fmt.Errorf("remove stale cache for ui provider: %w", err)
+	}
+	installed, err := pluginstore.Install(download.LocalPath, destDir)
+	if err != nil {
+		return fmt.Errorf("install locked source for ui provider: %w", err)
+	}
+	if err := validateInstalledManifestKind(pluginmanifestv1.KindWebUI, "ui provider", installed.Manifest); err != nil {
+		return err
 	}
 	return nil
 }
