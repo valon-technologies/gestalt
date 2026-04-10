@@ -96,10 +96,10 @@ Use `ok(body)` for normal responses and `response(status, body)` when a handler
 needs to set a non-200 status. Plain objects with `status` and `body` fields
 are treated as user data.
 
-Auth providers and datastore providers use dedicated helpers:
+Auth providers and secrets providers use dedicated helpers:
 
 ```ts
-import { defineAuthProvider, defineDatastoreProvider } from "@valon-technologies/gestalt";
+import { defineAuthProvider, defineSecretsProvider } from "@valon-technologies/gestalt";
 ```
 
 ## Runtime and build entrypoints
