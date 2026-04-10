@@ -20,9 +20,9 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ProviderLifecycle_GetProviderIdentity_FullMethodName = "/gestalt.plugin.v1.ProviderLifecycle/GetProviderIdentity"
-	ProviderLifecycle_ConfigureProvider_FullMethodName   = "/gestalt.plugin.v1.ProviderLifecycle/ConfigureProvider"
-	ProviderLifecycle_HealthCheck_FullMethodName         = "/gestalt.plugin.v1.ProviderLifecycle/HealthCheck"
+	ProviderLifecycle_GetProviderIdentity_FullMethodName = "/gestalt.provider.v1.ProviderLifecycle/GetProviderIdentity"
+	ProviderLifecycle_ConfigureProvider_FullMethodName   = "/gestalt.provider.v1.ProviderLifecycle/ConfigureProvider"
+	ProviderLifecycle_HealthCheck_FullMethodName         = "/gestalt.provider.v1.ProviderLifecycle/HealthCheck"
 )
 
 // ProviderLifecycleClient is the client API for ProviderLifecycle service.
@@ -177,7 +177,7 @@ func _ProviderLifecycle_HealthCheck_Handler(srv interface{}, ctx context.Context
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var ProviderLifecycle_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "gestalt.plugin.v1.ProviderLifecycle",
+	ServiceName: "gestalt.provider.v1.ProviderLifecycle",
 	HandlerType: (*ProviderLifecycleServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

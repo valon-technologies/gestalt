@@ -15,7 +15,7 @@ class SecretsProviderStub(object):
             channel: A grpc.Channel.
         """
         self.GetSecret = channel.unary_unary(
-                '/gestalt.plugin.v1.SecretsProvider/GetSecret',
+                '/gestalt.provider.v1.SecretsProvider/GetSecret',
                 request_serializer=v1_dot_secrets__pb2.GetSecretRequest.SerializeToString,
                 response_deserializer=v1_dot_secrets__pb2.GetSecretResponse.FromString,
                 _registered_method=True)
@@ -40,9 +40,9 @@ def add_SecretsProviderServicer_to_server(servicer, server):
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'gestalt.plugin.v1.SecretsProvider', rpc_method_handlers)
+            'gestalt.provider.v1.SecretsProvider', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('gestalt.plugin.v1.SecretsProvider', rpc_method_handlers)
+    server.add_registered_method_handlers('gestalt.provider.v1.SecretsProvider', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
@@ -63,7 +63,7 @@ class SecretsProvider(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.SecretsProvider/GetSecret',
+            '/gestalt.provider.v1.SecretsProvider/GetSecret',
             v1_dot_secrets__pb2.GetSecretRequest.SerializeToString,
             v1_dot_secrets__pb2.GetSecretResponse.FromString,
             options,

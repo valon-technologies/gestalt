@@ -20,11 +20,11 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	IntegrationProvider_GetMetadata_FullMethodName       = "/gestalt.plugin.v1.IntegrationProvider/GetMetadata"
-	IntegrationProvider_StartProvider_FullMethodName     = "/gestalt.plugin.v1.IntegrationProvider/StartProvider"
-	IntegrationProvider_Execute_FullMethodName           = "/gestalt.plugin.v1.IntegrationProvider/Execute"
-	IntegrationProvider_GetSessionCatalog_FullMethodName = "/gestalt.plugin.v1.IntegrationProvider/GetSessionCatalog"
-	IntegrationProvider_PostConnect_FullMethodName       = "/gestalt.plugin.v1.IntegrationProvider/PostConnect"
+	IntegrationProvider_GetMetadata_FullMethodName       = "/gestalt.provider.v1.IntegrationProvider/GetMetadata"
+	IntegrationProvider_StartProvider_FullMethodName     = "/gestalt.provider.v1.IntegrationProvider/StartProvider"
+	IntegrationProvider_Execute_FullMethodName           = "/gestalt.provider.v1.IntegrationProvider/Execute"
+	IntegrationProvider_GetSessionCatalog_FullMethodName = "/gestalt.provider.v1.IntegrationProvider/GetSessionCatalog"
+	IntegrationProvider_PostConnect_FullMethodName       = "/gestalt.provider.v1.IntegrationProvider/PostConnect"
 )
 
 // IntegrationProviderClient is the client API for IntegrationProvider service.
@@ -245,7 +245,7 @@ func _IntegrationProvider_PostConnect_Handler(srv interface{}, ctx context.Conte
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var IntegrationProvider_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "gestalt.plugin.v1.IntegrationProvider",
+	ServiceName: "gestalt.provider.v1.IntegrationProvider",
 	HandlerType: (*IntegrationProviderServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

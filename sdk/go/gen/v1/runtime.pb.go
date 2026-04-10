@@ -83,7 +83,7 @@ func (ProviderKind) EnumDescriptor() ([]byte, []int) {
 
 type ProviderIdentity struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
-	Kind               ProviderKind           `protobuf:"varint,1,opt,name=kind,proto3,enum=gestalt.plugin.v1.ProviderKind" json:"kind,omitempty"`
+	Kind               ProviderKind           `protobuf:"varint,1,opt,name=kind,proto3,enum=gestalt.provider.v1.ProviderKind" json:"kind,omitempty"`
 	Name               string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	DisplayName        string                 `protobuf:"bytes,3,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	Description        string                 `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
@@ -341,9 +341,9 @@ var File_v1_runtime_proto protoreflect.FileDescriptor
 
 const file_v1_runtime_proto_rawDesc = "" +
 	"\n" +
-	"\x10v1/runtime.proto\x12\x11gestalt.plugin.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\"\xba\x02\n" +
-	"\x10ProviderIdentity\x123\n" +
-	"\x04kind\x18\x01 \x01(\x0e2\x1f.gestalt.plugin.v1.ProviderKindR\x04kind\x12\x12\n" +
+	"\x10v1/runtime.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\"\xbc\x02\n" +
+	"\x10ProviderIdentity\x125\n" +
+	"\x04kind\x18\x01 \x01(\x0e2!.gestalt.provider.v1.ProviderKindR\x04kind\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12!\n" +
 	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x12 \n" +
 	"\vdescription\x18\x04 \x01(\tR\vdescription\x12\x18\n" +
@@ -367,12 +367,12 @@ const file_v1_runtime_proto_rawDesc = "" +
 	"\x12PROVIDER_KIND_AUTH\x10\x02\x12\x1b\n" +
 	"\x17PROVIDER_KIND_INDEXEDDB\x10\x03\x12\x19\n" +
 	"\x15PROVIDER_KIND_SECRETS\x10\x04\x12\x1b\n" +
-	"\x17PROVIDER_KIND_TELEMETRY\x10\x052\xa6\x02\n" +
-	"\x11ProviderLifecycle\x12R\n" +
-	"\x13GetProviderIdentity\x12\x16.google.protobuf.Empty\x1a#.gestalt.plugin.v1.ProviderIdentity\x12n\n" +
-	"\x11ConfigureProvider\x12+.gestalt.plugin.v1.ConfigureProviderRequest\x1a,.gestalt.plugin.v1.ConfigureProviderResponse\x12M\n" +
-	"\vHealthCheck\x12\x16.google.protobuf.Empty\x1a&.gestalt.plugin.v1.HealthCheckResponseB\xc6\x01\n" +
-	"\x15com.gestalt.plugin.v1B\fRuntimeProtoP\x01Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x11Gestalt.Plugin.V1\xca\x02\x11Gestalt\\Plugin\\V1\xe2\x02\x1dGestalt\\Plugin\\V1\\GPBMetadata\xea\x02\x13Gestalt::Plugin::V1b\x06proto3"
+	"\x17PROVIDER_KIND_TELEMETRY\x10\x052\xae\x02\n" +
+	"\x11ProviderLifecycle\x12T\n" +
+	"\x13GetProviderIdentity\x12\x16.google.protobuf.Empty\x1a%.gestalt.provider.v1.ProviderIdentity\x12r\n" +
+	"\x11ConfigureProvider\x12-.gestalt.provider.v1.ConfigureProviderRequest\x1a..gestalt.provider.v1.ConfigureProviderResponse\x12O\n" +
+	"\vHealthCheck\x12\x16.google.protobuf.Empty\x1a(.gestalt.provider.v1.HealthCheckResponseB\xd0\x01\n" +
+	"\x17com.gestalt.provider.v1B\fRuntimeProtoP\x01Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (
 	file_v1_runtime_proto_rawDescOnce sync.Once
@@ -389,23 +389,23 @@ func file_v1_runtime_proto_rawDescGZIP() []byte {
 var file_v1_runtime_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_v1_runtime_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_v1_runtime_proto_goTypes = []any{
-	(ProviderKind)(0),                 // 0: gestalt.plugin.v1.ProviderKind
-	(*ProviderIdentity)(nil),          // 1: gestalt.plugin.v1.ProviderIdentity
-	(*ConfigureProviderRequest)(nil),  // 2: gestalt.plugin.v1.ConfigureProviderRequest
-	(*ConfigureProviderResponse)(nil), // 3: gestalt.plugin.v1.ConfigureProviderResponse
-	(*HealthCheckResponse)(nil),       // 4: gestalt.plugin.v1.HealthCheckResponse
+	(ProviderKind)(0),                 // 0: gestalt.provider.v1.ProviderKind
+	(*ProviderIdentity)(nil),          // 1: gestalt.provider.v1.ProviderIdentity
+	(*ConfigureProviderRequest)(nil),  // 2: gestalt.provider.v1.ConfigureProviderRequest
+	(*ConfigureProviderResponse)(nil), // 3: gestalt.provider.v1.ConfigureProviderResponse
+	(*HealthCheckResponse)(nil),       // 4: gestalt.provider.v1.HealthCheckResponse
 	(*structpb.Struct)(nil),           // 5: google.protobuf.Struct
 	(*emptypb.Empty)(nil),             // 6: google.protobuf.Empty
 }
 var file_v1_runtime_proto_depIdxs = []int32{
-	0, // 0: gestalt.plugin.v1.ProviderIdentity.kind:type_name -> gestalt.plugin.v1.ProviderKind
-	5, // 1: gestalt.plugin.v1.ConfigureProviderRequest.config:type_name -> google.protobuf.Struct
-	6, // 2: gestalt.plugin.v1.ProviderLifecycle.GetProviderIdentity:input_type -> google.protobuf.Empty
-	2, // 3: gestalt.plugin.v1.ProviderLifecycle.ConfigureProvider:input_type -> gestalt.plugin.v1.ConfigureProviderRequest
-	6, // 4: gestalt.plugin.v1.ProviderLifecycle.HealthCheck:input_type -> google.protobuf.Empty
-	1, // 5: gestalt.plugin.v1.ProviderLifecycle.GetProviderIdentity:output_type -> gestalt.plugin.v1.ProviderIdentity
-	3, // 6: gestalt.plugin.v1.ProviderLifecycle.ConfigureProvider:output_type -> gestalt.plugin.v1.ConfigureProviderResponse
-	4, // 7: gestalt.plugin.v1.ProviderLifecycle.HealthCheck:output_type -> gestalt.plugin.v1.HealthCheckResponse
+	0, // 0: gestalt.provider.v1.ProviderIdentity.kind:type_name -> gestalt.provider.v1.ProviderKind
+	5, // 1: gestalt.provider.v1.ConfigureProviderRequest.config:type_name -> google.protobuf.Struct
+	6, // 2: gestalt.provider.v1.ProviderLifecycle.GetProviderIdentity:input_type -> google.protobuf.Empty
+	2, // 3: gestalt.provider.v1.ProviderLifecycle.ConfigureProvider:input_type -> gestalt.provider.v1.ConfigureProviderRequest
+	6, // 4: gestalt.provider.v1.ProviderLifecycle.HealthCheck:input_type -> google.protobuf.Empty
+	1, // 5: gestalt.provider.v1.ProviderLifecycle.GetProviderIdentity:output_type -> gestalt.provider.v1.ProviderIdentity
+	3, // 6: gestalt.provider.v1.ProviderLifecycle.ConfigureProvider:output_type -> gestalt.provider.v1.ConfigureProviderResponse
+	4, // 7: gestalt.provider.v1.ProviderLifecycle.HealthCheck:output_type -> gestalt.provider.v1.HealthCheckResponse
 	5, // [5:8] is the sub-list for method output_type
 	2, // [2:5] is the sub-list for method input_type
 	2, // [2:2] is the sub-list for extension type_name

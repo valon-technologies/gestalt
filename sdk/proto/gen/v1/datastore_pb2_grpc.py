@@ -16,92 +16,92 @@ class IndexedDBStub(object):
             channel: A grpc.Channel.
         """
         self.CreateObjectStore = channel.unary_unary(
-                '/gestalt.plugin.v1.IndexedDB/CreateObjectStore',
+                '/gestalt.provider.v1.IndexedDB/CreateObjectStore',
                 request_serializer=v1_dot_datastore__pb2.CreateObjectStoreRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
         self.DeleteObjectStore = channel.unary_unary(
-                '/gestalt.plugin.v1.IndexedDB/DeleteObjectStore',
+                '/gestalt.provider.v1.IndexedDB/DeleteObjectStore',
                 request_serializer=v1_dot_datastore__pb2.DeleteObjectStoreRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
         self.Get = channel.unary_unary(
-                '/gestalt.plugin.v1.IndexedDB/Get',
+                '/gestalt.provider.v1.IndexedDB/Get',
                 request_serializer=v1_dot_datastore__pb2.ObjectStoreRequest.SerializeToString,
                 response_deserializer=v1_dot_datastore__pb2.RecordResponse.FromString,
                 _registered_method=True)
         self.GetKey = channel.unary_unary(
-                '/gestalt.plugin.v1.IndexedDB/GetKey',
+                '/gestalt.provider.v1.IndexedDB/GetKey',
                 request_serializer=v1_dot_datastore__pb2.ObjectStoreRequest.SerializeToString,
                 response_deserializer=v1_dot_datastore__pb2.KeyResponse.FromString,
                 _registered_method=True)
         self.Add = channel.unary_unary(
-                '/gestalt.plugin.v1.IndexedDB/Add',
+                '/gestalt.provider.v1.IndexedDB/Add',
                 request_serializer=v1_dot_datastore__pb2.RecordRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
         self.Put = channel.unary_unary(
-                '/gestalt.plugin.v1.IndexedDB/Put',
+                '/gestalt.provider.v1.IndexedDB/Put',
                 request_serializer=v1_dot_datastore__pb2.RecordRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
         self.Delete = channel.unary_unary(
-                '/gestalt.plugin.v1.IndexedDB/Delete',
+                '/gestalt.provider.v1.IndexedDB/Delete',
                 request_serializer=v1_dot_datastore__pb2.ObjectStoreRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
         self.Clear = channel.unary_unary(
-                '/gestalt.plugin.v1.IndexedDB/Clear',
+                '/gestalt.provider.v1.IndexedDB/Clear',
                 request_serializer=v1_dot_datastore__pb2.ObjectStoreNameRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
         self.GetAll = channel.unary_unary(
-                '/gestalt.plugin.v1.IndexedDB/GetAll',
+                '/gestalt.provider.v1.IndexedDB/GetAll',
                 request_serializer=v1_dot_datastore__pb2.ObjectStoreRangeRequest.SerializeToString,
                 response_deserializer=v1_dot_datastore__pb2.RecordsResponse.FromString,
                 _registered_method=True)
         self.GetAllKeys = channel.unary_unary(
-                '/gestalt.plugin.v1.IndexedDB/GetAllKeys',
+                '/gestalt.provider.v1.IndexedDB/GetAllKeys',
                 request_serializer=v1_dot_datastore__pb2.ObjectStoreRangeRequest.SerializeToString,
                 response_deserializer=v1_dot_datastore__pb2.KeysResponse.FromString,
                 _registered_method=True)
         self.Count = channel.unary_unary(
-                '/gestalt.plugin.v1.IndexedDB/Count',
+                '/gestalt.provider.v1.IndexedDB/Count',
                 request_serializer=v1_dot_datastore__pb2.ObjectStoreRangeRequest.SerializeToString,
                 response_deserializer=v1_dot_datastore__pb2.CountResponse.FromString,
                 _registered_method=True)
         self.DeleteRange = channel.unary_unary(
-                '/gestalt.plugin.v1.IndexedDB/DeleteRange',
+                '/gestalt.provider.v1.IndexedDB/DeleteRange',
                 request_serializer=v1_dot_datastore__pb2.ObjectStoreRangeRequest.SerializeToString,
                 response_deserializer=v1_dot_datastore__pb2.DeleteResponse.FromString,
                 _registered_method=True)
         self.IndexGet = channel.unary_unary(
-                '/gestalt.plugin.v1.IndexedDB/IndexGet',
+                '/gestalt.provider.v1.IndexedDB/IndexGet',
                 request_serializer=v1_dot_datastore__pb2.IndexQueryRequest.SerializeToString,
                 response_deserializer=v1_dot_datastore__pb2.RecordResponse.FromString,
                 _registered_method=True)
         self.IndexGetKey = channel.unary_unary(
-                '/gestalt.plugin.v1.IndexedDB/IndexGetKey',
+                '/gestalt.provider.v1.IndexedDB/IndexGetKey',
                 request_serializer=v1_dot_datastore__pb2.IndexQueryRequest.SerializeToString,
                 response_deserializer=v1_dot_datastore__pb2.KeyResponse.FromString,
                 _registered_method=True)
         self.IndexGetAll = channel.unary_unary(
-                '/gestalt.plugin.v1.IndexedDB/IndexGetAll',
+                '/gestalt.provider.v1.IndexedDB/IndexGetAll',
                 request_serializer=v1_dot_datastore__pb2.IndexQueryRequest.SerializeToString,
                 response_deserializer=v1_dot_datastore__pb2.RecordsResponse.FromString,
                 _registered_method=True)
         self.IndexGetAllKeys = channel.unary_unary(
-                '/gestalt.plugin.v1.IndexedDB/IndexGetAllKeys',
+                '/gestalt.provider.v1.IndexedDB/IndexGetAllKeys',
                 request_serializer=v1_dot_datastore__pb2.IndexQueryRequest.SerializeToString,
                 response_deserializer=v1_dot_datastore__pb2.KeysResponse.FromString,
                 _registered_method=True)
         self.IndexCount = channel.unary_unary(
-                '/gestalt.plugin.v1.IndexedDB/IndexCount',
+                '/gestalt.provider.v1.IndexedDB/IndexCount',
                 request_serializer=v1_dot_datastore__pb2.IndexQueryRequest.SerializeToString,
                 response_deserializer=v1_dot_datastore__pb2.CountResponse.FromString,
                 _registered_method=True)
         self.IndexDelete = channel.unary_unary(
-                '/gestalt.plugin.v1.IndexedDB/IndexDelete',
+                '/gestalt.provider.v1.IndexedDB/IndexDelete',
                 request_serializer=v1_dot_datastore__pb2.IndexQueryRequest.SerializeToString,
                 response_deserializer=v1_dot_datastore__pb2.DeleteResponse.FromString,
                 _registered_method=True)
@@ -317,9 +317,9 @@ def add_IndexedDBServicer_to_server(servicer, server):
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'gestalt.plugin.v1.IndexedDB', rpc_method_handlers)
+            'gestalt.provider.v1.IndexedDB', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('gestalt.plugin.v1.IndexedDB', rpc_method_handlers)
+    server.add_registered_method_handlers('gestalt.provider.v1.IndexedDB', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
@@ -340,7 +340,7 @@ class IndexedDB(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.IndexedDB/CreateObjectStore',
+            '/gestalt.provider.v1.IndexedDB/CreateObjectStore',
             v1_dot_datastore__pb2.CreateObjectStoreRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
@@ -367,7 +367,7 @@ class IndexedDB(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.IndexedDB/DeleteObjectStore',
+            '/gestalt.provider.v1.IndexedDB/DeleteObjectStore',
             v1_dot_datastore__pb2.DeleteObjectStoreRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
@@ -394,7 +394,7 @@ class IndexedDB(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.IndexedDB/Get',
+            '/gestalt.provider.v1.IndexedDB/Get',
             v1_dot_datastore__pb2.ObjectStoreRequest.SerializeToString,
             v1_dot_datastore__pb2.RecordResponse.FromString,
             options,
@@ -421,7 +421,7 @@ class IndexedDB(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.IndexedDB/GetKey',
+            '/gestalt.provider.v1.IndexedDB/GetKey',
             v1_dot_datastore__pb2.ObjectStoreRequest.SerializeToString,
             v1_dot_datastore__pb2.KeyResponse.FromString,
             options,
@@ -448,7 +448,7 @@ class IndexedDB(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.IndexedDB/Add',
+            '/gestalt.provider.v1.IndexedDB/Add',
             v1_dot_datastore__pb2.RecordRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
@@ -475,7 +475,7 @@ class IndexedDB(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.IndexedDB/Put',
+            '/gestalt.provider.v1.IndexedDB/Put',
             v1_dot_datastore__pb2.RecordRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
@@ -502,7 +502,7 @@ class IndexedDB(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.IndexedDB/Delete',
+            '/gestalt.provider.v1.IndexedDB/Delete',
             v1_dot_datastore__pb2.ObjectStoreRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
@@ -529,7 +529,7 @@ class IndexedDB(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.IndexedDB/Clear',
+            '/gestalt.provider.v1.IndexedDB/Clear',
             v1_dot_datastore__pb2.ObjectStoreNameRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,
@@ -556,7 +556,7 @@ class IndexedDB(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.IndexedDB/GetAll',
+            '/gestalt.provider.v1.IndexedDB/GetAll',
             v1_dot_datastore__pb2.ObjectStoreRangeRequest.SerializeToString,
             v1_dot_datastore__pb2.RecordsResponse.FromString,
             options,
@@ -583,7 +583,7 @@ class IndexedDB(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.IndexedDB/GetAllKeys',
+            '/gestalt.provider.v1.IndexedDB/GetAllKeys',
             v1_dot_datastore__pb2.ObjectStoreRangeRequest.SerializeToString,
             v1_dot_datastore__pb2.KeysResponse.FromString,
             options,
@@ -610,7 +610,7 @@ class IndexedDB(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.IndexedDB/Count',
+            '/gestalt.provider.v1.IndexedDB/Count',
             v1_dot_datastore__pb2.ObjectStoreRangeRequest.SerializeToString,
             v1_dot_datastore__pb2.CountResponse.FromString,
             options,
@@ -637,7 +637,7 @@ class IndexedDB(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.IndexedDB/DeleteRange',
+            '/gestalt.provider.v1.IndexedDB/DeleteRange',
             v1_dot_datastore__pb2.ObjectStoreRangeRequest.SerializeToString,
             v1_dot_datastore__pb2.DeleteResponse.FromString,
             options,
@@ -664,7 +664,7 @@ class IndexedDB(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.IndexedDB/IndexGet',
+            '/gestalt.provider.v1.IndexedDB/IndexGet',
             v1_dot_datastore__pb2.IndexQueryRequest.SerializeToString,
             v1_dot_datastore__pb2.RecordResponse.FromString,
             options,
@@ -691,7 +691,7 @@ class IndexedDB(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.IndexedDB/IndexGetKey',
+            '/gestalt.provider.v1.IndexedDB/IndexGetKey',
             v1_dot_datastore__pb2.IndexQueryRequest.SerializeToString,
             v1_dot_datastore__pb2.KeyResponse.FromString,
             options,
@@ -718,7 +718,7 @@ class IndexedDB(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.IndexedDB/IndexGetAll',
+            '/gestalt.provider.v1.IndexedDB/IndexGetAll',
             v1_dot_datastore__pb2.IndexQueryRequest.SerializeToString,
             v1_dot_datastore__pb2.RecordsResponse.FromString,
             options,
@@ -745,7 +745,7 @@ class IndexedDB(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.IndexedDB/IndexGetAllKeys',
+            '/gestalt.provider.v1.IndexedDB/IndexGetAllKeys',
             v1_dot_datastore__pb2.IndexQueryRequest.SerializeToString,
             v1_dot_datastore__pb2.KeysResponse.FromString,
             options,
@@ -772,7 +772,7 @@ class IndexedDB(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.IndexedDB/IndexCount',
+            '/gestalt.provider.v1.IndexedDB/IndexCount',
             v1_dot_datastore__pb2.IndexQueryRequest.SerializeToString,
             v1_dot_datastore__pb2.CountResponse.FromString,
             options,
@@ -799,7 +799,7 @@ class IndexedDB(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/gestalt.plugin.v1.IndexedDB/IndexDelete',
+            '/gestalt.provider.v1.IndexedDB/IndexDelete',
             v1_dot_datastore__pb2.IndexQueryRequest.SerializeToString,
             v1_dot_datastore__pb2.DeleteResponse.FromString,
             options,

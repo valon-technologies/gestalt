@@ -68,7 +68,7 @@ Common source-package checks:
     cargo check
     ```
 
-    The plugin root needs a real `Cargo.toml` package with a `[package]` section, not just a workspace manifest, and `src/lib.rs` should export the provider with `gestalt::export_provider!(...)`, `gestalt::export_auth_provider!(...)`, or `gestalt::export_datastore_provider!(...)`.
+    The plugin root needs a real `Cargo.toml` package with a `[package]` section, not just a workspace manifest, and `src/lib.rs` should export the provider with `gestalt::export_provider!(...)`, `gestalt::export_auth_provider!(...)`, or `gestalt::export_indexeddb_provider!(...)`.
   </Tabs.Tab>
   <Tabs.Tab>
     Verify the module resolves from the provider root:

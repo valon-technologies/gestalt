@@ -20,24 +20,24 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	IndexedDB_CreateObjectStore_FullMethodName = "/gestalt.plugin.v1.IndexedDB/CreateObjectStore"
-	IndexedDB_DeleteObjectStore_FullMethodName = "/gestalt.plugin.v1.IndexedDB/DeleteObjectStore"
-	IndexedDB_Get_FullMethodName               = "/gestalt.plugin.v1.IndexedDB/Get"
-	IndexedDB_GetKey_FullMethodName            = "/gestalt.plugin.v1.IndexedDB/GetKey"
-	IndexedDB_Add_FullMethodName               = "/gestalt.plugin.v1.IndexedDB/Add"
-	IndexedDB_Put_FullMethodName               = "/gestalt.plugin.v1.IndexedDB/Put"
-	IndexedDB_Delete_FullMethodName            = "/gestalt.plugin.v1.IndexedDB/Delete"
-	IndexedDB_Clear_FullMethodName             = "/gestalt.plugin.v1.IndexedDB/Clear"
-	IndexedDB_GetAll_FullMethodName            = "/gestalt.plugin.v1.IndexedDB/GetAll"
-	IndexedDB_GetAllKeys_FullMethodName        = "/gestalt.plugin.v1.IndexedDB/GetAllKeys"
-	IndexedDB_Count_FullMethodName             = "/gestalt.plugin.v1.IndexedDB/Count"
-	IndexedDB_DeleteRange_FullMethodName       = "/gestalt.plugin.v1.IndexedDB/DeleteRange"
-	IndexedDB_IndexGet_FullMethodName          = "/gestalt.plugin.v1.IndexedDB/IndexGet"
-	IndexedDB_IndexGetKey_FullMethodName       = "/gestalt.plugin.v1.IndexedDB/IndexGetKey"
-	IndexedDB_IndexGetAll_FullMethodName       = "/gestalt.plugin.v1.IndexedDB/IndexGetAll"
-	IndexedDB_IndexGetAllKeys_FullMethodName   = "/gestalt.plugin.v1.IndexedDB/IndexGetAllKeys"
-	IndexedDB_IndexCount_FullMethodName        = "/gestalt.plugin.v1.IndexedDB/IndexCount"
-	IndexedDB_IndexDelete_FullMethodName       = "/gestalt.plugin.v1.IndexedDB/IndexDelete"
+	IndexedDB_CreateObjectStore_FullMethodName = "/gestalt.provider.v1.IndexedDB/CreateObjectStore"
+	IndexedDB_DeleteObjectStore_FullMethodName = "/gestalt.provider.v1.IndexedDB/DeleteObjectStore"
+	IndexedDB_Get_FullMethodName               = "/gestalt.provider.v1.IndexedDB/Get"
+	IndexedDB_GetKey_FullMethodName            = "/gestalt.provider.v1.IndexedDB/GetKey"
+	IndexedDB_Add_FullMethodName               = "/gestalt.provider.v1.IndexedDB/Add"
+	IndexedDB_Put_FullMethodName               = "/gestalt.provider.v1.IndexedDB/Put"
+	IndexedDB_Delete_FullMethodName            = "/gestalt.provider.v1.IndexedDB/Delete"
+	IndexedDB_Clear_FullMethodName             = "/gestalt.provider.v1.IndexedDB/Clear"
+	IndexedDB_GetAll_FullMethodName            = "/gestalt.provider.v1.IndexedDB/GetAll"
+	IndexedDB_GetAllKeys_FullMethodName        = "/gestalt.provider.v1.IndexedDB/GetAllKeys"
+	IndexedDB_Count_FullMethodName             = "/gestalt.provider.v1.IndexedDB/Count"
+	IndexedDB_DeleteRange_FullMethodName       = "/gestalt.provider.v1.IndexedDB/DeleteRange"
+	IndexedDB_IndexGet_FullMethodName          = "/gestalt.provider.v1.IndexedDB/IndexGet"
+	IndexedDB_IndexGetKey_FullMethodName       = "/gestalt.provider.v1.IndexedDB/IndexGetKey"
+	IndexedDB_IndexGetAll_FullMethodName       = "/gestalt.provider.v1.IndexedDB/IndexGetAll"
+	IndexedDB_IndexGetAllKeys_FullMethodName   = "/gestalt.provider.v1.IndexedDB/IndexGetAllKeys"
+	IndexedDB_IndexCount_FullMethodName        = "/gestalt.provider.v1.IndexedDB/IndexCount"
+	IndexedDB_IndexDelete_FullMethodName       = "/gestalt.provider.v1.IndexedDB/IndexDelete"
 )
 
 // IndexedDBClient is the client API for IndexedDB service.
@@ -695,7 +695,7 @@ func _IndexedDB_IndexDelete_Handler(srv interface{}, ctx context.Context, dec fu
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var IndexedDB_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "gestalt.plugin.v1.IndexedDB",
+	ServiceName: "gestalt.provider.v1.IndexedDB",
 	HandlerType: (*IndexedDBServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

@@ -2028,7 +2028,6 @@ func TestExecuteOperation_RejectsSessionPassthrough(t *testing.T) {
 	t.Run("different catalog and broker MCP connections", func(t *testing.T) {
 		t.Parallel()
 
-		const tokenInstance = "default"
 		var sessionCatalogCalls atomic.Int32
 		var resolvedToken atomic.Value
 

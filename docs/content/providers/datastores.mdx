@@ -72,7 +72,7 @@ A datastore provider implements the `IndexedDB` gRPC service, which maps to thes
     ```python
     import gestalt
 
-    class MyDatastore(gestalt.DatastoreProvider):
+    class MyDatastore(gestalt.IndexedDBProvider):
         def configure(self, name: str, config: dict) -> None:
             self.dsn = config.get("dsn", "")
 
@@ -90,7 +90,7 @@ A datastore provider implements the `IndexedDB` gRPC service, which maps to thes
     pub struct MyDatastore { /* database connection */ }
 
     #[gestalt::async_trait]
-    impl gestalt::DatastoreProvider for MyDatastore {
+    impl gestalt::IndexedDBProvider for MyDatastore {
         async fn configure(&self, _name: &str, config: serde_json::Map<String, serde_json::Value>) -> gestalt::Result<()> {
             // Initialize database connection from config["dsn"]
             Ok(())
@@ -99,14 +99,14 @@ A datastore provider implements the `IndexedDB` gRPC service, which maps to thes
         // Implement the IndexedDB gRPC service methods
     }
 
-    gestalt::export_datastore_provider!(constructor = MyDatastore::default);
+    gestalt::export_indexeddb_provider!(constructor = MyDatastore::default);
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```ts
-    import { defineDatastoreProvider } from "@valon-technologies/gestalt";
+    import { defineIndexedDBProvider } from "@valon-technologies/gestalt";
 
-    export const provider = defineDatastoreProvider({
+    export const provider = defineIndexedDBProvider({
       async configure(name, config) {
         // Initialize from config.dsn
       },

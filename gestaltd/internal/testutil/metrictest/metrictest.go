@@ -118,4 +118,3 @@ func AttrsMatch(set attribute.Set, want map[string]string) bool {
 	}
 	return true
 }
-

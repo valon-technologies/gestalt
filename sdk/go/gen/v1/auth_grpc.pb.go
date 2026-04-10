@@ -20,10 +20,10 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	AuthProvider_BeginLogin_FullMethodName            = "/gestalt.plugin.v1.AuthProvider/BeginLogin"
-	AuthProvider_CompleteLogin_FullMethodName         = "/gestalt.plugin.v1.AuthProvider/CompleteLogin"
-	AuthProvider_ValidateExternalToken_FullMethodName = "/gestalt.plugin.v1.AuthProvider/ValidateExternalToken"
-	AuthProvider_GetSessionSettings_FullMethodName    = "/gestalt.plugin.v1.AuthProvider/GetSessionSettings"
+	AuthProvider_BeginLogin_FullMethodName            = "/gestalt.provider.v1.AuthProvider/BeginLogin"
+	AuthProvider_CompleteLogin_FullMethodName         = "/gestalt.provider.v1.AuthProvider/CompleteLogin"
+	AuthProvider_ValidateExternalToken_FullMethodName = "/gestalt.provider.v1.AuthProvider/ValidateExternalToken"
+	AuthProvider_GetSessionSettings_FullMethodName    = "/gestalt.provider.v1.AuthProvider/GetSessionSettings"
 )
 
 // AuthProviderClient is the client API for AuthProvider service.
@@ -211,7 +211,7 @@ func _AuthProvider_GetSessionSettings_Handler(srv interface{}, ctx context.Conte
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
 var AuthProvider_ServiceDesc = grpc.ServiceDesc{
-	ServiceName: "gestalt.plugin.v1.AuthProvider",
+	ServiceName: "gestalt.provider.v1.AuthProvider",
 	HandlerType: (*AuthProviderServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{

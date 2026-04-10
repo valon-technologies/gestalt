@@ -911,10 +911,10 @@ var File_v1_datastore_proto protoreflect.FileDescriptor
 
 const file_v1_datastore_proto_rawDesc = "" +
 	"\n" +
-	"\x12v1/datastore.proto\x12\x11gestalt.plugin.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\"\x85\x01\n" +
-	"\x11ObjectStoreSchema\x128\n" +
-	"\aindexes\x18\x01 \x03(\v2\x1e.gestalt.plugin.v1.IndexSchemaR\aindexes\x126\n" +
-	"\acolumns\x18\x02 \x03(\v2\x1c.gestalt.plugin.v1.ColumnDefR\acolumns\"T\n" +
+	"\x12v1/datastore.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\"\x89\x01\n" +
+	"\x11ObjectStoreSchema\x12:\n" +
+	"\aindexes\x18\x01 \x03(\v2 .gestalt.provider.v1.IndexSchemaR\aindexes\x128\n" +
+	"\acolumns\x18\x02 \x03(\v2\x1e.gestalt.provider.v1.ColumnDefR\acolumns\"T\n" +
 	"\vIndexSchema\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n" +
 	"\bkey_path\x18\x02 \x03(\tR\akeyPath\x12\x16\n" +
@@ -946,50 +946,50 @@ const file_v1_datastore_proto_rawDesc = "" +
 	"\x05store\x18\x01 \x01(\tR\x05store\x12\x0e\n" +
 	"\x02id\x18\x02 \x01(\tR\x02id\".\n" +
 	"\x16ObjectStoreNameRequest\x12\x14\n" +
-	"\x05store\x18\x01 \x01(\tR\x05store\"q\n" +
+	"\x05store\x18\x01 \x01(\tR\x05store\"s\n" +
 	"\x17ObjectStoreRangeRequest\x12\x14\n" +
-	"\x05store\x18\x01 \x01(\tR\x05store\x126\n" +
-	"\x05range\x18\x02 \x01(\v2\x1b.gestalt.plugin.v1.KeyRangeH\x00R\x05range\x88\x01\x01B\b\n" +
-	"\x06_range\"l\n" +
+	"\x05store\x18\x01 \x01(\tR\x05store\x128\n" +
+	"\x05range\x18\x02 \x01(\v2\x1d.gestalt.provider.v1.KeyRangeH\x00R\x05range\x88\x01\x01B\b\n" +
+	"\x06_range\"n\n" +
 	"\x18CreateObjectStoreRequest\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12<\n" +
-	"\x06schema\x18\x02 \x01(\v2$.gestalt.plugin.v1.ObjectStoreSchemaR\x06schema\".\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12>\n" +
+	"\x06schema\x18\x02 \x01(\v2&.gestalt.provider.v1.ObjectStoreSchemaR\x06schema\".\n" +
 	"\x18DeleteObjectStoreRequest\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\"\xb1\x01\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"\xb3\x01\n" +
 	"\x11IndexQueryRequest\x12\x14\n" +
 	"\x05store\x18\x01 \x01(\tR\x05store\x12\x14\n" +
 	"\x05index\x18\x02 \x01(\tR\x05index\x12.\n" +
-	"\x06values\x18\x03 \x03(\v2\x16.google.protobuf.ValueR\x06values\x126\n" +
-	"\x05range\x18\x04 \x01(\v2\x1b.gestalt.plugin.v1.KeyRangeH\x00R\x05range\x88\x01\x01B\b\n" +
+	"\x06values\x18\x03 \x03(\v2\x16.google.protobuf.ValueR\x06values\x128\n" +
+	"\x05range\x18\x04 \x01(\v2\x1d.gestalt.provider.v1.KeyRangeH\x00R\x05range\x88\x01\x01B\b\n" +
 	"\x06_range\"%\n" +
 	"\rCountResponse\x12\x14\n" +
 	"\x05count\x18\x01 \x01(\x03R\x05count\"*\n" +
 	"\x0eDeleteResponse\x12\x18\n" +
 	"\adeleted\x18\x01 \x01(\x03R\adeleted\"\x1f\n" +
 	"\vKeyResponse\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key2\xed\v\n" +
-	"\tIndexedDB\x12X\n" +
-	"\x11CreateObjectStore\x12+.gestalt.plugin.v1.CreateObjectStoreRequest\x1a\x16.google.protobuf.Empty\x12X\n" +
-	"\x11DeleteObjectStore\x12+.gestalt.plugin.v1.DeleteObjectStoreRequest\x1a\x16.google.protobuf.Empty\x12O\n" +
-	"\x03Get\x12%.gestalt.plugin.v1.ObjectStoreRequest\x1a!.gestalt.plugin.v1.RecordResponse\x12O\n" +
-	"\x06GetKey\x12%.gestalt.plugin.v1.ObjectStoreRequest\x1a\x1e.gestalt.plugin.v1.KeyResponse\x12?\n" +
-	"\x03Add\x12 .gestalt.plugin.v1.RecordRequest\x1a\x16.google.protobuf.Empty\x12?\n" +
-	"\x03Put\x12 .gestalt.plugin.v1.RecordRequest\x1a\x16.google.protobuf.Empty\x12G\n" +
-	"\x06Delete\x12%.gestalt.plugin.v1.ObjectStoreRequest\x1a\x16.google.protobuf.Empty\x12J\n" +
-	"\x05Clear\x12).gestalt.plugin.v1.ObjectStoreNameRequest\x1a\x16.google.protobuf.Empty\x12X\n" +
-	"\x06GetAll\x12*.gestalt.plugin.v1.ObjectStoreRangeRequest\x1a\".gestalt.plugin.v1.RecordsResponse\x12Y\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key2\xa9\f\n" +
+	"\tIndexedDB\x12Z\n" +
+	"\x11CreateObjectStore\x12-.gestalt.provider.v1.CreateObjectStoreRequest\x1a\x16.google.protobuf.Empty\x12Z\n" +
+	"\x11DeleteObjectStore\x12-.gestalt.provider.v1.DeleteObjectStoreRequest\x1a\x16.google.protobuf.Empty\x12S\n" +
+	"\x03Get\x12'.gestalt.provider.v1.ObjectStoreRequest\x1a#.gestalt.provider.v1.RecordResponse\x12S\n" +
+	"\x06GetKey\x12'.gestalt.provider.v1.ObjectStoreRequest\x1a .gestalt.provider.v1.KeyResponse\x12A\n" +
+	"\x03Add\x12\".gestalt.provider.v1.RecordRequest\x1a\x16.google.protobuf.Empty\x12A\n" +
+	"\x03Put\x12\".gestalt.provider.v1.RecordRequest\x1a\x16.google.protobuf.Empty\x12I\n" +
+	"\x06Delete\x12'.gestalt.provider.v1.ObjectStoreRequest\x1a\x16.google.protobuf.Empty\x12L\n" +
+	"\x05Clear\x12+.gestalt.provider.v1.ObjectStoreNameRequest\x1a\x16.google.protobuf.Empty\x12\\\n" +
+	"\x06GetAll\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a$.gestalt.provider.v1.RecordsResponse\x12]\n" +
 	"\n" +
-	"GetAllKeys\x12*.gestalt.plugin.v1.ObjectStoreRangeRequest\x1a\x1f.gestalt.plugin.v1.KeysResponse\x12U\n" +
-	"\x05Count\x12*.gestalt.plugin.v1.ObjectStoreRangeRequest\x1a .gestalt.plugin.v1.CountResponse\x12\\\n" +
-	"\vDeleteRange\x12*.gestalt.plugin.v1.ObjectStoreRangeRequest\x1a!.gestalt.plugin.v1.DeleteResponse\x12S\n" +
-	"\bIndexGet\x12$.gestalt.plugin.v1.IndexQueryRequest\x1a!.gestalt.plugin.v1.RecordResponse\x12S\n" +
-	"\vIndexGetKey\x12$.gestalt.plugin.v1.IndexQueryRequest\x1a\x1e.gestalt.plugin.v1.KeyResponse\x12W\n" +
-	"\vIndexGetAll\x12$.gestalt.plugin.v1.IndexQueryRequest\x1a\".gestalt.plugin.v1.RecordsResponse\x12X\n" +
-	"\x0fIndexGetAllKeys\x12$.gestalt.plugin.v1.IndexQueryRequest\x1a\x1f.gestalt.plugin.v1.KeysResponse\x12T\n" +
+	"GetAllKeys\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a!.gestalt.provider.v1.KeysResponse\x12Y\n" +
+	"\x05Count\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a\".gestalt.provider.v1.CountResponse\x12`\n" +
+	"\vDeleteRange\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a#.gestalt.provider.v1.DeleteResponse\x12W\n" +
+	"\bIndexGet\x12&.gestalt.provider.v1.IndexQueryRequest\x1a#.gestalt.provider.v1.RecordResponse\x12W\n" +
+	"\vIndexGetKey\x12&.gestalt.provider.v1.IndexQueryRequest\x1a .gestalt.provider.v1.KeyResponse\x12[\n" +
+	"\vIndexGetAll\x12&.gestalt.provider.v1.IndexQueryRequest\x1a$.gestalt.provider.v1.RecordsResponse\x12\\\n" +
+	"\x0fIndexGetAllKeys\x12&.gestalt.provider.v1.IndexQueryRequest\x1a!.gestalt.provider.v1.KeysResponse\x12X\n" +
 	"\n" +
-	"IndexCount\x12$.gestalt.plugin.v1.IndexQueryRequest\x1a .gestalt.plugin.v1.CountResponse\x12V\n" +
-	"\vIndexDelete\x12$.gestalt.plugin.v1.IndexQueryRequest\x1a!.gestalt.plugin.v1.DeleteResponseB\xc8\x01\n" +
-	"\x15com.gestalt.plugin.v1B\x0eDatastoreProtoP\x01Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x11Gestalt.Plugin.V1\xca\x02\x11Gestalt\\Plugin\\V1\xe2\x02\x1dGestalt\\Plugin\\V1\\GPBMetadata\xea\x02\x13Gestalt::Plugin::V1b\x06proto3"
+	"IndexCount\x12&.gestalt.provider.v1.IndexQueryRequest\x1a\".gestalt.provider.v1.CountResponse\x12Z\n" +
+	"\vIndexDelete\x12&.gestalt.provider.v1.IndexQueryRequest\x1a#.gestalt.provider.v1.DeleteResponseB\xd2\x01\n" +
+	"\x17com.gestalt.provider.v1B\x0eDatastoreProtoP\x01Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (
 	file_v1_datastore_proto_rawDescOnce sync.Once
@@ -1005,75 +1005,75 @@ func file_v1_datastore_proto_rawDescGZIP() []byte {
 
 var file_v1_datastore_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_v1_datastore_proto_goTypes = []any{
-	(*ObjectStoreSchema)(nil),        // 0: gestalt.plugin.v1.ObjectStoreSchema
-	(*IndexSchema)(nil),              // 1: gestalt.plugin.v1.IndexSchema
-	(*ColumnDef)(nil),                // 2: gestalt.plugin.v1.ColumnDef
-	(*KeyRange)(nil),                 // 3: gestalt.plugin.v1.KeyRange
-	(*RecordRequest)(nil),            // 4: gestalt.plugin.v1.RecordRequest
-	(*RecordResponse)(nil),           // 5: gestalt.plugin.v1.RecordResponse
-	(*RecordsResponse)(nil),          // 6: gestalt.plugin.v1.RecordsResponse
-	(*KeysResponse)(nil),             // 7: gestalt.plugin.v1.KeysResponse
-	(*ObjectStoreRequest)(nil),       // 8: gestalt.plugin.v1.ObjectStoreRequest
-	(*ObjectStoreNameRequest)(nil),   // 9: gestalt.plugin.v1.ObjectStoreNameRequest
-	(*ObjectStoreRangeRequest)(nil),  // 10: gestalt.plugin.v1.ObjectStoreRangeRequest
-	(*CreateObjectStoreRequest)(nil), // 11: gestalt.plugin.v1.CreateObjectStoreRequest
-	(*DeleteObjectStoreRequest)(nil), // 12: gestalt.plugin.v1.DeleteObjectStoreRequest
-	(*IndexQueryRequest)(nil),        // 13: gestalt.plugin.v1.IndexQueryRequest
-	(*CountResponse)(nil),            // 14: gestalt.plugin.v1.CountResponse
-	(*DeleteResponse)(nil),           // 15: gestalt.plugin.v1.DeleteResponse
-	(*KeyResponse)(nil),              // 16: gestalt.plugin.v1.KeyResponse
+	(*ObjectStoreSchema)(nil),        // 0: gestalt.provider.v1.ObjectStoreSchema
+	(*IndexSchema)(nil),              // 1: gestalt.provider.v1.IndexSchema
+	(*ColumnDef)(nil),                // 2: gestalt.provider.v1.ColumnDef
+	(*KeyRange)(nil),                 // 3: gestalt.provider.v1.KeyRange
+	(*RecordRequest)(nil),            // 4: gestalt.provider.v1.RecordRequest
+	(*RecordResponse)(nil),           // 5: gestalt.provider.v1.RecordResponse
+	(*RecordsResponse)(nil),          // 6: gestalt.provider.v1.RecordsResponse
+	(*KeysResponse)(nil),             // 7: gestalt.provider.v1.KeysResponse
+	(*ObjectStoreRequest)(nil),       // 8: gestalt.provider.v1.ObjectStoreRequest
+	(*ObjectStoreNameRequest)(nil),   // 9: gestalt.provider.v1.ObjectStoreNameRequest
+	(*ObjectStoreRangeRequest)(nil),  // 10: gestalt.provider.v1.ObjectStoreRangeRequest
+	(*CreateObjectStoreRequest)(nil), // 11: gestalt.provider.v1.CreateObjectStoreRequest
+	(*DeleteObjectStoreRequest)(nil), // 12: gestalt.provider.v1.DeleteObjectStoreRequest
+	(*IndexQueryRequest)(nil),        // 13: gestalt.provider.v1.IndexQueryRequest
+	(*CountResponse)(nil),            // 14: gestalt.provider.v1.CountResponse
+	(*DeleteResponse)(nil),           // 15: gestalt.provider.v1.DeleteResponse
+	(*KeyResponse)(nil),              // 16: gestalt.provider.v1.KeyResponse
 	(*structpb.Value)(nil),           // 17: google.protobuf.Value
 	(*structpb.Struct)(nil),          // 18: google.protobuf.Struct
 	(*emptypb.Empty)(nil),            // 19: google.protobuf.Empty
 }
 var file_v1_datastore_proto_depIdxs = []int32{
-	1,  // 0: gestalt.plugin.v1.ObjectStoreSchema.indexes:type_name -> gestalt.plugin.v1.IndexSchema
-	2,  // 1: gestalt.plugin.v1.ObjectStoreSchema.columns:type_name -> gestalt.plugin.v1.ColumnDef
-	17, // 2: gestalt.plugin.v1.KeyRange.lower:type_name -> google.protobuf.Value
-	17, // 3: gestalt.plugin.v1.KeyRange.upper:type_name -> google.protobuf.Value
-	18, // 4: gestalt.plugin.v1.RecordRequest.record:type_name -> google.protobuf.Struct
-	18, // 5: gestalt.plugin.v1.RecordResponse.record:type_name -> google.protobuf.Struct
-	18, // 6: gestalt.plugin.v1.RecordsResponse.records:type_name -> google.protobuf.Struct
-	3,  // 7: gestalt.plugin.v1.ObjectStoreRangeRequest.range:type_name -> gestalt.plugin.v1.KeyRange
-	0,  // 8: gestalt.plugin.v1.CreateObjectStoreRequest.schema:type_name -> gestalt.plugin.v1.ObjectStoreSchema
-	17, // 9: gestalt.plugin.v1.IndexQueryRequest.values:type_name -> google.protobuf.Value
-	3,  // 10: gestalt.plugin.v1.IndexQueryRequest.range:type_name -> gestalt.plugin.v1.KeyRange
-	11, // 11: gestalt.plugin.v1.IndexedDB.CreateObjectStore:input_type -> gestalt.plugin.v1.CreateObjectStoreRequest
-	12, // 12: gestalt.plugin.v1.IndexedDB.DeleteObjectStore:input_type -> gestalt.plugin.v1.DeleteObjectStoreRequest
-	8,  // 13: gestalt.plugin.v1.IndexedDB.Get:input_type -> gestalt.plugin.v1.ObjectStoreRequest
-	8,  // 14: gestalt.plugin.v1.IndexedDB.GetKey:input_type -> gestalt.plugin.v1.ObjectStoreRequest
-	4,  // 15: gestalt.plugin.v1.IndexedDB.Add:input_type -> gestalt.plugin.v1.RecordRequest
-	4,  // 16: gestalt.plugin.v1.IndexedDB.Put:input_type -> gestalt.plugin.v1.RecordRequest
-	8,  // 17: gestalt.plugin.v1.IndexedDB.Delete:input_type -> gestalt.plugin.v1.ObjectStoreRequest
-	9,  // 18: gestalt.plugin.v1.IndexedDB.Clear:input_type -> gestalt.plugin.v1.ObjectStoreNameRequest
-	10, // 19: gestalt.plugin.v1.IndexedDB.GetAll:input_type -> gestalt.plugin.v1.ObjectStoreRangeRequest
-	10, // 20: gestalt.plugin.v1.IndexedDB.GetAllKeys:input_type -> gestalt.plugin.v1.ObjectStoreRangeRequest
-	10, // 21: gestalt.plugin.v1.IndexedDB.Count:input_type -> gestalt.plugin.v1.ObjectStoreRangeRequest
-	10, // 22: gestalt.plugin.v1.IndexedDB.DeleteRange:input_type -> gestalt.plugin.v1.ObjectStoreRangeRequest
-	13, // 23: gestalt.plugin.v1.IndexedDB.IndexGet:input_type -> gestalt.plugin.v1.IndexQueryRequest
-	13, // 24: gestalt.plugin.v1.IndexedDB.IndexGetKey:input_type -> gestalt.plugin.v1.IndexQueryRequest
-	13, // 25: gestalt.plugin.v1.IndexedDB.IndexGetAll:input_type -> gestalt.plugin.v1.IndexQueryRequest
-	13, // 26: gestalt.plugin.v1.IndexedDB.IndexGetAllKeys:input_type -> gestalt.plugin.v1.IndexQueryRequest
-	13, // 27: gestalt.plugin.v1.IndexedDB.IndexCount:input_type -> gestalt.plugin.v1.IndexQueryRequest
-	13, // 28: gestalt.plugin.v1.IndexedDB.IndexDelete:input_type -> gestalt.plugin.v1.IndexQueryRequest
-	19, // 29: gestalt.plugin.v1.IndexedDB.CreateObjectStore:output_type -> google.protobuf.Empty
-	19, // 30: gestalt.plugin.v1.IndexedDB.DeleteObjectStore:output_type -> google.protobuf.Empty
-	5,  // 31: gestalt.plugin.v1.IndexedDB.Get:output_type -> gestalt.plugin.v1.RecordResponse
-	16, // 32: gestalt.plugin.v1.IndexedDB.GetKey:output_type -> gestalt.plugin.v1.KeyResponse
-	19, // 33: gestalt.plugin.v1.IndexedDB.Add:output_type -> google.protobuf.Empty
-	19, // 34: gestalt.plugin.v1.IndexedDB.Put:output_type -> google.protobuf.Empty
-	19, // 35: gestalt.plugin.v1.IndexedDB.Delete:output_type -> google.protobuf.Empty
-	19, // 36: gestalt.plugin.v1.IndexedDB.Clear:output_type -> google.protobuf.Empty
-	6,  // 37: gestalt.plugin.v1.IndexedDB.GetAll:output_type -> gestalt.plugin.v1.RecordsResponse
-	7,  // 38: gestalt.plugin.v1.IndexedDB.GetAllKeys:output_type -> gestalt.plugin.v1.KeysResponse
-	14, // 39: gestalt.plugin.v1.IndexedDB.Count:output_type -> gestalt.plugin.v1.CountResponse
-	15, // 40: gestalt.plugin.v1.IndexedDB.DeleteRange:output_type -> gestalt.plugin.v1.DeleteResponse
-	5,  // 41: gestalt.plugin.v1.IndexedDB.IndexGet:output_type -> gestalt.plugin.v1.RecordResponse
-	16, // 42: gestalt.plugin.v1.IndexedDB.IndexGetKey:output_type -> gestalt.plugin.v1.KeyResponse
-	6,  // 43: gestalt.plugin.v1.IndexedDB.IndexGetAll:output_type -> gestalt.plugin.v1.RecordsResponse
-	7,  // 44: gestalt.plugin.v1.IndexedDB.IndexGetAllKeys:output_type -> gestalt.plugin.v1.KeysResponse
-	14, // 45: gestalt.plugin.v1.IndexedDB.IndexCount:output_type -> gestalt.plugin.v1.CountResponse
-	15, // 46: gestalt.plugin.v1.IndexedDB.IndexDelete:output_type -> gestalt.plugin.v1.DeleteResponse
+	1,  // 0: gestalt.provider.v1.ObjectStoreSchema.indexes:type_name -> gestalt.provider.v1.IndexSchema
+	2,  // 1: gestalt.provider.v1.ObjectStoreSchema.columns:type_name -> gestalt.provider.v1.ColumnDef
+	17, // 2: gestalt.provider.v1.KeyRange.lower:type_name -> google.protobuf.Value
+	17, // 3: gestalt.provider.v1.KeyRange.upper:type_name -> google.protobuf.Value
+	18, // 4: gestalt.provider.v1.RecordRequest.record:type_name -> google.protobuf.Struct
+	18, // 5: gestalt.provider.v1.RecordResponse.record:type_name -> google.protobuf.Struct
+	18, // 6: gestalt.provider.v1.RecordsResponse.records:type_name -> google.protobuf.Struct
+	3,  // 7: gestalt.provider.v1.ObjectStoreRangeRequest.range:type_name -> gestalt.provider.v1.KeyRange
+	0,  // 8: gestalt.provider.v1.CreateObjectStoreRequest.schema:type_name -> gestalt.provider.v1.ObjectStoreSchema
+	17, // 9: gestalt.provider.v1.IndexQueryRequest.values:type_name -> google.protobuf.Value
+	3,  // 10: gestalt.provider.v1.IndexQueryRequest.range:type_name -> gestalt.provider.v1.KeyRange
+	11, // 11: gestalt.provider.v1.IndexedDB.CreateObjectStore:input_type -> gestalt.provider.v1.CreateObjectStoreRequest
+	12, // 12: gestalt.provider.v1.IndexedDB.DeleteObjectStore:input_type -> gestalt.provider.v1.DeleteObjectStoreRequest
+	8,  // 13: gestalt.provider.v1.IndexedDB.Get:input_type -> gestalt.provider.v1.ObjectStoreRequest
+	8,  // 14: gestalt.provider.v1.IndexedDB.GetKey:input_type -> gestalt.provider.v1.ObjectStoreRequest
+	4,  // 15: gestalt.provider.v1.IndexedDB.Add:input_type -> gestalt.provider.v1.RecordRequest
+	4,  // 16: gestalt.provider.v1.IndexedDB.Put:input_type -> gestalt.provider.v1.RecordRequest
+	8,  // 17: gestalt.provider.v1.IndexedDB.Delete:input_type -> gestalt.provider.v1.ObjectStoreRequest
+	9,  // 18: gestalt.provider.v1.IndexedDB.Clear:input_type -> gestalt.provider.v1.ObjectStoreNameRequest
+	10, // 19: gestalt.provider.v1.IndexedDB.GetAll:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
+	10, // 20: gestalt.provider.v1.IndexedDB.GetAllKeys:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
+	10, // 21: gestalt.provider.v1.IndexedDB.Count:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
+	10, // 22: gestalt.provider.v1.IndexedDB.DeleteRange:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
+	13, // 23: gestalt.provider.v1.IndexedDB.IndexGet:input_type -> gestalt.provider.v1.IndexQueryRequest
+	13, // 24: gestalt.provider.v1.IndexedDB.IndexGetKey:input_type -> gestalt.provider.v1.IndexQueryRequest
+	13, // 25: gestalt.provider.v1.IndexedDB.IndexGetAll:input_type -> gestalt.provider.v1.IndexQueryRequest
+	13, // 26: gestalt.provider.v1.IndexedDB.IndexGetAllKeys:input_type -> gestalt.provider.v1.IndexQueryRequest
+	13, // 27: gestalt.provider.v1.IndexedDB.IndexCount:input_type -> gestalt.provider.v1.IndexQueryRequest
+	13, // 28: gestalt.provider.v1.IndexedDB.IndexDelete:input_type -> gestalt.provider.v1.IndexQueryRequest
+	19, // 29: gestalt.provider.v1.IndexedDB.CreateObjectStore:output_type -> google.protobuf.Empty
+	19, // 30: gestalt.provider.v1.IndexedDB.DeleteObjectStore:output_type -> google.protobuf.Empty
+	5,  // 31: gestalt.provider.v1.IndexedDB.Get:output_type -> gestalt.provider.v1.RecordResponse
+	16, // 32: gestalt.provider.v1.IndexedDB.GetKey:output_type -> gestalt.provider.v1.KeyResponse
+	19, // 33: gestalt.provider.v1.IndexedDB.Add:output_type -> google.protobuf.Empty
+	19, // 34: gestalt.provider.v1.IndexedDB.Put:output_type -> google.protobuf.Empty
+	19, // 35: gestalt.provider.v1.IndexedDB.Delete:output_type -> google.protobuf.Empty
+	19, // 36: gestalt.provider.v1.IndexedDB.Clear:output_type -> google.protobuf.Empty
+	6,  // 37: gestalt.provider.v1.IndexedDB.GetAll:output_type -> gestalt.provider.v1.RecordsResponse
+	7,  // 38: gestalt.provider.v1.IndexedDB.GetAllKeys:output_type -> gestalt.provider.v1.KeysResponse
+	14, // 39: gestalt.provider.v1.IndexedDB.Count:output_type -> gestalt.provider.v1.CountResponse
+	15, // 40: gestalt.provider.v1.IndexedDB.DeleteRange:output_type -> gestalt.provider.v1.DeleteResponse
+	5,  // 41: gestalt.provider.v1.IndexedDB.IndexGet:output_type -> gestalt.provider.v1.RecordResponse
+	16, // 42: gestalt.provider.v1.IndexedDB.IndexGetKey:output_type -> gestalt.provider.v1.KeyResponse
+	6,  // 43: gestalt.provider.v1.IndexedDB.IndexGetAll:output_type -> gestalt.provider.v1.RecordsResponse
+	7,  // 44: gestalt.provider.v1.IndexedDB.IndexGetAllKeys:output_type -> gestalt.provider.v1.KeysResponse
+	14, // 45: gestalt.provider.v1.IndexedDB.IndexCount:output_type -> gestalt.provider.v1.CountResponse
+	15, // 46: gestalt.provider.v1.IndexedDB.IndexDelete:output_type -> gestalt.provider.v1.DeleteResponse
 	29, // [29:47] is the sub-list for method output_type
 	11, // [11:29] is the sub-list for method input_type
 	11, // [11:11] is the sub-list for extension type_name

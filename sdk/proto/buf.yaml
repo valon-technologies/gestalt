@@ -1,7 +1,7 @@
 version: v2
 modules:
   - path: .
-    name: buf.build/valon-technologies/gestalt-pluginapi
+    name: buf.build/valon-technologies/gestalt-providerapi
 lint:
   use:
     - STANDARD

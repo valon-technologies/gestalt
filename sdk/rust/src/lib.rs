@@ -18,7 +18,7 @@ mod secrets_server;
 /// Generated protobuf and gRPC bindings compiled from `sdk/proto/v1/*.proto`.
 mod generated {
     pub mod v1 {
-        tonic::include_proto!("gestalt.plugin.v1");
+        tonic::include_proto!("gestalt.provider.v1");
     }
 }
 

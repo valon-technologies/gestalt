@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package gestalt.plugin.v1;
+package gestalt.provider.v1;
 
 option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
 

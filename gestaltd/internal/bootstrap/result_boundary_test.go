@@ -74,6 +74,6 @@ func TestResultClose_ShutsDownConstructedResources(t *testing.T) {
 func registryWithProvider(t *testing.T, name string, p *closableProvider) *registry.PluginMap[core.Provider] {
 	t.Helper()
 	r := registry.New()
-	r.Providers.Register(name, p)
+	_ = r.Providers.Register(name, p)
 	return &r.Providers
 }

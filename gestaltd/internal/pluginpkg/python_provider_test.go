@@ -64,7 +64,7 @@ func TestDetectPythonComponentTarget(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte(`[tool.gestalt]
 plugin = "provider"
 auth = "provider:auth_provider"
-datastore = "provider:datastore_provider"
+indexeddb = "provider:indexeddb_provider"
 `), 0o644); err != nil {
 		t.Fatalf("WriteFile(pyproject.toml): %v", err)
 	}
@@ -79,10 +79,10 @@ datastore = "provider:datastore_provider"
 
 	datastoreTarget, err := DetectPythonComponentTarget(root, pluginmanifestv1.KindIndexedDB)
 	if err != nil {
-		t.Fatalf("DetectPythonComponentTarget(datastore): %v", err)
+		t.Fatalf("DetectPythonComponentTarget(indexeddb): %v", err)
 	}
-	if datastoreTarget != "provider:datastore_provider" {
-		t.Fatalf("datastore target = %q, want %q", datastoreTarget, "provider:datastore_provider")
+	if datastoreTarget != "provider:indexeddb_provider" {
+		t.Fatalf("indexeddb target = %q, want %q", datastoreTarget, "provider:indexeddb_provider")
 	}
 }
 

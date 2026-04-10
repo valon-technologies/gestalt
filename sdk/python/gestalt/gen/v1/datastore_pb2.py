@@ -23,10 +23,10 @@ _sym_db = _symbol_database.Default()
 
 
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
-from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
+from google.protobuf import struct_pb2 as google_dot_protobuf_dot_struct__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x12v1/datastore.proto\x12\x11gestalt.plugin.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xcb\x01\n\nStoredUser\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n\x05\x65mail\x18\x02 \x01(\tR\x05\x65mail\x12!\n\x0c\x64isplay_name\x18\x03 \x01(\tR\x0b\x64isplayName\x12\x39\n\ncreated_at\x18\x04 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x39\n\nupdated_at\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\tupdatedAt\"\xf5\x05\n\x16StoredIntegrationToken\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n\x07user_id\x18\x02 \x01(\tR\x06userId\x12 \n\x0bintegration\x18\x03 \x01(\tR\x0bintegration\x12\x1e\n\nconnection\x18\x04 \x01(\tR\nconnection\x12\x1a\n\x08instance\x18\x05 \x01(\tR\x08instance\x12.\n\x13\x61\x63\x63\x65ss_token_sealed\x18\x06 \x01(\x0cR\x11\x61\x63\x63\x65ssTokenSealed\x12\x30\n\x14refresh_token_sealed\x18\x07 \x01(\x0cR\x12refreshTokenSealed\x12\x16\n\x06scopes\x18\x08 \x01(\tR\x06scopes\x12\x39\n\nexpires_at\x18\t \x01(\x0b\x32\x1a.google.protobuf.TimestampR\texpiresAt\x12\x46\n\x11last_refreshed_at\x18\n \x01(\x0b\x32\x1a.google.protobuf.TimestampR\x0flastRefreshedAt\x12.\n\x13refresh_error_count\x18\x0b \x01(\x05R\x11refreshErrorCount\x12l\n\x11\x63onnection_params\x18\x0c \x03(\x0b\x32?.gestalt.plugin.v1.StoredIntegrationToken.ConnectionParamsEntryR\x10\x63onnectionParams\x12\x39\n\ncreated_at\x18\r \x01(\x0b\x32\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x39\n\nupdated_at\x18\x0e \x01(\x0b\x32\x1a.google.protobuf.TimestampR\tupdatedAt\x1a\x43\n\x15\x43onnectionParamsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n\x05value\x18\x02 \x01(\tR\x05value:\x02\x38\x01\"\xb9\x02\n\x0eStoredAPIToken\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n\x07user_id\x18\x02 \x01(\tR\x06userId\x12\x12\n\x04name\x18\x03 \x01(\tR\x04name\x12!\n\x0chashed_token\x18\x04 \x01(\tR\x0bhashedToken\x12\x16\n\x06scopes\x18\x05 \x01(\tR\x06scopes\x12\x39\n\nexpires_at\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\texpiresAt\x12\x39\n\ncreated_at\x18\x07 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\tcreatedAt\x12\x39\n\nupdated_at\x18\x08 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\tupdatedAt\"\xb2\x03\n\x11OAuthRegistration\x12&\n\x0f\x61uth_server_url\x18\x01 \x01(\tR\rauthServerUrl\x12!\n\x0credirect_uri\x18\x02 \x01(\tR\x0bredirectUri\x12\x1b\n\tclient_id\x18\x03 \x01(\tR\x08\x63lientId\x12\x30\n\x14\x63lient_secret_sealed\x18\x04 \x01(\x0cR\x12\x63lientSecretSealed\x12\x39\n\nexpires_at\x18\x05 \x01(\x0b\x32\x1a.google.protobuf.TimestampR\texpiresAt\x12\x35\n\x16\x61uthorization_endpoint\x18\x06 \x01(\tR\x15\x61uthorizationEndpoint\x12%\n\x0etoken_endpoint\x18\x07 \x01(\tR\rtokenEndpoint\x12)\n\x10scopes_supported\x18\x08 \x01(\tR\x0fscopesSupported\x12?\n\rdiscovered_at\x18\t \x01(\x0b\x32\x1a.google.protobuf.TimestampR\x0c\x64iscoveredAt\" \n\x0eGetUserRequest\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id\"/\n\x17\x46indOrCreateUserRequest\x12\x14\n\x05\x65mail\x18\x01 \x01(\tR\x05\x65mail\"\x99\x01\n GetStoredIntegrationTokenRequest\x12\x17\n\x07user_id\x18\x01 \x01(\tR\x06userId\x12 \n\x0bintegration\x18\x02 \x01(\tR\x0bintegration\x12\x1e\n\nconnection\x18\x03 \x01(\tR\nconnection\x12\x1a\n\x08instance\x18\x04 \x01(\tR\x08instance\"\x7f\n\"ListStoredIntegrationTokensRequest\x12\x17\n\x07user_id\x18\x01 \x01(\tR\x06userId\x12 \n\x0bintegration\x18\x02 \x01(\tR\x0bintegration\x12\x1e\n\nconnection\x18\x03 \x01(\tR\nconnection\"h\n#ListStoredIntegrationTokensResponse\x12\x41\n\x06tokens\x18\x01 \x03(\x0b\x32).gestalt.plugin.v1.StoredIntegrationTokenR\x06tokens\"5\n#DeleteStoredIntegrationTokenRequest\x12\x0e\n\x02id\x18\x01 \x01(\tR\x02id\"=\n\x18GetAPITokenByHashRequest\x12!\n\x0chashed_token\x18\x01 \x01(\tR\x0bhashedToken\"/\n\x14ListAPITokensRequest\x12\x17\n\x07user_id\x18\x01 \x01(\tR\x06userId\"R\n\x15ListAPITokensResponse\x12\x39\n\x06tokens\x18\x01 \x03(\x0b\x32!.gestalt.plugin.v1.StoredAPITokenR\x06tokens\"@\n\x15RevokeAPITokenRequest\x12\x17\n\x07user_id\x18\x01 \x01(\tR\x06userId\x12\x0e\n\x02id\x18\x02 \x01(\tR\x02id\"4\n\x19RevokeAllAPITokensRequest\x12\x17\n\x07user_id\x18\x01 \x01(\tR\x06userId\"6\n\x1aRevokeAllAPITokensResponse\x12\x18\n\x07revoked\x18\x01 \x01(\x03R\x07revoked\"h\n\x1bGetOAuthRegistrationRequest\x12&\n\x0f\x61uth_server_url\x18\x01 \x01(\tR\rauthServerUrl\x12!\n\x0credirect_uri\x18\x02 \x01(\tR\x0bredirectUri\"k\n\x1e\x44\x65leteOAuthRegistrationRequest\x12&\n\x0f\x61uth_server_url\x18\x01 \x01(\tR\rauthServerUrl\x12!\n\x0credirect_uri\x18\x02 \x01(\tR\x0bredirectUri2\xda\x0b\n\x11\x44\x61tastoreProvider\x12\x39\n\x07Migrate\x12\x16.google.protobuf.Empty\x1a\x16.google.protobuf.Empty\x12K\n\x07GetUser\x12!.gestalt.plugin.v1.GetUserRequest\x1a\x1d.gestalt.plugin.v1.StoredUser\x12]\n\x10\x46indOrCreateUser\x12*.gestalt.plugin.v1.FindOrCreateUserRequest\x1a\x1d.gestalt.plugin.v1.StoredUser\x12^\n\x19PutStoredIntegrationToken\x12).gestalt.plugin.v1.StoredIntegrationToken\x1a\x16.google.protobuf.Empty\x12{\n\x19GetStoredIntegrationToken\x12\x33.gestalt.plugin.v1.GetStoredIntegrationTokenRequest\x1a).gestalt.plugin.v1.StoredIntegrationToken\x12\x8c\x01\n\x1bListStoredIntegrationTokens\x12\x35.gestalt.plugin.v1.ListStoredIntegrationTokensRequest\x1a\x36.gestalt.plugin.v1.ListStoredIntegrationTokensResponse\x12n\n\x1c\x44\x65leteStoredIntegrationToken\x12\x36.gestalt.plugin.v1.DeleteStoredIntegrationTokenRequest\x1a\x16.google.protobuf.Empty\x12H\n\x0bPutAPIToken\x12!.gestalt.plugin.v1.StoredAPIToken\x1a\x16.google.protobuf.Empty\x12\x63\n\x11GetAPITokenByHash\x12+.gestalt.plugin.v1.GetAPITokenByHashRequest\x1a!.gestalt.plugin.v1.StoredAPIToken\x12\x62\n\rListAPITokens\x12\'.gestalt.plugin.v1.ListAPITokensRequest\x1a(.gestalt.plugin.v1.ListAPITokensResponse\x12R\n\x0eRevokeAPIToken\x12(.gestalt.plugin.v1.RevokeAPITokenRequest\x1a\x16.google.protobuf.Empty\x12q\n\x12RevokeAllAPITokens\x12,.gestalt.plugin.v1.RevokeAllAPITokensRequest\x1a-.gestalt.plugin.v1.RevokeAllAPITokensResponse\x12l\n\x14GetOAuthRegistration\x12..gestalt.plugin.v1.GetOAuthRegistrationRequest\x1a$.gestalt.plugin.v1.OAuthRegistration\x12T\n\x14PutOAuthRegistration\x12$.gestalt.plugin.v1.OAuthRegistration\x1a\x16.google.protobuf.Empty\x12\x64\n\x17\x44\x65leteOAuthRegistration\x12\x31.gestalt.plugin.v1.DeleteOAuthRegistrationRequest\x1a\x16.google.protobuf.EmptyB;Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;protob\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x12v1/datastore.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\"\x89\x01\n\x11ObjectStoreSchema\x12:\n\x07indexes\x18\x01 \x03(\x0b\x32 .gestalt.provider.v1.IndexSchemaR\x07indexes\x12\x38\n\x07\x63olumns\x18\x02 \x03(\x0b\x32\x1e.gestalt.provider.v1.ColumnDefR\x07\x63olumns\"T\n\x0bIndexSchema\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n\x08key_path\x18\x02 \x03(\tR\x07keyPath\x12\x16\n\x06unique\x18\x03 \x01(\x08R\x06unique\"\x87\x01\n\tColumnDef\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n\x04type\x18\x02 \x01(\x05R\x04type\x12\x1f\n\x0bprimary_key\x18\x03 \x01(\x08R\nprimaryKey\x12\x19\n\x08not_null\x18\x04 \x01(\x08R\x07notNull\x12\x16\n\x06unique\x18\x05 \x01(\x08R\x06unique\"\xa4\x01\n\x08KeyRange\x12,\n\x05lower\x18\x01 \x01(\x0b\x32\x16.google.protobuf.ValueR\x05lower\x12,\n\x05upper\x18\x02 \x01(\x0b\x32\x16.google.protobuf.ValueR\x05upper\x12\x1d\n\nlower_open\x18\x03 \x01(\x08R\tlowerOpen\x12\x1d\n\nupper_open\x18\x04 \x01(\x08R\tupperOpen\"V\n\rRecordRequest\x12\x14\n\x05store\x18\x01 \x01(\tR\x05store\x12/\n\x06record\x18\x02 \x01(\x0b\x32\x17.google.protobuf.StructR\x06record\"A\n\x0eRecordResponse\x12/\n\x06record\x18\x01 \x01(\x0b\x32\x17.google.protobuf.StructR\x06record\"D\n\x0fRecordsResponse\x12\x31\n\x07records\x18\x01 \x03(\x0b\x32\x17.google.protobuf.StructR\x07records\"\"\n\x0cKeysResponse\x12\x12\n\x04keys\x18\x01 \x03(\tR\x04keys\":\n\x12ObjectStoreRequest\x12\x14\n\x05store\x18\x01 \x01(\tR\x05store\x12\x0e\n\x02id\x18\x02 \x01(\tR\x02id\".\n\x16ObjectStoreNameRequest\x12\x14\n\x05store\x18\x01 \x01(\tR\x05store\"s\n\x17ObjectStoreRangeRequest\x12\x14\n\x05store\x18\x01 \x01(\tR\x05store\x12\x38\n\x05range\x18\x02 \x01(\x0b\x32\x1d.gestalt.provider.v1.KeyRangeH\x00R\x05range\x88\x01\x01\x42\x08\n\x06_range\"n\n\x18\x43reateObjectStoreRequest\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12>\n\x06schema\x18\x02 \x01(\x0b\x32&.gestalt.provider.v1.ObjectStoreSchemaR\x06schema\".\n\x18\x44\x65leteObjectStoreRequest\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\"\xb3\x01\n\x11IndexQueryRequest\x12\x14\n\x05store\x18\x01 \x01(\tR\x05store\x12\x14\n\x05index\x18\x02 \x01(\tR\x05index\x12.\n\x06values\x18\x03 \x03(\x0b\x32\x16.google.protobuf.ValueR\x06values\x12\x38\n\x05range\x18\x04 \x01(\x0b\x32\x1d.gestalt.provider.v1.KeyRangeH\x00R\x05range\x88\x01\x01\x42\x08\n\x06_range\"%\n\rCountResponse\x12\x14\n\x05\x63ount\x18\x01 \x01(\x03R\x05\x63ount\"*\n\x0e\x44\x65leteResponse\x12\x18\n\x07\x64\x65leted\x18\x01 \x01(\x03R\x07\x64\x65leted\"\x1f\n\x0bKeyResponse\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key2\xa9\x0c\n\tIndexedDB\x12Z\n\x11\x43reateObjectStore\x12-.gestalt.provider.v1.CreateObjectStoreRequest\x1a\x16.google.protobuf.Empty\x12Z\n\x11\x44\x65leteObjectStore\x12-.gestalt.provider.v1.DeleteObjectStoreRequest\x1a\x16.google.protobuf.Empty\x12S\n\x03Get\x12\'.gestalt.provider.v1.ObjectStoreRequest\x1a#.gestalt.provider.v1.RecordResponse\x12S\n\x06GetKey\x12\'.gestalt.provider.v1.ObjectStoreRequest\x1a .gestalt.provider.v1.KeyResponse\x12\x41\n\x03\x41\x64\x64\x12\".gestalt.provider.v1.RecordRequest\x1a\x16.google.protobuf.Empty\x12\x41\n\x03Put\x12\".gestalt.provider.v1.RecordRequest\x1a\x16.google.protobuf.Empty\x12I\n\x06\x44\x65lete\x12\'.gestalt.provider.v1.ObjectStoreRequest\x1a\x16.google.protobuf.Empty\x12L\n\x05\x43lear\x12+.gestalt.provider.v1.ObjectStoreNameRequest\x1a\x16.google.protobuf.Empty\x12\\\n\x06GetAll\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a$.gestalt.provider.v1.RecordsResponse\x12]\n\nGetAllKeys\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a!.gestalt.provider.v1.KeysResponse\x12Y\n\x05\x43ount\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a\".gestalt.provider.v1.CountResponse\x12`\n\x0b\x44\x65leteRange\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a#.gestalt.provider.v1.DeleteResponse\x12W\n\x08IndexGet\x12&.gestalt.provider.v1.IndexQueryRequest\x1a#.gestalt.provider.v1.RecordResponse\x12W\n\x0bIndexGetKey\x12&.gestalt.provider.v1.IndexQueryRequest\x1a .gestalt.provider.v1.KeyResponse\x12[\n\x0bIndexGetAll\x12&.gestalt.provider.v1.IndexQueryRequest\x1a$.gestalt.provider.v1.RecordsResponse\x12\\\n\x0fIndexGetAllKeys\x12&.gestalt.provider.v1.IndexQueryRequest\x1a!.gestalt.provider.v1.KeysResponse\x12X\n\nIndexCount\x12&.gestalt.provider.v1.IndexQueryRequest\x1a\".gestalt.provider.v1.CountResponse\x12Z\n\x0bIndexDelete\x12&.gestalt.provider.v1.IndexQueryRequest\x1a#.gestalt.provider.v1.DeleteResponseB;Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;protob\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,46 +34,40 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'v1.datastore_pb2', _globals
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto'
-  _globals['_STOREDINTEGRATIONTOKEN_CONNECTIONPARAMSENTRY']._loaded_options = None
-  _globals['_STOREDINTEGRATIONTOKEN_CONNECTIONPARAMSENTRY']._serialized_options = b'8\001'
-  _globals['_STOREDUSER']._serialized_start=104
-  _globals['_STOREDUSER']._serialized_end=307
-  _globals['_STOREDINTEGRATIONTOKEN']._serialized_start=310
-  _globals['_STOREDINTEGRATIONTOKEN']._serialized_end=1067
-  _globals['_STOREDINTEGRATIONTOKEN_CONNECTIONPARAMSENTRY']._serialized_start=1000
-  _globals['_STOREDINTEGRATIONTOKEN_CONNECTIONPARAMSENTRY']._serialized_end=1067
-  _globals['_STOREDAPITOKEN']._serialized_start=1070
-  _globals['_STOREDAPITOKEN']._serialized_end=1383
-  _globals['_OAUTHREGISTRATION']._serialized_start=1386
-  _globals['_OAUTHREGISTRATION']._serialized_end=1820
-  _globals['_GETUSERREQUEST']._serialized_start=1822
-  _globals['_GETUSERREQUEST']._serialized_end=1854
-  _globals['_FINDORCREATEUSERREQUEST']._serialized_start=1856
-  _globals['_FINDORCREATEUSERREQUEST']._serialized_end=1903
-  _globals['_GETSTOREDINTEGRATIONTOKENREQUEST']._serialized_start=1906
-  _globals['_GETSTOREDINTEGRATIONTOKENREQUEST']._serialized_end=2059
-  _globals['_LISTSTOREDINTEGRATIONTOKENSREQUEST']._serialized_start=2061
-  _globals['_LISTSTOREDINTEGRATIONTOKENSREQUEST']._serialized_end=2188
-  _globals['_LISTSTOREDINTEGRATIONTOKENSRESPONSE']._serialized_start=2190
-  _globals['_LISTSTOREDINTEGRATIONTOKENSRESPONSE']._serialized_end=2294
-  _globals['_DELETESTOREDINTEGRATIONTOKENREQUEST']._serialized_start=2296
-  _globals['_DELETESTOREDINTEGRATIONTOKENREQUEST']._serialized_end=2349
-  _globals['_GETAPITOKENBYHASHREQUEST']._serialized_start=2351
-  _globals['_GETAPITOKENBYHASHREQUEST']._serialized_end=2412
-  _globals['_LISTAPITOKENSREQUEST']._serialized_start=2414
-  _globals['_LISTAPITOKENSREQUEST']._serialized_end=2461
-  _globals['_LISTAPITOKENSRESPONSE']._serialized_start=2463
-  _globals['_LISTAPITOKENSRESPONSE']._serialized_end=2545
-  _globals['_REVOKEAPITOKENREQUEST']._serialized_start=2547
-  _globals['_REVOKEAPITOKENREQUEST']._serialized_end=2611
-  _globals['_REVOKEALLAPITOKENSREQUEST']._serialized_start=2613
-  _globals['_REVOKEALLAPITOKENSREQUEST']._serialized_end=2665
-  _globals['_REVOKEALLAPITOKENSRESPONSE']._serialized_start=2667
-  _globals['_REVOKEALLAPITOKENSRESPONSE']._serialized_end=2721
-  _globals['_GETOAUTHREGISTRATIONREQUEST']._serialized_start=2723
-  _globals['_GETOAUTHREGISTRATIONREQUEST']._serialized_end=2827
-  _globals['_DELETEOAUTHREGISTRATIONREQUEST']._serialized_start=2829
-  _globals['_DELETEOAUTHREGISTRATIONREQUEST']._serialized_end=2936
-  _globals['_DATASTOREPROVIDER']._serialized_start=2939
-  _globals['_DATASTOREPROVIDER']._serialized_end=4437
+  _globals['_OBJECTSTORESCHEMA']._serialized_start=103
+  _globals['_OBJECTSTORESCHEMA']._serialized_end=240
+  _globals['_INDEXSCHEMA']._serialized_start=242
+  _globals['_INDEXSCHEMA']._serialized_end=326
+  _globals['_COLUMNDEF']._serialized_start=329
+  _globals['_COLUMNDEF']._serialized_end=464
+  _globals['_KEYRANGE']._serialized_start=467
+  _globals['_KEYRANGE']._serialized_end=631
+  _globals['_RECORDREQUEST']._serialized_start=633
+  _globals['_RECORDREQUEST']._serialized_end=719
+  _globals['_RECORDRESPONSE']._serialized_start=721
+  _globals['_RECORDRESPONSE']._serialized_end=786
+  _globals['_RECORDSRESPONSE']._serialized_start=788
+  _globals['_RECORDSRESPONSE']._serialized_end=856
+  _globals['_KEYSRESPONSE']._serialized_start=858
+  _globals['_KEYSRESPONSE']._serialized_end=892
+  _globals['_OBJECTSTOREREQUEST']._serialized_start=894
+  _globals['_OBJECTSTOREREQUEST']._serialized_end=952
+  _globals['_OBJECTSTORENAMEREQUEST']._serialized_start=954
+  _globals['_OBJECTSTORENAMEREQUEST']._serialized_end=1000
+  _globals['_OBJECTSTORERANGEREQUEST']._serialized_start=1002
+  _globals['_OBJECTSTORERANGEREQUEST']._serialized_end=1117
+  _globals['_CREATEOBJECTSTOREREQUEST']._serialized_start=1119
+  _globals['_CREATEOBJECTSTOREREQUEST']._serialized_end=1229
+  _globals['_DELETEOBJECTSTOREREQUEST']._serialized_start=1231
+  _globals['_DELETEOBJECTSTOREREQUEST']._serialized_end=1277
+  _globals['_INDEXQUERYREQUEST']._serialized_start=1280
+  _globals['_INDEXQUERYREQUEST']._serialized_end=1459
+  _globals['_COUNTRESPONSE']._serialized_start=1461
+  _globals['_COUNTRESPONSE']._serialized_end=1498
+  _globals['_DELETERESPONSE']._serialized_start=1500
+  _globals['_DELETERESPONSE']._serialized_end=1542
+  _globals['_KEYRESPONSE']._serialized_start=1544
+  _globals['_KEYRESPONSE']._serialized_end=1575
+  _globals['_INDEXEDDB']._serialized_start=1578
+  _globals['_INDEXEDDB']._serialized_end=3155
 # @@protoc_insertion_point(module_scope)

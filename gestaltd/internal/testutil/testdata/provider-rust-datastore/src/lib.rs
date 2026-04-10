@@ -19,7 +19,7 @@ impl Provider {
 }
 
 #[gestalt::async_trait]
-impl gestalt::DatastoreProvider for Provider {
+impl gestalt::IndexedDBProvider for Provider {
     fn metadata(&self) -> Option<gestalt::RuntimeMetadata> {
         Some(gestalt::RuntimeMetadata {
             name: "generated-datastore".to_string(),
@@ -150,4 +150,4 @@ fn new() -> Provider {
     Provider::new()
 }
 
-gestalt::export_datastore_provider!(constructor = new);
+gestalt::export_indexeddb_provider!(constructor = new);
