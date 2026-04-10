@@ -28,7 +28,7 @@ The host owns auth, token storage, connection selection, and HTTP or MCP routing
 
 ## Process isolation
 
-Providers run in their own process. They cannot access the host process memory, other users' credentials, or (for integration plugins) the datastore directly. Integration plugins also run inside a network sandbox: outbound requests to hosts not listed in `plugin.allowed_hosts` in the manifest are rejected with a 403.
+Providers run in their own process. They cannot access the host process memory, other users' credentials, or (for integration plugins) the datastore directly. Integration plugins also run inside a network sandbox: outbound requests to hosts not listed in `plugin.allowedHosts` in the manifest are rejected with a 403.
 
 ## SDK support
 
@@ -53,7 +53,7 @@ This convention enables prefix matching in the CLI. When you run `gestalt invoke
 
 **Duplicate operation IDs.** Operation IDs must be unique within a provider. If two surfaces (for example, an OpenAPI passthrough and an executable operation) expose the same ID, the provider fails validation at startup. Use `allowed_operations` to filter or alias collisions.
 
-**Sandbox 403 errors.** Executable providers run inside a network sandbox. Outbound HTTP requests to hosts not listed in `plugin.allowed_hosts` are rejected with a 403. Add every upstream domain the provider contacts to the allowlist in the manifest.
+**Sandbox 403 errors.** Executable providers run inside a network sandbox. Outbound HTTP requests to hosts not listed in `plugin.allowedHosts` are rejected with a 403. Add every upstream domain the provider contacts to the allowlist in the manifest.
 
 ## What to read next
 

@@ -170,7 +170,7 @@ source: github.com/acme/plugins/web/default
 version: 1.2.0
 webui:
   asset_root: ui/out
-  config_schema_path: schemas/ui-config.schema.json
+  configSchemaPath: schemas/ui-config.schema.json
 ```
 
 `gestaltd init` prepares the released UI and records it in `gestalt.lock.json`. `gestaltd serve --locked` then serves the prepared asset root at `/`. Omit `ui` to use the pinned first-party default UI bundle, or set `ui.provider: none` to disable the public UI. The built-in admin UI remains available at `/admin` regardless.

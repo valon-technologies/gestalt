@@ -4,7 +4,7 @@ Implementation details of how Gestalt protects credentials. For operator guidanc
 
 ## Key derivation
 
-`server.encryption_key` is converted to a 32-byte AES key at startup.
+`server.encryptionKey` is converted to a 32-byte AES key at startup.
 
 If the key is a 64-character hex string, it's hex-decoded directly into 32 bytes. No derivation, no extra cost. Generate one with `openssl rand -hex 32`.
 
@@ -42,7 +42,7 @@ Disconnecting deletes the token row. No soft-delete, no upstream revocation. If 
 
 API tokens (`gst_api_*`) work differently: the plaintext is never stored.
 
-**Creation.** Gestalt generates 32 random bytes, formats them as `gst_api_` + hex, computes the SHA-256 hash, and stores only the hash. The plaintext is returned once. Default TTL is 30 days (`server.api_token_ttl`). CLI login tokens are non-expiring.
+**Creation.** Gestalt generates 32 random bytes, formats them as `gst_api_` + hex, computes the SHA-256 hash, and stores only the hash. The plaintext is returned once. Default TTL is 30 days (`server.apiTokenTtl`). CLI login tokens are non-expiring.
 
 **Validation.** On each request, Gestalt hashes the bearer token and looks up the hash. Match + not expired = authenticated.
 
@@ -56,6 +56,6 @@ The `secrets.config` block is excluded from resolution. Use `${ENV_VAR}` or `${E
 
 ## Key rotation
 
-There is no automated key rotation. Changing `server.encryption_key` makes all stored encrypted values unreadable.
+There is no automated key rotation. Changing `server.encryptionKey` makes all stored encrypted values unreadable.
 
 To rotate: stop all instances, decrypt tokens with the old key, re-encrypt with the new key, update config, restart. This requires direct database access and the logic in `core/crypto`. There is no built-in tool for this.

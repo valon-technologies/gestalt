@@ -13,13 +13,13 @@ An auth provider manifest uses an `auth` block:
 ```yaml
 source: github.com/example/plugins/my-auth
 version: 0.0.1-alpha.1
-display_name: My Auth Provider
+displayName: My Auth Provider
 description: Custom OAuth 2.0 authentication
 auth:
-  config_schema_path: ./auth_config.json
+  configSchemaPath: ./auth_config.json
 ```
 
-The optional `auth.config_schema_path` field points to a JSON Schema that validates the `auth.config` block in the server config. If you provide one, Gestalt rejects invalid config at startup rather than letting bad values reach the provider at runtime.
+The optional `auth.configSchemaPath` field points to a JSON Schema that validates the `auth.config` block in the server config. If you provide one, Gestalt rejects invalid config at startup rather than letting bad values reach the provider at runtime.
 
 ## Interface
 
@@ -246,8 +246,8 @@ auth:
       path: ./my-auth/manifest.yaml
   config:
     issuer_url: https://login.example.com
-    client_id: ${OIDC_CLIENT_ID}
-    client_secret: secret://oidc-client-secret
+    clientId: ${OIDC_CLIENT_ID}
+    clientSecret: secret://oidc-client-secret
 ```
 
 `provider.source.path` points at the auth provider's `manifest.yaml` during development. For production, use `provider.source.ref` and `version` to reference a published release. The `config` block is passed to `Configure` at startup and validated against the config schema if one was declared in the manifest.
