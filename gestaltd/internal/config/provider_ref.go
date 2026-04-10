@@ -20,6 +20,7 @@ type integrationWire struct {
 	IconFile          string                            `yaml:"iconFile"`
 	Provider          *ProviderDef                      `yaml:"provider"`
 	Config            yaml.Node                         `yaml:"config"`
+	DefaultConnection string                            `yaml:"defaultConnection"`
 	Connections       map[string]*integrationConnection `yaml:"connections"`
 	AllowedOperations map[string]*OperationOverride     `yaml:"allowedOperations"`
 	MCP               *integrationMCPWire               `yaml:"mcp"`
@@ -88,42 +89,66 @@ func (i *PluginDef) UnmarshalYAML(value *yaml.Node) error {
 		if wire.MCP != nil {
 			plugin.MCP = wire.MCP.Enabled
 		}
-		if defaultConn, ok := wire.Connections["default"]; ok && defaultConn != nil {
-			auth := defaultConn.Auth
-			plugin.Auth = &auth
-			plugin.ConnectionMode = defaultConn.Mode
-			plugin.ConnectionParams = defaultConn.Params
-			plugin.Discovery = defaultConn.Discovery
+	}
+
+	var allConnections map[string]*ConnectionDef
+	if len(wire.Connections) > 0 {
+		allConnections = make(map[string]*ConnectionDef, len(wire.Connections))
+		for name, conn := range wire.Connections {
+			if conn == nil {
+				allConnections[name] = nil
+				continue
+			}
+			allConnections[name] = &ConnectionDef{
+				Mode:             conn.Mode,
+				Auth:             conn.Auth,
+				ConnectionParams: conn.Params,
+				Discovery:        conn.Discovery,
+			}
 		}
-		if len(wire.Connections) > 0 {
-			plugin.Connections = make(map[string]*ConnectionDef, len(wire.Connections))
-			for name, conn := range wire.Connections {
-				if name == "default" {
+	}
+
+	defaultConnName := wire.DefaultConnection
+	if defaultConnName == "" {
+		if _, ok := allConnections["default"]; ok {
+			defaultConnName = "default"
+		}
+	}
+
+	if plugin != nil && defaultConnName != "" {
+		if defConn, ok := allConnections[defaultConnName]; ok && defConn != nil {
+			auth := defConn.Auth
+			plugin.Auth = &auth
+			plugin.ConnectionMode = defConn.Mode
+			plugin.ConnectionParams = defConn.ConnectionParams
+			plugin.Discovery = defConn.Discovery
+		}
+		plugin.DefaultConnection = defaultConnName
+
+		if len(allConnections) > 0 {
+			plugin.Connections = make(map[string]*ConnectionDef, len(allConnections))
+			for name, conn := range allConnections {
+				if name == defaultConnName {
 					continue
 				}
-				if conn == nil {
-					plugin.Connections[name] = nil
-					continue
-				}
-				plugin.Connections[name] = &ConnectionDef{
-					Mode:             conn.Mode,
-					Auth:             conn.Auth,
-					ConnectionParams: conn.Params,
-					Discovery:        conn.Discovery,
-				}
+				plugin.Connections[name] = conn
 			}
 			if len(plugin.Connections) == 0 {
 				plugin.Connections = nil
 			}
 		}
+	} else if plugin != nil && len(allConnections) > 0 {
+		plugin.Connections = allConnections
 	}
 
 	*i = PluginDef{
-		Plugin:      plugin,
-		DisplayName: wire.DisplayName,
-		Description: wire.Description,
-		IconFile:    wire.IconFile,
-		Datastores:  wire.Datastores,
+		Plugin:            plugin,
+		DisplayName:       wire.DisplayName,
+		Description:       wire.Description,
+		IconFile:          wire.IconFile,
+		Datastores:        wire.Datastores,
+		DefaultConnection: defaultConnName,
+		Connections:       allConnections,
 	}
 	if wire.MCP != nil {
 		i.MCPToolPrefix = wire.MCP.ToolPrefix

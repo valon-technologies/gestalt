@@ -359,12 +359,14 @@ func (s ServerConfig) ManagementAddr() string {
 }
 
 type PluginDef struct {
-	Plugin        *ProviderDef      `yaml:"plugin"`
-	DisplayName   string            `yaml:"displayName"`
-	Description   string            `yaml:"description"`
-	MCPToolPrefix string            `yaml:"-"`
-	IconFile      string            `yaml:"iconFile"`
-	Datastores    map[string]string `yaml:"-"`
+	Plugin            *ProviderDef              `yaml:"plugin"`
+	DisplayName       string                    `yaml:"displayName"`
+	Description       string                    `yaml:"description"`
+	MCPToolPrefix     string                    `yaml:"-"`
+	IconFile          string                    `yaml:"iconFile"`
+	Datastores        map[string]string         `yaml:"-"`
+	DefaultConnection string                    `yaml:"-"`
+	Connections       map[string]*ConnectionDef `yaml:"-"`
 }
 
 // ConnectionDef owns authentication and connection parameters for a named

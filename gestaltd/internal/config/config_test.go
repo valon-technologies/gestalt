@@ -1040,6 +1040,132 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 	}
 }
 
+func TestPluginDefConnectionsParsing(t *testing.T) {
+	t.Parallel()
+
+	t.Run("default connection populates PluginDef.Connections and backward compat fields", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+plugins:
+  svc:
+    provider:
+      source:
+        path: /tmp/manifest.yaml
+    connections:
+      default:
+        mode: user
+        auth:
+          type: oauth2
+          clientId: cid-1
+        params:
+          org:
+            required: true
+      secondary:
+        mode: admin
+        auth:
+          type: none
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+
+		pluginDef := cfg.Plugins["svc"]
+
+		if pluginDef.DefaultConnection != "default" {
+			t.Fatalf("PluginDef.DefaultConnection = %q, want %q", pluginDef.DefaultConnection, "default")
+		}
+		if len(pluginDef.Connections) != 2 {
+			t.Fatalf("len(PluginDef.Connections) = %d, want 2", len(pluginDef.Connections))
+		}
+		if pluginDef.Connections["default"] == nil {
+			t.Fatal("PluginDef.Connections[\"default\"] = nil, want non-nil")
+		}
+		if pluginDef.Connections["secondary"] == nil {
+			t.Fatal("PluginDef.Connections[\"secondary\"] = nil, want non-nil")
+		}
+
+		provider := pluginDef.Plugin
+		if provider.Auth == nil {
+			t.Fatal("ProviderDef.Auth = nil, want hoisted from default connection")
+		}
+		if provider.Auth.Type != pluginmanifestv1.AuthTypeOAuth2 {
+			t.Fatalf("ProviderDef.Auth.Type = %q, want %q", provider.Auth.Type, pluginmanifestv1.AuthTypeOAuth2)
+		}
+		if provider.ConnectionMode != pluginmanifestv1.ConnectionModeUser {
+			t.Fatalf("ProviderDef.ConnectionMode = %q, want %q", provider.ConnectionMode, pluginmanifestv1.ConnectionModeUser)
+		}
+		if _, ok := provider.ConnectionParams["org"]; !ok {
+			t.Fatal("ProviderDef.ConnectionParams missing \"org\"")
+		}
+
+		if len(provider.Connections) != 1 {
+			t.Fatalf("ProviderDef.Connections length = %d, want 1 (non-default only)", len(provider.Connections))
+		}
+		if provider.Connections["secondary"] == nil {
+			t.Fatal("ProviderDef.Connections[\"secondary\"] = nil")
+		}
+	})
+
+	t.Run("explicit defaultConnection overrides implicit default key", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+plugins:
+  svc:
+    provider:
+      source:
+        path: /tmp/manifest.yaml
+    defaultConnection: primary
+    connections:
+      default:
+        mode: admin
+        auth:
+          type: none
+      primary:
+        mode: user
+        auth:
+          type: oauth2
+          clientId: cid-primary
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+
+		pluginDef := cfg.Plugins["svc"]
+
+		if pluginDef.DefaultConnection != "primary" {
+			t.Fatalf("PluginDef.DefaultConnection = %q, want %q", pluginDef.DefaultConnection, "primary")
+		}
+
+		provider := pluginDef.Plugin
+		if provider.Auth == nil {
+			t.Fatal("ProviderDef.Auth = nil, want hoisted from primary connection")
+		}
+		if provider.Auth.ClientID != "cid-primary" {
+			t.Fatalf("ProviderDef.Auth.ClientID = %q, want %q", provider.Auth.ClientID, "cid-primary")
+		}
+		if provider.ConnectionMode != pluginmanifestv1.ConnectionModeUser {
+			t.Fatalf("ProviderDef.ConnectionMode = %q, want %q", provider.ConnectionMode, pluginmanifestv1.ConnectionModeUser)
+		}
+
+		if len(pluginDef.Connections) != 2 {
+			t.Fatalf("len(PluginDef.Connections) = %d, want 2", len(pluginDef.Connections))
+		}
+
+		if provider.Connections["default"] == nil {
+			t.Fatal("ProviderDef.Connections[\"default\"] = nil, want non-default connections preserved")
+		}
+		if _, hasPrimary := provider.Connections["primary"]; hasPrimary {
+			t.Fatal("ProviderDef.Connections should not contain the effective default connection")
+		}
+	})
+}
+
 func TestLoadConfigResolvesRelativePaths(t *testing.T) {
 	t.Parallel()
 
