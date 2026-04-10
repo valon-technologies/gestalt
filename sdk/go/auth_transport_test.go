@@ -129,7 +129,7 @@ func TestAuthProviderRoundTrip(t *testing.T) {
 		t.Fatalf("warnings = %v, want to contain %q", meta.GetWarnings(), "battery low")
 	}
 
-	cfg, _ := structpb.NewStruct(map[string]any{"client_id": "abc"})
+	cfg, _ := structpb.NewStruct(map[string]any{"clientId": "abc"})
 	_, err = runtimeClient.ConfigureProvider(rpcCtx, &proto.ConfigureProviderRequest{
 		Name:            "my-auth",
 		Config:          cfg,
@@ -144,8 +144,8 @@ func TestAuthProviderRoundTrip(t *testing.T) {
 	if provider.configured[0].name != "my-auth" {
 		t.Fatalf("configured name = %q, want %q", provider.configured[0].name, "my-auth")
 	}
-	if provider.configured[0].config["client_id"] != "abc" {
-		t.Fatalf("configured config[client_id] = %v, want %q", provider.configured[0].config["client_id"], "abc")
+	if provider.configured[0].config["clientId"] != "abc" {
+		t.Fatalf("configured config[clientId] = %v, want %q", provider.configured[0].config["clientId"], "abc")
 	}
 
 	health, err := runtimeClient.HealthCheck(rpcCtx, &emptypb.Empty{})

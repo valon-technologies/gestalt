@@ -11,7 +11,7 @@ Auth providers handle platform login. They are configured under `auth.provider` 
 | Name | Purpose |
 | --- | --- |
 | `local` | Single-user auth for local development. No external identity provider required. |
-| `google` | Google OAuth 2.0 platform login. Supports `allowed_domains` restriction. |
+| `google` | Google OAuth 2.0 platform login. Supports `allowedDomains` restriction. |
 | `oidc` | Generic OpenID Connect. Works with Okta, Auth0, Azure AD, Keycloak, and others. |
 
 ```yaml
@@ -21,7 +21,7 @@ auth:
       ref: github.com/valon-technologies/gestalt-providers/auth-google
       version: 1.0.0
   config:
-    allowed_domains:
+    allowedDomains:
       - example.com
 ```
 

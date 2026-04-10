@@ -40,8 +40,8 @@ auth:
       ref: github.com/valon-technologies/gestalt-providers/auth/google
       version: 1.0.0
   config:
-    client_id: client-1
-    client_secret: secret-1
+    clientId: client-1
+    clientSecret: secret-1
 datastores:
   sqlite:
     driver: sqlite
@@ -96,7 +96,7 @@ auth:
       ref: github.com/valon-technologies/gestalt-providers/auth/google
       version: 1.0.0
   config:
-    client_id: ${TEST_CLIENT_ID}
+    clientId: ${TEST_CLIENT_ID}
 datastores:
   sqlite:
     driver: sqlite
@@ -133,8 +133,8 @@ plugins:
 		t.Fatal("Auth.Provider = nil")
 	}
 	authCfg := mustDecodeNode(t, cfg.Auth.Config)
-	if authCfg["client_id"] != "client-from-env" {
-		t.Fatalf("Auth.Config.client_id = %#v", authCfg["client_id"])
+	if authCfg["clientId"] != "client-from-env" {
+		t.Fatalf("Auth.Config.clientId = %#v", authCfg["clientId"])
 	}
 }
 
@@ -405,7 +405,7 @@ auth:
       ref: github.com/valon-technologies/gestalt-providers/auth/oidc
       version: 1.0.0
   config:
-    issuer_url: https://issuer.example.test
+    issuerUrl: https://issuer.example.test
 datastores:
   sqlite:
     driver: sqlite
@@ -1088,9 +1088,9 @@ auth:
       ref: github.com/valon-technologies/gestalt-providers/auth/google
       version: 1.0.0
   config:
-    client_id: client-1
-    client_secret: secret-1
-    allowed_domain: example.test
+    clientId: client-1
+    clientSecret: secret-1
+    redirectUrl: https://example.test/callback
 datastores:
   sqlite:
     driver: sqlite
@@ -1112,14 +1112,14 @@ server:
 	if len(authCfg) != 3 {
 		t.Fatalf("Auth.Config length = %d, want 3", len(authCfg))
 	}
-	if authCfg["client_id"] != "client-1" {
-		t.Fatalf("Auth.Config.client_id = %#v", authCfg["client_id"])
+	if authCfg["clientId"] != "client-1" {
+		t.Fatalf("Auth.Config.clientId = %#v", authCfg["clientId"])
 	}
-	if authCfg["client_secret"] != "secret-1" {
-		t.Fatalf("Auth.Config.client_secret = %#v", authCfg["client_secret"])
+	if authCfg["clientSecret"] != "secret-1" {
+		t.Fatalf("Auth.Config.clientSecret = %#v", authCfg["clientSecret"])
 	}
-	if authCfg["allowed_domain"] != "example.test" {
-		t.Fatalf("Auth.Config.allowed_domain = %#v", authCfg["allowed_domain"])
+	if authCfg["redirectUrl"] != "https://example.test/callback" {
+		t.Fatalf("Auth.Config.redirectUrl = %#v", authCfg["redirectUrl"])
 	}
 }
 

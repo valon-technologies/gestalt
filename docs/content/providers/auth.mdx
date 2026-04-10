@@ -44,10 +44,10 @@ An auth provider implements three methods: `Configure`, `BeginLogin`, and `Compl
     }
 
     func (a *MyAuth) Configure(_ context.Context, _ string, config map[string]any) error {
-    	a.clientID, _ = config["client_id"].(string)
-    	a.issuerURL, _ = config["issuer_url"].(string)
+    	a.clientID, _ = config["clientId"].(string)
+    	a.issuerURL, _ = config["issuerUrl"].(string)
     	if a.clientID == "" || a.issuerURL == "" {
-    		return fmt.Errorf("client_id and issuer_url are required")
+    		return fmt.Errorf("clientId and issuerUrl are required")
     	}
     	return nil
     }
@@ -88,8 +88,8 @@ An auth provider implements three methods: `Configure`, `BeginLogin`, and `Compl
 
     class MyAuth(gestalt.AuthProvider):
         def configure(self, name: str, config: dict) -> None:
-            self.client_id = config.get("client_id", "")
-            self.issuer_url = config.get("issuer_url", "")
+            self.client_id = config.get("clientId", "")
+            self.issuer_url = config.get("issuerUrl", "")
 
         def begin_login(self, request: gestalt.BeginLoginRequest) -> gestalt.BeginLoginResponse:
             auth_url = (
@@ -134,9 +134,9 @@ An auth provider implements three methods: `Configure`, `BeginLogin`, and `Compl
             config: serde_json::Map<String, serde_json::Value>,
         ) -> gestalt::Result<()> {
             *self.client_id.lock().unwrap() = config
-                .get("client_id").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                .get("clientId").and_then(|v| v.as_str()).unwrap_or("").to_string();
             *self.issuer_url.lock().unwrap() = config
-                .get("issuer_url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                .get("issuerUrl").and_then(|v| v.as_str()).unwrap_or("").to_string();
             Ok(())
         }
 
@@ -180,8 +180,8 @@ An auth provider implements three methods: `Configure`, `BeginLogin`, and `Compl
 
     export const provider = defineAuthProvider({
       async configure(_name, config) {
-        clientId = typeof config.client_id === "string" ? config.client_id : "";
-        issuerUrl = typeof config.issuer_url === "string" ? config.issuer_url : "";
+        clientId = typeof config.clientId === "string" ? config.clientId : "";
+        issuerUrl = typeof config.issuerUrl === "string" ? config.issuerUrl : "";
       },
       async beginLogin(request) {
         return {
@@ -245,7 +245,7 @@ auth:
     source:
       path: ./my-auth/manifest.yaml
   config:
-    issuer_url: https://login.example.com
+    issuerUrl: https://login.example.com
     clientId: ${OIDC_CLIENT_ID}
     clientSecret: secret://oidc-client-secret
 ```

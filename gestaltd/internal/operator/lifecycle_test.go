@@ -276,7 +276,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalTopLevelPluginsWithoutLockfile(t *t
     source:
       path: ./auth-manifest.yaml
   config:
-    client_id: local-auth-client
+    clientId: local-auth-client
 datastores:
   sqlite:
     driver: sqlite
@@ -311,7 +311,7 @@ server:
 		t.Fatalf("auth config command = %v, want %q", authCfg["command"], authExecutablePath)
 	}
 	authPluginCfg, ok := authCfg["config"].(map[string]any)
-	if !ok || authPluginCfg["client_id"] != "local-auth-client" {
+	if !ok || authPluginCfg["clientId"] != "local-auth-client" {
 		t.Fatalf("auth nested config = %#v", authCfg["config"])
 	}
 

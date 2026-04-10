@@ -538,7 +538,7 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 		"      auth:",
 		"        token: secret://source-token",
 		"  config:",
-		"    client_id: managed-auth-client",
+		"    clientId: managed-auth-client",
 		"server:",
 		"  artifactsDir: " + artifactsDir,
 		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -627,7 +627,7 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 		t.Fatalf("auth source config leaked source.auth: %#v", sourceCfg)
 	}
 	nested, ok := authCfg["config"].(map[string]any)
-	if !ok || nested["client_id"] != "managed-auth-client" {
+	if !ok || nested["clientId"] != "managed-auth-client" {
 		t.Fatalf("auth nested config = %#v", authCfg["config"])
 	}
 }
@@ -730,7 +730,7 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 		"      auth:",
 		"        token: secret://source-token",
 		"  config:",
-		"    client_id: managed-auth-client",
+		"    clientId: managed-auth-client",
 		"server:",
 		"  artifactsDir: " + artifactsDir,
 		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
