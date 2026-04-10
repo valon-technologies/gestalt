@@ -66,37 +66,13 @@ func DecodeManifestFormat(data []byte, format string) (*pluginmanifestv1.Manifes
 
 func decodeManifest(data []byte, format string, sourceMode bool) (*pluginmanifestv1.Manifest, error) {
 	var manifest pluginmanifestv1.Manifest
-	if err := decodeStrict(data, format, "manifest", &manifest); err == nil {
-		if err := validateManifest(&manifest, sourceMode); err != nil {
-			return nil, err
-		}
-		return &manifest, nil
-	} else {
-		if providerManifest, providerErr := decodeProviderManifestWire(data, format); providerErr == nil {
-			if err := validateManifest(providerManifest, sourceMode); err != nil {
-				return nil, err
-			}
-			return providerManifest, nil
-		}
-
-		compatData, changed, compatErr := normalizeLegacyManifestCompatibility(data, format)
-		if compatErr == nil && changed {
-			if compatStrictErr := decodeStrict(compatData, format, "manifest", &manifest); compatStrictErr == nil {
-				if err := validateManifest(&manifest, sourceMode); err != nil {
-					return nil, err
-				}
-				return &manifest, nil
-			}
-			if providerManifest, providerErr := decodeProviderManifestWire(compatData, format); providerErr == nil {
-				if err := validateManifest(providerManifest, sourceMode); err != nil {
-					return nil, err
-				}
-				return providerManifest, nil
-			}
-		}
-
+	if err := decodeStrict(data, format, "manifest", &manifest); err != nil {
 		return nil, err
 	}
+	if err := validateManifest(&manifest, sourceMode); err != nil {
+		return nil, err
+	}
+	return &manifest, nil
 }
 
 func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
@@ -626,9 +602,6 @@ func encodeManifestFormat(manifest *pluginmanifestv1.Manifest, format string, so
 	if err := validateManifest(manifest, sourceMode); err != nil {
 		return nil, err
 	}
-	if manifest != nil && manifest.Plugin != nil && manifest.Auth == nil && manifest.Datastore == nil {
-		return encodeProviderManifestWire(manifest, format)
-	}
 	switch format {
 	case ManifestFormatJSON:
 		return encodeManifestJSON(manifest)
@@ -674,135 +647,6 @@ func decodeStrict(data []byte, format, subject string, target any) error {
 	default:
 		return fmt.Errorf("unsupported %s format %q", subject, format)
 	}
-}
-
-func normalizeLegacyManifestCompatibility(data []byte, format string) ([]byte, bool, error) {
-	root := make(map[string]any)
-	switch format {
-	case ManifestFormatJSON:
-		if err := json.Unmarshal(data, &root); err != nil {
-			return nil, false, err
-		}
-	case ManifestFormatYAML:
-		if err := yaml.Unmarshal(data, &root); err != nil {
-			return nil, false, err
-		}
-	default:
-		return nil, false, fmt.Errorf("unsupported manifest format %q", format)
-	}
-
-	changed := false
-	if _, ok := root["kinds"]; ok {
-		delete(root, "kinds")
-		changed = true
-	}
-	if normalizeLegacyProviderResponseMapping(root) {
-		changed = true
-	}
-	if normalizeSnakeCaseKeys(root) {
-		changed = true
-	}
-	if !changed {
-		return data, false, nil
-	}
-
-	switch format {
-	case ManifestFormatJSON:
-		normalized, err := json.MarshalIndent(root, "", "  ")
-		if err != nil {
-			return nil, false, err
-		}
-		return append(normalized, '\n'), true, nil
-	case ManifestFormatYAML:
-		normalized, err := yaml.Marshal(root)
-		if err != nil {
-			return nil, false, err
-		}
-		return normalized, true, nil
-	default:
-		return nil, false, fmt.Errorf("unsupported manifest format %q", format)
-	}
-}
-
-func normalizeSnakeCaseKeys(m map[string]any) bool {
-	changed := false
-	for key, val := range m {
-		camel := snakeToCamel(key)
-		if camel != key {
-			delete(m, key)
-			m[camel] = val
-			changed = true
-		}
-		switch v := val.(type) {
-		case map[string]any:
-			if normalizeSnakeCaseKeys(v) {
-				changed = true
-			}
-		case []any:
-			for _, item := range v {
-				if sub, ok := item.(map[string]any); ok {
-					if normalizeSnakeCaseKeys(sub) {
-						changed = true
-					}
-				}
-			}
-		}
-	}
-	return changed
-}
-
-func snakeToCamel(s string) string {
-	if !strings.Contains(s, "_") {
-		return s
-	}
-	parts := strings.Split(s, "_")
-	for i := 1; i < len(parts); i++ {
-		if len(parts[i]) > 0 {
-			parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
-		}
-	}
-	return strings.Join(parts, "")
-}
-
-func normalizeLegacyProviderResponseMapping(root map[string]any) bool {
-	provider, ok := root["provider"].(map[string]any)
-	if !ok {
-		return false
-	}
-	responseMapping, ok := provider["responseMapping"].(map[string]any)
-	if !ok {
-		responseMapping, ok = provider["response_mapping"].(map[string]any)
-		if !ok {
-			return false
-		}
-	}
-	pagination, ok := responseMapping["pagination"].(map[string]any)
-	if !ok {
-		return false
-	}
-
-	changed := false
-	if path, ok := pagination["has_more_path"].(string); ok {
-		delete(pagination, "has_more_path")
-		if _, exists := pagination["hasMore"]; !exists {
-			pagination["hasMore"] = map[string]any{
-				"source": "body",
-				"path":   path,
-			}
-		}
-		changed = true
-	}
-	if path, ok := pagination["cursor_path"].(string); ok {
-		delete(pagination, "cursor_path")
-		if _, exists := pagination["cursor"]; !exists {
-			pagination["cursor"] = map[string]any{
-				"source": "body",
-				"path":   path,
-			}
-		}
-		changed = true
-	}
-	return changed
 }
 
 func ManifestEqual(a, b *pluginmanifestv1.Manifest) bool {

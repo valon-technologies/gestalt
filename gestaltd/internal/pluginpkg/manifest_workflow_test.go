@@ -304,7 +304,7 @@ func TestManifestWorkflow_AcceptsProviderWireSurfaceManifest(t *testing.T) {
 source: github.com/acme/plugins/provider-wire
 version: 1.0.0
 displayName: Provider Wire
-provider:
+plugin:
   configSchemaPath: schemas/config.schema.json
   connections:
     default:
@@ -331,10 +331,8 @@ provider:
     items.list:
       paginate: true
     items.info: {}
-  surfaces:
-    openapi:
-      document: openapi.yaml
-      connection: api
+  openapi: openapi.yaml
+  openapiConnection: api
 `))
 	mustWriteFile(t, filepath.Join(dir, "schemas", "config.schema.json"), []byte(`{"type":"object"}`), 0o644)
 	mustWriteFile(t, filepath.Join(dir, "openapi.yaml"), []byte("openapi: 3.1.0\ninfo:\n  title: Example\n  version: 1.0.0\npaths: {}\n"), 0o644)
@@ -375,16 +373,14 @@ func TestManifestWorkflow_AcceptsProviderWireMCPOAuthManifestAcrossDirectoryAndA
 source: github.com/acme/plugins/notion
 version: 0.0.1-alpha.1
 displayName: Notion
-provider:
+plugin:
   connections:
     mcp:
       mode: user
       auth:
         type: mcp_oauth
-  surfaces:
-    mcp:
-      url: https://mcp.notion.com/mcp
-      connection: mcp
+  mcpUrl: https://mcp.notion.com/mcp
+  mcpConnection: mcp
 `))
 
 	_, dirManifest, err := ReadManifestFile(manifestPath)
@@ -425,7 +421,7 @@ func TestManifestWorkflow_RejectsMCPOAuthManifestWithoutMCPSurface(t *testing.T)
 	manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
 source: github.com/acme/plugins/bad-mcp-oauth
 version: 0.0.1-alpha.1
-provider:
+plugin:
   connections:
     mcp:
       auth:
@@ -449,7 +445,7 @@ func TestManifestWorkflow_NamedConnectionParamsAndDiscovery(t *testing.T) {
 source: github.com/acme/plugins/multi-conn
 version: 1.0.0
 displayName: Multi Connection
-provider:
+plugin:
   connections:
     default:
       auth:
@@ -472,10 +468,8 @@ provider:
         namePath: name
         metadata:
           region: region
-  surfaces:
-    openapi:
-      document: openapi.yaml
-      connection: api
+  openapi: openapi.yaml
+  openapiConnection: api
 `))
 	mustWriteFile(t, filepath.Join(dir, "openapi.yaml"), []byte("openapi: 3.1.0\ninfo:\n  title: Example\n  version: 1.0.0\npaths: {}\n"), 0o644)
 
