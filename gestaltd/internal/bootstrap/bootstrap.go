@@ -302,7 +302,11 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	if encErr != nil {
 		return nil, fmt.Errorf("bootstrap: create encryptor: %w", encErr)
 	}
-	engine, engErr := xorm.NewEngine(def.Driver, def.DSN)
+	driver := def.Driver
+	if driver == "sqlite3" {
+		driver = "sqlite"
+	}
+	engine, engErr := xorm.NewEngine(driver, def.DSN)
 	if engErr != nil {
 		return nil, fmt.Errorf("bootstrap: system datastore from resource %q: create xorm engine: %w", cfg.Datastore.Resource, engErr)
 	}

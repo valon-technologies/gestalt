@@ -44,7 +44,7 @@ auth:
     client_secret: secret-1
 datastores:
   sqlite:
-    driver: sqlite3
+    driver: sqlite
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
@@ -99,7 +99,7 @@ auth:
     client_id: ${TEST_CLIENT_ID}
 datastores:
   sqlite:
-    driver: sqlite3
+    driver: sqlite
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
@@ -150,7 +150,7 @@ func TestLoadConfigEnvFileFallback(t *testing.T) {
 	path := mustWriteConfigFile(t, `
 datastores:
   sqlite:
-    driver: sqlite3
+    driver: sqlite
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
@@ -182,7 +182,7 @@ func TestLoadConfigMissingEnvVariableFails(t *testing.T) {
 	path := mustWriteConfigFile(t, fmt.Sprintf(`
 datastores:
   sqlite:
-    driver: sqlite3
+    driver: sqlite
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
@@ -222,7 +222,7 @@ func TestLoadConfigEmptyDefaultEnvSyntax(t *testing.T) {
 	path := mustWriteConfigFile(t, `
 datastores:
   sqlite:
-    driver: sqlite3
+    driver: sqlite
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
@@ -284,7 +284,7 @@ func TestValidateRuntime(t *testing.T) {
 			yaml: `
 datastores:
   sqlite:
-    driver: sqlite3
+    driver: sqlite
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
@@ -307,7 +307,7 @@ server:
 			yaml: `
 datastores:
   sqlite:
-    driver: sqlite3
+    driver: sqlite
     dsn: /tmp/gestalt.db
 datastore: sqlite
 `,
@@ -320,7 +320,7 @@ auth:
   provider: none
 datastores:
   sqlite:
-    driver: sqlite3
+    driver: sqlite
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
@@ -373,7 +373,7 @@ auth:
       version: 1.0.0
 datastores:
   sqlite:
-    driver: sqlite3
+    driver: sqlite
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
@@ -408,7 +408,7 @@ auth:
     issuer_url: https://issuer.example.test
 datastores:
   sqlite:
-    driver: sqlite3
+    driver: sqlite
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
@@ -423,7 +423,7 @@ auth:
   provider: none
 datastores:
   sqlite:
-    driver: sqlite3
+    driver: sqlite
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
@@ -483,7 +483,7 @@ func TestLoadConfigUIProviderModes(t *testing.T) {
 		path := mustWriteConfigFile(t, `
 datastores:
   sqlite:
-    driver: sqlite3
+    driver: sqlite
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
@@ -516,7 +516,7 @@ ui:
   provider: none
 datastores:
   sqlite:
-    driver: sqlite3
+    driver: sqlite
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
@@ -545,7 +545,7 @@ ui:
     brand_name: Acme
 datastores:
   sqlite:
-    driver: sqlite3
+    driver: sqlite
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
@@ -571,7 +571,7 @@ ui:
       path: ./web/default/provider.yaml
 datastores:
   sqlite:
-    driver: sqlite3
+    driver: sqlite
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
@@ -1049,7 +1049,7 @@ auth:
       path: ../auth-plugin/provider.yaml
 datastores:
   sqlite:
-    driver: sqlite3
+    driver: sqlite
     dsn: /tmp/gestalt.db
 datastore: sqlite
 plugins:
@@ -1093,7 +1093,7 @@ auth:
     allowed_domain: example.test
 datastores:
   sqlite:
-    driver: sqlite3
+    driver: sqlite
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
