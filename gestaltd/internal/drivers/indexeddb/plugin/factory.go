@@ -18,7 +18,7 @@ var Factory bootstrap.IndexedDBFactory = func(node yaml.Node) (indexeddb.Indexed
 		return nil, fmt.Errorf("plugin datastore: parsing config: %w", err)
 	}
 	prepared, err := componentplugin.PrepareExecution(componentplugin.PrepareParams{
-		Kind:                 pluginmanifestv1.KindDatastore,
+		Kind:                 pluginmanifestv1.KindIndexedDB,
 		Subject:              "plugin datastore",
 		SourceMissingMessage: "no Go, Rust, or Python datastore source package found",
 		Config:               cfg,

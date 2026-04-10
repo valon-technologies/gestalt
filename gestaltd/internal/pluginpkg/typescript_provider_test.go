@@ -190,7 +190,7 @@ func TestDetectTypeScriptComponentTarget(t *testing.T) {
 		},
 		{
 			name:   "datastore",
-			kind:   pluginmanifestv1.KindDatastore,
+			kind:   pluginmanifestv1.KindIndexedDB,
 			target: typeScriptTestDatastoreTarget,
 		},
 	}
@@ -245,7 +245,7 @@ func TestHasSourceComponentPackage_TypeScript(t *testing.T) {
 		t.Fatal("HasSourceComponentPackage(auth) = false, want true")
 	}
 
-	ok, err = HasSourceComponentPackage(root, pluginmanifestv1.KindDatastore)
+	ok, err = HasSourceComponentPackage(root, pluginmanifestv1.KindIndexedDB)
 	if err != nil {
 		t.Fatalf("HasSourceComponentPackage(datastore): %v", err)
 	}
@@ -323,7 +323,7 @@ func TestSourceComponentExecutionCommand_TypeScript(t *testing.T) {
 		},
 		{
 			name:   "datastore",
-			kind:   pluginmanifestv1.KindDatastore,
+			kind:   pluginmanifestv1.KindIndexedDB,
 			target: typeScriptTestDatastoreTarget,
 		},
 	}
@@ -404,7 +404,7 @@ func TestValidateSourceComponentRelease_TypeScript(t *testing.T) {
 		},
 		{
 			name:   "datastore",
-			kind:   pluginmanifestv1.KindDatastore,
+			kind:   pluginmanifestv1.KindIndexedDB,
 			target: typeScriptTestDatastoreTarget,
 		},
 	}
@@ -467,7 +467,7 @@ func TestBuildSourceComponentReleaseBinary_TypeScript(t *testing.T) {
 		},
 		{
 			name:       "datastore",
-			kind:       pluginmanifestv1.KindDatastore,
+			kind:       pluginmanifestv1.KindIndexedDB,
 			target:     typeScriptTestDatastoreTarget,
 			pluginName: "ts-datastore-release",
 		},
@@ -532,7 +532,7 @@ func mustWriteTypeScriptPackageConfig(t *testing.T, root string, gestalt map[str
 	t.Helper()
 
 	var fields []string
-	for _, key := range []string{typeScriptProviderKey, typeScriptPluginKey, typeScriptAuthKey, typeScriptDatastoreKey} {
+	for _, key := range []string{typeScriptProviderKey, typeScriptPluginKey, typeScriptAuthKey, typeScriptIndexedDBKey} {
 		value, ok := gestalt[key]
 		if !ok {
 			continue
@@ -602,7 +602,7 @@ func mustWriteTypeScriptSourceComponentManifest(t *testing.T, root, pluginName, 
 	switch kind {
 	case pluginmanifestv1.KindAuth:
 		manifest.Auth = &pluginmanifestv1.AuthMetadata{}
-	case pluginmanifestv1.KindDatastore:
+	case pluginmanifestv1.KindIndexedDB:
 		manifest.Datastore = &pluginmanifestv1.DatastoreMetadata{}
 	default:
 		t.Fatalf("unsupported component kind %q", kind)

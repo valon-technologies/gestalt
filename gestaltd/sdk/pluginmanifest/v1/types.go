@@ -7,7 +7,7 @@ import (
 const (
 	KindPlugin    = "plugin"
 	KindAuth      = "auth"
-	KindDatastore = "datastore"
+	KindIndexedDB = "indexeddb"
 	KindSecrets   = "secrets"
 	KindWebUI     = "webui"
 )

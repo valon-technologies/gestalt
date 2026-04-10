@@ -11,8 +11,9 @@ type ProviderKind string
 
 const (
 	ProviderKindIntegration ProviderKind = "integration"
-	ProviderKindAuth        ProviderKind = "auth"
-	ProviderKindSecrets ProviderKind = "secrets"
+	ProviderKindAuth       ProviderKind = "auth"
+	ProviderKindDatastore  ProviderKind = "datastore"
+	ProviderKindSecrets    ProviderKind = "secrets"
 )
 
 // ProviderMetadata describes a provider instance independent of its concrete

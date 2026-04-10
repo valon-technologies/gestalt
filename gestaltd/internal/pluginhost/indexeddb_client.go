@@ -47,7 +47,7 @@ func NewExecutableIndexedDB(ctx context.Context, cfg IndexedDBExecConfig) (index
 	runtimeClient := proto.NewProviderLifecycleClient(proc.conn)
 	dsClient := proto.NewIndexedDBClient(proc.conn)
 
-	_, err = configureRuntimeProvider(ctx, runtimeClient, proto.ProviderKind_PROVIDER_KIND_DATASTORE, cfg.Name, cfg.Config)
+	_, err = configureRuntimeProvider(ctx, runtimeClient, proto.ProviderKind_PROVIDER_KIND_INDEXEDDB, cfg.Name, cfg.Config)
 	if err != nil {
 		_ = proc.Close()
 		return nil, err

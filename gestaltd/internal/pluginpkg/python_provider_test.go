@@ -77,7 +77,7 @@ datastore = "provider:datastore_provider"
 		t.Fatalf("auth target = %q, want %q", authTarget, "provider:auth_provider")
 	}
 
-	datastoreTarget, err := DetectPythonComponentTarget(root, pluginmanifestv1.KindDatastore)
+	datastoreTarget, err := DetectPythonComponentTarget(root, pluginmanifestv1.KindIndexedDB)
 	if err != nil {
 		t.Fatalf("DetectPythonComponentTarget(datastore): %v", err)
 	}

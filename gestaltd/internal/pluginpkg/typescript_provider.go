@@ -23,7 +23,7 @@ const (
 	typeScriptProviderKey  = "provider"
 	typeScriptPluginKey    = "plugin"
 	typeScriptAuthKey      = "auth"
-	typeScriptDatastoreKey = "datastore"
+	typeScriptIndexedDBKey = "indexeddb"
 )
 
 var ErrNoTypeScriptProviderPackage = errors.New("no TypeScript provider package found")
@@ -174,8 +174,8 @@ func typeScriptComponentKind(kind string) (string, error) {
 	switch kind {
 	case pluginmanifestv1.KindAuth:
 		return "auth", nil
-	case pluginmanifestv1.KindDatastore:
-		return "datastore", nil
+	case pluginmanifestv1.KindIndexedDB:
+		return "indexeddb", nil
 	case pluginmanifestv1.KindSecrets:
 		return "secrets", nil
 	default:
@@ -189,8 +189,8 @@ func typeScriptLegacyTargetKey(kind string) (string, bool) {
 		return typeScriptPluginKey, true
 	case "auth":
 		return typeScriptAuthKey, true
-	case "datastore":
-		return typeScriptDatastoreKey, true
+	case "indexeddb":
+		return typeScriptIndexedDBKey, true
 	default:
 		return "", false
 	}
@@ -316,8 +316,8 @@ func normalizeTypeScriptProviderKind(value string) string {
 		return "integration"
 	case "auth":
 		return "auth"
-	case "datastore":
-		return "datastore"
+	case "indexeddb":
+		return "indexeddb"
 	case "secrets":
 		return "secrets"
 	case "telemetry":

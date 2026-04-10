@@ -45,7 +45,7 @@ func configSchemaForManifest(manifestPath string, manifest *pluginmanifestv1.Man
 			return "", "", false, nil
 		}
 		return filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(manifest.Auth.ConfigSchemaPath)), manifest.Auth.ConfigSchemaPath, true, nil
-	case pluginmanifestv1.KindDatastore:
+	case pluginmanifestv1.KindIndexedDB:
 		if manifest.Datastore == nil || manifest.Datastore.ConfigSchemaPath == "" {
 			return "", "", false, nil
 		}

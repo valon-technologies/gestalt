@@ -82,7 +82,7 @@ func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
 var validManifestKinds = map[string]bool{
 	pluginmanifestv1.KindPlugin:    true,
 	pluginmanifestv1.KindAuth:      true,
-	pluginmanifestv1.KindDatastore: true,
+	pluginmanifestv1.KindIndexedDB: true,
 	pluginmanifestv1.KindSecrets:   true,
 	pluginmanifestv1.KindWebUI:     true,
 }
@@ -112,7 +112,7 @@ func ManifestKind(manifest *pluginmanifestv1.Manifest) (string, error) {
 		count++
 	}
 	if manifest.Datastore != nil {
-		kind = pluginmanifestv1.KindDatastore
+		kind = pluginmanifestv1.KindIndexedDB
 		count++
 	}
 	if manifest.Secrets != nil {
@@ -172,7 +172,7 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 		needsArtifacts = needsArtifacts || manifest.Entrypoints.Plugin != nil
 	case pluginmanifestv1.KindAuth:
 		needsArtifacts = needsArtifacts || !allowsSourceAuthEntrypointOmission
-	case pluginmanifestv1.KindDatastore:
+	case pluginmanifestv1.KindIndexedDB:
 		needsArtifacts = needsArtifacts || !allowsSourceDatastoreEntrypointOmission
 	case pluginmanifestv1.KindSecrets:
 		needsArtifacts = needsArtifacts || !allowsSourceSecretsEntrypointOmission
@@ -251,7 +251,7 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 				return err
 			}
 		}
-	case pluginmanifestv1.KindDatastore:
+	case pluginmanifestv1.KindIndexedDB:
 		if manifest.Datastore.ConfigSchemaPath != "" {
 			if err := validateRelativePackagePath(manifest.Datastore.ConfigSchemaPath, "datastore config schema path"); err != nil {
 				return err
@@ -355,7 +355,7 @@ func EntrypointFieldForKind(kind string) string {
 		return "entrypoints.plugin"
 	case pluginmanifestv1.KindAuth:
 		return "entrypoints.auth"
-	case pluginmanifestv1.KindDatastore:
+	case pluginmanifestv1.KindIndexedDB:
 		return "entrypoints.datastore"
 	case pluginmanifestv1.KindSecrets:
 		return "entrypoints.secrets"
@@ -373,7 +373,7 @@ func EntrypointForKind(manifest *pluginmanifestv1.Manifest, kind string) *plugin
 		return manifest.Entrypoints.Plugin
 	case pluginmanifestv1.KindAuth:
 		return manifest.Entrypoints.Auth
-	case pluginmanifestv1.KindDatastore:
+	case pluginmanifestv1.KindIndexedDB:
 		return manifest.Entrypoints.Datastore
 	case pluginmanifestv1.KindSecrets:
 		return manifest.Entrypoints.Secrets
@@ -394,7 +394,7 @@ func EnsureEntrypointForKind(manifest *pluginmanifestv1.Manifest, kind string) *
 			manifest.Entrypoints.Auth = &pluginmanifestv1.Entrypoint{}
 		}
 		return manifest.Entrypoints.Auth
-	case pluginmanifestv1.KindDatastore:
+	case pluginmanifestv1.KindIndexedDB:
 		if manifest.Entrypoints.Datastore == nil {
 			manifest.Entrypoints.Datastore = &pluginmanifestv1.Entrypoint{}
 		}
