@@ -285,12 +285,12 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		return nil, err
 	}
 
-	if cfg.Datastore.Resource == "" {
+	if string(cfg.Datastore) == "" {
 		return nil, fmt.Errorf("bootstrap: datastore resource name is required")
 	}
-	def, ok := cfg.Datastores[cfg.Datastore.Resource]
+	def, ok := cfg.Datastores[string(cfg.Datastore)]
 	if !ok {
-		return nil, fmt.Errorf("bootstrap: datastore.resource references unknown datastore %q", cfg.Datastore.Resource)
+		return nil, fmt.Errorf("bootstrap: datastore.resource references unknown datastore %q", string(cfg.Datastore))
 	}
 	enc, encErr := crypto.NewAESGCM(encKey)
 	if encErr != nil {
@@ -298,11 +298,11 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	}
 	store, storeErr := buildIndexedDB(def, factories)
 	if storeErr != nil {
-		return nil, fmt.Errorf("bootstrap: system datastore from resource %q: %w", cfg.Datastore.Resource, storeErr)
+		return nil, fmt.Errorf("bootstrap: system datastore from resource %q: %w", string(cfg.Datastore), storeErr)
 	}
 	ds, dsErr := coredata.New(store, enc)
 	if dsErr != nil {
-		return nil, fmt.Errorf("bootstrap: system datastore from resource %q: %w", cfg.Datastore.Resource, dsErr)
+		return nil, fmt.Errorf("bootstrap: system datastore from resource %q: %w", string(cfg.Datastore), dsErr)
 	}
 	closeDS := true
 	defer func() {

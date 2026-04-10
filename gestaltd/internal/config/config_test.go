@@ -403,7 +403,7 @@ datastore:
 server:
   encryptionKey: server-key
 `,
-			wantErr: "field plugin not found in type config.DatastoreConfig",
+			wantErr: "cannot unmarshal !!map into config.DatastoreConfig",
 		},
 		{
 			name: "auth config accepted",
@@ -960,15 +960,6 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 		{
 			name: "auth provider none valid",
 			cfg:  &Config{},
-		},
-		{
-			name: "datastore provider rejected",
-			cfg: &Config{
-				Datastore: DatastoreConfig{
-					Provider: &ProviderDef{Source: &PluginSourceDef{Path: "./some-dir/manifest.yaml"}},
-				},
-			},
-			wantErr: "datastore.provider is no longer supported",
 		},
 		{
 			name: "auth provider invalid when source missing",

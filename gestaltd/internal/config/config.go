@@ -248,58 +248,11 @@ func (p *ProviderDef) DeclaresMCP() bool {
 	return provider.MCP
 }
 
-type DatastoreConfig struct {
-	Resource string       `yaml:"-"`
-	Provider *ProviderDef `yaml:"provider"`
-	Config   yaml.Node    `yaml:"config"`
-}
+type DatastoreConfig string
 
 type DatastoreDef struct {
 	Provider *ProviderDef `yaml:"provider"`
 	Config   yaml.Node    `yaml:"config"`
-}
-
-func (c *DatastoreConfig) UnmarshalYAML(value *yaml.Node) error {
-	if value == nil || value.Kind == 0 {
-		c.Provider = nil
-		c.Config = yaml.Node{}
-		c.Resource = ""
-		return nil
-	}
-	if value.Kind == yaml.ScalarNode {
-		v := strings.TrimSpace(value.Value)
-		if value.Tag == "!!null" || v == "" {
-			return nil
-		}
-		c.Resource = v
-		return nil
-	}
-	if value.Kind != yaml.MappingNode {
-		var probe map[string]any
-		return value.Decode(&probe)
-	}
-	for i := 0; i+1 < len(value.Content); i += 2 {
-		key := value.Content[i].Value
-		switch key {
-		case "provider", "config":
-		default:
-			return fmt.Errorf("field %s not found in type config.DatastoreConfig", key)
-		}
-	}
-	c.Provider = nil
-	c.Config = yaml.Node{}
-	c.Resource = ""
-	if providerNode := mappingValueNode(value, "provider"); providerNode != nil {
-		decoded, err := decodeExternalProvider(providerNode)
-		if err != nil {
-			return err
-		}
-		c.Provider = decoded
-	}
-	if configNode := mappingValueNode(value, "config"); configNode != nil {
-		c.Config = *configNode
-	}
-	return nil
 }
 
 func decodeExternalProvider(node *yaml.Node) (*ProviderDef, error) {
@@ -683,9 +636,6 @@ func OverlayManagedPluginConfig(path string, cfg *Config) error {
 	if err := overlayManagedComponentConfigNode(mappingValueNode(documentValueNode(&root), "auth"), cfg.Auth.Provider, &cfg.Auth.Config, "auth"); err != nil {
 		return err
 	}
-	if err := overlayManagedComponentConfigNode(mappingValueNode(documentValueNode(&root), "datastore"), cfg.Datastore.Provider, &cfg.Datastore.Config, "datastore"); err != nil {
-		return err
-	}
 	if err := overlayManagedComponentConfigNode(mappingValueNode(documentValueNode(&root), "secrets"), cfg.Secrets.Provider, &cfg.Secrets.Config, "secrets"); err != nil {
 		return err
 	}
@@ -927,9 +877,6 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 	}
 	if cfg.Auth.Provider != nil && cfg.Auth.Provider.Source != nil {
 		cfg.Auth.Provider.Source.Path = resolveRelativePath(baseDir, cfg.Auth.Provider.Source.Path)
-	}
-	if cfg.Datastore.Provider != nil && cfg.Datastore.Provider.Source != nil {
-		cfg.Datastore.Provider.Source.Path = resolveRelativePath(baseDir, cfg.Datastore.Provider.Source.Path)
 	}
 	if cfg.Secrets.Provider != nil && cfg.Secrets.Provider.Source != nil {
 		cfg.Secrets.Provider.Source.Path = resolveRelativePath(baseDir, cfg.Secrets.Provider.Source.Path)

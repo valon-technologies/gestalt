@@ -67,11 +67,6 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 			return err
 		}
 	}
-	if cfg.Datastore.Provider != nil {
-		if err := resolveStringFields(cfg.Datastore.Provider, resolve); err != nil {
-			return err
-		}
-	}
 	if cfg.Secrets.Provider != nil {
 		if err := resolveStringFields(cfg.Secrets.Provider, resolve); err != nil {
 			return err
@@ -103,9 +98,6 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 
 	// Skip cfg.Secrets.Config to avoid self-referential resolution.
 	if err := resolveYAMLNode(&cfg.Auth.Config, resolve); err != nil {
-		return err
-	}
-	if err := resolveYAMLNode(&cfg.Datastore.Config, resolve); err != nil {
 		return err
 	}
 	if err := resolveYAMLNode(&cfg.UI.Config, resolve); err != nil {

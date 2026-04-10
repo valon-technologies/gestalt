@@ -197,7 +197,7 @@ func buildSourceTokenMap(cfg *config.Config) map[string]string {
 			tokens[intg.Plugin.SourceRef()] = intg.Plugin.Source.Auth.Token
 		}
 	}
-	for _, p := range []*config.ProviderDef{cfg.Auth.Provider, cfg.Datastore.Provider, cfg.Secrets.Provider, cfg.Telemetry.Provider, cfg.Audit.Provider} {
+	for _, p := range []*config.ProviderDef{cfg.Auth.Provider, cfg.Secrets.Provider, cfg.Telemetry.Provider, cfg.Audit.Provider} {
 		if p != nil && p.Source != nil && p.Source.Auth != nil {
 			tokens[p.SourceRef()] = p.Source.Auth.Token
 		}

@@ -165,14 +165,11 @@ func ValidateResolvedStructure(cfg *Config) error {
 // operational config (serve) should call this after Load. Callers that only
 // need structural correctness (init, validate) should not.
 func ValidateRuntime(cfg *Config) error {
-	if cfg.Datastore.Provider != nil {
-		return fmt.Errorf("config validation: datastore.provider is no longer supported; use the datastores section with datastore: <name>")
-	}
-	if cfg.Datastore.Resource == "" {
+	if string(cfg.Datastore) == "" {
 		return fmt.Errorf("config validation: datastore is required (set datastore: <name> referencing a datastores entry)")
 	}
-	if _, ok := cfg.Datastores[cfg.Datastore.Resource]; !ok {
-		return fmt.Errorf("config validation: datastore references unknown datastore %q", cfg.Datastore.Resource)
+	if _, ok := cfg.Datastores[string(cfg.Datastore)]; !ok {
+		return fmt.Errorf("config validation: datastore references unknown datastore %q", string(cfg.Datastore))
 	}
 	if cfg.Server.EncryptionKey == "" {
 		return fmt.Errorf("config validation: server.encryption_key is required")
@@ -508,12 +505,9 @@ func validateServerListeners(cfg ServerConfig) error {
 }
 
 func validateDatastoreConfig(cfg *Config) error {
-	if cfg.Datastore.Provider != nil {
-		return fmt.Errorf("config validation: datastore.provider is no longer supported; use the datastores section with datastore: <name>")
-	}
-	if cfg.Datastore.Resource != "" {
-		if _, ok := cfg.Datastores[cfg.Datastore.Resource]; !ok {
-			return fmt.Errorf("config validation: datastore references unknown datastore %q", cfg.Datastore.Resource)
+	if string(cfg.Datastore) != "" {
+		if _, ok := cfg.Datastores[string(cfg.Datastore)]; !ok {
+			return fmt.Errorf("config validation: datastore references unknown datastore %q", string(cfg.Datastore))
 		}
 	}
 	return nil

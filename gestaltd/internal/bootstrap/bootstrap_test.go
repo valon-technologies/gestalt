@@ -58,9 +58,7 @@ func validConfig() *config.Config {
 			Provider: &config.ProviderDef{Source: &config.PluginSourceDef{Ref: "github.com/valon-technologies/gestalt-providers/auth/oidc", Version: "0.0.1-alpha.1"}},
 			Config:   yaml.Node{Kind: yaml.MappingNode},
 		},
-		Datastore: config.DatastoreConfig{
-			Resource: "test",
-		},
+		Datastore: config.DatastoreConfig("test"),
 		Datastores: map[string]config.DatastoreDef{
 			"test": {Provider: &config.ProviderDef{Source: &config.PluginSourceDef{Path: "stub"}}},
 		},
