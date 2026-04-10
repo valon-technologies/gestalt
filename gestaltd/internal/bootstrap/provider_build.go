@@ -841,14 +841,14 @@ func buildOAuthHandlerFromAuth(auth *config.ConnectionAuthDef, pluginConfig map[
 
 	clientID := auth.ClientID
 	clientSecret := auth.ClientSecret
-	if id, _ := pluginConfig["client_id"].(string); id != "" {
+	if id, _ := pluginConfig["clientId"].(string); id != "" {
 		clientID = id
 	}
-	if sec, _ := pluginConfig["client_secret"].(string); sec != "" {
+	if sec, _ := pluginConfig["clientSecret"].(string); sec != "" {
 		clientSecret = sec
 	}
 	if clientID == "" || clientSecret == "" {
-		return nil, fmt.Errorf("client_id and client_secret are required for oauth2 auth")
+		return nil, fmt.Errorf("clientId and clientSecret are required for oauth2 auth")
 	}
 
 	var tokenExchange oauth.TokenExchangeFormat
@@ -858,7 +858,7 @@ func buildOAuthHandlerFromAuth(auth *config.ConnectionAuthDef, pluginConfig map[
 	case "json":
 		tokenExchange = oauth.TokenExchangeJSON
 	default:
-		return nil, fmt.Errorf("unknown token_exchange %q", auth.TokenExchange)
+		return nil, fmt.Errorf("unknown tokenExchange %q", auth.TokenExchange)
 	}
 
 	oauthCfg := oauth.UpstreamConfig{
@@ -891,14 +891,14 @@ func buildOAuthHandlerFromDefinition(def *provider.Definition, conn config.Conne
 	}
 
 	effectiveConn := conn
-	if id, _ := pluginConfig["client_id"].(string); id != "" {
+	if id, _ := pluginConfig["clientId"].(string); id != "" {
 		effectiveConn.Auth.ClientID = id
 	}
-	if sec, _ := pluginConfig["client_secret"].(string); sec != "" {
+	if sec, _ := pluginConfig["clientSecret"].(string); sec != "" {
 		effectiveConn.Auth.ClientSecret = sec
 	}
 	if effectiveConn.Auth.ClientID == "" || effectiveConn.Auth.ClientSecret == "" {
-		return nil, fmt.Errorf("client_id and client_secret are required for oauth2 auth")
+		return nil, fmt.Errorf("clientId and clientSecret are required for oauth2 auth")
 	}
 	if effectiveConn.Auth.RedirectURL == "" {
 		effectiveConn.Auth.RedirectURL = deps.BaseURL + config.IntegrationCallbackPath

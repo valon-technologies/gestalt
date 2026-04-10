@@ -177,7 +177,7 @@ func TestBootstrap_ReusesPreparedComponentRuntimeConfig(t *testing.T) {
 	authRuntime, err := config.BuildComponentRuntimeConfigNode("auth", "auth", cfg.Auth.Provider, yaml.Node{
 		Kind: yaml.MappingNode,
 		Content: []*yaml.Node{
-			{Kind: yaml.ScalarNode, Tag: "!!str", Value: "client_id"},
+			{Kind: yaml.ScalarNode, Tag: "!!str", Value: "clientId"},
 			{Kind: yaml.ScalarNode, Tag: "!!str", Value: "prepared-auth"},
 		},
 	})
@@ -210,7 +210,7 @@ func TestBootstrap_ReusesPreparedComponentRuntimeConfig(t *testing.T) {
 	if _, nested := authConfig["config"]; nested {
 		t.Fatalf("auth config was rewrapped: %#v", authConfig)
 	}
-	if authConfig["client_id"] != "prepared-auth" {
+	if authConfig["clientId"] != "prepared-auth" {
 		t.Fatalf("auth config = %#v", authConfig)
 	}
 
@@ -432,7 +432,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		cfg.Auth.Config = yaml.Node{
 			Kind: yaml.MappingNode,
 			Content: []*yaml.Node{
-				{Kind: yaml.ScalarNode, Value: "client_secret", Tag: "!!str"},
+				{Kind: yaml.ScalarNode, Value: "clientSecret", Tag: "!!str"},
 				{Kind: yaml.ScalarNode, Value: "secret://auth-secret", Tag: "!!str"},
 			},
 		}
@@ -453,8 +453,8 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		if decoded.Source == nil || decoded.Source.Ref != "github.com/valon-technologies/gestalt-providers/auth/oidc" {
 			t.Fatalf("source = %+v", decoded.Source)
 		}
-		if decoded.Config["client_secret"] != "resolved-auth-secret" {
-			t.Errorf("client_secret: got %q, want %q", decoded.Config["client_secret"], "resolved-auth-secret")
+		if decoded.Config["clientSecret"] != "resolved-auth-secret" {
+			t.Errorf("clientSecret: got %q, want %q", decoded.Config["clientSecret"], "resolved-auth-secret")
 		}
 	})
 
@@ -466,7 +466,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		cfg.Auth.Config = yaml.Node{
 			Kind: yaml.MappingNode,
 			Content: []*yaml.Node{
-				{Kind: yaml.ScalarNode, Value: "issuer_url", Tag: "!!str"},
+				{Kind: yaml.ScalarNode, Value: "issuerUrl", Tag: "!!str"},
 				{Kind: yaml.ScalarNode, Value: "https://issuer.example.test", Tag: "!!str"},
 			},
 		}
@@ -494,7 +494,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		if authCfg.Source == nil || authCfg.Source.Ref != "github.com/valon-technologies/gestalt-providers/auth/oidc" {
 			t.Fatalf("auth source = %+v", authCfg.Source)
 		}
-		if authCfg.Config["issuer_url"] != "https://issuer.example.test" {
+		if authCfg.Config["issuerUrl"] != "https://issuer.example.test" {
 			t.Fatalf("auth config = %+v", authCfg.Config)
 		}
 	})

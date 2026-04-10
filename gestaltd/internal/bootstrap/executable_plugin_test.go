@@ -336,8 +336,8 @@ func TestPluginManifestOAuthWiresConnectionAuth(t *testing.T) {
 					Command: bin,
 					Args:    []string{"provider"},
 					Config: mustNode(t, map[string]any{
-						"client_id":     "test-client-id",
-						"client_secret": "test-client-secret",
+						"clientId":     "test-client-id",
+						"clientSecret": "test-client-secret",
 					}),
 					ResolvedManifest:     manifest,
 					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
@@ -447,8 +447,8 @@ func TestPluginManifestNamedOAuthKeepsProviderTokenMode(t *testing.T) {
 						},
 					},
 					Config: mustNode(t, map[string]any{
-						"client_id":     "test-client-id",
-						"client_secret": "test-client-secret",
+						"clientId":     "test-client-id",
+						"clientSecret": "test-client-secret",
 					}),
 					ResolvedManifest:     manifest,
 					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
