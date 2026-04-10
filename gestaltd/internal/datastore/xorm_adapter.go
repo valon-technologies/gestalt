@@ -59,8 +59,23 @@ type XORMAdapter struct {
 }
 
 func NewXORMAdapter(engine *xorm.Engine, enc *corecrypto.AESGCMEncryptor) (*XORMAdapter, error) {
-	if err := engine.Sync2(new(userRow), new(integrationTokenRow), new(apiTokenRow)); err != nil {
-		return nil, fmt.Errorf("sync schema: %w", err)
+	tables := []any{new(userRow), new(integrationTokenRow), new(apiTokenRow)}
+	for _, t := range tables {
+		exists, err := engine.IsTableExist(t)
+		if err != nil {
+			return nil, fmt.Errorf("check table existence: %w", err)
+		}
+		if !exists {
+			if err := engine.CreateTables(t); err != nil {
+				return nil, fmt.Errorf("create table: %w", err)
+			}
+			if err := engine.CreateIndexes(t); err != nil {
+				return nil, fmt.Errorf("create indexes: %w", err)
+			}
+			if err := engine.CreateUniques(t); err != nil {
+				return nil, fmt.Errorf("create uniques: %w", err)
+			}
+		}
 	}
 	return &XORMAdapter{engine: engine, enc: enc}, nil
 }
