@@ -118,10 +118,11 @@ func buildProvider(ctx context.Context, name string, intg config.PluginDef, deps
 		allowedOperations = maps.Clone(manifestPlugin.AllowedOperations)
 	}
 
-	switch {
-	case manifestPlugin.IsSpecLoaded() && manifest.Entrypoints.Plugin == nil:
+	mode := manifestPlugin.ResolvedMode(manifest.Entrypoints.Plugin != nil)
+	switch mode {
+	case pluginmanifestv1.PluginModeSpecLoaded:
 		return buildSpecLoadedProvider(ctx, name, intg, manifest, pluginConfig, meta, deps, allowedOperations)
-	case manifestPlugin.IsDeclarative() && manifest.Entrypoints.Plugin == nil:
+	case pluginmanifestv1.PluginModeDeclarative:
 		plan, err := buildPluginConnectionPlan(intg.Plugin, manifestPlugin)
 		if err != nil {
 			return nil, fmt.Errorf("build declarative provider %q: %w", name, err)
@@ -141,8 +142,10 @@ func buildProvider(ctx context.Context, name string, intg config.PluginDef, deps
 			return nil, err
 		}
 		return newProviderBuildResult(name, intg, manifest, pluginConfig, prov, nil, deps)
-	default:
+	case pluginmanifestv1.PluginModeHybrid, pluginmanifestv1.PluginModeExecutable:
 		return buildExecutablePluginProvider(ctx, name, intg, pluginConfig, meta, deps)
+	default:
+		return nil, fmt.Errorf("unsupported plugin mode %q for %q", mode, name)
 	}
 }
 

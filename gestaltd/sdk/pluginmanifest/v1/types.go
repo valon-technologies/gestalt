@@ -12,6 +12,15 @@ const (
 	KindWebUI     = "webui"
 )
 
+type PluginMode string
+
+const (
+	PluginModeExecutable  PluginMode = "executable"
+	PluginModeSpecLoaded  PluginMode = "spec-loaded"
+	PluginModeDeclarative PluginMode = "declarative"
+	PluginModeHybrid      PluginMode = "hybrid"
+)
+
 type Manifest struct {
 	Kind        string             `json:"kind,omitempty" yaml:"kind,omitempty"`
 	Source      string             `json:"source,omitempty" yaml:"source,omitempty"`
@@ -56,6 +65,7 @@ type WebUIMetadata struct {
 }
 
 type Plugin struct {
+	Mode              PluginMode                         `json:"mode,omitempty" yaml:"mode,omitempty"`
 	ConfigSchemaPath  string                             `json:"configSchemaPath,omitempty" yaml:"configSchemaPath,omitempty"`
 	Auth              *ProviderAuth                      `json:"auth,omitempty" yaml:"auth,omitempty"`
 	ConnectionMode    ConnectionMode                     `json:"connectionMode,omitempty" yaml:"connectionMode,omitempty"`
@@ -100,6 +110,25 @@ type GraphQLSurface struct {
 type MCPSurface struct {
 	Connection string `json:"connection,omitempty" yaml:"connection,omitempty"`
 	URL        string `json:"url" yaml:"url"`
+}
+
+func (p *Plugin) ResolvedMode(hasEntrypoint bool) PluginMode {
+	if p == nil {
+		return PluginModeExecutable
+	}
+	if p.Mode != "" {
+		return p.Mode
+	}
+	if !hasEntrypoint && p.IsDeclarative() {
+		return PluginModeDeclarative
+	}
+	if !hasEntrypoint && p.IsSpecLoaded() {
+		return PluginModeSpecLoaded
+	}
+	if hasEntrypoint && p.IsManifestBacked() {
+		return PluginModeHybrid
+	}
+	return PluginModeExecutable
 }
 
 func (p *Plugin) IsDeclarative() bool {
