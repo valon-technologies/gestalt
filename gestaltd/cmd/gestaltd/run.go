@@ -45,6 +45,8 @@ func run(args []string) error {
 			return runServe(args[1:])
 		case "init":
 			return runInit(args[1:])
+		case "config":
+			return runConfig(args[1:])
 		case "validate":
 			return runValidate(args[1:])
 		case "__sandbox":
@@ -507,10 +509,12 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd [--config PATH] [--artifacts-dir PATH]")
 	writeUsageLine(w, "  gestaltd init [--config PATH] [--artifacts-dir PATH] [--platform PLATFORMS]")
 	writeUsageLine(w, "  gestaltd serve [--config PATH] [--artifacts-dir PATH] [--locked]")
+	writeUsageLine(w, "  gestaltd config <command> [flags]")
 	writeUsageLine(w, "  gestaltd provider <command> [flags]")
 	writeUsageLine(w, "  gestaltd validate [--config PATH] [--artifacts-dir PATH]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Commands:")
+	writeUsageLine(w, "  config      Inspect resolved configuration")
 	writeUsageLine(w, "  init        Resolve providers and plugins and write lock state")
 	writeUsageLine(w, "  provider    Build provider release archives")
 	writeUsageLine(w, "  serve       Start the server (use --locked for production)")
