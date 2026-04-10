@@ -16,7 +16,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/composite"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/graphql"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/mcpoauth"
@@ -33,7 +32,10 @@ import (
 )
 
 func buildRegistrationStore(deps Deps) mcpoauth.RegistrationStore {
-	if store, ok := deps.Datastore.(mcpoauth.RegistrationStore); ok {
+	if deps.Services == nil {
+		return nil
+	}
+	if store, ok := deps.Services.DB.(mcpoauth.RegistrationStore); ok {
 		return store
 	}
 	return nil
@@ -497,10 +499,9 @@ func buildPluginProvider(ctx context.Context, intg config.PluginDef, pluginConfi
 		HostBinary:   intg.Plugin.HostBinary,
 		Cleanup:      cleanup,
 	}
-	if len(intg.Datastores) > 0 && deps.Datastore != nil {
-		ds := deps.Datastore.(*coredata.CompatDatastore).Store()
+	if len(intg.Datastores) > 0 && deps.Services != nil {
 		execCfg.RegisterHost = func(srv *grpc.Server) {
-			proto.RegisterIndexedDBServer(srv, pluginhost.NewIndexedDBServer(ds, intg.Plugin.Command))
+			proto.RegisterIndexedDBServer(srv, pluginhost.NewIndexedDBServer(deps.Services.DB, intg.Plugin.Command))
 		}
 		execCfg.HostSocketEnv = "GESTALT_INDEXEDDB_SOCKET"
 	}

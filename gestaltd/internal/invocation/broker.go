@@ -14,6 +14,7 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/mcpupstream"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
@@ -86,7 +87,8 @@ type RefresherResolver func() map[string]map[string]OAuthRefresher
 
 type Broker struct {
 	providers      *registry.PluginMap[core.Provider]
-	datastore      core.Datastore
+	users          *coredata.UserService
+	tokens         *coredata.TokenService
 	connMapper     ConnectionMapper
 	mcpMapper      ConnectionMapper
 	connectionAuth RefresherResolver
@@ -107,8 +109,8 @@ func WithConnectionAuth(r RefresherResolver) BrokerOption {
 	return func(b *Broker) { b.connectionAuth = r }
 }
 
-func NewBroker(providers *registry.PluginMap[core.Provider], ds core.Datastore, opts ...BrokerOption) *Broker {
-	b := &Broker{providers: providers, datastore: metricutil.WrapDatastore(ds)}
+func NewBroker(providers *registry.PluginMap[core.Provider], users *coredata.UserService, tokens *coredata.TokenService, opts ...BrokerOption) *Broker {
+	b := &Broker{providers: providers, users: users, tokens: tokens}
 	for _, o := range opts {
 		o(b)
 	}
@@ -359,7 +361,7 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 			if p.Identity == nil || p.Identity.Email == "" {
 				return ctx, "", fmt.Errorf("%w: principal has no user ID or email", ErrUserResolution)
 			}
-			dbUser, err := b.datastore.FindOrCreateUser(ctx, p.Identity.Email)
+			dbUser, err := b.users.FindOrCreateUser(ctx, p.Identity.Email)
 			if err != nil {
 				return ctx, "", fmt.Errorf("%w: %v", ErrUserResolution, err)
 			}
@@ -398,7 +400,7 @@ func (b *Broker) resolveUserToken(ctx context.Context, prov core.Provider, userI
 	var err error
 
 	if instance != "" {
-		storedToken, err = b.datastore.Token(ctx, userID, providerName, connection, instance)
+		storedToken, err = b.tokens.Token(ctx, userID, providerName, connection, instance)
 		if err != nil {
 			if errors.Is(err, core.ErrNotFound) {
 				return ctx, "", fmt.Errorf("%w: no token stored for integration %q instance %q", ErrNoToken, providerName, instance)
@@ -406,7 +408,7 @@ func (b *Broker) resolveUserToken(ctx context.Context, prov core.Provider, userI
 			return ctx, "", fmt.Errorf("%w: retrieving integration token: %v", ErrInternal, err)
 		}
 	} else {
-		tokens, listErr := b.datastore.ListTokensForConnection(ctx, userID, providerName, connection)
+		tokens, listErr := b.tokens.ListTokensForConnection(ctx, userID, providerName, connection)
 		if listErr != nil {
 			return ctx, "", fmt.Errorf("%w: listing tokens: %v", ErrInternal, listErr)
 		}
@@ -464,13 +466,13 @@ func (b *Broker) refreshTokenIfNeeded(ctx context.Context, token *core.Integrati
 		return resp, err
 	})
 	if err != nil {
-		fresh, fetchErr := b.datastore.Token(ctx, token.UserID, token.Integration, token.Connection, token.Instance)
+		fresh, fetchErr := b.tokens.Token(ctx, token.UserID, token.Integration, token.Connection, token.Instance)
 		if fetchErr == nil && fresh != nil && fresh.AccessToken != token.AccessToken {
 			return fresh.AccessToken, nil
 		}
 		token.RefreshErrorCount++
 		token.UpdatedAt = time.Now()
-		if storeErr := b.datastore.StoreToken(ctx, token); storeErr != nil {
+		if storeErr := b.tokens.StoreToken(ctx, token); storeErr != nil {
 			slog.WarnContext(ctx, "failed to persist refresh error count", "provider", providerName, "error", storeErr)
 		}
 		if time.Now().Before(*token.ExpiresAt) {
@@ -495,7 +497,7 @@ func (b *Broker) refreshTokenIfNeeded(ctx context.Context, token *core.Integrati
 	token.RefreshErrorCount = 0
 	token.UpdatedAt = now
 
-	if err := b.datastore.StoreToken(ctx, token); err != nil {
+	if err := b.tokens.StoreToken(ctx, token); err != nil {
 		return "", fmt.Errorf("persisting refreshed token: %w", err)
 	}
 	return token.AccessToken, nil

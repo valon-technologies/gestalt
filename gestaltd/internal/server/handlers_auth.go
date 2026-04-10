@@ -268,7 +268,7 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.URL.Query().Get("cli") == "1" {
-		dbUser, dbErr := s.datastore.FindOrCreateUser(r.Context(), identity.Email)
+		dbUser, dbErr := s.users.FindOrCreateUser(r.Context(), identity.Email)
 		if dbErr != nil || dbUser == nil || dbUser.ID == "" {
 			auditErr = errors.New("failed to resolve user")
 			writeError(w, http.StatusInternalServerError, "failed to resolve user")
@@ -293,7 +293,7 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if identity != nil && identity.Email != "" {
-		dbUser, auditPrincipalErr := s.datastore.FindOrCreateUser(r.Context(), identity.Email)
+		dbUser, auditPrincipalErr := s.users.FindOrCreateUser(r.Context(), identity.Email)
 		switch {
 		case auditPrincipalErr != nil:
 			slog.WarnContext(r.Context(), "login audit user resolution failed", "error", auditPrincipalErr)

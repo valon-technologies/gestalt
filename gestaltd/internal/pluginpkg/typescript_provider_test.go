@@ -189,7 +189,7 @@ func TestDetectTypeScriptComponentTarget(t *testing.T) {
 			target: typeScriptTestAuthTarget,
 		},
 		{
-			name:   "datastore",
+			name:   "indexeddb",
 			kind:   pluginmanifestv1.KindIndexedDB,
 			target: typeScriptTestDatastoreTarget,
 		},
@@ -322,7 +322,7 @@ func TestSourceComponentExecutionCommand_TypeScript(t *testing.T) {
 			target: typeScriptTestAuthTarget,
 		},
 		{
-			name:   "datastore",
+			name:   "indexeddb",
 			kind:   pluginmanifestv1.KindIndexedDB,
 			target: typeScriptTestDatastoreTarget,
 		},
@@ -403,7 +403,7 @@ func TestValidateSourceComponentRelease_TypeScript(t *testing.T) {
 			target: typeScriptTestAuthTarget,
 		},
 		{
-			name:   "datastore",
+			name:   "indexeddb",
 			kind:   pluginmanifestv1.KindIndexedDB,
 			target: typeScriptTestDatastoreTarget,
 		},
@@ -466,7 +466,7 @@ func TestBuildSourceComponentReleaseBinary_TypeScript(t *testing.T) {
 			pluginName: "ts-auth-release",
 		},
 		{
-			name:       "datastore",
+			name:       "indexeddb",
 			kind:       pluginmanifestv1.KindIndexedDB,
 			target:     typeScriptTestDatastoreTarget,
 			pluginName: "ts-datastore-release",

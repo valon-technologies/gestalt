@@ -121,7 +121,7 @@ type Deps struct {
 	EncryptionKey []byte
 	BaseURL       string
 	SecretManager core.SecretManager
-	Datastore     core.Datastore
+	Services      *coredata.Services
 	Datastores    map[string]config.DatastoreDef
 	Egress        EgressDeps
 }
@@ -150,7 +150,7 @@ func NewFactoryRegistry() *FactoryRegistry {
 
 type Result struct {
 	Auth             core.AuthProvider
-	Datastore        core.Datastore
+	Services         *coredata.Services
 	Providers        *registry.PluginMap[core.Provider]
 	ProvidersReady   <-chan struct{}
 	ConnectionAuth   func() map[string]map[string]OAuthHandler
@@ -194,7 +194,7 @@ func (r *Result) Close(ctx context.Context) error {
 	errs = append(errs,
 		closeAuth(r.Auth),
 		CloseProviders(r.Providers),
-		closeDatastore(r.Datastore),
+		r.Services.Close(),
 		closeSecretManager(r.SecretManager),
 	)
 	if r.auditClose != nil {
@@ -217,7 +217,7 @@ func closeIfPossible(values ...any) {
 
 type preparedCore struct {
 	Auth          core.AuthProvider
-	Datastore     core.Datastore
+	Services      *coredata.Services
 	SecretManager core.SecretManager
 	Telemetry     core.TelemetryProvider
 	Deps          Deps
@@ -300,27 +300,26 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	if storeErr != nil {
 		return nil, fmt.Errorf("bootstrap: system datastore from resource %q: %w", string(cfg.Datastore), storeErr)
 	}
-	ds, dsErr := coredata.New(store, enc)
-	if dsErr != nil {
-		return nil, fmt.Errorf("bootstrap: system datastore from resource %q: %w", string(cfg.Datastore), dsErr)
+	svc, svcErr := coredata.New(store, enc)
+	if svcErr != nil {
+		return nil, fmt.Errorf("bootstrap: system datastore from resource %q: %w", string(cfg.Datastore), svcErr)
 	}
-	closeDS := true
+	closeSvc := true
 	defer func() {
-		if closeDS {
-			_ = ds.Close()
+		if closeSvc {
+			_ = svc.Close()
 		}
 	}()
 
 	deps.Egress = newEgressDeps(cfg, sm)
-	var coreDS core.Datastore = ds
-	deps.Datastore = coreDS
+	deps.Services = svc
 
 	closeSM = false
 	shutdownTelemetry = false
-	closeDS = false
+	closeSvc = false
 	return &preparedCore{
 		Auth:          auth,
-		Datastore:     ds,
+		Services:      svc,
 		SecretManager: sm,
 		Telemetry:     tp,
 		Deps:          deps,
@@ -335,7 +334,7 @@ func (p *preparedCore) Close(ctx context.Context) error {
 	var errs []error
 	errs = append(errs,
 		closeAuth(p.Auth),
-		closeDatastore(p.Datastore),
+		p.Services.Close(),
 		closeSecretManager(p.SecretManager),
 	)
 	if p.Telemetry != nil {
@@ -372,7 +371,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	if err != nil {
 		return nil, err
 	}
-	sharedInvoker := invocation.NewBroker(providers, prepared.Datastore,
+	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.Tokens,
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
 		invocation.WithConnectionAuth(lazyRefreshers(providersReady, connAuthResolver)),
@@ -393,7 +392,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	closeAudit = false
 	return &Result{
 		Auth:             prepared.Auth,
-		Datastore:        prepared.Datastore,
+		Services:         prepared.Services,
 		Providers:        providers,
 		ProvidersReady:   providersReady,
 		ConnectionAuth:   connAuthResolver,
@@ -475,13 +474,6 @@ func buildSecretManager(cfg *config.Config, factories *FactoryRegistry) (core.Se
 		return nil, fmt.Errorf("bootstrap: secrets provider %q: %w", name, err)
 	}
 	return sm, nil
-}
-
-func closeDatastore(ds core.Datastore) error {
-	if ds == nil {
-		return nil
-	}
-	return ds.Close()
 }
 
 func closeAuth(provider core.AuthProvider) error {

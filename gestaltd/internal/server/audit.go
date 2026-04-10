@@ -13,7 +13,7 @@ func (s *Server) resolvePrincipalUserID(ctx context.Context, p *principal.Princi
 		return p, nil
 	}
 
-	dbUser, err := s.datastore.FindOrCreateUser(ctx, p.Identity.Email)
+	dbUser, err := s.users.FindOrCreateUser(ctx, p.Identity.Email)
 	if err != nil {
 		return nil, err
 	}

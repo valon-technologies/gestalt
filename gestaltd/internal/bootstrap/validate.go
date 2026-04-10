@@ -24,7 +24,7 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 	defer func() { _ = prepared.Close(context.Background()) }()
 
 	var warnings []string
-	if w, ok := prepared.Datastore.(interface{ Warnings() []string }); ok {
+	if w, ok := prepared.Services.DB.(interface{ Warnings() []string }); ok {
 		warnings = w.Warnings()
 	}
 

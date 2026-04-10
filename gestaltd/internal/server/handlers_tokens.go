@@ -94,7 +94,7 @@ func (s *Server) listAPITokens(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokens, err := s.datastore.ListAPITokens(r.Context(), userID)
+	tokens, err := s.apiTokens.ListAPITokens(r.Context(), userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list tokens")
 		return
@@ -121,7 +121,7 @@ func (s *Server) revokeAPIToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	id := chi.URLParam(r, "id")
-	if err := s.datastore.RevokeAPIToken(r.Context(), userID, id); err != nil {
+	if err := s.apiTokens.RevokeAPIToken(r.Context(), userID, id); err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			auditErr = errors.New("token not found")
 			writeError(w, http.StatusNotFound, "token not found")
@@ -149,7 +149,7 @@ func (s *Server) revokeAllAPITokens(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	count, err := s.datastore.RevokeAllAPITokens(r.Context(), userID)
+	count, err := s.apiTokens.RevokeAllAPITokens(r.Context(), userID)
 	if err != nil {
 		auditErr = errors.New("failed to revoke tokens")
 		writeError(w, http.StatusInternalServerError, "failed to revoke tokens")

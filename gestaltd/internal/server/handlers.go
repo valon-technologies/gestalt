@@ -89,7 +89,7 @@ func (s *Server) resolveUserID(w http.ResponseWriter, r *http.Request) (string, 
 	if id := UserIDFromContext(r.Context()); id != "" {
 		return id, nil
 	}
-	dbUser, err := s.datastore.FindOrCreateUser(r.Context(), user.Email)
+	dbUser, err := s.users.FindOrCreateUser(r.Context(), user.Email)
 	if err != nil || dbUser == nil || dbUser.ID == "" {
 		writeError(w, http.StatusInternalServerError, "failed to resolve user")
 		return "", errResolveUser
@@ -173,7 +173,7 @@ func (s *Server) userConnectedIntegrations(r *http.Request) (map[string][]instan
 	}
 	userID := UserIDFromContext(r.Context())
 	if userID == "" {
-		dbUser, err := s.datastore.FindOrCreateUser(r.Context(), user.Email)
+		dbUser, err := s.users.FindOrCreateUser(r.Context(), user.Email)
 		if err != nil {
 			return nil, fmt.Errorf("resolving user: %w", err)
 		}
@@ -182,7 +182,7 @@ func (s *Server) userConnectedIntegrations(r *http.Request) (map[string][]instan
 		}
 		userID = dbUser.ID
 	}
-	tokens, err := s.datastore.ListTokens(r.Context(), userID)
+	tokens, err := s.tokens.ListTokens(r.Context(), userID)
 	if err != nil {
 		return nil, fmt.Errorf("listing tokens: %w", err)
 	}
@@ -234,7 +234,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	tokens, err := s.datastore.ListTokensForIntegration(r.Context(), userID, name)
+	tokens, err := s.tokens.ListTokensForIntegration(r.Context(), userID, name)
 	if err != nil {
 		auditErr = errors.New("failed to list tokens")
 		writeError(w, http.StatusInternalServerError, "failed to list tokens")
@@ -291,7 +291,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.datastore.DeleteToken(r.Context(), tokenID); err != nil {
+	if err := s.tokens.DeleteToken(r.Context(), tokenID); err != nil {
 		auditErr = errors.New("failed to disconnect integration")
 		writeError(w, http.StatusInternalServerError, "failed to disconnect integration")
 		return

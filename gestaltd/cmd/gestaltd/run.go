@@ -13,14 +13,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/internal/adminui"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	gestaltmcp "github.com/valon-technologies/gestalt/server/internal/mcp"
-	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	"github.com/valon-technologies/gestalt/server/internal/sandbox"
@@ -151,7 +150,7 @@ func runServer(env *bootstrapEnv) error {
 	baseServerConfig := server.Config{
 		Auth:              result.Auth,
 		AuditSink:         result.AuditSink,
-		Datastore:         result.Datastore,
+		Services:          result.Services,
 		Providers:         result.Providers,
 		Invoker:           httpInvoker,
 		DefaultConnection: connMaps.DefaultConnection,
@@ -164,7 +163,7 @@ func runServer(env *bootstrapEnv) error {
 		APITokenTTL:       apiTokenTTL,
 		Readiness: composeReadiness(
 			readinessFromChannel(result.ProvidersReady, "providers loading"),
-			datastoreReadiness(result.Datastore),
+			datastoreReadiness(result.Services),
 		),
 		PrometheusMetrics: env.Result.Telemetry.PrometheusHandler(),
 		MCPHandler:        mcpHandler,
@@ -602,12 +601,11 @@ func composeReadiness(checks ...server.ReadinessChecker) server.ReadinessChecker
 	}
 }
 
-func datastoreReadiness(ds core.Datastore) server.ReadinessChecker {
-	ds = metricutil.WrapDatastore(ds)
+func datastoreReadiness(svc *coredata.Services) server.ReadinessChecker {
 	return func() string {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		if err := ds.Ping(ctx); err != nil {
+		if err := svc.Ping(ctx); err != nil {
 			return "datastore unavailable"
 		}
 		return ""

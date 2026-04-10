@@ -5,8 +5,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/core"
-	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -121,23 +119,3 @@ func AttrsMatch(set attribute.Set, want map[string]string) bool {
 	return true
 }
 
-type NamedStubDatastore struct {
-	coretesting.StubDatastore
-	N               string
-	ListAPITokensFn func(context.Context, string) ([]*core.APIToken, error)
-}
-
-func NewNamedStubDatastore(name string, stub coretesting.StubDatastore) *NamedStubDatastore {
-	return &NamedStubDatastore{StubDatastore: stub, N: name}
-}
-
-func (s *NamedStubDatastore) Name() string { return s.N }
-
-func (s *NamedStubDatastore) ListAPITokens(ctx context.Context, userID string) ([]*core.APIToken, error) {
-	if s.ListAPITokensFn != nil {
-		return s.ListAPITokensFn(ctx, userID)
-	}
-	return s.StubDatastore.ListAPITokens(ctx, userID)
-}
-
-var _ core.Datastore = (*NamedStubDatastore)(nil)

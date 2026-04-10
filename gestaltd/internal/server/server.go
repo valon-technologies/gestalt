@@ -12,8 +12,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/session"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
-	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -37,7 +37,9 @@ type Server struct {
 	handler            http.Handler
 	auth               core.AuthProvider
 	auditSink          core.AuditSink
-	datastore          core.Datastore
+	users              *coredata.UserService
+	tokens             *coredata.TokenService
+	apiTokens          *coredata.APITokenService
 	providers          *registry.PluginMap[core.Provider]
 	resolver           *principal.Resolver
 	invoker            invocation.Invoker
@@ -65,7 +67,7 @@ type Server struct {
 type Config struct {
 	Auth              core.AuthProvider
 	AuditSink         core.AuditSink
-	Datastore         core.Datastore
+	Services          *coredata.Services
 	Providers         *registry.PluginMap[core.Provider]
 	Invoker           invocation.Invoker
 	DefaultConnection map[string]string
@@ -111,8 +113,10 @@ func New(cfg Config) (*Server, error) {
 		now = time.Now
 	}
 
-	datastore := metricutil.WrapDatastore(cfg.Datastore)
-	resolver := principal.NewResolver(cfg.Auth, datastore)
+	users := cfg.Services.Users
+	tokens := cfg.Services.Tokens
+	apiTokens := cfg.Services.APITokens
+	resolver := principal.NewResolver(cfg.Auth, users, apiTokens)
 
 	router := chi.NewRouter()
 	s := &Server{
@@ -120,7 +124,9 @@ func New(cfg Config) (*Server, error) {
 		handler:           otelhttp.NewHandler(router, "gestaltd"),
 		auth:              cfg.Auth,
 		auditSink:         cfg.AuditSink,
-		datastore:         datastore,
+		users:             users,
+		tokens:            tokens,
+		apiTokens:         apiTokens,
 		providers:         cfg.Providers,
 		resolver:          resolver,
 		invoker:           cfg.Invoker,

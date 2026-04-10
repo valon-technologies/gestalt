@@ -33,7 +33,7 @@ func (s *Server) issueAPIToken(ctx context.Context, userID, name, scopes string,
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
-	if err := s.datastore.StoreAPIToken(ctx, apiToken); err != nil {
+	if err := s.apiTokens.StoreAPIToken(ctx, apiToken); err != nil {
 		return nil, "", err
 	}
 	return apiToken, plaintext, nil

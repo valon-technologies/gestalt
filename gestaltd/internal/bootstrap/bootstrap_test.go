@@ -96,7 +96,7 @@ func TestBootstrap(t *testing.T) {
 	if result.Auth.Name() != "test-auth" {
 		t.Errorf("Auth.Name: got %q, want %q", result.Auth.Name(), "test-auth")
 	}
-	if result.Datastore == nil {
+	if result.Services == nil {
 		t.Fatal("Datastore is nil")
 	}
 	if result.Telemetry == nil {

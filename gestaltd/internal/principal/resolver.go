@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 )
 
@@ -55,11 +56,12 @@ func ParseTokenType(token string) (TokenType, bool) {
 
 type Resolver struct {
 	auth      core.AuthProvider
-	datastore core.Datastore
+	users     *coredata.UserService
+	apiTokens *coredata.APITokenService
 }
 
-func NewResolver(auth core.AuthProvider, ds core.Datastore) *Resolver {
-	return &Resolver{auth: auth, datastore: ds}
+func NewResolver(auth core.AuthProvider, users *coredata.UserService, apiTokens *coredata.APITokenService) *Resolver {
+	return &Resolver{auth: auth, users: users, apiTokens: apiTokens}
 }
 
 func (r *Resolver) ResolveToken(ctx context.Context, token string) (*Principal, error) {
@@ -88,7 +90,7 @@ func (r *Resolver) ResolveToken(ctx context.Context, token string) (*Principal, 
 
 func (r *Resolver) resolveAPIToken(ctx context.Context, token string) (*Principal, error) {
 	hashed := HashToken(token)
-	apiToken, err := r.datastore.ValidateAPIToken(ctx, hashed)
+	apiToken, err := r.apiTokens.ValidateAPIToken(ctx, hashed)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			return nil, ErrInvalidToken
@@ -99,7 +101,7 @@ func (r *Resolver) resolveAPIToken(ctx context.Context, token string) (*Principa
 		return nil, ErrInvalidToken
 	}
 
-	user, err := r.datastore.GetUser(ctx, apiToken.UserID)
+	user, err := r.users.GetUser(ctx, apiToken.UserID)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			return nil, ErrInvalidToken

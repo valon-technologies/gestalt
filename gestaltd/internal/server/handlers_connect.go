@@ -261,7 +261,7 @@ func (s *Server) storeTokenFromMaterial(ctx context.Context, tm tokenMaterial) (
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
-	if err := s.datastore.StoreToken(ctx, tok); err != nil {
+	if err := s.tokens.StoreToken(ctx, tok); err != nil {
 		return nil, err
 	}
 	return tok, nil

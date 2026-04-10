@@ -34,12 +34,8 @@ func TestAuditMetadata_IPAndUserAgent(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, stub)
-	ds := &coretesting.StubDatastore{
-		FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
-			return &core.User{ID: "user-session", Email: email}, nil
-		},
-	}
-	broker := invocation.NewBroker(providers, ds)
+	svc := coretesting.NewStubServices(t)
+	broker := invocation.NewBroker(providers, svc.Users, svc.Tokens)
 	guarded := invocation.NewGuarded(broker, broker, "http", auditSink, invocation.WithoutRateLimit())
 
 	srv, err := server.New(server.Config{
@@ -53,7 +49,7 @@ func TestAuditMetadata_IPAndUserAgent(t *testing.T) {
 			},
 		},
 		AuditSink:   auditSink,
-		Datastore:   ds,
+		Services:    svc,
 		Providers:   providers,
 		Invoker:     guarded,
 		StateSecret: []byte("0123456789abcdef0123456789abcdef"),
@@ -130,13 +126,13 @@ func TestAuditMetadata_FallbackToRemoteAddr(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, stub)
-	ds := &coretesting.StubDatastore{}
-	broker := invocation.NewBroker(providers, ds)
+	svc := coretesting.NewStubServices(t)
+	broker := invocation.NewBroker(providers, svc.Users, svc.Tokens)
 	guarded := invocation.NewGuarded(broker, broker, "http", auditSink, invocation.WithoutRateLimit())
 
 	srv, err := server.New(server.Config{
 		Auth:        &coretesting.StubAuthProvider{N: "none"},
-		Datastore:   ds,
+		Services:    svc,
 		Providers:   providers,
 		Invoker:     guarded,
 		StateSecret: []byte("0123456789abcdef0123456789abcdef"),

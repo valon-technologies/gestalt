@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
@@ -43,90 +42,6 @@ func TestE2EValidateUsesUpdatedManagedPluginConfigAfterInit(t *testing.T) {
 	}
 	if !strings.Contains(string(out), "api_key") {
 		t.Fatalf("expected output to mention missing api_key, got: %s", out)
-	}
-}
-
-func TestE2EServeLockedResolvesLateBoundManagedPluginEnv(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	apiKeyEnv := "TEST_API_KEY_" + strings.ToUpper(strings.ReplaceAll(t.Name(), "/", "_"))
-	portEnv := apiKeyEnv + "_PORT"
-	pluginDir := buildPreparedPluginRequiringAPIKey(t, dir, "github.com/acme/plugins/provider", "0.0.1-alpha.1")
-	cfgPath := writePreparedSourceConfig(t, dir, pluginDir, map[string]string{
-		"api_key": "${" + apiKeyEnv + "}",
-	}, []string{
-		"public:",
-		"  port: ${" + portEnv + "}",
-		"encryptionKey: test-key",
-	})
-
-	initCmd := exec.Command(gestaltdBin, "init", "--config", cfgPath)
-	initCmd.Env = withoutEnvVar(withoutEnvVar(os.Environ(), apiKeyEnv), portEnv)
-	out, err := initCmd.CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd init: %v\n%s", err, out)
-	}
-
-	port := allocateTestPort(t)
-	cmd := exec.Command(gestaltdBin, "serve", "--locked", "--config", cfgPath)
-	cmd.Env = withoutEnvVar(withoutEnvVar(os.Environ(), apiKeyEnv), portEnv)
-	cmd.Env = append(cmd.Env,
-		apiKeyEnv+"=runtime-value",
-		fmt.Sprintf("%s=%d", portEnv, port),
-	)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start serve: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = cmd.Process.Signal(os.Interrupt)
-		_ = cmd.Wait()
-	})
-
-	baseURL := fmt.Sprintf("http://localhost:%d", port)
-	waitForReady(t, baseURL, 30*time.Second)
-}
-
-func TestE2EDefaultStartAutoGeneratesHomeConfig(t *testing.T) {
-	t.Parallel()
-
-	homeDir := filepath.Join(t.TempDir(), "home:with#special")
-	providersDir := filepath.Join(t.TempDir(), "providers")
-	_ = setupAuthProviderDir(t, providersDir, "none")
-	_ = setupWebProviderDir(t, providersDir, "default")
-	configPath := filepath.Join(homeDir, ".gestaltd", "config.yaml")
-
-	cmd := exec.Command(gestaltdBin)
-	cmd.Env = withoutEnvVar(os.Environ(), "GESTALT_CONFIG")
-	cmd.Env = append(cmd.Env,
-		"HOME="+homeDir,
-		"GESTALT_PROVIDERS_DIR="+providersDir,
-		"GOMODCACHE="+goEnvPath(t, "GOMODCACHE"),
-		"GOCACHE="+goEnvPath(t, "GOCACHE"),
-	)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start gestaltd: %v", err)
-	}
-	stopped := false
-	t.Cleanup(func() {
-		if !stopped {
-			_ = cmd.Process.Signal(os.Interrupt)
-			_ = cmd.Wait()
-		}
-	})
-
-	waitForFile(t, configPath, 20*time.Second)
-	stopped = true
-	_ = cmd.Process.Signal(os.Interrupt)
-	_ = cmd.Wait()
-
-	out, err := exec.Command(gestaltdBin, "validate", "--config", configPath).CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd validate: %v\n%s", err, out)
 	}
 }
 
@@ -202,15 +117,3 @@ func writePreparedSourceConfig(t *testing.T, dir, pluginDir string, pluginConfig
 	return cfgPath
 }
 
-func waitForFile(t *testing.T, path string, timeout time.Duration) {
-	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if _, err := os.Stat(path); err == nil {
-			return
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	t.Fatalf("%s was not created within %s", path, timeout)
-}

@@ -257,7 +257,7 @@ func SplitPythonProviderTarget(target string) (module string, attr string, err e
 const (
 	pythonRuntimeKindIntegration = "integration"
 	pythonRuntimeKindAuth        = "auth"
-	pythonRuntimeKindIndexedDB   = "datastore"
+	pythonRuntimeKindIndexedDB   = "indexeddb"
 	pythonRuntimeKindSecrets     = "secrets"
 )
 

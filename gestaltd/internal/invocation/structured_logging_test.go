@@ -34,22 +34,9 @@ func TestBrokerMalformedMetadataJSON_StructuredLog(t *testing.T) { //nolint:para
 		ops: []core.Operation{{Name: "do_thing", Method: http.MethodGet}},
 	}
 
-	ds := &coretesting.StubDatastore{
-		FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
-			return &core.User{ID: "u-1", Email: email}, nil
-		},
-		ListTokensForConnectionFn: func(_ context.Context, _, _, _ string) ([]*core.IntegrationToken, error) {
-			return []*core.IntegrationToken{{
-				UserID:       "u-1",
-				Integration:  "myservice",
-				Instance:     "default",
-				AccessToken:  "tok-123",
-				MetadataJSON: `{{{not json`,
-			}}, nil
-		},
-	}
+	svc := coretesting.NewStubServices(t)
 
-	broker := invocation.NewBroker(testutil.NewProviderRegistry(t, prov), ds)
+	broker := invocation.NewBroker(testutil.NewProviderRegistry(t, prov), svc.Users, svc.Tokens)
 	p := &principal.Principal{
 		Identity: &core.UserIdentity{Email: "test@example.com"},
 	}

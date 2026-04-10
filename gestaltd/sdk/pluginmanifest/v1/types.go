@@ -22,7 +22,7 @@ type Manifest struct {
 	Release     *ReleaseMetadata   `json:"release,omitempty" yaml:"release,omitempty"`
 	Plugin      *Plugin            `json:"plugin,omitempty" yaml:"plugin,omitempty"`
 	Auth        *AuthMetadata      `json:"auth,omitempty" yaml:"auth,omitempty"`
-	Datastore   *DatastoreMetadata `json:"datastore,omitempty" yaml:"datastore,omitempty"`
+	Datastore   *DatastoreMetadata `json:"indexeddb,omitempty" yaml:"indexeddb,omitempty"`
 	Secrets     *SecretsMetadata   `json:"secrets,omitempty" yaml:"secrets,omitempty"`
 	WebUI       *WebUIMetadata     `json:"webui,omitempty" yaml:"webui,omitempty"`
 	Artifacts   []Artifact         `json:"artifacts,omitempty" yaml:"artifacts,omitempty"`
@@ -360,7 +360,7 @@ type Artifact struct {
 type Entrypoints struct {
 	Plugin    *Entrypoint `json:"plugin,omitempty" yaml:"plugin,omitempty"`
 	Auth      *Entrypoint `json:"auth,omitempty" yaml:"auth,omitempty"`
-	Datastore *Entrypoint `json:"datastore,omitempty" yaml:"datastore,omitempty"`
+	Datastore *Entrypoint `json:"indexeddb,omitempty" yaml:"indexeddb,omitempty"`
 	Secrets   *Entrypoint `json:"secrets,omitempty" yaml:"secrets,omitempty"`
 }
 

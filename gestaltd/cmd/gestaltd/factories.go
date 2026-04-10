@@ -21,7 +21,6 @@ import (
 	telemetryotlp "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/otlp"
 	telemetrystdout "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/stdout"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
-	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
 )
 
@@ -59,15 +58,6 @@ func setupBootstrapWithArtifactsDir(configFlag, artifactsDir string, locked bool
 			slog.SetDefault(prevLogger)
 		}
 	}()
-	logDatastoreWarnings(result.Datastore)
-
-	if err := metricutil.WrapDatastore(result.Datastore).Migrate(ctx); err != nil {
-		stop()
-		closeCtx, cancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
-		defer cancel()
-		_ = result.Close(closeCtx)
-		return nil, fmt.Errorf("running datastore migrations: %v", err)
-	}
 	restoreLoggerOnError = false
 
 	return &bootstrapEnv{
@@ -154,17 +144,6 @@ func resolveConfigPath(flagValue string) string {
 		return p
 	}
 	return "/etc/gestalt/config.yaml"
-}
-
-func logDatastoreWarnings(ds core.Datastore) {
-	type warner interface {
-		Warnings() []string
-	}
-	if w, ok := ds.(warner); ok {
-		for _, msg := range w.Warnings() {
-			slog.Warn(msg)
-		}
-	}
 }
 
 const gracefulShutdownTimeout = 15 * time.Second

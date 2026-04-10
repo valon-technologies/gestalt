@@ -2,11 +2,26 @@ package coretesting
 
 import (
 	"context"
-	"errors"
+	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	corecrypto "github.com/valon-technologies/gestalt/server/core/crypto"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 )
+
+func NewStubServices(t *testing.T) *coredata.Services {
+	t.Helper()
+	enc, err := corecrypto.NewAESGCM([]byte("0123456789abcdef0123456789abcdef"))
+	if err != nil {
+		t.Fatalf("NewStubServices encryptor: %v", err)
+	}
+	svc, err := coredata.New(&StubIndexedDB{}, enc)
+	if err != nil {
+		t.Fatalf("NewStubServices: %v", err)
+	}
+	return svc
+}
 
 type StubSecretManager struct {
 	Secrets map[string]string
@@ -18,135 +33,6 @@ func (s *StubSecretManager) GetSecret(_ context.Context, name string) (string, e
 	}
 	return "", core.ErrSecretNotFound
 }
-
-// Set Fn fields to override individual methods; nil fields return zero values.
-type StubDatastore struct {
-	PingFn                     func(context.Context) error
-	GetUserFn                  func(context.Context, string) (*core.User, error)
-	FindOrCreateUserFn         func(context.Context, string) (*core.User, error)
-	StoreTokenFn               func(context.Context, *core.IntegrationToken) error
-	TokenFn                    func(context.Context, string, string, string, string) (*core.IntegrationToken, error)
-	ListTokensFn               func(context.Context, string) ([]*core.IntegrationToken, error)
-	ListTokensForIntegrationFn func(context.Context, string, string) ([]*core.IntegrationToken, error)
-	ListTokensForConnectionFn  func(context.Context, string, string, string) ([]*core.IntegrationToken, error)
-	DeleteTokenFn              func(context.Context, string) error
-	StoreAPITokenFn            func(context.Context, *core.APIToken) error
-	ValidateAPITokenFn         func(context.Context, string) (*core.APIToken, error)
-	RevokeAPITokenFn           func(context.Context, string, string) error
-	RevokeAllAPITokensFn       func(context.Context, string) (int64, error)
-}
-
-func (s *StubDatastore) Ping(ctx context.Context) error {
-	if s.PingFn != nil {
-		return s.PingFn(ctx)
-	}
-	return nil
-}
-
-func (s *StubDatastore) GetUser(ctx context.Context, id string) (*core.User, error) {
-	if s.GetUserFn != nil {
-		return s.GetUserFn(ctx, id)
-	}
-	return nil, nil
-}
-
-func (s *StubDatastore) FindOrCreateUser(ctx context.Context, email string) (*core.User, error) {
-	if s.FindOrCreateUserFn != nil {
-		return s.FindOrCreateUserFn(ctx, email)
-	}
-	return nil, nil
-}
-func (s *StubDatastore) StoreToken(ctx context.Context, token *core.IntegrationToken) error {
-	if s.StoreTokenFn != nil {
-		return s.StoreTokenFn(ctx, token)
-	}
-	return nil
-}
-func (s *StubDatastore) Token(ctx context.Context, userID, integration, connection, instance string) (*core.IntegrationToken, error) {
-	if s.TokenFn != nil {
-		return s.TokenFn(ctx, userID, integration, connection, instance)
-	}
-	return nil, nil
-}
-func (s *StubDatastore) ListTokens(ctx context.Context, userID string) ([]*core.IntegrationToken, error) {
-	if s.ListTokensFn != nil {
-		return s.ListTokensFn(ctx, userID)
-	}
-	return nil, nil
-}
-func (s *StubDatastore) ListTokensForIntegration(ctx context.Context, userID, integration string) ([]*core.IntegrationToken, error) {
-	if s.ListTokensForIntegrationFn != nil {
-		return s.ListTokensForIntegrationFn(ctx, userID, integration)
-	}
-	if s.TokenFn != nil {
-		tok, err := s.TokenFn(ctx, userID, integration, "", "default")
-		if err != nil {
-			if errors.Is(err, core.ErrNotFound) {
-				return nil, nil
-			}
-			return nil, err
-		}
-		if tok == nil {
-			return nil, nil
-		}
-		return []*core.IntegrationToken{tok}, nil
-	}
-	return nil, nil
-}
-func (s *StubDatastore) ListTokensForConnection(ctx context.Context, userID, integration, connection string) ([]*core.IntegrationToken, error) {
-	if s.ListTokensForConnectionFn != nil {
-		return s.ListTokensForConnectionFn(ctx, userID, integration, connection)
-	}
-	if s.TokenFn != nil {
-		tok, err := s.TokenFn(ctx, userID, integration, connection, "default")
-		if err != nil {
-			if errors.Is(err, core.ErrNotFound) {
-				return nil, nil
-			}
-			return nil, err
-		}
-		if tok == nil {
-			return nil, nil
-		}
-		return []*core.IntegrationToken{tok}, nil
-	}
-	return nil, nil
-}
-func (s *StubDatastore) DeleteToken(ctx context.Context, id string) error {
-	if s.DeleteTokenFn != nil {
-		return s.DeleteTokenFn(ctx, id)
-	}
-	return nil
-}
-func (s *StubDatastore) StoreAPIToken(ctx context.Context, token *core.APIToken) error {
-	if s.StoreAPITokenFn != nil {
-		return s.StoreAPITokenFn(ctx, token)
-	}
-	return nil
-}
-func (s *StubDatastore) ValidateAPIToken(ctx context.Context, hashedToken string) (*core.APIToken, error) {
-	if s.ValidateAPITokenFn != nil {
-		return s.ValidateAPITokenFn(ctx, hashedToken)
-	}
-	return nil, nil
-}
-func (s *StubDatastore) ListAPITokens(context.Context, string) ([]*core.APIToken, error) {
-	return nil, nil
-}
-func (s *StubDatastore) RevokeAPIToken(ctx context.Context, userID, id string) error {
-	if s.RevokeAPITokenFn != nil {
-		return s.RevokeAPITokenFn(ctx, userID, id)
-	}
-	return nil
-}
-func (s *StubDatastore) RevokeAllAPITokens(ctx context.Context, userID string) (int64, error) {
-	if s.RevokeAllAPITokensFn != nil {
-		return s.RevokeAllAPITokensFn(ctx, userID)
-	}
-	return 0, nil
-}
-func (s *StubDatastore) Migrate(context.Context) error { return nil }
-func (s *StubDatastore) Close() error                  { return nil }
 
 type StubAuthProvider struct {
 	N                string

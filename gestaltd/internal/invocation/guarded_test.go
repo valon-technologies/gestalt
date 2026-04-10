@@ -71,7 +71,7 @@ func guardTestProvider(name string) *stubProviderWithOps {
 
 func newGuardedTestInvoker(t *testing.T, providers ...core.Provider) *invocation.Broker {
 	t.Helper()
-	return invocation.NewBroker(testutil.NewProviderRegistry(t, providers...), &coretesting.StubDatastore{})
+	return invocation.NewBroker(testutil.NewProviderRegistry(t, providers...), nil, nil)
 }
 
 func TestGuardedInvoker_AllowedProvider(t *testing.T) {

@@ -13,6 +13,7 @@ import (
 	coreintegration "github.com/valon-technologies/gestalt/server/core/integration"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/composite"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
@@ -93,12 +94,16 @@ func newCatalogBackedProvider(stub coretesting.StubIntegration, ops []core.Opera
 	}
 }
 
-func stubDatastoreWithToken() *coretesting.StubDatastore {
-	return &coretesting.StubDatastore{
-		TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
-			return &core.IntegrationToken{AccessToken: "test-token"}, nil
-		},
-	}
+func stubServicesWithToken(t *testing.T) *coredata.Services {
+	t.Helper()
+	svc := coretesting.NewStubServices(t)
+	ctx := context.Background()
+	svc.Users.FindOrCreateUser(ctx, "test@example.com")
+	svc.Tokens.StoreToken(ctx, &core.IntegrationToken{
+		ID: "tok1", UserID: "u1", Integration: "test", Connection: "default", Instance: "default",
+		AccessToken: "test-token",
+	})
+	return svc
 }
 
 func ctxWithPrincipal() context.Context {
@@ -266,8 +271,8 @@ func TestNewServer_ListsToolsFromCatalogProvider(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	ds := stubDatastoreWithToken()
-	broker := invocation.NewBroker(providers, ds)
+	ds := stubServicesWithToken(t)
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:   broker,
@@ -316,8 +321,8 @@ func TestNewServer_SkipsFlatOnlyProvider(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	ds := stubDatastoreWithToken()
-	broker := invocation.NewBroker(providers, ds)
+	ds := stubServicesWithToken(t)
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:   broker,
@@ -339,8 +344,8 @@ func TestNewServer_ToolNameConvention(t *testing.T) {
 	)
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	ds := stubDatastoreWithToken()
-	broker := invocation.NewBroker(providers, ds)
+	ds := stubServicesWithToken(t)
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:      broker,
@@ -380,8 +385,8 @@ func TestNewServer_ToolCallRoutesThrough(t *testing.T) {
 	)
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	ds := stubDatastoreWithToken()
-	broker := invocation.NewBroker(providers, ds)
+	ds := stubServicesWithToken(t)
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:   broker,
@@ -491,8 +496,8 @@ func TestNewServer_ErrorResultSetsIsError(t *testing.T) {
 	)
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	ds := stubDatastoreWithToken()
-	broker := invocation.NewBroker(providers, ds)
+	ds := stubServicesWithToken(t)
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:   broker,
@@ -527,8 +532,8 @@ func TestNewServer_BrokerErrorReturnsToolError(t *testing.T) {
 	)
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	ds := stubDatastoreWithToken()
-	broker := invocation.NewBroker(providers, ds)
+	ds := stubServicesWithToken(t)
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:   broker,
@@ -558,8 +563,8 @@ func TestNewServer_NoPrincipalReturnsToolError(t *testing.T) {
 	)
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	ds := stubDatastoreWithToken()
-	broker := invocation.NewBroker(providers, ds)
+	ds := stubServicesWithToken(t)
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:   broker,
@@ -592,8 +597,8 @@ func TestNewServer_AllowedProvidersFilter(t *testing.T) {
 	)
 
 	providers := testutil.NewProviderRegistry(t, prov1, prov2)
-	ds := stubDatastoreWithToken()
-	broker := invocation.NewBroker(providers, ds)
+	ds := stubServicesWithToken(t)
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:          broker,
@@ -629,8 +634,8 @@ func TestNewServer_HiddenOperationsFiltered(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	ds := stubDatastoreWithToken()
-	broker := invocation.NewBroker(providers, ds)
+	ds := stubServicesWithToken(t)
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:   broker,
@@ -718,7 +723,7 @@ func TestNewServer_DirectCallerPassthrough(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	broker := invocation.NewBroker(providers, stubDatastoreWithToken())
+	broker := invocation.NewBroker(providers, stubServicesWithToken(t))
 	caps := broker.ListCapabilities()
 	if len(caps) != 1 {
 		t.Fatalf("expected 1 capability, got %d", len(caps))
@@ -809,7 +814,7 @@ func TestNewServer_RESTCatalogToolsUseOperationConnections(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, merged)
-	datastore := &coretesting.StubDatastore{
+	datastore := coretesting.NewStubServices(t
 		TokenFn: func(_ context.Context, _, integration, connection, _ string) (*core.IntegrationToken, error) {
 			if integration != "hybrid" {
 				return nil, fmt.Errorf("unexpected integration %q", integration)
@@ -1118,7 +1123,7 @@ func TestNewServer_DynamicCatalogProviderCallsSessionTool(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	broker := invocation.NewBroker(providers, stubDatastoreWithToken())
+	broker := invocation.NewBroker(providers, stubServicesWithToken(t))
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
 		TokenResolver: broker,
@@ -1165,8 +1170,8 @@ func TestNewServer_IncludeRESTFiltering(t *testing.T) {
 			}
 
 			providers := testutil.NewProviderRegistry(t, prov)
-			ds := stubDatastoreWithToken()
-			broker := invocation.NewBroker(providers, ds)
+			ds := stubServicesWithToken(t)
+			broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 
 			srv := gestaltmcp.NewServer(gestaltmcp.Config{
 				Invoker:     broker,
@@ -1230,7 +1235,7 @@ func TestNewServer_MCPPassthroughContract(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	broker := invocation.NewBroker(providers, stubDatastoreWithToken())
+	broker := invocation.NewBroker(providers, stubServicesWithToken(t))
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
 		TokenResolver: broker,
@@ -1340,7 +1345,7 @@ func TestNewServer_PassthroughToolPreservesErrorResultStructure(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	broker := invocation.NewBroker(providers, stubDatastoreWithToken())
+	broker := invocation.NewBroker(providers, stubServicesWithToken(t))
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
 		TokenResolver: broker,
@@ -1408,7 +1413,7 @@ func TestNewServer_PassthroughToolTreatsNilResultAsEmptyJSON(t *testing.T) {
 	}
 
 	providers := testutil.NewProviderRegistry(t, prov)
-	broker := invocation.NewBroker(providers, stubDatastoreWithToken())
+	broker := invocation.NewBroker(providers, stubServicesWithToken(t))
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       broker,
 		TokenResolver: broker,

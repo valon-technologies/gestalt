@@ -41,12 +41,12 @@ func TestTracing_HTTPAndBrokerSpans(t *testing.T) { //nolint:paralleltest // mut
 	}
 
 	providers := testutil.NewProviderRegistry(t, stub)
-	ds := &coretesting.StubDatastore{}
-	broker := invocation.NewBroker(providers, ds)
+	ds := coretesting.NewStubServices(t)
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 
 	srv, err := server.New(server.Config{
 		Auth:        &coretesting.StubAuthProvider{N: "none"},
-		Datastore:   ds,
+		Services:    ds,
 		Providers:   providers,
 		Invoker:     broker,
 		StateSecret: []byte("0123456789abcdef0123456789abcdef"),
@@ -119,12 +119,12 @@ func TestTracing_BrokerSpanRecordsErrors(t *testing.T) { //nolint:paralleltest /
 	}
 
 	providers := testutil.NewProviderRegistry(t, stub)
-	ds := &coretesting.StubDatastore{}
-	broker := invocation.NewBroker(providers, ds)
+	ds := coretesting.NewStubServices(t)
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 
 	srv, err := server.New(server.Config{
 		Auth:        &coretesting.StubAuthProvider{N: "none"},
-		Datastore:   ds,
+		Services:    ds,
 		Providers:   providers,
 		Invoker:     broker,
 		StateSecret: []byte("0123456789abcdef0123456789abcdef"),

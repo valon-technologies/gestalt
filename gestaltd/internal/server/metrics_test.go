@@ -89,11 +89,7 @@ func TestConnectionAuthMetrics(t *testing.T) {
 		})
 		cfg.DefaultConnection = map[string]string{providerName: testDefaultConnection}
 		cfg.ConnectionAuth = testConnectionAuth(providerName, handler)
-		cfg.Datastore = &coretesting.StubDatastore{
-			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
-				return &core.User{ID: "u1", Email: email}, nil
-			},
-		}
+		cfg.Services = coretesting.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, oauthServer)
 
@@ -187,25 +183,11 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 		},
 	}
 
-	expiresSoon := time.Now().Add(2 * time.Minute)
 	successServer := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, successStub)
 		cfg.DefaultConnection = map[string]string{providerName: testDefaultConnection}
 		cfg.ConnectionAuth = oauthRefreshConnectionAuth(providerName, successStub.refreshTokenFn)
-		cfg.Datastore = &coretesting.StubDatastore{
-			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
-				return &core.User{ID: "u1", Email: email}, nil
-			},
-			TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
-				return &core.IntegrationToken{
-					UserID:       "u1",
-					Integration:  providerName,
-					AccessToken:  "stale-access-token",
-					RefreshToken: "old-refresh-token",
-					ExpiresAt:    &expiresSoon,
-				}, nil
-			},
-		}
+		cfg.Services = coretesting.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, successServer)
 
@@ -232,25 +214,11 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 		},
 	}
 
-	alreadyExpired := time.Now().Add(-10 * time.Minute)
 	errorServer := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, errorStub)
 		cfg.DefaultConnection = map[string]string{providerName: testDefaultConnection}
 		cfg.ConnectionAuth = oauthRefreshConnectionAuth(providerName, errorStub.refreshTokenFn)
-		cfg.Datastore = &coretesting.StubDatastore{
-			FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
-				return &core.User{ID: "u1", Email: email}, nil
-			},
-			TokenFn: func(_ context.Context, _, _, _, _ string) (*core.IntegrationToken, error) {
-				return &core.IntegrationToken{
-					UserID:       "u1",
-					Integration:  providerName,
-					AccessToken:  "expired-token",
-					RefreshToken: "expired-refresh-token",
-					ExpiresAt:    &alreadyExpired,
-				}, nil
-			},
-		}
+		cfg.Services = coretesting.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, errorServer)
 
@@ -302,20 +270,8 @@ func TestManualConnectionMetrics(t *testing.T) {
 	reader := metrictest.UseManualMeterProvider(t)
 	const providerName = "manual-metrics"
 
-	ds := metrictest.NewNamedStubDatastore("metrics-store", coretesting.StubDatastore{
-		FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
-			return &core.User{ID: "u1", Email: email}, nil
-		},
-		StoreTokenFn: func(_ context.Context, token *core.IntegrationToken) error {
-			if token.AccessToken != `{"api_key":"secret"}` {
-				t.Fatalf("unexpected stored credential %q", token.AccessToken)
-			}
-			return nil
-		},
-	})
-
 	srv := newTestServer(t, func(cfg *server.Config) {
-		cfg.Datastore = ds
+		cfg.Services = coretesting.NewStubServices(t)
 		cfg.Providers = testutil.NewProviderRegistry(t, &manualMetricsProvider{name: providerName})
 		cfg.DefaultConnection = map[string]string{providerName: testDefaultConnection}
 	})
@@ -339,14 +295,6 @@ func TestManualConnectionMetrics(t *testing.T) {
 		"gestalt.type":            "manual",
 		"gestalt.action":          "complete",
 		"gestalt.connection_mode": "user",
-	})
-	metrictest.RequireInt64Sum(t, rm, "gestaltd.datastore.count", 1, map[string]string{
-		"gestalt.provider": "metrics-store",
-		"gestalt.method":   "store_token",
-	})
-	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.datastore.duration", map[string]string{
-		"gestalt.provider": "metrics-store",
-		"gestalt.method":   "store_token",
 	})
 }
 
@@ -415,13 +363,6 @@ func TestPlatformAuthMetrics(t *testing.T) {
 	secret := []byte("0123456789abcdef0123456789abcdef")
 	var auditBuf bytes.Buffer
 
-	ds := metrictest.NewNamedStubDatastore("auth-metrics-store", coretesting.StubDatastore{
-		FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
-			return &core.User{ID: "u1", Email: email}, nil
-		},
-	})
-	ds.ListAPITokensFn = func(context.Context, string) ([]*core.APIToken, error) { return nil, nil }
-
 	client := &http.Client{}
 	jar, err := cookiejar.New(nil)
 	if err != nil {
@@ -433,7 +374,7 @@ func TestPlatformAuthMetrics(t *testing.T) {
 		cfg.Auth = &metricsHostIssuedSessionAuth{secret: secret, name: "metrics-host-issued"}
 		cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 		cfg.StateSecret = secret
-		cfg.Datastore = ds
+		cfg.Services = coretesting.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, srv)
 

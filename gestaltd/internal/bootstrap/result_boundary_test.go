@@ -22,18 +22,6 @@ func (p *closableProvider) Close() error {
 	return nil
 }
 
-type closableDatastore struct {
-	coretesting.StubDatastore
-	closeFn func() error
-}
-
-func (d *closableDatastore) Close() error {
-	if d.closeFn != nil {
-		return d.closeFn()
-	}
-	return nil
-}
-
 type closableSecretManager struct {
 	coretesting.StubSecretManager
 	closeFn func() error
@@ -50,7 +38,6 @@ func TestResultClose_ShutsDownConstructedResources(t *testing.T) {
 	t.Parallel()
 
 	providerClosed := false
-	datastoreClosed := false
 	secretManagerClosed := false
 
 	result := &bootstrap.Result{
@@ -61,12 +48,7 @@ func TestResultClose_ShutsDownConstructedResources(t *testing.T) {
 				return nil
 			},
 		}),
-		Datastore: &closableDatastore{
-			closeFn: func() error {
-				datastoreClosed = true
-				return nil
-			},
-		},
+		Services: coretesting.NewStubServices(t),
 		SecretManager: &closableSecretManager{
 			closeFn: func() error {
 				secretManagerClosed = true
@@ -82,22 +64,16 @@ func TestResultClose_ShutsDownConstructedResources(t *testing.T) {
 		t.Fatalf("Close: %v", err)
 	}
 	if !providerClosed {
-		t.Fatal("expected Close to close providers")
-	}
-	if !datastoreClosed {
-		t.Fatal("expected Close to close datastore")
+		t.Error("expected provider to be closed")
 	}
 	if !secretManagerClosed {
-		t.Fatal("expected Close to close secret manager")
+		t.Error("expected secret manager to be closed")
 	}
 }
 
-func registryWithProvider(t *testing.T, name string, provider core.Provider) *registry.PluginMap[core.Provider] {
+func registryWithProvider(t *testing.T, name string, p *closableProvider) *registry.PluginMap[core.Provider] {
 	t.Helper()
-
-	reg := registry.New()
-	if err := reg.Providers.Register(name, provider); err != nil {
-		t.Fatalf("Register provider %q: %v", name, err)
-	}
-	return &reg.Providers
+	r := registry.New()
+	r.Providers.Register(name, p)
+	return &r.Providers
 }
