@@ -43,8 +43,8 @@ func TestManifestWorkflow_RoundTripsProviderPackagesAcrossDirectoryAndArchive(t 
 		if dirManifest.Plugin == nil || dirManifest.Plugin.ConfigSchemaPath != "schemas/config.schema.json" {
 			t.Fatalf("unexpected provider config schema: %#v", dirManifest.Plugin)
 		}
-		if dirManifest.Entrypoints.Provider == nil || dirManifest.Entrypoints.Provider.ArtifactPath != artifactPath {
-			t.Fatalf("unexpected provider entrypoint: %#v", dirManifest.Entrypoints.Provider)
+		if dirManifest.Entrypoints.Plugin == nil || dirManifest.Entrypoints.Plugin.ArtifactPath != artifactPath {
+			t.Fatalf("unexpected provider entrypoint: %#v", dirManifest.Entrypoints.Plugin)
 		}
 
 		archivePath := filepath.Join(root, "provider-json.tar.gz")
@@ -229,7 +229,7 @@ func TestManifestWorkflow_RejectsInvalidPackageInputs(t *testing.T) {
 			buildData: func(t *testing.T, dir string) string {
 				artifactPath := testArtifactPath("provider")
 				manifest := mustProviderManifest("github.com/acme/plugins/bad-entrypoint", "1.0.0", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider"))
-				manifest.Entrypoints.Provider.ArtifactPath = unknownSiblingArtifactPath(artifactPath)
+				manifest.Entrypoints.Plugin.ArtifactPath = unknownSiblingArtifactPath(artifactPath)
 				mustWriteFile(t, filepath.Join(dir, filepath.FromSlash(artifactPath)), []byte("provider"), 0o755)
 				return mustWriteManifestData(t, dir, ManifestFile, mustRawManifestJSON(t, manifest))
 			},
@@ -355,8 +355,8 @@ provider:
 	if len(manifest.Plugin.ManagedParameters) != 1 {
 		t.Fatalf("managed_parameters = %+v", manifest.Plugin.ManagedParameters)
 	}
-	if manifest.Entrypoints.Provider != nil {
-		t.Fatalf("expected declarative/spec provider to omit provider entrypoint, got %+v", manifest.Entrypoints.Provider)
+	if manifest.Entrypoints.Plugin != nil {
+		t.Fatalf("expected declarative/spec provider to omit provider entrypoint, got %+v", manifest.Entrypoints.Plugin)
 	}
 	if pgn := manifest.Plugin.Pagination; pgn == nil || pgn.Style != "cursor" || pgn.Cursor == nil || pgn.Cursor.Source != "header" || pgn.Cursor.Path != "X-After-Cursor" || pgn.MaxPages != 10 {
 		t.Fatalf("unexpected pagination config: %+v", manifest.Plugin.Pagination)

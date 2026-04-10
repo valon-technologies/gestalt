@@ -92,11 +92,11 @@ func (p *Plugin) IsManifestBacked() bool {
 }
 
 func (m *Manifest) IsHybridProvider() bool {
-	return m != nil && m.Plugin != nil && m.Plugin.IsManifestBacked() && m.Entrypoints.Provider != nil
+	return m != nil && m.Plugin != nil && m.Plugin.IsManifestBacked() && m.Entrypoints.Plugin != nil
 }
 
 func (m *Manifest) IsDeclarativeOnlyProvider() bool {
-	return m != nil && m.Plugin != nil && m.Plugin.IsManifestBacked() && m.Entrypoints.Provider == nil
+	return m != nil && m.Plugin != nil && m.Plugin.IsManifestBacked() && m.Entrypoints.Plugin == nil
 }
 
 type ManifestResponseMapping struct {
@@ -241,7 +241,7 @@ type Artifact struct {
 }
 
 type Entrypoints struct {
-	Provider  *Entrypoint `json:"plugin,omitempty" yaml:"plugin,omitempty"`
+	Plugin    *Entrypoint `json:"plugin,omitempty" yaml:"plugin,omitempty"`
 	Auth      *Entrypoint `json:"auth,omitempty" yaml:"auth,omitempty"`
 	Datastore *Entrypoint `json:"datastore,omitempty" yaml:"datastore,omitempty"`
 	Secrets   *Entrypoint `json:"secrets,omitempty" yaml:"secrets,omitempty"`

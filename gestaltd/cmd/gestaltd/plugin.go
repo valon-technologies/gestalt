@@ -283,7 +283,7 @@ func releaseRequiresBuildTarget(manifest *pluginmanifestv1.Manifest) bool {
 	}
 	switch kind {
 	case pluginmanifestv1.KindPlugin:
-		return manifest.Entrypoints.Provider == nil && !manifest.Plugin.IsManifestBacked()
+		return manifest.Entrypoints.Plugin == nil && !manifest.Plugin.IsManifestBacked()
 	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindSecrets:
 		return pluginpkg.EntrypointForKind(manifest, kind) == nil
 	default:

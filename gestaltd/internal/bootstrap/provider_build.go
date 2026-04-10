@@ -135,9 +135,9 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 	}
 
 	switch {
-	case manifestPlugin.IsSpecLoaded() && manifest.Entrypoints.Provider == nil:
+	case manifestPlugin.IsSpecLoaded() && manifest.Entrypoints.Plugin == nil:
 		return buildSpecLoadedProvider(ctx, name, intg, manifest, pluginConfig, meta, deps, allowedOperations)
-	case manifestPlugin.IsDeclarative() && manifest.Entrypoints.Provider == nil:
+	case manifestPlugin.IsDeclarative() && manifest.Entrypoints.Plugin == nil:
 		plan, err := buildPluginConnectionPlan(intg.Plugin, manifestPlugin)
 		if err != nil {
 			return nil, fmt.Errorf("build declarative provider %q: %w", name, err)

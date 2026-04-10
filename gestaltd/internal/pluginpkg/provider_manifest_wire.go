@@ -137,7 +137,7 @@ func providerWireToInternal(wire *providerManifestWireRoot) *pluginmanifestv1.Ma
 			manifest.Plugin.MCP = wire.Provider.MCP.Enabled
 		}
 		if wire.Provider.Exec != nil {
-			manifest.Entrypoints.Provider = &pluginmanifestv1.Entrypoint{
+			manifest.Entrypoints.Plugin = &pluginmanifestv1.Entrypoint{
 				ArtifactPath: wire.Provider.Exec.ArtifactPath,
 				Args:         append([]string(nil), wire.Provider.Exec.Args...),
 			}
@@ -239,10 +239,10 @@ func internalProviderManifestToWire(manifest *pluginmanifestv1.Manifest) *provid
 		Pagination:        manifest.Plugin.Pagination,
 		AllowedOperations: manifest.Plugin.AllowedOperations,
 	}
-	if manifest.Entrypoints.Provider != nil {
+	if manifest.Entrypoints.Plugin != nil {
 		provider.Exec = &providerExecWire{
-			ArtifactPath: manifest.Entrypoints.Provider.ArtifactPath,
-			Args:         append([]string(nil), manifest.Entrypoints.Provider.Args...),
+			ArtifactPath: manifest.Entrypoints.Plugin.ArtifactPath,
+			Args:         append([]string(nil), manifest.Entrypoints.Plugin.Args...),
 		}
 	}
 	if manifest.Plugin.MCP {

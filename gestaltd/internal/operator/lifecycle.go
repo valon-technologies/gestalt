@@ -1426,7 +1426,7 @@ func resolvePluginIcon(manifest *pluginmanifestv1.Manifest, manifestPath string,
 }
 
 func providerEntrypointArgs(manifest *pluginmanifestv1.Manifest) ([]string, error) {
-	entry := manifest.Entrypoints.Provider
+	entry := manifest.Entrypoints.Plugin
 	if entry == nil {
 		return nil, fmt.Errorf("manifest does not define a provider entrypoint")
 	}
