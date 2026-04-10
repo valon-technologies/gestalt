@@ -7,6 +7,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
@@ -256,33 +257,33 @@ func resolveManifestRelativeSpecURL(plugin *config.ProviderDef, raw string) (str
 	}
 	manifestDir := filepath.Dir(plugin.ResolvedManifestPath)
 
+	// Already-resolved absolute path (e.g. from ResolveManifestLocalReferences).
+	// Verify it is still within the manifest directory.
 	if filepath.IsAbs(raw) {
-		return "", fmt.Errorf("spec URL %q must be relative to the manifest directory", raw)
+		if !pluginpkg.IsPathWithinDir(manifestDir, filepath.Clean(raw)) {
+			return "", fmt.Errorf("spec URL %q is outside the manifest directory", raw)
+		}
+		return raw, nil
 	}
 	if strings.HasPrefix(raw, "file://") {
 		path := strings.TrimPrefix(raw, "file://")
 		if filepath.IsAbs(path) {
-			return "", fmt.Errorf("spec URL %q must be relative to the manifest directory", raw)
+			if !pluginpkg.IsPathWithinDir(manifestDir, filepath.Clean(path)) {
+				return "", fmt.Errorf("spec URL %q is outside the manifest directory", raw)
+			}
+			return raw, nil
 		}
 		resolved := filepath.Clean(filepath.Join(manifestDir, path))
-		if !isPathWithinDir(manifestDir, resolved) {
+		if !pluginpkg.IsPathWithinDir(manifestDir, resolved) {
 			return "", fmt.Errorf("spec URL %q escapes the manifest directory", raw)
 		}
 		return "file://" + resolved, nil
 	}
 	resolved := filepath.Clean(filepath.Join(manifestDir, raw))
-	if !isPathWithinDir(manifestDir, resolved) {
+	if !pluginpkg.IsPathWithinDir(manifestDir, resolved) {
 		return "", fmt.Errorf("spec URL %q escapes the manifest directory", raw)
 	}
 	return resolved, nil
-}
-
-func isPathWithinDir(root, target string) bool {
-	rel, err := filepath.Rel(root, target)
-	if err != nil {
-		return false
-	}
-	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func buildConnectionAuthMap(name string, intg config.PluginDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, authFallback *specAuthFallback, deps Deps) (map[string]OAuthHandler, error) {

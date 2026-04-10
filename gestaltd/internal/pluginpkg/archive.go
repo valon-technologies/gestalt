@@ -205,6 +205,11 @@ func CreatePackageFromDir(sourceDir, outputPath string) (err error) {
 	return nil
 }
 
+// IsPathWithinDir reports whether target is within root, using filepath.Rel.
+func IsPathWithinDir(root, target string) bool {
+	return isPathWithinDir(root, target)
+}
+
 func isPathWithinDir(root, target string) bool {
 	rel, err := filepath.Rel(root, target)
 	if err != nil {
