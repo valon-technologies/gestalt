@@ -52,8 +52,8 @@ function sanitizeSVG(raw: string): string {
 
 function hasConnectionParams(integration: Integration): boolean {
   return (
-    !!integration.connection_params &&
-    Object.keys(integration.connection_params).length > 0
+    !!integration.connectionParams &&
+    Object.keys(integration.connectionParams).length > 0
   );
 }
 
@@ -86,8 +86,8 @@ export default function IntegrationCard({
   const [submitting, setSubmitting] = useState(false);
   const pendingSelectionFormRef = useRef<HTMLFormElement>(null);
 
-  const safeIconSVG = integration.icon_svg
-    ? sanitizeSVG(integration.icon_svg)
+  const safeIconSVG = integration.iconSvg
+    ? sanitizeSVG(integration.iconSvg)
     : "";
   const needsParams = hasConnectionParams(integration);
 
@@ -100,8 +100,8 @@ export default function IntegrationCard({
     form: HTMLFormElement,
   ): Record<string, string> {
     const params: Record<string, string> = {};
-    if (!integration.connection_params) return params;
-    for (const name of Object.keys(integration.connection_params)) {
+    if (!integration.connectionParams) return params;
+    for (const name of Object.keys(integration.connectionParams)) {
       const val = (new FormData(form).get(`cp_${name}`) as string)?.trim();
       if (val) params[name] = val;
     }
@@ -146,13 +146,13 @@ export default function IntegrationCard({
         integration.name, credential, connectionParams, instance, connection,
       );
       if (result.status === "selection_required") {
-        if (!result.pending_token) {
+        if (!result.pendingToken) {
           throw new Error("Connection requires selection, but the server did not return a pending token.");
         }
         setSettingsOpen(false);
         setPendingSelection({
-          action: resolveAPIPath(result.selection_url || PENDING_CONNECTION_PATH),
-          pendingToken: result.pending_token,
+          action: resolveAPIPath(result.selectionUrl || PENDING_CONNECTION_PATH),
+          pendingToken: result.pendingToken,
         });
       } else {
         setSettingsOpen(false);
@@ -197,8 +197,8 @@ export default function IntegrationCard({
   }
 
   function renderConnectionParamFields() {
-    if (!integration.connection_params) return null;
-    return Object.entries(integration.connection_params).map(([name, def]) => (
+    if (!integration.connectionParams) return null;
+    return Object.entries(integration.connectionParams).map(([name, def]) => (
       <div key={name} className="mt-3">
         <label
           htmlFor={`cp_${name}-${integration.name}`}
@@ -249,7 +249,7 @@ export default function IntegrationCard({
           </div>
           <div>
             <h3 className="text-base font-heading font-semibold text-primary">
-              {integration.display_name || integration.name}
+              {integration.displayName || integration.name}
             </h3>
             {integration.description && (
               <p className="mt-1 line-clamp-2 text-sm text-muted">
@@ -265,7 +265,7 @@ export default function IntegrationCard({
           <button
             onClick={() => setSettingsOpen(true)}
             className="flex h-8 w-8 items-center justify-center rounded-md text-faint transition-all duration-150 hover:bg-alpha-5 hover:text-muted"
-            aria-label={`${integration.display_name || integration.name} settings`}
+            aria-label={`${integration.displayName || integration.name} settings`}
           >
             <GearIcon className="h-4 w-4" />
           </button>

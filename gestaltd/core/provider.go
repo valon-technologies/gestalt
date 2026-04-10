@@ -66,7 +66,6 @@ type CredentialFieldDef struct {
 	Name        string
 	Label       string
 	Description string
-	HelpURL     string
 }
 
 type CredentialFieldsProvider interface {

@@ -120,6 +120,10 @@ func ManifestKind(manifest *pluginmanifestv1.Manifest) (string, error) {
 		kind = pluginmanifestv1.KindAuth
 		count++
 	}
+	if manifest.Datastore != nil {
+		kind = pluginmanifestv1.KindDatastore
+		count++
+	}
 	if manifest.Secrets != nil {
 		kind = pluginmanifestv1.KindSecrets
 		count++
@@ -129,7 +133,7 @@ func ManifestKind(manifest *pluginmanifestv1.Manifest) (string, error) {
 		count++
 	}
 	if count != 1 {
-		return "", fmt.Errorf("manifest must define exactly one of plugin, auth, secrets, or webui")
+		return "", fmt.Errorf("manifest must define exactly one of plugin, auth, datastore, secrets, or webui")
 	}
 	return kind, nil
 }
@@ -149,7 +153,7 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 		return fmt.Errorf("manifest version: %w", err)
 	}
 	if manifest.IconFile != "" {
-		if err := validateRelativePackagePath(manifest.IconFile, "icon_file"); err != nil {
+		if err := validateRelativePackagePath(manifest.IconFile, "iconFile"); err != nil {
 			return err
 		}
 	}
@@ -168,6 +172,7 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 
 	allowsSourceExecutableEntrypointOmission := sourceMode && manifest.Entrypoints.Provider == nil
 	allowsSourceAuthEntrypointOmission := sourceMode && manifest.Entrypoints.Auth == nil
+	allowsSourceDatastoreEntrypointOmission := sourceMode && manifest.Entrypoints.Datastore == nil
 	allowsSourceSecretsEntrypointOmission := sourceMode && manifest.Entrypoints.Secrets == nil
 
 	needsArtifacts := len(manifest.Artifacts) > 0
@@ -176,6 +181,8 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 		needsArtifacts = needsArtifacts || manifest.Entrypoints.Provider != nil
 	case pluginmanifestv1.KindAuth:
 		needsArtifacts = needsArtifacts || !allowsSourceAuthEntrypointOmission
+	case pluginmanifestv1.KindDatastore:
+		needsArtifacts = needsArtifacts || !allowsSourceDatastoreEntrypointOmission
 	case pluginmanifestv1.KindSecrets:
 		needsArtifacts = needsArtifacts || !allowsSourceSecretsEntrypointOmission
 	}
@@ -250,6 +257,23 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 		}
 		if manifest.Entrypoints.Auth != nil {
 			if err := validateEntrypoint(kind, manifest.Entrypoints.Auth, artifactPaths); err != nil {
+				return err
+			}
+		}
+	case pluginmanifestv1.KindDatastore:
+		if manifest.Datastore.ConfigSchemaPath != "" {
+			if err := validateRelativePackagePath(manifest.Datastore.ConfigSchemaPath, "datastore config schema path"); err != nil {
+				return err
+			}
+		}
+		if manifest.Entrypoints.Provider != nil || manifest.Entrypoints.Auth != nil {
+			return fmt.Errorf("datastore manifests may only define entrypoints.datastore")
+		}
+		if manifest.Entrypoints.Datastore == nil && !allowsSourceDatastoreEntrypointOmission {
+			return fmt.Errorf("%s is required", EntrypointFieldForKind(kind))
+		}
+		if manifest.Entrypoints.Datastore != nil {
+			if err := validateEntrypoint(kind, manifest.Entrypoints.Datastore, artifactPaths); err != nil {
 				return err
 			}
 		}
@@ -340,6 +364,8 @@ func EntrypointFieldForKind(kind string) string {
 		return "entrypoints.provider"
 	case pluginmanifestv1.KindAuth:
 		return "entrypoints.auth"
+	case pluginmanifestv1.KindDatastore:
+		return "entrypoints.datastore"
 	case pluginmanifestv1.KindSecrets:
 		return "entrypoints.secrets"
 	default:
@@ -356,6 +382,8 @@ func EntrypointForKind(manifest *pluginmanifestv1.Manifest, kind string) *plugin
 		return manifest.Entrypoints.Provider
 	case pluginmanifestv1.KindAuth:
 		return manifest.Entrypoints.Auth
+	case pluginmanifestv1.KindDatastore:
+		return manifest.Entrypoints.Datastore
 	case pluginmanifestv1.KindSecrets:
 		return manifest.Entrypoints.Secrets
 	default:
@@ -375,6 +403,11 @@ func EnsureEntrypointForKind(manifest *pluginmanifestv1.Manifest, kind string) *
 			manifest.Entrypoints.Auth = &pluginmanifestv1.Entrypoint{}
 		}
 		return manifest.Entrypoints.Auth
+	case pluginmanifestv1.KindDatastore:
+		if manifest.Entrypoints.Datastore == nil {
+			manifest.Entrypoints.Datastore = &pluginmanifestv1.Entrypoint{}
+		}
+		return manifest.Entrypoints.Datastore
 	case pluginmanifestv1.KindSecrets:
 		if manifest.Entrypoints.Secrets == nil {
 			manifest.Entrypoints.Secrets = &pluginmanifestv1.Entrypoint{}
@@ -390,9 +423,9 @@ func validateEntrypoint(kind string, entry *pluginmanifestv1.Entrypoint, artifac
 		return fmt.Errorf("%s is required", EntrypointFieldForKind(kind))
 	}
 	if entry.ArtifactPath == "" {
-		return fmt.Errorf("%s.artifact_path is required", EntrypointFieldForKind(kind))
+		return fmt.Errorf("%s.artifactPath is required", EntrypointFieldForKind(kind))
 	}
-	if err := validateRelativePackagePath(entry.ArtifactPath, EntrypointFieldForKind(kind)+".artifact_path"); err != nil {
+	if err := validateRelativePackagePath(entry.ArtifactPath, EntrypointFieldForKind(kind)+".artifactPath"); err != nil {
 		return err
 	}
 	if len(artifactPaths) == 0 {
@@ -451,10 +484,10 @@ func validateProviderAuth(path string, auth *pluginmanifestv1.ProviderAuth) erro
 	switch auth.Type {
 	case pluginmanifestv1.AuthTypeOAuth2:
 		if auth.AuthorizationURL == "" {
-			return fmt.Errorf("%s.authorization_url is required for oauth2", path)
+			return fmt.Errorf("%s.authorizationUrl is required for oauth2", path)
 		}
 		if auth.TokenURL == "" {
-			return fmt.Errorf("%s.token_url is required for oauth2", path)
+			return fmt.Errorf("%s.tokenUrl is required for oauth2", path)
 		}
 	case pluginmanifestv1.AuthTypeMCPOAuth, pluginmanifestv1.AuthTypeBearer, pluginmanifestv1.AuthTypeManual, pluginmanifestv1.AuthTypeNone:
 	default:
@@ -495,11 +528,11 @@ func validateExecutableProviderMetadata(provider *pluginmanifestv1.Plugin) error
 	switch provider.ConnectionMode {
 	case "", "none", "user", "identity", "either":
 	default:
-		return fmt.Errorf("unsupported provider.connection_mode %q", provider.ConnectionMode)
+		return fmt.Errorf("unsupported provider.connectionMode %q", provider.ConnectionMode)
 	}
 	if provider.DefaultConnection != "" {
 		if _, ok := provider.Connections[provider.DefaultConnection]; !ok {
-			return fmt.Errorf("provider.default_connection %q references undefined provider.connections entry", provider.DefaultConnection)
+			return fmt.Errorf("provider.defaultConnection %q references undefined provider.connections entry", provider.DefaultConnection)
 		}
 	}
 	if len(provider.Connections) > 0 {
@@ -513,7 +546,7 @@ func validateExecutableProviderMetadata(provider *pluginmanifestv1.Plugin) error
 		field   string
 		present bool
 	}{
-		{field: "provider.base_url", present: provider.BaseURL != "" && !provider.IsDeclarative() && provider.OpenAPI == ""},
+		{field: "provider.baseUrl", present: provider.BaseURL != "" && !provider.IsDeclarative() && provider.OpenAPI == ""},
 		{field: "provider.operations", present: len(provider.Operations) > 0 && !provider.IsDeclarative()},
 	}
 	for _, check := range checks {
@@ -540,7 +573,7 @@ var validHTTPMethods = map[string]bool{
 
 func validateDeclarativeProvider(provider *pluginmanifestv1.Plugin) error {
 	if provider.BaseURL == "" {
-		return fmt.Errorf("provider.base_url is required for declarative providers")
+		return fmt.Errorf("provider.baseUrl is required for declarative providers")
 	}
 	seen := make(map[string]struct{}, len(provider.Operations))
 	for i, op := range provider.Operations {
@@ -666,6 +699,9 @@ func normalizeLegacyManifestCompatibility(data []byte, format string) ([]byte, b
 	if normalizeLegacyProviderResponseMapping(root) {
 		changed = true
 	}
+	if normalizeSnakeCaseKeys(root) {
+		changed = true
+	}
 	if !changed {
 		return data, false, nil
 	}
@@ -688,14 +724,57 @@ func normalizeLegacyManifestCompatibility(data []byte, format string) ([]byte, b
 	}
 }
 
+func normalizeSnakeCaseKeys(m map[string]any) bool {
+	changed := false
+	for key, val := range m {
+		camel := snakeToCamel(key)
+		if camel != key {
+			delete(m, key)
+			m[camel] = val
+			changed = true
+		}
+		switch v := val.(type) {
+		case map[string]any:
+			if normalizeSnakeCaseKeys(v) {
+				changed = true
+			}
+		case []any:
+			for _, item := range v {
+				if sub, ok := item.(map[string]any); ok {
+					if normalizeSnakeCaseKeys(sub) {
+						changed = true
+					}
+				}
+			}
+		}
+	}
+	return changed
+}
+
+func snakeToCamel(s string) string {
+	if !strings.Contains(s, "_") {
+		return s
+	}
+	parts := strings.Split(s, "_")
+	for i := 1; i < len(parts); i++ {
+		if len(parts[i]) > 0 {
+			parts[i] = strings.ToUpper(parts[i][:1]) + parts[i][1:]
+		}
+	}
+	return strings.Join(parts, "")
+}
+
 func normalizeLegacyProviderResponseMapping(root map[string]any) bool {
 	provider, ok := root["provider"].(map[string]any)
 	if !ok {
 		return false
 	}
-	responseMapping, ok := provider["response_mapping"].(map[string]any)
+	responseMapping, ok := provider["responseMapping"].(map[string]any)
 	if !ok {
-		return false
+		responseMapping, ok = provider["response_mapping"].(map[string]any)
+		if !ok {
+			return false
+		}
 	}
 	pagination, ok := responseMapping["pagination"].(map[string]any)
 	if !ok {
@@ -705,8 +784,8 @@ func normalizeLegacyProviderResponseMapping(root map[string]any) bool {
 	changed := false
 	if path, ok := pagination["has_more_path"].(string); ok {
 		delete(pagination, "has_more_path")
-		if _, exists := pagination["has_more"]; !exists {
-			pagination["has_more"] = map[string]any{
+		if _, exists := pagination["hasMore"]; !exists {
+			pagination["hasMore"] = map[string]any{
 				"source": "body",
 				"path":   path,
 			}

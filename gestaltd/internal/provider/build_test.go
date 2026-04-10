@@ -919,7 +919,7 @@ func TestBuildCredentialFields(t *testing.T) {
 		BaseURL:     "https://api.example.com",
 		Auth:        AuthDef{Type: "manual"},
 		CredentialFields: []CredentialFieldDef{
-			{Name: "api_key", Label: "API Key", HelpURL: "https://example.com/keys"},
+			{Name: "api_key", Label: "API Key"},
 			{Name: "app_key", Label: "App Key", Description: "Your application key"},
 		},
 		Operations: map[string]OperationDef{
@@ -941,7 +941,7 @@ func TestBuildCredentialFields(t *testing.T) {
 	if len(fields) != 2 {
 		t.Fatalf("got %d credential fields, want 2", len(fields))
 	}
-	if fields[0].Name != "api_key" || fields[0].Label != "API Key" || fields[0].HelpURL != "https://example.com/keys" {
+	if fields[0].Name != "api_key" || fields[0].Label != "API Key" {
 		t.Errorf("field[0] = %+v", fields[0])
 	}
 	if fields[1].Name != "app_key" || fields[1].Description != "Your application key" {
@@ -965,7 +965,7 @@ func TestBuildCredentialFieldsFromConfig(t *testing.T) {
 	conn := config.ConnectionDef{
 		Auth: config.ConnectionAuthDef{
 			Credentials: []config.CredentialFieldDef{
-				{Name: "token", Label: "Access Token", HelpURL: "https://example.com/tokens"},
+				{Name: "token", Label: "Access Token"},
 			},
 		},
 	}

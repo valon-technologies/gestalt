@@ -49,10 +49,10 @@ export async function mockManualConnect(
 
 export async function mockAuthInfo(
   page: Page,
-  info: { provider: string; display_name: string; login_supported?: boolean },
+  info: { provider: string; displayName: string; loginSupported?: boolean },
 ) {
   await page.route("**/api/v1/auth/info", (route: Route) => {
-    route.fulfill({ json: { login_supported: true, ...info } });
+    route.fulfill({ json: { loginSupported: true, ...info } });
   });
 }
 

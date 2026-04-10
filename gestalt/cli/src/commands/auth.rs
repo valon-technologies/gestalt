@@ -75,7 +75,7 @@ where
         .context("failed to build HTTP client")?;
     let resp = client
         .post(&login_url)
-        .json(&serde_json::json!({"state": state, "callback_port": port}))
+        .json(&serde_json::json!({"state": state, "callbackPort": port}))
         .send()
         .with_context(|| format!("failed to reach {}", login_url))?;
 
@@ -288,13 +288,13 @@ pub fn status(url_override: Option<&str>, format: Format) -> Result<()> {
             };
             output::print_json(&serde_json::json!({
                 "authenticated": configured,
-                "login_supported": login_supported,
+                "loginSupported": login_supported,
                 "source": source,
-                "env_var_set": has_env_key,
-                "stored_credentials": has_stored_credentials,
-                "server_url": server_url,
-                "url_source": url_source,
-                "server_reachable": reachable,
+                "envVarSet": has_env_key,
+                "storedCredentials": has_stored_credentials,
+                "serverUrl": server_url,
+                "urlSource": url_source,
+                "serverReachable": reachable,
             }));
         }
         Format::Table => {

@@ -38,7 +38,7 @@ auth: {}
 			data: []byte(`
 source: github.com/acme/providers/datastore
 version: 0.0.1-alpha.1
-display_name: Datastore
+displayName: Datastore
 kinds:
   - datastore
 datastore: {}
@@ -49,7 +49,7 @@ artifacts:
     sha256: deadbeef
 entrypoints:
   datastore:
-    artifact_path: gestalt-plugin-datastore
+    artifactPath: gestalt-plugin-datastore
 `),
 			decode: decodeManifestCompat,
 			assert: func(t *testing.T, manifest *testManifestCompat) {
@@ -77,7 +77,7 @@ artifacts:
     sha256: cafebabe
 entrypoints:
   secrets:
-    artifact_path: gestalt-plugin-secrets
+    artifactPath: gestalt-plugin-secrets
 `),
 			decode: decodeManifestCompat,
 			assert: func(t *testing.T, manifest *testManifestCompat) {
@@ -113,8 +113,8 @@ func TestDecodeManifestCompatibility_MapsLegacyProviderResponsePaginationPaths(t
 source: github.com/acme/providers/ashby
 version: 0.0.1-alpha.1
 provider:
-  response_mapping:
-    data_path: results
+  responseMapping:
+    dataPath: results
     pagination:
       has_more_path: moreDataAvailable
       cursor_path: nextCursor

@@ -1,11 +1,11 @@
 config:
   server:
-    base_url: "https://gestalt.example.com"
-    encryption_key: "ci-test-encryption-key"
+    baseUrl: "https://gestalt.example.com"
+    encryptionKey: "ci-test-encryption-key"
   auth:
     config:
-      client_id: "ci-test-client-id"
-      client_secret: "ci-test-client-secret"
+      clientId: "ci-test-client-id"
+      clientSecret: "ci-test-client-secret"
 
 image:
   tag: "ci-test"

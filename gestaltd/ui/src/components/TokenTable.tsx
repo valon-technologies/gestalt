@@ -53,11 +53,11 @@ export default function TokenTable({ tokens, onRevoked }: TokenTableProps) {
               <td className="px-5 py-4 text-primary font-medium">{token.name}</td>
               <td className="px-5 py-4 text-muted">{token.scopes || "all"}</td>
               <td className="px-5 py-4 text-muted font-mono text-xs">
-                {new Date(token.created_at).toLocaleDateString()}
+                {new Date(token.createdAt).toLocaleDateString()}
               </td>
               <td className="px-5 py-4 text-muted font-mono text-xs">
-                {token.expires_at
-                  ? new Date(token.expires_at).toLocaleDateString()
+                {token.expiresAt
+                  ? new Date(token.expiresAt).toLocaleDateString()
                   : "Never"}
               </td>
               <td className="px-5 py-4">

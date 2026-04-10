@@ -38,17 +38,17 @@ var _ core.TelemetryProvider = (*Provider)(nil)
 type yamlConfig struct {
 	Endpoint           string            `yaml:"endpoint"`
 	Protocol           string            `yaml:"protocol"`
-	ServiceName        string            `yaml:"service_name"`
+	ServiceName        string            `yaml:"serviceName"`
 	Insecure           bool              `yaml:"insecure"`
 	Headers            map[string]string `yaml:"headers"`
-	ResourceAttributes map[string]string `yaml:"resource_attributes"`
+	ResourceAttributes map[string]string `yaml:"resourceAttributes"`
 	Traces             tracesConfig      `yaml:"traces"`
 	Metrics            metricsConfig     `yaml:"metrics"`
 	Logs               logsConfig        `yaml:"logs"`
 }
 
 type tracesConfig struct {
-	SamplingRatio *float64 `yaml:"sampling_ratio"`
+	SamplingRatio *float64 `yaml:"samplingRatio"`
 }
 
 type metricsConfig struct {

@@ -25,8 +25,8 @@ var _ core.TelemetryProvider = (*Provider)(nil)
 type yamlConfig struct {
 	Level              string                 `yaml:"level"`
 	Format             string                 `yaml:"format"`
-	ServiceName        string                 `yaml:"service_name"`
-	ResourceAttributes map[string]string      `yaml:"resource_attributes"`
+	ServiceName        string                 `yaml:"serviceName"`
+	ResourceAttributes map[string]string      `yaml:"resourceAttributes"`
 	Metrics            metricspipeline.Config `yaml:"metrics"`
 }
 

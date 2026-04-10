@@ -13,9 +13,9 @@ import (
 type providerManifestWireRoot struct {
 	Source      string                            `json:"source,omitempty" yaml:"source,omitempty"`
 	Version     string                            `json:"version" yaml:"version"`
-	DisplayName string                            `json:"display_name,omitempty" yaml:"display_name,omitempty"`
+	DisplayName string                            `json:"displayName,omitempty" yaml:"displayName,omitempty"`
 	Description string                            `json:"description,omitempty" yaml:"description,omitempty"`
-	IconFile    string                            `json:"icon_file,omitempty" yaml:"icon_file,omitempty"`
+	IconFile    string                            `json:"iconFile,omitempty" yaml:"iconFile,omitempty"`
 	Release     *pluginmanifestv1.ReleaseMetadata `json:"release,omitempty" yaml:"release,omitempty"`
 	Provider    *providerManifestWire             `json:"provider,omitempty" yaml:"provider,omitempty"`
 	WebUI       *pluginmanifestv1.WebUIMetadata   `json:"webui,omitempty" yaml:"webui,omitempty"`
@@ -23,20 +23,20 @@ type providerManifestWireRoot struct {
 }
 
 type providerManifestWire struct {
-	ConfigSchemaPath  string                                                 `json:"config_schema_path,omitempty" yaml:"config_schema_path,omitempty"`
+	ConfigSchemaPath  string                                                 `json:"configSchemaPath,omitempty" yaml:"configSchemaPath,omitempty"`
 	Exec              *providerExecWire                                      `json:"exec,omitempty" yaml:"exec,omitempty"`
 	Connections       map[string]*providerManifestConnectionWire             `json:"connections,omitempty" yaml:"connections,omitempty"`
 	Headers           map[string]string                                      `json:"headers,omitempty" yaml:"headers,omitempty"`
-	ManagedParameters []pluginmanifestv1.ManagedParameter                    `json:"managed_parameters,omitempty" yaml:"managed_parameters,omitempty"`
-	ResponseMapping   *pluginmanifestv1.ManifestResponseMapping              `json:"response_mapping,omitempty" yaml:"response_mapping,omitempty"`
+	ManagedParameters []pluginmanifestv1.ManagedParameter                    `json:"managedParameters,omitempty" yaml:"managedParameters,omitempty"`
+	ResponseMapping   *pluginmanifestv1.ManifestResponseMapping              `json:"responseMapping,omitempty" yaml:"responseMapping,omitempty"`
 	Pagination        *pluginmanifestv1.ManifestPaginationConfig             `json:"pagination,omitempty" yaml:"pagination,omitempty"`
-	AllowedOperations map[string]*pluginmanifestv1.ManifestOperationOverride `json:"allowed_operations,omitempty" yaml:"allowed_operations,omitempty"`
+	AllowedOperations map[string]*pluginmanifestv1.ManifestOperationOverride `json:"allowedOperations,omitempty" yaml:"allowedOperations,omitempty"`
 	Surfaces          providerManifestSurfacesWire                           `json:"surfaces,omitempty" yaml:"surfaces,omitempty"`
 	MCP               *providerManifestMCPWire                               `json:"mcp,omitempty" yaml:"mcp,omitempty"`
 }
 
 type providerExecWire struct {
-	ArtifactPath string   `json:"artifact_path" yaml:"artifact_path"`
+	ArtifactPath string   `json:"artifactPath" yaml:"artifactPath"`
 	Args         []string `json:"args,omitempty" yaml:"args,omitempty"`
 }
 
@@ -49,8 +49,8 @@ type providerManifestConnectionWire struct {
 
 type providerManifestDiscoveryWire struct {
 	URL      string            `json:"url" yaml:"url"`
-	IDPath   string            `json:"id_path,omitempty" yaml:"id_path,omitempty"`
-	NamePath string            `json:"name_path,omitempty" yaml:"name_path,omitempty"`
+	IDPath   string            `json:"idPath,omitempty" yaml:"idPath,omitempty"`
+	NamePath string            `json:"namePath,omitempty" yaml:"namePath,omitempty"`
 	Metadata map[string]string `json:"metadata,omitempty" yaml:"metadata,omitempty"`
 }
 
@@ -63,14 +63,14 @@ type providerManifestSurfacesWire struct {
 
 type providerManifestRESTSurfaceWire struct {
 	Connection string                               `json:"connection,omitempty" yaml:"connection,omitempty"`
-	BaseURL    string                               `json:"base_url" yaml:"base_url"`
+	BaseURL    string                               `json:"baseUrl" yaml:"baseUrl"`
 	Operations []pluginmanifestv1.ProviderOperation `json:"operations" yaml:"operations"`
 }
 
 type providerManifestOpenAPISurfaceWire struct {
 	Connection string `json:"connection,omitempty" yaml:"connection,omitempty"`
 	Document   string `json:"document" yaml:"document"`
-	BaseURL    string `json:"base_url,omitempty" yaml:"base_url,omitempty"`
+	BaseURL    string `json:"baseUrl,omitempty" yaml:"baseUrl,omitempty"`
 }
 
 type providerManifestGraphQLSurfaceWire struct {

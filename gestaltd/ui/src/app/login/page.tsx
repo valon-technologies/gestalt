@@ -19,12 +19,12 @@ export default function LoginPage() {
     }
     getAuthInfo()
       .then((info) => {
-        if (!info.login_supported) {
+        if (!info.loginSupported) {
           setUserEmail(DEFAULT_LOCAL_EMAIL);
           window.location.replace("/");
           return;
         }
-        setAuthLabel("Sign in with " + info.display_name);
+        setAuthLabel("Sign in with " + info.displayName);
       })
       .catch(() => {});
   }, []);

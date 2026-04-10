@@ -11,14 +11,14 @@ const sampleTokens: APIToken[] = [
     id: "tok-1",
     name: "ci-pipeline",
     scopes: "read",
-    created_at: "2026-01-15T10:00:00Z",
+    createdAt: "2026-01-15T10:00:00Z",
   },
   {
     id: "tok-2",
     name: "deploy-key",
     scopes: "",
-    created_at: "2026-02-20T14:30:00Z",
-    expires_at: "2027-02-20T14:30:00Z",
+    createdAt: "2026-02-20T14:30:00Z",
+    expiresAt: "2027-02-20T14:30:00Z",
   },
 ];
 
@@ -60,7 +60,7 @@ test.describe("Token Management", () => {
             id: "tok-new",
             name: "my-new-token",
             scopes: "",
-            created_at: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
           },
         ];
         route.fulfill({
@@ -111,7 +111,7 @@ test.describe("Token Management", () => {
             id: "tok-race",
             name: "race-token",
             scopes: "",
-            created_at: new Date().toISOString(),
+            createdAt: new Date().toISOString(),
           },
         ];
         await route.fulfill({

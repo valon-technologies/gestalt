@@ -48,7 +48,7 @@ datastores:
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
-  encryption_key: server-key
+  encryptionKey: server-key
   public:
     host: 127.0.0.1
     port: 9090
@@ -57,7 +57,7 @@ server:
     port: 9191
 plugins:
   service-a:
-    display_name: Service A
+    displayName: Service A
     provider:
       source:
         path: /tmp/manifest.yaml
@@ -103,7 +103,7 @@ datastores:
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
-  encryption_key: ${TEST_ENCRYPTION}
+  encryptionKey: ${TEST_ENCRYPTION}
 plugins:
   service-a:
     provider:
@@ -154,7 +154,7 @@ datastores:
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
-  encryption_key: ${TEST_ENCRYPTION}
+  encryptionKey: ${TEST_ENCRYPTION}
 `)
 
 	cfg, err := LoadWithLookup(path, func(key string) (string, bool) {
@@ -186,7 +186,7 @@ datastores:
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
-  encryption_key: ${%s}
+  encryptionKey: ${%s}
   public:
     port: ${%s}
 `, encryptionEnv, portEnv))
@@ -226,7 +226,7 @@ datastores:
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
-  encryption_key: ${TEST_ENCRYPTION:-}
+  encryptionKey: ${TEST_ENCRYPTION:-}
 `)
 
 	cfg, err := LoadWithLookup(path, func(string) (string, bool) {
@@ -288,7 +288,7 @@ datastores:
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
-  encryption_key: server-key
+  encryptionKey: server-key
 `,
 			wantErr: false,
 		},
@@ -298,7 +298,7 @@ server:
 auth:
   provider: none
 server:
-  encryption_key: server-key
+  encryptionKey: server-key
 `,
 			wantErr: true,
 		},
@@ -324,7 +324,7 @@ datastores:
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
-  encryption_key: server-key
+  encryptionKey: server-key
 `,
 			wantErr: false,
 		},
@@ -377,7 +377,7 @@ datastores:
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
-  encryption_key: server-key
+  encryptionKey: server-key
 `,
 			wantErr: "field plugin not found in type config.AuthConfig",
 		},
@@ -392,7 +392,7 @@ datastore:
       ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
       version: 1.0.0
 server:
-  encryption_key: server-key
+  encryptionKey: server-key
 `,
 			wantErr: "field plugin not found in type config.DatastoreConfig",
 		},
@@ -412,7 +412,7 @@ datastores:
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
-  encryption_key: server-key
+  encryptionKey: server-key
 `,
 			wantErr: "",
 		},
@@ -427,7 +427,7 @@ datastores:
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
-  encryption_key: server-key
+  encryptionKey: server-key
 `,
 			wantErr: "",
 		},
@@ -487,7 +487,7 @@ datastores:
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
-  encryption_key: server-key
+  encryptionKey: server-key
 `)
 
 		cfg, err := Load(path)
@@ -520,7 +520,7 @@ datastores:
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
-  encryption_key: server-key
+  encryptionKey: server-key
 `)
 
 		cfg, err := Load(path)
@@ -549,7 +549,7 @@ datastores:
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
-  encryption_key: server-key
+  encryptionKey: server-key
 `)
 
 		_, err := Load(path)
@@ -575,7 +575,7 @@ datastores:
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
-  encryption_key: server-key
+  encryptionKey: server-key
 `)
 
 		cfg, err := Load(path)
@@ -585,7 +585,7 @@ server:
 		if cfg.UI.Provider == nil || cfg.UI.Provider.Source == nil {
 			t.Fatalf("UI.Provider = %#v", cfg.UI.Provider)
 		}
-		wantPath := filepath.Join(filepath.Dir(path), "web", "default", "manifest.yaml")
+		wantPath := filepath.Join(filepath.Dir(path), "web", "default", "provider.yaml")
 		if got := cfg.UI.Provider.Source.Path; got != wantPath {
 			t.Fatalf("UI.Provider.Source.Path = %q, want %q", got, wantPath)
 		}
@@ -604,14 +604,14 @@ func TestLoadConfigValidation(t *testing.T) {
 			yaml: `
 plugins:
   service-a:
-    display_name: Service A
+    displayName: Service A
 `,
 		},
 		{
 			name: "egress default action must be allow or deny",
 			yaml: `
 egress:
-  default_action: block
+  defaultAction: block
 `,
 		},
 	}
@@ -825,29 +825,29 @@ plugins:
       source:
         path: ./plugins/dummy/manifest.yaml
     mcp:
-      tool_prefix: external_
+      toolPrefix: external_
 `,
-			wantErr: "mcp.tool_prefix is only valid when mcp.enabled is true",
+			wantErr: "mcp.toolPrefix is only valid when mcp.enabled is true",
 		},
 		{
 			name: "egress default_action allow is valid",
 			yaml: `
 egress:
-  default_action: allow
+  defaultAction: allow
 `,
 		},
 		{
 			name: "egress default_action deny is valid",
 			yaml: `
 egress:
-  default_action: deny
+  defaultAction: deny
 `,
 		},
 		{
 			name: "egress default_action invalid",
 			yaml: `
 egress:
-  default_action: block
+  defaultAction: block
 `,
 			wantErr: "default_action must be \"allow\" or \"deny\"",
 		},
@@ -1054,7 +1054,7 @@ datastores:
 datastore: sqlite
 plugins:
   service-a:
-    icon_file: ../assets/service.svg
+    iconFile: ../assets/service.svg
     provider:
       source:
         path: ../bin/manifest.yaml
@@ -1070,11 +1070,11 @@ plugins:
 	if got := cfg.Integrations["service-a"].IconFile; got != iconPath {
 		t.Fatalf("IconFile = %q, want %q", got, iconPath)
 	}
-	if got := cfg.Auth.Provider.SourcePath(); got != filepath.Join(dir, "auth-plugin", "manifest.yaml") {
-		t.Fatalf("auth plugin source path = %q, want %q", got, filepath.Join(dir, "auth-plugin", "manifest.yaml"))
+	if got := cfg.Auth.Provider.SourcePath(); got != filepath.Join(dir, "auth-plugin", "provider.yaml") {
+		t.Fatalf("auth plugin source path = %q, want %q", got, filepath.Join(dir, "auth-plugin", "provider.yaml"))
 	}
-	if got := cfg.Integrations["service-a"].Plugin.SourcePath(); got != filepath.Join(dir, "bin", "provider.yaml") {
-		t.Fatalf("integration plugin source path = %q, want %q", got, filepath.Join(dir, "bin", "provider.yaml"))
+	if got := cfg.Integrations["service-a"].Plugin.SourcePath(); got != filepath.Join(dir, "bin", "manifest.yaml") {
+		t.Fatalf("integration plugin source path = %q, want %q", got, filepath.Join(dir, "bin", "manifest.yaml"))
 	}
 }
 
@@ -1097,7 +1097,7 @@ datastores:
     dsn: /tmp/gestalt.db
 datastore: sqlite
 server:
-  encryption_key: server-key
+  encryptionKey: server-key
 `)
 
 	cfg, err := Load(path)
@@ -1130,7 +1130,7 @@ func TestLoadConfig_APITokenTTL(t *testing.T) {
 		t.Parallel()
 		path := mustWriteConfigFile(t, `
 server:
-  api_token_ttl: "14d"
+  apiTokenTtl: "14d"
 `)
 		cfg, err := Load(path)
 		if err != nil {
@@ -1145,7 +1145,7 @@ server:
 		t.Parallel()
 		path := mustWriteConfigFile(t, `
 server:
-  api_token_ttl: "not-a-duration"
+  apiTokenTtl: "not-a-duration"
 `)
 		_, err := Load(path)
 		if err == nil {

@@ -20,18 +20,18 @@ const (
 // rest of Gestalt can derive runtime and MCP views from a single source.
 type Catalog struct {
 	Name        string             `yaml:"name"                   json:"name"`
-	DisplayName string             `yaml:"display_name"           json:"displayName"`
+	DisplayName string             `yaml:"displayName"           json:"displayName"`
 	Description string             `yaml:"description"            json:"description"`
-	IconSVG     string             `yaml:"icon_svg,omitempty"     json:"iconSvg,omitempty"`
-	BaseURL     string             `yaml:"base_url,omitempty"     json:"baseUrl,omitempty"`
-	AuthStyle   string             `yaml:"auth_style,omitempty"   json:"authStyle,omitempty"`
+	IconSVG     string             `yaml:"iconSvg,omitempty"     json:"iconSvg,omitempty"`
+	BaseURL     string             `yaml:"baseUrl,omitempty"     json:"baseUrl,omitempty"`
+	AuthStyle   string             `yaml:"authStyle,omitempty"   json:"authStyle,omitempty"`
 	Headers     map[string]string  `yaml:"headers,omitempty"      json:"headers,omitempty"`
 	Operations  []CatalogOperation `yaml:"operations"             json:"operations"`
 }
 
 type CatalogOperation struct {
 	ID             string               `yaml:"id"                       json:"id"`
-	ProviderID     string               `yaml:"provider_id,omitempty"    json:"providerId,omitempty"`
+	ProviderID     string               `yaml:"providerId,omitempty"    json:"providerId,omitempty"`
 	Method         string               `yaml:"method"                   json:"method"`
 	Path           string               `yaml:"path"                     json:"path"`
 	Title          string               `yaml:"title,omitempty"          json:"title,omitempty"`
@@ -40,24 +40,24 @@ type CatalogOperation struct {
 	OutputSchema   json.RawMessage      `yaml:"-"                        json:"outputSchema,omitempty"`
 	Annotations    OperationAnnotations `yaml:"annotations,omitempty"    json:"annotations,omitempty"`
 	Parameters     []CatalogParameter   `yaml:"parameters,omitempty"     json:"parameters,omitempty"`
-	RequiredScopes []string             `yaml:"required_scopes,omitempty" json:"requiredScopes,omitempty"`
+	RequiredScopes []string             `yaml:"requiredScopes,omitempty" json:"requiredScopes,omitempty"`
 	Tags           []string             `yaml:"tags,omitempty"           json:"tags,omitempty"`
-	ReadOnly       bool                 `yaml:"read_only,omitempty"      json:"readOnly,omitempty"`
+	ReadOnly       bool                 `yaml:"readOnly,omitempty"      json:"readOnly,omitempty"`
 	Visible        *bool                `yaml:"visible,omitempty"        json:"visible,omitempty"`
 	Transport      string               `yaml:"transport,omitempty"      json:"transport,omitempty"`
 	Query          string               `yaml:"query,omitempty"          json:"query,omitempty"`
 }
 
 type OperationAnnotations struct {
-	ReadOnlyHint    *bool `yaml:"read_only_hint,omitempty"    json:"readOnlyHint,omitempty"`
-	IdempotentHint  *bool `yaml:"idempotent_hint,omitempty"   json:"idempotentHint,omitempty"`
-	DestructiveHint *bool `yaml:"destructive_hint,omitempty"  json:"destructiveHint,omitempty"`
-	OpenWorldHint   *bool `yaml:"open_world_hint,omitempty"   json:"openWorldHint,omitempty"`
+	ReadOnlyHint    *bool `yaml:"readOnlyHint,omitempty"    json:"readOnlyHint,omitempty"`
+	IdempotentHint  *bool `yaml:"idempotentHint,omitempty"   json:"idempotentHint,omitempty"`
+	DestructiveHint *bool `yaml:"destructiveHint,omitempty"  json:"destructiveHint,omitempty"`
+	OpenWorldHint   *bool `yaml:"openWorldHint,omitempty"   json:"openWorldHint,omitempty"`
 }
 
 type CatalogParameter struct {
 	Name        string `yaml:"name"                  json:"name"`
-	WireName    string `yaml:"wire_name,omitempty"    json:"wireName,omitempty"`
+	WireName    string `yaml:"wireName,omitempty"    json:"wireName,omitempty"`
 	Type        string `yaml:"type"                  json:"type"`
 	Location    string `yaml:"location,omitempty"    json:"location,omitempty"`
 	Description string `yaml:"description,omitempty"  json:"description,omitempty"`
@@ -124,7 +124,7 @@ func (c *Catalog) Validate() error {
 		return fmt.Errorf("catalog %q must declare at least one operation", c.Name)
 	}
 	if !isValidAuthStyle(c.AuthStyle) {
-		return fmt.Errorf("catalog %q has unknown auth_style %q", c.Name, c.AuthStyle)
+		return fmt.Errorf("catalog %q has unknown authStyle %q", c.Name, c.AuthStyle)
 	}
 
 	seen := make(map[string]struct{}, len(c.Operations))

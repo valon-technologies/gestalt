@@ -54,7 +54,7 @@ type LockEntry struct {
 	Archives    map[string]LockArchive `json:"archives,omitempty"`
 	Manifest    string                 `json:"manifest"`
 	Executable  string                 `json:"executable,omitempty"`
-	AssetRoot   string                 `json:"asset_root,omitempty"`
+	AssetRoot   string                 `json:"assetRoot,omitempty"`
 }
 
 type LockProviderEntry = LockEntry

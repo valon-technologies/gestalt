@@ -13,7 +13,6 @@ pub fn run(url_override: Option<&str>) -> Result<()> {
     let url = api::normalize_url(&prompt_input(&InputPrompt {
         label: "API server URL".to_string(),
         description: None,
-        help_url: None,
         default: Some(current_url),
         required: true,
         secret: false,

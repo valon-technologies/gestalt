@@ -17,13 +17,13 @@ import (
 
 type loginRequest struct {
 	State        string `json:"state"`
-	CallbackPort int    `json:"callback_port,omitempty"`
+	CallbackPort int    `json:"callbackPort,omitempty"`
 }
 
 type authInfoResponse struct {
 	Provider       string `json:"provider"`
-	DisplayName    string `json:"display_name"`
-	LoginSupported bool   `json:"login_supported"`
+	DisplayName    string `json:"displayName"`
+	LoginSupported bool   `json:"loginSupported"`
 }
 
 func (s *Server) authProviderName() string {
@@ -305,8 +305,8 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := map[string]any{
-		"email":        identity.Email,
-		"display_name": identity.DisplayName,
+		"email":       identity.Email,
+		"displayName": identity.DisplayName,
 	}
 
 	token, err := s.issueSessionToken(identity)

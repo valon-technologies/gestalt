@@ -15,9 +15,9 @@ const (
 type Manifest struct {
 	Source      string             `json:"source,omitempty" yaml:"source,omitempty"`
 	Version     string             `json:"version" yaml:"version"`
-	DisplayName string             `json:"display_name,omitempty" yaml:"display_name,omitempty"`
+	DisplayName string             `json:"displayName,omitempty" yaml:"displayName,omitempty"`
 	Description string             `json:"description,omitempty" yaml:"description,omitempty"`
-	IconFile    string             `json:"icon_file,omitempty" yaml:"icon_file,omitempty"`
+	IconFile    string             `json:"iconFile,omitempty" yaml:"iconFile,omitempty"`
 	Release     *ReleaseMetadata   `json:"release,omitempty" yaml:"release,omitempty"`
 	Plugin      *Plugin            `json:"plugin,omitempty" yaml:"plugin,omitempty"`
 	Auth        *AuthMetadata      `json:"auth,omitempty" yaml:"auth,omitempty"`
@@ -38,44 +38,44 @@ type ReleaseBuild struct {
 }
 
 type AuthMetadata struct {
-	ConfigSchemaPath string `json:"config_schema_path,omitempty" yaml:"config_schema_path,omitempty"`
+	ConfigSchemaPath string `json:"configSchemaPath,omitempty" yaml:"configSchemaPath,omitempty"`
 }
 
 type DatastoreMetadata struct {
-	ConfigSchemaPath string `json:"config_schema_path,omitempty" yaml:"config_schema_path,omitempty"`
+	ConfigSchemaPath string `json:"configSchemaPath,omitempty" yaml:"configSchemaPath,omitempty"`
 }
 
 type SecretsMetadata struct {
-	ConfigSchemaPath string `json:"config_schema_path,omitempty" yaml:"config_schema_path,omitempty"`
+	ConfigSchemaPath string `json:"configSchemaPath,omitempty" yaml:"configSchemaPath,omitempty"`
 }
 
 type WebUIMetadata struct {
-	AssetRoot        string `json:"asset_root" yaml:"asset_root"`
-	ConfigSchemaPath string `json:"config_schema_path,omitempty" yaml:"config_schema_path,omitempty"`
+	AssetRoot        string `json:"assetRoot" yaml:"assetRoot"`
+	ConfigSchemaPath string `json:"configSchemaPath,omitempty" yaml:"configSchemaPath,omitempty"`
 }
 
 type Plugin struct {
-	ConfigSchemaPath  string                             `json:"config_schema_path,omitempty" yaml:"config_schema_path,omitempty"`
+	ConfigSchemaPath  string                             `json:"configSchemaPath,omitempty" yaml:"configSchemaPath,omitempty"`
 	Auth              *ProviderAuth                      `json:"auth,omitempty" yaml:"auth,omitempty"`
-	ConnectionMode    string                             `json:"connection_mode,omitempty" yaml:"connection_mode,omitempty"`
+	ConnectionMode    string                             `json:"connectionMode,omitempty" yaml:"connectionMode,omitempty"`
 	MCP               bool                               `json:"mcp,omitempty" yaml:"mcp,omitempty"`
-	BaseURL           string                             `json:"base_url,omitempty" yaml:"base_url,omitempty"`
+	BaseURL           string                             `json:"baseUrl,omitempty" yaml:"baseUrl,omitempty"`
 	Headers           map[string]string                  `json:"headers,omitempty" yaml:"headers,omitempty"`
-	ManagedParameters []ManagedParameter                 `json:"managed_parameters,omitempty" yaml:"managed_parameters,omitempty"`
+	ManagedParameters []ManagedParameter                 `json:"managedParameters,omitempty" yaml:"managedParameters,omitempty"`
 	Operations        []ProviderOperation                `json:"operations,omitempty" yaml:"operations,omitempty"`
 	Discovery         *ProviderDiscovery                 `json:"discovery,omitempty" yaml:"discovery,omitempty"`
-	ConnectionParams  map[string]ProviderConnectionParam `json:"connection_params,omitempty" yaml:"connection_params,omitempty"`
+	ConnectionParams  map[string]ProviderConnectionParam `json:"connectionParams,omitempty" yaml:"connectionParams,omitempty"`
 
 	OpenAPI           string                                `json:"openapi,omitempty" yaml:"openapi,omitempty"`
-	GraphQLURL        string                                `json:"graphql_url,omitempty" yaml:"graphql_url,omitempty"`
-	MCPURL            string                                `json:"mcp_url,omitempty" yaml:"mcp_url,omitempty"`
-	AllowedOperations map[string]*ManifestOperationOverride `json:"allowed_operations,omitempty" yaml:"allowed_operations,omitempty"`
-	OpenAPIConnection string                                `json:"openapi_connection,omitempty" yaml:"openapi_connection,omitempty"`
-	GraphQLConnection string                                `json:"graphql_connection,omitempty" yaml:"graphql_connection,omitempty"`
-	MCPConnection     string                                `json:"mcp_connection,omitempty" yaml:"mcp_connection,omitempty"`
-	DefaultConnection string                                `json:"default_connection,omitempty" yaml:"default_connection,omitempty"`
+	GraphQLURL        string                                `json:"graphqlUrl,omitempty" yaml:"graphqlUrl,omitempty"`
+	MCPURL            string                                `json:"mcpUrl,omitempty" yaml:"mcpUrl,omitempty"`
+	AllowedOperations map[string]*ManifestOperationOverride `json:"allowedOperations,omitempty" yaml:"allowedOperations,omitempty"`
+	OpenAPIConnection string                                `json:"openapiConnection,omitempty" yaml:"openapiConnection,omitempty"`
+	GraphQLConnection string                                `json:"graphqlConnection,omitempty" yaml:"graphqlConnection,omitempty"`
+	MCPConnection     string                                `json:"mcpConnection,omitempty" yaml:"mcpConnection,omitempty"`
+	DefaultConnection string                                `json:"defaultConnection,omitempty" yaml:"defaultConnection,omitempty"`
 	Connections       map[string]*ManifestConnectionDef     `json:"connections,omitempty" yaml:"connections,omitempty"`
-	ResponseMapping   *ManifestResponseMapping              `json:"response_mapping,omitempty" yaml:"response_mapping,omitempty"`
+	ResponseMapping   *ManifestResponseMapping              `json:"responseMapping,omitempty" yaml:"responseMapping,omitempty"`
 	Pagination        *ManifestPaginationConfig             `json:"pagination,omitempty" yaml:"pagination,omitempty"`
 }
 
@@ -100,7 +100,7 @@ func (m *Manifest) IsDeclarativeOnlyProvider() bool {
 }
 
 type ManifestResponseMapping struct {
-	DataPath   string                     `json:"data_path" yaml:"data_path"`
+	DataPath   string                     `json:"dataPath" yaml:"dataPath"`
 	Pagination *ManifestPaginationMapping `json:"pagination,omitempty" yaml:"pagination,omitempty"`
 }
 
@@ -110,14 +110,14 @@ type ManifestValueSelector struct {
 }
 
 type ManifestPaginationMapping struct {
-	HasMore *ManifestValueSelector `json:"has_more,omitempty" yaml:"has_more,omitempty"`
+	HasMore *ManifestValueSelector `json:"hasMore,omitempty" yaml:"hasMore,omitempty"`
 	Cursor  *ManifestValueSelector `json:"cursor,omitempty" yaml:"cursor,omitempty"`
 }
 
 type ProviderDiscovery struct {
 	URL      string            `json:"url" yaml:"url"`
-	IDPath   string            `json:"id_path,omitempty" yaml:"id_path,omitempty"`
-	NamePath string            `json:"name_path,omitempty" yaml:"name_path,omitempty"`
+	IDPath   string            `json:"idPath,omitempty" yaml:"idPath,omitempty"`
+	NamePath string            `json:"namePath,omitempty" yaml:"namePath,omitempty"`
 	Metadata map[string]string `json:"metadata,omitempty" yaml:"metadata,omitempty"`
 }
 
@@ -129,12 +129,12 @@ type ProviderConnectionParam struct {
 
 type ManifestPaginationConfig struct {
 	Style        string                 `json:"style" yaml:"style"`
-	CursorParam  string                 `json:"cursor_param,omitempty" yaml:"cursor_param,omitempty"`
+	CursorParam  string                 `json:"cursorParam,omitempty" yaml:"cursorParam,omitempty"`
 	Cursor       *ManifestValueSelector `json:"cursor,omitempty" yaml:"cursor,omitempty"`
-	LimitParam   string                 `json:"limit_param,omitempty" yaml:"limit_param,omitempty"`
-	DefaultLimit int                    `json:"default_limit,omitempty" yaml:"default_limit,omitempty"`
-	ResultsPath  string                 `json:"results_path,omitempty" yaml:"results_path,omitempty"`
-	MaxPages     int                    `json:"max_pages,omitempty" yaml:"max_pages,omitempty"`
+	LimitParam   string                 `json:"limitParam,omitempty" yaml:"limitParam,omitempty"`
+	DefaultLimit int                    `json:"defaultLimit,omitempty" yaml:"defaultLimit,omitempty"`
+	ResultsPath  string                 `json:"resultsPath,omitempty" yaml:"resultsPath,omitempty"`
+	MaxPages     int                    `json:"maxPages,omitempty" yaml:"maxPages,omitempty"`
 }
 
 type ManifestOperationOverride struct {
@@ -183,31 +183,30 @@ const (
 
 type ProviderAuth struct {
 	Type                string            `json:"type" yaml:"type"`
-	AuthorizationURL    string            `json:"authorization_url,omitempty" yaml:"authorization_url,omitempty"`
-	TokenURL            string            `json:"token_url,omitempty" yaml:"token_url,omitempty"`
-	ClientID            string            `json:"client_id,omitempty" yaml:"client_id,omitempty"`
-	ClientSecret        string            `json:"client_secret,omitempty" yaml:"client_secret,omitempty"`
+	AuthorizationURL    string            `json:"authorizationUrl,omitempty" yaml:"authorizationUrl,omitempty"`
+	TokenURL            string            `json:"tokenUrl,omitempty" yaml:"tokenUrl,omitempty"`
+	ClientID            string            `json:"clientId,omitempty" yaml:"clientId,omitempty"`
+	ClientSecret        string            `json:"clientSecret,omitempty" yaml:"clientSecret,omitempty"`
 	Scopes              []string          `json:"scopes,omitempty" yaml:"scopes,omitempty"`
 	PKCE                bool              `json:"pkce,omitempty" yaml:"pkce,omitempty"`
-	ClientAuth          string            `json:"client_auth,omitempty" yaml:"client_auth,omitempty"`
-	TokenExchange       string            `json:"token_exchange,omitempty" yaml:"token_exchange,omitempty"`
-	AccessTokenPath     string            `json:"access_token_path,omitempty" yaml:"access_token_path,omitempty"`
-	ScopeParam          string            `json:"scope_param,omitempty" yaml:"scope_param,omitempty"`
-	ScopeSeparator      string            `json:"scope_separator,omitempty" yaml:"scope_separator,omitempty"`
-	AuthorizationParams map[string]string `json:"authorization_params,omitempty" yaml:"authorization_params,omitempty"`
-	TokenParams         map[string]string `json:"token_params,omitempty" yaml:"token_params,omitempty"`
-	RefreshParams       map[string]string `json:"refresh_params,omitempty" yaml:"refresh_params,omitempty"`
-	AcceptHeader        string            `json:"accept_header,omitempty" yaml:"accept_header,omitempty"`
-	TokenMetadata       []string          `json:"token_metadata,omitempty" yaml:"token_metadata,omitempty"`
+	ClientAuth          string            `json:"clientAuth,omitempty" yaml:"clientAuth,omitempty"`
+	TokenExchange       string            `json:"tokenExchange,omitempty" yaml:"tokenExchange,omitempty"`
+	AccessTokenPath     string            `json:"accessTokenPath,omitempty" yaml:"accessTokenPath,omitempty"`
+	ScopeParam          string            `json:"scopeParam,omitempty" yaml:"scopeParam,omitempty"`
+	ScopeSeparator      string            `json:"scopeSeparator,omitempty" yaml:"scopeSeparator,omitempty"`
+	AuthorizationParams map[string]string `json:"authorizationParams,omitempty" yaml:"authorizationParams,omitempty"`
+	TokenParams         map[string]string `json:"tokenParams,omitempty" yaml:"tokenParams,omitempty"`
+	RefreshParams       map[string]string `json:"refreshParams,omitempty" yaml:"refreshParams,omitempty"`
+	AcceptHeader        string            `json:"acceptHeader,omitempty" yaml:"acceptHeader,omitempty"`
+	TokenMetadata       []string          `json:"tokenMetadata,omitempty" yaml:"tokenMetadata,omitempty"`
 	Credentials         []CredentialField `json:"credentials,omitempty" yaml:"credentials,omitempty"`
-	AuthMapping         *AuthMapping      `json:"auth_mapping,omitempty" yaml:"auth_mapping,omitempty"`
+	AuthMapping         *AuthMapping      `json:"authMapping,omitempty" yaml:"authMapping,omitempty"`
 }
 
 type CredentialField struct {
 	Name        string `json:"name" yaml:"name"`
 	Label       string `json:"label,omitempty" yaml:"label,omitempty"`
 	Description string `json:"description,omitempty" yaml:"description,omitempty"`
-	HelpURL     string `json:"help_url,omitempty" yaml:"help_url,omitempty"`
 }
 
 type AuthMapping struct {
@@ -249,7 +248,7 @@ type Entrypoints struct {
 }
 
 type Entrypoint struct {
-	ArtifactPath string   `json:"artifact_path" yaml:"artifact_path"`
+	ArtifactPath string   `json:"artifactPath" yaml:"artifactPath"`
 	Args         []string `json:"args,omitempty" yaml:"args,omitempty"`
 }
 

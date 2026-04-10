@@ -15,7 +15,7 @@ import (
 
 type yamlConfig struct {
 	componentplugin.YAMLConfig `yaml:",inline"`
-	CallbackURL                string `yaml:"callback_url"`
+	CallbackURL                string `yaml:"callbackUrl"`
 }
 
 var Factory bootstrap.AuthFactory = func(node yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {

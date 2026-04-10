@@ -18,4 +18,4 @@ operations:
   - id: status
     method: GET
     description: Return provider startup state
-    read_only: true
+    readOnly: true

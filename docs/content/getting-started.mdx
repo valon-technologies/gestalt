@@ -25,8 +25,8 @@ The generated config is fine for a first look, but let's write one explicitly so
 ```yaml
 server:
   port: 8080
-  base_url: http://localhost:8080
-  encryption_key: dev-only-change-me
+  baseUrl: http://localhost:8080
+  encryptionKey: dev-only-change-me
 
 auth:
   provider: none
@@ -57,8 +57,8 @@ Plugins are where the interesting things happen. Each entry under `plugins:` reg
 ```yaml
 server:
   port: 8080
-  base_url: http://localhost:8080
-  encryption_key: dev-only-change-me
+  baseUrl: http://localhost:8080
+  encryptionKey: dev-only-change-me
 
 auth:
   provider: none
@@ -73,7 +73,7 @@ datastore:
 
 plugins:
   httpbin:
-    display_name: HTTPBin
+    displayName: HTTPBin
     provider:
       source:
         ref: github.com/valon-technologies/gestalt-providers/plugins/httpbin

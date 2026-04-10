@@ -65,8 +65,8 @@ func TestResponseMappingExtractsDataAndPagination(t *testing.T) {
 	}
 
 	pgn := parsed["pagination"].(map[string]any)
-	if pgn["has_more"] != true {
-		t.Fatalf("has_more = %v, want true", pgn["has_more"])
+	if pgn["hasMore"] != true {
+		t.Fatalf("hasMore = %v, want true", pgn["hasMore"])
 	}
 	if pgn["cursor"] != "cursor-abc" {
 		t.Fatalf("cursor = %v, want cursor-abc", pgn["cursor"])

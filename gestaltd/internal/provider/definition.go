@@ -9,40 +9,40 @@ import (
 
 type Definition struct {
 	Provider         string            `yaml:"provider" json:"provider"`
-	DisplayName      string            `yaml:"display_name" json:"display_name"`
+	DisplayName      string            `yaml:"displayName" json:"displayName"`
 	Description      string            `yaml:"description" json:"description"`
-	IconSVG          string            `yaml:"icon_svg" json:"icon_svg"`
-	ConnectionMode   string            `yaml:"connection_mode" json:"connection_mode"`
-	BaseURL          string            `yaml:"base_url" json:"base_url"`
+	IconSVG          string            `yaml:"iconSvg" json:"iconSvg"`
+	ConnectionMode   string            `yaml:"connectionMode" json:"connectionMode"`
+	BaseURL          string            `yaml:"baseUrl" json:"baseUrl"`
 	Auth             AuthDef           `yaml:"auth" json:"auth"`
-	AuthStyle        string            `yaml:"auth_style" json:"auth_style"` // bearer (default), raw, none, basic
-	AuthHeader       string            `yaml:"auth_header" json:"auth_header"`
-	TokenPrefix      string            `yaml:"token_prefix" json:"token_prefix"`
+	AuthStyle        string            `yaml:"authStyle" json:"authStyle"` // bearer (default), raw, none, basic
+	AuthHeader       string            `yaml:"authHeader" json:"authHeader"`
+	TokenPrefix      string            `yaml:"tokenPrefix" json:"tokenPrefix"`
 	Headers          map[string]string `yaml:"headers" json:"headers"`
-	AuthMapping      *AuthMappingDef   `yaml:"auth_mapping" json:"auth_mapping"`
-	ErrorMessagePath string            `yaml:"error_message_path" json:"error_message_path"`
+	AuthMapping      *AuthMappingDef   `yaml:"authMapping" json:"authMapping"`
+	ErrorMessagePath string            `yaml:"errorMessagePath" json:"errorMessagePath"`
 
-	ResponseCheck    *ResponseCheckDef    `yaml:"response_check" json:"response_check,omitempty"`
-	ManualAuth       bool                 `yaml:"manual_auth" json:"manual_auth"`
-	CredentialFields []CredentialFieldDef `yaml:"credential_fields" json:"credential_fields,omitempty"`
+	ResponseCheck    *ResponseCheckDef    `yaml:"responseCheck" json:"responseCheck,omitempty"`
+	ManualAuth       bool                 `yaml:"manualAuth" json:"manualAuth"`
+	CredentialFields []CredentialFieldDef `yaml:"credentialFields" json:"credentialFields,omitempty"`
 
 	Discovery       *DiscoveryDef       `yaml:"discovery" json:"discovery,omitempty"`
-	ResponseMapping *ResponseMappingDef `yaml:"response_mapping" json:"response_mapping,omitempty"`
+	ResponseMapping *ResponseMappingDef `yaml:"responseMapping" json:"responseMapping,omitempty"`
 
 	Connection map[string]ConnectionParamDef `yaml:"connection" json:"connection"`
 	Operations map[string]OperationDef       `yaml:"operations" json:"operations"`
 }
 
 type ResponseCheckDef struct {
-	SuccessBodyMatch map[string]any `yaml:"success_body_match" json:"success_body_match,omitempty"`
-	ErrorMessagePath string         `yaml:"error_message_path" json:"error_message_path,omitempty"`
+	SuccessBodyMatch map[string]any `yaml:"successBodyMatch" json:"successBodyMatch,omitempty"`
+	ErrorMessagePath string         `yaml:"errorMessagePath" json:"errorMessagePath,omitempty"`
 }
 
 type DiscoveryDef struct {
 	URL       string            `yaml:"url" json:"url"`
-	ItemsPath string            `yaml:"items_path" json:"items_path"`
-	IDPath    string            `yaml:"id_path" json:"id_path"`
-	NamePath  string            `yaml:"name_path" json:"name_path"`
+	ItemsPath string            `yaml:"itemsPath" json:"itemsPath"`
+	IDPath    string            `yaml:"idPath" json:"idPath"`
+	NamePath  string            `yaml:"namePath" json:"namePath"`
 	Metadata  map[string]string `yaml:"metadata" json:"metadata"`
 }
 
@@ -66,21 +66,21 @@ type ConnectionParamDef struct {
 
 type AuthDef struct {
 	Type                string            `yaml:"type" json:"type"` // oauth2, manual
-	AuthorizationURL    string            `yaml:"authorization_url" json:"authorization_url"`
-	TokenURL            string            `yaml:"token_url" json:"token_url"`
-	ClientAuth          string            `yaml:"client_auth" json:"client_auth"`       // body (default), header
-	TokenExchange       string            `yaml:"token_exchange" json:"token_exchange"` // form (default), json
+	AuthorizationURL    string            `yaml:"authorizationUrl" json:"authorizationUrl"`
+	TokenURL            string            `yaml:"tokenUrl" json:"tokenUrl"`
+	ClientAuth          string            `yaml:"clientAuth" json:"clientAuth"`       // body (default), header
+	TokenExchange       string            `yaml:"tokenExchange" json:"tokenExchange"` // form (default), json
 	Scopes              []string          `yaml:"scopes" json:"scopes"`
-	ScopeParam          string            `yaml:"scope_param" json:"scope_param"`
-	ScopeSeparator      string            `yaml:"scope_separator" json:"scope_separator"`
+	ScopeParam          string            `yaml:"scopeParam" json:"scopeParam"`
+	ScopeSeparator      string            `yaml:"scopeSeparator" json:"scopeSeparator"`
 	PKCE                bool              `yaml:"pkce" json:"pkce"`
-	AuthorizationParams map[string]string `yaml:"authorization_params" json:"authorization_params"`
-	TokenParams         map[string]string `yaml:"token_params" json:"token_params"`
-	RefreshParams       map[string]string `yaml:"refresh_params" json:"refresh_params"`
-	AcceptHeader        string            `yaml:"accept_header" json:"accept_header"`
-	TokenMetadata       []string          `yaml:"token_metadata" json:"token_metadata"`
-	AccessTokenPath     string            `yaml:"access_token_path" json:"access_token_path,omitempty"`
-	ResponseCheck       *ResponseCheckDef `yaml:"response_check" json:"response_check,omitempty"`
+	AuthorizationParams map[string]string `yaml:"authorizationParams" json:"authorizationParams"`
+	TokenParams         map[string]string `yaml:"tokenParams" json:"tokenParams"`
+	RefreshParams       map[string]string `yaml:"refreshParams" json:"refreshParams"`
+	AcceptHeader        string            `yaml:"acceptHeader" json:"acceptHeader"`
+	TokenMetadata       []string          `yaml:"tokenMetadata" json:"tokenMetadata"`
+	AccessTokenPath     string            `yaml:"accessTokenPath" json:"accessTokenPath,omitempty"`
+	ResponseCheck       *ResponseCheckDef `yaml:"responseCheck" json:"responseCheck,omitempty"`
 }
 
 type OperationDef struct {
@@ -88,9 +88,9 @@ type OperationDef struct {
 	Method      string          `yaml:"method" json:"method"`
 	Path        string          `yaml:"path" json:"path"`
 	Parameters  []ParameterDef  `yaml:"parameters" json:"parameters"`
-	Query       string          `yaml:"query" json:"query"`                         // GraphQL query/mutation template
-	Transport   string          `yaml:"transport" json:"transport"`                 // "rest" (default) or "graphql"
-	InputSchema json.RawMessage `yaml:"input_schema" json:"input_schema,omitempty"` // pre-built JSON Schema (skips synthesis)
+	Query       string          `yaml:"query" json:"query"`                       // GraphQL query/mutation template
+	Transport   string          `yaml:"transport" json:"transport"`               // "rest" (default) or "graphql"
+	InputSchema json.RawMessage `yaml:"inputSchema" json:"inputSchema,omitempty"` // pre-built JSON Schema (skips synthesis)
 	Pagination  *PaginationDef  `yaml:"pagination" json:"pagination"`
 }
 
@@ -107,29 +107,29 @@ type ValueSelectorDef struct {
 
 type PaginationDef struct {
 	Style        string            `yaml:"style" json:"style"`
-	CursorParam  string            `yaml:"cursor_param" json:"cursor_param"`
+	CursorParam  string            `yaml:"cursorParam" json:"cursorParam"`
 	Cursor       *ValueSelectorDef `yaml:"cursor" json:"cursor,omitempty"`
-	LimitParam   string            `yaml:"limit_param" json:"limit_param"`
-	DefaultLimit int               `yaml:"default_limit" json:"default_limit"`
-	ResultsPath  string            `yaml:"results_path" json:"results_path"`
-	MaxPages     int               `yaml:"max_pages" json:"max_pages"`
+	LimitParam   string            `yaml:"limitParam" json:"limitParam"`
+	DefaultLimit int               `yaml:"defaultLimit" json:"defaultLimit"`
+	ResultsPath  string            `yaml:"resultsPath" json:"resultsPath"`
+	MaxPages     int               `yaml:"maxPages" json:"maxPages"`
 }
 
 type CredentialFieldDef = pluginmanifestv1.CredentialField
 
 type ResponseMappingDef struct {
-	DataPath   string                `yaml:"data_path" json:"data_path"`
+	DataPath   string                `yaml:"dataPath" json:"dataPath"`
 	Pagination *PaginationMappingDef `yaml:"pagination" json:"pagination,omitempty"`
 }
 
 type PaginationMappingDef struct {
-	HasMore *ValueSelectorDef `yaml:"has_more" json:"has_more,omitempty"`
+	HasMore *ValueSelectorDef `yaml:"hasMore" json:"hasMore,omitempty"`
 	Cursor  *ValueSelectorDef `yaml:"cursor" json:"cursor,omitempty"`
 }
 
 type ParameterDef struct {
 	Name        string `yaml:"name" json:"name"`
-	WireName    string `yaml:"wire_name,omitempty" json:"wire_name,omitempty"`
+	WireName    string `yaml:"wireName,omitempty" json:"wireName,omitempty"`
 	Type        string `yaml:"type" json:"type"`
 	Location    string `yaml:"location,omitempty" json:"location,omitempty"`
 	Description string `yaml:"description" json:"description"`

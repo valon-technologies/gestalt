@@ -7,7 +7,7 @@ datastore:
     path: ./example.db
 
 server:
-  encryption_key: dev-key-for-example-only
+  encryptionKey: dev-key-for-example-only
 
 plugins:
   example:

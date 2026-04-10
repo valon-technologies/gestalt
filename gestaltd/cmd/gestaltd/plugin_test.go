@@ -138,7 +138,7 @@ func TestRun_PluginReleaseRejectsInvalidManifest(t *testing.T) {
 		wantError    string
 	}{
 		{
-			name: "rest surface requires base_url",
+			name: "rest surface requires baseUrl",
 			manifestYAML: `
 source: github.com/testowner/plugins/invalid
 version: 0.0.1-alpha.1
@@ -150,7 +150,7 @@ provider:
           method: GET
           path: /items
 `,
-			wantError: "provider.base_url is required",
+			wantError: "provider.baseUrl is required",
 		},
 		{
 			name: "exec block requires artifact path",
@@ -160,7 +160,7 @@ version: 0.0.1-alpha.1
 provider:
   exec: {}
 `,
-			wantError: "entrypoints.provider.artifact_path is required",
+			wantError: "entrypoints.provider.artifactPath is required",
 		},
 	}
 

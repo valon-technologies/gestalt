@@ -11,6 +11,7 @@ const PLUGIN_CONNECTION_NAME: &str = "_plugin";
 const PLUGIN_CONNECTION_ALIAS: &str = "plugin";
 
 #[derive(Debug, Clone, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 struct IntegrationInfo {
     name: String,
     #[serde(default)]
@@ -28,6 +29,7 @@ struct IntegrationInfo {
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 struct ConnectionDefInfo {
     name: String,
     #[serde(default)]
@@ -47,6 +49,7 @@ struct ConnectionParamDef {
 }
 
 #[derive(Debug, Clone, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
 struct ConnectManualResponse {
     status: String,
     #[serde(default)]
@@ -66,8 +69,6 @@ struct CredentialFieldInfo {
     label: Option<String>,
     #[serde(default)]
     description: Option<String>,
-    #[serde(default)]
-    help_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default, PartialEq, Eq)]
@@ -78,6 +79,7 @@ struct DiscoveryCandidateInfo {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct StartOAuthRequest<'a> {
     integration: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -89,6 +91,7 @@ struct StartOAuthRequest<'a> {
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct ConnectManualRequest<'a> {
     integration: &'a str,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -488,7 +491,6 @@ fn prompt_connection_params(
                 .unwrap_or(name)
                 .to_string(),
             description: None,
-            help_url: None,
             default: non_empty(def.default.as_deref()).map(str::to_string),
             required: def.required,
             secret: false,
@@ -511,7 +513,6 @@ fn prompt_manual_credentials(fields: &[CredentialFieldInfo]) -> Result<ManualCre
             name: "credential".to_string(),
             label: Some("Credential".to_string()),
             description: None,
-            help_url: None,
         }]
     } else {
         fields.to_vec()
@@ -534,7 +535,6 @@ fn prompt_for_credential(field: &CredentialFieldInfo) -> Result<String> {
     prompt_input(&InputPrompt {
         label: field.display_label(),
         description: non_empty(field.description.as_deref()).map(str::to_string),
-        help_url: non_empty(field.help_url.as_deref()).map(str::to_string),
         default: None,
         required: true,
         secret: true,
