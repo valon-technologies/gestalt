@@ -876,13 +876,13 @@ func applyDefaults(cfg *Config) {
 	if cfg.Server.Public.Port == 0 {
 		cfg.Server.Public.Port = 8080
 	}
-	if cfg.Secrets.Provider == nil && cfg.Secrets.BuiltinProvider == "" {
+	if !cfg.Secrets.Disabled && cfg.Secrets.Provider == nil && cfg.Secrets.BuiltinProvider == "" {
 		cfg.Secrets.BuiltinProvider = "env"
 	}
-	if cfg.Telemetry.Provider == nil && cfg.Telemetry.BuiltinProvider == "" {
+	if !cfg.Telemetry.Disabled && cfg.Telemetry.Provider == nil && cfg.Telemetry.BuiltinProvider == "" {
 		cfg.Telemetry.BuiltinProvider = "stdout"
 	}
-	if cfg.Audit.Provider == nil && cfg.Audit.BuiltinProvider == "" {
+	if !cfg.Audit.Disabled && cfg.Audit.Provider == nil && cfg.Audit.BuiltinProvider == "" {
 		cfg.Audit.BuiltinProvider = "inherit"
 	}
 	if !cfg.UI.Disabled && cfg.UI.Provider == nil {
