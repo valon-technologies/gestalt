@@ -27,9 +27,9 @@ type integrationWire struct {
 }
 
 type integrationConnection struct {
-	Mode      pluginmanifestv1.ConnectionMode    `yaml:"mode"`
-	Auth      ConnectionAuthDef                  `yaml:"auth"`
-	Params    map[string]ConnectionParamDef      `yaml:"params"`
+	Mode      pluginmanifestv1.ConnectionMode     `yaml:"mode"`
+	Auth      ConnectionAuthDef                   `yaml:"auth"`
+	Params    map[string]ConnectionParamDef       `yaml:"params"`
 	Discovery *pluginmanifestv1.ProviderDiscovery `yaml:"discovery"`
 }
 

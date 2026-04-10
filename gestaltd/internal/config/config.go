@@ -55,11 +55,11 @@ type Config struct {
 // can be a builtin (provider: { builtin: <name> } or the legacy scalar form
 // provider: <name>) or an external plugin (provider: { source: ... }).
 type ComponentConfig struct {
-	Provider        *ProviderDef `yaml:"provider"`
-	Config          yaml.Node    `yaml:"config"`
-	BuiltinProvider string       `yaml:"-"`
-	Disabled        bool         `yaml:"-"`
-	ResolvedAssetRoot string     `yaml:"-"`
+	Provider          *ProviderDef `yaml:"provider"`
+	Config            yaml.Node    `yaml:"config"`
+	BuiltinProvider   string       `yaml:"-"`
+	Disabled          bool         `yaml:"-"`
+	ResolvedAssetRoot string       `yaml:"-"`
 }
 
 func (c *ComponentConfig) UnmarshalYAML(value *yaml.Node) error {
@@ -172,10 +172,10 @@ type ProviderDef struct {
 
 	Discovery *pluginmanifestv1.ProviderDiscovery `yaml:"-"`
 
-	Auth              *ConnectionAuthDef                 `yaml:"-"`
-	ConnectionMode    pluginmanifestv1.ConnectionMode   `yaml:"-"`
-	Connections       map[string]*ConnectionDef `yaml:"-"`
-	DefaultConnection string                    `yaml:"-"`
+	Auth              *ConnectionAuthDef              `yaml:"-"`
+	ConnectionMode    pluginmanifestv1.ConnectionMode `yaml:"-"`
+	Connections       map[string]*ConnectionDef       `yaml:"-"`
+	DefaultConnection string                          `yaml:"-"`
 
 	ConnectionParams  map[string]ConnectionParamDef `yaml:"-"`
 	MCP               bool                          `yaml:"-"`
@@ -258,7 +258,6 @@ type DatastoreDef struct {
 	Driver string `yaml:"driver"`
 	DSN    string `yaml:"dsn"`
 }
-
 
 func (c *DatastoreConfig) UnmarshalYAML(value *yaml.Node) error {
 	if value == nil || value.Kind == 0 {
@@ -379,25 +378,25 @@ type ConnectionDef struct {
 
 type ConnectionAuthDef struct {
 	Type                pluginmanifestv1.AuthType `yaml:"type"`
-	AuthorizationURL    string               `yaml:"authorizationUrl"`
-	TokenURL            string               `yaml:"tokenUrl"`
-	ClientID            string               `yaml:"clientId"`
-	ClientSecret        string               `yaml:"clientSecret"`
-	RedirectURL         string               `yaml:"redirectUrl"`
-	ClientAuth          string               `yaml:"clientAuth"`
-	TokenExchange       string               `yaml:"tokenExchange"`
-	Scopes              []string             `yaml:"scopes"`
-	ScopeParam          string               `yaml:"scopeParam"`
-	ScopeSeparator      string               `yaml:"scopeSeparator"`
-	PKCE                bool                 `yaml:"pkce"`
-	AuthorizationParams map[string]string    `yaml:"authorizationParams"`
-	TokenParams         map[string]string    `yaml:"tokenParams"`
-	RefreshParams       map[string]string    `yaml:"refreshParams"`
-	AcceptHeader        string               `yaml:"acceptHeader"`
-	AccessTokenPath     string               `yaml:"accessTokenPath"`
-	TokenMetadata       []string             `yaml:"tokenMetadata"`
-	Credentials         []CredentialFieldDef `yaml:"credentials"`
-	AuthMapping         *AuthMappingDef      `yaml:"authMapping"`
+	AuthorizationURL    string                    `yaml:"authorizationUrl"`
+	TokenURL            string                    `yaml:"tokenUrl"`
+	ClientID            string                    `yaml:"clientId"`
+	ClientSecret        string                    `yaml:"clientSecret"`
+	RedirectURL         string                    `yaml:"redirectUrl"`
+	ClientAuth          string                    `yaml:"clientAuth"`
+	TokenExchange       string                    `yaml:"tokenExchange"`
+	Scopes              []string                  `yaml:"scopes"`
+	ScopeParam          string                    `yaml:"scopeParam"`
+	ScopeSeparator      string                    `yaml:"scopeSeparator"`
+	PKCE                bool                      `yaml:"pkce"`
+	AuthorizationParams map[string]string         `yaml:"authorizationParams"`
+	TokenParams         map[string]string         `yaml:"tokenParams"`
+	RefreshParams       map[string]string         `yaml:"refreshParams"`
+	AcceptHeader        string                    `yaml:"acceptHeader"`
+	AccessTokenPath     string                    `yaml:"accessTokenPath"`
+	TokenMetadata       []string                  `yaml:"tokenMetadata"`
+	Credentials         []CredentialFieldDef      `yaml:"credentials"`
+	AuthMapping         *AuthMappingDef           `yaml:"authMapping"`
 }
 
 type CredentialFieldDef = pluginmanifestv1.CredentialField
