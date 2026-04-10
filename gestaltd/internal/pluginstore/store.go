@@ -86,7 +86,10 @@ func Install(packagePath, destDir string) (*InstalledPlugin, error) {
 	if manifestPath == "" {
 		manifestPath = filepath.Join(destDir, pluginpkg.ManifestFile)
 	}
-	manifest = pluginpkg.ResolveManifestLocalReferences(manifest, manifestPath)
+	manifest, err = pluginpkg.ResolveManifestLocalReferences(manifest, manifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("resolve local references: %w", err)
+	}
 	executablePath, err := executablePathForManifest(destDir, manifest)
 	if err != nil {
 		return nil, err
@@ -167,7 +170,10 @@ func InstallFromDir(dirPath, destDir string) (*InstalledPlugin, error) {
 	if err := copyManifestReferencedFiles(dirPath, destDir, manifest); err != nil {
 		return nil, err
 	}
-	manifest = pluginpkg.ResolveManifestLocalReferences(manifest, manifestDest)
+	manifest, err = pluginpkg.ResolveManifestLocalReferences(manifest, manifestDest)
+	if err != nil {
+		return nil, fmt.Errorf("resolve local references: %w", err)
+	}
 
 	executablePath, err := executablePathForManifest(destDir, manifest)
 	if err != nil {

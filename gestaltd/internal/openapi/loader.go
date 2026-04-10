@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -69,7 +70,8 @@ func LoadDefinition(ctx context.Context, name, specURL string, allowedOps map[st
 
 func fetch(ctx context.Context, specURL string) ([]byte, error) {
 	if !strings.HasPrefix(specURL, "http://") && !strings.HasPrefix(specURL, "https://") {
-		f, err := os.Open(strings.TrimPrefix(specURL, "file://"))
+		filePath := filepath.Clean(strings.TrimPrefix(specURL, "file://"))
+		f, err := os.Open(filePath)
 		if err != nil {
 			return nil, err
 		}

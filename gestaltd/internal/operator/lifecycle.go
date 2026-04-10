@@ -1200,7 +1200,11 @@ func (l *Lifecycle) applyLockedComponentEntry(paths initPaths, entry *LockEntry,
 }
 
 func bindResolvedProviderManifest(name string, plugin *config.ProviderDef, manifestPath string, manifest *pluginmanifestv1.Manifest, configMap map[string]any) error {
-	manifest = pluginpkg.ResolveManifestLocalReferences(manifest, manifestPath)
+	var err error
+	manifest, err = pluginpkg.ResolveManifestLocalReferences(manifest, manifestPath)
+	if err != nil {
+		return fmt.Errorf("resolve local references for provider %q: %w", name, err)
+	}
 	if err := validateInstalledManifestKind(pluginmanifestv1.KindPlugin, name, manifest); err != nil {
 		return err
 	}
@@ -1214,7 +1218,11 @@ func bindResolvedProviderManifest(name string, plugin *config.ProviderDef, manif
 }
 
 func bindResolvedComponentManifest(kind, name string, plugin *config.ProviderDef, manifestPath string, manifest *pluginmanifestv1.Manifest, configMap map[string]any) error {
-	manifest = pluginpkg.ResolveManifestLocalReferences(manifest, manifestPath)
+	var err error
+	manifest, err = pluginpkg.ResolveManifestLocalReferences(manifest, manifestPath)
+	if err != nil {
+		return fmt.Errorf("resolve local references for %s %q: %w", kind, name, err)
+	}
 	if err := validateInstalledManifestKind(kind, name, manifest); err != nil {
 		return err
 	}
@@ -1228,7 +1236,11 @@ func bindResolvedComponentManifest(kind, name string, plugin *config.ProviderDef
 }
 
 func bindResolvedUIManifest(plugin *config.ProviderDef, manifestPath string, manifest *pluginmanifestv1.Manifest, configMap map[string]any) error {
-	manifest = pluginpkg.ResolveManifestLocalReferences(manifest, manifestPath)
+	var err error
+	manifest, err = pluginpkg.ResolveManifestLocalReferences(manifest, manifestPath)
+	if err != nil {
+		return fmt.Errorf("resolve local references for ui provider: %w", err)
+	}
 	if err := validateInstalledManifestKind(pluginmanifestv1.KindWebUI, "provider", manifest); err != nil {
 		return err
 	}

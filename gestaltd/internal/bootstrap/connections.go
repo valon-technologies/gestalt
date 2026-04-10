@@ -78,7 +78,10 @@ func buildPluginConnectionPlan(plugin *config.ProviderDef, manifestPlugin *plugi
 	}
 
 	for _, surface := range config.OrderedSpecSurfaces {
-		url := surfaceURL(plugin, manifestPlugin, surface)
+		url, err := surfaceURL(plugin, manifestPlugin, surface)
+		if err != nil {
+			return pluginConnectionPlan{}, fmt.Errorf("resolve %s spec URL: %w", surface, err)
+		}
 		if url == "" {
 			continue
 		}
@@ -225,13 +228,13 @@ func resolveDefaultConnectionName(plugin *config.ProviderDef, manifestPlugin *pl
 	return ""
 }
 
-func surfaceURL(plugin *config.ProviderDef, manifestPlugin *pluginmanifestv1.Plugin, surface config.SpecSurface) string {
+func surfaceURL(plugin *config.ProviderDef, manifestPlugin *pluginmanifestv1.Plugin, surface config.SpecSurface) (string, error) {
 	if manifestPlugin == nil {
-		return ""
+		return "", nil
 	}
 	url := config.ManifestProviderSurfaceURL(manifestPlugin, surface)
 	if url == "" {
-		return ""
+		return "", nil
 	}
 	return resolveManifestRelativeSpecURL(plugin, url)
 }
@@ -244,21 +247,42 @@ func resolveSurfaceConnectionName(plugin *config.ProviderDef, manifestPlugin *pl
 	return name
 }
 
-func resolveManifestRelativeSpecURL(plugin *config.ProviderDef, raw string) string {
+func resolveManifestRelativeSpecURL(plugin *config.ProviderDef, raw string) (string, error) {
 	if plugin == nil || plugin.ResolvedManifestPath == "" || raw == "" {
-		return raw
+		return raw, nil
 	}
-	if filepath.IsAbs(raw) || strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
-		return raw
+	if strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
+		return raw, nil
+	}
+	manifestDir := filepath.Dir(plugin.ResolvedManifestPath)
+
+	if filepath.IsAbs(raw) {
+		return "", fmt.Errorf("spec URL %q must be relative to the manifest directory", raw)
 	}
 	if strings.HasPrefix(raw, "file://") {
 		path := strings.TrimPrefix(raw, "file://")
 		if filepath.IsAbs(path) {
-			return raw
+			return "", fmt.Errorf("spec URL %q must be relative to the manifest directory", raw)
 		}
-		return "file://" + filepath.Clean(filepath.Join(filepath.Dir(plugin.ResolvedManifestPath), path))
+		resolved := filepath.Clean(filepath.Join(manifestDir, path))
+		if !isPathWithinDir(manifestDir, resolved) {
+			return "", fmt.Errorf("spec URL %q escapes the manifest directory", raw)
+		}
+		return "file://" + resolved, nil
 	}
-	return filepath.Clean(filepath.Join(filepath.Dir(plugin.ResolvedManifestPath), raw))
+	resolved := filepath.Clean(filepath.Join(manifestDir, raw))
+	if !isPathWithinDir(manifestDir, resolved) {
+		return "", fmt.Errorf("spec URL %q escapes the manifest directory", raw)
+	}
+	return resolved, nil
+}
+
+func isPathWithinDir(root, target string) bool {
+	rel, err := filepath.Rel(root, target)
+	if err != nil {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func buildConnectionAuthMap(name string, intg config.PluginDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, authFallback *specAuthFallback, deps Deps) (map[string]OAuthHandler, error) {

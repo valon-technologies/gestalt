@@ -1,6 +1,7 @@
 package pluginpkg
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -52,19 +53,26 @@ func LocalPackageReferences(manifest *pluginmanifestv1.Manifest) []LocalPackageR
 	return refs
 }
 
-func ResolveManifestLocalReferences(manifest *pluginmanifestv1.Manifest, manifestPath string) *pluginmanifestv1.Manifest {
+func ResolveManifestLocalReferences(manifest *pluginmanifestv1.Manifest, manifestPath string) (*pluginmanifestv1.Manifest, error) {
 	if manifest == nil || manifest.Plugin == nil || manifestPath == "" {
-		return manifest
+		return manifest, nil
 	}
 	if manifest.Plugin.Surfaces == nil {
 		return manifest
 	}
 
+	manifestDir := filepath.Dir(manifestPath)
+	var resolveErr error
 	resolve := func(value string) string {
-		if value == "" || filepath.IsAbs(value) || strings.Contains(value, "://") {
+		if resolveErr != nil || value == "" || filepath.IsAbs(value) || strings.Contains(value, "://") {
 			return value
 		}
-		return filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(value))
+		resolved := filepath.Join(manifestDir, filepath.FromSlash(value))
+		if !isPathWithinDir(manifestDir, resolved) {
+			resolveErr = fmt.Errorf("local reference %q escapes the manifest directory", value)
+			return value
+		}
+		return resolved
 	}
 
 	provider := *manifest.Plugin
@@ -96,12 +104,16 @@ func ResolveManifestLocalReferences(manifest *pluginmanifestv1.Manifest, manifes
 		}
 	}
 
+	if resolveErr != nil {
+		return nil, resolveErr
+	}
+
 	if !changed {
-		return manifest
+		return manifest, nil
 	}
 
 	provider.Surfaces = &surfaces
 	cloned := *manifest
 	cloned.Plugin = &provider
-	return &cloned
+	return &cloned, nil
 }

@@ -448,6 +448,13 @@ func validateRelativePackagePath(value, label string) error {
 	return nil
 }
 
+func validateSpecURLField(value, label string) error {
+	if value == "" || strings.Contains(value, "://") {
+		return nil
+	}
+	return validateRelativePackagePath(value, label)
+}
+
 func validateReleaseMetadata(release *pluginmanifestv1.ReleaseMetadata) error {
 	if release == nil || release.Build == nil {
 		return nil
@@ -544,6 +551,15 @@ func validateExecutableProviderMetadata(provider *pluginmanifestv1.Plugin) error
 		if check.present {
 			return fmt.Errorf("%s is no longer supported for executable providers", check.field)
 		}
+	}
+	if err := validateSpecURLField(provider.OpenAPI, "provider.openapi"); err != nil {
+		return err
+	}
+	if err := validateSpecURLField(provider.GraphQLURL, "provider.graphqlUrl"); err != nil {
+		return err
+	}
+	if err := validateSpecURLField(provider.MCPURL, "provider.mcpUrl"); err != nil {
+		return err
 	}
 	return nil
 }
