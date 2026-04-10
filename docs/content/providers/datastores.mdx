@@ -64,7 +64,7 @@ A datastore provider implements the `IndexedDB` gRPC service, which maps to thes
     // IndexGet, IndexGetKey, IndexGetAll, IndexGetAllKeys, IndexCount, IndexDelete
 
     func main() {
-    	gestalt.ServeDatastoreProvider(context.Background(), &MyDatastore{})
+    	gestalt.ServeIndexedDBProvider(context.Background(), &MyDatastore{})
     }
     ```
   </Tabs.Tab>
@@ -116,13 +116,20 @@ A datastore provider implements the `IndexedDB` gRPC service, which maps to thes
   </Tabs.Tab>
 </Tabs>
 
-## Plugin SDK (consuming datastores)
+## Plugin SDK
 
 Plugins access datastores through the SDK. The host serves the IndexedDB interface over a gRPC socket, and the SDK wraps it into native types for each language.
 
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
     ```go
+    import (
+        "context"
+        "log"
+
+        gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
+
     db, err := gestalt.IndexedDB()
     if err != nil {
         log.Fatal(err)
@@ -157,6 +164,8 @@ Plugins access datastores through the SDK. The host serves the IndexedDB interfa
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
+    import gestalt
+
     db = gestalt.IndexedDB()
 
     # Create an object store with indexes
@@ -184,6 +193,9 @@ Plugins access datastores through the SDK. The host serves the IndexedDB interfa
   </Tabs.Tab>
   <Tabs.Tab>
     ```rust
+    use gestalt_plugin_sdk as gestalt;
+    use serde_json::json;
+
     let mut db = gestalt::IndexedDB::connect().await?;
 
     // Create an object store with indexes
