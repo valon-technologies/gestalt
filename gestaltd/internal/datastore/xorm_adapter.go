@@ -24,9 +24,9 @@ func (userRow) TableName() string { return "users" }
 type integrationTokenRow struct {
 	ID                 string     `xorm:"varchar(36) pk 'id'"`
 	UserID             string     `xorm:"varchar(36) notnull index 'user_id'"`
-	Integration        string     `xorm:"varchar(255) notnull 'integration'"`
-	Connection         string     `xorm:"varchar(255) notnull 'connection'"`
-	Instance           string     `xorm:"varchar(255) 'instance'"`
+	Integration        string     `xorm:"varchar(128) notnull 'integration'"`
+	Connection         string     `xorm:"varchar(128) notnull 'connection'"`
+	Instance           string     `xorm:"varchar(128) notnull 'instance'"`
 	AccessTokenSealed  string     `xorm:"text 'access_token_sealed'"`
 	RefreshTokenSealed string     `xorm:"text 'refresh_token_sealed'"`
 	Scopes             string     `xorm:"text 'scopes'"`
