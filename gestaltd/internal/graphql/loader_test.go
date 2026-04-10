@@ -100,7 +100,7 @@ func TestLoadDefinitionAllOps(t *testing.T) {
 	srv := startIntrospectionServer(t, newTestSchema())
 	defer srv.Close()
 
-	def, err := LoadDefinition(t.Context(), "test", srv.URL, nil)
+	def, err := LoadDefinition(t.Context(), "test", srv.URL, nil, http.DefaultClient)
 	if err != nil {
 		t.Fatalf("LoadDefinition: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestLoadDefinitionWithAllowedOps(t *testing.T) {
 
 	def, err := LoadDefinition(t.Context(), "test", srv.URL, map[string]*config.OperationOverride{
 		"teams": {Description: "My custom description"},
-	})
+	}, http.DefaultClient)
 	if err != nil {
 		t.Fatalf("LoadDefinition: %v", err)
 	}
@@ -167,7 +167,7 @@ func TestLoadDefinitionEmptySchemaErrors(t *testing.T) {
 	})
 	defer srv.Close()
 
-	_, err := LoadDefinition(t.Context(), "test", srv.URL, nil)
+	_, err := LoadDefinition(t.Context(), "test", srv.URL, nil, http.DefaultClient)
 	if err == nil {
 		t.Fatal("expected error for empty schema")
 	}

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/apiexec"
 )
@@ -140,10 +139,8 @@ fragment TypeRef on __Type {
   }
 }`
 
-var defaultClient = &http.Client{Timeout: 30 * time.Second}
-
-func introspect(ctx context.Context, endpoint string) (*Schema, error) {
-	result, err := apiexec.DoGraphQL(ctx, defaultClient, apiexec.GraphQLRequest{
+func introspect(ctx context.Context, endpoint string, client *http.Client) (*Schema, error) {
+	result, err := apiexec.DoGraphQL(ctx, client, apiexec.GraphQLRequest{
 		URL:   endpoint,
 		Query: introspectionQuery,
 	})

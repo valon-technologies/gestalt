@@ -13,6 +13,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/discovery"
+	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 )
 
@@ -298,7 +299,7 @@ func (s *Server) runPostConnect(ctx context.Context, prov core.Provider, tm toke
 		if cfg := dcp.DiscoveryConfig(); cfg != nil {
 			client := &http.Client{
 				Timeout:   30 * time.Second,
-				Transport: &bearerTransport{token: tm.AccessToken, base: http.DefaultTransport},
+				Transport: &bearerTransport{token: tm.AccessToken, base: egress.SafeTransport(s.privateNetworkPolicy)},
 			}
 			candidates, err := discovery.Run(ctx, cfg, client)
 			if err != nil {

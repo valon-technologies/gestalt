@@ -3,14 +3,15 @@ package graphql
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
 )
 
-func LoadDefinition(ctx context.Context, name, endpoint string, allowedOps map[string]*config.OperationOverride) (*provider.Definition, error) {
-	schema, err := introspect(ctx, endpoint)
+func LoadDefinition(ctx context.Context, name, endpoint string, allowedOps map[string]*config.OperationOverride, client *http.Client) (*provider.Definition, error) {
+	schema, err := introspect(ctx, endpoint, client)
 	if err != nil {
 		return nil, fmt.Errorf("introspecting %s: %w", endpoint, err)
 	}

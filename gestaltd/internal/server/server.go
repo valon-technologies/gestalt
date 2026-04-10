@@ -12,6 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/session"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
@@ -58,8 +59,9 @@ type Server struct {
 	prometheusMetrics  http.Handler
 	mcpHandler         http.Handler
 	clientUI           http.Handler
-	adminUI            http.Handler
-	routeProfile       RouteProfile
+	adminUI              http.Handler
+	routeProfile         RouteProfile
+	privateNetworkPolicy *egress.PrivateNetworkPolicy
 }
 
 type Config struct {
@@ -81,8 +83,9 @@ type Config struct {
 	PrometheusMetrics http.Handler
 	MCPHandler        http.Handler
 	ClientUI          http.Handler
-	AdminUI           http.Handler
-	RouteProfile      RouteProfile
+	AdminUI              http.Handler
+	RouteProfile         RouteProfile
+	PrivateNetworkPolicy *egress.PrivateNetworkPolicy
 }
 
 func New(cfg Config) (*Server, error) {
@@ -140,8 +143,9 @@ func New(cfg Config) (*Server, error) {
 		prometheusMetrics: cfg.PrometheusMetrics,
 		mcpHandler:        cfg.MCPHandler,
 		clientUI:          cfg.ClientUI,
-		adminUI:           cfg.AdminUI,
-		routeProfile:      cfg.RouteProfile,
+		adminUI:              cfg.AdminUI,
+		routeProfile:         cfg.RouteProfile,
+		privateNetworkPolicy: cfg.PrivateNetworkPolicy,
 	}
 	if noAuth {
 		s.anonymousPrincipal = resolver.ResolveEmail(anonymousEmail)

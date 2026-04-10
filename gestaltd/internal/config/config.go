@@ -134,9 +134,10 @@ type PluginSourceDef struct {
 }
 
 type EgressConfig struct {
-	DefaultAction string                  `yaml:"defaultAction"`
-	Policies      []EgressPolicyRule      `yaml:"policies"`
-	Credentials   []EgressCredentialGrant `yaml:"credentials"`
+	DefaultAction        string                  `yaml:"defaultAction"`
+	AllowPrivateNetworks *bool                   `yaml:"allowPrivateNetworks"`
+	Policies             []EgressPolicyRule      `yaml:"policies"`
+	Credentials          []EgressCredentialGrant `yaml:"credentials"`
 }
 
 type EgressPolicyRule struct {

@@ -40,20 +40,25 @@ func (c *managedMCPClient) Close() error {
 }
 
 type Upstream struct {
-	name     string
-	display  string
-	desc     string
-	iconSVG  string
-	url      string
-	connMode core.ConnectionMode
-	headers  map[string]string
-	cat      *catalog.Catalog
-	client   mcpclient.MCPClient
-	exposure *operationexposure.Policy
-	resolver *egress.Resolver
+	name                 string
+	display              string
+	desc                 string
+	iconSVG              string
+	url                  string
+	connMode             core.ConnectionMode
+	headers              map[string]string
+	cat                  *catalog.Catalog
+	client               mcpclient.MCPClient
+	exposure             *operationexposure.Policy
+	resolver             *egress.Resolver
+	privateNetworkPolicy *egress.PrivateNetworkPolicy
 }
 
 type Option func(*Upstream)
+
+func WithPrivateNetworkPolicy(p *egress.PrivateNetworkPolicy) Option {
+	return func(u *Upstream) { u.privateNetworkPolicy = p }
+}
 
 func WithMetadataOverrides(displayName, description, iconSVG string) Option {
 	return func(u *Upstream) {
@@ -175,7 +180,7 @@ func (u *Upstream) connect(ctx context.Context, token string) (mcpclient.MCPClie
 		return u.client, nil
 	}
 
-	baseTransport := cloneDefaultTransport()
+	baseTransport := egress.SafeTransport(u.privateNetworkPolicy)
 	httpClient := &http.Client{
 		Timeout:   httpTimeout,
 		Transport: egress.NewResolvingRoundTripper(baseTransport, u.resolver),
@@ -213,13 +218,6 @@ func (u *Upstream) connect(ctx context.Context, token string) (mcpclient.MCPClie
 	}
 
 	return &managedMCPClient{MCPClient: client, onClose: closeIdleConnections}, nil
-}
-
-func cloneDefaultTransport() *http.Transport {
-	if transport, ok := http.DefaultTransport.(*http.Transport); ok {
-		return transport.Clone()
-	}
-	return &http.Transport{}
 }
 
 func (u *Upstream) discover(ctx context.Context, token string) (*catalog.Catalog, error) {

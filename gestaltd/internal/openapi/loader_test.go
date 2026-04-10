@@ -85,7 +85,7 @@ func TestLoadDefinition(t *testing.T) {
 		"get_item":   nil,
 	}
 
-	def, err := LoadDefinition(context.Background(), "example", srv.URL, allowed)
+	def, err := LoadDefinition(context.Background(), "example", srv.URL, allowed, http.DefaultClient)
 	if err != nil {
 		t.Fatalf("LoadDefinition: %v", err)
 	}
@@ -149,7 +149,7 @@ func TestLoadDefinitionFiltersOperations(t *testing.T) {
 	srv := serveJSON(t, spec)
 	testutil.CloseOnCleanup(t, srv)
 
-	def, err := LoadDefinition(context.Background(), "test", srv.URL, map[string]*config.OperationOverride{"op_a": nil, "op_c": nil})
+	def, err := LoadDefinition(context.Background(), "test", srv.URL, map[string]*config.OperationOverride{"op_a": nil, "op_c": nil}, http.DefaultClient)
 	if err != nil {
 		t.Fatalf("LoadDefinition: %v", err)
 	}
@@ -178,7 +178,7 @@ func TestLoadDefinitionNilAllowedOpsExposesAll(t *testing.T) {
 	srv := serveJSON(t, spec)
 	testutil.CloseOnCleanup(t, srv)
 
-	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil)
+	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil, http.DefaultClient)
 	if err != nil {
 		t.Fatalf("LoadDefinition: %v", err)
 	}
@@ -218,7 +218,7 @@ func TestExtractAuthScopes(t *testing.T) {
 	srv := serveJSON(t, spec)
 	testutil.CloseOnCleanup(t, srv)
 
-	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil)
+	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil, http.DefaultClient)
 	if err != nil {
 		t.Fatalf("LoadDefinition: %v", err)
 	}
@@ -245,7 +245,7 @@ func TestExtractAuthNoScopes(t *testing.T) {
 	srv := serveJSON(t, testSpec())
 	testutil.CloseOnCleanup(t, srv)
 
-	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil)
+	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil, http.DefaultClient)
 	if err != nil {
 		t.Fatalf("LoadDefinition: %v", err)
 	}
@@ -291,7 +291,7 @@ func TestCollectScopesFromOperationSecurity(t *testing.T) {
 	srv := serveJSON(t, spec)
 	testutil.CloseOnCleanup(t, srv)
 
-	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil)
+	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil, http.DefaultClient)
 	if err != nil {
 		t.Fatalf("LoadDefinition: %v", err)
 	}
@@ -342,7 +342,7 @@ func TestCollectScopesRespectsAllowedOps(t *testing.T) {
 	srv := serveJSON(t, spec)
 	testutil.CloseOnCleanup(t, srv)
 
-	def, err := LoadDefinition(context.Background(), "test", srv.URL, map[string]*config.OperationOverride{"read_op": nil})
+	def, err := LoadDefinition(context.Background(), "test", srv.URL, map[string]*config.OperationOverride{"read_op": nil}, http.DefaultClient)
 	if err != nil {
 		t.Fatalf("LoadDefinition: %v", err)
 	}
@@ -381,7 +381,7 @@ func TestExtractAuthAPIKeyHeader(t *testing.T) {
 	srv := serveJSON(t, spec)
 	testutil.CloseOnCleanup(t, srv)
 
-	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil)
+	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil, http.DefaultClient)
 	if err != nil {
 		t.Fatalf("LoadDefinition: %v", err)
 	}
@@ -422,7 +422,7 @@ func TestExtractAuthAPIKeyQuery(t *testing.T) {
 	srv := serveJSON(t, spec)
 	testutil.CloseOnCleanup(t, srv)
 
-	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil)
+	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil, http.DefaultClient)
 	if err != nil {
 		t.Fatalf("LoadDefinition: %v", err)
 	}
@@ -462,7 +462,7 @@ func TestExtractAuthHTTPBearer(t *testing.T) {
 	srv := serveJSON(t, spec)
 	testutil.CloseOnCleanup(t, srv)
 
-	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil)
+	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil, http.DefaultClient)
 	if err != nil {
 		t.Fatalf("LoadDefinition: %v", err)
 	}
@@ -499,7 +499,7 @@ func TestExtractAuthHTTPBasic(t *testing.T) {
 	srv := serveJSON(t, spec)
 	testutil.CloseOnCleanup(t, srv)
 
-	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil)
+	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil, http.DefaultClient)
 	if err != nil {
 		t.Fatalf("LoadDefinition: %v", err)
 	}
@@ -556,7 +556,7 @@ func TestLoadDefinitionRelativeServerURL(t *testing.T) {
 				want = srv.URL + "/v1"
 			}
 
-			def, err := LoadDefinition(context.Background(), "test", srv.URL, nil)
+			def, err := LoadDefinition(context.Background(), "test", srv.URL, nil, http.DefaultClient)
 			if err != nil {
 				t.Fatalf("LoadDefinition: %v", err)
 			}
@@ -607,7 +607,7 @@ func TestLoadDefinitionBodyParamDedup(t *testing.T) {
 	srv := serveJSON(t, spec)
 	testutil.CloseOnCleanup(t, srv)
 
-	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil)
+	def, err := LoadDefinition(context.Background(), "test", srv.URL, nil, http.DefaultClient)
 	if err != nil {
 		t.Fatalf("LoadDefinition: %v", err)
 	}
@@ -663,7 +663,7 @@ paths:
 `)
 	testutil.CloseOnCleanup(t, srv)
 
-	def, err := LoadDefinition(context.Background(), "yamltest", srv.URL, nil)
+	def, err := LoadDefinition(context.Background(), "yamltest", srv.URL, nil, http.DefaultClient)
 	if err != nil {
 		t.Fatalf("LoadDefinition YAML: %v", err)
 	}

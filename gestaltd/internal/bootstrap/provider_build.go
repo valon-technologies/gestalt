@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"net/http"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
@@ -17,6 +19,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/composite"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/graphql"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/mcpoauth"
@@ -344,8 +347,8 @@ func buildSpecLoadedProvider(ctx context.Context, name string, intg config.Plugi
 	return newProviderBuildResult(name, intg, manifest, pluginConfig, composite.New(name, apiProv, mcpUp), authFallback, deps)
 }
 
-func loadConfiguredAPIDefinition(ctx context.Context, name string, resolved resolvedSpecSurface, meta providerMetadata, cfg specProviderConfig) (*provider.Definition, error) {
-	def, err := loadSpecDefinition(ctx, name, resolved, cfg.allowedOperations)
+func loadConfiguredAPIDefinition(ctx context.Context, name string, resolved resolvedSpecSurface, meta providerMetadata, cfg specProviderConfig, client *http.Client) (*provider.Definition, error) {
+	def, err := loadSpecDefinition(ctx, name, resolved, cfg.allowedOperations, client)
 	if err != nil {
 		return nil, fmt.Errorf("load %s definition: %w", resolved.surface, err)
 	}
@@ -377,10 +380,13 @@ func buildConfiguredSpecProvider(ctx context.Context, name string, resolved reso
 	if cfg.providerBuildOptions != nil {
 		buildOpts = cfg.providerBuildOptions(resolved.connection)
 	}
+	buildOpts = append(buildOpts, provider.WithPrivateNetworkPolicy(deps.Egress.PrivateNetworkPolicy))
+
+	specClient := egress.SafeClient(deps.Egress.PrivateNetworkPolicy, 30*time.Second)
 
 	switch resolved.surface {
 	case config.SpecSurfaceOpenAPI, config.SpecSurfaceGraphQL:
-		def, err := loadConfiguredAPIDefinition(ctx, name, resolved, meta, cfg)
+		def, err := loadConfiguredAPIDefinition(ctx, name, resolved, meta, cfg, specClient)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -402,6 +408,7 @@ func buildConfiguredSpecProvider(ctx context.Context, name string, resolved reso
 			manifestHeaders(cfg.manifestPlugin),
 			deps.Egress.Resolver,
 			mcpupstream.WithMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
+			mcpupstream.WithPrivateNetworkPolicy(deps.Egress.PrivateNetworkPolicy),
 		)
 		if err != nil {
 			return nil, nil, fmt.Errorf("create mcp upstream: %w", err)
@@ -418,12 +425,12 @@ func buildConfiguredSpecProvider(ctx context.Context, name string, resolved reso
 	}
 }
 
-func loadSpecDefinition(ctx context.Context, name string, resolved resolvedSpecSurface, allowedOperations map[string]*config.OperationOverride) (*provider.Definition, error) {
+func loadSpecDefinition(ctx context.Context, name string, resolved resolvedSpecSurface, allowedOperations map[string]*config.OperationOverride, client *http.Client) (*provider.Definition, error) {
 	switch resolved.surface {
 	case config.SpecSurfaceOpenAPI:
-		return openapi.LoadDefinition(ctx, name, resolved.url, allowedOperations)
+		return openapi.LoadDefinition(ctx, name, resolved.url, allowedOperations, client)
 	case config.SpecSurfaceGraphQL:
-		return graphql.LoadDefinition(ctx, name, resolved.url, allowedOperations)
+		return graphql.LoadDefinition(ctx, name, resolved.url, allowedOperations, client)
 	default:
 		return nil, fmt.Errorf("unsupported spec definition surface %q", resolved.surface)
 	}
@@ -906,6 +913,7 @@ func buildMCPOAuthHandler(conn config.ConnectionDef, mcpURL string, store mcpoau
 		MCPURL:       mcpURL,
 		Store:        store,
 		RedirectURL:  redirectURL,
+		HTTPClient:   egress.SafeClient(deps.Egress.PrivateNetworkPolicy, 10*time.Second),
 		ClientID:     conn.Auth.ClientID,
 		ClientSecret: conn.Auth.ClientSecret,
 	})

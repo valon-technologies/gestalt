@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"sync"
 	"time"
 
@@ -18,6 +19,7 @@ type HandlerConfig struct {
 	MCPURL      string
 	Store       RegistrationStore // nil for non-SQL deployments
 	RedirectURL string
+	HTTPClient  *http.Client
 
 	// Static overrides: if set, skip DCR and use these directly.
 	ClientID     string
@@ -50,7 +52,7 @@ func (h *Handler) ensure() (*oauth.UpstreamHandler, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	md, err := Discover(ctx, h.cfg.MCPURL)
+	md, err := Discover(ctx, h.cfg.MCPURL, h.cfg.HTTPClient)
 	if err != nil {
 		if h.upstream != nil {
 			return h.upstream, nil
@@ -140,7 +142,7 @@ func (h *Handler) resolveRegistration(ctx context.Context, md *DiscoveredMetadat
 		slog.Info("mcpoauth: re-registering (expired)", "auth_server", authServerURL)
 	}
 
-	reg, err := RegisterClient(ctx, md.RegistrationEndpoint, h.cfg.RedirectURL, "Gestalt", md.PreferredAuthMethod())
+	reg, err := RegisterClient(ctx, md.RegistrationEndpoint, h.cfg.RedirectURL, "Gestalt", md.PreferredAuthMethod(), h.cfg.HTTPClient)
 	if err != nil {
 		if existing != nil {
 			slog.Warn("mcpoauth: re-registration failed, using existing", "auth_server", authServerURL, "error", err)

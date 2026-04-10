@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/pb33f/libopenapi"
 	"github.com/pb33f/libopenapi/datamodel/high/base"
@@ -20,10 +19,8 @@ import (
 
 const maxSpecSize = 100 << 20 // 100 MB
 
-var defaultClient = &http.Client{Timeout: 30 * time.Second}
-
-func LoadDefinition(ctx context.Context, name, specURL string, allowedOps map[string]*config.OperationOverride) (*provider.Definition, error) {
-	body, err := fetch(ctx, specURL)
+func LoadDefinition(ctx context.Context, name, specURL string, allowedOps map[string]*config.OperationOverride, client *http.Client) (*provider.Definition, error) {
+	body, err := fetch(ctx, specURL, client)
 	if err != nil {
 		return nil, fmt.Errorf("fetching %s: %w", specURL, err)
 	}
@@ -67,7 +64,7 @@ func LoadDefinition(ctx context.Context, name, specURL string, allowedOps map[st
 	return def, nil
 }
 
-func fetch(ctx context.Context, specURL string) ([]byte, error) {
+func fetch(ctx context.Context, specURL string, client *http.Client) ([]byte, error) {
 	if !strings.HasPrefix(specURL, "http://") && !strings.HasPrefix(specURL, "https://") {
 		f, err := os.Open(strings.TrimPrefix(specURL, "file://"))
 		if err != nil {
@@ -82,7 +79,7 @@ func fetch(ctx context.Context, specURL string) ([]byte, error) {
 		return nil, err
 	}
 
-	resp, err := defaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
 	}

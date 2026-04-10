@@ -168,8 +168,9 @@ func runServer(env *bootstrapEnv) error {
 		),
 		PrometheusMetrics: env.Result.Telemetry.PrometheusHandler(),
 		MCPHandler:        mcpHandler,
-		ClientUI:          clientUI,
-		AdminUI:           publicAdminUI,
+		ClientUI:             clientUI,
+		AdminUI:              publicAdminUI,
+		PrivateNetworkPolicy: result.Egress.PrivateNetworkPolicy,
 	}
 
 	publicProfile := server.RouteProfileAll

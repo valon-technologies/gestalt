@@ -29,7 +29,7 @@ func (r *Registration) Expired() bool {
 	return false
 }
 
-func RegisterClient(ctx context.Context, endpoint, redirectURI, clientName, tokenAuthMethod string) (*Registration, error) {
+func RegisterClient(ctx context.Context, endpoint, redirectURI, clientName, tokenAuthMethod string, client *http.Client) (*Registration, error) {
 	if tokenAuthMethod == "" {
 		tokenAuthMethod = "none"
 	}
@@ -52,7 +52,9 @@ func RegisterClient(ctx context.Context, endpoint, redirectURI, clientName, toke
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: discoveryTimeout}
+	if client == nil {
+		client = &http.Client{Timeout: discoveryTimeout}
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("sending DCR request to %s: %w", endpoint, err)

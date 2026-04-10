@@ -22,8 +22,9 @@ import (
 type BuildOption func(*buildOptions)
 
 type buildOptions struct {
-	authOverride coreintegration.AuthHandler
-	egress       *egress.Resolver
+	authOverride         coreintegration.AuthHandler
+	egress               *egress.Resolver
+	privateNetworkPolicy *egress.PrivateNetworkPolicy
 }
 
 // WithAuthHandler injects a pre-built auth handler, bypassing buildAuth.
@@ -33,6 +34,10 @@ func WithAuthHandler(h coreintegration.AuthHandler) BuildOption {
 
 func WithEgressResolver(r *egress.Resolver) BuildOption {
 	return func(o *buildOptions) { o.egress = r }
+}
+
+func WithPrivateNetworkPolicy(p *egress.PrivateNetworkPolicy) BuildOption {
+	return func(o *buildOptions) { o.privateNetworkPolicy = p }
 }
 
 // Build constructs a provider from a spec Definition and a ConnectionDef that
@@ -49,7 +54,7 @@ func Build(def *Definition, conn config.ConnectionDef, opts ...BuildOption) (cor
 
 	baseURL := def.BaseURL
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := egress.SafeClient(bo.privateNetworkPolicy, 10*time.Second)
 
 	var auth coreintegration.AuthHandler
 	var err error

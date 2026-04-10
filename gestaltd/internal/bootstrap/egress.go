@@ -7,7 +7,8 @@ import (
 )
 
 type EgressDeps struct {
-	Resolver *egress.Resolver
+	Resolver             *egress.Resolver
+	PrivateNetworkPolicy *egress.PrivateNetworkPolicy
 }
 
 func newEgressDeps(cfg *config.Config, sm core.SecretManager) EgressDeps {
@@ -46,11 +47,19 @@ func newEgressDeps(cfg *config.Config, sm core.SecretManager) EgressDeps {
 		}
 	}
 
+	var allowPrivate bool
+	if cfg.Egress.AllowPrivateNetworks != nil {
+		allowPrivate = *cfg.Egress.AllowPrivateNetworks
+	}
+
 	return EgressDeps{
 		Resolver: &egress.Resolver{
 			Subjects:    egress.ContextSubjectResolver{},
 			Policy:      policy,
 			Credentials: credentials,
+		},
+		PrivateNetworkPolicy: &egress.PrivateNetworkPolicy{
+			AllowPrivateNetworks: allowPrivate,
 		},
 	}
 }

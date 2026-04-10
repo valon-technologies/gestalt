@@ -65,8 +65,10 @@ func (m *DiscoveredMetadata) PreferredAuthMethod() string {
 // Discover probes an MCP server to find its OAuth endpoints. Handles both
 // RFC 9728 indirection (authorization_servers) and servers that embed
 // endpoints directly in resource metadata (ClickHouse).
-func Discover(ctx context.Context, mcpURL string) (*DiscoveredMetadata, error) {
-	client := &http.Client{Timeout: discoveryTimeout}
+func Discover(ctx context.Context, mcpURL string, client *http.Client) (*DiscoveredMetadata, error) {
+	if client == nil {
+		client = &http.Client{Timeout: discoveryTimeout}
+	}
 
 	resourceMetadataURL, err := probeForResourceMetadata(ctx, client, mcpURL)
 	if err != nil {
