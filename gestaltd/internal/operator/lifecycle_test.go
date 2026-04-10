@@ -62,7 +62,7 @@ func decodeNodeMap(t *testing.T, node any) map[string]any {
 func requiredComponentConfigYAML(_ *testing.T, _, dbPath string) string {
 	return fmt.Sprintf(`datastores:
   sqlite:
-    driver: sqlite3
+    driver: sqlite
     dsn: %q
 datastore: sqlite
 ui:
@@ -73,7 +73,7 @@ ui:
 func requiredDatastoreConfigYAML(_ *testing.T, _, dbPath string) string {
 	return fmt.Sprintf(`datastores:
   sqlite:
-    driver: sqlite3
+    driver: sqlite
     dsn: %q
 datastore: sqlite
 ui:
@@ -279,7 +279,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalTopLevelPluginsWithoutLockfile(t *t
     client_id: local-auth-client
 datastores:
   sqlite:
-    driver: sqlite3
+    driver: sqlite
     dsn: %s
 datastore: sqlite
 ui:
@@ -360,7 +360,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalSourceTopLevelPluginsWithoutArtifac
       path: ./auth-manifest.yaml
 datastores:
   sqlite:
-    driver: sqlite3
+    driver: sqlite
     dsn: %s
 datastore: sqlite
 ui:

@@ -518,7 +518,7 @@ func validateDatastores(cfg *Config) error {
 			return fmt.Errorf("config validation: datastores.%s.driver is required", name)
 		}
 		if !validDatastoreDrivers[ds.Driver] {
-			return fmt.Errorf("config validation: datastores.%s.driver %q is not recognized (expected postgres, mysql, or sqlite3)", name, ds.Driver)
+			return fmt.Errorf("config validation: datastores.%s.driver %q is not recognized (expected postgres, mysql, or sqlite)", name, ds.Driver)
 		}
 		if ds.DSN == "" {
 			return fmt.Errorf("config validation: datastores.%s.dsn is required", name)

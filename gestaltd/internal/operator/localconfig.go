@@ -57,7 +57,7 @@ func GenerateDefaultConfig(configDir string) (string, error) {
 func defaultManagedConfig(dbPath, encryptionKey string) string {
 	return fmt.Sprintf(`datastores:
   sqlite:
-    driver: sqlite3
+    driver: sqlite
     dsn: %q
 datastore: sqlite
 secrets:
@@ -72,7 +72,7 @@ server:
 func defaultLocalSourceConfig(providersDir, dbPath, encryptionKey string) string {
 	return fmt.Sprintf(`datastores:
   sqlite:
-    driver: sqlite3
+    driver: sqlite
     dsn: %q
 datastore: sqlite
 ui:

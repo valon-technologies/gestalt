@@ -1511,7 +1511,7 @@ func TestE2EHelmChart(t *testing.T) {
 		cfgPath := filepath.Join(dir, "config.yaml")
 		cfg := fmt.Sprintf(`datastores:
   sqlite:
-    driver: sqlite3
+    driver: sqlite
     dsn: %s
 datastore: sqlite
 server:
@@ -1830,7 +1830,7 @@ func authDatastoreConfigYAML(t *testing.T, dir, authName, datastoreName, dbPath 
 	}
 	return fmt.Sprintf(`%sdatastores:
   %s:
-    driver: sqlite3
+    driver: sqlite
     dsn: %s
 datastore: %s
 ui:
