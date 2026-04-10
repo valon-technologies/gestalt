@@ -403,7 +403,7 @@ datastore:
 server:
   encryptionKey: server-key
 `,
-			wantErr: "field plugin not found in type config.DatastoreConfig",
+			wantErr: "cannot unmarshal !!map into config.DatastoreConfig",
 		},
 		{
 			name: "auth config accepted",
@@ -600,7 +600,7 @@ server:
 		if cfg.UI.Provider == nil || cfg.UI.Provider.Source == nil {
 			t.Fatalf("UI.Provider = %#v", cfg.UI.Provider)
 		}
-		wantPath := filepath.Join(filepath.Dir(path), "web", "default", "manifest.yaml")
+		wantPath := filepath.Join(filepath.Dir(path), "web", "default", "provider.yaml")
 		if got := cfg.UI.Provider.Source.Path; got != wantPath {
 			t.Fatalf("UI.Provider.Source.Path = %q, want %q", got, wantPath)
 		}
@@ -962,15 +962,6 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			cfg:  &Config{},
 		},
 		{
-			name: "datastore provider rejected",
-			cfg: &Config{
-				Datastore: DatastoreConfig{
-					Provider: &ProviderDef{Source: &PluginSourceDef{Path: "./some-dir/manifest.yaml"}},
-				},
-			},
-			wantErr: "datastore.provider is no longer supported",
-		},
-		{
 			name: "auth provider invalid when source missing",
 			cfg: &Config{
 				Auth: AuthConfig{
@@ -1086,11 +1077,11 @@ plugins:
 	if got := cfg.Plugins["service-a"].IconFile; got != iconPath {
 		t.Fatalf("IconFile = %q, want %q", got, iconPath)
 	}
-	if got := cfg.Auth.Provider.SourcePath(); got != filepath.Join(dir, "auth-plugin", "manifest.yaml") {
-		t.Fatalf("auth plugin source path = %q, want %q", got, filepath.Join(dir, "auth-plugin", "manifest.yaml"))
+	if got := cfg.Auth.Provider.SourcePath(); got != filepath.Join(dir, "auth-plugin", "provider.yaml") {
+		t.Fatalf("auth plugin source path = %q, want %q", got, filepath.Join(dir, "auth-plugin", "provider.yaml"))
 	}
-	if got := cfg.Plugins["service-a"].Plugin.SourcePath(); got != filepath.Join(dir, "bin", "provider.yaml") {
-		t.Fatalf("integration plugin source path = %q, want %q", got, filepath.Join(dir, "bin", "provider.yaml"))
+	if got := cfg.Plugins["service-a"].Plugin.SourcePath(); got != filepath.Join(dir, "bin", "manifest.yaml") {
+		t.Fatalf("integration plugin source path = %q, want %q", got, filepath.Join(dir, "bin", "manifest.yaml"))
 	}
 }
 

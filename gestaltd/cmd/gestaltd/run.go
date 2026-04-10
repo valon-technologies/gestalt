@@ -452,7 +452,6 @@ func logConfigSummary(path string, cfg *config.Config) {
 		"server_base_url", maskEmpty(cfg.Server.BaseURL),
 		"server_encryption", maskSecret(cfg.Server.EncryptionKey),
 		"auth_provider", providerLabel(cfg.Auth.Provider),
-		"datastore_provider", providerLabel(cfg.Datastore.Provider),
 		"secrets_provider", secretsProviderLabel(cfg.Secrets),
 		"telemetry_provider", cfg.Telemetry.BuiltinProvider,
 	)

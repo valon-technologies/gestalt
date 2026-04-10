@@ -28,16 +28,16 @@ const (
 )
 
 type ExecConfig struct {
-	Command        string
-	Args           []string
-	Env            map[string]string
-	StaticSpec     StaticProviderSpec
-	Config         map[string]any
-	AllowedHosts   []string
-	HostBinary     string
-	Cleanup        func()
-	RegisterHost   func(*grpc.Server)
-	HostSocketEnv  string
+	Command       string
+	Args          []string
+	Env           map[string]string
+	StaticSpec    StaticProviderSpec
+	Config        map[string]any
+	AllowedHosts  []string
+	HostBinary    string
+	Cleanup       func()
+	RegisterHost  func(*grpc.Server)
+	HostSocketEnv string
 }
 
 type providerProcess struct {
