@@ -57,8 +57,12 @@ func GenerateDefaultConfig(configDir string) (string, error) {
 func defaultManagedConfig(dbPath, encryptionKey string) string {
 	return fmt.Sprintf(`datastores:
   sqlite:
-    driver: sqlite
-    dsn: %q
+    provider:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+        version: 0.0.1-alpha.1
+    config:
+      path: %q
 datastore: sqlite
 secrets:
   provider: env
@@ -72,8 +76,12 @@ server:
 func defaultLocalSourceConfig(providersDir, dbPath, encryptionKey string) string {
 	return fmt.Sprintf(`datastores:
   sqlite:
-    driver: sqlite
-    dsn: %q
+    provider:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+        version: 0.0.1-alpha.1
+    config:
+      path: %q
 datastore: sqlite
 ui:
   provider:

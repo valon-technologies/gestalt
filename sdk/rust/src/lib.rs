@@ -6,6 +6,7 @@ mod auth_server;
 mod catalog;
 mod env;
 mod error;
+pub mod indexeddb;
 mod provider_server;
 mod router;
 mod rpc_status;
@@ -33,6 +34,7 @@ pub use auth::{
 pub use catalog::{Catalog, CatalogOperation};
 pub use env::{CURRENT_PROTOCOL_VERSION, ENV_PROVIDER_SOCKET};
 pub use error::{Error, Result};
+pub use indexeddb::{IndexedDB, IndexedDBError};
 #[doc(hidden)]
 pub use provider_server::{OperationResult, ProviderServer};
 pub use router::{Operation, Router};

@@ -28,14 +28,16 @@ const (
 )
 
 type ExecConfig struct {
-	Command      string
-	Args         []string
-	Env          map[string]string
-	StaticSpec   StaticProviderSpec
-	Config       map[string]any
-	AllowedHosts []string
-	HostBinary   string
-	Cleanup      func()
+	Command        string
+	Args           []string
+	Env            map[string]string
+	StaticSpec     StaticProviderSpec
+	Config         map[string]any
+	AllowedHosts   []string
+	HostBinary     string
+	Cleanup        func()
+	RegisterHost   func(*grpc.Server)
+	HostSocketEnv  string
 }
 
 type providerProcess struct {
@@ -54,7 +56,7 @@ type providerProcess struct {
 }
 
 func NewExecutableProvider(ctx context.Context, cfg ExecConfig) (core.Provider, error) {
-	proc, err := startProviderProcess(ctx, cfg, nil, "")
+	proc, err := startProviderProcess(ctx, cfg, cfg.RegisterHost, cfg.HostSocketEnv)
 	if err != nil {
 		return nil, err
 	}

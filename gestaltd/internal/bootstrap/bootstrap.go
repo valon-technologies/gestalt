@@ -9,14 +9,14 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/crypto"
+	"github.com/valon-technologies/gestalt/server/core/datastore"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/datastore"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"gopkg.in/yaml.v3"
-	"xorm.io/xorm"
 )
 
 // OAuthHandler covers every OAuth method needed by the server (start, exchange,
@@ -123,22 +123,19 @@ type Deps struct {
 	SecretManager core.SecretManager
 	Datastore     core.Datastore
 	Datastores    map[string]config.DatastoreDef
-	SQLDB         any // *sql.DB when available, nil otherwise
-	SQLDialect    any // Placeholder(int)string when available, nil otherwise
 	Egress        EgressDeps
 }
 
-type sqlDBAccessor interface{ RawDB() any }
-type sqlDialectAccessor interface{ RawDialect() any }
-
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthProvider, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
+type DatastoreFactory func(node yaml.Node) (datastore.Datastore, error)
 type TelemetryFactory func(node yaml.Node) (core.TelemetryProvider, error)
 type AuditFactory func(ctx context.Context, cfg config.AuditConfig, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error)
 
 type FactoryRegistry struct {
 	Auth      AuthFactory
 	Secrets   map[string]SecretManagerFactory
+	Datastore DatastoreFactory
 	Telemetry map[string]TelemetryFactory
 	Audit     AuditFactory
 	Builtins  []core.Provider
@@ -288,9 +285,6 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		return nil, err
 	}
 
-	if cfg.Datastore.Provider != nil {
-		return nil, fmt.Errorf("bootstrap: datastore.provider is no longer supported; use the datastores section with datastore: <name>")
-	}
 	if cfg.Datastore.Resource == "" {
 		return nil, fmt.Errorf("bootstrap: datastore resource name is required")
 	}
@@ -302,15 +296,11 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	if encErr != nil {
 		return nil, fmt.Errorf("bootstrap: create encryptor: %w", encErr)
 	}
-	driver := def.Driver
-	if driver == "sqlite3" {
-		driver = "sqlite"
+	store, storeErr := buildDatastore(def, factories)
+	if storeErr != nil {
+		return nil, fmt.Errorf("bootstrap: system datastore from resource %q: %w", cfg.Datastore.Resource, storeErr)
 	}
-	engine, engErr := xorm.NewEngine(driver, def.DSN)
-	if engErr != nil {
-		return nil, fmt.Errorf("bootstrap: system datastore from resource %q: create xorm engine: %w", cfg.Datastore.Resource, engErr)
-	}
-	ds, dsErr := datastore.NewXORMAdapter(engine, enc)
+	ds, dsErr := coredata.New(store, enc)
 	if dsErr != nil {
 		return nil, fmt.Errorf("bootstrap: system datastore from resource %q: %w", cfg.Datastore.Resource, dsErr)
 	}
@@ -324,12 +314,6 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	deps.Egress = newEgressDeps(cfg, sm)
 	var coreDS core.Datastore = ds
 	deps.Datastore = coreDS
-	if acc, ok := coreDS.(sqlDBAccessor); ok {
-		deps.SQLDB = acc.RawDB()
-	}
-	if acc, ok := coreDS.(sqlDialectAccessor); ok {
-		deps.SQLDialect = acc.RawDialect()
-	}
 
 	closeSM = false
 	shutdownTelemetry = false
@@ -536,4 +520,26 @@ func buildAuth(cfg *config.Config, factories *FactoryRegistry, deps Deps) (core.
 		return nil, fmt.Errorf("bootstrap: auth plugin: %w", err)
 	}
 	return auth, nil
+}
+
+func buildDatastore(def config.DatastoreDef, factories *FactoryRegistry) (datastore.Datastore, error) {
+	if def.Provider == nil {
+		return nil, fmt.Errorf("datastore provider is required")
+	}
+	if factories.Datastore == nil {
+		return nil, fmt.Errorf("datastore factory is not registered")
+	}
+	node := def.Config
+	if !config.IsComponentRuntimeConfigNode(node) {
+		var err error
+		node, err = config.BuildComponentRuntimeConfigNode("datastore", "datastore", def.Provider, def.Config)
+		if err != nil {
+			return nil, fmt.Errorf("datastore plugin: %w", err)
+		}
+	}
+	ds, err := factories.Datastore(node)
+	if err != nil {
+		return nil, fmt.Errorf("datastore plugin: %w", err)
+	}
+	return ds, nil
 }

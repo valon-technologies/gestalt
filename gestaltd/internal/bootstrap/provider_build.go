@@ -2,7 +2,6 @@ package bootstrap
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -12,10 +11,11 @@ import (
 	"strings"
 	"sync"
 
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
-	"github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/internal/composite"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/graphql"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
@@ -26,6 +26,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/operationexposure"
 	"github.com/valon-technologies/gestalt/server/internal/pluginhost"
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
+	"google.golang.org/grpc"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
@@ -35,24 +36,7 @@ func buildRegistrationStore(deps Deps) mcpoauth.RegistrationStore {
 	if store, ok := deps.Datastore.(mcpoauth.RegistrationStore); ok {
 		return store
 	}
-	db, ok := deps.SQLDB.(*sql.DB)
-	if !ok || db == nil {
-		return nil
-	}
-	dialect, ok := deps.SQLDialect.(mcpoauth.SQLDialect)
-	if !ok || dialect == nil {
-		return nil
-	}
-	enc, err := crypto.NewAESGCM(deps.EncryptionKey)
-	if err != nil {
-		slog.Warn("cannot create encryptor for registration store", "component", "mcpoauth", "error", err)
-		return nil
-	}
-	store := mcpoauth.NewSQLStore(db, enc, dialect)
-	if err := store.Migrate(context.Background()); err != nil {
-		slog.Error("registration store migration failed", "component", "mcpoauth", "error", err)
-	}
-	return store
+	return nil
 }
 
 func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.PluginMap[core.Provider], <-chan struct{}, func() map[string]map[string]OAuthHandler, error) {
@@ -470,14 +454,6 @@ func buildPluginProvider(ctx context.Context, intg config.PluginDef, pluginConfi
 	command := intg.Plugin.Command
 	args := intg.Plugin.Args
 	env := clonePluginEnv(intg.Plugin.Env)
-	for alias, resourceName := range intg.Datastores {
-		if def, ok := deps.Datastores[resourceName]; ok {
-			if env == nil {
-				env = make(map[string]string)
-			}
-			env["GESTALT_DATASTORE_"+strings.ToUpper(alias)] = def.DSN
-		}
-	}
 	var cleanup func()
 	if command == "" {
 		if intg.Plugin.ResolvedManifestPath == "" {
@@ -511,7 +487,7 @@ func buildPluginProvider(ctx context.Context, intg config.PluginDef, pluginConfi
 		}()
 	}
 
-	prov, err := pluginhost.NewExecutableProvider(ctx, pluginhost.ExecConfig{
+	execCfg := pluginhost.ExecConfig{
 		Command:      command,
 		Args:         args,
 		Env:          env,
@@ -520,7 +496,15 @@ func buildPluginProvider(ctx context.Context, intg config.PluginDef, pluginConfi
 		AllowedHosts: intg.Plugin.AllowedHosts,
 		HostBinary:   intg.Plugin.HostBinary,
 		Cleanup:      cleanup,
-	})
+	}
+	if len(intg.Datastores) > 0 && deps.Datastore != nil {
+		ds := deps.Datastore.(*coredata.CompatDatastore).Store()
+		execCfg.RegisterHost = func(srv *grpc.Server) {
+			proto.RegisterIndexedDBServer(srv, pluginhost.NewIndexedDBServer(ds, intg.Plugin.Command))
+		}
+		execCfg.HostSocketEnv = "GESTALT_INDEXEDDB_SOCKET"
+	}
+	prov, err := pluginhost.NewExecutableProvider(ctx, execCfg)
 	if err != nil {
 		return nil, err
 	}

@@ -44,8 +44,9 @@ auth:
     client_secret: secret-1
 datastores:
   sqlite:
-    driver: sqlite
-    dsn: /tmp/gestalt.db
+    provider:
+      source:
+        path: ./providers/datastore/sqlite
 datastore: sqlite
 server:
   encryptionKey: server-key
@@ -75,7 +76,7 @@ plugins:
 		t.Fatalf("Server.EncryptionKey = %q", cfg.Server.EncryptionKey)
 	}
 	if got := cfg.Plugins["service-a"].DisplayName; got != "Service A" {
-		t.Fatalf("Plugins[service-a].DisplayName = %q", got)
+		t.Fatalf("Integrations[service-a].DisplayName = %q", got)
 	}
 }
 
@@ -99,8 +100,9 @@ auth:
     client_id: ${TEST_CLIENT_ID}
 datastores:
   sqlite:
-    driver: sqlite
-    dsn: /tmp/gestalt.db
+    provider:
+      source:
+        path: ./providers/datastore/sqlite
 datastore: sqlite
 server:
   encryptionKey: ${TEST_ENCRYPTION}
@@ -150,8 +152,9 @@ func TestLoadConfigEnvFileFallback(t *testing.T) {
 	path := mustWriteConfigFile(t, `
 datastores:
   sqlite:
-    driver: sqlite
-    dsn: /tmp/gestalt.db
+    provider:
+      source:
+        path: ./providers/datastore/sqlite
 datastore: sqlite
 server:
   encryptionKey: ${TEST_ENCRYPTION}
@@ -182,8 +185,9 @@ func TestLoadConfigMissingEnvVariableFails(t *testing.T) {
 	path := mustWriteConfigFile(t, fmt.Sprintf(`
 datastores:
   sqlite:
-    driver: sqlite
-    dsn: /tmp/gestalt.db
+    provider:
+      source:
+        path: ./providers/datastore/sqlite
 datastore: sqlite
 server:
   encryptionKey: ${%s}
@@ -222,8 +226,9 @@ func TestLoadConfigEmptyDefaultEnvSyntax(t *testing.T) {
 	path := mustWriteConfigFile(t, `
 datastores:
   sqlite:
-    driver: sqlite
-    dsn: /tmp/gestalt.db
+    provider:
+      source:
+        path: ./providers/datastore/sqlite
 datastore: sqlite
 server:
   encryptionKey: ${TEST_ENCRYPTION:-}
@@ -284,8 +289,9 @@ func TestValidateRuntime(t *testing.T) {
 			yaml: `
 datastores:
   sqlite:
-    driver: sqlite
-    dsn: /tmp/gestalt.db
+    provider:
+      source:
+        path: ./providers/datastore/sqlite
 datastore: sqlite
 server:
   encryptionKey: server-key
@@ -307,8 +313,9 @@ server:
 			yaml: `
 datastores:
   sqlite:
-    driver: sqlite
-    dsn: /tmp/gestalt.db
+    provider:
+      source:
+        path: ./providers/datastore/sqlite
 datastore: sqlite
 `,
 			wantErr: true,
@@ -320,8 +327,9 @@ auth:
   provider: none
 datastores:
   sqlite:
-    driver: sqlite
-    dsn: /tmp/gestalt.db
+    provider:
+      source:
+        path: ./providers/datastore/sqlite
 datastore: sqlite
 server:
   encryptionKey: server-key
@@ -373,8 +381,9 @@ auth:
       version: 1.0.0
 datastores:
   sqlite:
-    driver: sqlite
-    dsn: /tmp/gestalt.db
+    provider:
+      source:
+        path: ./providers/datastore/sqlite
 datastore: sqlite
 server:
   encryptionKey: server-key
@@ -408,8 +417,9 @@ auth:
     issuer_url: https://issuer.example.test
 datastores:
   sqlite:
-    driver: sqlite
-    dsn: /tmp/gestalt.db
+    provider:
+      source:
+        path: ./providers/datastore/sqlite
 datastore: sqlite
 server:
   encryptionKey: server-key
@@ -423,8 +433,9 @@ auth:
   provider: none
 datastores:
   sqlite:
-    driver: sqlite
-    dsn: /tmp/gestalt.db
+    provider:
+      source:
+        path: ./providers/datastore/sqlite
 datastore: sqlite
 server:
   encryptionKey: server-key
@@ -483,8 +494,9 @@ func TestLoadConfigUIProviderModes(t *testing.T) {
 		path := mustWriteConfigFile(t, `
 datastores:
   sqlite:
-    driver: sqlite
-    dsn: /tmp/gestalt.db
+    provider:
+      source:
+        path: ./providers/datastore/sqlite
 datastore: sqlite
 server:
   encryptionKey: server-key
@@ -516,8 +528,9 @@ ui:
   provider: none
 datastores:
   sqlite:
-    driver: sqlite
-    dsn: /tmp/gestalt.db
+    provider:
+      source:
+        path: ./providers/datastore/sqlite
 datastore: sqlite
 server:
   encryptionKey: server-key
@@ -545,8 +558,9 @@ ui:
     brand_name: Acme
 datastores:
   sqlite:
-    driver: sqlite
-    dsn: /tmp/gestalt.db
+    provider:
+      source:
+        path: ./providers/datastore/sqlite
 datastore: sqlite
 server:
   encryptionKey: server-key
@@ -571,8 +585,9 @@ ui:
       path: ./web/default/provider.yaml
 datastores:
   sqlite:
-    driver: sqlite
-    dsn: /tmp/gestalt.db
+    provider:
+      source:
+        path: ./providers/datastore/sqlite
 datastore: sqlite
 server:
   encryptionKey: server-key
@@ -585,7 +600,7 @@ server:
 		if cfg.UI.Provider == nil || cfg.UI.Provider.Source == nil {
 			t.Fatalf("UI.Provider = %#v", cfg.UI.Provider)
 		}
-		wantPath := filepath.Join(filepath.Dir(path), "web", "default", "provider.yaml")
+		wantPath := filepath.Join(filepath.Dir(path), "web", "default", "manifest.yaml")
 		if got := cfg.UI.Provider.Source.Path; got != wantPath {
 			t.Fatalf("UI.Provider.Source.Path = %q, want %q", got, wantPath)
 		}
@@ -1049,8 +1064,9 @@ auth:
       path: ../auth-plugin/provider.yaml
 datastores:
   sqlite:
-    driver: sqlite
-    dsn: /tmp/gestalt.db
+    provider:
+      source:
+        path: ./providers/datastore/sqlite
 datastore: sqlite
 plugins:
   service-a:
@@ -1070,11 +1086,11 @@ plugins:
 	if got := cfg.Plugins["service-a"].IconFile; got != iconPath {
 		t.Fatalf("IconFile = %q, want %q", got, iconPath)
 	}
-	if got := cfg.Auth.Provider.SourcePath(); got != filepath.Join(dir, "auth-plugin", "provider.yaml") {
-		t.Fatalf("auth plugin source path = %q, want %q", got, filepath.Join(dir, "auth-plugin", "provider.yaml"))
+	if got := cfg.Auth.Provider.SourcePath(); got != filepath.Join(dir, "auth-plugin", "manifest.yaml") {
+		t.Fatalf("auth plugin source path = %q, want %q", got, filepath.Join(dir, "auth-plugin", "manifest.yaml"))
 	}
-	if got := cfg.Plugins["service-a"].Plugin.SourcePath(); got != filepath.Join(dir, "bin", "manifest.yaml") {
-		t.Fatalf("integration plugin source path = %q, want %q", got, filepath.Join(dir, "bin", "manifest.yaml"))
+	if got := cfg.Plugins["service-a"].Plugin.SourcePath(); got != filepath.Join(dir, "bin", "provider.yaml") {
+		t.Fatalf("integration plugin source path = %q, want %q", got, filepath.Join(dir, "bin", "provider.yaml"))
 	}
 }
 
@@ -1093,8 +1109,9 @@ auth:
     allowed_domain: example.test
 datastores:
   sqlite:
-    driver: sqlite
-    dsn: /tmp/gestalt.db
+    provider:
+      source:
+        path: ./providers/datastore/sqlite
 datastore: sqlite
 server:
   encryptionKey: server-key

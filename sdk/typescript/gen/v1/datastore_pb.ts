@@ -4,430 +4,215 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
-import type { EmptySchema, Timestamp } from "@bufbuild/protobuf/wkt";
-import { file_google_protobuf_empty, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
-import type { Message } from "@bufbuild/protobuf";
+import type { EmptySchema, Value } from "@bufbuild/protobuf/wkt";
+import { file_google_protobuf_empty, file_google_protobuf_struct } from "@bufbuild/protobuf/wkt";
+import type { JsonObject, Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file v1/datastore.proto.
  */
 export const file_v1_datastore: GenFile = /*@__PURE__*/
-  fileDesc("ChJ2MS9kYXRhc3RvcmUucHJvdG8SEWdlc3RhbHQucGx1Z2luLnYxIp0BCgpTdG9yZWRVc2VyEgoKAmlkGAEgASgJEg0KBWVtYWlsGAIgASgJEhQKDGRpc3BsYXlfbmFtZRgDIAEoCRIuCgpjcmVhdGVkX2F0GAQgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCK0BAoWU3RvcmVkSW50ZWdyYXRpb25Ub2tlbhIKCgJpZBgBIAEoCRIPCgd1c2VyX2lkGAIgASgJEhMKC2ludGVncmF0aW9uGAMgASgJEhIKCmNvbm5lY3Rpb24YBCABKAkSEAoIaW5zdGFuY2UYBSABKAkSGwoTYWNjZXNzX3Rva2VuX3NlYWxlZBgGIAEoDBIcChRyZWZyZXNoX3Rva2VuX3NlYWxlZBgHIAEoDBIOCgZzY29wZXMYCCABKAkSLgoKZXhwaXJlc19hdBgJIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNQoRbGFzdF9yZWZyZXNoZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhsKE3JlZnJlc2hfZXJyb3JfY291bnQYCyABKAUSWgoRY29ubmVjdGlvbl9wYXJhbXMYDCADKAsyPy5nZXN0YWx0LnBsdWdpbi52MS5TdG9yZWRJbnRlZ3JhdGlvblRva2VuLkNvbm5lY3Rpb25QYXJhbXNFbnRyeRIuCgpjcmVhdGVkX2F0GA0gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIuCgp1cGRhdGVkX2F0GA4gASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBo3ChVDb25uZWN0aW9uUGFyYW1zRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASLxAQoOU3RvcmVkQVBJVG9rZW4SCgoCaWQYASABKAkSDwoHdXNlcl9pZBgCIAEoCRIMCgRuYW1lGAMgASgJEhQKDGhhc2hlZF90b2tlbhgEIAEoCRIOCgZzY29wZXMYBSABKAkSLgoKZXhwaXJlc19hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKY3JlYXRlZF9hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLgoKdXBkYXRlZF9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiqAIKEU9BdXRoUmVnaXN0cmF0aW9uEhcKD2F1dGhfc2VydmVyX3VybBgBIAEoCRIUCgxyZWRpcmVjdF91cmkYAiABKAkSEQoJY2xpZW50X2lkGAMgASgJEhwKFGNsaWVudF9zZWNyZXRfc2VhbGVkGAQgASgMEi4KCmV4cGlyZXNfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEh4KFmF1dGhvcml6YXRpb25fZW5kcG9pbnQYBiABKAkSFgoOdG9rZW5fZW5kcG9pbnQYByABKAkSGAoQc2NvcGVzX3N1cHBvcnRlZBgIIAEoCRIxCg1kaXNjb3ZlcmVkX2F0GAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCIcCg5HZXRVc2VyUmVxdWVzdBIKCgJpZBgBIAEoCSIoChdGaW5kT3JDcmVhdGVVc2VyUmVxdWVzdBINCgVlbWFpbBgBIAEoCSJuCiBHZXRTdG9yZWRJbnRlZ3JhdGlvblRva2VuUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEhMKC2ludGVncmF0aW9uGAIgASgJEhIKCmNvbm5lY3Rpb24YAyABKAkSEAoIaW5zdGFuY2UYBCABKAkiXgoiTGlzdFN0b3JlZEludGVncmF0aW9uVG9rZW5zUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEhMKC2ludGVncmF0aW9uGAIgASgJEhIKCmNvbm5lY3Rpb24YAyABKAkiYAojTGlzdFN0b3JlZEludGVncmF0aW9uVG9rZW5zUmVzcG9uc2USOQoGdG9rZW5zGAEgAygLMikuZ2VzdGFsdC5wbHVnaW4udjEuU3RvcmVkSW50ZWdyYXRpb25Ub2tlbiIxCiNEZWxldGVTdG9yZWRJbnRlZ3JhdGlvblRva2VuUmVxdWVzdBIKCgJpZBgBIAEoCSIwChhHZXRBUElUb2tlbkJ5SGFzaFJlcXVlc3QSFAoMaGFzaGVkX3Rva2VuGAEgASgJIicKFExpc3RBUElUb2tlbnNSZXF1ZXN0Eg8KB3VzZXJfaWQYASABKAkiSgoVTGlzdEFQSVRva2Vuc1Jlc3BvbnNlEjEKBnRva2VucxgBIAMoCzIhLmdlc3RhbHQucGx1Z2luLnYxLlN0b3JlZEFQSVRva2VuIjQKFVJldm9rZUFQSVRva2VuUmVxdWVzdBIPCgd1c2VyX2lkGAEgASgJEgoKAmlkGAIgASgJIiwKGVJldm9rZUFsbEFQSVRva2Vuc1JlcXVlc3QSDwoHdXNlcl9pZBgBIAEoCSItChpSZXZva2VBbGxBUElUb2tlbnNSZXNwb25zZRIPCgdyZXZva2VkGAEgASgDIkwKG0dldE9BdXRoUmVnaXN0cmF0aW9uUmVxdWVzdBIXCg9hdXRoX3NlcnZlcl91cmwYASABKAkSFAoMcmVkaXJlY3RfdXJpGAIgASgJIk8KHkRlbGV0ZU9BdXRoUmVnaXN0cmF0aW9uUmVxdWVzdBIXCg9hdXRoX3NlcnZlcl91cmwYASABKAkSFAoMcmVkaXJlY3RfdXJpGAIgASgJMtoLChFEYXRhc3RvcmVQcm92aWRlchI5CgdNaWdyYXRlEhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5EksKB0dldFVzZXISIS5nZXN0YWx0LnBsdWdpbi52MS5HZXRVc2VyUmVxdWVzdBodLmdlc3RhbHQucGx1Z2luLnYxLlN0b3JlZFVzZXISXQoQRmluZE9yQ3JlYXRlVXNlchIqLmdlc3RhbHQucGx1Z2luLnYxLkZpbmRPckNyZWF0ZVVzZXJSZXF1ZXN0Gh0uZ2VzdGFsdC5wbHVnaW4udjEuU3RvcmVkVXNlchJeChlQdXRTdG9yZWRJbnRlZ3JhdGlvblRva2VuEikuZ2VzdGFsdC5wbHVnaW4udjEuU3RvcmVkSW50ZWdyYXRpb25Ub2tlbhoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRJ7ChlHZXRTdG9yZWRJbnRlZ3JhdGlvblRva2VuEjMuZ2VzdGFsdC5wbHVnaW4udjEuR2V0U3RvcmVkSW50ZWdyYXRpb25Ub2tlblJlcXVlc3QaKS5nZXN0YWx0LnBsdWdpbi52MS5TdG9yZWRJbnRlZ3JhdGlvblRva2VuEowBChtMaXN0U3RvcmVkSW50ZWdyYXRpb25Ub2tlbnMSNS5nZXN0YWx0LnBsdWdpbi52MS5MaXN0U3RvcmVkSW50ZWdyYXRpb25Ub2tlbnNSZXF1ZXN0GjYuZ2VzdGFsdC5wbHVnaW4udjEuTGlzdFN0b3JlZEludGVncmF0aW9uVG9rZW5zUmVzcG9uc2USbgocRGVsZXRlU3RvcmVkSW50ZWdyYXRpb25Ub2tlbhI2Lmdlc3RhbHQucGx1Z2luLnYxLkRlbGV0ZVN0b3JlZEludGVncmF0aW9uVG9rZW5SZXF1ZXN0GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5EkgKC1B1dEFQSVRva2VuEiEuZ2VzdGFsdC5wbHVnaW4udjEuU3RvcmVkQVBJVG9rZW4aFi5nb29nbGUucHJvdG9idWYuRW1wdHkSYwoRR2V0QVBJVG9rZW5CeUhhc2gSKy5nZXN0YWx0LnBsdWdpbi52MS5HZXRBUElUb2tlbkJ5SGFzaFJlcXVlc3QaIS5nZXN0YWx0LnBsdWdpbi52MS5TdG9yZWRBUElUb2tlbhJiCg1MaXN0QVBJVG9rZW5zEicuZ2VzdGFsdC5wbHVnaW4udjEuTGlzdEFQSVRva2Vuc1JlcXVlc3QaKC5nZXN0YWx0LnBsdWdpbi52MS5MaXN0QVBJVG9rZW5zUmVzcG9uc2USUgoOUmV2b2tlQVBJVG9rZW4SKC5nZXN0YWx0LnBsdWdpbi52MS5SZXZva2VBUElUb2tlblJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkScQoSUmV2b2tlQWxsQVBJVG9rZW5zEiwuZ2VzdGFsdC5wbHVnaW4udjEuUmV2b2tlQWxsQVBJVG9rZW5zUmVxdWVzdBotLmdlc3RhbHQucGx1Z2luLnYxLlJldm9rZUFsbEFQSVRva2Vuc1Jlc3BvbnNlEmwKFEdldE9BdXRoUmVnaXN0cmF0aW9uEi4uZ2VzdGFsdC5wbHVnaW4udjEuR2V0T0F1dGhSZWdpc3RyYXRpb25SZXF1ZXN0GiQuZ2VzdGFsdC5wbHVnaW4udjEuT0F1dGhSZWdpc3RyYXRpb24SVAoUUHV0T0F1dGhSZWdpc3RyYXRpb24SJC5nZXN0YWx0LnBsdWdpbi52MS5PQXV0aFJlZ2lzdHJhdGlvbhoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRJkChdEZWxldGVPQXV0aFJlZ2lzdHJhdGlvbhIxLmdlc3RhbHQucGx1Z2luLnYxLkRlbGV0ZU9BdXRoUmVnaXN0cmF0aW9uUmVxdWVzdBoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eUI7WjlnaXRodWIuY29tL3ZhbG9uLXRlY2hub2xvZ2llcy9nZXN0YWx0L3Nkay9nby9nZW4vdjE7cHJvdG9iBnByb3RvMw", [file_google_protobuf_empty, file_google_protobuf_timestamp]);
+  fileDesc("ChJ2MS9kYXRhc3RvcmUucHJvdG8SEWdlc3RhbHQucGx1Z2luLnYxInMKEU9iamVjdFN0b3JlU2NoZW1hEi8KB2luZGV4ZXMYASADKAsyHi5nZXN0YWx0LnBsdWdpbi52MS5JbmRleFNjaGVtYRItCgdjb2x1bW5zGAIgAygLMhwuZ2VzdGFsdC5wbHVnaW4udjEuQ29sdW1uRGVmIj0KC0luZGV4U2NoZW1hEgwKBG5hbWUYASABKAkSEAoIa2V5X3BhdGgYAiADKAkSDgoGdW5pcXVlGAMgASgIIl4KCUNvbHVtbkRlZhIMCgRuYW1lGAEgASgJEgwKBHR5cGUYAiABKAUSEwoLcHJpbWFyeV9rZXkYAyABKAgSEAoIbm90X251bGwYBCABKAgSDgoGdW5pcXVlGAUgASgIIoABCghLZXlSYW5nZRIlCgVsb3dlchgBIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZRIlCgV1cHBlchgCIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZRISCgpsb3dlcl9vcGVuGAMgASgIEhIKCnVwcGVyX29wZW4YBCABKAgiRwoNUmVjb3JkUmVxdWVzdBINCgVzdG9yZRgBIAEoCRInCgZyZWNvcmQYAiABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0IjkKDlJlY29yZFJlc3BvbnNlEicKBnJlY29yZBgBIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QiOwoPUmVjb3Jkc1Jlc3BvbnNlEigKB3JlY29yZHMYASADKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0IhwKDEtleXNSZXNwb25zZRIMCgRrZXlzGAEgAygJIi8KEk9iamVjdFN0b3JlUmVxdWVzdBINCgVzdG9yZRgBIAEoCRIKCgJpZBgCIAEoCSInChZPYmplY3RTdG9yZU5hbWVSZXF1ZXN0Eg0KBXN0b3JlGAEgASgJImMKF09iamVjdFN0b3JlUmFuZ2VSZXF1ZXN0Eg0KBXN0b3JlGAEgASgJEi8KBXJhbmdlGAIgASgLMhsuZ2VzdGFsdC5wbHVnaW4udjEuS2V5UmFuZ2VIAIgBAUIICgZfcmFuZ2UiXgoYQ3JlYXRlT2JqZWN0U3RvcmVSZXF1ZXN0EgwKBG5hbWUYASABKAkSNAoGc2NoZW1hGAIgASgLMiQuZ2VzdGFsdC5wbHVnaW4udjEuT2JqZWN0U3RvcmVTY2hlbWEiKAoYRGVsZXRlT2JqZWN0U3RvcmVSZXF1ZXN0EgwKBG5hbWUYASABKAkilAEKEUluZGV4UXVlcnlSZXF1ZXN0Eg0KBXN0b3JlGAEgASgJEg0KBWluZGV4GAIgASgJEiYKBnZhbHVlcxgDIAMoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZRIvCgVyYW5nZRgEIAEoCzIbLmdlc3RhbHQucGx1Z2luLnYxLktleVJhbmdlSACIAQFCCAoGX3JhbmdlIh4KDUNvdW50UmVzcG9uc2USDQoFY291bnQYASABKAMiIQoORGVsZXRlUmVzcG9uc2USDwoHZGVsZXRlZBgBIAEoAyIaCgtLZXlSZXNwb25zZRILCgNrZXkYASABKAky7QsKCUluZGV4ZWREQhJYChFDcmVhdGVPYmplY3RTdG9yZRIrLmdlc3RhbHQucGx1Z2luLnYxLkNyZWF0ZU9iamVjdFN0b3JlUmVxdWVzdBoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRJYChFEZWxldGVPYmplY3RTdG9yZRIrLmdlc3RhbHQucGx1Z2luLnYxLkRlbGV0ZU9iamVjdFN0b3JlUmVxdWVzdBoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRJPCgNHZXQSJS5nZXN0YWx0LnBsdWdpbi52MS5PYmplY3RTdG9yZVJlcXVlc3QaIS5nZXN0YWx0LnBsdWdpbi52MS5SZWNvcmRSZXNwb25zZRJPCgZHZXRLZXkSJS5nZXN0YWx0LnBsdWdpbi52MS5PYmplY3RTdG9yZVJlcXVlc3QaHi5nZXN0YWx0LnBsdWdpbi52MS5LZXlSZXNwb25zZRI/CgNBZGQSIC5nZXN0YWx0LnBsdWdpbi52MS5SZWNvcmRSZXF1ZXN0GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5Ej8KA1B1dBIgLmdlc3RhbHQucGx1Z2luLnYxLlJlY29yZFJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkSRwoGRGVsZXRlEiUuZ2VzdGFsdC5wbHVnaW4udjEuT2JqZWN0U3RvcmVSZXF1ZXN0GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5EkoKBUNsZWFyEikuZ2VzdGFsdC5wbHVnaW4udjEuT2JqZWN0U3RvcmVOYW1lUmVxdWVzdBoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRJYCgZHZXRBbGwSKi5nZXN0YWx0LnBsdWdpbi52MS5PYmplY3RTdG9yZVJhbmdlUmVxdWVzdBoiLmdlc3RhbHQucGx1Z2luLnYxLlJlY29yZHNSZXNwb25zZRJZCgpHZXRBbGxLZXlzEiouZ2VzdGFsdC5wbHVnaW4udjEuT2JqZWN0U3RvcmVSYW5nZVJlcXVlc3QaHy5nZXN0YWx0LnBsdWdpbi52MS5LZXlzUmVzcG9uc2USVQoFQ291bnQSKi5nZXN0YWx0LnBsdWdpbi52MS5PYmplY3RTdG9yZVJhbmdlUmVxdWVzdBogLmdlc3RhbHQucGx1Z2luLnYxLkNvdW50UmVzcG9uc2USXAoLRGVsZXRlUmFuZ2USKi5nZXN0YWx0LnBsdWdpbi52MS5PYmplY3RTdG9yZVJhbmdlUmVxdWVzdBohLmdlc3RhbHQucGx1Z2luLnYxLkRlbGV0ZVJlc3BvbnNlElMKCEluZGV4R2V0EiQuZ2VzdGFsdC5wbHVnaW4udjEuSW5kZXhRdWVyeVJlcXVlc3QaIS5nZXN0YWx0LnBsdWdpbi52MS5SZWNvcmRSZXNwb25zZRJTCgtJbmRleEdldEtleRIkLmdlc3RhbHQucGx1Z2luLnYxLkluZGV4UXVlcnlSZXF1ZXN0Gh4uZ2VzdGFsdC5wbHVnaW4udjEuS2V5UmVzcG9uc2USVwoLSW5kZXhHZXRBbGwSJC5nZXN0YWx0LnBsdWdpbi52MS5JbmRleFF1ZXJ5UmVxdWVzdBoiLmdlc3RhbHQucGx1Z2luLnYxLlJlY29yZHNSZXNwb25zZRJYCg9JbmRleEdldEFsbEtleXMSJC5nZXN0YWx0LnBsdWdpbi52MS5JbmRleFF1ZXJ5UmVxdWVzdBofLmdlc3RhbHQucGx1Z2luLnYxLktleXNSZXNwb25zZRJUCgpJbmRleENvdW50EiQuZ2VzdGFsdC5wbHVnaW4udjEuSW5kZXhRdWVyeVJlcXVlc3QaIC5nZXN0YWx0LnBsdWdpbi52MS5Db3VudFJlc3BvbnNlElYKC0luZGV4RGVsZXRlEiQuZ2VzdGFsdC5wbHVnaW4udjEuSW5kZXhRdWVyeVJlcXVlc3QaIS5nZXN0YWx0LnBsdWdpbi52MS5EZWxldGVSZXNwb25zZUI7WjlnaXRodWIuY29tL3ZhbG9uLXRlY2hub2xvZ2llcy9nZXN0YWx0L3Nkay9nby9nZW4vdjE7cHJvdG9iBnByb3RvMw", [file_google_protobuf_empty, file_google_protobuf_struct]);
 
 /**
- * @generated from message gestalt.plugin.v1.StoredUser
+ * @generated from message gestalt.plugin.v1.ObjectStoreSchema
  */
-export type StoredUser = Message<"gestalt.plugin.v1.StoredUser"> & {
+export type ObjectStoreSchema = Message<"gestalt.plugin.v1.ObjectStoreSchema"> & {
   /**
-   * @generated from field: string id = 1;
+   * @generated from field: repeated gestalt.plugin.v1.IndexSchema indexes = 1;
    */
-  id: string;
+  indexes: IndexSchema[];
 
   /**
-   * @generated from field: string email = 2;
+   * @generated from field: repeated gestalt.plugin.v1.ColumnDef columns = 2;
    */
-  email: string;
-
-  /**
-   * @generated from field: string display_name = 3;
-   */
-  displayName: string;
-
-  /**
-   * @generated from field: google.protobuf.Timestamp created_at = 4;
-   */
-  createdAt?: Timestamp;
-
-  /**
-   * @generated from field: google.protobuf.Timestamp updated_at = 5;
-   */
-  updatedAt?: Timestamp;
+  columns: ColumnDef[];
 };
 
 /**
- * Describes the message gestalt.plugin.v1.StoredUser.
- * Use `create(StoredUserSchema)` to create a new message.
+ * Describes the message gestalt.plugin.v1.ObjectStoreSchema.
+ * Use `create(ObjectStoreSchemaSchema)` to create a new message.
  */
-export const StoredUserSchema: GenMessage<StoredUser> = /*@__PURE__*/
+export const ObjectStoreSchemaSchema: GenMessage<ObjectStoreSchema> = /*@__PURE__*/
   messageDesc(file_v1_datastore, 0);
 
 /**
- * @generated from message gestalt.plugin.v1.StoredIntegrationToken
+ * @generated from message gestalt.plugin.v1.IndexSchema
  */
-export type StoredIntegrationToken = Message<"gestalt.plugin.v1.StoredIntegrationToken"> & {
+export type IndexSchema = Message<"gestalt.plugin.v1.IndexSchema"> & {
   /**
-   * @generated from field: string id = 1;
-   */
-  id: string;
-
-  /**
-   * @generated from field: string user_id = 2;
-   */
-  userId: string;
-
-  /**
-   * @generated from field: string integration = 3;
-   */
-  integration: string;
-
-  /**
-   * @generated from field: string connection = 4;
-   */
-  connection: string;
-
-  /**
-   * @generated from field: string instance = 5;
-   */
-  instance: string;
-
-  /**
-   * @generated from field: bytes access_token_sealed = 6;
-   */
-  accessTokenSealed: Uint8Array;
-
-  /**
-   * @generated from field: bytes refresh_token_sealed = 7;
-   */
-  refreshTokenSealed: Uint8Array;
-
-  /**
-   * @generated from field: string scopes = 8;
-   */
-  scopes: string;
-
-  /**
-   * @generated from field: google.protobuf.Timestamp expires_at = 9;
-   */
-  expiresAt?: Timestamp;
-
-  /**
-   * @generated from field: google.protobuf.Timestamp last_refreshed_at = 10;
-   */
-  lastRefreshedAt?: Timestamp;
-
-  /**
-   * @generated from field: int32 refresh_error_count = 11;
-   */
-  refreshErrorCount: number;
-
-  /**
-   * @generated from field: map<string, string> connection_params = 12;
-   */
-  connectionParams: { [key: string]: string };
-
-  /**
-   * @generated from field: google.protobuf.Timestamp created_at = 13;
-   */
-  createdAt?: Timestamp;
-
-  /**
-   * @generated from field: google.protobuf.Timestamp updated_at = 14;
-   */
-  updatedAt?: Timestamp;
-};
-
-/**
- * Describes the message gestalt.plugin.v1.StoredIntegrationToken.
- * Use `create(StoredIntegrationTokenSchema)` to create a new message.
- */
-export const StoredIntegrationTokenSchema: GenMessage<StoredIntegrationToken> = /*@__PURE__*/
-  messageDesc(file_v1_datastore, 1);
-
-/**
- * @generated from message gestalt.plugin.v1.StoredAPIToken
- */
-export type StoredAPIToken = Message<"gestalt.plugin.v1.StoredAPIToken"> & {
-  /**
-   * @generated from field: string id = 1;
-   */
-  id: string;
-
-  /**
-   * @generated from field: string user_id = 2;
-   */
-  userId: string;
-
-  /**
-   * @generated from field: string name = 3;
+   * @generated from field: string name = 1;
    */
   name: string;
 
   /**
-   * @generated from field: string hashed_token = 4;
+   * @generated from field: repeated string key_path = 2;
    */
-  hashedToken: string;
+  keyPath: string[];
 
   /**
-   * @generated from field: string scopes = 5;
+   * @generated from field: bool unique = 3;
    */
-  scopes: string;
-
-  /**
-   * @generated from field: google.protobuf.Timestamp expires_at = 6;
-   */
-  expiresAt?: Timestamp;
-
-  /**
-   * @generated from field: google.protobuf.Timestamp created_at = 7;
-   */
-  createdAt?: Timestamp;
-
-  /**
-   * @generated from field: google.protobuf.Timestamp updated_at = 8;
-   */
-  updatedAt?: Timestamp;
+  unique: boolean;
 };
 
 /**
- * Describes the message gestalt.plugin.v1.StoredAPIToken.
- * Use `create(StoredAPITokenSchema)` to create a new message.
+ * Describes the message gestalt.plugin.v1.IndexSchema.
+ * Use `create(IndexSchemaSchema)` to create a new message.
  */
-export const StoredAPITokenSchema: GenMessage<StoredAPIToken> = /*@__PURE__*/
+export const IndexSchemaSchema: GenMessage<IndexSchema> = /*@__PURE__*/
+  messageDesc(file_v1_datastore, 1);
+
+/**
+ * @generated from message gestalt.plugin.v1.ColumnDef
+ */
+export type ColumnDef = Message<"gestalt.plugin.v1.ColumnDef"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * @generated from field: int32 type = 2;
+   */
+  type: number;
+
+  /**
+   * @generated from field: bool primary_key = 3;
+   */
+  primaryKey: boolean;
+
+  /**
+   * @generated from field: bool not_null = 4;
+   */
+  notNull: boolean;
+
+  /**
+   * @generated from field: bool unique = 5;
+   */
+  unique: boolean;
+};
+
+/**
+ * Describes the message gestalt.plugin.v1.ColumnDef.
+ * Use `create(ColumnDefSchema)` to create a new message.
+ */
+export const ColumnDefSchema: GenMessage<ColumnDef> = /*@__PURE__*/
   messageDesc(file_v1_datastore, 2);
 
 /**
- * @generated from message gestalt.plugin.v1.OAuthRegistration
+ * @generated from message gestalt.plugin.v1.KeyRange
  */
-export type OAuthRegistration = Message<"gestalt.plugin.v1.OAuthRegistration"> & {
+export type KeyRange = Message<"gestalt.plugin.v1.KeyRange"> & {
   /**
-   * @generated from field: string auth_server_url = 1;
+   * @generated from field: google.protobuf.Value lower = 1;
    */
-  authServerUrl: string;
+  lower?: Value;
 
   /**
-   * @generated from field: string redirect_uri = 2;
+   * @generated from field: google.protobuf.Value upper = 2;
    */
-  redirectUri: string;
+  upper?: Value;
 
   /**
-   * @generated from field: string client_id = 3;
+   * @generated from field: bool lower_open = 3;
    */
-  clientId: string;
+  lowerOpen: boolean;
 
   /**
-   * @generated from field: bytes client_secret_sealed = 4;
+   * @generated from field: bool upper_open = 4;
    */
-  clientSecretSealed: Uint8Array;
-
-  /**
-   * @generated from field: google.protobuf.Timestamp expires_at = 5;
-   */
-  expiresAt?: Timestamp;
-
-  /**
-   * @generated from field: string authorization_endpoint = 6;
-   */
-  authorizationEndpoint: string;
-
-  /**
-   * @generated from field: string token_endpoint = 7;
-   */
-  tokenEndpoint: string;
-
-  /**
-   * @generated from field: string scopes_supported = 8;
-   */
-  scopesSupported: string;
-
-  /**
-   * @generated from field: google.protobuf.Timestamp discovered_at = 9;
-   */
-  discoveredAt?: Timestamp;
+  upperOpen: boolean;
 };
 
 /**
- * Describes the message gestalt.plugin.v1.OAuthRegistration.
- * Use `create(OAuthRegistrationSchema)` to create a new message.
+ * Describes the message gestalt.plugin.v1.KeyRange.
+ * Use `create(KeyRangeSchema)` to create a new message.
  */
-export const OAuthRegistrationSchema: GenMessage<OAuthRegistration> = /*@__PURE__*/
+export const KeyRangeSchema: GenMessage<KeyRange> = /*@__PURE__*/
   messageDesc(file_v1_datastore, 3);
 
 /**
- * @generated from message gestalt.plugin.v1.GetUserRequest
+ * @generated from message gestalt.plugin.v1.RecordRequest
  */
-export type GetUserRequest = Message<"gestalt.plugin.v1.GetUserRequest"> & {
+export type RecordRequest = Message<"gestalt.plugin.v1.RecordRequest"> & {
   /**
-   * @generated from field: string id = 1;
+   * @generated from field: string store = 1;
    */
-  id: string;
+  store: string;
+
+  /**
+   * @generated from field: google.protobuf.Struct record = 2;
+   */
+  record?: JsonObject;
 };
 
 /**
- * Describes the message gestalt.plugin.v1.GetUserRequest.
- * Use `create(GetUserRequestSchema)` to create a new message.
+ * Describes the message gestalt.plugin.v1.RecordRequest.
+ * Use `create(RecordRequestSchema)` to create a new message.
  */
-export const GetUserRequestSchema: GenMessage<GetUserRequest> = /*@__PURE__*/
+export const RecordRequestSchema: GenMessage<RecordRequest> = /*@__PURE__*/
   messageDesc(file_v1_datastore, 4);
 
 /**
- * @generated from message gestalt.plugin.v1.FindOrCreateUserRequest
+ * @generated from message gestalt.plugin.v1.RecordResponse
  */
-export type FindOrCreateUserRequest = Message<"gestalt.plugin.v1.FindOrCreateUserRequest"> & {
+export type RecordResponse = Message<"gestalt.plugin.v1.RecordResponse"> & {
   /**
-   * @generated from field: string email = 1;
+   * @generated from field: google.protobuf.Struct record = 1;
    */
-  email: string;
+  record?: JsonObject;
 };
 
 /**
- * Describes the message gestalt.plugin.v1.FindOrCreateUserRequest.
- * Use `create(FindOrCreateUserRequestSchema)` to create a new message.
+ * Describes the message gestalt.plugin.v1.RecordResponse.
+ * Use `create(RecordResponseSchema)` to create a new message.
  */
-export const FindOrCreateUserRequestSchema: GenMessage<FindOrCreateUserRequest> = /*@__PURE__*/
+export const RecordResponseSchema: GenMessage<RecordResponse> = /*@__PURE__*/
   messageDesc(file_v1_datastore, 5);
 
 /**
- * @generated from message gestalt.plugin.v1.GetStoredIntegrationTokenRequest
+ * @generated from message gestalt.plugin.v1.RecordsResponse
  */
-export type GetStoredIntegrationTokenRequest = Message<"gestalt.plugin.v1.GetStoredIntegrationTokenRequest"> & {
+export type RecordsResponse = Message<"gestalt.plugin.v1.RecordsResponse"> & {
   /**
-   * @generated from field: string user_id = 1;
+   * @generated from field: repeated google.protobuf.Struct records = 1;
    */
-  userId: string;
-
-  /**
-   * @generated from field: string integration = 2;
-   */
-  integration: string;
-
-  /**
-   * @generated from field: string connection = 3;
-   */
-  connection: string;
-
-  /**
-   * @generated from field: string instance = 4;
-   */
-  instance: string;
+  records: JsonObject[];
 };
 
 /**
- * Describes the message gestalt.plugin.v1.GetStoredIntegrationTokenRequest.
- * Use `create(GetStoredIntegrationTokenRequestSchema)` to create a new message.
+ * Describes the message gestalt.plugin.v1.RecordsResponse.
+ * Use `create(RecordsResponseSchema)` to create a new message.
  */
-export const GetStoredIntegrationTokenRequestSchema: GenMessage<GetStoredIntegrationTokenRequest> = /*@__PURE__*/
+export const RecordsResponseSchema: GenMessage<RecordsResponse> = /*@__PURE__*/
   messageDesc(file_v1_datastore, 6);
 
 /**
- * @generated from message gestalt.plugin.v1.ListStoredIntegrationTokensRequest
+ * @generated from message gestalt.plugin.v1.KeysResponse
  */
-export type ListStoredIntegrationTokensRequest = Message<"gestalt.plugin.v1.ListStoredIntegrationTokensRequest"> & {
+export type KeysResponse = Message<"gestalt.plugin.v1.KeysResponse"> & {
   /**
-   * @generated from field: string user_id = 1;
+   * @generated from field: repeated string keys = 1;
    */
-  userId: string;
-
-  /**
-   * @generated from field: string integration = 2;
-   */
-  integration: string;
-
-  /**
-   * @generated from field: string connection = 3;
-   */
-  connection: string;
+  keys: string[];
 };
 
 /**
- * Describes the message gestalt.plugin.v1.ListStoredIntegrationTokensRequest.
- * Use `create(ListStoredIntegrationTokensRequestSchema)` to create a new message.
+ * Describes the message gestalt.plugin.v1.KeysResponse.
+ * Use `create(KeysResponseSchema)` to create a new message.
  */
-export const ListStoredIntegrationTokensRequestSchema: GenMessage<ListStoredIntegrationTokensRequest> = /*@__PURE__*/
+export const KeysResponseSchema: GenMessage<KeysResponse> = /*@__PURE__*/
   messageDesc(file_v1_datastore, 7);
 
 /**
- * @generated from message gestalt.plugin.v1.ListStoredIntegrationTokensResponse
+ * @generated from message gestalt.plugin.v1.ObjectStoreRequest
  */
-export type ListStoredIntegrationTokensResponse = Message<"gestalt.plugin.v1.ListStoredIntegrationTokensResponse"> & {
+export type ObjectStoreRequest = Message<"gestalt.plugin.v1.ObjectStoreRequest"> & {
   /**
-   * @generated from field: repeated gestalt.plugin.v1.StoredIntegrationToken tokens = 1;
+   * @generated from field: string store = 1;
    */
-  tokens: StoredIntegrationToken[];
-};
-
-/**
- * Describes the message gestalt.plugin.v1.ListStoredIntegrationTokensResponse.
- * Use `create(ListStoredIntegrationTokensResponseSchema)` to create a new message.
- */
-export const ListStoredIntegrationTokensResponseSchema: GenMessage<ListStoredIntegrationTokensResponse> = /*@__PURE__*/
-  messageDesc(file_v1_datastore, 8);
-
-/**
- * @generated from message gestalt.plugin.v1.DeleteStoredIntegrationTokenRequest
- */
-export type DeleteStoredIntegrationTokenRequest = Message<"gestalt.plugin.v1.DeleteStoredIntegrationTokenRequest"> & {
-  /**
-   * @generated from field: string id = 1;
-   */
-  id: string;
-};
-
-/**
- * Describes the message gestalt.plugin.v1.DeleteStoredIntegrationTokenRequest.
- * Use `create(DeleteStoredIntegrationTokenRequestSchema)` to create a new message.
- */
-export const DeleteStoredIntegrationTokenRequestSchema: GenMessage<DeleteStoredIntegrationTokenRequest> = /*@__PURE__*/
-  messageDesc(file_v1_datastore, 9);
-
-/**
- * @generated from message gestalt.plugin.v1.GetAPITokenByHashRequest
- */
-export type GetAPITokenByHashRequest = Message<"gestalt.plugin.v1.GetAPITokenByHashRequest"> & {
-  /**
-   * @generated from field: string hashed_token = 1;
-   */
-  hashedToken: string;
-};
-
-/**
- * Describes the message gestalt.plugin.v1.GetAPITokenByHashRequest.
- * Use `create(GetAPITokenByHashRequestSchema)` to create a new message.
- */
-export const GetAPITokenByHashRequestSchema: GenMessage<GetAPITokenByHashRequest> = /*@__PURE__*/
-  messageDesc(file_v1_datastore, 10);
-
-/**
- * @generated from message gestalt.plugin.v1.ListAPITokensRequest
- */
-export type ListAPITokensRequest = Message<"gestalt.plugin.v1.ListAPITokensRequest"> & {
-  /**
-   * @generated from field: string user_id = 1;
-   */
-  userId: string;
-};
-
-/**
- * Describes the message gestalt.plugin.v1.ListAPITokensRequest.
- * Use `create(ListAPITokensRequestSchema)` to create a new message.
- */
-export const ListAPITokensRequestSchema: GenMessage<ListAPITokensRequest> = /*@__PURE__*/
-  messageDesc(file_v1_datastore, 11);
-
-/**
- * @generated from message gestalt.plugin.v1.ListAPITokensResponse
- */
-export type ListAPITokensResponse = Message<"gestalt.plugin.v1.ListAPITokensResponse"> & {
-  /**
-   * @generated from field: repeated gestalt.plugin.v1.StoredAPIToken tokens = 1;
-   */
-  tokens: StoredAPIToken[];
-};
-
-/**
- * Describes the message gestalt.plugin.v1.ListAPITokensResponse.
- * Use `create(ListAPITokensResponseSchema)` to create a new message.
- */
-export const ListAPITokensResponseSchema: GenMessage<ListAPITokensResponse> = /*@__PURE__*/
-  messageDesc(file_v1_datastore, 12);
-
-/**
- * @generated from message gestalt.plugin.v1.RevokeAPITokenRequest
- */
-export type RevokeAPITokenRequest = Message<"gestalt.plugin.v1.RevokeAPITokenRequest"> & {
-  /**
-   * @generated from field: string user_id = 1;
-   */
-  userId: string;
+  store: string;
 
   /**
    * @generated from field: string id = 2;
@@ -436,213 +221,328 @@ export type RevokeAPITokenRequest = Message<"gestalt.plugin.v1.RevokeAPITokenReq
 };
 
 /**
- * Describes the message gestalt.plugin.v1.RevokeAPITokenRequest.
- * Use `create(RevokeAPITokenRequestSchema)` to create a new message.
+ * Describes the message gestalt.plugin.v1.ObjectStoreRequest.
+ * Use `create(ObjectStoreRequestSchema)` to create a new message.
  */
-export const RevokeAPITokenRequestSchema: GenMessage<RevokeAPITokenRequest> = /*@__PURE__*/
+export const ObjectStoreRequestSchema: GenMessage<ObjectStoreRequest> = /*@__PURE__*/
+  messageDesc(file_v1_datastore, 8);
+
+/**
+ * @generated from message gestalt.plugin.v1.ObjectStoreNameRequest
+ */
+export type ObjectStoreNameRequest = Message<"gestalt.plugin.v1.ObjectStoreNameRequest"> & {
+  /**
+   * @generated from field: string store = 1;
+   */
+  store: string;
+};
+
+/**
+ * Describes the message gestalt.plugin.v1.ObjectStoreNameRequest.
+ * Use `create(ObjectStoreNameRequestSchema)` to create a new message.
+ */
+export const ObjectStoreNameRequestSchema: GenMessage<ObjectStoreNameRequest> = /*@__PURE__*/
+  messageDesc(file_v1_datastore, 9);
+
+/**
+ * @generated from message gestalt.plugin.v1.ObjectStoreRangeRequest
+ */
+export type ObjectStoreRangeRequest = Message<"gestalt.plugin.v1.ObjectStoreRangeRequest"> & {
+  /**
+   * @generated from field: string store = 1;
+   */
+  store: string;
+
+  /**
+   * @generated from field: optional gestalt.plugin.v1.KeyRange range = 2;
+   */
+  range?: KeyRange;
+};
+
+/**
+ * Describes the message gestalt.plugin.v1.ObjectStoreRangeRequest.
+ * Use `create(ObjectStoreRangeRequestSchema)` to create a new message.
+ */
+export const ObjectStoreRangeRequestSchema: GenMessage<ObjectStoreRangeRequest> = /*@__PURE__*/
+  messageDesc(file_v1_datastore, 10);
+
+/**
+ * @generated from message gestalt.plugin.v1.CreateObjectStoreRequest
+ */
+export type CreateObjectStoreRequest = Message<"gestalt.plugin.v1.CreateObjectStoreRequest"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * @generated from field: gestalt.plugin.v1.ObjectStoreSchema schema = 2;
+   */
+  schema?: ObjectStoreSchema;
+};
+
+/**
+ * Describes the message gestalt.plugin.v1.CreateObjectStoreRequest.
+ * Use `create(CreateObjectStoreRequestSchema)` to create a new message.
+ */
+export const CreateObjectStoreRequestSchema: GenMessage<CreateObjectStoreRequest> = /*@__PURE__*/
+  messageDesc(file_v1_datastore, 11);
+
+/**
+ * @generated from message gestalt.plugin.v1.DeleteObjectStoreRequest
+ */
+export type DeleteObjectStoreRequest = Message<"gestalt.plugin.v1.DeleteObjectStoreRequest"> & {
+  /**
+   * @generated from field: string name = 1;
+   */
+  name: string;
+};
+
+/**
+ * Describes the message gestalt.plugin.v1.DeleteObjectStoreRequest.
+ * Use `create(DeleteObjectStoreRequestSchema)` to create a new message.
+ */
+export const DeleteObjectStoreRequestSchema: GenMessage<DeleteObjectStoreRequest> = /*@__PURE__*/
+  messageDesc(file_v1_datastore, 12);
+
+/**
+ * @generated from message gestalt.plugin.v1.IndexQueryRequest
+ */
+export type IndexQueryRequest = Message<"gestalt.plugin.v1.IndexQueryRequest"> & {
+  /**
+   * @generated from field: string store = 1;
+   */
+  store: string;
+
+  /**
+   * @generated from field: string index = 2;
+   */
+  index: string;
+
+  /**
+   * @generated from field: repeated google.protobuf.Value values = 3;
+   */
+  values: Value[];
+
+  /**
+   * @generated from field: optional gestalt.plugin.v1.KeyRange range = 4;
+   */
+  range?: KeyRange;
+};
+
+/**
+ * Describes the message gestalt.plugin.v1.IndexQueryRequest.
+ * Use `create(IndexQueryRequestSchema)` to create a new message.
+ */
+export const IndexQueryRequestSchema: GenMessage<IndexQueryRequest> = /*@__PURE__*/
   messageDesc(file_v1_datastore, 13);
 
 /**
- * @generated from message gestalt.plugin.v1.RevokeAllAPITokensRequest
+ * @generated from message gestalt.plugin.v1.CountResponse
  */
-export type RevokeAllAPITokensRequest = Message<"gestalt.plugin.v1.RevokeAllAPITokensRequest"> & {
+export type CountResponse = Message<"gestalt.plugin.v1.CountResponse"> & {
   /**
-   * @generated from field: string user_id = 1;
+   * @generated from field: int64 count = 1;
    */
-  userId: string;
+  count: bigint;
 };
 
 /**
- * Describes the message gestalt.plugin.v1.RevokeAllAPITokensRequest.
- * Use `create(RevokeAllAPITokensRequestSchema)` to create a new message.
+ * Describes the message gestalt.plugin.v1.CountResponse.
+ * Use `create(CountResponseSchema)` to create a new message.
  */
-export const RevokeAllAPITokensRequestSchema: GenMessage<RevokeAllAPITokensRequest> = /*@__PURE__*/
+export const CountResponseSchema: GenMessage<CountResponse> = /*@__PURE__*/
   messageDesc(file_v1_datastore, 14);
 
 /**
- * @generated from message gestalt.plugin.v1.RevokeAllAPITokensResponse
+ * @generated from message gestalt.plugin.v1.DeleteResponse
  */
-export type RevokeAllAPITokensResponse = Message<"gestalt.plugin.v1.RevokeAllAPITokensResponse"> & {
+export type DeleteResponse = Message<"gestalt.plugin.v1.DeleteResponse"> & {
   /**
-   * @generated from field: int64 revoked = 1;
+   * @generated from field: int64 deleted = 1;
    */
-  revoked: bigint;
+  deleted: bigint;
 };
 
 /**
- * Describes the message gestalt.plugin.v1.RevokeAllAPITokensResponse.
- * Use `create(RevokeAllAPITokensResponseSchema)` to create a new message.
+ * Describes the message gestalt.plugin.v1.DeleteResponse.
+ * Use `create(DeleteResponseSchema)` to create a new message.
  */
-export const RevokeAllAPITokensResponseSchema: GenMessage<RevokeAllAPITokensResponse> = /*@__PURE__*/
+export const DeleteResponseSchema: GenMessage<DeleteResponse> = /*@__PURE__*/
   messageDesc(file_v1_datastore, 15);
 
 /**
- * @generated from message gestalt.plugin.v1.GetOAuthRegistrationRequest
+ * @generated from message gestalt.plugin.v1.KeyResponse
  */
-export type GetOAuthRegistrationRequest = Message<"gestalt.plugin.v1.GetOAuthRegistrationRequest"> & {
+export type KeyResponse = Message<"gestalt.plugin.v1.KeyResponse"> & {
   /**
-   * @generated from field: string auth_server_url = 1;
+   * @generated from field: string key = 1;
    */
-  authServerUrl: string;
-
-  /**
-   * @generated from field: string redirect_uri = 2;
-   */
-  redirectUri: string;
+  key: string;
 };
 
 /**
- * Describes the message gestalt.plugin.v1.GetOAuthRegistrationRequest.
- * Use `create(GetOAuthRegistrationRequestSchema)` to create a new message.
+ * Describes the message gestalt.plugin.v1.KeyResponse.
+ * Use `create(KeyResponseSchema)` to create a new message.
  */
-export const GetOAuthRegistrationRequestSchema: GenMessage<GetOAuthRegistrationRequest> = /*@__PURE__*/
+export const KeyResponseSchema: GenMessage<KeyResponse> = /*@__PURE__*/
   messageDesc(file_v1_datastore, 16);
 
 /**
- * @generated from message gestalt.plugin.v1.DeleteOAuthRegistrationRequest
+ * @generated from service gestalt.plugin.v1.IndexedDB
  */
-export type DeleteOAuthRegistrationRequest = Message<"gestalt.plugin.v1.DeleteOAuthRegistrationRequest"> & {
+export const IndexedDB: GenService<{
   /**
-   * @generated from field: string auth_server_url = 1;
+   * Lifecycle
+   *
+   * @generated from rpc gestalt.plugin.v1.IndexedDB.CreateObjectStore
    */
-  authServerUrl: string;
-
-  /**
-   * @generated from field: string redirect_uri = 2;
-   */
-  redirectUri: string;
-};
-
-/**
- * Describes the message gestalt.plugin.v1.DeleteOAuthRegistrationRequest.
- * Use `create(DeleteOAuthRegistrationRequestSchema)` to create a new message.
- */
-export const DeleteOAuthRegistrationRequestSchema: GenMessage<DeleteOAuthRegistrationRequest> = /*@__PURE__*/
-  messageDesc(file_v1_datastore, 17);
-
-/**
- * @generated from service gestalt.plugin.v1.DatastoreProvider
- */
-export const DatastoreProvider: GenService<{
-  /**
-   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.Migrate
-   */
-  migrate: {
+  createObjectStore: {
     methodKind: "unary";
-    input: typeof EmptySchema;
+    input: typeof CreateObjectStoreRequestSchema;
     output: typeof EmptySchema;
   },
   /**
-   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.GetUser
+   * @generated from rpc gestalt.plugin.v1.IndexedDB.DeleteObjectStore
    */
-  getUser: {
+  deleteObjectStore: {
     methodKind: "unary";
-    input: typeof GetUserRequestSchema;
-    output: typeof StoredUserSchema;
-  },
-  /**
-   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.FindOrCreateUser
-   */
-  findOrCreateUser: {
-    methodKind: "unary";
-    input: typeof FindOrCreateUserRequestSchema;
-    output: typeof StoredUserSchema;
-  },
-  /**
-   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.PutStoredIntegrationToken
-   */
-  putStoredIntegrationToken: {
-    methodKind: "unary";
-    input: typeof StoredIntegrationTokenSchema;
+    input: typeof DeleteObjectStoreRequestSchema;
     output: typeof EmptySchema;
   },
   /**
-   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.GetStoredIntegrationToken
+   * Primary key CRUD
+   *
+   * @generated from rpc gestalt.plugin.v1.IndexedDB.Get
    */
-  getStoredIntegrationToken: {
+  get: {
     methodKind: "unary";
-    input: typeof GetStoredIntegrationTokenRequestSchema;
-    output: typeof StoredIntegrationTokenSchema;
+    input: typeof ObjectStoreRequestSchema;
+    output: typeof RecordResponseSchema;
   },
   /**
-   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.ListStoredIntegrationTokens
+   * @generated from rpc gestalt.plugin.v1.IndexedDB.GetKey
    */
-  listStoredIntegrationTokens: {
+  getKey: {
     methodKind: "unary";
-    input: typeof ListStoredIntegrationTokensRequestSchema;
-    output: typeof ListStoredIntegrationTokensResponseSchema;
+    input: typeof ObjectStoreRequestSchema;
+    output: typeof KeyResponseSchema;
   },
   /**
-   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.DeleteStoredIntegrationToken
+   * @generated from rpc gestalt.plugin.v1.IndexedDB.Add
    */
-  deleteStoredIntegrationToken: {
+  add: {
     methodKind: "unary";
-    input: typeof DeleteStoredIntegrationTokenRequestSchema;
+    input: typeof RecordRequestSchema;
     output: typeof EmptySchema;
   },
   /**
-   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.PutAPIToken
+   * @generated from rpc gestalt.plugin.v1.IndexedDB.Put
    */
-  putAPIToken: {
+  put: {
     methodKind: "unary";
-    input: typeof StoredAPITokenSchema;
+    input: typeof RecordRequestSchema;
     output: typeof EmptySchema;
   },
   /**
-   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.GetAPITokenByHash
+   * @generated from rpc gestalt.plugin.v1.IndexedDB.Delete
    */
-  getAPITokenByHash: {
+  delete: {
     methodKind: "unary";
-    input: typeof GetAPITokenByHashRequestSchema;
-    output: typeof StoredAPITokenSchema;
-  },
-  /**
-   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.ListAPITokens
-   */
-  listAPITokens: {
-    methodKind: "unary";
-    input: typeof ListAPITokensRequestSchema;
-    output: typeof ListAPITokensResponseSchema;
-  },
-  /**
-   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.RevokeAPIToken
-   */
-  revokeAPIToken: {
-    methodKind: "unary";
-    input: typeof RevokeAPITokenRequestSchema;
+    input: typeof ObjectStoreRequestSchema;
     output: typeof EmptySchema;
   },
   /**
-   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.RevokeAllAPITokens
+   * Bulk operations (with optional key range)
+   *
+   * @generated from rpc gestalt.plugin.v1.IndexedDB.Clear
    */
-  revokeAllAPITokens: {
+  clear: {
     methodKind: "unary";
-    input: typeof RevokeAllAPITokensRequestSchema;
-    output: typeof RevokeAllAPITokensResponseSchema;
-  },
-  /**
-   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.GetOAuthRegistration
-   */
-  getOAuthRegistration: {
-    methodKind: "unary";
-    input: typeof GetOAuthRegistrationRequestSchema;
-    output: typeof OAuthRegistrationSchema;
-  },
-  /**
-   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.PutOAuthRegistration
-   */
-  putOAuthRegistration: {
-    methodKind: "unary";
-    input: typeof OAuthRegistrationSchema;
+    input: typeof ObjectStoreNameRequestSchema;
     output: typeof EmptySchema;
   },
   /**
-   * @generated from rpc gestalt.plugin.v1.DatastoreProvider.DeleteOAuthRegistration
+   * @generated from rpc gestalt.plugin.v1.IndexedDB.GetAll
    */
-  deleteOAuthRegistration: {
+  getAll: {
     methodKind: "unary";
-    input: typeof DeleteOAuthRegistrationRequestSchema;
-    output: typeof EmptySchema;
+    input: typeof ObjectStoreRangeRequestSchema;
+    output: typeof RecordsResponseSchema;
+  },
+  /**
+   * @generated from rpc gestalt.plugin.v1.IndexedDB.GetAllKeys
+   */
+  getAllKeys: {
+    methodKind: "unary";
+    input: typeof ObjectStoreRangeRequestSchema;
+    output: typeof KeysResponseSchema;
+  },
+  /**
+   * @generated from rpc gestalt.plugin.v1.IndexedDB.Count
+   */
+  count: {
+    methodKind: "unary";
+    input: typeof ObjectStoreRangeRequestSchema;
+    output: typeof CountResponseSchema;
+  },
+  /**
+   * @generated from rpc gestalt.plugin.v1.IndexedDB.DeleteRange
+   */
+  deleteRange: {
+    methodKind: "unary";
+    input: typeof ObjectStoreRangeRequestSchema;
+    output: typeof DeleteResponseSchema;
+  },
+  /**
+   * Index queries
+   *
+   * @generated from rpc gestalt.plugin.v1.IndexedDB.IndexGet
+   */
+  indexGet: {
+    methodKind: "unary";
+    input: typeof IndexQueryRequestSchema;
+    output: typeof RecordResponseSchema;
+  },
+  /**
+   * @generated from rpc gestalt.plugin.v1.IndexedDB.IndexGetKey
+   */
+  indexGetKey: {
+    methodKind: "unary";
+    input: typeof IndexQueryRequestSchema;
+    output: typeof KeyResponseSchema;
+  },
+  /**
+   * @generated from rpc gestalt.plugin.v1.IndexedDB.IndexGetAll
+   */
+  indexGetAll: {
+    methodKind: "unary";
+    input: typeof IndexQueryRequestSchema;
+    output: typeof RecordsResponseSchema;
+  },
+  /**
+   * @generated from rpc gestalt.plugin.v1.IndexedDB.IndexGetAllKeys
+   */
+  indexGetAllKeys: {
+    methodKind: "unary";
+    input: typeof IndexQueryRequestSchema;
+    output: typeof KeysResponseSchema;
+  },
+  /**
+   * @generated from rpc gestalt.plugin.v1.IndexedDB.IndexCount
+   */
+  indexCount: {
+    methodKind: "unary";
+    input: typeof IndexQueryRequestSchema;
+    output: typeof CountResponseSchema;
+  },
+  /**
+   * @generated from rpc gestalt.plugin.v1.IndexedDB.IndexDelete
+   */
+  indexDelete: {
+    methodKind: "unary";
+    input: typeof IndexQueryRequestSchema;
+    output: typeof DeleteResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_v1_datastore, 0);

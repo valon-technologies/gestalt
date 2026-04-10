@@ -1,0 +1,121 @@
+syntax = "proto3";
+
+package gestalt.plugin.v1;
+
+option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/struct.proto";
+
+message ObjectStoreSchema {
+  repeated IndexSchema indexes = 1;
+  repeated ColumnDef columns = 2;
+}
+
+message IndexSchema {
+  string name = 1;
+  repeated string key_path = 2;
+  bool unique = 3;
+}
+
+message ColumnDef {
+  string name = 1;
+  int32 type = 2;
+  bool primary_key = 3;
+  bool not_null = 4;
+  bool unique = 5;
+}
+
+message KeyRange {
+  google.protobuf.Value lower = 1;
+  google.protobuf.Value upper = 2;
+  bool lower_open = 3;
+  bool upper_open = 4;
+}
+
+message RecordRequest {
+  string store = 1;
+  google.protobuf.Struct record = 2;
+}
+
+message RecordResponse {
+  google.protobuf.Struct record = 1;
+}
+
+message RecordsResponse {
+  repeated google.protobuf.Struct records = 1;
+}
+
+message KeysResponse {
+  repeated string keys = 1;
+}
+
+message ObjectStoreRequest {
+  string store = 1;
+  string id = 2;
+}
+
+message ObjectStoreNameRequest {
+  string store = 1;
+}
+
+message ObjectStoreRangeRequest {
+  string store = 1;
+  optional KeyRange range = 2;
+}
+
+message CreateObjectStoreRequest {
+  string name = 1;
+  ObjectStoreSchema schema = 2;
+}
+
+message DeleteObjectStoreRequest {
+  string name = 1;
+}
+
+message IndexQueryRequest {
+  string store = 1;
+  string index = 2;
+  repeated google.protobuf.Value values = 3;
+  optional KeyRange range = 4;
+}
+
+message CountResponse {
+  int64 count = 1;
+}
+
+message DeleteResponse {
+  int64 deleted = 1;
+}
+
+message KeyResponse {
+  string key = 1;
+}
+
+service IndexedDB {
+  // Lifecycle
+  rpc CreateObjectStore(CreateObjectStoreRequest) returns (google.protobuf.Empty);
+  rpc DeleteObjectStore(DeleteObjectStoreRequest) returns (google.protobuf.Empty);
+
+  // Primary key CRUD
+  rpc Get(ObjectStoreRequest) returns (RecordResponse);
+  rpc GetKey(ObjectStoreRequest) returns (KeyResponse);
+  rpc Add(RecordRequest) returns (google.protobuf.Empty);
+  rpc Put(RecordRequest) returns (google.protobuf.Empty);
+  rpc Delete(ObjectStoreRequest) returns (google.protobuf.Empty);
+
+  // Bulk operations (with optional key range)
+  rpc Clear(ObjectStoreNameRequest) returns (google.protobuf.Empty);
+  rpc GetAll(ObjectStoreRangeRequest) returns (RecordsResponse);
+  rpc GetAllKeys(ObjectStoreRangeRequest) returns (KeysResponse);
+  rpc Count(ObjectStoreRangeRequest) returns (CountResponse);
+  rpc DeleteRange(ObjectStoreRangeRequest) returns (DeleteResponse);
+
+  // Index queries
+  rpc IndexGet(IndexQueryRequest) returns (RecordResponse);
+  rpc IndexGetKey(IndexQueryRequest) returns (KeyResponse);
+  rpc IndexGetAll(IndexQueryRequest) returns (RecordsResponse);
+  rpc IndexGetAllKeys(IndexQueryRequest) returns (KeysResponse);
+  rpc IndexCount(IndexQueryRequest) returns (CountResponse);
+  rpc IndexDelete(IndexQueryRequest) returns (DeleteResponse);
+}
