@@ -79,10 +79,10 @@ indexeddb = "provider:indexeddb_provider"
 
 	datastoreTarget, err := DetectPythonComponentTarget(root, pluginmanifestv1.KindIndexedDB)
 	if err != nil {
-		t.Fatalf("DetectPythonComponentTarget(indexeddb): %v", err)
+		t.Fatalf("DetectPythonComponentTarget(datastore): %v", err)
 	}
 	if datastoreTarget != "provider:indexeddb_provider" {
-		t.Fatalf("indexeddb target = %q, want %q", datastoreTarget, "provider:indexeddb_provider")
+		t.Fatalf("datastore target = %q, want %q", datastoreTarget, "provider:indexeddb_provider")
 	}
 }
 

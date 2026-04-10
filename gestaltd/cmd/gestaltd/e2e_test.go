@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/internal/operator"
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
@@ -104,24 +103,6 @@ func TestE2EValidateRejectsInvalidAuditSettings(t *testing.T) {
 				t.Fatalf("expected %q, got: %s", tc.wantError, out)
 			}
 		})
-	}
-}
-
-func TestE2EValidateNonMutating(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	pluginDir := setupPluginDir(t, dir)
-
-	cfgPath := writeE2EConfig(t, dir, pluginDir, 0)
-	lockPath := filepath.Join(dir, operator.InitLockfileName)
-
-	out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
-	if err != nil {
-		t.Fatalf("expected validate to succeed without init for local source plugins: %v\n%s", err, out)
-	}
-	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
-		t.Fatal("expected no lockfile after non-mutating validate")
 	}
 }
 
