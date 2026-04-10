@@ -167,7 +167,7 @@ jobs:
 
   update-formula:
     name: Update Homebrew Formula, Chart & OCI Publish
-    needs: [release, publish-image, publish-image-alpine, publish-image-debian]
+    needs: [release]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
