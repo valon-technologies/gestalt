@@ -12,8 +12,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	_ "github.com/valon-technologies/gestalt/server/internal/datastore"
 	authplugin "github.com/valon-technologies/gestalt/server/internal/drivers/auth/plugin"
+	datastoreplugin "github.com/valon-technologies/gestalt/server/internal/drivers/datastore/plugin"
 	secretsenv "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/env"
 	secretsfile "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/file"
 	secretsplugin "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/plugin"
@@ -125,6 +125,7 @@ func buildFactories() *bootstrap.FactoryRegistry {
 		}
 	}
 	factories.Auth = authplugin.Factory
+	factories.Datastore = datastoreplugin.Factory
 	factories.Secrets["env"] = secretsenv.Factory
 	factories.Secrets["file"] = secretsfile.Factory
 	factories.Secrets["plugin"] = secretsplugin.Factory

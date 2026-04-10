@@ -62,8 +62,12 @@ func decodeNodeMap(t *testing.T, node any) map[string]any {
 func requiredComponentConfigYAML(_ *testing.T, _, dbPath string) string {
 	return fmt.Sprintf(`datastores:
   sqlite:
-    driver: sqlite
-    dsn: %q
+    provider:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+        version: 0.0.1-alpha.1
+    config:
+      path: %q
 datastore: sqlite
 ui:
   provider: none
@@ -73,8 +77,12 @@ ui:
 func requiredDatastoreConfigYAML(_ *testing.T, _, dbPath string) string {
 	return fmt.Sprintf(`datastores:
   sqlite:
-    driver: sqlite
-    dsn: %q
+    provider:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+        version: 0.0.1-alpha.1
+    config:
+      path: %q
 datastore: sqlite
 ui:
   provider: none
@@ -279,8 +287,12 @@ func TestLoadForExecutionAtPath_ResolvesLocalTopLevelPluginsWithoutLockfile(t *t
     clientId: local-auth-client
 datastores:
   sqlite:
-    driver: sqlite
-    dsn: %s
+    provider:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+        version: 0.0.1-alpha.1
+    config:
+      path: %s
 datastore: sqlite
 ui:
   provider: none
@@ -360,8 +372,12 @@ func TestLoadForExecutionAtPath_ResolvesLocalSourceTopLevelPluginsWithoutArtifac
       path: ./auth-manifest.yaml
 datastores:
   sqlite:
-    driver: sqlite
-    dsn: %s
+    provider:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+        version: 0.0.1-alpha.1
+    config:
+      path: %s
 datastore: sqlite
 ui:
   provider: none

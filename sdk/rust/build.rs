@@ -15,6 +15,7 @@ fn main() {
         proto_root.join("v1").join("runtime.proto"),
         proto_root.join("v1").join("auth.proto"),
         proto_root.join("v1").join("secrets.proto"),
+        proto_root.join("v1").join("datastore.proto"),
     ];
     let includes = [proto_root];
     let mut prost_config = prost_build::Config::new();

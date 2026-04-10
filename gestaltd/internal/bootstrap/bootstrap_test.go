@@ -9,10 +9,10 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/datastore"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	_ "github.com/valon-technologies/gestalt/server/internal/datastore"
 	telemetrynoop "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/noop"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"gopkg.in/yaml.v3"
@@ -46,6 +46,12 @@ func (p *closableAuthProvider) Close() error {
 	return nil
 }
 
+func stubDatastoreFactory() bootstrap.DatastoreFactory {
+	return func(yaml.Node) (datastore.Datastore, error) {
+		return &coretesting.StubObjectDatastore{}, nil
+	}
+}
+
 func validConfig() *config.Config {
 	return &config.Config{
 		Auth: config.AuthConfig{
@@ -53,10 +59,10 @@ func validConfig() *config.Config {
 			Config:   yaml.Node{Kind: yaml.MappingNode},
 		},
 		Datastore: config.DatastoreConfig{
-			Resource: "sqlite",
+			Resource: "test",
 		},
 		Datastores: map[string]config.DatastoreDef{
-			"sqlite": {Driver: "sqlite", DSN: ":memory:"},
+			"test": {Provider: &config.ProviderDef{Source: &config.PluginSourceDef{Path: "stub"}}},
 		},
 		Secrets:   config.SecretsConfig{BuiltinProvider: "test-secrets"},
 		Telemetry: config.TelemetryConfig{BuiltinProvider: "test-telemetry"},
@@ -71,6 +77,7 @@ func validConfig() *config.Config {
 func validFactories() *bootstrap.FactoryRegistry {
 	f := bootstrap.NewFactoryRegistry()
 	f.Auth = stubAuthFactory("test-auth")
+	f.Datastore = stubDatastoreFactory()
 	f.Secrets["test-secrets"] = stubSecretManagerFactory()
 	f.Telemetry["test-telemetry"] = stubTelemetryFactory()
 	return f

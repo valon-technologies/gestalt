@@ -2,9 +2,9 @@ import { Tabs } from 'nextra/components'
 
 # Datastores
 
-Datastore providers back the persistent state layer. Gestalt stores users, integration tokens, API tokens, and OAuth registrations through the datastore interface, keeping the storage backend fully replaceable. The first-party SQLite provider works for single-node deployments. For production or multi-replica setups, use Postgres, MySQL, or another datastore provider.
+Datastore providers back the persistent state layer using an IndexedDB-inspired interface. Every provider implements the same set of operations -- object stores with primary key CRUD, named indexes for queries, and key ranges for scoped operations. The storage backend is fully replaceable: swap from SQLite to Postgres to MongoDB without changing any application code.
 
-The host encrypts all integration tokens before passing them to the datastore using AES-256-GCM, so the datastore stores sealed bytes without needing access to the encryption key. API tokens are stored as one-way SHA-256 hashes. User emails and display names are stored in plaintext.
+Gestalt stores users, integration tokens, API tokens, and OAuth registrations through the datastore. The host encrypts all integration tokens before storage using AES-256-GCM, so the datastore stores sealed bytes without needing access to the encryption key. API tokens are stored as one-way SHA-256 hashes.
 
 ## Manifest
 
@@ -19,11 +19,14 @@ datastore:
   configSchemaPath: ./datastore_config.json
 ```
 
-The optional `datastore.configSchemaPath` field points to a JSON Schema that validates the `datastore.config` block in the server config. If you provide one, Gestalt rejects invalid config at startup.
+## Provider interface
 
-## Interface
+A datastore provider implements the `IndexedDB` gRPC service, which maps to these operations:
 
-A datastore provider is a larger interface than auth or integration providers. It composes user storage, integration token storage, and API token storage, plus `Migrate` for schema setup and `HealthCheck` for readiness probes.
+- **CreateObjectStore / DeleteObjectStore** -- manage named object stores (tables/collections)
+- **Get / GetKey / Add / Put / Delete** -- primary key CRUD on an object store
+- **GetAll / GetAllKeys / Count / Clear / DeleteRange** -- bulk operations with optional key ranges
+- **IndexGet / IndexGetKey / IndexGetAll / IndexGetAllKeys / IndexCount / IndexDelete** -- query and delete via named indexes
 
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
@@ -52,34 +55,16 @@ A datastore provider is a larger interface than auth or integration providers. I
     	return ds.db.PingContext(ctx)
     }
 
-    func (ds *MyDatastore) Migrate(ctx context.Context) error {
-    	// Create users, integration_tokens, and api_tokens tables.
-    	return nil
-    }
-
-    // UserStore
-    func (ds *MyDatastore) GetUser(ctx context.Context, id string) (*gestalt.StoredUser, error) { ... }
-    func (ds *MyDatastore) FindOrCreateUser(ctx context.Context, email string) (*gestalt.StoredUser, error) { ... }
-
-    // IntegrationTokenStore (tokens are pre-sealed by the host)
-    func (ds *MyDatastore) PutIntegrationToken(ctx context.Context, token *gestalt.StoredIntegrationToken) error { ... }
-    func (ds *MyDatastore) GetIntegrationToken(ctx context.Context, userID, integration, connection, instance string) (*gestalt.StoredIntegrationToken, error) { ... }
-    func (ds *MyDatastore) ListIntegrationTokens(ctx context.Context, userID, integration, connection string) ([]*gestalt.StoredIntegrationToken, error) { ... }
-    func (ds *MyDatastore) DeleteIntegrationToken(ctx context.Context, id string) error { ... }
-
-    // APITokenStore (tokens are SHA-256 hashed, not encrypted)
-    func (ds *MyDatastore) PutAPIToken(ctx context.Context, token *gestalt.StoredAPIToken) error { ... }
-    func (ds *MyDatastore) GetAPITokenByHash(ctx context.Context, hashedToken string) (*gestalt.StoredAPIToken, error) { ... }
-    func (ds *MyDatastore) ListAPITokens(ctx context.Context, userID string) ([]*gestalt.StoredAPIToken, error) { ... }
-    func (ds *MyDatastore) RevokeAPIToken(ctx context.Context, userID, id string) error { ... }
-    func (ds *MyDatastore) RevokeAllAPITokens(ctx context.Context, userID string) (int64, error) { ... }
+    // Implement the IndexedDB gRPC service:
+    // CreateObjectStore, DeleteObjectStore,
+    // Get, GetKey, Add, Put, Delete,
+    // GetAll, GetAllKeys, Count, Clear, DeleteRange,
+    // IndexGet, IndexGetKey, IndexGetAll, IndexGetAllKeys, IndexCount, IndexDelete
 
     func main() {
     	gestalt.ServeDatastoreProvider(context.Background(), &MyDatastore{})
     }
     ```
-
-    Optionally implement `OAuthRegistrationStore` (`GetOAuthRegistration`, `PutOAuthRegistration`, `DeleteOAuthRegistration`) to support MCP OAuth dynamic client registration.
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
@@ -88,163 +73,206 @@ A datastore provider is a larger interface than auth or integration providers. I
     class MyDatastore(gestalt.DatastoreProvider):
         def configure(self, name: str, config: dict) -> None:
             self.dsn = config.get("dsn", "")
-            # Initialize database connection.
 
-        def migrate(self) -> None:
-            # Create users, integration_tokens, and api_tokens tables.
-            pass
-
-        # UserStore
-        def get_user(self, id: str) -> gestalt.StoredUser | None: ...
-        def find_or_create_user(self, email: str) -> gestalt.StoredUser: ...
-
-        # IntegrationTokenStore (tokens are pre-sealed by the host)
-        def put_integration_token(self, token: gestalt.StoredIntegrationToken) -> None: ...
-        def get_integration_token(self, user_id: str, integration: str, connection: str, instance: str) -> gestalt.StoredIntegrationToken | None: ...
-        def list_integration_tokens(self, user_id: str, integration: str, connection: str) -> list[gestalt.StoredIntegrationToken]: ...
-        def delete_integration_token(self, id: str) -> None: ...
-
-        # APITokenStore (tokens are SHA-256 hashed, not encrypted)
-        def put_api_token(self, token: gestalt.StoredAPIToken) -> None: ...
-        def get_api_token_by_hash(self, hashed_token: str) -> gestalt.StoredAPIToken | None: ...
-        def list_api_tokens(self, user_id: str) -> list[gestalt.StoredAPIToken]: ...
-        def revoke_api_token(self, user_id: str, id: str) -> None: ...
-        def revoke_all_api_tokens(self, user_id: str) -> int: ...
+        # Implement the IndexedDB gRPC service:
+        # create_object_store, delete_object_store,
+        # get, get_key, add, put, delete,
+        # get_all, get_all_keys, count, clear, delete_range,
+        # index_get, index_get_key, index_get_all, index_get_all_keys, index_count, index_delete
 
     MyDatastore().serve()
     ```
-
-    Optionally inherit from `gestalt.OAuthRegistrationStore` to support MCP OAuth dynamic client registration.
   </Tabs.Tab>
   <Tabs.Tab>
     ```rust
     use gestalt_plugin_sdk as gestalt;
-    use gestalt::{DatastoreProvider, StoredUser, StoredIntegrationToken, StoredApiToken};
 
-    pub struct MyDatastore {
-        // Your database connection.
-    }
+    pub struct MyDatastore { /* database connection */ }
 
     #[gestalt::async_trait]
-    impl DatastoreProvider for MyDatastore {
-        async fn configure(
-            &self,
-            _name: &str,
-            config: serde_json::Map<String, serde_json::Value>,
-        ) -> gestalt::Result<()> {
-            // Initialize database connection from config["dsn"].
+    impl gestalt::DatastoreProvider for MyDatastore {
+        async fn configure(&self, _name: &str, config: serde_json::Map<String, serde_json::Value>) -> gestalt::Result<()> {
+            // Initialize database connection from config["dsn"]
             Ok(())
         }
 
-        async fn health_check(&self) -> gestalt::Result<()> {
-            // Ping the database.
-            Ok(())
-        }
-
-        async fn migrate(&self) -> gestalt::Result<()> {
-            // Create users, integration_tokens, and api_tokens tables.
-            Ok(())
-        }
-
-        // UserStore
-        async fn get_user(&self, id: &str) -> gestalt::Result<Option<StoredUser>> { ... }
-        async fn find_or_create_user(&self, email: &str) -> gestalt::Result<StoredUser> { ... }
-
-        // IntegrationTokenStore (tokens are pre-sealed by the host)
-        async fn put_integration_token(&self, token: StoredIntegrationToken) -> gestalt::Result<()> { ... }
-        async fn get_integration_token(&self, user_id: &str, integration: &str, connection: &str, instance: &str) -> gestalt::Result<Option<StoredIntegrationToken>> { ... }
-        async fn list_integration_tokens(&self, user_id: &str, integration: &str, connection: &str) -> gestalt::Result<Vec<StoredIntegrationToken>> { ... }
-        async fn delete_integration_token(&self, id: &str) -> gestalt::Result<()> { ... }
-
-        // APITokenStore (tokens are SHA-256 hashed, not encrypted)
-        async fn put_api_token(&self, token: StoredApiToken) -> gestalt::Result<()> { ... }
-        async fn get_api_token_by_hash(&self, hashed_token: &str) -> gestalt::Result<Option<StoredApiToken>> { ... }
-        async fn list_api_tokens(&self, user_id: &str) -> gestalt::Result<Vec<StoredApiToken>> { ... }
-        async fn revoke_api_token(&self, user_id: &str, id: &str) -> gestalt::Result<()> { ... }
-        async fn revoke_all_api_tokens(&self, user_id: &str) -> gestalt::Result<i64> { ... }
+        // Implement the IndexedDB gRPC service methods
     }
 
     gestalt::export_datastore_provider!(constructor = MyDatastore::default);
     ```
-
-    OAuth registration methods (`get_oauth_registration`, `put_oauth_registration`, `delete_oauth_registration`) have default implementations that return unimplemented errors. Override them to support MCP OAuth.
   </Tabs.Tab>
   <Tabs.Tab>
     ```ts
     import { defineDatastoreProvider } from "@valon-technologies/gestalt";
 
-    const users = new Map<string, { id: string; email: string }>();
-
     export const provider = defineDatastoreProvider({
-      async healthCheck() {},
-      async migrate() {},
-      async getUser(id) {
-        return users.get(id) ?? null;
+      async configure(name, config) {
+        // Initialize from config.dsn
       },
-      async findOrCreateUser(email) {
-        const user = users.get(email) ?? { id: email, email };
-        users.set(email, user);
-        return user;
-      },
-      async putIntegrationToken() {},
-      async getIntegrationToken() {
-        return null;
-      },
-      async listIntegrationTokens() {
-        return [];
-      },
-      async deleteIntegrationToken() {},
-      async putApiToken() {},
-      async getApiTokenByHash() {
-        return null;
-      },
-      async listApiTokens() {
-        return [];
-      },
-      async revokeApiToken() {},
-      async revokeAllApiTokens() {
-        return 0;
-      },
+      // Implement the IndexedDB service methods
     });
     ```
-
-    Point `package.json` at the datastore provider with `gestalt.provider`:
-
-    ```json
-    {
-      "gestalt": {
-        "provider": {
-          "kind": "datastore",
-          "target": "./datastore.ts#provider"
-        }
-      }
-    }
-    ```
-
-    Optional handlers: `getOAuthRegistration`, `putOAuthRegistration`, and
-    `deleteOAuthRegistration` support MCP OAuth dynamic client registration.
   </Tabs.Tab>
 </Tabs>
 
-## OAuthRegistrationStore
+## Plugin SDK (consuming datastores)
 
-If your deployment uses MCP OAuth with dynamic client registration, the datastore needs to store OAuth client registrations. This is an optional interface. Implement `GetOAuthRegistration`, `PutOAuthRegistration`, and `DeleteOAuthRegistration` in Go, inherit from `gestalt.OAuthRegistrationStore` in Python, override the default methods in Rust, or provide the optional `getOAuthRegistration`, `putOAuthRegistration`, and `deleteOAuthRegistration` handlers in TypeScript.
+Plugins access datastores through the SDK. The host serves the IndexedDB interface over a gRPC socket, and the SDK wraps it into native types for each language.
 
-Deployments that do not use MCP OAuth can skip this entirely. The default implementations return unimplemented errors, which is the correct behavior when MCP OAuth is not configured.
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    db, err := gestalt.IndexedDB()
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer db.Close()
+
+    // Create an object store with indexes
+    db.CreateObjectStore(ctx, "tasks", gestalt.ObjectStoreSchema{
+        Indexes: []gestalt.IndexSchema{
+            {Name: "by_user", KeyPath: []string{"user_id"}},
+            {Name: "by_status", KeyPath: []string{"status"}},
+        },
+    })
+
+    // CRUD by primary key
+    tasks := db.ObjectStore("tasks")
+    tasks.Add(ctx, gestalt.Record{"id": "t1", "user_id": "u1", "status": "pending"})
+    task, err := tasks.Get(ctx, "t1")
+    tasks.Put(ctx, gestalt.Record{"id": "t1", "user_id": "u1", "status": "done"})
+    tasks.Delete(ctx, "t1")
+
+    // Query by named index
+    pending, err := tasks.Index("by_status").GetAll(ctx, nil, "pending")
+    userTasks, err := tasks.Index("by_user").GetAll(ctx, nil, "u1")
+
+    // Atomic delete by index
+    deleted, err := tasks.Index("by_user").Delete(ctx, "u1")
+
+    // Key range queries
+    recent, err := tasks.GetAll(ctx, gestalt.LowerBound("2024-01-01", false))
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    db = gestalt.IndexedDB()
+
+    # Create an object store with indexes
+    db.create_object_store("tasks", gestalt.ObjectStoreSchema(
+        indexes=[
+            gestalt.IndexSchema(name="by_user", key_path=["user_id"]),
+            gestalt.IndexSchema(name="by_status", key_path=["status"]),
+        ]
+    ))
+
+    # CRUD by primary key
+    tasks = db.object_store("tasks")
+    tasks.add({"id": "t1", "user_id": "u1", "status": "pending"})
+    task = tasks.get("t1")
+    tasks.put({"id": "t1", "user_id": "u1", "status": "done"})
+    tasks.delete("t1")
+
+    # Query by named index
+    pending = tasks.index("by_status").get_all("pending")
+    user_tasks = tasks.index("by_user").get_all("u1")
+
+    # Atomic delete by index
+    deleted = tasks.index("by_user").delete("u1")
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    let mut db = gestalt::IndexedDB::connect().await?;
+
+    // Create an object store with indexes
+    db.create_object_store("tasks", gestalt::indexeddb::ObjectStoreSchema {
+        indexes: vec![
+            gestalt::indexeddb::IndexSchema { name: "by_user".into(), key_path: vec!["user_id".into()], unique: false },
+            gestalt::indexeddb::IndexSchema { name: "by_status".into(), key_path: vec!["status".into()], unique: false },
+        ],
+    }).await?;
+
+    // CRUD by primary key
+    let mut tasks = db.object_store("tasks");
+    tasks.add(record).await?;
+    let task = tasks.get("t1").await?;
+    tasks.delete("t1").await?;
+
+    // Query by named index
+    let mut idx = tasks.index("by_user");
+    let user_tasks = idx.get_all(&[json!("u1")]).await?;
+    let deleted = idx.delete(&[json!("u1")]).await?;
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import { IndexedDB } from "@valon-technologies/gestalt";
+
+    const db = new IndexedDB();
+
+    // Create an object store with indexes
+    await db.createObjectStore("tasks", {
+      indexes: [
+        { name: "by_user", keyPath: ["user_id"] },
+        { name: "by_status", keyPath: ["status"] },
+      ],
+    });
+
+    // CRUD by primary key
+    const tasks = db.objectStore("tasks");
+    await tasks.add({ id: "t1", user_id: "u1", status: "pending" });
+    const task = await tasks.get("t1");
+    await tasks.put({ id: "t1", user_id: "u1", status: "done" });
+    await tasks.delete("t1");
+
+    // Query by named index
+    const pending = await tasks.index("by_status").getAll(undefined, "pending");
+    const userTasks = await tasks.index("by_user").getAll(undefined, "u1");
+
+    // Atomic delete by index
+    const deleted = await tasks.index("by_user").delete("u1");
+    ```
+  </Tabs.Tab>
+</Tabs>
 
 ## Config reference
 
-To use your datastore provider in a Gestalt deployment, reference it in the `datastore` block:
+Reference a datastore provider in the `datastores` section:
 
 ```yaml
-datastore:
-  provider:
-    source:
-      path: ./my-datastore/manifest.yaml
-  config:
-    dsn: ${DATABASE_URL}
+datastores:
+  main:
+    provider:
+      source:
+        path: ./my-datastore/manifest.yaml
+    config:
+      dsn: ${DATABASE_URL}
+
+datastore: main
 ```
 
-`provider.source.path` points at the datastore provider's `manifest.yaml` during development. For production, use `provider.source.ref` and `version` to reference a published release. The `config` block is passed to `Configure` at startup and validated against the config schema if one was declared in the manifest.
+`provider.source.path` points at the provider's `manifest.yaml` during development. For production, use `provider.source.ref` and `version` to reference a published release:
 
-Gestalt calls `Migrate` once at startup before any other datastore methods. Use it to create tables, run migrations, or verify that the schema is up to date. `HealthCheck` is called periodically and should return quickly; a database ping is the typical implementation.
+```yaml
+datastores:
+  main:
+    provider:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/datastore/postgres
+        version: 0.0.1
+    config:
+      dsn: ${DATABASE_URL}
+```
+
+Plugins bind to named datastores:
+
+```yaml
+integrations:
+  my-plugin:
+    datastores:
+      db: main
+```
+
+The plugin receives the `IndexedDB` interface over a gRPC socket. Object store names are automatically namespaced per plugin to prevent cross-plugin data access.

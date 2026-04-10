@@ -255,8 +255,8 @@ type DatastoreConfig struct {
 }
 
 type DatastoreDef struct {
-	Driver string `yaml:"driver"`
-	DSN    string `yaml:"dsn"`
+	Provider *ProviderDef `yaml:"provider"`
+	Config   yaml.Node    `yaml:"config"`
 }
 
 func (c *DatastoreConfig) UnmarshalYAML(value *yaml.Node) error {

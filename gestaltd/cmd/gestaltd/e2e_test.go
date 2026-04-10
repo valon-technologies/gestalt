@@ -1410,29 +1410,6 @@ func TestE2EInitServeLockedSplitManagementListener(t *testing.T) {
 	}
 }
 
-//nolint:paralleltest // Spawns gestaltd and is flaky under package-wide parallel load in CI.
-func TestE2EBareGestaltdAutoInit(t *testing.T) {
-	dir := t.TempDir()
-	pluginDir := setupPluginDir(t, dir)
-
-	port := allocateTestPort(t)
-	cfgPath := writeE2EConfig(t, dir, pluginDir, port)
-
-	cmd := exec.Command(gestaltdBin, "--config", cfgPath)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start gestaltd: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = cmd.Process.Signal(os.Interrupt)
-		_ = cmd.Wait()
-	})
-
-	baseURL := fmt.Sprintf("http://localhost:%d", port)
-	waitForHealth(t, baseURL, 20*time.Second)
-}
-
 func TestE2EBareGestaltdUsesDotGestaltdHomeConfig(t *testing.T) {
 	t.Parallel()
 
@@ -1521,8 +1498,12 @@ func TestE2EHelmChart(t *testing.T) {
 		cfgPath := filepath.Join(dir, "config.yaml")
 		cfg := fmt.Sprintf(`datastores:
   sqlite:
-    driver: sqlite
-    dsn: %s
+    provider:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+        version: 0.0.1-alpha.1
+    config:
+      path: %s
 datastore: sqlite
 server:
   encryptionKey: test-helm-key
@@ -1840,8 +1821,12 @@ func authDatastoreConfigYAML(t *testing.T, dir, authName, datastoreName, dbPath 
 	}
 	return fmt.Sprintf(`%sdatastores:
   %s:
-    driver: sqlite
-    dsn: %s
+    provider:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+        version: 0.0.1-alpha.1
+    config:
+      path: %s
 datastore: %s
 ui:
   provider: none

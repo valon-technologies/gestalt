@@ -6,6 +6,16 @@ from ._catalog import (
     OperationAnnotations,
     SessionCatalogProvider,
 )
+from ._indexeddb import (
+    AlreadyExistsError,
+    Index,
+    IndexedDB,
+    IndexSchema,
+    KeyRange,
+    NotFoundError,
+    ObjectStore,
+    ObjectStoreSchema,
+)
 from ._plugin import Plugin, operation, session_catalog
 from ._providers import (
     AuthenticatedUser,
@@ -38,13 +48,21 @@ __all__ = [
     "CompleteLoginRequest",
     "Error",
     "ExternalTokenValidator",
+    "Index",
+    "IndexedDB",
+    "IndexSchema",
+    "KeyRange",
     "HealthChecker",
     "Model",
     "MetadataProvider",
+    "NotFoundError",
     "OK",
+    "ObjectStore",
+    "ObjectStoreSchema",
     "OperationAnnotations",
     "Plugin",
     "PluginProvider",
+    "AlreadyExistsError",
     "PluginProviderAdapter",
     "ProviderKind",
     "ProviderMetadata",

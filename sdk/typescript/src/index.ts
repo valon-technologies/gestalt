@@ -122,3 +122,14 @@ export {
   type PackageConfig,
   type ProviderTarget,
 } from "./target.ts";
+export {
+  IndexedDB,
+  ObjectStore,
+  Index,
+  NotFoundError,
+  AlreadyExistsError,
+  type Record,
+  type KeyRange,
+  type IndexSchema,
+  type ObjectStoreSchema,
+} from "./indexeddb.ts";
