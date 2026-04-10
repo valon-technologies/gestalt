@@ -4,7 +4,7 @@ asIndexPage: true
 
 # CLI
 
-`gestalt` is the client CLI for interacting with a running `gestaltd` server. It handles authentication, integration connections, operation invocation, and API token management. A [Docker image](/client/cli/docker) is also available for CI and containerized environments.
+`gestalt` is the client CLI for interacting with a running `gestaltd` server. It handles authentication, plugin connections, operation invocation, and API token management. A [Docker image](/client/cli/docker) is also available for CI and containerized environments.
 
 ## Global flags
 
@@ -22,9 +22,9 @@ asIndexPage: true
 | `gestalt auth status` | Show current auth state and server connectivity. |
 | `gestalt init` | Run the interactive setup wizard. |
 | `gestalt config get\|set\|unset\|list` | Manage the local client config. |
-| `gestalt integrations list` | List integrations from the server. |
-| `gestalt integrations connect NAME` | Connect an integration through OAuth or interactive manual auth. |
-| `gestalt integrations disconnect NAME` | Disconnect an integration, removing stored credentials. |
+| `gestalt integrations list` | List plugins from the server. |
+| `gestalt integrations connect NAME` | Connect a plugin through OAuth or interactive manual auth. |
+| `gestalt integrations disconnect NAME` | Disconnect a plugin, removing stored credentials. |
 | `gestalt invoke INTEGRATION [OPERATION]` | Invoke an operation or list operations when omitted. |
 | `gestalt describe INTEGRATION OPERATION` | Show one operation's parameter contract. |
 | `gestalt tokens create\|list\|revoke` | Manage Gestalt API tokens. |
@@ -56,11 +56,11 @@ For auth, the CLI checks `GESTALT_API_KEY` first, then stored credentials from `
 
 The CLI searches the current directory and then parent directories until it finds the nearest `.gestalt/config.json`.
 
-## Integration connect flags
+## Plugin connect flags
 
 `gestalt integrations connect NAME` accepts `--connection` and `--instance`. When the selected connection uses manual auth instead of OAuth, the CLI prompts for the required credential fields and connection parameters.
 
-## Integration disconnect flags
+## Plugin disconnect flags
 
 `gestalt integrations disconnect NAME` accepts `--connection` and `--instance` to target a specific named connection or stored instance. When both are omitted, the default connection is disconnected.
 

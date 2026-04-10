@@ -2,9 +2,11 @@ import { Tabs } from 'nextra/components'
 
 # Datastores
 
-Datastore providers back the persistent state layer using an IndexedDB-inspired interface. Every provider implements the same set of operations -- object stores with primary key CRUD, named indexes for queries, and key ranges for scoped operations. The storage backend is fully replaceable: swap from SQLite to Postgres to MongoDB without changing any application code.
+Datastore providers back the persistent state layer using an interface modeled on the [IndexedDB API](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API). IndexedDB's vocabulary of object stores, primary keys, named indexes, and key ranges maps naturally onto SQL tables, document collections, and key-value stores alike, so a single provider contract can target Postgres, SQLite, MongoDB, DynamoDB, and others without leaking backend-specific abstractions. Building on an established open-source convention means the concepts are already documented, widely understood, and proven to cover the access patterns most applications need.
 
-Gestalt stores users, integration tokens, API tokens, and OAuth registrations through the datastore. The host encrypts all integration tokens before storage using AES-256-GCM, so the datastore stores sealed bytes without needing access to the encryption key. API tokens are stored as one-way SHA-256 hashes.
+Every provider implements the same set of operations -- object stores with primary key CRUD, named indexes for queries, and key ranges for scoped operations. The storage backend is fully replaceable: swap from SQLite to Postgres to MongoDB without changing any application code.
+
+Gestalt stores users, plugin tokens, API tokens, and OAuth registrations through the datastore. The host encrypts all plugin tokens before storage using AES-256-GCM, so the datastore stores sealed bytes without needing access to the encryption key. API tokens are stored as one-way SHA-256 hashes.
 
 ## Manifest
 
@@ -267,7 +269,7 @@ datastores:
 Plugins bind to named datastores:
 
 ```yaml
-integrations:
+plugins:
   my-plugin:
     datastores:
       db: main

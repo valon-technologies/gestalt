@@ -40,7 +40,7 @@ Gestalt sits between callers and upstream APIs. It authenticates users, stores e
 
 ## Encryption at rest
 
-All integration tokens are encrypted before storage using AES-256-GCM.
+All plugin tokens are encrypted before storage using AES-256-GCM.
 
 The `server.encryptionKey` is the root deployment secret. If the key is a 64-character hex string, it is decoded directly as a 32-byte AES key. Otherwise, Argon2id derives a 32-byte key from the string (3 iterations, 64 MiB, 4 threads).
 
@@ -54,7 +54,7 @@ Access tokens, refresh tokens, pending connection state, and OAuth state paramet
 
 **API tokens.** Generated with 32 random bytes from `crypto/rand` and prefixed with `gst_api_`. The plaintext is returned once at creation time. Only the SHA-256 hash is stored. Default TTL is 30 days, configurable via `server.apiTokenTtl`.
 
-**Integration tokens (OAuth).** OAuth state is encrypted with a 10-minute TTL to prevent state injection. After the authorization code exchange, access and refresh tokens are encrypted separately and stored. Gestalt automatically refreshes tokens that expire within 5 minutes.
+**Plugin tokens (OAuth).** OAuth state is encrypted with a 10-minute TTL to prevent state injection. After the authorization code exchange, access and refresh tokens are encrypted separately and stored. Gestalt automatically refreshes tokens that expire within 5 minutes.
 
 ## Request authentication
 
@@ -82,7 +82,7 @@ The host resolves the caller's access token and passes it to the provider in eac
 
 ### OS-level sandbox
 
-When `allowedHosts` is configured on a provider, the integration provider is automatically sandboxed:
+When `allowedHosts` is configured on a provider, the plugin is automatically sandboxed:
 
 ```yaml
 plugins:

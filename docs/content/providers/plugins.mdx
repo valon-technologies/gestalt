@@ -1,8 +1,8 @@
 import { Tabs } from 'nextra/components'
 
-# Integration Plugins
+# Plugins
 
-Integration plugins are one provider kind. Their manifests use a top-level `plugin:` block, and deployments reference them under the top-level `plugins:` map. A plugin can define operations as executable code (handled by the provider process), as passthrough surfaces (REST, OpenAPI, GraphQL, or MCP endpoints forwarded by the host), or both.
+Plugins are one provider kind. Their manifests use a top-level `plugin:` block, and deployments reference them under the top-level `plugins:` map. A plugin can define operations as executable code (handled by the provider process), as passthrough surfaces (REST, OpenAPI, GraphQL, or MCP endpoints forwarded by the host), or both.
 
 ## Manifest
 
@@ -14,7 +14,7 @@ Static metadata, auth, and passthrough surfaces live in a manifest file. Gestalt
     source: github.com/example/plugins/my-plugin
     version: 0.0.1-alpha.1
     displayName: My Plugin
-    description: A custom integration plugin
+    description: A custom plugin
     plugin:
       connections:
         default:
@@ -28,7 +28,7 @@ Static metadata, auth, and passthrough surfaces live in a manifest file. Gestalt
       "source": "github.com/example/plugins/my-plugin",
       "version": "0.0.1-alpha.1",
       "displayName": "My Plugin",
-      "description": "A custom integration plugin",
+      "description": "A custom plugin",
       "plugin": {
         "connections": {
           "default": {
@@ -186,9 +186,7 @@ The manifest stays the source of truth for display name, description, auth, the 
     }
     ```
 
-    Use `"plugin"` when you need to spell the plugin kind explicitly. The
-    legacy `integration` spelling and the older `gestalt.plugin` shorthand are
-    still accepted.
+    Use `"plugin"` when you need to spell the plugin kind explicitly.
   </Tabs.Tab>
 </Tabs>
 
@@ -548,7 +546,7 @@ By default, the operation catalog is static and materialized at startup. If your
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    Export a `sessionCatalog` function from your integration provider definition:
+    Export a `sessionCatalog` function from your plugin provider definition:
 
     ```typescript
     export const provider = defineIntegrationProvider({

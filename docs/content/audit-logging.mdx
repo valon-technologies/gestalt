@@ -8,7 +8,7 @@ backend without having to reconstruct behavior from mixed application logs.
 
 ## Coverage
 
-Audit events cover HTTP and MCP operation invocations, other guarded runtime surfaces such as binding hooks, login and logout flows, integration connect and disconnect flows, and API token lifecycle. Each event carries a `source` field (`http`, `mcp`, or a surface-specific value like `binding:...`) so consumers can filter by surface.
+Audit events cover HTTP and MCP operation invocations, other guarded runtime surfaces such as binding hooks, login and logout flows, plugin connect and disconnect flows, and API token lifecycle. Each event carries a `source` field (`http`, `mcp`, or a surface-specific value like `binding:...`) so consumers can filter by surface.
 
 `gestaltd` resolves the authenticated user ID before emitting session-backed audit events, so both session requests and API-token requests produce stable `user_id` values when a user identity exists.
 
@@ -22,7 +22,7 @@ Every audit record includes:
 | `event_time` | Event timestamp |
 | `request_id` | Request-scoped correlation ID |
 | `source` | Surface that emitted the event, such as `http`, `mcp`, or `binding:...` |
-| `provider` | Integration key for provider-scoped events |
+| `provider` | Plugin key for provider-scoped events |
 | `operation` | Operation or event name |
 | `depth` | Invocation depth for guarded invocation events |
 | `allowed` | Whether `gestaltd` allowed or completed the audited action |
@@ -41,7 +41,7 @@ These fields are emitted when available:
 | `span_id` | Active OpenTelemetry span ID |
 
 For platform-level events such as API-token CRUD, `provider` is empty because
-the event is not tied to a specific integration.
+the event is not tied to a specific plugin.
 
 ## Event Names
 

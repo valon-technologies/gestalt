@@ -4,7 +4,7 @@ import { Tabs } from 'nextra/components'
 
 Gestalt provider packages and release archives are described by a manifest file: `manifest.yaml`, `manifest.yml`, or `manifest.json`. YAML is the easiest format to author by hand.
 
-Providers are the umbrella concept in Gestalt. Auth providers, datastore providers, and integration plugins all use this manifest format. The `plugin` manifest kind is reserved for integration providers that expose callable operations.
+Providers are the umbrella concept in Gestalt. Auth providers, datastore providers, and plugins all use this manifest format. The `plugin` manifest kind is reserved for providers that expose callable operations.
 
 ## Manifest Kinds
 
@@ -12,7 +12,7 @@ Every manifest defines exactly one provider kind, determined by which metadata b
 
 | Kind | Top-level key | Purpose |
 | --- | --- | --- |
-| `plugin` | `plugin` | Integration plugin (REST, OpenAPI, GraphQL, MCP, or executable). |
+| `plugin` | `plugin` | Plugin (REST, OpenAPI, GraphQL, MCP, or executable). |
 | `auth` | `auth` | Platform auth provider (Google, OIDC, local, or custom). |
 | `datastore` | `datastore` | Persistence backend (Postgres, SQLite, DynamoDB, or custom). |
 | `secrets` | `secrets` | Secret manager for resolving `secret://` references. |
@@ -31,7 +31,7 @@ These fields appear at the top level of every manifest regardless of kind.
 | `displayName` | string | no | Human-readable label shown in the UI. |
 | `description` | string | no | Human-readable description. |
 | `iconFile` | string | no | Relative path to an SVG icon bundled with the package. |
-| `artifacts` | Artifact[] | no | Packaged executable artifacts keyed by platform. Omit for declarative-only integration plugin packages or source manifests used during local development. |
+| `artifacts` | Artifact[] | no | Packaged executable artifacts keyed by platform. Omit for declarative-only plugin packages or source manifests used during local development. |
 | `entrypoints` | Entrypoints | no | Executable entrypoint metadata for the manifest's kind. |
 
 ## Entrypoints
@@ -40,7 +40,7 @@ The `entrypoints` block declares executable binaries. Each key corresponds to a 
 
 | Key | Kind | Purpose |
 | --- | --- | --- |
-| `plugin` | plugin | Executable entrypoint for an integration plugin. |
+| `plugin` | plugin | Executable entrypoint for a plugin. |
 | `auth` | auth | Executable entrypoint for an auth provider. |
 | `datastore` | datastore | Executable entrypoint for a datastore provider. |
 | `secrets` | secrets | Executable entrypoint for a secrets provider. |
@@ -59,9 +59,9 @@ entrypoints:
     args: ["--verbose"]
 ```
 
-## Integration Plugin Metadata
+## Plugin Metadata
 
-The `plugin` block describes an integration plugin. It supports declarative REST operations, spec-loaded surfaces (OpenAPI, GraphQL, MCP), executable code, or any combination.
+The `plugin` block describes a plugin. It supports declarative REST operations, spec-loaded surfaces (OpenAPI, GraphQL, MCP), executable code, or any combination.
 
 ### Core Fields
 
@@ -78,7 +78,7 @@ The `plugin` block describes an integration plugin. It supports declarative REST
 
 ### Connections
 
-The `connections` map defines named connection profiles. Each connection supports the following fields:
+The `connections` map defines named connection profiles. Deployment config can override or extend these defaults; see [Config File](/reference/config-file#connections) for the config-side schema. Each connection supports the following fields:
 
 | Field | Type | Purpose |
 | --- | --- | --- |
@@ -309,11 +309,11 @@ The `artifacts` array lists platform-specific binaries included in the package.
 | `path` | string | yes | Path to the binary inside the package. |
 | `sha256` | string | no | SHA-256 hex digest for integrity verification. |
 
-Declarative-only integration plugin packages do not require `artifacts`. Pure executable source manifests used with `plugins.*.provider.source.path` or `gestaltd provider release` may omit them.
+Declarative-only plugin packages do not require `artifacts`. Pure executable source manifests used with `plugins.*.provider.source.path` or `gestaltd provider release` may omit them.
 
 ## Full Example
 
-This manifest shows an integration plugin with an executable entrypoint, multiple connections, OpenAPI and MCP surfaces, pagination, allowed operations, and managed parameters.
+This manifest shows a plugin with an executable entrypoint, multiple connections, OpenAPI and MCP surfaces, pagination, allowed operations, and managed parameters.
 
 <Tabs items={['YAML', 'JSON']}>
   <Tabs.Tab>
@@ -598,13 +598,11 @@ gestaltd provider release --version 1.2.3
 `manifest.yaml` stays YAML and `manifest.json` stays JSON in the release archive.
 For executable Go and Rust plugins, release materializes the executable
 catalog automatically before packaging. Python source plugins load the module
-declared in `[tool.gestalt].plugin` and materialize the executable catalog
+declared in `[tool.gestalt].provider` and materialize the executable catalog
 automatically. TypeScript source providers load the target declared in
 `package.json` under `gestalt.provider`. A string target such as
 `./provider.ts#plugin` defaults to a plugin provider; auth and datastore
-providers use an object with `kind` and `target`. Use `"plugin"` as the
-explicit plugin kind when needed. The legacy `integration` spelling and the
-older `gestalt.plugin` shorthand are still accepted. Auth and datastore source
+providers use an object with `kind` and `target`. Auth and datastore source
 packages support the same release flow for Go, Rust, and TypeScript, but they
 do not generate catalogs. Source packages build the host-platform artifact by
 default. Pass `--platform` for an explicit `os/arch[/libc]` target list, or

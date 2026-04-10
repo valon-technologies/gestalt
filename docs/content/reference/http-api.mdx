@@ -17,26 +17,26 @@ Authenticated routes accept a `session_token` cookie or an `Authorization: Beare
 | `POST` | `/api/v1/auth/login` | Starts platform login and returns an absolute browser URL. |
 | `GET` | `/api/v1/auth/login/callback` | Completes platform login. |
 | `POST` | `/api/v1/auth/logout` | Clears the current platform session. |
-| `GET` | `/api/v1/auth/callback` | Completes integration OAuth. |
+| `GET` | `/api/v1/auth/callback` | Completes plugin OAuth. |
 | `POST` | `/api/v1/auth/pending-connection` | Render or finalize a multi-candidate connection choice using a pending connection token. |
 
 ## Authenticated User Routes
 
-### Integrations
+### Plugins
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/api/v1/integrations` | List integrations, connection state, auth types, instances, icons, and connection parameter hints. |
-| `DELETE` | `/api/v1/integrations/{name}` | Disconnect an integration. Use `?connection=...` and `?instance=...` to target one stored connection. |
-| `GET` | `/api/v1/integrations/{name}/operations` | List operations for one integration. Supports `_connection` and `_instance` selectors. |
-| `GET` or `POST` | `/api/v1/{integration}/{operation}` | Invoke an integration operation. Supports `_connection` and `_instance`. |
+| `GET` | `/api/v1/integrations` | List plugins, connection state, auth types, instances, icons, and connection parameter hints. |
+| `DELETE` | `/api/v1/integrations/{name}` | Disconnect a plugin. Use `?connection=...` and `?instance=...` to target one stored connection. |
+| `GET` | `/api/v1/integrations/{name}/operations` | List operations for one plugin. Supports `_connection` and `_instance` selectors. |
+| `GET` or `POST` | `/api/v1/{integration}/{operation}` | Invoke a plugin operation. Supports `_connection` and `_instance`. |
 
-### Integration Connection Flows
+### Plugin Connection Flows
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `POST` | `/api/v1/auth/start-oauth` | Start an integration OAuth flow. |
-| `POST` | `/api/v1/auth/connect-manual` | Submit manual integration credentials. |
+| `POST` | `/api/v1/auth/start-oauth` | Start a plugin OAuth flow. |
+| `POST` | `/api/v1/auth/connect-manual` | Submit manual plugin credentials. |
 
 ### API Tokens
 
@@ -76,7 +76,7 @@ Gestalt authenticates the caller, resolves the target plugin and operation, then
 
 ## Parameter conventions
 
-`GET` invocations read parameters from the query string; `POST` invocations read parameters from a JSON body. Use `_connection` to select a named connection when an integration exposes more than one, and `_instance` to select one stored instance for that connection.
+`GET` invocations read parameters from the query string; `POST` invocations read parameters from a JSON body. Use `_connection` to select a named connection when a plugin exposes more than one, and `_instance` to select one stored instance for that connection.
 
 ## Example
 

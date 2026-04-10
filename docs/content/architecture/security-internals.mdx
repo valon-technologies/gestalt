@@ -18,7 +18,7 @@ All credential encryption uses AES-256-GCM, an authenticated mode that protects 
 
 Each encryption generates a fresh 12-byte nonce via `crypto/rand`, encrypts the plaintext, prepends the nonce to the ciphertext, and base64-encodes the result for storage. Tampered ciphertexts are detected at decryption. Access and refresh tokens are encrypted independently, each with their own nonce.
 
-## Integration token lifecycle
+## Plugin token lifecycle
 
 ### Creation
 
