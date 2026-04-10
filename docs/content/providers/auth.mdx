@@ -118,7 +118,6 @@ An auth provider implements three methods: `Configure`, `BeginLogin`, and `Compl
     ```rust
     use std::sync::Mutex;
 
-    use gestalt_plugin_sdk as gestalt;
     use gestalt::{AuthProvider, AuthenticatedUser, BeginLoginRequest, BeginLoginResponse, CompleteLoginRequest};
 
     pub struct MyAuth {

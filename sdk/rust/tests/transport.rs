@@ -3,11 +3,11 @@ mod helpers;
 
 use std::sync::{Arc, Mutex};
 
-use gestalt_plugin_sdk::proto::v1::integration_provider_client::IntegrationProviderClient;
-use gestalt_plugin_sdk::proto::v1::{
+use gestalt::proto::v1::integration_provider_client::IntegrationProviderClient;
+use gestalt::proto::v1::{
     ExecuteRequest, GetSessionCatalogRequest, PostConnectRequest, StartProviderRequest,
 };
-use gestalt_plugin_sdk::{
+use gestalt::{
     Catalog, CatalogOperation, Operation, Provider, Request, Response, Router, ok,
 };
 use hyper_util::rt::tokio::TokioIo;
@@ -28,7 +28,7 @@ impl Provider for TestProvider {
         &self,
         _name: &str,
         config: serde_json::Map<String, serde_json::Value>,
-    ) -> gestalt_plugin_sdk::Result<()> {
+    ) -> gestalt::Result<()> {
         let greeting = config
             .get("greeting")
             .and_then(serde_json::Value::as_str)
@@ -45,7 +45,7 @@ impl Provider for TestProvider {
     async fn catalog_for_request(
         &self,
         request: &Request,
-    ) -> gestalt_plugin_sdk::Result<Option<Catalog>> {
+    ) -> gestalt::Result<Option<Catalog>> {
         Ok(Some(Catalog {
             name: "session-example".to_string(),
             display_name: request
@@ -88,7 +88,7 @@ async fn serves_provider_requests_over_unix_socket() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("gestalt-rust-sdk.sock");
     let _socket_guard =
-        helpers::EnvGuard::set(gestalt_plugin_sdk::ENV_PROVIDER_SOCKET, socket.as_os_str());
+        helpers::EnvGuard::set(gestalt::ENV_PROVIDER_SOCKET, socket.as_os_str());
 
     let router = Router::new()
         .register(
@@ -106,7 +106,7 @@ async fn serves_provider_requests_over_unix_socket() {
     let serve_provider = Arc::clone(&provider);
     let serve_router = router.clone();
     let serve_task = tokio::spawn(async move {
-        gestalt_plugin_sdk::runtime::serve_provider(serve_provider, serve_router)
+        gestalt::runtime::serve_provider(serve_provider, serve_router)
             .await
             .expect("serve provider");
     });
@@ -134,11 +134,11 @@ async fn serves_provider_requests_over_unix_socket() {
     assert!(metadata.supports_session_catalog);
     assert_eq!(
         metadata.min_protocol_version,
-        gestalt_plugin_sdk::CURRENT_PROTOCOL_VERSION
+        gestalt::CURRENT_PROTOCOL_VERSION
     );
     assert_eq!(
         metadata.max_protocol_version,
-        gestalt_plugin_sdk::CURRENT_PROTOCOL_VERSION
+        gestalt::CURRENT_PROTOCOL_VERSION
     );
 
     let started = client
@@ -147,14 +147,14 @@ async fn serves_provider_requests_over_unix_socket() {
             config: Some(helpers::struct_from_json(
                 serde_json::json!({ "greeting": "Hi" }),
             )),
-            protocol_version: gestalt_plugin_sdk::CURRENT_PROTOCOL_VERSION,
+            protocol_version: gestalt::CURRENT_PROTOCOL_VERSION,
         })
         .await
         .expect("start provider")
         .into_inner();
     assert_eq!(
         started.protocol_version,
-        gestalt_plugin_sdk::CURRENT_PROTOCOL_VERSION
+        gestalt::CURRENT_PROTOCOL_VERSION
     );
 
     let response = client

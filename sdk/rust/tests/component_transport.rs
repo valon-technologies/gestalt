@@ -6,13 +6,13 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use gestalt_plugin_sdk::proto::v1::auth_provider_client::AuthProviderClient;
-use gestalt_plugin_sdk::proto::v1::provider_lifecycle_client::ProviderLifecycleClient;
-use gestalt_plugin_sdk::proto::v1::{
+use gestalt::proto::v1::auth_provider_client::AuthProviderClient;
+use gestalt::proto::v1::provider_lifecycle_client::ProviderLifecycleClient;
+use gestalt::proto::v1::{
     BeginLoginRequest, CompleteLoginRequest, ConfigureProviderRequest, ProviderKind,
     ValidateExternalTokenRequest,
 };
-use gestalt_plugin_sdk::{AuthProvider, RuntimeMetadata};
+use gestalt::{AuthProvider, RuntimeMetadata};
 use hyper_util::rt::tokio::TokioIo;
 use tokio::net::UnixStream;
 use tonic::Code;
@@ -38,7 +38,7 @@ impl AuthProvider for TestAuthProvider {
         &self,
         name: &str,
         _config: serde_json::Map<String, serde_json::Value>,
-    ) -> gestalt_plugin_sdk::Result<()> {
+    ) -> gestalt::Result<()> {
         *self.configured_name.lock().expect("lock configured_name") = name.to_string();
         Ok(())
     }
@@ -59,8 +59,8 @@ impl AuthProvider for TestAuthProvider {
     async fn begin_login(
         &self,
         req: BeginLoginRequest,
-    ) -> gestalt_plugin_sdk::Result<gestalt_plugin_sdk::BeginLoginResponse> {
-        Ok(gestalt_plugin_sdk::BeginLoginResponse {
+    ) -> gestalt::Result<gestalt::BeginLoginResponse> {
+        Ok(gestalt::BeginLoginResponse {
             authorization_url: format!("https://example.com/login?state={}", req.host_state),
             provider_state: b"provider-state".to_vec(),
         })
@@ -69,8 +69,8 @@ impl AuthProvider for TestAuthProvider {
     async fn complete_login(
         &self,
         req: CompleteLoginRequest,
-    ) -> gestalt_plugin_sdk::Result<gestalt_plugin_sdk::AuthenticatedUser> {
-        Ok(gestalt_plugin_sdk::AuthenticatedUser {
+    ) -> gestalt::Result<gestalt::AuthenticatedUser> {
+        Ok(gestalt::AuthenticatedUser {
             subject: "sub_123".to_string(),
             email: req
                 .query
@@ -87,9 +87,9 @@ impl AuthProvider for TestAuthProvider {
     async fn validate_external_token(
         &self,
         token: &str,
-    ) -> gestalt_plugin_sdk::Result<Option<gestalt_plugin_sdk::AuthenticatedUser>> {
+    ) -> gestalt::Result<Option<gestalt::AuthenticatedUser>> {
         if token == "external-token" {
-            return Ok(Some(gestalt_plugin_sdk::AuthenticatedUser {
+            return Ok(Some(gestalt::AuthenticatedUser {
                 subject: "sub_external".to_string(),
                 email: "external@example.com".to_string(),
                 email_verified: true,
@@ -111,12 +111,12 @@ async fn serves_auth_provider_and_runtime_over_unix_socket() {
     let _env_lock = helpers::env_lock().lock().await;
     let socket = helpers::temp_socket("gestalt-rust-auth.sock");
     let _socket_guard =
-        helpers::EnvGuard::set(gestalt_plugin_sdk::ENV_PROVIDER_SOCKET, socket.as_os_str());
+        helpers::EnvGuard::set(gestalt::ENV_PROVIDER_SOCKET, socket.as_os_str());
 
     let provider = Arc::new(TestAuthProvider::default());
     let serve_provider = Arc::clone(&provider);
     let serve_task = tokio::spawn(async move {
-        gestalt_plugin_sdk::runtime::serve_auth_provider(serve_provider)
+        gestalt::runtime::serve_auth_provider(serve_provider)
             .await
             .expect("serve auth provider");
     });
@@ -147,14 +147,14 @@ async fn serves_auth_provider_and_runtime_over_unix_socket() {
             config: Some(helpers::struct_from_json(
                 serde_json::json!({ "issuer": "https://issuer" }),
             )),
-            protocol_version: gestalt_plugin_sdk::CURRENT_PROTOCOL_VERSION,
+            protocol_version: gestalt::CURRENT_PROTOCOL_VERSION,
         })
         .await
         .expect("configure provider")
         .into_inner();
     assert_eq!(
         configured.protocol_version,
-        gestalt_plugin_sdk::CURRENT_PROTOCOL_VERSION
+        gestalt::CURRENT_PROTOCOL_VERSION
     );
 
     let begin = auth

@@ -1,6 +1,5 @@
 use std::sync::{Arc, Mutex};
 
-use gestalt_plugin_sdk as gestalt;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map as JsonMap, Value as JsonValue};

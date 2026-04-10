@@ -4,16 +4,15 @@ mod helpers;
 use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
-use gestalt_plugin_sdk as gestalt;
-use gestalt_plugin_sdk::proto::v1::integration_provider_server::IntegrationProvider;
-use gestalt_plugin_sdk::proto::v1::{ExecuteRequest, StartProviderRequest};
+use gestalt::proto::v1::integration_provider_server::IntegrationProvider;
+use gestalt::proto::v1::{ExecuteRequest, StartProviderRequest};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map as JsonMap, Value as JsonValue, json};
 use tonic::Request as GrpcRequest;
 use tonic::codegen::async_trait;
 
-use gestalt_plugin_sdk::{Operation, Provider, Request, Response, Router, ok};
+use gestalt::{Operation, Provider, Request, Response, Router, ok};
 
 #[derive(Default)]
 struct TestProvider;

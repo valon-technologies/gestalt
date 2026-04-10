@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use std::time::Duration;
 
-use gestalt_plugin_sdk as gestalt;
 
 pub struct Provider;
 
