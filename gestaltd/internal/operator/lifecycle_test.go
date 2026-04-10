@@ -124,7 +124,7 @@ plugins:
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
 
-	intg := loaded.Integrations["example"]
+	intg := loaded.Plugins["example"]
 	if intg.DisplayName != "Local Provider" {
 		t.Fatalf("DisplayName = %q", intg.DisplayName)
 	}
@@ -183,7 +183,7 @@ plugins:
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
 
-	intg := loaded.Integrations["notion"]
+	intg := loaded.Plugins["notion"]
 	if intg.Plugin == nil || intg.Plugin.ResolvedManifest == nil || intg.Plugin.ResolvedManifest.Plugin == nil {
 		t.Fatalf("ResolvedManifest = %+v", intg.Plugin)
 	}
@@ -440,7 +440,7 @@ plugins:
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
 
-	intg := loaded.Integrations["example"]
+	intg := loaded.Plugins["example"]
 	if intg.Plugin == nil || intg.Plugin.ResolvedManifest == nil {
 		t.Fatalf("ResolvedManifest = %+v", intg.Plugin)
 	}
@@ -666,7 +666,7 @@ print(json.dumps({
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
 
-	intg := loaded.Integrations["example"]
+	intg := loaded.Plugins["example"]
 	if intg.Plugin == nil || intg.Plugin.ResolvedManifest == nil {
 		t.Fatalf("ResolvedManifest = %+v", intg.Plugin)
 	}
@@ -943,14 +943,14 @@ plugins:
 	if err != nil {
 		t.Fatalf("Load config: %v", err)
 	}
-	loaded.Integrations["missing"] = config.IntegrationDef{}
+	loaded.Plugins["missing"] = config.PluginDef{}
 
 	lc := NewLifecycle(nil)
 	if err := lc.applyLockedPlugins(cfgPath, "", loaded, false); err != nil {
 		t.Fatalf("applyLockedPlugins: %v", err)
 	}
-	if loaded.Integrations["example"].Plugin == nil || loaded.Integrations["example"].Plugin.ResolvedManifest == nil {
-		t.Fatalf("ResolvedManifest = %+v", loaded.Integrations["example"].Plugin)
+	if loaded.Plugins["example"].Plugin == nil || loaded.Plugins["example"].Plugin.ResolvedManifest == nil {
+		t.Fatalf("ResolvedManifest = %+v", loaded.Plugins["example"].Plugin)
 	}
 }
 

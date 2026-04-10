@@ -357,7 +357,7 @@ func discoveryCandidateInfos(candidates []core.DiscoveryCandidate) []discoveryCa
 }
 
 func (s *Server) effectiveConnectionAuth(integration, connection string) config.ConnectionAuthDef {
-	intg, ok := s.integrationDefs[integration]
+	intg, ok := s.pluginDefs[integration]
 	if !ok || intg.Plugin == nil {
 		return config.ConnectionAuthDef{}
 	}

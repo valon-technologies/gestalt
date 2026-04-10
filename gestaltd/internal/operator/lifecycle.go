@@ -26,6 +26,8 @@ const (
 	PreparedProvidersDir = ".gestaltd/providers"
 	PreparedAuthDir      = ".gestaltd/auth"
 	PreparedSecretsDir   = ".gestaltd/secrets"
+	PreparedTelemetryDir = ".gestaltd/telemetry"
+	PreparedAuditDir     = ".gestaltd/audit"
 	PreparedUIDir        = ".gestaltd/ui"
 	LockVersion          = 2
 
@@ -38,6 +40,8 @@ type Lockfile struct {
 	Auth      *LockEntry                   `json:"auth,omitempty"`
 	Datastore *LockEntry                   `json:"datastore,omitempty"`
 	Secrets   *LockEntry                   `json:"secrets,omitempty"`
+	Telemetry *LockEntry                   `json:"telemetry,omitempty"`
+	Audit     *LockEntry                   `json:"audit,omitempty"`
 	UI        *LockUIEntry                 `json:"ui,omitempty"`
 }
 
@@ -149,6 +153,20 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 	if secretsEntry != nil {
 		lock.Secrets = secretsEntry
 	}
+	if cfg.Telemetry.Provider != nil && cfg.Telemetry.Provider.HasManagedArtifacts() {
+		entry, err := l.writeComponentArtifact(context.Background(), paths, pluginmanifestv1.KindPlugin, "telemetry", telemetryDestDir(paths), cfg.Telemetry.Provider, cfg.Telemetry.Config)
+		if err != nil {
+			return nil, nil, err
+		}
+		lock.Telemetry = &entry
+	}
+	if cfg.Audit.Provider != nil && cfg.Audit.Provider.HasManagedArtifacts() {
+		entry, err := l.writeComponentArtifact(context.Background(), paths, pluginmanifestv1.KindPlugin, "audit", auditDestDir(paths), cfg.Audit.Provider, cfg.Audit.Config)
+		if err != nil {
+			return nil, nil, err
+		}
+		lock.Audit = &entry
+	}
 	if cfg.UI.Provider != nil && cfg.UI.Provider.HasManagedArtifacts() {
 		uiEntry, err := l.writeUIProviderArtifact(context.Background(), cfg, paths)
 		if err != nil {
@@ -167,19 +185,19 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 		return nil, nil, err
 	}
 
-	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "auth", lock.Auth != nil, "secrets", lock.Secrets != nil, "ui", lock.UI != nil)
+	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "auth", lock.Auth != nil, "secrets", lock.Secrets != nil, "telemetry", lock.Telemetry != nil, "audit", lock.Audit != nil, "ui", lock.UI != nil)
 	slog.Info("wrote lockfile", "path", paths.lockfilePath)
 	return lock, cfg, nil
 }
 
 func buildSourceTokenMap(cfg *config.Config) map[string]string {
 	tokens := make(map[string]string)
-	for _, intg := range cfg.Integrations {
+	for _, intg := range cfg.Plugins {
 		if intg.Plugin != nil && intg.Plugin.Source != nil && intg.Plugin.Source.Auth != nil {
 			tokens[intg.Plugin.SourceRef()] = intg.Plugin.Source.Auth.Token
 		}
 	}
-	for _, p := range []*config.ProviderDef{cfg.Auth.Provider, cfg.Datastore.Provider, cfg.Secrets.Provider} {
+	for _, p := range []*config.ProviderDef{cfg.Auth.Provider, cfg.Datastore.Provider, cfg.Secrets.Provider, cfg.Telemetry.Provider, cfg.Audit.Provider} {
 		if p != nil && p.Source != nil && p.Source.Auth != nil {
 			tokens[p.SourceRef()] = p.Source.Auth.Token
 		}
@@ -306,6 +324,8 @@ type initPaths struct {
 	providersDir string
 	authDir      string
 	secretsDir   string
+	telemetryDir string
+	auditDir     string
 	uiDir        string
 }
 
@@ -316,34 +336,32 @@ type pluginFingerprintInput struct {
 }
 
 func configHasPluginLoading(cfg *config.Config) bool {
-	for name := range cfg.Integrations {
-		plugin := cfg.Integrations[name].Plugin
+	for name := range cfg.Plugins {
+		plugin := cfg.Plugins[name].Plugin
 		if plugin.HasManagedArtifacts() || plugin.HasLocalSource() {
 			return true
 		}
 	}
-	if cfg.Auth.Provider != nil && (cfg.Auth.Provider.HasManagedArtifacts() || cfg.Auth.Provider.HasLocalSource()) {
-		return true
-	}
-	if cfg.Secrets.Provider != nil && (cfg.Secrets.Provider.HasManagedArtifacts() || cfg.Secrets.Provider.HasLocalSource()) {
-		return true
-	}
-	return cfg.UI.Provider != nil && (cfg.UI.Provider.HasManagedArtifacts() || cfg.UI.Provider.HasLocalSource())
-}
-
-func configHasManagedPlugins(cfg *config.Config) bool {
-	for name := range cfg.Integrations {
-		if cfg.Integrations[name].Plugin.HasManagedArtifacts() {
+	for _, p := range []*config.ProviderDef{cfg.Auth.Provider, cfg.Secrets.Provider, cfg.UI.Provider, cfg.Telemetry.Provider, cfg.Audit.Provider} {
+		if p != nil && (p.HasManagedArtifacts() || p.HasLocalSource()) {
 			return true
 		}
 	}
-	if cfg.Auth.Provider != nil && cfg.Auth.Provider.HasManagedArtifacts() {
-		return true
+	return false
+}
+
+func configHasManagedPlugins(cfg *config.Config) bool {
+	for name := range cfg.Plugins {
+		if cfg.Plugins[name].Plugin.HasManagedArtifacts() {
+			return true
+		}
 	}
-	if cfg.Secrets.Provider != nil && cfg.Secrets.Provider.HasManagedArtifacts() {
-		return true
+	for _, p := range []*config.ProviderDef{cfg.Auth.Provider, cfg.Secrets.Provider, cfg.UI.Provider, cfg.Telemetry.Provider, cfg.Audit.Provider} {
+		if p != nil && p.HasManagedArtifacts() {
+			return true
+		}
 	}
-	return cfg.UI.Provider != nil && cfg.UI.Provider.HasManagedArtifacts()
+	return false
 }
 
 func resolveLockPath(baseDir, provider string) string {
@@ -386,6 +404,8 @@ func initPathsForConfigWithArtifactsDir(configPath, artifactsDir string) initPat
 		providersDir: filepath.Join(artifactsDir, filepath.FromSlash(PreparedProvidersDir)),
 		authDir:      filepath.Join(artifactsDir, filepath.FromSlash(PreparedAuthDir)),
 		secretsDir:   filepath.Join(artifactsDir, filepath.FromSlash(PreparedSecretsDir)),
+		telemetryDir: filepath.Join(artifactsDir, filepath.FromSlash(PreparedTelemetryDir)),
+		auditDir:     filepath.Join(artifactsDir, filepath.FromSlash(PreparedAuditDir)),
 		uiDir:        filepath.Join(artifactsDir, filepath.FromSlash(PreparedUIDir)),
 	}
 }
@@ -404,6 +424,14 @@ func authDestDir(paths initPaths) string {
 
 func secretsDestDir(paths initPaths) string {
 	return paths.secretsDir
+}
+
+func telemetryDestDir(paths initPaths) string {
+	return paths.telemetryDir
+}
+
+func auditDestDir(paths initPaths) string {
+	return paths.auditDir
 }
 
 func writeJSONFile(path string, v any) error {
@@ -444,8 +472,8 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 	if lock == nil || lock.Version != LockVersion {
 		return false
 	}
-	for name := range cfg.Integrations {
-		provider := cfg.Integrations[name]
+	for name := range cfg.Plugins {
+		provider := cfg.Plugins[name]
 		if !provider.Plugin.HasManagedArtifacts() {
 			continue
 		}
@@ -461,6 +489,16 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 	}
 	if cfg.Secrets.Provider != nil && cfg.Secrets.Provider.HasManagedArtifacts() {
 		if lock.Secrets == nil || !lockEntryMatches(paths, "secrets", cfg.Secrets.Provider, *lock.Secrets, true) {
+			return false
+		}
+	}
+	if cfg.Telemetry.Provider != nil && cfg.Telemetry.Provider.HasManagedArtifacts() {
+		if lock.Telemetry == nil || !lockEntryMatches(paths, "telemetry", cfg.Telemetry.Provider, *lock.Telemetry, true) {
+			return false
+		}
+	}
+	if cfg.Audit.Provider != nil && cfg.Audit.Provider.HasManagedArtifacts() {
+		if lock.Audit == nil || !lockEntryMatches(paths, "audit", cfg.Audit.Provider, *lock.Audit, true) {
 			return false
 		}
 	}
@@ -586,8 +624,8 @@ func (l *Lifecycle) buildArchivesMap(ctx context.Context, src pluginsource.Sourc
 
 func (l *Lifecycle) writeProviderArtifacts(ctx context.Context, cfg *config.Config, paths initPaths) (map[string]LockProviderEntry, error) {
 	written := make(map[string]LockProviderEntry)
-	for name := range cfg.Integrations {
-		provider := cfg.Integrations[name]
+	for name := range cfg.Plugins {
+		provider := cfg.Plugins[name]
 		if provider.Plugin == nil {
 			continue
 		}
@@ -826,8 +864,8 @@ func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *con
 		}
 	}
 
-	for name := range cfg.Integrations {
-		provider := cfg.Integrations[name]
+	for name := range cfg.Plugins {
+		provider := cfg.Plugins[name]
 		if provider.Plugin == nil {
 			continue
 		}
@@ -852,7 +890,7 @@ func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *con
 			provider.Description = cmp.Or(provider.Description, manifest.Description)
 		}
 		provider.IconFile = cmp.Or(provider.IconFile, provider.Plugin.ResolvedIconFile)
-		cfg.Integrations[name] = provider
+		cfg.Plugins[name] = provider
 	}
 	if cfg.Auth.Provider != nil {
 		if err := l.applyComponentProvider(paths, lock, pluginmanifestv1.KindAuth, "auth", cfg.Auth.Provider, cfg.Auth.Config, &cfg.Auth.Config, locked); err != nil {
@@ -861,6 +899,16 @@ func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *con
 	}
 	if cfg.Secrets.Provider != nil {
 		if err := l.applyComponentProvider(paths, lock, pluginmanifestv1.KindSecrets, "secrets", cfg.Secrets.Provider, cfg.Secrets.Config, &cfg.Secrets.Config, locked); err != nil {
+			return err
+		}
+	}
+	if cfg.Telemetry.Provider != nil {
+		if err := l.applyComponentProvider(paths, lock, pluginmanifestv1.KindPlugin, "telemetry", cfg.Telemetry.Provider, cfg.Telemetry.Config, &cfg.Telemetry.Config, locked); err != nil {
+			return err
+		}
+	}
+	if cfg.Audit.Provider != nil {
+		if err := l.applyComponentProvider(paths, lock, pluginmanifestv1.KindPlugin, "audit", cfg.Audit.Provider, cfg.Audit.Config, &cfg.Audit.Config, locked); err != nil {
 			return err
 		}
 	}
@@ -932,11 +980,15 @@ func (l *Lifecycle) applyComponentProvider(paths initPaths, lock *Lockfile, kind
 			return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init --config %s`", kind, name, paths.configPath)
 		}
 		var entry *LockEntry
-		switch kind {
-		case pluginmanifestv1.KindAuth:
+		switch name {
+		case "auth":
 			entry = lock.Auth
-		case pluginmanifestv1.KindSecrets:
+		case "secrets":
 			entry = lock.Secrets
+		case "telemetry":
+			entry = lock.Telemetry
+		case "audit":
+			entry = lock.Audit
 		}
 		if err := l.applyLockedComponentEntry(paths, entry, kind, name, provider, configMap, locked); err != nil {
 			return err
@@ -1277,13 +1329,17 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 	}
 
 	var destDir string
-	switch kind {
-	case pluginmanifestv1.KindAuth:
+	switch name {
+	case "auth":
 		destDir = authDestDir(paths)
-	case pluginmanifestv1.KindSecrets:
+	case "secrets":
 		destDir = secretsDestDir(paths)
+	case "telemetry":
+		destDir = telemetryDestDir(paths)
+	case "audit":
+		destDir = auditDestDir(paths)
 	default:
-		return fmt.Errorf("unsupported component kind %q", kind)
+		return fmt.Errorf("unsupported component %q", name)
 	}
 	if err := os.RemoveAll(destDir); err != nil {
 		return fmt.Errorf("remove stale plugin cache for %s %q: %w", kind, name, err)

@@ -70,14 +70,14 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 	}
 
 	ready := make(chan struct{})
-	if len(cfg.Integrations) == 0 {
+	if len(cfg.Plugins) == 0 {
 		close(ready)
 		return &reg.Providers, ready, func() map[string]map[string]OAuthHandler { return connAuth }, nil
 	}
 
 	var wg sync.WaitGroup
-	for name := range cfg.Integrations {
-		intgDef := cfg.Integrations[name]
+	for name := range cfg.Plugins {
+		intgDef := cfg.Plugins[name]
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -112,7 +112,7 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 	return &reg.Providers, ready, resolver, nil
 }
 
-func buildProvider(ctx context.Context, name string, intg config.IntegrationDef, deps Deps) (*ProviderBuildResult, error) {
+func buildProvider(ctx context.Context, name string, intg config.PluginDef, deps Deps) (*ProviderBuildResult, error) {
 	if intg.Plugin == nil {
 		return nil, fmt.Errorf("integration %q has no plugin defined", name)
 	}
@@ -162,7 +162,7 @@ func buildProvider(ctx context.Context, name string, intg config.IntegrationDef,
 	}
 }
 
-func buildExecutablePluginProvider(ctx context.Context, name string, intg config.IntegrationDef, pluginConfig map[string]any, meta providerMetadata, deps Deps) (*ProviderBuildResult, error) {
+func buildExecutablePluginProvider(ctx context.Context, name string, intg config.PluginDef, pluginConfig map[string]any, meta providerMetadata, deps Deps) (*ProviderBuildResult, error) {
 	manifest := intg.Plugin.ResolvedManifest
 	manifestPlugin := intg.Plugin.ManifestPlugin()
 	if manifest == nil || manifestPlugin == nil {
@@ -275,7 +275,7 @@ type specAuthFallback struct {
 	connectionName string
 }
 
-func newProviderBuildResult(name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, prov core.Provider, authFallback *specAuthFallback, deps Deps) (*ProviderBuildResult, error) {
+func newProviderBuildResult(name string, intg config.PluginDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, prov core.Provider, authFallback *specAuthFallback, deps Deps) (*ProviderBuildResult, error) {
 	result := &ProviderBuildResult{Provider: prov}
 	var err error
 	result.ConnectionAuth, err = buildConnectionAuthMap(name, intg, manifest, pluginConfig, authFallback, deps)
@@ -286,7 +286,7 @@ func newProviderBuildResult(name string, intg config.IntegrationDef, manifest *p
 	return result, nil
 }
 
-func buildSpecLoadedProvider(ctx context.Context, name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, meta providerMetadata, deps Deps, allowedOperations map[string]*config.OperationOverride) (*ProviderBuildResult, error) {
+func buildSpecLoadedProvider(ctx context.Context, name string, intg config.PluginDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, meta providerMetadata, deps Deps, allowedOperations map[string]*config.OperationOverride) (*ProviderBuildResult, error) {
 	mp := manifest.Plugin
 	plan, err := buildPluginConnectionPlan(intg.Plugin, mp)
 	if err != nil {
@@ -466,7 +466,7 @@ func catalogOperationCount(cat *catalog.Catalog) int {
 	return len(cat.Operations)
 }
 
-func buildPluginProvider(ctx context.Context, intg config.IntegrationDef, pluginConfig map[string]any, spec pluginhost.StaticProviderSpec, deps Deps) (core.Provider, error) {
+func buildPluginProvider(ctx context.Context, intg config.PluginDef, pluginConfig map[string]any, spec pluginhost.StaticProviderSpec, deps Deps) (core.Provider, error) {
 	command := intg.Plugin.Command
 	args := intg.Plugin.Args
 	env := clonePluginEnv(intg.Plugin.Env)
@@ -539,7 +539,7 @@ func clonePluginEnv(src map[string]string) map[string]string {
 	return dst
 }
 
-func buildPluginStaticSpec(name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, meta providerMetadata) (pluginhost.StaticProviderSpec, error) {
+func buildPluginStaticSpec(name string, intg config.PluginDef, manifest *pluginmanifestv1.Manifest, meta providerMetadata) (pluginhost.StaticProviderSpec, error) {
 	if manifest == nil || manifest.Plugin == nil {
 		return pluginhost.StaticProviderSpec{}, fmt.Errorf("resolved manifest is required")
 	}

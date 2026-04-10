@@ -866,7 +866,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.IntegrationDefs = map[string]config.IntegrationDef{
+		cfg.PluginDefs = map[string]config.PluginDef{
 			"example": {Plugin: plugin},
 		}
 		cfg.Datastore = &coretesting.StubDatastore{
@@ -1064,7 +1064,7 @@ func TestListIntegrations_ConnectionInfosIncludeProviderManualAuth(t *testing.T)
 
 			ts := newTestServer(t, func(cfg *server.Config) {
 				cfg.Providers = testutil.NewProviderRegistry(t, tc.provider(t))
-				cfg.IntegrationDefs = map[string]config.IntegrationDef{
+				cfg.PluginDefs = map[string]config.PluginDef{
 					"example": {Plugin: tc.plugin},
 				}
 				cfg.Datastore = &coretesting.StubDatastore{
@@ -6577,11 +6577,11 @@ func TestConnectManual_MultiCredential(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
-		name            string
-		integration     string
-		requestBody     string
-		integrationDefs map[string]config.IntegrationDef
-		wantTokenData   map[string]string
+		name          string
+		integration   string
+		requestBody   string
+		pluginDefs    map[string]config.PluginDef
+		wantTokenData map[string]string
 	}{
 		{
 			name:        "stores named credentials map",
@@ -6596,7 +6596,7 @@ func TestConnectManual_MultiCredential(t *testing.T) {
 			name:        "single credential input wraps structured auth mapping field",
 			integration: "modern-treasury",
 			requestBody: `{"integration":"modern-treasury","credential":"api-key-abc"}`,
-			integrationDefs: map[string]config.IntegrationDef{
+			pluginDefs: map[string]config.PluginDef{
 				"modern-treasury": {
 					Plugin: &config.ProviderDef{
 						Auth: &config.ConnectionAuthDef{
@@ -6637,7 +6637,7 @@ func TestConnectManual_MultiCredential(t *testing.T) {
 					StubIntegration: coretesting.StubIntegration{N: tc.integration},
 				})
 				cfg.DefaultConnection = map[string]string{tc.integration: config.PluginConnectionName}
-				cfg.IntegrationDefs = tc.integrationDefs
+				cfg.PluginDefs = tc.pluginDefs
 				cfg.Datastore = &coretesting.StubDatastore{
 					FindOrCreateUserFn: func(_ context.Context, email string) (*core.User, error) {
 						return &core.User{ID: "u1", Email: email}, nil
