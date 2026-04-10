@@ -151,16 +151,14 @@ func TestLoadForExecutionAtPath_ResolvesLocalMCPOAuthManifestPluginWithoutLockfi
 source: github.com/testowner/plugins/notion
 version: 0.0.1-alpha.1
 displayName: Notion
-provider:
+plugin:
+  mcpUrl: https://mcp.notion.com/mcp
+  mcpConnection: mcp
   connections:
     mcp:
       mode: user
       auth:
         type: mcp_oauth
-  surfaces:
-    mcp:
-      url: https://mcp.notion.com/mcp
-      connection: mcp
 `)
 	if err := os.WriteFile(manifestPath, manifest, 0o644); err != nil {
 		t.Fatalf("WriteFile manifest: %v", err)

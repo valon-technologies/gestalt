@@ -142,13 +142,11 @@ func TestRun_PluginReleaseRejectsInvalidManifest(t *testing.T) {
 			manifestYAML: `
 source: github.com/testowner/plugins/invalid
 version: 0.0.1-alpha.1
-provider:
-  surfaces:
-    rest:
-      operations:
-        - name: list_items
-          method: GET
-          path: /items
+plugin:
+  operations:
+    - name: list_items
+      method: GET
+      path: /items
 `,
 			wantError: "provider.baseUrl is required",
 		},
@@ -157,8 +155,10 @@ provider:
 			manifestYAML: `
 source: github.com/testowner/plugins/invalid
 version: 0.0.1-alpha.1
-provider:
-  exec: {}
+plugin: {}
+entrypoints:
+  plugin:
+    artifactPath: ""
 `,
 			wantError: "entrypoints.plugin.artifactPath is required",
 		},
@@ -1383,16 +1383,15 @@ func TestRun_PluginReleasePreservesYAMLManifestFormatAndConnectionDefaults(t *te
 		t.Fatalf("read released manifest: %v", err)
 	}
 	for _, expected := range []string{
-		"exec:",
-		"connections:",
-		"default:",
-		"mode: identity",
-		"params:",
-		"mcp:",
-		"enabled: true",
+		"plugin:",
+		"connectionMode: identity",
+		"connectionParams:",
+		"mcp: true",
+		"entrypoints:",
+		"artifactPath:",
 	} {
 		if !strings.Contains(string(manifestData), expected) {
-			t.Fatalf("expected released manifest to preserve provider wire field %q, got: %s", expected, manifestData)
+			t.Fatalf("expected released manifest to contain canonical field %q, got: %s", expected, manifestData)
 		}
 	}
 }

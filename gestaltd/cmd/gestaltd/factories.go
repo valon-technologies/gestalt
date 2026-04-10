@@ -12,6 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	_ "github.com/valon-technologies/gestalt/server/internal/datastore"
 	authplugin "github.com/valon-technologies/gestalt/server/internal/drivers/auth/plugin"
 	secretsenv "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/env"
 	secretsfile "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/file"
