@@ -18,9 +18,9 @@ func TestSafeClientBlocksLoopbackServer(t *testing.T) {
 	defer srv.Close()
 
 	client := egress.SafeClient(&egress.PrivateNetworkPolicy{AllowPrivateNetworks: false}, 5*time.Second)
-	resp, err := client.Get(srv.URL) //nolint:bodyclose // closed below when non-nil
+	resp, err := client.Get(srv.URL) //nolint:bodyclose // resp is nil on expected error path
 	if err == nil {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		t.Fatal("expected request to loopback server to be blocked")
 	}
 	if !errors.Is(err, egress.ErrEgressDenied) {
@@ -40,7 +40,7 @@ func TestSafeClientAllowsLoopbackWhenPermitted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected request to succeed with AllowPrivateNetworks=true, got: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected 200, got %d", resp.StatusCode)
 	}
@@ -58,7 +58,7 @@ func TestSafeClientNilPolicyAllowsLoopback(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected request to succeed with nil policy, got: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected 200, got %d", resp.StatusCode)
 	}

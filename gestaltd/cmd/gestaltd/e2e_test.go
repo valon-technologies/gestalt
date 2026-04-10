@@ -1505,6 +1505,8 @@ func TestE2EHelmChart(t *testing.T) {
     config:
       path: %s
 datastore: sqlite
+egress:
+  allowPrivateNetworks: true
 server:
   encryptionKey: test-helm-key
   public:

@@ -53,7 +53,7 @@ func RegisterClient(ctx context.Context, endpoint, redirectURI, clientName, toke
 	req.Header.Set("Content-Type", "application/json")
 
 	if client == nil {
-		client = &http.Client{Timeout: discoveryTimeout}
+		client = http.DefaultClient
 	}
 	resp, err := client.Do(req)
 	if err != nil {

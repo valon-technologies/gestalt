@@ -8,12 +8,9 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 )
-
-const discoveryTimeout = 10 * time.Second
 
 type DiscoveredMetadata struct {
 	AuthServerURL                 string
@@ -67,7 +64,7 @@ func (m *DiscoveredMetadata) PreferredAuthMethod() string {
 // endpoints directly in resource metadata (ClickHouse).
 func Discover(ctx context.Context, mcpURL string, client *http.Client) (*DiscoveredMetadata, error) {
 	if client == nil {
-		client = &http.Client{Timeout: discoveryTimeout}
+		client = http.DefaultClient
 	}
 
 	resourceMetadataURL, err := probeForResourceMetadata(ctx, client, mcpURL)
