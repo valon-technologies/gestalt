@@ -40,8 +40,8 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 	if err := resolveStringFields(&cfg.Server, resolve); err != nil {
 		return err
 	}
-	for name := range cfg.Integrations {
-		intg := cfg.Integrations[name]
+	for name := range cfg.Plugins {
+		intg := cfg.Plugins[name]
 		if err := resolveStringFields(&intg, resolve); err != nil {
 			return err
 		}
@@ -60,7 +60,7 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 				return err
 			}
 		}
-		cfg.Integrations[name] = intg
+		cfg.Plugins[name] = intg
 	}
 	if cfg.Auth.Provider != nil {
 		if err := resolveStringFields(cfg.Auth.Provider, resolve); err != nil {
@@ -79,6 +79,16 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 	}
 	if cfg.UI.Provider != nil {
 		if err := resolveStringFields(cfg.UI.Provider, resolve); err != nil {
+			return err
+		}
+	}
+	if cfg.Telemetry.Provider != nil {
+		if err := resolveStringFields(cfg.Telemetry.Provider, resolve); err != nil {
+			return err
+		}
+	}
+	if cfg.Audit.Provider != nil {
+		if err := resolveStringFields(cfg.Audit.Provider, resolve); err != nil {
 			return err
 		}
 	}

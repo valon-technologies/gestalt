@@ -160,7 +160,7 @@ func (s *Server) revokeAllAPITokens(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) integrationConnectionInfos(name string, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo) []connectionDefInfo {
-	intg, ok := s.integrationDefs[name]
+	intg, ok := s.pluginDefs[name]
 	if !ok || intg.Plugin == nil {
 		return nil
 	}

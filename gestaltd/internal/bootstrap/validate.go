@@ -71,11 +71,11 @@ func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *Fa
 		}
 	}
 
-	names := slices.Sorted(maps.Keys(cfg.Integrations))
+	names := slices.Sorted(maps.Keys(cfg.Plugins))
 
 	var errs []error
 	for _, name := range names {
-		intgDef := cfg.Integrations[name]
+		intgDef := cfg.Plugins[name]
 		result, err := buildProviderForValidation(ctx, name, intgDef, deps)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("integration %q: %w", name, err))
@@ -98,7 +98,7 @@ func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *Fa
 	return &reg.Providers, connAuth, nil
 }
 
-func buildProviderForValidation(ctx context.Context, name string, intg config.IntegrationDef, deps Deps) (*ProviderBuildResult, error) {
+func buildProviderForValidation(ctx context.Context, name string, intg config.PluginDef, deps Deps) (*ProviderBuildResult, error) {
 	if intg.Plugin == nil || !intg.Plugin.HasManagedArtifacts() || !intg.Plugin.HasResolvedManifest() {
 		return buildProvider(ctx, name, intg, deps)
 	}
@@ -116,7 +116,7 @@ type preparedProviderStub struct {
 	connectionMode core.ConnectionMode
 }
 
-func newPreparedProviderStub(name string, intg config.IntegrationDef) (core.Provider, error) {
+func newPreparedProviderStub(name string, intg config.PluginDef) (core.Provider, error) {
 	if intg.Plugin == nil || intg.Plugin.ResolvedManifest == nil {
 		return nil, fmt.Errorf("prepared manifest is not resolved")
 	}
@@ -152,7 +152,7 @@ func (p *preparedProviderStub) Execute(context.Context, string, map[string]any, 
 	return nil, fmt.Errorf("prepared validation stub cannot execute operations")
 }
 
-func connectionModeFromPlugin(intg config.IntegrationDef) core.ConnectionMode {
+func connectionModeFromPlugin(intg config.PluginDef) core.ConnectionMode {
 	if intg.Plugin == nil {
 		return core.ConnectionModeUser
 	}

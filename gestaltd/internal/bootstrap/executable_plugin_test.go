@@ -26,7 +26,7 @@ func TestExecutableSDKExampleProviderReceivesStartConfig(t *testing.T) {
 	manifestRoot := exampleProviderRoot(t)
 	manifest := newExecutableManifest("Example Provider", "A minimal example provider built with the public SDK")
 	cfg := &config.Config{
-		Integrations: map[string]config.IntegrationDef{
+		Plugins: map[string]config.PluginDef{
 			"example": {
 				Plugin: &config.ProviderDef{
 					Command:              bin,
@@ -151,7 +151,7 @@ plugin = "provider"
 	t.Setenv("PATH", t.TempDir())
 
 	cfg := &config.Config{
-		Integrations: map[string]config.IntegrationDef{
+		Plugins: map[string]config.PluginDef{
 			"python-source": {
 				Plugin: &config.ProviderDef{
 					ResolvedManifest:     manifest,
@@ -210,7 +210,7 @@ func TestExecutableSDKExampleProviderAppliesConfigMetadataOverrides(t *testing.T
 	manifest := newExecutableManifest("Manifest Display", "Manifest Description")
 
 	cfg := &config.Config{
-		Integrations: map[string]config.IntegrationDef{
+		Plugins: map[string]config.PluginDef{
 			"example": {
 				DisplayName: "Config Display",
 				Description: "Config Description",
@@ -330,7 +330,7 @@ func TestPluginManifestOAuthWiresConnectionAuth(t *testing.T) {
 		Scopes:           []string{"read", "write"},
 	}
 	cfg := &config.Config{
-		Integrations: map[string]config.IntegrationDef{
+		Plugins: map[string]config.PluginDef{
 			"echoauth": {
 				Plugin: &config.ProviderDef{
 					Command: bin,
@@ -393,7 +393,7 @@ func TestPluginManifestNoAuthSkipsConnectionAuth(t *testing.T) {
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	cfg := &config.Config{
-		Integrations: map[string]config.IntegrationDef{
+		Plugins: map[string]config.PluginDef{
 			"echonoauth": {
 				Plugin: &config.ProviderDef{
 					Command:              bin,
@@ -430,7 +430,7 @@ func TestPluginManifestNamedOAuthKeepsProviderTokenMode(t *testing.T) {
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	cfg := &config.Config{
-		Integrations: map[string]config.IntegrationDef{
+		Plugins: map[string]config.PluginDef{
 			"echoauth": {
 				Plugin: &config.ProviderDef{
 					Command:           bin,
@@ -489,7 +489,7 @@ func TestPluginProcessEnvIsolation(t *testing.T) {
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 
 	cfg := &config.Config{
-		Integrations: map[string]config.IntegrationDef{
+		Plugins: map[string]config.PluginDef{
 			"echoext": {
 				Plugin: &config.ProviderDef{
 					Command:              bin,
@@ -546,7 +546,7 @@ func TestExecutablePluginRequiresManifest(t *testing.T) {
 
 	bin := buildEchoPluginBinary(t)
 	cfg := &config.Config{
-		Integrations: map[string]config.IntegrationDef{
+		Plugins: map[string]config.PluginDef{
 			"echoext": {
 				Plugin: &config.ProviderDef{
 					Command: bin,

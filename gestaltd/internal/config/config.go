@@ -44,20 +44,22 @@ type Config struct {
 	Secrets      SecretsConfig             `yaml:"secrets"`
 	Telemetry    TelemetryConfig           `yaml:"telemetry"`
 	Audit        AuditConfig               `yaml:"audit"`
-	Integrations map[string]IntegrationDef `yaml:"plugins"`
+	Plugins map[string]PluginDef `yaml:"plugins"`
 	Server       ServerConfig              `yaml:"server"`
 	Egress       EgressConfig              `yaml:"egress"`
 	UI           UIConfig                  `yaml:"ui"`
 }
 
 type TelemetryConfig struct {
-	Provider string    `yaml:"provider"`
-	Config   yaml.Node `yaml:"config"`
+	Provider        *ProviderDef `yaml:"provider"`
+	Config          yaml.Node    `yaml:"config"`
+	BuiltinProvider string       `yaml:"-"`
 }
 
 type AuditConfig struct {
-	Provider string    `yaml:"provider"`
-	Config   yaml.Node `yaml:"config"`
+	Provider        *ProviderDef `yaml:"provider"`
+	Config          yaml.Node    `yaml:"config"`
+	BuiltinProvider string       `yaml:"-"`
 }
 
 type UIConfig struct {
@@ -297,11 +299,11 @@ func (c *UIConfig) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-func (c *SecretsConfig) UnmarshalYAML(value *yaml.Node) error {
+func unmarshalHybridProvider(value *yaml.Node, kind string, provider **ProviderDef, builtin *string, cfg *yaml.Node) error {
 	if value == nil || value.Kind == 0 {
-		c.Provider = nil
-		c.BuiltinProvider = ""
-		c.Config = yaml.Node{}
+		*provider = nil
+		*builtin = ""
+		*cfg = yaml.Node{}
 		return nil
 	}
 	if value.Kind != yaml.MappingNode {
@@ -313,31 +315,43 @@ func (c *SecretsConfig) UnmarshalYAML(value *yaml.Node) error {
 		switch key {
 		case "provider", "config":
 		default:
-			return fmt.Errorf("field %s not found in type config.SecretsConfig", key)
+			return fmt.Errorf("field %s not found in type config.%sConfig", key, kind)
 		}
 	}
-	c.Provider = nil
-	c.BuiltinProvider = ""
-	c.Config = yaml.Node{}
+	*provider = nil
+	*builtin = ""
+	*cfg = yaml.Node{}
 	providerNode := mappingValueNode(value, "provider")
 	if providerNode != nil {
 		switch {
 		case providerNode.Kind == yaml.ScalarNode && providerNode.Tag != "!!null":
-			c.BuiltinProvider = strings.TrimSpace(providerNode.Value)
+			*builtin = strings.TrimSpace(providerNode.Value)
 		case providerNode.Kind == yaml.MappingNode:
-			decoded, err := decodeTopLevelComponentProvider("secrets", providerNode)
+			decoded, err := decodeTopLevelComponentProvider(kind, providerNode)
 			if err != nil {
 				return err
 			}
-			c.Provider = decoded
+			*provider = decoded
 		case providerNode.Kind != yaml.ScalarNode || providerNode.Tag != "!!null":
-			return fmt.Errorf("secrets.provider must be a string or a provider reference mapping")
+			return fmt.Errorf("%s.provider must be a string or a provider reference mapping", kind)
 		}
 	}
 	if configNode := mappingValueNode(value, "config"); configNode != nil {
-		c.Config = *configNode
+		*cfg = *configNode
 	}
 	return nil
+}
+
+func (c *TelemetryConfig) UnmarshalYAML(value *yaml.Node) error {
+	return unmarshalHybridProvider(value, "telemetry", &c.Provider, &c.BuiltinProvider, &c.Config)
+}
+
+func (c *AuditConfig) UnmarshalYAML(value *yaml.Node) error {
+	return unmarshalHybridProvider(value, "audit", &c.Provider, &c.BuiltinProvider, &c.Config)
+}
+
+func (c *SecretsConfig) UnmarshalYAML(value *yaml.Node) error {
+	return unmarshalHybridProvider(value, "secrets", &c.Provider, &c.BuiltinProvider, &c.Config)
 }
 
 func unmarshalTopLevelComponentConfig(value *yaml.Node, typeName, kind string, provider **ProviderDef, cfg *yaml.Node) error {
@@ -467,7 +481,7 @@ func (s ServerConfig) ManagementAddr() string {
 	return net.JoinHostPort(listener.Host, strconv.Itoa(listener.Port))
 }
 
-type IntegrationDef struct {
+type PluginDef struct {
 	Plugin        *ProviderDef      `yaml:"plugin"`
 	DisplayName   string            `yaml:"displayName"`
 	Description   string            `yaml:"description"`
@@ -777,15 +791,15 @@ func OverlayManagedPluginConfig(path string, cfg *Config) error {
 		return fmt.Errorf("parsing config YAML: %w", err)
 	}
 	plugins := mappingValueNode(documentValueNode(&root), "plugins")
-	for name := range cfg.Integrations {
-		intg := cfg.Integrations[name]
+	for name := range cfg.Plugins {
+		intg := cfg.Plugins[name]
 		if intg.Plugin == nil || !intg.Plugin.HasManagedArtifacts() {
 			continue
 		}
 		if err := overlayManagedPluginConfigNode(mappingValueNode(plugins, name), intg.Plugin, "integration "+strconv.Quote(name)); err != nil {
 			return err
 		}
-		cfg.Integrations[name] = intg
+		cfg.Plugins[name] = intg
 	}
 	if err := overlayManagedComponentConfigNode(mappingValueNode(documentValueNode(&root), "auth"), cfg.Auth.Provider, &cfg.Auth.Config, "auth"); err != nil {
 		return err
@@ -797,6 +811,12 @@ func OverlayManagedPluginConfig(path string, cfg *Config) error {
 		return err
 	}
 	if err := overlayManagedComponentConfigNode(mappingValueNode(documentValueNode(&root), "ui"), cfg.UI.Provider, &cfg.UI.Config, "ui"); err != nil {
+		return err
+	}
+	if err := overlayManagedComponentConfigNode(mappingValueNode(documentValueNode(&root), "telemetry"), cfg.Telemetry.Provider, &cfg.Telemetry.Config, "telemetry"); err != nil {
+		return err
+	}
+	if err := overlayManagedComponentConfigNode(mappingValueNode(documentValueNode(&root), "audit"), cfg.Audit.Provider, &cfg.Audit.Config, "audit"); err != nil {
 		return err
 	}
 	return nil
@@ -980,11 +1000,11 @@ func applyDefaults(cfg *Config) {
 	if cfg.Secrets.Provider == nil && cfg.Secrets.BuiltinProvider == "" {
 		cfg.Secrets.BuiltinProvider = "env"
 	}
-	if cfg.Telemetry.Provider == "" {
-		cfg.Telemetry.Provider = "stdout"
+	if cfg.Telemetry.Provider == nil && cfg.Telemetry.BuiltinProvider == "" {
+		cfg.Telemetry.BuiltinProvider = "stdout"
 	}
-	if cfg.Audit.Provider == "" {
-		cfg.Audit.Provider = "inherit"
+	if cfg.Audit.Provider == nil && cfg.Audit.BuiltinProvider == "" {
+		cfg.Audit.BuiltinProvider = "inherit"
 	}
 	if !cfg.UI.Disabled && cfg.UI.Provider == nil {
 		cfg.UI.Provider = defaultUIProvider()
@@ -1014,8 +1034,8 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		baseDir = filepath.Dir(absPath)
 	}
 
-	for name := range cfg.Integrations {
-		intg := cfg.Integrations[name]
+	for name := range cfg.Plugins {
+		intg := cfg.Plugins[name]
 		if intg.IconFile != "" {
 			intg.IconFile = resolveRelativePath(baseDir, intg.IconFile)
 		}
@@ -1024,7 +1044,7 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 				intg.Plugin.Source.Path = resolveRelativePath(baseDir, intg.Plugin.Source.Path)
 			}
 		}
-		cfg.Integrations[name] = intg
+		cfg.Plugins[name] = intg
 	}
 	if cfg.Auth.Provider != nil && cfg.Auth.Provider.Source != nil {
 		cfg.Auth.Provider.Source.Path = resolveRelativePath(baseDir, cfg.Auth.Provider.Source.Path)

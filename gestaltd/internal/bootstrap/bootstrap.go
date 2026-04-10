@@ -85,7 +85,7 @@ type providerMetadata struct {
 	iconSVG     string
 }
 
-func resolveProviderMetadata(intg config.IntegrationDef) providerMetadata {
+func resolveProviderMetadata(intg config.PluginDef) providerMetadata {
 	meta := providerMetadata{
 		displayName: intg.DisplayName,
 		description: intg.Description,
@@ -424,29 +424,29 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 }
 
 func buildTelemetry(cfg *config.Config, factories *FactoryRegistry) (core.TelemetryProvider, error) {
-	factory, ok := factories.Telemetry[cfg.Telemetry.Provider]
+	factory, ok := factories.Telemetry[cfg.Telemetry.BuiltinProvider]
 	if !ok {
-		return nil, fmt.Errorf("bootstrap: unknown telemetry provider %q", cfg.Telemetry.Provider)
+		return nil, fmt.Errorf("bootstrap: unknown telemetry provider %q", cfg.Telemetry.BuiltinProvider)
 	}
 	tp, err := factory(cfg.Telemetry.Config)
 	if err != nil {
-		return nil, fmt.Errorf("bootstrap: telemetry provider %q: %w", cfg.Telemetry.Provider, err)
+		return nil, fmt.Errorf("bootstrap: telemetry provider %q: %w", cfg.Telemetry.BuiltinProvider, err)
 	}
 	return tp, nil
 }
 
 func buildAuditSink(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error) {
 	if factories.Audit == nil {
-		switch cfg.Audit.Provider {
+		switch cfg.Audit.BuiltinProvider {
 		case "", "inherit":
 			return invocation.NewLoggerAuditSink(telemetry.Logger()), nil, nil
 		default:
-			return nil, nil, fmt.Errorf("bootstrap: unknown audit provider %q", cfg.Audit.Provider)
+			return nil, nil, fmt.Errorf("bootstrap: unknown audit provider %q", cfg.Audit.BuiltinProvider)
 		}
 	}
 	sink, closeFn, err := factories.Audit(ctx, cfg.Audit, telemetry)
 	if err != nil {
-		return nil, nil, fmt.Errorf("bootstrap: audit provider %q: %w", cfg.Audit.Provider, err)
+		return nil, nil, fmt.Errorf("bootstrap: audit provider %q: %w", cfg.Audit.BuiltinProvider, err)
 	}
 	return sink, closeFn, nil
 }

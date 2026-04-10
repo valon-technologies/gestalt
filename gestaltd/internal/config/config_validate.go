@@ -26,6 +26,9 @@ func ValidateStructure(cfg *Config) error {
 			return fmt.Errorf("config validation: server.apiTokenTtl: %w", err)
 		}
 	}
+	if err := validateTelemetry(cfg.Telemetry); err != nil {
+		return err
+	}
 	if err := validateAudit(cfg.Audit); err != nil {
 		return err
 	}
@@ -49,22 +52,32 @@ func ValidateStructure(cfg *Config) error {
 			return err
 		}
 	}
-	for name := range cfg.Integrations {
-		intg := cfg.Integrations[name]
-		if err := validatePluginIntegration(name, intg); err != nil {
+	for name := range cfg.Plugins {
+		intg := cfg.Plugins[name]
+		if err := validatePlugin(name, intg); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
+func validateTelemetry(cfg TelemetryConfig) error {
+	if cfg.Provider != nil {
+		return validateTopLevelComponentProvider("telemetry", cfg.Provider)
+	}
+	return nil
+}
+
 func validateAudit(cfg AuditConfig) error {
-	switch cfg.Provider {
+	if cfg.Provider != nil {
+		return validateTopLevelComponentProvider("audit", cfg.Provider)
+	}
+	switch cfg.BuiltinProvider {
 	case "", "inherit", "noop":
 		if cfg.Config.Kind == 0 {
 			return nil
 		}
-		return fmt.Errorf("config validation: audit.config is not supported when audit.provider is %q", cfg.Provider)
+		return fmt.Errorf("config validation: audit.config is not supported when audit.provider is %q", cfg.BuiltinProvider)
 	case "stdout":
 		if cfg.Config.Kind == 0 {
 			return nil
@@ -102,7 +115,7 @@ func validateAudit(cfg AuditConfig) error {
 		}
 		return nil
 	default:
-		return fmt.Errorf("config validation: unknown audit.provider %q", cfg.Provider)
+		return fmt.Errorf("config validation: unknown audit.provider %q", cfg.BuiltinProvider)
 	}
 }
 
@@ -131,8 +144,8 @@ func validateTopLevelComponentConfig(kind string, provider *ProviderDef, cfg yam
 // applied locked plugin artifacts into the config. It intentionally does not
 // rerun the full structural validator on the mutated config.
 func ValidateResolvedStructure(cfg *Config) error {
-	for name := range cfg.Integrations {
-		intg := cfg.Integrations[name]
+	for name := range cfg.Plugins {
+		intg := cfg.Plugins[name]
 		if intg.Plugin == nil {
 			return fmt.Errorf("config validation: integration %q requires a plugin", name)
 		}
@@ -164,7 +177,7 @@ func ValidateRuntime(cfg *Config) error {
 	return nil
 }
 
-func validatePluginIntegration(name string, intg IntegrationDef) error {
+func validatePlugin(name string, intg PluginDef) error {
 	if intg.Plugin == nil {
 		return fmt.Errorf("config validation: integration %q requires a plugin", name)
 	}
@@ -524,8 +537,8 @@ func validateDatastores(cfg *Config) error {
 			return fmt.Errorf("config validation: datastores.%s.dsn is required", name)
 		}
 	}
-	for name := range cfg.Integrations {
-		intg := cfg.Integrations[name]
+	for name := range cfg.Plugins {
+		intg := cfg.Plugins[name]
 		if err := validateDatastoreBindings(name, intg.Datastores, cfg); err != nil {
 			return err
 		}

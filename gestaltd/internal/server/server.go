@@ -44,7 +44,7 @@ type Server struct {
 	defaultConnection  map[string]string
 	catalogConnection  map[string]string
 	connectionAuth     func() map[string]map[string]bootstrap.OAuthHandler
-	integrationDefs    map[string]config.IntegrationDef
+	pluginDefs    map[string]config.PluginDef
 	noAuth             bool
 	anonymousPrincipal *principal.Principal
 	publicBaseURL      string
@@ -71,7 +71,7 @@ type Config struct {
 	DefaultConnection map[string]string
 	CatalogConnection map[string]string
 	ConnectionAuth    func() map[string]map[string]bootstrap.OAuthHandler
-	IntegrationDefs   map[string]config.IntegrationDef
+	PluginDefs   map[string]config.PluginDef
 	PublicBaseURL     string
 	SecureCookies     bool
 	StateSecret       []byte
@@ -127,7 +127,7 @@ func New(cfg Config) (*Server, error) {
 		defaultConnection: cfg.DefaultConnection,
 		catalogConnection: cfg.CatalogConnection,
 		connectionAuth:    cfg.ConnectionAuth,
-		integrationDefs:   cfg.IntegrationDefs,
+		pluginDefs:   cfg.PluginDefs,
 		noAuth:            noAuth,
 		publicBaseURL:     strings.TrimRight(cfg.PublicBaseURL, "/"),
 		secureCookies:     cfg.SecureCookies,

@@ -19,12 +19,12 @@ type ConnectionMaps struct {
 
 func BuildConnectionMaps(cfg *config.Config) (ConnectionMaps, error) {
 	maps := ConnectionMaps{
-		DefaultConnection: make(map[string]string, len(cfg.Integrations)),
-		APIConnection:     make(map[string]string, len(cfg.Integrations)),
-		MCPConnection:     make(map[string]string, len(cfg.Integrations)),
+		DefaultConnection: make(map[string]string, len(cfg.Plugins)),
+		APIConnection:     make(map[string]string, len(cfg.Plugins)),
+		MCPConnection:     make(map[string]string, len(cfg.Plugins)),
 	}
 
-	for name, intg := range cfg.Integrations {
+	for name, intg := range cfg.Plugins {
 		defaultConnection := config.PluginConnectionName
 		apiConnection := config.PluginConnectionName
 		mcpConnection := config.PluginConnectionName
@@ -261,7 +261,7 @@ func resolveManifestRelativeSpecURL(plugin *config.ProviderDef, raw string) stri
 	return filepath.Clean(filepath.Join(filepath.Dir(plugin.ResolvedManifestPath), raw))
 }
 
-func buildConnectionAuthMap(name string, intg config.IntegrationDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, authFallback *specAuthFallback, deps Deps) (map[string]OAuthHandler, error) {
+func buildConnectionAuthMap(name string, intg config.PluginDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, authFallback *specAuthFallback, deps Deps) (map[string]OAuthHandler, error) {
 	manifestPlugin := (*pluginmanifestv1.Plugin)(nil)
 	if manifest != nil {
 		manifestPlugin = manifest.Plugin

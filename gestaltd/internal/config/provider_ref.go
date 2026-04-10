@@ -70,9 +70,9 @@ func (p *ProviderDef) UnmarshalYAML(value *yaml.Node) error {
 	return nil
 }
 
-func (i *IntegrationDef) UnmarshalYAML(value *yaml.Node) error {
+func (i *PluginDef) UnmarshalYAML(value *yaml.Node) error {
 	if value == nil || value.Kind == 0 {
-		*i = IntegrationDef{}
+		*i = PluginDef{}
 		return nil
 	}
 	if value.Kind != yaml.MappingNode {
@@ -125,7 +125,7 @@ func (i *IntegrationDef) UnmarshalYAML(value *yaml.Node) error {
 		}
 	}
 
-	*i = IntegrationDef{
+	*i = PluginDef{
 		Plugin:      plugin,
 		DisplayName: wire.DisplayName,
 		Description: wire.Description,

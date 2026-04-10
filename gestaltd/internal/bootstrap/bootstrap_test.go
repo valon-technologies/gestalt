@@ -59,8 +59,8 @@ func validConfig() *config.Config {
 			"sqlite": {Driver: "sqlite", DSN: ":memory:"},
 		},
 		Secrets:      config.SecretsConfig{BuiltinProvider: "test-secrets"},
-		Telemetry:    config.TelemetryConfig{Provider: "test-telemetry"},
-		Integrations: map[string]config.IntegrationDef{},
+		Telemetry:    config.TelemetryConfig{BuiltinProvider: "test-telemetry"},
+		Plugins: map[string]config.PluginDef{},
 		Server: config.ServerConfig{
 			Public:        config.ListenerConfig{Port: 8080},
 			EncryptionKey: "test-key",
@@ -157,7 +157,7 @@ func TestBootstrapNoIntegrations(t *testing.T) {
 	ctx := context.Background()
 
 	cfg := validConfig()
-	cfg.Integrations = nil
+	cfg.Plugins = nil
 
 	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
 	if err != nil {

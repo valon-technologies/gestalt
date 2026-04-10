@@ -62,7 +62,7 @@ func TestSandboxedPluginCannotReadUnauthorizedFile(t *testing.T) {
 	)
 
 	cfg := &config.Config{
-		Integrations: map[string]config.IntegrationDef{
+		Plugins: map[string]config.PluginDef{
 			"sandboxed": {
 				Plugin: &config.ProviderDef{
 					Command:              bin,
@@ -108,7 +108,7 @@ func TestSandboxedPluginCanCommunicateViaGRPC(t *testing.T) {
 	)
 
 	cfg := &config.Config{
-		Integrations: map[string]config.IntegrationDef{
+		Plugins: map[string]config.PluginDef{
 			"sandboxed": {
 				Plugin: &config.ProviderDef{
 					Command:              bin,
@@ -157,7 +157,7 @@ func TestSandboxedSynthesizedSourcePluginCanStart(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		Integrations: map[string]config.IntegrationDef{
+		Plugins: map[string]config.PluginDef{
 			"example": {
 				Plugin: &config.ProviderDef{
 					AllowedHosts:         []string{"localhost"},
@@ -211,7 +211,7 @@ func TestSandboxDisabledByDefault(t *testing.T) {
 	)
 
 	cfg := &config.Config{
-		Integrations: map[string]config.IntegrationDef{
+		Plugins: map[string]config.PluginDef{
 			"nosandbox": {
 				Plugin: &config.ProviderDef{
 					Command:              bin,
@@ -260,7 +260,7 @@ func TestSandboxedPluginHTTPProxyAllowsConfiguredHosts(t *testing.T) {
 	)
 
 	cfg := &config.Config{
-		Integrations: map[string]config.IntegrationDef{
+		Plugins: map[string]config.PluginDef{
 			"proxied": {
 				Plugin: &config.ProviderDef{
 					Command:              bin,
@@ -318,7 +318,7 @@ func TestSandboxedPluginHTTPProxyBlocksUnconfiguredHosts(t *testing.T) {
 	)
 
 	cfg := &config.Config{
-		Integrations: map[string]config.IntegrationDef{
+		Plugins: map[string]config.PluginDef{
 			"blocked": {
 				Plugin: &config.ProviderDef{
 					Command:              bin,

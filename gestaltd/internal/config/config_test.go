@@ -74,8 +74,8 @@ plugins:
 	if cfg.Server.EncryptionKey != "server-key" {
 		t.Fatalf("Server.EncryptionKey = %q", cfg.Server.EncryptionKey)
 	}
-	if got := cfg.Integrations["service-a"].DisplayName; got != "Service A" {
-		t.Fatalf("Integrations[service-a].DisplayName = %q", got)
+	if got := cfg.Plugins["service-a"].DisplayName; got != "Service A" {
+		t.Fatalf("Plugins[service-a].DisplayName = %q", got)
 	}
 }
 
@@ -469,7 +469,7 @@ plugins:
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if got := cfg.Integrations["custom_tool"].Plugin.SourcePath(); got != filepath.Join(filepath.Dir(path), "manifest.yaml") {
+	if got := cfg.Plugins["custom_tool"].Plugin.SourcePath(); got != filepath.Join(filepath.Dir(path), "manifest.yaml") {
 		t.Fatalf("unexpected plugin source path: %q", got)
 	}
 }
@@ -885,7 +885,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 		{
 			name: "local source valid",
 			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
+				Plugins: map[string]PluginDef{
 					"sample": {Plugin: &ProviderDef{Source: &PluginSourceDef{Path: "./some-dir/manifest.yaml"}}},
 				},
 			},
@@ -893,7 +893,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 		{
 			name: "source valid",
 			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
+				Plugins: map[string]PluginDef{
 					"sample": {Plugin: &ProviderDef{Source: &PluginSourceDef{Ref: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}}},
 				},
 			},
@@ -901,7 +901,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 		{
 			name: "source path and ref rejected",
 			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
+				Plugins: map[string]PluginDef{
 					"sample": {Plugin: &ProviderDef{Source: &PluginSourceDef{Path: "./manifest.yaml", Ref: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}}},
 				},
 			},
@@ -910,7 +910,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 		{
 			name: "nil plugin rejected",
 			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
+				Plugins: map[string]PluginDef{
 					"sample": {},
 				},
 			},
@@ -919,7 +919,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 		{
 			name: "source without version rejected",
 			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
+				Plugins: map[string]PluginDef{
 					"sample": {Plugin: &ProviderDef{Source: &PluginSourceDef{Ref: "github.com/test-org/test-repo/test-plugin"}}},
 				},
 			},
@@ -928,7 +928,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 		{
 			name: "source version without ref rejected",
 			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
+				Plugins: map[string]PluginDef{
 					"sample": {Plugin: &ProviderDef{Source: &PluginSourceDef{Version: "1.0.0"}}},
 				},
 			},
@@ -976,7 +976,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 		{
 			name: "plugin auth rejects mcp oauth early",
 			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
+				Plugins: map[string]PluginDef{
 					"sample": {
 						Plugin: &ProviderDef{
 							Source: &PluginSourceDef{Path: "./manifest.yaml"},
@@ -990,7 +990,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 		{
 			name: "named connection rejects mcp oauth early",
 			cfg: &Config{
-				Integrations: map[string]IntegrationDef{
+				Plugins: map[string]PluginDef{
 					"sample": {
 						Plugin: &ProviderDef{
 							Source: &PluginSourceDef{Path: "./manifest.yaml"},
@@ -1067,13 +1067,13 @@ plugins:
 		t.Fatalf("Load: %v", err)
 	}
 
-	if got := cfg.Integrations["service-a"].IconFile; got != iconPath {
+	if got := cfg.Plugins["service-a"].IconFile; got != iconPath {
 		t.Fatalf("IconFile = %q, want %q", got, iconPath)
 	}
 	if got := cfg.Auth.Provider.SourcePath(); got != filepath.Join(dir, "auth-plugin", "provider.yaml") {
 		t.Fatalf("auth plugin source path = %q, want %q", got, filepath.Join(dir, "auth-plugin", "provider.yaml"))
 	}
-	if got := cfg.Integrations["service-a"].Plugin.SourcePath(); got != filepath.Join(dir, "bin", "manifest.yaml") {
+	if got := cfg.Plugins["service-a"].Plugin.SourcePath(); got != filepath.Join(dir, "bin", "manifest.yaml") {
 		t.Fatalf("integration plugin source path = %q, want %q", got, filepath.Join(dir, "bin", "manifest.yaml"))
 	}
 }
@@ -1200,7 +1200,7 @@ func TestLoad_ResolvesRelativePluginSourcePath(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 
-	plugin := loaded.Integrations["sample"].Plugin
+	plugin := loaded.Plugins["sample"].Plugin
 	if plugin == nil {
 		t.Fatal("expected plugin to be loaded")
 	}

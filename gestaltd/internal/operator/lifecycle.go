@@ -174,7 +174,7 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 
 func buildSourceTokenMap(cfg *config.Config) map[string]string {
 	tokens := make(map[string]string)
-	for _, intg := range cfg.Integrations {
+	for _, intg := range cfg.Plugins {
 		if intg.Plugin != nil && intg.Plugin.Source != nil && intg.Plugin.Source.Auth != nil {
 			tokens[intg.Plugin.SourceRef()] = intg.Plugin.Source.Auth.Token
 		}
@@ -316,8 +316,8 @@ type pluginFingerprintInput struct {
 }
 
 func configHasPluginLoading(cfg *config.Config) bool {
-	for name := range cfg.Integrations {
-		plugin := cfg.Integrations[name].Plugin
+	for name := range cfg.Plugins {
+		plugin := cfg.Plugins[name].Plugin
 		if plugin.HasManagedArtifacts() || plugin.HasLocalSource() {
 			return true
 		}
@@ -332,8 +332,8 @@ func configHasPluginLoading(cfg *config.Config) bool {
 }
 
 func configHasManagedPlugins(cfg *config.Config) bool {
-	for name := range cfg.Integrations {
-		if cfg.Integrations[name].Plugin.HasManagedArtifacts() {
+	for name := range cfg.Plugins {
+		if cfg.Plugins[name].Plugin.HasManagedArtifacts() {
 			return true
 		}
 	}
@@ -444,8 +444,8 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 	if lock == nil || lock.Version != LockVersion {
 		return false
 	}
-	for name := range cfg.Integrations {
-		provider := cfg.Integrations[name]
+	for name := range cfg.Plugins {
+		provider := cfg.Plugins[name]
 		if !provider.Plugin.HasManagedArtifacts() {
 			continue
 		}
@@ -586,8 +586,8 @@ func (l *Lifecycle) buildArchivesMap(ctx context.Context, src pluginsource.Sourc
 
 func (l *Lifecycle) writeProviderArtifacts(ctx context.Context, cfg *config.Config, paths initPaths) (map[string]LockProviderEntry, error) {
 	written := make(map[string]LockProviderEntry)
-	for name := range cfg.Integrations {
-		provider := cfg.Integrations[name]
+	for name := range cfg.Plugins {
+		provider := cfg.Plugins[name]
 		if provider.Plugin == nil {
 			continue
 		}
@@ -826,8 +826,8 @@ func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *con
 		}
 	}
 
-	for name := range cfg.Integrations {
-		provider := cfg.Integrations[name]
+	for name := range cfg.Plugins {
+		provider := cfg.Plugins[name]
 		if provider.Plugin == nil {
 			continue
 		}
@@ -852,7 +852,7 @@ func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *con
 			provider.Description = cmp.Or(provider.Description, manifest.Description)
 		}
 		provider.IconFile = cmp.Or(provider.IconFile, provider.Plugin.ResolvedIconFile)
-		cfg.Integrations[name] = provider
+		cfg.Plugins[name] = provider
 	}
 	if cfg.Auth.Provider != nil {
 		if err := l.applyComponentProvider(paths, lock, pluginmanifestv1.KindAuth, "auth", cfg.Auth.Provider, cfg.Auth.Config, &cfg.Auth.Config, locked); err != nil {
