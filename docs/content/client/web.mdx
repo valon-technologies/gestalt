@@ -24,14 +24,14 @@ Create and revoke API tokens for programmatic access. Each token shows its name,
 
 ## Authentication
 
-When `auth.provider` is set to `google` or `oidc`, the web UI redirects to your identity provider for login. With `auth.provider: local`, login is automatic. With `auth.provider: none`, every request is anonymous.
+When `auth.provider` points to a Google or OIDC auth provider, the web UI redirects to your identity provider for login. With a local auth provider, login is automatic. With `auth: { disabled: true }`, every request is anonymous.
 
 ## Custom UI bundles
 
-The public web UI is configured through `ui.provider`.
+The public web UI is configured through the `ui` block.
 
 - Omit `ui` to use the pinned first-party default UI bundle.
-- Set `ui.provider: none` to run headless with no public UI at `/`.
+- Set `ui: { disabled: true }` to run headless with no public UI at `/`.
 - Set `ui.provider.source` to a packaged `webui` bundle to bring your own frontend.
 
 The built-in admin UI at `/admin` remains available regardless. See [Releasing](/providers/releasing) for the bundle format.

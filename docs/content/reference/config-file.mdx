@@ -20,7 +20,7 @@ ui: {}
 
 `${ENV_VAR}` references are expanded before YAML decoding. When a referenced variable is unset, Gestalt checks for a corresponding `ENV_VAR_FILE` variable and reads that file path instead. If neither is set, config loading fails. Use `${ENV_VAR:-}` when an explicit empty default is intentional. Unknown YAML fields are rejected.
 
-Several fields carry defaults when omitted: `server.public.port` defaults to `8080`, `secrets.provider` to `env`, and `telemetry.provider` to `stdout`. Relative paths resolve relative to the config file's directory. `secret://...` values are resolved during bootstrap, not during YAML parsing.
+Several fields carry defaults when omitted: `server.public.port` defaults to `8080`, `secrets.builtin` to `env`, and `telemetry.builtin` to `stdout`. Relative paths resolve relative to the config file's directory. `secret://...` values are resolved during bootstrap, not during YAML parsing.
 
 ## `server`
 
@@ -63,13 +63,13 @@ When `server.management` is configured, Gestalt serves `/`, `/api/v1/*`, auth ro
 
 ## `auth`
 
-Top-level platform auth is optional. Omit the `auth` block entirely to disable platform authentication, or set `auth.provider: none` explicitly. When auth is enabled, configure it with `auth.provider` and `auth.config`. `auth.provider` uses the same provider-reference shape as plugins: a `source` block plus optional `env` and `allowedHosts`.
+Top-level platform auth is optional. Omit the `auth` block entirely to disable platform authentication, or set `auth: { disabled: true }` explicitly. When auth is enabled, configure it with `auth.provider` and `auth.config`. `auth.provider` uses the same provider-reference shape as plugins: a `source` block plus optional `env` and `allowedHosts`.
 
-### `none`
+### `disabled`
 
 ```yaml
 auth:
-  provider: none
+  disabled: true
 ```
 
 Disables platform authentication. Every request is treated as a single anonymous user. Omitting the `auth` block has the same effect.
@@ -159,11 +159,11 @@ The exact config fields depend on the selected external datastore provider packa
 
 ## `secrets`
 
-The secrets manager resolves `secret://` references at startup. Unlike `auth` and `datastore`, secret providers are built into the `gestaltd` binary and selected by a plain string `provider` field.
+The secrets manager resolves `secret://` references at startup. Unlike `auth` and `datastore`, secret providers are built into the `gestaltd` binary and selected by the `builtin` field.
 
 ```yaml
 secrets:
-  provider: file
+  builtin: file
   config:
     dir: /etc/gestalt-secrets
 ```
@@ -202,14 +202,14 @@ Gestalt uses [OpenTelemetry](https://opentelemetry.io) for distributed traces, m
 
 ```yaml
 telemetry:
-  provider: stdout
+  builtin: stdout
   config:
     format: text
     level: info
     serviceName: gestaltd
 ```
 
-Outputs structured logs to standard output. Traces remain disabled, but metrics are collected locally and exposed through the Prometheus-compatible `/metrics` endpoint. The built-in admin UI at `/admin` reads that same scrape surface. This is the default provider when `telemetry` is omitted.
+Outputs structured logs to standard output. Traces remain disabled, but metrics are collected locally and exposed through the Prometheus-compatible `/metrics` endpoint. The built-in admin UI at `/admin` reads that same scrape surface. This is the default when `telemetry` is omitted.
 
 | Field | Default | Description |
 | --- | --- | --- |
@@ -223,7 +223,7 @@ Outputs structured logs to standard output. Traces remain disabled, but metrics 
 
 ```yaml
 telemetry:
-  provider: otlp
+  builtin: otlp
   config:
     endpoint: otel-collector:4317
     protocol: grpc
@@ -264,7 +264,7 @@ To keep system logs on stdout while still exporting traces and metrics over OTLP
 
 ```yaml
 telemetry:
-  provider: otlp
+  builtin: otlp
   config:
     endpoint: otel-collector:4317
     protocol: grpc
@@ -280,7 +280,7 @@ telemetry:
 
 ```yaml
 telemetry:
-  provider: noop
+  builtin: noop
 ```
 
 Disables all telemetry. Instrumentation points remain but produce zero overhead. This disables Prometheus scraping. `/metrics` returns a clear unavailable response, and the built-in admin UI shows that metrics are unavailable.
@@ -295,24 +295,24 @@ Disables all telemetry. Instrumentation points remain but produce zero overhead.
 
 ## `audit`
 
-Audit records are emitted as structured log entries with `log.type=audit`. By default they inherit the normal telemetry log pipeline, but you can override that with a dedicated `audit` block. See [Audit Logging](/audit-logging) for the event schema and coverage details, and [Observability](/observability) for export options. If you keep `audit.provider: inherit`, you can still route audit traffic to a dedicated backend by filtering on `log.type=audit` in your collector.
+Audit records are emitted as structured log entries with `log.type=audit`. By default they inherit the normal telemetry log pipeline, but you can override that with a dedicated `audit` block. See [Audit Logging](/audit-logging) for the event schema and coverage details, and [Observability](/observability) for export options. If you keep `audit: { builtin: inherit }`, you can still route audit traffic to a dedicated backend by filtering on `log.type=audit` in your collector.
 
 ### `inherit`
 
 ```yaml
 audit:
-  provider: inherit
+  builtin: inherit
 ```
 
 This is the default when `audit` is omitted. Audit records follow the same log route as `telemetry`: when telemetry uses `stdout`, audit logs go to standard output; when telemetry uses `otlp`, audit logs export through the OTLP log pipeline; when telemetry uses `noop`, audit output is disabled unless you override it here.
 
-`audit.config` is not allowed when `audit.provider` is `inherit`.
+`audit.config` is not allowed when `audit.builtin` is `inherit`.
 
 ### `stdout`
 
 ```yaml
 audit:
-  provider: stdout
+  builtin: stdout
   config:
     format: json
 ```
@@ -328,7 +328,7 @@ Writes audit records to standard output even if the main telemetry pipeline is u
 
 ```yaml
 audit:
-  provider: otlp
+  builtin: otlp
   config:
     endpoint: audit-collector:4317
     protocol: grpc
@@ -355,10 +355,10 @@ Exports audit records over OTLP without changing where application logs, metrics
 
 ```yaml
 audit:
-  provider: noop
+  builtin: noop
 ```
 
-Disables audit output explicitly. `audit.config` is not allowed when `audit.provider` is `noop`.
+Disables audit output explicitly. `audit.config` is not allowed when `audit.builtin` is `noop`.
 
 ## `plugins`
 
@@ -692,11 +692,12 @@ ui:
     brandName: Acme
 ```
 
-`ui.provider` controls the public client UI at `/`, while the built-in admin UI remains available at `/admin`. Omit `ui` to use the pinned first-party default UI bundle. Set `ui.provider: none` to disable the public UI entirely. Or set `ui.provider.source` to a packaged `webui` bundle. See [Releasing](/providers/releasing) for the full workflow.
+The `ui` block controls the public client UI at `/`, while the built-in admin UI remains available at `/admin`. Omit `ui` to use the pinned first-party default UI bundle. Set `ui: { disabled: true }` to disable the public UI entirely. Or set `ui.provider.source` to a packaged `webui` bundle. See [Releasing](/providers/releasing) for the full workflow.
 
 | Field | Description |
 | --- | --- |
-| `provider` | `none` to disable the public UI, or a provider mapping with `source.path` or `source.ref`. |
+| `disabled` | `true` to disable the public UI entirely. |
+| `provider` | A provider mapping with `source.path` or `source.ref`. |
 | `config` | Optional UI-provider config validated against the bundle schema when present. |
 
 ## Validation rules
@@ -711,7 +712,7 @@ Auth providers and datastore entries use the same external provider shape. When 
 
 Only `connections.default` may define `params` or `discovery`. `mcp.toolPrefix` is valid only when `mcp.enabled` is `true`. All connections in a plugin must share the same mode.
 
-`ui.provider` must be either `none` or a provider mapping with exactly one loading mode: local `ui.provider.source.path` or managed `ui.provider.source.ref`. `ui.provider.source.version` is required with `ui.provider.source.ref` and invalid with `ui.provider.source.path`. `ui.config` is only allowed when `ui.provider` is not `none`.
+`ui` must use exactly one mode: `disabled: true`, or a `provider` mapping with exactly one loading mode: local `ui.provider.source.path` or managed `ui.provider.source.ref`. `ui.provider.source.version` is required with `ui.provider.source.ref` and invalid with `ui.provider.source.path`. `ui.config` is only allowed when `ui.provider` is set.
 
 `egress.defaultAction` must be `allow` or `deny`. Each egress policy rule requires an `action`. Each egress credential grant requires `secretRef` (as a bare name, not a `secret://` URI) and at least one match criterion.
 

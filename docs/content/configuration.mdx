@@ -44,7 +44,7 @@ A config file has the following top-level blocks:
 
 ## Defaults and required fields
 
-Gestalt defaults `server.public.port` to `8080`, `secrets.provider` to `env`, and `telemetry.provider` to `stdout`. The required fields are `datastores`, `datastore`, and `server.encryptionKey`. Platform auth is optional.
+Gestalt defaults `server.public.port` to `8080`, `secrets.builtin` to `env`, and `telemetry.builtin` to `stdout`. The required fields are `datastores`, `datastore`, and `server.encryptionKey`. Platform auth is optional.
 
 `server.encryptionKey` is the root deployment secret. Gestalt derives token encryption and session material from it. Changing this key invalidates all existing sessions and tokens, so treat it as a meaningful deployment event.
 
@@ -168,11 +168,11 @@ Gestalt stores upstream credentials keyed by user, plugin name, connection name,
 
 The `auth` block selects a platform login provider that protects the web UI, HTTP API, and `/mcp` endpoint. Auth providers run as external gRPC provider processes, following the same architecture as plugins.
 
-For local development, omit the `auth` block entirely or use the `none` shorthand:
+For local development, omit the `auth` block entirely or disable it explicitly:
 
 ```yaml
 auth:
-  provider: none
+  disabled: true
 ```
 
 Both are equivalent. Omitting `auth` means no platform login is required.
@@ -191,7 +191,7 @@ auth:
     clientSecret: secret://oidc-client-secret
 ```
 
-The `auth.provider` field is a provider reference with `source.ref` and `version`, the same shape used for plugins. The `none` scalar shorthand is the only exception.
+The `auth.provider` field is a provider reference with `source.ref` and `version`, the same shape used for plugins. Use `auth: { disabled: true }` to disable auth entirely.
 
 ### API tokens
 
@@ -316,8 +316,8 @@ The lockfile records the concrete result of resolving that config.
 
 | Scenario | Configuration |
 | --- | --- |
-| Local development | Omit `auth` or set `auth.provider: none` |
-| Multi-user deployment | `auth.provider` with an OIDC or Google auth provider |
+| Local development | Omit `auth` or set `auth: { disabled: true }` |
+| Multi-user deployment | `auth.provider` with a published OIDC or Google auth provider |
 | Per-user upstream access | `mode: user` on plugin connections |
 | Shared service credential | `mode: identity` on plugin connections |
 
