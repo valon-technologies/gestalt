@@ -79,9 +79,24 @@ func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
 	return validateManifest(manifest, false)
 }
 
+var validManifestKinds = map[string]bool{
+	pluginmanifestv1.KindPlugin:    true,
+	pluginmanifestv1.KindAuth:      true,
+	pluginmanifestv1.KindDatastore: true,
+	pluginmanifestv1.KindSecrets:   true,
+	pluginmanifestv1.KindWebUI:     true,
+}
+
 func ManifestKind(manifest *pluginmanifestv1.Manifest) (string, error) {
 	if manifest == nil {
 		return "", fmt.Errorf("manifest is required")
+	}
+
+	if manifest.Kind != "" {
+		if !validManifestKinds[manifest.Kind] {
+			return "", fmt.Errorf("manifest kind %q is not valid; expected one of plugin, auth, datastore, secrets, or webui", manifest.Kind)
+		}
+		return manifest.Kind, nil
 	}
 
 	var (
@@ -109,7 +124,7 @@ func ManifestKind(manifest *pluginmanifestv1.Manifest) (string, error) {
 		count++
 	}
 	if count != 1 {
-		return "", fmt.Errorf("manifest must define exactly one of plugin, auth, datastore, secrets, or webui")
+		return "", fmt.Errorf("manifest must define exactly one of plugin, auth, datastore, secrets, or webui (or set the kind field explicitly)")
 	}
 	return kind, nil
 }
@@ -479,7 +494,7 @@ func validateExecutableProviderMetadata(provider *pluginmanifestv1.Plugin) error
 	if err := validateProviderAuth("provider.auth", provider.Auth); err != nil {
 		return err
 	}
-	if provider.Auth != nil && provider.Auth.Type == pluginmanifestv1.AuthTypeMCPOAuth && provider.MCPURL == "" {
+	if provider.Auth != nil && provider.Auth.Type == pluginmanifestv1.AuthTypeMCPOAuth && provider.MCPURL() == "" {
 		return fmt.Errorf("provider.auth.type %q requires an MCP surface", pluginmanifestv1.AuthTypeMCPOAuth)
 	}
 	for name, conn := range provider.Connections {
@@ -489,7 +504,7 @@ func validateExecutableProviderMetadata(provider *pluginmanifestv1.Plugin) error
 		if err := validateProviderAuth(fmt.Sprintf("provider.connections.%s.auth", name), conn.Auth); err != nil {
 			return err
 		}
-		if conn.Auth != nil && conn.Auth.Type == pluginmanifestv1.AuthTypeMCPOAuth && provider.MCPURL == "" {
+		if conn.Auth != nil && conn.Auth.Type == pluginmanifestv1.AuthTypeMCPOAuth && provider.MCPURL() == "" {
 			return fmt.Errorf("provider.connections.%s.auth.type %q requires an MCP surface", name, pluginmanifestv1.AuthTypeMCPOAuth)
 		}
 		if conn.Mode == "" {
@@ -522,8 +537,8 @@ func validateExecutableProviderMetadata(provider *pluginmanifestv1.Plugin) error
 		field   string
 		present bool
 	}{
-		{field: "provider.baseUrl", present: provider.BaseURL != "" && !provider.IsDeclarative() && provider.OpenAPI == ""},
-		{field: "provider.operations", present: len(provider.Operations) > 0 && !provider.IsDeclarative()},
+		{field: "provider.baseUrl", present: provider.RESTBaseURL() != "" && !provider.IsDeclarative() && provider.OpenAPIDocument() == ""},
+		{field: "provider.operations", present: len(provider.RESTOperations()) > 0 && !provider.IsDeclarative()},
 	}
 	for _, check := range checks {
 		if check.present {
@@ -548,11 +563,12 @@ var validHTTPMethods = map[string]bool{
 }
 
 func validateDeclarativeProvider(provider *pluginmanifestv1.Plugin) error {
-	if provider.BaseURL == "" {
+	if provider.RESTBaseURL() == "" {
 		return fmt.Errorf("provider.baseUrl is required for declarative providers")
 	}
-	seen := make(map[string]struct{}, len(provider.Operations))
-	for i, op := range provider.Operations {
+	ops := provider.RESTOperations()
+	seen := make(map[string]struct{}, len(ops))
+	for i, op := range ops {
 		if op.Name == "" {
 			return fmt.Errorf("provider.operations[%d].name is required", i)
 		}

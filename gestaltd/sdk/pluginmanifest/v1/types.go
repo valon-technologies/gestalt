@@ -13,6 +13,7 @@ const (
 )
 
 type Manifest struct {
+	Kind        string             `json:"kind,omitempty" yaml:"kind,omitempty"`
 	Source      string             `json:"source,omitempty" yaml:"source,omitempty"`
 	Version     string             `json:"version" yaml:"version"`
 	DisplayName string             `json:"displayName,omitempty" yaml:"displayName,omitempty"`
@@ -57,38 +58,135 @@ type WebUIMetadata struct {
 type Plugin struct {
 	ConfigSchemaPath  string                             `json:"configSchemaPath,omitempty" yaml:"configSchemaPath,omitempty"`
 	Auth              *ProviderAuth                      `json:"auth,omitempty" yaml:"auth,omitempty"`
-	ConnectionMode    string                             `json:"connectionMode,omitempty" yaml:"connectionMode,omitempty"`
+	ConnectionMode    ConnectionMode                     `json:"connectionMode,omitempty" yaml:"connectionMode,omitempty"`
 	MCP               bool                               `json:"mcp,omitempty" yaml:"mcp,omitempty"`
-	BaseURL           string                             `json:"baseUrl,omitempty" yaml:"baseUrl,omitempty"`
 	Headers           map[string]string                  `json:"headers,omitempty" yaml:"headers,omitempty"`
 	ManagedParameters []ManagedParameter                 `json:"managedParameters,omitempty" yaml:"managedParameters,omitempty"`
-	Operations        []ProviderOperation                `json:"operations,omitempty" yaml:"operations,omitempty"`
 	Discovery         *ProviderDiscovery                 `json:"discovery,omitempty" yaml:"discovery,omitempty"`
 	ConnectionParams  map[string]ProviderConnectionParam `json:"connectionParams,omitempty" yaml:"connectionParams,omitempty"`
 
-	OpenAPI           string                                `json:"openapi,omitempty" yaml:"openapi,omitempty"`
-	GraphQLURL        string                                `json:"graphqlUrl,omitempty" yaml:"graphqlUrl,omitempty"`
-	MCPURL            string                                `json:"mcpUrl,omitempty" yaml:"mcpUrl,omitempty"`
+	Surfaces          *PluginSurfaces                       `json:"surfaces,omitempty" yaml:"surfaces,omitempty"`
 	AllowedOperations map[string]*ManifestOperationOverride `json:"allowedOperations,omitempty" yaml:"allowedOperations,omitempty"`
-	OpenAPIConnection string                                `json:"openapiConnection,omitempty" yaml:"openapiConnection,omitempty"`
-	GraphQLConnection string                                `json:"graphqlConnection,omitempty" yaml:"graphqlConnection,omitempty"`
-	MCPConnection     string                                `json:"mcpConnection,omitempty" yaml:"mcpConnection,omitempty"`
 	DefaultConnection string                                `json:"defaultConnection,omitempty" yaml:"defaultConnection,omitempty"`
 	Connections       map[string]*ManifestConnectionDef     `json:"connections,omitempty" yaml:"connections,omitempty"`
 	ResponseMapping   *ManifestResponseMapping              `json:"responseMapping,omitempty" yaml:"responseMapping,omitempty"`
 	Pagination        *ManifestPaginationConfig             `json:"pagination,omitempty" yaml:"pagination,omitempty"`
 }
 
+type PluginSurfaces struct {
+	REST    *RESTSurface    `json:"rest,omitempty" yaml:"rest,omitempty"`
+	OpenAPI *OpenAPISurface `json:"openapi,omitempty" yaml:"openapi,omitempty"`
+	GraphQL *GraphQLSurface `json:"graphql,omitempty" yaml:"graphql,omitempty"`
+	MCP     *MCPSurface     `json:"mcp,omitempty" yaml:"mcp,omitempty"`
+}
+
+type RESTSurface struct {
+	Connection string              `json:"connection,omitempty" yaml:"connection,omitempty"`
+	BaseURL    string              `json:"baseUrl" yaml:"baseUrl"`
+	Operations []ProviderOperation `json:"operations" yaml:"operations"`
+}
+
+type OpenAPISurface struct {
+	Connection string `json:"connection,omitempty" yaml:"connection,omitempty"`
+	Document   string `json:"document" yaml:"document"`
+	BaseURL    string `json:"baseUrl,omitempty" yaml:"baseUrl,omitempty"`
+}
+
+type GraphQLSurface struct {
+	Connection string `json:"connection,omitempty" yaml:"connection,omitempty"`
+	URL        string `json:"url" yaml:"url"`
+}
+
+type MCPSurface struct {
+	Connection string `json:"connection,omitempty" yaml:"connection,omitempty"`
+	URL        string `json:"url" yaml:"url"`
+}
+
 func (p *Plugin) IsDeclarative() bool {
-	return p != nil && len(p.Operations) > 0
+	return p != nil && p.Surfaces != nil && p.Surfaces.REST != nil && len(p.Surfaces.REST.Operations) > 0
 }
 
 func (p *Plugin) IsSpecLoaded() bool {
-	return p != nil && (p.OpenAPI != "" || p.GraphQLURL != "" || p.MCPURL != "")
+	return p != nil && p.Surfaces != nil &&
+		(p.Surfaces.OpenAPI != nil || p.Surfaces.GraphQL != nil || p.Surfaces.MCP != nil)
 }
 
 func (p *Plugin) IsManifestBacked() bool {
 	return p != nil && (p.IsDeclarative() || p.IsSpecLoaded())
+}
+
+func (p *Plugin) OpenAPIDocument() string {
+	if p == nil || p.Surfaces == nil || p.Surfaces.OpenAPI == nil {
+		return ""
+	}
+	return p.Surfaces.OpenAPI.Document
+}
+
+func (p *Plugin) OpenAPIBaseURL() string {
+	if p == nil || p.Surfaces == nil || p.Surfaces.OpenAPI == nil {
+		return ""
+	}
+	return p.Surfaces.OpenAPI.BaseURL
+}
+
+func (p *Plugin) SpecBaseURL() string {
+	if u := p.RESTBaseURL(); u != "" {
+		return u
+	}
+	return p.OpenAPIBaseURL()
+}
+
+func (p *Plugin) GraphQLURL() string {
+	if p == nil || p.Surfaces == nil || p.Surfaces.GraphQL == nil {
+		return ""
+	}
+	return p.Surfaces.GraphQL.URL
+}
+
+func (p *Plugin) MCPURL() string {
+	if p == nil || p.Surfaces == nil || p.Surfaces.MCP == nil {
+		return ""
+	}
+	return p.Surfaces.MCP.URL
+}
+
+func (p *Plugin) RESTBaseURL() string {
+	if p == nil || p.Surfaces == nil || p.Surfaces.REST == nil {
+		return ""
+	}
+	return p.Surfaces.REST.BaseURL
+}
+
+func (p *Plugin) RESTOperations() []ProviderOperation {
+	if p == nil || p.Surfaces == nil || p.Surfaces.REST == nil {
+		return nil
+	}
+	return p.Surfaces.REST.Operations
+}
+
+func (p *Plugin) SurfaceConnectionName(surface string) string {
+	if p == nil || p.Surfaces == nil {
+		return ""
+	}
+	switch surface {
+	case "openapi":
+		if p.Surfaces.OpenAPI != nil {
+			return p.Surfaces.OpenAPI.Connection
+		}
+	case "graphql":
+		if p.Surfaces.GraphQL != nil {
+			return p.Surfaces.GraphQL.Connection
+		}
+	case "mcp":
+		if p.Surfaces.MCP != nil {
+			return p.Surfaces.MCP.Connection
+		}
+	case "rest":
+		if p.Surfaces.REST != nil {
+			return p.Surfaces.REST.Connection
+		}
+	}
+	return ""
 }
 
 func (m *Manifest) IsHybridProvider() bool {
@@ -128,7 +226,7 @@ type ProviderConnectionParam struct {
 }
 
 type ManifestPaginationConfig struct {
-	Style        string                 `json:"style" yaml:"style"`
+	Style        PaginationStyle        `json:"style" yaml:"style"`
 	CursorParam  string                 `json:"cursorParam,omitempty" yaml:"cursorParam,omitempty"`
 	Cursor       *ManifestValueSelector `json:"cursor,omitempty" yaml:"cursor,omitempty"`
 	LimitParam   string                 `json:"limitParam,omitempty" yaml:"limitParam,omitempty"`
@@ -145,7 +243,7 @@ type ManifestOperationOverride struct {
 }
 
 type ManifestConnectionDef struct {
-	Mode      string                             `json:"mode,omitempty" yaml:"mode,omitempty"`
+	Mode      ConnectionMode                     `json:"mode,omitempty" yaml:"mode,omitempty"`
 	Auth      *ProviderAuth                      `json:"auth,omitempty" yaml:"auth,omitempty"`
 	Params    map[string]ProviderConnectionParam `json:"params,omitempty" yaml:"params,omitempty"`
 	Discovery *ProviderDiscovery                 `json:"discovery,omitempty" yaml:"discovery,omitempty"`
@@ -173,16 +271,35 @@ type ManagedParameter struct {
 	Value string `json:"value" yaml:"value"`
 }
 
+type AuthType string
+
 const (
-	AuthTypeOAuth2   = "oauth2"
-	AuthTypeMCPOAuth = "mcp_oauth"
-	AuthTypeBearer   = "bearer"
-	AuthTypeManual   = "manual"
-	AuthTypeNone     = "none"
+	AuthTypeOAuth2   AuthType = "oauth2"
+	AuthTypeMCPOAuth AuthType = "mcp_oauth"
+	AuthTypeBearer   AuthType = "bearer"
+	AuthTypeManual   AuthType = "manual"
+	AuthTypeNone     AuthType = "none"
+)
+
+type ConnectionMode string
+
+const (
+	ConnectionModeNone     ConnectionMode = "none"
+	ConnectionModeUser     ConnectionMode = "user"
+	ConnectionModeIdentity ConnectionMode = "identity"
+	ConnectionModeEither   ConnectionMode = "either"
+)
+
+type PaginationStyle string
+
+const (
+	PaginationStyleCursor PaginationStyle = "cursor"
+	PaginationStyleOffset PaginationStyle = "offset"
+	PaginationStylePage   PaginationStyle = "page"
 )
 
 type ProviderAuth struct {
-	Type                string            `json:"type" yaml:"type"`
+	Type                AuthType          `json:"type" yaml:"type"`
 	AuthorizationURL    string            `json:"authorizationUrl,omitempty" yaml:"authorizationUrl,omitempty"`
 	TokenURL            string            `json:"tokenUrl,omitempty" yaml:"tokenUrl,omitempty"`
 	ClientID            string            `json:"clientId,omitempty" yaml:"clientId,omitempty"`

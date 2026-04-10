@@ -8,6 +8,16 @@
     "version"
   ],
   "properties": {
+    "kind": {
+      "type": "string",
+      "enum": [
+        "plugin",
+        "auth",
+        "datastore",
+        "secrets",
+        "webui"
+      ]
+    },
     "source": {
       "type": "string",
       "pattern": "^github\\.com/[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*(/[a-z0-9][a-z0-9._-]*)*$"

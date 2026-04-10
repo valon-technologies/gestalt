@@ -35,11 +35,11 @@ func ManifestProviderSurfaceURL(provider *pluginmanifestv1.Plugin, surface SpecS
 	}
 	switch surface {
 	case SpecSurfaceOpenAPI:
-		return provider.OpenAPI
+		return provider.OpenAPIDocument()
 	case SpecSurfaceGraphQL:
-		return provider.GraphQLURL
+		return provider.GraphQLURL()
 	case SpecSurfaceMCP:
-		return provider.MCPURL
+		return provider.MCPURL()
 	default:
 		return ""
 	}
@@ -49,14 +49,5 @@ func ManifestProviderSurfaceConnectionName(provider *pluginmanifestv1.Plugin, su
 	if provider == nil {
 		return ""
 	}
-	switch surface {
-	case SpecSurfaceOpenAPI:
-		return provider.OpenAPIConnection
-	case SpecSurfaceGraphQL:
-		return provider.GraphQLConnection
-	case SpecSurfaceMCP:
-		return provider.MCPConnection
-	default:
-		return ""
-	}
+	return provider.SurfaceConnectionName(string(surface))
 }

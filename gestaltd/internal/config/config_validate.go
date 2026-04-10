@@ -38,6 +38,9 @@ func ValidateStructure(cfg *Config) error {
 	if err := validateUIConfig(cfg.UI); err != nil {
 		return err
 	}
+	if cfg.Auth.BuiltinProvider != "" {
+		return fmt.Errorf("config validation: auth.provider must be a provider reference mapping or the string \"none\"")
+	}
 	if err := validateTopLevelComponentConfig("auth", cfg.Auth.Provider, cfg.Auth.Config); err != nil {
 		return err
 	}
@@ -224,7 +227,7 @@ func validateManifestBackedConnectionDefaults(name string, plugin *ProviderDef, 
 }
 
 func validateExecutableConnectionAuthSupport(name string, plugin *ProviderDef, provider *pluginmanifestv1.Plugin) error {
-	supportsMCPOAuth := provider != nil && provider.MCPURL != ""
+	supportsMCPOAuth := provider != nil && provider.MCPURL() != ""
 	if conn := EffectivePluginConnectionDef(plugin, provider); conn.Auth.Type == pluginmanifestv1.AuthTypeMCPOAuth && !supportsMCPOAuth {
 		return fmt.Errorf("config validation: integration %q plugin auth type %q requires an MCP surface", name, pluginmanifestv1.AuthTypeMCPOAuth)
 	}

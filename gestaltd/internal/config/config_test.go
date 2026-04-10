@@ -379,7 +379,7 @@ datastore: sqlite
 server:
   encryptionKey: server-key
 `,
-			wantErr: "field plugin not found in type config.AuthConfig",
+			wantErr: "field plugin not found in type component config",
 		},
 		{
 			name: "legacy datastore plugin field rejected",

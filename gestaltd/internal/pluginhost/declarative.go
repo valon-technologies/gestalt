@@ -63,24 +63,25 @@ func NewDeclarativeProvider(manifest *pluginmanifestv1.Manifest, httpClient *htt
 		httpClient = &http.Client{Timeout: declarativeHTTPTimeout}
 	}
 
+	ops := manifest.Plugin.RESTOperations()
 	p := &DeclarativeProvider{
 		catalog: &catalog.Catalog{
 			Name:        manifest.Source,
 			DisplayName: manifest.DisplayName,
 			Description: manifest.Description,
 			Headers:     maps.Clone(manifest.Plugin.Headers),
-			Operations:  make([]catalog.CatalogOperation, 0, len(manifest.Plugin.Operations)),
+			Operations:  make([]catalog.CatalogOperation, 0, len(ops)),
 		},
-		opsByName:      make(map[string]*catalog.CatalogOperation, len(manifest.Plugin.Operations)),
-		baseURL:        manifest.Plugin.BaseURL,
+		opsByName:      make(map[string]*catalog.CatalogOperation, len(ops)),
+		baseURL:        manifest.Plugin.RESTBaseURL(),
 		auth:           manifest.Plugin.Auth,
 		httpClient:     httpClient,
 		discovery:      manifest.Plugin.Discovery,
 		connectionDefs: manifest.Plugin.ConnectionParams,
 	}
 
-	for i := range manifest.Plugin.Operations {
-		mop := &manifest.Plugin.Operations[i]
+	for i := range ops {
+		mop := &ops[i]
 		catOp := catalog.CatalogOperation{
 			ID:          mop.Name,
 			Method:      mop.Method,
