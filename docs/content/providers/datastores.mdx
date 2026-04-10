@@ -13,13 +13,13 @@ A datastore provider manifest uses a `datastore` block:
 ```yaml
 source: github.com/example/plugins/my-datastore
 version: 0.0.1-alpha.1
-display_name: My Datastore
+displayName: My Datastore
 description: Custom persistent storage backend
 datastore:
-  config_schema_path: ./datastore_config.json
+  configSchemaPath: ./datastore_config.json
 ```
 
-The optional `datastore.config_schema_path` field points to a JSON Schema that validates the `datastore.config` block in the server config. If you provide one, Gestalt rejects invalid config at startup.
+The optional `datastore.configSchemaPath` field points to a JSON Schema that validates the `datastore.config` block in the server config. If you provide one, Gestalt rejects invalid config at startup.
 
 ## Interface
 

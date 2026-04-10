@@ -91,7 +91,7 @@ Credentials are encrypted. Everything else is plaintext.
 | API tokens | `api_tokens.hashed_token` | One-way SHA-256 |
 | Emails, names, metadata, scopes, timestamps | Various | Plaintext |
 
-All encrypted fields use the same key derived from `server.encryption_key`. There is no per-user or per-provider key separation.
+All encrypted fields use the same key derived from `server.encryptionKey`. There is no per-user or per-provider key separation.
 
 ## Token storage granularity
 

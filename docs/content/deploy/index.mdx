@@ -12,7 +12,7 @@ The server image `valontechnologies/gestaltd:latest` is published for `linux/amd
 
 **Secrets.** Use a dedicated secret manager (`google_secret_manager`, `aws_secrets_manager`, `vault`, `azure_key_vault`, or `file`) instead of `env` in production. Gestalt config supports `secret://` references that are resolved at boot time through the configured secret manager.
 
-**TLS.** Gestalt does not terminate TLS. Deploy behind a reverse proxy or load balancer that handles TLS termination. Set `server.base_url` to the public HTTPS URL so that OAuth callback URLs are derived correctly.
+**TLS.** Gestalt does not terminate TLS. Deploy behind a reverse proxy or load balancer that handles TLS termination. Set `server.baseUrl` to the public HTTPS URL so that OAuth callback URLs are derived correctly.
 
 **Locked startup.** For deterministic deployments, run `gestaltd init` locally
 to resolve plugins and generate prepared state, then bake that state into a
