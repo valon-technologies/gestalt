@@ -159,7 +159,7 @@ The exact config fields depend on the selected external datastore provider packa
 
 ## `secrets`
 
-The secrets manager resolves `secret://` references at startup. Two simple secret managers are built into the `gestaltd` binary and selected by the `builtin` field. Cloud-backed secret managers and other advanced backends are packaged as external providers and configured through `secrets.provider`.
+The secrets manager resolves `secret://` references at startup. Two providers (`env` and `file`) are built into the binary and selected by the `builtin` field. Cloud secret backends are loaded as external providers using the `provider` field, the same way auth and datastore providers work.
 
 ```yaml
 secrets:
@@ -173,7 +173,9 @@ secrets:
 | `env` | `prefix` | Reads secrets from environment variables. Default when `secrets` is omitted. |
 | `file` | `dir` | Reads one secret per file from a base directory. Works with Kubernetes volume-mounted secrets. |
 
-For external secret managers, use the same provider package model as auth and IndexedDB providers:
+### Cloud secret backends
+
+Cloud secret managers are external providers configured with `provider:` instead of `builtin:`:
 
 ```yaml
 secrets:
@@ -185,27 +187,29 @@ secrets:
     project: my-gcp-project
 ```
 
-| External provider | Config fields | Purpose |
+| Provider | Source ref | Config fields |
 | --- | --- | --- |
-| `github.com/valon-technologies/gestalt-providers/secrets/google` | `project`, `version` | Google Cloud Secret Manager. `version` defaults to `latest`. |
-| `github.com/valon-technologies/gestalt-providers/secrets/aws` | `region`, `versionStage`, `endpoint` | AWS Secrets Manager. `region` is required. `versionStage` defaults to `AWSCURRENT`. |
-| `github.com/valon-technologies/gestalt-providers/secrets/vault` | `address`, `token`, `mountPath`, `namespace` | HashiCorp Vault KV v2. `address` and `token` are required. `mountPath` defaults to `secret`. |
-| `github.com/valon-technologies/gestalt-providers/secrets/azure` | `vaultUrl`, `version` | Azure Key Vault. `vaultUrl` is required. `version` defaults to latest. |
+| Google Secret Manager | `github.com/valon-technologies/gestalt-providers/secrets/google` | `project` (required), `version` |
+| AWS Secrets Manager | `github.com/valon-technologies/gestalt-providers/secrets/aws` | `region` (required), `versionStage`, `endpoint` |
+| HashiCorp Vault | `github.com/valon-technologies/gestalt-providers/secrets/vault` | `address` (required), `token` (required), `mountPath`, `namespace` |
+| Azure Key Vault | `github.com/valon-technologies/gestalt-providers/secrets/azure` | `vaultUrl` (required), `version` |
+
+See [Secrets Providers](/providers/secrets) for the complete reference and SDK interface.
 
 ### Bootstrap credentials
 
 `secret://` references are resolved through the configured secret manager at startup, but the secret manager's own configuration (`secrets.config`) cannot use `secret://` because it would be self-referential. Use `${ENV_VAR}` or `${ENV_VAR_FILE}` placeholders for any credentials the secret manager itself needs.
 
-Each provider authenticates to its backing service differently:
+Each provider authenticates to its backing service differently. The `env` and `file` providers are built in. The remaining rows apply when using the corresponding external provider from `gestalt-providers`:
 
 | Provider | Authentication model |
 | --- | --- |
 | `env` | Reads from process environment. No external auth needed. |
 | `file` | Reads from local filesystem. No external auth needed. |
-| `github.com/valon-technologies/gestalt-providers/secrets/google` | Uses [Application Default Credentials](https://cloud.google.com/docs/authentication/application-default-credentials). In production, attach a service account or use workload identity. Locally, run `gcloud auth application-default login`. |
-| `github.com/valon-technologies/gestalt-providers/secrets/aws` | Uses the [AWS SDK default credential chain](https://docs.aws.amazon.com/sdkref/latest/guide/standardized-credentials.html). In production, use an instance profile, ECS task role, or IRSA. Locally, run `aws configure` or set `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. |
-| `github.com/valon-technologies/gestalt-providers/secrets/vault` | Requires explicit `address` and `token` in config. Inject the token via `${VAULT_TOKEN}` or `${VAULT_TOKEN_FILE}`. |
-| `github.com/valon-technologies/gestalt-providers/secrets/azure` | Uses [`DefaultAzureCredential`](https://learn.microsoft.com/en-us/azure/developer/go/azure-sdk-authentication). In production, use managed identity. Locally, run `az login`. |
+| Google Secret Manager | Uses [Application Default Credentials](https://cloud.google.com/docs/authentication/application-default-credentials). In production, attach a service account or use workload identity. Locally, run `gcloud auth application-default login`. |
+| AWS Secrets Manager | Uses the [AWS SDK default credential chain](https://docs.aws.amazon.com/sdkref/latest/guide/standardized-credentials.html). In production, use an instance profile, ECS task role, or IRSA. Locally, run `aws configure` or set `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`. |
+| HashiCorp Vault | Requires explicit `address` and `token` in config. Inject the token via `${VAULT_TOKEN}` or `${VAULT_TOKEN_FILE}`. |
+| Azure Key Vault | Uses [`DefaultAzureCredential`](https://learn.microsoft.com/en-us/azure/developer/go/azure-sdk-authentication). In production, use managed identity. Locally, run `az login`. |
 
 For local development, `env` or `file` avoids external dependencies entirely. Switch to a cloud secret manager when deploying to a managed environment where ambient identity is available.
 
