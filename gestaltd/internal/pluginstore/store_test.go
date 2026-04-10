@@ -295,7 +295,7 @@ func TestInstallRejectsNonLinuxLibcArtifact(t *testing.T) {
 	manifest.Artifacts[0].OS = "darwin"
 	manifest.Artifacts[0].Arch = "arm64"
 	manifest.Artifacts[0].Path = newPath
-	manifest.Entrypoints.Provider.ArtifactPath = newPath
+	manifest.Entrypoints.Plugin.ArtifactPath = newPath
 
 	oldArtifactPath := filepath.Join(srcDir, filepath.FromSlash(oldPath))
 	newArtifactPath := filepath.Join(srcDir, filepath.FromSlash(newPath))
@@ -497,7 +497,7 @@ func mustBuildPluginDir(t *testing.T, dir, source, version, content, schema stri
 			},
 		},
 		Entrypoints: pluginmanifestv1.Entrypoints{
-			Provider: &pluginmanifestv1.Entrypoint{
+			Plugin: &pluginmanifestv1.Entrypoint{
 				ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider")),
 			},
 		},
@@ -539,7 +539,7 @@ func mustBuildPluginDirWithDigest(t *testing.T, dir, source, version, content, d
 			},
 		},
 		Entrypoints: pluginmanifestv1.Entrypoints{
-			Provider: &pluginmanifestv1.Entrypoint{
+			Plugin: &pluginmanifestv1.Entrypoint{
 				ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider")),
 			},
 		},
@@ -591,7 +591,7 @@ func mustBuildPackageWithDigest(t *testing.T, dir, source, version, content, dig
 			},
 		},
 		Entrypoints: pluginmanifestv1.Entrypoints{
-			Provider: &pluginmanifestv1.Entrypoint{
+			Plugin: &pluginmanifestv1.Entrypoint{
 				ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider")),
 			},
 		},
@@ -630,7 +630,7 @@ func mustBuildMismatchPackage(t *testing.T, dir, source, version, content, diges
 			},
 		},
 		Entrypoints: pluginmanifestv1.Entrypoints{
-			Provider: &pluginmanifestv1.Entrypoint{
+			Plugin: &pluginmanifestv1.Entrypoint{
 				ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider")),
 			},
 		},
@@ -691,7 +691,7 @@ func mustBuildPackageWithDuplicateArtifact(t *testing.T, dir, source, version, f
 			},
 		},
 		Entrypoints: pluginmanifestv1.Entrypoints{
-			Provider: &pluginmanifestv1.Entrypoint{
+			Plugin: &pluginmanifestv1.Entrypoint{
 				ArtifactPath: artifactName,
 			},
 		},
@@ -751,7 +751,7 @@ func newV2Manifest(source, version, content string) *pluginmanifestv1.Manifest {
 			},
 		},
 		Entrypoints: pluginmanifestv1.Entrypoints{
-			Provider: &pluginmanifestv1.Entrypoint{
+			Plugin: &pluginmanifestv1.Entrypoint{
 				ArtifactPath: artifactPath,
 			},
 		},

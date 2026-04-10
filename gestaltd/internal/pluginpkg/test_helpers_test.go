@@ -60,7 +60,7 @@ func newProviderManifest(source, version, artifactPath, digest string) *pluginma
 			},
 		},
 		Entrypoints: pluginmanifestv1.Entrypoints{
-			Provider: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactPath},
+			Plugin: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactPath},
 		},
 	}
 }
@@ -102,7 +102,7 @@ func mustProviderManifest(source, version, osName, arch, artifactPath, sha strin
 			},
 		},
 		Entrypoints: pluginmanifestv1.Entrypoints{
-			Provider: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactPath},
+			Plugin: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactPath},
 		},
 	}
 }

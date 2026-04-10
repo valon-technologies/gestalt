@@ -68,7 +68,7 @@ properties:
 					},
 				},
 				Entrypoints: pluginmanifestv1.Entrypoints{
-					Provider: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactPath},
+					Plugin: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactPath},
 				},
 			}
 			data, err := EncodeManifest(manifest)

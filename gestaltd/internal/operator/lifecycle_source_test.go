@@ -127,7 +127,7 @@ func buildV2ArchiveForArtifact(t *testing.T, dir, source, version, artifactPath,
 			},
 		},
 		Entrypoints: pluginmanifestv1.Entrypoints{
-			Provider: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactPath},
+			Plugin: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactPath},
 		},
 	}
 
@@ -195,7 +195,7 @@ func buildExecutableArchiveData(t *testing.T, dir, srcDirName, source, version, 
 	switch kind {
 	case pluginmanifestv1.KindPlugin:
 		manifest.Plugin = &pluginmanifestv1.Plugin{}
-		manifest.Entrypoints.Provider = &pluginmanifestv1.Entrypoint{ArtifactPath: artPath}
+		manifest.Entrypoints.Plugin = &pluginmanifestv1.Entrypoint{ArtifactPath: artPath}
 	case pluginmanifestv1.KindAuth:
 		manifest.Auth = &pluginmanifestv1.AuthMetadata{}
 		manifest.Entrypoints.Auth = &pluginmanifestv1.Entrypoint{ArtifactPath: artPath}

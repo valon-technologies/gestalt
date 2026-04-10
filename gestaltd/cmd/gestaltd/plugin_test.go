@@ -160,7 +160,7 @@ version: 0.0.1-alpha.1
 provider:
   exec: {}
 `,
-			wantError: "entrypoints.provider.artifactPath is required",
+			wantError: "entrypoints.plugin.artifactPath is required",
 		},
 	}
 
@@ -301,8 +301,8 @@ func TestRun_PluginReleaseBuildsPythonSourcePluginForCurrentPlatform(t *testing.
 	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
 		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
 	}
-	if manifest.Entrypoints.Provider == nil || manifest.Entrypoints.Provider.ArtifactPath != binaryName {
-		t.Fatalf("provider entrypoint = %+v, want artifact path %q", manifest.Entrypoints.Provider, binaryName)
+	if manifest.Entrypoints.Plugin == nil || manifest.Entrypoints.Plugin.ArtifactPath != binaryName {
+		t.Fatalf("provider entrypoint = %+v, want artifact path %q", manifest.Entrypoints.Plugin, binaryName)
 	}
 
 	artifactPath := filepath.Join(extractDir, binaryName)
@@ -517,8 +517,8 @@ func TestRun_PluginReleaseBuildsRustSourcePluginForCurrentPlatform(t *testing.T)
 		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
 	}
 	assertExpectedRustArtifactPlatform(t, manifest.Artifacts[0], runtime.GOOS, runtime.GOARCH, "")
-	if manifest.Entrypoints.Provider == nil || manifest.Entrypoints.Provider.ArtifactPath != binaryName {
-		t.Fatalf("provider entrypoint = %+v, want artifact path %q", manifest.Entrypoints.Provider, binaryName)
+	if manifest.Entrypoints.Plugin == nil || manifest.Entrypoints.Plugin.ArtifactPath != binaryName {
+		t.Fatalf("provider entrypoint = %+v, want artifact path %q", manifest.Entrypoints.Plugin, binaryName)
 	}
 
 	artifactPath := filepath.Join(extractDir, binaryName)
@@ -1495,8 +1495,8 @@ func TestRun_PluginReleaseCompilesProviderWithoutSourceArtifacts(t *testing.T) {
 	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != releaseBinaryName(releaseTestPluginName, runtime.GOOS) {
 		t.Fatalf("artifacts = %+v", manifest.Artifacts)
 	}
-	if manifest.Entrypoints.Provider == nil || manifest.Entrypoints.Provider.ArtifactPath != releaseBinaryName(releaseTestPluginName, runtime.GOOS) {
-		t.Fatalf("provider entrypoint = %+v", manifest.Entrypoints.Provider)
+	if manifest.Entrypoints.Plugin == nil || manifest.Entrypoints.Plugin.ArtifactPath != releaseBinaryName(releaseTestPluginName, runtime.GOOS) {
+		t.Fatalf("provider entrypoint = %+v", manifest.Entrypoints.Plugin)
 	}
 	if manifest.Plugin == nil || manifest.Plugin.ConfigSchemaPath != releaseProviderSchemaPath {
 		t.Fatalf("provider metadata = %#v, want config schema path %q", manifest.Plugin, releaseProviderSchemaPath)
@@ -1591,11 +1591,11 @@ func TestRun_PluginReleasePreservesPrebuiltProvider(t *testing.T) {
 	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != prebuiltProviderBinaryPath {
 		t.Fatalf("artifacts = %+v", manifest.Artifacts)
 	}
-	if manifest.Entrypoints.Provider == nil {
+	if manifest.Entrypoints.Plugin == nil {
 		t.Fatal("expected provider entrypoint")
 	}
-	if manifest.Entrypoints.Provider.ArtifactPath != prebuiltProviderBinaryPath {
-		t.Fatalf("provider artifact path = %q", manifest.Entrypoints.Provider.ArtifactPath)
+	if manifest.Entrypoints.Plugin.ArtifactPath != prebuiltProviderBinaryPath {
+		t.Fatalf("provider artifact path = %q", manifest.Entrypoints.Plugin.ArtifactPath)
 	}
 	if manifest.Plugin == nil || manifest.Plugin.ConfigSchemaPath != releaseProviderSchemaPath {
 		t.Fatalf("provider metadata = %#v, want config schema path %q", manifest.Plugin, releaseProviderSchemaPath)
@@ -1626,8 +1626,8 @@ func TestRun_PluginReleasePackagesGoModuleWithoutCmdAsSource(t *testing.T) {
 	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != prebuiltProviderBinaryPath {
 		t.Fatalf("artifacts = %+v", manifest.Artifacts)
 	}
-	if manifest.Entrypoints.Provider == nil || manifest.Entrypoints.Provider.ArtifactPath != prebuiltProviderBinaryPath {
-		t.Fatalf("provider entrypoint = %+v", manifest.Entrypoints.Provider)
+	if manifest.Entrypoints.Plugin == nil || manifest.Entrypoints.Plugin.ArtifactPath != prebuiltProviderBinaryPath {
+		t.Fatalf("provider entrypoint = %+v", manifest.Entrypoints.Plugin)
 	}
 	if _, err := os.Stat(filepath.Join(extractDir, filepath.FromSlash(prebuiltProviderBinaryPath))); err != nil {
 		t.Fatalf("expected prebuilt artifact in archive: %v", err)
@@ -1684,8 +1684,8 @@ func TestRun_PluginReleaseWindowsArtifactUsesExe(t *testing.T) {
 	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
 		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
 	}
-	if manifest.Entrypoints.Provider == nil || manifest.Entrypoints.Provider.ArtifactPath != binaryName {
-		t.Fatalf("provider entrypoint = %+v, want artifact path %q", manifest.Entrypoints.Provider, binaryName)
+	if manifest.Entrypoints.Plugin == nil || manifest.Entrypoints.Plugin.ArtifactPath != binaryName {
+		t.Fatalf("provider entrypoint = %+v, want artifact path %q", manifest.Entrypoints.Plugin, binaryName)
 	}
 	if _, err := os.Stat(filepath.Join(extractDir, binaryName)); err != nil {
 		t.Fatalf("expected %s in archive: %v", binaryName, err)
@@ -2526,7 +2526,7 @@ func newPrebuiltProviderReleaseFixture(t *testing.T, dir string) string {
 			},
 		},
 		Entrypoints: pluginmanifestv1.Entrypoints{
-			Provider: &pluginmanifestv1.Entrypoint{
+			Plugin: &pluginmanifestv1.Entrypoint{
 				ArtifactPath: prebuiltProviderBinaryPath,
 			},
 		},
