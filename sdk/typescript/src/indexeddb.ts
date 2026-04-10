@@ -47,7 +47,6 @@ export class IndexedDB {
     }
     const transport = createGrpcTransport({
       baseUrl: `http://localhost`,
-      httpVersion: "2",
       nodeOptions: { path: socketPath },
     });
     this.client = createClient(IndexedDBService, transport);
