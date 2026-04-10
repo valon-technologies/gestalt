@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
@@ -1025,6 +1026,10 @@ func (l *Lifecycle) applyComponentProvider(paths initPaths, lock *Lockfile, kind
 			entry = lock.Telemetry
 		case "audit":
 			entry = lock.Audit
+		default:
+			if kind == pluginmanifestv1.KindIndexedDB && strings.HasPrefix(name, "indexeddb-") {
+				entry = lock.Datastore
+			}
 		}
 		if err := l.applyLockedComponentEntry(paths, entry, kind, name, provider, configMap, locked); err != nil {
 			return err
@@ -1375,6 +1380,10 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 	case "audit":
 		destDir = auditDestDir(paths)
 	default:
+		if kind == pluginmanifestv1.KindIndexedDB && strings.HasPrefix(name, "indexeddb-") {
+			destDir = indexeddbDestDir(paths, strings.TrimPrefix(name, "indexeddb-"))
+			break
+		}
 		return fmt.Errorf("unsupported component %q", name)
 	}
 	if err := os.RemoveAll(destDir); err != nil {
