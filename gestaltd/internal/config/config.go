@@ -315,7 +315,7 @@ func unmarshalHybridProvider(value *yaml.Node, kind string, provider **ProviderD
 		switch key {
 		case "provider", "config":
 		default:
-			return fmt.Errorf("field %s not found in type config.%sConfig", key, kind)
+			return fmt.Errorf("field %s not found in type %s config", key, kind)
 		}
 	}
 	*provider = nil
