@@ -452,7 +452,7 @@ func logConfigSummary(path string, cfg *config.Config) {
 		"server_encryption", maskSecret(cfg.Server.EncryptionKey),
 		"auth_provider", providerLabel(cfg.Auth.Provider),
 		"secrets_provider", secretsProviderLabel(cfg.Secrets),
-		"telemetry_provider", cfg.Telemetry.BuiltinProvider,
+		"telemetry_provider", cfg.Telemetry.Builtin,
 	)
 
 	for name, intg := range cfg.Plugins {
@@ -480,8 +480,8 @@ func secretsProviderLabel(secrets config.SecretsConfig) string {
 	if secrets.Provider != nil {
 		return providerLabel(secrets.Provider)
 	}
-	if secrets.BuiltinProvider != "" {
-		return secrets.BuiltinProvider
+	if secrets.Builtin != "" {
+		return secrets.Builtin
 	}
 	return "env"
 }

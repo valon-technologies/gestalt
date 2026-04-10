@@ -103,7 +103,7 @@ config:
   # Keep the default chart profile self-contained. Set this to a managed
   # provider source when you want a public web UI.
   ui:
-    provider: none
+    disabled: true
 
 # Extra environment variables for the container. These are only required
 # when your config uses ${VAR} placeholders for auth, baseUrl, or

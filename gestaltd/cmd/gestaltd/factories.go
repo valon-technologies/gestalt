@@ -88,7 +88,7 @@ func buildFactories() *bootstrap.FactoryRegistry {
 		if cfg.Provider != nil {
 			return nil, nil, fmt.Errorf("plugin-based audit providers are not yet supported")
 		}
-		switch cfg.BuiltinProvider {
+		switch cfg.Builtin {
 		case "", "inherit":
 			return invocation.NewLoggerAuditSink(telemetry.Logger()), nil, nil
 		case "noop":
@@ -111,7 +111,7 @@ func buildFactories() *bootstrap.FactoryRegistry {
 			}
 			return invocation.NewLevelAwareLoggerAuditSink(logger), closeFn, nil
 		default:
-			return nil, nil, fmt.Errorf("unknown audit provider %q", cfg.BuiltinProvider)
+			return nil, nil, fmt.Errorf("unknown audit provider %q", cfg.Builtin)
 		}
 	}
 	factories.Auth = authplugin.Factory

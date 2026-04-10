@@ -233,7 +233,7 @@ func writeConfigYAML(t *testing.T, dir, source, version, artifactsDir string) st
 
 	lines := []string{
 		"ui:",
-		"  provider: none",
+		"  disabled: true",
 		"server:",
 		"  artifactsDir: " + artifactsDir,
 		"plugins:",
@@ -529,7 +529,7 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 	configYAML := strings.Join([]string{
 		requiredDatastoreConfigYAML(t, dir, filepath.Join(dir, "data.db")),
 		"secrets:",
-		"  provider: test-secrets",
+		"  builtin: test-secrets",
 		"auth:",
 		"  provider:",
 		"    source:",

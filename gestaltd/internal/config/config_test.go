@@ -124,8 +124,8 @@ plugins:
 	if cfg.Server.Public.Port != 8080 {
 		t.Fatalf("Server.Public.Port = %d, want 8080", cfg.Server.Public.Port)
 	}
-	if cfg.Secrets.BuiltinProvider != "env" {
-		t.Fatalf("Secrets.BuiltinProvider = %q, want env", cfg.Secrets.BuiltinProvider)
+	if cfg.Secrets.Builtin != "env" {
+		t.Fatalf("Secrets.Builtin = %q, want env", cfg.Secrets.Builtin)
 	}
 	if cfg.Server.EncryptionKey != "encryption-from-env" {
 		t.Fatalf("Server.EncryptionKey = %q", cfg.Server.EncryptionKey)
@@ -302,7 +302,7 @@ server:
 			name: "missing datastore",
 			yaml: `
 auth:
-  provider: none
+  disabled: true
 server:
   encryptionKey: server-key
 `,
@@ -321,10 +321,10 @@ datastore: sqlite
 			wantErr: true,
 		},
 		{
-			name: "auth provider none is allowed",
+			name: "auth disabled is allowed",
 			yaml: `
 auth:
-  provider: none
+  disabled: true
 datastores:
   sqlite:
     provider:
@@ -356,8 +356,8 @@ server:
 			if err != nil {
 				t.Fatalf("ValidateRuntime: %v", err)
 			}
-			if tc.name == "auth provider none is allowed" && cfg.Auth.Provider != nil {
-				t.Fatalf("Auth.Provider = %#v, want nil", cfg.Auth.Provider)
+			if tc.name == "auth disabled is allowed" && !cfg.Auth.Disabled {
+				t.Fatal("Auth.Disabled = false, want true")
 			}
 		})
 	}
@@ -394,7 +394,7 @@ server:
 			name: "legacy datastore plugin field rejected",
 			yaml: `
 auth:
-  provider: none
+  disabled: true
 datastore:
   plugin:
     source:
@@ -430,7 +430,7 @@ server:
 			name: "datastore config accepted",
 			yaml: `
 auth:
-  provider: none
+  disabled: true
 datastores:
   sqlite:
     provider:
@@ -520,12 +520,12 @@ server:
 		}
 	})
 
-	t.Run("ui provider none disables public ui", func(t *testing.T) {
+	t.Run("ui disabled true disables public ui", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
 ui:
-  provider: none
+  disabled: true
 datastores:
   sqlite:
     provider:
@@ -548,12 +548,44 @@ server:
 		}
 	})
 
-	t.Run("ui config is rejected with provider none", func(t *testing.T) {
+	t.Run("disabled field accepts all YAML boolean variants", func(t *testing.T) {
+		t.Parallel()
+
+		for _, variant := range []string{"true", "True", "TRUE"} {
+			variant := variant
+			t.Run(variant, func(t *testing.T) {
+				t.Parallel()
+
+				path := mustWriteConfigFile(t, fmt.Sprintf(`
+ui:
+  disabled: %s
+datastores:
+  sqlite:
+    provider:
+      source:
+        path: ./providers/datastore/sqlite
+datastore: sqlite
+server:
+  encryptionKey: server-key
+`, variant))
+
+				cfg, err := Load(path)
+				if err != nil {
+					t.Fatalf("Load: %v", err)
+				}
+				if !cfg.UI.Disabled {
+					t.Fatalf("UI.Disabled = false with disabled: %s, want true", variant)
+				}
+			})
+		}
+	})
+
+	t.Run("ui config is rejected when disabled", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
 ui:
-  provider: none
+  disabled: true
   config:
     brand_name: Acme
 datastores:
@@ -570,7 +602,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `ui.config is not supported when ui.provider is "none"`) {
+		if !strings.Contains(err.Error(), "ui.config is not supported when ui is disabled") {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -605,6 +637,155 @@ server:
 			t.Fatalf("UI.Provider.Source.Path = %q, want %q", got, wantPath)
 		}
 	})
+}
+
+func TestLoadRejectsOldProviderScalarForms(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		yaml    string
+		wantErr string
+	}{
+		{
+			name: "provider none is rejected",
+			yaml: `
+ui:
+  provider: none
+`,
+			wantErr: `provider: "none" is no longer supported; use disabled: true`,
+		},
+		{
+			name: "provider scalar string is rejected",
+			yaml: `
+telemetry:
+  provider: stdout
+`,
+			wantErr: `provider: "stdout" is no longer supported as a scalar string; use builtin: stdout`,
+		},
+		{
+			name: "provider builtin mapping is rejected",
+			yaml: `
+audit:
+  provider:
+    builtin: noop
+`,
+			wantErr: `provider: { builtin: noop } is no longer supported; use builtin: noop`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			path := mustWriteConfigFile(t, tc.yaml)
+			_, err := Load(path)
+			if err == nil {
+				t.Fatal("Load: expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("expected error containing %q, got: %v", tc.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestLoadAcceptsNewComponentForms(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		yaml string
+	}{
+		{
+			name: "builtin string",
+			yaml: `
+telemetry:
+  builtin: stdout
+`,
+		},
+		{
+			name: "disabled true",
+			yaml: `
+ui:
+  disabled: true
+`,
+		},
+		{
+			name: "external provider source",
+			yaml: `
+auth:
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/auth/google
+      version: 1.0.0
+`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			path := mustWriteConfigFile(t, tc.yaml)
+			_, err := Load(path)
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+		})
+	}
+}
+
+func TestLoadRejectsMutuallyExclusiveComponentFields(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		yaml string
+	}{
+		{
+			name: "builtin and disabled",
+			yaml: `
+telemetry:
+  builtin: stdout
+  disabled: true
+`,
+		},
+		{
+			name: "provider and disabled",
+			yaml: `
+auth:
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/auth/google
+      version: 1.0.0
+  disabled: true
+`,
+		},
+		{
+			name: "provider and builtin",
+			yaml: `
+telemetry:
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/telemetry/custom
+      version: 1.0.0
+  builtin: stdout
+`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			path := mustWriteConfigFile(t, tc.yaml)
+			_, err := Load(path)
+			if err == nil {
+				t.Fatal("Load: expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), "mutually exclusive") {
+				t.Fatalf("expected mutual exclusivity error, got: %v", err)
+			}
+		})
+	}
 }
 
 func TestLoadConfigValidation(t *testing.T) {
