@@ -53,42 +53,72 @@ has_changes_in() {
 
 ran_any=false
 
-# --- Go checks --------------------------------------------------------------
+# --- Go (gestaltd) checks ---------------------------------------------------
 
-if has_changes_in '\.go$|go\.(mod|sum)$'; then
+if has_changes_in '^gestaltd/'; then
     if has go; then
         ran_any=true
-        bold "==> Go: mod tidy"
-        go mod tidy || fail "go mod tidy"
-        git diff --exit-code go.mod go.sum || fail "go.mod/go.sum not tidy, commit the changes"
+        bold "==> Go gestaltd: mod tidy"
+        (cd gestaltd && go mod tidy) || fail "go mod tidy"
+        git diff --exit-code gestaltd/go.mod gestaltd/go.sum || fail "go.mod/go.sum not tidy, commit the changes"
     fi
 
     if has golangci-lint; then
         ran_any=true
-        bold "==> Go: golangci-lint"
-        golangci-lint run ./... || fail "golangci-lint"
+        bold "==> Go gestaltd: golangci-lint"
+        (cd gestaltd && golangci-lint run ./...) || fail "golangci-lint"
     else
-        yellow "==> Go: skipping lint (golangci-lint not installed)"
+        yellow "==> Go gestaltd: skipping lint (golangci-lint not installed)"
     fi
 fi
 
 # --- Web + Docs checks ------------------------------------------------------
 
-check_npm web  "Web: typecheck + lint" check
-check_npm docs "Docs: typecheck"       typecheck
+check_npm gestaltd/ui "Web: typecheck + lint" check
+check_npm docs        "Docs: typecheck"       typecheck
 
-# --- Rust checks -------------------------------------------------------------
+# --- Gestalt CLI (Rust) checks ----------------------------------------------
 
-if has_changes_in '^client/'; then
+if has_changes_in '^gestalt/'; then
     if has cargo; then
         ran_any=true
-        bold "==> Rust: fmt"
-        (cd client && cargo fmt --all -- --check) || fail "cargo fmt"
+        bold "==> Gestalt CLI: fmt"
+        (cd gestalt && cargo fmt --all -- --check) || fail "Gestalt CLI: cargo fmt"
 
-        bold "==> Rust: clippy"
-        (cd client && cargo clippy --workspace --all-targets -- -D warnings) || fail "cargo clippy"
+        bold "==> Gestalt CLI: clippy"
+        (cd gestalt && cargo clippy --workspace --all-targets -- -D warnings) || fail "Gestalt CLI: cargo clippy"
     else
-        yellow "==> Rust: skipping (cargo not installed)"
+        yellow "==> Gestalt CLI: skipping (cargo not installed)"
+    fi
+fi
+
+# --- Rust SDK checks --------------------------------------------------------
+
+if has_changes_in '^sdk/rust/|^sdk/proto/'; then
+    if has cargo; then
+        ran_any=true
+        bold "==> Rust SDK: fmt"
+        (cd sdk/rust && cargo fmt --check) || fail "Rust SDK: cargo fmt"
+
+        bold "==> Rust SDK: clippy"
+        (cd sdk/rust && cargo clippy --all-targets -- -D warnings) || fail "Rust SDK: cargo clippy"
+    else
+        yellow "==> Rust SDK: skipping (cargo not installed)"
+    fi
+fi
+
+# --- Python SDK checks ------------------------------------------------------
+
+if has_changes_in '^sdk/python/|^sdk/proto/'; then
+    if has uv; then
+        ran_any=true
+        bold "==> Python SDK: ruff"
+        (cd sdk/python && uv run ruff check .) || fail "Python SDK: ruff"
+
+        bold "==> Python SDK: ty"
+        (cd sdk/python && uv run ty check --exclude 'gestalt/gen/**' gestalt scripts tests) || fail "Python SDK: ty"
+    else
+        yellow "==> Python SDK: skipping (uv not installed)"
     fi
 fi
 
