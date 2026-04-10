@@ -1,5 +1,5 @@
 [package]
-name = "gestalt_plugin_sdk"
+name = "gestalt"
 version = "0.0.1-alpha.1"
 edition = "2024"
 rust-version = "1.85"

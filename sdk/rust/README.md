@@ -4,7 +4,7 @@ This directory contains the Rust SDK for Gestalt executable providers.
 
 Current scope:
 
-- standalone Cargo package named `gestalt_plugin_sdk`
+- standalone Cargo package named `gestalt`
 - build-time protobuf/gRPC generation from `sdk/proto/v1/*.proto`
 - vendored `protoc` via `protoc-bin-vendored`
 - generated protocol bindings exposed via `proto::v1`

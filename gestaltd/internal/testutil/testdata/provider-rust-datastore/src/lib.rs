@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use gestalt_plugin_sdk as gestalt;
 use prost_types::Timestamp;
 
 pub struct Provider {

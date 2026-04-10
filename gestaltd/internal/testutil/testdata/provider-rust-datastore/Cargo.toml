@@ -7,5 +7,5 @@ edition = "2024"
 path = "src/lib.rs"
 
 [dependencies]
-gestalt_plugin_sdk = { path = "../../../../../sdk/rust" }
+gestalt = { path = "../../../../../sdk/rust" }
 prost-types = "0.14"

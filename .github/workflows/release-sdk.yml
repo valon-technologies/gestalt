@@ -117,7 +117,7 @@ jobs:
       component-summary: |
         Rust SDK for building Gestalt executable providers, including integration, auth, and datastore surfaces, against the shared protocol bindings in this repository.
       install-markdown: |
-        - Crate name: `gestalt_plugin_sdk`
+        - Crate name: `gestalt`
         - Crates.io publishing is not enabled for this release yet.
         - Consume the crate source from `sdk/rust` at tag `${tag}` until registry publishing is added.
 
