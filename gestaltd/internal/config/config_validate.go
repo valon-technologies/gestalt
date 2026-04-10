@@ -38,6 +38,9 @@ func ValidateStructure(cfg *Config) error {
 	if err := validateUIConfig(cfg.UI); err != nil {
 		return err
 	}
+	if cfg.Auth.BuiltinProvider != "" {
+		return fmt.Errorf("config validation: auth.provider must be a provider reference mapping or the string \"none\"")
+	}
 	if err := validateTopLevelComponentConfig("auth", cfg.Auth.Provider, cfg.Auth.Config); err != nil {
 		return err
 	}

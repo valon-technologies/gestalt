@@ -122,6 +122,20 @@ func (p *Plugin) OpenAPIDocument() string {
 	return p.Surfaces.OpenAPI.Document
 }
 
+func (p *Plugin) OpenAPIBaseURL() string {
+	if p == nil || p.Surfaces == nil || p.Surfaces.OpenAPI == nil {
+		return ""
+	}
+	return p.Surfaces.OpenAPI.BaseURL
+}
+
+func (p *Plugin) SpecBaseURL() string {
+	if u := p.RESTBaseURL(); u != "" {
+		return u
+	}
+	return p.OpenAPIBaseURL()
+}
+
 func (p *Plugin) GraphQLURL() string {
 	if p == nil || p.Surfaces == nil || p.Surfaces.GraphQL == nil {
 		return ""

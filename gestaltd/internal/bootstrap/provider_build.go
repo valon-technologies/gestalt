@@ -230,7 +230,7 @@ func buildExecutablePluginProvider(ctx context.Context, name string, intg config
 	specProv, specDef, err := buildConfiguredSpecProvider(ctx, name, resolved, meta, specProviderConfig{
 		manifestPlugin:       manifestPlugin,
 		allowedOperations:    allowedOperations,
-		baseURL:              manifestPlugin.RESTBaseURL(),
+		baseURL:              manifestPlugin.SpecBaseURL(),
 		applyResponseMapping: true,
 		providerBuildOptions: func(conn config.ConnectionDef) []provider.BuildOption {
 			return mcpOAuthBuildOpts(conn, manifestPlugin, deps)
