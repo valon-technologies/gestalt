@@ -94,6 +94,9 @@ func buildFactories() *bootstrap.FactoryRegistry {
 	factories.Telemetry["stdout"] = telemetrystdout.Factory
 	factories.Telemetry["otlp"] = telemetryotlp.Factory
 	factories.Audit = func(ctx context.Context, cfg config.AuditConfig, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error) {
+		if cfg.Provider != nil {
+			return nil, nil, fmt.Errorf("plugin-based audit providers are not yet supported")
+		}
 		switch cfg.BuiltinProvider {
 		case "", "inherit":
 			return invocation.NewLoggerAuditSink(telemetry.Logger()), nil, nil

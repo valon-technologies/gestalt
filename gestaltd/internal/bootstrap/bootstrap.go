@@ -424,6 +424,9 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 }
 
 func buildTelemetry(cfg *config.Config, factories *FactoryRegistry) (core.TelemetryProvider, error) {
+	if cfg.Telemetry.Provider != nil {
+		return nil, fmt.Errorf("bootstrap: plugin-based telemetry providers are not yet supported")
+	}
 	factory, ok := factories.Telemetry[cfg.Telemetry.BuiltinProvider]
 	if !ok {
 		return nil, fmt.Errorf("bootstrap: unknown telemetry provider %q", cfg.Telemetry.BuiltinProvider)
@@ -436,6 +439,9 @@ func buildTelemetry(cfg *config.Config, factories *FactoryRegistry) (core.Teleme
 }
 
 func buildAuditSink(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error) {
+	if cfg.Audit.Provider != nil {
+		return nil, nil, fmt.Errorf("bootstrap: plugin-based audit providers are not yet supported")
+	}
 	if factories.Audit == nil {
 		switch cfg.Audit.BuiltinProvider {
 		case "", "inherit":
