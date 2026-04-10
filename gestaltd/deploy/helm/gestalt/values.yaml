@@ -1,9 +1,9 @@
 # The default chart profile is for local development or trusted internal
-# clusters. It disables platform auth, uses the first-party datastore/sqlite
-# provider, and keeps a single replica so the chart boots without extra
-# secrets.
+# clusters. It disables platform auth, uses the first-party relationaldb
+# provider with a SQLite DSN, and keeps a single replica so the chart boots
+# without extra secrets.
 #
-# Configure OAuth/OIDC, server.encryption_key, and a networked datastore
+# Configure OAuth/OIDC, server.encryptionKey, and a networked datastore
 # before using this chart in production.
 replicaCount: 1
 
@@ -89,22 +89,24 @@ config:
     # Set it to your public HTTPS URL when auth callbacks or external
     # integrations need it.
     # baseUrl: "${GESTALT_BASE_URL}"
-  datastore:
-    # SQLite is appropriate for local development or single-instance
-    # deployments with mounted persistent storage at /data.
-    provider:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
-        version: 0.0.1-alpha.1
-    config:
-      path: /data/gestalt.db
+  datastores:
+    main:
+      # SQLite is appropriate for local development or single-instance
+      # deployments with mounted persistent storage at /data.
+      provider:
+        source:
+          ref: github.com/valon-technologies/gestalt-providers/datastore/relationaldb
+          version: 0.0.1-alpha.1
+      config:
+        dsn: "sqlite:///data/gestalt.db"
+  datastore: main
   # Keep the default chart profile self-contained. Set this to a managed
   # provider source when you want a public web UI.
   ui:
     provider: none
 
 # Extra environment variables for the container. These are only required
-# when your config uses ${VAR} placeholders for auth, base_url, or
+# when your config uses ${VAR} placeholders for auth, baseUrl, or
 # external datastore settings.
 extraEnv: []
 # - name: GESTALT_BASE_URL

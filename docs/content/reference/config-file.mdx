@@ -140,19 +140,22 @@ Both `google` and `oidc` use the same PluginDef provider reference shape under `
 
 ## `datastore`
 
-Top-level datastores are also provider-based. Configure them with `datastore.provider` and `datastore.config`. First-party datastore providers are published at `github.com/valon-technologies/gestalt-providers/datastore/<name>`.
+Top-level datastores are also provider-based. Configure one or more named entries under `datastores`, then set `datastore` to the name the host should use for system storage. First-party datastore providers are published at `github.com/valon-technologies/gestalt-providers/datastore/<name>`.
 
 ```yaml
-datastore:
-  provider:
-    source:
-      ref: github.com/valon-technologies/gestalt-providers/datastore/postgres
-      version: 0.0.1-alpha.1
-  config:
-    dsn: ${DATABASE_URL}
+datastores:
+  main:
+    provider:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/datastore/relationaldb
+        version: 0.0.1-alpha.1
+    config:
+      dsn: ${DATABASE_URL}
+
+datastore: main
 ```
 
-The exact config fields depend on the selected external datastore provider package. Gestalt itself does not have a built-in datastore driver matrix; it loads the configured provider process and passes the `datastore.config` block through to that provider.
+The exact config fields depend on the selected external datastore provider package. Gestalt itself does not have a built-in datastore driver matrix; it loads the configured provider process and passes the selected `datastores.<name>.config` block through to that provider.
 
 ## `secrets`
 
@@ -704,7 +707,7 @@ Structural validation runs at config load time (`init`, `validate`, `serve`). Ru
 
 Each plugin uses a nested `provider` block. Every plugin must use exactly one loading mode: local `provider.source.path` or managed `provider.source.ref`. `provider.source.version` is required with `provider.source.ref` and invalid with `provider.source.path`.
 
-Auth and datastore providers use the same PluginDef shape. When `auth.provider` or `datastore.provider` is set, `source.ref` or `source.path` must be present. `auth.config` and `datastore.config` are only allowed when their corresponding provider is set.
+Auth providers and datastore entries use the same external provider shape. When `auth.provider` or `datastores.<name>.provider` is set, `source.ref` or `source.path` must be present. `auth.config` and `datastores.<name>.config` are only allowed when their corresponding provider is set.
 
 Only `connections.default` may define `params` or `discovery`. `mcp.toolPrefix` is valid only when `mcp.enabled` is `true`. All connections in a plugin must share the same mode.
 
@@ -716,4 +719,4 @@ Server listener ports must be greater than zero. When `server.management` is con
 
 ### Runtime
 
-`datastore.provider` and `server.encryptionKey` are required at `serve` time. `auth` is optional.
+`datastore`, `datastores`, and `server.encryptionKey` are required at `serve` time. `auth` is optional.

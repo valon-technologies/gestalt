@@ -61,32 +61,32 @@ func decodeNodeMap(t *testing.T, node any) map[string]any {
 
 func requiredComponentConfigYAML(_ *testing.T, _, dbPath string) string {
 	return fmt.Sprintf(`datastores:
-  sqlite:
+  main:
     provider:
       source:
-        ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+        ref: github.com/valon-technologies/gestalt-providers/datastore/relationaldb
         version: 0.0.1-alpha.1
     config:
-      path: %q
-datastore: sqlite
+      dsn: %q
+datastore: main
 ui:
   provider: none
-`, dbPath)
+`, "sqlite://"+dbPath)
 }
 
 func requiredDatastoreConfigYAML(_ *testing.T, _, dbPath string) string {
 	return fmt.Sprintf(`datastores:
-  sqlite:
+  main:
     provider:
       source:
-        ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+        ref: github.com/valon-technologies/gestalt-providers/datastore/relationaldb
         version: 0.0.1-alpha.1
     config:
-      path: %q
-datastore: sqlite
+      dsn: %q
+datastore: main
 ui:
   provider: none
-`, dbPath)
+`, "sqlite://"+dbPath)
 }
 
 func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *testing.T) {
@@ -289,16 +289,16 @@ datastores:
   sqlite:
     provider:
       source:
-        ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+        ref: github.com/valon-technologies/gestalt-providers/datastore/relationaldb
         version: 0.0.1-alpha.1
     config:
-      path: %s
+      dsn: %q
 datastore: sqlite
 ui:
   provider: none
 server:
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`, dbPath)
+`, "sqlite://"+dbPath)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
 	}
@@ -374,16 +374,16 @@ datastores:
   sqlite:
     provider:
       source:
-        ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+        ref: github.com/valon-technologies/gestalt-providers/datastore/relationaldb
         version: 0.0.1-alpha.1
     config:
-      path: %s
+      dsn: %q
 datastore: sqlite
 ui:
   provider: none
 server:
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`, dbPath)
+`, "sqlite://"+dbPath)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
 	}

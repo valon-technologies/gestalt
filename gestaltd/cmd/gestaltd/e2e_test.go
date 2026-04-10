@@ -298,14 +298,14 @@ func authDatastoreConfigYAML(t *testing.T, dir, authName, datastoreName, dbPath 
   %s:
     provider:
       source:
-        ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+        ref: github.com/valon-technologies/gestalt-providers/datastore/relationaldb
         version: 0.0.1-alpha.1
     config:
-      path: %s
+      dsn: %q
 datastore: %s
 ui:
   provider: none
-`, authBlock, datastoreName, dbPath, datastoreName)
+`, authBlock, datastoreName, "sqlite://"+dbPath, datastoreName)
 }
 
 func writeManifestFile(t *testing.T, pluginDir string, manifest *pluginmanifestv1.Manifest) {

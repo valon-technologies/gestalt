@@ -44,7 +44,7 @@ A config file has the following top-level blocks:
 
 ## Defaults and required fields
 
-Gestalt defaults `server.public.port` to `8080`, `secrets.provider` to `env`, and `telemetry.provider` to `stdout`. The required fields are `datastore.provider` and `server.encryptionKey`. Platform auth is optional.
+Gestalt defaults `server.public.port` to `8080`, `secrets.provider` to `env`, and `telemetry.provider` to `stdout`. The required fields are `datastores`, `datastore`, and `server.encryptionKey`. Platform auth is optional.
 
 `server.encryptionKey` is the root deployment secret. Gestalt derives token encryption and session material from it. Changing this key invalidates all existing sessions and tokens, so treat it as a meaningful deployment event.
 
@@ -199,19 +199,22 @@ For programmatic access, Gestalt issues API tokens prefixed with `gst_api_`. The
 
 ## Datastore
 
-The `datastore` block selects persistent storage for users, sessions, API tokens, and plugin credentials. Like auth, the datastore runs as an external gRPC provider process.
+The `datastores` block declares persistent storage providers for users, sessions, API tokens, and plugin credentials. The top-level `datastore` field selects which named entry Gestalt should use for system storage. Like auth, the datastore runs as an external gRPC provider process.
 
 ```yaml
-datastore:
-  provider:
-    source:
-      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
-      version: 0.0.1-alpha.1
-  config:
-    path: ./gestalt.db
+datastores:
+  main:
+    provider:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/datastore/relationaldb
+        version: 0.0.1-alpha.1
+    config:
+      dsn: sqlite://./gestalt.db
+
+datastore: main
 ```
 
-`datastore.provider` is required. The `source.ref` and `version` fields work the same as for plugin and auth providers. Provider-specific settings go in `datastore.config`.
+`datastores.<name>.provider` is required for each declared datastore entry, and `datastore` must name one of those entries. The `source.ref` and `version` fields work the same as for plugin and auth providers. Provider-specific settings go in `datastores.<name>.config`.
 
 ## MCP
 
@@ -337,13 +340,16 @@ auth:
     clientId: ${OIDC_CLIENT_ID}
     clientSecret: secret://oidc-client-secret
 
-datastore:
-  provider:
-    source:
-      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
-      version: 0.0.1-alpha.1
-  config:
-    path: ./gestalt.db
+datastores:
+  main:
+    provider:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/datastore/relationaldb
+        version: 0.0.1-alpha.1
+    config:
+      dsn: sqlite://./gestalt.db
+
+datastore: main
 
 plugins:
   github:
@@ -382,13 +388,16 @@ server:
   baseUrl: http://localhost:8080
   encryptionKey: change-me
 
-datastore:
-  provider:
-    source:
-      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
-      version: 0.0.1-alpha.1
-  config:
-    path: ./gestalt.db
+datastores:
+  main:
+    provider:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/datastore/relationaldb
+        version: 0.0.1-alpha.1
+    config:
+      dsn: sqlite://./gestalt.db
+
+datastore: main
 
 plugins: {}
 ```

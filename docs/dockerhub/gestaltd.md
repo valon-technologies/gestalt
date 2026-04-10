@@ -28,7 +28,7 @@
 - This image is not zero-config. Mount or bake a config file before starting it.
 - Locked startup is the default. If your config uses
   `plugins.*.provider.source.ref`, `auth.provider.source.ref`,
-  `datastore.provider.source.ref`, or `ui.provider.source.ref`, run `init`
+  `datastores.*.provider.source.ref`, or `ui.provider.source.ref`, run `init`
   first.
 
 ## Supported tags
@@ -76,15 +76,17 @@ Example minimal config:
 server:
   public:
     port: 8080
-  encryption_key: ${GESTALT_ENCRYPTION_KEY}
+  encryptionKey: ${GESTALT_ENCRYPTION_KEY}
 
-datastore:
-  provider:
-    source:
-      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
-      version: 0.0.1-alpha.1
-  config:
-    path: /data/gestalt.db
+datastores:
+  main:
+    provider:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/datastore/relationaldb
+        version: 0.0.1-alpha.1
+    config:
+      dsn: sqlite:///data/gestalt.db
+datastore: main
 
 plugins: {}
 ui:
@@ -101,15 +103,17 @@ server:
   management:
     host: 0.0.0.0
     port: 9090
-  encryption_key: ${GESTALT_ENCRYPTION_KEY}
+  encryptionKey: ${GESTALT_ENCRYPTION_KEY}
 
-datastore:
-  provider:
-    source:
-      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
-      version: 0.0.1-alpha.1
-  config:
-    path: /data/gestalt.db
+datastores:
+  main:
+    provider:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/datastore/relationaldb
+        version: 0.0.1-alpha.1
+    config:
+      dsn: sqlite:///data/gestalt.db
+datastore: main
 
 plugins: {}
 ui:
@@ -131,7 +135,7 @@ them reachable from the host at `127.0.0.1:9090`.
 
 For production-style deployments, prefer this split-listener pattern over
 leaving `/admin` and `/metrics` on the public listener. If you also set
-`server.base_url`, the management admin UI can link back to the public client
+`server.baseUrl`, the management admin UI can link back to the public client
 UI hostname; otherwise it omits that link.
 
 ## Run a locked production image
@@ -238,7 +242,7 @@ That means this works well with Docker secrets:
 
 ```yaml
 server:
-  encryption_key: ${GESTALT_ENCRYPTION_KEY}
+  encryptionKey: ${GESTALT_ENCRYPTION_KEY}
 ```
 
 ```sh

@@ -398,7 +398,7 @@ auth:
 datastore:
   plugin:
     source:
-      ref: github.com/valon-technologies/gestalt-providers/datastore/sqlite
+      ref: github.com/valon-technologies/gestalt-providers/datastore/relationaldb
       version: 1.0.0
 server:
   encryptionKey: server-key

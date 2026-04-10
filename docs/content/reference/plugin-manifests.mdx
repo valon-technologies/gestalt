@@ -262,7 +262,7 @@ The `datastore` block describes a persistence backend package.
 
 | Field | Type | Purpose |
 | --- | --- | --- |
-| `configSchemaPath` | string | Path to a JSON/YAML schema that validates the `datastore.config` block in the server config. |
+| `configSchemaPath` | string | Path to a JSON/YAML schema that validates the `datastores.<name>.config` block in the server config. |
 
 Datastore providers require an executable entrypoint. Declare it under `entrypoints.datastore`.
 
