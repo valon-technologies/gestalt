@@ -55,7 +55,7 @@ func NewDeclarativeProvider(manifest *pluginmanifestv1.Manifest, httpClient *htt
 	if manifest == nil {
 		return nil, fmt.Errorf("manifest is required")
 	}
-	if manifest.Plugin == nil || !manifest.Plugin.IsDeclarative() {
+	if manifest.Spec == nil || !manifest.Spec.IsDeclarative() {
 		return nil, fmt.Errorf("manifest is not a declarative provider")
 	}
 
@@ -63,21 +63,21 @@ func NewDeclarativeProvider(manifest *pluginmanifestv1.Manifest, httpClient *htt
 		httpClient = &http.Client{Timeout: declarativeHTTPTimeout}
 	}
 
-	ops := manifest.Plugin.RESTOperations()
+	ops := manifest.Spec.RESTOperations()
 	p := &DeclarativeProvider{
 		catalog: &catalog.Catalog{
 			Name:        manifest.Source,
 			DisplayName: manifest.DisplayName,
 			Description: manifest.Description,
-			Headers:     maps.Clone(manifest.Plugin.Headers),
+			Headers:     maps.Clone(manifest.Spec.Headers),
 			Operations:  make([]catalog.CatalogOperation, 0, len(ops)),
 		},
 		opsByName:      make(map[string]*catalog.CatalogOperation, len(ops)),
-		baseURL:        manifest.Plugin.RESTBaseURL(),
-		auth:           manifest.Plugin.Auth,
+		baseURL:        manifest.Spec.RESTBaseURL(),
+		auth:           manifest.Spec.Auth,
 		httpClient:     httpClient,
-		discovery:      manifest.Plugin.Discovery,
-		connectionDefs: manifest.Plugin.ConnectionParams,
+		discovery:      manifest.Spec.Discovery,
+		connectionDefs: manifest.Spec.ConnectionParams,
 	}
 
 	for i := range ops {

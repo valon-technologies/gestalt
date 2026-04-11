@@ -42,46 +42,49 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 	if err := resolveStringFields(&cfg.Server, resolve); err != nil {
 		return err
 	}
-	for name := range cfg.Plugins {
-		intg := cfg.Plugins[name]
-		if err := resolveStringFields(&intg, resolve); err != nil {
+	for name, entry := range cfg.Providers.Plugins {
+		if entry == nil {
+			continue
+		}
+		if err := resolveStringFields(entry, resolve); err != nil {
 			return err
 		}
-		if intg.Plugin != nil {
-			if err := resolveStringFields(intg.Plugin, resolve); err != nil {
-				return err
-			}
-			for _, conn := range intg.Plugin.Connections {
-				if conn != nil {
-					if err := resolveStringFields(conn, resolve); err != nil {
-						return err
-					}
+		for _, conn := range entry.Connections {
+			if conn != nil {
+				if err := resolveStringFields(conn, resolve); err != nil {
+					return err
 				}
 			}
 		}
-		cfg.Plugins[name] = intg
+		cfg.Providers.Plugins[name] = entry
 	}
-	// resolveStringFields handles both Provider (*ProviderDef, via pointer
-	// recursion) and Config (yaml.Node, via type detection) automatically.
-	// Secrets is handled separately to skip its Config node and avoid
-	// self-referential resolution.
-	for _, comp := range []*config.ComponentConfig{&cfg.Auth, &cfg.UI, &cfg.Telemetry, &cfg.Audit} {
-		if err := resolveStringFields(comp, resolve); err != nil {
-			return err
+	for _, entry := range []*config.ProviderEntry{cfg.Providers.Auth, cfg.Providers.UI, cfg.Providers.Telemetry, cfg.Providers.Audit} {
+		if entry != nil {
+			if err := resolveStringFields(entry, resolve); err != nil {
+				return err
+			}
 		}
 	}
-	if cfg.Secrets.Provider != nil {
-		if err := resolveStringFields(cfg.Secrets.Provider, resolve); err != nil {
+	// Resolve secrets provider struct fields (Source, Env, AllowedHosts, etc.)
+	// but skip its Config node to avoid self-referential resolution.
+	if cfg.Providers.Secrets != nil {
+		savedConfig := cfg.Providers.Secrets.Config
+		cfg.Providers.Secrets.Config = yaml.Node{}
+		if err := resolveStringFields(cfg.Providers.Secrets, resolve); err != nil {
+			cfg.Providers.Secrets.Config = savedConfig
 			return err
 		}
+		cfg.Providers.Secrets.Config = savedConfig
 	}
 
-	for name := range cfg.IndexedDBs {
-		ds := cfg.IndexedDBs[name]
-		if err := resolveStringFields(&ds, resolve); err != nil {
+	for name, ds := range cfg.Providers.IndexedDBs {
+		if ds == nil {
+			continue
+		}
+		if err := resolveStringFields(ds, resolve); err != nil {
 			return err
 		}
-		cfg.IndexedDBs[name] = ds
+		cfg.Providers.IndexedDBs[name] = ds
 	}
 
 	return nil

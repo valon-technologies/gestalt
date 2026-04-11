@@ -11,9 +11,9 @@ type EgressDeps struct {
 }
 
 func newEgressDeps(cfg *config.Config, sm core.SecretManager) EgressDeps {
-	staticEnforcer := buildStaticPolicyEnforcer(cfg.Egress)
-	defaultAction := egress.PolicyAction(cfg.Egress.DefaultAction)
-	hasStaticRules := len(cfg.Egress.Policies) > 0 || defaultAction == egress.PolicyDeny
+	staticEnforcer := buildStaticPolicyEnforcer(cfg.Server.Egress)
+	defaultAction := egress.PolicyAction(cfg.Server.Egress.DefaultAction)
+	hasStaticRules := len(cfg.Server.Egress.Policies) > 0 || defaultAction == egress.PolicyDeny
 
 	var policy egress.PolicyEnforcer
 	if hasStaticRules {
@@ -21,10 +21,10 @@ func newEgressDeps(cfg *config.Config, sm core.SecretManager) EgressDeps {
 	}
 
 	var credentials egress.CredentialResolver
-	if len(cfg.Egress.Credentials) > 0 {
-		grants := make([]egress.CredentialGrant, len(cfg.Egress.Credentials))
-		for i := range cfg.Egress.Credentials {
-			g := &cfg.Egress.Credentials[i]
+	if len(cfg.Server.Egress.Credentials) > 0 {
+		grants := make([]egress.CredentialGrant, len(cfg.Server.Egress.Credentials))
+		for i := range cfg.Server.Egress.Credentials {
+			g := &cfg.Server.Egress.Credentials[i]
 			grants[i] = egress.CredentialGrant{
 				SecretRef: g.SecretRef,
 				AuthStyle: egress.AuthStyle(g.AuthStyle),

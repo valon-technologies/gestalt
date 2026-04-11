@@ -54,9 +54,10 @@ properties:
 				t.Fatalf("WriteFile(schema): %v", err)
 			}
 			manifest := &pluginmanifestv1.Manifest{
+				Kind:    pluginmanifestv1.KindPlugin,
 				Source:  "github.com/acme/plugins/provider",
 				Version: "0.0.1-alpha.1",
-				Plugin: &pluginmanifestv1.Plugin{
+				Spec: &pluginmanifestv1.Spec{
 					ConfigSchemaPath: tc.schemaPath,
 				},
 				Artifacts: []pluginmanifestv1.Artifact{
@@ -67,9 +68,7 @@ properties:
 						SHA256: sha256Hex("provider"),
 					},
 				},
-				Entrypoints: pluginmanifestv1.Entrypoints{
-					Plugin: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactPath},
-				},
+				Entrypoint: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactPath},
 			}
 			data, err := EncodeManifest(manifest)
 			if err != nil {

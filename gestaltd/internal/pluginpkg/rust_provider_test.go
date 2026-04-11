@@ -233,7 +233,7 @@ func TestPrepareSourceManifest_GeneratesStaticCatalogForRustProvider(t *testing.
 	if err != nil {
 		t.Fatalf("PrepareSourceManifest: %v", err)
 	}
-	if manifest == nil || manifest.Plugin == nil {
+	if manifest == nil || manifest.Spec == nil {
 		t.Fatalf("manifest = %#v, want plugin manifest", manifest)
 	}
 

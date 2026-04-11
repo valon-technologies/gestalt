@@ -1,4 +1,4 @@
-datastores:
+indexeddbs:
   main:
     provider:
       source:

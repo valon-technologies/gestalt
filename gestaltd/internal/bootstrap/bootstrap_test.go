@@ -54,20 +54,22 @@ func stubIndexedDBFactory() bootstrap.IndexedDBFactory {
 
 func validConfig() *config.Config {
 	return &config.Config{
-		Auth: config.AuthConfig{
-			Provider: &config.ProviderDef{Source: &config.PluginSourceDef{Ref: "github.com/valon-technologies/gestalt-providers/auth/oidc", Version: "0.0.1-alpha.1"}},
-			Config:   yaml.Node{Kind: yaml.MappingNode},
+		Providers: config.ProvidersConfig{
+			Auth: &config.ProviderEntry{
+				Source: config.ProviderSource{Ref: "github.com/valon-technologies/gestalt-providers/auth/oidc", Version: "0.0.1-alpha.1"},
+				Config: yaml.Node{Kind: yaml.MappingNode},
+			},
+			Secrets:   &config.ProviderEntry{Source: config.ProviderSource{Builtin: "test-secrets"}},
+			Telemetry: &config.ProviderEntry{Source: config.ProviderSource{Builtin: "test-telemetry"}},
+			IndexedDBs: map[string]*config.ProviderEntry{
+				"test": {Source: config.ProviderSource{Path: "stub"}},
+			},
+			Plugins: map[string]*config.ProviderEntry{},
 		},
-		IndexedDB: config.IndexedDBConfig("test"),
-		IndexedDBs: map[string]config.IndexedDBDef{
-			"test": {Provider: &config.ProviderDef{Source: &config.PluginSourceDef{Path: "stub"}}},
-		},
-		Secrets:   config.SecretsConfig{Builtin: "test-secrets"},
-		Telemetry: config.TelemetryConfig{Builtin: "test-telemetry"},
-		Plugins:   map[string]config.PluginDef{},
 		Server: config.ServerConfig{
 			Public:        config.ListenerConfig{Port: 8080},
 			EncryptionKey: "test-key",
+			IndexedDB:     "test",
 		},
 	}
 }
@@ -162,7 +164,7 @@ func TestBootstrapNoIntegrations(t *testing.T) {
 	ctx := context.Background()
 
 	cfg := validConfig()
-	cfg.Plugins = nil
+	cfg.Providers.Plugins = nil
 
 	result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
 	if err != nil {
@@ -179,7 +181,7 @@ func TestBootstrap_ReusesPreparedComponentRuntimeConfig(t *testing.T) {
 
 	cfg := validConfig()
 
-	authRuntime, err := config.BuildComponentRuntimeConfigNode("auth", "auth", cfg.Auth.Provider, yaml.Node{
+	authRuntime, err := config.BuildComponentRuntimeConfigNode("auth", "auth", cfg.Providers.Auth, yaml.Node{
 		Kind: yaml.MappingNode,
 		Content: []*yaml.Node{
 			{Kind: yaml.ScalarNode, Tag: "!!str", Value: "clientId"},
@@ -189,7 +191,7 @@ func TestBootstrap_ReusesPreparedComponentRuntimeConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildComponentRuntimeConfigNode(auth): %v", err)
 	}
-	cfg.Auth.Config = authRuntime
+	cfg.Providers.Auth.Config = authRuntime
 
 	var gotAuthNode yaml.Node
 	factories := validFactories()
@@ -434,7 +436,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 
 		cfg := validConfig()
-		cfg.Auth.Config = yaml.Node{
+		cfg.Providers.Auth.Config = yaml.Node{
 			Kind: yaml.MappingNode,
 			Content: []*yaml.Node{
 				{Kind: yaml.ScalarNode, Value: "clientSecret", Tag: "!!str"},
@@ -480,15 +482,15 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 
 		cfg := validConfig()
-		def := cfg.IndexedDBs["test"]
-		def.Config = yaml.Node{
+		ds := cfg.Providers.IndexedDBs["test"]
+		ds.Config = yaml.Node{
 			Kind: yaml.MappingNode,
 			Content: []*yaml.Node{
 				{Kind: yaml.ScalarNode, Value: "dsn", Tag: "!!str"},
 				{Kind: yaml.ScalarNode, Value: "secret://indexeddb-dsn", Tag: "!!str"},
 			},
 		}
-		cfg.IndexedDBs["test"] = def
+		cfg.Providers.IndexedDBs["test"] = ds
 
 		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
 		if err != nil {
@@ -497,8 +499,8 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		<-result.ProvidersReady
 
 		var decoded struct {
-			Source *config.ProviderDef `yaml:"provider"`
-			Config map[string]string   `yaml:"config"`
+			Source *config.ProviderEntry `yaml:"provider"`
+			Config map[string]string     `yaml:"config"`
 		}
 		if err := receivedNode.Decode(&decoded); err != nil {
 			t.Fatalf("decode: %v", err)
@@ -512,8 +514,8 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		t.Parallel()
 
 		cfg := validConfig()
-		cfg.Auth.Provider = &config.ProviderDef{Source: &config.PluginSourceDef{Ref: "github.com/valon-technologies/gestalt-providers/auth/oidc", Version: "0.0.1-alpha.1"}}
-		cfg.Auth.Config = yaml.Node{
+		cfg.Providers.Auth = &config.ProviderEntry{Source: config.ProviderSource{Ref: "github.com/valon-technologies/gestalt-providers/auth/oidc", Version: "0.0.1-alpha.1"}}
+		cfg.Providers.Auth.Config = yaml.Node{
 			Kind: yaml.MappingNode,
 			Content: []*yaml.Node{
 				{Kind: yaml.ScalarNode, Value: "issuerUrl", Tag: "!!str"},
@@ -553,7 +555,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		t.Parallel()
 
 		cfg := validConfig()
-		cfg.Auth.Provider = nil
+		cfg.Providers.Auth = nil
 
 		var authFactoryCalled atomic.Bool
 		factories := validFactories()
@@ -614,7 +616,7 @@ func TestBootstrapDisabledComponents(t *testing.T) {
 		t.Parallel()
 
 		cfg := validConfig()
-		cfg.Telemetry = config.TelemetryConfig{Disabled: true}
+		cfg.Providers.Telemetry = &config.ProviderEntry{Disabled: true}
 
 		factories := validFactories()
 		factories.Telemetry["noop"] = telemetrynoop.Factory
@@ -636,7 +638,7 @@ func TestBootstrapDisabledComponents(t *testing.T) {
 		t.Parallel()
 
 		cfg := validConfig()
-		cfg.Secrets = config.SecretsConfig{Disabled: true}
+		cfg.Providers.Secrets = &config.ProviderEntry{Disabled: true}
 
 		result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
 		if err != nil {

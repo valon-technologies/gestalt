@@ -71,12 +71,12 @@ func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *Fa
 		}
 	}
 
-	names := slices.Sorted(maps.Keys(cfg.Plugins))
+	names := slices.Sorted(maps.Keys(cfg.Providers.Plugins))
 
 	var errs []error
 	for _, name := range names {
-		intgDef := cfg.Plugins[name]
-		result, err := buildProviderForValidation(ctx, name, intgDef, deps)
+		entry := cfg.Providers.Plugins[name]
+		result, err := buildProviderForValidation(ctx, name, entry, deps)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("integration %q: %w", name, err))
 			continue
@@ -98,11 +98,11 @@ func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *Fa
 	return &reg.Providers, connAuth, nil
 }
 
-func buildProviderForValidation(ctx context.Context, name string, intg config.PluginDef, deps Deps) (*ProviderBuildResult, error) {
-	if intg.Plugin == nil || !intg.Plugin.HasManagedArtifacts() || !intg.Plugin.HasResolvedManifest() {
-		return buildProvider(ctx, name, intg, deps)
+func buildProviderForValidation(ctx context.Context, name string, entry *config.ProviderEntry, deps Deps) (*ProviderBuildResult, error) {
+	if entry == nil || !entry.HasManagedSource() || !entry.HasResolvedManifest() {
+		return buildProvider(ctx, name, entry, deps)
 	}
-	prov, err := newPreparedProviderStub(name, intg)
+	prov, err := newPreparedProviderStub(name, entry)
 	if err != nil {
 		return nil, err
 	}
@@ -116,11 +116,11 @@ type preparedProviderStub struct {
 	connectionMode core.ConnectionMode
 }
 
-func newPreparedProviderStub(name string, intg config.PluginDef) (core.Provider, error) {
-	if intg.Plugin == nil || intg.Plugin.ResolvedManifest == nil {
+func newPreparedProviderStub(name string, entry *config.ProviderEntry) (core.Provider, error) {
+	if entry == nil || entry.ResolvedManifest == nil {
 		return nil, fmt.Errorf("prepared manifest is not resolved")
 	}
-	manifest := intg.Plugin.ResolvedManifest
+	manifest := entry.ResolvedManifest
 	displayName := manifest.DisplayName
 	if displayName == "" {
 		displayName = name
@@ -133,7 +133,7 @@ func newPreparedProviderStub(name string, intg config.PluginDef) (core.Provider,
 		name:           name,
 		displayName:    displayName,
 		description:    description,
-		connectionMode: connectionModeFromPlugin(intg),
+		connectionMode: connectionModeFromEntry(entry),
 	}, nil
 }
 
@@ -152,21 +152,21 @@ func (p *preparedProviderStub) Execute(context.Context, string, map[string]any, 
 	return nil, fmt.Errorf("prepared validation stub cannot execute operations")
 }
 
-func connectionModeFromPlugin(intg config.PluginDef) core.ConnectionMode {
-	if intg.Plugin == nil {
+func connectionModeFromEntry(entry *config.ProviderEntry) core.ConnectionMode {
+	if entry == nil {
 		return core.ConnectionModeUser
 	}
 
 	plan := pluginConnectionPlan{
-		namedConnections: make(map[string]config.ConnectionDef, len(intg.Plugin.Connections)),
+		namedConnections: make(map[string]config.ConnectionDef, len(entry.Connections)),
 	}
-	if intg.Plugin.ConnectionMode != "" {
-		plan.pluginConnection.Mode = intg.Plugin.ConnectionMode
+	if entry.ConnectionMode != "" {
+		plan.pluginConnection.Mode = entry.ConnectionMode
 	}
-	if intg.Plugin.Auth != nil {
-		plan.pluginConnection.Auth = *intg.Plugin.Auth
+	if entry.Auth != nil {
+		plan.pluginConnection.Auth = *entry.Auth
 	}
-	for name, conn := range intg.Plugin.Connections {
+	for name, conn := range entry.Connections {
 		if conn == nil {
 			continue
 		}

@@ -366,7 +366,7 @@ func TestPrepareSourceManifest_GeneratesTypeScriptStaticCatalog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PrepareSourceManifest: %v", err)
 	}
-	if manifest == nil || manifest.Plugin == nil {
+	if manifest == nil || manifest.Spec == nil {
 		t.Fatalf("manifest = %+v, want provider metadata", manifest)
 	}
 
@@ -577,9 +577,10 @@ func mustWriteTypeScriptSourceManifest(t *testing.T, root, pluginName string) st
 	t.Helper()
 
 	data, err := EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
+		Kind:    pluginmanifestv1.KindPlugin,
 		Source:  "github.com/testowner/plugins/" + pluginName,
 		Version: "0.0.1",
-		Plugin: &pluginmanifestv1.Plugin{
+		Spec: &pluginmanifestv1.Spec{
 			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
 		},
 	}, ManifestFormatYAML)
@@ -596,16 +597,10 @@ func mustWriteTypeScriptSourceComponentManifest(t *testing.T, root, pluginName, 
 	t.Helper()
 
 	manifest := &pluginmanifestv1.Manifest{
+		Kind:    kind,
 		Source:  "github.com/testowner/plugins/" + pluginName,
 		Version: "0.0.1",
-	}
-	switch kind {
-	case pluginmanifestv1.KindAuth:
-		manifest.Auth = &pluginmanifestv1.AuthMetadata{}
-	case pluginmanifestv1.KindIndexedDB:
-		manifest.Datastore = &pluginmanifestv1.DatastoreMetadata{}
-	default:
-		t.Fatalf("unsupported component kind %q", kind)
+		Spec:    &pluginmanifestv1.Spec{},
 	}
 
 	data, err := EncodeSourceManifestFormat(manifest, ManifestFormatYAML)

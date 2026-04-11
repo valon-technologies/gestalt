@@ -62,9 +62,9 @@ func TestSandboxedPluginCannotReadUnauthorizedFile(t *testing.T) {
 	)
 
 	cfg := &config.Config{
-		Plugins: map[string]config.PluginDef{
-			"sandboxed": {
-				Plugin: &config.ProviderDef{
+		Providers: config.ProvidersConfig{
+			Plugins: map[string]*config.ProviderEntry{
+				"sandboxed": {
 					Command:              bin,
 					Args:                 []string{"provider"},
 					AllowedHosts:         []string{"localhost"},
@@ -108,9 +108,9 @@ func TestSandboxedPluginCanCommunicateViaGRPC(t *testing.T) {
 	)
 
 	cfg := &config.Config{
-		Plugins: map[string]config.PluginDef{
-			"sandboxed": {
-				Plugin: &config.ProviderDef{
+		Providers: config.ProvidersConfig{
+			Plugins: map[string]*config.ProviderEntry{
+				"sandboxed": {
 					Command:              bin,
 					Args:                 []string{"provider"},
 					AllowedHosts:         []string{"localhost"},
@@ -157,9 +157,9 @@ func TestSandboxedSynthesizedSourcePluginCanStart(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		Plugins: map[string]config.PluginDef{
-			"example": {
-				Plugin: &config.ProviderDef{
+		Providers: config.ProvidersConfig{
+			Plugins: map[string]*config.ProviderEntry{
+				"example": {
 					AllowedHosts:         []string{"localhost"},
 					HostBinary:           hostBin,
 					ResolvedManifest:     manifest,
@@ -211,9 +211,9 @@ func TestSandboxDisabledByDefault(t *testing.T) {
 	)
 
 	cfg := &config.Config{
-		Plugins: map[string]config.PluginDef{
-			"nosandbox": {
-				Plugin: &config.ProviderDef{
+		Providers: config.ProvidersConfig{
+			Plugins: map[string]*config.ProviderEntry{
+				"nosandbox": {
 					Command:              bin,
 					Args:                 []string{"provider"},
 					ResolvedManifest:     manifest,
@@ -260,9 +260,9 @@ func TestSandboxedPluginHTTPProxyAllowsConfiguredHosts(t *testing.T) {
 	)
 
 	cfg := &config.Config{
-		Plugins: map[string]config.PluginDef{
-			"proxied": {
-				Plugin: &config.ProviderDef{
+		Providers: config.ProvidersConfig{
+			Plugins: map[string]*config.ProviderEntry{
+				"proxied": {
 					Command:              bin,
 					Args:                 []string{"provider"},
 					AllowedHosts:         []string{host},
@@ -318,9 +318,9 @@ func TestSandboxedPluginHTTPProxyBlocksUnconfiguredHosts(t *testing.T) {
 	)
 
 	cfg := &config.Config{
-		Plugins: map[string]config.PluginDef{
-			"blocked": {
-				Plugin: &config.ProviderDef{
+		Providers: config.ProvidersConfig{
+			Plugins: map[string]*config.ProviderEntry{
+				"blocked": {
 					Command:              bin,
 					Args:                 []string{"provider"},
 					AllowedHosts:         []string{"not-a-real-host.example.com"},

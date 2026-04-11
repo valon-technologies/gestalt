@@ -32,6 +32,14 @@ func MustExampleProviderPluginPath() string {
 	return filepath.Join(root, "gestaltd", "internal", "testutil", "testdata", "provider-go")
 }
 
+func MustExampleDatastoreProviderPath() string {
+	root, ok := repoRoot()
+	if !ok {
+		panic("runtime.Caller failed")
+	}
+	return filepath.Join(root, "gestaltd", "internal", "testutil", "testdata", "provider-rust-datastore")
+}
+
 func CopyExampleProviderPlugin(t *testing.T, dst string) {
 	t.Helper()
 

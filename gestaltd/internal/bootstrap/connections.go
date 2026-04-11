@@ -19,18 +19,18 @@ type ConnectionMaps struct {
 
 func BuildConnectionMaps(cfg *config.Config) (ConnectionMaps, error) {
 	maps := ConnectionMaps{
-		DefaultConnection: make(map[string]string, len(cfg.Plugins)),
-		APIConnection:     make(map[string]string, len(cfg.Plugins)),
-		MCPConnection:     make(map[string]string, len(cfg.Plugins)),
+		DefaultConnection: make(map[string]string, len(cfg.Providers.Plugins)),
+		APIConnection:     make(map[string]string, len(cfg.Providers.Plugins)),
+		MCPConnection:     make(map[string]string, len(cfg.Providers.Plugins)),
 	}
 
-	for name, intg := range cfg.Plugins {
+	for name, entry := range cfg.Providers.Plugins {
 		defaultConnection := config.PluginConnectionName
 		apiConnection := config.PluginConnectionName
 		mcpConnection := config.PluginConnectionName
 
-		if intg.Plugin != nil {
-			plan, err := buildPluginConnectionPlan(intg.Plugin, intg.Plugin.ManifestPlugin())
+		if entry != nil {
+			plan, err := buildPluginConnectionPlan(entry, entry.ManifestSpec())
 			if err != nil {
 				return ConnectionMaps{}, fmt.Errorf("integration %q: %w", name, err)
 			}
@@ -61,7 +61,7 @@ type resolvedSpecSurface struct {
 	connection     config.ConnectionDef
 }
 
-func buildPluginConnectionPlan(plugin *config.ProviderDef, manifestPlugin *pluginmanifestv1.Plugin) (pluginConnectionPlan, error) {
+func buildPluginConnectionPlan(plugin *config.ProviderEntry, manifestPlugin *pluginmanifestv1.Spec) (pluginConnectionPlan, error) {
 	declaredNames := namedConnectionNames(plugin, manifestPlugin)
 	plan := pluginConnectionPlan{
 		pluginConnection: config.EffectivePluginConnectionDef(plugin, manifestPlugin),
@@ -211,7 +211,7 @@ func (plan pluginConnectionPlan) connectionDef(name string) (config.ConnectionDe
 	return conn, nil
 }
 
-func resolveDefaultConnectionName(plugin *config.ProviderDef, manifestPlugin *pluginmanifestv1.Plugin) string {
+func resolveDefaultConnectionName(plugin *config.ProviderEntry, manifestPlugin *pluginmanifestv1.Spec) string {
 	if plugin != nil {
 		if name := config.ResolveConnectionAlias(plugin.DefaultConnection); name != "" {
 			return name
@@ -225,7 +225,7 @@ func resolveDefaultConnectionName(plugin *config.ProviderDef, manifestPlugin *pl
 	return ""
 }
 
-func surfaceURL(plugin *config.ProviderDef, manifestPlugin *pluginmanifestv1.Plugin, surface config.SpecSurface) string {
+func surfaceURL(plugin *config.ProviderEntry, manifestPlugin *pluginmanifestv1.Spec, surface config.SpecSurface) string {
 	if manifestPlugin == nil {
 		return ""
 	}
@@ -236,7 +236,7 @@ func surfaceURL(plugin *config.ProviderDef, manifestPlugin *pluginmanifestv1.Plu
 	return resolveManifestRelativeSpecURL(plugin, url)
 }
 
-func resolveSurfaceConnectionName(plugin *config.ProviderDef, manifestPlugin *pluginmanifestv1.Plugin, surface config.SpecSurface) string {
+func resolveSurfaceConnectionName(plugin *config.ProviderEntry, manifestPlugin *pluginmanifestv1.Spec, surface config.SpecSurface) string {
 	name := config.ResolveConnectionAlias(config.ManifestProviderSurfaceConnectionName(manifestPlugin, surface))
 	if name == "" {
 		return config.PluginConnectionName
@@ -244,7 +244,7 @@ func resolveSurfaceConnectionName(plugin *config.ProviderDef, manifestPlugin *pl
 	return name
 }
 
-func resolveManifestRelativeSpecURL(plugin *config.ProviderDef, raw string) string {
+func resolveManifestRelativeSpecURL(plugin *config.ProviderEntry, raw string) string {
 	if plugin == nil || plugin.ResolvedManifestPath == "" || raw == "" {
 		return raw
 	}
@@ -261,12 +261,12 @@ func resolveManifestRelativeSpecURL(plugin *config.ProviderDef, raw string) stri
 	return filepath.Clean(filepath.Join(filepath.Dir(plugin.ResolvedManifestPath), raw))
 }
 
-func buildConnectionAuthMap(name string, intg config.PluginDef, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, authFallback *specAuthFallback, deps Deps) (map[string]OAuthHandler, error) {
-	manifestPlugin := (*pluginmanifestv1.Plugin)(nil)
+func buildConnectionAuthMap(name string, entry *config.ProviderEntry, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, authFallback *specAuthFallback, deps Deps) (map[string]OAuthHandler, error) {
+	manifestPlugin := (*pluginmanifestv1.Spec)(nil)
 	if manifest != nil {
-		manifestPlugin = manifest.Plugin
+		manifestPlugin = manifest.Spec
 	}
-	plan, err := buildPluginConnectionPlan(intg.Plugin, manifestPlugin)
+	plan, err := buildPluginConnectionPlan(entry, manifestPlugin)
 	if err != nil {
 		return nil, fmt.Errorf("resolve connections for %q: %w", name, err)
 	}
@@ -307,7 +307,7 @@ func buildConnectionAuthMap(name string, intg config.PluginDef, manifest *plugin
 	return handlers, nil
 }
 
-func namedConnectionNames(plugin *config.ProviderDef, manifestPlugin *pluginmanifestv1.Plugin) map[string]struct{} {
+func namedConnectionNames(plugin *config.ProviderEntry, manifestPlugin *pluginmanifestv1.Spec) map[string]struct{} {
 	names := make(map[string]struct{})
 	add := func(name string) {
 		resolved := config.ResolveConnectionAlias(name)

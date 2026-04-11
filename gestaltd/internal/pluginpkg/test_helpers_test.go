@@ -48,9 +48,10 @@ func unknownSiblingArtifactPath(artifactPath string) string {
 
 func newProviderManifest(source, version, artifactPath, digest string) *pluginmanifestv1.Manifest {
 	return &pluginmanifestv1.Manifest{
+		Kind:    pluginmanifestv1.KindPlugin,
 		Source:  source,
 		Version: version,
-		Plugin:  &pluginmanifestv1.Plugin{},
+		Spec:    &pluginmanifestv1.Spec{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     testArtifactOS,
@@ -59,9 +60,7 @@ func newProviderManifest(source, version, artifactPath, digest string) *pluginma
 				SHA256: digest,
 			},
 		},
-		Entrypoints: pluginmanifestv1.Entrypoints{
-			Plugin: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactPath},
-		},
+		Entrypoint: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactPath},
 	}
 }
 
@@ -90,9 +89,10 @@ func mustWriteManifest(t *testing.T, dir string, manifest *pluginmanifestv1.Mani
 
 func mustProviderManifest(source, version, osName, arch, artifactPath, sha string) *pluginmanifestv1.Manifest {
 	return &pluginmanifestv1.Manifest{
+		Kind:    pluginmanifestv1.KindPlugin,
 		Source:  source,
 		Version: version,
-		Plugin:  &pluginmanifestv1.Plugin{},
+		Spec:    &pluginmanifestv1.Spec{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     osName,
@@ -101,9 +101,7 @@ func mustProviderManifest(source, version, osName, arch, artifactPath, sha strin
 				SHA256: sha,
 			},
 		},
-		Entrypoints: pluginmanifestv1.Entrypoints{
-			Plugin: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactPath},
-		},
+		Entrypoint: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactPath},
 	}
 }
 
@@ -153,7 +151,7 @@ func mustWriteManifestData(t *testing.T, dir, name string, data []byte) string {
 
 func mustWriteStaticCatalog(t *testing.T, dir string, manifest *pluginmanifestv1.Manifest) {
 	t.Helper()
-	if manifest == nil || manifest.Plugin == nil {
+	if manifest == nil || manifest.Spec == nil {
 		return
 	}
 	mustWriteFile(t, filepath.Join(dir, StaticCatalogFile), []byte("name: provider\noperations:\n  - id: echo\n    method: POST\n"), 0644)

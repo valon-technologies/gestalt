@@ -20,7 +20,7 @@ func TestManifestWorkflow_RoundTripsProviderPackagesAcrossDirectoryAndArchive(t 
 		artifactPath := testArtifactPath("provider")
 		manifest := mustProviderManifest("github.com/acme/plugins/provider-json", "1.2.3", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider-json"))
 		manifest.IconFile = "assets/icon.svg"
-		manifest.Plugin.ConfigSchemaPath = "schemas/config.schema.json"
+		manifest.Spec.ConfigSchemaPath = "schemas/config.schema.json"
 
 		mustWriteManifestData(t, sourceDir, ManifestFile, mustManifestJSON(t, manifest))
 		mustWriteFile(t, filepath.Join(sourceDir, filepath.FromSlash(artifactPath)), []byte("provider-json"), 0o755)
@@ -40,11 +40,11 @@ func TestManifestWorkflow_RoundTripsProviderPackagesAcrossDirectoryAndArchive(t 
 		if dirManifest.IconFile != "assets/icon.svg" {
 			t.Fatalf("IconFile = %q", dirManifest.IconFile)
 		}
-		if dirManifest.Plugin == nil || dirManifest.Plugin.ConfigSchemaPath != "schemas/config.schema.json" {
-			t.Fatalf("unexpected provider config schema: %#v", dirManifest.Plugin)
+		if dirManifest.Spec == nil || dirManifest.Spec.ConfigSchemaPath != "schemas/config.schema.json" {
+			t.Fatalf("unexpected provider config schema: %#v", dirManifest.Spec)
 		}
-		if dirManifest.Entrypoints.Plugin == nil || dirManifest.Entrypoints.Plugin.ArtifactPath != artifactPath {
-			t.Fatalf("unexpected provider entrypoint: %#v", dirManifest.Entrypoints.Plugin)
+		if dirManifest.Entrypoint == nil || dirManifest.Entrypoint.ArtifactPath != artifactPath {
+			t.Fatalf("unexpected provider entrypoint: %#v", dirManifest.Entrypoint)
 		}
 
 		archivePath := filepath.Join(root, "provider-json.tar.gz")
@@ -75,9 +75,10 @@ func TestManifestWorkflow_RoundTripsWebUIPackage(t *testing.T) {
 	root := t.TempDir()
 	sourceDir := filepath.Join(root, "webui")
 	manifest := &pluginmanifestv1.Manifest{
+		Kind:    pluginmanifestv1.KindWebUI,
 		Source:  "github.com/acme/plugins/webui",
 		Version: "1.0.0",
-		WebUI:   &pluginmanifestv1.WebUIMetadata{AssetRoot: "ui/dist"},
+		Spec:    &pluginmanifestv1.Spec{AssetRoot: "ui/dist"},
 	}
 
 	mustWriteManifestData(t, sourceDir, "manifest.yml", mustManifestYAML(t, manifest))
@@ -90,8 +91,8 @@ func TestManifestWorkflow_RoundTripsWebUIPackage(t *testing.T) {
 	if filepath.Base(gotPath) != "manifest.yml" {
 		t.Fatalf("manifest path = %q, want manifest.yml", gotPath)
 	}
-	if manifest.WebUI == nil || manifest.WebUI.AssetRoot != "ui/dist" {
-		t.Fatalf("unexpected webui manifest: %#v", manifest.WebUI)
+	if manifest.Spec == nil || manifest.Spec.AssetRoot != "ui/dist" {
+		t.Fatalf("unexpected webui manifest: %#v", manifest.Spec)
 	}
 
 	archivePath := filepath.Join(root, "webui.tar.gz")
@@ -172,9 +173,10 @@ func TestLoadManifestFromPath_PrefersManifestFileOrder(t *testing.T) {
 					source = "github.com/acme/plugins/yaml-first"
 				}
 				manifest := &pluginmanifestv1.Manifest{
+					Kind:    pluginmanifestv1.KindWebUI,
 					Source:  source,
 					Version: "1.0.0",
-					WebUI:   &pluginmanifestv1.WebUIMetadata{AssetRoot: "ui"},
+					Spec:    &pluginmanifestv1.Spec{AssetRoot: "ui"},
 				}
 				data := mustManifestYAML(t, manifest)
 				if filepath.Ext(name) == ".json" {
@@ -209,27 +211,19 @@ func TestManifestWorkflow_RejectsInvalidPackageInputs(t *testing.T) {
 			name: "missing provider and webui",
 			buildData: func(t *testing.T, dir string) string {
 				return mustWriteManifestData(t, dir, ManifestFile, mustRawManifestJSON(t, &pluginmanifestv1.Manifest{
+					Kind:    "",
 					Source:  "github.com/acme/plugins/missing-kind",
 					Version: "1.0.0",
 				}))
 			},
-			wantError: "manifest must define exactly one of plugin, auth, datastore, secrets, or webui",
-		},
-		{
-			name: "multiple metadata blocks",
-			buildData: func(t *testing.T, dir string) string {
-				manifest := mustProviderManifest("github.com/acme/plugins/too-many-kinds", "1.0.0", testArtifactOS, testArtifactArch, testArtifactPath("provider"), sha256Hex("provider"))
-				manifest.Auth = &pluginmanifestv1.AuthMetadata{}
-				return mustWriteManifestData(t, dir, ManifestFile, mustRawManifestJSON(t, manifest))
-			},
-			wantError: "manifest must define exactly one of plugin, auth, datastore, secrets, or webui",
+			wantError: "manifest kind is required",
 		},
 		{
 			name: "entrypoint references unknown artifact",
 			buildData: func(t *testing.T, dir string) string {
 				artifactPath := testArtifactPath("provider")
 				manifest := mustProviderManifest("github.com/acme/plugins/bad-entrypoint", "1.0.0", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider"))
-				manifest.Entrypoints.Plugin.ArtifactPath = unknownSiblingArtifactPath(artifactPath)
+				manifest.Entrypoint.ArtifactPath = unknownSiblingArtifactPath(artifactPath)
 				mustWriteFile(t, filepath.Join(dir, filepath.FromSlash(artifactPath)), []byte("provider"), 0o755)
 				return mustWriteManifestData(t, dir, ManifestFile, mustRawManifestJSON(t, manifest))
 			},
@@ -251,7 +245,7 @@ func TestManifestWorkflow_RejectsInvalidPackageInputs(t *testing.T) {
 			buildData: func(t *testing.T, dir string) string {
 				artifactPath := testArtifactPath("provider")
 				manifest := mustProviderManifest("github.com/acme/plugins/bad-auth", "1.0.0", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider"))
-				manifest.Plugin.Connections = map[string]*pluginmanifestv1.ManifestConnectionDef{
+				manifest.Spec.Connections = map[string]*pluginmanifestv1.ManifestConnectionDef{
 					"default": {
 						Auth: &pluginmanifestv1.ProviderAuth{Type: "bogus"},
 					},
@@ -266,7 +260,7 @@ func TestManifestWorkflow_RejectsInvalidPackageInputs(t *testing.T) {
 			buildData: func(t *testing.T, dir string) string {
 				artifactPath := testArtifactPath("provider")
 				manifest := mustProviderManifest("github.com/acme/plugins/missing-token-url", "1.0.0", testArtifactOS, testArtifactArch, artifactPath, sha256Hex("provider"))
-				manifest.Plugin.Auth = &pluginmanifestv1.ProviderAuth{
+				manifest.Spec.Auth = &pluginmanifestv1.ProviderAuth{
 					Type:             pluginmanifestv1.AuthTypeOAuth2,
 					AuthorizationURL: "https://auth.example.com/authorize",
 				}
@@ -301,10 +295,11 @@ func TestManifestWorkflow_AcceptsProviderWireSurfaceManifest(t *testing.T) {
 
 	dir := t.TempDir()
 	manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: plugin
 source: github.com/acme/plugins/provider-wire
 version: 1.0.0
 displayName: Provider Wire
-plugin:
+spec:
   configSchemaPath: schemas/config.schema.json
   connections:
     default:
@@ -343,26 +338,26 @@ plugin:
 	if err != nil {
 		t.Fatalf("ReadManifestFile: %v", err)
 	}
-	if manifest.Plugin == nil {
+	if manifest.Spec == nil {
 		t.Fatal("expected provider metadata")
 	}
-	if manifest.Plugin.OpenAPIDocument() != "openapi.yaml" {
-		t.Fatalf("provider openapi document = %q", manifest.Plugin.OpenAPIDocument())
+	if manifest.Spec.OpenAPIDocument() != "openapi.yaml" {
+		t.Fatalf("provider openapi document = %q", manifest.Spec.OpenAPIDocument())
 	}
-	if manifest.Plugin.SurfaceConnectionName("openapi") != "api" {
-		t.Fatalf("provider openapi connection = %q, want api", manifest.Plugin.SurfaceConnectionName("openapi"))
+	if manifest.Spec.SurfaceConnectionName("openapi") != "api" {
+		t.Fatalf("provider openapi connection = %q, want api", manifest.Spec.SurfaceConnectionName("openapi"))
 	}
-	if len(manifest.Plugin.ManagedParameters) != 1 {
-		t.Fatalf("managed_parameters = %+v", manifest.Plugin.ManagedParameters)
+	if len(manifest.Spec.ManagedParameters) != 1 {
+		t.Fatalf("managed_parameters = %+v", manifest.Spec.ManagedParameters)
 	}
-	if manifest.Entrypoints.Plugin != nil {
-		t.Fatalf("expected declarative/spec provider to omit provider entrypoint, got %+v", manifest.Entrypoints.Plugin)
+	if manifest.Entrypoint != nil {
+		t.Fatalf("expected declarative/spec provider to omit provider entrypoint, got %+v", manifest.Entrypoint)
 	}
-	if pgn := manifest.Plugin.Pagination; pgn == nil || pgn.Style != pluginmanifestv1.PaginationStyleCursor || pgn.Cursor == nil || pgn.Cursor.Source != "header" || pgn.Cursor.Path != "X-After-Cursor" || pgn.MaxPages != 10 {
-		t.Fatalf("unexpected pagination config: %+v", manifest.Plugin.Pagination)
+	if pgn := manifest.Spec.Pagination; pgn == nil || pgn.Style != pluginmanifestv1.PaginationStyleCursor || pgn.Cursor == nil || pgn.Cursor.Source != "header" || pgn.Cursor.Path != "X-After-Cursor" || pgn.MaxPages != 10 {
+		t.Fatalf("unexpected pagination config: %+v", manifest.Spec.Pagination)
 	}
-	if op := manifest.Plugin.AllowedOperations["items.list"]; op == nil || !op.Paginate {
-		t.Fatalf("items.list should have paginate=true, got %+v", manifest.Plugin.AllowedOperations["items.list"])
+	if op := manifest.Spec.AllowedOperations["items.list"]; op == nil || !op.Paginate {
+		t.Fatalf("items.list should have paginate=true, got %+v", manifest.Spec.AllowedOperations["items.list"])
 	}
 }
 
@@ -372,10 +367,11 @@ func TestManifestWorkflow_AcceptsProviderWireMCPOAuthManifestAcrossDirectoryAndA
 	root := t.TempDir()
 	sourceDir := filepath.Join(root, "plugin-mcp-oauth")
 	manifestPath := mustWriteManifestData(t, sourceDir, "manifest.yaml", []byte(`
+kind: plugin
 source: github.com/acme/plugins/notion
 version: 0.0.1-alpha.1
 displayName: Notion
-plugin:
+spec:
   connections:
     mcp:
       mode: user
@@ -391,17 +387,17 @@ plugin:
 	if err != nil {
 		t.Fatalf("ReadManifestFile(dir): %v", err)
 	}
-	if dirManifest.Plugin == nil {
+	if dirManifest.Spec == nil {
 		t.Fatal("expected plugin metadata")
 	}
-	if dirManifest.Plugin.MCPURL() != "https://mcp.notion.com/mcp" {
-		t.Fatalf("plugin mcp_url = %q", dirManifest.Plugin.MCPURL())
+	if dirManifest.Spec.MCPURL() != "https://mcp.notion.com/mcp" {
+		t.Fatalf("plugin mcp_url = %q", dirManifest.Spec.MCPURL())
 	}
-	if dirManifest.Plugin.SurfaceConnectionName("mcp") != "mcp" {
-		t.Fatalf("plugin mcp_connection = %q, want mcp", dirManifest.Plugin.SurfaceConnectionName("mcp"))
+	if dirManifest.Spec.SurfaceConnectionName("mcp") != "mcp" {
+		t.Fatalf("plugin mcp_connection = %q, want mcp", dirManifest.Spec.SurfaceConnectionName("mcp"))
 	}
-	if conn := dirManifest.Plugin.Connections["mcp"]; conn == nil || conn.Auth == nil || conn.Auth.Type != pluginmanifestv1.AuthTypeMCPOAuth {
-		t.Fatalf("plugin connection auth = %#v", dirManifest.Plugin.Connections["mcp"])
+	if conn := dirManifest.Spec.Connections["mcp"]; conn == nil || conn.Auth == nil || conn.Auth.Type != pluginmanifestv1.AuthTypeMCPOAuth {
+		t.Fatalf("plugin connection auth = %#v", dirManifest.Spec.Connections["mcp"])
 	}
 
 	archivePath := filepath.Join(root, "plugin-mcp-oauth.tar.gz")
@@ -423,9 +419,10 @@ func TestManifestWorkflow_RejectsMCPOAuthManifestWithoutMCPSurface(t *testing.T)
 
 	dir := t.TempDir()
 	manifestPath := mustWriteManifestData(t, dir, "manifest.yaml", []byte(`
+kind: plugin
 source: github.com/acme/plugins/bad-mcp-oauth
 version: 0.0.1-alpha.1
-plugin:
+spec:
   connections:
     mcp:
       auth:
@@ -446,10 +443,11 @@ func TestManifestWorkflow_NamedConnectionParamsAndDiscovery(t *testing.T) {
 
 	dir := t.TempDir()
 	manifestPath := mustWriteManifestData(t, dir, "plugin.yaml", []byte(`
+kind: plugin
 source: github.com/acme/plugins/multi-conn
 version: 1.0.0
 displayName: Multi Connection
-plugin:
+spec:
   connections:
     default:
       auth:

@@ -156,7 +156,7 @@ func runServer(env *bootstrapEnv) error {
 		DefaultConnection: connMaps.DefaultConnection,
 		CatalogConnection: connMaps.MCPConnection,
 		ConnectionAuth:    result.ConnectionAuth,
-		PluginDefs:        env.Config.Plugins,
+		PluginDefs:        env.Config.Providers.Plugins,
 		PublicBaseURL:     env.Config.Server.BaseURL,
 		SecureCookies:     strings.HasPrefix(env.Config.Server.BaseURL, "https://"),
 		StateSecret:       crypto.DeriveKey(env.Config.Server.EncryptionKey),
@@ -315,13 +315,14 @@ func resolveClientUIHandler(cfg *config.Config) (http.Handler, error) {
 	if dir := strings.TrimSpace(os.Getenv(clientUIDirEnv)); dir != "" {
 		return webui.DirHandler(dir)
 	}
-	if cfg.UI.Disabled {
+	uiEntry := cfg.Providers.UI
+	if uiEntry == nil || uiEntry.Disabled {
 		return http.NotFoundHandler(), nil
 	}
-	if cfg.UI.ResolvedAssetRoot != "" {
-		return webui.DirHandler(cfg.UI.ResolvedAssetRoot)
+	if uiEntry.ResolvedAssetRoot != "" {
+		return webui.DirHandler(uiEntry.ResolvedAssetRoot)
 	}
-	if cfg.UI.Provider == nil {
+	if !uiEntry.Source.IsManaged() && !uiEntry.Source.IsLocal() {
 		return http.NotFoundHandler(), nil
 	}
 	return nil, fmt.Errorf("ui provider configured but asset root not resolved")
@@ -351,22 +352,22 @@ func buildMCPSurface(cfg *config.Config, connMaps bootstrap.ConnectionMaps) mcpS
 		mcpConnection: make(map[string]string),
 	}
 
-	for name, intg := range cfg.Plugins {
-		if intg.Plugin == nil {
+	for name, entry := range cfg.Providers.Plugins {
+		if entry == nil {
 			continue
 		}
-		if !intg.Plugin.DeclaresMCP() {
+		if !entry.DeclaresMCP() {
 			continue
 		}
 		surface.providers = append(surface.providers, name)
 		surface.mcpConnection[name] = connMaps.MCPConnection[name]
-		if intg.MCPToolPrefix == "" && intg.Plugin.HasManagedSource() {
-			if src, err := pluginsource.Parse(intg.Plugin.SourceRef()); err == nil {
+		if entry.MCPToolPrefix == "" && entry.HasManagedSource() {
+			if src, err := pluginsource.Parse(entry.SourceRef()); err == nil {
 				surface.toolPrefixes[name] = src.PluginName() + "_"
 			}
 		}
-		if intg.MCPToolPrefix != "" {
-			surface.toolPrefixes[name] = intg.MCPToolPrefix
+		if entry.MCPToolPrefix != "" {
+			surface.toolPrefixes[name] = entry.MCPToolPrefix
 		}
 	}
 
@@ -450,40 +451,39 @@ func logConfigSummary(path string, cfg *config.Config) {
 		"server_management_addr", maskEmpty(cfg.Server.ManagementAddr()),
 		"server_base_url", maskEmpty(cfg.Server.BaseURL),
 		"server_encryption", maskSecret(cfg.Server.EncryptionKey),
-		"auth_provider", providerLabel(cfg.Auth.Provider),
-		"secrets_provider", secretsProviderLabel(cfg.Secrets),
-		"telemetry_provider", cfg.Telemetry.Builtin,
+		"auth_provider", providerEntryLabel(cfg.Providers.Auth),
+		"secrets_provider", secretsProviderLabel(cfg.Providers.Secrets),
+		"telemetry_provider", providerEntryLabel(cfg.Providers.Telemetry),
 	)
 
-	for name, intg := range cfg.Plugins {
-		if intg.Plugin != nil {
+	for name, entry := range cfg.Providers.Plugins {
+		if entry != nil {
 			slog.Info("integration configured", "integration", name, "type", "plugin")
 		}
 	}
 
 }
 
-func providerLabel(provider *config.ProviderDef) string {
+func providerEntryLabel(entry *config.ProviderEntry) string {
 	switch {
-	case provider == nil:
+	case entry == nil:
 		return "(not set)"
-	case provider.Source != nil && provider.Source.Ref != "":
-		return provider.Source.Ref
-	case provider.Source != nil && provider.Source.Path != "":
-		return provider.Source.Path
+	case entry.Source.IsManaged():
+		return entry.Source.Ref
+	case entry.Source.IsLocal():
+		return entry.Source.Path
+	case entry.Source.IsBuiltin():
+		return entry.Source.Builtin
 	default:
 		return "custom"
 	}
 }
 
-func secretsProviderLabel(secrets config.SecretsConfig) string {
-	if secrets.Provider != nil {
-		return providerLabel(secrets.Provider)
+func secretsProviderLabel(entry *config.ProviderEntry) string {
+	if entry == nil {
+		return "env"
 	}
-	if secrets.Builtin != "" {
-		return secrets.Builtin
-	}
-	return "env"
+	return providerEntryLabel(entry)
 }
 
 func maskSecret(s string) string {

@@ -84,11 +84,11 @@ func buildFactories() *bootstrap.FactoryRegistry {
 	factories.Telemetry["noop"] = telemetrynoop.Factory
 	factories.Telemetry["stdout"] = telemetrystdout.Factory
 	factories.Telemetry["otlp"] = telemetryotlp.Factory
-	factories.Audit = func(ctx context.Context, cfg config.AuditConfig, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error) {
-		if cfg.Provider != nil {
+	factories.Audit = func(ctx context.Context, cfg config.ProviderEntry, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error) {
+		if cfg.Source.IsManaged() || cfg.Source.IsLocal() {
 			return nil, nil, fmt.Errorf("plugin-based audit providers are not yet supported")
 		}
-		switch cfg.Builtin {
+		switch cfg.Source.Builtin {
 		case "", "inherit":
 			return invocation.NewLoggerAuditSink(telemetry.Logger()), nil, nil
 		case "noop":
@@ -111,7 +111,7 @@ func buildFactories() *bootstrap.FactoryRegistry {
 			}
 			return invocation.NewLevelAwareLoggerAuditSink(logger), closeFn, nil
 		default:
-			return nil, nil, fmt.Errorf("unknown audit provider %q", cfg.Builtin)
+			return nil, nil, fmt.Errorf("unknown audit provider %q", cfg.Source.Builtin)
 		}
 	}
 	factories.Auth = authplugin.Factory

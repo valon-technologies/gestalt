@@ -282,7 +282,7 @@ func releaseRequiresBuildTarget(manifest *pluginmanifestv1.Manifest) bool {
 	}
 	switch kind {
 	case pluginmanifestv1.KindPlugin:
-		return manifest.Entrypoints.Plugin == nil && !manifest.Plugin.IsManifestBacked()
+		return manifest.Entrypoint == nil && (manifest.Spec == nil || !manifest.Spec.IsManifestBacked())
 	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindIndexedDB, pluginmanifestv1.KindSecrets:
 		return pluginpkg.EntrypointForKind(manifest, kind) == nil
 	default:
@@ -435,7 +435,7 @@ func buildReleaseManifest(srcManifest *pluginmanifestv1.Manifest, version, binar
 		{OS: plat.GOOS, Arch: plat.GOARCH, Path: binaryName, SHA256: digest},
 	}
 
-	pluginpkg.EnsureEntrypointForKind(manifest, buildKind).ArtifactPath = binaryName
+	pluginpkg.EnsureEntrypoint(manifest).ArtifactPath = binaryName
 
 	return manifest, nil
 }
@@ -584,28 +584,18 @@ func copyReleasePackageFiles(manifest *pluginmanifestv1.Manifest, sourceDir, sta
 			return err
 		}
 	}
-	if manifest.Plugin != nil {
+	if manifest.Kind == pluginmanifestv1.KindPlugin && manifest.Spec != nil {
 		if err := copyPath(pluginpkg.StaticCatalogFile, !pluginpkg.StaticCatalogRequired(manifest)); err != nil {
 			return err
 		}
 	}
-	if manifest.Auth != nil {
-		if err := copyPath(manifest.Auth.ConfigSchemaPath, false); err != nil {
+	if manifest.Spec != nil && manifest.Spec.ConfigSchemaPath != "" {
+		if err := copyPath(manifest.Spec.ConfigSchemaPath, false); err != nil {
 			return err
 		}
 	}
-	if manifest.Datastore != nil {
-		if err := copyPath(manifest.Datastore.ConfigSchemaPath, false); err != nil {
-			return err
-		}
-	}
-	if manifest.Secrets != nil {
-		if err := copyPath(manifest.Secrets.ConfigSchemaPath, false); err != nil {
-			return err
-		}
-	}
-	if manifest.WebUI != nil {
-		if err := copyPath(manifest.WebUI.AssetRoot, false); err != nil {
+	if manifest.Spec != nil && manifest.Spec.AssetRoot != "" {
+		if err := copyPath(manifest.Spec.AssetRoot, false); err != nil {
 			return err
 		}
 	}
@@ -620,11 +610,11 @@ func copyReleasePackageFiles(manifest *pluginmanifestv1.Manifest, sourceDir, sta
 }
 
 func validateReleaseOutputDir(manifest *pluginmanifestv1.Manifest, sourceDir, outputDir string) error {
-	if manifest == nil || manifest.WebUI == nil || manifest.WebUI.AssetRoot == "" {
+	if manifest == nil || manifest.Spec == nil || manifest.Spec.AssetRoot == "" {
 		return nil
 	}
 
-	assetRoot, err := normalizeReleasePath(manifest.WebUI.AssetRoot)
+	assetRoot, err := normalizeReleasePath(manifest.Spec.AssetRoot)
 	if err != nil {
 		return err
 	}
@@ -646,7 +636,7 @@ func validateReleaseOutputDir(manifest *pluginmanifestv1.Manifest, sourceDir, ou
 		return fmt.Errorf("compare output dir to webui asset_root: %w", err)
 	}
 	if insideAssetRoot {
-		return fmt.Errorf("--output %q must not be inside webui.asset_root %q", outputDir, manifest.WebUI.AssetRoot)
+		return fmt.Errorf("--output %q must not be inside webui.asset_root %q", outputDir, manifest.Spec.AssetRoot)
 	}
 
 	return nil

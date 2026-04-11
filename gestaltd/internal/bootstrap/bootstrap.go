@@ -85,18 +85,18 @@ type providerMetadata struct {
 	iconSVG     string
 }
 
-func resolveProviderMetadata(intg config.PluginDef) providerMetadata {
+func resolveProviderMetadata(entry *config.ProviderEntry) providerMetadata {
 	meta := providerMetadata{
-		displayName: intg.DisplayName,
-		description: intg.Description,
+		displayName: entry.DisplayName,
+		description: entry.Description,
 	}
-	if intg.IconFile == "" {
+	if entry.IconFile == "" {
 		return meta
 	}
 
-	svg, err := provider.ReadIconFile(intg.IconFile)
+	svg, err := provider.ReadIconFile(entry.IconFile)
 	if err != nil {
-		slog.Warn("could not read icon_file", "path", intg.IconFile, "error", err)
+		slog.Warn("could not read icon_file", "path", entry.IconFile, "error", err)
 		return meta
 	}
 	meta.iconSVG = svg
@@ -122,7 +122,7 @@ type Deps struct {
 	BaseURL       string
 	SecretManager core.SecretManager
 	Services      *coredata.Services
-	IndexedDBs    map[string]config.IndexedDBDef
+	IndexedDBs    map[string]*config.ProviderEntry
 	Egress        EgressDeps
 }
 
@@ -130,7 +130,7 @@ type AuthFactory func(node yaml.Node, deps Deps) (core.AuthProvider, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
 type IndexedDBFactory func(node yaml.Node) (indexeddb.IndexedDB, error)
 type TelemetryFactory func(node yaml.Node) (core.TelemetryProvider, error)
-type AuditFactory func(ctx context.Context, cfg config.AuditConfig, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error)
+type AuditFactory func(ctx context.Context, cfg config.ProviderEntry, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error)
 
 type FactoryRegistry struct {
 	Auth      AuthFactory
@@ -277,7 +277,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		EncryptionKey: encKey,
 		BaseURL:       cfg.Server.BaseURL,
 		SecretManager: sm,
-		IndexedDBs:    cfg.IndexedDBs,
+		IndexedDBs:    cfg.Providers.IndexedDBs,
 	}
 
 	auth, err := buildAuth(cfg, factories, deps)
@@ -285,12 +285,12 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		return nil, err
 	}
 
-	if string(cfg.IndexedDB) == "" {
+	if cfg.Server.IndexedDB == "" {
 		return nil, fmt.Errorf("bootstrap: datastore resource name is required")
 	}
-	def, ok := cfg.IndexedDBs[string(cfg.IndexedDB)]
+	def, ok := cfg.Providers.IndexedDBs[cfg.Server.IndexedDB]
 	if !ok {
-		return nil, fmt.Errorf("bootstrap: indexeddb references unknown indexeddb %q", string(cfg.IndexedDB))
+		return nil, fmt.Errorf("bootstrap: indexeddb references unknown indexeddb %q", cfg.Server.IndexedDB)
 	}
 	enc, encErr := crypto.NewAESGCM(encKey)
 	if encErr != nil {
@@ -298,11 +298,11 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	}
 	store, storeErr := buildIndexedDB(def, factories)
 	if storeErr != nil {
-		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", string(cfg.IndexedDB), storeErr)
+		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", cfg.Server.IndexedDB, storeErr)
 	}
 	svc, svcErr := coredata.New(store, enc)
 	if svcErr != nil {
-		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", string(cfg.IndexedDB), svcErr)
+		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", cfg.Server.IndexedDB, svcErr)
 	}
 	closeSvc := true
 	defer func() {
@@ -407,45 +407,60 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 }
 
 func buildTelemetry(cfg *config.Config, factories *FactoryRegistry) (core.TelemetryProvider, error) {
-	if cfg.Telemetry.Disabled {
+	tel := cfg.Providers.Telemetry
+	if tel != nil && tel.Disabled {
 		factory, ok := factories.Telemetry["noop"]
 		if !ok {
 			return nil, fmt.Errorf("bootstrap: noop telemetry factory is not registered")
 		}
-		return factory(cfg.Telemetry.Config)
+		return factory(tel.Config)
 	}
-	if cfg.Telemetry.Provider != nil {
+	if tel != nil && !tel.Source.IsBuiltin() {
 		return nil, fmt.Errorf("bootstrap: plugin-based telemetry providers are not yet supported")
 	}
-	factory, ok := factories.Telemetry[cfg.Telemetry.Builtin]
-	if !ok {
-		return nil, fmt.Errorf("bootstrap: unknown telemetry provider %q", cfg.Telemetry.Builtin)
+	builtin := ""
+	var configNode yaml.Node
+	if tel != nil {
+		builtin = tel.Source.Builtin
+		configNode = tel.Config
 	}
-	tp, err := factory(cfg.Telemetry.Config)
+	factory, ok := factories.Telemetry[builtin]
+	if !ok {
+		return nil, fmt.Errorf("bootstrap: unknown telemetry provider %q", builtin)
+	}
+	tp, err := factory(configNode)
 	if err != nil {
-		return nil, fmt.Errorf("bootstrap: telemetry provider %q: %w", cfg.Telemetry.Builtin, err)
+		return nil, fmt.Errorf("bootstrap: telemetry provider %q: %w", builtin, err)
 	}
 	return tp, nil
 }
 
 func buildAuditSink(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error) {
-	if cfg.Audit.Disabled {
+	audit := cfg.Providers.Audit
+	if audit != nil && audit.Disabled {
 		return invocation.NewLoggerAuditSink(slog.New(slog.DiscardHandler)), nil, nil
 	}
-	if cfg.Audit.Provider != nil {
+	if audit != nil && !audit.Source.IsBuiltin() {
 		return nil, nil, fmt.Errorf("bootstrap: plugin-based audit providers are not yet supported")
 	}
+	builtin := ""
+	if audit != nil {
+		builtin = audit.Source.Builtin
+	}
 	if factories.Audit == nil {
-		switch cfg.Audit.Builtin {
+		switch builtin {
 		case "", "inherit":
 			return invocation.NewLoggerAuditSink(telemetry.Logger()), nil, nil
 		default:
-			return nil, nil, fmt.Errorf("bootstrap: unknown audit provider %q", cfg.Audit.Builtin)
+			return nil, nil, fmt.Errorf("bootstrap: unknown audit provider %q", builtin)
 		}
 	}
-	sink, closeFn, err := factories.Audit(ctx, cfg.Audit, telemetry)
+	if audit == nil {
+		audit = &config.ProviderEntry{}
+	}
+	sink, closeFn, err := factories.Audit(ctx, *audit, telemetry)
 	if err != nil {
-		return nil, nil, fmt.Errorf("bootstrap: audit provider %q: %w", cfg.Audit.Builtin, err)
+		return nil, nil, fmt.Errorf("bootstrap: audit provider %q: %w", builtin, err)
 	}
 	return sink, closeFn, nil
 }
@@ -459,18 +474,19 @@ func (disabledSecretManager) GetSecret(_ context.Context, _ string) (string, err
 }
 
 func buildSecretManager(cfg *config.Config, factories *FactoryRegistry) (core.SecretManager, error) {
-	if cfg.Secrets.Disabled {
+	secrets := cfg.Providers.Secrets
+	if secrets != nil && secrets.Disabled {
 		return disabledSecretManager{}, nil
 	}
-	if cfg.Secrets.Provider != nil {
+	if secrets != nil && !secrets.Source.IsBuiltin() {
 		factory, ok := factories.Secrets["plugin"]
 		if !ok {
 			return nil, fmt.Errorf("bootstrap: secrets plugin factory is not registered")
 		}
-		node := cfg.Secrets.Config
+		node := secrets.Config
 		if !config.IsComponentRuntimeConfigNode(node) {
 			var err error
-			node, err = config.BuildComponentRuntimeConfigNode("secrets", "secrets", cfg.Secrets.Provider, cfg.Secrets.Config)
+			node, err = config.BuildComponentRuntimeConfigNode("secrets", "secrets", secrets, secrets.Config)
 			if err != nil {
 				return nil, fmt.Errorf("bootstrap: secrets plugin: %w", err)
 			}
@@ -482,7 +498,12 @@ func buildSecretManager(cfg *config.Config, factories *FactoryRegistry) (core.Se
 		return sm, nil
 	}
 
-	name := cfg.Secrets.Builtin
+	name := ""
+	var configNode yaml.Node
+	if secrets != nil {
+		name = secrets.Source.Builtin
+		configNode = secrets.Config
+	}
 	if name == "" {
 		name = "env"
 	}
@@ -490,7 +511,7 @@ func buildSecretManager(cfg *config.Config, factories *FactoryRegistry) (core.Se
 	if !ok {
 		return nil, fmt.Errorf("bootstrap: unknown secrets provider %q", name)
 	}
-	sm, err := factory(cfg.Secrets.Config)
+	sm, err := factory(configNode)
 	if err != nil {
 		return nil, fmt.Errorf("bootstrap: secrets provider %q: %w", name, err)
 	}
@@ -514,16 +535,17 @@ func closeSecretManager(sm core.SecretManager) error {
 }
 
 func buildAuth(cfg *config.Config, factories *FactoryRegistry, deps Deps) (core.AuthProvider, error) {
-	if cfg.Auth.Provider == nil {
+	authEntry := cfg.Providers.Auth
+	if authEntry == nil || authEntry.Disabled {
 		return nil, nil
 	}
 	if factories.Auth == nil {
 		return nil, fmt.Errorf("bootstrap: auth factory is not registered")
 	}
-	node := cfg.Auth.Config
+	node := authEntry.Config
 	if !config.IsComponentRuntimeConfigNode(node) {
 		var err error
-		node, err = config.BuildComponentRuntimeConfigNode("auth", "auth", cfg.Auth.Provider, cfg.Auth.Config)
+		node, err = config.BuildComponentRuntimeConfigNode("auth", "auth", authEntry, authEntry.Config)
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap: auth plugin: %w", err)
 		}
@@ -535,17 +557,17 @@ func buildAuth(cfg *config.Config, factories *FactoryRegistry, deps Deps) (core.
 	return auth, nil
 }
 
-func buildIndexedDB(def config.IndexedDBDef, factories *FactoryRegistry) (indexeddb.IndexedDB, error) {
-	if def.Provider == nil {
+func buildIndexedDB(entry *config.ProviderEntry, factories *FactoryRegistry) (indexeddb.IndexedDB, error) {
+	if entry == nil {
 		return nil, fmt.Errorf("datastore provider is required")
 	}
 	if factories.IndexedDB == nil {
 		return nil, fmt.Errorf("datastore factory is not registered")
 	}
-	node := def.Config
+	node := entry.Config
 	if !config.IsComponentRuntimeConfigNode(node) {
 		var err error
-		node, err = config.BuildComponentRuntimeConfigNode("datastore", "datastore", def.Provider, def.Config)
+		node, err = config.BuildComponentRuntimeConfigNode("indexeddb", "indexeddb", entry, entry.Config)
 		if err != nil {
 			return nil, fmt.Errorf("datastore plugin: %w", err)
 		}
