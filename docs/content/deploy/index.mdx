@@ -4,7 +4,7 @@ asIndexPage: true
 
 # Deploy
 
-The server image `valontechnologies/gestaltd:latest` is published for `linux/amd64`, `linux/arm64`, and `linux/arm/v7`. Alpine and Debian variants are available as `:latest-alpine` and `:latest-debian`. For the CLI client image, see [Client Docker Image](/client/docker).
+The server image `valontechnologies/gestaltd:latest` is published for `linux/amd64`, `linux/arm64`, and `linux/arm/v7`. An Alpine variant is available as `:latest-alpine`. For the CLI client image, see [Client Docker Image](/client/docker).
 
 ## Production considerations
 
@@ -14,10 +14,42 @@ The server image `valontechnologies/gestaltd:latest` is published for `linux/amd
 
 **TLS.** Gestalt does not terminate TLS. Deploy behind a reverse proxy or load balancer that handles TLS termination. Set `server.baseUrl` to the public HTTPS URL so that OAuth callback URLs are derived correctly.
 
-**Locked startup.** For deterministic deployments, run `gestaltd init` locally
-to resolve plugins and generate prepared state, then bake that state into a
-derived image. See [Configuration](/configuration) for the model and
-[Docker](/deploy/docker) for the recommended production image pattern.
+**Startup workflows.** `gestaltd serve` resolves providers on first boot and is suitable for development and single-instance deployments. For deterministic, reproducible deployments, split startup into two phases:
+
+1. **Prepare** -- run `gestaltd init` locally (or in CI) to resolve every provider and write a lock file.
+2. **Serve** -- run `gestaltd serve --locked` in production. The server reads the lock file and refuses to start if any provider is missing or has drifted.
+
+This guarantees that the image you test is byte-for-byte the image you deploy.
+
+**Prepared state and lockfiles.** `gestaltd init` writes a `deploy/` directory next to your config file:
+
+```
+deploy/
+  lockfile.json        # pinned provider refs and checksums
+  providers/           # vendored provider artifacts (optional)
+```
+
+The lock file is a JSON document that records every resolved provider:
+
+```json
+{
+  "version": 1,
+  "providers": {
+    "indexeddb/relationaldb": {
+      "source": "github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb",
+      "version": "0.5.2",
+      "sha256": "ab12cd..."
+    }
+  }
+}
+```
+
+You can choose between two patterns:
+
+- **Vendored** -- commit the full `deploy/` directory (including `providers/`). The server loads artifacts directly with no network calls at boot. Best for air-gapped or latency-sensitive environments.
+- **Lockfile-only** -- commit only `lockfile.json`. The server fetches providers on first boot but verifies each artifact against the recorded checksum. Keeps your repo lightweight while still guaranteeing integrity.
+
+See [Configuration](/configuration) for the config model and [Docker](/deploy/docker) for the recommended production image pattern.
 
 ## Deployment guides
 

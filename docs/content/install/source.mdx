@@ -12,7 +12,7 @@ Building the server requires Go 1.26 or later.
 
 ```sh
 git clone https://github.com/valon-technologies/gestalt.git
-cd gestalt
+cd gestalt/gestaltd
 go install ./cmd/gestaltd
 ```
 
@@ -28,14 +28,14 @@ gestaltd --version
 
 `gestalt` is the CLI for communicating with the Gestalt server.
 
-Building the client requires Rust.
+Building the client requires the current stable Rust toolchain.
 
 ### Build
 
 ```sh
 git clone https://github.com/valon-technologies/gestalt.git
-cd gestalt/client
-cargo install --path .
+cd gestalt/gestalt
+cargo install --path cli
 ```
 
 The binary is installed into `~/.cargo/bin`. Make sure that directory is on your `PATH`.
