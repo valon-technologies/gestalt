@@ -648,7 +648,38 @@ func (l *Lifecycle) buildArchivesMap(ctx context.Context, src pluginsource.Sourc
 		}
 		archives[pa.Platform] = LockArchive{URL: pa.URL}
 	}
+	expandLinuxLibCVariants(archives)
 	return archives
+}
+
+// expandLinuxLibCVariants ensures that libc-agnostic Linux archives
+// (e.g. "linux/amd64") are also available under explicit libc-qualified
+// keys ("linux/amd64/musl", "linux/amd64/glibc"). This allows platforms
+// like Alpine (musl) to find an exact match in the lockfile without
+// relying on runtime fallback resolution.
+func expandLinuxLibCVariants(archives map[string]LockArchive) {
+	var expansions []struct {
+		key     string
+		archive LockArchive
+	}
+	for key, archive := range archives {
+		goos, goarch, libc, err := pluginpkg.ParsePlatformString(key)
+		if err != nil || goos != "linux" || libc != "" {
+			continue
+		}
+		for _, variant := range []string{pluginpkg.LinuxLibCMusl, pluginpkg.LinuxLibCGLibC} {
+			variantKey := pluginpkg.PlatformString(goos, goarch, variant)
+			if _, exists := archives[variantKey]; !exists {
+				expansions = append(expansions, struct {
+					key     string
+					archive LockArchive
+				}{variantKey, LockArchive{URL: archive.URL}})
+			}
+		}
+	}
+	for _, e := range expansions {
+		archives[e.key] = e.archive
+	}
 }
 
 func (l *Lifecycle) writeProviderArtifacts(ctx context.Context, cfg *config.Config, paths initPaths) (map[string]LockProviderEntry, error) {

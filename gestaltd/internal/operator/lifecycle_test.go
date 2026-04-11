@@ -1193,3 +1193,104 @@ func TestResolveArchiveForPlatform(t *testing.T) {
 		t.Error("expected no match for darwin/arm64 when only windows is available")
 	}
 }
+
+func TestExpandLinuxLibCVariants(t *testing.T) {
+	t.Parallel()
+
+	t.Run("expands libc-less linux entry", func(t *testing.T) {
+		t.Parallel()
+		archives := map[string]LockArchive{
+			"linux/amd64": {URL: "https://example.com/linux-amd64"},
+		}
+		expandLinuxLibCVariants(archives)
+		if len(archives) != 3 {
+			t.Fatalf("got %d entries, want 3", len(archives))
+		}
+		if archives["linux/amd64/musl"].URL != "https://example.com/linux-amd64" {
+			t.Errorf("musl URL = %q", archives["linux/amd64/musl"].URL)
+		}
+		if archives["linux/amd64/glibc"].URL != "https://example.com/linux-amd64" {
+			t.Errorf("glibc URL = %q", archives["linux/amd64/glibc"].URL)
+		}
+	})
+
+	t.Run("does not overwrite explicit libc entry", func(t *testing.T) {
+		t.Parallel()
+		archives := map[string]LockArchive{
+			"linux/amd64":      {URL: "https://example.com/linux-amd64"},
+			"linux/amd64/musl": {URL: "https://example.com/linux-amd64-musl", SHA256: "abc"},
+		}
+		expandLinuxLibCVariants(archives)
+		if archives["linux/amd64/musl"].URL != "https://example.com/linux-amd64-musl" {
+			t.Error("explicit musl entry was overwritten")
+		}
+		if archives["linux/amd64/musl"].SHA256 != "abc" {
+			t.Error("explicit musl entry SHA256 was overwritten")
+		}
+		if archives["linux/amd64/glibc"].URL != "https://example.com/linux-amd64" {
+			t.Errorf("glibc URL = %q", archives["linux/amd64/glibc"].URL)
+		}
+	})
+
+	t.Run("skips non-linux entries", func(t *testing.T) {
+		t.Parallel()
+		archives := map[string]LockArchive{
+			"darwin/arm64": {URL: "https://example.com/darwin-arm64"},
+		}
+		expandLinuxLibCVariants(archives)
+		if len(archives) != 1 {
+			t.Fatalf("got %d entries, want 1", len(archives))
+		}
+	})
+
+	t.Run("skips entries that already have libc", func(t *testing.T) {
+		t.Parallel()
+		archives := map[string]LockArchive{
+			"linux/amd64/glibc": {URL: "https://example.com/linux-amd64-glibc"},
+		}
+		expandLinuxLibCVariants(archives)
+		if len(archives) != 1 {
+			t.Fatalf("got %d entries, want 1", len(archives))
+		}
+	})
+
+	t.Run("expands multiple architectures", func(t *testing.T) {
+		t.Parallel()
+		archives := map[string]LockArchive{
+			"linux/amd64": {URL: "https://example.com/linux-amd64"},
+			"linux/arm64": {URL: "https://example.com/linux-arm64"},
+		}
+		expandLinuxLibCVariants(archives)
+		if len(archives) != 6 {
+			t.Fatalf("got %d entries, want 6", len(archives))
+		}
+		if archives["linux/arm64/musl"].URL != "https://example.com/linux-arm64" {
+			t.Errorf("arm64 musl URL = %q", archives["linux/arm64/musl"].URL)
+		}
+	})
+
+	t.Run("skips generic key", func(t *testing.T) {
+		t.Parallel()
+		archives := map[string]LockArchive{
+			"generic": {URL: "https://example.com/generic"},
+		}
+		expandLinuxLibCVariants(archives)
+		if len(archives) != 1 {
+			t.Fatalf("got %d entries, want 1", len(archives))
+		}
+	})
+
+	t.Run("expanded entries have no sha256", func(t *testing.T) {
+		t.Parallel()
+		archives := map[string]LockArchive{
+			"linux/amd64": {URL: "https://example.com/linux-amd64", SHA256: "abc"},
+		}
+		expandLinuxLibCVariants(archives)
+		if archives["linux/amd64/musl"].SHA256 != "" {
+			t.Error("expanded musl entry should not inherit SHA256")
+		}
+		if archives["linux/amd64/glibc"].SHA256 != "" {
+			t.Error("expanded glibc entry should not inherit SHA256")
+		}
+	})
+}
