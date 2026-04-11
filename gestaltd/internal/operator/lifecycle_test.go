@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1181,7 +1182,7 @@ func TestResolveArchiveForPlatform(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			archive, ok := resolveArchiveForPlatform(entry, tt.platform)
+			archive, _, ok := resolveArchiveForPlatform(entry, tt.platform)
 			if ok != tt.wantOK {
 				t.Fatalf("ok = %v, want %v", ok, tt.wantOK)
 			}
@@ -1193,7 +1194,37 @@ func TestResolveArchiveForPlatform(t *testing.T) {
 
 	// No match at all
 	sparse := LockEntry{Archives: map[string]LockArchive{"windows/amd64": {URL: "x"}}}
-	if _, ok := resolveArchiveForPlatform(sparse, "darwin/arm64"); ok {
+	if _, _, ok := resolveArchiveForPlatform(sparse, "darwin/arm64"); ok {
 		t.Error("expected no match for darwin/arm64 when only windows is available")
+	}
+}
+
+func TestHashArchiveEntry_HashesFallbackArchive(t *testing.T) {
+	t.Parallel()
+
+	const payload = "generic plugin archive"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(payload))
+	}))
+	defer server.Close()
+
+	entry := LockEntry{
+		Source: server.URL,
+		Archives: map[string]LockArchive{
+			platformKeyGeneric: {URL: server.URL},
+		},
+	}
+
+	if err := hashArchiveEntry(context.Background(), &entry, "linux/amd64", nil); err != nil {
+		t.Fatalf("hashArchiveEntry: %v", err)
+	}
+
+	got := entry.Archives[platformKeyGeneric]
+	if got.URL != server.URL {
+		t.Fatalf("generic URL = %q, want %q", got.URL, server.URL)
+	}
+	want := sha256.Sum256([]byte(payload))
+	if got.SHA256 != hex.EncodeToString(want[:]) {
+		t.Fatalf("generic SHA256 = %q, want %q", got.SHA256, hex.EncodeToString(want[:]))
 	}
 }

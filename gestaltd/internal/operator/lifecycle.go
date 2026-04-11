@@ -590,7 +590,7 @@ func lockEntryMatches(paths initPaths, name string, plugin *config.ProviderDef, 
 	}
 	if len(entry.Archives) > 0 {
 		platform := pluginpkg.CurrentPlatformString()
-		if _, ok := resolveArchiveForPlatform(entry, platform); !ok {
+		if _, _, ok := resolveArchiveForPlatform(entry, platform); !ok {
 			return false
 		}
 	}
@@ -609,23 +609,23 @@ func lockEntryMatches(paths initPaths, name string, plugin *config.ProviderDef, 
 
 // resolveArchiveForPlatform looks up a LockArchive for the given platform
 // string using a fallback chain: exact match → without libc → generic.
-func resolveArchiveForPlatform(entry LockEntry, platform string) (LockArchive, bool) {
+func resolveArchiveForPlatform(entry LockEntry, platform string) (LockArchive, string, bool) {
 	if a, ok := entry.Archives[platform]; ok {
-		return a, true
+		return a, platform, true
 	}
 	goos, goarch, err := pluginpkg.ParsePlatformString(platform)
 	if err == nil {
 		key := pluginpkg.PlatformString(goos, goarch)
 		if key != platform {
 			if a, ok := entry.Archives[key]; ok {
-				return a, true
+				return a, key, true
 			}
 		}
 	}
 	if a, ok := entry.Archives[platformKeyGeneric]; ok {
-		return a, true
+		return a, platformKeyGeneric, true
 	}
-	return LockArchive{}, false
+	return LockArchive{}, "", false
 }
 
 // buildArchivesMap constructs the Archives map for a lock entry. It enumerates
@@ -1288,7 +1288,7 @@ func bindResolvedUIManifest(plugin *config.ProviderDef, manifestPath string, man
 
 func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPaths, name string, plugin *config.ProviderDef, entry LockProviderEntry, locked bool) error {
 	platform := pluginpkg.CurrentPlatformString()
-	archive, ok := resolveArchiveForPlatform(entry, platform)
+	archive, _, ok := resolveArchiveForPlatform(entry, platform)
 	if !ok || archive.URL == "" {
 		return fmt.Errorf("no archive for platform %s for provider %q; run `gestaltd init --config %s`", platform, name, paths.configPath)
 	}
@@ -1340,7 +1340,7 @@ func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPat
 
 func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPaths, kind, name string, plugin *config.ProviderDef, entry LockEntry, locked bool) error {
 	platform := pluginpkg.CurrentPlatformString()
-	archive, ok := resolveArchiveForPlatform(entry, platform)
+	archive, _, ok := resolveArchiveForPlatform(entry, platform)
 	if !ok || archive.URL == "" {
 		return fmt.Errorf("no archive for platform %s for %s %q; run `gestaltd init --config %s`", platform, kind, name, paths.configPath)
 	}
@@ -1411,7 +1411,7 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 
 func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths initPaths, plugin *config.ProviderDef, entry LockUIEntry, locked bool) error {
 	platform := pluginpkg.CurrentPlatformString()
-	archive, ok := resolveArchiveForPlatform(entry, platform)
+	archive, _, ok := resolveArchiveForPlatform(entry, platform)
 	if !ok || archive.URL == "" {
 		return fmt.Errorf("no archive for platform %s for ui provider; run `gestaltd init --config %s`", platform, paths.configPath)
 	}
@@ -1490,7 +1490,7 @@ func hashArchiveEntry(ctx context.Context, entry *LockEntry, platformKey string,
 	if entry.Archives == nil {
 		return nil
 	}
-	archive, ok := entry.Archives[platformKey]
+	archive, resolvedKey, ok := resolveArchiveForPlatform(*entry, platformKey)
 	if !ok || archive.URL == "" || archive.SHA256 != "" {
 		return nil
 	}
@@ -1514,7 +1514,7 @@ func hashArchiveEntry(ctx context.Context, entry *LockEntry, platformKey string,
 	}
 	archive.SHA256 = dl.SHA256Hex
 	dl.Cleanup()
-	entry.Archives[platformKey] = archive
+	entry.Archives[resolvedKey] = archive
 	return nil
 }
 
