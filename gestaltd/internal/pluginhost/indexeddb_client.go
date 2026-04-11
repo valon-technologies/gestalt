@@ -131,7 +131,7 @@ func (o *remoteObjectStore) GetKey(ctx context.Context, id string) (string, erro
 func (o *remoteObjectStore) Add(ctx context.Context, record indexeddb.Record) error {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
-	s, err := structpb.NewStruct(record)
+	s, err := structFromMap(record)
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
 	}
@@ -142,7 +142,7 @@ func (o *remoteObjectStore) Add(ctx context.Context, record indexeddb.Record) er
 func (o *remoteObjectStore) Put(ctx context.Context, record indexeddb.Record) error {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
-	s, err := structpb.NewStruct(record)
+	s, err := structFromMap(record)
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
 	}

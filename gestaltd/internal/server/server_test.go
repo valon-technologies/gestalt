@@ -1015,6 +1015,71 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 	}
 }
 
+func TestListIntegrations_ConnectionInfosHideOAuthConnectionsWithoutHandler(t *testing.T) {
+	t.Parallel()
+
+	stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
+	plugin := &config.ProviderDef{
+		Source: &config.PluginSourceDef{
+			Ref:     "github.com/acme/plugins/slack",
+			Version: "1.0.0",
+		},
+		Connections: map[string]*config.ConnectionDef{
+			"default": {},
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.PluginDefs = map[string]config.PluginDef{
+			"slack": {Plugin: plugin},
+		}
+		cfg.ConnectionAuth = func() map[string]map[string]bootstrap.OAuthHandler {
+			return map[string]map[string]bootstrap.OAuthHandler{
+				"slack": {
+					"default": &testOAuthHandler{authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize"},
+				},
+			}
+		}
+		cfg.Services = coretesting.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var integrations []struct {
+		Name        string `json:"name"`
+		Connections []struct {
+			Name      string   `json:"name"`
+			AuthTypes []string `json:"authTypes"`
+		} `json:"connections"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if len(integrations) != 1 {
+		t.Fatalf("expected 1 integration, got %d", len(integrations))
+	}
+	if len(integrations[0].Connections) != 1 {
+		t.Fatalf("expected 1 connection, got %+v", integrations[0].Connections)
+	}
+	if integrations[0].Connections[0].Name != "default" {
+		t.Fatalf("expected only default connection, got %+v", integrations[0].Connections)
+	}
+	if !reflect.DeepEqual(integrations[0].Connections[0].AuthTypes, []string{"oauth"}) {
+		t.Fatalf("expected default authTypes [oauth], got %+v", integrations[0].Connections[0].AuthTypes)
+	}
+}
+
 func TestListIntegrations_ConnectionInfosIncludeProviderManualAuth(t *testing.T) {
 	t.Parallel()
 
