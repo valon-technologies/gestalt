@@ -12,6 +12,8 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
+const sqlDateTimeLayout = "2006-01-02 15:04:05"
+
 func structFromMap(values map[string]any) (*structpb.Struct, error) {
 	if len(values) == 0 {
 		return nil, nil
@@ -165,12 +167,12 @@ func normalizeStructValue(value any) (any, error) {
 	case nil:
 		return nil, nil
 	case time.Time:
-		return v.UTC().Format(time.RFC3339Nano), nil
+		return v.UTC().Format(sqlDateTimeLayout), nil
 	case *time.Time:
 		if v == nil {
 			return nil, nil
 		}
-		return v.UTC().Format(time.RFC3339Nano), nil
+		return v.UTC().Format(sqlDateTimeLayout), nil
 	case map[string]any:
 		return normalizeStructMap(v)
 	}

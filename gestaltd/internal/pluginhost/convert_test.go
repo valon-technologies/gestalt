@@ -24,7 +24,7 @@ func TestStructFromMap_NormalizesTimeValues(t *testing.T) {
 	}
 
 	got := s.AsMap()
-	want := now.Format(time.RFC3339Nano)
+	want := now.Format(sqlDateTimeLayout)
 	if got["created_at"] != want {
 		t.Fatalf("created_at = %#v, want %#v", got["created_at"], want)
 	}
