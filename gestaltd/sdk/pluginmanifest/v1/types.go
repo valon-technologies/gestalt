@@ -13,20 +13,16 @@ const (
 )
 
 type Manifest struct {
-	Kind        string             `json:"kind,omitempty" yaml:"kind,omitempty"`
-	Source      string             `json:"source,omitempty" yaml:"source,omitempty"`
-	Version     string             `json:"version" yaml:"version"`
-	DisplayName string             `json:"displayName,omitempty" yaml:"displayName,omitempty"`
-	Description string             `json:"description,omitempty" yaml:"description,omitempty"`
-	IconFile    string             `json:"iconFile,omitempty" yaml:"iconFile,omitempty"`
-	Release     *ReleaseMetadata   `json:"release,omitempty" yaml:"release,omitempty"`
-	Plugin      *Plugin            `json:"plugin,omitempty" yaml:"plugin,omitempty"`
-	Auth        *AuthMetadata      `json:"auth,omitempty" yaml:"auth,omitempty"`
-	Datastore   *DatastoreMetadata `json:"indexeddb,omitempty" yaml:"indexeddb,omitempty"`
-	Secrets     *SecretsMetadata   `json:"secrets,omitempty" yaml:"secrets,omitempty"`
-	WebUI       *WebUIMetadata     `json:"webui,omitempty" yaml:"webui,omitempty"`
-	Artifacts   []Artifact         `json:"artifacts,omitempty" yaml:"artifacts,omitempty"`
-	Entrypoints Entrypoints        `json:"entrypoints,omitzero" yaml:"entrypoints,omitempty"`
+	Kind        string           `json:"kind,omitempty" yaml:"kind,omitempty"`
+	Source      string           `json:"source,omitempty" yaml:"source,omitempty"`
+	Version     string           `json:"version" yaml:"version"`
+	DisplayName string           `json:"displayName,omitempty" yaml:"displayName,omitempty"`
+	Description string           `json:"description,omitempty" yaml:"description,omitempty"`
+	IconFile    string           `json:"iconFile,omitempty" yaml:"iconFile,omitempty"`
+	Release     *ReleaseMetadata `json:"release,omitempty" yaml:"release,omitempty"`
+	Artifacts   []Artifact       `json:"artifacts,omitempty" yaml:"artifacts,omitempty"`
+	Entrypoint  *Entrypoint      `json:"entrypoint,omitempty" yaml:"entrypoint,omitempty"`
+	Spec        *Spec            `json:"spec,omitempty" yaml:"spec,omitempty"`
 }
 
 type ReleaseMetadata struct {
@@ -38,39 +34,125 @@ type ReleaseBuild struct {
 	Command []string `json:"command" yaml:"command"`
 }
 
-type AuthMetadata struct {
+// Spec is a union type validated per kind. For auth/datastore/secrets only
+// ConfigSchemaPath is valid. For plugins all surface/connection fields are
+// valid. For webui AssetRoot + ConfigSchemaPath.
+type Spec struct {
 	ConfigSchemaPath string `json:"configSchemaPath,omitempty" yaml:"configSchemaPath,omitempty"`
-}
 
-type DatastoreMetadata struct {
-	ConfigSchemaPath string `json:"configSchemaPath,omitempty" yaml:"configSchemaPath,omitempty"`
-}
-
-type SecretsMetadata struct {
-	ConfigSchemaPath string `json:"configSchemaPath,omitempty" yaml:"configSchemaPath,omitempty"`
-}
-
-type WebUIMetadata struct {
-	AssetRoot        string `json:"assetRoot" yaml:"assetRoot"`
-	ConfigSchemaPath string `json:"configSchemaPath,omitempty" yaml:"configSchemaPath,omitempty"`
-}
-
-type Plugin struct {
-	ConfigSchemaPath  string                             `json:"configSchemaPath,omitempty" yaml:"configSchemaPath,omitempty"`
-	Auth              *ProviderAuth                      `json:"auth,omitempty" yaml:"auth,omitempty"`
-	ConnectionMode    ConnectionMode                     `json:"connectionMode,omitempty" yaml:"connectionMode,omitempty"`
-	MCP               bool                               `json:"mcp,omitempty" yaml:"mcp,omitempty"`
-	Headers           map[string]string                  `json:"headers,omitempty" yaml:"headers,omitempty"`
-	ManagedParameters []ManagedParameter                 `json:"managedParameters,omitempty" yaml:"managedParameters,omitempty"`
-	Discovery         *ProviderDiscovery                 `json:"discovery,omitempty" yaml:"discovery,omitempty"`
-	ConnectionParams  map[string]ProviderConnectionParam `json:"connectionParams,omitempty" yaml:"connectionParams,omitempty"`
-
+	// Plugin-specific fields
+	Auth              *ProviderAuth                         `json:"auth,omitempty" yaml:"auth,omitempty"`
+	ConnectionMode    ConnectionMode                        `json:"connectionMode,omitempty" yaml:"connectionMode,omitempty"`
+	MCP               bool                                  `json:"mcp,omitempty" yaml:"mcp,omitempty"`
+	Headers           map[string]string                     `json:"headers,omitempty" yaml:"headers,omitempty"`
+	ManagedParameters []ManagedParameter                    `json:"managedParameters,omitempty" yaml:"managedParameters,omitempty"`
+	Discovery         *ProviderDiscovery                    `json:"discovery,omitempty" yaml:"discovery,omitempty"`
+	ConnectionParams  map[string]ProviderConnectionParam    `json:"connectionParams,omitempty" yaml:"connectionParams,omitempty"`
 	Surfaces          *PluginSurfaces                       `json:"surfaces,omitempty" yaml:"surfaces,omitempty"`
 	AllowedOperations map[string]*ManifestOperationOverride `json:"allowedOperations,omitempty" yaml:"allowedOperations,omitempty"`
 	DefaultConnection string                                `json:"defaultConnection,omitempty" yaml:"defaultConnection,omitempty"`
 	Connections       map[string]*ManifestConnectionDef     `json:"connections,omitempty" yaml:"connections,omitempty"`
 	ResponseMapping   *ManifestResponseMapping              `json:"responseMapping,omitempty" yaml:"responseMapping,omitempty"`
 	Pagination        *ManifestPaginationConfig             `json:"pagination,omitempty" yaml:"pagination,omitempty"`
+	Requires          []string                              `json:"requires,omitempty" yaml:"requires,omitempty"`
+
+	// WebUI-specific fields
+	AssetRoot string `json:"assetRoot,omitempty" yaml:"assetRoot,omitempty"`
+}
+
+func (s *Spec) IsDeclarative() bool {
+	return s != nil && s.Surfaces != nil && s.Surfaces.REST != nil && len(s.Surfaces.REST.Operations) > 0
+}
+
+func (s *Spec) IsSpecLoaded() bool {
+	return s != nil && s.Surfaces != nil &&
+		(s.Surfaces.OpenAPI != nil || s.Surfaces.GraphQL != nil || s.Surfaces.MCP != nil)
+}
+
+func (s *Spec) IsManifestBacked() bool {
+	return s != nil && (s.IsDeclarative() || s.IsSpecLoaded())
+}
+
+func (s *Spec) OpenAPIDocument() string {
+	if s == nil || s.Surfaces == nil || s.Surfaces.OpenAPI == nil {
+		return ""
+	}
+	return s.Surfaces.OpenAPI.Document
+}
+
+func (s *Spec) OpenAPIBaseURL() string {
+	if s == nil || s.Surfaces == nil || s.Surfaces.OpenAPI == nil {
+		return ""
+	}
+	return s.Surfaces.OpenAPI.BaseURL
+}
+
+func (s *Spec) SpecBaseURL() string {
+	if u := s.RESTBaseURL(); u != "" {
+		return u
+	}
+	return s.OpenAPIBaseURL()
+}
+
+func (s *Spec) GraphQLURL() string {
+	if s == nil || s.Surfaces == nil || s.Surfaces.GraphQL == nil {
+		return ""
+	}
+	return s.Surfaces.GraphQL.URL
+}
+
+func (s *Spec) MCPURL() string {
+	if s == nil || s.Surfaces == nil || s.Surfaces.MCP == nil {
+		return ""
+	}
+	return s.Surfaces.MCP.URL
+}
+
+func (s *Spec) RESTBaseURL() string {
+	if s == nil || s.Surfaces == nil || s.Surfaces.REST == nil {
+		return ""
+	}
+	return s.Surfaces.REST.BaseURL
+}
+
+func (s *Spec) RESTOperations() []ProviderOperation {
+	if s == nil || s.Surfaces == nil || s.Surfaces.REST == nil {
+		return nil
+	}
+	return s.Surfaces.REST.Operations
+}
+
+func (s *Spec) SurfaceConnectionName(surface string) string {
+	if s == nil || s.Surfaces == nil {
+		return ""
+	}
+	switch surface {
+	case "openapi":
+		if s.Surfaces.OpenAPI != nil {
+			return s.Surfaces.OpenAPI.Connection
+		}
+	case "graphql":
+		if s.Surfaces.GraphQL != nil {
+			return s.Surfaces.GraphQL.Connection
+		}
+	case "mcp":
+		if s.Surfaces.MCP != nil {
+			return s.Surfaces.MCP.Connection
+		}
+	case "rest":
+		if s.Surfaces.REST != nil {
+			return s.Surfaces.REST.Connection
+		}
+	}
+	return ""
+}
+
+func (m *Manifest) IsHybridProvider() bool {
+	return m != nil && m.Spec != nil && m.Spec.IsManifestBacked() && m.Entrypoint != nil
+}
+
+func (m *Manifest) IsDeclarativeOnlyProvider() bool {
+	return m != nil && m.Spec != nil && m.Spec.IsManifestBacked() && m.Entrypoint == nil
 }
 
 type PluginSurfaces struct {
@@ -100,101 +182,6 @@ type GraphQLSurface struct {
 type MCPSurface struct {
 	Connection string `json:"connection,omitempty" yaml:"connection,omitempty"`
 	URL        string `json:"url" yaml:"url"`
-}
-
-func (p *Plugin) IsDeclarative() bool {
-	return p != nil && p.Surfaces != nil && p.Surfaces.REST != nil && len(p.Surfaces.REST.Operations) > 0
-}
-
-func (p *Plugin) IsSpecLoaded() bool {
-	return p != nil && p.Surfaces != nil &&
-		(p.Surfaces.OpenAPI != nil || p.Surfaces.GraphQL != nil || p.Surfaces.MCP != nil)
-}
-
-func (p *Plugin) IsManifestBacked() bool {
-	return p != nil && (p.IsDeclarative() || p.IsSpecLoaded())
-}
-
-func (p *Plugin) OpenAPIDocument() string {
-	if p == nil || p.Surfaces == nil || p.Surfaces.OpenAPI == nil {
-		return ""
-	}
-	return p.Surfaces.OpenAPI.Document
-}
-
-func (p *Plugin) OpenAPIBaseURL() string {
-	if p == nil || p.Surfaces == nil || p.Surfaces.OpenAPI == nil {
-		return ""
-	}
-	return p.Surfaces.OpenAPI.BaseURL
-}
-
-func (p *Plugin) SpecBaseURL() string {
-	if u := p.RESTBaseURL(); u != "" {
-		return u
-	}
-	return p.OpenAPIBaseURL()
-}
-
-func (p *Plugin) GraphQLURL() string {
-	if p == nil || p.Surfaces == nil || p.Surfaces.GraphQL == nil {
-		return ""
-	}
-	return p.Surfaces.GraphQL.URL
-}
-
-func (p *Plugin) MCPURL() string {
-	if p == nil || p.Surfaces == nil || p.Surfaces.MCP == nil {
-		return ""
-	}
-	return p.Surfaces.MCP.URL
-}
-
-func (p *Plugin) RESTBaseURL() string {
-	if p == nil || p.Surfaces == nil || p.Surfaces.REST == nil {
-		return ""
-	}
-	return p.Surfaces.REST.BaseURL
-}
-
-func (p *Plugin) RESTOperations() []ProviderOperation {
-	if p == nil || p.Surfaces == nil || p.Surfaces.REST == nil {
-		return nil
-	}
-	return p.Surfaces.REST.Operations
-}
-
-func (p *Plugin) SurfaceConnectionName(surface string) string {
-	if p == nil || p.Surfaces == nil {
-		return ""
-	}
-	switch surface {
-	case "openapi":
-		if p.Surfaces.OpenAPI != nil {
-			return p.Surfaces.OpenAPI.Connection
-		}
-	case "graphql":
-		if p.Surfaces.GraphQL != nil {
-			return p.Surfaces.GraphQL.Connection
-		}
-	case "mcp":
-		if p.Surfaces.MCP != nil {
-			return p.Surfaces.MCP.Connection
-		}
-	case "rest":
-		if p.Surfaces.REST != nil {
-			return p.Surfaces.REST.Connection
-		}
-	}
-	return ""
-}
-
-func (m *Manifest) IsHybridProvider() bool {
-	return m != nil && m.Plugin != nil && m.Plugin.IsManifestBacked() && m.Entrypoints.Plugin != nil
-}
-
-func (m *Manifest) IsDeclarativeOnlyProvider() bool {
-	return m != nil && m.Plugin != nil && m.Plugin.IsManifestBacked() && m.Entrypoints.Plugin == nil
 }
 
 type ManifestResponseMapping struct {
@@ -355,13 +342,6 @@ type Artifact struct {
 	LibC   string `json:"libc,omitempty" yaml:"libc,omitempty"`
 	Path   string `json:"path" yaml:"path"`
 	SHA256 string `json:"sha256,omitempty" yaml:"sha256,omitempty"`
-}
-
-type Entrypoints struct {
-	Plugin    *Entrypoint `json:"plugin,omitempty" yaml:"plugin,omitempty"`
-	Auth      *Entrypoint `json:"auth,omitempty" yaml:"auth,omitempty"`
-	Datastore *Entrypoint `json:"indexeddb,omitempty" yaml:"indexeddb,omitempty"`
-	Secrets   *Entrypoint `json:"secrets,omitempty" yaml:"secrets,omitempty"`
 }
 
 type Entrypoint struct {

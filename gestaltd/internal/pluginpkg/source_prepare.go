@@ -26,7 +26,7 @@ func PrepareSourceManifest(manifestPath string) ([]byte, *pluginmanifestv1.Manif
 }
 
 func EnsureSourceStaticCatalog(manifestPath string, manifest *pluginmanifestv1.Manifest) error {
-	if manifest == nil || manifest.Plugin == nil {
+	if manifest == nil || manifest.Kind != pluginmanifestv1.KindPlugin {
 		return nil
 	}
 	rootDir := filepath.Dir(manifestPath)

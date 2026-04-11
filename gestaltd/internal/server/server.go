@@ -46,7 +46,7 @@ type Server struct {
 	defaultConnection  map[string]string
 	catalogConnection  map[string]string
 	connectionAuth     func() map[string]map[string]bootstrap.OAuthHandler
-	pluginDefs         map[string]config.PluginDef
+	pluginDefs         map[string]*config.ProviderEntry
 	noAuth             bool
 	anonymousPrincipal *principal.Principal
 	publicBaseURL      string
@@ -73,7 +73,7 @@ type Config struct {
 	DefaultConnection map[string]string
 	CatalogConnection map[string]string
 	ConnectionAuth    func() map[string]map[string]bootstrap.OAuthHandler
-	PluginDefs        map[string]config.PluginDef
+	PluginDefs        map[string]*config.ProviderEntry
 	PublicBaseURL     string
 	SecureCookies     bool
 	StateSecret       []byte

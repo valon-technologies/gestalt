@@ -33,30 +33,27 @@ func LocalPackageReferences(manifest *pluginmanifestv1.Manifest) []LocalPackageR
 		})
 	}
 
-	if manifest.Plugin != nil {
-		add(manifest.Plugin.ConfigSchemaPath, "provider config schema")
-		if doc := manifest.Plugin.OpenAPIDocument(); doc != "" && !strings.Contains(doc, "://") {
+	if manifest.Spec != nil {
+		add(manifest.Spec.ConfigSchemaPath, "provider config schema")
+		if doc := manifest.Spec.OpenAPIDocument(); doc != "" && !strings.Contains(doc, "://") {
 			add(doc, "provider openapi document")
 		}
-		if url := manifest.Plugin.GraphQLURL(); url != "" && !strings.Contains(url, "://") {
+		if url := manifest.Spec.GraphQLURL(); url != "" && !strings.Contains(url, "://") {
 			add(url, "provider graphql document")
 		}
-		if url := manifest.Plugin.MCPURL(); url != "" && !strings.Contains(url, "://") {
+		if url := manifest.Spec.MCPURL(); url != "" && !strings.Contains(url, "://") {
 			add(url, "provider mcp document")
 		}
-	}
-	if manifest.WebUI != nil {
-		add(manifest.WebUI.ConfigSchemaPath, "webui config schema")
 	}
 	add(manifest.IconFile, "icon_file")
 	return refs
 }
 
 func ResolveManifestLocalReferences(manifest *pluginmanifestv1.Manifest, manifestPath string) *pluginmanifestv1.Manifest {
-	if manifest == nil || manifest.Plugin == nil || manifestPath == "" {
+	if manifest == nil || manifest.Spec == nil || manifestPath == "" {
 		return manifest
 	}
-	if manifest.Plugin.Surfaces == nil {
+	if manifest.Spec.Surfaces == nil {
 		return manifest
 	}
 
@@ -67,7 +64,7 @@ func ResolveManifestLocalReferences(manifest *pluginmanifestv1.Manifest, manifes
 		return filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(value))
 	}
 
-	provider := *manifest.Plugin
+	provider := *manifest.Spec
 	surfaces := *provider.Surfaces
 	changed := false
 
@@ -102,6 +99,6 @@ func ResolveManifestLocalReferences(manifest *pluginmanifestv1.Manifest, manifes
 
 	provider.Surfaces = &surfaces
 	cloned := *manifest
-	cloned.Plugin = &provider
+	cloned.Spec = &provider
 	return &cloned
 }

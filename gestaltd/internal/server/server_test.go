@@ -811,7 +811,7 @@ func TestListIntegrations_DerivesAuthTypesFromConnectionsWhenProviderOmitsThem(t
 	stub := &stubNilAuthTypesProvider{
 		StubIntegration: coretesting.StubIntegration{N: "example", DN: "Example"},
 	}
-	plugin := &config.ProviderDef{
+	plugin := &config.ProviderEntry{
 		Connections: map[string]*config.ConnectionDef{
 			"default": {
 				Auth: config.ConnectionAuthDef{
@@ -823,8 +823,8 @@ func TestListIntegrations_DerivesAuthTypesFromConnectionsWhenProviderOmitsThem(t
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.PluginDefs = map[string]config.PluginDef{
-			"example": {Plugin: plugin},
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"example": plugin,
 		}
 		cfg.Services = coretesting.NewStubServices(t)
 	})
@@ -872,8 +872,8 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 	t.Parallel()
 
 	stub := &coretesting.StubIntegration{N: "example", DN: "Example"}
-	plugin := &config.ProviderDef{
-		Source: &config.PluginSourceDef{
+	plugin := &config.ProviderEntry{
+		Source: config.ProviderSource{
 			Ref:     "github.com/acme/plugins/example",
 			Version: "1.0.0",
 		},
@@ -896,7 +896,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 			},
 		},
 		ResolvedManifest: &pluginmanifestv1.Manifest{
-			Plugin: &pluginmanifestv1.Plugin{
+			Spec: &pluginmanifestv1.Spec{
 				Auth: &pluginmanifestv1.ProviderAuth{
 					Type: pluginmanifestv1.AuthTypeManual,
 					Credentials: []pluginmanifestv1.CredentialField{
@@ -921,8 +921,8 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.PluginDefs = map[string]config.PluginDef{
-			"example": {Plugin: plugin},
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"example": plugin,
 		}
 		cfg.Services = coretesting.NewStubServices(t)
 	})
@@ -1019,8 +1019,8 @@ func TestListIntegrations_ConnectionInfosHideOAuthConnectionsWithoutHandler(t *t
 	t.Parallel()
 
 	stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
-	plugin := &config.ProviderDef{
-		Source: &config.PluginSourceDef{
+	plugin := &config.ProviderEntry{
+		Source: config.ProviderSource{
 			Ref:     "github.com/acme/plugins/slack",
 			Version: "1.0.0",
 		},
@@ -1031,8 +1031,8 @@ func TestListIntegrations_ConnectionInfosHideOAuthConnectionsWithoutHandler(t *t
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.PluginDefs = map[string]config.PluginDef{
-			"slack": {Plugin: plugin},
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"slack": plugin,
 		}
 		cfg.ConnectionAuth = func() map[string]map[string]bootstrap.OAuthHandler {
 			return map[string]map[string]bootstrap.OAuthHandler{
@@ -1086,7 +1086,7 @@ func TestListIntegrations_ConnectionInfosIncludeProviderManualAuth(t *testing.T)
 	cases := []struct {
 		name       string
 		provider   func(t *testing.T) core.Provider
-		plugin     *config.ProviderDef
+		plugin     *config.ProviderEntry
 		wantAuth   []string
 		wantFields []struct {
 			Name  string `json:"name"`
@@ -1101,7 +1101,7 @@ func TestListIntegrations_ConnectionInfosIncludeProviderManualAuth(t *testing.T)
 					StubIntegration: coretesting.StubIntegration{N: "example", DN: "Example"},
 				}
 			},
-			plugin: &config.ProviderDef{
+			plugin: &config.ProviderEntry{
 				Auth: &config.ConnectionAuthDef{
 					Type:             pluginmanifestv1.AuthTypeOAuth2,
 					AuthorizationURL: "https://example.com/oauth/authorize",
@@ -1124,7 +1124,7 @@ func TestListIntegrations_ConnectionInfosIncludeProviderManualAuth(t *testing.T)
 					StubIntegration: coretesting.StubIntegration{N: "example", DN: "Example"},
 				}
 			},
-			plugin: &config.ProviderDef{
+			plugin: &config.ProviderEntry{
 				Auth: &config.ConnectionAuthDef{
 					Type:             "",
 					AuthorizationURL: "https://example.com/oauth/authorize",
@@ -1160,7 +1160,7 @@ func TestListIntegrations_ConnectionInfosIncludeProviderManualAuth(t *testing.T)
 				}
 				return prov
 			},
-			plugin:   &config.ProviderDef{},
+			plugin:   &config.ProviderEntry{},
 			wantAuth: []string{"manual"},
 			wantFields: []struct {
 				Name  string `json:"name"`
@@ -1176,7 +1176,7 @@ func TestListIntegrations_ConnectionInfosIncludeProviderManualAuth(t *testing.T)
 				t.Helper()
 				return &coretesting.StubIntegration{N: "example", DN: "Example"}
 			},
-			plugin: &config.ProviderDef{
+			plugin: &config.ProviderEntry{
 				Auth: &config.ConnectionAuthDef{
 					Type: pluginmanifestv1.AuthTypeManual,
 					Credentials: []config.CredentialFieldDef{
@@ -1213,8 +1213,8 @@ func TestListIntegrations_ConnectionInfosIncludeProviderManualAuth(t *testing.T)
 
 			ts := newTestServer(t, func(cfg *server.Config) {
 				cfg.Providers = testutil.NewProviderRegistry(t, tc.provider(t))
-				cfg.PluginDefs = map[string]config.PluginDef{
-					"example": {Plugin: tc.plugin},
+				cfg.PluginDefs = map[string]*config.ProviderEntry{
+					"example": tc.plugin,
 				}
 				cfg.Services = coretesting.NewStubServices(t)
 			})
@@ -6331,7 +6331,7 @@ func TestConnectManual_MultiCredential(t *testing.T) {
 		name          string
 		integration   string
 		requestBody   string
-		pluginDefs    map[string]config.PluginDef
+		pluginDefs    map[string]*config.ProviderEntry
 		wantTokenData map[string]string
 	}{
 		{
@@ -6347,23 +6347,21 @@ func TestConnectManual_MultiCredential(t *testing.T) {
 			name:        "single credential input wraps structured auth mapping field",
 			integration: "modern-treasury",
 			requestBody: `{"integration":"modern-treasury","credential":"api-key-abc"}`,
-			pluginDefs: map[string]config.PluginDef{
+			pluginDefs: map[string]*config.ProviderEntry{
 				"modern-treasury": {
-					Plugin: &config.ProviderDef{
-						Auth: &config.ConnectionAuthDef{
-							Type: pluginmanifestv1.AuthTypeManual,
-							Credentials: []config.CredentialFieldDef{
-								{Name: "api_key", Label: "API Key"},
-							},
-							AuthMapping: &config.AuthMappingDef{
-								Basic: &config.BasicAuthMappingDef{
-									Username: config.AuthValueDef{
-										Value: "org-123",
-									},
-									Password: config.AuthValueDef{
-										ValueFrom: &config.AuthValueFromDef{
-											CredentialFieldRef: &config.CredentialFieldRefDef{Name: "api_key"},
-										},
+					Auth: &config.ConnectionAuthDef{
+						Type: pluginmanifestv1.AuthTypeManual,
+						Credentials: []config.CredentialFieldDef{
+							{Name: "api_key", Label: "API Key"},
+						},
+						AuthMapping: &config.AuthMappingDef{
+							Basic: &config.BasicAuthMappingDef{
+								Username: config.AuthValueDef{
+									Value: "org-123",
+								},
+								Password: config.AuthValueDef{
+									ValueFrom: &config.AuthValueFromDef{
+										CredentialFieldRef: &config.CredentialFieldRefDef{Name: "api_key"},
 									},
 								},
 							},

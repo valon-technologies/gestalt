@@ -68,8 +68,8 @@ func DirectoryDigest(dirPath string, manifest *pluginmanifestv1.Manifest) (strin
 		return "", fmt.Errorf("digest provider static catalog: %s does not exist", StaticCatalogFile)
 	}
 
-	if manifest.WebUI != nil && manifest.WebUI.AssetRoot != "" {
-		assetDir := filepath.Join(dirPath, filepath.FromSlash(manifest.WebUI.AssetRoot))
+	if manifest.Spec != nil && manifest.Spec.AssetRoot != "" {
+		assetDir := filepath.Join(dirPath, filepath.FromSlash(manifest.Spec.AssetRoot))
 		if err := filepath.WalkDir(assetDir, func(path string, d os.DirEntry, err error) error {
 			if err != nil || d.IsDir() {
 				return err

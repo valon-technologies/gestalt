@@ -10,7 +10,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
-	"gopkg.in/yaml.v3"
 )
 
 // ValidateStructure checks config shape: integration references, plugin
@@ -26,75 +25,82 @@ func ValidateStructure(cfg *Config) error {
 			return fmt.Errorf("config validation: server.apiTokenTtl: %w", err)
 		}
 	}
-	if err := validateTelemetry(cfg.Telemetry); err != nil {
+	if err := validateEgress(&cfg.Server.Egress); err != nil {
 		return err
 	}
-	if err := validateAudit(cfg.Audit); err != nil {
-		return err
-	}
-	if err := validateEgress(&cfg.Egress); err != nil {
-		return err
-	}
-	if err := validateUIConfig(cfg.UI); err != nil {
-		return err
-	}
-	if cfg.Auth.Builtin != "" {
-		return fmt.Errorf("config validation: auth does not support builtin providers; use a provider reference or omit auth")
-	}
-	if err := validateTopLevelComponentConfig("auth", cfg.Auth.Provider, cfg.Auth.Config); err != nil {
-		return err
-	}
-	if err := validateIndexedDBConfig(cfg); err != nil {
-		return err
-	}
-	if err := validateIndexedDBs(cfg); err != nil {
-		return err
-	}
-	if cfg.Secrets.Provider != nil {
-		if err := validateTopLevelComponentConfig("secrets", cfg.Secrets.Provider, cfg.Secrets.Config); err != nil {
+
+	// Validate singleton providers
+	if cfg.Providers.Auth != nil {
+		if cfg.Providers.Auth.Source.IsBuiltin() {
+			return fmt.Errorf("config validation: auth does not support builtin providers; use a provider source reference or omit auth")
+		}
+		if err := validateProviderEntrySource("auth", "auth", cfg.Providers.Auth); err != nil {
 			return err
 		}
 	}
-	for name := range cfg.Plugins {
-		intg := cfg.Plugins[name]
-		if err := validatePlugin(name, intg); err != nil {
+	if cfg.Providers.Secrets != nil && !cfg.Providers.Secrets.Disabled && !cfg.Providers.Secrets.Source.IsBuiltin() {
+		if err := validateProviderEntrySource("secrets", "secrets", cfg.Providers.Secrets); err != nil {
+			return err
+		}
+	}
+	if cfg.Providers.Telemetry != nil && !cfg.Providers.Telemetry.Disabled && !cfg.Providers.Telemetry.Source.IsBuiltin() {
+		if err := validateProviderEntrySource("telemetry", "telemetry", cfg.Providers.Telemetry); err != nil {
+			return err
+		}
+	}
+	if cfg.Providers.Audit != nil && !cfg.Providers.Audit.Disabled {
+		if cfg.Providers.Audit.Source.IsBuiltin() {
+			if err := validateBuiltinAudit(cfg.Providers.Audit); err != nil {
+				return err
+			}
+		} else {
+			if err := validateProviderEntrySource("audit", "audit", cfg.Providers.Audit); err != nil {
+				return err
+			}
+		}
+	}
+	if cfg.Providers.UI != nil && !cfg.Providers.UI.Disabled {
+		if err := validateProviderEntrySource("ui", "provider", cfg.Providers.UI); err != nil {
+			return err
+		}
+	}
+
+	// Validate indexeddbs
+	if err := validateDatastoreConfig(cfg); err != nil {
+		return err
+	}
+
+	// Validate plugins
+	for name, entry := range cfg.Providers.Plugins {
+		if err := validatePlugin(name, entry); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func validateTelemetry(cfg TelemetryConfig) error {
-	if cfg.Provider != nil {
-		return validateTopLevelComponentProvider("telemetry", cfg.Provider)
-	}
-	return nil
-}
-
-func validateAudit(cfg AuditConfig) error {
-	if cfg.Provider != nil {
-		return validateTopLevelComponentProvider("audit", cfg.Provider)
-	}
-	switch cfg.Builtin {
+func validateBuiltinAudit(entry *ProviderEntry) error {
+	name := entry.Source.Builtin
+	switch name {
 	case "", "inherit", "noop":
-		if cfg.Config.Kind == 0 {
-			return nil
+		if entry.Config.Kind != 0 {
+			return fmt.Errorf("config validation: audit.config is not supported when audit.provider is %q", name)
 		}
-		return fmt.Errorf("config validation: audit.config is not supported when audit.provider is %q", cfg.Builtin)
+		return nil
 	case "stdout":
-		if cfg.Config.Kind == 0 {
+		if entry.Config.Kind == 0 {
 			return nil
 		}
 		var stdoutCfg struct {
 			Level  string `yaml:"level"`
 			Format string `yaml:"format"`
 		}
-		if err := cfg.Config.Decode(&stdoutCfg); err != nil {
+		if err := entry.Config.Decode(&stdoutCfg); err != nil {
 			return fmt.Errorf("config validation: stdout audit: parsing config: %w", err)
 		}
 		return nil
 	case "otlp":
-		if cfg.Config.Kind == 0 {
+		if entry.Config.Kind == 0 {
 			return nil
 		}
 		var otlpCfg struct {
@@ -103,7 +109,7 @@ func validateAudit(cfg AuditConfig) error {
 				Exporter string `yaml:"exporter"`
 			} `yaml:"logs"`
 		}
-		if err := cfg.Config.Decode(&otlpCfg); err != nil {
+		if err := entry.Config.Decode(&otlpCfg); err != nil {
 			return fmt.Errorf("config validation: otlp audit: parsing config: %w", err)
 		}
 		if otlpCfg.Protocol != "" {
@@ -118,41 +124,64 @@ func validateAudit(cfg AuditConfig) error {
 		}
 		return nil
 	default:
-		return fmt.Errorf("config validation: unknown audit.provider %q", cfg.Builtin)
+		return fmt.Errorf("config validation: unknown audit provider %q", name)
 	}
 }
 
-func validateTopLevelComponentProvider(kind string, provider *ProviderDef) error {
-	if provider == nil {
+func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error {
+	if entry == nil {
 		return nil
 	}
-	if provider.Config.Kind != 0 {
-		return fmt.Errorf("config validation: %s.provider.config is not supported; use %s.config", kind, kind)
+	src := entry.Source
+	if src.IsBuiltin() {
+		return nil
 	}
-	return validateExternalPlugin(kind, kind, provider)
-}
-
-func validateTopLevelComponentConfig(kind string, provider *ProviderDef, cfg yaml.Node) error {
-	if provider == nil {
-		if cfg.Kind != 0 {
-			return fmt.Errorf("config validation: %s.config is not supported when %s.provider is unset", kind, kind)
+	modeCount := 0
+	if src.IsLocal() {
+		modeCount++
+	}
+	if src.IsManaged() {
+		modeCount++
+	}
+	if modeCount == 0 && !entry.Disabled {
+		return fmt.Errorf("config validation: %s %q source.path or source.ref is required", kind, name)
+	}
+	if modeCount > 1 {
+		return fmt.Errorf("config validation: %s %q source.path and source.ref are mutually exclusive", kind, name)
+	}
+	if src.IsManaged() {
+		if _, err := pluginsource.Parse(src.Ref); err != nil {
+			return fmt.Errorf("config validation: %s %q source.ref: %w", kind, name, err)
 		}
-		return nil
+		if src.Version == "" {
+			return fmt.Errorf("config validation: %s %q source.version is required when source.ref is set", kind, name)
+		}
+		if err := pluginsource.ValidateVersion(src.Version); err != nil {
+			return fmt.Errorf("config validation: %s %q source.version: %w", kind, name, err)
+		}
 	}
-	return validateTopLevelComponentProvider(kind, provider)
+	if src.IsLocal() && src.Version != "" {
+		return fmt.Errorf("config validation: %s %q source.version is only valid with source.ref", kind, name)
+	}
+	if src.Auth != nil {
+		if !src.IsManaged() {
+			return fmt.Errorf("config validation: %s %q source.auth is only valid with source.ref", kind, name)
+		}
+		if strings.TrimSpace(src.Auth.Token) == "" {
+			return fmt.Errorf("config validation: %s %q source.auth.token is required when source.auth is set", kind, name)
+		}
+	}
+	return nil
 }
 
 // ValidateResolvedStructure checks integration fields whose support depends on
-// resolved managed plugin manifests. Callers should use this after init has
-// applied locked plugin artifacts into the config. It intentionally does not
-// rerun the full structural validator on the mutated config.
+// resolved managed plugin manifests.
 func ValidateResolvedStructure(cfg *Config) error {
-	for name := range cfg.Plugins {
-		intg := cfg.Plugins[name]
-		if intg.Plugin == nil {
-			return fmt.Errorf("config validation: integration %q requires a plugin", name)
+	for name, entry := range cfg.Providers.Plugins {
+		if entry == nil {
+			return fmt.Errorf("config validation: integration %q requires a source", name)
 		}
-		if err := validateManifestBackedIntegration(name, intg.Plugin); err != nil {
+		if err := validateManifestBackedIntegration(name, entry); err != nil {
 			return err
 		}
 	}
@@ -160,16 +189,13 @@ func ValidateResolvedStructure(cfg *Config) error {
 }
 
 // ValidateRuntime checks runtime-only requirements: encryption key plus the
-// required top-level datastore provider. Platform auth is optional; omitting it
-// or setting auth.disabled to true disables authentication. Callers that need a fully
-// operational config (serve) should call this after Load. Callers that only
-// need structural correctness (init, validate) should not.
+// required top-level datastore provider.
 func ValidateRuntime(cfg *Config) error {
-	if string(cfg.IndexedDB) == "" {
-		return fmt.Errorf("config validation: indexeddb is required (set indexeddb: <name> referencing a datastores entry)")
+	if cfg.Server.IndexedDB == "" {
+		return fmt.Errorf("config validation: server.indexeddb is required (set server.indexeddb referencing a providers.indexeddbs entry)")
 	}
-	if _, ok := cfg.IndexedDBs[string(cfg.IndexedDB)]; !ok {
-		return fmt.Errorf("config validation: indexeddb references unknown indexeddb %q", string(cfg.IndexedDB))
+	if _, ok := cfg.Providers.IndexedDBs[cfg.Server.IndexedDB]; !ok {
+		return fmt.Errorf("config validation: server.indexeddb references unknown datastore %q", cfg.Server.IndexedDB)
 	}
 	if cfg.Server.EncryptionKey == "" {
 		return fmt.Errorf("config validation: server.encryption_key is required")
@@ -177,15 +203,31 @@ func ValidateRuntime(cfg *Config) error {
 	return nil
 }
 
-func validatePlugin(name string, intg PluginDef) error {
-	if intg.Plugin == nil {
-		return fmt.Errorf("config validation: integration %q requires a plugin", name)
+func validatePlugin(name string, entry *ProviderEntry) error {
+	if entry == nil {
+		return fmt.Errorf("config validation: plugin %q requires a source", name)
 	}
-	p := intg.Plugin
-	if err := validateExternalPlugin("integration", name, p); err != nil {
+	if err := validateProviderEntrySource("plugin", name, entry); err != nil {
 		return err
 	}
-	return validateManifestBackedIntegration(name, p)
+	return validateManifestBackedIntegration(name, entry)
+}
+
+func validateDatastoreConfig(cfg *Config) error {
+	if cfg.Server.IndexedDB != "" {
+		if _, ok := cfg.Providers.IndexedDBs[cfg.Server.IndexedDB]; !ok {
+			return fmt.Errorf("config validation: server.indexeddb references unknown datastore %q", cfg.Server.IndexedDB)
+		}
+	}
+	for name, entry := range cfg.Providers.IndexedDBs {
+		if entry == nil {
+			return fmt.Errorf("config validation: indexeddbs.%s is required", name)
+		}
+		if err := validateProviderEntrySource("indexeddb", name, entry); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 type inlineConnectionReference struct {
@@ -195,7 +237,7 @@ type inlineConnectionReference struct {
 	context  string
 }
 
-func manifestBackedConnectionReferences(plugin *ProviderDef, provider *pluginmanifestv1.Plugin) []inlineConnectionReference {
+func manifestBackedConnectionReferences(plugin *ProviderEntry, provider *pluginmanifestv1.Spec) []inlineConnectionReference {
 	if provider == nil {
 		return nil
 	}
@@ -215,15 +257,15 @@ func manifestBackedConnectionReferences(plugin *ProviderDef, provider *pluginman
 	}
 }
 
-func validateManifestBackedConnectionReferences(name string, plugin *ProviderDef, provider *pluginmanifestv1.Plugin) error {
+func validateManifestBackedConnectionReferences(name string, plugin *ProviderEntry, provider *pluginmanifestv1.Spec) error {
 	return validateConnectionReferences(name, declaredManifestBackedConnections(plugin, provider), manifestBackedConnectionReferences(plugin, provider))
 }
 
-func validateManifestBackedConnectionDefaults(name string, plugin *ProviderDef, provider *pluginmanifestv1.Plugin) error {
+func validateManifestBackedConnectionDefaults(name string, plugin *ProviderEntry, provider *pluginmanifestv1.Spec) error {
 	return validateConnectionDefaults(name, "integration", len(declaredManifestBackedConnections(plugin, provider)), manifestBackedConnectionReferences(plugin, provider))
 }
 
-func validateExecutableConnectionAuthSupport(name string, plugin *ProviderDef, provider *pluginmanifestv1.Plugin) error {
+func validateExecutableConnectionAuthSupport(name string, plugin *ProviderEntry, provider *pluginmanifestv1.Spec) error {
 	supportsMCPOAuth := provider != nil && provider.MCPURL() != ""
 	if conn := EffectivePluginConnectionDef(plugin, provider); conn.Auth.Type == pluginmanifestv1.AuthTypeMCPOAuth && !supportsMCPOAuth {
 		return fmt.Errorf("config validation: integration %q plugin auth type %q requires an MCP surface", name, pluginmanifestv1.AuthTypeMCPOAuth)
@@ -276,7 +318,7 @@ func validateConnectionDefaults(name, subject string, declaredCount int, refs []
 	return nil
 }
 
-func declaredManifestBackedConnections(plugin *ProviderDef, provider *pluginmanifestv1.Plugin) map[string]struct{} {
+func declaredManifestBackedConnections(plugin *ProviderEntry, provider *pluginmanifestv1.Spec) map[string]struct{} {
 	size := 0
 	if plugin != nil {
 		size += len(plugin.Connections)
@@ -306,94 +348,26 @@ func addDeclaredConnection(declared map[string]struct{}, rawName string) {
 	declared[resolved] = struct{}{}
 }
 
-func validateExternalPlugin(kind, name string, plugin *ProviderDef) error {
-	if plugin == nil {
+func validateManifestBackedIntegration(name string, entry *ProviderEntry) error {
+	if entry == nil {
 		return nil
 	}
-	if plugin.Source != nil {
-		modeCount := 0
-		if plugin.Source.Path != "" {
-			modeCount++
-		}
-		if plugin.Source.Ref != "" {
-			modeCount++
-		}
-		switch {
-		case modeCount == 0:
-			return fmt.Errorf("config validation: %s %q plugin.source.path or plugin.source.ref is required when plugin.source is set", kind, name)
-		case modeCount > 1:
-			return fmt.Errorf("config validation: %s %q plugin.source.path and plugin.source.ref are mutually exclusive", kind, name)
-		}
-	}
-	modeCount := 0
-	if plugin.HasLocalSource() {
-		modeCount++
-	}
-	if plugin.HasManagedSource() {
-		modeCount++
-	}
-	switch {
-	case modeCount == 0:
-		return fmt.Errorf("config validation: %s %q provider.source.path or provider.source.ref is required", kind, name)
-	case modeCount > 1:
-		return fmt.Errorf("config validation: %s %q provider.source.path and provider.source.ref are mutually exclusive", kind, name)
-	}
-	if plugin.HasManagedSource() {
-		if _, err := pluginsource.Parse(plugin.SourceRef()); err != nil {
-			return fmt.Errorf("config validation: %s %q plugin.source.ref: %w", kind, name, err)
-		}
-		if plugin.SourceVersion() == "" {
-			return fmt.Errorf("config validation: %s %q plugin.source.version is required when plugin.source.ref is set", kind, name)
-		}
-		if err := pluginsource.ValidateVersion(plugin.SourceVersion()); err != nil {
-			return fmt.Errorf("config validation: %s %q plugin.source.version: %w", kind, name, err)
-		}
-	}
-
-	if plugin.HasLocalSource() && plugin.SourceVersion() != "" {
-		return fmt.Errorf("config validation: %s %q plugin.source.version is only valid with plugin.source.ref", kind, name)
-	}
-	if plugin.Source != nil && plugin.Source.Auth != nil {
-		if !plugin.HasManagedSource() {
-			return fmt.Errorf("config validation: %s %q plugin.source.auth is only valid with plugin.source.ref", kind, name)
-		}
-		if strings.TrimSpace(plugin.Source.Auth.Token) == "" {
-			return fmt.Errorf("config validation: %s %q plugin.source.auth.token is required when plugin.source.auth is set", kind, name)
-		}
-	}
-
-	if kind != "integration" {
-		hasIntegrationConfig := plugin.Auth != nil || len(plugin.Connections) > 0 ||
-			len(plugin.ConnectionParams) > 0 || plugin.MCP || len(plugin.AllowedOperations) > 0 ||
-			plugin.DefaultConnection != "" || plugin.Discovery != nil
-		if hasIntegrationConfig {
-			return fmt.Errorf("config validation: %s %q provider cannot use integration-only fields", kind, name)
-		}
-	}
-
-	return nil
-}
-
-func validateManifestBackedIntegration(name string, plugin *ProviderDef) error {
-	if plugin == nil {
-		return nil
-	}
-	effectiveProvider := plugin.ManifestPlugin()
+	effectiveProvider := entry.ManifestSpec()
 	if effectiveProvider != nil {
-		if err := validateManifestBackedConnectionReferences(name, plugin, effectiveProvider); err != nil {
+		if err := validateManifestBackedConnectionReferences(name, entry, effectiveProvider); err != nil {
 			return err
 		}
-		if err := validateManifestBackedConnectionDefaults(name, plugin, effectiveProvider); err != nil {
+		if err := validateManifestBackedConnectionDefaults(name, entry, effectiveProvider); err != nil {
 			return err
 		}
 	}
-	if err := validateExecutableConnectionAuthSupport(name, plugin, effectiveProvider); err != nil {
+	if err := validateExecutableConnectionAuthSupport(name, entry, effectiveProvider); err != nil {
 		return err
 	}
-	if err := validateConnectionAuthMappings(name, EffectivePluginConnectionDef(plugin, effectiveProvider).Auth, "plugin"); err != nil {
+	if err := validateConnectionAuthMappings(name, EffectivePluginConnectionDef(entry, effectiveProvider).Auth, "plugin"); err != nil {
 		return err
 	}
-	declared := declaredManifestBackedConnections(plugin, effectiveProvider)
+	declared := declaredManifestBackedConnections(entry, effectiveProvider)
 	names := make([]string, 0, len(declared))
 	for connName := range declared {
 		if connName == PluginConnectionName {
@@ -403,7 +377,7 @@ func validateManifestBackedIntegration(name string, plugin *ProviderDef) error {
 	}
 	slices.Sort(names)
 	for _, connName := range names {
-		conn, ok := EffectiveNamedConnectionDef(plugin, effectiveProvider, connName)
+		conn, ok := EffectiveNamedConnectionDef(entry, effectiveProvider, connName)
 		if !ok {
 			continue
 		}
@@ -462,19 +436,6 @@ func validateAuthValueDef(integration, subject, path string, value AuthValueDef,
 	return nil
 }
 
-func validateUIConfig(cfg UIConfig) error {
-	if cfg.Disabled {
-		if cfg.Config.Kind != 0 {
-			return fmt.Errorf("config validation: ui.config is not supported when ui is disabled")
-		}
-		return nil
-	}
-	if cfg.Provider == nil {
-		return nil
-	}
-	return validateExternalPlugin("ui", "provider", cfg.Provider)
-}
-
 func validateServerListeners(cfg ServerConfig) error {
 	public := cfg.PublicListener()
 	if public.Port <= 0 {
@@ -500,40 +461,6 @@ func validateServerListeners(cfg ServerConfig) error {
 	}
 	if managementAddr == cfg.PublicAddr() {
 		return fmt.Errorf("config validation: server.management must differ from server.public")
-	}
-	return nil
-}
-
-func validateIndexedDBConfig(cfg *Config) error {
-	if string(cfg.IndexedDB) != "" {
-		if _, ok := cfg.IndexedDBs[string(cfg.IndexedDB)]; !ok {
-			return fmt.Errorf("config validation: indexeddb references unknown indexeddb %q", string(cfg.IndexedDB))
-		}
-	}
-	return nil
-}
-
-func validateIndexedDBs(cfg *Config) error {
-	for name := range cfg.IndexedDBs {
-		ds := cfg.IndexedDBs[name]
-		if ds.Provider == nil {
-			return fmt.Errorf("config validation: indexeddbs.%s.provider is required", name)
-		}
-	}
-	for name := range cfg.Plugins {
-		intg := cfg.Plugins[name]
-		if err := validateIndexedDBBindings(name, intg.IndexedDBs, cfg); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func validateIndexedDBBindings(integrationName string, bindings map[string]string, cfg *Config) error {
-	for alias, resourceName := range bindings {
-		if _, ok := cfg.IndexedDBs[resourceName]; !ok {
-			return fmt.Errorf("config validation: integration %q indexeddb binding %q references unknown datastore %q", integrationName, alias, resourceName)
-		}
 	}
 	return nil
 }

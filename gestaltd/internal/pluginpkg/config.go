@@ -29,40 +29,12 @@ func ValidateConfigForManifest(manifestPath string, manifest *pluginmanifestv1.M
 	return validateConfigSchema(config, string(data))
 }
 
-func configSchemaForManifest(manifestPath string, manifest *pluginmanifestv1.Manifest, kind string) (path string, name string, ok bool, err error) {
-	if manifest == nil {
+func configSchemaForManifest(manifestPath string, manifest *pluginmanifestv1.Manifest, _ string) (path string, name string, ok bool, err error) {
+	if manifest == nil || manifest.Spec == nil || manifest.Spec.ConfigSchemaPath == "" {
 		return "", "", false, nil
 	}
-
-	switch kind {
-	case pluginmanifestv1.KindPlugin:
-		if manifest.Plugin == nil || manifest.Plugin.ConfigSchemaPath == "" {
-			return "", "", false, nil
-		}
-		return filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(manifest.Plugin.ConfigSchemaPath)), manifest.Plugin.ConfigSchemaPath, true, nil
-	case pluginmanifestv1.KindAuth:
-		if manifest.Auth == nil || manifest.Auth.ConfigSchemaPath == "" {
-			return "", "", false, nil
-		}
-		return filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(manifest.Auth.ConfigSchemaPath)), manifest.Auth.ConfigSchemaPath, true, nil
-	case pluginmanifestv1.KindIndexedDB:
-		if manifest.Datastore == nil || manifest.Datastore.ConfigSchemaPath == "" {
-			return "", "", false, nil
-		}
-		return filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(manifest.Datastore.ConfigSchemaPath)), manifest.Datastore.ConfigSchemaPath, true, nil
-	case pluginmanifestv1.KindSecrets:
-		if manifest.Secrets == nil || manifest.Secrets.ConfigSchemaPath == "" {
-			return "", "", false, nil
-		}
-		return filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(manifest.Secrets.ConfigSchemaPath)), manifest.Secrets.ConfigSchemaPath, true, nil
-	case pluginmanifestv1.KindWebUI:
-		if manifest.WebUI == nil || manifest.WebUI.ConfigSchemaPath == "" {
-			return "", "", false, nil
-		}
-		return filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(manifest.WebUI.ConfigSchemaPath)), manifest.WebUI.ConfigSchemaPath, true, nil
-	default:
-		return "", "", false, fmt.Errorf("unsupported manifest config kind %q", kind)
-	}
+	schemaPath := manifest.Spec.ConfigSchemaPath
+	return filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(schemaPath)), schemaPath, true, nil
 }
 
 func validateConfigSchema(config map[string]any, schemaText string) error {

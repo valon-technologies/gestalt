@@ -54,7 +54,7 @@ func Install(packagePath, destDir string) (*InstalledPlugin, error) {
 		if manifestPath == "" {
 			manifestPath = filepath.Join(destDir, pluginpkg.ManifestFile)
 		}
-		assetRoot := filepath.Join(destDir, filepath.FromSlash(manifest.WebUI.AssetRoot))
+		assetRoot := filepath.Join(destDir, filepath.FromSlash(manifest.Spec.AssetRoot))
 		installed := buildInstalledPlugin(manifest, destDir, manifestPath, "", nil, assetRoot)
 		return installed, nil
 	}
@@ -113,7 +113,7 @@ func InstallFromDir(dirPath, destDir string) (*InstalledPlugin, error) {
 		if mfPath == "" {
 			mfPath = filepath.Join(destDir, pluginpkg.ManifestFile)
 		}
-		assetRoot := filepath.Join(destDir, filepath.FromSlash(manifest.WebUI.AssetRoot))
+		assetRoot := filepath.Join(destDir, filepath.FromSlash(manifest.Spec.AssetRoot))
 		installed := buildInstalledPlugin(manifest, destDir, mfPath, "", nil, assetRoot)
 		return installed, nil
 	}
@@ -208,7 +208,7 @@ func executablePathForManifest(root string, manifest *pluginmanifestv1.Manifest)
 	}
 	entry := pluginpkg.EntrypointForKind(manifest, kind)
 	if entry == nil {
-		if manifest.Plugin != nil && manifest.Plugin.IsManifestBacked() {
+		if manifest.Spec != nil && manifest.Spec.IsManifestBacked() {
 			return "", nil
 		}
 		return "", fmt.Errorf("manifest does not define an executable entrypoint")
@@ -230,7 +230,7 @@ func copyManifestReferencedFiles(srcDir, destDir string, manifest *pluginmanifes
 			return fmt.Errorf("copy %s %s: %w", ref.Description, ref.Path, err)
 		}
 	}
-	if manifest != nil && manifest.Plugin != nil {
+	if manifest != nil && manifest.Spec != nil {
 		src := pluginpkg.StaticCatalogPath(srcDir)
 		dest := pluginpkg.StaticCatalogPath(destDir)
 		if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {

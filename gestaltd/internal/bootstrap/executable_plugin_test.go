@@ -26,9 +26,9 @@ func TestExecutableSDKExampleProviderReceivesStartConfig(t *testing.T) {
 	manifestRoot := exampleProviderRoot(t)
 	manifest := newExecutableManifest("Example Provider", "A minimal example provider built with the public SDK")
 	cfg := &config.Config{
-		Plugins: map[string]config.PluginDef{
-			"example": {
-				Plugin: &config.ProviderDef{
+		Providers: config.ProvidersConfig{
+			Plugins: map[string]*config.ProviderEntry{
+				"example": {
 					Command:              bin,
 					ResolvedManifest:     manifest,
 					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
@@ -107,11 +107,12 @@ func TestPythonSourcePluginFallsBackWithoutGoOnPath(t *testing.T) {
 	bin := buildExampleProviderBinary(t)
 	root := t.TempDir()
 	manifest := &pluginmanifestv1.Manifest{
+		Kind:        pluginmanifestv1.KindPlugin,
 		Source:      "github.com/testowner/plugins/python-source",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Python Source",
 		Description: "Python source provider fixture",
-		Plugin: &pluginmanifestv1.Plugin{
+		Spec: &pluginmanifestv1.Spec{
 			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
 		},
 	}
@@ -151,9 +152,9 @@ plugin = "provider"
 	t.Setenv("PATH", t.TempDir())
 
 	cfg := &config.Config{
-		Plugins: map[string]config.PluginDef{
-			"python-source": {
-				Plugin: &config.ProviderDef{
+		Providers: config.ProvidersConfig{
+			Plugins: map[string]*config.ProviderEntry{
+				"python-source": {
 					ResolvedManifest:     manifest,
 					ResolvedManifestPath: manifestPath,
 					Config: mustNode(t, map[string]any{
@@ -210,12 +211,12 @@ func TestExecutableSDKExampleProviderAppliesConfigMetadataOverrides(t *testing.T
 	manifest := newExecutableManifest("Manifest Display", "Manifest Description")
 
 	cfg := &config.Config{
-		Plugins: map[string]config.PluginDef{
-			"example": {
-				DisplayName: "Config Display",
-				Description: "Config Description",
-				IconFile:    iconPath,
-				Plugin: &config.ProviderDef{
+		Providers: config.ProvidersConfig{
+			Plugins: map[string]*config.ProviderEntry{
+				"example": {
+					DisplayName:          "Config Display",
+					Description:          "Config Description",
+					IconFile:             iconPath,
 					Command:              bin,
 					ResolvedManifest:     manifest,
 					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
@@ -303,11 +304,12 @@ func writeStaticCatalog(t *testing.T, cat *catalog.Catalog) string {
 
 func newExecutableManifest(displayName, description string) *pluginmanifestv1.Manifest {
 	return &pluginmanifestv1.Manifest{
+		Kind:        pluginmanifestv1.KindPlugin,
 		Source:      "github.com/acme/plugins/test",
 		Version:     "1.0.0",
 		DisplayName: displayName,
 		Description: description,
-		Plugin:      &pluginmanifestv1.Plugin{},
+		Spec:        &pluginmanifestv1.Spec{},
 	}
 }
 
@@ -323,16 +325,16 @@ func TestPluginManifestOAuthWiresConnectionAuth(t *testing.T) {
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-	manifest.Plugin.Auth = &pluginmanifestv1.ProviderAuth{
+	manifest.Spec.Auth = &pluginmanifestv1.ProviderAuth{
 		Type:             pluginmanifestv1.AuthTypeOAuth2,
 		AuthorizationURL: "https://example.com/authorize",
 		TokenURL:         "https://example.com/token",
 		Scopes:           []string{"read", "write"},
 	}
 	cfg := &config.Config{
-		Plugins: map[string]config.PluginDef{
-			"echoauth": {
-				Plugin: &config.ProviderDef{
+		Providers: config.ProvidersConfig{
+			Plugins: map[string]*config.ProviderEntry{
+				"echoauth": {
 					Command: bin,
 					Args:    []string{"provider"},
 					Config: mustNode(t, map[string]any{
@@ -393,9 +395,9 @@ func TestPluginManifestNoAuthSkipsConnectionAuth(t *testing.T) {
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	cfg := &config.Config{
-		Plugins: map[string]config.PluginDef{
-			"echonoauth": {
-				Plugin: &config.ProviderDef{
+		Providers: config.ProvidersConfig{
+			Plugins: map[string]*config.ProviderEntry{
+				"echonoauth": {
 					Command:              bin,
 					Args:                 []string{"provider"},
 					ResolvedManifest:     manifest,
@@ -430,12 +432,12 @@ func TestPluginManifestNamedOAuthKeepsProviderTokenMode(t *testing.T) {
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	cfg := &config.Config{
-		Plugins: map[string]config.PluginDef{
-			"echoauth": {
-				Plugin: &config.ProviderDef{
+		Providers: config.ProvidersConfig{
+			Plugins: map[string]*config.ProviderEntry{
+				"echoauth": {
 					Command:           bin,
 					Args:              []string{"provider"},
-					Source:            &config.PluginSourceDef{Ref: "github.com/acme/plugins/test", Version: "1.0.0"},
+					Source:            config.ProviderSource{Ref: "github.com/acme/plugins/test", Version: "1.0.0"},
 					DefaultConnection: "workspace",
 					Connections: map[string]*config.ConnectionDef{
 						"workspace": {
@@ -489,9 +491,9 @@ func TestPluginProcessEnvIsolation(t *testing.T) {
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 
 	cfg := &config.Config{
-		Plugins: map[string]config.PluginDef{
-			"echoext": {
-				Plugin: &config.ProviderDef{
+		Providers: config.ProvidersConfig{
+			Plugins: map[string]*config.ProviderEntry{
+				"echoext": {
 					Command:              bin,
 					Args:                 []string{"provider"},
 					ResolvedManifest:     manifest,
@@ -546,9 +548,9 @@ func TestExecutablePluginRequiresManifest(t *testing.T) {
 
 	bin := buildEchoPluginBinary(t)
 	cfg := &config.Config{
-		Plugins: map[string]config.PluginDef{
-			"echoext": {
-				Plugin: &config.ProviderDef{
+		Providers: config.ProvidersConfig{
+			Plugins: map[string]*config.ProviderEntry{
+				"echoext": {
 					Command: bin,
 					Args:    []string{"provider"},
 				},

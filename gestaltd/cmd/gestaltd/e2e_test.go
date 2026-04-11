@@ -25,9 +25,9 @@ func TestE2EValidateRejectsAuditConfigWhenProviderInheritsTelemetry(t *testing.T
 	if err != nil {
 		t.Fatalf("read config: %v", err)
 	}
-	cfgBytes = append(cfgBytes, []byte(`audit:
-  config:
-    format: json
+	cfgBytes = append(cfgBytes, []byte(`  audit:
+    config:
+      format: json
 `)...)
 	if err := os.WriteFile(cfgPath, cfgBytes, 0o644); err != nil {
 		t.Fatalf("write config audit: %v", err)
@@ -52,26 +52,26 @@ func TestE2EValidateRejectsInvalidAuditSettings(t *testing.T) {
 	}{
 		{
 			name: "unknown audit provider",
-			auditYAML: `audit:
-  builtin: bogus
+			auditYAML: `  audit:
+    source: bogus
 `,
-			wantError: "unknown audit.provider",
+			wantError: "unknown audit provider",
 		},
 		{
 			name: "stdout audit requires mapping config",
-			auditYAML: `audit:
-  builtin: stdout
-  config: nope
+			auditYAML: `  audit:
+    source: stdout
+    config: nope
 `,
 			wantError: "stdout audit: parsing config",
 		},
 		{
 			name: "otlp audit rejects non-otlp logs exporter",
-			auditYAML: `audit:
-  builtin: otlp
-  config:
-    logs:
-      exporter: stdout
+			auditYAML: `  audit:
+    source: otlp
+    config:
+      logs:
+        exporter: stdout
 `,
 			wantError: "otlp audit: logs.exporter must be",
 		},
@@ -116,25 +116,22 @@ func TestE2EValidateRejectsUnknownYAMLField(t *testing.T) {
 	}{
 		{
 			name: "bogus field",
-			pluginYAML: `provider:
-  source:
-    path: /tmp/manifest.yaml
+			pluginYAML: `source:
+  path: /tmp/manifest.yaml
 bogus: true`,
 			wantError: "bogus",
 		},
 		{
 			name: "removed plugin connection field",
-			pluginYAML: `provider:
-  source:
-    path: /tmp/manifest.yaml
+			pluginYAML: `source:
+  path: /tmp/manifest.yaml
 connection: default`,
 			wantError: "connection",
 		},
 		{
 			name: "removed provider params field",
-			pluginYAML: `provider:
-  source:
-    path: /tmp/manifest.yaml
+			pluginYAML: `source:
+  path: /tmp/manifest.yaml
 params:
   tenant:
     required: true`,
@@ -149,12 +146,10 @@ params:
 
 			dir := t.TempDir()
 			cfgPath := filepath.Join(dir, "config.yaml")
-			cfg := authIndexedDBConfigYAML(t, dir, "local", "sqlite", filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`server:
-  encryptionKey: test-key
-plugins:
-  example:
-    %s
-`, strings.ReplaceAll(tc.pluginYAML, "\n", "\n    "))
+			cfg := "server:\n  encryptionKey: test-key\n" + authIndexedDBConfigYAML(t, dir, "local", "sqlite", filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`  plugins:
+    example:
+      %s
+`, strings.ReplaceAll(tc.pluginYAML, "\n", "\n      "))
 			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 				t.Fatalf("WriteFile config: %v", err)
 			}
@@ -199,11 +194,12 @@ func setupPluginDirWithVersion(t *testing.T, baseDir, version string) string {
 	pluginDir := filepath.Join(baseDir, "plugin-src")
 	testutil.CopyExampleProviderPlugin(t, pluginDir)
 	manifest := &pluginmanifestv1.Manifest{
+		Kind:        pluginmanifestv1.KindPlugin,
 		Source:      "github.com/test/plugins/provider",
 		Version:     version,
 		DisplayName: "Example Provider",
 		Description: "A minimal example provider built with the public SDK",
-		Plugin:      &pluginmanifestv1.Plugin{},
+		Spec:        &pluginmanifestv1.Spec{},
 	}
 	writeManifestFile(t, pluginDir, manifest)
 	return pluginDir
@@ -228,16 +224,15 @@ func setupAuthProviderDir(t *testing.T, baseDir, name string) string {
 		t.Fatalf("BuildSourceComponentReleaseBinary(%s): %v", providerDir, err)
 	}
 	writeManifestFile(t, providerDir, &pluginmanifestv1.Manifest{
+		Kind:        pluginmanifestv1.KindAuth,
 		Source:      "github.com/test/providers/auth/" + name,
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Test Auth " + name,
-		Auth:        &pluginmanifestv1.AuthMetadata{},
+		Spec:        &pluginmanifestv1.Spec{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: artifactRel},
 		},
-		Entrypoints: pluginmanifestv1.Entrypoints{
-			Auth: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactRel},
-		},
+		Entrypoint: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	})
 	return providerDir
 }
@@ -269,24 +264,23 @@ func authIndexedDBConfigYAML(t *testing.T, dir, authName, datastoreName, dbPath 
 	authBlock := ""
 	if authName != "" {
 		authManifestPath := componentProviderManifestPath(t, setupAuthProviderDir(t, dir, authName))
-		authBlock = fmt.Sprintf(`auth:
-  provider:
+		authBlock = fmt.Sprintf(`  auth:
     source:
       path: %s
 `, authManifestPath)
 	}
-	return fmt.Sprintf(`%sindexeddbs:
-  %s:
-    provider:
+	return fmt.Sprintf(`  indexeddb: %s
+providers:
+%s  indexeddbs:
+    %s:
       source:
         ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
         version: 0.0.1-alpha.2
-    config:
-      dsn: %q
-indexeddb: %s
-ui:
-  disabled: true
-`, authBlock, datastoreName, "sqlite://"+dbPath, datastoreName)
+      config:
+        dsn: %q
+  ui:
+    disabled: true
+`, datastoreName, authBlock, datastoreName, "sqlite://"+dbPath)
 }
 
 func writeManifestFile(t *testing.T, pluginDir string, manifest *pluginmanifestv1.Manifest) {
@@ -325,12 +319,11 @@ func writeE2EConfigWithPaths(t *testing.T, dir, pluginDir, dbPath, artifactsDir 
 	if artifactsDir != "" {
 		serverBlock += fmt.Sprintf("  artifactsDir: %s\n", artifactsDir)
 	}
-	cfg := authIndexedDBConfigYAML(t, dir, "", "sqlite", dbPath) + fmt.Sprintf(`%splugins:
-  example:
-    provider:
+	cfg := serverBlock + authIndexedDBConfigYAML(t, dir, "", "sqlite", dbPath) + fmt.Sprintf(`  plugins:
+    example:
       source:
         path: %s
-`, serverBlock, manifestPath)
+`, manifestPath)
 
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
 		t.Fatalf("write config: %v", err)

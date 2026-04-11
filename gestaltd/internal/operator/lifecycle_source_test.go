@@ -116,7 +116,7 @@ func buildV2ArchiveForArtifact(t *testing.T, dir, source, version, artifactPath,
 	manifest := &pluginmanifestv1.Manifest{
 		Source:  source,
 		Version: version,
-		Plugin:  &pluginmanifestv1.Plugin{},
+		Kind:    pluginmanifestv1.KindPlugin, Spec: &pluginmanifestv1.Spec{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -126,9 +126,7 @@ func buildV2ArchiveForArtifact(t *testing.T, dir, source, version, artifactPath,
 				SHA256: sha256hex(binaryContent),
 			},
 		},
-		Entrypoints: pluginmanifestv1.Entrypoints{
-			Plugin: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactPath},
-		},
+		Entrypoint: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactPath},
 	}
 
 	manifestBytes, err := pluginpkg.EncodeManifest(manifest)
@@ -192,22 +190,9 @@ func buildExecutableArchiveData(t *testing.T, dir, srcDirName, source, version, 
 			},
 		},
 	}
-	switch kind {
-	case pluginmanifestv1.KindPlugin:
-		manifest.Plugin = &pluginmanifestv1.Plugin{}
-		manifest.Entrypoints.Plugin = &pluginmanifestv1.Entrypoint{ArtifactPath: artPath}
-	case pluginmanifestv1.KindAuth:
-		manifest.Auth = &pluginmanifestv1.AuthMetadata{}
-		manifest.Entrypoints.Auth = &pluginmanifestv1.Entrypoint{ArtifactPath: artPath}
-	case pluginmanifestv1.KindSecrets:
-		manifest.Secrets = &pluginmanifestv1.SecretsMetadata{}
-		manifest.Entrypoints.Secrets = &pluginmanifestv1.Entrypoint{ArtifactPath: artPath}
-	case pluginmanifestv1.KindIndexedDB:
-		manifest.Datastore = &pluginmanifestv1.DatastoreMetadata{}
-		manifest.Entrypoints.Datastore = &pluginmanifestv1.Entrypoint{ArtifactPath: artPath}
-	default:
-		t.Fatalf("unsupported kind %q", kind)
-	}
+	manifest.Kind = kind
+	manifest.Spec = &pluginmanifestv1.Spec{}
+	manifest.Entrypoint = &pluginmanifestv1.Entrypoint{ArtifactPath: artPath}
 
 	manifestBytes, err := pluginpkg.EncodeManifest(manifest)
 	if err != nil {
@@ -235,16 +220,16 @@ func writeConfigYAML(t *testing.T, dir, source, version, artifactsDir string) st
 	t.Helper()
 
 	lines := []string{
-		"ui:",
-		"  disabled: true",
-		"server:",
-		"  artifactsDir: " + artifactsDir,
-		"plugins:",
-		"  alpha:",
-		"    provider:",
+		"providers:",
+		"  ui:",
+		"    disabled: true",
+		"  plugins:",
+		"    alpha:",
 		"      source:",
 		"        ref: " + source,
 		"        version: " + version,
+		"server:",
+		"  artifactsDir: " + artifactsDir,
 	}
 
 	yaml := strings.Join(lines, "\n") + "\n"
@@ -431,15 +416,15 @@ func TestSourcePluginLoadForExecution(t *testing.T) {
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	yaml := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
-		"server:",
-		"  artifactsDir: " + artifactsDir,
-		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		"plugins:",
-		"  gadget:",
-		"    provider:",
+		"  plugins:",
+		"    gadget:",
 		"      source:",
 		"        ref: " + source,
 		"        version: " + version,
+		"server:",
+		"  indexeddb: sqlite",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}, "\n") + "\n"
 
 	configPath := filepath.Join(dir, "gestalt.yaml")
@@ -493,8 +478,8 @@ func TestSourcePluginLoadForExecution(t *testing.T) {
 	if _, err := os.Stat(executablePath); err != nil {
 		t.Fatalf("executable not rehydrated at %s: %v", executablePath, err)
 	}
-	if cfg.Plugins["gadget"].Plugin.Command != executablePath {
-		t.Fatalf("plugin command = %q, want %q", cfg.Plugins["gadget"].Plugin.Command, executablePath)
+	if cfg.Providers.Plugins["gadget"].Command != executablePath {
+		t.Fatalf("plugin command = %q, want %q", cfg.Providers.Plugins["gadget"].Command, executablePath)
 	}
 }
 
@@ -531,18 +516,18 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configYAML := strings.Join([]string{
 		requiredIndexedDBConfigYAML(t, dir, filepath.Join(dir, "data.db")),
-		"secrets:",
-		"  builtin: test-secrets",
-		"auth:",
-		"  provider:",
+		"  secrets:",
+		"    source: test-secrets",
+		"  auth:",
 		"    source:",
 		"      ref: " + source,
 		"      version: " + version,
 		"      auth:",
 		"        token: secret://source-token",
-		"  config:",
-		"    clientId: managed-auth-client",
+		"    config:",
+		"      clientId: managed-auth-client",
 		"server:",
+		"  indexeddb: sqlite",
 		"  artifactsDir: " + artifactsDir,
 		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}, "\n") + "\n"
@@ -608,14 +593,14 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 		t.Fatalf("download count during locked rehydration = %d, want 1", got)
 	}
 
-	if cfg.Auth.Provider == nil {
+	if cfg.Providers.Auth == nil {
 		t.Fatal("auth provider is nil after load")
 	}
 	executablePath := resolveLockPath(artifactsDir, lock.Auth.Executable)
-	if cfg.Auth.Provider.Command != executablePath {
-		t.Fatalf("auth provider command = %q, want %q", cfg.Auth.Provider.Command, executablePath)
+	if cfg.Providers.Auth.Command != executablePath {
+		t.Fatalf("auth provider command = %q, want %q", cfg.Providers.Auth.Command, executablePath)
 	}
-	authCfg, err := config.NodeToMap(cfg.Auth.Config)
+	authCfg, err := config.NodeToMap(cfg.Providers.Auth.Config)
 	if err != nil {
 		t.Fatalf("NodeToMap(auth config): %v", err)
 	}
@@ -720,21 +705,20 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configYAML := strings.Join([]string{
 		requiredIndexedDBConfigYAML(t, dir, filepath.Join(dir, "data.db")),
-		"secrets:",
-		"  provider:",
+		"  secrets:",
 		"    source:",
 		"      ref: " + secretsSource,
 		"      version: " + secretsVersion,
-		"auth:",
-		"  provider:",
+		"  auth:",
 		"    source:",
 		"      ref: " + authSource,
 		"      version: " + authVersion,
 		"      auth:",
 		"        token: secret://source-token",
-		"  config:",
-		"    clientId: managed-auth-client",
+		"    config:",
+		"      clientId: managed-auth-client",
 		"server:",
+		"  indexeddb: sqlite",
 		"  artifactsDir: " + artifactsDir,
 		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}, "\n") + "\n"
@@ -800,23 +784,23 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 	if got := authDownloads.Load(); got != 1 {
 		t.Fatalf("auth download count = %d, want 1", got)
 	}
-	if cfg.Auth.Provider == nil || cfg.Auth.Provider.Source == nil || cfg.Auth.Provider.Source.Auth == nil {
-		t.Fatalf("auth provider source auth = %#v", cfg.Auth.Provider)
+	if cfg.Providers.Auth == nil || cfg.Providers.Auth.Source.Auth == nil {
+		t.Fatalf("auth provider source auth = %#v", cfg.Providers.Auth)
 	}
-	if cfg.Auth.Provider.Source.Auth.Token != "ghp_inline_auth_source_token" {
-		t.Fatalf("resolved auth source token = %q, want %q", cfg.Auth.Provider.Source.Auth.Token, "ghp_inline_auth_source_token")
+	if cfg.Providers.Auth.Source.Auth.Token != "ghp_inline_auth_source_token" {
+		t.Fatalf("resolved auth source token = %q, want %q", cfg.Providers.Auth.Source.Auth.Token, "ghp_inline_auth_source_token")
 	}
 
 	secretsExecutablePath := resolveLockPath(artifactsDir, lock.Secrets.Executable)
-	if cfg.Secrets.Provider == nil {
+	if cfg.Providers.Secrets == nil {
 		t.Fatal("secrets provider is nil after load")
 	}
-	if cfg.Secrets.Provider.Command != secretsExecutablePath {
-		t.Fatalf("secrets provider command = %q, want %q", cfg.Secrets.Provider.Command, secretsExecutablePath)
+	if cfg.Providers.Secrets.Command != secretsExecutablePath {
+		t.Fatalf("secrets provider command = %q, want %q", cfg.Providers.Secrets.Command, secretsExecutablePath)
 	}
 	authExecutablePath := resolveLockPath(artifactsDir, lock.Auth.Executable)
-	if cfg.Auth.Provider.Command != authExecutablePath {
-		t.Fatalf("auth provider command = %q, want %q", cfg.Auth.Provider.Command, authExecutablePath)
+	if cfg.Providers.Auth.Command != authExecutablePath {
+		t.Fatalf("auth provider command = %q, want %q", cfg.Providers.Auth.Command, authExecutablePath)
 	}
 }
 
@@ -895,17 +879,17 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
-		"server:",
-		"  artifactsDir: " + artifactsDir,
-		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-		"plugins:",
-		"  alpha:",
-		"    provider:",
+		"  plugins:",
+		"    alpha:",
 		"      source:",
 		"        ref: " + testSource,
 		"        version: " + testVersion,
 		"        auth:",
 		"          token: test-token",
+		"server:",
+		"  indexeddb: sqlite",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}, "\n") + "\n"
 	configPath := filepath.Join(dir, "gestalt.yaml")
 	if err := os.WriteFile(configPath, []byte(configYAML), 0644); err != nil {
@@ -1008,7 +992,7 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 	if got := assetCount.Load() - assetsBefore; got != 1 {
 		t.Errorf("asset request count during locked load = %d, want 1", got)
 	}
-	if cfg.Plugins["alpha"].Plugin.Command != executablePath {
-		t.Errorf("plugin command = %q, want %q", cfg.Plugins["alpha"].Plugin.Command, executablePath)
+	if cfg.Providers.Plugins["alpha"].Command != executablePath {
+		t.Errorf("plugin command = %q, want %q", cfg.Providers.Plugins["alpha"].Command, executablePath)
 	}
 }

@@ -20,11 +20,9 @@ func TestBootstrapSkippedProviderLogsWarning(t *testing.T) { //nolint:parallelte
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
 	cfg := validConfig()
-	cfg.Plugins = map[string]config.PluginDef{
+	cfg.Providers.Plugins = map[string]*config.ProviderEntry{
 		"broken": {
-			Plugin: &config.ProviderDef{
-				Source: &config.PluginSourceDef{Path: "./manifest.yaml"},
-			},
+			Source: config.ProviderSource{Path: "./manifest.yaml"},
 		},
 	}
 

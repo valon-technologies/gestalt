@@ -1,5 +1,6 @@
+kind: indexeddb
 source: github.com/valon-technologies/gestalt/provider-rust-datastore
 version: 0.0.1-alpha.1
 displayName: Example Rust Datastore Provider
 description: A minimal Rust datastore provider built with the public Rust SDK
-datastore: {}
+spec: {}

@@ -161,18 +161,18 @@ func (s *Server) revokeAllAPITokens(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) integrationConnectionInfos(name string, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo) []connectionDefInfo {
-	intg, ok := s.pluginDefs[name]
-	if !ok || intg.Plugin == nil {
-		return []connectionDefInfo{}
+	entry, ok := s.pluginDefs[name]
+	if !ok || entry == nil {
+		return nil
 	}
-	return s.connectionInfosForPlugin(name, intg.Plugin, integrationAuthTypes, defaultCredentialFields)
+	return s.connectionInfosForPlugin(name, entry, integrationAuthTypes, defaultCredentialFields)
 }
 
-func (s *Server) connectionInfosForPlugin(integration string, plugin *config.ProviderDef, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo) []connectionDefInfo {
+func (s *Server) connectionInfosForPlugin(integration string, plugin *config.ProviderEntry, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo) []connectionDefInfo {
 	if plugin == nil {
 		return []connectionDefInfo{}
 	}
-	manifestProvider := plugin.ManifestPlugin()
+	manifestProvider := plugin.ManifestSpec()
 
 	infos := make([]connectionDefInfo, 0, len(plugin.Connections)+1)
 	if info, ok := s.connectionInfoFromAuth(integration, config.PluginConnectionAlias, config.EffectivePluginConnectionDef(plugin, manifestProvider).Auth, integrationAuthTypes, defaultCredentialFields); ok {

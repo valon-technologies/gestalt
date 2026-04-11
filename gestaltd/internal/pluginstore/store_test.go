@@ -303,9 +303,10 @@ func mustBuildPluginDir(t *testing.T, dir, source, version, content, schema stri
 	}
 
 	manifest := &pluginmanifestv1.Manifest{
+		Kind:    pluginmanifestv1.KindPlugin,
 		Source:  source,
 		Version: version,
-		Plugin: &pluginmanifestv1.Plugin{
+		Spec: &pluginmanifestv1.Spec{
 			ConfigSchemaPath: schemaPath,
 		},
 		Artifacts: []pluginmanifestv1.Artifact{
@@ -316,10 +317,8 @@ func mustBuildPluginDir(t *testing.T, dir, source, version, content, schema stri
 				SHA256: digest,
 			},
 		},
-		Entrypoints: pluginmanifestv1.Entrypoints{
-			Plugin: &pluginmanifestv1.Entrypoint{
-				ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider")),
-			},
+		Entrypoint: &pluginmanifestv1.Entrypoint{
+			ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider")),
 		},
 	}
 	manifestBytes, err := pluginpkg.EncodeManifest(manifest)
@@ -347,9 +346,10 @@ func mustBuildPluginDirWithDigest(t *testing.T, dir, source, version, content, d
 	}
 
 	manifest := &pluginmanifestv1.Manifest{
+		Kind:    pluginmanifestv1.KindPlugin,
 		Source:  source,
 		Version: version,
-		Plugin:  &pluginmanifestv1.Plugin{},
+		Spec:    &pluginmanifestv1.Spec{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -358,10 +358,8 @@ func mustBuildPluginDirWithDigest(t *testing.T, dir, source, version, content, d
 				SHA256: digestOverride,
 			},
 		},
-		Entrypoints: pluginmanifestv1.Entrypoints{
-			Plugin: &pluginmanifestv1.Entrypoint{
-				ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider")),
-			},
+		Entrypoint: &pluginmanifestv1.Entrypoint{
+			ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider")),
 		},
 	}
 	manifestBytes, err := pluginpkg.EncodeManifest(manifest)
@@ -399,9 +397,10 @@ func mustBuildPackageWithDigest(t *testing.T, dir, source, version, content, dig
 		digest = digestOverride
 	}
 	manifest := &pluginmanifestv1.Manifest{
+		Kind:    pluginmanifestv1.KindPlugin,
 		Source:  source,
 		Version: version,
-		Plugin:  &pluginmanifestv1.Plugin{},
+		Spec:    &pluginmanifestv1.Spec{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -410,10 +409,8 @@ func mustBuildPackageWithDigest(t *testing.T, dir, source, version, content, dig
 				SHA256: digest,
 			},
 		},
-		Entrypoints: pluginmanifestv1.Entrypoints{
-			Plugin: &pluginmanifestv1.Entrypoint{
-				ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider")),
-			},
+		Entrypoint: &pluginmanifestv1.Entrypoint{
+			ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider")),
 		},
 	}
 	manifestBytes, err := pluginpkg.EncodeManifest(manifest)
@@ -438,9 +435,10 @@ func mustBuildMismatchPackage(t *testing.T, dir, source, version, content, diges
 	t.Helper()
 
 	manifest := &pluginmanifestv1.Manifest{
+		Kind:    pluginmanifestv1.KindPlugin,
 		Source:  source,
 		Version: version,
-		Plugin:  &pluginmanifestv1.Plugin{},
+		Spec:    &pluginmanifestv1.Spec{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -449,10 +447,8 @@ func mustBuildMismatchPackage(t *testing.T, dir, source, version, content, diges
 				SHA256: digest,
 			},
 		},
-		Entrypoints: pluginmanifestv1.Entrypoints{
-			Plugin: &pluginmanifestv1.Entrypoint{
-				ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider")),
-			},
+		Entrypoint: &pluginmanifestv1.Entrypoint{
+			ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider")),
 		},
 	}
 	manifestBytes, err := pluginpkg.EncodeManifest(manifest)
@@ -499,9 +495,10 @@ func mustBuildPackageWithDuplicateArtifact(t *testing.T, dir, source, version, f
 	artifactName := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider"))
 	sum := sha256.Sum256([]byte(firstContent))
 	manifest := &pluginmanifestv1.Manifest{
+		Kind:    pluginmanifestv1.KindPlugin,
 		Source:  source,
 		Version: version,
-		Plugin:  &pluginmanifestv1.Plugin{},
+		Spec:    &pluginmanifestv1.Spec{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -510,10 +507,8 @@ func mustBuildPackageWithDuplicateArtifact(t *testing.T, dir, source, version, f
 				SHA256: hex.EncodeToString(sum[:]),
 			},
 		},
-		Entrypoints: pluginmanifestv1.Entrypoints{
-			Plugin: &pluginmanifestv1.Entrypoint{
-				ArtifactPath: artifactName,
-			},
+		Entrypoint: &pluginmanifestv1.Entrypoint{
+			ArtifactPath: artifactName,
 		},
 	}
 	manifestBytes, err := pluginpkg.EncodeManifest(manifest)
@@ -559,9 +554,10 @@ func newV2Manifest(source, version, content string) *pluginmanifestv1.Manifest {
 	artifactPath := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider"))
 	sum := sha256.Sum256([]byte(content))
 	return &pluginmanifestv1.Manifest{
+		Kind:    pluginmanifestv1.KindPlugin,
 		Source:  source,
 		Version: version,
-		Plugin:  &pluginmanifestv1.Plugin{},
+		Spec:    &pluginmanifestv1.Spec{},
 		Artifacts: []pluginmanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
@@ -570,10 +566,8 @@ func newV2Manifest(source, version, content string) *pluginmanifestv1.Manifest {
 				SHA256: hex.EncodeToString(sum[:]),
 			},
 		},
-		Entrypoints: pluginmanifestv1.Entrypoints{
-			Plugin: &pluginmanifestv1.Entrypoint{
-				ArtifactPath: artifactPath,
-			},
+		Entrypoint: &pluginmanifestv1.Entrypoint{
+			ArtifactPath: artifactPath,
 		},
 	}
 }

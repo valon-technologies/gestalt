@@ -19,10 +19,7 @@ type componentRuntimeConfig struct {
 	Config       yaml.Node         `yaml:"config,omitempty"`
 }
 
-func sanitizeRuntimeSource(src *PluginSourceDef) *PluginSourceDef {
-	if src == nil {
-		return nil
-	}
+func sanitizeRuntimeSource(src ProviderSource) *PluginSourceDef {
 	return &PluginSourceDef{
 		Path:    src.Path,
 		Ref:     src.Ref,
@@ -30,19 +27,19 @@ func sanitizeRuntimeSource(src *PluginSourceDef) *PluginSourceDef {
 	}
 }
 
-func BuildComponentRuntimeConfigNode(name, kind string, provider *ProviderDef, providerConfig yaml.Node) (yaml.Node, error) {
-	if provider == nil {
+func BuildComponentRuntimeConfigNode(name, kind string, entry *ProviderEntry, providerConfig yaml.Node) (yaml.Node, error) {
+	if entry == nil {
 		return yaml.Node{}, fmt.Errorf("%s %q provider is required", kind, name)
 	}
 	node := componentRuntimeConfig{
 		Name:         name,
-		Source:       sanitizeRuntimeSource(provider.Source),
-		Command:      provider.Command,
-		Args:         append([]string(nil), provider.Args...),
-		Env:          provider.Env,
-		AllowedHosts: provider.AllowedHosts,
-		HostBinary:   provider.HostBinary,
-		ManifestPath: provider.ResolvedManifestPath,
+		Source:       sanitizeRuntimeSource(entry.Source),
+		Command:      entry.Command,
+		Args:         append([]string(nil), entry.Args...),
+		Env:          entry.Env,
+		AllowedHosts: entry.AllowedHosts,
+		HostBinary:   entry.HostBinary,
+		ManifestPath: entry.ResolvedManifestPath,
 		Config:       providerConfig,
 	}
 	data, err := yaml.Marshal(node)

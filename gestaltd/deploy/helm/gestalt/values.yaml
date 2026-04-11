@@ -89,21 +89,21 @@ config:
     # Set it to your public HTTPS URL when auth callbacks or external
     # integrations need it.
     # baseUrl: "${GESTALT_BASE_URL}"
-  datastores:
-    main:
-      # SQLite is appropriate for local development or single-instance
-      # deployments with mounted persistent storage at /data.
-      provider:
+    indexeddb: main
+  providers:
+    indexeddbs:
+      main:
+        # SQLite is appropriate for local development or single-instance
+        # deployments with mounted persistent storage at /data.
         source:
           ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
           version: 0.0.1-alpha.2
-      config:
-        dsn: "sqlite:///data/gestalt.db"
-  datastore: main
-  # Keep the default chart profile self-contained. Set this to a managed
-  # provider source when you want a public web UI.
-  ui:
-    disabled: true
+        config:
+          dsn: "sqlite:///data/gestalt.db"
+    # Keep the default chart profile self-contained. Set this to a managed
+    # provider source when you want a public web UI.
+    ui:
+      disabled: true
 
 # Extra environment variables for the container. These are only required
 # when your config uses ${VAR} placeholders for auth, baseUrl, or

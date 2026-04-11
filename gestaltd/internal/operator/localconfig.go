@@ -60,51 +60,49 @@ func GenerateDefaultConfig(configDir string) (string, error) {
 }
 
 func defaultManagedConfig(dbPath, encryptionKey string) string {
-	return fmt.Sprintf(`indexeddbs:
-  main:
-    provider:
-      source:
-        ref: %s
-        version: %s
-    config:
-      dsn: %q
-indexeddb: main
-secrets:
-  builtin: env
-server:
+	return fmt.Sprintf(`server:
   public:
     port: 8080
   encryptionKey: %q
-plugins:
-  httpbin:
-    displayName: HTTPBin
-    provider:
+  indexeddb: main
+providers:
+  indexeddbs:
+    main:
+      source:
+        ref: %s
+        version: %s
+      config:
+        dsn: %q
+  secrets:
+    source: env
+  plugins:
+    httpbin:
+      displayName: HTTPBin
       source:
         ref: %s
         version: %s
       allowedHosts:
         - httpbin.org
-`, config.DefaultIndexedDBProvider, config.DefaultIndexedDBVersion, "sqlite://"+dbPath, encryptionKey, defaultHTTPBinProvider, defaultHTTPBinVersion)
+`, encryptionKey, config.DefaultIndexedDBProvider, config.DefaultIndexedDBVersion, "sqlite://"+dbPath, defaultHTTPBinProvider, defaultHTTPBinVersion)
 }
 
 func defaultLocalSourceConfig(providersDir, dbPath, encryptionKey string) string {
-	return fmt.Sprintf(`indexeddbs:
-  main:
-    provider:
-      source:
-        path: %q
-    config:
-      dsn: %q
-indexeddb: main
-ui:
-  provider:
-    source:
-      path: %q
-secrets:
-  builtin: env
-server:
+	return fmt.Sprintf(`server:
   public:
     port: 8080
   encryptionKey: %q
-`, filepath.Join(providersDir, "indexeddb", "relationaldb", "manifest.yaml"), "sqlite://"+dbPath, filepath.Join(providersDir, "web", "default", "manifest.yaml"), encryptionKey)
+  indexeddb: main
+providers:
+  indexeddbs:
+    main:
+      source:
+        path: %q
+      config:
+        dsn: %q
+  ui:
+    source:
+      path: %q
+  secrets:
+    source: env
+`, encryptionKey, filepath.Join(providersDir, "indexeddb", "relationaldb", "manifest.yaml"), "sqlite://"+dbPath, filepath.Join(providersDir, "web", "default", "manifest.yaml"))
 }

@@ -357,15 +357,15 @@ func discoveryCandidateInfos(candidates []core.DiscoveryCandidate) []discoveryCa
 }
 
 func (s *Server) effectiveConnectionAuth(integration, connection string) config.ConnectionAuthDef {
-	intg, ok := s.pluginDefs[integration]
-	if !ok || intg.Plugin == nil {
+	entry, ok := s.pluginDefs[integration]
+	if !ok || entry == nil {
 		return config.ConnectionAuthDef{}
 	}
-	manifestProvider := intg.Plugin.ManifestPlugin()
+	manifestProvider := entry.ManifestSpec()
 	if connection == config.PluginConnectionName {
-		return config.EffectivePluginConnectionDef(intg.Plugin, manifestProvider).Auth
+		return config.EffectivePluginConnectionDef(entry, manifestProvider).Auth
 	}
-	conn, ok := config.EffectiveNamedConnectionDef(intg.Plugin, manifestProvider, connection)
+	conn, ok := config.EffectiveNamedConnectionDef(entry, manifestProvider, connection)
 	if !ok {
 		return config.ConnectionAuthDef{}
 	}
