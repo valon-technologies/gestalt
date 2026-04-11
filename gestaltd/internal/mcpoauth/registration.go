@@ -52,7 +52,8 @@ func RegisterClient(ctx context.Context, endpoint, redirectURI, clientName, toke
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{Timeout: discoveryTimeout}
+	client, closeIdleConnections := newHTTPClient(discoveryTimeout)
+	defer closeIdleConnections()
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("sending DCR request to %s: %w", endpoint, err)

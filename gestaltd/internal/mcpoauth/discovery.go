@@ -66,7 +66,8 @@ func (m *DiscoveredMetadata) PreferredAuthMethod() string {
 // RFC 9728 indirection (authorization_servers) and servers that embed
 // endpoints directly in resource metadata (ClickHouse).
 func Discover(ctx context.Context, mcpURL string) (*DiscoveredMetadata, error) {
-	client := &http.Client{Timeout: discoveryTimeout}
+	client, closeIdleConnections := newHTTPClient(discoveryTimeout)
+	defer closeIdleConnections()
 
 	resourceMetadataURL, err := probeForResourceMetadata(ctx, client, mcpURL)
 	if err != nil {
