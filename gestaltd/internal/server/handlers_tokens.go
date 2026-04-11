@@ -165,17 +165,17 @@ func (s *Server) integrationConnectionInfos(name string, integrationAuthTypes []
 	if !ok || intg.Plugin == nil {
 		return []connectionDefInfo{}
 	}
-	return connectionInfosForPlugin(intg.Plugin, integrationAuthTypes, defaultCredentialFields)
+	return s.connectionInfosForPlugin(name, intg.Plugin, integrationAuthTypes, defaultCredentialFields)
 }
 
-func connectionInfosForPlugin(plugin *config.ProviderDef, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo) []connectionDefInfo {
+func (s *Server) connectionInfosForPlugin(integration string, plugin *config.ProviderDef, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo) []connectionDefInfo {
 	if plugin == nil {
 		return []connectionDefInfo{}
 	}
 	manifestProvider := plugin.ManifestPlugin()
 
 	infos := make([]connectionDefInfo, 0, len(plugin.Connections)+1)
-	if info, ok := connectionInfoFromAuth(config.PluginConnectionAlias, config.EffectivePluginConnectionDef(plugin, manifestProvider).Auth, integrationAuthTypes, defaultCredentialFields); ok {
+	if info, ok := s.connectionInfoFromAuth(integration, config.PluginConnectionAlias, config.EffectivePluginConnectionDef(plugin, manifestProvider).Auth, integrationAuthTypes, defaultCredentialFields); ok {
 		infos = append(infos, info)
 	}
 
@@ -207,7 +207,7 @@ func connectionInfosForPlugin(plugin *config.ProviderDef, integrationAuthTypes [
 		if !ok {
 			continue
 		}
-		if info, ok := connectionInfoFromAuth(name, conn.Auth, integrationAuthTypes, defaultCredentialFields); ok {
+		if info, ok := s.connectionInfoFromAuth(integration, name, conn.Auth, integrationAuthTypes, defaultCredentialFields); ok {
 			infos = append(infos, info)
 		}
 	}
@@ -259,8 +259,9 @@ func credentialFieldInfos[T any](fields []T, mapField func(T) credentialFieldInf
 	return infos
 }
 
-func connectionInfoFromAuth(name string, auth config.ConnectionAuthDef, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo) (connectionDefInfo, bool) {
+func (s *Server) connectionInfoFromAuth(integration, name string, auth config.ConnectionAuthDef, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo) (connectionDefInfo, bool) {
 	authTypes := connectionAuthTypes(auth.Type, integrationAuthTypes)
+	authTypes = s.supportedConnectionAuthTypes(integration, name, authTypes)
 	if len(authTypes) == 0 {
 		return connectionDefInfo{}, false
 	}
@@ -282,6 +283,32 @@ func connectionInfoFromAuth(name string, auth config.ConnectionAuthDef, integrat
 		info.CredentialFields = append([]credentialFieldInfo(nil), defaultCredentialFields...)
 	}
 	return info, true
+}
+
+func (s *Server) supportedConnectionAuthTypes(integration, connection string, authTypes []string) []string {
+	if !authTypesContain(authTypes, "oauth") || s.connectionAuth == nil {
+		return authTypes
+	}
+
+	connMap := s.connectionAuth()[integration]
+	if connMap == nil {
+		return removeAuthType(authTypes, "oauth")
+	}
+
+	if _, ok := connMap[config.ResolveConnectionAlias(connection)]; ok {
+		return authTypes
+	}
+	return removeAuthType(authTypes, "oauth")
+}
+
+func removeAuthType(authTypes []string, drop string) []string {
+	filtered := make([]string, 0, len(authTypes))
+	for _, authType := range authTypes {
+		if authType != drop {
+			filtered = append(filtered, authType)
+		}
+	}
+	return filtered
 }
 
 func authTypesFromConnections(connections []connectionDefInfo) []string {

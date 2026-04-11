@@ -389,4 +389,86 @@ func TestMCPOAuthFlow(t *testing.T) {
 			t.Fatalf("re-registered client_id = %q, want client-002", parsed3.Query().Get("client_id"))
 		}
 	})
+
+	t.Run("IsolatedFromDefaultTransportCloseIdleConnections", func(t *testing.T) {
+		t.Parallel()
+
+		mux := http.NewServeMux()
+		mux.HandleFunc("POST /mcp", func(w http.ResponseWriter, r *http.Request) {
+			baseURL := "http://" + r.Host
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf(
+				`Bearer resource_metadata="%s/.well-known/oauth-protected-resource/mcp"`, baseURL))
+			w.WriteHeader(http.StatusUnauthorized)
+		})
+		mux.HandleFunc("GET /.well-known/oauth-protected-resource/mcp", func(w http.ResponseWriter, r *http.Request) {
+			baseURL := "http://" + r.Host
+			writeJSON(w, 0, map[string]any{
+				"resource":              baseURL + "/mcp",
+				"authorization_servers": []string{baseURL},
+			})
+		})
+		mux.HandleFunc("GET /.well-known/oauth-authorization-server", func(w http.ResponseWriter, r *http.Request) {
+			baseURL := "http://" + r.Host
+			writeJSON(w, 0, map[string]any{
+				"issuer":                                baseURL,
+				"authorization_endpoint":                baseURL + "/oauth/authorize",
+				"token_endpoint":                        baseURL + "/oauth/token",
+				"registration_endpoint":                 baseURL + "/oauth/register",
+				"code_challenge_methods_supported":      []string{"S256"},
+				"token_endpoint_auth_methods_supported": []string{"none"},
+			})
+		})
+		mux.HandleFunc("POST /oauth/register", func(w http.ResponseWriter, _ *http.Request) {
+			writeJSON(w, http.StatusCreated, map[string]any{"client_id": "client-001"})
+		})
+
+		srv := httptest.NewServer(mux)
+		testutil.CloseOnCleanup(t, srv)
+
+		handler := mcpoauth.NewHandler(mcpoauth.HandlerConfig{
+			MCPURL:      srv.URL + "/mcp",
+			RedirectURL: "http://localhost:9999/callback",
+		})
+
+		defaultTransport, ok := http.DefaultTransport.(*http.Transport)
+		if !ok {
+			t.Fatalf("http.DefaultTransport = %T, want *http.Transport", http.DefaultTransport)
+		}
+
+		stop := make(chan struct{})
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+					defaultTransport.CloseIdleConnections()
+				}
+			}
+		}()
+		t.Cleanup(func() {
+			close(stop)
+			<-done
+		})
+
+		for i := range 5 {
+			authURL, verifier := handler.StartOAuth(fmt.Sprintf("s%d", i+1), nil)
+			if authURL == "" {
+				t.Fatalf("StartOAuth #%d returned empty authURL", i+1)
+			}
+			if verifier == "" {
+				t.Fatalf("StartOAuth #%d returned empty verifier", i+1)
+			}
+			parsed, err := url.Parse(authURL)
+			if err != nil {
+				t.Fatalf("parse auth URL #%d: %v", i+1, err)
+			}
+			if parsed.Query().Get("client_id") != "client-001" {
+				t.Fatalf("client_id #%d = %q, want client-001", i+1, parsed.Query().Get("client_id"))
+			}
+			handler.ClearRegistration()
+		}
+	})
 }

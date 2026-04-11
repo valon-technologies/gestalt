@@ -175,7 +175,7 @@ func (u *Upstream) connect(ctx context.Context, token string) (mcpclient.MCPClie
 		return u.client, nil
 	}
 
-	baseTransport := cloneDefaultTransport()
+	baseTransport := egress.CloneDefaultTransport()
 	httpClient := &http.Client{
 		Timeout:   httpTimeout,
 		Transport: egress.NewResolvingRoundTripper(baseTransport, u.resolver),
@@ -213,13 +213,6 @@ func (u *Upstream) connect(ctx context.Context, token string) (mcpclient.MCPClie
 	}
 
 	return &managedMCPClient{MCPClient: client, onClose: closeIdleConnections}, nil
-}
-
-func cloneDefaultTransport() *http.Transport {
-	if transport, ok := http.DefaultTransport.(*http.Transport); ok {
-		return transport.Clone()
-	}
-	return &http.Transport{}
 }
 
 func (u *Upstream) discover(ctx context.Context, token string) (*catalog.Catalog, error) {
