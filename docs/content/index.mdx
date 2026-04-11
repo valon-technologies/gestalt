@@ -2,9 +2,9 @@ import { Cards, Callout } from 'nextra/components'
 
 # Gestalt
 
-Gestalt is a self-hostable integration platform. A single YAML config defines
-how users authenticate, how upstream APIs are connected, and which tools are
-exposed through the HTTP API, web UI, and `/mcp`.
+Gestalt is a self-hostable, open source platform for managing agentic tools
+and services, with declarative configuration and secure credential management
+built in.
 
 <Callout type="warning">
   **Alpha.** Gestalt is under active development. APIs and
@@ -12,29 +12,45 @@ exposed through the HTTP API, web UI, and `/mcp`.
   welcome via [GitHub Issues](https://github.com/valon-technologies/gestalt/issues).
 </Callout>
 
-## How it works
+## Why Gestalt
 
-You define plugins in a YAML config, connect users or shared identities to upstream systems through OAuth or manual auth, then invoke the same catalog through the browser, HTTP API, CLI, or MCP. Auth providers, datastore providers, and plugins all run as providers with the same runtime model, whether they come from a local source tree or a published package.
+Agents need tools. Tools need auth. Auth needs credential storage, encryption, token refresh, and scoped access control. Every team building with agents ends up solving the same infrastructure problems before they can ship.
+
+Gestalt handles this so individual agents and applications don't have to. A single YAML config declares which tools to expose, how users authenticate, and how credentials are managed. The platform takes care of the rest.
+
+## What Gestalt provides
+
+- **[Declarative tool configuration.](/configuration)** Add a tool by declaring it in YAML. Gestalt resolves the provider package, sets up connections, and exposes operations automatically.
+- **[Secure credential management.](/security)** Connect to upstream APIs through OAuth, API keys, or custom credentials. Gestalt encrypts, stores, and refreshes tokens automatically so agents never handle raw secrets.
+- **[One definition, all harnesses.](/reference/http-api)** Define tools once and access them over MCP, HTTP, CLI across local and cloud environments, using any harness.
+- **[Pluggable infrastructure.](/reference/built-in-providers)** Swap your database, identity provider, or secret manager without changing application code. Auth backends, datastores, and the web UI are all replaceable.
+- **[Run anywhere.](/deploy)** Deploy on any infrastructure you control with Docker, Helm, or bare containers. No hosted dependency, no vendor lock-in.
+
+## What Gestalt is not
+
+Gestalt is not a SaaS platform. There is no hosted version. It runs on your infrastructure, and you control the data, the credentials, and the deployment.
+
+Gestalt does not replace your existing APIs. It sits between agents and upstream services, handling auth and credential lifecycle. Your APIs stay where they are.
 
 ## Start here
 
 <Cards>
   <Cards.Card title="Getting Started" href="/getting-started">
-    Run Gestalt locally, invoke a sample plugin, and verify the core flow.
+    Run Gestalt locally, add a plugin, and invoke an operation in five minutes.
   </Cards.Card>
   <Cards.Card title="Configuration" href="/configuration">
-    Learn the configuration model, plugin setup, auth, connections, and MCP.
+    The config model, plugin setup, auth, connections, and MCP.
   </Cards.Card>
   <Cards.Card title="Providers" href="/providers">
-    Write, release, and configure providers for plugins, auth, datastores, and custom UIs.
+    Plugins, auth backends, datastores, and custom UIs as provider packages.
   </Cards.Card>
   <Cards.Card title="Security" href="/security">
-    Review trust boundaries, encryption, headers, and token handling.
+    Trust boundaries, encryption, headers, and token handling.
   </Cards.Card>
   <Cards.Card title="Deploy" href="/deploy">
-    Ship Gestalt to the cloud provider of your choice.
+    Docker, Helm, and production deployment patterns.
   </Cards.Card>
   <Cards.Card title="Reference" href="/reference/config-file">
-    Look up exact config syntax, manifest fields, API routes, and CLI commands.
+    Config syntax, manifest fields, API routes, and CLI commands.
   </Cards.Card>
 </Cards>

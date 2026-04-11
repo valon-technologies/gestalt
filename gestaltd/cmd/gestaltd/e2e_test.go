@@ -224,7 +224,7 @@ func setupAuthProviderDir(t *testing.T, baseDir, name string) string {
 	if err := os.MkdirAll(filepath.Dir(artifactPath), 0o755); err != nil {
 		t.Fatalf("MkdirAll(%s): %v", filepath.Dir(artifactPath), err)
 	}
-	if _, err := pluginpkg.BuildSourceComponentReleaseBinary(providerDir, artifactPath, pluginmanifestv1.KindAuth, runtime.GOOS, runtime.GOARCH, ""); err != nil {
+	if _, err := pluginpkg.BuildSourceComponentReleaseBinary(providerDir, artifactPath, pluginmanifestv1.KindAuth, runtime.GOOS, runtime.GOARCH); err != nil {
 		t.Fatalf("BuildSourceComponentReleaseBinary(%s): %v", providerDir, err)
 	}
 	writeManifestFile(t, providerDir, &pluginmanifestv1.Manifest{

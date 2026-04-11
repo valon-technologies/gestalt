@@ -186,9 +186,6 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 			if err := validateRelativePackagePath(artifact.Path, "artifact path"); err != nil {
 				return err
 			}
-			if _, err := NormalizeArtifactLibC(artifact.OS, artifact.LibC); err != nil {
-				return err
-			}
 			if artifact.SHA256 == "" && !sourceMode {
 				return fmt.Errorf("artifact %s sha256 is required", artifact.Path)
 			}
@@ -197,7 +194,7 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 			}
 			artifactPaths[artifact.Path] = struct{}{}
 
-			key := PlatformString(artifact.OS, artifact.Arch, artifact.LibC)
+			key := PlatformString(artifact.OS, artifact.Arch)
 			if _, exists := artifactPlatforms[key]; exists {
 				return fmt.Errorf("duplicate artifact platform %q", key)
 			}
@@ -304,46 +301,14 @@ func validateManifest(manifest *pluginmanifestv1.Manifest, sourceMode bool) erro
 	return nil
 }
 
-func CurrentPlatformArtifact(manifest *pluginmanifestv1.Manifest, runtimeLibC string) (*pluginmanifestv1.Artifact, error) {
+func CurrentPlatformArtifact(manifest *pluginmanifestv1.Manifest) (*pluginmanifestv1.Artifact, error) {
 	if manifest == nil {
 		return nil, fmt.Errorf("manifest is required")
 	}
-	currentLibC := runtimeLibC
-	var generic *pluginmanifestv1.Artifact
-	var muslSpecific *pluginmanifestv1.Artifact
-	libcSpecific := make([]*pluginmanifestv1.Artifact, 0, 2)
-	for _, artifact := range manifest.Artifacts {
-		if artifact.OS != runtime.GOOS || artifact.Arch != runtime.GOARCH {
-			continue
-		}
-		switch {
-		case runtime.GOOS == "linux" && currentLibC != "" && artifact.LibC == currentLibC:
-			artifact := artifact
-			return &artifact, nil
-		case runtime.GOOS == "linux" && currentLibC == "" && artifact.LibC != "":
-			artifact := artifact
-			if artifact.LibC == LinuxLibCMusl {
-				muslSpecific = &artifact
-			}
-			libcSpecific = append(libcSpecific, &artifact)
-		case artifact.LibC == "":
-			artifact := artifact
-			generic = &artifact
-		}
-	}
-	if generic != nil {
-		return generic, nil
-	}
-	if runtime.GOOS == "linux" && currentLibC == "" {
-		if muslSpecific != nil {
-			return muslSpecific, nil
-		}
-		switch len(libcSpecific) {
-		case 1:
-			return libcSpecific[0], nil
-		case 0:
-		default:
-			return nil, fmt.Errorf("multiple artifacts for current platform %s/%s", runtime.GOOS, runtime.GOARCH)
+	for i := range manifest.Artifacts {
+		a := &manifest.Artifacts[i]
+		if a.OS == runtime.GOOS && a.Arch == runtime.GOARCH {
+			return a, nil
 		}
 	}
 	return nil, fmt.Errorf("no artifact for current platform %s/%s", runtime.GOOS, runtime.GOARCH)

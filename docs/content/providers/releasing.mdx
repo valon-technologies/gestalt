@@ -156,7 +156,7 @@ entrypoints:
 artifacts:
   - os: linux
     arch: amd64
-    libc: glibc
+    libc: musl
     path: artifacts/linux/amd64/provider
     sha256: "..."
 ```
@@ -192,9 +192,7 @@ For executable Go, Rust, Python, and TypeScript source providers,
 the host-platform artifact by default. Go, Rust, and TypeScript auth/datastore
 source packages use the same release flow without catalog generation. Pass
 `--platform` with a comma-separated list such as
-`--platform linux/amd64,darwin/arm64` to build explicit targets, or
-`--platform linux/amd64/glibc,linux/amd64/musl,darwin/arm64` when you need
-Linux libc variants. Pass `--platform all` in CI release jobs to build the
+`--platform linux/amd64,darwin/arm64` to build explicit targets. Pass `--platform all` in CI release jobs to build the
 full supported platform matrix for source builds.
 
 For non-host Python targets, point Gestalt at a matching interpreter with

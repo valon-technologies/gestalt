@@ -363,7 +363,6 @@ server:
 	}
 }
 
-
 func TestLoadSucceedsWithoutRuntimeFields(t *testing.T) {
 	t.Parallel()
 

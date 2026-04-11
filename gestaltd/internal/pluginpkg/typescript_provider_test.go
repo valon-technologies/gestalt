@@ -386,7 +386,7 @@ func TestValidateSourceProviderRelease_TypeScript(t *testing.T) {
 	bunPath := writeFakeTypeScriptBun(t, root, "ts-release", typeScriptTestPluginTarget, runtime.GOOS, runtime.GOARCH)
 	t.Setenv(typeScriptBunEnvVar, bunPath)
 
-	if err := ValidateSourceProviderRelease(root, runtime.GOOS, runtime.GOARCH, ""); err != nil {
+	if err := ValidateSourceProviderRelease(root, runtime.GOOS, runtime.GOARCH); err != nil {
 		t.Fatalf("ValidateSourceProviderRelease: %v", err)
 	}
 }
@@ -416,7 +416,7 @@ func TestValidateSourceComponentRelease_TypeScript(t *testing.T) {
 			bunPath := writeFakeTypeScriptBun(t, root, "ts-release", tt.target, runtime.GOOS, runtime.GOARCH)
 			t.Setenv(typeScriptBunEnvVar, bunPath)
 
-			if err := ValidateSourceComponentRelease(root, tt.kind, runtime.GOOS, runtime.GOARCH, ""); err != nil {
+			if err := ValidateSourceComponentRelease(root, tt.kind, runtime.GOOS, runtime.GOARCH); err != nil {
 				t.Fatalf("ValidateSourceComponentRelease(%q): %v", tt.kind, err)
 			}
 		})
@@ -430,7 +430,7 @@ func TestBuildSourceProviderReleaseBinary_TypeScript(t *testing.T) {
 	t.Setenv(typeScriptBunEnvVar, bunPath)
 
 	outputPath := filepath.Join(t.TempDir(), "gestalt-plugin-ts-release")
-	libc, err := BuildSourceProviderReleaseBinary(root, outputPath, "ts-release", runtime.GOOS, runtime.GOARCH, "")
+	libc, err := BuildSourceProviderReleaseBinary(root, outputPath, "ts-release", runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		t.Fatalf("BuildSourceProviderReleaseBinary: %v", err)
 	}
@@ -445,7 +445,7 @@ func TestBuildSourceProviderReleaseBinary_TypeScript(t *testing.T) {
 
 	wantLibC := ""
 	if runtime.GOOS == "linux" {
-		wantLibC = CurrentRuntimeLibC()
+		wantLibC = ""
 	}
 	if libc != wantLibC {
 		t.Fatalf("libc = %q, want %q", libc, wantLibC)
@@ -482,7 +482,7 @@ func TestBuildSourceComponentReleaseBinary_TypeScript(t *testing.T) {
 			t.Setenv(typeScriptBunEnvVar, bunPath)
 
 			outputPath := filepath.Join(t.TempDir(), "gestalt-plugin-"+tt.pluginName)
-			libc, err := BuildSourceComponentReleaseBinary(root, outputPath, tt.kind, runtime.GOOS, runtime.GOARCH, "")
+			libc, err := BuildSourceComponentReleaseBinary(root, outputPath, tt.kind, runtime.GOOS, runtime.GOARCH)
 			if err != nil {
 				t.Fatalf("BuildSourceComponentReleaseBinary(%q): %v", tt.kind, err)
 			}
@@ -497,7 +497,7 @@ func TestBuildSourceComponentReleaseBinary_TypeScript(t *testing.T) {
 
 			wantLibC := ""
 			if runtime.GOOS == "linux" {
-				wantLibC = CurrentRuntimeLibC()
+				wantLibC = ""
 			}
 			if libc != wantLibC {
 				t.Fatalf("libc = %q, want %q", libc, wantLibC)

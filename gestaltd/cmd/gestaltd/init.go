@@ -33,7 +33,7 @@ func initConfigWithArtifactsDir(configFlag, artifactsDir, platformFlag string) e
 
 	platArgs := make([]struct{ GOOS, GOARCH, LibC string }, len(platforms))
 	for i, p := range platforms {
-		platArgs[i] = struct{ GOOS, GOARCH, LibC string }{p.GOOS, p.GOARCH, p.LibC}
+		platArgs[i] = struct{ GOOS, GOARCH, LibC string }{p.GOOS, p.GOARCH, ""}
 	}
 
 	_, err = operatorLifecycle().InitAtPathWithPlatforms(configPath, artifactsDir, platArgs)

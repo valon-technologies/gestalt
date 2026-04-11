@@ -149,22 +149,6 @@ jobs:
       tag-suffix: '-alpine'
       target: alpine
 
-  publish-image-debian:
-    name: Publish Docker Image (Debian)
-    needs: build
-    uses: ./.github/workflows/publish-dockerhub-image.yml
-    secrets: inherit
-    with:
-      image-name: valontechnologies/gestaltd
-      image-url: https://hub.docker.com/r/valontechnologies/gestaltd
-      dockerfile: gestaltd/Dockerfile
-      version-prefix: 'gestaltd/v'
-      short-description: Platform for self-hostable, configurable integrations and tooling
-      readme-filepath: docs/dockerhub/gestaltd.md
-      platforms: 'linux/amd64,linux/arm64,linux/arm/v7'
-      tag-suffix: '-debian'
-      target: debian
-
   update-formula:
     name: Update Homebrew Formula, Chart & OCI Publish
     needs: [release]

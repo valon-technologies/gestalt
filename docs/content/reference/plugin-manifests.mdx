@@ -305,7 +305,7 @@ The `artifacts` array lists platform-specific binaries included in the package.
 | --- | --- | --- | --- |
 | `os` | string | yes | Target operating system (e.g. `linux`, `darwin`). |
 | `arch` | string | yes | Target architecture (e.g. `amd64`, `arm64`). |
-| `libc` | string | no | C library variant. Either `glibc` or `musl`. Only relevant for Linux. |
+| `libc` | string | no | C library variant. `musl`. Only relevant for Linux. |
 | `path` | string | yes | Path to the binary inside the package. |
 | `sha256` | string | no | SHA-256 hex digest for integrity verification. |
 
@@ -382,7 +382,7 @@ This manifest shows a plugin with an executable entrypoint, multiple connections
     artifacts:
       - os: linux
         arch: amd64
-        libc: glibc
+        libc: musl
         path: artifacts/linux/amd64/plugin
         sha256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     ```
@@ -458,7 +458,7 @@ This manifest shows a plugin with an executable entrypoint, multiple connections
         {
           "os": "linux",
           "arch": "amd64",
-          "libc": "glibc",
+          "libc": "musl",
           "path": "artifacts/linux/amd64/plugin",
           "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
         }

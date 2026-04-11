@@ -126,7 +126,7 @@ func SourceComponentExecutionEnv(root, kind, goos, goarch string) (map[string]st
 	return pythonBackendEnvMap(), nil
 }
 
-func ValidateSourceComponentRelease(root, kind, goos, goarch, libc string) error {
+func ValidateSourceComponentRelease(root, kind, goos, goarch string) error {
 	sourceKind, _, err := detectSourceComponent(root, kind, goos, goarch)
 	if err != nil {
 		return err
@@ -136,7 +136,7 @@ func ValidateSourceComponentRelease(root, kind, goos, goarch, libc string) error
 		_, err = DetectPythonInterpreter(root, goos, goarch)
 		return err
 	case sourceProviderKindRust:
-		return ValidateRustComponentRelease(root, kind, goos, goarch, libc)
+		return ValidateRustComponentRelease(root, kind, goos, goarch)
 	case sourceProviderKindTypeScript:
 		_, err = DetectBunExecutable()
 		return err
@@ -145,7 +145,7 @@ func ValidateSourceComponentRelease(root, kind, goos, goarch, libc string) error
 	}
 }
 
-func BuildSourceComponentReleaseBinary(root, outputPath, kind, goos, goarch, libc string) (string, error) {
+func BuildSourceComponentReleaseBinary(root, outputPath, kind, goos, goarch string) (string, error) {
 	sourceKind, target, err := detectSourceComponent(root, kind, goos, goarch)
 	if err != nil {
 		return "", err
@@ -154,7 +154,7 @@ func BuildSourceComponentReleaseBinary(root, outputPath, kind, goos, goarch, lib
 	case sourceProviderKindGo:
 		return "", BuildGoComponentBinary(root, outputPath, kind, goos, goarch)
 	case sourceProviderKindRust:
-		return BuildRustComponentBinary(root, outputPath, kind, goos, goarch, libc)
+		return BuildRustComponentBinary(root, outputPath, kind, goos, goarch)
 	case sourceProviderKindPython:
 		runtimeKind, err := pythonRuntimeKind(kind)
 		if err != nil {

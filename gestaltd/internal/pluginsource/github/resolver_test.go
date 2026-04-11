@@ -254,49 +254,6 @@ func TestFindAssetMatchesGenericArchiveName(t *testing.T) {
 	}
 }
 
-func TestFindAssetMatchesLinuxLibCSpecificArchiveWhenLibCUnknown(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("linux-specific libc archive matching")
-	}
-
-	t.Parallel()
-
-	want := platformAssetPrefix + testPlugin + "_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + "_glibc.tar.gz"
-	assets := []releaseAsset{
-		{Name: want, URL: "http://x", BrowserDownloadURL: "http://x"},
-	}
-
-	got, err := findAssetForPlatform(assets, runtime.GOOS, runtime.GOARCH, testPlugin, testVersion, "")
-	if err != nil {
-		t.Fatalf("findAssetForPlatform() error: %v", err)
-	}
-	if got.Name != want {
-		t.Fatalf("findAssetForPlatform() = %q, want %q", got.Name, want)
-	}
-}
-
-func TestFindAssetPrefersMuslLinuxAssetWhenLibCUnknownAndBothSpecificArchivesExist(t *testing.T) {
-	if runtime.GOOS != "linux" {
-		t.Skip("linux-specific libc archive matching")
-	}
-
-	t.Parallel()
-
-	want := platformAssetPrefix + testPlugin + "_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + "_musl.tar.gz"
-	assets := []releaseAsset{
-		{Name: platformAssetPrefix + testPlugin + "_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + "_glibc.tar.gz", URL: "http://glibc", BrowserDownloadURL: "http://glibc"},
-		{Name: want, URL: "http://musl", BrowserDownloadURL: "http://musl"},
-	}
-
-	got, err := findAssetForPlatform(assets, runtime.GOOS, runtime.GOARCH, testPlugin, testVersion, "")
-	if err != nil {
-		t.Fatalf("findAssetForPlatform() error: %v", err)
-	}
-	if got.Name != want {
-		t.Fatalf("findAssetForPlatform() = %q, want %q", got.Name, want)
-	}
-}
-
 func TestFindAssetVersionBeforePluginMatch(t *testing.T) {
 	t.Parallel()
 
@@ -571,8 +528,8 @@ func TestExtractPlatformFromAssetName_Canonical(t *testing.T) {
 	}{
 		{"darwin_arm64", "gestalt-plugin-linter_v1.2.3_darwin_arm64.tar.gz", "darwin/arm64", true},
 		{"linux_amd64", "gestalt-plugin-linter_v1.2.3_linux_amd64.tar.gz", "linux/amd64", true},
-		{"linux_amd64_glibc", "gestalt-plugin-linter_v1.2.3_linux_amd64_glibc.tar.gz", "linux/amd64/glibc", true},
-		{"linux_arm64_musl", "gestalt-plugin-linter_v1.2.3_linux_arm64_musl.tar.gz", "linux/arm64/musl", true},
+		{"linux_amd64_musl", "gestalt-plugin-linter_v1.2.3_linux_amd64_musl.tar.gz", "linux/amd64", true},
+		{"linux_arm64_musl", "gestalt-plugin-linter_v1.2.3_linux_arm64_musl.tar.gz", "linux/arm64", true},
 		{"windows_amd64", "gestalt-plugin-linter_v1.2.3_windows_amd64.tar.gz", "windows/amd64", true},
 		{"macos_alias", "gestalt-plugin-linter_v1.2.3_macos_aarch64.tar.gz", "darwin/arm64", true},
 		{"x86_64_alias", "gestalt-plugin-linter_v1.2.3_linux_x86_64.tar.gz", "linux/amd64", true},
@@ -600,7 +557,7 @@ func TestClassifyReleaseAssets(t *testing.T) {
 	assets := []releaseAsset{
 		{Name: "gestalt-plugin-linter_v1.2.3_darwin_arm64.tar.gz", URL: "https://example.com/darwin-arm64"},
 		{Name: "gestalt-plugin-linter_v1.2.3_linux_amd64.tar.gz", URL: "https://example.com/linux-amd64"},
-		{Name: "gestalt-plugin-linter_v1.2.3_linux_amd64_glibc.tar.gz", URL: "https://example.com/linux-amd64-glibc"},
+		{Name: "gestalt-plugin-linter_v1.2.3_linux_amd64_musl.tar.gz", URL: "https://example.com/linux-amd64-musl"},
 		{Name: "gestalt-plugin-linter_v1.2.3.tar.gz", URL: "https://example.com/generic"},
 		{Name: "unrelated-file.zip", URL: "https://example.com/unrelated"},
 		{Name: "checksums.txt", URL: "https://example.com/checksums"},
@@ -609,10 +566,9 @@ func TestClassifyReleaseAssets(t *testing.T) {
 	result := classifyReleaseAssets(assets, testPlugin, testVersion)
 
 	expected := map[string]string{
-		"darwin/arm64":      "https://example.com/darwin-arm64",
-		"linux/amd64":       "https://example.com/linux-amd64",
-		"linux/amd64/glibc": "https://example.com/linux-amd64-glibc",
-		"generic":           "https://example.com/generic",
+		"darwin/arm64": "https://example.com/darwin-arm64",
+		"linux/amd64":  "https://example.com/linux-amd64-musl",
+		"generic":      "https://example.com/generic",
 	}
 
 	if len(result) != len(expected) {
@@ -627,6 +583,22 @@ func TestClassifyReleaseAssets(t *testing.T) {
 		if asset.URL != wantURL {
 			t.Errorf("platform %q URL = %q, want %q", platform, asset.URL, wantURL)
 		}
+	}
+}
+
+func TestClassifyReleaseAssets_PrefersMuslRegardlessOfOrder(t *testing.T) {
+	t.Parallel()
+	assets := []releaseAsset{
+		{Name: "gestalt-plugin-linter_v1.2.3_linux_amd64_musl.tar.gz", URL: "https://example.com/musl"},
+		{Name: "gestalt-plugin-linter_v1.2.3_linux_amd64.tar.gz", URL: "https://example.com/plain"},
+	}
+
+	result := classifyReleaseAssets(assets, testPlugin, testVersion)
+
+	if asset, ok := result["linux/amd64"]; !ok {
+		t.Fatal("missing linux/amd64")
+	} else if asset.URL != "https://example.com/musl" {
+		t.Fatalf("linux/amd64 URL = %q, want musl variant", asset.URL)
 	}
 }
 
