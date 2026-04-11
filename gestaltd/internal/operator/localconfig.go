@@ -13,6 +13,9 @@ import (
 
 const (
 	localConfigDirName = ".gestaltd"
+
+	defaultHTTPBinProvider = config.DefaultProviderRepo + "/plugins/httpbin"
+	defaultHTTPBinVersion  = "0.0.1-alpha.1"
 )
 
 func DefaultLocalConfigPath() string {
@@ -72,7 +75,16 @@ server:
   public:
     port: 8080
   encryptionKey: %q
-`, config.DefaultIndexedDBProvider, config.DefaultIndexedDBVersion, "sqlite://"+dbPath, encryptionKey)
+plugins:
+  httpbin:
+    displayName: HTTPBin
+    provider:
+      source:
+        ref: %s
+        version: %s
+      allowedHosts:
+        - httpbin.org
+`, config.DefaultIndexedDBProvider, config.DefaultIndexedDBVersion, "sqlite://"+dbPath, encryptionKey, defaultHTTPBinProvider, defaultHTTPBinVersion)
 }
 
 func defaultLocalSourceConfig(providersDir, dbPath, encryptionKey string) string {

@@ -1,6 +1,8 @@
+import { Tabs } from 'nextra/components'
+
 # Getting Started
 
-This tutorial walks you through running a Gestalt server, adding a plugin, and invoking an operation. It takes about five minutes.
+This guide gets you from zero to invoking your first operation. It takes about five minutes.
 
 ## Prerequisites
 
@@ -14,166 +16,140 @@ Run `gestaltd` with no arguments:
 gestaltd
 ```
 
-When no config file exists, `gestaltd` generates one at `~/.gestaltd/config.yaml` and starts immediately. The generated config uses SQLite for storage, no authentication, and listens on port 8080.
+When no config file exists, `gestaltd` generates one at `~/.gestaltd/config.yaml` and starts immediately with SQLite storage via the [RelationalDB](https://github.com/valon-technologies/gestalt-providers/tree/main/datastore) implementation of the [IndexedDB provider](/providers/datastores), no authentication, and an [HTTPBin](https://github.com/valon-technologies/gestalt-providers/tree/main/plugins/httpbin) implementation of the [plugin provider](/providers/plugins) on port 8080.
 
-You now have a Gestalt server running at `http://localhost:8080`.
-
-## Write a config file
-
-The generated config is fine for a first look, but let's write one explicitly so you can see what is going on. Create a file called `config.yaml`:
-
-```yaml
-server:
-  public:
-    port: 8080
-  baseUrl: http://localhost:8080
-  encryptionKey: dev-only-change-me
-
-auth:
-  disabled: true
-
-datastores:
-  main:
-    provider:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
-        version: 0.0.1-alpha.2
-    config:
-      dsn: sqlite://./gestalt.db
-
-datastore: main
-
-plugins: {}
+```
+2026/04/10 10:00:00 INFO generated default config path=~/.gestaltd/config.yaml
+2026/04/10 10:00:01 INFO gestaltd ready url=http://localhost:8080
 ```
 
-A few things to note. `auth: { disabled: true }` disables platform login, which is what you want for local development. `datastores.main.provider` points at the first-party relational datastore provider, and the SQLite backend is selected by the `sqlite://` DSN. The top-level `datastore: main` line tells Gestalt which named datastore to use. The `plugins` map is empty for now.
+## Using the client
 
-Start the server with your config:
-
-```sh
-gestaltd serve --config ./config.yaml
-```
-
-## Add a plugin
-
-Plugins are where the interesting things happen. Each entry under `plugins:` registers a plugin backed by a provider package. Let's add the first-party `httpbin` provider, which wraps httpbin.org and is useful for testing:
-
-```yaml
-server:
-  public:
-    port: 8080
-  baseUrl: http://localhost:8080
-  encryptionKey: dev-only-change-me
-
-auth:
-  disabled: true
-
-datastores:
-  main:
-    provider:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
-        version: 0.0.1-alpha.2
-    config:
-      dsn: sqlite://./gestalt.db
-
-datastore: main
-
-plugins:
-  httpbin:
-    displayName: HTTPBin
-    provider:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/plugins/httpbin
-        version: 0.0.1-alpha.1
-```
-
-The `provider.source.ref` tells Gestalt where to fetch the plugin package. On first startup, Gestalt downloads the package and caches it locally.
-
-Restart the server so it picks up the new config.
-
-## Connect the CLI
-
-In a separate terminal, point the `gestalt` client at your running server:
+In a separate terminal, run the setup wizard:
 
 ```sh
 gestalt init
 ```
 
-The wizard prompts for the server URL and saves it to your local config. You can skip the wizard and set the URL directly:
+The wizard prompts for the server URL. Enter `http://localhost:8080` and it saves the connection to your local config.
 
-```sh
-gestalt config set url http://localhost:8080
-```
-
-Verify the connection by listing available plugins:
+Verify the connection:
 
 ```sh
 gestalt integrations list
 ```
 
-You should see `httpbin` in the output.
+```
+╭─────────────────────────────────────────────────────────────────────╮
+│ Name       Description                                   Connected  │
+╞═════════════════════════════════════════════════════════════════════╡
+│ httpbin    HTTP request and response testing service.    -          │
+╰─────────────────────────────────────────────────────────────────────╯
+```
 
-## Invoke an operation
+### List operations
 
-List the operations available on the httpbin plugin:
+See what the httpbin plugin can do:
 
 ```sh
 gestalt invoke httpbin
 ```
 
-Then invoke one:
-
-```sh
-gestalt invoke httpbin get_headers
+```
+╭─────────────────────────────────────────────────────────────────────────╮
+│ Name              Description                                   Method  │
+╞═════════════════════════════════════════════════════════════════════════╡
+│ get_headers       Return the request headers                    GET     │
+│ get_ip            Return the origin IP address                  GET     │
+│ get_user_agent    Return the user agent string                  GET     │
+│ get_anything      Return anything passed in the request         GET     │
+│ post_anything     Return anything passed in the request body    POST    │
+╰─────────────────────────────────────────────────────────────────────────╯
 ```
 
-The same operation is available over HTTP. Here is the curl equivalent:
+### Invoke an operation
 
-```sh
-curl http://localhost:8080/api/v1/httpbin/get_headers
+<Tabs items={['CLI', 'HTTP']}>
+  <Tabs.Tab>
+    ```sh
+    gestalt invoke httpbin get_ip
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```sh
+    curl http://localhost:8080/api/v1/httpbin/get_ip
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+```json
+{
+  "origin": "203.0.113.42"
+}
 ```
 
-Both return the same response from the provider.
+Both return the same response. The CLI wraps the HTTP API, so anything you can do with `gestalt invoke` you can also do with `curl` or any HTTP client.
 
-## Complete config
+## Connecting over MCP
 
-Here is the full config from this tutorial, ready to copy:
+Gestalt exposes all MCP-enabled plugins at a single endpoint: `http://localhost:8080/mcp`. Any MCP-compatible client can connect to it.
 
-```yaml
-server:
-  public:
-    port: 8080
-  baseUrl: http://localhost:8080
-  encryptionKey: dev-only-change-me
+<Tabs items={['Claude Code', 'Codex', 'Cursor']}>
+  <Tabs.Tab>
+    Add the following to your [`~/.claude.json`](https://docs.anthropic.com/en/docs/claude-code/mcp) (user) or `.claude/settings.json` (project-level):
 
-auth:
-  disabled: true
+    ```json
+    {
+      "mcpServers": {
+        "gestalt": {
+          "type": "http",
+          "url": "http://localhost:8080/mcp"
+        }
+      }
+    }
+    ```
 
-datastores:
-  main:
-    provider:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
-        version: 0.0.1-alpha.2
-    config:
-      dsn: sqlite://./gestalt.db
+    Or via the CLI:
 
-datastore: main
+    ```sh
+    claude mcp add --transport http gestalt http://localhost:8080/mcp
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Add the following to [`~/.codex/config.toml`](https://developers.openai.com/codex/mcp) (global) or `.codex/config.toml` (project-level):
 
-plugins:
-  httpbin:
-    displayName: HTTPBin
-    provider:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/plugins/httpbin
-        version: 0.0.1-alpha.1
-```
+    ```toml
+    [mcp_servers.gestalt]
+    url = "http://localhost:8080/mcp"
+    ```
+
+    Or via the CLI:
+
+    ```sh
+    codex mcp add gestalt --type http -- http://localhost:8080/mcp
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    Add the following to [`~/.cursor/mcp.json`](https://cursor.com/docs/mcp) (global) or `.cursor/mcp.json` (project-level):
+
+    ```json
+    {
+      "mcpServers": {
+        "gestalt": {
+          "url": "http://localhost:8080/mcp"
+        }
+      }
+    }
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+Once connected, your agent can call any operation exposed by the server. The same auth model applies: when plugins require credentials, users connect through the Gestalt web UI or CLI before the agent can invoke those tools.
 
 ## Next steps
 
-You have a running Gestalt server with a plugin, and you know how to invoke operations from the CLI and over HTTP. From here:
+You have a running Gestalt server and you know how to invoke operations from the CLI, HTTP, and MCP. From here:
 
-- [Configuration](/configuration) covers the full config model, environment variable expansion, and secret references.
-- [Providers](/providers) explains how to write your own provider package.
+- [Configuration](/configuration) explains the config model, how to add plugins, set up auth, and configure connections.
+- [Providers](/providers) covers writing your own provider packages.
 - [Deploy](/deploy) walks through production deployment with Helm and Docker.

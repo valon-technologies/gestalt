@@ -140,10 +140,7 @@ func resolveConfigPath(flagValue string) string {
 			return p
 		}
 	}
-	if p := operator.DefaultLocalConfigPath(); p != "" {
-		return p
-	}
-	return "/etc/gestalt/config.yaml"
+	return operator.DefaultLocalConfigPath()
 }
 
 const gracefulShutdownTimeout = 15 * time.Second

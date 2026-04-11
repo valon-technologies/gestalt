@@ -1,17 +1,242 @@
 # Configuration
 
-Gestalt is configured from a single YAML file. The [Config File](/reference/config-file) reference covers every field and its validation rules; this page explains the model and the main workflows.
+Gestalt is configured from a single YAML file. This page covers the key concepts and how to set up each part. The [Config File](/reference/config-file) reference documents every field and its validation rules.
 
-## Config lifecycle
+## Concepts
+
+Gestalt has six core concepts you configure in YAML:
+
+- **[Plugin.](/providers/plugins)** A tool backed by a provider package. Plugins expose operations that agents and users invoke over HTTP, MCP, or the CLI. Plugins can come from published packages or local source.
+- **Connection.** How Gestalt authenticates to an upstream API on behalf of a user or service. Connections handle OAuth flows, API keys, and manual credentials.
+- **[IndexedDB.](/providers/datastores)** The persistent storage layer. Stores users, sessions, tokens, and credentials through a provider that implements the IndexedDB interface.
+- **[Auth.](/providers/auth)** Platform login for the Gestalt server. Separate from connection auth, which is per-plugin and per-upstream.
+- **[Secrets.](/providers/secrets)** Resolves `secret://` references in the config at startup. Backed by environment variables, files, or cloud secret managers.
+- **[UI.](/providers/web-uis)** The public web interface served at `/`. Uses the default bundle, a custom package, or can be disabled entirely.
+
+## Adding a plugin
+
+Each entry under `plugins:` registers a plugin backed by a provider package:
+
+```yaml
+plugins:
+  github:
+    displayName: GitHub
+    provider:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/plugins/github
+        version: 0.0.1-alpha.1
+    config:
+      apiBaseUrl: https://api.github.com
+```
+
+`provider.source.ref` points at a published provider package. Gestalt resolves and downloads it on startup. First-party providers are published to `github.com/valon-technologies/gestalt-providers/`.
+
+During development, point at a local provider manifest instead:
+
+```yaml
+plugins:
+  support:
+    provider:
+      source:
+        path: ./plugins/support/manifest.yaml
+```
+
+See [Providers](/providers) for how to build your own.
+
+### Filtering operations
+
+A provider package may expose a large catalog. Use `allowedOperations` to publish only the subset you want:
+
+```yaml
+plugins:
+  support:
+    provider:
+      source:
+        ref: github.com/acme/providers/support
+        version: 2.4.0
+    allowedOperations:
+      tickets.list:
+        alias: list_tickets
+      tickets.get:
+        alias: get_ticket
+```
+
+Each entry can set an `alias` to rename the operation as it appears to callers.
+
+### Network sandbox
+
+Executable provider processes run inside a network sandbox. Outbound requests to hosts not listed in `provider.allowedHosts` are rejected:
+
+```yaml
+plugins:
+  example:
+    provider:
+      source:
+        ref: github.com/acme/providers/example
+        version: 1.0.0
+      allowedHosts:
+        - api.example.com
+        - cdn.example.com
+```
+
+## Connecting to upstream APIs
+
+Connections define how Gestalt authenticates to upstream services on behalf of callers. Each plugin declares its connections under `connections:`:
+
+```yaml
+plugins:
+  github:
+    connections:
+      default:
+        mode: user
+        auth:
+          type: oauth2
+```
+
+### Connection modes
+
+| Mode | Behavior |
+| --- | --- |
+| `none` | No upstream credential needed. |
+| `user` | Each user stores their own credential. |
+| `identity` | One shared service credential for all callers. |
+| `either` | Prefers a user credential, falls back to identity. |
+
+### Auth types
+
+| Type | Use case |
+| --- | --- |
+| `oauth2` | Standard OAuth 2.0 with authorization URL, token URL, scopes, PKCE. |
+| `mcp_oauth` | Delegates auth to an upstream MCP server. |
+| `bearer` | Static bearer token. Prompts the user for the value. |
+| `manual` | Custom credential fields (API key, org ID, etc.). |
+| `none` | No authentication. |
+
+### Connection naming
+
+`connections.default` is the common case. When a provider defines more than one connection, callers pass `_connection` and `_instance` through the [HTTP API](/reference/http-api) to select which stored credential to use. Connection parameters (`params`) and post-connect discovery are only supported on `connections.default`.
+
+Gestalt stores upstream credentials keyed by user, plugin name, connection name, and instance. Renaming a `plugins:` key is a breaking change for stored connections.
+
+## Exposing over MCP
+
+Enable MCP tool exposure per plugin:
+
+```yaml
+plugins:
+  github:
+    mcp:
+      enabled: true
+      toolPrefix: github_
+```
+
+`toolPrefix` avoids name collisions when multiple plugins expose MCP tools. The MCP endpoint is served at `/mcp` using the same auth model as the HTTP API.
+
+## Secrets
+
+The `secrets` block configures how `secret://` references in the config are resolved at startup. The default is `env`, which reads secrets from environment variables:
+
+```yaml
+secrets:
+  builtin: env
+```
+
+For production, use `file` (reads from a directory, works with Kubernetes volume-mounted secrets) or a cloud secret manager:
+
+```yaml
+secrets:
+  builtin: file
+  config:
+    dir: /etc/gestalt-secrets
+```
+
+Cloud backends (Google Secret Manager, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault) are also available. See [Secret Providers](/providers/secrets) for the full list.
+
+## Web UI
+
+The `ui` block controls the public client UI served at `/`. Omit it to use the default bundled UI. Disable it to run headless:
+
+```yaml
+ui:
+  disabled: true
+```
+
+Or point at a custom UI bundle:
+
+```yaml
+ui:
+  provider:
+    source:
+      ref: github.com/your-org/your-ui
+      version: 1.0.0
+```
+
+The built-in admin UI at `/admin` is always available regardless of this setting. See [Web UIs](/providers/web-uis) for the bundle format.
+
+## Platform auth
+
+The `auth` block protects the web UI, HTTP API, and `/mcp` endpoint. For local development, omit it or disable it explicitly:
+
+```yaml
+auth:
+  disabled: true
+```
+
+For multi-user deployments, point at a published auth provider:
+
+```yaml
+auth:
+  provider:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/auth/oidc
+      version: 0.0.1-alpha.1
+  config:
+    issuerUrl: https://login.example.com
+    clientId: ${OIDC_CLIENT_ID}
+    clientSecret: secret://oidc-client-secret
+```
+
+| Scenario | Configuration |
+| --- | --- |
+| Local development | Omit `auth` or set `auth: { disabled: true }` |
+| Multi-user deployment | `auth.provider` with a published OIDC or Google auth provider |
+| Per-user upstream access | `mode: user` on plugin connections |
+| Shared service credential | `mode: identity` on plugin connections |
+
+### API tokens
+
+For programmatic access, Gestalt issues API tokens prefixed with `gst_api_`. They are accepted through `Authorization: Bearer ...` and use the same auth middleware as browser sessions. Token lifetime is controlled by `server.apiTokenTtl`, which defaults to `30d`.
+
+## Configuring storage
+
+The `indexeddbs` block declares storage providers. The `indexeddb` field selects which one Gestalt uses:
+
+```yaml
+indexeddbs:
+  main:
+    provider:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
+    config:
+      dsn: sqlite://./gestalt.db
+
+indexeddb: main
+```
+
+SQLite works for single-instance deployments. For production, use a Postgres or MySQL DSN. See [Datastores](/providers/datastores) for the full provider model.
+
+## Config file mechanics
+
+### Lookup order
 
 When `--config` is not supplied, `gestaltd` looks for a config file in this order:
 
 1. `GESTALT_CONFIG` environment variable
 2. `./config.yaml` in the working directory
 3. `~/.gestaltd/config.yaml`
-4. `/etc/gestalt/config.yaml`
 
-If nothing is found, `gestaltd` generates a default config at `~/.gestaltd/config.yaml` with SQLite storage, no auth, and a random encryption key.
+If nothing is found, `gestaltd` generates a default config at `~/.gestaltd/config.yaml` with SQLite storage, no auth, a random encryption key, and an HTTPBin test plugin.
 
 ### Environment expansion
 
@@ -29,301 +254,15 @@ Unknown YAML fields are rejected at load time. Relative paths resolve from the c
 gestaltd validate --config ./config.yaml
 ```
 
-## Top-level blocks
+### Defaults and required fields
 
-A config file has the following top-level blocks:
-
-- `server` controls the HTTP listener, base URL, encryption key, API token TTL, and prepared artifacts directory.
-- `auth` selects the platform login provider for the web UI, HTTP API, and `/mcp`.
-- `datastore` selects persistent storage for users, sessions, API tokens, and plugin credentials.
-- `secrets` configures resolution for `secret://` references.
-- `telemetry` configures structured logs, metrics, traces, and OTLP export.
-- `plugins` declares the plugins users invoke.
-- `egress` defines outbound policy rules and credential grants (optional).
-- `ui` references a packaged web UI bundle (optional).
-
-## Defaults and required fields
-
-Gestalt defaults `server.public.port` to `8080`, `secrets.builtin` to `env`, and `telemetry.builtin` to `stdout`. The required fields are `datastores`, `datastore`, and `server.encryptionKey`. Platform auth is optional.
+Gestalt defaults `server.public.port` to `8080`, `secrets.builtin` to `env`, and `telemetry.builtin` to `stdout`. The required fields are `indexeddbs`, `indexeddb`, and `server.encryptionKey`. Platform auth is optional.
 
 `server.encryptionKey` is the root deployment secret. Gestalt derives token encryption and session material from it. Changing this key invalidates all existing sessions and tokens, so treat it as a meaningful deployment event.
 
-## Plugins
-
-Each entry under `plugins:` registers a plugin backed by a provider package. The provider package is the source of truth for available operations, request schemas, and response schemas. The config supplies only provider selection, provider-level config, connection policy, and MCP exposure settings.
-
-A provider package can come from two places: a versioned published package resolved by `source.ref`, or a local source manifest at `source.path` for development.
-
-### Published provider
-
-Published providers use a `source.ref` and `version` that Gestalt resolves during startup or `init`.
-
-```yaml
-plugins:
-  github:
-    displayName: GitHub
-    provider:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/plugins/github
-        version: 0.0.1-alpha.1
-    config:
-      apiBaseUrl: https://api.github.com
-    connections:
-      default:
-        mode: user
-        auth:
-          type: oauth2
-    mcp:
-      enabled: true
-      toolPrefix: github_
-```
-
-First-party providers are published to `github.com/valon-technologies/gestalt-providers/`.
-
-### Local source provider
-
-During development, point at a local provider manifest instead.
-
-```yaml
-plugins:
-  support:
-    displayName: Support
-    provider:
-      source:
-        path: ./plugins/support/manifest.yaml
-    config:
-      workspace: primary
-    connections:
-      default:
-        mode: identity
-        auth:
-          type: bearer
-          credentials:
-            - name: token
-              label: API Token
-```
-
-### Filtering operations
-
-A provider package may expose a large catalog. Use `allowedOperations` to publish only the subset you want.
-
-```yaml
-plugins:
-  support:
-    provider:
-      source:
-        ref: github.com/acme/providers/support
-        version: 2.4.0
-    connections:
-      default:
-        mode: user
-        auth:
-          type: oauth2
-    allowedOperations:
-      tickets.list:
-        alias: list_tickets
-      tickets.get:
-        alias: get_ticket
-```
-
-Each entry can set an `alias` to rename the operation as it appears to callers.
-
-### Network sandbox
-
-Executable provider processes run inside a network sandbox. Outbound requests to hosts not listed in `provider.allowedHosts` are rejected. Add every upstream domain the plugin contacts to the allowlist.
-
-```yaml
-plugins:
-  example:
-    provider:
-      source:
-        ref: github.com/acme/providers/example
-        version: 1.0.0
-      allowedHosts:
-        - api.example.com
-        - cdn.example.com
-```
-
-## Connections and auth
-
-Connections define how Gestalt authenticates to upstream systems. Each plugin declares its connections under `connections:`, with `default` being the most common.
-
-### Connection modes
-
-**none** means no upstream credential is needed. **user** means each user stores their own credential. **identity** uses one shared service credential. **either** prefers a user credential and falls back to identity.
-
-### Connection naming
-
-`connections.default` is the common case. When a provider defines more than one connection, callers pass `_connection` and `_instance` through the [HTTP API](/reference/http-api) to select which stored credential to use. Connection parameters (`params`) and post-connect discovery are only supported on `connections.default`.
-
-### Auth types
-
-Common connection auth types are `oauth2`, `mcp_oauth`, `bearer`, `manual`, and `none`.
-
-OAuth2 connections support the full set of OAuth2 configuration: `authorizationUrl`, `tokenUrl`, `clientId`, `clientSecret`, `scopes`, `pkce`, and custom authorization/token/refresh parameters. Bearer and manual connections declare `credentials` fields that the user fills in during connection setup.
-
-Gestalt stores upstream credentials keyed by user, plugin name, connection name, and instance. Renaming a `plugins:` key is a breaking change for stored connections.
-
-## Auth
-
-The `auth` block selects a platform login provider that protects the web UI, HTTP API, and `/mcp` endpoint. Auth providers run as external gRPC provider processes, following the same architecture as plugins.
-
-For local development, omit the `auth` block entirely or disable it explicitly:
-
-```yaml
-auth:
-  disabled: true
-```
-
-Both are equivalent. Omitting `auth` means no platform login is required.
-
-For multi-user deployments, point `auth.provider` at a published auth provider. Provider-specific settings go in `auth.config`.
-
-```yaml
-auth:
-  provider:
-    source:
-      ref: github.com/valon-technologies/gestalt-providers/auth/oidc
-      version: 0.0.1-alpha.1
-  config:
-    issuerUrl: https://login.example.com
-    clientId: ${OIDC_CLIENT_ID}
-    clientSecret: secret://oidc-client-secret
-```
-
-The `auth.provider` field is a provider reference with `source.ref` and `version`, the same shape used for plugins. Use `auth: { disabled: true }` to disable auth entirely.
-
-### API tokens
-
-For programmatic access, Gestalt issues API tokens prefixed with `gst_api_`. They are accepted through `Authorization: Bearer ...` and use the same auth middleware as browser sessions. Token lifetime is controlled by `server.apiTokenTtl`, which defaults to `30d`.
-
-## Datastore
-
-The `datastores` block declares persistent storage providers for users, sessions, API tokens, and plugin credentials. The top-level `datastore` field selects which named entry Gestalt should use for system storage. Like auth, the datastore runs as an external gRPC provider process.
-
-```yaml
-datastores:
-  main:
-    provider:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
-        version: 0.0.1-alpha.2
-    config:
-      dsn: sqlite://./gestalt.db
-
-datastore: main
-```
-
-`datastores.<name>.provider` is required for each declared datastore entry, and `datastore` must name one of those entries. The `source.ref` and `version` fields work the same as for plugin and auth providers. Provider-specific settings go in `datastores.<name>.config`.
-
-## MCP
-
-Gestalt exposes a single MCP endpoint at `/mcp`, using the same auth model as the rest of the HTTP surface. Enable MCP tool exposure per plugin with the `mcp` block.
-
-```yaml
-plugins:
-  github:
-    mcp:
-      enabled: true
-      toolPrefix: github_
-```
-
-`toolPrefix` controls the prefix added to tool names to avoid collisions when multiple plugins expose MCP tools. Tool exposure follows the provider catalog loaded at startup.
-
-## Managed parameters and response mapping
-
-Operations, request schemas, response schemas, managed parameters, and response mappings are defined in the provider manifest, not in the deployment config. Inline configuration surfaces that existed in earlier versions of Gestalt (such as `openapi`, `graphqlUrl`, `mcpUrl`, `baseUrl`, `headers`, `managedParameters`, `operations`, and `responseMapping`) have been removed from config. See [Provider Manifests](/reference/plugin-manifests) for the manifest schema.
-
-## Startup workflows
-
-For local development, start the server directly. Gestalt resolves provider packages on the fly.
-
-```sh
-gestaltd serve --config ./config.yaml
-```
-
-For deterministic production startup, prepare locked artifacts first.
-
-```sh
-gestaltd init --config ./config.yaml
-gestaltd serve --locked --config ./config.yaml
-```
-
-`init` downloads and prepares published provider packages, packaged UI bundles, and other artifacts into a writable directory. `serve --locked` validates startup against `gestalt.lock.json` and uses that lock state to start deterministically. If prepared files are already present under the configured artifacts directory, Gestalt reuses them. If they are missing, Gestalt can materialize them from the lockfile at startup, as long as the selected archives have verified hashes and the runtime can download them into a writable artifacts directory.
-
-## Prepared state and lockfiles
-
-`gestaltd init` writes `gestalt.lock.json` next to the config file, along with prepared provider and UI artifacts under `.gestaltd/` in the configured artifacts directory. A typical layout:
-
-```text
-deploy/
-  config.yaml
-  gestalt.lock.json
-  .gestaltd/providers/...
-  .gestaltd/ui/...
-```
-
-The config declares intent. The lockfile records the exact prepared result that `serve --locked` trusts. This lets Gestalt verify that startup still matches the current config instead of using whatever happens to exist on disk.
-
-Two production patterns are valid:
-
-- Vendored prepared artifacts: bake `gestalt.lock.json` and `.gestaltd/` into the image. This avoids runtime downloads and usually gives faster cold starts, at the cost of larger images and generated-file churn.
-- Lockfile-only startup: ship `gestalt.lock.json` but do not ship `.gestaltd/`. Gestalt repopulates `.gestaltd/` from the lockfile at startup. This keeps the repo and image smaller, but requires runtime network access, source auth, verified archive hashes, and a writable artifacts directory.
-
-If you choose the lockfile-only model, treat `.gestaltd/` as a cache rather than source-controlled deployment input. In app repos, that usually means adding it to both `.gitignore` and `.dockerignore`.
-
-On ephemeral platforms, lockfile-only startup may redownload artifacts on cold start. If that is too slow or too dependent on external availability, vendor `.gestaltd/` into the image instead.
-
-### Lockfile example
-
-For a published plugin, the config says which release you intend to use.
-
-```yaml
-plugins:
-  example:
-    provider:
-      source:
-        ref: github.com/acme/plugins/example
-        version: 1.2.3
-```
-
-The lockfile records the concrete result of resolving that config.
-
-```json
-{
-  "version": 2,
-  "providers": {
-    "example": {
-      "fingerprint": "...",
-      "source": "github.com/acme/plugins/example",
-      "version": "1.2.3",
-      "archives": {
-        "linux/amd64": {
-          "url": "https://api.github.com/repos/acme/plugins/releases/assets/123456",
-          "sha256": "..."
-        }
-      },
-      "manifest": ".gestaltd/providers/example/manifest.yaml",
-      "executable": ".gestaltd/providers/example/example-plugin"
-    }
-  }
-}
-```
-
-`serve --locked` uses the lockfile to verify that startup matches the current config before starting.
-
-## Choosing an auth strategy
-
-| Scenario | Configuration |
-| --- | --- |
-| Local development | Omit `auth` or set `auth: { disabled: true }` |
-| Multi-user deployment | `auth.provider` with a published OIDC or Google auth provider |
-| Per-user upstream access | `mode: user` on plugin connections |
-| Shared service credential | `mode: identity` on plugin connections |
-
 ## Full example
 
-This config shows a production deployment with OIDC auth, a GitHub plugin with per-user connections, and MCP enabled.
+A production deployment with OIDC auth, a GitHub plugin with per-user connections, and MCP enabled:
 
 ```yaml
 server:
@@ -340,16 +279,16 @@ auth:
     clientId: ${OIDC_CLIENT_ID}
     clientSecret: secret://oidc-client-secret
 
-datastores:
+indexeddbs:
   main:
     provider:
       source:
         ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
-        version: 0.0.1-alpha.2
+        version: 0.0.1-alpha.1
     config:
       dsn: sqlite://./gestalt.db
 
-datastore: main
+indexeddb: main
 
 plugins:
   github:
@@ -379,7 +318,7 @@ plugins:
 
 ## Minimal config
 
-The smallest useful config sets up a local server with SQLite storage, no auth, and an empty plugin list.
+The smallest useful config:
 
 ```yaml
 server:
@@ -388,18 +327,18 @@ server:
   baseUrl: http://localhost:8080
   encryptionKey: change-me
 
-datastores:
+indexeddbs:
   main:
     provider:
       source:
         ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
-        version: 0.0.1-alpha.2
+        version: 0.0.1-alpha.1
     config:
       dsn: sqlite://./gestalt.db
 
-datastore: main
+indexeddb: main
 
 plugins: {}
 ```
 
-See [Observability](/observability) for adding metrics, logs, and OTLP export.
+See [Observability](/observability) for adding metrics, logs, and OTLP export. See [Deploy](/deploy) for production startup workflows, lockfiles, and prepared artifacts.
