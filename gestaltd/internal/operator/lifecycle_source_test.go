@@ -202,6 +202,9 @@ func buildExecutableArchiveData(t *testing.T, dir, srcDirName, source, version, 
 	case pluginmanifestv1.KindSecrets:
 		manifest.Secrets = &pluginmanifestv1.SecretsMetadata{}
 		manifest.Entrypoints.Secrets = &pluginmanifestv1.Entrypoint{ArtifactPath: artPath}
+	case pluginmanifestv1.KindIndexedDB:
+		manifest.Datastore = &pluginmanifestv1.DatastoreMetadata{}
+		manifest.Entrypoints.Datastore = &pluginmanifestv1.Entrypoint{ArtifactPath: artPath}
 	default:
 		t.Fatalf("unsupported kind %q", kind)
 	}

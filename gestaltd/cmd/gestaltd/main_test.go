@@ -111,4 +111,3 @@ func TestE2ECLIRejectsBadArgs(t *testing.T) {
 		})
 	}
 }
-

@@ -93,6 +93,23 @@ func (o *stubObjectStore) Add(_ context.Context, record indexeddb.Record) error 
 	if _, ok := o.records[id]; ok {
 		return indexeddb.ErrAlreadyExists
 	}
+	for _, idx := range o.schema.Indexes {
+		if !idx.Unique {
+			continue
+		}
+		for _, existing := range o.records {
+			match := true
+			for _, field := range idx.KeyPath {
+				if existing[field] != record[field] {
+					match = false
+					break
+				}
+			}
+			if match {
+				return indexeddb.ErrAlreadyExists
+			}
+		}
+	}
 	o.records[id] = record
 	return nil
 }

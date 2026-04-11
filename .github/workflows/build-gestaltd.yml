@@ -198,6 +198,17 @@ jobs:
             assetRoot: out
           EOF
 
+      - name: Create local IndexedDB provider fixture
+        run: |
+          provider_dir="$GITHUB_WORKSPACE/gestalt-providers/datastore/relationaldb"
+          provider_src="$GITHUB_WORKSPACE/gestaltd/internal/testutil/testdata/provider-go-indexeddb"
+          mkdir -p "$provider_dir"
+          cp "$provider_src/manifest.yaml" "$provider_dir/manifest.yaml"
+          cp "$provider_src/go.sum" "$provider_dir/go.sum"
+          cp "$provider_src/provider.go" "$provider_dir/provider.go"
+          # Rewrite go.mod with absolute replace path for this workspace
+          sed "s|../../../../../sdk/go|$GITHUB_WORKSPACE/sdk/go|" "$provider_src/go.mod" > "$provider_dir/go.mod"
+
       - name: Build Go server
         run: |
           mkdir -p build

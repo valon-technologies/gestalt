@@ -168,7 +168,8 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 		}
 		lock.Audit = &entry
 	}
-	for name, def := range cfg.IndexedDBs {
+	for name := range cfg.IndexedDBs {
+		def := cfg.IndexedDBs[name]
 		if def.Provider != nil && def.Provider.HasManagedArtifacts() {
 			entry, err := l.writeComponentArtifact(context.Background(), paths, pluginmanifestv1.KindIndexedDB, "indexeddb-"+name, indexeddbDestDir(paths, name), def.Provider, def.Config)
 			if err != nil {
@@ -212,7 +213,8 @@ func buildSourceTokenMap(cfg *config.Config) map[string]string {
 			tokens[p.SourceRef()] = p.Source.Auth.Token
 		}
 	}
-	for _, def := range cfg.IndexedDBs {
+	for name := range cfg.IndexedDBs {
+		def := cfg.IndexedDBs[name]
 		if def.Provider != nil && def.Provider.Source != nil && def.Provider.Source.Auth != nil {
 			tokens[def.Provider.SourceRef()] = def.Provider.Source.Auth.Token
 		}
@@ -362,7 +364,8 @@ func configHasPluginLoading(cfg *config.Config) bool {
 			return true
 		}
 	}
-	for _, def := range cfg.IndexedDBs {
+	for name := range cfg.IndexedDBs {
+		def := cfg.IndexedDBs[name]
 		if def.Provider != nil && (def.Provider.HasManagedArtifacts() || def.Provider.HasLocalSource()) {
 			return true
 		}
@@ -381,8 +384,8 @@ func configHasManagedPlugins(cfg *config.Config) bool {
 			return true
 		}
 	}
-	for _, def := range cfg.IndexedDBs {
-		if def.Provider != nil && def.Provider.HasManagedArtifacts() {
+	for name := range cfg.IndexedDBs {
+		if def := cfg.IndexedDBs[name]; def.Provider != nil && def.Provider.HasManagedArtifacts() {
 			return true
 		}
 	}
@@ -941,7 +944,8 @@ func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *con
 			return err
 		}
 	}
-	for name, def := range cfg.IndexedDBs {
+	for name := range cfg.IndexedDBs {
+		def := cfg.IndexedDBs[name]
 		if def.Provider != nil {
 			if err := l.applyComponentProvider(paths, lock, pluginmanifestv1.KindIndexedDB, "indexeddb-"+name, def.Provider, def.Config, &def.Config, locked); err != nil {
 				return err
