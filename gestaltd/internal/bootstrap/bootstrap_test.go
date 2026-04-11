@@ -463,6 +463,51 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 	})
 
+	t.Run("resolves secret:// in yaml.Node indexeddb config", func(t *testing.T) {
+		t.Parallel()
+
+		factories := validFactories()
+		factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
+			return &coretesting.StubSecretManager{
+				Secrets: map[string]string{"indexeddb-dsn": "mysql://resolved-dsn"},
+			}, nil
+		}
+
+		var receivedNode yaml.Node
+		factories.IndexedDB = func(node yaml.Node) (indexeddb.IndexedDB, error) {
+			receivedNode = node
+			return &coretesting.StubIndexedDB{}, nil
+		}
+
+		cfg := validConfig()
+		def := cfg.IndexedDBs["test"]
+		def.Config = yaml.Node{
+			Kind: yaml.MappingNode,
+			Content: []*yaml.Node{
+				{Kind: yaml.ScalarNode, Value: "dsn", Tag: "!!str"},
+				{Kind: yaml.ScalarNode, Value: "secret://indexeddb-dsn", Tag: "!!str"},
+			},
+		}
+		cfg.IndexedDBs["test"] = def
+
+		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+		if err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		<-result.ProvidersReady
+
+		var decoded struct {
+			Source *config.ProviderDef `yaml:"provider"`
+			Config map[string]string   `yaml:"config"`
+		}
+		if err := receivedNode.Decode(&decoded); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if decoded.Config["dsn"] != "mysql://resolved-dsn" {
+			t.Errorf("dsn: got %q, want %q", decoded.Config["dsn"], "mysql://resolved-dsn")
+		}
+	})
+
 	t.Run("passes top-level provider selection to auth factory", func(t *testing.T) {
 		t.Parallel()
 

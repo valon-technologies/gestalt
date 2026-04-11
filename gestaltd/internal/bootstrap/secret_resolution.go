@@ -93,6 +93,9 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 		if err := resolveStringFields(&ds, resolve); err != nil {
 			return err
 		}
+		if err := resolveYAMLNode(&ds.Config, resolve); err != nil {
+			return err
+		}
 		cfg.IndexedDBs[name] = ds
 	}
 
