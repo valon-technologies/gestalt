@@ -80,8 +80,7 @@ func defaultLocalSourceConfig(providersDir, dbPath, encryptionKey string) string
   main:
     provider:
       source:
-        ref: %s
-        version: %s
+        path: %q
     config:
       dsn: %q
 indexeddb: main
@@ -95,5 +94,5 @@ server:
   public:
     port: 8080
   encryptionKey: %q
-`, config.DefaultIndexedDBProvider, config.DefaultIndexedDBVersion, "sqlite://"+dbPath, filepath.Join(providersDir, "web", "default", "manifest.yaml"), encryptionKey)
+`, filepath.Join(providersDir, "datastore", "relationaldb", "manifest.yaml"), "sqlite://"+dbPath, filepath.Join(providersDir, "web", "default", "manifest.yaml"), encryptionKey)
 }

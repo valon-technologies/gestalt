@@ -59,34 +59,40 @@ func decodeNodeMap(t *testing.T, node any) map[string]any {
 	return out
 }
 
-func requiredComponentConfigYAML(_ *testing.T, _, dbPath string) string {
-	return fmt.Sprintf(`indexeddbs:
-  sqlite:
-    provider:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/datastore/relationaldb
-        version: 0.0.1-alpha.1
-    config:
-      path: %q
-indexeddb: sqlite
-ui:
-  disabled: true
-`, dbPath)
+func writeStubIndexedDBManifest(t *testing.T, dir string) string {
+	t.Helper()
+	manifestPath := filepath.Join(dir, "indexeddb-manifest.yaml")
+	data, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
+		Source:    "github.com/test/providers/indexeddb-stub",
+		Version:   "0.0.1-alpha.1",
+		Datastore: &pluginmanifestv1.DatastoreMetadata{},
+	}, pluginpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("encode indexeddb manifest: %v", err)
+	}
+	if err := os.WriteFile(manifestPath, data, 0o644); err != nil {
+		t.Fatalf("write indexeddb manifest: %v", err)
+	}
+	return manifestPath
 }
 
-func requiredIndexedDBConfigYAML(_ *testing.T, _, dbPath string) string {
+func requiredComponentConfigYAML(t *testing.T, dir, dbPath string) string {
+	manifestPath := writeStubIndexedDBManifest(t, dir)
 	return fmt.Sprintf(`indexeddbs:
   sqlite:
     provider:
       source:
-        ref: github.com/valon-technologies/gestalt-providers/datastore/relationaldb
-        version: 0.0.1-alpha.1
+        path: %s
     config:
       path: %q
 indexeddb: sqlite
 ui:
   disabled: true
-`, dbPath)
+`, manifestPath, dbPath)
+}
+
+func requiredIndexedDBConfigYAML(t *testing.T, dir, dbPath string) string {
+	return requiredComponentConfigYAML(t, dir, dbPath)
 }
 
 func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *testing.T) {
@@ -278,6 +284,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalTopLevelPluginsWithoutLockfile(t *t
 	}
 
 	dbPath := filepath.Join(dir, "gestalt.db")
+	idbManifestPath := writeStubIndexedDBManifest(t, dir)
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := fmt.Sprintf(`auth:
   provider:
@@ -289,8 +296,7 @@ indexeddbs:
   sqlite:
     provider:
       source:
-        ref: github.com/valon-technologies/gestalt-providers/datastore/relationaldb
-        version: 0.0.1-alpha.1
+        path: %s
     config:
       dsn: %q
 indexeddb: sqlite
@@ -298,7 +304,7 @@ ui:
   disabled: true
 server:
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`, "sqlite://"+dbPath)
+`, idbManifestPath, "sqlite://"+dbPath)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
 	}
@@ -365,6 +371,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalSourceTopLevelPluginsWithoutArtifac
 	}
 
 	dbPath := filepath.Join(dir, "gestalt.db")
+	idbManifestPath := writeStubIndexedDBManifest(t, dir)
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := fmt.Sprintf(`auth:
   provider:
@@ -374,8 +381,7 @@ indexeddbs:
   sqlite:
     provider:
       source:
-        ref: github.com/valon-technologies/gestalt-providers/datastore/relationaldb
-        version: 0.0.1-alpha.1
+        path: %s
     config:
       dsn: %q
 indexeddb: sqlite
@@ -383,7 +389,7 @@ ui:
   disabled: true
 server:
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`, "sqlite://"+dbPath)
+`, idbManifestPath, "sqlite://"+dbPath)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
 	}

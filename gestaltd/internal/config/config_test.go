@@ -457,12 +457,12 @@ server:
 				path := mustWriteConfigFile(t, fmt.Sprintf(`
 ui:
   disabled: %s
-datastores:
+indexeddbs:
   sqlite:
     provider:
       source:
         path: ./providers/datastore/sqlite
-datastore: sqlite
+indexeddb: sqlite
 server:
   encryptionKey: server-key
 `, variant))
