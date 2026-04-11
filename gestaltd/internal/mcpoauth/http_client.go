@@ -3,19 +3,14 @@ package mcpoauth
 import (
 	"net/http"
 	"time"
+
+	"github.com/valon-technologies/gestalt/server/internal/egress"
 )
 
 func newHTTPClient(timeout time.Duration) (*http.Client, func()) {
-	transport := cloneDefaultTransport()
+	transport := egress.CloneDefaultTransport()
 	return &http.Client{
 		Timeout:   timeout,
 		Transport: transport,
 	}, transport.CloseIdleConnections
-}
-
-func cloneDefaultTransport() *http.Transport {
-	if transport, ok := http.DefaultTransport.(*http.Transport); ok {
-		return transport.Clone()
-	}
-	return &http.Transport{}
 }

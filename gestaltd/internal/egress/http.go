@@ -8,6 +8,15 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/apiexec"
 )
 
+// CloneDefaultTransport returns an isolated transport initialized from the
+// process default transport when possible.
+func CloneDefaultTransport() *http.Transport {
+	if transport, ok := http.DefaultTransport.(*http.Transport); ok {
+		return transport.Clone()
+	}
+	return &http.Transport{}
+}
+
 // HTTPRequestSpec is the generic outbound HTTP representation shared by
 // product-specific adapters.
 type HTTPRequestSpec struct {
