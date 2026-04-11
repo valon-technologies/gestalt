@@ -200,7 +200,7 @@ jobs:
 
       - name: Create local IndexedDB provider fixture
         run: |
-          provider_dir="$GITHUB_WORKSPACE/gestalt-providers/datastore/relationaldb"
+          provider_dir="$GITHUB_WORKSPACE/gestalt-providers/indexeddb/relationaldb"
           provider_src="$GITHUB_WORKSPACE/gestaltd/internal/testutil/testdata/provider-go-indexeddb"
           mkdir -p "$provider_dir"
           cp "$provider_src/manifest.yaml" "$provider_dir/manifest.yaml"

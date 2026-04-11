@@ -28,8 +28,8 @@ const (
 	DefaultWebUIProvider = DefaultProviderRepo + "/web/default"
 	DefaultWebUIVersion  = "0.0.1-alpha.9"
 
-	DefaultIndexedDBProvider = DefaultProviderRepo + "/datastore/relationaldb"
-	DefaultIndexedDBVersion  = "0.0.1-alpha.1"
+	DefaultIndexedDBProvider = DefaultProviderRepo + "/indexeddb/relationaldb"
+	DefaultIndexedDBVersion  = "0.0.1-alpha.2"
 )
 
 // PluginConnectionName is the implicit connection name used when storing

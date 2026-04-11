@@ -94,5 +94,5 @@ server:
   public:
     port: 8080
   encryptionKey: %q
-`, filepath.Join(providersDir, "datastore", "relationaldb", "manifest.yaml"), "sqlite://"+dbPath, filepath.Join(providersDir, "web", "default", "manifest.yaml"), encryptionKey)
+`, filepath.Join(providersDir, "indexeddb", "relationaldb", "manifest.yaml"), "sqlite://"+dbPath, filepath.Join(providersDir, "web", "default", "manifest.yaml"), encryptionKey)
 }

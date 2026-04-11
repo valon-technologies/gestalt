@@ -82,8 +82,8 @@ datastores:
   main:
     provider:
       source:
-        ref: github.com/valon-technologies/gestalt-providers/datastore/relationaldb
-        version: 0.0.1-alpha.1
+        ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.2
     config:
       dsn: sqlite:///data/gestalt.db
 datastore: main
@@ -109,8 +109,8 @@ datastores:
   main:
     provider:
       source:
-        ref: github.com/valon-technologies/gestalt-providers/datastore/relationaldb
-        version: 0.0.1-alpha.1
+        ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.2
     config:
       dsn: sqlite:///data/gestalt.db
 datastore: main
