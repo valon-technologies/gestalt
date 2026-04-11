@@ -292,31 +292,11 @@ func authTypesFromConnections(connections []connectionDefInfo) []string {
 	return userFacingAuthTypes(combined)
 }
 
-func mergeAuthTypes(groups ...[]string) []string {
-	combined := make([]string, 0, 4)
-	for _, group := range groups {
-		combined = append(combined, group...)
-	}
-	return userFacingAuthTypes(combined)
-}
-
 func fallbackAuthTypesForProvider(prov core.Provider) []string {
 	if mp, ok := prov.(core.ManualProvider); ok && mp.SupportsManualAuth() {
 		return []string{"manual"}
 	}
 	return []string{"oauth"}
-}
-
-func sameAuthTypes(left, right []string) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for i := range left {
-		if left[i] != right[i] {
-			return false
-		}
-	}
-	return true
 }
 
 func connectionAuthTypes(authType pluginmanifestv1.AuthType, integrationAuthTypes []string) []string {

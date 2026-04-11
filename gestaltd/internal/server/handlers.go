@@ -156,12 +156,11 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		info.Connections = s.integrationConnectionInfos(name, authTypes, info.CredentialFields)
-		effectiveAuthTypes := mergeAuthTypes(authTypes, authTypesFromConnections(info.Connections))
-		if len(effectiveAuthTypes) == 0 {
-			effectiveAuthTypes = fallbackAuthTypesForProvider(prov)
-		}
-		if !sameAuthTypes(authTypes, effectiveAuthTypes) {
-			authTypes = effectiveAuthTypes
+		if len(authTypes) == 0 {
+			authTypes = authTypesFromConnections(info.Connections)
+			if len(authTypes) == 0 {
+				authTypes = fallbackAuthTypesForProvider(prov)
+			}
 			info.Connections = s.integrationConnectionInfos(name, authTypes, info.CredentialFields)
 		}
 		info.AuthTypes = authTypes
