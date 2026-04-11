@@ -74,7 +74,7 @@ func TestBuildRustProviderBinary_UsesSynthesizedCargoWrapper(t *testing.T) {
 	root := t.TempDir()
 	writeRustProviderCargoToml(t, root)
 
-	targetTriple, expectedLibC, err := rustTargetTriple(runtime.GOOS, runtime.GOARCH, "")
+	targetTriple, err := rustTargetTriple(runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		t.Fatalf("rustTargetTriple(host): %v", err)
 	}
@@ -90,15 +90,12 @@ func TestBuildRustProviderBinary_UsesSynthesizedCargoWrapper(t *testing.T) {
 	t.Setenv("PATH", fakeCargoDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	outputPath := filepath.Join(t.TempDir(), "provider")
-	builtLibC, err := BuildRustProviderBinary(root, outputPath, "rust-release", runtime.GOOS, runtime.GOARCH, "")
+	_, err = BuildRustProviderBinary(root, outputPath, "rust-release", runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		t.Fatalf("BuildRustProviderBinary: %v", err)
 	}
 	if _, err := os.Stat(outputPath); err != nil {
 		t.Fatalf("stat output binary: %v", err)
-	}
-	if builtLibC != expectedLibC {
-		t.Fatalf("builtLibC = %q, want %q", builtLibC, expectedLibC)
 	}
 }
 
@@ -122,7 +119,7 @@ func TestBuildRustComponentBinary_UsesKindSpecificWrapper(t *testing.T) {
 			root := t.TempDir()
 			writeRustProviderCargoToml(t, root)
 
-			targetTriple, _, err := rustTargetTriple(runtime.GOOS, runtime.GOARCH, "")
+			targetTriple, err := rustTargetTriple(runtime.GOOS, runtime.GOARCH)
 			if err != nil {
 				t.Fatalf("rustTargetTriple(host): %v", err)
 			}
@@ -137,7 +134,7 @@ func TestBuildRustComponentBinary_UsesKindSpecificWrapper(t *testing.T) {
 			t.Setenv("PATH", fakeCargoDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 			outputPath := filepath.Join(t.TempDir(), tt.kind)
-			if _, err := BuildRustComponentBinary(root, outputPath, tt.kind, runtime.GOOS, runtime.GOARCH, ""); err != nil {
+			if _, err := BuildRustComponentBinary(root, outputPath, tt.kind, runtime.GOOS, runtime.GOARCH); err != nil {
 				t.Fatalf("BuildRustComponentBinary(%s): %v", tt.kind, err)
 			}
 			if _, err := os.Stat(outputPath); err != nil {
@@ -208,34 +205,6 @@ func TestNewRustWrapperProject_UsesAbsoluteDependencyPath(t *testing.T) { //noli
 	}
 }
 
-func TestBuildRustProviderBinary_UsesExplicitLinuxLibCTarget(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("fake cargo test fixture is POSIX-only")
-	}
-
-	root := t.TempDir()
-	writeRustProviderCargoToml(t, root)
-
-	fakeCargoDir := t.TempDir()
-	writeFakeCargo(t, filepath.Join(fakeCargoDir, "cargo"), fakeCargoConfig{
-		ExpectedPluginName:   "rust-release",
-		ExpectedTarget:       "x86_64-unknown-linux-musl",
-		ExpectedServeExport:  "__gestalt_serve",
-		ExpectedCatalogWrite: true,
-		GeneratedCatalog:     "rust-release",
-	})
-	t.Setenv("PATH", fakeCargoDir+string(os.PathListSeparator)+os.Getenv("PATH"))
-
-	outputPath := filepath.Join(t.TempDir(), "provider")
-	builtLibC, err := BuildRustProviderBinary(root, outputPath, "rust-release", "linux", "amd64", LinuxLibCMusl)
-	if err != nil {
-		t.Fatalf("BuildRustProviderBinary(linux/amd64/musl): %v", err)
-	}
-	if builtLibC != LinuxLibCMusl {
-		t.Fatalf("builtLibC = %q, want %q", builtLibC, LinuxLibCMusl)
-	}
-}
-
 func TestPrepareSourceManifest_GeneratesStaticCatalogForRustProvider(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake cargo test fixture is POSIX-only")
@@ -244,7 +213,7 @@ func TestPrepareSourceManifest_GeneratesStaticCatalogForRustProvider(t *testing.
 	root := t.TempDir()
 	copyRustProviderFixture(t, root)
 
-	targetTriple, _, err := rustTargetTriple(runtime.GOOS, runtime.GOARCH, "")
+	targetTriple, err := rustTargetTriple(runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		t.Fatalf("rustTargetTriple(host): %v", err)
 	}
@@ -285,33 +254,27 @@ func TestRustTargetTriple(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name     string
-		goos     string
-		goarch   string
-		libc     string
-		want     string
-		wantLibC string
+		name   string
+		goos   string
+		goarch string
+		libc   string
+		want   string
 	}{
 		{name: "darwin-amd64", goos: "darwin", goarch: "amd64", want: "x86_64-apple-darwin"},
 		{name: "darwin-arm64", goos: "darwin", goarch: "arm64", want: "aarch64-apple-darwin"},
 		{name: "windows-amd64", goos: "windows", goarch: "amd64", want: "x86_64-pc-windows-gnu"},
-		{name: "linux-amd64-glibc", goos: "linux", goarch: "amd64", libc: LinuxLibCGLibC, want: "x86_64-unknown-linux-gnu", wantLibC: LinuxLibCGLibC},
-		{name: "linux-amd64-musl", goos: "linux", goarch: "amd64", libc: LinuxLibCMusl, want: "x86_64-unknown-linux-musl", wantLibC: LinuxLibCMusl},
 	}
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			got, gotLibC, err := rustTargetTriple(tt.goos, tt.goarch, tt.libc)
+			got, err := rustTargetTriple(tt.goos, tt.goarch)
 			if err != nil {
 				t.Fatalf("rustTargetTriple: %v", err)
 			}
 			if got != tt.want {
 				t.Fatalf("target = %q, want %q", got, tt.want)
-			}
-			if gotLibC != tt.wantLibC {
-				t.Fatalf("libc = %q, want %q", gotLibC, tt.wantLibC)
 			}
 		})
 	}

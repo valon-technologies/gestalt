@@ -62,28 +62,3 @@ USER nobody:nobody
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/gestaltd"]
 CMD ["serve", "--locked", "--config", "/etc/gestalt/config.yaml", "--artifacts-dir", "/data"]
-
-# --- Debian ---
-FROM debian:bookworm-slim AS debian
-ARG GESTALT_VERSION
-ARG GESTALT_REVISION
-ARG GESTALT_CREATED
-ARG GESTALT_SOURCE
-ARG GESTALT_DOCUMENTATION
-ARG GESTALT_URL
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
-COPY --from=build-binary /out/ /usr/local/bin/
-RUN mkdir -p /data && chown nobody:nogroup /data
-LABEL org.opencontainers.image.title="gestaltd" \
-      org.opencontainers.image.description="Platform for self-hostable, configurable integrations and tooling" \
-      org.opencontainers.image.source="${GESTALT_SOURCE}" \
-      org.opencontainers.image.documentation="${GESTALT_DOCUMENTATION}" \
-      org.opencontainers.image.url="${GESTALT_URL}" \
-      org.opencontainers.image.version="${GESTALT_VERSION}" \
-      org.opencontainers.image.revision="${GESTALT_REVISION}" \
-      org.opencontainers.image.created="${GESTALT_CREATED}"
-USER nobody:nogroup
-EXPOSE 8080
-ENTRYPOINT ["/usr/local/bin/gestaltd"]
-CMD ["serve", "--locked", "--config", "/etc/gestalt/config.yaml", "--artifacts-dir", "/data"]

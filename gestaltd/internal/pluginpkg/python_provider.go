@@ -118,10 +118,7 @@ func BuildPythonComponentBinary(sourceDir, binaryPath, pluginName, target, runti
 	if err := cmd.Run(); err != nil {
 		return "", fmt.Errorf("python release build: %w (ensure gestalt and PyInstaller are installed in the selected Python environment)", err)
 	}
-	if goos != "linux" || runtime.GOOS != "linux" {
-		return "", nil
-	}
-	return CurrentRuntimeLibC(), nil
+	return "", nil
 }
 
 func DetectPythonInterpreter(root, goos, goarch string) (string, error) {

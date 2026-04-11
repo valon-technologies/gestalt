@@ -15,7 +15,7 @@ type Resolver interface {
 
 // PlatformArchive identifies a single platform-specific archive in a release.
 type PlatformArchive struct {
-	Platform string // e.g. "darwin/arm64", "linux/amd64/glibc", "generic"
+	Platform string // e.g. "darwin/arm64", "linux/amd64/musl", "generic"
 	URL      string // download URL for the archive
 }
 

@@ -1156,10 +1156,9 @@ func TestResolveArchiveForPlatform(t *testing.T) {
 
 	entry := LockEntry{
 		Archives: map[string]LockArchive{
-			"darwin/arm64":      {URL: "https://example.com/darwin-arm64", SHA256: "abc"},
-			"linux/amd64":       {URL: "https://example.com/linux-amd64", SHA256: "def"},
-			"linux/amd64/glibc": {URL: "https://example.com/linux-amd64-glibc", SHA256: "ghi"},
-			"generic":           {URL: "https://example.com/generic", SHA256: "xyz"},
+			"darwin/arm64": {URL: "https://example.com/darwin-arm64", SHA256: "abc"},
+			"linux/amd64":  {URL: "https://example.com/linux-amd64", SHA256: "def"},
+			"generic":      {URL: "https://example.com/generic", SHA256: "xyz"},
 		},
 	}
 
@@ -1170,8 +1169,7 @@ func TestResolveArchiveForPlatform(t *testing.T) {
 		wantOK   bool
 	}{
 		{"exact match", "darwin/arm64", "https://example.com/darwin-arm64", true},
-		{"exact match with libc", "linux/amd64/glibc", "https://example.com/linux-amd64-glibc", true},
-		{"fallback without libc", "linux/amd64/musl", "https://example.com/linux-amd64", true},
+		{"fallback without libc", "linux/amd64", "https://example.com/linux-amd64", true},
 		{"no match falls to generic", "windows/amd64", "https://example.com/generic", true},
 	}
 	for _, tt := range tests {

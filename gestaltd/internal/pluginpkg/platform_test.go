@@ -7,34 +7,34 @@ import (
 
 func TestParsePlatformString_TwoComponents(t *testing.T) {
 	t.Parallel()
-	goos, goarch, libc, err := ParsePlatformString("darwin/arm64")
+	goos, goarch, err := ParsePlatformString("darwin/arm64")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if goos != "darwin" || goarch != "arm64" || libc != "" {
-		t.Fatalf("got (%q, %q, %q), want (darwin, arm64, \"\")", goos, goarch, libc)
+	if goos != "darwin" || goarch != "arm64" {
+		t.Fatalf("got (%q, %q), want (darwin, arm64)", goos, goarch)
 	}
 }
 
-func TestParsePlatformString_ThreeComponents(t *testing.T) {
+func TestParsePlatformString_ThreeComponentsIgnoresLibC(t *testing.T) {
 	t.Parallel()
-	goos, goarch, libc, err := ParsePlatformString("linux/amd64/glibc")
+	goos, goarch, err := ParsePlatformString("linux/amd64/musl")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if goos != "linux" || goarch != "amd64" || libc != "glibc" {
-		t.Fatalf("got (%q, %q, %q), want (linux, amd64, glibc)", goos, goarch, libc)
+	if goos != "linux" || goarch != "amd64" {
+		t.Fatalf("got (%q, %q), want (linux, amd64)", goos, goarch)
 	}
 }
 
 func TestParsePlatformString_RoundTrip(t *testing.T) {
 	t.Parallel()
-	for _, input := range []string{"darwin/arm64", "linux/amd64", "linux/amd64/glibc", "linux/arm64/musl", "windows/amd64"} {
-		goos, goarch, libc, err := ParsePlatformString(input)
+	for _, input := range []string{"darwin/arm64", "linux/amd64", "windows/amd64"} {
+		goos, goarch, err := ParsePlatformString(input)
 		if err != nil {
 			t.Fatalf("ParsePlatformString(%q): %v", input, err)
 		}
-		roundTripped := PlatformString(goos, goarch, libc)
+		roundTripped := PlatformString(goos, goarch)
 		if roundTripped != input {
 			t.Errorf("PlatformString(ParsePlatformString(%q)) = %q", input, roundTripped)
 		}
@@ -44,7 +44,7 @@ func TestParsePlatformString_RoundTrip(t *testing.T) {
 func TestParsePlatformString_RejectsInvalid(t *testing.T) {
 	t.Parallel()
 	for _, input := range []string{"", "darwin", "a/b/c/d", "/arm64", "darwin/"} {
-		_, _, _, err := ParsePlatformString(input)
+		_, _, err := ParsePlatformString(input)
 		if err == nil {
 			t.Errorf("ParsePlatformString(%q) should fail", input)
 		}
@@ -57,7 +57,7 @@ func TestCurrentPlatformString(t *testing.T) {
 	if got == "" {
 		t.Fatal("CurrentPlatformString() returned empty string")
 	}
-	goos, goarch, _, err := ParsePlatformString(got)
+	goos, goarch, err := ParsePlatformString(got)
 	if err != nil {
 		t.Fatalf("CurrentPlatformString() returned unparseable: %v", err)
 	}

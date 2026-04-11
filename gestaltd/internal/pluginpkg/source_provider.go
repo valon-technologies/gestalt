@@ -85,14 +85,14 @@ func SourceProviderExecutionEnv(root, goos, goarch string) (map[string]string, e
 	return pythonBackendEnvMap(), nil
 }
 
-func ValidateSourceProviderRelease(root, goos, goarch, libc string) error {
+func ValidateSourceProviderRelease(root, goos, goarch string) error {
 	kind, _, err := detectSourceProvider(root, goos, goarch)
 	if err != nil {
 		return err
 	}
 	switch kind {
 	case sourceProviderKindRust:
-		return ValidateRustProviderRelease(root, goos, goarch, libc)
+		return ValidateRustProviderRelease(root, goos, goarch)
 	case sourceProviderKindPython:
 		_, err = DetectPythonInterpreter(root, goos, goarch)
 		return err
@@ -104,7 +104,7 @@ func ValidateSourceProviderRelease(root, goos, goarch, libc string) error {
 	}
 }
 
-func BuildSourceProviderReleaseBinary(root, outputPath, pluginName, goos, goarch, libc string) (string, error) {
+func BuildSourceProviderReleaseBinary(root, outputPath, pluginName, goos, goarch string) (string, error) {
 	kind, target, err := detectSourceProvider(root, goos, goarch)
 	if err != nil {
 		return "", err
@@ -113,7 +113,7 @@ func BuildSourceProviderReleaseBinary(root, outputPath, pluginName, goos, goarch
 	case sourceProviderKindGo:
 		return "", BuildGoProviderBinary(root, outputPath, pluginName, goos, goarch)
 	case sourceProviderKindRust:
-		return BuildRustProviderBinary(root, outputPath, pluginName, goos, goarch, libc)
+		return BuildRustProviderBinary(root, outputPath, pluginName, goos, goarch)
 	case sourceProviderKindPython:
 		return BuildPythonProviderBinary(root, outputPath, pluginName, target, goos, goarch)
 	case sourceProviderKindTypeScript:

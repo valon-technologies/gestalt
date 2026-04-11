@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"text/template"
@@ -123,51 +122,51 @@ func BuildRustComponentTempBinary(root, kind, goos, goarch string) (string, func
 
 func buildRustTempBinary(root, pluginName, kind, goos, goarch string) (string, func(), error) {
 	return buildGoTempBinary("gestalt-rust-provider-bin-*", rustBinaryName(kind), goos, func(outputPath string) error {
-		_, err := buildRustBinary(root, outputPath, pluginName, kind, goos, goarch, "")
+		_, err := buildRustBinary(root, outputPath, pluginName, kind, goos, goarch)
 		return err
 	})
 }
 
-func ValidateRustProviderRelease(root, goos, goarch, libc string) error {
+func ValidateRustProviderRelease(root, goos, goarch string) error {
 	if _, err := detectRustPackage(root); err != nil {
 		return err
 	}
-	if _, _, err := rustTargetTriple(goos, goarch, libc); err != nil {
+	if _, err := rustTargetTriple(goos, goarch); err != nil {
 		return err
 	}
 	return ensureCargoAvailable()
 }
 
-func ValidateRustComponentRelease(root, kind, goos, goarch, libc string) error {
+func ValidateRustComponentRelease(root, kind, goos, goarch string) error {
 	if err := validateSourceComponentKind(kind); err != nil {
 		return err
 	}
 	if _, err := detectRustPackage(root); err != nil {
 		return err
 	}
-	if _, _, err := rustTargetTriple(goos, goarch, libc); err != nil {
+	if _, err := rustTargetTriple(goos, goarch); err != nil {
 		return err
 	}
 	return ensureCargoAvailable()
 }
 
-func BuildRustProviderBinary(root, outputPath, pluginName, goos, goarch, libc string) (string, error) {
-	return buildRustBinary(root, outputPath, pluginName, pluginmanifestv1.KindPlugin, goos, goarch, libc)
+func BuildRustProviderBinary(root, outputPath, pluginName, goos, goarch string) (string, error) {
+	return buildRustBinary(root, outputPath, pluginName, pluginmanifestv1.KindPlugin, goos, goarch)
 }
 
-func BuildRustComponentBinary(root, outputPath, kind, goos, goarch, libc string) (string, error) {
+func BuildRustComponentBinary(root, outputPath, kind, goos, goarch string) (string, error) {
 	if err := validateSourceComponentKind(kind); err != nil {
 		return "", err
 	}
-	return buildRustBinary(root, outputPath, sourcePluginName(root), kind, goos, goarch, libc)
+	return buildRustBinary(root, outputPath, sourcePluginName(root), kind, goos, goarch)
 }
 
-func buildRustBinary(root, outputPath, pluginName, kind, goos, goarch, libc string) (string, error) {
+func buildRustBinary(root, outputPath, pluginName, kind, goos, goarch string) (string, error) {
 	target, err := detectRustPackage(root)
 	if err != nil {
 		return "", err
 	}
-	targetTriple, builtLibC, err := rustTargetTriple(goos, goarch, libc)
+	targetTriple, err := rustTargetTriple(goos, goarch)
 	if err != nil {
 		return "", err
 	}
@@ -207,7 +206,7 @@ func buildRustBinary(root, outputPath, pluginName, kind, goos, goarch, libc stri
 		return "", err
 	}
 
-	return builtLibC, nil
+	return "", nil
 }
 
 func rustProjectPackageTarget(data []byte) (*rustProviderTarget, error) {
@@ -266,45 +265,28 @@ func ensureCargoAvailable() error {
 	return nil
 }
 
-func rustTargetTriple(goos, goarch, requestedLibC string) (string, string, error) {
-	normalizedLibC, err := NormalizeArtifactLibC(goos, requestedLibC)
-	if err != nil {
-		return "", "", err
-	}
+func rustTargetTriple(goos, goarch string) (string, error) {
 	switch goos {
 	case "darwin":
 		switch goarch {
 		case "amd64":
-			return "x86_64-apple-darwin", "", nil
+			return "x86_64-apple-darwin", nil
 		case "arm64":
-			return "aarch64-apple-darwin", "", nil
+			return "aarch64-apple-darwin", nil
 		}
 	case "linux":
-		libc := normalizedLibC
-		if libc == "" {
-			libc = LinuxLibCGLibC
-			if runtime.GOOS == "linux" && CurrentRuntimeLibC() == LinuxLibCMusl {
-				libc = LinuxLibCMusl
-			}
-		}
 		switch goarch {
 		case "amd64":
-			if libc == LinuxLibCMusl {
-				return "x86_64-unknown-linux-musl", libc, nil
-			}
-			return "x86_64-unknown-linux-gnu", libc, nil
+			return "x86_64-unknown-linux-musl", nil
 		case "arm64":
-			if libc == LinuxLibCMusl {
-				return "aarch64-unknown-linux-musl", libc, nil
-			}
-			return "aarch64-unknown-linux-gnu", libc, nil
+			return "aarch64-unknown-linux-musl", nil
 		}
 	case "windows":
 		if goarch == "amd64" {
-			return "x86_64-pc-windows-gnu", "", nil
+			return "x86_64-pc-windows-gnu", nil
 		}
 	}
-	return "", "", fmt.Errorf("unsupported Rust target platform %s/%s", goos, goarch)
+	return "", fmt.Errorf("unsupported Rust target platform %s/%s", goos, goarch)
 }
 
 func rustServeFunction(kind string) (string, bool, error) {

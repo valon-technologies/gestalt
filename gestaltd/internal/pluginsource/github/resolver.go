@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
@@ -40,6 +41,7 @@ var (
 	platformArchAliases = map[string][]string{
 		"386":   {"386", "x86"},
 		"amd64": {"amd64", "x86_64"},
+		"arm":   {"arm", "armv7"},
 		"arm64": {"arm64", "aarch64"},
 	}
 )
@@ -159,14 +161,14 @@ func (r *GitHubResolver) fetchRelease(ctx context.Context, client *http.Client, 
 }
 
 func findAsset(assets []releaseAsset, plugin, version string) (releaseAsset, error) {
-	return findAssetForPlatform(assets, runtime.GOOS, runtime.GOARCH, plugin, version, pluginpkg.CurrentRuntimeLibC())
+	return findAssetForPlatform(assets, runtime.GOOS, runtime.GOARCH, plugin, version)
 }
 
-func findAssetForPlatform(assets []releaseAsset, goos, goarch, plugin, version, libc string) (releaseAsset, error) {
+func findAssetForPlatform(assets []releaseAsset, goos, goarch, plugin, version string) (releaseAsset, error) {
 	if plugin == "" {
 		return releaseAsset{}, fmt.Errorf("plugin name is required")
 	}
-	for _, expectedName := range candidatePlatformAssetNamesFor(goos, goarch, plugin, version, libc) {
+	for _, expectedName := range candidatePlatformAssetNamesFor(goos, goarch, plugin, version) {
 		if asset, ok := findAssetByName(assets, expectedName); ok {
 			return asset, nil
 		}
@@ -211,29 +213,19 @@ func findAssetForPlatform(assets []releaseAsset, goos, goarch, plugin, version, 
 	)
 }
 
-func platformAssetNameFor(goos, goarch, plugin, version, libc string) string {
-	return fmt.Sprintf("%s%s_v%s_%s.tar.gz", platformAssetPrefix, plugin, version, pluginpkg.PlatformArchiveSuffix(goos, goarch, libc))
+func platformAssetNameFor(goos, goarch, plugin, version string) string {
+	return fmt.Sprintf("%s%s_v%s_%s.tar.gz", platformAssetPrefix, plugin, version, pluginpkg.PlatformArchiveSuffix(goos, goarch))
 }
 
 func genericAssetName(plugin, version string) string {
 	return fmt.Sprintf("%s%s_v%s.tar.gz", platformAssetPrefix, plugin, version)
 }
 
-func candidatePlatformAssetNamesFor(goos, goarch, plugin, version, libc string) []string {
-	names := make([]string, 0, 4)
-	switch {
-	case goos == "linux" && libc == "":
-		names = append(names,
-			platformAssetNameFor(goos, goarch, plugin, version, pluginpkg.LinuxLibCMusl),
-			platformAssetNameFor(goos, goarch, plugin, version, pluginpkg.LinuxLibCGLibC),
-		)
-	default:
-		names = append(names, platformAssetNameFor(goos, goarch, plugin, version, libc))
+func candidatePlatformAssetNamesFor(goos, goarch, plugin, version string) []string {
+	names := []string{
+		platformAssetNameFor(goos, goarch, plugin, version),
+		genericAssetName(plugin, version),
 	}
-	if goos == "linux" && libc != "" {
-		names = append(names, fmt.Sprintf("%s%s_v%s_%s.tar.gz", platformAssetPrefix, plugin, version, pluginpkg.PlatformArchiveSuffix(goos, goarch, "")))
-	}
-	names = append(names, genericAssetName(plugin, version))
 	seen := make(map[string]struct{}, len(names))
 	out := make([]string, 0, len(names))
 	for _, name := range names {
@@ -309,13 +301,6 @@ func platformSuffixCandidatesFor(goos, goarch string) []string {
 			for _, leadSep := range platformSeparators {
 				for _, midSep := range platformSeparators {
 					suffixes = append(suffixes, leadSep+osAlias+midSep+archAlias)
-					if goos == "linux" {
-						for _, libc := range []string{pluginpkg.LinuxLibCGLibC, pluginpkg.LinuxLibCMusl} {
-							for _, libSep := range platformSeparators {
-								suffixes = append(suffixes, leadSep+osAlias+midSep+archAlias+libSep+libc)
-							}
-						}
-					}
 				}
 			}
 		}
@@ -376,9 +361,19 @@ func classifyReleaseAssets(assets []releaseAsset, plugin, version string) map[st
 			result["generic"] = a
 			continue
 		}
-		if platform, ok := extractPlatformFromAssetName(a.Name, plugin, version); ok {
-			result[platform] = a
+		platform, ok := extractPlatformFromAssetName(a.Name, plugin, version)
+		if !ok {
+			continue
 		}
+		if existing, dup := result[platform]; dup {
+			// When two assets map to the same platform (e.g. _linux_amd64
+			// and _linux_amd64_musl from a transition-period release),
+			// prefer the musl variant since it is statically linked.
+			if strings.Contains(existing.Name, "_musl") {
+				continue
+			}
+		}
+		result[platform] = a
 	}
 	return result
 }
@@ -388,7 +383,8 @@ func classifyReleaseAssets(assets []releaseAsset, plugin, version string) map[st
 //
 //	gestalt-plugin-{plugin}_v{version}_{goos}_{goarch}[_{libc}].tar.gz
 //
-// OS and arch aliases (e.g. macos→darwin, x86_64→amd64) are normalized.
+// OS and arch aliases (e.g. macos->darwin, x86_64->amd64) are normalized.
+// Trailing qualifiers like _musl are ignored.
 func extractPlatformFromAssetName(name, plugin, version string) (string, bool) {
 	stem, ok := trimPackageArchiveExtension(name)
 	if !ok {
@@ -401,54 +397,61 @@ func extractPlatformFromAssetName(name, plugin, version string) (string, bool) {
 	}
 	suffix := stem[len(prefix):]
 
-	// Try parsing with 2, 3, or 4 underscore-separated parts to handle
-	// aliases like x86_64 that contain underscores.
-	parts := strings.Split(suffix, "_")
-	for _, split := range possiblePlatformSplits(parts) {
-		goos := normalizeOS(split.os)
-		goarch := normalizeArch(split.arch)
-		if goos == "" || goarch == "" {
-			continue
-		}
-		if split.libc != "" {
-			libc := normalizeLibC(split.libc)
-			if libc == "" {
-				continue
-			}
-			return pluginpkg.PlatformString(goos, goarch, libc), true
-		}
-		return pluginpkg.PlatformString(goos, goarch, ""), true
+	goos, rest, ok := strings.Cut(suffix, "_")
+	if !ok {
+		return "", false
 	}
-	return "", false
-}
-
-type platformSplit struct {
-	os, arch, libc string
-}
-
-// possiblePlatformSplits returns candidate (os, arch, libc) interpretations
-// for underscore-separated parts, handling aliases like x86_64 that contain
-// an underscore.
-func possiblePlatformSplits(parts []string) []platformSplit {
-	var splits []platformSplit
-	switch len(parts) {
-	case 2:
-		// os_arch
-		splits = append(splits, platformSplit{parts[0], parts[1], ""})
-	case 3:
-		// os_arch_libc  OR  os_x86_64 (arch alias with underscore)
-		splits = append(splits,
-			platformSplit{parts[0], parts[1], parts[2]},
-			platformSplit{parts[0], parts[1] + "_" + parts[2], ""},
-		)
-	case 4:
-		// os_x86_64_libc
-		splits = append(splits, platformSplit{parts[0], parts[1] + "_" + parts[2], parts[3]})
+	goos = normalizeOS(goos)
+	if goos == "" {
+		return "", false
 	}
-	return splits
+	goarch := matchArch(rest)
+	if goarch == "" {
+		return "", false
+	}
+	return pluginpkg.PlatformString(goos, goarch), true
 }
 
-// normalizeOS maps OS aliases to canonical Go GOOS values.
+// matchArch resolves an arch string that may contain trailing qualifiers
+// (e.g. "amd64_musl", "x86_64_musl") into a canonical GOARCH value.
+// Known aliases are matched longest-first so "x86_64" takes priority over
+// "x86". Unknown single-token values pass through for forward compatibility
+// with future GOARCH values.
+func matchArch(s string) string {
+	lower := strings.ToLower(s)
+	for _, entry := range sortedArchAliases {
+		if lower == entry.alias || strings.HasPrefix(lower, entry.alias+"_") {
+			return entry.canonical
+		}
+	}
+	if i := strings.IndexByte(lower, '_'); i > 0 {
+		return lower[:i]
+	}
+	return lower
+}
+
+type archAlias struct {
+	alias     string
+	canonical string
+}
+
+// sortedArchAliases is built from platformArchAliases at init time, sorted
+// by alias length descending so longer aliases match first (x86_64 before x86).
+var sortedArchAliases = func() []archAlias {
+	var entries []archAlias
+	for canonical, aliases := range platformArchAliases {
+		for _, alias := range aliases {
+			entries = append(entries, archAlias{alias: alias, canonical: canonical})
+		}
+	}
+	sort.Slice(entries, func(i, j int) bool {
+		return len(entries[i].alias) > len(entries[j].alias)
+	})
+	return entries
+}()
+
+// normalizeOS maps OS aliases to canonical Go GOOS values. Unknown values
+// pass through for forward compatibility.
 func normalizeOS(s string) string {
 	s = strings.ToLower(s)
 	for canonical, aliases := range platformOSAliases {
@@ -459,27 +462,4 @@ func normalizeOS(s string) string {
 		}
 	}
 	return s
-}
-
-// normalizeArch maps arch aliases to canonical Go GOARCH values.
-func normalizeArch(s string) string {
-	s = strings.ToLower(s)
-	for canonical, aliases := range platformArchAliases {
-		for _, alias := range aliases {
-			if s == alias {
-				return canonical
-			}
-		}
-	}
-	return s
-}
-
-func normalizeLibC(s string) string {
-	s = strings.ToLower(s)
-	switch s {
-	case pluginpkg.LinuxLibCGLibC, pluginpkg.LinuxLibCMusl:
-		return s
-	default:
-		return ""
-	}
 }

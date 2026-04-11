@@ -164,10 +164,7 @@ func buildTypeScriptBinary(sourceDir, binaryPath, pluginName, target, goos, goar
 	if err := cmd.Run(); err != nil {
 		return "", fmt.Errorf("TypeScript release build: %w (ensure Bun and @valon-technologies/gestalt are available)", err)
 	}
-	if goos != "linux" || runtime.GOOS != "linux" {
-		return "", nil
-	}
-	return CurrentRuntimeLibC(), nil
+	return "", nil
 }
 
 func typeScriptComponentKind(kind string) (string, error) {

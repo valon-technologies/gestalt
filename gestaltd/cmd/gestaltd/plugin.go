@@ -45,7 +45,6 @@ const windowsExecutableSuffix = ".exe"
 type releasePlatform struct {
 	GOOS   string
 	GOARCH string
-	LibC   string
 }
 
 type releaseBuildTarget struct {
@@ -125,7 +124,7 @@ func runProviderRelease(args []string) error {
 		for _, platform := range buildPlatforms {
 			archivePath, err := buildPlatformArchive(sourceDir, srcManifest, pluginName, *version, buildTarget.Kind, platform, *outputDir, manifestFile, manifestFormat)
 			if err != nil {
-				return fmt.Errorf("build %s: %w", pluginpkg.PlatformString(platform.GOOS, platform.GOARCH, platform.LibC), err)
+				return fmt.Errorf("build %s: %w", pluginpkg.PlatformString(platform.GOOS, platform.GOARCH), err)
 			}
 			archivePaths = append(archivePaths, archivePath)
 		}
@@ -191,7 +190,7 @@ func resolveReleaseBuildPlatforms(root string, manifest *pluginmanifestv1.Manife
 	builds := make([]releasePlatform, 0, len(platforms))
 	var missingSource bool
 	for _, platform := range platforms {
-		if err := validateReleaseBuildTarget(root, target.Kind, platform.GOOS, platform.GOARCH, platform.LibC); err != nil {
+		if err := validateReleaseBuildTarget(root, target.Kind, platform.GOOS, platform.GOARCH); err != nil {
 			if isMissingReleaseSourceBuildTarget(err, target.Kind) {
 				missingSource = true
 				continue
@@ -302,23 +301,23 @@ func detectReleaseSourceBuildTarget(root, kind string) (bool, error) {
 	}
 }
 
-func validateReleaseBuildTarget(root, kind, goos, goarch, libc string) error {
+func validateReleaseBuildTarget(root, kind, goos, goarch string) error {
 	switch kind {
 	case pluginmanifestv1.KindPlugin:
-		return pluginpkg.ValidateSourceProviderRelease(root, goos, goarch, libc)
+		return pluginpkg.ValidateSourceProviderRelease(root, goos, goarch)
 	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindIndexedDB, pluginmanifestv1.KindSecrets:
-		return pluginpkg.ValidateSourceComponentRelease(root, kind, goos, goarch, libc)
+		return pluginpkg.ValidateSourceComponentRelease(root, kind, goos, goarch)
 	default:
 		return fmt.Errorf("unsupported release build target kind %q", kind)
 	}
 }
 
-func buildReleaseTargetBinary(root, outputPath, pluginName, kind, goos, goarch, libc string) (string, error) {
+func buildReleaseTargetBinary(root, outputPath, pluginName, kind, goos, goarch string) (string, error) {
 	switch kind {
 	case pluginmanifestv1.KindPlugin:
-		return pluginpkg.BuildSourceProviderReleaseBinary(root, outputPath, pluginName, goos, goarch, libc)
+		return pluginpkg.BuildSourceProviderReleaseBinary(root, outputPath, pluginName, goos, goarch)
 	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindIndexedDB, pluginmanifestv1.KindSecrets:
-		return pluginpkg.BuildSourceComponentReleaseBinary(root, outputPath, kind, goos, goarch, libc)
+		return pluginpkg.BuildSourceComponentReleaseBinary(root, outputPath, kind, goos, goarch)
 	default:
 		return "", fmt.Errorf("unsupported release build target kind %q", kind)
 	}
@@ -353,20 +352,11 @@ func parseReleasePlatforms(value string) ([]releasePlatform, error) {
 		plat := strings.TrimSpace(part)
 		pieces := strings.Split(plat, "/")
 		if len(pieces) < 2 || len(pieces) > 3 || pieces[0] == "" || pieces[1] == "" {
-			return nil, fmt.Errorf("invalid platform %q, expected os/arch[/libc]", plat)
-		}
-		libc := ""
-		if len(pieces) == 3 {
-			libc = pieces[2]
-		}
-		normalizedLibC, err := pluginpkg.NormalizeArtifactLibC(pieces[0], libc)
-		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("invalid platform %q, expected os/arch", plat)
 		}
 		platforms = append(platforms, releasePlatform{
 			GOOS:   pieces[0],
 			GOARCH: pieces[1],
-			LibC:   normalizedLibC,
 		})
 	}
 	return platforms, nil
@@ -394,15 +384,8 @@ func prepareBuiltPackageDir(stagingDir, sourceDir string, srcManifest *pluginman
 	plat := platform
 	binaryName := releaseBinaryName(pluginName, plat.GOOS)
 	binaryPath := filepath.Join(stagingDir, binaryName)
-	builtLibC, err := buildReleaseTargetBinary(sourceDir, binaryPath, pluginName, buildKind, plat.GOOS, plat.GOARCH, plat.LibC)
-	if err != nil {
+	if _, err := buildReleaseTargetBinary(sourceDir, binaryPath, pluginName, buildKind, plat.GOOS, plat.GOARCH); err != nil {
 		return nil, releasePlatform{}, err
-	}
-	switch {
-	case plat.LibC == "":
-		plat.LibC = builtLibC
-	case builtLibC != "" && builtLibC != plat.LibC:
-		return nil, releasePlatform{}, fmt.Errorf("requested linux libc %q but built artifact targets %q", plat.LibC, builtLibC)
 	}
 
 	digest, err := pluginpkg.FileSHA256(binaryPath)
@@ -449,7 +432,7 @@ func buildReleaseManifest(srcManifest *pluginmanifestv1.Manifest, version, binar
 	manifest.Version = version
 	manifest.Release = nil
 	manifest.Artifacts = []pluginmanifestv1.Artifact{
-		{OS: plat.GOOS, Arch: plat.GOARCH, LibC: plat.LibC, Path: binaryName, SHA256: digest},
+		{OS: plat.GOOS, Arch: plat.GOARCH, Path: binaryName, SHA256: digest},
 	}
 
 	pluginpkg.EnsureEntrypointForKind(manifest, buildKind).ArtifactPath = binaryName
@@ -458,7 +441,7 @@ func buildReleaseManifest(srcManifest *pluginmanifestv1.Manifest, version, binar
 }
 
 func platformArchiveName(pluginName, version string, plat releasePlatform) string {
-	return fmt.Sprintf("gestalt-plugin-%s_v%s_%s.tar.gz", pluginName, version, pluginpkg.PlatformArchiveSuffix(plat.GOOS, plat.GOARCH, plat.LibC))
+	return fmt.Sprintf("gestalt-plugin-%s_v%s_%s.tar.gz", pluginName, version, pluginpkg.PlatformArchiveSuffix(plat.GOOS, plat.GOARCH))
 }
 
 func releaseBinaryName(pluginName, goos string) string {

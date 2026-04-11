@@ -574,7 +574,7 @@ func TestRun_PluginReleaseBuildsRustSourcePluginForExplicitLinuxTarget(t *testin
 	if err != nil {
 		t.Fatalf("pluginpkgRustTargetTriple(host): %v", err)
 	}
-	explicitTarget, _, err := pluginpkgRustTargetTriple("linux", "amd64", pluginpkg.LinuxLibCMusl)
+	explicitTarget, _, err := pluginpkgRustTargetTriple("linux", "amd64", "musl")
 	if err != nil {
 		t.Fatalf("pluginpkgRustTargetTriple(linux/amd64/musl): %v", err)
 	}
@@ -600,14 +600,14 @@ func TestRun_PluginReleaseBuildsRustSourcePluginForExplicitLinuxTarget(t *testin
 		"--output", outputDir,
 	)
 
-	archiveName := expectedRustArchiveName(testVersion, "linux", "amd64", pluginpkg.LinuxLibCMusl)
+	archiveName := expectedRustArchiveName(testVersion, "linux", "amd64", "musl")
 	manifest := readReleasedManifest(t, outputDir, archiveName)
 	binaryName := releaseBinaryName(rustReleasePluginName, "linux")
 
 	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
 		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
 	}
-	assertExpectedRustArtifactPlatform(t, manifest.Artifacts[0], "linux", "amd64", pluginpkg.LinuxLibCMusl)
+	assertExpectedRustArtifactPlatform(t, manifest.Artifacts[0], "linux", "amd64", "musl")
 }
 
 func TestRun_PluginReleaseRejectsMissingCrossTargetInterpreterForPythonSourcePlugin(t *testing.T) {
@@ -776,46 +776,6 @@ func TestRun_PluginReleaseBuildsGoSourceAuthPlugin(t *testing.T) {
 	}
 	if validated == nil || validated.Email != "jwt@example.com" {
 		t.Fatalf("validated = %+v", validated)
-	}
-}
-
-func TestRun_PluginReleaseBuildsGoSourceAuthPluginForExplicitLinuxLibC(t *testing.T) {
-	t.Parallel()
-
-	if runtime.GOOS != "linux" {
-		t.Skip("explicit linux libc packaging only applies on linux builders")
-	}
-	libc := pluginpkg.CurrentRuntimeLibC()
-	if libc == "" {
-		t.Skip("current linux runtime libc is unknown")
-	}
-
-	pluginDir := newSourceComponentReleaseFixture(t, t.TempDir(), sourceComponentReleaseFixtureParams{
-		pluginName: authReleasePluginName,
-		schemaPath: authReleaseSchemaPath,
-		sourceFile: "auth.go",
-		sourceCode: testutil.GeneratedAuthPackageSource(),
-		manifest: &pluginmanifestv1.Manifest{
-			Source: authReleaseSource, Version: "0.0.1", DisplayName: "Auth Release",
-			Auth: &pluginmanifestv1.AuthMetadata{ConfigSchemaPath: authReleaseSchemaPath},
-		},
-	})
-	outputDir := t.TempDir()
-	const testVersion = "0.0.15-linux-libc"
-
-	runPluginReleaseCommand(t, pluginDir,
-		"--version", testVersion,
-		"--platform", runtime.GOOS+"/"+runtime.GOARCH+"/"+libc,
-		"--output", outputDir,
-	)
-
-	archiveName := "gestalt-plugin-" + authReleasePluginName + "_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + "_" + libc + ".tar.gz"
-	manifest := readReleasedManifest(t, outputDir, archiveName)
-	if len(manifest.Artifacts) != 1 {
-		t.Fatalf("artifacts = %+v, want one artifact", manifest.Artifacts)
-	}
-	if manifest.Artifacts[0].LibC != libc {
-		t.Fatalf("artifact libc = %q, want %q", manifest.Artifacts[0].LibC, libc)
 	}
 }
 
@@ -1100,8 +1060,8 @@ func TestRun_PluginReleaseBuildsTypeScriptSourceAuthPlugin(t *testing.T) {
 	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
 		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
 	}
-	if runtime.GOOS == "linux" && manifest.Artifacts[0].LibC != pluginpkg.CurrentRuntimeLibC() {
-		t.Fatalf("artifact libc = %q, want %q", manifest.Artifacts[0].LibC, pluginpkg.CurrentRuntimeLibC())
+	if runtime.GOOS == "linux" && manifest.Artifacts[0].LibC != "" {
+		t.Fatalf("artifact libc = %q, want %q", manifest.Artifacts[0].LibC, "")
 	}
 	if manifest.Entrypoints.Auth == nil || manifest.Entrypoints.Auth.ArtifactPath != binaryName {
 		t.Fatalf("auth entrypoint = %+v, want artifact path %q", manifest.Entrypoints.Auth, binaryName)
@@ -2028,11 +1988,7 @@ func defaultReleasePlatformsForTest(t *testing.T) []releasePlatform {
 }
 
 func expectedScriptReleasePlatform(goos, goarch string) releasePlatform {
-	plat := releasePlatform{GOOS: goos, GOARCH: goarch}
-	if runtime.GOOS == "linux" && goos == "linux" {
-		plat.LibC = pluginpkg.CurrentRuntimeLibC()
-	}
-	return plat
+	return releasePlatform{GOOS: goos, GOARCH: goarch}
 }
 
 func expectedPythonArchiveNameFor(pluginName, version, goos, goarch string) string {
@@ -2043,22 +1999,12 @@ func expectedPythonArchiveName(version, goos, goarch string) string {
 	return expectedPythonArchiveNameFor("python-release", version, goos, goarch)
 }
 
-func expectedGoReleasePlatform(goos, goarch, libc string) releasePlatform {
-	return releasePlatform{GOOS: goos, GOARCH: goarch, LibC: libc}
+func expectedGoReleasePlatform(goos, goarch, _ string) releasePlatform {
+	return releasePlatform{GOOS: goos, GOARCH: goarch}
 }
 
-func expectedRustReleasePlatform(goos, goarch, libc string) releasePlatform {
-	plat := releasePlatform{GOOS: goos, GOARCH: goarch, LibC: libc}
-	if plat.GOOS != "linux" || plat.LibC != "" {
-		return plat
-	}
-	if runtime.GOOS == "linux" && goos == "linux" {
-		plat.LibC = pluginpkg.CurrentRuntimeLibC()
-	}
-	if plat.LibC == "" {
-		plat.LibC = pluginpkg.LinuxLibCGLibC
-	}
-	return plat
+func expectedRustReleasePlatform(goos, goarch, _ string) releasePlatform {
+	return releasePlatform{GOOS: goos, GOARCH: goarch}
 }
 
 func expectedRustArchiveName(version, goos, goarch, libc string) string {
@@ -2069,38 +2015,26 @@ func assertExpectedScriptArtifactPlatform(t *testing.T, artifact pluginmanifestv
 	t.Helper()
 
 	want := expectedScriptReleasePlatform(goos, goarch)
-	if artifact.OS != want.GOOS || artifact.Arch != want.GOARCH || artifact.LibC != want.LibC {
-		t.Fatalf(
-			"artifact platform = %s/%s/%s, want %s/%s/%s",
-			artifact.OS, artifact.Arch, artifact.LibC,
-			want.GOOS, want.GOARCH, want.LibC,
-		)
+	if artifact.OS != want.GOOS || artifact.Arch != want.GOARCH {
+		t.Fatalf("artifact platform = %s/%s, want %s/%s", artifact.OS, artifact.Arch, want.GOOS, want.GOARCH)
 	}
 }
 
-func assertExpectedGoArtifactPlatform(t *testing.T, artifact pluginmanifestv1.Artifact, goos, goarch, libc string) {
+func assertExpectedGoArtifactPlatform(t *testing.T, artifact pluginmanifestv1.Artifact, goos, goarch, _ string) {
 	t.Helper()
 
-	want := expectedGoReleasePlatform(goos, goarch, libc)
-	if artifact.OS != want.GOOS || artifact.Arch != want.GOARCH || artifact.LibC != want.LibC {
-		t.Fatalf(
-			"artifact platform = %s/%s/%s, want %s/%s/%s",
-			artifact.OS, artifact.Arch, artifact.LibC,
-			want.GOOS, want.GOARCH, want.LibC,
-		)
+	want := expectedGoReleasePlatform(goos, goarch, "")
+	if artifact.OS != want.GOOS || artifact.Arch != want.GOARCH {
+		t.Fatalf("artifact platform = %s/%s, want %s/%s", artifact.OS, artifact.Arch, want.GOOS, want.GOARCH)
 	}
 }
 
-func assertExpectedRustArtifactPlatform(t *testing.T, artifact pluginmanifestv1.Artifact, goos, goarch, libc string) {
+func assertExpectedRustArtifactPlatform(t *testing.T, artifact pluginmanifestv1.Artifact, goos, goarch, _ string) {
 	t.Helper()
 
-	want := expectedRustReleasePlatform(goos, goarch, libc)
-	if artifact.OS != want.GOOS || artifact.Arch != want.GOARCH || artifact.LibC != want.LibC {
-		t.Fatalf(
-			"artifact platform = %s/%s/%s, want %s/%s/%s",
-			artifact.OS, artifact.Arch, artifact.LibC,
-			want.GOOS, want.GOARCH, want.LibC,
-		)
+	want := expectedRustReleasePlatform(goos, goarch, "")
+	if artifact.OS != want.GOOS || artifact.Arch != want.GOARCH {
+		t.Fatalf("artifact platform = %s/%s, want %s/%s", artifact.OS, artifact.Arch, want.GOOS, want.GOARCH)
 	}
 }
 
@@ -2168,7 +2102,7 @@ func buildGoSourceComponentBinaryForTest(t *testing.T, pluginDir, kind string) s
 
 	outputDir := t.TempDir()
 	outputPath := filepath.Join(outputDir, releaseBinaryName(filepath.Base(pluginDir), runtime.GOOS))
-	if _, err := pluginpkg.BuildSourceComponentReleaseBinary(pluginDir, outputPath, kind, runtime.GOOS, runtime.GOARCH, ""); err != nil {
+	if _, err := pluginpkg.BuildSourceComponentReleaseBinary(pluginDir, outputPath, kind, runtime.GOOS, runtime.GOARCH); err != nil {
 		t.Fatalf("BuildSourceComponentReleaseBinary(%s): %v", kind, err)
 	}
 	return outputPath
@@ -2452,7 +2386,7 @@ fi`
 fi`
 }
 
-func pluginpkgRustTargetTriple(goos, goarch, libc string) (string, string, error) {
+func pluginpkgRustTargetTriple(goos, goarch, _ string) (string, string, error) {
 	switch goos {
 	case "darwin":
 		switch goarch {
@@ -2462,24 +2396,11 @@ func pluginpkgRustTargetTriple(goos, goarch, libc string) (string, string, error
 			return "aarch64-apple-darwin", "", nil
 		}
 	case "linux":
-		normalizedLibC, err := pluginpkg.NormalizeArtifactLibC(goos, libc)
-		if err != nil {
-			return "", "", err
-		}
-		if normalizedLibC == "" {
-			normalizedLibC = expectedRustReleasePlatform(goos, goarch, "").LibC
-		}
 		switch goarch {
 		case "amd64":
-			if normalizedLibC == pluginpkg.LinuxLibCMusl {
-				return "x86_64-unknown-linux-musl", normalizedLibC, nil
-			}
-			return "x86_64-unknown-linux-gnu", normalizedLibC, nil
+			return "x86_64-unknown-linux-musl", "", nil
 		case "arm64":
-			if normalizedLibC == pluginpkg.LinuxLibCMusl {
-				return "aarch64-unknown-linux-musl", normalizedLibC, nil
-			}
-			return "aarch64-unknown-linux-gnu", normalizedLibC, nil
+			return "aarch64-unknown-linux-musl", "", nil
 		}
 	case "windows":
 		switch goarch {

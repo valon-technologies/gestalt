@@ -911,7 +911,6 @@
         "libc": {
           "type": "string",
           "enum": [
-            "glibc",
             "musl"
           ]
         },

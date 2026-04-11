@@ -24,13 +24,13 @@ class Gestalt < Formula
 
   on_linux do
     on_arm do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.1-alpha.17/gestalt-linux-arm64-musl.tar.gz",
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.1-alpha.17/gestalt-linux-arm64.tar.gz",
           using: GitHubPrivateRepositoryReleaseDownloadStrategy
       sha256 "b3e844d0521959fc6f532d7a50b19cc86f855c58757fbcaa3881bbfa0fdbd8be"
     end
 
     on_intel do
-      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.1-alpha.17/gestalt-linux-x86_64-musl.tar.gz",
+      url "https://github.com/valon-technologies/gestalt/releases/download/gestalt/v0.0.1-alpha.17/gestalt-linux-x86_64.tar.gz",
           using: GitHubPrivateRepositoryReleaseDownloadStrategy
       sha256 "e39fb2dc5b4ea5e5d7509afbdc401b9a95bc76989e92096f9d67b723429232e3"
     end
