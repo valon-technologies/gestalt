@@ -13,6 +13,8 @@ import (
 
 const secretPrefix = "secret://"
 
+var yamlNodeType = reflect.TypeOf(yaml.Node{})
+
 // resolveSecretRefs walks the config struct and replaces any string value
 // starting with "secret://" with the resolved secret value. The
 // SecretsConfig.Config node is skipped to avoid self-referential resolution,
@@ -56,34 +58,20 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 					}
 				}
 			}
-			if err := resolveYAMLNode(&intg.Plugin.Config, resolve); err != nil {
-				return err
-			}
 		}
 		cfg.Plugins[name] = intg
 	}
-	if cfg.Auth.Provider != nil {
-		if err := resolveStringFields(cfg.Auth.Provider, resolve); err != nil {
+	// resolveStringFields handles both Provider (*ProviderDef, via pointer
+	// recursion) and Config (yaml.Node, via type detection) automatically.
+	// Secrets is handled separately to skip its Config node and avoid
+	// self-referential resolution.
+	for _, comp := range []*config.ComponentConfig{&cfg.Auth, &cfg.UI, &cfg.Telemetry, &cfg.Audit} {
+		if err := resolveStringFields(comp, resolve); err != nil {
 			return err
 		}
 	}
 	if cfg.Secrets.Provider != nil {
 		if err := resolveStringFields(cfg.Secrets.Provider, resolve); err != nil {
-			return err
-		}
-	}
-	if cfg.UI.Provider != nil {
-		if err := resolveStringFields(cfg.UI.Provider, resolve); err != nil {
-			return err
-		}
-	}
-	if cfg.Telemetry.Provider != nil {
-		if err := resolveStringFields(cfg.Telemetry.Provider, resolve); err != nil {
-			return err
-		}
-	}
-	if cfg.Audit.Provider != nil {
-		if err := resolveStringFields(cfg.Audit.Provider, resolve); err != nil {
 			return err
 		}
 	}
@@ -93,24 +81,7 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 		if err := resolveStringFields(&ds, resolve); err != nil {
 			return err
 		}
-		if err := resolveYAMLNode(&ds.Config, resolve); err != nil {
-			return err
-		}
 		cfg.IndexedDBs[name] = ds
-	}
-
-	// Skip cfg.Secrets.Config to avoid self-referential resolution.
-	if err := resolveYAMLNode(&cfg.Auth.Config, resolve); err != nil {
-		return err
-	}
-	if err := resolveYAMLNode(&cfg.UI.Config, resolve); err != nil {
-		return err
-	}
-	if err := resolveYAMLNode(&cfg.Telemetry.Config, resolve); err != nil {
-		return err
-	}
-	if err := resolveYAMLNode(&cfg.Audit.Config, resolve); err != nil {
-		return err
 	}
 
 	return nil
@@ -133,8 +104,15 @@ func resolveStringFields(ptr any, resolve func(string) (string, error)) error {
 			field.SetString(resolved)
 		case reflect.Struct:
 			if field.CanSet() {
-				if err := resolveStringFields(field.Addr().Interface(), resolve); err != nil {
-					return err
+				if field.Type() == yamlNodeType {
+					nodePtr := field.Addr().Interface().(*yaml.Node)
+					if err := resolveYAMLNode(nodePtr, resolve); err != nil {
+						return err
+					}
+				} else {
+					if err := resolveStringFields(field.Addr().Interface(), resolve); err != nil {
+						return err
+					}
 				}
 			}
 		case reflect.Pointer:
