@@ -163,18 +163,18 @@ func (s *Server) revokeAllAPITokens(w http.ResponseWriter, r *http.Request) {
 func (s *Server) integrationConnectionInfos(name string, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo) []connectionDefInfo {
 	intg, ok := s.pluginDefs[name]
 	if !ok || intg.Plugin == nil {
-		return nil
+		return []connectionDefInfo{}
 	}
 	return connectionInfosForPlugin(intg.Plugin, integrationAuthTypes, defaultCredentialFields)
 }
 
 func connectionInfosForPlugin(plugin *config.ProviderDef, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo) []connectionDefInfo {
 	if plugin == nil {
-		return nil
+		return []connectionDefInfo{}
 	}
 	manifestProvider := plugin.ManifestPlugin()
 
-	var infos []connectionDefInfo
+	infos := make([]connectionDefInfo, 0, len(plugin.Connections)+1)
 	if info, ok := connectionInfoFromAuth(config.PluginConnectionAlias, config.EffectivePluginConnectionDef(plugin, manifestProvider).Auth, integrationAuthTypes, defaultCredentialFields); ok {
 		infos = append(infos, info)
 	}
@@ -237,7 +237,7 @@ func integrationAuthTypesForProvider(prov core.Provider) []string {
 func credentialFieldInfosFromProvider(prov core.Provider) []credentialFieldInfo {
 	cfp, ok := prov.(core.CredentialFieldsProvider)
 	if !ok {
-		return nil
+		return []credentialFieldInfo{}
 	}
 	return credentialFieldInfos(cfp.CredentialFields(), func(field core.CredentialFieldDef) credentialFieldInfo {
 		return credentialFieldInfo{
@@ -250,7 +250,7 @@ func credentialFieldInfosFromProvider(prov core.Provider) []credentialFieldInfo 
 
 func credentialFieldInfos[T any](fields []T, mapField func(T) credentialFieldInfo) []credentialFieldInfo {
 	if len(fields) == 0 {
-		return nil
+		return []credentialFieldInfo{}
 	}
 	infos := make([]credentialFieldInfo, len(fields))
 	for i, field := range fields {
@@ -265,7 +265,11 @@ func connectionInfoFromAuth(name string, auth config.ConnectionAuthDef, integrat
 		return connectionDefInfo{}, false
 	}
 
-	info := connectionDefInfo{Name: name, AuthTypes: authTypes}
+	info := connectionDefInfo{
+		Name:             name,
+		AuthTypes:        authTypes,
+		CredentialFields: []credentialFieldInfo{},
+	}
 	if fields := credentialFieldInfos(auth.Credentials, func(field config.CredentialFieldDef) credentialFieldInfo {
 		return credentialFieldInfo{
 			Name:        field.Name,
@@ -278,6 +282,41 @@ func connectionInfoFromAuth(name string, auth config.ConnectionAuthDef, integrat
 		info.CredentialFields = append([]credentialFieldInfo(nil), defaultCredentialFields...)
 	}
 	return info, true
+}
+
+func authTypesFromConnections(connections []connectionDefInfo) []string {
+	combined := make([]string, 0, 2)
+	for _, connection := range connections {
+		combined = append(combined, connection.AuthTypes...)
+	}
+	return userFacingAuthTypes(combined)
+}
+
+func mergeAuthTypes(groups ...[]string) []string {
+	combined := make([]string, 0, 4)
+	for _, group := range groups {
+		combined = append(combined, group...)
+	}
+	return userFacingAuthTypes(combined)
+}
+
+func fallbackAuthTypesForProvider(prov core.Provider) []string {
+	if mp, ok := prov.(core.ManualProvider); ok && mp.SupportsManualAuth() {
+		return []string{"manual"}
+	}
+	return []string{"oauth"}
+}
+
+func sameAuthTypes(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		if left[i] != right[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func connectionAuthTypes(authType pluginmanifestv1.AuthType, integrationAuthTypes []string) []string {

@@ -58,7 +58,7 @@ type credentialFieldInfo struct {
 type connectionDefInfo struct {
 	Name             string                `json:"name"`
 	AuthTypes        []string              `json:"authTypes"`
-	CredentialFields []credentialFieldInfo `json:"credentialFields,omitempty"`
+	CredentialFields []credentialFieldInfo `json:"credentialFields"`
 }
 
 type integrationInfo struct {
@@ -67,11 +67,11 @@ type integrationInfo struct {
 	Description      string                         `json:"description,omitempty"`
 	IconSVG          string                         `json:"iconSvg,omitempty"`
 	Connected        bool                           `json:"connected"`
-	Instances        []instanceInfo                 `json:"instances,omitempty"`
+	Instances        []instanceInfo                 `json:"instances"`
 	AuthTypes        []string                       `json:"authTypes"`
-	ConnectionParams map[string]connectionParamInfo `json:"connectionParams,omitempty"`
-	Connections      []connectionDefInfo            `json:"connections,omitempty"`
-	CredentialFields []credentialFieldInfo          `json:"credentialFields,omitempty"`
+	ConnectionParams map[string]connectionParamInfo `json:"connectionParams"`
+	Connections      []connectionDefInfo            `json:"connections"`
+	CredentialFields []credentialFieldInfo          `json:"credentialFields"`
 }
 
 type connectionParamInfo struct {
@@ -129,38 +129,42 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		authTypes := integrationAuthTypesForProvider(prov)
 		instances := connected[name]
 		info := integrationInfo{
-			Name:        name,
-			DisplayName: prov.DisplayName(),
-			Description: prov.Description(),
-			Connected:   len(instances) > 0,
-			Instances:   instances,
-			AuthTypes:   authTypes,
+			Name:             name,
+			DisplayName:      prov.DisplayName(),
+			Description:      prov.Description(),
+			Connected:        len(instances) > 0,
+			Instances:        append(make([]instanceInfo, 0, len(instances)), instances...),
+			AuthTypes:        []string{},
+			ConnectionParams: map[string]connectionParamInfo{},
+			Connections:      []connectionDefInfo{},
+			CredentialFields: []credentialFieldInfo{},
 		}
 		if cat := prov.Catalog(); cat != nil {
 			info.IconSVG = cat.IconSVG
 		}
+		info.CredentialFields = credentialFieldInfosFromProvider(prov)
 		if cpp, ok := prov.(core.ConnectionParamProvider); ok {
 			defs := cpp.ConnectionParamDefs()
-			userParams := make(map[string]connectionParamInfo)
 			for name, def := range defs {
 				if def.From == "" {
-					userParams[name] = connectionParamInfo{
+					info.ConnectionParams[name] = connectionParamInfo{
 						Required:    def.Required,
 						Description: def.Description,
 						Default:     def.Default,
 					}
 				}
 			}
-			if len(userParams) > 0 {
-				info.ConnectionParams = userParams
-			}
 		}
-		if fields := credentialFieldInfosFromProvider(prov); len(fields) > 0 {
-			info.CredentialFields = fields
+		info.Connections = s.integrationConnectionInfos(name, authTypes, info.CredentialFields)
+		effectiveAuthTypes := mergeAuthTypes(authTypes, authTypesFromConnections(info.Connections))
+		if len(effectiveAuthTypes) == 0 {
+			effectiveAuthTypes = fallbackAuthTypesForProvider(prov)
 		}
-		if connections := s.integrationConnectionInfos(name, authTypes, info.CredentialFields); len(connections) > 0 {
-			info.Connections = connections
+		if !sameAuthTypes(authTypes, effectiveAuthTypes) {
+			authTypes = effectiveAuthTypes
+			info.Connections = s.integrationConnectionInfos(name, authTypes, info.CredentialFields)
 		}
+		info.AuthTypes = authTypes
 		out = append(out, info)
 	}
 	writeJSON(w, http.StatusOK, out)
