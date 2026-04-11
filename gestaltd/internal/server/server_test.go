@@ -805,6 +805,69 @@ func TestListIntegrations_AuthTypes(t *testing.T) {
 	}
 }
 
+func TestListIntegrations_DerivesAuthTypesFromConnectionsWhenProviderOmitsThem(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubNilAuthTypesProvider{
+		StubIntegration: coretesting.StubIntegration{N: "example", DN: "Example"},
+	}
+	plugin := &config.ProviderDef{
+		Connections: map[string]*config.ConnectionDef{
+			"default": {
+				Auth: config.ConnectionAuthDef{
+					Type: pluginmanifestv1.AuthTypeManual,
+				},
+			},
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.PluginDefs = map[string]config.PluginDef{
+			"example": {Plugin: plugin},
+		}
+		cfg.Services = coretesting.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	text := string(body)
+	if !strings.Contains(text, `"authTypes":["manual"]`) {
+		t.Fatalf("expected response to contain authTypes=[manual], got %s", text)
+	}
+
+	var integrations []struct {
+		Name      string   `json:"name"`
+		AuthTypes []string `json:"authTypes"`
+	}
+	if err := json.Unmarshal(body, &integrations); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if len(integrations) != 1 {
+		t.Fatalf("expected 1 integration, got %d", len(integrations))
+	}
+	if !reflect.DeepEqual(integrations[0].AuthTypes, []string{"manual"}) {
+		t.Fatalf("auth types = %v, want [manual]", integrations[0].AuthTypes)
+	}
+	if strings.Contains(text, `"authTypes":null`) {
+		t.Fatalf("unexpected null authTypes in response: %s", text)
+	}
+}
+
 func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T) {
 	t.Parallel()
 
@@ -876,6 +939,32 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	text := string(body)
+	for _, fragment := range []string{
+		`"instances":[]`,
+		`"connectionParams":{}`,
+		`"connections":[`,
+		`"credentialFields":[`,
+	} {
+		if !strings.Contains(text, fragment) {
+			t.Fatalf("expected response to contain %s, got %s", fragment, text)
+		}
+	}
+	for _, fragment := range []string{
+		`"instances":null`,
+		`"connectionParams":null`,
+		`"connections":null`,
+		`"credentialFields":null`,
+	} {
+		if strings.Contains(text, fragment) {
+			t.Fatalf("unexpected null collection in response: %s", text)
+		}
+	}
+
 	type credentialField struct {
 		Name        string `json:"name"`
 		Label       string `json:"label"`
@@ -888,14 +977,21 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 	}
 
 	var integrations []struct {
-		Name        string           `json:"name"`
-		Connections []connectionInfo `json:"connections"`
+		Name             string           `json:"name"`
+		AuthTypes        []string         `json:"authTypes"`
+		Instances        []map[string]any `json:"instances"`
+		ConnectionParams map[string]any   `json:"connectionParams"`
+		CredentialFields []map[string]any `json:"credentialFields"`
+		Connections      []connectionInfo `json:"connections"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+	if err := json.Unmarshal(body, &integrations); err != nil {
 		t.Fatalf("decoding: %v", err)
 	}
 	if len(integrations) != 1 {
 		t.Fatalf("expected 1 integration, got %d", len(integrations))
+	}
+	if integrations[0].Instances == nil || integrations[0].ConnectionParams == nil || integrations[0].CredentialFields == nil || integrations[0].Connections == nil {
+		t.Fatalf("expected non-nil collections, got %+v", integrations[0])
 	}
 
 	got := make(map[string]connectionInfo, len(integrations[0].Connections))
@@ -4438,6 +4534,12 @@ type stubManualProvider struct {
 }
 
 func (s *stubManualProvider) SupportsManualAuth() bool { return true }
+
+type stubNilAuthTypesProvider struct {
+	coretesting.StubIntegration
+}
+
+func (s *stubNilAuthTypesProvider) AuthTypes() []string { return nil }
 
 type stubDiscoveringManualProvider struct {
 	stubManualProvider
