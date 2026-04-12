@@ -448,8 +448,10 @@ func openRemoteCursor(ctx context.Context, client proto.IndexedDBClient, store, 
 			return nil, err
 		}
 	}
-	stream, err := client.OpenCursor(ctx)
+	streamCtx, streamCancel := context.WithCancel(ctx)
+	stream, err := client.OpenCursor(streamCtx)
 	if err != nil {
+		streamCancel()
 		return nil, grpcToDatastoreErr(err)
 	}
 	if err := stream.Send(&proto.CursorClientMessage{
@@ -462,13 +464,15 @@ func openRemoteCursor(ctx context.Context, client proto.IndexedDBClient, store, 
 			Values:    pbValues,
 		}},
 	}); err != nil {
+		streamCancel()
 		return nil, grpcToDatastoreErr(err)
 	}
-	return &remoteCursor{stream: stream, keysOnly: keysOnly}, nil
+	return &remoteCursor{stream: stream, cancel: streamCancel, keysOnly: keysOnly}, nil
 }
 
 type remoteCursor struct {
 	stream   proto.IndexedDB_OpenCursorClient
+	cancel   context.CancelFunc
 	keysOnly bool
 	entry    *proto.CursorEntry
 	err      error
@@ -602,7 +606,9 @@ func (c *remoteCursor) Close() error {
 			Command: &proto.CursorCommand_Close{Close: true},
 		}},
 	})
-	return c.stream.CloseSend()
+	_ = c.stream.CloseSend()
+	c.cancel()
+	return nil
 }
 
 var _ indexeddb.IndexedDB = (*remoteIndexedDB)(nil)

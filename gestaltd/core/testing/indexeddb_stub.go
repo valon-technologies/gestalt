@@ -222,12 +222,14 @@ func (o *stubObjectStore) newCursor(dir indexeddb.CursorDirection, keysOnly bool
 		sort.Sort(sort.Reverse(sort.StringSlice(keys)))
 	}
 
+	reverse := dir == indexeddb.CursorPrev || dir == indexeddb.CursorPrevUnique
 	return &stubCursor{
 		store:    o,
 		keys:     keys,
 		snapshot: snapshot,
 		pos:      -1,
 		keysOnly: keysOnly,
+		reverse:  reverse,
 	}
 }
 
@@ -356,6 +358,7 @@ func (idx *stubIndex) OpenCursor(_ context.Context, _ *indexeddb.KeyRange, dir i
 	c.filterIndex = idx
 	c.filterValues = values
 	c.applyIndexFilter()
+	c.buildIndexKeys()
 	return c, nil
 }
 
@@ -367,18 +370,44 @@ func (idx *stubIndex) OpenKeyCursor(_ context.Context, _ *indexeddb.KeyRange, di
 	c.filterIndex = idx
 	c.filterValues = values
 	c.applyIndexFilter()
+	c.buildIndexKeys()
 	return c, nil
 }
 
 type stubCursor struct {
 	store        *stubObjectStore
 	keys         []string
+	indexKeys    []any
 	snapshot     map[string]indexeddb.Record
 	pos          int
 	keysOnly     bool
+	reverse      bool
 	err          error
 	filterIndex  *stubIndex
 	filterValues []any
+}
+
+func (c *stubCursor) buildIndexKeys() {
+	if c.filterIndex == nil {
+		return
+	}
+	kp := c.filterIndex.keyPath()
+	if kp == nil {
+		return
+	}
+	c.indexKeys = make([]any, len(c.keys))
+	for i, k := range c.keys {
+		rec := c.snapshot[k]
+		if len(kp) == 1 {
+			c.indexKeys[i] = rec[kp[0]]
+		} else {
+			vals := make([]any, len(kp))
+			for j, field := range kp {
+				vals[j] = rec[field]
+			}
+			c.indexKeys[i] = vals
+		}
+	}
 }
 
 func (c *stubCursor) applyIndexFilter() {
@@ -408,8 +437,14 @@ func (c *stubCursor) ContinueToKey(_ context.Context, key any) bool {
 	}
 	target := fmt.Sprint(key)
 	for c.pos++; c.pos < len(c.keys); c.pos++ {
-		if c.keys[c.pos] >= target {
-			return true
+		if c.reverse {
+			if c.keys[c.pos] <= target {
+				return true
+			}
+		} else {
+			if c.keys[c.pos] >= target {
+				return true
+			}
 		}
 	}
 	return false
@@ -426,6 +461,9 @@ func (c *stubCursor) Advance(_ context.Context, count int) bool {
 func (c *stubCursor) Key() any {
 	if c.pos < 0 || c.pos >= len(c.keys) {
 		return nil
+	}
+	if c.indexKeys != nil {
+		return c.indexKeys[c.pos]
 	}
 	return c.keys[c.pos]
 }
