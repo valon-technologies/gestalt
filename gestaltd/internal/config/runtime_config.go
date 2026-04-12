@@ -9,7 +9,7 @@ import (
 
 type componentRuntimeConfig struct {
 	Name         string            `yaml:"name"`
-	Source       *PluginSourceDef  `yaml:"source,omitempty"`
+	Source       *ProviderSource   `yaml:"source,omitempty"`
 	Command      string            `yaml:"command"`
 	Args         []string          `yaml:"args,omitempty"`
 	Env          map[string]string `yaml:"env,omitempty"`
@@ -19,21 +19,17 @@ type componentRuntimeConfig struct {
 	Config       yaml.Node         `yaml:"config,omitempty"`
 }
 
-func sanitizeRuntimeSource(src ProviderSource) *PluginSourceDef {
-	return &PluginSourceDef{
-		Path:    src.Path,
-		Ref:     src.Ref,
-		Version: src.Version,
-	}
-}
-
 func BuildComponentRuntimeConfigNode(name, kind string, entry *ProviderEntry, providerConfig yaml.Node) (yaml.Node, error) {
 	if entry == nil {
 		return yaml.Node{}, fmt.Errorf("%s %q provider is required", kind, name)
 	}
 	node := componentRuntimeConfig{
-		Name:         name,
-		Source:       sanitizeRuntimeSource(entry.Source),
+		Name: name,
+		Source: &ProviderSource{
+			Path:    entry.Source.Path,
+			Ref:     entry.Source.Ref,
+			Version: entry.Source.Version,
+		},
 		Command:      entry.Command,
 		Args:         append([]string(nil), entry.Args...),
 		Env:          entry.Env,

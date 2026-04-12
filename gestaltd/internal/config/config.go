@@ -61,11 +61,11 @@ type ProvidersConfig struct {
 //   - Managed: source: {ref, version} -> ProviderSource{Ref: "...", Version: "..."}
 //   - Local:   source: {path}         -> ProviderSource{Path: "..."}
 type ProviderSource struct {
-	Builtin string               `yaml:"-"`
-	Ref     string               `yaml:"ref,omitempty"`
-	Version string               `yaml:"version,omitempty"`
-	Path    string               `yaml:"path,omitempty"`
-	Auth    *PluginSourceAuthDef `yaml:"auth,omitempty"`
+	Builtin string         `yaml:"-"`
+	Ref     string         `yaml:"ref,omitempty"`
+	Version string         `yaml:"version,omitempty"`
+	Path    string         `yaml:"path,omitempty"`
+	Auth    *SourceAuthDef `yaml:"auth,omitempty"`
 }
 
 func (s *ProviderSource) UnmarshalYAML(value *yaml.Node) error {
@@ -170,15 +170,8 @@ func (e *ProviderEntry) DeclaresMCP() bool {
 	return spec.MCP
 }
 
-type PluginSourceAuthDef struct {
+type SourceAuthDef struct {
 	Token string `yaml:"token"`
-}
-
-type PluginSourceDef struct {
-	Path    string               `yaml:"path"`
-	Ref     string               `yaml:"ref"`
-	Version string               `yaml:"version"`
-	Auth    *PluginSourceAuthDef `yaml:"auth,omitempty"`
 }
 
 type EgressConfig struct {

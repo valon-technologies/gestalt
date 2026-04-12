@@ -451,8 +451,8 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		<-result.ProvidersReady
 
 		var decoded struct {
-			Source *config.PluginSourceDef `yaml:"source"`
-			Config map[string]string       `yaml:"config"`
+			Source *config.ProviderSource `yaml:"source"`
+			Config map[string]string      `yaml:"config"`
 		}
 		if err := receivedNode.Decode(&decoded); err != nil {
 			t.Fatalf("decode: %v", err)
@@ -537,8 +537,8 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		<-result.ProvidersReady
 
 		var authCfg struct {
-			Source *config.PluginSourceDef `yaml:"source"`
-			Config map[string]string       `yaml:"config"`
+			Source *config.ProviderSource `yaml:"source"`
+			Config map[string]string      `yaml:"config"`
 		}
 		if err := authNode.Decode(&authCfg); err != nil {
 			t.Fatalf("decode auth node: %v", err)
