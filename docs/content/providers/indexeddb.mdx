@@ -2,15 +2,22 @@ import { Tabs } from 'nextra/components'
 
 # IndexedDB
 
-Datastore providers back the persistent state layer using an interface modeled on the [IndexedDB API](https://developer.mozilla.org/en-US/docs/Web/API/IndexedDB_API). IndexedDB's vocabulary of object stores, primary keys, named indexes, and key ranges maps naturally onto SQL tables, document collections, and key-value stores alike, so a single provider contract can target Postgres, SQLite, MongoDB, DynamoDB, and others without leaking backend-specific abstractions. Building on an established open-source convention means the concepts are already documented, widely understood, and proven to cover the access patterns most applications need.
+IndexedDB providers back the persistent state layer using an interface modeled on the [W3C IndexedDB API](https://www.w3.org/TR/IndexedDB/). IndexedDB's vocabulary of object stores, primary keys, named indexes, and key ranges maps naturally onto SQL tables, document collections, and key-value stores alike, so a single provider contract can target Postgres, SQLite, MongoDB, DynamoDB, and others without leaking backend-specific abstractions. Building on an established W3C standard means the concepts are already documented, widely understood, and proven to cover the access patterns most applications need.
 
-Every provider implements the same set of operations -- object stores with primary key CRUD, named indexes for queries, and key ranges for scoped operations. The storage backend is fully replaceable: swap from SQLite to Postgres to MongoDB without changing any application code.
+Every IndexedDB provider implements the same set of operations. The storage backend is fully replaceable: swap from SQLite to Postgres to MongoDB without changing any application code.
 
-Gestalt stores users, plugin tokens, API tokens, and OAuth registrations through the datastore. The host encrypts all plugin tokens before storage using AES-256-GCM, so the datastore stores sealed bytes without needing access to the encryption key. API tokens are stored as one-way SHA-256 hashes.
+| Category | Methods | W3C equivalent |
+| --- | --- | --- |
+| Lifecycle | `CreateObjectStore`, `DeleteObjectStore` | [`IDBDatabase.createObjectStore`](https://www.w3.org/TR/IndexedDB/#dom-idbdatabase-createobjectstore), [`deleteObjectStore`](https://www.w3.org/TR/IndexedDB/#dom-idbdatabase-deleteobjectstore) |
+| Primary key CRUD | `Get`, `GetKey`, `Add`, `Put`, `Delete` | [`IDBObjectStore.get`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-get), [`add`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-add), [`put`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-put), [`delete`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-delete) |
+| Bulk operations | `GetAll`, `GetAllKeys`, `Count`, `Clear`, `DeleteRange` | [`IDBObjectStore.getAll`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-getall), [`count`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-count), [`clear`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-clear) |
+| Index queries | `IndexGet`, `IndexGetKey`, `IndexGetAll`, `IndexGetAllKeys`, `IndexCount`, `IndexDelete` | [`IDBIndex.get`](https://www.w3.org/TR/IndexedDB/#dom-idbindex-get), [`getAll`](https://www.w3.org/TR/IndexedDB/#dom-idbindex-getall), [`count`](https://www.w3.org/TR/IndexedDB/#dom-idbindex-count) |
+
+The examples on this page use the first-party RelationalDB provider, which supports PostgreSQL, MySQL, SQLite, and SQL Server through a single `dsn` config value.
 
 ## Manifest
 
-The RelationalDB provider ships a manifest with `kind: indexeddb`. This tells Gestalt the provider implements the IndexedDB gRPC service and can be referenced in the `providers.indexeddbs` config section.
+An IndexedDB provider manifest declares `kind: indexeddb`:
 
 ```yaml
 kind: indexeddb
@@ -22,18 +29,9 @@ spec:
   configSchemaPath: ./datastore_config.json
 ```
 
-The `source` field identifies the provider in the registry. RelationalDB supports four SQL dialects through a single `dsn` config value, so one provider covers most relational databases.
-
 ## Provider interface
 
-A datastore provider implements the `IndexedDB` gRPC service, which maps to these operations:
-
-- **CreateObjectStore / DeleteObjectStore** -- manage named object stores (tables/collections)
-- **Get / GetKey / Add / Put / Delete** -- primary key CRUD on an object store
-- **GetAll / GetAllKeys / Count / Clear / DeleteRange** -- bulk operations with optional key ranges
-- **IndexGet / IndexGetKey / IndexGetAll / IndexGetAllKeys / IndexCount / IndexDelete** -- query and delete via named indexes
-
-The RelationalDB provider parses the `dsn` config value to determine the SQL driver and dialect, then opens a database connection. The DSN prefix selects the backend: `postgres://` for PostgreSQL, `mysql://` for MySQL, `sqlite://` for SQLite, and `sqlserver://` for SQL Server.
+You implement the [IndexedDB gRPC service](https://www.w3.org/TR/IndexedDB/#object-store-interface), which covers object store lifecycle, primary key CRUD, bulk operations, and index queries. The examples below show the core CRUD methods. See the [W3C IndexedDB specification](https://www.w3.org/TR/IndexedDB/) for the full interface contract.
 
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
@@ -47,6 +45,8 @@ The RelationalDB provider parses the `dsn` config value to determine the SQL dri
     	"strings"
 
     	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+    	"google.golang.org/protobuf/types/known/emptypb"
     )
 
     type RelationalDB struct {
@@ -79,27 +79,28 @@ The RelationalDB provider parses the `dsn` config value to determine the SQL dri
     	return r.db.PingContext(ctx)
     }
 
-    // Primary key CRUD
+    // Get retrieves a single record by primary key.
     func (r *RelationalDB) Get(ctx context.Context, req *proto.ObjectStoreRequest) (*proto.RecordResponse, error) {
-    	// SELECT by primary key from the object store table
-    	return nil, nil
-    }
-    func (r *RelationalDB) Add(ctx context.Context, req *proto.RecordRequest) (*emptypb.Empty, error) {
-    	// INSERT a new record; fail if the key already exists
-    	return nil, nil
-    }
-    func (r *RelationalDB) Put(ctx context.Context, req *proto.RecordRequest) (*emptypb.Empty, error) {
-    	// UPSERT: insert or replace the record at the given key
-    	return nil, nil
-    }
-    func (r *RelationalDB) Delete(ctx context.Context, req *proto.ObjectStoreRequest) (*emptypb.Empty, error) {
-    	// DELETE by primary key
     	return nil, nil
     }
 
-    // Also implement: CreateObjectStore, DeleteObjectStore, GetKey,
-    // GetAll, GetAllKeys, Count, Clear, DeleteRange,
-    // IndexGet, IndexGetKey, IndexGetAll, IndexGetAllKeys, IndexCount, IndexDelete
+    // Add inserts a new record. Fails if the key already exists.
+    func (r *RelationalDB) Add(ctx context.Context, req *proto.RecordRequest) (*emptypb.Empty, error) {
+    	return nil, nil
+    }
+
+    // Put inserts or replaces the record at the given key.
+    func (r *RelationalDB) Put(ctx context.Context, req *proto.RecordRequest) (*emptypb.Empty, error) {
+    	return nil, nil
+    }
+
+    // Delete removes a record by primary key.
+    func (r *RelationalDB) Delete(ctx context.Context, req *proto.ObjectStoreRequest) (*emptypb.Empty, error) {
+    	return nil, nil
+    }
+
+    // See the W3C IndexedDB specification for the remaining methods:
+    // https://www.w3.org/TR/IndexedDB/#object-store-interface
 
     func main() {
     	gestalt.ServeIndexedDBProvider(context.Background(), &RelationalDB{})
@@ -108,6 +109,8 @@ The RelationalDB provider parses the `dsn` config value to determine the SQL dri
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
+    from typing import Any
+
     import gestalt
 
     class RelationalDB(gestalt.IndexedDBProvider):
@@ -117,26 +120,24 @@ The RelationalDB provider parses the `dsn` config value to determine the SQL dri
                 raise ValueError("relationaldb: dsn is required")
             self.dsn = dsn
 
-        # Primary key CRUD
         def get(self, store: str, id: str) -> dict[str, Any]:
-            # SELECT by primary key from the object store table
+            """Retrieve a single record by primary key."""
             ...
 
         def add(self, store: str, record: dict[str, Any]) -> None:
-            # INSERT a new record; fail if the key already exists
+            """Insert a new record. Fails if the key already exists."""
             ...
 
         def put(self, store: str, record: dict[str, Any]) -> None:
-            # UPSERT: insert or replace the record at the given key
+            """Insert or replace the record at the given key."""
             ...
 
         def delete(self, store: str, id: str) -> None:
-            # DELETE by primary key
+            """Remove a record by primary key."""
             ...
 
-        # Also implement: create_object_store, delete_object_store, get_key,
-        # get_all, get_all_keys, count, clear, delete_range,
-        # index_get, index_get_key, index_get_all, index_get_all_keys, index_count, index_delete
+        # See the W3C IndexedDB specification for the remaining methods:
+        # https://www.w3.org/TR/IndexedDB/#object-store-interface
 
     RelationalDB().serve()
     ```
@@ -151,31 +152,32 @@ The RelationalDB provider parses the `dsn` config value to determine the SQL dri
             let dsn = config.get("dsn")
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| gestalt::Error::Config("dsn is required"))?;
-            // Parse DSN prefix to select driver, open connection
+            // Parse DSN prefix to select driver, open connection.
             Ok(())
         }
 
-        // Primary key CRUD
+        /// Retrieves a single record by primary key.
         async fn get(&self, req: proto::ObjectStoreRequest) -> gestalt::Result<proto::RecordResponse> {
-            // SELECT by primary key
-            todo!()
-        }
-        async fn add(&self, req: proto::RecordRequest) -> gestalt::Result<()> {
-            // INSERT; fail if key exists
-            todo!()
-        }
-        async fn put(&self, req: proto::RecordRequest) -> gestalt::Result<()> {
-            // UPSERT
-            todo!()
-        }
-        async fn delete(&self, req: proto::ObjectStoreRequest) -> gestalt::Result<()> {
-            // DELETE by primary key
             todo!()
         }
 
-        // Also implement: create_object_store, delete_object_store, get_key,
-        // get_all, get_all_keys, count, clear, delete_range,
-        // index_get, index_get_key, index_get_all, index_get_all_keys, index_count, index_delete
+        /// Inserts a new record. Fails if the key already exists.
+        async fn add(&self, req: proto::RecordRequest) -> gestalt::Result<()> {
+            todo!()
+        }
+
+        /// Inserts or replaces the record at the given key.
+        async fn put(&self, req: proto::RecordRequest) -> gestalt::Result<()> {
+            todo!()
+        }
+
+        /// Removes a record by primary key.
+        async fn delete(&self, req: proto::ObjectStoreRequest) -> gestalt::Result<()> {
+            todo!()
+        }
+
+        // See the W3C IndexedDB specification for the remaining methods:
+        // https://www.w3.org/TR/IndexedDB/#object-store-interface
     }
 
     gestalt::export_indexeddb_provider!(constructor = RelationalDB::default);
@@ -189,36 +191,31 @@ The RelationalDB provider parses the `dsn` config value to determine the SQL dri
       async configure(name, config) {
         const dsn = config.dsn;
         if (!dsn) throw new Error("relationaldb: dsn is required");
-        // Parse DSN prefix to select driver, open connection
+        // Parse DSN prefix to select driver, open connection.
       },
 
-      // Primary key CRUD
-      async get(store: string, id: string): Promise<Record> {
-        // SELECT by primary key from the object store table
-      },
-      async add(store: string, record: Record): Promise<void> {
-        // INSERT a new record; fail if the key already exists
-      },
-      async put(store: string, record: Record): Promise<void> {
-        // UPSERT: insert or replace the record at the given key
-      },
-      async delete(store: string, id: string): Promise<void> {
-        // DELETE by primary key
-      },
+      /** Retrieves a single record by primary key. */
+      async get(store: string, id: string): Promise<Record> {},
 
-      // Also implement: createObjectStore, deleteObjectStore, getKey,
-      // getAll, getAllKeys, count, clear, deleteRange,
-      // indexGet, indexGetKey, indexGetAll, indexGetAllKeys, indexCount, indexDelete
+      /** Inserts a new record. Fails if the key already exists. */
+      async add(store: string, record: Record): Promise<void> {},
+
+      /** Inserts or replaces the record at the given key. */
+      async put(store: string, record: Record): Promise<void> {},
+
+      /** Removes a record by primary key. */
+      async delete(store: string, id: string): Promise<void> {},
+
+      // See the W3C IndexedDB specification for the remaining methods:
+      // https://www.w3.org/TR/IndexedDB/#object-store-interface
     });
     ```
   </Tabs.Tab>
 </Tabs>
 
-Each language follows the same pattern: read the `dsn` from config, determine the database driver from the URL prefix, and open a connection. The remaining IndexedDB methods translate object store operations into SQL queries against that connection.
-
 ## Plugin SDK
 
-Plugins access datastores through the SDK. The host serves the IndexedDB interface over a gRPC socket, and the SDK wraps it into native types for each language.
+Plugins access the IndexedDB provider through the SDK. The host serves the IndexedDB interface over a gRPC socket, and the SDK wraps it into native types for each language.
 
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
@@ -351,7 +348,7 @@ Plugins access datastores through the SDK. The host serves the IndexedDB interfa
 
 ## Config reference
 
-Reference a datastore provider in the `providers.indexeddbs` section, and set `server.indexeddb` to the name of the active provider. For local development, SQLite keeps things simple with a file path:
+Reference an IndexedDB provider in the `providers.indexeddbs` section, and set `server.indexeddb` to the name of the active provider. For local development, SQLite keeps things simple with a file path:
 
 ```yaml
 server:
@@ -366,7 +363,7 @@ providers:
         dsn: sqlite://gestalt.db
 ```
 
-For production, use `source.ref` and `version` to reference a published release, and point the DSN at your Postgres instance:
+For production, use `source.ref` and `version` to reference a published release:
 
 ```yaml
 providers:
@@ -379,9 +376,9 @@ providers:
         dsn: ${DATABASE_URL}
 ```
 
-`DATABASE_URL` is typically a connection string like `postgres://user:pass@host:5432/gestalt`. The RelationalDB provider also accepts `mysql://`, `sqlite://`, and `sqlserver://` prefixes.
+`DATABASE_URL` is a connection string for your database. The RelationalDB provider accepts `postgres://`, `mysql://`, `sqlite://`, and `sqlserver://` prefixes.
 
-The plugin receives the `IndexedDB` interface over a gRPC socket. Object store names are automatically namespaced per plugin to prevent cross-plugin data access.
+Object store names are automatically namespaced per plugin to prevent cross-plugin data access.
 
 ## What to read next
 
