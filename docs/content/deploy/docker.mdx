@@ -38,7 +38,7 @@ volumes:
 | Image | `valontechnologies/gestaltd:latest` |
 | Platforms | `linux/amd64`, `linux/arm64`, `linux/arm/v7` |
 | Base | Static (`scratch` with CA certificates) |
-| Variants | `:latest-alpine` (Alpine, has shell), `:latest-debian` (Debian bookworm-slim, has shell) |
+| Variants | `:latest-alpine` (Alpine, has shell) |
 | Port | `8080` |
 | Entrypoint | `/gestaltd` |
 | Default command | `serve --locked --config /etc/gestalt/config.yaml --artifacts-dir /data` |

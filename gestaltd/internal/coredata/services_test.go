@@ -526,20 +526,20 @@ func TestTokenService(t *testing.T) {
 		if err != nil {
 			t.Fatalf("raw Get: %v", err)
 		}
-		accessSealed, _ := raw["access_token_sealed"].(string)
-		refreshSealed, _ := raw["refresh_token_sealed"].(string)
+		accessEncrypted, _ := raw["access_token_encrypted"].(string)
+		refreshEncrypted, _ := raw["refresh_token_encrypted"].(string)
 
-		if accessSealed == "plaintext-access" {
-			t.Error("access_token_sealed stored as plaintext")
+		if accessEncrypted == "plaintext-access" {
+			t.Error("access_token_encrypted stored as plaintext")
 		}
-		if refreshSealed == "plaintext-refresh" {
-			t.Error("refresh_token_sealed stored as plaintext")
+		if refreshEncrypted == "plaintext-refresh" {
+			t.Error("refresh_token_encrypted stored as plaintext")
 		}
-		if accessSealed == "" {
-			t.Error("access_token_sealed should not be empty")
+		if accessEncrypted == "" {
+			t.Error("access_token_encrypted should not be empty")
 		}
-		if refreshSealed == "" {
-			t.Error("refresh_token_sealed should not be empty")
+		if refreshEncrypted == "" {
+			t.Error("refresh_token_encrypted should not be empty")
 		}
 
 		got, err := svc.Tokens.Token(ctx, user.ID, "svc", "default", "i1")
