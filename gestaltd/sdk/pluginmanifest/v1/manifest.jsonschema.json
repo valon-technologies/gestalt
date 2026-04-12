@@ -233,6 +233,10 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "displayName": {
+          "type": "string",
+          "minLength": 1
+        },
         "mode": {
           "type": "string",
           "enum": [
@@ -260,6 +264,10 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "displayName": {
+          "type": "string",
+          "minLength": 1
+        },
         "mode": {
           "type": "string",
           "enum": [

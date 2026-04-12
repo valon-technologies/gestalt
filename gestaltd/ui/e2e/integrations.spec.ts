@@ -23,11 +23,13 @@ const MULTI_CONNECTION_DUAL_AUTH_INTEGRATION: Integration = {
   connections: [
     {
       name: "workspace",
+      displayName: "Workspace OAuth",
       authTypes: ["oauth", "manual"],
       credentialFields: [{ name: "api_token", label: "API Token" }],
     },
     {
       name: "personal",
+      displayName: "Personal Token",
       authTypes: ["manual"],
       credentialFields: [{ name: "personal_token", label: "Personal Token" }],
     },
@@ -42,11 +44,13 @@ const MULTI_CONNECTION_MULTI_OAUTH_INTEGRATION: Integration = {
   connections: [
     {
       name: "workspace",
+      displayName: "Workspace OAuth",
       authTypes: ["oauth", "manual"],
       credentialFields: [{ name: "workspace_token", label: "Workspace Token" }],
     },
     {
       name: "personal",
+      displayName: "Personal OAuth",
       authTypes: ["oauth", "manual"],
       credentialFields: [{ name: "personal_token", label: "Personal Token" }],
     },
@@ -242,9 +246,9 @@ test.describe("Integrations", () => {
     await page.getByRole("button", { name: "Workspace Service settings" }).click();
     const dialog = page.getByRole("dialog");
 
-    await expect(dialog.getByRole("button", { name: "Connect with workspace" })).toBeVisible();
-    await expect(dialog.getByRole("button", { name: "Use API Token for workspace" })).toBeVisible();
-    await expect(dialog.getByRole("button", { name: "Connect with personal" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Connect with Workspace OAuth" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Use API Token for Workspace OAuth" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Connect with Personal Token" })).toBeVisible();
   });
 
   test("multi-connection loading state stays on the clicked oauth action", async ({
@@ -266,9 +270,9 @@ test.describe("Integrations", () => {
     await page.getByRole("button", { name: "Team Service settings" }).click();
     const dialog = page.getByRole("dialog");
 
-    await dialog.getByRole("button", { name: "Connect with personal" }).click();
+    await dialog.getByRole("button", { name: "Connect with Personal OAuth" }).click();
     await expect(dialog.getByRole("button", { name: "Connecting..." })).toBeVisible();
-    await expect(dialog.getByRole("button", { name: "Connect with workspace" })).toBeVisible();
+    await expect(dialog.getByRole("button", { name: "Connect with Workspace OAuth" })).toBeVisible();
 
     releaseOAuthRequest?.();
     await expect(dialog.getByText("oauth failed")).toBeVisible();

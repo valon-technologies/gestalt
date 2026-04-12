@@ -20,6 +20,7 @@ export interface InstanceInfo {
 
 export interface ConnectionDefInfo {
   name: string;
+  displayName?: string;
   authTypes: ("oauth" | "manual")[];
   credentialFields?: CredentialFieldDef[];
 }

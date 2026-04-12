@@ -228,6 +228,7 @@ func (s ServerConfig) ManagementAddr() string {
 // ConnectionDef owns authentication and connection parameters for a named
 // connection. All connections in a single integration must share the same Mode.
 type ConnectionDef struct {
+	DisplayName      string                              `yaml:"displayName,omitempty"`
 	Mode             pluginmanifestv1.ConnectionMode     `yaml:"mode"`
 	Auth             ConnectionAuthDef                   `yaml:"auth"`
 	ConnectionParams map[string]ConnectionParamDef       `yaml:"params"`
@@ -373,6 +374,9 @@ func MergeConnectionDef(dst *ConnectionDef, src *ConnectionDef) {
 	if dst == nil || src == nil {
 		return
 	}
+	if src.DisplayName != "" {
+		dst.DisplayName = src.DisplayName
+	}
 	if src.Mode != "" {
 		dst.Mode = src.Mode
 	}
@@ -474,6 +478,7 @@ func EffectiveNamedConnectionDef(plugin *ProviderEntry, manifestPlugin *pluginma
 	if manifestPlugin != nil && manifestPlugin.Connections != nil {
 		if def, ok := manifestPlugin.Connections[name]; ok && def != nil {
 			found = true
+			conn.DisplayName = def.DisplayName
 			if def.Mode != "" {
 				conn.Mode = def.Mode
 			}
