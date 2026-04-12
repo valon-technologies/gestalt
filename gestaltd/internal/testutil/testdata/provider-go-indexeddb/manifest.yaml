@@ -1,5 +1,6 @@
+kind: indexeddb
 source: github.com/valon-technologies/gestalt/testdata/provider-go-indexeddb
 version: 0.0.1-alpha.1
 displayName: In-Memory IndexedDB Provider
 description: An in-memory IndexedDB provider for testing
-indexeddb: {}
+spec: {}
