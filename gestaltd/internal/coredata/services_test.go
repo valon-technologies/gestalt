@@ -526,20 +526,28 @@ func TestTokenService(t *testing.T) {
 		if err != nil {
 			t.Fatalf("raw Get: %v", err)
 		}
-		accessEncrypted, _ := raw["access_token_encrypted"].(string)
-		refreshEncrypted, _ := raw["refresh_token_encrypted"].(string)
+		accessEncrypted, _ := raw["access_token_sealed"].(string)
+		refreshEncrypted, _ := raw["refresh_token_sealed"].(string)
 
 		if accessEncrypted == "plaintext-access" {
-			t.Error("access_token_encrypted stored as plaintext")
+			t.Error("access_token_sealed stored as plaintext")
 		}
 		if refreshEncrypted == "plaintext-refresh" {
-			t.Error("refresh_token_encrypted stored as plaintext")
+			t.Error("refresh_token_sealed stored as plaintext")
 		}
 		if accessEncrypted == "" {
-			t.Error("access_token_encrypted should not be empty")
+			t.Error("access_token_sealed should not be empty")
 		}
 		if refreshEncrypted == "" {
-			t.Error("refresh_token_encrypted should not be empty")
+			t.Error("refresh_token_sealed should not be empty")
+		}
+
+		delete(raw, "access_token_sealed")
+		delete(raw, "refresh_token_sealed")
+		raw["access_token_encrypted"] = accessEncrypted
+		raw["refresh_token_encrypted"] = refreshEncrypted
+		if err := db.ObjectStore(coredata.StoreIntegrationTokens).Put(ctx, raw); err != nil {
+			t.Fatalf("rewrite token with *_encrypted fields: %v", err)
 		}
 
 		got, err := svc.Tokens.Token(ctx, user.ID, "svc", "default", "i1")

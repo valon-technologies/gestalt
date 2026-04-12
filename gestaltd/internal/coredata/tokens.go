@@ -34,18 +34,18 @@ func (s *TokenService) StoreToken(ctx context.Context, token *core.IntegrationTo
 	}
 	now := time.Now()
 	fields := indexeddb.Record{
-		"user_id":                 token.UserID,
-		"integration":             token.Integration,
-		"connection":              token.Connection,
-		"instance":                token.Instance,
-		"access_token_encrypted":  accessEnc,
-		"refresh_token_encrypted": refreshEnc,
-		"scopes":                  token.Scopes,
-		"expires_at":              token.ExpiresAt,
-		"last_refreshed_at":       token.LastRefreshedAt,
-		"refresh_error_count":     token.RefreshErrorCount,
-		"metadata_json":           token.MetadataJSON,
-		"updated_at":              now,
+		"user_id":              token.UserID,
+		"integration":          token.Integration,
+		"connection":           token.Connection,
+		"instance":             token.Instance,
+		"access_token_sealed":  accessEnc,
+		"refresh_token_sealed": refreshEnc,
+		"scopes":               token.Scopes,
+		"expires_at":           token.ExpiresAt,
+		"last_refreshed_at":    token.LastRefreshedAt,
+		"refresh_error_count":  token.RefreshErrorCount,
+		"metadata_json":        token.MetadataJSON,
+		"updated_at":           now,
 	}
 
 	existing, err := s.tokenRecord(ctx, token.UserID, token.Integration, token.Connection, token.Instance)
@@ -115,8 +115,8 @@ func (s *TokenService) DeleteToken(ctx context.Context, id string) error {
 
 func (s *TokenService) recordToToken(rec indexeddb.Record) (*core.IntegrationToken, error) {
 	access, refresh, err := s.enc.DecryptTokenPair(
-		recString(rec, "access_token_encrypted"),
-		recString(rec, "refresh_token_encrypted"),
+		tokenCiphertext(rec, "access_token_sealed", "access_token_encrypted"),
+		tokenCiphertext(rec, "refresh_token_sealed", "refresh_token_encrypted"),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt token pair: %w", err)
@@ -137,6 +137,13 @@ func (s *TokenService) recordToToken(rec indexeddb.Record) (*core.IntegrationTok
 		CreatedAt:         recTime(rec, "created_at"),
 		UpdatedAt:         recTime(rec, "updated_at"),
 	}, nil
+}
+
+func tokenCiphertext(rec indexeddb.Record, primary, fallback string) string {
+	if value := recString(rec, primary); value != "" {
+		return value
+	}
+	return recString(rec, fallback)
 }
 
 func (s *TokenService) recordsToTokens(recs []indexeddb.Record) ([]*core.IntegrationToken, error) {
