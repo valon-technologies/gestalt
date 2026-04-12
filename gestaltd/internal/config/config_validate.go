@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
 // ValidateStructure checks config shape: integration references, plugin
@@ -236,7 +236,7 @@ type inlineConnectionReference struct {
 	context  string
 }
 
-func manifestBackedConnectionReferences(plugin *ProviderEntry, provider *pluginmanifestv1.Spec) []inlineConnectionReference {
+func manifestBackedConnectionReferences(plugin *ProviderEntry, provider *providermanifestv1.Spec) []inlineConnectionReference {
 	if provider == nil {
 		return nil
 	}
@@ -256,18 +256,18 @@ func manifestBackedConnectionReferences(plugin *ProviderEntry, provider *pluginm
 	}
 }
 
-func validateManifestBackedConnectionReferences(name string, plugin *ProviderEntry, provider *pluginmanifestv1.Spec) error {
+func validateManifestBackedConnectionReferences(name string, plugin *ProviderEntry, provider *providermanifestv1.Spec) error {
 	return validateConnectionReferences(name, declaredManifestBackedConnections(plugin, provider), manifestBackedConnectionReferences(plugin, provider))
 }
 
-func validateManifestBackedConnectionDefaults(name string, plugin *ProviderEntry, provider *pluginmanifestv1.Spec) error {
+func validateManifestBackedConnectionDefaults(name string, plugin *ProviderEntry, provider *providermanifestv1.Spec) error {
 	return validateConnectionDefaults(name, "integration", len(declaredManifestBackedConnections(plugin, provider)), manifestBackedConnectionReferences(plugin, provider))
 }
 
-func validateExecutableConnectionAuthSupport(name string, plugin *ProviderEntry, provider *pluginmanifestv1.Spec) error {
+func validateExecutableConnectionAuthSupport(name string, plugin *ProviderEntry, provider *providermanifestv1.Spec) error {
 	supportsMCPOAuth := provider != nil && provider.MCPURL() != ""
-	if conn := EffectivePluginConnectionDef(plugin, provider); conn.Auth.Type == pluginmanifestv1.AuthTypeMCPOAuth && !supportsMCPOAuth {
-		return fmt.Errorf("config validation: integration %q plugin auth type %q requires an MCP surface", name, pluginmanifestv1.AuthTypeMCPOAuth)
+	if conn := EffectivePluginConnectionDef(plugin, provider); conn.Auth.Type == providermanifestv1.AuthTypeMCPOAuth && !supportsMCPOAuth {
+		return fmt.Errorf("config validation: integration %q plugin auth type %q requires an MCP surface", name, providermanifestv1.AuthTypeMCPOAuth)
 	}
 
 	declared := declaredManifestBackedConnections(plugin, provider)
@@ -278,11 +278,11 @@ func validateExecutableConnectionAuthSupport(name string, plugin *ProviderEntry,
 	slices.Sort(declaredNames)
 	for _, connName := range declaredNames {
 		conn, ok := EffectiveNamedConnectionDef(plugin, provider, connName)
-		if !ok || conn.Auth.Type != pluginmanifestv1.AuthTypeMCPOAuth {
+		if !ok || conn.Auth.Type != providermanifestv1.AuthTypeMCPOAuth {
 			continue
 		}
 		if !supportsMCPOAuth {
-			return fmt.Errorf("config validation: integration %q connection %q auth type %q requires an MCP surface", name, connName, pluginmanifestv1.AuthTypeMCPOAuth)
+			return fmt.Errorf("config validation: integration %q connection %q auth type %q requires an MCP surface", name, connName, providermanifestv1.AuthTypeMCPOAuth)
 		}
 	}
 	return nil
@@ -317,7 +317,7 @@ func validateConnectionDefaults(name, subject string, declaredCount int, refs []
 	return nil
 }
 
-func declaredManifestBackedConnections(plugin *ProviderEntry, provider *pluginmanifestv1.Spec) map[string]struct{} {
+func declaredManifestBackedConnections(plugin *ProviderEntry, provider *providermanifestv1.Spec) map[string]struct{} {
 	size := 0
 	if plugin != nil {
 		size += len(plugin.Connections)

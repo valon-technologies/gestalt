@@ -8,7 +8,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
 type ConnectionMaps struct {
@@ -62,7 +62,7 @@ type resolvedSpecSurface struct {
 	connection     config.ConnectionDef
 }
 
-func buildPluginConnectionPlan(plugin *config.ProviderEntry, manifestPlugin *pluginmanifestv1.Spec) (pluginConnectionPlan, error) {
+func buildPluginConnectionPlan(plugin *config.ProviderEntry, manifestPlugin *providermanifestv1.Spec) (pluginConnectionPlan, error) {
 	declaredNames := namedConnectionNames(plugin, manifestPlugin)
 	plan := pluginConnectionPlan{
 		pluginConnection: config.EffectivePluginConnectionDef(plugin, manifestPlugin),
@@ -211,7 +211,7 @@ func connectionModeForConnection(conn config.ConnectionDef) core.ConnectionMode 
 		return core.ConnectionMode(conn.Mode)
 	}
 	switch conn.Auth.Type {
-	case "", pluginmanifestv1.AuthTypeNone:
+	case "", providermanifestv1.AuthTypeNone:
 		return core.ConnectionModeNone
 	default:
 		return core.ConnectionModeUser
@@ -229,7 +229,7 @@ func (plan pluginConnectionPlan) connectionDef(name string) (config.ConnectionDe
 	return conn, nil
 }
 
-func resolveDefaultConnectionName(plugin *config.ProviderEntry, manifestPlugin *pluginmanifestv1.Spec) string {
+func resolveDefaultConnectionName(plugin *config.ProviderEntry, manifestPlugin *providermanifestv1.Spec) string {
 	if plugin != nil {
 		if name := config.ResolveConnectionAlias(plugin.DefaultConnection); name != "" {
 			return name
@@ -243,7 +243,7 @@ func resolveDefaultConnectionName(plugin *config.ProviderEntry, manifestPlugin *
 	return ""
 }
 
-func surfaceURL(plugin *config.ProviderEntry, manifestPlugin *pluginmanifestv1.Spec, surface config.SpecSurface) string {
+func surfaceURL(plugin *config.ProviderEntry, manifestPlugin *providermanifestv1.Spec, surface config.SpecSurface) string {
 	if manifestPlugin == nil {
 		return ""
 	}
@@ -254,7 +254,7 @@ func surfaceURL(plugin *config.ProviderEntry, manifestPlugin *pluginmanifestv1.S
 	return resolveManifestRelativeSpecURL(plugin, url)
 }
 
-func resolveSurfaceConnectionName(plugin *config.ProviderEntry, manifestPlugin *pluginmanifestv1.Spec, surface config.SpecSurface) string {
+func resolveSurfaceConnectionName(plugin *config.ProviderEntry, manifestPlugin *providermanifestv1.Spec, surface config.SpecSurface) string {
 	name := config.ResolveConnectionAlias(config.ManifestProviderSurfaceConnectionName(manifestPlugin, surface))
 	if name == "" {
 		return config.PluginConnectionName
@@ -279,8 +279,8 @@ func resolveManifestRelativeSpecURL(plugin *config.ProviderEntry, raw string) st
 	return filepath.Clean(filepath.Join(filepath.Dir(plugin.ResolvedManifestPath), raw))
 }
 
-func buildConnectionAuthMap(name string, entry *config.ProviderEntry, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, authFallback *specAuthFallback, deps Deps) (map[string]OAuthHandler, error) {
-	manifestPlugin := (*pluginmanifestv1.Spec)(nil)
+func buildConnectionAuthMap(name string, entry *config.ProviderEntry, manifest *providermanifestv1.Manifest, pluginConfig map[string]any, authFallback *specAuthFallback, deps Deps) (map[string]OAuthHandler, error) {
+	manifestPlugin := (*providermanifestv1.Spec)(nil)
 	if manifest != nil {
 		manifestPlugin = manifest.Spec
 	}
@@ -325,7 +325,7 @@ func buildConnectionAuthMap(name string, entry *config.ProviderEntry, manifest *
 	return handlers, nil
 }
 
-func namedConnectionNames(plugin *config.ProviderEntry, manifestPlugin *pluginmanifestv1.Spec) map[string]struct{} {
+func namedConnectionNames(plugin *config.ProviderEntry, manifestPlugin *providermanifestv1.Spec) map[string]struct{} {
 	names := make(map[string]struct{})
 	add := func(name string) {
 		resolved := config.ResolveConnectionAlias(name)
@@ -348,13 +348,13 @@ func namedConnectionNames(plugin *config.ProviderEntry, manifestPlugin *pluginma
 
 func buildConnectionHandler(conn config.ConnectionDef, mcpURL string, pluginConfig map[string]any, specDef *provider.Definition, deps Deps) (OAuthHandler, error) {
 	switch conn.Auth.Type {
-	case "", pluginmanifestv1.AuthTypeOAuth2:
+	case "", providermanifestv1.AuthTypeOAuth2:
 		handler, err := buildOAuthHandlerFromAuth(&conn.Auth, pluginConfig, deps)
-		if err != nil || handler != nil || conn.Auth.Type == pluginmanifestv1.AuthTypeOAuth2 {
+		if err != nil || handler != nil || conn.Auth.Type == providermanifestv1.AuthTypeOAuth2 {
 			return handler, err
 		}
 		return buildOAuthHandlerFromDefinition(specDef, conn, pluginConfig, deps)
-	case pluginmanifestv1.AuthTypeMCPOAuth:
+	case providermanifestv1.AuthTypeMCPOAuth:
 		if mcpURL == "" {
 			return nil, fmt.Errorf("mcp_oauth auth requires mcp_url")
 		}

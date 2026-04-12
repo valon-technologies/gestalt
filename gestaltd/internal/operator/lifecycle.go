@@ -14,11 +14,11 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	ghresolver "github.com/valon-technologies/gestalt/server/internal/pluginsource/github"
 	"github.com/valon-technologies/gestalt/server/internal/pluginstore"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"gopkg.in/yaml.v3"
 )
 
@@ -145,7 +145,7 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 		lock.Providers[name] = resolvedProviders[name]
 	}
 	if cfg.Providers.Auth != nil && cfg.Providers.Auth.HasManagedSource() {
-		entry, err := l.writeComponentArtifact(context.Background(), paths, pluginmanifestv1.KindAuth, "auth", authDestDir(paths), cfg.Providers.Auth, cfg.Providers.Auth.Config)
+		entry, err := l.writeComponentArtifact(context.Background(), paths, providermanifestv1.KindAuth, "auth", authDestDir(paths), cfg.Providers.Auth, cfg.Providers.Auth.Config)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -155,14 +155,14 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 		lock.Secrets = secretsEntry
 	}
 	if cfg.Providers.Telemetry != nil && cfg.Providers.Telemetry.HasManagedSource() {
-		entry, err := l.writeComponentArtifact(context.Background(), paths, pluginmanifestv1.KindPlugin, "telemetry", telemetryDestDir(paths), cfg.Providers.Telemetry, cfg.Providers.Telemetry.Config)
+		entry, err := l.writeComponentArtifact(context.Background(), paths, providermanifestv1.KindPlugin, "telemetry", telemetryDestDir(paths), cfg.Providers.Telemetry, cfg.Providers.Telemetry.Config)
 		if err != nil {
 			return nil, nil, err
 		}
 		lock.Telemetry = &entry
 	}
 	if cfg.Providers.Audit != nil && cfg.Providers.Audit.HasManagedSource() {
-		entry, err := l.writeComponentArtifact(context.Background(), paths, pluginmanifestv1.KindPlugin, "audit", auditDestDir(paths), cfg.Providers.Audit, cfg.Providers.Audit.Config)
+		entry, err := l.writeComponentArtifact(context.Background(), paths, providermanifestv1.KindPlugin, "audit", auditDestDir(paths), cfg.Providers.Audit, cfg.Providers.Audit.Config)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -170,7 +170,7 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 	}
 	for name, def := range cfg.Providers.IndexedDBs {
 		if def != nil && def.HasManagedSource() {
-			entry, err := l.writeComponentArtifact(context.Background(), paths, pluginmanifestv1.KindIndexedDB, "indexeddb-"+name, indexeddbDestDir(paths, name), def, def.Config)
+			entry, err := l.writeComponentArtifact(context.Background(), paths, providermanifestv1.KindIndexedDB, "indexeddb-"+name, indexeddbDestDir(paths, name), def, def.Config)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -303,27 +303,27 @@ func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context,
 	provider := cfg.Providers.Secrets
 	configMap, err := config.NodeToMap(cfg.Providers.Secrets.Config)
 	if err != nil {
-		return nil, fmt.Errorf("decode provider config for %s %q: %w", pluginmanifestv1.KindSecrets, "secrets", err)
+		return nil, fmt.Errorf("decode provider config for %s %q: %w", providermanifestv1.KindSecrets, "secrets", err)
 	}
 
 	switch {
 	case provider.HasManagedSource():
 		if lock != nil {
-			if err := l.applyLockedComponentEntry(paths, lock.Secrets, pluginmanifestv1.KindSecrets, "secrets", provider, configMap, false); err != nil {
+			if err := l.applyLockedComponentEntry(paths, lock.Secrets, providermanifestv1.KindSecrets, "secrets", provider, configMap, false); err != nil {
 				return nil, err
 			}
 			return nil, nil
 		}
-		entry, err := l.writeComponentArtifact(ctx, paths, pluginmanifestv1.KindSecrets, "secrets", secretsDestDir(paths), provider, cfg.Providers.Secrets.Config)
+		entry, err := l.writeComponentArtifact(ctx, paths, providermanifestv1.KindSecrets, "secrets", secretsDestDir(paths), provider, cfg.Providers.Secrets.Config)
 		if err != nil {
 			return nil, err
 		}
-		if err := l.applyLockedComponentEntry(paths, &entry, pluginmanifestv1.KindSecrets, "secrets", provider, configMap, false); err != nil {
+		if err := l.applyLockedComponentEntry(paths, &entry, providermanifestv1.KindSecrets, "secrets", provider, configMap, false); err != nil {
 			return nil, err
 		}
 		return &entry, nil
 	case provider.HasLocalSource():
-		if err := applyLocalComponentManifest(pluginmanifestv1.KindSecrets, "secrets", provider, configMap); err != nil {
+		if err := applyLocalComponentManifest(providermanifestv1.KindSecrets, "secrets", provider, configMap); err != nil {
 			return nil, err
 		}
 	}
@@ -584,7 +584,7 @@ func lockEntryMatches(paths initPaths, name string, plugin *config.ProviderEntry
 		return false
 	}
 	if len(entry.Archives) > 0 {
-		platform := pluginpkg.CurrentPlatformString()
+		platform := providerpkg.CurrentPlatformString()
 		if _, _, ok := resolveArchiveForPlatform(entry, platform); !ok {
 			return false
 		}
@@ -608,9 +608,9 @@ func resolveArchiveForPlatform(entry LockEntry, platform string) (LockArchive, s
 	if a, ok := entry.Archives[platform]; ok {
 		return a, platform, true
 	}
-	goos, goarch, err := pluginpkg.ParsePlatformString(platform)
+	goos, goarch, err := providerpkg.ParsePlatformString(platform)
 	if err == nil {
-		key := pluginpkg.PlatformString(goos, goarch)
+		key := providerpkg.PlatformString(goos, goarch)
 		if key != platform {
 			if a, ok := entry.Archives[key]; ok {
 				return a, key, true
@@ -627,7 +627,7 @@ func resolveArchiveForPlatform(entry LockEntry, platform string) (LockArchive, s
 // all platform archives from the resolver (if supported) and records the
 // verified SHA256 for the current platform.
 func (l *Lifecycle) buildArchivesMap(ctx context.Context, src pluginsource.Source, version, currentURL, currentSHA256 string) map[string]LockArchive {
-	currentPlatform := pluginpkg.CurrentPlatformString()
+	currentPlatform := providerpkg.CurrentPlatformString()
 	archives := map[string]LockArchive{
 		currentPlatform: {URL: currentURL, SHA256: currentSHA256},
 	}
@@ -707,11 +707,11 @@ func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, paths initP
 	if installed.Manifest.Version != plugin.SourceVersion() {
 		return LockEntry{}, fmt.Errorf("%s %q: manifest version %q does not match config version %q", kind, name, installed.Manifest.Version, plugin.SourceVersion())
 	}
-	if err := pluginpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, kind, configMap); err != nil {
+	if err := providerpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, kind, configMap); err != nil {
 		return LockEntry{}, fmt.Errorf("plugin config validation for %s %q: %w", kind, name, err)
 	}
 
-	entrypoint := pluginpkg.EntrypointForKind(installed.Manifest, kind)
+	entrypoint := providerpkg.EntrypointForKind(installed.Manifest, kind)
 	if entrypoint == nil {
 		return LockEntry{}, fmt.Errorf("%s %q manifest does not define a %s entrypoint", kind, name, kind)
 	}
@@ -757,7 +757,7 @@ func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths initPa
 	if err != nil {
 		return LockProviderEntry{}, fmt.Errorf("provider %q install source plugin: %w", name, err)
 	}
-	if err := validateInstalledManifestKind(pluginmanifestv1.KindPlugin, name, installed.Manifest); err != nil {
+	if err := validateInstalledManifestKind(providermanifestv1.KindPlugin, name, installed.Manifest); err != nil {
 		return LockProviderEntry{}, err
 	}
 
@@ -768,7 +768,7 @@ func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths initPa
 		return LockProviderEntry{}, fmt.Errorf("provider %q: manifest version %q does not match config version %q", name, installed.Manifest.Version, plugin.SourceVersion())
 	}
 
-	if err := pluginpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, pluginmanifestv1.KindPlugin, configMap); err != nil {
+	if err := providerpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, providermanifestv1.KindPlugin, configMap); err != nil {
 		return LockProviderEntry{}, fmt.Errorf("plugin config validation for provider %q: %w", name, err)
 	}
 	fingerprint, err := PluginFingerprint(name, plugin, paths.configDir)
@@ -829,7 +829,7 @@ func (l *Lifecycle) writeUIProviderArtifact(ctx context.Context, cfg *config.Con
 	if err != nil {
 		return LockUIEntry{}, fmt.Errorf("ui provider install source: %w", err)
 	}
-	if err := validateInstalledManifestKind(pluginmanifestv1.KindWebUI, "provider", installed.Manifest); err != nil {
+	if err := validateInstalledManifestKind(providermanifestv1.KindWebUI, "provider", installed.Manifest); err != nil {
 		return LockUIEntry{}, err
 	}
 	if installed.Manifest.Source != plugin.SourceRef() {
@@ -838,7 +838,7 @@ func (l *Lifecycle) writeUIProviderArtifact(ctx context.Context, cfg *config.Con
 	if installed.Manifest.Version != plugin.SourceVersion() {
 		return LockUIEntry{}, fmt.Errorf("ui provider manifest version %q does not match config version %q", installed.Manifest.Version, plugin.SourceVersion())
 	}
-	if err := pluginpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, pluginmanifestv1.KindWebUI, configMap); err != nil {
+	if err := providerpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, providermanifestv1.KindWebUI, configMap); err != nil {
 		return LockUIEntry{}, fmt.Errorf("plugin config validation for ui provider: %w", err)
 	}
 	manifestPath, err := filepath.Rel(paths.artifactsDir, installed.ManifestPath)
@@ -917,28 +917,28 @@ func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *con
 		entry.IconFile = cmp.Or(entry.IconFile, entry.ResolvedIconFile)
 	}
 	if cfg.Providers.Auth != nil {
-		if err := l.applyComponentProvider(paths, lock, pluginmanifestv1.KindAuth, "auth", cfg.Providers.Auth, cfg.Providers.Auth.Config, &cfg.Providers.Auth.Config, locked); err != nil {
+		if err := l.applyComponentProvider(paths, lock, providermanifestv1.KindAuth, "auth", cfg.Providers.Auth, cfg.Providers.Auth.Config, &cfg.Providers.Auth.Config, locked); err != nil {
 			return err
 		}
 	}
 	if cfg.Providers.Secrets != nil {
-		if err := l.applyComponentProvider(paths, lock, pluginmanifestv1.KindSecrets, "secrets", cfg.Providers.Secrets, cfg.Providers.Secrets.Config, &cfg.Providers.Secrets.Config, locked); err != nil {
+		if err := l.applyComponentProvider(paths, lock, providermanifestv1.KindSecrets, "secrets", cfg.Providers.Secrets, cfg.Providers.Secrets.Config, &cfg.Providers.Secrets.Config, locked); err != nil {
 			return err
 		}
 	}
 	if cfg.Providers.Telemetry != nil {
-		if err := l.applyComponentProvider(paths, lock, pluginmanifestv1.KindPlugin, "telemetry", cfg.Providers.Telemetry, cfg.Providers.Telemetry.Config, &cfg.Providers.Telemetry.Config, locked); err != nil {
+		if err := l.applyComponentProvider(paths, lock, providermanifestv1.KindPlugin, "telemetry", cfg.Providers.Telemetry, cfg.Providers.Telemetry.Config, &cfg.Providers.Telemetry.Config, locked); err != nil {
 			return err
 		}
 	}
 	if cfg.Providers.Audit != nil {
-		if err := l.applyComponentProvider(paths, lock, pluginmanifestv1.KindPlugin, "audit", cfg.Providers.Audit, cfg.Providers.Audit.Config, &cfg.Providers.Audit.Config, locked); err != nil {
+		if err := l.applyComponentProvider(paths, lock, providermanifestv1.KindPlugin, "audit", cfg.Providers.Audit, cfg.Providers.Audit.Config, &cfg.Providers.Audit.Config, locked); err != nil {
 			return err
 		}
 	}
 	for name, def := range cfg.Providers.IndexedDBs {
 		if def != nil {
-			if err := l.applyComponentProvider(paths, lock, pluginmanifestv1.KindIndexedDB, "indexeddb-"+name, def, def.Config, &def.Config, locked); err != nil {
+			if err := l.applyComponentProvider(paths, lock, providermanifestv1.KindIndexedDB, "indexeddb-"+name, def, def.Config, &def.Config, locked); err != nil {
 				return err
 			}
 		}
@@ -979,7 +979,7 @@ func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *con
 			if _, err := os.Stat(assetRootPath); err != nil {
 				return fmt.Errorf("prepared asset root for ui provider not found at %s", assetRootPath)
 			}
-			_, manifest, err := pluginpkg.ReadManifestFile(manifestPath)
+			_, manifest, err := providerpkg.ReadManifestFile(manifestPath)
 			if err != nil {
 				return fmt.Errorf("read prepared manifest for ui provider: %w", err)
 			}
@@ -1021,7 +1021,7 @@ func (l *Lifecycle) applyComponentProvider(paths initPaths, lock *Lockfile, kind
 		case "audit":
 			entry = lock.Audit
 		default:
-			if kind == pluginmanifestv1.KindIndexedDB && strings.HasPrefix(name, "indexeddb-") {
+			if kind == providermanifestv1.KindIndexedDB && strings.HasPrefix(name, "indexeddb-") {
 				entry = lock.Datastore
 			}
 		}
@@ -1054,7 +1054,7 @@ func applyLocalProviderManifest(name string, plugin *config.ProviderEntry, confi
 		return fmt.Errorf("manifest for provider %q not found at %s: %w", name, manifestPath, err)
 	}
 
-	_, manifest, err := pluginpkg.PrepareSourceManifest(manifestPath)
+	_, manifest, err := providerpkg.PrepareSourceManifest(manifestPath)
 	if err != nil {
 		return fmt.Errorf("prepare manifest for provider %q: %w", name, err)
 	}
@@ -1064,7 +1064,7 @@ func applyLocalProviderManifest(name string, plugin *config.ProviderEntry, confi
 	if plugin.Command != "" {
 		return nil
 	}
-	if entry := pluginpkg.EntrypointForKind(plugin.ResolvedManifest, pluginmanifestv1.KindPlugin); entry != nil {
+	if entry := providerpkg.EntrypointForKind(plugin.ResolvedManifest, providermanifestv1.KindPlugin); entry != nil {
 		candidate := filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(entry.ArtifactPath))
 		if _, err := os.Stat(candidate); err == nil {
 			plugin.Command = candidate
@@ -1084,7 +1084,7 @@ func applyLocalComponentManifest(kind, name string, plugin *config.ProviderEntry
 		return fmt.Errorf("manifest for %s %q not found at %s: %w", kind, name, manifestPath, err)
 	}
 
-	_, manifest, err := pluginpkg.ReadSourceManifestFile(manifestPath)
+	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
 	if err != nil {
 		return fmt.Errorf("prepare manifest for %s %q: %w", kind, name, err)
 	}
@@ -1094,7 +1094,7 @@ func applyLocalComponentManifest(kind, name string, plugin *config.ProviderEntry
 	if plugin.Command != "" {
 		return nil
 	}
-	if entry := pluginpkg.EntrypointForKind(plugin.ResolvedManifest, kind); entry != nil {
+	if entry := providerpkg.EntrypointForKind(plugin.ResolvedManifest, kind); entry != nil {
 		candidate := filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(entry.ArtifactPath))
 		if _, err := os.Stat(candidate); err == nil {
 			plugin.Command = candidate
@@ -1114,7 +1114,7 @@ func applyLocalUIManifest(plugin *config.ProviderEntry, configMap map[string]any
 		return fmt.Errorf("manifest for ui provider not found at %s: %w", manifestPath, err)
 	}
 
-	_, manifest, err := pluginpkg.ReadSourceManifestFile(manifestPath)
+	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
 	if err != nil {
 		return fmt.Errorf("prepare manifest for ui provider: %w", err)
 	}
@@ -1162,7 +1162,7 @@ func (l *Lifecycle) applyLockedProviderEntry(paths initPaths, lock *Lockfile, na
 		return fmt.Errorf("prepared manifest for provider %q not found at %s; run `gestaltd init --config %s`", name, manifestPath, paths.configPath)
 	}
 
-	_, manifest, err := pluginpkg.ReadManifestFile(manifestPath)
+	_, manifest, err := providerpkg.ReadManifestFile(manifestPath)
 	if err != nil {
 		return fmt.Errorf("read prepared manifest for provider %q: %w", name, err)
 	}
@@ -1215,7 +1215,7 @@ func (l *Lifecycle) applyLockedComponentEntry(paths initPaths, entry *LockEntry,
 		return fmt.Errorf("prepared manifest for %s %q not found at %s; run `gestaltd init --config %s`", kind, name, manifestPath, paths.configPath)
 	}
 
-	_, manifest, err := pluginpkg.ReadManifestFile(manifestPath)
+	_, manifest, err := providerpkg.ReadManifestFile(manifestPath)
 	if err != nil {
 		return fmt.Errorf("read prepared manifest for %s %q: %w", kind, name, err)
 	}
@@ -1234,12 +1234,12 @@ func (l *Lifecycle) applyLockedComponentEntry(paths initPaths, entry *LockEntry,
 	return nil
 }
 
-func bindResolvedProviderManifest(name string, plugin *config.ProviderEntry, manifestPath string, manifest *pluginmanifestv1.Manifest, configMap map[string]any) error {
-	manifest = pluginpkg.ResolveManifestLocalReferences(manifest, manifestPath)
-	if err := validateInstalledManifestKind(pluginmanifestv1.KindPlugin, name, manifest); err != nil {
+func bindResolvedProviderManifest(name string, plugin *config.ProviderEntry, manifestPath string, manifest *providermanifestv1.Manifest, configMap map[string]any) error {
+	manifest = providerpkg.ResolveManifestLocalReferences(manifest, manifestPath)
+	if err := validateInstalledManifestKind(providermanifestv1.KindPlugin, name, manifest); err != nil {
 		return err
 	}
-	if err := pluginpkg.ValidateConfigForManifest(manifestPath, manifest, pluginmanifestv1.KindPlugin, configMap); err != nil {
+	if err := providerpkg.ValidateConfigForManifest(manifestPath, manifest, providermanifestv1.KindPlugin, configMap); err != nil {
 		return fmt.Errorf("plugin config validation for provider %q: %w", name, err)
 	}
 	resolvePluginIcon(manifest, manifestPath, plugin)
@@ -1248,12 +1248,12 @@ func bindResolvedProviderManifest(name string, plugin *config.ProviderEntry, man
 	return nil
 }
 
-func bindResolvedComponentManifest(kind, name string, plugin *config.ProviderEntry, manifestPath string, manifest *pluginmanifestv1.Manifest, configMap map[string]any) error {
-	manifest = pluginpkg.ResolveManifestLocalReferences(manifest, manifestPath)
+func bindResolvedComponentManifest(kind, name string, plugin *config.ProviderEntry, manifestPath string, manifest *providermanifestv1.Manifest, configMap map[string]any) error {
+	manifest = providerpkg.ResolveManifestLocalReferences(manifest, manifestPath)
 	if err := validateInstalledManifestKind(kind, name, manifest); err != nil {
 		return err
 	}
-	if err := pluginpkg.ValidateConfigForManifest(manifestPath, manifest, kind, configMap); err != nil {
+	if err := providerpkg.ValidateConfigForManifest(manifestPath, manifest, kind, configMap); err != nil {
 		return fmt.Errorf("plugin config validation for %s %q: %w", kind, name, err)
 	}
 	resolvePluginIcon(manifest, manifestPath, plugin)
@@ -1262,12 +1262,12 @@ func bindResolvedComponentManifest(kind, name string, plugin *config.ProviderEnt
 	return nil
 }
 
-func bindResolvedUIManifest(plugin *config.ProviderEntry, manifestPath string, manifest *pluginmanifestv1.Manifest, configMap map[string]any) error {
-	manifest = pluginpkg.ResolveManifestLocalReferences(manifest, manifestPath)
-	if err := validateInstalledManifestKind(pluginmanifestv1.KindWebUI, "provider", manifest); err != nil {
+func bindResolvedUIManifest(plugin *config.ProviderEntry, manifestPath string, manifest *providermanifestv1.Manifest, configMap map[string]any) error {
+	manifest = providerpkg.ResolveManifestLocalReferences(manifest, manifestPath)
+	if err := validateInstalledManifestKind(providermanifestv1.KindWebUI, "provider", manifest); err != nil {
 		return err
 	}
-	if err := pluginpkg.ValidateConfigForManifest(manifestPath, manifest, pluginmanifestv1.KindWebUI, configMap); err != nil {
+	if err := providerpkg.ValidateConfigForManifest(manifestPath, manifest, providermanifestv1.KindWebUI, configMap); err != nil {
 		return fmt.Errorf("plugin config validation for ui provider: %w", err)
 	}
 	resolvePluginIcon(manifest, manifestPath, plugin)
@@ -1277,7 +1277,7 @@ func bindResolvedUIManifest(plugin *config.ProviderEntry, manifestPath string, m
 }
 
 func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPaths, name string, plugin *config.ProviderEntry, entry LockProviderEntry, locked bool) error {
-	platform := pluginpkg.CurrentPlatformString()
+	platform := providerpkg.CurrentPlatformString()
 	archive, _, ok := resolveArchiveForPlatform(entry, platform)
 	if !ok || archive.URL == "" {
 		return fmt.Errorf("no archive for platform %s for provider %q; run `gestaltd init --config %s`", platform, name, paths.configPath)
@@ -1291,7 +1291,7 @@ func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPat
 		src, parseErr = pluginsource.Parse(entry.Source)
 	}
 	var (
-		download *pluginpkg.DownloadResult
+		download *providerpkg.DownloadResult
 		err      error
 	)
 	if parseErr == nil && src.Host == pluginsource.HostGitHub {
@@ -1301,7 +1301,7 @@ func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPat
 		if reqErr != nil {
 			return fmt.Errorf("create locked source plugin request for provider %q: %w", name, reqErr)
 		}
-		download, err = pluginpkg.DownloadRequest(http.DefaultClient, req)
+		download, err = providerpkg.DownloadRequest(http.DefaultClient, req)
 	}
 	if err != nil {
 		return fmt.Errorf("download locked source plugin for provider %q: %w", name, err)
@@ -1329,7 +1329,7 @@ func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPat
 }
 
 func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPaths, kind, name string, plugin *config.ProviderEntry, entry LockEntry, locked bool) error {
-	platform := pluginpkg.CurrentPlatformString()
+	platform := providerpkg.CurrentPlatformString()
 	archive, _, ok := resolveArchiveForPlatform(entry, platform)
 	if !ok || archive.URL == "" {
 		return fmt.Errorf("no archive for platform %s for %s %q; run `gestaltd init --config %s`", platform, kind, name, paths.configPath)
@@ -1343,7 +1343,7 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 		src, parseErr = pluginsource.Parse(entry.Source)
 	}
 	var (
-		download *pluginpkg.DownloadResult
+		download *providerpkg.DownloadResult
 		err      error
 	)
 	if parseErr == nil && src.Host == pluginsource.HostGitHub {
@@ -1353,7 +1353,7 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 		if reqErr != nil {
 			return fmt.Errorf("create locked source plugin request for %s %q: %w", kind, name, reqErr)
 		}
-		download, err = pluginpkg.DownloadRequest(http.DefaultClient, req)
+		download, err = providerpkg.DownloadRequest(http.DefaultClient, req)
 	}
 	if err != nil {
 		return fmt.Errorf("download locked source plugin for %s %q: %w", kind, name, err)
@@ -1374,7 +1374,7 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 	case "audit":
 		destDir = auditDestDir(paths)
 	default:
-		if kind == pluginmanifestv1.KindIndexedDB && strings.HasPrefix(name, "indexeddb-") {
+		if kind == providermanifestv1.KindIndexedDB && strings.HasPrefix(name, "indexeddb-") {
 			destDir = indexeddbDestDir(paths, strings.TrimPrefix(name, "indexeddb-"))
 			break
 		}
@@ -1400,7 +1400,7 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 }
 
 func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths initPaths, plugin *config.ProviderEntry, entry LockUIEntry, locked bool) error {
-	platform := pluginpkg.CurrentPlatformString()
+	platform := providerpkg.CurrentPlatformString()
 	archive, _, ok := resolveArchiveForPlatform(entry, platform)
 	if !ok || archive.URL == "" {
 		return fmt.Errorf("no archive for platform %s for ui provider; run `gestaltd init --config %s`", platform, paths.configPath)
@@ -1414,7 +1414,7 @@ func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths initP
 		src, parseErr = pluginsource.Parse(entry.Source)
 	}
 	var (
-		download *pluginpkg.DownloadResult
+		download *providerpkg.DownloadResult
 		err      error
 	)
 	if parseErr == nil && src.Host == pluginsource.HostGitHub {
@@ -1424,7 +1424,7 @@ func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths initP
 		if reqErr != nil {
 			return fmt.Errorf("create locked source request for ui provider: %w", reqErr)
 		}
-		download, err = pluginpkg.DownloadRequest(http.DefaultClient, req)
+		download, err = providerpkg.DownloadRequest(http.DefaultClient, req)
 	}
 	if err != nil {
 		return fmt.Errorf("download locked source for ui provider: %w", err)
@@ -1442,7 +1442,7 @@ func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths initP
 	if err != nil {
 		return fmt.Errorf("install locked source for ui provider: %w", err)
 	}
-	if err := validateInstalledManifestKind(pluginmanifestv1.KindWebUI, "ui provider", installed.Manifest); err != nil {
+	if err := validateInstalledManifestKind(providermanifestv1.KindWebUI, "ui provider", installed.Manifest); err != nil {
 		return err
 	}
 	return nil
@@ -1450,7 +1450,7 @@ func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths initP
 
 func downloadPlatformArchives(ctx context.Context, lock *Lockfile, platforms []struct{ GOOS, GOARCH, LibC string }, tokenForSource map[string]string) error {
 	for _, plat := range platforms {
-		platformKey := pluginpkg.PlatformString(plat.GOOS, plat.GOARCH)
+		platformKey := providerpkg.PlatformString(plat.GOOS, plat.GOARCH)
 		if err := hashPlatformInEntries(ctx, lock, platformKey, tokenForSource); err != nil {
 			return err
 		}
@@ -1487,7 +1487,7 @@ func hashArchiveEntry(ctx context.Context, entry *LockEntry, platformKey string,
 	token := tokenForSource[entry.Source]
 	src, parseErr := pluginsource.Parse(entry.Source)
 	var (
-		dl  *pluginpkg.DownloadResult
+		dl  *providerpkg.DownloadResult
 		err error
 	)
 	if parseErr == nil && src.Host == pluginsource.HostGitHub {
@@ -1497,7 +1497,7 @@ func hashArchiveEntry(ctx context.Context, entry *LockEntry, platformKey string,
 		if reqErr != nil {
 			return fmt.Errorf("create request for platform %s, source %s: %w", platformKey, entry.Source, reqErr)
 		}
-		dl, err = pluginpkg.DownloadRequest(http.DefaultClient, req)
+		dl, err = providerpkg.DownloadRequest(http.DefaultClient, req)
 	}
 	if err != nil {
 		return fmt.Errorf("download archive for platform %s, source %s: %w", platformKey, entry.Source, err)
@@ -1508,7 +1508,7 @@ func hashArchiveEntry(ctx context.Context, entry *LockEntry, platformKey string,
 	return nil
 }
 
-func resolvePluginIcon(manifest *pluginmanifestv1.Manifest, manifestPath string, plugin *config.ProviderEntry) {
+func resolvePluginIcon(manifest *providermanifestv1.Manifest, manifestPath string, plugin *config.ProviderEntry) {
 	if manifest.IconFile == "" {
 		return
 	}
@@ -1520,7 +1520,7 @@ func resolvePluginIcon(manifest *pluginmanifestv1.Manifest, manifestPath string,
 	plugin.ResolvedIconFile = iconPath
 }
 
-func providerEntrypointArgs(manifest *pluginmanifestv1.Manifest) ([]string, error) {
+func providerEntrypointArgs(manifest *providermanifestv1.Manifest) ([]string, error) {
 	entry := manifest.Entrypoint
 	if entry == nil {
 		return nil, fmt.Errorf("manifest does not define a provider entrypoint")
@@ -1528,19 +1528,19 @@ func providerEntrypointArgs(manifest *pluginmanifestv1.Manifest) ([]string, erro
 	return append([]string(nil), entry.Args...), nil
 }
 
-func componentEntrypointArgs(manifest *pluginmanifestv1.Manifest, kind string) ([]string, error) {
-	entry := pluginpkg.EntrypointForKind(manifest, kind)
+func componentEntrypointArgs(manifest *providermanifestv1.Manifest, kind string) ([]string, error) {
+	entry := providerpkg.EntrypointForKind(manifest, kind)
 	if entry == nil {
 		return nil, fmt.Errorf("manifest does not define a %s entrypoint", kind)
 	}
 	return append([]string(nil), entry.Args...), nil
 }
 
-func validateInstalledManifestKind(kind, name string, manifest *pluginmanifestv1.Manifest) error {
+func validateInstalledManifestKind(kind, name string, manifest *providermanifestv1.Manifest) error {
 	if manifest == nil {
 		return fmt.Errorf("manifest for %s %q is required", kind, name)
 	}
-	declared, err := pluginpkg.ManifestKind(manifest)
+	declared, err := providerpkg.ManifestKind(manifest)
 	if err != nil {
 		return fmt.Errorf("%s %q manifest is invalid: %w", kind, name, err)
 	}

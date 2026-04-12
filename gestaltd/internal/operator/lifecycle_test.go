@@ -17,10 +17,10 @@ import (
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
+	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"gopkg.in/yaml.v3"
 )
 
@@ -63,12 +63,12 @@ func decodeNodeMap(t *testing.T, node any) map[string]any {
 func writeStubIndexedDBManifest(t *testing.T, dir string) string {
 	t.Helper()
 	manifestPath := filepath.Join(dir, "indexeddb-manifest.yaml")
-	data, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
+	data, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
 		Source:  "github.com/test/providers/indexeddb-stub",
 		Version: "0.0.1-alpha.1",
-		Kind:    pluginmanifestv1.KindIndexedDB,
-		Spec:    &pluginmanifestv1.Spec{},
-	}, pluginpkg.ManifestFormatYAML)
+		Kind:    providermanifestv1.KindIndexedDB,
+		Spec:    &providermanifestv1.Spec{},
+	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("encode indexeddb manifest: %v", err)
 	}
@@ -106,15 +106,15 @@ func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *te
 
 	dir := t.TempDir()
 	manifestPath := filepath.Join(dir, "manifest.yaml")
-	manifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
+	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
 		Source:      "github.com/testowner/plugins/local-provider",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Local Provider",
 		Description: "Local executable provider",
-		Kind:        pluginmanifestv1.KindPlugin, Spec: &pluginmanifestv1.Spec{
-			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
+		Kind:        providermanifestv1.KindPlugin, Spec: &providermanifestv1.Spec{
+			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
 		},
-	}, pluginpkg.ManifestFormatYAML)
+	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("EncodeManifest: %v", err)
 	}
@@ -215,8 +215,8 @@ spec:
 	if conn == nil || conn.Auth == nil {
 		t.Fatalf("MCP connection = %#v", conn)
 	}
-	if got := conn.Auth.Type; got != pluginmanifestv1.AuthTypeMCPOAuth {
-		t.Fatalf("MCP auth type = %q, want %q", got, pluginmanifestv1.AuthTypeMCPOAuth)
+	if got := conn.Auth.Type; got != providermanifestv1.AuthTypeMCPOAuth {
+		t.Fatalf("MCP auth type = %q, want %q", got, providermanifestv1.AuthTypeMCPOAuth)
 	}
 	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); !os.IsNotExist(err) {
 		t.Fatalf("lockfile should not be created, got err=%v", err)
@@ -227,12 +227,12 @@ func TestLockProviderEntryForSource_RejectsManifestWithoutProviderKind(t *testin
 	t.Parallel()
 
 	dir := t.TempDir()
-	pkgPath := mustBuildManagedProviderPackage(t, dir, &pluginmanifestv1.Manifest{
-		Kind:       pluginmanifestv1.KindAuth,
+	pkgPath := mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
+		Kind:       providermanifestv1.KindAuth,
 		Source:     "github.com/testowner/gestalt-providers/plugins/auth-only",
 		Version:    "0.0.1-alpha.1",
-		Spec:       &pluginmanifestv1.Spec{},
-		Entrypoint: &pluginmanifestv1.Entrypoint{ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "auth"))},
+		Spec:       &providermanifestv1.Spec{},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "auth"))},
 	}, map[string]string{
 		filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "auth")): "auth-binary",
 	}, false)
@@ -262,16 +262,16 @@ func TestLoadForExecutionAtPath_ResolvesLocalTopLevelPluginsWithoutLockfile(t *t
 	dir := t.TempDir()
 	authArtifact := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "auth-plugin"))
 	authManifestPath := filepath.Join(dir, "auth-manifest.yaml")
-	authManifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
-		Kind:    pluginmanifestv1.KindAuth,
+	authManifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
+		Kind:    providermanifestv1.KindAuth,
 		Source:  "github.com/testowner/plugins/local-auth",
 		Version: "0.0.1-alpha.1",
-		Spec:    &pluginmanifestv1.Spec{},
-		Artifacts: []pluginmanifestv1.Artifact{
+		Spec:    &providermanifestv1.Spec{},
+		Artifacts: []providermanifestv1.Artifact{
 			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: authArtifact},
 		},
-		Entrypoint: &pluginmanifestv1.Entrypoint{ArtifactPath: authArtifact, Args: []string{"serve-auth"}},
-	}, pluginpkg.ManifestFormatYAML)
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: authArtifact, Args: []string{"serve-auth"}},
+	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("EncodeSourceManifestFormat auth: %v", err)
 	}
@@ -360,12 +360,12 @@ func TestLoadForExecutionAtPath_ResolvesLocalSourceTopLevelPluginsWithoutArtifac
 
 	authManifestPath := filepath.Join(dir, "auth-manifest.yaml")
 	writeTestSourceFile("auth.go", []byte(testutil.GeneratedAuthPackageSource()), 0o644)
-	authManifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
-		Kind:    pluginmanifestv1.KindAuth,
+	authManifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
+		Kind:    providermanifestv1.KindAuth,
 		Source:  "github.com/testowner/plugins/local-source-auth",
 		Version: "0.0.1-alpha.1",
-		Spec:    &pluginmanifestv1.Spec{},
-	}, pluginpkg.ManifestFormatYAML)
+		Spec:    &providermanifestv1.Spec{},
+	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("EncodeSourceManifestFormat auth: %v", err)
 	}
@@ -436,14 +436,14 @@ func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalSourceHybridPlugin
 	writeTestFile("go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/local-generated-provider")), 0o644)
 	writeTestFile("go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
 	writeTestFile("provider.go", []byte(testutil.GeneratedProviderPackageSource()), 0o644)
-	manifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
+	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
 		Source:      "github.com/testowner/plugins/local-generated-provider",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Generated Local Provider",
-		Kind:        pluginmanifestv1.KindPlugin, Spec: &pluginmanifestv1.Spec{
-			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
+		Kind:        providermanifestv1.KindPlugin, Spec: &providermanifestv1.Spec{
+			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
 		},
-	}, pluginpkg.ManifestFormatYAML)
+	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("EncodeManifestFormat: %v", err)
 	}
@@ -607,14 +607,14 @@ def session_catalog(request: gestalt.Request) -> gestalt.Catalog:
 `), 0o644)
 	createLocalPythonSDKVenv(t, python3Path, filepath.Join(dir, ".venv"), localPythonSDKPath(t))
 
-	manifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
+	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
 		Source:      "github.com/testowner/plugins/local-python-provider",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Generated Local Python Provider",
-		Kind:        pluginmanifestv1.KindPlugin, Spec: &pluginmanifestv1.Spec{
-			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
+		Kind:        providermanifestv1.KindPlugin, Spec: &providermanifestv1.Spec{
+			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
 		},
-	}, pluginpkg.ManifestFormatYAML)
+	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("EncodeManifestFormat: %v", err)
 	}
@@ -932,14 +932,14 @@ func TestApplyLockedPlugins_SkipsNilIntegrationPlugins(t *testing.T) {
 
 	dir := t.TempDir()
 	manifestPath := filepath.Join(dir, "manifest.yaml")
-	manifest, err := pluginpkg.EncodeSourceManifestFormat(&pluginmanifestv1.Manifest{
+	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
 		Source:      "github.com/testowner/plugins/local-provider",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Local Provider",
-		Kind:        pluginmanifestv1.KindPlugin, Spec: &pluginmanifestv1.Spec{
-			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
+		Kind:        providermanifestv1.KindPlugin, Spec: &providermanifestv1.Spec{
+			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
 		},
-	}, pluginpkg.ManifestFormatYAML)
+	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("EncodeManifest: %v", err)
 	}
@@ -1057,7 +1057,7 @@ func TestReadLockfile_RejectsUnsupportedVersion(t *testing.T) {
 	}
 }
 
-func mustBuildManagedProviderPackage(t *testing.T, dir string, manifest *pluginmanifestv1.Manifest, artifacts map[string]string, includeCatalog bool) string {
+func mustBuildManagedProviderPackage(t *testing.T, dir string, manifest *providermanifestv1.Manifest, artifacts map[string]string, includeCatalog bool) string {
 	t.Helper()
 
 	srcDir := filepath.Join(dir, strings.NewReplacer("/", "-", "@", "-", ".", "_").Replace(manifest.Source+"-"+manifest.Version)+"-pkg")
@@ -1076,7 +1076,7 @@ func mustBuildManagedProviderPackage(t *testing.T, dir string, manifest *pluginm
 			t.Fatalf("WriteFile artifact: %v", err)
 		}
 		sum := sha256.Sum256([]byte(content))
-		manifestCopy.Artifacts = append(manifestCopy.Artifacts, pluginmanifestv1.Artifact{
+		manifestCopy.Artifacts = append(manifestCopy.Artifacts, providermanifestv1.Artifact{
 			OS:     runtime.GOOS,
 			Arch:   runtime.GOARCH,
 			Path:   artifactPath,
@@ -1084,11 +1084,11 @@ func mustBuildManagedProviderPackage(t *testing.T, dir string, manifest *pluginm
 		})
 	}
 
-	manifestBytes, err := pluginpkg.EncodeManifest(&manifestCopy)
+	manifestBytes, err := providerpkg.EncodeManifest(&manifestCopy)
 	if err != nil {
 		t.Fatalf("EncodeManifest: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(srcDir, pluginpkg.ManifestFile), manifestBytes, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(srcDir, providerpkg.ManifestFile), manifestBytes, 0o644); err != nil {
 		t.Fatalf("WriteFile manifest: %v", err)
 	}
 	if includeCatalog {
@@ -1098,7 +1098,7 @@ func mustBuildManagedProviderPackage(t *testing.T, dir string, manifest *pluginm
 	}
 
 	pkgPath := filepath.Join(dir, filepath.Base(srcDir)+".tar.gz")
-	if err := pluginpkg.CreatePackageFromDir(srcDir, pkgPath); err != nil {
+	if err := providerpkg.CreatePackageFromDir(srcDir, pkgPath); err != nil {
 		t.Fatalf("CreatePackageFromDir: %v", err)
 	}
 	return pkgPath

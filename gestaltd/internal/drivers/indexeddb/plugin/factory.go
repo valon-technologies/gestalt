@@ -8,7 +8,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/drivers/componentplugin"
 	"github.com/valon-technologies/gestalt/server/internal/pluginhost"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"gopkg.in/yaml.v3"
 )
 
@@ -18,7 +18,7 @@ var Factory bootstrap.IndexedDBFactory = func(node yaml.Node) (indexeddb.Indexed
 		return nil, fmt.Errorf("plugin datastore: parsing config: %w", err)
 	}
 	prepared, err := componentplugin.PrepareExecution(componentplugin.PrepareParams{
-		Kind:                 pluginmanifestv1.KindIndexedDB,
+		Kind:                 providermanifestv1.KindIndexedDB,
 		Subject:              "plugin datastore",
 		SourceMissingMessage: "no Go, Rust, or Python datastore source package found",
 		Config:               cfg,

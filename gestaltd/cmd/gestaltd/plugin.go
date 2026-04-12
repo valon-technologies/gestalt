@@ -13,9 +13,9 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
 func runProvider(args []string) error {
@@ -77,26 +77,26 @@ func runProviderRelease(args []string) error {
 		return fmt.Errorf("invalid --version: %w", err)
 	}
 
-	manifestPath, err := pluginpkg.FindManifestFile(".")
+	manifestPath, err := providerpkg.FindManifestFile(".")
 	if err != nil {
 		return err
 	}
 	sourceDir := filepath.Dir(manifestPath)
-	_, releaseManifest, err := pluginpkg.ReadSourceManifestFile(manifestPath)
+	_, releaseManifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
 	if err != nil {
 		return fmt.Errorf("read %s: %w", manifestPath, err)
 	}
 	if err := validateReleaseOutputDir(releaseManifest, sourceDir, *outputDir); err != nil {
 		return err
 	}
-	if err := pluginpkg.RunSourceReleaseBuild(manifestPath, releaseManifest); err != nil {
+	if err := providerpkg.RunSourceReleaseBuild(manifestPath, releaseManifest); err != nil {
 		return err
 	}
-	_, srcManifest, err := pluginpkg.PrepareSourceManifest(manifestPath)
+	_, srcManifest, err := providerpkg.PrepareSourceManifest(manifestPath)
 	if err != nil {
 		return fmt.Errorf("prepare %s: %w", manifestPath, err)
 	}
-	manifestFormat := pluginpkg.ManifestFormatFromPath(manifestPath)
+	manifestFormat := providerpkg.ManifestFormatFromPath(manifestPath)
 	manifestFile := filepath.Base(manifestPath)
 
 	src, err := pluginsource.Parse(srcManifest.Source)
@@ -124,7 +124,7 @@ func runProviderRelease(args []string) error {
 		for _, platform := range buildPlatforms {
 			archivePath, err := buildPlatformArchive(sourceDir, srcManifest, pluginName, *version, buildTarget.Kind, platform, *outputDir, manifestFile, manifestFormat)
 			if err != nil {
-				return fmt.Errorf("build %s: %w", pluginpkg.PlatformString(platform.GOOS, platform.GOARCH), err)
+				return fmt.Errorf("build %s: %w", providerpkg.PlatformString(platform.GOOS, platform.GOARCH), err)
 			}
 			archivePaths = append(archivePaths, archivePath)
 		}
@@ -143,12 +143,12 @@ func runProviderRelease(args []string) error {
 	return nil
 }
 
-func resolveReleaseBuildTarget(root string, manifest *pluginmanifestv1.Manifest) (*releaseBuildTarget, error) {
-	kind, err := pluginpkg.ManifestKind(manifest)
+func resolveReleaseBuildTarget(root string, manifest *providermanifestv1.Manifest) (*releaseBuildTarget, error) {
+	kind, err := providerpkg.ManifestKind(manifest)
 	if err != nil {
 		return nil, err
 	}
-	if kind == pluginmanifestv1.KindWebUI {
+	if kind == providermanifestv1.KindWebUI {
 		return nil, nil
 	}
 	hasSource, err := detectReleaseSourceBuildTarget(root, kind)
@@ -164,7 +164,7 @@ func resolveReleaseBuildTarget(root string, manifest *pluginmanifestv1.Manifest)
 	return &releaseBuildTarget{Kind: kind}, nil
 }
 
-func resolveReleaseBuildPlatforms(root string, manifest *pluginmanifestv1.Manifest, target *releaseBuildTarget, value string, explicit bool) ([]releasePlatform, error) {
+func resolveReleaseBuildPlatforms(root string, manifest *providermanifestv1.Manifest, target *releaseBuildTarget, value string, explicit bool) ([]releasePlatform, error) {
 	if target == nil {
 		return nil, nil
 	}
@@ -221,7 +221,7 @@ func expandReleasePlatformValue(value string) (string, error) {
 	}
 }
 
-func buildPlatformArchive(sourceDir string, srcManifest *pluginmanifestv1.Manifest, pluginName, version, buildKind string, platform releasePlatform, outputDir, manifestFile, manifestFormat string) (string, error) {
+func buildPlatformArchive(sourceDir string, srcManifest *providermanifestv1.Manifest, pluginName, version, buildKind string, platform releasePlatform, outputDir, manifestFile, manifestFormat string) (string, error) {
 	stagingDir, err := os.MkdirTemp("", "gestalt-release-*")
 	if err != nil {
 		return "", err
@@ -236,7 +236,7 @@ func buildPlatformArchive(sourceDir string, srcManifest *pluginmanifestv1.Manife
 	if err := writeReleaseManifestFile(stagingDir, manifestFile, manifestFormat, manifest); err != nil {
 		return "", err
 	}
-	if err := pluginpkg.CreatePackageFromDir(stagingDir, archivePath); err != nil {
+	if err := providerpkg.CreatePackageFromDir(stagingDir, archivePath); err != nil {
 		return "", err
 	}
 
@@ -244,7 +244,7 @@ func buildPlatformArchive(sourceDir string, srcManifest *pluginmanifestv1.Manife
 	return archivePath, nil
 }
 
-func createReleaseArchive(outputDir, archiveName, manifestFile, manifestFormat string, prepare func(stagingDir string) (*pluginmanifestv1.Manifest, error)) (string, error) {
+func createReleaseArchive(outputDir, archiveName, manifestFile, manifestFormat string, prepare func(stagingDir string) (*providermanifestv1.Manifest, error)) (string, error) {
 	stagingDir, err := os.MkdirTemp("", "gestalt-release-*")
 	if err != nil {
 		return "", err
@@ -259,7 +259,7 @@ func createReleaseArchive(outputDir, archiveName, manifestFile, manifestFormat s
 	if err := writeReleaseManifestFile(stagingDir, manifestFile, manifestFormat, manifest); err != nil {
 		return "", err
 	}
-	if err := pluginpkg.CreatePackageFromDir(stagingDir, archivePath); err != nil {
+	if err := providerpkg.CreatePackageFromDir(stagingDir, archivePath); err != nil {
 		return "", err
 	}
 
@@ -267,24 +267,24 @@ func createReleaseArchive(outputDir, archiveName, manifestFile, manifestFormat s
 	return archivePath, nil
 }
 
-func writeReleaseManifestFile(stagingDir, manifestFile, manifestFormat string, manifest *pluginmanifestv1.Manifest) error {
-	data, err := pluginpkg.EncodeManifestFormat(manifest, manifestFormat)
+func writeReleaseManifestFile(stagingDir, manifestFile, manifestFormat string, manifest *providermanifestv1.Manifest) error {
+	data, err := providerpkg.EncodeManifestFormat(manifest, manifestFormat)
 	if err != nil {
 		return fmt.Errorf("encode manifest: %w", err)
 	}
 	return os.WriteFile(filepath.Join(stagingDir, manifestFile), data, 0644)
 }
 
-func releaseRequiresBuildTarget(manifest *pluginmanifestv1.Manifest) bool {
-	kind, err := pluginpkg.ManifestKind(manifest)
+func releaseRequiresBuildTarget(manifest *providermanifestv1.Manifest) bool {
+	kind, err := providerpkg.ManifestKind(manifest)
 	if err != nil {
 		return false
 	}
 	switch kind {
-	case pluginmanifestv1.KindPlugin:
+	case providermanifestv1.KindPlugin:
 		return manifest.Entrypoint == nil && (manifest.Spec == nil || !manifest.Spec.IsManifestBacked())
-	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindIndexedDB, pluginmanifestv1.KindSecrets:
-		return pluginpkg.EntrypointForKind(manifest, kind) == nil
+	case providermanifestv1.KindAuth, providermanifestv1.KindIndexedDB, providermanifestv1.KindSecrets:
+		return providerpkg.EntrypointForKind(manifest, kind) == nil
 	default:
 		return false
 	}
@@ -292,10 +292,10 @@ func releaseRequiresBuildTarget(manifest *pluginmanifestv1.Manifest) bool {
 
 func detectReleaseSourceBuildTarget(root, kind string) (bool, error) {
 	switch kind {
-	case pluginmanifestv1.KindPlugin:
-		return pluginpkg.HasSourceProviderPackage(root)
-	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindIndexedDB, pluginmanifestv1.KindSecrets:
-		return pluginpkg.HasSourceComponentPackage(root, kind)
+	case providermanifestv1.KindPlugin:
+		return providerpkg.HasSourceProviderPackage(root)
+	case providermanifestv1.KindAuth, providermanifestv1.KindIndexedDB, providermanifestv1.KindSecrets:
+		return providerpkg.HasSourceComponentPackage(root, kind)
 	default:
 		return false, fmt.Errorf("unsupported release build target kind %q", kind)
 	}
@@ -303,10 +303,10 @@ func detectReleaseSourceBuildTarget(root, kind string) (bool, error) {
 
 func validateReleaseBuildTarget(root, kind, goos, goarch string) error {
 	switch kind {
-	case pluginmanifestv1.KindPlugin:
-		return pluginpkg.ValidateSourceProviderRelease(root, goos, goarch)
-	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindIndexedDB, pluginmanifestv1.KindSecrets:
-		return pluginpkg.ValidateSourceComponentRelease(root, kind, goos, goarch)
+	case providermanifestv1.KindPlugin:
+		return providerpkg.ValidateSourceProviderRelease(root, goos, goarch)
+	case providermanifestv1.KindAuth, providermanifestv1.KindIndexedDB, providermanifestv1.KindSecrets:
+		return providerpkg.ValidateSourceComponentRelease(root, kind, goos, goarch)
 	default:
 		return fmt.Errorf("unsupported release build target kind %q", kind)
 	}
@@ -314,10 +314,10 @@ func validateReleaseBuildTarget(root, kind, goos, goarch string) error {
 
 func buildReleaseTargetBinary(root, outputPath, pluginName, kind, goos, goarch string) (string, error) {
 	switch kind {
-	case pluginmanifestv1.KindPlugin:
-		return pluginpkg.BuildSourceProviderReleaseBinary(root, outputPath, pluginName, goos, goarch)
-	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindIndexedDB, pluginmanifestv1.KindSecrets:
-		return pluginpkg.BuildSourceComponentReleaseBinary(root, outputPath, kind, goos, goarch)
+	case providermanifestv1.KindPlugin:
+		return providerpkg.BuildSourceProviderReleaseBinary(root, outputPath, pluginName, goos, goarch)
+	case providermanifestv1.KindAuth, providermanifestv1.KindIndexedDB, providermanifestv1.KindSecrets:
+		return providerpkg.BuildSourceComponentReleaseBinary(root, outputPath, kind, goos, goarch)
 	default:
 		return "", fmt.Errorf("unsupported release build target kind %q", kind)
 	}
@@ -325,10 +325,10 @@ func buildReleaseTargetBinary(root, outputPath, pluginName, kind, goos, goarch s
 
 func isMissingReleaseSourceBuildTarget(err error, kind string) bool {
 	switch kind {
-	case pluginmanifestv1.KindPlugin:
-		return errors.Is(err, pluginpkg.ErrNoSourceProviderPackage)
-	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindIndexedDB, pluginmanifestv1.KindSecrets:
-		return errors.Is(err, pluginpkg.ErrNoSourceComponentPackage)
+	case providermanifestv1.KindPlugin:
+		return errors.Is(err, providerpkg.ErrNoSourceProviderPackage)
+	case providermanifestv1.KindAuth, providermanifestv1.KindIndexedDB, providermanifestv1.KindSecrets:
+		return errors.Is(err, providerpkg.ErrNoSourceComponentPackage)
 	default:
 		return false
 	}
@@ -336,9 +336,9 @@ func isMissingReleaseSourceBuildTarget(err error, kind string) bool {
 
 func missingReleaseSourceBuildTargetError(kind string) error {
 	switch kind {
-	case pluginmanifestv1.KindPlugin:
+	case providermanifestv1.KindPlugin:
 		return fmt.Errorf("no Go, Rust, Python, or TypeScript provider package found")
-	case pluginmanifestv1.KindAuth, pluginmanifestv1.KindIndexedDB, pluginmanifestv1.KindSecrets:
+	case providermanifestv1.KindAuth, providermanifestv1.KindIndexedDB, providermanifestv1.KindSecrets:
 		return fmt.Errorf("no Go, Rust, Python, or TypeScript %s source package found", kind)
 	default:
 		return fmt.Errorf("unsupported release build target kind %q", kind)
@@ -366,9 +366,9 @@ func currentReleasePlatform() string {
 	return runtime.GOOS + "/" + runtime.GOARCH
 }
 
-func buildSourceArchive(sourceDir string, srcManifest *pluginmanifestv1.Manifest, pluginName, version, outputDir, manifestFile, manifestFormat string) (string, error) {
+func buildSourceArchive(sourceDir string, srcManifest *providermanifestv1.Manifest, pluginName, version, outputDir, manifestFile, manifestFormat string) (string, error) {
 	archiveName := fmt.Sprintf("gestalt-plugin-%s_v%s.tar.gz", pluginName, version)
-	return createReleaseArchive(outputDir, archiveName, manifestFile, manifestFormat, func(stagingDir string) (*pluginmanifestv1.Manifest, error) {
+	return createReleaseArchive(outputDir, archiveName, manifestFile, manifestFormat, func(stagingDir string) (*providermanifestv1.Manifest, error) {
 		manifest, err := buildSourceReleaseManifest(srcManifest, version, sourceDir)
 		if err != nil {
 			return nil, err
@@ -380,7 +380,7 @@ func buildSourceArchive(sourceDir string, srcManifest *pluginmanifestv1.Manifest
 	})
 }
 
-func prepareBuiltPackageDir(stagingDir, sourceDir string, srcManifest *pluginmanifestv1.Manifest, version, pluginName, buildKind string, platform releasePlatform) (*pluginmanifestv1.Manifest, releasePlatform, error) {
+func prepareBuiltPackageDir(stagingDir, sourceDir string, srcManifest *providermanifestv1.Manifest, version, pluginName, buildKind string, platform releasePlatform) (*providermanifestv1.Manifest, releasePlatform, error) {
 	plat := platform
 	binaryName := releaseBinaryName(pluginName, plat.GOOS)
 	binaryPath := filepath.Join(stagingDir, binaryName)
@@ -388,7 +388,7 @@ func prepareBuiltPackageDir(stagingDir, sourceDir string, srcManifest *pluginman
 		return nil, releasePlatform{}, err
 	}
 
-	digest, err := pluginpkg.FileSHA256(binaryPath)
+	digest, err := providerpkg.FileSHA256(binaryPath)
 	if err != nil {
 		return nil, releasePlatform{}, fmt.Errorf("hash binary: %w", err)
 	}
@@ -402,7 +402,7 @@ func prepareBuiltPackageDir(stagingDir, sourceDir string, srcManifest *pluginman
 	return manifest, plat, nil
 }
 
-func buildSourceReleaseManifest(srcManifest *pluginmanifestv1.Manifest, version, sourceDir string) (*pluginmanifestv1.Manifest, error) {
+func buildSourceReleaseManifest(srcManifest *providermanifestv1.Manifest, version, sourceDir string) (*providermanifestv1.Manifest, error) {
 	manifest, err := cloneManifest(srcManifest)
 	if err != nil {
 		return nil, fmt.Errorf("clone manifest: %w", err)
@@ -411,7 +411,7 @@ func buildSourceReleaseManifest(srcManifest *pluginmanifestv1.Manifest, version,
 	manifest.Release = nil
 
 	for i, artifact := range srcManifest.Artifacts {
-		digest, err := pluginpkg.FileSHA256(filepath.Join(sourceDir, filepath.FromSlash(artifact.Path)))
+		digest, err := providerpkg.FileSHA256(filepath.Join(sourceDir, filepath.FromSlash(artifact.Path)))
 		if err != nil {
 			return nil, fmt.Errorf("hash artifact %s: %w", artifact.Path, err)
 		}
@@ -424,24 +424,24 @@ func buildSourceReleaseManifest(srcManifest *pluginmanifestv1.Manifest, version,
 	return manifest, nil
 }
 
-func buildReleaseManifest(srcManifest *pluginmanifestv1.Manifest, version, binaryName, buildKind string, plat releasePlatform, digest string) (*pluginmanifestv1.Manifest, error) {
+func buildReleaseManifest(srcManifest *providermanifestv1.Manifest, version, binaryName, buildKind string, plat releasePlatform, digest string) (*providermanifestv1.Manifest, error) {
 	manifest, err := cloneManifest(srcManifest)
 	if err != nil {
 		return nil, fmt.Errorf("clone manifest: %w", err)
 	}
 	manifest.Version = version
 	manifest.Release = nil
-	manifest.Artifacts = []pluginmanifestv1.Artifact{
+	manifest.Artifacts = []providermanifestv1.Artifact{
 		{OS: plat.GOOS, Arch: plat.GOARCH, Path: binaryName, SHA256: digest},
 	}
 
-	pluginpkg.EnsureEntrypoint(manifest).ArtifactPath = binaryName
+	providerpkg.EnsureEntrypoint(manifest).ArtifactPath = binaryName
 
 	return manifest, nil
 }
 
 func platformArchiveName(pluginName, version string, plat releasePlatform) string {
-	return fmt.Sprintf("gestalt-plugin-%s_v%s_%s.tar.gz", pluginName, version, pluginpkg.PlatformArchiveSuffix(plat.GOOS, plat.GOARCH))
+	return fmt.Sprintf("gestalt-plugin-%s_v%s_%s.tar.gz", pluginName, version, providerpkg.PlatformArchiveSuffix(plat.GOOS, plat.GOARCH))
 }
 
 func releaseBinaryName(pluginName, goos string) string {
@@ -455,7 +455,7 @@ func releaseBinaryName(pluginName, goos string) string {
 func writeChecksums(dir string, archivePaths []string) error {
 	var lines []string
 	for _, archivePath := range archivePaths {
-		digest, err := pluginpkg.ArchiveDigest(archivePath)
+		digest, err := providerpkg.ArchiveDigest(archivePath)
 		if err != nil {
 			return err
 		}
@@ -475,7 +475,7 @@ func writeChecksums(dir string, archivePaths []string) error {
 	return nil
 }
 
-func cloneManifest(manifest *pluginmanifestv1.Manifest) (*pluginmanifestv1.Manifest, error) {
+func cloneManifest(manifest *providermanifestv1.Manifest) (*providermanifestv1.Manifest, error) {
 	if manifest == nil {
 		return nil, nil
 	}
@@ -485,7 +485,7 @@ func cloneManifest(manifest *pluginmanifestv1.Manifest) (*pluginmanifestv1.Manif
 		return nil, err
 	}
 
-	var cloned pluginmanifestv1.Manifest
+	var cloned providermanifestv1.Manifest
 	if err := json.Unmarshal(data, &cloned); err != nil {
 		return nil, err
 	}
@@ -534,7 +534,7 @@ func copyReleaseFile(src, dst string) error {
 	return out.Close()
 }
 
-func copyReleasePackageFiles(manifest *pluginmanifestv1.Manifest, sourceDir, stagingDir string, includeArtifacts bool) error {
+func copyReleasePackageFiles(manifest *providermanifestv1.Manifest, sourceDir, stagingDir string, includeArtifacts bool) error {
 	if manifest == nil {
 		return nil
 	}
@@ -579,13 +579,13 @@ func copyReleasePackageFiles(manifest *pluginmanifestv1.Manifest, sourceDir, sta
 	if err := copyPath(manifest.IconFile, false); err != nil {
 		return err
 	}
-	for _, ref := range pluginpkg.LocalPackageReferences(manifest) {
+	for _, ref := range providerpkg.LocalPackageReferences(manifest) {
 		if err := copyPath(ref.Path, false); err != nil {
 			return err
 		}
 	}
-	if manifest.Kind == pluginmanifestv1.KindPlugin && manifest.Spec != nil {
-		if err := copyPath(pluginpkg.StaticCatalogFile, !pluginpkg.StaticCatalogRequired(manifest)); err != nil {
+	if manifest.Kind == providermanifestv1.KindPlugin && manifest.Spec != nil {
+		if err := copyPath(providerpkg.StaticCatalogFile, !providerpkg.StaticCatalogRequired(manifest)); err != nil {
 			return err
 		}
 	}
@@ -609,7 +609,7 @@ func copyReleasePackageFiles(manifest *pluginmanifestv1.Manifest, sourceDir, sta
 	return nil
 }
 
-func validateReleaseOutputDir(manifest *pluginmanifestv1.Manifest, sourceDir, outputDir string) error {
+func validateReleaseOutputDir(manifest *providermanifestv1.Manifest, sourceDir, outputDir string) error {
 	if manifest == nil || manifest.Spec == nil || manifest.Spec.AssetRoot == "" {
 		return nil
 	}

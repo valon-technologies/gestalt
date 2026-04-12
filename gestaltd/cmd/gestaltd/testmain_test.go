@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
+	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
 
@@ -38,11 +38,11 @@ func TestMain(m *testing.M) {
 	go func() { defer wg.Done(); errs[0] = buildTarget(".", ".", gestaltdBin) }()
 	go func() {
 		defer wg.Done()
-		errs[1] = pluginpkg.BuildGoProviderBinary(testutil.MustExampleProviderPluginPath(), pluginBin, "provider-go", runtime.GOOS, runtime.GOARCH)
+		errs[1] = providerpkg.BuildGoProviderBinary(testutil.MustExampleProviderPluginPath(), pluginBin, "provider-go", runtime.GOOS, runtime.GOARCH)
 	}()
 	go func() {
 		defer wg.Done()
-		errs[2] = pluginpkg.BuildGoComponentBinary(indexedDBSrcDir, indexedDBBin, "indexeddb", runtime.GOOS, runtime.GOARCH)
+		errs[2] = providerpkg.BuildGoComponentBinary(indexedDBSrcDir, indexedDBBin, "indexeddb", runtime.GOOS, runtime.GOARCH)
 	}()
 	wg.Wait()
 

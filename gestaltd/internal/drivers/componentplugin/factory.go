@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 
-	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
+	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"gopkg.in/yaml.v3"
 )
 
@@ -47,14 +47,14 @@ func PrepareExecution(params PrepareParams) (PreparedConfig, error) {
 	var cleanup func()
 
 	if cfg.Command == "" && cfg.ManifestPath != "" {
-		command, args, tempCleanup, err := pluginpkg.SourceComponentExecutionCommand(filepath.Dir(cfg.ManifestPath), params.Kind, runtime.GOOS, runtime.GOARCH)
-		if errors.Is(err, pluginpkg.ErrNoSourceComponentPackage) {
+		command, args, tempCleanup, err := providerpkg.SourceComponentExecutionCommand(filepath.Dir(cfg.ManifestPath), params.Kind, runtime.GOOS, runtime.GOARCH)
+		if errors.Is(err, providerpkg.ErrNoSourceComponentPackage) {
 			return PreparedConfig{}, fmt.Errorf("%s: %s", params.Subject, params.SourceMissingMessage)
 		}
 		if err != nil {
 			return PreparedConfig{}, fmt.Errorf("%s: prepare synthesized source execution: %w", params.Subject, err)
 		}
-		execEnv, err := pluginpkg.SourceComponentExecutionEnv(filepath.Dir(cfg.ManifestPath), params.Kind, runtime.GOOS, runtime.GOARCH)
+		execEnv, err := providerpkg.SourceComponentExecutionEnv(filepath.Dir(cfg.ManifestPath), params.Kind, runtime.GOOS, runtime.GOARCH)
 		if err != nil {
 			return PreparedConfig{}, fmt.Errorf("%s: prepare synthesized source environment: %w", params.Subject, err)
 		}

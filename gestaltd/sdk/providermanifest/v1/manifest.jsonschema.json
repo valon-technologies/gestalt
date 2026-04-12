@@ -1,0 +1,850 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/valon-technologies/gestalt/sdk/providermanifest/v1/manifest.jsonschema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "source",
+    "version"
+  ],
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": [
+        "plugin",
+        "auth",
+        "indexeddb",
+        "secrets",
+        "webui"
+      ]
+    },
+    "source": {
+      "type": "string",
+      "pattern": "^github\\.com/[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*(/[a-z0-9][a-z0-9._-]*)*$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
+    },
+    "displayName": {
+      "type": "string"
+    },
+    "description": {
+      "type": "string"
+    },
+    "iconFile": {
+      "type": "string"
+    },
+    "release": {
+      "$ref": "#/$defs/release"
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/artifact"
+      }
+    },
+    "entrypoint": {
+      "$ref": "#/$defs/exec"
+    },
+    "spec": {
+      "$ref": "#/$defs/spec"
+    }
+  },
+  "$defs": {
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "build": {
+          "$ref": "#/$defs/releaseBuild"
+        }
+      }
+    },
+    "releaseBuild": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "command"
+      ],
+      "properties": {
+        "workdir": {
+          "type": "string",
+          "minLength": 1
+        },
+        "command": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "spec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "configSchemaPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mcp": {
+          "type": "boolean"
+        },
+        "auth": {
+          "$ref": "#/$defs/providerAuth"
+        },
+        "connectionMode": {
+          "type": "string",
+          "enum": [
+            "none",
+            "user",
+            "identity",
+            "either"
+          ]
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "managedParameters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/managedParameter"
+          }
+        },
+        "responseMapping": {
+          "$ref": "#/$defs/responseMapping"
+        },
+        "pagination": {
+          "$ref": "#/$defs/paginationConfig"
+        },
+        "allowedOperations": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/manifestOperationOverride"
+          }
+        },
+        "surfaces": {
+          "$ref": "#/$defs/surfaces"
+        },
+        "defaultConnection": {
+          "type": "string",
+          "minLength": 1
+        },
+        "connections": {
+          "type": "object",
+          "propertyNames": {
+            "minLength": 1
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/manifestConnectionDef"
+          }
+        },
+        "discovery": {
+          "$ref": "#/$defs/providerDiscovery"
+        },
+        "connectionParams": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/providerConnectionParam"
+          }
+        },
+        "requires": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "assetRoot": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "exec": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifactPath"
+      ],
+      "properties": {
+        "artifactPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "args": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "manifestConnectionDef": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "displayName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "none",
+            "user",
+            "identity",
+            "either"
+          ]
+        },
+        "auth": {
+          "$ref": "#/$defs/providerAuth"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/providerConnectionParam"
+          }
+        },
+        "discovery": {
+          "$ref": "#/$defs/providerDiscovery"
+        }
+      }
+    },
+    "providerConnectionParam": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "required": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string"
+        },
+        "from": {
+          "type": "string",
+          "enum": [
+            "discovery"
+          ]
+        }
+      }
+    },
+    "providerDiscovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "url"
+      ],
+      "properties": {
+        "url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "idPath": {
+          "type": "string"
+        },
+        "namePath": {
+          "type": "string"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "credentialFieldRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^[a-z][a-z0-9_]*$"
+        }
+      }
+    },
+    "authValueFrom": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "credentialFieldRef"
+      ],
+      "properties": {
+        "credentialFieldRef": {
+          "$ref": "#/$defs/credentialFieldRef"
+        }
+      }
+    },
+    "authValue": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "value": {
+          "type": "string"
+        },
+        "valueFrom": {
+          "$ref": "#/$defs/authValueFrom"
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "value"
+          ],
+          "not": {
+            "required": [
+              "valueFrom"
+            ]
+          }
+        },
+        {
+          "required": [
+            "valueFrom"
+          ],
+          "not": {
+            "required": [
+              "value"
+            ]
+          }
+        }
+      ]
+    },
+    "basicAuthMapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "username",
+        "password"
+      ],
+      "properties": {
+        "username": {
+          "$ref": "#/$defs/authValue"
+        },
+        "password": {
+          "$ref": "#/$defs/authValue"
+        }
+      }
+    },
+    "authMapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/authValue"
+          }
+        },
+        "basic": {
+          "$ref": "#/$defs/basicAuthMapping"
+        }
+      }
+    },
+    "surfaces": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rest": {
+          "$ref": "#/$defs/restSurface"
+        },
+        "openapi": {
+          "$ref": "#/$defs/openapiSurface"
+        },
+        "graphql": {
+          "$ref": "#/$defs/graphqlSurface"
+        },
+        "mcp": {
+          "$ref": "#/$defs/mcpSurface"
+        }
+      },
+      "allOf": [
+        {
+          "not": {
+            "required": [
+              "rest",
+              "openapi"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "rest",
+              "graphql"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "openapi",
+              "graphql"
+            ]
+          }
+        }
+      ]
+    },
+    "restSurface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "baseUrl",
+        "operations"
+      ],
+      "properties": {
+        "connection": {
+          "type": "string",
+          "minLength": 1
+        },
+        "baseUrl": {
+          "type": "string",
+          "minLength": 1
+        },
+        "operations": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/providerOperation"
+          }
+        }
+      }
+    },
+    "openapiSurface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document"
+      ],
+      "properties": {
+        "connection": {
+          "type": "string",
+          "minLength": 1
+        },
+        "document": {
+          "type": "string",
+          "minLength": 1
+        },
+        "baseUrl": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "graphqlSurface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "url"
+      ],
+      "properties": {
+        "connection": {
+          "type": "string",
+          "minLength": 1
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "mcpSurface": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "url"
+      ],
+      "properties": {
+        "connection": {
+          "type": "string",
+          "minLength": 1
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "responseMapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dataPath"
+      ],
+      "properties": {
+        "dataPath": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pagination": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "hasMore": {
+              "$ref": "#/$defs/valueSelector"
+            },
+            "cursor": {
+              "$ref": "#/$defs/valueSelector"
+            }
+          }
+        }
+      }
+    },
+    "providerAuth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "oauth2",
+            "mcp_oauth",
+            "bearer",
+            "manual",
+            "none"
+          ]
+        },
+        "authorizationUrl": {
+          "type": "string",
+          "format": "uri"
+        },
+        "tokenUrl": {
+          "type": "string",
+          "format": "uri"
+        },
+        "clientId": {
+          "type": "string"
+        },
+        "clientSecret": {
+          "type": "string"
+        },
+        "scopes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "pkce": {
+          "type": "boolean"
+        },
+        "clientAuth": {
+          "type": "string",
+          "enum": [
+            "header"
+          ]
+        },
+        "tokenExchange": {
+          "type": "string",
+          "enum": [
+            "form",
+            "json"
+          ]
+        },
+        "accessTokenPath": {
+          "type": "string"
+        },
+        "scopeParam": {
+          "type": "string"
+        },
+        "scopeSeparator": {
+          "type": "string"
+        },
+        "authorizationParams": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "tokenParams": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "refreshParams": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "acceptHeader": {
+          "type": "string"
+        },
+        "tokenMetadata": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "credentials": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "^[a-z][a-z0-9_]*$"
+              },
+              "label": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "authMapping": {
+          "$ref": "#/$defs/authMapping"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "oauth2"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "authorizationUrl",
+              "tokenUrl"
+            ]
+          }
+        }
+      ]
+    },
+    "providerOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "method",
+        "path"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string"
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/providerParameter"
+          }
+        }
+      }
+    },
+    "providerParameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "type",
+        "in"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "string",
+            "int",
+            "bool",
+            "object",
+            "array"
+          ]
+        },
+        "in": {
+          "type": "string",
+          "enum": [
+            "query",
+            "body",
+            "path"
+          ]
+        },
+        "description": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      }
+    },
+    "managedParameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "in",
+        "name",
+        "value"
+      ],
+      "properties": {
+        "in": {
+          "type": "string",
+          "enum": [
+            "header",
+            "path"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "valueSelector": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "path"
+      ],
+      "properties": {
+        "source": {
+          "type": "string",
+          "enum": [
+            "body",
+            "header"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "paginationConfig": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "style"
+      ],
+      "properties": {
+        "style": {
+          "type": "string",
+          "enum": [
+            "cursor",
+            "offset",
+            "page"
+          ]
+        },
+        "cursorParam": {
+          "type": "string"
+        },
+        "cursor": {
+          "$ref": "#/$defs/valueSelector"
+        },
+        "limitParam": {
+          "type": "string"
+        },
+        "defaultLimit": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "resultsPath": {
+          "type": "string"
+        },
+        "maxPages": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "manifestOperationOverride": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "alias": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "paginate": {
+          "type": "boolean"
+        },
+        "pagination": {
+          "$ref": "#/$defs/paginationConfig"
+        }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "os",
+        "arch",
+        "path"
+      ],
+      "properties": {
+        "os": {
+          "type": "string",
+          "minLength": 1
+        },
+        "arch": {
+          "type": "string",
+          "minLength": 1
+        },
+        "libc": {
+          "type": "string",
+          "enum": [
+            "musl"
+          ]
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    }
+  }
+}

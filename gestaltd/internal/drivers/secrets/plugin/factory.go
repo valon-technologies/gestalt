@@ -8,7 +8,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/drivers/componentplugin"
 	"github.com/valon-technologies/gestalt/server/internal/pluginhost"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"gopkg.in/yaml.v3"
 )
 
@@ -18,7 +18,7 @@ var Factory bootstrap.SecretManagerFactory = func(node yaml.Node) (core.SecretMa
 		return nil, fmt.Errorf("plugin secrets: parsing config: %w", err)
 	}
 	prepared, err := componentplugin.PrepareExecution(componentplugin.PrepareParams{
-		Kind:                 pluginmanifestv1.KindSecrets,
+		Kind:                 providermanifestv1.KindSecrets,
 		Subject:              "plugin secrets",
 		SourceMissingMessage: "no Go, Rust, or Python secrets source package found",
 		Config:               cfg,

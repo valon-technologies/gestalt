@@ -9,7 +9,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/drivers/componentplugin"
 	"github.com/valon-technologies/gestalt/server/internal/pluginhost"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"gopkg.in/yaml.v3"
 )
 
@@ -24,7 +24,7 @@ var Factory bootstrap.AuthFactory = func(node yaml.Node, deps bootstrap.Deps) (c
 		return nil, fmt.Errorf("plugin auth: parsing config: %w", err)
 	}
 	prepared, err := componentplugin.PrepareExecution(componentplugin.PrepareParams{
-		Kind:                 pluginmanifestv1.KindAuth,
+		Kind:                 providermanifestv1.KindAuth,
 		Subject:              "plugin auth",
 		SourceMissingMessage: "no Go, Rust, or Python auth source package found",
 		Config:               cfg.YAMLConfig,

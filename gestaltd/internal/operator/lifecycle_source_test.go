@@ -20,11 +20,11 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	secretsplugin "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/plugin"
-	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	ghresolver "github.com/valon-technologies/gestalt/server/internal/pluginsource/github"
+	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"gopkg.in/yaml.v3"
 )
 
@@ -113,11 +113,11 @@ func buildV2ArchiveForArtifact(t *testing.T, dir, source, version, artifactPath,
 	if err := os.MkdirAll(filepath.Join(srcDir, filepath.Dir(filepath.FromSlash(artifactPath))), 0755); err != nil {
 		t.Fatalf("create provider src dir: %v", err)
 	}
-	manifest := &pluginmanifestv1.Manifest{
+	manifest := &providermanifestv1.Manifest{
 		Source:  source,
 		Version: version,
-		Kind:    pluginmanifestv1.KindPlugin, Spec: &pluginmanifestv1.Spec{},
-		Artifacts: []pluginmanifestv1.Artifact{
+		Kind:    providermanifestv1.KindPlugin, Spec: &providermanifestv1.Spec{},
+		Artifacts: []providermanifestv1.Artifact{
 			{
 				OS:     runtime.GOOS,
 				Arch:   runtime.GOARCH,
@@ -126,10 +126,10 @@ func buildV2ArchiveForArtifact(t *testing.T, dir, source, version, artifactPath,
 				SHA256: sha256hex(binaryContent),
 			},
 		},
-		Entrypoint: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactPath},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactPath},
 	}
 
-	manifestBytes, err := pluginpkg.EncodeManifest(manifest)
+	manifestBytes, err := providerpkg.EncodeManifest(manifest)
 	if err != nil {
 		t.Fatalf("encode manifest: %v", err)
 	}
@@ -144,7 +144,7 @@ func buildV2ArchiveForArtifact(t *testing.T, dir, source, version, artifactPath,
 	}
 
 	archivePath := filepath.Join(dir, safeName+".tar.gz")
-	if err := pluginpkg.CreatePackageFromDir(srcDir, archivePath); err != nil {
+	if err := providerpkg.CreatePackageFromDir(srcDir, archivePath); err != nil {
 		t.Fatalf("CreatePackageFromDir plugin: %v", err)
 	}
 
@@ -175,10 +175,10 @@ func buildExecutableArchiveData(t *testing.T, dir, srcDirName, source, version, 
 	if err := os.MkdirAll(filepath.Join(srcDir, filepath.Dir(filepath.FromSlash(artPath))), 0755); err != nil {
 		t.Fatalf("create plugin src dir: %v", err)
 	}
-	manifest := &pluginmanifestv1.Manifest{
+	manifest := &providermanifestv1.Manifest{
 		Source:  source,
 		Version: version,
-		Artifacts: []pluginmanifestv1.Artifact{
+		Artifacts: []providermanifestv1.Artifact{
 			{
 				OS:   runtime.GOOS,
 				Arch: runtime.GOARCH,
@@ -191,10 +191,10 @@ func buildExecutableArchiveData(t *testing.T, dir, srcDirName, source, version, 
 		},
 	}
 	manifest.Kind = kind
-	manifest.Spec = &pluginmanifestv1.Spec{}
-	manifest.Entrypoint = &pluginmanifestv1.Entrypoint{ArtifactPath: artPath}
+	manifest.Spec = &providermanifestv1.Spec{}
+	manifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: artPath}
 
-	manifestBytes, err := pluginpkg.EncodeManifest(manifest)
+	manifestBytes, err := providerpkg.EncodeManifest(manifest)
 	if err != nil {
 		t.Fatalf("encode manifest: %v", err)
 	}
@@ -209,7 +209,7 @@ func buildExecutableArchiveData(t *testing.T, dir, srcDirName, source, version, 
 	}
 
 	archivePath := filepath.Join(dir, srcDirName+".tar.gz")
-	if err := pluginpkg.CreatePackageFromDir(srcDir, archivePath); err != nil {
+	if err := providerpkg.CreatePackageFromDir(srcDir, archivePath); err != nil {
 		t.Fatalf("CreatePackageFromDir plugin: %v", err)
 	}
 
@@ -258,7 +258,7 @@ func buildGoSourceSecretsBinary(t *testing.T) string {
 		t.Fatalf("write secrets.go: %v", err)
 	}
 	outputPath := filepath.Join(t.TempDir(), "secrets-provider")
-	if err := pluginpkg.BuildGoComponentBinary(providerDir, outputPath, pluginmanifestv1.KindSecrets, runtime.GOOS, runtime.GOARCH); err != nil {
+	if err := providerpkg.BuildGoComponentBinary(providerDir, outputPath, providermanifestv1.KindSecrets, runtime.GOOS, runtime.GOARCH); err != nil {
 		t.Fatalf("BuildGoComponentBinary(secrets): %v", err)
 	}
 	return outputPath
@@ -310,11 +310,11 @@ func TestSourcePluginEndToEnd(t *testing.T) {
 	if entry.Version != version {
 		t.Errorf("entry.Version = %q, want %q", entry.Version, version)
 	}
-	if entry.Archives[pluginpkg.CurrentPlatformString()].URL != resolvedURL {
-		t.Errorf("entry archive URL = %q, want %q", entry.Archives[pluginpkg.CurrentPlatformString()].URL, resolvedURL)
+	if entry.Archives[providerpkg.CurrentPlatformString()].URL != resolvedURL {
+		t.Errorf("entry archive URL = %q, want %q", entry.Archives[providerpkg.CurrentPlatformString()].URL, resolvedURL)
 	}
-	if entry.Archives[pluginpkg.CurrentPlatformString()].SHA256 != archiveSHA {
-		t.Errorf("entry archive SHA256 = %q, want %q", entry.Archives[pluginpkg.CurrentPlatformString()].SHA256, archiveSHA)
+	if entry.Archives[providerpkg.CurrentPlatformString()].SHA256 != archiveSHA {
+		t.Errorf("entry archive SHA256 = %q, want %q", entry.Archives[providerpkg.CurrentPlatformString()].SHA256, archiveSHA)
 	}
 	if entry.Manifest == "" {
 		t.Error("entry.Manifest is empty")
@@ -491,7 +491,7 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 	version := "2.0.0"
 	binaryContent := "fake-auth-binary"
 
-	archivePath := buildExecutableArchive(t, dir, "auth-src", source, version, pluginmanifestv1.KindAuth, "auth-plugin", binaryContent)
+	archivePath := buildExecutableArchive(t, dir, "auth-src", source, version, providermanifestv1.KindAuth, "auth-plugin", binaryContent)
 	archiveData, err := os.ReadFile(archivePath)
 	if err != nil {
 		t.Fatalf("read archive: %v", err)
@@ -635,7 +635,7 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 		"secrets-src",
 		secretsSource,
 		secretsVersion,
-		pluginmanifestv1.KindSecrets,
+		providermanifestv1.KindSecrets,
 		"secrets-plugin",
 		buildGoSourceSecretsBinary(t),
 	)
@@ -645,7 +645,7 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 		"auth-src",
 		authSource,
 		authVersion,
-		pluginmanifestv1.KindAuth,
+		providermanifestv1.KindAuth,
 		"auth-plugin",
 		"fake-auth-binary",
 	)
@@ -924,18 +924,18 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 	if entry.Version != testVersion {
 		t.Errorf("entry.Version = %q, want %q", entry.Version, testVersion)
 	}
-	if entry.Archives[pluginpkg.CurrentPlatformString()].URL == "" {
+	if entry.Archives[providerpkg.CurrentPlatformString()].URL == "" {
 		t.Error("entry archive URL is empty")
 	}
-	if entry.Archives[pluginpkg.CurrentPlatformString()].URL != srv.URL+"/asset-dl" {
-		t.Errorf("entry archive URL = %q, want %q", entry.Archives[pluginpkg.CurrentPlatformString()].URL, srv.URL+"/asset-dl")
+	if entry.Archives[providerpkg.CurrentPlatformString()].URL != srv.URL+"/asset-dl" {
+		t.Errorf("entry archive URL = %q, want %q", entry.Archives[providerpkg.CurrentPlatformString()].URL, srv.URL+"/asset-dl")
 	}
-	if entry.Archives[pluginpkg.CurrentPlatformString()].SHA256 == "" {
+	if entry.Archives[providerpkg.CurrentPlatformString()].SHA256 == "" {
 		t.Error("entry archive SHA256 is empty")
 	}
 	wantSHA := sha256hex(string(archiveData))
-	if entry.Archives[pluginpkg.CurrentPlatformString()].SHA256 != wantSHA {
-		t.Errorf("entry archive SHA256 = %q, want %q", entry.Archives[pluginpkg.CurrentPlatformString()].SHA256, wantSHA)
+	if entry.Archives[providerpkg.CurrentPlatformString()].SHA256 != wantSHA {
+		t.Errorf("entry archive SHA256 = %q, want %q", entry.Archives[providerpkg.CurrentPlatformString()].SHA256, wantSHA)
 	}
 
 	configDir := filepath.Dir(configPath)
