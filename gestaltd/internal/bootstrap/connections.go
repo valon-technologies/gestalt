@@ -51,6 +51,7 @@ type pluginConnectionPlan struct {
 	pluginConnection  config.ConnectionDef
 	namedConnections  map[string]config.ConnectionDef
 	surfaces          map[config.SpecSurface]resolvedSpecSurface
+	restConnection    string
 	defaultConnection string
 }
 
@@ -75,6 +76,15 @@ func buildPluginConnectionPlan(plugin *config.ProviderEntry, manifestPlugin *plu
 			continue
 		}
 		plan.namedConnections[name] = conn
+	}
+
+	if manifestPlugin != nil && manifestPlugin.Surfaces != nil && manifestPlugin.Surfaces.REST != nil {
+		plan.restConnection = config.ResolveConnectionAlias(manifestPlugin.Surfaces.REST.Connection)
+		if plan.restConnection != "" {
+			if _, err := plan.connectionDef(plan.restConnection); err != nil {
+				return pluginConnectionPlan{}, fmt.Errorf("rest connection references undeclared connection %q", plan.restConnection)
+			}
+		}
 	}
 
 	for _, surface := range config.OrderedSpecSurfaces {
@@ -135,6 +145,9 @@ func (plan pluginConnectionPlan) apiConnection() string {
 	if resolved, ok := plan.configuredAPISurface(); ok {
 		return resolved.connectionName
 	}
+	if plan.restConnection != "" {
+		return plan.restConnection
+	}
 	return plan.fallbackConnection()
 }
 
@@ -151,6 +164,11 @@ func (plan pluginConnectionPlan) fallbackConnection() string {
 	}
 	if len(plan.namedConnections) == 0 {
 		return config.PluginConnectionName
+	}
+	if len(plan.namedConnections) == 1 {
+		for name := range plan.namedConnections {
+			return name
+		}
 	}
 	return ""
 }
