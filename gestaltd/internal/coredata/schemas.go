@@ -26,7 +26,7 @@ var IntegrationTokensSchema = indexeddb.ObjectStoreSchema{
 		{Name: "by_user", KeyPath: []string{"user_id"}},
 		{Name: "by_user_integration", KeyPath: []string{"user_id", "integration"}},
 		{Name: "by_user_connection", KeyPath: []string{"user_id", "integration", "connection"}},
-		{Name: "by_lookup", KeyPath: []string{"user_id", "integration", "connection", "instance"}},
+		{Name: "by_lookup", KeyPath: []string{"user_id", "integration", "connection", "instance"}, Unique: true},
 	},
 	Columns: []indexeddb.ColumnDef{
 		{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},

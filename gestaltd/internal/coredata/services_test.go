@@ -10,6 +10,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	corecrypto "github.com/valon-technologies/gestalt/server/core/crypto"
+	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 )
@@ -359,6 +360,7 @@ func TestTokenService(t *testing.T) {
 			t.Fatalf("first StoreToken: %v", err)
 		}
 
+		tok.ID = "tok-upsert-replacement"
 		tok.AccessToken = "updated"
 		if err := svc.Tokens.StoreToken(ctx, tok); err != nil {
 			t.Fatalf("second StoreToken: %v", err)
@@ -368,8 +370,94 @@ func TestTokenService(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Token: %v", err)
 		}
+		if got.ID != "tok-upsert" {
+			t.Errorf("ID = %q, want %q", got.ID, "tok-upsert")
+		}
 		if got.AccessToken != "updated" {
 			t.Errorf("AccessToken = %q, want %q", got.AccessToken, "updated")
+		}
+
+		tokens, err := svc.Tokens.ListTokensForConnection(ctx, user.ID, "svc", "default")
+		if err != nil {
+			t.Fatalf("ListTokensForConnection: %v", err)
+		}
+		if len(tokens) != 1 {
+			t.Fatalf("got %d tokens, want 1", len(tokens))
+		}
+	})
+
+	t.Run("ListTokensForConnection_dedupes_legacy_duplicate_rows", func(t *testing.T) {
+		t.Parallel()
+		svc, db := newTestServicesWithDB(t)
+		ctx := context.Background()
+
+		user := mustCreateUser(t, svc, "dupes@test.com")
+		newest := &core.IntegrationToken{
+			ID:           "tok-primary",
+			UserID:       user.ID,
+			Integration:  "svc",
+			Connection:   "default",
+			Instance:     "i1",
+			AccessToken:  "newest",
+			RefreshToken: "refresh-newest",
+		}
+		if err := svc.Tokens.StoreToken(ctx, newest); err != nil {
+			t.Fatalf("StoreToken newest: %v", err)
+		}
+
+		legacySource := &core.IntegrationToken{
+			ID:           "tok-legacy-source",
+			UserID:       user.ID,
+			Integration:  "svc",
+			Connection:   "default",
+			Instance:     "legacy-source",
+			AccessToken:  "legacy",
+			RefreshToken: "refresh-legacy",
+		}
+		if err := svc.Tokens.StoreToken(ctx, legacySource); err != nil {
+			t.Fatalf("StoreToken legacy source: %v", err)
+		}
+
+		store := db.ObjectStore(coredata.StoreIntegrationTokens)
+		primaryRaw, err := store.Get(ctx, newest.ID)
+		if err != nil {
+			t.Fatalf("Get primary raw: %v", err)
+		}
+		legacyRaw, err := store.Get(ctx, legacySource.ID)
+		if err != nil {
+			t.Fatalf("Get legacy raw: %v", err)
+		}
+		if err := store.Delete(ctx, legacySource.ID); err != nil {
+			t.Fatalf("Delete legacy source: %v", err)
+		}
+
+		duplicate := indexeddb.Record{}
+		for k, v := range legacyRaw {
+			duplicate[k] = v
+		}
+		duplicate["id"] = "tok-legacy-duplicate"
+		duplicate["user_id"] = user.ID
+		duplicate["integration"] = "svc"
+		duplicate["connection"] = "default"
+		duplicate["instance"] = "i1"
+		duplicate["created_at"] = recOrNow(primaryRaw, "created_at").Add(-time.Minute)
+		duplicate["updated_at"] = recOrNow(primaryRaw, "updated_at").Add(-time.Minute)
+		if err := store.Put(ctx, duplicate); err != nil {
+			t.Fatalf("Put duplicate raw token: %v", err)
+		}
+
+		tokens, err := svc.Tokens.ListTokensForConnection(ctx, user.ID, "svc", "default")
+		if err != nil {
+			t.Fatalf("ListTokensForConnection: %v", err)
+		}
+		if len(tokens) != 1 {
+			t.Fatalf("got %d tokens, want 1", len(tokens))
+		}
+		if tokens[0].ID != newest.ID {
+			t.Fatalf("ID = %q, want %q", tokens[0].ID, newest.ID)
+		}
+		if tokens[0].AccessToken != "newest" {
+			t.Fatalf("AccessToken = %q, want %q", tokens[0].AccessToken, "newest")
 		}
 	})
 
@@ -465,6 +553,13 @@ func TestTokenService(t *testing.T) {
 			t.Errorf("decrypted RefreshToken = %q, want %q", got.RefreshToken, "plaintext-refresh")
 		}
 	})
+}
+
+func recOrNow(rec indexeddb.Record, key string) time.Time {
+	if v, ok := rec[key].(time.Time); ok && !v.IsZero() {
+		return v
+	}
+	return time.Now()
 }
 
 func TestAPITokenService(t *testing.T) {
