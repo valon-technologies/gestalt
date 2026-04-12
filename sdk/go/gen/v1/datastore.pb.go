@@ -24,6 +24,58 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type CursorDirection int32
+
+const (
+	CursorDirection_CURSOR_NEXT        CursorDirection = 0
+	CursorDirection_CURSOR_NEXT_UNIQUE CursorDirection = 1
+	CursorDirection_CURSOR_PREV        CursorDirection = 2
+	CursorDirection_CURSOR_PREV_UNIQUE CursorDirection = 3
+)
+
+// Enum value maps for CursorDirection.
+var (
+	CursorDirection_name = map[int32]string{
+		0: "CURSOR_NEXT",
+		1: "CURSOR_NEXT_UNIQUE",
+		2: "CURSOR_PREV",
+		3: "CURSOR_PREV_UNIQUE",
+	}
+	CursorDirection_value = map[string]int32{
+		"CURSOR_NEXT":        0,
+		"CURSOR_NEXT_UNIQUE": 1,
+		"CURSOR_PREV":        2,
+		"CURSOR_PREV_UNIQUE": 3,
+	}
+)
+
+func (x CursorDirection) Enum() *CursorDirection {
+	p := new(CursorDirection)
+	*p = x
+	return p
+}
+
+func (x CursorDirection) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (CursorDirection) Descriptor() protoreflect.EnumDescriptor {
+	return file_v1_datastore_proto_enumTypes[0].Descriptor()
+}
+
+func (CursorDirection) Type() protoreflect.EnumType {
+	return &file_v1_datastore_proto_enumTypes[0]
+}
+
+func (x CursorDirection) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use CursorDirection.Descriptor instead.
+func (CursorDirection) EnumDescriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{0}
+}
+
 type TypedValue struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Kind:
@@ -1042,6 +1094,635 @@ func (x *CountResponse) GetCount() int64 {
 	return 0
 }
 
+type OpenCursorRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Store         string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
+	Range         *KeyRange              `protobuf:"bytes,2,opt,name=range,proto3,oneof" json:"range,omitempty"`
+	Direction     CursorDirection        `protobuf:"varint,3,opt,name=direction,proto3,enum=gestalt.provider.v1.CursorDirection" json:"direction,omitempty"`
+	KeysOnly      bool                   `protobuf:"varint,4,opt,name=keys_only,json=keysOnly,proto3" json:"keys_only,omitempty"`
+	Index         string                 `protobuf:"bytes,5,opt,name=index,proto3" json:"index,omitempty"`
+	Values        []*TypedValue          `protobuf:"bytes,6,rep,name=values,proto3" json:"values,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OpenCursorRequest) Reset() {
+	*x = OpenCursorRequest{}
+	mi := &file_v1_datastore_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OpenCursorRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OpenCursorRequest) ProtoMessage() {}
+
+func (x *OpenCursorRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OpenCursorRequest.ProtoReflect.Descriptor instead.
+func (*OpenCursorRequest) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *OpenCursorRequest) GetStore() string {
+	if x != nil {
+		return x.Store
+	}
+	return ""
+}
+
+func (x *OpenCursorRequest) GetRange() *KeyRange {
+	if x != nil {
+		return x.Range
+	}
+	return nil
+}
+
+func (x *OpenCursorRequest) GetDirection() CursorDirection {
+	if x != nil {
+		return x.Direction
+	}
+	return CursorDirection_CURSOR_NEXT
+}
+
+func (x *OpenCursorRequest) GetKeysOnly() bool {
+	if x != nil {
+		return x.KeysOnly
+	}
+	return false
+}
+
+func (x *OpenCursorRequest) GetIndex() string {
+	if x != nil {
+		return x.Index
+	}
+	return ""
+}
+
+func (x *OpenCursorRequest) GetValues() []*TypedValue {
+	if x != nil {
+		return x.Values
+	}
+	return nil
+}
+
+// KeyValue represents a single IndexedDB key, which can be a scalar
+// (string, number, date, binary) or a nested array of keys per the W3C spec.
+type KeyValue struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Kind:
+	//
+	//	*KeyValue_Scalar
+	//	*KeyValue_Array
+	Kind          isKeyValue_Kind `protobuf_oneof:"kind"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *KeyValue) Reset() {
+	*x = KeyValue{}
+	mi := &file_v1_datastore_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KeyValue) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KeyValue) ProtoMessage() {}
+
+func (x *KeyValue) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KeyValue.ProtoReflect.Descriptor instead.
+func (*KeyValue) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *KeyValue) GetKind() isKeyValue_Kind {
+	if x != nil {
+		return x.Kind
+	}
+	return nil
+}
+
+func (x *KeyValue) GetScalar() *TypedValue {
+	if x != nil {
+		if x, ok := x.Kind.(*KeyValue_Scalar); ok {
+			return x.Scalar
+		}
+	}
+	return nil
+}
+
+func (x *KeyValue) GetArray() *KeyValueArray {
+	if x != nil {
+		if x, ok := x.Kind.(*KeyValue_Array); ok {
+			return x.Array
+		}
+	}
+	return nil
+}
+
+type isKeyValue_Kind interface {
+	isKeyValue_Kind()
+}
+
+type KeyValue_Scalar struct {
+	Scalar *TypedValue `protobuf:"bytes,1,opt,name=scalar,proto3,oneof"`
+}
+
+type KeyValue_Array struct {
+	Array *KeyValueArray `protobuf:"bytes,2,opt,name=array,proto3,oneof"`
+}
+
+func (*KeyValue_Scalar) isKeyValue_Kind() {}
+
+func (*KeyValue_Array) isKeyValue_Kind() {}
+
+type KeyValueArray struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Elements      []*KeyValue            `protobuf:"bytes,1,rep,name=elements,proto3" json:"elements,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *KeyValueArray) Reset() {
+	*x = KeyValueArray{}
+	mi := &file_v1_datastore_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *KeyValueArray) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*KeyValueArray) ProtoMessage() {}
+
+func (x *KeyValueArray) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use KeyValueArray.ProtoReflect.Descriptor instead.
+func (*KeyValueArray) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *KeyValueArray) GetElements() []*KeyValue {
+	if x != nil {
+		return x.Elements
+	}
+	return nil
+}
+
+type CursorKeyTarget struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Key           []*KeyValue            `protobuf:"bytes,1,rep,name=key,proto3" json:"key,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CursorKeyTarget) Reset() {
+	*x = CursorKeyTarget{}
+	mi := &file_v1_datastore_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CursorKeyTarget) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CursorKeyTarget) ProtoMessage() {}
+
+func (x *CursorKeyTarget) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CursorKeyTarget.ProtoReflect.Descriptor instead.
+func (*CursorKeyTarget) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *CursorKeyTarget) GetKey() []*KeyValue {
+	if x != nil {
+		return x.Key
+	}
+	return nil
+}
+
+type CursorCommand struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Command:
+	//
+	//	*CursorCommand_Next
+	//	*CursorCommand_ContinueToKey
+	//	*CursorCommand_Advance
+	//	*CursorCommand_Update
+	//	*CursorCommand_Delete
+	//	*CursorCommand_Close
+	Command       isCursorCommand_Command `protobuf_oneof:"command"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CursorCommand) Reset() {
+	*x = CursorCommand{}
+	mi := &file_v1_datastore_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CursorCommand) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CursorCommand) ProtoMessage() {}
+
+func (x *CursorCommand) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CursorCommand.ProtoReflect.Descriptor instead.
+func (*CursorCommand) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *CursorCommand) GetCommand() isCursorCommand_Command {
+	if x != nil {
+		return x.Command
+	}
+	return nil
+}
+
+func (x *CursorCommand) GetNext() bool {
+	if x != nil {
+		if x, ok := x.Command.(*CursorCommand_Next); ok {
+			return x.Next
+		}
+	}
+	return false
+}
+
+func (x *CursorCommand) GetContinueToKey() *CursorKeyTarget {
+	if x != nil {
+		if x, ok := x.Command.(*CursorCommand_ContinueToKey); ok {
+			return x.ContinueToKey
+		}
+	}
+	return nil
+}
+
+func (x *CursorCommand) GetAdvance() int32 {
+	if x != nil {
+		if x, ok := x.Command.(*CursorCommand_Advance); ok {
+			return x.Advance
+		}
+	}
+	return 0
+}
+
+func (x *CursorCommand) GetUpdate() *Record {
+	if x != nil {
+		if x, ok := x.Command.(*CursorCommand_Update); ok {
+			return x.Update
+		}
+	}
+	return nil
+}
+
+func (x *CursorCommand) GetDelete() bool {
+	if x != nil {
+		if x, ok := x.Command.(*CursorCommand_Delete); ok {
+			return x.Delete
+		}
+	}
+	return false
+}
+
+func (x *CursorCommand) GetClose() bool {
+	if x != nil {
+		if x, ok := x.Command.(*CursorCommand_Close); ok {
+			return x.Close
+		}
+	}
+	return false
+}
+
+type isCursorCommand_Command interface {
+	isCursorCommand_Command()
+}
+
+type CursorCommand_Next struct {
+	Next bool `protobuf:"varint,1,opt,name=next,proto3,oneof"`
+}
+
+type CursorCommand_ContinueToKey struct {
+	ContinueToKey *CursorKeyTarget `protobuf:"bytes,2,opt,name=continue_to_key,json=continueToKey,proto3,oneof"`
+}
+
+type CursorCommand_Advance struct {
+	Advance int32 `protobuf:"varint,3,opt,name=advance,proto3,oneof"`
+}
+
+type CursorCommand_Update struct {
+	Update *Record `protobuf:"bytes,4,opt,name=update,proto3,oneof"`
+}
+
+type CursorCommand_Delete struct {
+	Delete bool `protobuf:"varint,5,opt,name=delete,proto3,oneof"`
+}
+
+type CursorCommand_Close struct {
+	Close bool `protobuf:"varint,6,opt,name=close,proto3,oneof"`
+}
+
+func (*CursorCommand_Next) isCursorCommand_Command() {}
+
+func (*CursorCommand_ContinueToKey) isCursorCommand_Command() {}
+
+func (*CursorCommand_Advance) isCursorCommand_Command() {}
+
+func (*CursorCommand_Update) isCursorCommand_Command() {}
+
+func (*CursorCommand_Delete) isCursorCommand_Command() {}
+
+func (*CursorCommand_Close) isCursorCommand_Command() {}
+
+type CursorClientMessage struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Msg:
+	//
+	//	*CursorClientMessage_Open
+	//	*CursorClientMessage_Command
+	Msg           isCursorClientMessage_Msg `protobuf_oneof:"msg"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CursorClientMessage) Reset() {
+	*x = CursorClientMessage{}
+	mi := &file_v1_datastore_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CursorClientMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CursorClientMessage) ProtoMessage() {}
+
+func (x *CursorClientMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CursorClientMessage.ProtoReflect.Descriptor instead.
+func (*CursorClientMessage) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *CursorClientMessage) GetMsg() isCursorClientMessage_Msg {
+	if x != nil {
+		return x.Msg
+	}
+	return nil
+}
+
+func (x *CursorClientMessage) GetOpen() *OpenCursorRequest {
+	if x != nil {
+		if x, ok := x.Msg.(*CursorClientMessage_Open); ok {
+			return x.Open
+		}
+	}
+	return nil
+}
+
+func (x *CursorClientMessage) GetCommand() *CursorCommand {
+	if x != nil {
+		if x, ok := x.Msg.(*CursorClientMessage_Command); ok {
+			return x.Command
+		}
+	}
+	return nil
+}
+
+type isCursorClientMessage_Msg interface {
+	isCursorClientMessage_Msg()
+}
+
+type CursorClientMessage_Open struct {
+	Open *OpenCursorRequest `protobuf:"bytes,1,opt,name=open,proto3,oneof"`
+}
+
+type CursorClientMessage_Command struct {
+	Command *CursorCommand `protobuf:"bytes,2,opt,name=command,proto3,oneof"`
+}
+
+func (*CursorClientMessage_Open) isCursorClientMessage_Msg() {}
+
+func (*CursorClientMessage_Command) isCursorClientMessage_Msg() {}
+
+type CursorEntry struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Key components per index KeyPath field. Each component is a KeyValue
+	// that can be a scalar or a nested array, preserving the full W3C IndexedDB
+	// key structure including array-valued keys.
+	Key           []*KeyValue `protobuf:"bytes,1,rep,name=key,proto3" json:"key,omitempty"`
+	PrimaryKey    string      `protobuf:"bytes,2,opt,name=primary_key,json=primaryKey,proto3" json:"primary_key,omitempty"`
+	Record        *Record     `protobuf:"bytes,3,opt,name=record,proto3" json:"record,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CursorEntry) Reset() {
+	*x = CursorEntry{}
+	mi := &file_v1_datastore_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CursorEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CursorEntry) ProtoMessage() {}
+
+func (x *CursorEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CursorEntry.ProtoReflect.Descriptor instead.
+func (*CursorEntry) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *CursorEntry) GetKey() []*KeyValue {
+	if x != nil {
+		return x.Key
+	}
+	return nil
+}
+
+func (x *CursorEntry) GetPrimaryKey() string {
+	if x != nil {
+		return x.PrimaryKey
+	}
+	return ""
+}
+
+func (x *CursorEntry) GetRecord() *Record {
+	if x != nil {
+		return x.Record
+	}
+	return nil
+}
+
+type CursorResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Result:
+	//
+	//	*CursorResponse_Entry
+	//	*CursorResponse_Done
+	Result        isCursorResponse_Result `protobuf_oneof:"result"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CursorResponse) Reset() {
+	*x = CursorResponse{}
+	mi := &file_v1_datastore_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CursorResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CursorResponse) ProtoMessage() {}
+
+func (x *CursorResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CursorResponse.ProtoReflect.Descriptor instead.
+func (*CursorResponse) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *CursorResponse) GetResult() isCursorResponse_Result {
+	if x != nil {
+		return x.Result
+	}
+	return nil
+}
+
+func (x *CursorResponse) GetEntry() *CursorEntry {
+	if x != nil {
+		if x, ok := x.Result.(*CursorResponse_Entry); ok {
+			return x.Entry
+		}
+	}
+	return nil
+}
+
+func (x *CursorResponse) GetDone() bool {
+	if x != nil {
+		if x, ok := x.Result.(*CursorResponse_Done); ok {
+			return x.Done
+		}
+	}
+	return false
+}
+
+type isCursorResponse_Result interface {
+	isCursorResponse_Result()
+}
+
+type CursorResponse_Entry struct {
+	Entry *CursorEntry `protobuf:"bytes,1,opt,name=entry,proto3,oneof"`
+}
+
+type CursorResponse_Done struct {
+	Done bool `protobuf:"varint,2,opt,name=done,proto3,oneof"`
+}
+
+func (*CursorResponse_Entry) isCursorResponse_Result() {}
+
+func (*CursorResponse_Done) isCursorResponse_Result() {}
+
 type DeleteResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Deleted       int64                  `protobuf:"varint,1,opt,name=deleted,proto3" json:"deleted,omitempty"`
@@ -1051,7 +1732,7 @@ type DeleteResponse struct {
 
 func (x *DeleteResponse) Reset() {
 	*x = DeleteResponse{}
-	mi := &file_v1_datastore_proto_msgTypes[17]
+	mi := &file_v1_datastore_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1063,7 +1744,7 @@ func (x *DeleteResponse) String() string {
 func (*DeleteResponse) ProtoMessage() {}
 
 func (x *DeleteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[17]
+	mi := &file_v1_datastore_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1076,7 +1757,7 @@ func (x *DeleteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteResponse.ProtoReflect.Descriptor instead.
 func (*DeleteResponse) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{17}
+	return file_v1_datastore_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *DeleteResponse) GetDeleted() int64 {
@@ -1095,7 +1776,7 @@ type KeyResponse struct {
 
 func (x *KeyResponse) Reset() {
 	*x = KeyResponse{}
-	mi := &file_v1_datastore_proto_msgTypes[18]
+	mi := &file_v1_datastore_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1107,7 +1788,7 @@ func (x *KeyResponse) String() string {
 func (*KeyResponse) ProtoMessage() {}
 
 func (x *KeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[18]
+	mi := &file_v1_datastore_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1120,7 +1801,7 @@ func (x *KeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyResponse.ProtoReflect.Descriptor instead.
 func (*KeyResponse) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{18}
+	return file_v1_datastore_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *KeyResponse) GetKey() string {
@@ -1208,11 +1889,53 @@ const file_v1_datastore_proto_rawDesc = "" +
 	"\x05range\x18\x04 \x01(\v2\x1d.gestalt.provider.v1.KeyRangeH\x00R\x05range\x88\x01\x01B\b\n" +
 	"\x06_range\"%\n" +
 	"\rCountResponse\x12\x14\n" +
-	"\x05count\x18\x01 \x01(\x03R\x05count\"*\n" +
+	"\x05count\x18\x01 \x01(\x03R\x05count\"\x9d\x02\n" +
+	"\x11OpenCursorRequest\x12\x14\n" +
+	"\x05store\x18\x01 \x01(\tR\x05store\x128\n" +
+	"\x05range\x18\x02 \x01(\v2\x1d.gestalt.provider.v1.KeyRangeH\x00R\x05range\x88\x01\x01\x12B\n" +
+	"\tdirection\x18\x03 \x01(\x0e2$.gestalt.provider.v1.CursorDirectionR\tdirection\x12\x1b\n" +
+	"\tkeys_only\x18\x04 \x01(\bR\bkeysOnly\x12\x14\n" +
+	"\x05index\x18\x05 \x01(\tR\x05index\x127\n" +
+	"\x06values\x18\x06 \x03(\v2\x1f.gestalt.provider.v1.TypedValueR\x06valuesB\b\n" +
+	"\x06_range\"\x89\x01\n" +
+	"\bKeyValue\x129\n" +
+	"\x06scalar\x18\x01 \x01(\v2\x1f.gestalt.provider.v1.TypedValueH\x00R\x06scalar\x12:\n" +
+	"\x05array\x18\x02 \x01(\v2\".gestalt.provider.v1.KeyValueArrayH\x00R\x05arrayB\x06\n" +
+	"\x04kind\"J\n" +
+	"\rKeyValueArray\x129\n" +
+	"\belements\x18\x01 \x03(\v2\x1d.gestalt.provider.v1.KeyValueR\belements\"B\n" +
+	"\x0fCursorKeyTarget\x12/\n" +
+	"\x03key\x18\x01 \x03(\v2\x1d.gestalt.provider.v1.KeyValueR\x03key\"\x85\x02\n" +
+	"\rCursorCommand\x12\x14\n" +
+	"\x04next\x18\x01 \x01(\bH\x00R\x04next\x12N\n" +
+	"\x0fcontinue_to_key\x18\x02 \x01(\v2$.gestalt.provider.v1.CursorKeyTargetH\x00R\rcontinueToKey\x12\x1a\n" +
+	"\aadvance\x18\x03 \x01(\x05H\x00R\aadvance\x125\n" +
+	"\x06update\x18\x04 \x01(\v2\x1b.gestalt.provider.v1.RecordH\x00R\x06update\x12\x18\n" +
+	"\x06delete\x18\x05 \x01(\bH\x00R\x06delete\x12\x16\n" +
+	"\x05close\x18\x06 \x01(\bH\x00R\x05closeB\t\n" +
+	"\acommand\"\x9a\x01\n" +
+	"\x13CursorClientMessage\x12<\n" +
+	"\x04open\x18\x01 \x01(\v2&.gestalt.provider.v1.OpenCursorRequestH\x00R\x04open\x12>\n" +
+	"\acommand\x18\x02 \x01(\v2\".gestalt.provider.v1.CursorCommandH\x00R\acommandB\x05\n" +
+	"\x03msg\"\x94\x01\n" +
+	"\vCursorEntry\x12/\n" +
+	"\x03key\x18\x01 \x03(\v2\x1d.gestalt.provider.v1.KeyValueR\x03key\x12\x1f\n" +
+	"\vprimary_key\x18\x02 \x01(\tR\n" +
+	"primaryKey\x123\n" +
+	"\x06record\x18\x03 \x01(\v2\x1b.gestalt.provider.v1.RecordR\x06record\"j\n" +
+	"\x0eCursorResponse\x128\n" +
+	"\x05entry\x18\x01 \x01(\v2 .gestalt.provider.v1.CursorEntryH\x00R\x05entry\x12\x14\n" +
+	"\x04done\x18\x02 \x01(\bH\x00R\x04doneB\b\n" +
+	"\x06result\"*\n" +
 	"\x0eDeleteResponse\x12\x18\n" +
 	"\adeleted\x18\x01 \x01(\x03R\adeleted\"\x1f\n" +
 	"\vKeyResponse\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key2\xa9\f\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key*c\n" +
+	"\x0fCursorDirection\x12\x0f\n" +
+	"\vCURSOR_NEXT\x10\x00\x12\x16\n" +
+	"\x12CURSOR_NEXT_UNIQUE\x10\x01\x12\x0f\n" +
+	"\vCURSOR_PREV\x10\x02\x12\x16\n" +
+	"\x12CURSOR_PREV_UNIQUE\x10\x032\x8a\r\n" +
 	"\tIndexedDB\x12Z\n" +
 	"\x11CreateObjectStore\x12-.gestalt.provider.v1.CreateObjectStoreRequest\x1a\x16.google.protobuf.Empty\x12Z\n" +
 	"\x11DeleteObjectStore\x12-.gestalt.provider.v1.DeleteObjectStoreRequest\x1a\x16.google.protobuf.Empty\x12S\n" +
@@ -1233,7 +1956,9 @@ const file_v1_datastore_proto_rawDesc = "" +
 	"\x0fIndexGetAllKeys\x12&.gestalt.provider.v1.IndexQueryRequest\x1a!.gestalt.provider.v1.KeysResponse\x12X\n" +
 	"\n" +
 	"IndexCount\x12&.gestalt.provider.v1.IndexQueryRequest\x1a\".gestalt.provider.v1.CountResponse\x12Z\n" +
-	"\vIndexDelete\x12&.gestalt.provider.v1.IndexQueryRequest\x1a#.gestalt.provider.v1.DeleteResponseB\xd2\x01\n" +
+	"\vIndexDelete\x12&.gestalt.provider.v1.IndexQueryRequest\x1a#.gestalt.provider.v1.DeleteResponse\x12_\n" +
+	"\n" +
+	"OpenCursor\x12(.gestalt.provider.v1.CursorClientMessage\x1a#.gestalt.provider.v1.CursorResponse(\x010\x01B\xd2\x01\n" +
 	"\x17com.gestalt.provider.v1B\x0eDatastoreProtoP\x01Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto\xa2\x02\x03GPX\xaa\x02\x13Gestalt.Provider.V1\xca\x02\x13Gestalt\\Provider\\V1\xe2\x02\x1fGestalt\\Provider\\V1\\GPBMetadata\xea\x02\x15Gestalt::Provider::V1b\x06proto3"
 
 var (
@@ -1248,91 +1973,117 @@ func file_v1_datastore_proto_rawDescGZIP() []byte {
 	return file_v1_datastore_proto_rawDescData
 }
 
-var file_v1_datastore_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_v1_datastore_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_v1_datastore_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_v1_datastore_proto_goTypes = []any{
-	(*TypedValue)(nil),               // 0: gestalt.provider.v1.TypedValue
-	(*Record)(nil),                   // 1: gestalt.provider.v1.Record
-	(*ObjectStoreSchema)(nil),        // 2: gestalt.provider.v1.ObjectStoreSchema
-	(*IndexSchema)(nil),              // 3: gestalt.provider.v1.IndexSchema
-	(*ColumnDef)(nil),                // 4: gestalt.provider.v1.ColumnDef
-	(*KeyRange)(nil),                 // 5: gestalt.provider.v1.KeyRange
-	(*RecordRequest)(nil),            // 6: gestalt.provider.v1.RecordRequest
-	(*RecordResponse)(nil),           // 7: gestalt.provider.v1.RecordResponse
-	(*RecordsResponse)(nil),          // 8: gestalt.provider.v1.RecordsResponse
-	(*KeysResponse)(nil),             // 9: gestalt.provider.v1.KeysResponse
-	(*ObjectStoreRequest)(nil),       // 10: gestalt.provider.v1.ObjectStoreRequest
-	(*ObjectStoreNameRequest)(nil),   // 11: gestalt.provider.v1.ObjectStoreNameRequest
-	(*ObjectStoreRangeRequest)(nil),  // 12: gestalt.provider.v1.ObjectStoreRangeRequest
-	(*CreateObjectStoreRequest)(nil), // 13: gestalt.provider.v1.CreateObjectStoreRequest
-	(*DeleteObjectStoreRequest)(nil), // 14: gestalt.provider.v1.DeleteObjectStoreRequest
-	(*IndexQueryRequest)(nil),        // 15: gestalt.provider.v1.IndexQueryRequest
-	(*CountResponse)(nil),            // 16: gestalt.provider.v1.CountResponse
-	(*DeleteResponse)(nil),           // 17: gestalt.provider.v1.DeleteResponse
-	(*KeyResponse)(nil),              // 18: gestalt.provider.v1.KeyResponse
-	nil,                              // 19: gestalt.provider.v1.Record.FieldsEntry
-	(structpb.NullValue)(0),          // 20: google.protobuf.NullValue
-	(*timestamppb.Timestamp)(nil),    // 21: google.protobuf.Timestamp
-	(*structpb.Value)(nil),           // 22: google.protobuf.Value
-	(*emptypb.Empty)(nil),            // 23: google.protobuf.Empty
+	(CursorDirection)(0),             // 0: gestalt.provider.v1.CursorDirection
+	(*TypedValue)(nil),               // 1: gestalt.provider.v1.TypedValue
+	(*Record)(nil),                   // 2: gestalt.provider.v1.Record
+	(*ObjectStoreSchema)(nil),        // 3: gestalt.provider.v1.ObjectStoreSchema
+	(*IndexSchema)(nil),              // 4: gestalt.provider.v1.IndexSchema
+	(*ColumnDef)(nil),                // 5: gestalt.provider.v1.ColumnDef
+	(*KeyRange)(nil),                 // 6: gestalt.provider.v1.KeyRange
+	(*RecordRequest)(nil),            // 7: gestalt.provider.v1.RecordRequest
+	(*RecordResponse)(nil),           // 8: gestalt.provider.v1.RecordResponse
+	(*RecordsResponse)(nil),          // 9: gestalt.provider.v1.RecordsResponse
+	(*KeysResponse)(nil),             // 10: gestalt.provider.v1.KeysResponse
+	(*ObjectStoreRequest)(nil),       // 11: gestalt.provider.v1.ObjectStoreRequest
+	(*ObjectStoreNameRequest)(nil),   // 12: gestalt.provider.v1.ObjectStoreNameRequest
+	(*ObjectStoreRangeRequest)(nil),  // 13: gestalt.provider.v1.ObjectStoreRangeRequest
+	(*CreateObjectStoreRequest)(nil), // 14: gestalt.provider.v1.CreateObjectStoreRequest
+	(*DeleteObjectStoreRequest)(nil), // 15: gestalt.provider.v1.DeleteObjectStoreRequest
+	(*IndexQueryRequest)(nil),        // 16: gestalt.provider.v1.IndexQueryRequest
+	(*CountResponse)(nil),            // 17: gestalt.provider.v1.CountResponse
+	(*OpenCursorRequest)(nil),        // 18: gestalt.provider.v1.OpenCursorRequest
+	(*KeyValue)(nil),                 // 19: gestalt.provider.v1.KeyValue
+	(*KeyValueArray)(nil),            // 20: gestalt.provider.v1.KeyValueArray
+	(*CursorKeyTarget)(nil),          // 21: gestalt.provider.v1.CursorKeyTarget
+	(*CursorCommand)(nil),            // 22: gestalt.provider.v1.CursorCommand
+	(*CursorClientMessage)(nil),      // 23: gestalt.provider.v1.CursorClientMessage
+	(*CursorEntry)(nil),              // 24: gestalt.provider.v1.CursorEntry
+	(*CursorResponse)(nil),           // 25: gestalt.provider.v1.CursorResponse
+	(*DeleteResponse)(nil),           // 26: gestalt.provider.v1.DeleteResponse
+	(*KeyResponse)(nil),              // 27: gestalt.provider.v1.KeyResponse
+	nil,                              // 28: gestalt.provider.v1.Record.FieldsEntry
+	(structpb.NullValue)(0),          // 29: google.protobuf.NullValue
+	(*timestamppb.Timestamp)(nil),    // 30: google.protobuf.Timestamp
+	(*structpb.Value)(nil),           // 31: google.protobuf.Value
+	(*emptypb.Empty)(nil),            // 32: google.protobuf.Empty
 }
 var file_v1_datastore_proto_depIdxs = []int32{
-	20, // 0: gestalt.provider.v1.TypedValue.null_value:type_name -> google.protobuf.NullValue
-	21, // 1: gestalt.provider.v1.TypedValue.time_value:type_name -> google.protobuf.Timestamp
-	22, // 2: gestalt.provider.v1.TypedValue.json_value:type_name -> google.protobuf.Value
-	19, // 3: gestalt.provider.v1.Record.fields:type_name -> gestalt.provider.v1.Record.FieldsEntry
-	3,  // 4: gestalt.provider.v1.ObjectStoreSchema.indexes:type_name -> gestalt.provider.v1.IndexSchema
-	4,  // 5: gestalt.provider.v1.ObjectStoreSchema.columns:type_name -> gestalt.provider.v1.ColumnDef
-	0,  // 6: gestalt.provider.v1.KeyRange.lower:type_name -> gestalt.provider.v1.TypedValue
-	0,  // 7: gestalt.provider.v1.KeyRange.upper:type_name -> gestalt.provider.v1.TypedValue
-	1,  // 8: gestalt.provider.v1.RecordRequest.record:type_name -> gestalt.provider.v1.Record
-	1,  // 9: gestalt.provider.v1.RecordResponse.record:type_name -> gestalt.provider.v1.Record
-	1,  // 10: gestalt.provider.v1.RecordsResponse.records:type_name -> gestalt.provider.v1.Record
-	5,  // 11: gestalt.provider.v1.ObjectStoreRangeRequest.range:type_name -> gestalt.provider.v1.KeyRange
-	2,  // 12: gestalt.provider.v1.CreateObjectStoreRequest.schema:type_name -> gestalt.provider.v1.ObjectStoreSchema
-	0,  // 13: gestalt.provider.v1.IndexQueryRequest.values:type_name -> gestalt.provider.v1.TypedValue
-	5,  // 14: gestalt.provider.v1.IndexQueryRequest.range:type_name -> gestalt.provider.v1.KeyRange
-	0,  // 15: gestalt.provider.v1.Record.FieldsEntry.value:type_name -> gestalt.provider.v1.TypedValue
-	13, // 16: gestalt.provider.v1.IndexedDB.CreateObjectStore:input_type -> gestalt.provider.v1.CreateObjectStoreRequest
-	14, // 17: gestalt.provider.v1.IndexedDB.DeleteObjectStore:input_type -> gestalt.provider.v1.DeleteObjectStoreRequest
-	10, // 18: gestalt.provider.v1.IndexedDB.Get:input_type -> gestalt.provider.v1.ObjectStoreRequest
-	10, // 19: gestalt.provider.v1.IndexedDB.GetKey:input_type -> gestalt.provider.v1.ObjectStoreRequest
-	6,  // 20: gestalt.provider.v1.IndexedDB.Add:input_type -> gestalt.provider.v1.RecordRequest
-	6,  // 21: gestalt.provider.v1.IndexedDB.Put:input_type -> gestalt.provider.v1.RecordRequest
-	10, // 22: gestalt.provider.v1.IndexedDB.Delete:input_type -> gestalt.provider.v1.ObjectStoreRequest
-	11, // 23: gestalt.provider.v1.IndexedDB.Clear:input_type -> gestalt.provider.v1.ObjectStoreNameRequest
-	12, // 24: gestalt.provider.v1.IndexedDB.GetAll:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
-	12, // 25: gestalt.provider.v1.IndexedDB.GetAllKeys:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
-	12, // 26: gestalt.provider.v1.IndexedDB.Count:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
-	12, // 27: gestalt.provider.v1.IndexedDB.DeleteRange:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
-	15, // 28: gestalt.provider.v1.IndexedDB.IndexGet:input_type -> gestalt.provider.v1.IndexQueryRequest
-	15, // 29: gestalt.provider.v1.IndexedDB.IndexGetKey:input_type -> gestalt.provider.v1.IndexQueryRequest
-	15, // 30: gestalt.provider.v1.IndexedDB.IndexGetAll:input_type -> gestalt.provider.v1.IndexQueryRequest
-	15, // 31: gestalt.provider.v1.IndexedDB.IndexGetAllKeys:input_type -> gestalt.provider.v1.IndexQueryRequest
-	15, // 32: gestalt.provider.v1.IndexedDB.IndexCount:input_type -> gestalt.provider.v1.IndexQueryRequest
-	15, // 33: gestalt.provider.v1.IndexedDB.IndexDelete:input_type -> gestalt.provider.v1.IndexQueryRequest
-	23, // 34: gestalt.provider.v1.IndexedDB.CreateObjectStore:output_type -> google.protobuf.Empty
-	23, // 35: gestalt.provider.v1.IndexedDB.DeleteObjectStore:output_type -> google.protobuf.Empty
-	7,  // 36: gestalt.provider.v1.IndexedDB.Get:output_type -> gestalt.provider.v1.RecordResponse
-	18, // 37: gestalt.provider.v1.IndexedDB.GetKey:output_type -> gestalt.provider.v1.KeyResponse
-	23, // 38: gestalt.provider.v1.IndexedDB.Add:output_type -> google.protobuf.Empty
-	23, // 39: gestalt.provider.v1.IndexedDB.Put:output_type -> google.protobuf.Empty
-	23, // 40: gestalt.provider.v1.IndexedDB.Delete:output_type -> google.protobuf.Empty
-	23, // 41: gestalt.provider.v1.IndexedDB.Clear:output_type -> google.protobuf.Empty
-	8,  // 42: gestalt.provider.v1.IndexedDB.GetAll:output_type -> gestalt.provider.v1.RecordsResponse
-	9,  // 43: gestalt.provider.v1.IndexedDB.GetAllKeys:output_type -> gestalt.provider.v1.KeysResponse
-	16, // 44: gestalt.provider.v1.IndexedDB.Count:output_type -> gestalt.provider.v1.CountResponse
-	17, // 45: gestalt.provider.v1.IndexedDB.DeleteRange:output_type -> gestalt.provider.v1.DeleteResponse
-	7,  // 46: gestalt.provider.v1.IndexedDB.IndexGet:output_type -> gestalt.provider.v1.RecordResponse
-	18, // 47: gestalt.provider.v1.IndexedDB.IndexGetKey:output_type -> gestalt.provider.v1.KeyResponse
-	8,  // 48: gestalt.provider.v1.IndexedDB.IndexGetAll:output_type -> gestalt.provider.v1.RecordsResponse
-	9,  // 49: gestalt.provider.v1.IndexedDB.IndexGetAllKeys:output_type -> gestalt.provider.v1.KeysResponse
-	16, // 50: gestalt.provider.v1.IndexedDB.IndexCount:output_type -> gestalt.provider.v1.CountResponse
-	17, // 51: gestalt.provider.v1.IndexedDB.IndexDelete:output_type -> gestalt.provider.v1.DeleteResponse
-	34, // [34:52] is the sub-list for method output_type
-	16, // [16:34] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	29, // 0: gestalt.provider.v1.TypedValue.null_value:type_name -> google.protobuf.NullValue
+	30, // 1: gestalt.provider.v1.TypedValue.time_value:type_name -> google.protobuf.Timestamp
+	31, // 2: gestalt.provider.v1.TypedValue.json_value:type_name -> google.protobuf.Value
+	28, // 3: gestalt.provider.v1.Record.fields:type_name -> gestalt.provider.v1.Record.FieldsEntry
+	4,  // 4: gestalt.provider.v1.ObjectStoreSchema.indexes:type_name -> gestalt.provider.v1.IndexSchema
+	5,  // 5: gestalt.provider.v1.ObjectStoreSchema.columns:type_name -> gestalt.provider.v1.ColumnDef
+	1,  // 6: gestalt.provider.v1.KeyRange.lower:type_name -> gestalt.provider.v1.TypedValue
+	1,  // 7: gestalt.provider.v1.KeyRange.upper:type_name -> gestalt.provider.v1.TypedValue
+	2,  // 8: gestalt.provider.v1.RecordRequest.record:type_name -> gestalt.provider.v1.Record
+	2,  // 9: gestalt.provider.v1.RecordResponse.record:type_name -> gestalt.provider.v1.Record
+	2,  // 10: gestalt.provider.v1.RecordsResponse.records:type_name -> gestalt.provider.v1.Record
+	6,  // 11: gestalt.provider.v1.ObjectStoreRangeRequest.range:type_name -> gestalt.provider.v1.KeyRange
+	3,  // 12: gestalt.provider.v1.CreateObjectStoreRequest.schema:type_name -> gestalt.provider.v1.ObjectStoreSchema
+	1,  // 13: gestalt.provider.v1.IndexQueryRequest.values:type_name -> gestalt.provider.v1.TypedValue
+	6,  // 14: gestalt.provider.v1.IndexQueryRequest.range:type_name -> gestalt.provider.v1.KeyRange
+	6,  // 15: gestalt.provider.v1.OpenCursorRequest.range:type_name -> gestalt.provider.v1.KeyRange
+	0,  // 16: gestalt.provider.v1.OpenCursorRequest.direction:type_name -> gestalt.provider.v1.CursorDirection
+	1,  // 17: gestalt.provider.v1.OpenCursorRequest.values:type_name -> gestalt.provider.v1.TypedValue
+	1,  // 18: gestalt.provider.v1.KeyValue.scalar:type_name -> gestalt.provider.v1.TypedValue
+	20, // 19: gestalt.provider.v1.KeyValue.array:type_name -> gestalt.provider.v1.KeyValueArray
+	19, // 20: gestalt.provider.v1.KeyValueArray.elements:type_name -> gestalt.provider.v1.KeyValue
+	19, // 21: gestalt.provider.v1.CursorKeyTarget.key:type_name -> gestalt.provider.v1.KeyValue
+	21, // 22: gestalt.provider.v1.CursorCommand.continue_to_key:type_name -> gestalt.provider.v1.CursorKeyTarget
+	2,  // 23: gestalt.provider.v1.CursorCommand.update:type_name -> gestalt.provider.v1.Record
+	18, // 24: gestalt.provider.v1.CursorClientMessage.open:type_name -> gestalt.provider.v1.OpenCursorRequest
+	22, // 25: gestalt.provider.v1.CursorClientMessage.command:type_name -> gestalt.provider.v1.CursorCommand
+	19, // 26: gestalt.provider.v1.CursorEntry.key:type_name -> gestalt.provider.v1.KeyValue
+	2,  // 27: gestalt.provider.v1.CursorEntry.record:type_name -> gestalt.provider.v1.Record
+	24, // 28: gestalt.provider.v1.CursorResponse.entry:type_name -> gestalt.provider.v1.CursorEntry
+	1,  // 29: gestalt.provider.v1.Record.FieldsEntry.value:type_name -> gestalt.provider.v1.TypedValue
+	14, // 30: gestalt.provider.v1.IndexedDB.CreateObjectStore:input_type -> gestalt.provider.v1.CreateObjectStoreRequest
+	15, // 31: gestalt.provider.v1.IndexedDB.DeleteObjectStore:input_type -> gestalt.provider.v1.DeleteObjectStoreRequest
+	11, // 32: gestalt.provider.v1.IndexedDB.Get:input_type -> gestalt.provider.v1.ObjectStoreRequest
+	11, // 33: gestalt.provider.v1.IndexedDB.GetKey:input_type -> gestalt.provider.v1.ObjectStoreRequest
+	7,  // 34: gestalt.provider.v1.IndexedDB.Add:input_type -> gestalt.provider.v1.RecordRequest
+	7,  // 35: gestalt.provider.v1.IndexedDB.Put:input_type -> gestalt.provider.v1.RecordRequest
+	11, // 36: gestalt.provider.v1.IndexedDB.Delete:input_type -> gestalt.provider.v1.ObjectStoreRequest
+	12, // 37: gestalt.provider.v1.IndexedDB.Clear:input_type -> gestalt.provider.v1.ObjectStoreNameRequest
+	13, // 38: gestalt.provider.v1.IndexedDB.GetAll:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
+	13, // 39: gestalt.provider.v1.IndexedDB.GetAllKeys:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
+	13, // 40: gestalt.provider.v1.IndexedDB.Count:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
+	13, // 41: gestalt.provider.v1.IndexedDB.DeleteRange:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
+	16, // 42: gestalt.provider.v1.IndexedDB.IndexGet:input_type -> gestalt.provider.v1.IndexQueryRequest
+	16, // 43: gestalt.provider.v1.IndexedDB.IndexGetKey:input_type -> gestalt.provider.v1.IndexQueryRequest
+	16, // 44: gestalt.provider.v1.IndexedDB.IndexGetAll:input_type -> gestalt.provider.v1.IndexQueryRequest
+	16, // 45: gestalt.provider.v1.IndexedDB.IndexGetAllKeys:input_type -> gestalt.provider.v1.IndexQueryRequest
+	16, // 46: gestalt.provider.v1.IndexedDB.IndexCount:input_type -> gestalt.provider.v1.IndexQueryRequest
+	16, // 47: gestalt.provider.v1.IndexedDB.IndexDelete:input_type -> gestalt.provider.v1.IndexQueryRequest
+	23, // 48: gestalt.provider.v1.IndexedDB.OpenCursor:input_type -> gestalt.provider.v1.CursorClientMessage
+	32, // 49: gestalt.provider.v1.IndexedDB.CreateObjectStore:output_type -> google.protobuf.Empty
+	32, // 50: gestalt.provider.v1.IndexedDB.DeleteObjectStore:output_type -> google.protobuf.Empty
+	8,  // 51: gestalt.provider.v1.IndexedDB.Get:output_type -> gestalt.provider.v1.RecordResponse
+	27, // 52: gestalt.provider.v1.IndexedDB.GetKey:output_type -> gestalt.provider.v1.KeyResponse
+	32, // 53: gestalt.provider.v1.IndexedDB.Add:output_type -> google.protobuf.Empty
+	32, // 54: gestalt.provider.v1.IndexedDB.Put:output_type -> google.protobuf.Empty
+	32, // 55: gestalt.provider.v1.IndexedDB.Delete:output_type -> google.protobuf.Empty
+	32, // 56: gestalt.provider.v1.IndexedDB.Clear:output_type -> google.protobuf.Empty
+	9,  // 57: gestalt.provider.v1.IndexedDB.GetAll:output_type -> gestalt.provider.v1.RecordsResponse
+	10, // 58: gestalt.provider.v1.IndexedDB.GetAllKeys:output_type -> gestalt.provider.v1.KeysResponse
+	17, // 59: gestalt.provider.v1.IndexedDB.Count:output_type -> gestalt.provider.v1.CountResponse
+	26, // 60: gestalt.provider.v1.IndexedDB.DeleteRange:output_type -> gestalt.provider.v1.DeleteResponse
+	8,  // 61: gestalt.provider.v1.IndexedDB.IndexGet:output_type -> gestalt.provider.v1.RecordResponse
+	27, // 62: gestalt.provider.v1.IndexedDB.IndexGetKey:output_type -> gestalt.provider.v1.KeyResponse
+	9,  // 63: gestalt.provider.v1.IndexedDB.IndexGetAll:output_type -> gestalt.provider.v1.RecordsResponse
+	10, // 64: gestalt.provider.v1.IndexedDB.IndexGetAllKeys:output_type -> gestalt.provider.v1.KeysResponse
+	17, // 65: gestalt.provider.v1.IndexedDB.IndexCount:output_type -> gestalt.provider.v1.CountResponse
+	26, // 66: gestalt.provider.v1.IndexedDB.IndexDelete:output_type -> gestalt.provider.v1.DeleteResponse
+	25, // 67: gestalt.provider.v1.IndexedDB.OpenCursor:output_type -> gestalt.provider.v1.CursorResponse
+	49, // [49:68] is the sub-list for method output_type
+	30, // [30:49] is the sub-list for method input_type
+	30, // [30:30] is the sub-list for extension type_name
+	30, // [30:30] is the sub-list for extension extendee
+	0,  // [0:30] is the sub-list for field type_name
 }
 
 func init() { file_v1_datastore_proto_init() }
@@ -1352,18 +2103,40 @@ func file_v1_datastore_proto_init() {
 	}
 	file_v1_datastore_proto_msgTypes[12].OneofWrappers = []any{}
 	file_v1_datastore_proto_msgTypes[15].OneofWrappers = []any{}
+	file_v1_datastore_proto_msgTypes[17].OneofWrappers = []any{}
+	file_v1_datastore_proto_msgTypes[18].OneofWrappers = []any{
+		(*KeyValue_Scalar)(nil),
+		(*KeyValue_Array)(nil),
+	}
+	file_v1_datastore_proto_msgTypes[21].OneofWrappers = []any{
+		(*CursorCommand_Next)(nil),
+		(*CursorCommand_ContinueToKey)(nil),
+		(*CursorCommand_Advance)(nil),
+		(*CursorCommand_Update)(nil),
+		(*CursorCommand_Delete)(nil),
+		(*CursorCommand_Close)(nil),
+	}
+	file_v1_datastore_proto_msgTypes[22].OneofWrappers = []any{
+		(*CursorClientMessage_Open)(nil),
+		(*CursorClientMessage_Command)(nil),
+	}
+	file_v1_datastore_proto_msgTypes[24].OneofWrappers = []any{
+		(*CursorResponse_Entry)(nil),
+		(*CursorResponse_Done)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_datastore_proto_rawDesc), len(file_v1_datastore_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   20,
+			NumEnums:      1,
+			NumMessages:   28,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_v1_datastore_proto_goTypes,
 		DependencyIndexes: file_v1_datastore_proto_depIdxs,
+		EnumInfos:         file_v1_datastore_proto_enumTypes,
 		MessageInfos:      file_v1_datastore_proto_msgTypes,
 	}.Build()
 	File_v1_datastore_proto = out.File

@@ -38,6 +38,7 @@ const (
 	IndexedDB_IndexGetAllKeys_FullMethodName   = "/gestalt.provider.v1.IndexedDB/IndexGetAllKeys"
 	IndexedDB_IndexCount_FullMethodName        = "/gestalt.provider.v1.IndexedDB/IndexCount"
 	IndexedDB_IndexDelete_FullMethodName       = "/gestalt.provider.v1.IndexedDB/IndexDelete"
+	IndexedDB_OpenCursor_FullMethodName        = "/gestalt.provider.v1.IndexedDB/OpenCursor"
 )
 
 // IndexedDBClient is the client API for IndexedDB service.
@@ -66,6 +67,8 @@ type IndexedDBClient interface {
 	IndexGetAllKeys(ctx context.Context, in *IndexQueryRequest, opts ...grpc.CallOption) (*KeysResponse, error)
 	IndexCount(ctx context.Context, in *IndexQueryRequest, opts ...grpc.CallOption) (*CountResponse, error)
 	IndexDelete(ctx context.Context, in *IndexQueryRequest, opts ...grpc.CallOption) (*DeleteResponse, error)
+	// Cursor iteration (bidirectional stream)
+	OpenCursor(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[CursorClientMessage, CursorResponse], error)
 }
 
 type indexedDBClient struct {
@@ -256,6 +259,19 @@ func (c *indexedDBClient) IndexDelete(ctx context.Context, in *IndexQueryRequest
 	return out, nil
 }
 
+func (c *indexedDBClient) OpenCursor(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[CursorClientMessage, CursorResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &IndexedDB_ServiceDesc.Streams[0], IndexedDB_OpenCursor_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[CursorClientMessage, CursorResponse]{ClientStream: stream}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type IndexedDB_OpenCursorClient = grpc.BidiStreamingClient[CursorClientMessage, CursorResponse]
+
 // IndexedDBServer is the server API for IndexedDB service.
 // All implementations must embed UnimplementedIndexedDBServer
 // for forward compatibility.
@@ -282,6 +298,8 @@ type IndexedDBServer interface {
 	IndexGetAllKeys(context.Context, *IndexQueryRequest) (*KeysResponse, error)
 	IndexCount(context.Context, *IndexQueryRequest) (*CountResponse, error)
 	IndexDelete(context.Context, *IndexQueryRequest) (*DeleteResponse, error)
+	// Cursor iteration (bidirectional stream)
+	OpenCursor(grpc.BidiStreamingServer[CursorClientMessage, CursorResponse]) error
 	mustEmbedUnimplementedIndexedDBServer()
 }
 
@@ -345,6 +363,9 @@ func (UnimplementedIndexedDBServer) IndexCount(context.Context, *IndexQueryReque
 }
 func (UnimplementedIndexedDBServer) IndexDelete(context.Context, *IndexQueryRequest) (*DeleteResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method IndexDelete not implemented")
+}
+func (UnimplementedIndexedDBServer) OpenCursor(grpc.BidiStreamingServer[CursorClientMessage, CursorResponse]) error {
+	return status.Error(codes.Unimplemented, "method OpenCursor not implemented")
 }
 func (UnimplementedIndexedDBServer) mustEmbedUnimplementedIndexedDBServer() {}
 func (UnimplementedIndexedDBServer) testEmbeddedByValue()                   {}
@@ -691,6 +712,13 @@ func _IndexedDB_IndexDelete_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
+func _IndexedDB_OpenCursor_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(IndexedDBServer).OpenCursor(&grpc.GenericServerStream[CursorClientMessage, CursorResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type IndexedDB_OpenCursorServer = grpc.BidiStreamingServer[CursorClientMessage, CursorResponse]
+
 // IndexedDB_ServiceDesc is the grpc.ServiceDesc for IndexedDB service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -771,6 +799,13 @@ var IndexedDB_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _IndexedDB_IndexDelete_Handler,
 		},
 	},
-	Streams:  []grpc.StreamDesc{},
+	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "OpenCursor",
+			Handler:       _IndexedDB_OpenCursor_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
+	},
 	Metadata: "v1/datastore.proto",
 }
