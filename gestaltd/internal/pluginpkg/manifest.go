@@ -91,7 +91,7 @@ func ManifestKind(manifest *pluginmanifestv1.Manifest) (string, error) {
 		return "", fmt.Errorf("manifest kind is required")
 	}
 	if !validManifestKinds[manifest.Kind] {
-		return "", fmt.Errorf("manifest kind %q is not valid; expected one of plugin, auth, datastore, secrets, or webui", manifest.Kind)
+		return "", fmt.Errorf("manifest kind %q is not valid; expected one of plugin, auth, indexeddb, secrets, or webui", manifest.Kind)
 	}
 	return manifest.Kind, nil
 }
