@@ -190,11 +190,12 @@ jobs:
           cp -r "$GITHUB_WORKSPACE/gestaltd/ui/out" "$provider_dir/out"
 
           cat >"$provider_dir/manifest.yaml" <<'EOF'
+          kind: webui
           source: github.com/valon-technologies/gestalt-providers/web/default
           version: 0.0.1-alpha.1
           displayName: Default Web UI
           description: Local CI web UI fixture
-          webui:
+          spec:
             assetRoot: out
           EOF
 
