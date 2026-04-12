@@ -11,6 +11,7 @@ import (
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	structpb "google.golang.org/protobuf/types/known/structpb"
+	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -23,6 +24,228 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type TypedValue struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Kind:
+	//
+	//	*TypedValue_NullValue
+	//	*TypedValue_StringValue
+	//	*TypedValue_IntValue
+	//	*TypedValue_FloatValue
+	//	*TypedValue_BoolValue
+	//	*TypedValue_TimeValue
+	//	*TypedValue_BytesValue
+	//	*TypedValue_JsonValue
+	Kind          isTypedValue_Kind `protobuf_oneof:"kind"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TypedValue) Reset() {
+	*x = TypedValue{}
+	mi := &file_v1_datastore_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TypedValue) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TypedValue) ProtoMessage() {}
+
+func (x *TypedValue) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TypedValue.ProtoReflect.Descriptor instead.
+func (*TypedValue) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *TypedValue) GetKind() isTypedValue_Kind {
+	if x != nil {
+		return x.Kind
+	}
+	return nil
+}
+
+func (x *TypedValue) GetNullValue() structpb.NullValue {
+	if x != nil {
+		if x, ok := x.Kind.(*TypedValue_NullValue); ok {
+			return x.NullValue
+		}
+	}
+	return structpb.NullValue(0)
+}
+
+func (x *TypedValue) GetStringValue() string {
+	if x != nil {
+		if x, ok := x.Kind.(*TypedValue_StringValue); ok {
+			return x.StringValue
+		}
+	}
+	return ""
+}
+
+func (x *TypedValue) GetIntValue() int64 {
+	if x != nil {
+		if x, ok := x.Kind.(*TypedValue_IntValue); ok {
+			return x.IntValue
+		}
+	}
+	return 0
+}
+
+func (x *TypedValue) GetFloatValue() float64 {
+	if x != nil {
+		if x, ok := x.Kind.(*TypedValue_FloatValue); ok {
+			return x.FloatValue
+		}
+	}
+	return 0
+}
+
+func (x *TypedValue) GetBoolValue() bool {
+	if x != nil {
+		if x, ok := x.Kind.(*TypedValue_BoolValue); ok {
+			return x.BoolValue
+		}
+	}
+	return false
+}
+
+func (x *TypedValue) GetTimeValue() *timestamppb.Timestamp {
+	if x != nil {
+		if x, ok := x.Kind.(*TypedValue_TimeValue); ok {
+			return x.TimeValue
+		}
+	}
+	return nil
+}
+
+func (x *TypedValue) GetBytesValue() []byte {
+	if x != nil {
+		if x, ok := x.Kind.(*TypedValue_BytesValue); ok {
+			return x.BytesValue
+		}
+	}
+	return nil
+}
+
+func (x *TypedValue) GetJsonValue() *structpb.Value {
+	if x != nil {
+		if x, ok := x.Kind.(*TypedValue_JsonValue); ok {
+			return x.JsonValue
+		}
+	}
+	return nil
+}
+
+type isTypedValue_Kind interface {
+	isTypedValue_Kind()
+}
+
+type TypedValue_NullValue struct {
+	NullValue structpb.NullValue `protobuf:"varint,1,opt,name=null_value,json=nullValue,proto3,enum=google.protobuf.NullValue,oneof"`
+}
+
+type TypedValue_StringValue struct {
+	StringValue string `protobuf:"bytes,2,opt,name=string_value,json=stringValue,proto3,oneof"`
+}
+
+type TypedValue_IntValue struct {
+	IntValue int64 `protobuf:"varint,3,opt,name=int_value,json=intValue,proto3,oneof"`
+}
+
+type TypedValue_FloatValue struct {
+	FloatValue float64 `protobuf:"fixed64,4,opt,name=float_value,json=floatValue,proto3,oneof"`
+}
+
+type TypedValue_BoolValue struct {
+	BoolValue bool `protobuf:"varint,5,opt,name=bool_value,json=boolValue,proto3,oneof"`
+}
+
+type TypedValue_TimeValue struct {
+	TimeValue *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=time_value,json=timeValue,proto3,oneof"`
+}
+
+type TypedValue_BytesValue struct {
+	BytesValue []byte `protobuf:"bytes,7,opt,name=bytes_value,json=bytesValue,proto3,oneof"`
+}
+
+type TypedValue_JsonValue struct {
+	JsonValue *structpb.Value `protobuf:"bytes,8,opt,name=json_value,json=jsonValue,proto3,oneof"`
+}
+
+func (*TypedValue_NullValue) isTypedValue_Kind() {}
+
+func (*TypedValue_StringValue) isTypedValue_Kind() {}
+
+func (*TypedValue_IntValue) isTypedValue_Kind() {}
+
+func (*TypedValue_FloatValue) isTypedValue_Kind() {}
+
+func (*TypedValue_BoolValue) isTypedValue_Kind() {}
+
+func (*TypedValue_TimeValue) isTypedValue_Kind() {}
+
+func (*TypedValue_BytesValue) isTypedValue_Kind() {}
+
+func (*TypedValue_JsonValue) isTypedValue_Kind() {}
+
+type Record struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Fields        map[string]*TypedValue `protobuf:"bytes,1,rep,name=fields,proto3" json:"fields,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Record) Reset() {
+	*x = Record{}
+	mi := &file_v1_datastore_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Record) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Record) ProtoMessage() {}
+
+func (x *Record) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_datastore_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Record.ProtoReflect.Descriptor instead.
+func (*Record) Descriptor() ([]byte, []int) {
+	return file_v1_datastore_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *Record) GetFields() map[string]*TypedValue {
+	if x != nil {
+		return x.Fields
+	}
+	return nil
+}
+
 type ObjectStoreSchema struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Indexes       []*IndexSchema         `protobuf:"bytes,1,rep,name=indexes,proto3" json:"indexes,omitempty"`
@@ -33,7 +256,7 @@ type ObjectStoreSchema struct {
 
 func (x *ObjectStoreSchema) Reset() {
 	*x = ObjectStoreSchema{}
-	mi := &file_v1_datastore_proto_msgTypes[0]
+	mi := &file_v1_datastore_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -45,7 +268,7 @@ func (x *ObjectStoreSchema) String() string {
 func (*ObjectStoreSchema) ProtoMessage() {}
 
 func (x *ObjectStoreSchema) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[0]
+	mi := &file_v1_datastore_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -58,7 +281,7 @@ func (x *ObjectStoreSchema) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObjectStoreSchema.ProtoReflect.Descriptor instead.
 func (*ObjectStoreSchema) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{0}
+	return file_v1_datastore_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ObjectStoreSchema) GetIndexes() []*IndexSchema {
@@ -86,7 +309,7 @@ type IndexSchema struct {
 
 func (x *IndexSchema) Reset() {
 	*x = IndexSchema{}
-	mi := &file_v1_datastore_proto_msgTypes[1]
+	mi := &file_v1_datastore_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -98,7 +321,7 @@ func (x *IndexSchema) String() string {
 func (*IndexSchema) ProtoMessage() {}
 
 func (x *IndexSchema) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[1]
+	mi := &file_v1_datastore_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -111,7 +334,7 @@ func (x *IndexSchema) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IndexSchema.ProtoReflect.Descriptor instead.
 func (*IndexSchema) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{1}
+	return file_v1_datastore_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *IndexSchema) GetName() string {
@@ -148,7 +371,7 @@ type ColumnDef struct {
 
 func (x *ColumnDef) Reset() {
 	*x = ColumnDef{}
-	mi := &file_v1_datastore_proto_msgTypes[2]
+	mi := &file_v1_datastore_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -160,7 +383,7 @@ func (x *ColumnDef) String() string {
 func (*ColumnDef) ProtoMessage() {}
 
 func (x *ColumnDef) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[2]
+	mi := &file_v1_datastore_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -173,7 +396,7 @@ func (x *ColumnDef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ColumnDef.ProtoReflect.Descriptor instead.
 func (*ColumnDef) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{2}
+	return file_v1_datastore_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ColumnDef) GetName() string {
@@ -213,8 +436,8 @@ func (x *ColumnDef) GetUnique() bool {
 
 type KeyRange struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Lower         *structpb.Value        `protobuf:"bytes,1,opt,name=lower,proto3" json:"lower,omitempty"`
-	Upper         *structpb.Value        `protobuf:"bytes,2,opt,name=upper,proto3" json:"upper,omitempty"`
+	Lower         *TypedValue            `protobuf:"bytes,1,opt,name=lower,proto3" json:"lower,omitempty"`
+	Upper         *TypedValue            `protobuf:"bytes,2,opt,name=upper,proto3" json:"upper,omitempty"`
 	LowerOpen     bool                   `protobuf:"varint,3,opt,name=lower_open,json=lowerOpen,proto3" json:"lower_open,omitempty"`
 	UpperOpen     bool                   `protobuf:"varint,4,opt,name=upper_open,json=upperOpen,proto3" json:"upper_open,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -223,7 +446,7 @@ type KeyRange struct {
 
 func (x *KeyRange) Reset() {
 	*x = KeyRange{}
-	mi := &file_v1_datastore_proto_msgTypes[3]
+	mi := &file_v1_datastore_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -235,7 +458,7 @@ func (x *KeyRange) String() string {
 func (*KeyRange) ProtoMessage() {}
 
 func (x *KeyRange) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[3]
+	mi := &file_v1_datastore_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -248,17 +471,17 @@ func (x *KeyRange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyRange.ProtoReflect.Descriptor instead.
 func (*KeyRange) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{3}
+	return file_v1_datastore_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *KeyRange) GetLower() *structpb.Value {
+func (x *KeyRange) GetLower() *TypedValue {
 	if x != nil {
 		return x.Lower
 	}
 	return nil
 }
 
-func (x *KeyRange) GetUpper() *structpb.Value {
+func (x *KeyRange) GetUpper() *TypedValue {
 	if x != nil {
 		return x.Upper
 	}
@@ -282,14 +505,14 @@ func (x *KeyRange) GetUpperOpen() bool {
 type RecordRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Store         string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
-	Record        *structpb.Struct       `protobuf:"bytes,2,opt,name=record,proto3" json:"record,omitempty"`
+	Record        *Record                `protobuf:"bytes,2,opt,name=record,proto3" json:"record,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RecordRequest) Reset() {
 	*x = RecordRequest{}
-	mi := &file_v1_datastore_proto_msgTypes[4]
+	mi := &file_v1_datastore_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -301,7 +524,7 @@ func (x *RecordRequest) String() string {
 func (*RecordRequest) ProtoMessage() {}
 
 func (x *RecordRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[4]
+	mi := &file_v1_datastore_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -314,7 +537,7 @@ func (x *RecordRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordRequest.ProtoReflect.Descriptor instead.
 func (*RecordRequest) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{4}
+	return file_v1_datastore_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *RecordRequest) GetStore() string {
@@ -324,7 +547,7 @@ func (x *RecordRequest) GetStore() string {
 	return ""
 }
 
-func (x *RecordRequest) GetRecord() *structpb.Struct {
+func (x *RecordRequest) GetRecord() *Record {
 	if x != nil {
 		return x.Record
 	}
@@ -333,14 +556,14 @@ func (x *RecordRequest) GetRecord() *structpb.Struct {
 
 type RecordResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Record        *structpb.Struct       `protobuf:"bytes,1,opt,name=record,proto3" json:"record,omitempty"`
+	Record        *Record                `protobuf:"bytes,1,opt,name=record,proto3" json:"record,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RecordResponse) Reset() {
 	*x = RecordResponse{}
-	mi := &file_v1_datastore_proto_msgTypes[5]
+	mi := &file_v1_datastore_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -352,7 +575,7 @@ func (x *RecordResponse) String() string {
 func (*RecordResponse) ProtoMessage() {}
 
 func (x *RecordResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[5]
+	mi := &file_v1_datastore_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -365,10 +588,10 @@ func (x *RecordResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordResponse.ProtoReflect.Descriptor instead.
 func (*RecordResponse) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{5}
+	return file_v1_datastore_proto_rawDescGZIP(), []int{7}
 }
 
-func (x *RecordResponse) GetRecord() *structpb.Struct {
+func (x *RecordResponse) GetRecord() *Record {
 	if x != nil {
 		return x.Record
 	}
@@ -377,14 +600,14 @@ func (x *RecordResponse) GetRecord() *structpb.Struct {
 
 type RecordsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Records       []*structpb.Struct     `protobuf:"bytes,1,rep,name=records,proto3" json:"records,omitempty"`
+	Records       []*Record              `protobuf:"bytes,1,rep,name=records,proto3" json:"records,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RecordsResponse) Reset() {
 	*x = RecordsResponse{}
-	mi := &file_v1_datastore_proto_msgTypes[6]
+	mi := &file_v1_datastore_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -396,7 +619,7 @@ func (x *RecordsResponse) String() string {
 func (*RecordsResponse) ProtoMessage() {}
 
 func (x *RecordsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[6]
+	mi := &file_v1_datastore_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -409,10 +632,10 @@ func (x *RecordsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RecordsResponse.ProtoReflect.Descriptor instead.
 func (*RecordsResponse) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{6}
+	return file_v1_datastore_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *RecordsResponse) GetRecords() []*structpb.Struct {
+func (x *RecordsResponse) GetRecords() []*Record {
 	if x != nil {
 		return x.Records
 	}
@@ -428,7 +651,7 @@ type KeysResponse struct {
 
 func (x *KeysResponse) Reset() {
 	*x = KeysResponse{}
-	mi := &file_v1_datastore_proto_msgTypes[7]
+	mi := &file_v1_datastore_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -440,7 +663,7 @@ func (x *KeysResponse) String() string {
 func (*KeysResponse) ProtoMessage() {}
 
 func (x *KeysResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[7]
+	mi := &file_v1_datastore_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -453,7 +676,7 @@ func (x *KeysResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeysResponse.ProtoReflect.Descriptor instead.
 func (*KeysResponse) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{7}
+	return file_v1_datastore_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *KeysResponse) GetKeys() []string {
@@ -473,7 +696,7 @@ type ObjectStoreRequest struct {
 
 func (x *ObjectStoreRequest) Reset() {
 	*x = ObjectStoreRequest{}
-	mi := &file_v1_datastore_proto_msgTypes[8]
+	mi := &file_v1_datastore_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -485,7 +708,7 @@ func (x *ObjectStoreRequest) String() string {
 func (*ObjectStoreRequest) ProtoMessage() {}
 
 func (x *ObjectStoreRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[8]
+	mi := &file_v1_datastore_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -498,7 +721,7 @@ func (x *ObjectStoreRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObjectStoreRequest.ProtoReflect.Descriptor instead.
 func (*ObjectStoreRequest) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{8}
+	return file_v1_datastore_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ObjectStoreRequest) GetStore() string {
@@ -524,7 +747,7 @@ type ObjectStoreNameRequest struct {
 
 func (x *ObjectStoreNameRequest) Reset() {
 	*x = ObjectStoreNameRequest{}
-	mi := &file_v1_datastore_proto_msgTypes[9]
+	mi := &file_v1_datastore_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -536,7 +759,7 @@ func (x *ObjectStoreNameRequest) String() string {
 func (*ObjectStoreNameRequest) ProtoMessage() {}
 
 func (x *ObjectStoreNameRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[9]
+	mi := &file_v1_datastore_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -549,7 +772,7 @@ func (x *ObjectStoreNameRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObjectStoreNameRequest.ProtoReflect.Descriptor instead.
 func (*ObjectStoreNameRequest) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{9}
+	return file_v1_datastore_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ObjectStoreNameRequest) GetStore() string {
@@ -569,7 +792,7 @@ type ObjectStoreRangeRequest struct {
 
 func (x *ObjectStoreRangeRequest) Reset() {
 	*x = ObjectStoreRangeRequest{}
-	mi := &file_v1_datastore_proto_msgTypes[10]
+	mi := &file_v1_datastore_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -581,7 +804,7 @@ func (x *ObjectStoreRangeRequest) String() string {
 func (*ObjectStoreRangeRequest) ProtoMessage() {}
 
 func (x *ObjectStoreRangeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[10]
+	mi := &file_v1_datastore_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -594,7 +817,7 @@ func (x *ObjectStoreRangeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ObjectStoreRangeRequest.ProtoReflect.Descriptor instead.
 func (*ObjectStoreRangeRequest) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{10}
+	return file_v1_datastore_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ObjectStoreRangeRequest) GetStore() string {
@@ -621,7 +844,7 @@ type CreateObjectStoreRequest struct {
 
 func (x *CreateObjectStoreRequest) Reset() {
 	*x = CreateObjectStoreRequest{}
-	mi := &file_v1_datastore_proto_msgTypes[11]
+	mi := &file_v1_datastore_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -633,7 +856,7 @@ func (x *CreateObjectStoreRequest) String() string {
 func (*CreateObjectStoreRequest) ProtoMessage() {}
 
 func (x *CreateObjectStoreRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[11]
+	mi := &file_v1_datastore_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -646,7 +869,7 @@ func (x *CreateObjectStoreRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateObjectStoreRequest.ProtoReflect.Descriptor instead.
 func (*CreateObjectStoreRequest) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{11}
+	return file_v1_datastore_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *CreateObjectStoreRequest) GetName() string {
@@ -672,7 +895,7 @@ type DeleteObjectStoreRequest struct {
 
 func (x *DeleteObjectStoreRequest) Reset() {
 	*x = DeleteObjectStoreRequest{}
-	mi := &file_v1_datastore_proto_msgTypes[12]
+	mi := &file_v1_datastore_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -684,7 +907,7 @@ func (x *DeleteObjectStoreRequest) String() string {
 func (*DeleteObjectStoreRequest) ProtoMessage() {}
 
 func (x *DeleteObjectStoreRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[12]
+	mi := &file_v1_datastore_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -697,7 +920,7 @@ func (x *DeleteObjectStoreRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteObjectStoreRequest.ProtoReflect.Descriptor instead.
 func (*DeleteObjectStoreRequest) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{12}
+	return file_v1_datastore_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *DeleteObjectStoreRequest) GetName() string {
@@ -711,7 +934,7 @@ type IndexQueryRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Store         string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
 	Index         string                 `protobuf:"bytes,2,opt,name=index,proto3" json:"index,omitempty"`
-	Values        []*structpb.Value      `protobuf:"bytes,3,rep,name=values,proto3" json:"values,omitempty"`
+	Values        []*TypedValue          `protobuf:"bytes,3,rep,name=values,proto3" json:"values,omitempty"`
 	Range         *KeyRange              `protobuf:"bytes,4,opt,name=range,proto3,oneof" json:"range,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -719,7 +942,7 @@ type IndexQueryRequest struct {
 
 func (x *IndexQueryRequest) Reset() {
 	*x = IndexQueryRequest{}
-	mi := &file_v1_datastore_proto_msgTypes[13]
+	mi := &file_v1_datastore_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -731,7 +954,7 @@ func (x *IndexQueryRequest) String() string {
 func (*IndexQueryRequest) ProtoMessage() {}
 
 func (x *IndexQueryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[13]
+	mi := &file_v1_datastore_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -744,7 +967,7 @@ func (x *IndexQueryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IndexQueryRequest.ProtoReflect.Descriptor instead.
 func (*IndexQueryRequest) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{13}
+	return file_v1_datastore_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *IndexQueryRequest) GetStore() string {
@@ -761,7 +984,7 @@ func (x *IndexQueryRequest) GetIndex() string {
 	return ""
 }
 
-func (x *IndexQueryRequest) GetValues() []*structpb.Value {
+func (x *IndexQueryRequest) GetValues() []*TypedValue {
 	if x != nil {
 		return x.Values
 	}
@@ -784,7 +1007,7 @@ type CountResponse struct {
 
 func (x *CountResponse) Reset() {
 	*x = CountResponse{}
-	mi := &file_v1_datastore_proto_msgTypes[14]
+	mi := &file_v1_datastore_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -796,7 +1019,7 @@ func (x *CountResponse) String() string {
 func (*CountResponse) ProtoMessage() {}
 
 func (x *CountResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[14]
+	mi := &file_v1_datastore_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -809,7 +1032,7 @@ func (x *CountResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CountResponse.ProtoReflect.Descriptor instead.
 func (*CountResponse) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{14}
+	return file_v1_datastore_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *CountResponse) GetCount() int64 {
@@ -828,7 +1051,7 @@ type DeleteResponse struct {
 
 func (x *DeleteResponse) Reset() {
 	*x = DeleteResponse{}
-	mi := &file_v1_datastore_proto_msgTypes[15]
+	mi := &file_v1_datastore_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -840,7 +1063,7 @@ func (x *DeleteResponse) String() string {
 func (*DeleteResponse) ProtoMessage() {}
 
 func (x *DeleteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[15]
+	mi := &file_v1_datastore_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -853,7 +1076,7 @@ func (x *DeleteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteResponse.ProtoReflect.Descriptor instead.
 func (*DeleteResponse) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{15}
+	return file_v1_datastore_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *DeleteResponse) GetDeleted() int64 {
@@ -872,7 +1095,7 @@ type KeyResponse struct {
 
 func (x *KeyResponse) Reset() {
 	*x = KeyResponse{}
-	mi := &file_v1_datastore_proto_msgTypes[16]
+	mi := &file_v1_datastore_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -884,7 +1107,7 @@ func (x *KeyResponse) String() string {
 func (*KeyResponse) ProtoMessage() {}
 
 func (x *KeyResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_datastore_proto_msgTypes[16]
+	mi := &file_v1_datastore_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -897,7 +1120,7 @@ func (x *KeyResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use KeyResponse.ProtoReflect.Descriptor instead.
 func (*KeyResponse) Descriptor() ([]byte, []int) {
-	return file_v1_datastore_proto_rawDescGZIP(), []int{16}
+	return file_v1_datastore_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *KeyResponse) GetKey() string {
@@ -911,7 +1134,29 @@ var File_v1_datastore_proto protoreflect.FileDescriptor
 
 const file_v1_datastore_proto_rawDesc = "" +
 	"\n" +
-	"\x12v1/datastore.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\"\x89\x01\n" +
+	"\x12v1/datastore.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf2\x02\n" +
+	"\n" +
+	"TypedValue\x12;\n" +
+	"\n" +
+	"null_value\x18\x01 \x01(\x0e2\x1a.google.protobuf.NullValueH\x00R\tnullValue\x12#\n" +
+	"\fstring_value\x18\x02 \x01(\tH\x00R\vstringValue\x12\x1d\n" +
+	"\tint_value\x18\x03 \x01(\x03H\x00R\bintValue\x12!\n" +
+	"\vfloat_value\x18\x04 \x01(\x01H\x00R\n" +
+	"floatValue\x12\x1f\n" +
+	"\n" +
+	"bool_value\x18\x05 \x01(\bH\x00R\tboolValue\x12;\n" +
+	"\n" +
+	"time_value\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampH\x00R\ttimeValue\x12!\n" +
+	"\vbytes_value\x18\a \x01(\fH\x00R\n" +
+	"bytesValue\x127\n" +
+	"\n" +
+	"json_value\x18\b \x01(\v2\x16.google.protobuf.ValueH\x00R\tjsonValueB\x06\n" +
+	"\x04kind\"\xa5\x01\n" +
+	"\x06Record\x12?\n" +
+	"\x06fields\x18\x01 \x03(\v2'.gestalt.provider.v1.Record.FieldsEntryR\x06fields\x1aZ\n" +
+	"\vFieldsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x125\n" +
+	"\x05value\x18\x02 \x01(\v2\x1f.gestalt.provider.v1.TypedValueR\x05value:\x028\x01\"\x89\x01\n" +
 	"\x11ObjectStoreSchema\x12:\n" +
 	"\aindexes\x18\x01 \x03(\v2 .gestalt.provider.v1.IndexSchemaR\aindexes\x128\n" +
 	"\acolumns\x18\x02 \x03(\v2\x1e.gestalt.provider.v1.ColumnDefR\acolumns\"T\n" +
@@ -925,21 +1170,21 @@ const file_v1_datastore_proto_rawDesc = "" +
 	"\vprimary_key\x18\x03 \x01(\bR\n" +
 	"primaryKey\x12\x19\n" +
 	"\bnot_null\x18\x04 \x01(\bR\anotNull\x12\x16\n" +
-	"\x06unique\x18\x05 \x01(\bR\x06unique\"\xa4\x01\n" +
-	"\bKeyRange\x12,\n" +
-	"\x05lower\x18\x01 \x01(\v2\x16.google.protobuf.ValueR\x05lower\x12,\n" +
-	"\x05upper\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05upper\x12\x1d\n" +
+	"\x06unique\x18\x05 \x01(\bR\x06unique\"\xb6\x01\n" +
+	"\bKeyRange\x125\n" +
+	"\x05lower\x18\x01 \x01(\v2\x1f.gestalt.provider.v1.TypedValueR\x05lower\x125\n" +
+	"\x05upper\x18\x02 \x01(\v2\x1f.gestalt.provider.v1.TypedValueR\x05upper\x12\x1d\n" +
 	"\n" +
 	"lower_open\x18\x03 \x01(\bR\tlowerOpen\x12\x1d\n" +
 	"\n" +
-	"upper_open\x18\x04 \x01(\bR\tupperOpen\"V\n" +
+	"upper_open\x18\x04 \x01(\bR\tupperOpen\"Z\n" +
 	"\rRecordRequest\x12\x14\n" +
-	"\x05store\x18\x01 \x01(\tR\x05store\x12/\n" +
-	"\x06record\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x06record\"A\n" +
-	"\x0eRecordResponse\x12/\n" +
-	"\x06record\x18\x01 \x01(\v2\x17.google.protobuf.StructR\x06record\"D\n" +
-	"\x0fRecordsResponse\x121\n" +
-	"\arecords\x18\x01 \x03(\v2\x17.google.protobuf.StructR\arecords\"\"\n" +
+	"\x05store\x18\x01 \x01(\tR\x05store\x123\n" +
+	"\x06record\x18\x02 \x01(\v2\x1b.gestalt.provider.v1.RecordR\x06record\"E\n" +
+	"\x0eRecordResponse\x123\n" +
+	"\x06record\x18\x01 \x01(\v2\x1b.gestalt.provider.v1.RecordR\x06record\"H\n" +
+	"\x0fRecordsResponse\x125\n" +
+	"\arecords\x18\x01 \x03(\v2\x1b.gestalt.provider.v1.RecordR\arecords\"\"\n" +
 	"\fKeysResponse\x12\x12\n" +
 	"\x04keys\x18\x01 \x03(\tR\x04keys\":\n" +
 	"\x12ObjectStoreRequest\x12\x14\n" +
@@ -955,11 +1200,11 @@ const file_v1_datastore_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12>\n" +
 	"\x06schema\x18\x02 \x01(\v2&.gestalt.provider.v1.ObjectStoreSchemaR\x06schema\".\n" +
 	"\x18DeleteObjectStoreRequest\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\"\xb3\x01\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"\xbc\x01\n" +
 	"\x11IndexQueryRequest\x12\x14\n" +
 	"\x05store\x18\x01 \x01(\tR\x05store\x12\x14\n" +
-	"\x05index\x18\x02 \x01(\tR\x05index\x12.\n" +
-	"\x06values\x18\x03 \x03(\v2\x16.google.protobuf.ValueR\x06values\x128\n" +
+	"\x05index\x18\x02 \x01(\tR\x05index\x127\n" +
+	"\x06values\x18\x03 \x03(\v2\x1f.gestalt.provider.v1.TypedValueR\x06values\x128\n" +
 	"\x05range\x18\x04 \x01(\v2\x1d.gestalt.provider.v1.KeyRangeH\x00R\x05range\x88\x01\x01B\b\n" +
 	"\x06_range\"%\n" +
 	"\rCountResponse\x12\x14\n" +
@@ -1003,82 +1248,91 @@ func file_v1_datastore_proto_rawDescGZIP() []byte {
 	return file_v1_datastore_proto_rawDescData
 }
 
-var file_v1_datastore_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
+var file_v1_datastore_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_v1_datastore_proto_goTypes = []any{
-	(*ObjectStoreSchema)(nil),        // 0: gestalt.provider.v1.ObjectStoreSchema
-	(*IndexSchema)(nil),              // 1: gestalt.provider.v1.IndexSchema
-	(*ColumnDef)(nil),                // 2: gestalt.provider.v1.ColumnDef
-	(*KeyRange)(nil),                 // 3: gestalt.provider.v1.KeyRange
-	(*RecordRequest)(nil),            // 4: gestalt.provider.v1.RecordRequest
-	(*RecordResponse)(nil),           // 5: gestalt.provider.v1.RecordResponse
-	(*RecordsResponse)(nil),          // 6: gestalt.provider.v1.RecordsResponse
-	(*KeysResponse)(nil),             // 7: gestalt.provider.v1.KeysResponse
-	(*ObjectStoreRequest)(nil),       // 8: gestalt.provider.v1.ObjectStoreRequest
-	(*ObjectStoreNameRequest)(nil),   // 9: gestalt.provider.v1.ObjectStoreNameRequest
-	(*ObjectStoreRangeRequest)(nil),  // 10: gestalt.provider.v1.ObjectStoreRangeRequest
-	(*CreateObjectStoreRequest)(nil), // 11: gestalt.provider.v1.CreateObjectStoreRequest
-	(*DeleteObjectStoreRequest)(nil), // 12: gestalt.provider.v1.DeleteObjectStoreRequest
-	(*IndexQueryRequest)(nil),        // 13: gestalt.provider.v1.IndexQueryRequest
-	(*CountResponse)(nil),            // 14: gestalt.provider.v1.CountResponse
-	(*DeleteResponse)(nil),           // 15: gestalt.provider.v1.DeleteResponse
-	(*KeyResponse)(nil),              // 16: gestalt.provider.v1.KeyResponse
-	(*structpb.Value)(nil),           // 17: google.protobuf.Value
-	(*structpb.Struct)(nil),          // 18: google.protobuf.Struct
-	(*emptypb.Empty)(nil),            // 19: google.protobuf.Empty
+	(*TypedValue)(nil),               // 0: gestalt.provider.v1.TypedValue
+	(*Record)(nil),                   // 1: gestalt.provider.v1.Record
+	(*ObjectStoreSchema)(nil),        // 2: gestalt.provider.v1.ObjectStoreSchema
+	(*IndexSchema)(nil),              // 3: gestalt.provider.v1.IndexSchema
+	(*ColumnDef)(nil),                // 4: gestalt.provider.v1.ColumnDef
+	(*KeyRange)(nil),                 // 5: gestalt.provider.v1.KeyRange
+	(*RecordRequest)(nil),            // 6: gestalt.provider.v1.RecordRequest
+	(*RecordResponse)(nil),           // 7: gestalt.provider.v1.RecordResponse
+	(*RecordsResponse)(nil),          // 8: gestalt.provider.v1.RecordsResponse
+	(*KeysResponse)(nil),             // 9: gestalt.provider.v1.KeysResponse
+	(*ObjectStoreRequest)(nil),       // 10: gestalt.provider.v1.ObjectStoreRequest
+	(*ObjectStoreNameRequest)(nil),   // 11: gestalt.provider.v1.ObjectStoreNameRequest
+	(*ObjectStoreRangeRequest)(nil),  // 12: gestalt.provider.v1.ObjectStoreRangeRequest
+	(*CreateObjectStoreRequest)(nil), // 13: gestalt.provider.v1.CreateObjectStoreRequest
+	(*DeleteObjectStoreRequest)(nil), // 14: gestalt.provider.v1.DeleteObjectStoreRequest
+	(*IndexQueryRequest)(nil),        // 15: gestalt.provider.v1.IndexQueryRequest
+	(*CountResponse)(nil),            // 16: gestalt.provider.v1.CountResponse
+	(*DeleteResponse)(nil),           // 17: gestalt.provider.v1.DeleteResponse
+	(*KeyResponse)(nil),              // 18: gestalt.provider.v1.KeyResponse
+	nil,                              // 19: gestalt.provider.v1.Record.FieldsEntry
+	(structpb.NullValue)(0),          // 20: google.protobuf.NullValue
+	(*timestamppb.Timestamp)(nil),    // 21: google.protobuf.Timestamp
+	(*structpb.Value)(nil),           // 22: google.protobuf.Value
+	(*emptypb.Empty)(nil),            // 23: google.protobuf.Empty
 }
 var file_v1_datastore_proto_depIdxs = []int32{
-	1,  // 0: gestalt.provider.v1.ObjectStoreSchema.indexes:type_name -> gestalt.provider.v1.IndexSchema
-	2,  // 1: gestalt.provider.v1.ObjectStoreSchema.columns:type_name -> gestalt.provider.v1.ColumnDef
-	17, // 2: gestalt.provider.v1.KeyRange.lower:type_name -> google.protobuf.Value
-	17, // 3: gestalt.provider.v1.KeyRange.upper:type_name -> google.protobuf.Value
-	18, // 4: gestalt.provider.v1.RecordRequest.record:type_name -> google.protobuf.Struct
-	18, // 5: gestalt.provider.v1.RecordResponse.record:type_name -> google.protobuf.Struct
-	18, // 6: gestalt.provider.v1.RecordsResponse.records:type_name -> google.protobuf.Struct
-	3,  // 7: gestalt.provider.v1.ObjectStoreRangeRequest.range:type_name -> gestalt.provider.v1.KeyRange
-	0,  // 8: gestalt.provider.v1.CreateObjectStoreRequest.schema:type_name -> gestalt.provider.v1.ObjectStoreSchema
-	17, // 9: gestalt.provider.v1.IndexQueryRequest.values:type_name -> google.protobuf.Value
-	3,  // 10: gestalt.provider.v1.IndexQueryRequest.range:type_name -> gestalt.provider.v1.KeyRange
-	11, // 11: gestalt.provider.v1.IndexedDB.CreateObjectStore:input_type -> gestalt.provider.v1.CreateObjectStoreRequest
-	12, // 12: gestalt.provider.v1.IndexedDB.DeleteObjectStore:input_type -> gestalt.provider.v1.DeleteObjectStoreRequest
-	8,  // 13: gestalt.provider.v1.IndexedDB.Get:input_type -> gestalt.provider.v1.ObjectStoreRequest
-	8,  // 14: gestalt.provider.v1.IndexedDB.GetKey:input_type -> gestalt.provider.v1.ObjectStoreRequest
-	4,  // 15: gestalt.provider.v1.IndexedDB.Add:input_type -> gestalt.provider.v1.RecordRequest
-	4,  // 16: gestalt.provider.v1.IndexedDB.Put:input_type -> gestalt.provider.v1.RecordRequest
-	8,  // 17: gestalt.provider.v1.IndexedDB.Delete:input_type -> gestalt.provider.v1.ObjectStoreRequest
-	9,  // 18: gestalt.provider.v1.IndexedDB.Clear:input_type -> gestalt.provider.v1.ObjectStoreNameRequest
-	10, // 19: gestalt.provider.v1.IndexedDB.GetAll:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
-	10, // 20: gestalt.provider.v1.IndexedDB.GetAllKeys:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
-	10, // 21: gestalt.provider.v1.IndexedDB.Count:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
-	10, // 22: gestalt.provider.v1.IndexedDB.DeleteRange:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
-	13, // 23: gestalt.provider.v1.IndexedDB.IndexGet:input_type -> gestalt.provider.v1.IndexQueryRequest
-	13, // 24: gestalt.provider.v1.IndexedDB.IndexGetKey:input_type -> gestalt.provider.v1.IndexQueryRequest
-	13, // 25: gestalt.provider.v1.IndexedDB.IndexGetAll:input_type -> gestalt.provider.v1.IndexQueryRequest
-	13, // 26: gestalt.provider.v1.IndexedDB.IndexGetAllKeys:input_type -> gestalt.provider.v1.IndexQueryRequest
-	13, // 27: gestalt.provider.v1.IndexedDB.IndexCount:input_type -> gestalt.provider.v1.IndexQueryRequest
-	13, // 28: gestalt.provider.v1.IndexedDB.IndexDelete:input_type -> gestalt.provider.v1.IndexQueryRequest
-	19, // 29: gestalt.provider.v1.IndexedDB.CreateObjectStore:output_type -> google.protobuf.Empty
-	19, // 30: gestalt.provider.v1.IndexedDB.DeleteObjectStore:output_type -> google.protobuf.Empty
-	5,  // 31: gestalt.provider.v1.IndexedDB.Get:output_type -> gestalt.provider.v1.RecordResponse
-	16, // 32: gestalt.provider.v1.IndexedDB.GetKey:output_type -> gestalt.provider.v1.KeyResponse
-	19, // 33: gestalt.provider.v1.IndexedDB.Add:output_type -> google.protobuf.Empty
-	19, // 34: gestalt.provider.v1.IndexedDB.Put:output_type -> google.protobuf.Empty
-	19, // 35: gestalt.provider.v1.IndexedDB.Delete:output_type -> google.protobuf.Empty
-	19, // 36: gestalt.provider.v1.IndexedDB.Clear:output_type -> google.protobuf.Empty
-	6,  // 37: gestalt.provider.v1.IndexedDB.GetAll:output_type -> gestalt.provider.v1.RecordsResponse
-	7,  // 38: gestalt.provider.v1.IndexedDB.GetAllKeys:output_type -> gestalt.provider.v1.KeysResponse
-	14, // 39: gestalt.provider.v1.IndexedDB.Count:output_type -> gestalt.provider.v1.CountResponse
-	15, // 40: gestalt.provider.v1.IndexedDB.DeleteRange:output_type -> gestalt.provider.v1.DeleteResponse
-	5,  // 41: gestalt.provider.v1.IndexedDB.IndexGet:output_type -> gestalt.provider.v1.RecordResponse
-	16, // 42: gestalt.provider.v1.IndexedDB.IndexGetKey:output_type -> gestalt.provider.v1.KeyResponse
-	6,  // 43: gestalt.provider.v1.IndexedDB.IndexGetAll:output_type -> gestalt.provider.v1.RecordsResponse
-	7,  // 44: gestalt.provider.v1.IndexedDB.IndexGetAllKeys:output_type -> gestalt.provider.v1.KeysResponse
-	14, // 45: gestalt.provider.v1.IndexedDB.IndexCount:output_type -> gestalt.provider.v1.CountResponse
-	15, // 46: gestalt.provider.v1.IndexedDB.IndexDelete:output_type -> gestalt.provider.v1.DeleteResponse
-	29, // [29:47] is the sub-list for method output_type
-	11, // [11:29] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	20, // 0: gestalt.provider.v1.TypedValue.null_value:type_name -> google.protobuf.NullValue
+	21, // 1: gestalt.provider.v1.TypedValue.time_value:type_name -> google.protobuf.Timestamp
+	22, // 2: gestalt.provider.v1.TypedValue.json_value:type_name -> google.protobuf.Value
+	19, // 3: gestalt.provider.v1.Record.fields:type_name -> gestalt.provider.v1.Record.FieldsEntry
+	3,  // 4: gestalt.provider.v1.ObjectStoreSchema.indexes:type_name -> gestalt.provider.v1.IndexSchema
+	4,  // 5: gestalt.provider.v1.ObjectStoreSchema.columns:type_name -> gestalt.provider.v1.ColumnDef
+	0,  // 6: gestalt.provider.v1.KeyRange.lower:type_name -> gestalt.provider.v1.TypedValue
+	0,  // 7: gestalt.provider.v1.KeyRange.upper:type_name -> gestalt.provider.v1.TypedValue
+	1,  // 8: gestalt.provider.v1.RecordRequest.record:type_name -> gestalt.provider.v1.Record
+	1,  // 9: gestalt.provider.v1.RecordResponse.record:type_name -> gestalt.provider.v1.Record
+	1,  // 10: gestalt.provider.v1.RecordsResponse.records:type_name -> gestalt.provider.v1.Record
+	5,  // 11: gestalt.provider.v1.ObjectStoreRangeRequest.range:type_name -> gestalt.provider.v1.KeyRange
+	2,  // 12: gestalt.provider.v1.CreateObjectStoreRequest.schema:type_name -> gestalt.provider.v1.ObjectStoreSchema
+	0,  // 13: gestalt.provider.v1.IndexQueryRequest.values:type_name -> gestalt.provider.v1.TypedValue
+	5,  // 14: gestalt.provider.v1.IndexQueryRequest.range:type_name -> gestalt.provider.v1.KeyRange
+	0,  // 15: gestalt.provider.v1.Record.FieldsEntry.value:type_name -> gestalt.provider.v1.TypedValue
+	13, // 16: gestalt.provider.v1.IndexedDB.CreateObjectStore:input_type -> gestalt.provider.v1.CreateObjectStoreRequest
+	14, // 17: gestalt.provider.v1.IndexedDB.DeleteObjectStore:input_type -> gestalt.provider.v1.DeleteObjectStoreRequest
+	10, // 18: gestalt.provider.v1.IndexedDB.Get:input_type -> gestalt.provider.v1.ObjectStoreRequest
+	10, // 19: gestalt.provider.v1.IndexedDB.GetKey:input_type -> gestalt.provider.v1.ObjectStoreRequest
+	6,  // 20: gestalt.provider.v1.IndexedDB.Add:input_type -> gestalt.provider.v1.RecordRequest
+	6,  // 21: gestalt.provider.v1.IndexedDB.Put:input_type -> gestalt.provider.v1.RecordRequest
+	10, // 22: gestalt.provider.v1.IndexedDB.Delete:input_type -> gestalt.provider.v1.ObjectStoreRequest
+	11, // 23: gestalt.provider.v1.IndexedDB.Clear:input_type -> gestalt.provider.v1.ObjectStoreNameRequest
+	12, // 24: gestalt.provider.v1.IndexedDB.GetAll:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
+	12, // 25: gestalt.provider.v1.IndexedDB.GetAllKeys:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
+	12, // 26: gestalt.provider.v1.IndexedDB.Count:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
+	12, // 27: gestalt.provider.v1.IndexedDB.DeleteRange:input_type -> gestalt.provider.v1.ObjectStoreRangeRequest
+	15, // 28: gestalt.provider.v1.IndexedDB.IndexGet:input_type -> gestalt.provider.v1.IndexQueryRequest
+	15, // 29: gestalt.provider.v1.IndexedDB.IndexGetKey:input_type -> gestalt.provider.v1.IndexQueryRequest
+	15, // 30: gestalt.provider.v1.IndexedDB.IndexGetAll:input_type -> gestalt.provider.v1.IndexQueryRequest
+	15, // 31: gestalt.provider.v1.IndexedDB.IndexGetAllKeys:input_type -> gestalt.provider.v1.IndexQueryRequest
+	15, // 32: gestalt.provider.v1.IndexedDB.IndexCount:input_type -> gestalt.provider.v1.IndexQueryRequest
+	15, // 33: gestalt.provider.v1.IndexedDB.IndexDelete:input_type -> gestalt.provider.v1.IndexQueryRequest
+	23, // 34: gestalt.provider.v1.IndexedDB.CreateObjectStore:output_type -> google.protobuf.Empty
+	23, // 35: gestalt.provider.v1.IndexedDB.DeleteObjectStore:output_type -> google.protobuf.Empty
+	7,  // 36: gestalt.provider.v1.IndexedDB.Get:output_type -> gestalt.provider.v1.RecordResponse
+	18, // 37: gestalt.provider.v1.IndexedDB.GetKey:output_type -> gestalt.provider.v1.KeyResponse
+	23, // 38: gestalt.provider.v1.IndexedDB.Add:output_type -> google.protobuf.Empty
+	23, // 39: gestalt.provider.v1.IndexedDB.Put:output_type -> google.protobuf.Empty
+	23, // 40: gestalt.provider.v1.IndexedDB.Delete:output_type -> google.protobuf.Empty
+	23, // 41: gestalt.provider.v1.IndexedDB.Clear:output_type -> google.protobuf.Empty
+	8,  // 42: gestalt.provider.v1.IndexedDB.GetAll:output_type -> gestalt.provider.v1.RecordsResponse
+	9,  // 43: gestalt.provider.v1.IndexedDB.GetAllKeys:output_type -> gestalt.provider.v1.KeysResponse
+	16, // 44: gestalt.provider.v1.IndexedDB.Count:output_type -> gestalt.provider.v1.CountResponse
+	17, // 45: gestalt.provider.v1.IndexedDB.DeleteRange:output_type -> gestalt.provider.v1.DeleteResponse
+	7,  // 46: gestalt.provider.v1.IndexedDB.IndexGet:output_type -> gestalt.provider.v1.RecordResponse
+	18, // 47: gestalt.provider.v1.IndexedDB.IndexGetKey:output_type -> gestalt.provider.v1.KeyResponse
+	8,  // 48: gestalt.provider.v1.IndexedDB.IndexGetAll:output_type -> gestalt.provider.v1.RecordsResponse
+	9,  // 49: gestalt.provider.v1.IndexedDB.IndexGetAllKeys:output_type -> gestalt.provider.v1.KeysResponse
+	16, // 50: gestalt.provider.v1.IndexedDB.IndexCount:output_type -> gestalt.provider.v1.CountResponse
+	17, // 51: gestalt.provider.v1.IndexedDB.IndexDelete:output_type -> gestalt.provider.v1.DeleteResponse
+	34, // [34:52] is the sub-list for method output_type
+	16, // [16:34] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_v1_datastore_proto_init() }
@@ -1086,15 +1340,25 @@ func file_v1_datastore_proto_init() {
 	if File_v1_datastore_proto != nil {
 		return
 	}
-	file_v1_datastore_proto_msgTypes[10].OneofWrappers = []any{}
-	file_v1_datastore_proto_msgTypes[13].OneofWrappers = []any{}
+	file_v1_datastore_proto_msgTypes[0].OneofWrappers = []any{
+		(*TypedValue_NullValue)(nil),
+		(*TypedValue_StringValue)(nil),
+		(*TypedValue_IntValue)(nil),
+		(*TypedValue_FloatValue)(nil),
+		(*TypedValue_BoolValue)(nil),
+		(*TypedValue_TimeValue)(nil),
+		(*TypedValue_BytesValue)(nil),
+		(*TypedValue_JsonValue)(nil),
+	}
+	file_v1_datastore_proto_msgTypes[12].OneofWrappers = []any{}
+	file_v1_datastore_proto_msgTypes[15].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_datastore_proto_rawDesc), len(file_v1_datastore_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   17,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

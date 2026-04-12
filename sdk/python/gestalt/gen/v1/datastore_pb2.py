@@ -24,9 +24,10 @@ _sym_db = _symbol_database.Default()
 
 from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
 from google.protobuf import struct_pb2 as google_dot_protobuf_dot_struct__pb2
+from google.protobuf import timestamp_pb2 as google_dot_protobuf_dot_timestamp__pb2
 
 
-DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x12v1/datastore.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\"\x89\x01\n\x11ObjectStoreSchema\x12:\n\x07indexes\x18\x01 \x03(\x0b\x32 .gestalt.provider.v1.IndexSchemaR\x07indexes\x12\x38\n\x07\x63olumns\x18\x02 \x03(\x0b\x32\x1e.gestalt.provider.v1.ColumnDefR\x07\x63olumns\"T\n\x0bIndexSchema\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n\x08key_path\x18\x02 \x03(\tR\x07keyPath\x12\x16\n\x06unique\x18\x03 \x01(\x08R\x06unique\"\x87\x01\n\tColumnDef\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n\x04type\x18\x02 \x01(\x05R\x04type\x12\x1f\n\x0bprimary_key\x18\x03 \x01(\x08R\nprimaryKey\x12\x19\n\x08not_null\x18\x04 \x01(\x08R\x07notNull\x12\x16\n\x06unique\x18\x05 \x01(\x08R\x06unique\"\xa4\x01\n\x08KeyRange\x12,\n\x05lower\x18\x01 \x01(\x0b\x32\x16.google.protobuf.ValueR\x05lower\x12,\n\x05upper\x18\x02 \x01(\x0b\x32\x16.google.protobuf.ValueR\x05upper\x12\x1d\n\nlower_open\x18\x03 \x01(\x08R\tlowerOpen\x12\x1d\n\nupper_open\x18\x04 \x01(\x08R\tupperOpen\"V\n\rRecordRequest\x12\x14\n\x05store\x18\x01 \x01(\tR\x05store\x12/\n\x06record\x18\x02 \x01(\x0b\x32\x17.google.protobuf.StructR\x06record\"A\n\x0eRecordResponse\x12/\n\x06record\x18\x01 \x01(\x0b\x32\x17.google.protobuf.StructR\x06record\"D\n\x0fRecordsResponse\x12\x31\n\x07records\x18\x01 \x03(\x0b\x32\x17.google.protobuf.StructR\x07records\"\"\n\x0cKeysResponse\x12\x12\n\x04keys\x18\x01 \x03(\tR\x04keys\":\n\x12ObjectStoreRequest\x12\x14\n\x05store\x18\x01 \x01(\tR\x05store\x12\x0e\n\x02id\x18\x02 \x01(\tR\x02id\".\n\x16ObjectStoreNameRequest\x12\x14\n\x05store\x18\x01 \x01(\tR\x05store\"s\n\x17ObjectStoreRangeRequest\x12\x14\n\x05store\x18\x01 \x01(\tR\x05store\x12\x38\n\x05range\x18\x02 \x01(\x0b\x32\x1d.gestalt.provider.v1.KeyRangeH\x00R\x05range\x88\x01\x01\x42\x08\n\x06_range\"n\n\x18\x43reateObjectStoreRequest\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12>\n\x06schema\x18\x02 \x01(\x0b\x32&.gestalt.provider.v1.ObjectStoreSchemaR\x06schema\".\n\x18\x44\x65leteObjectStoreRequest\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\"\xb3\x01\n\x11IndexQueryRequest\x12\x14\n\x05store\x18\x01 \x01(\tR\x05store\x12\x14\n\x05index\x18\x02 \x01(\tR\x05index\x12.\n\x06values\x18\x03 \x03(\x0b\x32\x16.google.protobuf.ValueR\x06values\x12\x38\n\x05range\x18\x04 \x01(\x0b\x32\x1d.gestalt.provider.v1.KeyRangeH\x00R\x05range\x88\x01\x01\x42\x08\n\x06_range\"%\n\rCountResponse\x12\x14\n\x05\x63ount\x18\x01 \x01(\x03R\x05\x63ount\"*\n\x0e\x44\x65leteResponse\x12\x18\n\x07\x64\x65leted\x18\x01 \x01(\x03R\x07\x64\x65leted\"\x1f\n\x0bKeyResponse\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key2\xa9\x0c\n\tIndexedDB\x12Z\n\x11\x43reateObjectStore\x12-.gestalt.provider.v1.CreateObjectStoreRequest\x1a\x16.google.protobuf.Empty\x12Z\n\x11\x44\x65leteObjectStore\x12-.gestalt.provider.v1.DeleteObjectStoreRequest\x1a\x16.google.protobuf.Empty\x12S\n\x03Get\x12\'.gestalt.provider.v1.ObjectStoreRequest\x1a#.gestalt.provider.v1.RecordResponse\x12S\n\x06GetKey\x12\'.gestalt.provider.v1.ObjectStoreRequest\x1a .gestalt.provider.v1.KeyResponse\x12\x41\n\x03\x41\x64\x64\x12\".gestalt.provider.v1.RecordRequest\x1a\x16.google.protobuf.Empty\x12\x41\n\x03Put\x12\".gestalt.provider.v1.RecordRequest\x1a\x16.google.protobuf.Empty\x12I\n\x06\x44\x65lete\x12\'.gestalt.provider.v1.ObjectStoreRequest\x1a\x16.google.protobuf.Empty\x12L\n\x05\x43lear\x12+.gestalt.provider.v1.ObjectStoreNameRequest\x1a\x16.google.protobuf.Empty\x12\\\n\x06GetAll\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a$.gestalt.provider.v1.RecordsResponse\x12]\n\nGetAllKeys\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a!.gestalt.provider.v1.KeysResponse\x12Y\n\x05\x43ount\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a\".gestalt.provider.v1.CountResponse\x12`\n\x0b\x44\x65leteRange\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a#.gestalt.provider.v1.DeleteResponse\x12W\n\x08IndexGet\x12&.gestalt.provider.v1.IndexQueryRequest\x1a#.gestalt.provider.v1.RecordResponse\x12W\n\x0bIndexGetKey\x12&.gestalt.provider.v1.IndexQueryRequest\x1a .gestalt.provider.v1.KeyResponse\x12[\n\x0bIndexGetAll\x12&.gestalt.provider.v1.IndexQueryRequest\x1a$.gestalt.provider.v1.RecordsResponse\x12\\\n\x0fIndexGetAllKeys\x12&.gestalt.provider.v1.IndexQueryRequest\x1a!.gestalt.provider.v1.KeysResponse\x12X\n\nIndexCount\x12&.gestalt.provider.v1.IndexQueryRequest\x1a\".gestalt.provider.v1.CountResponse\x12Z\n\x0bIndexDelete\x12&.gestalt.provider.v1.IndexQueryRequest\x1a#.gestalt.provider.v1.DeleteResponseB;Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;protob\x06proto3')
+DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(b'\n\x12v1/datastore.proto\x12\x13gestalt.provider.v1\x1a\x1bgoogle/protobuf/empty.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xf2\x02\n\nTypedValue\x12;\n\nnull_value\x18\x01 \x01(\x0e\x32\x1a.google.protobuf.NullValueH\x00R\tnullValue\x12#\n\x0cstring_value\x18\x02 \x01(\tH\x00R\x0bstringValue\x12\x1d\n\tint_value\x18\x03 \x01(\x03H\x00R\x08intValue\x12!\n\x0b\x66loat_value\x18\x04 \x01(\x01H\x00R\nfloatValue\x12\x1f\n\nbool_value\x18\x05 \x01(\x08H\x00R\tboolValue\x12;\n\ntime_value\x18\x06 \x01(\x0b\x32\x1a.google.protobuf.TimestampH\x00R\ttimeValue\x12!\n\x0b\x62ytes_value\x18\x07 \x01(\x0cH\x00R\nbytesValue\x12\x37\n\njson_value\x18\x08 \x01(\x0b\x32\x16.google.protobuf.ValueH\x00R\tjsonValueB\x06\n\x04kind\"\xa5\x01\n\x06Record\x12?\n\x06\x66ields\x18\x01 \x03(\x0b\x32\'.gestalt.provider.v1.Record.FieldsEntryR\x06\x66ields\x1aZ\n\x0b\x46ieldsEntry\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key\x12\x35\n\x05value\x18\x02 \x01(\x0b\x32\x1f.gestalt.provider.v1.TypedValueR\x05value:\x02\x38\x01\"\x89\x01\n\x11ObjectStoreSchema\x12:\n\x07indexes\x18\x01 \x03(\x0b\x32 .gestalt.provider.v1.IndexSchemaR\x07indexes\x12\x38\n\x07\x63olumns\x18\x02 \x03(\x0b\x32\x1e.gestalt.provider.v1.ColumnDefR\x07\x63olumns\"T\n\x0bIndexSchema\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x19\n\x08key_path\x18\x02 \x03(\tR\x07keyPath\x12\x16\n\x06unique\x18\x03 \x01(\x08R\x06unique\"\x87\x01\n\tColumnDef\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n\x04type\x18\x02 \x01(\x05R\x04type\x12\x1f\n\x0bprimary_key\x18\x03 \x01(\x08R\nprimaryKey\x12\x19\n\x08not_null\x18\x04 \x01(\x08R\x07notNull\x12\x16\n\x06unique\x18\x05 \x01(\x08R\x06unique\"\xb6\x01\n\x08KeyRange\x12\x35\n\x05lower\x18\x01 \x01(\x0b\x32\x1f.gestalt.provider.v1.TypedValueR\x05lower\x12\x35\n\x05upper\x18\x02 \x01(\x0b\x32\x1f.gestalt.provider.v1.TypedValueR\x05upper\x12\x1d\n\nlower_open\x18\x03 \x01(\x08R\tlowerOpen\x12\x1d\n\nupper_open\x18\x04 \x01(\x08R\tupperOpen\"Z\n\rRecordRequest\x12\x14\n\x05store\x18\x01 \x01(\tR\x05store\x12\x33\n\x06record\x18\x02 \x01(\x0b\x32\x1b.gestalt.provider.v1.RecordR\x06record\"E\n\x0eRecordResponse\x12\x33\n\x06record\x18\x01 \x01(\x0b\x32\x1b.gestalt.provider.v1.RecordR\x06record\"H\n\x0fRecordsResponse\x12\x35\n\x07records\x18\x01 \x03(\x0b\x32\x1b.gestalt.provider.v1.RecordR\x07records\"\"\n\x0cKeysResponse\x12\x12\n\x04keys\x18\x01 \x03(\tR\x04keys\":\n\x12ObjectStoreRequest\x12\x14\n\x05store\x18\x01 \x01(\tR\x05store\x12\x0e\n\x02id\x18\x02 \x01(\tR\x02id\".\n\x16ObjectStoreNameRequest\x12\x14\n\x05store\x18\x01 \x01(\tR\x05store\"s\n\x17ObjectStoreRangeRequest\x12\x14\n\x05store\x18\x01 \x01(\tR\x05store\x12\x38\n\x05range\x18\x02 \x01(\x0b\x32\x1d.gestalt.provider.v1.KeyRangeH\x00R\x05range\x88\x01\x01\x42\x08\n\x06_range\"n\n\x18\x43reateObjectStoreRequest\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\x12>\n\x06schema\x18\x02 \x01(\x0b\x32&.gestalt.provider.v1.ObjectStoreSchemaR\x06schema\".\n\x18\x44\x65leteObjectStoreRequest\x12\x12\n\x04name\x18\x01 \x01(\tR\x04name\"\xbc\x01\n\x11IndexQueryRequest\x12\x14\n\x05store\x18\x01 \x01(\tR\x05store\x12\x14\n\x05index\x18\x02 \x01(\tR\x05index\x12\x37\n\x06values\x18\x03 \x03(\x0b\x32\x1f.gestalt.provider.v1.TypedValueR\x06values\x12\x38\n\x05range\x18\x04 \x01(\x0b\x32\x1d.gestalt.provider.v1.KeyRangeH\x00R\x05range\x88\x01\x01\x42\x08\n\x06_range\"%\n\rCountResponse\x12\x14\n\x05\x63ount\x18\x01 \x01(\x03R\x05\x63ount\"*\n\x0e\x44\x65leteResponse\x12\x18\n\x07\x64\x65leted\x18\x01 \x01(\x03R\x07\x64\x65leted\"\x1f\n\x0bKeyResponse\x12\x10\n\x03key\x18\x01 \x01(\tR\x03key2\xa9\x0c\n\tIndexedDB\x12Z\n\x11\x43reateObjectStore\x12-.gestalt.provider.v1.CreateObjectStoreRequest\x1a\x16.google.protobuf.Empty\x12Z\n\x11\x44\x65leteObjectStore\x12-.gestalt.provider.v1.DeleteObjectStoreRequest\x1a\x16.google.protobuf.Empty\x12S\n\x03Get\x12\'.gestalt.provider.v1.ObjectStoreRequest\x1a#.gestalt.provider.v1.RecordResponse\x12S\n\x06GetKey\x12\'.gestalt.provider.v1.ObjectStoreRequest\x1a .gestalt.provider.v1.KeyResponse\x12\x41\n\x03\x41\x64\x64\x12\".gestalt.provider.v1.RecordRequest\x1a\x16.google.protobuf.Empty\x12\x41\n\x03Put\x12\".gestalt.provider.v1.RecordRequest\x1a\x16.google.protobuf.Empty\x12I\n\x06\x44\x65lete\x12\'.gestalt.provider.v1.ObjectStoreRequest\x1a\x16.google.protobuf.Empty\x12L\n\x05\x43lear\x12+.gestalt.provider.v1.ObjectStoreNameRequest\x1a\x16.google.protobuf.Empty\x12\\\n\x06GetAll\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a$.gestalt.provider.v1.RecordsResponse\x12]\n\nGetAllKeys\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a!.gestalt.provider.v1.KeysResponse\x12Y\n\x05\x43ount\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a\".gestalt.provider.v1.CountResponse\x12`\n\x0b\x44\x65leteRange\x12,.gestalt.provider.v1.ObjectStoreRangeRequest\x1a#.gestalt.provider.v1.DeleteResponse\x12W\n\x08IndexGet\x12&.gestalt.provider.v1.IndexQueryRequest\x1a#.gestalt.provider.v1.RecordResponse\x12W\n\x0bIndexGetKey\x12&.gestalt.provider.v1.IndexQueryRequest\x1a .gestalt.provider.v1.KeyResponse\x12[\n\x0bIndexGetAll\x12&.gestalt.provider.v1.IndexQueryRequest\x1a$.gestalt.provider.v1.RecordsResponse\x12\\\n\x0fIndexGetAllKeys\x12&.gestalt.provider.v1.IndexQueryRequest\x1a!.gestalt.provider.v1.KeysResponse\x12X\n\nIndexCount\x12&.gestalt.provider.v1.IndexQueryRequest\x1a\".gestalt.provider.v1.CountResponse\x12Z\n\x0bIndexDelete\x12&.gestalt.provider.v1.IndexQueryRequest\x1a#.gestalt.provider.v1.DeleteResponseB;Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;protob\x06proto3')
 
 _globals = globals()
 _builder.BuildMessageAndEnumDescriptors(DESCRIPTOR, _globals)
@@ -34,40 +35,48 @@ _builder.BuildTopDescriptorsAndMessages(DESCRIPTOR, 'v1.datastore_pb2', _globals
 if not _descriptor._USE_C_DESCRIPTORS:
   _globals['DESCRIPTOR']._loaded_options = None
   _globals['DESCRIPTOR']._serialized_options = b'Z9github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto'
-  _globals['_OBJECTSTORESCHEMA']._serialized_start=103
-  _globals['_OBJECTSTORESCHEMA']._serialized_end=240
-  _globals['_INDEXSCHEMA']._serialized_start=242
-  _globals['_INDEXSCHEMA']._serialized_end=326
-  _globals['_COLUMNDEF']._serialized_start=329
-  _globals['_COLUMNDEF']._serialized_end=464
-  _globals['_KEYRANGE']._serialized_start=467
-  _globals['_KEYRANGE']._serialized_end=631
-  _globals['_RECORDREQUEST']._serialized_start=633
-  _globals['_RECORDREQUEST']._serialized_end=719
-  _globals['_RECORDRESPONSE']._serialized_start=721
-  _globals['_RECORDRESPONSE']._serialized_end=786
-  _globals['_RECORDSRESPONSE']._serialized_start=788
-  _globals['_RECORDSRESPONSE']._serialized_end=856
-  _globals['_KEYSRESPONSE']._serialized_start=858
-  _globals['_KEYSRESPONSE']._serialized_end=892
-  _globals['_OBJECTSTOREREQUEST']._serialized_start=894
-  _globals['_OBJECTSTOREREQUEST']._serialized_end=952
-  _globals['_OBJECTSTORENAMEREQUEST']._serialized_start=954
-  _globals['_OBJECTSTORENAMEREQUEST']._serialized_end=1000
-  _globals['_OBJECTSTORERANGEREQUEST']._serialized_start=1002
-  _globals['_OBJECTSTORERANGEREQUEST']._serialized_end=1117
-  _globals['_CREATEOBJECTSTOREREQUEST']._serialized_start=1119
-  _globals['_CREATEOBJECTSTOREREQUEST']._serialized_end=1229
-  _globals['_DELETEOBJECTSTOREREQUEST']._serialized_start=1231
-  _globals['_DELETEOBJECTSTOREREQUEST']._serialized_end=1277
-  _globals['_INDEXQUERYREQUEST']._serialized_start=1280
-  _globals['_INDEXQUERYREQUEST']._serialized_end=1459
-  _globals['_COUNTRESPONSE']._serialized_start=1461
-  _globals['_COUNTRESPONSE']._serialized_end=1498
-  _globals['_DELETERESPONSE']._serialized_start=1500
-  _globals['_DELETERESPONSE']._serialized_end=1542
-  _globals['_KEYRESPONSE']._serialized_start=1544
-  _globals['_KEYRESPONSE']._serialized_end=1575
-  _globals['_INDEXEDDB']._serialized_start=1578
-  _globals['_INDEXEDDB']._serialized_end=3155
+  _globals['_RECORD_FIELDSENTRY']._loaded_options = None
+  _globals['_RECORD_FIELDSENTRY']._serialized_options = b'8\001'
+  _globals['_TYPEDVALUE']._serialized_start=136
+  _globals['_TYPEDVALUE']._serialized_end=506
+  _globals['_RECORD']._serialized_start=509
+  _globals['_RECORD']._serialized_end=674
+  _globals['_RECORD_FIELDSENTRY']._serialized_start=584
+  _globals['_RECORD_FIELDSENTRY']._serialized_end=674
+  _globals['_OBJECTSTORESCHEMA']._serialized_start=677
+  _globals['_OBJECTSTORESCHEMA']._serialized_end=814
+  _globals['_INDEXSCHEMA']._serialized_start=816
+  _globals['_INDEXSCHEMA']._serialized_end=900
+  _globals['_COLUMNDEF']._serialized_start=903
+  _globals['_COLUMNDEF']._serialized_end=1038
+  _globals['_KEYRANGE']._serialized_start=1041
+  _globals['_KEYRANGE']._serialized_end=1223
+  _globals['_RECORDREQUEST']._serialized_start=1225
+  _globals['_RECORDREQUEST']._serialized_end=1315
+  _globals['_RECORDRESPONSE']._serialized_start=1317
+  _globals['_RECORDRESPONSE']._serialized_end=1386
+  _globals['_RECORDSRESPONSE']._serialized_start=1388
+  _globals['_RECORDSRESPONSE']._serialized_end=1460
+  _globals['_KEYSRESPONSE']._serialized_start=1462
+  _globals['_KEYSRESPONSE']._serialized_end=1496
+  _globals['_OBJECTSTOREREQUEST']._serialized_start=1498
+  _globals['_OBJECTSTOREREQUEST']._serialized_end=1556
+  _globals['_OBJECTSTORENAMEREQUEST']._serialized_start=1558
+  _globals['_OBJECTSTORENAMEREQUEST']._serialized_end=1604
+  _globals['_OBJECTSTORERANGEREQUEST']._serialized_start=1606
+  _globals['_OBJECTSTORERANGEREQUEST']._serialized_end=1721
+  _globals['_CREATEOBJECTSTOREREQUEST']._serialized_start=1723
+  _globals['_CREATEOBJECTSTOREREQUEST']._serialized_end=1833
+  _globals['_DELETEOBJECTSTOREREQUEST']._serialized_start=1835
+  _globals['_DELETEOBJECTSTOREREQUEST']._serialized_end=1881
+  _globals['_INDEXQUERYREQUEST']._serialized_start=1884
+  _globals['_INDEXQUERYREQUEST']._serialized_end=2072
+  _globals['_COUNTRESPONSE']._serialized_start=2074
+  _globals['_COUNTRESPONSE']._serialized_end=2111
+  _globals['_DELETERESPONSE']._serialized_start=2113
+  _globals['_DELETERESPONSE']._serialized_end=2155
+  _globals['_KEYRESPONSE']._serialized_start=2157
+  _globals['_KEYRESPONSE']._serialized_end=2188
+  _globals['_INDEXEDDB']._serialized_start=2191
+  _globals['_INDEXEDDB']._serialized_end=3768
 # @@protoc_insertion_point(module_scope)

@@ -5,12 +5,12 @@ import (
 	"errors"
 	"fmt"
 
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type indexedDBServer struct {
@@ -59,14 +59,22 @@ func (s *indexedDBServer) GetKey(ctx context.Context, req *proto.ObjectStoreRequ
 }
 
 func (s *indexedDBServer) Add(ctx context.Context, req *proto.RecordRequest) (*emptypb.Empty, error) {
-	if err := s.ds.ObjectStore(s.storeName(req.GetStore())).Add(ctx, req.GetRecord().AsMap()); err != nil {
+	record, err := gestalt.RecordFromProto(req.GetRecord())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "unmarshal record: %v", err)
+	}
+	if err := s.ds.ObjectStore(s.storeName(req.GetStore())).Add(ctx, record); err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
 	return &emptypb.Empty{}, nil
 }
 
 func (s *indexedDBServer) Put(ctx context.Context, req *proto.RecordRequest) (*emptypb.Empty, error) {
-	if err := s.ds.ObjectStore(s.storeName(req.GetStore())).Put(ctx, req.GetRecord().AsMap()); err != nil {
+	record, err := gestalt.RecordFromProto(req.GetRecord())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "unmarshal record: %v", err)
+	}
+	if err := s.ds.ObjectStore(s.storeName(req.GetStore())).Put(ctx, record); err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
 	return &emptypb.Empty{}, nil
@@ -87,7 +95,11 @@ func (s *indexedDBServer) Clear(ctx context.Context, req *proto.ObjectStoreNameR
 }
 
 func (s *indexedDBServer) GetAll(ctx context.Context, req *proto.ObjectStoreRangeRequest) (*proto.RecordsResponse, error) {
-	recs, err := s.ds.ObjectStore(s.storeName(req.GetStore())).GetAll(ctx, protoToKeyRange(req.Range))
+	keyRange, err := protoToKeyRange(req.Range)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
+	}
+	recs, err := s.ds.ObjectStore(s.storeName(req.GetStore())).GetAll(ctx, keyRange)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -95,7 +107,11 @@ func (s *indexedDBServer) GetAll(ctx context.Context, req *proto.ObjectStoreRang
 }
 
 func (s *indexedDBServer) GetAllKeys(ctx context.Context, req *proto.ObjectStoreRangeRequest) (*proto.KeysResponse, error) {
-	keys, err := s.ds.ObjectStore(s.storeName(req.GetStore())).GetAllKeys(ctx, protoToKeyRange(req.Range))
+	keyRange, err := protoToKeyRange(req.Range)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
+	}
+	keys, err := s.ds.ObjectStore(s.storeName(req.GetStore())).GetAllKeys(ctx, keyRange)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -103,7 +119,11 @@ func (s *indexedDBServer) GetAllKeys(ctx context.Context, req *proto.ObjectStore
 }
 
 func (s *indexedDBServer) Count(ctx context.Context, req *proto.ObjectStoreRangeRequest) (*proto.CountResponse, error) {
-	count, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Count(ctx, protoToKeyRange(req.Range))
+	keyRange, err := protoToKeyRange(req.Range)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
+	}
+	count, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Count(ctx, keyRange)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -111,7 +131,10 @@ func (s *indexedDBServer) Count(ctx context.Context, req *proto.ObjectStoreRange
 }
 
 func (s *indexedDBServer) DeleteRange(ctx context.Context, req *proto.ObjectStoreRangeRequest) (*proto.DeleteResponse, error) {
-	kr := protoToKeyRange(req.Range)
+	kr, err := protoToKeyRange(req.Range)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
+	}
 	if kr == nil {
 		return nil, status.Error(codes.InvalidArgument, "key range is required for DeleteRange")
 	}
@@ -123,7 +146,11 @@ func (s *indexedDBServer) DeleteRange(ctx context.Context, req *proto.ObjectStor
 }
 
 func (s *indexedDBServer) IndexGet(ctx context.Context, req *proto.IndexQueryRequest) (*proto.RecordResponse, error) {
-	rec, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Index(req.GetIndex()).Get(ctx, protoValuesToAny(req.GetValues())...)
+	values, err := protoValuesToAny(req.GetValues())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", err)
+	}
+	rec, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Index(req.GetIndex()).Get(ctx, values...)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -131,7 +158,11 @@ func (s *indexedDBServer) IndexGet(ctx context.Context, req *proto.IndexQueryReq
 }
 
 func (s *indexedDBServer) IndexGetKey(ctx context.Context, req *proto.IndexQueryRequest) (*proto.KeyResponse, error) {
-	key, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Index(req.GetIndex()).GetKey(ctx, protoValuesToAny(req.GetValues())...)
+	values, err := protoValuesToAny(req.GetValues())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", err)
+	}
+	key, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Index(req.GetIndex()).GetKey(ctx, values...)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -139,7 +170,15 @@ func (s *indexedDBServer) IndexGetKey(ctx context.Context, req *proto.IndexQuery
 }
 
 func (s *indexedDBServer) IndexGetAll(ctx context.Context, req *proto.IndexQueryRequest) (*proto.RecordsResponse, error) {
-	recs, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Index(req.GetIndex()).GetAll(ctx, protoToKeyRange(req.Range), protoValuesToAny(req.GetValues())...)
+	keyRange, err := protoToKeyRange(req.Range)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
+	}
+	values, err := protoValuesToAny(req.GetValues())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", err)
+	}
+	recs, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Index(req.GetIndex()).GetAll(ctx, keyRange, values...)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -147,7 +186,15 @@ func (s *indexedDBServer) IndexGetAll(ctx context.Context, req *proto.IndexQuery
 }
 
 func (s *indexedDBServer) IndexGetAllKeys(ctx context.Context, req *proto.IndexQueryRequest) (*proto.KeysResponse, error) {
-	keys, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Index(req.GetIndex()).GetAllKeys(ctx, protoToKeyRange(req.Range), protoValuesToAny(req.GetValues())...)
+	keyRange, err := protoToKeyRange(req.Range)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
+	}
+	values, err := protoValuesToAny(req.GetValues())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", err)
+	}
+	keys, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Index(req.GetIndex()).GetAllKeys(ctx, keyRange, values...)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -155,7 +202,15 @@ func (s *indexedDBServer) IndexGetAllKeys(ctx context.Context, req *proto.IndexQ
 }
 
 func (s *indexedDBServer) IndexCount(ctx context.Context, req *proto.IndexQueryRequest) (*proto.CountResponse, error) {
-	count, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Index(req.GetIndex()).Count(ctx, protoToKeyRange(req.Range), protoValuesToAny(req.GetValues())...)
+	keyRange, err := protoToKeyRange(req.Range)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
+	}
+	values, err := protoValuesToAny(req.GetValues())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", err)
+	}
+	count, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Index(req.GetIndex()).Count(ctx, keyRange, values...)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -163,7 +218,11 @@ func (s *indexedDBServer) IndexCount(ctx context.Context, req *proto.IndexQueryR
 }
 
 func (s *indexedDBServer) IndexDelete(ctx context.Context, req *proto.IndexQueryRequest) (*proto.DeleteResponse, error) {
-	deleted, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Index(req.GetIndex()).Delete(ctx, protoValuesToAny(req.GetValues())...)
+	values, err := protoValuesToAny(req.GetValues())
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", err)
+	}
+	deleted, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Index(req.GetIndex()).Delete(ctx, values...)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -171,23 +230,19 @@ func (s *indexedDBServer) IndexDelete(ctx context.Context, req *proto.IndexQuery
 }
 
 func recordToProto(rec indexeddb.Record) (*proto.RecordResponse, error) {
-	s, err := structpb.NewStruct(rec)
+	pbRecord, err := gestalt.RecordToProto(rec)
 	if err != nil {
 		return nil, fmt.Errorf("marshal record: %w", err)
 	}
-	return &proto.RecordResponse{Record: s}, nil
+	return &proto.RecordResponse{Record: pbRecord}, nil
 }
 
 func recordsToProto(recs []indexeddb.Record) (*proto.RecordsResponse, error) {
-	structs := make([]*structpb.Struct, len(recs))
-	for i, rec := range recs {
-		s, err := structpb.NewStruct(rec)
-		if err != nil {
-			return nil, fmt.Errorf("marshal record %d: %w", i, err)
-		}
-		structs[i] = s
+	pbRecords, err := gestalt.RecordsToProto(recs)
+	if err != nil {
+		return nil, err
 	}
-	return &proto.RecordsResponse{Records: structs}, nil
+	return &proto.RecordsResponse{Records: pbRecords}, nil
 }
 
 func protoToSchema(ps *proto.ObjectStoreSchema) indexeddb.ObjectStoreSchema {
@@ -212,29 +267,33 @@ func protoToSchema(ps *proto.ObjectStoreSchema) indexeddb.ObjectStoreSchema {
 	return schema
 }
 
-func protoToKeyRange(kr *proto.KeyRange) *indexeddb.KeyRange {
+func protoToKeyRange(kr *proto.KeyRange) (*indexeddb.KeyRange, error) {
 	if kr == nil {
-		return nil
+		return nil, nil
 	}
 	r := &indexeddb.KeyRange{
 		LowerOpen: kr.GetLowerOpen(),
 		UpperOpen: kr.GetUpperOpen(),
 	}
 	if kr.GetLower() != nil {
-		r.Lower = kr.GetLower().AsInterface()
+		value, err := gestalt.AnyFromTypedValue(kr.GetLower())
+		if err != nil {
+			return nil, fmt.Errorf("key range lower: %w", err)
+		}
+		r.Lower = value
 	}
 	if kr.GetUpper() != nil {
-		r.Upper = kr.GetUpper().AsInterface()
+		value, err := gestalt.AnyFromTypedValue(kr.GetUpper())
+		if err != nil {
+			return nil, fmt.Errorf("key range upper: %w", err)
+		}
+		r.Upper = value
 	}
-	return r
+	return r, nil
 }
 
-func protoValuesToAny(vals []*structpb.Value) []any {
-	out := make([]any, len(vals))
-	for i, v := range vals {
-		out[i] = v.AsInterface()
-	}
-	return out
+func protoValuesToAny(vals []*proto.TypedValue) ([]any, error) {
+	return gestalt.AnyFromTypedValues(vals)
 }
 
 func indexeddbToGRPCErr(err error) error {

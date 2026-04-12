@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import datetime as _dt
 import os
 from dataclasses import dataclass, field
 from typing import Any
 
 import grpc
 from google.protobuf import struct_pb2 as _struct_pb2
+from google.protobuf import timestamp_pb2 as _timestamp_pb2
 
 from .gen.v1 import datastore_pb2 as _pb
 from .gen.v1 import datastore_pb2_grpc as _pb_grpc
@@ -13,6 +15,7 @@ from .gen.v1 import datastore_pb2_grpc as _pb_grpc
 pb: Any = _pb
 pb_grpc: Any = _pb_grpc
 struct_pb2: Any = _struct_pb2
+timestamp_pb2: Any = _timestamp_pb2
 
 ENV_INDEXEDDB_SOCKET = "GESTALT_INDEXEDDB_SOCKET"
 
@@ -85,17 +88,17 @@ class ObjectStore:
 
     def get(self, id: str) -> dict[str, Any]:
         resp = _grpc_call(self._stub.Get, pb.ObjectStoreRequest(store=self._store, id=id))
-        return _struct_to_dict(resp.record)
+        return _record_to_dict(resp.record)
 
     def get_key(self, id: str) -> str:
         resp = _grpc_call(self._stub.GetKey, pb.ObjectStoreRequest(store=self._store, id=id))
         return resp.key
 
     def add(self, record: dict[str, Any]) -> None:
-        _grpc_call(self._stub.Add, pb.RecordRequest(store=self._store, record=_dict_to_struct(record)))
+        _grpc_call(self._stub.Add, pb.RecordRequest(store=self._store, record=_dict_to_record(record)))
 
     def put(self, record: dict[str, Any]) -> None:
-        _grpc_call(self._stub.Put, pb.RecordRequest(store=self._store, record=_dict_to_struct(record)))
+        _grpc_call(self._stub.Put, pb.RecordRequest(store=self._store, record=_dict_to_record(record)))
 
     def delete(self, id: str) -> None:
         _grpc_call(self._stub.Delete, pb.ObjectStoreRequest(store=self._store, id=id))
@@ -108,7 +111,7 @@ class ObjectStore:
             self._stub.GetAll,
             pb.ObjectStoreRangeRequest(store=self._store, range=_kr_to_proto(key_range)),
         )
-        return [_struct_to_dict(r) for r in resp.records]
+        return [_record_to_dict(r) for r in resp.records]
 
     def get_all_keys(self, key_range: KeyRange | None = None) -> list[str]:
         resp = _grpc_call(
@@ -143,7 +146,7 @@ class Index:
 
     def get(self, *values: Any) -> dict[str, Any]:
         resp = _grpc_call(self._stub.IndexGet, self._req(values))
-        return _struct_to_dict(resp.record)
+        return _record_to_dict(resp.record)
 
     def get_key(self, *values: Any) -> str:
         resp = _grpc_call(self._stub.IndexGetKey, self._req(values))
@@ -151,7 +154,7 @@ class Index:
 
     def get_all(self, *values: Any, key_range: KeyRange | None = None) -> list[dict[str, Any]]:
         resp = _grpc_call(self._stub.IndexGetAll, self._req(values, key_range))
-        return [_struct_to_dict(r) for r in resp.records]
+        return [_record_to_dict(r) for r in resp.records]
 
     def get_all_keys(self, *values: Any, key_range: KeyRange | None = None) -> list[str]:
         resp = _grpc_call(self._stub.IndexGetAllKeys, self._req(values, key_range))
@@ -189,37 +192,113 @@ def _grpc_call(method: Any, request: Any) -> Any:
         raise
 
 
-def _dict_to_struct(d: dict[str, Any]) -> Any:
-    s = struct_pb2.Struct()
-    s.update(d)
-    return s
+def _dict_to_record(d: dict[str, Any]) -> Any:
+    record = pb.Record()
+    for key, value in d.items():
+        record.fields[key].CopyFrom(_to_typed_value(value))
+    return record
 
 
-def _struct_to_dict(s: Any) -> dict[str, Any]:
-    return dict(s)
+def _record_to_dict(record: Any) -> dict[str, Any]:
+    return {key: _typed_value_to_python(value) for key, value in record.fields.items()}
 
 
-def _to_proto_value(v: Any) -> Any:
-    val = struct_pb2.Value()
+def _to_typed_value(v: Any) -> Any:
+    val = pb.TypedValue()
     if v is None:
         val.null_value = 0
     elif isinstance(v, bool):
         val.bool_value = v
-    elif isinstance(v, (int, float)):
-        val.number_value = float(v)
+    elif isinstance(v, int) and not isinstance(v, bool):
+        val.int_value = v
+    elif isinstance(v, float):
+        val.float_value = v
     elif isinstance(v, str):
         val.string_value = v
+    elif isinstance(v, (bytes, bytearray, memoryview)):
+        val.bytes_value = bytes(v)
+    elif isinstance(v, _dt.datetime):
+        timestamp = timestamp_pb2.Timestamp()
+        dt = v if v.tzinfo is not None else v.replace(tzinfo=_dt.timezone.utc)
+        timestamp.FromDatetime(dt.astimezone(_dt.timezone.utc))
+        val.time_value.CopyFrom(timestamp)
     else:
-        val.string_value = str(v)
+        val.json_value.CopyFrom(_to_json_value(v))
     return val
+
+
+def _typed_value_to_python(v: Any) -> Any:
+    kind = v.WhichOneof("kind")
+    if kind in (None, "null_value"):
+        return None
+    if kind == "string_value":
+        return v.string_value
+    if kind == "int_value":
+        return v.int_value
+    if kind == "float_value":
+        return v.float_value
+    if kind == "bool_value":
+        return v.bool_value
+    if kind == "time_value":
+        return _dt.datetime.fromtimestamp(
+            v.time_value.seconds + (v.time_value.nanos / 1_000_000_000),
+            tz=_dt.timezone.utc,
+        )
+    if kind == "bytes_value":
+        return bytes(v.bytes_value)
+    if kind == "json_value":
+        return _json_value_to_python(v.json_value)
+    raise TypeError(f"unsupported typed value kind: {kind}")
+
+
+def _to_json_value(v: Any) -> Any:
+    value = struct_pb2.Value()
+    if v is None:
+        value.null_value = 0
+    elif isinstance(v, bool):
+        value.bool_value = v
+    elif isinstance(v, (int, float)) and not isinstance(v, bool):
+        value.number_value = float(v)
+    elif isinstance(v, str):
+        value.string_value = v
+    elif isinstance(v, dict):
+        struct = struct_pb2.Struct()
+        for key, inner in v.items():
+            struct.fields[key].CopyFrom(_to_json_value(inner))
+        value.struct_value.CopyFrom(struct)
+    elif isinstance(v, (list, tuple)):
+        list_value = struct_pb2.ListValue()
+        for inner in v:
+            list_value.values.append(_to_json_value(inner))
+        value.list_value.CopyFrom(list_value)
+    else:
+        raise TypeError(f"unsupported JSON value type: {type(v)!r}")
+    return value
+
+
+def _json_value_to_python(v: Any) -> Any:
+    kind = v.WhichOneof("kind")
+    if kind in (None, "null_value"):
+        return None
+    if kind == "number_value":
+        return v.number_value
+    if kind == "string_value":
+        return v.string_value
+    if kind == "bool_value":
+        return v.bool_value
+    if kind == "struct_value":
+        return {key: _json_value_to_python(value) for key, value in v.struct_value.fields.items()}
+    if kind == "list_value":
+        return [_json_value_to_python(value) for value in v.list_value.values]
+    raise TypeError(f"unsupported JSON value kind: {kind}")
 
 
 def _kr_to_proto(kr: KeyRange | None) -> Any:
     if kr is None:
         return None
     return pb.KeyRange(
-        lower=_to_proto_value(kr.lower) if kr.lower is not None else None,
-        upper=_to_proto_value(kr.upper) if kr.upper is not None else None,
+        lower=_to_typed_value(kr.lower) if kr.lower is not None else None,
+        upper=_to_typed_value(kr.upper) if kr.upper is not None else None,
         lower_open=kr.lower_open,
         upper_open=kr.upper_open,
     )

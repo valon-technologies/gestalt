@@ -6,6 +6,24 @@ option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+message TypedValue {
+  oneof kind {
+    google.protobuf.NullValue null_value = 1;
+    string string_value = 2;
+    int64 int_value = 3;
+    double float_value = 4;
+    bool bool_value = 5;
+    google.protobuf.Timestamp time_value = 6;
+    bytes bytes_value = 7;
+    google.protobuf.Value json_value = 8;
+  }
+}
+
+message Record {
+  map<string, TypedValue> fields = 1;
+}
 
 message ObjectStoreSchema {
   repeated IndexSchema indexes = 1;
@@ -27,23 +45,23 @@ message ColumnDef {
 }
 
 message KeyRange {
-  google.protobuf.Value lower = 1;
-  google.protobuf.Value upper = 2;
+  TypedValue lower = 1;
+  TypedValue upper = 2;
   bool lower_open = 3;
   bool upper_open = 4;
 }
 
 message RecordRequest {
   string store = 1;
-  google.protobuf.Struct record = 2;
+  Record record = 2;
 }
 
 message RecordResponse {
-  google.protobuf.Struct record = 1;
+  Record record = 1;
 }
 
 message RecordsResponse {
-  repeated google.protobuf.Struct records = 1;
+  repeated Record records = 1;
 }
 
 message KeysResponse {
@@ -76,7 +94,7 @@ message DeleteObjectStoreRequest {
 message IndexQueryRequest {
   string store = 1;
   string index = 2;
-  repeated google.protobuf.Value values = 3;
+  repeated TypedValue values = 3;
   optional KeyRange range = 4;
 }
 

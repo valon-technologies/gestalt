@@ -83,7 +83,7 @@ export class ObjectStore {
 
   async get(id: string): Promise<Record> {
     const resp = await rpc(() => this.client.get({ store: this.store, id }));
-    return (resp.record ?? {}) as Record;
+    return fromProtoRecord(resp.record);
   }
 
   async getKey(id: string): Promise<string> {
@@ -92,11 +92,11 @@ export class ObjectStore {
   }
 
   async add(record: Record): Promise<void> {
-    await rpc(() => this.client.add({ store: this.store, record: record as any }));
+    await rpc(() => this.client.add({ store: this.store, record: toProtoRecord(record) }));
   }
 
   async put(record: Record): Promise<void> {
-    await rpc(() => this.client.put({ store: this.store, record: record as any }));
+    await rpc(() => this.client.put({ store: this.store, record: toProtoRecord(record) }));
   }
 
   async delete(id: string): Promise<void> {
@@ -112,7 +112,7 @@ export class ObjectStore {
       store: this.store,
       range: keyRange ? toProtoKeyRange(keyRange) : undefined,
     });
-    return resp.records.map((r) => r as unknown as Record);
+    return resp.records.map((r) => fromProtoRecord(r));
   }
 
   async getAllKeys(keyRange?: KeyRange): Promise<string[]> {
@@ -156,10 +156,10 @@ export class Index {
       this.client.indexGet({
         store: this.store,
         index: this.indexName,
-        values: values.map(toProtoValue),
+        values: values.map(toProtoTypedValue),
       }),
     );
-    return (resp.record ?? {}) as Record;
+    return fromProtoRecord(resp.record);
   }
 
   async getKey(...values: unknown[]): Promise<string> {
@@ -167,7 +167,7 @@ export class Index {
       this.client.indexGetKey({
         store: this.store,
         index: this.indexName,
-        values: values.map(toProtoValue),
+        values: values.map(toProtoTypedValue),
       }),
     );
     return resp.key;
@@ -177,17 +177,17 @@ export class Index {
     const resp = await this.client.indexGetAll({
       store: this.store,
       index: this.indexName,
-      values: values.map(toProtoValue),
+      values: values.map(toProtoTypedValue),
       range: keyRange ? toProtoKeyRange(keyRange) : undefined,
     });
-    return resp.records.map((r) => r as unknown as Record);
+    return resp.records.map((r) => fromProtoRecord(r));
   }
 
   async getAllKeys(keyRange?: KeyRange, ...values: unknown[]): Promise<string[]> {
     const resp = await this.client.indexGetAllKeys({
       store: this.store,
       index: this.indexName,
-      values: values.map(toProtoValue),
+      values: values.map(toProtoTypedValue),
       range: keyRange ? toProtoKeyRange(keyRange) : undefined,
     });
     return resp.keys;
@@ -197,7 +197,7 @@ export class Index {
     const resp = await this.client.indexCount({
       store: this.store,
       index: this.indexName,
-      values: values.map(toProtoValue),
+      values: values.map(toProtoTypedValue),
       range: keyRange ? toProtoKeyRange(keyRange) : undefined,
     });
     return Number(resp.count);
@@ -207,27 +207,149 @@ export class Index {
     const resp = await this.client.indexDelete({
       store: this.store,
       index: this.indexName,
-      values: values.map(toProtoValue),
+      values: values.map(toProtoTypedValue),
     });
     return Number(resp.deleted);
   }
 }
 
-function toProtoValue(v: unknown): any {
+function toProtoRecord(record: Record): any {
+  const fields: { [key: string]: unknown } = {};
+  for (const [key, value] of Object.entries(record)) {
+    fields[key] = toProtoTypedValue(value);
+  }
+  return { fields };
+}
+
+function fromProtoRecord(record: any): Record {
+  const fields = record?.fields ?? {};
+  const out: Record = {};
+  for (const [key, value] of Object.entries(fields)) {
+    out[key] = fromProtoTypedValue(value);
+  }
+  return out;
+}
+
+function toProtoTypedValue(v: unknown): any {
   if (v === null || v === undefined) return { kind: { case: "nullValue", value: 0 } };
   if (typeof v === "boolean") return { kind: { case: "boolValue", value: v } };
-  if (typeof v === "number") return { kind: { case: "numberValue", value: v } };
+  if (typeof v === "bigint") return { kind: { case: "intValue", value: v } };
+  if (typeof v === "number") {
+    if (Number.isInteger(v) && Number.isSafeInteger(v)) {
+      return { kind: { case: "intValue", value: BigInt(v) } };
+    }
+    return { kind: { case: "floatValue", value: v } };
+  }
   if (typeof v === "string") return { kind: { case: "stringValue", value: v } };
-  return { kind: { case: "stringValue", value: String(v) } };
+  if (v instanceof Date) return { kind: { case: "timeValue", value: toProtoTimestamp(v) } };
+  if (v instanceof Uint8Array) return { kind: { case: "bytesValue", value: v } };
+  if (v instanceof ArrayBuffer) return { kind: { case: "bytesValue", value: new Uint8Array(v) } };
+  return { kind: { case: "jsonValue", value: toProtoJsonValue(v) } };
+}
+
+function fromProtoTypedValue(v: any): unknown {
+  switch (v?.kind?.case) {
+    case undefined:
+    case "nullValue":
+      return null;
+    case "stringValue":
+      return v.kind.value;
+    case "intValue":
+      return toJsInt(v.kind.value);
+    case "floatValue":
+      return v.kind.value;
+    case "boolValue":
+      return v.kind.value;
+    case "timeValue":
+      return fromProtoTimestamp(v.kind.value);
+    case "bytesValue":
+      return new Uint8Array(v.kind.value);
+    case "jsonValue":
+      return fromProtoJsonValue(v.kind.value);
+    default:
+      throw new Error(`unsupported typed value kind: ${String(v?.kind?.case)}`);
+  }
 }
 
 function toProtoKeyRange(kr: KeyRange): any {
   return {
-    lower: kr.lower !== undefined ? toProtoValue(kr.lower) : undefined,
-    upper: kr.upper !== undefined ? toProtoValue(kr.upper) : undefined,
+    lower: kr.lower !== undefined ? toProtoTypedValue(kr.lower) : undefined,
+    upper: kr.upper !== undefined ? toProtoTypedValue(kr.upper) : undefined,
     lowerOpen: kr.lowerOpen ?? false,
     upperOpen: kr.upperOpen ?? false,
   };
+}
+
+function toProtoTimestamp(value: Date): any {
+  const millis = value.getTime();
+  const seconds = Math.trunc(millis / 1000);
+  const nanos = Math.trunc((millis % 1000) * 1_000_000);
+  return { seconds: BigInt(seconds), nanos };
+}
+
+function fromProtoTimestamp(value: any): Date {
+  const seconds = Number(value?.seconds ?? 0n);
+  const nanos = Number(value?.nanos ?? 0);
+  return new Date((seconds * 1000) + Math.trunc(nanos / 1_000_000));
+}
+
+function toJsInt(value: bigint): number | bigint {
+  const asNumber = Number(value);
+  return Number.isSafeInteger(asNumber) ? asNumber : value;
+}
+
+function toProtoJsonValue(value: unknown): any {
+  if (value === null || value === undefined) return { kind: { case: "nullValue", value: 0 } };
+  if (typeof value === "boolean") return { kind: { case: "boolValue", value } };
+  if (typeof value === "number") return { kind: { case: "numberValue", value } };
+  if (typeof value === "string") return { kind: { case: "stringValue", value } };
+  if (value instanceof Date || value instanceof Uint8Array || value instanceof ArrayBuffer) {
+    throw new Error(`unsupported JSON value type: ${value.constructor.name}`);
+  }
+  if (Array.isArray(value)) {
+    return {
+      kind: {
+        case: "listValue",
+        value: { values: value.map((item) => toProtoJsonValue(item)) },
+      },
+    };
+  }
+  if (typeof value === "object") {
+    const fields: { [key: string]: unknown } = {};
+    for (const [key, inner] of Object.entries(value as { [key: string]: unknown })) {
+      fields[key] = toProtoJsonValue(inner);
+    }
+    return {
+      kind: {
+        case: "structValue",
+        value: { fields },
+      },
+    };
+  }
+  throw new Error(`unsupported JSON value type: ${typeof value}`);
+}
+
+function fromProtoJsonValue(value: any): unknown {
+  switch (value?.kind?.case) {
+    case undefined:
+    case "nullValue":
+      return null;
+    case "numberValue":
+    case "stringValue":
+    case "boolValue":
+      return value.kind.value;
+    case "listValue":
+      return (value.kind.value?.values ?? []).map((item: unknown) => fromProtoJsonValue(item));
+    case "structValue": {
+      const out: Record = {};
+      for (const [key, inner] of Object.entries(value.kind.value?.fields ?? {})) {
+        out[key] = fromProtoJsonValue(inner);
+      }
+      return out;
+    }
+    default:
+      throw new Error(`unsupported JSON value kind: ${String(value?.kind?.case)}`);
+  }
 }
 
 async function rpc<T>(fn: () => Promise<T>): Promise<T> {

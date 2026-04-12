@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"io"
 
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type IndexedDBExecConfig struct {
@@ -115,7 +115,11 @@ func (o *remoteObjectStore) Get(ctx context.Context, id string) (indexeddb.Recor
 	if err != nil {
 		return nil, grpcToDatastoreErr(err)
 	}
-	return structToRecord(resp.GetRecord()), nil
+	record, err := gestalt.RecordFromProto(resp.GetRecord())
+	if err != nil {
+		return nil, fmt.Errorf("unmarshal record: %w", err)
+	}
+	return record, nil
 }
 
 func (o *remoteObjectStore) GetKey(ctx context.Context, id string) (string, error) {
@@ -131,22 +135,22 @@ func (o *remoteObjectStore) GetKey(ctx context.Context, id string) (string, erro
 func (o *remoteObjectStore) Add(ctx context.Context, record indexeddb.Record) error {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
-	s, err := structFromMap(record)
+	pbRecord, err := gestalt.RecordToProto(record)
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
 	}
-	_, err = o.client.Add(ctx, &proto.RecordRequest{Store: o.store, Record: s})
+	_, err = o.client.Add(ctx, &proto.RecordRequest{Store: o.store, Record: pbRecord})
 	return grpcToDatastoreErr(err)
 }
 
 func (o *remoteObjectStore) Put(ctx context.Context, record indexeddb.Record) error {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
-	s, err := structFromMap(record)
+	pbRecord, err := gestalt.RecordToProto(record)
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
 	}
-	_, err = o.client.Put(ctx, &proto.RecordRequest{Store: o.store, Record: s})
+	_, err = o.client.Put(ctx, &proto.RecordRequest{Store: o.store, Record: pbRecord})
 	return grpcToDatastoreErr(err)
 }
 
@@ -175,7 +179,11 @@ func (o *remoteObjectStore) GetAll(ctx context.Context, r *indexeddb.KeyRange) (
 	if err != nil {
 		return nil, grpcToDatastoreErr(err)
 	}
-	return structsToRecords(resp.GetRecords()), nil
+	records, err := gestalt.RecordsFromProto(resp.GetRecords())
+	if err != nil {
+		return nil, fmt.Errorf("unmarshal records: %w", err)
+	}
+	return records, nil
 }
 
 func (o *remoteObjectStore) GetAllKeys(ctx context.Context, r *indexeddb.KeyRange) ([]string, error) {
@@ -245,7 +253,11 @@ func (idx *remoteIndex) Get(ctx context.Context, values ...any) (indexeddb.Recor
 	if err != nil {
 		return nil, grpcToDatastoreErr(err)
 	}
-	return structToRecord(resp.GetRecord()), nil
+	record, err := gestalt.RecordFromProto(resp.GetRecord())
+	if err != nil {
+		return nil, fmt.Errorf("unmarshal record: %w", err)
+	}
+	return record, nil
 }
 
 func (idx *remoteIndex) GetKey(ctx context.Context, values ...any) (string, error) {
@@ -281,7 +293,11 @@ func (idx *remoteIndex) GetAll(ctx context.Context, r *indexeddb.KeyRange, value
 	if err != nil {
 		return nil, grpcToDatastoreErr(err)
 	}
-	return structsToRecords(resp.GetRecords()), nil
+	records, err := gestalt.RecordsFromProto(resp.GetRecords())
+	if err != nil {
+		return nil, fmt.Errorf("unmarshal records: %w", err)
+	}
+	return records, nil
 }
 
 func (idx *remoteIndex) GetAllKeys(ctx context.Context, r *indexeddb.KeyRange, values ...any) ([]string, error) {
@@ -342,31 +358,8 @@ func (idx *remoteIndex) Delete(ctx context.Context, values ...any) (int64, error
 
 // --- Helpers ---
 
-func structToRecord(s *structpb.Struct) indexeddb.Record {
-	if s == nil {
-		return nil
-	}
-	return s.AsMap()
-}
-
-func structsToRecords(ss []*structpb.Struct) []indexeddb.Record {
-	records := make([]indexeddb.Record, len(ss))
-	for i, s := range ss {
-		records[i] = structToRecord(s)
-	}
-	return records
-}
-
-func toProtoValues(values []any) ([]*structpb.Value, error) {
-	pbValues := make([]*structpb.Value, len(values))
-	for i, v := range values {
-		pv, err := structpb.NewValue(v)
-		if err != nil {
-			return nil, fmt.Errorf("marshal index value %d: %w", i, err)
-		}
-		pbValues[i] = pv
-	}
-	return pbValues, nil
+func toProtoValues(values []any) ([]*proto.TypedValue, error) {
+	return gestalt.TypedValuesFromAny(values)
 }
 
 func keyRangeToProto(r *indexeddb.KeyRange) (*proto.KeyRange, error) {
@@ -378,14 +371,14 @@ func keyRangeToProto(r *indexeddb.KeyRange) (*proto.KeyRange, error) {
 		UpperOpen: r.UpperOpen,
 	}
 	if r.Lower != nil {
-		v, err := structpb.NewValue(r.Lower)
+		v, err := gestalt.TypedValueFromAny(r.Lower)
 		if err != nil {
 			return nil, fmt.Errorf("marshal key range lower: %w", err)
 		}
 		kr.Lower = v
 	}
 	if r.Upper != nil {
-		v, err := structpb.NewValue(r.Upper)
+		v, err := gestalt.TypedValueFromAny(r.Upper)
 		if err != nil {
 			return nil, fmt.Errorf("marshal key range upper: %w", err)
 		}

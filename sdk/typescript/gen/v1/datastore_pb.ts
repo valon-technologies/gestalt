@@ -4,15 +4,97 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
-import type { EmptySchema, Value } from "@bufbuild/protobuf/wkt";
-import { file_google_protobuf_empty, file_google_protobuf_struct } from "@bufbuild/protobuf/wkt";
-import type { JsonObject, Message } from "@bufbuild/protobuf";
+import type { EmptySchema, NullValue, Timestamp, Value } from "@bufbuild/protobuf/wkt";
+import { file_google_protobuf_empty, file_google_protobuf_struct, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
+import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file v1/datastore.proto.
  */
 export const file_v1_datastore: GenFile = /*@__PURE__*/
-  fileDesc("ChJ2MS9kYXRhc3RvcmUucHJvdG8SE2dlc3RhbHQucHJvdmlkZXIudjEidwoRT2JqZWN0U3RvcmVTY2hlbWESMQoHaW5kZXhlcxgBIAMoCzIgLmdlc3RhbHQucHJvdmlkZXIudjEuSW5kZXhTY2hlbWESLwoHY29sdW1ucxgCIAMoCzIeLmdlc3RhbHQucHJvdmlkZXIudjEuQ29sdW1uRGVmIj0KC0luZGV4U2NoZW1hEgwKBG5hbWUYASABKAkSEAoIa2V5X3BhdGgYAiADKAkSDgoGdW5pcXVlGAMgASgIIl4KCUNvbHVtbkRlZhIMCgRuYW1lGAEgASgJEgwKBHR5cGUYAiABKAUSEwoLcHJpbWFyeV9rZXkYAyABKAgSEAoIbm90X251bGwYBCABKAgSDgoGdW5pcXVlGAUgASgIIoABCghLZXlSYW5nZRIlCgVsb3dlchgBIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZRIlCgV1cHBlchgCIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZRISCgpsb3dlcl9vcGVuGAMgASgIEhIKCnVwcGVyX29wZW4YBCABKAgiRwoNUmVjb3JkUmVxdWVzdBINCgVzdG9yZRgBIAEoCRInCgZyZWNvcmQYAiABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0IjkKDlJlY29yZFJlc3BvbnNlEicKBnJlY29yZBgBIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QiOwoPUmVjb3Jkc1Jlc3BvbnNlEigKB3JlY29yZHMYASADKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0IhwKDEtleXNSZXNwb25zZRIMCgRrZXlzGAEgAygJIi8KEk9iamVjdFN0b3JlUmVxdWVzdBINCgVzdG9yZRgBIAEoCRIKCgJpZBgCIAEoCSInChZPYmplY3RTdG9yZU5hbWVSZXF1ZXN0Eg0KBXN0b3JlGAEgASgJImUKF09iamVjdFN0b3JlUmFuZ2VSZXF1ZXN0Eg0KBXN0b3JlGAEgASgJEjEKBXJhbmdlGAIgASgLMh0uZ2VzdGFsdC5wcm92aWRlci52MS5LZXlSYW5nZUgAiAEBQggKBl9yYW5nZSJgChhDcmVhdGVPYmplY3RTdG9yZVJlcXVlc3QSDAoEbmFtZRgBIAEoCRI2CgZzY2hlbWEYAiABKAsyJi5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlU2NoZW1hIigKGERlbGV0ZU9iamVjdFN0b3JlUmVxdWVzdBIMCgRuYW1lGAEgASgJIpYBChFJbmRleFF1ZXJ5UmVxdWVzdBINCgVzdG9yZRgBIAEoCRINCgVpbmRleBgCIAEoCRImCgZ2YWx1ZXMYAyADKAsyFi5nb29nbGUucHJvdG9idWYuVmFsdWUSMQoFcmFuZ2UYBCABKAsyHS5nZXN0YWx0LnByb3ZpZGVyLnYxLktleVJhbmdlSACIAQFCCAoGX3JhbmdlIh4KDUNvdW50UmVzcG9uc2USDQoFY291bnQYASABKAMiIQoORGVsZXRlUmVzcG9uc2USDwoHZGVsZXRlZBgBIAEoAyIaCgtLZXlSZXNwb25zZRILCgNrZXkYASABKAkyqQwKCUluZGV4ZWREQhJaChFDcmVhdGVPYmplY3RTdG9yZRItLmdlc3RhbHQucHJvdmlkZXIudjEuQ3JlYXRlT2JqZWN0U3RvcmVSZXF1ZXN0GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5EloKEURlbGV0ZU9iamVjdFN0b3JlEi0uZ2VzdGFsdC5wcm92aWRlci52MS5EZWxldGVPYmplY3RTdG9yZVJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkSUwoDR2V0EicuZ2VzdGFsdC5wcm92aWRlci52MS5PYmplY3RTdG9yZVJlcXVlc3QaIy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlY29yZFJlc3BvbnNlElMKBkdldEtleRInLmdlc3RhbHQucHJvdmlkZXIudjEuT2JqZWN0U3RvcmVSZXF1ZXN0GiAuZ2VzdGFsdC5wcm92aWRlci52MS5LZXlSZXNwb25zZRJBCgNBZGQSIi5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlY29yZFJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkSQQoDUHV0EiIuZ2VzdGFsdC5wcm92aWRlci52MS5SZWNvcmRSZXF1ZXN0GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5EkkKBkRlbGV0ZRInLmdlc3RhbHQucHJvdmlkZXIudjEuT2JqZWN0U3RvcmVSZXF1ZXN0GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5EkwKBUNsZWFyEisuZ2VzdGFsdC5wcm92aWRlci52MS5PYmplY3RTdG9yZU5hbWVSZXF1ZXN0GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5ElwKBkdldEFsbBIsLmdlc3RhbHQucHJvdmlkZXIudjEuT2JqZWN0U3RvcmVSYW5nZVJlcXVlc3QaJC5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlY29yZHNSZXNwb25zZRJdCgpHZXRBbGxLZXlzEiwuZ2VzdGFsdC5wcm92aWRlci52MS5PYmplY3RTdG9yZVJhbmdlUmVxdWVzdBohLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5c1Jlc3BvbnNlElkKBUNvdW50EiwuZ2VzdGFsdC5wcm92aWRlci52MS5PYmplY3RTdG9yZVJhbmdlUmVxdWVzdBoiLmdlc3RhbHQucHJvdmlkZXIudjEuQ291bnRSZXNwb25zZRJgCgtEZWxldGVSYW5nZRIsLmdlc3RhbHQucHJvdmlkZXIudjEuT2JqZWN0U3RvcmVSYW5nZVJlcXVlc3QaIy5nZXN0YWx0LnByb3ZpZGVyLnYxLkRlbGV0ZVJlc3BvbnNlElcKCEluZGV4R2V0EiYuZ2VzdGFsdC5wcm92aWRlci52MS5JbmRleFF1ZXJ5UmVxdWVzdBojLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkUmVzcG9uc2USVwoLSW5kZXhHZXRLZXkSJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkluZGV4UXVlcnlSZXF1ZXN0GiAuZ2VzdGFsdC5wcm92aWRlci52MS5LZXlSZXNwb25zZRJbCgtJbmRleEdldEFsbBImLmdlc3RhbHQucHJvdmlkZXIudjEuSW5kZXhRdWVyeVJlcXVlc3QaJC5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlY29yZHNSZXNwb25zZRJcCg9JbmRleEdldEFsbEtleXMSJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkluZGV4UXVlcnlSZXF1ZXN0GiEuZ2VzdGFsdC5wcm92aWRlci52MS5LZXlzUmVzcG9uc2USWAoKSW5kZXhDb3VudBImLmdlc3RhbHQucHJvdmlkZXIudjEuSW5kZXhRdWVyeVJlcXVlc3QaIi5nZXN0YWx0LnByb3ZpZGVyLnYxLkNvdW50UmVzcG9uc2USWgoLSW5kZXhEZWxldGUSJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkluZGV4UXVlcnlSZXF1ZXN0GiMuZ2VzdGFsdC5wcm92aWRlci52MS5EZWxldGVSZXNwb25zZUI7WjlnaXRodWIuY29tL3ZhbG9uLXRlY2hub2xvZ2llcy9nZXN0YWx0L3Nkay9nby9nZW4vdjE7cHJvdG9iBnByb3RvMw", [file_google_protobuf_empty, file_google_protobuf_struct]);
+  fileDesc("ChJ2MS9kYXRhc3RvcmUucHJvdG8SE2dlc3RhbHQucHJvdmlkZXIudjEilwIKClR5cGVkVmFsdWUSMAoKbnVsbF92YWx1ZRgBIAEoDjIaLmdvb2dsZS5wcm90b2J1Zi5OdWxsVmFsdWVIABIWCgxzdHJpbmdfdmFsdWUYAiABKAlIABITCglpbnRfdmFsdWUYAyABKANIABIVCgtmbG9hdF92YWx1ZRgEIAEoAUgAEhQKCmJvb2xfdmFsdWUYBSABKAhIABIwCgp0aW1lX3ZhbHVlGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEgAEhUKC2J5dGVzX3ZhbHVlGAcgASgMSAASLAoKanNvbl92YWx1ZRgIIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZUgAQgYKBGtpbmQikQEKBlJlY29yZBI3CgZmaWVsZHMYASADKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlY29yZC5GaWVsZHNFbnRyeRpOCgtGaWVsZHNFbnRyeRILCgNrZXkYASABKAkSLgoFdmFsdWUYAiABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLlR5cGVkVmFsdWU6AjgBIncKEU9iamVjdFN0b3JlU2NoZW1hEjEKB2luZGV4ZXMYASADKAsyIC5nZXN0YWx0LnByb3ZpZGVyLnYxLkluZGV4U2NoZW1hEi8KB2NvbHVtbnMYAiADKAsyHi5nZXN0YWx0LnByb3ZpZGVyLnYxLkNvbHVtbkRlZiI9CgtJbmRleFNjaGVtYRIMCgRuYW1lGAEgASgJEhAKCGtleV9wYXRoGAIgAygJEg4KBnVuaXF1ZRgDIAEoCCJeCglDb2x1bW5EZWYSDAoEbmFtZRgBIAEoCRIMCgR0eXBlGAIgASgFEhMKC3ByaW1hcnlfa2V5GAMgASgIEhAKCG5vdF9udWxsGAQgASgIEg4KBnVuaXF1ZRgFIAEoCCKSAQoIS2V5UmFuZ2USLgoFbG93ZXIYASABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLlR5cGVkVmFsdWUSLgoFdXBwZXIYAiABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLlR5cGVkVmFsdWUSEgoKbG93ZXJfb3BlbhgDIAEoCBISCgp1cHBlcl9vcGVuGAQgASgIIksKDVJlY29yZFJlcXVlc3QSDQoFc3RvcmUYASABKAkSKwoGcmVjb3JkGAIgASgLMhsuZ2VzdGFsdC5wcm92aWRlci52MS5SZWNvcmQiPQoOUmVjb3JkUmVzcG9uc2USKwoGcmVjb3JkGAEgASgLMhsuZ2VzdGFsdC5wcm92aWRlci52MS5SZWNvcmQiPwoPUmVjb3Jkc1Jlc3BvbnNlEiwKB3JlY29yZHMYASADKAsyGy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlY29yZCIcCgxLZXlzUmVzcG9uc2USDAoEa2V5cxgBIAMoCSIvChJPYmplY3RTdG9yZVJlcXVlc3QSDQoFc3RvcmUYASABKAkSCgoCaWQYAiABKAkiJwoWT2JqZWN0U3RvcmVOYW1lUmVxdWVzdBINCgVzdG9yZRgBIAEoCSJlChdPYmplY3RTdG9yZVJhbmdlUmVxdWVzdBINCgVzdG9yZRgBIAEoCRIxCgVyYW5nZRgCIAEoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5UmFuZ2VIAIgBAUIICgZfcmFuZ2UiYAoYQ3JlYXRlT2JqZWN0U3RvcmVSZXF1ZXN0EgwKBG5hbWUYASABKAkSNgoGc2NoZW1hGAIgASgLMiYuZ2VzdGFsdC5wcm92aWRlci52MS5PYmplY3RTdG9yZVNjaGVtYSIoChhEZWxldGVPYmplY3RTdG9yZVJlcXVlc3QSDAoEbmFtZRgBIAEoCSKfAQoRSW5kZXhRdWVyeVJlcXVlc3QSDQoFc3RvcmUYASABKAkSDQoFaW5kZXgYAiABKAkSLwoGdmFsdWVzGAMgAygLMh8uZ2VzdGFsdC5wcm92aWRlci52MS5UeXBlZFZhbHVlEjEKBXJhbmdlGAQgASgLMh0uZ2VzdGFsdC5wcm92aWRlci52MS5LZXlSYW5nZUgAiAEBQggKBl9yYW5nZSIeCg1Db3VudFJlc3BvbnNlEg0KBWNvdW50GAEgASgDIiEKDkRlbGV0ZVJlc3BvbnNlEg8KB2RlbGV0ZWQYASABKAMiGgoLS2V5UmVzcG9uc2USCwoDa2V5GAEgASgJMqkMCglJbmRleGVkREISWgoRQ3JlYXRlT2JqZWN0U3RvcmUSLS5nZXN0YWx0LnByb3ZpZGVyLnYxLkNyZWF0ZU9iamVjdFN0b3JlUmVxdWVzdBoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRJaChFEZWxldGVPYmplY3RTdG9yZRItLmdlc3RhbHQucHJvdmlkZXIudjEuRGVsZXRlT2JqZWN0U3RvcmVSZXF1ZXN0GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5ElMKA0dldBInLmdlc3RhbHQucHJvdmlkZXIudjEuT2JqZWN0U3RvcmVSZXF1ZXN0GiMuZ2VzdGFsdC5wcm92aWRlci52MS5SZWNvcmRSZXNwb25zZRJTCgZHZXRLZXkSJy5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmVxdWVzdBogLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5UmVzcG9uc2USQQoDQWRkEiIuZ2VzdGFsdC5wcm92aWRlci52MS5SZWNvcmRSZXF1ZXN0GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5EkEKA1B1dBIiLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkUmVxdWVzdBoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRJJCgZEZWxldGUSJy5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmVxdWVzdBoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRJMCgVDbGVhchIrLmdlc3RhbHQucHJvdmlkZXIudjEuT2JqZWN0U3RvcmVOYW1lUmVxdWVzdBoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRJcCgZHZXRBbGwSLC5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmFuZ2VSZXF1ZXN0GiQuZ2VzdGFsdC5wcm92aWRlci52MS5SZWNvcmRzUmVzcG9uc2USXQoKR2V0QWxsS2V5cxIsLmdlc3RhbHQucHJvdmlkZXIudjEuT2JqZWN0U3RvcmVSYW5nZVJlcXVlc3QaIS5nZXN0YWx0LnByb3ZpZGVyLnYxLktleXNSZXNwb25zZRJZCgVDb3VudBIsLmdlc3RhbHQucHJvdmlkZXIudjEuT2JqZWN0U3RvcmVSYW5nZVJlcXVlc3QaIi5nZXN0YWx0LnByb3ZpZGVyLnYxLkNvdW50UmVzcG9uc2USYAoLRGVsZXRlUmFuZ2USLC5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmFuZ2VSZXF1ZXN0GiMuZ2VzdGFsdC5wcm92aWRlci52MS5EZWxldGVSZXNwb25zZRJXCghJbmRleEdldBImLmdlc3RhbHQucHJvdmlkZXIudjEuSW5kZXhRdWVyeVJlcXVlc3QaIy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlY29yZFJlc3BvbnNlElcKC0luZGV4R2V0S2V5EiYuZ2VzdGFsdC5wcm92aWRlci52MS5JbmRleFF1ZXJ5UmVxdWVzdBogLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5UmVzcG9uc2USWwoLSW5kZXhHZXRBbGwSJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkluZGV4UXVlcnlSZXF1ZXN0GiQuZ2VzdGFsdC5wcm92aWRlci52MS5SZWNvcmRzUmVzcG9uc2USXAoPSW5kZXhHZXRBbGxLZXlzEiYuZ2VzdGFsdC5wcm92aWRlci52MS5JbmRleFF1ZXJ5UmVxdWVzdBohLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5c1Jlc3BvbnNlElgKCkluZGV4Q291bnQSJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkluZGV4UXVlcnlSZXF1ZXN0GiIuZ2VzdGFsdC5wcm92aWRlci52MS5Db3VudFJlc3BvbnNlEloKC0luZGV4RGVsZXRlEiYuZ2VzdGFsdC5wcm92aWRlci52MS5JbmRleFF1ZXJ5UmVxdWVzdBojLmdlc3RhbHQucHJvdmlkZXIudjEuRGVsZXRlUmVzcG9uc2VCO1o5Z2l0aHViLmNvbS92YWxvbi10ZWNobm9sb2dpZXMvZ2VzdGFsdC9zZGsvZ28vZ2VuL3YxO3Byb3RvYgZwcm90bzM", [file_google_protobuf_empty, file_google_protobuf_struct, file_google_protobuf_timestamp]);
+
+/**
+ * @generated from message gestalt.provider.v1.TypedValue
+ */
+export type TypedValue = Message<"gestalt.provider.v1.TypedValue"> & {
+  /**
+   * @generated from oneof gestalt.provider.v1.TypedValue.kind
+   */
+  kind: {
+    /**
+     * @generated from field: google.protobuf.NullValue null_value = 1;
+     */
+    value: NullValue;
+    case: "nullValue";
+  } | {
+    /**
+     * @generated from field: string string_value = 2;
+     */
+    value: string;
+    case: "stringValue";
+  } | {
+    /**
+     * @generated from field: int64 int_value = 3;
+     */
+    value: bigint;
+    case: "intValue";
+  } | {
+    /**
+     * @generated from field: double float_value = 4;
+     */
+    value: number;
+    case: "floatValue";
+  } | {
+    /**
+     * @generated from field: bool bool_value = 5;
+     */
+    value: boolean;
+    case: "boolValue";
+  } | {
+    /**
+     * @generated from field: google.protobuf.Timestamp time_value = 6;
+     */
+    value: Timestamp;
+    case: "timeValue";
+  } | {
+    /**
+     * @generated from field: bytes bytes_value = 7;
+     */
+    value: Uint8Array;
+    case: "bytesValue";
+  } | {
+    /**
+     * @generated from field: google.protobuf.Value json_value = 8;
+     */
+    value: Value;
+    case: "jsonValue";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message gestalt.provider.v1.TypedValue.
+ * Use `create(TypedValueSchema)` to create a new message.
+ */
+export const TypedValueSchema: GenMessage<TypedValue> = /*@__PURE__*/
+  messageDesc(file_v1_datastore, 0);
+
+/**
+ * @generated from message gestalt.provider.v1.Record
+ */
+export type Record = Message<"gestalt.provider.v1.Record"> & {
+  /**
+   * @generated from field: map<string, gestalt.provider.v1.TypedValue> fields = 1;
+   */
+  fields: { [key: string]: TypedValue };
+};
+
+/**
+ * Describes the message gestalt.provider.v1.Record.
+ * Use `create(RecordSchema)` to create a new message.
+ */
+export const RecordSchema: GenMessage<Record> = /*@__PURE__*/
+  messageDesc(file_v1_datastore, 1);
 
 /**
  * @generated from message gestalt.provider.v1.ObjectStoreSchema
@@ -34,7 +116,7 @@ export type ObjectStoreSchema = Message<"gestalt.provider.v1.ObjectStoreSchema">
  * Use `create(ObjectStoreSchemaSchema)` to create a new message.
  */
 export const ObjectStoreSchemaSchema: GenMessage<ObjectStoreSchema> = /*@__PURE__*/
-  messageDesc(file_v1_datastore, 0);
+  messageDesc(file_v1_datastore, 2);
 
 /**
  * @generated from message gestalt.provider.v1.IndexSchema
@@ -61,7 +143,7 @@ export type IndexSchema = Message<"gestalt.provider.v1.IndexSchema"> & {
  * Use `create(IndexSchemaSchema)` to create a new message.
  */
 export const IndexSchemaSchema: GenMessage<IndexSchema> = /*@__PURE__*/
-  messageDesc(file_v1_datastore, 1);
+  messageDesc(file_v1_datastore, 3);
 
 /**
  * @generated from message gestalt.provider.v1.ColumnDef
@@ -98,21 +180,21 @@ export type ColumnDef = Message<"gestalt.provider.v1.ColumnDef"> & {
  * Use `create(ColumnDefSchema)` to create a new message.
  */
 export const ColumnDefSchema: GenMessage<ColumnDef> = /*@__PURE__*/
-  messageDesc(file_v1_datastore, 2);
+  messageDesc(file_v1_datastore, 4);
 
 /**
  * @generated from message gestalt.provider.v1.KeyRange
  */
 export type KeyRange = Message<"gestalt.provider.v1.KeyRange"> & {
   /**
-   * @generated from field: google.protobuf.Value lower = 1;
+   * @generated from field: gestalt.provider.v1.TypedValue lower = 1;
    */
-  lower?: Value;
+  lower?: TypedValue;
 
   /**
-   * @generated from field: google.protobuf.Value upper = 2;
+   * @generated from field: gestalt.provider.v1.TypedValue upper = 2;
    */
-  upper?: Value;
+  upper?: TypedValue;
 
   /**
    * @generated from field: bool lower_open = 3;
@@ -130,7 +212,7 @@ export type KeyRange = Message<"gestalt.provider.v1.KeyRange"> & {
  * Use `create(KeyRangeSchema)` to create a new message.
  */
 export const KeyRangeSchema: GenMessage<KeyRange> = /*@__PURE__*/
-  messageDesc(file_v1_datastore, 3);
+  messageDesc(file_v1_datastore, 5);
 
 /**
  * @generated from message gestalt.provider.v1.RecordRequest
@@ -142,9 +224,9 @@ export type RecordRequest = Message<"gestalt.provider.v1.RecordRequest"> & {
   store: string;
 
   /**
-   * @generated from field: google.protobuf.Struct record = 2;
+   * @generated from field: gestalt.provider.v1.Record record = 2;
    */
-  record?: JsonObject;
+  record?: Record;
 };
 
 /**
@@ -152,16 +234,16 @@ export type RecordRequest = Message<"gestalt.provider.v1.RecordRequest"> & {
  * Use `create(RecordRequestSchema)` to create a new message.
  */
 export const RecordRequestSchema: GenMessage<RecordRequest> = /*@__PURE__*/
-  messageDesc(file_v1_datastore, 4);
+  messageDesc(file_v1_datastore, 6);
 
 /**
  * @generated from message gestalt.provider.v1.RecordResponse
  */
 export type RecordResponse = Message<"gestalt.provider.v1.RecordResponse"> & {
   /**
-   * @generated from field: google.protobuf.Struct record = 1;
+   * @generated from field: gestalt.provider.v1.Record record = 1;
    */
-  record?: JsonObject;
+  record?: Record;
 };
 
 /**
@@ -169,16 +251,16 @@ export type RecordResponse = Message<"gestalt.provider.v1.RecordResponse"> & {
  * Use `create(RecordResponseSchema)` to create a new message.
  */
 export const RecordResponseSchema: GenMessage<RecordResponse> = /*@__PURE__*/
-  messageDesc(file_v1_datastore, 5);
+  messageDesc(file_v1_datastore, 7);
 
 /**
  * @generated from message gestalt.provider.v1.RecordsResponse
  */
 export type RecordsResponse = Message<"gestalt.provider.v1.RecordsResponse"> & {
   /**
-   * @generated from field: repeated google.protobuf.Struct records = 1;
+   * @generated from field: repeated gestalt.provider.v1.Record records = 1;
    */
-  records: JsonObject[];
+  records: Record[];
 };
 
 /**
@@ -186,7 +268,7 @@ export type RecordsResponse = Message<"gestalt.provider.v1.RecordsResponse"> & {
  * Use `create(RecordsResponseSchema)` to create a new message.
  */
 export const RecordsResponseSchema: GenMessage<RecordsResponse> = /*@__PURE__*/
-  messageDesc(file_v1_datastore, 6);
+  messageDesc(file_v1_datastore, 8);
 
 /**
  * @generated from message gestalt.provider.v1.KeysResponse
@@ -203,7 +285,7 @@ export type KeysResponse = Message<"gestalt.provider.v1.KeysResponse"> & {
  * Use `create(KeysResponseSchema)` to create a new message.
  */
 export const KeysResponseSchema: GenMessage<KeysResponse> = /*@__PURE__*/
-  messageDesc(file_v1_datastore, 7);
+  messageDesc(file_v1_datastore, 9);
 
 /**
  * @generated from message gestalt.provider.v1.ObjectStoreRequest
@@ -225,7 +307,7 @@ export type ObjectStoreRequest = Message<"gestalt.provider.v1.ObjectStoreRequest
  * Use `create(ObjectStoreRequestSchema)` to create a new message.
  */
 export const ObjectStoreRequestSchema: GenMessage<ObjectStoreRequest> = /*@__PURE__*/
-  messageDesc(file_v1_datastore, 8);
+  messageDesc(file_v1_datastore, 10);
 
 /**
  * @generated from message gestalt.provider.v1.ObjectStoreNameRequest
@@ -242,7 +324,7 @@ export type ObjectStoreNameRequest = Message<"gestalt.provider.v1.ObjectStoreNam
  * Use `create(ObjectStoreNameRequestSchema)` to create a new message.
  */
 export const ObjectStoreNameRequestSchema: GenMessage<ObjectStoreNameRequest> = /*@__PURE__*/
-  messageDesc(file_v1_datastore, 9);
+  messageDesc(file_v1_datastore, 11);
 
 /**
  * @generated from message gestalt.provider.v1.ObjectStoreRangeRequest
@@ -264,7 +346,7 @@ export type ObjectStoreRangeRequest = Message<"gestalt.provider.v1.ObjectStoreRa
  * Use `create(ObjectStoreRangeRequestSchema)` to create a new message.
  */
 export const ObjectStoreRangeRequestSchema: GenMessage<ObjectStoreRangeRequest> = /*@__PURE__*/
-  messageDesc(file_v1_datastore, 10);
+  messageDesc(file_v1_datastore, 12);
 
 /**
  * @generated from message gestalt.provider.v1.CreateObjectStoreRequest
@@ -286,7 +368,7 @@ export type CreateObjectStoreRequest = Message<"gestalt.provider.v1.CreateObject
  * Use `create(CreateObjectStoreRequestSchema)` to create a new message.
  */
 export const CreateObjectStoreRequestSchema: GenMessage<CreateObjectStoreRequest> = /*@__PURE__*/
-  messageDesc(file_v1_datastore, 11);
+  messageDesc(file_v1_datastore, 13);
 
 /**
  * @generated from message gestalt.provider.v1.DeleteObjectStoreRequest
@@ -303,7 +385,7 @@ export type DeleteObjectStoreRequest = Message<"gestalt.provider.v1.DeleteObject
  * Use `create(DeleteObjectStoreRequestSchema)` to create a new message.
  */
 export const DeleteObjectStoreRequestSchema: GenMessage<DeleteObjectStoreRequest> = /*@__PURE__*/
-  messageDesc(file_v1_datastore, 12);
+  messageDesc(file_v1_datastore, 14);
 
 /**
  * @generated from message gestalt.provider.v1.IndexQueryRequest
@@ -320,9 +402,9 @@ export type IndexQueryRequest = Message<"gestalt.provider.v1.IndexQueryRequest">
   index: string;
 
   /**
-   * @generated from field: repeated google.protobuf.Value values = 3;
+   * @generated from field: repeated gestalt.provider.v1.TypedValue values = 3;
    */
-  values: Value[];
+  values: TypedValue[];
 
   /**
    * @generated from field: optional gestalt.provider.v1.KeyRange range = 4;
@@ -335,7 +417,7 @@ export type IndexQueryRequest = Message<"gestalt.provider.v1.IndexQueryRequest">
  * Use `create(IndexQueryRequestSchema)` to create a new message.
  */
 export const IndexQueryRequestSchema: GenMessage<IndexQueryRequest> = /*@__PURE__*/
-  messageDesc(file_v1_datastore, 13);
+  messageDesc(file_v1_datastore, 15);
 
 /**
  * @generated from message gestalt.provider.v1.CountResponse
@@ -352,7 +434,7 @@ export type CountResponse = Message<"gestalt.provider.v1.CountResponse"> & {
  * Use `create(CountResponseSchema)` to create a new message.
  */
 export const CountResponseSchema: GenMessage<CountResponse> = /*@__PURE__*/
-  messageDesc(file_v1_datastore, 14);
+  messageDesc(file_v1_datastore, 16);
 
 /**
  * @generated from message gestalt.provider.v1.DeleteResponse
@@ -369,7 +451,7 @@ export type DeleteResponse = Message<"gestalt.provider.v1.DeleteResponse"> & {
  * Use `create(DeleteResponseSchema)` to create a new message.
  */
 export const DeleteResponseSchema: GenMessage<DeleteResponse> = /*@__PURE__*/
-  messageDesc(file_v1_datastore, 15);
+  messageDesc(file_v1_datastore, 17);
 
 /**
  * @generated from message gestalt.provider.v1.KeyResponse
@@ -386,7 +468,7 @@ export type KeyResponse = Message<"gestalt.provider.v1.KeyResponse"> & {
  * Use `create(KeyResponseSchema)` to create a new message.
  */
 export const KeyResponseSchema: GenMessage<KeyResponse> = /*@__PURE__*/
-  messageDesc(file_v1_datastore, 16);
+  messageDesc(file_v1_datastore, 18);
 
 /**
  * @generated from service gestalt.provider.v1.IndexedDB

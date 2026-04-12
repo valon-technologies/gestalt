@@ -11,7 +11,6 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 const EnvIndexedDBSocket = "GESTALT_INDEXEDDB_SOCKET"
@@ -99,7 +98,11 @@ func (o *ObjectStoreClient) Get(ctx context.Context, id string) (Record, error) 
 	if err != nil {
 		return nil, grpcErr(err)
 	}
-	return resp.GetRecord().AsMap(), nil
+	record, err := RecordFromProto(resp.GetRecord())
+	if err != nil {
+		return nil, fmt.Errorf("unmarshal record: %w", err)
+	}
+	return record, nil
 }
 
 func (o *ObjectStoreClient) GetKey(ctx context.Context, id string) (string, error) {
@@ -111,20 +114,20 @@ func (o *ObjectStoreClient) GetKey(ctx context.Context, id string) (string, erro
 }
 
 func (o *ObjectStoreClient) Add(ctx context.Context, record Record) error {
-	s, err := structpb.NewStruct(record)
+	pbRecord, err := RecordToProto(record)
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
 	}
-	_, err = o.client.Add(ctx, &proto.RecordRequest{Store: o.store, Record: s})
+	_, err = o.client.Add(ctx, &proto.RecordRequest{Store: o.store, Record: pbRecord})
 	return grpcErr(err)
 }
 
 func (o *ObjectStoreClient) Put(ctx context.Context, record Record) error {
-	s, err := structpb.NewStruct(record)
+	pbRecord, err := RecordToProto(record)
 	if err != nil {
 		return fmt.Errorf("marshal record: %w", err)
 	}
-	_, err = o.client.Put(ctx, &proto.RecordRequest{Store: o.store, Record: s})
+	_, err = o.client.Put(ctx, &proto.RecordRequest{Store: o.store, Record: pbRecord})
 	return grpcErr(err)
 }
 
@@ -147,7 +150,11 @@ func (o *ObjectStoreClient) GetAll(ctx context.Context, r *KeyRange) ([]Record, 
 	if err != nil {
 		return nil, grpcErr(err)
 	}
-	return structsToMaps(resp.GetRecords()), nil
+	records, err := RecordsFromProto(resp.GetRecords())
+	if err != nil {
+		return nil, fmt.Errorf("unmarshal records: %w", err)
+	}
+	return records, nil
 }
 
 func (o *ObjectStoreClient) GetAllKeys(ctx context.Context, r *KeyRange) ([]string, error) {
@@ -207,7 +214,11 @@ func (idx *IndexClient) Get(ctx context.Context, values ...any) (Record, error) 
 	if err != nil {
 		return nil, grpcErr(err)
 	}
-	return resp.GetRecord().AsMap(), nil
+	record, err := RecordFromProto(resp.GetRecord())
+	if err != nil {
+		return nil, fmt.Errorf("unmarshal record: %w", err)
+	}
+	return record, nil
 }
 
 func (idx *IndexClient) GetKey(ctx context.Context, values ...any) (string, error) {
@@ -239,7 +250,11 @@ func (idx *IndexClient) GetAll(ctx context.Context, r *KeyRange, values ...any) 
 	if err != nil {
 		return nil, grpcErr(err)
 	}
-	return structsToMaps(resp.GetRecords()), nil
+	records, err := RecordsFromProto(resp.GetRecords())
+	if err != nil {
+		return nil, fmt.Errorf("unmarshal records: %w", err)
+	}
+	return records, nil
 }
 
 func (idx *IndexClient) GetAllKeys(ctx context.Context, r *KeyRange, values ...any) ([]string, error) {
@@ -298,14 +313,14 @@ func krToProto(r *KeyRange) (*proto.KeyRange, error) {
 	}
 	kr := &proto.KeyRange{LowerOpen: r.LowerOpen, UpperOpen: r.UpperOpen}
 	if r.Lower != nil {
-		v, err := structpb.NewValue(r.Lower)
+		v, err := TypedValueFromAny(r.Lower)
 		if err != nil {
 			return nil, fmt.Errorf("marshal key range lower: %w", err)
 		}
 		kr.Lower = v
 	}
 	if r.Upper != nil {
-		v, err := structpb.NewValue(r.Upper)
+		v, err := TypedValueFromAny(r.Upper)
 		if err != nil {
 			return nil, fmt.Errorf("marshal key range upper: %w", err)
 		}
@@ -314,24 +329,8 @@ func krToProto(r *KeyRange) (*proto.KeyRange, error) {
 	return kr, nil
 }
 
-func anyToProtoValues(values []any) ([]*structpb.Value, error) {
-	out := make([]*structpb.Value, len(values))
-	for i, v := range values {
-		pv, err := structpb.NewValue(v)
-		if err != nil {
-			return nil, fmt.Errorf("marshal value %d: %w", i, err)
-		}
-		out[i] = pv
-	}
-	return out, nil
-}
-
-func structsToMaps(ss []*structpb.Struct) []Record {
-	out := make([]Record, len(ss))
-	for i, s := range ss {
-		out[i] = s.AsMap()
-	}
-	return out
+func anyToProtoValues(values []any) ([]*proto.TypedValue, error) {
+	return TypedValuesFromAny(values)
 }
 
 func grpcErr(err error) error {

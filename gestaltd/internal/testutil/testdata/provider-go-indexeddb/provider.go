@@ -2,13 +2,14 @@ package provider
 
 import (
 	"context"
+	"reflect"
 	"sync"
 
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
-	"google.golang.org/protobuf/types/known/structpb"
 )
 
 type Provider struct {
@@ -18,7 +19,7 @@ type Provider struct {
 }
 
 type objectStore struct {
-	records map[string]*structpb.Struct
+	records map[string]*proto.Record
 	schema  *proto.ObjectStoreSchema
 }
 
@@ -34,7 +35,7 @@ func (p *Provider) getStore(name string) *objectStore {
 	if s, ok := p.stores[name]; ok {
 		return s
 	}
-	s := &objectStore{records: make(map[string]*structpb.Struct)}
+	s := &objectStore{records: make(map[string]*proto.Record)}
 	p.stores[name] = s
 	return s
 }
@@ -46,7 +47,7 @@ func (p *Provider) CreateObjectStore(_ context.Context, req *proto.CreateObjectS
 		s.schema = req.GetSchema()
 	} else {
 		p.stores[req.GetName()] = &objectStore{
-			records: make(map[string]*structpb.Struct),
+			records: make(map[string]*proto.Record),
 			schema:  req.GetSchema(),
 		}
 	}
@@ -126,7 +127,7 @@ func (p *Provider) Clear(_ context.Context, req *proto.ObjectStoreNameRequest) (
 	s := p.getStore(req.GetStore())
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	s.records = make(map[string]*structpb.Struct)
+	s.records = make(map[string]*proto.Record)
 	return &emptypb.Empty{}, nil
 }
 
@@ -134,7 +135,7 @@ func (p *Provider) GetAll(_ context.Context, req *proto.ObjectStoreRangeRequest)
 	s := p.getStore(req.GetStore())
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	recs := make([]*structpb.Struct, 0, len(s.records))
+	recs := make([]*proto.Record, 0, len(s.records))
 	for _, r := range s.records {
 		recs = append(recs, r)
 	}
@@ -187,7 +188,7 @@ func (p *Provider) IndexGetAll(_ context.Context, req *proto.IndexQueryRequest) 
 	s := p.getStore(req.GetStore())
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	var recs []*structpb.Struct
+	var recs []*proto.Record
 	for _, rec := range s.records {
 		if indexMatches(rec, s.schema, req.GetIndex(), req.GetValues()) {
 			recs = append(recs, rec)
@@ -232,17 +233,22 @@ func (p *Provider) IndexDelete(_ context.Context, req *proto.IndexQueryRequest) 
 	return &proto.DeleteResponse{Deleted: int64(len(toDelete))}, nil
 }
 
-func fieldString(rec *structpb.Struct, key string) string {
+func fieldString(rec *proto.Record, key string) string {
 	if rec == nil {
 		return ""
 	}
 	if v, ok := rec.GetFields()[key]; ok {
-		return v.GetStringValue()
+		value, err := gestalt.AnyFromTypedValue(v)
+		if err == nil {
+			if s, ok := value.(string); ok {
+				return s
+			}
+		}
 	}
 	return ""
 }
 
-func indexMatches(rec *structpb.Struct, schema *proto.ObjectStoreSchema, indexName string, values []*structpb.Value) bool {
+func indexMatches(rec *proto.Record, schema *proto.ObjectStoreSchema, indexName string, values []*proto.TypedValue) bool {
 	if schema == nil || rec == nil {
 		return false
 	}
@@ -265,14 +271,22 @@ func indexMatches(rec *structpb.Struct, schema *proto.ObjectStoreSchema, indexNa
 		if !ok {
 			return false
 		}
-		if rv.GetStringValue() != values[i].GetStringValue() {
+		recordValue, err := gestalt.AnyFromTypedValue(rv)
+		if err != nil {
+			return false
+		}
+		queryValue, err := gestalt.AnyFromTypedValue(values[i])
+		if err != nil {
+			return false
+		}
+		if !reflect.DeepEqual(recordValue, queryValue) {
 			return false
 		}
 	}
 	return true
 }
 
-func fieldsMatch(a, b *structpb.Struct, keyPath []string) bool {
+func fieldsMatch(a, b *proto.Record, keyPath []string) bool {
 	af, bf := a.GetFields(), b.GetFields()
 	for _, field := range keyPath {
 		av, aok := af[field]
@@ -280,7 +294,15 @@ func fieldsMatch(a, b *structpb.Struct, keyPath []string) bool {
 		if !aok || !bok {
 			return false
 		}
-		if av.GetStringValue() != bv.GetStringValue() {
+		left, err := gestalt.AnyFromTypedValue(av)
+		if err != nil {
+			return false
+		}
+		right, err := gestalt.AnyFromTypedValue(bv)
+		if err != nil {
+			return false
+		}
+		if !reflect.DeepEqual(left, right) {
 			return false
 		}
 	}
