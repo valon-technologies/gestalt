@@ -75,10 +75,6 @@ func decodeManifest(data []byte, format string, sourceMode bool) (*pluginmanifes
 	return &manifest, nil
 }
 
-func ValidateManifest(manifest *pluginmanifestv1.Manifest) error {
-	return validateManifest(manifest, false)
-}
-
 var validManifestKinds = map[string]bool{
 	pluginmanifestv1.KindPlugin:    true,
 	pluginmanifestv1.KindAuth:      true,

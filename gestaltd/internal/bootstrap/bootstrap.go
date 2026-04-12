@@ -13,6 +13,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
@@ -159,7 +160,6 @@ type Result struct {
 	AuditSink        core.AuditSink
 	SecretManager    core.SecretManager
 	Telemetry        core.TelemetryProvider
-	Egress           EgressDeps
 
 	auditClose func(context.Context) error
 	mu         sync.Mutex
@@ -300,6 +300,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	if storeErr != nil {
 		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", cfg.Server.IndexedDB, storeErr)
 	}
+	store = metricutil.InstrumentIndexedDB(store)
 	svc, svcErr := coredata.New(store, enc)
 	if svcErr != nil {
 		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", cfg.Server.IndexedDB, svcErr)
@@ -401,7 +402,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		AuditSink:        audit,
 		SecretManager:    prepared.SecretManager,
 		Telemetry:        prepared.Telemetry,
-		Egress:           prepared.Deps.Egress,
 		auditClose:       auditClose,
 	}, nil
 }
