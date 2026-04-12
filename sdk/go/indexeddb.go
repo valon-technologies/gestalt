@@ -18,6 +18,16 @@ const EnvIndexedDBSocket = "GESTALT_INDEXEDDB_SOCKET"
 var (
 	ErrNotFound      = fmt.Errorf("indexeddb: not found")
 	ErrAlreadyExists = fmt.Errorf("indexeddb: already exists")
+	ErrKeysOnly      = fmt.Errorf("indexeddb: value not available on key-only cursor")
+)
+
+type CursorDirection string
+
+const (
+	CursorNext       CursorDirection = "next"
+	CursorNextUnique CursorDirection = "nextunique"
+	CursorPrev       CursorDirection = "prev"
+	CursorPrevUnique CursorDirection = "prevunique"
 )
 
 type Record = map[string]any
@@ -193,6 +203,14 @@ func (o *ObjectStoreClient) DeleteRange(ctx context.Context, r KeyRange) (int64,
 	return resp.GetDeleted(), nil
 }
 
+func (o *ObjectStoreClient) OpenCursor(ctx context.Context, r *KeyRange, dir CursorDirection) (*Cursor, error) {
+	return openCursor(ctx, o.client, o.store, "", r, dir, false, nil)
+}
+
+func (o *ObjectStoreClient) OpenKeyCursor(ctx context.Context, r *KeyRange, dir CursorDirection) (*Cursor, error) {
+	return openCursor(ctx, o.client, o.store, "", r, dir, true, nil)
+}
+
 func (o *ObjectStoreClient) Index(name string) *IndexClient {
 	return &IndexClient{client: o.client, store: o.store, index: name}
 }
@@ -305,6 +323,227 @@ func (idx *IndexClient) Delete(ctx context.Context, values ...any) (int64, error
 		return 0, grpcErr(err)
 	}
 	return resp.GetDeleted(), nil
+}
+
+func (idx *IndexClient) OpenCursor(ctx context.Context, r *KeyRange, dir CursorDirection, values ...any) (*Cursor, error) {
+	return openCursor(ctx, idx.client, idx.store, idx.index, r, dir, false, values)
+}
+
+func (idx *IndexClient) OpenKeyCursor(ctx context.Context, r *KeyRange, dir CursorDirection, values ...any) (*Cursor, error) {
+	return openCursor(ctx, idx.client, idx.store, idx.index, r, dir, true, values)
+}
+
+type Cursor struct {
+	stream   proto.IndexedDB_OpenCursorClient
+	keysOnly bool
+	entry    *proto.CursorEntry
+	err      error
+	done     bool
+}
+
+func (c *Cursor) Continue(ctx context.Context) bool {
+	return c.sendAndRecv(&proto.CursorCommand{
+		Command: &proto.CursorCommand_Next{Next: true},
+	})
+}
+
+func (c *Cursor) ContinueToKey(ctx context.Context, key any) bool {
+	tv, err := TypedValueFromAny(key)
+	if err != nil {
+		c.err = fmt.Errorf("indexeddb: marshal cursor key: %w", err)
+		return false
+	}
+	return c.sendAndRecv(&proto.CursorCommand{
+		Command: &proto.CursorCommand_ContinueToKey{ContinueToKey: tv},
+	})
+}
+
+func (c *Cursor) Advance(ctx context.Context, count int) bool {
+	return c.sendAndRecv(&proto.CursorCommand{
+		Command: &proto.CursorCommand_Advance{Advance: int32(count)},
+	})
+}
+
+func (c *Cursor) Key() any {
+	if c.entry == nil {
+		return nil
+	}
+	v, _ := AnyFromTypedValue(c.entry.GetKey())
+	return v
+}
+
+func (c *Cursor) PrimaryKey() string {
+	if c.entry == nil {
+		return ""
+	}
+	return c.entry.GetPrimaryKey()
+}
+
+func (c *Cursor) Value() (Record, error) {
+	if c.keysOnly {
+		return nil, ErrKeysOnly
+	}
+	if c.entry == nil {
+		return nil, nil
+	}
+	return RecordFromProto(c.entry.GetRecord())
+}
+
+func (c *Cursor) Delete(ctx context.Context) error {
+	if c.done || c.err != nil {
+		return c.err
+	}
+	err := c.stream.Send(&proto.CursorClientMessage{
+		Msg: &proto.CursorClientMessage_Command{
+			Command: &proto.CursorCommand{
+				Command: &proto.CursorCommand_Delete{Delete: true},
+			},
+		},
+	})
+	if err != nil {
+		c.err = grpcErr(err)
+		return c.err
+	}
+	resp, err := c.stream.Recv()
+	if err != nil {
+		c.err = grpcErr(err)
+		return c.err
+	}
+	if resp.GetDone() {
+		c.done = true
+	}
+	return nil
+}
+
+func (c *Cursor) Update(ctx context.Context, value Record) error {
+	if c.done || c.err != nil {
+		return c.err
+	}
+	pbRecord, err := RecordToProto(value)
+	if err != nil {
+		return fmt.Errorf("indexeddb: marshal cursor update: %w", err)
+	}
+	err = c.stream.Send(&proto.CursorClientMessage{
+		Msg: &proto.CursorClientMessage_Command{
+			Command: &proto.CursorCommand{
+				Command: &proto.CursorCommand_Update{Update: pbRecord},
+			},
+		},
+	})
+	if err != nil {
+		c.err = grpcErr(err)
+		return c.err
+	}
+	resp, err := c.stream.Recv()
+	if err != nil {
+		c.err = grpcErr(err)
+		return c.err
+	}
+	if resp.GetDone() {
+		c.done = true
+	}
+	return nil
+}
+
+func (c *Cursor) Err() error {
+	return c.err
+}
+
+func (c *Cursor) Close() error {
+	if c.done {
+		return nil
+	}
+	c.done = true
+	err := c.stream.Send(&proto.CursorClientMessage{
+		Msg: &proto.CursorClientMessage_Command{
+			Command: &proto.CursorCommand{
+				Command: &proto.CursorCommand_Close{Close: true},
+			},
+		},
+	})
+	if err != nil {
+		return grpcErr(err)
+	}
+	return grpcErr(c.stream.CloseSend())
+}
+
+func (c *Cursor) sendAndRecv(cmd *proto.CursorCommand) bool {
+	if c.done || c.err != nil {
+		return false
+	}
+	err := c.stream.Send(&proto.CursorClientMessage{
+		Msg: &proto.CursorClientMessage_Command{Command: cmd},
+	})
+	if err != nil {
+		c.err = grpcErr(err)
+		return false
+	}
+	resp, err := c.stream.Recv()
+	if err != nil {
+		c.err = grpcErr(err)
+		return false
+	}
+	if resp.GetDone() {
+		c.done = true
+		c.entry = nil
+		return false
+	}
+	c.entry = resp.GetEntry()
+	return c.entry != nil
+}
+
+func cursorDirectionToProto(dir CursorDirection) proto.CursorDirection {
+	switch dir {
+	case CursorNextUnique:
+		return proto.CursorDirection_CURSOR_NEXT_UNIQUE
+	case CursorPrev:
+		return proto.CursorDirection_CURSOR_PREV
+	case CursorPrevUnique:
+		return proto.CursorDirection_CURSOR_PREV_UNIQUE
+	default:
+		return proto.CursorDirection_CURSOR_NEXT
+	}
+}
+
+func openCursor(ctx context.Context, client proto.IndexedDBClient, store, index string, r *KeyRange, dir CursorDirection, keysOnly bool, values []any) (*Cursor, error) {
+	kr, err := krToProto(r)
+	if err != nil {
+		return nil, err
+	}
+	vals, err := TypedValuesFromAny(values)
+	if err != nil {
+		return nil, err
+	}
+	stream, err := client.OpenCursor(ctx)
+	if err != nil {
+		return nil, grpcErr(err)
+	}
+	err = stream.Send(&proto.CursorClientMessage{
+		Msg: &proto.CursorClientMessage_Open{
+			Open: &proto.OpenCursorRequest{
+				Store:     store,
+				Range:     kr,
+				Direction: cursorDirectionToProto(dir),
+				KeysOnly:  keysOnly,
+				Index:     index,
+				Values:    vals,
+			},
+		},
+	})
+	if err != nil {
+		return nil, grpcErr(err)
+	}
+	c := &Cursor{stream: stream, keysOnly: keysOnly}
+	resp, err := stream.Recv()
+	if err != nil {
+		return nil, grpcErr(err)
+	}
+	if resp.GetDone() {
+		c.done = true
+	} else {
+		c.entry = resp.GetEntry()
+	}
+	return c, nil
 }
 
 func krToProto(r *KeyRange) (*proto.KeyRange, error) {
