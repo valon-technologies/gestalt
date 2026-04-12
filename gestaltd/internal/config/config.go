@@ -770,6 +770,9 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		}
 		entry.IconFile = resolveRelativePath(baseDir, entry.IconFile)
 		entry.Source.Path = resolveRelativePath(baseDir, entry.Source.Path)
+		if entry.WebUI != nil {
+			entry.WebUI.Source.Path = resolveRelativePath(baseDir, entry.WebUI.Source.Path)
+		}
 	}
 
 	resolveEntry(cfg.Providers.Auth)
