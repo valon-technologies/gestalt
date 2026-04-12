@@ -159,7 +159,6 @@ type Result struct {
 	AuditSink        core.AuditSink
 	SecretManager    core.SecretManager
 	Telemetry        core.TelemetryProvider
-	Egress           EgressDeps
 
 	auditClose func(context.Context) error
 	mu         sync.Mutex
@@ -401,7 +400,6 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		AuditSink:        audit,
 		SecretManager:    prepared.SecretManager,
 		Telemetry:        prepared.Telemetry,
-		Egress:           prepared.Deps.Egress,
 		auditClose:       auditClose,
 	}, nil
 }
