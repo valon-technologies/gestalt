@@ -229,6 +229,191 @@ func (s *indexedDBServer) IndexDelete(ctx context.Context, req *proto.IndexQuery
 	return &proto.DeleteResponse{Deleted: deleted}, nil
 }
 
+func protoCursorDirection(d proto.CursorDirection) indexeddb.CursorDirection {
+	switch d {
+	case proto.CursorDirection_CURSOR_NEXT_UNIQUE:
+		return indexeddb.CursorNextUnique
+	case proto.CursorDirection_CURSOR_PREV:
+		return indexeddb.CursorPrev
+	case proto.CursorDirection_CURSOR_PREV_UNIQUE:
+		return indexeddb.CursorPrevUnique
+	default:
+		return indexeddb.CursorNext
+	}
+}
+
+func (s *indexedDBServer) OpenCursor(stream proto.IndexedDB_OpenCursorServer) error {
+	first, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+	openReq := first.GetOpen()
+	if openReq == nil {
+		return status.Error(codes.InvalidArgument, "first message must be OpenCursorRequest")
+	}
+
+	keyRange, err := protoToKeyRange(openReq.Range)
+	if err != nil {
+		return status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
+	}
+	dir := protoCursorDirection(openReq.GetDirection())
+	ctx := stream.Context()
+
+	var cursor indexeddb.Cursor
+	store := s.ds.ObjectStore(s.storeName(openReq.GetStore()))
+
+	if openReq.GetIndex() != "" {
+		values, vErr := protoValuesToAny(openReq.GetValues())
+		if vErr != nil {
+			return status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", vErr)
+		}
+		idx := store.Index(openReq.GetIndex())
+		if openReq.GetKeysOnly() {
+			cursor, err = idx.OpenKeyCursor(ctx, keyRange, dir, values...)
+		} else {
+			cursor, err = idx.OpenCursor(ctx, keyRange, dir, values...)
+		}
+	} else {
+		if openReq.GetKeysOnly() {
+			cursor, err = store.OpenKeyCursor(ctx, keyRange, dir)
+		} else {
+			cursor, err = store.OpenCursor(ctx, keyRange, dir)
+		}
+	}
+	if err != nil {
+		return indexeddbToGRPCErr(err)
+	}
+	defer cursor.Close()
+
+	for {
+		msg, recvErr := stream.Recv()
+		if recvErr != nil {
+			return recvErr
+		}
+		cmd := msg.GetCommand()
+		if cmd == nil {
+			return status.Error(codes.InvalidArgument, "expected CursorCommand after open")
+		}
+
+		switch v := cmd.GetCommand().(type) {
+		case *proto.CursorCommand_Next:
+			if !cursor.Continue(ctx) {
+				if cErr := cursor.Err(); cErr != nil {
+					return indexeddbToGRPCErr(cErr)
+				}
+				return stream.Send(&proto.CursorResponse{Result: &proto.CursorResponse_Done{Done: true}})
+			}
+			entry, eErr := cursorEntryToProto(cursor, openReq.GetKeysOnly())
+			if eErr != nil {
+				return eErr
+			}
+			if sErr := stream.Send(&proto.CursorResponse{Result: &proto.CursorResponse_Entry{Entry: entry}}); sErr != nil {
+				return sErr
+			}
+
+		case *proto.CursorCommand_ContinueToKey:
+			key, kErr := gestalt.AnyFromTypedValue(v.ContinueToKey)
+			if kErr != nil {
+				return status.Errorf(codes.InvalidArgument, "unmarshal continue key: %v", kErr)
+			}
+			if !cursor.ContinueToKey(ctx, key) {
+				if cErr := cursor.Err(); cErr != nil {
+					return indexeddbToGRPCErr(cErr)
+				}
+				return stream.Send(&proto.CursorResponse{Result: &proto.CursorResponse_Done{Done: true}})
+			}
+			entry, eErr := cursorEntryToProto(cursor, openReq.GetKeysOnly())
+			if eErr != nil {
+				return eErr
+			}
+			if sErr := stream.Send(&proto.CursorResponse{Result: &proto.CursorResponse_Entry{Entry: entry}}); sErr != nil {
+				return sErr
+			}
+
+		case *proto.CursorCommand_Advance:
+			if !cursor.Advance(ctx, int(v.Advance)) {
+				if cErr := cursor.Err(); cErr != nil {
+					return indexeddbToGRPCErr(cErr)
+				}
+				return stream.Send(&proto.CursorResponse{Result: &proto.CursorResponse_Done{Done: true}})
+			}
+			entry, eErr := cursorEntryToProto(cursor, openReq.GetKeysOnly())
+			if eErr != nil {
+				return eErr
+			}
+			if sErr := stream.Send(&proto.CursorResponse{Result: &proto.CursorResponse_Entry{Entry: entry}}); sErr != nil {
+				return sErr
+			}
+
+		case *proto.CursorCommand_Delete:
+			if dErr := cursor.Delete(ctx); dErr != nil {
+				return indexeddbToGRPCErr(dErr)
+			}
+			entry, eErr := cursorEntryToProto(cursor, openReq.GetKeysOnly())
+			if eErr != nil {
+				return eErr
+			}
+			if sErr := stream.Send(&proto.CursorResponse{Result: &proto.CursorResponse_Entry{Entry: entry}}); sErr != nil {
+				return sErr
+			}
+
+		case *proto.CursorCommand_Update:
+			rec, rErr := gestalt.RecordFromProto(v.Update)
+			if rErr != nil {
+				return status.Errorf(codes.InvalidArgument, "unmarshal update record: %v", rErr)
+			}
+			if uErr := cursor.Update(ctx, rec); uErr != nil {
+				return indexeddbToGRPCErr(uErr)
+			}
+			entry, eErr := cursorEntryToProto(cursor, openReq.GetKeysOnly())
+			if eErr != nil {
+				return eErr
+			}
+			if sErr := stream.Send(&proto.CursorResponse{Result: &proto.CursorResponse_Entry{Entry: entry}}); sErr != nil {
+				return sErr
+			}
+
+		case *proto.CursorCommand_Close:
+			return nil
+
+		default:
+			return status.Error(codes.InvalidArgument, "unknown cursor command")
+		}
+	}
+}
+
+func cursorEntryToProto(c indexeddb.Cursor, keysOnly bool) (*proto.CursorEntry, error) {
+	entry := &proto.CursorEntry{PrimaryKey: c.PrimaryKey()}
+	key := c.Key()
+	if key != nil {
+		if parts, ok := key.([]any); ok {
+			tvs, err := gestalt.TypedValuesFromAny(parts)
+			if err != nil {
+				return nil, fmt.Errorf("marshal compound cursor key: %w", err)
+			}
+			entry.Key = tvs
+		} else {
+			tv, err := gestalt.TypedValueFromAny(key)
+			if err != nil {
+				return nil, fmt.Errorf("marshal cursor key: %w", err)
+			}
+			entry.Key = []*proto.TypedValue{tv}
+		}
+	}
+	if !keysOnly {
+		rec, err := c.Value()
+		if err != nil {
+			return nil, fmt.Errorf("cursor value: %w", err)
+		}
+		pbRec, err := gestalt.RecordToProto(rec)
+		if err != nil {
+			return nil, fmt.Errorf("marshal cursor record: %w", err)
+		}
+		entry.Record = pbRec
+	}
+	return entry, nil
+}
+
 func recordToProto(rec indexeddb.Record) (*proto.RecordResponse, error) {
 	pbRecord, err := gestalt.RecordToProto(rec)
 	if err != nil {

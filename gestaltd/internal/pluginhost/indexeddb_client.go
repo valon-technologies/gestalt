@@ -232,6 +232,14 @@ func (o *remoteObjectStore) Index(name string) indexeddb.Index {
 	return &remoteIndex{client: o.client, store: o.store, index: name}
 }
 
+func (o *remoteObjectStore) OpenCursor(ctx context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection) (indexeddb.Cursor, error) {
+	return openRemoteCursor(ctx, o.client, o.store, "", r, dir, false, nil)
+}
+
+func (o *remoteObjectStore) OpenKeyCursor(ctx context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection) (indexeddb.Cursor, error) {
+	return openRemoteCursor(ctx, o.client, o.store, "", r, dir, true, nil)
+}
+
 // --- Index ---
 
 type remoteIndex struct {
@@ -340,6 +348,14 @@ func (idx *remoteIndex) Count(ctx context.Context, r *indexeddb.KeyRange, values
 	return resp.GetCount(), nil
 }
 
+func (idx *remoteIndex) OpenCursor(ctx context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection, values ...any) (indexeddb.Cursor, error) {
+	return openRemoteCursor(ctx, idx.client, idx.store, idx.index, r, dir, false, values)
+}
+
+func (idx *remoteIndex) OpenKeyCursor(ctx context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection, values ...any) (indexeddb.Cursor, error) {
+	return openRemoteCursor(ctx, idx.client, idx.store, idx.index, r, dir, true, values)
+}
+
 func (idx *remoteIndex) Delete(ctx context.Context, values ...any) (int64, error) {
 	ctx, cancel := providerCallContext(ctx)
 	defer cancel()
@@ -403,6 +419,215 @@ func grpcToDatastoreErr(err error) error {
 	default:
 		return err
 	}
+}
+
+// --- Remote Cursor ---
+
+func cursorDirectionToProto(dir indexeddb.CursorDirection) proto.CursorDirection {
+	switch dir {
+	case indexeddb.CursorNextUnique:
+		return proto.CursorDirection_CURSOR_NEXT_UNIQUE
+	case indexeddb.CursorPrev:
+		return proto.CursorDirection_CURSOR_PREV
+	case indexeddb.CursorPrevUnique:
+		return proto.CursorDirection_CURSOR_PREV_UNIQUE
+	default:
+		return proto.CursorDirection_CURSOR_NEXT
+	}
+}
+
+func openRemoteCursor(ctx context.Context, client proto.IndexedDBClient, store, index string, r *indexeddb.KeyRange, dir indexeddb.CursorDirection, keysOnly bool, values []any) (*remoteCursor, error) {
+	kr, err := keyRangeToProto(r)
+	if err != nil {
+		return nil, err
+	}
+	var pbValues []*proto.TypedValue
+	if len(values) > 0 {
+		pbValues, err = toProtoValues(values)
+		if err != nil {
+			return nil, err
+		}
+	}
+	streamCtx, streamCancel := context.WithCancel(ctx)
+	stream, err := client.OpenCursor(streamCtx)
+	if err != nil {
+		streamCancel()
+		return nil, grpcToDatastoreErr(err)
+	}
+	if err := stream.Send(&proto.CursorClientMessage{
+		Msg: &proto.CursorClientMessage_Open{Open: &proto.OpenCursorRequest{
+			Store:     store,
+			Range:     kr,
+			Direction: cursorDirectionToProto(dir),
+			KeysOnly:  keysOnly,
+			Index:     index,
+			Values:    pbValues,
+		}},
+	}); err != nil {
+		streamCancel()
+		return nil, grpcToDatastoreErr(err)
+	}
+	return &remoteCursor{stream: stream, cancel: streamCancel, keysOnly: keysOnly}, nil
+}
+
+type remoteCursor struct {
+	stream   proto.IndexedDB_OpenCursorClient
+	cancel   context.CancelFunc
+	keysOnly bool
+	entry    *proto.CursorEntry
+	err      error
+	done     bool
+}
+
+func (c *remoteCursor) sendAndRecv(msg *proto.CursorClientMessage) bool {
+	if c.done || c.err != nil {
+		return false
+	}
+	if err := c.stream.Send(msg); err != nil {
+		c.err = grpcToDatastoreErr(err)
+		return false
+	}
+	resp, err := c.stream.Recv()
+	if err != nil {
+		c.err = grpcToDatastoreErr(err)
+		return false
+	}
+	switch v := resp.GetResult().(type) {
+	case *proto.CursorResponse_Entry:
+		c.entry = v.Entry
+		return true
+	case *proto.CursorResponse_Done:
+		if v.Done {
+			c.done = true
+			c.entry = nil
+		}
+		return false
+	default:
+		c.err = fmt.Errorf("unexpected cursor response")
+		return false
+	}
+}
+
+func (c *remoteCursor) Continue(_ context.Context) bool {
+	return c.sendAndRecv(&proto.CursorClientMessage{
+		Msg: &proto.CursorClientMessage_Command{Command: &proto.CursorCommand{
+			Command: &proto.CursorCommand_Next{Next: true},
+		}},
+	})
+}
+
+func (c *remoteCursor) ContinueToKey(_ context.Context, key any) bool {
+	tv, err := gestalt.TypedValueFromAny(key)
+	if err != nil {
+		c.err = err
+		return false
+	}
+	return c.sendAndRecv(&proto.CursorClientMessage{
+		Msg: &proto.CursorClientMessage_Command{Command: &proto.CursorCommand{
+			Command: &proto.CursorCommand_ContinueToKey{ContinueToKey: tv},
+		}},
+	})
+}
+
+func (c *remoteCursor) Advance(_ context.Context, count int) bool {
+	return c.sendAndRecv(&proto.CursorClientMessage{
+		Msg: &proto.CursorClientMessage_Command{Command: &proto.CursorCommand{
+			Command: &proto.CursorCommand_Advance{Advance: int32(count)},
+		}},
+	})
+}
+
+func (c *remoteCursor) Key() any {
+	if c.entry == nil || len(c.entry.Key) == 0 {
+		return nil
+	}
+	if len(c.entry.Key) == 1 {
+		v, _ := gestalt.AnyFromTypedValue(c.entry.Key[0])
+		return v
+	}
+	parts, _ := gestalt.AnyFromTypedValues(c.entry.Key)
+	return parts
+}
+
+func (c *remoteCursor) PrimaryKey() string {
+	if c.entry == nil {
+		return ""
+	}
+	return c.entry.PrimaryKey
+}
+
+func (c *remoteCursor) Value() (indexeddb.Record, error) {
+	if c.keysOnly {
+		return nil, indexeddb.ErrKeysOnly
+	}
+	if c.entry == nil || c.entry.Record == nil {
+		return nil, indexeddb.ErrNotFound
+	}
+	return gestalt.RecordFromProto(c.entry.Record)
+}
+
+func (c *remoteCursor) Delete(_ context.Context) error {
+	if c.done || c.err != nil {
+		return indexeddb.ErrNotFound
+	}
+	if err := c.stream.Send(&proto.CursorClientMessage{
+		Msg: &proto.CursorClientMessage_Command{Command: &proto.CursorCommand{
+			Command: &proto.CursorCommand_Delete{Delete: true},
+		}},
+	}); err != nil {
+		return grpcToDatastoreErr(err)
+	}
+	resp, err := c.stream.Recv()
+	if err != nil {
+		return grpcToDatastoreErr(err)
+	}
+	if e, ok := resp.GetResult().(*proto.CursorResponse_Entry); ok {
+		c.entry = e.Entry
+	}
+	return nil
+}
+
+func (c *remoteCursor) Update(_ context.Context, value indexeddb.Record) error {
+	if c.done || c.err != nil {
+		return indexeddb.ErrNotFound
+	}
+	pbRec, err := gestalt.RecordToProto(value)
+	if err != nil {
+		return fmt.Errorf("marshal update record: %w", err)
+	}
+	if err := c.stream.Send(&proto.CursorClientMessage{
+		Msg: &proto.CursorClientMessage_Command{Command: &proto.CursorCommand{
+			Command: &proto.CursorCommand_Update{Update: pbRec},
+		}},
+	}); err != nil {
+		return grpcToDatastoreErr(err)
+	}
+	resp, err := c.stream.Recv()
+	if err != nil {
+		return grpcToDatastoreErr(err)
+	}
+	if e, ok := resp.GetResult().(*proto.CursorResponse_Entry); ok {
+		c.entry = e.Entry
+	} else if c.entry != nil {
+		c.entry.Record = pbRec
+	}
+	return nil
+}
+
+func (c *remoteCursor) Err() error { return c.err }
+
+func (c *remoteCursor) Close() error {
+	if c.stream == nil {
+		return nil
+	}
+	_ = c.stream.Send(&proto.CursorClientMessage{
+		Msg: &proto.CursorClientMessage_Command{Command: &proto.CursorCommand{
+			Command: &proto.CursorCommand_Close{Close: true},
+		}},
+	})
+	_ = c.stream.CloseSend()
+	c.cancel()
+	return nil
 }
 
 var _ indexeddb.IndexedDB = (*remoteIndexedDB)(nil)

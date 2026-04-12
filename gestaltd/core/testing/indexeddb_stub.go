@@ -2,6 +2,8 @@ package coretesting
 
 import (
 	"context"
+	"fmt"
+	"sort"
 	"sync"
 
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
@@ -191,6 +193,48 @@ func (o *stubObjectStore) Index(name string) indexeddb.Index {
 	return &stubIndex{store: o, name: name, schema: o.schema}
 }
 
+func (o *stubObjectStore) OpenCursor(_ context.Context, _ *indexeddb.KeyRange, dir indexeddb.CursorDirection) (indexeddb.Cursor, error) {
+	if o.db.Err != nil {
+		return nil, o.db.Err
+	}
+	return o.newCursor(dir, false), nil
+}
+
+func (o *stubObjectStore) OpenKeyCursor(_ context.Context, _ *indexeddb.KeyRange, dir indexeddb.CursorDirection) (indexeddb.Cursor, error) {
+	if o.db.Err != nil {
+		return nil, o.db.Err
+	}
+	return o.newCursor(dir, true), nil
+}
+
+func (o *stubObjectStore) newCursor(dir indexeddb.CursorDirection, keysOnly bool) *stubCursor {
+	o.mu.RLock()
+	keys := make([]string, 0, len(o.records))
+	snapshot := make(map[string]indexeddb.Record, len(o.records))
+	for k, r := range o.records {
+		keys = append(keys, k)
+		snapshot[k] = r
+	}
+	o.mu.RUnlock()
+
+	sort.Strings(keys)
+	if dir == indexeddb.CursorPrev || dir == indexeddb.CursorPrevUnique {
+		sort.Sort(sort.Reverse(sort.StringSlice(keys)))
+	}
+
+	reverse := dir == indexeddb.CursorPrev || dir == indexeddb.CursorPrevUnique
+	unique := dir == indexeddb.CursorNextUnique || dir == indexeddb.CursorPrevUnique
+	return &stubCursor{
+		store:    o,
+		keys:     keys,
+		snapshot: snapshot,
+		pos:      -1,
+		keysOnly: keysOnly,
+		reverse:  reverse,
+		unique:   unique,
+	}
+}
+
 type stubIndex struct {
 	store  *stubObjectStore
 	name   string
@@ -307,5 +351,257 @@ func (idx *stubIndex) Delete(_ context.Context, values ...any) (int64, error) {
 	}
 	return int64(len(toDelete)), nil
 }
+
+func (idx *stubIndex) OpenCursor(_ context.Context, _ *indexeddb.KeyRange, dir indexeddb.CursorDirection, values ...any) (indexeddb.Cursor, error) {
+	if idx.store.db.Err != nil {
+		return nil, idx.store.db.Err
+	}
+	c := idx.store.newCursor(dir, false)
+	c.filterIndex = idx
+	c.filterValues = values
+	c.applyIndexFilter()
+	c.buildIndexKeys()
+	return c, nil
+}
+
+func (idx *stubIndex) OpenKeyCursor(_ context.Context, _ *indexeddb.KeyRange, dir indexeddb.CursorDirection, values ...any) (indexeddb.Cursor, error) {
+	if idx.store.db.Err != nil {
+		return nil, idx.store.db.Err
+	}
+	c := idx.store.newCursor(dir, true)
+	c.filterIndex = idx
+	c.filterValues = values
+	c.applyIndexFilter()
+	c.buildIndexKeys()
+	return c, nil
+}
+
+type stubCursor struct {
+	store        *stubObjectStore
+	keys         []string
+	indexKeys    []any
+	snapshot     map[string]indexeddb.Record
+	pos          int
+	keysOnly     bool
+	reverse      bool
+	unique       bool
+	err          error
+	filterIndex  *stubIndex
+	filterValues []any
+}
+
+func (c *stubCursor) buildIndexKeys() {
+	if c.filterIndex == nil {
+		return
+	}
+	kp := c.filterIndex.keyPath()
+	if kp == nil {
+		return
+	}
+	c.indexKeys = make([]any, len(c.keys))
+	for i, k := range c.keys {
+		rec := c.snapshot[k]
+		if len(kp) == 1 {
+			c.indexKeys[i] = rec[kp[0]]
+		} else {
+			vals := make([]any, len(kp))
+			for j, field := range kp {
+				vals[j] = rec[field]
+			}
+			c.indexKeys[i] = vals
+		}
+	}
+	sort.Sort(&indexKeySorter{keys: c.keys, indexKeys: c.indexKeys, reverse: c.reverse})
+}
+
+type indexKeySorter struct {
+	keys      []string
+	indexKeys []any
+	reverse   bool
+}
+
+func (s *indexKeySorter) Len() int { return len(s.keys) }
+
+func (s *indexKeySorter) Swap(i, j int) {
+	s.keys[i], s.keys[j] = s.keys[j], s.keys[i]
+	s.indexKeys[i], s.indexKeys[j] = s.indexKeys[j], s.indexKeys[i]
+}
+
+func (s *indexKeySorter) Less(i, j int) bool {
+	cmp := compareIndexKeys(s.indexKeys[i], s.indexKeys[j])
+	if cmp == 0 {
+		cmp = compareIndexKeys(s.keys[i], s.keys[j])
+	}
+	if s.reverse {
+		return cmp > 0
+	}
+	return cmp < 0
+}
+
+func compareIndexKeys(a, b any) int {
+	switch av := a.(type) {
+	case string:
+		if bv, ok := b.(string); ok {
+			if av < bv {
+				return -1
+			}
+			if av > bv {
+				return 1
+			}
+			return 0
+		}
+	case int:
+		if bv, ok := b.(int); ok {
+			if av < bv {
+				return -1
+			}
+			if av > bv {
+				return 1
+			}
+			return 0
+		}
+	case int64:
+		if bv, ok := b.(int64); ok {
+			if av < bv {
+				return -1
+			}
+			if av > bv {
+				return 1
+			}
+			return 0
+		}
+	case float64:
+		if bv, ok := b.(float64); ok {
+			if av < bv {
+				return -1
+			}
+			if av > bv {
+				return 1
+			}
+			return 0
+		}
+	}
+	as, bs := fmt.Sprint(a), fmt.Sprint(b)
+	if as < bs {
+		return -1
+	}
+	if as > bs {
+		return 1
+	}
+	return 0
+}
+
+func (c *stubCursor) applyIndexFilter() {
+	if c.filterIndex == nil {
+		return
+	}
+	filtered := c.keys[:0]
+	for _, k := range c.keys {
+		if rec, ok := c.snapshot[k]; ok && c.filterIndex.matches(rec, c.filterValues) {
+			filtered = append(filtered, k)
+		}
+	}
+	c.keys = filtered
+}
+
+func (c *stubCursor) Continue(_ context.Context) bool {
+	if c.err != nil {
+		return false
+	}
+	if c.unique && c.indexKeys != nil && c.pos >= 0 && c.pos < len(c.indexKeys) {
+		prev := c.indexKeys[c.pos]
+		for c.pos++; c.pos < len(c.keys); c.pos++ {
+			if compareIndexKeys(c.indexKeys[c.pos], prev) != 0 {
+				return true
+			}
+		}
+		return false
+	}
+	c.pos++
+	return c.pos < len(c.keys)
+}
+
+func (c *stubCursor) ContinueToKey(_ context.Context, key any) bool {
+	if c.err != nil {
+		return false
+	}
+	for c.pos++; c.pos < len(c.keys); c.pos++ {
+		var cur any = c.keys[c.pos]
+		if c.indexKeys != nil {
+			cur = c.indexKeys[c.pos]
+		}
+		cmp := compareIndexKeys(cur, key)
+		if c.reverse {
+			if cmp <= 0 {
+				return true
+			}
+		} else {
+			if cmp >= 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (c *stubCursor) Advance(ctx context.Context, count int) bool {
+	for i := 0; i < count; i++ {
+		if !c.Continue(ctx) {
+			return false
+		}
+	}
+	return true
+}
+
+func (c *stubCursor) Key() any {
+	if c.pos < 0 || c.pos >= len(c.keys) {
+		return nil
+	}
+	if c.indexKeys != nil {
+		return c.indexKeys[c.pos]
+	}
+	return c.keys[c.pos]
+}
+
+func (c *stubCursor) PrimaryKey() string {
+	if c.pos < 0 || c.pos >= len(c.keys) {
+		return ""
+	}
+	return c.keys[c.pos]
+}
+
+func (c *stubCursor) Value() (indexeddb.Record, error) {
+	if c.keysOnly {
+		return nil, indexeddb.ErrKeysOnly
+	}
+	if c.pos < 0 || c.pos >= len(c.keys) {
+		return nil, indexeddb.ErrNotFound
+	}
+	return c.snapshot[c.keys[c.pos]], nil
+}
+
+func (c *stubCursor) Delete(_ context.Context) error {
+	if c.pos < 0 || c.pos >= len(c.keys) {
+		return indexeddb.ErrNotFound
+	}
+	c.store.mu.Lock()
+	delete(c.store.records, c.keys[c.pos])
+	c.store.mu.Unlock()
+	return nil
+}
+
+func (c *stubCursor) Update(_ context.Context, value indexeddb.Record) error {
+	if c.pos < 0 || c.pos >= len(c.keys) {
+		return indexeddb.ErrNotFound
+	}
+	c.store.mu.Lock()
+	c.store.records[c.keys[c.pos]] = value
+	c.store.mu.Unlock()
+	c.snapshot[c.keys[c.pos]] = value
+	return nil
+}
+
+func (c *stubCursor) Err() error   { return c.err }
+func (c *stubCursor) Close() error { return nil }
 
 var _ indexeddb.IndexedDB = (*StubIndexedDB)(nil)

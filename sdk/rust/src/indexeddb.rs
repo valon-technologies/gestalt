@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 
 use hyper_util::rt::TokioIo;
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
 use tonic::transport::{Channel, Endpoint, Uri};
 use tower::service_fn;
 
@@ -8,12 +10,16 @@ use crate::generated::v1::{self as pb, indexed_db_client::IndexedDbClient};
 
 pub const ENV_INDEXEDDB_SOCKET: &str = "GESTALT_INDEXEDDB_SOCKET";
 
+const CURSOR_CHANNEL_BUFFER: usize = 1;
+
 #[derive(Debug, thiserror::Error)]
 pub enum IndexedDBError {
     #[error("not found")]
     NotFound,
     #[error("already exists")]
     AlreadyExists,
+    #[error("cursor is keys-only; value not available")]
+    KeysOnly,
     #[error("{0}")]
     Transport(#[from] tonic::transport::Error),
     #[error("{0}")]
@@ -39,6 +45,180 @@ pub struct IndexSchema {
 
 pub struct ObjectStoreSchema {
     pub indexes: Vec<IndexSchema>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CursorDirection {
+    Next,
+    NextUnique,
+    Prev,
+    PrevUnique,
+}
+
+impl CursorDirection {
+    fn to_proto(self) -> i32 {
+        match self {
+            Self::Next => pb::CursorDirection::CursorNext as i32,
+            Self::NextUnique => pb::CursorDirection::CursorNextUnique as i32,
+            Self::Prev => pb::CursorDirection::CursorPrev as i32,
+            Self::PrevUnique => pb::CursorDirection::CursorPrevUnique as i32,
+        }
+    }
+}
+
+pub struct Cursor {
+    tx: mpsc::Sender<pb::CursorClientMessage>,
+    stream: tonic::Streaming<pb::CursorResponse>,
+    keys_only: bool,
+    entry: Option<pb::CursorEntry>,
+    done: bool,
+}
+
+impl Cursor {
+    pub fn key(&self) -> Option<serde_json::Value> {
+        let entry = self.entry.as_ref()?;
+        match entry.key.len() {
+            0 => None,
+            1 => Some(typed_value_to_json(&entry.key[0])),
+            _ => Some(serde_json::Value::Array(
+                entry.key.iter().map(typed_value_to_json).collect(),
+            )),
+        }
+    }
+
+    pub fn primary_key(&self) -> &str {
+        self.entry
+            .as_ref()
+            .map(|e| e.primary_key.as_str())
+            .unwrap_or("")
+    }
+
+    pub fn value(&self) -> Result<Record, IndexedDBError> {
+        if self.keys_only {
+            return Err(IndexedDBError::KeysOnly);
+        }
+        Ok(self
+            .entry
+            .as_ref()
+            .and_then(|e| e.record.as_ref())
+            .map(pb_record_to_record)
+            .unwrap_or_default())
+    }
+
+    pub async fn continue_next(&mut self) -> Result<bool, IndexedDBError> {
+        let cmd = pb::cursor_command::Command::Next(true);
+        self.send_and_recv(cmd).await
+    }
+
+    pub async fn continue_to_key(
+        &mut self,
+        key: serde_json::Value,
+    ) -> Result<bool, IndexedDBError> {
+        let cmd = pb::cursor_command::Command::ContinueToKey(json_to_typed_value(&key));
+        self.send_and_recv(cmd).await
+    }
+
+    pub async fn advance(&mut self, count: i32) -> Result<bool, IndexedDBError> {
+        let cmd = pb::cursor_command::Command::Advance(count);
+        self.send_and_recv(cmd).await
+    }
+
+    pub async fn delete(&mut self) -> Result<(), IndexedDBError> {
+        let cmd = pb::cursor_command::Command::Delete(true);
+        self.send_and_recv(cmd).await?;
+        Ok(())
+    }
+
+    pub async fn update(&mut self, value: Record) -> Result<(), IndexedDBError> {
+        let cmd = pb::cursor_command::Command::Update(record_to_pb_record(value));
+        self.send_and_recv(cmd).await?;
+        Ok(())
+    }
+
+    pub async fn close(self) -> Result<(), IndexedDBError> {
+        let msg = pb::CursorClientMessage {
+            msg: Some(pb::cursor_client_message::Msg::Command(pb::CursorCommand {
+                command: Some(pb::cursor_command::Command::Close(true)),
+            })),
+        };
+        self.tx
+            .send(msg)
+            .await
+            .map_err(|e| IndexedDBError::Status(tonic::Status::internal(e.to_string())))?;
+        Ok(())
+    }
+
+    async fn send_and_recv(
+        &mut self,
+        cmd: pb::cursor_command::Command,
+    ) -> Result<bool, IndexedDBError> {
+        let msg = pb::CursorClientMessage {
+            msg: Some(pb::cursor_client_message::Msg::Command(pb::CursorCommand {
+                command: Some(cmd),
+            })),
+        };
+        self.tx
+            .send(msg)
+            .await
+            .map_err(|e| IndexedDBError::Status(tonic::Status::internal(e.to_string())))?;
+
+        let resp = self
+            .stream
+            .message()
+            .await
+            .map_err(map_status)?
+            .ok_or_else(|| {
+                IndexedDBError::Status(tonic::Status::internal("cursor stream ended"))
+            })?;
+
+        match resp.result {
+            Some(pb::cursor_response::Result::Entry(entry)) => {
+                self.entry = Some(entry);
+                self.done = false;
+                Ok(true)
+            }
+            Some(pb::cursor_response::Result::Done(_)) => {
+                self.entry = None;
+                self.done = true;
+                Ok(false)
+            }
+            None => {
+                self.entry = None;
+                self.done = true;
+                Ok(false)
+            }
+        }
+    }
+}
+
+async fn open_cursor_inner(
+    client: &mut IndexedDbClient<Channel>,
+    req: pb::OpenCursorRequest,
+) -> Result<Cursor, IndexedDBError> {
+    let keys_only = req.keys_only;
+    let (tx, rx) = mpsc::channel::<pb::CursorClientMessage>(CURSOR_CHANNEL_BUFFER);
+
+    let open_msg = pb::CursorClientMessage {
+        msg: Some(pb::cursor_client_message::Msg::Open(req)),
+    };
+    tx.send(open_msg)
+        .await
+        .map_err(|e| IndexedDBError::Status(tonic::Status::internal(e.to_string())))?;
+
+    let receiver_stream = ReceiverStream::new(rx);
+    let stream = client
+        .open_cursor(receiver_stream)
+        .await
+        .map_err(map_status)?
+        .into_inner();
+
+    Ok(Cursor {
+        tx,
+        stream,
+        keys_only,
+        entry: None,
+        done: false,
+    })
 }
 
 pub struct IndexedDB {
@@ -126,14 +306,19 @@ impl ObjectStore {
             })
             .await
             .map_err(map_status)?;
-        Ok(prost_struct_to_record(resp.into_inner().record))
+        Ok(resp
+            .into_inner()
+            .record
+            .as_ref()
+            .map(pb_record_to_record)
+            .unwrap_or_default())
     }
 
     pub async fn add(&mut self, record: Record) -> Result<(), IndexedDBError> {
         self.client
             .add(pb::RecordRequest {
                 store: self.store.clone(),
-                record: Some(record_to_prost_struct(record)),
+                record: Some(record_to_pb_record(record)),
             })
             .await
             .map_err(map_status)?;
@@ -144,7 +329,7 @@ impl ObjectStore {
         self.client
             .put(pb::RecordRequest {
                 store: self.store.clone(),
-                record: Some(record_to_prost_struct(record)),
+                record: Some(record_to_pb_record(record)),
             })
             .await
             .map_err(map_status)?;
@@ -179,6 +364,38 @@ impl ObjectStore {
             index: name.to_string(),
         }
     }
+
+    pub async fn open_cursor(
+        &mut self,
+        range: Option<KeyRange>,
+        direction: CursorDirection,
+    ) -> Result<Cursor, IndexedDBError> {
+        let req = pb::OpenCursorRequest {
+            store: self.store.clone(),
+            range: range.map(key_range_to_pb),
+            direction: direction.to_proto(),
+            keys_only: false,
+            index: String::new(),
+            values: vec![],
+        };
+        open_cursor_inner(&mut self.client, req).await
+    }
+
+    pub async fn open_key_cursor(
+        &mut self,
+        range: Option<KeyRange>,
+        direction: CursorDirection,
+    ) -> Result<Cursor, IndexedDBError> {
+        let req = pb::OpenCursorRequest {
+            store: self.store.clone(),
+            range: range.map(key_range_to_pb),
+            direction: direction.to_proto(),
+            keys_only: true,
+            index: String::new(),
+            values: vec![],
+        };
+        open_cursor_inner(&mut self.client, req).await
+    }
 }
 
 pub struct IndexClient {
@@ -194,12 +411,17 @@ impl IndexClient {
             .index_get(pb::IndexQueryRequest {
                 store: self.store.clone(),
                 index: self.index.clone(),
-                values: values.iter().map(json_to_prost_value).collect(),
+                values: values.iter().map(json_to_typed_value).collect(),
                 range: None,
             })
             .await
             .map_err(map_status)?;
-        Ok(prost_struct_to_record(resp.into_inner().record))
+        Ok(resp
+            .into_inner()
+            .record
+            .as_ref()
+            .map(pb_record_to_record)
+            .unwrap_or_default())
     }
 
     pub async fn get_all(
@@ -211,7 +433,7 @@ impl IndexClient {
             .index_get_all(pb::IndexQueryRequest {
                 store: self.store.clone(),
                 index: self.index.clone(),
-                values: values.iter().map(json_to_prost_value).collect(),
+                values: values.iter().map(json_to_typed_value).collect(),
                 range: None,
             })
             .await
@@ -219,8 +441,8 @@ impl IndexClient {
         Ok(resp
             .into_inner()
             .records
-            .into_iter()
-            .map(|s| prost_struct_to_record(Some(s)))
+            .iter()
+            .map(pb_record_to_record)
             .collect())
     }
 
@@ -230,12 +452,46 @@ impl IndexClient {
             .index_delete(pb::IndexQueryRequest {
                 store: self.store.clone(),
                 index: self.index.clone(),
-                values: values.iter().map(json_to_prost_value).collect(),
+                values: values.iter().map(json_to_typed_value).collect(),
                 range: None,
             })
             .await
             .map_err(map_status)?;
         Ok(resp.into_inner().deleted)
+    }
+
+    pub async fn open_cursor(
+        &mut self,
+        values: &[serde_json::Value],
+        range: Option<KeyRange>,
+        direction: CursorDirection,
+    ) -> Result<Cursor, IndexedDBError> {
+        let req = pb::OpenCursorRequest {
+            store: self.store.clone(),
+            range: range.map(key_range_to_pb),
+            direction: direction.to_proto(),
+            keys_only: false,
+            index: self.index.clone(),
+            values: values.iter().map(json_to_typed_value).collect(),
+        };
+        open_cursor_inner(&mut self.client, req).await
+    }
+
+    pub async fn open_key_cursor(
+        &mut self,
+        values: &[serde_json::Value],
+        range: Option<KeyRange>,
+        direction: CursorDirection,
+    ) -> Result<Cursor, IndexedDBError> {
+        let req = pb::OpenCursorRequest {
+            store: self.store.clone(),
+            range: range.map(key_range_to_pb),
+            direction: direction.to_proto(),
+            keys_only: true,
+            index: self.index.clone(),
+            values: values.iter().map(json_to_typed_value).collect(),
+        };
+        open_cursor_inner(&mut self.client, req).await
     }
 }
 
@@ -247,45 +503,69 @@ fn map_status(err: tonic::Status) -> IndexedDBError {
     }
 }
 
-fn record_to_prost_struct(record: Record) -> prost_types::Struct {
-    prost_types::Struct {
+fn record_to_pb_record(record: Record) -> pb::Record {
+    pb::Record {
         fields: record
             .into_iter()
-            .map(|(k, v)| (k, json_to_prost_value(&v)))
+            .map(|(k, v)| (k, json_to_typed_value(&v)))
             .collect(),
     }
 }
 
-fn prost_struct_to_record(s: Option<prost_types::Struct>) -> Record {
-    match s {
-        Some(s) => s
-            .fields
-            .into_iter()
-            .map(|(k, v)| (k, prost_value_to_json(v)))
-            .collect(),
-        None => BTreeMap::new(),
-    }
+fn pb_record_to_record(r: &pb::Record) -> Record {
+    r.fields
+        .iter()
+        .map(|(k, v)| (k.clone(), typed_value_to_json(v)))
+        .collect()
 }
 
-fn json_to_prost_value(v: &serde_json::Value) -> prost_types::Value {
-    use prost_types::value::Kind;
+fn json_to_typed_value(v: &serde_json::Value) -> pb::TypedValue {
+    use pb::typed_value::Kind;
     let kind = match v {
         serde_json::Value::Null => Kind::NullValue(0),
         serde_json::Value::Bool(b) => Kind::BoolValue(*b),
-        serde_json::Value::Number(n) => Kind::NumberValue(n.as_f64().unwrap_or(0.0)),
+        serde_json::Value::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                Kind::IntValue(i)
+            } else {
+                Kind::FloatValue(n.as_f64().unwrap_or(0.0))
+            }
+        }
         serde_json::Value::String(s) => Kind::StringValue(s.clone()),
-        _ => Kind::StringValue(v.to_string()),
+        other => Kind::JsonValue(prost_types::Value {
+            kind: Some(prost_types::value::Kind::StringValue(other.to_string())),
+        }),
     };
-    prost_types::Value { kind: Some(kind) }
+    pb::TypedValue { kind: Some(kind) }
 }
 
-fn prost_value_to_json(v: prost_types::Value) -> serde_json::Value {
-    use prost_types::value::Kind;
-    match v.kind {
+fn typed_value_to_json(v: &pb::TypedValue) -> serde_json::Value {
+    use pb::typed_value::Kind;
+    match &v.kind {
         Some(Kind::NullValue(_)) => serde_json::Value::Null,
-        Some(Kind::BoolValue(b)) => serde_json::Value::Bool(b),
-        Some(Kind::NumberValue(n)) => serde_json::json!(n),
-        Some(Kind::StringValue(s)) => serde_json::Value::String(s),
-        _ => serde_json::Value::Null,
+        Some(Kind::BoolValue(b)) => serde_json::Value::Bool(*b),
+        Some(Kind::IntValue(i)) => serde_json::json!(*i),
+        Some(Kind::FloatValue(f)) => serde_json::json!(*f),
+        Some(Kind::StringValue(s)) => serde_json::Value::String(s.clone()),
+        Some(Kind::BytesValue(b)) => serde_json::json!(b),
+        Some(Kind::JsonValue(pv)) => match &pv.kind {
+            Some(prost_types::value::Kind::StringValue(s)) => {
+                serde_json::from_str(s).unwrap_or(serde_json::Value::String(s.clone()))
+            }
+            _ => serde_json::Value::Null,
+        },
+        Some(Kind::TimeValue(ts)) => {
+            serde_json::Value::String(format!("{}.{}", ts.seconds, ts.nanos))
+        }
+        None => serde_json::Value::Null,
+    }
+}
+
+fn key_range_to_pb(kr: KeyRange) -> pb::KeyRange {
+    pb::KeyRange {
+        lower: kr.lower.map(|v| json_to_typed_value(&v)),
+        upper: kr.upper.map(|v| json_to_typed_value(&v)),
+        lower_open: kr.lower_open,
+        upper_open: kr.upper_open,
     }
 }
