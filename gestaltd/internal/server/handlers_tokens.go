@@ -12,7 +12,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
 
 type createTokenRequest struct {
@@ -175,7 +174,8 @@ func (s *Server) connectionInfosForPlugin(integration string, plugin *config.Pro
 	manifestProvider := plugin.ManifestSpec()
 
 	infos := make([]connectionDefInfo, 0, len(plugin.Connections)+1)
-	if info, ok := s.connectionInfoFromAuth(integration, config.PluginConnectionAlias, config.EffectivePluginConnectionDef(plugin, manifestProvider).Auth, integrationAuthTypes, defaultCredentialFields); ok {
+	effectivePluginConn := config.EffectivePluginConnectionDef(plugin, manifestProvider)
+	if info, ok := s.connectionInfoFromAuth(integration, config.PluginConnectionAlias, effectivePluginConn, integrationAuthTypes, defaultCredentialFields); ok {
 		infos = append(infos, info)
 	}
 
@@ -207,7 +207,7 @@ func (s *Server) connectionInfosForPlugin(integration string, plugin *config.Pro
 		if !ok {
 			continue
 		}
-		if info, ok := s.connectionInfoFromAuth(integration, name, conn.Auth, integrationAuthTypes, defaultCredentialFields); ok {
+		if info, ok := s.connectionInfoFromAuth(integration, name, conn, integrationAuthTypes, defaultCredentialFields); ok {
 			infos = append(infos, info)
 		}
 	}
@@ -259,19 +259,20 @@ func credentialFieldInfos[T any](fields []T, mapField func(T) credentialFieldInf
 	return infos
 }
 
-func (s *Server) connectionInfoFromAuth(integration, name string, auth config.ConnectionAuthDef, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo) (connectionDefInfo, bool) {
-	authTypes := connectionAuthTypes(auth.Type, integrationAuthTypes)
+func (s *Server) connectionInfoFromAuth(integration, name string, conn config.ConnectionDef, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo) (connectionDefInfo, bool) {
+	authTypes := connectionAuthTypes(conn.Auth, integrationAuthTypes)
 	authTypes = s.supportedConnectionAuthTypes(integration, name, authTypes)
 	if len(authTypes) == 0 {
 		return connectionDefInfo{}, false
 	}
 
 	info := connectionDefInfo{
+		DisplayName:      connectionDisplayName(name, conn.DisplayName),
 		Name:             name,
 		AuthTypes:        authTypes,
 		CredentialFields: []credentialFieldInfo{},
 	}
-	if fields := credentialFieldInfos(auth.Credentials, func(field config.CredentialFieldDef) credentialFieldInfo {
+	if fields := credentialFieldInfos(conn.Auth.Credentials, func(field config.CredentialFieldDef) credentialFieldInfo {
 		return credentialFieldInfo{
 			Name:        field.Name,
 			Label:       field.Label,
@@ -326,20 +327,24 @@ func fallbackAuthTypesForProvider(prov core.Provider) []string {
 	return []string{"oauth"}
 }
 
-func connectionAuthTypes(authType pluginmanifestv1.AuthType, integrationAuthTypes []string) []string {
-	if authType == "" {
+func connectionDisplayName(name, configured string) string {
+	if strings.TrimSpace(configured) != "" {
+		return configured
+	}
+	return userFacingConnectionName(name)
+}
+
+func connectionAuthTypes(auth config.ConnectionAuthDef, integrationAuthTypes []string) []string {
+	if auth.Type == "" {
 		if len(integrationAuthTypes) == 0 {
 			return nil
 		}
 		return append([]string(nil), integrationAuthTypes...)
 	}
 
-	authTypes := userFacingAuthTypes([]string{string(authType)})
+	authTypes := userFacingAuthTypes([]string{string(auth.Type)})
 	if len(authTypes) == 0 {
 		return nil
-	}
-	if authTypesContain(integrationAuthTypes, "manual") && !authTypesContain(authTypes, "manual") {
-		authTypes = append(authTypes, "manual")
 	}
 	return authTypes
 }

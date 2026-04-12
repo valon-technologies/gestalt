@@ -33,6 +33,8 @@ struct IntegrationInfo {
 struct ConnectionDefInfo {
     name: String,
     #[serde(default)]
+    display_name: Option<String>,
+    #[serde(default)]
     auth_types: Vec<String>,
     #[serde(default)]
     credential_fields: Vec<CredentialFieldInfo>,
@@ -436,7 +438,7 @@ fn resolve_connection(
         .connections
         .iter()
         .map(|connection| PromptOption {
-            label: user_facing_connection_name(&connection.name).to_string(),
+            label: connection.display_name(),
             detail: Some(format!(
                 "Auth: {}",
                 format_auth_types(&connection.auth_types)
@@ -595,9 +597,17 @@ impl IntegrationInfo {
     fn available_connections(&self) -> String {
         self.connections
             .iter()
-            .map(|connection| user_facing_connection_name(&connection.name).to_string())
+            .map(ConnectionDefInfo::display_name)
             .collect::<Vec<_>>()
             .join(", ")
+    }
+}
+
+impl ConnectionDefInfo {
+    fn display_name(&self) -> String {
+        non_empty(self.display_name.as_deref())
+            .unwrap_or(user_facing_connection_name(&self.name))
+            .to_string()
     }
 }
 

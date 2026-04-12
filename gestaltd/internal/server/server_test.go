@@ -886,6 +886,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 		},
 		Connections: map[string]*config.ConnectionDef{
 			"workspace": {
+				DisplayName: "Workspace OAuth",
 				Auth: config.ConnectionAuthDef{
 					Type: pluginmanifestv1.AuthTypeManual,
 					Credentials: []config.CredentialFieldDef{
@@ -906,6 +907,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 				},
 				Connections: map[string]*pluginmanifestv1.ManifestConnectionDef{
 					"workspace": {
+						DisplayName: "Workspace Access",
 						Auth: &pluginmanifestv1.ProviderAuth{
 							Type: pluginmanifestv1.AuthTypeManual,
 							Credentials: []pluginmanifestv1.CredentialField{
@@ -971,6 +973,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 		Description string `json:"description"`
 	}
 	type connectionInfo struct {
+		DisplayName      string            `json:"displayName"`
 		Name             string            `json:"name"`
 		AuthTypes        []string          `json:"authTypes"`
 		CredentialFields []credentialField `json:"credentialFields"`
@@ -1005,6 +1008,9 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 		{Name: "plugin_local_only", Label: "Plugin Local Only", Description: "Plugin Local Only Description"},
 	}) {
 		t.Fatalf("plugin connection info = %+v", got[config.PluginConnectionAlias])
+	}
+	if got["workspace"].DisplayName != "Workspace OAuth" {
+		t.Fatalf("workspace connection info = %+v", got["workspace"])
 	}
 	if !reflect.DeepEqual(got["workspace"].AuthTypes, []string{"manual"}) || !reflect.DeepEqual(got["workspace"].CredentialFields, []credentialField{
 		{Name: "workspace_token", Label: "Workspace Config Token", Description: "Workspace Manifest Description"},
@@ -1108,13 +1114,11 @@ func TestListIntegrations_ConnectionInfosIncludeProviderManualAuth(t *testing.T)
 					TokenURL:         "https://example.com/oauth/token",
 				},
 			},
-			wantAuth: []string{"oauth", "manual"},
+			wantAuth: []string{"oauth"},
 			wantFields: []struct {
 				Name  string `json:"name"`
 				Label string `json:"label"`
-			}{
-				{Name: "api_token", Label: "API Token"},
-			},
+			}{},
 		},
 		{
 			name: "empty auth type still exposes oauth",

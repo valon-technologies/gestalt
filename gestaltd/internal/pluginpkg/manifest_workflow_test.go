@@ -306,6 +306,7 @@ spec:
       auth:
         type: none
     api:
+      displayName: OAuth
       auth:
         type: oauth2
         authorizationUrl: https://auth.example.com/authorize
@@ -347,6 +348,9 @@ spec:
 	if manifest.Spec.SurfaceConnectionName("openapi") != "api" {
 		t.Fatalf("provider openapi connection = %q, want api", manifest.Spec.SurfaceConnectionName("openapi"))
 	}
+	if manifest.Spec.Connections["api"] == nil || manifest.Spec.Connections["api"].DisplayName != "OAuth" {
+		t.Fatalf("provider api connection displayName = %#v", manifest.Spec.Connections["api"])
+	}
 	if len(manifest.Spec.ManagedParameters) != 1 {
 		t.Fatalf("managed_parameters = %+v", manifest.Spec.ManagedParameters)
 	}
@@ -374,6 +378,7 @@ displayName: Notion
 spec:
   connections:
     mcp:
+      displayName: MCP
       mode: user
       auth:
         type: mcp_oauth
@@ -398,6 +403,9 @@ spec:
 	}
 	if conn := dirManifest.Spec.Connections["mcp"]; conn == nil || conn.Auth == nil || conn.Auth.Type != pluginmanifestv1.AuthTypeMCPOAuth {
 		t.Fatalf("plugin connection auth = %#v", dirManifest.Spec.Connections["mcp"])
+	}
+	if conn := dirManifest.Spec.Connections["mcp"]; conn == nil || conn.DisplayName != "MCP" {
+		t.Fatalf("plugin connection displayName = %#v", dirManifest.Spec.Connections["mcp"])
 	}
 
 	archivePath := filepath.Join(root, "plugin-mcp-oauth.tar.gz")

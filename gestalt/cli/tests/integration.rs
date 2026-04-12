@@ -1095,16 +1095,16 @@ fn test_manual_connect_prompts_for_connection_and_finishes_candidate_selection()
     let mut server = Server::new();
     let _integrations = authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
         .with_body(
-            r#"[{
-                "name":"manual-svc",
-                "displayName":"Manual Service",
-                "authTypes":["manual"],
-                "connections":[
-                    {"name":"workspace","credentialFields":[{"name":"token","label":"Workspace token"}]},
-                    {"name":"plugin","authTypes":["oauth"]}
-                ]
-            }]"#,
-        )
+	            r#"[{
+	                "name":"manual-svc",
+	                "displayName":"Manual Service",
+	                "authTypes":["manual"],
+	                "connections":[
+	                    {"name":"workspace","displayName":"Workspace OAuth","credentialFields":[{"name":"token","label":"Workspace token"}]},
+	                    {"name":"plugin","displayName":"Legacy Plugin","authTypes":["oauth"]}
+	                ]
+	            }]"#,
+	        )
         .create();
     let _connect = authed_json_mock!(
         server,
@@ -1157,6 +1157,7 @@ fn test_manual_connect_prompts_for_connection_and_finishes_candidate_selection()
         .stderr(predicate::str::contains(
             "Select a Manual Service connection:",
         ))
+        .stderr(predicate::str::contains("Workspace OAuth"))
         .stderr(predicate::str::contains("Workspace token"))
         .stderr(predicate::str::contains(
             "Gestalt found more than one manual-svc connection. Choose one to save:",

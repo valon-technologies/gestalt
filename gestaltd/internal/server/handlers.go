@@ -56,6 +56,7 @@ type credentialFieldInfo struct {
 }
 
 type connectionDefInfo struct {
+	DisplayName      string                `json:"displayName,omitempty"`
 	Name             string                `json:"name"`
 	AuthTypes        []string              `json:"authTypes"`
 	CredentialFields []credentialFieldInfo `json:"credentialFields"`

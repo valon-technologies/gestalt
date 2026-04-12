@@ -65,7 +65,7 @@ function resolveAuthTargets(integration: Integration): AuthTarget[] {
       .map((connection) => ({
         key: connection.name,
         connection: connection.name,
-        label: connection.name,
+        label: connection.displayName || connection.name,
         authTypes: normalizeAuthTypes(connection.authTypes, false),
         credentialFields: connection.credentialFields?.length
           ? connection.credentialFields
@@ -211,6 +211,11 @@ export default function IntegrationSettingsModal({
       ? authTargets.find((authTarget) => authTarget.connection === pendingAction.connection)
       : defaultTarget;
     return target?.credentialFields ?? integration.credentialFields;
+  }
+
+  function displayConnectionName(name?: string): string | undefined {
+    if (!name) return undefined;
+    return authTargets.find((target) => target.connection === name)?.label || name;
   }
 
   function isPendingAction(action: AuthAction): boolean {
@@ -394,7 +399,7 @@ export default function IntegrationSettingsModal({
                           <div>
                             <div className="text-sm text-primary">{inst.name}</div>
                             {inst.connection && (
-                              <div className="text-xs text-faint">{inst.connection}</div>
+                              <div className="text-xs text-faint">{displayConnectionName(inst.connection)}</div>
                             )}
                           </div>
                         </div>
