@@ -10,6 +10,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 )
 
@@ -24,7 +25,7 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 	defer func() { _ = prepared.Close(context.Background()) }()
 
 	var warnings []string
-	if w, ok := prepared.Services.DB.(interface{ Warnings() []string }); ok {
+	if w, ok := metricutil.UnwrapIndexedDB(prepared.Services.DB).(interface{ Warnings() []string }); ok {
 		warnings = w.Warnings()
 	}
 

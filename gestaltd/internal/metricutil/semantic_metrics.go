@@ -14,6 +14,8 @@ var (
 	attrProvider       = attribute.Key("gestalt.provider")
 	attrAction         = attribute.Key("gestalt.action")
 	attrType           = attribute.Key("gestalt.type")
+	attrMethod         = attribute.Key("gestalt.method")
+	attrStore          = attribute.Key("gestalt.store")
 	attrConnectionMode = attribute.Key("gestalt.connection_mode")
 )
 
@@ -47,6 +49,7 @@ func newCounterMetrics(meter metric.Meter, prefix, desc string) counterMetrics {
 var (
 	authMetricsCache           MeterCache[counterMetrics]
 	connectionAuthMetricsCache MeterCache[counterMetrics]
+	indexedDBMetricsCache      MeterCache[counterMetrics]
 )
 
 func RecordAuthMetrics(ctx context.Context, startedAt time.Time, provider string, action string, failed bool) {
@@ -68,6 +71,16 @@ func RecordConnectionAuthMetrics(ctx context.Context, startedAt time.Time, provi
 		attrType.String(AttrValue(authType)),
 		attrAction.String(AttrValue(action)),
 		attrConnectionMode.String(AttrValue(connectionMode)),
+	)
+}
+
+func RecordIndexedDBMetrics(ctx context.Context, startedAt time.Time, store string, method string, failed bool) {
+	metrics := indexedDBMetricsCache.Load(meterName, func(meter metric.Meter) counterMetrics {
+		return newCounterMetrics(meter, "gestaltd.indexeddb", "gestaltd indexeddb operations")
+	})
+	recordCounterMetrics(ctx, metrics, startedAt, failed,
+		attrStore.String(AttrValue(store)),
+		attrMethod.String(AttrValue(method)),
 	)
 }
 
