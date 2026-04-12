@@ -437,6 +437,10 @@ article.nextra-content main::before {
   order: 1;
 }
 
+.nextra-callout {
+  align-items: center;
+}
+
 article div:has(> table) {
   width: 100%;
 }
