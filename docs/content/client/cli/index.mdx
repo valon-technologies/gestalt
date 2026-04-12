@@ -22,11 +22,11 @@ asIndexPage: true
 | `gestalt auth status` | Show current auth state and server connectivity. |
 | `gestalt init` | Run the interactive setup wizard. |
 | `gestalt config get\|set\|unset\|list` | Manage the local client config. |
-| `gestalt integrations list` | List plugins from the server. |
-| `gestalt integrations connect NAME` | Connect a plugin through OAuth or interactive manual auth. |
-| `gestalt integrations disconnect NAME` | Disconnect a plugin, removing stored credentials. |
-| `gestalt invoke INTEGRATION [OPERATION]` | Invoke an operation or list operations when omitted. |
-| `gestalt describe INTEGRATION OPERATION` | Show one operation's parameter contract. |
+| `gestalt plugins list` | List plugins from the server. |
+| `gestalt plugins connect NAME` | Connect a plugin through OAuth or interactive manual auth. |
+| `gestalt plugins disconnect NAME` | Disconnect a plugin, removing stored credentials. |
+| `gestalt plugins invoke NAME [OPERATION]` | Invoke an operation or list operations when omitted. |
+| `gestalt plugins describe NAME OPERATION` | Show one operation's parameter contract. |
 | `gestalt tokens create\|list\|revoke` | Manage Gestalt API tokens. |
 
 ## URL resolution
@@ -58,33 +58,33 @@ The CLI searches the current directory and then parent directories until it find
 
 ## Plugin connect flags
 
-`gestalt integrations connect NAME` accepts `--connection` and `--instance`. When the selected connection uses manual auth instead of OAuth, the CLI prompts for the required credential fields and connection parameters.
+`gestalt plugins connect NAME` accepts `--connection` and `--instance`. When the selected connection uses manual auth instead of OAuth, the CLI prompts for the required credential fields and connection parameters.
 
 ## Plugin disconnect flags
 
-`gestalt integrations disconnect NAME` accepts `--connection` and `--instance` to target a specific named connection or stored instance. When both are omitted, the default connection is disconnected.
+`gestalt plugins disconnect NAME` accepts `--connection` and `--instance` to target a specific named connection or stored instance. When both are omitted, the default connection is disconnected.
 
 ## Invoke flags
 
-`gestalt invoke` accepts `-p`/`--param key=value`, `--input-file file.json` (use `-` for stdin), `--connection`, `--instance`, and `--select`. Use `:=` instead of `=` to pass JSON values: `-p items:='["a","b"]'`.
+`gestalt plugins invoke` accepts `-p`/`--param key=value`, `--input-file file.json` (use `-` for stdin), `--connection`, `--instance`, and `--select`. Use `:=` instead of `=` to pass JSON values: `-p items:='["a","b"]'`.
 
 ## Operation name matching
 
 Operation names with dots (like `chat.postMessage`) can be typed as space-separated segments:
 
 ```sh
-gestalt invoke slack chat postMessage
+gestalt plugins invoke slack chat postMessage
 ```
 
-This resolves to `chat.postMessage`. If the segments match a prefix shared by multiple operations, the CLI displays the matching subset instead of an error. For example, `gestalt invoke slack chat` lists all operations starting with `chat.`.
+This resolves to `chat.postMessage`. If the segments match a prefix shared by multiple operations, the CLI displays the matching subset instead of an error. For example, `gestalt plugins invoke slack chat` lists all operations starting with `chat.`.
 
 ## Examples
 
 ```sh
-gestalt integrations list
-gestalt integrations connect notion --connection MCP
-gestalt describe slack chat.postMessage
-gestalt invoke slack chat postMessage \
+gestalt plugins list
+gestalt plugins connect notion --connection MCP
+gestalt plugins describe slack chat.postMessage
+gestalt plugins invoke slack chat postMessage \
   --connection plugin \
   -p channel=C123 \
   -p text='hello'

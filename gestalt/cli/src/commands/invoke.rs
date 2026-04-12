@@ -17,13 +17,13 @@ pub struct InvokeOptions<'a> {
 
 pub fn run(
     client: &ApiClient,
-    integration: &str,
+    plugin: &str,
     segments: &[String],
     params: &[ParamEntry],
     options: InvokeOptions<'_>,
     format: Format,
 ) -> Result<()> {
-    let cat = catalog::fetch_catalog(client, integration)?;
+    let cat = catalog::fetch_catalog(client, plugin)?;
     let query = segments.join(".");
 
     match cat.resolve(&query)? {
@@ -32,7 +32,7 @@ pub fn run(
             display_operations(ops, format)
         }
         ResolvedOperation::Exact(_) => {
-            execute(client, &cat, integration, &query, params, options, format)
+            execute(client, &cat, plugin, &query, params, options, format)
         }
         ResolvedOperation::Prefix(matches) => {
             let n = matches.len();
@@ -49,33 +49,25 @@ pub fn run(
 
 pub fn invoke(
     client: &ApiClient,
-    integration: &str,
+    plugin: &str,
     operation: &str,
     params: &[ParamEntry],
     options: InvokeOptions<'_>,
     format: Format,
 ) -> Result<()> {
-    let cat = catalog::fetch_catalog(client, integration)?;
-    execute(
-        client,
-        &cat,
-        integration,
-        operation,
-        params,
-        options,
-        format,
-    )
+    let cat = catalog::fetch_catalog(client, plugin)?;
+    execute(client, &cat, plugin, operation, params, options, format)
 }
 
-pub fn list_operations(client: &ApiClient, integration: &str, format: Format) -> Result<()> {
-    let cat = catalog::fetch_catalog(client, integration)?;
+pub fn list_operations(client: &ApiClient, plugin: &str, format: Format) -> Result<()> {
+    let cat = catalog::fetch_catalog(client, plugin)?;
     display_operations(cat.operations(), format)
 }
 
 fn execute(
     client: &ApiClient,
     cat: &OperationsCatalog,
-    integration: &str,
+    plugin: &str,
     operation: &str,
     params: &[ParamEntry],
     options: InvokeOptions<'_>,
@@ -101,7 +93,7 @@ fn execute(
         );
     }
 
-    let path = format!("/api/v1/{}/{}", integration, operation);
+    let path = format!("/api/v1/{}/{}", plugin, operation);
     let resp = (if param_map.is_empty() {
         client.get(&path)
     } else {
@@ -113,7 +105,7 @@ fn execute(
             return err;
         }
 
-        let mut connect_command = format!("gestalt integrations connect {}", integration);
+        let mut connect_command = format!("gestalt plugins connect {}", plugin);
         if let Some(connection) = options.connection {
             connect_command.push_str(" --connection ");
             connect_command.push_str(connection);
@@ -124,12 +116,12 @@ fn execute(
         }
 
         anyhow::anyhow!(
-            "integration {:?} is not connected. Connect it first with `{}`",
-            integration,
+            "plugin {:?} is not connected. Connect it first with `{}`",
+            plugin,
             connect_command,
         )
     })
-    .with_context(|| format!("failed to invoke {}.{}", integration, operation))?;
+    .with_context(|| format!("failed to invoke {}.{}", plugin, operation))?;
 
     let output_value = match options.select {
         Some(sel_path) => output::select_path(&resp, sel_path)?,

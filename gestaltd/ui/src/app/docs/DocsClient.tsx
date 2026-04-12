@@ -29,7 +29,7 @@ const sections: Section[] = [
       { id: "authenticate", label: "Authenticate" },
     ],
   },
-  { id: "connect", label: "Connect Integrations", subsections: [] },
+  { id: "connect", label: "Connect Plugins", subsections: [] },
   {
     id: "invoke",
     label: "Invoke Operations",
@@ -271,24 +271,24 @@ export GESTALT_URL=${origin}`}
 gestalt auth status
 
 export GESTALT_API_KEY=gst_api_your_token_here
-gestalt integrations list`}
+gestalt plugins list`}
               />
             </DocSection>
 
             <DocSection
               id="connect"
-              title="Connect Integrations"
-              description="Inspect available integrations first, then authorize the ones you need."
+              title="Connect Plugins"
+              description="Inspect available plugins first, then authorize the ones you need."
             >
               <p className="doc-copy">
-                Integrations exposed by the deployment appear in both the CLI
+                Plugins exposed by the deployment appear in both the CLI
                 and the web UI. Use either surface to start the underlying OAuth
                 or manual credential flow.
               </p>
               <CodeBlock
-                code={`gestalt integrations list
-gestalt integrations connect <integration>
-gestalt integrations connect <integration> --connection <name> --instance <instance>`}
+                code={`gestalt plugins list
+gestalt plugins connect <plugin>
+gestalt plugins connect <plugin> --connection <name> --instance <instance>`}
               />
               <p className="doc-copy">
                 If you prefer the browser flow, the same work is available on{" "}
@@ -302,19 +302,19 @@ gestalt integrations connect <integration> --connection <name> --instance <insta
             <DocSection
               id="invoke"
               title="Invoke Operations"
-              description="Use the catalog built into Gestalt to discover an integration's operations before making requests."
+              description="Use the catalog built into Gestalt to discover a plugin's operations before making requests."
             >
               <CodeBlock
-                code={`gestalt invoke <integration>
-gestalt describe <integration> <operation>
-gestalt invoke <integration> <operation> -p key=value
-gestalt invoke <integration> <operation> -p filters:='{"status":"open"}'
-gestalt invoke <integration> <operation> --input-file payload.json --select data.items`}
+                code={`gestalt plugins invoke <plugin>
+gestalt plugins describe <plugin> <operation>
+gestalt plugins invoke <plugin> <operation> -p key=value
+gestalt plugins invoke <plugin> <operation> -p filters:='{"status":"open"}'
+gestalt plugins invoke <plugin> <operation> --input-file payload.json --select data.items`}
               />
               <p className="doc-copy">
                 If you omit the operation,{" "}
                 <code className="font-mono text-sm text-primary">
-                  gestalt invoke &lt;integration&gt;
+                  gestalt plugins invoke &lt;plugin&gt;
                 </code>{" "}
                 lists available operations instead of running one.
               </p>

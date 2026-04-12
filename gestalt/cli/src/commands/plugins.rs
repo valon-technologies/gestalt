@@ -132,7 +132,7 @@ enum ManualCredentialPayload {
 pub fn list(client: &ApiClient, format: Format) -> Result<()> {
     let resp = client
         .get("/api/v1/integrations")
-        .context("failed to list integrations")?;
+        .context("failed to list plugins")?;
 
     match format {
         Format::Json => output::print_json(&resp),
@@ -181,7 +181,7 @@ pub fn disconnect(
 
     client
         .delete(&path)
-        .with_context(|| format!("failed to disconnect integration '{}'", name))?;
+        .with_context(|| format!("failed to disconnect plugin '{}'", name))?;
 
     output::print_success(&format!("Disconnected {}.", name));
     Ok(())
@@ -208,7 +208,7 @@ pub fn connect_with_browser_opener<F>(
 where
     F: FnOnce(&str) -> Result<()>,
 {
-    let integration = fetch_integration(client, name)?;
+    let integration = fetch_plugin(client, name)?;
     let selected_connection = resolve_connection(&integration, connection)?;
     let auth_target = resolve_auth_target(&integration, selected_connection.as_deref());
 
@@ -236,7 +236,7 @@ where
     }
 
     bail!(
-        "integration '{}' does not expose a supported connection flow in the CLI",
+        "plugin '{}' does not expose a supported connection flow in the CLI",
         name
     );
 }
@@ -319,7 +319,7 @@ fn connect_manual(
                     connection_params: connection_params.as_ref(),
                 },
             )
-            .context("failed to connect integration")?,
+            .context("failed to connect plugin")?,
     )
     .context("failed to parse manual connect response")?;
 
@@ -392,18 +392,18 @@ fn complete_pending_selection(
     Ok(())
 }
 
-fn fetch_integration(client: &ApiClient, name: &str) -> Result<IntegrationInfo> {
-    let integrations: Vec<IntegrationInfo> = serde_json::from_value(
+fn fetch_plugin(client: &ApiClient, name: &str) -> Result<IntegrationInfo> {
+    let plugins: Vec<IntegrationInfo> = serde_json::from_value(
         client
             .get("/api/v1/integrations")
-            .context("failed to load integrations")?,
+            .context("failed to load plugins")?,
     )
-    .context("failed to parse integrations")?;
+    .context("failed to parse plugins")?;
 
-    integrations
+    plugins
         .into_iter()
-        .find(|integration| integration.name == name)
-        .with_context(|| format!("integration '{}' not found", name))
+        .find(|plugin| plugin.name == name)
+        .with_context(|| format!("plugin '{}' not found", name))
 }
 
 fn resolve_connection(
@@ -420,7 +420,7 @@ fn resolve_connection(
             .map(|connection| Some(connection.name.clone()))
             .with_context(|| {
                 format!(
-                    "unknown connection '{}' for integration '{}'; available connections: {}",
+                    "unknown connection '{}' for plugin '{}'; available connections: {}",
                     requested_connection,
                     integration.name,
                     integration.available_connections()

@@ -1,8 +1,6 @@
 use clap::{CommandFactory, Parser};
 use gestalt::api::{self, ApiClient};
-use gestalt::cli::{
-    AuthCommands, Cli, Commands, ConfigCommands, IntegrationCommands, TokenCommands,
-};
+use gestalt::cli::{AuthCommands, Cli, Commands, ConfigCommands, PluginCommands, TokenCommands};
 use gestalt::commands;
 use gestalt::output;
 
@@ -29,62 +27,32 @@ fn run() -> anyhow::Result<()> {
             ConfigCommands::Unset { key } => commands::config::unset(&key),
             ConfigCommands::List => commands::config::list(format),
         },
-        Commands::Integrations { command } => {
-            let client = ApiClient::from_env(url)?;
-            match command {
-                IntegrationCommands::List => commands::integrations::list(&client, format),
-                IntegrationCommands::Connect {
-                    name,
-                    connection,
-                    instance,
-                } => commands::integrations::connect(
-                    &client,
-                    &name,
-                    connection.as_deref(),
-                    instance.as_deref(),
-                ),
-                IntegrationCommands::Disconnect {
-                    name,
-                    connection,
-                    instance,
-                } => commands::integrations::disconnect(
-                    &client,
-                    &name,
-                    connection.as_deref(),
-                    instance.as_deref(),
-                ),
-            }
+        Commands::Plugins { command } | Commands::Integrations { command } => {
+            dispatch_plugin_command(command, url, format)
         }
         Commands::Invoke {
-            integration,
+            plugin,
             operation,
             params,
             connection,
             instance,
             select,
             input_file,
-        } => {
-            let client = ApiClient::from_env(url)?;
-            commands::invoke::run(
-                &client,
-                &integration,
-                &operation,
-                &params,
-                commands::invoke::InvokeOptions {
-                    connection: connection.as_deref(),
-                    instance: instance.as_deref(),
-                    select: select.as_deref(),
-                    input_file: input_file.as_deref(),
-                },
-                format,
-            )
-        }
-        Commands::Describe {
-            integration,
-            operation,
-        } => {
-            let client = ApiClient::from_env(url)?;
-            commands::describe::describe(&client, &integration, &operation, format)
+        } => dispatch_plugin_command(
+            PluginCommands::Invoke {
+                plugin,
+                operation,
+                params,
+                connection,
+                instance,
+                select,
+                input_file,
+            },
+            url,
+            format,
+        ),
+        Commands::Describe { plugin, operation } => {
+            dispatch_plugin_command(PluginCommands::Describe { plugin, operation }, url, format)
         }
         Commands::Tokens { command } => {
             let client = ApiClient::from_env(url)?;
@@ -95,6 +63,56 @@ fn run() -> anyhow::Result<()> {
                 TokenCommands::List => commands::tokens::list(&client, format),
                 TokenCommands::Revoke { id } => commands::tokens::revoke(&client, &id, format),
             }
+        }
+    }
+}
+
+fn dispatch_plugin_command(
+    command: PluginCommands,
+    url: Option<&str>,
+    format: gestalt::output::Format,
+) -> anyhow::Result<()> {
+    let client = ApiClient::from_env(url)?;
+    match command {
+        PluginCommands::List => commands::plugins::list(&client, format),
+        PluginCommands::Connect {
+            name,
+            connection,
+            instance,
+        } => commands::plugins::connect(&client, &name, connection.as_deref(), instance.as_deref()),
+        PluginCommands::Disconnect {
+            name,
+            connection,
+            instance,
+        } => commands::plugins::disconnect(
+            &client,
+            &name,
+            connection.as_deref(),
+            instance.as_deref(),
+        ),
+        PluginCommands::Invoke {
+            plugin,
+            operation,
+            params,
+            connection,
+            instance,
+            select,
+            input_file,
+        } => commands::invoke::run(
+            &client,
+            &plugin,
+            &operation,
+            &params,
+            commands::invoke::InvokeOptions {
+                connection: connection.as_deref(),
+                instance: instance.as_deref(),
+                select: select.as_deref(),
+                input_file: input_file.as_deref(),
+            },
+            format,
+        ),
+        PluginCommands::Describe { plugin, operation } => {
+            commands::describe::describe(&client, &plugin, &operation, format)
         }
     }
 }
