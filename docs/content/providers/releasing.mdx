@@ -19,9 +19,10 @@ those fields for you.
 ### Minimal executable source manifest
 
 ```yaml
+kind: plugin
 source: github.com/acme/plugins/my-plugin
 version: 0.0.1-alpha.1
-plugin:
+spec:
   connections:
     default:
       auth:
@@ -128,6 +129,7 @@ static assets and lets provider/auth/datastore packages generate support files
 such as config schemas before packaging.
 
 ```yaml
+kind: webui
 source: github.com/acme/plugins/gestalt-ui
 version: 1.2.0
 release:
@@ -137,22 +139,22 @@ release:
       - npm
       - run
       - build
-webui:
-  asset_root: ui/out
+spec:
+  assetRoot: ui/out
 ```
 
 ### Release manifest for an executable provider
 
-Released executable plugin providers add concrete `entrypoints.plugin` and
+Released executable plugin providers add concrete `entrypoint` and
 `artifacts` entries:
 
 ```yaml
+kind: plugin
 source: github.com/acme/plugins/my-plugin
 version: 0.0.1-alpha.1
-plugin: {}
-entrypoints:
-  plugin:
-    artifact_path: artifacts/linux/amd64/provider
+spec: {}
+entrypoint:
+  artifactPath: artifacts/linux/amd64/provider
 artifacts:
   - os: linux
     arch: amd64
@@ -166,10 +168,11 @@ artifacts:
 UI packages use the same manifest system:
 
 ```yaml
+kind: webui
 source: github.com/acme/plugins/web/default
 version: 1.2.0
-webui:
-  asset_root: ui/out
+spec:
+  assetRoot: ui/out
   configSchemaPath: schemas/ui-config.schema.json
 ```
 
@@ -210,9 +213,9 @@ binaries during release.
 Use the source tree directly during development:
 
 ```yaml
-plugins:
-  my-plugin:
-    provider:
+providers:
+  plugins:
+    my-plugin:
       source:
         path: ./plugins/my-plugin/manifest.yaml
 ```
@@ -223,9 +226,9 @@ Reference a published release by source and version. `gestaltd init` resolves
 the release archive and writes it to lock state:
 
 ```yaml
-plugins:
-  my-plugin:
-    provider:
+providers:
+  plugins:
+    my-plugin:
       source:
         ref: github.com/your-org/your-plugins/my-plugin
         version: 0.0.1-alpha.1
@@ -235,16 +238,16 @@ This is the recommended approach for production deployments.
 
 ### UI bundle
 
-Reference a released UI bundle separately under `ui.provider`:
+Reference a released UI bundle separately under `providers.ui`:
 
 ```yaml
-ui:
-  provider:
+providers:
+  ui:
     source:
       ref: github.com/acme/plugins/web/default
       version: 1.2.0
-  config:
-    brand_name: Acme
+    config:
+      brand_name: Acme
 ```
 
 ## Prepared state

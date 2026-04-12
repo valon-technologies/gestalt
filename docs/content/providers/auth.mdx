@@ -8,18 +8,19 @@ Beyond the core login flow, an auth provider can optionally validate externally 
 
 ## Manifest
 
-An auth provider manifest uses an `auth` block:
+An auth provider manifest uses a `spec` block with `kind: auth`:
 
 ```yaml
+kind: auth
 source: github.com/example/plugins/my-auth
 version: 0.0.1-alpha.1
 displayName: My Auth Provider
 description: Custom OAuth 2.0 authentication
-auth:
+spec:
   configSchemaPath: ./auth_config.json
 ```
 
-The optional `auth.configSchemaPath` field points to a JSON Schema that validates the `auth.config` block in the server config. If you provide one, Gestalt rejects invalid config at startup rather than letting bad values reach the provider at runtime.
+The optional `spec.configSchemaPath` field points to a JSON Schema that validates the `config` block in the server config. If you provide one, Gestalt rejects invalid config at startup rather than letting bad values reach the provider at runtime.
 
 ## Interface
 
@@ -236,19 +237,19 @@ Two optional interfaces extend the base contract.
 
 ## Config reference
 
-To use your auth provider in a Gestalt deployment, reference it in the `auth` block:
+To use your auth provider in a Gestalt deployment, reference it in the `providers.auth` block:
 
 ```yaml
-auth:
-  provider:
+providers:
+  auth:
     source:
       path: ./my-auth/manifest.yaml
-  config:
-    issuerUrl: https://login.example.com
-    clientId: ${OIDC_CLIENT_ID}
-    clientSecret: secret://oidc-client-secret
+    config:
+      issuerUrl: https://login.example.com
+      clientId: ${OIDC_CLIENT_ID}
+      clientSecret: secret://oidc-client-secret
 ```
 
-`provider.source.path` points at the auth provider's `manifest.yaml` during development. For production, use `provider.source.ref` and `version` to reference a published release. The `config` block is passed to `Configure` at startup and validated against the config schema if one was declared in the manifest.
+`source.path` points at the auth provider's `manifest.yaml` during development. For production, use `source.ref` and `version` to reference a published release. The `config` block is passed to `Configure` at startup and validated against the config schema if one was declared in the manifest.
 
 Secret references like `secret://oidc-client-secret` are resolved through the configured secret manager before reaching the provider. Environment variable placeholders like `${OIDC_CLIENT_ID}` are expanded during config loading. See [Configuration](/configuration) for details on both.

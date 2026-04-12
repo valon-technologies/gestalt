@@ -8,22 +8,24 @@ A UI bundle is not a plugin in the executable sense. It contains no server-side 
 
 ## Manifest
 
-A UI bundle manifest declares `webui.asset_root`, which points to the directory containing the built static assets:
+A UI bundle manifest declares `spec.assetRoot`, which points to the directory containing the built static assets:
 
 ```yaml
+kind: webui
 source: github.com/acme/plugins/gestalt-ui
 version: 1.2.0
-webui:
-  asset_root: ui/out
+spec:
+  assetRoot: ui/out
 ```
 
-The `asset_root` path is relative to the manifest file. It should contain the output of your frontend build (typically an `index.html` and accompanying JS, CSS, and image files).
+The `assetRoot` path is relative to the manifest file. It should contain the output of your frontend build (typically an `index.html` and accompanying JS, CSS, and image files).
 
 ## Build step
 
 If your UI needs a build step before packaging, use `release.build` to run it automatically during `gestaltd provider release`. This runs before source-manifest preparation, so the built assets are included in the release archive.
 
 ```yaml
+kind: webui
 source: github.com/acme/plugins/gestalt-ui
 version: 1.2.0
 release:
@@ -33,19 +35,19 @@ release:
       - npm
       - run
       - build
-webui:
-  asset_root: ui/out
+spec:
+  assetRoot: ui/out
 ```
 
-`workdir` is relative to the manifest directory. The command runs in that directory, so `npm run build` executes inside `ui/`. After the build completes, Gestalt packages everything under `asset_root` into the release archive.
+`workdir` is relative to the manifest directory. The command runs in that directory, so `npm run build` executes inside `ui/`. After the build completes, Gestalt packages everything under `assetRoot` into the release archive.
 
 ## Configuring a UI bundle
 
-Reference a UI bundle in the `ui.plugin` block of the server config. During development, point at the source manifest:
+Reference a UI bundle in the `providers.ui` block of the server config. During development, point at the source manifest:
 
 ```yaml
-ui:
-  plugin:
+providers:
+  ui:
     source:
       path: ./gestalt-ui/manifest.yaml
 ```
@@ -53,15 +55,16 @@ ui:
 For production, reference a published release by source and version:
 
 ```yaml
-ui:
-  plugin:
-    source: github.com/acme/plugins/gestalt-ui
-    version: 1.2.0
+providers:
+  ui:
+    source:
+      ref: github.com/acme/plugins/gestalt-ui
+      version: 1.2.0
 ```
 
 When a config references a published UI bundle, run `gestaltd init` to resolve and prepare it. This writes lock state to `gestalt.lock.json` and extracts the assets under `.gestaltd/`. After init, `gestaltd serve --locked` serves the locked UI bundle at `/`. If the prepared UI files are already present, Gestalt uses them directly; if they are missing, Gestalt can materialize them from the lockfile at startup.
 
-If `ui.plugin` is omitted entirely, Gestalt falls back to the built-in client UI.
+If `providers.ui` is omitted entirely, Gestalt falls back to the built-in client UI.
 
 ## The admin UI
 

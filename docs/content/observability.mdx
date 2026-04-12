@@ -15,78 +15,82 @@ finished initialization, then switches to `200`.
 
 ## Default Telemetry
 
-If you omit the `telemetry` block, Gestalt defaults to stdout.
+If you omit the `providers.telemetry` block, Gestalt defaults to stdout.
 
 ```yaml
-telemetry:
-  builtin: stdout
+providers:
+  telemetry:
+    source: stdout
 ```
 
 That gives you structured logs without external collectors. The `stdout`
-builtin also exposes a Prometheus-compatible `/metrics` endpoint. Traces remain
-disabled unless you switch to `telemetry: { builtin: otlp }`.
+source also exposes a Prometheus-compatible `/metrics` endpoint. Traces remain
+disabled unless you switch to `source: otlp` under `providers.telemetry`.
 
 ## OTLP Export
 
-Set `telemetry: { builtin: otlp }` to export traces, metrics, and logs over
-OpenTelemetry.
+Set `source: otlp` under `providers.telemetry` to export traces, metrics, and
+logs over OpenTelemetry.
 
 ```yaml
-telemetry:
-  builtin: otlp
-  config:
-    endpoint: otel-collector:4317
-    protocol: grpc
-    service_name: gestaltd
-    traces:
-      sampling_ratio: 1.0
-    metrics:
-      interval: 60s
-    logs:
-      level: info
+providers:
+  telemetry:
+    source: otlp
+    config:
+      endpoint: otel-collector:4317
+      protocol: grpc
+      service_name: gestaltd
+      traces:
+        sampling_ratio: 1.0
+      metrics:
+        interval: 60s
+      logs:
+        level: info
 ```
 
 If you want traces and metrics in OTLP but need application logs to remain on
 stdout for the host platform to collect, override the log exporter.
 
 ```yaml
-telemetry:
-  builtin: otlp
-  config:
-    endpoint: otel-collector:4317
-    protocol: grpc
-    logs:
-      exporter: stdout
-      format: json
-      level: info
+providers:
+  telemetry:
+    source: otlp
+    config:
+      endpoint: otel-collector:4317
+      protocol: grpc
+      logs:
+        exporter: stdout
+        format: json
+        level: info
 ```
 
 ## Audit Routing
 
 Audit logs inherit the main telemetry logger by default. If you need a
-different route for compliance, analytics, or warehousing, configure the
-top-level `audit:` block separately.
+different route for compliance, analytics, or warehousing, configure
+`providers.audit` separately.
 
 ```yaml
-telemetry:
-  builtin: stdout
-  config:
-    format: json
+providers:
+  telemetry:
+    source: stdout
+    config:
+      format: json
 
-audit:
-  builtin: otlp
-  config:
-    endpoint: audit-collector:4317
-    protocol: grpc
-    headers:
-      Authorization: Bearer ${AUDIT_OTLP_TOKEN}
+  audit:
+    source: otlp
+    config:
+      endpoint: audit-collector:4317
+      protocol: grpc
+      headers:
+        Authorization: Bearer ${AUDIT_OTLP_TOKEN}
 ```
 
 That keeps application logs on stdout while exporting only audit records over
-OTLP. You can also set `audit: { builtin: stdout }` to keep audit logs on stdout
-when telemetry is `noop`, or `audit: { builtin: noop }` to disable audit output
-explicitly. If you leave `audit: { builtin: inherit }`, collectors can still split
-the stream by filtering on `log.type=audit`.
+OTLP. You can also set `providers.audit` with `source: stdout` to keep audit
+logs on stdout when telemetry is `noop`, or `source: noop` to disable audit
+output explicitly. If you leave `source: inherit` under `providers.audit`,
+collectors can still split the stream by filtering on `log.type=audit`.
 
 ## Emitted Metrics
 
@@ -319,12 +323,11 @@ These metrics use standard OpenTelemetry gRPC client semantic attributes such as
 ## Prometheus Scrape Endpoint
 
 When telemetry metrics are enabled, Gestalt exposes a Prometheus scrape endpoint
-at `/metrics`. With `telemetry: { builtin: stdout }`, metrics are kept local and
-served directly. With `telemetry: { builtin: otlp }`, metrics are exported over OTLP
-and also served at `/metrics` locally unless you disable the Prometheus bridge.
-Setting `telemetry: { builtin: noop }` disables Prometheus scraping entirely;
-`/metrics` returns a clear unavailable response so the admin UI can surface that
-state.
+at `/metrics`. With `providers.telemetry` set to `source: stdout`, metrics are
+kept local and served directly. With `source: otlp`, metrics are exported over
+OTLP and also served at `/metrics` locally unless you disable the Prometheus
+bridge. Setting `source: noop` disables Prometheus scraping entirely; `/metrics`
+returns a clear unavailable response so the admin UI can surface that state.
 
 When Gestalt serves `/metrics` on the public listener, it is authenticated with
 the same session or bearer-token middleware as the rest of the HTTP API. When

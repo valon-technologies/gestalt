@@ -15,28 +15,28 @@ Gestalt has six core concepts you configure in YAML:
 
 ## Adding a plugin
 
-Each entry under `plugins:` registers a plugin backed by a provider package:
+Each entry under `providers.plugins` registers a plugin backed by a provider package:
 
 ```yaml
-plugins:
-  github:
-    displayName: GitHub
-    provider:
+providers:
+  plugins:
+    github:
+      displayName: GitHub
       source:
         ref: github.com/valon-technologies/gestalt-providers/plugins/github
         version: 0.0.1-alpha.1
-    config:
-      apiBaseUrl: https://api.github.com
+      config:
+        apiBaseUrl: https://api.github.com
 ```
 
-`provider.source.ref` points at a published provider package. Gestalt resolves and downloads it on startup. First-party providers are published to `github.com/valon-technologies/gestalt-providers/`.
+`source.ref` points at a published provider package. Gestalt resolves and downloads it on startup. First-party providers are published to `github.com/valon-technologies/gestalt-providers/`.
 
 During development, point at a local provider manifest instead:
 
 ```yaml
-plugins:
-  support:
-    provider:
+providers:
+  plugins:
+    support:
       source:
         path: ./plugins/support/manifest.yaml
 ```
@@ -48,29 +48,29 @@ See [Providers](/providers) for how to build your own.
 A provider package may expose a large catalog. Use `allowedOperations` to publish only the subset you want:
 
 ```yaml
-plugins:
-  support:
-    provider:
+providers:
+  plugins:
+    support:
       source:
         ref: github.com/acme/providers/support
         version: 2.4.0
-    allowedOperations:
-      tickets.list:
-        alias: list_tickets
-      tickets.get:
-        alias: get_ticket
+      allowedOperations:
+        tickets.list:
+          alias: list_tickets
+        tickets.get:
+          alias: get_ticket
 ```
 
 Each entry can set an `alias` to rename the operation as it appears to callers.
 
 ### Network sandbox
 
-Executable provider processes run inside a network sandbox. Outbound requests to hosts not listed in `provider.allowedHosts` are rejected:
+Executable provider processes run inside a network sandbox. Outbound requests to hosts not listed in `allowedHosts` are rejected:
 
 ```yaml
-plugins:
-  example:
-    provider:
+providers:
+  plugins:
+    example:
       source:
         ref: github.com/acme/providers/example
         version: 1.0.0
@@ -84,13 +84,14 @@ plugins:
 Connections define how Gestalt authenticates to upstream services on behalf of callers. Each plugin declares its connections under `connections:`:
 
 ```yaml
-plugins:
-  github:
-    connections:
-      default:
-        mode: user
-        auth:
-          type: oauth2
+providers:
+  plugins:
+    github:
+      connections:
+        default:
+          mode: user
+          auth:
+            type: oauth2
 ```
 
 ### Connection modes
@@ -116,56 +117,49 @@ plugins:
 
 `connections.default` is the common case. When a provider defines more than one connection, callers pass `_connection` and `_instance` through the [HTTP API](/reference/http-api) to select which stored credential to use. Connection parameters (`params`) and post-connect discovery are only supported on `connections.default`.
 
-Gestalt stores upstream credentials keyed by user, plugin name, connection name, and instance. Renaming a `plugins:` key is a breaking change for stored connections.
+Gestalt stores upstream credentials keyed by user, plugin name, connection name, and instance. Renaming a plugin key under `providers.plugins` is a breaking change for stored connections.
 
 ## Exposing over MCP
 
-Enable MCP tool exposure per plugin:
-
-```yaml
-plugins:
-  github:
-    mcp:
-      enabled: true
-      toolPrefix: github_
-```
-
-`toolPrefix` avoids name collisions when multiple plugins expose MCP tools. The MCP endpoint is served at `/mcp` using the same auth model as the HTTP API.
+MCP tool exposure is declared in the provider manifest via `spec.mcp: true`. When enabled, the plugin's operations are available at `/mcp` using the same auth model as the HTTP API.
 
 ## Secrets
 
-The `secrets` block configures how `secret://` references in the config are resolved at startup. The default is `env`, which reads secrets from environment variables:
+The `providers.secrets` entry configures how `secret://` references in the config are resolved at startup. The default is `env`, which reads secrets from environment variables:
 
 ```yaml
-secrets:
-  builtin: env
+providers:
+  secrets:
+    source: env
 ```
 
 For production, use `file` (reads from a directory, works with Kubernetes volume-mounted secrets) or a cloud secret manager:
 
 ```yaml
-secrets:
-  builtin: file
-  config:
-    dir: /etc/gestalt-secrets
+providers:
+  secrets:
+    source: file
+    config:
+      dir: /etc/gestalt-secrets
 ```
 
 Cloud backends (Google Secret Manager, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault) are also available. See [Secret Providers](/providers/secrets) for the full list.
 
 ## Web UI
 
-The `ui` block controls the public client UI served at `/`. Omit it to use the default bundled UI. Disable it to run headless:
+The `providers.ui` entry controls the public client UI served at `/`. Omit it to use the default bundled UI. Disable it to run headless:
 
 ```yaml
-ui:
-  disabled: true
+providers:
+  ui:
+    disabled: true
 ```
 
 Or point at a custom UI bundle:
 
 ```yaml
-ui:
-  provider:
+providers:
+  ui:
     source:
       ref: github.com/your-org/your-ui
       version: 1.0.0
@@ -175,31 +169,32 @@ The built-in admin UI at `/admin` is always available regardless of this setting
 
 ## Platform auth
 
-The `auth` block protects the web UI, HTTP API, and `/mcp` endpoint. For local development, omit it or disable it explicitly:
+The `providers.auth` entry protects the web UI, HTTP API, and `/mcp` endpoint. For local development, omit it or disable it explicitly:
 
 ```yaml
-auth:
-  disabled: true
+providers:
+  auth:
+    disabled: true
 ```
 
 For multi-user deployments, point at a published auth provider:
 
 ```yaml
-auth:
-  provider:
+providers:
+  auth:
     source:
       ref: github.com/valon-technologies/gestalt-providers/auth/oidc
       version: 0.0.1-alpha.1
-  config:
-    issuerUrl: https://login.example.com
-    clientId: ${OIDC_CLIENT_ID}
-    clientSecret: secret://oidc-client-secret
+    config:
+      issuerUrl: https://login.example.com
+      clientId: ${OIDC_CLIENT_ID}
+      clientSecret: secret://oidc-client-secret
 ```
 
 | Scenario | Configuration |
 | --- | --- |
-| Local development | Omit `auth` or set `auth: { disabled: true }` |
-| Multi-user deployment | `auth.provider` with a published OIDC or Google auth provider |
+| Local development | Omit `providers.auth` or set `providers.auth.disabled: true` |
+| Multi-user deployment | `providers.auth` with a published OIDC or Google auth provider |
 | Per-user upstream access | `mode: user` on plugin connections |
 | Shared service credential | `mode: identity` on plugin connections |
 
@@ -209,19 +204,20 @@ For programmatic access, Gestalt issues API tokens prefixed with `gst_api_`. The
 
 ## Configuring storage
 
-The `indexeddbs` block declares storage providers. The `indexeddb` field selects which one Gestalt uses:
+The `providers.indexeddbs` block declares storage providers. The `server.indexeddb` field selects which one Gestalt uses:
 
 ```yaml
-indexeddbs:
-  main:
-    provider:
+server:
+  indexeddb: main
+
+providers:
+  indexeddbs:
+    main:
       source:
         ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
         version: 0.0.1-alpha.1
-    config:
-      dsn: sqlite://./gestalt.db
-
-indexeddb: main
+      config:
+        dsn: sqlite://./gestalt.db
 ```
 
 SQLite works for single-instance deployments. For production, use a Postgres or MySQL DSN. See [Datastores](/providers/datastores) for the full provider model.
@@ -256,7 +252,7 @@ gestaltd validate --config ./config.yaml
 
 ### Defaults and required fields
 
-Gestalt defaults `server.public.port` to `8080`, `secrets.builtin` to `env`, and `telemetry.builtin` to `stdout`. The required fields are `indexeddbs`, `indexeddb`, and `server.encryptionKey`. Platform auth is optional.
+Gestalt defaults `server.public.port` to `8080`, `providers.secrets` to `env`, and `providers.telemetry` to `stdout`. The required fields are `providers.indexeddbs`, `server.indexeddb`, and `server.encryptionKey`. Platform auth is optional.
 
 `server.encryptionKey` is the root deployment secret. Gestalt derives token encryption and session material from it. Changing this key invalidates all existing sessions and tokens, so treat it as a meaningful deployment event.
 
@@ -268,52 +264,46 @@ A production deployment with OIDC auth, a GitHub plugin with per-user connection
 server:
   baseUrl: https://gestalt.example.com
   encryptionKey: secret://gestalt-encryption-key
+  indexeddb: main
 
-auth:
-  provider:
+providers:
+  auth:
     source:
       ref: github.com/valon-technologies/gestalt-providers/auth/oidc
       version: 0.0.1-alpha.1
-  config:
-    issuerUrl: https://login.example.com
-    clientId: ${OIDC_CLIENT_ID}
-    clientSecret: secret://oidc-client-secret
+    config:
+      issuerUrl: https://login.example.com
+      clientId: ${OIDC_CLIENT_ID}
+      clientSecret: secret://oidc-client-secret
 
-indexeddbs:
-  main:
-    provider:
+  indexeddbs:
+    main:
       source:
         ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
         version: 0.0.1-alpha.1
-    config:
-      dsn: sqlite://./gestalt.db
+      config:
+        dsn: sqlite://./gestalt.db
 
-indexeddb: main
-
-plugins:
-  github:
-    displayName: GitHub
-    provider:
+  plugins:
+    github:
+      displayName: GitHub
       source:
         ref: github.com/valon-technologies/gestalt-providers/plugins/github
         version: 0.0.1-alpha.1
-    config:
-      apiBaseUrl: https://api.github.com
-    mcp:
-      enabled: true
-      toolPrefix: github_
-    connections:
-      api:
-        mode: user
-        auth:
-          type: bearer
-          credentials:
-            - name: token
-              label: Personal Access Token
-      mcp:
-        mode: user
-        auth:
-          type: mcp_oauth
+      config:
+        apiBaseUrl: https://api.github.com
+      connections:
+        api:
+          mode: user
+          auth:
+            type: bearer
+            credentials:
+              - name: token
+                label: Personal Access Token
+        mcp:
+          mode: user
+          auth:
+            type: mcp_oauth
 ```
 
 ## Minimal config
@@ -326,19 +316,16 @@ server:
     port: 8080
   baseUrl: http://localhost:8080
   encryptionKey: change-me
+  indexeddb: main
 
-indexeddbs:
-  main:
-    provider:
+providers:
+  indexeddbs:
+    main:
       source:
         ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
         version: 0.0.1-alpha.1
-    config:
-      dsn: sqlite://./gestalt.db
-
-indexeddb: main
-
-plugins: {}
+      config:
+        dsn: sqlite://./gestalt.db
 ```
 
 See [Observability](/observability) for adding metrics, logs, and OTLP export. See [Deploy](/deploy) for production startup workflows, lockfiles, and prepared artifacts.
