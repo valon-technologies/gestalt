@@ -1,83 +1,83 @@
 # Data Model
 
-Gestalt creates its own tables in the configured datastore. All SQL backends (SQLite, PostgreSQL, MySQL, SQL Server, Oracle) share the same logical schema. MongoDB and DynamoDB use equivalent document structures. Migrations run automatically on startup.
+Gestalt stores all persistent state through the configured [IndexedDB provider](/providers/indexeddb). At startup, gestaltd provisions four object stores and their indexes through the same `CreateObjectStore` interface that plugins use. Any backend that implements the IndexedDB contract (RelationalDB, MongoDB, DynamoDB) can store this data. Migrations run automatically on startup.
 
-For encryption mechanics, see [Security Internals](/architecture/security-internals). For choosing a datastore, see [Configuration](/configuration).
+For encryption mechanics, see [Security Internals](/architecture/security-internals). For choosing a provider, see [Configuration](/configuration).
 
-## Tables
+## Object stores
 
 ### `users`
 
 Created automatically on first login.
 
-| Column | Type | Notes |
+| Field | Type | Notes |
 | --- | --- | --- |
-| `id` | text, PK | UUID. |
-| `email` | text, unique | Plaintext. From the identity provider. |
-| `display_name` | text | Plaintext. |
-| `created_at` | timestamp | |
-| `updated_at` | timestamp | |
+| `id` | string, PK | UUID. |
+| `email` | string, unique | Plaintext. From the identity provider. |
+| `display_name` | string | Plaintext. |
+| `created_at` | time | |
+| `updated_at` | time | |
 
-Emails and display names are plaintext. If you need encrypted PII at rest, handle it at the database layer (e.g., Postgres TDE).
+Emails and display names are plaintext. If you need encrypted PII at rest, handle it at the storage layer.
 
 ### `integration_tokens`
 
 Stores upstream credentials (OAuth tokens, API keys, manual credentials) for each user's connected integrations.
 
-| Column | Type | Notes |
+| Field | Type | Notes |
 | --- | --- | --- |
-| `id` | text, PK | UUID. |
-| `user_id` | text, FK | References `users.id`. |
-| `integration` | text | Provider name from config (e.g., `github`). |
-| `connection` | text | Named connection within the provider (e.g., `default`, `mcp`). |
-| `instance` | text | User-chosen or discovery-assigned name for multi-account providers. |
-| `access_token_encrypted` | text | **Encrypted.** AES-256-GCM. |
-| `refresh_token_encrypted` | text | **Encrypted.** AES-256-GCM. Empty (still encrypted) if no refresh token. |
-| `scopes` | text | Plaintext. Space-separated OAuth scopes. |
-| `expires_at` | timestamp | Null if the provider doesn't report expiry. |
-| `last_refreshed_at` | timestamp | |
-| `refresh_error_count` | integer | Consecutive failed refreshes. Reset to 0 on success. |
-| `metadata_json` | text | Plaintext. Connection metadata from post-connect discovery. |
-| `created_at` | timestamp | |
-| `updated_at` | timestamp | |
+| `id` | string, PK | UUID. |
+| `user_id` | string | References `users.id`. |
+| `integration` | string | Provider name from config (e.g., `slack`). |
+| `connection` | string | Named connection within the provider (e.g., `default`, `mcp`). |
+| `instance` | string | User-chosen or discovery-assigned name for multi-account providers. |
+| `access_token_encrypted` | string | **Encrypted.** AES-256-GCM. |
+| `refresh_token_encrypted` | string | **Encrypted.** AES-256-GCM. Empty (still encrypted) if no refresh token. |
+| `scopes` | string | Plaintext. Space-separated OAuth scopes. |
+| `expires_at` | time | Null if the provider doesn't report expiry. |
+| `last_refreshed_at` | time | |
+| `refresh_error_count` | int | Consecutive failed refreshes. Reset to 0 on success. |
+| `metadata_json` | string | Plaintext. Connection metadata from post-connect discovery. |
+| `created_at` | time | |
+| `updated_at` | time | |
 
-Unique constraint: `(user_id, integration, connection, instance)`. Reconnecting overwrites the existing row via upsert.
+Unique index on `(user_id, integration, connection, instance)`. Reconnecting overwrites the existing record via `Put`.
 
 ### `api_tokens`
 
 Gestalt API tokens (`gst_api_*`). The plaintext is never stored, only a one-way hash.
 
-| Column | Type | Notes |
+| Field | Type | Notes |
 | --- | --- | --- |
-| `id` | text, PK | UUID. |
-| `user_id` | text, FK | References `users.id`. |
-| `name` | text | Display name (e.g., `automation`, `cli-token`). |
-| `hashed_token` | text, unique | **SHA-256 hash.** Plaintext returned once at creation. |
-| `scopes` | text | Plaintext. Space-separated provider names. |
-| `expires_at` | timestamp | Null for non-expiring tokens. |
-| `created_at` | timestamp | |
-| `updated_at` | timestamp | |
+| `id` | string, PK | UUID. |
+| `user_id` | string | References `users.id`. |
+| `name` | string | Display name (e.g., `automation`, `cli-token`). |
+| `hashed_token` | string, unique | **SHA-256 hash.** Plaintext returned once at creation. |
+| `scopes` | string | Plaintext. Space-separated provider names. |
+| `expires_at` | time | Null for non-expiring tokens. |
+| `created_at` | time | |
+| `updated_at` | time | |
 
 ### `oauth_registrations`
 
 Caches dynamic OAuth client registrations for `mcp_oauth` connections, so Gestalt doesn't re-register on every request.
 
-| Column | Type | Notes |
+| Field | Type | Notes |
 | --- | --- | --- |
-| `id` | text, PK | |
-| `auth_server_url` | text | Upstream authorization server. |
-| `redirect_uri` | text | Callback URI. |
-| `client_id` | text | Dynamically registered client ID. |
-| `client_secret_encrypted` | text | **Encrypted.** AES-256-GCM. |
-| `expires_at` | timestamp | |
-| `authorization_endpoint` | text | Discovered URL. |
-| `token_endpoint` | text | Discovered URL. |
-| `scopes_supported` | text | |
-| `discovered_at` | timestamp | |
-| `created_at` | timestamp | |
-| `updated_at` | timestamp | |
+| `id` | string, PK | |
+| `auth_server_url` | string | Upstream authorization server. |
+| `redirect_uri` | string | Callback URI. |
+| `client_id` | string | Dynamically registered client ID. |
+| `client_secret_encrypted` | string | **Encrypted.** AES-256-GCM. |
+| `expires_at` | time | |
+| `authorization_endpoint` | string | Discovered URL. |
+| `token_endpoint` | string | Discovered URL. |
+| `scopes_supported` | string | |
+| `discovered_at` | time | |
+| `created_at` | time | |
+| `updated_at` | time | |
 
-Unique constraint: `(auth_server_url, redirect_uri)`.
+Unique index on `(auth_server_url, redirect_uri)`.
 
 ## Encryption summary
 
@@ -112,4 +112,4 @@ Renaming a `plugins` key in config is a breaking change. Stored tokens reference
 
 ## Sessions
 
-Platform sessions (Google, OIDC, local) are not in the datastore. They're HTTP-only cookies (`session_token`) with `Secure` (when HTTPS), `SameSite=Lax`, and a default 24-hour TTL (configurable via `session_ttl` for OIDC). Sessions can't be revoked server-side; they expire on TTL. Logout clears the client cookie.
+Platform sessions (Google, OIDC, local) are not stored in the IndexedDB provider. They are HTTP-only cookies (`session_token`) with `Secure` (when HTTPS), `SameSite=Lax`, and a default 24-hour TTL (configurable via `session_ttl` for OIDC). Sessions cannot be revoked server-side; they expire on TTL. Logout clears the client cookie.
