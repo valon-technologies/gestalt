@@ -91,6 +91,9 @@ func Install(packagePath, destDir string) (*InstalledPlugin, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := adhocCodesignDarwin(executablePath); err != nil {
+		return nil, err
+	}
 
 	installed := buildInstalledPlugin(manifest, destDir, manifestPath, executablePath, artifact, "")
 	return installed, nil
