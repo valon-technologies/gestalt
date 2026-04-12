@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -15,6 +17,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	telemetrynoop "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/noop"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/principal"
+	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 	"gopkg.in/yaml.v3"
 )
 
@@ -121,6 +125,139 @@ func TestBootstrap(t *testing.T) {
 	if invoker != lister {
 		t.Fatal("expected shared invoker and capability lister to be the same instance")
 	}
+
+	t.Run("invoker uses resolved REST connections", func(t *testing.T) {
+		t.Parallel()
+
+		cases := []struct {
+			name           string
+			restConnection string
+			connections    map[string]*pluginmanifestv1.ManifestConnectionDef
+			tokenConn      string
+		}{
+			{
+				name: "single named connection is inferred as default",
+				connections: map[string]*pluginmanifestv1.ManifestConnectionDef{
+					"default": {
+						Auth: &pluginmanifestv1.ProviderAuth{
+							Type:             pluginmanifestv1.AuthTypeOAuth2,
+							ClientID:         "client-id",
+							ClientSecret:     "client-secret",
+							AuthorizationURL: "https://example.com/authorize",
+							TokenURL:         "https://example.com/token",
+						},
+					},
+				},
+				tokenConn: "default",
+			},
+			{
+				name:           "explicit REST connection is used for invoke",
+				restConnection: "workspace",
+				connections: map[string]*pluginmanifestv1.ManifestConnectionDef{
+					"workspace": {
+						Auth: &pluginmanifestv1.ProviderAuth{
+							Type:             pluginmanifestv1.AuthTypeOAuth2,
+							ClientID:         "client-id",
+							ClientSecret:     "client-secret",
+							AuthorizationURL: "https://example.com/authorize",
+							TokenURL:         "https://example.com/token",
+						},
+					},
+					"backup": {
+						Auth: &pluginmanifestv1.ProviderAuth{
+							Type:             pluginmanifestv1.AuthTypeOAuth2,
+							ClientID:         "client-id",
+							ClientSecret:     "client-secret",
+							AuthorizationURL: "https://example.com/authorize",
+							TokenURL:         "https://example.com/token",
+						},
+					},
+				},
+				tokenConn: "workspace",
+			},
+		}
+
+		for _, tc := range cases {
+			tc := tc
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+
+				var authHeader atomic.Value
+				var requestPath atomic.Value
+				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					authHeader.Store(r.Header.Get("Authorization"))
+					requestPath.Store(r.URL.Path)
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusOK)
+					_, _ = w.Write([]byte(`{"ok":true}`))
+				}))
+				defer srv.Close()
+
+				cfg := validConfig()
+				cfg.Providers.Plugins = map[string]*config.ProviderEntry{
+					"slack": {
+						ResolvedManifest: &pluginmanifestv1.Manifest{
+							Spec: &pluginmanifestv1.Spec{
+								Surfaces: &pluginmanifestv1.PluginSurfaces{
+									REST: &pluginmanifestv1.RESTSurface{
+										BaseURL:    srv.URL,
+										Connection: tc.restConnection,
+										Operations: []pluginmanifestv1.ProviderOperation{
+											{Name: "users.list", Method: http.MethodGet, Path: "/users"},
+										},
+									},
+								},
+								Connections: tc.connections,
+							},
+						},
+					},
+				}
+
+				result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+				if err != nil {
+					t.Fatalf("Bootstrap: %v", err)
+				}
+				t.Cleanup(func() { _ = result.Close(context.Background()) })
+				<-result.ProvidersReady
+
+				user, err := result.Services.Users.FindOrCreateUser(ctx, "hugh@test.com")
+				if err != nil {
+					t.Fatalf("FindOrCreateUser: %v", err)
+				}
+				tokenValue := tc.tokenConn + "-access-token"
+				if err := result.Services.Tokens.StoreToken(ctx, &core.IntegrationToken{
+					UserID:       user.ID,
+					Integration:  "slack",
+					Connection:   tc.tokenConn,
+					Instance:     "default",
+					AccessToken:  tokenValue,
+					RefreshToken: "refresh-token",
+				}); err != nil {
+					t.Fatalf("StoreToken: %v", err)
+				}
+
+				principal := &principal.Principal{
+					UserID: user.ID,
+					Source: principal.SourceSession,
+					Scopes: []string{"slack"},
+				}
+				got, err := result.Invoker.Invoke(ctx, principal, "slack", "", "users.list", nil)
+				if err != nil {
+					t.Fatalf("Invoke: %v", err)
+				}
+				if got.Status != http.StatusOK {
+					t.Fatalf("status = %d, want %d", got.Status, http.StatusOK)
+				}
+				if gotPath, _ := requestPath.Load().(string); gotPath != "/users" {
+					t.Fatalf("path = %q, want %q", gotPath, "/users")
+				}
+				wantAuth := "Bearer " + tokenValue
+				if gotAuth, _ := authHeader.Load().(string); gotAuth != wantAuth {
+					t.Fatalf("Authorization = %q, want %q", gotAuth, wantAuth)
+				}
+			})
+		}
+	})
 }
 
 func TestResultCloseClosesAuthProvider(t *testing.T) {
