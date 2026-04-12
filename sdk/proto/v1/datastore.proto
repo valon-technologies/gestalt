@@ -102,6 +102,53 @@ message CountResponse {
   int64 count = 1;
 }
 
+enum CursorDirection {
+  CURSOR_NEXT = 0;
+  CURSOR_NEXT_UNIQUE = 1;
+  CURSOR_PREV = 2;
+  CURSOR_PREV_UNIQUE = 3;
+}
+
+message OpenCursorRequest {
+  string store = 1;
+  optional KeyRange range = 2;
+  CursorDirection direction = 3;
+  bool keys_only = 4;
+  string index = 5;
+  repeated TypedValue values = 6;
+}
+
+message CursorCommand {
+  oneof command {
+    bool next = 1;
+    TypedValue continue_to_key = 2;
+    int32 advance = 3;
+    Record update = 4;
+    bool delete = 5;
+    bool close = 6;
+  }
+}
+
+message CursorClientMessage {
+  oneof msg {
+    OpenCursorRequest open = 1;
+    CursorCommand command = 2;
+  }
+}
+
+message CursorEntry {
+  TypedValue key = 1;
+  string primary_key = 2;
+  Record record = 3;
+}
+
+message CursorResponse {
+  oneof result {
+    CursorEntry entry = 1;
+    bool done = 2;
+  }
+}
+
 message DeleteResponse {
   int64 deleted = 1;
 }
@@ -136,4 +183,7 @@ service IndexedDB {
   rpc IndexGetAllKeys(IndexQueryRequest) returns (KeysResponse);
   rpc IndexCount(IndexQueryRequest) returns (CountResponse);
   rpc IndexDelete(IndexQueryRequest) returns (DeleteResponse);
+
+  // Cursor iteration (bidirectional stream)
+  rpc OpenCursor(stream CursorClientMessage) returns (stream CursorResponse);
 }

@@ -8,6 +8,17 @@ import (
 var (
 	ErrNotFound      = errors.New("datastore: not found")
 	ErrAlreadyExists = errors.New("datastore: already exists")
+	ErrKeysOnly      = errors.New("datastore: value not available on key-only cursor")
+)
+
+// CursorDirection controls the traversal order of a cursor.
+type CursorDirection string
+
+const (
+	CursorNext       CursorDirection = "next"
+	CursorNextUnique CursorDirection = "nextunique"
+	CursorPrev       CursorDirection = "prev"
+	CursorPrevUnique CursorDirection = "prevunique"
 )
 
 type Record = map[string]any
@@ -40,6 +51,10 @@ type ObjectStore interface {
 
 	// Index access
 	Index(name string) Index
+
+	// Cursor iteration
+	OpenCursor(ctx context.Context, r *KeyRange, dir CursorDirection) (Cursor, error)
+	OpenKeyCursor(ctx context.Context, r *KeyRange, dir CursorDirection) (Cursor, error)
 }
 
 // Index provides queries on a named index.
@@ -51,6 +66,52 @@ type Index interface {
 	GetAllKeys(ctx context.Context, r *KeyRange, values ...any) ([]string, error)
 	Count(ctx context.Context, r *KeyRange, values ...any) (int64, error)
 	Delete(ctx context.Context, values ...any) (int64, error)
+
+	// Cursor iteration
+	OpenCursor(ctx context.Context, r *KeyRange, dir CursorDirection, values ...any) (Cursor, error)
+	OpenKeyCursor(ctx context.Context, r *KeyRange, dir CursorDirection, values ...any) (Cursor, error)
+}
+
+// Cursor iterates over records in an object store or index.
+// Modeled after IDBCursor / IDBCursorWithValue.
+//
+// Usage:
+//
+//	cursor, err := store.OpenCursor(ctx, nil, indexeddb.CursorNext)
+//	if err != nil { ... }
+//	defer cursor.Close()
+//	for cursor.Continue(ctx) {
+//	    rec, _ := cursor.Value()
+//	    // ...
+//	}
+//	if err := cursor.Err(); err != nil { ... }
+type Cursor interface {
+	// Continue advances to the next record. Returns false when exhausted.
+	Continue(ctx context.Context) bool
+	// ContinueToKey advances to the next record whose key is >= the given key
+	// (or <= for reverse cursors).
+	ContinueToKey(ctx context.Context, key any) bool
+	// Advance skips count records, then positions on the next one.
+	Advance(ctx context.Context, count int) bool
+
+	// Key returns the cursor's current key (index key for index cursors,
+	// primary key for object store cursors).
+	Key() any
+	// PrimaryKey returns the primary key at the cursor's current position.
+	PrimaryKey() string
+	// Value returns the record at the cursor's current position.
+	// Returns ErrKeysOnly if the cursor was opened via OpenKeyCursor.
+	Value() (Record, error)
+
+	// Delete removes the record at the cursor's current position.
+	Delete(ctx context.Context) error
+	// Update replaces the record at the cursor's current position.
+	Update(ctx context.Context, value Record) error
+
+	// Err returns any error encountered during iteration.
+	Err() error
+	// Close releases cursor resources. Must be called when done.
+	Close() error
 }
 
 // KeyRange represents a range over keys, modeled after IDBKeyRange.

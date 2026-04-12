@@ -126,6 +126,20 @@ func (s *instrumentedObjectStore) Index(name string) indexeddb.Index {
 	return &instrumentedIndex{inner: s.inner.Index(name), store: s.store}
 }
 
+func (s *instrumentedObjectStore) OpenCursor(ctx context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection) (indexeddb.Cursor, error) {
+	startedAt := time.Now()
+	c, err := s.inner.OpenCursor(ctx, r, dir)
+	RecordIndexedDBMetrics(ctx, startedAt, s.store, "OpenCursor", err != nil)
+	return c, err
+}
+
+func (s *instrumentedObjectStore) OpenKeyCursor(ctx context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection) (indexeddb.Cursor, error) {
+	startedAt := time.Now()
+	c, err := s.inner.OpenKeyCursor(ctx, r, dir)
+	RecordIndexedDBMetrics(ctx, startedAt, s.store, "OpenKeyCursor", err != nil)
+	return c, err
+}
+
 type instrumentedIndex struct {
 	inner indexeddb.Index
 	store string
@@ -171,4 +185,18 @@ func (i *instrumentedIndex) Delete(ctx context.Context, values ...any) (int64, e
 	n, err := i.inner.Delete(ctx, values...)
 	RecordIndexedDBMetrics(ctx, startedAt, i.store, "Index.Delete", err != nil)
 	return n, err
+}
+
+func (i *instrumentedIndex) OpenCursor(ctx context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection, values ...any) (indexeddb.Cursor, error) {
+	startedAt := time.Now()
+	c, err := i.inner.OpenCursor(ctx, r, dir, values...)
+	RecordIndexedDBMetrics(ctx, startedAt, i.store, "Index.OpenCursor", err != nil)
+	return c, err
+}
+
+func (i *instrumentedIndex) OpenKeyCursor(ctx context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection, values ...any) (indexeddb.Cursor, error) {
+	startedAt := time.Now()
+	c, err := i.inner.OpenKeyCursor(ctx, r, dir, values...)
+	RecordIndexedDBMetrics(ctx, startedAt, i.store, "Index.OpenKeyCursor", err != nil)
+	return c, err
 }
