@@ -393,7 +393,7 @@ Disables audit output explicitly. `providers.audit.config` is not allowed when `
 
 ## `providers.plugins`
 
-Each entry in the `providers.plugins` map is a named plugin backed by an executable provider package. The provider package is the source of truth for operations and transport details. Server config selects the provider, passes provider-specific config, and declares connection policy. The HTTP API and client CLI use the synonym "integrations" in route paths and commands (e.g. `/api/v1/integrations`, `gestalt integrations list`), but `plugins` is the canonical config term.
+Each entry in the `providers.plugins` map is a named plugin backed by an executable provider package. The provider package is the source of truth for operations and transport details. Server config selects the provider, passes provider-specific config, and declares connection policy. The HTTP API route paths still use "integrations" (e.g. `/api/v1/integrations`) as stable code surface, but the CLI and config both use `plugins` as the canonical term.
 
 ```yaml
 providers:

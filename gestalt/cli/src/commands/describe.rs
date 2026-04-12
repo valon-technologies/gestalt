@@ -4,13 +4,8 @@ use crate::api::ApiClient;
 use crate::catalog;
 use crate::output::{self, Format};
 
-pub fn describe(
-    client: &ApiClient,
-    integration: &str,
-    operation: &str,
-    format: Format,
-) -> Result<()> {
-    let cat = catalog::fetch_catalog(client, integration)?;
+pub fn describe(client: &ApiClient, plugin: &str, operation: &str, format: Format) -> Result<()> {
+    let cat = catalog::fetch_catalog(client, plugin)?;
 
     let op = match cat.find_operation(operation) {
         Some(op) => op,

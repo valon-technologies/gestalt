@@ -36,7 +36,7 @@ The wizard prompts for the server URL. Enter `http://localhost:8080` and it save
 Verify the connection:
 
 ```sh
-gestalt integrations list
+gestalt plugins list
 ```
 
 ```
@@ -52,7 +52,7 @@ gestalt integrations list
 See what the httpbin plugin can do:
 
 ```sh
-gestalt invoke httpbin
+gestalt plugins invoke httpbin
 ```
 
 ```
@@ -72,7 +72,7 @@ gestalt invoke httpbin
 <Tabs items={['CLI', 'HTTP']}>
   <Tabs.Tab>
     ```sh
-    gestalt invoke httpbin get_ip
+    gestalt plugins invoke httpbin get_ip
     ```
 
     ```
@@ -100,7 +100,7 @@ gestalt invoke httpbin
   </Tabs.Tab>
 </Tabs>
 
-Both access the same underlying operation. Anything you can do with `gestalt invoke` you can also do with `curl` or any HTTP client.
+Both access the same underlying operation. Anything you can do with `gestalt plugins invoke` you can also do with `curl` or any HTTP client.
 
 ## Connecting over MCP
 

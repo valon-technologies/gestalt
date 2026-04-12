@@ -5,7 +5,7 @@ use crate::params;
 
 #[derive(Parser)]
 #[command(name = "gestalt")]
-#[command(about = "CLI for Gestalt API - authentication, integrations, and operations")]
+#[command(about = "CLI for Gestalt API - authentication, plugins, and operations")]
 #[command(version)]
 pub struct Cli {
     #[command(subcommand)]
@@ -37,16 +37,23 @@ pub enum Commands {
         command: ConfigCommands,
     },
 
-    /// Manage third-party integrations
-    Integrations {
+    /// Manage plugins
+    Plugins {
         #[command(subcommand)]
-        command: IntegrationCommands,
+        command: PluginCommands,
     },
 
-    /// Execute an integration operation
+    #[command(hide = true)]
+    Integrations {
+        #[command(subcommand)]
+        command: PluginCommands,
+    },
+
+    #[command(hide = true)]
+    /// Execute a plugin operation
     Invoke {
-        /// Integration name (e.g., github, slack)
-        integration: String,
+        /// Plugin name (e.g., github, slack)
+        plugin: String,
 
         /// Operation name segments joined by "." (e.g., "chat postMessage" or "chat.postMessage"). Omit to list available operations.
         operation: Vec<String>,
@@ -72,10 +79,11 @@ pub enum Commands {
         input_file: Option<String>,
     },
 
-    /// Describe an integration operation
+    #[command(hide = true)]
+    /// Describe a plugin operation
     Describe {
-        /// Integration name
-        integration: String,
+        /// Plugin name
+        plugin: String,
         /// Operation name
         operation: String,
     },
@@ -121,12 +129,12 @@ pub enum ConfigCommands {
 }
 
 #[derive(Subcommand)]
-pub enum IntegrationCommands {
-    /// List available integrations
+pub enum PluginCommands {
+    /// List available plugins
     List,
-    /// Connect an integration via OAuth or interactive manual auth
+    /// Connect a plugin via OAuth or interactive manual auth
     Connect {
-        /// Integration name (e.g., github, slack)
+        /// Plugin name (e.g., github, slack)
         name: String,
 
         /// Named connection to connect
@@ -137,9 +145,9 @@ pub enum IntegrationCommands {
         #[arg(long)]
         instance: Option<String>,
     },
-    /// Disconnect an integration
+    /// Disconnect a plugin
     Disconnect {
-        /// Integration name (e.g., github, slack)
+        /// Plugin name (e.g., github, slack)
         name: String,
 
         /// Target a specific named connection
@@ -149,6 +157,41 @@ pub enum IntegrationCommands {
         /// Target a specific stored instance
         #[arg(long)]
         instance: Option<String>,
+    },
+    /// Execute a plugin operation
+    Invoke {
+        /// Plugin name (e.g., github, slack)
+        plugin: String,
+
+        /// Operation name segments joined by "." (e.g., "chat postMessage" or "chat.postMessage"). Omit to list available operations.
+        operation: Vec<String>,
+
+        /// Parameters as key=value or key:=json pairs
+        #[arg(short = 'p', long = "param", value_parser = params::parse_param_entry)]
+        params: Vec<params::ParamEntry>,
+
+        /// Select a named connection for this invocation
+        #[arg(long)]
+        connection: Option<String>,
+
+        /// Select a stored connection instance
+        #[arg(long)]
+        instance: Option<String>,
+
+        /// Select a sub-path from the response (e.g., "data.items")
+        #[arg(long = "select")]
+        select: Option<String>,
+
+        /// Load parameters from a JSON file (use "-" for stdin)
+        #[arg(long = "input-file")]
+        input_file: Option<String>,
+    },
+    /// Describe a plugin operation
+    Describe {
+        /// Plugin name
+        plugin: String,
+        /// Operation name
+        operation: String,
     },
 }
 

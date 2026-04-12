@@ -300,11 +300,11 @@ fn write_cli_credentials(home: &Path, json: &str) {
 }
 
 #[test]
-fn test_list_integrations() {
+fn test_list_plugins() {
     let mut server = Server::new();
     let mock = authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
         .with_body(
-            r#"[{"name":"github","displayName":"GitHub","description":"GitHub integration"}]"#,
+            r#"[{"name":"acme_crm","displayName":"Acme CRM","description":"Acme CRM plugin"}]"#,
         )
         .create();
 
@@ -314,7 +314,7 @@ fn test_list_integrations() {
     mock.assert();
     let items = resp.as_array().unwrap();
     assert_eq!(items.len(), 1);
-    assert_eq!(items[0]["name"], "github");
+    assert_eq!(items[0]["name"], "acme_crm");
 }
 
 #[test]
@@ -433,7 +433,7 @@ fn test_error_response() {
         .assert()
         .failure()
         .stderr(predicate::str::contains(
-            "failed to invoke auth_svc.list_items: integration \"auth_svc\" is not connected. Connect it first with `gestalt integrations connect auth_svc`",
+            "failed to invoke auth_svc.list_items: plugin \"auth_svc\" is not connected. Connect it first with `gestalt plugins connect auth_svc`",
         ))
         .stderr(predicate::str::contains("OAuth first").not());
 }
@@ -588,7 +588,7 @@ fn test_start_oauth() {
     .create();
 
     let client = create_client(&server);
-    let body = serde_json::json!({"integration": "github"});
+    let body = serde_json::json!({"integration": "acme_crm"});
     let resp = client.post("/api/v1/auth/start-oauth", &body).unwrap();
 
     mock.assert();
@@ -919,7 +919,7 @@ fn test_connect_includes_connection_and_instance() {
     let mut server = Server::new();
     let _integrations =
         authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
-            .with_body(r#"[{"name":"github","authTypes":["oauth"],"connected":false}]"#)
+            .with_body(r#"[{"name":"acme_crm","authTypes":["oauth"],"connected":false}]"#)
             .create();
     let mock = authed_json_mock!(
         server,
@@ -929,15 +929,15 @@ fn test_connect_includes_connection_and_instance() {
     )
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
     .match_body(Matcher::JsonString(
-        r#"{"connection":"workspace","instance":"team-a","integration":"github"}"#.to_string(),
+        r#"{"connection":"workspace","instance":"team-a","integration":"acme_crm"}"#.to_string(),
     ))
     .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
     .create();
 
     let client = create_client(&server);
-    let result = gestalt::commands::integrations::connect_with_browser_opener(
+    let result = gestalt::commands::plugins::connect_with_browser_opener(
         &client,
-        "github",
+        "acme_crm",
         Some("workspace"),
         Some("team-a"),
         |_| Ok(()),
@@ -952,7 +952,7 @@ fn test_connect_prefers_oauth_when_manual_also_exists_and_omits_null_connection_
     let mut server = Server::new();
     let _integrations =
         authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
-            .with_body(r#"[{"name":"github","authTypes":["oauth","manual"],"connected":false}]"#)
+            .with_body(r#"[{"name":"acme_crm","authTypes":["oauth","manual"],"connected":false}]"#)
             .create();
     let mock = authed_json_mock!(
         server,
@@ -962,7 +962,7 @@ fn test_connect_prefers_oauth_when_manual_also_exists_and_omits_null_connection_
     )
     .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
     .match_body(Matcher::JsonString(
-        r#"{"integration":"github"}"#.to_string(),
+        r#"{"integration":"acme_crm"}"#.to_string(),
     ))
     .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
     .create();
@@ -970,9 +970,9 @@ fn test_connect_prefers_oauth_when_manual_also_exists_and_omits_null_connection_
     let client = create_client(&server);
     let opened_url = Arc::new(Mutex::new(None));
     let opened_url_handle = Arc::clone(&opened_url);
-    let result = gestalt::commands::integrations::connect_with_browser_opener(
+    let result = gestalt::commands::plugins::connect_with_browser_opener(
         &client,
-        "github",
+        "acme_crm",
         None,
         None,
         move |url| {
@@ -995,16 +995,16 @@ fn test_disconnect_sends_delete_with_connection_and_instance() {
     let mock = authed_json_mock!(
         server,
         Method::DELETE,
-        "/api/v1/integrations/datadog?connection=oauth&instance=prod",
+        "/api/v1/integrations/widget_metrics?connection=oauth&instance=prod",
         StatusCode::OK
     )
     .with_body(r#"{"status":"disconnected"}"#)
     .create();
 
     let client = create_client(&server);
-    let result = gestalt::commands::integrations::disconnect(
+    let result = gestalt::commands::plugins::disconnect(
         &client,
-        "datadog",
+        "widget_metrics",
         Some("oauth"),
         Some("prod"),
     );
@@ -1019,15 +1019,14 @@ fn test_disconnect_normalizes_plugin_connection_name() {
     let mock = authed_json_mock!(
         server,
         Method::DELETE,
-        "/api/v1/integrations/github?connection=_plugin",
+        "/api/v1/integrations/acme_crm?connection=_plugin",
         StatusCode::OK
     )
     .with_body(r#"{"status":"disconnected"}"#)
     .create();
 
     let client = create_client(&server);
-    let result =
-        gestalt::commands::integrations::disconnect(&client, "github", Some("plugin"), None);
+    let result = gestalt::commands::plugins::disconnect(&client, "acme_crm", Some("plugin"), None);
 
     mock.assert();
     assert!(result.is_ok());
@@ -1039,14 +1038,14 @@ fn test_disconnect_without_optional_params() {
     let mock = authed_json_mock!(
         server,
         Method::DELETE,
-        "/api/v1/integrations/slack",
+        "/api/v1/integrations/buzz_chat",
         StatusCode::OK
     )
     .with_body(r#"{"status":"disconnected"}"#)
     .create();
 
     let client = create_client(&server);
-    let result = gestalt::commands::integrations::disconnect(&client, "slack", None, None);
+    let result = gestalt::commands::plugins::disconnect(&client, "buzz_chat", None, None);
 
     mock.assert();
     assert!(result.is_ok());
@@ -1058,11 +1057,11 @@ fn test_manual_connect_uses_prompted_credentials_and_connection_params() {
     let _integrations = authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
         .with_body(
             r#"[{
-                "name":"datadog",
-                "displayName":"Datadog",
+                "name":"widget_metrics",
+                "displayName":"Widget Metrics",
                 "description":"Metrics and logs",
                 "authTypes":["manual"],
-                "connectionParams":{"site":{"description":"Datadog site","default":"datadoghq.com","required":true}},
+                "connectionParams":{"region":{"description":"API region","default":"us-east","required":true}},
                 "credentialFields":[{"name":"api_key","label":"API key","description":"Use a personal API key"}]
             }]"#,
         )
@@ -1075,20 +1074,20 @@ fn test_manual_connect_uses_prompted_credentials_and_connection_params() {
     )
         .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
         .match_body(Matcher::JsonString(
-            r#"{"connectionParams":{"site":"datadoghq.eu"},"credential":"dd-key","integration":"datadog"}"#.to_string(),
+            r#"{"connectionParams":{"region":"eu-west"},"credential":"wm-key","integration":"widget_metrics"}"#.to_string(),
         ))
-        .with_body(r#"{"status":"connected","integration":"datadog"}"#)
+        .with_body(r#"{"status":"connected","integration":"widget_metrics"}"#)
         .create();
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["integrations", "connect", "datadog"])
-        .write_stdin("datadoghq.eu\ndd-key\n")
+        .args(["plugins", "connect", "widget_metrics"])
+        .write_stdin("eu-west\nwm-key\n")
         .assert()
         .success()
-        .stderr(predicate::str::contains("Datadog site"))
+        .stderr(predicate::str::contains("API region"))
         .stderr(predicate::str::contains("API key"))
-        .stderr(predicate::str::contains("Connected datadog."));
+        .stderr(predicate::str::contains("Connected widget_metrics."));
 }
 
 #[test]
@@ -1151,7 +1150,7 @@ fn test_manual_connect_prompts_for_connection_and_finishes_candidate_selection()
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["integrations", "connect", "manual-svc"])
+        .args(["plugins", "connect", "manual-svc"])
         .write_stdin("1\nabc123\n2\n")
         .assert()
         .success()
@@ -1187,7 +1186,7 @@ fn test_manual_connect_falls_back_to_generic_credential_prompt() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["integrations", "connect", "manual-svc"])
+        .args(["plugins", "connect", "manual-svc"])
         .write_stdin("secret\n")
         .assert()
         .success()
@@ -1205,7 +1204,7 @@ fn test_manual_connect_fails_when_stdin_closes_during_prompt() {
 
     let home = tempfile::tempdir().unwrap();
     cli_command_for_server(home.path(), &server)
-        .args(["integrations", "connect", "manual-svc"])
+        .args(["plugins", "connect", "manual-svc"])
         .write_stdin("")
         .assert()
         .failure()
@@ -1338,7 +1337,7 @@ fn test_invoke_with_connection_and_instance() {
 
     secondary_invoke_mock.assert();
     assert!(err.contains(
-        "Connect it first with `gestalt integrations connect other_svc --connection workspace --instance team-a`"
+        "Connect it first with `gestalt plugins connect other_svc --connection workspace --instance team-a`"
     ));
 }
 
@@ -1361,6 +1360,24 @@ fn test_describe_operation() {
 
     mock.assert();
     assert!(result.is_ok());
+
+    // "plugins describe" subcommand reaches the same handler
+    let mock = json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/test_svc/operations",
+        StatusCode::OK
+    )
+    .with_body(catalog_body())
+    .create();
+
+    let output = run_cli(&server, &["plugins", "describe", "test_svc", "do_thing"]);
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    mock.assert();
 }
 
 #[test]
@@ -1441,7 +1458,7 @@ fn test_resolve_url_does_not_read_unsupported_dot_gestalt_json_file() {
 }
 
 #[test]
-fn test_cli_integrations_list_table_output() {
+fn test_cli_plugins_list_table_output() {
     let mut server = Server::new();
     let home = TempDir::new().unwrap();
     write_credentials(
@@ -1454,16 +1471,16 @@ fn test_cli_integrations_list_table_output() {
     );
     let mock = authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
         .with_body(
-            r#"[{"name":"github","description":"GitHub integration with a longer description","connected":true}]"#,
+            r#"[{"name":"acme_crm","description":"Acme CRM plugin with a longer description","connected":true}]"#,
         )
         .create();
 
     let mut cmd = cli_command(home.path());
-    cmd.args(["integrations", "list"]);
+    cmd.args(["plugins", "list"]);
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("GITHUB").or(predicate::str::contains("github")))
-        .stdout(predicate::str::contains("GitHub integration"))
+        .stdout(predicate::str::contains("ACME_CRM").or(predicate::str::contains("acme_crm")))
+        .stdout(predicate::str::contains("Acme CRM plugin"))
         .stdout(
             predicate::str::contains("Connected")
                 .or(predicate::str::contains("CONNECTED"))
@@ -1471,10 +1488,24 @@ fn test_cli_integrations_list_table_output() {
         );
 
     mock.assert();
+
+    let mock = authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
+        .with_body(
+            r#"[{"name":"acme_crm","description":"Acme CRM plugin with a longer description","connected":true}]"#,
+        )
+        .create();
+
+    let mut cmd = cli_command(home.path());
+    cmd.args(["integrations", "list"]);
+    cmd.assert()
+        .success()
+        .stdout(predicate::str::contains("acme_crm"));
+
+    mock.assert();
 }
 
 #[test]
-fn test_cli_integrations_list_accepts_legacy_credentials_without_api_url() {
+fn test_cli_plugins_list_accepts_legacy_credentials_without_api_url() {
     let mut server = Server::new();
     let home = TempDir::new().unwrap();
     write_credentials(
@@ -1486,7 +1517,7 @@ fn test_cli_integrations_list_accepts_legacy_credentials_without_api_url() {
     );
     let mock = authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
         .with_body(
-            r#"[{"name":"github","description":"GitHub integration with a longer description","connected":true}]"#,
+            r#"[{"name":"acme_crm","description":"Acme CRM plugin with a longer description","connected":true}]"#,
         )
         .create();
 
@@ -1495,10 +1526,10 @@ fn test_cli_integrations_list_accepts_legacy_credentials_without_api_url() {
     config_cmd.assert().success();
 
     let mut cmd = cli_command(home.path());
-    cmd.args(["integrations", "list"]);
+    cmd.args(["plugins", "list"]);
     cmd.assert()
         .success()
-        .stdout(predicate::str::contains("GitHub integration"));
+        .stdout(predicate::str::contains("Acme CRM plugin"));
 
     mock.assert();
 }
@@ -1755,6 +1786,27 @@ fn test_space_separated_segments_invoke() {
         String::from_utf8_lossy(&output.stderr)
     );
     deep_mock.assert();
+
+    // "plugins invoke" subcommand resolves the same way
+    let subcommand_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/test_svc/widgets.delete",
+        StatusCode::OK
+    )
+    .with_body(r#"{"ok": true}"#)
+    .create();
+
+    let output = run_cli(
+        &server,
+        &["plugins", "invoke", "test_svc", "widgets", "delete"],
+    );
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    subcommand_mock.assert();
 }
 
 #[test]

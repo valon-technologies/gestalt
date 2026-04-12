@@ -107,8 +107,8 @@ fn is_valid_operation_query(query: &str) -> bool {
     })
 }
 
-pub fn fetch_catalog(client: &ApiClient, integration: &str) -> Result<OperationsCatalog> {
-    let path = format!("/api/v1/integrations/{}/operations", integration);
+pub fn fetch_catalog(client: &ApiClient, plugin: &str) -> Result<OperationsCatalog> {
+    let path = format!("/api/v1/integrations/{}/operations", plugin);
     let resp = client.get(&path)?;
     let operations: Vec<CatalogOperation> =
         serde_json::from_value(resp).context("failed to parse operations response")?;
