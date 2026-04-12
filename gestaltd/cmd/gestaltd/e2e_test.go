@@ -502,6 +502,100 @@ func TestE2EServeAndHealthCheck(t *testing.T) {
 	}
 }
 
+func TestE2EAdminUI(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping E2E admin UI test in short mode")
+	}
+
+	dir := t.TempDir()
+	baseURL := startGestaltd(t, dir)
+	client := &http.Client{Timeout: 2 * time.Second}
+
+	t.Run("admin page serves embedded HTML", func(t *testing.T) {
+		t.Parallel()
+
+		resp, err := client.Get(baseURL + "/admin/")
+		if err != nil {
+			t.Fatalf("GET /admin/: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected /admin/ 200, got %d", resp.StatusCode)
+		}
+		html := string(body)
+		if !strings.Contains(html, "Prometheus metrics") {
+			t.Fatal("expected admin page to contain 'Prometheus metrics'")
+		}
+		if !strings.Contains(html, "theme.css") {
+			t.Fatal("expected admin page to reference theme.css")
+		}
+	})
+
+	t.Run("admin theme CSS is served", func(t *testing.T) {
+		t.Parallel()
+
+		resp, err := client.Get(baseURL + "/admin/theme.css")
+		if err != nil {
+			t.Fatalf("GET /admin/theme.css: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected /admin/theme.css 200, got %d", resp.StatusCode)
+		}
+		if !strings.Contains(string(body), "--background") {
+			t.Fatal("expected theme.css to contain CSS custom properties")
+		}
+	})
+
+	t.Run("metrics endpoint serves prometheus format", func(t *testing.T) {
+		t.Parallel()
+
+		resp, err := client.Get(baseURL + "/metrics")
+		if err != nil {
+			t.Fatalf("GET /metrics: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected /metrics 200, got %d", resp.StatusCode)
+		}
+		content := string(body)
+		if !strings.Contains(content, "# TYPE") {
+			t.Fatal("expected /metrics to contain '# TYPE' marker")
+		}
+		if !strings.Contains(content, "# HELP") {
+			t.Fatal("expected /metrics to contain '# HELP' marker")
+		}
+	})
+
+	t.Run("admin redirect adds trailing slash", func(t *testing.T) {
+		t.Parallel()
+
+		noRedirect := &http.Client{
+			Timeout: 2 * time.Second,
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
+		resp, err := noRedirect.Get(baseURL + "/admin")
+		if err != nil {
+			t.Fatalf("GET /admin: %v", err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusMovedPermanently && resp.StatusCode != http.StatusPermanentRedirect {
+			t.Fatalf("expected /admin to redirect, got %d", resp.StatusCode)
+		}
+		loc := resp.Header.Get("Location")
+		if !strings.HasSuffix(loc, "/admin/") {
+			t.Fatalf("expected redirect to /admin/, got Location: %s", loc)
+		}
+	})
+}
+
 func TestE2EInitLocalProviders(t *testing.T) {
 	t.Parallel()
 
