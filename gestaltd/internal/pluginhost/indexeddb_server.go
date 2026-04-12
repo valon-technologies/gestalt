@@ -283,7 +283,7 @@ func (s *indexedDBServer) OpenCursor(stream proto.IndexedDB_OpenCursorServer) er
 	if err != nil {
 		return indexeddbToGRPCErr(err)
 	}
-	defer cursor.Close()
+	defer func() { _ = cursor.Close() }()
 
 	for {
 		msg, recvErr := stream.Recv()
