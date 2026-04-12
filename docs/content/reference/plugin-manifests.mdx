@@ -280,17 +280,17 @@ IndexedDB providers require an executable entrypoint. Declare it under `entrypoi
 
 ```yaml
 kind: indexeddb
-source: github.com/valon-technologies/gestalt-providers/datastore-postgres
+source: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
 version: 1.0.0
 displayName: PostgreSQL
 spec:
   configSchemaPath: schemas/config.schema.json
 entrypoint:
-  artifactPath: artifacts/linux/amd64/datastore
+  artifactPath: artifacts/linux/amd64/provider
 artifacts:
   - os: linux
     arch: amd64
-    path: artifacts/linux/amd64/datastore
+    path: artifacts/linux/amd64/provider
 ```
 
 ## Web UI Metadata

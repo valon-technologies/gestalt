@@ -27,7 +27,7 @@ providers:
 
 To disable platform auth entirely, omit the `providers.auth` block or set `providers: { auth: { disabled: true } }`.
 
-## Datastore Providers
+## IndexedDB Providers
 
 Datastore providers back the persistent state layer. They are configured under named entries in `providers.indexeddbs`, and `server.indexeddb` selects which one the host uses. Gestalt does not compile datastore drivers into the binary; it starts the configured external datastore provider process at runtime.
 
