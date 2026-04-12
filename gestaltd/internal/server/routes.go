@@ -107,6 +107,10 @@ func (s *Server) mountAPIRoutes(r chi.Router) {
 // BuildPluginRouter creates a scoped chi.Router for a plugin's subdomain.
 // It reuses the server's auth, middleware, and handlers, scoping API routes
 // to the given plugin name.
+//
+// Plugin subdomains are a read/execute surface only. Authentication and
+// connection management happen on the main domain; the shared session
+// cookie (with Domain attribute) carries the session to subdomains.
 func (s *Server) BuildPluginRouter(pluginName string, staticHandler, mcpHandler http.Handler, allowedUsers []string) chi.Router {
 	r := chi.NewRouter()
 	r.Use(requestMetaMiddleware)
@@ -118,7 +122,11 @@ func (s *Server) BuildPluginRouter(pluginName string, staticHandler, mcpHandler 
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(middleware.Timeout(60 * time.Second))
-		s.mountAuthRoutes(r)
+
+		// Public: auth provider info so the plugin frontend can redirect
+		// to the main domain's login page when unauthenticated.
+		r.Get("/auth/info", s.authInfo)
+
 		r.Group(func(r chi.Router) {
 			r.Use(s.authMiddleware)
 			if len(allowedUsers) > 0 {
@@ -126,13 +134,12 @@ func (s *Server) BuildPluginRouter(pluginName string, staticHandler, mcpHandler 
 			}
 			r.Use(scopeIntegration(pluginName))
 
+			// Logout clears the shared session cookie (Domain-scoped).
+			r.Post("/auth/logout", s.logout)
 			r.Get("/integrations", s.listIntegrations)
 			r.Get("/operations", s.listOperations)
 			r.Get("/{operation}", s.executeOperation)
 			r.Post("/{operation}", s.executeOperation)
-
-			r.Post("/auth/start-oauth", s.startIntegrationOAuth)
-			r.Post("/auth/connect-manual", s.connectManual)
 		})
 	})
 

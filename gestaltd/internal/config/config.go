@@ -105,7 +105,6 @@ type ProviderEntry struct {
 	AllowedOperations map[string]*OperationOverride `yaml:"allowedOperations,omitempty"`
 	WebUI             *WebUIEntry                   `yaml:"webui,omitempty"`
 	AllowedUsers      []string                      `yaml:"allowedUsers,omitempty"`
-	AllowedGroups     []string                      `yaml:"allowedGroups,omitempty"`
 
 	// Runtime-resolved fields (populated during init/bootstrap, not from YAML)
 	Command              string                              `yaml:"-"`

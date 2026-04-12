@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"io"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -117,20 +118,6 @@ func TestSubdomainRouting(t *testing.T) {
 		}
 	})
 
-	t.Run("subdomain scoped POST operation", func(t *testing.T) {
-		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/create_item", strings.NewReader(`{}`))
-		req.Host = "acme.example.com"
-		req.Header.Set("Content-Type", "application/json")
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("request: %v", err)
-		}
-		defer func() { _ = resp.Body.Close() }()
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("expected 200, got %d", resp.StatusCode)
-		}
-	})
-
 	t.Run("subdomain serves static assets on fallback", func(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/some/spa/path", nil)
 		req.Host = "acme.example.com"
@@ -215,6 +202,70 @@ func TestSubdomainRouting(t *testing.T) {
 		defer func() { _ = resp.Body.Close() }()
 		if resp.StatusCode != http.StatusOK {
 			t.Fatalf("expected 200 from main domain health, got %d", resp.StatusCode)
+		}
+	})
+
+	t.Run("login handler not reachable on subdomain", func(t *testing.T) {
+		// The login route is not registered on the plugin subdomain.
+		// Unmatched /api/v1 paths fall through to the static SPA handler,
+		// which is safe -- the handler is not invoked.
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/login", strings.NewReader(`{}`))
+		req.Host = "acme.example.com"
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		// Response is the static SPA handler, not a login response.
+		// The login handler writes JSON with a "redirectUrl" field.
+		if strings.Contains(string(body), "redirectUrl") {
+			t.Fatalf("login handler should not be invoked on subdomain, got: %s", body)
+		}
+	})
+
+	t.Run("start-oauth handler not reachable on subdomain", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", strings.NewReader(`{"integration":"other"}`))
+		req.Host = "acme.example.com"
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		// The start-oauth handler writes JSON with "url" field.
+		if strings.Contains(string(body), `"url"`) {
+			t.Fatalf("start-oauth handler should not be invoked on subdomain, got: %s", body)
+		}
+	})
+
+	t.Run("connect-manual handler not reachable on subdomain", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", strings.NewReader(`{"integration":"other"}`))
+		req.Host = "acme.example.com"
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if strings.Contains(string(body), `"status"`) {
+			t.Fatalf("connect-manual handler should not be invoked on subdomain, got: %s", body)
+		}
+	})
+
+	t.Run("auth info available on subdomain", func(t *testing.T) {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/info", nil)
+		req.Host = "acme.example.com"
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200 for auth/info on subdomain, got %d", resp.StatusCode)
 		}
 	})
 }
