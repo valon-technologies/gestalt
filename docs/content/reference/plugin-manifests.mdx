@@ -4,21 +4,21 @@ import { Tabs } from 'nextra/components'
 
 Gestalt provider packages and release archives are described by a manifest file: `manifest.yaml`, `manifest.yml`, or `manifest.json`. YAML is the easiest format to author by hand.
 
-Providers are the umbrella concept in Gestalt. Auth providers, datastore providers, and plugins all use this manifest format. The `plugin` manifest kind is reserved for providers that expose callable operations.
+Providers are the umbrella concept in Gestalt. Auth providers, indexeddb providers, and plugins all use this manifest format. The `plugin` manifest kind is reserved for providers that expose callable operations.
 
 ## Manifest Kinds
 
-Every manifest defines exactly one provider kind, determined by which metadata block is present at the top level:
+Every manifest defines exactly one provider kind, set by the `kind` field:
 
-| Kind | Top-level key | Purpose |
-| --- | --- | --- |
-| `plugin` | `plugin` | Plugin (REST, OpenAPI, GraphQL, MCP, or executable). |
-| `auth` | `auth` | Platform auth provider (Google, OIDC, local, or custom). |
-| `datastore` | `datastore` | Persistence backend (Postgres, SQLite, DynamoDB, or custom). |
-| `secrets` | `secrets` | Secret manager for resolving `secret://` references. |
-| `webui` | `webui` | Static UI package served by `gestaltd`. |
+| Kind | Purpose |
+| --- | --- |
+| `plugin` | Plugin (REST, OpenAPI, GraphQL, MCP, or executable). |
+| `auth` | Platform auth provider (Google, OIDC, local, or custom). |
+| `indexeddb` | Persistence backend (Postgres, SQLite, DynamoDB, or custom). |
+| `secrets` | Secret manager for resolving `secret://` references. |
+| `webui` | Static UI package served by `gestaltd`. |
 
-A manifest must include exactly one of these keys. There is no separate `kind` or `kinds` field.
+The `kind` field is required. Kind-specific configuration goes under the `spec` block.
 
 ## Common Fields
 
@@ -26,26 +26,19 @@ These fields appear at the top level of every manifest regardless of kind.
 
 | Field | Type | Required | Purpose |
 | --- | --- | --- | --- |
+| `kind` | string | yes | The provider kind (`plugin`, `auth`, `indexeddb`, `secrets`, `webui`). |
 | `source` | string | yes | Canonical provider source identifier. Use `github.com/<org>/<repo>/<path>`. The final path segment is the provider package name; preceding segments are used for release tags and source resolution. |
 | `version` | string | yes | Semver version. Pre-release suffixes like `-alpha.1` are allowed. |
 | `displayName` | string | no | Human-readable label shown in the UI. |
 | `description` | string | no | Human-readable description. |
 | `iconFile` | string | no | Relative path to an SVG icon bundled with the package. |
 | `artifacts` | Artifact[] | no | Packaged executable artifacts keyed by platform. Omit for declarative-only plugin packages or source manifests used during local development. |
-| `entrypoints` | Entrypoints | no | Executable entrypoint metadata for the manifest's kind. |
+| `entrypoint` | Entrypoint | no | Executable entrypoint metadata for the provider. |
+| `spec` | object | no | Kind-specific configuration block. |
 
-## Entrypoints
+## Entrypoint
 
-The `entrypoints` block declares executable binaries. Each key corresponds to a provider kind.
-
-| Key | Kind | Purpose |
-| --- | --- | --- |
-| `plugin` | plugin | Executable entrypoint for a plugin. |
-| `auth` | auth | Executable entrypoint for an auth provider. |
-| `datastore` | datastore | Executable entrypoint for a datastore provider. |
-| `secrets` | secrets | Executable entrypoint for a secrets provider. |
-
-Each entrypoint has two fields:
+The `entrypoint` block declares the executable binary for the provider.
 
 | Field | Type | Required | Purpose |
 | --- | --- | --- | --- |
@@ -53,15 +46,14 @@ Each entrypoint has two fields:
 | `args` | string[] | no | Additional arguments passed to the binary at startup. |
 
 ```yaml
-entrypoints:
-  plugin:
-    artifactPath: artifacts/linux/amd64/plugin
-    args: ["--verbose"]
+entrypoint:
+  artifactPath: artifacts/linux/amd64/plugin
+  args: ["--verbose"]
 ```
 
 ## Plugin Metadata
 
-The `plugin` block describes a plugin. It supports declarative REST operations, spec-loaded surfaces (OpenAPI, GraphQL, MCP), executable code, or any combination.
+The `spec` block for a `kind: plugin` manifest describes a plugin. It supports declarative REST operations, spec-loaded surfaces (OpenAPI, GraphQL, MCP), executable code, or any combination.
 
 ### Core Fields
 
@@ -71,9 +63,8 @@ The `plugin` block describes a plugin. It supports declarative REST operations, 
 | `auth` | ProviderAuth | Default connection auth when no `connections` map is defined. |
 | `connectionMode` | string | Default connection mode when no `connections` map is defined. One of `none`, `user`, `identity`, `either`. |
 | `mcp` | bool | When true, the plugin exposes its operations as MCP tools. |
-| `baseUrl` | string | Base URL for declarative REST operations. |
 | `headers` | map[string]string | Static headers injected into every outbound request. |
-| `operations` | ProviderOperation[] | Declarative REST operations. Presence of this field makes the plugin declarative. |
+| `surfaces` | Surfaces | Spec-loaded and declarative REST surfaces. See [Surfaces](#surfaces). |
 | `defaultConnection` | string | Name of the connection to use when none is specified. |
 
 ### Connections
@@ -89,18 +80,37 @@ The `connections` map defines named connection profiles. Deployment config can o
 
 ### Surfaces
 
-Surfaces load operation catalogs from external specifications. The following top-level `plugin` fields configure surfaces:
+Surfaces load operation catalogs from external specifications. They are configured under `spec.surfaces`.
+
+#### `spec.surfaces.openapi`
 
 | Field | Type | Purpose |
 | --- | --- | --- |
-| `openapi` | string | Path to a bundled OpenAPI document. |
-| `openapiConnection` | string | Connection name used for OpenAPI calls. |
-| `graphqlUrl` | string | URL of the upstream GraphQL endpoint. |
-| `graphqlConnection` | string | Connection name used for GraphQL calls. |
-| `mcpUrl` | string | URL of the upstream MCP server. |
-| `mcpConnection` | string | Connection name used for MCP calls. |
+| `document` | string | Path to a bundled OpenAPI document. |
+| `connection` | string | Connection name used for OpenAPI calls. |
 
-The `rest`/`openapi`/`graphql` surface types are mutually exclusive (use `openapi` or `graphqlUrl`, not both), but `mcpUrl` may be combined with any of them.
+#### `spec.surfaces.graphql`
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `url` | string | URL of the upstream GraphQL endpoint. |
+| `connection` | string | Connection name used for GraphQL calls. |
+
+#### `spec.surfaces.mcp`
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `url` | string | URL of the upstream MCP server. |
+| `connection` | string | Connection name used for MCP calls. |
+
+#### `spec.surfaces.rest`
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `baseUrl` | string | Base URL for declarative REST operations. |
+| `operations` | ProviderOperation[] | Declarative REST operations. Presence of this field makes the plugin declarative. |
+
+The `rest`/`openapi`/`graphql` surface types are mutually exclusive (use `surfaces.openapi` or `surfaces.graphql`, not both), but `surfaces.mcp` may be combined with any of them.
 
 ### Auth Types
 
@@ -109,7 +119,7 @@ The `auth.type` field on a connection accepts these values:
 | Type | Purpose |
 | --- | --- |
 | `oauth2` | Standard OAuth 2.0. Requires `authorizationUrl` and `tokenUrl`. |
-| `mcp_oauth` | MCP-native OAuth. The plugin must also declare `mcpUrl` (either directly or via a surface). A manifest that uses `mcp_oauth` without an MCP surface fails validation. |
+| `mcp_oauth` | MCP-native OAuth. The plugin must also declare an MCP surface (via `spec.surfaces.mcp`). A manifest that uses `mcp_oauth` without an MCP surface fails validation. |
 | `bearer` | Static bearer token. Define `credentials` to prompt the user for the token value. |
 | `manual` | Custom credential fields. Define `credentials` to describe each field. |
 | `none` | No authentication. |
@@ -117,7 +127,7 @@ The `auth.type` field on a connection accepts these values:
 Manual auth in provider manifests also supports `authMapping`, using the same `value` / `valueFrom.credentialFieldRef.name` shape as deploy config.
 
 ```yaml
-plugin:
+spec:
   auth:
     type: manual
     credentials:
@@ -153,7 +163,7 @@ Plugin-level pagination configuration applies to all operations by default. Indi
 | `maxPages` | int | Maximum number of pages to fetch in a single paginated request. |
 
 ```yaml
-plugin:
+spec:
   pagination:
     style: cursor
     cursorParam: starting_after
@@ -177,7 +187,7 @@ The `allowedOperations` map selectively exposes and customizes operations from a
 | `pagination` | ManifestPaginationConfig | Per-operation pagination config that overrides the plugin-level default. |
 
 ```yaml
-plugin:
+spec:
   allowedOperations:
     tickets.list:
       alias: list_tickets
@@ -233,48 +243,48 @@ The `params` map on a connection defines parameters that are populated during or
 
 ## Auth Provider Metadata
 
-The `auth` block describes a platform auth provider package.
+The `spec` block for a `kind: auth` manifest describes a platform auth provider package.
 
 | Field | Type | Purpose |
 | --- | --- | --- |
 | `configSchemaPath` | string | Path to a JSON/YAML schema that validates the `auth.config` block in the server config. |
 
-Auth providers require an executable entrypoint. Declare it under `entrypoints.auth`.
+Auth providers require an executable entrypoint. Declare it under `entrypoint`.
 
 ```yaml
+kind: auth
 source: github.com/valon-technologies/gestalt-providers/auth-google
 version: 1.0.0
 displayName: Google Auth
-auth:
+spec:
   configSchemaPath: schemas/config.schema.json
-entrypoints:
-  auth:
-    artifactPath: artifacts/linux/amd64/auth
+entrypoint:
+  artifactPath: artifacts/linux/amd64/auth
 artifacts:
   - os: linux
     arch: amd64
     path: artifacts/linux/amd64/auth
 ```
 
-## Datastore Provider Metadata
+## IndexedDB Provider Metadata
 
-The `datastore` block describes a persistence backend package.
+The `spec` block for a `kind: indexeddb` manifest describes a persistence backend package.
 
 | Field | Type | Purpose |
 | --- | --- | --- |
 | `configSchemaPath` | string | Path to a JSON/YAML schema that validates the `datastores.<name>.config` block in the server config. |
 
-Datastore providers require an executable entrypoint. Declare it under `entrypoints.datastore`.
+IndexedDB providers require an executable entrypoint. Declare it under `entrypoint`.
 
 ```yaml
+kind: indexeddb
 source: github.com/valon-technologies/gestalt-providers/datastore-postgres
 version: 1.0.0
 displayName: PostgreSQL
-datastore:
+spec:
   configSchemaPath: schemas/config.schema.json
-entrypoints:
-  datastore:
-    artifactPath: artifacts/linux/amd64/datastore
+entrypoint:
+  artifactPath: artifacts/linux/amd64/datastore
 artifacts:
   - os: linux
     arch: amd64
@@ -283,17 +293,18 @@ artifacts:
 
 ## Web UI Metadata
 
-The `webui` block describes a static UI package.
+The `spec` block for a `kind: webui` manifest describes a static UI package.
 
 | Field | Type | Required | Purpose |
 | --- | --- | --- | --- |
 | `assetRoot` | string | yes | Directory containing the built static assets. |
 
 ```yaml
+kind: webui
 source: github.com/acme/plugins/gestalt-ui
 version: 1.0.0
 displayName: Custom UI
-webui:
+spec:
   assetRoot: ui/out
 ```
 
@@ -318,12 +329,13 @@ This manifest shows a plugin with an executable entrypoint, multiple connections
 <Tabs items={['YAML', 'JSON']}>
   <Tabs.Tab>
     ```yaml
+    kind: plugin
     source: github.com/acme/plugins/support
     version: 1.2.3
     displayName: Support
     description: Tickets, knowledge base, and MCP workspace tools
     iconFile: assets/icon.svg
-    plugin:
+    spec:
       configSchemaPath: schemas/config.schema.yaml
       headers:
         X-App-Version: "2026-04-01"
@@ -357,10 +369,13 @@ This manifest shows a plugin with an executable entrypoint, multiple connections
           mode: user
           auth:
             type: mcp_oauth
-      openapi: openapi.yaml
-      openapiConnection: default
-      mcpUrl: https://mcp.support.example.com/mcp
-      mcpConnection: mcp
+      surfaces:
+        openapi:
+          document: openapi.yaml
+          connection: default
+        mcp:
+          url: https://mcp.support.example.com/mcp
+          connection: mcp
       pagination:
         style: cursor
         cursorParam: starting_after
@@ -376,9 +391,8 @@ This manifest shows a plugin with an executable entrypoint, multiple connections
           paginate: true
         tickets.get:
           alias: get_ticket
-    entrypoints:
-      plugin:
-        artifactPath: artifacts/linux/amd64/plugin
+    entrypoint:
+      artifactPath: artifacts/linux/amd64/plugin
     artifacts:
       - os: linux
         arch: amd64
@@ -390,12 +404,13 @@ This manifest shows a plugin with an executable entrypoint, multiple connections
   <Tabs.Tab>
     ```json
     {
+      "kind": "plugin",
       "source": "github.com/acme/plugins/support",
       "version": "1.2.3",
       "displayName": "Support",
       "description": "Tickets, knowledge base, and MCP workspace tools",
       "iconFile": "assets/icon.svg",
-      "plugin": {
+      "spec": {
         "configSchemaPath": "schemas/config.schema.yaml",
         "headers": {
           "X-App-Version": "2026-04-01"
@@ -429,10 +444,16 @@ This manifest shows a plugin with an executable entrypoint, multiple connections
             "auth": { "type": "mcp_oauth" }
           }
         },
-        "openapi": "openapi.yaml",
-        "openapiConnection": "default",
-        "mcpUrl": "https://mcp.support.example.com/mcp",
-        "mcpConnection": "mcp",
+        "surfaces": {
+          "openapi": {
+            "document": "openapi.yaml",
+            "connection": "default"
+          },
+          "mcp": {
+            "url": "https://mcp.support.example.com/mcp",
+            "connection": "mcp"
+          }
+        },
         "pagination": {
           "style": "cursor",
           "cursorParam": "starting_after",
@@ -449,10 +470,8 @@ This manifest shows a plugin with an executable entrypoint, multiple connections
           "tickets.get": { "alias": "get_ticket" }
         }
       },
-      "entrypoints": {
-        "plugin": {
-          "artifactPath": "artifacts/linux/amd64/plugin"
-        }
+      "entrypoint": {
+        "artifactPath": "artifacts/linux/amd64/plugin"
       },
       "artifacts": [
         {
@@ -473,40 +492,43 @@ This manifest shows a plugin with an executable entrypoint, multiple connections
 This plugin requires no binary. It defines REST operations entirely in the manifest.
 
 ```yaml
+kind: plugin
 source: github.com/acme/plugins/support-api
 version: 0.0.1-alpha.1
 displayName: Support API
 description: Small ticket API
 iconFile: assets/icon.svg
-plugin:
+spec:
   auth:
     type: bearer
     credentials:
       - name: token
         label: API Token
-  baseUrl: https://api.support.example.com
-  operations:
-    - name: list_tickets
-      description: Return open tickets
-      method: GET
-      path: /tickets
-    - name: get_ticket
-      description: Return one ticket
-      method: GET
-      path: /tickets/{ticket_id}
+  surfaces:
+    rest:
+      baseUrl: https://api.support.example.com
+      operations:
+        - name: list_tickets
+          description: Return open tickets
+          method: GET
+          path: /tickets
+        - name: get_ticket
+          description: Return one ticket
+          method: GET
+          path: /tickets/{ticket_id}
 ```
 
 ## Authoring Notes
 
-Manifest paths must stay inside the package. `source` and `version` are required. A manifest defines exactly one provider kind: `plugin`, `auth`, `datastore`, `secrets`, or `webui`.
+Manifest paths must stay inside the package. `kind`, `source`, and `version` are required. A manifest defines exactly one provider kind: `kind: plugin`, `kind: auth`, `kind: indexeddb`, `kind: secrets`, or `kind: webui`.
 
 `configSchemaPath` validates per-plugin config and may be written in JSON or YAML. Any connection may define `params` and `discovery`. The OpenAPI/GraphQL surface types are mutually exclusive, but MCP may be added alongside either.
 
-A connection using `mcp_oauth` auth requires the plugin to declare an MCP surface (via `mcpUrl` or an equivalent). Manifests that set `auth.type: mcp_oauth` without an MCP surface fail validation.
+A connection using `mcp_oauth` auth requires the plugin to declare an MCP surface (via `spec.surfaces.mcp` or an equivalent). Manifests that set `auth.type: mcp_oauth` without an MCP surface fail validation.
 
 When an executable plugin defines helper operations in Go, Rust, Python, or
 TypeScript, Gestalt materializes the executable catalog automatically during
-local source-plugin execution and `provider release`. Auth and datastore
+local source-plugin execution and `provider release`. Auth and indexeddb
 source packages use the same release flow for Go, Rust, and TypeScript, but
 they do not generate catalogs. See [Plugins](/providers/plugins)
 for the end-to-end authoring flow.
@@ -573,6 +595,7 @@ packages generate support files or UI bundles without checking built artifacts
 into source control.
 
 ```yaml
+kind: webui
 source: github.com/acme/plugins/gestalt-ui
 version: 1.0.0
 release:
@@ -582,7 +605,7 @@ release:
       - npm
       - run
       - build
-webui:
+spec:
   assetRoot: ui/out
 ```
 
@@ -601,8 +624,8 @@ catalog automatically before packaging. Python source plugins load the module
 declared in `[tool.gestalt].provider` and materialize the executable catalog
 automatically. TypeScript source providers load the target declared in
 `package.json` under `gestalt.provider`. A string target such as
-`./provider.ts#plugin` defaults to a plugin provider; auth and datastore
-providers use an object with `kind` and `target`. Auth and datastore source
+`./provider.ts#plugin` defaults to a plugin provider; auth and indexeddb
+providers use an object with `kind` and `target`. Auth and indexeddb source
 packages support the same release flow for Go, Rust, and TypeScript, but they
 do not generate catalogs. Source packages build the host-platform artifact by
 default. Pass `--platform` for an explicit `os/arch[/libc]` target list, or

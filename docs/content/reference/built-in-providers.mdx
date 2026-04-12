@@ -6,7 +6,7 @@ Two simple secrets providers (`env` and `file`), telemetry, and audit remain bui
 
 ## Auth Providers
 
-Auth providers handle platform login. They are configured under `auth.provider` in your config file, using the `provider:` key to reference the provider source.
+Auth providers handle platform login. They are configured under `providers.auth` in your config file.
 
 | Name | Purpose |
 | --- | --- |
@@ -15,33 +15,34 @@ Auth providers handle platform login. They are configured under `auth.provider` 
 | `oidc` | Generic OpenID Connect. Works with Okta, Auth0, Azure AD, Keycloak, and others. |
 
 ```yaml
-auth:
-  provider:
+providers:
+  auth:
     source:
       ref: github.com/valon-technologies/gestalt-providers/auth-google
       version: 1.0.0
-  config:
-    allowedDomains:
-      - example.com
+    config:
+      allowedDomains:
+        - example.com
 ```
 
-To disable platform auth entirely, omit the `auth` block or set `auth: { disabled: true }`.
+To disable platform auth entirely, omit the `providers.auth` block or set `providers: { auth: { disabled: true } }`.
 
 ## Datastore Providers
 
-Datastore providers back the persistent state layer. They are configured under named entries in `datastores`, and `datastore` selects which one the host uses. Gestalt does not compile datastore drivers into the binary; it starts the configured external datastore provider process at runtime.
+Datastore providers back the persistent state layer. They are configured under named entries in `providers.indexeddbs`, and `server.indexeddb` selects which one the host uses. Gestalt does not compile datastore drivers into the binary; it starts the configured external datastore provider process at runtime.
 
 ```yaml
-datastores:
-  main:
-    provider:
+server:
+  indexeddb: main
+
+providers:
+  indexeddbs:
+    main:
       source:
         ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
         version: 1.0.0
-    config:
-      dsn: ${DATABASE_URL}
-
-datastore: main
+      config:
+        dsn: ${DATABASE_URL}
 ```
 
 ## Secret Managers
@@ -50,10 +51,10 @@ Two secret managers are compiled into the `gestaltd` binary and resolve `secret:
 
 | Name | Purpose |
 | --- | --- |
-| `env` | Resolves secrets from environment variables. Default when `secrets` is omitted. |
+| `env` | Resolves secrets from environment variables. Default when `providers.secrets` is omitted. |
 | `file` | Resolves secrets from files in a configured directory. Works with Kubernetes volume-mounted secrets. |
 
-For cloud backends (Google Secret Manager, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault), see [Secrets Providers](/providers/secrets#available-providers). These use the `provider:` config key under `secrets` rather than `builtin:`.
+For cloud backends (Google Secret Manager, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault), see [Secrets Providers](/providers/secrets#available-providers). These use a `source:` config key under `providers.secrets`.
 
 ## Telemetry Providers (built-in)
 
@@ -67,12 +68,12 @@ Telemetry providers are compiled into the binary.
 
 ## Plugins
 
-Plugins (BigQuery, Jira, Slack, and others) are published separately from [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers). They use the `provider:` key under each named entry in the `plugins` map:
+Plugins (BigQuery, Jira, Slack, and others) are published separately from [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers). They are configured under `providers.plugins`:
 
 ```yaml
-plugins:
-  jira:
-    provider:
+providers:
+  plugins:
+    jira:
       source:
         ref: github.com/valon-technologies/gestalt-providers/jira
         version: 1.0.0
@@ -80,4 +81,4 @@ plugins:
 
 ## Community and Custom Providers
 
-Third-party auth providers, datastore providers, and plugins use the same provider package model as the first-party packages. Package your implementation with a provider manifest that includes the appropriate top-level block (`auth`, `datastore`, or `plugin`), publish it to a Git-accessible source, and reference it in your config the same way you would reference any first-party provider.
+Third-party auth providers, datastore providers, and plugins use the same provider package model as the first-party packages. Package your implementation with a provider manifest that includes the appropriate `kind` and `spec` block, publish it to a Git-accessible source, and reference it in your config the same way you would reference any first-party provider.

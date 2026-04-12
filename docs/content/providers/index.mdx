@@ -8,13 +8,13 @@ Gestalt has a unified runtime model: plugins, auth backends, datastores, and web
 
 ## Provider kinds
 
-A provider's kind is implied by the one top-level metadata block in its manifest:
+A provider's kind is set by the `kind` field in its manifest:
 
 | Kind | Purpose |
 | --- | --- |
 | `plugin` | Plugin. Exposes operations that users invoke through the CLI, the HTTP API, or MCP. |
 | `auth` | Platform auth backend. Handles login, session validation, and external token verification. |
-| `datastore` | Persistent storage. Stores users, plugin tokens, API tokens, and OAuth registrations. |
+| `indexeddb` | Persistent storage. Stores users, plugin tokens, API tokens, and OAuth registrations. |
 | `secrets` | Secret manager. Resolves `secret://` references at bootstrap. Go SDK only for now. |
 | `webui` | Replacement web UI served at `/`. |
 
@@ -28,7 +28,7 @@ The host owns auth, token storage, connection selection, and HTTP or MCP routing
 
 ## Process isolation
 
-Providers run in their own process. They cannot access the host process memory, other users' credentials, or (for plugins) the datastore directly. Plugins also run inside a network sandbox: outbound requests to hosts not listed in `plugin.allowedHosts` in the manifest are rejected with a 403.
+Providers run in their own process. They cannot access the host process memory, other users' credentials, or (for plugins) the datastore directly. Plugins also run inside a network sandbox: outbound requests to hosts not listed in `allowedHosts` are rejected with a 403.
 
 ## SDK support
 
@@ -51,9 +51,9 @@ This convention enables prefix matching in the CLI. When you run `gestalt invoke
 
 ## Common pitfalls
 
-**Duplicate operation IDs.** Operation IDs must be unique within a provider. If two surfaces (for example, an OpenAPI passthrough and an executable operation) expose the same ID, the provider fails validation at startup. Use `allowed_operations` to filter or alias collisions.
+**Duplicate operation IDs.** Operation IDs must be unique within a provider. If two surfaces (for example, an OpenAPI passthrough and an executable operation) expose the same ID, the provider fails validation at startup. Use `allowedOperations` to filter or alias collisions.
 
-**Sandbox 403 errors.** Executable providers run inside a network sandbox. Outbound HTTP requests to hosts not listed in `plugin.allowedHosts` are rejected with a 403. Add every upstream domain the provider contacts to the allowlist in the manifest.
+**Sandbox 403 errors.** Executable providers run inside a network sandbox. Outbound HTTP requests to hosts not listed in `allowedHosts` are rejected with a 403. Add every upstream domain the provider contacts to the allowlist in the config or manifest.
 
 ## What to read next
 

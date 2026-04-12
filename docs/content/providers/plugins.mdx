@@ -2,7 +2,7 @@ import { Tabs } from 'nextra/components'
 
 # Plugins
 
-Plugins are one provider kind. Their manifests use a top-level `plugin:` block, and deployments reference them under the top-level `plugins:` map. A plugin can define operations as executable code (handled by the provider process), as passthrough surfaces (REST, OpenAPI, GraphQL, or MCP endpoints forwarded by the host), or both.
+Plugins are one provider kind. Their manifests use a top-level `spec:` block, and deployments reference them under `providers.plugins`. A plugin can define operations as executable code (handled by the provider process), as passthrough surfaces (REST, OpenAPI, GraphQL, or MCP endpoints forwarded by the host), or both.
 
 ## Manifest
 
@@ -11,11 +11,12 @@ Static metadata, auth, and passthrough surfaces live in a manifest file. Gestalt
 <Tabs items={['YAML', 'JSON']}>
   <Tabs.Tab>
     ```yaml
+    kind: plugin
     source: github.com/example/plugins/my-plugin
     version: 0.0.1-alpha.1
     displayName: My Plugin
     description: A custom plugin
-    plugin:
+    spec:
       connections:
         default:
           auth:
@@ -25,11 +26,12 @@ Static metadata, auth, and passthrough surfaces live in a manifest file. Gestalt
   <Tabs.Tab>
     ```json
     {
+      "kind": "plugin",
       "source": "github.com/example/plugins/my-plugin",
       "version": "0.0.1-alpha.1",
       "displayName": "My Plugin",
       "description": "A custom plugin",
-      "plugin": {
+      "spec": {
         "connections": {
           "default": {
             "auth": {
@@ -574,16 +576,13 @@ By default, the operation catalog is static and materialized at startup. If your
 Point a local config at the source plugin. Gestalt synthesizes the executable wrapper and materializes the catalog automatically:
 
 ```yaml
-plugins:
-  my-plugin:
-    provider:
+providers:
+  plugins:
+    my-plugin:
       source:
         path: ./manifest.yaml
-    config:
-      greeting: Hello
-    mcp:
-      enabled: true
-      tool_prefix: my_
+      config:
+        greeting: Hello
 ```
 
 Start the server and invoke the operation:
@@ -598,6 +597,6 @@ gestalt invoke my-plugin greet -p name=Gestalt
 
 ## Hybrid providers
 
-A manifest can define passthrough surfaces (`plugin.openapi`, `plugin.base_url` plus `plugin.operations`, `plugin.graphql_url`, or `plugin.mcp_url`) alongside executable operations. The passthrough surfaces are forwarded by the host directly to the upstream API, while the executable operations are handled by the provider process. This is useful when a plugin adds custom logic on top of an existing API.
+A manifest can define passthrough surfaces (`spec.surfaces.openapi`, `spec.surfaces.rest`, `spec.surfaces.graphql`, or `spec.surfaces.mcp`) alongside executable operations. The passthrough surfaces are forwarded by the host directly to the upstream API, while the executable operations are handled by the provider process. This is useful when a plugin adds custom logic on top of an existing API.
 
-Do not define the same operation ID in both a passthrough surface and an executable operation. If two surfaces expose the same ID, the provider fails validation at startup. Use `allowed_operations` to filter or alias collisions when needed.
+Do not define the same operation ID in both a passthrough surface and an executable operation. If two surfaces expose the same ID, the provider fails validation at startup. Use `allowedOperations` to filter or alias collisions when needed.

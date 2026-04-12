@@ -39,24 +39,23 @@ config:
   server:
     baseUrl: "${GESTALT_BASE_URL}"
     encryptionKey: "${GESTALT_ENCRYPTION_KEY}"
-  auth:
-    provider:
+    indexeddb: main
+  providers:
+    auth:
       source:
         ref: github.com/valon-technologies/gestalt-providers/auth/oidc
         version: 0.0.1-alpha.1
-    config:
-      issuerUrl: "${OIDC_ISSUER_URL}"
-      clientId: "${OIDC_CLIENT_ID}"
-      clientSecret: "${OIDC_CLIENT_SECRET}"
-  datastores:
-    main:
-      provider:
+      config:
+        issuerUrl: "${OIDC_ISSUER_URL}"
+        clientId: "${OIDC_CLIENT_ID}"
+        clientSecret: "${OIDC_CLIENT_SECRET}"
+    indexeddbs:
+      main:
         source:
           ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
           version: 0.0.1-alpha.2
-      config:
-        dsn: "${DATABASE_URL}"
-  datastore: main
+        config:
+          dsn: "${DATABASE_URL}"
 
 extraEnv:
   - name: GESTALT_BASE_URL
@@ -119,25 +118,24 @@ config:
       port: 9090
     baseUrl: "${GESTALT_BASE_URL}"
     encryptionKey: "${GESTALT_ENCRYPTION_KEY}"
-  auth:
-    provider:
+    indexeddb: main
+  providers:
+    auth:
       source:
         ref: github.com/valon-technologies/gestalt-providers/auth/oidc
         version: 0.0.1-alpha.1
-    config:
-      issuerUrl: "${OIDC_ISSUER_URL}"
-      clientId: "${OIDC_CLIENT_ID}"
-      clientSecret: "${OIDC_CLIENT_SECRET}"
-      redirectUrl: "${OIDC_REDIRECT_URL}"
-  datastores:
-    main:
-      provider:
+      config:
+        issuerUrl: "${OIDC_ISSUER_URL}"
+        clientId: "${OIDC_CLIENT_ID}"
+        clientSecret: "${OIDC_CLIENT_SECRET}"
+        redirectUrl: "${OIDC_REDIRECT_URL}"
+    indexeddbs:
+      main:
         source:
           ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
           version: 0.0.1-alpha.2
-      config:
-        dsn: "${DATABASE_URL}"
-  datastore: main
+        config:
+          dsn: "${DATABASE_URL}"
 
 extraEnv:
   - name: GESTALT_BASE_URL
@@ -181,7 +179,7 @@ client UI hostname.
 
 ## When to enable `pluginInit`
 
-Enable the init container when your config uses `plugins.*.provider.source.ref`, `auth.provider.source.ref`, `datastores.*.provider.source.ref`, or `ui.provider.source.ref` and you want that state prepared before the main container starts. The init container copies the rendered config and runs:
+Enable the init container when your config uses `providers.plugins.*.source.ref`, `providers.auth.source.ref`, `providers.indexeddbs.*.source.ref`, or `providers.ui.source.ref` and you want that state prepared before the main container starts. The init container copies the rendered config and runs:
 
 `/gestaltd init --config /etc/gestalt/config.yaml`
 

@@ -16,9 +16,9 @@ When `/ready` returns `503`, the server has not finished initialization. Readine
 
 ## Operation invocation
 
-A "provider not found" error means the plugin key in the request does not match any entry in the `plugins` config map. Verify the spelling and confirm the plugin loaded without errors at startup.
+A "provider not found" error means the plugin key in the request does not match any entry in `providers.plugins`. Verify the spelling and confirm the plugin loaded without errors at startup.
 
-An "operation not found" error means the operation ID does not exist in the plugin's catalog. Check that the operation is exposed and that `allowed_operations`, if set, includes it.
+An "operation not found" error means the operation ID does not exist in the plugin's catalog. Check that the operation is exposed and that `allowedOperations`, if set, includes it.
 
 A "not authenticated" error on an API or MCP request means no valid session or API token was presented. Log in through the web UI or pass a bearer token in the `Authorization` header.
 
@@ -81,7 +81,7 @@ Common source-package checks:
   </Tabs.Tab>
 </Tabs>
 
-A sandbox 403 means the provider process made an outbound request to a host not listed in `plugin.allowedHosts`. Add every upstream domain the plugin contacts to the allowlist in your plugin config.
+A sandbox 403 means the provider process made an outbound request to a host not listed in `allowedHosts`. Add every upstream domain the plugin contacts to the allowlist in the plugin's config entry or manifest.
 
 An input decode error means the operation received a request body that does not match the expected schema. Check the operation's parameter definitions and ensure the caller is sending the correct types and required fields.
 

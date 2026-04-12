@@ -10,14 +10,15 @@ Gestalt stores users, plugin tokens, API tokens, and OAuth registrations through
 
 ## Manifest
 
-A datastore provider manifest uses a `datastore` block:
+A datastore provider manifest uses a `spec` block with `kind: indexeddb`:
 
 ```yaml
+kind: indexeddb
 source: github.com/example/plugins/my-datastore
 version: 0.0.1-alpha.1
 displayName: My Datastore
 description: Custom persistent storage backend
-datastore:
+spec:
   configSchemaPath: ./datastore_config.json
 ```
 
@@ -251,40 +252,32 @@ Plugins access datastores through the SDK. The host serves the IndexedDB interfa
 
 ## Config reference
 
-Reference a datastore provider in the `datastores` section:
+Reference a datastore provider in the `providers.indexeddbs` section, and set `server.indexeddb` to the name of the active provider:
 
 ```yaml
-datastores:
-  main:
-    provider:
+server:
+  indexeddb: main
+
+providers:
+  indexeddbs:
+    main:
       source:
         path: ./my-datastore/manifest.yaml
-    config:
-      dsn: ${DATABASE_URL}
-
-datastore: main
+      config:
+        dsn: ${DATABASE_URL}
 ```
 
-`provider.source.path` points at the provider's `manifest.yaml` during development. For production, use `provider.source.ref` and `version` to reference a published release:
+`source.path` points at the provider's `manifest.yaml` during development. For production, use `source.ref` and `version` to reference a published release:
 
 ```yaml
-datastores:
-  main:
-    provider:
+providers:
+  indexeddbs:
+    main:
       source:
         ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
         version: 0.0.1
-    config:
-      dsn: ${DATABASE_URL}
-```
-
-Plugins bind to named datastores:
-
-```yaml
-plugins:
-  my-plugin:
-    datastores:
-      db: main
+      config:
+        dsn: ${DATABASE_URL}
 ```
 
 The plugin receives the `IndexedDB` interface over a gRPC socket. Object store names are automatically namespaced per plugin to prevent cross-plugin data access.
