@@ -9,8 +9,11 @@
 | `gestaltd` | Local-friendly startup. Generates a config if needed and serves. |
 | `gestaltd serve --config PATH` | Start the server. |
 | `gestaltd serve --locked --config PATH` | Start from lock state. Uses prepared artifacts when present and can materialize missing artifacts from the lockfile. |
+| `gestaltd serve --artifacts-dir DIR` | Directory for prepared provider artifacts. |
 | `gestaltd init --config PATH` | Resolve published plugin sources and write lock state. |
+| `gestaltd init --artifacts-dir DIR` | Directory for prepared provider artifacts. |
 | `gestaltd validate --config PATH` | Validate config without serving. |
+| `gestaltd validate --artifacts-dir DIR` | Directory for prepared provider artifacts. |
 | `gestaltd --version` | Print the server version. |
 
 ## Provider commands
@@ -18,6 +21,7 @@
 | Command | Purpose |
 | --- | --- |
 | `gestaltd provider release --version VERSION` | Build and package a provider release. Go, Python, Rust, and TypeScript source plugins default to the host platform. Pass `--platform ...` with `os/arch[/libc]` targets or `--platform all` for multi-platform builds. |
+| `gestaltd provider release --output DIR` | Output directory for the release archive. Defaults to `dist/`. |
 
 ## Examples
 

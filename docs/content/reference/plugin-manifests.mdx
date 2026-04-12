@@ -66,6 +66,7 @@ The `spec` block for a `kind: plugin` manifest describes a plugin. It supports d
 | `headers` | map[string]string | Static headers injected into every outbound request. |
 | `surfaces` | Surfaces | Spec-loaded and declarative REST surfaces. See [Surfaces](#surfaces). |
 | `defaultConnection` | string | Name of the connection to use when none is specified. |
+| `requires` | string[] | Provider source identifiers that this provider depends on. Gestalt ensures the listed providers are available before starting this provider. |
 
 ### Connections
 
@@ -107,6 +108,7 @@ Surfaces load operation catalogs from external specifications. They are configur
 
 | Field | Type | Purpose |
 | --- | --- | --- |
+| `connection` | string | Connection name used for REST calls. Optional. |
 | `baseUrl` | string | Base URL for declarative REST operations. |
 | `operations` | ProviderOperation[] | Declarative REST operations. Presence of this field makes the plugin declarative. |
 
