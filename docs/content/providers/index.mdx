@@ -4,7 +4,7 @@ asIndexPage: true
 
 # Providers
 
-Gestalt has a unified runtime model: plugins, auth backends, datastores, and web UIs all run as providers. The server binary (`gestaltd`) does not compile any of these in. Instead, each provider is a separate package with a manifest and an executable (or a passthrough surface definition) that the host loads at startup.
+Gestalt has a unified runtime model: plugins, auth backends, IndexedDB stores, and web UIs all run as providers. The server binary (`gestaltd`) does not compile any of these in. Instead, each provider is a separate package with a manifest and an executable (or a passthrough surface definition) that the host loads at startup.
 
 ## Provider kinds
 
@@ -47,6 +47,6 @@ Go, Rust, and TypeScript support plugin, auth, and datastore providers. Python r
 
 - [Plugins](/providers/plugins): plugin providers that expose operations
 - [Auth](/providers/auth): platform login providers
-- [Datastores](/providers/datastores): persistent storage backends
+- [IndexedDB](/providers/indexeddb): persistent storage backends
 - [Web UIs](/providers/web-uis): custom web frontends
 - [Releasing](/providers/releasing): packaging and publishing providers

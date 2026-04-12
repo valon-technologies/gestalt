@@ -1,7 +1,7 @@
 export default {
   plugins: "Plugins",
   auth: "Auth",
-  datastores: "Datastores",
+  indexeddb: "IndexedDB",
   secrets: "Secrets",
   "web-uis": "Web UIs",
   releasing: "Releasing",
