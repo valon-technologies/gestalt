@@ -3,6 +3,7 @@ package coredata
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
@@ -47,26 +48,39 @@ func (s *TokenService) StoreToken(ctx context.Context, token *core.IntegrationTo
 		"updated_at":           now,
 	}
 
-	_, err = s.store.Get(ctx, token.ID)
-	if err == indexeddb.ErrNotFound {
+	existing, err := s.tokenRecord(ctx, token.UserID, token.Integration, token.Connection, token.Instance)
+	switch err {
+	case nil:
+		token.ID = recString(existing, "id")
+		fields["id"] = token.ID
+		createdAt := recTime(existing, "created_at")
+		if createdAt.IsZero() {
+			createdAt = now
+		}
+		fields["created_at"] = createdAt
+		if err := s.store.Put(ctx, fields); err != nil {
+			return fmt.Errorf("update token: %w", err)
+		}
+	case core.ErrNotFound:
 		fields["id"] = token.ID
 		fields["created_at"] = now
-		return s.store.Add(ctx, fields)
-	}
-	if err != nil {
+		if err := s.store.Add(ctx, fields); err != nil {
+			return fmt.Errorf("create token: %w", err)
+		}
+	default:
 		return fmt.Errorf("check existing token: %w", err)
 	}
-	fields["id"] = token.ID
-	return s.store.Put(ctx, fields)
+
+	if err := s.deleteDuplicateLookupRecords(ctx, token.ID, token.UserID, token.Integration, token.Connection, token.Instance); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *TokenService) Token(ctx context.Context, userID, integration, connection, instance string) (*core.IntegrationToken, error) {
-	rec, err := s.store.Index("by_lookup").Get(ctx, userID, integration, connection, instance)
+	rec, err := s.tokenRecord(ctx, userID, integration, connection, instance)
 	if err != nil {
-		if err == indexeddb.ErrNotFound {
-			return nil, core.ErrNotFound
-		}
-		return nil, fmt.Errorf("get token: %w", err)
+		return nil, err
 	}
 	return s.recordToToken(rec)
 }
@@ -126,6 +140,7 @@ func (s *TokenService) recordToToken(rec indexeddb.Record) (*core.IntegrationTok
 }
 
 func (s *TokenService) recordsToTokens(recs []indexeddb.Record) ([]*core.IntegrationToken, error) {
+	recs = dedupeTokenRecords(recs)
 	out := make([]*core.IntegrationToken, 0, len(recs))
 	for _, rec := range recs {
 		t, err := s.recordToToken(rec)
@@ -135,4 +150,80 @@ func (s *TokenService) recordsToTokens(recs []indexeddb.Record) ([]*core.Integra
 		out = append(out, t)
 	}
 	return out, nil
+}
+
+func (s *TokenService) tokenRecord(ctx context.Context, userID, integration, connection, instance string) (indexeddb.Record, error) {
+	recs, err := s.store.Index("by_lookup").GetAll(ctx, nil, userID, integration, connection, instance)
+	if err != nil {
+		return nil, fmt.Errorf("get token: %w", err)
+	}
+	recs = dedupeTokenRecords(recs)
+	if len(recs) == 0 {
+		return nil, core.ErrNotFound
+	}
+	return recs[0], nil
+}
+
+func (s *TokenService) deleteDuplicateLookupRecords(ctx context.Context, keepID, userID, integration, connection, instance string) error {
+	recs, err := s.store.Index("by_lookup").GetAll(ctx, nil, userID, integration, connection, instance)
+	if err != nil {
+		return fmt.Errorf("list duplicate tokens: %w", err)
+	}
+	for _, rec := range recs {
+		id := recString(rec, "id")
+		if id == "" || id == keepID {
+			continue
+		}
+		if err := s.store.Delete(ctx, id); err != nil && err != indexeddb.ErrNotFound {
+			return fmt.Errorf("delete duplicate token %q: %w", id, err)
+		}
+	}
+	return nil
+}
+
+func dedupeTokenRecords(recs []indexeddb.Record) []indexeddb.Record {
+	if len(recs) <= 1 {
+		return recs
+	}
+
+	bestByLookup := make(map[string]indexeddb.Record, len(recs))
+	for _, rec := range recs {
+		key := tokenLookupKey(rec)
+		best, ok := bestByLookup[key]
+		if !ok || tokenRecordLess(rec, best) {
+			bestByLookup[key] = rec
+		}
+	}
+
+	out := make([]indexeddb.Record, 0, len(bestByLookup))
+	for _, rec := range bestByLookup {
+		out = append(out, rec)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return tokenRecordLess(out[i], out[j])
+	})
+	return out
+}
+
+func tokenLookupKey(rec indexeddb.Record) string {
+	return recString(rec, "user_id") + "\x00" +
+		recString(rec, "integration") + "\x00" +
+		recString(rec, "connection") + "\x00" +
+		recString(rec, "instance")
+}
+
+func tokenRecordLess(a, b indexeddb.Record) bool {
+	aUpdated := recTime(a, "updated_at")
+	bUpdated := recTime(b, "updated_at")
+	if !aUpdated.Equal(bUpdated) {
+		return aUpdated.After(bUpdated)
+	}
+
+	aCreated := recTime(a, "created_at")
+	bCreated := recTime(b, "created_at")
+	if !aCreated.Equal(bCreated) {
+		return aCreated.After(bCreated)
+	}
+
+	return recString(a, "id") < recString(b, "id")
 }
