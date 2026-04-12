@@ -1,6 +1,8 @@
 # Data Model
 
-Gestalt stores all persistent state through the configured [IndexedDB provider](/providers/indexeddb). At startup, gestaltd provisions four object stores and their indexes through the same `CreateObjectStore` interface that plugins use. Any backend that implements the IndexedDB contract (RelationalDB, MongoDB, DynamoDB) can store this data. Migrations run automatically on startup.
+Gestalt stores most persistent state through the configured [IndexedDB provider](/providers/indexeddb). At startup, gestaltd provisions three object stores and their indexes through the same `CreateObjectStore` interface that plugins use. Any backend that implements the IndexedDB contract can store this data. Migrations run automatically on startup.
+
+MCP OAuth client registrations (`oauth_registrations`) are stored separately in a raw SQL table managed outside the IndexedDB provider.
 
 For encryption mechanics, see [Security Internals](/architecture/security-internals). For choosing a provider, see [Configuration](/configuration).
 
@@ -112,4 +114,4 @@ Renaming a `plugins` key in config is a breaking change. Stored tokens reference
 
 ## Sessions
 
-Platform sessions (Google, OIDC, local) are not stored in the IndexedDB provider. They are HTTP-only cookies (`session_token`) with `Secure` (when HTTPS), `SameSite=Lax`, and a default 24-hour TTL (configurable via `session_ttl` for OIDC). Sessions cannot be revoked server-side; they expire on TTL. Logout clears the client cookie.
+Platform sessions (Google, OIDC, local) are not stored in the IndexedDB provider. They are HTTP-only cookies (`session_token`) with `Secure` (when HTTPS), `SameSite=Lax`, and a default 24-hour TTL (configurable via `sessionTtl` for OIDC). Sessions cannot be revoked server-side; they expire on TTL. Logout clears the client cookie.

@@ -39,7 +39,6 @@ Docker Hub publishes these tag shapes for each release:
 | --- | --- | --- | --- |
 | `latest`, `<version>` | `scratch` (static) | No | Smallest |
 | `latest-alpine`, `<version>-alpine` | Alpine 3.23 | Yes | Small |
-| `latest-debian`, `<version>-debian` | Debian bookworm-slim | Yes | Medium |
 
 All tags are published for `linux/amd64`, `linux/arm64`, and `linux/arm/v7`.
 
@@ -49,9 +48,9 @@ The default image is a static build: just the `gestaltd` binary and CA
 certificates on a `scratch` base. There is no shell, no package manager, and
 minimal attack surface.
 
-For debugging access or plugin compatibility, use the `-alpine` or `-debian`
-variants. These include a shell, `ca-certificates`, and a writable `/data`
-directory owned by `nobody`.
+For debugging access or plugin compatibility, use the `-alpine` variant.
+It includes a shell, `ca-certificates`, and a writable `/data` directory
+owned by `nobody`.
 
 ## Run a simple config
 
@@ -320,7 +319,7 @@ RUN cd ./my-plugin && \
 
 - The published image defaults to locked startup. A missing config file, missing lockfile, missing verified archive hash, or unwritable artifacts directory causes startup to fail fast. Missing prepared artifacts alone do not, because `gestaltd` can materialize them from `gestalt.lock.json`.
 - `docker run valontechnologies/gestaltd:latest` by itself is expected to fail because the image does not auto-generate config in-container.
-- The default image does not include a shell. Use `-alpine` or `-debian` for debugging.
+- The default image does not include a shell. Use `-alpine` for debugging.
 - If you use SQLite, do not scale to multiple replicas.
 
 ## Learn more

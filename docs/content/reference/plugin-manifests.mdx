@@ -13,8 +13,8 @@ Every manifest defines exactly one provider kind, set by the `kind` field:
 | Kind | Purpose |
 | --- | --- |
 | `plugin` | Plugin (REST, OpenAPI, GraphQL, MCP, or executable). |
-| `auth` | Platform auth provider (Google, OIDC, local, or custom). |
-| `indexeddb` | Persistence backend (Postgres, SQLite, DynamoDB, or custom). |
+| `auth` | Platform auth provider. |
+| `indexeddb` | Persistence backend. |
 | `secrets` | Secret manager for resolving `secret://` references. |
 | `webui` | Static UI package served by `gestaltd`. |
 
