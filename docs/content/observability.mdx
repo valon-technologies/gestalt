@@ -96,8 +96,8 @@ collectors can still split the stream by filtering on `log.type=audit`.
 
 The built-in metric surface covers Prometheus exporter metadata, inbound HTTP
 requests handled by `gestaltd`, broker operation execution, connection auth
-flows, platform auth actions, datastore calls, and outbound gRPC calls from
-`gestaltd` to provider processes.
+flows, platform auth actions, IndexedDB operations, and outbound gRPC calls
+from `gestaltd` to provider processes.
 
 Gestalt documents metric names using their OpenTelemetry instrument names. The
 Prometheus scrape endpoint translates those names to Prometheus-style metric
@@ -203,36 +203,45 @@ These metrics carry low-cardinality attributes: `gestalt.provider` (the auth
 provider name) and `gestalt.action` (`begin_login`, `complete_login`, or
 `validate_token`).
 
-### Datastore Metrics
+### IndexedDB Metrics
 
-These metrics are recorded around host calls into the configured datastore
-provider.
+These metrics are recorded around every ObjectStore and Index operation on the
+system IndexedDB instance. The instrumentation is applied once at the interface
+level in bootstrap, so both core services (tokens, users, API tokens) and
+plugin host traffic are covered.
 
 <Tabs items={['OpenTelemetry', 'Prometheus']}>
   <Tabs.Tab>
     | Metric | Type | Meaning |
     | --- | --- | --- |
-    | `gestaltd.datastore.count` | Counter | Datastore calls |
-    | `gestaltd.datastore.error_count` | Counter | Failed datastore calls |
-    | `gestaltd.datastore.duration` | Histogram | Datastore call duration |
+    | `gestaltd.indexeddb.count` | Counter | IndexedDB operations |
+    | `gestaltd.indexeddb.error_count` | Counter | Failed IndexedDB operations |
+    | `gestaltd.indexeddb.duration` | Histogram | IndexedDB operation duration |
   </Tabs.Tab>
   <Tabs.Tab>
     | Metric | Type | Meaning |
     | --- | --- | --- |
-    | `gestaltd_datastore_count_total` | Counter | Datastore calls |
-    | `gestaltd_datastore_error_count_total` | Counter | Failed datastore calls |
-    | `gestaltd_datastore_duration_seconds` | Histogram | Datastore call duration |
+    | `gestaltd_indexeddb_count_total` | Counter | IndexedDB operations |
+    | `gestaltd_indexeddb_error_count_total` | Counter | Failed IndexedDB operations |
+    | `gestaltd_indexeddb_duration_seconds` | Histogram | IndexedDB operation duration |
   </Tabs.Tab>
 </Tabs>
 
-These metrics carry low-cardinality attributes: `gestalt.provider` (the
-datastore provider name when available) and `gestalt.method` for the host-side
-datastore action, such as `find_or_create_user`, `store_token`,
-`validate_api_token`, `list_api_tokens`, `ping`, or `migrate`.
+These metrics carry two low-cardinality attributes:
 
-Expected datastore misses that return `ErrNotFound` still increment
-`gestaltd.datastore.count` and `gestaltd.datastore.duration`, but do not
-increment `gestaltd.datastore.error_count`.
+- `gestalt.store` identifies the table being accessed, such as `users`,
+  `integration_tokens`, or `api_tokens`. Plugins that declare IndexedDB
+  access produce their own store names here.
+- `gestalt.method` identifies the operation. Values correspond to the
+  methods on the ObjectStore and Index interfaces inspired by the
+  [IndexedDB API](https://www.w3.org/TR/IndexedDB/): `Get`, `GetKey`,
+  `Put`, `Add`, `Delete`, `Clear`, `GetAll`, `GetAllKeys`, `Count`,
+  `DeleteRange`, `Index.Get`, `Index.GetKey`, `Index.GetAll`,
+  `Index.GetAllKeys`, `Index.Count`, and `Index.Delete`.
+
+Expected misses that return `ErrNotFound` still increment
+`gestaltd.indexeddb.count` and `gestaltd.indexeddb.duration`, but do not
+increment `gestaltd.indexeddb.error_count`.
 
 ### Metrics And Audit Boundaries
 
@@ -247,7 +256,7 @@ need actor, target, and outcome details.
 | Platform token validation | Yes: `gestaltd.auth.*` with `action=validate_token` | No | Per-request auth checks stay metrics-only to avoid audit noise. |
 | Connection auth start and completion | Yes: `gestaltd.connection.auth.*` | Yes | Covers OAuth start and completion plus manual connect completion. |
 | Connection credential refresh | Yes: `gestaltd.connection.auth.*` with `action=refresh` | No | Refresh is system maintenance behavior, not a user-facing audit event. |
-| Datastore methods | Yes: `gestaltd.datastore.*` | No | Audit the higher-level user action instead of low-level storage calls. |
+| IndexedDB operations | Yes: `gestaltd.indexeddb.*` | No | Audit the higher-level user action instead of low-level storage calls. |
 | API token lifecycle | No dedicated semantic metric family | Yes | `api_token.create`, `api_token.revoke`, and `api_token.revoke_all` are audited. |
 | Logout, pending selection, disconnect | No dedicated semantic metric family | Yes | These are workflow and security events rather than aggregate telemetry series. |
 
