@@ -10,17 +10,19 @@ Gestalt stores users, plugin tokens, API tokens, and OAuth registrations through
 
 ## Manifest
 
-A datastore provider manifest uses a `spec` block with `kind: indexeddb`:
+The RelationalDB provider ships a manifest with `kind: indexeddb`. This tells Gestalt the provider implements the IndexedDB gRPC service and can be referenced in the `providers.indexeddbs` config section.
 
 ```yaml
 kind: indexeddb
-source: github.com/example/plugins/my-datastore
-version: 0.0.1-alpha.1
-displayName: My Datastore
-description: Custom persistent storage backend
+source: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+version: 0.0.1
+displayName: RelationalDB
+description: IndexedDB provider supporting PostgreSQL, MySQL, SQLite, and SQL Server.
 spec:
   configSchemaPath: ./datastore_config.json
 ```
+
+The `source` field identifies the provider in the registry. RelationalDB supports four SQL dialects through a single `dsn` config value, so one provider covers most relational databases.
 
 ## Provider interface
 
@@ -31,6 +33,8 @@ A datastore provider implements the `IndexedDB` gRPC service, which maps to thes
 - **GetAll / GetAllKeys / Count / Clear / DeleteRange** -- bulk operations with optional key ranges
 - **IndexGet / IndexGetKey / IndexGetAll / IndexGetAllKeys / IndexCount / IndexDelete** -- query and delete via named indexes
 
+The RelationalDB provider parses the `dsn` config value to determine the SQL driver and dialect, then opens a database connection. The DSN prefix selects the backend: `postgres://` for PostgreSQL, `mysql://` for MySQL, `sqlite://` for SQLite, and `sqlserver://` for SQL Server.
+
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
     ```go
@@ -39,23 +43,40 @@ A datastore provider implements the `IndexedDB` gRPC service, which maps to thes
     import (
     	"context"
     	"database/sql"
+    	"fmt"
+    	"strings"
 
     	gestalt "github.com/valon-technologies/gestalt/sdk/go"
     )
 
-    type MyDatastore struct {
+    type RelationalDB struct {
     	db *sql.DB
     }
 
-    func (ds *MyDatastore) Configure(_ context.Context, _ string, config map[string]any) error {
+    func (r *RelationalDB) Configure(_ context.Context, _ string, config map[string]any) error {
     	dsn, _ := config["dsn"].(string)
+    	if dsn == "" {
+    		return fmt.Errorf("relationaldb: dsn is required")
+    	}
+    	driver := "sqlite"
+    	connStr := dsn
+    	switch {
+    	case strings.HasPrefix(dsn, "postgres://"):
+    		driver, connStr = "pgx", dsn
+    	case strings.HasPrefix(dsn, "mysql://"):
+    		driver, connStr = "mysql", strings.TrimPrefix(dsn, "mysql://")
+    	case strings.HasPrefix(dsn, "sqlserver://"):
+    		driver, connStr = "sqlserver", dsn
+    	case strings.HasPrefix(dsn, "sqlite://"):
+    		driver, connStr = "sqlite", strings.TrimPrefix(dsn, "sqlite://")
+    	}
     	var err error
-    	ds.db, err = sql.Open("postgres", dsn)
+    	r.db, err = sql.Open(driver, connStr)
     	return err
     }
 
-    func (ds *MyDatastore) HealthCheck(ctx context.Context) error {
-    	return ds.db.PingContext(ctx)
+    func (r *RelationalDB) HealthCheck(ctx context.Context) error {
+    	return r.db.PingContext(ctx)
     }
 
     // Implement the IndexedDB gRPC service:
@@ -65,7 +86,7 @@ A datastore provider implements the `IndexedDB` gRPC service, which maps to thes
     // IndexGet, IndexGetKey, IndexGetAll, IndexGetAllKeys, IndexCount, IndexDelete
 
     func main() {
-    	gestalt.ServeIndexedDBProvider(context.Background(), &MyDatastore{})
+    	gestalt.ServeIndexedDBProvider(context.Background(), &RelationalDB{})
     }
     ```
   </Tabs.Tab>
@@ -73,9 +94,12 @@ A datastore provider implements the `IndexedDB` gRPC service, which maps to thes
     ```python
     import gestalt
 
-    class MyDatastore(gestalt.IndexedDBProvider):
+    class RelationalDB(gestalt.IndexedDBProvider):
         def configure(self, name: str, config: dict) -> None:
-            self.dsn = config.get("dsn", "")
+            dsn = config.get("dsn", "")
+            if not dsn:
+                raise ValueError("relationaldb: dsn is required")
+            self.dsn = dsn
 
         # Implement the IndexedDB gRPC service:
         # create_object_store, delete_object_store,
@@ -83,24 +107,27 @@ A datastore provider implements the `IndexedDB` gRPC service, which maps to thes
         # get_all, get_all_keys, count, clear, delete_range,
         # index_get, index_get_key, index_get_all, index_get_all_keys, index_count, index_delete
 
-    MyDatastore().serve()
+    RelationalDB().serve()
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```rust
-    pub struct MyDatastore { /* database connection */ }
+    pub struct RelationalDB { /* database connection */ }
 
     #[gestalt::async_trait]
-    impl gestalt::IndexedDBProvider for MyDatastore {
+    impl gestalt::IndexedDBProvider for RelationalDB {
         async fn configure(&self, _name: &str, config: serde_json::Map<String, serde_json::Value>) -> gestalt::Result<()> {
-            // Initialize database connection from config["dsn"]
+            let dsn = config.get("dsn")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| gestalt::Error::Config("dsn is required"))?;
+            // Parse DSN prefix to select driver, open connection
             Ok(())
         }
 
         // Implement the IndexedDB gRPC service methods
     }
 
-    gestalt::export_indexeddb_provider!(constructor = MyDatastore::default);
+    gestalt::export_indexeddb_provider!(constructor = RelationalDB::default);
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -109,13 +136,17 @@ A datastore provider implements the `IndexedDB` gRPC service, which maps to thes
 
     export const provider = defineIndexedDBProvider({
       async configure(name, config) {
-        // Initialize from config.dsn
+        const dsn = config.dsn;
+        if (!dsn) throw new Error("relationaldb: dsn is required");
+        // Parse DSN prefix to select driver, open connection
       },
       // Implement the IndexedDB service methods
     });
     ```
   </Tabs.Tab>
 </Tabs>
+
+Each language follows the same pattern: read the `dsn` from config, determine the database driver from the URL prefix, and open a connection. The remaining IndexedDB methods translate object store operations into SQL queries against that connection.
 
 ## Plugin SDK
 
@@ -252,7 +283,7 @@ Plugins access datastores through the SDK. The host serves the IndexedDB interfa
 
 ## Config reference
 
-Reference a datastore provider in the `providers.indexeddbs` section, and set `server.indexeddb` to the name of the active provider:
+Reference a datastore provider in the `providers.indexeddbs` section, and set `server.indexeddb` to the name of the active provider. For local development, SQLite keeps things simple with a file path:
 
 ```yaml
 server:
@@ -262,12 +293,12 @@ providers:
   indexeddbs:
     main:
       source:
-        path: ./my-datastore/manifest.yaml
+        path: ./relationaldb/manifest.yaml
       config:
-        dsn: ${DATABASE_URL}
+        dsn: sqlite://gestalt.db
 ```
 
-`source.path` points at the provider's `manifest.yaml` during development. For production, use `source.ref` and `version` to reference a published release:
+For production, use `source.ref` and `version` to reference a published release, and point the DSN at your Postgres instance:
 
 ```yaml
 providers:
@@ -279,6 +310,8 @@ providers:
       config:
         dsn: ${DATABASE_URL}
 ```
+
+`DATABASE_URL` is typically a connection string like `postgres://user:pass@host:5432/gestalt`. The RelationalDB provider also accepts `mysql://`, `sqlite://`, and `sqlserver://` prefixes.
 
 The plugin receives the `IndexedDB` interface over a gRPC socket. Object store names are automatically namespaced per plugin to prevent cross-plugin data access.
 

@@ -8,14 +8,21 @@ A UI bundle is not a plugin in the executable sense. It contains no server-side 
 
 ## Manifest
 
-A UI bundle manifest declares `spec.assetRoot`, which points to the directory containing the built static assets:
+The Default Web UI manifest declares `spec.assetRoot`, which points to the directory containing the built static assets. The source field identifies the provider in the registry.
 
 ```yaml
 kind: webui
-source: github.com/acme/plugins/gestalt-ui
-version: 1.2.0
+source: github.com/valon-technologies/gestalt-providers/web/default
+version: 0.0.1
+displayName: Default Web UI
+description: Default Gestalt web UI bundle served at /.
+release:
+  build:
+    command:
+      - sh
+      - ./build.sh
 spec:
-  assetRoot: ui/out
+  assetRoot: out
 ```
 
 The `assetRoot` path is relative to the manifest file. It should contain the output of your frontend build (typically an `index.html` and accompanying JS, CSS, and image files).
@@ -24,22 +31,23 @@ The `assetRoot` path is relative to the manifest file. It should contain the out
 
 If your UI needs a build step before packaging, use `release.build` to run it automatically during `gestaltd provider release`. This runs before source-manifest preparation, so the built assets are included in the release archive.
 
+The Default Web UI uses a shell script that runs `npm ci && npm run build` to produce the static output:
+
 ```yaml
 kind: webui
-source: github.com/acme/plugins/gestalt-ui
-version: 1.2.0
+source: github.com/valon-technologies/gestalt-providers/web/default
+version: 0.0.1
 release:
   build:
-    workdir: ui
     command:
       - npm
       - run
       - build
 spec:
-  assetRoot: ui/out
+  assetRoot: out
 ```
 
-`workdir` is relative to the manifest directory. The command runs in that directory, so `npm run build` executes inside `ui/`. After the build completes, Gestalt packages everything under `assetRoot` into the release archive.
+The command runs relative to the manifest directory. After the build completes, Gestalt packages everything under `assetRoot` into the release archive. You can use any build tool here -- `npm run build`, `vite build`, `next build && next export` -- as long as it writes output to the directory specified in `assetRoot`.
 
 ## Configuring a UI bundle
 
@@ -49,7 +57,7 @@ Reference a UI bundle in the `providers.ui` block of the server config. During d
 providers:
   ui:
     source:
-      path: ./gestalt-ui/manifest.yaml
+      path: ./web-default/manifest.yaml
 ```
 
 For production, reference a published release by source and version:
@@ -58,8 +66,8 @@ For production, reference a published release by source and version:
 providers:
   ui:
     source:
-      ref: github.com/acme/plugins/gestalt-ui
-      version: 1.2.0
+      ref: github.com/valon-technologies/gestalt-providers/web/default
+      version: 0.0.1
 ```
 
 When a config references a published UI bundle, run `gestaltd init` to resolve and prepare it. This writes lock state to `gestalt.lock.json` and extracts the assets under `.gestaltd/`. After init, `gestaltd serve --locked` serves the locked UI bundle at `/`. If the prepared UI files are already present, Gestalt uses them directly; if they are missing, Gestalt can materialize them from the lockfile at startup.
@@ -75,7 +83,7 @@ The built-in admin UI is always served at `/admin`, regardless of whether a cust
 UI bundles use the same release system as provider packages:
 
 ```sh
-gestaltd provider release --version 1.2.0
+gestaltd provider release --version 0.0.1
 ```
 
 Run this from the directory containing the manifest. If `release.build` is defined, the build command runs first, then Gestalt packages the manifest and the asset root into a release archive. See [Releasing](/providers/releasing) for details on release archives, tag resolution, and prepared state.

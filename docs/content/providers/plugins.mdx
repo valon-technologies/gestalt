@@ -4,38 +4,58 @@ import { Tabs } from 'nextra/components'
 
 Plugins are one provider kind. Their manifests use a top-level `spec:` block, and deployments reference them under `providers.plugins`. A plugin can define operations as executable code (handled by the provider process), as passthrough surfaces (REST, OpenAPI, GraphQL, or MCP endpoints forwarded by the host), or both.
 
+The examples on this page use a Slack plugin as the running example, since it demonstrates most plugin features: OAuth connections, REST passthrough surfaces, executable operations, and MCP.
+
 ## Manifest
 
-Static metadata, auth, and passthrough surfaces live in a manifest file. Gestalt accepts `manifest.yaml`, `manifest.yml`, or `manifest.json`.
+You declare static metadata, connections, and passthrough surfaces in a manifest file. Gestalt accepts `manifest.yaml`, `manifest.yml`, or `manifest.json`.
 
 <Tabs items={['YAML', 'JSON']}>
   <Tabs.Tab>
     ```yaml
     kind: plugin
-    source: github.com/example/plugins/my-plugin
-    version: 0.0.1-alpha.1
-    displayName: My Plugin
-    description: A custom plugin
+    source: github.com/your-org/plugins/slack
+    version: 0.0.1
+    displayName: Slack
+    description: Send messages, search conversations, and manage channels.
     spec:
+      mcp: true
       connections:
         default:
           auth:
-            type: none
+            type: oauth2
+            authorizationUrl: https://slack.com/oauth/v2/authorize
+            tokenUrl: https://slack.com/api/oauth.v2.access
+            accessTokenPath: authed_user.access_token
+            scopeParam: user_scope
+            scopeSeparator: ','
+            scopes:
+              - channels:read
+              - chat:write
+              - search:read
+              - users:read
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```json
     {
       "kind": "plugin",
-      "source": "github.com/example/plugins/my-plugin",
-      "version": "0.0.1-alpha.1",
-      "displayName": "My Plugin",
-      "description": "A custom plugin",
+      "source": "github.com/your-org/plugins/slack",
+      "version": "0.0.1",
+      "displayName": "Slack",
+      "description": "Send messages, search conversations, and manage channels.",
       "spec": {
+        "mcp": true,
         "connections": {
           "default": {
             "auth": {
-              "type": "none"
+              "type": "oauth2",
+              "authorizationUrl": "https://slack.com/oauth/v2/authorize",
+              "tokenUrl": "https://slack.com/api/oauth.v2.access",
+              "accessTokenPath": "authed_user.access_token",
+              "scopeParam": "user_scope",
+              "scopeSeparator": ",",
+              "scopes": ["channels:read", "chat:write", "search:read", "users:read"]
             }
           }
         }
@@ -45,9 +65,9 @@ Static metadata, auth, and passthrough surfaces live in a manifest file. Gestalt
   </Tabs.Tab>
 </Tabs>
 
-The manifest stays the source of truth for display name, description, auth, the connection model, and any passthrough API surfaces (REST, OpenAPI, GraphQL, or MCP). See [Provider Manifests](/reference/plugin-manifests) for the full field reference.
+The manifest is the source of truth for display name, description, the connection model, and any passthrough API surfaces (REST, OpenAPI, GraphQL, or MCP). Setting `spec.mcp: true` exposes the plugin's operations through Gestalt's MCP server. See [Provider Manifests](/reference/plugin-manifests) for the full field reference.
 
-`source` may include nested segments after the repository, such as `github.com/example/plugins/catalog/my-plugin`. Gestalt keeps the final segment as the plugin name and uses the full path for release tag resolution.
+`source` may include nested segments after the repository, such as `github.com/your-org/plugins/catalog/slack`. Gestalt keeps the final segment as the plugin name and uses the full path for release tag resolution.
 
 ## Creating a project
 
@@ -56,15 +76,15 @@ The manifest stays the source of truth for display name, description, auth, the 
     You need Go 1.26+ and a running `gestaltd` instance for testing.
 
     ```sh
-    mkdir my-plugin && cd my-plugin
-    go mod init example.com/my-plugin
+    mkdir slack && cd slack
+    go mod init github.com/your-org/plugins/slack
     go get github.com/valon-technologies/gestalt/sdk/go
     ```
 
     Recommended layout:
 
     ```text
-    my-plugin/
+    slack/
       go.mod
       manifest.yaml
       provider.go
@@ -74,13 +94,13 @@ The manifest stays the source of truth for display name, description, auth, the 
     You need Python 3.10+ and a running `gestaltd` instance for testing.
 
     ```sh
-    mkdir my-plugin && cd my-plugin
+    mkdir slack && cd slack
     ```
 
     Recommended layout:
 
     ```text
-    my-plugin/
+    slack/
       pyproject.toml
       manifest.yaml
       provider.py
@@ -90,8 +110,8 @@ The manifest stays the source of truth for display name, description, auth, the 
 
     ```toml
     [project]
-    name = "my-plugin"
-    version = "0.0.1-alpha.1"
+    name = "gestalt-slack"
+    version = "0.0.1"
     dependencies = ["gestalt"]
 
     [tool.uv]
@@ -105,14 +125,14 @@ The manifest stays the source of truth for display name, description, auth, the 
     You need the current stable Rust toolchain, Cargo, and a running `gestaltd` instance for testing.
 
     ```sh
-    mkdir my-plugin && cd my-plugin
+    mkdir slack && cd slack
     cargo init --lib
     ```
 
     Recommended layout:
 
     ```text
-    my-plugin/
+    slack/
       Cargo.toml
       manifest.yaml
       src/
@@ -123,12 +143,12 @@ The manifest stays the source of truth for display name, description, auth, the 
 
     ```toml
     [package]
-    name = "my-plugin"
-    version = "0.0.1-alpha.1"
+    name = "gestalt-slack"
+    version = "0.0.1"
     edition = "2024"
 
     [dependencies]
-    gestalt = { git = "https://github.com/valon-technologies/gestalt", tag = "sdk/rust/v0.0.1-alpha.1" }
+    gestalt = { git = "https://github.com/valon-technologies/gestalt", tag = "sdk/rust/v0.0.1" }
     schemars = { version = "0.8", features = ["derive"] }
     serde = { version = "1", features = ["derive"] }
     serde_json = "1"
@@ -140,7 +160,7 @@ The manifest stays the source of truth for display name, description, auth, the 
     You need Bun 1.3+ and a running `gestaltd` instance for testing.
 
     ```sh
-    mkdir my-plugin && cd my-plugin
+    mkdir slack && cd slack
     bun init -y
     bun add @valon-technologies/gestalt
     ```
@@ -148,7 +168,7 @@ The manifest stays the source of truth for display name, description, auth, the 
     Recommended layout:
 
     ```text
-    my-plugin/
+    slack/
       package.json
       manifest.yaml
       provider.ts
@@ -158,12 +178,12 @@ The manifest stays the source of truth for display name, description, auth, the 
 
     ```json
     {
-      "name": "my-plugin",
-      "version": "0.0.1-alpha.1",
+      "name": "gestalt-slack",
+      "version": "0.0.1",
       "private": true,
       "type": "module",
       "dependencies": {
-        "@valon-technologies/gestalt": "0.0.1-alpha.1"
+        "@valon-technologies/gestalt": "0.0.1"
       },
       "gestalt": {
         "provider": {
@@ -196,6 +216,8 @@ The manifest stays the source of truth for display name, description, auth, the 
 
 Operations are the callable units of a plugin. Each operation has an ID, an HTTP method, input and output types, and a handler function. You do not write an entrypoint. Gestalt synthesizes the executable wrapper automatically for local source execution and release.
 
+The following example defines a `conversations.getMessage` operation that fetches a single Slack message by channel and timestamp. The handler uses the caller's OAuth token from the request context to call the Slack API.
+
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
     ```go
@@ -203,61 +225,47 @@ Operations are the callable units of a plugin. Each operation has an ID, an HTTP
 
     import (
       "context"
-      "fmt"
       "net/http"
 
       gestalt "github.com/valon-technologies/gestalt/sdk/go"
     )
 
-    type Provider struct {
-      greeting string
+    type Provider struct{}
+
+    type GetMessageInput struct {
+      Channel string `json:"channel" doc:"Channel ID"        required:"true"`
+      TS      string `json:"ts"      doc:"Message timestamp" required:"true"`
     }
 
-    type GreetInput struct {
-      Name string `json:"name,omitempty" doc:"Name to greet"`
-    }
-
-    type GreetOutput struct {
-      Message string `json:"message"`
+    type GetMessageOutput struct {
+      Message map[string]any `json:"message"`
     }
 
     var (
-      greetOperation = gestalt.Operation[GreetInput, GreetOutput]{
-        ID:          "greet",
+      getMessageOp = gestalt.Operation[GetMessageInput, GetMessageOutput]{
+        ID:          "conversations.getMessage",
         Method:      http.MethodGet,
-        Description: "Return a greeting message",
+        Description: "Get a single message from a Slack channel",
       }
       Router = gestalt.MustRouter(
-        gestalt.Register(greetOperation, (*Provider).greet),
+        gestalt.Register(getMessageOp, (*Provider).getMessage),
       )
     )
 
-    func New() *Provider {
-      return &Provider{}
-    }
+    func New() *Provider { return &Provider{} }
 
-    func (p *Provider) Configure(_ context.Context, _ string, config map[string]any) error {
-      if g, ok := config["greeting"].(string); ok {
-        p.greeting = g
-      }
+    func (p *Provider) Configure(_ context.Context, _ string, _ map[string]any) error {
       return nil
     }
 
-    func (p *Provider) greet(
-      _ context.Context,
-      input GreetInput,
-      _ gestalt.Request,
-    ) (gestalt.Response[GreetOutput], error) {
-      greeting := p.greeting
-      if greeting == "" {
-        greeting = "Hello"
-      }
-      if input.Name == "" {
-        input.Name = "World"
-      }
-      return gestalt.OK(GreetOutput{
-        Message: fmt.Sprintf("%s, %s!", greeting, input.Name),
-      }), nil
+    func (p *Provider) getMessage(
+      ctx context.Context,
+      input GetMessageInput,
+      req gestalt.Request,
+    ) (gestalt.Response[GetMessageOutput], error) {
+      // Call Slack API using req.Token as Bearer token.
+      // Fetch conversations.history filtered to the single message at input.TS.
+      return gestalt.OK(GetMessageOutput{Message: map[string]any{"ts": input.TS}}), nil
     }
     ```
   </Tabs.Tab>
@@ -265,128 +273,99 @@ Operations are the callable units of a plugin. Each operation has an ID, an HTTP
     ```python
     import gestalt
 
-    greeting = "Hello"
+
+    class GetMessageInput(gestalt.Model):
+        channel: str = gestalt.field(description="Channel ID")
+        ts: str = gestalt.field(description="Message timestamp")
 
 
-    def configure(name, config):
-        global greeting
-        greeting = config.get("greeting", "Hello")
-
-
-    class GreetInput(gestalt.Model):
-        name: str = gestalt.field(description="Name to greet", default="World")
-
-
-    class GreetOutput(gestalt.Model):
-        message: str
+    class GetMessageOutput(gestalt.Model):
+        message: dict
 
 
     @gestalt.operation(
         method="GET",
-        description="Return a greeting message",
-        read_only=True,
+        description="Get a single message from a Slack channel",
     )
-    def greet(input: GreetInput, _req: gestalt.Request) -> GreetOutput:
-        return GreetOutput(message=f"{greeting}, {input.name}!")
+    def conversations_getMessage(
+        input: GetMessageInput, req: gestalt.Request
+    ) -> GetMessageOutput:
+        # Call Slack API using req.token as Bearer token.
+        # Fetch conversations.history filtered to the single message at input.ts.
+        return GetMessageOutput(message={"ts": input.ts})
     ```
 
-    The top-level `configure(name, config)` function runs once at startup. It does not need a decorator.
+    The top-level `configure(name, config)` function runs once at startup if defined. It does not need a decorator.
   </Tabs.Tab>
   <Tabs.Tab>
     ```rust
-    use std::sync::{Arc, Mutex};
-
     use serde::{Deserialize, Serialize};
+    use std::sync::Arc;
 
-    pub struct Provider {
-        greeting: Mutex<String>,
-    }
-
-    impl Default for Provider {
-        fn default() -> Self {
-            Self {
-                greeting: Mutex::new("Hello".to_string()),
-            }
-        }
-    }
+    pub struct Provider;
 
     #[gestalt::async_trait]
     impl gestalt::Provider for Provider {
         async fn configure(
-            &self,
-            _name: &str,
-            config: serde_json::Map<String, serde_json::Value>,
+            &self, _name: &str, _config: serde_json::Map<String, serde_json::Value>,
         ) -> gestalt::Result<()> {
-            let greeting = config
-                .get("greeting")
-                .and_then(serde_json::Value::as_str)
-                .unwrap_or("Hello")
-                .to_string();
-            *self.greeting.lock().expect("lock greeting") = greeting;
             Ok(())
         }
     }
 
     #[derive(Deserialize, schemars::JsonSchema)]
-    pub struct GreetInput {
-        #[schemars(description = "Name to greet")]
-        name: Option<String>,
+    pub struct GetMessageInput {
+        #[schemars(description = "Channel ID")]
+        channel: String,
+        #[schemars(description = "Message timestamp")]
+        ts: String,
     }
 
     #[derive(Serialize, schemars::JsonSchema)]
-    pub struct GreetOutput {
-        message: String,
-    }
-
-    pub fn new() -> Provider {
-        Provider::default()
+    pub struct GetMessageOutput {
+        message: serde_json::Value,
     }
 
     pub fn router() -> gestalt::Result<gestalt::Router<Provider>> {
         gestalt::Router::new().register(
-            gestalt::Operation::<GreetInput, GreetOutput>::new("greet")
-                .method("GET")
-                .description("Return a greeting message")
-                .read_only(true),
-            |provider: Arc<Provider>, input: GreetInput, _request: gestalt::Request| async move {
-                let greeting = provider.greeting.lock().expect("lock greeting").clone();
-                let name = input.name.unwrap_or_else(|| "World".to_string());
-                Ok::<gestalt::Response<GreetOutput>, std::convert::Infallible>(gestalt::ok(
-                    GreetOutput {
-                        message: format!("{greeting}, {name}!"),
-                    },
-                ))
+            gestalt::Operation::<GetMessageInput, GetMessageOutput>::new(
+                "conversations.getMessage",
+            )
+            .method("GET")
+            .description("Get a single message from a Slack channel"),
+            |_provider: Arc<Provider>, input: GetMessageInput, request: gestalt::Request| async move {
+                // Call Slack API using request.token as Bearer token.
+                let _ = (input, request);
+                todo!("fetch conversations.history")
             },
         )
     }
 
-    gestalt::export_provider!(constructor = new, router = router);
+    gestalt::export_provider!(constructor = Provider, router = router);
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```typescript
     import { defineIntegrationProvider, ok, operation, s } from "@valon-technologies/gestalt";
 
-    let greeting = "Hello";
-
     export const provider = defineIntegrationProvider({
-      configure(_name, config) {
-        greeting = (config.greeting as string) ?? "Hello";
-      },
       operations: [
         operation({
-          id: "greet",
+          id: "conversations.getMessage",
           method: "GET",
-          description: "Return a greeting message",
+          description: "Get a single message from a Slack channel",
           readOnly: true,
           input: s.object({
-            name: s.string({ description: "Name to greet", default: "World" }),
+            channel: s.string({ description: "Channel ID" }),
+            ts: s.string({ description: "Message timestamp" }),
           }),
           output: s.object({
-            message: s.string(),
+            message: s.any({ description: "The Slack message object" }),
           }),
-          handler(input) {
-            return ok({ message: `${greeting}, ${input.name}!` });
+          async handler(input, request) {
+            // Call Slack API using request.token as Bearer token.
+            // Fetch conversations.history filtered to the single message at input.ts.
+            return ok({ message: { ts: input.ts } });
           },
         }),
       ],
@@ -409,10 +388,10 @@ The router derives catalog parameters from the input type. Fields are required b
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
     ```go
-    type SearchInput struct {
-      Query    string `json:"query"              doc:"Search query"         required:"true"`
-      MaxItems int    `json:"max_items,omitempty" doc:"Maximum results"      default:"10"`
-      Filters  Filter `json:"filters,omitempty"   doc:"Optional filter set"`
+    type ListMessagesInput struct {
+      Channel string `json:"channel"            doc:"Channel ID"              required:"true"`
+      Limit   int    `json:"limit,omitempty"    doc:"Maximum messages"        default:"100"`
+      Oldest  string `json:"oldest,omitempty"   doc:"Unix timestamp bound"`
     }
     ```
 
@@ -420,10 +399,10 @@ The router derives catalog parameters from the input type. Fields are required b
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
-    class SearchInput(gestalt.Model):
-        query: str = gestalt.field(description="Search query")
-        max_items: int = gestalt.field(description="Maximum results", default=10)
-        filters: Filter | None = gestalt.field(description="Optional filter set", default=None)
+    class ListMessagesInput(gestalt.Model):
+        channel: str = gestalt.field(description="Channel ID")
+        limit: int = gestalt.field(description="Maximum messages", default=100)
+        oldest: str | None = gestalt.field(description="Unix timestamp bound", default=None)
     ```
 
     Fields without a default are required. Use `gestalt.field(description="...")` for descriptions and `default=...` for default values.
@@ -431,18 +410,18 @@ The router derives catalog parameters from the input type. Fields are required b
   <Tabs.Tab>
     ```rust
     #[derive(serde::Deserialize, schemars::JsonSchema)]
-    struct SearchInput {
-        #[schemars(description = "Search query")]
-        query: String,
-        #[serde(default = "default_max_items")]
-        #[schemars(description = "Maximum results")]
-        max_items: u32,
-        #[schemars(description = "Optional filter set")]
-        filters: Option<Filter>,
+    struct ListMessagesInput {
+        #[schemars(description = "Channel ID")]
+        channel: String,
+        #[serde(default = "default_limit")]
+        #[schemars(description = "Maximum messages")]
+        limit: u32,
+        #[schemars(description = "Unix timestamp bound")]
+        oldest: Option<String>,
     }
 
-    fn default_max_items() -> u32 {
-        10
+    fn default_limit() -> u32 {
+        100
     }
     ```
 
@@ -450,17 +429,10 @@ The router derives catalog parameters from the input type. Fields are required b
   </Tabs.Tab>
   <Tabs.Tab>
     ```ts
-    const SearchInput = s.object({
-      query: s.string({ description: "Search query" }),
-      max_items: s.integer({ description: "Maximum results", default: 10 }),
-      filters: s.optional(
-        s.object(
-          {
-            status: s.optional(s.string()),
-          },
-          { description: "Optional filter set" },
-        ),
-      ),
+    const ListMessagesInput = s.object({
+      channel: s.string({ description: "Channel ID" }),
+      limit: s.integer({ description: "Maximum messages", default: 100 }),
+      oldest: s.optional(s.string({ description: "Unix timestamp bound" })),
     });
     ```
 
@@ -470,15 +442,101 @@ The router derives catalog parameters from the input type. Fields are required b
   </Tabs.Tab>
 </Tabs>
 
+## Declarative plugins
+
+Not every plugin needs executable code. If the upstream API is already reachable over HTTP, you can expose it as a set of REST operations declared entirely in the manifest. Gestalt forwards each invocation to the upstream, injecting the caller's credentials automatically. No provider process runs.
+
+The following manifest exposes three Slack API endpoints as Gestalt operations, with no code at all:
+
+```yaml
+kind: plugin
+source: github.com/your-org/plugins/slack-readonly
+version: 0.0.1
+displayName: Slack (read-only)
+description: Read Slack channels and messages via the REST API.
+spec:
+  mcp: true
+  surfaces:
+    rest:
+      baseUrl: https://slack.com
+      operations:
+        - name: conversations.list
+          description: List conversations and channels
+          method: GET
+          path: /api/conversations.list
+          parameters:
+            - name: limit
+              type: int
+              in: query
+            - name: types
+              type: string
+              in: query
+        - name: conversations.history
+          description: Read message history for a channel
+          method: GET
+          path: /api/conversations.history
+          parameters:
+            - name: channel
+              type: string
+              in: query
+              required: true
+            - name: limit
+              type: int
+              in: query
+            - name: oldest
+              type: string
+              in: query
+        - name: users.list
+          description: List workspace users
+          method: GET
+          path: /api/users.list
+          parameters:
+            - name: limit
+              type: int
+              in: query
+  connections:
+    default:
+      auth:
+        type: oauth2
+        authorizationUrl: https://slack.com/oauth/v2/authorize
+        tokenUrl: https://slack.com/api/oauth.v2.access
+        accessTokenPath: authed_user.access_token
+        scopeParam: user_scope
+        scopeSeparator: ','
+        scopes:
+          - channels:read
+          - users:read
+```
+
+You configure a declarative plugin the same way as any other. Point the config at the manifest, and the declared operations appear in the catalog:
+
+```yaml
+providers:
+  plugins:
+    slack-readonly:
+      source:
+        path: ./slack-readonly/manifest.yaml
+```
+
+```sh
+gestalt invoke slack-readonly conversations.list -p limit=5
+```
+
+Gestalt handles OAuth token injection, request formatting, and response passthrough. The `spec.surfaces.rest.baseUrl` is the root for all declared paths, and each operation's `parameters` define how input fields map to query parameters or request body fields.
+
+You can also declare OpenAPI, GraphQL, and MCP surfaces using `spec.surfaces.openapi`, `spec.surfaces.graphql`, and `spec.surfaces.mcp`. See [Provider Manifests](/reference/plugin-manifests) for the full surface schema.
+
 ## Operation ID conventions
 
-Operation IDs should use period-separated hierarchical names. For example, a Slack plugin might use `messages.list`, `messages.send`, `channels.list`, and `channels.archive`.
+Operation IDs should use period-separated hierarchical names. The Slack plugin uses `conversations.list`, `conversations.history`, `chat.postMessage`, and `users.info`.
 
-This convention enables prefix matching in the CLI. When you run `gestalt invoke slack messages`, the CLI joins the space-separated segments with periods and shows all operations whose ID starts with `messages.`. This makes large catalogs navigable without memorizing every operation name.
+This convention enables prefix matching in the CLI. When you run `gestalt invoke slack conversations`, the CLI joins the space-separated segments with periods and shows all operations whose ID starts with `conversations.`. This makes large catalogs navigable without memorizing every operation name.
 
 ## Dynamic catalogs
 
 By default, the operation catalog is static and materialized at startup. If your plugin needs to expose different operations depending on the caller's credentials or runtime state, implement a session catalog.
+
+A Slack plugin could use this to check which Slack workspace the caller is connected to and adjust the available operations accordingly.
 
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
@@ -487,12 +545,12 @@ By default, the operation catalog is static and materialized at startup. If your
     ```go
     func (p *Provider) CatalogForRequest(ctx context.Context, token string) (*gestalt.Catalog, error) {
         return &gestalt.Catalog{
-            Name:        "my-plugin-session",
-            DisplayName: token,
+            Name:        "slack-session",
+            DisplayName: "Slack",
             Operations: []gestalt.CatalogOperation{
                 {
-                    ID:     "search_private",
-                    Method: http.MethodPost,
+                    ID:     "conversations.getMessage",
+                    Method: http.MethodGet,
                     Annotations: gestalt.OperationAnnotations{
                         ReadOnlyHint: true,
                     },
@@ -509,12 +567,12 @@ By default, the operation catalog is static and materialized at startup. If your
     @gestalt.session_catalog
     def dynamic_catalog(request: gestalt.Request) -> gestalt.Catalog:
         return gestalt.Catalog(
-            name="my-plugin-session",
-            display_name=request.token,
+            name="slack-session",
+            display_name="Slack",
             operations=[
                 gestalt.CatalogOperation(
-                    id="search_private",
-                    method="POST",
+                    id="conversations.getMessage",
+                    method="GET",
                     read_only=True,
                 )
             ],
@@ -536,11 +594,11 @@ By default, the operation catalog is static and materialized at startup. If your
             request: &gestalt::Request,
         ) -> gestalt::Result<Option<gestalt::Catalog>> {
             Ok(Some(gestalt::Catalog {
-                name: "my-plugin-session".to_string(),
-                display_name: request.token.clone(),
+                name: "slack-session".to_string(),
+                display_name: "Slack".to_string(),
                 operations: vec![gestalt::CatalogOperation {
-                    id: "search_private".to_string(),
-                    method: "POST".to_string(),
+                    id: "conversations.getMessage".to_string(),
+                    method: "GET".to_string(),
                     annotations: Some(gestalt::OperationAnnotations {
                         read_only_hint: Some(true),
                         ..Default::default()
@@ -560,12 +618,12 @@ By default, the operation catalog is static and materialized at startup. If your
     export const provider = defineIntegrationProvider({
       sessionCatalog(request) {
         return {
-          name: "my-plugin-session",
-          displayName: request.token,
+          name: "slack-session",
+          displayName: "Slack",
           operations: [
             {
-              id: "search_private",
-              method: "POST",
+              id: "conversations.getMessage",
+              method: "GET",
               readOnly: true,
             },
           ],
@@ -584,28 +642,30 @@ Point a local config at the source plugin. Gestalt synthesizes the executable wr
 ```yaml
 providers:
   plugins:
-    my-plugin:
+    slack:
       source:
-        path: ./manifest.yaml
-      config:
-        greeting: Hello
+        path: ./slack/manifest.yaml
+      allowedHosts:
+        - slack.com
 ```
 
-Start the server and invoke the operation:
+Start the server and invoke an operation:
 
 ```sh
 gestaltd serve --config ./config.yaml
 ```
 
 ```sh
-gestalt invoke my-plugin greet -p name=Gestalt
+gestalt invoke slack conversations.getMessage -p channel=C01ABC23DEF -p ts=1712161829.000300
 ```
 
 If your plugin makes outbound HTTP requests and you see 403 errors, check `allowedHosts`. Executable providers run inside a network sandbox, and requests to hosts not in the allowlist are rejected. Add every upstream domain the provider contacts to `allowedHosts` in the config or manifest.
 
 ## Hybrid providers
 
-A manifest can define passthrough surfaces (`spec.surfaces.openapi`, `spec.surfaces.rest`, `spec.surfaces.graphql`, or `spec.surfaces.mcp`) alongside executable operations. The passthrough surfaces are forwarded by the host directly to the upstream API, while the executable operations are handled by the provider process. This is useful when a plugin adds custom logic on top of an existing API.
+A manifest can define passthrough surfaces alongside executable operations. The passthrough surfaces are forwarded by the host directly to the upstream API, while the executable operations are handled by the provider process.
+
+The first-party Slack plugin is a hybrid provider. It declares 14 REST operations in its manifest (such as `chat.postMessage`, `conversations.list`, and `users.info`) that Gestalt forwards directly to the Slack API. On top of those, it defines 3 executable operations (such as `conversations.getMessage`) that add custom logic like URL parsing and multi-API orchestration. Both sets of operations appear in the same catalog.
 
 Do not define the same operation ID in both a passthrough surface and an executable operation. If two surfaces expose the same ID, the provider fails validation at startup. Use `allowedOperations` to filter or alias collisions when needed.
 
