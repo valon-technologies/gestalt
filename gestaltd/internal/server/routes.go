@@ -104,6 +104,55 @@ func (s *Server) mountAPIRoutes(r chi.Router) {
 	})
 }
 
+// BuildPluginRouter creates a scoped chi.Router for a plugin's subdomain.
+// It reuses the server's auth, middleware, and handlers, scoping API routes
+// to the given plugin name.
+func (s *Server) BuildPluginRouter(pluginName string, staticHandler, mcpHandler http.Handler, allowedUsers []string) chi.Router {
+	r := chi.NewRouter()
+	r.Use(requestMetaMiddleware)
+	r.Use(s.securityHeadersMiddleware)
+	r.Use(maxBodyMiddleware(1 << 20))
+
+	r.Get("/health", s.healthCheck)
+	r.Get("/ready", s.readinessCheck)
+
+	r.Route("/api/v1", func(r chi.Router) {
+		r.Use(middleware.Timeout(60 * time.Second))
+		s.mountAuthRoutes(r)
+		r.Group(func(r chi.Router) {
+			r.Use(s.authMiddleware)
+			if len(allowedUsers) > 0 {
+				r.Use(authzMiddleware(allowedUsers))
+			}
+			r.Use(scopeIntegration(pluginName))
+
+			r.Get("/integrations", s.listIntegrations)
+			r.Get("/operations", s.listOperations)
+			r.Get("/{operation}", s.executeOperation)
+			r.Post("/{operation}", s.executeOperation)
+
+			r.Post("/auth/start-oauth", s.startIntegrationOAuth)
+			r.Post("/auth/connect-manual", s.connectManual)
+		})
+	})
+
+	if mcpHandler != nil {
+		r.Group(func(r chi.Router) {
+			r.Use(s.authMiddleware)
+			if len(allowedUsers) > 0 {
+				r.Use(authzMiddleware(allowedUsers))
+			}
+			r.Handle("/mcp", mcpHandler)
+		})
+	}
+
+	if staticHandler != nil {
+		r.NotFound(staticHandler.ServeHTTP)
+	}
+
+	return r
+}
+
 func (s *Server) servePrometheusMetrics(w http.ResponseWriter, r *http.Request) {
 	if s.prometheusMetrics == nil {
 		http.Error(w, "Prometheus metrics are unavailable because telemetry metrics are disabled.", http.StatusServiceUnavailable)

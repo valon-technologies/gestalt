@@ -89,6 +89,38 @@ func (s *Server) securityHeadersMiddleware(next http.Handler) http.Handler {
 	})
 }
 
+const scopedIntegrationKey contextKey = "scopedIntegration"
+
+func scopeIntegration(name string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := context.WithValue(r.Context(), scopedIntegrationKey, name)
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+}
+
+func authzMiddleware(allowedUsers []string) func(http.Handler) http.Handler {
+	userSet := make(map[string]struct{}, len(allowedUsers))
+	for _, u := range allowedUsers {
+		userSet[u] = struct{}{}
+	}
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			p := PrincipalFromContext(r.Context())
+			if p == nil || p.Identity == nil {
+				writeError(w, http.StatusForbidden, "access denied")
+				return
+			}
+			if _, ok := userSet[p.Identity.Email]; ok {
+				next.ServeHTTP(w, r)
+				return
+			}
+			writeError(w, http.StatusForbidden, "access denied")
+		})
+	}
+}
+
 var errInvalidAuthorizationHeader = errors.New("invalid authorization header format")
 
 func requestBearerToken(r *http.Request) (string, error) {

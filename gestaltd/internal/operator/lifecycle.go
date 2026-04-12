@@ -915,6 +915,9 @@ func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *con
 			entry.Description = cmp.Or(entry.Description, manifest.Description)
 		}
 		entry.IconFile = cmp.Or(entry.IconFile, entry.ResolvedIconFile)
+		if err := resolvePluginWebUI(entry); err != nil {
+			return fmt.Errorf("resolve webui for plugin %q: %w", name, err)
+		}
 	}
 	if cfg.Providers.Auth != nil {
 		if err := l.applyComponentProvider(paths, lock, pluginmanifestv1.KindAuth, "auth", cfg.Providers.Auth, cfg.Providers.Auth.Config, &cfg.Providers.Auth.Config, locked); err != nil {
@@ -1126,6 +1129,48 @@ func applyLocalUIManifest(plugin *config.ProviderEntry, configMap map[string]any
 		return fmt.Errorf("ui provider asset root not found at %s: %w", assetRoot, err)
 	}
 	*resolvedAssetRoot = assetRoot
+	return nil
+}
+
+// resolvePluginWebUI resolves the static asset root for a plugin's web UI.
+// It supports two models:
+//   - Separate WebUI package: entry.WebUI is set with a local source pointing
+//     to a kind:webui manifest. The asset root is resolved from that manifest.
+//   - Bundled model: the plugin's own manifest declares spec.assetRoot. The
+//     asset root is resolved relative to the plugin's manifest directory.
+func resolvePluginWebUI(entry *config.ProviderEntry) error {
+	if entry == nil {
+		return nil
+	}
+	// Case 1: separate WebUI package with local source
+	if entry.WebUI != nil && entry.WebUI.Source.IsLocal() {
+		manifestPath := entry.WebUI.Source.Path
+		if _, err := os.Stat(manifestPath); err != nil {
+			return fmt.Errorf("webui manifest not found at %s: %w", manifestPath, err)
+		}
+		_, manifest, err := pluginpkg.ReadSourceManifestFile(manifestPath)
+		if err != nil {
+			return fmt.Errorf("read webui manifest: %w", err)
+		}
+		if manifest.Spec == nil || manifest.Spec.AssetRoot == "" {
+			return fmt.Errorf("webui manifest at %s has no spec.assetRoot", manifestPath)
+		}
+		assetRoot := filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(manifest.Spec.AssetRoot))
+		if _, err := os.Stat(assetRoot); err != nil {
+			return fmt.Errorf("webui asset root not found at %s: %w", assetRoot, err)
+		}
+		entry.ResolvedAssetRoot = assetRoot
+		return nil
+	}
+	// Case 2: plugin manifest itself declares spec.assetRoot (bundled model)
+	if entry.ResolvedManifest != nil && entry.ResolvedManifest.Spec != nil && entry.ResolvedManifest.Spec.AssetRoot != "" && entry.ResolvedManifestPath != "" {
+		assetRoot := filepath.Join(filepath.Dir(entry.ResolvedManifestPath), filepath.FromSlash(entry.ResolvedManifest.Spec.AssetRoot))
+		if _, err := os.Stat(assetRoot); err != nil {
+			// Not an error: plugin declares assetRoot but it doesn't exist yet (not built).
+			return nil
+		}
+		entry.ResolvedAssetRoot = assetRoot
+	}
 	return nil
 }
 

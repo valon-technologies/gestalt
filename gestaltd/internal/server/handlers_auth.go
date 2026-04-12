@@ -173,7 +173,7 @@ func (s *Server) setSessionCookie(w http.ResponseWriter, token string) {
 	if p, ok := s.auth.(SessionTokenTTLProvider); ok {
 		maxAge = int(p.SessionTokenTTL().Seconds())
 	}
-	http.SetCookie(w, &http.Cookie{
+	cookie := &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    token,
 		Path:     "/",
@@ -181,11 +181,15 @@ func (s *Server) setSessionCookie(w http.ResponseWriter, token string) {
 		HttpOnly: true,
 		Secure:   s.secureCookies,
 		SameSite: http.SameSiteLaxMode,
-	})
+	}
+	if s.cookieDomain != "" {
+		cookie.Domain = s.cookieDomain
+	}
+	http.SetCookie(w, cookie)
 }
 
 func (s *Server) clearSessionCookie(w http.ResponseWriter) {
-	http.SetCookie(w, &http.Cookie{
+	cookie := &http.Cookie{
 		Name:     sessionCookieName,
 		Value:    "",
 		Path:     "/",
@@ -193,7 +197,11 @@ func (s *Server) clearSessionCookie(w http.ResponseWriter) {
 		HttpOnly: true,
 		Secure:   s.secureCookies,
 		SameSite: http.SameSiteLaxMode,
-	})
+	}
+	if s.cookieDomain != "" {
+		cookie.Domain = s.cookieDomain
+	}
+	http.SetCookie(w, cookie)
 }
 
 // StatefulCallbackHandler is an optional interface for auth providers that need

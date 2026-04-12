@@ -72,6 +72,7 @@ type integrationInfo struct {
 	ConnectionParams map[string]connectionParamInfo `json:"connectionParams"`
 	Connections      []connectionDefInfo            `json:"connections"`
 	CredentialFields []credentialFieldInfo          `json:"credentialFields"`
+	SubdomainURL     string                         `json:"subdomainUrl,omitempty"`
 }
 
 type connectionParamInfo struct {
@@ -164,6 +165,9 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 			info.Connections = s.integrationConnectionInfos(name, authTypes, info.CredentialFields)
 		}
 		info.AuthTypes = authTypes
+		if entry := s.pluginDefs[name]; entry != nil && entry.ResolvedAssetRoot != "" {
+			info.SubdomainURL = s.pluginSubdomainURL(name)
+		}
 		out = append(out, info)
 	}
 	writeJSON(w, http.StatusOK, out)
@@ -381,6 +385,9 @@ func resolveConnectionParams(w http.ResponseWriter, prov core.Provider, provided
 
 func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
+	if name == "" {
+		name, _ = r.Context().Value(scopedIntegrationKey).(string)
+	}
 	prov, ok := s.getProvider(w, name)
 	if !ok {
 		return
@@ -424,6 +431,9 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	providerName := chi.URLParam(r, "integration")
+	if providerName == "" {
+		providerName, _ = r.Context().Value(scopedIntegrationKey).(string)
+	}
 	operationName := chi.URLParam(r, "operation")
 
 	p := PrincipalFromContext(r.Context())

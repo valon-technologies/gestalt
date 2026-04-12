@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -176,10 +177,37 @@ func runServer(env *bootstrapEnv) error {
 		publicProfile = server.RouteProfilePublic
 	}
 	baseServerConfig.RouteProfile = publicProfile
+	baseServerConfig.BaseDomain = baseDomainFromURL(env.Config.Server.BaseURL)
+	baseServerConfig.CookieDomain = cookieDomainFromURL(env.Config.Server.BaseURL)
 
 	srv, err := server.New(baseServerConfig)
 	if err != nil {
 		return fmt.Errorf("creating server: %w", err)
+	}
+
+	pluginMCPSlots := map[string]*lateHandler{}
+	pluginRouters := map[string]http.Handler{}
+	for name, entry := range env.Config.Providers.Plugins {
+		if entry == nil || entry.ResolvedAssetRoot == "" {
+			continue
+		}
+		staticHandler, err := webui.DirHandler(entry.ResolvedAssetRoot)
+		if err != nil {
+			slog.Warn("skipping plugin webui", "plugin", name, "error", err)
+			continue
+		}
+		var pluginMCPHandler http.Handler
+		if entry.DeclaresMCP() {
+			slot := &lateHandler{}
+			pluginMCPSlots[name] = slot
+			pluginMCPHandler = slot
+		}
+		pluginRouters[name] = srv.BuildPluginRouter(name, staticHandler, pluginMCPHandler, entry.AllowedUsers)
+		slog.Info("plugin subdomain configured", "plugin", name)
+	}
+	if len(pluginRouters) > 0 {
+		srv.SetPluginRouters(pluginRouters)
+		slog.Info("plugin subdomains enabled", "count", len(pluginRouters), "base_domain", baseServerConfig.BaseDomain)
 	}
 
 	type namedHTTPServer struct {
@@ -268,6 +296,17 @@ func runServer(env *bootstrapEnv) error {
 	mcpSlot.Set(mcpInner)
 	slog.Info("MCP endpoint enabled", "path", "/mcp")
 
+	for name, slot := range pluginMCPSlots {
+		surface := buildPluginMCPSurface(name, mcpSurface)
+		handler, err := surface.handler(result, mcpInvoker)
+		if err != nil {
+			slog.Warn("skipping plugin MCP endpoint", "plugin", name, "error", err)
+			continue
+		}
+		slot.Set(handler)
+		slog.Info("plugin MCP endpoint enabled", "plugin", name)
+	}
+
 	select {
 	case failure := <-listenErr:
 		return fmt.Errorf("%s http server: %v", failure.name, failure.err)
@@ -345,6 +384,34 @@ type mcpSurface struct {
 	mcpConnection map[string]string
 }
 
+// baseDomainFromURL extracts the host (without scheme or path) from a base URL.
+// Returns "localhost" as fallback when no URL is configured.
+func baseDomainFromURL(baseURL string) string {
+	if baseURL == "" {
+		return "localhost"
+	}
+	u, err := url.Parse(baseURL)
+	if err != nil || u.Host == "" {
+		return "localhost"
+	}
+	// Strip port for domain comparison (extractSubdomain handles port separately)
+	host := u.Hostname()
+	if host == "" {
+		return "localhost"
+	}
+	return host
+}
+
+// cookieDomainFromURL derives the cookie Domain attribute from a base URL.
+// Returns empty for localhost (browsers share .localhost cookies automatically).
+func cookieDomainFromURL(baseURL string) string {
+	host := baseDomainFromURL(baseURL)
+	if host == "localhost" || host == "127.0.0.1" {
+		return ""
+	}
+	return host
+}
+
 func buildMCPSurface(cfg *config.Config, connMaps bootstrap.ConnectionMaps) mcpSurface {
 	surface := mcpSurface{
 		providers:     []string{},
@@ -391,6 +458,21 @@ func (s mcpSurface) handler(result *bootstrap.Result, invoker invocation.Invoker
 		}),
 		mcpserver.WithStateLess(true),
 	), nil
+}
+
+func buildPluginMCPSurface(pluginName string, main mcpSurface) mcpSurface {
+	s := mcpSurface{
+		providers:     []string{pluginName},
+		toolPrefixes:  make(map[string]string),
+		mcpConnection: make(map[string]string),
+	}
+	if prefix, ok := main.toolPrefixes[pluginName]; ok {
+		s.toolPrefixes[pluginName] = prefix
+	}
+	if conn, ok := main.mcpConnection[pluginName]; ok {
+		s.mcpConnection[pluginName] = conn
+	}
+	return s
 }
 
 func runInit(args []string) error {

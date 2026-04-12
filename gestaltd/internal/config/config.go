@@ -103,6 +103,9 @@ type ProviderEntry struct {
 	// Plugin-specific config fields (parsed from YAML, only valid on plugin entries)
 	Connections       map[string]*ConnectionDef     `yaml:"connections,omitempty"`
 	AllowedOperations map[string]*OperationOverride `yaml:"allowedOperations,omitempty"`
+	WebUI             *WebUIEntry                   `yaml:"webui,omitempty"`
+	AllowedUsers      []string                      `yaml:"allowedUsers,omitempty"`
+	AllowedGroups     []string                      `yaml:"allowedGroups,omitempty"`
 
 	// Runtime-resolved fields (populated during init/bootstrap, not from YAML)
 	Command              string                              `yaml:"-"`
@@ -168,6 +171,13 @@ func (e *ProviderEntry) DeclaresMCP() bool {
 		return false
 	}
 	return spec.MCP
+}
+
+// WebUIEntry configures a web UI source for a plugin provider.
+// When set on a plugin entry, gestaltd serves the web UI's static assets
+// on a subdomain derived from the plugin ID.
+type WebUIEntry struct {
+	Source ProviderSource `yaml:"source"`
 }
 
 type SourceAuthDef struct {

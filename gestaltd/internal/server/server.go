@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -62,6 +63,9 @@ type Server struct {
 	clientUI           http.Handler
 	adminUI            http.Handler
 	routeProfile       RouteProfile
+	pluginRouters      map[string]http.Handler
+	baseDomain         string
+	cookieDomain       string
 }
 
 type Config struct {
@@ -85,6 +89,8 @@ type Config struct {
 	ClientUI          http.Handler
 	AdminUI           http.Handler
 	RouteProfile      RouteProfile
+	BaseDomain        string
+	CookieDomain      string
 }
 
 func New(cfg Config) (*Server, error) {
@@ -148,6 +154,8 @@ func New(cfg Config) (*Server, error) {
 		clientUI:          cfg.ClientUI,
 		adminUI:           cfg.AdminUI,
 		routeProfile:      cfg.RouteProfile,
+		baseDomain:        cfg.BaseDomain,
+		cookieDomain:      cfg.CookieDomain,
 	}
 	if noAuth {
 		s.anonymousPrincipal = resolver.ResolveEmail(anonymousEmail)
@@ -155,6 +163,13 @@ func New(cfg Config) (*Server, error) {
 
 	s.routes()
 	return s, nil
+}
+
+// SetPluginRouters registers per-plugin subdomain routers built via
+// BuildPluginRouter. This must be called after New because the plugin
+// routers reference Server middleware methods.
+func (s *Server) SetPluginRouters(routers map[string]http.Handler) {
+	s.pluginRouters = routers
 }
 
 func (s *Server) issueSessionToken(identity *core.UserIdentity) (string, error) {
@@ -172,5 +187,60 @@ func (s *Server) issueSessionToken(identity *core.UserIdentity) (string, error) 
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if len(s.pluginRouters) > 0 {
+		if sub := s.extractSubdomain(r.Host); sub != "" {
+			if router, ok := s.pluginRouters[sub]; ok {
+				router.ServeHTTP(w, r)
+				return
+			}
+			http.NotFound(w, r)
+			return
+		}
+	}
 	s.handler.ServeHTTP(w, r)
+}
+
+// extractSubdomain returns the plugin subdomain from a Host header value,
+// or empty string if the request is for the main domain.
+// Examples:
+//   - "slack.example.com" with baseDomain "example.com" -> "slack"
+//   - "slack.localhost:8080" with baseDomain "localhost" -> "slack"
+//   - "example.com" with baseDomain "example.com" -> ""
+//   - "localhost:8080" with baseDomain "localhost" -> ""
+func (s *Server) extractSubdomain(host string) string {
+	if s.baseDomain == "" {
+		return ""
+	}
+	h := stripHostPort(host)
+	base := stripHostPort(s.baseDomain)
+	if h == base {
+		return ""
+	}
+	suffix := "." + base
+	if strings.HasSuffix(h, suffix) {
+		sub := strings.TrimSuffix(h, suffix)
+		if sub != "" && !strings.Contains(sub, ".") {
+			return sub
+		}
+	}
+	return ""
+}
+
+func stripHostPort(host string) string {
+	if i := strings.LastIndex(host, ":"); i != -1 {
+		return host[:i]
+	}
+	return host
+}
+
+func (s *Server) pluginSubdomainURL(pluginName string) string {
+	if s.publicBaseURL == "" {
+		return ""
+	}
+	u, err := url.Parse(s.publicBaseURL)
+	if err != nil {
+		return ""
+	}
+	u.Host = pluginName + "." + u.Host
+	return u.String()
 }
