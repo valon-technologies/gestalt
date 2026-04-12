@@ -14,8 +14,10 @@ import (
 )
 
 var (
-	gestaltdBin string
-	pluginBin   string
+	gestaltdBin   string
+	pluginBin     string
+	indexedDBBin  string
+	gestaltCLIBin string
 )
 
 func TestMain(m *testing.M) {
@@ -27,14 +29,20 @@ func TestMain(m *testing.M) {
 
 	gestaltdBin = filepath.Join(tmpDir, "gestaltd")
 	pluginBin = filepath.Join(tmpDir, "provider")
+	indexedDBBin = filepath.Join(tmpDir, "indexeddb-provider")
+	indexedDBSrcDir := filepath.Join(filepath.Dir(testutil.MustExampleProviderPluginPath()), "provider-go-indexeddb")
 
 	var wg sync.WaitGroup
-	errs := make([]error, 2)
-	wg.Add(2)
+	errs := make([]error, 3)
+	wg.Add(3)
 	go func() { defer wg.Done(); errs[0] = buildTarget(".", ".", gestaltdBin) }()
 	go func() {
 		defer wg.Done()
 		errs[1] = pluginpkg.BuildGoProviderBinary(testutil.MustExampleProviderPluginPath(), pluginBin, "provider-go", runtime.GOOS, runtime.GOARCH)
+	}()
+	go func() {
+		defer wg.Done()
+		errs[2] = pluginpkg.BuildGoComponentBinary(indexedDBSrcDir, indexedDBBin, "indexeddb", runtime.GOOS, runtime.GOARCH)
 	}()
 	wg.Wait()
 
@@ -46,9 +54,46 @@ func TestMain(m *testing.M) {
 		}
 	}
 
+	gestaltCLIBin = buildGestaltCLI()
+
 	code := m.Run()
 	_ = os.RemoveAll(tmpDir)
 	os.Exit(code)
+}
+
+func buildGestaltCLI() string {
+	if _, err := exec.LookPath("cargo"); err != nil {
+		return ""
+	}
+
+	repoRoot := filepath.Dir(filepath.Dir(testutil.MustExampleProviderPluginPath()))
+	for {
+		if _, err := os.Stat(filepath.Join(repoRoot, "gestalt", "Cargo.toml")); err == nil {
+			break
+		}
+		parent := filepath.Dir(repoRoot)
+		if parent == repoRoot {
+			return ""
+		}
+		repoRoot = parent
+	}
+
+	workspaceDir := filepath.Join(repoRoot, "gestalt")
+	cmd := exec.Command("cargo", "build", "-p", "gestalt", "--release")
+	cmd.Dir = workspaceDir
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "build gestalt CLI: %v (skipping CLI tests)\n", err)
+		return ""
+	}
+
+	builtBin := filepath.Join(workspaceDir, "target", "release", "gestalt")
+	if _, err := os.Stat(builtBin); err != nil {
+		fmt.Fprintf(os.Stderr, "gestalt CLI binary not found at %s\n", builtBin)
+		return ""
+	}
+	return builtBin
 }
 
 func buildTarget(dir, target, output string) error {

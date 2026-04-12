@@ -50,13 +50,6 @@ updates:
       prefix: build
 
   - package-ecosystem: npm
-    directory: /gestaltd/ui
-    schedule:
-      interval: daily
-    commit-message:
-      prefix: build
-
-  - package-ecosystem: npm
     directory: /docs
     schedule:
       interval: daily
