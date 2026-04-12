@@ -1,8 +1,226 @@
 import { createClient, type Client } from "@connectrpc/connect";
 import { createGrpcTransport } from "@connectrpc/connect-node";
-import { IndexedDB as IndexedDBService } from "../gen/v1/datastore_pb";
+import {
+  IndexedDB as IndexedDBService,
+  CursorDirection as ProtoCursorDirection,
+} from "../gen/v1/datastore_pb";
 
 const ENV_INDEXEDDB_SOCKET = "GESTALT_INDEXEDDB_SOCKET";
+
+class AsyncQueue<T> implements AsyncIterable<T> {
+  private queue: T[] = [];
+  private waiting: ((result: IteratorResult<T>) => void) | null = null;
+  private closed = false;
+
+  push(value: T) {
+    if (this.waiting) {
+      const resolve = this.waiting;
+      this.waiting = null;
+      resolve({ value, done: false });
+    } else {
+      this.queue.push(value);
+    }
+  }
+
+  end() {
+    this.closed = true;
+    if (this.waiting) {
+      const resolve = this.waiting;
+      this.waiting = null;
+      resolve({ value: undefined as any, done: true });
+    }
+  }
+
+  [Symbol.asyncIterator]() {
+    return this;
+  }
+
+  async next(): Promise<IteratorResult<T>> {
+    if (this.queue.length > 0) {
+      return { value: this.queue.shift()!, done: false };
+    }
+    if (this.closed) {
+      return { value: undefined as any, done: true };
+    }
+    return new Promise((resolve) => {
+      this.waiting = resolve;
+    });
+  }
+}
+
+export enum CursorDirection {
+  Next = 0,
+  NextUnique = 1,
+  Prev = 2,
+  PrevUnique = 3,
+}
+
+const CURSOR_DIRECTION_TO_PROTO: { [K in CursorDirection]: ProtoCursorDirection } = {
+  [CursorDirection.Next]: ProtoCursorDirection.CURSOR_NEXT,
+  [CursorDirection.NextUnique]: ProtoCursorDirection.CURSOR_NEXT_UNIQUE,
+  [CursorDirection.Prev]: ProtoCursorDirection.CURSOR_PREV,
+  [CursorDirection.PrevUnique]: ProtoCursorDirection.CURSOR_PREV_UNIQUE,
+};
+
+export interface OpenCursorOptions {
+  range?: KeyRange;
+  direction?: CursorDirection;
+}
+
+export class Cursor {
+  private sendQueue: AsyncQueue<any>;
+  private responseIterator: AsyncIterator<any>;
+  private _key: unknown = undefined;
+  private _primaryKey: string = "";
+  private _value: Record | undefined = undefined;
+  private _done = false;
+
+  private constructor(
+    sendQueue: AsyncQueue<any>,
+    responseIterator: AsyncIterator<any>,
+  ) {
+    this.sendQueue = sendQueue;
+    this.responseIterator = responseIterator;
+  }
+
+  static async open(
+    client: Client<typeof IndexedDBService>,
+    store: string,
+    options?: OpenCursorOptions & { keysOnly?: boolean; index?: string; indexValues?: unknown[] },
+  ): Promise<Cursor | null> {
+    const sendQueue = new AsyncQueue<any>();
+    const direction = options?.direction ?? CursorDirection.Next;
+
+    sendQueue.push({
+      msg: {
+        case: "open" as const,
+        value: {
+          store,
+          range: options?.range ? toProtoKeyRange(options.range) : undefined,
+          direction: CURSOR_DIRECTION_TO_PROTO[direction],
+          keysOnly: options?.keysOnly ?? false,
+          index: options?.index ?? "",
+          values: (options?.indexValues ?? []).map(toProtoTypedValue),
+        },
+      },
+    });
+
+    const responses = client.openCursor(sendQueue);
+    const responseIterator = responses[Symbol.asyncIterator]();
+
+    const cursor = new Cursor(sendQueue, responseIterator);
+    const hasEntry = await cursor.pull();
+    if (!hasEntry) {
+      cursor.sendQueue.end();
+      return null;
+    }
+    return cursor;
+  }
+
+  get key(): unknown {
+    return this._key;
+  }
+
+  get primaryKey(): string {
+    return this._primaryKey;
+  }
+
+  get value(): Record | undefined {
+    return this._value;
+  }
+
+  get done(): boolean {
+    return this._done;
+  }
+
+  async continue(): Promise<boolean> {
+    this.sendQueue.push({
+      msg: { case: "command" as const, value: { command: { case: "next" as const, value: true } } },
+    });
+    return this.pull();
+  }
+
+  async continueToKey(key: unknown): Promise<boolean> {
+    this.sendQueue.push({
+      msg: {
+        case: "command" as const,
+        value: { command: { case: "continueToKey" as const, value: toProtoTypedValue(key) } },
+      },
+    });
+    return this.pull();
+  }
+
+  async advance(count: number): Promise<boolean> {
+    this.sendQueue.push({
+      msg: {
+        case: "command" as const,
+        value: { command: { case: "advance" as const, value: count } },
+      },
+    });
+    return this.pull();
+  }
+
+  async delete(): Promise<void> {
+    this.sendQueue.push({
+      msg: {
+        case: "command" as const,
+        value: { command: { case: "delete" as const, value: true } },
+      },
+    });
+    await this.pull();
+  }
+
+  async update(record: Record): Promise<void> {
+    this.sendQueue.push({
+      msg: {
+        case: "command" as const,
+        value: { command: { case: "update" as const, value: toProtoRecord(record) } },
+      },
+    });
+    await this.pull();
+  }
+
+  close(): void {
+    this.sendQueue.push({
+      msg: {
+        case: "command" as const,
+        value: { command: { case: "close" as const, value: true } },
+      },
+    });
+    this.sendQueue.end();
+    this._done = true;
+    this._key = undefined;
+    this._primaryKey = "";
+    this._value = undefined;
+  }
+
+  private async pull(): Promise<boolean> {
+    const { value: resp, done } = await this.responseIterator.next();
+    if (done || !resp) {
+      this._done = true;
+      this._key = undefined;
+      this._primaryKey = "";
+      this._value = undefined;
+      return false;
+    }
+    if (resp.result?.case === "done") {
+      this._done = true;
+      this._key = undefined;
+      this._primaryKey = "";
+      this._value = undefined;
+      return false;
+    }
+    if (resp.result?.case === "entry") {
+      const entry = resp.result.value;
+      this._key = entry.key ? fromProtoTypedValue(entry.key) : undefined;
+      this._primaryKey = entry.primaryKey;
+      this._value = entry.record ? fromProtoRecord(entry.record) : undefined;
+      this._done = false;
+      return true;
+    }
+    return false;
+  }
+}
 
 export class NotFoundError extends Error {
   constructor(message?: string) {
@@ -139,6 +357,14 @@ export class ObjectStore {
     return Number(resp.deleted);
   }
 
+  async openCursor(options?: OpenCursorOptions): Promise<Cursor | null> {
+    return Cursor.open(this.client, this.store, options);
+  }
+
+  async openKeyCursor(options?: OpenCursorOptions): Promise<Cursor | null> {
+    return Cursor.open(this.client, this.store, { ...options, keysOnly: true });
+  }
+
   index(name: string): Index {
     return new Index(this.client, this.store, name);
   }
@@ -210,6 +436,23 @@ export class Index {
       values: values.map(toProtoTypedValue),
     });
     return Number(resp.deleted);
+  }
+
+  async openCursor(options?: OpenCursorOptions, ...values: unknown[]): Promise<Cursor | null> {
+    return Cursor.open(this.client, this.store, {
+      ...options,
+      index: this.indexName,
+      indexValues: values,
+    });
+  }
+
+  async openKeyCursor(options?: OpenCursorOptions, ...values: unknown[]): Promise<Cursor | null> {
+    return Cursor.open(this.client, this.store, {
+      ...options,
+      keysOnly: true,
+      index: this.indexName,
+      indexValues: values,
+    });
   }
 }
 
