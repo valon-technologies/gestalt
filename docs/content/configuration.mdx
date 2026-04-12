@@ -8,7 +8,7 @@ Gestalt has six core concepts you configure in YAML:
 
 - **[Plugin.](/providers/plugins)** A tool backed by a provider package. Plugins expose operations that agents and users invoke over HTTP, MCP, or the CLI. Plugins can come from published packages or local source.
 - **Connection.** How Gestalt authenticates to an upstream API on behalf of a user or service. Connections handle OAuth flows, API keys, and manual credentials.
-- **[IndexedDB.](/providers/datastores)** The persistent storage layer. Stores users, sessions, tokens, and credentials through a provider that implements the IndexedDB interface.
+- **[IndexedDB.](/providers/indexeddb)** The persistent storage layer. Stores users, sessions, tokens, and credentials through a provider that implements the IndexedDB interface.
 - **[Auth.](/providers/auth)** Platform login for the Gestalt server. Separate from connection auth, which is per-plugin and per-upstream.
 - **[Secrets.](/providers/secrets)** Resolves `secret://` references in the config at startup. Backed by environment variables, files, or cloud secret managers.
 - **[UI.](/providers/web-uis)** The public web interface served at `/`. Uses the default bundle, a custom package, or can be disabled entirely.
@@ -220,7 +220,7 @@ providers:
         dsn: sqlite://./gestalt.db
 ```
 
-SQLite works for single-instance deployments. For production, use a Postgres or MySQL DSN. See [Datastores](/providers/datastores) for the full provider model.
+SQLite works for single-instance deployments. For production, use a Postgres or MySQL DSN. See [IndexedDB](/providers/indexeddb) for the full provider model.
 
 ## Config file mechanics
 
