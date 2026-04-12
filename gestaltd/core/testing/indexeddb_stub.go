@@ -408,6 +408,28 @@ func (c *stubCursor) buildIndexKeys() {
 			c.indexKeys[i] = vals
 		}
 	}
+	sort.Sort(&indexKeySorter{keys: c.keys, indexKeys: c.indexKeys, reverse: c.reverse})
+}
+
+type indexKeySorter struct {
+	keys      []string
+	indexKeys []any
+	reverse   bool
+}
+
+func (s *indexKeySorter) Len() int { return len(s.keys) }
+
+func (s *indexKeySorter) Swap(i, j int) {
+	s.keys[i], s.keys[j] = s.keys[j], s.keys[i]
+	s.indexKeys[i], s.indexKeys[j] = s.indexKeys[j], s.indexKeys[i]
+}
+
+func (s *indexKeySorter) Less(i, j int) bool {
+	a, b := fmt.Sprint(s.indexKeys[i]), fmt.Sprint(s.indexKeys[j])
+	if s.reverse {
+		return a > b
+	}
+	return a < b
 }
 
 func (c *stubCursor) applyIndexFilter() {

@@ -595,7 +595,9 @@ func (c *remoteCursor) Update(_ context.Context, value indexeddb.Record) error {
 	if err != nil {
 		return grpcToDatastoreErr(err)
 	}
-	c.entry.Record = pbRec
+	if c.entry != nil {
+		c.entry.Record = pbRec
+	}
 	return nil
 }
 

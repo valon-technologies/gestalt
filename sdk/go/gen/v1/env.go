@@ -11,7 +11,7 @@ const (
 	// CurrentProtocolVersion is the provider protocol version spoken by this
 	// build of the host and SDK. Providers must echo this version in their
 	// StartProviderResponse.
-	CurrentProtocolVersion int32 = 3
+	CurrentProtocolVersion int32 = 2
 
 	// Deprecated: Use EnvProviderSocket instead.
 	EnvPluginSocket = EnvProviderSocket
