@@ -28,7 +28,7 @@ The host owns auth, token storage, connection selection, and HTTP or MCP routing
 
 ## Process isolation
 
-Providers run in their own process. They cannot access the host process memory, other users' credentials, or (for plugins) the datastore directly. Plugins also run inside a network sandbox: outbound requests to hosts not listed in `allowedHosts` are rejected with a 403.
+Providers run in their own process. They cannot access the host process memory, other users' credentials, or (for plugins) the datastore directly. All provider types respect `allowedHosts` for egress control: outbound requests to hosts not in the allowlist are rejected.
 
 ## SDK support
 

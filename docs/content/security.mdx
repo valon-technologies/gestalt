@@ -4,37 +4,10 @@ Gestalt sits between callers and upstream APIs. It authenticates users, stores e
 
 ## Trust boundaries
 
-```
-┌─────────────────────────────────────────────────────────┐
-│                      INTERNET                           │
-└────────────────────────┬────────────────────────────────┘
-                         │
-                    ┌────▼────┐
-                    │ Platform │  session_token cookie
-                    │   Auth   │  or Authorization: Bearer
-                    └────┬────┘
-                         │
-           ┌─────────────▼─────────────┐
-           │         gestaltd          │
-           │                           │
-           │  ┌─────────┐ ┌─────────┐  │
-           │  │ Invoker │ │  MCP    │  │
-           │  │ (Broker)│ │ Server  │  │
-           │  └────┬────┘ └────┬────┘  │
-           └───────┬───────────┬───────┘
-                   │           │
-         ┌─────────▼──┐  ┌────▼──────────┐
-         │  Upstream   │  │   Provider    │
-         │  APIs       │  │   Processes   │
-         │ (REST/GQL/  │  │  (gRPC over   │
-         │  MCP)       │  │  Unix socket) │
-         └────────────┘  └───────────────┘
-```
-
 | Boundary | What crosses it | Protection |
 | --- | --- | --- |
 | Internet to Gestalt | User requests | Platform auth (session or API token) |
-| Gestalt to upstream APIs | OAuth tokens, API keys | Credential encryption, TLS |
+| Gestalt to upstream APIs | OAuth tokens, API keys | Credential encryption, TLS, egress host allowlist |
 | Gestalt to providers | Config, operation requests, access tokens | Process isolation, Unix socket, scoped capabilities |
 | Operator to Gestalt | Config, encryption key, secrets | Secret manager, env var expansion, `secret://` refs |
 
@@ -80,11 +53,15 @@ Providers run as separate OS processes with communication over temporary Unix so
 
 The host resolves the caller's access token and passes it to the provider in each gRPC request. Providers receive only the token for the current invocation.
 
-### OS-level sandbox
+### Egress control
 
-When `allowedHosts` is configured on a provider, the plugin is automatically sandboxed:
+Every provider entry supports `allowedHosts` to restrict which upstream hosts it can reach. When `server.egress.defaultAction` is `deny`, providers without an explicit allowlist are blocked from all outbound requests.
 
 ```yaml
+server:
+  egress:
+    defaultAction: deny
+
 providers:
   plugins:
     my-plugin:
@@ -96,9 +73,15 @@ providers:
         - "*.slack.com"
 ```
 
+Wildcards are supported (`*.example.com` matches `api.example.com`). The same check applies uniformly to REST, GraphQL, and MCP providers.
+
+### OS-level sandbox
+
+Executable plugin providers run with additional OS-level isolation when `allowedHosts` is configured or when `server.egress.defaultAction` is `deny`.
+
 **Filesystem.** On Linux, [Landlock](https://docs.kernel.org/userspace-api/landlock.html) restricts file access to system libraries, SSL certificates, and DNS configuration. Writes are limited to the socket directory and an isolated temp directory. On macOS, equivalent restrictions are applied via `sandbox-exec`.
 
-**Network.** `gestaltd` starts a local HTTP proxy and sets `HTTP_PROXY`/`HTTPS_PROXY` in the provider's environment. The proxy checks each request's hostname against the allowlist before forwarding. Wildcards are supported (`*.example.com` matches `api.example.com`).
+**Network.** `gestaltd` starts a local HTTP proxy and sets `HTTP_PROXY`/`HTTPS_PROXY` in the provider's environment. The proxy checks each request's hostname against the same `allowedHosts` and `defaultAction` rules used by all other provider types.
 
 **Process group.** Sandboxed providers run in their own process group. On shutdown, `gestaltd` signals the entire group to ensure child processes are also cleaned up.
 
