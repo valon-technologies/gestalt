@@ -18,12 +18,12 @@ Agents need tools. Tools need auth. Auth needs credential storage, encryption, t
 
 Gestalt handles this so individual agents and applications don't have to. A single YAML config declares which tools to expose, how users authenticate, and how credentials are managed. The platform takes care of the rest.
 
-## What Gestalt provides
+### What Gestalt provides
 
 - **[Declarative tool configuration.](/configuration)** Add a tool by declaring it in YAML. Gestalt resolves the provider package, sets up connections, and exposes operations automatically.
 - **[Secure credential management.](/security)** Connect to upstream APIs through OAuth, API keys, or custom credentials. Gestalt encrypts, stores, and refreshes tokens automatically so agents never handle raw secrets.
 - **[One definition, all harnesses.](/reference/http-api)** Define tools once and access them over MCP, HTTP, CLI across local and cloud environments, using any harness.
-- **[Pluggable infrastructure.](/reference/built-in-providers)** Swap your database, identity provider, or secret manager without changing application code. Auth backends, datastores, and the web UI are all replaceable.
+- **[Pluggable by default.](/reference/built-in-providers)** Auth backends, datastores, secret managers, and the web UI are all replaceable provider packages. Use the first-party providers or write your own in Go, Python, Rust, or TypeScript. Gestalt provides the building blocks; you choose the components.
 - **[Run anywhere.](/deploy)** Deploy on any infrastructure you control with Docker, Helm, or bare containers. No hosted dependency, no vendor lock-in.
 
 ## What Gestalt is not
