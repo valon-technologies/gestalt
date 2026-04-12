@@ -208,9 +208,9 @@ binaries during release.
 
 ## Reference releases from config
 
-### Provider source path
+### During development
 
-Use the source tree directly during development:
+Use `source.path` to point at the source tree directly. Gestalt synthesizes the executable wrapper and materializes the catalog automatically:
 
 ```yaml
 providers:
@@ -220,10 +220,18 @@ providers:
         path: ./plugins/my-plugin/manifest.yaml
 ```
 
-### Published provider release
+UI bundles work the same way:
 
-Reference a published release by source and version. `gestaltd init` resolves
-the release archive and writes it to lock state:
+```yaml
+providers:
+  ui:
+    source:
+      path: ./gestalt-ui/manifest.yaml
+```
+
+### For production
+
+Reference a published release by source and version:
 
 ```yaml
 providers:
@@ -234,11 +242,7 @@ providers:
         version: 0.0.1-alpha.1
 ```
 
-This is the recommended approach for production deployments.
-
-### UI bundle
-
-Reference a released UI bundle separately under `providers.ui`:
+UI bundles use the same pattern under `providers.ui`:
 
 ```yaml
 providers:
@@ -250,21 +254,13 @@ providers:
       brand_name: Acme
 ```
 
-## Prepared state
-
-When a config references published releases or a released UI, run `gestaltd init`
-to resolve and prepare them:
+When a config references published releases, run `gestaltd init` to resolve and prepare them:
 
 ```sh
 gestaltd init --config ./config.yaml
 ```
 
-This writes lock state (`gestalt.lock.json`) and extracts prepared artifacts
-under `.gestaltd/`. After init, `gestaltd serve --locked` starts the server
-from that lock state. If the prepared files are already present, Gestalt uses
-them directly. If they are missing, Gestalt can materialize them from the
-lockfile at runtime. See [Configuration](/configuration) for the full startup
-model and the tradeoffs between vendored artifacts and lockfile-only startup.
+This writes lock state (`gestalt.lock.json`) and extracts prepared artifacts under `.gestaltd/`. After init, `gestaltd serve --locked` starts the server from that lock state. If the prepared files are already present, Gestalt uses them directly. If they are missing, Gestalt can materialize them from the lockfile at runtime. See [Configuration](/configuration) for the full startup model and the tradeoffs between vendored artifacts and lockfile-only startup.
 
 ## Release archive layout
 
@@ -287,3 +283,9 @@ other static files.
 
 Use [Provider Manifests](/reference/plugin-manifests) for the canonical manifest
 reference.
+
+## What to read next
+
+- [Provider Manifests](/reference/plugin-manifests): full manifest field reference
+- [Helm Deployment](/deploy/helm): deploying with Helm and referencing published releases
+- [Configuration](/configuration): `gestaltd init`, lock state, and the full startup model
