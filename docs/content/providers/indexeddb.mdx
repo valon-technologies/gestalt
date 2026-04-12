@@ -79,9 +79,25 @@ The RelationalDB provider parses the `dsn` config value to determine the SQL dri
     	return r.db.PingContext(ctx)
     }
 
-    // Implement the IndexedDB gRPC service:
-    // CreateObjectStore, DeleteObjectStore,
-    // Get, GetKey, Add, Put, Delete,
+    // Primary key CRUD
+    func (r *RelationalDB) Get(ctx context.Context, req *proto.ObjectStoreRequest) (*proto.RecordResponse, error) {
+    	// SELECT by primary key from the object store table
+    	return nil, nil
+    }
+    func (r *RelationalDB) Add(ctx context.Context, req *proto.RecordRequest) (*emptypb.Empty, error) {
+    	// INSERT a new record; fail if the key already exists
+    	return nil, nil
+    }
+    func (r *RelationalDB) Put(ctx context.Context, req *proto.RecordRequest) (*emptypb.Empty, error) {
+    	// UPSERT: insert or replace the record at the given key
+    	return nil, nil
+    }
+    func (r *RelationalDB) Delete(ctx context.Context, req *proto.ObjectStoreRequest) (*emptypb.Empty, error) {
+    	// DELETE by primary key
+    	return nil, nil
+    }
+
+    // Also implement: CreateObjectStore, DeleteObjectStore, GetKey,
     // GetAll, GetAllKeys, Count, Clear, DeleteRange,
     // IndexGet, IndexGetKey, IndexGetAll, IndexGetAllKeys, IndexCount, IndexDelete
 
@@ -101,9 +117,24 @@ The RelationalDB provider parses the `dsn` config value to determine the SQL dri
                 raise ValueError("relationaldb: dsn is required")
             self.dsn = dsn
 
-        # Implement the IndexedDB gRPC service:
-        # create_object_store, delete_object_store,
-        # get, get_key, add, put, delete,
+        # Primary key CRUD
+        def get(self, store: str, id: str) -> dict[str, Any]:
+            # SELECT by primary key from the object store table
+            ...
+
+        def add(self, store: str, record: dict[str, Any]) -> None:
+            # INSERT a new record; fail if the key already exists
+            ...
+
+        def put(self, store: str, record: dict[str, Any]) -> None:
+            # UPSERT: insert or replace the record at the given key
+            ...
+
+        def delete(self, store: str, id: str) -> None:
+            # DELETE by primary key
+            ...
+
+        # Also implement: create_object_store, delete_object_store, get_key,
         # get_all, get_all_keys, count, clear, delete_range,
         # index_get, index_get_key, index_get_all, index_get_all_keys, index_count, index_delete
 
@@ -124,7 +155,27 @@ The RelationalDB provider parses the `dsn` config value to determine the SQL dri
             Ok(())
         }
 
-        // Implement the IndexedDB gRPC service methods
+        // Primary key CRUD
+        async fn get(&self, req: proto::ObjectStoreRequest) -> gestalt::Result<proto::RecordResponse> {
+            // SELECT by primary key
+            todo!()
+        }
+        async fn add(&self, req: proto::RecordRequest) -> gestalt::Result<()> {
+            // INSERT; fail if key exists
+            todo!()
+        }
+        async fn put(&self, req: proto::RecordRequest) -> gestalt::Result<()> {
+            // UPSERT
+            todo!()
+        }
+        async fn delete(&self, req: proto::ObjectStoreRequest) -> gestalt::Result<()> {
+            // DELETE by primary key
+            todo!()
+        }
+
+        // Also implement: create_object_store, delete_object_store, get_key,
+        // get_all, get_all_keys, count, clear, delete_range,
+        // index_get, index_get_key, index_get_all, index_get_all_keys, index_count, index_delete
     }
 
     gestalt::export_indexeddb_provider!(constructor = RelationalDB::default);
@@ -140,7 +191,24 @@ The RelationalDB provider parses the `dsn` config value to determine the SQL dri
         if (!dsn) throw new Error("relationaldb: dsn is required");
         // Parse DSN prefix to select driver, open connection
       },
-      // Implement the IndexedDB service methods
+
+      // Primary key CRUD
+      async get(store: string, id: string): Promise<Record> {
+        // SELECT by primary key from the object store table
+      },
+      async add(store: string, record: Record): Promise<void> {
+        // INSERT a new record; fail if the key already exists
+      },
+      async put(store: string, record: Record): Promise<void> {
+        // UPSERT: insert or replace the record at the given key
+      },
+      async delete(store: string, id: string): Promise<void> {
+        // DELETE by primary key
+      },
+
+      // Also implement: createObjectStore, deleteObjectStore, getKey,
+      // getAll, getAllKeys, count, clear, deleteRange,
+      // indexGet, indexGetKey, indexGetAll, indexGetAllKeys, indexCount, indexDelete
     });
     ```
   </Tabs.Tab>
