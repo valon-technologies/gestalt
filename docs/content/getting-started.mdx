@@ -74,21 +74,33 @@ gestalt invoke httpbin
     ```sh
     gestalt invoke httpbin get_ip
     ```
+
+    ```
+    ╭──────────────────────────╮
+    │ key       value          │
+    ╞══════════════════════════╡
+    │ origin    203.0.113.42   │
+    ╰──────────────────────────╯
+    ```
+
+    The CLI renders responses as a key-value table.
   </Tabs.Tab>
   <Tabs.Tab>
     ```sh
     curl http://localhost:8080/api/v1/httpbin/get_ip
     ```
+
+    ```json
+    {
+      "origin": "203.0.113.42"
+    }
+    ```
+
+    The HTTP API returns JSON.
   </Tabs.Tab>
 </Tabs>
 
-```json
-{
-  "origin": "203.0.113.42"
-}
-```
-
-Both return the same response. The CLI wraps the HTTP API, so anything you can do with `gestalt invoke` you can also do with `curl` or any HTTP client.
+Both access the same underlying operation. Anything you can do with `gestalt invoke` you can also do with `curl` or any HTTP client.
 
 ## Connecting over MCP
 
