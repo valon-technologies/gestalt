@@ -43,18 +43,6 @@ The underlying protocol is gRPC, so other languages are possible, but the docume
 
 Go, Rust, and TypeScript support plugin, auth, and datastore providers. Python remains focused on plugin providers.
 
-## Operation ID conventions
-
-Operation IDs should use period-separated hierarchical names. For example, a Slack plugin might use `messages.list`, `messages.send`, `channels.list`, and `channels.archive`.
-
-This convention enables prefix matching in the CLI. When you run `gestalt invoke slack messages`, the CLI joins the space-separated segments with periods and shows all operations whose ID starts with `messages.`. This makes large catalogs navigable without memorizing every operation name.
-
-## Common pitfalls
-
-**Duplicate operation IDs.** Operation IDs must be unique within a provider. If two surfaces (for example, an OpenAPI passthrough and an executable operation) expose the same ID, the provider fails validation at startup. Use `allowedOperations` to filter or alias collisions.
-
-**Sandbox 403 errors.** Executable providers run inside a network sandbox. Outbound HTTP requests to hosts not listed in `allowedHosts` are rejected with a 403. Add every upstream domain the provider contacts to the allowlist in the config or manifest.
-
 ## What to read next
 
 - [Plugins](/providers/plugins): plugin providers that expose operations

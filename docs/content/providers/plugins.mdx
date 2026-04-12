@@ -45,7 +45,7 @@ Static metadata, auth, and passthrough surfaces live in a manifest file. Gestalt
   </Tabs.Tab>
 </Tabs>
 
-The manifest stays the source of truth for display name, description, auth, the connection model, and any passthrough API surfaces (REST, OpenAPI, GraphQL, or MCP).
+The manifest stays the source of truth for display name, description, auth, the connection model, and any passthrough API surfaces (REST, OpenAPI, GraphQL, or MCP). See [Provider Manifests](/reference/plugin-manifests) for the full field reference.
 
 `source` may include nested segments after the repository, such as `github.com/example/plugins/catalog/my-plugin`. Gestalt keeps the final segment as the plugin name and uses the full path for release tag resolution.
 
@@ -470,6 +470,12 @@ The router derives catalog parameters from the input type. Fields are required b
   </Tabs.Tab>
 </Tabs>
 
+## Operation ID conventions
+
+Operation IDs should use period-separated hierarchical names. For example, a Slack plugin might use `messages.list`, `messages.send`, `channels.list`, and `channels.archive`.
+
+This convention enables prefix matching in the CLI. When you run `gestalt invoke slack messages`, the CLI joins the space-separated segments with periods and shows all operations whose ID starts with `messages.`. This makes large catalogs navigable without memorizing every operation name.
+
 ## Dynamic catalogs
 
 By default, the operation catalog is static and materialized at startup. If your plugin needs to expose different operations depending on the caller's credentials or runtime state, implement a session catalog.
@@ -595,8 +601,16 @@ gestaltd serve --config ./config.yaml
 gestalt invoke my-plugin greet -p name=Gestalt
 ```
 
+If your plugin makes outbound HTTP requests and you see 403 errors, check `allowedHosts`. Executable providers run inside a network sandbox, and requests to hosts not in the allowlist are rejected. Add every upstream domain the provider contacts to `allowedHosts` in the config or manifest.
+
 ## Hybrid providers
 
 A manifest can define passthrough surfaces (`spec.surfaces.openapi`, `spec.surfaces.rest`, `spec.surfaces.graphql`, or `spec.surfaces.mcp`) alongside executable operations. The passthrough surfaces are forwarded by the host directly to the upstream API, while the executable operations are handled by the provider process. This is useful when a plugin adds custom logic on top of an existing API.
 
 Do not define the same operation ID in both a passthrough surface and an executable operation. If two surfaces expose the same ID, the provider fails validation at startup. Use `allowedOperations` to filter or alias collisions when needed.
+
+## What to read next
+
+- [Releasing](/providers/releasing): packaging and publishing provider releases
+- [Datastores](/providers/datastores): persistent storage SDK for plugins
+- [Provider Manifests](/reference/plugin-manifests): full manifest field reference

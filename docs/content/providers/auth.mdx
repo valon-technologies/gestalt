@@ -253,3 +253,9 @@ providers:
 `source.path` points at the auth provider's `manifest.yaml` during development. For production, use `source.ref` and `version` to reference a published release. The `config` block is passed to `Configure` at startup and validated against the config schema if one was declared in the manifest.
 
 Secret references like `secret://oidc-client-secret` are resolved through the configured secret manager before reaching the provider. Environment variable placeholders like `${OIDC_CLIENT_ID}` are expanded during config loading. See [Configuration](/configuration) for details on both.
+
+## What to read next
+
+- [Secrets](/providers/secrets): configuring the secret manager that resolves `secret://` references
+- [Releasing](/providers/releasing): packaging and publishing provider releases
+- [Built-in Providers](/reference/built-in-providers): first-party auth provider reference
