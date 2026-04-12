@@ -592,7 +592,11 @@ func (c *remoteCursor) Update(_ context.Context, value indexeddb.Record) error {
 		return grpcToDatastoreErr(err)
 	}
 	_, err = c.stream.Recv()
-	return grpcToDatastoreErr(err)
+	if err != nil {
+		return grpcToDatastoreErr(err)
+	}
+	c.entry.Record = pbRec
+	return nil
 }
 
 func (c *remoteCursor) Err() error { return c.err }
