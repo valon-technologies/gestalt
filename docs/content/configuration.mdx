@@ -63,9 +63,9 @@ providers:
 
 Each entry can set an `alias` to rename the operation as it appears to callers.
 
-### Network sandbox
+### Egress control
 
-Executable provider processes run inside a network sandbox. Outbound requests to hosts not listed in `allowedHosts` are rejected:
+Every provider supports `allowedHosts` to restrict which upstream hosts it can reach. When `server.egress.defaultAction` is `deny`, providers without an explicit allowlist are blocked from all outbound requests. Executable plugin providers are additionally sandboxed at the OS level when egress restrictions are active.
 
 ```yaml
 providers:

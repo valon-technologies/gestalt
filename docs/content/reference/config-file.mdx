@@ -656,54 +656,31 @@ connections:
 
 ## `server.egress`
 
-`server.egress` controls outbound requests made through providers and grants operator-managed credentials to specific outbound destinations.
+`server.egress` sets the server-wide default for outbound network access. Per-provider `allowedHosts` lists control which hosts each provider can reach.
 
 ```yaml
 server:
   egress:
     defaultAction: deny
-    policies:
-      - action: allow
-        provider: github
-        method: GET
-        host: api.github.com
-    credentials:
-      - secretRef: github-service-token
-        authStyle: bearer
-        host: api.github.com
+
+providers:
+  plugins:
+    github:
+      allowedHosts:
+        - api.github.com
+        - "*.github.com"
+    my-plugin:
+      source:
+        path: ./plugins/my-plugin
+      allowedHosts:
+        - external-api.com
 ```
 
-`defaultAction` sets the global fallback policy to `allow` or `deny`.
-
-### Policies
-
-`policies` declares static allow or deny rules. Each rule matches against a combination of fields; all specified fields must match for the rule to apply.
-
 | Field | Description |
 | --- | --- |
-| `action` | **Required.** `allow` or `deny`. |
-| `subjectKind` | Match by subject kind. |
-| `subjectId` | Match by subject identifier. |
-| `provider` | Match by plugin name. |
-| `operation` | Match by operation name. |
-| `method` | Match by HTTP method. |
-| `host` | Match by destination host. |
-| `pathPrefix` | Match by URL path prefix. |
+| `defaultAction` | `allow` (default) or `deny`. Applies when a provider has no `allowedHosts`. |
 
-### Credentials
-
-`credentials` attaches secret-backed outbound credentials to requests matching at least one criterion. `secretRef` is a bare secret name (not a `secret://` URI) resolved through the configured secret manager.
-
-| Field | Description |
-| --- | --- |
-| `secretRef` | **Required.** Bare secret name resolved through the secret manager. |
-| `authStyle` | How to inject the credential: `bearer`, `raw`, `basic`, or `none`. |
-| `subjectKind` | Match by subject kind. |
-| `subjectId` | Match by subject identifier. |
-| `operation` | Match by operation name. |
-| `method` | Match by HTTP method. |
-| `host` | Match by destination host. |
-| `pathPrefix` | Match by URL path prefix. |
+When `allowedHosts` is set on a provider, only listed hosts are reachable (exact match and `*.suffix` wildcards). When `allowedHosts` is empty, `defaultAction` decides: `allow` permits all outbound requests, `deny` blocks them. This applies uniformly to REST, GraphQL, MCP, and executable plugin providers. For executable plugins, `deny` also activates the OS-level sandbox even when no `allowedHosts` are configured.
 
 ## `providers.ui`
 
@@ -739,7 +716,7 @@ Only `connections.default` may define `params` or `discovery`. All connections i
 
 `providers.ui` must use exactly one mode: `disabled: true`, or a source mapping with exactly one loading mode: local `providers.ui.source.path` or managed `providers.ui.source.ref`. `providers.ui.source.version` is required with `providers.ui.source.ref` and invalid with `providers.ui.source.path`. `providers.ui.config` is only allowed when `providers.ui.source` is set.
 
-`server.egress.defaultAction` must be `allow` or `deny`. Each egress policy rule requires an `action`. Each egress credential grant requires `secretRef` (as a bare name, not a `secret://` URI) and at least one match criterion.
+`server.egress.defaultAction` must be `allow` or `deny`.
 
 Server listener ports must be greater than zero. When `server.management` is configured, it must differ from `server.public`.
 
