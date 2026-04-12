@@ -175,31 +175,7 @@ type SourceAuthDef struct {
 }
 
 type EgressConfig struct {
-	DefaultAction string                  `yaml:"defaultAction"`
-	Policies      []EgressPolicyRule      `yaml:"policies"`
-	Credentials   []EgressCredentialGrant `yaml:"credentials"`
-}
-
-type EgressPolicyRule struct {
-	Action      string `yaml:"action"`
-	SubjectKind string `yaml:"subjectKind"`
-	SubjectID   string `yaml:"subjectId"`
-	Provider    string `yaml:"provider"`
-	Operation   string `yaml:"operation"`
-	Method      string `yaml:"method"`
-	Host        string `yaml:"host"`
-	PathPrefix  string `yaml:"pathPrefix"`
-}
-
-type EgressCredentialGrant struct {
-	SecretRef   string `yaml:"secretRef"`
-	AuthStyle   string `yaml:"authStyle"`
-	SubjectKind string `yaml:"subjectKind"`
-	SubjectID   string `yaml:"subjectId"`
-	Operation   string `yaml:"operation"`
-	Method      string `yaml:"method"`
-	Host        string `yaml:"host"`
-	PathPrefix  string `yaml:"pathPrefix"`
+	DefaultAction string `yaml:"defaultAction"`
 }
 
 type ListenerConfig struct {

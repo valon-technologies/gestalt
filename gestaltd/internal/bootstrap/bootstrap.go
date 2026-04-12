@@ -310,7 +310,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		}
 	}()
 
-	deps.Egress = newEgressDeps(cfg, sm)
+	deps.Egress = newEgressDeps(cfg)
 	deps.Services = svc
 
 	closeSM = false

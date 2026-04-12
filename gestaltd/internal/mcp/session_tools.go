@@ -12,10 +12,6 @@ import (
 )
 
 func hydrateSessionTools(ctx context.Context, cfg Config, providerNames []string) {
-	if p := principal.FromContext(ctx); p != nil {
-		ctx = attachEgressSubject(ctx, p)
-	}
-
 	session := mcpserver.ClientSessionFromContext(ctx)
 	if session == nil {
 		return

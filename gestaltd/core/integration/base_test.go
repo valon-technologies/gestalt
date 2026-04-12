@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,7 +12,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
-	"github.com/valon-technologies/gestalt/server/internal/egress/egresstest"
 )
 
 type mockAuth struct{}
@@ -182,46 +182,56 @@ func TestBaseExecuteRequestAuthOverridesStaticAuthorizationHeader(t *testing.T) 
 	}
 }
 
-func TestBaseExecuteRESTRunsEgressResolutionOnFinalRequest(t *testing.T) {
+func TestBaseExecuteRESTRespectsEgressCheck(t *testing.T) {
 	t.Parallel()
 
-	var gotPolicy egress.PolicyInput
+	var gotHost string
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"auth": r.Header.Get("Authorization"),
-		})
+		_ = json.NewEncoder(w).Encode(map[string]any{"ok": true})
 	}))
 	t.Cleanup(func() { srv.Close() })
 
 	b := &Base{
-		Auth:            mockAuth{},
-		IntegrationName: "test-provider",
-		BaseURL:         srv.URL,
-		EgressResolver: &egress.Resolver{
-			Subjects: egress.ContextSubjectResolver{},
-			Policy: egresstest.PolicyFunc(func(_ context.Context, input egress.PolicyInput) error {
-				gotPolicy = input
-				return nil
-			}),
+		Auth:    mockAuth{},
+		BaseURL: srv.URL,
+		CheckEgress: func(host string) error {
+			gotHost = host
+			return nil
 		},
 	}
 	setTestCatalog(b, restCatalogOp("op", http.MethodGet, "/test"))
 
-	ctx := egress.WithSubject(context.Background(), egress.Subject{Kind: egress.SubjectUser, ID: "user-1"})
-	if _, err := b.Execute(ctx, "op", nil, "test-token"); err != nil {
+	if _, err := b.Execute(context.Background(), "op", nil, "test-token"); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 
-	if gotPolicy.Subject.Kind != egress.SubjectUser || gotPolicy.Subject.ID != "user-1" {
-		t.Fatalf("subject = %+v, want user-1", gotPolicy.Subject)
+	if gotHost == "" {
+		t.Fatal("egress check was not called")
 	}
-	if gotPolicy.Target.Provider != "test-provider" || gotPolicy.Target.Operation != "op" {
-		t.Fatalf("target = %+v, want test-provider/op", gotPolicy.Target)
+}
+
+func TestBaseExecuteRESTEgressDenyBlocksRequest(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		t.Fatal("request should not reach upstream")
+	}))
+	t.Cleanup(func() { srv.Close() })
+
+	b := &Base{
+		Auth:    mockAuth{},
+		BaseURL: srv.URL,
+		CheckEgress: func(_ string) error {
+			return egress.ErrEgressDenied
+		},
 	}
-	if gotPolicy.Headers["Authorization"] != "" {
-		t.Fatalf("policy should not see credential Authorization (policy runs before credentials), got %q", gotPolicy.Headers["Authorization"])
+	setTestCatalog(b, restCatalogOp("op", http.MethodGet, "/test"))
+
+	_, err := b.Execute(context.Background(), "op", nil, "tok")
+	if !errors.Is(err, egress.ErrEgressDenied) {
+		t.Fatalf("expected ErrEgressDenied, got %v", err)
 	}
 }
 
@@ -331,75 +341,36 @@ func TestBaseExecuteGraphQLWithVariables(t *testing.T) {
 	}
 }
 
-func TestBaseExecuteGraphQLRunsEgressResolutionOnFinalRequest(t *testing.T) {
+func TestBaseExecuteGraphQLRespectsEgressCheck(t *testing.T) {
 	t.Parallel()
 
-	var gotPolicy egress.PolicyInput
+	var gotHost string
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			t.Fatalf("method = %s, want POST", r.Method)
-		}
-		if r.URL.Path != "/graphql" {
-			t.Fatalf("path = %s, want /graphql", r.URL.Path)
-		}
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"data":{"viewer":{"auth":"` + r.Header.Get("Authorization") + `","org":"` + r.Header.Get("X-Org") + `"}}}`))
+		_, _ = w.Write([]byte(`{"data":{"viewer":{"login":"test"}}}`))
 	}))
 	t.Cleanup(func() { srv.Close() })
 
 	b := &Base{
 		Auth:    mockAuth{},
 		BaseURL: srv.URL + "/graphql",
-		TokenParser: func(token string) (string, map[string]string, error) {
-			return "Token " + token, map[string]string{"X-Org": "acme"}, nil
-		},
-		IntegrationName: "github",
-		EgressResolver: &egress.Resolver{
-			Subjects: egress.ContextSubjectResolver{},
-			Policy: egresstest.PolicyFunc(func(_ context.Context, input egress.PolicyInput) error {
-				gotPolicy = input
-				return nil
-			}),
+		CheckEgress: func(host string) error {
+			gotHost = host
+			return nil
 		},
 	}
 	setTestCatalog(b, graphQLCatalogOp("get_viewer", "{ viewer { login } }"))
 
-	ctx := egress.WithSubject(context.Background(), egress.Subject{Kind: egress.SubjectUser, ID: "user-graphql"})
-	result, err := b.Execute(ctx, "get_viewer", nil, "gql-token")
+	result, err := b.Execute(context.Background(), "get_viewer", nil, "gql-token")
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
 	if result.Status != http.StatusOK {
 		t.Fatalf("status = %d, want 200", result.Status)
 	}
-
-	if gotPolicy.Subject != (egress.Subject{Kind: egress.SubjectUser, ID: "user-graphql"}) {
-		t.Fatalf("subject = %+v, want user-graphql", gotPolicy.Subject)
-	}
-	if gotPolicy.Target.Provider != "github" || gotPolicy.Target.Operation != "get_viewer" {
-		t.Fatalf("target = %+v, want github/get_viewer", gotPolicy.Target)
-	}
-	if gotPolicy.Target.Method != http.MethodPost || gotPolicy.Target.Path != "/graphql" {
-		t.Fatalf("target = %+v, want POST /graphql", gotPolicy.Target)
-	}
-	if gotPolicy.Headers["Authorization"] != "" {
-		t.Fatalf("policy should not see credential Authorization (policy runs before credentials), got %q", gotPolicy.Headers["Authorization"])
-	}
-	if gotPolicy.Headers["X-Org"] != "acme" {
-		t.Fatalf("X-Org should be visible to policy (it's an input header, not a credential header), got %q", gotPolicy.Headers["X-Org"])
-	}
-
-	var data map[string]any
-	if err := json.Unmarshal([]byte(result.Body), &data); err != nil {
-		t.Fatalf("json.Unmarshal: %v", err)
-	}
-	viewer := data["viewer"].(map[string]any)
-	if viewer["auth"] != "Token gql-token" {
-		t.Fatalf("auth = %v, want Token gql-token", viewer["auth"])
-	}
-	if viewer["org"] != "acme" {
-		t.Fatalf("org = %v, want acme", viewer["org"])
+	if gotHost == "" {
+		t.Fatal("egress check was not called")
 	}
 }
 

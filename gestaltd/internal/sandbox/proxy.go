@@ -6,7 +6,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"strings"
 	"time"
 )
 
@@ -16,20 +15,19 @@ const (
 )
 
 type ProxyServer struct {
-	allowedHosts []string
-	transport    *http.Transport
-	server       *http.Server
-	listener     net.Listener
+	checkHost func(string) error
+	transport *http.Transport
+	server    *http.Server
+	listener  net.Listener
 }
 
-func NewProxyServer(allowedHosts []string) *ProxyServer {
-	normalized := make([]string, len(allowedHosts))
-	for i, h := range allowedHosts {
-		normalized[i] = strings.ToLower(h)
-	}
+// NewProxyServer creates an HTTP proxy that delegates host-level egress
+// decisions to checkHost. If checkHost returns a non-nil error the request
+// is rejected with 403 Forbidden.
+func NewProxyServer(checkHost func(string) error) *ProxyServer {
 	p := &ProxyServer{
-		allowedHosts: normalized,
-		transport:    &http.Transport{},
+		checkHost: checkHost,
+		transport: &http.Transport{},
 	}
 	p.server = &http.Server{
 		Handler:           p,
@@ -70,7 +68,7 @@ func (p *ProxyServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h, _, err := net.SplitHostPort(host); err == nil {
 		host = h
 	}
-	if !p.isHostAllowed(host) {
+	if err := p.checkHost(host); err != nil {
 		http.Error(w, fmt.Sprintf("host %q is not in the allowed list", host), http.StatusForbidden)
 		return
 	}
@@ -139,22 +137,6 @@ func (p *ProxyServer) handleConnect(w http.ResponseWriter, r *http.Request) {
 	<-done
 	_ = clientConn.Close()
 	_ = targetConn.Close()
-}
-
-func (p *ProxyServer) isHostAllowed(host string) bool {
-	if len(p.allowedHosts) == 0 {
-		return true
-	}
-	lower := strings.ToLower(host)
-	for _, pattern := range p.allowedHosts {
-		if pattern == lower {
-			return true
-		}
-		if strings.HasPrefix(pattern, "*.") && strings.HasSuffix(lower, pattern[1:]) {
-			return true
-		}
-	}
-	return false
 }
 
 func closeWrite(c net.Conn) {

@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/mcpupstream"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
@@ -45,8 +44,4 @@ func makeHandler(invoker invocation.Invoker, provName, opName, connection string
 		}
 		return mcpgo.NewToolResultText(result.Body), nil
 	}
-}
-
-func attachEgressSubject(ctx context.Context, p *principal.Principal) context.Context {
-	return egress.WithSubjectFromPrincipal(ctx, p)
 }

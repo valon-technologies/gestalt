@@ -216,6 +216,7 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 	specProv, specDef, err := buildConfiguredSpecProvider(ctx, name, resolved, meta, specProviderConfig{
 		manifestPlugin:       manifestPlugin,
 		allowedOperations:    allowedOperations,
+		allowedHosts:         entry.AllowedHosts,
 		baseURL:              manifestPlugin.SpecBaseURL(),
 		applyResponseMapping: true,
 		providerBuildOptions: func(conn config.ConnectionDef) []provider.BuildOption {
@@ -251,6 +252,7 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 type specProviderConfig struct {
 	manifestPlugin       *pluginmanifestv1.Spec
 	allowedOperations    map[string]*config.OperationOverride
+	allowedHosts         []string
 	baseURL              string
 	providerBuildOptions func(config.ConnectionDef) []provider.BuildOption
 	applyResponseMapping bool
@@ -288,6 +290,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, entry *config.Pro
 		return buildConfiguredSpecProvider(ctx, name, resolved, meta, specProviderConfig{
 			manifestPlugin:       mp,
 			allowedOperations:    allowed,
+			allowedHosts:         entry.AllowedHosts,
 			baseURL:              mp.RESTBaseURL(),
 			applyResponseMapping: true,
 			providerBuildOptions: func(conn config.ConnectionDef) []provider.BuildOption {
@@ -376,8 +379,9 @@ func loadConfiguredAPIDefinition(ctx context.Context, name string, resolved reso
 
 func buildConfiguredSpecProvider(ctx context.Context, name string, resolved resolvedSpecSurface, meta providerMetadata, cfg specProviderConfig, deps Deps) (core.Provider, *provider.Definition, error) {
 	var buildOpts []provider.BuildOption
+	buildOpts = append(buildOpts, provider.WithEgressCheck(deps.Egress.CheckFunc(cfg.allowedHosts)))
 	if cfg.providerBuildOptions != nil {
-		buildOpts = cfg.providerBuildOptions(resolved.connection)
+		buildOpts = append(buildOpts, cfg.providerBuildOptions(resolved.connection)...)
 	}
 
 	switch resolved.surface {
@@ -402,7 +406,7 @@ func buildConfiguredSpecProvider(ctx context.Context, name string, resolved reso
 			resolved.url,
 			connMode,
 			manifestHeaders(cfg.manifestPlugin),
-			deps.Egress.Resolver,
+			deps.Egress.CheckFunc(cfg.allowedHosts),
 			mcpupstream.WithMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
 		)
 		if err != nil {
@@ -490,14 +494,15 @@ func buildPluginProvider(ctx context.Context, entry *config.ProviderEntry, plugi
 	}
 
 	execCfg := pluginhost.ExecConfig{
-		Command:      command,
-		Args:         args,
-		Env:          env,
-		StaticSpec:   spec,
-		Config:       pluginConfig,
-		AllowedHosts: entry.AllowedHosts,
-		HostBinary:   entry.HostBinary,
-		Cleanup:      cleanup,
+		Command:       command,
+		Args:          args,
+		Env:           env,
+		StaticSpec:    spec,
+		Config:        pluginConfig,
+		AllowedHosts:  entry.AllowedHosts,
+		DefaultAction: deps.Egress.DefaultAction,
+		HostBinary:    entry.HostBinary,
+		Cleanup:       cleanup,
 	}
 	if len(entry.IndexedDBs) > 0 && deps.Services != nil {
 		execCfg.RegisterHost = func(srv *grpc.Server) {
