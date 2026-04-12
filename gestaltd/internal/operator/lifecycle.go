@@ -36,14 +36,15 @@ const (
 )
 
 type Lockfile struct {
-	Version   int                          `json:"version"`
-	Providers map[string]LockProviderEntry `json:"providers"`
-	Auth      *LockEntry                   `json:"auth,omitempty"`
-	Datastore *LockEntry                   `json:"datastore,omitempty"`
-	Secrets   *LockEntry                   `json:"secrets,omitempty"`
-	Telemetry *LockEntry                   `json:"telemetry,omitempty"`
-	Audit     *LockEntry                   `json:"audit,omitempty"`
-	UI        *LockUIEntry                 `json:"ui,omitempty"`
+	Version      int                          `json:"version"`
+	Providers    map[string]LockProviderEntry `json:"providers"`
+	Auth         *LockEntry                   `json:"auth,omitempty"`
+	Datastore    *LockEntry                   `json:"datastore,omitempty"`
+	Secrets      *LockEntry                   `json:"secrets,omitempty"`
+	Telemetry    *LockEntry                   `json:"telemetry,omitempty"`
+	Audit        *LockEntry                   `json:"audit,omitempty"`
+	UI           *LockUIEntry                 `json:"ui,omitempty"`
+	PluginWebUIs map[string]LockUIEntry       `json:"pluginWebUIs,omitempty"`
 }
 
 // LockArchive records a platform-specific archive URL and optional integrity hash.
@@ -183,6 +184,19 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 			return nil, nil, err
 		}
 		lock.UI = &uiEntry
+	}
+	for name, entry := range cfg.Providers.Plugins {
+		if entry == nil || entry.WebUI == nil || !entry.WebUI.Source.IsManaged() {
+			continue
+		}
+		uiEntry, err := l.writePluginWebUIArtifact(context.Background(), name, entry.WebUI, paths)
+		if err != nil {
+			return nil, nil, fmt.Errorf("plugin %q webui: %w", name, err)
+		}
+		if lock.PluginWebUIs == nil {
+			lock.PluginWebUIs = make(map[string]LockUIEntry)
+		}
+		lock.PluginWebUIs[name] = uiEntry
 	}
 
 	if err := WriteLockfile(paths.lockfilePath, lock); err != nil {
@@ -372,6 +386,9 @@ func configHasPluginLoading(cfg *config.Config) bool {
 func configHasManagedPlugins(cfg *config.Config) bool {
 	for _, entry := range cfg.Providers.Plugins {
 		if entry.HasManagedSource() {
+			return true
+		}
+		if entry.WebUI != nil && entry.WebUI.Source.IsManaged() {
 			return true
 		}
 	}
@@ -860,6 +877,72 @@ func (l *Lifecycle) writeUIProviderArtifact(ctx context.Context, cfg *config.Con
 	}, nil
 }
 
+func (l *Lifecycle) writePluginWebUIArtifact(ctx context.Context, pluginName string, webui *config.WebUIEntry, paths initPaths) (LockUIEntry, error) {
+	src, err := pluginsource.Parse(webui.Source.Ref)
+	if err != nil {
+		return LockUIEntry{}, fmt.Errorf("source.ref %q: %w", webui.Source.Ref, err)
+	}
+	if webui.Source.Auth != nil {
+		src.Token = webui.Source.Auth.Token
+	}
+	if l.sourceResolver == nil {
+		return LockUIEntry{}, fmt.Errorf("source resolution requires a source resolver")
+	}
+	resolved, err := l.sourceResolver.Resolve(ctx, src, webui.Source.Version)
+	if err != nil {
+		return LockUIEntry{}, fmt.Errorf("resolve source %q@%s: %w", webui.Source.Ref, webui.Source.Version, err)
+	}
+	defer resolved.Cleanup()
+
+	destDir := pluginWebUIDestDir(paths, pluginName)
+	installed, err := pluginstore.Install(resolved.LocalPath, destDir)
+	if err != nil {
+		return LockUIEntry{}, fmt.Errorf("install source: %w", err)
+	}
+	if err := validateInstalledManifestKind(pluginmanifestv1.KindWebUI, pluginName+"-webui", installed.Manifest); err != nil {
+		return LockUIEntry{}, err
+	}
+	manifestPath, err := filepath.Rel(paths.artifactsDir, installed.ManifestPath)
+	if err != nil {
+		return LockUIEntry{}, fmt.Errorf("compute manifest path: %w", err)
+	}
+	assetRoot, err := filepath.Rel(paths.artifactsDir, installed.AssetRoot)
+	if err != nil {
+		return LockUIEntry{}, fmt.Errorf("compute asset root path: %w", err)
+	}
+	fingerprint, err := pluginWebUIFingerprint(pluginName, webui)
+	if err != nil {
+		return LockUIEntry{}, fmt.Errorf("fingerprinting: %w", err)
+	}
+	archives := l.buildArchivesMap(ctx, src, webui.Source.Version, resolved.ResolvedURL, resolved.ArchiveSHA256)
+	return LockUIEntry{
+		Fingerprint: fingerprint,
+		Source:      webui.Source.Ref,
+		Version:     webui.Source.Version,
+		Archives:    archives,
+		Manifest:    filepath.ToSlash(manifestPath),
+		AssetRoot:   filepath.ToSlash(assetRoot),
+	}, nil
+}
+
+func pluginWebUIDestDir(paths initPaths, pluginName string) string {
+	return filepath.Join(paths.artifactsDir, ".gestaltd", "plugin-webui", pluginName)
+}
+
+func pluginWebUIFingerprint(pluginName string, webui *config.WebUIEntry) (string, error) {
+	input := pluginFingerprintInput{
+		Name:    pluginName + "-webui",
+		Source:  webui.Source.Ref,
+		Version: webui.Source.Version,
+	}
+	payload, err := json.Marshal(input)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:]), nil
+}
+
 func sourceForPlugin(plugin *config.ProviderEntry) (pluginsource.Source, error) {
 	src, err := pluginsource.Parse(plugin.SourceRef())
 	if err != nil {
@@ -915,7 +998,7 @@ func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *con
 			entry.Description = cmp.Or(entry.Description, manifest.Description)
 		}
 		entry.IconFile = cmp.Or(entry.IconFile, entry.ResolvedIconFile)
-		if err := resolvePluginWebUI(entry); err != nil {
+		if err := resolvePluginWebUI(name, entry, lock, paths); err != nil {
 			return fmt.Errorf("resolve webui for plugin %q: %w", name, err)
 		}
 	}
@@ -1133,16 +1216,32 @@ func applyLocalUIManifest(plugin *config.ProviderEntry, configMap map[string]any
 }
 
 // resolvePluginWebUI resolves the static asset root for a plugin's web UI.
-// It supports two models:
-//   - Separate WebUI package: entry.WebUI is set with a local source pointing
-//     to a kind:webui manifest. The asset root is resolved from that manifest.
-//   - Bundled model: the plugin's own manifest declares spec.assetRoot. The
-//     asset root is resolved relative to the plugin's manifest directory.
-func resolvePluginWebUI(entry *config.ProviderEntry) error {
+// It supports three models:
+//   - Managed WebUI package: entry.WebUI has a managed source. The lockfile
+//     records the materialized asset root from gestaltd init.
+//   - Local WebUI package: entry.WebUI has a local source pointing to a
+//     kind:webui manifest. The asset root is resolved from that manifest.
+//   - Bundled model: the plugin's own manifest declares spec.assetRoot.
+//     The asset root is resolved relative to the plugin's manifest directory.
+func resolvePluginWebUI(pluginName string, entry *config.ProviderEntry, lock *Lockfile, paths initPaths) error {
 	if entry == nil {
 		return nil
 	}
-	// Case 1: separate WebUI package with local source
+	if entry.WebUI != nil && entry.WebUI.Source.IsManaged() {
+		if lock == nil || lock.PluginWebUIs == nil {
+			return fmt.Errorf("managed webui source requires prepared artifacts; run `gestaltd init`")
+		}
+		lockEntry, ok := lock.PluginWebUIs[pluginName]
+		if !ok {
+			return fmt.Errorf("prepared webui artifact missing; run `gestaltd init`")
+		}
+		assetRoot := resolveLockPath(paths.artifactsDir, lockEntry.AssetRoot)
+		if _, err := os.Stat(assetRoot); err != nil {
+			return fmt.Errorf("prepared webui asset root not found at %s: %w", assetRoot, err)
+		}
+		entry.ResolvedAssetRoot = assetRoot
+		return nil
+	}
 	if entry.WebUI != nil && entry.WebUI.Source.IsLocal() {
 		manifestPath := entry.WebUI.Source.Path
 		if _, err := os.Stat(manifestPath); err != nil {
@@ -1162,11 +1261,10 @@ func resolvePluginWebUI(entry *config.ProviderEntry) error {
 		entry.ResolvedAssetRoot = assetRoot
 		return nil
 	}
-	// Case 2: plugin manifest itself declares spec.assetRoot (bundled model)
+	// Bundled model: plugin manifest itself declares spec.assetRoot
 	if entry.ResolvedManifest != nil && entry.ResolvedManifest.Spec != nil && entry.ResolvedManifest.Spec.AssetRoot != "" && entry.ResolvedManifestPath != "" {
 		assetRoot := filepath.Join(filepath.Dir(entry.ResolvedManifestPath), filepath.FromSlash(entry.ResolvedManifest.Spec.AssetRoot))
 		if _, err := os.Stat(assetRoot); err != nil {
-			// Not an error: plugin declares assetRoot but it doesn't exist yet (not built).
 			return nil
 		}
 		entry.ResolvedAssetRoot = assetRoot

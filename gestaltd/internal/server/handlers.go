@@ -121,6 +121,9 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 	}
 
 	names := s.providers.List()
+	if scoped, ok := r.Context().Value(scopedIntegrationKey).(string); ok && scoped != "" {
+		names = []string{scoped}
+	}
 	out := make([]integrationInfo, 0, len(names))
 	for _, name := range names {
 		prov, err := s.providers.Get(name)
