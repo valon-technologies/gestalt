@@ -2,7 +2,39 @@
 
 Gestalt is configured from a single YAML file. This page covers the key concepts and how to set up each part. The [Config File](/reference/config-file) reference documents every field and its validation rules.
 
-## Concepts
+## Config file structure
+
+A Gestalt config has two top-level keys: `server` for host settings and `providers` for all pluggable components.
+
+```yaml
+server:
+  encryptionKey: ...        # required, root deployment secret
+  baseUrl: ...              # public URL for OAuth callbacks
+  indexeddb: ...            # name of the active storage provider
+  public:                   # public listener (default port 8080)
+    host: ...
+    port: ...
+  management:               # optional management listener
+    host: ...
+    port: ...
+  egress:                   # outbound request policy
+    defaultAction: ...      # "allow" or "deny"
+
+providers:
+  auth: ...                 # platform login (ProviderEntry)
+  secrets: ...              # secret resolution (default: env)
+  telemetry: ...            # metrics and tracing (default: stdout)
+  audit: ...                # audit log routing (default: inherit)
+  ui: ...                   # web UI bundle (ProviderEntry)
+  plugins:                  # named plugin providers
+    <name>: ...             # each is a ProviderEntry
+  indexeddbs:               # named storage providers
+    <name>: ...             # each is a ProviderEntry
+```
+
+Each provider entry accepts `source` (where to load it from), `config` (provider-specific settings), `disabled`, `allowedHosts`, `connections`, and optional metadata fields. See the [Config File](/reference/config-file) reference for every field.
+
+## Key concepts
 
 Gestalt has six core concepts you configure in YAML:
 
@@ -221,6 +253,20 @@ providers:
 ```
 
 SQLite works for single-instance deployments. For production, use a Postgres or MySQL DSN. See [IndexedDB](/providers/indexeddb) for the full provider model.
+
+## Telemetry and audit
+
+Gestalt ships with builtin telemetry and audit providers that work without any configuration. The defaults emit to stdout:
+
+```yaml
+providers:
+  telemetry:
+    source: stdout
+  audit:
+    source: inherit
+```
+
+`inherit` routes audit events through the telemetry provider. For production observability with OpenTelemetry, see [Observability](/observability).
 
 ## Config file mechanics
 
