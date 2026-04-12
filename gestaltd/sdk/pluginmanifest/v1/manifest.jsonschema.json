@@ -4,6 +4,7 @@
   "type": "object",
   "additionalProperties": false,
   "required": [
+    "kind",
     "source",
     "version"
   ],
@@ -13,7 +14,7 @@
       "enum": [
         "plugin",
         "auth",
-        "datastore",
+        "indexeddb",
         "secrets",
         "webui"
       ]
@@ -38,47 +39,19 @@
     "release": {
       "$ref": "#/$defs/release"
     },
-    "plugin": {
-      "$ref": "#/$defs/plugin"
-    },
-    "auth": {
-      "$ref": "#/$defs/auth"
-    },
-    "datastore": {
-      "$ref": "#/$defs/datastore"
-    },
-    "webui": {
-      "$ref": "#/$defs/webui"
-    },
     "artifacts": {
       "type": "array",
       "items": {
         "$ref": "#/$defs/artifact"
       }
+    },
+    "entrypoint": {
+      "$ref": "#/$defs/exec"
+    },
+    "spec": {
+      "$ref": "#/$defs/spec"
     }
   },
-  "oneOf": [
-    {
-      "required": [
-        "plugin"
-      ]
-    },
-    {
-      "required": [
-        "auth"
-      ]
-    },
-    {
-      "required": [
-        "datastore"
-      ]
-    },
-    {
-      "required": [
-        "webui"
-      ]
-    }
-  ],
   "$defs": {
     "release": {
       "type": "object",
@@ -110,7 +83,7 @@
         }
       }
     },
-    "plugin": {
+    "spec": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -118,22 +91,20 @@
           "type": "string",
           "minLength": 1
         },
-        "exec": {
-          "$ref": "#/$defs/exec"
+        "mcp": {
+          "type": "boolean"
         },
-        "connections": {
-          "type": "object",
-          "properties": {
-            "default": {
-              "$ref": "#/$defs/pluginDefaultConnection"
-            }
-          },
-          "propertyNames": {
-            "minLength": 1
-          },
-          "additionalProperties": {
-            "$ref": "#/$defs/pluginNamedConnection"
-          }
+        "auth": {
+          "$ref": "#/$defs/pluginAuth"
+        },
+        "connectionMode": {
+          "type": "string",
+          "enum": [
+            "none",
+            "user",
+            "identity",
+            "either"
+          ]
         },
         "headers": {
           "type": "object",
@@ -162,51 +133,37 @@
         "surfaces": {
           "$ref": "#/$defs/surfaces"
         },
-        "mcp": {
-          "$ref": "#/$defs/mcpConfig"
-        }
-      }
-    },
-    "webui": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "assetRoot"
-      ],
-      "properties": {
+        "defaultConnection": {
+          "type": "string",
+          "minLength": 1
+        },
+        "connections": {
+          "type": "object",
+          "propertyNames": {
+            "minLength": 1
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/manifestConnectionDef"
+          }
+        },
+        "discovery": {
+          "$ref": "#/$defs/pluginDiscovery"
+        },
+        "connectionParams": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/pluginConnectionParam"
+          }
+        },
+        "requires": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
         "assetRoot": {
           "type": "string",
           "minLength": 1
-        },
-        "configSchemaPath": {
-          "type": "string",
-          "minLength": 1
-        }
-      }
-    },
-    "auth": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "configSchemaPath": {
-          "type": "string",
-          "minLength": 1
-        },
-        "exec": {
-          "$ref": "#/$defs/exec"
-        }
-      }
-    },
-    "datastore": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "configSchemaPath": {
-          "type": "string",
-          "minLength": 1
-        },
-        "exec": {
-          "$ref": "#/$defs/exec"
         }
       }
     },
@@ -229,38 +186,7 @@
         }
       }
     },
-    "pluginDefaultConnection": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "displayName": {
-          "type": "string",
-          "minLength": 1
-        },
-        "mode": {
-          "type": "string",
-          "enum": [
-            "none",
-            "user",
-            "identity",
-            "either"
-          ]
-        },
-        "auth": {
-          "$ref": "#/$defs/pluginAuth"
-        },
-        "params": {
-          "type": "object",
-          "additionalProperties": {
-            "$ref": "#/$defs/pluginConnectionParam"
-          }
-        },
-        "discovery": {
-          "$ref": "#/$defs/pluginDiscovery"
-        }
-      }
-    },
-    "pluginNamedConnection": {
+    "manifestConnectionDef": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
@@ -546,18 +472,6 @@
         "url": {
           "type": "string",
           "minLength": 1
-        }
-      }
-    },
-    "mcpConfig": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": [
-        "enabled"
-      ],
-      "properties": {
-        "enabled": {
-          "type": "boolean"
         }
       }
     },
