@@ -13,7 +13,6 @@ import (
 	coreintegration "github.com/valon-technologies/gestalt/server/core/integration"
 	"github.com/valon-technologies/gestalt/server/internal/apiexec"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
@@ -23,7 +22,7 @@ type BuildOption func(*buildOptions)
 
 type buildOptions struct {
 	authOverride coreintegration.AuthHandler
-	egress       *egress.Resolver
+	egressCheck  func(string) error
 }
 
 // WithAuthHandler injects a pre-built auth handler, bypassing buildAuth.
@@ -31,8 +30,9 @@ func WithAuthHandler(h coreintegration.AuthHandler) BuildOption {
 	return func(o *buildOptions) { o.authOverride = h }
 }
 
-func WithEgressResolver(r *egress.Resolver) BuildOption {
-	return func(o *buildOptions) { o.egress = r }
+// WithEgressCheck injects a host-level egress check function.
+func WithEgressCheck(fn func(string) error) BuildOption {
+	return func(o *buildOptions) { o.egressCheck = fn }
 }
 
 // Build constructs a provider from a spec Definition and a ConnectionDef that
@@ -75,7 +75,7 @@ func Build(def *Definition, conn config.ConnectionDef, opts ...BuildOption) (cor
 		HTTPClient:         client,
 		Headers:            def.Headers,
 		Pagination:         buildPaginationConfigs(def),
-		EgressResolver:     bo.egress,
+		CheckEgress:        bo.egressCheck,
 	}
 
 	connMode := conn.Mode

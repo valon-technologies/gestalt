@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/mcpupstream"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 
@@ -23,8 +22,6 @@ func CallDirectTool(ctx context.Context, resolver TokenResolver, p *principal.Pr
 	if p == nil {
 		return nil, ErrNotAuthenticated
 	}
-	ctx = egress.WithSubjectFromPrincipal(ctx, p)
-
 	if resolver != nil && prov.ConnectionMode() != core.ConnectionModeNone {
 		token, err := resolver.ResolveToken(ctx, p, provName, connection, instance)
 		if err != nil {

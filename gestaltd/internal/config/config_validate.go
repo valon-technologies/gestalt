@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
 )
@@ -470,33 +469,6 @@ func validateEgress(cfg *EgressConfig) error {
 	case "", "allow", "deny":
 	default:
 		return fmt.Errorf("config validation: egress.default_action must be \"allow\" or \"deny\", got %q", cfg.DefaultAction)
-	}
-	for i := range cfg.Policies {
-		switch cfg.Policies[i].Action {
-		case "allow", "deny":
-		default:
-			return fmt.Errorf("config validation: egress.policies[%d].action must be \"allow\" or \"deny\", got %q", i, cfg.Policies[i].Action)
-		}
-	}
-	for i := range cfg.Credentials {
-		c := &cfg.Credentials[i]
-		if c.SecretRef == "" {
-			return fmt.Errorf("config validation: egress.credentials[%d]: secret_ref is required", i)
-		}
-		if strings.HasPrefix(c.SecretRef, "secret://") {
-			return fmt.Errorf("config validation: egress.credentials[%d]: secret_ref must be a bare secret name without secret://", i)
-		}
-		if err := egress.ValidateCredentialGrant(egress.CredentialGrantValidationInput{
-			SubjectKind: c.SubjectKind,
-			SubjectID:   c.SubjectID,
-			Operation:   c.Operation,
-			Method:      c.Method,
-			Host:        c.Host,
-			PathPrefix:  c.PathPrefix,
-			AuthStyle:   c.AuthStyle,
-		}); err != nil {
-			return fmt.Errorf("config validation: egress.credentials[%d]: %w", i, err)
-		}
 	}
 	return nil
 }

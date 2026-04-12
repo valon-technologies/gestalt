@@ -3,8 +3,6 @@ package integration
 import (
 	"context"
 	"fmt"
-	"maps"
-	"net/http"
 	"net/url"
 	"strings"
 
@@ -34,12 +32,16 @@ func (b *Base) executeREST(ctx context.Context, operation string, catOp *catalog
 		}
 		headers[k] = v
 	}
+
+	if err := b.checkEgressHost(baseURL); err != nil {
+		return nil, err
+	}
+
 	credential, err := b.materializeCredential(token)
 	if err != nil {
 		return nil, err
 	}
 	headers = egress.ApplyHeaderMutations(headers, credential.Headers)
-	authCredential := egress.CredentialMaterialization{Authorization: credential.Authorization}
 
 	req := apiexec.Request{
 		Method:        method,
@@ -47,17 +49,10 @@ func (b *Base) executeREST(ctx context.Context, operation string, catOp *catalog
 		Path:          catOp.Path,
 		Params:        bodyParams,
 		QueryParams:   queryParams,
-		AuthHeader:    authCredential.Authorization,
+		AuthHeader:    credential.Authorization,
 		CustomHeaders: headers,
 		CheckResponse: b.CheckResponse,
 	}
-
-	resolved, err := b.resolveEgress(ctx, operation, req, authCredential)
-	if err != nil {
-		return nil, err
-	}
-	req.AuthHeader = resolved.Credential.Authorization
-	req.CustomHeaders = maps.Clone(resolved.Headers)
 
 	if pgn, ok := b.Pagination[operation]; ok {
 		return apiexec.DoPaginated(ctx, b.httpClient(), req, pgn)
@@ -75,46 +70,39 @@ func (b *Base) executeREST(ctx context.Context, operation string, catOp *catalog
 	return result, nil
 }
 
-func (b *Base) resolveEgress(ctx context.Context, operation string, req apiexec.Request, credential egress.CredentialMaterialization) (egress.Resolution, error) {
-	resolver := egress.Resolver{}
-	if b.EgressResolver != nil {
-		resolver = *b.EgressResolver
+func (b *Base) executeGraphQL(ctx context.Context, operation string, query string, params map[string]any, token string) (*core.OperationResult, error) {
+	gqlURL, headers := b.resolvedURLAndHeaders(ctx)
+
+	if err := b.checkEgressHost(gqlURL); err != nil {
+		return nil, err
 	}
 
-	return resolver.Resolve(ctx, egress.ResolutionInput{
-		Target: egress.Target{
-			Provider:  b.IntegrationName,
-			Operation: operation,
-			Method:    req.Method,
-			Path:      apiexec.ExpandedPathWithQuery(req.Method, req.Path, req.Params, req.QueryParams),
-		},
-		Headers:    maps.Clone(req.CustomHeaders),
-		Credential: credential,
-	})
+	credential, err := b.materializeCredential(token)
+	if err != nil {
+		return nil, err
+	}
+	headers = egress.ApplyHeaderMutations(headers, credential.Headers)
+
+	gqlReq := apiexec.GraphQLRequest{
+		URL:           gqlURL,
+		Query:         query,
+		Variables:     params,
+		AuthHeader:    credential.Authorization,
+		CustomHeaders: headers,
+	}
+
+	return apiexec.DoGraphQL(ctx, b.httpClient(), gqlReq)
 }
 
-func (b *Base) resolveGraphQLEgress(ctx context.Context, operation string, req apiexec.GraphQLRequest, credential egress.CredentialMaterialization) (egress.Resolution, error) {
-	resolver := egress.Resolver{}
-	if b.EgressResolver != nil {
-		resolver = *b.EgressResolver
+func (b *Base) checkEgressHost(rawURL string) error {
+	if b.CheckEgress == nil {
+		return nil
 	}
-
-	parsed, err := url.Parse(req.URL)
+	parsed, err := url.Parse(rawURL)
 	if err != nil {
-		return egress.Resolution{}, fmt.Errorf("parsing graphql url: %w", err)
+		return fmt.Errorf("egress check: parsing URL: %w", err)
 	}
-
-	return resolver.Resolve(ctx, egress.ResolutionInput{
-		Target: egress.Target{
-			Provider:  b.IntegrationName,
-			Operation: operation,
-			Method:    http.MethodPost,
-			Host:      parsed.Host,
-			Path:      parsed.Path,
-		},
-		Headers:    maps.Clone(req.CustomHeaders),
-		Credential: credential,
-	})
+	return b.CheckEgress(parsed.Host)
 }
 
 func findCatalogOp(cat *catalog.Catalog, id string) *catalog.CatalogOperation {

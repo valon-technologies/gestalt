@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	neturl "net/url"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -40,17 +41,17 @@ func (c *managedMCPClient) Close() error {
 }
 
 type Upstream struct {
-	name     string
-	display  string
-	desc     string
-	iconSVG  string
-	url      string
-	connMode core.ConnectionMode
-	headers  map[string]string
-	cat      *catalog.Catalog
-	client   mcpclient.MCPClient
-	exposure *operationexposure.Policy
-	resolver *egress.Resolver
+	name        string
+	display     string
+	desc        string
+	iconSVG     string
+	url         string
+	connMode    core.ConnectionMode
+	headers     map[string]string
+	cat         *catalog.Catalog
+	client      mcpclient.MCPClient
+	exposure    *operationexposure.Policy
+	checkEgress func(string) error
 }
 
 type Option func(*Upstream)
@@ -69,19 +70,19 @@ func WithMetadataOverrides(displayName, description, iconSVG string) Option {
 	}
 }
 
-func New(_ context.Context, name string, url string, connMode core.ConnectionMode, headers map[string]string, resolver *egress.Resolver, opts ...Option) (*Upstream, error) {
+func New(_ context.Context, name string, url string, connMode core.ConnectionMode, headers map[string]string, checkEgress func(string) error, opts ...Option) (*Upstream, error) {
 	if url == "" {
 		return nil, fmt.Errorf("mcpupstream %s: url is required", name)
 	}
 
 	u := &Upstream{
-		name:     name,
-		display:  name,
-		desc:     fmt.Sprintf("MCP upstream: %s", url),
-		url:      url,
-		connMode: connMode,
-		headers:  config.NormalizeHeaders(headers),
-		resolver: resolver,
+		name:        name,
+		display:     name,
+		desc:        fmt.Sprintf("MCP upstream: %s", url),
+		url:         url,
+		connMode:    connMode,
+		headers:     config.NormalizeHeaders(headers),
+		checkEgress: checkEgress,
 	}
 	for _, opt := range opts {
 		opt(u)
@@ -175,10 +176,20 @@ func (u *Upstream) connect(ctx context.Context, token string) (mcpclient.MCPClie
 		return u.client, nil
 	}
 
+	if u.checkEgress != nil {
+		parsed, err := neturl.Parse(u.url)
+		if err != nil {
+			return nil, fmt.Errorf("mcpupstream %s: parsing url for egress check: %w", u.name, err)
+		}
+		if err := u.checkEgress(parsed.Host); err != nil {
+			return nil, err
+		}
+	}
+
 	baseTransport := egress.CloneDefaultTransport()
 	httpClient := &http.Client{
 		Timeout:   httpTimeout,
-		Transport: egress.NewResolvingRoundTripper(baseTransport, u.resolver),
+		Transport: baseTransport,
 	}
 	closeIdleConnections := func() { baseTransport.CloseIdleConnections() }
 

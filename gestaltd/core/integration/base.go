@@ -63,7 +63,7 @@ type Base struct {
 	TokenParser     func(token string) (authHeader string, extraHeaders map[string]string, err error)
 	CheckResponse   apiexec.ResponseChecker
 	ExecuteFunc     func(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error)
-	EgressResolver  *egress.Resolver
+	CheckEgress     func(host string) error
 	ResponseMapping *ResponseMappingConfig
 
 	ConnectionDefs      map[string]core.ConnectionParamDef
@@ -165,33 +165,6 @@ func (b *Base) Execute(ctx context.Context, operation string, params map[string]
 		return b.executeGraphQL(ctx, operation, catOp.Query, params, token)
 	}
 	return b.executeREST(ctx, operation, catOp, params, token)
-}
-
-func (b *Base) executeGraphQL(ctx context.Context, operation string, query string, params map[string]any, token string) (*core.OperationResult, error) {
-	gqlURL, headers := b.resolvedURLAndHeaders(ctx)
-	credential, err := b.materializeCredential(token)
-	if err != nil {
-		return nil, err
-	}
-	headers = egress.ApplyHeaderMutations(headers, credential.Headers)
-	authCredential := egress.CredentialMaterialization{Authorization: credential.Authorization}
-
-	gqlReq := apiexec.GraphQLRequest{
-		URL:           gqlURL,
-		Query:         query,
-		Variables:     params,
-		AuthHeader:    authCredential.Authorization,
-		CustomHeaders: headers,
-	}
-
-	resolved, err := b.resolveGraphQLEgress(ctx, operation, gqlReq, authCredential)
-	if err != nil {
-		return nil, err
-	}
-	gqlReq.AuthHeader = resolved.Credential.Authorization
-	gqlReq.CustomHeaders = resolved.Headers
-
-	return apiexec.DoGraphQL(ctx, b.httpClient(), gqlReq)
 }
 
 func (b *Base) egressAuthStyle() egress.AuthStyle {

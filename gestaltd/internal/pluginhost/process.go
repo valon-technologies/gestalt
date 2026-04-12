@@ -16,6 +16,7 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/egress"
 	"github.com/valon-technologies/gestalt/server/internal/sandbox"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
@@ -34,6 +35,7 @@ type ExecConfig struct {
 	StaticSpec    StaticProviderSpec
 	Config        map[string]any
 	AllowedHosts  []string
+	DefaultAction egress.PolicyAction
 	HostBinary    string
 	Cleanup       func()
 	RegisterHost  func(*grpc.Server)
@@ -123,7 +125,7 @@ func startProviderProcess(ctx context.Context, cfg ExecConfig, registerHost func
 		return nil, fmt.Errorf("plugin command is required")
 	}
 
-	sandboxActive := len(cfg.AllowedHosts) > 0
+	sandboxActive := len(cfg.AllowedHosts) > 0 || cfg.DefaultAction == egress.PolicyDeny
 
 	dir, err := newSocketDir()
 	if err != nil {
@@ -170,7 +172,11 @@ func startProviderProcess(ctx context.Context, cfg ExecConfig, registerHost func
 			HostBinary:     cfg.HostBinary,
 		}
 
-		proxy := sandbox.NewProxyServer(policy.AllowedHosts)
+		defaultAction := cfg.DefaultAction
+		checkHost := func(host string) error {
+			return egress.CheckHost(policy.AllowedHosts, host, defaultAction)
+		}
+		proxy := sandbox.NewProxyServer(checkHost)
 		port, err := proxy.Start()
 		if err != nil {
 			_ = proc.Close()

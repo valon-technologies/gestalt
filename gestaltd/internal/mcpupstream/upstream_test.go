@@ -3,6 +3,7 @@ package mcpupstream
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -11,7 +12,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/egress"
-	"github.com/valon-technologies/gestalt/server/internal/egress/egresstest"
 
 	mcpclient "github.com/mark3labs/mcp-go/client"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -472,44 +472,60 @@ func TestUpstream_RequestTokenOverridesStaticAuthorizationHeader(t *testing.T) {
 	}
 }
 
-func TestUpstream_UsesSharedEgressResolver(t *testing.T) {
+func TestUpstream_EgressCheckBlocksDeniedHost(t *testing.T) {
 	t.Parallel()
 
-	var gotPolicy egress.PolicyInput
-	ts := newAuthenticatedHTTPTestServer(t, "Bearer secret-token")
+	ts := newAuthenticatedHTTPTestServer(t, "Bearer tok")
 	t.Cleanup(ts.Close)
 
-	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeUser, nil, &egress.Resolver{
-		Subjects: egress.ContextSubjectResolver{},
-		Policy: egresstest.PolicyFunc(func(_ context.Context, input egress.PolicyInput) error {
-			gotPolicy = input
-			return nil
-		}),
-	})
+	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeUser, nil,
+		func(_ string) error {
+			return fmt.Errorf("%w: denied", egress.ErrEgressDenied)
+		},
+	)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
 
-	ctx := egress.WithSubject(context.Background(), egress.Subject{Kind: egress.SubjectUser, ID: "u1"})
-	cat, err := u.CatalogForRequest(ctx, "secret-token")
+	_, err = u.CatalogForRequest(context.Background(), "tok")
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !errors.Is(err, egress.ErrEgressDenied) {
+		t.Fatalf("expected ErrEgressDenied, got %v", err)
+	}
+}
+
+func TestUpstream_EgressCheckAllowsPermittedHost(t *testing.T) {
+	t.Parallel()
+
+	var checkedHost string
+	ts := newAuthenticatedHTTPTestServer(t, "Bearer secret-token")
+	t.Cleanup(ts.Close)
+
+	u, err := New(context.Background(), "clickhouse", ts.URL, core.ConnectionModeUser, nil,
+		func(host string) error {
+			checkedHost = host
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	cat, err := u.CatalogForRequest(context.Background(), "secret-token")
 	if err != nil {
 		t.Fatalf("CatalogForRequest: %v", err)
 	}
 	if len(cat.Operations) != 2 {
 		t.Fatalf("expected 2 operations, got %d", len(cat.Operations))
 	}
-	if gotPolicy.Subject != (egress.Subject{Kind: egress.SubjectUser, ID: "u1"}) {
-		t.Fatalf("subject = %+v, want user u1", gotPolicy.Subject)
-	}
-	if gotPolicy.Target.Method == "" {
-		t.Fatal("expected target method to be populated")
+	if checkedHost == "" {
+		t.Fatal("egress check was not called")
 	}
 
-	callCtx := WithUpstreamToken(
-		egress.WithSubject(context.Background(), egress.Subject{Kind: egress.SubjectUser, ID: "u1"}),
-		"secret-token",
-	)
-	result, err := u.CallTool(callCtx, "run_query", map[string]any{"sql": "SELECT 1"})
+	ctx := WithUpstreamToken(context.Background(), "secret-token")
+	result, err := u.CallTool(ctx, "run_query", map[string]any{"sql": "SELECT 1"})
 	if err != nil {
 		t.Fatalf("CallTool: %v", err)
 	}
