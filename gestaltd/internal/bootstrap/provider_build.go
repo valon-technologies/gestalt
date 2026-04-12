@@ -20,6 +20,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/mcpoauth"
 	"github.com/valon-technologies/gestalt/server/internal/mcpupstream"
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
 	"github.com/valon-technologies/gestalt/server/internal/openapi"
 	"github.com/valon-technologies/gestalt/server/internal/operationexposure"
@@ -35,7 +36,7 @@ func buildRegistrationStore(deps Deps) mcpoauth.RegistrationStore {
 	if deps.Services == nil {
 		return nil
 	}
-	if store, ok := deps.Services.DB.(mcpoauth.RegistrationStore); ok {
+	if store, ok := metricutil.UnwrapIndexedDB(deps.Services.DB).(mcpoauth.RegistrationStore); ok {
 		return store
 	}
 	return nil
