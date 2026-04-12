@@ -113,6 +113,26 @@ providers:
 | `manual` | Custom credential fields (API key, org ID, etc.). |
 | `none` | No authentication. |
 
+### OAuth app credentials
+
+Plugins that use `oauth2` connections typically require you to register an OAuth app with the upstream service and provide the app credentials in the server config. The provider's manifest declares the OAuth URLs and scopes; your config supplies the client ID and client secret.
+
+For example, the GitHub plugin requires OAuth app credentials from the [GitHub Developer Settings](https://github.com/settings/developers):
+
+```yaml
+providers:
+  plugins:
+    github:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/plugins/github
+        version: 0.0.1
+      config:
+        clientId: ${GITHUB_CLIENT_ID}
+        clientSecret: secret://github-client-secret
+```
+
+Not all providers need this. Some providers (like Slack) use OAuth flows that do not require operator-provided app credentials. Check the provider's documentation or config schema for required fields.
+
 ### Connection naming
 
 `connections.default` is the common case. When a provider defines more than one connection, callers pass `_connection` and `_instance` through the [HTTP API](/reference/http-api) to select which stored credential to use. Connection parameters (`params`) and post-connect discovery are only supported on `connections.default`.
