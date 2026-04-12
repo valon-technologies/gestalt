@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
@@ -15,12 +16,18 @@ import (
 
 type indexedDBServer struct {
 	proto.UnimplementedIndexedDBServer
-	ds     indexeddb.IndexedDB
-	prefix string
+	ds       indexeddb.IndexedDB
+	prefix   string
+	schemaMu sync.RWMutex
+	schemas  map[string]indexeddb.ObjectStoreSchema
 }
 
 func NewIndexedDBServer(ds indexeddb.IndexedDB, pluginName string) proto.IndexedDBServer {
-	return &indexedDBServer{ds: ds, prefix: "plugin_" + pluginName + "_"}
+	return &indexedDBServer{
+		ds:      ds,
+		prefix:  "plugin_" + pluginName + "_",
+		schemas: make(map[string]indexeddb.ObjectStoreSchema),
+	}
 }
 
 func (s *indexedDBServer) storeName(name string) string {
@@ -29,25 +36,30 @@ func (s *indexedDBServer) storeName(name string) string {
 
 func (s *indexedDBServer) CreateObjectStore(ctx context.Context, req *proto.CreateObjectStoreRequest) (*emptypb.Empty, error) {
 	schema := protoToSchema(req.GetSchema())
-	if err := s.ds.CreateObjectStore(ctx, s.storeName(req.GetName()), schema); err != nil {
+	storeName := s.storeName(req.GetName())
+	if err := s.ds.CreateObjectStore(ctx, storeName, schema); err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
+	s.setSchema(storeName, schema)
 	return &emptypb.Empty{}, nil
 }
 
 func (s *indexedDBServer) DeleteObjectStore(ctx context.Context, req *proto.DeleteObjectStoreRequest) (*emptypb.Empty, error) {
-	if err := s.ds.DeleteObjectStore(ctx, s.storeName(req.GetName())); err != nil {
+	storeName := s.storeName(req.GetName())
+	if err := s.ds.DeleteObjectStore(ctx, storeName); err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
+	s.deleteSchema(storeName)
 	return &emptypb.Empty{}, nil
 }
 
 func (s *indexedDBServer) Get(ctx context.Context, req *proto.ObjectStoreRequest) (*proto.RecordResponse, error) {
-	rec, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Get(ctx, req.GetId())
+	storeName := s.storeName(req.GetStore())
+	rec, err := s.ds.ObjectStore(storeName).Get(ctx, req.GetId())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
-	return recordToProto(rec)
+	return recordToProto(rec, s.schema(storeName))
 }
 
 func (s *indexedDBServer) GetKey(ctx context.Context, req *proto.ObjectStoreRequest) (*proto.KeyResponse, error) {
@@ -59,14 +71,24 @@ func (s *indexedDBServer) GetKey(ctx context.Context, req *proto.ObjectStoreRequ
 }
 
 func (s *indexedDBServer) Add(ctx context.Context, req *proto.RecordRequest) (*emptypb.Empty, error) {
-	if err := s.ds.ObjectStore(s.storeName(req.GetStore())).Add(ctx, req.GetRecord().AsMap()); err != nil {
+	storeName := s.storeName(req.GetStore())
+	record, err := recordFromStruct(req.GetRecord(), s.schema(storeName))
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if err := s.ds.ObjectStore(storeName).Add(ctx, record); err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
 	return &emptypb.Empty{}, nil
 }
 
 func (s *indexedDBServer) Put(ctx context.Context, req *proto.RecordRequest) (*emptypb.Empty, error) {
-	if err := s.ds.ObjectStore(s.storeName(req.GetStore())).Put(ctx, req.GetRecord().AsMap()); err != nil {
+	storeName := s.storeName(req.GetStore())
+	record, err := recordFromStruct(req.GetRecord(), s.schema(storeName))
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	if err := s.ds.ObjectStore(storeName).Put(ctx, record); err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
 	return &emptypb.Empty{}, nil
@@ -87,15 +109,25 @@ func (s *indexedDBServer) Clear(ctx context.Context, req *proto.ObjectStoreNameR
 }
 
 func (s *indexedDBServer) GetAll(ctx context.Context, req *proto.ObjectStoreRangeRequest) (*proto.RecordsResponse, error) {
-	recs, err := s.ds.ObjectStore(s.storeName(req.GetStore())).GetAll(ctx, protoToKeyRange(req.Range))
+	storeName := s.storeName(req.GetStore())
+	keyRange, err := protoToKeyRange(req.Range, schemaPrimaryKeyCodec(s.schema(storeName)))
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	recs, err := s.ds.ObjectStore(storeName).GetAll(ctx, keyRange)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
-	return recordsToProto(recs)
+	return recordsToProto(recs, s.schema(storeName))
 }
 
 func (s *indexedDBServer) GetAllKeys(ctx context.Context, req *proto.ObjectStoreRangeRequest) (*proto.KeysResponse, error) {
-	keys, err := s.ds.ObjectStore(s.storeName(req.GetStore())).GetAllKeys(ctx, protoToKeyRange(req.Range))
+	storeName := s.storeName(req.GetStore())
+	keyRange, err := protoToKeyRange(req.Range, schemaPrimaryKeyCodec(s.schema(storeName)))
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	keys, err := s.ds.ObjectStore(storeName).GetAllKeys(ctx, keyRange)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -103,7 +135,12 @@ func (s *indexedDBServer) GetAllKeys(ctx context.Context, req *proto.ObjectStore
 }
 
 func (s *indexedDBServer) Count(ctx context.Context, req *proto.ObjectStoreRangeRequest) (*proto.CountResponse, error) {
-	count, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Count(ctx, protoToKeyRange(req.Range))
+	storeName := s.storeName(req.GetStore())
+	keyRange, err := protoToKeyRange(req.Range, schemaPrimaryKeyCodec(s.schema(storeName)))
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	count, err := s.ds.ObjectStore(storeName).Count(ctx, keyRange)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -111,11 +148,15 @@ func (s *indexedDBServer) Count(ctx context.Context, req *proto.ObjectStoreRange
 }
 
 func (s *indexedDBServer) DeleteRange(ctx context.Context, req *proto.ObjectStoreRangeRequest) (*proto.DeleteResponse, error) {
-	kr := protoToKeyRange(req.Range)
+	storeName := s.storeName(req.GetStore())
+	kr, err := protoToKeyRange(req.Range, schemaPrimaryKeyCodec(s.schema(storeName)))
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
 	if kr == nil {
 		return nil, status.Error(codes.InvalidArgument, "key range is required for DeleteRange")
 	}
-	deleted, err := s.ds.ObjectStore(s.storeName(req.GetStore())).DeleteRange(ctx, *kr)
+	deleted, err := s.ds.ObjectStore(storeName).DeleteRange(ctx, *kr)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -123,15 +164,25 @@ func (s *indexedDBServer) DeleteRange(ctx context.Context, req *proto.ObjectStor
 }
 
 func (s *indexedDBServer) IndexGet(ctx context.Context, req *proto.IndexQueryRequest) (*proto.RecordResponse, error) {
-	rec, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Index(req.GetIndex()).Get(ctx, protoValuesToAny(req.GetValues())...)
+	storeName := s.storeName(req.GetStore())
+	values, err := protoValuesToAny(req.GetValues(), schemaIndexCodecs(s.schema(storeName), req.GetIndex()))
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	rec, err := s.ds.ObjectStore(storeName).Index(req.GetIndex()).Get(ctx, values...)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
-	return recordToProto(rec)
+	return recordToProto(rec, s.schema(storeName))
 }
 
 func (s *indexedDBServer) IndexGetKey(ctx context.Context, req *proto.IndexQueryRequest) (*proto.KeyResponse, error) {
-	key, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Index(req.GetIndex()).GetKey(ctx, protoValuesToAny(req.GetValues())...)
+	storeName := s.storeName(req.GetStore())
+	values, err := protoValuesToAny(req.GetValues(), schemaIndexCodecs(s.schema(storeName), req.GetIndex()))
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	key, err := s.ds.ObjectStore(storeName).Index(req.GetIndex()).GetKey(ctx, values...)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -139,15 +190,33 @@ func (s *indexedDBServer) IndexGetKey(ctx context.Context, req *proto.IndexQuery
 }
 
 func (s *indexedDBServer) IndexGetAll(ctx context.Context, req *proto.IndexQueryRequest) (*proto.RecordsResponse, error) {
-	recs, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Index(req.GetIndex()).GetAll(ctx, protoToKeyRange(req.Range), protoValuesToAny(req.GetValues())...)
+	storeName := s.storeName(req.GetStore())
+	keyRange, err := protoToKeyRange(req.Range, schemaPrimaryKeyCodec(s.schema(storeName)))
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	values, err := protoValuesToAny(req.GetValues(), schemaIndexCodecs(s.schema(storeName), req.GetIndex()))
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	recs, err := s.ds.ObjectStore(storeName).Index(req.GetIndex()).GetAll(ctx, keyRange, values...)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
-	return recordsToProto(recs)
+	return recordsToProto(recs, s.schema(storeName))
 }
 
 func (s *indexedDBServer) IndexGetAllKeys(ctx context.Context, req *proto.IndexQueryRequest) (*proto.KeysResponse, error) {
-	keys, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Index(req.GetIndex()).GetAllKeys(ctx, protoToKeyRange(req.Range), protoValuesToAny(req.GetValues())...)
+	storeName := s.storeName(req.GetStore())
+	keyRange, err := protoToKeyRange(req.Range, schemaPrimaryKeyCodec(s.schema(storeName)))
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	values, err := protoValuesToAny(req.GetValues(), schemaIndexCodecs(s.schema(storeName), req.GetIndex()))
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	keys, err := s.ds.ObjectStore(storeName).Index(req.GetIndex()).GetAllKeys(ctx, keyRange, values...)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -155,7 +224,16 @@ func (s *indexedDBServer) IndexGetAllKeys(ctx context.Context, req *proto.IndexQ
 }
 
 func (s *indexedDBServer) IndexCount(ctx context.Context, req *proto.IndexQueryRequest) (*proto.CountResponse, error) {
-	count, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Index(req.GetIndex()).Count(ctx, protoToKeyRange(req.Range), protoValuesToAny(req.GetValues())...)
+	storeName := s.storeName(req.GetStore())
+	keyRange, err := protoToKeyRange(req.Range, schemaPrimaryKeyCodec(s.schema(storeName)))
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	values, err := protoValuesToAny(req.GetValues(), schemaIndexCodecs(s.schema(storeName), req.GetIndex()))
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	count, err := s.ds.ObjectStore(storeName).Index(req.GetIndex()).Count(ctx, keyRange, values...)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -163,25 +241,53 @@ func (s *indexedDBServer) IndexCount(ctx context.Context, req *proto.IndexQueryR
 }
 
 func (s *indexedDBServer) IndexDelete(ctx context.Context, req *proto.IndexQueryRequest) (*proto.DeleteResponse, error) {
-	deleted, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Index(req.GetIndex()).Delete(ctx, protoValuesToAny(req.GetValues())...)
+	storeName := s.storeName(req.GetStore())
+	values, err := protoValuesToAny(req.GetValues(), schemaIndexCodecs(s.schema(storeName), req.GetIndex()))
+	if err != nil {
+		return nil, status.Error(codes.InvalidArgument, err.Error())
+	}
+	deleted, err := s.ds.ObjectStore(storeName).Index(req.GetIndex()).Delete(ctx, values...)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
 	return &proto.DeleteResponse{Deleted: deleted}, nil
 }
 
-func recordToProto(rec indexeddb.Record) (*proto.RecordResponse, error) {
-	s, err := structpb.NewStruct(rec)
+func (s *indexedDBServer) schema(name string) *indexeddb.ObjectStoreSchema {
+	s.schemaMu.RLock()
+	defer s.schemaMu.RUnlock()
+	schema, ok := s.schemas[name]
+	if !ok {
+		return nil
+	}
+	copy := schema
+	return &copy
+}
+
+func (s *indexedDBServer) setSchema(name string, schema indexeddb.ObjectStoreSchema) {
+	s.schemaMu.Lock()
+	defer s.schemaMu.Unlock()
+	s.schemas[name] = schema
+}
+
+func (s *indexedDBServer) deleteSchema(name string) {
+	s.schemaMu.Lock()
+	defer s.schemaMu.Unlock()
+	delete(s.schemas, name)
+}
+
+func recordToProto(rec indexeddb.Record, schema *indexeddb.ObjectStoreSchema) (*proto.RecordResponse, error) {
+	s, err := structFromRecord(rec, schema)
 	if err != nil {
 		return nil, fmt.Errorf("marshal record: %w", err)
 	}
 	return &proto.RecordResponse{Record: s}, nil
 }
 
-func recordsToProto(recs []indexeddb.Record) (*proto.RecordsResponse, error) {
+func recordsToProto(recs []indexeddb.Record, schema *indexeddb.ObjectStoreSchema) (*proto.RecordsResponse, error) {
 	structs := make([]*structpb.Struct, len(recs))
 	for i, rec := range recs {
-		s, err := structpb.NewStruct(rec)
+		s, err := structFromRecord(rec, schema)
 		if err != nil {
 			return nil, fmt.Errorf("marshal record %d: %w", i, err)
 		}
@@ -212,29 +318,12 @@ func protoToSchema(ps *proto.ObjectStoreSchema) indexeddb.ObjectStoreSchema {
 	return schema
 }
 
-func protoToKeyRange(kr *proto.KeyRange) *indexeddb.KeyRange {
-	if kr == nil {
-		return nil
-	}
-	r := &indexeddb.KeyRange{
-		LowerOpen: kr.GetLowerOpen(),
-		UpperOpen: kr.GetUpperOpen(),
-	}
-	if kr.GetLower() != nil {
-		r.Lower = kr.GetLower().AsInterface()
-	}
-	if kr.GetUpper() != nil {
-		r.Upper = kr.GetUpper().AsInterface()
-	}
-	return r
+func protoToKeyRange(kr *proto.KeyRange, codec valueCodec) (*indexeddb.KeyRange, error) {
+	return keyRangeFromProto(kr, codec)
 }
 
-func protoValuesToAny(vals []*structpb.Value) []any {
-	out := make([]any, len(vals))
-	for i, v := range vals {
-		out[i] = v.AsInterface()
-	}
-	return out
+func protoValuesToAny(vals []*structpb.Value, codecs []valueCodec) ([]any, error) {
+	return anyFromProtoValues(vals, codecs)
 }
 
 func indexeddbToGRPCErr(err error) error {
