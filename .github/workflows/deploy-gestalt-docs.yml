@@ -12,6 +12,12 @@ env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
   REGION: ${{ vars.GCP_REGION }}
   SERVICE: ${{ vars.DOCS_SERVICE_NAME }}
+  DNS_PROJECT_ID: ${{ secrets.DOCS_DNS_PROJECT_ID }}
+  TERRAFORM_STATE_BUCKET: ${{ secrets.DOCS_TERRAFORM_STATE_BUCKET }}
+  TERRAFORM_STATE_PREFIX: ${{ vars.DOCS_TERRAFORM_STATE_PREFIX }}
+  DOCS_RESOURCE_PREFIX: ${{ vars.DOCS_RESOURCE_PREFIX }}
+  WIF_POOL_ID: ${{ vars.GCP_WIF_POOL_ID }}
+  WIF_PROVIDER_ID: ${{ vars.GCP_WIF_PROVIDER_ID }}
   IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/cloud-run-source-deploy/${{ vars.DOCS_SERVICE_NAME }}
 
 jobs:
@@ -29,7 +35,7 @@ jobs:
         id: gcp-auth
         uses: google-github-actions/auth@c200f3691d83b41bf9bbd8638997a462592937ed # v2
         with:
-          workload_identity_provider: projects/${{ secrets.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/github-pool/providers/github-provider
+          workload_identity_provider: projects/${{ secrets.GCP_PROJECT_NUMBER }}/locations/global/workloadIdentityPools/${{ env.WIF_POOL_ID }}/providers/${{ env.WIF_PROVIDER_ID }}
           service_account: github-actions@${{ env.PROJECT_ID }}.iam.gserviceaccount.com
           token_format: access_token
 
@@ -61,7 +67,10 @@ jobs:
 
       - name: Terraform Init
         working-directory: docs/terraform
-        run: terraform init
+        run: |
+          terraform init \
+            -backend-config="bucket=${{ env.TERRAFORM_STATE_BUCKET }}" \
+            -backend-config="prefix=${{ env.TERRAFORM_STATE_PREFIX }}"
 
       - name: Terraform Apply
         working-directory: docs/terraform
@@ -69,6 +78,9 @@ jobs:
           TF_VAR_project_id: ${{ env.PROJECT_ID }}
           TF_VAR_project_number: ${{ secrets.GCP_PROJECT_NUMBER }}
           TF_VAR_region: ${{ env.REGION }}
+          TF_VAR_dns_project_id: ${{ env.DNS_PROJECT_ID }}
+          TF_VAR_resource_prefix: ${{ env.DOCS_RESOURCE_PREFIX }}
+          TF_VAR_wif_pool_id: ${{ env.WIF_POOL_ID }}
         run: |
           terraform apply -auto-approve \
             -var='docs_image=${{ env.IMAGE }}:${{ github.sha }}'
