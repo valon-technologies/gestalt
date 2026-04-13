@@ -1,10 +1,4 @@
-import {
-  connectionParam,
-  definePlugin,
-  ok,
-  operation,
-  s,
-} from "../../../src/index.ts";
+import { connectionParam, definePlugin, ok, operation, s } from "../../../src/index.ts";
 
 let configuredName = "";
 let configuredConfig: Record<string, unknown> = {};

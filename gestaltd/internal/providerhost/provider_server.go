@@ -90,7 +90,8 @@ func principalFromProto(subject *proto.SubjectContext) *principal.Principal {
 		return nil
 	}
 	p := &principal.Principal{
-		SubjectID: subject.GetId(),
+		SubjectID:   subject.GetId(),
+		DisplayName: subject.GetDisplayName(),
 		Identity: &core.UserIdentity{
 			DisplayName: subject.GetDisplayName(),
 		},

@@ -34,14 +34,6 @@ impl Request {
     pub fn connection_param(&self, name: &str) -> Option<&str> {
         self.connection_params.get(name).map(String::as_str)
     }
-
-    pub fn subject(&self) -> &Subject {
-        &self.subject
-    }
-
-    pub fn credential(&self) -> &Credential {
-        &self.credential
-    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
