@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	sdkgestalt "github.com/valon-technologies/gestalt/sdk/go"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
@@ -28,6 +29,7 @@ func (p *roundTripProvider) Execute(ctx context.Context, operation string, param
 	subjectKind := ""
 	authSource := ""
 	displayName := ""
+	identityPresent := "false"
 	if p := principal.FromContext(ctx); p != nil {
 		subjectID = p.SubjectID
 		if subjectID == "" && p.UserID != "" {
@@ -36,11 +38,14 @@ func (p *roundTripProvider) Execute(ctx context.Context, operation string, param
 		subjectKind = string(p.Kind)
 		authSource = p.AuthSource()
 		displayName = p.DisplayName
+		if p.Identity != nil {
+			identityPresent = "true"
+		}
 	}
 	credential := invocation.CredentialContextFromContext(ctx)
 	return &core.OperationResult{
 		Status: 201,
-		Body:   fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%s|%s|%s", operation, token, params["message"], core.ConnectionParams(ctx)["tenant"], subjectID, subjectKind, displayName, authSource, credential.Mode, credential.SubjectID),
+		Body:   fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s", operation, token, params["message"], core.ConnectionParams(ctx)["tenant"], subjectID, subjectKind, displayName, identityPresent, authSource, credential.Mode, credential.SubjectID),
 	}, nil
 }
 
@@ -60,6 +65,7 @@ func (p *roundTripProvider) CatalogForRequest(ctx context.Context, token string)
 	subjectKind := ""
 	authSource := ""
 	displayName := ""
+	identityPresent := "false"
 	if p := principal.FromContext(ctx); p != nil {
 		subjectID = p.SubjectID
 		if subjectID == "" && p.UserID != "" {
@@ -68,11 +74,14 @@ func (p *roundTripProvider) CatalogForRequest(ctx context.Context, token string)
 		subjectKind = string(p.Kind)
 		authSource = p.AuthSource()
 		displayName = p.DisplayName
+		if p.Identity != nil {
+			identityPresent = "true"
+		}
 	}
 	credential := invocation.CredentialContextFromContext(ctx)
 	return &catalog.Catalog{
 		Name:        "roundtrip-session",
-		DisplayName: fmt.Sprintf("%s|%s|%s|%s|%s|%s", token, subjectID, subjectKind, displayName, authSource, credential.Mode),
+		DisplayName: fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s", token, subjectID, subjectKind, displayName, identityPresent, authSource, credential.Mode),
 		Description: "session catalog",
 		Operations: []catalog.CatalogOperation{
 			{ID: "echo", Method: http.MethodPost},
@@ -188,8 +197,8 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 				Identity:    &core.UserIdentity{DisplayName: "Ada"},
 				Source:      principal.SourceAPIToken,
 			},
-			wantExecuteBody:    "echo|secret-token|hi|acme|user:user-123|user|Ada|api_token|identity|identity:__identity__",
-			wantSessionCatalog: "token-123|user:user-123|user|Ada|api_token|identity",
+			wantExecuteBody:    "echo|secret-token|hi|acme|user:user-123|user|Ada|true|api_token|identity|identity:__identity__",
+			wantSessionCatalog: "token-123|user:user-123|user|Ada|true|api_token|identity",
 		},
 		{
 			name: "workload subject",
@@ -199,8 +208,8 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 				Kind:        principal.KindWorkload,
 				Source:      principal.SourceWorkloadToken,
 			},
-			wantExecuteBody:    "echo|secret-token|hi|acme|workload:triage-bot|workload|Triage Bot|workload_token|identity|identity:__identity__",
-			wantSessionCatalog: "token-123|workload:triage-bot|workload|Triage Bot|workload_token|identity",
+			wantExecuteBody:    "echo|secret-token|hi|acme|workload:triage-bot|workload|Triage Bot|false|workload_token|identity|identity:__identity__",
+			wantSessionCatalog: "token-123|workload:triage-bot|workload|Triage Bot|false|workload_token|identity",
 		},
 	}
 
@@ -263,6 +272,26 @@ func TestRequestContextProto_PreservesWorkloadDisplayName(t *testing.T) {
 	}
 	if got := reqCtx.GetSubject().GetDisplayName(); got != "Triage Bot" {
 		t.Fatalf("subject display name = %q, want %q", got, "Triage Bot")
+	}
+}
+
+func TestPrincipalFromProto_WorkloadDisplayNameDoesNotCreateIdentity(t *testing.T) {
+	t.Parallel()
+
+	p := principalFromProto(&proto.SubjectContext{
+		Id:          principal.WorkloadSubjectID("triage-bot"),
+		Kind:        string(principal.KindWorkload),
+		DisplayName: "Triage Bot",
+		AuthSource:  principal.SourceWorkloadToken.String(),
+	})
+	if p == nil {
+		t.Fatal("expected principal")
+	}
+	if p.DisplayName != "Triage Bot" {
+		t.Fatalf("display name = %q, want %q", p.DisplayName, "Triage Bot")
+	}
+	if p.Identity != nil {
+		t.Fatalf("expected workload identity to remain nil, got %#v", p.Identity)
 	}
 }
 
