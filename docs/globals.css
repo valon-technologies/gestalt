@@ -474,7 +474,8 @@ article.nextra-content main::before {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  padding-top: 0.65rem;
+  line-height: 1;
+  padding-top: 0.2rem;
 }
 
 .nextra-callout > [data-pagefind-ignore='all'] svg {
