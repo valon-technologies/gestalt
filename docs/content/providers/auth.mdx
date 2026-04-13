@@ -1,227 +1,61 @@
-import { Tabs } from 'nextra/components'
-
 # Auth
 
-Auth providers handle platform login. When a user visits the Gestalt web UI or hits the HTTP API without a valid session, the auth provider drives the login flow, validates the callback, and returns an authenticated identity. Gestalt then issues a session cookie and manages session lifetime on its own.
+Auth providers handle platform login for the Gestalt server. They are separate
+from plugin connections: `providers.auth` decides how users sign in to the
+deployment itself, while plugin connections decide how Gestalt authenticates to
+upstream APIs on behalf of callers.
 
-Beyond the core login flow, an auth provider can optionally validate externally issued tokens (so API clients can present a bearer token directly instead of going through the browser) and control session TTL.
+## How auth providers work
 
-The examples on this page use a Google OAuth provider as the running example.
+When a request arrives without a valid session, Gestalt asks the configured
+auth provider to begin login, redirects the user to the identity provider, and
+then calls the provider again to complete the callback. After that, Gestalt
+issues and stores its own session.
 
-## Manifest
+Some auth providers also support:
 
-An auth provider manifest declares `kind: auth`. You can optionally include a `configSchemaPath` so Gestalt validates provider config at startup.
+- validating externally issued bearer tokens for API clients
+- customizing session TTL
+- restricting login to allowed email domains or tenant settings
+
+## First-party auth providers
+
+First-party auth providers live under
+[`valon-technologies/gestalt-providers/auth`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth).
+
+| Provider | Repository | Source ref | Use case |
+| --- | --- | --- | --- |
+| Local | [`auth/local`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth/local) | `github.com/valon-technologies/gestalt-providers/auth/local` | Single-user local development |
+| Google | [`auth/google`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth/google) | `github.com/valon-technologies/gestalt-providers/auth/google` | Google OAuth platform login |
+| OIDC | [`auth/oidc`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth/oidc) | `github.com/valon-technologies/gestalt-providers/auth/oidc` | Generic OpenID Connect providers such as Okta, Auth0, Azure AD, or Keycloak |
+
+## Configuring `providers.auth`
 
 ```yaml
-kind: auth
-source: github.com/your-org/auth/google
-version: 0.0.1
-displayName: Google
-description: Authenticate users with Google OAuth.
-spec:
-  configSchemaPath: ./auth_config.json
+providers:
+  auth:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/auth/google
+      version: 0.0.1-alpha.1
+    config:
+      clientId: ${GOOGLE_CLIENT_ID}
+      clientSecret: secret://google-client-secret
+      allowedDomains:
+        - example.com
 ```
 
-## Interface
+Secret references such as `secret://google-client-secret` are resolved through
+`providers.secrets` before the auth provider receives its config.
 
-You implement three methods: `Configure`, `BeginLogin`, and `CompleteLogin`. `BeginLogin` returns an authorization URL that Gestalt redirects the user to. `CompleteLogin` exchanges the callback parameters for an authenticated identity.
+To disable platform auth entirely, omit `providers.auth` or set:
 
-<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
-  <Tabs.Tab>
-    ```go
-    package googleauth
+```yaml
+providers:
+  auth:
+    disabled: true
+```
 
-    import (
-    	"context"
-    	"fmt"
-
-    	gestalt "github.com/valon-technologies/gestalt/sdk/go"
-    	"golang.org/x/oauth2"
-    	googleoauth "golang.org/x/oauth2/google"
-    )
-
-    type GoogleAuth struct {
-    	clientID     string
-    	clientSecret string
-    }
-
-    func New() *GoogleAuth { return &GoogleAuth{} }
-
-    func (g *GoogleAuth) Configure(_ context.Context, _ string, config map[string]any) error {
-    	g.clientID, _ = config["clientId"].(string)
-    	g.clientSecret, _ = config["clientSecret"].(string)
-    	if g.clientID == "" || g.clientSecret == "" {
-    		return fmt.Errorf("clientId and clientSecret are required")
-    	}
-    	return nil
-    }
-
-    func (g *GoogleAuth) BeginLogin(_ context.Context, req gestalt.BeginLoginRequest) (*gestalt.BeginLoginResponse, error) {
-    	cfg := &oauth2.Config{
-    		ClientID:     g.clientID,
-    		ClientSecret: g.clientSecret,
-    		RedirectURL:  req.CallbackURL,
-    		Scopes:       []string{"openid", "email", "profile"},
-    		Endpoint:     googleoauth.Endpoint,
-    	}
-    	return &gestalt.BeginLoginResponse{
-    		AuthorizationURL: cfg.AuthCodeURL(req.HostState, oauth2.AccessTypeOffline),
-    	}, nil
-    }
-
-    func (g *GoogleAuth) CompleteLogin(ctx context.Context, req gestalt.CompleteLoginRequest) (*gestalt.AuthenticatedUser, error) {
-    	// Exchange req.Query["code"] for a token, then fetch userinfo.
-    	return &gestalt.AuthenticatedUser{
-    		Subject:       "user-123",
-    		Email:         "user@example.com",
-    		EmailVerified: true,
-    		DisplayName:   "Example User",
-    	}, nil
-    }
-
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```python
-    import gestalt
-
-    class GoogleAuth(gestalt.AuthProvider):
-        def configure(self, name: str, config: dict) -> None:
-            self.client_id = config["clientId"]
-            self.client_secret = config["clientSecret"]
-
-        def begin_login(self, request: gestalt.BeginLoginRequest) -> gestalt.BeginLoginResponse:
-            auth_url = (
-                "https://accounts.google.com/o/oauth2/v2/auth"
-                f"?client_id={self.client_id}"
-                f"&redirect_uri={request.callback_url}"
-                f"&state={request.host_state}"
-                "&response_type=code"
-                "&scope=openid+email+profile"
-            )
-            return gestalt.BeginLoginResponse(authorization_url=auth_url)
-
-        def complete_login(self, request: gestalt.CompleteLoginRequest) -> gestalt.AuthenticatedUser:
-            # Exchange request.query["code"] for a token, then fetch userinfo.
-            return gestalt.AuthenticatedUser(
-                subject="user-123",
-                email="user@example.com",
-                email_verified=True,
-                display_name="Example User",
-            )
-
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```rust
-    use std::sync::Mutex;
-    use gestalt::{AuthProvider, AuthenticatedUser, BeginLoginRequest, BeginLoginResponse, CompleteLoginRequest};
-
-    pub struct GoogleAuth {
-        client_id: Mutex<String>,
-        client_secret: Mutex<String>,
-    }
-
-    #[gestalt::async_trait]
-    impl AuthProvider for GoogleAuth {
-        async fn configure(
-            &self, _name: &str, config: serde_json::Map<String, serde_json::Value>,
-        ) -> gestalt::Result<()> {
-            *self.client_id.lock().unwrap() = config
-                .get("clientId").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            *self.client_secret.lock().unwrap() = config
-                .get("clientSecret").and_then(|v| v.as_str()).unwrap_or("").to_string();
-            Ok(())
-        }
-
-        async fn begin_login(&self, req: BeginLoginRequest) -> gestalt::Result<BeginLoginResponse> {
-            let client_id = self.client_id.lock().unwrap().clone();
-            Ok(BeginLoginResponse {
-                authorization_url: format!(
-                    "https://accounts.google.com/o/oauth2/v2/auth\
-                    ?client_id={client_id}&redirect_uri={}&state={}&response_type=code\
-                    &scope=openid+email+profile",
-                    req.callback_url, req.host_state,
-                ),
-                provider_state: vec![],
-            })
-        }
-
-        async fn complete_login(&self, req: CompleteLoginRequest) -> gestalt::Result<AuthenticatedUser> {
-            // Exchange req.query["code"] for a token, then fetch userinfo.
-            Ok(AuthenticatedUser {
-                subject: "user-123".into(),
-                email: "user@example.com".into(),
-                email_verified: true,
-                display_name: "Example User".into(),
-                ..Default::default()
-            })
-        }
-    }
-
-    gestalt::export_auth_provider!(constructor = GoogleAuth::default);
-    ```
-  </Tabs.Tab>
-  <Tabs.Tab>
-    ```ts
-    import { defineAuthProvider } from "@valon-technologies/gestalt";
-
-    let clientId = "";
-    let clientSecret = "";
-
-    export const provider = defineAuthProvider({
-      async configure(_name, config) {
-        clientId = config.clientId as string;
-        clientSecret = config.clientSecret as string;
-      },
-      async beginLogin(request) {
-        return {
-          authorizationUrl:
-            `https://accounts.google.com/o/oauth2/v2/auth` +
-            `?client_id=${encodeURIComponent(clientId)}` +
-            `&redirect_uri=${encodeURIComponent(request.callbackUrl)}` +
-            `&state=${encodeURIComponent(request.hostState)}` +
-            `&response_type=code&scope=${encodeURIComponent("openid email profile")}`,
-        };
-      },
-      async completeLogin(request) {
-        // Exchange request.query.code for a token, then fetch userinfo.
-        return {
-          subject: "user-123",
-          email: "user@example.com",
-          emailVerified: true,
-          displayName: "Example User",
-        };
-      },
-    });
-    ```
-
-    Point `package.json` at the auth provider with `gestalt.provider`:
-
-    ```json
-    {
-      "gestalt": {
-        "provider": {
-          "kind": "auth",
-          "target": "./auth.ts#provider"
-        }
-      }
-    }
-    ```
-  </Tabs.Tab>
-</Tabs>
-
-## Optional interfaces
-
-Two optional interfaces extend the base contract.
-
-**ExternalTokenValidator** lets API clients present a bearer token directly instead of going through the browser login flow. In Go, implement the `ExternalTokenValidator` interface on your provider. In Python, inherit from `gestalt.ExternalTokenValidator`. In Rust, override the `validate_external_token` method, which returns an unimplemented error by default. In TypeScript, provide the optional `validateExternalToken` handler to `defineAuthProvider`.
-
-**SessionTTLProvider** controls session lifetime. The default is 24 hours. In Go, implement the `SessionTTLProvider` interface. In Python, inherit from `gestalt.SessionTTLProvider`. In Rust, override the `session_ttl` method, which returns `None` (the 24-hour default) by default. In TypeScript, provide the optional `sessionSettings` handler to `defineAuthProvider`.
-
-## Config reference
-
-To use a Google auth provider in a Gestalt deployment, reference it in the `providers.auth` block:
+## Local source during development
 
 ```yaml
 providers:
@@ -231,16 +65,17 @@ providers:
     config:
       clientId: ${GOOGLE_CLIENT_ID}
       clientSecret: secret://google-client-secret
-      allowedDomains:
-        - example.com
 ```
 
-`source.path` points at the auth provider's `manifest.yaml` during development. For production, use `source.ref` and `version` to reference a published release. The `config` block is passed to `Configure` at startup and validated against the config schema if one was declared in the manifest.
+## Building your own auth provider
 
-Secret references like `secret://google-client-secret` are resolved through the configured secret manager before reaching the provider. Environment variable placeholders like `${GOOGLE_CLIENT_ID}` are expanded during config loading. See [Configuration](/configuration) for details on both.
+Implementation details for `BeginLogin`, callback handling, optional bearer
+token validation, and release packaging now live under
+[Custom Providers > Auth](/custom-providers/auth).
 
 ## What to read next
 
-- [Secrets](/providers/secrets): configuring the secret manager that resolves `secret://` references
-- [Releasing](/providers/releasing): packaging and publishing provider releases
-- [Built-in Providers](/reference/built-in-providers): first-party auth provider reference
+- [Secrets](/providers/secrets): secret managers for auth provider config
+- [Configuration](/configuration): full config examples including `providers.auth`
+- [Built-in Providers](/reference/built-in-providers): first-party auth reference
+- [Custom Auth Providers](/custom-providers/auth): advanced authoring docs

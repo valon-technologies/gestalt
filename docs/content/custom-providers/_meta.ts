@@ -4,7 +4,5 @@ export default {
   indexeddb: "IndexedDB",
   secrets: "Secrets",
   "web-uis": "Web UIs",
-  releasing: {
-    display: "hidden",
-  },
+  releasing: "Releasing",
 };

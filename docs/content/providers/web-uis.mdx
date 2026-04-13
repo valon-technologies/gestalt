@@ -1,57 +1,32 @@
-import { Tabs } from 'nextra/components'
-
 # Web UIs
 
-Web UI bundles are static asset packages. Gestalt serves them under explicit path prefixes configured in `providers.ui`. The built-in admin UI at `/admin` remains available regardless of whether custom UI bundles are configured.
+Web UI providers are static asset bundles. Gestalt serves each configured
+bundle under the path prefix declared in `providers.ui.<name>.path`. The
+built-in admin UI at `/admin` remains available regardless of whether public UI
+bundles are configured.
 
-A UI bundle is not a plugin in the executable sense. It contains no server-side code. Gestalt simply serves the static files from the asset root directory. The bundle talks to Gestalt through the same HTTP API and MCP endpoints that any other client would use.
+## How web UI providers work
 
-## Manifest
+Unlike executable providers, a web UI provider is just a packaged asset root.
+`gestaltd` resolves the bundle, prepares it during `gestaltd init`, and then
+serves the pinned assets from the configured public path prefix when the server
+starts.
 
-The manifest declares `spec.assetRoot`, which points to the directory containing the built static assets. The source field identifies the provider in the registry.
+## First-party UI bundles
 
-```yaml
-kind: webui
-source: github.com/valon-technologies/gestalt-providers/web/default
-version: 0.0.1
-displayName: Default Web UI
-description: Static Gestalt web UI bundle.
-release:
-  build:
-    command:
-      - sh
-      - ./build.sh
-spec:
-  assetRoot: out
-```
+First-party UI bundles live under
+[`valon-technologies/gestalt-providers/web`](https://github.com/valon-technologies/gestalt-providers/tree/main/web).
 
-The `assetRoot` path is relative to the manifest file. It should contain the output of your frontend build (typically an `index.html` and accompanying JS, CSS, and image files).
+| Bundle | Repository | Source ref |
+| --- | --- | --- |
+| Default Web UI | [`web/default`](https://github.com/valon-technologies/gestalt-providers/tree/main/web/default) | `github.com/valon-technologies/gestalt-providers/web/default` |
 
-## Build step
+## Configuring `providers.ui`
 
-If your UI needs a build step before packaging, use `release.build` to run it automatically during `gestaltd provider release`. This runs before source-manifest preparation, so the built assets are included in the release archive.
+Use `providers.ui` as a map of mounted bundles. Omit it entirely to run
+headless with no public UI bundles.
 
-This example uses a build step that runs `npm run build` to produce the static output:
-
-```yaml
-kind: webui
-source: github.com/valon-technologies/gestalt-providers/web/default
-version: 0.0.1
-release:
-  build:
-    command:
-      - npm
-      - run
-      - build
-spec:
-  assetRoot: out
-```
-
-The command runs relative to the manifest directory. After the build completes, Gestalt packages everything under `assetRoot` into the release archive. You can use any build tool here -- `npm run build`, `vite build`, `next build && next export` -- as long as it writes output to the directory specified in `assetRoot`.
-
-## Configuring mounted UI bundles
-
-Reference a UI bundle under `providers.ui.<name>`. During development, point at the source manifest:
+Point at a local source bundle during development:
 
 ```yaml
 providers:
@@ -62,7 +37,7 @@ providers:
       path: /create-customer-roadmap-review
 ```
 
-For production, reference a published release by source and version:
+Reference a published bundle in production:
 
 ```yaml
 providers:
@@ -74,25 +49,32 @@ providers:
       path: /create-customer-roadmap-review
 ```
 
-When a config references a published UI bundle, run `gestaltd init` to resolve and prepare it. This writes lock state to `gestalt.lock.json` and extracts the assets under `.gestaltd/`. After init, `gestaltd serve --locked` serves the locked UI bundle under its configured path prefix. If the prepared UI files are already present, Gestalt uses them directly; if they are missing, Gestalt can materialize them from the lockfile at startup.
+## Locked deployments
 
-Gestalt serves each bundle for requests under `<path>/*`. Mounted bundles are static SPAs; they talk to Gestalt through the same HTTP API and MCP endpoints, not through a special plugin-local route surface.
+When `providers.ui` references a published bundle, run:
+
+```sh
+gestaltd init --config ./config.yaml
+```
+
+That writes `gestalt.lock.json` and prepares the bundle under `.gestaltd/`.
+Afterward, `gestaltd serve --locked` serves the prepared assets from the
+configured path prefix.
 
 ## The admin UI
 
-The built-in admin UI is always served at `/admin`, regardless of whether custom UI bundles are configured. It provides a management interface for users, plugins, connections, and API tokens. UI bundles own only their configured prefixes.
+The built-in admin UI is always served at `/admin`, regardless of whether
+custom UI bundles are configured. Mounted bundles own only their configured
+public prefixes.
 
-## Release
+## Building your own web UI bundle
 
-UI bundles use the same release system as provider packages:
-
-```sh
-gestaltd provider release --version 0.0.1
-```
-
-Run this from the directory containing the manifest. If `release.build` is defined, the build command runs first, then Gestalt packages the manifest and the asset root into a release archive. See [Releasing](/providers/releasing) for details on release archives, tag resolution, and prepared state.
+Asset-root layout, build hooks, and release packaging now live under
+[Custom Providers > Web UIs](/custom-providers/web-uis) and
+[Custom Providers > Releasing](/custom-providers/releasing).
 
 ## What to read next
 
-- [Releasing](/providers/releasing): release archives, tag resolution, and prepared state
-- [Configuration](/configuration): full server config reference including `providers.ui`
+- [Configuration](/configuration): `providers.ui` and headless deployments
+- [Client Web UI](/client/web): what the default client exposes
+- [Custom Web UIs](/custom-providers/web-uis): advanced authoring docs

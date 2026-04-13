@@ -4,49 +4,95 @@ asIndexPage: true
 
 # Providers
 
-Gestalt has a unified runtime model: plugins, auth backends, IndexedDB stores, and web UIs all run as providers. The server binary (`gestaltd`) does not compile any of these in. Instead, each provider is a separate package with a manifest and an executable (or a passthrough surface definition) that the host loads at startup.
+Gestalt loads most integration and platform surfaces as providers instead of
+compiling them into `gestaltd`. Plugins, auth backends, IndexedDB backends,
+external secret managers, and public web UIs all use the same provider model:
+you reference a package in config, the host resolves it, validates it, and
+starts it with the permissions and request context it needs.
 
 ## Provider kinds
 
-A provider's kind is set by the `kind` field in its manifest:
+| Kind | Purpose | Config location |
+| --- | --- | --- |
+| `plugin` | Tool providers that expose operations over CLI, HTTP API, and MCP | `providers.plugins.<name>` |
+| `auth` | Platform login backends | `providers.auth` |
+| `indexeddb` | Persistent state backends for users, sessions, tokens, and credentials | `providers.indexeddbs.<name>` |
+| `secrets` | Secret managers that resolve `secret://` references | `providers.secrets` |
+| `webui` | Public UI bundles served at `/` | `providers.ui` |
 
-| Kind | Purpose |
-| --- | --- |
-| `plugin` | Plugin. Exposes operations that users invoke through the CLI, the HTTP API, or MCP. |
-| `auth` | Platform auth backend. Handles login, session validation, and external token verification. |
-| `indexeddb` | Persistent storage. Stores users, plugin tokens, API tokens, and OAuth registrations. |
-| `secrets` | Secret manager. Resolves `secret://` references at bootstrap. Go SDK only for now. |
-| `webui` | Replacement web UI served at `/`. |
+## How providers work
 
-First-party auth, datastore, and secrets providers are published at `github.com/valon-technologies/gestalt-providers/`. You can write your own for any kind.
+- Use `source.path` during local development to point at a provider manifest in
+  a local source tree.
+- Use `source.ref` and `version` to consume a published provider package.
+- Executable providers run as child processes and connect back to the host over
+  gRPC on a temporary Unix socket.
+- Web UI providers are static asset bundles rather than executable processes.
+- `allowedHosts` and `server.egress` govern outbound access for executable
+  providers.
+- Two simple secret managers, `env` and `file`, remain built into
+  `gestaltd`. Telemetry and audit backends are also built in.
 
-## How the runtime works
+## First-party providers
 
-When a provider entry resolves to an executable, `gestaltd` starts it as a child process. The host creates a temporary Unix socket, passes the socket path through the `GESTALT_PLUGIN_SOCKET` environment variable, and waits for the provider to connect back over gRPC. At startup the provider receives the configured provider name and the `config` block from the server config. For plugins, each invocation also receives the current request context (caller identity, decrypted token, and operation parameters).
+First-party provider packages live in
+[`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers).
+The repository is organized by provider type:
 
-The host owns auth, token storage, connection selection, and HTTP or MCP routing. Plugins do not interact with the datastore. Auth providers implement `BeginLogin` and `CompleteLogin`. Datastore providers implement user, token, and API-token storage interfaces. Secrets providers implement `GetSecret` for resolving `secret://` references. Each kind has its own gRPC service contract, but they all share the same process lifecycle.
+| Type | Repository path | Typical config key |
+| --- | --- | --- |
+| Plugins | [`plugins/`](https://github.com/valon-technologies/gestalt-providers/tree/main/plugins) | `providers.plugins.<name>` |
+| Auth | [`auth/`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth) | `providers.auth` |
+| IndexedDB | [`indexeddb/`](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb) | `providers.indexeddbs.<name>` |
+| Secrets | [`secrets/`](https://github.com/valon-technologies/gestalt-providers/tree/main/secrets) | `providers.secrets` |
+| Web UI bundles | [`web/`](https://github.com/valon-technologies/gestalt-providers/tree/main/web) | `providers.ui` |
 
-## Process isolation
+## Using providers
 
-Providers run in their own process. They cannot access the host process memory, other users' credentials, or (for plugins) the datastore directly. All provider types respect `allowedHosts` for egress control: outbound requests to hosts not in the allowlist are rejected.
+Reference the package you want to run, then initialize or start the server:
 
-## SDK support
+```yaml
+server:
+  indexeddb: main
 
-Gestalt ships first-party SDKs for four languages:
+providers:
+  auth:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/auth/oidc
+      version: 0.0.1-alpha.1
+    config:
+      issuerUrl: https://login.example.com
+      clientId: ${OIDC_CLIENT_ID}
+      clientSecret: secret://oidc-client-secret
 
-- **Go** (`sdk/go`)
-- **Python** (`sdk/python`)
-- **Rust** (`sdk/rust`)
-- **TypeScript** (`sdk/typescript`, published as `@valon-technologies/gestalt`)
+  indexeddbs:
+    main:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
+      config:
+        dsn: ${DATABASE_URL}
 
-The underlying protocol is gRPC, so other languages are possible, but the documented authoring flow targets those SDKs.
+  plugins:
+    github:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/plugins/github
+        version: 0.0.1-alpha.1
+```
 
-Go, Rust, and TypeScript support plugin, auth, and datastore providers. Python remains focused on plugin providers.
+Run `gestaltd init` when you want to resolve and pin published releases ahead
+of time, then `gestaltd serve --locked` to start from that prepared state.
+
+## Building custom providers
+
+If you need a provider Gestalt does not already ship, the implementation and
+release workflow now lives under [Custom Providers](/custom-providers).
 
 ## What to read next
 
-- [Plugins](/providers/plugins): plugin providers that expose operations
+- [Plugins](/providers/plugins): choosing and configuring plugin providers
 - [Auth](/providers/auth): platform login providers
-- [IndexedDB](/providers/indexeddb): persistent storage backends
-- [Web UIs](/providers/web-uis): custom web frontends
-- [Releasing](/providers/releasing): packaging and publishing providers
+- [IndexedDB](/providers/indexeddb): storage backends
+- [Secrets](/providers/secrets): built-in and external secret managers
+- [Web UIs](/providers/web-uis): public UI bundles
+- [Custom Providers](/custom-providers): advanced implementation and release docs
