@@ -288,6 +288,54 @@ func TestTransport_IndexCursor(t *testing.T) {
 	}
 }
 
+func TestTransport_IndexContinueToKeyRoundTrip(t *testing.T) {
+	ctx := context.Background()
+	store := "index_seek_" + t.Name()
+
+	err := testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{
+		Indexes: []gestalt.IndexSchema{{Name: "by_num", KeyPath: []string{"n"}}},
+	})
+	if err != nil {
+		t.Fatalf("CreateObjectStore: %v", err)
+	}
+
+	s := testClient.ObjectStore(store)
+	for _, r := range []gestalt.Record{
+		{"id": "a", "n": 1},
+		{"id": "b", "n": 2},
+		{"id": "c", "n": 3},
+	} {
+		if err := s.Add(ctx, r); err != nil {
+			t.Fatalf("Add: %v", err)
+		}
+	}
+
+	cursor, err := s.Index("by_num").OpenCursor(ctx, nil, gestalt.CursorNext)
+	if err != nil {
+		t.Fatalf("OpenCursor: %v", err)
+	}
+	defer cursor.Close()
+
+	if !cursor.Continue() {
+		t.Fatal("Continue returned false")
+	}
+
+	key, ok := cursor.Key().([]any)
+	if !ok {
+		t.Fatalf("Key() type = %T, want []any", cursor.Key())
+	}
+	if len(key) != 1 || key[0] != int64(1) {
+		t.Fatalf("Key() = %#v, want []any{int64(1)}", key)
+	}
+
+	if !cursor.ContinueToKey(cursor.Key()) {
+		t.Fatalf("ContinueToKey returned false err=%v", cursor.Err())
+	}
+	if cursor.PrimaryKey() != "b" {
+		t.Fatalf("PrimaryKey = %q, want b", cursor.PrimaryKey())
+	}
+}
+
 func TestTransport_ErrorMapping(t *testing.T) {
 	ctx := context.Background()
 	store := "errmap_" + t.Name()

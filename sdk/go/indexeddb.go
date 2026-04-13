@@ -334,12 +334,12 @@ func (idx *IndexClient) OpenKeyCursor(ctx context.Context, r *KeyRange, dir Curs
 }
 
 type Cursor struct {
-	stream   proto.IndexedDB_OpenCursorClient
+	stream      proto.IndexedDB_OpenCursorClient
 	keysOnly    bool
 	indexCursor bool
-	entry    *proto.CursorEntry
-	err      error
-	done     bool
+	entry       *proto.CursorEntry
+	err         error
+	done        bool
 }
 
 func (c *Cursor) Continue() bool {
@@ -349,9 +349,9 @@ func (c *Cursor) Continue() bool {
 }
 
 func (c *Cursor) ContinueToKey(key any) bool {
-	kv := anyToKeyValueSDK(key)
+	kvs := cursorKeyToProtoSDK(key, c.indexCursor)
 	return c.sendAndRecv(&proto.CursorCommand{
-		Command: &proto.CursorCommand_ContinueToKey{ContinueToKey: &proto.CursorKeyTarget{Key: []*proto.KeyValue{kv}}},
+		Command: &proto.CursorCommand_ContinueToKey{ContinueToKey: &proto.CursorKeyTarget{Key: kvs}},
 	})
 }
 
@@ -401,6 +401,19 @@ func anyToKeyValueSDK(v any) *proto.KeyValue {
 	}
 	tv, _ := TypedValueFromAny(v)
 	return &proto.KeyValue{Kind: &proto.KeyValue_Scalar{Scalar: tv}}
+}
+
+func cursorKeyToProtoSDK(key any, indexCursor bool) []*proto.KeyValue {
+	if indexCursor {
+		if parts, ok := key.([]any); ok {
+			kvs := make([]*proto.KeyValue, len(parts))
+			for i, part := range parts {
+				kvs[i] = anyToKeyValueSDK(part)
+			}
+			return kvs
+		}
+	}
+	return []*proto.KeyValue{anyToKeyValueSDK(key)}
 }
 
 func (c *Cursor) PrimaryKey() string {
@@ -580,8 +593,6 @@ func openCursor(ctx context.Context, client proto.IndexedDBClient, store, index 
 	}
 	return &Cursor{stream: stream, keysOnly: keysOnly, indexCursor: index != ""}, nil
 }
-
-
 
 func krToProto(r *KeyRange) (*proto.KeyRange, error) {
 	if r == nil {

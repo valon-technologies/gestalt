@@ -200,6 +200,26 @@ class TestIndexCursor(unittest.TestCase):
         c.close()
 
 
+class TestIndexContinueToKey(unittest.TestCase):
+    def test_round_trips_cursor_key(self) -> None:
+        c = _client()
+        c.create_object_store(
+            "index_seek",
+            ObjectStoreSchema(indexes=[IndexSchema(name="by_num", key_path=["n"], unique=False)]),
+        )
+        s = c.object_store("index_seek")
+        s.add({"id": "a", "n": 1})
+        s.add({"id": "b", "n": 2})
+        s.add({"id": "c", "n": 3})
+
+        with s.index("by_num").open_cursor(direction=CURSOR_NEXT) as cursor:
+            self.assertTrue(cursor.continue_())
+            self.assertEqual(cursor.key, [1])
+            self.assertTrue(cursor.continue_to_key(cursor.key))
+            self.assertEqual(cursor.primary_key, "b")
+        c.close()
+
+
 class TestErrorMapping(unittest.TestCase):
     def test_not_found(self) -> None:
         c = _client()

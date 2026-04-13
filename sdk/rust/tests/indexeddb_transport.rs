@@ -365,6 +365,53 @@ async fn index_cursor() {
 }
 
 #[tokio::test]
+async fn index_continue_to_key_round_trip() {
+    let _lock = helpers::env_lock().lock().await;
+    let _harness = start_harness("idb-index-seek.sock").await;
+
+    let mut db = IndexedDB::connect().await.expect("connect");
+    db.create_object_store(
+        "index_seek_store",
+        ObjectStoreSchema {
+            indexes: vec![IndexSchema {
+                name: "by_num".to_string(),
+                key_path: vec!["n".to_string()],
+                unique: false,
+            }],
+        },
+    )
+    .await
+    .expect("create store");
+
+    let mut store = db.object_store("index_seek_store");
+    for (id, n) in [("a", 1), ("b", 2), ("c", 3)] {
+        store
+            .put(make_record(&[
+                ("id", serde_json::json!(id)),
+                ("n", serde_json::json!(n)),
+            ]))
+            .await
+            .expect("put");
+    }
+
+    let mut cursor = store
+        .index("by_num")
+        .open_cursor(&[], None, CursorDirection::Next)
+        .await
+        .expect("open cursor");
+
+    assert!(cursor.continue_next().await.expect("first"));
+    assert_eq!(cursor.key(), Some(serde_json::json!([1])));
+    assert!(
+        cursor
+            .continue_to_key(cursor.key().expect("cursor key"))
+            .await
+            .expect("continue_to_key")
+    );
+    assert_eq!(cursor.primary_key(), "b");
+}
+
+#[tokio::test]
 async fn error_mapping() {
     let _lock = helpers::env_lock().lock().await;
     let _harness = start_harness("idb-errors.sock").await;

@@ -39,7 +39,11 @@ beforeAll(async () => {
     stderr: "inherit",
   });
 
-  const reader = proc.stdout.getReader();
+  const stdout = proc.stdout;
+  if (!stdout || typeof stdout === "number") {
+    throw new Error("expected harness stdout to be piped");
+  }
+  const reader = stdout.getReader();
   const { value } = await reader.read();
   const line = new TextDecoder().decode(value).trim();
   if (!line.includes("READY")) {
@@ -245,6 +249,43 @@ describe("IndexedDB transport", () => {
     }
     expect(keys).toHaveLength(3);
     expect(keys).toEqual(["r1", "r3", "r4"]);
+  });
+
+  test("index cursor: continueToKey round-trips the current key", async () => {
+    const store = "index_cursor_seek";
+    await db.createObjectStore(store, {
+      indexes: [{ name: "by_num", keyPath: ["n"] }],
+    });
+    const os = db.objectStore(store);
+
+    await os.put({ id: "a", n: 1 });
+    await os.put({ id: "b", n: 2 });
+    await os.put({ id: "c", n: 3 });
+
+    const cursor = await os.index("by_num").openCursor();
+    expect(cursor).not.toBeNull();
+
+    expect(await cursor!.continue()).toBe(true);
+    expect(cursor!.key).toEqual([1]);
+    expect(await cursor!.continueToKey(cursor!.key)).toBe(true);
+    expect(cursor!.primaryKey).toBe("b");
+  });
+
+  test("cursor update acknowledges successful mutation", async () => {
+    const store = "cursor_update_ack";
+    await db.createObjectStore(store);
+    const os = db.objectStore(store);
+
+    await os.put({ id: "u1", status: "active" });
+
+    const cursor = await os.openCursor();
+    expect(cursor).not.toBeNull();
+    expect(await cursor!.continue()).toBe(true);
+
+    await cursor!.update({ id: "u1", status: "inactive" });
+    expect(cursor!.value).toEqual({ id: "u1", status: "inactive" });
+    const got = await os.get("u1");
+    expect(got).toEqual({ id: "u1", status: "inactive" });
   });
 
   test("error mapping: get missing throws NotFoundError", async () => {

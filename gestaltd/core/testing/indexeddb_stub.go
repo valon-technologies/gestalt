@@ -408,7 +408,7 @@ func (c *stubCursor) buildIndexKeys() {
 	for i, k := range c.keys {
 		rec := c.snapshot[k]
 		if len(kp) == 1 {
-			c.indexKeys[i] = rec[kp[0]]
+			c.indexKeys[i] = []any{rec[kp[0]]}
 		} else {
 			vals := make([]any, len(kp))
 			for j, field := range kp {
@@ -646,6 +646,9 @@ func (c *stubCursor) ContinueToKey(key any) bool {
 }
 
 func (c *stubCursor) Advance(count int) bool {
+	if count <= 0 {
+		return false
+	}
 	for i := 0; i < count; i++ {
 		if !c.Continue() {
 			return false

@@ -321,12 +321,17 @@ func (s *indexedDBServer) OpenCursor(stream proto.IndexedDB_OpenCursorServer) er
 
 		case *proto.CursorCommand_ContinueToKey:
 			target := v.ContinueToKey.GetKey()
+			if len(target) == 0 {
+				return status.Error(codes.InvalidArgument, "continue key is required")
+			}
 			parts, kErr := keyValuesToAny(target)
 			if kErr != nil {
 				return status.Errorf(codes.InvalidArgument, "unmarshal continue key: %v", kErr)
 			}
 			var key any
-			if len(parts) == 1 {
+			if openReq.GetIndex() != "" {
+				key = parts
+			} else if len(parts) == 1 {
 				key = parts[0]
 			} else {
 				key = parts

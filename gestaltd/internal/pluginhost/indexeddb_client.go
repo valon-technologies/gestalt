@@ -524,14 +524,14 @@ func (c *remoteCursor) Continue() bool {
 }
 
 func (c *remoteCursor) ContinueToKey(key any) bool {
-	kv, err := anyToKeyValue(key)
+	kvs, err := cursorKeyToProto(key, c.indexCursor)
 	if err != nil {
 		c.err = err
 		return false
 	}
 	return c.sendAndRecv(&proto.CursorClientMessage{
 		Msg: &proto.CursorClientMessage_Command{Command: &proto.CursorCommand{
-			Command: &proto.CursorCommand_ContinueToKey{ContinueToKey: &proto.CursorKeyTarget{Key: []*proto.KeyValue{kv}}},
+			Command: &proto.CursorCommand_ContinueToKey{ContinueToKey: &proto.CursorKeyTarget{Key: kvs}},
 		}},
 	})
 }
@@ -640,6 +640,28 @@ func (c *remoteCursor) Close() error {
 	_ = c.stream.CloseSend()
 	c.cancel()
 	return nil
+}
+
+func cursorKeyToProto(key any, indexCursor bool) ([]*proto.KeyValue, error) {
+	if indexCursor {
+		if parts, ok := key.([]any); ok {
+			kvs := make([]*proto.KeyValue, len(parts))
+			for i, part := range parts {
+				kv, err := anyToKeyValue(part)
+				if err != nil {
+					return nil, err
+				}
+				kvs[i] = kv
+			}
+			return kvs, nil
+		}
+	}
+
+	kv, err := anyToKeyValue(key)
+	if err != nil {
+		return nil, err
+	}
+	return []*proto.KeyValue{kv}, nil
 }
 
 var _ indexeddb.IndexedDB = (*remoteIndexedDB)(nil)

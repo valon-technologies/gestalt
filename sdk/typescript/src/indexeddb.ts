@@ -153,11 +153,15 @@ export class Cursor {
   }
 
   async continueToKey(key: unknown): Promise<boolean> {
-    const kv = toProtoKeyValue(key);
     this.sendQueue.push({
       msg: {
         case: "command" as const,
-        value: { command: { case: "continueToKey" as const, value: { key: [kv] } } },
+        value: {
+          command: {
+            case: "continueToKey" as const,
+            value: { key: toProtoCursorKey(key, this._indexCursor) },
+          },
+        },
       },
     });
     return this.pull();
@@ -214,14 +218,7 @@ export class Cursor {
       const { value: resp, done } = await this.responseIterator.next();
       if (done || !resp) return;
       if (resp.result?.case === "entry") {
-        const entry = resp.result.value;
-        if (!this._indexCursor && entry.key.length === 1) {
-          this._key = fromProtoTypedValue(entry.key[0]);
-        } else if (entry.key.length > 0) {
-          this._key = entry.key.map(fromProtoTypedValue);
-        }
-        this._primaryKey = entry.primaryKey;
-        this._value = entry.record ? fromProtoRecord(entry.record) : undefined;
+        this.refreshFromEntry(resp.result.value);
       }
     } catch (err: any) {
       if (err?.code === 5) throw new NotFoundError(err.message);
@@ -259,20 +256,23 @@ export class Cursor {
       return false;
     }
     if (resp.result?.case === "entry") {
-      const entry = resp.result.value;
-      if (!this._indexCursor && entry.key.length === 1) {
-        this._key = fromProtoKeyValue(entry.key[0]);
-      } else if (entry.key.length > 0) {
-        this._key = entry.key.map(fromProtoKeyValue);
-      } else {
-        this._key = undefined;
-      }
-      this._primaryKey = entry.primaryKey;
-      this._value = entry.record ? fromProtoRecord(entry.record) : undefined;
+      this.refreshFromEntry(resp.result.value);
       this._done = false;
       return true;
     }
     return false;
+  }
+
+  private refreshFromEntry(entry: any): void {
+    if (!this._indexCursor && entry.key.length === 1) {
+      this._key = fromProtoKeyValue(entry.key[0]);
+    } else if (entry.key.length > 0) {
+      this._key = entry.key.map(fromProtoKeyValue);
+    } else {
+      this._key = undefined;
+    }
+    this._primaryKey = entry.primaryKey;
+    this._value = entry.record ? fromProtoRecord(entry.record) : undefined;
   }
 }
 
@@ -521,6 +521,13 @@ function toProtoKeyValue(v: unknown): any {
     return { kind: { case: "array" as const, value: { elements: v.map(toProtoKeyValue) } } };
   }
   return { kind: { case: "scalar" as const, value: toProtoTypedValue(v) } };
+}
+
+function toProtoCursorKey(key: unknown, indexCursor: boolean): any[] {
+  if (indexCursor && Array.isArray(key)) {
+    return key.map(toProtoKeyValue);
+  }
+  return [toProtoKeyValue(key)];
 }
 
 function toProtoRecord(record: Record): any {

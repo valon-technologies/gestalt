@@ -115,8 +115,9 @@ impl Cursor {
         &mut self,
         key: serde_json::Value,
     ) -> Result<bool, IndexedDBError> {
-        let kv = json_to_key_value(&key);
-        let cmd = pb::cursor_command::Command::ContinueToKey(pb::CursorKeyTarget { key: vec![kv] });
+        let cmd = pb::cursor_command::Command::ContinueToKey(pb::CursorKeyTarget {
+            key: cursor_key_to_proto(&key, self.index_cursor),
+        });
         self.send_and_recv(cmd).await
     }
 
@@ -659,6 +660,15 @@ fn json_to_key_value(v: &serde_json::Value) -> pb::KeyValue {
             kind: Some(pb::key_value::Kind::Scalar(json_to_typed_value(v))),
         }
     }
+}
+
+fn cursor_key_to_proto(key: &serde_json::Value, index_cursor: bool) -> Vec<pb::KeyValue> {
+    if index_cursor {
+        if let serde_json::Value::Array(parts) = key {
+            return parts.iter().map(json_to_key_value).collect();
+        }
+    }
+    vec![json_to_key_value(key)]
 }
 
 fn typed_value_to_json(v: &pb::TypedValue) -> serde_json::Value {

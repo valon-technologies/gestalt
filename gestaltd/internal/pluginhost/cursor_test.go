@@ -386,6 +386,29 @@ func TestCursor_ContinueToKey(t *testing.T) {
 	}
 }
 
+func TestCursor_AdvanceRejectsNonPositiveCounts(t *testing.T) {
+	t.Parallel()
+
+	_, db := newCursorTestDB(t)
+	ctx := context.Background()
+
+	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, indexeddb.CursorNext)
+	if err != nil {
+		t.Fatalf("OpenCursor: %v", err)
+	}
+	defer func() { _ = cursor.Close() }()
+
+	if cursor.Advance(0) {
+		t.Fatal("Advance(0) returned true")
+	}
+	if err := cursor.Err(); err != nil {
+		t.Fatalf("Err: %v", err)
+	}
+	if cursor.PrimaryKey() != "" {
+		t.Fatalf("PrimaryKey after Advance(0) = %q, want empty", cursor.PrimaryKey())
+	}
+}
+
 // --- Index cursor ---
 
 func TestCursor_IndexIteration(t *testing.T) {
@@ -450,6 +473,76 @@ func TestCursor_IndexKeyReturnsIndexValues(t *testing.T) {
 	pk := cursor.PrimaryKey()
 	if pk != "a" && pk != "b" && pk != "c" && pk != "d" {
 		t.Errorf("PrimaryKey() = %q, want a/b/c/d", pk)
+	}
+}
+
+func TestCursor_IndexContinueToKeyRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	stub := &coretesting.StubIndexedDB{}
+	ctx := context.Background()
+	schema := indexeddb.ObjectStoreSchema{
+		Indexes: []indexeddb.IndexSchema{{Name: "by_num", KeyPath: []string{"n"}}},
+	}
+	if err := stub.CreateObjectStore(ctx, "plugin_test_items", schema); err != nil {
+		t.Fatal(err)
+	}
+
+	store := stub.ObjectStore("plugin_test_items")
+	for _, r := range []indexeddb.Record{
+		{"id": "a", "n": 1},
+		{"id": "b", "n": 2},
+		{"id": "c", "n": 3},
+	} {
+		if err := store.Add(ctx, r); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	conn := newBufconnConn(t, func(srv *grpc.Server) {
+		proto.RegisterIndexedDBServer(srv, NewIndexedDBServer(stub, "test"))
+	})
+	remote := &remoteIndexedDB{client: proto.NewIndexedDBClient(conn)}
+
+	cursor, err := remote.ObjectStore("items").Index("by_num").OpenCursor(ctx, nil, indexeddb.CursorNext)
+	if err != nil {
+		t.Fatalf("OpenCursor: %v", err)
+	}
+	defer func() { _ = cursor.Close() }()
+
+	if !cursor.Continue() {
+		t.Fatal("Continue returned false")
+	}
+	if !cursor.ContinueToKey(cursor.Key()) {
+		t.Fatalf("ContinueToKey returned false err=%v", cursor.Err())
+	}
+	if cursor.PrimaryKey() != "b" {
+		t.Fatalf("PrimaryKey = %q, want b", cursor.PrimaryKey())
+	}
+}
+
+func TestCursor_StubSingleFieldIndexKeyMatchesRemoteShape(t *testing.T) {
+	t.Parallel()
+
+	stub, _ := newCursorTestDB(t)
+	ctx := context.Background()
+
+	cursor, err := stub.ObjectStore("plugin_test_items").Index("by_status").OpenCursor(ctx, nil, indexeddb.CursorNext)
+	if err != nil {
+		t.Fatalf("OpenCursor: %v", err)
+	}
+	defer func() { _ = cursor.Close() }()
+
+	if !cursor.Continue() {
+		t.Fatal("Continue returned false")
+	}
+
+	key, ok := cursor.Key().([]any)
+	if !ok {
+		t.Fatalf("Key() type = %T, want []any", cursor.Key())
+	}
+	if len(key) != 1 {
+		t.Fatalf("Key() len = %d, want 1", len(key))
 	}
 }
 

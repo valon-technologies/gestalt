@@ -351,8 +351,11 @@ class Cursor:
     def continue_to_key(self, key: Any) -> bool:
         if self._closed or self._exhausted:
             return False
-        kv = _python_to_key_value(key)
-        self._send_command(continue_to_key=pb.CursorKeyTarget(key=[kv]))
+        self._send_command(
+            continue_to_key=pb.CursorKeyTarget(
+                key=_cursor_key_to_proto(key, self._index_cursor),
+            )
+        )
         return self._advance_to_next()
 
     def advance(self, count: int) -> bool:
@@ -570,6 +573,12 @@ def _python_to_key_value(v: Any) -> Any:
     if isinstance(v, (list, tuple)):
         return pb.KeyValue(array=pb.KeyValueArray(elements=[_python_to_key_value(elem) for elem in v]))
     return pb.KeyValue(scalar=_to_typed_value(v))
+
+
+def _cursor_key_to_proto(key: Any, index_cursor: bool) -> list[Any]:
+    if index_cursor and isinstance(key, (list, tuple)):
+        return [_python_to_key_value(part) for part in key]
+    return [_python_to_key_value(key)]
 
 
 def _kr_to_proto(kr: KeyRange | None) -> Any:
