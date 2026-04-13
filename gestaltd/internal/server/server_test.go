@@ -408,6 +408,8 @@ func TestMountedWebUIRoutesHiddenOnManagementProfile(t *testing.T) {
 }
 
 func TestMountedRootWebUIRoutes(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>root-shell</html>"), 0o644); err != nil {
 		t.Fatalf("WriteFile index.html: %v", err)
@@ -497,6 +499,8 @@ func TestMountedRootWebUIRoutes(t *testing.T) {
 }
 
 func TestMountedRootWebUIRoutesHiddenOnManagementProfile(t *testing.T) {
+	t.Parallel()
+
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.RouteProfile = server.RouteProfileManagement
 		cfg.MountedWebUIs = []server.MountedWebUI{{
