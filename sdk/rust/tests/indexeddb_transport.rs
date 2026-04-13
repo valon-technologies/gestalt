@@ -5,7 +5,7 @@ use std::io::{BufRead, BufReader};
 use std::process::{Command, Stdio};
 
 use gestalt::indexeddb::{
-    CursorDirection, ENV_INDEXEDDB_SOCKET, IndexSchema, IndexedDB, IndexedDBError,
+    CursorDirection, ENV_INDEXEDDB_SOCKET, IndexSchema, IndexedDB, IndexedDBError, KeyRange,
     ObjectStoreSchema, Record,
 };
 
@@ -109,6 +109,74 @@ async fn nested_json_round_trip() {
         got["tags"]
     );
     assert_eq!(got["tags"][0], serde_json::json!("alpha"));
+}
+
+#[tokio::test]
+async fn object_store_bulk_helpers() {
+    let _lock = helpers::env_lock().lock().await;
+    let _harness = start_harness("idb-store-helpers.sock").await;
+
+    let mut db = IndexedDB::connect().await.expect("connect");
+    db.create_object_store("store_helpers", ObjectStoreSchema { indexes: vec![] })
+        .await
+        .expect("create store");
+
+    let mut store = db.object_store("store_helpers");
+    for id in ["a", "b", "c", "d"] {
+        store
+            .put(make_record(&[
+                ("id", serde_json::json!(id)),
+                ("label", serde_json::json!(format!("label-{id}"))),
+            ]))
+            .await
+            .expect("put");
+    }
+
+    let key = store.get_key("b").await.expect("get_key");
+    assert_eq!(key, "b");
+
+    let all = store.get_all(None).await.expect("get_all");
+    assert_eq!(all.len(), 4);
+
+    let ranged = store
+        .get_all(Some(KeyRange {
+            lower: Some(serde_json::json!("b")),
+            upper: Some(serde_json::json!("c")),
+            lower_open: false,
+            upper_open: false,
+        }))
+        .await
+        .expect("get_all with range");
+    let ranged_ids: Vec<_> = ranged
+        .iter()
+        .map(|record| record["id"].as_str().expect("id").to_string())
+        .collect();
+    assert_eq!(ranged_ids, vec!["b", "c"]);
+
+    let all_keys = store.get_all_keys(None).await.expect("get_all_keys");
+    assert_eq!(all_keys, vec!["a", "b", "c", "d"]);
+
+    let count = store.count(None).await.expect("count");
+    assert_eq!(count, 4);
+
+    let deleted = store
+        .delete_range(KeyRange {
+            lower: Some(serde_json::json!("b")),
+            upper: Some(serde_json::json!("c")),
+            lower_open: false,
+            upper_open: false,
+        })
+        .await
+        .expect("delete_range");
+    assert_eq!(deleted, 2);
+    assert_eq!(
+        store.count(None).await.expect("count after delete_range"),
+        2
+    );
+    assert_eq!(
+        store.get_all_keys(None).await.expect("remaining keys"),
+        vec!["a", "d"]
+    );
 }
 
 #[tokio::test]
@@ -387,13 +455,80 @@ async fn index_cursor() {
 
     let mut idx = store.index("by_status");
     let all_active = idx
-        .get_all(&[serde_json::json!("active")])
+        .get_all(&[serde_json::json!("active")], None)
         .await
         .expect("get_all active");
     assert_eq!(all_active.len(), 3, "expected 3 active records");
     for rec in &all_active {
         assert_eq!(rec["status"], serde_json::json!("active"));
     }
+}
+
+#[tokio::test]
+async fn index_query_helpers() {
+    let _lock = helpers::env_lock().lock().await;
+    let _harness = start_harness("idb-index-helpers.sock").await;
+
+    let mut db = IndexedDB::connect().await.expect("connect");
+    db.create_object_store(
+        "index_helpers_store",
+        ObjectStoreSchema {
+            indexes: vec![IndexSchema {
+                name: "by_num".to_string(),
+                key_path: vec!["n".to_string()],
+                unique: false,
+            }],
+        },
+    )
+    .await
+    .expect("create store");
+
+    let mut store = db.object_store("index_helpers_store");
+    for (id, n) in [("a", 1), ("b", 2), ("c", 2), ("d", 4)] {
+        store
+            .put(make_record(&[
+                ("id", serde_json::json!(id)),
+                ("n", serde_json::json!(n)),
+            ]))
+            .await
+            .expect("put");
+    }
+
+    let mut idx = store.index("by_num");
+    let key = idx
+        .get_key(&[serde_json::json!(2)])
+        .await
+        .expect("index get_key");
+    assert_eq!(key, "b");
+
+    let keys = idx
+        .get_all_keys(&[], None)
+        .await
+        .expect("index get_all_keys");
+    assert_eq!(keys, vec!["a", "b", "c", "d"]);
+
+    let ranged_keys = idx
+        .get_all_keys(
+            &[],
+            Some(KeyRange {
+                lower: Some(serde_json::json!(2)),
+                upper: Some(serde_json::json!(2)),
+                lower_open: false,
+                upper_open: false,
+            }),
+        )
+        .await
+        .expect("index get_all_keys with range");
+    assert_eq!(ranged_keys, vec!["b", "c"]);
+
+    let count = idx.count(&[], None).await.expect("index count");
+    assert_eq!(count, 4);
+
+    let exact_count = idx
+        .count(&[serde_json::json!(2)], None)
+        .await
+        .expect("index count exact");
+    assert_eq!(exact_count, 2);
 }
 
 #[tokio::test]

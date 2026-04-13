@@ -384,6 +384,18 @@ impl ObjectStore {
             .unwrap_or_default())
     }
 
+    pub async fn get_key(&mut self, id: &str) -> Result<String, IndexedDBError> {
+        let resp = self
+            .client
+            .get_key(pb::ObjectStoreRequest {
+                store: self.store.clone(),
+                id: id.to_string(),
+            })
+            .await
+            .map_err(map_status)?;
+        Ok(resp.into_inner().key)
+    }
+
     pub async fn add(&mut self, record: Record) -> Result<(), IndexedDBError> {
         self.client
             .add(pb::RecordRequest {
@@ -425,6 +437,65 @@ impl ObjectStore {
             .await
             .map_err(map_status)?;
         Ok(())
+    }
+
+    pub async fn get_all(
+        &mut self,
+        range: Option<KeyRange>,
+    ) -> Result<Vec<Record>, IndexedDBError> {
+        let resp = self
+            .client
+            .get_all(pb::ObjectStoreRangeRequest {
+                store: self.store.clone(),
+                range: range.map(key_range_to_pb),
+            })
+            .await
+            .map_err(map_status)?;
+        Ok(resp
+            .into_inner()
+            .records
+            .iter()
+            .map(pb_record_to_record)
+            .collect())
+    }
+
+    pub async fn get_all_keys(
+        &mut self,
+        range: Option<KeyRange>,
+    ) -> Result<Vec<String>, IndexedDBError> {
+        let resp = self
+            .client
+            .get_all_keys(pb::ObjectStoreRangeRequest {
+                store: self.store.clone(),
+                range: range.map(key_range_to_pb),
+            })
+            .await
+            .map_err(map_status)?;
+        Ok(resp.into_inner().keys)
+    }
+
+    pub async fn count(&mut self, range: Option<KeyRange>) -> Result<i64, IndexedDBError> {
+        let resp = self
+            .client
+            .count(pb::ObjectStoreRangeRequest {
+                store: self.store.clone(),
+                range: range.map(key_range_to_pb),
+            })
+            .await
+            .map_err(map_status)?;
+        Ok(resp.into_inner().count)
+    }
+
+    pub async fn delete_range(&mut self, range: KeyRange) -> Result<i64, IndexedDBError> {
+        let resp = self
+            .client
+            .delete_range(pb::ObjectStoreRangeRequest {
+                store: self.store.clone(),
+                range: Some(key_range_to_pb(range)),
+            })
+            .await
+            .map_err(map_status)?;
+        Ok(resp.into_inner().deleted)
     }
 
     pub fn index(&self, name: &str) -> IndexClient {
@@ -494,9 +565,27 @@ impl IndexClient {
             .unwrap_or_default())
     }
 
+    pub async fn get_key(
+        &mut self,
+        values: &[serde_json::Value],
+    ) -> Result<String, IndexedDBError> {
+        let resp = self
+            .client
+            .index_get_key(pb::IndexQueryRequest {
+                store: self.store.clone(),
+                index: self.index.clone(),
+                values: values.iter().map(json_to_typed_value).collect(),
+                range: None,
+            })
+            .await
+            .map_err(map_status)?;
+        Ok(resp.into_inner().key)
+    }
+
     pub async fn get_all(
         &mut self,
         values: &[serde_json::Value],
+        range: Option<KeyRange>,
     ) -> Result<Vec<Record>, IndexedDBError> {
         let resp = self
             .client
@@ -504,7 +593,7 @@ impl IndexClient {
                 store: self.store.clone(),
                 index: self.index.clone(),
                 values: values.iter().map(json_to_typed_value).collect(),
-                range: None,
+                range: range.map(key_range_to_pb),
             })
             .await
             .map_err(map_status)?;
@@ -514,6 +603,42 @@ impl IndexClient {
             .iter()
             .map(pb_record_to_record)
             .collect())
+    }
+
+    pub async fn get_all_keys(
+        &mut self,
+        values: &[serde_json::Value],
+        range: Option<KeyRange>,
+    ) -> Result<Vec<String>, IndexedDBError> {
+        let resp = self
+            .client
+            .index_get_all_keys(pb::IndexQueryRequest {
+                store: self.store.clone(),
+                index: self.index.clone(),
+                values: values.iter().map(json_to_typed_value).collect(),
+                range: range.map(key_range_to_pb),
+            })
+            .await
+            .map_err(map_status)?;
+        Ok(resp.into_inner().keys)
+    }
+
+    pub async fn count(
+        &mut self,
+        values: &[serde_json::Value],
+        range: Option<KeyRange>,
+    ) -> Result<i64, IndexedDBError> {
+        let resp = self
+            .client
+            .index_count(pb::IndexQueryRequest {
+                store: self.store.clone(),
+                index: self.index.clone(),
+                values: values.iter().map(json_to_typed_value).collect(),
+                range: range.map(key_range_to_pb),
+            })
+            .await
+            .map_err(map_status)?;
+        Ok(resp.into_inner().count)
     }
 
     pub async fn delete(&mut self, values: &[serde_json::Value]) -> Result<i64, IndexedDBError> {
