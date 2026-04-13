@@ -25,9 +25,6 @@ const (
 const (
 	DefaultProviderRepo = "github.com/valon-technologies/gestalt-providers"
 
-	DefaultWebUIProvider = DefaultProviderRepo + "/web/default"
-	DefaultWebUIVersion  = "0.0.1-alpha.4"
-
 	DefaultIndexedDBProvider = DefaultProviderRepo + "/indexeddb/relationaldb"
 	DefaultIndexedDBVersion  = "0.0.1-alpha.2"
 )
@@ -51,7 +48,7 @@ type ProvidersConfig struct {
 	Secrets    *ProviderEntry            `yaml:"secrets,omitempty"`
 	Telemetry  *ProviderEntry            `yaml:"telemetry,omitempty"`
 	Audit      *ProviderEntry            `yaml:"audit,omitempty"`
-	UI         *ProviderEntry            `yaml:"ui,omitempty"`
+	UI         map[string]*UIEntry       `yaml:"ui,omitempty"`
 	IndexedDBs map[string]*ProviderEntry `yaml:"indexeddbs,omitempty"`
 	Plugins    map[string]*ProviderEntry `yaml:"plugins,omitempty"`
 }
@@ -103,6 +100,7 @@ type ProviderEntry struct {
 	// Plugin-specific config fields (parsed from YAML, only valid on plugin entries)
 	Connections       map[string]*ConnectionDef     `yaml:"connections,omitempty"`
 	AllowedOperations map[string]*OperationOverride `yaml:"allowedOperations,omitempty"`
+	IndexedDBs        []string                      `yaml:"indexeddbs,omitempty"`
 
 	// Runtime-resolved fields (populated during init/bootstrap, not from YAML)
 	Command              string                                `yaml:"-"`
@@ -119,7 +117,12 @@ type ProviderEntry struct {
 	Discovery            *providermanifestv1.ProviderDiscovery `yaml:"-"`
 	ResolvedAssetRoot    string                                `yaml:"-"`
 	MCPToolPrefix        string                                `yaml:"-"`
-	IndexedDBs           map[string]string                     `yaml:"-"`
+}
+
+// UIEntry configures a mounted web UI bundle served under a fixed path prefix.
+type UIEntry struct {
+	ProviderEntry `yaml:",inline"`
+	Path          string `yaml:"path,omitempty"`
 }
 
 func (e *ProviderEntry) HasManagedSource() bool {
@@ -565,7 +568,6 @@ func OverlayManagedPluginConfig(path string, cfg *Config) error {
 	}{
 		{"auth", cfg.Providers.Auth},
 		{"secrets", cfg.Providers.Secrets},
-		{"ui", cfg.Providers.UI},
 		{"telemetry", cfg.Providers.Telemetry},
 		{"audit", cfg.Providers.Audit},
 	} {
@@ -574,6 +576,15 @@ func OverlayManagedPluginConfig(path string, cfg *Config) error {
 		}
 		node := mappingValueNode(providersNode, c.name)
 		if err := overlayManagedEntryConfigNode(node, c.entry, c.name); err != nil {
+			return err
+		}
+	}
+	uiNode := mappingValueNode(providersNode, "ui")
+	for name, entry := range cfg.Providers.UI {
+		if entry == nil || !entry.HasManagedSource() {
+			continue
+		}
+		if err := overlayManagedEntryConfigNode(mappingValueNode(uiNode, name), &entry.ProviderEntry, "ui "+strconv.Quote(name)); err != nil {
 			return err
 		}
 	}
@@ -747,20 +758,6 @@ func applyDefaults(cfg *Config) {
 	} else if !cfg.Providers.Audit.Disabled && !cfg.Providers.Audit.Source.IsBuiltin() && !cfg.Providers.Audit.Source.IsManaged() && !cfg.Providers.Audit.Source.IsLocal() {
 		cfg.Providers.Audit.Source.Builtin = "inherit"
 	}
-	if cfg.Providers.UI == nil {
-		cfg.Providers.UI = defaultUIProvider()
-	} else if !cfg.Providers.UI.Disabled && !cfg.Providers.UI.Source.IsBuiltin() && !cfg.Providers.UI.Source.IsManaged() && !cfg.Providers.UI.Source.IsLocal() {
-		cfg.Providers.UI = defaultUIProvider()
-	}
-}
-
-func defaultUIProvider() *ProviderEntry {
-	return &ProviderEntry{
-		Source: ProviderSource{
-			Ref:     DefaultWebUIProvider,
-			Version: DefaultWebUIVersion,
-		},
-	}
 }
 
 func resolveBaseURL(cfg *Config) {
@@ -789,7 +786,11 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 	resolveEntry(cfg.Providers.Secrets)
 	resolveEntry(cfg.Providers.Telemetry)
 	resolveEntry(cfg.Providers.Audit)
-	resolveEntry(cfg.Providers.UI)
+	for _, entry := range cfg.Providers.UI {
+		if entry != nil {
+			resolveEntry(&entry.ProviderEntry)
+		}
+	}
 	for _, entry := range cfg.Providers.IndexedDBs {
 		resolveEntry(entry)
 	}

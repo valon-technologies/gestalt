@@ -132,6 +132,7 @@ export {
   CursorDirection,
   NotFoundError,
   AlreadyExistsError,
+  indexedDBSocketEnv,
   type Record,
   type KeyRange,
   type IndexSchema,

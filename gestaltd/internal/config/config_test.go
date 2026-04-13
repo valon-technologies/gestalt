@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -381,10 +382,10 @@ providers:
 	}
 }
 
-func TestLoadConfigUIProviderModes(t *testing.T) {
+func TestLoadConfigUIEntries(t *testing.T) {
 	t.Parallel()
 
-	t.Run("omitted ui uses default provider", func(t *testing.T) {
+	t.Run("omitted ui leaves mounted ui map empty", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -402,27 +403,19 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		if cfg.Providers.UI.Disabled {
-			t.Fatal("UI.Disabled = true, want false")
-		}
-		if cfg.Providers.UI == nil {
-			t.Fatalf("Providers.UI = nil, want default provider")
-		}
-		if got := cfg.Providers.UI.Source.Ref; got != DefaultWebUIProvider {
-			t.Fatalf("UI.Source.Ref = %q, want %q", got, DefaultWebUIProvider)
-		}
-		if got := cfg.Providers.UI.Source.Version; got != DefaultWebUIVersion {
-			t.Fatalf("UI.Source.Version = %q, want %q", got, DefaultWebUIVersion)
+		if len(cfg.Providers.UI) != 0 {
+			t.Fatalf("Providers.UI = %#v, want empty", cfg.Providers.UI)
 		}
 	})
 
-	t.Run("ui disabled true disables public ui", func(t *testing.T) {
+	t.Run("ui entry can be disabled", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
 providers:
   ui:
-    disabled: true
+    roadmap:
+      disabled: true
   indexeddbs:
     sqlite:
       source:
@@ -436,8 +429,12 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		if !cfg.Providers.UI.Disabled {
-			t.Fatal("UI.Disabled = false, want true")
+		entry := cfg.Providers.UI["roadmap"]
+		if entry == nil {
+			t.Fatal(`Providers.UI["roadmap"] = nil`)
+		}
+		if !entry.Disabled {
+			t.Fatal(`Providers.UI["roadmap"].Disabled = false, want true`)
 		}
 	})
 
@@ -452,7 +449,8 @@ server:
 				path := mustWriteConfigFile(t, fmt.Sprintf(`
 providers:
   ui:
-    disabled: %s
+    roadmap:
+      disabled: %s
   indexeddbs:
     sqlite:
       source:
@@ -466,8 +464,8 @@ server:
 				if err != nil {
 					t.Fatalf("Load: %v", err)
 				}
-				if !cfg.Providers.UI.Disabled {
-					t.Fatalf("UI.Disabled = false with disabled: %s, want true", variant)
+				if !cfg.Providers.UI["roadmap"].Disabled {
+					t.Fatalf(`Providers.UI["roadmap"].Disabled = false with disabled: %s, want true`, variant)
 				}
 			})
 		}
@@ -479,9 +477,10 @@ server:
 		path := mustWriteConfigFile(t, `
 providers:
   ui:
-    disabled: true
-    config:
-      brand_name: Acme
+    roadmap:
+      disabled: true
+      config:
+        brand_name: Acme
   indexeddbs:
     sqlite:
       source:
@@ -503,8 +502,10 @@ server:
 		path := mustWriteConfigFile(t, `
 providers:
   ui:
-    source:
-      path: ./web/default/provider.yaml
+    roadmap:
+      source:
+        path: ./web/default/provider.yaml
+      path: /create-customer-roadmap-review
   indexeddbs:
     sqlite:
       source:
@@ -518,12 +519,328 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		if cfg.Providers.UI == nil {
-			t.Fatalf("Providers.UI = nil")
+		entry := cfg.Providers.UI["roadmap"]
+		if entry == nil {
+			t.Fatal(`Providers.UI["roadmap"] = nil`)
 		}
 		wantPath := filepath.Join(filepath.Dir(path), "web", "default", "provider.yaml")
-		if got := cfg.Providers.UI.Source.Path; got != wantPath {
-			t.Fatalf("UI.Source.Path = %q, want %q", got, wantPath)
+		if got := entry.Source.Path; got != wantPath {
+			t.Fatalf(`Providers.UI["roadmap"].Source.Path = %q, want %q`, got, wantPath)
+		}
+	})
+}
+
+func TestLoadConfigMountedUIs(t *testing.T) {
+	t.Parallel()
+
+	t.Run("relative ui provider path resolves and mount path normalizes", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  ui:
+    roadmap:
+      source:
+        path: ./web/roadmap/manifest.yaml
+      path: /create-customer-roadmap-review/
+  indexeddbs:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		entry := cfg.Providers.UI["roadmap"]
+		if entry == nil {
+			t.Fatal(`Providers.UI["roadmap"] = nil`)
+		}
+		wantSourcePath := filepath.Join(filepath.Dir(path), "web", "roadmap", "manifest.yaml")
+		if got := entry.Source.Path; got != wantSourcePath {
+			t.Fatalf(`Providers.UI["roadmap"].Source.Path = %q, want %q`, got, wantSourcePath)
+		}
+		if got := entry.Path; got != "/create-customer-roadmap-review" {
+			t.Fatalf(`Providers.UI["roadmap"].Path = %q, want %q`, got, "/create-customer-roadmap-review")
+		}
+	})
+
+	t.Run("reserved path is rejected", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  ui:
+    api:
+      source:
+        path: ./web/api/manifest.yaml
+      path: /api
+  indexeddbs:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `ui.api.path "/api" conflicts with reserved path "/api"`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("metrics namespace is rejected", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  ui:
+    metrics:
+      source:
+        path: ./web/metrics/manifest.yaml
+      path: /metrics/dashboard
+  indexeddbs:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `ui.metrics.path "/metrics/dashboard" conflicts with reserved path "/metrics"`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("prefix collision is rejected", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  ui:
+    parent:
+      source:
+        path: ./web/parent/manifest.yaml
+      path: /tools
+    child:
+      source:
+        path: ./web/child/manifest.yaml
+      path: /tools/admin
+  indexeddbs:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `ui.`) || !strings.Contains(err.Error(), `"/tools"`) || !strings.Contains(err.Error(), `"/tools/admin"`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("root path is rejected", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  ui:
+    root:
+      source:
+        path: ./web/root/manifest.yaml
+      path: /
+  indexeddbs:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `root path is not supported`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("builtin ui source is rejected", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  ui:
+    roadmap:
+      source: stdout
+      path: /create-customer-roadmap-review
+  indexeddbs:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `ui "roadmap" does not support builtin providers`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
+func TestLoadConfigPluginIndexedDBBindings(t *testing.T) {
+	t.Parallel()
+
+	t.Run("plugin accepts indexeddb bindings", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  plugins:
+    roadmap:
+      source:
+        path: ./plugin/manifest.yaml
+      indexeddbs:
+        - sqlite
+        - archive
+  indexeddbs:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+    archive:
+      source:
+        path: ./providers/datastore/archive
+server:
+  indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		got := cfg.Providers.Plugins["roadmap"].IndexedDBs
+		want := []string{"sqlite", "archive"}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("Plugins[roadmap].IndexedDBs = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("rejects indexeddb bindings outside plugins", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  ui:
+    root:
+      source:
+        path: ./web/root/manifest.yaml
+      path: /app
+      indexeddbs:
+        - sqlite
+  indexeddbs:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `ui.root.indexeddbs is only supported on providers.plugins.*`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects unknown indexeddb binding names", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  plugins:
+    roadmap:
+      source:
+        path: ./plugin/manifest.yaml
+      indexeddbs:
+        - sqlite
+        - missing
+  indexeddbs:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `plugin "roadmap" indexeddbs[1] references unknown indexeddb "missing"`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects indexeddb bindings that normalize to the same env var", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  plugins:
+    roadmap:
+      source:
+        path: ./plugin/manifest.yaml
+      indexeddbs:
+        - main-db
+        - main_db
+  indexeddbs:
+    main-db:
+      source:
+        path: ./providers/datastore/main-db
+    main_db:
+      source:
+        path: ./providers/datastore/main_db
+server:
+  indexeddb: main-db
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `plugin "roadmap" indexeddbs[1] "main_db" conflicts with "main-db" after IndexedDB env normalization (GESTALT_INDEXEDDB_SOCKET_MAIN_DB)`) {
+			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 }
@@ -540,7 +857,7 @@ func TestLoadRejectsUnknownProviderFields(t *testing.T) {
 			name: "provider field is rejected",
 			yaml: `
 providers:
-  ui:
+  secrets:
     provider: none
 `,
 			wantErr: `field provider not found`,
@@ -591,7 +908,8 @@ providers:
 			yaml: `
 providers:
   ui:
-    disabled: true
+    roadmap:
+      disabled: true
 `,
 		},
 		{

@@ -2,7 +2,7 @@ import { Tabs } from 'nextra/components'
 
 # Config File
 
-Every `gestaltd` deployment reads a single YAML config file. The two top-level keys are `server` (listener, encryption, egress, and indexeddb selection) and `providers` (auth, secrets, telemetry, audit, UI, indexeddbs, and plugins):
+Every `gestaltd` deployment reads a single YAML config file. The two top-level keys are `server` (listener, encryption, egress, and indexeddb selection) and `providers` (auth, secrets, telemetry, audit, mounted UI bundles, indexeddbs, and plugins):
 
 ```yaml
 server:
@@ -446,6 +446,7 @@ providers:
 | `config` | Provider-specific configuration passed into the provider package. |
 | `connections` | Named connection declarations. See [connections](#connections) below. |
 | `allowedOperations` | Allowlist with optional `alias` and `description` overrides per operation. |
+| `indexeddbs` | Optional list of named `providers.indexeddbs` bindings exposed to the executable plugin through the SDK transport. Store names are automatically prefixed per plugin. A single binding also populates the default IndexedDB SDK env var for compatibility. |
 
 ### `providers.plugins.*.source`
 
@@ -705,18 +706,21 @@ When `allowedHosts` is set on a provider, only listed hosts are reachable (exact
 ```yaml
 providers:
   ui:
-    source:
-      ref: github.com/your-org/your-repo/web/console
-      version: 1.0.0
-    config:
-      brandName: Acme
+    console:
+      source:
+        ref: github.com/your-org/your-repo/web/console
+        version: 1.0.0
+      path: /console
+      config:
+        brandName: Acme
 ```
 
-The `providers.ui` block controls the public client UI at `/`, while the built-in admin UI remains available at `/admin`. Omit `providers.ui` to use the pinned first-party default UI bundle. Set `providers: { ui: { disabled: true } }` to disable the public UI entirely. Or set `providers.ui.source` to a packaged `webui` bundle. See [Releasing](/providers/releasing) for the full workflow.
+`providers.ui` is a map of mounted `webui` bundles. Each entry is served under an explicit non-root path prefix on the public listener. The built-in admin UI remains available at `/admin`. Omit `providers.ui` entirely to run headless with no public UI bundles.
 
 | Field | Description |
 | --- | --- |
-| `disabled` | `true` to disable the public UI entirely. |
+| `path` | Required mount prefix. Must start with `/`, may not be `/`, and may not conflict with `/api`, auth routes, `/mcp`, `/admin`, `/metrics`, `/health`, `/ready`, or another mounted UI prefix. |
+| `disabled` | `true` to disable an individual mounted UI entry. |
 | `source` | A source mapping with `source.path` or `source.ref`. |
 | `config` | Optional UI-provider config validated against the bundle schema when present. |
 
@@ -732,7 +736,9 @@ Auth providers and indexeddb entries use the same external provider shape. When 
 
 Only `connections.default` may define `params` or `discovery`. All connections in a plugin must share the same mode.
 
-`providers.ui` must use exactly one mode: `disabled: true`, or a source mapping with exactly one loading mode: local `providers.ui.source.path` or managed `providers.ui.source.ref`. `providers.ui.source.version` is required with `providers.ui.source.ref` and invalid with `providers.ui.source.path`. `providers.ui.config` is only allowed when `providers.ui.source` is set.
+Each `providers.ui.<name>` entry must use exactly one mode: `disabled: true`, or a source mapping with exactly one loading mode: local `providers.ui.<name>.source.path` or managed `providers.ui.<name>.source.ref`. `providers.ui.<name>.source.version` is required with `providers.ui.<name>.source.ref` and invalid with `providers.ui.<name>.source.path`. `providers.ui.<name>.config` is only allowed when `providers.ui.<name>.source` is set.
+
+Mounted UI bundles are served on the public listener only. The built-in admin UI remains at `/admin`.
 
 `server.egress.defaultAction` must be `allow` or `deny`.
 

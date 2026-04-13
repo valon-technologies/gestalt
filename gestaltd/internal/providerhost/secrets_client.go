@@ -34,7 +34,7 @@ func NewExecutableSecretManager(ctx context.Context, cfg SecretsExecConfig) (cor
 		AllowedHosts: cfg.AllowedHosts,
 		HostBinary:   cfg.HostBinary,
 		Cleanup:      cfg.Cleanup,
-	}, nil, "")
+	})
 	if err != nil {
 		return nil, err
 	}

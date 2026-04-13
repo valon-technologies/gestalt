@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -30,20 +31,20 @@ const (
 	PreparedTelemetryDir = ".gestaltd/telemetry"
 	PreparedAuditDir     = ".gestaltd/audit"
 	PreparedUIDir        = ".gestaltd/ui"
-	LockVersion          = 2
+	LockVersion          = 5
 
 	platformKeyGeneric = "generic"
 )
 
 type Lockfile struct {
-	Version   int                          `json:"version"`
-	Providers map[string]LockProviderEntry `json:"providers"`
-	Auth      *LockEntry                   `json:"auth,omitempty"`
-	Datastore *LockEntry                   `json:"datastore,omitempty"`
-	Secrets   *LockEntry                   `json:"secrets,omitempty"`
-	Telemetry *LockEntry                   `json:"telemetry,omitempty"`
-	Audit     *LockEntry                   `json:"audit,omitempty"`
-	UI        *LockUIEntry                 `json:"ui,omitempty"`
+	Version    int                          `json:"version"`
+	Providers  map[string]LockProviderEntry `json:"providers"`
+	Auth       *LockEntry                   `json:"auth,omitempty"`
+	IndexedDBs map[string]LockEntry         `json:"indexeddbs,omitempty"`
+	Secrets    *LockEntry                   `json:"secrets,omitempty"`
+	Telemetry  *LockEntry                   `json:"telemetry,omitempty"`
+	Audit      *LockEntry                   `json:"audit,omitempty"`
+	UIs        map[string]LockUIEntry       `json:"ui,omitempty"`
 }
 
 // LockArchive records a platform-specific archive URL and optional integrity hash.
@@ -133,8 +134,10 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 	}
 
 	lock := &Lockfile{
-		Version:   LockVersion,
-		Providers: make(map[string]LockProviderEntry),
+		Version:    LockVersion,
+		Providers:  make(map[string]LockProviderEntry),
+		IndexedDBs: make(map[string]LockEntry),
+		UIs:        make(map[string]LockUIEntry),
 	}
 
 	resolvedProviders, err := l.writeProviderArtifacts(context.Background(), cfg, paths)
@@ -174,15 +177,17 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 			if err != nil {
 				return nil, nil, err
 			}
-			lock.Datastore = &entry
+			lock.IndexedDBs[name] = entry
 		}
 	}
-	if cfg.Providers.UI != nil && cfg.Providers.UI.HasManagedSource() {
-		uiEntry, err := l.writeUIProviderArtifact(context.Background(), cfg, paths)
-		if err != nil {
-			return nil, nil, err
+	for name, entry := range cfg.Providers.UI {
+		if entry != nil && !entry.Disabled && entry.HasManagedSource() {
+			uiEntry, err := l.writeNamedUIProviderArtifact(context.Background(), paths, name, &entry.ProviderEntry, uiDestDir(paths, name), "ui "+strconv.Quote(name))
+			if err != nil {
+				return nil, nil, err
+			}
+			lock.UIs[name] = uiEntry
 		}
-		lock.UI = &uiEntry
 	}
 
 	if err := WriteLockfile(paths.lockfilePath, lock); err != nil {
@@ -195,7 +200,7 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 		return nil, nil, err
 	}
 
-	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "auth", lock.Auth != nil, "secrets", lock.Secrets != nil, "telemetry", lock.Telemetry != nil, "audit", lock.Audit != nil, "ui", lock.UI != nil)
+	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "auth", lock.Auth != nil, "indexeddbs", len(lock.IndexedDBs), "secrets", lock.Secrets != nil, "telemetry", lock.Telemetry != nil, "audit", lock.Audit != nil, "uis", len(lock.UIs))
 	slog.Info("wrote lockfile", "path", paths.lockfilePath)
 	return lock, cfg, nil
 }
@@ -217,8 +222,10 @@ func buildSourceTokenMap(cfg *config.Config) map[string]string {
 			tokens[def.SourceRef()] = def.Source.Auth.Token
 		}
 	}
-	if cfg.Providers.UI != nil && cfg.Providers.UI.Source.Auth != nil {
-		tokens[cfg.Providers.UI.SourceRef()] = cfg.Providers.UI.Source.Auth.Token
+	for _, entry := range cfg.Providers.UI {
+		if entry != nil && !entry.Disabled && entry.Source.Auth != nil {
+			tokens[entry.SourceRef()] = entry.Source.Auth.Token
+		}
 	}
 	return tokens
 }
@@ -356,8 +363,13 @@ func configHasProviderLoading(cfg *config.Config) bool {
 			return true
 		}
 	}
-	for _, p := range []*config.ProviderEntry{cfg.Providers.Auth, cfg.Providers.Secrets, cfg.Providers.UI, cfg.Providers.Telemetry, cfg.Providers.Audit} {
+	for _, p := range []*config.ProviderEntry{cfg.Providers.Auth, cfg.Providers.Secrets, cfg.Providers.Telemetry, cfg.Providers.Audit} {
 		if p != nil && (p.HasManagedSource() || p.HasLocalSource()) {
+			return true
+		}
+	}
+	for _, entry := range cfg.Providers.UI {
+		if entry != nil && !entry.Disabled && (entry.HasManagedSource() || entry.HasLocalSource()) {
 			return true
 		}
 	}
@@ -375,8 +387,13 @@ func configHasManagedProviderSources(cfg *config.Config) bool {
 			return true
 		}
 	}
-	for _, p := range []*config.ProviderEntry{cfg.Providers.Auth, cfg.Providers.Secrets, cfg.Providers.UI, cfg.Providers.Telemetry, cfg.Providers.Audit} {
+	for _, p := range []*config.ProviderEntry{cfg.Providers.Auth, cfg.Providers.Secrets, cfg.Providers.Telemetry, cfg.Providers.Audit} {
 		if p != nil && p.HasManagedSource() {
+			return true
+		}
+	}
+	for _, entry := range cfg.Providers.UI {
+		if entry != nil && !entry.Disabled && entry.HasManagedSource() {
 			return true
 		}
 	}
@@ -438,8 +455,8 @@ func providerDestDir(paths initPaths, name string) string {
 	return filepath.Join(paths.providersDir, name)
 }
 
-func uiDestDir(paths initPaths) string {
-	return paths.uiDir
+func uiDestDir(paths initPaths, name string) string {
+	return filepath.Join(paths.uiDir, name)
 }
 
 func authDestDir(paths initPaths) string {
@@ -476,15 +493,27 @@ func ReadLockfile(path string) (*Lockfile, error) {
 	if err != nil {
 		return nil, err
 	}
+	var version struct {
+		Version int `json:"version"`
+	}
+	if err := json.Unmarshal(data, &version); err != nil {
+		return nil, fmt.Errorf("parsing lockfile %s: %w", path, err)
+	}
+	if version.Version != LockVersion {
+		return nil, fmt.Errorf("unsupported lockfile version %d; run `gestaltd init` to upgrade", version.Version)
+	}
 	var lock Lockfile
 	if err := json.Unmarshal(data, &lock); err != nil {
 		return nil, fmt.Errorf("parsing lockfile %s: %w", path, err)
 	}
-	if lock.Version != LockVersion {
-		return nil, fmt.Errorf("unsupported lockfile version %d; run `gestaltd init` to upgrade", lock.Version)
-	}
 	if lock.Providers == nil {
 		lock.Providers = make(map[string]LockProviderEntry)
+	}
+	if lock.IndexedDBs == nil {
+		lock.IndexedDBs = make(map[string]LockEntry)
+	}
+	if lock.UIs == nil {
+		lock.UIs = make(map[string]LockUIEntry)
 	}
 	return &lock, nil
 }
@@ -529,19 +558,32 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 			return false
 		}
 	}
-	if cfg.Providers.UI != nil && cfg.Providers.UI.HasManagedSource() {
-		if lock.UI == nil {
+	for name, entry := range cfg.Providers.IndexedDBs {
+		if entry == nil || !entry.HasManagedSource() {
+			continue
+		}
+		lockEntry, found := lock.IndexedDBs[name]
+		if !lockEntryMatches(paths, "indexeddb-"+name, entry, lockEntry, found) {
 			return false
 		}
-		fingerprint, err := UIProviderFingerprint(cfg.Providers.UI)
-		if err != nil || lock.UI.Fingerprint != fingerprint {
+	}
+	for name, entry := range cfg.Providers.UI {
+		if entry == nil || entry.Disabled || !entry.HasManagedSource() {
+			continue
+		}
+		lockEntry, ok := lock.UIs[name]
+		if !ok {
 			return false
 		}
-		manifestPath := resolveLockPath(paths.artifactsDir, lock.UI.Manifest)
+		fingerprint, err := NamedUIProviderFingerprint(name, &entry.ProviderEntry)
+		if err != nil || lockEntry.Fingerprint != fingerprint {
+			return false
+		}
+		manifestPath := resolveLockPath(paths.artifactsDir, lockEntry.Manifest)
 		if _, err := os.Stat(manifestPath); err != nil {
 			return false
 		}
-		assetRootPath := resolveLockPath(paths.artifactsDir, lock.UI.AssetRoot)
+		assetRootPath := resolveLockPath(paths.artifactsDir, lockEntry.AssetRoot)
 		if _, err := os.Stat(assetRootPath); err != nil {
 			return false
 		}
@@ -568,8 +610,8 @@ func ProviderFingerprint(name string, entry *config.ProviderEntry, configDir str
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func UIProviderFingerprint(entry *config.ProviderEntry) (string, error) {
-	return ProviderFingerprint("ui", entry, "")
+func NamedUIProviderFingerprint(name string, entry *config.ProviderEntry) (string, error) {
+	return ProviderFingerprint("ui:"+name, entry, "")
 }
 
 func lockEntryMatches(paths initPaths, name string, providerEntry *config.ProviderEntry, entry LockEntry, found bool) bool {
@@ -797,57 +839,55 @@ func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths initPa
 	}, nil
 }
 
-func (l *Lifecycle) writeUIProviderArtifact(ctx context.Context, cfg *config.Config, paths initPaths) (LockUIEntry, error) {
-	plugin := cfg.Providers.UI
+func (l *Lifecycle) writeNamedUIProviderArtifact(ctx context.Context, paths initPaths, name string, plugin *config.ProviderEntry, destDir string, subject string) (LockUIEntry, error) {
 	if plugin == nil || !plugin.HasManagedSource() {
-		return LockUIEntry{}, fmt.Errorf("ui provider requires managed source")
+		return LockUIEntry{}, fmt.Errorf("%s requires managed source", subject)
 	}
-	configMap, err := config.NodeToMap(cfg.Providers.UI.Config)
+	configMap, err := config.NodeToMap(plugin.Config)
 	if err != nil {
-		return LockUIEntry{}, fmt.Errorf("decode ui provider config: %w", err)
+		return LockUIEntry{}, fmt.Errorf("decode %s config: %w", subject, err)
 	}
-	fingerprint, err := UIProviderFingerprint(plugin)
+	fingerprint, err := NamedUIProviderFingerprint(name, plugin)
 	if err != nil {
-		return LockUIEntry{}, fmt.Errorf("fingerprinting ui provider: %w", err)
+		return LockUIEntry{}, fmt.Errorf("fingerprinting %s: %w", subject, err)
 	}
 
-	destDir := uiDestDir(paths)
 	src, err := sourceForProvider(plugin)
 	if err != nil {
-		return LockUIEntry{}, fmt.Errorf("ui provider source.ref %q: %w", plugin.SourceRef(), err)
+		return LockUIEntry{}, fmt.Errorf("%s source.ref %q: %w", subject, plugin.SourceRef(), err)
 	}
 	if l.sourceResolver == nil {
-		return LockUIEntry{}, fmt.Errorf("ui provider: source resolution requires a source resolver")
+		return LockUIEntry{}, fmt.Errorf("%s: source resolution requires a source resolver", subject)
 	}
 	resolved, err := l.sourceResolver.Resolve(ctx, src, plugin.SourceVersion())
 	if err != nil {
-		return LockUIEntry{}, fmt.Errorf("ui provider resolve source %q@%s: %w", plugin.SourceRef(), plugin.SourceVersion(), err)
+		return LockUIEntry{}, fmt.Errorf("%s resolve source %q@%s: %w", subject, plugin.SourceRef(), plugin.SourceVersion(), err)
 	}
 	defer resolved.Cleanup()
 
 	installed, err := pluginstore.Install(resolved.LocalPath, destDir)
 	if err != nil {
-		return LockUIEntry{}, fmt.Errorf("ui provider install source: %w", err)
+		return LockUIEntry{}, fmt.Errorf("%s install source: %w", subject, err)
 	}
-	if err := validateInstalledManifestKind(providermanifestv1.KindWebUI, "provider", installed.Manifest); err != nil {
+	if err := validateInstalledManifestKind(providermanifestv1.KindWebUI, subject, installed.Manifest); err != nil {
 		return LockUIEntry{}, err
 	}
 	if installed.Manifest.Source != plugin.SourceRef() {
-		return LockUIEntry{}, fmt.Errorf("ui provider manifest source %q does not match config source %q", installed.Manifest.Source, plugin.SourceRef())
+		return LockUIEntry{}, fmt.Errorf("%s manifest source %q does not match config source %q", subject, installed.Manifest.Source, plugin.SourceRef())
 	}
 	if installed.Manifest.Version != plugin.SourceVersion() {
-		return LockUIEntry{}, fmt.Errorf("ui provider manifest version %q does not match config version %q", installed.Manifest.Version, plugin.SourceVersion())
+		return LockUIEntry{}, fmt.Errorf("%s manifest version %q does not match config version %q", subject, installed.Manifest.Version, plugin.SourceVersion())
 	}
 	if err := providerpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, providermanifestv1.KindWebUI, configMap); err != nil {
-		return LockUIEntry{}, fmt.Errorf("provider config validation for ui provider: %w", err)
+		return LockUIEntry{}, fmt.Errorf("provider config validation for %s: %w", subject, err)
 	}
 	manifestPath, err := filepath.Rel(paths.artifactsDir, installed.ManifestPath)
 	if err != nil {
-		return LockUIEntry{}, fmt.Errorf("compute manifest path for ui provider: %w", err)
+		return LockUIEntry{}, fmt.Errorf("compute manifest path for %s: %w", subject, err)
 	}
 	assetRoot, err := filepath.Rel(paths.artifactsDir, installed.AssetRoot)
 	if err != nil {
-		return LockUIEntry{}, fmt.Errorf("compute asset root path for ui provider: %w", err)
+		return LockUIEntry{}, fmt.Errorf("compute asset root path for %s: %w", subject, err)
 	}
 	archives := l.buildArchivesMap(ctx, src, plugin.SourceVersion(), resolved.ResolvedURL, resolved.ArchiveSHA256)
 	return LockUIEntry{
@@ -943,58 +983,82 @@ func (l *Lifecycle) applyLockedProviders(configPath, artifactsDir string, cfg *c
 			}
 		}
 	}
-	if cfg.Providers.UI != nil {
-		configMap, err := config.NodeToMap(cfg.Providers.UI.Config)
+	for name, entry := range cfg.Providers.UI {
+		if entry == nil || entry.Disabled {
+			continue
+		}
+		var lockEntry *LockUIEntry
+		if lock != nil {
+			if le, ok := lock.UIs[name]; ok {
+				lockEntry = &le
+			}
+		}
+		resolvedAssetRoot, err := l.applyConfiguredUIProvider(paths, lockEntry, &entry.ProviderEntry, name, "ui "+strconv.Quote(name), uiDestDir(paths, name), locked)
 		if err != nil {
-			return fmt.Errorf("decode ui provider config: %w", err)
+			return err
 		}
-		switch {
-		case cfg.Providers.UI.HasManagedSource():
-			if lock.UI == nil {
-				return fmt.Errorf("prepared artifact for ui provider is missing or stale; run `gestaltd init --config %s`", paths.configPath)
-			}
-			fingerprint, err := UIProviderFingerprint(cfg.Providers.UI)
-			if err != nil || lock.UI.Fingerprint != fingerprint {
-				return fmt.Errorf("prepared artifact for ui provider is missing or stale; run `gestaltd init --config %s`", paths.configPath)
-			}
-			manifestPath := resolveLockPath(paths.artifactsDir, lock.UI.Manifest)
-			assetRootPath := resolveLockPath(paths.artifactsDir, lock.UI.AssetRoot)
-			needMaterialize := false
-			if _, err := os.Stat(manifestPath); err != nil {
-				needMaterialize = true
-			}
-			if !needMaterialize {
-				if _, err := os.Stat(assetRootPath); err != nil {
-					needMaterialize = true
-				}
-			}
-			if needMaterialize {
-				if err := l.materializeLockedUIProvider(context.Background(), paths, cfg.Providers.UI, *lock.UI, locked); err != nil {
-					return err
-				}
-			}
-			if _, err := os.Stat(manifestPath); err != nil {
-				return fmt.Errorf("prepared manifest for ui provider not found at %s", manifestPath)
-			}
-			if _, err := os.Stat(assetRootPath); err != nil {
-				return fmt.Errorf("prepared asset root for ui provider not found at %s", assetRootPath)
-			}
-			_, manifest, err := providerpkg.ReadManifestFile(manifestPath)
-			if err != nil {
-				return fmt.Errorf("read prepared manifest for ui provider: %w", err)
-			}
-			if err := bindResolvedUIManifest(cfg.Providers.UI, manifestPath, manifest, configMap); err != nil {
-				return err
-			}
-			cfg.Providers.UI.ResolvedAssetRoot = assetRootPath
-		case cfg.Providers.UI.HasLocalSource():
-			if err := applyLocalUIManifest(cfg.Providers.UI, configMap, &cfg.Providers.UI.ResolvedAssetRoot); err != nil {
-				return err
-			}
-		}
+		entry.ResolvedAssetRoot = resolvedAssetRoot
 	}
 
 	return nil
+}
+
+func (l *Lifecycle) applyConfiguredUIProvider(paths initPaths, lockEntry *LockUIEntry, provider *config.ProviderEntry, logicalName, subject, destDir string, locked bool) (string, error) {
+	if provider == nil {
+		return "", nil
+	}
+	configMap, err := config.NodeToMap(provider.Config)
+	if err != nil {
+		return "", fmt.Errorf("decode %s config: %w", subject, err)
+	}
+	switch {
+	case provider.HasManagedSource():
+		if lockEntry == nil {
+			return "", fmt.Errorf("prepared artifact for %s is missing or stale; run `gestaltd init --config %s`", subject, paths.configPath)
+		}
+		fingerprint, err := NamedUIProviderFingerprint(logicalName, provider)
+		if err != nil || lockEntry.Fingerprint != fingerprint {
+			return "", fmt.Errorf("prepared artifact for %s is missing or stale; run `gestaltd init --config %s`", subject, paths.configPath)
+		}
+		manifestPath := resolveLockPath(paths.artifactsDir, lockEntry.Manifest)
+		assetRootPath := resolveLockPath(paths.artifactsDir, lockEntry.AssetRoot)
+		needMaterialize := false
+		if _, err := os.Stat(manifestPath); err != nil {
+			needMaterialize = true
+		}
+		if !needMaterialize {
+			if _, err := os.Stat(assetRootPath); err != nil {
+				needMaterialize = true
+			}
+		}
+		if needMaterialize {
+			if err := l.materializeLockedUIProvider(context.Background(), paths, provider, *lockEntry, destDir, locked); err != nil {
+				return "", err
+			}
+		}
+		if _, err := os.Stat(manifestPath); err != nil {
+			return "", fmt.Errorf("prepared manifest for %s not found at %s", subject, manifestPath)
+		}
+		if _, err := os.Stat(assetRootPath); err != nil {
+			return "", fmt.Errorf("prepared asset root for %s not found at %s", subject, assetRootPath)
+		}
+		_, manifest, err := providerpkg.ReadManifestFile(manifestPath)
+		if err != nil {
+			return "", fmt.Errorf("read prepared manifest for %s: %w", subject, err)
+		}
+		if err := bindResolvedUIManifest(provider, manifestPath, manifest, configMap); err != nil {
+			return "", err
+		}
+		return assetRootPath, nil
+	case provider.HasLocalSource():
+		var resolvedAssetRoot string
+		if err := applyLocalUIManifest(provider, configMap, &resolvedAssetRoot); err != nil {
+			return "", err
+		}
+		return resolvedAssetRoot, nil
+	default:
+		return "", nil
+	}
 }
 
 func (l *Lifecycle) applyComponentProvider(paths initPaths, lock *Lockfile, kind, name string, provider *config.ProviderEntry, providerConfig yaml.Node, targetNode *yaml.Node, locked bool) error {
@@ -1022,7 +1086,10 @@ func (l *Lifecycle) applyComponentProvider(paths initPaths, lock *Lockfile, kind
 			entry = lock.Audit
 		default:
 			if kind == providermanifestv1.KindIndexedDB && strings.HasPrefix(name, "indexeddb-") {
-				entry = lock.Datastore
+				binding := strings.TrimPrefix(name, "indexeddb-")
+				if lockEntry, ok := lock.IndexedDBs[binding]; ok {
+					entry = &lockEntry
+				}
 			}
 		}
 		if err := l.applyLockedComponentEntry(paths, entry, kind, name, provider, configMap, locked); err != nil {
@@ -1399,7 +1466,7 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 	return nil
 }
 
-func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths initPaths, plugin *config.ProviderEntry, entry LockUIEntry, locked bool) error {
+func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths initPaths, plugin *config.ProviderEntry, entry LockUIEntry, destDir string, locked bool) error {
 	platform := providerpkg.CurrentPlatformString()
 	archive, _, ok := resolveArchiveForPlatform(entry, platform)
 	if !ok || archive.URL == "" {
@@ -1434,7 +1501,6 @@ func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths initP
 		return fmt.Errorf("locked source digest mismatch for ui provider: got %s, want %s", download.SHA256Hex, archive.SHA256)
 	}
 
-	destDir := uiDestDir(paths)
 	if err := os.RemoveAll(destDir); err != nil {
 		return fmt.Errorf("remove stale cache for ui provider: %w", err)
 	}
@@ -1465,13 +1531,25 @@ func hashPlatformInEntries(ctx context.Context, lock *Lockfile, platformKey stri
 		}
 		lock.Providers[name] = entry
 	}
-	for _, entry := range []*LockEntry{lock.Auth, lock.Datastore, lock.Secrets, lock.UI} {
+	for _, entry := range []*LockEntry{lock.Auth, lock.Secrets, lock.Telemetry, lock.Audit} {
 		if entry == nil {
 			continue
 		}
 		if err := hashArchiveEntry(ctx, entry, platformKey, tokenForSource); err != nil {
 			return err
 		}
+	}
+	for name, entry := range lock.IndexedDBs {
+		if err := hashArchiveEntry(ctx, &entry, platformKey, tokenForSource); err != nil {
+			return err
+		}
+		lock.IndexedDBs[name] = entry
+	}
+	for name, entry := range lock.UIs {
+		if err := hashArchiveEntry(ctx, &entry, platformKey, tokenForSource); err != nil {
+			return err
+		}
+		lock.UIs[name] = entry
 	}
 	return nil
 }

@@ -686,6 +686,31 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 	})
 
+	t.Run("skips secret resolution for disabled mounted webuis", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := validConfig()
+		cfg.Providers.UI = map[string]*config.UIEntry{
+			"roadmap": {
+				ProviderEntry: config.ProviderEntry{
+					Disabled: true,
+					Source: config.ProviderSource{
+						Ref:     "github.com/testowner/web/roadmap",
+						Version: "0.0.1-alpha.1",
+						Auth:    &config.SourceAuthDef{Token: "secret://disabled-webui-token"},
+					},
+				},
+				Path: "/create-customer-roadmap-review",
+			},
+		}
+
+		result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+		if err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		<-result.ProvidersReady
+	})
+
 	t.Run("passes top-level provider selection to auth factory", func(t *testing.T) {
 		t.Parallel()
 

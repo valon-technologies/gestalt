@@ -297,8 +297,13 @@ pub struct IndexedDB {
 
 impl IndexedDB {
     pub async fn connect() -> Result<Self, IndexedDBError> {
-        let socket_path = std::env::var(ENV_INDEXEDDB_SOCKET)
-            .map_err(|_| IndexedDBError::Env(format!("{ENV_INDEXEDDB_SOCKET} is not set")))?;
+        Self::connect_named("").await
+    }
+
+    pub async fn connect_named(name: &str) -> Result<Self, IndexedDBError> {
+        let env_name = indexeddb_socket_env(name);
+        let socket_path = std::env::var(&env_name)
+            .map_err(|_| IndexedDBError::Env(format!("{env_name} is not set")))?;
 
         let channel = Endpoint::try_from("http://[::]:50051")?
             .connect_with_connector(service_fn(move |_: Uri| {
@@ -851,4 +856,20 @@ fn key_range_to_pb(kr: KeyRange) -> pb::KeyRange {
         lower_open: kr.lower_open,
         upper_open: kr.upper_open,
     }
+}
+pub fn indexeddb_socket_env(name: &str) -> String {
+    let trimmed = name.trim();
+    if trimmed.is_empty() {
+        return ENV_INDEXEDDB_SOCKET.to_string();
+    }
+    let mut env = String::from(ENV_INDEXEDDB_SOCKET);
+    env.push('_');
+    for ch in trimmed.chars() {
+        if ch.is_ascii_alphanumeric() {
+            env.push(ch.to_ascii_uppercase());
+        } else {
+            env.push('_');
+        }
+    }
+    env
 }

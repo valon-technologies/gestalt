@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
@@ -14,6 +15,27 @@ import (
 )
 
 const EnvIndexedDBSocket = "GESTALT_INDEXEDDB_SOCKET"
+
+func IndexedDBSocketEnv(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return EnvIndexedDBSocket
+	}
+	var b strings.Builder
+	b.WriteString(EnvIndexedDBSocket)
+	b.WriteByte('_')
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r - ('a' - 'A'))
+		case r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	return b.String()
+}
 
 var (
 	ErrNotFound      = fmt.Errorf("indexeddb: not found")
@@ -54,10 +76,14 @@ type IndexedDBClient struct {
 	conn   *grpc.ClientConn
 }
 
-func IndexedDB() (*IndexedDBClient, error) {
-	socketPath := os.Getenv(EnvIndexedDBSocket)
+func IndexedDB(name ...string) (*IndexedDBClient, error) {
+	envName := EnvIndexedDBSocket
+	if len(name) > 0 {
+		envName = IndexedDBSocketEnv(name[0])
+	}
+	socketPath := os.Getenv(envName)
 	if socketPath == "" {
-		return nil, fmt.Errorf("indexeddb: %s is not set", EnvIndexedDBSocket)
+		return nil, fmt.Errorf("indexeddb: %s is not set", envName)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

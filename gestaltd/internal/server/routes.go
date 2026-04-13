@@ -19,6 +19,7 @@ func (s *Server) routes() {
 		s.mountCoreRoutes(r, metricsHidden)
 		s.mountMCPRoutes(r)
 		s.mountAPIRoutes(r)
+		s.mountMountedWebUIRoutes(r)
 		s.mountManagementHiddenRoutes(r)
 	case RouteProfileManagement:
 		s.mountCoreRoutes(r, metricsUnauthenticated)
@@ -28,11 +29,8 @@ func (s *Server) routes() {
 		s.mountCoreRoutes(r, metricsAuthenticated)
 		s.mountMCPRoutes(r)
 		s.mountAPIRoutes(r)
+		s.mountMountedWebUIRoutes(r)
 		s.mountAdminUIRoutes(r)
-	}
-
-	if s.clientUI != nil {
-		r.NotFound(s.clientUI.ServeHTTP)
 	}
 }
 
@@ -64,7 +62,7 @@ func (s *Server) mountManagementRootRedirect(r chi.Router) {
 	}
 
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/admin/", http.StatusMovedPermanently)
+		redirectPreservingQuery(w, r, "/admin/", http.StatusMovedPermanently)
 	})
 }
 
@@ -74,9 +72,29 @@ func (s *Server) mountAdminUIRoutes(r chi.Router) {
 	}
 
 	r.Get("/admin", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/admin/", http.StatusMovedPermanently)
+		redirectPreservingQuery(w, r, "/admin/", http.StatusMovedPermanently)
 	})
 	r.Handle("/admin/*", http.StripPrefix("/admin", s.adminUI))
+}
+
+func (s *Server) mountMountedWebUIRoutes(r chi.Router) {
+	for _, mounted := range s.mountedWebUIs {
+		if mounted.Handler == nil || mounted.Path == "" {
+			continue
+		}
+		path := mounted.Path
+		r.Get(path, func(w http.ResponseWriter, r *http.Request) {
+			redirectPreservingQuery(w, r, path+"/", http.StatusMovedPermanently)
+		})
+		r.Handle(path+"/*", http.StripPrefix(path, mounted.Handler))
+	}
+}
+
+func redirectPreservingQuery(w http.ResponseWriter, r *http.Request, target string, code int) {
+	if rawQuery := r.URL.RawQuery; rawQuery != "" {
+		target += "?" + rawQuery
+	}
+	http.Redirect(w, r, target, code)
 }
 
 func (s *Server) mountManagementHiddenRoutes(r chi.Router) {

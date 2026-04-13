@@ -20,6 +20,7 @@ from ._indexeddb import (
     NotFoundError,
     ObjectStore,
     ObjectStoreSchema,
+    indexeddb_socket_env,
 )
 from ._plugin import Plugin, operation, session_catalog
 from ._providers import (
@@ -85,6 +86,7 @@ __all__ = [
     "SessionTTLProvider",
     "WarningsProvider",
     "field",
+    "indexeddb_socket_env",
     "operation",
     "session_catalog",
 ]

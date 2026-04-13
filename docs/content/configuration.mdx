@@ -199,12 +199,10 @@ Cloud backends (Google Secret Manager, AWS Secrets Manager, HashiCorp Vault, Azu
 
 ## Web UI
 
-The `providers.ui` entry controls the public client UI served at `/`. Omit it to use the default bundled UI. Disable it to run headless:
+The `providers.ui` map controls public static UI bundles served under explicit non-root paths. Omit it to run headless:
 
 ```yaml
-providers:
-  ui:
-    disabled: true
+providers: {}
 ```
 
 Or point at a custom UI bundle:
@@ -212,9 +210,11 @@ Or point at a custom UI bundle:
 ```yaml
 providers:
   ui:
-    source:
-      ref: github.com/your-org/your-ui
-      version: 1.0.0
+    roadmap:
+      source:
+        ref: github.com/your-org/your-ui
+        version: 1.0.0
+      path: /create-customer-roadmap-review
 ```
 
 The built-in admin UI at `/admin` is always available regardless of this setting. See [Web UIs](/providers/web-uis) for the bundle format.

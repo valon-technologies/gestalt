@@ -100,10 +100,7 @@ config:
           version: 0.0.1-alpha.2
         config:
           dsn: "sqlite:///data/gestalt.db"
-    # Keep the default chart profile self-contained. Set this to a managed
-    # provider source when you want a public web UI.
-    ui:
-      disabled: true
+    # Add providers.ui.<name> entries when you want to mount public static UI bundles.
 
 # Extra environment variables for the container. These are only required
 # when your config uses ${VAR} placeholders for auth, baseUrl, or

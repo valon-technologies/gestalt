@@ -173,13 +173,11 @@ This configuration keeps the public UI and API on port `8080` while exposing
 `/admin` and `/metrics` only through the internal `gestalt-management` Service
 on port `9090`. If operators need browser access to `/admin`, place an
 internal-only ingress, VPN, or identity-aware proxy in front of that management
-Service rather than exposing it on the public ingress. Because `server.baseUrl`
-is set, the management admin UI can still link operators back to the public
-client UI hostname.
+Service rather than exposing it on the public ingress.
 
 ## When to enable `pluginInit`
 
-Enable the init container when your config uses `providers.plugins.*.source.ref`, `providers.auth.source.ref`, `providers.indexeddbs.*.source.ref`, or `providers.ui.source.ref` and you want that state prepared before the main container starts. The init container copies the rendered config and runs:
+Enable the init container when your config uses `providers.plugins.*.source.ref`, `providers.auth.source.ref`, `providers.indexeddbs.*.source.ref`, or `providers.ui.*.source.ref` and you want that state prepared before the main container starts. The init container copies the rendered config and runs:
 
 `/gestaltd init --config /etc/gestalt/config.yaml`
 

@@ -10,6 +10,8 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"sync/atomic"
@@ -37,6 +39,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
+	"github.com/valon-technologies/gestalt/server/internal/webui"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -294,6 +297,118 @@ func TestHealthCheck(t *testing.T) {
 	if body["status"] != "ok" {
 		t.Fatalf("expected status ok, got %q", body["status"])
 	}
+}
+
+func TestMountedWebUIRoutes(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>roadmap-shell</html>"), 0o644); err != nil {
+		t.Fatalf("WriteFile index.html: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "assets"), 0o755); err != nil {
+		t.Fatalf("MkdirAll assets: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "assets", "app.js"), []byte("console.log('roadmap')"), 0o644); err != nil {
+		t.Fatalf("WriteFile app.js: %v", err)
+	}
+	handler, err := testutilWebUIHandler(dir)
+	if err != nil {
+		t.Fatalf("webui handler: %v", err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.MountedWebUIs = []server.MountedWebUI{{
+			Path:    "/create-customer-roadmap-review",
+			Handler: handler,
+		}}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	noRedirect := &http.Client{CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	resp, err := noRedirect.Get(ts.URL + "/create-customer-roadmap-review")
+	if err != nil {
+		t.Fatalf("GET mounted root: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusMovedPermanently {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusMovedPermanently)
+	}
+	if got := resp.Header.Get("Location"); got != "/create-customer-roadmap-review/" {
+		t.Fatalf("Location = %q, want %q", got, "/create-customer-roadmap-review/")
+	}
+
+	resp, err = noRedirect.Get(ts.URL + "/create-customer-roadmap-review?code=invite-code&state=abc123")
+	if err != nil {
+		t.Fatalf("GET mounted root with query: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusMovedPermanently {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusMovedPermanently)
+	}
+	if got := resp.Header.Get("Location"); got != "/create-customer-roadmap-review/?code=invite-code&state=abc123" {
+		t.Fatalf("Location = %q, want %q", got, "/create-customer-roadmap-review/?code=invite-code&state=abc123")
+	}
+
+	resp, err = http.Get(ts.URL + "/create-customer-roadmap-review/sync")
+	if err != nil {
+		t.Fatalf("GET mounted sync: %v", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll mounted sync: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), "roadmap-shell") {
+		t.Fatalf("body = %q, want roadmap shell", body)
+	}
+
+	resp, err = http.Get(ts.URL + "/create-customer-roadmap-review/assets/app.js")
+	if err != nil {
+		t.Fatalf("GET mounted asset: %v", err)
+	}
+	body, err = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll mounted asset: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("asset status = %d, want 200", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), "roadmap") {
+		t.Fatalf("asset body = %q, want roadmap asset", body)
+	}
+}
+
+func TestMountedWebUIRoutesHiddenOnManagementProfile(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.RouteProfile = server.RouteProfileManagement
+		cfg.MountedWebUIs = []server.MountedWebUI{{
+			Path:    "/create-customer-roadmap-review",
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("unexpected")) }),
+		}}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/create-customer-roadmap-review/sync")
+	if err != nil {
+		t.Fatalf("GET management mounted route: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
+func testutilWebUIHandler(dir string) (http.Handler, error) {
+	return webui.DirHandler(dir)
 }
 
 func TestSecurityHeaders(t *testing.T) {

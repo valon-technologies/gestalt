@@ -12,7 +12,10 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/core/indexeddb"
+	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -540,6 +543,100 @@ func TestPluginProcessEnvIsolation(t *testing.T) {
 	}
 	if !env.Found || env.Value == "" {
 		t.Fatal("plugin process should see PATH")
+	}
+}
+
+func TestPluginIndexedDBBindingsExposeHostSocketEnv(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+
+	makeConfig := func(bindings []string) *config.Config {
+		return &config.Config{
+			Providers: config.ProvidersConfig{
+				Plugins: map[string]*config.ProviderEntry{
+					"echoext": {
+						Command:              bin,
+						Args:                 []string{"provider"},
+						ResolvedManifest:     manifest,
+						ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+						IndexedDBs:           bindings,
+					},
+				},
+			},
+		}
+	}
+
+	services := coretesting.NewStubServices(t)
+	indexedDBBindings := map[string]indexeddb.IndexedDB{
+		"main":    services.DB,
+		"archive": &coretesting.StubIndexedDB{},
+	}
+
+	checkEnv := func(t *testing.T, bindings []string, envName string) bool {
+		t.Helper()
+		providers, _, err := buildProvidersStrict(context.Background(), makeConfig(bindings), NewFactoryRegistry(), Deps{
+			Services:   services,
+			IndexedDBs: indexedDBBindings,
+		})
+		if err != nil {
+			t.Fatalf("buildProvidersStrict: %v", err)
+		}
+		defer func() { _ = CloseProviders(providers) }()
+
+		prov, err := providers.Get("echoext")
+		if err != nil {
+			t.Fatalf("providers.Get: %v", err)
+		}
+		result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": envName}, "")
+		if err != nil {
+			t.Fatalf("Execute read_env: %v", err)
+		}
+		var env struct {
+			Value string `json:"value"`
+			Found bool   `json:"found"`
+		}
+		if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		return env.Found && env.Value != ""
+	}
+
+	if got := checkEnv(t, nil, providerhost.DefaultIndexedDBSocketEnv); got {
+		t.Fatal("default IndexedDB env should not be set without plugin indexeddb bindings")
+	}
+	if got := checkEnv(t, []string{"main"}, providerhost.DefaultIndexedDBSocketEnv); !got {
+		t.Fatal("default IndexedDB env should be set with a single plugin indexeddb binding")
+	}
+	if got := checkEnv(t, []string{"main"}, providerhost.IndexedDBSocketEnv("main")); !got {
+		t.Fatal("named IndexedDB env should be set with a single plugin indexeddb binding")
+	}
+	if got := checkEnv(t, []string{"main", "archive"}, providerhost.DefaultIndexedDBSocketEnv); got {
+		t.Fatal("default IndexedDB env should not be set with multiple plugin indexeddb bindings")
+	}
+	if got := checkEnv(t, []string{"main", "archive"}, providerhost.IndexedDBSocketEnv("main")); !got {
+		t.Fatal(`named IndexedDB env for "main" should be set with multiple plugin indexeddb bindings`)
+	}
+	if got := checkEnv(t, []string{"main", "archive"}, providerhost.IndexedDBSocketEnv("archive")); !got {
+		t.Fatal(`named IndexedDB env for "archive" should be set with multiple plugin indexeddb bindings`)
+	}
+}
+
+func TestIndexedDBNamespaceUsesProviderName(t *testing.T) {
+	t.Parallel()
+
+	if got := indexedDBNamespace("roadmap-review"); got != "roadmap-review" {
+		t.Fatalf("indexedDBNamespace() = %q, want %q", got, "roadmap-review")
+	}
+	if got := indexedDBNamespace("source-backed"); got != "source-backed" {
+		t.Fatalf("indexedDBNamespace() = %q, want %q", got, "source-backed")
 	}
 }
 

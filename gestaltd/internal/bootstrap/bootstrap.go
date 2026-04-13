@@ -124,7 +124,7 @@ type Deps struct {
 	BaseURL       string
 	SecretManager core.SecretManager
 	Services      *coredata.Services
-	IndexedDBs    map[string]*config.ProviderEntry
+	IndexedDBs    map[string]indexeddb.IndexedDB
 	Egress        EgressDeps
 }
 
@@ -153,6 +153,7 @@ func NewFactoryRegistry() *FactoryRegistry {
 type Result struct {
 	Auth             core.AuthProvider
 	Services         *coredata.Services
+	ExtraIndexedDBs  []indexeddb.IndexedDB
 	Providers        *registry.ProviderMap[core.Provider]
 	ProvidersReady   <-chan struct{}
 	Authorizer       *authorization.Authorizer
@@ -197,6 +198,7 @@ func (r *Result) Close(ctx context.Context) error {
 		closeAuth(r.Auth),
 		CloseProviders(r.Providers),
 		r.Services.Close(),
+		closeIndexedDBs(r.ExtraIndexedDBs...),
 		closeSecretManager(r.SecretManager),
 	)
 	if r.auditClose != nil {
@@ -217,12 +219,26 @@ func closeIfPossible(values ...any) {
 	}
 }
 
+func closeIndexedDBs(stores ...indexeddb.IndexedDB) error {
+	var errs []error
+	for _, store := range stores {
+		if store == nil {
+			continue
+		}
+		if err := store.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
 type preparedCore struct {
-	Auth          core.AuthProvider
-	Services      *coredata.Services
-	SecretManager core.SecretManager
-	Telemetry     core.TelemetryProvider
-	Deps          Deps
+	Auth            core.AuthProvider
+	Services        *coredata.Services
+	ExtraIndexedDBs []indexeddb.IndexedDB
+	SecretManager   core.SecretManager
+	Telemetry       core.TelemetryProvider
+	Deps            Deps
 }
 
 func prepareSecretManager(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) (core.SecretManager, error) {
@@ -279,7 +295,6 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		EncryptionKey: encKey,
 		BaseURL:       cfg.Server.BaseURL,
 		SecretManager: sm,
-		IndexedDBs:    cfg.Providers.IndexedDBs,
 	}
 
 	auth, err := buildAuth(cfg, factories, deps)
@@ -305,27 +320,51 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	store = metricutil.InstrumentIndexedDB(store)
 	svc, svcErr := coredata.New(store, enc)
 	if svcErr != nil {
+		_ = store.Close()
 		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", cfg.Server.IndexedDB, svcErr)
 	}
+	hostIndexedDBs := map[string]indexeddb.IndexedDB{cfg.Server.IndexedDB: store}
+	var extraIndexedDBs []indexeddb.IndexedDB
+	for name, entry := range cfg.Providers.IndexedDBs {
+		if name == cfg.Server.IndexedDB {
+			continue
+		}
+		ds, err := buildIndexedDB(entry, factories)
+		if err != nil {
+			_ = svc.Close()
+			_ = closeIndexedDBs(extraIndexedDBs...)
+			return nil, fmt.Errorf("bootstrap: indexeddb from resource %q: %w", name, err)
+		}
+		ds = metricutil.InstrumentIndexedDB(ds)
+		hostIndexedDBs[name] = ds
+		extraIndexedDBs = append(extraIndexedDBs, ds)
+	}
 	closeSvc := true
+	closeExtraStores := true
 	defer func() {
 		if closeSvc {
 			_ = svc.Close()
+		}
+		if closeExtraStores {
+			_ = closeIndexedDBs(extraIndexedDBs...)
 		}
 	}()
 
 	deps.Egress = newEgressDeps(cfg)
 	deps.Services = svc
+	deps.IndexedDBs = hostIndexedDBs
 
 	closeSM = false
 	shutdownTelemetry = false
 	closeSvc = false
+	closeExtraStores = false
 	return &preparedCore{
-		Auth:          auth,
-		Services:      svc,
-		SecretManager: sm,
-		Telemetry:     tp,
-		Deps:          deps,
+		Auth:            auth,
+		Services:        svc,
+		ExtraIndexedDBs: extraIndexedDBs,
+		SecretManager:   sm,
+		Telemetry:       tp,
+		Deps:            deps,
 	}, nil
 }
 
@@ -338,6 +377,7 @@ func (p *preparedCore) Close(ctx context.Context) error {
 	errs = append(errs,
 		closeAuth(p.Auth),
 		p.Services.Close(),
+		closeIndexedDBs(p.ExtraIndexedDBs...),
 		closeSecretManager(p.SecretManager),
 	)
 	if p.Telemetry != nil {
@@ -401,6 +441,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	return &Result{
 		Auth:             prepared.Auth,
 		Services:         prepared.Services,
+		ExtraIndexedDBs:  prepared.ExtraIndexedDBs,
 		Providers:        providers,
 		ProvidersReady:   providersReady,
 		Authorizer:       authz,

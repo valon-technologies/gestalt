@@ -16,8 +16,7 @@ import (
 var assets embed.FS
 
 type Options struct {
-	BrandHref    string
-	ClientUIHref string
+	BrandHref string
 }
 
 func EmbeddedHandler(opts Options) http.Handler {
@@ -57,11 +56,7 @@ func renderIndexHTML(indexHTML []byte, opts Options) []byte {
 		1,
 	)
 
-	clientUILink := ""
-	if normalized.ClientUIHref != "" {
-		clientUILink = fmt.Sprintf(`<a href=%q>Client UI</a>`, html.EscapeString(normalized.ClientUIHref))
-	}
-	replaced = strings.Replace(replaced, `<a href="/">Client UI</a>`, clientUILink, 1)
+	replaced = strings.Replace(replaced, `<a href="/">Client UI</a>`, "", 1)
 	return []byte(replaced)
 }
 
@@ -70,6 +65,5 @@ func normalizeOptions(opts Options) Options {
 	if opts.BrandHref == "" {
 		opts.BrandHref = "/"
 	}
-	opts.ClientUIHref = strings.TrimSpace(opts.ClientUIHref)
 	return opts
 }
