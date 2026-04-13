@@ -27,6 +27,8 @@ import (
 const defaultTokenInstance = "default"
 const httpInstanceParam = "_instance"
 const httpConnectionParam = "_connection"
+const legacyHTTPInstanceParam = "instance"
+const legacyHTTPConnectionParam = "connection"
 
 const cliStatePrefix = "cli:"
 const maxPort = 65535
@@ -41,6 +43,7 @@ var (
 
 var (
 	safeParamValue         = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
+	safeInstanceValue      = regexp.MustCompile(`^[a-zA-Z0-9._ -]+$`)
 	safeTokenResponseValue = regexp.MustCompile(`^[a-zA-Z0-9._:/-]+$`)
 )
 
@@ -219,7 +222,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	requestedInstance := r.URL.Query().Get(httpInstanceParam)
+	requestedInstance := queryParamValue(r, httpInstanceParam, legacyHTTPInstanceParam)
 	if requestedInstance != "" {
 		var ok bool
 		requestedInstance, ok = resolveRequestedInstance(w, requestedInstance)
@@ -228,7 +231,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	requestedConnection := r.URL.Query().Get(httpConnectionParam)
+	requestedConnection := queryParamValue(r, httpConnectionParam, legacyHTTPConnectionParam)
 	if requestedConnection != "" {
 		var ok bool
 		requestedConnection, ok = s.resolveRequestedConnection(w, name, requestedConnection)
@@ -274,7 +277,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, fmt.Sprintf("no connection found for integration %q instance %q", name, requestedInstance))
 		return
 	}
-	if len(matched) > 1 && (requestedConnection != "" || requestedInstance != "") {
+	if len(matched) > 1 {
 		auditErr = errors.New("multiple matching connections")
 		labels := make([]string, len(matched))
 		for i, t := range matched {
@@ -288,17 +291,17 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for _, tok := range matched {
-		if tok.ID == "" {
-			auditErr = errors.New("connection token is missing an ID")
-			writeError(w, http.StatusNotFound, fmt.Sprintf("no connection found for integration %q", name))
-			return
-		}
-		if err := s.tokens.DeleteToken(r.Context(), tok.ID); err != nil {
-			auditErr = errors.New("failed to disconnect integration")
-			writeError(w, http.StatusInternalServerError, "failed to disconnect integration")
-			return
-		}
+	tokenID := matched[0].ID
+	if tokenID == "" {
+		auditErr = errors.New("connection token is missing an ID")
+		writeError(w, http.StatusNotFound, fmt.Sprintf("no connection found for integration %q", name))
+		return
+	}
+
+	if err := s.tokens.DeleteToken(r.Context(), tokenID); err != nil {
+		auditErr = errors.New("failed to disconnect integration")
+		writeError(w, http.StatusInternalServerError, "failed to disconnect integration")
+		return
 	}
 
 	auditAllowed = true
@@ -317,6 +320,15 @@ func (s *Server) getProvider(w http.ResponseWriter, name string) (core.Provider,
 		return nil, false
 	}
 	return prov, true
+}
+
+func queryParamValue(r *http.Request, names ...string) string {
+	for _, name := range names {
+		if value := r.URL.Query().Get(name); value != "" {
+			return value
+		}
+	}
+	return ""
 }
 
 func (s *Server) requireOAuthHandler(w http.ResponseWriter, integration, connection string) (bootstrap.OAuthHandler, bool) {
@@ -359,7 +371,7 @@ func resolveRequestedInstance(w http.ResponseWriter, requested string) (string, 
 	if instance == "" {
 		instance = defaultTokenInstance
 	}
-	if !safeParamValue.MatchString(instance) {
+	if !safeInstanceValue.MatchString(instance) {
 		writeError(w, http.StatusBadRequest, "instance name contains invalid characters")
 		return "", false
 	}
