@@ -521,6 +521,10 @@ footer {
   }
 }
 
+.arch-dark { display: none; }
+.dark .arch-light { display: none; }
+.dark .arch-dark { display: block; }
+
 @media (max-width: 767px) {
   .nextra-content main > p:first-of-type {
     font-size: 1rem;
