@@ -644,6 +644,19 @@ func lockEntryMatches(paths initPaths, name string, providerEntry *config.Provid
 	return true
 }
 
+func preparedManifestMatchesLock(entry LockEntry, manifest *providermanifestv1.Manifest) bool {
+	if manifest == nil {
+		return false
+	}
+	if entry.Source != "" && manifest.Source != entry.Source {
+		return false
+	}
+	if entry.Version != "" && manifest.Version != entry.Version {
+		return false
+	}
+	return true
+}
+
 // resolveArchiveForPlatform looks up a LockArchive for the given platform
 // string using a fallback chain: exact match → without libc → generic.
 func resolveArchiveForPlatform(entry LockEntry, platform string) (LockArchive, string, bool) {
@@ -1031,6 +1044,15 @@ func (l *Lifecycle) applyConfiguredUIProvider(paths initPaths, lockEntry *LockUI
 				needMaterialize = true
 			}
 		}
+		if !needMaterialize {
+			_, manifest, err := providerpkg.ReadManifestFile(manifestPath)
+			if err != nil {
+				return "", fmt.Errorf("read prepared manifest for %s: %w", subject, err)
+			}
+			if !preparedManifestMatchesLock(*lockEntry, manifest) {
+				needMaterialize = true
+			}
+		}
 		if needMaterialize {
 			if err := l.materializeLockedUIProvider(context.Background(), paths, provider, *lockEntry, destDir, locked); err != nil {
 				return "", err
@@ -1220,6 +1242,15 @@ func (l *Lifecycle) applyLockedProviderEntry(paths initPaths, lock *Lockfile, na
 			needMaterialize = true
 		}
 	}
+	if !needMaterialize {
+		_, manifest, err := providerpkg.ReadManifestFile(manifestPath)
+		if err != nil {
+			return fmt.Errorf("read prepared manifest for provider %q: %w", name, err)
+		}
+		if !preparedManifestMatchesLock(entry, manifest) {
+			needMaterialize = true
+		}
+	}
 	if needMaterialize {
 		if err := l.materializeLockedProvider(context.Background(), paths, name, plugin, entry, locked); err != nil {
 			return err
@@ -1270,6 +1301,15 @@ func (l *Lifecycle) applyLockedComponentEntry(paths initPaths, entry *LockEntry,
 	}
 	if !needMaterialize {
 		if _, err := os.Stat(executablePath); err != nil {
+			needMaterialize = true
+		}
+	}
+	if !needMaterialize {
+		_, manifest, err := providerpkg.ReadManifestFile(manifestPath)
+		if err != nil {
+			return fmt.Errorf("read prepared manifest for %s %q: %w", kind, name, err)
+		}
+		if !preparedManifestMatchesLock(*entry, manifest) {
 			needMaterialize = true
 		}
 	}

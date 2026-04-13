@@ -481,6 +481,109 @@ func TestSourcePluginLoadForExecution(t *testing.T) {
 	}
 }
 
+func TestSourcePluginLoadForExecution_RehydratesWhenCachedManifestVersionMismatchesLock(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	source := "github.com/acme/tools/gadget"
+	version := "2.0.0"
+	binaryContent := "fake-gadget-binary"
+
+	archivePath := buildV2Archive(t, dir, source, version, binaryContent)
+	archiveData, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("read archive: %v", err)
+	}
+	archiveSum := sha256.Sum256(archiveData)
+	archiveSHA := hex.EncodeToString(archiveSum[:])
+
+	var downloadCount atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		downloadCount.Add(1)
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(archiveData)
+	}))
+	defer srv.Close()
+
+	resolver := &fakeResolver{
+		archivePath: archivePath,
+		resolvedURL: srv.URL + "/plugin.tar.gz",
+		sha256:      archiveSHA,
+	}
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	yaml := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
+		"  plugins:",
+		"    gadget:",
+		"      source:",
+		"        ref: " + source,
+		"        version: " + version,
+		"server:",
+		"  indexeddb: sqlite",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(configPath, []byte(yaml), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle(resolver)
+	if _, err := lc.InitAtPath(configPath); err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+
+	lock, err := ReadLockfile(filepath.Join(filepath.Dir(configPath), InitLockfileName))
+	if err != nil {
+		t.Fatalf("ReadLockfile: %v", err)
+	}
+	entry := lock.Providers["gadget"]
+	manifestPath := resolveLockPath(artifactsDir, entry.Manifest)
+
+	_, staleManifest, err := providerpkg.ReadManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadManifestFile(%s): %v", manifestPath, err)
+	}
+	staleManifest.Version = "1.9.9"
+	staleBytes, err := providerpkg.EncodeManifest(staleManifest)
+	if err != nil {
+		t.Fatalf("EncodeManifest: %v", err)
+	}
+	if err := os.WriteFile(manifestPath, staleBytes, 0644); err != nil {
+		t.Fatalf("WriteFile(%s): %v", manifestPath, err)
+	}
+
+	callsBefore := resolver.calls
+	downloadsBefore := downloadCount.Load()
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
+	}
+	if resolver.calls != callsBefore {
+		t.Fatalf("resolver called during locked rehydration: got %d, want %d", resolver.calls, callsBefore)
+	}
+	if got := downloadCount.Load() - downloadsBefore; got != 1 {
+		t.Fatalf("download count during locked rehydration = %d, want 1", got)
+	}
+
+	gotManifest := cfg.Providers.Plugins["gadget"].ResolvedManifest
+	if gotManifest == nil {
+		t.Fatal("ResolvedManifest is nil")
+	}
+	if gotManifest.Version != version {
+		t.Fatalf("ResolvedManifest.Version = %q, want %q", gotManifest.Version, version)
+	}
+
+	_, readBack, err := providerpkg.ReadManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadManifestFile(%s) after rehydrate: %v", manifestPath, err)
+	}
+	if readBack.Version != version {
+		t.Fatalf("cached manifest version = %q, want %q", readBack.Version, version)
+	}
+}
+
 func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 	t.Parallel()
 
