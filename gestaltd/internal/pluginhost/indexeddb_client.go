@@ -566,7 +566,7 @@ func (c *remoteCursor) Continue() bool {
 }
 
 func (c *remoteCursor) ContinueToKey(key any) bool {
-	kvs, err := cursorKeyToProto(key, c.indexCursor)
+	kvs, err := gestalt.CursorKeyToProto(key, c.indexCursor)
 	if err != nil {
 		c.err = err
 		return false
@@ -590,7 +590,7 @@ func (c *remoteCursor) Key() any {
 	if c.entry == nil || len(c.entry.Key) == 0 {
 		return nil
 	}
-	parts, err := keyValuesToAny(c.entry.Key)
+	parts, err := gestalt.KeyValuesToAny(c.entry.Key)
 	if err != nil {
 		c.err = err
 		return nil
@@ -709,28 +709,6 @@ func (c *remoteCursor) Close() error {
 	})
 	c.cleanup()
 	return nil
-}
-
-func cursorKeyToProto(key any, indexCursor bool) ([]*proto.KeyValue, error) {
-	if indexCursor {
-		if parts, ok := key.([]any); ok {
-			kvs := make([]*proto.KeyValue, len(parts))
-			for i, part := range parts {
-				kv, err := anyToKeyValue(part)
-				if err != nil {
-					return nil, err
-				}
-				kvs[i] = kv
-			}
-			return kvs, nil
-		}
-	}
-
-	kv, err := anyToKeyValue(key)
-	if err != nil {
-		return nil, err
-	}
-	return []*proto.KeyValue{kv}, nil
 }
 
 var _ indexeddb.IndexedDB = (*remoteIndexedDB)(nil)

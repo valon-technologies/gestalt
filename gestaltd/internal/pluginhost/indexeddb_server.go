@@ -324,7 +324,7 @@ func (s *indexedDBServer) OpenCursor(stream proto.IndexedDB_OpenCursorServer) er
 			if len(target) == 0 {
 				return status.Error(codes.InvalidArgument, "continue key is required")
 			}
-			parts, kErr := keyValuesToAny(target)
+			parts, kErr := gestalt.KeyValuesToAny(target)
 			if kErr != nil {
 				return status.Errorf(codes.InvalidArgument, "unmarshal continue key: %v", kErr)
 			}
@@ -408,56 +408,6 @@ func (s *indexedDBServer) OpenCursor(stream proto.IndexedDB_OpenCursorServer) er
 	}
 }
 
-func anyToKeyValue(v any) (*proto.KeyValue, error) {
-	if arr, ok := v.([]any); ok {
-		elems := make([]*proto.KeyValue, len(arr))
-		for i, elem := range arr {
-			kv, err := anyToKeyValue(elem)
-			if err != nil {
-				return nil, err
-			}
-			elems[i] = kv
-		}
-		return &proto.KeyValue{Kind: &proto.KeyValue_Array{Array: &proto.KeyValueArray{Elements: elems}}}, nil
-	}
-	tv, err := gestalt.TypedValueFromAny(v)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.KeyValue{Kind: &proto.KeyValue_Scalar{Scalar: tv}}, nil
-}
-
-func keyValueToAny(kv *proto.KeyValue) (any, error) {
-	switch v := kv.GetKind().(type) {
-	case *proto.KeyValue_Scalar:
-		return gestalt.AnyFromTypedValue(v.Scalar)
-	case *proto.KeyValue_Array:
-		parts := make([]any, len(v.Array.GetElements()))
-		for i, elem := range v.Array.GetElements() {
-			val, err := keyValueToAny(elem)
-			if err != nil {
-				return nil, err
-			}
-			parts[i] = val
-		}
-		return parts, nil
-	default:
-		return nil, nil
-	}
-}
-
-func keyValuesToAny(kvs []*proto.KeyValue) ([]any, error) {
-	parts := make([]any, len(kvs))
-	for i, kv := range kvs {
-		val, err := keyValueToAny(kv)
-		if err != nil {
-			return nil, err
-		}
-		parts[i] = val
-	}
-	return parts, nil
-}
-
 func cursorEntryToProto(c indexeddb.Cursor, keysOnly bool) (*proto.CursorEntry, error) {
 	entry := &proto.CursorEntry{PrimaryKey: c.PrimaryKey()}
 	key := c.Key()
@@ -465,7 +415,7 @@ func cursorEntryToProto(c indexeddb.Cursor, keysOnly bool) (*proto.CursorEntry, 
 		if parts, ok := key.([]any); ok {
 			kvs := make([]*proto.KeyValue, len(parts))
 			for i, p := range parts {
-				kv, err := anyToKeyValue(p)
+				kv, err := gestalt.AnyToKeyValue(p)
 				if err != nil {
 					return nil, fmt.Errorf("marshal cursor key[%d]: %w", i, err)
 				}
@@ -473,7 +423,7 @@ func cursorEntryToProto(c indexeddb.Cursor, keysOnly bool) (*proto.CursorEntry, 
 			}
 			entry.Key = kvs
 		} else {
-			kv, err := anyToKeyValue(key)
+			kv, err := gestalt.AnyToKeyValue(key)
 			if err != nil {
 				return nil, fmt.Errorf("marshal cursor key: %w", err)
 			}

@@ -212,6 +212,73 @@ func RecordsToProto(records []Record) ([]*proto.Record, error) {
 	return out, nil
 }
 
+// KeyValuesToAny decodes a cursor/index key from its proto representation.
+func KeyValuesToAny(kvs []*proto.KeyValue) ([]any, error) {
+	parts := make([]any, len(kvs))
+	for i, kv := range kvs {
+		part, err := KeyValueToAny(kv)
+		if err != nil {
+			return nil, err
+		}
+		parts[i] = part
+	}
+	return parts, nil
+}
+
+// KeyValueToAny decodes a single key component from its proto representation.
+func KeyValueToAny(kv *proto.KeyValue) (any, error) {
+	switch v := kv.GetKind().(type) {
+	case *proto.KeyValue_Scalar:
+		return AnyFromTypedValue(v.Scalar)
+	case *proto.KeyValue_Array:
+		return KeyValuesToAny(v.Array.GetElements())
+	default:
+		return nil, fmt.Errorf("indexeddb: unsupported key value kind %T", v)
+	}
+}
+
+// AnyToKeyValue encodes a key or key component into its proto representation.
+func AnyToKeyValue(v any) (*proto.KeyValue, error) {
+	if arr, ok := v.([]any); ok {
+		elems := make([]*proto.KeyValue, len(arr))
+		for i, elem := range arr {
+			kv, err := AnyToKeyValue(elem)
+			if err != nil {
+				return nil, err
+			}
+			elems[i] = kv
+		}
+		return &proto.KeyValue{Kind: &proto.KeyValue_Array{Array: &proto.KeyValueArray{Elements: elems}}}, nil
+	}
+	tv, err := TypedValueFromAny(v)
+	if err != nil {
+		return nil, err
+	}
+	return &proto.KeyValue{Kind: &proto.KeyValue_Scalar{Scalar: tv}}, nil
+}
+
+// CursorKeyToProto encodes a cursor seek target into the wire shape expected by the cursor RPC.
+func CursorKeyToProto(key any, indexCursor bool) ([]*proto.KeyValue, error) {
+	if indexCursor {
+		if parts, ok := key.([]any); ok {
+			kvs := make([]*proto.KeyValue, len(parts))
+			for i, part := range parts {
+				kv, err := AnyToKeyValue(part)
+				if err != nil {
+					return nil, err
+				}
+				kvs[i] = kv
+			}
+			return kvs, nil
+		}
+	}
+	kv, err := AnyToKeyValue(key)
+	if err != nil {
+		return nil, err
+	}
+	return []*proto.KeyValue{kv}, nil
+}
+
 func timestampToTypedValue(value time.Time) (*proto.TypedValue, error) {
 	timestamp := timestamppb.New(value)
 	if err := timestamp.CheckValid(); err != nil {

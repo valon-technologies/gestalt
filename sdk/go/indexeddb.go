@@ -350,7 +350,7 @@ func (c *Cursor) Continue() bool {
 }
 
 func (c *Cursor) ContinueToKey(key any) bool {
-	kvs, err := cursorKeyToProtoSDK(key, c.indexCursor)
+	kvs, err := CursorKeyToProto(key, c.indexCursor)
 	if err != nil {
 		c.err = err
 		return false
@@ -370,7 +370,7 @@ func (c *Cursor) Key() any {
 	if c.entry == nil || len(c.entry.GetKey()) == 0 {
 		return nil
 	}
-	parts, err := keyValuesToAnySDK(c.entry.GetKey())
+	parts, err := KeyValuesToAny(c.entry.GetKey())
 	if err != nil {
 		c.err = err
 		return nil
@@ -379,69 +379,6 @@ func (c *Cursor) Key() any {
 		return parts[0]
 	}
 	return parts
-}
-
-func keyValuesToAnySDK(kvs []*proto.KeyValue) ([]any, error) {
-	parts := make([]any, len(kvs))
-	for i, kv := range kvs {
-		part, err := keyValueToAnySDK(kv)
-		if err != nil {
-			return nil, err
-		}
-		parts[i] = part
-	}
-	return parts, nil
-}
-
-func keyValueToAnySDK(kv *proto.KeyValue) (any, error) {
-	switch v := kv.GetKind().(type) {
-	case *proto.KeyValue_Scalar:
-		return AnyFromTypedValue(v.Scalar)
-	case *proto.KeyValue_Array:
-		return keyValuesToAnySDK(v.Array.GetElements())
-	default:
-		return nil, fmt.Errorf("indexeddb: unsupported key value kind %T", v)
-	}
-}
-
-func anyToKeyValueSDK(v any) (*proto.KeyValue, error) {
-	if arr, ok := v.([]any); ok {
-		elems := make([]*proto.KeyValue, len(arr))
-		for i, elem := range arr {
-			kv, err := anyToKeyValueSDK(elem)
-			if err != nil {
-				return nil, err
-			}
-			elems[i] = kv
-		}
-		return &proto.KeyValue{Kind: &proto.KeyValue_Array{Array: &proto.KeyValueArray{Elements: elems}}}, nil
-	}
-	tv, err := TypedValueFromAny(v)
-	if err != nil {
-		return nil, err
-	}
-	return &proto.KeyValue{Kind: &proto.KeyValue_Scalar{Scalar: tv}}, nil
-}
-
-func cursorKeyToProtoSDK(key any, indexCursor bool) ([]*proto.KeyValue, error) {
-	if indexCursor {
-		if parts, ok := key.([]any); ok {
-			kvs := make([]*proto.KeyValue, len(parts))
-			for i, part := range parts {
-				kv, err := anyToKeyValueSDK(part)
-				if err != nil {
-					return nil, err
-				}
-				kvs[i] = kv
-			}
-			return kvs, nil
-		}
-	}
-	kv, err := anyToKeyValueSDK(key)
-	if err != nil {
-		return nil, err
-	}
-	return []*proto.KeyValue{kv}, nil
 }
 
 func (c *Cursor) PrimaryKey() string {
@@ -567,18 +504,18 @@ func (c *Cursor) setErr(err error) error {
 }
 
 func (c *Cursor) Close() error {
+	c.done = true
+	c.entry = nil
 	if c.stream == nil {
-		return nil
+		return c.cleanup()
 	}
-	var sendErr error
-	sendErr = c.stream.Send(&proto.CursorClientMessage{
+	sendErr := c.stream.Send(&proto.CursorClientMessage{
 		Msg: &proto.CursorClientMessage_Command{
 			Command: &proto.CursorCommand{
 				Command: &proto.CursorCommand_Close{Close: true},
 			},
 		},
 	})
-	c.done = true
 	closeErr := c.cleanup()
 	if sendErr != nil {
 		return grpcErr(sendErr)
