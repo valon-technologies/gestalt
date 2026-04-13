@@ -273,7 +273,7 @@ providers:
         dsn: sqlite://./gestalt.db
 ```
 
-SQLite works for single-instance deployments. For production, use a Postgres or MySQL DSN. See [IndexedDB](/providers/indexeddb) for the full provider model.
+SQLite works for single-instance deployments. For production, use a networked IndexedDB provider such as `indexeddb/relationaldb` with Postgres or MySQL, `indexeddb/dynamodb`, or `indexeddb/mongodb`. See [IndexedDB](/providers/indexeddb) for the full provider model.
 
 ## Telemetry and audit
 
