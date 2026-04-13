@@ -148,46 +148,49 @@ func (o *stubObjectStore) Clear(_ context.Context) error {
 	return nil
 }
 
-func (o *stubObjectStore) GetAll(_ context.Context, _ *indexeddb.KeyRange) ([]indexeddb.Record, error) {
+func (o *stubObjectStore) GetAll(_ context.Context, r *indexeddb.KeyRange) ([]indexeddb.Record, error) {
 	if o.db.Err != nil {
 		return nil, o.db.Err
 	}
-	o.mu.RLock()
-	defer o.mu.RUnlock()
-	out := make([]indexeddb.Record, 0, len(o.records))
-	for _, r := range o.records {
-		out = append(out, r)
+	c := o.newCursor(indexeddb.CursorNext, false)
+	c.applyKeyRange(r)
+	out := make([]indexeddb.Record, 0, len(c.keys))
+	for _, key := range c.keys {
+		out = append(out, c.snapshot[key])
 	}
 	return out, nil
 }
 
-func (o *stubObjectStore) GetAllKeys(_ context.Context, _ *indexeddb.KeyRange) ([]string, error) {
+func (o *stubObjectStore) GetAllKeys(_ context.Context, r *indexeddb.KeyRange) ([]string, error) {
 	if o.db.Err != nil {
 		return nil, o.db.Err
 	}
-	o.mu.RLock()
-	defer o.mu.RUnlock()
-	out := make([]string, 0, len(o.records))
-	for k := range o.records {
-		out = append(out, k)
-	}
-	return out, nil
+	c := o.newCursor(indexeddb.CursorNext, true)
+	c.applyKeyRange(r)
+	return append([]string(nil), c.keys...), nil
 }
 
-func (o *stubObjectStore) Count(_ context.Context, _ *indexeddb.KeyRange) (int64, error) {
+func (o *stubObjectStore) Count(_ context.Context, r *indexeddb.KeyRange) (int64, error) {
 	if o.db.Err != nil {
 		return 0, o.db.Err
 	}
-	o.mu.RLock()
-	defer o.mu.RUnlock()
-	return int64(len(o.records)), nil
+	c := o.newCursor(indexeddb.CursorNext, true)
+	c.applyKeyRange(r)
+	return int64(len(c.keys)), nil
 }
 
-func (o *stubObjectStore) DeleteRange(_ context.Context, _ indexeddb.KeyRange) (int64, error) {
+func (o *stubObjectStore) DeleteRange(_ context.Context, r indexeddb.KeyRange) (int64, error) {
 	if o.db.Err != nil {
 		return 0, o.db.Err
 	}
-	return 0, nil
+	c := o.newCursor(indexeddb.CursorNext, true)
+	c.applyKeyRange(&r)
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	for _, key := range c.keys {
+		delete(o.records, key)
+	}
+	return int64(len(c.keys)), nil
 }
 
 func (o *stubObjectStore) Index(name string) indexeddb.Index {
@@ -298,17 +301,24 @@ func (idx *stubIndex) GetKey(ctx context.Context, values ...any) (string, error)
 	return id, nil
 }
 
-func (idx *stubIndex) GetAll(_ context.Context, _ *indexeddb.KeyRange, values ...any) ([]indexeddb.Record, error) {
+func (idx *stubIndex) newCursor(dir indexeddb.CursorDirection, r *indexeddb.KeyRange, keysOnly bool, values ...any) *stubCursor {
+	c := idx.store.newCursor(dir, keysOnly)
+	c.filterIndex = idx
+	c.filterValues = values
+	c.applyIndexFilter()
+	c.buildIndexKeys()
+	c.applyKeyRange(r)
+	return c
+}
+
+func (idx *stubIndex) GetAll(_ context.Context, r *indexeddb.KeyRange, values ...any) ([]indexeddb.Record, error) {
 	if idx.store.db.Err != nil {
 		return nil, idx.store.db.Err
 	}
-	idx.store.mu.RLock()
-	defer idx.store.mu.RUnlock()
-	var out []indexeddb.Record
-	for _, r := range idx.store.records {
-		if idx.matches(r, values) {
-			out = append(out, r)
-		}
+	c := idx.newCursor(indexeddb.CursorNext, r, false, values...)
+	out := make([]indexeddb.Record, 0, len(c.keys))
+	for _, key := range c.keys {
+		out = append(out, c.snapshot[key])
 	}
 	return out, nil
 }
@@ -332,11 +342,8 @@ func (idx *stubIndex) Count(ctx context.Context, r *indexeddb.KeyRange, values .
 	if idx.store.db.Err != nil {
 		return 0, idx.store.db.Err
 	}
-	records, err := idx.GetAll(ctx, r, values...)
-	if err != nil {
-		return 0, err
-	}
-	return int64(len(records)), nil
+	c := idx.newCursor(indexeddb.CursorNext, r, true, values...)
+	return int64(len(c.keys)), nil
 }
 
 func (idx *stubIndex) Delete(_ context.Context, values ...any) (int64, error) {
@@ -361,26 +368,14 @@ func (idx *stubIndex) OpenCursor(_ context.Context, r *indexeddb.KeyRange, dir i
 	if idx.store.db.Err != nil {
 		return nil, idx.store.db.Err
 	}
-	c := idx.store.newCursor(dir, false)
-	c.filterIndex = idx
-	c.filterValues = values
-	c.applyIndexFilter()
-	c.buildIndexKeys()
-	c.applyKeyRange(r)
-	return c, nil
+	return idx.newCursor(dir, r, false, values...), nil
 }
 
 func (idx *stubIndex) OpenKeyCursor(_ context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection, values ...any) (indexeddb.Cursor, error) {
 	if idx.store.db.Err != nil {
 		return nil, idx.store.db.Err
 	}
-	c := idx.store.newCursor(dir, true)
-	c.filterIndex = idx
-	c.filterValues = values
-	c.applyIndexFilter()
-	c.buildIndexKeys()
-	c.applyKeyRange(r)
-	return c, nil
+	return idx.newCursor(dir, r, true, values...), nil
 }
 
 type stubCursor struct {
