@@ -25,8 +25,9 @@ This guarantees that the image you test is byte-for-byte the image you deploy.
 
 ```
 deploy/
-  lockfile.json        # pinned provider refs and checksums
-  providers/           # vendored provider artifacts (optional)
+  gestalt.lock.json    # pinned provider refs and checksums
+  .gestaltd/providers/ # vendored provider artifacts (optional)
+  .gestaltd/ui/        # vendored UI assets (optional)
 ```
 
 The lock file is a JSON document that records every resolved provider:
@@ -47,7 +48,7 @@ The lock file is a JSON document that records every resolved provider:
 You can choose between two patterns:
 
 - **Vendored** -- commit the full `deploy/` directory (including `providers/`). The server loads artifacts directly with no network calls at boot. Best for air-gapped or latency-sensitive environments.
-- **Lockfile-only** -- commit only `lockfile.json`. The server fetches providers on first boot but verifies each artifact against the recorded checksum. Keeps your repo lightweight while still guaranteeing integrity.
+- **Lockfile-only** -- commit only `gestalt.lock.json`. The server fetches providers on first boot but verifies each artifact against the recorded checksum. Keeps your repo lightweight while still guaranteeing integrity.
 
 See [Configuration](/configuration) for the config model and [Docker](/deploy/docker) for the recommended production image pattern.
 
