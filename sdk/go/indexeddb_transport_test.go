@@ -362,6 +362,45 @@ func TestTransport_IndexContinueToKeyRoundTrip(t *testing.T) {
 	}
 }
 
+func TestTransport_CursorUpdateAcknowledgesMutation(t *testing.T) {
+	ctx := context.Background()
+	store := "update_ack_" + t.Name()
+	_ = testClient.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{})
+	s := testClient.ObjectStore(store)
+
+	if err := s.Put(ctx, gestalt.Record{"id": "u1", "status": "active"}); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+
+	cursor, err := s.OpenCursor(ctx, nil, gestalt.CursorNext)
+	if err != nil {
+		t.Fatalf("OpenCursor: %v", err)
+	}
+	defer cursor.Close()
+
+	if !cursor.Continue() {
+		t.Fatal("Continue returned false")
+	}
+	updated := gestalt.Record{"id": "u1", "status": "inactive"}
+	if err := cursor.Update(updated); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+	curRec, err := cursor.Value()
+	if err != nil {
+		t.Fatalf("Value after Update: %v", err)
+	}
+	if curRec["status"] != "inactive" {
+		t.Fatalf("cursor.Value().status = %v, want inactive", curRec["status"])
+	}
+	got, err := s.Get(ctx, "u1")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got["status"] != "inactive" {
+		t.Fatalf("Get status = %v, want inactive", got["status"])
+	}
+}
+
 func TestTransport_ErrorMapping(t *testing.T) {
 	ctx := context.Background()
 	store := "errmap_" + t.Name()

@@ -329,11 +329,12 @@ func (s *indexedDBServer) OpenCursor(stream proto.IndexedDB_OpenCursorServer) er
 				return status.Errorf(codes.InvalidArgument, "unmarshal continue key: %v", kErr)
 			}
 			var key any
-			if openReq.GetIndex() != "" {
+			switch {
+			case openReq.GetIndex() != "":
 				key = parts
-			} else if len(parts) == 1 {
+			case len(parts) == 1:
 				key = parts[0]
-			} else {
+			default:
 				key = parts
 			}
 			if !cursor.ContinueToKey(key) {

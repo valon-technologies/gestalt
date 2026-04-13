@@ -467,13 +467,27 @@ func openRemoteCursor(ctx context.Context, client proto.IndexedDBClient, store, 
 			Values:    pbValues,
 		}},
 	}); err != nil {
+		_ = stream.CloseSend()
 		streamCancel()
 		return nil, grpcToDatastoreErr(err)
 	}
 	// Read the open ack to surface creation errors synchronously.
-	if _, err := stream.Recv(); err != nil {
+	resp, err := stream.Recv()
+	if err != nil {
+		_ = stream.CloseSend()
 		streamCancel()
 		return nil, grpcToDatastoreErr(err)
+	}
+	if resp == nil {
+		_ = stream.CloseSend()
+		streamCancel()
+		return nil, fmt.Errorf("cursor stream ended during open")
+	}
+	done, ok := resp.GetResult().(*proto.CursorResponse_Done)
+	if !ok || done.Done {
+		_ = stream.CloseSend()
+		streamCancel()
+		return nil, fmt.Errorf("unexpected cursor open ack")
 	}
 	return &remoteCursor{stream: stream, cancel: streamCancel, keysOnly: keysOnly, indexCursor: index != ""}, nil
 }
@@ -488,17 +502,41 @@ type remoteCursor struct {
 	done        bool
 }
 
+func (c *remoteCursor) cleanup() {
+	if c.stream != nil {
+		_ = c.stream.CloseSend()
+		c.stream = nil
+	}
+	if c.cancel != nil {
+		c.cancel()
+		c.cancel = nil
+	}
+}
+
+func (c *remoteCursor) setErr(err error) error {
+	c.err = err
+	c.cleanup()
+	return c.err
+}
+
 func (c *remoteCursor) sendAndRecv(msg *proto.CursorClientMessage) bool {
 	if c.done || c.err != nil {
 		return false
 	}
 	if err := c.stream.Send(msg); err != nil {
 		c.err = grpcToDatastoreErr(err)
+		c.cleanup()
 		return false
 	}
 	resp, err := c.stream.Recv()
 	if err != nil {
 		c.err = grpcToDatastoreErr(err)
+		c.cleanup()
+		return false
+	}
+	if resp == nil {
+		c.err = fmt.Errorf("cursor stream ended")
+		c.cleanup()
 		return false
 	}
 	switch v := resp.GetResult().(type) {
@@ -506,11 +544,15 @@ func (c *remoteCursor) sendAndRecv(msg *proto.CursorClientMessage) bool {
 		c.entry = v.Entry
 		return true
 	case *proto.CursorResponse_Done:
+		if !v.Done {
+			_ = c.setErr(fmt.Errorf("unexpected non-exhaustion cursor ack"))
+			return false
+		}
 		c.done = true
 		c.entry = nil
 		return false
 	default:
-		c.err = fmt.Errorf("unexpected cursor response")
+		_ = c.setErr(fmt.Errorf("unexpected cursor response"))
 		return false
 	}
 }
@@ -548,7 +590,11 @@ func (c *remoteCursor) Key() any {
 	if c.entry == nil || len(c.entry.Key) == 0 {
 		return nil
 	}
-	parts, _ := keyValuesToAny(c.entry.Key)
+	parts, err := keyValuesToAny(c.entry.Key)
+	if err != nil {
+		c.err = err
+		return nil
+	}
 	if !c.indexCursor && len(parts) == 1 {
 		return parts[0]
 	}
@@ -584,14 +630,25 @@ func (c *remoteCursor) Delete() error {
 			Command: &proto.CursorCommand_Delete{Delete: true},
 		}},
 	}); err != nil {
-		return grpcToDatastoreErr(err)
+		return c.setErr(grpcToDatastoreErr(err))
 	}
 	resp, err := c.stream.Recv()
 	if err != nil {
-		return grpcToDatastoreErr(err)
+		return c.setErr(grpcToDatastoreErr(err))
 	}
-	if e, ok := resp.GetResult().(*proto.CursorResponse_Entry); ok {
-		c.entry = e.Entry
+	if resp == nil {
+		return c.setErr(fmt.Errorf("cursor stream ended during mutation"))
+	}
+	switch v := resp.GetResult().(type) {
+	case *proto.CursorResponse_Entry:
+		c.entry = v.Entry
+	case *proto.CursorResponse_Done:
+		if v.Done {
+			c.done = true
+			c.entry = nil
+		}
+	default:
+		return c.setErr(fmt.Errorf("unexpected cursor mutation ack"))
 	}
 	return nil
 }
@@ -612,16 +669,27 @@ func (c *remoteCursor) Update(value indexeddb.Record) error {
 			Command: &proto.CursorCommand_Update{Update: pbRec},
 		}},
 	}); err != nil {
-		return grpcToDatastoreErr(err)
+		return c.setErr(grpcToDatastoreErr(err))
 	}
 	resp, err := c.stream.Recv()
 	if err != nil {
-		return grpcToDatastoreErr(err)
+		return c.setErr(grpcToDatastoreErr(err))
 	}
-	if e, ok := resp.GetResult().(*proto.CursorResponse_Entry); ok {
-		c.entry = e.Entry
-	} else if c.entry != nil {
-		c.entry.Record = pbRec
+	if resp == nil {
+		return c.setErr(fmt.Errorf("cursor stream ended during mutation"))
+	}
+	switch v := resp.GetResult().(type) {
+	case *proto.CursorResponse_Entry:
+		c.entry = v.Entry
+	case *proto.CursorResponse_Done:
+		if v.Done {
+			c.done = true
+			c.entry = nil
+		} else if c.entry != nil {
+			c.entry.Record = pbRec
+		}
+	default:
+		return c.setErr(fmt.Errorf("unexpected cursor mutation ack"))
 	}
 	return nil
 }
@@ -637,8 +705,7 @@ func (c *remoteCursor) Close() error {
 			Command: &proto.CursorCommand_Close{Close: true},
 		}},
 	})
-	_ = c.stream.CloseSend()
-	c.cancel()
+	c.cleanup()
 	return nil
 }
 

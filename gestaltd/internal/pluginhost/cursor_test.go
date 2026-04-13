@@ -216,6 +216,13 @@ func TestCursor_UpdateAtPosition(t *testing.T) {
 	if err := cursor.Update(updated); err != nil {
 		t.Fatalf("Update: %v", err)
 	}
+	curRec, err := cursor.Value()
+	if err != nil {
+		t.Fatalf("Value after Update: %v", err)
+	}
+	if curRec["name"] != "Updated" {
+		t.Errorf("cursor.Value().name = %v, want Updated", curRec["name"])
+	}
 
 	// Verify via direct read
 	rec, err := db.ObjectStore("items").Get(ctx, pk)
@@ -385,6 +392,26 @@ func TestCursor_ContinueToKey(t *testing.T) {
 	}
 	if cursor.PrimaryKey() != "c" {
 		t.Errorf("PrimaryKey = %q, want c", cursor.PrimaryKey())
+	}
+}
+
+func TestCursor_ReverseContinueToKey(t *testing.T) {
+	t.Parallel()
+
+	_, db := newCursorTestDB(t)
+	ctx := context.Background()
+
+	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, indexeddb.CursorPrev)
+	if err != nil {
+		t.Fatalf("OpenCursor: %v", err)
+	}
+	defer func() { _ = cursor.Close() }()
+
+	if !cursor.ContinueToKey("c") {
+		t.Fatalf("ContinueToKey returned false err=%v", cursor.Err())
+	}
+	if cursor.PrimaryKey() != "c" {
+		t.Fatalf("PrimaryKey = %q, want c", cursor.PrimaryKey())
 	}
 }
 
