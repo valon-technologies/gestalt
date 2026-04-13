@@ -7,7 +7,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/drivers/componentplugin"
-	"github.com/valon-technologies/gestalt/server/internal/pluginhost"
+	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"gopkg.in/yaml.v3"
 )
@@ -28,7 +28,7 @@ var Factory bootstrap.IndexedDBFactory = func(node yaml.Node) (indexeddb.Indexed
 	}
 	cfg = prepared.YAMLConfig
 
-	return pluginhost.NewExecutableIndexedDB(context.Background(), pluginhost.IndexedDBExecConfig{
+	return providerhost.NewExecutableIndexedDB(context.Background(), providerhost.IndexedDBExecConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
 		Env:          cfg.Env,

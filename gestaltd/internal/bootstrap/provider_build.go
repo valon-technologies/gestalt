@@ -24,8 +24,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
 	"github.com/valon-technologies/gestalt/server/internal/openapi"
 	"github.com/valon-technologies/gestalt/server/internal/operationexposure"
-	"github.com/valon-technologies/gestalt/server/internal/pluginhost"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
+	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -129,11 +129,11 @@ func buildProvider(ctx context.Context, name string, entry *config.ProviderEntry
 		if err != nil {
 			return nil, fmt.Errorf("build declarative provider %q: %w", name, err)
 		}
-		declarative, err := pluginhost.NewDeclarativeProvider(
+		declarative, err := providerhost.NewDeclarativeProvider(
 			manifest,
 			nil,
-			pluginhost.WithDeclarativeMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
-			pluginhost.WithDeclarativeConnectionMode(plan.connectionMode()),
+			providerhost.WithDeclarativeMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
+			providerhost.WithDeclarativeConnectionMode(plan.connectionMode()),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("create declarative provider %q: %w", name, err)
@@ -174,11 +174,11 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 	}
 
 	if manifestPlugin.IsDeclarative() {
-		declarative, err := pluginhost.NewDeclarativeProvider(
+		declarative, err := providerhost.NewDeclarativeProvider(
 			manifest,
 			nil,
-			pluginhost.WithDeclarativeMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
-			pluginhost.WithDeclarativeConnectionMode(plan.connectionMode()),
+			providerhost.WithDeclarativeMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
+			providerhost.WithDeclarativeConnectionMode(plan.connectionMode()),
 		)
 		if err != nil {
 			closeIfPossible(pluginProv)
@@ -457,7 +457,7 @@ func catalogOperationCount(cat *catalog.Catalog) int {
 	return len(cat.Operations)
 }
 
-func buildPluginProvider(ctx context.Context, entry *config.ProviderEntry, pluginConfig map[string]any, spec pluginhost.StaticProviderSpec, deps Deps) (core.Provider, error) {
+func buildPluginProvider(ctx context.Context, entry *config.ProviderEntry, pluginConfig map[string]any, spec providerhost.StaticProviderSpec, deps Deps) (core.Provider, error) {
 	command := entry.Command
 	args := entry.Args
 	env := clonePluginEnv(entry.Env)
@@ -494,7 +494,7 @@ func buildPluginProvider(ctx context.Context, entry *config.ProviderEntry, plugi
 		}()
 	}
 
-	execCfg := pluginhost.ExecConfig{
+	execCfg := providerhost.ExecConfig{
 		Command:       command,
 		Args:          args,
 		Env:           env,
@@ -507,11 +507,11 @@ func buildPluginProvider(ctx context.Context, entry *config.ProviderEntry, plugi
 	}
 	if len(entry.IndexedDBs) > 0 && deps.Services != nil {
 		execCfg.RegisterHost = func(srv *grpc.Server) {
-			proto.RegisterIndexedDBServer(srv, pluginhost.NewIndexedDBServer(deps.Services.DB, entry.Command))
+			proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(deps.Services.DB, entry.Command))
 		}
 		execCfg.HostSocketEnv = "GESTALT_INDEXEDDB_SOCKET"
 	}
-	prov, err := pluginhost.NewExecutableProvider(ctx, execCfg)
+	prov, err := providerhost.NewExecutableProvider(ctx, execCfg)
 	if err != nil {
 		return nil, err
 	}
@@ -530,13 +530,13 @@ func clonePluginEnv(src map[string]string) map[string]string {
 	return dst
 }
 
-func buildPluginStaticSpec(name string, entry *config.ProviderEntry, manifest *providermanifestv1.Manifest, meta providerMetadata) (pluginhost.StaticProviderSpec, error) {
+func buildPluginStaticSpec(name string, entry *config.ProviderEntry, manifest *providermanifestv1.Manifest, meta providerMetadata) (providerhost.StaticProviderSpec, error) {
 	if manifest == nil || manifest.Spec == nil {
-		return pluginhost.StaticProviderSpec{}, fmt.Errorf("resolved manifest is required")
+		return providerhost.StaticProviderSpec{}, fmt.Errorf("resolved manifest is required")
 	}
 	plan, err := buildPluginConnectionPlan(entry, manifest.Spec)
 	if err != nil {
-		return pluginhost.StaticProviderSpec{}, err
+		return providerhost.StaticProviderSpec{}, err
 	}
 
 	displayName := meta.displayNameOr(manifest.DisplayName)
@@ -562,14 +562,14 @@ func buildPluginStaticSpec(name string, entry *config.ProviderEntry, manifest *p
 		var err error
 		staticCatalog, err = providerpkg.ReadStaticCatalog(manifestRoot, name)
 		if err != nil {
-			return pluginhost.StaticProviderSpec{}, err
+			return providerhost.StaticProviderSpec{}, err
 		}
 	}
 	if staticCatalog == nil && providerpkg.StaticCatalogRequired(manifest) {
 		if entry.ResolvedManifestPath == "" {
-			return pluginhost.StaticProviderSpec{}, fmt.Errorf("resolved manifest path is required for executable provider static catalog")
+			return providerhost.StaticProviderSpec{}, fmt.Errorf("resolved manifest path is required for executable provider static catalog")
 		}
-		return pluginhost.StaticProviderSpec{}, fmt.Errorf("executable providers without declarative or spec surfaces must define %s", providerpkg.StaticCatalogFile)
+		return providerhost.StaticProviderSpec{}, fmt.Errorf("executable providers without declarative or spec surfaces must define %s", providerpkg.StaticCatalogFile)
 	}
 	if staticCatalog != nil {
 		if displayName != "" {
@@ -583,7 +583,7 @@ func buildPluginStaticSpec(name string, entry *config.ProviderEntry, manifest *p
 		}
 	}
 
-	return pluginhost.StaticProviderSpec{
+	return providerhost.StaticProviderSpec{
 		Name:             name,
 		DisplayName:      displayName,
 		Description:      description,
@@ -591,9 +591,9 @@ func buildPluginStaticSpec(name string, entry *config.ProviderEntry, manifest *p
 		ConnectionMode:   connMode,
 		Catalog:          staticCatalog,
 		AuthTypes:        staticAuthTypes(conn.Auth.Type),
-		ConnectionParams: pluginhost.ConnectionParamDefsFromManifest(conn.ConnectionParams),
-		CredentialFields: pluginhost.CredentialFieldsFromManifest(conn.Auth.Credentials),
-		DiscoveryConfig:  pluginhost.DiscoveryConfigFromManifest(manifest.Spec.Discovery),
+		ConnectionParams: providerhost.ConnectionParamDefsFromManifest(conn.ConnectionParams),
+		CredentialFields: providerhost.CredentialFieldsFromManifest(conn.Auth.Credentials),
+		DiscoveryConfig:  providerhost.DiscoveryConfigFromManifest(manifest.Spec.Discovery),
 	}, nil
 }
 

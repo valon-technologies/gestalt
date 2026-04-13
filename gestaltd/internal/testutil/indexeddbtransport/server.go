@@ -8,7 +8,7 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
-	"github.com/valon-technologies/gestalt/server/internal/pluginhost"
+	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"google.golang.org/grpc"
 )
 
@@ -30,7 +30,7 @@ func Start(socketPath string) (*Server, error) {
 	stub := &coretesting.StubIndexedDB{}
 	srv := grpc.NewServer()
 	// Empty prefix -- SDK clients don't expect prefixed store names.
-	proto.RegisterIndexedDBServer(srv, pluginhost.NewIndexedDBServer(stub, ""))
+	proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(stub, ""))
 	go func() { _ = srv.Serve(lis) }()
 	return &Server{srv: srv, lis: lis, Socket: socketPath}, nil
 }
