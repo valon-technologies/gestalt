@@ -7,7 +7,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/drivers/componentplugin"
-	"github.com/valon-technologies/gestalt/server/internal/pluginhost"
+	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"gopkg.in/yaml.v3"
 )
@@ -28,7 +28,7 @@ var Factory bootstrap.SecretManagerFactory = func(node yaml.Node) (core.SecretMa
 	}
 	cfg = prepared.YAMLConfig
 
-	return pluginhost.NewExecutableSecretManager(context.Background(), pluginhost.SecretsExecConfig{
+	return providerhost.NewExecutableSecretManager(context.Background(), providerhost.SecretsExecConfig{
 		Command:      cfg.Command,
 		Args:         cfg.Args,
 		Env:          cfg.Env,

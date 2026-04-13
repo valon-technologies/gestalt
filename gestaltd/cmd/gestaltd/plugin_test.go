@@ -16,7 +16,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/session"
-	"github.com/valon-technologies/gestalt/server/internal/pluginhost"
+	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -314,9 +314,9 @@ func TestRun_PluginReleaseBuildsPythonSourcePluginForCurrentPlatform(t *testing.
 	}
 
 	ctx := context.Background()
-	prov, err := pluginhost.NewExecutableProvider(ctx, pluginhost.ExecConfig{
+	prov, err := providerhost.NewExecutableProvider(ctx, providerhost.ExecConfig{
 		Command: artifactPath,
-		StaticSpec: pluginhost.StaticProviderSpec{
+		StaticSpec: providerhost.StaticProviderSpec{
 			Name: "python-release",
 		},
 		Config: map[string]any{"greeting": "Hi"},
@@ -538,9 +538,9 @@ func TestRun_PluginReleaseBuildsRustSourcePluginForCurrentPlatform(t *testing.T)
 	}
 
 	ctx := context.Background()
-	prov, err := pluginhost.NewExecutableProvider(ctx, pluginhost.ExecConfig{
+	prov, err := providerhost.NewExecutableProvider(ctx, providerhost.ExecConfig{
 		Command: artifactPath,
-		StaticSpec: pluginhost.StaticProviderSpec{
+		StaticSpec: providerhost.StaticProviderSpec{
 			Name: rustReleasePluginName,
 		},
 		Config: map[string]any{"greeting": "Hi"},
@@ -717,7 +717,7 @@ func TestRun_PluginReleaseBuildsGoSourceAuthPlugin(t *testing.T) {
 		t.Fatalf("expected %s in archive: %v", authReleaseSchemaPath, err)
 	}
 
-	auth, err := pluginhost.NewExecutableAuthProvider(context.Background(), pluginhost.AuthExecConfig{
+	auth, err := providerhost.NewExecutableAuthProvider(context.Background(), providerhost.AuthExecConfig{
 		Command:     filepath.Join(extractDir, binaryName),
 		Name:        "auth-release",
 		CallbackURL: "https://gestalt.example.test/api/v1/auth/login/callback",
@@ -821,7 +821,7 @@ func TestRun_PluginReleaseBuildsGoSourceSecretsPlugin(t *testing.T) {
 		t.Fatalf("expected %s in archive: %v", secretsReleaseSchemaPath, err)
 	}
 
-	sm, err := pluginhost.NewExecutableSecretManager(context.Background(), pluginhost.SecretsExecConfig{
+	sm, err := providerhost.NewExecutableSecretManager(context.Background(), providerhost.SecretsExecConfig{
 		Command: filepath.Join(extractDir, binaryName),
 		Name:    secretsReleasePluginName,
 	})
@@ -889,7 +889,7 @@ func TestRun_PluginReleaseBuildsRustSourceAuthPlugin(t *testing.T) {
 		t.Fatalf("expected %s in archive: %v", authReleaseSchemaPath, err)
 	}
 
-	auth, err := pluginhost.NewExecutableAuthProvider(context.Background(), pluginhost.AuthExecConfig{
+	auth, err := providerhost.NewExecutableAuthProvider(context.Background(), providerhost.AuthExecConfig{
 		Command:     filepath.Join(extractDir, binaryName),
 		Name:        "auth-release",
 		CallbackURL: "https://gestalt.example.test/api/v1/auth/login/callback",
@@ -986,7 +986,7 @@ func TestRun_PluginReleaseBuildsPythonSourceAuthPlugin(t *testing.T) {
 		t.Fatalf("expected %s in archive: %v", authReleaseSchemaPath, err)
 	}
 
-	auth, err := pluginhost.NewExecutableAuthProvider(context.Background(), pluginhost.AuthExecConfig{
+	auth, err := providerhost.NewExecutableAuthProvider(context.Background(), providerhost.AuthExecConfig{
 		Command:     filepath.Join(extractDir, binaryName),
 		Name:        pythonAuthReleasePluginName,
 		CallbackURL: "https://gestalt.example.test/api/v1/auth/login/callback",
@@ -1075,7 +1075,7 @@ func TestRun_PluginReleaseBuildsTypeScriptSourceAuthPlugin(t *testing.T) {
 		t.Fatalf("expected %s in archive: %v", authReleaseSchemaPath, err)
 	}
 
-	auth, err := pluginhost.NewExecutableAuthProvider(context.Background(), pluginhost.AuthExecConfig{
+	auth, err := providerhost.NewExecutableAuthProvider(context.Background(), providerhost.AuthExecConfig{
 		Command:     filepath.Join(extractDir, binaryName),
 		Name:        authReleasePluginName,
 		CallbackURL: "https://gestalt.example.test/api/v1/auth/login/callback",

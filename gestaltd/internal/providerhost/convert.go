@@ -1,4 +1,4 @@
-package pluginhost
+package providerhost
 
 import (
 	"encoding/json"
