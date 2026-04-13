@@ -280,6 +280,63 @@ footer > div {
   color: var(--valon-muted) !important;
 }
 
+.nextra-search kbd {
+  border-color: var(--valon-line) !important;
+  background: rgba(248, 246, 243, 0.96) !important;
+  color: var(--valon-muted) !important;
+}
+
+.dark .nextra-search kbd {
+  background: rgba(30, 25, 22, 0.96) !important;
+}
+
+.nextra-search-results {
+  border-color: var(--valon-line) !important;
+  background: rgba(248, 246, 243, 0.96) !important;
+  color: var(--valon-secondary) !important;
+  box-shadow: 0 16px 40px rgba(35, 24, 16, 0.12) !important;
+}
+
+.dark .nextra-search-results {
+  background: rgba(30, 25, 22, 0.96) !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.34) !important;
+}
+
+.nextra-search-results > div {
+  color: var(--valon-secondary) !important;
+  border-color: var(--valon-line) !important;
+}
+
+.nextra-search-results a {
+  color: rgba(var(--valon-ink), 0.92) !important;
+}
+
+.nextra-search-results a > div:first-child {
+  color: rgba(var(--valon-ink), 1) !important;
+}
+
+.nextra-search-results a > div:last-child {
+  color: var(--valon-secondary) !important;
+}
+
+.nextra-search-results a:hover,
+.nextra-search-results a[aria-selected='true'],
+.nextra-search-results a[data-headlessui-state~='active'] {
+  background: rgba(var(--valon-ink), 0.08) !important;
+  color: rgba(var(--valon-ink), 1) !important;
+}
+
+.nextra-search-results mark {
+  border-radius: 0.2rem;
+  background: rgba(225, 150, 20, 0.22) !important;
+  color: rgba(var(--valon-ink), 1) !important;
+  padding: 0 0.12rem;
+}
+
+.dark .nextra-search-results mark {
+  background: rgba(245, 202, 120, 0.26) !important;
+}
+
 .docs-header-search {
   display: flex;
   align-items: center;
