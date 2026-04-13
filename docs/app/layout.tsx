@@ -38,7 +38,7 @@ const navbar = (
 const footer = (
   <Footer>
     <span>
-      Gestalt, a self-hosted integration platform by{" "}
+      Gestalt, a self-hostable, open source platform by{" "}
       <a
         href="https://valon.ai"
         target="_blank"
