@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -48,6 +49,7 @@ func BuildConnectionMaps(cfg *config.Config) (ConnectionMaps, error) {
 }
 
 type pluginConnectionPlan struct {
+	manifestBacked    bool
 	pluginConnection  config.ConnectionDef
 	namedConnections  map[string]config.ConnectionDef
 	surfaces          map[config.SpecSurface]resolvedSpecSurface
@@ -65,6 +67,7 @@ type resolvedSpecSurface struct {
 func buildPluginConnectionPlan(plugin *config.ProviderEntry, manifestPlugin *providermanifestv1.Spec) (pluginConnectionPlan, error) {
 	declaredNames := namedConnectionNames(plugin, manifestPlugin)
 	plan := pluginConnectionPlan{
+		manifestBacked:   manifestPlugin != nil && manifestPlugin.IsManifestBacked(),
 		pluginConnection: config.EffectivePluginConnectionDef(plugin, manifestPlugin),
 		namedConnections: make(map[string]config.ConnectionDef),
 		surfaces:         make(map[config.SpecSurface]resolvedSpecSurface),
@@ -78,8 +81,16 @@ func buildPluginConnectionPlan(plugin *config.ProviderEntry, manifestPlugin *pro
 		plan.namedConnections[name] = conn
 	}
 
+	defaultConnection := resolveDefaultConnectionName(plugin, manifestPlugin)
+	if defaultConnection != "" {
+		if _, err := plan.connectionDef(defaultConnection); err != nil {
+			return pluginConnectionPlan{}, fmt.Errorf("default_connection references undeclared connection %q", defaultConnection)
+		}
+		plan.defaultConnection = defaultConnection
+	}
+
 	if manifestPlugin != nil && manifestPlugin.Surfaces != nil && manifestPlugin.Surfaces.REST != nil {
-		plan.restConnection = config.ResolveConnectionAlias(manifestPlugin.Surfaces.REST.Connection)
+		plan.restConnection = plan.resolveSurfaceConnectionName(manifestPlugin.Surfaces.REST.Connection)
 		if plan.restConnection != "" {
 			if _, err := plan.connectionDef(plan.restConnection); err != nil {
 				return pluginConnectionPlan{}, fmt.Errorf("rest connection references undeclared connection %q", plan.restConnection)
@@ -95,7 +106,7 @@ func buildPluginConnectionPlan(plugin *config.ProviderEntry, manifestPlugin *pro
 		resolved := resolvedSpecSurface{
 			surface:        surface,
 			url:            url,
-			connectionName: resolveSurfaceConnectionName(plugin, manifestPlugin, surface),
+			connectionName: plan.resolveSurfaceConnectionName(config.ManifestProviderSurfaceConnectionName(manifestPlugin, surface)),
 		}
 		conn, err := plan.connectionDef(resolved.connectionName)
 		if err != nil {
@@ -105,15 +116,18 @@ func buildPluginConnectionPlan(plugin *config.ProviderEntry, manifestPlugin *pro
 		plan.surfaces[surface] = resolved
 	}
 
-	defaultConnection := resolveDefaultConnectionName(plugin, manifestPlugin)
-	if defaultConnection != "" {
-		if _, err := plan.connectionDef(defaultConnection); err != nil {
-			return pluginConnectionPlan{}, fmt.Errorf("default_connection references undeclared connection %q", defaultConnection)
-		}
-		plan.defaultConnection = defaultConnection
-	}
-
 	return plan, nil
+}
+
+func AdvertisedConnectionNames(plugin *config.ProviderEntry) ([]string, error) {
+	if plugin == nil {
+		return []string{}, nil
+	}
+	plan, err := buildPluginConnectionPlan(plugin, plugin.ManifestSpec())
+	if err != nil {
+		return nil, err
+	}
+	return plan.advertisedConnectionNames(), nil
 }
 
 func (plan pluginConnectionPlan) configuredAPISurface() (resolvedSpecSurface, bool) {
@@ -171,6 +185,52 @@ func (plan pluginConnectionPlan) fallbackConnection() string {
 		}
 	}
 	return ""
+}
+
+func (plan pluginConnectionPlan) resolveSurfaceConnectionName(raw string) string {
+	if name := config.ResolveConnectionAlias(raw); name != "" {
+		return name
+	}
+	if plan.defaultConnection != "" {
+		return plan.defaultConnection
+	}
+	if len(plan.namedConnections) == 1 {
+		for name := range plan.namedConnections {
+			return name
+		}
+	}
+	return config.PluginConnectionName
+}
+
+func (plan pluginConnectionPlan) shouldAdvertisePluginConnection() bool {
+	if !plan.manifestBacked {
+		return true
+	}
+	if len(plan.namedConnections) == 0 {
+		return true
+	}
+	if plan.defaultConnection == config.PluginConnectionName {
+		return true
+	}
+	if plan.apiConnection() == config.PluginConnectionName {
+		return true
+	}
+	if plan.mcpConnection() == config.PluginConnectionName {
+		return true
+	}
+	return false
+}
+
+func (plan pluginConnectionPlan) advertisedConnectionNames() []string {
+	names := make([]string, 0, len(plan.namedConnections))
+	for name := range plan.namedConnections {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	if !plan.shouldAdvertisePluginConnection() {
+		return names
+	}
+	return append([]string{config.PluginConnectionName}, names...)
 }
 
 func (plan pluginConnectionPlan) connectionMode() core.ConnectionMode {
@@ -252,14 +312,6 @@ func surfaceURL(plugin *config.ProviderEntry, manifestPlugin *providermanifestv1
 		return ""
 	}
 	return resolveManifestRelativeSpecURL(plugin, url)
-}
-
-func resolveSurfaceConnectionName(plugin *config.ProviderEntry, manifestPlugin *providermanifestv1.Spec, surface config.SpecSurface) string {
-	name := config.ResolveConnectionAlias(config.ManifestProviderSurfaceConnectionName(manifestPlugin, surface))
-	if name == "" {
-		return config.PluginConnectionName
-	}
-	return name
 }
 
 func resolveManifestRelativeSpecURL(plugin *config.ProviderEntry, raw string) string {

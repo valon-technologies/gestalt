@@ -5,12 +5,12 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 )
 
@@ -173,42 +173,24 @@ func (s *Server) connectionInfosForPlugin(integration string, plugin *config.Pro
 	}
 	manifestProvider := plugin.ManifestSpec()
 
-	infos := make([]connectionDefInfo, 0, len(plugin.Connections)+1)
-	effectivePluginConn := config.EffectivePluginConnectionDef(plugin, manifestProvider)
-	if info, ok := s.connectionInfoFromAuth(integration, config.PluginConnectionAlias, effectivePluginConn, integrationAuthTypes, defaultCredentialFields); ok {
-		infos = append(infos, info)
+	names, err := bootstrap.AdvertisedConnectionNames(plugin)
+	if err != nil {
+		return []connectionDefInfo{}
 	}
-
-	names := make([]string, 0, len(plugin.Connections))
-	seen := make(map[string]struct{})
-	addName := func(raw string) {
-		resolved := config.ResolveConnectionAlias(raw)
-		if resolved == "" || resolved == config.PluginConnectionName {
-			return
-		}
-		if _, ok := seen[resolved]; ok {
-			return
-		}
-		seen[resolved] = struct{}{}
-		names = append(names, resolved)
-	}
-	if manifestProvider != nil {
-		for name := range manifestProvider.Connections {
-			addName(name)
-		}
-	}
-	for name := range plugin.Connections {
-		addName(name)
-	}
-	sort.Strings(names)
-
+	infos := make([]connectionDefInfo, 0, len(names))
 	for _, name := range names {
-		conn, ok := config.EffectiveNamedConnectionDef(plugin, manifestProvider, name)
-		if !ok {
+		if name == config.PluginConnectionName {
+			effectivePluginConn := config.EffectivePluginConnectionDef(plugin, manifestProvider)
+			if info, ok := s.connectionInfoFromAuth(integration, config.PluginConnectionAlias, effectivePluginConn, integrationAuthTypes, defaultCredentialFields); ok {
+				infos = append(infos, info)
+			}
 			continue
 		}
-		if info, ok := s.connectionInfoFromAuth(integration, name, conn, integrationAuthTypes, defaultCredentialFields); ok {
-			infos = append(infos, info)
+		conn, ok := config.EffectiveNamedConnectionDef(plugin, manifestProvider, name)
+		if ok {
+			if info, ok := s.connectionInfoFromAuth(integration, name, conn, integrationAuthTypes, defaultCredentialFields); ok {
+				infos = append(infos, info)
+			}
 		}
 	}
 

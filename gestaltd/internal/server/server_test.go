@@ -871,154 +871,244 @@ func TestListIntegrations_DerivesAuthTypesFromConnectionsWhenProviderOmitsThem(t
 func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T) {
 	t.Parallel()
 
-	stub := &coretesting.StubIntegration{N: "example", DN: "Example"}
-	plugin := &config.ProviderEntry{
-		Source: config.ProviderSource{
-			Ref:     "github.com/acme/plugins/example",
-			Version: "1.0.0",
-		},
-		Auth: &config.ConnectionAuthDef{
-			Type: providermanifestv1.AuthTypeManual,
-			Credentials: []config.CredentialFieldDef{
-				{Name: "plugin_token", Description: "Plugin Config Description"},
-				{Name: "plugin_local_only", Label: "Plugin Local Only", Description: "Plugin Local Only Description"},
+	t.Run("non manifest-backed connections still expose plugin and named auth", func(t *testing.T) {
+		t.Parallel()
+
+		stub := &coretesting.StubIntegration{N: "example", DN: "Example"}
+		plugin := &config.ProviderEntry{
+			Source: config.ProviderSource{
+				Ref:     "github.com/acme/plugins/example",
+				Version: "1.0.0",
 			},
-		},
-		Connections: map[string]*config.ConnectionDef{
-			"workspace": {
-				DisplayName: "Workspace OAuth",
-				Auth: config.ConnectionAuthDef{
-					Type: providermanifestv1.AuthTypeManual,
-					Credentials: []config.CredentialFieldDef{
-						{Name: "workspace_token", Label: "Workspace Config Token"},
-						{Name: "workspace_local_only", Label: "Workspace Local Only", Description: "Workspace Local Only Description"},
+			Auth: &config.ConnectionAuthDef{
+				Type: providermanifestv1.AuthTypeManual,
+				Credentials: []config.CredentialFieldDef{
+					{Name: "plugin_token", Description: "Plugin Config Description"},
+					{Name: "plugin_local_only", Label: "Plugin Local Only", Description: "Plugin Local Only Description"},
+				},
+			},
+			Connections: map[string]*config.ConnectionDef{
+				"workspace": {
+					DisplayName: "Workspace OAuth",
+					Auth: config.ConnectionAuthDef{
+						Type: providermanifestv1.AuthTypeManual,
+						Credentials: []config.CredentialFieldDef{
+							{Name: "workspace_token", Label: "Workspace Config Token"},
+							{Name: "workspace_local_only", Label: "Workspace Local Only", Description: "Workspace Local Only Description"},
+						},
 					},
 				},
 			},
-		},
-		ResolvedManifest: &providermanifestv1.Manifest{
-			Spec: &providermanifestv1.Spec{
-				Auth: &providermanifestv1.ProviderAuth{
-					Type: providermanifestv1.AuthTypeManual,
-					Credentials: []providermanifestv1.CredentialField{
-						{Name: "plugin_token", Label: "Plugin Manifest Token", Description: "Plugin Manifest Description"},
-						{Name: "plugin_manifest_only", Label: "Plugin Manifest Only", Description: "Plugin Manifest Only Description"},
+			ResolvedManifest: &providermanifestv1.Manifest{
+				Spec: &providermanifestv1.Spec{
+					Auth: &providermanifestv1.ProviderAuth{
+						Type: providermanifestv1.AuthTypeManual,
+						Credentials: []providermanifestv1.CredentialField{
+							{Name: "plugin_token", Label: "Plugin Manifest Token", Description: "Plugin Manifest Description"},
+							{Name: "plugin_manifest_only", Label: "Plugin Manifest Only", Description: "Plugin Manifest Only Description"},
+						},
 					},
-				},
-				Connections: map[string]*providermanifestv1.ManifestConnectionDef{
-					"workspace": {
-						DisplayName: "Workspace Access",
-						Auth: &providermanifestv1.ProviderAuth{
-							Type: providermanifestv1.AuthTypeManual,
-							Credentials: []providermanifestv1.CredentialField{
-								{Name: "workspace_token", Label: "Workspace Manifest Token", Description: "Workspace Manifest Description"},
-								{Name: "workspace_manifest_only", Label: "Workspace Manifest Only", Description: "Workspace Manifest Only Description"},
+					Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+						"workspace": {
+							DisplayName: "Workspace Access",
+							Auth: &providermanifestv1.ProviderAuth{
+								Type: providermanifestv1.AuthTypeManual,
+								Credentials: []providermanifestv1.CredentialField{
+									{Name: "workspace_token", Label: "Workspace Manifest Token", Description: "Workspace Manifest Description"},
+									{Name: "workspace_manifest_only", Label: "Workspace Manifest Only", Description: "Workspace Manifest Only Description"},
+								},
 							},
 						},
 					},
 				},
 			},
-		},
-	}
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.PluginDefs = map[string]*config.ProviderEntry{
-			"example": plugin,
 		}
-		cfg.Services = coretesting.NewStubServices(t)
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, stub)
+			cfg.PluginDefs = map[string]*config.ProviderEntry{
+				"example": plugin,
+			}
+			cfg.Services = coretesting.NewStubServices(t)
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		text := string(body)
+		for _, fragment := range []string{
+			`"instances":[]`,
+			`"connectionParams":{}`,
+			`"connections":[`,
+			`"credentialFields":[`,
+		} {
+			if !strings.Contains(text, fragment) {
+				t.Fatalf("expected response to contain %s, got %s", fragment, text)
+			}
+		}
+		for _, fragment := range []string{
+			`"instances":null`,
+			`"connectionParams":null`,
+			`"connections":null`,
+			`"credentialFields":null`,
+		} {
+			if strings.Contains(text, fragment) {
+				t.Fatalf("unexpected null collection in response: %s", text)
+			}
+		}
+
+		type credentialField struct {
+			Name        string `json:"name"`
+			Label       string `json:"label"`
+			Description string `json:"description"`
+		}
+		type connectionInfo struct {
+			DisplayName      string            `json:"displayName"`
+			Name             string            `json:"name"`
+			AuthTypes        []string          `json:"authTypes"`
+			CredentialFields []credentialField `json:"credentialFields"`
+		}
+
+		var integrations []struct {
+			Name             string           `json:"name"`
+			AuthTypes        []string         `json:"authTypes"`
+			Instances        []map[string]any `json:"instances"`
+			ConnectionParams map[string]any   `json:"connectionParams"`
+			CredentialFields []map[string]any `json:"credentialFields"`
+			Connections      []connectionInfo `json:"connections"`
+		}
+		if err := json.Unmarshal(body, &integrations); err != nil {
+			t.Fatalf("decoding: %v", err)
+		}
+		if len(integrations) != 1 {
+			t.Fatalf("expected 1 integration, got %d", len(integrations))
+		}
+		if integrations[0].Instances == nil || integrations[0].ConnectionParams == nil || integrations[0].CredentialFields == nil || integrations[0].Connections == nil {
+			t.Fatalf("expected non-nil collections, got %+v", integrations[0])
+		}
+
+		got := make(map[string]connectionInfo, len(integrations[0].Connections))
+		for _, conn := range integrations[0].Connections {
+			got[conn.Name] = conn
+		}
+
+		if !reflect.DeepEqual(got[config.PluginConnectionAlias].AuthTypes, []string{"manual"}) || !reflect.DeepEqual(got[config.PluginConnectionAlias].CredentialFields, []credentialField{
+			{Name: "plugin_token", Label: "Plugin Manifest Token", Description: "Plugin Config Description"},
+			{Name: "plugin_manifest_only", Label: "Plugin Manifest Only", Description: "Plugin Manifest Only Description"},
+			{Name: "plugin_local_only", Label: "Plugin Local Only", Description: "Plugin Local Only Description"},
+		}) {
+			t.Fatalf("plugin connection info = %+v", got[config.PluginConnectionAlias])
+		}
+		if got["workspace"].DisplayName != "Workspace OAuth" {
+			t.Fatalf("workspace connection info = %+v", got["workspace"])
+		}
+		if !reflect.DeepEqual(got["workspace"].AuthTypes, []string{"manual"}) || !reflect.DeepEqual(got["workspace"].CredentialFields, []credentialField{
+			{Name: "workspace_token", Label: "Workspace Config Token", Description: "Workspace Manifest Description"},
+			{Name: "workspace_manifest_only", Label: "Workspace Manifest Only", Description: "Workspace Manifest Only Description"},
+			{Name: "workspace_local_only", Label: "Workspace Local Only", Description: "Workspace Local Only Description"},
+		}) {
+			t.Fatalf("workspace connection info = %+v", got["workspace"])
+		}
 	})
-	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
+	t.Run("manifest-backed API surfaces only expose the resolved named connection", func(t *testing.T) {
+		t.Parallel()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read body: %v", err)
-	}
-	text := string(body)
-	for _, fragment := range []string{
-		`"instances":[]`,
-		`"connectionParams":{}`,
-		`"connections":[`,
-		`"credentialFields":[`,
-	} {
-		if !strings.Contains(text, fragment) {
-			t.Fatalf("expected response to contain %s, got %s", fragment, text)
+		stub := &coretesting.StubIntegration{N: "example", DN: "Example"}
+		plugin := &config.ProviderEntry{
+			Source: config.ProviderSource{
+				Ref:     "github.com/acme/plugins/example",
+				Version: "1.0.0",
+			},
+			Auth: &config.ConnectionAuthDef{
+				Type: providermanifestv1.AuthTypeManual,
+				Credentials: []config.CredentialFieldDef{
+					{Name: "plugin_token", Label: "Plugin Token"},
+				},
+			},
+			Connections: map[string]*config.ConnectionDef{
+				"default": {
+					Auth: config.ConnectionAuthDef{
+						Type: providermanifestv1.AuthTypeManual,
+						Credentials: []config.CredentialFieldDef{
+							{Name: "default_token", Label: "Default Token"},
+						},
+					},
+				},
+			},
+			ResolvedManifest: &providermanifestv1.Manifest{
+				Spec: &providermanifestv1.Spec{
+					Surfaces: &providermanifestv1.ProviderSurfaces{
+						OpenAPI: &providermanifestv1.OpenAPISurface{
+							Document: "https://example.com/openapi.json",
+						},
+					},
+					Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+						"default": {
+							Auth: &providermanifestv1.ProviderAuth{
+								Type: providermanifestv1.AuthTypeManual,
+								Credentials: []providermanifestv1.CredentialField{
+									{Name: "default_token", Label: "Default Manifest Token"},
+								},
+							},
+						},
+					},
+				},
+			},
 		}
-	}
-	for _, fragment := range []string{
-		`"instances":null`,
-		`"connectionParams":null`,
-		`"connections":null`,
-		`"credentialFields":null`,
-	} {
-		if strings.Contains(text, fragment) {
-			t.Fatalf("unexpected null collection in response: %s", text)
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, stub)
+			cfg.PluginDefs = map[string]*config.ProviderEntry{
+				"example": plugin,
+			}
+			cfg.Services = coretesting.NewStubServices(t)
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
 		}
-	}
+		defer func() { _ = resp.Body.Close() }()
 
-	type credentialField struct {
-		Name        string `json:"name"`
-		Label       string `json:"label"`
-		Description string `json:"description"`
-	}
-	type connectionInfo struct {
-		DisplayName      string            `json:"displayName"`
-		Name             string            `json:"name"`
-		AuthTypes        []string          `json:"authTypes"`
-		CredentialFields []credentialField `json:"credentialFields"`
-	}
-
-	var integrations []struct {
-		Name             string           `json:"name"`
-		AuthTypes        []string         `json:"authTypes"`
-		Instances        []map[string]any `json:"instances"`
-		ConnectionParams map[string]any   `json:"connectionParams"`
-		CredentialFields []map[string]any `json:"credentialFields"`
-		Connections      []connectionInfo `json:"connections"`
-	}
-	if err := json.Unmarshal(body, &integrations); err != nil {
-		t.Fatalf("decoding: %v", err)
-	}
-	if len(integrations) != 1 {
-		t.Fatalf("expected 1 integration, got %d", len(integrations))
-	}
-	if integrations[0].Instances == nil || integrations[0].ConnectionParams == nil || integrations[0].CredentialFields == nil || integrations[0].Connections == nil {
-		t.Fatalf("expected non-nil collections, got %+v", integrations[0])
-	}
-
-	got := make(map[string]connectionInfo, len(integrations[0].Connections))
-	for _, conn := range integrations[0].Connections {
-		got[conn.Name] = conn
-	}
-
-	if !reflect.DeepEqual(got[config.PluginConnectionAlias].AuthTypes, []string{"manual"}) || !reflect.DeepEqual(got[config.PluginConnectionAlias].CredentialFields, []credentialField{
-		{Name: "plugin_token", Label: "Plugin Manifest Token", Description: "Plugin Config Description"},
-		{Name: "plugin_manifest_only", Label: "Plugin Manifest Only", Description: "Plugin Manifest Only Description"},
-		{Name: "plugin_local_only", Label: "Plugin Local Only", Description: "Plugin Local Only Description"},
-	}) {
-		t.Fatalf("plugin connection info = %+v", got[config.PluginConnectionAlias])
-	}
-	if got["workspace"].DisplayName != "Workspace OAuth" {
-		t.Fatalf("workspace connection info = %+v", got["workspace"])
-	}
-	if !reflect.DeepEqual(got["workspace"].AuthTypes, []string{"manual"}) || !reflect.DeepEqual(got["workspace"].CredentialFields, []credentialField{
-		{Name: "workspace_token", Label: "Workspace Config Token", Description: "Workspace Manifest Description"},
-		{Name: "workspace_manifest_only", Label: "Workspace Manifest Only", Description: "Workspace Manifest Only Description"},
-		{Name: "workspace_local_only", Label: "Workspace Local Only", Description: "Workspace Local Only Description"},
-	}) {
-		t.Fatalf("workspace connection info = %+v", got["workspace"])
-	}
+		var integrations []struct {
+			Name        string `json:"name"`
+			Connections []struct {
+				Name      string   `json:"name"`
+				AuthTypes []string `json:"authTypes"`
+			} `json:"connections"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+			t.Fatalf("decoding: %v", err)
+		}
+		if len(integrations) != 1 {
+			t.Fatalf("expected 1 integration, got %d", len(integrations))
+		}
+		if len(integrations[0].Connections) != 1 {
+			t.Fatalf("expected only resolved named connection, got %+v", integrations[0].Connections)
+		}
+		if integrations[0].Connections[0].Name != "default" {
+			t.Fatalf("expected only default connection, got %+v", integrations[0].Connections)
+		}
+		if !reflect.DeepEqual(integrations[0].Connections[0].AuthTypes, []string{"manual"}) {
+			t.Fatalf("expected default authTypes [manual], got %+v", integrations[0].Connections[0].AuthTypes)
+		}
+	})
 }
 
 func TestListIntegrations_ConnectionInfosHideOAuthConnectionsWithoutHandler(t *testing.T) {
