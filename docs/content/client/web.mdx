@@ -24,7 +24,7 @@ Create and revoke API tokens for programmatic access. Each token shows its name,
 
 ## Authentication
 
-When `providers.auth` points to a Google or OIDC auth provider, the web UI redirects to your identity provider for login. With a local auth provider, login is automatic. With `providers.auth` disabled, every request is anonymous.
+When `providers.auth` points to a Google or OIDC auth provider, the web UI redirects to your identity provider for login. With `providers.auth` disabled, every request is anonymous.
 
 ## Custom UI bundles
 
@@ -34,4 +34,4 @@ Public web UI bundles are configured through the `providers.ui` map.
 - Add `ui.<name>` entries with `source` and explicit `path` fields to mount static SPAs under public URL prefixes.
 - UI bundles use the normal `/api/v1` and `/mcp` surfaces; there is no separate plugin-local browser route surface.
 
-The built-in admin UI at `/admin` remains available regardless. See [Releasing](/providers/releasing) for the bundle format.
+The built-in admin UI at `/admin` remains available regardless. See [Custom Web UIs](/custom-providers/web-uis) for the bundle format and [Releasing](/custom-providers/releasing) for packaging.

@@ -1,0 +1,45 @@
+---
+asIndexPage: true
+---
+
+# Custom Providers
+
+This section covers building and releasing your own provider packages. If you
+only need to configure first-party or already-published providers in a
+deployment, start with [Providers](/providers).
+
+## What belongs here
+
+- Implementing executable or declarative plugin providers
+- Building custom auth, IndexedDB, secrets, and web UI providers
+- Testing providers from local source with `source.path`
+- Packaging releases with `gestaltd provider release`
+
+## Runtime model
+
+Custom providers use the same packaging and lifecycle model as first-party
+providers:
+
+- A provider package includes a manifest plus executable code or static assets.
+- `gestaltd` resolves the package from `source.path` or `source.ref`.
+- Executable providers start as child processes and connect back to the host
+  over gRPC on a temporary Unix socket.
+- Web UI providers are static asset bundles served under configured public path
+  prefixes.
+- Published packages are prepared with `gestaltd init` and referenced from
+  `gestalt.lock.json`.
+
+## Choose a starting point
+
+- [Plugins](/custom-providers/plugins): custom tool providers, executable
+  operations, declarative surfaces, and hybrid catalogs
+- [Auth](/custom-providers/auth): platform login providers and optional bearer
+  token validation
+- [IndexedDB](/custom-providers/indexeddb): custom storage backends for system
+  state
+- [Secrets](/custom-providers/secrets): secret managers for `secret://`
+  resolution
+- [Web UIs](/custom-providers/web-uis): public UI bundles served under
+  configured path prefixes
+- [Releasing](/custom-providers/releasing): packaging, platform builds, and
+  release archives
