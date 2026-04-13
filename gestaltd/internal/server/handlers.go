@@ -274,7 +274,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, fmt.Sprintf("no connection found for integration %q instance %q", name, requestedInstance))
 		return
 	}
-	if len(matched) > 1 {
+	if len(matched) > 1 && (requestedConnection != "" || requestedInstance != "") {
 		auditErr = errors.New("multiple matching connections")
 		labels := make([]string, len(matched))
 		for i, t := range matched {
@@ -288,17 +288,17 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tokenID := matched[0].ID
-	if tokenID == "" {
-		auditErr = errors.New("connection token is missing an ID")
-		writeError(w, http.StatusNotFound, fmt.Sprintf("no connection found for integration %q", name))
-		return
-	}
-
-	if err := s.tokens.DeleteToken(r.Context(), tokenID); err != nil {
-		auditErr = errors.New("failed to disconnect integration")
-		writeError(w, http.StatusInternalServerError, "failed to disconnect integration")
-		return
+	for _, tok := range matched {
+		if tok.ID == "" {
+			auditErr = errors.New("connection token is missing an ID")
+			writeError(w, http.StatusNotFound, fmt.Sprintf("no connection found for integration %q", name))
+			return
+		}
+		if err := s.tokens.DeleteToken(r.Context(), tok.ID); err != nil {
+			auditErr = errors.New("failed to disconnect integration")
+			writeError(w, http.StatusInternalServerError, "failed to disconnect integration")
+			return
+		}
 	}
 
 	auditAllowed = true

@@ -1567,6 +1567,53 @@ func TestDisconnectIntegration(t *testing.T) {
 			body, _ := io.ReadAll(resp.Body)
 			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
 		}
+		tokens, err := svc.Tokens.ListTokensForIntegration(context.Background(), u.ID, "slack")
+		if err != nil {
+			t.Fatalf("ListTokensForIntegration: %v", err)
+		}
+		if len(tokens) != 0 {
+			t.Fatalf("expected 0 tokens after disconnect, got %d", len(tokens))
+		}
+	})
+
+	t.Run("disconnect without selectors removes all matching connections", func(t *testing.T) {
+		t.Parallel()
+
+		svc := coretesting.NewStubServices(t)
+		u := seedUser(t, svc, "anonymous@gestalt")
+		seedToken(t, svc, &core.IntegrationToken{
+			ID: "tok-a", UserID: u.ID, Integration: "notion",
+			Connection: "mcp", Instance: "MCP OAuth", AccessToken: "test-token",
+		})
+		seedToken(t, svc, &core.IntegrationToken{
+			ID: "tok-b", UserID: u.ID, Integration: "notion",
+			Connection: "default", Instance: "default", AccessToken: "test-token-2",
+		})
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "notion", DN: "Notion"})
+			cfg.Services = svc
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/integrations/notion", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+		tokens, err := svc.Tokens.ListTokensForIntegration(context.Background(), u.ID, "notion")
+		if err != nil {
+			t.Fatalf("ListTokensForIntegration: %v", err)
+		}
+		if len(tokens) != 0 {
+			t.Fatalf("expected 0 tokens after disconnect, got %d", len(tokens))
+		}
 	})
 
 	t.Run("underscored parameters", func(t *testing.T) {
