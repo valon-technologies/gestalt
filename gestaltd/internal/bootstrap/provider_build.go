@@ -219,7 +219,7 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 		manifestPlugin:       manifestPlugin,
 		allowedOperations:    allowedOperations,
 		allowedHosts:         entry.AllowedHosts,
-		baseURL:              manifestPlugin.SpecBaseURL(),
+		baseURL:              config.EffectiveProviderSpecBaseURL(entry, manifestPlugin),
 		applyResponseMapping: true,
 		providerBuildOptions: func(conn config.ConnectionDef) []provider.BuildOption {
 			return mcpOAuthBuildOpts(conn, manifestPlugin, deps)
@@ -293,7 +293,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, entry *config.Pro
 			manifestPlugin:       mp,
 			allowedOperations:    allowed,
 			allowedHosts:         entry.AllowedHosts,
-			baseURL:              mp.RESTBaseURL(),
+			baseURL:              config.EffectiveProviderSpecBaseURL(entry, mp),
 			applyResponseMapping: true,
 			providerBuildOptions: func(conn config.ConnectionDef) []provider.BuildOption {
 				return mcpOAuthBuildOpts(conn, mp, deps)

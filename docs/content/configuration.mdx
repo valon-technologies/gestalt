@@ -57,8 +57,9 @@ providers:
       source:
         ref: github.com/valon-technologies/gestalt-providers/plugins/github
         version: 0.0.1-alpha.1
-      config:
-        apiBaseUrl: https://api.github.com
+      surfaces:
+        openapi:
+          baseUrl: https://api.github.com
 ```
 
 `source.ref` points at a published provider package. Gestalt resolves and downloads it on startup. First-party providers are published to `github.com/valon-technologies/gestalt-providers/`.
@@ -356,8 +357,9 @@ providers:
       source:
         ref: github.com/valon-technologies/gestalt-providers/plugins/github
         version: 0.0.1-alpha.1
-      config:
-        apiBaseUrl: https://api.github.com
+      surfaces:
+        openapi:
+          baseUrl: https://api.github.com
       connections:
         api:
           mode: user

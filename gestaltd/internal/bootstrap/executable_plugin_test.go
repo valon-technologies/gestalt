@@ -3,11 +3,14 @@ package bootstrap
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"sync/atomic"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -189,6 +192,122 @@ plugin = "provider"
 	}
 	if result.Body != `{"message":"Hi, Ada!"}` {
 		t.Fatalf("greet body = %q", result.Body)
+	}
+}
+
+func TestSpecLoadedOpenAPIProviderUsesConfiguredAPIBaseURL(t *testing.T) {
+	t.Parallel()
+
+	var docHits atomic.Int32
+	docSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		docHits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"source":"document"}`))
+	}))
+	t.Cleanup(docSrv.Close)
+
+	var manifestHits atomic.Int32
+	manifestSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		manifestHits.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"source":"manifest"}`))
+	}))
+	t.Cleanup(manifestSrv.Close)
+
+	var configHits atomic.Int32
+	var configPath atomic.Value
+	configSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		configHits.Add(1)
+		configPath.Store(r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"source":"config"}`))
+	}))
+	t.Cleanup(configSrv.Close)
+
+	root := t.TempDir()
+	manifestPath := filepath.Join(root, "manifest.yaml")
+	if err := os.WriteFile(manifestPath, []byte("kind: plugin\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(manifest.yaml): %v", err)
+	}
+	openapiPath := filepath.Join(root, "openapi.yaml")
+	openapiDoc := fmt.Sprintf(`openapi: "3.1.0"
+info:
+  title: Example
+  version: "1.0.0"
+servers:
+  - url: %s
+paths:
+  /items:
+    get:
+      operationId: list_items
+      responses:
+        "200":
+          description: OK
+`, docSrv.URL)
+	if err := os.WriteFile(openapiPath, []byte(openapiDoc), 0o644); err != nil {
+		t.Fatalf("WriteFile(openapi.yaml): %v", err)
+	}
+
+	cfg := &config.Config{
+		Providers: config.ProvidersConfig{
+			Plugins: map[string]*config.ProviderEntry{
+				"example": {
+					ResolvedManifestPath: manifestPath,
+					ResolvedManifest: &providermanifestv1.Manifest{
+						Kind:        providermanifestv1.KindPlugin,
+						DisplayName: "Example",
+						Description: "OpenAPI example",
+						Spec: &providermanifestv1.Spec{
+							Surfaces: &providermanifestv1.ProviderSurfaces{
+								OpenAPI: &providermanifestv1.OpenAPISurface{
+									Document: "openapi.yaml",
+									BaseURL:  manifestSrv.URL,
+								},
+							},
+						},
+					},
+					Surfaces: &config.ProviderSurfaceOverrides{
+						OpenAPI: &config.ProviderOpenAPISurfaceOverride{
+							BaseURL: configSrv.URL,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	prov, err := providers.Get("example")
+	if err != nil {
+		t.Fatalf("providers.Get(example): %v", err)
+	}
+
+	result, err := prov.Execute(context.Background(), "list_items", nil, "")
+	if err != nil {
+		t.Fatalf("Execute(list_items): %v", err)
+	}
+	if result.Status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", result.Status, http.StatusOK)
+	}
+	if got := result.Body; got != `{"source":"config"}` {
+		t.Fatalf("body = %q, want %q", got, `{"source":"config"}`)
+	}
+	if got, _ := configPath.Load().(string); got != "/items" {
+		t.Fatalf("request path = %q, want %q", got, "/items")
+	}
+	if got := configHits.Load(); got != 1 {
+		t.Fatalf("configured base URL hits = %d, want 1", got)
+	}
+	if got := manifestHits.Load(); got != 0 {
+		t.Fatalf("manifest base URL hits = %d, want 0", got)
+	}
+	if got := docHits.Load(); got != 0 {
+		t.Fatalf("document server hits = %d, want 0", got)
 	}
 }
 

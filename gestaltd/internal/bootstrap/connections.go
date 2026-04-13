@@ -304,8 +304,8 @@ func resolveDefaultConnectionName(plugin *config.ProviderEntry, manifestPlugin *
 }
 
 func surfaceURL(plugin *config.ProviderEntry, manifestPlugin *providermanifestv1.Spec, surface config.SpecSurface) string {
-	if manifestPlugin == nil {
-		return ""
+	if url := config.ProviderSurfaceURLOverride(plugin, surface); url != "" {
+		return url
 	}
 	url := config.ManifestProviderSurfaceURL(manifestPlugin, surface)
 	if url == "" {

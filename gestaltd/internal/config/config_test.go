@@ -781,6 +781,70 @@ server:
 		}
 	})
 
+	t.Run("loads plugin surface overrides", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  plugins:
+    datadog:
+      source:
+        path: ./plugin/manifest.yaml
+      surfaces:
+        openapi:
+          baseUrl: https://api.us5.datadoghq.com
+  indexeddbs:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  indexeddb: sqlite
+  encryptionKey: server-key
+  `)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if cfg.Providers.Plugins["datadog"].Surfaces == nil || cfg.Providers.Plugins["datadog"].Surfaces.OpenAPI == nil {
+			t.Fatal("Plugins[datadog].Surfaces.OpenAPI is nil")
+		}
+		if got := cfg.Providers.Plugins["datadog"].Surfaces.OpenAPI.BaseURL; got != "https://api.us5.datadoghq.com" {
+			t.Fatalf("Plugins[datadog].Surfaces.OpenAPI.BaseURL = %q, want %q", got, "https://api.us5.datadoghq.com")
+		}
+	})
+
+	t.Run("rejects surface overrides outside plugins", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  ui:
+    root:
+      source:
+        path: ./web/root/manifest.yaml
+      path: /app
+      surfaces:
+        mcp:
+          url: https://mcp.example.test
+  indexeddbs:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `ui.root.surfaces is only supported on providers.plugins.*`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	t.Run("rejects unknown indexeddb binding names", func(t *testing.T) {
 		t.Parallel()
 
