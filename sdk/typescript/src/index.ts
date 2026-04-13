@@ -126,10 +126,13 @@ export {
   IndexedDB,
   ObjectStore,
   Index,
+  Cursor,
+  CursorDirection,
   NotFoundError,
   AlreadyExistsError,
   type Record,
   type KeyRange,
   type IndexSchema,
   type ObjectStoreSchema,
+  type OpenCursorOptions,
 } from "./indexeddb.ts";

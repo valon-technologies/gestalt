@@ -18,6 +18,16 @@ const EnvIndexedDBSocket = "GESTALT_INDEXEDDB_SOCKET"
 var (
 	ErrNotFound      = fmt.Errorf("indexeddb: not found")
 	ErrAlreadyExists = fmt.Errorf("indexeddb: already exists")
+	ErrKeysOnly      = fmt.Errorf("indexeddb: value not available on key-only cursor")
+)
+
+type CursorDirection string
+
+const (
+	CursorNext       CursorDirection = "next"
+	CursorNextUnique CursorDirection = "nextunique"
+	CursorPrev       CursorDirection = "prev"
+	CursorPrevUnique CursorDirection = "prevunique"
 )
 
 type Record = map[string]any
@@ -193,6 +203,14 @@ func (o *ObjectStoreClient) DeleteRange(ctx context.Context, r KeyRange) (int64,
 	return resp.GetDeleted(), nil
 }
 
+func (o *ObjectStoreClient) OpenCursor(ctx context.Context, r *KeyRange, dir CursorDirection) (*Cursor, error) {
+	return openCursor(ctx, o.client, o.store, "", r, dir, false, nil)
+}
+
+func (o *ObjectStoreClient) OpenKeyCursor(ctx context.Context, r *KeyRange, dir CursorDirection) (*Cursor, error) {
+	return openCursor(ctx, o.client, o.store, "", r, dir, true, nil)
+}
+
 func (o *ObjectStoreClient) Index(name string) *IndexClient {
 	return &IndexClient{client: o.client, store: o.store, index: name}
 }
@@ -305,6 +323,313 @@ func (idx *IndexClient) Delete(ctx context.Context, values ...any) (int64, error
 		return 0, grpcErr(err)
 	}
 	return resp.GetDeleted(), nil
+}
+
+func (idx *IndexClient) OpenCursor(ctx context.Context, r *KeyRange, dir CursorDirection, values ...any) (*Cursor, error) {
+	return openCursor(ctx, idx.client, idx.store, idx.index, r, dir, false, values)
+}
+
+func (idx *IndexClient) OpenKeyCursor(ctx context.Context, r *KeyRange, dir CursorDirection, values ...any) (*Cursor, error) {
+	return openCursor(ctx, idx.client, idx.store, idx.index, r, dir, true, values)
+}
+
+type Cursor struct {
+	stream      proto.IndexedDB_OpenCursorClient
+	cancel      context.CancelFunc
+	keysOnly    bool
+	indexCursor bool
+	entry       *proto.CursorEntry
+	err         error
+	done        bool
+}
+
+func (c *Cursor) Continue() bool {
+	return c.sendAndRecv(&proto.CursorCommand{
+		Command: &proto.CursorCommand_Next{Next: true},
+	})
+}
+
+func (c *Cursor) ContinueToKey(key any) bool {
+	kvs, err := CursorKeyToProto(key, c.indexCursor)
+	if err != nil {
+		c.err = err
+		return false
+	}
+	return c.sendAndRecv(&proto.CursorCommand{
+		Command: &proto.CursorCommand_ContinueToKey{ContinueToKey: &proto.CursorKeyTarget{Key: kvs}},
+	})
+}
+
+func (c *Cursor) Advance(count int) bool {
+	return c.sendAndRecv(&proto.CursorCommand{
+		Command: &proto.CursorCommand_Advance{Advance: int32(count)},
+	})
+}
+
+func (c *Cursor) Key() any {
+	if c.entry == nil || len(c.entry.GetKey()) == 0 {
+		return nil
+	}
+	parts, err := KeyValuesToAny(c.entry.GetKey())
+	if err != nil {
+		c.err = err
+		return nil
+	}
+	if !c.indexCursor && len(parts) == 1 {
+		return parts[0]
+	}
+	return parts
+}
+
+func (c *Cursor) PrimaryKey() string {
+	if c.entry == nil {
+		return ""
+	}
+	return c.entry.GetPrimaryKey()
+}
+
+func (c *Cursor) Value() (Record, error) {
+	if c.keysOnly {
+		return nil, ErrKeysOnly
+	}
+	if c.entry == nil || c.entry.GetRecord() == nil {
+		return nil, ErrNotFound
+	}
+	return RecordFromProto(c.entry.GetRecord())
+}
+
+func (c *Cursor) Delete() error {
+	if c.err != nil {
+		return c.err
+	}
+	if c.done {
+		return ErrNotFound
+	}
+	err := c.stream.Send(&proto.CursorClientMessage{
+		Msg: &proto.CursorClientMessage_Command{
+			Command: &proto.CursorCommand{
+				Command: &proto.CursorCommand_Delete{Delete: true},
+			},
+		},
+	})
+	if err != nil {
+		return c.setErr(grpcErr(err))
+	}
+	resp, err := c.stream.Recv()
+	if err != nil {
+		return c.setErr(grpcErr(err))
+	}
+	if resp == nil {
+		return c.setErr(fmt.Errorf("indexeddb: cursor stream ended during mutation"))
+	}
+	switch v := resp.GetResult().(type) {
+	case *proto.CursorResponse_Entry:
+		c.entry = v.Entry
+	case *proto.CursorResponse_Done:
+		if v.Done {
+			c.done = true
+			c.entry = nil
+		}
+	default:
+		return c.setErr(fmt.Errorf("indexeddb: unexpected cursor mutation ack"))
+	}
+	return nil
+}
+
+func (c *Cursor) Update(value Record) error {
+	if c.err != nil {
+		return c.err
+	}
+	if c.done {
+		return ErrNotFound
+	}
+	pbRecord, err := RecordToProto(value)
+	if err != nil {
+		return fmt.Errorf("indexeddb: marshal cursor update: %w", err)
+	}
+	err = c.stream.Send(&proto.CursorClientMessage{
+		Msg: &proto.CursorClientMessage_Command{
+			Command: &proto.CursorCommand{
+				Command: &proto.CursorCommand_Update{Update: pbRecord},
+			},
+		},
+	})
+	if err != nil {
+		return c.setErr(grpcErr(err))
+	}
+	resp, err := c.stream.Recv()
+	if err != nil {
+		return c.setErr(grpcErr(err))
+	}
+	if resp == nil {
+		return c.setErr(fmt.Errorf("indexeddb: cursor stream ended during mutation"))
+	}
+	switch v := resp.GetResult().(type) {
+	case *proto.CursorResponse_Entry:
+		c.entry = v.Entry
+	case *proto.CursorResponse_Done:
+		if v.Done {
+			c.done = true
+			c.entry = nil
+		} else if c.entry != nil {
+			c.entry.Record = pbRecord
+		}
+	default:
+		return c.setErr(fmt.Errorf("indexeddb: unexpected cursor mutation ack"))
+	}
+	return nil
+}
+
+func (c *Cursor) Err() error {
+	return c.err
+}
+
+func (c *Cursor) cleanup() error {
+	var err error
+	if c.stream != nil {
+		err = grpcErr(c.stream.CloseSend())
+		c.stream = nil
+	}
+	if c.cancel != nil {
+		c.cancel()
+		c.cancel = nil
+	}
+	return err
+}
+
+func (c *Cursor) setErr(err error) error {
+	c.err = err
+	_ = c.cleanup()
+	return c.err
+}
+
+func (c *Cursor) Close() error {
+	c.done = true
+	c.entry = nil
+	if c.stream == nil {
+		return c.cleanup()
+	}
+	sendErr := c.stream.Send(&proto.CursorClientMessage{
+		Msg: &proto.CursorClientMessage_Command{
+			Command: &proto.CursorCommand{
+				Command: &proto.CursorCommand_Close{Close: true},
+			},
+		},
+	})
+	closeErr := c.cleanup()
+	if sendErr != nil {
+		return grpcErr(sendErr)
+	}
+	return closeErr
+}
+
+func (c *Cursor) sendAndRecv(cmd *proto.CursorCommand) bool {
+	if c.done || c.err != nil {
+		return false
+	}
+	err := c.stream.Send(&proto.CursorClientMessage{
+		Msg: &proto.CursorClientMessage_Command{Command: cmd},
+	})
+	if err != nil {
+		_ = c.setErr(grpcErr(err))
+		return false
+	}
+	resp, err := c.stream.Recv()
+	if err != nil {
+		_ = c.setErr(grpcErr(err))
+		return false
+	}
+	if resp == nil {
+		_ = c.setErr(fmt.Errorf("indexeddb: cursor stream ended"))
+		return false
+	}
+	switch v := resp.GetResult().(type) {
+	case *proto.CursorResponse_Entry:
+		c.entry = v.Entry
+		return true
+	case *proto.CursorResponse_Done:
+		if !v.Done {
+			_ = c.setErr(fmt.Errorf("indexeddb: unexpected non-exhaustion cursor ack"))
+			c.entry = nil
+			return false
+		}
+		c.done = true
+		c.entry = nil
+		return false
+	default:
+		_ = c.setErr(fmt.Errorf("indexeddb: unexpected cursor response"))
+		c.entry = nil
+		return false
+	}
+}
+
+func cursorDirectionToProto(dir CursorDirection) proto.CursorDirection {
+	switch dir {
+	case CursorNextUnique:
+		return proto.CursorDirection_CURSOR_NEXT_UNIQUE
+	case CursorPrev:
+		return proto.CursorDirection_CURSOR_PREV
+	case CursorPrevUnique:
+		return proto.CursorDirection_CURSOR_PREV_UNIQUE
+	default:
+		return proto.CursorDirection_CURSOR_NEXT
+	}
+}
+
+func openCursor(ctx context.Context, client proto.IndexedDBClient, store, index string, r *KeyRange, dir CursorDirection, keysOnly bool, values []any) (*Cursor, error) {
+	kr, err := krToProto(r)
+	if err != nil {
+		return nil, err
+	}
+	vals, err := TypedValuesFromAny(values)
+	if err != nil {
+		return nil, err
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	streamCtx, streamCancel := context.WithCancel(ctx)
+	stream, err := client.OpenCursor(streamCtx)
+	if err != nil {
+		streamCancel()
+		return nil, grpcErr(err)
+	}
+	err = stream.Send(&proto.CursorClientMessage{
+		Msg: &proto.CursorClientMessage_Open{
+			Open: &proto.OpenCursorRequest{
+				Store:     store,
+				Range:     kr,
+				Direction: cursorDirectionToProto(dir),
+				KeysOnly:  keysOnly,
+				Index:     index,
+				Values:    vals,
+			},
+		},
+	})
+	if err != nil {
+		_ = stream.CloseSend()
+		streamCancel()
+		return nil, grpcErr(err)
+	}
+	// Read the open ack to surface creation errors synchronously.
+	resp, err := stream.Recv()
+	if err != nil {
+		_ = stream.CloseSend()
+		streamCancel()
+		return nil, grpcErr(err)
+	}
+	if resp == nil {
+		_ = stream.CloseSend()
+		streamCancel()
+		return nil, fmt.Errorf("indexeddb: cursor stream ended during open")
+	}
+	done, ok := resp.GetResult().(*proto.CursorResponse_Done)
+	if !ok || done.Done {
+		_ = stream.CloseSend()
+		streamCancel()
+		return nil, fmt.Errorf("indexeddb: unexpected cursor open ack")
+	}
+	return &Cursor{stream: stream, cancel: streamCancel, keysOnly: keysOnly, indexCursor: index != ""}, nil
 }
 
 func krToProto(r *KeyRange) (*proto.KeyRange, error) {

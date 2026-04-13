@@ -34,7 +34,7 @@ pub use auth::{
 pub use catalog::{Catalog, CatalogOperation};
 pub use env::{CURRENT_PROTOCOL_VERSION, ENV_PROVIDER_SOCKET};
 pub use error::{Error, Result};
-pub use indexeddb::{IndexedDB, IndexedDBError};
+pub use indexeddb::{Cursor, CursorDirection, IndexedDB, IndexedDBError};
 #[doc(hidden)]
 pub use provider_server::{OperationResult, ProviderServer};
 pub use router::{Operation, Router};
