@@ -423,8 +423,9 @@ providers:
       source:
         ref: github.com/valon-technologies/gestalt-providers/github
         version: 1.2.3
-      config:
-        apiBaseUrl: https://api.github.com
+      surfaces:
+        openapi:
+          baseUrl: https://api.github.com
       connections:
         default:
           mode: user
@@ -444,6 +445,7 @@ providers:
 | `iconFile` | SVG icon path, resolved relative to the config directory. |
 | `source` | **Required.** The backing provider source. See [source shape](#providerspluginssource) below. |
 | `config` | Provider-specific configuration passed into the provider package. |
+| `surfaces` | Typed host-side overrides for manifest-declared surfaces, such as `surfaces.openapi.baseUrl` or `surfaces.graphql.url`. |
 | `connections` | Named connection declarations. See [connections](#connections) below. |
 | `allowedOperations` | Allowlist with optional `alias` and `description` overrides per operation. |
 | `indexeddbs` | Optional list of named `providers.indexeddbs` bindings exposed to the executable plugin through the SDK transport. Store names are automatically prefixed per plugin. A single binding also populates the default IndexedDB SDK env var for compatibility. |

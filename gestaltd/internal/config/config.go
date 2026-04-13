@@ -101,6 +101,7 @@ type ProviderEntry struct {
 	Connections       map[string]*ConnectionDef     `yaml:"connections,omitempty"`
 	AllowedOperations map[string]*OperationOverride `yaml:"allowedOperations,omitempty"`
 	IndexedDBs        []string                      `yaml:"indexeddbs,omitempty"`
+	Surfaces          *ProviderSurfaceOverrides     `yaml:"surfaces,omitempty"`
 
 	// Runtime-resolved fields (populated during init/bootstrap, not from YAML)
 	Command              string                                `yaml:"-"`
@@ -117,6 +118,29 @@ type ProviderEntry struct {
 	Discovery            *providermanifestv1.ProviderDiscovery `yaml:"-"`
 	ResolvedAssetRoot    string                                `yaml:"-"`
 	MCPToolPrefix        string                                `yaml:"-"`
+}
+
+type ProviderSurfaceOverrides struct {
+	REST    *ProviderRESTSurfaceOverride    `yaml:"rest,omitempty"`
+	OpenAPI *ProviderOpenAPISurfaceOverride `yaml:"openapi,omitempty"`
+	GraphQL *ProviderGraphQLSurfaceOverride `yaml:"graphql,omitempty"`
+	MCP     *ProviderMCPSurfaceOverride     `yaml:"mcp,omitempty"`
+}
+
+type ProviderRESTSurfaceOverride struct {
+	BaseURL string `yaml:"baseUrl,omitempty"`
+}
+
+type ProviderOpenAPISurfaceOverride struct {
+	BaseURL string `yaml:"baseUrl,omitempty"`
+}
+
+type ProviderGraphQLSurfaceOverride struct {
+	URL string `yaml:"url,omitempty"`
+}
+
+type ProviderMCPSurfaceOverride struct {
+	URL string `yaml:"url,omitempty"`
 }
 
 // UIEntry configures a mounted web UI bundle served under a fixed path prefix.

@@ -275,6 +275,9 @@ func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) erro
 	if len(entry.IndexedDBs) > 0 {
 		return fmt.Errorf("config validation: %s.indexeddbs is only supported on providers.plugins.*", subject)
 	}
+	if entry.Surfaces != nil {
+		return fmt.Errorf("config validation: %s.surfaces is only supported on providers.plugins.*", subject)
+	}
 	return nil
 }
 
