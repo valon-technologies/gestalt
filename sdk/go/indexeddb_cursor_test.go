@@ -50,6 +50,18 @@ func TestCursor_CloseClearsCurrentEntry(t *testing.T) {
 	}
 }
 
+func TestCursor_ValueRejectsNilRecord(t *testing.T) {
+	cursor := &Cursor{
+		entry: &proto.CursorEntry{
+			PrimaryKey: "a",
+		},
+	}
+
+	if _, err := cursor.Value(); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Value() with nil record = %v, want ErrNotFound", err)
+	}
+}
+
 func TestCursorKeyCodec_RoundTripArrayValuedIndexComponent(t *testing.T) {
 	key := []any{[]any{"x", "y"}}
 

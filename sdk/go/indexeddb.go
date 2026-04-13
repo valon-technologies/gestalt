@@ -392,7 +392,7 @@ func (c *Cursor) Value() (Record, error) {
 	if c.keysOnly {
 		return nil, ErrKeysOnly
 	}
-	if c.entry == nil {
+	if c.entry == nil || c.entry.GetRecord() == nil {
 		return nil, ErrNotFound
 	}
 	return RecordFromProto(c.entry.GetRecord())
