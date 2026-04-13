@@ -4,6 +4,8 @@ Open your Gestalt server's base URL in a browser to access the web client. For a
 
 The web UI lets you browse plugins, connect to upstream services through OAuth or manual auth, invoke operations, and manage API tokens. It uses the same HTTP API and authentication model as the CLI.
 
+When the public UI is enabled, the same server also hosts an in-product user guide at `/docs`.
+
 ## Dashboard
 
 The dashboard shows an overview of the workspace with plugin and API token counts.
@@ -12,9 +14,9 @@ The dashboard shows an overview of the workspace with plugin and API token count
 
 ## Plugins
 
-The plugins page lists all configured providers. Connected plugins show a green checkmark. Click the settings icon to manage connections or disconnect.
+The Plugins page lists all configured plugins. Connected plugins show a green checkmark. Click the settings icon to manage connections or disconnect.
 
-![Integrations](/images/web-integrations.png)
+![Plugins](/images/web-integrations.png)
 
 ## API Tokens
 
@@ -32,6 +34,6 @@ The public web UI is configured through the `providers.ui` entry.
 
 - Omit `ui` to use the pinned first-party default UI bundle.
 - Set `ui: { disabled: true }` to run headless with no public UI at `/`.
-- Set `ui.provider.source` to a packaged `webui` bundle to bring your own frontend.
+- Set `providers.ui.source` to a packaged `webui` bundle to bring your own frontend.
 
 The built-in admin UI at `/admin` remains available regardless. See [Releasing](/providers/releasing) for the bundle format.

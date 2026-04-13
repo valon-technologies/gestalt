@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build && pagefind --site out --output-subdir _pagefind",
     "start": "next start",
+    "test:smoke": "playwright test",
     "typecheck": "tsc --noEmit",
     "lint": "next lint"
   },
@@ -19,6 +20,7 @@
   },
   "devDependencies": {
     "@types/node": "25.6.0",
+    "@playwright/test": "1.59.1",
     "pagefind": "^1.5.2",
     "@types/react": "^19.2.14",
     "typescript": "5.9.3"

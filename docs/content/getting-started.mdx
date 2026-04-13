@@ -23,6 +23,13 @@ When no config file exists, `gestaltd` generates one at `~/.gestaltd/config.yaml
 2026/04/10 10:00:01 INFO gestaltd ready url=http://localhost:8080
 ```
 
+With the default public UI enabled, open:
+
+- `http://localhost:8080/` for the web client
+- `http://localhost:8080/docs` for the in-product user guide for this running server
+
+If you later disable `providers.ui`, those browser pages are not served.
+
 ## Using the client
 
 In a separate terminal, run the setup wizard:
@@ -108,41 +115,23 @@ Gestalt exposes all MCP-enabled plugins at a single endpoint: `http://localhost:
 
 <Tabs items={['Claude Code', 'Codex', 'Cursor']}>
   <Tabs.Tab>
-    Add the following to your [`~/.claude.json`](https://docs.anthropic.com/en/docs/claude-code/mcp) (user) or `.claude/settings.json` (project-level):
-
-    ```json
-    {
-      "mcpServers": {
-        "gestalt": {
-          "type": "http",
-          "url": "http://localhost:8080/mcp"
-        }
-      }
-    }
-    ```
-
-    Or via the CLI:
+    The default local server has authentication disabled, so you can add it directly:
 
     ```sh
-    claude mcp add --transport http gestalt http://localhost:8080/mcp
+    claude mcp add --transport http --scope project gestalt http://localhost:8080/mcp
     ```
+
+    This writes a project-scoped entry to `.mcp.json`. For a private local or user-scoped config, Claude Code stores MCP settings in `~/.claude.json`.
   </Tabs.Tab>
   <Tabs.Tab>
-    Add the following to [`~/.codex/config.toml`](https://developers.openai.com/codex/mcp) (global) or `.codex/config.toml` (project-level):
-
-    ```toml
-    [mcp_servers.gestalt]
-    url = "http://localhost:8080/mcp"
-    ```
-
-    Or via the CLI:
+    Add it from the Codex CLI:
 
     ```sh
     codex mcp add gestalt --url http://localhost:8080/mcp
     ```
   </Tabs.Tab>
   <Tabs.Tab>
-    Add the following to [`~/.cursor/mcp.json`](https://cursor.com/docs/mcp) (global) or `.cursor/mcp.json` (project-level):
+    Add the following to `.cursor/mcp.json` in the current project, or `~/.cursor/mcp.json` globally:
 
     ```json
     {
@@ -156,7 +145,7 @@ Gestalt exposes all MCP-enabled plugins at a single endpoint: `http://localhost:
   </Tabs.Tab>
 </Tabs>
 
-Once connected, your agent can call any operation exposed by the server. The same auth model applies: when plugins require credentials, users connect through the Gestalt web UI or CLI before the agent can invoke those tools.
+Once connected, your agent can call any operation exposed by the server. On deployments with authentication enabled, users connect through the Gestalt web UI or CLI first and then configure MCP client auth as required.
 
 ## Next steps
 

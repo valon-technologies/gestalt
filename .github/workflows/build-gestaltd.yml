@@ -128,8 +128,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
       - name: Build docs
         run: npm run build
+
+      - name: Run docs smoke tests
+        run: npm run test:smoke
 
   helm-validate:
     name: Helm Chart Validation
