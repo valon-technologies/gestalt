@@ -6,12 +6,26 @@ IndexedDB providers back the persistent state layer. Rather than inventing a cus
 
 IndexedDB's vocabulary maps naturally onto SQL tables, document collections, and key-value stores alike. This means a single provider contract can target Postgres, SQLite, MongoDB, DynamoDB, and others without leaking backend-specific abstractions. The storage backend is fully replaceable: swap from SQLite to Postgres to MongoDB without changing any application code.
 
-| Category | Methods | W3C equivalent |
-| --- | --- | --- |
-| Lifecycle | `CreateObjectStore`, `DeleteObjectStore` | [`IDBDatabase.createObjectStore`](https://www.w3.org/TR/IndexedDB/#dom-idbdatabase-createobjectstore), [`deleteObjectStore`](https://www.w3.org/TR/IndexedDB/#dom-idbdatabase-deleteobjectstore) |
-| Primary key CRUD | `Get`, `GetKey`, `Add`, `Put`, `Delete` | [`IDBObjectStore.get`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-get), [`add`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-add), [`put`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-put), [`delete`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-delete) |
-| Bulk operations | `GetAll`, `GetAllKeys`, `Count`, `Clear`, `DeleteRange` | [`IDBObjectStore.getAll`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-getall), [`count`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-count), [`clear`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-clear) |
-| Index queries | `IndexGet`, `IndexGetKey`, `IndexGetAll`, `IndexGetAllKeys`, `IndexCount`, `IndexDelete` | [`IDBIndex.get`](https://www.w3.org/TR/IndexedDB/#dom-idbindex-get), [`getAll`](https://www.w3.org/TR/IndexedDB/#dom-idbindex-getall), [`count`](https://www.w3.org/TR/IndexedDB/#dom-idbindex-count) |
+| Method | W3C equivalent |
+| --- | --- |
+| `CreateObjectStore` | [`IDBDatabase.createObjectStore`](https://www.w3.org/TR/IndexedDB/#dom-idbdatabase-createobjectstore) |
+| `DeleteObjectStore` | [`IDBDatabase.deleteObjectStore`](https://www.w3.org/TR/IndexedDB/#dom-idbdatabase-deleteobjectstore) |
+| `Get` | [`IDBObjectStore.get`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-get) |
+| `GetKey` | [`IDBObjectStore.getKey`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-getkey) |
+| `Add` | [`IDBObjectStore.add`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-add) |
+| `Put` | [`IDBObjectStore.put`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-put) |
+| `Delete` | [`IDBObjectStore.delete`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-delete) |
+| `GetAll` | [`IDBObjectStore.getAll`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-getall) |
+| `GetAllKeys` | [`IDBObjectStore.getAllKeys`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-getallkeys) |
+| `Count` | [`IDBObjectStore.count`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-count) |
+| `Clear` | [`IDBObjectStore.clear`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-clear) |
+| `DeleteRange` | [`IDBObjectStore.delete`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-delete) (with key range) |
+| `IndexGet` | [`IDBIndex.get`](https://www.w3.org/TR/IndexedDB/#dom-idbindex-get) |
+| `IndexGetKey` | [`IDBIndex.getKey`](https://www.w3.org/TR/IndexedDB/#dom-idbindex-getkey) |
+| `IndexGetAll` | [`IDBIndex.getAll`](https://www.w3.org/TR/IndexedDB/#dom-idbindex-getall) |
+| `IndexGetAllKeys` | [`IDBIndex.getAllKeys`](https://www.w3.org/TR/IndexedDB/#dom-idbindex-getallkeys) |
+| `IndexCount` | [`IDBIndex.count`](https://www.w3.org/TR/IndexedDB/#dom-idbindex-count) |
+| `IndexDelete` | [`IDBIndex.delete`](https://www.w3.org/TR/IndexedDB/#dom-idbindex-delete) |
 
 The examples on this page use the first-party RelationalDB provider, which supports PostgreSQL, MySQL, SQLite, and SQL Server through a single `dsn` config value.
 
