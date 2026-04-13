@@ -178,20 +178,37 @@ type EgressConfig struct {
 	DefaultAction string `yaml:"defaultAction"`
 }
 
+type AuthorizationConfig struct {
+	Workloads map[string]WorkloadDef `yaml:"workloads,omitempty"`
+}
+
+type WorkloadDef struct {
+	DisplayName string                         `yaml:"displayName,omitempty"`
+	Token       string                         `yaml:"token"`
+	Providers   map[string]WorkloadProviderDef `yaml:"providers,omitempty"`
+}
+
+type WorkloadProviderDef struct {
+	Connection string   `yaml:"connection,omitempty"`
+	Instance   string   `yaml:"instance,omitempty"`
+	Allow      []string `yaml:"allow,omitempty"`
+}
+
 type ListenerConfig struct {
 	Host string `yaml:"host"`
 	Port int    `yaml:"port"`
 }
 
 type ServerConfig struct {
-	Public        ListenerConfig `yaml:"public"`
-	Management    ListenerConfig `yaml:"management"`
-	BaseURL       string         `yaml:"baseUrl"`
-	EncryptionKey string         `yaml:"encryptionKey"`
-	APITokenTTL   string         `yaml:"apiTokenTtl"`
-	ArtifactsDir  string         `yaml:"artifactsDir"`
-	IndexedDB     string         `yaml:"indexeddb,omitempty"`
-	Egress        EgressConfig   `yaml:"egress,omitempty"`
+	Public        ListenerConfig      `yaml:"public"`
+	Management    ListenerConfig      `yaml:"management"`
+	BaseURL       string              `yaml:"baseUrl"`
+	EncryptionKey string              `yaml:"encryptionKey"`
+	APITokenTTL   string              `yaml:"apiTokenTtl"`
+	ArtifactsDir  string              `yaml:"artifactsDir"`
+	IndexedDB     string              `yaml:"indexeddb,omitempty"`
+	Egress        EgressConfig        `yaml:"egress,omitempty"`
+	Authorization AuthorizationConfig `yaml:"authorization,omitempty"`
 }
 
 func (s ServerConfig) PublicListener() ListenerConfig {

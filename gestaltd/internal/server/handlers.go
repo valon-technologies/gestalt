@@ -19,6 +19,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/principal"
 
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
@@ -37,8 +38,9 @@ const sessionCookieName = "session_token"
 const defaultSessionCookieTTL = 24 * time.Hour
 
 var (
-	errNotAuthenticated = errors.New("not authenticated")
-	errResolveUser      = errors.New("failed to resolve user")
+	errNotAuthenticated  = errors.New("not authenticated")
+	errResolveUser       = errors.New("failed to resolve user")
+	errWorkloadForbidden = errors.New("workload callers are not allowed on this route")
 )
 
 var (
@@ -85,6 +87,10 @@ type connectionParamInfo struct {
 }
 
 func (s *Server) resolveUserID(w http.ResponseWriter, r *http.Request) (string, error) {
+	if p := PrincipalFromContext(r.Context()); p != nil && p.Kind == principal.KindWorkload {
+		writeError(w, http.StatusForbidden, "workload callers are not allowed on this route")
+		return "", errWorkloadForbidden
+	}
 	user := UserFromContext(r.Context())
 	if user == nil || user.Email == "" {
 		writeError(w, http.StatusUnauthorized, "not authenticated")
@@ -116,28 +122,34 @@ func (s *Server) readinessCheck(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
-	connected, err := s.userConnectedIntegrations(r)
-	if err != nil {
-		slog.ErrorContext(r.Context(), "listing integrations", "error", err)
-		writeError(w, http.StatusInternalServerError, "failed to check integration status")
-		return
+	p := PrincipalFromContext(r.Context())
+	connected := map[string][]instanceInfo{}
+	if p == nil || p.Kind != principal.KindWorkload {
+		var err error
+		connected, err = s.userConnectedIntegrations(r)
+		if err != nil {
+			slog.ErrorContext(r.Context(), "listing integrations", "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to check integration status")
+			return
+		}
 	}
 
 	names := s.providers.List()
 	out := make([]integrationInfo, 0, len(names))
 	for _, name := range names {
+		if !s.allowProvider(p, name) {
+			continue
+		}
 		prov, err := s.providers.Get(name)
 		if err != nil {
 			continue
 		}
-		authTypes := integrationAuthTypesForProvider(prov)
-		instances := connected[name]
 		info := integrationInfo{
 			Name:             name,
 			DisplayName:      prov.DisplayName(),
 			Description:      prov.Description(),
-			Connected:        len(instances) > 0,
-			Instances:        append(make([]instanceInfo, 0, len(instances)), instances...),
+			Connected:        false,
+			Instances:        []instanceInfo{},
 			AuthTypes:        []string{},
 			ConnectionParams: map[string]connectionParamInfo{},
 			Connections:      []connectionDefInfo{},
@@ -146,6 +158,24 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		if cat := prov.Catalog(); cat != nil {
 			info.IconSVG = cat.IconSVG
 		}
+		if p != nil && p.Kind == principal.KindWorkload {
+			if binding, ok := s.workloadBinding(p, name); ok {
+				bindingConnected, err := s.workloadBindingConnected(r.Context(), binding, name)
+				if err != nil {
+					slog.ErrorContext(r.Context(), "checking workload integration status", "provider", name, "error", err)
+					writeError(w, http.StatusInternalServerError, "failed to check integration status")
+					return
+				}
+				info.Connected = bindingConnected
+			}
+			out = append(out, info)
+			continue
+		}
+
+		authTypes := integrationAuthTypesForProvider(prov)
+		instances := connected[name]
+		info.Connected = len(instances) > 0
+		info.Instances = append(make([]instanceInfo, 0, len(instances)), instances...)
 		info.CredentialFields = credentialFieldInfosFromProvider(prov)
 		if cpp, ok := prov.(core.ConnectionParamProvider); ok {
 			defs := cpp.ConnectionParamDefs()
@@ -401,6 +431,11 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	p := PrincipalFromContext(r.Context())
+	if !s.allowProvider(p, name) {
+		writeError(w, http.StatusForbidden, "operation access denied")
+		return
+	}
 	requestedConnection := r.URL.Query().Get(httpConnectionParam)
 	if requestedConnection != "" {
 		var ok bool
@@ -417,7 +452,9 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	p := PrincipalFromContext(r.Context())
+	if rejectWorkloadSelectors(w, p, requestedConnection, requestedInstance) {
+		return
+	}
 	var resolver invocation.TokenResolver
 	if tr, ok := s.invoker.(invocation.TokenResolver); ok {
 		resolver = tr
@@ -426,12 +463,22 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 	if requestedConnection != "" || requestedInstance != "" {
 		resolveCatalog = invocation.ResolveCatalogStrict
 	}
-	cat, err := resolveCatalog(r.Context(), prov, name, resolver, p, s.catalogLookupConnection(name, requestedConnection), requestedInstance)
+	catalogConnection, catalogInstance := s.workloadBindingSelectors(p, name, requestedConnection, requestedInstance)
+	cat, err := resolveCatalog(r.Context(), prov, name, resolver, p, catalogConnection, catalogInstance)
 	if err != nil {
 		s.writeInvocationError(w, r, name, "", err)
 		return
 	}
 	ops := httpVisibleCatalogOperations(cat.Operations)
+	if p != nil && p.Kind == principal.KindWorkload {
+		filtered := ops[:0]
+		for i := range ops {
+			if s.allowOperation(p, name, ops[i].ID) {
+				filtered = append(filtered, ops[i])
+			}
+		}
+		ops = filtered
+	}
 	sort.Slice(ops, func(i, j int) bool {
 		return ops[i].ID < ops[j].ID
 	})
@@ -444,6 +491,10 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 
 	p := PrincipalFromContext(r.Context())
 	if _, ok := s.getProvider(w, providerName); !ok {
+		return
+	}
+	if !s.allowProvider(p, providerName) || !s.allowOperation(p, providerName, operationName) {
+		writeError(w, http.StatusForbidden, "operation access denied")
 		return
 	}
 
@@ -462,6 +513,9 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
+	}
+	if rejectWorkloadSelectors(w, p, requestedConnection, requestedInstance) {
+		return
 	}
 
 	params := make(map[string]any)
@@ -513,6 +567,9 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("conflicting connection parameter %q in query string and JSON body", httpConnectionParam))
 		return
 	}
+	if rejectWorkloadSelectors(w, p, bodyConnection, bodyInstance) {
+		return
+	}
 	connection := bodyConnection
 	if connection == "" {
 		connection = requestedConnection
@@ -546,6 +603,8 @@ func (s *Server) writeInvocationError(w http.ResponseWriter, r *http.Request, pr
 		writeError(w, http.StatusNotFound, fmt.Sprintf("operation %q not found on integration %q", operationName, providerName))
 	case errors.Is(err, invocation.ErrNotAuthenticated):
 		writeError(w, http.StatusUnauthorized, "not authenticated")
+	case errors.Is(err, invocation.ErrAuthorizationDenied):
+		writeError(w, http.StatusForbidden, err.Error())
 	case errors.Is(err, invocation.ErrScopeDenied):
 		writeError(w, http.StatusForbidden, err.Error())
 	case errors.Is(err, invocation.ErrNoToken):

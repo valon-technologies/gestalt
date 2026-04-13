@@ -125,13 +125,40 @@ func resolveStringFields(ptr any, resolve func(string) (string, error)) error {
 				}
 			}
 		case reflect.Map:
-			if field.Type().Key().Kind() == reflect.String && field.Type().Elem().Kind() == reflect.String {
+			if field.Type().Key().Kind() != reflect.String {
+				continue
+			}
+			switch field.Type().Elem().Kind() {
+			case reflect.String:
 				for _, k := range field.MapKeys() {
 					resolved, err := resolve(field.MapIndex(k).String())
 					if err != nil {
 						return err
 					}
 					field.SetMapIndex(k, reflect.ValueOf(resolved))
+				}
+			case reflect.Struct:
+				for _, k := range field.MapKeys() {
+					current := field.MapIndex(k)
+					next := reflect.New(field.Type().Elem())
+					next.Elem().Set(current)
+					if err := resolveStringFields(next.Interface(), resolve); err != nil {
+						return err
+					}
+					field.SetMapIndex(k, next.Elem())
+				}
+			case reflect.Pointer:
+				if field.Type().Elem().Elem().Kind() != reflect.Struct {
+					continue
+				}
+				for _, k := range field.MapKeys() {
+					current := field.MapIndex(k)
+					if current.IsNil() {
+						continue
+					}
+					if err := resolveStringFields(current.Interface(), resolve); err != nil {
+						return err
+					}
 				}
 			}
 		case reflect.Slice:

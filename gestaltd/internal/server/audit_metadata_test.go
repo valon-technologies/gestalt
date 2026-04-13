@@ -11,7 +11,10 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/authorization"
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
@@ -175,6 +178,119 @@ func TestAuditMetadata_FallbackToRemoteAddr(t *testing.T) {
 	}
 	if record["user_agent"] != "fallback-agent/2.0" {
 		t.Errorf("expected user_agent=fallback-agent/2.0, got %v", record["user_agent"])
+	}
+}
+
+func TestAuditMetadata_WorkloadSubjectAndCredentialPath(t *testing.T) {
+	t.Parallel()
+
+	var auditBuf bytes.Buffer
+	auditSink := invocation.NewSlogAuditSink(&auditBuf)
+
+	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+
+	stub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "audit-workload-prov",
+			ConnMode: core.ConnectionModeIdentity,
+			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
+				if token != "identity-token" {
+					t.Fatalf("unexpected token %q", token)
+				}
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "ping", Method: http.MethodPost}},
+	}
+
+	providers := testutil.NewProviderRegistry(t, stub)
+	authz, err := authorization.New(config.AuthorizationConfig{
+		Workloads: map[string]config.WorkloadDef{
+			"triage-bot": {
+				Token: workloadToken,
+				Providers: map[string]config.WorkloadProviderDef{
+					"audit-workload-prov": {
+						Connection: "workspace",
+						Instance:   "team-a",
+						Allow:      []string{"ping"},
+					},
+				},
+			},
+		},
+	}, nil, providers, nil)
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+
+	svc := coretesting.NewStubServices(t)
+	if err := svc.Tokens.StoreToken(t.Context(), &core.IntegrationToken{
+		ID:          "identity-audit-token",
+		UserID:      principal.IdentityPrincipal,
+		Integration: "audit-workload-prov",
+		Connection:  "workspace",
+		Instance:    "team-a",
+		AccessToken: "identity-token",
+	}); err != nil {
+		t.Fatalf("StoreToken: %v", err)
+	}
+
+	broker := invocation.NewBroker(providers, svc.Users, svc.Tokens, invocation.WithAuthorizer(authz))
+	guarded := invocation.NewGuarded(broker, broker, "http", auditSink, invocation.WithoutRateLimit())
+
+	srv, err := server.New(server.Config{
+		Auth:        &coretesting.StubAuthProvider{N: "test"},
+		AuditSink:   auditSink,
+		Services:    svc,
+		Providers:   providers,
+		Invoker:     guarded,
+		Authorizer:  authz,
+		StateSecret: []byte("0123456789abcdef0123456789abcdef"),
+	})
+	if err != nil {
+		t.Fatalf("creating server: %v", err)
+	}
+	ts := httptest.NewServer(srv)
+	t.Cleanup(ts.Close)
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/audit-workload-prov/ping", bytes.NewBufferString(`{}`))
+	req.Header.Set("Authorization", "Bearer "+workloadToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.ReadAll(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var record map[string]any
+	if err := json.Unmarshal(auditBuf.Bytes(), &record); err != nil {
+		t.Fatalf("failed to parse audit JSON: %v\nraw: %s", err, auditBuf.String())
+	}
+
+	if record["subject_id"] != "workload:triage-bot" {
+		t.Fatalf("expected workload subject_id, got %v", record["subject_id"])
+	}
+	if record["subject_kind"] != "workload" {
+		t.Fatalf("expected subject_kind=workload, got %v", record["subject_kind"])
+	}
+	if record["credential_mode"] != "identity" {
+		t.Fatalf("expected credential_mode=identity, got %v", record["credential_mode"])
+	}
+	if record["credential_subject_id"] != "identity:__identity__" {
+		t.Fatalf("expected credential_subject_id identity principal, got %v", record["credential_subject_id"])
+	}
+	if record["credential_connection"] != "workspace" {
+		t.Fatalf("expected credential_connection=workspace, got %v", record["credential_connection"])
+	}
+	if record["credential_instance"] != "team-a" {
+		t.Fatalf("expected credential_instance=team-a, got %v", record["credential_instance"])
 	}
 }
 

@@ -37,6 +37,21 @@ server:
   encryptionKey: secret://gestalt-encryption-key
   apiTokenTtl: 30d
   artifactsDir: ./state
+  authorization:
+    workloads:
+      triage-bot:
+        displayName: Triage Bot
+        token: secret://triage-bot-token
+        providers:
+          github:
+            connection: default
+            instance: default
+            allow:
+              - list_issues
+              - get_issue
+          weather:
+            allow:
+              - get_forecast
 ```
 
 `public.host` and `public.port` control the public listener address. Both default to all-interfaces on port `8080`.
@@ -49,6 +64,8 @@ server:
 
 `apiTokenTtl` controls the lifetime of newly issued API tokens, defaulting to `30d`. It accepts Go duration strings (`1h`, `720h`) and day suffixes (`30d`). `artifactsDir` is a writable directory for prepared artifacts produced by `init` and consumed by `serve --locked` when no CLI override is supplied; it defaults to the config file's directory. See [Configuration](/configuration) for the full `init`/`serve` lifecycle.
 
+`server.authorization.workloads` configures non-human workload callers. Each workload uses a dedicated bearer token with the `gst_wld_` prefix and a per-provider allowlist. In v1, workloads may bind only to `identity` or `none` providers. For `identity` providers, `connection` and `instance` resolve the exact stored identity credential the workload may use; `instance` defaults to `default` and `connection` falls back to the provider's default connection when omitted. For `none` providers, omit `connection` and `instance`.
+
 | Field | Default | Description |
 | --- | --- | --- |
 | `public.host` | `0.0.0.0` | Bind address for the public listener. |
@@ -59,6 +76,7 @@ server:
 | `encryptionKey` | | **Required.** Root encryption key. Typically a `secret://` reference. |
 | `apiTokenTtl` | `30d` | Lifetime of newly issued API tokens. Go durations or day suffixes (`30d`). |
 | `artifactsDir` | config directory | Directory for prepared `init` artifacts. |
+| `authorization.workloads` | | Workload bearer tokens, per-provider allowlists, and identity credential bindings. |
 
 When `server.management` is configured, Gestalt serves `/`, `/api/v1/*`, auth routes, and `/mcp` on the public listener, while `/admin`, `/metrics`, `/health`, and `/ready` move to the management listener. The management listener is intended to be protected by deployment infrastructure such as private networking, VPN, or an internal-only reverse proxy. Gestalt does not apply its own session or API-token auth to `/metrics` on the management listener.
 

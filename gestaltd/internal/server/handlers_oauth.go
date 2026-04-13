@@ -13,6 +13,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
 	"github.com/valon-technologies/gestalt/server/internal/paraminterp"
+	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
 
 type startOAuthRequest struct {
@@ -34,6 +35,11 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		metricutil.RecordConnectionAuthMetrics(r.Context(), startedAt, metricProviderName, "oauth", "start", connectionMode, auditErr != nil)
 		s.auditHTTPEvent(r.Context(), PrincipalFromContext(r.Context()), providerName, "connection.oauth.start", auditAllowed, auditErr)
 	}()
+	if p := PrincipalFromContext(r.Context()); p != nil && p.Kind == principal.KindWorkload {
+		auditErr = errWorkloadForbidden
+		writeError(w, http.StatusForbidden, "workload callers are not allowed on this route")
+		return
+	}
 
 	var req startOAuthRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

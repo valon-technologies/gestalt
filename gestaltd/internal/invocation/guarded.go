@@ -78,6 +78,7 @@ func (g *GuardedInvoker) Invoke(ctx context.Context, p *principal.Principal, pro
 	}
 
 	entry := buildAuditEntry(ctx, p, g.source, providerName, operation, meta)
+	ctx = withAuditEntry(ctx, &entry)
 
 	if err := g.check(meta, providerName, instance, operation); err != nil {
 		entry.Allowed = false
@@ -87,7 +88,9 @@ func (g *GuardedInvoker) Invoke(ctx context.Context, p *principal.Principal, pro
 	}
 
 	entry.Allowed = true
-	g.logAudit(ctx, entry)
+	defer func() {
+		g.logAudit(ctx, entry)
+	}()
 
 	chainInstance := instance
 	if chainInstance == "" {

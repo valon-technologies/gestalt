@@ -647,6 +647,45 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 	})
 
+	t.Run("resolves secret:// in workload tokens", func(t *testing.T) {
+		t.Parallel()
+
+		factories := validFactories()
+		factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
+			return &coretesting.StubSecretManager{
+				Secrets: map[string]string{"workload-token": "gst_wld_resolved-workload-token"},
+			}, nil
+		}
+		factories.Builtins = []core.Provider{
+			&coretesting.StubIntegration{N: "weather", ConnMode: core.ConnectionModeNone},
+		}
+
+		cfg := validConfig()
+		cfg.Server.Authorization = config.AuthorizationConfig{
+			Workloads: map[string]config.WorkloadDef{
+				"triage-bot": {
+					Token: "secret://workload-token",
+					Providers: map[string]config.WorkloadProviderDef{
+						"weather": {Allow: []string{"forecast"}},
+					},
+				},
+			},
+		}
+
+		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+		if err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		<-result.ProvidersReady
+
+		if result.Authorizer == nil {
+			t.Fatal("Authorizer is nil")
+		}
+		if _, ok := result.Authorizer.ResolveWorkloadToken("gst_wld_resolved-workload-token"); !ok {
+			t.Fatal("expected resolved workload token to authenticate")
+		}
+	})
+
 	t.Run("passes top-level provider selection to auth factory", func(t *testing.T) {
 		t.Parallel()
 
@@ -743,6 +782,35 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			t.Errorf("unexpected error: %v", err)
 		}
 	})
+}
+
+func TestBootstrapWorkloadAuthorizationRejectsEitherProvider(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Server.Authorization = config.AuthorizationConfig{
+		Workloads: map[string]config.WorkloadDef{
+			"triage-bot": {
+				Token: "gst_wld_triage-bot-token",
+				Providers: map[string]config.WorkloadProviderDef{
+					"svc": {Allow: []string{"run"}},
+				},
+			},
+		},
+	}
+
+	factories := validFactories()
+	factories.Builtins = []core.Provider{
+		&coretesting.StubIntegration{N: "svc", ConnMode: core.ConnectionModeEither},
+	}
+
+	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), `unsupported connection mode "either"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
 }
 
 func TestBootstrapDisabledComponents(t *testing.T) {

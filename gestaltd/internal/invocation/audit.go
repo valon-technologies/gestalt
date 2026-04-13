@@ -62,6 +62,10 @@ func buildAuditEntry(ctx context.Context, p *principal.Principal, source, provid
 	if p != nil {
 		entry.UserID = p.UserID
 		entry.AuthSource = p.AuthSource()
+		entry.SubjectID = p.SubjectID
+		if p.Kind != "" {
+			entry.SubjectKind = string(p.Kind)
+		}
 	}
 	return entry
 }
@@ -72,6 +76,17 @@ func BuildAuditEntry(ctx context.Context, p *principal.Principal, source, provid
 		p = principal.FromContext(ctx)
 	}
 	return ctx, buildAuditEntry(ctx, p, source, providerName, operation, meta)
+}
+
+func SetCredentialAudit(ctx context.Context, mode core.ConnectionMode, subjectID, connection, instance string) {
+	entry := auditEntryFromContext(ctx)
+	if entry == nil {
+		return
+	}
+	entry.CredentialMode = string(mode)
+	entry.CredentialSubjectID = subjectID
+	entry.CredentialConnection = connection
+	entry.CredentialInstance = instance
 }
 
 func (s *SlogAuditSink) Log(ctx context.Context, entry core.AuditEntry) {
@@ -91,6 +106,24 @@ func (s *SlogAuditSink) Log(ctx context.Context, entry core.AuditEntry) {
 	}
 	if entry.UserID != "" {
 		attrs = append(attrs, slog.String("user_id", entry.UserID))
+	}
+	if entry.SubjectID != "" {
+		attrs = append(attrs, slog.String("subject_id", entry.SubjectID))
+	}
+	if entry.SubjectKind != "" {
+		attrs = append(attrs, slog.String("subject_kind", entry.SubjectKind))
+	}
+	if entry.CredentialMode != "" {
+		attrs = append(attrs, slog.String("credential_mode", entry.CredentialMode))
+	}
+	if entry.CredentialSubjectID != "" {
+		attrs = append(attrs, slog.String("credential_subject_id", entry.CredentialSubjectID))
+	}
+	if entry.CredentialConnection != "" {
+		attrs = append(attrs, slog.String("credential_connection", entry.CredentialConnection))
+	}
+	if entry.CredentialInstance != "" {
+		attrs = append(attrs, slog.String("credential_instance", entry.CredentialInstance))
 	}
 
 	if entry.Error != "" {

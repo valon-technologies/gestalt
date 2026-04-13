@@ -10,6 +10,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	cryptoutil "github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/core/session"
+	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
@@ -47,6 +48,7 @@ type Server struct {
 	catalogConnection  map[string]string
 	connectionAuth     func() map[string]map[string]bootstrap.OAuthHandler
 	pluginDefs         map[string]*config.ProviderEntry
+	authorizer         *authorization.Authorizer
 	noAuth             bool
 	anonymousPrincipal *principal.Principal
 	publicBaseURL      string
@@ -74,6 +76,7 @@ type Config struct {
 	CatalogConnection map[string]string
 	ConnectionAuth    func() map[string]map[string]bootstrap.OAuthHandler
 	PluginDefs        map[string]*config.ProviderEntry
+	Authorizer        *authorization.Authorizer
 	PublicBaseURL     string
 	SecureCookies     bool
 	StateSecret       []byte
@@ -116,7 +119,7 @@ func New(cfg Config) (*Server, error) {
 	users := cfg.Services.Users
 	tokens := cfg.Services.Tokens
 	apiTokens := cfg.Services.APITokens
-	resolver := principal.NewResolver(cfg.Auth, users, apiTokens)
+	resolver := principal.NewResolver(cfg.Auth, users, apiTokens, cfg.Authorizer)
 
 	router := chi.NewRouter()
 	s := &Server{
@@ -134,6 +137,7 @@ func New(cfg Config) (*Server, error) {
 		catalogConnection: cfg.CatalogConnection,
 		connectionAuth:    cfg.ConnectionAuth,
 		pluginDefs:        cfg.PluginDefs,
+		authorizer:        cfg.Authorizer,
 		noAuth:            noAuth,
 		publicBaseURL:     strings.TrimRight(cfg.PublicBaseURL, "/"),
 		secureCookies:     cfg.SecureCookies,
