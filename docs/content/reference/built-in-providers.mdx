@@ -45,6 +45,12 @@ providers:
         dsn: ${DATABASE_URL}
 ```
 
+| Name | Purpose |
+| --- | --- |
+| `relationaldb` | SQL-backed IndexedDB provider for PostgreSQL, MySQL, SQLite, and SQL Server. |
+| `dynamodb` | Amazon DynamoDB-backed IndexedDB provider for managed key-value and document storage. |
+| `mongodb` | MongoDB-backed IndexedDB provider for document-oriented storage. |
+
 ## Secret Managers
 
 Two secret managers are compiled into the `gestaltd` binary and resolve `secret://` references during bootstrap. Cloud secret backends are available as external providers published from [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers).

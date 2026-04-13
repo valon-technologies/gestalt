@@ -178,6 +178,14 @@ providers:
 
 The exact config fields depend on the selected external indexeddb provider package. Gestalt itself does not have a built-in indexeddb driver matrix; it loads the configured provider process and passes the selected `providers.indexeddbs.<name>.config` block through to that provider.
 
+Common first-party IndexedDB packages:
+
+| Provider | Source ref | Config fields |
+| --- | --- | --- |
+| RelationalDB | `github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb` | `dsn` |
+| DynamoDB | `github.com/valon-technologies/gestalt-providers/indexeddb/dynamodb` | `table`, `region`, optional `endpoint` |
+| MongoDB | `github.com/valon-technologies/gestalt-providers/indexeddb/mongodb` | `uri`, optional `database` |
+
 ## `providers.secrets`
 
 The secrets manager resolves `secret://` references at startup. Two built-in sources (`env` and `file`) are selected by the `source` field. Cloud secret backends are loaded as external providers using `source.ref`, the same way auth and indexeddb providers work.

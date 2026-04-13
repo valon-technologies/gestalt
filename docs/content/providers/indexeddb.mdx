@@ -20,6 +20,8 @@ First-party storage backends live under
 | Provider | Repository | Source ref | Notes |
 | --- | --- | --- | --- |
 | RelationalDB | [`indexeddb/relationaldb`](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb/relationaldb) | `github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb` | Supports PostgreSQL, MySQL, SQLite, and SQL Server through a `dsn` config value |
+| DynamoDB | [`indexeddb/dynamodb`](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb/dynamodb) | `github.com/valon-technologies/gestalt-providers/indexeddb/dynamodb` | Uses Amazon DynamoDB with `table`, `region`, and optional `endpoint` config |
+| MongoDB | [`indexeddb/mongodb`](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb/mongodb) | `github.com/valon-technologies/gestalt-providers/indexeddb/mongodb` | Uses MongoDB with `uri` and optional `database` config |
 
 ## Configuring storage
 
@@ -56,6 +58,33 @@ providers:
 
 The first-party RelationalDB provider accepts `postgres://`, `mysql://`,
 `sqlite://`, and `sqlserver://` DSN prefixes.
+
+Other first-party IndexedDB providers use their own config blocks:
+
+```yaml
+providers:
+  indexeddbs:
+    main:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/indexeddb/dynamodb
+        version: 0.0.1-alpha.1
+      config:
+        table: gestalt
+        region: us-east-1
+        # endpoint: http://localhost:8000
+```
+
+```yaml
+providers:
+  indexeddbs:
+    main:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/indexeddb/mongodb
+        version: 0.0.1-alpha.1
+      config:
+        uri: ${MONGODB_URI}
+        database: gestalt
+```
 
 ## Operational notes
 
