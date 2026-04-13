@@ -25,7 +25,6 @@ First-party auth providers live under
 
 | Provider | Repository | Source ref | Use case |
 | --- | --- | --- | --- |
-| Local | [`auth/local`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth/local) | `github.com/valon-technologies/gestalt-providers/auth/local` | Single-user local development |
 | Google | [`auth/google`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth/google) | `github.com/valon-technologies/gestalt-providers/auth/google` | Google OAuth platform login |
 | OIDC | [`auth/oidc`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth/oidc) | `github.com/valon-technologies/gestalt-providers/auth/oidc` | Generic OpenID Connect providers such as Okta, Auth0, Azure AD, or Keycloak |
 
@@ -54,6 +53,9 @@ providers:
   auth:
     disabled: true
 ```
+
+For local development, that disabled mode is the simple default: every request
+is treated as the same anonymous user.
 
 ## Local source during development
 
