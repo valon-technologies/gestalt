@@ -59,8 +59,14 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	metricProviderName = req.Integration
 	connectionMode = metricutil.NormalizeConnectionMode(prov.ConnectionMode())
 
-	mp, ok := prov.(core.ManualProvider)
-	if !ok || !mp.SupportsManualAuth() {
+	manualConnection, ok := s.resolveRequestedConnection(w, req.Integration, req.Connection)
+	if !ok {
+		auditErr = errors.New("invalid connection")
+		return
+	}
+
+	auth := s.effectiveConnectionAuth(req.Integration, manualConnection)
+	if !manualConnectionAllowed(prov, auth) {
 		auditErr = errors.New("integration does not support manual auth")
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("integration %q does not support manual auth; use OAuth connect instead", req.Integration))
 		return
@@ -78,13 +84,6 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	manualConnection, ok := s.resolveRequestedConnection(w, req.Integration, req.Connection)
-	if !ok {
-		auditErr = errors.New("invalid connection")
-		return
-	}
-
-	auth := s.effectiveConnectionAuth(req.Integration, manualConnection)
 	effectiveCredential, credErr := buildEffectiveManualCredential(req, auth)
 	if credErr != nil {
 		auditErr = credErr
@@ -340,6 +339,13 @@ func (s *Server) runPostConnect(ctx context.Context, prov core.Provider, tm toke
 		return nil, err
 	}
 	return &postConnectResult{Status: "connected", Integration: tm.Integration}, nil
+}
+
+func manualConnectionAllowed(prov core.Provider, auth config.ConnectionAuthDef) bool {
+	if authTypesContain(connectionAuthTypes(auth, nil), "manual") {
+		return true
+	}
+	return providerSupportsManualAuth(prov)
 }
 
 func discoveryCandidateInfos(candidates []core.DiscoveryCandidate) []discoveryCandidateInfo {

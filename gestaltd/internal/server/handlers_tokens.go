@@ -204,13 +204,23 @@ func userFacingConnectionName(name string) string {
 	return name
 }
 
+func providerSupportsManualAuth(prov core.Provider) bool {
+	mp, ok := prov.(core.ManualProvider)
+	return ok && mp.SupportsManualAuth()
+}
+
+func providerSupportsOAuth(prov core.Provider) bool {
+	_, ok := prov.(core.OAuthProvider)
+	return ok
+}
+
 func integrationAuthTypesForProvider(prov core.Provider) []string {
 	var authTypes []string
 	if atl, ok := prov.(core.AuthTypeLister); ok {
 		authTypes = atl.AuthTypes()
-	} else if mp, ok := prov.(core.ManualProvider); ok && mp.SupportsManualAuth() {
+	} else if providerSupportsManualAuth(prov) {
 		authTypes = []string{"manual"}
-	} else {
+	} else if providerSupportsOAuth(prov) {
 		authTypes = []string{"oauth"}
 	}
 	return userFacingAuthTypes(authTypes)
@@ -303,10 +313,13 @@ func authTypesFromConnections(connections []connectionDefInfo) []string {
 }
 
 func fallbackAuthTypesForProvider(prov core.Provider) []string {
-	if mp, ok := prov.(core.ManualProvider); ok && mp.SupportsManualAuth() {
+	if providerSupportsManualAuth(prov) {
 		return []string{"manual"}
 	}
-	return []string{"oauth"}
+	if providerSupportsOAuth(prov) {
+		return []string{"oauth"}
+	}
+	return nil
 }
 
 func connectionDisplayName(name, configured string) string {

@@ -24,7 +24,6 @@ const httpTimeout = 30 * time.Second
 var (
 	_ core.Provider               = (*Upstream)(nil)
 	_ core.SessionCatalogProvider = (*Upstream)(nil)
-	_ core.ManualProvider         = (*Upstream)(nil)
 )
 
 type managedMCPClient struct {
@@ -107,7 +106,6 @@ func (u *Upstream) DisplayName() string                 { return u.display }
 func (u *Upstream) Description() string                 { return u.desc }
 func (u *Upstream) ConnectionMode() core.ConnectionMode { return u.connMode }
 func (u *Upstream) Catalog() *catalog.Catalog           { return u.decorateCatalog(u.cat) }
-func (u *Upstream) SupportsManualAuth() bool            { return true }
 
 func (u *Upstream) SetDisplayName(s string) { u.display = s }
 func (u *Upstream) SetDescription(s string) { u.desc = s }

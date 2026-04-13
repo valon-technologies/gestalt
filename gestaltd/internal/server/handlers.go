@@ -167,6 +167,9 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 			}
 			info.Connections = s.integrationConnectionInfos(name, authTypes, info.CredentialFields)
 		}
+		if authTypes == nil {
+			authTypes = []string{}
+		}
 		info.AuthTypes = authTypes
 		out = append(out, info)
 	}

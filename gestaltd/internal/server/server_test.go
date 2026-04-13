@@ -765,8 +765,9 @@ func TestListIntegrations_AuthTypes(t *testing.T) {
 	manualStub := &stubManualProvider{
 		StubIntegration: coretesting.StubIntegration{N: "manual-svc", DN: "Manual Service"},
 	}
+	mcpStub := &stubNonOAuthProvider{name: "clickhouse"}
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, oauthStub, manualStub)
+		cfg.Providers = testutil.NewProviderRegistry(t, oauthStub, manualStub, mcpStub)
 		cfg.Services = coretesting.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -789,8 +790,8 @@ func TestListIntegrations_AuthTypes(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
 		t.Fatalf("decoding: %v", err)
 	}
-	if len(integrations) != 2 {
-		t.Fatalf("expected 2 integrations, got %d", len(integrations))
+	if len(integrations) != 3 {
+		t.Fatalf("expected 3 integrations, got %d", len(integrations))
 	}
 
 	authTypes := make(map[string][]string)
@@ -802,6 +803,9 @@ func TestListIntegrations_AuthTypes(t *testing.T) {
 	}
 	if len(authTypes["oauth-svc"]) != 1 || authTypes["oauth-svc"][0] != "oauth" {
 		t.Fatalf("expected oauth-svc auth_types=[oauth], got %v", authTypes["oauth-svc"])
+	}
+	if len(authTypes["clickhouse"]) != 0 {
+		t.Fatalf("expected clickhouse auth_types=[], got %v", authTypes["clickhouse"])
 	}
 }
 
@@ -1107,6 +1111,64 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 		}
 		if !reflect.DeepEqual(integrations[0].Connections[0].AuthTypes, []string{"manual"}) {
 			t.Fatalf("expected default authTypes [manual], got %+v", integrations[0].Connections[0].AuthTypes)
+		}
+	})
+
+	t.Run("manifest-backed MCP passthrough without declared auth exposes no synthetic connection", func(t *testing.T) {
+		t.Parallel()
+
+		stub := &stubNonOAuthProvider{name: "clickhouse"}
+		plugin := &config.ProviderEntry{
+			Source: config.ProviderSource{
+				Ref:     "github.com/acme/plugins/clickhouse",
+				Version: "1.0.0",
+			},
+			ResolvedManifest: &providermanifestv1.Manifest{
+				Spec: &providermanifestv1.Spec{
+					Surfaces: &providermanifestv1.ProviderSurfaces{
+						MCP: &providermanifestv1.MCPSurface{
+							URL: "https://example.com/mcp",
+						},
+					},
+				},
+			},
+		}
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, stub)
+			cfg.PluginDefs = map[string]*config.ProviderEntry{
+				"clickhouse": plugin,
+			}
+			cfg.Services = coretesting.NewStubServices(t)
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		var integrations []struct {
+			Name        string   `json:"name"`
+			AuthTypes   []string `json:"authTypes"`
+			Connections []struct {
+				Name      string   `json:"name"`
+				AuthTypes []string `json:"authTypes"`
+			} `json:"connections"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+			t.Fatalf("decoding: %v", err)
+		}
+		if len(integrations) != 1 {
+			t.Fatalf("expected 1 integration, got %d", len(integrations))
+		}
+		if len(integrations[0].AuthTypes) != 0 {
+			t.Fatalf("expected no auth types, got %+v", integrations[0].AuthTypes)
+		}
+		if len(integrations[0].Connections) != 0 {
+			t.Fatalf("expected no connectable connections, got %+v", integrations[0].Connections)
 		}
 	})
 }
@@ -6508,6 +6570,7 @@ func TestConnectManual_MultiCredential(t *testing.T) {
 		name          string
 		integration   string
 		requestBody   string
+		provider      func() core.Provider
 		pluginDefs    map[string]*config.ProviderEntry
 		wantTokenData map[string]string
 	}{
@@ -6515,6 +6578,11 @@ func TestConnectManual_MultiCredential(t *testing.T) {
 			name:        "stores named credentials map",
 			integration: "multi-key-svc",
 			requestBody: `{"integration":"multi-key-svc","credentials":{"api_key":"k1","app_key":"k2"}}`,
+			provider: func() core.Provider {
+				return &stubManualProvider{
+					StubIntegration: coretesting.StubIntegration{N: "multi-key-svc"},
+				}
+			},
 			wantTokenData: map[string]string{
 				"api_key": "k1",
 				"app_key": "k2",
@@ -6524,6 +6592,11 @@ func TestConnectManual_MultiCredential(t *testing.T) {
 			name:        "single credential input wraps structured auth mapping field",
 			integration: "modern-treasury",
 			requestBody: `{"integration":"modern-treasury","credential":"api-key-abc"}`,
+			provider: func() core.Provider {
+				return &stubManualProvider{
+					StubIntegration: coretesting.StubIntegration{N: "modern-treasury"},
+				}
+			},
 			pluginDefs: map[string]*config.ProviderEntry{
 				"modern-treasury": {
 					Auth: &config.ConnectionAuthDef{
@@ -6550,6 +6623,27 @@ func TestConnectManual_MultiCredential(t *testing.T) {
 				"api_key": "api-key-abc",
 			},
 		},
+		{
+			name:        "explicit manual connection auth does not require provider manual interface",
+			integration: "clickhouse-manual",
+			requestBody: `{"integration":"clickhouse-manual","credentials":{"api_key":"api-key-abc"}}`,
+			provider: func() core.Provider {
+				return &stubNonOAuthProvider{name: "clickhouse-manual"}
+			},
+			pluginDefs: map[string]*config.ProviderEntry{
+				"clickhouse-manual": {
+					Auth: &config.ConnectionAuthDef{
+						Type: providermanifestv1.AuthTypeManual,
+						Credentials: []config.CredentialFieldDef{
+							{Name: "api_key", Label: "API Key"},
+						},
+					},
+				},
+			},
+			wantTokenData: map[string]string{
+				"api_key": "api-key-abc",
+			},
+		},
 	}
 
 	for _, tc := range cases {
@@ -6559,9 +6653,7 @@ func TestConnectManual_MultiCredential(t *testing.T) {
 
 			svc := coretesting.NewStubServices(t)
 			ts := newTestServer(t, func(cfg *server.Config) {
-				cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
-					StubIntegration: coretesting.StubIntegration{N: tc.integration},
-				})
+				cfg.Providers = testutil.NewProviderRegistry(t, tc.provider())
 				cfg.DefaultConnection = map[string]string{tc.integration: config.PluginConnectionName}
 				cfg.PluginDefs = tc.pluginDefs
 				cfg.Services = svc
