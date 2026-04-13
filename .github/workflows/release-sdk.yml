@@ -247,7 +247,7 @@ jobs:
               password_b64="$(printf '%s' "$GESTALT_TYPESCRIPT_PUBLISH_PASSWORD" | base64 | tr -d '\n')"
               printf "%s:username=%s\n" "$registry_host" "$GESTALT_TYPESCRIPT_PUBLISH_USERNAME"
               printf "%s:_password=%s\n" "$registry_host" "$password_b64"
-              printf "%s:email=%s\n" "$registry_host" "gestalt-ci@valon.com"
+              printf "%s:email=%s\n" "$registry_host" "github-actions[bot]@users.noreply.github.com"
             fi
           } > "$userconfig"
 
