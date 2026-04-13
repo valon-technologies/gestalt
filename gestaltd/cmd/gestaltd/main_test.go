@@ -18,7 +18,7 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "root",
 			args:      []string{"--help"},
-			wantParts: []string{"gestaltd validate", "gestaltd init", "gestaltd provider <command> [flags]", "gestaltd serve", "--locked"},
+			wantParts: []string{"gestaltd validate", "gestaltd init", "gestaltd provider <command> [flags]", "gestaltd serve", "gestaltd serve-integration-callback-proxy", "--locked"},
 			notWant:   []string{"gestaltd bundle", "gestaltd dev"},
 		},
 		{

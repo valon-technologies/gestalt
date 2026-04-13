@@ -114,6 +114,7 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		Connection:       connection,
 		Instance:         instance,
 		Verifier:         verifier,
+		ReturnBaseURL:    s.publicBaseURL,
 		ConnectionParams: connParams,
 		ExpiresAt:        s.now().Add(integrationOAuthStateTTL).Unix(),
 	})

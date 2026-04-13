@@ -1158,6 +1158,84 @@ server:
 	})
 }
 
+func TestLoadCallbackProxyConfig(t *testing.T) {
+	path := mustWriteConfigFile(t, `
+server:
+  public:
+    port: 8080
+  baseUrl: ${PUBLIC_BASE_URL}
+  encryptionKey: ${PROXY_ENCRYPTION_KEY}
+providers:
+  indexeddbs:
+    main-db:
+      source:
+        path: ./providers/datastore/sqlite
+`)
+	t.Setenv("PUBLIC_BASE_URL", "https://preview.example.test/base/")
+	t.Setenv("PROXY_ENCRYPTION_KEY", "secret-value")
+
+	cfg, err := LoadCallbackProxy(path)
+	if err != nil {
+		t.Fatalf("LoadCallbackProxy: %v", err)
+	}
+	if got := cfg.Server.BaseURL; got != "https://preview.example.test/base" {
+		t.Fatalf("Server.BaseURL = %q, want %q", got, "https://preview.example.test/base")
+	}
+	if got := cfg.Server.EncryptionKey; got != "secret-value" {
+		t.Fatalf("Server.EncryptionKey = %q, want %q", got, "secret-value")
+	}
+}
+
+func TestLoadCallbackProxyConfigRejectsSecretRef(t *testing.T) {
+	path := mustWriteConfigFile(t, `
+server:
+  public:
+    port: 8080
+  encryptionKey: secret://gestalt-encryption-key
+`)
+
+	_, err := LoadCallbackProxy(path)
+	if err == nil || !strings.Contains(err.Error(), "callback proxy requires server.encryptionKey to be resolved before startup") {
+		t.Fatalf("LoadCallbackProxy error = %v", err)
+	}
+}
+
+func TestLoadCallbackProxyConfigRejectsUnknownField(t *testing.T) {
+	path := mustWriteConfigFile(t, `
+server:
+  public:
+    port: 8080
+  encryptionKey: secret-value
+  encrpytionKey: typo-should-fail
+`)
+
+	_, err := LoadCallbackProxy(path)
+	if err == nil || !strings.Contains(err.Error(), "field encrpytionKey not found") {
+		t.Fatalf("LoadCallbackProxy error = %v", err)
+	}
+}
+
+func TestLoadRejectsIntegrationCallbackBaseWithoutBaseURL(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+providers:
+  indexeddbs:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  indexeddb: sqlite
+  encryptionKey: server-key
+  integrationCallbackBaseUrl: https://auth-proxy.example.test
+`)
+
+	_, err := Load(path)
+	if err == nil || !strings.Contains(err.Error(), "server.baseUrl is required when server.integrationCallbackBaseUrl is set") {
+		t.Fatalf("Load error = %v", err)
+	}
+}
+
 func TestLoadErrors(t *testing.T) {
 	t.Parallel()
 

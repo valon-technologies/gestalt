@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -351,7 +352,10 @@ func TestPluginManifestOAuthWiresConnectionAuth(t *testing.T) {
 	factories := NewFactoryRegistry()
 	providers, connAuth, err := buildProvidersStrict(
 		context.Background(), cfg, factories,
-		Deps{BaseURL: "https://gestalt.example.com"},
+		Deps{
+			BaseURL:                    "https://gestalt.example.com",
+			IntegrationCallbackBaseURL: "https://auth-proxy.example.com",
+		},
 	)
 	if err != nil {
 		t.Fatalf("buildProvidersStrict: %v", err)
@@ -379,6 +383,15 @@ func TestPluginManifestOAuthWiresConnectionAuth(t *testing.T) {
 	}
 	if handler.TokenURL() != "https://example.com/token" {
 		t.Fatalf("token URL = %q, want %q", handler.TokenURL(), "https://example.com/token")
+	}
+
+	authURL, _ := handler.StartOAuth("state-123", nil)
+	parsedAuthURL, err := url.Parse(authURL)
+	if err != nil {
+		t.Fatalf("url.Parse(authURL): %v", err)
+	}
+	if got := parsedAuthURL.Query().Get("redirect_uri"); got != "https://auth-proxy.example.com"+config.IntegrationCallbackPath {
+		t.Fatalf("redirect_uri = %q, want %q", got, "https://auth-proxy.example.com"+config.IntegrationCallbackPath)
 	}
 }
 

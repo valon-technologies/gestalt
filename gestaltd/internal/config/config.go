@@ -184,14 +184,15 @@ type ListenerConfig struct {
 }
 
 type ServerConfig struct {
-	Public        ListenerConfig `yaml:"public"`
-	Management    ListenerConfig `yaml:"management"`
-	BaseURL       string         `yaml:"baseUrl"`
-	EncryptionKey string         `yaml:"encryptionKey"`
-	APITokenTTL   string         `yaml:"apiTokenTtl"`
-	ArtifactsDir  string         `yaml:"artifactsDir"`
-	IndexedDB     string         `yaml:"indexeddb,omitempty"`
-	Egress        EgressConfig   `yaml:"egress,omitempty"`
+	Public                     ListenerConfig `yaml:"public"`
+	Management                 ListenerConfig `yaml:"management"`
+	BaseURL                    string         `yaml:"baseUrl"`
+	IntegrationCallbackBaseURL string         `yaml:"integrationCallbackBaseUrl,omitempty"`
+	EncryptionKey              string         `yaml:"encryptionKey"`
+	APITokenTTL                string         `yaml:"apiTokenTtl"`
+	ArtifactsDir               string         `yaml:"artifactsDir"`
+	IndexedDB                  string         `yaml:"indexeddb,omitempty"`
+	Egress                     EgressConfig   `yaml:"egress,omitempty"`
 }
 
 func (s ServerConfig) PublicListener() ListenerConfig {
@@ -624,7 +625,9 @@ func loadWithLookup(path string, lookup func(string) (string, bool), allowMissin
 	}
 
 	applyDefaults(&cfg)
-	resolveBaseURL(&cfg)
+	if err := resolveBaseURL(&cfg); err != nil {
+		return nil, err
+	}
 	resolveRelativePaths(path, &cfg)
 
 	if err := ValidateStructure(&cfg); err != nil {
@@ -746,12 +749,23 @@ func defaultUIProvider() *ProviderEntry {
 	}
 }
 
-func resolveBaseURL(cfg *Config) {
+func resolveBaseURL(cfg *Config) error {
 	base := strings.TrimRight(cfg.Server.BaseURL, "/")
+	callbackBase := strings.TrimRight(cfg.Server.IntegrationCallbackBaseURL, "/")
 	if base == "" {
-		return
+		if callbackBase != "" {
+			return fmt.Errorf("config validation: server.baseUrl is required when server.integrationCallbackBaseUrl is set")
+		}
+		cfg.Server.IntegrationCallbackBaseURL = callbackBase
+		return nil
 	}
 	cfg.Server.BaseURL = base
+	if callbackBase == "" {
+		cfg.Server.IntegrationCallbackBaseURL = base
+		return nil
+	}
+	cfg.Server.IntegrationCallbackBaseURL = callbackBase
+	return nil
 }
 
 func resolveRelativePaths(configPath string, cfg *Config) {

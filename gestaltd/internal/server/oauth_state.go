@@ -23,6 +23,7 @@ type integrationOAuthState struct {
 	Connection       string            `json:"con,omitempty"`
 	Instance         string            `json:"ins,omitempty"`
 	Verifier         string            `json:"ver,omitempty"`
+	ReturnBaseURL    string            `json:"ret,omitempty"`
 	ConnectionParams map[string]string `json:"cp,omitempty"`
 	ExpiresAt        int64             `json:"exp"`
 }

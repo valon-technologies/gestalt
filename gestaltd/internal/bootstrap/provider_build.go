@@ -857,7 +857,7 @@ func buildOAuthHandlerFromAuth(auth *config.ConnectionAuthDef, pluginConfig map[
 		ClientSecret:        clientSecret,
 		AuthorizationURL:    auth.AuthorizationURL,
 		TokenURL:            auth.TokenURL,
-		RedirectURL:         deps.BaseURL + config.IntegrationCallbackPath,
+		RedirectURL:         deps.IntegrationCallbackBaseURL + config.IntegrationCallbackPath,
 		PKCE:                auth.PKCE,
 		DefaultScopes:       auth.Scopes,
 		ScopeParam:          auth.ScopeParam,
@@ -892,7 +892,7 @@ func buildOAuthHandlerFromDefinition(def *provider.Definition, conn config.Conne
 		return nil, fmt.Errorf("clientId and clientSecret are required for oauth2 auth")
 	}
 	if effectiveConn.Auth.RedirectURL == "" {
-		effectiveConn.Auth.RedirectURL = deps.BaseURL + config.IntegrationCallbackPath
+		effectiveConn.Auth.RedirectURL = deps.IntegrationCallbackBaseURL + config.IntegrationCallbackPath
 	}
 
 	defCopy := *def
@@ -907,7 +907,7 @@ func buildOAuthHandlerFromDefinition(def *provider.Definition, conn config.Conne
 func buildMCPOAuthHandler(conn config.ConnectionDef, mcpURL string, store mcpoauth.RegistrationStore, deps Deps) *mcpoauth.Handler {
 	redirectURL := conn.Auth.RedirectURL
 	if redirectURL == "" {
-		redirectURL = deps.BaseURL + config.IntegrationCallbackPath
+		redirectURL = deps.IntegrationCallbackBaseURL + config.IntegrationCallbackPath
 	}
 	return mcpoauth.NewHandler(mcpoauth.HandlerConfig{
 		MCPURL:       mcpURL,

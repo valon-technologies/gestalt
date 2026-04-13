@@ -119,12 +119,13 @@ func (m providerMetadata) descriptionOr(v string) string {
 }
 
 type Deps struct {
-	EncryptionKey []byte
-	BaseURL       string
-	SecretManager core.SecretManager
-	Services      *coredata.Services
-	IndexedDBs    map[string]*config.ProviderEntry
-	Egress        EgressDeps
+	EncryptionKey              []byte
+	BaseURL                    string
+	IntegrationCallbackBaseURL string
+	SecretManager              core.SecretManager
+	Services                   *coredata.Services
+	IndexedDBs                 map[string]*config.ProviderEntry
+	Egress                     EgressDeps
 }
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthProvider, error)
@@ -274,10 +275,11 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	}
 
 	deps := Deps{
-		EncryptionKey: encKey,
-		BaseURL:       cfg.Server.BaseURL,
-		SecretManager: sm,
-		IndexedDBs:    cfg.Providers.IndexedDBs,
+		EncryptionKey:              encKey,
+		BaseURL:                    cfg.Server.BaseURL,
+		IntegrationCallbackBaseURL: cfg.Server.IntegrationCallbackBaseURL,
+		SecretManager:              sm,
+		IndexedDBs:                 cfg.Providers.IndexedDBs,
 	}
 
 	auth, err := buildAuth(cfg, factories, deps)

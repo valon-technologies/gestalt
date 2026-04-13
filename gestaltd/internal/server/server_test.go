@@ -20,6 +20,7 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	cryptoutil "github.com/valon-technologies/gestalt/server/core/crypto"
 	coreintegration "github.com/valon-technologies/gestalt/server/core/integration"
 	"github.com/valon-technologies/gestalt/server/core/session"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
@@ -102,6 +103,40 @@ func extractHiddenInputValue(t *testing.T, html, name string) string {
 		t.Fatalf("unterminated hidden input %q in %q", name, html)
 	}
 	return html[start : start+end]
+}
+
+func decodeIntegrationOAuthState(t *testing.T, secret []byte, encoded string) map[string]any {
+	t.Helper()
+	enc, err := cryptoutil.NewAESGCM(secret)
+	if err != nil {
+		t.Fatalf("NewAESGCM: %v", err)
+	}
+	plaintext, err := enc.DecryptURLSafe(encoded)
+	if err != nil {
+		t.Fatalf("DecryptURLSafe: %v", err)
+	}
+	var state map[string]any
+	if err := json.Unmarshal([]byte(plaintext), &state); err != nil {
+		t.Fatalf("Unmarshal oauth state: %v", err)
+	}
+	return state
+}
+
+func encodeIntegrationOAuthState(t *testing.T, secret []byte, state map[string]any) string {
+	t.Helper()
+	enc, err := cryptoutil.NewAESGCM(secret)
+	if err != nil {
+		t.Fatalf("NewAESGCM: %v", err)
+	}
+	payload, err := json.Marshal(state)
+	if err != nil {
+		t.Fatalf("Marshal oauth state: %v", err)
+	}
+	encoded, err := enc.EncryptURLSafe(string(payload))
+	if err != nil {
+		t.Fatalf("EncryptURLSafe: %v", err)
+	}
+	return encoded
 }
 
 // testOAuthHandler adapts a test stub into bootstrap.OAuthHandler for use in
@@ -3046,6 +3081,7 @@ func TestLoginCallbackWithStatefulHandler(t *testing.T) {
 func TestStartIntegrationOAuth(t *testing.T) {
 	t.Parallel()
 
+	secret := []byte("0123456789abcdef0123456789abcdef")
 	stub := &stubIntegrationWithAuthURL{
 		StubIntegration: coretesting.StubIntegration{N: "slack"},
 		authURL:         "https://slack.com/oauth/v2/authorize",
@@ -3060,6 +3096,8 @@ func TestStartIntegrationOAuth(t *testing.T) {
 		cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
 		cfg.ConnectionAuth = testConnectionAuth("slack", handler)
 		cfg.Services = coretesting.NewStubServices(t)
+		cfg.PublicBaseURL = "https://preview.example.test/base"
+		cfg.StateSecret = secret
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -3093,6 +3131,97 @@ func TestStartIntegrationOAuth(t *testing.T) {
 	}
 	if parsedURL.Query().Get("state") != result["state"] {
 		t.Fatal("expected auth URL state to match returned state")
+	}
+
+	state := decodeIntegrationOAuthState(t, secret, result["state"])
+	if got := state["ret"]; got != "https://preview.example.test/base" {
+		t.Fatalf("oauth state return base URL = %v, want %q", got, "https://preview.example.test/base")
+	}
+}
+
+func TestIntegrationOAuthCallbackProxy(t *testing.T) {
+	t.Parallel()
+
+	const previewBaseURL = "https://preview.example.test/base"
+	secret := []byte("0123456789abcdef0123456789abcdef")
+
+	stub := &stubIntegrationWithAuthURL{
+		StubIntegration: coretesting.StubIntegration{N: "slack"},
+		authURL:         "https://slack.com/oauth/v2/authorize",
+	}
+	handler := &testOAuthHandler{
+		authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
+	}
+
+	app := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
+		cfg.ConnectionAuth = testConnectionAuth("slack", handler)
+		cfg.Services = coretesting.NewStubServices(t)
+		cfg.PublicBaseURL = previewBaseURL
+		cfg.StateSecret = secret
+	})
+	testutil.CloseOnCleanup(t, app)
+
+	startBody := bytes.NewBufferString(`{"integration":"slack","scopes":["channels:read"]}`)
+	startReq, _ := http.NewRequest(http.MethodPost, app.URL+"/api/v1/auth/start-oauth", startBody)
+	startReq.Header.Set("Authorization", "Bearer ignored")
+	startReq.Header.Set("Content-Type", "application/json")
+	startResp, err := http.DefaultClient.Do(startReq)
+	if err != nil {
+		t.Fatalf("start request: %v", err)
+	}
+	defer func() { _ = startResp.Body.Close() }()
+	if startResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 from start-oauth, got %d", startResp.StatusCode)
+	}
+
+	var startResult map[string]string
+	if err := json.NewDecoder(startResp.Body).Decode(&startResult); err != nil {
+		t.Fatalf("decoding start response: %v", err)
+	}
+
+	proxyHandler, err := server.NewIntegrationOAuthCallbackProxy(server.IntegrationOAuthCallbackProxyConfig{
+		StateSecret: secret,
+	})
+	if err != nil {
+		t.Fatalf("NewIntegrationOAuthCallbackProxy: %v", err)
+	}
+	proxy := httptest.NewServer(proxyHandler)
+	testutil.CloseOnCleanup(t, proxy)
+
+	noRedirect := &http.Client{
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	callbackURL := proxy.URL + "/api/v1/auth/callback?code=good-code&state=" + url.QueryEscape(startResult["state"]) + "&foo=bar"
+	resp, err := noRedirect.Get(callbackURL)
+	if err != nil {
+		t.Fatalf("proxy callback request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusSeeOther {
+		t.Fatalf("proxy status = %d, want %d", resp.StatusCode, http.StatusSeeOther)
+	}
+	wantLocation := previewBaseURL + "/api/v1/auth/callback?code=good-code&state=" + url.QueryEscape(startResult["state"]) + "&foo=bar"
+	if got := resp.Header.Get("Location"); got != wantLocation {
+		t.Fatalf("proxy redirect = %q, want %q", got, wantLocation)
+	}
+
+	invalidState := encodeIntegrationOAuthState(t, secret, map[string]any{
+		"uid": "user-1",
+		"int": "slack",
+		"exp": time.Now().Add(time.Minute).Unix(),
+	})
+	invalidResp, err := noRedirect.Get(proxy.URL + "/api/v1/auth/callback?code=good-code&state=" + url.QueryEscape(invalidState))
+	if err != nil {
+		t.Fatalf("invalid proxy callback request: %v", err)
+	}
+	defer func() { _ = invalidResp.Body.Close() }()
+	if invalidResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("invalid proxy status = %d, want %d", invalidResp.StatusCode, http.StatusBadRequest)
 	}
 }
 

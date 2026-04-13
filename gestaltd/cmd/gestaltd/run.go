@@ -8,9 +8,11 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core/crypto"
@@ -42,6 +44,8 @@ func run(args []string) error {
 			return runProvider(args[1:])
 		case "serve":
 			return runServe(args[1:])
+		case "serve-integration-callback-proxy":
+			return runServeIntegrationCallbackProxy(args[1:])
 		case "init":
 			return runInit(args[1:])
 		case "validate":
@@ -76,6 +80,24 @@ func runServe(args []string) error {
 		return err
 	}
 	return runServer(env)
+}
+
+func runServeIntegrationCallbackProxy(args []string) error {
+	fs := flag.NewFlagSet("gestaltd serve-integration-callback-proxy", flag.ContinueOnError)
+	fs.Usage = func() { printServeIntegrationCallbackProxyUsage(fs.Output()) }
+	configPath := fs.String("config", "", "path to config file")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() > 0 {
+		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
+	}
+
+	cfg, err := config.LoadCallbackProxy(resolveConfigPath(*configPath))
+	if err != nil {
+		return err
+	}
+	return runIntegrationCallbackProxy(cfg)
 }
 
 func runStartCommand(name string, usage func(io.Writer), args []string, locked bool, autoGenerate bool) error {
@@ -122,11 +144,12 @@ func runServer(env *bootstrapEnv) error {
 
 	mcpSurface := buildMCPSurface(env.Config, connMaps)
 
-	if env.Config.Server.BaseURL != "" {
+	if env.Config.Server.BaseURL != "" || env.Config.Server.IntegrationCallbackBaseURL != "" {
 		slog.Info("gestaltd base URL configured",
 			"base_url", env.Config.Server.BaseURL,
 			"auth_callback", env.Config.Server.BaseURL+config.AuthCallbackPath,
-			"integration_callback", env.Config.Server.BaseURL+config.IntegrationCallbackPath,
+			"integration_callback_base_url", env.Config.Server.IntegrationCallbackBaseURL,
+			"integration_callback", env.Config.Server.IntegrationCallbackBaseURL+config.IntegrationCallbackPath,
 		)
 	}
 
@@ -274,6 +297,55 @@ func runServer(env *bootstrapEnv) error {
 	case <-env.Ctx.Done():
 	}
 
+	return nil
+}
+
+func runIntegrationCallbackProxy(cfg *config.CallbackProxyConfig) error {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	stateSecret := crypto.DeriveKey(cfg.Server.EncryptionKey)
+	proxy, err := server.NewIntegrationOAuthCallbackProxy(server.IntegrationOAuthCallbackProxyConfig{
+		StateSecret: stateSecret,
+	})
+	if err != nil {
+		return fmt.Errorf("creating integration callback proxy: %w", err)
+	}
+
+	if cfg.Server.BaseURL != "" {
+		slog.Info("integration callback proxy configured",
+			"base_url", cfg.Server.BaseURL,
+			"integration_callback", cfg.Server.BaseURL+config.IntegrationCallbackPath,
+		)
+	}
+
+	srv := &http.Server{
+		Addr:              cfg.Server.PublicAddr(),
+		Handler:           proxy,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20,
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		slog.Info("integration callback proxy listening", "addr", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			errCh <- err
+		}
+	}()
+
+	select {
+	case err := <-errCh:
+		return fmt.Errorf("integration callback proxy http server: %w", err)
+	case <-ctx.Done():
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), gracefulShutdownTimeout)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		return fmt.Errorf("integration callback proxy shutdown: %w", err)
+	}
 	return nil
 }
 
@@ -505,6 +577,7 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd [--config PATH] [--artifacts-dir PATH]")
 	writeUsageLine(w, "  gestaltd init [--config PATH] [--artifacts-dir PATH] [--platform PLATFORMS]")
 	writeUsageLine(w, "  gestaltd serve [--config PATH] [--artifacts-dir PATH] [--locked]")
+	writeUsageLine(w, "  gestaltd serve-integration-callback-proxy [--config PATH]")
 	writeUsageLine(w, "  gestaltd provider <command> [flags]")
 	writeUsageLine(w, "  gestaltd validate [--config PATH] [--artifacts-dir PATH]")
 	writeUsageLine(w, "")
@@ -512,6 +585,7 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "  init        Resolve providers and plugins and write lock state")
 	writeUsageLine(w, "  provider    Build provider release archives")
 	writeUsageLine(w, "  serve       Start the server (use --locked for production)")
+	writeUsageLine(w, "  serve-integration-callback-proxy  Start the stable integration OAuth callback proxy")
 	writeUsageLine(w, "  validate    Load and validate configuration without starting the server")
 	writeUsageLine(w, "  version     Print the version and exit")
 	writeUsageLine(w, "")
@@ -527,6 +601,15 @@ func printServeUsage(w io.Writer) {
 	writeUsageLine(w, "Start the server. Auto-inits if lock state is missing or stale.")
 	writeUsageLine(w, "Use --locked for production deployments to prevent automatic mutation")
 	writeUsageLine(w, "at startup. When locked, run `gestaltd init` first to prepare artifacts.")
+}
+
+func printServeIntegrationCallbackProxyUsage(w io.Writer) {
+	writeUsageLine(w, "Usage:")
+	writeUsageLine(w, "  gestaltd serve-integration-callback-proxy [--config PATH]")
+	writeUsageLine(w, "")
+	writeUsageLine(w, "Start the stable integration OAuth callback proxy.")
+	writeUsageLine(w, "This service only validates encrypted OAuth state and redirects callbacks")
+	writeUsageLine(w, "to the preview environment that initiated the flow.")
 }
 
 func printInitUsage(w io.Writer) {
