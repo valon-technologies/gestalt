@@ -1,6 +1,7 @@
 package coretesting
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"sort"
@@ -501,6 +502,10 @@ func compareIndexKeys(a, b any) int {
 			}
 			return 0
 		}
+	case []byte:
+		if bv, ok := b.([]byte); ok {
+			return bytes.Compare(av, bv)
+		}
 	}
 	// Coerce numeric types for cross-type comparison (e.g. int vs int64 after gRPC round-trip).
 	af, aOk := toFloat64(a)
@@ -665,7 +670,7 @@ func (c *stubCursor) Advance(count int) bool {
 		c.err = fmt.Errorf("advance count must be positive")
 		return false
 	}
-	for i := 0; i < count; i++ {
+	for i := 0; i <= count; i++ {
 		if !c.Continue() {
 			return false
 		}

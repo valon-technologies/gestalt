@@ -433,6 +433,9 @@ class Cursor:
         if self._closed:
             return
         self._closed = True
+        self._key = None
+        self._primary_key = None
+        self._record = None
         try:
             self._send_command(close=True)
             self._request_iter.close()

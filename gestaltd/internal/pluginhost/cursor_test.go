@@ -395,13 +395,13 @@ func TestCursor_Advance(t *testing.T) {
 	}
 	defer func() { _ = cursor.Close() }()
 
-	// Advance(2) should skip first 2 records
+	// Advance(2) should skip the first 2 records and land on the next one.
 	if !cursor.Advance(2) {
 		t.Fatal("Advance(2) returned false")
 	}
 	pk := cursor.PrimaryKey()
-	if pk != "b" {
-		t.Errorf("PrimaryKey after Advance(2) = %q, want b", pk)
+	if pk != "c" {
+		t.Errorf("PrimaryKey after Advance(2) = %q, want c", pk)
 	}
 }
 
