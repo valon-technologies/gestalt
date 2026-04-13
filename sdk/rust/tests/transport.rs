@@ -5,7 +5,8 @@ use std::sync::{Arc, Mutex};
 
 use gestalt::proto::v1::integration_provider_client::IntegrationProviderClient;
 use gestalt::proto::v1::{
-    ExecuteRequest, GetSessionCatalogRequest, PostConnectRequest, StartProviderRequest,
+    CredentialContext, ExecuteRequest, GetSessionCatalogRequest, PostConnectRequest,
+    RequestContext, StartProviderRequest, SubjectContext,
 };
 use gestalt::{Catalog, CatalogOperation, Operation, Provider, Request, Response, Router, ok};
 use hyper_util::rt::tokio::TokioIo;
@@ -43,10 +44,12 @@ impl Provider for TestProvider {
     async fn catalog_for_request(&self, request: &Request) -> gestalt::Result<Option<Catalog>> {
         Ok(Some(Catalog {
             name: "session-example".to_string(),
-            display_name: request
-                .connection_param("tenant")
-                .unwrap_or_default()
-                .to_string(),
+            display_name: format!(
+                "{}|{}|{}",
+                request.connection_param("tenant").unwrap_or_default(),
+                request.subject.id,
+                request.credential.mode,
+            ),
             description: String::new(),
             icon_svg: String::new(),
             operations: vec![CatalogOperation {
@@ -76,6 +79,8 @@ struct Input {
 #[derive(serde::Serialize, schemars::JsonSchema)]
 struct Output {
     message: String,
+    subject_id: String,
+    credential_mode: String,
 }
 
 #[tokio::test]
@@ -87,10 +92,12 @@ async fn serves_provider_requests_over_unix_socket() {
     let router = Router::new()
         .register(
             Operation::<Input, Output>::new("greet"),
-            |provider: Arc<TestProvider>, input: Input, _request: Request| async move {
+            |provider: Arc<TestProvider>, input: Input, request: Request| async move {
                 let greeting = provider.greeting.lock().expect("lock greeting").clone();
                 Ok::<Response<Output>, std::convert::Infallible>(ok(Output {
                     message: format!("{greeting}, {}!", input.name),
+                    subject_id: request.subject.id,
+                    credential_mode: request.credential.mode,
                 }))
             },
         )
@@ -157,13 +164,27 @@ async fn serves_provider_requests_over_unix_socket() {
             token: String::new(),
             connection_params: Default::default(),
             invocation_id: String::new(),
+            context: Some(RequestContext {
+                subject: Some(SubjectContext {
+                    id: "user:user-123".to_string(),
+                    kind: "user".to_string(),
+                    ..Default::default()
+                }),
+                credential: Some(CredentialContext {
+                    mode: "identity".to_string(),
+                    ..Default::default()
+                }),
+            }),
         })
         .await
         .expect("execute")
         .into_inner();
 
     assert_eq!(response.status, 200);
-    assert_eq!(response.body, r#"{"message":"Hi, Rust!"}"#);
+    assert_eq!(
+        response.body,
+        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","credential_mode":"identity"}"#
+    );
 
     let session_catalog = client
         .get_session_catalog(GetSessionCatalogRequest {
@@ -172,13 +193,24 @@ async fn serves_provider_requests_over_unix_socket() {
                 .into_iter()
                 .collect(),
             invocation_id: String::new(),
+            context: Some(RequestContext {
+                subject: Some(SubjectContext {
+                    id: "user:user-123".to_string(),
+                    kind: "user".to_string(),
+                    ..Default::default()
+                }),
+                credential: Some(CredentialContext {
+                    mode: "identity".to_string(),
+                    ..Default::default()
+                }),
+            }),
         })
         .await
         .expect("session catalog")
         .into_inner();
     let catalog = session_catalog.catalog.expect("session catalog");
     assert_eq!(catalog.name, "session-example");
-    assert_eq!(catalog.display_name, "acme");
+    assert_eq!(catalog.display_name, "acme|user:user-123|identity");
 
     let err = client
         .post_connect(PostConnectRequest::default())

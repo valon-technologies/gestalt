@@ -101,9 +101,13 @@ type execInput struct {
 }
 
 type execOutput struct {
-	Echo          string `json:"echo"`
-	Region        string `json:"region"`
-	RegionPresent bool   `json:"region_present"`
+	Echo                string `json:"echo"`
+	Region              string `json:"region"`
+	RegionPresent       bool   `json:"region_present"`
+	SubjectID           string `json:"subject_id"`
+	SubjectKind         string `json:"subject_kind"`
+	CredentialMode      string `json:"credential_mode"`
+	CredentialSubjectID string `json:"credential_subject_id"`
 }
 
 type execProvider struct{}
@@ -112,7 +116,15 @@ func (p *execProvider) Configure(context.Context, string, map[string]any) error 
 
 func (p *execProvider) echo(_ context.Context, in execInput, req gestalt.Request) (gestalt.Response[execOutput], error) {
 	region, ok := req.ConnectionParam("region")
-	return gestalt.OK(execOutput{Echo: in.Value, Region: region, RegionPresent: ok}), nil
+	return gestalt.OK(execOutput{
+		Echo:                in.Value,
+		Region:              region,
+		RegionPresent:       ok,
+		SubjectID:           req.Subject.ID,
+		SubjectKind:         req.Subject.Kind,
+		CredentialMode:      req.Credential.Mode,
+		CredentialSubjectID: req.Credential.SubjectID,
+	}), nil
 }
 
 func TestRouterOperationExecution(t *testing.T) {
@@ -156,16 +168,26 @@ func TestRouterOperationExecution(t *testing.T) {
 	if result.Status != http.StatusOK {
 		t.Fatalf("status = %d, want %d", result.Status, http.StatusOK)
 	}
-	if result.Body != `{"echo":"hello","region":"","region_present":false}` {
-		t.Fatalf("body = %q, want %q", result.Body, `{"echo":"hello","region":"","region_present":false}`)
+	if result.Body != `{"echo":"hello","region":"","region_present":false,"subject_id":"","subject_kind":"","credential_mode":"","credential_subject_id":""}` {
+		t.Fatalf("body = %q, want %q", result.Body, `{"echo":"hello","region":"","region_present":false,"subject_id":"","subject_kind":"","credential_mode":"","credential_subject_id":""}`)
 	}
 
-	result, err = router.Execute(gestalt.WithConnectionParams(ctx, map[string]string{"region": "iad"}), provider, "echo", map[string]any{"value": "hello"}, "tok")
+	ctxWithRequest := gestalt.WithConnectionParams(ctx, map[string]string{"region": "iad"})
+	ctxWithRequest = gestalt.WithSubject(ctxWithRequest, gestalt.Subject{
+		ID:         "user:user-123",
+		Kind:       "user",
+		AuthSource: "api_token",
+	})
+	ctxWithRequest = gestalt.WithCredential(ctxWithRequest, gestalt.Credential{
+		Mode:      "identity",
+		SubjectID: "identity:__identity__",
+	})
+	result, err = router.Execute(ctxWithRequest, provider, "echo", map[string]any{"value": "hello"}, "tok")
 	if err != nil {
 		t.Fatalf("Execute(with params): %v", err)
 	}
-	if result.Body != `{"echo":"hello","region":"iad","region_present":true}` {
-		t.Fatalf("body with params = %q, want %q", result.Body, `{"echo":"hello","region":"iad","region_present":true}`)
+	if result.Body != `{"echo":"hello","region":"iad","region_present":true,"subject_id":"user:user-123","subject_kind":"user","credential_mode":"identity","credential_subject_id":"identity:__identity__"}` {
+		t.Fatalf("body with params = %q, want %q", result.Body, `{"echo":"hello","region":"iad","region_present":true,"subject_id":"user:user-123","subject_kind":"user","credential_mode":"identity","credential_subject_id":"identity:__identity__"}`)
 	}
 
 	result, err = router.Execute(ctx, provider, "nonexistent", nil, "tok")

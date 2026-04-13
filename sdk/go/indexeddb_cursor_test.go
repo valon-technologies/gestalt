@@ -77,3 +77,37 @@ func TestCursorKeyCodec_RoundTripArrayValuedIndexComponent(t *testing.T) {
 		t.Fatalf("round trip = %#v, want %#v", got, key)
 	}
 }
+
+func TestCursorKeyCodec_AcceptsTypedSliceCompositeKeys(t *testing.T) {
+	key := []string{"a", "b"}
+
+	kvs, err := CursorKeyToProto(key, true)
+	if err != nil {
+		t.Fatalf("CursorKeyToProto: %v", err)
+	}
+	got, err := KeyValuesToAny(kvs)
+	if err != nil {
+		t.Fatalf("KeyValuesToAny: %v", err)
+	}
+	want := []any{"a", "b"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("round trip = %#v, want %#v", got, want)
+	}
+}
+
+func TestCursorKeyCodec_RoundTripTypedArrayValuedIndexComponent(t *testing.T) {
+	key := []any{[]string{"x", "y"}}
+
+	kvs, err := CursorKeyToProto(key, true)
+	if err != nil {
+		t.Fatalf("CursorKeyToProto: %v", err)
+	}
+	got, err := KeyValuesToAny(kvs)
+	if err != nil {
+		t.Fatalf("KeyValuesToAny: %v", err)
+	}
+	want := []any{[]any{"x", "y"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("round trip = %#v, want %#v", got, want)
+	}
+}

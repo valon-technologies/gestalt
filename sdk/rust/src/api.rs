@@ -7,9 +7,27 @@ use crate::catalog::Catalog;
 use crate::error::{Error, Result};
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct Subject {
+    pub id: String,
+    pub kind: String,
+    pub display_name: String,
+    pub auth_source: String,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct Credential {
+    pub mode: String,
+    pub subject_id: String,
+    pub connection: String,
+    pub instance: String,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Request {
     pub token: String,
     pub connection_params: BTreeMap<String, String>,
+    pub subject: Subject,
+    pub credential: Credential,
 }
 
 impl Request {

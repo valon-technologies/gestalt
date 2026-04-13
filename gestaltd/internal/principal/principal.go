@@ -9,7 +9,8 @@ import (
 type Source int
 
 const (
-	SourceSession Source = iota
+	SourceUnknown Source = iota
+	SourceSession
 	SourceAPIToken
 	SourceWorkloadToken
 	SourceEnv

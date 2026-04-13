@@ -145,6 +145,8 @@ class RequestTests(unittest.TestCase):
 
         self.assertEqual(request.connection_param("region"), "us-east-1")
         self.assertIsNone(request.connection_param("missing"))
+        self.assertEqual(request.subject.id, "")
+        self.assertEqual(request.credential.mode, "")
 
 
 class MainEntrypointTests(unittest.TestCase):
@@ -174,29 +176,77 @@ class MainEntrypointTests(unittest.TestCase):
     def test_provider_servicer_reports_and_serves_session_catalogs(self) -> None:
         plugin = Plugin("source-name")
 
+        @plugin.operation
+        def whoami(request: Request) -> dict[str, str]:
+            return {
+                "token": request.token,
+                "subject_id": request.subject.id,
+                "subject_kind": request.subject.kind,
+                "credential_mode": request.credential.mode,
+                "credential_subject_id": request.credential.subject_id,
+            }
+
         @plugin.session_catalog
         def dynamic_catalog(request: Request) -> Catalog:
             cat = Catalog(
                 name="session-source",
-                display_name=request.connection_param("tenant") or "",
+                display_name="|".join(
+                    [
+                        request.connection_param("tenant") or "",
+                        request.subject.id,
+                        request.credential.mode,
+                    ]
+                ),
             )
             cat.operations.append(CatalogOperation(id="private_search", method="POST"))
             return cat
 
         servicer = _runtime._provider_servicer(plugin=plugin)
         metadata = servicer.GetMetadata(mock.Mock(), mock.Mock())
+        execute_response = servicer.Execute(
+            plugin_pb2.ExecuteRequest(
+                operation="whoami",
+                token="secret-token",
+                context=plugin_pb2.RequestContext(
+                    subject=plugin_pb2.SubjectContext(
+                        id="user:user-123",
+                        kind="user",
+                        auth_source="api_token",
+                    ),
+                    credential=plugin_pb2.CredentialContext(
+                        mode="identity",
+                        subject_id="identity:__identity__",
+                    ),
+                ),
+            ),
+            mock.Mock(),
+        )
         response = servicer.GetSessionCatalog(
             plugin_pb2.GetSessionCatalogRequest(
                 token="secret-token",
                 connection_params={"tenant": "acme"},
+                context=plugin_pb2.RequestContext(
+                    subject=plugin_pb2.SubjectContext(id="user:user-123", kind="user"),
+                    credential=plugin_pb2.CredentialContext(mode="identity"),
+                ),
             ),
             mock.Mock(),
         )
 
         self.assertTrue(metadata.supports_session_catalog)
+        self.assertEqual(
+            json.loads(execute_response.body),
+            {
+                "token": "secret-token",
+                "subject_id": "user:user-123",
+                "subject_kind": "user",
+                "credential_mode": "identity",
+                "credential_subject_id": "identity:__identity__",
+            },
+        )
         catalog = response.catalog
         self.assertEqual(catalog.name, "session-source")
-        self.assertEqual(catalog.display_name, "acme")
+        self.assertEqual(catalog.display_name, "acme|user:user-123|identity")
         self.assertEqual(len(catalog.operations), 1)
         self.assertEqual(catalog.operations[0].id, "private_search")
         self.assertEqual(catalog.operations[0].method, "POST")

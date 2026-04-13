@@ -5,7 +5,9 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex};
 
 use gestalt::proto::v1::integration_provider_server::IntegrationProvider;
-use gestalt::proto::v1::{ExecuteRequest, StartProviderRequest};
+use gestalt::proto::v1::{
+    CredentialContext, ExecuteRequest, RequestContext, StartProviderRequest, SubjectContext,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map as JsonMap, Value as JsonValue, json};
@@ -112,6 +114,8 @@ struct GreetInput {
 struct GreetOutput {
     message: String,
     api_key: String,
+    subject_id: String,
+    credential_mode: String,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -130,6 +134,8 @@ async fn greet(
             .connection_param("api_key")
             .unwrap_or_default()
             .to_owned(),
+        subject_id: request.subject.id,
+        credential_mode: request.credential.mode,
     }))
 }
 
@@ -189,12 +195,26 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
             token: "tok".to_owned(),
             connection_params: BTreeMap::from([("api_key".to_owned(), "secret".to_owned())]),
             invocation_id: String::new(),
+            context: Some(RequestContext {
+                subject: Some(SubjectContext {
+                    id: "user:user-123".to_owned(),
+                    kind: "user".to_owned(),
+                    ..Default::default()
+                }),
+                credential: Some(CredentialContext {
+                    mode: "identity".to_owned(),
+                    ..Default::default()
+                }),
+            }),
         }))
         .await
         .expect("execute greet")
         .into_inner();
     assert_eq!(success.status, 200);
-    assert_eq!(success.body, r#"{"message":"Hi, Ada!","api_key":"secret"}"#);
+    assert_eq!(
+        success.body,
+        r#"{"message":"Hi, Ada!","api_key":"secret","subject_id":"user:user-123","credential_mode":"identity"}"#
+    );
 
     let unknown = server
         .execute(GrpcRequest::new(ExecuteRequest {

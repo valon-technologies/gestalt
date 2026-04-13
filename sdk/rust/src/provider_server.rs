@@ -4,7 +4,7 @@ use serde::Serialize;
 use serde_json::Value;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
-use crate::api::{Request, Response};
+use crate::api::{Credential, Request, Response, Subject};
 use crate::catalog::object_map;
 use crate::env::CURRENT_PROTOCOL_VERSION;
 use crate::error::Error;
@@ -101,6 +101,8 @@ where
                 Request {
                     token: request.token,
                     connection_params: request.connection_params.into_iter().collect(),
+                    subject: request_subject(request.context.as_ref()),
+                    credential: request_credential(request.context.as_ref()),
                 },
             )
             .await;
@@ -125,6 +127,8 @@ where
         let request = Request {
             token: request.token,
             connection_params: request.connection_params.into_iter().collect(),
+            subject: request_subject(request.context.as_ref()),
+            credential: request_credential(request.context.as_ref()),
         };
         let catalog = self
             .provider
@@ -142,5 +146,35 @@ where
         Err(Status::unimplemented(
             "provider does not support post connect",
         ))
+    }
+}
+
+fn request_subject(context: Option<&crate::generated::v1::RequestContext>) -> Subject {
+    let Some(context) = context else {
+        return Subject::default();
+    };
+    let Some(subject) = context.subject.as_ref() else {
+        return Subject::default();
+    };
+    Subject {
+        id: subject.id.clone(),
+        kind: subject.kind.clone(),
+        display_name: subject.display_name.clone(),
+        auth_source: subject.auth_source.clone(),
+    }
+}
+
+fn request_credential(context: Option<&crate::generated::v1::RequestContext>) -> Credential {
+    let Some(context) = context else {
+        return Credential::default();
+    };
+    let Some(credential) = context.credential.as_ref() else {
+        return Credential::default();
+    };
+    Credential {
+        mode: credential.mode.clone(),
+        subject_id: credential.subject_id.clone(),
+        connection: credential.connection.clone(),
+        instance: credential.instance.clone(),
     }
 }

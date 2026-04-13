@@ -21,8 +21,8 @@ export const plugin = definePlugin({
           id: "session-hello",
           method: "GET",
           title: scope
-            ? `Session Hello ${scope}`
-            : "Session Hello",
+            ? `Session Hello ${scope} ${request.subject.id} ${request.credential.mode}`.trim()
+            : `Session Hello ${request.subject.id} ${request.credential.mode}`.trim(),
         },
       ],
     };
@@ -51,6 +51,8 @@ export const plugin = definePlugin({
         configuredName: s.string(),
         region: s.string(),
         configuredRegion: s.string(),
+        subjectId: s.string(),
+        credentialMode: s.string(),
       }),
       handler(input, request) {
         const region = connectionParam(request, "region") ?? "";
@@ -59,6 +61,8 @@ export const plugin = definePlugin({
           configuredName,
           region,
           configuredRegion: String(configuredConfig.region ?? ""),
+          subjectId: request.subject.id,
+          credentialMode: request.credential.mode,
         });
       },
     }),

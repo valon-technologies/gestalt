@@ -10,9 +10,12 @@ import {
   ValidateExternalTokenRequestSchema,
 } from "../gen/v1/auth_pb.ts";
 import {
+  CredentialContextSchema,
   ExecuteRequestSchema,
   GetSessionCatalogRequestSchema,
+  RequestContextSchema,
   StartProviderRequestSchema,
+  SubjectContextSchema,
 } from "../gen/v1/plugin_pb.ts";
 import { ConfigureProviderRequestSchema } from "../gen/v1/runtime_pb.ts";
 import {
@@ -86,6 +89,17 @@ test("integration provider service exposes metadata, configure, execute, and ses
       connectionParams: {
         region: "iad",
       },
+      context: create(RequestContextSchema, {
+        subject: create(SubjectContextSchema, {
+          id: "user:user-123",
+          kind: "user",
+          authSource: "api_token",
+        }),
+        credential: create(CredentialContextSchema, {
+          mode: "identity",
+          subjectId: "identity:__identity__",
+        }),
+      }),
     }),
   );
   expect(JSON.parse(result.body)).toEqual({
@@ -93,6 +107,8 @@ test("integration provider service exposes metadata, configure, execute, and ses
     configuredName: "configured-provider",
     region: "iad",
     configuredRegion: "use1",
+    subjectId: "user:user-123",
+    credentialMode: "identity",
   });
 
   const sessionCatalog = await (service.getSessionCatalog as any)(
@@ -101,13 +117,24 @@ test("integration provider service exposes metadata, configure, execute, and ses
       connectionParams: {
         scope: "ops",
       },
+      context: create(RequestContextSchema, {
+        subject: create(SubjectContextSchema, {
+          id: "user:user-123",
+          kind: "user",
+        }),
+        credential: create(CredentialContextSchema, {
+          mode: "identity",
+        }),
+      }),
     }),
   );
   expect(sessionCatalog.catalog?.name).toBe("fixture-session");
   expect(sessionCatalog.catalog?.operations).toHaveLength(1);
   expect(sessionCatalog.catalog?.operations[0].id).toBe("session-hello");
   expect(sessionCatalog.catalog?.operations[0].method).toBe("GET");
-  expect(sessionCatalog.catalog?.operations[0].title).toBe("Session Hello ops");
+  expect(sessionCatalog.catalog?.operations[0].title).toBe(
+    "Session Hello ops user:user-123 identity",
+  );
 });
 
 test("auth provider supports runtime metadata, login flows, and token validation", async () => {
@@ -157,4 +184,3 @@ test("auth provider supports runtime metadata, login flows, and token validation
   );
   expect(validated.email).toBe("api-token@example.com");
 });
-
