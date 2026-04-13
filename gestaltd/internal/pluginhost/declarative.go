@@ -13,7 +13,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/apiexec"
 	"github.com/valon-technologies/gestalt/server/internal/paraminterp"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
 const declarativeHTTPTimeout = 30 * time.Second
@@ -44,14 +44,14 @@ type DeclarativeProvider struct {
 	catalog        *catalog.Catalog
 	opsByName      map[string]*catalog.CatalogOperation
 	baseURL        string
-	auth           *pluginmanifestv1.ProviderAuth
+	auth           *providermanifestv1.ProviderAuth
 	httpClient     *http.Client
-	discovery      *pluginmanifestv1.ProviderDiscovery
-	connectionDefs map[string]pluginmanifestv1.ProviderConnectionParam
+	discovery      *providermanifestv1.ProviderDiscovery
+	connectionDefs map[string]providermanifestv1.ProviderConnectionParam
 	connectionMode core.ConnectionMode
 }
 
-func NewDeclarativeProvider(manifest *pluginmanifestv1.Manifest, httpClient *http.Client, opts ...DeclarativeProviderOption) (*DeclarativeProvider, error) {
+func NewDeclarativeProvider(manifest *providermanifestv1.Manifest, httpClient *http.Client, opts ...DeclarativeProviderOption) (*DeclarativeProvider, error) {
 	if manifest == nil {
 		return nil, fmt.Errorf("manifest is required")
 	}
@@ -111,7 +111,7 @@ func NewDeclarativeProvider(manifest *pluginmanifestv1.Manifest, httpClient *htt
 		opt(p)
 	}
 	if p.connectionMode == "" {
-		if p.auth == nil || p.auth.Type == "" || p.auth.Type == pluginmanifestv1.AuthTypeNone {
+		if p.auth == nil || p.auth.Type == "" || p.auth.Type == providermanifestv1.AuthTypeNone {
 			p.connectionMode = core.ConnectionModeNone
 		} else {
 			p.connectionMode = core.ConnectionModeUser
@@ -208,7 +208,7 @@ func (p *DeclarativeProvider) SupportsManualAuth() bool {
 	if p.auth == nil {
 		return false
 	}
-	return p.auth.Type == pluginmanifestv1.AuthTypeManual || p.auth.Type == pluginmanifestv1.AuthTypeBearer
+	return p.auth.Type == providermanifestv1.AuthTypeManual || p.auth.Type == providermanifestv1.AuthTypeBearer
 }
 
 func (p *DeclarativeProvider) CredentialFields() []core.CredentialFieldDef {
@@ -223,11 +223,11 @@ func (p *DeclarativeProvider) AuthTypes() []string {
 		return nil
 	}
 	switch p.auth.Type {
-	case pluginmanifestv1.AuthTypeOAuth2:
+	case providermanifestv1.AuthTypeOAuth2:
 		return []string{"oauth"}
-	case pluginmanifestv1.AuthTypeBearer, pluginmanifestv1.AuthTypeManual:
+	case providermanifestv1.AuthTypeBearer, providermanifestv1.AuthTypeManual:
 		return []string{"manual"}
-	case pluginmanifestv1.AuthTypeNone:
+	case providermanifestv1.AuthTypeNone:
 		return nil
 	default:
 		return nil
@@ -235,21 +235,21 @@ func (p *DeclarativeProvider) AuthTypes() []string {
 }
 
 func (p *DeclarativeProvider) AuthorizationURL(state string, scopes []string) string {
-	if p.auth == nil || p.auth.Type != pluginmanifestv1.AuthTypeOAuth2 {
+	if p.auth == nil || p.auth.Type != providermanifestv1.AuthTypeOAuth2 {
 		return ""
 	}
 	return p.auth.AuthorizationURL
 }
 
 func (p *DeclarativeProvider) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
-	if p.auth == nil || p.auth.Type != pluginmanifestv1.AuthTypeOAuth2 {
+	if p.auth == nil || p.auth.Type != providermanifestv1.AuthTypeOAuth2 {
 		return nil, fmt.Errorf("provider does not support OAuth")
 	}
 	return nil, fmt.Errorf("declarative provider OAuth exchange not implemented")
 }
 
 func (p *DeclarativeProvider) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
-	if p.auth == nil || p.auth.Type != pluginmanifestv1.AuthTypeOAuth2 {
+	if p.auth == nil || p.auth.Type != providermanifestv1.AuthTypeOAuth2 {
 		return nil, fmt.Errorf("provider does not support OAuth")
 	}
 	return nil, fmt.Errorf("declarative provider OAuth refresh not implemented")

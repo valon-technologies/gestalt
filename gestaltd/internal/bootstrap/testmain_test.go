@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
+	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
 
@@ -92,7 +92,7 @@ func TestMain(m *testing.M) {
 
 func buildBootstrapTestBinary(dir, target, output string) error {
 	if target == "" {
-		return pluginpkg.BuildGoProviderBinary(dir, output, filepath.Base(dir), runtime.GOOS, runtime.GOARCH)
+		return providerpkg.BuildGoProviderBinary(dir, output, filepath.Base(dir), runtime.GOOS, runtime.GOARCH)
 	}
 	return runGoCommand(dir, "build", "-o", output, target)
 }

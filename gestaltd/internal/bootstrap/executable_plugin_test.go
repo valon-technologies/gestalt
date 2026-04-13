@@ -13,9 +13,9 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
+	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"gopkg.in/yaml.v3"
 )
 
@@ -106,17 +106,17 @@ func TestPythonSourcePluginFallsBackWithoutGoOnPath(t *testing.T) {
 
 	bin := buildExampleProviderBinary(t)
 	root := t.TempDir()
-	manifest := &pluginmanifestv1.Manifest{
-		Kind:        pluginmanifestv1.KindPlugin,
+	manifest := &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindPlugin,
 		Source:      "github.com/testowner/plugins/python-source",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Python Source",
 		Description: "Python source provider fixture",
-		Spec: &pluginmanifestv1.Spec{
-			Auth: &pluginmanifestv1.ProviderAuth{Type: pluginmanifestv1.AuthTypeNone},
+		Spec: &providermanifestv1.Spec{
+			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
 		},
 	}
-	manifestData, err := pluginpkg.EncodeSourceManifestFormat(manifest, pluginpkg.ManifestFormatYAML)
+	manifestData, err := providerpkg.EncodeSourceManifestFormat(manifest, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("EncodeSourceManifestFormat: %v", err)
 	}
@@ -139,7 +139,7 @@ plugin = "provider"
 	if err != nil {
 		t.Fatalf("yaml.Marshal(catalog): %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(root, pluginpkg.StaticCatalogFile), catalogData, 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, providerpkg.StaticCatalogFile), catalogData, 0o644); err != nil {
 		t.Fatalf("WriteFile(catalog.yaml): %v", err)
 	}
 	if err := os.MkdirAll(filepath.Join(root, ".venv", "bin"), 0o755); err != nil {
@@ -295,21 +295,21 @@ func writeStaticCatalog(t *testing.T, cat *catalog.Catalog) string {
 		t.Fatalf("yaml.Marshal(catalog): %v", err)
 	}
 	dir := t.TempDir()
-	path := filepath.Join(dir, pluginpkg.StaticCatalogFile)
+	path := filepath.Join(dir, providerpkg.StaticCatalogFile)
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Fatalf("WriteFile(catalog): %v", err)
 	}
 	return dir
 }
 
-func newExecutableManifest(displayName, description string) *pluginmanifestv1.Manifest {
-	return &pluginmanifestv1.Manifest{
-		Kind:        pluginmanifestv1.KindPlugin,
+func newExecutableManifest(displayName, description string) *providermanifestv1.Manifest {
+	return &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindPlugin,
 		Source:      "github.com/acme/plugins/test",
 		Version:     "1.0.0",
 		DisplayName: displayName,
 		Description: description,
-		Spec:        &pluginmanifestv1.Spec{},
+		Spec:        &providermanifestv1.Spec{},
 	}
 }
 
@@ -325,8 +325,8 @@ func TestPluginManifestOAuthWiresConnectionAuth(t *testing.T) {
 		},
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-	manifest.Spec.Auth = &pluginmanifestv1.ProviderAuth{
-		Type:             pluginmanifestv1.AuthTypeOAuth2,
+	manifest.Spec.Auth = &providermanifestv1.ProviderAuth{
+		Type:             providermanifestv1.AuthTypeOAuth2,
 		AuthorizationURL: "https://example.com/authorize",
 		TokenURL:         "https://example.com/token",
 		Scopes:           []string{"read", "write"},
@@ -442,7 +442,7 @@ func TestPluginManifestNamedOAuthKeepsProviderTokenMode(t *testing.T) {
 					Connections: map[string]*config.ConnectionDef{
 						"workspace": {
 							Auth: config.ConnectionAuthDef{
-								Type:             pluginmanifestv1.AuthTypeOAuth2,
+								Type:             providermanifestv1.AuthTypeOAuth2,
 								AuthorizationURL: "https://example.com/authorize",
 								TokenURL:         "https://example.com/token",
 							},

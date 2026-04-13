@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"gopkg.in/yaml.v3"
 )
 
@@ -984,7 +984,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 					Plugins: map[string]*ProviderEntry{
 						"sample": {
 							Source: ProviderSource{Path: "./manifest.yaml"},
-							Auth:   &ConnectionAuthDef{Type: pluginmanifestv1.AuthTypeMCPOAuth},
+							Auth:   &ConnectionAuthDef{Type: providermanifestv1.AuthTypeMCPOAuth},
 						},
 					},
 				},
@@ -999,7 +999,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 						"sample": {
 							Source: ProviderSource{Path: "./manifest.yaml"},
 							Connections: map[string]*ConnectionDef{
-								"default": {Auth: ConnectionAuthDef{Type: pluginmanifestv1.AuthTypeMCPOAuth}},
+								"default": {Auth: ConnectionAuthDef{Type: providermanifestv1.AuthTypeMCPOAuth}},
 							},
 						},
 					},

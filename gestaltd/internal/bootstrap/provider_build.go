@@ -25,10 +25,10 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/openapi"
 	"github.com/valon-technologies/gestalt/server/internal/operationexposure"
 	"github.com/valon-technologies/gestalt/server/internal/pluginhost"
-	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
+	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"google.golang.org/grpc"
 )
 
@@ -251,7 +251,7 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 }
 
 type specProviderConfig struct {
-	manifestPlugin       *pluginmanifestv1.Spec
+	manifestPlugin       *providermanifestv1.Spec
 	allowedOperations    map[string]*config.OperationOverride
 	allowedHosts         []string
 	baseURL              string
@@ -264,7 +264,7 @@ type specAuthFallback struct {
 	connectionName string
 }
 
-func newProviderBuildResult(name string, entry *config.ProviderEntry, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, prov core.Provider, authFallback *specAuthFallback, deps Deps) (*ProviderBuildResult, error) {
+func newProviderBuildResult(name string, entry *config.ProviderEntry, manifest *providermanifestv1.Manifest, pluginConfig map[string]any, prov core.Provider, authFallback *specAuthFallback, deps Deps) (*ProviderBuildResult, error) {
 	result := &ProviderBuildResult{Provider: prov}
 	var err error
 	result.ConnectionAuth, err = buildConnectionAuthMap(name, entry, manifest, pluginConfig, authFallback, deps)
@@ -275,7 +275,7 @@ func newProviderBuildResult(name string, entry *config.ProviderEntry, manifest *
 	return result, nil
 }
 
-func buildSpecLoadedProvider(ctx context.Context, name string, entry *config.ProviderEntry, manifest *pluginmanifestv1.Manifest, pluginConfig map[string]any, meta providerMetadata, deps Deps, allowedOperations map[string]*config.OperationOverride) (*ProviderBuildResult, error) {
+func buildSpecLoadedProvider(ctx context.Context, name string, entry *config.ProviderEntry, manifest *providermanifestv1.Manifest, pluginConfig map[string]any, meta providerMetadata, deps Deps, allowedOperations map[string]*config.OperationOverride) (*ProviderBuildResult, error) {
 	mp := manifest.Spec
 	plan, err := buildPluginConnectionPlan(entry, mp)
 	if err != nil {
@@ -468,14 +468,14 @@ func buildPluginProvider(ctx context.Context, entry *config.ProviderEntry, plugi
 		}
 		rootDir := filepath.Dir(entry.ResolvedManifestPath)
 		var err error
-		command, args, cleanup, err = pluginpkg.SourceProviderExecutionCommand(rootDir, runtime.GOOS, runtime.GOARCH)
-		if errors.Is(err, pluginpkg.ErrNoSourceProviderPackage) {
+		command, args, cleanup, err = providerpkg.SourceProviderExecutionCommand(rootDir, runtime.GOOS, runtime.GOARCH)
+		if errors.Is(err, providerpkg.ErrNoSourceProviderPackage) {
 			return nil, fmt.Errorf("prepare synthesized source provider execution: no Go or Python provider source found")
 		}
 		if err != nil {
 			return nil, fmt.Errorf("prepare synthesized source provider execution: %w", err)
 		}
-		execEnv, err := pluginpkg.SourceProviderExecutionEnv(rootDir, runtime.GOOS, runtime.GOARCH)
+		execEnv, err := providerpkg.SourceProviderExecutionEnv(rootDir, runtime.GOOS, runtime.GOARCH)
 		if err != nil {
 			return nil, fmt.Errorf("prepare synthesized source provider environment: %w", err)
 		}
@@ -530,7 +530,7 @@ func clonePluginEnv(src map[string]string) map[string]string {
 	return dst
 }
 
-func buildPluginStaticSpec(name string, entry *config.ProviderEntry, manifest *pluginmanifestv1.Manifest, meta providerMetadata) (pluginhost.StaticProviderSpec, error) {
+func buildPluginStaticSpec(name string, entry *config.ProviderEntry, manifest *providermanifestv1.Manifest, meta providerMetadata) (pluginhost.StaticProviderSpec, error) {
 	if manifest == nil || manifest.Spec == nil {
 		return pluginhost.StaticProviderSpec{}, fmt.Errorf("resolved manifest is required")
 	}
@@ -560,16 +560,16 @@ func buildPluginStaticSpec(name string, entry *config.ProviderEntry, manifest *p
 	var staticCatalog *catalog.Catalog
 	if manifestRoot := filepath.Dir(entry.ResolvedManifestPath); entry.ResolvedManifestPath != "" {
 		var err error
-		staticCatalog, err = pluginpkg.ReadStaticCatalog(manifestRoot, name)
+		staticCatalog, err = providerpkg.ReadStaticCatalog(manifestRoot, name)
 		if err != nil {
 			return pluginhost.StaticProviderSpec{}, err
 		}
 	}
-	if staticCatalog == nil && pluginpkg.StaticCatalogRequired(manifest) {
+	if staticCatalog == nil && providerpkg.StaticCatalogRequired(manifest) {
 		if entry.ResolvedManifestPath == "" {
 			return pluginhost.StaticProviderSpec{}, fmt.Errorf("resolved manifest path is required for executable provider static catalog")
 		}
-		return pluginhost.StaticProviderSpec{}, fmt.Errorf("executable providers without declarative or spec surfaces must define %s", pluginpkg.StaticCatalogFile)
+		return pluginhost.StaticProviderSpec{}, fmt.Errorf("executable providers without declarative or spec surfaces must define %s", providerpkg.StaticCatalogFile)
 	}
 	if staticCatalog != nil {
 		if displayName != "" {
@@ -597,19 +597,19 @@ func buildPluginStaticSpec(name string, entry *config.ProviderEntry, manifest *p
 	}, nil
 }
 
-func staticAuthTypes(authType pluginmanifestv1.AuthType) []string {
+func staticAuthTypes(authType providermanifestv1.AuthType) []string {
 	switch authType {
-	case "", pluginmanifestv1.AuthTypeNone:
+	case "", providermanifestv1.AuthTypeNone:
 		return nil
-	case pluginmanifestv1.AuthTypeManual, pluginmanifestv1.AuthTypeBearer:
+	case providermanifestv1.AuthTypeManual, providermanifestv1.AuthTypeBearer:
 		return []string{"manual"}
 	default:
 		return []string{"oauth"}
 	}
 }
 
-func mcpOAuthBuildOpts(conn config.ConnectionDef, manifestPlugin *pluginmanifestv1.Spec, deps Deps) []provider.BuildOption {
-	if manifestPlugin == nil || conn.Auth.Type != pluginmanifestv1.AuthTypeMCPOAuth || manifestPlugin.MCPURL() == "" {
+func mcpOAuthBuildOpts(conn config.ConnectionDef, manifestPlugin *providermanifestv1.Spec, deps Deps) []provider.BuildOption {
+	if manifestPlugin == nil || conn.Auth.Type != providermanifestv1.AuthTypeMCPOAuth || manifestPlugin.MCPURL() == "" {
 		return nil
 	}
 	return []provider.BuildOption{
@@ -617,14 +617,14 @@ func mcpOAuthBuildOpts(conn config.ConnectionDef, manifestPlugin *pluginmanifest
 	}
 }
 
-func manifestHeaders(manifestPlugin *pluginmanifestv1.Spec) map[string]string {
+func manifestHeaders(manifestPlugin *providermanifestv1.Spec) map[string]string {
 	if manifestPlugin == nil || len(manifestPlugin.Headers) == 0 {
 		return nil
 	}
 	return maps.Clone(manifestPlugin.Headers)
 }
 
-func applyProviderHeaders(def *provider.Definition, manifestPlugin *pluginmanifestv1.Spec) {
+func applyProviderHeaders(def *provider.Definition, manifestPlugin *providermanifestv1.Spec) {
 	if def == nil {
 		return
 	}
@@ -635,7 +635,7 @@ func applyProviderHeaders(def *provider.Definition, manifestPlugin *pluginmanife
 	def.Headers = headers
 }
 
-func applyManagedParameters(def *provider.Definition, manifestPlugin *pluginmanifestv1.Spec) error {
+func applyManagedParameters(def *provider.Definition, manifestPlugin *providermanifestv1.Spec) error {
 	if def == nil || manifestPlugin == nil || len(manifestPlugin.ManagedParameters) == 0 {
 		return nil
 	}
@@ -678,7 +678,7 @@ func applyManagedParameters(def *provider.Definition, manifestPlugin *pluginmani
 	return nil
 }
 
-func isManagedOperationParameter(param provider.ParameterDef, managed []pluginmanifestv1.ManagedParameter) bool {
+func isManagedOperationParameter(param provider.ParameterDef, managed []providermanifestv1.ManagedParameter) bool {
 	location := strings.ToLower(strings.TrimSpace(param.Location))
 	if location == "" {
 		return false
@@ -698,7 +698,7 @@ func isManagedOperationParameter(param provider.ParameterDef, managed []pluginma
 	return false
 }
 
-func applyProviderResponseMapping(def *provider.Definition, manifestPlugin *pluginmanifestv1.Spec) {
+func applyProviderResponseMapping(def *provider.Definition, manifestPlugin *providermanifestv1.Spec) {
 	if def == nil || manifestPlugin == nil || manifestPlugin.ResponseMapping == nil {
 		return
 	}
@@ -714,7 +714,7 @@ func applyProviderResponseMapping(def *provider.Definition, manifestPlugin *plug
 	def.ResponseMapping = rm
 }
 
-func applyProviderPagination(def *provider.Definition, manifestPlugin *pluginmanifestv1.Spec, allowedOperations map[string]*config.OperationOverride) {
+func applyProviderPagination(def *provider.Definition, manifestPlugin *providermanifestv1.Spec, allowedOperations map[string]*config.OperationOverride) {
 	if def == nil || manifestPlugin == nil {
 		return
 	}
@@ -740,7 +740,7 @@ func applyProviderPagination(def *provider.Definition, manifestPlugin *pluginman
 	}
 }
 
-func mergedPaginationConfig(base, override *pluginmanifestv1.ManifestPaginationConfig) *pluginmanifestv1.ManifestPaginationConfig {
+func mergedPaginationConfig(base, override *providermanifestv1.ManifestPaginationConfig) *providermanifestv1.ManifestPaginationConfig {
 	if base == nil && override == nil {
 		return nil
 	}
@@ -775,17 +775,17 @@ func mergedPaginationConfig(base, override *pluginmanifestv1.ManifestPaginationC
 	return &merged
 }
 
-func cloneManifestValueSelector(in *pluginmanifestv1.ManifestValueSelector) *pluginmanifestv1.ManifestValueSelector {
+func cloneManifestValueSelector(in *providermanifestv1.ManifestValueSelector) *providermanifestv1.ManifestValueSelector {
 	if in == nil {
 		return nil
 	}
-	return &pluginmanifestv1.ManifestValueSelector{
+	return &providermanifestv1.ManifestValueSelector{
 		Source: in.Source,
 		Path:   in.Path,
 	}
 }
 
-func cloneManifestValueSelectorDef(in *pluginmanifestv1.ManifestValueSelector) *provider.ValueSelectorDef {
+func cloneManifestValueSelectorDef(in *providermanifestv1.ManifestValueSelector) *provider.ValueSelectorDef {
 	if in == nil {
 		return nil
 	}

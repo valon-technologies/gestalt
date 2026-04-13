@@ -10,8 +10,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
+	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 )
 
 const (
@@ -214,7 +214,7 @@ func findAssetForPlatform(assets []releaseAsset, goos, goarch, plugin, version s
 }
 
 func platformAssetNameFor(goos, goarch, plugin, version string) string {
-	return fmt.Sprintf("%s%s_v%s_%s.tar.gz", platformAssetPrefix, plugin, version, pluginpkg.PlatformArchiveSuffix(goos, goarch))
+	return fmt.Sprintf("%s%s_v%s_%s.tar.gz", platformAssetPrefix, plugin, version, providerpkg.PlatformArchiveSuffix(goos, goarch))
 }
 
 func genericAssetName(plugin, version string) string {
@@ -308,7 +308,7 @@ func platformSuffixCandidatesFor(goos, goarch string) []string {
 	return suffixes
 }
 
-// Remote plugin packages are tarball archives today; pluginpkg only reads gzip-compressed tar packages.
+// Remote plugin packages are tarball archives today; providerpkg only reads gzip-compressed tar packages.
 func trimPackageArchiveExtension(name string) (string, bool) {
 	for _, ext := range []string{".tar.gz", ".tgz"} {
 		if strings.HasSuffix(name, ext) {
@@ -329,7 +329,7 @@ func joinAssetNames(assets []releaseAsset) string {
 	return strings.Join(names, ", ")
 }
 
-func DownloadResolvedAsset(ctx context.Context, client *http.Client, assetURL, token string) (*pluginpkg.DownloadResult, error) {
+func DownloadResolvedAsset(ctx context.Context, client *http.Client, assetURL, token string) (*providerpkg.DownloadResult, error) {
 	if client == nil {
 		client = http.DefaultClient
 	}
@@ -342,10 +342,10 @@ func DownloadResolvedAsset(ctx context.Context, client *http.Client, assetURL, t
 	if token != "" {
 		req.Header.Set(headerAuthorization, authTokenPrefix+token)
 	}
-	return pluginpkg.DownloadRequest(client, req)
+	return providerpkg.DownloadRequest(client, req)
 }
 
-func (r *GitHubResolver) downloadAsset(ctx context.Context, client *http.Client, assetURL, token string) (*pluginpkg.DownloadResult, error) {
+func (r *GitHubResolver) downloadAsset(ctx context.Context, client *http.Client, assetURL, token string) (*providerpkg.DownloadResult, error) {
 	return DownloadResolvedAsset(ctx, client, assetURL, token)
 }
 
@@ -409,7 +409,7 @@ func extractPlatformFromAssetName(name, plugin, version string) (string, bool) {
 	if goarch == "" {
 		return "", false
 	}
-	return pluginpkg.PlatformString(goos, goarch), true
+	return providerpkg.PlatformString(goos, goarch), true
 }
 
 // matchArch resolves an arch string that may contain trailing qualifiers

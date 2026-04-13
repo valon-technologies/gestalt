@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
 type Definition struct {
@@ -94,11 +94,11 @@ type OperationDef struct {
 	Pagination  *PaginationDef  `yaml:"pagination" json:"pagination"`
 }
 
-type AuthMappingDef = pluginmanifestv1.AuthMapping
-type BasicAuthMappingDef = pluginmanifestv1.BasicAuthMapping
-type AuthValueDef = pluginmanifestv1.AuthValue
-type AuthValueFromDef = pluginmanifestv1.AuthValueFrom
-type CredentialFieldRefDef = pluginmanifestv1.CredentialFieldRef
+type AuthMappingDef = providermanifestv1.AuthMapping
+type BasicAuthMappingDef = providermanifestv1.BasicAuthMapping
+type AuthValueDef = providermanifestv1.AuthValue
+type AuthValueFromDef = providermanifestv1.AuthValueFrom
+type CredentialFieldRefDef = providermanifestv1.CredentialFieldRef
 
 type ValueSelectorDef struct {
 	Source string `yaml:"source" json:"source"`
@@ -115,7 +115,7 @@ type PaginationDef struct {
 	MaxPages     int               `yaml:"maxPages" json:"maxPages"`
 }
 
-type CredentialFieldDef = pluginmanifestv1.CredentialField
+type CredentialFieldDef = providermanifestv1.CredentialField
 
 type ResponseMappingDef struct {
 	DataPath   string                `yaml:"dataPath" json:"dataPath"`

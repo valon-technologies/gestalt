@@ -16,8 +16,8 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
 func buildGestaltdBinary(t *testing.T) string {
@@ -37,7 +37,7 @@ func hostFromTestServer(t *testing.T, ts *httptest.Server) string {
 	return host
 }
 
-func echoExecutableManifest(t *testing.T, name string, ops ...catalog.CatalogOperation) (string, *pluginmanifestv1.Manifest) {
+func echoExecutableManifest(t *testing.T, name string, ops ...catalog.CatalogOperation) (string, *providermanifestv1.Manifest) {
 	t.Helper()
 	root := writeStaticCatalog(t, &catalog.Catalog{
 		Name:       name,
@@ -151,7 +151,7 @@ func TestSandboxedSynthesizedSourcePluginCanStart(t *testing.T) {
 
 	hostBin := buildGestaltdBinary(t)
 	manifestPath := filepath.Join(exampleProviderRoot(t), "manifest.yaml")
-	_, manifest, err := pluginpkg.ReadSourceManifestFile(manifestPath)
+	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
 	if err != nil {
 		t.Fatalf("ReadSourceManifestFile: %v", err)
 	}

@@ -4,10 +4,10 @@ import (
 	"maps"
 
 	"github.com/valon-technologies/gestalt/server/core"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
-func ConnectionParamDefsFromManifest(defs map[string]pluginmanifestv1.ProviderConnectionParam) map[string]core.ConnectionParamDef {
+func ConnectionParamDefsFromManifest(defs map[string]providermanifestv1.ProviderConnectionParam) map[string]core.ConnectionParamDef {
 	if len(defs) == 0 {
 		return nil
 	}
@@ -22,7 +22,7 @@ func ConnectionParamDefsFromManifest(defs map[string]pluginmanifestv1.ProviderCo
 	return out
 }
 
-func CredentialFieldsFromManifest(fields []pluginmanifestv1.CredentialField) []core.CredentialFieldDef {
+func CredentialFieldsFromManifest(fields []providermanifestv1.CredentialField) []core.CredentialFieldDef {
 	if len(fields) == 0 {
 		return nil
 	}
@@ -37,7 +37,7 @@ func CredentialFieldsFromManifest(fields []pluginmanifestv1.CredentialField) []c
 	return out
 }
 
-func DiscoveryConfigFromManifest(discovery *pluginmanifestv1.ProviderDiscovery) *core.DiscoveryConfig {
+func DiscoveryConfigFromManifest(discovery *providermanifestv1.ProviderDiscovery) *core.DiscoveryConfig {
 	if discovery == nil {
 		return nil
 	}

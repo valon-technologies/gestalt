@@ -36,7 +36,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 )
@@ -815,7 +815,7 @@ func TestListIntegrations_DerivesAuthTypesFromConnectionsWhenProviderOmitsThem(t
 		Connections: map[string]*config.ConnectionDef{
 			"default": {
 				Auth: config.ConnectionAuthDef{
-					Type: pluginmanifestv1.AuthTypeManual,
+					Type: providermanifestv1.AuthTypeManual,
 				},
 			},
 		},
@@ -878,7 +878,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 			Version: "1.0.0",
 		},
 		Auth: &config.ConnectionAuthDef{
-			Type: pluginmanifestv1.AuthTypeManual,
+			Type: providermanifestv1.AuthTypeManual,
 			Credentials: []config.CredentialFieldDef{
 				{Name: "plugin_token", Description: "Plugin Config Description"},
 				{Name: "plugin_local_only", Label: "Plugin Local Only", Description: "Plugin Local Only Description"},
@@ -888,7 +888,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 			"workspace": {
 				DisplayName: "Workspace OAuth",
 				Auth: config.ConnectionAuthDef{
-					Type: pluginmanifestv1.AuthTypeManual,
+					Type: providermanifestv1.AuthTypeManual,
 					Credentials: []config.CredentialFieldDef{
 						{Name: "workspace_token", Label: "Workspace Config Token"},
 						{Name: "workspace_local_only", Label: "Workspace Local Only", Description: "Workspace Local Only Description"},
@@ -896,21 +896,21 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 				},
 			},
 		},
-		ResolvedManifest: &pluginmanifestv1.Manifest{
-			Spec: &pluginmanifestv1.Spec{
-				Auth: &pluginmanifestv1.ProviderAuth{
-					Type: pluginmanifestv1.AuthTypeManual,
-					Credentials: []pluginmanifestv1.CredentialField{
+		ResolvedManifest: &providermanifestv1.Manifest{
+			Spec: &providermanifestv1.Spec{
+				Auth: &providermanifestv1.ProviderAuth{
+					Type: providermanifestv1.AuthTypeManual,
+					Credentials: []providermanifestv1.CredentialField{
 						{Name: "plugin_token", Label: "Plugin Manifest Token", Description: "Plugin Manifest Description"},
 						{Name: "plugin_manifest_only", Label: "Plugin Manifest Only", Description: "Plugin Manifest Only Description"},
 					},
 				},
-				Connections: map[string]*pluginmanifestv1.ManifestConnectionDef{
+				Connections: map[string]*providermanifestv1.ManifestConnectionDef{
 					"workspace": {
 						DisplayName: "Workspace Access",
-						Auth: &pluginmanifestv1.ProviderAuth{
-							Type: pluginmanifestv1.AuthTypeManual,
-							Credentials: []pluginmanifestv1.CredentialField{
+						Auth: &providermanifestv1.ProviderAuth{
+							Type: providermanifestv1.AuthTypeManual,
+							Credentials: []providermanifestv1.CredentialField{
 								{Name: "workspace_token", Label: "Workspace Manifest Token", Description: "Workspace Manifest Description"},
 								{Name: "workspace_manifest_only", Label: "Workspace Manifest Only", Description: "Workspace Manifest Only Description"},
 							},
@@ -1109,7 +1109,7 @@ func TestListIntegrations_ConnectionInfosIncludeProviderManualAuth(t *testing.T)
 			},
 			plugin: &config.ProviderEntry{
 				Auth: &config.ConnectionAuthDef{
-					Type:             pluginmanifestv1.AuthTypeOAuth2,
+					Type:             providermanifestv1.AuthTypeOAuth2,
 					AuthorizationURL: "https://example.com/oauth/authorize",
 					TokenURL:         "https://example.com/oauth/token",
 				},
@@ -1182,7 +1182,7 @@ func TestListIntegrations_ConnectionInfosIncludeProviderManualAuth(t *testing.T)
 			},
 			plugin: &config.ProviderEntry{
 				Auth: &config.ConnectionAuthDef{
-					Type: pluginmanifestv1.AuthTypeManual,
+					Type: providermanifestv1.AuthTypeManual,
 					Credentials: []config.CredentialFieldDef{
 						{Name: "api_key", Label: "API Key"},
 					},
@@ -6354,7 +6354,7 @@ func TestConnectManual_MultiCredential(t *testing.T) {
 			pluginDefs: map[string]*config.ProviderEntry{
 				"modern-treasury": {
 					Auth: &config.ConnectionAuthDef{
-						Type: pluginmanifestv1.AuthTypeManual,
+						Type: providermanifestv1.AuthTypeManual,
 						Credentials: []config.CredentialFieldDef{
 							{Name: "api_key", Label: "API Key"},
 						},

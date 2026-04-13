@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/valon-technologies/gestalt/server/internal/pluginpkg"
+	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
 func TestE2EValidateRejectsAuditConfigWhenProviderInheritsTelemetry(t *testing.T) {
@@ -199,13 +199,13 @@ func setupPluginDirWithVersion(t *testing.T, baseDir, version string) string {
 
 	pluginDir := filepath.Join(baseDir, "plugin-src")
 	testutil.CopyExampleProviderPlugin(t, pluginDir)
-	manifest := &pluginmanifestv1.Manifest{
-		Kind:        pluginmanifestv1.KindPlugin,
+	manifest := &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindPlugin,
 		Source:      "github.com/test/plugins/provider",
 		Version:     version,
 		DisplayName: "Example Provider",
 		Description: "A minimal example provider built with the public SDK",
-		Spec:        &pluginmanifestv1.Spec{},
+		Spec:        &providermanifestv1.Spec{},
 	}
 	writeManifestFile(t, pluginDir, manifest)
 	return pluginDir
@@ -226,19 +226,19 @@ func setupAuthProviderDir(t *testing.T, baseDir, name string) string {
 	if err := os.MkdirAll(filepath.Dir(artifactPath), 0o755); err != nil {
 		t.Fatalf("MkdirAll(%s): %v", filepath.Dir(artifactPath), err)
 	}
-	if _, err := pluginpkg.BuildSourceComponentReleaseBinary(providerDir, artifactPath, pluginmanifestv1.KindAuth, runtime.GOOS, runtime.GOARCH); err != nil {
+	if _, err := providerpkg.BuildSourceComponentReleaseBinary(providerDir, artifactPath, providermanifestv1.KindAuth, runtime.GOOS, runtime.GOARCH); err != nil {
 		t.Fatalf("BuildSourceComponentReleaseBinary(%s): %v", providerDir, err)
 	}
-	writeManifestFile(t, providerDir, &pluginmanifestv1.Manifest{
-		Kind:        pluginmanifestv1.KindAuth,
+	writeManifestFile(t, providerDir, &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindAuth,
 		Source:      "github.com/test/providers/auth/" + name,
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "Test Auth " + name,
-		Spec:        &pluginmanifestv1.Spec{},
-		Artifacts: []pluginmanifestv1.Artifact{
+		Spec:        &providermanifestv1.Spec{},
+		Artifacts: []providermanifestv1.Artifact{
 			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: artifactRel},
 		},
-		Entrypoint: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactRel},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	})
 	return providerDir
 }
@@ -257,7 +257,7 @@ func authProviderSource(name string) string {
 func componentProviderManifestPath(t *testing.T, providerDir string) string {
 	t.Helper()
 
-	manifestPath, err := pluginpkg.FindManifestFile(providerDir)
+	manifestPath, err := providerpkg.FindManifestFile(providerDir)
 	if err != nil {
 		t.Fatalf("FindManifestFile(%s): %v", providerDir, err)
 	}
@@ -289,9 +289,9 @@ providers:
 `, datastoreName, authBlock, datastoreName, "sqlite://"+dbPath)
 }
 
-func writeManifestFile(t *testing.T, pluginDir string, manifest *pluginmanifestv1.Manifest) {
+func writeManifestFile(t *testing.T, pluginDir string, manifest *providermanifestv1.Manifest) {
 	t.Helper()
-	data, err := pluginpkg.EncodeSourceManifestFormat(manifest, pluginpkg.ManifestFormatYAML)
+	data, err := providerpkg.EncodeSourceManifestFormat(manifest, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("EncodeSourceManifestFormat: %v", err)
 	}
@@ -327,16 +327,16 @@ func setupIndexedDBProviderDir(t *testing.T, baseDir string) string {
 	}
 
 	artifactRel := filepath.Base(binDest)
-	writeManifestFile(t, providerDir, &pluginmanifestv1.Manifest{
-		Kind:        pluginmanifestv1.KindIndexedDB,
+	writeManifestFile(t, providerDir, &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindIndexedDB,
 		Source:      "github.com/test/providers/indexeddb-inmem",
 		Version:     "0.0.1-alpha.1",
 		DisplayName: "In-Memory IndexedDB",
-		Spec:        &pluginmanifestv1.Spec{},
-		Artifacts: []pluginmanifestv1.Artifact{
+		Spec:        &providermanifestv1.Spec{},
+		Artifacts: []providermanifestv1.Artifact{
 			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: artifactRel},
 		},
-		Entrypoint: &pluginmanifestv1.Entrypoint{ArtifactPath: artifactRel},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	})
 	return providerDir
 }
@@ -367,16 +367,16 @@ func setupPrebuiltPluginDir(t *testing.T, baseDir string) string {
 		t.Fatalf("write catalog.yaml: %v", err)
 	}
 
-	_, srcManifest, err := pluginpkg.ReadSourceManifestFile(filepath.Join(srcDir, "manifest.yaml"))
+	_, srcManifest, err := providerpkg.ReadSourceManifestFile(filepath.Join(srcDir, "manifest.yaml"))
 	if err != nil {
 		t.Fatalf("read source manifest: %v", err)
 	}
 
 	artifactRel := filepath.Base(binDest)
-	srcManifest.Artifacts = []pluginmanifestv1.Artifact{
+	srcManifest.Artifacts = []providermanifestv1.Artifact{
 		{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: artifactRel},
 	}
-	srcManifest.Entrypoint = &pluginmanifestv1.Entrypoint{ArtifactPath: artifactRel}
+	srcManifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: artifactRel}
 	writeManifestFile(t, providerDir, srcManifest)
 	return providerDir
 }
@@ -387,7 +387,7 @@ func writeServeConfig(t *testing.T, dir string, port int) string {
 	indexedDBDir := setupIndexedDBProviderDir(t, dir)
 	indexedDBManifest := componentProviderManifestPath(t, indexedDBDir)
 	pluginDir := setupPrebuiltPluginDir(t, dir)
-	pluginManifest, err := pluginpkg.FindManifestFile(pluginDir)
+	pluginManifest, err := providerpkg.FindManifestFile(pluginDir)
 	if err != nil {
 		t.Fatalf("FindManifestFile(%s): %v", pluginDir, err)
 	}
@@ -702,7 +702,7 @@ func writeE2EConfigWithPaths(t *testing.T, dir, pluginDir, dbPath, artifactsDir 
 	if port == 0 {
 		port = 18080
 	}
-	manifestPath, err := pluginpkg.FindManifestFile(pluginDir)
+	manifestPath, err := providerpkg.FindManifestFile(pluginDir)
 	if err != nil {
 		t.Fatalf("FindManifestFile(%s): %v", pluginDir, err)
 	}

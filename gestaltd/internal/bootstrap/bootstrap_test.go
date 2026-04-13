@@ -18,7 +18,7 @@ import (
 	telemetrynoop "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/noop"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"gopkg.in/yaml.v3"
 )
 
@@ -132,15 +132,15 @@ func TestBootstrap(t *testing.T) {
 		cases := []struct {
 			name           string
 			restConnection string
-			connections    map[string]*pluginmanifestv1.ManifestConnectionDef
+			connections    map[string]*providermanifestv1.ManifestConnectionDef
 			tokenConn      string
 		}{
 			{
 				name: "single named connection is inferred as default",
-				connections: map[string]*pluginmanifestv1.ManifestConnectionDef{
+				connections: map[string]*providermanifestv1.ManifestConnectionDef{
 					"default": {
-						Auth: &pluginmanifestv1.ProviderAuth{
-							Type:             pluginmanifestv1.AuthTypeOAuth2,
+						Auth: &providermanifestv1.ProviderAuth{
+							Type:             providermanifestv1.AuthTypeOAuth2,
 							ClientID:         "client-id",
 							ClientSecret:     "client-secret",
 							AuthorizationURL: "https://example.com/authorize",
@@ -153,10 +153,10 @@ func TestBootstrap(t *testing.T) {
 			{
 				name:           "explicit REST connection is used for invoke",
 				restConnection: "workspace",
-				connections: map[string]*pluginmanifestv1.ManifestConnectionDef{
+				connections: map[string]*providermanifestv1.ManifestConnectionDef{
 					"workspace": {
-						Auth: &pluginmanifestv1.ProviderAuth{
-							Type:             pluginmanifestv1.AuthTypeOAuth2,
+						Auth: &providermanifestv1.ProviderAuth{
+							Type:             providermanifestv1.AuthTypeOAuth2,
 							ClientID:         "client-id",
 							ClientSecret:     "client-secret",
 							AuthorizationURL: "https://example.com/authorize",
@@ -164,8 +164,8 @@ func TestBootstrap(t *testing.T) {
 						},
 					},
 					"backup": {
-						Auth: &pluginmanifestv1.ProviderAuth{
-							Type:             pluginmanifestv1.AuthTypeOAuth2,
+						Auth: &providermanifestv1.ProviderAuth{
+							Type:             providermanifestv1.AuthTypeOAuth2,
 							ClientID:         "client-id",
 							ClientSecret:     "client-secret",
 							AuthorizationURL: "https://example.com/authorize",
@@ -196,13 +196,13 @@ func TestBootstrap(t *testing.T) {
 				cfg := validConfig()
 				cfg.Providers.Plugins = map[string]*config.ProviderEntry{
 					"slack": {
-						ResolvedManifest: &pluginmanifestv1.Manifest{
-							Spec: &pluginmanifestv1.Spec{
-								Surfaces: &pluginmanifestv1.PluginSurfaces{
-									REST: &pluginmanifestv1.RESTSurface{
+						ResolvedManifest: &providermanifestv1.Manifest{
+							Spec: &providermanifestv1.Spec{
+								Surfaces: &providermanifestv1.ProviderSurfaces{
+									REST: &providermanifestv1.RESTSurface{
 										BaseURL:    srv.URL,
 										Connection: tc.restConnection,
-										Operations: []pluginmanifestv1.ProviderOperation{
+										Operations: []providermanifestv1.ProviderOperation{
 											{Name: "users.list", Method: http.MethodGet, Path: "/users"},
 										},
 									},

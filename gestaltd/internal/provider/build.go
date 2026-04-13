@@ -14,7 +14,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/apiexec"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
 // BuildOption configures optional aspects of provider construction.
@@ -80,11 +80,11 @@ func Build(def *Definition, conn config.ConnectionDef, opts ...BuildOption) (cor
 
 	connMode := conn.Mode
 	if connMode == "" {
-		connMode = pluginmanifestv1.ConnectionMode(def.ConnectionMode)
+		connMode = providermanifestv1.ConnectionMode(def.ConnectionMode)
 	}
 	switch connMode {
-	case "", pluginmanifestv1.ConnectionModeNone, pluginmanifestv1.ConnectionModeUser,
-		pluginmanifestv1.ConnectionModeIdentity, pluginmanifestv1.ConnectionModeEither:
+	case "", providermanifestv1.ConnectionModeNone, providermanifestv1.ConnectionModeUser,
+		providermanifestv1.ConnectionModeIdentity, providermanifestv1.ConnectionModeEither:
 		if connMode != "" {
 			base.ConnMode = core.ConnectionMode(connMode)
 		}

@@ -1,6 +1,6 @@
 package config
 
-import pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+import providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 
 type SpecSurface string
 
@@ -29,7 +29,7 @@ func (s SpecSurface) ConnectionField() string {
 	}
 }
 
-func ManifestProviderSurfaceURL(provider *pluginmanifestv1.Spec, surface SpecSurface) string {
+func ManifestProviderSurfaceURL(provider *providermanifestv1.Spec, surface SpecSurface) string {
 	if provider == nil {
 		return ""
 	}
@@ -45,7 +45,7 @@ func ManifestProviderSurfaceURL(provider *pluginmanifestv1.Spec, surface SpecSur
 	}
 }
 
-func ManifestProviderSurfaceConnectionName(provider *pluginmanifestv1.Spec, surface SpecSurface) string {
+func ManifestProviderSurfaceConnectionName(provider *providermanifestv1.Spec, surface SpecSurface) string {
 	if provider == nil {
 		return ""
 	}

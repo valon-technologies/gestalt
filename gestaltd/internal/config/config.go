@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	pluginmanifestv1 "github.com/valon-technologies/gestalt/server/sdk/pluginmanifest/v1"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"gopkg.in/yaml.v3"
 )
 
@@ -105,21 +105,21 @@ type ProviderEntry struct {
 	AllowedOperations map[string]*OperationOverride `yaml:"allowedOperations,omitempty"`
 
 	// Runtime-resolved fields (populated during init/bootstrap, not from YAML)
-	Command              string                              `yaml:"-"`
-	Args                 []string                            `yaml:"-"`
-	ResolvedManifestPath string                              `yaml:"-"`
-	ResolvedManifest     *pluginmanifestv1.Manifest          `yaml:"-"`
-	ResolvedIconFile     string                              `yaml:"-"`
-	HostBinary           string                              `yaml:"-"`
-	ConnectionMode       pluginmanifestv1.ConnectionMode     `yaml:"-"`
-	Auth                 *ConnectionAuthDef                  `yaml:"-"`
-	DefaultConnection    string                              `yaml:"-"`
-	ConnectionParams     map[string]ConnectionParamDef       `yaml:"-"`
-	MCP                  bool                                `yaml:"-"`
-	Discovery            *pluginmanifestv1.ProviderDiscovery `yaml:"-"`
-	ResolvedAssetRoot    string                              `yaml:"-"`
-	MCPToolPrefix        string                              `yaml:"-"`
-	IndexedDBs           map[string]string                   `yaml:"-"`
+	Command              string                                `yaml:"-"`
+	Args                 []string                              `yaml:"-"`
+	ResolvedManifestPath string                                `yaml:"-"`
+	ResolvedManifest     *providermanifestv1.Manifest          `yaml:"-"`
+	ResolvedIconFile     string                                `yaml:"-"`
+	HostBinary           string                                `yaml:"-"`
+	ConnectionMode       providermanifestv1.ConnectionMode     `yaml:"-"`
+	Auth                 *ConnectionAuthDef                    `yaml:"-"`
+	DefaultConnection    string                                `yaml:"-"`
+	ConnectionParams     map[string]ConnectionParamDef         `yaml:"-"`
+	MCP                  bool                                  `yaml:"-"`
+	Discovery            *providermanifestv1.ProviderDiscovery `yaml:"-"`
+	ResolvedAssetRoot    string                                `yaml:"-"`
+	MCPToolPrefix        string                                `yaml:"-"`
+	IndexedDBs           map[string]string                     `yaml:"-"`
 }
 
 func (e *ProviderEntry) HasManagedSource() bool {
@@ -149,7 +149,7 @@ func (e *ProviderEntry) HasResolvedManifest() bool {
 	return e != nil && e.ResolvedManifest != nil
 }
 
-func (e *ProviderEntry) ManifestSpec() *pluginmanifestv1.Spec {
+func (e *ProviderEntry) ManifestSpec() *providermanifestv1.Spec {
 	if e == nil || e.ResolvedManifest == nil {
 		return nil
 	}
@@ -228,44 +228,44 @@ func (s ServerConfig) ManagementAddr() string {
 // ConnectionDef owns authentication and connection parameters for a named
 // connection. All connections in a single integration must share the same Mode.
 type ConnectionDef struct {
-	DisplayName      string                              `yaml:"displayName,omitempty"`
-	Mode             pluginmanifestv1.ConnectionMode     `yaml:"mode"`
-	Auth             ConnectionAuthDef                   `yaml:"auth"`
-	ConnectionParams map[string]ConnectionParamDef       `yaml:"params"`
-	Discovery        *pluginmanifestv1.ProviderDiscovery `yaml:"-"`
+	DisplayName      string                                `yaml:"displayName,omitempty"`
+	Mode             providermanifestv1.ConnectionMode     `yaml:"mode"`
+	Auth             ConnectionAuthDef                     `yaml:"auth"`
+	ConnectionParams map[string]ConnectionParamDef         `yaml:"params"`
+	Discovery        *providermanifestv1.ProviderDiscovery `yaml:"-"`
 }
 
 type ConnectionAuthDef struct {
-	Type                pluginmanifestv1.AuthType `yaml:"type"`
-	AuthorizationURL    string                    `yaml:"authorizationUrl"`
-	TokenURL            string                    `yaml:"tokenUrl"`
-	ClientID            string                    `yaml:"clientId"`
-	ClientSecret        string                    `yaml:"clientSecret"`
-	RedirectURL         string                    `yaml:"redirectUrl"`
-	ClientAuth          string                    `yaml:"clientAuth"`
-	TokenExchange       string                    `yaml:"tokenExchange"`
-	Scopes              []string                  `yaml:"scopes"`
-	ScopeParam          string                    `yaml:"scopeParam"`
-	ScopeSeparator      string                    `yaml:"scopeSeparator"`
-	PKCE                bool                      `yaml:"pkce"`
-	AuthorizationParams map[string]string         `yaml:"authorizationParams"`
-	TokenParams         map[string]string         `yaml:"tokenParams"`
-	RefreshParams       map[string]string         `yaml:"refreshParams"`
-	AcceptHeader        string                    `yaml:"acceptHeader"`
-	AccessTokenPath     string                    `yaml:"accessTokenPath"`
-	TokenMetadata       []string                  `yaml:"tokenMetadata"`
-	Credentials         []CredentialFieldDef      `yaml:"credentials"`
-	AuthMapping         *AuthMappingDef           `yaml:"authMapping"`
+	Type                providermanifestv1.AuthType `yaml:"type"`
+	AuthorizationURL    string                      `yaml:"authorizationUrl"`
+	TokenURL            string                      `yaml:"tokenUrl"`
+	ClientID            string                      `yaml:"clientId"`
+	ClientSecret        string                      `yaml:"clientSecret"`
+	RedirectURL         string                      `yaml:"redirectUrl"`
+	ClientAuth          string                      `yaml:"clientAuth"`
+	TokenExchange       string                      `yaml:"tokenExchange"`
+	Scopes              []string                    `yaml:"scopes"`
+	ScopeParam          string                      `yaml:"scopeParam"`
+	ScopeSeparator      string                      `yaml:"scopeSeparator"`
+	PKCE                bool                        `yaml:"pkce"`
+	AuthorizationParams map[string]string           `yaml:"authorizationParams"`
+	TokenParams         map[string]string           `yaml:"tokenParams"`
+	RefreshParams       map[string]string           `yaml:"refreshParams"`
+	AcceptHeader        string                      `yaml:"acceptHeader"`
+	AccessTokenPath     string                      `yaml:"accessTokenPath"`
+	TokenMetadata       []string                    `yaml:"tokenMetadata"`
+	Credentials         []CredentialFieldDef        `yaml:"credentials"`
+	AuthMapping         *AuthMappingDef             `yaml:"authMapping"`
 }
 
-type CredentialFieldDef = pluginmanifestv1.CredentialField
-type AuthMappingDef = pluginmanifestv1.AuthMapping
-type BasicAuthMappingDef = pluginmanifestv1.BasicAuthMapping
-type AuthValueDef = pluginmanifestv1.AuthValue
-type AuthValueFromDef = pluginmanifestv1.AuthValueFrom
-type CredentialFieldRefDef = pluginmanifestv1.CredentialFieldRef
+type CredentialFieldDef = providermanifestv1.CredentialField
+type AuthMappingDef = providermanifestv1.AuthMapping
+type BasicAuthMappingDef = providermanifestv1.BasicAuthMapping
+type AuthValueDef = providermanifestv1.AuthValue
+type AuthValueFromDef = providermanifestv1.AuthValueFrom
+type CredentialFieldRefDef = providermanifestv1.CredentialFieldRef
 
-type ConnectionParamDef = pluginmanifestv1.ProviderConnectionParam
+type ConnectionParamDef = providermanifestv1.ProviderConnectionParam
 
 // ResolveConnectionAlias maps the user-facing "plugin" alias to the
 // internal PluginConnectionName. All other names pass through unchanged.
@@ -389,7 +389,7 @@ func MergeConnectionDef(dst *ConnectionDef, src *ConnectionDef) {
 	}
 }
 
-func ManifestAuthToConnectionAuthDef(auth *pluginmanifestv1.ProviderAuth) ConnectionAuthDef {
+func ManifestAuthToConnectionAuthDef(auth *providermanifestv1.ProviderAuth) ConnectionAuthDef {
 	if auth == nil {
 		return ConnectionAuthDef{}
 	}
@@ -447,7 +447,7 @@ func cloneAuthValue(src AuthValueDef) AuthValueDef {
 	return dst
 }
 
-func EffectivePluginConnectionDef(plugin *ProviderEntry, manifestPlugin *pluginmanifestv1.Spec) ConnectionDef {
+func EffectivePluginConnectionDef(plugin *ProviderEntry, manifestPlugin *providermanifestv1.Spec) ConnectionDef {
 	conn := ConnectionDef{}
 	if manifestPlugin != nil {
 		conn.Mode = manifestPlugin.ConnectionMode
@@ -471,7 +471,7 @@ func EffectivePluginConnectionDef(plugin *ProviderEntry, manifestPlugin *pluginm
 	return conn
 }
 
-func EffectiveNamedConnectionDef(plugin *ProviderEntry, manifestPlugin *pluginmanifestv1.Spec, name string) (ConnectionDef, bool) {
+func EffectiveNamedConnectionDef(plugin *ProviderEntry, manifestPlugin *providermanifestv1.Spec, name string) (ConnectionDef, bool) {
 	conn := ConnectionDef{}
 	found := false
 
@@ -507,7 +507,7 @@ func EffectiveNamedConnectionDef(plugin *ProviderEntry, manifestPlugin *pluginma
 }
 
 // OperationOverride holds optional alias and description for an allowed operation.
-type OperationOverride = pluginmanifestv1.ManifestOperationOverride
+type OperationOverride = providermanifestv1.ManifestOperationOverride
 
 func Load(path string) (*Config, error) {
 	return loadWithLookup(path, os.LookupEnv, false)
