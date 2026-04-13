@@ -1,12 +1,8 @@
 # gestalt Docker image
 
 `gestalt` is a CLI client for the Gestalt API. It connects to a running
-`gestaltd` server and provides commands for:
-
-- authenticating via OAuth or API tokens
-- listing and connecting third-party integrations
-- invoking integration operations
-- managing configuration and credentials
+`gestaltd` server and provides commands for authenticating, listing plugins,
+invoking integration operations, and managing credentials.
 
 > **Alpha.** Gestalt is under active development. Images are tagged
 > with alpha versions and may introduce breaking changes. See the
@@ -38,9 +34,9 @@ Point the CLI at a running `gestaltd` server:
 ```sh
 docker run --rm \
   -e GESTALT_URL=https://gestalt.example.com \
-  -e GESTALT_API_KEY=gst_... \
+  -e GESTALT_API_KEY=gst_api_... \
   valontechnologies/gestalt:latest \
-  integrations list
+  plugins list
 ```
 
 ### Invoke an operation
@@ -48,9 +44,9 @@ docker run --rm \
 ```sh
 docker run --rm \
   -e GESTALT_URL=https://gestalt.example.com \
-  -e GESTALT_API_KEY=gst_... \
+  -e GESTALT_API_KEY=gst_api_... \
   valontechnologies/gestalt:latest \
-  invoke github search_code -p "query=gestalt org:my-org"
+  plugins invoke github search_code -p "query=gestalt org:my-org"
 ```
 
 ### Use in CI pipelines
@@ -60,7 +56,7 @@ binary is inconvenient:
 
 ```yaml
 jobs:
-  check-integrations:
+  check-plugins:
     runs-on: ubuntu-latest
     steps:
       - run: |
@@ -68,32 +64,28 @@ jobs:
             -e GESTALT_URL="${{ vars.GESTALT_URL }}" \
             -e GESTALT_API_KEY="${{ secrets.GESTALT_API_KEY }}" \
             valontechnologies/gestalt:latest \
-            integrations list --format json
+            plugins list --format json
 ```
 
-## Available commands
+## Key commands
 
-| Command                     | Description                            |
-|-----------------------------|----------------------------------------|
-| `auth login`                | Log in via browser OAuth flow          |
-| `auth logout`               | Log out and clear stored credentials   |
-| `auth status`               | Show authentication status             |
-| `init`                      | Interactive setup wizard               |
-| `config get/set/unset/list` | Manage persistent configuration        |
-| `integrations list`         | List available integrations            |
-| `integrations connect`      | Connect an integration via OAuth or interactive manual auth |
-| `invoke <integ> <op>`       | Execute an integration operation       |
-| `describe <integ> <op>`     | Describe an integration operation      |
-| `tokens create/list/revoke` | Manage API tokens                      |
+| Command | Description |
+|---|---|
+| `plugins list` | List available plugins |
+| `plugins connect NAME` | Connect a plugin via OAuth or manual auth |
+| `plugins disconnect NAME` | Disconnect a plugin |
+| `plugins invoke NAME OP` | Execute a plugin operation |
+| `tokens create/list/revoke` | Manage API tokens |
 
-Use `--format json` or `--format table` to control output format.
+Use `--format json` or `--format table` to control output format. See the
+[CLI reference](https://gestaltd.ai/reference/cli) for the full command list.
 
 ## Environment variables
 
-| Variable          | Description                     |
-|-------------------|---------------------------------|
-| `GESTALT_URL`     | Base URL of the gestaltd server |
-| `GESTALT_API_KEY` | API token for authentication    |
+| Variable | Description |
+|---|---|
+| `GESTALT_URL` | Base URL of the gestaltd server |
+| `GESTALT_API_KEY` | API token for authentication |
 
 ## Debugging
 
@@ -102,7 +94,7 @@ to inspect available commands:
 
 ```sh
 docker run --rm valontechnologies/gestalt:latest --help
-docker run --rm valontechnologies/gestalt:latest invoke --help
+docker run --rm valontechnologies/gestalt:latest plugins invoke --help
 ```
 
 For an interactive shell, use the native binary or Homebrew install instead
