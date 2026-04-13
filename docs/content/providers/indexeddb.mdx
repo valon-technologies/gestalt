@@ -8,24 +8,24 @@ IndexedDB's vocabulary maps naturally onto SQL tables, document collections, and
 
 | Method | W3C equivalent |
 | --- | --- |
-| `IndexedDB.CreateObjectStore` | [`IDBDatabase.createObjectStore`](https://www.w3.org/TR/IndexedDB/#dom-idbdatabase-createobjectstore) |
-| `IndexedDB.DeleteObjectStore` | [`IDBDatabase.deleteObjectStore`](https://www.w3.org/TR/IndexedDB/#dom-idbdatabase-deleteobjectstore) |
-| `IndexedDB.Get` | [`IDBObjectStore.get`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-get) |
-| `IndexedDB.GetKey` | [`IDBObjectStore.getKey`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-getkey) |
-| `IndexedDB.Add` | [`IDBObjectStore.add`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-add) |
-| `IndexedDB.Put` | [`IDBObjectStore.put`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-put) |
-| `IndexedDB.Delete` | [`IDBObjectStore.delete`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-delete) |
-| `IndexedDB.GetAll` | [`IDBObjectStore.getAll`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-getall) |
-| `IndexedDB.GetAllKeys` | [`IDBObjectStore.getAllKeys`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-getallkeys) |
-| `IndexedDB.Count` | [`IDBObjectStore.count`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-count) |
-| `IndexedDB.Clear` | [`IDBObjectStore.clear`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-clear) |
-| `IndexedDB.DeleteRange` | [`IDBObjectStore.delete`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-delete) (with key range) |
-| `IndexedDB.IndexGet` | [`IDBIndex.get`](https://www.w3.org/TR/IndexedDB/#dom-idbindex-get) |
-| `IndexedDB.IndexGetKey` | [`IDBIndex.getKey`](https://www.w3.org/TR/IndexedDB/#dom-idbindex-getkey) |
-| `IndexedDB.IndexGetAll` | [`IDBIndex.getAll`](https://www.w3.org/TR/IndexedDB/#dom-idbindex-getall) |
-| `IndexedDB.IndexGetAllKeys` | [`IDBIndex.getAllKeys`](https://www.w3.org/TR/IndexedDB/#dom-idbindex-getallkeys) |
-| `IndexedDB.IndexCount` | [`IDBIndex.count`](https://www.w3.org/TR/IndexedDB/#dom-idbindex-count) |
-| `IndexedDB.IndexDelete` | [`IDBIndex.delete`](https://www.w3.org/TR/IndexedDB/#dom-idbindex-delete) |
+| `CreateObjectStore` | [`IDBDatabase.createObjectStore`](https://www.w3.org/TR/IndexedDB/#dom-idbdatabase-createobjectstore) |
+| `DeleteObjectStore` | [`IDBDatabase.deleteObjectStore`](https://www.w3.org/TR/IndexedDB/#dom-idbdatabase-deleteobjectstore) |
+| `Get` | [`IDBObjectStore.get`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-get) |
+| `GetKey` | [`IDBObjectStore.getKey`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-getkey) |
+| `Add` | [`IDBObjectStore.add`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-add) |
+| `Put` | [`IDBObjectStore.put`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-put) |
+| `Delete` | [`IDBObjectStore.delete`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-delete) |
+| `GetAll` | [`IDBObjectStore.getAll`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-getall) |
+| `GetAllKeys` | [`IDBObjectStore.getAllKeys`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-getallkeys) |
+| `Count` | [`IDBObjectStore.count`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-count) |
+| `Clear` | [`IDBObjectStore.clear`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-clear) |
+| `DeleteRange` | [`IDBObjectStore.delete`](https://www.w3.org/TR/IndexedDB/#dom-idbobjectstore-delete) (with key range) |
+| `IndexGet` | [`IDBIndex.get`](https://www.w3.org/TR/IndexedDB/#dom-idbindex-get) |
+| `IndexGetKey` | [`IDBIndex.getKey`](https://www.w3.org/TR/IndexedDB/#dom-idbindex-getkey) |
+| `IndexGetAll` | [`IDBIndex.getAll`](https://www.w3.org/TR/IndexedDB/#dom-idbindex-getall) |
+| `IndexGetAllKeys` | [`IDBIndex.getAllKeys`](https://www.w3.org/TR/IndexedDB/#dom-idbindex-getallkeys) |
+| `IndexCount` | [`IDBIndex.count`](https://www.w3.org/TR/IndexedDB/#dom-idbindex-count) |
+| `IndexDelete` | [`IDBIndex.delete`](https://www.w3.org/TR/IndexedDB/#dom-idbindex-delete) |
 
 The examples on this page use the first-party RelationalDB provider, which supports PostgreSQL, MySQL, SQLite, and SQL Server through a single `dsn` config value.
 
