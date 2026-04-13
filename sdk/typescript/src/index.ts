@@ -10,6 +10,7 @@ export {
   type Credential,
   type OperationResult,
   type Request,
+  type ResolvedRequest,
   type Response,
   type Subject,
 } from "./api.ts";

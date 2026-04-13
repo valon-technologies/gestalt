@@ -39,6 +39,8 @@ async fn executes_registered_operation() {
         Request {
             token: "tok".to_owned(),
             connection_params: BTreeMap::new(),
+            subject: Default::default(),
+            credential: Default::default(),
         }
         .connection_param("missing"),
         None
@@ -141,8 +143,8 @@ async fn greet(
             .connection_param("api_key")
             .unwrap_or_default()
             .to_owned(),
-        subject_id: request.subject().id,
-        credential_mode: request.credential().mode,
+        subject_id: request.subject.id,
+        credential_mode: request.credential.mode,
     }))
 }
 
@@ -268,4 +270,56 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
         .into_inner();
     assert_eq!(panic.status, 500);
     assert_eq!(panic.body, r#"{"error":"boom"}"#);
+}
+
+#[tokio::test]
+async fn request_context_survives_spawned_subtasks() {
+    #[derive(Serialize, JsonSchema)]
+    struct SpawnOutput {
+        subject_id: String,
+        credential_mode: String,
+    }
+
+    let router = Router::<TestProvider>::new()
+        .register(
+            Operation::<EchoInput, SpawnOutput>::new("spawn"),
+            |_: Arc<TestProvider>, _input: EchoInput, request: Request| async move {
+                tokio::spawn(async move {
+                    Ok::<Response<SpawnOutput>, std::convert::Infallible>(ok(SpawnOutput {
+                        subject_id: request.subject.id,
+                        credential_mode: request.credential.mode,
+                    }))
+                })
+                .await
+                .expect("spawned task")
+            },
+        )
+        .expect("register operation");
+
+    let result = router
+        .execute(
+            Arc::new(TestProvider),
+            "spawn",
+            serde_json::json!({ "message": "hello" }),
+            Request {
+                token: String::new(),
+                connection_params: BTreeMap::new(),
+                subject: gestalt::Subject {
+                    id: "user:user-123".to_owned(),
+                    kind: "user".to_owned(),
+                    ..Default::default()
+                },
+                credential: gestalt::Credential {
+                    mode: "identity".to_owned(),
+                    ..Default::default()
+                },
+            },
+        )
+        .await;
+
+    assert_eq!(result.status, 200);
+    assert_eq!(
+        result.body,
+        r#"{"subject_id":"user:user-123","credential_mode":"identity"}"#
+    );
 }

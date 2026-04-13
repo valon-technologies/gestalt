@@ -1,5 +1,21 @@
-import { type Catalog, type CatalogOperation, type CatalogSchema, catalogToJson, schemaToCatalogSchema, schemaToParameters, writeCatalogYaml } from "./catalog.ts";
-import { errorMessage, type MaybePromise, type OperationResult, type Request, responseBrand, type Response } from "./api.ts";
+import {
+  type Catalog,
+  type CatalogOperation,
+  type CatalogSchema,
+  catalogToJson,
+  schemaToCatalogSchema,
+  schemaToParameters,
+  writeCatalogYaml,
+} from "./catalog.ts";
+import {
+  errorMessage,
+  type MaybePromise,
+  type OperationResult,
+  type Request,
+  type ResolvedRequest,
+  responseBrand,
+  type Response,
+} from "./api.ts";
 import { RuntimeProvider, type RuntimeProviderOptions } from "./provider.ts";
 import type { Schema } from "./schema.ts";
 
@@ -28,13 +44,21 @@ export interface OperationOptions<In, Out> {
   visible?: boolean;
   input?: Schema<In>;
   output?: Schema<Out>;
-  handler: (input: In, request: Request) => MaybePromise<Out | Response<Out>>;
+  handler: (
+    input: In,
+    request: ResolvedRequest,
+  ) => MaybePromise<Out | Response<Out>>;
 }
 
-export interface OperationDefinition<In, Out> extends OperationOptions<In, Out> {}
+export interface OperationDefinition<In, Out> extends OperationOptions<
+  In,
+  Out
+> {}
 
 export type SessionCatalog = Catalog | Record<string, unknown>;
-export type SessionCatalogHandler = (request: Request) => MaybePromise<SessionCatalog | null | undefined>;
+export type SessionCatalogHandler = (
+  request: ResolvedRequest,
+) => MaybePromise<SessionCatalog | null | undefined>;
 
 export interface PluginDefinitionOptions extends RuntimeProviderOptions {
   connectionMode?: ConnectionMode;
@@ -47,7 +71,9 @@ export interface PluginDefinitionOptions extends RuntimeProviderOptions {
 
 export type IntegrationProviderOptions = PluginDefinitionOptions;
 
-export function operation<In, Out>(options: OperationOptions<In, Out>): OperationDefinition<In, Out> {
+export function operation<In, Out>(
+  options: OperationOptions<In, Out>,
+): OperationDefinition<In, Out> {
   return {
     ...options,
     id: options.id.trim(),
@@ -66,7 +92,10 @@ export class IntegrationProvider extends RuntimeProvider {
   readonly connectionParams: Record<string, ConnectionParamDefinition>;
 
   private readonly sessionCatalogHandler: SessionCatalogHandler | undefined;
-  private readonly operations = new Map<string, OperationDefinition<any, any>>();
+  private readonly operations = new Map<
+    string,
+    OperationDefinition<any, any>
+  >();
 
   constructor(options: PluginDefinitionOptions) {
     super(options);
@@ -99,46 +128,56 @@ export class IntegrationProvider extends RuntimeProvider {
     return this.sessionCatalogHandler !== undefined;
   }
 
-  async catalogForRequest(request: Request): Promise<SessionCatalog | null | undefined> {
+  async catalogForRequest(
+    request: ResolvedRequest,
+  ): Promise<SessionCatalog | null | undefined> {
     return await this.sessionCatalogHandler?.(request);
   }
 
   staticCatalog(): Catalog {
     const catalog: Catalog = {
-      operations: [...this.operations.values()].map<CatalogOperation>((entry) => {
-        const operationCatalog: CatalogOperation = {
-          id: entry.id,
-          method: normalizeMethod(entry.method),
-        };
-        if (entry.title) {
-          operationCatalog.title = entry.title;
-        }
-        if (entry.description) {
-          operationCatalog.description = entry.description;
-        }
-        const parameters = schemaToParameters(entry.input as Schema<unknown> | undefined);
-        if (parameters.length > 0) {
-          operationCatalog.parameters = parameters;
-        }
-        const inputSchema = schemaToCatalogSchema(entry.input as Schema<unknown> | undefined);
-        if (inputSchema !== undefined) {
-          operationCatalog.inputSchema = inputSchema;
-        }
-        const outputSchema = schemaToCatalogSchema(entry.output as Schema<unknown> | undefined);
-        if (outputSchema !== undefined) {
-          operationCatalog.outputSchema = outputSchema;
-        }
-        if (entry.tags && entry.tags.length > 0) {
-          operationCatalog.tags = [...entry.tags];
-        }
-        if (entry.readOnly !== undefined) {
-          operationCatalog.readOnly = entry.readOnly;
-        }
-        if (entry.visible !== undefined) {
-          operationCatalog.visible = entry.visible;
-        }
-        return operationCatalog;
-      }),
+      operations: [...this.operations.values()].map<CatalogOperation>(
+        (entry) => {
+          const operationCatalog: CatalogOperation = {
+            id: entry.id,
+            method: normalizeMethod(entry.method),
+          };
+          if (entry.title) {
+            operationCatalog.title = entry.title;
+          }
+          if (entry.description) {
+            operationCatalog.description = entry.description;
+          }
+          const parameters = schemaToParameters(
+            entry.input as Schema<unknown> | undefined,
+          );
+          if (parameters.length > 0) {
+            operationCatalog.parameters = parameters;
+          }
+          const inputSchema = schemaToCatalogSchema(
+            entry.input as Schema<unknown> | undefined,
+          );
+          if (inputSchema !== undefined) {
+            operationCatalog.inputSchema = inputSchema;
+          }
+          const outputSchema = schemaToCatalogSchema(
+            entry.output as Schema<unknown> | undefined,
+          );
+          if (outputSchema !== undefined) {
+            operationCatalog.outputSchema = outputSchema;
+          }
+          if (entry.tags && entry.tags.length > 0) {
+            operationCatalog.tags = [...entry.tags];
+          }
+          if (entry.readOnly !== undefined) {
+            operationCatalog.readOnly = entry.readOnly;
+          }
+          if (entry.visible !== undefined) {
+            operationCatalog.visible = entry.visible;
+          }
+          return operationCatalog;
+        },
+      ),
     };
 
     if (this.name) {
@@ -164,7 +203,11 @@ export class IntegrationProvider extends RuntimeProvider {
     return catalogToJson(this.staticCatalog());
   }
 
-  async execute(operationId: string, params: Record<string, unknown>, request: Request): Promise<OperationResult> {
+  async execute(
+    operationId: string,
+    params: Record<string, unknown>,
+    request: ResolvedRequest,
+  ): Promise<OperationResult> {
     const entry = this.operations.get(operationId);
     if (!entry) {
       return errorResult(404, "unknown operation");
@@ -173,7 +216,10 @@ export class IntegrationProvider extends RuntimeProvider {
     let input: unknown = undefined;
     try {
       if (entry.input) {
-        input = entry.input.parse(normalizeOperationInput(entry.input, params), "$");
+        input = entry.input.parse(
+          normalizeOperationInput(entry.input, params),
+          "$",
+        );
       }
     } catch (error) {
       return errorResult(400, errorMessage(error));
@@ -198,15 +244,21 @@ export class IntegrationProvider extends RuntimeProvider {
 
 export const Plugin = IntegrationProvider;
 
-export function defineIntegrationProvider(options: PluginDefinitionOptions): IntegrationProvider {
+export function defineIntegrationProvider(
+  options: PluginDefinitionOptions,
+): IntegrationProvider {
   return new IntegrationProvider(options);
 }
 
-export function definePlugin(options: PluginDefinitionOptions): IntegrationProvider {
+export function definePlugin(
+  options: PluginDefinitionOptions,
+): IntegrationProvider {
   return new IntegrationProvider(options);
 }
 
-export function isIntegrationProvider(value: unknown): value is IntegrationProvider {
+export function isIntegrationProvider(
+  value: unknown,
+): value is IntegrationProvider {
   return (
     value instanceof IntegrationProvider ||
     (typeof value === "object" &&
@@ -252,14 +304,20 @@ function isResponse(value: unknown): value is Response<unknown> {
     return false;
   }
   const status = (value as { status?: unknown }).status;
-  return status === undefined || (typeof status === "number" && Number.isInteger(status));
+  return (
+    status === undefined ||
+    (typeof status === "number" && Number.isInteger(status))
+  );
 }
 
 function normalizeMethod(value: string | undefined): string {
   return (value?.trim() || "POST").toUpperCase();
 }
 
-function normalizeOperationInput(schema: Schema<unknown>, params: Record<string, unknown>): unknown {
+function normalizeOperationInput(
+  schema: Schema<unknown>,
+  params: Record<string, unknown>,
+): unknown {
   if (schema.fields) {
     return params ?? {};
   }
@@ -295,9 +353,7 @@ export function connectionModeToProtoValue(mode: ConnectionMode): number {
   }
 }
 
-export function connectionParamToProto(
-  value: ConnectionParamDefinition,
-): {
+export function connectionParamToProto(value: ConnectionParamDefinition): {
   required?: boolean;
   description?: string;
   defaultValue?: string;

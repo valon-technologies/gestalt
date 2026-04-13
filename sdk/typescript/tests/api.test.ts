@@ -37,12 +37,17 @@ test("request helper stores subject and credential context out of band", () => {
     { mode: "identity", subjectId: "identity:__identity__" },
   );
 
-  expect(built).toEqual({
+  expect({
+    token: built.token,
+    connectionParams: built.connectionParams,
+  }).toEqual({
     token: "token-123",
     connectionParams: {
       region: "iad",
     },
   });
+  expect(built.subject.id).toBe("user:user-123");
+  expect(built.credential.mode).toBe("identity");
   expect(requestSubject(built)).toEqual({
     id: "user:user-123",
     kind: "user",
@@ -54,5 +59,39 @@ test("request helper stores subject and credential context out of band", () => {
     subjectId: "identity:__identity__",
     connection: "",
     instance: "",
+  });
+});
+
+test("request helpers round-trip explicit subject and credential fields", () => {
+  const adopted: Request = {
+    token: "token-123",
+    connectionParams: {
+      region: "iad",
+    },
+    subject: {
+      id: "user:user-123",
+      kind: "user",
+      displayName: "Ada",
+      authSource: "session",
+    },
+    credential: {
+      mode: "identity",
+      subjectId: "identity:__identity__",
+      connection: "workspace",
+      instance: "default",
+    },
+  };
+
+  expect(requestSubject(adopted)).toEqual({
+    id: "user:user-123",
+    kind: "user",
+    displayName: "Ada",
+    authSource: "session",
+  });
+  expect(requestCredential(adopted)).toEqual({
+    mode: "identity",
+    subjectId: "identity:__identity__",
+    connection: "workspace",
+    instance: "default",
   });
 });

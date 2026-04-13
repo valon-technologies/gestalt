@@ -4,7 +4,7 @@ use serde::Serialize;
 use serde_json::Value;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
-use crate::api::{Credential, Request, Response, Subject, with_request_context};
+use crate::api::{Credential, Request, Response, Subject};
 use crate::catalog::object_map;
 use crate::env::CURRENT_PROTOCOL_VERSION;
 use crate::error::Error;
@@ -94,16 +94,16 @@ where
         let request = request.into_inner();
         let result = self
             .router
-            .execute_with_context(
+            .execute(
                 Arc::clone(&self.provider),
                 &request.operation,
                 Value::Object(object_map(request.params)),
                 Request {
                     token: request.token,
                     connection_params: request.connection_params.into_iter().collect(),
+                    subject: request_subject(request.context.as_ref()),
+                    credential: request_credential(request.context.as_ref()),
                 },
-                request_subject(request.context.as_ref()),
-                request_credential(request.context.as_ref()),
             )
             .await;
 
@@ -124,17 +124,17 @@ where
         }
 
         let request = request.into_inner();
-        let subject = request_subject(request.context.as_ref());
-        let credential = request_credential(request.context.as_ref());
         let request = Request {
             token: request.token,
             connection_params: request.connection_params.into_iter().collect(),
+            subject: request_subject(request.context.as_ref()),
+            credential: request_credential(request.context.as_ref()),
         };
-        let catalog = with_request_context(subject, credential, async {
-            self.provider.catalog_for_request(&request).await
-        })
-        .await
-        .map_err(|error| Status::unknown(format!("session catalog: {}", error.message())))?;
+        let catalog = self
+            .provider
+            .catalog_for_request(&request)
+            .await
+            .map_err(|error| Status::unknown(format!("session catalog: {}", error.message())))?;
 
         Ok(GrpcResponse::new(GetSessionCatalogResponse { catalog }))
     }

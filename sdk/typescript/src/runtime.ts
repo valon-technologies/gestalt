@@ -43,7 +43,11 @@ import {
   ProviderLifecycle,
   type ConfigureProviderRequest,
 } from "../gen/v1/runtime_pb.ts";
-import { errorMessage, request as buildRequest, type Request } from "./api.ts";
+import {
+  errorMessage,
+  request as buildRequest,
+  type ResolvedRequest,
+} from "./api.ts";
 import {
   AuthProvider,
   isAuthProvider,
@@ -585,7 +589,7 @@ function providerRequest(
   token: string,
   connectionParams: Record<string, string>,
   requestContext?: ProtoRequestContext,
-): Request {
+): ResolvedRequest {
   const subject = requestContext?.subject;
   const credential = requestContext?.credential;
   return buildRequest(token, connectionParams, subject, credential);

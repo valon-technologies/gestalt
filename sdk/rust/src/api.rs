@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 use std::convert::Infallible;
-use std::future::Future;
 
 use tonic::codegen::async_trait;
 
@@ -27,10 +26,6 @@ pub struct Credential {
 pub struct Request {
     pub token: String,
     pub connection_params: BTreeMap<String, String>,
-}
-
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub(crate) struct ScopedRequestContext {
     pub subject: Subject,
     pub credential: Credential,
 }
@@ -40,40 +35,13 @@ impl Request {
         self.connection_params.get(name).map(String::as_str)
     }
 
-    pub fn subject(&self) -> Subject {
-        REQUEST_CONTEXT
-            .try_with(|context| context.subject.clone())
-            .unwrap_or_default()
+    pub fn subject(&self) -> &Subject {
+        &self.subject
     }
 
-    pub fn credential(&self) -> Credential {
-        REQUEST_CONTEXT
-            .try_with(|context| context.credential.clone())
-            .unwrap_or_default()
+    pub fn credential(&self) -> &Credential {
+        &self.credential
     }
-}
-
-tokio::task_local! {
-    static REQUEST_CONTEXT: ScopedRequestContext;
-}
-
-pub(crate) async fn with_request_context<F, T>(
-    subject: Subject,
-    credential: Credential,
-    future: F,
-) -> T
-where
-    F: Future<Output = T>,
-{
-    REQUEST_CONTEXT
-        .scope(
-            ScopedRequestContext {
-                subject,
-                credential,
-            },
-            future,
-        )
-        .await
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

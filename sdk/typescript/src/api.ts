@@ -15,17 +15,15 @@ export interface Credential {
 export interface Request {
   token: string;
   connectionParams: Record<string, string>;
+  // Compatibility fields: legacy request literals may omit these, but
+  // runtime-constructed requests expose them for direct handler access.
+  subject?: any;
+  credential?: any;
 }
 
-type RequestContext = {
+export type ResolvedRequest = Omit<Request, "subject" | "credential"> & {
   subject: Subject;
   credential: Credential;
-};
-
-const requestContextBrand: unique symbol = Symbol("gestalt.requestContext");
-
-type InternalRequest = Request & {
-  [requestContextBrand]?: RequestContext;
 };
 
 export const responseBrand: unique symbol = Symbol("gestalt.response");
@@ -65,15 +63,23 @@ function withRequestContext(
   request: Request,
   subject: Partial<Subject> = {},
   credential: Partial<Credential> = {},
-): Request {
-  Object.defineProperty(request as InternalRequest, requestContextBrand, {
-    value: {
-      subject: normalizeSubject(subject),
-      credential: normalizeCredential(credential),
+): ResolvedRequest {
+  const resolvedSubject = normalizeSubject(subject);
+  const resolvedCredential = normalizeCredential(credential);
+
+  Object.defineProperty(request, "subject", {
+    get() {
+      return resolvedSubject;
     },
     enumerable: false,
   });
-  return request;
+  Object.defineProperty(request, "credential", {
+    get() {
+      return resolvedCredential;
+    },
+    enumerable: false,
+  });
+  return request as ResolvedRequest;
 }
 
 export function response<T>(status: number, body: T): Response<T> {
@@ -93,7 +99,7 @@ export function request(
   connectionParams: Record<string, string> = {},
   subject: Partial<Subject> = {},
   credential: Partial<Credential> = {},
-): Request {
+): ResolvedRequest {
   return withRequestContext(
     {
       token,
@@ -107,17 +113,17 @@ export function request(
 }
 
 export function requestSubject(input: Request | undefined): Subject {
-  return (
-    (input as InternalRequest | undefined)?.[requestContextBrand]?.subject ??
-    normalizeSubject()
-  );
+  if (input?.subject && typeof input.subject === "object") {
+    return normalizeSubject(input.subject as Partial<Subject>);
+  }
+  return normalizeSubject();
 }
 
 export function requestCredential(input: Request | undefined): Credential {
-  return (
-    (input as InternalRequest | undefined)?.[requestContextBrand]?.credential ??
-    normalizeCredential()
-  );
+  if (input?.credential && typeof input.credential === "object") {
+    return normalizeCredential(input.credential as Partial<Credential>);
+  }
+  return normalizeCredential();
 }
 
 export function connectionParam(

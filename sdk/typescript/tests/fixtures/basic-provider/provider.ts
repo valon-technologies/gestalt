@@ -3,8 +3,6 @@ import {
   definePlugin,
   ok,
   operation,
-  requestCredential,
-  requestSubject,
   s,
 } from "../../../src/index.ts";
 
@@ -22,8 +20,6 @@ export const plugin = definePlugin({
   },
   sessionCatalog(request) {
     const scope = connectionParam(request, "scope");
-    const subject = requestSubject(request);
-    const credential = requestCredential(request);
     return {
       name: "fixture-session",
       operations: [
@@ -31,8 +27,8 @@ export const plugin = definePlugin({
           id: "session-hello",
           method: "GET",
           title: scope
-            ? `Session Hello ${scope} ${subject.id} ${credential.mode}`.trim()
-            : `Session Hello ${subject.id} ${credential.mode}`.trim(),
+            ? `Session Hello ${scope} ${request.subject.id} ${request.credential.mode}`.trim()
+            : `Session Hello ${request.subject.id} ${request.credential.mode}`.trim(),
         },
       ],
     };
@@ -66,15 +62,13 @@ export const plugin = definePlugin({
       }),
       handler(input, request) {
         const region = connectionParam(request, "region") ?? "";
-        const subject = requestSubject(request);
-        const credential = requestCredential(request);
         return ok({
           message: `Hello, ${input.name}${input.excited ? "!" : "."}`,
           configuredName,
           region,
           configuredRegion: String(configuredConfig.region ?? ""),
-          subjectId: subject.id,
-          credentialMode: credential.mode,
+          subjectId: request.subject.id,
+          credentialMode: request.credential.mode,
         });
       },
     }),
