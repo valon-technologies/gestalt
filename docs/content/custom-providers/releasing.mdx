@@ -229,8 +229,10 @@ UI bundles work the same way:
 ```yaml
 providers:
   ui:
-    source:
-      path: ./gestalt-ui/manifest.yaml
+    dashboard:
+      source:
+        path: ./gestalt-ui/manifest.yaml
+      path: /dashboard
 ```
 
 ### For production
@@ -246,16 +248,18 @@ providers:
         version: 0.0.1-alpha.1
 ```
 
-UI bundles use the same pattern under `providers.ui`:
+UI bundles use the same pattern under `providers.ui.<name>`:
 
 ```yaml
 providers:
   ui:
-    source:
-      ref: github.com/acme/plugins/web/default
-      version: 1.2.0
-    config:
-      brand_name: Acme
+    dashboard:
+      source:
+        ref: github.com/acme/plugins/web/default
+        version: 1.2.0
+      path: /dashboard
+      config:
+        brand_name: Acme
 ```
 
 When a config references published releases, run `gestaltd init` to resolve and prepare them:

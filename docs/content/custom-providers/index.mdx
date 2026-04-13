@@ -24,7 +24,8 @@ providers:
 - `gestaltd` resolves the package from `source.path` or `source.ref`.
 - Executable providers start as child processes and connect back to the host
   over gRPC on a temporary Unix socket.
-- Web UI providers are static asset bundles served at `/`.
+- Web UI providers are static asset bundles served under configured public path
+  prefixes.
 - Published packages are prepared with `gestaltd init` and referenced from
   `gestalt.lock.json`.
 
@@ -38,6 +39,7 @@ providers:
   state
 - [Secrets](/custom-providers/secrets): secret managers for `secret://`
   resolution
-- [Web UIs](/custom-providers/web-uis): public UI bundles served at `/`
+- [Web UIs](/custom-providers/web-uis): public UI bundles served under
+  configured path prefixes
 - [Releasing](/custom-providers/releasing): packaging, platform builds, and
   release archives
