@@ -10,7 +10,7 @@ use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 
-use crate::api::{IntoResponse, Request};
+use crate::api::{Credential, IntoResponse, Request, Subject, with_request_context};
 use crate::catalog::{Catalog, CatalogOperation, schema_json, schema_parameters};
 use crate::error::{Error, Result};
 use crate::provider_server::OperationResult;
@@ -132,11 +132,32 @@ impl<P> Router<P> {
         params: Value,
         request: Request,
     ) -> OperationResult {
+        self.execute_with_context(
+            provider,
+            operation,
+            params,
+            request,
+            Subject::default(),
+            Credential::default(),
+        )
+        .await
+    }
+
+    pub async fn execute_with_context(
+        &self,
+        provider: Arc<P>,
+        operation: &str,
+        params: Value,
+        request: Request,
+        subject: Subject,
+        credential: Credential,
+    ) -> OperationResult {
         let Some(handler) = self.handlers.get(operation) else {
             return OperationResult::error(404, "unknown operation");
         };
 
-        match tokio::spawn(handler(provider, params, request)).await {
+        let future = handler(provider, params, request);
+        match tokio::spawn(with_request_context(subject, credential, future)).await {
             Ok(result) => result,
             Err(error) => OperationResult::error(500, join_error_message(error)),
         }

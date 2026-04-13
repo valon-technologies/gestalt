@@ -381,6 +381,9 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 	if b.authorizer != nil && b.authorizer.IsWorkload(p) {
 		return b.resolveWorkloadToken(ctx, prov, p, providerName, connection, instance)
 	}
+	if err := b.resolveUserPrincipal(ctx, p); err != nil {
+		return ctx, "", err
+	}
 
 	mode := prov.ConnectionMode()
 	switch mode {
@@ -391,21 +394,7 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 
 	case core.ConnectionModeUser, "":
 		if p.UserID == "" {
-			if p.Identity == nil || p.Identity.Email == "" {
-				return ctx, "", fmt.Errorf("%w: principal has no user ID or email", ErrUserResolution)
-			}
-			dbUser, err := b.users.FindOrCreateUser(ctx, p.Identity.Email)
-			if err != nil {
-				return ctx, "", fmt.Errorf("%w: %v", ErrUserResolution, err)
-			}
-			if dbUser == nil || dbUser.ID == "" {
-				return ctx, "", fmt.Errorf("%w: no user record returned", ErrUserResolution)
-			}
-			p.UserID = dbUser.ID
-			if p.Kind == "" {
-				p.Kind = principal.KindUser
-			}
-			p.SubjectID = principal.UserSubjectID(dbUser.ID)
+			return ctx, "", fmt.Errorf("%w: principal has no user ID or email", ErrUserResolution)
 		}
 		return b.resolveUserToken(ctx, prov, p.UserID, providerName, connection, instance, core.ConnectionModeUser, principal.UserSubjectID(p.UserID))
 
@@ -430,6 +419,33 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 	default:
 		return ctx, "", fmt.Errorf("%w: unknown connection mode %q", ErrInternal, mode)
 	}
+}
+
+func (b *Broker) resolveUserPrincipal(ctx context.Context, p *principal.Principal) error {
+	if p == nil || p.UserID != "" || p.Kind == principal.KindWorkload || p.Identity == nil || p.Identity.Email == "" {
+		return nil
+	}
+	if b.users == nil {
+		return fmt.Errorf("%w: no user service configured", ErrUserResolution)
+	}
+	dbUser, err := b.users.FindOrCreateUser(ctx, p.Identity.Email)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrUserResolution, err)
+	}
+	if dbUser == nil || dbUser.ID == "" {
+		return fmt.Errorf("%w: no user record returned", ErrUserResolution)
+	}
+	p.UserID = dbUser.ID
+	if p.Kind == "" {
+		p.Kind = principal.KindUser
+	}
+	if p.SubjectID == "" {
+		p.SubjectID = principal.UserSubjectID(dbUser.ID)
+	}
+	if p.Identity != nil && p.Identity.DisplayName == "" {
+		p.Identity.DisplayName = dbUser.DisplayName
+	}
+	return nil
 }
 
 func (b *Broker) resolveWorkloadToken(ctx context.Context, prov core.Provider, p *principal.Principal, providerName, requestedConnection, requestedInstance string) (context.Context, string, error) {

@@ -241,6 +241,25 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 	}
 }
 
+func TestRequestContextProto_PreservesWorkloadDisplayName(t *testing.T) {
+	t.Parallel()
+
+	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
+		SubjectID:   principal.WorkloadSubjectID("triage-bot"),
+		DisplayName: "Triage Bot",
+		Kind:        principal.KindWorkload,
+		Source:      principal.SourceWorkloadToken,
+	})
+
+	reqCtx := requestContextProto(ctx)
+	if reqCtx == nil || reqCtx.GetSubject() == nil {
+		t.Fatal("expected request subject context")
+	}
+	if got := reqCtx.GetSubject().GetDisplayName(); got != "Triage Bot" {
+		t.Fatalf("subject display name = %q, want %q", got, "Triage Bot")
+	}
+}
+
 func TestRemoteProviderManualAuthOnly(t *testing.T) {
 	t.Parallel()
 

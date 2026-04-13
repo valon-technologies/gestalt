@@ -47,8 +47,8 @@ impl Provider for TestProvider {
             display_name: format!(
                 "{}|{}|{}",
                 request.connection_param("tenant").unwrap_or_default(),
-                request.subject.id,
-                request.credential.mode,
+                request.subject().id,
+                request.credential().mode,
             ),
             description: String::new(),
             icon_svg: String::new(),
@@ -96,8 +96,8 @@ async fn serves_provider_requests_over_unix_socket() {
                 let greeting = provider.greeting.lock().expect("lock greeting").clone();
                 Ok::<Response<Output>, std::convert::Infallible>(ok(Output {
                     message: format!("{greeting}, {}!", input.name),
-                    subject_id: request.subject.id,
-                    credential_mode: request.credential.mode,
+                    subject_id: request.subject().id,
+                    credential_mode: request.credential().mode,
                 }))
             },
         )

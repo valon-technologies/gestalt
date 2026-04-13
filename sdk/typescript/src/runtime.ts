@@ -43,8 +43,12 @@ import {
   ProviderLifecycle,
   type ConfigureProviderRequest,
 } from "../gen/v1/runtime_pb.ts";
-import { errorMessage, type Request } from "./api.ts";
-import { AuthProvider, isAuthProvider, type AuthenticatedUser } from "./auth.ts";
+import { errorMessage, request as buildRequest, type Request } from "./api.ts";
+import {
+  AuthProvider,
+  isAuthProvider,
+  type AuthenticatedUser,
+} from "./auth.ts";
 import { SecretsProvider, isSecretsProvider } from "./secrets.ts";
 import { catalogToYaml, type Catalog } from "./catalog.ts";
 import {
@@ -74,9 +78,14 @@ export type RuntimeArgs = {
   target: string;
 };
 
-export type LoadedProvider = IntegrationProvider | AuthProvider | SecretsProvider;
+export type LoadedProvider =
+  | IntegrationProvider
+  | AuthProvider
+  | SecretsProvider;
 
-export async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
+export async function main(
+  argv: string[] = process.argv.slice(2),
+): Promise<number> {
   const args = parseRuntimeArgs(argv);
   if (!args) {
     console.error(USAGE);
@@ -105,7 +114,10 @@ export async function loadProviderFromTarget(
 ): Promise<LoadedProvider> {
   const config = readPackageConfig(root);
   const targetValue =
-    rawTarget?.trim() || formatProviderTarget(config.providerTarget ?? readPackageProviderTarget(root));
+    rawTarget?.trim() ||
+    formatProviderTarget(
+      config.providerTarget ?? readPackageProviderTarget(root),
+    );
   const target = parseProviderTarget(targetValue);
   const module = await import(resolveProviderImportUrl(root, target));
   const candidate =
@@ -115,31 +127,40 @@ export async function loadProviderFromTarget(
     module.default;
 
   const defaultName =
-    slugName(config.name ?? "") || slugName(dirname(resolve(root, target.modulePath)));
+    slugName(config.name ?? "") ||
+    slugName(dirname(resolve(root, target.modulePath)));
   switch (target.kind) {
     case "integration": {
       if (!isIntegrationProvider(candidate)) {
-        throw new Error(`${targetValue} did not resolve to a Gestalt integration provider`);
+        throw new Error(
+          `${targetValue} did not resolve to a Gestalt integration provider`,
+        );
       }
       candidate.resolveName(defaultName);
       return candidate;
     }
     case "auth": {
       if (!isAuthProvider(candidate)) {
-        throw new Error(`${targetValue} did not resolve to a Gestalt auth provider`);
+        throw new Error(
+          `${targetValue} did not resolve to a Gestalt auth provider`,
+        );
       }
       candidate.resolveName(defaultName);
       return candidate;
     }
     case "secrets": {
       if (!isSecretsProvider(candidate)) {
-        throw new Error(`${targetValue} did not resolve to a Gestalt secrets provider`);
+        throw new Error(
+          `${targetValue} did not resolve to a Gestalt secrets provider`,
+        );
       }
       candidate.resolveName(defaultName);
       return candidate;
     }
     default:
-      throw new Error(`TypeScript SDK does not yet support provider kind ${JSON.stringify(target.kind)}`);
+      throw new Error(
+        `TypeScript SDK does not yet support provider kind ${JSON.stringify(target.kind)}`,
+      );
   }
 }
 
@@ -170,7 +191,9 @@ export async function runLoadedProvider(
   const catalogPath = process.env[ENV_WRITE_CATALOG];
   if (catalogPath) {
     if (!isIntegrationProvider(provider)) {
-      throw new Error("static catalog generation is only supported for integration providers");
+      throw new Error(
+        "static catalog generation is only supported for integration providers",
+      );
     }
     writeFileSync(catalogPath, pluginCatalogYaml(provider), "utf8");
     return;
@@ -208,24 +231,32 @@ export async function runBundledProvider(
   switch (kind) {
     case "integration":
       if (!isIntegrationProvider(provider)) {
-        throw new Error("bundled target did not resolve to a Gestalt integration provider");
+        throw new Error(
+          "bundled target did not resolve to a Gestalt integration provider",
+        );
       }
       loaded = provider;
       break;
     case "auth":
       if (!isAuthProvider(provider)) {
-        throw new Error("bundled target did not resolve to a Gestalt auth provider");
+        throw new Error(
+          "bundled target did not resolve to a Gestalt auth provider",
+        );
       }
       loaded = provider;
       break;
     case "secrets":
       if (!isSecretsProvider(provider)) {
-        throw new Error("bundled target did not resolve to a Gestalt secrets provider");
+        throw new Error(
+          "bundled target did not resolve to a Gestalt secrets provider",
+        );
       }
       loaded = provider;
       break;
     default:
-      throw new Error(`TypeScript SDK does not yet support provider kind ${JSON.stringify(kind)}`);
+      throw new Error(
+        `TypeScript SDK does not yet support provider kind ${JSON.stringify(kind)}`,
+      );
   }
   loaded.name = slugName(providerName);
   await runLoadedProvider(loaded, {
@@ -233,7 +264,10 @@ export async function runBundledProvider(
   });
 }
 
-export async function runBundledPlugin(plugin: unknown, pluginName: string): Promise<void> {
+export async function runBundledPlugin(
+  plugin: unknown,
+  pluginName: string,
+): Promise<void> {
   await runBundledProvider(plugin, "integration", pluginName);
 }
 
@@ -253,7 +287,10 @@ export async function serve(provider: LoadedProvider): Promise<void> {
     routes(router) {
       router.service(ProviderLifecycle, createRuntimeService(provider));
       if (isIntegrationProvider(provider)) {
-        router.service(IntegrationProviderService, createProviderService(provider));
+        router.service(
+          IntegrationProviderService,
+          createProviderService(provider),
+        );
       } else if (isAuthProvider(provider)) {
         router.service(AuthProviderService, createAuthService(provider));
       } else if (isSecretsProvider(provider)) {
@@ -333,9 +370,15 @@ export function createRuntimeService(
         );
       }
       try {
-        await provider.configureProvider(request.name, objectFromUnknown(request.config));
+        await provider.configureProvider(
+          request.name,
+          objectFromUnknown(request.config),
+        );
       } catch (error) {
-        throw new ConnectError(`configure provider: ${errorMessage(error)}`, Code.Unknown);
+        throw new ConnectError(
+          `configure provider: ${errorMessage(error)}`,
+          Code.Unknown,
+        );
       }
       return create(ConfigureProviderResponseSchema, {
         protocolVersion: CURRENT_PROTOCOL_VERSION,
@@ -371,7 +414,9 @@ export function createProviderService(
         name: provider.name,
         displayName: provider.displayName,
         description: provider.description,
-        connectionMode: connectionModeToProtoValue(provider.connectionMode) as ProviderConnectionMode,
+        connectionMode: connectionModeToProtoValue(
+          provider.connectionMode,
+        ) as ProviderConnectionMode,
         authTypes: [...provider.authTypes],
         connectionParams: Object.fromEntries(
           Object.entries(provider.connectionParams).map(([key, value]) => [
@@ -388,9 +433,15 @@ export function createProviderService(
     },
     async startProvider(request: StartProviderRequest) {
       try {
-        await provider.configureProvider(request.name, objectFromUnknown(request.config));
+        await provider.configureProvider(
+          request.name,
+          objectFromUnknown(request.config),
+        );
       } catch (error) {
-        throw new ConnectError(`configure provider: ${errorMessage(error)}`, Code.Unknown);
+        throw new ConnectError(
+          `configure provider: ${errorMessage(error)}`,
+          Code.Unknown,
+        );
       }
       return create(StartProviderResponseSchema, {
         protocolVersion: CURRENT_PROTOCOL_VERSION,
@@ -402,7 +453,11 @@ export function createProviderService(
         await provider.execute(
           request.operation,
           objectFromUnknown(request.params),
-          providerRequest(request.token, request.connectionParams, request.context),
+          providerRequest(
+            request.token,
+            request.connectionParams,
+            request.context,
+          ),
         ),
       );
     },
@@ -410,20 +465,33 @@ export function createProviderService(
       let catalog: Catalog | Record<string, unknown> | null | undefined;
       try {
         catalog = await provider.catalogForRequest(
-          providerRequest(request.token, request.connectionParams, request.context),
+          providerRequest(
+            request.token,
+            request.connectionParams,
+            request.context,
+          ),
         );
       } catch (error) {
-        throw new ConnectError(`session catalog: ${errorMessage(error)}`, Code.Unknown);
+        throw new ConnectError(
+          `session catalog: ${errorMessage(error)}`,
+          Code.Unknown,
+        );
       }
       if (!catalog) {
-        throw new ConnectError("provider does not support session catalogs", Code.Unimplemented);
+        throw new ConnectError(
+          "provider does not support session catalogs",
+          Code.Unimplemented,
+        );
       }
       return create(GetSessionCatalogResponseSchema, {
         catalog: catalogToProto(catalog),
       });
     },
     async postConnect() {
-      throw new ConnectError("provider does not support post connect", Code.Unimplemented);
+      throw new ConnectError(
+        "provider does not support post connect",
+        Code.Unimplemented,
+      );
     },
   };
 }
@@ -442,7 +510,10 @@ export function createAuthService(
         },
       });
       if (!response) {
-        throw new ConnectError("auth provider returned nil response", Code.Internal);
+        throw new ConnectError(
+          "auth provider returned nil response",
+          Code.Internal,
+        );
       }
       return create(BeginLoginResponseSchema, {
         authorizationUrl: response.authorizationUrl,
@@ -458,7 +529,10 @@ export function createAuthService(
         callbackUrl: request.callbackUrl,
       });
       if (!user) {
-        throw new ConnectError("auth provider returned nil user", Code.Internal);
+        throw new ConnectError(
+          "auth provider returned nil user",
+          Code.Internal,
+        );
       }
       return authenticatedUserToProto(user);
     },
@@ -514,24 +588,7 @@ function providerRequest(
 ): Request {
   const subject = requestContext?.subject;
   const credential = requestContext?.credential;
-  return {
-    token,
-    connectionParams: {
-      ...connectionParams,
-    },
-    subject: {
-      id: subject?.id ?? "",
-      kind: subject?.kind ?? "",
-      displayName: subject?.displayName ?? "",
-      authSource: subject?.authSource ?? "",
-    },
-    credential: {
-      mode: credential?.mode ?? "",
-      subjectId: credential?.subjectId ?? "",
-      connection: credential?.connection ?? "",
-      instance: credential?.instance ?? "",
-    },
-  };
+  return buildRequest(token, connectionParams, subject, credential);
 }
 
 function providerKindToProto(kind: ProviderKind): ProtoProviderKind {
@@ -626,7 +683,9 @@ if (import.meta.main) {
       process.exitCode = code;
     },
     (error: unknown) => {
-      console.error(error instanceof Error ? error.stack ?? error.message : String(error));
+      console.error(
+        error instanceof Error ? (error.stack ?? error.message) : String(error),
+      );
       process.exitCode = 1;
     },
   );

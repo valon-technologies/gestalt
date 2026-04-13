@@ -35,7 +35,14 @@ struct EchoOutput {
 
 #[tokio::test]
 async fn executes_registered_operation() {
-    assert_eq!(Request::default().connection_param("missing"), None);
+    assert_eq!(
+        Request {
+            token: "tok".to_owned(),
+            connection_params: BTreeMap::new(),
+        }
+        .connection_param("missing"),
+        None
+    );
 
     let router = Router::new()
         .register(
@@ -134,8 +141,8 @@ async fn greet(
             .connection_param("api_key")
             .unwrap_or_default()
             .to_owned(),
-        subject_id: request.subject.id,
-        credential_mode: request.credential.mode,
+        subject_id: request.subject().id,
+        credential_mode: request.credential().mode,
     }))
 }
 

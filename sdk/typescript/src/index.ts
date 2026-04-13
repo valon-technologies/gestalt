@@ -4,6 +4,8 @@ export {
   response,
   responseBrand,
   request,
+  requestCredential,
+  requestSubject,
   type MaybePromise,
   type Credential,
   type OperationResult,

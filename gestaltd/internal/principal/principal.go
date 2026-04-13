@@ -26,12 +26,13 @@ const (
 )
 
 type Principal struct {
-	Identity  *core.UserIdentity
-	UserID    string
-	SubjectID string
-	Kind      Kind
-	Source    Source
-	Scopes    []string
+	Identity    *core.UserIdentity
+	UserID      string
+	SubjectID   string
+	DisplayName string
+	Kind        Kind
+	Source      Source
+	Scopes      []string
 }
 
 func (s Source) String() string {

@@ -318,7 +318,13 @@ func subjectKindForPrincipal(p *principal.Principal) string {
 }
 
 func subjectDisplayName(p *principal.Principal) string {
-	if p == nil || p.Identity == nil {
+	if p == nil {
+		return ""
+	}
+	if p.DisplayName != "" {
+		return p.DisplayName
+	}
+	if p.Identity == nil {
 		return ""
 	}
 	return p.Identity.DisplayName
