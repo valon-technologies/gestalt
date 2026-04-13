@@ -33,58 +33,60 @@ const (
 )
 
 type Server struct {
-	router             chi.Router
-	handler            http.Handler
-	auth               core.AuthProvider
-	auditSink          core.AuditSink
-	users              *coredata.UserService
-	tokens             *coredata.TokenService
-	apiTokens          *coredata.APITokenService
-	providers          *registry.PluginMap[core.Provider]
-	resolver           *principal.Resolver
-	invoker            invocation.Invoker
-	defaultConnection  map[string]string
-	catalogConnection  map[string]string
-	connectionAuth     func() map[string]map[string]bootstrap.OAuthHandler
-	pluginDefs         map[string]*config.ProviderEntry
-	noAuth             bool
-	anonymousPrincipal *principal.Principal
-	publicBaseURL      string
-	secureCookies      bool
-	encryptor          *cryptoutil.AESGCMEncryptor
-	sessionIssuer      []byte
-	stateCodec         *integrationOAuthStateCodec
-	apiTokenTTL        time.Duration
-	now                func() time.Time
-	readiness          ReadinessChecker
-	prometheusMetrics  http.Handler
-	mcpHandler         http.Handler
-	clientUI           http.Handler
-	adminUI            http.Handler
-	routeProfile       RouteProfile
+	router                 chi.Router
+	handler                http.Handler
+	auth                   core.AuthProvider
+	auditSink              core.AuditSink
+	users                  *coredata.UserService
+	tokens                 *coredata.TokenService
+	apiTokens              *coredata.APITokenService
+	providers              *registry.PluginMap[core.Provider]
+	resolver               *principal.Resolver
+	invoker                invocation.Invoker
+	defaultConnection      map[string]string
+	catalogConnection      map[string]string
+	connectionAuth         func() map[string]map[string]bootstrap.OAuthHandler
+	pluginDefs             map[string]*config.ProviderEntry
+	noAuth                 bool
+	noAuthSessionIsolation bool
+	anonymousPrincipal     *principal.Principal
+	publicBaseURL          string
+	secureCookies          bool
+	encryptor              *cryptoutil.AESGCMEncryptor
+	sessionIssuer          []byte
+	stateCodec             *integrationOAuthStateCodec
+	apiTokenTTL            time.Duration
+	now                    func() time.Time
+	readiness              ReadinessChecker
+	prometheusMetrics      http.Handler
+	mcpHandler             http.Handler
+	clientUI               http.Handler
+	adminUI                http.Handler
+	routeProfile           RouteProfile
 }
 
 type Config struct {
-	Auth              core.AuthProvider
-	AuditSink         core.AuditSink
-	Services          *coredata.Services
-	Providers         *registry.PluginMap[core.Provider]
-	Invoker           invocation.Invoker
-	DefaultConnection map[string]string
-	CatalogConnection map[string]string
-	ConnectionAuth    func() map[string]map[string]bootstrap.OAuthHandler
-	PluginDefs        map[string]*config.ProviderEntry
-	PublicBaseURL     string
-	SecureCookies     bool
-	StateSecret       []byte
-	APITokenTTL       time.Duration
-	Now               func() time.Time
-	Readiness         ReadinessChecker
-	PrometheusMetrics http.Handler
-	MCPHandler        http.Handler
-	ClientUI          http.Handler
-	AdminUI           http.Handler
-	RouteProfile      RouteProfile
+	Auth                   core.AuthProvider
+	AuditSink              core.AuditSink
+	Services               *coredata.Services
+	Providers              *registry.PluginMap[core.Provider]
+	Invoker                invocation.Invoker
+	DefaultConnection      map[string]string
+	CatalogConnection      map[string]string
+	ConnectionAuth         func() map[string]map[string]bootstrap.OAuthHandler
+	PluginDefs             map[string]*config.ProviderEntry
+	PublicBaseURL          string
+	NoAuthSessionIsolation bool
+	SecureCookies          bool
+	StateSecret            []byte
+	APITokenTTL            time.Duration
+	Now                    func() time.Time
+	Readiness              ReadinessChecker
+	PrometheusMetrics      http.Handler
+	MCPHandler             http.Handler
+	ClientUI               http.Handler
+	AdminUI                http.Handler
+	RouteProfile           RouteProfile
 }
 
 func New(cfg Config) (*Server, error) {
@@ -120,36 +122,37 @@ func New(cfg Config) (*Server, error) {
 
 	router := chi.NewRouter()
 	s := &Server{
-		router:            router,
-		handler:           otelhttp.NewHandler(router, "gestaltd"),
-		auth:              cfg.Auth,
-		auditSink:         cfg.AuditSink,
-		users:             users,
-		tokens:            tokens,
-		apiTokens:         apiTokens,
-		providers:         cfg.Providers,
-		resolver:          resolver,
-		invoker:           cfg.Invoker,
-		defaultConnection: cfg.DefaultConnection,
-		catalogConnection: cfg.CatalogConnection,
-		connectionAuth:    cfg.ConnectionAuth,
-		pluginDefs:        cfg.PluginDefs,
-		noAuth:            noAuth,
-		publicBaseURL:     strings.TrimRight(cfg.PublicBaseURL, "/"),
-		secureCookies:     cfg.SecureCookies,
-		encryptor:         encryptor,
-		sessionIssuer:     cfg.StateSecret,
-		stateCodec:        stateCodec,
-		apiTokenTTL:       cfg.APITokenTTL,
-		now:               now,
-		readiness:         cfg.Readiness,
-		prometheusMetrics: cfg.PrometheusMetrics,
-		mcpHandler:        cfg.MCPHandler,
-		clientUI:          cfg.ClientUI,
-		adminUI:           cfg.AdminUI,
-		routeProfile:      cfg.RouteProfile,
+		router:                 router,
+		handler:                otelhttp.NewHandler(router, "gestaltd"),
+		auth:                   cfg.Auth,
+		auditSink:              cfg.AuditSink,
+		users:                  users,
+		tokens:                 tokens,
+		apiTokens:              apiTokens,
+		providers:              cfg.Providers,
+		resolver:               resolver,
+		invoker:                cfg.Invoker,
+		defaultConnection:      cfg.DefaultConnection,
+		catalogConnection:      cfg.CatalogConnection,
+		connectionAuth:         cfg.ConnectionAuth,
+		pluginDefs:             cfg.PluginDefs,
+		noAuth:                 noAuth,
+		noAuthSessionIsolation: cfg.NoAuthSessionIsolation,
+		publicBaseURL:          strings.TrimRight(cfg.PublicBaseURL, "/"),
+		secureCookies:          cfg.SecureCookies,
+		encryptor:              encryptor,
+		sessionIssuer:          cfg.StateSecret,
+		stateCodec:             stateCodec,
+		apiTokenTTL:            cfg.APITokenTTL,
+		now:                    now,
+		readiness:              cfg.Readiness,
+		prometheusMetrics:      cfg.PrometheusMetrics,
+		mcpHandler:             cfg.MCPHandler,
+		clientUI:               cfg.ClientUI,
+		adminUI:                cfg.AdminUI,
+		routeProfile:           cfg.RouteProfile,
 	}
-	if noAuth {
+	if noAuth && !cfg.NoAuthSessionIsolation {
 		s.anonymousPrincipal = resolver.ResolveEmail(anonymousEmail)
 	}
 

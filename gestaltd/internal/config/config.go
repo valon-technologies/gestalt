@@ -188,6 +188,7 @@ type ServerConfig struct {
 	Management                 ListenerConfig `yaml:"management"`
 	BaseURL                    string         `yaml:"baseUrl"`
 	IntegrationCallbackBaseURL string         `yaml:"integrationCallbackBaseUrl,omitempty"`
+	NoAuthSessionIsolation     bool           `yaml:"noAuthSessionIsolation,omitempty"`
 	EncryptionKey              string         `yaml:"encryptionKey"`
 	APITokenTTL                string         `yaml:"apiTokenTtl"`
 	ArtifactsDir               string         `yaml:"artifactsDir"`

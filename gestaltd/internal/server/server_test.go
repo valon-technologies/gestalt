@@ -5077,6 +5077,102 @@ func (s *stubDualAuthProvider) CredentialFields() []core.CredentialFieldDef {
 	return []core.CredentialFieldDef{{Name: "api_token", Label: "API Token"}}
 }
 
+func TestNoAuthSessionIsolationSeparatesManualConnections(t *testing.T) {
+	t.Parallel()
+
+	const noAuthSessionCookieName = "gestalt_noauth_session"
+
+	svc := coretesting.NewStubServices(t)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
+			StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
+		})
+		cfg.DefaultConnection = map[string]string{"manual-svc": config.PluginConnectionName}
+		cfg.Services = svc
+		cfg.NoAuthSessionIsolation = true
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	newClient := func(t *testing.T) *http.Client {
+		t.Helper()
+		jar, err := cookiejar.New(nil)
+		if err != nil {
+			t.Fatalf("cookiejar.New: %v", err)
+		}
+		return &http.Client{Jar: jar}
+	}
+
+	connectManual := func(t *testing.T, client *http.Client, credential string) {
+		t.Helper()
+		body := bytes.NewBufferString(fmt.Sprintf(`{"integration":"manual-svc","credential":"%s"}`, credential))
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusOK {
+			b, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
+		}
+	}
+
+	sessionID := func(t *testing.T, client *http.Client) string {
+		t.Helper()
+		u, err := url.Parse(ts.URL)
+		if err != nil {
+			t.Fatalf("url.Parse: %v", err)
+		}
+		for _, c := range client.Jar.Cookies(u) {
+			if c.Name == noAuthSessionCookieName {
+				return c.Value
+			}
+		}
+		t.Fatalf("missing %s cookie", noAuthSessionCookieName)
+		return ""
+	}
+
+	clientA := newClient(t)
+	clientB := newClient(t)
+
+	connectManual(t, clientA, "key-a")
+	connectManual(t, clientB, "key-b")
+
+	sessionA := sessionID(t, clientA)
+	sessionB := sessionID(t, clientB)
+	if sessionA == sessionB {
+		t.Fatalf("expected distinct no-auth sessions, got %q", sessionA)
+	}
+
+	userA, err := svc.Users.FindOrCreateUser(context.Background(), "anonymous+"+sessionA+"@gestalt")
+	if err != nil {
+		t.Fatalf("FindOrCreateUser A: %v", err)
+	}
+	userB, err := svc.Users.FindOrCreateUser(context.Background(), "anonymous+"+sessionB+"@gestalt")
+	if err != nil {
+		t.Fatalf("FindOrCreateUser B: %v", err)
+	}
+	if userA.ID == userB.ID {
+		t.Fatalf("expected distinct users, got %q", userA.ID)
+	}
+
+	tokensA, err := svc.Tokens.ListTokens(context.Background(), userA.ID)
+	if err != nil {
+		t.Fatalf("ListTokens A: %v", err)
+	}
+	tokensB, err := svc.Tokens.ListTokens(context.Background(), userB.ID)
+	if err != nil {
+		t.Fatalf("ListTokens B: %v", err)
+	}
+	if len(tokensA) != 1 || tokensA[0].AccessToken != "key-a" {
+		t.Fatalf("tokensA = %+v, want one key-a token", tokensA)
+	}
+	if len(tokensB) != 1 || tokensB[0].AccessToken != "key-b" {
+		t.Fatalf("tokensB = %+v, want one key-b token", tokensB)
+	}
+}
+
 func TestConnectManual(t *testing.T) {
 	t.Parallel()
 

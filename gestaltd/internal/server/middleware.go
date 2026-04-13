@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -18,7 +20,8 @@ const (
 	userContextKey   contextKey = "user"
 	userIDContextKey contextKey = "userID"
 
-	anonymousEmail = "anonymous@gestalt"
+	anonymousEmail          = "anonymous@gestalt"
+	noAuthSessionCookieName = "gestalt_noauth_session"
 )
 
 func UserFromContext(ctx context.Context) *core.UserIdentity {
@@ -103,6 +106,67 @@ func requestBearerToken(r *http.Request) (string, error) {
 	return bearer, nil
 }
 
+func newNoAuthSessionID() (string, error) {
+	b := make([]byte, 16)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+func isValidNoAuthSessionID(sessionID string) bool {
+	if len(sessionID) != 32 {
+		return false
+	}
+	for _, r := range sessionID {
+		if (r < '0' || r > '9') && (r < 'a' || r > 'f') {
+			return false
+		}
+	}
+	return true
+}
+
+func noAuthEmailForSession(sessionID string) string {
+	return "anonymous+" + sessionID + "@gestalt"
+}
+
+func newNoAuthSessionCookie(sessionID string, secure bool) *http.Cookie {
+	return &http.Cookie{
+		Name:     noAuthSessionCookieName,
+		Value:    sessionID,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteLaxMode,
+	}
+}
+
+func (s *Server) resolveNoAuthPrincipal(r *http.Request) (*principal.Principal, *http.Cookie, error) {
+	if !s.noAuthSessionIsolation {
+		return s.anonymousPrincipal, nil, nil
+	}
+
+	if c, err := r.Cookie(noAuthSessionCookieName); err == nil && isValidNoAuthSessionID(c.Value) {
+		p := s.resolver.ResolveEmail(noAuthEmailForSession(c.Value))
+		enriched, err := s.resolvePrincipalUserID(r.Context(), p)
+		if err != nil {
+			return nil, nil, err
+		}
+		return enriched, nil, nil
+	}
+
+	sessionID, err := newNoAuthSessionID()
+	if err != nil {
+		return nil, nil, err
+	}
+	p := s.resolver.ResolveEmail(noAuthEmailForSession(sessionID))
+	enriched, err := s.resolvePrincipalUserID(r.Context(), p)
+	if err != nil {
+		return nil, nil, err
+	}
+	return enriched, newNoAuthSessionCookie(sessionID, s.secureCookies), nil
+}
+
 func (s *Server) resolveRequestPrincipal(r *http.Request) (*principal.Principal, error) {
 	var lastErr error
 
@@ -143,7 +207,16 @@ func (s *Server) resolveRequestPrincipalWithUserID(r *http.Request) (*principal.
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s.noAuth {
-			ctx := principal.WithPrincipal(r.Context(), s.anonymousPrincipal)
+			p, cookie, err := s.resolveNoAuthPrincipal(r)
+			if err != nil {
+				slog.ErrorContext(r.Context(), "auth: no-auth principal setup failed", "remote_addr", r.RemoteAddr, "error", err)
+				writeError(w, http.StatusInternalServerError, "no-auth principal setup failed")
+				return
+			}
+			if cookie != nil {
+				http.SetCookie(w, cookie)
+			}
+			ctx := principal.WithPrincipal(r.Context(), p)
 			next.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}
