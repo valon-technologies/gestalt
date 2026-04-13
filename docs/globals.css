@@ -467,15 +467,15 @@ article.nextra-content main::before {
 }
 
 .nextra-callout {
-  align-items: flex-start;
+  align-items: baseline;
 }
 
 .nextra-callout > [data-pagefind-ignore='all'] {
   display: flex;
-  align-items: flex-start;
+  align-items: baseline;
   justify-content: center;
   line-height: 1;
-  padding-top: 0.2rem;
+  padding-top: 0;
 }
 
 .nextra-callout > [data-pagefind-ignore='all'] svg {
