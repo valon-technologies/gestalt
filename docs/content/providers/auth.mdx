@@ -29,7 +29,7 @@ You implement three methods: `Configure`, `BeginLogin`, and `CompleteLogin`. `Be
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
     ```go
-    package main
+    package googleauth
 
     import (
     	"context"
@@ -44,6 +44,8 @@ You implement three methods: `Configure`, `BeginLogin`, and `CompleteLogin`. `Be
     	clientID     string
     	clientSecret string
     }
+
+    func New() *GoogleAuth { return &GoogleAuth{} }
 
     func (g *GoogleAuth) Configure(_ context.Context, _ string, config map[string]any) error {
     	g.clientID, _ = config["clientId"].(string)
@@ -75,10 +77,6 @@ You implement three methods: `Configure`, `BeginLogin`, and `CompleteLogin`. `Be
     		EmailVerified: true,
     		DisplayName:   "Example User",
     	}, nil
-    }
-
-    func main() {
-    	gestalt.ServeAuthProvider(context.Background(), &GoogleAuth{})
     }
     ```
   </Tabs.Tab>
