@@ -549,6 +549,11 @@ func (c *stubCursor) applyKeyRange(r *indexeddb.KeyRange) {
 	if r == nil {
 		return
 	}
+	lower, upper := r.Lower, r.Upper
+	if c.indexKeys != nil {
+		lower = normalizeIndexRangeBound(lower)
+		upper = normalizeIndexRangeBound(upper)
+	}
 	filtered := make([]string, 0, len(c.keys))
 	var filteredIdx []any
 	for i, k := range c.keys {
@@ -556,8 +561,8 @@ func (c *stubCursor) applyKeyRange(r *indexeddb.KeyRange) {
 		if c.indexKeys != nil {
 			cur = c.indexKeys[i]
 		}
-		if r.Lower != nil {
-			cmp := compareIndexKeys(cur, r.Lower)
+		if lower != nil {
+			cmp := compareIndexKeys(cur, lower)
 			if r.LowerOpen && cmp <= 0 {
 				continue
 			}
@@ -565,8 +570,8 @@ func (c *stubCursor) applyKeyRange(r *indexeddb.KeyRange) {
 				continue
 			}
 		}
-		if r.Upper != nil {
-			cmp := compareIndexKeys(cur, r.Upper)
+		if upper != nil {
+			cmp := compareIndexKeys(cur, upper)
 			if r.UpperOpen && cmp >= 0 {
 				continue
 			}
@@ -583,6 +588,16 @@ func (c *stubCursor) applyKeyRange(r *indexeddb.KeyRange) {
 	if c.indexKeys != nil {
 		c.indexKeys = filteredIdx
 	}
+}
+
+func normalizeIndexRangeBound(bound any) any {
+	if bound == nil {
+		return nil
+	}
+	if _, ok := bound.([]any); ok {
+		return bound
+	}
+	return []any{bound}
 }
 
 func (c *stubCursor) applyIndexFilter() {

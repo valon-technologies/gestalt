@@ -351,6 +351,36 @@ func TestCursor_KeyRange(t *testing.T) {
 	}
 }
 
+func TestCursor_IndexKeyRangeSingleField(t *testing.T) {
+	t.Parallel()
+
+	_, db := newCursorTestDB(t)
+	ctx := context.Background()
+
+	cursor, err := db.ObjectStore("items").Index("by_status").OpenCursor(ctx, indexeddb.Only("active"), indexeddb.CursorNext)
+	if err != nil {
+		t.Fatalf("OpenCursor: %v", err)
+	}
+	defer func() { _ = cursor.Close() }()
+
+	var keys []string
+	for cursor.Continue() {
+		keys = append(keys, cursor.PrimaryKey())
+	}
+	if len(keys) != 3 {
+		t.Fatalf("got %d active records, want 3: %v", len(keys), keys)
+	}
+	for _, key := range keys {
+		rec, err := db.ObjectStore("items").Get(ctx, key)
+		if err != nil {
+			t.Fatalf("Get(%q): %v", key, err)
+		}
+		if rec["status"] != "active" {
+			t.Fatalf("record %q status = %v, want active", key, rec["status"])
+		}
+	}
+}
+
 // --- Protocol edge cases ---
 
 func TestCursor_Advance(t *testing.T) {
