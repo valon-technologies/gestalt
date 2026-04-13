@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Footer, Layout, Navbar } from "nextra-theme-docs";
-import { Head } from "nextra/components";
+import { Head, Search } from "nextra/components";
+import { GitHubIcon } from "nextra/icons";
 import { getPageMap } from "nextra/page-map";
 import "nextra-theme-docs/style.css";
 import "../globals.css";
@@ -19,6 +20,8 @@ export const viewport: Viewport = {
   themeColor: "#FDFCF9",
 };
 
+const repositoryUrl = "https://github.com/valon-technologies/gestalt";
+
 const navbar = (
   <Navbar
     logo={
@@ -35,21 +38,23 @@ const navbar = (
   />
 );
 
-const footer = (
-  <Footer>
-    <span>
-      Gestalt, a self-hosted integration platform by{" "}
-      <a
-        href="https://valon.ai"
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{ textDecoration: "underline", textUnderlineOffset: "0.18em" }}
-      >
-        Valon Technologies
-      </a>
-    </span>
-  </Footer>
+const search = (
+  <div className="docs-header-search">
+    <a
+      href={repositoryUrl}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="docs-header-repo-link"
+      aria-label="View the Gestalt GitHub repository"
+    >
+      <GitHubIcon height="20" aria-hidden="true" />
+      <span>GitHub</span>
+    </a>
+    <Search />
+  </div>
 );
+
+const footer = <Footer />;
 
 export default async function RootLayout({
   children,
@@ -65,6 +70,7 @@ export default async function RootLayout({
         <Layout
           navbar={navbar}
           footer={footer}
+          search={search}
           pageMap={await getPageMap()}
           docsRepositoryBase="https://github.com/valon-technologies/gestalt/tree/main/docs"
           nextThemes={{
