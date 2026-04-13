@@ -496,69 +496,6 @@ server:
 		}
 	})
 
-	t.Run("legacy root ui entry is accepted", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-providers:
-  ui:
-    source:
-      ref: github.com/valon-technologies/gestalt-providers/web/default
-      version: 0.0.1-alpha.4
-  indexeddbs:
-    sqlite:
-      source:
-        path: ./providers/datastore/sqlite
-server:
-  indexeddb: sqlite
-  encryptionKey: server-key
-`)
-
-		cfg, err := Load(path)
-		if err != nil {
-			t.Fatalf("Load: %v", err)
-		}
-		if cfg.Providers.RootUI == nil {
-			t.Fatal("Providers.RootUI = nil")
-		}
-		if got := cfg.Providers.RootUI.Source.Ref; got != "github.com/valon-technologies/gestalt-providers/web/default" {
-			t.Fatalf("Providers.RootUI.Source.Ref = %q", got)
-		}
-		if len(cfg.Providers.UI) != 0 {
-			t.Fatalf("Providers.UI = %#v, want empty", cfg.Providers.UI)
-		}
-	})
-
-	t.Run("legacy root ui provider path resolves from config directory", func(t *testing.T) {
-		t.Parallel()
-
-		path := mustWriteConfigFile(t, `
-providers:
-  ui:
-    source:
-      path: ./web/default/provider.yaml
-  indexeddbs:
-    sqlite:
-      source:
-        path: ./providers/datastore/sqlite
-server:
-  indexeddb: sqlite
-  encryptionKey: server-key
-`)
-
-		cfg, err := Load(path)
-		if err != nil {
-			t.Fatalf("Load: %v", err)
-		}
-		if cfg.Providers.RootUI == nil {
-			t.Fatal("Providers.RootUI = nil")
-		}
-		wantPath := filepath.Join(filepath.Dir(path), "web", "default", "provider.yaml")
-		if got := cfg.Providers.RootUI.Source.Path; got != wantPath {
-			t.Fatalf("Providers.RootUI.Source.Path = %q, want %q", got, wantPath)
-		}
-	})
-
 	t.Run("relative ui provider path resolves from config directory", func(t *testing.T) {
 		t.Parallel()
 
@@ -720,7 +657,7 @@ server:
 		}
 	})
 
-	t.Run("root path is rejected", func(t *testing.T) {
+	t.Run("root path is accepted", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -739,12 +676,12 @@ server:
   encryptionKey: server-key
 `)
 
-		_, err := Load(path)
-		if err == nil {
-			t.Fatal("Load: expected error, got nil")
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
 		}
-		if !strings.Contains(err.Error(), `root path is not supported`) {
-			t.Fatalf("unexpected error: %v", err)
+		if got := cfg.Providers.UI["root"].Path; got != "/" {
+			t.Fatalf("Providers.UI[root].Path = %q, want %q", got, "/")
 		}
 	})
 

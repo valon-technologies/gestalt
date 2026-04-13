@@ -66,7 +66,6 @@ type Server struct {
 	readiness          ReadinessChecker
 	prometheusMetrics  http.Handler
 	mcpHandler         http.Handler
-	clientUI           http.Handler
 	mountedWebUIs      []MountedWebUI
 	adminUI            http.Handler
 	routeProfile       RouteProfile
@@ -91,7 +90,6 @@ type Config struct {
 	Readiness         ReadinessChecker
 	PrometheusMetrics http.Handler
 	MCPHandler        http.Handler
-	ClientUI          http.Handler
 	MountedWebUIs     []MountedWebUI
 	AdminUI           http.Handler
 	RouteProfile      RouteProfile
@@ -156,7 +154,6 @@ func New(cfg Config) (*Server, error) {
 		readiness:         cfg.Readiness,
 		prometheusMetrics: cfg.PrometheusMetrics,
 		mcpHandler:        cfg.MCPHandler,
-		clientUI:          cfg.ClientUI,
 		mountedWebUIs:     append([]MountedWebUI(nil), cfg.MountedWebUIs...),
 		adminUI:           cfg.AdminUI,
 		routeProfile:      cfg.RouteProfile,

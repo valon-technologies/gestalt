@@ -407,11 +407,27 @@ func TestMountedWebUIRoutesHiddenOnManagementProfile(t *testing.T) {
 	}
 }
 
-func TestClientUIFallbackRoutes(t *testing.T) {
+func TestMountedRootWebUIRoutes(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>root-shell</html>"), 0o644); err != nil {
+		t.Fatalf("WriteFile index.html: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "assets"), 0o755); err != nil {
+		t.Fatalf("MkdirAll assets: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "assets", "app.js"), []byte("console.log('root-ui')"), 0o644); err != nil {
+		t.Fatalf("WriteFile app.js: %v", err)
+	}
+	handler, err := testutilWebUIHandler(dir)
+	if err != nil {
+		t.Fatalf("webui handler: %v", err)
+	}
+
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.ClientUI = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprintf(w, "client-ui:%s", r.URL.Path)
-		})
+		cfg.MountedWebUIs = []server.MountedWebUI{{
+			Path:    "/",
+			Handler: handler,
+		}}
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -427,39 +443,72 @@ func TestClientUIFallbackRoutes(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	if got := string(body); got != "client-ui:/" {
-		t.Fatalf("body = %q, want %q", got, "client-ui:/")
+	if !strings.Contains(string(body), "root-shell") {
+		t.Fatalf("body = %q, want root shell", body)
 	}
 
-	resp, err = http.Get(ts.URL + "/some/client/route")
+	resp, err = http.Get(ts.URL + "/integrations")
 	if err != nil {
-		t.Fatalf("GET fallback route: %v", err)
+		t.Fatalf("GET /integrations: %v", err)
 	}
 	body, err = io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
 	if err != nil {
-		t.Fatalf("ReadAll fallback route: %v", err)
+		t.Fatalf("ReadAll /integrations: %v", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("fallback status = %d, want 200", resp.StatusCode)
+		t.Fatalf("integrations status = %d, want 200", resp.StatusCode)
 	}
-	if got := string(body); got != "client-ui:/some/client/route" {
-		t.Fatalf("fallback body = %q, want %q", got, "client-ui:/some/client/route")
+	if !strings.Contains(string(body), "root-shell") {
+		t.Fatalf("integrations body = %q, want root shell", body)
+	}
+
+	resp, err = http.Get(ts.URL + "/assets/app.js")
+	if err != nil {
+		t.Fatalf("GET /assets/app.js: %v", err)
+	}
+	body, err = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll /assets/app.js: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("asset status = %d, want 200", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), "root-ui") {
+		t.Fatalf("asset body = %q, want root-ui asset", body)
+	}
+
+	resp, err = http.Get(ts.URL + "/health")
+	if err != nil {
+		t.Fatalf("GET /health: %v", err)
+	}
+	body, err = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll /health: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("health status = %d, want 200", resp.StatusCode)
+	}
+	if strings.Contains(string(body), "root-shell") {
+		t.Fatalf("health body unexpectedly served root UI: %q", body)
 	}
 }
 
-func TestClientUIFallbackHiddenOnManagementProfile(t *testing.T) {
+func TestMountedRootWebUIRoutesHiddenOnManagementProfile(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.RouteProfile = server.RouteProfileManagement
-		cfg.ClientUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			_, _ = w.Write([]byte("unexpected"))
-		})
+		cfg.MountedWebUIs = []server.MountedWebUI{{
+			Path:    "/",
+			Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("unexpected")) }),
+		}}
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	resp, err := http.Get(ts.URL + "/some/client/route")
+	resp, err := http.Get(ts.URL + "/integrations")
 	if err != nil {
-		t.Fatalf("GET management client route: %v", err)
+		t.Fatalf("GET management root-mounted route: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusNotFound {

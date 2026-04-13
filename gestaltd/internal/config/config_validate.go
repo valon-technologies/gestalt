@@ -73,19 +73,6 @@ func ValidateStructure(cfg *Config) error {
 	if err := validatePluginOnlyProviderFields("audit", cfg.Providers.Audit); err != nil {
 		return err
 	}
-	if cfg.Providers.RootUI != nil {
-		if err := validatePluginOnlyProviderFields("ui", cfg.Providers.RootUI); err != nil {
-			return err
-		}
-		if !cfg.Providers.RootUI.Disabled {
-			if cfg.Providers.RootUI.Source.IsBuiltin() {
-				return fmt.Errorf("config validation: ui does not support builtin providers; use a provider source reference")
-			}
-			if err := validateProviderEntrySource("ui", "provider", cfg.Providers.RootUI); err != nil {
-				return err
-			}
-		}
-	}
 	for name, entry := range cfg.Providers.UI {
 		if entry == nil {
 			return fmt.Errorf("config validation: ui.%s is required", name)
@@ -366,8 +353,8 @@ func normalizeMountedUIPath(path string) (string, error) {
 		return "", fmt.Errorf("must start with /")
 	}
 	path = strings.TrimRight(path, "/")
-	if path == "" || path == "/" {
-		return "", fmt.Errorf("root path is not supported; use an explicit non-root mount path")
+	if path == "" {
+		return "/", nil
 	}
 	if strings.ContainsAny(path, "{}*") {
 		return "", fmt.Errorf("route patterns are not supported")
@@ -392,6 +379,18 @@ func validateMountedUICollisions(cfg *Config) error {
 	for i, name := range names {
 		entry := cfg.Providers.UI[name]
 		if entry == nil || entry.Disabled {
+			continue
+		}
+		if entry.Path == "/" {
+			for _, otherName := range names[i+1:] {
+				other := cfg.Providers.UI[otherName]
+				if other == nil || other.Disabled {
+					continue
+				}
+				if other.Path == "/" {
+					return fmt.Errorf("config validation: ui.%s.path %q conflicts with ui.%s.path %q", name, entry.Path, otherName, other.Path)
+				}
+			}
 			continue
 		}
 		for _, reservedPath := range reserved {

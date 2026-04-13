@@ -21,9 +21,6 @@ func (s *Server) routes() {
 		s.mountAPIRoutes(r)
 		s.mountMountedWebUIRoutes(r)
 		s.mountManagementHiddenRoutes(r)
-		if s.clientUI != nil {
-			r.NotFound(s.clientUI.ServeHTTP)
-		}
 	case RouteProfileManagement:
 		s.mountCoreRoutes(r, metricsUnauthenticated)
 		s.mountManagementRootRedirect(r)
@@ -34,9 +31,6 @@ func (s *Server) routes() {
 		s.mountAPIRoutes(r)
 		s.mountMountedWebUIRoutes(r)
 		s.mountAdminUIRoutes(r)
-		if s.clientUI != nil {
-			r.NotFound(s.clientUI.ServeHTTP)
-		}
 	}
 }
 
@@ -84,15 +78,23 @@ func (s *Server) mountAdminUIRoutes(r chi.Router) {
 }
 
 func (s *Server) mountMountedWebUIRoutes(r chi.Router) {
+	var rootHandler http.Handler
 	for _, mounted := range s.mountedWebUIs {
 		if mounted.Handler == nil || mounted.Path == "" {
 			continue
 		}
 		path := mounted.Path
+		if path == "/" {
+			rootHandler = mounted.Handler
+			continue
+		}
 		r.Get(path, func(w http.ResponseWriter, r *http.Request) {
 			redirectPreservingQuery(w, r, path+"/", http.StatusMovedPermanently)
 		})
 		r.Handle(path+"/*", http.StripPrefix(path, mounted.Handler))
+	}
+	if rootHandler != nil {
+		r.NotFound(rootHandler.ServeHTTP)
 	}
 }
 

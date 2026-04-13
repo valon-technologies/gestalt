@@ -288,68 +288,6 @@ func TestLoadForExecutionAtPath_ResolvesLocalMountedWebUIWithoutLockfile(t *test
 	}
 }
 
-func TestLoadForExecutionAtPath_ResolvesLegacyRootUIWithoutLockfile(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	webUIDir := filepath.Join(dir, "webui")
-	if err := os.MkdirAll(filepath.Join(webUIDir, "dist"), 0o755); err != nil {
-		t.Fatalf("MkdirAll webui dist: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(webUIDir, "dist", "index.html"), []byte("<html>valon-tools</html>"), 0o644); err != nil {
-		t.Fatalf("WriteFile index.html: %v", err)
-	}
-	manifestPath := filepath.Join(webUIDir, "manifest.yaml")
-	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindWebUI,
-		Source:      "github.com/testowner/web/default",
-		Version:     "0.0.1-alpha.4",
-		DisplayName: "Default UI",
-		Spec:        &providermanifestv1.Spec{AssetRoot: "dist"},
-	}, providerpkg.ManifestFormatYAML)
-	if err != nil {
-		t.Fatalf("EncodeManifest: %v", err)
-	}
-	if err := os.WriteFile(manifestPath, manifest, 0o644); err != nil {
-		t.Fatalf("WriteFile manifest: %v", err)
-	}
-
-	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  ui:
-    source:
-      path: ./webui/manifest.yaml
-` + `server:
-` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
-
-	lc := NewLifecycle(nil)
-	loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
-	if err != nil {
-		t.Fatalf("LoadForExecutionAtPath: %v", err)
-	}
-
-	entry := loaded.Providers.RootUI
-	if entry == nil {
-		t.Fatal("Providers.RootUI = nil")
-	}
-	if entry.ResolvedManifest == nil {
-		t.Fatal("ResolvedManifest = nil")
-	}
-	if got := entry.ResolvedManifestPath; got != manifestPath {
-		t.Fatalf("ResolvedManifestPath = %q, want %q", got, manifestPath)
-	}
-	wantAssetRoot := filepath.Join(webUIDir, "dist")
-	if got := entry.ResolvedAssetRoot; got != wantAssetRoot {
-		t.Fatalf("ResolvedAssetRoot = %q, want %q", got, wantAssetRoot)
-	}
-	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); !os.IsNotExist(err) {
-		t.Fatalf("lockfile should not be created, got err=%v", err)
-	}
-}
-
 func TestLoadForExecutionAtPath_SkipsDisabledLocalMountedWebUIWithoutLockfile(t *testing.T) {
 	t.Parallel()
 
@@ -415,56 +353,6 @@ func TestInitAtPath_SkipsDisabledManagedMountedWebUI(t *testing.T) {
 	}
 	if len(lock.UIs) != 0 {
 		t.Fatalf("UIs = %#v, want empty", lock.UIs)
-	}
-}
-
-func TestInitAtPath_WritesLegacyRootUIIntoCurrentLockfile(t *testing.T) {
-	t.Parallel()
-
-	dir := t.TempDir()
-	pkgPath := mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindWebUI,
-		Source:      "github.com/testowner/web/default",
-		Version:     "0.0.1-alpha.4",
-		DisplayName: "Default UI",
-		Spec:        &providermanifestv1.Spec{AssetRoot: "out"},
-	}, map[string]string{
-		"out/index.html": "<html>default-ui</html>",
-	}, false)
-
-	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  ui:
-    source:
-      ref: github.com/testowner/web/default
-      version: 0.0.1-alpha.4
-` + `server:
-` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
-
-	lc := NewLifecycle(staticSourceResolver{localPath: pkgPath})
-	lock, err := lc.InitAtPath(cfgPath)
-	if err != nil {
-		t.Fatalf("InitAtPath: %v", err)
-	}
-
-	entry, ok := lock.UIs[rootUIInternalName]
-	if !ok {
-		t.Fatalf("lock.UIs[%q] missing", rootUIInternalName)
-	}
-	if got := entry.Source; got != "github.com/testowner/web/default" {
-		t.Fatalf("Source = %q, want %q", got, "github.com/testowner/web/default")
-	}
-	if got := entry.Version; got != "0.0.1-alpha.4" {
-		t.Fatalf("Version = %q, want %q", got, "0.0.1-alpha.4")
-	}
-	if got := entry.Manifest; got != filepath.ToSlash(filepath.Join(PreparedUIDir, "manifest.json")) {
-		t.Fatalf("Manifest = %q", got)
-	}
-	if got := entry.AssetRoot; got != filepath.ToSlash(filepath.Join(PreparedUIDir, "out")) {
-		t.Fatalf("AssetRoot = %q", got)
 	}
 }
 

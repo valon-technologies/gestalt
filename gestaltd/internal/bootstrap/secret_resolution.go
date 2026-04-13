@@ -65,11 +65,6 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 			}
 		}
 	}
-	if cfg.Providers.RootUI != nil && !cfg.Providers.RootUI.Disabled {
-		if err := resolveStringFields(cfg.Providers.RootUI, resolve); err != nil {
-			return err
-		}
-	}
 	for name, entry := range cfg.Providers.UI {
 		if entry == nil || entry.Disabled {
 			continue

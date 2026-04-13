@@ -34,7 +34,6 @@ const (
 	LockVersion          = 5
 
 	platformKeyGeneric = "generic"
-	rootUIInternalName = "__root__"
 )
 
 type Lockfile struct {
@@ -181,13 +180,6 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 			lock.IndexedDBs[name] = entry
 		}
 	}
-	if cfg.Providers.RootUI != nil && !cfg.Providers.RootUI.Disabled && cfg.Providers.RootUI.HasManagedSource() {
-		uiEntry, err := l.writeNamedUIProviderArtifact(context.Background(), paths, rootUIInternalName, cfg.Providers.RootUI, uiDestDir(paths, rootUIInternalName), "ui")
-		if err != nil {
-			return nil, nil, err
-		}
-		lock.UIs[rootUIInternalName] = uiEntry
-	}
 	for name, entry := range cfg.Providers.UI {
 		if entry != nil && !entry.Disabled && entry.HasManagedSource() {
 			uiEntry, err := l.writeNamedUIProviderArtifact(context.Background(), paths, name, &entry.ProviderEntry, uiDestDir(paths, name), "ui "+strconv.Quote(name))
@@ -224,9 +216,6 @@ func buildSourceTokenMap(cfg *config.Config) map[string]string {
 		if p != nil && p.Source.Auth != nil {
 			tokens[p.SourceRef()] = p.Source.Auth.Token
 		}
-	}
-	if cfg.Providers.RootUI != nil && cfg.Providers.RootUI.Source.Auth != nil {
-		tokens[cfg.Providers.RootUI.SourceRef()] = cfg.Providers.RootUI.Source.Auth.Token
 	}
 	for _, def := range cfg.Providers.IndexedDBs {
 		if def != nil && def.Source.Auth != nil {
@@ -379,9 +368,6 @@ func configHasProviderLoading(cfg *config.Config) bool {
 			return true
 		}
 	}
-	if cfg.Providers.RootUI != nil && !cfg.Providers.RootUI.Disabled && (cfg.Providers.RootUI.HasManagedSource() || cfg.Providers.RootUI.HasLocalSource()) {
-		return true
-	}
 	for _, entry := range cfg.Providers.UI {
 		if entry != nil && !entry.Disabled && (entry.HasManagedSource() || entry.HasLocalSource()) {
 			return true
@@ -405,9 +391,6 @@ func configHasManagedProviderSources(cfg *config.Config) bool {
 		if p != nil && p.HasManagedSource() {
 			return true
 		}
-	}
-	if cfg.Providers.RootUI != nil && !cfg.Providers.RootUI.Disabled && cfg.Providers.RootUI.HasManagedSource() {
-		return true
 	}
 	for _, entry := range cfg.Providers.UI {
 		if entry != nil && !entry.Disabled && entry.HasManagedSource() {
@@ -473,9 +456,6 @@ func providerDestDir(paths initPaths, name string) string {
 }
 
 func uiDestDir(paths initPaths, name string) string {
-	if name == rootUIInternalName {
-		return paths.uiDir
-	}
 	return filepath.Join(paths.uiDir, name)
 }
 
@@ -578,24 +558,6 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 			return false
 		}
 	}
-	if cfg.Providers.RootUI != nil && !cfg.Providers.RootUI.Disabled && cfg.Providers.RootUI.HasManagedSource() {
-		lockEntry, ok := lock.UIs[rootUIInternalName]
-		if !ok {
-			return false
-		}
-		fingerprint, err := NamedUIProviderFingerprint(rootUIInternalName, cfg.Providers.RootUI)
-		if err != nil || lockEntry.Fingerprint != fingerprint {
-			return false
-		}
-		manifestPath := resolveLockPath(paths.artifactsDir, lockEntry.Manifest)
-		if _, err := os.Stat(manifestPath); err != nil {
-			return false
-		}
-		assetRootPath := resolveLockPath(paths.artifactsDir, lockEntry.AssetRoot)
-		if _, err := os.Stat(assetRootPath); err != nil {
-			return false
-		}
-	}
 	for name, entry := range cfg.Providers.IndexedDBs {
 		if entry == nil || !entry.HasManagedSource() {
 			continue
@@ -649,9 +611,6 @@ func ProviderFingerprint(name string, entry *config.ProviderEntry, configDir str
 }
 
 func NamedUIProviderFingerprint(name string, entry *config.ProviderEntry) (string, error) {
-	if name == rootUIInternalName {
-		return ProviderFingerprint("ui", entry, "")
-	}
 	return ProviderFingerprint("ui:"+name, entry, "")
 }
 
@@ -1036,19 +995,6 @@ func (l *Lifecycle) applyLockedProviders(configPath, artifactsDir string, cfg *c
 				return err
 			}
 		}
-	}
-	if cfg.Providers.RootUI != nil && !cfg.Providers.RootUI.Disabled {
-		var lockEntry *LockUIEntry
-		if lock != nil {
-			if le, ok := lock.UIs[rootUIInternalName]; ok {
-				lockEntry = &le
-			}
-		}
-		resolvedAssetRoot, err := l.applyConfiguredUIProvider(paths, lockEntry, cfg.Providers.RootUI, rootUIInternalName, "ui", uiDestDir(paths, rootUIInternalName), locked)
-		if err != nil {
-			return err
-		}
-		cfg.Providers.RootUI.ResolvedAssetRoot = resolvedAssetRoot
 	}
 	for name, entry := range cfg.Providers.UI {
 		if entry == nil || entry.Disabled {
