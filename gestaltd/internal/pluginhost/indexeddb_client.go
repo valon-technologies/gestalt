@@ -700,6 +700,8 @@ func (c *remoteCursor) Close() error {
 	if c.stream == nil {
 		return nil
 	}
+	c.done = true
+	c.entry = nil
 	_ = c.stream.Send(&proto.CursorClientMessage{
 		Msg: &proto.CursorClientMessage_Command{Command: &proto.CursorCommand{
 			Command: &proto.CursorCommand_Close{Close: true},

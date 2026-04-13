@@ -766,3 +766,33 @@ func TestCursor_PostExhaustionFollowUp(t *testing.T) {
 		t.Errorf("Delete after exhaustion = %v, want ErrNotFound", err)
 	}
 }
+
+func TestCursor_CloseMakesFurtherCallsInert(t *testing.T) {
+	t.Parallel()
+	_, db := newCursorTestDB(t)
+	ctx := context.Background()
+
+	cursor, err := db.ObjectStore("items").OpenCursor(ctx, nil, indexeddb.CursorNext)
+	if err != nil {
+		t.Fatalf("OpenCursor: %v", err)
+	}
+	if err := cursor.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	if cursor.Continue() {
+		t.Fatal("Continue after Close returned true")
+	}
+	if cursor.ContinueToKey("b") {
+		t.Fatal("ContinueToKey after Close returned true")
+	}
+	if cursor.Advance(1) {
+		t.Fatal("Advance after Close returned true")
+	}
+	if err := cursor.Delete(); !errors.Is(err, indexeddb.ErrNotFound) {
+		t.Fatalf("Delete after Close = %v, want ErrNotFound", err)
+	}
+	if err := cursor.Update(indexeddb.Record{"id": "x"}); !errors.Is(err, indexeddb.ErrNotFound) {
+		t.Fatalf("Update after Close = %v, want ErrNotFound", err)
+	}
+}
