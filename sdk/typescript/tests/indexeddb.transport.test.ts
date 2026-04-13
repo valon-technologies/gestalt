@@ -204,6 +204,20 @@ describe("IndexedDB transport", () => {
     expect(cursor!.done).toBe(true);
   });
 
+  test("advance rejects non-positive counts", async () => {
+    const store = "advance_invalid";
+    await db.createObjectStore(store);
+    const os = db.objectStore(store);
+
+    await os.put({ id: "x", data: 1 });
+
+    const cursor = await os.openCursor();
+    expect(cursor).not.toBeNull();
+
+    await expect(cursor!.advance(0)).rejects.toThrow("advance count must be positive");
+    cursor!.close();
+  });
+
   test("post-exhaustion: continue false, delete throws NotFoundError", async () => {
     const store = "post_exhaustion";
     await db.createObjectStore(store);

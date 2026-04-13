@@ -9,6 +9,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 func newCursorTestDB(t *testing.T) (*coretesting.StubIndexedDB, indexeddb.IndexedDB) {
@@ -401,11 +403,16 @@ func TestCursor_AdvanceRejectsNonPositiveCounts(t *testing.T) {
 	if cursor.Advance(0) {
 		t.Fatal("Advance(0) returned true")
 	}
-	if err := cursor.Err(); err != nil {
-		t.Fatalf("Err: %v", err)
+	err = cursor.Err()
+	if err == nil {
+		t.Fatal("Err() = nil, want invalid argument")
 	}
-	if cursor.PrimaryKey() != "" {
-		t.Fatalf("PrimaryKey after Advance(0) = %q, want empty", cursor.PrimaryKey())
+	st, ok := status.FromError(err)
+	if !ok {
+		t.Fatalf("Err() = %T, want gRPC status", err)
+	}
+	if st.Code() != codes.InvalidArgument {
+		t.Fatalf("Err() code = %v, want %v", st.Code(), codes.InvalidArgument)
 	}
 }
 

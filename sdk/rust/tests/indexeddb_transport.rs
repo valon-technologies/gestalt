@@ -279,6 +279,38 @@ async fn advance_past_end() {
 }
 
 #[tokio::test]
+async fn advance_rejects_non_positive_counts() {
+    let _lock = helpers::env_lock().lock().await;
+    let _harness = start_harness("idb-advance-invalid.sock").await;
+
+    let mut db = IndexedDB::connect().await.expect("connect");
+    db.create_object_store(
+        "advance_invalid_store",
+        ObjectStoreSchema { indexes: vec![] },
+    )
+    .await
+    .expect("create store");
+
+    let mut store = db.object_store("advance_invalid_store");
+    store
+        .put(make_record(&[("id", serde_json::json!("one"))]))
+        .await
+        .expect("put");
+
+    let mut cursor = store
+        .open_cursor(None, CursorDirection::Next)
+        .await
+        .expect("open cursor");
+
+    match cursor.advance(0).await {
+        Err(IndexedDBError::Status(status)) => {
+            assert_eq!(status.code(), tonic::Code::InvalidArgument);
+        }
+        other => panic!("expected InvalidArgument from advance(0), got: {:?}", other),
+    }
+}
+
+#[tokio::test]
 async fn post_exhaustion() {
     let _lock = helpers::env_lock().lock().await;
     let _harness = start_harness("idb-post-exhaust.sock").await;

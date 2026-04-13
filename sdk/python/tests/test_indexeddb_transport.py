@@ -7,6 +7,8 @@ import tempfile
 import time
 import unittest
 
+import grpc
+
 from gestalt import (
     CURSOR_NEXT,
     AlreadyExistsError,
@@ -169,6 +171,17 @@ class TestAdvancePastEnd(unittest.TestCase):
         s = c.object_store("advance_past")
         with s.open_cursor(direction=CURSOR_NEXT) as cursor:
             self.assertFalse(cursor.advance(100))
+        c.close()
+
+
+class TestAdvanceRejectsNonPositiveCounts(unittest.TestCase):
+    def test_zero_raises_invalid_argument(self) -> None:
+        c = _client()
+        _seed_store(c, "advance_invalid")
+        s = c.object_store("advance_invalid")
+        with s.open_cursor(direction=CURSOR_NEXT) as cursor:
+            with self.assertRaises(grpc.RpcError):
+                cursor.advance(0)
         c.close()
 
 

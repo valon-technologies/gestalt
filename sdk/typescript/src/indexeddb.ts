@@ -125,7 +125,7 @@ export class Cursor {
     const isIndex = !!(options?.index);
     const cursor = new Cursor(sendQueue, responseIterator, isIndex);
     // Read the open ack to surface creation errors synchronously.
-    await cursor.pull();
+    await cursor.recvOpenAck();
     return cursor;
   }
 
@@ -213,17 +213,53 @@ export class Cursor {
     this._value = undefined;
   }
 
+  private resetState(): void {
+    this._done = true;
+    this._key = undefined;
+    this._primaryKey = "";
+    this._value = undefined;
+  }
+
+  private mapCursorError(err: any): never {
+    if (err?.code === 5) throw new NotFoundError(err.message);
+    if (err?.code === 6) throw new AlreadyExistsError(err.message);
+    throw err;
+  }
+
+  private async recvOpenAck(): Promise<void> {
+    try {
+      const { value: resp, done } = await this.responseIterator.next();
+      if (done || !resp) {
+        this.sendQueue.end();
+        this.resetState();
+        throw new Error("cursor stream ended during open");
+      }
+      if (resp.result?.case !== "done" || resp.result.value !== false) {
+        this.sendQueue.end();
+        this.resetState();
+        throw new Error("unexpected cursor open ack");
+      }
+    } catch (err: any) {
+      this.mapCursorError(err);
+    }
+  }
+
   private async recvMutationAck(): Promise<void> {
     try {
       const { value: resp, done } = await this.responseIterator.next();
-      if (done || !resp) return;
+      if (done || !resp) {
+        this.sendQueue.end();
+        this.resetState();
+        throw new Error("cursor stream ended during mutation");
+      }
       if (resp.result?.case === "entry") {
         this.refreshFromEntry(resp.result.value);
+        return;
       }
+      if (resp.result?.case === "done") return;
+      throw new Error("unexpected cursor mutation ack");
     } catch (err: any) {
-      if (err?.code === 5) throw new NotFoundError(err.message);
-      if (err?.code === 6) throw new AlreadyExistsError(err.message);
-      throw err;
+      this.mapCursorError(err);
     }
   }
 
@@ -233,22 +269,14 @@ export class Cursor {
     try {
       ({ value: resp, done } = await this.responseIterator.next());
     } catch (err: any) {
-      if (err?.code === 5) throw new NotFoundError(err.message);
-      if (err?.code === 6) throw new AlreadyExistsError(err.message);
-      throw err;
+      this.mapCursorError(err);
     }
     if (done || !resp) {
-      this._done = true;
-      this._key = undefined;
-      this._primaryKey = "";
-      this._value = undefined;
+      this.resetState();
       return false;
     }
     if (resp.result?.case === "done" && resp.result.value === true) {
-      this._done = true;
-      this._key = undefined;
-      this._primaryKey = "";
-      this._value = undefined;
+      this.resetState();
       return false;
     }
     if (resp.result?.case === "done") {

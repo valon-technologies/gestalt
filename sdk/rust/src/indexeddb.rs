@@ -169,9 +169,25 @@ impl Cursor {
             .await
             .map_err(|e| IndexedDBError::Status(tonic::Status::internal(e.to_string())))?;
         // Read ack -- if it contains an entry, update cursor state.
-        if let Some(resp) = self.stream.message().await.map_err(map_status)? {
-            if let Some(pb::cursor_response::Result::Entry(entry)) = resp.result {
+        let resp = self
+            .stream
+            .message()
+            .await
+            .map_err(map_status)?
+            .ok_or_else(|| {
+                IndexedDBError::Status(tonic::Status::internal(
+                    "cursor stream ended during mutation",
+                ))
+            })?;
+        match resp.result {
+            Some(pb::cursor_response::Result::Entry(entry)) => {
                 self.entry = Some(entry);
+            }
+            Some(pb::cursor_response::Result::Done(_)) => {}
+            None => {
+                return Err(IndexedDBError::Status(tonic::Status::internal(
+                    "unexpected cursor mutation ack",
+                )));
             }
         }
         Ok(())
@@ -248,7 +264,22 @@ async fn open_cursor_inner(
         .into_inner();
 
     // Read the open ack to surface creation errors synchronously.
-    let _ack = stream.message().await.map_err(map_status)?;
+    let ack = stream.message().await.map_err(map_status)?.ok_or_else(|| {
+        IndexedDBError::Status(tonic::Status::internal("cursor stream ended during open"))
+    })?;
+    match ack.result {
+        Some(pb::cursor_response::Result::Done(false)) => {}
+        Some(pb::cursor_response::Result::Done(true)) => {
+            return Err(IndexedDBError::Status(tonic::Status::internal(
+                "unexpected exhausted cursor open ack",
+            )));
+        }
+        _ => {
+            return Err(IndexedDBError::Status(tonic::Status::internal(
+                "unexpected cursor open ack",
+            )));
+        }
+    }
 
     Ok(Cursor {
         tx,

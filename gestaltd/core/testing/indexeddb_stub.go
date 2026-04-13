@@ -647,6 +647,7 @@ func (c *stubCursor) ContinueToKey(key any) bool {
 
 func (c *stubCursor) Advance(count int) bool {
 	if count <= 0 {
+		c.err = fmt.Errorf("advance count must be positive")
 		return false
 	}
 	for i := 0; i < count; i++ {

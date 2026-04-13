@@ -354,6 +354,9 @@ func (s *indexedDBServer) OpenCursor(stream proto.IndexedDB_OpenCursorServer) er
 			}
 
 		case *proto.CursorCommand_Advance:
+			if v.Advance <= 0 {
+				return status.Error(codes.InvalidArgument, "advance count must be positive")
+			}
 			if !cursor.Advance(int(v.Advance)) {
 				if cErr := cursor.Err(); cErr != nil {
 					return indexeddbToGRPCErr(cErr)

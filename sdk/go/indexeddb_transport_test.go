@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var testClient *gestalt.IndexedDBClient
@@ -241,6 +243,30 @@ func TestTransport_AdvancePastEnd(t *testing.T) {
 	}
 	if cursor.Err() != nil {
 		t.Fatalf("Err: %v", cursor.Err())
+	}
+}
+
+func TestTransport_AdvanceRejectsNonPositiveCounts(t *testing.T) {
+	store := seedStore(t)
+	ctx := context.Background()
+	cursor, err := testClient.ObjectStore(store).OpenCursor(ctx, nil, gestalt.CursorNext)
+	if err != nil {
+		t.Fatalf("OpenCursor: %v", err)
+	}
+	defer cursor.Close()
+
+	if cursor.Advance(0) {
+		t.Fatal("Advance(0) returned true")
+	}
+	if cursor.Err() == nil {
+		t.Fatal("Err() = nil, want invalid argument")
+	}
+	st, ok := status.FromError(cursor.Err())
+	if !ok {
+		t.Fatalf("Err() = %T, want gRPC status", cursor.Err())
+	}
+	if st.Code() != codes.InvalidArgument {
+		t.Fatalf("Err() code = %v, want %v", st.Code(), codes.InvalidArgument)
 	}
 }
 
