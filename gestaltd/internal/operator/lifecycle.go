@@ -694,7 +694,7 @@ func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, paths initP
 	}
 	defer resolved.Cleanup()
 
-	installed, err := pluginstore.Install(resolved.LocalPath, destDir)
+	installed, err := installResolvedPackage(resolved.LocalPath, destDir)
 	if err != nil {
 		return LockEntry{}, fmt.Errorf("%s %q install source plugin: %w", kind, name, err)
 	}
@@ -753,7 +753,7 @@ func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths initPa
 	defer resolved.Cleanup()
 
 	destDir := providerDestDir(paths, name)
-	installed, err := pluginstore.Install(resolved.LocalPath, destDir)
+	installed, err := installResolvedPackage(resolved.LocalPath, destDir)
 	if err != nil {
 		return LockProviderEntry{}, fmt.Errorf("provider %q install source plugin: %w", name, err)
 	}
@@ -825,7 +825,7 @@ func (l *Lifecycle) writeUIProviderArtifact(ctx context.Context, cfg *config.Con
 	}
 	defer resolved.Cleanup()
 
-	installed, err := pluginstore.Install(resolved.LocalPath, destDir)
+	installed, err := installResolvedPackage(resolved.LocalPath, destDir)
 	if err != nil {
 		return LockUIEntry{}, fmt.Errorf("ui provider install source: %w", err)
 	}
@@ -858,6 +858,19 @@ func (l *Lifecycle) writeUIProviderArtifact(ctx context.Context, cfg *config.Con
 		Manifest:    filepath.ToSlash(manifestPath),
 		AssetRoot:   filepath.ToSlash(assetRoot),
 	}, nil
+}
+
+func installResolvedPackage(localPath, destDir string) (*pluginstore.InstalledPlugin, error) {
+	info, err := os.Stat(localPath)
+	if err == nil {
+		switch {
+		case info.IsDir():
+			return pluginstore.InstallFromDir(localPath, destDir)
+		case providerpkg.IsManifestFile(localPath):
+			return pluginstore.InstallFromDir(filepath.Dir(localPath), destDir)
+		}
+	}
+	return pluginstore.Install(localPath, destDir)
 }
 
 func sourceForPlugin(plugin *config.ProviderEntry) (pluginsource.Source, error) {

@@ -2,15 +2,21 @@ package main
 
 import (
 	"context"
+	"os"
 
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
 	github "github.com/valon-technologies/gestalt/server/internal/pluginsource/github"
+	sourceoverride "github.com/valon-technologies/gestalt/server/internal/pluginsource/override"
 )
 
 func operatorLifecycle() *operator.Lifecycle {
-	return operator.NewLifecycle(&github.GitHubResolver{}).WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
+	sourceResolver := &sourceoverride.Resolver{
+		Root: os.Getenv("GESTALT_SOURCE_OVERRIDE_DIR"),
+		Next: &github.GitHubResolver{},
+	}
+	return operator.NewLifecycle(sourceResolver).WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
 		return bootstrap.ResolveConfigSecrets(ctx, cfg, buildFactories())
 	})
 }

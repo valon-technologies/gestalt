@@ -216,6 +216,16 @@ func buildExecutableArchiveData(t *testing.T, dir, srcDirName, source, version, 
 	return archivePath
 }
 
+func extractArchiveToDir(t *testing.T, archivePath string) string {
+	t.Helper()
+
+	destDir := filepath.Join(t.TempDir(), "package")
+	if err := providerpkg.ExtractPackage(archivePath, destDir); err != nil {
+		t.Fatalf("ExtractPackage(%s): %v", archivePath, err)
+	}
+	return destDir
+}
+
 func writeConfigYAML(t *testing.T, dir, source, version, artifactsDir string) string {
 	t.Helper()
 
@@ -362,6 +372,103 @@ func TestSourcePluginEndToEnd(t *testing.T) {
 	readEntry := readBack.Providers["alpha"]
 	if readEntry.Source != source {
 		t.Errorf("readback Source = %q, want %q", readEntry.Source, source)
+	}
+}
+
+func TestSourcePluginEndToEndFromResolvedDirectory(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	source := "github.com/acme/tools/widget"
+	version := "1.0.0"
+	packageDir := extractArchiveToDir(t, buildV2Archive(t, dir, source, version, "fake-binary-v1"))
+
+	resolver := &fakeResolver{archivePath: packageDir}
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configPath := writeConfigYAML(t, dir, source, version, artifactsDir)
+
+	lc := NewLifecycle(resolver)
+	lock, err := lc.InitAtPath(configPath)
+	if err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+
+	entry, ok := lock.Providers["alpha"]
+	if !ok {
+		t.Fatal("lock entry for provider alpha not found")
+	}
+	if entry.Source != source {
+		t.Errorf("entry.Source = %q, want %q", entry.Source, source)
+	}
+	if entry.Version != version {
+		t.Errorf("entry.Version = %q, want %q", entry.Version, version)
+	}
+	if _, ok := entry.Archives[providerpkg.CurrentPlatformString()]; !ok {
+		t.Fatal("current platform archive missing from lock entry")
+	}
+
+	manifestPath := resolveLockPath(artifactsDir, entry.Manifest)
+	if _, err := os.Stat(manifestPath); err != nil {
+		t.Fatalf("manifest not found at %s: %v", manifestPath, err)
+	}
+	executablePath := resolveLockPath(artifactsDir, entry.Executable)
+	if _, err := os.Stat(executablePath); err != nil {
+		t.Fatalf("executable not found at %s: %v", executablePath, err)
+	}
+}
+
+func TestSourceIndexedDBComponentEndToEndFromResolvedDirectory(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	source := "github.com/acme/tools/indexeddb/relationaldb"
+	version := "1.0.0"
+	archivePath := buildExecutableArchive(t, dir, "indexeddb-src", source, version, providermanifestv1.KindIndexedDB, "indexeddb", "fake-indexeddb-v1")
+	packageDir := extractArchiveToDir(t, archivePath)
+
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configYAML := strings.Join([]string{
+		"providers:",
+		"  indexeddbs:",
+		"    sqlite:",
+		"      source:",
+		"        ref: " + source,
+		"        version: " + version,
+		"  ui:",
+		"    disabled: true",
+		"server:",
+		"  indexeddb: sqlite",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle(&fakeResolver{archivePath: packageDir})
+	lock, err := lc.InitAtPath(configPath)
+	if err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+	if lock.Datastore == nil {
+		t.Fatal("lock datastore entry not found")
+	}
+	if lock.Datastore.Source != source {
+		t.Errorf("lock.Datastore.Source = %q, want %q", lock.Datastore.Source, source)
+	}
+	if lock.Datastore.Version != version {
+		t.Errorf("lock.Datastore.Version = %q, want %q", lock.Datastore.Version, version)
+	}
+
+	manifestPath := resolveLockPath(artifactsDir, lock.Datastore.Manifest)
+	if _, err := os.Stat(manifestPath); err != nil {
+		t.Fatalf("manifest not found at %s: %v", manifestPath, err)
+	}
+	executablePath := resolveLockPath(artifactsDir, lock.Datastore.Executable)
+	if _, err := os.Stat(executablePath); err != nil {
+		t.Fatalf("executable not found at %s: %v", executablePath, err)
 	}
 }
 
