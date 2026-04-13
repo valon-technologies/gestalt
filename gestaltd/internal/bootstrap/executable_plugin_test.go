@@ -13,6 +13,8 @@ import (
 	"sync/atomic"
 	"testing"
 
+	mcpgo "github.com/mark3labs/mcp-go/mcp"
+	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
@@ -308,6 +310,125 @@ paths:
 	}
 	if got := docHits.Load(); got != 0 {
 		t.Fatalf("document server hits = %d, want 0", got)
+	}
+}
+
+func TestSpecLoadedDualSurfaceProviderBuildsMCPOperations(t *testing.T) {
+	t.Parallel()
+
+	apiSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/pages" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"source":"api"}`))
+	}))
+	t.Cleanup(apiSrv.Close)
+
+	mcpSrv := mcpserver.NewMCPServer("notion-upstream", "1.0.0")
+	mcpSrv.AddTool(
+		mcpgo.NewTool("search", mcpgo.WithDescription("Search Notion")),
+		func(_ context.Context, _ mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+			return mcpgo.NewToolResultText("from-mcp"), nil
+		},
+	)
+	mcpHTTP := httptest.NewServer(mcpserver.NewStreamableHTTPServer(
+		mcpSrv,
+		mcpserver.WithStateLess(true),
+	))
+	t.Cleanup(mcpHTTP.Close)
+
+	root := t.TempDir()
+	manifestPath := filepath.Join(root, "manifest.yaml")
+	if err := os.WriteFile(manifestPath, []byte("kind: plugin\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(manifest.yaml): %v", err)
+	}
+	openapiPath := filepath.Join(root, "openapi.yaml")
+	openapiDoc := fmt.Sprintf(`openapi: "3.1.0"
+info:
+  title: Notion
+  version: "1.0.0"
+servers:
+  - url: %s
+paths:
+  /pages:
+    get:
+      operationId: list_pages
+      responses:
+        "200":
+          description: OK
+`, apiSrv.URL)
+	if err := os.WriteFile(openapiPath, []byte(openapiDoc), 0o644); err != nil {
+		t.Fatalf("WriteFile(openapi.yaml): %v", err)
+	}
+
+	cfg := &config.Config{
+		Providers: config.ProvidersConfig{
+			Plugins: map[string]*config.ProviderEntry{
+				"notion": {
+					ResolvedManifestPath: manifestPath,
+					ResolvedManifest: &providermanifestv1.Manifest{
+						Kind:        providermanifestv1.KindPlugin,
+						DisplayName: "Notion",
+						Description: "Dual-surface provider",
+						Spec: &providermanifestv1.Spec{
+							Surfaces: &providermanifestv1.ProviderSurfaces{
+								OpenAPI: &providermanifestv1.OpenAPISurface{
+									Document: "openapi.yaml",
+								},
+								MCP: &providermanifestv1.MCPSurface{
+									URL: mcpHTTP.URL,
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	prov, err := providers.Get("notion")
+	if err != nil {
+		t.Fatalf("providers.Get(notion): %v", err)
+	}
+
+	apiResult, err := prov.Execute(context.Background(), "list_pages", nil, "")
+	if err != nil {
+		t.Fatalf("Execute(list_pages): %v", err)
+	}
+	if apiResult.Status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", apiResult.Status, http.StatusOK)
+	}
+	if apiResult.Body != `{"source":"api"}` {
+		t.Fatalf("body = %q, want %q", apiResult.Body, `{"source":"api"}`)
+	}
+
+	directTool, ok := any(prov).(interface {
+		CallTool(context.Context, string, map[string]any) (*mcpgo.CallToolResult, error)
+	})
+	if !ok {
+		t.Fatalf("provider does not expose direct MCP tools: %T", prov)
+	}
+	mcpResult, err := directTool.CallTool(context.Background(), "search", nil)
+	if err != nil {
+		t.Fatalf("CallTool(search): %v", err)
+	}
+	if mcpResult.IsError {
+		t.Fatalf("unexpected MCP tool error: %+v", mcpResult.Content)
+	}
+	text, ok := mcpResult.Content[0].(mcpgo.TextContent)
+	if !ok {
+		t.Fatalf("expected TextContent, got %T", mcpResult.Content[0])
+	}
+	if text.Text != "from-mcp" {
+		t.Fatalf("text = %q, want %q", text.Text, "from-mcp")
 	}
 }
 

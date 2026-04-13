@@ -15,7 +15,6 @@ type MCPUpstream interface {
 	core.Provider
 	core.SessionCatalogProvider
 	CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error)
-	SupportsManualAuth() bool
 	Close() error
 }
 
