@@ -36,7 +36,7 @@ You implement the [IndexedDB gRPC service](https://www.w3.org/TR/IndexedDB/#obje
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
     ```go
-    package main
+    package relationaldb
 
     import (
     	"context"
@@ -44,7 +44,6 @@ You implement the [IndexedDB gRPC service](https://www.w3.org/TR/IndexedDB/#obje
     	"fmt"
     	"strings"
 
-    	gestalt "github.com/valon-technologies/gestalt/sdk/go"
     	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
     	"google.golang.org/protobuf/types/known/emptypb"
     )
@@ -52,6 +51,8 @@ You implement the [IndexedDB gRPC service](https://www.w3.org/TR/IndexedDB/#obje
     type RelationalDB struct {
     	db *sql.DB
     }
+
+    func New() *RelationalDB { return &RelationalDB{} }
 
     func (r *RelationalDB) Configure(_ context.Context, _ string, config map[string]any) error {
     	dsn, _ := config["dsn"].(string)
@@ -101,10 +102,6 @@ You implement the [IndexedDB gRPC service](https://www.w3.org/TR/IndexedDB/#obje
 
     // See the W3C IndexedDB specification for the remaining methods:
     // https://www.w3.org/TR/IndexedDB/#object-store-interface
-
-    func main() {
-    	gestalt.ServeIndexedDBProvider(context.Background(), &RelationalDB{})
-    }
     ```
   </Tabs.Tab>
   <Tabs.Tab>
@@ -138,8 +135,6 @@ You implement the [IndexedDB gRPC service](https://www.w3.org/TR/IndexedDB/#obje
 
         # See the W3C IndexedDB specification for the remaining methods:
         # https://www.w3.org/TR/IndexedDB/#object-store-interface
-
-    RelationalDB().serve()
     ```
   </Tabs.Tab>
   <Tabs.Tab>
