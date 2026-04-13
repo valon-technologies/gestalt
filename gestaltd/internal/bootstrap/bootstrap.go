@@ -10,6 +10,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
+	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
@@ -154,6 +155,7 @@ type Result struct {
 	Services         *coredata.Services
 	Providers        *registry.ProviderMap[core.Provider]
 	ProvidersReady   <-chan struct{}
+	Authorizer       *authorization.Authorizer
 	ConnectionAuth   func() map[string]map[string]OAuthHandler
 	Invoker          invocation.Invoker
 	CapabilityLister invocation.CapabilityLister
@@ -372,7 +374,12 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	if err != nil {
 		return nil, err
 	}
+	authz, err := authorization.New(cfg.Server.Authorization, cfg.Providers.Plugins, providers, connMaps.DefaultConnection)
+	if err != nil {
+		return nil, err
+	}
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.Tokens,
+		invocation.WithAuthorizer(authz),
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
 		invocation.WithConnectionAuth(lazyRefreshers(providersReady, connAuthResolver)),
@@ -396,6 +403,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Services:         prepared.Services,
 		Providers:        providers,
 		ProvidersReady:   providersReady,
+		Authorizer:       authz,
 		ConnectionAuth:   connAuthResolver,
 		Invoker:          sharedInvoker,
 		CapabilityLister: sharedInvoker,

@@ -9,7 +9,24 @@ import (
 )
 
 func (s *Server) resolvePrincipalUserID(ctx context.Context, p *principal.Principal) (*principal.Principal, error) {
-	if p == nil || p.UserID != "" || p.Identity == nil || p.Identity.Email == "" {
+	if p == nil {
+		return nil, nil
+	}
+	if p.Kind == principal.KindWorkload {
+		return p, nil
+	}
+	if p.Kind == "" {
+		p.Kind = principal.KindUser
+	}
+	if p.UserID != "" {
+		if p.SubjectID == "" {
+			clone := *p
+			clone.SubjectID = principal.UserSubjectID(p.UserID)
+			return &clone, nil
+		}
+		return p, nil
+	}
+	if p.Identity == nil || p.Identity.Email == "" {
 		return p, nil
 	}
 
@@ -23,6 +40,8 @@ func (s *Server) resolvePrincipalUserID(ctx context.Context, p *principal.Princi
 
 	clone := *p
 	clone.UserID = dbUser.ID
+	clone.Kind = principal.KindUser
+	clone.SubjectID = principal.UserSubjectID(dbUser.ID)
 	return &clone, nil
 }
 
@@ -47,6 +66,8 @@ func (s *Server) auditHTTPEventWithUserID(ctx context.Context, userID, authSourc
 	ctx, entry := invocation.BuildAuditEntry(ctx, nil, "http", provider, operation)
 	entry.UserID = userID
 	entry.AuthSource = authSource
+	entry.SubjectID = principal.UserSubjectID(userID)
+	entry.SubjectKind = string(principal.KindUser)
 	entry.Allowed = allowed
 	if err != nil {
 		entry.Error = err.Error()

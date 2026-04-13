@@ -256,6 +256,9 @@ func (s *Server) resolvePendingConnectionUserID(r *http.Request) (string, bool, 
 	if p == nil {
 		return "", false, nil
 	}
+	if p.Kind == principal.KindWorkload {
+		return "", true, errWorkloadForbidden
+	}
 	if p.UserID == "" {
 		return "", true, fmt.Errorf("authenticated principal missing user ID")
 	}
@@ -286,6 +289,10 @@ func (s *Server) authorizePendingConnectionByCookie(r *http.Request, state *pend
 func (s *Server) authorizePendingConnection(w http.ResponseWriter, r *http.Request, state *pendingConnectionState) bool {
 	userID, authenticated, err := s.resolvePendingConnectionUserID(r)
 	if err != nil {
+		if errors.Is(err, errWorkloadForbidden) {
+			writeError(w, http.StatusForbidden, "workload callers are not allowed on this route")
+			return false
+		}
 		if errors.Is(err, principal.ErrInvalidToken) {
 			writeError(w, http.StatusUnauthorized, "invalid token")
 			return false

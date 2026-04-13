@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/valon-technologies/gestalt/server/core"
 )
 
 type InvocationMeta struct {
@@ -36,6 +37,7 @@ func ensureMeta(ctx context.Context) (context.Context, *InvocationMeta) {
 }
 
 type requestMetaCtxKey struct{}
+type auditEntryCtxKey struct{}
 
 type RequestMeta struct {
 	ClientIP   string
@@ -56,6 +58,15 @@ func WithRequestMeta(ctx context.Context, meta RequestMeta) context.Context {
 func RequestMetaFromContext(ctx context.Context) RequestMeta {
 	m, _ := ctx.Value(requestMetaCtxKey{}).(RequestMeta)
 	return m
+}
+
+func withAuditEntry(ctx context.Context, entry *core.AuditEntry) context.Context {
+	return context.WithValue(ctx, auditEntryCtxKey{}, entry)
+}
+
+func auditEntryFromContext(ctx context.Context) *core.AuditEntry {
+	entry, _ := ctx.Value(auditEntryCtxKey{}).(*core.AuditEntry)
+	return entry
 }
 
 func WithInvocationSurface(ctx context.Context, surface InvocationSurface) context.Context {

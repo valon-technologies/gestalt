@@ -24,6 +24,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/session"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/apiexec"
+	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/composite"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -78,6 +79,9 @@ func newTestServer(t *testing.T, opts ...func(*server.Config)) *httptest.Server 
 			}
 			return refreshers
 		}))
+	}
+	if cfg.Authorizer != nil {
+		brokerOpts = append(brokerOpts, invocation.WithAuthorizer(cfg.Authorizer))
 	}
 	if cfg.Invoker == nil {
 		cfg.Invoker = invocation.NewBroker(cfg.Providers, cfg.Services.Users, cfg.Services.Tokens, brokerOpts...)
@@ -216,6 +220,27 @@ func seedUser(t *testing.T, svc *coredata.Services, email string) *core.User {
 		t.Fatalf("seedUser: %v", err)
 	}
 	return u
+}
+
+func seedIdentityToken(t *testing.T, svc *coredata.Services, integration, connection, instance, accessToken string) {
+	t.Helper()
+	seedToken(t, svc, &core.IntegrationToken{
+		ID:          integration + "-" + connection + "-" + instance,
+		UserID:      principal.IdentityPrincipal,
+		Integration: integration,
+		Connection:  connection,
+		Instance:    instance,
+		AccessToken: accessToken,
+	})
+}
+
+func mustAuthorizer(t *testing.T, cfg config.AuthorizationConfig, providers *registry.ProviderMap[core.Provider], pluginDefs map[string]*config.ProviderEntry, defaultConnections map[string]string) *authorization.Authorizer {
+	t.Helper()
+	authz, err := authorization.New(cfg, pluginDefs, providers, defaultConnections)
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+	return authz
 }
 
 func seedToken(t *testing.T, svc *coredata.Services, tok *core.IntegrationToken) {
@@ -493,6 +518,57 @@ func TestAuthMiddleware_ValidAPIToken(t *testing.T) {
 	}
 }
 
+func TestAuthMiddleware_ValidWorkloadToken(t *testing.T) {
+	t.Parallel()
+
+	plaintext, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+
+	stub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{N: "weather", ConnMode: core.ConnectionModeNone},
+		ops:             []core.Operation{{Name: "forecast", Method: http.MethodGet}},
+	}
+	providers := testutil.NewProviderRegistry(t, stub)
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Workloads: map[string]config.WorkloadDef{
+			"weather-bot": {
+				Token: plaintext,
+				Providers: map[string]config.WorkloadProviderDef{
+					"weather": {Allow: []string{"forecast"}},
+				},
+			},
+		},
+	}, providers, nil, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, _ string) (*core.UserIdentity, error) {
+				return nil, fmt.Errorf("not a session token")
+			},
+		}
+		cfg.Providers = providers
+		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Authorizer = authz
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req.Header.Set("Authorization", "Bearer "+plaintext)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+}
+
 func TestAuthMiddleware_NoAuth(t *testing.T) {
 	t.Parallel()
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -712,6 +788,280 @@ func TestListIntegrations(t *testing.T) {
 	}
 	if integrations[0].Connected {
 		t.Fatal("expected connected=false when no tokens stored")
+	}
+}
+
+func TestWorkloadAuthorization_ListIntegrationsFiltersAndHidesConnectionAffordances(t *testing.T) {
+	t.Parallel()
+
+	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+
+	svc := coretesting.NewStubServices(t)
+	seedIdentityToken(t, svc, "svc", "workspace", "default", "identity-svc-token")
+
+	svcProvider := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{N: "svc", DN: "Service", ConnMode: core.ConnectionModeIdentity},
+		ops:             []core.Operation{{Name: "run", Method: http.MethodGet}},
+	}
+	weatherProvider := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{N: "weather", DN: "Weather", ConnMode: core.ConnectionModeNone},
+		ops:             []core.Operation{{Name: "forecast", Method: http.MethodGet}},
+	}
+	secretProvider := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{N: "secret", DN: "Secret", ConnMode: core.ConnectionModeNone},
+		ops:             []core.Operation{{Name: "peek", Method: http.MethodGet}},
+	}
+	providers := testutil.NewProviderRegistry(t, svcProvider, weatherProvider, secretProvider)
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Workloads: map[string]config.WorkloadDef{
+			"triage-bot": {
+				Token: workloadToken,
+				Providers: map[string]config.WorkloadProviderDef{
+					"svc":     {Allow: []string{"run"}},
+					"weather": {Allow: []string{"forecast"}},
+				},
+			},
+		},
+	}, providers, nil, map[string]string{"svc": "workspace"})
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+		cfg.Providers = providers
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.DefaultConnection = map[string]string{"svc": "workspace"}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req.Header.Set("Authorization", "Bearer "+workloadToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	var integrations []struct {
+		Name             string                    `json:"name"`
+		Connected        bool                      `json:"connected"`
+		Instances        []map[string]any          `json:"instances"`
+		AuthTypes        []string                  `json:"authTypes"`
+		Connections      []map[string]any          `json:"connections"`
+		CredentialFields []map[string]any          `json:"credentialFields"`
+		ConnectionParams map[string]map[string]any `json:"connectionParams"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if len(integrations) != 2 {
+		t.Fatalf("expected 2 integrations, got %+v", integrations)
+	}
+
+	got := map[string]struct {
+		Connected        bool
+		Instances        []map[string]any
+		AuthTypes        []string
+		Connections      []map[string]any
+		CredentialFields []map[string]any
+		ConnectionParams map[string]map[string]any
+	}{}
+	for _, integration := range integrations {
+		got[integration.Name] = struct {
+			Connected        bool
+			Instances        []map[string]any
+			AuthTypes        []string
+			Connections      []map[string]any
+			CredentialFields []map[string]any
+			ConnectionParams map[string]map[string]any
+		}{
+			Connected:        integration.Connected,
+			Instances:        integration.Instances,
+			AuthTypes:        integration.AuthTypes,
+			Connections:      integration.Connections,
+			CredentialFields: integration.CredentialFields,
+			ConnectionParams: integration.ConnectionParams,
+		}
+	}
+	if _, ok := got["secret"]; ok {
+		t.Fatalf("unauthorized integration was visible: %+v", integrations)
+	}
+	if !got["svc"].Connected {
+		t.Fatalf("expected bound identity integration to be connected, got %+v", got["svc"])
+	}
+	if !got["weather"].Connected {
+		t.Fatalf("expected connection-mode none integration to be connected, got %+v", got["weather"])
+	}
+	for name, info := range got {
+		if len(info.Instances) != 0 || len(info.AuthTypes) != 0 || len(info.Connections) != 0 || len(info.CredentialFields) != 0 || len(info.ConnectionParams) != 0 {
+			t.Fatalf("workload integration %q should not expose connection affordances: %+v", name, info)
+		}
+	}
+
+	stubDB := svc.DB.(*coretesting.StubIndexedDB)
+	stubDB.Err = fmt.Errorf("token store unavailable")
+	t.Cleanup(func() { stubDB.Err = nil })
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req.Header.Set("Authorization", "Bearer "+workloadToken)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request with token store outage: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusInternalServerError {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 500 when workload binding lookup fails, got %d: %s", resp.StatusCode, body)
+	}
+}
+
+func TestWorkloadAuthorization_ListOperationsFiltersAndRejectsSelectors(t *testing.T) {
+	t.Parallel()
+
+	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+
+	provider := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{N: "svc", ConnMode: core.ConnectionModeIdentity},
+		ops: []core.Operation{
+			{Name: "run", Method: http.MethodGet},
+			{Name: "admin", Method: http.MethodGet},
+		},
+	}
+	providers := testutil.NewProviderRegistry(t, provider)
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Workloads: map[string]config.WorkloadDef{
+			"triage-bot": {
+				Token: workloadToken,
+				Providers: map[string]config.WorkloadProviderDef{
+					"svc": {
+						Connection: "workspace",
+						Instance:   "default",
+						Allow:      []string{"run"},
+					},
+				},
+			},
+		},
+	}, providers, nil, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+		cfg.Providers = providers
+		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Authorizer = authz
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/svc/operations", nil)
+	req.Header.Set("Authorization", "Bearer "+workloadToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	var ops []struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&ops); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if len(ops) != 1 || ops[0].ID != "run" {
+		t.Fatalf("operations = %+v, want only run", ops)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/svc/operations?_connection=workspace", nil)
+	req.Header.Set("Authorization", "Bearer "+workloadToken)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request with selector: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusForbidden {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 403, got %d: %s", resp.StatusCode, body)
+	}
+
+	svc := coretesting.NewStubServices(t)
+	seedIdentityToken(t, svc, "svc-session", "workspace", "team-a", "session-bound-token")
+
+	var sessionCatalogToken string
+	sessionProvider := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "svc-session", ConnMode: core.ConnectionModeIdentity},
+		},
+		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			sessionCatalogToken = token
+			return &catalog.Catalog{
+				Name: "svc-session",
+				Operations: []catalog.CatalogOperation{
+					{ID: "run", Method: http.MethodGet},
+				},
+			}, nil
+		},
+	}
+	sessionProviders := testutil.NewProviderRegistry(t, sessionProvider)
+	sessionAuthz := mustAuthorizer(t, config.AuthorizationConfig{
+		Workloads: map[string]config.WorkloadDef{
+			"triage-bot": {
+				Token: workloadToken,
+				Providers: map[string]config.WorkloadProviderDef{
+					"svc-session": {
+						Connection: "workspace",
+						Instance:   "team-a",
+						Allow:      []string{"run"},
+					},
+				},
+			},
+		},
+	}, sessionProviders, nil, map[string]string{"svc-session": testDefaultConnection})
+
+	sessionTS := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+		cfg.Providers = sessionProviders
+		cfg.Services = svc
+		cfg.Authorizer = sessionAuthz
+		cfg.DefaultConnection = map[string]string{"svc-session": testDefaultConnection}
+	})
+	testutil.CloseOnCleanup(t, sessionTS)
+
+	req, _ = http.NewRequest(http.MethodGet, sessionTS.URL+"/api/v1/integrations/svc-session/operations", nil)
+	req.Header.Set("Authorization", "Bearer "+workloadToken)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("session catalog request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200 for session-catalog workload discovery, got %d: %s", resp.StatusCode, body)
+	}
+
+	ops = nil
+	if err := json.NewDecoder(resp.Body).Decode(&ops); err != nil {
+		t.Fatalf("decoding session ops: %v", err)
+	}
+	if len(ops) != 1 || ops[0].ID != "run" {
+		t.Fatalf("session operations = %+v, want only run", ops)
+	}
+	if sessionCatalogToken != "session-bound-token" {
+		t.Fatalf("expected session catalog to use bound identity token, got %q", sessionCatalogToken)
 	}
 }
 
@@ -2423,6 +2773,235 @@ func TestExecuteOperation_NoStoredToken(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
+}
+
+func TestWorkloadAuthorization_ExecuteOperation_UsesBoundIdentityAndRejectsSelectors(t *testing.T) {
+	t.Parallel()
+
+	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+
+	svc := coretesting.NewStubServices(t)
+	seedIdentityToken(t, svc, "svc", "workspace", "team-a", "identity-bound-token")
+
+	stub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "svc",
+			ConnMode: core.ConnectionModeIdentity,
+			ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
+				return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)}, nil
+			},
+		},
+		ops: []core.Operation{
+			{Name: "run", Method: http.MethodGet},
+			{Name: "admin", Method: http.MethodGet},
+		},
+	}
+	providers := testutil.NewProviderRegistry(t, stub)
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Workloads: map[string]config.WorkloadDef{
+			"triage-bot": {
+				Token: workloadToken,
+				Providers: map[string]config.WorkloadProviderDef{
+					"svc": {
+						Connection: "workspace",
+						Instance:   "team-a",
+						Allow:      []string{"run"},
+					},
+				},
+			},
+		},
+	}, providers, nil, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+		cfg.Providers = providers
+		cfg.Services = svc
+		cfg.Authorizer = authz
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/run", nil)
+	req.Header.Set("Authorization", "Bearer "+workloadToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if result["token"] != "identity-bound-token" {
+		t.Fatalf("expected bound identity token, got %v", result["token"])
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/admin", nil)
+	req.Header.Set("Authorization", "Bearer "+workloadToken)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("unauthorized request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusForbidden {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 403, got %d: %s", resp.StatusCode, body)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/run?_instance=team-a", nil)
+	req.Header.Set("Authorization", "Bearer "+workloadToken)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("selector request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusForbidden {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 403 for selector override, got %d: %s", resp.StatusCode, body)
+	}
+}
+
+func TestWorkloadAuthorization_ExecuteOperation_MissingBoundIdentityTokenReturns412(t *testing.T) {
+	t.Parallel()
+
+	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+
+	var auditBuf bytes.Buffer
+	auditSink := invocation.NewSlogAuditSink(&auditBuf)
+
+	stub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "svc",
+			ConnMode: core.ConnectionModeIdentity,
+		},
+		ops: []core.Operation{{Name: "run", Method: http.MethodGet}},
+	}
+	providers := testutil.NewProviderRegistry(t, stub)
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Workloads: map[string]config.WorkloadDef{
+			"triage-bot": {
+				Token: workloadToken,
+				Providers: map[string]config.WorkloadProviderDef{
+					"svc": {
+						Connection: "workspace",
+						Instance:   "team-a",
+						Allow:      []string{"run"},
+					},
+				},
+			},
+		},
+	}, providers, nil, nil)
+
+	svc := coretesting.NewStubServices(t)
+	broker := invocation.NewBroker(providers, svc.Users, svc.Tokens, invocation.WithAuthorizer(authz))
+	guarded := invocation.NewGuarded(broker, broker, "http", auditSink, invocation.WithoutRateLimit())
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+		cfg.Providers = providers
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.AuditSink = auditSink
+		cfg.Invoker = guarded
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/run", nil)
+	req.Header.Set("Authorization", "Bearer "+workloadToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusPreconditionFailed {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 412, got %d: %s", resp.StatusCode, body)
+	}
+
+	var record map[string]any
+	if err := json.Unmarshal(auditBuf.Bytes(), &record); err != nil {
+		t.Fatalf("failed to parse audit JSON: %v\nraw: %s", err, auditBuf.String())
+	}
+	if record["subject_id"] != "workload:triage-bot" {
+		t.Fatalf("expected workload subject_id, got %v", record["subject_id"])
+	}
+	if record["credential_subject_id"] != "identity:__identity__" {
+		t.Fatalf("expected credential_subject_id identity principal, got %v", record["credential_subject_id"])
+	}
+	if record["credential_connection"] != "workspace" {
+		t.Fatalf("expected credential_connection=workspace, got %v", record["credential_connection"])
+	}
+	if record["credential_instance"] != "team-a" {
+		t.Fatalf("expected credential_instance=team-a, got %v", record["credential_instance"])
+	}
+}
+
+func TestWorkloadAuthorization_HumanRoutesReturn403(t *testing.T) {
+	t.Parallel()
+
+	workloadToken, _, err := principal.GenerateToken(principal.TokenTypeWorkload)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+
+	stub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{N: "weather", ConnMode: core.ConnectionModeNone},
+		ops:             []core.Operation{{Name: "forecast", Method: http.MethodGet}},
+	}
+	providers := testutil.NewProviderRegistry(t, stub)
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Workloads: map[string]config.WorkloadDef{
+			"triage-bot": {
+				Token: workloadToken,
+				Providers: map[string]config.WorkloadProviderDef{
+					"weather": {Allow: []string{"forecast"}},
+				},
+			},
+		},
+	}, providers, nil, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+		cfg.Providers = providers
+		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Authorizer = authz
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	for _, request := range []struct {
+		method string
+		path   string
+		body   string
+	}{
+		{method: http.MethodPost, path: "/api/v1/tokens", body: `{"name":"bot-token"}`},
+		{method: http.MethodPost, path: "/api/v1/auth/connect-manual", body: `{"integration":"weather","credential":"abc"}`},
+		{method: http.MethodDelete, path: "/api/v1/integrations/weather"},
+		{method: http.MethodPost, path: "/api/v1/auth/logout"},
+	} {
+		req, _ := http.NewRequest(request.method, ts.URL+request.path, bytes.NewBufferString(request.body))
+		req.Header.Set("Authorization", "Bearer "+workloadToken)
+		if request.body != "" {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("%s %s: %v", request.method, request.path, err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusForbidden {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("%s %s expected 403, got %d: %s", request.method, request.path, resp.StatusCode, body)
+		}
+	}
 }
 
 func TestExecuteOperation_RejectsSessionPassthrough(t *testing.T) {

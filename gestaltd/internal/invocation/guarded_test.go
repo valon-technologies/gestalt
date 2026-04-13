@@ -12,6 +12,7 @@ import (
 	coreintegration "github.com/valon-technologies/gestalt/server/core/integration"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
 
@@ -54,6 +55,14 @@ type capturingSink struct {
 
 func (s *capturingSink) Log(_ context.Context, entry core.AuditEntry) {
 	s.entries = append(s.entries, entry)
+}
+
+type funcInvoker struct {
+	invoke func(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error)
+}
+
+func (f funcInvoker) Invoke(ctx context.Context, p *principal.Principal, providerName, instance, operation string, params map[string]any) (*core.OperationResult, error) {
+	return f.invoke(ctx, p, providerName, instance, operation, params)
 }
 
 func guardTestProvider(name string) *stubProviderWithOps {
@@ -227,6 +236,49 @@ func TestGuardedInvoker_AuditLogged(t *testing.T) {
 	if denied.Error == "" {
 		t.Error("expected denied call to include an error")
 	}
+}
+
+func TestGuardedInvoker_AuditLoggedOnPanic(t *testing.T) {
+	t.Parallel()
+
+	sink := &capturingSink{}
+	guarded := invocation.NewGuarded(funcInvoker{
+		invoke: func(ctx context.Context, _ *principal.Principal, _ string, _ string, _ string, _ map[string]any) (*core.OperationResult, error) {
+			invocation.SetCredentialAudit(ctx, core.ConnectionModeIdentity, principal.IdentitySubjectID(), "workspace", "team-a")
+			panic("boom")
+		},
+	}, nil, "test", sink, invocation.WithoutRateLimit())
+
+	defer func() {
+		r := recover()
+		if r == nil {
+			t.Fatal("expected panic")
+		}
+		if r != "boom" {
+			t.Fatalf("unexpected panic: %v", r)
+		}
+		if len(sink.entries) != 1 {
+			t.Fatalf("expected 1 audit entry, got %d", len(sink.entries))
+		}
+		entry := sink.entries[0]
+		if !entry.Allowed {
+			t.Fatal("expected panicing invocation to keep allowed=true audit entry")
+		}
+		if entry.CredentialMode != string(core.ConnectionModeIdentity) {
+			t.Fatalf("expected credential mode identity, got %q", entry.CredentialMode)
+		}
+		if entry.CredentialSubjectID != principal.IdentitySubjectID() {
+			t.Fatalf("expected credential subject %q, got %q", principal.IdentitySubjectID(), entry.CredentialSubjectID)
+		}
+		if entry.CredentialConnection != "workspace" {
+			t.Fatalf("expected credential connection workspace, got %q", entry.CredentialConnection)
+		}
+		if entry.CredentialInstance != "team-a" {
+			t.Fatalf("expected credential instance team-a, got %q", entry.CredentialInstance)
+		}
+	}()
+
+	_, _ = guarded.Invoke(context.Background(), nil, "alpha", "", "ping", nil)
 }
 
 func TestGuardedInvoker_ListCapabilities(t *testing.T) {

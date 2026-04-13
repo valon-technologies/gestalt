@@ -19,11 +19,22 @@ type TokenType int
 
 const (
 	TokenTypeAPI TokenType = iota
+	TokenTypeWorkload
 )
 
 const (
-	prefixAPI = "gst_api_"
+	prefixAPI      = "gst_api_"
+	prefixWorkload = "gst_wld_"
 )
+
+type ResolvedWorkload struct {
+	ID          string
+	DisplayName string
+}
+
+type WorkloadTokenResolver interface {
+	ResolveWorkloadToken(token string) (*ResolvedWorkload, bool)
+}
 
 func GenerateToken(typ TokenType) (plaintext, hashed string, err error) {
 	b := make([]byte, 32)
@@ -36,6 +47,8 @@ func GenerateToken(typ TokenType) (plaintext, hashed string, err error) {
 	switch typ {
 	case TokenTypeAPI:
 		prefix = prefixAPI
+	case TokenTypeWorkload:
+		prefix = prefixWorkload
 	default:
 		return "", "", fmt.Errorf("unknown token type %d", typ)
 	}
@@ -49,6 +62,8 @@ func ParseTokenType(token string) (TokenType, bool) {
 	switch {
 	case strings.HasPrefix(token, prefixAPI):
 		return TokenTypeAPI, true
+	case strings.HasPrefix(token, prefixWorkload):
+		return TokenTypeWorkload, true
 	default:
 		return 0, false
 	}
@@ -58,15 +73,21 @@ type Resolver struct {
 	auth      core.AuthProvider
 	users     *coredata.UserService
 	apiTokens *coredata.APITokenService
+	workloads WorkloadTokenResolver
 }
 
-func NewResolver(auth core.AuthProvider, users *coredata.UserService, apiTokens *coredata.APITokenService) *Resolver {
-	return &Resolver{auth: auth, users: users, apiTokens: apiTokens}
+func NewResolver(auth core.AuthProvider, users *coredata.UserService, apiTokens *coredata.APITokenService, workloads WorkloadTokenResolver) *Resolver {
+	return &Resolver{auth: auth, users: users, apiTokens: apiTokens, workloads: workloads}
 }
 
 func (r *Resolver) ResolveToken(ctx context.Context, token string) (*Principal, error) {
-	if typ, ok := ParseTokenType(token); ok && typ == TokenTypeAPI {
-		return r.resolveAPIToken(ctx, token)
+	if typ, ok := ParseTokenType(token); ok {
+		switch typ {
+		case TokenTypeAPI:
+			return r.resolveAPIToken(ctx, token)
+		case TokenTypeWorkload:
+			return r.resolveWorkloadToken(token)
+		}
 	}
 
 	startedAt := time.Now()
@@ -114,8 +135,10 @@ func (r *Resolver) resolveAPIToken(ctx context.Context, token string) (*Principa
 			Email:       user.Email,
 			DisplayName: user.DisplayName,
 		},
-		UserID: user.ID,
-		Source: SourceAPIToken,
+		UserID:    user.ID,
+		SubjectID: UserSubjectID(user.ID),
+		Kind:      KindUser,
+		Source:    SourceAPIToken,
 	}
 	if scopes := strings.Fields(apiToken.Scopes); len(scopes) > 0 {
 		p.Scopes = scopes
@@ -123,9 +146,25 @@ func (r *Resolver) resolveAPIToken(ctx context.Context, token string) (*Principa
 	return p, nil
 }
 
+func (r *Resolver) resolveWorkloadToken(token string) (*Principal, error) {
+	if r.workloads == nil {
+		return nil, ErrInvalidToken
+	}
+	workload, ok := r.workloads.ResolveWorkloadToken(token)
+	if !ok || workload == nil || workload.ID == "" {
+		return nil, ErrInvalidToken
+	}
+	return &Principal{
+		Kind:      KindWorkload,
+		SubjectID: WorkloadSubjectID(workload.ID),
+		Source:    SourceWorkloadToken,
+	}, nil
+}
+
 func (r *Resolver) ResolveEmail(email string) *Principal {
 	return &Principal{
 		Identity: &core.UserIdentity{Email: email},
+		Kind:     KindUser,
 		Source:   SourceEnv,
 	}
 }
