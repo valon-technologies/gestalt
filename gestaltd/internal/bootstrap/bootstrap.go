@@ -152,7 +152,7 @@ func NewFactoryRegistry() *FactoryRegistry {
 type Result struct {
 	Auth             core.AuthProvider
 	Services         *coredata.Services
-	Providers        *registry.PluginMap[core.Provider]
+	Providers        *registry.ProviderMap[core.Provider]
 	ProvidersReady   <-chan struct{}
 	ConnectionAuth   func() map[string]map[string]OAuthHandler
 	Invoker          invocation.Invoker
@@ -416,7 +416,7 @@ func buildTelemetry(cfg *config.Config, factories *FactoryRegistry) (core.Teleme
 		return factory(tel.Config)
 	}
 	if tel != nil && !tel.Source.IsBuiltin() {
-		return nil, fmt.Errorf("bootstrap: plugin-based telemetry providers are not yet supported")
+		return nil, fmt.Errorf("bootstrap: provider-based telemetry providers are not yet supported")
 	}
 	builtin := ""
 	var configNode yaml.Node
@@ -441,7 +441,7 @@ func buildAuditSink(ctx context.Context, cfg *config.Config, factories *FactoryR
 		return invocation.NewLoggerAuditSink(slog.New(slog.DiscardHandler)), nil, nil
 	}
 	if audit != nil && !audit.Source.IsBuiltin() {
-		return nil, nil, fmt.Errorf("bootstrap: plugin-based audit providers are not yet supported")
+		return nil, nil, fmt.Errorf("bootstrap: provider-based audit providers are not yet supported")
 	}
 	builtin := ""
 	if audit != nil {
@@ -479,21 +479,21 @@ func buildSecretManager(cfg *config.Config, factories *FactoryRegistry) (core.Se
 		return disabledSecretManager{}, nil
 	}
 	if secrets != nil && !secrets.Source.IsBuiltin() {
-		factory, ok := factories.Secrets["plugin"]
+		factory, ok := factories.Secrets["provider"]
 		if !ok {
-			return nil, fmt.Errorf("bootstrap: secrets plugin factory is not registered")
+			return nil, fmt.Errorf("bootstrap: secrets provider factory is not registered")
 		}
 		node := secrets.Config
 		if !config.IsComponentRuntimeConfigNode(node) {
 			var err error
 			node, err = config.BuildComponentRuntimeConfigNode("secrets", "secrets", secrets, secrets.Config)
 			if err != nil {
-				return nil, fmt.Errorf("bootstrap: secrets plugin: %w", err)
+				return nil, fmt.Errorf("bootstrap: secrets provider: %w", err)
 			}
 		}
 		sm, err := factory(node)
 		if err != nil {
-			return nil, fmt.Errorf("bootstrap: secrets plugin: %w", err)
+			return nil, fmt.Errorf("bootstrap: secrets provider: %w", err)
 		}
 		return sm, nil
 	}
@@ -547,12 +547,12 @@ func buildAuth(cfg *config.Config, factories *FactoryRegistry, deps Deps) (core.
 		var err error
 		node, err = config.BuildComponentRuntimeConfigNode("auth", "auth", authEntry, authEntry.Config)
 		if err != nil {
-			return nil, fmt.Errorf("bootstrap: auth plugin: %w", err)
+			return nil, fmt.Errorf("bootstrap: auth provider: %w", err)
 		}
 	}
 	auth, err := factories.Auth(node, deps)
 	if err != nil {
-		return nil, fmt.Errorf("bootstrap: auth plugin: %w", err)
+		return nil, fmt.Errorf("bootstrap: auth provider: %w", err)
 	}
 	return auth, nil
 }
@@ -569,12 +569,12 @@ func buildIndexedDB(entry *config.ProviderEntry, factories *FactoryRegistry) (in
 		var err error
 		node, err = config.BuildComponentRuntimeConfigNode("indexeddb", "indexeddb", entry, entry.Config)
 		if err != nil {
-			return nil, fmt.Errorf("datastore plugin: %w", err)
+			return nil, fmt.Errorf("datastore provider: %w", err)
 		}
 	}
 	ds, err := factories.IndexedDB(node)
 	if err != nil {
-		return nil, fmt.Errorf("datastore plugin: %w", err)
+		return nil, fmt.Errorf("datastore provider: %w", err)
 	}
 	return ds, nil
 }

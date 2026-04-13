@@ -969,8 +969,8 @@ func TestApplyLockedPlugins_SkipsNilIntegrationPlugins(t *testing.T) {
 	loaded.Providers.Plugins["missing"] = &config.ProviderEntry{}
 
 	lc := NewLifecycle(nil)
-	if err := lc.applyLockedPlugins(cfgPath, "", loaded, false); err != nil {
-		t.Fatalf("applyLockedPlugins: %v", err)
+	if err := lc.applyLockedProviders(cfgPath, "", loaded, false); err != nil {
+		t.Fatalf("applyLockedProviders: %v", err)
 	}
 	if loaded.Providers.Plugins["example"] == nil || loaded.Providers.Plugins["example"].ResolvedManifest == nil {
 		t.Fatalf("ResolvedManifest = %+v", loaded.Providers.Plugins["example"])
@@ -997,38 +997,38 @@ func TestLockMatchesConfig_FalseWithNilLock(t *testing.T) {
 	}
 }
 
-func TestPluginFingerprint_Stable(t *testing.T) {
+func TestProviderFingerprint_Stable(t *testing.T) {
 	t.Parallel()
 
 	plugin := &config.ProviderEntry{
 		Source: config.ProviderSource{Ref: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"},
 	}
-	first, err := PluginFingerprint("example", plugin, ".")
+	first, err := ProviderFingerprint("example", plugin, ".")
 	if err != nil {
-		t.Fatalf("PluginFingerprint: %v", err)
+		t.Fatalf("ProviderFingerprint: %v", err)
 	}
-	second, err := PluginFingerprint("example", plugin, ".")
+	second, err := ProviderFingerprint("example", plugin, ".")
 	if err != nil {
-		t.Fatalf("PluginFingerprint: %v", err)
+		t.Fatalf("ProviderFingerprint: %v", err)
 	}
 	if first != second {
 		t.Fatalf("fingerprint not stable: %q != %q", first, second)
 	}
 }
 
-func TestPluginFingerprint_ChangesWithName(t *testing.T) {
+func TestProviderFingerprint_ChangesWithName(t *testing.T) {
 	t.Parallel()
 
 	plugin := &config.ProviderEntry{
 		Source: config.ProviderSource{Ref: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"},
 	}
-	first, err := PluginFingerprint("alpha", plugin, ".")
+	first, err := ProviderFingerprint("alpha", plugin, ".")
 	if err != nil {
-		t.Fatalf("PluginFingerprint: %v", err)
+		t.Fatalf("ProviderFingerprint: %v", err)
 	}
-	second, err := PluginFingerprint("beta", plugin, ".")
+	second, err := ProviderFingerprint("beta", plugin, ".")
 	if err != nil {
-		t.Fatalf("PluginFingerprint: %v", err)
+		t.Fatalf("ProviderFingerprint: %v", err)
 	}
 	if first == second {
 		t.Fatal("fingerprint should differ with different name")

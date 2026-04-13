@@ -40,7 +40,7 @@ type Server struct {
 	users              *coredata.UserService
 	tokens             *coredata.TokenService
 	apiTokens          *coredata.APITokenService
-	providers          *registry.PluginMap[core.Provider]
+	providers          *registry.ProviderMap[core.Provider]
 	resolver           *principal.Resolver
 	invoker            invocation.Invoker
 	defaultConnection  map[string]string
@@ -68,7 +68,7 @@ type Config struct {
 	Auth              core.AuthProvider
 	AuditSink         core.AuditSink
 	Services          *coredata.Services
-	Providers         *registry.PluginMap[core.Provider]
+	Providers         *registry.ProviderMap[core.Provider]
 	Invoker           invocation.Invoker
 	DefaultConnection map[string]string
 	CatalogConnection map[string]string

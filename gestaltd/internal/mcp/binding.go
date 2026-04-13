@@ -21,7 +21,7 @@ type Config struct {
 	Invoker          invocation.Invoker
 	TokenResolver    invocation.TokenResolver
 	AuditSink        core.AuditSink
-	Providers        *registry.PluginMap[core.Provider]
+	Providers        *registry.ProviderMap[core.Provider]
 	AllowedProviders []string
 	ToolPrefixes     map[string]string
 	IncludeREST      map[string]bool

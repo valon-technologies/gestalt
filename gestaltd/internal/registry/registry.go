@@ -8,18 +8,18 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 )
 
-// PluginMap is a thread-safe, named collection of plugins of a single type.
-type PluginMap[T any] struct {
+// ProviderMap is a thread-safe, named collection of providers of a single type.
+type ProviderMap[T any] struct {
 	mu    sync.RWMutex
 	items map[string]T
 	kind  string
 }
 
-func newPluginMap[T any](kind string) PluginMap[T] {
-	return PluginMap[T]{items: make(map[string]T), kind: kind}
+func newProviderMap[T any](kind string) ProviderMap[T] {
+	return ProviderMap[T]{items: make(map[string]T), kind: kind}
 }
 
-func (m *PluginMap[T]) Register(name string, val T) error {
+func (m *ProviderMap[T]) Register(name string, val T) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, exists := m.items[name]; exists {
@@ -29,7 +29,7 @@ func (m *PluginMap[T]) Register(name string, val T) error {
 	return nil
 }
 
-func (m *PluginMap[T]) Get(name string) (T, error) {
+func (m *ProviderMap[T]) Get(name string) (T, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	val, ok := m.items[name]
@@ -41,7 +41,7 @@ func (m *PluginMap[T]) Get(name string) (T, error) {
 }
 
 // List returns all registered names, sorted alphabetically.
-func (m *PluginMap[T]) List() []string {
+func (m *ProviderMap[T]) List() []string {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	names := make([]string, 0, len(m.items))
@@ -53,13 +53,13 @@ func (m *PluginMap[T]) List() []string {
 }
 
 type Registry struct {
-	AuthProviders PluginMap[core.AuthProvider]
-	Providers     PluginMap[core.Provider]
+	AuthProviders ProviderMap[core.AuthProvider]
+	Providers     ProviderMap[core.Provider]
 }
 
 func New() *Registry {
 	return &Registry{
-		AuthProviders: newPluginMap[core.AuthProvider]("auth provider"),
-		Providers:     newPluginMap[core.Provider]("provider"),
+		AuthProviders: newProviderMap[core.AuthProvider]("auth provider"),
+		Providers:     newProviderMap[core.Provider]("provider"),
 	}
 }

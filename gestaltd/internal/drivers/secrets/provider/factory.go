@@ -1,4 +1,4 @@
-package plugin
+package provider
 
 import (
 	"context"
@@ -6,21 +6,21 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
-	"github.com/valon-technologies/gestalt/server/internal/drivers/componentplugin"
+	"github.com/valon-technologies/gestalt/server/internal/drivers/componentprovider"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"gopkg.in/yaml.v3"
 )
 
 var Factory bootstrap.SecretManagerFactory = func(node yaml.Node) (core.SecretManager, error) {
-	var cfg componentplugin.YAMLConfig
+	var cfg componentprovider.YAMLConfig
 	if err := node.Decode(&cfg); err != nil {
-		return nil, fmt.Errorf("plugin secrets: parsing config: %w", err)
+		return nil, fmt.Errorf("secrets provider: parsing config: %w", err)
 	}
-	prepared, err := componentplugin.PrepareExecution(componentplugin.PrepareParams{
+	prepared, err := componentprovider.PrepareExecution(componentprovider.PrepareParams{
 		Kind:                 providermanifestv1.KindSecrets,
-		Subject:              "plugin secrets",
-		SourceMissingMessage: "no Go, Rust, or Python secrets source package found",
+		Subject:              "secrets provider",
+		SourceMissingMessage: "no Go, Rust, or Python secrets provider source package found",
 		Config:               cfg,
 	})
 	if err != nil {

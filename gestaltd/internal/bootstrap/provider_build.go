@@ -42,7 +42,7 @@ func buildRegistrationStore(deps Deps) mcpoauth.RegistrationStore {
 	return nil
 }
 
-func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.PluginMap[core.Provider], <-chan struct{}, func() map[string]map[string]OAuthHandler, error) {
+func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.ProviderMap[core.Provider], <-chan struct{}, func() map[string]map[string]OAuthHandler, error) {
 	reg := registry.New()
 	connAuth := make(map[string]map[string]OAuthHandler)
 	var connMu sync.Mutex

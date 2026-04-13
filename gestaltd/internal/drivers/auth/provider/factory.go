@@ -1,4 +1,4 @@
-package plugin
+package provider
 
 import (
 	"context"
@@ -7,26 +7,26 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	"github.com/valon-technologies/gestalt/server/internal/drivers/componentplugin"
+	"github.com/valon-technologies/gestalt/server/internal/drivers/componentprovider"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"gopkg.in/yaml.v3"
 )
 
 type yamlConfig struct {
-	componentplugin.YAMLConfig `yaml:",inline"`
-	CallbackURL                string `yaml:"callbackUrl"`
+	componentprovider.YAMLConfig `yaml:",inline"`
+	CallbackURL                  string `yaml:"callbackUrl"`
 }
 
 var Factory bootstrap.AuthFactory = func(node yaml.Node, deps bootstrap.Deps) (core.AuthProvider, error) {
 	var cfg yamlConfig
 	if err := node.Decode(&cfg); err != nil {
-		return nil, fmt.Errorf("plugin auth: parsing config: %w", err)
+		return nil, fmt.Errorf("auth provider: parsing config: %w", err)
 	}
-	prepared, err := componentplugin.PrepareExecution(componentplugin.PrepareParams{
+	prepared, err := componentprovider.PrepareExecution(componentprovider.PrepareParams{
 		Kind:                 providermanifestv1.KindAuth,
-		Subject:              "plugin auth",
-		SourceMissingMessage: "no Go, Rust, or Python auth source package found",
+		Subject:              "auth provider",
+		SourceMissingMessage: "no Go, Rust, or Python auth provider source package found",
 		Config:               cfg.YAMLConfig,
 	})
 	if err != nil {

@@ -85,7 +85,7 @@ type OAuthRefresher interface {
 type RefresherResolver func() map[string]map[string]OAuthRefresher
 
 type Broker struct {
-	providers      *registry.PluginMap[core.Provider]
+	providers      *registry.ProviderMap[core.Provider]
 	users          *coredata.UserService
 	tokens         *coredata.TokenService
 	connMapper     ConnectionMapper
@@ -108,7 +108,7 @@ func WithConnectionAuth(r RefresherResolver) BrokerOption {
 	return func(b *Broker) { b.connectionAuth = r }
 }
 
-func NewBroker(providers *registry.PluginMap[core.Provider], users *coredata.UserService, tokens *coredata.TokenService, opts ...BrokerOption) *Broker {
+func NewBroker(providers *registry.ProviderMap[core.Provider], users *coredata.UserService, tokens *coredata.TokenService, opts ...BrokerOption) *Broker {
 	b := &Broker{providers: providers, users: users, tokens: tokens}
 	for _, o := range opts {
 		o(b)

@@ -1,4 +1,4 @@
-package plugin
+package provider
 
 import (
 	"context"
@@ -6,21 +6,21 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
-	"github.com/valon-technologies/gestalt/server/internal/drivers/componentplugin"
+	"github.com/valon-technologies/gestalt/server/internal/drivers/componentprovider"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"gopkg.in/yaml.v3"
 )
 
 var Factory bootstrap.IndexedDBFactory = func(node yaml.Node) (indexeddb.IndexedDB, error) {
-	var cfg componentplugin.YAMLConfig
+	var cfg componentprovider.YAMLConfig
 	if err := node.Decode(&cfg); err != nil {
-		return nil, fmt.Errorf("plugin datastore: parsing config: %w", err)
+		return nil, fmt.Errorf("datastore provider: parsing config: %w", err)
 	}
-	prepared, err := componentplugin.PrepareExecution(componentplugin.PrepareParams{
+	prepared, err := componentprovider.PrepareExecution(componentprovider.PrepareParams{
 		Kind:                 providermanifestv1.KindIndexedDB,
-		Subject:              "plugin datastore",
-		SourceMissingMessage: "no Go, Rust, or Python datastore source package found",
+		Subject:              "datastore provider",
+		SourceMissingMessage: "no Go, Rust, or Python datastore provider source package found",
 		Config:               cfg,
 	})
 	if err != nil {
