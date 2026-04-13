@@ -2,6 +2,8 @@
 
 `gestaltd` exposes a REST API and an optional MCP endpoint. When `server.management` is not configured, every route below is served from the public listener. When `server.management` is configured, `/admin`, `/metrics`, `/health`, and `/ready` move to the management listener and return `404` on the public listener. Prefer the split-listener setup for production so the operator surface does not share the public listener.
 
+The HTTP API uses "integrations" in route paths (e.g. `/api/v1/integrations`) as a stable code surface. The CLI and config both use "plugins" as the canonical term. See [Config File](/reference/config-file#providersplugins) for context.
+
 ## Authentication model
 
 Authenticated routes accept a `session_token` cookie or an `Authorization: Bearer <token>` header. Valid bearer tokens are platform session tokens and Gestalt API tokens (`gst_api_...`).
@@ -78,8 +80,17 @@ Gestalt authenticates the caller, resolves the target plugin and operation, then
 
 `GET` invocations read parameters from the query string; `POST` invocations read parameters from a JSON body. Use `_connection` to select a named connection when a plugin exposes more than one, and `_instance` to select one stored instance for that connection.
 
-## Example
+## Examples
 
 ```sh
+# Simple invocation
 curl http://localhost:8080/api/v1/httpbin/get_headers
+
+# GET with connection and instance selectors
+curl 'http://localhost:8080/api/v1/slack/chat.postMessage?_connection=mcp&_instance=workspace-123&channel=C123&text=hello'
+
+# POST with connection selector and parameters
+curl -X POST http://localhost:8080/api/v1/slack/chat.postMessage \
+  -H 'Content-Type: application/json' \
+  -d '{"_connection": "mcp", "channel": "C123", "text": "hello"}'
 ```
