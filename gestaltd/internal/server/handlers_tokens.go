@@ -12,6 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
 type createTokenRequest struct {
@@ -181,6 +182,9 @@ func (s *Server) connectionInfosForPlugin(integration string, plugin *config.Pro
 	for _, name := range names {
 		if name == config.PluginConnectionName {
 			effectivePluginConn := config.EffectivePluginConnectionDef(plugin, manifestProvider)
+			if !userFacingConnection(effectivePluginConn) {
+				continue
+			}
 			if info, ok := s.connectionInfoFromAuth(integration, config.PluginConnectionAlias, effectivePluginConn, integrationAuthTypes, defaultCredentialFields, false); ok {
 				infos = append(infos, info)
 			}
@@ -188,6 +192,9 @@ func (s *Server) connectionInfosForPlugin(integration string, plugin *config.Pro
 		}
 		conn, ok := config.EffectiveNamedConnectionDef(plugin, manifestProvider, name)
 		if ok {
+			if !userFacingConnection(conn) {
+				continue
+			}
 			if info, ok := s.connectionInfoFromAuth(integration, name, conn, integrationAuthTypes, defaultCredentialFields, true); ok {
 				infos = append(infos, info)
 			}
@@ -228,16 +235,21 @@ func integrationAuthTypesForProvider(prov core.Provider) []string {
 
 func credentialFieldInfosFromProvider(prov core.Provider) []credentialFieldInfo {
 	cfp, ok := prov.(core.CredentialFieldsProvider)
-	if !ok {
-		return []credentialFieldInfo{}
-	}
-	return credentialFieldInfos(cfp.CredentialFields(), func(field core.CredentialFieldDef) credentialFieldInfo {
-		return credentialFieldInfo{
-			Name:        field.Name,
-			Label:       field.Label,
-			Description: field.Description,
+	if ok {
+		if fields := credentialFieldInfos(cfp.CredentialFields(), func(field core.CredentialFieldDef) credentialFieldInfo {
+			return credentialFieldInfo{
+				Name:        field.Name,
+				Label:       field.Label,
+				Description: field.Description,
+			}
+		}); len(fields) > 0 {
+			return fields
 		}
-	})
+	}
+	if providerSupportsManualAuth(prov) {
+		return defaultManualCredentialFieldInfos()
+	}
+	return []credentialFieldInfo{}
 }
 
 func credentialFieldInfos[T any](fields []T, mapField func(T) credentialFieldInfo) []credentialFieldInfo {
@@ -277,8 +289,21 @@ func (s *Server) connectionInfoFromAuth(integration, name string, conn config.Co
 		info.CredentialFields = fields
 	} else if authTypesContain(authTypes, "manual") && len(defaultCredentialFields) > 0 {
 		info.CredentialFields = append([]credentialFieldInfo(nil), defaultCredentialFields...)
+	} else if authTypesContain(authTypes, "manual") {
+		info.CredentialFields = defaultManualCredentialFieldInfos()
 	}
 	return info, true
+}
+
+func userFacingConnection(conn config.ConnectionDef) bool {
+	return conn.Mode != providermanifestv1.ConnectionModeIdentity
+}
+
+func defaultManualCredentialFieldInfos() []credentialFieldInfo {
+	return []credentialFieldInfo{{
+		Name:  "credential",
+		Label: "Credential",
+	}}
 }
 
 func (s *Server) supportedConnectionAuthTypes(integration, connection string, authTypes []string) []string {

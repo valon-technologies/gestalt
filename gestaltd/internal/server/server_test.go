@@ -1446,6 +1446,162 @@ func TestListIntegrations_DerivesAuthTypesFromConnectionsWhenProviderOmitsThem(t
 	}
 }
 
+func TestListIntegrations_HidesIdentityConnectionsFromUserFacingMetadata(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubNilAuthTypesProvider{
+		StubIntegration: coretesting.StubIntegration{N: "launchdarkly", DN: "LaunchDarkly"},
+	}
+	plugin := &config.ProviderEntry{
+		Source: config.ProviderSource{
+			Ref:     "github.com/acme/plugins/launchdarkly",
+			Version: "1.0.0",
+		},
+		ResolvedManifest: &providermanifestv1.Manifest{
+			Spec: &providermanifestv1.Spec{
+				DefaultConnection: "default",
+				Surfaces: &providermanifestv1.ProviderSurfaces{
+					OpenAPI: &providermanifestv1.OpenAPISurface{
+						Document:   "https://example.com/openapi.json",
+						Connection: "default",
+					},
+				},
+				Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+					"default": {
+						Mode: providermanifestv1.ConnectionModeUser,
+						Auth: &providermanifestv1.ProviderAuth{
+							Type: providermanifestv1.AuthTypeManual,
+						},
+					},
+					"identity": {
+						Mode: providermanifestv1.ConnectionModeIdentity,
+						Auth: &providermanifestv1.ProviderAuth{
+							Type: providermanifestv1.AuthTypeManual,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"launchdarkly": plugin,
+		}
+		cfg.Services = coretesting.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var integrations []struct {
+		Name        string `json:"name"`
+		AuthTypes   []string
+		Connections []struct {
+			Name      string   `json:"name"`
+			AuthTypes []string `json:"authTypes"`
+		} `json:"connections"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if len(integrations) != 1 {
+		t.Fatalf("expected 1 integration, got %d", len(integrations))
+	}
+	if !reflect.DeepEqual(integrations[0].AuthTypes, []string{"manual"}) {
+		t.Fatalf("auth types = %v, want [manual]", integrations[0].AuthTypes)
+	}
+	if len(integrations[0].Connections) != 1 {
+		t.Fatalf("connections = %+v, want only one user-facing connection", integrations[0].Connections)
+	}
+	if integrations[0].Connections[0].Name != "default" {
+		t.Fatalf("connection name = %q, want default", integrations[0].Connections[0].Name)
+	}
+	if !reflect.DeepEqual(integrations[0].Connections[0].AuthTypes, []string{"manual"}) {
+		t.Fatalf("connection auth types = %v, want [manual]", integrations[0].Connections[0].AuthTypes)
+	}
+}
+
+func TestListIntegrations_ManualProvidersWithoutDeclaredCredentialsExposeGenericField(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubManualProvider{
+		StubIntegration: coretesting.StubIntegration{N: "linear", DN: "Linear"},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"linear": {},
+		}
+		cfg.Services = coretesting.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	type credentialField struct {
+		Name        string `json:"name"`
+		Label       string `json:"label"`
+		Description string `json:"description"`
+	}
+	var integrations []struct {
+		Name             string            `json:"name"`
+		AuthTypes        []string          `json:"authTypes"`
+		CredentialFields []credentialField `json:"credentialFields"`
+		Connections      []struct {
+			Name             string            `json:"name"`
+			AuthTypes        []string          `json:"authTypes"`
+			CredentialFields []credentialField `json:"credentialFields"`
+		} `json:"connections"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if len(integrations) != 1 {
+		t.Fatalf("expected 1 integration, got %d", len(integrations))
+	}
+
+	wantFields := []credentialField{{Name: "credential", Label: "Credential"}}
+	if !reflect.DeepEqual(integrations[0].AuthTypes, []string{"manual"}) {
+		t.Fatalf("auth types = %v, want [manual]", integrations[0].AuthTypes)
+	}
+	if !reflect.DeepEqual(integrations[0].CredentialFields, wantFields) {
+		t.Fatalf("credential fields = %+v, want %+v", integrations[0].CredentialFields, wantFields)
+	}
+	if len(integrations[0].Connections) != 1 {
+		t.Fatalf("connections = %+v, want one default connection", integrations[0].Connections)
+	}
+	if integrations[0].Connections[0].Name != config.PluginConnectionAlias {
+		t.Fatalf("connection name = %q, want %q", integrations[0].Connections[0].Name, config.PluginConnectionAlias)
+	}
+	if !reflect.DeepEqual(integrations[0].Connections[0].AuthTypes, []string{"manual"}) {
+		t.Fatalf("connection auth types = %v, want [manual]", integrations[0].Connections[0].AuthTypes)
+	}
+	if !reflect.DeepEqual(integrations[0].Connections[0].CredentialFields, wantFields) {
+		t.Fatalf("connection credential fields = %+v, want %+v", integrations[0].Connections[0].CredentialFields, wantFields)
+	}
+}
+
 func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T) {
 	t.Parallel()
 
