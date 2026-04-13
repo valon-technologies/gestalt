@@ -8,6 +8,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/integration"
+	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
 
@@ -74,4 +75,20 @@ func mergeCatalogs(provName string, staticCat, sessionCat *catalog.Catalog) (*ca
 
 	integration.CompileSchemas(merged)
 	return merged, nil
+}
+
+func FilterCatalogForPrincipal(cat *catalog.Catalog, provName string, p *principal.Principal, authorizer *authorization.Authorizer) *catalog.Catalog {
+	if cat == nil || authorizer == nil || !authorizer.IsWorkload(p) {
+		return cat
+	}
+
+	filtered := cat.Clone()
+	ops := filtered.Operations[:0]
+	for i := range filtered.Operations {
+		if authorizer.AllowOperation(p, provName, filtered.Operations[i].ID) {
+			ops = append(ops, filtered.Operations[i])
+		}
+	}
+	filtered.Operations = ops
+	return filtered
 }

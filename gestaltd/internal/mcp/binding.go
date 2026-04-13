@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 
@@ -22,6 +23,7 @@ type Config struct {
 	TokenResolver    invocation.TokenResolver
 	AuditSink        core.AuditSink
 	Providers        *registry.ProviderMap[core.Provider]
+	Authorizer       *authorization.Authorizer
 	AllowedProviders []string
 	ToolPrefixes     map[string]string
 	IncludeREST      map[string]bool
@@ -42,6 +44,8 @@ func NewServer(cfg Config) *mcpserver.MCPServer {
 		allowed[p] = struct{}{}
 	}
 
+	staticToolNames := map[string]struct{}{}
+	visibleProviders := make([]string, 0, len(cfg.Providers.List()))
 	var dynamicProviders []string
 	for _, provName := range cfg.Providers.List() {
 		if cfg.AllowedProviders != nil {
@@ -60,20 +64,27 @@ func NewServer(cfg Config) *mcpserver.MCPServer {
 		}
 
 		if cat := prov.Catalog(); cat != nil {
+			for name := range buildToolMap(cfg, provName, cat) {
+				staticToolNames[name] = struct{}{}
+			}
 			addCatalogTools(srv, cfg, provName, cat)
 		}
+		visibleProviders = append(visibleProviders, provName)
 	}
 
 	if len(dynamicProviders) > 0 {
 		hooks.AddBeforeListTools(func(ctx context.Context, _ any, _ *mcpgo.ListToolsRequest) {
-			hydrateSessionTools(ctx, cfg, dynamicProviders)
+			hydrateSessionTools(ctx, cfg, dynamicProviders, staticToolNames)
 		})
 		hooks.AddBeforeCallTool(func(ctx context.Context, _ any, req *mcpgo.CallToolRequest) {
 			if provName := providerNameForTool(cfg.ToolPrefixes, dynamicProviders, req.Params.Name); provName != "" {
-				hydrateSessionTools(ctx, cfg, []string{provName})
+				hydrateSessionTools(ctx, cfg, []string{provName}, staticToolNames)
 			}
 		})
 	}
+	hooks.AddAfterListTools(func(ctx context.Context, _ any, _ *mcpgo.ListToolsRequest, result *mcpgo.ListToolsResult) {
+		filterVisibleTools(ctx, cfg, visibleProviders, result)
+	})
 
 	return srv
 }

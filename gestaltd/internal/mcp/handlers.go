@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
@@ -29,6 +30,9 @@ func makeHandler(invoker invocation.Invoker, provName, opName, connection string
 		ctx = mcpupstream.WithCallToolMeta(ctx, req.Params.Meta)
 		result, err := invoker.Invoke(ctx, p, provName, instance, opName, args)
 		if err != nil {
+			if errors.Is(err, invocation.ErrAuthorizationDenied) || errors.Is(err, invocation.ErrScopeDenied) {
+				return mcpgo.NewToolResultError("operation access denied"), nil
+			}
 			return mcpgo.NewToolResultError(err.Error()), nil
 		}
 		if result == nil {

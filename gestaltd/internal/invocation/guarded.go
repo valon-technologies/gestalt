@@ -2,6 +2,7 @@ package invocation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -104,7 +105,14 @@ func (g *GuardedInvoker) Invoke(ctx context.Context, p *principal.Principal, pro
 	}
 	ctx = ContextWithMeta(ctx, next)
 
-	return g.inner.Invoke(ctx, p, providerName, instance, operation, params)
+	result, err := g.inner.Invoke(ctx, p, providerName, instance, operation, params)
+	if err != nil {
+		entry.Error = err.Error()
+		if errors.Is(err, ErrAuthorizationDenied) || errors.Is(err, ErrScopeDenied) || errors.Is(err, ErrNotAuthenticated) {
+			entry.Allowed = false
+		}
+	}
+	return result, err
 }
 
 func (g *GuardedInvoker) ListCapabilities() []core.Capability {

@@ -5,13 +5,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"reflect"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	coreintegration "github.com/valon-technologies/gestalt/server/core/integration"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/composite"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
@@ -19,6 +22,7 @@ import (
 	gestaltmcp "github.com/valon-technologies/gestalt/server/internal/mcp"
 	"github.com/valon-technologies/gestalt/server/internal/mcpupstream"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
+	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -134,6 +138,24 @@ func ctxWithIdentityPrincipal(email, userID string) context.Context {
 	return principal.WithPrincipal(context.Background(), p)
 }
 
+func ctxWithWorkloadPrincipal(workloadID string) context.Context {
+	p := &principal.Principal{
+		Kind:      principal.KindWorkload,
+		SubjectID: principal.WorkloadSubjectID(workloadID),
+		Source:    principal.SourceWorkloadToken,
+	}
+	return principal.WithPrincipal(context.Background(), p)
+}
+
+func mustAuthorizer(t *testing.T, cfg config.AuthorizationConfig, providers *registry.ProviderMap[core.Provider]) *authorization.Authorizer {
+	t.Helper()
+	authz, err := authorization.New(cfg, nil, providers, map[string]string{})
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+	return authz
+}
+
 type testSessionWithTools struct {
 	id            string
 	initialized   bool
@@ -143,10 +165,14 @@ type testSessionWithTools struct {
 
 func newTestSessionWithTools() *testSessionWithTools {
 	return &testSessionWithTools{
-		id:            "session-1",
+		id:            fmt.Sprintf("session-%d", time.Now().UnixNano()),
 		initialized:   true,
 		notifications: make(chan mcpgo.JSONRPCNotification, 1),
 	}
+}
+
+func hydrationMarkerToolName(provider string) string {
+	return "__gestalt_internal_hydrated__:" + provider
 }
 
 func (s *testSessionWithTools) Initialize() { s.initialized = true }
@@ -776,6 +802,424 @@ func TestNewServer_DirectCallerPassthrough(t *testing.T) {
 	}
 	if text.Text != "query result" {
 		t.Fatalf("expected direct passthrough result, got %q", text.Text)
+	}
+}
+
+func TestNewServer_WorkloadListToolsFiltersStaticAndSessionTools(t *testing.T) {
+	t.Parallel()
+
+	staticCat := &catalog.Catalog{
+		Name: "clickhouse",
+		Operations: []catalog.CatalogOperation{
+			{
+				ID:          "run_query",
+				Description: "static query",
+				Transport:   catalog.TransportMCPPassthrough,
+			},
+			{
+				ID:          "delete_table",
+				Description: "delete a table",
+				Transport:   catalog.TransportMCPPassthrough,
+			},
+		},
+	}
+
+	sessionCat := &catalog.Catalog{
+		Name: "clickhouse",
+		Operations: []catalog.CatalogOperation{
+			{
+				ID:          "run_query",
+				Description: "session query",
+				Transport:   catalog.TransportMCPPassthrough,
+			},
+			{
+				ID:          "list_databases",
+				Description: "list databases",
+				Transport:   catalog.TransportMCPPassthrough,
+			},
+			{
+				ID:          "drop_database",
+				Description: "drop a database",
+				Transport:   catalog.TransportMCPPassthrough,
+			},
+		},
+	}
+
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{N: "clickhouse", ConnMode: core.ConnectionModeIdentity},
+		cat:             staticCat,
+		sessionCatalogFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			if token != "identity-token" {
+				t.Fatalf("session catalog token = %q, want %q", token, "identity-token")
+			}
+			return sessionCat, nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Workloads: map[string]config.WorkloadDef{
+			"triage-bot": {
+				Token: "gst_wld_triage-bot-token",
+				Providers: map[string]config.WorkloadProviderDef{
+					"clickhouse": {
+						Connection: "workspace",
+						Instance:   "team-a",
+						Allow:      []string{"run_query", "list_databases"},
+					},
+				},
+			},
+		},
+	}, providers)
+
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker: &testutil.StubInvoker{
+			InvokeFn: func(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		TokenResolver: &stubTokenResolver{
+			resolveFn: func(_ context.Context, p *principal.Principal, providerName, connection, instance string) (string, error) {
+				if p == nil || p.Kind != principal.KindWorkload {
+					t.Fatalf("expected workload principal, got %+v", p)
+				}
+				if providerName != "clickhouse" {
+					t.Fatalf("providerName = %q, want %q", providerName, "clickhouse")
+				}
+				if connection != "workspace" || instance != "team-a" {
+					t.Fatalf("unexpected session hydration selector inputs: connection=%q instance=%q", connection, instance)
+				}
+				return "identity-token", nil
+			},
+		},
+		Providers:     providers,
+		Authorizer:    authz,
+		MCPConnection: map[string]string{"clickhouse": "default"},
+	})
+
+	session := newTestSessionWithTools()
+	result := listToolsForSession(t, srv, ctxWithWorkloadPrincipal("triage-bot"), session)
+
+	names := make([]string, 0, len(result.Tools))
+	descriptions := map[string]string{}
+	for _, tool := range result.Tools {
+		names = append(names, tool.Name)
+		descriptions[tool.Name] = tool.Description
+	}
+	sort.Strings(names)
+
+	if !reflect.DeepEqual(names, []string{"clickhouse_list_databases", "clickhouse_run_query"}) {
+		t.Fatalf("tool names = %v, want %v", names, []string{"clickhouse_list_databases", "clickhouse_run_query"})
+	}
+	if descriptions["clickhouse_run_query"] != "static query" {
+		t.Fatalf("run_query description = %q, want %q", descriptions["clickhouse_run_query"], "static query")
+	}
+	sessionTools := session.GetSessionTools()
+	if _, ok := sessionTools["clickhouse_run_query"]; ok {
+		t.Fatal("expected static tool collision to keep global tool and skip session override")
+	}
+	if _, ok := sessionTools["clickhouse_list_databases"]; !ok {
+		t.Fatal("expected allowed session-only tool to remain registered for the session")
+	}
+	if _, ok := sessionTools["clickhouse_drop_database"]; !ok {
+		t.Fatal("expected denied session-only tool to remain registered for call-time authorization")
+	}
+	if _, ok := sessionTools[hydrationMarkerToolName("clickhouse")]; !ok {
+		t.Fatal("expected hydration marker to remain in session tool state")
+	}
+}
+
+func TestNewServer_WorkloadCallToolDeniedReturnsErrorResult(t *testing.T) {
+	t.Parallel()
+
+	var sessionCatalogCalls int
+	var called bool
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "clickhouse",
+			ConnMode: core.ConnectionModeNone,
+		},
+		sessionCatalogFn: func(_ context.Context, _ string) (*catalog.Catalog, error) {
+			sessionCatalogCalls++
+			return &catalog.Catalog{
+				Name: "clickhouse",
+				Operations: []catalog.CatalogOperation{
+					{
+						ID:          "run_query",
+						Description: "run a query",
+						Transport:   catalog.TransportMCPPassthrough,
+					},
+					{
+						ID:          "delete_table",
+						Description: "delete a table",
+						Transport:   catalog.TransportMCPPassthrough,
+					},
+				},
+			}, nil
+		},
+		callFn: func(_ context.Context, _ string, _ map[string]any) (*mcpgo.CallToolResult, error) {
+			called = true
+			return mcpgo.NewToolResultText("unexpected provider call"), nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	ds := coretesting.NewStubServices(t)
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Workloads: map[string]config.WorkloadDef{
+			"triage-bot": {
+				Token: "gst_wld_triage-bot-token",
+				Providers: map[string]config.WorkloadProviderDef{
+					"clickhouse": {
+						Allow: []string{"run_query"},
+					},
+				},
+			},
+		},
+	}, providers)
+
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens, invocation.WithAuthorizer(authz))
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:    broker,
+		Providers:  providers,
+		Authorizer: authz,
+	})
+
+	result := callToolForSession(t, srv, ctxWithWorkloadPrincipal("triage-bot"), newTestSessionWithTools(), "clickhouse_delete_table", map[string]any{"table": "users"})
+	if !result.IsError {
+		t.Fatalf("expected MCP error result, got %+v", result)
+	}
+	text, ok := result.Content[0].(mcpgo.TextContent)
+	if !ok || text.Text != "operation access denied" {
+		t.Fatalf("unexpected MCP error content: %+v", result.Content)
+	}
+	if called {
+		t.Fatal("expected denied tool call to stop before provider execution")
+	}
+	if sessionCatalogCalls != 1 {
+		t.Fatalf("session catalog calls = %d, want %d", sessionCatalogCalls, 1)
+	}
+}
+
+func TestNewServer_WorkloadCallToolDeniedForUnboundSessionOnlyProvider(t *testing.T) {
+	t.Parallel()
+
+	var sessionCatalogCalls int
+	var called bool
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "clickhouse",
+			ConnMode: core.ConnectionModeNone,
+		},
+		sessionCatalogFn: func(_ context.Context, _ string) (*catalog.Catalog, error) {
+			sessionCatalogCalls++
+			return &catalog.Catalog{
+				Name: "clickhouse",
+				Operations: []catalog.CatalogOperation{
+					{
+						ID:          "run_query",
+						Description: "run a query",
+						Transport:   catalog.TransportMCPPassthrough,
+					},
+				},
+			}, nil
+		},
+		callFn: func(_ context.Context, _ string, _ map[string]any) (*mcpgo.CallToolResult, error) {
+			called = true
+			return mcpgo.NewToolResultText("unexpected provider call"), nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	ds := coretesting.NewStubServices(t)
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Workloads: map[string]config.WorkloadDef{
+			"triage-bot": {
+				Token: "gst_wld_triage-bot-token",
+			},
+		},
+	}, providers)
+
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens, invocation.WithAuthorizer(authz))
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:    broker,
+		Providers:  providers,
+		Authorizer: authz,
+	})
+
+	session := newTestSessionWithTools()
+	result := callToolForSession(t, srv, ctxWithWorkloadPrincipal("triage-bot"), session, "clickhouse_run_query", map[string]any{"sql": "select 1"})
+	if !result.IsError {
+		t.Fatalf("expected MCP error result, got %+v", result)
+	}
+	text, ok := result.Content[0].(mcpgo.TextContent)
+	if !ok || text.Text != "operation access denied" {
+		t.Fatalf("unexpected MCP error content: %+v", result.Content)
+	}
+	if called {
+		t.Fatal("expected denied tool call to stop before provider execution")
+	}
+	if sessionCatalogCalls != 1 {
+		t.Fatalf("session catalog calls = %d, want %d", sessionCatalogCalls, 1)
+	}
+	if _, ok := session.GetSessionTools()["clickhouse_run_query"]; !ok {
+		t.Fatal("expected hidden session-only tool to remain registered for call-time authorization")
+	}
+}
+
+func TestNewServer_WorkloadCallToolUsesBoundConnectionForSessionOnlyProvider(t *testing.T) {
+	t.Parallel()
+
+	var sessionCatalogCalls int
+	var called bool
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "clickhouse",
+			ConnMode: core.ConnectionModeIdentity,
+		},
+		sessionCatalogFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			sessionCatalogCalls++
+			if token != "identity-token" {
+				t.Fatalf("session catalog token = %q, want %q", token, "identity-token")
+			}
+			return &catalog.Catalog{
+				Name: "clickhouse",
+				Operations: []catalog.CatalogOperation{
+					{
+						ID:          "run_query",
+						Description: "run a query",
+						Transport:   catalog.TransportMCPPassthrough,
+					},
+				},
+			}, nil
+		},
+		callFn: func(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
+			called = true
+			if name != "run_query" {
+				t.Fatalf("name = %q, want %q", name, "run_query")
+			}
+			if token := mcpupstream.UpstreamTokenFromContext(ctx); token != "identity-token" {
+				t.Fatalf("upstream token = %q, want %q", token, "identity-token")
+			}
+			if sql, _ := args["sql"].(string); sql != "select 1" {
+				t.Fatalf("sql = %q, want %q", sql, "select 1")
+			}
+			return mcpgo.NewToolResultText("ok"), nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	ds := coretesting.NewStubServices(t)
+	ctx := context.Background()
+	if err := ds.Tokens.StoreToken(ctx, &core.IntegrationToken{
+		ID:          "tok-identity",
+		UserID:      principal.IdentityPrincipal,
+		Integration: "clickhouse",
+		Connection:  "workspace",
+		Instance:    "team-a",
+		AccessToken: "identity-token",
+	}); err != nil {
+		t.Fatalf("StoreToken: %v", err)
+	}
+
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Workloads: map[string]config.WorkloadDef{
+			"triage-bot": {
+				Token: "gst_wld_triage-bot-token",
+				Providers: map[string]config.WorkloadProviderDef{
+					"clickhouse": {
+						Connection: "workspace",
+						Instance:   "team-a",
+						Allow:      []string{"run_query"},
+					},
+				},
+			},
+		},
+	}, providers)
+
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens, invocation.WithAuthorizer(authz))
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:       broker,
+		TokenResolver: broker,
+		Providers:     providers,
+		Authorizer:    authz,
+		MCPConnection: map[string]string{"clickhouse": "default"},
+	})
+
+	result := callToolForSession(t, srv, ctxWithWorkloadPrincipal("triage-bot"), newTestSessionWithTools(), "clickhouse_run_query", map[string]any{"sql": "select 1"})
+	if result.IsError {
+		t.Fatalf("expected success result, got %+v", result)
+	}
+	text, ok := result.Content[0].(mcpgo.TextContent)
+	if !ok || text.Text != "ok" {
+		t.Fatalf("unexpected MCP success content: %+v", result.Content)
+	}
+	if !called {
+		t.Fatal("expected workload tool call to reach provider")
+	}
+	if sessionCatalogCalls != 2 {
+		t.Fatalf("session catalog calls = %d, want %d", sessionCatalogCalls, 2)
+	}
+}
+
+func TestNewServer_DynamicCatalogProviderDoesNotRehydrateAfterExactCollisionOnly(t *testing.T) {
+	t.Parallel()
+
+	var sessionCatalogCalls int
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{N: "clickhouse", ConnMode: core.ConnectionModeNone},
+		cat: &catalog.Catalog{
+			Name: "clickhouse",
+			Operations: []catalog.CatalogOperation{
+				{
+					ID:          "run_query",
+					Description: "static query",
+					Transport:   catalog.TransportMCPPassthrough,
+				},
+			},
+		},
+		sessionCatalogFn: func(_ context.Context, _ string) (*catalog.Catalog, error) {
+			sessionCatalogCalls++
+			return &catalog.Catalog{
+				Name: "clickhouse",
+				Operations: []catalog.CatalogOperation{
+					{
+						ID:          "run_query",
+						Description: "session query",
+						Transport:   catalog.TransportMCPPassthrough,
+					},
+				},
+			}, nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:   &testutil.StubInvoker{},
+		Providers: providers,
+	})
+
+	session := newTestSessionWithTools()
+	ctx := ctxWithPrincipal("stub-user-id")
+
+	first := listToolsForSession(t, srv, ctx, session)
+	second := listToolsForSession(t, srv, ctx, session)
+
+	if sessionCatalogCalls != 1 {
+		t.Fatalf("session catalog calls = %d, want %d", sessionCatalogCalls, 1)
+	}
+	if len(first.Tools) != 1 || first.Tools[0].Name != "clickhouse_run_query" {
+		t.Fatalf("first tools = %+v, want only clickhouse_run_query", first.Tools)
+	}
+	if len(second.Tools) != 1 || second.Tools[0].Name != "clickhouse_run_query" {
+		t.Fatalf("second tools = %+v, want only clickhouse_run_query", second.Tools)
+	}
+	tools := session.GetSessionTools()
+	if len(tools) != 1 {
+		t.Fatalf("session tools = %+v, want only hydration marker after exact collision hydration", tools)
+	}
+	if _, ok := tools[hydrationMarkerToolName("clickhouse")]; !ok {
+		t.Fatalf("session tools = %+v, want hydration marker after exact collision hydration", tools)
 	}
 }
 

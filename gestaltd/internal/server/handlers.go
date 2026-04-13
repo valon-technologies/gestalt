@@ -469,16 +469,8 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 		s.writeInvocationError(w, r, name, "", err)
 		return
 	}
+	cat = invocation.FilterCatalogForPrincipal(cat, name, p, s.authorizer)
 	ops := httpVisibleCatalogOperations(cat.Operations)
-	if p != nil && p.Kind == principal.KindWorkload {
-		filtered := ops[:0]
-		for i := range ops {
-			if s.allowOperation(p, name, ops[i].ID) {
-				filtered = append(filtered, ops[i])
-			}
-		}
-		ops = filtered
-	}
 	sort.Slice(ops, func(i, j int) bool {
 		return ops[i].ID < ops[j].ID
 	})
