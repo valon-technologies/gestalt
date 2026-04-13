@@ -403,15 +403,21 @@ func baseDomainFromURL(baseURL string) string {
 }
 
 // cookieDomainFromURL derives the cookie Domain attribute from a base URL.
-// For localhost, returns "localhost" so the cookie covers *.localhost
-// subdomains (e.g., plugin.localhost:8080). For production domains,
-// returns the hostname so the cookie covers *.example.com.
-// Returns empty only for IP addresses other than 127.0.0.1, where
-// subdomain cookies are not applicable.
+// Returns a domain only when the operator explicitly configured a hostname
+// in server.baseUrl. Returns empty for empty/unparseable URLs (preserving
+// host-only cookie behavior for deployments without baseUrl).
+// For localhost, returns "localhost" so the cookie covers *.localhost subdomains.
 func cookieDomainFromURL(baseURL string) string {
-	host := baseDomainFromURL(baseURL)
-	if host == "127.0.0.1" {
-		return "localhost"
+	if baseURL == "" {
+		return ""
+	}
+	u, err := url.Parse(baseURL)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	host := u.Hostname()
+	if host == "" || host == "127.0.0.1" {
+		return ""
 	}
 	return host
 }

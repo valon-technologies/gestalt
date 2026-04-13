@@ -234,6 +234,11 @@ func buildSourceTokenMap(cfg *config.Config) map[string]string {
 	if cfg.Providers.UI != nil && cfg.Providers.UI.Source.Auth != nil {
 		tokens[cfg.Providers.UI.SourceRef()] = cfg.Providers.UI.Source.Auth.Token
 	}
+	for _, entry := range cfg.Providers.Plugins {
+		if entry != nil && entry.WebUI != nil && entry.WebUI.Source.Auth != nil {
+			tokens[entry.WebUI.Source.Ref] = entry.WebUI.Source.Auth.Token
+		}
+	}
 	return tokens
 }
 
@@ -559,6 +564,30 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 			return false
 		}
 		assetRootPath := resolveLockPath(paths.artifactsDir, lock.UI.AssetRoot)
+		if _, err := os.Stat(assetRootPath); err != nil {
+			return false
+		}
+	}
+	for name, entry := range cfg.Providers.Plugins {
+		if entry == nil || entry.WebUI == nil || !entry.WebUI.Source.IsManaged() {
+			continue
+		}
+		if lock.PluginWebUIs == nil {
+			return false
+		}
+		lockEntry, ok := lock.PluginWebUIs[name]
+		if !ok {
+			return false
+		}
+		fp, err := pluginWebUIFingerprint(name, entry.WebUI)
+		if err != nil || lockEntry.Fingerprint != fp {
+			return false
+		}
+		manifestPath := resolveLockPath(paths.artifactsDir, lockEntry.Manifest)
+		if _, err := os.Stat(manifestPath); err != nil {
+			return false
+		}
+		assetRootPath := resolveLockPath(paths.artifactsDir, lockEntry.AssetRoot)
 		if _, err := os.Stat(assetRootPath); err != nil {
 			return false
 		}
@@ -998,7 +1027,7 @@ func (l *Lifecycle) applyLockedPlugins(configPath, artifactsDir string, cfg *con
 			entry.Description = cmp.Or(entry.Description, manifest.Description)
 		}
 		entry.IconFile = cmp.Or(entry.IconFile, entry.ResolvedIconFile)
-		if err := resolvePluginWebUI(name, entry, lock, paths); err != nil {
+		if err := l.resolvePluginWebUI(name, entry, lock, paths, locked); err != nil {
 			return fmt.Errorf("resolve webui for plugin %q: %w", name, err)
 		}
 	}
@@ -1223,7 +1252,7 @@ func applyLocalUIManifest(plugin *config.ProviderEntry, configMap map[string]any
 //     kind:webui manifest. The asset root is resolved from that manifest.
 //   - Bundled model: the plugin's own manifest declares spec.assetRoot.
 //     The asset root is resolved relative to the plugin's manifest directory.
-func resolvePluginWebUI(pluginName string, entry *config.ProviderEntry, lock *Lockfile, paths initPaths) error {
+func (l *Lifecycle) resolvePluginWebUI(pluginName string, entry *config.ProviderEntry, lock *Lockfile, paths initPaths, locked bool) error {
 	if entry == nil {
 		return nil
 	}
@@ -1235,11 +1264,30 @@ func resolvePluginWebUI(pluginName string, entry *config.ProviderEntry, lock *Lo
 		if !ok {
 			return fmt.Errorf("prepared webui artifact missing; run `gestaltd init`")
 		}
-		assetRoot := resolveLockPath(paths.artifactsDir, lockEntry.AssetRoot)
-		if _, err := os.Stat(assetRoot); err != nil {
-			return fmt.Errorf("prepared webui asset root not found at %s: %w", assetRoot, err)
+		fp, err := pluginWebUIFingerprint(pluginName, entry.WebUI)
+		if err != nil || lockEntry.Fingerprint != fp {
+			return fmt.Errorf("prepared webui artifact for plugin %q is stale; run `gestaltd init`", pluginName)
 		}
-		entry.ResolvedAssetRoot = assetRoot
+		manifestPath := resolveLockPath(paths.artifactsDir, lockEntry.Manifest)
+		assetRootPath := resolveLockPath(paths.artifactsDir, lockEntry.AssetRoot)
+		needMaterialize := false
+		if _, err := os.Stat(manifestPath); err != nil {
+			needMaterialize = true
+		}
+		if !needMaterialize {
+			if _, err := os.Stat(assetRootPath); err != nil {
+				needMaterialize = true
+			}
+		}
+		if needMaterialize {
+			if err := l.materializeLockedPluginWebUI(context.Background(), paths, pluginName, entry.WebUI, lockEntry, locked); err != nil {
+				return err
+			}
+		}
+		if _, err := os.Stat(assetRootPath); err != nil {
+			return fmt.Errorf("prepared webui asset root for plugin %q not found at %s", pluginName, assetRootPath)
+		}
+		entry.ResolvedAssetRoot = assetRootPath
 		return nil
 	}
 	if entry.WebUI != nil && entry.WebUI.Source.IsLocal() {
@@ -1591,6 +1639,55 @@ func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths initP
 	return nil
 }
 
+func (l *Lifecycle) materializeLockedPluginWebUI(ctx context.Context, paths initPaths, pluginName string, webui *config.WebUIEntry, entry LockUIEntry, locked bool) error {
+	platform := pluginpkg.CurrentPlatformString()
+	archive, _, ok := resolveArchiveForPlatform(entry, platform)
+	if !ok || archive.URL == "" {
+		return fmt.Errorf("no archive for platform %s for plugin %q webui; run `gestaltd init --config %s`", platform, pluginName, paths.configPath)
+	}
+	if locked && archive.SHA256 == "" {
+		return fmt.Errorf("no verified hash for platform %s for plugin %q webui; run `gestaltd init --platform %s`", platform, pluginName, platform)
+	}
+
+	src, parseErr := pluginsource.Parse(entry.Source)
+	if parseErr != nil && webui != nil {
+		src, parseErr = pluginsource.Parse(webui.Source.Ref)
+	}
+	var (
+		download *pluginpkg.DownloadResult
+		err      error
+	)
+	if parseErr == nil && src.Host == pluginsource.HostGitHub {
+		download, err = ghresolver.DownloadResolvedAsset(ctx, http.DefaultClient, archive.URL, src.Token)
+	} else {
+		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, archive.URL, nil)
+		if reqErr != nil {
+			return fmt.Errorf("create locked source request for plugin %q webui: %w", pluginName, reqErr)
+		}
+		download, err = pluginpkg.DownloadRequest(http.DefaultClient, req)
+	}
+	if err != nil {
+		return fmt.Errorf("download locked source for plugin %q webui: %w", pluginName, err)
+	}
+	defer download.Cleanup()
+	if archive.SHA256 != "" && download.SHA256Hex != archive.SHA256 {
+		return fmt.Errorf("locked source digest mismatch for plugin %q webui: got %s, want %s", pluginName, download.SHA256Hex, archive.SHA256)
+	}
+
+	destDir := pluginWebUIDestDir(paths, pluginName)
+	if err := os.RemoveAll(destDir); err != nil {
+		return fmt.Errorf("remove stale cache for plugin %q webui: %w", pluginName, err)
+	}
+	installed, err := pluginstore.Install(download.LocalPath, destDir)
+	if err != nil {
+		return fmt.Errorf("install locked source for plugin %q webui: %w", pluginName, err)
+	}
+	if err := validateInstalledManifestKind(pluginmanifestv1.KindWebUI, pluginName+"-webui", installed.Manifest); err != nil {
+		return err
+	}
+	return nil
+}
+
 func downloadPlatformArchives(ctx context.Context, lock *Lockfile, platforms []struct{ GOOS, GOARCH, LibC string }, tokenForSource map[string]string) error {
 	for _, plat := range platforms {
 		platformKey := pluginpkg.PlatformString(plat.GOOS, plat.GOARCH)
@@ -1615,6 +1712,12 @@ func hashPlatformInEntries(ctx context.Context, lock *Lockfile, platformKey stri
 		if err := hashArchiveEntry(ctx, entry, platformKey, tokenForSource); err != nil {
 			return err
 		}
+	}
+	for name, entry := range lock.PluginWebUIs {
+		if err := hashArchiveEntry(ctx, &entry, platformKey, tokenForSource); err != nil {
+			return err
+		}
+		lock.PluginWebUIs[name] = entry
 	}
 	return nil
 }

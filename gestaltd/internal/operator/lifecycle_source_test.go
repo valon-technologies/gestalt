@@ -996,3 +996,294 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 		t.Errorf("plugin command = %q, want %q", cfg.Providers.Plugins["alpha"].Command, executablePath)
 	}
 }
+
+// buildWebUIArchive creates a tar.gz archive for a kind:webui plugin with
+// a manifest and an asset root directory containing a stub index.html.
+func buildWebUIArchive(t *testing.T, dir, srcDirName, source, version string) string {
+	t.Helper()
+	srcDir := filepath.Join(dir, srcDirName)
+	assetDir := filepath.Join(srcDir, "out")
+	if err := os.MkdirAll(assetDir, 0755); err != nil {
+		t.Fatalf("create asset dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(assetDir, "index.html"), []byte("<html><body>plugin ui</body></html>"), 0644); err != nil {
+		t.Fatalf("write index.html: %v", err)
+	}
+
+	manifest := &pluginmanifestv1.Manifest{
+		Source:  source,
+		Version: version,
+		Kind:    pluginmanifestv1.KindWebUI,
+		Spec:    &pluginmanifestv1.Spec{AssetRoot: "out"},
+	}
+	manifestBytes, err := pluginpkg.EncodeManifest(manifest)
+	if err != nil {
+		t.Fatalf("encode manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(srcDir, "manifest.json"), manifestBytes, 0644); err != nil {
+		t.Fatalf("write manifest: %v", err)
+	}
+
+	archivePath := filepath.Join(dir, srcDirName+".tar.gz")
+	if err := pluginpkg.CreatePackageFromDir(srcDir, archivePath); err != nil {
+		t.Fatalf("create package: %v", err)
+	}
+	return archivePath
+}
+
+func writeConfigWithPluginWebUI(t *testing.T, dir, pluginSource, pluginVersion, webuiSource, webuiVersion, artifactsDir string) string {
+	t.Helper()
+	dbPath := filepath.Join(dir, "test.db")
+	indexedDBManifest := writeStubIndexedDBManifest(t, dir)
+	content := fmt.Sprintf(`providers:
+  ui:
+    disabled: true
+  indexeddbs:
+    sqlite:
+      source:
+        path: %s
+      config:
+        path: %q
+  plugins:
+    acme:
+      source:
+        ref: %s
+        version: %s
+      webui:
+        source:
+          ref: %s
+          version: %s
+server:
+  indexeddb: sqlite
+  encryptionKey: "0123456789abcdef0123456789abcdef"
+  artifactsDir: %s
+`, indexedDBManifest, dbPath, pluginSource, pluginVersion, webuiSource, webuiVersion, artifactsDir)
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	return configPath
+}
+
+func TestPluginWebUI_InitWritesLockfileEntry(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	pluginSource := "github.com/acme/tools/acme-plugin"
+	pluginVersion := "1.0.0"
+	webuiSource := "github.com/acme/tools/acme-webui"
+	webuiVersion := "2.0.0"
+
+	pluginArchive := buildV2Archive(t, dir, pluginSource, pluginVersion, "fake-plugin")
+	webuiArchive := buildWebUIArchive(t, dir, "acme-webui-src", webuiSource, webuiVersion)
+
+	resolver := &fakeMultiResolver{
+		results: map[string]fakeResolverResult{
+			pluginSource: {archivePath: pluginArchive, resolvedURL: "https://example.com/plugin.tar.gz"},
+			webuiSource:  {archivePath: webuiArchive, resolvedURL: "https://example.com/webui.tar.gz"},
+		},
+	}
+
+	artifactsDir := filepath.Join(dir, "artifacts")
+	configPath := writeConfigWithPluginWebUI(t, dir, pluginSource, pluginVersion, webuiSource, webuiVersion, artifactsDir)
+
+	lc := NewLifecycle(resolver)
+	lock, err := lc.InitAtPath(configPath)
+	if err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+
+	if lock.PluginWebUIs == nil {
+		t.Fatal("lock.PluginWebUIs is nil")
+	}
+	entry, ok := lock.PluginWebUIs["acme"]
+	if !ok {
+		t.Fatal("lock.PluginWebUIs missing acme entry")
+	}
+	if entry.Source != webuiSource {
+		t.Errorf("source = %q, want %q", entry.Source, webuiSource)
+	}
+	if entry.Version != webuiVersion {
+		t.Errorf("version = %q, want %q", entry.Version, webuiVersion)
+	}
+	if entry.Fingerprint == "" {
+		t.Error("fingerprint is empty")
+	}
+	if entry.Manifest == "" {
+		t.Error("manifest path is empty")
+	}
+	if entry.AssetRoot == "" {
+		t.Error("asset root path is empty")
+	}
+
+	assetRootAbs := resolveLockPath(artifactsDir, entry.AssetRoot)
+	if _, err := os.Stat(assetRootAbs); err != nil {
+		t.Errorf("asset root not found on disk: %v", err)
+	}
+	indexPath := filepath.Join(assetRootAbs, "index.html")
+	if _, err := os.Stat(indexPath); err != nil {
+		t.Errorf("index.html not found in asset root: %v", err)
+	}
+}
+
+func TestPluginWebUI_LoadResolvesAssetRoot(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	pluginSource := "github.com/acme/tools/acme-plugin"
+	pluginVersion := "1.0.0"
+	webuiSource := "github.com/acme/tools/acme-webui"
+	webuiVersion := "2.0.0"
+
+	pluginArchive := buildV2Archive(t, dir, pluginSource, pluginVersion, "fake-plugin")
+	webuiArchive := buildWebUIArchive(t, dir, "acme-webui-src", webuiSource, webuiVersion)
+
+	resolver := &fakeMultiResolver{
+		results: map[string]fakeResolverResult{
+			pluginSource: {archivePath: pluginArchive, resolvedURL: "https://example.com/plugin.tar.gz"},
+			webuiSource:  {archivePath: webuiArchive, resolvedURL: "https://example.com/webui.tar.gz"},
+		},
+	}
+
+	artifactsDir := filepath.Join(dir, "artifacts")
+	configPath := writeConfigWithPluginWebUI(t, dir, pluginSource, pluginVersion, webuiSource, webuiVersion, artifactsDir)
+
+	lc := NewLifecycle(resolver)
+	if _, err := lc.InitAtPath(configPath); err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath: %v", err)
+	}
+
+	acmeEntry := cfg.Providers.Plugins["acme"]
+	if acmeEntry == nil {
+		t.Fatal("acme plugin entry is nil")
+	}
+	if acmeEntry.ResolvedAssetRoot == "" {
+		t.Fatal("ResolvedAssetRoot is empty after load")
+	}
+	if _, err := os.Stat(acmeEntry.ResolvedAssetRoot); err != nil {
+		t.Errorf("ResolvedAssetRoot path does not exist: %v", err)
+	}
+}
+
+func TestPluginWebUI_ConfigChangeInvalidatesLock(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	pluginSource := "github.com/acme/tools/acme-plugin"
+	pluginVersion := "1.0.0"
+	webuiSource := "github.com/acme/tools/acme-webui"
+	webuiV1 := "1.0.0"
+	webuiV2 := "2.0.0"
+
+	pluginArchive := buildV2Archive(t, dir, pluginSource, pluginVersion, "fake-plugin")
+	webuiArchive := buildWebUIArchive(t, dir, "acme-webui-src", webuiSource, webuiV1)
+
+	resolver := &fakeMultiResolver{
+		results: map[string]fakeResolverResult{
+			pluginSource: {archivePath: pluginArchive, resolvedURL: "https://example.com/plugin.tar.gz"},
+			webuiSource:  {archivePath: webuiArchive, resolvedURL: "https://example.com/webui.tar.gz"},
+		},
+	}
+
+	artifactsDir := filepath.Join(dir, "artifacts")
+	configPath := writeConfigWithPluginWebUI(t, dir, pluginSource, pluginVersion, webuiSource, webuiV1, artifactsDir)
+
+	lc := NewLifecycle(resolver)
+	lock, err := lc.InitAtPath(configPath)
+	if err != nil {
+		t.Fatalf("InitAtPath v1: %v", err)
+	}
+	v1Fingerprint := lock.PluginWebUIs["acme"].Fingerprint
+
+	// Rewrite config with v2 webui
+	writeConfigWithPluginWebUI(t, dir, pluginSource, pluginVersion, webuiSource, webuiV2, artifactsDir)
+
+	cfg, err := config.LoadAllowMissingEnv(configPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	paths := initPathsForConfigWithArtifactsDir(configPath, artifactsDir)
+	if lockMatchesConfig(cfg, paths, lock) {
+		t.Fatal("lockMatchesConfig should return false after webui version change")
+	}
+
+	// Re-init should produce a different fingerprint
+	lock2, err := lc.InitAtPath(configPath)
+	if err != nil {
+		t.Fatalf("InitAtPath v2: %v", err)
+	}
+	if lock2.PluginWebUIs["acme"].Fingerprint == v1Fingerprint {
+		t.Error("fingerprint should change after version update")
+	}
+}
+
+func TestPluginWebUI_MissingLockEntryErrors(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	pluginSource := "github.com/acme/tools/acme-plugin"
+	pluginVersion := "1.0.0"
+	webuiSource := "github.com/acme/tools/acme-webui"
+	webuiVersion := "1.0.0"
+
+	pluginArchive := buildV2Archive(t, dir, pluginSource, pluginVersion, "fake-plugin")
+
+	// Only resolve the plugin, not the webui -- simulates stale lock
+	resolver := &fakeMultiResolver{
+		results: map[string]fakeResolverResult{
+			pluginSource: {archivePath: pluginArchive, resolvedURL: "https://example.com/plugin.tar.gz"},
+			webuiSource:  {archivePath: pluginArchive, resolvedURL: "https://example.com/webui.tar.gz"}, // wrong archive, but init will write it
+		},
+	}
+
+	artifactsDir := filepath.Join(dir, "artifacts")
+
+	// First, write config WITHOUT webui and init
+	dbPath := filepath.Join(dir, "test.db")
+	indexedDBManifest := writeStubIndexedDBManifest(t, dir)
+	noWebuiConfig := fmt.Sprintf(`providers:
+  ui:
+    disabled: true
+  indexeddbs:
+    sqlite:
+      source:
+        path: %s
+      config:
+        path: %q
+  plugins:
+    acme:
+      source:
+        ref: %s
+        version: %s
+server:
+  indexeddb: sqlite
+  encryptionKey: "0123456789abcdef0123456789abcdef"
+  artifactsDir: %s
+`, indexedDBManifest, dbPath, pluginSource, pluginVersion, artifactsDir)
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(configPath, []byte(noWebuiConfig), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle(resolver)
+	if _, err := lc.InitAtPath(configPath); err != nil {
+		t.Fatalf("InitAtPath without webui: %v", err)
+	}
+
+	// Now rewrite config WITH webui but don't re-init
+	writeConfigWithPluginWebUI(t, dir, pluginSource, pluginVersion, webuiSource, webuiVersion, artifactsDir)
+
+	// Locked load should fail because lock has no PluginWebUIs entry
+	_, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	if err == nil {
+		t.Fatal("expected error for missing webui lock entry in locked mode")
+	}
+	if !strings.Contains(err.Error(), "gestaltd init") {
+		t.Errorf("error should mention gestaltd init, got: %v", err)
+	}
+}
