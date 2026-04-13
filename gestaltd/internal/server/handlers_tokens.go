@@ -181,14 +181,14 @@ func (s *Server) connectionInfosForPlugin(integration string, plugin *config.Pro
 	for _, name := range names {
 		if name == config.PluginConnectionName {
 			effectivePluginConn := config.EffectivePluginConnectionDef(plugin, manifestProvider)
-			if info, ok := s.connectionInfoFromAuth(integration, config.PluginConnectionAlias, effectivePluginConn, integrationAuthTypes, defaultCredentialFields); ok {
+			if info, ok := s.connectionInfoFromAuth(integration, config.PluginConnectionAlias, effectivePluginConn, integrationAuthTypes, defaultCredentialFields, false); ok {
 				infos = append(infos, info)
 			}
 			continue
 		}
 		conn, ok := config.EffectiveNamedConnectionDef(plugin, manifestProvider, name)
 		if ok {
-			if info, ok := s.connectionInfoFromAuth(integration, name, conn, integrationAuthTypes, defaultCredentialFields); ok {
+			if info, ok := s.connectionInfoFromAuth(integration, name, conn, integrationAuthTypes, defaultCredentialFields, true); ok {
 				infos = append(infos, info)
 			}
 		}
@@ -251,18 +251,21 @@ func credentialFieldInfos[T any](fields []T, mapField func(T) credentialFieldInf
 	return infos
 }
 
-func (s *Server) connectionInfoFromAuth(integration, name string, conn config.ConnectionDef, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo) (connectionDefInfo, bool) {
+func (s *Server) connectionInfoFromAuth(integration, name string, conn config.ConnectionDef, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo, includeWithoutAuth bool) (connectionDefInfo, bool) {
 	authTypes := connectionAuthTypes(conn.Auth, integrationAuthTypes)
 	authTypes = s.supportedConnectionAuthTypes(integration, name, authTypes)
-	if len(authTypes) == 0 {
+	if len(authTypes) == 0 && !includeWithoutAuth {
 		return connectionDefInfo{}, false
 	}
 
 	info := connectionDefInfo{
 		DisplayName:      connectionDisplayName(name, conn.DisplayName),
 		Name:             name,
-		AuthTypes:        authTypes,
+		AuthTypes:        []string{},
 		CredentialFields: []credentialFieldInfo{},
+	}
+	if len(authTypes) > 0 {
+		info.AuthTypes = authTypes
 	}
 	if fields := credentialFieldInfos(conn.Auth.Credentials, func(field config.CredentialFieldDef) credentialFieldInfo {
 		return credentialFieldInfo{

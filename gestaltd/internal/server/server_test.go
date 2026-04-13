@@ -1171,6 +1171,81 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 			t.Fatalf("expected no connectable connections, got %+v", integrations[0].Connections)
 		}
 	})
+
+	t.Run("manifest-backed explicit no-auth MCP connection is exposed", func(t *testing.T) {
+		t.Parallel()
+
+		stub := &stubNonOAuthProvider{name: "clickhouse"}
+		plugin := &config.ProviderEntry{
+			Source: config.ProviderSource{
+				Ref:     "github.com/acme/plugins/clickhouse",
+				Version: "1.0.0",
+			},
+			ResolvedManifest: &providermanifestv1.Manifest{
+				Spec: &providermanifestv1.Spec{
+					Surfaces: &providermanifestv1.ProviderSurfaces{
+						MCP: &providermanifestv1.MCPSurface{
+							Connection: "MCP",
+							URL:        "https://example.com/mcp",
+						},
+					},
+					Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+						"MCP": {
+							DisplayName: "MCP",
+							Mode:        providermanifestv1.ConnectionModeUser,
+							Auth: &providermanifestv1.ProviderAuth{
+								Type: providermanifestv1.AuthTypeNone,
+							},
+						},
+					},
+				},
+			},
+		}
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, stub)
+			cfg.PluginDefs = map[string]*config.ProviderEntry{
+				"clickhouse": plugin,
+			}
+			cfg.Services = coretesting.NewStubServices(t)
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		var integrations []struct {
+			Name        string   `json:"name"`
+			AuthTypes   []string `json:"authTypes"`
+			Connections []struct {
+				Name        string   `json:"name"`
+				DisplayName string   `json:"displayName"`
+				AuthTypes   []string `json:"authTypes"`
+			} `json:"connections"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+			t.Fatalf("decoding: %v", err)
+		}
+		if len(integrations) != 1 {
+			t.Fatalf("expected 1 integration, got %d", len(integrations))
+		}
+		if len(integrations[0].AuthTypes) != 0 {
+			t.Fatalf("expected no top-level auth types, got %+v", integrations[0].AuthTypes)
+		}
+		if len(integrations[0].Connections) != 1 {
+			t.Fatalf("expected one explicit no-auth connection, got %+v", integrations[0].Connections)
+		}
+		if integrations[0].Connections[0].Name != "MCP" || integrations[0].Connections[0].DisplayName != "MCP" {
+			t.Fatalf("unexpected connection %+v", integrations[0].Connections[0])
+		}
+		if len(integrations[0].Connections[0].AuthTypes) != 0 {
+			t.Fatalf("expected MCP connection authTypes=[], got %+v", integrations[0].Connections[0].AuthTypes)
+		}
+	})
 }
 
 func TestListIntegrations_ConnectionInfosHideOAuthConnectionsWithoutHandler(t *testing.T) {
