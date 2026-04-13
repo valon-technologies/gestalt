@@ -549,15 +549,15 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 	return true
 }
 
-func PluginFingerprint(name string, plugin *config.ProviderEntry, configDir string) (string, error) {
-	if plugin == nil {
+func ProviderFingerprint(name string, entry *config.ProviderEntry, configDir string) (string, error) {
+	if entry == nil {
 		return "", nil
 	}
 
 	input := pluginFingerprintInput{
 		Name:    name,
-		Source:  plugin.SourceRef(),
-		Version: plugin.SourceVersion(),
+		Source:  entry.SourceRef(),
+		Version: entry.SourceVersion(),
 	}
 
 	payload, err := json.Marshal(input)
@@ -568,19 +568,19 @@ func PluginFingerprint(name string, plugin *config.ProviderEntry, configDir stri
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func UIProviderFingerprint(plugin *config.ProviderEntry) (string, error) {
-	return PluginFingerprint("ui", plugin, "")
+func UIProviderFingerprint(entry *config.ProviderEntry) (string, error) {
+	return ProviderFingerprint("ui", entry, "")
 }
 
-func lockEntryMatches(paths initPaths, name string, plugin *config.ProviderEntry, entry LockEntry, found bool) bool {
+func lockEntryMatches(paths initPaths, name string, providerEntry *config.ProviderEntry, entry LockEntry, found bool) bool {
 	if !found {
 		return false
 	}
-	fingerprint, err := PluginFingerprint(name, plugin, paths.configDir)
+	fingerprint, err := ProviderFingerprint(name, providerEntry, paths.configDir)
 	if err != nil || entry.Fingerprint != fingerprint {
 		return false
 	}
-	if entry.Source != plugin.SourceRef() || entry.Version != plugin.SourceVersion() {
+	if entry.Source != providerEntry.SourceRef() || entry.Version != providerEntry.SourceVersion() {
 		return false
 	}
 	if len(entry.Archives) > 0 {
@@ -715,7 +715,7 @@ func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, paths initP
 	if entrypoint == nil {
 		return LockEntry{}, fmt.Errorf("%s %q manifest does not define a %s entrypoint", kind, name, kind)
 	}
-	fingerprint, err := PluginFingerprint(name, plugin, paths.configDir)
+	fingerprint, err := ProviderFingerprint(name, plugin, paths.configDir)
 	if err != nil {
 		return LockEntry{}, fmt.Errorf("fingerprinting %s %q plugin: %w", kind, name, err)
 	}
@@ -771,7 +771,7 @@ func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths initPa
 	if err := providerpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, providermanifestv1.KindPlugin, configMap); err != nil {
 		return LockProviderEntry{}, fmt.Errorf("plugin config validation for provider %q: %w", name, err)
 	}
-	fingerprint, err := PluginFingerprint(name, plugin, paths.configDir)
+	fingerprint, err := ProviderFingerprint(name, plugin, paths.configDir)
 	if err != nil {
 		return LockProviderEntry{}, fmt.Errorf("fingerprinting provider %q plugin: %w", name, err)
 	}
@@ -1134,7 +1134,7 @@ func (l *Lifecycle) applyLockedProviderEntry(paths initPaths, lock *Lockfile, na
 	if !ok {
 		return fmt.Errorf("prepared artifact for provider %q is missing or stale; run `gestaltd init --config %s`", name, paths.configPath)
 	}
-	fingerprint, err := PluginFingerprint(name, plugin, paths.configDir)
+	fingerprint, err := ProviderFingerprint(name, plugin, paths.configDir)
 	if err != nil {
 		return fmt.Errorf("fingerprinting provider %q plugin: %w", name, err)
 	}
@@ -1187,7 +1187,7 @@ func (l *Lifecycle) applyLockedComponentEntry(paths initPaths, entry *LockEntry,
 	if entry == nil {
 		return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init --config %s`", kind, name, paths.configPath)
 	}
-	fingerprint, err := PluginFingerprint(name, plugin, paths.configDir)
+	fingerprint, err := ProviderFingerprint(name, plugin, paths.configDir)
 	if err != nil {
 		return fmt.Errorf("fingerprinting %s %q plugin: %w", kind, name, err)
 	}

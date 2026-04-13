@@ -19,7 +19,7 @@ import (
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	secretsplugin "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/plugin"
+	secretsprovider "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/provider"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	ghresolver "github.com/valon-technologies/gestalt/server/internal/pluginsource/github"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
@@ -729,7 +729,7 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 	}
 
 	factories := bootstrap.NewFactoryRegistry()
-	factories.Secrets["plugin"] = secretsplugin.Factory
+	factories.Secrets["provider"] = secretsprovider.Factory
 
 	lc := NewLifecycle(resolver).WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
 		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)

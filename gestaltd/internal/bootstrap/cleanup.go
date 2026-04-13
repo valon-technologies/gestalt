@@ -10,7 +10,7 @@ import (
 )
 
 // CloseProviders closes all registered providers that implement io.Closer.
-func CloseProviders(providers *registry.PluginMap[core.Provider]) error {
+func CloseProviders(providers *registry.ProviderMap[core.Provider]) error {
 	if providers == nil {
 		return nil
 	}

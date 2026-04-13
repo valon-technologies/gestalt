@@ -12,11 +12,11 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
-	authplugin "github.com/valon-technologies/gestalt/server/internal/drivers/auth/plugin"
-	indexeddbplugin "github.com/valon-technologies/gestalt/server/internal/drivers/indexeddb/plugin"
+	authprovider "github.com/valon-technologies/gestalt/server/internal/drivers/auth/provider"
+	indexeddbprovider "github.com/valon-technologies/gestalt/server/internal/drivers/indexeddb/provider"
 	secretsenv "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/env"
 	secretsfile "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/file"
-	secretsplugin "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/plugin"
+	secretsprovider "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/provider"
 	telemetrynoop "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/noop"
 	telemetryotlp "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/otlp"
 	telemetrystdout "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/stdout"
@@ -86,7 +86,7 @@ func buildFactories() *bootstrap.FactoryRegistry {
 	factories.Telemetry["otlp"] = telemetryotlp.Factory
 	factories.Audit = func(ctx context.Context, cfg config.ProviderEntry, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error) {
 		if cfg.Source.IsManaged() || cfg.Source.IsLocal() {
-			return nil, nil, fmt.Errorf("plugin-based audit providers are not yet supported")
+			return nil, nil, fmt.Errorf("provider-based audit providers are not yet supported")
 		}
 		switch cfg.Source.Builtin {
 		case "", "inherit":
@@ -114,11 +114,11 @@ func buildFactories() *bootstrap.FactoryRegistry {
 			return nil, nil, fmt.Errorf("unknown audit provider %q", cfg.Source.Builtin)
 		}
 	}
-	factories.Auth = authplugin.Factory
-	factories.IndexedDB = indexeddbplugin.Factory
+	factories.Auth = authprovider.Factory
+	factories.IndexedDB = indexeddbprovider.Factory
 	factories.Secrets["env"] = secretsenv.Factory
 	factories.Secrets["file"] = secretsfile.Factory
-	factories.Secrets["plugin"] = secretsplugin.Factory
+	factories.Secrets["provider"] = secretsprovider.Factory
 	return factories
 }
 

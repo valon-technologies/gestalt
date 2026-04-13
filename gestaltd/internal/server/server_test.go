@@ -46,7 +46,7 @@ func newTestServer(t *testing.T, opts ...func(*server.Config)) *httptest.Server 
 	cfg := server.Config{
 		Auth:     &coretesting.StubAuthProvider{N: "none"},
 		Services: coretesting.NewStubServices(t),
-		Providers: func() *registry.PluginMap[core.Provider] {
+		Providers: func() *registry.ProviderMap[core.Provider] {
 			reg := registry.New()
 			return &reg.Providers
 		}(),
@@ -229,7 +229,7 @@ func seedToken(t *testing.T, svc *coredata.Services, tok *core.IntegrationToken)
 func TestNewServerRequiresStateSecretWithAuth(t *testing.T) {
 	t.Parallel()
 	svc := coretesting.NewStubServices(t)
-	providers := func() *registry.PluginMap[core.Provider] {
+	providers := func() *registry.ProviderMap[core.Provider] {
 		reg := registry.New()
 		return &reg.Providers
 	}()
@@ -5586,7 +5586,7 @@ func TestRefresh_UsesConnectionAuth(t *testing.T) {
 	}
 }
 
-func newMCPHandler(t *testing.T, providers *registry.PluginMap[core.Provider], svc *coredata.Services, auditSink core.AuditSink) http.Handler {
+func newMCPHandler(t *testing.T, providers *registry.ProviderMap[core.Provider], svc *coredata.Services, auditSink core.AuditSink) http.Handler {
 	t.Helper()
 	broker := invocation.NewBroker(providers, svc.Users, svc.Tokens)
 	mcpInvoker := invocation.NewGuarded(broker, broker, "mcp", auditSink)
@@ -5688,7 +5688,7 @@ func TestMCPEndpoint_InitializeAndListTools(t *testing.T) {
 func TestMCPEndpoint_RequiresAuth(t *testing.T) {
 	t.Parallel()
 
-	providers := func() *registry.PluginMap[core.Provider] {
+	providers := func() *registry.ProviderMap[core.Provider] {
 		reg := registry.New()
 		return &reg.Providers
 	}()

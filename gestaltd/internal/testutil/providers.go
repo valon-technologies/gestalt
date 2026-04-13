@@ -7,8 +7,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 )
 
-// NewProviderRegistry creates a PluginMap populated with the given providers.
-func NewProviderRegistry(t *testing.T, providers ...core.Provider) *registry.PluginMap[core.Provider] {
+// NewProviderRegistry creates a ProviderMap populated with the given providers.
+func NewProviderRegistry(t *testing.T, providers ...core.Provider) *registry.ProviderMap[core.Provider] {
 	t.Helper()
 	reg := registry.New()
 	for _, p := range providers {

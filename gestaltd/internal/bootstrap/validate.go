@@ -42,7 +42,7 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 	return warnings, nil
 }
 
-func validateMCPCatalogs(providers *registry.PluginMap[core.Provider]) error {
+func validateMCPCatalogs(providers *registry.ProviderMap[core.Provider]) error {
 	for _, name := range providers.List() {
 		prov, err := providers.Get(name)
 		if err != nil {
@@ -59,7 +59,7 @@ func validateMCPCatalogs(providers *registry.PluginMap[core.Provider]) error {
 	return nil
 }
 
-func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.PluginMap[core.Provider], map[string]map[string]OAuthHandler, error) {
+func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.ProviderMap[core.Provider], map[string]map[string]OAuthHandler, error) {
 	reg := registry.New()
 	connAuth := make(map[string]map[string]OAuthHandler)
 
