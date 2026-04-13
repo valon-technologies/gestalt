@@ -67,6 +67,7 @@ func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest)
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
+	ctx = withRequestContext(ctx, req.GetContext())
 	if len(req.GetConnectionParams()) > 0 {
 		ctx = WithConnectionParams(ctx, req.GetConnectionParams())
 	}
@@ -85,6 +86,7 @@ func (s *ProviderServer) GetSessionCatalog(ctx context.Context, req *proto.GetSe
 	if !ok {
 		return nil, status.Error(codes.Unimplemented, "provider does not support session catalogs")
 	}
+	ctx = withRequestContext(ctx, req.GetContext())
 	if len(req.GetConnectionParams()) > 0 {
 		ctx = WithConnectionParams(ctx, req.GetConnectionParams())
 	}
@@ -103,4 +105,27 @@ func operationResultProto(result *OperationResult) *proto.OperationResult {
 		Status: int32(result.Status),
 		Body:   result.Body,
 	}
+}
+
+func withRequestContext(ctx context.Context, reqCtx *proto.RequestContext) context.Context {
+	if reqCtx == nil {
+		return ctx
+	}
+	if subject := reqCtx.GetSubject(); subject != nil {
+		ctx = WithSubject(ctx, Subject{
+			ID:          subject.GetId(),
+			Kind:        subject.GetKind(),
+			DisplayName: subject.GetDisplayName(),
+			AuthSource:  subject.GetAuthSource(),
+		})
+	}
+	if credential := reqCtx.GetCredential(); credential != nil {
+		ctx = WithCredential(ctx, Credential{
+			Mode:       credential.GetMode(),
+			SubjectID:  credential.GetSubjectId(),
+			Connection: credential.GetConnection(),
+			Instance:   credential.GetInstance(),
+		})
+	}
+	return ctx
 }

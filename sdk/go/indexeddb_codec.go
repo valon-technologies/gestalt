@@ -239,7 +239,7 @@ func KeyValueToAny(kv *proto.KeyValue) (any, error) {
 
 // AnyToKeyValue encodes a key or key component into its proto representation.
 func AnyToKeyValue(v any) (*proto.KeyValue, error) {
-	if arr, ok := v.([]any); ok {
+	if arr, ok := keyValueArrayParts(v); ok {
 		elems := make([]*proto.KeyValue, len(arr))
 		for i, elem := range arr {
 			kv, err := AnyToKeyValue(elem)
@@ -260,7 +260,7 @@ func AnyToKeyValue(v any) (*proto.KeyValue, error) {
 // CursorKeyToProto encodes a cursor seek target into the wire shape expected by the cursor RPC.
 func CursorKeyToProto(key any, indexCursor bool) ([]*proto.KeyValue, error) {
 	if indexCursor {
-		if parts, ok := key.([]any); ok {
+		if parts, ok := keyValueArrayParts(key); ok {
 			kvs := make([]*proto.KeyValue, len(parts))
 			for i, part := range parts {
 				kv, err := AnyToKeyValue(part)
@@ -277,6 +277,32 @@ func CursorKeyToProto(key any, indexCursor bool) ([]*proto.KeyValue, error) {
 		return nil, err
 	}
 	return []*proto.KeyValue{kv}, nil
+}
+
+func keyValueArrayParts(v any) ([]any, bool) {
+	if arr, ok := v.([]any); ok {
+		return append([]any(nil), arr...), true
+	}
+	if _, ok := v.([]byte); ok {
+		return nil, false
+	}
+	rv := reflect.ValueOf(v)
+	if !rv.IsValid() {
+		return nil, false
+	}
+	switch rv.Kind() {
+	case reflect.Slice, reflect.Array:
+	default:
+		return nil, false
+	}
+	if rv.Type().Elem().Kind() == reflect.Uint8 {
+		return nil, false
+	}
+	parts := make([]any, rv.Len())
+	for i := range parts {
+		parts[i] = rv.Index(i).Interface()
+	}
+	return parts, true
 }
 
 func timestampToTypedValue(value time.Time) (*proto.TypedValue, error) {

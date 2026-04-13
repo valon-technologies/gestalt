@@ -17,6 +17,8 @@ import (
 type Request struct {
 	Token            string
 	ConnectionParams map[string]string
+	Subject          Subject
+	Credential       Credential
 }
 
 // ConnectionParam returns one resolved connection parameter by name and whether
@@ -192,6 +194,8 @@ func (r *Router[P]) Execute(ctx context.Context, provider *P, operation string, 
 		return handler(ctx, provider, params, Request{
 			Token:            token,
 			ConnectionParams: ConnectionParams(ctx),
+			Subject:          SubjectFromContext(ctx),
+			Credential:       CredentialFromContext(ctx),
 		})
 	})
 	if result == nil {

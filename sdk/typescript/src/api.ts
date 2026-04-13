@@ -1,6 +1,22 @@
+export interface Subject {
+  id: string;
+  kind: string;
+  displayName: string;
+  authSource: string;
+}
+
+export interface Credential {
+  mode: string;
+  subjectId: string;
+  connection: string;
+  instance: string;
+}
+
 export interface Request {
   token: string;
   connectionParams: Record<string, string>;
+  subject: Subject;
+  credential: Credential;
 }
 
 export const responseBrand: unique symbol = Symbol("gestalt.response");
@@ -30,11 +46,28 @@ export function ok<T>(body: T): Response<T> {
   return response(200, body);
 }
 
-export function request(token = "", connectionParams: Record<string, string> = {}): Request {
+export function request(
+  token = "",
+  connectionParams: Record<string, string> = {},
+  subject: Partial<Subject> = {},
+  credential: Partial<Credential> = {},
+): Request {
   return {
     token,
     connectionParams: {
       ...connectionParams,
+    },
+    subject: {
+      id: subject.id ?? "",
+      kind: subject.kind ?? "",
+      displayName: subject.displayName ?? "",
+      authSource: subject.authSource ?? "",
+    },
+    credential: {
+      mode: credential.mode ?? "",
+      subjectId: credential.subjectId ?? "",
+      connection: credential.connection ?? "",
+      instance: credential.instance ?? "",
     },
   };
 }

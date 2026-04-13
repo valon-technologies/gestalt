@@ -360,22 +360,21 @@ func toolResultBody(result *mcpgo.CallToolResult) (string, error) {
 	return string(body), nil
 }
 
-func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (string, error) {
+func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error) {
 	if p != nil && p.Scopes != nil && !slices.Contains(p.Scopes, providerName) {
-		return "", fmt.Errorf("%w: %s", ErrScopeDenied, providerName)
+		return ctx, "", fmt.Errorf("%w: %s", ErrScopeDenied, providerName)
 	}
 	if b.authorizer != nil && !b.authorizer.AllowProvider(p, providerName) {
-		return "", fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName)
+		return ctx, "", fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName)
 	}
 	prov, err := b.providers.Get(providerName)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
-			return "", fmt.Errorf("%w: %q", ErrProviderNotFound, providerName)
+			return ctx, "", fmt.Errorf("%w: %q", ErrProviderNotFound, providerName)
 		}
-		return "", fmt.Errorf("%w: looking up provider: %v", ErrInternal, err)
+		return ctx, "", fmt.Errorf("%w: looking up provider: %v", ErrInternal, err)
 	}
-	_, tok, resolveErr := b.resolveToken(ctx, prov, p, providerName, connection, instance)
-	return tok, resolveErr
+	return b.resolveToken(ctx, prov, p, providerName, connection, instance)
 }
 
 func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error) {
@@ -387,6 +386,7 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 	switch mode {
 	case core.ConnectionModeNone:
 		SetCredentialAudit(ctx, core.ConnectionModeNone, "", "", "")
+		ctx = WithCredentialContext(ctx, CredentialContext{Mode: core.ConnectionModeNone})
 		return ctx, "", nil
 
 	case core.ConnectionModeUser, "":
@@ -447,6 +447,12 @@ func (b *Broker) resolveWorkloadToken(ctx context.Context, prov core.Provider, p
 			return ctx, "", fmt.Errorf("%w: workloads may not override connection or instance bindings", ErrAuthorizationDenied)
 		}
 		SetCredentialAudit(ctx, binding.Mode, binding.CredentialSubjectID, binding.Connection, binding.Instance)
+		ctx = WithCredentialContext(ctx, CredentialContext{
+			Mode:       binding.Mode,
+			SubjectID:  binding.CredentialSubjectID,
+			Connection: binding.Connection,
+			Instance:   binding.Instance,
+		})
 		return ctx, "", nil
 	case core.ConnectionModeIdentity:
 		if (requestedConnection != "" && requestedConnection != binding.Connection) || (requestedInstance != "" && requestedInstance != binding.Instance) {
@@ -495,6 +501,12 @@ func (b *Broker) resolveUserToken(ctx context.Context, prov core.Provider, userI
 		return ctx, "", fmt.Errorf("%w: no token stored for integration %q", ErrNoToken, providerName)
 	}
 	SetCredentialAudit(ctx, credentialMode, credentialSubjectID, storedToken.Connection, storedToken.Instance)
+	ctx = WithCredentialContext(ctx, CredentialContext{
+		Mode:       credentialMode,
+		SubjectID:  credentialSubjectID,
+		Connection: storedToken.Connection,
+		Instance:   storedToken.Instance,
+	})
 
 	if storedToken.MetadataJSON != "" {
 		var connParams map[string]string

@@ -1,4 +1,4 @@
-from ._api import OK, Error, Model, Request, Response, field
+from ._api import OK, Credential, Error, Model, Request, Response, Subject, field
 from ._catalog import (
     Catalog,
     CatalogOperation,
@@ -54,6 +54,7 @@ __all__ = [
     "Catalog",
     "CatalogOperation",
     "CatalogParameter",
+    "Credential",
     "Closer",
     "CompleteLoginRequest",
     "Cursor",
@@ -79,6 +80,7 @@ __all__ = [
     "Request",
     "Response",
     "SecretsProvider",
+    "Subject",
     "SessionCatalogProvider",
     "SessionTTLProvider",
     "WarningsProvider",

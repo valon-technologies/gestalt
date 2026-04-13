@@ -14,7 +14,7 @@ import grpc
 from google.protobuf import empty_pb2 as _empty_pb2
 from google.protobuf import json_format
 
-from ._api import Request
+from ._api import Credential, Request, Subject
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._catalog import catalog_to_proto
 from ._plugin import Plugin, _module_plugin
@@ -332,6 +332,8 @@ def _provider_servicer(*, plugin: Plugin) -> Any:
                     Request(
                         token=request.token,
                         connection_params=dict(request.connection_params),
+                        subject=_subject_from_proto(getattr(request, "context", None)),
+                        credential=_credential_from_proto(getattr(request, "context", None)),
                     ),
                 )
             except Exception as error:
@@ -492,6 +494,36 @@ def _plugin_request(request: Any) -> Request:
     return Request(
         token=getattr(request, "token", ""),
         connection_params=dict(getattr(request, "connection_params", {})),
+        subject=_subject_from_proto(getattr(request, "context", None)),
+        credential=_credential_from_proto(getattr(request, "context", None)),
+    )
+
+
+def _subject_from_proto(request_context: Any) -> Subject:
+    if request_context is None:
+        return Subject()
+    subject = getattr(request_context, "subject", None)
+    if subject is None:
+        return Subject()
+    return Subject(
+        id=getattr(subject, "id", ""),
+        kind=getattr(subject, "kind", ""),
+        display_name=getattr(subject, "display_name", ""),
+        auth_source=getattr(subject, "auth_source", ""),
+    )
+
+
+def _credential_from_proto(request_context: Any) -> Credential:
+    if request_context is None:
+        return Credential()
+    credential = getattr(request_context, "credential", None)
+    if credential is None:
+        return Credential()
+    return Credential(
+        mode=getattr(credential, "mode", ""),
+        subject_id=getattr(credential, "subject_id", ""),
+        connection=getattr(credential, "connection", ""),
+        instance=getattr(credential, "instance", ""),
     )
 
 

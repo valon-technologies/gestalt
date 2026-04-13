@@ -11,9 +11,9 @@ type ProviderKind string
 
 const (
 	ProviderKindIntegration ProviderKind = "integration"
-	ProviderKindAuth       ProviderKind = "auth"
-	ProviderKindIndexedDB  ProviderKind = "datastore"
-	ProviderKindSecrets    ProviderKind = "secrets"
+	ProviderKindAuth        ProviderKind = "auth"
+	ProviderKindIndexedDB   ProviderKind = "datastore"
+	ProviderKindSecrets     ProviderKind = "secrets"
 )
 
 // ProviderMetadata describes a provider instance independent of its concrete
@@ -61,12 +61,28 @@ type SessionCatalogProvider interface {
 	CatalogForRequest(ctx context.Context, token string) (*proto.Catalog, error)
 }
 
+type Subject struct {
+	ID          string
+	Kind        string
+	DisplayName string
+	AuthSource  string
+}
+
+type Credential struct {
+	Mode       string
+	SubjectID  string
+	Connection string
+	Instance   string
+}
+
 type OperationResult struct {
 	Status int
 	Body   string
 }
 
 type connectionParamsKey struct{}
+type subjectKey struct{}
+type credentialKey struct{}
 
 // WithConnectionParams returns a child context carrying the given connection
 // parameters. The host calls this before invoking an executable operation so
@@ -80,4 +96,22 @@ func WithConnectionParams(ctx context.Context, params map[string]string) context
 func ConnectionParams(ctx context.Context) map[string]string {
 	params, _ := ctx.Value(connectionParamsKey{}).(map[string]string)
 	return params
+}
+
+func WithSubject(ctx context.Context, subject Subject) context.Context {
+	return context.WithValue(ctx, subjectKey{}, subject)
+}
+
+func SubjectFromContext(ctx context.Context) Subject {
+	subject, _ := ctx.Value(subjectKey{}).(Subject)
+	return subject
+}
+
+func WithCredential(ctx context.Context, credential Credential) context.Context {
+	return context.WithValue(ctx, credentialKey{}, credential)
+}
+
+func CredentialFromContext(ctx context.Context) Credential {
+	credential, _ := ctx.Value(credentialKey{}).(Credential)
+	return credential
 }

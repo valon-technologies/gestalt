@@ -23,11 +23,15 @@ func CallDirectTool(ctx context.Context, resolver TokenResolver, p *principal.Pr
 		return nil, ErrNotAuthenticated
 	}
 	if resolver != nil && prov.ConnectionMode() != core.ConnectionModeNone {
-		token, err := resolver.ResolveToken(ctx, p, provName, connection, instance)
+		var token string
+		var err error
+		ctx, token, err = resolver.ResolveToken(ctx, p, provName, connection, instance)
 		if err != nil {
 			return nil, err
 		}
 		ctx = mcpupstream.WithUpstreamToken(ctx, token)
+	} else if prov.ConnectionMode() == core.ConnectionModeNone {
+		ctx = WithCredentialContext(ctx, CredentialContext{Mode: core.ConnectionModeNone})
 	}
 	ctx = mcpupstream.WithCallToolMeta(ctx, meta)
 	return caller.CallTool(ctx, opName, args)

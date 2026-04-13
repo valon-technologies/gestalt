@@ -9,6 +9,7 @@ import (
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	protoutil "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -18,7 +19,11 @@ type stubProvider struct{}
 type stubInput struct{}
 
 type stubOutput struct {
-	Operation string `json:"operation"`
+	Operation           string `json:"operation"`
+	SubjectID           string `json:"subject_id"`
+	SubjectKind         string `json:"subject_kind"`
+	CredentialMode      string `json:"credential_mode"`
+	CredentialSubjectID string `json:"credential_subject_id"`
 }
 
 type decodeInput struct {
@@ -63,8 +68,14 @@ func (p *stubProvider) Configure(_ context.Context, _ string, _ map[string]any) 
 	return nil
 }
 
-func (p *stubProvider) testOp(_ context.Context, _ stubInput, _ gestalt.Request) (gestalt.Response[stubOutput], error) {
-	return gestalt.OK(stubOutput{Operation: "test_op"}), nil
+func (p *stubProvider) testOp(_ context.Context, _ stubInput, req gestalt.Request) (gestalt.Response[stubOutput], error) {
+	return gestalt.OK(stubOutput{
+		Operation:           "test_op",
+		SubjectID:           req.Subject.ID,
+		SubjectKind:         req.Subject.Kind,
+		CredentialMode:      req.Credential.Mode,
+		CredentialSubjectID: req.Credential.SubjectID,
+	}), nil
 }
 
 func (p *stubProvider) decodeOp(_ context.Context, input decodeInput, _ gestalt.Request) (gestalt.Response[decodeOutput], error) {
@@ -96,8 +107,14 @@ type sessionCatalogStubProvider struct {
 	sessionCatalog *proto.Catalog
 }
 
-func (p *sessionCatalogStubProvider) CatalogForRequest(_ context.Context, _ string) (*proto.Catalog, error) {
-	return p.sessionCatalog, nil
+func (p *sessionCatalogStubProvider) CatalogForRequest(ctx context.Context, _ string) (*proto.Catalog, error) {
+	cat := protoutil.Clone(p.sessionCatalog).(*proto.Catalog)
+	if cat != nil {
+		subject := gestalt.SubjectFromContext(ctx)
+		credential := gestalt.CredentialFromContext(ctx)
+		cat.DisplayName = subject.ID + "|" + credential.Mode
+	}
+	return cat, nil
 }
 
 func TestProviderServerGetMetadata(t *testing.T) {
@@ -146,12 +163,26 @@ func TestProviderServerGetSessionCatalog(t *testing.T) {
 			},
 		}
 		client := newIntegrationProviderClient(t, prov, sessionCatalogStubRouter)
-		resp, err := client.GetSessionCatalog(context.Background(), &proto.GetSessionCatalogRequest{Token: "tok"})
+		resp, err := client.GetSessionCatalog(context.Background(), &proto.GetSessionCatalogRequest{
+			Token: "tok",
+			Context: &proto.RequestContext{
+				Subject: &proto.SubjectContext{
+					Id:   "user:user-123",
+					Kind: "user",
+				},
+				Credential: &proto.CredentialContext{
+					Mode: "identity",
+				},
+			},
+		})
 		if err != nil {
 			t.Fatalf("GetSessionCatalog: %v", err)
 		}
 		if resp.GetCatalog() == nil {
 			t.Fatal("expected session catalog")
+		}
+		if resp.GetCatalog().GetDisplayName() != "user:user-123|identity" {
+			t.Fatalf("DisplayName = %q, want %q", resp.GetCatalog().GetDisplayName(), "user:user-123|identity")
 		}
 	})
 
@@ -207,7 +238,7 @@ func TestProviderServerExecute(t *testing.T) {
 			name:       "success",
 			router:     stubRouter,
 			wantStatus: http.StatusOK,
-			wantBody:   `{"operation":"test_op"}`,
+			wantBody:   `{"operation":"test_op","subject_id":"user:user-123","subject_kind":"user","credential_mode":"identity","credential_subject_id":"identity:__identity__"}`,
 			request: &proto.ExecuteRequest{
 				Operation: "test_op",
 				Params: func() *structpb.Struct {
@@ -215,6 +246,16 @@ func TestProviderServerExecute(t *testing.T) {
 					return params
 				}(),
 				Token: "tok",
+				Context: &proto.RequestContext{
+					Subject: &proto.SubjectContext{
+						Id:   "user:user-123",
+						Kind: "user",
+					},
+					Credential: &proto.CredentialContext{
+						Mode:      "identity",
+						SubjectId: "identity:__identity__",
+					},
+				},
 			},
 		},
 		{
@@ -302,4 +343,3 @@ func TestProviderServerStartProvider(t *testing.T) {
 		t.Errorf("config[key] = %v, want %q", prov.config["key"], "val")
 	}
 }
-

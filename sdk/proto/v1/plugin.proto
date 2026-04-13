@@ -99,12 +99,32 @@ message IntegrationToken {
   google.protobuf.Timestamp updated_at = 13;
 }
 
+message SubjectContext {
+  string id = 1;
+  string kind = 2;
+  string display_name = 3;
+  string auth_source = 4;
+}
+
+message CredentialContext {
+  string mode = 1;
+  string subject_id = 2;
+  string connection = 3;
+  string instance = 4;
+}
+
+message RequestContext {
+  SubjectContext subject = 1;
+  CredentialContext credential = 2;
+}
+
 message ExecuteRequest {
   string operation = 1;
   google.protobuf.Struct params = 2;
   string token = 3;
   map<string, string> connection_params = 4;
   string invocation_id = 5;
+  RequestContext context = 6;
 }
 
 
@@ -112,6 +132,7 @@ message GetSessionCatalogRequest {
   string token = 1;
   map<string, string> connection_params = 2;
   string invocation_id = 3;
+  RequestContext context = 4;
 }
 
 message GetSessionCatalogResponse {

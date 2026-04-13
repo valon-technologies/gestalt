@@ -45,7 +45,15 @@ type RequestMeta struct {
 	UserAgent  string
 }
 
+type CredentialContext struct {
+	Mode       core.ConnectionMode
+	SubjectID  string
+	Connection string
+	Instance   string
+}
+
 type invocationSurfaceCtxKey struct{}
+type credentialCtxKey struct{}
 
 type InvocationSurface string
 
@@ -67,6 +75,15 @@ func withAuditEntry(ctx context.Context, entry *core.AuditEntry) context.Context
 func auditEntryFromContext(ctx context.Context) *core.AuditEntry {
 	entry, _ := ctx.Value(auditEntryCtxKey{}).(*core.AuditEntry)
 	return entry
+}
+
+func WithCredentialContext(ctx context.Context, cred CredentialContext) context.Context {
+	return context.WithValue(ctx, credentialCtxKey{}, cred)
+}
+
+func CredentialContextFromContext(ctx context.Context) CredentialContext {
+	cred, _ := ctx.Value(credentialCtxKey{}).(CredentialContext)
+	return cred
 }
 
 func WithInvocationSurface(ctx context.Context, surface InvocationSurface) context.Context {

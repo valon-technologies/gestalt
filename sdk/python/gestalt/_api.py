@@ -12,9 +12,27 @@ T = TypeVar("T")
 
 
 @dataclasses.dataclass(slots=True)
+class Subject:
+    id: str = ""
+    kind: str = ""
+    display_name: str = ""
+    auth_source: str = ""
+
+
+@dataclasses.dataclass(slots=True)
+class Credential:
+    mode: str = ""
+    subject_id: str = ""
+    connection: str = ""
+    instance: str = ""
+
+
+@dataclasses.dataclass(slots=True)
 class Request:
     token: str = ""
     connection_params: dict[str, str] = dataclasses.field(default_factory=dict)
+    subject: Subject = dataclasses.field(default_factory=Subject)
+    credential: Credential = dataclasses.field(default_factory=Credential)
 
     def connection_param(self, name: str) -> str | None:
         return self.connection_params.get(name)

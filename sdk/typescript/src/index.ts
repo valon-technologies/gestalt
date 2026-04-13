@@ -5,9 +5,11 @@ export {
   responseBrand,
   request,
   type MaybePromise,
+  type Credential,
   type OperationResult,
   type Request,
   type Response,
+  type Subject,
 } from "./api.ts";
 export {
   catalogToJson,

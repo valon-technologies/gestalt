@@ -28,6 +28,7 @@ import {
   GetSessionCatalogResponseSchema,
   OperationResultSchema,
   ProviderMetadataSchema,
+  type RequestContext as ProtoRequestContext,
   IntegrationProvider as IntegrationProviderService,
   StartProviderResponseSchema,
   type ExecuteRequest,
@@ -401,7 +402,7 @@ export function createProviderService(
         await provider.execute(
           request.operation,
           objectFromUnknown(request.params),
-          providerRequest(request.token, request.connectionParams),
+          providerRequest(request.token, request.connectionParams, request.context),
         ),
       );
     },
@@ -409,7 +410,7 @@ export function createProviderService(
       let catalog: Catalog | Record<string, unknown> | null | undefined;
       try {
         catalog = await provider.catalogForRequest(
-          providerRequest(request.token, request.connectionParams),
+          providerRequest(request.token, request.connectionParams, request.context),
         );
       } catch (error) {
         throw new ConnectError(`session catalog: ${errorMessage(error)}`, Code.Unknown);
@@ -506,11 +507,29 @@ export function pluginCatalogYaml(plugin: IntegrationProvider): string {
   return catalogToYaml(plugin.staticCatalog());
 }
 
-function providerRequest(token: string, connectionParams: Record<string, string>): Request {
+function providerRequest(
+  token: string,
+  connectionParams: Record<string, string>,
+  requestContext?: ProtoRequestContext,
+): Request {
+  const subject = requestContext?.subject;
+  const credential = requestContext?.credential;
   return {
     token,
     connectionParams: {
       ...connectionParams,
+    },
+    subject: {
+      id: subject?.id ?? "",
+      kind: subject?.kind ?? "",
+      displayName: subject?.displayName ?? "",
+      authSource: subject?.authSource ?? "",
+    },
+    credential: {
+      mode: credential?.mode ?? "",
+      subjectId: credential?.subjectId ?? "",
+      connection: credential?.connection ?? "",
+      instance: credential?.instance ?? "",
     },
   };
 }

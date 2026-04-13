@@ -55,8 +55,8 @@ type stubTokenResolver struct {
 	err   error
 }
 
-func (s *stubTokenResolver) ResolveToken(context.Context, *principal.Principal, string, string, string) (string, error) {
-	return s.token, s.err
+func (s *stubTokenResolver) ResolveToken(ctx context.Context, _ *principal.Principal, _ string, _ string, _ string) (context.Context, string, error) {
+	return ctx, s.token, s.err
 }
 
 func TestResolveCatalog_StaticCatalog(t *testing.T) {

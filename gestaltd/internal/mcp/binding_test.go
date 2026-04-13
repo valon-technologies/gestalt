@@ -713,14 +713,14 @@ func (p *directCallerProvider) CallTool(ctx context.Context, name string, args m
 type stubTokenResolver struct {
 	token     string
 	err       error
-	resolveFn func(context.Context, *principal.Principal, string, string, string) (string, error)
+	resolveFn func(context.Context, *principal.Principal, string, string, string) (context.Context, string, error)
 }
 
-func (r *stubTokenResolver) ResolveToken(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (string, error) {
+func (r *stubTokenResolver) ResolveToken(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error) {
 	if r.resolveFn != nil {
 		return r.resolveFn(ctx, p, providerName, connection, instance)
 	}
-	return r.token, r.err
+	return ctx, r.token, r.err
 }
 
 func TestNewServer_DirectCallerPassthrough(t *testing.T) {
@@ -805,6 +805,107 @@ func TestNewServer_DirectCallerPassthrough(t *testing.T) {
 	}
 }
 
+func TestNewServer_DirectCallerPassthroughConnectionModeNoneSetsCredentialContext(t *testing.T) {
+	t.Parallel()
+
+	var seen invocation.CredentialContext
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{N: "clickhouse", ConnMode: core.ConnectionModeNone},
+		cat: &catalog.Catalog{
+			Name: "clickhouse",
+			Operations: []catalog.CatalogOperation{
+				{
+					ID:        "run_query",
+					Transport: catalog.TransportMCPPassthrough,
+				},
+			},
+		},
+		callFn: func(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
+			seen = invocation.CredentialContextFromContext(ctx)
+			return mcpgo.NewToolResultText("query result"), nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	ds, userID := stubServicesWithToken(t, "clickhouse")
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
+
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:   broker,
+		Providers: providers,
+	})
+
+	tool := srv.GetTool("clickhouse_run_query")
+	if tool == nil {
+		t.Fatal("tool not found")
+	}
+
+	req := mcpgo.CallToolRequest{}
+	req.Params.Name = "clickhouse_run_query"
+	req.Params.Arguments = map[string]any{"sql": "SELECT 1"}
+
+	result, err := tool.Handler(ctxWithPrincipal(userID), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected tool error: %v", result.Content)
+	}
+	if seen.Mode != core.ConnectionModeNone {
+		t.Fatalf("credential mode = %q, want %q", seen.Mode, core.ConnectionModeNone)
+	}
+	if seen.SubjectID != "" || seen.Connection != "" || seen.Instance != "" {
+		t.Fatalf("unexpected credential context: %+v", seen)
+	}
+}
+
+func TestNewServer_SessionCatalogConnectionModeNoneSetsCredentialContext(t *testing.T) {
+	t.Parallel()
+
+	var seen invocation.CredentialContext
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{N: "clickhouse", ConnMode: core.ConnectionModeNone},
+		cat:             &catalog.Catalog{Name: "clickhouse"},
+		sessionCatalogFn: func(ctx context.Context, token string) (*catalog.Catalog, error) {
+			if token != "" {
+				t.Fatalf("session catalog token = %q, want empty", token)
+			}
+			seen = invocation.CredentialContextFromContext(ctx)
+			return &catalog.Catalog{
+				Name: "clickhouse",
+				Operations: []catalog.CatalogOperation{
+					{
+						ID:          "run_query",
+						Description: "Execute a SQL query",
+						Transport:   catalog.TransportMCPPassthrough,
+					},
+				},
+			}, nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	ds, userID := stubServicesWithToken(t, "clickhouse")
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
+
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:   broker,
+		Providers: providers,
+	})
+
+	session := newTestSessionWithTools()
+	result := listToolsForSession(t, srv, ctxWithPrincipal(userID), session)
+	if len(result.Tools) != 1 || result.Tools[0].Name != "clickhouse_run_query" {
+		t.Fatalf("unexpected tools = %+v", result.Tools)
+	}
+	if seen.Mode != core.ConnectionModeNone {
+		t.Fatalf("credential mode = %q, want %q", seen.Mode, core.ConnectionModeNone)
+	}
+	if seen.SubjectID != "" || seen.Connection != "" || seen.Instance != "" {
+		t.Fatalf("unexpected credential context: %+v", seen)
+	}
+}
+
 func TestNewServer_WorkloadListToolsFiltersStaticAndSessionTools(t *testing.T) {
 	t.Parallel()
 
@@ -879,7 +980,7 @@ func TestNewServer_WorkloadListToolsFiltersStaticAndSessionTools(t *testing.T) {
 			},
 		},
 		TokenResolver: &stubTokenResolver{
-			resolveFn: func(_ context.Context, p *principal.Principal, providerName, connection, instance string) (string, error) {
+			resolveFn: func(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error) {
 				if p == nil || p.Kind != principal.KindWorkload {
 					t.Fatalf("expected workload principal, got %+v", p)
 				}
@@ -889,7 +990,7 @@ func TestNewServer_WorkloadListToolsFiltersStaticAndSessionTools(t *testing.T) {
 				if connection != "workspace" || instance != "team-a" {
 					t.Fatalf("unexpected session hydration selector inputs: connection=%q instance=%q", connection, instance)
 				}
-				return "identity-token", nil
+				return ctx, "identity-token", nil
 			},
 		},
 		Providers:     providers,

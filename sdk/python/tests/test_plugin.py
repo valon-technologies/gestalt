@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from dataclasses import dataclass
 
-from gestalt import OK, Error, Plugin, Request, Response
+from gestalt import OK, Credential, Error, Plugin, Request, Response, Subject
 
 
 class PluginOperationTests(unittest.TestCase):
@@ -100,16 +100,28 @@ class PluginOperationTests(unittest.TestCase):
 
         @plugin.operation
         def echo(req: Request) -> dict[str, str]:
-            return {"token": req.token, "region": req.connection_param("region") or ""}
+            return {
+                "token": req.token,
+                "region": req.connection_param("region") or "",
+                "subject_id": req.subject.id,
+                "credential_mode": req.credential.mode,
+            }
 
         result = plugin.execute(
             "echo",
             {},
-            Request(token="tok-abc", connection_params={"region": "us-east-1"}),
+            Request(
+                token="tok-abc",
+                connection_params={"region": "us-east-1"},
+                subject=Subject(id="user:user-123", kind="user"),
+                credential=Credential(mode="identity"),
+            ),
         )
         body = json.loads(result.body)
         self.assertEqual(body["token"], "tok-abc")
         self.assertEqual(body["region"], "us-east-1")
+        self.assertEqual(body["subject_id"], "user:user-123")
+        self.assertEqual(body["credential_mode"], "identity")
 
     def test_async_handler(self) -> None:
         plugin = Plugin("test-plugin")

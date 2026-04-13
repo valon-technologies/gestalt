@@ -13,7 +13,7 @@ import (
 )
 
 type TokenResolver interface {
-	ResolveToken(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (string, error)
+	ResolveToken(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error)
 }
 
 func ResolveCatalog(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, defaultConnection, instance string) (*catalog.Catalog, error) {
@@ -44,7 +44,7 @@ func resolveSessionCatalog(ctx context.Context, prov core.Provider, provName str
 		return nil, nil
 	}
 
-	token, err := resolver.ResolveToken(ctx, p, provName, connection, instance)
+	ctx, token, err := resolver.ResolveToken(ctx, p, provName, connection, instance)
 	if err != nil {
 		return nil, err
 	}

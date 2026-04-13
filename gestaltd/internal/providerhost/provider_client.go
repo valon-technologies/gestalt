@@ -4,11 +4,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -135,6 +138,8 @@ func (p *remoteProviderBase) Execute(ctx context.Context, operation string, para
 		Params:           msg,
 		Token:            token,
 		ConnectionParams: core.ConnectionParams(ctx),
+		InvocationId:     invocationIDFromContext(ctx),
+		Context:          requestContextProto(ctx),
 	})
 	if err != nil {
 		return nil, err
@@ -178,6 +183,8 @@ func (p *remoteProviderBase) sessionCatalog(ctx context.Context, token string) (
 	resp, err := p.client.GetSessionCatalog(ctx, &proto.GetSessionCatalogRequest{
 		Token:            token,
 		ConnectionParams: core.ConnectionParams(ctx),
+		InvocationId:     invocationIDFromContext(ctx),
+		Context:          requestContextProto(ctx),
 	})
 	if err != nil {
 		return nil, err
@@ -241,4 +248,78 @@ func callStartProvider(ctx context.Context, client proto.IntegrationProviderClie
 			v, proto.CurrentProtocolVersion)
 	}
 	return nil
+}
+
+func invocationIDFromContext(ctx context.Context) string {
+	meta := invocation.MetaFromContext(ctx)
+	if meta == nil {
+		return ""
+	}
+	return meta.RequestID
+}
+
+func requestContextProto(ctx context.Context) *proto.RequestContext {
+	var out proto.RequestContext
+
+	if p := principal.FromContext(ctx); p != nil {
+		out.Subject = &proto.SubjectContext{
+			Id:          subjectIDForPrincipal(p),
+			Kind:        subjectKindForPrincipal(p),
+			DisplayName: subjectDisplayName(p),
+			AuthSource:  p.AuthSource(),
+		}
+	}
+
+	if cred := invocation.CredentialContextFromContext(ctx); cred.Mode != "" || cred.SubjectID != "" || cred.Connection != "" || cred.Instance != "" {
+		out.Credential = &proto.CredentialContext{
+			Mode:       string(cred.Mode),
+			SubjectId:  cred.SubjectID,
+			Connection: cred.Connection,
+			Instance:   cred.Instance,
+		}
+	}
+
+	if out.Subject == nil && out.Credential == nil {
+		return nil
+	}
+	return &out
+}
+
+func subjectIDForPrincipal(p *principal.Principal) string {
+	if p == nil {
+		return ""
+	}
+	if p.SubjectID != "" {
+		return p.SubjectID
+	}
+	if p.UserID != "" {
+		return principal.UserSubjectID(p.UserID)
+	}
+	return ""
+}
+
+func subjectKindForPrincipal(p *principal.Principal) string {
+	if p == nil {
+		return ""
+	}
+	if p.Kind != "" {
+		return string(p.Kind)
+	}
+	switch {
+	case strings.HasPrefix(p.SubjectID, string(principal.KindUser)+":"):
+		return string(principal.KindUser)
+	case strings.HasPrefix(p.SubjectID, string(principal.KindWorkload)+":"):
+		return string(principal.KindWorkload)
+	}
+	if p.UserID != "" || p.Identity != nil {
+		return string(principal.KindUser)
+	}
+	return ""
+}
+
+func subjectDisplayName(p *principal.Principal) string {
+	if p == nil || p.Identity == nil {
+		return ""
+	}
+	return p.Identity.DisplayName
 }

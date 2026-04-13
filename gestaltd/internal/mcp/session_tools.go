@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -44,12 +45,12 @@ func hydrateSessionTools(ctx context.Context, cfg Config, providerNames []string
 			continue
 		}
 
-		token, err := resolveSessionToken(ctx, cfg, provName, prov)
+		sessionCtx, token, err := resolveSessionToken(ctx, cfg, provName, prov)
 		if err != nil {
 			continue
 		}
 
-		cat, err := scp.CatalogForRequest(ctx, token)
+		cat, err := scp.CatalogForRequest(sessionCtx, token)
 		if err != nil {
 			continue
 		}
@@ -75,13 +76,16 @@ func hydrateSessionTools(ctx context.Context, cfg Config, providerNames []string
 	}
 }
 
-func resolveSessionToken(ctx context.Context, cfg Config, provName string, prov core.Provider) (string, error) {
-	if cfg.TokenResolver == nil || prov.ConnectionMode() == core.ConnectionModeNone {
-		return "", nil
+func resolveSessionToken(ctx context.Context, cfg Config, provName string, prov core.Provider) (context.Context, string, error) {
+	if prov.ConnectionMode() == core.ConnectionModeNone {
+		return invocation.WithCredentialContext(ctx, invocation.CredentialContext{Mode: core.ConnectionModeNone}), "", nil
+	}
+	if cfg.TokenResolver == nil {
+		return ctx, "", nil
 	}
 	p := principal.FromContext(ctx)
 	if p == nil {
-		return "", fmt.Errorf("not authenticated")
+		return ctx, "", fmt.Errorf("not authenticated")
 	}
 	connection, instance := sessionTokenSelectors(cfg, p, provName)
 	return cfg.TokenResolver.ResolveToken(ctx, p, provName, connection, instance)
