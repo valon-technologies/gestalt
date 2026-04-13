@@ -7,6 +7,12 @@ import {
 
 const ENV_INDEXEDDB_SOCKET = "GESTALT_INDEXEDDB_SOCKET";
 
+export function indexedDBSocketEnv(name?: string): string {
+  const trimmed = name?.trim() ?? "";
+  if (!trimmed) return ENV_INDEXEDDB_SOCKET;
+  return `${ENV_INDEXEDDB_SOCKET}_${trimmed.replace(/[^A-Za-z0-9]/g, "_").toUpperCase()}`;
+}
+
 class AsyncQueue<T> implements AsyncIterable<T> {
   private queue: T[] = [];
   private waiting: ((result: IteratorResult<T>) => void) | null = null;
@@ -340,10 +346,11 @@ export interface ObjectStoreSchema {
 export class IndexedDB {
   private client: Client<typeof IndexedDBService>;
 
-  constructor() {
-    const socketPath = process.env[ENV_INDEXEDDB_SOCKET];
+  constructor(name?: string) {
+    const envName = indexedDBSocketEnv(name);
+    const socketPath = process.env[envName];
     if (!socketPath) {
-      throw new Error(`${ENV_INDEXEDDB_SOCKET} is not set`);
+      throw new Error(`${envName} is not set`);
     }
     const transport = createGrpcTransport({
       baseUrl: `http://localhost`,

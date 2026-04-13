@@ -87,8 +87,6 @@ func requiredComponentConfigYAML(t *testing.T, dir, dbPath string) string {
         path: %s
       config:
         path: %q
-  ui:
-    disabled: true
 `, manifestPath, dbPath)
 }
 
@@ -223,6 +221,141 @@ spec:
 	}
 }
 
+func TestLoadForExecutionAtPath_ResolvesLocalMountedWebUIWithoutLockfile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	webUIDir := filepath.Join(dir, "webui")
+	if err := os.MkdirAll(filepath.Join(webUIDir, "dist"), 0o755); err != nil {
+		t.Fatalf("MkdirAll webui dist: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(webUIDir, "dist", "index.html"), []byte("<html>roadmap</html>"), 0o644); err != nil {
+		t.Fatalf("WriteFile index.html: %v", err)
+	}
+	manifestPath := filepath.Join(webUIDir, "manifest.yaml")
+	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindWebUI,
+		Source:      "github.com/testowner/web/roadmap",
+		Version:     "0.0.1-alpha.1",
+		DisplayName: "Roadmap UI",
+		Spec:        &providermanifestv1.Spec{AssetRoot: "dist"},
+	}, providerpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeManifest: %v", err)
+	}
+	if err := os.WriteFile(manifestPath, manifest, 0o644); err != nil {
+		t.Fatalf("WriteFile manifest: %v", err)
+	}
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  ui:
+    roadmap:
+      source:
+        path: ./webui/manifest.yaml
+      path: /create-customer-roadmap-review
+` + `server:
+` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	lc := NewLifecycle(nil)
+	loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath: %v", err)
+	}
+
+	entry := loaded.Providers.UI["roadmap"]
+	if entry == nil {
+		t.Fatal(`Providers.UI["roadmap"] = nil`)
+	}
+	if entry.ResolvedManifest == nil {
+		t.Fatal("ResolvedManifest = nil")
+	}
+	if got := entry.ResolvedManifestPath; got != manifestPath {
+		t.Fatalf("ResolvedManifestPath = %q, want %q", got, manifestPath)
+	}
+	wantAssetRoot := filepath.Join(webUIDir, "dist")
+	if got := entry.ResolvedAssetRoot; got != wantAssetRoot {
+		t.Fatalf("ResolvedAssetRoot = %q, want %q", got, wantAssetRoot)
+	}
+	if got := entry.Path; got != "/create-customer-roadmap-review" {
+		t.Fatalf("Path = %q, want %q", got, "/create-customer-roadmap-review")
+	}
+	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); !os.IsNotExist(err) {
+		t.Fatalf("lockfile should not be created, got err=%v", err)
+	}
+}
+
+func TestLoadForExecutionAtPath_SkipsDisabledLocalMountedWebUIWithoutLockfile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  ui:
+    roadmap:
+      disabled: true
+      source:
+        path: ./missing-webui/manifest.yaml
+      path: /create-customer-roadmap-review
+` + `server:
+` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	lc := NewLifecycle(nil)
+	loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath: %v", err)
+	}
+
+	entry := loaded.Providers.UI["roadmap"]
+	if entry == nil {
+		t.Fatal(`Providers.UI["roadmap"] = nil`)
+	}
+	if entry.ResolvedManifest != nil {
+		t.Fatalf("ResolvedManifest = %#v, want nil", entry.ResolvedManifest)
+	}
+	if entry.ResolvedAssetRoot != "" {
+		t.Fatalf("ResolvedAssetRoot = %q, want empty", entry.ResolvedAssetRoot)
+	}
+	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); !os.IsNotExist(err) {
+		t.Fatalf("lockfile should not be created, got err=%v", err)
+	}
+}
+
+func TestInitAtPath_SkipsDisabledManagedMountedWebUI(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  ui:
+    roadmap:
+      disabled: true
+      source:
+        ref: github.com/testowner/web/roadmap
+        version: 0.0.1-alpha.1
+      path: /create-customer-roadmap-review
+` + `server:
+` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	lc := NewLifecycle(nil)
+	lock, err := lc.InitAtPath(cfgPath)
+	if err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+	if len(lock.UIs) != 0 {
+		t.Fatalf("UIs = %#v, want empty", lock.UIs)
+	}
+}
+
 func TestLockProviderEntryForSource_RejectsManifestWithoutProviderKind(t *testing.T) {
 	t.Parallel()
 
@@ -253,6 +386,38 @@ func TestLockProviderEntryForSource_RejectsManifestWithoutProviderKind(t *testin
 	}
 	if !strings.Contains(err.Error(), `manifest has kind "auth", want "plugin"`) {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestHashPlatformInEntries_HashesMountedWebUIArchives(t *testing.T) {
+	t.Parallel()
+
+	archiveBytes := []byte("mounted-web-ui-archive")
+	sum := sha256.Sum256(archiveBytes)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(archiveBytes)
+	}))
+	defer srv.Close()
+
+	lock := &Lockfile{
+		UIs: map[string]LockUIEntry{
+			"roadmap": {
+				Source: "github.com/testowner/web/roadmap",
+				Archives: map[string]LockArchive{
+					platformKeyGeneric: {URL: srv.URL},
+				},
+			},
+		},
+	}
+
+	if err := hashPlatformInEntries(context.Background(), lock, providerpkg.CurrentPlatformString(), map[string]string{}); err != nil {
+		t.Fatalf("hashPlatformInEntries: %v", err)
+	}
+
+	got := lock.UIs["roadmap"].Archives[platformKeyGeneric].SHA256
+	want := hex.EncodeToString(sum[:])
+	if got != want {
+		t.Fatalf("SHA256 = %q, want %q", got, want)
 	}
 }
 
@@ -301,8 +466,6 @@ func TestLoadForExecutionAtPath_ResolvesLocalTopLevelPluginsWithoutLockfile(t *t
         path: %s
       config:
         dsn: %q
-  ui:
-    disabled: true
 server:
   indexeddb: sqlite
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -386,8 +549,6 @@ func TestLoadForExecutionAtPath_ResolvesLocalSourceTopLevelPluginsWithoutArtifac
         path: %s
       config:
         dsn: %q
-  ui:
-    disabled: true
 server:
   indexeddb: sqlite
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -1057,6 +1218,36 @@ func TestReadLockfile_RejectsUnsupportedVersion(t *testing.T) {
 	}
 }
 
+func TestReadLockfile_RejectsLegacyUILockShapeBeforeUnmarshal(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, InitLockfileName)
+	legacy := `{
+  "version": 3,
+  "providers": {},
+  "ui": {
+    "fingerprint": "ui-fp",
+    "source": "github.com/test-org/test-repo/test-ui",
+    "version": "2.0.0",
+    "manifest": ".gestaltd/ui/manifest.json",
+    "assetRoot": ".gestaltd/ui/assets"
+  }
+}
+`
+	if err := os.WriteFile(lockPath, []byte(legacy), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	_, err := ReadLockfile(lockPath)
+	if err == nil {
+		t.Fatal("expected error for legacy ui lock shape")
+	}
+	if !strings.Contains(err.Error(), "unsupported lockfile version 3") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func mustBuildManagedProviderPackage(t *testing.T, dir string, manifest *providermanifestv1.Manifest, artifacts map[string]string, includeCatalog bool) string {
 	t.Helper()
 
@@ -1123,15 +1314,39 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 				Executable: ".gestaltd/providers/example/artifacts/darwin/arm64/provider",
 			},
 		},
-		UI: &LockUIEntry{
-			Fingerprint: "ui-fp",
-			Source:      "github.com/test-org/test-repo/test-ui",
-			Version:     "2.0.0",
-			Archives: map[string]LockArchive{
-				"generic": {URL: "https://example.com/ui.tar.gz", SHA256: "def456"},
+		IndexedDBs: map[string]LockEntry{
+			"main": {
+				Fingerprint: "indexeddb-main-fp",
+				Source:      "github.com/test-org/test-repo/indexeddb-main",
+				Version:     "1.1.0",
+				Archives: map[string]LockArchive{
+					"darwin/arm64": {URL: "https://example.com/indexeddb-main.tar.gz", SHA256: "abc999"},
+				},
+				Manifest:   "indexeddb/main/manifest.json",
+				Executable: "indexeddb/main/artifacts/darwin/arm64/indexeddb-main",
 			},
-			Manifest:  ".gestaltd/ui/manifest.json",
-			AssetRoot: ".gestaltd/ui/assets",
+			"archive": {
+				Fingerprint: "indexeddb-archive-fp",
+				Source:      "github.com/test-org/test-repo/indexeddb-archive",
+				Version:     "1.2.0",
+				Archives: map[string]LockArchive{
+					"darwin/arm64": {URL: "https://example.com/indexeddb-archive.tar.gz", SHA256: "def999"},
+				},
+				Manifest:   "indexeddb/archive/manifest.json",
+				Executable: "indexeddb/archive/artifacts/darwin/arm64/indexeddb-archive",
+			},
+		},
+		UIs: map[string]LockUIEntry{
+			"roadmap": {
+				Fingerprint: "ui-fp",
+				Source:      "github.com/test-org/test-repo/test-ui",
+				Version:     "2.0.0",
+				Archives: map[string]LockArchive{
+					"generic": {URL: "https://example.com/ui.tar.gz", SHA256: "def456"},
+				},
+				Manifest:  ".gestaltd/ui/roadmap/manifest.json",
+				AssetRoot: ".gestaltd/ui/roadmap/assets",
+			},
 		},
 	}
 	if err := WriteLockfile(lockPath, want); err != nil {
@@ -1151,7 +1366,13 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if got.Providers["example"].Source != want.Providers["example"].Source || got.Providers["example"].Version != want.Providers["example"].Version {
 		t.Fatal("provider source mismatch")
 	}
-	if got.UI == nil || got.UI.Source != want.UI.Source || got.UI.Version != want.UI.Version {
+	if got.IndexedDBs["main"].Fingerprint != want.IndexedDBs["main"].Fingerprint {
+		t.Fatal("indexeddb fingerprint mismatch")
+	}
+	if got.IndexedDBs["archive"].Executable != want.IndexedDBs["archive"].Executable {
+		t.Fatal("indexeddb executable mismatch")
+	}
+	if got.UIs["roadmap"].Source != want.UIs["roadmap"].Source || got.UIs["roadmap"].Version != want.UIs["roadmap"].Version {
 		t.Fatal("ui lock entry mismatch")
 	}
 }

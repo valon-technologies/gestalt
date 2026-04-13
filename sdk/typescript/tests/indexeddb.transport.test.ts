@@ -9,6 +9,7 @@ import {
   IndexedDB,
   NotFoundError,
   AlreadyExistsError,
+  indexedDBSocketEnv,
 } from "../src/indexeddb.ts";
 
 const REPO_ROOT = join(import.meta.dir, "..", "..", "..");
@@ -52,12 +53,14 @@ beforeAll(async () => {
   reader.releaseLock();
 
   process.env.GESTALT_INDEXEDDB_SOCKET = socketPath;
+  process.env[indexedDBSocketEnv("named")] = socketPath;
   db = new IndexedDB();
 }, 60_000);
 
 afterAll(() => {
   proc?.kill();
   delete process.env.GESTALT_INDEXEDDB_SOCKET;
+  delete process.env[indexedDBSocketEnv("named")];
   if (tmpDir) {
     rmSync(tmpDir, { recursive: true, force: true });
   }
@@ -98,6 +101,15 @@ describe("IndexedDB transport", () => {
     expect(meta.created).toBe("2025-01-01");
     expect(meta.scores).toEqual([1, 2, 3]);
     expect(meta.nested).toEqual({ deep: true });
+  });
+
+  test("named socket env selects the requested binding", async () => {
+    const namedDb = new IndexedDB("named");
+    const store = "named_socket_env";
+    await namedDb.createObjectStore(store);
+    await namedDb.objectStore(store).put({ id: "row-1", value: "named" });
+    const got = await namedDb.objectStore(store).get("row-1");
+    expect(got.value).toBe("named");
   });
 
   test("cursor happy path: 4 records in order", async () => {

@@ -221,8 +221,6 @@ func writeConfigYAML(t *testing.T, dir, source, version, artifactsDir string) st
 
 	lines := []string{
 		"providers:",
-		"  ui:",
-		"    disabled: true",
 		"  plugins:",
 		"    alpha:",
 		"      source:",
@@ -617,6 +615,110 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 	nested, ok := authCfg["config"].(map[string]any)
 	if !ok || nested["clientId"] != "managed-auth-client" {
 		t.Fatalf("auth nested config = %#v", authCfg["config"])
+	}
+}
+
+func TestManagedIndexedDBSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	mainSource := "github.com/acme/providers/indexeddb-main"
+	archiveSource := "github.com/acme/providers/indexeddb-archive"
+	version := "1.0.0"
+
+	mainArchivePath := buildExecutableArchive(t, dir, "indexeddb-main-src", mainSource, version, providermanifestv1.KindIndexedDB, "indexeddb-main", "main-indexeddb-binary")
+	archiveArchivePath := buildExecutableArchive(t, dir, "indexeddb-archive-src", archiveSource, version, providermanifestv1.KindIndexedDB, "indexeddb-archive", "archive-indexeddb-binary")
+
+	mainArchiveData, err := os.ReadFile(mainArchivePath)
+	if err != nil {
+		t.Fatalf("read main indexeddb archive: %v", err)
+	}
+	mainArchiveSum := sha256.Sum256(mainArchiveData)
+
+	archiveArchiveData, err := os.ReadFile(archiveArchivePath)
+	if err != nil {
+		t.Fatalf("read archive indexeddb archive: %v", err)
+	}
+	archiveArchiveSum := sha256.Sum256(archiveArchiveData)
+
+	resolver := &fakeMultiResolver{
+		results: map[string]fakeResolverResult{
+			mainSource: {
+				archivePath: mainArchivePath,
+				resolvedURL: "https://example.com/indexeddb-main.tar.gz",
+				sha256:      hex.EncodeToString(mainArchiveSum[:]),
+			},
+			archiveSource: {
+				archivePath: archiveArchivePath,
+				resolvedURL: "https://example.com/indexeddb-archive.tar.gz",
+				sha256:      hex.EncodeToString(archiveArchiveSum[:]),
+			},
+		},
+	}
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configYAML := strings.Join([]string{
+		"providers:",
+		"  indexeddbs:",
+		"    main:",
+		"      source:",
+		"        ref: " + mainSource,
+		"        version: " + version,
+		"      config:",
+		`        dsn: "sqlite://main.db"`,
+		"    archive:",
+		"      source:",
+		"        ref: " + archiveSource,
+		"        version: " + version,
+		"      config:",
+		`        dsn: "sqlite://archive.db"`,
+		"server:",
+		"  indexeddb: main",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle(resolver)
+	lock, err := lc.InitAtPath(configPath)
+	if err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+	if len(lock.IndexedDBs) != 2 {
+		t.Fatalf("lock.IndexedDBs = %#v, want 2 entries", lock.IndexedDBs)
+	}
+	if _, ok := lock.IndexedDBs["main"]; !ok {
+		t.Fatal(`lock.IndexedDBs["main"] not found`)
+	}
+	if _, ok := lock.IndexedDBs["archive"]; !ok {
+		t.Fatal(`lock.IndexedDBs["archive"] not found`)
+	}
+
+	callsBefore := len(resolver.calls)
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
+	}
+	if len(resolver.calls) != callsBefore {
+		t.Fatalf("resolver called during locked load: got %d calls, want %d", len(resolver.calls), callsBefore)
+	}
+
+	for _, name := range []string{"main", "archive"} {
+		entry := cfg.Providers.IndexedDBs[name]
+		if entry == nil {
+			t.Fatalf("cfg.Providers.IndexedDBs[%q] = nil", name)
+		}
+		if entry.ResolvedManifest == nil {
+			t.Fatalf("cfg.Providers.IndexedDBs[%q].ResolvedManifest = nil", name)
+		}
+		wantCommand := resolveLockPath(artifactsDir, lock.IndexedDBs[name].Executable)
+		if entry.Command != wantCommand {
+			t.Fatalf("cfg.Providers.IndexedDBs[%q].Command = %q, want %q", name, entry.Command, wantCommand)
+		}
 	}
 }
 

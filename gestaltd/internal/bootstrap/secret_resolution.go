@@ -58,12 +58,21 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 		}
 		cfg.Providers.Plugins[name] = entry
 	}
-	for _, entry := range []*config.ProviderEntry{cfg.Providers.Auth, cfg.Providers.UI, cfg.Providers.Telemetry, cfg.Providers.Audit} {
+	for _, entry := range []*config.ProviderEntry{cfg.Providers.Auth, cfg.Providers.Telemetry, cfg.Providers.Audit} {
 		if entry != nil {
 			if err := resolveStringFields(entry, resolve); err != nil {
 				return err
 			}
 		}
+	}
+	for name, entry := range cfg.Providers.UI {
+		if entry == nil || entry.Disabled {
+			continue
+		}
+		if err := resolveStringFields(entry, resolve); err != nil {
+			return err
+		}
+		cfg.Providers.UI[name] = entry
 	}
 	// Resolve secrets provider struct fields (Source, Env, AllowedHosts, etc.)
 	// but skip its Config node to avoid self-referential resolution.

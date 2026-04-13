@@ -284,8 +284,6 @@ providers:
         version: 0.0.1-alpha.2
       config:
         dsn: %q
-  ui:
-    disabled: true
 `, datastoreName, authBlock, datastoreName, "sqlite://"+dbPath)
 }
 
@@ -381,7 +379,52 @@ func setupPrebuiltPluginDir(t *testing.T, baseDir string) string {
 	return providerDir
 }
 
-func writeServeConfig(t *testing.T, dir string, port int) string {
+type mountedUITestConfig struct {
+	Name         string
+	Path         string
+	ManifestPath string
+}
+
+func setupMountedWebUIDir(t *testing.T, baseDir string) *mountedUITestConfig {
+	t.Helper()
+
+	uiDir := filepath.Join(baseDir, "mounted-webui")
+	distDir := filepath.Join(uiDir, "dist")
+	assetsDir := filepath.Join(distDir, "assets")
+	if err := os.MkdirAll(assetsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", assetsDir, err)
+	}
+
+	writeTestFile(t, uiDir, filepath.Join("dist", "index.html"), []byte(`<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Roadmap Review UI</title>
+  </head>
+  <body>
+    <div id="app">Roadmap Review UI</div>
+    <script type="module" src="assets/app.js"></script>
+  </body>
+</html>
+`), 0o644)
+	writeTestFile(t, uiDir, filepath.Join("dist", "assets", "app.js"), []byte(`window.__ROADMAP_REVIEW_UI__ = "ready";
+`), 0o644)
+	writeManifestFile(t, uiDir, &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindWebUI,
+		Source:      "github.com/test/webui/roadmap-review",
+		Version:     "0.0.1-alpha.1",
+		DisplayName: "Roadmap Review UI",
+		Spec:        &providermanifestv1.Spec{AssetRoot: "dist"},
+	})
+
+	return &mountedUITestConfig{
+		Name:         "roadmap_review",
+		Path:         "/create-customer-roadmap-review",
+		ManifestPath: filepath.Join(uiDir, "manifest.yaml"),
+	}
+}
+
+func writeServeConfig(t *testing.T, dir string, port int, mountedUI *mountedUITestConfig) string {
 	t.Helper()
 
 	indexedDBDir := setupIndexedDBProviderDir(t, dir)
@@ -398,8 +441,6 @@ func writeServeConfig(t *testing.T, dir string, port int) string {
   encryptionKey: test-serve-e2e-key
   indexeddb: inmem
 providers:
-  ui:
-    disabled: true
   indexeddbs:
     inmem:
       source:
@@ -410,6 +451,15 @@ providers:
         path: %s
 `, port, indexedDBManifest, pluginManifest)
 
+	if mountedUI != nil {
+		cfg += fmt.Sprintf(`  ui:
+    %s:
+      source:
+        path: %q
+      path: %s
+`, mountedUI.Name, mountedUI.ManifestPath, mountedUI.Path)
+	}
+
 	cfgPath := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
@@ -417,11 +467,11 @@ providers:
 	return cfgPath
 }
 
-func startGestaltd(t *testing.T, dir string) string {
+func startGestaltd(t *testing.T, dir string, mountedUI *mountedUITestConfig) string {
 	t.Helper()
 
 	port, holder := reservePort(t)
-	cfgPath := writeServeConfig(t, dir, port)
+	cfgPath := writeServeConfig(t, dir, port, mountedUI)
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 
 	_ = holder.Close()
@@ -480,7 +530,7 @@ func TestE2EServeAndHealthCheck(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	baseURL := startGestaltd(t, dir)
+	baseURL := startGestaltd(t, dir, nil)
 
 	client := &http.Client{Timeout: 2 * time.Second}
 	intResp, err := client.Get(baseURL + "/api/v1/integrations")
@@ -510,7 +560,7 @@ func TestE2EAdminUI(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	baseURL := startGestaltd(t, dir)
+	baseURL := startGestaltd(t, dir, nil)
 	client := &http.Client{Timeout: 2 * time.Second}
 
 	t.Run("admin page serves embedded HTML", func(t *testing.T) {
@@ -604,7 +654,7 @@ func TestE2EInitLocalProviders(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	cfgPath := writeServeConfig(t, dir, 0)
+	cfgPath := writeServeConfig(t, dir, 0, nil)
 
 	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
 	if err != nil {
@@ -638,7 +688,7 @@ func TestE2ECLIToServer(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	baseURL := startGestaltd(t, dir)
+	baseURL := startGestaltd(t, dir, nil)
 
 	cliEnv := append(os.Environ(), "GESTALT_URL="+baseURL, "GESTALT_API_KEY=e2e-test-key")
 
@@ -687,6 +737,80 @@ func TestE2ECLIToServer(t *testing.T) {
 		}
 		if !strings.Contains(string(out), "message") {
 			t.Fatalf("expected 'message' parameter in describe output, got: %s", out)
+		}
+	})
+}
+
+func TestE2EMountedWebUI(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping mounted web UI E2E test in short mode")
+	}
+
+	dir := t.TempDir()
+	mountedUI := setupMountedWebUIDir(t, dir)
+	baseURL := startGestaltd(t, dir, mountedUI)
+
+	noRedirect := &http.Client{
+		Timeout: 2 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+	client := &http.Client{Timeout: 2 * time.Second}
+
+	t.Run("mounted UI path redirects to trailing slash", func(t *testing.T) {
+		t.Parallel()
+
+		resp, err := noRedirect.Get(baseURL + mountedUI.Path)
+		if err != nil {
+			t.Fatalf("GET %s: %v", mountedUI.Path, err)
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusMovedPermanently && resp.StatusCode != http.StatusPermanentRedirect {
+			t.Fatalf("expected mounted UI redirect, got %d", resp.StatusCode)
+		}
+		if got := resp.Header.Get("Location"); got != mountedUI.Path+"/" {
+			t.Fatalf("Location = %q, want %q", got, mountedUI.Path+"/")
+		}
+	})
+
+	t.Run("mounted UI SPA shell serves under nested routes", func(t *testing.T) {
+		t.Parallel()
+
+		resp, err := client.Get(baseURL + mountedUI.Path + "/sync")
+		if err != nil {
+			t.Fatalf("GET %s/sync: %v", mountedUI.Path, err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected mounted UI shell 200, got %d", resp.StatusCode)
+		}
+		content := string(body)
+		if !strings.Contains(content, "Roadmap Review UI") {
+			t.Fatal("expected mounted UI shell marker in HTML")
+		}
+		if !strings.Contains(content, "assets/app.js") {
+			t.Fatal("expected mounted UI shell to reference assets/app.js")
+		}
+	})
+
+	t.Run("mounted UI assets are served from the prefixed path", func(t *testing.T) {
+		t.Parallel()
+
+		resp, err := client.Get(baseURL + mountedUI.Path + "/assets/app.js")
+		if err != nil {
+			t.Fatalf("GET %s/assets/app.js: %v", mountedUI.Path, err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		body, _ := io.ReadAll(resp.Body)
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected mounted UI asset 200, got %d", resp.StatusCode)
+		}
+		if !strings.Contains(string(body), "__ROADMAP_REVIEW_UI__") {
+			t.Fatal("expected mounted UI asset marker in JS")
 		}
 	})
 }

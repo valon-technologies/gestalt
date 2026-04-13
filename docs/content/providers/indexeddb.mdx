@@ -226,6 +226,20 @@ You implement the [IndexedDB gRPC service](https://www.w3.org/TR/IndexedDB/#obje
 
 Plugins access the IndexedDB provider through the SDK. The host serves the IndexedDB interface over a gRPC socket, and the SDK wraps it into native types for each language.
 
+Executable plugins must opt in through config before the host exposes the IndexedDB socket:
+
+```yaml
+providers:
+  plugins:
+    roadmap:
+      source:
+        path: ./plugin/manifest.yaml
+      indexeddbs:
+        - main
+```
+
+With a single binding, the host still exports the default `GESTALT_INDEXEDDB_SOCKET` env var for backward compatibility. If a plugin binds multiple IndexedDB providers, each one is exposed under a named env var and the SDKs let the plugin select the binding explicitly.
+
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
     ```go
@@ -241,6 +255,12 @@ Plugins access the IndexedDB provider through the SDK. The host serves the Index
         log.Fatal(err)
     }
     defer db.Close()
+
+    archiveDB, err := gestalt.IndexedDB("archive")
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer archiveDB.Close()
 
     // Create an object store with indexes
     db.CreateObjectStore(ctx, "tasks", gestalt.ObjectStoreSchema{
@@ -273,6 +293,7 @@ Plugins access the IndexedDB provider through the SDK. The host serves the Index
     import gestalt
 
     db = gestalt.IndexedDB()
+    archive_db = gestalt.IndexedDB("archive")
 
     # Create an object store with indexes
     db.create_object_store("tasks", gestalt.ObjectStoreSchema(
@@ -303,6 +324,7 @@ Plugins access the IndexedDB provider through the SDK. The host serves the Index
     use serde_json::json;
 
     let mut db = gestalt::IndexedDB::connect().await?;
+    let mut archive_db = gestalt::IndexedDB::connect_named("archive").await?;
 
     // Create an object store with indexes
     db.create_object_store("tasks", gestalt::indexeddb::ObjectStoreSchema {
@@ -329,6 +351,7 @@ Plugins access the IndexedDB provider through the SDK. The host serves the Index
     import { IndexedDB } from "@valon-technologies/gestalt";
 
     const db = new IndexedDB();
+    const archiveDb = new IndexedDB("archive");
 
     // Create an object store with indexes
     await db.createObjectStore("tasks", {

@@ -39,7 +39,7 @@ func NewExecutableIndexedDB(ctx context.Context, cfg IndexedDBExecConfig) (index
 		AllowedHosts: cfg.AllowedHosts,
 		HostBinary:   cfg.HostBinary,
 		Cleanup:      cfg.Cleanup,
-	}, nil, "")
+	})
 	if err != nil {
 		return nil, err
 	}

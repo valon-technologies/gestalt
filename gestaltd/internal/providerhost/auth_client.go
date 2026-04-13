@@ -53,7 +53,7 @@ func NewExecutableAuthProvider(ctx context.Context, cfg AuthExecConfig) (core.Au
 		AllowedHosts: cfg.AllowedHosts,
 		HostBinary:   cfg.HostBinary,
 		Cleanup:      cfg.Cleanup,
-	}, nil, "")
+	})
 	if err != nil {
 		return nil, err
 	}

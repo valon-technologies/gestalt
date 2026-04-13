@@ -26,6 +26,14 @@ CURSOR_PREV = 2
 CURSOR_PREV_UNIQUE = 3
 
 
+def indexeddb_socket_env(name: str | None = None) -> str:
+    trimmed = (name or "").strip()
+    if not trimmed:
+        return ENV_INDEXEDDB_SOCKET
+    normalized = "".join(ch.upper() if ch.isalnum() else "_" for ch in trimmed)
+    return f"{ENV_INDEXEDDB_SOCKET}_{normalized}"
+
+
 class NotFoundError(Exception):
     pass
 
@@ -55,10 +63,11 @@ class ObjectStoreSchema:
 
 
 class IndexedDB:
-    def __init__(self) -> None:
-        socket_path = os.environ.get(ENV_INDEXEDDB_SOCKET, "")
+    def __init__(self, name: str | None = None) -> None:
+        env_name = indexeddb_socket_env(name)
+        socket_path = os.environ.get(env_name, "")
         if not socket_path:
-            raise RuntimeError(f"{ENV_INDEXEDDB_SOCKET} is not set")
+            raise RuntimeError(f"{env_name} is not set")
         self._channel = grpc.insecure_channel(f"unix:{socket_path}")
         self._stub = pb_grpc.IndexedDBStub(self._channel)
 

@@ -38,8 +38,12 @@ type ExecConfig struct {
 	DefaultAction egress.PolicyAction
 	HostBinary    string
 	Cleanup       func()
-	RegisterHost  func(*grpc.Server)
-	HostSocketEnv string
+	HostServices  []HostService
+}
+
+type HostService struct {
+	Register func(*grpc.Server)
+	EnvVar   string
 }
 
 type providerProcess struct {
@@ -48,8 +52,8 @@ type providerProcess struct {
 	sandboxTmp     string
 	conn           *grpc.ClientConn
 	waitCh         chan error
-	hostSrv        *grpc.Server
-	hostLis        net.Listener
+	hostSrvs       []*grpc.Server
+	hostLiss       []net.Listener
 	proxy          *sandbox.ProxyServer
 	sandboxCleanup func()
 	cleanup        func()
@@ -58,7 +62,7 @@ type providerProcess struct {
 }
 
 func NewExecutableProvider(ctx context.Context, cfg ExecConfig) (core.Provider, error) {
-	proc, err := startProviderProcess(ctx, cfg, cfg.RegisterHost, cfg.HostSocketEnv)
+	proc, err := startProviderProcess(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +124,7 @@ func serveProvider(ctx context.Context, register func(*grpc.Server)) error {
 	return err
 }
 
-func startProviderProcess(ctx context.Context, cfg ExecConfig, registerHost func(*grpc.Server), hostSocketEnv string) (*providerProcess, error) {
+func startProviderProcess(ctx context.Context, cfg ExecConfig) (*providerProcess, error) {
 	if cfg.Command == "" {
 		return nil, fmt.Errorf("plugin command is required")
 	}
@@ -139,21 +143,24 @@ func startProviderProcess(ctx context.Context, cfg ExecConfig, registerHost func
 
 	proc := &providerProcess{dir: dir}
 	proc.cleanup = cfg.Cleanup
-	if registerHost != nil {
-		hostSocket := filepath.Join(dir, "host.sock")
+	for i, hostService := range cfg.HostServices {
+		if hostService.Register == nil || hostService.EnvVar == "" {
+			continue
+		}
+		hostSocket := filepath.Join(dir, fmt.Sprintf("host-%d.sock", i))
 		lis, err := net.Listen("unix", hostSocket)
 		if err != nil {
 			_ = os.RemoveAll(dir)
 			return nil, fmt.Errorf("listen on host socket: %w", err)
 		}
 		srv := grpc.NewServer()
-		registerHost(srv)
-		proc.hostLis = lis
-		proc.hostSrv = srv
+		hostService.Register(srv)
+		proc.hostLiss = append(proc.hostLiss, lis)
+		proc.hostSrvs = append(proc.hostSrvs, srv)
 		go func() {
 			_ = srv.Serve(lis)
 		}()
-		env[hostSocketEnv] = hostSocket
+		env[hostService.EnvVar] = hostSocket
 	}
 
 	if sandboxActive {
@@ -269,11 +276,11 @@ func (p *providerProcess) Close() error {
 				errs = append(errs, fmt.Errorf("close plugin connection: %w", err))
 			}
 		}
-		if p.hostSrv != nil {
-			p.hostSrv.Stop()
+		for _, hostSrv := range p.hostSrvs {
+			hostSrv.Stop()
 		}
-		if p.hostLis != nil {
-			if err := p.hostLis.Close(); err != nil {
+		for _, hostLis := range p.hostLiss {
+			if err := hostLis.Close(); err != nil {
 				errs = append(errs, fmt.Errorf("close runtime host listener: %w", err))
 			}
 		}

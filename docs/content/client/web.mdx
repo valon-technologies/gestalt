@@ -28,10 +28,10 @@ When `providers.auth` points to a Google or OIDC auth provider, the web UI redir
 
 ## Custom UI bundles
 
-The public web UI is configured through the `providers.ui` entry.
+Public web UI bundles are configured through the `providers.ui` map.
 
-- Omit `ui` to use the pinned first-party default UI bundle.
-- Set `ui: { disabled: true }` to run headless with no public UI at `/`.
-- Set `ui.provider.source` to a packaged `webui` bundle to bring your own frontend.
+- Omit `ui` to run headless with no public UI bundles.
+- Add `ui.<name>` entries with `source` and explicit `path` fields to mount static SPAs under public URL prefixes.
+- UI bundles use the normal `/api/v1` and `/mcp` surfaces; there is no separate plugin-local browser route surface.
 
 The built-in admin UI at `/admin` remains available regardless. See [Releasing](/providers/releasing) for the bundle format.

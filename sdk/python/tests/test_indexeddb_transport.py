@@ -15,6 +15,7 @@ from gestalt import (
     IndexSchema,
     NotFoundError,
     ObjectStoreSchema,
+    indexeddb_socket_env,
 )
 
 
@@ -60,6 +61,7 @@ def setUpModule() -> None:
         _harness_proc.kill()
         raise RuntimeError(f"harness did not print READY, got: {line!r}")
     os.environ["GESTALT_INDEXEDDB_SOCKET"] = _socket_path
+    os.environ[indexeddb_socket_env("named")] = _socket_path
 
 
 def tearDownModule() -> None:
@@ -100,6 +102,17 @@ class TestNestedJSON(unittest.TestCase):
         self.assertEqual(got["meta"]["role"], "admin")
         self.assertIsInstance(got["tags"], list)
         self.assertEqual(got["tags"][0], "rust")
+        c.close()
+
+
+class TestNamedSocketEnv(unittest.TestCase):
+    def test_named_socket_env_roundtrip(self) -> None:
+        c = IndexedDB("named")
+        c.create_object_store("named_socket_env")
+        s = c.object_store("named_socket_env")
+        s.put({"id": "row-1", "value": "named"})
+        got = s.get("row-1")
+        self.assertEqual(got["value"], "named")
         c.close()
 
 

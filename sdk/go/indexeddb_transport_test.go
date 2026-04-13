@@ -48,6 +48,7 @@ func TestMain(m *testing.M) {
 	}
 
 	os.Setenv(gestalt.EnvIndexedDBSocket, sock)
+	os.Setenv(gestalt.IndexedDBSocketEnv("test"), sock)
 	client, err := gestalt.IndexedDB()
 	if err != nil {
 		cmd.Process.Kill()
@@ -63,6 +64,31 @@ func TestMain(m *testing.M) {
 	_ = os.Remove(sock)
 	_ = os.Remove(bin)
 	os.Exit(code)
+}
+
+func TestTransport_NamedSocketEnv(t *testing.T) {
+	client, err := gestalt.IndexedDB("test")
+	if err != nil {
+		t.Fatalf("connect named indexeddb: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	ctx := context.Background()
+	store := "named_socket_" + t.Name()
+	if err := client.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{}); err != nil {
+		t.Fatalf("CreateObjectStore: %v", err)
+	}
+	s := client.ObjectStore(store)
+	if err := s.Put(ctx, gestalt.Record{"id": "named", "value": "ok"}); err != nil {
+		t.Fatalf("Put: %v", err)
+	}
+	got, err := s.Get(ctx, "named")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got["value"] != "ok" {
+		t.Fatalf("value = %v, want ok", got["value"])
+	}
 }
 
 func seedStore(t *testing.T) string {

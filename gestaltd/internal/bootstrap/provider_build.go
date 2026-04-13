@@ -14,6 +14,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	"github.com/valon-technologies/gestalt/server/internal/composite"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/graphql"
@@ -159,7 +160,7 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 	if err != nil {
 		return nil, fmt.Errorf("build executable plugin provider %q: %w", name, err)
 	}
-	pluginProv, err := buildPluginProvider(ctx, entry, pluginConfig, staticSpec, deps)
+	pluginProv, err := buildPluginProvider(ctx, name, entry, pluginConfig, staticSpec, deps)
 	if err != nil {
 		return nil, err
 	}
@@ -457,7 +458,7 @@ func catalogOperationCount(cat *catalog.Catalog) int {
 	return len(cat.Operations)
 }
 
-func buildPluginProvider(ctx context.Context, entry *config.ProviderEntry, pluginConfig map[string]any, spec providerhost.StaticProviderSpec, deps Deps) (core.Provider, error) {
+func buildPluginProvider(ctx context.Context, name string, entry *config.ProviderEntry, pluginConfig map[string]any, spec providerhost.StaticProviderSpec, deps Deps) (core.Provider, error) {
 	command := entry.Command
 	args := entry.Args
 	env := clonePluginEnv(entry.Env)
@@ -505,11 +506,34 @@ func buildPluginProvider(ctx context.Context, entry *config.ProviderEntry, plugi
 		HostBinary:    entry.HostBinary,
 		Cleanup:       cleanup,
 	}
-	if len(entry.IndexedDBs) > 0 && deps.Services != nil {
-		execCfg.RegisterHost = func(srv *grpc.Server) {
-			proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(deps.Services.DB, entry.Command))
+	if len(entry.IndexedDBs) > 0 {
+		if len(deps.IndexedDBs) == 0 {
+			return nil, fmt.Errorf("indexeddb host services are not available")
 		}
-		execCfg.HostSocketEnv = "GESTALT_INDEXEDDB_SOCKET"
+		execCfg.HostServices = make([]providerhost.HostService, 0, len(entry.IndexedDBs)+1)
+		for _, binding := range entry.IndexedDBs {
+			ds, ok := deps.IndexedDBs[binding]
+			if !ok || ds == nil {
+				return nil, fmt.Errorf("indexeddb %q is not available", binding)
+			}
+			execCfg.HostServices = append(execCfg.HostServices, providerhost.HostService{
+				EnvVar: providerhost.IndexedDBSocketEnv(binding),
+				Register: func(ds indexeddb.IndexedDB) func(*grpc.Server) {
+					return func(srv *grpc.Server) {
+						proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(ds, indexedDBNamespace(name)))
+					}
+				}(ds),
+			})
+		}
+		if len(entry.IndexedDBs) == 1 {
+			ds := deps.IndexedDBs[entry.IndexedDBs[0]]
+			execCfg.HostServices = append(execCfg.HostServices, providerhost.HostService{
+				EnvVar: providerhost.DefaultIndexedDBSocketEnv,
+				Register: func(srv *grpc.Server) {
+					proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(ds, indexedDBNamespace(name)))
+				},
+			})
+		}
 	}
 	prov, err := providerhost.NewExecutableProvider(ctx, execCfg)
 	if err != nil {
@@ -517,6 +541,10 @@ func buildPluginProvider(ctx context.Context, entry *config.ProviderEntry, plugi
 	}
 	cleanup = nil
 	return prov, nil
+}
+
+func indexedDBNamespace(providerName string) string {
+	return providerName
 }
 
 func clonePluginEnv(src map[string]string) map[string]string {

@@ -3,7 +3,7 @@ package config
 import (
 	"fmt"
 	"net"
-	"slices"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -16,6 +16,9 @@ import (
 // Called by Load (and therefore by init, validate, and serve). Does not require
 // runtime secrets like encryption_key.
 func ValidateStructure(cfg *Config) error {
+	if err := normalizeMountedUIPaths(cfg); err != nil {
+		return err
+	}
 	if err := validateServerListeners(cfg.Server); err != nil {
 		return err
 	}
@@ -58,10 +61,40 @@ func ValidateStructure(cfg *Config) error {
 			}
 		}
 	}
-	if cfg.Providers.UI != nil && !cfg.Providers.UI.Disabled {
-		if err := validateProviderEntrySource("ui", "provider", cfg.Providers.UI); err != nil {
+	if err := validatePluginOnlyProviderFields("auth", cfg.Providers.Auth); err != nil {
+		return err
+	}
+	if err := validatePluginOnlyProviderFields("secrets", cfg.Providers.Secrets); err != nil {
+		return err
+	}
+	if err := validatePluginOnlyProviderFields("telemetry", cfg.Providers.Telemetry); err != nil {
+		return err
+	}
+	if err := validatePluginOnlyProviderFields("audit", cfg.Providers.Audit); err != nil {
+		return err
+	}
+	for name, entry := range cfg.Providers.UI {
+		if entry == nil {
+			return fmt.Errorf("config validation: ui.%s is required", name)
+		}
+		if err := validatePluginOnlyProviderFields("ui."+name, &entry.ProviderEntry); err != nil {
 			return err
 		}
+		if entry.Disabled {
+			continue
+		}
+		if entry.Source.IsBuiltin() {
+			return fmt.Errorf("config validation: ui %q does not support builtin providers; use a provider source reference", name)
+		}
+		if err := validateProviderEntrySource("ui", name, &entry.ProviderEntry); err != nil {
+			return err
+		}
+		if entry.Path == "" {
+			return fmt.Errorf("config validation: ui.%s.path is required", name)
+		}
+	}
+	if err := validateMountedUICollisions(cfg); err != nil {
+		return err
 	}
 
 	// Validate indexeddbs
@@ -71,7 +104,7 @@ func ValidateStructure(cfg *Config) error {
 
 	// Validate plugins
 	for name, entry := range cfg.Providers.Plugins {
-		if err := validatePlugin(name, entry); err != nil {
+		if err := validatePlugin(cfg, name, entry); err != nil {
 			return err
 		}
 	}
@@ -202,11 +235,14 @@ func ValidateRuntime(cfg *Config) error {
 	return nil
 }
 
-func validatePlugin(name string, entry *ProviderEntry) error {
+func validatePlugin(cfg *Config, name string, entry *ProviderEntry) error {
 	if entry == nil {
 		return fmt.Errorf("config validation: plugin %q requires a source", name)
 	}
 	if err := validateProviderEntrySource("plugin", name, entry); err != nil {
+		return err
+	}
+	if err := validatePluginIndexedDBBindings(cfg, name, entry); err != nil {
 		return err
 	}
 	return validateManifestBackedIntegration(name, entry)
@@ -222,11 +258,157 @@ func validateDatastoreConfig(cfg *Config) error {
 		if entry == nil {
 			return fmt.Errorf("config validation: indexeddbs.%s is required", name)
 		}
+		if err := validatePluginOnlyProviderFields("indexeddbs."+name, entry); err != nil {
+			return err
+		}
 		if err := validateProviderEntrySource("indexeddb", name, entry); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) error {
+	if entry == nil {
+		return nil
+	}
+	if len(entry.IndexedDBs) > 0 {
+		return fmt.Errorf("config validation: %s.indexeddbs is only supported on providers.plugins.*", subject)
+	}
+	return nil
+}
+
+func validatePluginIndexedDBBindings(cfg *Config, name string, entry *ProviderEntry) error {
+	if entry == nil {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(entry.IndexedDBs))
+	envNames := make(map[string]string, len(entry.IndexedDBs))
+	for i, binding := range entry.IndexedDBs {
+		binding = strings.TrimSpace(binding)
+		if binding == "" {
+			return fmt.Errorf("config validation: plugin %q indexeddbs[%d] is required", name, i)
+		}
+		if _, exists := seen[binding]; exists {
+			return fmt.Errorf("config validation: plugin %q indexeddbs[%d] duplicates %q", name, i, binding)
+		}
+		if _, ok := cfg.Providers.IndexedDBs[binding]; !ok {
+			return fmt.Errorf("config validation: plugin %q indexeddbs[%d] references unknown indexeddb %q", name, i, binding)
+		}
+		envName := indexedDBSocketEnv(binding)
+		if otherBinding, exists := envNames[envName]; exists {
+			return fmt.Errorf("config validation: plugin %q indexeddbs[%d] %q conflicts with %q after IndexedDB env normalization (%s)", name, i, binding, otherBinding, envName)
+		}
+		seen[binding] = struct{}{}
+		envNames[envName] = binding
+		entry.IndexedDBs[i] = binding
+	}
+	return nil
+}
+
+func indexedDBSocketEnv(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "GESTALT_INDEXEDDB_SOCKET"
+	}
+	var b strings.Builder
+	b.WriteString("GESTALT_INDEXEDDB_SOCKET")
+	b.WriteByte('_')
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r - ('a' - 'A'))
+		case r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	return b.String()
+}
+
+func normalizeMountedUIPaths(cfg *Config) error {
+	for name, entry := range cfg.Providers.UI {
+		if entry == nil || entry.Disabled {
+			continue
+		}
+		normalized, err := normalizeMountedUIPath(entry.Path)
+		if err != nil {
+			return fmt.Errorf("config validation: ui.%s.path: %w", name, err)
+		}
+		entry.Path = normalized
+	}
+	return nil
+}
+
+func normalizeMountedUIPath(path string) (string, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", fmt.Errorf("path is required")
+	}
+	if !strings.HasPrefix(path, "/") {
+		return "", fmt.Errorf("must start with /")
+	}
+	path = strings.TrimRight(path, "/")
+	if path == "" || path == "/" {
+		return "", fmt.Errorf("root path is not supported; use an explicit non-root mount path")
+	}
+	if strings.ContainsAny(path, "{}*") {
+		return "", fmt.Errorf("route patterns are not supported")
+	}
+	return path, nil
+}
+
+func validateMountedUICollisions(cfg *Config) error {
+	reserved := []string{
+		"/api",
+		"/api/v1",
+		AuthCallbackPath,
+		IntegrationCallbackPath,
+		"/mcp",
+		"/admin",
+		"/metrics",
+		"/health",
+		"/ready",
+	}
+	names := mapsKeys(cfg.Providers.UI)
+	sort.Strings(names)
+	for i, name := range names {
+		entry := cfg.Providers.UI[name]
+		if entry == nil || entry.Disabled {
+			continue
+		}
+		for _, reservedPath := range reserved {
+			if mountedUIPathsConflict(entry.Path, reservedPath) {
+				return fmt.Errorf("config validation: ui.%s.path %q conflicts with reserved path %q", name, entry.Path, reservedPath)
+			}
+		}
+		for _, otherName := range names[i+1:] {
+			other := cfg.Providers.UI[otherName]
+			if other == nil || other.Disabled {
+				continue
+			}
+			if mountedUIPathsConflict(entry.Path, other.Path) {
+				return fmt.Errorf("config validation: ui.%s.path %q conflicts with ui.%s.path %q", name, entry.Path, otherName, other.Path)
+			}
+		}
+	}
+	return nil
+}
+
+func mountedUIPathsConflict(a, b string) bool {
+	if a == b {
+		return true
+	}
+	return strings.HasPrefix(a, b+"/") || strings.HasPrefix(b, a+"/")
+}
+
+func mapsKeys[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
 
 type inlineConnectionReference struct {
@@ -275,7 +457,7 @@ func validateExecutableConnectionAuthSupport(name string, plugin *ProviderEntry,
 	for connName := range declared {
 		declaredNames = append(declaredNames, connName)
 	}
-	slices.Sort(declaredNames)
+	sort.Strings(declaredNames)
 	for _, connName := range declaredNames {
 		conn, ok := EffectiveNamedConnectionDef(plugin, provider, connName)
 		if !ok || conn.Auth.Type != providermanifestv1.AuthTypeMCPOAuth {
@@ -374,7 +556,7 @@ func validateManifestBackedIntegration(name string, entry *ProviderEntry) error 
 		}
 		names = append(names, connName)
 	}
-	slices.Sort(names)
+	sort.Strings(names)
 	for _, connName := range names {
 		conn, ok := EffectiveNamedConnectionDef(entry, effectiveProvider, connName)
 		if !ok {
