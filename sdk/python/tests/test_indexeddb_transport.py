@@ -173,6 +173,22 @@ class TestAdvancePastEnd(unittest.TestCase):
         c.close()
 
 
+class TestCursorCloseClearsState(unittest.TestCase):
+    def test_close_clears_last_entry(self) -> None:
+        c = _client()
+        _seed_store(c, "close_clears_state")
+        s = c.object_store("close_clears_state")
+        with s.open_cursor(direction=CURSOR_NEXT) as cursor:
+            self.assertTrue(cursor.continue_())
+            self.assertEqual(cursor.primary_key, "a")
+
+        self.assertIsNone(cursor.key)
+        self.assertIsNone(cursor.primary_key)
+        with self.assertRaises(TypeError):
+            _ = cursor.value
+        c.close()
+
+
 class TestAdvanceRejectsNonPositiveCounts(unittest.TestCase):
     def test_zero_raises_invalid_argument(self) -> None:
         c = _client()
