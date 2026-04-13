@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 var validSegment = regexp.MustCompile(`^[a-zA-Z0-9_]([a-zA-Z0-9_-]*[a-zA-Z0-9_])?$`)
@@ -36,8 +38,8 @@ type CatalogOperation struct {
 	Path           string               `yaml:"path"                     json:"path"`
 	Title          string               `yaml:"title,omitempty"          json:"title,omitempty"`
 	Description    string               `yaml:"description,omitempty"    json:"description,omitempty"`
-	InputSchema    json.RawMessage      `yaml:"-"                        json:"inputSchema,omitempty"`
-	OutputSchema   json.RawMessage      `yaml:"-"                        json:"outputSchema,omitempty"`
+	InputSchema    json.RawMessage      `yaml:"inputSchema,omitempty"    json:"inputSchema,omitempty"`
+	OutputSchema   json.RawMessage      `yaml:"outputSchema,omitempty"   json:"outputSchema,omitempty"`
 	Annotations    OperationAnnotations `yaml:"annotations,omitempty"    json:"annotations,omitempty"`
 	Parameters     []CatalogParameter   `yaml:"parameters,omitempty"     json:"parameters,omitempty"`
 	RequiredScopes []string             `yaml:"requiredScopes,omitempty" json:"requiredScopes,omitempty"`
@@ -46,6 +48,61 @@ type CatalogOperation struct {
 	Visible        *bool                `yaml:"visible,omitempty"        json:"visible,omitempty"`
 	Transport      string               `yaml:"transport,omitempty"      json:"transport,omitempty"`
 	Query          string               `yaml:"query,omitempty"          json:"query,omitempty"`
+}
+
+func (o *CatalogOperation) UnmarshalYAML(value *yaml.Node) error {
+	type catalogOperationYAML struct {
+		ID             string               `yaml:"id"`
+		ProviderID     string               `yaml:"providerId,omitempty"`
+		Method         string               `yaml:"method"`
+		Path           string               `yaml:"path"`
+		Title          string               `yaml:"title,omitempty"`
+		Description    string               `yaml:"description,omitempty"`
+		InputSchema    any                  `yaml:"inputSchema,omitempty"`
+		OutputSchema   any                  `yaml:"outputSchema,omitempty"`
+		Annotations    OperationAnnotations `yaml:"annotations,omitempty"`
+		Parameters     []CatalogParameter   `yaml:"parameters,omitempty"`
+		RequiredScopes []string             `yaml:"requiredScopes,omitempty"`
+		Tags           []string             `yaml:"tags,omitempty"`
+		ReadOnly       bool                 `yaml:"readOnly,omitempty"`
+		Visible        *bool                `yaml:"visible,omitempty"`
+		Transport      string               `yaml:"transport,omitempty"`
+		Query          string               `yaml:"query,omitempty"`
+	}
+
+	var aux catalogOperationYAML
+	if err := value.Decode(&aux); err != nil {
+		return err
+	}
+
+	inputSchema, err := rawJSONFromValue(aux.InputSchema)
+	if err != nil {
+		return fmt.Errorf("marshal inputSchema: %w", err)
+	}
+	outputSchema, err := rawJSONFromValue(aux.OutputSchema)
+	if err != nil {
+		return fmt.Errorf("marshal outputSchema: %w", err)
+	}
+
+	*o = CatalogOperation{
+		ID:             aux.ID,
+		ProviderID:     aux.ProviderID,
+		Method:         aux.Method,
+		Path:           aux.Path,
+		Title:          aux.Title,
+		Description:    aux.Description,
+		InputSchema:    inputSchema,
+		OutputSchema:   outputSchema,
+		Annotations:    aux.Annotations,
+		Parameters:     aux.Parameters,
+		RequiredScopes: aux.RequiredScopes,
+		Tags:           aux.Tags,
+		ReadOnly:       aux.ReadOnly,
+		Visible:        aux.Visible,
+		Transport:      aux.Transport,
+		Query:          aux.Query,
+	}
+	return nil
 }
 
 type OperationAnnotations struct {
@@ -161,4 +218,15 @@ func validateOperationID(id string) error {
 		}
 	}
 	return nil
+}
+
+func rawJSONFromValue(value any) (json.RawMessage, error) {
+	if value == nil {
+		return nil, nil
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return nil, err
+	}
+	return json.RawMessage(data), nil
 }
