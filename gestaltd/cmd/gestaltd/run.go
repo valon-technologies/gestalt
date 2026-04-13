@@ -131,7 +131,7 @@ func runServer(env *bootstrapEnv) error {
 		)
 	}
 
-	mountedWebUIs, publicAdminUI, managementAdminUI, err := resolveUIHandlers(env.Config)
+	clientUI, mountedWebUIs, publicAdminUI, managementAdminUI, err := resolveUIHandlers(env.Config)
 	if err != nil {
 		return fmt.Errorf("resolving ui handlers: %w", err)
 	}
@@ -169,6 +169,7 @@ func runServer(env *bootstrapEnv) error {
 		),
 		PrometheusMetrics: env.Result.Telemetry.PrometheusHandler(),
 		MCPHandler:        mcpHandler,
+		ClientUI:          clientUI,
 		MountedWebUIs:     mountedWebUIs,
 		AdminUI:           publicAdminUI,
 	}
@@ -213,6 +214,7 @@ func runServer(env *bootstrapEnv) error {
 		managementConfig := baseServerConfig
 		managementConfig.RouteProfile = server.RouteProfileManagement
 		managementConfig.MCPHandler = nil
+		managementConfig.ClientUI = nil
 		managementConfig.MountedWebUIs = nil
 		managementConfig.AdminUI = managementAdminUI
 		managementSrv, err := server.New(managementConfig)
@@ -280,30 +282,57 @@ func runServer(env *bootstrapEnv) error {
 }
 
 const (
+	clientUIDirEnv = "GESTALTD_CLIENT_UI_DIR"
 	adminUIDirEnv = "GESTALTD_ADMIN_UI_DIR"
 )
 
-func resolveUIHandlers(cfg *config.Config) ([]server.MountedWebUI, http.Handler, http.Handler, error) {
-	mountedWebUIs, err := resolveMountedWebUIHandlers(cfg)
+func resolveUIHandlers(cfg *config.Config) (http.Handler, []server.MountedWebUI, http.Handler, http.Handler, error) {
+	clientUI, err := resolveClientUIHandler(cfg)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
+	mountedWebUIs, err := resolveMountedWebUIHandlers(cfg)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	publicBrandHref := "/admin/"
+	if clientUI != nil {
+		publicBrandHref = "/"
+	}
 	publicAdminUI, err := resolveAdminUIHandler(adminui.Options{
-		BrandHref: "/admin/",
+		BrandHref: publicBrandHref,
 	})
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
 	managementAdminUI, err := resolveAdminUIHandler(adminui.Options{
 		BrandHref: "/admin/",
 	})
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, nil, err
 	}
 
-	return mountedWebUIs, publicAdminUI, managementAdminUI, nil
+	return clientUI, mountedWebUIs, publicAdminUI, managementAdminUI, nil
+}
+
+func resolveClientUIHandler(cfg *config.Config) (http.Handler, error) {
+	if dir := strings.TrimSpace(os.Getenv(clientUIDirEnv)); dir != "" {
+		return webui.DirHandler(dir)
+	}
+	uiEntry := cfg.Providers.RootUI
+	if uiEntry == nil || uiEntry.Disabled {
+		return nil, nil
+	}
+	if uiEntry.ResolvedAssetRoot != "" {
+		return webui.DirHandler(uiEntry.ResolvedAssetRoot)
+	}
+	if !uiEntry.Source.IsManaged() && !uiEntry.Source.IsLocal() {
+		return nil, nil
+	}
+	return nil, fmt.Errorf("ui provider configured but asset root not resolved")
 }
 
 func resolveMountedWebUIHandlers(cfg *config.Config) ([]server.MountedWebUI, error) {

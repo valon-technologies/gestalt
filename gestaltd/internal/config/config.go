@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"maps"
@@ -49,8 +50,53 @@ type ProvidersConfig struct {
 	Telemetry  *ProviderEntry            `yaml:"telemetry,omitempty"`
 	Audit      *ProviderEntry            `yaml:"audit,omitempty"`
 	UI         map[string]*UIEntry       `yaml:"ui,omitempty"`
+	RootUI     *ProviderEntry            `yaml:"-"`
 	IndexedDBs map[string]*ProviderEntry `yaml:"indexeddbs,omitempty"`
 	Plugins    map[string]*ProviderEntry `yaml:"plugins,omitempty"`
+}
+
+type providersConfigYAML struct {
+	Auth       *ProviderEntry            `yaml:"auth,omitempty"`
+	Secrets    *ProviderEntry            `yaml:"secrets,omitempty"`
+	Telemetry  *ProviderEntry            `yaml:"telemetry,omitempty"`
+	Audit      *ProviderEntry            `yaml:"audit,omitempty"`
+	UI         yaml.Node                 `yaml:"ui,omitempty"`
+	IndexedDBs map[string]*ProviderEntry `yaml:"indexeddbs,omitempty"`
+	Plugins    map[string]*ProviderEntry `yaml:"plugins,omitempty"`
+}
+
+func (p *ProvidersConfig) UnmarshalYAML(value *yaml.Node) error {
+	var raw providersConfigYAML
+	if err := strictDecodeYAMLNode(value, &raw); err != nil {
+		return err
+	}
+
+	p.Auth = raw.Auth
+	p.Secrets = raw.Secrets
+	p.Telemetry = raw.Telemetry
+	p.Audit = raw.Audit
+	p.IndexedDBs = raw.IndexedDBs
+	p.Plugins = raw.Plugins
+	p.UI = nil
+	p.RootUI = nil
+
+	if uiNode := documentValueNode(&raw.UI); uiNode != nil && uiNode.Kind != 0 {
+		if isLegacyRootUIConfigNode(uiNode) {
+			var entry ProviderEntry
+			if err := strictDecodeYAMLNode(uiNode, &entry); err != nil {
+				return err
+			}
+			p.RootUI = &entry
+		} else {
+			var entries map[string]*UIEntry
+			if err := strictDecodeYAMLNode(uiNode, &entries); err != nil {
+				return err
+			}
+			p.UI = entries
+		}
+	}
+
+	return nil
 }
 
 // ProviderSource supports three modes via custom UnmarshalYAML:
@@ -71,7 +117,7 @@ func (s *ProviderSource) UnmarshalYAML(value *yaml.Node) error {
 		return nil
 	}
 	type raw ProviderSource
-	return value.Decode((*raw)(s))
+	return strictDecodeYAMLNode(value, (*raw)(s))
 }
 
 func (s ProviderSource) MarshalYAML() (any, error) {
@@ -147,6 +193,28 @@ type ProviderMCPSurfaceOverride struct {
 type UIEntry struct {
 	ProviderEntry `yaml:",inline"`
 	Path          string `yaml:"path,omitempty"`
+}
+
+func isLegacyRootUIConfigNode(node *yaml.Node) bool {
+	node = documentValueNode(node)
+	if node == nil || node.Kind != yaml.MappingNode || len(node.Content) == 0 {
+		return false
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if !isLegacyRootUIField(node.Content[i].Value) {
+			return false
+		}
+	}
+	return true
+}
+
+func isLegacyRootUIField(name string) bool {
+	switch name {
+	case "source", "config", "disabled", "env", "allowedHosts", "displayName", "description", "iconFile", "connections", "allowedOperations", "indexeddbs":
+		return true
+	default:
+		return false
+	}
 }
 
 func (e *ProviderEntry) HasManagedSource() bool {
@@ -604,12 +672,18 @@ func OverlayManagedPluginConfig(path string, cfg *Config) error {
 		}
 	}
 	uiNode := mappingValueNode(providersNode, "ui")
-	for name, entry := range cfg.Providers.UI {
-		if entry == nil || !entry.HasManagedSource() {
-			continue
-		}
-		if err := overlayManagedEntryConfigNode(mappingValueNode(uiNode, name), &entry.ProviderEntry, "ui "+strconv.Quote(name)); err != nil {
+	if cfg.Providers.RootUI != nil && cfg.Providers.RootUI.HasManagedSource() {
+		if err := overlayManagedEntryConfigNode(uiNode, cfg.Providers.RootUI, "ui"); err != nil {
 			return err
+		}
+	} else {
+		for name, entry := range cfg.Providers.UI {
+			if entry == nil || !entry.HasManagedSource() {
+				continue
+			}
+			if err := overlayManagedEntryConfigNode(mappingValueNode(uiNode, name), &entry.ProviderEntry, "ui "+strconv.Quote(name)); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -650,6 +724,27 @@ func mappingValueNode(node *yaml.Node, key string) *yaml.Node {
 		if node.Content[i].Value == key {
 			return node.Content[i+1]
 		}
+	}
+	return nil
+}
+
+func strictDecodeYAMLNode(node *yaml.Node, out any) error {
+	node = documentValueNode(node)
+	if node == nil || node.Kind == 0 {
+		return nil
+	}
+
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	defer enc.Close()
+	if err := enc.Encode(node); err != nil {
+		return err
+	}
+
+	dec := yaml.NewDecoder(strings.NewReader(buf.String()))
+	dec.KnownFields(true)
+	if err := dec.Decode(out); err != nil && err != io.EOF {
+		return err
 	}
 	return nil
 }
@@ -810,6 +905,7 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 	resolveEntry(cfg.Providers.Secrets)
 	resolveEntry(cfg.Providers.Telemetry)
 	resolveEntry(cfg.Providers.Audit)
+	resolveEntry(cfg.Providers.RootUI)
 	for _, entry := range cfg.Providers.UI {
 		if entry != nil {
 			resolveEntry(&entry.ProviderEntry)

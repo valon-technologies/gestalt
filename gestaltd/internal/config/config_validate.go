@@ -73,6 +73,19 @@ func ValidateStructure(cfg *Config) error {
 	if err := validatePluginOnlyProviderFields("audit", cfg.Providers.Audit); err != nil {
 		return err
 	}
+	if cfg.Providers.RootUI != nil {
+		if err := validatePluginOnlyProviderFields("ui", cfg.Providers.RootUI); err != nil {
+			return err
+		}
+		if !cfg.Providers.RootUI.Disabled {
+			if cfg.Providers.RootUI.Source.IsBuiltin() {
+				return fmt.Errorf("config validation: ui does not support builtin providers; use a provider source reference")
+			}
+			if err := validateProviderEntrySource("ui", "provider", cfg.Providers.RootUI); err != nil {
+				return err
+			}
+		}
+	}
 	for name, entry := range cfg.Providers.UI {
 		if entry == nil {
 			return fmt.Errorf("config validation: ui.%s is required", name)

@@ -407,6 +407,66 @@ func TestMountedWebUIRoutesHiddenOnManagementProfile(t *testing.T) {
 	}
 }
 
+func TestClientUIFallbackRoutes(t *testing.T) {
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.ClientUI = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprintf(w, "client-ui:%s", r.URL.Path)
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET /: %v", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll /: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if got := string(body); got != "client-ui:/" {
+		t.Fatalf("body = %q, want %q", got, "client-ui:/")
+	}
+
+	resp, err = http.Get(ts.URL + "/some/client/route")
+	if err != nil {
+		t.Fatalf("GET fallback route: %v", err)
+	}
+	body, err = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll fallback route: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("fallback status = %d, want 200", resp.StatusCode)
+	}
+	if got := string(body); got != "client-ui:/some/client/route" {
+		t.Fatalf("fallback body = %q, want %q", got, "client-ui:/some/client/route")
+	}
+}
+
+func TestClientUIFallbackHiddenOnManagementProfile(t *testing.T) {
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.RouteProfile = server.RouteProfileManagement
+		cfg.ClientUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("unexpected"))
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/some/client/route")
+	if err != nil {
+		t.Fatalf("GET management client route: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
 func testutilWebUIHandler(dir string) (http.Handler, error) {
 	return webui.DirHandler(dir)
 }

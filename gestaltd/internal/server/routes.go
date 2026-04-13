@@ -21,6 +21,9 @@ func (s *Server) routes() {
 		s.mountAPIRoutes(r)
 		s.mountMountedWebUIRoutes(r)
 		s.mountManagementHiddenRoutes(r)
+		if s.clientUI != nil {
+			r.NotFound(s.clientUI.ServeHTTP)
+		}
 	case RouteProfileManagement:
 		s.mountCoreRoutes(r, metricsUnauthenticated)
 		s.mountManagementRootRedirect(r)
@@ -31,6 +34,9 @@ func (s *Server) routes() {
 		s.mountAPIRoutes(r)
 		s.mountMountedWebUIRoutes(r)
 		s.mountAdminUIRoutes(r)
+		if s.clientUI != nil {
+			r.NotFound(s.clientUI.ServeHTTP)
+		}
 	}
 }
 
