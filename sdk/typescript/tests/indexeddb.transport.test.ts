@@ -9,6 +9,7 @@ import {
   IndexedDB,
   NotFoundError,
   AlreadyExistsError,
+  ColumnType,
   indexedDBSocketEnv,
 } from "../src/indexeddb.ts";
 
@@ -67,6 +68,51 @@ afterAll(() => {
 });
 
 describe("IndexedDB transport", () => {
+  test("createObjectStore forwards declared columns", async () => {
+    const previousSocket = process.env.GESTALT_INDEXEDDB_SOCKET;
+    process.env.GESTALT_INDEXEDDB_SOCKET = "/tmp/fake-indexeddb.sock";
+    try {
+      const local = new IndexedDB();
+      const calls: any[] = [];
+      (local as any).client = {
+        createObjectStore: async (request: any) => {
+          calls.push(request);
+          return {};
+        },
+      };
+
+      await local.createObjectStore("typed_store", {
+        indexes: [{ name: "by_status", keyPath: ["status"], unique: false }],
+        columns: [
+          { name: "id", type: ColumnType.String, primaryKey: true, notNull: true },
+          { name: "attempts", type: ColumnType.Int },
+          { name: "enabled", type: ColumnType.Bool },
+          { name: "payload", type: ColumnType.JSON },
+        ],
+      });
+
+      expect(calls).toHaveLength(1);
+      expect(calls[0]).toEqual({
+        name: "typed_store",
+        schema: {
+          indexes: [{ name: "by_status", keyPath: ["status"], unique: false }],
+          columns: [
+            { name: "id", type: ColumnType.String, primaryKey: true, notNull: true, unique: false },
+            { name: "attempts", type: ColumnType.Int, primaryKey: false, notNull: false, unique: false },
+            { name: "enabled", type: ColumnType.Bool, primaryKey: false, notNull: false, unique: false },
+            { name: "payload", type: ColumnType.JSON, primaryKey: false, notNull: false, unique: false },
+          ],
+        },
+      });
+    } finally {
+      if (previousSocket === undefined) {
+        delete process.env.GESTALT_INDEXEDDB_SOCKET;
+      } else {
+        process.env.GESTALT_INDEXEDDB_SOCKET = previousSocket;
+      }
+    }
+  });
+
   test("nested JSON round-trip", async () => {
     const store = "nested_json_roundtrip";
     await db.createObjectStore(store);

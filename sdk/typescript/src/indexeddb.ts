@@ -339,8 +339,27 @@ export interface IndexSchema {
   unique?: boolean;
 }
 
+export enum ColumnType {
+  String = 0,
+  Int = 1,
+  Float = 2,
+  Bool = 3,
+  Time = 4,
+  Bytes = 5,
+  JSON = 6,
+}
+
+export interface ColumnSchema {
+  name: string;
+  type?: ColumnType;
+  primaryKey?: boolean;
+  notNull?: boolean;
+  unique?: boolean;
+}
+
 export interface ObjectStoreSchema {
   indexes?: IndexSchema[];
+  columns?: ColumnSchema[];
 }
 
 export class IndexedDB {
@@ -368,7 +387,13 @@ export class IndexedDB {
           keyPath: idx.keyPath,
           unique: idx.unique ?? false,
         })),
-        columns: [],
+        columns: (schema?.columns ?? []).map((col) => ({
+          name: col.name,
+          type: col.type ?? ColumnType.String,
+          primaryKey: col.primaryKey ?? false,
+          notNull: col.notNull ?? false,
+          unique: col.unique ?? false,
+        })),
       },
     });
   }

@@ -330,12 +330,18 @@ Plugins access the IndexedDB provider through the SDK. The host serves the Index
   </Tabs.Tab>
   <Tabs.Tab>
     ```ts
-    import { IndexedDB } from "@valon-technologies/gestalt";
+    import { ColumnType, IndexedDB } from "@valon-technologies/gestalt";
 
     const db = new IndexedDB();
 
-    // Create an object store with indexes
+    // Create an object store with a SQL-friendly schema and indexes.
     await db.createObjectStore("tasks", {
+      columns: [
+        { name: "id", type: ColumnType.String, primaryKey: true, notNull: true },
+        { name: "user_id", type: ColumnType.String, notNull: true },
+        { name: "status", type: ColumnType.String, notNull: true },
+        { name: "metadata", type: ColumnType.JSON },
+      ],
       indexes: [
         { name: "by_user", keyPath: ["user_id"] },
         { name: "by_status", keyPath: ["status"] },
@@ -358,6 +364,11 @@ Plugins access the IndexedDB provider through the SDK. The host serves the Index
     ```
   </Tabs.Tab>
 </Tabs>
+
+For SQL-backed providers such as `indexeddb/relationaldb`, declare `columns`
+when creating an object store so the backend can materialize a concrete table
+schema. Document-style providers may ignore `columns`, but keeping the schema in
+the SDK call makes the store portable across both styles of backend.
 
 ## Config reference
 
