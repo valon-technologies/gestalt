@@ -3,15 +3,17 @@ package mcp
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 
+	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 )
 
-func hydrateSessionTools(ctx context.Context, cfg Config, providerNames []string) {
+const hydrationMarkerPrefix = "__gestalt_internal_hydrated__:"
+
+func hydrateSessionTools(ctx context.Context, cfg Config, providerNames []string, staticToolNames map[string]struct{}) {
 	session := mcpserver.ClientSessionFromContext(ctx)
 	if session == nil {
 		return
@@ -28,8 +30,7 @@ func hydrateSessionTools(ctx context.Context, cfg Config, providerNames []string
 
 	changed := false
 	for _, provName := range providerNames {
-		prefix := toolName(cfg.ToolPrefixes, provName, "")
-		if hasToolsWithPrefix(tools, prefix) {
+		if sessionProviderHydrated(tools, provName) {
 			continue
 		}
 
@@ -49,12 +50,21 @@ func hydrateSessionTools(ctx context.Context, cfg Config, providerNames []string
 		}
 
 		cat, err := scp.CatalogForRequest(ctx, token)
-		if err != nil || cat == nil {
+		if err != nil {
+			continue
+		}
+		if markSessionProviderHydrated(tools, provName) {
+			changed = true
+		}
+		if cat == nil {
 			continue
 		}
 
 		m := buildToolMap(cfg, provName, cat)
 		for name := range m {
+			if _, exists := staticToolNames[name]; exists {
+				continue
+			}
 			tools[name] = m[name]
 		}
 		changed = true
@@ -65,15 +75,6 @@ func hydrateSessionTools(ctx context.Context, cfg Config, providerNames []string
 	}
 }
 
-func hasToolsWithPrefix(tools map[string]mcpserver.ServerTool, prefix string) bool {
-	for name := range tools {
-		if strings.HasPrefix(name, prefix) {
-			return true
-		}
-	}
-	return false
-}
-
 func resolveSessionToken(ctx context.Context, cfg Config, provName string, prov core.Provider) (string, error) {
 	if cfg.TokenResolver == nil || prov.ConnectionMode() == core.ConnectionModeNone {
 		return "", nil
@@ -82,5 +83,44 @@ func resolveSessionToken(ctx context.Context, cfg Config, provName string, prov 
 	if p == nil {
 		return "", fmt.Errorf("not authenticated")
 	}
-	return cfg.TokenResolver.ResolveToken(ctx, p, provName, cfg.MCPConnection[provName], "")
+	connection, instance := sessionTokenSelectors(cfg, p, provName)
+	return cfg.TokenResolver.ResolveToken(ctx, p, provName, connection, instance)
+}
+
+func sessionProviderHydrated(tools map[string]mcpserver.ServerTool, provider string) bool {
+	_, ok := tools[hydrationMarkerName(provider)]
+	return ok
+}
+
+func markSessionProviderHydrated(tools map[string]mcpserver.ServerTool, provider string) bool {
+	name := hydrationMarkerName(provider)
+	if _, ok := tools[name]; ok {
+		return false
+	}
+	tools[name] = mcpserver.ServerTool{
+		Tool: mcpgo.NewTool(name, mcpgo.WithDescription("gestalt internal hydration marker")),
+		Handler: func(context.Context, mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+			return mcpgo.NewToolResultError("tool not found"), nil
+		},
+	}
+	return true
+}
+
+func hydrationMarkerName(provider string) string {
+	return hydrationMarkerPrefix + provider
+}
+
+func isHydrationMarkerTool(name string) bool {
+	return len(name) > len(hydrationMarkerPrefix) && name[:len(hydrationMarkerPrefix)] == hydrationMarkerPrefix
+}
+
+func sessionTokenSelectors(cfg Config, p *principal.Principal, provName string) (string, string) {
+	connection := cfg.MCPConnection[provName]
+	if cfg.Authorizer == nil || !cfg.Authorizer.IsWorkload(p) {
+		return connection, ""
+	}
+	if binding, ok := cfg.Authorizer.Binding(p, provName); ok {
+		return binding.Connection, binding.Instance
+	}
+	return connection, ""
 }

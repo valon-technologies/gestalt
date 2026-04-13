@@ -6165,20 +6165,25 @@ func TestRefresh_UsesConnectionAuth(t *testing.T) {
 	}
 }
 
-func newMCPHandler(t *testing.T, providers *registry.ProviderMap[core.Provider], svc *coredata.Services, auditSink core.AuditSink) http.Handler {
+func newMCPHandler(t *testing.T, providers *registry.ProviderMap[core.Provider], svc *coredata.Services, auditSink core.AuditSink, authorizer *authorization.Authorizer) http.Handler {
 	t.Helper()
-	broker := invocation.NewBroker(providers, svc.Users, svc.Tokens)
+	brokerOpts := []invocation.BrokerOption{}
+	if authorizer != nil {
+		brokerOpts = append(brokerOpts, invocation.WithAuthorizer(authorizer))
+	}
+	broker := invocation.NewBroker(providers, svc.Users, svc.Tokens, brokerOpts...)
 	mcpInvoker := invocation.NewGuarded(broker, broker, "mcp", auditSink)
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
 		Invoker:       mcpInvoker,
 		TokenResolver: broker,
 		AuditSink:     auditSink,
 		Providers:     providers,
+		Authorizer:    authorizer,
 	})
 	return mcpserver.NewStreamableHTTPServer(srv, mcpserver.WithStateLess(true))
 }
 
-func mcpJSONRPC(t *testing.T, ts *httptest.Server, headers map[string]string, body map[string]any) (int, map[string]any) {
+func mcpJSONRPCWithHeaders(t *testing.T, ts *httptest.Server, headers map[string]string, body map[string]any) (int, map[string]any, http.Header) {
 	t.Helper()
 	payload, _ := json.Marshal(body)
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/mcp", bytes.NewReader(payload))
@@ -6198,7 +6203,13 @@ func mcpJSONRPC(t *testing.T, ts *httptest.Server, headers map[string]string, bo
 			t.Fatalf("decoding MCP response: %v\nbody: %s", err, raw)
 		}
 	}
-	return resp.StatusCode, result
+	return resp.StatusCode, result, resp.Header.Clone()
+}
+
+func mcpJSONRPC(t *testing.T, ts *httptest.Server, headers map[string]string, body map[string]any) (int, map[string]any) {
+	t.Helper()
+	status, result, _ := mcpJSONRPCWithHeaders(t, ts, headers, body)
+	return status, result
 }
 
 func TestMCPEndpoint_InitializeAndListTools(t *testing.T) {
@@ -6212,7 +6223,7 @@ func TestMCPEndpoint_InitializeAndListTools(t *testing.T) {
 	}
 	svc := coretesting.NewStubServices(t)
 	providers := testutil.NewProviderRegistry(t, stub)
-	mcpHandler := newMCPHandler(t, providers, svc, nil)
+	mcpHandler := newMCPHandler(t, providers, svc, nil, nil)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = providers
@@ -6272,7 +6283,7 @@ func TestMCPEndpoint_RequiresAuth(t *testing.T) {
 		return &reg.Providers
 	}()
 	svc := coretesting.NewStubServices(t)
-	mcpHandler := newMCPHandler(t, providers, svc, nil)
+	mcpHandler := newMCPHandler(t, providers, svc, nil, nil)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
@@ -6340,7 +6351,7 @@ func TestMCPEndpoint_DirectPassthrough(t *testing.T) {
 
 	svc := coretesting.NewStubServices(t)
 	providers := testutil.NewProviderRegistry(t, prov)
-	mcpHandler := newMCPHandler(t, providers, svc, auditSink)
+	mcpHandler := newMCPHandler(t, providers, svc, auditSink, nil)
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -6491,6 +6502,188 @@ func TestMCPEndpoint_DirectPassthrough(t *testing.T) {
 	structured, ok := result["structuredContent"].(map[string]any)
 	if !ok || structured["code"] != "bad_query" {
 		t.Fatalf("expected structuredContent.code=bad_query, got %v", result["structuredContent"])
+	}
+}
+
+func TestMCPEndpoint_WorkloadAuthorizationAndAudit(t *testing.T) {
+	t.Parallel()
+
+	staticCat := &catalog.Catalog{
+		Name: "clickhouse",
+		Operations: []catalog.CatalogOperation{
+			{
+				ID:          "run_query",
+				Description: "Execute a SQL query",
+				Transport:   catalog.TransportMCPPassthrough,
+			},
+			{
+				ID:          "delete_table",
+				Description: "Delete a table",
+				Transport:   catalog.TransportMCPPassthrough,
+			},
+		},
+	}
+
+	var auditBuf bytes.Buffer
+	var calledName string
+	auditSink := invocation.NewSlogAuditSink(&auditBuf)
+	prov := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "clickhouse", ConnMode: core.ConnectionModeIdentity},
+			ops: []core.Operation{
+				{Name: "run_query", Description: "Execute a SQL query"},
+				{Name: "delete_table", Description: "Delete a table"},
+			},
+		},
+		catalog: staticCat,
+		callFn: func(_ context.Context, name string, _ map[string]any) (*mcpgo.CallToolResult, error) {
+			calledName = name
+			return mcpgo.NewToolResultText("unexpected"), nil
+		},
+	}
+
+	svc := coretesting.NewStubServices(t)
+	seedIdentityToken(t, svc, "clickhouse", "default", "default", "identity-token")
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Workloads: map[string]config.WorkloadDef{
+			"triage-bot": {
+				Token: "gst_wld_triage-bot-token",
+				Providers: map[string]config.WorkloadProviderDef{
+					"clickhouse": {
+						Connection: "default",
+						Instance:   "default",
+						Allow:      []string{"run_query"},
+					},
+				},
+			},
+		},
+	}, providers, nil, nil)
+	mcpHandler := newMCPHandler(t, providers, svc, auditSink, authz)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{N: "stub"}
+		cfg.Providers = providers
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.MCPHandler = mcpHandler
+	})
+	defer ts.Close()
+
+	headers := map[string]string{
+		"Authorization": "Bearer gst_wld_triage-bot-token",
+	}
+
+	_, _, initHeaders := mcpJSONRPCWithHeaders(t, ts, headers, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "initialize",
+		"params": map[string]any{
+			"protocolVersion": "2025-03-26",
+			"capabilities":    map[string]any{},
+			"clientInfo":      map[string]any{"name": "test", "version": "1.0"},
+		},
+	})
+	if sessionID := initHeaders.Get("Mcp-Session-Id"); sessionID != "" {
+		headers["Mcp-Session-Id"] = sessionID
+	}
+
+	status, resp := mcpJSONRPC(t, ts, headers, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      2,
+		"method":  "tools/list",
+	})
+	if status != http.StatusOK {
+		t.Fatalf("tools/list: expected 200, got %d", status)
+	}
+	result, ok := resp["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("tools/list: expected result object, got %v", resp)
+	}
+	tools, ok := result["tools"].([]any)
+	if !ok {
+		t.Fatalf("tools/list: expected tools array, got %v", result)
+	}
+	names := make([]string, 0, len(tools))
+	for _, raw := range tools {
+		names = append(names, raw.(map[string]any)["name"].(string))
+	}
+	if !reflect.DeepEqual(names, []string{"clickhouse_run_query"}) {
+		t.Fatalf("tools/list names = %v, want %v", names, []string{"clickhouse_run_query"})
+	}
+
+	status, resp = mcpJSONRPC(t, ts, headers, map[string]any{
+		"jsonrpc": "2.0",
+		"id":      3,
+		"method":  "tools/call",
+		"params": map[string]any{
+			"name":      "clickhouse_delete_table",
+			"arguments": map[string]any{"table": "users"},
+		},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("tools/call: expected 200, got %d", status)
+	}
+	result, ok = resp["result"].(map[string]any)
+	if !ok {
+		t.Fatalf("tools/call: expected result object, got %v", resp)
+	}
+	if result["isError"] != true {
+		t.Fatalf("expected MCP error result, got %v", result["isError"])
+	}
+	content, ok := result["content"].([]any)
+	if !ok || len(content) == 0 {
+		t.Fatalf("expected MCP error content, got %v", result)
+	}
+	firstText, ok := content[0].(map[string]any)
+	if !ok || firstText["text"] != "operation access denied" {
+		t.Fatalf("unexpected MCP error content: %v", content)
+	}
+	if calledName != "" {
+		t.Fatalf("expected denied tool call to stop before provider CallTool, got %q", calledName)
+	}
+
+	lines := bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
+	if len(lines) == 0 {
+		t.Fatal("expected MCP audit record")
+	}
+	var auditRecord map[string]any
+	if err := json.Unmarshal(lines[len(lines)-1], &auditRecord); err != nil {
+		t.Fatalf("parsing MCP audit record: %v\nraw: %s", err, auditBuf.String())
+	}
+	if auditRecord["source"] != "mcp" {
+		t.Fatalf("expected audit source mcp, got %v", auditRecord["source"])
+	}
+	if auditRecord["provider"] != "clickhouse" {
+		t.Fatalf("expected audit provider clickhouse, got %v", auditRecord["provider"])
+	}
+	if auditRecord["operation"] != "delete_table" {
+		t.Fatalf("expected audit operation delete_table, got %v", auditRecord["operation"])
+	}
+	if auditRecord["allowed"] != false {
+		t.Fatalf("expected audit allowed=false, got %v", auditRecord["allowed"])
+	}
+	if auditRecord["auth_source"] != "workload_token" {
+		t.Fatalf("expected audit auth_source workload_token, got %v", auditRecord["auth_source"])
+	}
+	if auditRecord["subject_id"] != "workload:triage-bot" {
+		t.Fatalf("expected subject_id workload:triage-bot, got %v", auditRecord["subject_id"])
+	}
+	if auditRecord["subject_kind"] != "workload" {
+		t.Fatalf("expected subject_kind workload, got %v", auditRecord["subject_kind"])
+	}
+	if auditRecord["credential_mode"] != "identity" {
+		t.Fatalf("expected credential_mode identity, got %v", auditRecord["credential_mode"])
+	}
+	if auditRecord["credential_subject_id"] != "identity:__identity__" {
+		t.Fatalf("expected credential_subject_id identity:__identity__, got %v", auditRecord["credential_subject_id"])
+	}
+	if auditRecord["credential_connection"] != "default" {
+		t.Fatalf("expected credential_connection default, got %v", auditRecord["credential_connection"])
+	}
+	if auditRecord["credential_instance"] != "default" {
+		t.Fatalf("expected credential_instance default, got %v", auditRecord["credential_instance"])
 	}
 }
 

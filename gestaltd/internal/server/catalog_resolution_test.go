@@ -9,8 +9,11 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/internal/authorization"
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
+	"github.com/valon-technologies/gestalt/server/internal/testutil"
 )
 
 type stubProvider struct {
@@ -234,6 +237,75 @@ func TestResolveCatalog_SameIDCollision_StaticWins(t *testing.T) {
 	}
 	if cat.Operations[0].Method != http.MethodGet {
 		t.Fatalf("expected GET from static, got %q", cat.Operations[0].Method)
+	}
+}
+
+func TestFilterCatalogForPrincipal_WorkloadFilteringUsesMergedCatalog(t *testing.T) {
+	t.Parallel()
+
+	prov := &stubSessionProvider{
+		stubCatalogProvider: stubCatalogProvider{
+			stubProvider: stubProvider{
+				name:     "clash-api",
+				connMode: core.ConnectionModeIdentity,
+			},
+			cat: &catalog.Catalog{
+				Name: "clash-api",
+				Operations: []catalog.CatalogOperation{
+					{ID: "shared_op", Method: http.MethodGet, Transport: catalog.TransportREST, Description: "static version"},
+					{ID: "static_only", Method: http.MethodGet, Transport: catalog.TransportREST},
+				},
+			},
+		},
+		sessionCat: &catalog.Catalog{
+			Name: "clash-api",
+			Operations: []catalog.CatalogOperation{
+				{ID: "shared_op", Method: http.MethodPost, Transport: catalog.TransportMCPPassthrough, Description: "session version"},
+				{ID: "session_only", Method: http.MethodPost, Transport: catalog.TransportMCPPassthrough},
+			},
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	authz, err := authorization.New(config.AuthorizationConfig{
+		Workloads: map[string]config.WorkloadDef{
+			"triage-bot": {
+				Token: "gst_wld_triage-bot-token",
+				Providers: map[string]config.WorkloadProviderDef{
+					"clash-api": {
+						Connection: "default",
+						Instance:   "default",
+						Allow:      []string{"shared_op", "session_only"},
+					},
+				},
+			},
+		},
+	}, nil, providers, map[string]string{"clash-api": "default"})
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+
+	p := &principal.Principal{
+		Kind:      principal.KindWorkload,
+		SubjectID: principal.WorkloadSubjectID("triage-bot"),
+	}
+	cat, err := invocation.ResolveCatalog(context.Background(), prov, "clash-api", &stubTokenResolver{token: "tok_456"}, p, "default", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	filtered := invocation.FilterCatalogForPrincipal(cat, "clash-api", p, authz)
+	if len(filtered.Operations) != 2 {
+		t.Fatalf("expected 2 operations after workload filtering, got %d", len(filtered.Operations))
+	}
+	if filtered.Operations[0].ID != "shared_op" {
+		t.Fatalf("expected first filtered op shared_op, got %q", filtered.Operations[0].ID)
+	}
+	if filtered.Operations[0].Description != "static version" {
+		t.Fatalf("expected static version to win after filtering, got %q", filtered.Operations[0].Description)
+	}
+	if filtered.Operations[1].ID != "session_only" {
+		t.Fatalf("expected second filtered op session_only, got %q", filtered.Operations[1].ID)
 	}
 }
 

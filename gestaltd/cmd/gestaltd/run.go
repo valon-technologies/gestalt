@@ -386,6 +386,7 @@ func (s mcpSurface) handler(result *bootstrap.Result, invoker invocation.Invoker
 			TokenResolver:    broker,
 			AuditSink:        result.AuditSink,
 			Providers:        result.Providers,
+			Authorizer:       result.Authorizer,
 			AllowedProviders: s.providers,
 			ToolPrefixes:     s.toolPrefixes,
 			MCPConnection:    s.mcpConnection,

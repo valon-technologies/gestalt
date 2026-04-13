@@ -201,11 +201,17 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	if p.Scopes != nil && !slices.Contains(p.Scopes, providerName) {
 		return fail(fmt.Errorf("%w: %s", ErrScopeDenied, providerName))
 	}
+	if b.authorizer != nil && b.authorizer.IsWorkload(p) {
+		if binding, ok := b.authorizer.Binding(p, providerName); ok {
+			SetCredentialAudit(ctx, binding.Mode, binding.CredentialSubjectID, binding.Connection, binding.Instance)
+		}
+	}
 	if b.authorizer != nil && !b.authorizer.AllowOperation(p, providerName, operation) {
 		return fail(fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operation))
 	}
 
 	conn := ConnectionFromContext(ctx)
+	conn, instance = b.workloadSelectors(p, providerName, conn, instance)
 
 	transport, err := b.resolveTransport(ctx, p, prov, providerName, operation, conn, instance)
 	if err != nil {
@@ -289,6 +295,23 @@ func (b *Broker) mcpConnection(providerName string) string {
 		return b.connMapper.ConnectionForProvider(providerName)
 	}
 	return ""
+}
+
+func (b *Broker) workloadSelectors(p *principal.Principal, providerName, connection, instance string) (string, string) {
+	if b.authorizer == nil || !b.authorizer.IsWorkload(p) {
+		return connection, instance
+	}
+	binding, ok := b.authorizer.Binding(p, providerName)
+	if !ok {
+		return connection, instance
+	}
+	if connection == "" {
+		connection = binding.Connection
+	}
+	if instance == "" {
+		instance = binding.Instance
+	}
+	return connection, instance
 }
 
 func toolResultToOperationResult(result *mcpgo.CallToolResult) (*core.OperationResult, error) {
