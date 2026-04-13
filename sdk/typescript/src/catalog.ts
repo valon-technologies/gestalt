@@ -105,7 +105,7 @@ export function catalogToJson(catalog: Catalog | Record<string, unknown> | null 
 }
 
 export function catalogToYaml(catalog: Catalog | Record<string, unknown>): string {
-  return YAML.stringify(toCatalogYamlObject(catalog));
+  return YAML.stringify(toCatalogJsonObject(catalog));
 }
 
 export function writeCatalogYaml(path: string, catalog: Catalog | Record<string, unknown>): void {
@@ -168,26 +168,4 @@ function toCatalogJsonObject(catalog: Catalog | Record<string, unknown>): Record
   }
 
   return output;
-}
-
-function toCatalogYamlObject(catalog: Catalog | Record<string, unknown>): Record<string, unknown> {
-  return snakeCaseKeys(toCatalogJsonObject(catalog)) as Record<string, unknown>;
-}
-
-function snakeCaseKeys(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map((entry) => snakeCaseKeys(entry));
-  }
-  if (value === null || typeof value !== "object") {
-    return value;
-  }
-  const output: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(value)) {
-    output[toSnakeCase(key)] = snakeCaseKeys(entry);
-  }
-  return output;
-}
-
-function toSnakeCase(input: string): string {
-  return input.replace(/[A-Z]/g, (match) => `_${match.toLowerCase()}`);
 }

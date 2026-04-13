@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 
 import { connectionParam, ok, request, response } from "../src/api.ts";
+import { catalogToYaml } from "../src/catalog.ts";
 import { definePlugin, operation } from "../src/plugin.ts";
 import { s } from "../src/schema.ts";
 
@@ -154,6 +155,36 @@ test("plugin rejects duplicate operation identifiers after trimming", () => {
       ],
     }),
   ).toThrow('duplicate operation id "ping"');
+});
+
+test("catalog yaml preserves camelCase schema and metadata fields", () => {
+  const plugin = definePlugin({
+    name: "demo",
+    displayName: "Demo Provider",
+    operations: [
+      operation({
+        id: "ping",
+        input: s.object({
+          projectId: s.string(),
+        }),
+        output: s.object({
+          ok: s.boolean(),
+        }),
+        handler() {
+          return { ok: true };
+        },
+      }),
+    ],
+  });
+
+  const yaml = catalogToYaml(plugin.staticCatalog());
+  expect(yaml).toContain("displayName: Demo Provider");
+  expect(yaml).toContain("inputSchema:");
+  expect(yaml).toContain("projectId:");
+  expect(yaml).toContain("outputSchema:");
+  expect(yaml).not.toContain("display_name:");
+  expect(yaml).not.toContain("input_schema:");
+  expect(yaml).not.toContain("output_schema:");
 });
 
 test("plugin treats raw outputs with a body field as plain output values", async () => {
