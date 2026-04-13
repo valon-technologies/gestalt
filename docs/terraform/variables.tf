@@ -1,7 +1,6 @@
 variable "project_id" {
   description = "GCP project hosting the Cloud Run service"
   type        = string
-  default     = "REDACTED_GCP_PROJECT"
 }
 
 variable "project_number" {
@@ -12,13 +11,11 @@ variable "project_number" {
 variable "region" {
   description = "GCP region for Cloud Run"
   type        = string
-  default     = "us-east4"
 }
 
 variable "dns_project_id" {
   description = "GCP project containing the DNS zone"
   type        = string
-  default     = "serviceone"
 }
 
 variable "domain" {
@@ -32,10 +29,14 @@ variable "docs_image" {
   type        = string
 }
 
+variable "resource_prefix" {
+  description = "Prefix used for docs infrastructure resource names"
+  type        = string
+}
+
 variable "wif_pool_id" {
   description = "Workload Identity Pool ID for GitHub Actions OIDC"
   type        = string
-  default     = "github-pool"
 }
 
 variable "github_repository" {

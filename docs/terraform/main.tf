@@ -20,13 +20,13 @@ provider "google" {
 }
 
 locals {
-  docs_cert_name = "toolshed-docs-cert-${replace(var.domain, ".", "-")}"
+  docs_cert_name = "${var.resource_prefix}-cert-${replace(var.domain, ".", "-")}"
 }
 
 # ---------- Cloud Run ----------
 
 resource "google_cloud_run_v2_service" "docs" {
-  name     = "toolshed-docs"
+  name     = var.resource_prefix
   location = var.region
   ingress  = "INGRESS_TRAFFIC_INTERNAL_LOAD_BALANCER"
 
@@ -61,7 +61,7 @@ resource "google_cloud_run_v2_service_iam_member" "public" {
 # ---------- Load Balancer ----------
 
 resource "google_compute_region_network_endpoint_group" "docs" {
-  name                  = "toolshed-docs-neg"
+  name                  = "${var.resource_prefix}-neg"
   region                = var.region
   network_endpoint_type = "SERVERLESS"
 
@@ -71,7 +71,7 @@ resource "google_compute_region_network_endpoint_group" "docs" {
 }
 
 resource "google_compute_backend_service" "docs" {
-  name                  = "toolshed-docs-backend"
+  name                  = "${var.resource_prefix}-backend"
   load_balancing_scheme = "EXTERNAL_MANAGED"
 
   backend {
@@ -80,7 +80,7 @@ resource "google_compute_backend_service" "docs" {
 }
 
 resource "google_compute_url_map" "docs" {
-  name            = "toolshed-docs-url-map"
+  name            = "${var.resource_prefix}-url-map"
   default_service = google_compute_backend_service.docs.id
 }
 
@@ -97,17 +97,17 @@ resource "google_compute_managed_ssl_certificate" "docs" {
 }
 
 resource "google_compute_target_https_proxy" "docs" {
-  name             = "toolshed-docs-https-proxy"
+  name             = "${var.resource_prefix}-https-proxy"
   url_map          = google_compute_url_map.docs.id
   ssl_certificates = [google_compute_managed_ssl_certificate.docs.id]
 }
 
 resource "google_compute_global_address" "docs" {
-  name = "toolshed-docs-ip"
+  name = "${var.resource_prefix}-ip"
 }
 
 resource "google_compute_global_forwarding_rule" "docs" {
-  name                  = "toolshed-docs-forwarding-rule"
+  name                  = "${var.resource_prefix}-forwarding-rule"
   load_balancing_scheme = "EXTERNAL_MANAGED"
   target                = google_compute_target_https_proxy.docs.id
   port_range            = "443"
@@ -117,7 +117,7 @@ resource "google_compute_global_forwarding_rule" "docs" {
 # ---------- HTTP-to-HTTPS Redirect ----------
 
 resource "google_compute_url_map" "docs_http_redirect" {
-  name = "toolshed-docs-http-redirect"
+  name = "${var.resource_prefix}-http-redirect"
 
   default_url_redirect {
     https_redirect         = true
@@ -127,12 +127,12 @@ resource "google_compute_url_map" "docs_http_redirect" {
 }
 
 resource "google_compute_target_http_proxy" "docs_redirect" {
-  name    = "toolshed-docs-http-proxy"
+  name    = "${var.resource_prefix}-http-proxy"
   url_map = google_compute_url_map.docs_http_redirect.id
 }
 
 resource "google_compute_global_forwarding_rule" "docs_http" {
-  name                  = "toolshed-docs-http-forwarding-rule"
+  name                  = "${var.resource_prefix}-http-forwarding-rule"
   load_balancing_scheme = "EXTERNAL_MANAGED"
   target                = google_compute_target_http_proxy.docs_redirect.id
   port_range            = "80"
@@ -143,7 +143,7 @@ resource "google_compute_global_forwarding_rule" "docs_http" {
 
 resource "google_dns_managed_zone" "docs" {
   provider    = google.dns
-  name        = "gestaltd-ai"
+  name        = replace(var.domain, ".", "-")
   dns_name    = "${var.domain}."
   description = "DNS zone for ${var.domain}"
 }
