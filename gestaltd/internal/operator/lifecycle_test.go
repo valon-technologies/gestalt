@@ -1040,8 +1040,9 @@ server:
 	uiEntry.Manifest = "stale/ui/manifest.json"
 	uiEntry.AssetRoot = "stale/ui/assets"
 	lock.UIs["roadmap"] = uiEntry
-	if err := WriteLockfile(filepath.Join(dir, InitLockfileName), lock); err != nil {
-		t.Fatalf("WriteLockfile: %v", err)
+	lockPath := filepath.Join(dir, InitLockfileName)
+	if err := writeJSONFile(lockPath, lock); err != nil {
+		t.Fatalf("writeJSONFile: %v", err)
 	}
 
 	for _, locked := range []bool{false, true} {
@@ -1075,7 +1076,7 @@ server:
 		}
 	}
 
-	rewrittenLock, err := ReadLockfile(filepath.Join(dir, InitLockfileName))
+	rewrittenLock, err := ReadLockfile(lockPath)
 	if err != nil {
 		t.Fatalf("ReadLockfile: %v", err)
 	}
@@ -1087,6 +1088,13 @@ server:
 	}
 	if got := rewrittenLock.UIs["roadmap"].AssetRoot; got != "stale/ui/assets" {
 		t.Fatalf("lock.UIs[roadmap].AssetRoot = %q, want stale path preserved", got)
+	}
+	rewrittenData, err := os.ReadFile(lockPath)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if !strings.Contains(string(rewrittenData), "stale/provider/manifest.json") || !strings.Contains(string(rewrittenData), "stale/ui/assets") {
+		t.Fatalf("lockfile was unexpectedly rewritten: %s", rewrittenData)
 	}
 }
 
@@ -1360,7 +1368,7 @@ func TestLockProviderEntryForSource_RejectsManifestWithoutProviderKind(t *testin
 	}
 }
 
-func TestHashPlatformInEntries_HashesMountedWebUIArchives(t *testing.T) {
+func TestHashPlatformInEntries_HashesMountedWebUIAndCacheArchives(t *testing.T) {
 	t.Parallel()
 
 	archiveBytes := []byte("mounted-web-ui-archive")
@@ -1371,6 +1379,14 @@ func TestHashPlatformInEntries_HashesMountedWebUIArchives(t *testing.T) {
 	defer srv.Close()
 
 	lock := &Lockfile{
+		Caches: map[string]LockEntry{
+			"session": {
+				Source: "github.com/testowner/cache/session",
+				Archives: map[string]LockArchive{
+					platformKeyGeneric: {URL: srv.URL},
+				},
+			},
+		},
 		UIs: map[string]LockUIEntry{
 			"roadmap": {
 				Source: "github.com/testowner/web/roadmap",
@@ -1388,7 +1404,10 @@ func TestHashPlatformInEntries_HashesMountedWebUIArchives(t *testing.T) {
 	got := lock.UIs["roadmap"].Archives[platformKeyGeneric].SHA256
 	want := hex.EncodeToString(sum[:])
 	if got != want {
-		t.Fatalf("SHA256 = %q, want %q", got, want)
+		t.Fatalf("webui SHA256 = %q, want %q", got, want)
+	}
+	if got := lock.Caches["session"].Archives[platformKeyGeneric].SHA256; got != want {
+		t.Fatalf("cache SHA256 = %q, want %q", got, want)
 	}
 }
 
@@ -2180,12 +2199,8 @@ func TestReadLockfile_RejectsUnsupportedVersion(t *testing.T) {
 
 	dir := t.TempDir()
 	lockPath := filepath.Join(dir, InitLockfileName)
-	lock := &Lockfile{
-		Version:   999,
-		Providers: make(map[string]LockProviderEntry),
-	}
-	if err := WriteLockfile(lockPath, lock); err != nil {
-		t.Fatalf("WriteLockfile: %v", err)
+	if err := os.WriteFile(lockPath, []byte(`{"version":999,"providers":{}}`), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
 	}
 
 	_, err := ReadLockfile(lockPath)
@@ -2376,6 +2391,20 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 		t.Fatalf("WriteLockfile: %v", err)
 	}
 
+	lockData, err := os.ReadFile(lockPath)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if !strings.Contains(string(lockData), `"schema": "gestaltd-provider-lock"`) {
+		t.Fatalf("lockfile = %s, want provider lock schema", lockData)
+	}
+	if strings.Contains(string(lockData), `"version": 7`) {
+		t.Fatalf("lockfile = %s, want schema-based versioning", lockData)
+	}
+	if strings.Contains(string(lockData), `"manifest"`) || strings.Contains(string(lockData), `"executable"`) || strings.Contains(string(lockData), `"assetRoot"`) {
+		t.Fatalf("lockfile = %s, want portable entries only", lockData)
+	}
+
 	got, err := ReadLockfile(lockPath)
 	if err != nil {
 		t.Fatalf("ReadLockfile: %v", err)
@@ -2392,11 +2421,14 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if got.IndexedDBs["main"].Fingerprint != want.IndexedDBs["main"].Fingerprint {
 		t.Fatal("indexeddb fingerprint mismatch")
 	}
-	if got.IndexedDBs["archive"].Executable != want.IndexedDBs["archive"].Executable {
-		t.Fatal("indexeddb executable mismatch")
+	if got.IndexedDBs["archive"].Executable != "" {
+		t.Fatal("indexeddb executable should not round-trip from portable lock schema")
 	}
 	if got.UIs["roadmap"].Source != want.UIs["roadmap"].Source || got.UIs["roadmap"].Version != want.UIs["roadmap"].Version {
 		t.Fatal("ui lock entry mismatch")
+	}
+	if got.Providers["example"].Manifest != "" || got.UIs["roadmap"].AssetRoot != "" {
+		t.Fatal("portable lock schema should not populate local path fields on read")
 	}
 }
 

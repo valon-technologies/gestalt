@@ -137,17 +137,7 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 		return nil, nil, fmt.Errorf("creating providers dir: %w", err)
 	}
 
-	lock := &Lockfile{
-		Version:    LockVersion,
-		Providers:  make(map[string]LockProviderEntry),
-		Auth:       make(map[string]LockEntry),
-		IndexedDBs: make(map[string]LockEntry),
-		Caches:     make(map[string]LockEntry),
-		Secrets:    make(map[string]LockEntry),
-		Telemetry:  make(map[string]LockEntry),
-		Audit:      make(map[string]LockEntry),
-		UIs:        make(map[string]LockUIEntry),
-	}
+	lock := newLockfile()
 
 	resolvedProviders, err := l.writeProviderArtifacts(context.Background(), cfg, paths)
 	if err != nil {
@@ -641,48 +631,39 @@ func ReadLockfile(path string) (*Lockfile, error) {
 	if err != nil {
 		return nil, err
 	}
-	var version struct {
-		Version int `json:"version"`
+	var header struct {
+		Schema        string `json:"schema"`
+		SchemaVersion int    `json:"schemaVersion"`
+		Version       int    `json:"version"`
 	}
-	if err := json.Unmarshal(data, &version); err != nil {
+	if err := json.Unmarshal(data, &header); err != nil {
 		return nil, fmt.Errorf("parsing lockfile %s: %w", path, err)
 	}
-	if version.Version != LockVersion {
-		return nil, fmt.Errorf("unsupported lockfile version %d; run `gestaltd init` to upgrade", version.Version)
+
+	if header.Schema != "" {
+		var lock providerLockfile
+		if err := json.Unmarshal(data, &lock); err != nil {
+			return nil, fmt.Errorf("parsing lockfile %s: %w", path, err)
+		}
+		if err := validateProviderLockfile(&lock); err != nil {
+			return nil, err
+		}
+		return lock.toLockfile(), nil
 	}
+
+	if header.Version != LockVersion {
+		return nil, fmt.Errorf("unsupported lockfile version %d; run `gestaltd init` to upgrade", header.Version)
+	}
+
 	var lock Lockfile
 	if err := json.Unmarshal(data, &lock); err != nil {
 		return nil, fmt.Errorf("parsing lockfile %s: %w", path, err)
 	}
-	if lock.Providers == nil {
-		lock.Providers = make(map[string]LockProviderEntry)
-	}
-	if lock.Auth == nil {
-		lock.Auth = make(map[string]LockEntry)
-	}
-	if lock.Secrets == nil {
-		lock.Secrets = make(map[string]LockEntry)
-	}
-	if lock.Caches == nil {
-		lock.Caches = make(map[string]LockEntry)
-	}
-	if lock.Telemetry == nil {
-		lock.Telemetry = make(map[string]LockEntry)
-	}
-	if lock.Audit == nil {
-		lock.Audit = make(map[string]LockEntry)
-	}
-	if lock.IndexedDBs == nil {
-		lock.IndexedDBs = make(map[string]LockEntry)
-	}
-	if lock.UIs == nil {
-		lock.UIs = make(map[string]LockUIEntry)
-	}
-	return &lock, nil
+	return normalizeLockfile(&lock), nil
 }
 
 func WriteLockfile(path string, lock *Lockfile) error {
-	if err := writeJSONFile(path, lock); err != nil {
+	if err := writeJSONFile(path, providerLockfileFromLockfile(lock)); err != nil {
 		return fmt.Errorf("writing lockfile: %w", err)
 	}
 	return nil
@@ -1892,31 +1873,14 @@ func downloadPlatformArchives(ctx context.Context, lock *Lockfile, platforms []s
 }
 
 func hashPlatformInEntries(ctx context.Context, lock *Lockfile, platformKey string, tokenForSource map[string]string) error {
-	for name, entry := range lock.Providers {
-		if err := hashArchiveEntry(ctx, &entry, platformKey, tokenForSource); err != nil {
-			return err
-		}
-		lock.Providers[name] = entry
-	}
-	for _, lockEntries := range []map[string]LockEntry{lock.Auth, lock.Secrets, lock.Telemetry, lock.Audit} {
+	for _, kind := range providerLockKinds() {
+		lockEntries := lockEntriesForProviderKind(lock, kind)
 		for name, entry := range lockEntries {
 			if err := hashArchiveEntry(ctx, &entry, platformKey, tokenForSource); err != nil {
 				return err
 			}
 			lockEntries[name] = entry
 		}
-	}
-	for name, entry := range lock.IndexedDBs {
-		if err := hashArchiveEntry(ctx, &entry, platformKey, tokenForSource); err != nil {
-			return err
-		}
-		lock.IndexedDBs[name] = entry
-	}
-	for name, entry := range lock.UIs {
-		if err := hashArchiveEntry(ctx, &entry, platformKey, tokenForSource); err != nil {
-			return err
-		}
-		lock.UIs[name] = entry
 	}
 	return nil
 }
