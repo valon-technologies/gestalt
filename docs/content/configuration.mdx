@@ -246,6 +246,10 @@ providers:
       clientSecret: secret://oidc-client-secret
 ```
 
+For production OIDC providers, keep `issuerUrl` on `https://`. If you run a
+local plaintext issuer on loopback for development, add
+`allowInsecureHttp: true` under `providers.auth.config`.
+
 | Scenario | Configuration |
 | --- | --- |
 | Local development | Omit `providers.auth` or set `providers.auth.disabled: true` |

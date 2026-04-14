@@ -161,6 +161,9 @@ providers:
       sessionTtl: 24h
       pkce: true
       displayName: Company SSO
+      allowInsecureHttp: false
+      pkceVerifierTtl: 1h
+      pkceVerifierMaxItems: 10000
 ```
 
 Two fields are required: `issuerUrl` (the OIDC discovery base URL) and `clientId`. `clientSecret` may be omitted for PKCE-only public clients.
@@ -168,6 +171,10 @@ Two fields are required: `issuerUrl` (the OIDC discovery base URL) and `clientId
 `redirectUrl` defaults to a path derived from `server.baseUrl`. `allowedDomains` restricts login by email domain. `scopes` defaults to `openid`, `email`, and `profile`.
 
 `sessionTtl` controls session token lifetime and defaults to `24h`. Set `pkce` to `true` to enable Proof Key for Code Exchange. `displayName` controls the label shown in the login UI, defaulting to `SSO`.
+
+`issuerUrl` and all discovered OIDC endpoints must use `https://` by default. Set `allowInsecureHttp: true` only for local loopback development against issuers such as `http://127.0.0.1:8080` or `http://localhost:8080`. Non-loopback `http://` endpoints are always rejected.
+
+`pkceVerifierTtl` and `pkceVerifierMaxItems` are optional PKCE cache controls. They default to `1h` and `10000` in-flight login attempts, and both must be greater than zero when set.
 
 OIDC checks `email_verified` when the claim is present. Unverified accounts are rejected.
 
