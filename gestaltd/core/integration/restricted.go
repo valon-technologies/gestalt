@@ -17,6 +17,7 @@ type Restricted struct {
 	reverseAlias map[string]string
 	allowedInner map[string]struct{}
 	descriptions map[string]string
+	allowedRoles map[string][]string
 }
 
 // RestrictedOption configures a Restricted provider.
@@ -25,6 +26,11 @@ type RestrictedOption func(*Restricted)
 // WithDescriptions sets description overrides keyed by exposed operation name.
 func WithDescriptions(descs map[string]string) RestrictedOption {
 	return func(r *Restricted) { r.descriptions = descs }
+}
+
+// WithAllowedRoles sets allowedRoles overrides keyed by exposed operation name.
+func WithAllowedRoles(roles map[string][]string) RestrictedOption {
+	return func(r *Restricted) { r.allowedRoles = roles }
 }
 
 // Compile-time interface checks.
@@ -138,6 +144,9 @@ func (r *Restricted) filterCatalog(cat *catalog.Catalog) *catalog.Catalog {
 			}
 			if desc, ok := r.descriptions[op.ID]; ok {
 				op.Description = desc
+			}
+			if roles, ok := r.allowedRoles[op.ID]; ok {
+				op.AllowedRoles = append([]string(nil), roles...)
 			}
 			filtered.Operations = append(filtered.Operations, op)
 		}

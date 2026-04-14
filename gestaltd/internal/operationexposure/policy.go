@@ -17,6 +17,7 @@ type Policy struct {
 	exposedToOriginal map[string]string
 	originalToExposed map[string]string
 	descriptions      map[string]string
+	allowedRoles      map[string][]string
 }
 
 func New(allowed map[string]*config.OperationOverride) (*Policy, error) {
@@ -50,6 +51,12 @@ func New(allowed map[string]*config.OperationOverride) (*Policy, error) {
 				policy.descriptions = make(map[string]string)
 			}
 			policy.descriptions[exposed] = override.Description
+		}
+		if override != nil && override.AllowedRoles != nil {
+			if policy.allowedRoles == nil {
+				policy.allowedRoles = make(map[string][]string)
+			}
+			policy.allowedRoles[exposed] = append([]string(nil), override.AllowedRoles...)
 		}
 	}
 
@@ -102,6 +109,9 @@ func (p *Policy) Wrap(prov core.Provider) core.Provider {
 	if len(p.descriptions) > 0 {
 		opts = append(opts, coreintegration.WithDescriptions(p.DescriptionOverrides()))
 	}
+	if len(p.allowedRoles) > 0 {
+		opts = append(opts, coreintegration.WithAllowedRoles(p.AllowedRoles()))
+	}
 	return coreintegration.NewRestricted(prov, p.RestrictedMap(), opts...)
 }
 
@@ -131,6 +141,18 @@ func (p *Policy) DescriptionOverrides() map[string]string {
 		descriptions[exposed] = description
 	}
 	return descriptions
+}
+
+func (p *Policy) AllowedRoles() map[string][]string {
+	if len(p.allowedRoles) == 0 {
+		return nil
+	}
+
+	roles := make(map[string][]string, len(p.allowedRoles))
+	for exposed, allowed := range p.allowedRoles {
+		roles[exposed] = append([]string(nil), allowed...)
+	}
+	return roles
 }
 
 func (p *Policy) ApplyOperations(ops []core.Operation) []core.Operation {
@@ -172,6 +194,9 @@ func (p *Policy) ApplyCatalog(cat *catalog.Catalog) *catalog.Catalog {
 		op.ID = exposed
 		if description, ok := p.descriptions[exposed]; ok {
 			op.Description = description
+		}
+		if roles, ok := p.allowedRoles[exposed]; ok {
+			op.AllowedRoles = append([]string(nil), roles...)
 		}
 		filtered.Operations = append(filtered.Operations, op)
 	}
