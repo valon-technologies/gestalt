@@ -548,7 +548,7 @@ func buildPluginIndexedDBHostServices(pluginName string, entry *config.ProviderE
 		if len(binding.ObjectStores) == 0 && len(reservedStores) > 0 {
 			deniedStores = reservedStores
 		}
-		ds, err := buildPluginScopedIndexedDB(pluginName, binding, effectiveSchema, deniedStores, deps)
+		ds, err := buildPluginScopedIndexedDB(binding, effectiveSchema, deniedStores, deps)
 		if err != nil {
 			_ = closeIndexedDBs(boundStores...)
 			return nil, nil, err
@@ -578,12 +578,12 @@ func buildPluginIndexedDBHostServices(pluginName string, entry *config.ProviderE
 	}, nil
 }
 
-func buildPluginScopedIndexedDB(pluginName string, binding config.PluginIndexedDBBinding, schema string, deniedStores []string, deps Deps) (indexeddb.IndexedDB, error) {
+func buildPluginScopedIndexedDB(binding config.PluginIndexedDBBinding, schema string, deniedStores []string, deps Deps) (indexeddb.IndexedDB, error) {
 	def, ok := deps.IndexedDBDefs[binding.Name]
 	if !ok || def == nil {
 		return nil, fmt.Errorf("indexeddb %q is not available", binding.Name)
 	}
-	scopedDef, transportPrefix, err := newPluginScopedIndexedDBDef(def, pluginName, schema)
+	scopedDef, transportPrefix, err := newPluginScopedIndexedDBDef(def, schema)
 	if err != nil {
 		return nil, fmt.Errorf("indexeddb %q: %w", binding.Name, err)
 	}
@@ -592,15 +592,14 @@ func buildPluginScopedIndexedDB(pluginName string, binding config.PluginIndexedD
 		return nil, fmt.Errorf("indexeddb %q: %w", binding.Name, err)
 	}
 	ds = newPluginIndexedDBTransport(ds, pluginIndexedDBTransportOptions{
-		StorePrefix:       transportPrefix,
-		LegacyStorePrefix: legacyPluginIndexedDBPrefix(pluginName),
-		AllowedStores:     binding.ObjectStores,
-		DeniedStores:      deniedStores,
+		StorePrefix:   transportPrefix,
+		AllowedStores: binding.ObjectStores,
+		DeniedStores:  deniedStores,
 	})
 	return metricutil.InstrumentIndexedDB(ds, binding.Name), nil
 }
 
-func newPluginScopedIndexedDBDef(entry *config.ProviderEntry, pluginName, schema string) (*config.ProviderEntry, string, error) {
+func newPluginScopedIndexedDBDef(entry *config.ProviderEntry, schema string) (*config.ProviderEntry, string, error) {
 	if entry == nil {
 		return nil, "", fmt.Errorf("datastore provider is required")
 	}
@@ -614,11 +613,9 @@ func newPluginScopedIndexedDBDef(entry *config.ProviderEntry, pluginName, schema
 
 	transportPrefix := ""
 	if pluginIndexedDBUsesScopedProviderConfig(entry, cfg) {
+		delete(cfg, "legacy_table_prefix")
 		delete(cfg, "legacy_prefix")
 		delete(cfg, "namespace")
-		if legacyPrefix := legacyPluginIndexedDBPrefix(pluginName); legacyPrefix != "" {
-			cfg["legacy_table_prefix"] = legacyPrefix
-		}
 		if isSQLiteIndexedDBConfig(cfg) {
 			delete(cfg, "schema")
 			cfg["table_prefix"] = schema + "_"
@@ -665,14 +662,6 @@ func isRelationalIndexedDBEntry(entry *config.ProviderEntry) bool {
 			strings.HasSuffix(path, "/relationaldb/manifest.yaml")
 	}
 	return false
-}
-
-func legacyPluginIndexedDBPrefix(pluginName string) string {
-	pluginName = strings.TrimSpace(pluginName)
-	if pluginName == "" {
-		return ""
-	}
-	return "plugin_" + pluginName + "_"
 }
 
 func isSQLiteIndexedDBConfig(cfg map[string]any) bool {
