@@ -28,12 +28,13 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	startedAt := time.Now()
 	auditAllowed := false
 	auditErr := errors.New("oauth start failed")
+	auditTarget := auditTarget{Kind: auditTargetKindConnection}
 	providerName := ""
 	metricProviderName := metricutil.UnknownAttrValue
 	connectionMode := metricutil.UnknownAttrValue
 	defer func() {
 		metricutil.RecordConnectionAuthMetrics(r.Context(), startedAt, metricProviderName, "oauth", "start", connectionMode, auditErr != nil)
-		s.auditHTTPEvent(r.Context(), PrincipalFromContext(r.Context()), providerName, "connection.oauth.start", auditAllowed, auditErr)
+		s.auditHTTPEventWithTarget(r.Context(), PrincipalFromContext(r.Context()), providerName, "connection.oauth.start", auditAllowed, auditErr, auditTarget)
 	}()
 	if p := PrincipalFromContext(r.Context()); p != nil && p.Kind == principal.KindWorkload {
 		auditErr = errWorkloadForbidden
@@ -86,6 +87,7 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		auditErr = errors.New("invalid instance")
 		return
 	}
+	auditTarget = connectionAuditTarget(req.Integration, connection, instance)
 
 	connParams, ok := resolveConnectionParams(w, prov, req.ConnectionParams)
 	if !ok {
@@ -146,16 +148,17 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	auditAllowed := false
 	auditErr := errors.New("oauth callback failed")
 	auditUserID := ""
+	auditTarget := auditTarget{Kind: auditTargetKindConnection}
 	stateAuthSource := ""
 	providerName := ""
 	connectionMode := metricutil.UnknownAttrValue
 	defer func() {
 		metricutil.RecordConnectionAuthMetrics(r.Context(), startedAt, providerName, "oauth", "complete", connectionMode, auditErr != nil)
 		if auditUserID != "" {
-			s.auditHTTPEventWithUserID(r.Context(), auditUserID, stateAuthSource, providerName, "connection.oauth.complete", auditAllowed, auditErr)
+			s.auditHTTPEventWithUserIDAndTarget(r.Context(), auditUserID, stateAuthSource, providerName, "connection.oauth.complete", auditAllowed, auditErr, auditTarget)
 			return
 		}
-		s.auditHTTPEvent(r.Context(), nil, providerName, "connection.oauth.complete", auditAllowed, auditErr)
+		s.auditHTTPEventWithTarget(r.Context(), nil, providerName, "connection.oauth.complete", auditAllowed, auditErr, auditTarget)
 	}()
 
 	writeCallbackError := func(status int, apiMessage, title, pageMessage string) {
@@ -209,6 +212,7 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	providerName = state.Integration
 	auditUserID = state.UserID
 	stateAuthSource = state.AuthSource
+	auditTarget = connectionAuditTarget(state.Integration, state.Connection, state.Instance)
 	handler, ok := s.requireOAuthHandler(w, providerName, state.Connection)
 	if !ok {
 		auditErr = errors.New("oauth is not configured")

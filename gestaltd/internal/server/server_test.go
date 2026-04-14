@@ -3217,6 +3217,7 @@ func TestDisconnectIntegration(t *testing.T) {
 
 		svc := coretesting.NewStubServices(t)
 		u := seedUser(t, svc, "anonymous@gestalt")
+		var auditBuf bytes.Buffer
 		seedToken(t, svc, &core.IntegrationToken{
 			ID: "tok-b", UserID: u.ID, Integration: "notion",
 			Connection: "mcp", Instance: "MCP OAuth", AccessToken: "test-token",
@@ -3228,6 +3229,7 @@ func TestDisconnectIntegration(t *testing.T) {
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "notion", DN: "Notion"})
+			cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 			cfg.Services = svc
 		})
 		testutil.CloseOnCleanup(t, ts)
@@ -3253,6 +3255,20 @@ func TestDisconnectIntegration(t *testing.T) {
 		if tokens[0].Connection != "default" || tokens[0].Instance != "default" {
 			t.Fatalf("unexpected remaining token %+v", tokens[0])
 		}
+
+		var auditRecord map[string]any
+		if err := json.Unmarshal(auditBuf.Bytes(), &auditRecord); err != nil {
+			t.Fatalf("parsing audit record: %v\nraw: %s", err, auditBuf.String())
+		}
+		if auditRecord["target_kind"] != "connection" {
+			t.Fatalf("expected audit target_kind connection, got %v", auditRecord["target_kind"])
+		}
+		if auditRecord["target_id"] != "notion/mcp/MCP OAuth" {
+			t.Fatalf("expected audit target_id notion/mcp/MCP OAuth, got %v", auditRecord["target_id"])
+		}
+		if auditRecord["target_name"] != "mcp/MCP OAuth" {
+			t.Fatalf("expected audit target_name mcp/MCP OAuth, got %v", auditRecord["target_name"])
+		}
 	})
 
 	t.Run("ambiguous error uses canonical hint", func(t *testing.T) {
@@ -3260,6 +3276,7 @@ func TestDisconnectIntegration(t *testing.T) {
 
 		svc := coretesting.NewStubServices(t)
 		u := seedUser(t, svc, "anonymous@gestalt")
+		var auditBuf bytes.Buffer
 		seedToken(t, svc, &core.IntegrationToken{
 			ID: "tok-a", UserID: u.ID, Integration: "slack",
 			Connection: "workspace", Instance: "team-a", AccessToken: "test-token",
@@ -3271,6 +3288,7 @@ func TestDisconnectIntegration(t *testing.T) {
 
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "slack", DN: "Slack"})
+			cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 			cfg.Services = svc
 		})
 		testutil.CloseOnCleanup(t, ts)
@@ -3292,6 +3310,20 @@ func TestDisconnectIntegration(t *testing.T) {
 		}
 		if !strings.Contains(result["error"], "?_instance=NAME") {
 			t.Fatalf("expected canonical parameter hint, got %q", result["error"])
+		}
+
+		var auditRecord map[string]any
+		if err := json.Unmarshal(auditBuf.Bytes(), &auditRecord); err != nil {
+			t.Fatalf("parsing audit record: %v\nraw: %s", err, auditBuf.String())
+		}
+		if auditRecord["target_kind"] != nil {
+			t.Fatalf("expected no audit target_kind for ambiguous disconnect, got %v", auditRecord["target_kind"])
+		}
+		if auditRecord["target_id"] != nil {
+			t.Fatalf("expected no audit target_id for ambiguous disconnect, got %v", auditRecord["target_id"])
+		}
+		if auditRecord["target_name"] != nil {
+			t.Fatalf("expected no audit target_name for ambiguous disconnect, got %v", auditRecord["target_name"])
 		}
 	})
 }
@@ -5729,6 +5761,7 @@ func TestLoginCallbackWithStatefulHandler(t *testing.T) {
 func TestStartIntegrationOAuth(t *testing.T) {
 	t.Parallel()
 
+	var auditBuf bytes.Buffer
 	stub := &stubIntegrationWithAuthURL{
 		StubIntegration: coretesting.StubIntegration{N: "slack"},
 		authURL:         "https://slack.com/oauth/v2/authorize",
@@ -5742,6 +5775,7 @@ func TestStartIntegrationOAuth(t *testing.T) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
 		cfg.ConnectionAuth = testConnectionAuth("slack", handler)
+		cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 		cfg.Services = coretesting.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -5776,6 +5810,20 @@ func TestStartIntegrationOAuth(t *testing.T) {
 	}
 	if parsedURL.Query().Get("state") != result["state"] {
 		t.Fatal("expected auth URL state to match returned state")
+	}
+
+	var auditRecord map[string]any
+	if err := json.Unmarshal(auditBuf.Bytes(), &auditRecord); err != nil {
+		t.Fatalf("parsing audit record: %v\nraw: %s", err, auditBuf.String())
+	}
+	if auditRecord["target_kind"] != "connection" {
+		t.Fatalf("expected audit target_kind connection, got %v", auditRecord["target_kind"])
+	}
+	if auditRecord["target_id"] != "slack/default/default" {
+		t.Fatalf("expected audit target_id slack/default/default, got %v", auditRecord["target_id"])
+	}
+	if auditRecord["target_name"] != "default/default" {
+		t.Fatalf("expected audit target_name default/default, got %v", auditRecord["target_name"])
 	}
 }
 
@@ -5890,6 +5938,15 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		}
 		if uid, ok := auditRecord["user_id"].(string); !ok || uid == "" {
 			t.Fatalf("expected non-empty audit user_id, got %v", auditRecord["user_id"])
+		}
+		if auditRecord["target_kind"] != "connection" {
+			t.Fatalf("expected audit target_kind connection, got %v", auditRecord["target_kind"])
+		}
+		if auditRecord["target_id"] != "slack/default/default" {
+			t.Fatalf("expected audit target_id slack/default/default, got %v", auditRecord["target_id"])
+		}
+		if auditRecord["target_name"] != "default/default" {
+			t.Fatalf("expected audit target_name default/default, got %v", auditRecord["target_name"])
 		}
 	})
 
@@ -6144,6 +6201,7 @@ func TestRevokeAPIToken(t *testing.T) {
 
 	svc := coretesting.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
+	var auditBuf bytes.Buffer
 	ctx := context.Background()
 	exp := time.Now().Add(24 * time.Hour)
 	_ = svc.APITokens.StoreAPIToken(ctx, &core.APIToken{
@@ -6151,6 +6209,7 @@ func TestRevokeAPIToken(t *testing.T) {
 	})
 
 	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 		cfg.Services = svc
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -6172,6 +6231,17 @@ func TestRevokeAPIToken(t *testing.T) {
 	}
 	if result["status"] != "revoked" {
 		t.Fatalf("expected revoked, got %q", result["status"])
+	}
+
+	var auditRecord map[string]any
+	if err := json.Unmarshal(auditBuf.Bytes(), &auditRecord); err != nil {
+		t.Fatalf("parsing audit record: %v\nraw: %s", err, auditBuf.String())
+	}
+	if auditRecord["target_kind"] != "api_token" {
+		t.Fatalf("expected audit target_kind api_token, got %v", auditRecord["target_kind"])
+	}
+	if auditRecord["target_id"] != "tok-123" {
+		t.Fatalf("expected audit target_id tok-123, got %v", auditRecord["target_id"])
 	}
 }
 
@@ -6237,6 +6307,10 @@ func TestCreateAPIToken_DefaultExpiry(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		t.Fatalf("decoding: %v", err)
 	}
+	tokenID, ok := result["id"].(string)
+	if !ok || tokenID == "" {
+		t.Fatalf("expected non-empty id in response, got %v", result["id"])
+	}
 	expiresAtRaw, ok := result["expiresAt"]
 	if !ok || expiresAtRaw == nil {
 		t.Fatal("expected expiresAt in response, got nil")
@@ -6272,6 +6346,15 @@ func TestCreateAPIToken_DefaultExpiry(t *testing.T) {
 	}
 	if auditRecord["allowed"] != true {
 		t.Fatalf("expected audit allowed=true, got %v", auditRecord["allowed"])
+	}
+	if auditRecord["target_kind"] != "api_token" {
+		t.Fatalf("expected audit target_kind api_token, got %v", auditRecord["target_kind"])
+	}
+	if auditRecord["target_id"] != tokenID {
+		t.Fatalf("expected audit target_id %q, got %v", tokenID, auditRecord["target_id"])
+	}
+	if auditRecord["target_name"] != "expiry-test" {
+		t.Fatalf("expected audit target_name expiry-test, got %v", auditRecord["target_name"])
 	}
 }
 
@@ -6383,6 +6466,7 @@ func TestRevokeAllAPITokens(t *testing.T) {
 
 	svc := coretesting.NewStubServices(t)
 	u := seedUser(t, svc, "anonymous@gestalt")
+	var auditBuf bytes.Buffer
 	ctx := context.Background()
 	exp := time.Now().Add(24 * time.Hour)
 	for i, name := range []string{"tok-a", "tok-b", "tok-c"} {
@@ -6393,6 +6477,7 @@ func TestRevokeAllAPITokens(t *testing.T) {
 	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 		cfg.Services = svc
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -6417,6 +6502,14 @@ func TestRevokeAllAPITokens(t *testing.T) {
 	}
 	if count, ok := result["count"].(float64); !ok || count != 3 {
 		t.Fatalf("expected count 3, got %v", result["count"])
+	}
+
+	var auditRecord map[string]any
+	if err := json.Unmarshal(auditBuf.Bytes(), &auditRecord); err != nil {
+		t.Fatalf("parsing audit record: %v\nraw: %s", err, auditBuf.String())
+	}
+	if auditRecord["target_kind"] != "api_token_collection" {
+		t.Fatalf("expected audit target_kind api_token_collection, got %v", auditRecord["target_kind"])
 	}
 }
 
@@ -7648,12 +7741,14 @@ func TestConnectManual(t *testing.T) {
 	t.Run("connected", func(t *testing.T) {
 		t.Parallel()
 
+		var auditBuf bytes.Buffer
 		svc := coretesting.NewStubServices(t)
 		ts := newTestServer(t, func(cfg *server.Config) {
 			cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
 				StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
 			})
 			cfg.DefaultConnection = map[string]string{"manual-svc": config.PluginConnectionName}
+			cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 			cfg.Services = svc
 		})
 		testutil.CloseOnCleanup(t, ts)
@@ -7690,6 +7785,20 @@ func TestConnectManual(t *testing.T) {
 		}
 		if stored.AccessToken != "my-api-key" {
 			t.Fatalf("expected credential my-api-key, got %q", stored.AccessToken)
+		}
+
+		var auditRecord map[string]any
+		if err := json.Unmarshal(auditBuf.Bytes(), &auditRecord); err != nil {
+			t.Fatalf("parsing audit record: %v\nraw: %s", err, auditBuf.String())
+		}
+		if auditRecord["target_kind"] != "connection" {
+			t.Fatalf("expected audit target_kind connection, got %v", auditRecord["target_kind"])
+		}
+		if auditRecord["target_id"] != "manual-svc/plugin/default" {
+			t.Fatalf("expected audit target_id manual-svc/plugin/default, got %v", auditRecord["target_id"])
+		}
+		if auditRecord["target_name"] != "plugin/default" {
+			t.Fatalf("expected audit target_name plugin/default, got %v", auditRecord["target_name"])
 		}
 	})
 
@@ -7848,6 +7957,15 @@ func TestConnectManual(t *testing.T) {
 		}
 		if userID, ok := noAuthAudit["user_id"]; ok && userID != "" {
 			t.Fatalf("expected unauthenticated denied selection to omit user_id, got %v", userID)
+		}
+		if noAuthAudit["target_kind"] != "connection" {
+			t.Fatalf("expected pending connection target_kind connection, got %v", noAuthAudit["target_kind"])
+		}
+		if noAuthAudit["target_id"] != "manual-svc/plugin/default" {
+			t.Fatalf("expected pending connection target_id manual-svc/plugin/default, got %v", noAuthAudit["target_id"])
+		}
+		if noAuthAudit["target_name"] != "plugin/default" {
+			t.Fatalf("expected pending connection target_name plugin/default, got %v", noAuthAudit["target_name"])
 		}
 
 		mismatchForm := url.Values{

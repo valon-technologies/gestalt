@@ -242,8 +242,9 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	auditAllowed := false
 	auditErr := errors.New("connection disconnect failed")
+	auditTarget := auditTarget{}
 	defer func() {
-		s.auditHTTPEvent(r.Context(), PrincipalFromContext(r.Context()), name, "connection.disconnect", auditAllowed, auditErr)
+		s.auditHTTPEventWithTarget(r.Context(), PrincipalFromContext(r.Context()), name, "connection.disconnect", auditAllowed, auditErr, auditTarget)
 	}()
 
 	userID, err := s.resolveUserID(w, r)
@@ -274,6 +275,9 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 			auditErr = errors.New("invalid connection parameter")
 			return
 		}
+	}
+	if requestedConnection != "" && requestedInstance != "" {
+		auditTarget = connectionAuditTarget(name, requestedConnection, requestedInstance)
 	}
 
 	tokens, err := s.tokens.ListTokensForIntegration(r.Context(), userID, name)
@@ -327,6 +331,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tokenID := matched[0].ID
+	auditTarget = connectionAuditTarget(name, matched[0].Connection, matched[0].Instance)
 	if tokenID == "" {
 		auditErr = errors.New("connection token is missing an ID")
 		writeError(w, http.StatusNotFound, fmt.Sprintf("no connection found for integration %q", name))

@@ -17,6 +17,9 @@ type AuditEntry struct {
 	CredentialSubjectID  string
 	CredentialConnection string
 	CredentialInstance   string
+	TargetID             string
+	TargetKind           string
+	TargetName           string
 	Provider             string
 	Operation            string
 	Depth                int

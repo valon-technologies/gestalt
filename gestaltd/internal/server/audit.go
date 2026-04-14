@@ -6,9 +6,22 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
+
+const (
+	auditTargetKindAPIToken           = "api_token"
+	auditTargetKindAPITokenCollection = "api_token_collection"
+	auditTargetKindConnection         = "connection"
+)
+
+type auditTarget struct {
+	ID   string
+	Kind string
+	Name string
+}
 
 func (s *Server) resolvePrincipalUserID(ctx context.Context, p *principal.Principal) (*principal.Principal, error) {
 	if p == nil {
@@ -54,16 +67,13 @@ func auditSourceForRequest(r *http.Request) string {
 	return "http"
 }
 
-func (s *Server) auditEvent(ctx context.Context, p *principal.Principal, source, provider, operation string, allowed bool, err error) {
+func (s *Server) auditEventWithTarget(ctx context.Context, p *principal.Principal, source, provider, operation string, allowed bool, err error, target auditTarget) {
 	if s.auditSink == nil {
 		return
 	}
 
 	ctx, entry := invocation.BuildAuditEntry(ctx, p, source, provider, operation)
-	entry.Allowed = allowed
-	if err != nil {
-		entry.Error = err.Error()
-	}
+	populateAuditEntry(&entry, allowed, err, target)
 	s.auditSink.Log(ctx, entry)
 }
 
@@ -74,14 +84,11 @@ func (s *Server) auditEventWithAuthSource(ctx context.Context, authSource, sourc
 
 	ctx, entry := invocation.BuildAuditEntry(ctx, nil, source, provider, operation)
 	entry.AuthSource = authSource
-	entry.Allowed = allowed
-	if err != nil {
-		entry.Error = err.Error()
-	}
+	populateAuditEntry(&entry, allowed, err, auditTarget{})
 	s.auditSink.Log(ctx, entry)
 }
 
-func (s *Server) auditEventWithUserID(ctx context.Context, userID, authSource, source, provider, operation string, allowed bool, err error) {
+func (s *Server) auditEventWithUserIDAndTarget(ctx context.Context, userID, authSource, source, provider, operation string, allowed bool, err error, target auditTarget) {
 	if s.auditSink == nil {
 		return
 	}
@@ -91,15 +98,71 @@ func (s *Server) auditEventWithUserID(ctx context.Context, userID, authSource, s
 	entry.AuthSource = authSource
 	entry.SubjectID = principal.UserSubjectID(userID)
 	entry.SubjectKind = string(principal.KindUser)
+	populateAuditEntry(&entry, allowed, err, target)
+	s.auditSink.Log(ctx, entry)
+}
+
+func populateAuditEntry(entry *core.AuditEntry, allowed bool, err error, target auditTarget) {
 	entry.Allowed = allowed
 	if err != nil {
 		entry.Error = err.Error()
 	}
-	s.auditSink.Log(ctx, entry)
+	if target.ID != "" {
+		entry.TargetID = target.ID
+	}
+	if target.Kind != "" {
+		entry.TargetKind = target.Kind
+	}
+	if target.Name != "" {
+		entry.TargetName = target.Name
+	}
+}
+
+func apiTokenAuditTarget(id, name string) auditTarget {
+	return auditTarget{
+		ID:   id,
+		Kind: auditTargetKindAPIToken,
+		Name: name,
+	}
+}
+
+func apiTokenCollectionAuditTarget() auditTarget {
+	return auditTarget{Kind: auditTargetKindAPITokenCollection}
+}
+
+func connectionAuditTarget(provider, connection, instance string) auditTarget {
+	connection = auditConnectionName(connection)
+	if instance == "" {
+		instance = defaultTokenInstance
+	}
+
+	idParts := []string{}
+	if provider != "" {
+		idParts = append(idParts, provider)
+	}
+	idParts = append(idParts, connection, instance)
+
+	return auditTarget{
+		ID:   strings.Join(idParts, "/"),
+		Kind: auditTargetKindConnection,
+		Name: connection + "/" + instance,
+	}
+}
+
+func auditConnectionName(connection string) string {
+	connection = userFacingConnectionName(connection)
+	if connection == "" {
+		return "default"
+	}
+	return connection
 }
 
 func (s *Server) auditHTTPEvent(ctx context.Context, p *principal.Principal, provider, operation string, allowed bool, err error) {
-	s.auditEvent(ctx, p, "http", provider, operation, allowed, err)
+	s.auditHTTPEventWithTarget(ctx, p, provider, operation, allowed, err, auditTarget{})
+}
+
+func (s *Server) auditHTTPEventWithTarget(ctx context.Context, p *principal.Principal, provider, operation string, allowed bool, err error, target auditTarget) {
+	s.auditEventWithTarget(ctx, p, "http", provider, operation, allowed, err, target)
 }
 
 func (s *Server) auditRequestEventWithAuthSource(r *http.Request, authSource, provider, operation string, allowed bool, err error) {
@@ -107,5 +170,9 @@ func (s *Server) auditRequestEventWithAuthSource(r *http.Request, authSource, pr
 }
 
 func (s *Server) auditHTTPEventWithUserID(ctx context.Context, userID, authSource, provider, operation string, allowed bool, err error) {
-	s.auditEventWithUserID(ctx, userID, authSource, "http", provider, operation, allowed, err)
+	s.auditHTTPEventWithUserIDAndTarget(ctx, userID, authSource, provider, operation, allowed, err, auditTarget{})
+}
+
+func (s *Server) auditHTTPEventWithUserIDAndTarget(ctx context.Context, userID, authSource, provider, operation string, allowed bool, err error, target auditTarget) {
+	s.auditEventWithUserIDAndTarget(ctx, userID, authSource, "http", provider, operation, allowed, err, target)
 }

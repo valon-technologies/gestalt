@@ -125,6 +125,15 @@ func (s *SlogAuditSink) Log(ctx context.Context, entry core.AuditEntry) {
 	if entry.CredentialInstance != "" {
 		attrs = append(attrs, slog.String("credential_instance", entry.CredentialInstance))
 	}
+	if entry.TargetID != "" {
+		attrs = append(attrs, slog.String("target_id", entry.TargetID))
+	}
+	if entry.TargetKind != "" {
+		attrs = append(attrs, slog.String("target_kind", entry.TargetKind))
+	}
+	if entry.TargetName != "" {
+		attrs = append(attrs, slog.String("target_name", entry.TargetName))
+	}
 
 	if entry.Error != "" {
 		attrs = append(attrs, slog.String("error", entry.Error))
