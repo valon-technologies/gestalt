@@ -1,3 +1,5 @@
+import { Callout } from 'nextra/components'
+
 # Server CLI
 
 `gestaltd` manages server lifecycle and provider releases.
@@ -15,6 +17,13 @@
 | `gestaltd validate --config PATH` | Validate config without serving. |
 | `gestaltd validate --artifacts-dir DIR` | Directory for prepared provider artifacts. |
 | `gestaltd --version` | Print the server version. |
+
+<Callout type="warning">
+  For production deployments, strongly prefer `gestaltd init` followed by
+  `gestaltd serve --locked`. The lockfile pins resolved provider artifacts and
+  verified hashes so startup cannot silently pick up new artifacts or mutate
+  deployment state.
+</Callout>
 
 ## Provider commands
 

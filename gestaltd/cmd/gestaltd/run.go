@@ -532,8 +532,9 @@ func printServeUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd serve [--config PATH] [--artifacts-dir PATH] [--locked]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Start the server. Auto-inits if lock state is missing or stale.")
-	writeUsageLine(w, "Use --locked for production deployments to prevent automatic mutation")
-	writeUsageLine(w, "at startup. When locked, run `gestaltd init` first to prepare artifacts.")
+	writeUsageLine(w, "For production, strongly prefer --locked so startup uses the pinned")
+	writeUsageLine(w, "lockfile state instead of resolving new artifacts or mutating state.")
+	writeUsageLine(w, "When locked, run `gestaltd init` first to prepare artifacts.")
 }
 
 func printInitUsage(w io.Writer) {
