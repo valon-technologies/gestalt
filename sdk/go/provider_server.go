@@ -49,7 +49,7 @@ func (s *ProviderServer) StartProvider(ctx context.Context, req *proto.StartProv
 		config = map[string]any{}
 	}
 	if err := s.provider.Configure(ctx, req.GetName(), config); err != nil {
-		return nil, status.Errorf(codes.Unknown, "configure provider: %v", err)
+		return nil, status.Errorf(codes.Unknown, "configure provider: %s", internalErrorMessage)
 	}
 	return &proto.StartProviderResponse{
 		ProtocolVersion: proto.CurrentProtocolVersion,
@@ -92,7 +92,7 @@ func (s *ProviderServer) GetSessionCatalog(ctx context.Context, req *proto.GetSe
 	}
 	cat, err := scp.CatalogForRequest(ctx, req.GetToken())
 	if err != nil {
-		return nil, status.Errorf(codes.Unknown, "session catalog: %v", err)
+		return nil, status.Errorf(codes.Unknown, "session catalog: %s", internalErrorMessage)
 	}
 	return &proto.GetSessionCatalogResponse{Catalog: cat}, nil
 }

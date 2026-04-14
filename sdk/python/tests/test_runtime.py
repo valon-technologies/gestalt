@@ -391,6 +391,24 @@ class AuthRuntimeTests(unittest.TestCase):
             "token not recognized",
         )
 
+    def test_auth_validator_exception_is_sanitized(self) -> None:
+        class RaisingValidator(self.StubAuthProvider):
+            def validate_external_token(self, token: str) -> Any:
+                raise RuntimeError("token exploded")
+
+        context = mock.Mock()
+        servicer = _runtime._auth_servicer(provider=RaisingValidator())
+
+        servicer.ValidateExternalToken(
+            auth_pb2.ValidateExternalTokenRequest(token="broken"),
+            context,
+        )
+
+        context.abort.assert_called_once_with(
+            grpc.StatusCode.UNKNOWN,
+            "validate external token: internal error",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -92,11 +92,15 @@ func (p *stubProvider) panicOp(_ context.Context, _ stubInput, _ gestalt.Request
 
 type startableStubProvider struct {
 	stubProvider
-	name   string
-	config map[string]any
+	name         string
+	config       map[string]any
+	configureErr error
 }
 
 func (p *startableStubProvider) Configure(_ context.Context, name string, config map[string]any) error {
+	if p.configureErr != nil {
+		return p.configureErr
+	}
 	p.name = name
 	p.config = config
 	return nil
@@ -105,9 +109,13 @@ func (p *startableStubProvider) Configure(_ context.Context, name string, config
 type sessionCatalogStubProvider struct {
 	stubProvider
 	sessionCatalog *proto.Catalog
+	catalogErr     error
 }
 
 func (p *sessionCatalogStubProvider) CatalogForRequest(ctx context.Context, _ string) (*proto.Catalog, error) {
+	if p.catalogErr != nil {
+		return nil, p.catalogErr
+	}
 	cat := protoutil.Clone(p.sessionCatalog).(*proto.Catalog)
 	if cat != nil {
 		subject := gestalt.SubjectFromContext(ctx)
@@ -191,6 +199,19 @@ func TestProviderServerGetSessionCatalog(t *testing.T) {
 		_, err := client.GetSessionCatalog(context.Background(), &proto.GetSessionCatalogRequest{Token: "t"})
 		if err == nil {
 			t.Fatal("GetSessionCatalog should return error for unsupported provider")
+		}
+	})
+
+	t.Run("provider error is sanitized", func(t *testing.T) {
+		client := newIntegrationProviderClient(t, &sessionCatalogStubProvider{
+			catalogErr: errors.New("catalog exploded"),
+		}, sessionCatalogStubRouter)
+		_, err := client.GetSessionCatalog(context.Background(), &proto.GetSessionCatalogRequest{Token: "t"})
+		if err == nil {
+			t.Fatal("GetSessionCatalog should return error")
+		}
+		if got := err.Error(); !strings.Contains(got, "session catalog: internal error") {
+			t.Fatalf("GetSessionCatalog error = %q, want sanitized message", got)
 		}
 	})
 }
@@ -320,26 +341,44 @@ func TestProviderServerExecute(t *testing.T) {
 func TestProviderServerStartProvider(t *testing.T) {
 	t.Parallel()
 
-	prov := &startableStubProvider{}
-	client := newIntegrationProviderClient(t, prov, startableStubRouter)
-	ctx := context.Background()
+	t.Run("success", func(t *testing.T) {
+		prov := &startableStubProvider{}
+		client := newIntegrationProviderClient(t, prov, startableStubRouter)
+		ctx := context.Background()
 
-	cfg, _ := structpb.NewStruct(map[string]any{"key": "val"})
-	resp, err := client.StartProvider(ctx, &proto.StartProviderRequest{
-		Name:            "my-instance",
-		Config:          cfg,
-		ProtocolVersion: proto.CurrentProtocolVersion,
+		cfg, _ := structpb.NewStruct(map[string]any{"key": "val"})
+		resp, err := client.StartProvider(ctx, &proto.StartProviderRequest{
+			Name:            "my-instance",
+			Config:          cfg,
+			ProtocolVersion: proto.CurrentProtocolVersion,
+		})
+		if err != nil {
+			t.Fatalf("StartProvider: %v", err)
+		}
+		if resp.GetProtocolVersion() != proto.CurrentProtocolVersion {
+			t.Errorf("ProtocolVersion = %d, want %d", resp.GetProtocolVersion(), proto.CurrentProtocolVersion)
+		}
+		if prov.name != "my-instance" {
+			t.Errorf("name = %q, want %q", prov.name, "my-instance")
+		}
+		if prov.config["key"] != "val" {
+			t.Errorf("config[key] = %v, want %q", prov.config["key"], "val")
+		}
 	})
-	if err != nil {
-		t.Fatalf("StartProvider: %v", err)
-	}
-	if resp.GetProtocolVersion() != proto.CurrentProtocolVersion {
-		t.Errorf("ProtocolVersion = %d, want %d", resp.GetProtocolVersion(), proto.CurrentProtocolVersion)
-	}
-	if prov.name != "my-instance" {
-		t.Errorf("name = %q, want %q", prov.name, "my-instance")
-	}
-	if prov.config["key"] != "val" {
-		t.Errorf("config[key] = %v, want %q", prov.config["key"], "val")
-	}
+
+	t.Run("configure failure is sanitized", func(t *testing.T) {
+		client := newIntegrationProviderClient(t, &startableStubProvider{
+			configureErr: errors.New("config exploded"),
+		}, startableStubRouter)
+		_, err := client.StartProvider(context.Background(), &proto.StartProviderRequest{
+			Name:            "my-instance",
+			ProtocolVersion: proto.CurrentProtocolVersion,
+		})
+		if err == nil {
+			t.Fatal("StartProvider should return error")
+		}
+		if got := err.Error(); !strings.Contains(got, "configure provider: internal error") {
+			t.Fatalf("StartProvider error = %q, want sanitized message", got)
+		}
+	})
 }

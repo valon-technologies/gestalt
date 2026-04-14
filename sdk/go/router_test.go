@@ -110,6 +110,10 @@ type execOutput struct {
 	CredentialSubjectID string `json:"credential_subject_id"`
 }
 
+type invalidJSONOutput struct {
+	Ch chan int `json:"ch"`
+}
+
 type execProvider struct{}
 
 func (p *execProvider) Configure(context.Context, string, map[string]any) error { return nil }
@@ -154,6 +158,15 @@ func TestRouterOperationExecution(t *testing.T) {
 			},
 			func(*execProvider, context.Context, struct{}, gestalt.Request) (gestalt.Response[struct{}], error) {
 				return gestalt.Response[struct{}]{}, errors.New("boom")
+			},
+		),
+		gestalt.Register(
+			gestalt.Operation[struct{}, invalidJSONOutput]{
+				ID:     "marshal_error",
+				Method: http.MethodPost,
+			},
+			func(*execProvider, context.Context, struct{}, gestalt.Request) (gestalt.Response[invalidJSONOutput], error) {
+				return gestalt.OK(invalidJSONOutput{Ch: make(chan int)}), nil
 			},
 		),
 	)
@@ -218,6 +231,17 @@ func TestRouterOperationExecution(t *testing.T) {
 	}
 	if result.Body != `{"error":"internal error"}` {
 		t.Fatalf("plain_error body = %q, want %q", result.Body, `{"error":"internal error"}`)
+	}
+
+	result, err = router.Execute(ctx, provider, "marshal_error", nil, "tok")
+	if err != nil {
+		t.Fatalf("Execute(marshal_error): %v", err)
+	}
+	if result.Status != http.StatusInternalServerError {
+		t.Fatalf("marshal_error status = %d, want %d", result.Status, http.StatusInternalServerError)
+	}
+	if result.Body != `{"error":"internal error"}` {
+		t.Fatalf("marshal_error body = %q, want %q", result.Body, `{"error":"internal error"}`)
 	}
 
 	var nilRouter *gestalt.Router[execProvider]

@@ -3,6 +3,8 @@ package gestalt_test
 import (
 	"bytes"
 	"context"
+	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,10 +24,14 @@ type configCall struct {
 
 type fullAuthProvider struct {
 	closeTracker
-	configured []configCall
+	configured   []configCall
+	configureErr error
 }
 
 func (p *fullAuthProvider) Configure(_ context.Context, name string, config map[string]any) error {
+	if p.configureErr != nil {
+		return p.configureErr
+	}
 	p.configured = append(p.configured, configCall{name: name, config: config})
 	return nil
 }
@@ -175,7 +181,7 @@ func TestAuthProviderRoundTrip(t *testing.T) {
 	completeResp, err := authClient.CompleteLogin(rpcCtx, &proto.CompleteLoginRequest{
 		Query:         map[string]string{"code": "auth-code"},
 		ProviderState: []byte("state-data"),
-		CallbackUrl: "https://app.example.test/callback",
+		CallbackUrl:   "https://app.example.test/callback",
 	})
 	if err != nil {
 		t.Fatalf("CompleteLogin: %v", err)
@@ -203,6 +209,39 @@ func TestAuthProviderRoundTrip(t *testing.T) {
 	const expectedTTL int64 = 1800
 	if sessionResp.GetSessionTtlSeconds() != expectedTTL {
 		t.Fatalf("session_ttl_seconds = %d, want %d", sessionResp.GetSessionTtlSeconds(), expectedTTL)
+	}
+}
+
+func TestAuthProviderConfigureProviderSanitizesErrors(t *testing.T) {
+	socket := newSocketPath(t, "auth-config-error.sock")
+	t.Setenv(proto.EnvProviderSocket, socket)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	provider := &fullAuthProvider{configureErr: errors.New("configure exploded")}
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- gestalt.ServeAuthProvider(ctx, provider)
+	}()
+	t.Cleanup(func() {
+		cancel()
+		waitServeResult(t, errCh)
+	})
+
+	conn := newUnixConn(t, socket)
+	runtimeClient := proto.NewProviderLifecycleClient(conn)
+
+	rpcCtx, rpcCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer rpcCancel()
+
+	_, err := runtimeClient.ConfigureProvider(rpcCtx, &proto.ConfigureProviderRequest{
+		Name:            "my-auth",
+		ProtocolVersion: proto.CurrentProtocolVersion,
+	})
+	if err == nil {
+		t.Fatal("ConfigureProvider should return error")
+	}
+	if got := err.Error(); !strings.Contains(got, "configure provider: internal error") {
+		t.Fatalf("ConfigureProvider error = %q, want sanitized message", got)
 	}
 }
 

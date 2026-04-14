@@ -62,7 +62,7 @@ func (s *runtimeServer) ConfigureProvider(ctx context.Context, req *proto.Config
 		config = map[string]any{}
 	}
 	if err := s.provider.Configure(ctx, req.GetName(), config); err != nil {
-		return nil, status.Errorf(codes.Unknown, "configure provider: %v", err)
+		return nil, status.Errorf(codes.Unknown, "configure provider: %s", internalErrorMessage)
 	}
 	return &proto.ConfigureProviderResponse{ProtocolVersion: proto.CurrentProtocolVersion}, nil
 }

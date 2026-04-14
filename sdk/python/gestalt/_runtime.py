@@ -455,7 +455,7 @@ def _auth_servicer(*, provider: PluginProvider) -> Any:
                 traceback.print_exception(error)
                 return context.abort(
                     grpc.StatusCode.UNKNOWN,
-                    f"validate external token: {error}",
+                    f"validate external token: {INTERNAL_ERROR_MESSAGE}",
                 )
             if user is None:
                 return context.abort(

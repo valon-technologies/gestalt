@@ -89,7 +89,7 @@ func Register[P any, In any, Out any](
 			}
 			body, err := json.Marshal(resp.Body)
 			if err != nil {
-				return nil, newOperationError(http.StatusInternalServerError, fmt.Sprintf("marshal response for %q: %v", op.ID, err), err)
+				return nil, newOperationError(http.StatusInternalServerError, internalErrorMessage, err)
 			}
 			return &OperationResult{Status: status, Body: string(body)}, nil
 		},
