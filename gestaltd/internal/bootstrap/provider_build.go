@@ -508,8 +508,12 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		DefaultAction: deps.Egress.DefaultAction,
 		HostBinary:    entry.HostBinary,
 	}
-	if len(entry.IndexedDBs) > 0 {
-		hostServices, indexedDBCleanup, err := buildPluginIndexedDBHostServices(name, entry, deps)
+	effectiveIndexedDB, err := config.ResolveEffectivePluginIndexedDB(name, entry, deps.SelectedIndexedDBName, deps.IndexedDBDefs)
+	if err != nil {
+		return nil, err
+	}
+	if effectiveIndexedDB.Enabled {
+		hostServices, indexedDBCleanup, err := buildPluginIndexedDBHostServices(name, effectiveIndexedDB, deps)
 		if err != nil {
 			return nil, err
 		}
@@ -525,81 +529,49 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 	return prov, nil
 }
 
-func buildPluginIndexedDBHostServices(pluginName string, entry *config.ProviderEntry, deps Deps) ([]providerhost.HostService, func(), error) {
+func buildPluginIndexedDBHostServices(pluginName string, effective config.EffectivePluginIndexedDB, deps Deps) ([]providerhost.HostService, func(), error) {
 	if deps.IndexedDBFactory == nil || len(deps.IndexedDBDefs) == 0 {
 		return nil, nil, fmt.Errorf("indexeddb host services are not available")
 	}
 
-	effectiveSchema := effectivePluginIndexedDBSchema(pluginName, entry)
-	explicitStores := make(map[string]struct{})
-	for _, binding := range entry.IndexedDBs {
-		for _, store := range binding.ObjectStores {
-			explicitStores[store] = struct{}{}
-		}
-	}
-	reservedStores := make([]string, 0, len(explicitStores))
-	for store := range explicitStores {
-		reservedStores = append(reservedStores, store)
-	}
-	hostServices := make([]providerhost.HostService, 0, len(entry.IndexedDBs)+1)
-	boundStores := make([]indexeddb.IndexedDB, 0, len(entry.IndexedDBs))
-	for _, binding := range entry.IndexedDBs {
-		var deniedStores []string
-		if len(binding.ObjectStores) == 0 && len(reservedStores) > 0 {
-			deniedStores = reservedStores
-		}
-		ds, err := buildPluginScopedIndexedDB(binding, effectiveSchema, deniedStores, deps)
-		if err != nil {
-			_ = closeIndexedDBs(boundStores...)
-			return nil, nil, err
-		}
-		boundStores = append(boundStores, ds)
-		hostServices = append(hostServices, providerhost.HostService{
-			EnvVar: providerhost.IndexedDBSocketEnv(binding.Name),
-			Register: func(ds indexeddb.IndexedDB) func(*grpc.Server) {
-				return func(srv *grpc.Server) {
-					proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(ds, pluginName))
-				}
-			}(ds),
-		})
-	}
-	if len(boundStores) == 1 {
-		ds := boundStores[0]
-		hostServices = append(hostServices, providerhost.HostService{
-			EnvVar: providerhost.DefaultIndexedDBSocketEnv,
-			Register: func(srv *grpc.Server) {
-				proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(ds, pluginName))
-			},
-		})
+	ds, err := buildPluginScopedIndexedDB(effective, deps)
+	if err != nil {
+		return nil, nil, err
 	}
 
+	hostServices := []providerhost.HostService{{
+		EnvVar: providerhost.DefaultIndexedDBSocketEnv,
+		Register: func(srv *grpc.Server) {
+			proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(ds, pluginName, providerhost.IndexedDBServerOptions{
+				AllowedStores: effective.ObjectStores,
+			}))
+		},
+	}}
 	return hostServices, func() {
-		_ = closeIndexedDBs(boundStores...)
+		_ = closeIndexedDBs(ds)
 	}, nil
 }
 
-func buildPluginScopedIndexedDB(binding config.PluginIndexedDBBinding, schema string, deniedStores []string, deps Deps) (indexeddb.IndexedDB, error) {
-	def, ok := deps.IndexedDBDefs[binding.Name]
+func buildPluginScopedIndexedDB(effective config.EffectivePluginIndexedDB, deps Deps) (indexeddb.IndexedDB, error) {
+	def, ok := deps.IndexedDBDefs[effective.ProviderName]
 	if !ok || def == nil {
-		return nil, fmt.Errorf("indexeddb %q is not available", binding.Name)
+		return nil, fmt.Errorf("indexeddb %q is not available", effective.ProviderName)
 	}
-	scopedDef, transportPrefix, err := newPluginScopedIndexedDBDef(def, schema)
+	scopedDef, transportPrefix, err := newPluginScopedIndexedDBDef(def, effective.DB)
 	if err != nil {
-		return nil, fmt.Errorf("indexeddb %q: %w", binding.Name, err)
+		return nil, fmt.Errorf("indexeddb %q: %w", effective.ProviderName, err)
 	}
 	ds, err := buildIndexedDB(scopedDef, &FactoryRegistry{IndexedDB: deps.IndexedDBFactory})
 	if err != nil {
-		return nil, fmt.Errorf("indexeddb %q: %w", binding.Name, err)
+		return nil, fmt.Errorf("indexeddb %q: %w", effective.ProviderName, err)
 	}
 	ds = newPluginIndexedDBTransport(ds, pluginIndexedDBTransportOptions{
-		StorePrefix:   transportPrefix,
-		AllowedStores: binding.ObjectStores,
-		DeniedStores:  deniedStores,
+		StorePrefix: transportPrefix,
 	})
-	return metricutil.InstrumentIndexedDB(ds, binding.Name), nil
+	return metricutil.InstrumentIndexedDB(ds, effective.ProviderName), nil
 }
 
-func newPluginScopedIndexedDBDef(entry *config.ProviderEntry, schema string) (*config.ProviderEntry, string, error) {
+func newPluginScopedIndexedDBDef(entry *config.ProviderEntry, db string) (*config.ProviderEntry, string, error) {
 	if entry == nil {
 		return nil, "", fmt.Errorf("datastore provider is required")
 	}
@@ -618,15 +590,15 @@ func newPluginScopedIndexedDBDef(entry *config.ProviderEntry, schema string) (*c
 		delete(cfg, "namespace")
 		if isSQLiteIndexedDBConfig(cfg) {
 			delete(cfg, "schema")
-			cfg["table_prefix"] = schema + "_"
-			cfg["prefix"] = schema + "_"
+			cfg["table_prefix"] = db + "_"
+			cfg["prefix"] = db + "_"
 		} else {
 			delete(cfg, "table_prefix")
 			delete(cfg, "prefix")
-			cfg["schema"] = schema
+			cfg["schema"] = db
 		}
 	} else {
-		transportPrefix = schema + "_"
+		transportPrefix = db + "_"
 	}
 
 	configNode, err := mapToYAMLNode(cfg)
@@ -696,13 +668,6 @@ func mapToYAMLNode(value map[string]any) (yaml.Node, error) {
 		return *out.Content[0], nil
 	}
 	return out, nil
-}
-
-func effectivePluginIndexedDBSchema(pluginName string, entry *config.ProviderEntry) string {
-	if entry != nil && strings.TrimSpace(entry.IndexedDBSchema) != "" {
-		return strings.TrimSpace(entry.IndexedDBSchema)
-	}
-	return pluginName
 }
 
 func chainCleanup(cleanups ...func()) func() {

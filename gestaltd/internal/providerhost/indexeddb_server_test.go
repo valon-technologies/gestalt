@@ -16,7 +16,7 @@ func TestIndexedDBServerUsesStoreNamesAsProvided(t *testing.T) {
 	t.Parallel()
 
 	db := &coretesting.StubIndexedDB{}
-	srv := NewIndexedDBServer(db, "roadmap")
+	srv := NewIndexedDBServer(db, "roadmap", IndexedDBServerOptions{})
 	ctx := context.Background()
 	record, err := gestalt.RecordToProto(map[string]any{"id": "snap-1"})
 	if err != nil {
@@ -42,7 +42,7 @@ func TestIndexedDBServerRecordsPluginMetricAttributes(t *testing.T) {
 	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
 
 	db := metricutil.InstrumentIndexedDB(&coretesting.StubIndexedDB{}, "system")
-	srv := NewIndexedDBServer(db, "roadmap")
+	srv := NewIndexedDBServer(db, "roadmap", IndexedDBServerOptions{})
 	if err := metricutil.UnwrapIndexedDB(db).CreateObjectStore(ctx, "snapshots", indexeddb.ObjectStoreSchema{
 		Indexes: []indexeddb.IndexSchema{{Name: "by_type", KeyPath: []string{"type"}}},
 	}); err != nil {
@@ -93,4 +93,30 @@ func TestIndexedDBServerRecordsPluginMetricAttributes(t *testing.T) {
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.indexeddb.count", 1, indexAttrs)
 	metrictest.RequireInt64SumOmitsAttr(t, rm, "gestaltd.indexeddb.count", indexAttrs, "gestalt.store")
 	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.indexeddb.duration", indexAttrs)
+}
+
+func TestIndexedDBServerRejectsStoresOutsideAllowlist(t *testing.T) {
+	t.Parallel()
+
+	db := &coretesting.StubIndexedDB{}
+	srv := NewIndexedDBServer(db, "roadmap", IndexedDBServerOptions{
+		AllowedStores: []string{"tasks"},
+	})
+	ctx := context.Background()
+	record, err := gestalt.RecordToProto(map[string]any{"id": "evt-1"})
+	if err != nil {
+		t.Fatalf("RecordToProto: %v", err)
+	}
+
+	if _, err := srv.(*indexedDBServer).Put(ctx, &proto.RecordRequest{
+		Store:  "events",
+		Record: record,
+	}); err == nil {
+		t.Fatal("Put should reject stores outside the configured allowlist")
+	}
+	if _, err := srv.(*indexedDBServer).CreateObjectStore(ctx, &proto.CreateObjectStoreRequest{
+		Name: "events",
+	}); err == nil {
+		t.Fatal("CreateObjectStore should reject stores outside the configured allowlist")
+	}
 }

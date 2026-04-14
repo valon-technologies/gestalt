@@ -230,15 +230,14 @@ You implement the [IndexedDB gRPC service](https://www.w3.org/TR/IndexedDB/#obje
 
 Plugins access the IndexedDB provider through the SDK. The host serves the IndexedDB interface over a gRPC socket, and the SDK wraps it into native types for each language.
 
-When a plugin binds a datastore through `plugins.<name>.indexeddb`, the host now rebuilds
-that provider with a plugin-scoped schema before exposing it over the SDK
-socket. Plugins still use plain store names like `tasks` or `snapshots`; the
-host applies isolation outside the plugin. For schema-capable backends, that
-means a plugin-specific schema. For SQLite-backed relationaldb
-bindings, the host falls back to `<indexeddbSchema>_` table prefixes. Other
-IndexedDB providers fall back to transport-level `<indexeddbSchema>_` store
-prefixes. Plugin bindings can also declare `objectStore` allowlists so the host rejects stores
-that were assigned to a different binding.
+When a plugin binds a datastore through `plugins.<name>.indexeddb`, the host
+rebuilds that provider with plugin-scoped storage before exposing it over the
+SDK socket. Plugins still use plain store names like `tasks` or `snapshots`;
+the host applies isolation outside the plugin. For schema-capable backends,
+that means a plugin-specific schema. For SQLite-backed relationaldb bindings,
+the host falls back to `<db>_` table prefixes. Other IndexedDB providers fall
+back to transport-level `<db>_` store prefixes. `plugins.<name>.indexeddb.objectStores`
+can also allowlist logical stores so the host rejects stores outside that set.
 
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
@@ -413,7 +412,7 @@ providers:
 
 `DATABASE_URL` is a connection string for your database. The RelationalDB provider accepts `postgres://`, `mysql://`, `sqlite://`, and `sqlserver://` prefixes.
 
-Object store names remain logical inside plugins. The host scopes plugin data by rebuilding schema-capable providers with a plugin-specific schema, or by applying a `<indexeddbSchema>_` prefix on backends without schema support.
+Object store names remain logical inside plugins. The host scopes plugin data by rebuilding schema-capable providers with a plugin-specific schema, or by applying a `<db>_` prefix on backends without schema support.
 
 ## What to read next
 

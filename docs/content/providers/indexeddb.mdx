@@ -10,14 +10,16 @@ contract can map cleanly to relational, document, or key-value backends.
 The active datastore is selected by `server.providers.indexeddb`, which points
 to one of the named entries under `providers.indexeddb`. Gestalt talks to that provider
 through the IndexedDB service contract while keeping plugin state isolated with
-plugin-scoped datastore instances. By default, a plugin binding uses the plugin
-name as its IndexedDB schema; `plugins.<name>.indexeddbSchema` can
-override that schema name. Plugin bindings can also declare `objectStore`
-allowlists so a store like `tasks` is only served through one configured
-binding. With the first-party RelationalDB provider, Postgres, MySQL, and SQL
-Server receive that value as `schema`, while SQLite falls back
-to `<schema>_` table prefixes because it has no schema support. Other IndexedDB
-providers fall back to `<schema>_` transport-level store prefixes.
+plugin-scoped datastore instances. Plugins may override that host selection
+with `plugins.<name>.indexeddb.provider`; otherwise they inherit the
+selected/default host IndexedDB. `plugins.<name>.indexeddb.db` defaults to the
+plugin key and controls the plugin-visible database name used for backend
+scoping. With the first-party RelationalDB provider, Postgres, MySQL, and SQL
+Server receive that value as `schema`, while SQLite falls back to `<db>_`
+table prefixes because it has no schema support. Other IndexedDB providers
+fall back to `<db>_` transport-level store prefixes. Plugins may also set
+`plugins.<name>.indexeddb.objectStores` to allowlist logical stores such as
+`tasks`.
 
 ## First-party IndexedDB providers
 
