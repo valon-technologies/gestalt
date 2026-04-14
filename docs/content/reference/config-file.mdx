@@ -239,10 +239,10 @@ providers:
   cache:
     session:
       source:
-        ref: github.com/valon-technologies/gestalt-providers/cache/redis
+        ref: github.com/valon-technologies/gestalt-providers/cache/valkey
         version: 0.0.1-alpha.1
       config:
-        address: ${REDIS_ADDR}
+        address: ${VALKEY_ADDR}
         database: 0
 
 plugins:
