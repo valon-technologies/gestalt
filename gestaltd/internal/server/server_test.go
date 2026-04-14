@@ -1856,11 +1856,13 @@ func TestWorkloadAuthorization_ListOperationsFiltersAndRejectsSelectors(t *testi
 		},
 	}, providers, nil, nil)
 
+	var auditBuf bytes.Buffer
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
 		cfg.Providers = providers
 		cfg.Services = coretesting.NewStubServices(t)
 		cfg.Authorizer = authz
+		cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -1897,6 +1899,33 @@ func TestWorkloadAuthorization_ListOperationsFiltersAndRejectsSelectors(t *testi
 	if resp.StatusCode != http.StatusForbidden {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("expected 403, got %d: %s", resp.StatusCode, body)
+	}
+
+	lines := bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
+	if len(lines) == 0 {
+		t.Fatal("expected list operations denial audit record")
+	}
+	var auditRecord map[string]any
+	if err := json.Unmarshal(lines[len(lines)-1], &auditRecord); err != nil {
+		t.Fatalf("parsing list operations audit record: %v\nraw: %s", err, auditBuf.String())
+	}
+	if auditRecord["provider"] != "svc" {
+		t.Fatalf("expected audit provider svc, got %v", auditRecord["provider"])
+	}
+	if auditRecord["operation"] != "operations.list" {
+		t.Fatalf("expected audit operation operations.list, got %v", auditRecord["operation"])
+	}
+	if auditRecord["allowed"] != false {
+		t.Fatalf("expected denied audit record, got %v", auditRecord["allowed"])
+	}
+	if auditRecord["auth_source"] != "workload_token" {
+		t.Fatalf("expected workload auth_source, got %v", auditRecord["auth_source"])
+	}
+	if auditRecord["subject_id"] != "workload:triage-bot" {
+		t.Fatalf("expected workload subject_id, got %v", auditRecord["subject_id"])
+	}
+	if auditRecord["error"] != "workload callers may not override connection or instance bindings" {
+		t.Fatalf("unexpected audit error: %v", auditRecord["error"])
 	}
 
 	svc := coretesting.NewStubServices(t)
@@ -4323,11 +4352,13 @@ func TestWorkloadAuthorization_ExecuteOperation_UsesBoundIdentityAndRejectsSelec
 		},
 	}, providers, nil, nil)
 
+	var auditBuf bytes.Buffer
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
 		cfg.Providers = providers
 		cfg.Services = svc
 		cfg.Authorizer = authz
+		cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -4372,6 +4403,51 @@ func TestWorkloadAuthorization_ExecuteOperation_UsesBoundIdentityAndRejectsSelec
 	if resp.StatusCode != http.StatusForbidden {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("expected 403 for selector override, got %d: %s", resp.StatusCode, body)
+	}
+
+	lines := bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
+	if len(lines) < 2 {
+		t.Fatalf("expected denial audit records, got %d", len(lines))
+	}
+
+	var accessDeniedAudit map[string]any
+	if err := json.Unmarshal(lines[len(lines)-2], &accessDeniedAudit); err != nil {
+		t.Fatalf("parsing denied operation audit record: %v\nraw: %s", err, auditBuf.String())
+	}
+	if accessDeniedAudit["provider"] != "svc" {
+		t.Fatalf("expected denied operation provider svc, got %v", accessDeniedAudit["provider"])
+	}
+	if accessDeniedAudit["operation"] != "admin" {
+		t.Fatalf("expected denied operation admin, got %v", accessDeniedAudit["operation"])
+	}
+	if accessDeniedAudit["allowed"] != false {
+		t.Fatalf("expected denied operation audit allowed=false, got %v", accessDeniedAudit["allowed"])
+	}
+	if accessDeniedAudit["error"] != "operation access denied" {
+		t.Fatalf("unexpected denied operation error: %v", accessDeniedAudit["error"])
+	}
+
+	var selectorAudit map[string]any
+	if err := json.Unmarshal(lines[len(lines)-1], &selectorAudit); err != nil {
+		t.Fatalf("parsing selector denial audit record: %v\nraw: %s", err, auditBuf.String())
+	}
+	if selectorAudit["provider"] != "svc" {
+		t.Fatalf("expected selector audit provider svc, got %v", selectorAudit["provider"])
+	}
+	if selectorAudit["operation"] != "run" {
+		t.Fatalf("expected selector audit operation run, got %v", selectorAudit["operation"])
+	}
+	if selectorAudit["allowed"] != false {
+		t.Fatalf("expected selector audit allowed=false, got %v", selectorAudit["allowed"])
+	}
+	if selectorAudit["auth_source"] != "workload_token" {
+		t.Fatalf("expected selector audit auth_source workload_token, got %v", selectorAudit["auth_source"])
+	}
+	if selectorAudit["subject_id"] != "workload:triage-bot" {
+		t.Fatalf("expected selector audit subject_id workload:triage-bot, got %v", selectorAudit["subject_id"])
+	}
+	if selectorAudit["error"] != "workload callers may not override connection or instance bindings" {
+		t.Fatalf("unexpected selector audit error: %v", selectorAudit["error"])
 	}
 }
 
@@ -5375,6 +5451,7 @@ func TestLoginCallbackForCLI(t *testing.T) {
 	t.Parallel()
 
 	svc := coretesting.NewStubServices(t)
+	var auditBuf bytes.Buffer
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
 			N: "test",
@@ -5386,6 +5463,7 @@ func TestLoginCallbackForCLI(t *testing.T) {
 			},
 		}
 		cfg.Services = svc
+		cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -5442,6 +5520,39 @@ func TestLoginCallbackForCLI(t *testing.T) {
 		if cookie.Name == "session_token" {
 			t.Fatalf("did not expect session cookie for CLI login, got %q", cookie.Value)
 		}
+	}
+
+	lines := bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
+	if len(lines) < 2 {
+		t.Fatalf("expected CLI login callback to emit token and login audit records, got %d", len(lines))
+	}
+
+	var tokenAudit map[string]any
+	if err := json.Unmarshal(lines[len(lines)-2], &tokenAudit); err != nil {
+		t.Fatalf("parsing token audit record: %v\nraw: %s", err, auditBuf.String())
+	}
+	if tokenAudit["operation"] != "api_token.create" {
+		t.Fatalf("expected api_token.create audit operation, got %v", tokenAudit["operation"])
+	}
+	if tokenAudit["source"] != "http" {
+		t.Fatalf("expected token audit source http, got %v", tokenAudit["source"])
+	}
+	if tokenAudit["auth_source"] != "session" {
+		t.Fatalf("expected token audit auth_source session, got %v", tokenAudit["auth_source"])
+	}
+	if uid, ok := tokenAudit["user_id"].(string); !ok || uid == "" {
+		t.Fatalf("expected non-empty token audit user_id, got %v", tokenAudit["user_id"])
+	}
+	if tokenAudit["allowed"] != true {
+		t.Fatalf("expected token audit allowed=true, got %v", tokenAudit["allowed"])
+	}
+
+	var loginAudit map[string]any
+	if err := json.Unmarshal(lines[len(lines)-1], &loginAudit); err != nil {
+		t.Fatalf("parsing login audit record: %v\nraw: %s", err, auditBuf.String())
+	}
+	if loginAudit["operation"] != "auth.login.complete" {
+		t.Fatalf("expected auth.login.complete audit operation, got %v", loginAudit["operation"])
 	}
 }
 

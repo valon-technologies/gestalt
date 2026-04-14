@@ -257,7 +257,8 @@ need actor, target, and outcome details.
 | --- | --- | --- | --- |
 | Provider operation invocation | Yes: `gestaltd.operation.*` | Yes | Every guarded HTTP and MCP invocation is audited. |
 | Platform login start and completion | Yes: `gestaltd.auth.*` | Yes | `begin_login` and `complete_login` are both operational and security events. |
-| Platform token validation | Yes: `gestaltd.auth.*` with `action=validate_token` | No | Per-request auth checks stay metrics-only to avoid audit noise. |
+| Platform token validation | Yes: `gestaltd.auth.*` with `action=validate_token` | Partially | Successful per-request validation is metrics-only; shared-middleware denials emit `auth.authenticate`. |
+| Pre-invoker authorization denials | No dedicated semantic metric family | Yes | Denied workload access before guarded invocation dispatch is audited with the attempted operation or `operations.list`. |
 | Connection auth start and completion | Yes: `gestaltd.connection.auth.*` | Yes | Covers OAuth start and completion plus manual connect completion. |
 | Connection credential refresh | Yes: `gestaltd.connection.auth.*` with `action=refresh` | No | Refresh is system maintenance behavior, not a user-facing audit event. |
 | IndexedDB operations | Yes: `gestaltd.indexeddb.*` | No | Audit the higher-level user action instead of low-level storage calls. |

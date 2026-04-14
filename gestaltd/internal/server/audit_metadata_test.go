@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -178,6 +179,128 @@ func TestAuditMetadata_FallbackToRemoteAddr(t *testing.T) {
 	}
 	if record["user_agent"] != "fallback-agent/2.0" {
 		t.Errorf("expected user_agent=fallback-agent/2.0, got %v", record["user_agent"])
+	}
+}
+
+func TestAuditMetadata_AuthMiddlewareFailures(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name           string
+		method         string
+		path           string
+		body           string
+		authHeader     string
+		withMCPHandler bool
+		wantSource     string
+		wantError      string
+		wantAuthSource string
+	}{
+		{
+			name:       "missing_http_auth",
+			method:     http.MethodGet,
+			path:       "/api/v1/integrations",
+			wantSource: "http",
+			wantError:  "missing authorization",
+		},
+		{
+			name:           "missing_mcp_auth",
+			method:         http.MethodPost,
+			path:           "/mcp",
+			body:           `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`,
+			withMCPHandler: true,
+			wantSource:     "mcp",
+			wantError:      "missing authorization",
+		},
+		{
+			name:           "invalid_session_bearer",
+			method:         http.MethodPost,
+			path:           "/mcp",
+			body:           `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}`,
+			authHeader:     "Bearer invalid-session-token",
+			withMCPHandler: true,
+			wantSource:     "mcp",
+			wantError:      "invalid token",
+			wantAuthSource: "session",
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var auditBuf bytes.Buffer
+			auditSink := invocation.NewSlogAuditSink(&auditBuf)
+
+			ts := newTestServer(t, func(cfg *server.Config) {
+				cfg.Auth = &coretesting.StubAuthProvider{
+					N: "stub",
+					ValidateTokenFn: func(_ context.Context, _ string) (*core.UserIdentity, error) {
+						return nil, fmt.Errorf("invalid token")
+					},
+				}
+				cfg.AuditSink = auditSink
+				cfg.Services = coretesting.NewStubServices(t)
+				if tc.withMCPHandler {
+					cfg.MCPHandler = http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+						t.Fatal("unexpected MCP handler invocation")
+					})
+				}
+			})
+			t.Cleanup(ts.Close)
+
+			var body io.Reader
+			if tc.body != "" {
+				body = bytes.NewBufferString(tc.body)
+			}
+			req, _ := http.NewRequest(tc.method, ts.URL+tc.path, body)
+			if tc.body != "" {
+				req.Header.Set("Content-Type", "application/json")
+			}
+			if tc.authHeader != "" {
+				req.Header.Set("Authorization", tc.authHeader)
+			}
+
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("request: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+			_, _ = io.ReadAll(resp.Body)
+
+			if resp.StatusCode != http.StatusUnauthorized {
+				t.Fatalf("expected 401, got %d", resp.StatusCode)
+			}
+
+			var record map[string]any
+			if err := json.Unmarshal(bytes.TrimSpace(auditBuf.Bytes()), &record); err != nil {
+				t.Fatalf("failed to parse audit JSON: %v\nraw: %s", err, auditBuf.String())
+			}
+
+			if record["source"] != tc.wantSource {
+				t.Fatalf("expected source %q, got %v", tc.wantSource, record["source"])
+			}
+			if record["operation"] != "auth.authenticate" {
+				t.Fatalf("expected operation auth.authenticate, got %v", record["operation"])
+			}
+			if record["allowed"] != false {
+				t.Fatalf("expected allowed=false, got %v", record["allowed"])
+			}
+			if record["error"] != tc.wantError {
+				t.Fatalf("expected error %q, got %v", tc.wantError, record["error"])
+			}
+			if record["provider"] != "" {
+				t.Fatalf("expected empty provider, got %v", record["provider"])
+			}
+			if tc.wantAuthSource == "" {
+				if authSource, ok := record["auth_source"]; ok && authSource != "" {
+					t.Fatalf("expected empty auth_source, got %v", authSource)
+				}
+			} else if record["auth_source"] != tc.wantAuthSource {
+				t.Fatalf("expected auth_source %q, got %v", tc.wantAuthSource, record["auth_source"])
+			}
+		})
 	}
 }
 
