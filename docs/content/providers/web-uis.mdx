@@ -1,9 +1,9 @@
 # Web UIs
 
 Web UI providers are static asset bundles. Gestalt serves each configured
-bundle under the path prefix declared in `providers.ui.<name>.path`. The
-built-in admin UI at `/admin` remains available regardless of whether public UI
-bundles are configured.
+bundle either directly from `providers.ui.<name>.path` or via a top-level
+`apps.<name>.path` binding. The built-in admin UI at `/admin` remains available
+regardless of whether public UI bundles are configured.
 
 ## How web UI providers work
 
@@ -23,8 +23,10 @@ First-party UI bundles live under
 
 ## Configuring `providers.ui`
 
-Use `providers.ui` as a map of mounted bundles. Omit it entirely to run
-headless with no public UI bundles.
+Use `providers.ui` as a map of UI bundles. You can either mount a bundle
+directly from `providers.ui`, or bind it to a plugin-backed app through the
+top-level `apps` block. Omit `providers.ui` entirely to run headless with no
+public UI bundles.
 
 Point at a local source bundle during development:
 
@@ -36,6 +38,23 @@ providers:
         path: ./customer-roadmap-review/ui/manifest.yaml
       path: /create-customer-roadmap-review
       authorizationPolicy: roadmap_review
+```
+
+Bind a UI bundle to a plugin-backed app:
+
+```yaml
+providers:
+  ui:
+    roadmap:
+      source:
+        path: ./customer-roadmap-review/ui/manifest.yaml
+
+apps:
+  roadmap_review:
+    plugin: roadmap_review
+    ui: roadmap
+    path: /create-customer-roadmap-review
+    authorizationPolicy: roadmap_review
 ```
 
 Reference a published bundle in production:
@@ -58,7 +77,7 @@ associated static assets.
 
 ## Locked deployments
 
-When `providers.ui` references a published bundle, run:
+When a published UI bundle is referenced from `providers.ui`, run:
 
 ```sh
 gestaltd init --config ./config.yaml
@@ -82,6 +101,6 @@ Asset-root layout, build hooks, and release packaging now live under
 
 ## What to read next
 
-- [Configuration](/configuration): `providers.ui` and headless deployments
+- [Configuration](/configuration): `providers.ui`, `apps`, and headless deployments
 - [Client Web UI](/client/web): what the default client exposes
 - [Custom Web UIs](/custom-providers/web-uis): advanced authoring docs
