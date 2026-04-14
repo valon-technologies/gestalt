@@ -303,13 +303,13 @@ func TestMountedWebUIRoutes(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>roadmap-shell</html>"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>sample-shell</html>"), 0o644); err != nil {
 		t.Fatalf("WriteFile index.html: %v", err)
 	}
 	if err := os.MkdirAll(filepath.Join(dir, "assets"), 0o755); err != nil {
 		t.Fatalf("MkdirAll assets: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "assets", "app.js"), []byte("console.log('roadmap')"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "assets", "app.js"), []byte("console.log('sample')"), 0o644); err != nil {
 		t.Fatalf("WriteFile app.js: %v", err)
 	}
 	handler, err := testutilWebUIHandler(dir)
@@ -319,7 +319,7 @@ func TestMountedWebUIRoutes(t *testing.T) {
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.MountedWebUIs = []server.MountedWebUI{{
-			Path:    "/create-customer-roadmap-review",
+			Path:    "/sample-portal",
 			Handler: handler,
 		}}
 	})
@@ -328,7 +328,7 @@ func TestMountedWebUIRoutes(t *testing.T) {
 	noRedirect := &http.Client{CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 		return http.ErrUseLastResponse
 	}}
-	resp, err := noRedirect.Get(ts.URL + "/create-customer-roadmap-review")
+	resp, err := noRedirect.Get(ts.URL + "/sample-portal")
 	if err != nil {
 		t.Fatalf("GET mounted root: %v", err)
 	}
@@ -336,11 +336,11 @@ func TestMountedWebUIRoutes(t *testing.T) {
 	if resp.StatusCode != http.StatusMovedPermanently {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusMovedPermanently)
 	}
-	if got := resp.Header.Get("Location"); got != "/create-customer-roadmap-review/" {
-		t.Fatalf("Location = %q, want %q", got, "/create-customer-roadmap-review/")
+	if got := resp.Header.Get("Location"); got != "/sample-portal/" {
+		t.Fatalf("Location = %q, want %q", got, "/sample-portal/")
 	}
 
-	resp, err = noRedirect.Get(ts.URL + "/create-customer-roadmap-review?code=invite-code&state=abc123")
+	resp, err = noRedirect.Get(ts.URL + "/sample-portal?code=invite-code&state=abc123")
 	if err != nil {
 		t.Fatalf("GET mounted root with query: %v", err)
 	}
@@ -348,11 +348,11 @@ func TestMountedWebUIRoutes(t *testing.T) {
 	if resp.StatusCode != http.StatusMovedPermanently {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusMovedPermanently)
 	}
-	if got := resp.Header.Get("Location"); got != "/create-customer-roadmap-review/?code=invite-code&state=abc123" {
-		t.Fatalf("Location = %q, want %q", got, "/create-customer-roadmap-review/?code=invite-code&state=abc123")
+	if got := resp.Header.Get("Location"); got != "/sample-portal/?code=invite-code&state=abc123" {
+		t.Fatalf("Location = %q, want %q", got, "/sample-portal/?code=invite-code&state=abc123")
 	}
 
-	resp, err = http.Get(ts.URL + "/create-customer-roadmap-review/sync")
+	resp, err = http.Get(ts.URL + "/sample-portal/sync")
 	if err != nil {
 		t.Fatalf("GET mounted sync: %v", err)
 	}
@@ -364,11 +364,11 @@ func TestMountedWebUIRoutes(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want 200", resp.StatusCode)
 	}
-	if !strings.Contains(string(body), "roadmap-shell") {
-		t.Fatalf("body = %q, want roadmap shell", body)
+	if !strings.Contains(string(body), "sample-shell") {
+		t.Fatalf("body = %q, want sample shell", body)
 	}
 
-	resp, err = http.Get(ts.URL + "/create-customer-roadmap-review/assets/app.js")
+	resp, err = http.Get(ts.URL + "/sample-portal/assets/app.js")
 	if err != nil {
 		t.Fatalf("GET mounted asset: %v", err)
 	}
@@ -380,8 +380,143 @@ func TestMountedWebUIRoutes(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("asset status = %d, want 200", resp.StatusCode)
 	}
-	if !strings.Contains(string(body), "roadmap") {
-		t.Fatalf("asset body = %q, want roadmap asset", body)
+	if !strings.Contains(string(body), "sample") {
+		t.Fatalf("asset body = %q, want sample asset", body)
+	}
+}
+
+func TestMountedWebUIRoutes_HumanAuthorization(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>protected-sample-shell</html>"), 0o644); err != nil {
+		t.Fatalf("WriteFile index.html: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "assets"), 0o755); err != nil {
+		t.Fatalf("MkdirAll assets: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "assets", "app.js"), []byte("console.log('protected-sample')"), 0o644); err != nil {
+		t.Fatalf("WriteFile app.js: %v", err)
+	}
+	handler, err := testutilWebUIHandler(dir)
+	if err != nil {
+		t.Fatalf("webui handler: %v", err)
+	}
+
+	svc := coretesting.NewStubServices(t)
+	viewer := seedUser(t, svc, "viewer@example.test")
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
+				},
+			},
+		},
+	}, nil, map[string]*config.ProviderEntry{
+		"sample_portal": {AuthorizationPolicy: "sample_policy"},
+	}, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				switch token {
+				case "viewer-session":
+					return &core.UserIdentity{Email: "viewer@example.test"}, nil
+				default:
+					return nil, fmt.Errorf("invalid token")
+				}
+			},
+		}
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.MountedWebUIs = []server.MountedWebUI{{
+			Name:                "sample_portal",
+			Path:                "/sample-portal",
+			AuthorizationPolicy: "sample_policy",
+			Routes: []server.MountedWebUIRoute{
+				{Path: "/admin/*", AllowedRoles: []string{"admin"}},
+				{Path: "/*", AllowedRoles: []string{"viewer", "admin"}},
+			},
+			Handler: handler,
+		}}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	noRedirect := &http.Client{CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+
+	resp, err := noRedirect.Get(ts.URL + "/sample-portal/sync?code=invite-code&state=abc123")
+	if err != nil {
+		t.Fatalf("GET protected mounted sync without auth: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusFound)
+	}
+	if got, want := resp.Header.Get("Location"), "/api/v1/auth/login?next=%2Fsample-portal%2Fsync%3Fcode%3Dinvite-code%26state%3Dabc123"; got != want {
+		t.Fatalf("Location = %q, want %q", got, want)
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/sample-portal/sync", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET protected mounted sync with viewer session: %v", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll protected mounted sync: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), "protected-sample-shell") {
+		t.Fatalf("body = %q, want protected sample shell", body)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/sample-portal/admin", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET protected mounted admin: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("admin status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/sample-portal/admin/index.html", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET protected mounted admin/index.html: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("admin/index.html status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/sample-portal/assets/app.js", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET protected mounted asset: %v", err)
+	}
+	body, err = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll protected mounted asset: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("asset status = %d, want 200", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), "protected-sample") {
+		t.Fatalf("asset body = %q, want protected sample asset", body)
 	}
 }
 
@@ -391,19 +526,558 @@ func TestMountedWebUIRoutesHiddenOnManagementProfile(t *testing.T) {
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.RouteProfile = server.RouteProfileManagement
 		cfg.MountedWebUIs = []server.MountedWebUI{{
-			Path:    "/create-customer-roadmap-review",
+			Path:    "/sample-portal",
 			Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("unexpected")) }),
 		}}
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	resp, err := http.Get(ts.URL + "/create-customer-roadmap-review/sync")
+	resp, err := http.Get(ts.URL + "/sample-portal/sync")
 	if err != nil {
 		t.Fatalf("GET management mounted route: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
+func TestMountedWebUIAuthorizationPolicyRequiresExplicitRouteCoverage(t *testing.T) {
+	t.Parallel()
+
+	makeConfig := func(mounted server.MountedWebUI) server.Config {
+		svc := coretesting.NewStubServices(t)
+		authz := mustAuthorizer(t, config.AuthorizationConfig{
+			Policies: map[string]config.HumanPolicyDef{
+				"sample_policy": {
+					Default: "deny",
+					Members: []config.HumanPolicyMemberDef{
+						{Email: "viewer@example.test", Role: "viewer"},
+					},
+				},
+			},
+		}, nil, map[string]*config.ProviderEntry{
+			"sample_portal": {AuthorizationPolicy: "sample_policy"},
+		}, nil)
+		return server.Config{
+			Auth:          &coretesting.StubAuthProvider{N: "test"},
+			Services:      svc,
+			Invoker:       &testutil.StubInvoker{},
+			Authorizer:    authz,
+			StateSecret:   []byte("0123456789abcdef0123456789abcdef"),
+			MountedWebUIs: []server.MountedWebUI{mounted},
+			Providers: func() *registry.ProviderMap[core.Provider] {
+				reg := registry.New()
+				return &reg.Providers
+			}(),
+		}
+	}
+
+	tests := []struct {
+		name    string
+		mounted server.MountedWebUI
+		want    string
+	}{
+		{
+			name: "missing routes",
+			mounted: server.MountedWebUI{
+				Name:                "sample_portal",
+				Path:                "/sample-portal",
+				AuthorizationPolicy: "sample_policy",
+				Handler:             http.NotFoundHandler(),
+			},
+			want: "must declare at least one route",
+		},
+		{
+			name: "missing root coverage",
+			mounted: server.MountedWebUI{
+				Name:                "sample_portal",
+				Path:                "/sample-portal",
+				AuthorizationPolicy: "sample_policy",
+				Routes: []server.MountedWebUIRoute{
+					{Path: "/sync/*", AllowedRoles: []string{"viewer", "admin"}},
+				},
+				Handler: http.NotFoundHandler(),
+			},
+			want: "must declare a route covering /",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			_, err := server.New(makeConfig(tc.mounted))
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("server.New error = %v, want substring %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestMountedWebUIAuthorizationPolicyDeniesUnmatchedNavigationRoute(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>protected-sample-shell</html>"), 0o644); err != nil {
+		t.Fatalf("WriteFile index.html: %v", err)
+	}
+	handler, err := testutilWebUIHandler(dir)
+	if err != nil {
+		t.Fatalf("webui handler: %v", err)
+	}
+
+	svc := coretesting.NewStubServices(t)
+	viewer := seedUser(t, svc, "viewer@example.test")
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
+				},
+			},
+		},
+	}, nil, map[string]*config.ProviderEntry{
+		"sample_portal": {AuthorizationPolicy: "sample_policy"},
+	}, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "viewer-session" {
+					return nil, fmt.Errorf("invalid token")
+				}
+				return &core.UserIdentity{Email: "viewer@example.test"}, nil
+			},
+		}
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.MountedWebUIs = []server.MountedWebUI{{
+			Name:                "sample_portal",
+			Path:                "/sample-portal",
+			AuthorizationPolicy: "sample_policy",
+			Routes: []server.MountedWebUIRoute{
+				{Path: "/", AllowedRoles: []string{"viewer", "admin"}},
+				{Path: "/sync/*", AllowedRoles: []string{"viewer", "admin"}},
+			},
+			Handler: handler,
+		}}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/sample-portal/admin", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET unmatched protected mounted route: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+}
+
+func TestMountedWebUIAuthorizationPolicyUsesCanonicalNavigationPaths(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>protected-sample-shell</html>"), 0o644); err != nil {
+		t.Fatalf("WriteFile index.html: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "assets"), 0o755); err != nil {
+		t.Fatalf("MkdirAll assets: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "assets", "app.js"), []byte("console.log('protected-sample')"), 0o644); err != nil {
+		t.Fatalf("WriteFile app.js: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "reports"), 0o755); err != nil {
+		t.Fatalf("MkdirAll reports: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "reports", "index.html"), []byte("<html>reports</html>"), 0o644); err != nil {
+		t.Fatalf("WriteFile reports/index.html: %v", err)
+	}
+	handler, err := testutilWebUIHandler(dir)
+	if err != nil {
+		t.Fatalf("webui handler: %v", err)
+	}
+
+	svc := coretesting.NewStubServices(t)
+	viewer := seedUser(t, svc, "viewer@example.test")
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
+				},
+			},
+		},
+	}, nil, map[string]*config.ProviderEntry{
+		"sample_portal": {AuthorizationPolicy: "sample_policy"},
+	}, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "viewer-session" {
+					return nil, fmt.Errorf("invalid token")
+				}
+				return &core.UserIdentity{Email: "viewer@example.test"}, nil
+			},
+		}
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.MountedWebUIs = []server.MountedWebUI{{
+			Name:                "sample_portal",
+			Path:                "/sample-portal",
+			AuthorizationPolicy: "sample_policy",
+			Routes: []server.MountedWebUIRoute{
+				{Path: "/", AllowedRoles: []string{"viewer", "admin"}},
+				{Path: "/reports", AllowedRoles: []string{"viewer", "admin"}},
+			},
+			Handler: handler,
+		}}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	assetReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/sample-portal/assets/app.js", nil)
+	assetReq.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+	assetResp, err := http.DefaultClient.Do(assetReq)
+	if err != nil {
+		t.Fatalf("GET protected mounted asset: %v", err)
+	}
+	defer func() { _ = assetResp.Body.Close() }()
+	if assetResp.StatusCode != http.StatusOK {
+		t.Fatalf("asset status = %d, want %d", assetResp.StatusCode, http.StatusOK)
+	}
+
+	reportsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/sample-portal/reports/index.html", nil)
+	reportsReq.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+	reportsResp, err := http.DefaultClient.Do(reportsReq)
+	if err != nil {
+		t.Fatalf("GET protected mounted reports html: %v", err)
+	}
+	defer func() { _ = reportsResp.Body.Close() }()
+	if reportsResp.StatusCode != http.StatusOK {
+		t.Fatalf("reports html status = %d, want %d", reportsResp.StatusCode, http.StatusOK)
+	}
+}
+
+func TestMountedWebUIAuthorizationPolicyUsesNearestAncestorRouteForNestedAssets(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>protected-sample-shell</html>"), 0o644); err != nil {
+		t.Fatalf("WriteFile index.html: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "reports", "assets"), 0o755); err != nil {
+		t.Fatalf("MkdirAll reports/assets: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "reports", "assets", "app.js"), []byte("console.log('reports-only')"), 0o644); err != nil {
+		t.Fatalf("WriteFile reports/assets/app.js: %v", err)
+	}
+	handler, err := testutilWebUIHandler(dir)
+	if err != nil {
+		t.Fatalf("webui handler: %v", err)
+	}
+
+	svc := coretesting.NewStubServices(t)
+	viewer := seedUser(t, svc, "viewer@example.test")
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
+				},
+			},
+		},
+	}, nil, map[string]*config.ProviderEntry{
+		"sample_portal": {AuthorizationPolicy: "sample_policy"},
+	}, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "viewer-session" {
+					return nil, fmt.Errorf("invalid token")
+				}
+				return &core.UserIdentity{Email: "viewer@example.test"}, nil
+			},
+		}
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.MountedWebUIs = []server.MountedWebUI{{
+			Name:                "sample_portal",
+			Path:                "/sample-portal",
+			AuthorizationPolicy: "sample_policy",
+			Routes: []server.MountedWebUIRoute{
+				{Path: "/", AllowedRoles: []string{"viewer", "admin"}},
+				{Path: "/reports", AllowedRoles: []string{"admin"}},
+			},
+			Handler: handler,
+		}}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/sample-portal/reports/assets/app.js", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET nested protected mounted asset: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("nested asset status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+}
+
+func TestMountedWebUIAuthorizationPolicyAllowsExplicitCatchAllAndDottedRoutes(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>protected-sample-shell</html>"), 0o644); err != nil {
+		t.Fatalf("WriteFile index.html: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "admin"), 0o755); err != nil {
+		t.Fatalf("MkdirAll admin: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "admin", "widget.js"), []byte("console.log('admin-only')"), 0o644); err != nil {
+		t.Fatalf("WriteFile admin/widget.js: %v", err)
+	}
+	handler, err := testutilWebUIHandler(dir)
+	if err != nil {
+		t.Fatalf("webui handler: %v", err)
+	}
+
+	svc := coretesting.NewStubServices(t)
+	viewer := seedUser(t, svc, "viewer@example.test")
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
+				},
+			},
+		},
+	}, nil, map[string]*config.ProviderEntry{
+		"sample_portal": {AuthorizationPolicy: "sample_policy"},
+	}, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "viewer-session" {
+					return nil, fmt.Errorf("invalid token")
+				}
+				return &core.UserIdentity{Email: "viewer@example.test"}, nil
+			},
+		}
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.MountedWebUIs = []server.MountedWebUI{{
+			Name:                "sample_portal",
+			Path:                "/sample-portal",
+			AuthorizationPolicy: "sample_policy",
+			Routes: []server.MountedWebUIRoute{
+				{Path: "/admin/widget.js", AllowedRoles: []string{"admin"}},
+				{Path: "/*", AllowedRoles: []string{"viewer", "admin"}},
+			},
+			Handler: handler,
+		}}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	dottedReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/sample-portal/customers/acme.test", nil)
+	dottedReq.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+	dottedResp, err := http.DefaultClient.Do(dottedReq)
+	if err != nil {
+		t.Fatalf("GET dotted protected mounted route: %v", err)
+	}
+	defer func() { _ = dottedResp.Body.Close() }()
+	if dottedResp.StatusCode != http.StatusOK {
+		t.Fatalf("dotted route status = %d, want %d", dottedResp.StatusCode, http.StatusOK)
+	}
+
+	adminReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/sample-portal/admin/widget.js", nil)
+	adminReq.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+	adminResp, err := http.DefaultClient.Do(adminReq)
+	if err != nil {
+		t.Fatalf("GET asset-like protected mounted route: %v", err)
+	}
+	defer func() { _ = adminResp.Body.Close() }()
+	if adminResp.StatusCode != http.StatusForbidden {
+		t.Fatalf("asset-like route status = %d, want %d", adminResp.StatusCode, http.StatusForbidden)
+	}
+}
+
+func TestMountedWebUIAuthorizationPolicyPrefersExactRoutesOverWildcards(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>protected-sample-shell</html>"), 0o644); err != nil {
+		t.Fatalf("WriteFile index.html: %v", err)
+	}
+	handler, err := testutilWebUIHandler(dir)
+	if err != nil {
+		t.Fatalf("webui handler: %v", err)
+	}
+
+	svc := coretesting.NewStubServices(t)
+	viewer := seedUser(t, svc, "viewer@example.test")
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
+				},
+			},
+		},
+	}, nil, map[string]*config.ProviderEntry{
+		"sample_portal": {AuthorizationPolicy: "sample_policy"},
+	}, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "viewer-session" {
+					return nil, fmt.Errorf("invalid token")
+				}
+				return &core.UserIdentity{Email: "viewer@example.test"}, nil
+			},
+		}
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.MountedWebUIs = []server.MountedWebUI{{
+			Name:                "sample_portal",
+			Path:                "/sample-portal",
+			AuthorizationPolicy: "sample_policy",
+			Routes: []server.MountedWebUIRoute{
+				{Path: "/admin/settings", AllowedRoles: []string{"admin"}},
+				{Path: "/admin/*", AllowedRoles: []string{"viewer", "admin"}},
+				{Path: "/*", AllowedRoles: []string{"viewer", "admin"}},
+			},
+			Handler: handler,
+		}}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	exactReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/sample-portal/admin/settings", nil)
+	exactReq.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+	exactResp, err := http.DefaultClient.Do(exactReq)
+	if err != nil {
+		t.Fatalf("GET exact protected mounted route: %v", err)
+	}
+	defer func() { _ = exactResp.Body.Close() }()
+	if exactResp.StatusCode != http.StatusForbidden {
+		t.Fatalf("exact route status = %d, want %d", exactResp.StatusCode, http.StatusForbidden)
+	}
+
+	wildReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/sample-portal/admin/overview", nil)
+	wildReq.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+	wildResp, err := http.DefaultClient.Do(wildReq)
+	if err != nil {
+		t.Fatalf("GET wildcard protected mounted route: %v", err)
+	}
+	defer func() { _ = wildResp.Body.Close() }()
+	if wildResp.StatusCode != http.StatusOK {
+		t.Fatalf("wildcard route status = %d, want %d", wildResp.StatusCode, http.StatusOK)
+	}
+}
+
+func TestMountedWebUIAuthorizationPolicyExactRoutesDoNotMatchDescendants(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>protected-sample-shell</html>"), 0o644); err != nil {
+		t.Fatalf("WriteFile index.html: %v", err)
+	}
+	handler, err := testutilWebUIHandler(dir)
+	if err != nil {
+		t.Fatalf("webui handler: %v", err)
+	}
+
+	svc := coretesting.NewStubServices(t)
+	viewer := seedUser(t, svc, "viewer@example.test")
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
+				},
+			},
+		},
+	}, nil, map[string]*config.ProviderEntry{
+		"sample_portal": {AuthorizationPolicy: "sample_policy"},
+	}, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "viewer-session" {
+					return nil, fmt.Errorf("invalid token")
+				}
+				return &core.UserIdentity{Email: "viewer@example.test"}, nil
+			},
+		}
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.MountedWebUIs = []server.MountedWebUI{{
+			Name:                "sample_portal",
+			Path:                "/sample-portal",
+			AuthorizationPolicy: "sample_policy",
+			Routes: []server.MountedWebUIRoute{
+				{Path: "/admin", AllowedRoles: []string{"viewer", "admin"}},
+				{Path: "/admin/*", AllowedRoles: []string{"admin"}},
+				{Path: "/*", AllowedRoles: []string{"viewer", "admin"}},
+			},
+			Handler: handler,
+		}}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	exactReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/sample-portal/admin", nil)
+	exactReq.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+	exactResp, err := http.DefaultClient.Do(exactReq)
+	if err != nil {
+		t.Fatalf("GET exact protected mounted route: %v", err)
+	}
+	defer func() { _ = exactResp.Body.Close() }()
+	if exactResp.StatusCode != http.StatusOK {
+		t.Fatalf("exact route status = %d, want %d", exactResp.StatusCode, http.StatusOK)
+	}
+
+	descendantReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/sample-portal/admin/reports", nil)
+	descendantReq.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+	descendantResp, err := http.DefaultClient.Do(descendantReq)
+	if err != nil {
+		t.Fatalf("GET descendant protected mounted route: %v", err)
+	}
+	defer func() { _ = descendantResp.Body.Close() }()
+	if descendantResp.StatusCode != http.StatusForbidden {
+		t.Fatalf("descendant route status = %d, want %d", descendantResp.StatusCode, http.StatusForbidden)
+	}
+
+	htmlReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/sample-portal/admin/index.html", nil)
+	htmlReq.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+	htmlResp, err := http.DefaultClient.Do(htmlReq)
+	if err != nil {
+		t.Fatalf("GET html descendant protected mounted route: %v", err)
+	}
+	defer func() { _ = htmlResp.Body.Close() }()
+	if htmlResp.StatusCode != http.StatusForbidden {
+		t.Fatalf("html descendant route status = %d, want %d", htmlResp.StatusCode, http.StatusForbidden)
 	}
 }
 
@@ -8500,6 +9174,71 @@ func TestLoginCallback_HostIssuesSessionWhenProviderDoesNot(t *testing.T) {
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == http.StatusUnauthorized {
 		t.Fatal("host-issued session cookie should authenticate subsequent requests")
+	}
+}
+
+func TestBrowserLoginRedirect_RedirectsBackToNextPath(t *testing.T) {
+	t.Parallel()
+
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	auth := &stubHostIssuedSessionAuth{secret: secret}
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("cookiejar.New: %v", err)
+	}
+	client := &http.Client{
+		Jar: jar,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = auth
+		cfg.StateSecret = secret
+		cfg.Services = coretesting.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	startResp, err := client.Get(ts.URL + "/api/v1/auth/login?next=%2Fsample-portal%2Fadmin%3Ftab%3Dmembers")
+	if err != nil {
+		t.Fatalf("start browser login: %v", err)
+	}
+	defer func() { _ = startResp.Body.Close() }()
+	if startResp.StatusCode != http.StatusFound {
+		t.Fatalf("start status = %d, want %d", startResp.StatusCode, http.StatusFound)
+	}
+	loginURL, err := url.Parse(startResp.Header.Get("Location"))
+	if err != nil {
+		t.Fatalf("parse start login redirect: %v", err)
+	}
+	if got := loginURL.Host; got != "idp.example.test" {
+		t.Fatalf("login redirect host = %q, want %q", got, "idp.example.test")
+	}
+	if got := loginURL.Query().Get("state"); got != "/sample-portal/admin" {
+		t.Fatalf("login redirect state = %q, want %q", got, "/sample-portal/admin")
+	}
+
+	callbackResp, err := client.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=" + url.QueryEscape(loginURL.Query().Get("state")))
+	if err != nil {
+		t.Fatalf("browser login callback: %v", err)
+	}
+	defer func() { _ = callbackResp.Body.Close() }()
+	if callbackResp.StatusCode != http.StatusFound {
+		t.Fatalf("callback status = %d, want %d", callbackResp.StatusCode, http.StatusFound)
+	}
+	if got, want := callbackResp.Header.Get("Location"), "/sample-portal/admin?tab=members"; got != want {
+		t.Fatalf("callback redirect = %q, want %q", got, want)
+	}
+
+	foundSession := false
+	for _, cookie := range jar.Cookies(callbackResp.Request.URL) {
+		if cookie.Name == "session_token" && cookie.Value != "" {
+			foundSession = true
+		}
+	}
+	if !foundSession {
+		t.Fatal("expected session cookie after browser login callback")
 	}
 }
 

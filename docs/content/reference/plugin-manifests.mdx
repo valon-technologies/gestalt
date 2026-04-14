@@ -303,6 +303,14 @@ The `spec` block for a `kind: webui` manifest describes a static UI package.
 | Field | Type | Required | Purpose |
 | --- | --- | --- | --- |
 | `assetRoot` | string | yes | Directory containing the built static assets. |
+| `routes` | WebUIRoute[] | no | Optional route-level authorization rules used when a deployment binds this UI to `providers.ui.<name>.authorizationPolicy`. |
+
+Each `spec.routes` entry declares a mounted path and the allowed human roles for that path. Path matching is exact or longest-prefix with a terminal `/*`. When a deployment sets `authorizationPolicy`, route definitions must have non-empty `allowedRoles`, and the manifest must include a route that covers `/`.
+
+| Route field | Type | Required | Purpose |
+| --- | --- | --- | --- |
+| `path` | string | yes | Route path such as `/`, `/reports`, or `/admin/*`. |
+| `allowedRoles` | string[] | yes | Roles permitted to load the route or its associated static assets. |
 
 ```yaml
 kind: webui
@@ -311,6 +319,11 @@ version: 1.0.0
 displayName: Custom UI
 spec:
   assetRoot: ui/out
+  routes:
+    - path: /
+      allowedRoles: [viewer, admin]
+    - path: /admin/*
+      allowedRoles: [admin]
 ```
 
 ## Artifacts

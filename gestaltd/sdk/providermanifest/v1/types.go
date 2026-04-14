@@ -57,7 +57,8 @@ type Spec struct {
 	Requires          []string                              `json:"requires,omitempty" yaml:"requires,omitempty"`
 
 	// WebUI-specific fields
-	AssetRoot string `json:"assetRoot,omitempty" yaml:"assetRoot,omitempty"`
+	AssetRoot string       `json:"assetRoot,omitempty" yaml:"assetRoot,omitempty"`
+	Routes    []WebUIRoute `json:"routes,omitempty" yaml:"routes,omitempty"`
 }
 
 func (s *Spec) IsDeclarative() bool {
@@ -236,6 +237,11 @@ type ManifestConnectionDef struct {
 	Auth        *ProviderAuth                      `json:"auth,omitempty" yaml:"auth,omitempty"`
 	Params      map[string]ProviderConnectionParam `json:"params,omitempty" yaml:"params,omitempty"`
 	Discovery   *ProviderDiscovery                 `json:"discovery,omitempty" yaml:"discovery,omitempty"`
+}
+
+type WebUIRoute struct {
+	Path         string   `json:"path" yaml:"path"`
+	AllowedRoles []string `json:"allowedRoles,omitempty" yaml:"allowedRoles,omitempty"`
 }
 
 type ProviderOperation struct {

@@ -164,6 +164,12 @@
         "assetRoot": {
           "type": "string",
           "minLength": 1
+        },
+        "routes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/webuiRoute"
+          }
         }
       }
     },
@@ -675,6 +681,26 @@
           "type": "array",
           "items": {
             "$ref": "#/$defs/providerParameter"
+          }
+        }
+      }
+    },
+    "webuiRoute": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "minLength": 1
+        },
+        "allowedRoles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
           }
         }
       }

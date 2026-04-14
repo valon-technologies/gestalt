@@ -742,6 +742,8 @@ providers:
 
 `providers.ui` is a map of mounted `webui` bundles. Each entry is served under an explicit non-root path prefix on the public listener. The built-in admin UI remains available at `/admin`. Omit `providers.ui` entirely to run headless with no public UI bundles.
 
+When `authorizationPolicy` is set on a mounted UI, the referenced web UI manifest must declare `spec.routes` with non-empty `allowedRoles`, and at least one route must cover `/`.
+
 | Field | Description |
 | --- | --- |
 | `path` | Required mount prefix. Must start with `/`, may not be `/`, and may not conflict with `/api`, auth routes, `/mcp`, `/admin`, `/metrics`, `/health`, `/ready`, or another mounted UI prefix. |

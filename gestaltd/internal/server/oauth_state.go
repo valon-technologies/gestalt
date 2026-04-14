@@ -100,6 +100,7 @@ const loginStateCookieName = "login_state"
 
 type loginState struct {
 	State     string `json:"s"`
+	NextPath  string `json:"n,omitempty"`
 	ExpiresAt int64  `json:"exp"`
 }
 

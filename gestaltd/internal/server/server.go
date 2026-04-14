@@ -35,9 +35,17 @@ const (
 	RouteProfileManagement
 )
 
+type MountedWebUIRoute struct {
+	Path         string
+	AllowedRoles []string
+}
+
 type MountedWebUI struct {
-	Path    string
-	Handler http.Handler
+	Name                string
+	Path                string
+	AuthorizationPolicy string
+	Routes              []MountedWebUIRoute
+	Handler             http.Handler
 }
 
 type Server struct {
@@ -123,6 +131,10 @@ func New(cfg Config) (*Server, error) {
 	if now == nil {
 		now = time.Now
 	}
+	mountedWebUIs, err := normalizeMountedWebUIs(cfg.MountedWebUIs)
+	if err != nil {
+		return nil, err
+	}
 
 	users := cfg.Services.Users
 	tokens := cfg.Services.Tokens
@@ -161,7 +173,7 @@ func New(cfg Config) (*Server, error) {
 		readiness:         cfg.Readiness,
 		prometheusMetrics: cfg.PrometheusMetrics,
 		mcpHandler:        cfg.MCPHandler,
-		mountedWebUIs:     append([]MountedWebUI(nil), cfg.MountedWebUIs...),
+		mountedWebUIs:     mountedWebUIs,
 		adminUI:           cfg.AdminUI,
 		routeProfile:      cfg.RouteProfile,
 	}

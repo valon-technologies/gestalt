@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
+	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
@@ -221,6 +222,20 @@ func ValidateResolvedStructure(cfg *Config) error {
 		}
 		if err := validateManifestBackedIntegration(name, entry); err != nil {
 			return err
+		}
+	}
+	for name, entry := range cfg.Providers.UI {
+		if entry == nil {
+			return fmt.Errorf("config validation: ui %q requires a source", name)
+		}
+		if entry.Disabled || entry.AuthorizationPolicy == "" {
+			continue
+		}
+		if entry.ResolvedManifest == nil || entry.ManifestSpec() == nil {
+			return fmt.Errorf("config validation: ui %q authorizationPolicy requires a resolved webui manifest", name)
+		}
+		if err := providerpkg.ValidatePolicyBoundWebUIRoutes(entry.ManifestSpec().Routes); err != nil {
+			return fmt.Errorf("config validation: ui %q authorizationPolicy: %w", name, err)
 		}
 	}
 	return nil

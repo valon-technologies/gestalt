@@ -212,10 +212,54 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 		if err := validateRelativePackagePath(spec.AssetRoot, "spec.assetRoot"); err != nil {
 			return err
 		}
+		if err := validateWebUIRoutes(spec.Routes); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("unsupported manifest kind %q", kind)
 	}
 
+	return nil
+}
+
+func validateWebUIRoutes(routes []providermanifestv1.WebUIRoute) error {
+	seenPaths := make(map[string]struct{}, len(routes))
+	for i := range routes {
+		normalized, err := NormalizeWebUIRoutePath(fmt.Sprintf("spec.routes[%d].path", i), routes[i].Path)
+		if err != nil {
+			return err
+		}
+		routes[i].Path = normalized
+		if _, exists := seenPaths[normalized]; exists {
+			return fmt.Errorf("spec.routes[%d].path %q duplicates another route", i, normalized)
+		}
+		seenPaths[normalized] = struct{}{}
+
+		roles, err := NormalizeWebUIAllowedRoles(fmt.Sprintf("spec.routes[%d].allowedRoles", i), routes[i].AllowedRoles)
+		if err != nil {
+			return err
+		}
+		routes[i].AllowedRoles = roles
+	}
+	return nil
+}
+
+func ValidatePolicyBoundWebUIRoutes(routes []providermanifestv1.WebUIRoute) error {
+	if len(routes) == 0 {
+		return fmt.Errorf("policy-bound UIs must declare at least one route")
+	}
+	coversRoot := false
+	for i := range routes {
+		if len(routes[i].AllowedRoles) == 0 {
+			return fmt.Errorf("spec.routes[%d].allowedRoles must not be empty", i)
+		}
+		if WebUIRouteMatches(routes[i].Path, "/") {
+			coversRoot = true
+		}
+	}
+	if !coversRoot {
+		return fmt.Errorf("policy-bound UIs must declare a route covering /")
+	}
 	return nil
 }
 
