@@ -1,8 +1,14 @@
 # Homebrew
 
-Gestalt publishes a Homebrew tap for macOS and Linux.
+Gestalt publishes a public Homebrew tap for macOS and Linux. Homebrew downloads the release archives directly from GitHub, so no custom download strategy or GitHub auth token is required.
 
 If you need a direct-download install or a Linux-specific release artifact, see [Binary Releases](/install/binary).
+
+## Add the tap
+
+```sh
+brew tap valon-technologies/gestalt
+```
 
 ## Server
 
@@ -11,7 +17,7 @@ If you need a direct-download install or a Linux-specific release artifact, see 
 ### Install
 
 ```sh
-brew install valon-technologies/gestalt/gestaltd
+brew install gestaltd
 ```
 
 ### Verify
@@ -27,7 +33,7 @@ gestaltd --version
 ### Install
 
 ```sh
-brew install valon-technologies/gestalt/gestalt
+brew install gestalt
 ```
 
 ### Verify
