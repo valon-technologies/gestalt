@@ -40,7 +40,8 @@ config:
   server:
     baseUrl: "${GESTALT_BASE_URL}"
     encryptionKey: "${GESTALT_ENCRYPTION_KEY}"
-    indexeddb: main
+    providers:
+      indexeddb: main
   providers:
     auth:
       source:
@@ -119,7 +120,8 @@ config:
       port: 9090
     baseUrl: "${GESTALT_BASE_URL}"
     encryptionKey: "${GESTALT_ENCRYPTION_KEY}"
-    indexeddb: main
+    providers:
+      indexeddb: main
   providers:
     auth:
       source:
