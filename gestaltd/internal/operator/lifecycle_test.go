@@ -140,7 +140,7 @@ func writeStubIndexedDBManifest(t *testing.T, dir string) string {
 func requiredComponentConfigYAML(t *testing.T, dir, dbPath string) string {
 	manifestPath := writeStubIndexedDBManifest(t, dir)
 	return fmt.Sprintf(`providers:
-  indexeddbs:
+  indexeddb:
     sqlite:
       source:
         path: %s
@@ -150,7 +150,8 @@ func requiredComponentConfigYAML(t *testing.T, dir, dbPath string) string {
 }
 
 func requiredServerDatastoreYAML() string {
-	return `  indexeddb: sqlite
+	return `  providers:
+    indexeddb: sqlite
 `
 }
 
@@ -201,7 +202,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *te
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  plugins:
+	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
     example:
       source:
         path: ./manifest.yaml
@@ -262,7 +263,7 @@ spec:
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  plugins:
+	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
     notion:
       source:
         path: ./manifest.yaml
@@ -328,7 +329,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalMountedWebUIWithoutLockfile(t *test
     roadmap:
       source:
         path: ./webui/manifest.yaml
-  plugins:
+plugins:
     roadmap:
       source:
         path: ./plugin/manifest.yaml
@@ -361,7 +362,7 @@ authorization:
       source:
         path: ./webui/manifest.yaml
       path: /console
-  plugins:
+plugins:
     roadmap:
       source:
         path: ./plugin/manifest.yaml
@@ -383,7 +384,7 @@ authorization:
     roadmap_review:
       source:
         path: ./webui/manifest.yaml
-  plugins:
+plugins:
     roadmap:
       source:
         path: ./plugin/manifest.yaml
@@ -397,7 +398,7 @@ authorization:
 		},
 		{
 			name: "plugin owned ui via app binding",
-			uiConfigYAML: `  plugins:
+			uiConfigYAML: `plugins:
     roadmap:
       source:
         path: ./plugin/manifest.yaml
@@ -426,7 +427,7 @@ authorization:
     roadmap_review:
       source:
         path: ./webui/manifest.yaml
-  plugins:
+plugins:
     roadmap:
       source:
         path: ./plugin/manifest.yaml
@@ -456,7 +457,7 @@ authorization:
       disabled: true
       source:
         path: ./webui/manifest.yaml
-  plugins:
+plugins:
     roadmap:
       source:
         path: ./plugin/manifest.yaml
@@ -639,7 +640,7 @@ func TestLoadForExecutionAtPath_ReinitializesManagedPluginOwnedUIWhenUILockEntry
         ref: ` + webUIRef + `
         version: ` + version + `
       path: /create-customer-roadmap-review
-  plugins:
+plugins:
     roadmap:
       source:
         ref: ` + pluginRef + `
@@ -777,7 +778,7 @@ func TestLoadForExecutionAtPath_ResolvesManagedPluginOwnedUIFromManagedPath(t *t
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  plugins:
+	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
     roadmap:
       source:
         ref: ` + pluginRef + `
@@ -876,7 +877,7 @@ func TestLoadForExecutionAtPath_ReinitializesManagedPluginOwnedUIWhenPluginLockI
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	writeConfig := func(version string) {
-		cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  plugins:
+		cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
     roadmap:
       source:
         ref: ` + pluginRef + `
@@ -998,7 +999,7 @@ func TestInitAtPath_RejectsManagedPluginOwnedUIPathOutsidePackage(t *testing.T) 
 	)
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  plugins:
+	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
     roadmap:
       source:
         ref: ` + pluginRef + `
@@ -1283,18 +1284,21 @@ func TestLoadForExecutionAtPath_ResolvesLocalTopLevelPluginsWithoutLockfile(t *t
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := fmt.Sprintf(`providers:
   auth:
-    source:
-      path: ./auth-manifest.yaml
-    config:
-      clientId: local-auth-client
-  indexeddbs:
+    auth:
+      source:
+        path: ./auth-manifest.yaml
+      config:
+        clientId: local-auth-client
+  indexeddb:
     sqlite:
       source:
         path: %s
       config:
         dsn: %q
 server:
-  indexeddb: sqlite
+  providers:
+    auth: auth
+    indexeddb: sqlite
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `, idbManifestPath, "sqlite://"+dbPath)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
@@ -1369,16 +1373,19 @@ func TestLoadForExecutionAtPath_ResolvesLocalSourceTopLevelPluginsWithoutArtifac
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := fmt.Sprintf(`providers:
   auth:
-    source:
-      path: ./auth-manifest.yaml
-  indexeddbs:
+    auth:
+      source:
+        path: ./auth-manifest.yaml
+  indexeddb:
     sqlite:
       source:
         path: %s
       config:
         dsn: %q
 server:
-  indexeddb: sqlite
+  providers:
+    auth: auth
+    indexeddb: sqlite
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `, idbManifestPath, "sqlite://"+dbPath)
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
@@ -1440,7 +1447,7 @@ func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalSourceHybridPlugin
 	writeTestFile("manifest.yaml", manifest, 0o644)
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  plugins:
+	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
     example:
       source:
         path: ./manifest.yaml
@@ -1610,7 +1617,7 @@ def session_catalog(request: gestalt.Request) -> gestalt.Catalog:
 	}
 	writeTestFile("manifest.yaml", manifest, 0o644)
 
-	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  plugins:
+	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
     example:
       source:
         path: ./manifest.yaml
@@ -1941,7 +1948,7 @@ func TestApplyLockedPlugins_SkipsNilIntegrationPlugins(t *testing.T) {
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  plugins:
+	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
     example:
       source:
         path: ./manifest.yaml

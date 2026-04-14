@@ -47,7 +47,6 @@ func buildRegistrationStore(deps Deps) mcpoauth.RegistrationStore {
 }
 
 func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.ProviderMap[core.Provider], <-chan struct{}, func() map[string]map[string]OAuthHandler, error) {
-	cfg.SyncCompatFields()
 	reg := registry.New()
 	connAuth := make(map[string]map[string]OAuthHandler)
 	var connMu sync.Mutex

@@ -999,7 +999,6 @@ func TestBootstrapDisabledComponents(t *testing.T) {
 				Source:   config.ProviderSource{Path: "stub"},
 			},
 		}
-		cfg.Server.IndexedDB = ""
 		cfg.Server.Providers.IndexedDB = ""
 
 		_, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
