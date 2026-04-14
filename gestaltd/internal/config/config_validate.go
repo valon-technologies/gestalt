@@ -674,7 +674,7 @@ func validateMountedUICollisions(cfg *Config, pluginOwnedUIRefs map[string]struc
 			continue
 		}
 		if _, ok := pluginOwnedUIRefs[name]; ok {
-			if ui := cfg.Providers.UI[name]; ui != nil && !ui.Disabled && strings.TrimSpace(ui.Path) != "" {
+			if ui := cfg.Providers.UI[name]; ui != nil && !ui.Disabled && mountedUIPathsMatch(ui.Path, entry.MountPath) {
 				continue
 			}
 		}
@@ -704,6 +704,17 @@ func validateMountedUICollisions(cfg *Config, pluginOwnedUIRefs map[string]struc
 		}
 	}
 	return nil
+}
+
+func mountedUIPathsMatch(uiPath, mountPath string) bool {
+	if strings.TrimSpace(uiPath) == "" {
+		return false
+	}
+	normalizedMountPath, err := normalizeMountedUIPath(mountPath)
+	if err != nil {
+		return false
+	}
+	return uiPath == normalizedMountPath
 }
 
 func mountedUIPathsConflict(a, b string) bool {
