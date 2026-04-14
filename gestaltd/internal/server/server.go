@@ -48,6 +48,11 @@ type MountedWebUI struct {
 	Handler             http.Handler
 }
 
+type AdminRouteConfig struct {
+	AuthorizationPolicy string
+	AllowedRoles        []string
+}
+
 type Server struct {
 	router             chi.Router
 	handler            http.Handler
@@ -67,6 +72,7 @@ type Server struct {
 	noAuth             bool
 	anonymousPrincipal *principal.Principal
 	publicBaseURL      string
+	managementBaseURL  string
 	secureCookies      bool
 	encryptor          *cryptoutil.AESGCMEncryptor
 	sessionIssuer      []byte
@@ -77,6 +83,7 @@ type Server struct {
 	prometheusMetrics  http.Handler
 	mcpHandler         http.Handler
 	mountedWebUIs      []MountedWebUI
+	adminRoute         AdminRouteConfig
 	adminUI            http.Handler
 	routeProfile       RouteProfile
 }
@@ -93,6 +100,7 @@ type Config struct {
 	PluginDefs        map[string]*config.ProviderEntry
 	Authorizer        *authorization.Authorizer
 	PublicBaseURL     string
+	ManagementBaseURL string
 	SecureCookies     bool
 	StateSecret       []byte
 	APITokenTTL       time.Duration
@@ -101,6 +109,7 @@ type Config struct {
 	PrometheusMetrics http.Handler
 	MCPHandler        http.Handler
 	MountedWebUIs     []MountedWebUI
+	Admin             AdminRouteConfig
 	AdminUI           http.Handler
 	RouteProfile      RouteProfile
 	MeterProvider     metric.MeterProvider
@@ -130,6 +139,13 @@ func New(cfg Config) (*Server, error) {
 	now := cfg.Now
 	if now == nil {
 		now = time.Now
+	}
+	adminRoute, err := normalizeAdminRouteConfig(cfg.Admin)
+	if err != nil {
+		return nil, fmt.Errorf("normalize admin route: %w", err)
+	}
+	if err := validateAdminRouteRuntime(adminRoute, noAuth, cfg.PublicBaseURL, cfg.ManagementBaseURL, cfg.RouteProfile); err != nil {
+		return nil, fmt.Errorf("validate admin route: %w", err)
 	}
 	mountedWebUIs, err := normalizeMountedWebUIs(cfg.MountedWebUIs)
 	if err != nil {
@@ -164,6 +180,7 @@ func New(cfg Config) (*Server, error) {
 		authorizer:        cfg.Authorizer,
 		noAuth:            noAuth,
 		publicBaseURL:     strings.TrimRight(cfg.PublicBaseURL, "/"),
+		managementBaseURL: strings.TrimRight(cfg.ManagementBaseURL, "/"),
 		secureCookies:     cfg.SecureCookies,
 		encryptor:         encryptor,
 		sessionIssuer:     cfg.StateSecret,
@@ -174,6 +191,7 @@ func New(cfg Config) (*Server, error) {
 		prometheusMetrics: cfg.PrometheusMetrics,
 		mcpHandler:        cfg.MCPHandler,
 		mountedWebUIs:     mountedWebUIs,
+		adminRoute:        adminRoute,
 		adminUI:           cfg.AdminUI,
 		routeProfile:      cfg.RouteProfile,
 	}

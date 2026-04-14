@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	stdpath "path"
 	"strings"
 	"time"
 
@@ -105,7 +106,7 @@ func (s *Server) startBrowserLogin(w http.ResponseWriter, r *http.Request) {
 		s.auditHTTPEvent(r.Context(), nil, s.authProviderName(), "auth.login.start", auditAllowed, auditErr)
 	}()
 
-	nextPath, err := resolveLoginRedirectPath(r.URL.Query().Get("next"))
+	nextPath, err := resolveLoginRedirectPath(r.URL.Query().Get("next"), s.allowedLoginRedirectBaseURLs())
 	if err != nil {
 		auditErr = err
 		writeError(w, http.StatusBadRequest, err.Error())
@@ -160,7 +161,14 @@ func (s *Server) beginLogin(w http.ResponseWriter, r *http.Request, state, nextP
 	return loginURL, nil
 }
 
-func resolveLoginRedirectPath(raw string) (string, error) {
+func (s *Server) allowedLoginRedirectBaseURLs() []string {
+	if s.routeProfile != RouteProfilePublic || s.managementBaseURL == "" || s.adminRoute.AuthorizationPolicy == "" {
+		return nil
+	}
+	return []string{strings.TrimRight(s.managementBaseURL, "/") + "/admin"}
+}
+
+func resolveLoginRedirectPath(raw string, allowedBaseURLs []string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return "/", nil
@@ -169,7 +177,16 @@ func resolveLoginRedirectPath(raw string) (string, error) {
 	if err != nil {
 		return "", errBadLoginRedirectPath
 	}
-	if parsed.IsAbs() || parsed.Host != "" || !strings.HasPrefix(raw, "/") || strings.HasPrefix(raw, "//") {
+	if parsed.IsAbs() || parsed.Host != "" {
+		for _, base := range allowedBaseURLs {
+			if absoluteLoginRedirectAllowed(raw, base) {
+				parsed.Fragment = ""
+				return parsed.String(), nil
+			}
+		}
+		return "", errBadLoginRedirectPath
+	}
+	if !strings.HasPrefix(raw, "/") || strings.HasPrefix(raw, "//") {
 		return "", errBadLoginRedirectPath
 	}
 	parsed.Fragment = ""
@@ -177,6 +194,57 @@ func resolveLoginRedirectPath(raw string) (string, error) {
 		parsed.Path = "/"
 	}
 	return parsed.RequestURI(), nil
+}
+
+func absoluteLoginRedirectAllowed(raw, allowedBase string) bool {
+	base, err := url.Parse(strings.TrimSpace(allowedBase))
+	if err != nil || !base.IsAbs() || base.Host == "" {
+		return false
+	}
+	next, err := url.Parse(raw)
+	if err != nil || !next.IsAbs() || next.Host == "" {
+		return false
+	}
+	if next.Scheme != base.Scheme || next.Host != base.Host {
+		return false
+	}
+	basePath, ok := normalizedAbsoluteRedirectPath(base)
+	if !ok {
+		return false
+	}
+	nextPath, ok := normalizedAbsoluteRedirectPath(next)
+	if !ok {
+		return false
+	}
+	switch {
+	case basePath == "":
+		return strings.HasPrefix(nextPath, "/")
+	case nextPath == basePath:
+		return true
+	case strings.HasPrefix(nextPath, basePath+"/"):
+		return true
+	default:
+		return false
+	}
+}
+
+func normalizedAbsoluteRedirectPath(u *url.URL) (string, bool) {
+	path := u.EscapedPath()
+	if path == "" {
+		return "/", true
+	}
+	decoded, err := url.PathUnescape(path)
+	if err != nil {
+		return "", false
+	}
+	path = stdpath.Clean(decoded)
+	if path == "." {
+		path = "/"
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	return path, true
 }
 
 func browserLoginStateForNextPath(nextPath string) string {

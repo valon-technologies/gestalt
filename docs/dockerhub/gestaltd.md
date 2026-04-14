@@ -126,8 +126,15 @@ for the full config model and `secret://` reference support.
 
 The built-in admin UI is served at `/admin`. If you configure
 `server.management`, health and admin endpoints move to the management
-listener. See the [deployment documentation](https://gestaltd.ai/deploy) for
-the recommended split-listener production pattern.
+listener. If you also set `server.admin.authorizationPolicy`, Gestalt applies
+browser session auth and role checks to `/admin`; on split
+public/management deployments, set `server.management.baseUrl` so login can
+return the browser to the management listener after callback. Use the same
+hostname as `server.baseUrl`, and keep it on `https` whenever
+`server.baseUrl` is `https`, so the session cookie is reusable across both
+listeners. See the
+[deployment documentation](https://gestaltd.ai/deploy) for the recommended
+split-listener production pattern.
 
 ## SQLite and `/data`
 

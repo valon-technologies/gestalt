@@ -160,6 +160,7 @@ func runServer(env *bootstrapEnv) error {
 		PluginDefs:        env.Config.Plugins,
 		Authorizer:        result.Authorizer,
 		PublicBaseURL:     env.Config.Server.BaseURL,
+		ManagementBaseURL: env.Config.Server.ManagementBaseURL(),
 		SecureCookies:     strings.HasPrefix(env.Config.Server.BaseURL, "https://"),
 		StateSecret:       crypto.DeriveKey(env.Config.Server.EncryptionKey),
 		APITokenTTL:       apiTokenTTL,
@@ -170,7 +171,11 @@ func runServer(env *bootstrapEnv) error {
 		PrometheusMetrics: env.Result.Telemetry.PrometheusHandler(),
 		MCPHandler:        mcpHandler,
 		MountedWebUIs:     mountedWebUIs,
-		AdminUI:           publicAdminUI,
+		Admin: server.AdminRouteConfig{
+			AuthorizationPolicy: env.Config.Server.Admin.AuthorizationPolicy,
+			AllowedRoles:        append([]string(nil), env.Config.Server.Admin.AllowedRoles...),
+		},
+		AdminUI: publicAdminUI,
 	}
 
 	publicProfile := server.RouteProfileAll
@@ -205,10 +210,17 @@ func runServer(env *bootstrapEnv) error {
 	}}
 
 	if managementAddr := env.Config.Server.ManagementAddr(); managementAddr != "" {
-		slog.Warn(
-			"management listener serves /admin and /metrics without Gestalt auth; protect server.management with private networking or an internal reverse proxy",
-			"addr", managementAddr,
-		)
+		if env.Config.Server.Admin.AuthorizationPolicy != "" {
+			slog.Warn(
+				"management listener serves /metrics without Gestalt auth; /admin requires Gestalt session auth and server.admin policy access",
+				"addr", managementAddr,
+			)
+		} else {
+			slog.Warn(
+				"management listener serves /admin and /metrics without Gestalt auth; protect server.management with private networking or an internal reverse proxy",
+				"addr", managementAddr,
+			)
+		}
 
 		managementConfig := baseServerConfig
 		managementConfig.RouteProfile = server.RouteProfileManagement
