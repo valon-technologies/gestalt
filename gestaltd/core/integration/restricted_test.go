@@ -86,6 +86,37 @@ func TestCatalogFilters(t *testing.T) {
 	}
 }
 
+func TestCatalogFiltersCanOverrideAllowedRoles(t *testing.T) {
+	t.Parallel()
+
+	inner := &stubWithOps{
+		StubIntegration: coretesting.StubIntegration{N: "test_provider"},
+		ops:             sampleOps(),
+	}
+
+	r := coreintegration.NewRestricted(
+		inner,
+		map[string]string{"list_channels": "", "send_message": ""},
+		coreintegration.WithAllowedRoles(map[string][]string{
+			"list_channels": {"admin"},
+		}),
+	)
+
+	cat := r.Catalog()
+	if cat == nil {
+		t.Fatal("Catalog() returned nil")
+	}
+	if len(cat.Operations) != 2 {
+		t.Fatalf("Catalog().Operations: got %d, want 2", len(cat.Operations))
+	}
+	if got := cat.Operations[0].AllowedRoles; len(got) != 1 || got[0] != "admin" {
+		t.Fatalf("list_channels AllowedRoles = %#v, want [admin]", got)
+	}
+	if got := cat.Operations[1].AllowedRoles; len(got) != 0 {
+		t.Fatalf("send_message AllowedRoles = %#v, want empty", got)
+	}
+}
+
 func TestCatalogPreservesOrder(t *testing.T) {
 	t.Parallel()
 

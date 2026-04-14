@@ -37,7 +37,7 @@ func TestPolicyValidateAndApply(t *testing.T) {
 	t.Parallel()
 
 	policy, err := New(map[string]*config.OperationOverride{
-		"list_items": {Alias: "items", Description: "Custom description"},
+		"list_items": {Alias: "items", Description: "Custom description", AllowedRoles: []string{"admin"}},
 		"get_item":   nil,
 	})
 	if err != nil {
@@ -76,5 +76,8 @@ func TestPolicyValidateAndApply(t *testing.T) {
 	}
 	if filteredCat.Operations[0].ID != "items" || filteredCat.Operations[0].Description != "Custom description" {
 		t.Fatalf("first catalog operation = %+v", filteredCat.Operations[0])
+	}
+	if got := filteredCat.Operations[0].AllowedRoles; len(got) != 1 || got[0] != "admin" {
+		t.Fatalf("first catalog AllowedRoles = %#v, want [admin]", got)
 	}
 }
