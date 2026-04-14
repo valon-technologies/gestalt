@@ -1109,6 +1109,40 @@ server:
 		}
 	})
 
+	t.Run("same-name plugin-owned ui overlay only suppresses duplicate mount checks", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    mountPath: /api
+providers:
+  ui:
+    roadmap:
+      source:
+        path: ./web/roadmap/manifest.yaml
+      path: /roadmap
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `plugins.roadmap.mountPath "/api" conflicts with reserved path "/api"`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	t.Run("prefix collision is rejected", func(t *testing.T) {
 		t.Parallel()
 
