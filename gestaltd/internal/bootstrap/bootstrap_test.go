@@ -988,4 +988,26 @@ func TestBootstrapDisabledComponents(t *testing.T) {
 			t.Fatalf("Close: %v", err)
 		}
 	})
+
+	t.Run("disabled singleton indexeddb is rejected", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := validConfig()
+		cfg.Providers.IndexedDB = map[string]*config.ProviderEntry{
+			"only": {
+				Disabled: true,
+				Source:   config.ProviderSource{Path: "stub"},
+			},
+		}
+		cfg.Server.IndexedDB = ""
+		cfg.Server.Providers.IndexedDB = ""
+
+		_, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+		if err == nil {
+			t.Fatal("Bootstrap: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "datastore resource name is required") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 }
