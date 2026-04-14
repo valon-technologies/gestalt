@@ -5,10 +5,10 @@ asIndexPage: true
 # Providers
 
 Gestalt loads most integration and platform surfaces as providers instead of
-compiling them into `gestaltd`. Plugins, auth backends, IndexedDB backends,
-external secret managers, and public web UIs all use the same provider model:
-you reference a package in config, the host resolves it, validates it, and
-starts it with the permissions and request context it needs.
+compiling them into `gestaltd`. Plugins, auth backends, File API backends,
+IndexedDB backends, external secret managers, and public web UIs all use the
+same provider model: you reference a package in config, the host resolves it,
+validates it, and starts it with the permissions and request context it needs.
 
 ## Provider kinds
 
@@ -16,6 +16,7 @@ starts it with the permissions and request context it needs.
 | --- | --- | --- |
 | `plugin` | Tool providers that expose operations over CLI, HTTP API, and MCP | `providers.plugins.<name>` |
 | `auth` | Platform login backends | `providers.auth` |
+| `fileapi` | Blob/File-style storage backends mounted into plugins | `providers.fileapis.<name>` |
 | `indexeddb` | Persistent state backends for users, sessions, tokens, and credentials | `providers.indexeddbs.<name>` |
 | `secrets` | Secret managers that resolve `secret://` references | `providers.secrets` |
 | `webui` | Public UI bundles served under configured path prefixes | `providers.ui` |
@@ -43,6 +44,7 @@ The repository is organized by provider type:
 | --- | --- | --- |
 | Plugins | [`plugins/`](https://github.com/valon-technologies/gestalt-providers/tree/main/plugins) | `providers.plugins.<name>` |
 | Auth | [`auth/`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth) | `providers.auth` |
+| File API | [`fileapi/`](https://github.com/valon-technologies/gestalt-providers/tree/main/fileapi) | `providers.fileapis.<name>` |
 | IndexedDB | [`indexeddb/`](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb) | `providers.indexeddbs.<name>` |
 | Secrets | [`secrets/`](https://github.com/valon-technologies/gestalt-providers/tree/main/secrets) | `providers.secrets` |
 | Web UI bundles | [`web/`](https://github.com/valon-technologies/gestalt-providers/tree/main/web) | `providers.ui` |
@@ -92,6 +94,7 @@ release workflow now lives under [Custom Providers](/custom-providers).
 
 - [Plugins](/providers/plugins): choosing and configuring plugin providers
 - [Auth](/providers/auth): platform login providers
+- [File API](/providers/fileapi): blob and file storage backends for plugins
 - [IndexedDB](/providers/indexeddb): storage backends
 - [Secrets](/providers/secrets): built-in and external secret managers
 - [Web UIs](/providers/web-uis): public UI bundles

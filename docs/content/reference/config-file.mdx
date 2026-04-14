@@ -2,13 +2,14 @@ import { Tabs } from 'nextra/components'
 
 # Config File
 
-Every `gestaltd` deployment reads a single YAML config file. The two top-level keys are `server` (listener, encryption, egress, and indexeddb selection) and `providers` (auth, secrets, telemetry, audit, mounted UI bundles, indexeddbs, and plugins):
+Every `gestaltd` deployment reads a single YAML config file. The two top-level keys are `server` (listener, encryption, egress, and indexeddb selection) and `providers` (auth, fileapis, secrets, telemetry, audit, mounted UI bundles, indexeddbs, and plugins):
 
 ```yaml
 server:
   # listener, encryption, egress, indexeddb selector
 providers:
   auth: {}
+  fileapis: {}
   secrets: {}
   telemetry: {}
   audit: {}
@@ -157,6 +158,41 @@ Both `google` and `oidc` use the same PluginDef provider reference shape under `
 | `source.version` | Required with `source.ref`. SemVer without a leading `v`. |
 | `env` | Extra environment variables passed to the provider process. |
 | `allowedHosts` | Network allowlist for sandboxed provider processes. |
+
+## `providers.fileapis`
+
+File API providers expose W3C `Blob`/`File`-style object storage to executable
+plugins. Configure reusable named entries under `providers.fileapis`, then bind
+one or more of them into a plugin with `providers.plugins.<name>.fileapis`.
+Unlike `server.indexeddb`, there is no single global File API selector.
+
+```yaml
+providers:
+  fileapis:
+    assets:
+      source:
+        ref: github.com/your-org/providers/fileapi/object-store
+        version: 0.0.1
+      config:
+        bucket: my-assets
+
+  plugins:
+    media:
+      source:
+        ref: github.com/your-org/providers/plugins/media
+        version: 0.0.1
+      fileapis:
+        - assets
+```
+
+The exact config fields depend on the selected external fileapi provider
+package. Gestalt loads the configured provider process and passes
+`providers.fileapis.<name>.config` through to that provider unchanged.
+
+Each bound name is exposed to the plugin through a Unix socket environment
+variable derived from the binding name, such as
+`GESTALT_FILEAPI_SOCKET_ASSETS`. When a plugin binds exactly one File API,
+Gestalt also populates `GESTALT_FILEAPI_SOCKET` for SDK compatibility.
 
 ## `providers.indexeddbs`
 
@@ -456,6 +492,7 @@ providers:
 | `surfaces` | Typed host-side overrides for manifest-declared surfaces, such as `surfaces.openapi.baseUrl` or `surfaces.graphql.url`. |
 | `connections` | Named connection declarations. See [connections](#connections) below. |
 | `allowedOperations` | Allowlist with optional `alias` and `description` overrides per operation. |
+| `fileapis` | Optional list of named `providers.fileapis` bindings exposed to the executable plugin through the SDK transport. A single binding also populates the default FileAPI SDK env var for compatibility. |
 | `indexeddbs` | Optional list of named `providers.indexeddbs` bindings exposed to the executable plugin through the SDK transport. Store names are automatically prefixed per plugin. A single binding also populates the default IndexedDB SDK env var for compatibility. |
 
 ### `providers.plugins.*.source`
@@ -742,7 +779,7 @@ Structural validation runs at config load time (`init`, `validate`, `serve`). Ru
 
 Each plugin uses a `source` block. Every plugin must use exactly one loading mode: local `source.path` or managed `source.ref`. `source.version` is required with `source.ref` and invalid with `source.path`.
 
-Auth providers and indexeddb entries use the same external provider shape. When `providers.auth` or `providers.indexeddbs.<name>` is set, `source.ref` or `source.path` must be present. `providers.auth.config` and `providers.indexeddbs.<name>.config` are only allowed when their corresponding source is set.
+Auth providers, fileapi entries, and indexeddb entries use the same external provider shape. When `providers.auth`, `providers.fileapis.<name>`, or `providers.indexeddbs.<name>` is set, `source.ref` or `source.path` must be present. `providers.auth.config`, `providers.fileapis.<name>.config`, and `providers.indexeddbs.<name>.config` are only allowed when their corresponding source is set.
 
 Only `connections.default` may define `params` or `discovery`. All connections in a plugin must share the same mode.
 

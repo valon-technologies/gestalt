@@ -14,6 +14,7 @@ Every manifest defines exactly one provider kind, set by the `kind` field:
 | --- | --- |
 | `plugin` | Plugin (REST, OpenAPI, GraphQL, MCP, or executable). |
 | `auth` | Platform auth provider. |
+| `fileapi` | Blob/File-style storage backend for plugins. |
 | `indexeddb` | Persistence backend. |
 | `secrets` | Secret manager for resolving `secret://` references. |
 | `webui` | Static UI package served by `gestaltd`. |
@@ -26,7 +27,7 @@ These fields appear at the top level of every manifest regardless of kind.
 
 | Field | Type | Required | Purpose |
 | --- | --- | --- | --- |
-| `kind` | string | yes | The provider kind (`plugin`, `auth`, `indexeddb`, `secrets`, `webui`). |
+| `kind` | string | yes | The provider kind (`plugin`, `auth`, `fileapi`, `indexeddb`, `secrets`, `webui`). |
 | `source` | string | yes | Canonical provider source identifier. Use `github.com/<org>/<repo>/<path>`. The final path segment is the provider package name; preceding segments are used for release tags and source resolution. |
 | `version` | string | yes | Semver version. Pre-release suffixes like `-alpha.1` are allowed. |
 | `displayName` | string | no | Human-readable label shown in the UI. |
@@ -293,6 +294,33 @@ artifacts:
     path: artifacts/linux/amd64/provider
 ```
 
+## FileAPI Provider Metadata
+
+The `spec` block for a `kind: fileapi` manifest describes a Blob/File-style
+storage backend package.
+
+| Field | Type | Purpose |
+| --- | --- | --- |
+| `configSchemaPath` | string | Path to a JSON/YAML schema that validates the `providers.fileapis.<name>.config` block in the server config. |
+
+FileAPI providers require an executable entrypoint. Declare it under
+`entrypoint`.
+
+```yaml
+kind: fileapi
+source: github.com/valon-technologies/gestalt-providers/fileapi/s3
+version: 1.0.0
+displayName: S3 FileAPI
+spec:
+  configSchemaPath: schemas/config.schema.json
+entrypoint:
+  artifactPath: artifacts/linux/amd64/provider
+artifacts:
+  - os: linux
+    arch: amd64
+    path: artifacts/linux/amd64/provider
+```
+
 ## Web UI Metadata
 
 The `spec` block for a `kind: webui` manifest describes a static UI package.
@@ -522,7 +550,7 @@ spec:
 
 ## Authoring Notes
 
-Manifest paths must stay inside the package. `kind`, `source`, and `version` are required. A manifest defines exactly one provider kind: `kind: plugin`, `kind: auth`, `kind: indexeddb`, `kind: secrets`, or `kind: webui`.
+Manifest paths must stay inside the package. `kind`, `source`, and `version` are required. A manifest defines exactly one provider kind: `kind: plugin`, `kind: auth`, `kind: fileapi`, `kind: indexeddb`, `kind: secrets`, or `kind: webui`.
 
 `configSchemaPath` validates per-plugin config and may be written in JSON or YAML. Any connection may define `params` and `discovery`. The OpenAPI/GraphQL surface types are mutually exclusive, but MCP may be added alongside either.
 
@@ -530,10 +558,10 @@ A connection using `mcp_oauth` auth requires the plugin to declare an MCP surfac
 
 When an executable plugin defines helper operations in Go, Rust, Python, or
 TypeScript, Gestalt materializes the executable catalog automatically during
-local source-plugin execution and `provider release`. Auth and indexeddb
-source packages use the same release flow for Go, Rust, and TypeScript, but
-they do not generate catalogs. See [Plugins](/providers/plugins)
-for the end-to-end authoring flow.
+local source-plugin execution and `provider release`. Auth, fileapi,
+indexeddb, and secrets source packages use the same release flow for Go, Rust,
+and TypeScript, but they do not generate catalogs. See
+[Plugins](/providers/plugins) for the end-to-end authoring flow.
 
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>

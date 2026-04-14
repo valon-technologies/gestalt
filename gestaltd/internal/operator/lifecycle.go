@@ -27,7 +27,6 @@ const (
 	InitLockfileName     = "gestalt.lock.json"
 	PreparedProvidersDir = ".gestaltd/providers"
 	PreparedAuthDir      = ".gestaltd/auth"
-	PreparedFileAPIDir   = ".gestaltd/fileapi"
 	PreparedSecretsDir   = ".gestaltd/secrets"
 	PreparedTelemetryDir = ".gestaltd/telemetry"
 	PreparedAuditDir     = ".gestaltd/audit"

@@ -1,0 +1,164 @@
+# File API
+
+File API providers expose W3C `Blob`/`File`-style object storage to executable
+plugins. Gestalt models the surface on the web platform File API so plugins can
+create blobs and files, read or stream bytes, slice objects, and manage object
+URLs without caring whether the backend is local disk, S3, GCS, or another
+object store.
+
+## How File API providers work
+
+File API providers are configured as named entries under `providers.fileapis`.
+Plugins opt into one or more of those entries through
+`providers.plugins.<name>.fileapis`.
+
+Gestalt starts each configured File API provider as a child process, then
+mounts the bound provider into the plugin over a Unix socket transport. Object
+IDs and object URLs are namespaced per plugin, so one plugin cannot resolve or
+reuse another plugin's File API handles.
+
+Unlike `server.indexeddb`, there is no single global File API selector. File
+providers are reusable attachments that plugins opt into explicitly.
+
+## Configuring a provider
+
+For local development, point at a source manifest:
+
+```yaml
+providers:
+  fileapis:
+    assets:
+      source:
+        path: ./fileapi/object-store/manifest.yaml
+      config:
+        bucket: local-assets
+```
+
+For published releases, use `source.ref` and `version`:
+
+```yaml
+providers:
+  fileapis:
+    assets:
+      source:
+        ref: github.com/your-org/providers/fileapi/object-store
+        version: 0.0.1
+      config:
+        bucket: my-assets
+```
+
+The `config` block is provider-specific and is passed through to the File API
+provider's `Configure` hook unchanged.
+
+## Binding a provider into a plugin
+
+Bind the named provider into a plugin with `providers.plugins.<name>.fileapis`:
+
+```yaml
+providers:
+  fileapis:
+    assets:
+      source:
+        ref: github.com/your-org/providers/fileapi/object-store
+        version: 0.0.1
+      config:
+        bucket: my-assets
+
+  plugins:
+    media:
+      source:
+        ref: github.com/your-org/providers/plugins/media
+        version: 0.0.1
+      fileapis:
+        - assets
+```
+
+Every bound name gets a socket env var such as `GESTALT_FILEAPI_SOCKET_ASSETS`.
+When a plugin binds exactly one File API, Gestalt also sets
+`GESTALT_FILEAPI_SOCKET` so SDKs can connect without a binding name.
+
+## Using it from a plugin
+
+The SDK wraps the socket transport into native `Blob` and `File` helpers.
+
+```go
+import (
+    "context"
+    "log"
+
+    gestalt "github.com/valon-technologies/gestalt/sdk/go"
+)
+
+func example(ctx context.Context) {
+    api, err := gestalt.FileAPI("assets")
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer api.Close()
+
+    blob, err := api.CreateBlob(
+        ctx,
+        []gestalt.BlobPart{gestalt.StringBlobPart("hello world")},
+        gestalt.BlobOptions{Type: "text/plain"},
+    )
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    url, err := blob.CreateObjectURL(ctx)
+    if err != nil {
+        log.Fatal(err)
+    }
+    _ = url
+}
+```
+
+```python
+import gestalt
+
+api = gestalt.FileAPI("assets")
+blob = api.create_blob(["hello world"], type="text/plain")
+url = blob.create_object_url()
+text = blob.text()
+```
+
+```rust
+use gestalt::{BlobPart, BlobPropertyBag, FileAPI};
+
+let mut api = FileAPI::connect_named("assets").await?;
+let blob = api
+    .create_blob([BlobPart::from("hello world")], BlobPropertyBag::default())
+    .await?;
+let url = blob.create_object_url().await?;
+let text = blob.text().await?;
+```
+
+```ts
+import { FileAPI } from "@valon-technologies/gestalt";
+
+const api = new FileAPI("assets");
+const blob = await api.createBlob(["hello world"], { mimeType: "text/plain" });
+const url = await blob.createObjectURL();
+const text = await blob.text();
+```
+
+## Operational notes
+
+- File API providers are optional and plugin-scoped. They do not replace the
+  host's IndexedDB-backed system datastore.
+- `gestaltd init` and `gestaltd serve --locked` prepare File API providers the
+  same way they prepare auth, secrets, and IndexedDB providers.
+- Binding names are normalized into socket env vars by uppercasing letters and
+  replacing non-alphanumeric characters with underscores.
+
+## Building your own File API provider
+
+The interface contract, manifest kind, and SDK authoring details live under
+[Custom Providers > File API](/custom-providers/fileapi).
+
+## What to read next
+
+- [Configuration](/configuration): high-level config overview
+- [Config File](/reference/config-file#providersfileapis): field reference
+- [Custom File API Providers](/custom-providers/fileapi): advanced authoring
+  docs

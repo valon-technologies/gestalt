@@ -22,6 +22,7 @@ server:
 
 providers:
   auth: ...                 # platform login (ProviderEntry)
+  fileapis: ...             # named Blob/File storage providers
   secrets: ...              # secret resolution (default: env)
   telemetry: ...            # metrics and tracing (default: stdout)
   audit: ...                # audit log routing (default: inherit)
@@ -36,10 +37,11 @@ Each provider entry accepts `source` (where to load it from), `config` (provider
 
 ## Key concepts
 
-Gestalt has six core concepts you configure in YAML:
+Gestalt has seven core concepts you configure in YAML:
 
 - **[Plugin.](/providers/plugins)** A tool backed by a provider package. Plugins expose operations that agents and users invoke over HTTP, MCP, or the CLI. Plugins can come from published packages or local source.
 - **Connection.** How Gestalt authenticates to an upstream API on behalf of a user or service. Connections handle OAuth flows, API keys, and manual credentials.
+- **[File API.](/providers/fileapi)** Blob/File-style object storage mounted into plugins. Use this for plugin-managed binary objects such as uploads, generated documents, and object URLs.
 - **[IndexedDB.](/providers/indexeddb)** The persistent storage layer. Stores users, sessions, tokens, and credentials through a provider that implements the IndexedDB interface.
 - **[Auth.](/providers/auth)** Platform login for the Gestalt server. Separate from connection auth, which is per-plugin and per-upstream.
 - **[Secrets.](/providers/secrets)** Resolves `secret://` references in the config at startup. Backed by environment variables, files, or cloud secret managers.
@@ -171,6 +173,34 @@ Not all providers need this. Some providers (like Slack) use OAuth flows that do
 `connections.default` is the common case. When a provider defines more than one connection, callers pass `_connection` and `_instance` through the [HTTP API](/reference/http-api) to select which stored credential to use. Connection parameters (`params`) and post-connect discovery are only supported on `connections.default`.
 
 Gestalt stores upstream credentials keyed by user, plugin name, connection name, and instance. Renaming a plugin key under `providers.plugins` is a breaking change for stored connections.
+
+## Mounting a File API into a plugin
+
+Declare one or more reusable file providers under `providers.fileapis`, then
+bind the ones a plugin needs in `providers.plugins.<name>.fileapis`:
+
+```yaml
+providers:
+  fileapis:
+    assets:
+      source:
+        ref: github.com/your-org/providers/fileapi/object-store
+        version: 0.0.1
+      config:
+        bucket: my-assets
+
+  plugins:
+    media:
+      source:
+        ref: github.com/your-org/providers/plugins/media
+        version: 0.0.1
+      fileapis:
+        - assets
+```
+
+Inside the plugin, the Gestalt SDK exposes that binding as a File API socket.
+If exactly one File API is bound, the SDK default env var is populated. Named
+bindings are always available through `GESTALT_FILEAPI_SOCKET_<NAME>`.
 
 ## Exposing over MCP
 

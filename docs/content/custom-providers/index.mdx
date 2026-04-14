@@ -11,7 +11,7 @@ deployment, start with [Providers](/providers).
 ## What belongs here
 
 - Implementing executable or declarative plugin providers
-- Building custom auth, IndexedDB, secrets, and web UI providers
+- Building custom auth, File API, IndexedDB, secrets, and web UI providers
 - Testing providers from local source with `source.path`
 - Packaging releases with `gestaltd provider release`
 
@@ -35,6 +35,8 @@ providers:
   operations, declarative surfaces, and hybrid catalogs
 - [Auth](/custom-providers/auth): platform login providers and optional bearer
   token validation
+- [File API](/custom-providers/fileapi): Blob/File-style object storage
+  backends for plugins
 - [IndexedDB](/custom-providers/indexeddb): custom storage backends for system
   state
 - [Secrets](/custom-providers/secrets): secret managers for `secret://`
