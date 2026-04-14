@@ -23,8 +23,8 @@ func ValidateStructure(cfg *Config) error {
 	if err := NormalizeCompatibility(cfg); err != nil {
 		return err
 	}
-	appUIRefs := appReferencedUIs(cfg)
-	if err := normalizeMountedUIPaths(cfg, appUIRefs); err != nil {
+	pluginOwnedUIRefs := pluginOwnedUIRefs(cfg)
+	if err := normalizeMountedUIPaths(cfg, pluginOwnedUIRefs); err != nil {
 		return err
 	}
 	if err := validateAuthorizationPolicies(cfg); err != nil {
@@ -81,13 +81,13 @@ func ValidateStructure(cfg *Config) error {
 			return err
 		}
 		if entry.Path == "" {
-			if _, ok := appUIRefs[name]; ok {
+			if _, ok := pluginOwnedUIRefs[name]; ok {
 				continue
 			}
 			return fmt.Errorf("config validation: ui.%s.path is required", name)
 		}
 	}
-	if err := validateMountedUICollisions(cfg); err != nil {
+	if err := validateMountedUICollisions(cfg, pluginOwnedUIRefs); err != nil {
 		return err
 	}
 
@@ -253,6 +253,12 @@ func ValidateResolvedStructure(cfg *Config) error {
 		if err := validateManifestBackedIntegration(name, entry); err != nil {
 			return err
 		}
+		if entry.Disabled || strings.TrimSpace(entry.MountPath) == "" || strings.TrimSpace(entry.UI) != "" {
+			continue
+		}
+		if entry.ResolvedManifest == nil || entry.ManifestSpec() == nil || entry.ManifestSpec().UI == nil {
+			return fmt.Errorf("config validation: plugins.%s.mountPath requires plugins.%s.ui or plugin spec.ui", name, name)
+		}
 	}
 	for name, entry := range cfg.Providers.UI {
 		if entry == nil {
@@ -294,12 +300,17 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry) error {
 	if entry.Default {
 		return fmt.Errorf("config validation: plugins.%s.default is not supported on plugins", name)
 	}
+	entry.MountPath = strings.TrimSpace(entry.MountPath)
+	entry.UI = strings.TrimSpace(entry.UI)
 	if entry.IndexedDB != nil {
 		entry.IndexedDB.Provider = strings.TrimSpace(entry.IndexedDB.Provider)
 		entry.IndexedDB.DB = strings.TrimSpace(entry.IndexedDB.DB)
 		for i, store := range entry.IndexedDB.ObjectStores {
 			entry.IndexedDB.ObjectStores[i] = strings.TrimSpace(store)
 		}
+	}
+	if entry.UI != "" && entry.MountPath == "" {
+		return fmt.Errorf("config validation: plugins.%s.ui requires plugins.%s.mountPath", name, name)
 	}
 	if err := validateProviderEntrySource("plugin", name, entry); err != nil {
 		return err
@@ -355,6 +366,12 @@ func validateCacheConfig(cfg *Config) error {
 func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) error {
 	if entry == nil {
 		return nil
+	}
+	if strings.TrimSpace(entry.MountPath) != "" {
+		return fmt.Errorf("config validation: %s.mountPath is only supported on plugins.*", subject)
+	}
+	if strings.TrimSpace(entry.UI) != "" {
+		return fmt.Errorf("config validation: %s.ui is only supported on plugins.*", subject)
 	}
 	if entry.IndexedDB != nil {
 		return fmt.Errorf("config validation: %s.indexeddb is only supported on plugins.*", subject)
@@ -584,15 +601,16 @@ func cacheSocketEnv(name string) string {
 	return b.String()
 }
 
-func normalizeMountedUIPaths(cfg *Config, appUIRefs map[string]struct{}) error {
+func normalizeMountedUIPaths(cfg *Config, pluginOwnedUIRefs map[string]struct{}) error {
 	for name, entry := range cfg.Providers.UI {
 		if entry == nil || entry.Disabled {
 			continue
 		}
 		if strings.TrimSpace(entry.Path) == "" {
-			if _, ok := appUIRefs[name]; ok {
+			if _, ok := pluginOwnedUIRefs[name]; ok {
 				continue
 			}
+			return fmt.Errorf("config validation: ui.%s.path: path is required", name)
 		}
 		normalized, err := normalizeMountedUIPath(entry.Path)
 		if err != nil {
@@ -621,7 +639,7 @@ func normalizeMountedUIPath(path string) (string, error) {
 	return path, nil
 }
 
-func validateMountedUICollisions(cfg *Config) error {
+func validateMountedUICollisions(cfg *Config, pluginOwnedUIRefs map[string]struct{}) error {
 	reserved := []string{
 		"/api",
 		"/api/v1",
@@ -637,7 +655,7 @@ func validateMountedUICollisions(cfg *Config) error {
 		label string
 		path  string
 	}
-	subjects := make([]mountedPathSubject, 0, len(cfg.Providers.UI)+len(cfg.Apps))
+	subjects := make([]mountedPathSubject, 0, len(cfg.Providers.UI)+len(cfg.Plugins))
 	names := slices.Sorted(maps.Keys(cfg.Providers.UI))
 	for _, name := range names {
 		entry := cfg.Providers.UI[name]
@@ -649,18 +667,20 @@ func validateMountedUICollisions(cfg *Config) error {
 			path:  entry.Path,
 		})
 	}
-	appNames := slices.Sorted(maps.Keys(cfg.Apps))
-	for _, name := range appNames {
-		app := cfg.Apps[name]
-		if app == nil || app.Disabled || strings.TrimSpace(app.UI) != "" || strings.TrimSpace(app.Path) == "" {
+	pluginNames := slices.Sorted(maps.Keys(cfg.Plugins))
+	for _, name := range pluginNames {
+		entry := cfg.Plugins[name]
+		if entry == nil || entry.Disabled || strings.TrimSpace(entry.UI) != "" || strings.TrimSpace(entry.MountPath) == "" {
 			continue
 		}
-		if ui := cfg.Providers.UI[name]; ui != nil && !ui.Disabled && strings.TrimSpace(ui.Path) != "" {
-			continue
+		if _, ok := pluginOwnedUIRefs[name]; ok {
+			if ui := cfg.Providers.UI[name]; ui != nil && !ui.Disabled && strings.TrimSpace(ui.Path) != "" {
+				continue
+			}
 		}
 		subjects = append(subjects, mountedPathSubject{
-			label: "apps." + name + ".path",
-			path:  app.Path,
+			label: "plugins." + name + ".mountPath",
+			path:  entry.MountPath,
 		})
 	}
 	for i, subject := range subjects {
@@ -693,14 +713,10 @@ func mountedUIPathsConflict(a, b string) bool {
 	return strings.HasPrefix(a, b+"/") || strings.HasPrefix(b, a+"/")
 }
 
-func appReferencedUIs(cfg *Config) map[string]struct{} {
-	refs := make(map[string]struct{}, len(cfg.Apps))
-	for name, app := range cfg.Apps {
-		if app == nil || app.Disabled {
-			continue
-		}
-		if ui := strings.TrimSpace(app.UI); ui != "" {
-			refs[ui] = struct{}{}
+func pluginOwnedUIRefs(cfg *Config) map[string]struct{} {
+	refs := make(map[string]struct{}, len(cfg.Plugins))
+	for name, entry := range cfg.Plugins {
+		if entry == nil || entry.Disabled || strings.TrimSpace(entry.UI) != "" || strings.TrimSpace(entry.MountPath) == "" {
 			continue
 		}
 		refs[name] = struct{}{}

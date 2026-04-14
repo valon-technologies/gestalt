@@ -969,6 +969,55 @@ server:
 		}
 	})
 
+	t.Run("plugin mount path binds an explicit ui entry", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  ui:
+    roadmap:
+      source:
+        path: ./web/roadmap/manifest.yaml
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    ui: roadmap
+    mountPath: /create-customer-roadmap-review/
+    authorizationPolicy: roadmap_policy
+authorization:
+  policies:
+    roadmap_policy:
+      default: deny
+      members:
+        - email: viewer@example.test
+          role: viewer
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		entry := cfg.Providers.UI["roadmap"]
+		if entry == nil {
+			t.Fatal(`Providers.UI["roadmap"] = nil`)
+		}
+		if got := entry.Path; got != "/create-customer-roadmap-review" {
+			t.Fatalf(`Providers.UI["roadmap"].Path = %q, want %q`, got, "/create-customer-roadmap-review")
+		}
+		if got := entry.AuthorizationPolicy; got != "roadmap_policy" {
+			t.Fatalf(`Providers.UI["roadmap"].AuthorizationPolicy = %q, want %q`, got, "roadmap_policy")
+		}
+	})
+
 	t.Run("reserved path is rejected", func(t *testing.T) {
 		t.Parallel()
 
@@ -1023,6 +1072,39 @@ server:
 			t.Fatal("Load: expected error, got nil")
 		}
 		if !strings.Contains(err.Error(), `ui.metrics.path "/metrics/dashboard" conflicts with reserved path "/metrics"`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("plugin-owned ui overlay still validates reserved mount paths", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    mountPath: /api
+providers:
+  ui:
+    roadmap:
+      source:
+        path: ./web/roadmap/manifest.yaml
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `plugins.roadmap.mountPath "/api" conflicts with reserved path "/api"`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -1352,6 +1434,36 @@ server:
 			t.Fatal("Load: expected error, got nil")
 		}
 		if !strings.Contains(err.Error(), `ui.root.surfaces is only supported on plugins.*`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects plugin mount fields outside plugins", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  ui:
+    root:
+      source:
+        path: ./web/root/manifest.yaml
+      path: /app
+      mountPath: /also-app
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `ui.root.mountPath is only supported on plugins.*`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

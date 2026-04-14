@@ -2,7 +2,7 @@ import { Tabs } from 'nextra/components'
 
 # Config File
 
-Every `gestaltd` deployment reads a single YAML config file. The top-level keys are `server` (listener, encryption, egress, and indexeddb selection), `authorization` (shared human/workload access policy), `apps` (deployment-owned bindings between plugins and web UIs), `providers` (auth, secrets, telemetry, audit, mounted UI bundles, and indexeddb), and `plugins` (executable integrations):
+Every `gestaltd` deployment reads a single YAML config file. The top-level keys are `server` (listener, encryption, egress, and indexeddb selection), `authorization` (shared human/workload access policy), `providers` (auth, secrets, telemetry, audit, mounted UI bundles, and indexeddb), and `plugins` (executable integrations and optional plugin-backed UI mounts):
 
 ```yaml
 server:
@@ -10,7 +10,6 @@ server:
 authorization:
   policies: {}
   workloads: {}
-apps: {}
 providers:
   auth: {}
   secrets: {}
@@ -494,6 +493,8 @@ plugins:
     description: Public GitHub operations
     iconFile: ./icons/github.svg
     authorizationPolicy: support_staff
+    mountPath: /github
+    ui: github_console
     source:
       ref: github.com/valon-technologies/gestalt-providers/github
       version: 1.2.3
@@ -526,6 +527,8 @@ plugins:
 | `description` | Short description of the plugin. |
 | `iconFile` | SVG icon path, resolved relative to the config directory. |
 | `authorizationPolicy` | Optional shared human access policy from `authorization.policies`. When set, host-side operation filtering and execution checks use the resolved role for this plugin. |
+| `mountPath` | Optional public path prefix for a plugin-backed mounted UI. When set, Gestalt mounts either `plugins.<name>.ui` or the plugin manifest's `spec.ui`. |
+| `ui` | Optional UI key from `providers.ui` used with `mountPath`. Omit it to mount the plugin manifest's owned `spec.ui`. |
 | `source` | **Required.** The backing provider source. See [source shape](#pluginssource) below. |
 | `config` | Provider-specific configuration passed into the provider package. |
 | `surfaces` | Typed host-side overrides for manifest-declared surfaces, such as `surfaces.openapi.baseUrl` or `surfaces.graphql.url`. |
@@ -799,37 +802,17 @@ providers:
         brandName: Acme
 ```
 
-`providers.ui` is a map of `webui` bundles. Entries may mount directly by setting `path`, or they may act as app-owned UI artifacts that are bound through the top-level `apps` block. When a plugin manifest declares `spec.ui`, an app binding may omit `ui` entirely and let Gestalt synthesize the mounted UI entry from the plugin-owned reference. The built-in admin UI remains available at `/admin`. Omit `providers.ui` entirely to run headless with no public UI bundles.
+`providers.ui` is a map of `webui` bundles. Entries may mount directly by setting `path`, or they may act as named UI bundles that `plugins.<name>.ui` binds to `plugins.<name>.mountPath`. When a plugin manifest declares `spec.ui`, `plugins.<name>.ui` may be omitted entirely and Gestalt synthesizes the mounted UI entry from the plugin-owned reference. The built-in admin UI remains available at `/admin`. Omit `providers.ui` entirely to run headless with no public UI bundles.
 
 When `authorizationPolicy` is set on a mounted UI, the referenced web UI manifest must declare `spec.routes` with non-empty `allowedRoles`, and at least one route must cover `/`.
 
 | Field | Description |
 | --- | --- |
-| `path` | Direct mount prefix for this UI when not bound through `apps`. |
-| `authorizationPolicy` | Direct policy binding for this UI when not bound through `apps`. |
+| `path` | Direct mount prefix for this UI when not bound through `plugins.<name>.mountPath`. |
+| `authorizationPolicy` | Direct policy binding for this UI when not bound through `plugins.<name>.mountPath`. |
 | `disabled` | `true` to disable an individual mounted UI entry. |
 | `source` | A source mapping with `source.path` or `source.ref`. |
 | `config` | Optional UI-provider config validated against the bundle schema when present. |
-
-## `apps`
-
-```yaml
-apps:
-  roadmap_review:
-    plugin: roadmap_review
-    path: /create-customer-roadmap-review
-    authorizationPolicy: support_staff
-```
-
-`apps` is a deployment-owned binding layer for plugin-backed mounted apps. Each entry references an existing `plugins.<name>` entry, then supplies the public path and optional shared human authorization policy for both surfaces. The UI bundle may either be named explicitly through `apps.<name>.ui`, or omitted when the referenced plugin manifest declares an owned UI through `spec.ui`.
-
-| Field | Description |
-| --- | --- |
-| `plugin` | Required plugin key from `plugins`. |
-| `ui` | Optional UI key from `providers.ui`. Omit it when the plugin manifest declares `spec.ui`. |
-| `path` | Required public mount path for the app-owned UI bundle. |
-| `authorizationPolicy` | Optional shared policy from `authorization.policies` applied to both the mounted UI and referenced plugin. |
-| `disabled` | `true` to disable the app binding without removing the underlying plugin or UI entries. |
 
 ## Validation rules
 
@@ -845,7 +828,7 @@ Only `connections.default` may define `params` or `discovery`. All connections i
 
 Each `providers.ui.<name>` entry must use exactly one mode: `disabled: true`, or a source mapping with exactly one loading mode: local `providers.ui.<name>.source.path` or managed `providers.ui.<name>.source.ref`. `providers.ui.<name>.source.version` is required with `providers.ui.<name>.source.ref` and invalid with `providers.ui.<name>.source.path`. `providers.ui.<name>.config` is only allowed when `providers.ui.<name>.source` is set.
 
-Each enabled `apps.<name>` entry must reference an existing enabled plugin. When `apps.<name>.ui` is set, it must reference an existing enabled UI bundle. When `apps.<name>.ui` is omitted, the referenced plugin manifest must declare `spec.ui`. A given plugin or UI may be bound by at most one enabled app entry. `apps.<name>.path` must use the same path rules as a directly mounted UI, and `apps.<name>.authorizationPolicy` must reference `authorization.policies` when set.
+Each enabled `plugins.<name>` entry may set `mountPath` to publish a plugin-backed UI. When `plugins.<name>.ui` is set, it must reference an existing enabled UI bundle. When `plugins.<name>.ui` is omitted and `plugins.<name>.mountPath` is set, the plugin manifest must declare `spec.ui`. A given UI may be bound by at most one enabled plugin entry. `plugins.<name>.mountPath` must use the same path rules as a directly mounted UI.
 
 Mounted UI bundles are served on the public listener only. The built-in admin UI remains at `/admin`.
 

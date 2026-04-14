@@ -44,17 +44,8 @@ const PluginConnectionAlias = "plugin"
 type Config struct {
 	Server        ServerConfig              `yaml:"server"`
 	Authorization AuthorizationConfig       `yaml:"authorization,omitempty"`
-	Apps          map[string]*AppEntry      `yaml:"apps,omitempty"`
 	Providers     ProvidersConfig           `yaml:"providers"`
 	Plugins       map[string]*ProviderEntry `yaml:"plugins,omitempty"`
-}
-
-type AppEntry struct {
-	Plugin              string `yaml:"plugin"`
-	UI                  string `yaml:"ui"`
-	Path                string `yaml:"path,omitempty"`
-	AuthorizationPolicy string `yaml:"authorizationPolicy,omitempty"`
-	Disabled            bool   `yaml:"disabled,omitempty"`
 }
 
 type ProvidersConfig struct {
@@ -134,6 +125,8 @@ type ProviderEntry struct {
 	AuthorizationPolicy string `yaml:"authorizationPolicy,omitempty"`
 
 	// Plugin-specific config fields (parsed from YAML, only valid on plugin entries)
+	MountPath         string                        `yaml:"mountPath,omitempty"`
+	UI                string                        `yaml:"ui,omitempty"`
 	Connections       map[string]*ConnectionDef     `yaml:"connections,omitempty"`
 	AllowedOperations map[string]*OperationOverride `yaml:"allowedOperations,omitempty"`
 	IndexedDB         *PluginIndexedDBConfig        `yaml:"indexeddb,omitempty"`
@@ -656,7 +649,7 @@ func NormalizeCompatibility(cfg *Config) error {
 	if err := normalizeAdminConfig(cfg); err != nil {
 		return err
 	}
-	return applyAppBindings(cfg)
+	return applyPluginMountBindings(cfg)
 }
 
 func OverlayManagedPluginConfig(path string, cfg *Config) error {
@@ -1040,82 +1033,61 @@ func normalizedWorkloadDef(workload WorkloadDef) WorkloadDef {
 	return workload
 }
 
-func applyAppBindings(cfg *Config) error {
-	if cfg == nil || len(cfg.Apps) == 0 {
+func applyPluginMountBindings(cfg *Config) error {
+	if cfg == nil || len(cfg.Plugins) == 0 {
 		return nil
 	}
 
-	appNames := slices.Sorted(maps.Keys(cfg.Apps))
-	seenPlugins := make(map[string]string, len(appNames))
-	seenUIs := make(map[string]string, len(appNames))
-	for _, appName := range appNames {
-		app := cfg.Apps[appName]
-		if app == nil {
-			return fmt.Errorf("config validation: apps.%s is required", appName)
-		}
-		if app.Disabled {
-			continue
-		}
-		if strings.TrimSpace(appName) == "" {
-			return fmt.Errorf("config validation: apps keys must be non-empty")
-		}
-		app.Plugin = strings.TrimSpace(app.Plugin)
-		app.UI = strings.TrimSpace(app.UI)
-		app.Path = strings.TrimSpace(app.Path)
-		app.AuthorizationPolicy = strings.TrimSpace(app.AuthorizationPolicy)
-
-		if app.Plugin == "" {
-			return fmt.Errorf("config validation: apps.%s.plugin is required", appName)
-		}
-		if app.Path == "" {
-			return fmt.Errorf("config validation: apps.%s.path is required", appName)
-		}
-		normalizedPath, err := normalizeMountedUIPath(app.Path)
-		if err != nil {
-			return fmt.Errorf("config validation: apps.%s.path: %w", appName, err)
-		}
-		app.Path = normalizedPath
-		if err := validateAuthorizationPolicyReference(cfg, "app", appName, app.AuthorizationPolicy); err != nil {
-			return err
-		}
-		if prev, exists := seenPlugins[app.Plugin]; exists && prev != appName {
-			return fmt.Errorf("config validation: apps.%s.plugin %q duplicates apps.%s", appName, app.Plugin, prev)
-		}
-		plugin := cfg.Plugins[app.Plugin]
+	pluginNames := slices.Sorted(maps.Keys(cfg.Plugins))
+	seenUIs := make(map[string]string, len(pluginNames))
+	for _, pluginName := range pluginNames {
+		plugin := cfg.Plugins[pluginName]
 		if plugin == nil {
-			return fmt.Errorf("config validation: apps.%s.plugin references unknown plugin %q", appName, app.Plugin)
+			return fmt.Errorf("config validation: plugins.%s is required", pluginName)
 		}
 		if plugin.Disabled {
-			return fmt.Errorf("config validation: apps.%s.plugin references disabled plugin %q", appName, app.Plugin)
-		}
-		if current := strings.TrimSpace(plugin.AuthorizationPolicy); current != "" && current != app.AuthorizationPolicy {
-			return fmt.Errorf("config validation: apps.%s.plugin %q conflicts with plugins.%s.authorizationPolicy", appName, app.Plugin, app.Plugin)
-		}
-		plugin.AuthorizationPolicy = app.AuthorizationPolicy
-		seenPlugins[app.Plugin] = appName
-
-		if app.UI == "" {
 			continue
 		}
-		if prev, exists := seenUIs[app.UI]; exists && prev != appName {
-			return fmt.Errorf("config validation: apps.%s.ui %q duplicates apps.%s", appName, app.UI, prev)
+		plugin.UI = strings.TrimSpace(plugin.UI)
+		plugin.MountPath = strings.TrimSpace(plugin.MountPath)
+		plugin.AuthorizationPolicy = strings.TrimSpace(plugin.AuthorizationPolicy)
+
+		if plugin.MountPath == "" {
+			if plugin.UI != "" {
+				return fmt.Errorf("config validation: plugins.%s.ui requires plugins.%s.mountPath", pluginName, pluginName)
+			}
+			continue
 		}
-		ui := cfg.Providers.UI[app.UI]
+		normalizedPath, err := normalizeMountedUIPath(plugin.MountPath)
+		if err != nil {
+			return fmt.Errorf("config validation: plugins.%s.mountPath: %w", pluginName, err)
+		}
+		plugin.MountPath = normalizedPath
+		if err := validateAuthorizationPolicyReference(cfg, "plugin", pluginName, plugin.AuthorizationPolicy); err != nil {
+			return err
+		}
+		if plugin.UI == "" {
+			continue
+		}
+		if prev, exists := seenUIs[plugin.UI]; exists && prev != pluginName {
+			return fmt.Errorf("config validation: plugins.%s.ui %q duplicates plugins.%s", pluginName, plugin.UI, prev)
+		}
+		ui := cfg.Providers.UI[plugin.UI]
 		if ui == nil {
-			return fmt.Errorf("config validation: apps.%s.ui references unknown ui %q", appName, app.UI)
+			return fmt.Errorf("config validation: plugins.%s.ui references unknown ui %q", pluginName, plugin.UI)
 		}
 		if ui.Disabled {
-			return fmt.Errorf("config validation: apps.%s.ui references disabled ui %q", appName, app.UI)
+			return fmt.Errorf("config validation: plugins.%s.ui references disabled ui %q", pluginName, plugin.UI)
 		}
-		if current := strings.TrimSpace(ui.AuthorizationPolicy); current != "" && current != app.AuthorizationPolicy {
-			return fmt.Errorf("config validation: apps.%s.ui %q conflicts with providers.ui.%s.authorizationPolicy", appName, app.UI, app.UI)
+		if current := strings.TrimSpace(ui.AuthorizationPolicy); current != "" && current != plugin.AuthorizationPolicy {
+			return fmt.Errorf("config validation: plugins.%s.ui %q conflicts with providers.ui.%s.authorizationPolicy", pluginName, plugin.UI, plugin.UI)
 		}
-		if current := strings.TrimSpace(ui.Path); current != "" && current != app.Path {
-			return fmt.Errorf("config validation: apps.%s.ui %q conflicts with providers.ui.%s.path", appName, app.UI, app.UI)
+		if current := strings.TrimSpace(ui.Path); current != "" && current != plugin.MountPath {
+			return fmt.Errorf("config validation: plugins.%s.ui %q conflicts with providers.ui.%s.path", pluginName, plugin.UI, plugin.UI)
 		}
-		ui.AuthorizationPolicy = app.AuthorizationPolicy
-		ui.Path = app.Path
-		seenUIs[app.UI] = appName
+		ui.AuthorizationPolicy = plugin.AuthorizationPolicy
+		ui.Path = plugin.MountPath
+		seenUIs[plugin.UI] = pluginName
 	}
 
 	return nil

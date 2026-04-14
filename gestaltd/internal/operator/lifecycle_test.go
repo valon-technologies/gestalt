@@ -324,7 +324,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalMountedWebUIWithoutLockfile(t *test
 			wantPath: "/create-customer-roadmap-review",
 		},
 		{
-			name: "app bound mounted ui",
+			name: "plugin mount binds explicit ui",
 			uiConfigYAML: `  ui:
     roadmap:
       source:
@@ -333,14 +333,11 @@ plugins:
     roadmap:
       source:
         path: ./plugin/manifest.yaml
+      ui: roadmap
+      mountPath: /create-customer-roadmap-review
+      authorizationPolicy: roadmap_policy
 `,
-			extraYAML: `apps:
-  roadmap_review:
-    plugin: roadmap
-    ui: roadmap
-    path: /create-customer-roadmap-review
-    authorizationPolicy: roadmap_policy
-authorization:
+			extraYAML: `authorization:
   policies:
     roadmap_policy:
       default: deny
@@ -353,7 +350,7 @@ authorization:
 			wantPolicy: "roadmap_policy",
 		},
 		{
-			name: "disabled explicit app binding does not suppress ui path validation",
+			name: "disabled explicit plugin mount does not suppress ui path validation",
 			uiConfigYAML: `  ui:
     roadmap:
       source:
@@ -364,51 +361,41 @@ authorization:
       path: /console
 plugins:
     roadmap:
+      disabled: true
       source:
         path: ./plugin/manifest.yaml
+      ui: roadmap
+      mountPath: /create-customer-roadmap-review
+      authorizationPolicy: roadmap_policy
 `,
-			uiKey: "roadmap",
-			extraYAML: `apps:
-  roadmap_review:
-    disabled: true
-    plugin: roadmap
-    ui: roadmap
-    path: /create-customer-roadmap-review
-    authorizationPolicy: roadmap_policy
-`,
+			uiKey:   "roadmap",
 			wantErr: "config validation: ui.roadmap.path: path is required",
 		},
 		{
-			name: "disabled app does not suppress matching ui path validation",
+			name: "disabled plugin does not suppress matching ui path validation",
 			uiConfigYAML: `  ui:
-    roadmap_review:
+    roadmap:
       source:
         path: ./webui/manifest.yaml
 plugins:
     roadmap:
+      disabled: true
       source:
         path: ./plugin/manifest.yaml
+      mountPath: /create-customer-roadmap-review
 `,
-			extraYAML: `apps:
-  roadmap_review:
-    disabled: true
-    plugin: roadmap
-`,
-			wantErr: "config validation: ui.roadmap_review.path: path is required",
+			wantErr: "config validation: ui.roadmap.path: path is required",
 		},
 		{
-			name: "plugin owned ui via app binding",
+			name: "plugin owned ui via plugin mount",
 			uiConfigYAML: `plugins:
     roadmap:
       source:
         path: ./plugin/manifest.yaml
+      mountPath: /create-customer-roadmap-review
+      authorizationPolicy: roadmap_policy
 `,
-			extraYAML: `apps:
-  roadmap_review:
-    plugin: roadmap
-    path: /create-customer-roadmap-review
-    authorizationPolicy: roadmap_policy
-authorization:
+			extraYAML: `authorization:
   policies:
     roadmap_policy:
       default: deny
@@ -416,7 +403,7 @@ authorization:
         - email: viewer@example.test
           role: viewer
 `,
-			uiKey:       "roadmap_review",
+			uiKey:       "roadmap",
 			wantPath:    "/create-customer-roadmap-review",
 			wantPolicy:  "roadmap_policy",
 			ownedUIPath: "../webui/manifest.yaml",
@@ -424,20 +411,17 @@ authorization:
 		{
 			name: "plugin owned ui with same-name ui overlay",
 			uiConfigYAML: `  ui:
-    roadmap_review:
+    roadmap:
       source:
         path: ./webui/manifest.yaml
 plugins:
     roadmap:
       source:
         path: ./plugin/manifest.yaml
+      mountPath: /create-customer-roadmap-review
+      authorizationPolicy: roadmap_policy
 `,
-			extraYAML: `apps:
-  roadmap_review:
-    plugin: roadmap
-    path: /create-customer-roadmap-review
-    authorizationPolicy: roadmap_policy
-authorization:
+			extraYAML: `authorization:
   policies:
     roadmap_policy:
       default: deny
@@ -445,7 +429,7 @@ authorization:
         - email: viewer@example.test
           role: viewer
 `,
-			uiKey:       "roadmap_review",
+			uiKey:       "roadmap",
 			wantPath:    "/create-customer-roadmap-review",
 			wantPolicy:  "roadmap_policy",
 			ownedUIPath: "../webui/manifest.yaml",
@@ -453,7 +437,7 @@ authorization:
 		{
 			name: "disabled same-name ui overlay is rejected",
 			uiConfigYAML: `  ui:
-    roadmap_review:
+    roadmap:
       disabled: true
       source:
         path: ./webui/manifest.yaml
@@ -461,13 +445,9 @@ plugins:
     roadmap:
       source:
         path: ./plugin/manifest.yaml
+      mountPath: /create-customer-roadmap-review
 `,
-			extraYAML: `apps:
-  roadmap_review:
-    plugin: roadmap
-    path: /create-customer-roadmap-review
-`,
-			wantErr:     "config validation: apps.roadmap_review owned ui conflicts with disabled providers.ui.roadmap_review",
+			wantErr:     "config validation: plugins.roadmap owned ui conflicts with disabled providers.ui.roadmap",
 			ownedUIPath: "../webui/manifest.yaml",
 		},
 	}
@@ -635,7 +615,7 @@ func TestLoadForExecutionAtPath_ReinitializesManagedPluginOwnedUIWhenUILockEntry
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  ui:
-    roadmap_review:
+    roadmap:
       source:
         ref: ` + webUIRef + `
         version: ` + version + `
@@ -645,12 +625,9 @@ plugins:
       source:
         ref: ` + pluginRef + `
         version: ` + version + `
+      mountPath: /create-customer-roadmap-review
 ` + `server:
 ` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-apps:
-  roadmap_review:
-    plugin: roadmap
-    path: /create-customer-roadmap-review
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
@@ -669,7 +646,7 @@ apps:
 	if err != nil {
 		t.Fatalf("InitAtPath: %v", err)
 	}
-	delete(lock.UIs, "roadmap_review")
+	delete(lock.UIs, "roadmap")
 	if err := WriteLockfile(filepath.Join(dir, InitLockfileName), lock); err != nil {
 		t.Fatalf("WriteLockfile: %v", err)
 	}
@@ -678,9 +655,9 @@ apps:
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
-	entry := loaded.Providers.UI["roadmap_review"]
+	entry := loaded.Providers.UI["roadmap"]
 	if entry == nil || entry.ResolvedManifest == nil {
-		t.Fatalf("Resolved app-owned UI = %+v", entry)
+		t.Fatalf("Resolved plugin-owned UI = %+v", entry)
 	}
 	if entry.Path != "/create-customer-roadmap-review" {
 		t.Fatalf("entry.Path = %q", entry.Path)
@@ -690,8 +667,8 @@ apps:
 	if err != nil {
 		t.Fatalf("ReadLockfile: %v", err)
 	}
-	if _, ok := rewrittenLock.UIs["roadmap_review"]; !ok {
-		t.Fatalf("lock.UIs = %#v, want roadmap_review entry restored", rewrittenLock.UIs)
+	if _, ok := rewrittenLock.UIs["roadmap"]; !ok {
+		t.Fatalf("lock.UIs = %#v, want roadmap entry restored", rewrittenLock.UIs)
 	}
 }
 
@@ -783,12 +760,9 @@ func TestLoadForExecutionAtPath_ResolvesManagedPluginOwnedUIFromManagedPath(t *t
       source:
         ref: ` + pluginRef + `
         version: ` + version + `
+      mountPath: /create-customer-roadmap-review
 ` + `server:
 ` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-apps:
-  roadmap_review:
-    plugin: roadmap
-    path: /create-customer-roadmap-review
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
@@ -803,9 +777,9 @@ apps:
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
-	entry := loaded.Providers.UI["roadmap_review"]
+	entry := loaded.Providers.UI["roadmap"]
 	if entry == nil || entry.ResolvedManifest == nil {
-		t.Fatalf("Resolved app-owned UI = %+v", entry)
+		t.Fatalf("Resolved plugin-owned UI = %+v", entry)
 	}
 	if entry.Path != "/create-customer-roadmap-review" {
 		t.Fatalf("entry.Path = %q", entry.Path)
@@ -882,12 +856,9 @@ func TestLoadForExecutionAtPath_ReinitializesManagedPluginOwnedUIWhenPluginLockI
       source:
         ref: ` + pluginRef + `
         version: ` + version + `
+      mountPath: /create-customer-roadmap-review
 ` + `server:
 ` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-apps:
-  roadmap_review:
-    plugin: roadmap
-    path: /create-customer-roadmap-review
 `
 		if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 			t.Fatalf("WriteFile config: %v", err)
@@ -920,9 +891,9 @@ apps:
 	if err != nil {
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
-	entry := loaded.Providers.UI["roadmap_review"]
+	entry := loaded.Providers.UI["roadmap"]
 	if entry == nil || entry.ResolvedManifest == nil {
-		t.Fatalf("Resolved app-owned UI = %+v", entry)
+		t.Fatalf("Resolved plugin-owned UI = %+v", entry)
 	}
 	if got := entry.ResolvedManifest.Version; got != newVersion {
 		t.Fatalf("ResolvedManifest.Version = %q, want %q", got, newVersion)
@@ -935,12 +906,12 @@ apps:
 	if err != nil {
 		t.Fatalf("ReadLockfile: %v", err)
 	}
-	lockEntry, ok := rewrittenLock.UIs["roadmap_review"]
+	lockEntry, ok := rewrittenLock.UIs["roadmap"]
 	if !ok {
-		t.Fatalf("lock.UIs = %#v, want roadmap_review entry restored", rewrittenLock.UIs)
+		t.Fatalf("lock.UIs = %#v, want roadmap entry restored", rewrittenLock.UIs)
 	}
 	if got := lockEntry.Version; got != newVersion {
-		t.Fatalf("lock.UIs[roadmap_review].Version = %q, want %q", got, newVersion)
+		t.Fatalf("lock.UIs[roadmap].Version = %q, want %q", got, newVersion)
 	}
 }
 
@@ -1004,12 +975,9 @@ func TestInitAtPath_RejectsManagedPluginOwnedUIPathOutsidePackage(t *testing.T) 
       source:
         ref: ` + pluginRef + `
         version: ` + version + `
+      mountPath: /create-customer-roadmap-review
 server:
 ` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-apps:
-  roadmap_review:
-    plugin: roadmap
-    path: /create-customer-roadmap-review
 `
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)

@@ -1,8 +1,8 @@
 # Web UIs
 
 Web UI providers are static asset bundles. Gestalt serves each configured
-bundle either directly from `providers.ui.<name>.path` or via a top-level
-`apps.<name>.path` binding. The built-in admin UI at `/admin` remains available
+bundle either directly from `providers.ui.<name>.path` or via
+`plugins.<name>.mountPath`. The built-in admin UI at `/admin` remains available
 regardless of whether public UI bundles are configured.
 
 ## How web UI providers work
@@ -25,7 +25,7 @@ First-party UI bundles live under
 
 Use `providers.ui` as a map of UI bundles. You can either mount a bundle
 directly from `providers.ui`, or bind it to a plugin-backed app through the
-top-level `apps` block. Omit `providers.ui` entirely to run headless with no
+`plugins` block. Omit `providers.ui` entirely to run headless with no
 public UI bundles.
 
 Point at a local source bundle during development:
@@ -49,27 +49,23 @@ providers:
       source:
         path: ./customer-roadmap-review/ui/manifest.yaml
 
-apps:
+plugins:
   roadmap_review:
-    plugin: roadmap_review
+    source:
+      path: ./customer-roadmap-review/plugin/manifest.yaml
     ui: roadmap
-    path: /create-customer-roadmap-review
+    mountPath: /create-customer-roadmap-review
     authorizationPolicy: roadmap_review
 ```
 
 Or let the plugin manifest own the UI bundle and keep only the deployment binding in config:
 
 ```yaml
-providers:
-  plugins:
-    roadmap_review:
-      source:
-        path: ./customer-roadmap-review/plugin/manifest.yaml
-
-apps:
+plugins:
   roadmap_review:
-    plugin: roadmap_review
-    path: /create-customer-roadmap-review
+    source:
+      path: ./customer-roadmap-review/plugin/manifest.yaml
+    mountPath: /create-customer-roadmap-review
     authorizationPolicy: roadmap_review
 ```
 
@@ -130,6 +126,6 @@ Asset-root layout, build hooks, and release packaging now live under
 
 ## What to read next
 
-- [Configuration](/configuration): `providers.ui`, `apps`, and headless deployments
+- [Configuration](/configuration): `providers.ui`, `plugins.<name>.mountPath`, and headless deployments
 - [Client Web UI](/client/web): what the default client exposes
 - [Custom Web UIs](/custom-providers/web-uis): advanced authoring docs
