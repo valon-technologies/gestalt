@@ -1767,44 +1767,6 @@ server:
 `,
 		},
 		{
-			name: "server indexeddb selector cannot use legacy and canonical keys together",
-			yaml: `
-server:
-  providers:
-    indexeddb: legacy
-  providers:
-    indexeddb: canonical
-`,
-		},
-		{
-			name: "indexeddb collection cannot use legacy and canonical keys together",
-			yaml: `
-providers:
-  indexeddb:
-    legacy:
-      source:
-        path: ./legacy/manifest.yaml
-  indexeddb:
-    canonical:
-      source:
-        path: ./canonical/manifest.yaml
-`,
-		},
-		{
-			name: "plugins cannot use legacy and canonical keys together",
-			yaml: `
-providers:
-plugins:
-    legacy:
-      source:
-        path: ./legacy/manifest.yaml
-plugins:
-  canonical:
-    source:
-      path: ./canonical/manifest.yaml
-`,
-		},
-		{
 			name: "multiple auth providers require selection or default",
 			yaml: `
 providers:
@@ -1826,6 +1788,72 @@ providers:
 			_, err := Load(path)
 			if err == nil {
 				t.Fatal("Load: expected error, got nil")
+			}
+		})
+	}
+}
+
+func TestLoadRejectsDuplicateYAMLKeys(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		yaml string
+		want string
+	}{
+		{
+			name: "duplicate server providers mapping",
+			yaml: `
+server:
+  providers:
+    indexeddb: legacy
+  providers:
+    indexeddb: canonical
+`,
+			want: `mapping key "providers" already defined`,
+		},
+		{
+			name: "duplicate indexeddb collection mapping",
+			yaml: `
+providers:
+  indexeddb:
+    legacy:
+      source:
+        path: ./legacy/manifest.yaml
+  indexeddb:
+    canonical:
+      source:
+        path: ./canonical/manifest.yaml
+`,
+			want: `mapping key "indexeddb" already defined`,
+		},
+		{
+			name: "duplicate plugins mapping",
+			yaml: `
+plugins:
+  legacy:
+    source:
+      path: ./legacy/manifest.yaml
+plugins:
+  canonical:
+    source:
+      path: ./canonical/manifest.yaml
+`,
+			want: `mapping key "plugins" already defined`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			path := mustWriteConfigFile(t, tc.yaml)
+			_, err := Load(path)
+			if err == nil {
+				t.Fatal("Load: expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Load error = %v, want substring %q", err, tc.want)
 			}
 		})
 	}
