@@ -14,19 +14,19 @@ providers:
   cache:
     session:
       source:
-        ref: github.com/valon-technologies/gestalt-providers/cache/redis
+        ref: github.com/valon-technologies/gestalt-providers/cache/valkey
         version: 0.0.1-alpha.1
       config:
-        addr: ${VALKEY_ADDR}
-        db: 0
+        address: ${VALKEY_ADDR}
+        database: 0
 
     rate_limit:
       source:
-        ref: github.com/valon-technologies/gestalt-providers/cache/redis
+        ref: github.com/valon-technologies/gestalt-providers/cache/valkey
         version: 0.0.1-alpha.1
       config:
-        addr: ${VALKEY_ADDR}
-        db: 1
+        address: ${VALKEY_ADDR}
+        database: 1
 
 plugins:
   search:

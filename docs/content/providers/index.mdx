@@ -15,10 +15,10 @@ validates it, and starts it with the permissions and request context it needs.
 | Kind | Purpose | Config location |
 | --- | --- | --- |
 | `plugin` | Tool providers that expose operations over CLI, HTTP API, and MCP | `plugins.<name>` |
-| `auth` | Platform login backends | `providers.auth` |
+| `auth` | Platform login backends | `providers.auth.<name>` |
 | `cache` | Plugin-bound cache backends | `providers.cache.<name>` |
 | `indexeddb` | Persistent state backends for users, sessions, tokens, and credentials | `providers.indexeddb.<name>` |
-| `secrets` | Secret managers that resolve `secret://` references | `providers.secrets` |
+| `secrets` | Secret managers that resolve `secret://` references | `providers.secrets.<name>` |
 | `webui` | Public UI bundles served under configured path prefixes | `providers.ui` |
 
 ## How providers work
@@ -43,10 +43,10 @@ The repository is organized by provider type:
 | Type | Repository path | Typical config key |
 | --- | --- | --- |
 | Plugins | [`plugins/`](https://github.com/valon-technologies/gestalt-providers/tree/main/plugins) | `plugins.<name>` |
-| Auth | [`auth/`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth) | `providers.auth` |
+| Auth | [`auth/`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth) | `providers.auth.<name>` |
 | Cache | [`cache/`](https://github.com/valon-technologies/gestalt-providers/tree/main/cache) | `providers.cache.<name>` |
 | IndexedDB | [`indexeddb/`](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb) | `providers.indexeddb.<name>` |
-| Secrets | [`secrets/`](https://github.com/valon-technologies/gestalt-providers/tree/main/secrets) | `providers.secrets` |
+| Secrets | [`secrets/`](https://github.com/valon-technologies/gestalt-providers/tree/main/secrets) | `providers.secrets.<name>` |
 | Web UI bundles | [`web/`](https://github.com/valon-technologies/gestalt-providers/tree/main/web) | `providers.ui` |
 
 ## Using providers
@@ -60,29 +60,30 @@ server:
 
 providers:
   auth:
-    source:
-      ref: github.com/valon-technologies/gestalt-providers/auth/oidc
-      version: 0.0.1-alpha.1
-    config:
-      issuerUrl: https://login.example.com
-      clientId: ${OIDC_CLIENT_ID}
-      clientSecret: secret://oidc-client-secret
+    oidc:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/auth/oidc
+        version: 0.0.1-alpha.1
+      config:
+        issuerUrl: https://login.example.com
+        clientId: ${OIDC_CLIENT_ID}
+        clientSecret: secret://oidc-client-secret
 
   indexeddb:
     main:
       source:
         ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
-        version: 0.0.1-alpha.1
+        version: 0.0.1-alpha.2
       config:
         dsn: ${DATABASE_URL}
 
   cache:
     session:
       source:
-        ref: github.com/valon-technologies/gestalt-providers/cache/redis
+        ref: github.com/valon-technologies/gestalt-providers/cache/valkey
         version: 0.0.1-alpha.1
       config:
-        address: ${REDIS_ADDR}
+        address: ${VALKEY_ADDR}
 
 plugins:
   github:

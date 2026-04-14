@@ -4,13 +4,17 @@ Gestalt is configured from a single YAML file. This page covers the key concepts
 
 ## Config file structure
 
-A Gestalt config has four top-level keys: `server` for host settings, `authorization` for shared human/workload access policy, `providers` for host-scoped providers and web UIs, and `plugins` for executable integrations and optional plugin-backed UI mounts.
+A Gestalt config has four top-level keys: `server` for host settings and host-provider selection, `authorization` for shared human/workload access policy, `providers` for named host-scoped providers and web UIs, and `plugins` for executable integrations and optional plugin-backed UI mounts.
 
 ```yaml
 server:
   encryptionKey: ...        # required, root deployment secret
   baseUrl: ...              # public URL for OAuth callbacks
   providers:
+    auth: ...               # optional selected auth provider
+    secrets: ...            # optional selected secrets provider
+    telemetry: ...          # optional selected telemetry provider
+    audit: ...              # optional selected audit provider
     indexeddb: ...          # selected storage provider
   public:                   # public listener (default port 8080)
     host: ...
@@ -26,18 +30,25 @@ authorization:
   workloads: ...            # workload bearer-token policy
 
 providers:
-  auth: ...                 # platform login (ProviderEntry)
-  secrets: ...              # secret resolution (default: env)
-  telemetry: ...            # metrics and tracing (default: stdout)
-  audit: ...                # audit log routing (default: inherit)
-  ui: ...                   # web UI bundle (ProviderEntry)
+  auth:                     # named auth providers
+    <name>: ...            # each is a ProviderEntry
+  secrets:                  # named secret managers (default: providers.secrets.default = env)
+    <name>: ...            # each is a ProviderEntry
+  telemetry:                # named telemetry pipelines (default: providers.telemetry.default = stdout)
+    <name>: ...            # each is a ProviderEntry
+  audit:                    # named audit pipelines (default: providers.audit.default = inherit)
+    <name>: ...            # each is a ProviderEntry
+  ui:                       # named web UI bundles
+    <name>: ...             # each is a UIEntry
   indexeddb:                # named storage providers
+    <name>: ...             # each is a ProviderEntry
+  cache:                    # named cache providers
     <name>: ...             # each is a ProviderEntry
 plugins:
   <name>: ...               # each is a ProviderEntry
 ```
 
-Each provider entry accepts `source` (where to load it from), `config` (provider-specific settings), `disabled`, `allowedHosts`, `connections`, and optional metadata fields. See the [Config File](/reference/config-file) reference for every field.
+ProviderEntry-backed entries accept `source` (where to load it from), `config` (provider-specific settings), `disabled`, `allowedHosts`, and optional metadata fields. Plugin entries additionally support plugin-only fields such as `connections`, `allowedOperations`, `mountPath`, and `ui`. See the [Config File](/reference/config-file) reference for every field.
 
 ## Key concepts
 
@@ -179,12 +190,13 @@ MCP tool exposure is declared in the provider manifest via `spec.mcp: true`. Whe
 
 ## Secrets
 
-The `providers.secrets` entry configures how `secret://` references in the config are resolved at startup. The default is `env`, which reads secrets from environment variables:
+The `providers.secrets` map configures how `secret://` references in the config are resolved at startup. When omitted entirely, Gestalt synthesizes `providers.secrets.default` with builtin `env`:
 
 ```yaml
 providers:
   secrets:
-    source: env
+    default:
+      source: env
 ```
 
 For production, use `file` (reads from a directory, works with Kubernetes volume-mounted secrets) or a cloud secret manager:
@@ -192,9 +204,10 @@ For production, use `file` (reads from a directory, works with Kubernetes volume
 ```yaml
 providers:
   secrets:
-    source: file
-    config:
-      dir: /etc/gestalt-secrets
+    default:
+      source: file
+      config:
+        dir: /etc/gestalt-secrets
 ```
 
 Cloud backends (Google Secret Manager, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault) are also available. See [Secret Providers](/providers/secrets) for the full list.
@@ -223,36 +236,42 @@ The built-in admin UI at `/admin` is always available regardless of this setting
 
 ## Platform auth
 
-The `providers.auth` entry protects the web UI, HTTP API, and `/mcp` endpoint. For local development, omit it or disable it explicitly:
+The `providers.auth` map protects the web UI, HTTP API, and `/mcp` endpoint. For local development, omit it or disable it explicitly:
 
 ```yaml
 providers:
   auth:
-    disabled: true
+    default:
+      disabled: true
 ```
 
 For multi-user deployments, point at a published auth provider:
 
 ```yaml
+server:
+  providers:
+    auth: oidc
+
 providers:
   auth:
-    source:
-      ref: github.com/valon-technologies/gestalt-providers/auth/oidc
-      version: 0.0.1-alpha.1
-    config:
-      issuerUrl: https://login.example.com
-      clientId: ${OIDC_CLIENT_ID}
-      clientSecret: secret://oidc-client-secret
+    oidc:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/auth/oidc
+        version: 0.0.1-alpha.1
+      config:
+        issuerUrl: https://login.example.com
+        clientId: ${OIDC_CLIENT_ID}
+        clientSecret: secret://oidc-client-secret
 ```
 
 For production OIDC providers, keep `issuerUrl` on `https://`. If you run a
 local plaintext issuer on loopback for development, add
-`allowInsecureHttp: true` under `providers.auth.config`.
+`allowInsecureHttp: true` under `providers.auth.<name>.config`.
 
 | Scenario | Configuration |
 | --- | --- |
-| Local development | Omit `providers.auth` or set `providers.auth.disabled: true` |
-| Multi-user deployment | `providers.auth` with a published OIDC or Google auth provider |
+| Local development | Omit `providers.auth` or set `providers.auth.default.disabled: true` |
+| Multi-user deployment | `providers.auth.<name>` with a published OIDC or Google auth provider |
 | Per-user upstream access | `mode: user` on plugin connections |
 | Shared service credential | `mode: identity` on plugin connections |
 
@@ -288,9 +307,11 @@ Gestalt ships with builtin telemetry and audit providers that work without any c
 ```yaml
 providers:
   telemetry:
-    source: stdout
+    default:
+      source: stdout
   audit:
-    source: inherit
+    default:
+      source: inherit
 ```
 
 `inherit` routes audit events through the telemetry provider. For production observability with OpenTelemetry, see [Observability](/observability).
@@ -325,7 +346,7 @@ gestaltd validate --config ./config.yaml
 
 ### Defaults and required fields
 
-Gestalt defaults `server.public.port` to `8080`, `providers.secrets` to `env`, and `providers.telemetry` to `stdout`. The required fields are `providers.indexeddb`, `server.providers.indexeddb`, and `server.encryptionKey`. Platform auth is optional.
+Gestalt defaults `server.public.port` to `8080`, `providers.secrets.default` to `env`, `providers.telemetry.default` to `stdout`, and `providers.audit.default` to `inherit`. The required fields are `providers.indexeddb`, `server.providers.indexeddb`, and `server.encryptionKey`. Platform auth is optional.
 
 `server.encryptionKey` is the root deployment secret. Gestalt derives token encryption and session material from it. Changing this key invalidates all existing sessions and tokens, so treat it as a meaningful deployment event.
 
@@ -338,17 +359,19 @@ server:
   baseUrl: https://gestalt.example.com
   encryptionKey: secret://gestalt-encryption-key
   providers:
+    auth: oidc
     indexeddb: main
 
 providers:
   auth:
-    source:
-      ref: github.com/valon-technologies/gestalt-providers/auth/oidc
-      version: 0.0.1-alpha.1
-    config:
-      issuerUrl: https://login.example.com
-      clientId: ${OIDC_CLIENT_ID}
-      clientSecret: secret://oidc-client-secret
+    oidc:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/auth/oidc
+        version: 0.0.1-alpha.1
+      config:
+        issuerUrl: https://login.example.com
+        clientId: ${OIDC_CLIENT_ID}
+        clientSecret: secret://oidc-client-secret
 
   indexeddb:
     main:

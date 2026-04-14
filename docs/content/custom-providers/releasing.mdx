@@ -180,7 +180,7 @@ spec:
   configSchemaPath: schemas/ui-config.schema.json
 ```
 
-`gestaltd init` prepares the released UI and records it in `gestalt.lock.json`. `gestaltd serve --locked` then serves the prepared asset root at `/`. Omit `ui` to use the pinned first-party default UI bundle, or set `ui: { disabled: true }` to disable the public UI. The built-in admin UI remains available at `/admin` regardless.
+`gestaltd init` prepares the released UI and records it in `gestalt.lock.json`. `gestaltd serve --locked` then serves the prepared asset root at whatever public path the deployment config binds for that UI bundle. Omit `providers.ui` to run headless with no public UI bundles, or set `providers.ui.<name>.disabled: true` to disable a specific mounted UI entry. The built-in admin UI remains available at `/admin` regardless.
 
 ## Build a release
 

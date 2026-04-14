@@ -224,18 +224,19 @@ Two optional interfaces extend the base contract.
 
 ## Config reference
 
-To use a Google auth provider in a Gestalt deployment, reference it in the `providers.auth` block:
+To use a Google auth provider in a Gestalt deployment, reference it as a named entry in `providers.auth`:
 
 ```yaml
 providers:
   auth:
-    source:
-      path: ./google-auth/manifest.yaml
-    config:
-      clientId: ${GOOGLE_CLIENT_ID}
-      clientSecret: secret://google-client-secret
-      allowedDomains:
-        - example.com
+    google:
+      source:
+        path: ./google-auth/manifest.yaml
+      config:
+        clientId: ${GOOGLE_CLIENT_ID}
+        clientSecret: secret://google-client-secret
+        allowedDomains:
+          - example.com
 ```
 
 `source.path` points at the auth provider's `manifest.yaml` during development. For production, use `source.ref` and `version` to reference a published release. The `config` block is passed to `Configure` at startup and validated against the config schema if one was declared in the manifest.

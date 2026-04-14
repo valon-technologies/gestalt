@@ -62,20 +62,19 @@ server:
   public:
     port: 8080
   encryptionKey: ${GESTALT_ENCRYPTION_KEY}
+  providers:
+    indexeddb: main
 
-datastores:
-  main:
-    provider:
+providers:
+  indexeddb:
+    main:
       source:
         ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
         version: 0.0.1-alpha.2
-    config:
-      dsn: sqlite:///data/gestalt.db
-datastore: main
+      config:
+        dsn: sqlite:///data/gestalt.db
 
 plugins: {}
-ui:
-  provider: none
 ```
 
 ## Compose example

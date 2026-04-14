@@ -6,7 +6,7 @@ The HTTP API uses "integrations" in route paths (e.g. `/api/v1/integrations`) as
 
 ## Authentication model
 
-Authenticated routes accept a `session_token` cookie or an `Authorization: Bearer <token>` header. Valid bearer tokens are platform session tokens and Gestalt API tokens (`gst_api_...`).
+Authenticated routes accept a `session_token` cookie or an `Authorization: Bearer <token>` header. Valid bearer tokens include Gestalt API tokens (`gst_api_...`), workload tokens (`gst_wld_...`), and auth-provider-issued tokens when the configured platform auth provider supports direct token validation.
 
 ## Unauthenticated Routes
 

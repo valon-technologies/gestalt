@@ -40,16 +40,18 @@ deploy/
   .gestaltd/ui/        # vendored UI assets (optional)
 ```
 
-The lock file is a JSON document that records every resolved provider:
+The lock file is a JSON document that records resolved plugins and host-scoped providers in separate maps:
 
 ```json
 {
   "version": 1,
-  "providers": {
-    "indexeddb/relationaldb": {
+  "indexeddbs": {
+    "main": {
+      "fingerprint": "ab12cd...",
       "source": "github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb",
-      "version": "0.5.2",
-      "sha256": "ab12cd..."
+      "version": "0.0.1-alpha.2",
+      "manifest": ".gestaltd/providers/main/manifest.json",
+      "executable": ".gestaltd/providers/main/artifacts/linux/amd64/provider"
     }
   }
 }
