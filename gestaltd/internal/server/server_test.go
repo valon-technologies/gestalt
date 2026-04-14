@@ -1653,9 +1653,13 @@ func TestListIntegrations(t *testing.T) {
 	t.Parallel()
 
 	stub := &coretesting.StubIntegration{N: "slack", DN: "Slack", Desc: "Team messaging"}
+	appStub := &coretesting.StubIntegration{N: "roadmap_review", DN: "Roadmap Review", Desc: "Mounted internal app"}
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.Providers = testutil.NewProviderRegistry(t, stub, appStub)
 		cfg.Services = coretesting.NewStubServices(t)
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"roadmap_review": {AppBinding: "roadmap_review"},
+		}
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -3300,9 +3304,13 @@ func TestDisconnectIntegration_NotConnected(t *testing.T) {
 	t.Parallel()
 
 	stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
+	appStub := &coretesting.StubIntegration{N: "roadmap_review", DN: "Roadmap Review"}
 	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.Providers = testutil.NewProviderRegistry(t, stub, appStub)
 		cfg.Services = coretesting.NewStubServices(t)
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"roadmap_review": {AppBinding: "roadmap_review"},
+		}
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -3315,6 +3323,17 @@ func TestDisconnectIntegration_NotConnected(t *testing.T) {
 
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", resp.StatusCode)
+	}
+
+	reqHidden, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/integrations/roadmap_review", nil)
+	respHidden, err := http.DefaultClient.Do(reqHidden)
+	if err != nil {
+		t.Fatalf("hidden request: %v", err)
+	}
+	defer func() { _ = respHidden.Body.Close() }()
+
+	if respHidden.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected hidden app-backed integration to return 404, got %d", respHidden.StatusCode)
 	}
 }
 
@@ -3971,6 +3990,10 @@ func TestExecuteOperation_HumanAuthorizationUsesSessionMetadataOnCollision(t *te
 func TestListOperations_NotFound(t *testing.T) {
 	t.Parallel()
 	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, &coretesting.StubIntegration{N: "roadmap_review", DN: "Roadmap Review"})
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"roadmap_review": {AppBinding: "roadmap_review"},
+		}
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -3983,6 +4006,17 @@ func TestListOperations_NotFound(t *testing.T) {
 
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", resp.StatusCode)
+	}
+
+	reqHidden, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/roadmap_review/operations", nil)
+	respHidden, err := http.DefaultClient.Do(reqHidden)
+	if err != nil {
+		t.Fatalf("hidden request: %v", err)
+	}
+	defer func() { _ = respHidden.Body.Close() }()
+
+	if respHidden.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected hidden app-backed integration to return 404, got %d", respHidden.StatusCode)
 	}
 }
 
@@ -5729,54 +5763,97 @@ func TestLoginCallbackWithStatefulHandler(t *testing.T) {
 func TestStartIntegrationOAuth(t *testing.T) {
 	t.Parallel()
 
-	stub := &stubIntegrationWithAuthURL{
-		StubIntegration: coretesting.StubIntegration{N: "slack"},
-		authURL:         "https://slack.com/oauth/v2/authorize",
-	}
+	t.Run("app backed integration is hidden", func(t *testing.T) {
+		t.Parallel()
 
-	handler := &testOAuthHandler{
-		authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
-	}
+		stub := &stubIntegrationWithAuthURL{
+			StubIntegration: coretesting.StubIntegration{N: "slack"},
+			authURL:         "https://slack.com/oauth/v2/authorize",
+		}
 
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
-		cfg.ConnectionAuth = testConnectionAuth("slack", handler)
-		cfg.Services = coretesting.NewStubServices(t)
+		handler := &testOAuthHandler{
+			authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
+		}
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, stub)
+			cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
+			cfg.ConnectionAuth = testConnectionAuth("slack", handler)
+			cfg.PluginDefs = map[string]*config.ProviderEntry{
+				"slack": {AppBinding: "sample_app"},
+			}
+			cfg.Services = coretesting.NewStubServices(t)
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		body := bytes.NewBufferString(`{"integration":"slack","scopes":["channels:read"]}`)
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", body)
+		req.Header.Set("Authorization", "Bearer ignored")
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d", resp.StatusCode)
+		}
 	})
-	testutil.CloseOnCleanup(t, ts)
 
-	body := bytes.NewBufferString(`{"integration":"slack","scopes":["channels:read"]}`)
-	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", body)
-	req.Header.Set("Authorization", "Bearer ignored")
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
+	t.Run("user facing integration returns an oauth url", func(t *testing.T) {
+		t.Parallel()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
+		stub := &stubIntegrationWithAuthURL{
+			StubIntegration: coretesting.StubIntegration{N: "slack"},
+			authURL:         "https://slack.com/oauth/v2/authorize",
+		}
 
-	var result map[string]string
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		t.Fatalf("decoding: %v", err)
-	}
-	if result["url"] == "" {
-		t.Fatal("expected non-empty url")
-	}
-	if result["state"] == "" {
-		t.Fatal("expected non-empty state")
-	}
-	parsedURL, err := url.Parse(result["url"])
-	if err != nil {
-		t.Fatalf("parse auth URL: %v", err)
-	}
-	if parsedURL.Query().Get("state") != result["state"] {
-		t.Fatal("expected auth URL state to match returned state")
-	}
+		handler := &testOAuthHandler{
+			authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
+		}
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, stub)
+			cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
+			cfg.ConnectionAuth = testConnectionAuth("slack", handler)
+			cfg.Services = coretesting.NewStubServices(t)
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		body := bytes.NewBufferString(`{"integration":"slack","scopes":["channels:read"]}`)
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", body)
+		req.Header.Set("Authorization", "Bearer ignored")
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+
+		var result map[string]string
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			t.Fatalf("decoding: %v", err)
+		}
+		if result["url"] == "" {
+			t.Fatal("expected non-empty url")
+		}
+		if result["state"] == "" {
+			t.Fatal("expected non-empty state")
+		}
+		parsedURL, err := url.Parse(result["url"])
+		if err != nil {
+			t.Fatalf("parse auth URL: %v", err)
+		}
+		if parsedURL.Query().Get("state") != result["state"] {
+			t.Fatal("expected auth URL state to match returned state")
+		}
+	})
+
 }
 
 func TestIntegrationOAuthCallback(t *testing.T) {
@@ -7645,6 +7722,35 @@ func TestConnectManual(t *testing.T) {
 
 	const pendingSelectionPath = "/api/v1/auth/pending-connection"
 
+	t.Run("app backed integration is hidden", func(t *testing.T) {
+		t.Parallel()
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
+				StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
+			})
+			cfg.DefaultConnection = map[string]string{"manual-svc": config.PluginConnectionName}
+			cfg.PluginDefs = map[string]*config.ProviderEntry{
+				"manual-svc": {AppBinding: "sample_app"},
+			}
+			cfg.Services = coretesting.NewStubServices(t)
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		body := bytes.NewBufferString(`{"integration":"manual-svc","credential":"my-api-key"}`)
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusNotFound {
+			t.Fatalf("expected 404, got %d", resp.StatusCode)
+		}
+	})
+
 	t.Run("connected", func(t *testing.T) {
 		t.Parallel()
 
@@ -7919,6 +8025,7 @@ func TestConnectManual(t *testing.T) {
 			t.Fatalf("expected workspace metadata beta, got %q", metadata["workspace"])
 		}
 	})
+
 }
 
 func TestConnectManual_OAuthProviderRejected(t *testing.T) {

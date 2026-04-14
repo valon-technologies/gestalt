@@ -49,7 +49,7 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	}
 	providerName = req.Integration
 
-	prov, ok := s.getProvider(w, req.Integration)
+	prov, ok := s.getAuthorizedUserFacingProvider(w, r, req.Integration)
 	if !ok {
 		auditErr = errors.New("integration not found")
 		return

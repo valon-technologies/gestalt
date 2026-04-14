@@ -777,6 +777,8 @@ apps:
 
 `apps` is a deployment-owned binding layer for plugin-backed mounted apps. Each entry references an existing `plugins.<name>` entry and an existing `providers.ui.<name>` bundle, then supplies the public path and optional shared human authorization policy for both surfaces.
 
+Plugins bound through `apps` are treated as mounted applications rather than generic integrations. They do not appear in `/api/v1/integrations` or on the default Plugins page.
+
 | Field | Description |
 | --- | --- |
 | `plugin` | Required plugin key from `plugins`. |

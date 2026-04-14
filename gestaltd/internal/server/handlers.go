@@ -139,6 +139,9 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 	names := s.providers.List()
 	out := make([]integrationInfo, 0, len(names))
 	for _, name := range names {
+		if s.isAppBackedPlugin(name) {
+			continue
+		}
 		if !s.allowProvider(p, name) {
 			continue
 		}
@@ -208,6 +211,14 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, out)
 }
 
+func (s *Server) isAppBackedPlugin(name string) bool {
+	if s == nil || s.pluginDefs == nil {
+		return false
+	}
+	entry := s.pluginDefs[name]
+	return entry != nil && strings.TrimSpace(entry.AppBinding) != ""
+}
+
 func (s *Server) userConnectedIntegrations(r *http.Request) (map[string][]instanceInfo, error) {
 	user := UserFromContext(r.Context())
 	if user == nil || user.Email == "" {
@@ -252,7 +263,7 @@ func (s *Server) disconnectIntegration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, ok := s.getProvider(w, name); !ok {
+	if _, ok := s.getAuthorizedUserFacingProvider(w, r, name); !ok {
 		auditErr = errors.New("integration not found")
 		return
 	}
@@ -357,6 +368,26 @@ func (s *Server) getProvider(w http.ResponseWriter, name string) (core.Provider,
 	return prov, true
 }
 
+func (s *Server) getUserFacingProvider(w http.ResponseWriter, name string) (core.Provider, bool) {
+	if s.isAppBackedPlugin(name) {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("integration %q not found", name))
+		return nil, false
+	}
+	return s.getProvider(w, name)
+}
+
+func (s *Server) getAuthorizedUserFacingProvider(w http.ResponseWriter, r *http.Request, name string) (core.Provider, bool) {
+	prov, ok := s.getUserFacingProvider(w, name)
+	if !ok {
+		return nil, false
+	}
+	if !s.allowProvider(PrincipalFromContext(r.Context()), name) {
+		writeError(w, http.StatusForbidden, "provider access denied")
+		return nil, false
+	}
+	return prov, true
+}
+
 func queryParamValue(r *http.Request, names ...string) string {
 	for _, name := range names {
 		if value := r.URL.Query().Get(name); value != "" {
@@ -431,7 +462,7 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 	const operation = "operations.list"
 
 	name := chi.URLParam(r, "name")
-	prov, ok := s.getProvider(w, name)
+	prov, ok := s.getUserFacingProvider(w, name)
 	if !ok {
 		return
 	}

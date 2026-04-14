@@ -157,6 +157,7 @@ type ProviderEntry struct {
 	Discovery            *providermanifestv1.ProviderDiscovery `yaml:"-"`
 	ResolvedAssetRoot    string                                `yaml:"-"`
 	MCPToolPrefix        string                                `yaml:"-"`
+	AppBinding           string                                `yaml:"-"`
 }
 
 type ProviderSurfaceOverrides struct {
@@ -1276,15 +1277,18 @@ func applyAppBindings(cfg *Config) error {
 		if plugin.Disabled {
 			return fmt.Errorf("config validation: apps.%s.plugin references disabled plugin %q", appName, app.Plugin)
 		}
+		if current := strings.TrimSpace(plugin.AuthorizationPolicy); current != "" && current != app.AuthorizationPolicy {
+			return fmt.Errorf("config validation: apps.%s.plugin %q conflicts with plugins.%s.authorizationPolicy", appName, app.Plugin, app.Plugin)
+		}
+		plugin.AuthorizationPolicy = app.AuthorizationPolicy
+		plugin.AppBinding = appName
+		seenPlugins[app.Plugin] = appName
 		ui := cfg.Providers.UI[app.UI]
 		if ui == nil {
 			return fmt.Errorf("config validation: apps.%s.ui references unknown ui %q", appName, app.UI)
 		}
 		if ui.Disabled {
 			return fmt.Errorf("config validation: apps.%s.ui references disabled ui %q", appName, app.UI)
-		}
-		if current := strings.TrimSpace(plugin.AuthorizationPolicy); current != "" && current != app.AuthorizationPolicy {
-			return fmt.Errorf("config validation: apps.%s.plugin %q conflicts with plugins.%s.authorizationPolicy", appName, app.Plugin, app.Plugin)
 		}
 		if current := strings.TrimSpace(ui.AuthorizationPolicy); current != "" && current != app.AuthorizationPolicy {
 			return fmt.Errorf("config validation: apps.%s.ui %q conflicts with providers.ui.%s.authorizationPolicy", appName, app.UI, app.UI)
