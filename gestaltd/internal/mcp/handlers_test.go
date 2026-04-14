@@ -71,6 +71,23 @@ func TestMakeHandlerPreservesNoTokenErrors(t *testing.T) {
 	}
 }
 
+func TestMakeHandlerSanitizesUserResolutionErrors(t *testing.T) {
+	handler := makeHandler(stubInvoker{err: fmt.Errorf("%w: principal has no user ID or email", invocation.ErrUserResolution)}, "demo", "op", "")
+
+	result, err := handler(testPrincipalContext(), mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{Arguments: map[string]any{}},
+	})
+	if err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatalf("expected tool error result")
+	}
+	if text := toolResultText(t, result); text != "failed to resolve user" {
+		t.Fatalf("unexpected tool error text %q", text)
+	}
+}
+
 func testPrincipalContext() context.Context {
 	return principal.WithPrincipal(context.Background(), &principal.Principal{
 		UserID: "user-1",
