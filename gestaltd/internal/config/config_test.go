@@ -1423,6 +1423,31 @@ providers:
 		}
 	})
 
+	t.Run("rejects disabled fileapi binding names", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    fileapi:
+      - primary
+providers:
+  fileapi:
+    primary:
+      disabled: true
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `plugin "roadmap" fileapi[0] references disabled fileapi "primary"`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
 	t.Run("rejects fileapi bindings that normalize to the same env var", func(t *testing.T) {
 		t.Parallel()
 

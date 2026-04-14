@@ -497,8 +497,12 @@ func validatePluginFileAPIBindings(cfg *Config, name string, entry *ProviderEntr
 		if _, exists := seen[binding]; exists {
 			return fmt.Errorf("config validation: plugin %q fileapi[%d] duplicates %q", name, i, binding)
 		}
-		if _, ok := cfg.Providers.FileAPI[binding]; !ok {
+		provider, ok := cfg.Providers.FileAPI[binding]
+		if !ok {
 			return fmt.Errorf("config validation: plugin %q fileapi[%d] references unknown fileapi %q", name, i, binding)
+		}
+		if provider != nil && provider.Disabled {
+			return fmt.Errorf("config validation: plugin %q fileapi[%d] references disabled fileapi %q", name, i, binding)
 		}
 		envName := fileAPISocketEnv(binding)
 		if otherBinding, exists := envNames[envName]; exists {

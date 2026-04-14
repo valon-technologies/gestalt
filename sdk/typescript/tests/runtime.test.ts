@@ -293,3 +293,11 @@ test("fileapi provider rejects plain-object exports without runtime provider met
     "did not resolve to a Gestalt FileAPI provider",
   );
 });
+
+test("fileapi provider rejects exports missing required fileapi methods", async () => {
+  await expect(
+    loadProviderFromTarget(fixturePath("fileapi-provider-missing-create-file")),
+  ).rejects.toThrow(
+    "did not resolve to a Gestalt FileAPI provider",
+  );
+});

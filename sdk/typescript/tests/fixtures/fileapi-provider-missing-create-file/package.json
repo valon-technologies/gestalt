@@ -1,0 +1,10 @@
+{
+  "name": "@fixtures/fileapi-provider-missing-create-file",
+  "type": "module",
+  "gestalt": {
+    "provider": {
+      "kind": "fileapi",
+      "target": "./fileapi.ts#provider"
+    }
+  }
+}

@@ -116,14 +116,33 @@ export function defineFileAPIProvider(
 }
 
 export function isFileAPIProvider(value: unknown): value is FileAPIProvider {
+  const requiredMethods = [
+    "resolveName",
+    "configureProvider",
+    "runtimeMetadata",
+    "supportsHealthCheck",
+    "healthCheck",
+    "warnings",
+    "closeProvider",
+    "createBlob",
+    "createFile",
+    "stat",
+    "slice",
+    "readBytes",
+    "openReadStream",
+    "createObjectURL",
+    "resolveObjectURL",
+    "revokeObjectURL",
+  ] as const;
   return (
     value instanceof FileAPIProvider ||
     (isRuntimeProvider(value) &&
       "kind" in value &&
       (value as { kind?: unknown }).kind === "fileapi" &&
-      "createBlob" in value &&
-      "openReadStream" in value &&
-      "resolveObjectURL" in value &&
-      "revokeObjectURL" in value)
+      requiredMethods.every(
+        (name) =>
+          typeof ((value as unknown as Record<string, unknown>)[name]) ===
+          "function",
+      ))
   );
 }
