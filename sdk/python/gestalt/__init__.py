@@ -1,4 +1,14 @@
-from ._api import OK, Credential, Error, Model, Request, Response, Subject, field
+from ._api import (
+    OK,
+    Access,
+    Credential,
+    Error,
+    Model,
+    Request,
+    Response,
+    Subject,
+    field,
+)
 from ._catalog import (
     Catalog,
     CatalogOperation,
@@ -46,6 +56,7 @@ __all__ = [
     "AlreadyExistsError",
     "AuthProvider",
     "AuthenticatedUser",
+    "Access",
     "BeginLoginRequest",
     "BeginLoginResponse",
     "CURSOR_NEXT",

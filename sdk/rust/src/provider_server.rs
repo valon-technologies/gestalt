@@ -4,7 +4,7 @@ use serde::Serialize;
 use serde_json::Value;
 use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
-use crate::api::{Credential, Request, Response, Subject};
+use crate::api::{Access, Credential, Request, Response, Subject};
 use crate::catalog::object_map;
 use crate::env::CURRENT_PROTOCOL_VERSION;
 use crate::error::Error;
@@ -103,6 +103,7 @@ where
                     connection_params: request.connection_params.into_iter().collect(),
                     subject: request_subject(request.context.as_ref()),
                     credential: request_credential(request.context.as_ref()),
+                    access: request_access(request.context.as_ref()),
                 },
             )
             .await;
@@ -129,6 +130,7 @@ where
             connection_params: request.connection_params.into_iter().collect(),
             subject: request_subject(request.context.as_ref()),
             credential: request_credential(request.context.as_ref()),
+            access: request_access(request.context.as_ref()),
         };
         let catalog = self
             .provider
@@ -176,5 +178,18 @@ fn request_credential(context: Option<&crate::generated::v1::RequestContext>) ->
         subject_id: credential.subject_id.clone(),
         connection: credential.connection.clone(),
         instance: credential.instance.clone(),
+    }
+}
+
+fn request_access(context: Option<&crate::generated::v1::RequestContext>) -> Access {
+    let Some(context) = context else {
+        return Access::default();
+    };
+    let Some(access) = context.access.as_ref() else {
+        return Access::default();
+    };
+    Access {
+        policy: access.policy.clone(),
+        role: access.role.clone(),
     }
 }

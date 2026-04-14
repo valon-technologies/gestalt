@@ -28,11 +28,18 @@ class Credential:
 
 
 @dataclasses.dataclass(slots=True)
+class Access:
+    policy: str = ""
+    role: str = ""
+
+
+@dataclasses.dataclass(slots=True)
 class Request:
     token: str = ""
     connection_params: dict[str, str] = dataclasses.field(default_factory=dict)
     subject: Subject = dataclasses.field(default_factory=Subject)
     credential: Credential = dataclasses.field(default_factory=Credential)
+    access: Access = dataclasses.field(default_factory=Access)
 
     def connection_param(self, name: str) -> str | None:
         return self.connection_params.get(name)

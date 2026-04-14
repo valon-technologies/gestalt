@@ -82,6 +82,12 @@ func applyRequestContext(ctx context.Context, reqCtx *proto.RequestContext) cont
 			Instance:   credential.GetInstance(),
 		})
 	}
+	if access := reqCtx.GetAccess(); access != nil {
+		ctx = invocation.WithAccessContext(ctx, invocation.AccessContext{
+			Policy: access.GetPolicy(),
+			Role:   access.GetRole(),
+		})
+	}
 	return ctx
 }
 

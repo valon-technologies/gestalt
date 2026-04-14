@@ -2618,10 +2618,8 @@ func TestDisconnectIntegration_NotConnected(t *testing.T) {
 func TestListOperations(t *testing.T) {
 	t.Parallel()
 
-	stub := &stubIntegrationWithSessionCatalog{
-		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "test-int"},
-		},
+	stub := &stubIntegrationWithCatalog{
+		StubIntegration: coretesting.StubIntegration{N: "test-int"},
 		catalog: &catalog.Catalog{
 			Name: "test-int",
 			Operations: []catalog.CatalogOperation{
@@ -2850,6 +2848,423 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 	}
 }
 
+func TestListOperations_UsesBrokerCatalogConnectionFallback(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "sample-int", ConnMode: core.ConnectionModeUser},
+		},
+		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			switch token {
+			case "catalog-token":
+				return &catalog.Catalog{
+					Name: "sample-int",
+					Operations: []catalog.CatalogOperation{
+						{ID: "run", Description: "Run", Method: http.MethodGet, Transport: catalog.TransportREST},
+					},
+				}, nil
+			case "rest-token":
+				return &catalog.Catalog{Name: "sample-int"}, nil
+			default:
+				return nil, fmt.Errorf("unexpected token %q", token)
+			}
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, stub)
+	svc := coretesting.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	seedToken(t, svc, &core.IntegrationToken{
+		ID: "tok-catalog", UserID: u.ID, Integration: "sample-int",
+		Connection: "catalog-conn", Instance: "default", AccessToken: "catalog-token",
+	})
+	seedToken(t, svc, &core.IntegrationToken{
+		ID: "tok-rest", UserID: u.ID, Integration: "sample-int",
+		Connection: "rest-conn", Instance: "default", AccessToken: "rest-token",
+	})
+
+	broker := invocation.NewBroker(
+		providers,
+		svc.Users,
+		svc.Tokens,
+		invocation.WithConnectionMapper(invocation.ConnectionMap(map[string]string{"sample-int": "rest-conn"})),
+		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(map[string]string{"sample-int": "catalog-conn"})),
+	)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = providers
+		cfg.Services = svc
+		cfg.Invoker = broker
+		cfg.DefaultConnection = map[string]string{"sample-int": "rest-conn"}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/sample-int/operations", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	var ops []map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&ops); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if len(ops) != 1 || ops[0]["id"] != "run" {
+		t.Fatalf("operations = %+v, want only run", ops)
+	}
+}
+
+func TestListOperations_RetriesDefaultConnectionAfterBrokerCatalogError(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "sample-int", ConnMode: core.ConnectionModeUser},
+		},
+		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			switch token {
+			case "rest-token":
+				return &catalog.Catalog{
+					Name: "sample-int",
+					Operations: []catalog.CatalogOperation{
+						{ID: "run", Description: "Run", Method: http.MethodGet, Transport: catalog.TransportREST},
+					},
+				}, nil
+			default:
+				return nil, fmt.Errorf("unexpected token %q", token)
+			}
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, stub)
+	svc := coretesting.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	seedToken(t, svc, &core.IntegrationToken{
+		ID: "tok-rest", UserID: u.ID, Integration: "sample-int",
+		Connection: "rest-conn", Instance: "default", AccessToken: "rest-token",
+	})
+
+	broker := invocation.NewBroker(
+		providers,
+		svc.Users,
+		svc.Tokens,
+		invocation.WithConnectionMapper(invocation.ConnectionMap(map[string]string{"sample-int": "rest-conn"})),
+		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(map[string]string{"sample-int": "mcp-conn"})),
+	)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = providers
+		cfg.Services = svc
+		cfg.Invoker = broker
+		cfg.DefaultConnection = map[string]string{"sample-int": "rest-conn"}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/sample-int/operations", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	var ops []map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&ops); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if len(ops) != 1 || ops[0]["id"] != "run" {
+		t.Fatalf("operations = %+v, want only run", ops)
+	}
+}
+
+func TestListOperations_HumanAuthorizationFiltersMergedCatalog(t *testing.T) {
+	t.Parallel()
+
+	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+
+	svc := coretesting.NewStubServices(t)
+	seedAPIToken(t, svc, plaintext, hashed, "viewer-user")
+	viewer := seedUser(t, svc, "viewer-user@test.local")
+	seedToken(t, svc, &core.IntegrationToken{
+		ID: "tok-cat-human", UserID: viewer.ID, Integration: "test-int",
+		Connection: testCatalogConnection, Instance: "default", AccessToken: testCatalogToken,
+	})
+
+	var gotAccess invocation.AccessContext
+	stub := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "test-int", ConnMode: core.ConnectionModeUser},
+		},
+		catalog: &catalog.Catalog{
+			Name: "test-int",
+			Operations: []catalog.CatalogOperation{
+				{ID: "public_static", Description: "Visible to anyone with app access", Method: http.MethodGet, Transport: catalog.TransportREST},
+				{ID: "admin_static", Description: "Admin only", Method: http.MethodGet, Transport: catalog.TransportREST, AllowedRoles: []string{"admin"}},
+			},
+		},
+		catalogForRequestFn: func(ctx context.Context, token string) (*catalog.Catalog, error) {
+			if token != testCatalogToken {
+				return nil, fmt.Errorf("unexpected token %q", token)
+			}
+			gotAccess = invocation.AccessContextFromContext(ctx)
+			return &catalog.Catalog{
+				Name: "test-int",
+				Operations: []catalog.CatalogOperation{
+					{ID: "viewer_session", Description: "Viewer session op", Method: http.MethodPost, Transport: catalog.TransportREST, AllowedRoles: []string{"viewer"}},
+					{ID: "admin_session", Description: "Admin session op", Method: http.MethodPost, Transport: catalog.TransportREST, AllowedRoles: []string{"admin"}},
+				},
+			}, nil
+		},
+	}
+
+	pluginDefs := map[string]*config.ProviderEntry{
+		"test-int": {AuthorizationPolicy: "sample_policy"},
+	}
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
+				},
+			},
+		},
+	}, nil, pluginDefs, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.CatalogConnection = map[string]string{"test-int": testCatalogConnection}
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.PluginDefs = pluginDefs
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/test-int/operations", nil)
+	req.Header.Set("Authorization", "Bearer "+plaintext)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	var ops []map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&ops); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if len(ops) != 1 {
+		t.Fatalf("expected 1 visible operation, got %d", len(ops))
+	}
+	if ops[0]["id"] != "viewer_session" {
+		t.Fatalf("unexpected filtered operations: %+v", ops)
+	}
+	if gotAccess.Policy != "sample_policy" || gotAccess.Role != "viewer" {
+		t.Fatalf("unexpected access context propagated to session catalog: %+v", gotAccess)
+	}
+}
+
+func TestExecuteOperation_HumanAuthorizationUsesCatalogRoles(t *testing.T) {
+	t.Parallel()
+
+	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+
+	svc := coretesting.NewStubServices(t)
+	seedAPIToken(t, svc, plaintext, hashed, "viewer-user")
+	viewer := seedUser(t, svc, "viewer-user@test.local")
+	seedToken(t, svc, &core.IntegrationToken{
+		ID: "tok-exec-human", UserID: viewer.ID, Integration: "test-int",
+		Connection: testDefaultConnection, Instance: "default", AccessToken: "exec-token",
+	})
+
+	var called bool
+	stub := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "test-int",
+				ConnMode: core.ConnectionModeUser,
+				ExecuteFn: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
+					called = true
+					return &core.OperationResult{Status: http.StatusOK, Body: operation}, nil
+				},
+			},
+		},
+		catalog: &catalog.Catalog{
+			Name: "test-int",
+			Operations: []catalog.CatalogOperation{
+				{ID: "public_static", Description: "Visible only when explicitly allowed", Method: http.MethodGet, Transport: catalog.TransportREST},
+				{ID: "viewer_static", Description: "Viewer only", Method: http.MethodGet, Transport: catalog.TransportREST, AllowedRoles: []string{"viewer"}},
+			},
+		},
+	}
+
+	pluginDefs := map[string]*config.ProviderEntry{
+		"test-int": {AuthorizationPolicy: "sample_policy"},
+	}
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
+				},
+			},
+		},
+	}, nil, pluginDefs, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"test-int": testDefaultConnection}
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.PluginDefs = pluginDefs
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/test-int/public_static", nil)
+	req.Header.Set("Authorization", "Bearer "+plaintext)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request denied op: %v", err)
+	}
+	if resp.StatusCode != http.StatusForbidden {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		t.Fatalf("expected 403 for unannotated operation, got %d: %s", resp.StatusCode, body)
+	}
+	_ = resp.Body.Close()
+	if called {
+		t.Fatal("expected denied operation to stop before provider execution")
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/test-int/viewer_static", nil)
+	req.Header.Set("Authorization", "Bearer "+plaintext)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request allowed op: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		t.Fatalf("expected 200 for viewer operation, got %d: %s", resp.StatusCode, body)
+	}
+	_ = resp.Body.Close()
+	if !called {
+		t.Fatal("expected allowed operation to reach provider execution")
+	}
+}
+
+func TestExecuteOperation_HumanAuthorizationUsesSessionMetadataOnCollision(t *testing.T) {
+	t.Parallel()
+
+	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+
+	svc := coretesting.NewStubServices(t)
+	seedAPIToken(t, svc, plaintext, hashed, "viewer-user")
+	viewer := seedUser(t, svc, "viewer-user@test.local")
+	seedToken(t, svc, &core.IntegrationToken{
+		ID: "tok-session-collision", UserID: viewer.ID, Integration: "sample-int",
+		Connection: testDefaultConnection, Instance: "default", AccessToken: "session-token",
+	})
+
+	var called bool
+	stub := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "sample-int",
+				ConnMode: core.ConnectionModeUser,
+				ExecuteFn: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
+					called = true
+					return &core.OperationResult{Status: http.StatusOK, Body: operation}, nil
+				},
+			},
+		},
+		catalog: &catalog.Catalog{
+			Name: "sample-int",
+			Operations: []catalog.CatalogOperation{
+				{ID: "run", Description: "Static viewer op", Method: http.MethodGet, Transport: catalog.TransportREST, AllowedRoles: []string{"viewer"}},
+			},
+		},
+		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			if token != "session-token" {
+				t.Fatalf("token = %q, want %q", token, "session-token")
+			}
+			return &catalog.Catalog{
+				Name: "sample-int",
+				Operations: []catalog.CatalogOperation{
+					{ID: "run", Description: "Session admin op", Method: http.MethodGet, Transport: catalog.TransportREST, AllowedRoles: []string{"admin"}},
+				},
+			}, nil
+		},
+	}
+
+	pluginDefs := map[string]*config.ProviderEntry{
+		"sample-int": {AuthorizationPolicy: "sample_policy"},
+	}
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
+				},
+			},
+		},
+	}, nil, pluginDefs, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"sample-int": testDefaultConnection}
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.PluginDefs = pluginDefs
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/sample-int/run?_connection="+testDefaultConnection, nil)
+	req.Header.Set("Authorization", "Bearer "+plaintext)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusForbidden {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 403, got %d: %s", resp.StatusCode, body)
+	}
+	if called {
+		t.Fatal("expected session-side collision metadata to stop provider execution")
+	}
+}
+
 func TestListOperations_NotFound(t *testing.T) {
 	t.Parallel()
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -2944,6 +3359,41 @@ func TestListOperations_TokenSelectionErrors(t *testing.T) {
 		}
 		if !strings.Contains(result["error"], `"_instance"`) {
 			t.Fatalf("expected error to mention _instance, got %q", result["error"])
+		}
+	})
+
+	t.Run("static_catalog_does_not_fail_open", func(t *testing.T) {
+		t.Parallel()
+
+		stub := &stubIntegrationWithSessionCatalog{
+			stubIntegrationWithOps: stubIntegrationWithOps{
+				StubIntegration: coretesting.StubIntegration{N: "sample-int", ConnMode: core.ConnectionModeUser},
+			},
+			catalog: &catalog.Catalog{
+				Name: "sample-int",
+				Operations: []catalog.CatalogOperation{
+					{ID: "run", Description: "Static REST op", Method: http.MethodGet, Transport: catalog.TransportREST},
+				},
+			},
+		}
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, stub)
+			cfg.CatalogConnection = map[string]string{"sample-int": "catalog-conn"}
+			cfg.Services = coretesting.NewStubServices(t)
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/sample-int/operations", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusPreconditionFailed {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 412, got %d: %s", resp.StatusCode, body)
 		}
 	})
 }
@@ -3251,6 +3701,102 @@ func TestWorkloadAuthorization_ExecuteOperation_UsesBoundIdentityAndRejectsSelec
 	}
 }
 
+func TestHumanAuthorization_ExecuteOperation_UsesResolvedRoleAndRejectsDisallowedOperations(t *testing.T) {
+	t.Parallel()
+
+	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+
+	svc := coretesting.NewStubServices(t)
+	seedAPIToken(t, svc, plaintext, hashed, "viewer-user")
+	viewer := seedUser(t, svc, "viewer-user@test.local")
+
+	stub := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "svc",
+				ConnMode: core.ConnectionModeNone,
+				ExecuteFn: func(ctx context.Context, op string, _ map[string]any, _ string) (*core.OperationResult, error) {
+					access := invocation.AccessContextFromContext(ctx)
+					body, err := json.Marshal(map[string]string{
+						"operation": op,
+						"policy":    access.Policy,
+						"role":      access.Role,
+					})
+					if err != nil {
+						return nil, err
+					}
+					return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+				},
+			},
+		},
+		catalog: &catalog.Catalog{
+			Name: "svc",
+			Operations: []catalog.CatalogOperation{
+				{ID: "run", Method: http.MethodGet, Transport: catalog.TransportREST, AllowedRoles: []string{"viewer"}},
+				{ID: "admin", Method: http.MethodGet, Transport: catalog.TransportREST, AllowedRoles: []string{"admin"}},
+			},
+		},
+	}
+
+	pluginDefs := map[string]*config.ProviderEntry{
+		"svc": {AuthorizationPolicy: "sample_policy"},
+	}
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{Email: "viewer-user@test.local", Role: "viewer"},
+					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
+				},
+			},
+		},
+	}, nil, pluginDefs, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.PluginDefs = pluginDefs
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/run", nil)
+	req.Header.Set("Authorization", "Bearer "+plaintext)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if result["policy"] != "sample_policy" || result["role"] != "viewer" {
+		t.Fatalf("unexpected access context in execute response: %+v", result)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/admin", nil)
+	req.Header.Set("Authorization", "Bearer "+plaintext)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("admin request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusForbidden {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 403, got %d: %s", resp.StatusCode, body)
+	}
+}
+
 func TestWorkloadAuthorization_ExecuteOperation_MissingBoundIdentityTokenReturns412(t *testing.T) {
 	t.Parallel()
 
@@ -3463,7 +4009,7 @@ func TestExecuteOperation_RejectsSessionPassthrough(t *testing.T) {
 		}
 	})
 
-	t.Run("different catalog and broker MCP connections", func(t *testing.T) {
+	t.Run("server catalog connection takes precedence over broker MCP connection", func(t *testing.T) {
 		t.Parallel()
 
 		var sessionCatalogCalls atomic.Int32
@@ -3522,14 +4068,403 @@ func TestExecuteOperation_RejectsSessionPassthrough(t *testing.T) {
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		assertMCPOnly(t, ts)
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/test-int/session_only", bytes.NewBufferString(`{}`))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusNotFound {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 404, got %d: %s", resp.StatusCode, body)
+		}
+
 		if got := sessionCatalogCalls.Load(); got != 1 {
 			t.Fatalf("session catalog calls = %d, want 1", got)
 		}
-		if got, _ := resolvedToken.Load().(string); got != "mcp-token" {
-			t.Fatalf("resolved token = %q, want %q", got, "mcp-token")
+		if got, _ := resolvedToken.Load().(string); got != "catalog-token" {
+			t.Fatalf("resolved token = %q, want %q", got, "catalog-token")
 		}
 	})
+}
+
+func TestExecuteOperation_UsesFallbackSessionCatalogConnectionAfterEarlierError(t *testing.T) {
+	t.Parallel()
+
+	var gotToken string
+	sessionStub := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "sample-int",
+				ConnMode: core.ConnectionModeUser,
+				ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
+					gotToken = token
+					return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)}, nil
+				},
+			},
+		},
+		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			if token != "rest-token" {
+				return nil, fmt.Errorf("unexpected token %q", token)
+			}
+			return &catalog.Catalog{
+				Name: "sample-int",
+				Operations: []catalog.CatalogOperation{
+					{ID: "run", Description: "Run", Method: http.MethodGet, Transport: catalog.TransportREST},
+				},
+			}, nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, sessionStub)
+	svc := coretesting.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	seedToken(t, svc, &core.IntegrationToken{
+		ID: "tok-rest", UserID: u.ID, Integration: "sample-int",
+		Connection: "rest-conn", Instance: "default", AccessToken: "rest-token",
+	})
+
+	broker := invocation.NewBroker(
+		providers,
+		svc.Users,
+		svc.Tokens,
+		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(map[string]string{"sample-int": "mcp-conn"})),
+	)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = providers
+		cfg.Services = svc
+		cfg.Invoker = broker
+		cfg.DefaultConnection = map[string]string{"sample-int": "rest-conn"}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/sample-int/run", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+	if gotToken != "rest-token" {
+		t.Fatalf("execute token = %q, want %q", gotToken, "rest-token")
+	}
+}
+
+func TestExecuteOperation_PinsSessionCatalogConnectionIntoExecution(t *testing.T) {
+	t.Parallel()
+
+	var gotToken string
+	sessionStub := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "sample-int",
+				ConnMode: core.ConnectionModeUser,
+				ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
+					gotToken = token
+					return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)}, nil
+				},
+			},
+		},
+		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			switch token {
+			case "mcp-token":
+				return &catalog.Catalog{
+					Name: "sample-int",
+					Operations: []catalog.CatalogOperation{
+						{ID: "run", Description: "Run", Method: http.MethodGet, Transport: catalog.TransportREST},
+					},
+				}, nil
+			case "rest-token":
+				return &catalog.Catalog{Name: "sample-int"}, nil
+			default:
+				return nil, fmt.Errorf("unexpected token %q", token)
+			}
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, sessionStub)
+	svc := coretesting.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	seedToken(t, svc, &core.IntegrationToken{
+		ID: "tok-mcp", UserID: u.ID, Integration: "sample-int",
+		Connection: "mcp-conn", Instance: "default", AccessToken: "mcp-token",
+	})
+	seedToken(t, svc, &core.IntegrationToken{
+		ID: "tok-rest", UserID: u.ID, Integration: "sample-int",
+		Connection: "rest-conn", Instance: "default", AccessToken: "rest-token",
+	})
+
+	broker := invocation.NewBroker(
+		providers,
+		svc.Users,
+		svc.Tokens,
+		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(map[string]string{"sample-int": "mcp-conn"})),
+	)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = providers
+		cfg.Services = svc
+		cfg.Invoker = broker
+		cfg.DefaultConnection = map[string]string{"sample-int": "rest-conn"}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/sample-int/run", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+	if gotToken != "mcp-token" {
+		t.Fatalf("execute token = %q, want %q", gotToken, "mcp-token")
+	}
+}
+
+func TestExecuteOperation_UsesConfiguredCatalogConnectionWhenInvokerIsWrapped(t *testing.T) {
+	t.Parallel()
+
+	var gotToken string
+	sessionStub := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "sample-int",
+				ConnMode: core.ConnectionModeUser,
+				ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
+					gotToken = token
+					return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)}, nil
+				},
+			},
+		},
+		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			switch token {
+			case "catalog-token":
+				return &catalog.Catalog{
+					Name: "sample-int",
+					Operations: []catalog.CatalogOperation{
+						{ID: "run", Description: "Run", Method: http.MethodGet, Transport: catalog.TransportREST},
+					},
+				}, nil
+			case "rest-token":
+				return &catalog.Catalog{Name: "sample-int"}, nil
+			default:
+				return nil, fmt.Errorf("unexpected token %q", token)
+			}
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, sessionStub)
+	svc := coretesting.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	seedToken(t, svc, &core.IntegrationToken{
+		ID: "tok-catalog", UserID: u.ID, Integration: "sample-int",
+		Connection: "catalog-conn", Instance: "default", AccessToken: "catalog-token",
+	})
+	seedToken(t, svc, &core.IntegrationToken{
+		ID: "tok-rest", UserID: u.ID, Integration: "sample-int",
+		Connection: "rest-conn", Instance: "default", AccessToken: "rest-token",
+	})
+
+	broker := invocation.NewBroker(
+		providers,
+		svc.Users,
+		svc.Tokens,
+		invocation.WithConnectionMapper(invocation.ConnectionMap(map[string]string{"sample-int": "rest-conn"})),
+	)
+	wrappedInvoker := struct {
+		invocation.Invoker
+		invocation.TokenResolver
+	}{
+		Invoker:       broker,
+		TokenResolver: broker,
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = providers
+		cfg.Services = svc
+		cfg.Invoker = wrappedInvoker
+		cfg.DefaultConnection = map[string]string{"sample-int": "rest-conn"}
+		cfg.CatalogConnection = map[string]string{"sample-int": "catalog-conn"}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/sample-int/run", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+	if gotToken != "catalog-token" {
+		t.Fatalf("execute token = %q, want %q", gotToken, "catalog-token")
+	}
+}
+
+func TestExecuteOperation_UsesServerCatalogConnectionBeforeBrokerFallback(t *testing.T) {
+	t.Parallel()
+
+	var gotToken string
+	sessionStub := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "sample-int",
+				ConnMode: core.ConnectionModeUser,
+				ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
+					gotToken = token
+					return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)}, nil
+				},
+			},
+		},
+		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			switch token {
+			case "catalog-token":
+				return &catalog.Catalog{
+					Name: "sample-int",
+					Operations: []catalog.CatalogOperation{
+						{ID: "run", Description: "Run", Method: http.MethodGet, Transport: catalog.TransportREST},
+					},
+				}, nil
+			case "rest-token":
+				return &catalog.Catalog{Name: "sample-int"}, nil
+			default:
+				return nil, fmt.Errorf("unexpected token %q", token)
+			}
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, sessionStub)
+	svc := coretesting.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	seedToken(t, svc, &core.IntegrationToken{
+		ID: "tok-catalog", UserID: u.ID, Integration: "sample-int",
+		Connection: "catalog-conn", Instance: "default", AccessToken: "catalog-token",
+	})
+	seedToken(t, svc, &core.IntegrationToken{
+		ID: "tok-rest", UserID: u.ID, Integration: "sample-int",
+		Connection: "rest-conn", Instance: "default", AccessToken: "rest-token",
+	})
+
+	broker := invocation.NewBroker(
+		providers,
+		svc.Users,
+		svc.Tokens,
+		invocation.WithConnectionMapper(invocation.ConnectionMap(map[string]string{"sample-int": "rest-conn"})),
+	)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = providers
+		cfg.Services = svc
+		cfg.Invoker = broker
+		cfg.DefaultConnection = map[string]string{"sample-int": "rest-conn"}
+		cfg.CatalogConnection = map[string]string{"sample-int": "catalog-conn"}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/sample-int/run", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+	if gotToken != "catalog-token" {
+		t.Fatalf("execute token = %q, want %q", gotToken, "catalog-token")
+	}
+}
+
+func TestExecuteOperation_DoesNotFallbackPastConfiguredCatalogConnection(t *testing.T) {
+	t.Parallel()
+
+	var gotToken string
+	sessionStub := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "sample-int",
+				ConnMode: core.ConnectionModeUser,
+				ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
+					gotToken = token
+					return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)}, nil
+				},
+			},
+		},
+		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			switch token {
+			case "catalog-token":
+				return &catalog.Catalog{Name: "sample-int"}, nil
+			case "rest-token":
+				return &catalog.Catalog{
+					Name: "sample-int",
+					Operations: []catalog.CatalogOperation{
+						{ID: "run", Description: "Run", Method: http.MethodGet, Transport: catalog.TransportREST},
+					},
+				}, nil
+			default:
+				return nil, fmt.Errorf("unexpected token %q", token)
+			}
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, sessionStub)
+	svc := coretesting.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	seedToken(t, svc, &core.IntegrationToken{
+		ID: "tok-catalog", UserID: u.ID, Integration: "sample-int",
+		Connection: "catalog-conn", Instance: "default", AccessToken: "catalog-token",
+	})
+	seedToken(t, svc, &core.IntegrationToken{
+		ID: "tok-rest", UserID: u.ID, Integration: "sample-int",
+		Connection: "rest-conn", Instance: "default", AccessToken: "rest-token",
+	})
+
+	broker := invocation.NewBroker(
+		providers,
+		svc.Users,
+		svc.Tokens,
+		invocation.WithConnectionMapper(invocation.ConnectionMap(map[string]string{"sample-int": "rest-conn"})),
+	)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = providers
+		cfg.Services = svc
+		cfg.Invoker = broker
+		cfg.DefaultConnection = map[string]string{"sample-int": "rest-conn"}
+		cfg.CatalogConnection = map[string]string{"sample-int": "catalog-conn"}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/sample-int/run", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusNotFound {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 404, got %d: %s", resp.StatusCode, body)
+	}
+	if gotToken != "" {
+		t.Fatalf("execute token = %q, want no provider execution", gotToken)
+	}
 }
 
 func TestStartLogin(t *testing.T) {
@@ -4901,6 +5836,15 @@ type stubIntegrationWithOps struct {
 
 func (s *stubIntegrationWithOps) Catalog() *catalog.Catalog {
 	return serverTestCatalogFromOperations(s.N, s.ops)
+}
+
+type stubIntegrationWithCatalog struct {
+	coretesting.StubIntegration
+	catalog *catalog.Catalog
+}
+
+func (s *stubIntegrationWithCatalog) Catalog() *catalog.Catalog {
+	return s.catalog
 }
 
 type stubIntegrationWithSessionCatalog struct {

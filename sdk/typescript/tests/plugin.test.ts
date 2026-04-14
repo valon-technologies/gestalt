@@ -16,6 +16,7 @@ test("plugin executes operations and exposes catalog metadata", async () => {
         method: "post",
         title: "Add",
         description: "Add two numbers",
+        allowedRoles: ["viewer", "admin", "viewer"],
         tags: ["math"],
         readOnly: false,
         visible: false,
@@ -26,11 +27,13 @@ test("plugin executes operations and exposes catalog metadata", async () => {
         output: s.object({
           total: s.integer(),
           token: s.string(),
+          accessRole: s.string(),
         }),
         handler(input, req) {
           return ok({
             total: input.a + input.b,
             token: req.token,
+            accessRole: req.access.role,
           });
         },
       }),
@@ -43,13 +46,20 @@ test("plugin executes operations and exposes catalog metadata", async () => {
     ],
   });
 
-  const result = await plugin.execute("sum", { a: "2" }, request("tok"));
+  const result = await plugin.execute(
+    "sum",
+    { a: "2" },
+    request("tok", {}, {}, {}, { role: "admin" }),
+  );
   expect(result.status).toBe(200);
   expect(JSON.parse(result.body)).toEqual({
     total: 3,
     token: "tok",
+    accessRole: "admin",
   });
-  expect(connectionParam(request("tok", { region: "iad" }), "region")).toBe("iad");
+  expect(connectionParam(request("tok", { region: "iad" }), "region")).toBe(
+    "iad",
+  );
   expect(connectionParam(request(), "missing")).toBeUndefined();
 
   const invalid = await plugin.execute("sum", { a: "bad" }, request());
@@ -94,9 +104,11 @@ test("plugin executes operations and exposes catalog metadata", async () => {
           properties: {
             total: { type: "integer" },
             token: { type: "string" },
+            accessRole: { type: "string" },
           },
-          required: ["total", "token"],
+          required: ["total", "token", "accessRole"],
         },
+        allowedRoles: ["viewer", "admin"],
         tags: ["math"],
         readOnly: false,
         visible: false,

@@ -41,6 +41,7 @@ type CatalogOperation struct {
 	InputSchema    json.RawMessage      `yaml:"inputSchema,omitempty"    json:"inputSchema,omitempty"`
 	OutputSchema   json.RawMessage      `yaml:"outputSchema,omitempty"   json:"outputSchema,omitempty"`
 	Annotations    OperationAnnotations `yaml:"annotations,omitempty"    json:"annotations,omitempty"`
+	AllowedRoles   []string             `yaml:"allowedRoles,omitempty"   json:"allowedRoles,omitempty"`
 	Parameters     []CatalogParameter   `yaml:"parameters,omitempty"     json:"parameters,omitempty"`
 	RequiredScopes []string             `yaml:"requiredScopes,omitempty" json:"requiredScopes,omitempty"`
 	Tags           []string             `yaml:"tags,omitempty"           json:"tags,omitempty"`
@@ -61,6 +62,7 @@ func (o *CatalogOperation) UnmarshalYAML(value *yaml.Node) error {
 		InputSchema    any                  `yaml:"inputSchema,omitempty"`
 		OutputSchema   any                  `yaml:"outputSchema,omitempty"`
 		Annotations    OperationAnnotations `yaml:"annotations,omitempty"`
+		AllowedRoles   []string             `yaml:"allowedRoles,omitempty"`
 		Parameters     []CatalogParameter   `yaml:"parameters,omitempty"`
 		RequiredScopes []string             `yaml:"requiredScopes,omitempty"`
 		Tags           []string             `yaml:"tags,omitempty"`
@@ -94,6 +96,7 @@ func (o *CatalogOperation) UnmarshalYAML(value *yaml.Node) error {
 		InputSchema:    inputSchema,
 		OutputSchema:   outputSchema,
 		Annotations:    aux.Annotations,
+		AllowedRoles:   aux.AllowedRoles,
 		Parameters:     aux.Parameters,
 		RequiredScopes: aux.RequiredScopes,
 		Tags:           aux.Tags,
@@ -139,7 +142,49 @@ func (c *Catalog) Clone() *Catalog {
 	for k, v := range c.Headers {
 		out.Headers[k] = v
 	}
-	copy(out.Operations, c.Operations)
+	for i := range c.Operations {
+		op := c.Operations[i]
+		outOp := op
+		if op.InputSchema != nil {
+			outOp.InputSchema = append(json.RawMessage(nil), op.InputSchema...)
+		}
+		if op.OutputSchema != nil {
+			outOp.OutputSchema = append(json.RawMessage(nil), op.OutputSchema...)
+		}
+		if op.AllowedRoles != nil {
+			outOp.AllowedRoles = append([]string(nil), op.AllowedRoles...)
+		}
+		if op.Parameters != nil {
+			outOp.Parameters = append([]CatalogParameter(nil), op.Parameters...)
+		}
+		if op.RequiredScopes != nil {
+			outOp.RequiredScopes = append([]string(nil), op.RequiredScopes...)
+		}
+		if op.Tags != nil {
+			outOp.Tags = append([]string(nil), op.Tags...)
+		}
+		if op.Visible != nil {
+			visible := *op.Visible
+			outOp.Visible = &visible
+		}
+		if op.Annotations.ReadOnlyHint != nil {
+			value := *op.Annotations.ReadOnlyHint
+			outOp.Annotations.ReadOnlyHint = &value
+		}
+		if op.Annotations.IdempotentHint != nil {
+			value := *op.Annotations.IdempotentHint
+			outOp.Annotations.IdempotentHint = &value
+		}
+		if op.Annotations.DestructiveHint != nil {
+			value := *op.Annotations.DestructiveHint
+			outOp.Annotations.DestructiveHint = &value
+		}
+		if op.Annotations.OpenWorldHint != nil {
+			value := *op.Annotations.OpenWorldHint
+			outOp.Annotations.OpenWorldHint = &value
+		}
+		out.Operations[i] = outOp
+	}
 	return out
 }
 
@@ -205,6 +250,23 @@ func (c *Catalog) Validate() error {
 			if strings.TrimSpace(param.Type) == "" {
 				return fmt.Errorf("catalog %q operation %q parameter %q is missing type", c.Name, op.ID, param.Name)
 			}
+		}
+
+		if len(op.AllowedRoles) > 0 {
+			roles := op.AllowedRoles[:0]
+			seenRoles := make(map[string]struct{}, len(op.AllowedRoles))
+			for _, role := range op.AllowedRoles {
+				role = strings.TrimSpace(role)
+				if role == "" {
+					return fmt.Errorf("catalog %q operation %q has allowedRoles entry with empty value", c.Name, op.ID)
+				}
+				if _, ok := seenRoles[role]; ok {
+					continue
+				}
+				seenRoles[role] = struct{}{}
+				roles = append(roles, role)
+			}
+			op.AllowedRoles = roles
 		}
 	}
 

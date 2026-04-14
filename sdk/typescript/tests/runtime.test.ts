@@ -10,6 +10,7 @@ import {
   ValidateExternalTokenRequestSchema,
 } from "../gen/v1/auth_pb.ts";
 import {
+  AccessContextSchema,
   CredentialContextSchema,
   ExecuteRequestSchema,
   GetSessionCatalogRequestSchema,
@@ -68,7 +69,13 @@ test("integration provider service exposes metadata, configure, execute, and ses
   const metadata = await (service.getMetadata as any)();
   expect(metadata.name).toBe("basic-provider");
   expect(metadata.supportsSessionCatalog).toBe(true);
-  expect(metadata.staticCatalog?.operations?.some((op: any) => op.id === "hello")).toBe(true);
+  expect(
+    metadata.staticCatalog?.operations?.some((op: any) => op.id === "hello"),
+  ).toBe(true);
+  expect(
+    metadata.staticCatalog?.operations?.find((op: any) => op.id === "hello")
+      ?.allowedRoles,
+  ).toEqual(["viewer", "admin"]);
 
   await (service.startProvider as any)(
     create(StartProviderRequestSchema, {
@@ -99,6 +106,10 @@ test("integration provider service exposes metadata, configure, execute, and ses
           mode: "identity",
           subjectId: "identity:__identity__",
         }),
+        access: create(AccessContextSchema, {
+          policy: "sample_policy",
+          role: "admin",
+        }),
       }),
     }),
   );
@@ -109,6 +120,8 @@ test("integration provider service exposes metadata, configure, execute, and ses
     configuredRegion: "use1",
     subjectId: "user:user-123",
     credentialMode: "identity",
+    accessPolicy: "sample_policy",
+    accessRole: "admin",
   });
 
   const sessionCatalog = await (service.getSessionCatalog as any)(
@@ -125,6 +138,10 @@ test("integration provider service exposes metadata, configure, execute, and ses
         credential: create(CredentialContextSchema, {
           mode: "identity",
         }),
+        access: create(AccessContextSchema, {
+          policy: "sample_policy",
+          role: "viewer",
+        }),
       }),
     }),
   );
@@ -132,8 +149,12 @@ test("integration provider service exposes metadata, configure, execute, and ses
   expect(sessionCatalog.catalog?.operations).toHaveLength(1);
   expect(sessionCatalog.catalog?.operations[0].id).toBe("session-hello");
   expect(sessionCatalog.catalog?.operations[0].method).toBe("GET");
+  expect(sessionCatalog.catalog?.operations[0].allowedRoles).toEqual([
+    "viewer",
+    "admin",
+  ]);
   expect(sessionCatalog.catalog?.operations[0].title).toBe(
-    "Session Hello ops user:user-123 identity",
+    "Session Hello ops user:user-123 identity viewer",
   );
 });
 
@@ -152,7 +173,9 @@ test("auth provider supports runtime metadata, login flows, and token validation
     }),
   );
 
-  const metadata = await (runtime.getProviderIdentity as any)(create(EmptySchema, {}));
+  const metadata = await (runtime.getProviderIdentity as any)(
+    create(EmptySchema, {}),
+  );
   expect(metadata.kind).toBe(2);
   expect(metadata.displayName).toBe("Fixture Auth");
 
@@ -163,7 +186,9 @@ test("auth provider supports runtime metadata, login flows, and token validation
       scopes: ["openid"],
     }),
   );
-  expect(begin.authorizationUrl).toContain("https://login.example.test/authorize");
+  expect(begin.authorizationUrl).toContain(
+    "https://login.example.test/authorize",
+  );
 
   const user = await (auth.completeLogin as any)(
     create(CompleteLoginRequestSchema, {

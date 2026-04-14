@@ -32,6 +32,7 @@ export interface CatalogOperation {
   tags?: string[];
   readOnly?: boolean;
   visible?: boolean;
+  allowedRoles?: string[];
 }
 
 export interface Catalog {
@@ -42,7 +43,9 @@ export interface Catalog {
   operations: CatalogOperation[];
 }
 
-export function schemaToParameters(schema: Schema<unknown> | undefined): CatalogParameter[] {
+export function schemaToParameters(
+  schema: Schema<unknown> | undefined,
+): CatalogParameter[] {
   if (!schema?.fields) {
     return [];
   }
@@ -64,7 +67,9 @@ export function schemaToParameters(schema: Schema<unknown> | undefined): Catalog
   });
 }
 
-export function schemaToCatalogSchema(schema: Schema<unknown> | undefined): CatalogSchema | undefined {
+export function schemaToCatalogSchema(
+  schema: Schema<unknown> | undefined,
+): CatalogSchema | undefined {
   if (!schema) {
     return undefined;
   }
@@ -97,22 +102,31 @@ export function schemaToCatalogSchema(schema: Schema<unknown> | undefined): Cata
   return output;
 }
 
-export function catalogToJson(catalog: Catalog | Record<string, unknown> | null | undefined): string {
+export function catalogToJson(
+  catalog: Catalog | Record<string, unknown> | null | undefined,
+): string {
   if (!catalog) {
     return "";
   }
   return JSON.stringify(toCatalogJsonObject(catalog));
 }
 
-export function catalogToYaml(catalog: Catalog | Record<string, unknown>): string {
+export function catalogToYaml(
+  catalog: Catalog | Record<string, unknown>,
+): string {
   return YAML.stringify(toCatalogJsonObject(catalog));
 }
 
-export function writeCatalogYaml(path: string, catalog: Catalog | Record<string, unknown>): void {
+export function writeCatalogYaml(
+  path: string,
+  catalog: Catalog | Record<string, unknown>,
+): void {
   writeFileSync(path, catalogToYaml(catalog), "utf8");
 }
 
-function toCatalogJsonObject(catalog: Catalog | Record<string, unknown>): Record<string, unknown> {
+function toCatalogJsonObject(
+  catalog: Catalog | Record<string, unknown>,
+): Record<string, unknown> {
   if (!("operations" in catalog) || !Array.isArray(catalog.operations)) {
     return {
       ...catalog,
@@ -149,6 +163,9 @@ function toCatalogJsonObject(catalog: Catalog | Record<string, unknown>): Record
       }
       if (operation.visible !== undefined) {
         serialized.visible = operation.visible;
+      }
+      if (operation.allowedRoles && operation.allowedRoles.length > 0) {
+        serialized.allowedRoles = operation.allowedRoles;
       }
       return serialized;
     }),

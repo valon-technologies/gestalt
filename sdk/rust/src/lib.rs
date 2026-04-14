@@ -26,7 +26,7 @@ pub mod proto {
     pub use crate::generated::v1;
 }
 
-pub use api::{Credential, Provider, Request, Response, RuntimeMetadata, Subject, ok};
+pub use api::{Access, Credential, Provider, Request, Response, RuntimeMetadata, Subject, ok};
 pub use auth::{
     AuthProvider, AuthenticatedUser, BeginLoginRequest, BeginLoginResponse, CompleteLoginRequest,
 };

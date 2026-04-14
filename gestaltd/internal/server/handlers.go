@@ -460,14 +460,57 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 		resolver = tr
 	}
 	resolveCatalog := invocation.ResolveCatalog
+	strictCatalog := false
 	if requestedConnection != "" || requestedInstance != "" {
 		resolveCatalog = invocation.ResolveCatalogStrict
+		strictCatalog = true
+	} else if _, ok := prov.(core.SessionCatalogProvider); ok {
+		resolveCatalog = invocation.ResolveCatalogStrict
+		strictCatalog = true
 	}
-	catalogConnection, catalogInstance := s.workloadBindingSelectors(p, name, requestedConnection, requestedInstance)
-	cat, err := resolveCatalog(r.Context(), prov, name, resolver, p, catalogConnection, catalogInstance)
-	if err != nil {
-		s.writeInvocationError(w, r, name, "", err)
-		return
+	ctx := invocation.WithAccessContext(r.Context(), s.providerAccessContext(p, name))
+	var cat *catalog.Catalog
+	if strictCatalog && requestedConnection == "" && requestedInstance == "" &&
+		(s.authorizer == nil || !s.authorizer.IsWorkload(p)) {
+		catalogConnections := make([]string, 0, 2)
+		if conn := s.catalogLookupConnection(name, requestedConnection); conn != "" {
+			catalogConnections = append(catalogConnections, conn)
+		}
+		if conn := s.defaultConnection[name]; conn != "" && (len(catalogConnections) == 0 || catalogConnections[0] != conn) && s.catalogConnection[name] == "" {
+			catalogConnections = append(catalogConnections, conn)
+		}
+		if len(catalogConnections) == 0 {
+			catalogConnections = append(catalogConnections, "")
+		}
+		var firstErr error
+		for _, catalogConnection := range catalogConnections {
+			resolvedConnection, catalogInstance := s.workloadBindingSelectors(p, name, catalogConnection, requestedInstance)
+			var err error
+			cat, err = resolveCatalog(ctx, prov, name, resolver, p, resolvedConnection, catalogInstance)
+			if err == nil {
+				break
+			}
+			if firstErr == nil {
+				firstErr = err
+			}
+			cat = nil
+		}
+		if cat == nil && firstErr != nil {
+			s.writeInvocationError(w, r, name, "", firstErr)
+			return
+		}
+	} else {
+		catalogConnection := requestedConnection
+		if s.authorizer == nil || !s.authorizer.IsWorkload(p) {
+			catalogConnection = s.catalogLookupConnection(name, requestedConnection)
+		}
+		catalogConnection, catalogInstance := s.workloadBindingSelectors(p, name, catalogConnection, requestedInstance)
+		var err error
+		cat, err = resolveCatalog(ctx, prov, name, resolver, p, catalogConnection, catalogInstance)
+		if err != nil {
+			s.writeInvocationError(w, r, name, "", err)
+			return
+		}
 	}
 	cat = invocation.FilterCatalogForPrincipal(cat, name, p, s.authorizer)
 	ops := httpVisibleCatalogOperations(cat.Operations)
@@ -482,7 +525,8 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	operationName := chi.URLParam(r, "operation")
 
 	p := PrincipalFromContext(r.Context())
-	if _, ok := s.getProvider(w, providerName); !ok {
+	prov, ok := s.getProvider(w, providerName)
+	if !ok {
 		return
 	}
 	if !s.allowProvider(p, providerName) || !s.allowOperation(p, providerName, operationName) {
@@ -567,6 +611,88 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		connection = requestedConnection
 	}
 	ctx := r.Context()
+	ctx = invocation.WithAccessContext(ctx, s.providerAccessContext(p, providerName))
+
+	var resolver invocation.TokenResolver
+	if tr, ok := s.invoker.(invocation.TokenResolver); ok {
+		resolver = tr
+	}
+	opMeta, ok := invocation.CatalogOperation(prov.Catalog(), operationName)
+	sessionOpFound := false
+	if _, sessionCapable := prov.(core.SessionCatalogProvider); sessionCapable {
+		var firstSessionErr error
+		sessionCatalogResolved := false
+		sessionConnections := make([]string, 0, 2)
+		switch {
+		case connection != "":
+			sessionConnections = append(sessionConnections, connection)
+		case s.authorizer != nil && s.authorizer.IsWorkload(p):
+			sessionConnections = append(sessionConnections, "")
+		default:
+			catalogConnection := ""
+			hasCatalogConnection := false
+			if conn := s.catalogConnection[providerName]; conn != "" {
+				catalogConnection = conn
+				hasCatalogConnection = true
+			} else if broker, ok := s.invoker.(interface{ MCPConnection(string) string }); ok {
+				catalogConnection = broker.MCPConnection(providerName)
+			}
+			if catalogConnection == "" {
+				catalogConnection = s.defaultConnection[providerName]
+			}
+			if catalogConnection != "" {
+				sessionConnections = append(sessionConnections, catalogConnection)
+			}
+			if !hasCatalogConnection {
+				if conn := s.defaultConnection[providerName]; conn != "" && (len(sessionConnections) == 0 || sessionConnections[0] != conn) {
+					sessionConnections = append(sessionConnections, conn)
+				}
+			}
+			if len(sessionConnections) == 0 {
+				sessionConnections = append(sessionConnections, "")
+			}
+		}
+		for _, sessionConnection := range sessionConnections {
+			sessionConnection, sessionInstance := s.workloadBindingSelectors(p, providerName, sessionConnection, instance)
+			sessionCat, err := invocation.ResolveSessionCatalog(ctx, prov, providerName, resolver, p, sessionConnection, sessionInstance)
+			if err != nil {
+				if firstSessionErr == nil {
+					firstSessionErr = err
+				}
+				if connection != "" {
+					s.writeInvocationError(w, r, providerName, operationName, err)
+					return
+				}
+				continue
+			}
+			sessionCatalogResolved = true
+			if sessionOp, sessionOK := invocation.CatalogOperation(sessionCat, operationName); sessionOK {
+				opMeta, ok = sessionOp, true
+				sessionOpFound = true
+				if connection == "" {
+					connection = sessionConnection
+				}
+				break
+			}
+		}
+		if firstSessionErr != nil && !sessionCatalogResolved {
+			s.writeInvocationError(w, r, providerName, operationName, firstSessionErr)
+			return
+		}
+		if instance != "" && !sessionOpFound {
+			s.writeInvocationError(w, r, providerName, operationName, fmt.Errorf("%w: %q on provider %q", invocation.ErrOperationNotFound, operationName, providerName))
+			return
+		}
+	}
+	if !ok {
+		s.writeInvocationError(w, r, providerName, operationName, fmt.Errorf("%w: %q on provider %q", invocation.ErrOperationNotFound, operationName, providerName))
+		return
+	}
+	if s.authorizer != nil && !s.authorizer.AllowCatalogOperation(p, providerName, opMeta) {
+		writeError(w, http.StatusForbidden, "operation access denied")
+		return
+	}
+	ctx = invocation.WithCatalogOperation(ctx, providerName, opMeta)
 	if connection != "" {
 		if !safeParamValue.MatchString(connection) {
 			writeError(w, http.StatusBadRequest, "connection name contains invalid characters")
@@ -643,6 +769,11 @@ func (s *Server) catalogLookupConnection(providerName, explicit string) string {
 	}
 	if conn := s.catalogConnection[providerName]; conn != "" {
 		return conn
+	}
+	if broker, ok := s.invoker.(interface{ MCPConnection(string) string }); ok {
+		if conn := broker.MCPConnection(providerName); conn != "" {
+			return conn
+		}
 	}
 	return s.defaultConnection[providerName]
 }

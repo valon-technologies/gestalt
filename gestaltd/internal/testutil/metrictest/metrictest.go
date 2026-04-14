@@ -2,31 +2,30 @@ package metrictest
 
 import (
 	"context"
-	"sync"
 	"testing"
 
-	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
 
-var meterProviderMu sync.Mutex
+type ManualMeterProvider struct {
+	Provider *sdkmetric.MeterProvider
+	Reader   *sdkmetric.ManualReader
+}
 
-func UseManualMeterProvider(t *testing.T) *sdkmetric.ManualReader {
+func NewManualMeterProvider(t *testing.T) *ManualMeterProvider {
 	t.Helper()
 
-	meterProviderMu.Lock()
-	prev := otel.GetMeterProvider()
 	reader := sdkmetric.NewManualReader()
 	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
-	otel.SetMeterProvider(provider)
 	t.Cleanup(func() {
 		_ = provider.Shutdown(context.Background())
-		otel.SetMeterProvider(prev)
-		meterProviderMu.Unlock()
 	})
-	return reader
+	return &ManualMeterProvider{
+		Provider: provider,
+		Reader:   reader,
+	}
 }
 
 func CollectMetrics(t *testing.T, reader *sdkmetric.ManualReader) metricdata.ResourceMetrics {

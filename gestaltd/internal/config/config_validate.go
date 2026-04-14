@@ -19,6 +19,9 @@ func ValidateStructure(cfg *Config) error {
 	if err := normalizeMountedUIPaths(cfg); err != nil {
 		return err
 	}
+	if err := validateAuthorizationPolicies(cfg); err != nil {
+		return err
+	}
 	if err := validateServerListeners(cfg.Server); err != nil {
 		return err
 	}
@@ -87,6 +90,9 @@ func ValidateStructure(cfg *Config) error {
 			return fmt.Errorf("config validation: ui %q does not support builtin providers; use a provider source reference", name)
 		}
 		if err := validateProviderEntrySource("ui", name, &entry.ProviderEntry); err != nil {
+			return err
+		}
+		if err := validateAuthorizationPolicyReference(cfg, "ui", name, entry.AuthorizationPolicy); err != nil {
 			return err
 		}
 		if entry.Path == "" {
@@ -245,6 +251,9 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry) error {
 	if err := validatePluginIndexedDBBindings(cfg, name, entry); err != nil {
 		return err
 	}
+	if err := validateAuthorizationPolicyReference(cfg, "plugin", name, entry.AuthorizationPolicy); err != nil {
+		return err
+	}
 	return validateManifestBackedIntegration(name, entry)
 }
 
@@ -277,6 +286,61 @@ func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) erro
 	}
 	if entry.Surfaces != nil {
 		return fmt.Errorf("config validation: %s.surfaces is only supported on providers.plugins.*", subject)
+	}
+	if entry.AuthorizationPolicy != "" && !strings.HasPrefix(subject, "ui.") {
+		return fmt.Errorf("config validation: %s.authorizationPolicy is only supported on providers.plugins.* and providers.ui.*", subject)
+	}
+	return nil
+}
+
+func validateAuthorizationPolicies(cfg *Config) error {
+	for name, policy := range cfg.Server.Authorization.Policies {
+		if strings.TrimSpace(name) == "" {
+			return fmt.Errorf("config validation: server.authorization.policies keys must be non-empty")
+		}
+		switch strings.TrimSpace(policy.Default) {
+		case "", "allow", "deny":
+		default:
+			return fmt.Errorf("config validation: server.authorization.policies.%s.default must be %q or %q", name, "allow", "deny")
+		}
+		seenSubjectIDs := make(map[string]int, len(policy.Members))
+		seenEmails := make(map[string]int, len(policy.Members))
+		for i, member := range policy.Members {
+			subjectID := strings.TrimSpace(member.SubjectID)
+			email := strings.ToLower(strings.TrimSpace(member.Email))
+			role := strings.TrimSpace(member.Role)
+			switch {
+			case role == "":
+				return fmt.Errorf("config validation: server.authorization.policies.%s.members[%d].role is required", name, i)
+			case subjectID == "" && email == "":
+				return fmt.Errorf("config validation: server.authorization.policies.%s.members[%d] must set subjectID or email", name, i)
+			case subjectID != "" && email != "":
+				return fmt.Errorf("config validation: server.authorization.policies.%s.members[%d] may not set both subjectID and email", name, i)
+			}
+			if subjectID != "" {
+				if prev, exists := seenSubjectIDs[subjectID]; exists {
+					return fmt.Errorf("config validation: server.authorization.policies.%s.members[%d].subjectID duplicates members[%d]", name, i, prev)
+				}
+				seenSubjectIDs[subjectID] = i
+			}
+			if email != "" {
+				if prev, exists := seenEmails[email]; exists {
+					return fmt.Errorf("config validation: server.authorization.policies.%s.members[%d].email duplicates members[%d]", name, i, prev)
+				}
+				seenEmails[email] = i
+			}
+		}
+	}
+	return nil
+}
+
+func validateAuthorizationPolicyReference(cfg *Config, kind, name, policy string) error {
+	policy = strings.TrimSpace(policy)
+	if policy == "" {
+		return nil
+	}
+	if _, ok := cfg.Server.Authorization.Policies[policy]; !ok {
+		return fmt.Errorf("config validation: %s %q authorizationPolicy references unknown policy %q", kind, name, policy)
 	}
 	return nil
 }

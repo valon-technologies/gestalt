@@ -25,10 +25,7 @@ func capabilitiesFromCatalog(name string, cat *catalog.Catalog) []core.Capabilit
 		}
 
 		method := strings.ToUpper(strings.TrimSpace(op.Method))
-		transport := strings.TrimSpace(op.Transport)
-		if transport == "" && method != "" {
-			transport = catalog.TransportREST
-		}
+		transport := catalogOperationTransport(op)
 
 		caps = append(caps, core.Capability{
 			Provider:    name,
@@ -54,18 +51,30 @@ func providerCatalog(prov core.Provider) *catalog.Catalog {
 	return prov.Catalog()
 }
 
-func CatalogOperationTransport(cat *catalog.Catalog, operation string) (string, bool) {
+func CatalogOperation(cat *catalog.Catalog, operation string) (catalog.CatalogOperation, bool) {
 	if cat == nil || strings.TrimSpace(operation) == "" {
-		return "", false
+		return catalog.CatalogOperation{}, false
 	}
 	for i := range cat.Operations {
 		if cat.Operations[i].ID == operation {
-			transport := strings.TrimSpace(cat.Operations[i].Transport)
-			if transport == "" && strings.TrimSpace(cat.Operations[i].Method) != "" {
-				transport = catalog.TransportREST
-			}
-			return transport, true
+			return cat.Operations[i], true
 		}
 	}
-	return "", false
+	return catalog.CatalogOperation{}, false
+}
+
+func CatalogOperationTransport(cat *catalog.Catalog, operation string) (string, bool) {
+	op, ok := CatalogOperation(cat, operation)
+	if !ok {
+		return "", false
+	}
+	return catalogOperationTransport(op), true
+}
+
+func catalogOperationTransport(op catalog.CatalogOperation) string {
+	transport := strings.TrimSpace(op.Transport)
+	if transport == "" && strings.TrimSpace(op.Method) != "" {
+		return catalog.TransportREST
+	}
+	return transport
 }

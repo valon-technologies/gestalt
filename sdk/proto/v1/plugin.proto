@@ -37,6 +37,7 @@ message CatalogOperation {
   bool read_only = 11;
   optional bool visible = 12;
   string transport = 13;
+  repeated string allowed_roles = 14;
 }
 
 message Catalog {
@@ -113,9 +114,15 @@ message CredentialContext {
   string instance = 4;
 }
 
+message AccessContext {
+  string policy = 1;
+  string role = 2;
+}
+
 message RequestContext {
   SubjectContext subject = 1;
   CredentialContext credential = 2;
+  AccessContext access = 3;
 }
 
 message ExecuteRequest {

@@ -75,7 +75,9 @@ class ParseRuntimeArgsTests(unittest.TestCase):
                 encoding="utf-8",
             )
 
-            with mock.patch.object(_runtime.sys, "_MEIPASS", str(bundle_dir), create=True):
+            with mock.patch.object(
+                _runtime.sys, "_MEIPASS", str(bundle_dir), create=True
+            ):
                 runtime_args = _runtime._parse_runtime_args([])
 
         self.assertEqual(
@@ -88,7 +90,9 @@ class ParseRuntimeArgsTests(unittest.TestCase):
         )
 
     def test_defaults_runtime_kind_to_integration(self) -> None:
-        runtime_args = _runtime._parse_runtime_args(["/tmp/plugin", "example.plugin:PLUGIN"])
+        runtime_args = _runtime._parse_runtime_args(
+            ["/tmp/plugin", "example.plugin:PLUGIN"]
+        )
         self.assertIsNotNone(runtime_args)
         assert runtime_args is not None
         self.assertEqual(runtime_args.runtime_kind, "integration")
@@ -105,7 +109,9 @@ class ManifestNameTests(unittest.TestCase):
             temp_root = pathlib.Path(tmpdir)
 
             manifest_path = temp_root / "manifest.yaml"
-            manifest_path.write_text('display_name: "Released Plugin"\n', encoding="utf-8")
+            manifest_path.write_text(
+                'display_name: "Released Plugin"\n', encoding="utf-8"
+            )
 
             manifest_dir = temp_root / "plugin.json"
             manifest_dir.mkdir()
@@ -147,6 +153,7 @@ class RequestTests(unittest.TestCase):
         self.assertIsNone(request.connection_param("missing"))
         self.assertEqual(request.subject.id, "")
         self.assertEqual(request.credential.mode, "")
+        self.assertEqual(request.access.role, "")
 
 
 class MainEntrypointTests(unittest.TestCase):
@@ -159,10 +166,13 @@ class MainEntrypointTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             catalog_path = pathlib.Path(tmpdir) / "catalog.yaml"
-            with mock.patch.object(_runtime, "_load_target", return_value=plugin), mock.patch.dict(
-                _runtime.os.environ,
-                {_runtime.ENV_WRITE_CATALOG: str(catalog_path)},
-                clear=True,
+            with (
+                mock.patch.object(_runtime, "_load_target", return_value=plugin),
+                mock.patch.dict(
+                    _runtime.os.environ,
+                    {_runtime.ENV_WRITE_CATALOG: str(catalog_path)},
+                    clear=True,
+                ),
             ):
                 result = _runtime.main(["/tmp/plugin", "example.plugin:PLUGIN"])
 
@@ -184,6 +194,8 @@ class MainEntrypointTests(unittest.TestCase):
                 "subject_kind": request.subject.kind,
                 "credential_mode": request.credential.mode,
                 "credential_subject_id": request.credential.subject_id,
+                "access_policy": request.access.policy,
+                "access_role": request.access.role,
             }
 
         @plugin.session_catalog
@@ -195,10 +207,12 @@ class MainEntrypointTests(unittest.TestCase):
                         request.connection_param("tenant") or "",
                         request.subject.id,
                         request.credential.mode,
+                        request.access.role,
                     ]
                 ),
             )
             cat.operations.append(CatalogOperation(id="private_search", method="POST"))
+            cat.operations[0].allowed_roles.extend(["viewer", "admin"])
             return cat
 
         servicer = _runtime._provider_servicer(plugin=plugin)
@@ -217,6 +231,10 @@ class MainEntrypointTests(unittest.TestCase):
                         mode="identity",
                         subject_id="identity:__identity__",
                     ),
+                    access=plugin_pb2.AccessContext(
+                        policy="sample_policy",
+                        role="admin",
+                    ),
                 ),
             ),
             mock.Mock(),
@@ -228,6 +246,10 @@ class MainEntrypointTests(unittest.TestCase):
                 context=plugin_pb2.RequestContext(
                     subject=plugin_pb2.SubjectContext(id="user:user-123", kind="user"),
                     credential=plugin_pb2.CredentialContext(mode="identity"),
+                    access=plugin_pb2.AccessContext(
+                        policy="sample_policy",
+                        role="viewer",
+                    ),
                 ),
             ),
             mock.Mock(),
@@ -242,14 +264,17 @@ class MainEntrypointTests(unittest.TestCase):
                 "subject_kind": "user",
                 "credential_mode": "identity",
                 "credential_subject_id": "identity:__identity__",
+                "access_policy": "sample_policy",
+                "access_role": "admin",
             },
         )
         catalog = response.catalog
         self.assertEqual(catalog.name, "session-source")
-        self.assertEqual(catalog.display_name, "acme|user:user-123|identity")
+        self.assertEqual(catalog.display_name, "acme|user:user-123|identity|viewer")
         self.assertEqual(len(catalog.operations), 1)
         self.assertEqual(catalog.operations[0].id, "private_search")
         self.assertEqual(catalog.operations[0].method, "POST")
+        self.assertEqual(list(catalog.operations[0].allowed_roles), ["viewer", "admin"])
 
     def test_provider_servicer_rejects_missing_session_catalog_support(self) -> None:
         plugin = Plugin("source-name")
@@ -336,7 +361,9 @@ class AuthRuntimeTests(unittest.TestCase):
             ),
             mock.Mock(),
         )
-        self.assertEqual(login.authorization_url, "https://auth.example.test/login?state=host-state")
+        self.assertEqual(
+            login.authorization_url, "https://auth.example.test/login?state=host-state"
+        )
         self.assertEqual(bytes(login.provider_state), b"provider-state")
 
         user = auth_servicer.CompleteLogin(
@@ -362,7 +389,9 @@ class AuthRuntimeTests(unittest.TestCase):
     def test_auth_validator_missing_or_unknown_token(self) -> None:
         class NoValidator(AuthProvider):
             def begin_login(self, request: Any) -> Any:
-                return auth_pb2.BeginLoginResponse(authorization_url="https://example.test")
+                return auth_pb2.BeginLoginResponse(
+                    authorization_url="https://example.test"
+                )
 
             def complete_login(self, request: Any) -> Any:
                 return auth_pb2.AuthenticatedUser(email="user@example.com")

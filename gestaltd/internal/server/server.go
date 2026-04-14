@@ -15,9 +15,11 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/metric"
 )
 
 // ReadinessChecker reports whether the server is ready to handle requests.
@@ -93,6 +95,7 @@ type Config struct {
 	MountedWebUIs     []MountedWebUI
 	AdminUI           http.Handler
 	RouteProfile      RouteProfile
+	MeterProvider     metric.MeterProvider
 }
 
 func New(cfg Config) (*Server, error) {
@@ -127,9 +130,13 @@ func New(cfg Config) (*Server, error) {
 	resolver := principal.NewResolver(cfg.Auth, users, apiTokens, cfg.Authorizer)
 
 	router := chi.NewRouter()
+	otelOptions := []otelhttp.Option{}
+	if cfg.MeterProvider != nil {
+		otelOptions = append(otelOptions, otelhttp.WithMeterProvider(cfg.MeterProvider))
+	}
 	s := &Server{
 		router:            router,
-		handler:           otelhttp.NewHandler(router, "gestaltd"),
+		handler:           withRequestMeterProvider(otelhttp.NewHandler(router, "gestaltd", otelOptions...), cfg.MeterProvider),
 		auth:              cfg.Auth,
 		auditSink:         cfg.AuditSink,
 		users:             users,
@@ -182,4 +189,13 @@ func (s *Server) issueSessionToken(identity *core.UserIdentity) (string, error) 
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.handler.ServeHTTP(w, r)
+}
+
+func withRequestMeterProvider(next http.Handler, provider metric.MeterProvider) http.Handler {
+	if provider == nil {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r.WithContext(metricutil.WithMeterProvider(r.Context(), provider)))
+	})
 }

@@ -223,10 +223,11 @@ type ManifestPaginationConfig struct {
 }
 
 type ManifestOperationOverride struct {
-	Alias       string                    `json:"alias,omitempty" yaml:"alias,omitempty"`
-	Description string                    `json:"description,omitempty" yaml:"description,omitempty"`
-	Paginate    bool                      `json:"paginate,omitempty" yaml:"paginate,omitempty"`
-	Pagination  *ManifestPaginationConfig `json:"pagination,omitempty" yaml:"pagination,omitempty"`
+	Alias        string                    `json:"alias,omitempty" yaml:"alias,omitempty"`
+	Description  string                    `json:"description,omitempty" yaml:"description,omitempty"`
+	AllowedRoles []string                  `json:"allowedRoles,omitempty" yaml:"allowedRoles,omitempty"`
+	Paginate     bool                      `json:"paginate,omitempty" yaml:"paginate,omitempty"`
+	Pagination   *ManifestPaginationConfig `json:"pagination,omitempty" yaml:"pagination,omitempty"`
 }
 
 type ManifestConnectionDef struct {
@@ -238,11 +239,12 @@ type ManifestConnectionDef struct {
 }
 
 type ProviderOperation struct {
-	Name        string              `json:"name" yaml:"name"`
-	Description string              `json:"description,omitempty" yaml:"description,omitempty"`
-	Method      string              `json:"method" yaml:"method"`
-	Path        string              `json:"path" yaml:"path"`
-	Parameters  []ProviderParameter `json:"parameters,omitempty" yaml:"parameters,omitempty"`
+	Name         string              `json:"name" yaml:"name"`
+	Description  string              `json:"description,omitempty" yaml:"description,omitempty"`
+	Method       string              `json:"method" yaml:"method"`
+	Path         string              `json:"path" yaml:"path"`
+	AllowedRoles []string            `json:"allowedRoles,omitempty" yaml:"allowedRoles,omitempty"`
+	Parameters   []ProviderParameter `json:"parameters,omitempty" yaml:"parameters,omitempty"`
 }
 
 type ProviderParameter struct {

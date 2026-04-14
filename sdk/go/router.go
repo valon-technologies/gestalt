@@ -19,6 +19,7 @@ type Request struct {
 	ConnectionParams map[string]string
 	Subject          Subject
 	Credential       Credential
+	Access           Access
 }
 
 // ConnectionParam returns one resolved connection parameter by name and whether
@@ -46,13 +47,14 @@ func OK[T any](body T) Response[T] {
 // Operation describes one statically declared executable operation.
 // Input and output types are used for typed dispatch and catalog generation.
 type Operation[In any, Out any] struct {
-	ID          string
-	Method      string
-	Title       string
-	Description string
-	Tags        []string
-	ReadOnly    bool
-	Visible     *bool
+	ID           string
+	Method       string
+	Title        string
+	Description  string
+	AllowedRoles []string
+	Tags         []string
+	ReadOnly     bool
+	Visible      *bool
 }
 
 type Registration[P any] struct {
@@ -196,6 +198,7 @@ func (r *Router[P]) Execute(ctx context.Context, provider *P, operation string, 
 			ConnectionParams: ConnectionParams(ctx),
 			Subject:          SubjectFromContext(ctx),
 			Credential:       CredentialFromContext(ctx),
+			Access:           AccessFromContext(ctx),
 		})
 	})
 	if result == nil {
@@ -214,13 +217,14 @@ func catalogOperationFor[In any, Out any](op Operation[In, Out]) (*proto.Catalog
 		return nil, fmt.Errorf("operation %q: %w", id, err)
 	}
 	catOp := &proto.CatalogOperation{
-		Id:          id,
-		Method:      normalizeMethod(op.Method),
-		Title:       strings.TrimSpace(op.Title),
-		Description: strings.TrimSpace(op.Description),
-		Parameters:  params,
-		Tags:        append([]string(nil), op.Tags...),
-		ReadOnly:    op.ReadOnly,
+		Id:           id,
+		Method:       normalizeMethod(op.Method),
+		Title:        strings.TrimSpace(op.Title),
+		Description:  strings.TrimSpace(op.Description),
+		AllowedRoles: append([]string(nil), op.AllowedRoles...),
+		Parameters:   params,
+		Tags:         append([]string(nil), op.Tags...),
+		ReadOnly:     op.ReadOnly,
 	}
 	if op.Visible != nil {
 		catOp.Visible = op.Visible

@@ -24,6 +24,10 @@ func ResolveCatalogStrict(ctx context.Context, prov core.Provider, provName stri
 	return resolveCatalog(ctx, prov, provName, resolver, p, defaultConnection, instance, true)
 }
 
+func ResolveSessionCatalog(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, connection, instance string) (*catalog.Catalog, error) {
+	return resolveSessionCatalog(ctx, prov, provName, resolver, p, connection, instance)
+}
+
 func resolveCatalog(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, defaultConnection, instance string, strictSession bool) (*catalog.Catalog, error) {
 	staticCat := prov.Catalog()
 
@@ -40,7 +44,21 @@ func resolveCatalog(ctx context.Context, prov core.Provider, provName string, re
 
 func resolveSessionCatalog(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, connection, instance string) (*catalog.Catalog, error) {
 	scp, ok := prov.(core.SessionCatalogProvider)
-	if !ok || resolver == nil || prov.ConnectionMode() == core.ConnectionModeNone || p == nil {
+	if !ok {
+		return nil, nil
+	}
+	if prov.ConnectionMode() == core.ConnectionModeNone {
+		if resolver != nil && p != nil {
+			enrichedCtx, token, err := resolver.ResolveToken(ctx, p, provName, connection, instance)
+			if err != nil {
+				return nil, err
+			}
+			return scp.CatalogForRequest(enrichedCtx, token)
+		}
+		ctx = WithCredentialContext(ctx, CredentialContext{Mode: core.ConnectionModeNone})
+		return scp.CatalogForRequest(ctx, "")
+	}
+	if resolver == nil || p == nil {
 		return nil, nil
 	}
 
@@ -62,14 +80,16 @@ func mergeCatalogs(provName string, staticCat, sessionCat *catalog.Catalog) (*ca
 		merged = sessionCat.Clone()
 	default:
 		merged = staticCat.Clone()
-		staticIDs := make(map[string]struct{}, len(merged.Operations))
+		staticIndexes := make(map[string]int, len(merged.Operations))
 		for i := range merged.Operations {
-			staticIDs[merged.Operations[i].ID] = struct{}{}
+			staticIndexes[merged.Operations[i].ID] = i
 		}
 		for i := range sessionCat.Operations {
-			if _, exists := staticIDs[sessionCat.Operations[i].ID]; !exists {
-				merged.Operations = append(merged.Operations, sessionCat.Operations[i])
+			if idx, exists := staticIndexes[sessionCat.Operations[i].ID]; exists {
+				merged.Operations[idx] = sessionCat.Operations[i]
+				continue
 			}
+			merged.Operations = append(merged.Operations, sessionCat.Operations[i])
 		}
 	}
 
@@ -78,14 +98,14 @@ func mergeCatalogs(provName string, staticCat, sessionCat *catalog.Catalog) (*ca
 }
 
 func FilterCatalogForPrincipal(cat *catalog.Catalog, provName string, p *principal.Principal, authorizer *authorization.Authorizer) *catalog.Catalog {
-	if cat == nil || authorizer == nil || !authorizer.IsWorkload(p) {
+	if cat == nil || authorizer == nil {
 		return cat
 	}
 
 	filtered := cat.Clone()
 	ops := filtered.Operations[:0]
 	for i := range filtered.Operations {
-		if authorizer.AllowOperation(p, provName, filtered.Operations[i].ID) {
+		if authorizer.AllowCatalogOperation(p, provName, filtered.Operations[i]) {
 			ops = append(ops, filtered.Operations[i])
 		}
 	}

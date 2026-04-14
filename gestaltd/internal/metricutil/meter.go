@@ -1,6 +1,7 @@
 package metricutil
 
 import (
+	"context"
 	"reflect"
 	"strconv"
 	"sync"
@@ -11,14 +12,32 @@ import (
 	noopmetric "go.opentelemetry.io/otel/metric/noop"
 )
 
+type meterProviderContextKey struct{}
+
 type MeterCache[T any] struct {
 	mu      sync.Mutex
 	key     string
 	metrics T
 }
 
-func (c *MeterCache[T]) Load(meterName string, build func(metric.Meter) T) T {
-	provider := otel.GetMeterProvider()
+func WithMeterProvider(ctx context.Context, provider metric.MeterProvider) context.Context {
+	if ctx == nil || provider == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, meterProviderContextKey{}, provider)
+}
+
+func MeterProviderFromContext(ctx context.Context) metric.MeterProvider {
+	if ctx != nil {
+		if provider, _ := ctx.Value(meterProviderContextKey{}).(metric.MeterProvider); provider != nil {
+			return provider
+		}
+	}
+	return otel.GetMeterProvider()
+}
+
+func (c *MeterCache[T]) Load(ctx context.Context, meterName string, build func(metric.Meter) T) T {
+	provider := MeterProviderFromContext(ctx)
 	if key, ok := meterProviderCacheKey(provider); ok {
 		c.mu.Lock()
 		defer c.mu.Unlock()

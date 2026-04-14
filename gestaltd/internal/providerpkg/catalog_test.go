@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -68,5 +69,27 @@ operations:
 	}
 	if output["type"] != "object" {
 		t.Fatalf("outputSchema.type = %v, want object", output["type"])
+	}
+}
+
+func TestReadStaticCatalogRejectsBlankAllowedRoles(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	data := []byte(`
+name: provider
+operations:
+  - id: echo
+    method: POST
+    allowedRoles:
+      - "   "
+`)
+	if err := os.WriteFile(filepath.Join(root, StaticCatalogFile), data, 0o644); err != nil {
+		t.Fatalf("WriteFile(catalog.yaml): %v", err)
+	}
+
+	_, err := ReadStaticCatalog(root, "")
+	if err == nil || err.Error() == "" || !strings.Contains(err.Error(), "allowedRoles entry with empty value") {
+		t.Fatalf("ReadStaticCatalog error = %v, want blank allowedRoles error", err)
 	}
 }

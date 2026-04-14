@@ -7,6 +7,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
+	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
 
@@ -22,6 +23,14 @@ func (s *Server) allowOperation(p *principal.Principal, provider, operation stri
 		return true
 	}
 	return s.authorizer.AllowOperation(p, provider, operation)
+}
+
+func (s *Server) providerAccessContext(p *principal.Principal, provider string) invocation.AccessContext {
+	if s.authorizer == nil {
+		return invocation.AccessContext{}
+	}
+	access, _ := s.authorizer.ResolveAccess(p, provider)
+	return access
 }
 
 func (s *Server) workloadBinding(p *principal.Principal, provider string) (authorization.CredentialBinding, bool) {

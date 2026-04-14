@@ -65,6 +65,7 @@ class Plugin(SessionCatalogProvider):
         method: str = DEFAULT_OPERATION_METHOD,
         title: str = "",
         description: str = "",
+        allowed_roles: list[str] | None = None,
         tags: list[str] | None = None,
         read_only: bool = False,
         visible: bool | None = None,
@@ -82,6 +83,7 @@ class Plugin(SessionCatalogProvider):
                 method=(method or DEFAULT_OPERATION_METHOD).upper(),
                 title=title.strip(),
                 description=description.strip(),
+                allowed_roles=_normalize_allowed_roles(allowed_roles),
                 tags=list(tags or []),
                 read_only=read_only,
                 visible=visible,
@@ -101,7 +103,9 @@ class Plugin(SessionCatalogProvider):
             return
         run_sync(handler(name, config))
 
-    def execute(self, operation: str, params: dict[str, Any], request: Request) -> OperationResult:
+    def execute(
+        self, operation: str, params: dict[str, Any], request: Request
+    ) -> OperationResult:
         return execute_operation(
             self._operations.get(operation),
             params=params,
@@ -164,7 +168,10 @@ class Plugin(SessionCatalogProvider):
             return None
 
         session_catalog = getattr(module, "session_catalog", None)
-        if callable(session_catalog) and getattr(session_catalog, "__module__", None) == module.__name__:
+        if (
+            callable(session_catalog)
+            and getattr(session_catalog, "__module__", None) == module.__name__
+        ):
             self._session_catalog_handler = (
                 session_catalog,
                 _inspect_session_catalog_handler(session_catalog),
@@ -211,6 +218,7 @@ def operation(
     method: str = DEFAULT_OPERATION_METHOD,
     title: str = "",
     description: str = "",
+    allowed_roles: list[str] | None = None,
     tags: list[str] | None = None,
     read_only: bool = False,
     visible: bool | None = None,
@@ -222,6 +230,7 @@ def operation(
             method=method,
             title=title,
             description=description,
+            allowed_roles=allowed_roles,
             tags=tags,
             read_only=read_only,
             visible=visible,
@@ -246,6 +255,18 @@ def _module_plugin(module: types.ModuleType) -> "Plugin":
     return _MODULE_PLUGINS.for_module(module)
 
 
+def _normalize_allowed_roles(allowed_roles: list[str] | None) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for role in allowed_roles or []:
+        trimmed = role.strip()
+        if not trimmed or trimmed in seen:
+            continue
+        seen.add(trimmed)
+        normalized.append(trimmed)
+    return normalized
+
+
 def _inspect_session_catalog_handler(func: Any) -> bool:
     signature = inspect.signature(func)
     parameters = list(signature.parameters.values())
@@ -258,7 +279,9 @@ def _inspect_session_catalog_handler(func: Any) -> bool:
 
     annotation = type_hints.get(parameters[0].name, parameters[0].annotation)
     if annotation not in (inspect.Signature.empty, Request):
-        raise TypeError("session catalog handler parameter must be annotated as gestalt.Request")
+        raise TypeError(
+            "session catalog handler parameter must be annotated as gestalt.Request"
+        )
     return True
 
 
@@ -310,7 +333,9 @@ class _TagIgnoringLoader(yaml.SafeLoader):
     pass
 
 
-def _construct_ignore_tag(loader: yaml.SafeLoader, _suffix: str, node: yaml.Node) -> Any:
+def _construct_ignore_tag(
+    loader: yaml.SafeLoader, _suffix: str, node: yaml.Node
+) -> Any:
     if isinstance(node, yaml.ScalarNode):
         return loader.construct_scalar(node)
     if isinstance(node, yaml.SequenceNode):

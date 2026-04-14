@@ -30,7 +30,9 @@ OperationAnnotations: Any = plugin_pb2.OperationAnnotations  # ty: ignore[unreso
 
 @runtime_checkable
 class SessionCatalogProvider(Protocol):
-    def catalog_for_request(self, request: Request) -> Catalog | Mapping[str, Any] | None: ...
+    def catalog_for_request(
+        self, request: Request
+    ) -> Catalog | Mapping[str, Any] | None: ...
 
 
 def build_catalog(
@@ -54,9 +56,13 @@ def catalog_to_proto(catalog: Catalog | Mapping[str, Any] | None) -> Catalog | N
     raise TypeError("catalog must be a gestalt.Catalog or mapping")
 
 
-def catalog_to_dict(catalog: Catalog | Mapping[str, Any], *, field_style: str = "yaml") -> dict[str, Any]:
+def catalog_to_dict(
+    catalog: Catalog | Mapping[str, Any], *, field_style: str = "yaml"
+) -> dict[str, Any]:
     if isinstance(catalog, Catalog):
-        raw = json_format.MessageToDict(catalog, preserving_proto_field_name=(field_style == "yaml"))
+        raw = json_format.MessageToDict(
+            catalog, preserving_proto_field_name=(field_style == "yaml")
+        )
         if "operations" not in raw:
             raw["operations"] = []
         return raw
@@ -65,7 +71,9 @@ def catalog_to_dict(catalog: Catalog | Mapping[str, Any], *, field_style: str = 
     raise TypeError("catalog must be a gestalt.Catalog or mapping")
 
 
-def write_catalog(path: str | pathlib.Path, *, catalog: Catalog | Mapping[str, Any]) -> None:
+def write_catalog(
+    path: str | pathlib.Path, *, catalog: Catalog | Mapping[str, Any]
+) -> None:
     if isinstance(catalog, Mapping):
         catalog = _catalog_from_mapping(catalog)
     catalog_path = pathlib.Path(path)
@@ -86,6 +94,7 @@ def _catalog_operation(operation: OperationDefinition) -> CatalogOperation:
         read_only=operation.read_only,
     )
     op.parameters.extend(_catalog_parameters(operation.input_type))
+    op.allowed_roles.extend(operation.allowed_roles)
     op.tags.extend(operation.tags)
     if operation.visible is not None:
         op.visible = operation.visible
@@ -113,7 +122,9 @@ def _catalog_parameters(input_type: Any) -> list[CatalogParameter]:
             type=_catalog_type(annotation),
         )
 
-        description = str(field_definition.metadata.get(FIELD_DESCRIPTION_KEY, "")).strip()
+        description = str(
+            field_definition.metadata.get(FIELD_DESCRIPTION_KEY, "")
+        ).strip()
         required = field_definition.metadata.get(FIELD_REQUIRED_KEY)
         if required is None:
             required = (
@@ -125,9 +136,11 @@ def _catalog_parameters(input_type: Any) -> list[CatalogParameter]:
         param.description = description
         param.required = bool(required)
         if field_definition.default is not MISSING:
-            param.default.CopyFrom(struct_pb2.Value(string_value=str(field_definition.default))
-                                   if isinstance(field_definition.default, str)
-                                   else _to_proto_value(field_definition.default))
+            param.default.CopyFrom(
+                struct_pb2.Value(string_value=str(field_definition.default))
+                if isinstance(field_definition.default, str)
+                else _to_proto_value(field_definition.default)
+            )
         parameters.append(param)
 
     return parameters
@@ -189,14 +202,27 @@ def _catalog_from_mapping(data: Mapping[str, Any]) -> Catalog:
         visible = raw_op.get("visible")
         if visible is not None:
             op.visible = visible
+        op.allowed_roles.extend(
+            raw_op.get("allowed_roles", raw_op.get("allowedRoles", []))
+        )
         raw_ann = raw_op.get("annotations") or {}
         if raw_ann:
-            op.annotations.CopyFrom(OperationAnnotations(
-                read_only_hint=raw_ann.get("read_only_hint", raw_ann.get("readOnlyHint")),
-                idempotent_hint=raw_ann.get("idempotent_hint", raw_ann.get("idempotentHint")),
-                destructive_hint=raw_ann.get("destructive_hint", raw_ann.get("destructiveHint")),
-                open_world_hint=raw_ann.get("open_world_hint", raw_ann.get("openWorldHint")),
-            ))
+            op.annotations.CopyFrom(
+                OperationAnnotations(
+                    read_only_hint=raw_ann.get(
+                        "read_only_hint", raw_ann.get("readOnlyHint")
+                    ),
+                    idempotent_hint=raw_ann.get(
+                        "idempotent_hint", raw_ann.get("idempotentHint")
+                    ),
+                    destructive_hint=raw_ann.get(
+                        "destructive_hint", raw_ann.get("destructiveHint")
+                    ),
+                    open_world_hint=raw_ann.get(
+                        "open_world_hint", raw_ann.get("openWorldHint")
+                    ),
+                )
+            )
         for raw_param in raw_op.get("parameters", []):
             param = CatalogParameter(
                 name=raw_param.get("name", ""),
@@ -206,6 +232,8 @@ def _catalog_from_mapping(data: Mapping[str, Any]) -> Catalog:
             )
             op.parameters.append(param)
         op.tags.extend(raw_op.get("tags", []))
-        op.required_scopes.extend(raw_op.get("required_scopes", raw_op.get("requiredScopes", [])))
+        op.required_scopes.extend(
+            raw_op.get("required_scopes", raw_op.get("requiredScopes", []))
+        )
         catalog.operations.append(op)
     return catalog

@@ -21,6 +21,7 @@ pub struct Operation<In, Out> {
     pub method: String,
     pub title: String,
     pub description: String,
+    pub allowed_roles: Vec<String>,
     pub tags: Vec<String>,
     pub read_only: bool,
     pub visible: Option<bool>,
@@ -38,6 +39,7 @@ where
             method: "POST".to_owned(),
             title: String::new(),
             description: String::new(),
+            allowed_roles: Vec::new(),
             tags: Vec::new(),
             read_only: false,
             visible: None,
@@ -60,6 +62,11 @@ where
 
     pub fn description(mut self, description: impl Into<String>) -> Self {
         self.description = description.into();
+        self
+    }
+
+    pub fn allowed_roles(mut self, allowed_roles: impl Into<Vec<String>>) -> Self {
+        self.allowed_roles = allowed_roles.into();
         self
     }
 
@@ -194,6 +201,7 @@ where
             read_only: operation.read_only,
             visible: operation.visible,
             transport: String::new(),
+            allowed_roles: operation.allowed_roles.clone(),
         });
 
         let handler = Arc::new(handler);

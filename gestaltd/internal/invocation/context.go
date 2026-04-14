@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/authorization"
 )
 
 type InvocationMeta struct {
@@ -54,8 +55,11 @@ type CredentialContext struct {
 
 type invocationSurfaceCtxKey struct{}
 type credentialCtxKey struct{}
+type accessCtxKey struct{}
 
 type InvocationSurface string
+
+type AccessContext = authorization.AccessContext
 
 const InvocationSurfaceHTTP InvocationSurface = "http"
 
@@ -84,6 +88,15 @@ func WithCredentialContext(ctx context.Context, cred CredentialContext) context.
 func CredentialContextFromContext(ctx context.Context) CredentialContext {
 	cred, _ := ctx.Value(credentialCtxKey{}).(CredentialContext)
 	return cred
+}
+
+func WithAccessContext(ctx context.Context, access AccessContext) context.Context {
+	return context.WithValue(ctx, accessCtxKey{}, access)
+}
+
+func AccessContextFromContext(ctx context.Context) AccessContext {
+	access, _ := ctx.Value(accessCtxKey{}).(AccessContext)
+	return access
 }
 
 func WithInvocationSurface(ctx context.Context, surface InvocationSurface) context.Context {

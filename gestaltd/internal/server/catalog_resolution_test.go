@@ -198,7 +198,7 @@ func TestResolveCatalog_SessionAndStaticMerge(t *testing.T) {
 	}
 }
 
-func TestResolveCatalog_SameIDCollision_StaticWins(t *testing.T) {
+func TestResolveCatalog_SameIDCollision_SessionWins(t *testing.T) {
 	t.Parallel()
 
 	prov := &stubSessionProvider{
@@ -210,14 +210,26 @@ func TestResolveCatalog_SameIDCollision_StaticWins(t *testing.T) {
 			cat: &catalog.Catalog{
 				Name: "clash-api",
 				Operations: []catalog.CatalogOperation{
-					{ID: "shared_op", Method: http.MethodGet, Transport: catalog.TransportREST, Description: "static version"},
+					{
+						ID:           "shared_op",
+						Method:       http.MethodGet,
+						Transport:    catalog.TransportREST,
+						Description:  "static version",
+						AllowedRoles: []string{"admin"},
+					},
 				},
 			},
 		},
 		sessionCat: &catalog.Catalog{
 			Name: "clash-api",
 			Operations: []catalog.CatalogOperation{
-				{ID: "shared_op", Method: http.MethodPost, Transport: catalog.TransportMCPPassthrough, Description: "session version"},
+				{
+					ID:           "shared_op",
+					Method:       http.MethodPost,
+					Transport:    catalog.TransportMCPPassthrough,
+					Description:  "session version",
+					AllowedRoles: []string{"viewer"},
+				},
 			},
 		},
 	}
@@ -232,11 +244,165 @@ func TestResolveCatalog_SameIDCollision_StaticWins(t *testing.T) {
 	if len(cat.Operations) != 1 {
 		t.Fatalf("expected 1 operation after collision, got %d", len(cat.Operations))
 	}
-	if cat.Operations[0].Description != "static version" {
-		t.Fatalf("expected static version to win, got %q", cat.Operations[0].Description)
+	if cat.Operations[0].Description != "session version" {
+		t.Fatalf("expected session version to win, got %q", cat.Operations[0].Description)
 	}
-	if cat.Operations[0].Method != http.MethodGet {
-		t.Fatalf("expected GET from static, got %q", cat.Operations[0].Method)
+	if cat.Operations[0].Method != http.MethodPost {
+		t.Fatalf("expected POST from session, got %q", cat.Operations[0].Method)
+	}
+	if got := cat.Operations[0].AllowedRoles; len(got) != 1 || got[0] != "viewer" {
+		t.Fatalf("expected session allowedRoles to win, got %#v", got)
+	}
+}
+
+func TestFilterCatalogForPrincipal_HumanFilteringUsesResolvedRole(t *testing.T) {
+	t.Parallel()
+
+	prov := &stubSessionProvider{
+		stubCatalogProvider: stubCatalogProvider{
+			stubProvider: stubProvider{
+				name:     "sample-api",
+				connMode: core.ConnectionModeUser,
+			},
+			cat: &catalog.Catalog{
+				Name: "sample-api",
+				Operations: []catalog.CatalogOperation{
+					{ID: "public_op", Method: http.MethodGet, Transport: catalog.TransportREST},
+					{ID: "viewer_op", Method: http.MethodGet, Transport: catalog.TransportREST, AllowedRoles: []string{"viewer"}},
+					{ID: "admin_op", Method: http.MethodGet, Transport: catalog.TransportREST, AllowedRoles: []string{"admin"}},
+				},
+			},
+		},
+		sessionCat: &catalog.Catalog{
+			Name: "sample-api",
+			Operations: []catalog.CatalogOperation{
+				{ID: "session_viewer", Method: http.MethodPost, Transport: catalog.TransportREST, AllowedRoles: []string{"viewer"}},
+				{ID: "session_admin", Method: http.MethodPost, Transport: catalog.TransportREST, AllowedRoles: []string{"admin"}},
+			},
+		},
+	}
+
+	authz, err := authorization.New(config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID("u1"), Role: "viewer"},
+				},
+			},
+		},
+	}, map[string]*config.ProviderEntry{
+		"sample-api": {AuthorizationPolicy: "sample_policy"},
+	}, nil, nil)
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+
+	p := &principal.Principal{
+		Kind:      principal.KindUser,
+		UserID:    "u1",
+		SubjectID: principal.UserSubjectID("u1"),
+	}
+	cat, err := invocation.ResolveCatalog(context.Background(), prov, "sample-api", &stubTokenResolver{token: "tok_456"}, p, "default", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	filtered := invocation.FilterCatalogForPrincipal(cat, "sample-api", p, authz)
+	if len(filtered.Operations) != 2 {
+		t.Fatalf("expected 2 operations after human filtering, got %d", len(filtered.Operations))
+	}
+	gotIDs := []string{
+		filtered.Operations[0].ID,
+		filtered.Operations[1].ID,
+	}
+	wantIDs := []string{"viewer_op", "session_viewer"}
+	if fmt.Sprint(gotIDs) != fmt.Sprint(wantIDs) {
+		t.Fatalf("filtered operation IDs = %#v, want %#v", gotIDs, wantIDs)
+	}
+}
+
+func TestFilterCatalogForPrincipal_HumanDefaultAllowKeepsUnannotatedOperations(t *testing.T) {
+	t.Parallel()
+
+	prov := &stubCatalogProvider{
+		stubProvider: stubProvider{
+			name:     "sample-api",
+			connMode: core.ConnectionModeUser,
+		},
+		cat: &catalog.Catalog{
+			Name: "sample-api",
+			Operations: []catalog.CatalogOperation{
+				{ID: "baseline_op", Method: http.MethodGet, Transport: catalog.TransportREST},
+				{ID: "admin_op", Method: http.MethodGet, Transport: catalog.TransportREST, AllowedRoles: []string{"admin"}},
+			},
+		},
+	}
+
+	authz, err := authorization.New(config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "allow",
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID("admin-user"), Role: "admin"},
+				},
+			},
+		},
+	}, map[string]*config.ProviderEntry{
+		"sample-api": {AuthorizationPolicy: "sample_policy"},
+	}, nil, nil)
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+
+	p := &principal.Principal{
+		Kind:      principal.KindUser,
+		UserID:    "viewer-user",
+		SubjectID: principal.UserSubjectID("viewer-user"),
+	}
+	filtered := invocation.FilterCatalogForPrincipal(prov.Catalog(), "sample-api", p, authz)
+	if len(filtered.Operations) != 1 {
+		t.Fatalf("expected 1 operation after default-allow filtering, got %d", len(filtered.Operations))
+	}
+	if filtered.Operations[0].ID != "baseline_op" {
+		t.Fatalf("filtered operation ID = %q, want baseline_op", filtered.Operations[0].ID)
+	}
+}
+
+func TestFilterCatalogForPrincipal_HumanUnboundProviderKeepsRoleAnnotatedOperations(t *testing.T) {
+	t.Parallel()
+
+	prov := &stubCatalogProvider{
+		stubProvider: stubProvider{
+			name:     "sample-api",
+			connMode: core.ConnectionModeUser,
+		},
+		cat: &catalog.Catalog{
+			Name: "sample-api",
+			Operations: []catalog.CatalogOperation{
+				{ID: "baseline_op", Method: http.MethodGet, Transport: catalog.TransportREST},
+				{ID: "viewer_op", Method: http.MethodGet, Transport: catalog.TransportREST, AllowedRoles: []string{"viewer"}},
+			},
+		},
+	}
+
+	authz, err := authorization.New(config.AuthorizationConfig{}, nil, nil, nil)
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+
+	p := &principal.Principal{
+		Kind:      principal.KindUser,
+		UserID:    "viewer-user",
+		SubjectID: principal.UserSubjectID("viewer-user"),
+	}
+	filtered := invocation.FilterCatalogForPrincipal(prov.Catalog(), "sample-api", p, authz)
+	if len(filtered.Operations) != 2 {
+		t.Fatalf("expected 2 operations after filtering unbound provider, got %d", len(filtered.Operations))
+	}
+	gotIDs := []string{filtered.Operations[0].ID, filtered.Operations[1].ID}
+	wantIDs := []string{"baseline_op", "viewer_op"}
+	if fmt.Sprint(gotIDs) != fmt.Sprint(wantIDs) {
+		t.Fatalf("filtered operation IDs = %#v, want %#v", gotIDs, wantIDs)
 	}
 }
 
@@ -301,8 +467,8 @@ func TestFilterCatalogForPrincipal_WorkloadFilteringUsesMergedCatalog(t *testing
 	if filtered.Operations[0].ID != "shared_op" {
 		t.Fatalf("expected first filtered op shared_op, got %q", filtered.Operations[0].ID)
 	}
-	if filtered.Operations[0].Description != "static version" {
-		t.Fatalf("expected static version to win after filtering, got %q", filtered.Operations[0].Description)
+	if filtered.Operations[0].Description != "session version" {
+		t.Fatalf("expected session version to win after filtering, got %q", filtered.Operations[0].Description)
 	}
 	if filtered.Operations[1].ID != "session_only" {
 		t.Fatalf("expected second filtered op session_only, got %q", filtered.Operations[1].ID)

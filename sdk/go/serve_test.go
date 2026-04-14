@@ -24,6 +24,8 @@ type stubOutput struct {
 	SubjectKind         string `json:"subject_kind"`
 	CredentialMode      string `json:"credential_mode"`
 	CredentialSubjectID string `json:"credential_subject_id"`
+	AccessPolicy        string `json:"access_policy"`
+	AccessRole          string `json:"access_role"`
 }
 
 type decodeInput struct {
@@ -75,6 +77,8 @@ func (p *stubProvider) testOp(_ context.Context, _ stubInput, req gestalt.Reques
 		SubjectKind:         req.Subject.Kind,
 		CredentialMode:      req.Credential.Mode,
 		CredentialSubjectID: req.Credential.SubjectID,
+		AccessPolicy:        req.Access.Policy,
+		AccessRole:          req.Access.Role,
 	}), nil
 }
 
@@ -112,7 +116,8 @@ func (p *sessionCatalogStubProvider) CatalogForRequest(ctx context.Context, _ st
 	if cat != nil {
 		subject := gestalt.SubjectFromContext(ctx)
 		credential := gestalt.CredentialFromContext(ctx)
-		cat.DisplayName = subject.ID + "|" + credential.Mode
+		access := gestalt.AccessFromContext(ctx)
+		cat.DisplayName = subject.ID + "|" + credential.Mode + "|" + access.Policy + "|" + access.Role
 	}
 	return cat, nil
 }
@@ -136,7 +141,7 @@ func TestProviderServerGetMetadata(t *testing.T) {
 			sessionCatalog: &proto.Catalog{
 				Name: "test-provider",
 				Operations: []*proto.CatalogOperation{
-					{Id: "session_op", Method: http.MethodGet},
+					{Id: "session_op", Method: http.MethodGet, AllowedRoles: []string{"viewer"}},
 				},
 			},
 		}, sessionCatalogStubRouter)
@@ -158,7 +163,7 @@ func TestProviderServerGetSessionCatalog(t *testing.T) {
 			sessionCatalog: &proto.Catalog{
 				Name: "test-provider",
 				Operations: []*proto.CatalogOperation{
-					{Id: "session_op", Method: http.MethodPost},
+					{Id: "session_op", Method: http.MethodPost, AllowedRoles: []string{"viewer"}},
 				},
 			},
 		}
@@ -173,6 +178,10 @@ func TestProviderServerGetSessionCatalog(t *testing.T) {
 				Credential: &proto.CredentialContext{
 					Mode: "identity",
 				},
+				Access: &proto.AccessContext{
+					Policy: "roadmap",
+					Role:   "viewer",
+				},
 			},
 		})
 		if err != nil {
@@ -181,8 +190,11 @@ func TestProviderServerGetSessionCatalog(t *testing.T) {
 		if resp.GetCatalog() == nil {
 			t.Fatal("expected session catalog")
 		}
-		if resp.GetCatalog().GetDisplayName() != "user:user-123|identity" {
-			t.Fatalf("DisplayName = %q, want %q", resp.GetCatalog().GetDisplayName(), "user:user-123|identity")
+		if resp.GetCatalog().GetDisplayName() != "user:user-123|identity|roadmap|viewer" {
+			t.Fatalf("DisplayName = %q, want %q", resp.GetCatalog().GetDisplayName(), "user:user-123|identity|roadmap|viewer")
+		}
+		if got := resp.GetCatalog().GetOperations()[0].GetAllowedRoles(); len(got) != 1 || got[0] != "viewer" {
+			t.Fatalf("AllowedRoles = %#v, want %#v", got, []string{"viewer"})
 		}
 	})
 
@@ -238,7 +250,7 @@ func TestProviderServerExecute(t *testing.T) {
 			name:       "success",
 			router:     stubRouter,
 			wantStatus: http.StatusOK,
-			wantBody:   `{"operation":"test_op","subject_id":"user:user-123","subject_kind":"user","credential_mode":"identity","credential_subject_id":"identity:__identity__"}`,
+			wantBody:   `{"operation":"test_op","subject_id":"user:user-123","subject_kind":"user","credential_mode":"identity","credential_subject_id":"identity:__identity__","access_policy":"roadmap","access_role":"admin"}`,
 			request: &proto.ExecuteRequest{
 				Operation: "test_op",
 				Params: func() *structpb.Struct {
@@ -254,6 +266,10 @@ func TestProviderServerExecute(t *testing.T) {
 					Credential: &proto.CredentialContext{
 						Mode:      "identity",
 						SubjectId: "identity:__identity__",
+					},
+					Access: &proto.AccessContext{
+						Policy: "roadmap",
+						Role:   "admin",
 					},
 				},
 			},

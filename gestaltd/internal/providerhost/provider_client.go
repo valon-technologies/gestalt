@@ -279,7 +279,14 @@ func requestContextProto(ctx context.Context) *proto.RequestContext {
 		}
 	}
 
-	if out.Subject == nil && out.Credential == nil {
+	if access := invocation.AccessContextFromContext(ctx); access.Policy != "" || access.Role != "" {
+		out.Access = &proto.AccessContext{
+			Policy: access.Policy,
+			Role:   access.Role,
+		}
+	}
+
+	if out.Subject == nil && out.Credential == nil && out.Access == nil {
 		return nil
 	}
 	return &out

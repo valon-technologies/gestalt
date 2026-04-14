@@ -6,6 +6,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -78,7 +79,27 @@ func NewServer(cfg Config) *mcpserver.MCPServer {
 		})
 		hooks.AddBeforeCallTool(func(ctx context.Context, _ any, req *mcpgo.CallToolRequest) {
 			if provName := providerNameForTool(cfg.ToolPrefixes, dynamicProviders, req.Params.Name); provName != "" {
-				hydrateSessionTools(ctx, cfg, []string{provName}, staticToolNames)
+				instance := normalizedSessionCatalogInstance(req.GetArguments()["_instance"])
+				if workloadInstanceOverrideRequested(cfg.Authorizer, principal.FromContext(ctx), instance) {
+					return
+				}
+				hydrateSessionToolsForInstance(ctx, cfg, []string{provName}, staticToolNames, instance)
+			}
+		})
+		hooks.AddAfterCallTool(func(ctx context.Context, _ any, req *mcpgo.CallToolRequest, _ any) {
+			if provName := providerNameForTool(cfg.ToolPrefixes, dynamicProviders, req.Params.Name); provName != "" {
+				instance := normalizedSessionCatalogInstance(req.GetArguments()["_instance"])
+				cleanupSessionToolsForInstance(ctx, provName, instance)
+			}
+		})
+		hooks.AddOnError(func(ctx context.Context, _ any, _ mcpgo.MCPMethod, message any, _ error) {
+			req, ok := message.(*mcpgo.CallToolRequest)
+			if !ok || req == nil {
+				return
+			}
+			if provName := providerNameForTool(cfg.ToolPrefixes, dynamicProviders, req.Params.Name); provName != "" {
+				instance := normalizedSessionCatalogInstance(req.GetArguments()["_instance"])
+				cleanupSessionToolsForInstance(ctx, provName, instance)
 			}
 		})
 	}

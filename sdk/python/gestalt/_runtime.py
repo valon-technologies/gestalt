@@ -14,7 +14,7 @@ import grpc
 from google.protobuf import empty_pb2 as _empty_pb2
 from google.protobuf import json_format
 
-from ._api import Credential, Request, Subject
+from ._api import Access, Credential, Request, Subject
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._catalog import catalog_to_proto
 from ._plugin import Plugin, _module_plugin
@@ -57,7 +57,9 @@ ENV_WRITE_CATALOG: Final[str] = "GESTALT_PLUGIN_WRITE_CATALOG"
 CURRENT_PROTOCOL_VERSION: Final[int] = 2
 GRPC_SERVER_MAX_WORKERS: Final[int] = 4
 GRPC_SHUTDOWN_GRACE_SECONDS: Final[int] = 2
-USAGE: Final[str] = "usage: python -m gestalt._runtime ROOT MODULE[:ATTRIBUTE] [RUNTIME_KIND]"
+USAGE: Final[str] = (
+    "usage: python -m gestalt._runtime ROOT MODULE[:ATTRIBUTE] [RUNTIME_KIND]"
+)
 
 
 @dataclass(frozen=True)
@@ -79,7 +81,9 @@ def _grpc_handler(label: str):
                     raise
                 traceback.print_exception(error)
                 context.abort(grpc.StatusCode.UNKNOWN, f"{label}: {error}")
+
         return wrapper
+
     return decorator
 
 
@@ -119,7 +123,9 @@ def main(argv: list[str] | None = None) -> int:
     catalog_path = os.environ.get(ENV_WRITE_CATALOG)
     if catalog_path:
         if not isinstance(target, Plugin):
-            raise RuntimeError("catalog export is only supported for integration plugins")
+            raise RuntimeError(
+                "catalog export is only supported for integration plugins"
+            )
         target.write_catalog(catalog_path)
         return 0
 
@@ -218,7 +224,9 @@ def _register_shutdown_handlers(server: Any, close_provider: Any) -> None:
     signal.signal(signal.SIGINT, _shutdown)
 
 
-def _register_services(*, server: Any, servable: Plugin | PluginProviderAdapter) -> None:
+def _register_services(
+    *, server: Any, servable: Plugin | PluginProviderAdapter
+) -> None:
     if isinstance(servable, Plugin):
         plugin_pb2_grpc.add_IntegrationProviderServicer_to_server(
             _provider_servicer(plugin=servable),
@@ -333,7 +341,10 @@ def _provider_servicer(*, plugin: Plugin) -> Any:
                         token=request.token,
                         connection_params=dict(request.connection_params),
                         subject=_subject_from_proto(getattr(request, "context", None)),
-                        credential=_credential_from_proto(getattr(request, "context", None)),
+                        credential=_credential_from_proto(
+                            getattr(request, "context", None)
+                        ),
+                        access=_access_from_proto(getattr(request, "context", None)),
                     ),
                 )
             except Exception as error:
@@ -496,6 +507,7 @@ def _plugin_request(request: Any) -> Request:
         connection_params=dict(getattr(request, "connection_params", {})),
         subject=_subject_from_proto(getattr(request, "context", None)),
         credential=_credential_from_proto(getattr(request, "context", None)),
+        access=_access_from_proto(getattr(request, "context", None)),
     )
 
 
@@ -527,6 +539,18 @@ def _credential_from_proto(request_context: Any) -> Credential:
     )
 
 
+def _access_from_proto(request_context: Any) -> Access:
+    if request_context is None:
+        return Access()
+    access = getattr(request_context, "access", None)
+    if access is None:
+        return Access()
+    return Access(
+        policy=getattr(access, "policy", ""),
+        role=getattr(access, "role", ""),
+    )
+
+
 def _message_to_dict(
     *,
     field_name: str,
@@ -542,7 +566,9 @@ def _message_to_dict(
     )
 
 
-def _provider_metadata(*, provider: PluginProvider, kind: ProviderKind) -> ProviderMetadata:
+def _provider_metadata(
+    *, provider: PluginProvider, kind: ProviderKind
+) -> ProviderMetadata:
     if isinstance(provider, MetadataProvider):
         metadata = provider.metadata()
         if isinstance(metadata, ProviderMetadata):

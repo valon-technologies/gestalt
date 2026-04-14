@@ -176,6 +176,7 @@ func extractOperations(model *v3high.Document, def *provider.Definition, allowed
 				desc = op.Description
 			}
 			opID := op.OperationId
+			var allowedRoles []string
 			if override := allowedOps[op.OperationId]; override != nil {
 				if override.Description != "" {
 					desc = override.Description
@@ -183,6 +184,7 @@ func extractOperations(model *v3high.Document, def *provider.Definition, allowed
 				if override.Alias != "" {
 					opID = override.Alias
 				}
+				allowedRoles = override.AllowedRoles
 			}
 
 			var params []provider.ParameterDef
@@ -233,10 +235,11 @@ func extractOperations(model *v3high.Document, def *provider.Definition, allowed
 			}
 
 			def.Operations[opID] = provider.OperationDef{
-				Description: desc,
-				Method:      strings.ToUpper(method),
-				Path:        path,
-				Parameters:  params,
+				Description:  desc,
+				Method:       strings.ToUpper(method),
+				Path:         path,
+				AllowedRoles: allowedRoles,
+				Parameters:   params,
 			}
 		}
 	}

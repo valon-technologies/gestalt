@@ -17,6 +17,7 @@ class OperationDefinition:
     method: str
     title: str
     description: str
+    allowed_roles: list[str]
     tags: list[str]
     read_only: bool
     visible: bool | None
@@ -51,7 +52,9 @@ def inspect_handler(func: Any) -> tuple[Any, bool]:
         return _normalize_input_type(annotation), False
 
     first_parameter, second_parameter = parameters
-    second_annotation = type_hints.get(second_parameter.name, second_parameter.annotation)
+    second_annotation = type_hints.get(
+        second_parameter.name, second_parameter.annotation
+    )
     if second_annotation not in (inspect.Signature.empty, Request):
         raise TypeError("second handler parameter must be annotated as gestalt.Request")
 
@@ -98,7 +101,9 @@ def decode_input(input_type: Any, params: dict[str, Any]) -> Any:
     actual_type = strip_optional(input_type)
     if actual_type in (str, int, float, bool) and isinstance(params, dict):
         if len(params) != 1:
-            raise TypeError("primitive operation inputs must be passed as a scalar or single-field object")
+            raise TypeError(
+                "primitive operation inputs must be passed as a scalar or single-field object"
+            )
         params = next(iter(params.values()))
 
     return _decode_value(input_type, params)
@@ -184,7 +189,9 @@ def _decode_dataclass(model_type: Any, value: Any) -> Any:
         if field_definition.name not in value:
             continue
         annotation = type_hints.get(field_definition.name, field_definition.type)
-        kwargs[field_definition.name] = _decode_value(annotation, value[field_definition.name])
+        kwargs[field_definition.name] = _decode_value(
+            annotation, value[field_definition.name]
+        )
     return model_type(**kwargs)
 
 

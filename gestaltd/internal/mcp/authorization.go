@@ -4,16 +4,26 @@ import (
 	"context"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 )
 
-func allowOperation(cfg Config, p *principal.Principal, provider, operation string) bool {
+func allowOperation(ctx context.Context, cfg Config, p *principal.Principal, provider, operation string) bool {
 	if cfg.Authorizer == nil {
 		return true
 	}
-	return cfg.Authorizer.AllowOperation(p, provider, operation)
+	if cfg.Authorizer.IsWorkload(p) {
+		return cfg.Authorizer.AllowOperation(p, provider, operation)
+	}
+	op, ok := catalogOperationForTool(ctx, cfg, provider, operation)
+	if !ok {
+		return false
+	}
+	return cfg.Authorizer.AllowCatalogOperation(p, provider, op)
 }
 
 func toolTarget(cfg Config, providers []string, name string) (provider, operation string, ok bool) {
@@ -35,20 +45,54 @@ func filterVisibleTools(ctx context.Context, cfg Config, providers []string, res
 	}
 
 	p := principal.FromContext(ctx)
-	workload := cfg.Authorizer != nil && cfg.Authorizer.IsWorkload(p)
-
 	tools := result.Tools[:0]
 	for i := range result.Tools {
-		if isHydrationMarkerTool(result.Tools[i].Name) {
+		if isHydrationMarkerTool(result.Tools[i].Name) ||
+			isHydrationAttemptMarkerTool(result.Tools[i].Name) ||
+			isSessionCatalogOperationMarkerTool(result.Tools[i].Name) ||
+			strings.HasPrefix(result.Tools[i].Name, instanceHydratedToolMarkerPrefix) {
 			continue
 		}
-		if workload {
-			provider, operation, ok := toolTarget(cfg, providers, result.Tools[i].Name)
-			if ok && !allowOperation(cfg, p, provider, operation) {
+		provider, operation, hasTarget := toolTarget(cfg, providers, result.Tools[i].Name)
+		if hasTarget {
+			if _, ok := catalogOperationForTool(ctx, cfg, provider, operation); !ok {
+				continue
+			}
+		}
+		if cfg.Authorizer != nil {
+			if hasTarget && !allowOperation(ctx, cfg, p, provider, operation) {
 				continue
 			}
 		}
 		tools = append(tools, result.Tools[i])
 	}
 	result.Tools = tools
+}
+
+func catalogOperationForTool(ctx context.Context, cfg Config, providerName, operation string) (catalog.CatalogOperation, bool) {
+	if cfg.Providers == nil {
+		return catalog.CatalogOperation{}, false
+	}
+	if sessionCatalogOperationSuppressedFromContext(ctx, providerName, operation, "") {
+		return catalog.CatalogOperation{}, false
+	}
+	prov, err := cfg.Providers.Get(providerName)
+	if err != nil {
+		return catalog.CatalogOperation{}, false
+	}
+	if op, _, ok := sessionCatalogOperationFromContext(ctx, providerName, operation, ""); ok {
+		return op, true
+	}
+	if _, sessionCapable := prov.(core.SessionCatalogProvider); sessionCapable &&
+		sessionProviderHydrationAttemptedFromContext(ctx, providerName, "") &&
+		!sessionProviderHydratedFromContext(ctx, providerName, "") {
+		return catalog.CatalogOperation{}, false
+	}
+	if op, ok := invocation.CatalogOperation(prov.Catalog(), operation); ok && catalogOperationProjectedToMCP(cfg, providerName, op) {
+		return op, true
+	}
+	if _, ok := prov.(core.SessionCatalogProvider); !ok {
+		return catalog.CatalogOperation{}, false
+	}
+	return catalog.CatalogOperation{}, false
 }

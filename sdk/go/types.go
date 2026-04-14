@@ -75,6 +75,11 @@ type Credential struct {
 	Instance   string
 }
 
+type Access struct {
+	Policy string
+	Role   string
+}
+
 type OperationResult struct {
 	Status int
 	Body   string
@@ -83,6 +88,7 @@ type OperationResult struct {
 type connectionParamsKey struct{}
 type subjectKey struct{}
 type credentialKey struct{}
+type accessKey struct{}
 
 // WithConnectionParams returns a child context carrying the given connection
 // parameters. The host calls this before invoking an executable operation so
@@ -114,4 +120,13 @@ func WithCredential(ctx context.Context, credential Credential) context.Context 
 func CredentialFromContext(ctx context.Context) Credential {
 	credential, _ := ctx.Value(credentialKey{}).(Credential)
 	return credential
+}
+
+func WithAccess(ctx context.Context, access Access) context.Context {
+	return context.WithValue(ctx, accessKey{}, access)
+}
+
+func AccessFromContext(ctx context.Context) Access {
+	access, _ := ctx.Value(accessKey{}).(Access)
+	return access
 }

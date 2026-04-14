@@ -84,14 +84,15 @@ type AuthDef struct {
 }
 
 type OperationDef struct {
-	Description string          `yaml:"description" json:"description"`
-	Method      string          `yaml:"method" json:"method"`
-	Path        string          `yaml:"path" json:"path"`
-	Parameters  []ParameterDef  `yaml:"parameters" json:"parameters"`
-	Query       string          `yaml:"query" json:"query"`                       // GraphQL query/mutation template
-	Transport   string          `yaml:"transport" json:"transport"`               // "rest" (default) or "graphql"
-	InputSchema json.RawMessage `yaml:"inputSchema" json:"inputSchema,omitempty"` // pre-built JSON Schema (skips synthesis)
-	Pagination  *PaginationDef  `yaml:"pagination" json:"pagination"`
+	Description  string          `yaml:"description" json:"description"`
+	Method       string          `yaml:"method" json:"method"`
+	Path         string          `yaml:"path" json:"path"`
+	AllowedRoles []string        `yaml:"allowedRoles,omitempty" json:"allowedRoles,omitempty"`
+	Parameters   []ParameterDef  `yaml:"parameters" json:"parameters"`
+	Query        string          `yaml:"query" json:"query"`                       // GraphQL query/mutation template
+	Transport    string          `yaml:"transport" json:"transport"`               // "rest" (default) or "graphql"
+	InputSchema  json.RawMessage `yaml:"inputSchema" json:"inputSchema,omitempty"` // pre-built JSON Schema (skips synthesis)
+	Pagination   *PaginationDef  `yaml:"pagination" json:"pagination"`
 }
 
 type AuthMappingDef = providermanifestv1.AuthMapping
