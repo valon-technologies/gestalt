@@ -39,8 +39,8 @@ func TestIndexedDBServerPrefixesStoreNamesPerPlugin(t *testing.T) {
 }
 
 func TestIndexedDBServerRecordsPluginMetricAttributes(t *testing.T) {
-	reader := metrictest.UseManualMeterProvider(t)
-	ctx := context.Background()
+	metrics := metrictest.NewManualMeterProvider(t)
+	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
 
 	db := metricutil.InstrumentIndexedDB(&coretesting.StubIndexedDB{}, "system")
 	srv := NewIndexedDBServer(db, "roadmap")
@@ -74,7 +74,7 @@ func TestIndexedDBServerRecordsPluginMetricAttributes(t *testing.T) {
 		t.Fatalf("IndexGet: %v", err)
 	}
 
-	rm := metrictest.CollectMetrics(t, reader)
+	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	putAttrs := map[string]string{
 		"gestalt.db":           "system",
 		"gestalt.plugin":       "roadmap",
@@ -82,6 +82,7 @@ func TestIndexedDBServerRecordsPluginMetricAttributes(t *testing.T) {
 		"gestalt.method":       "Put",
 	}
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.indexeddb.count", 1, putAttrs)
+	metrictest.RequireInt64SumOmitsAttr(t, rm, "gestaltd.indexeddb.count", putAttrs, "gestalt.store")
 	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.indexeddb.duration", putAttrs)
 
 	indexAttrs := map[string]string{
@@ -91,5 +92,6 @@ func TestIndexedDBServerRecordsPluginMetricAttributes(t *testing.T) {
 		"gestalt.method":       "Index.Get",
 	}
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.indexeddb.count", 1, indexAttrs)
+	metrictest.RequireInt64SumOmitsAttr(t, rm, "gestaltd.indexeddb.count", indexAttrs, "gestalt.store")
 	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.indexeddb.duration", indexAttrs)
 }
