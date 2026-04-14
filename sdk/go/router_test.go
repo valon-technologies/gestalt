@@ -216,8 +216,8 @@ func TestRouterOperationExecution(t *testing.T) {
 	if result.Status != http.StatusInternalServerError {
 		t.Fatalf("plain_error status = %d, want %d", result.Status, http.StatusInternalServerError)
 	}
-	if result.Body != `{"error":"boom"}` {
-		t.Fatalf("plain_error body = %q, want %q", result.Body, `{"error":"boom"}`)
+	if result.Body != `{"error":"internal error"}` {
+		t.Fatalf("plain_error body = %q, want %q", result.Body, `{"error":"internal error"}`)
 	}
 
 	var nilRouter *gestalt.Router[execProvider]

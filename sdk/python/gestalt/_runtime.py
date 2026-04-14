@@ -58,6 +58,7 @@ CURRENT_PROTOCOL_VERSION: Final[int] = 2
 GRPC_SERVER_MAX_WORKERS: Final[int] = 4
 GRPC_SHUTDOWN_GRACE_SECONDS: Final[int] = 2
 USAGE: Final[str] = "usage: python -m gestalt._runtime ROOT MODULE[:ATTRIBUTE] [RUNTIME_KIND]"
+INTERNAL_ERROR_MESSAGE: Final[str] = "internal error"
 
 
 @dataclass(frozen=True)
@@ -78,7 +79,7 @@ def _grpc_handler(label: str):
                 if context.code() is not None:
                     raise
                 traceback.print_exception(error)
-                context.abort(grpc.StatusCode.UNKNOWN, f"{label}: {error}")
+                context.abort(grpc.StatusCode.UNKNOWN, f"{label}: {INTERNAL_ERROR_MESSAGE}")
         return wrapper
     return decorator
 
@@ -339,7 +340,7 @@ def _provider_servicer(*, plugin: Plugin) -> Any:
             except Exception as error:
                 traceback.print_exception(error)
                 status = HTTPStatus.INTERNAL_SERVER_ERROR
-                body = json_body({"error": str(error)})
+                body = json_body({"error": INTERNAL_ERROR_MESSAGE})
                 return plugin_pb2.OperationResult(status=status, body=body)
             return plugin_pb2.OperationResult(status=result.status, body=result.body)
 
@@ -352,18 +353,18 @@ def _provider_servicer(*, plugin: Plugin) -> Any:
 
             try:
                 catalog = plugin.catalog_for_request(_plugin_request(request))
-            except Exception as error:
+            except Exception:
                 return context.abort(
                     grpc.StatusCode.UNKNOWN,
-                    f"session catalog: {error}",
+                    f"session catalog: {INTERNAL_ERROR_MESSAGE}",
                 )
 
             try:
                 proto_catalog = catalog_to_proto(catalog)
-            except Exception as error:
+            except Exception:
                 return context.abort(
                     grpc.StatusCode.INTERNAL,
-                    f"encode session catalog: {error}",
+                    f"encode session catalog: {INTERNAL_ERROR_MESSAGE}",
                 )
 
             return plugin_pb2.GetSessionCatalogResponse(catalog=proto_catalog)

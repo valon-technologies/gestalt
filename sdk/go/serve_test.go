@@ -278,7 +278,7 @@ func TestProviderServerExecute(t *testing.T) {
 			name:       "handler error",
 			router:     errorRouter,
 			wantStatus: http.StatusInternalServerError,
-			wantBody:   `{"error":"boom"}`,
+			wantBody:   `{"error":"internal error"}`,
 			request: &proto.ExecuteRequest{
 				Operation: "error_op",
 			},
@@ -287,7 +287,7 @@ func TestProviderServerExecute(t *testing.T) {
 			name:       "panic",
 			router:     panicRouter,
 			wantStatus: http.StatusInternalServerError,
-			wantBody:   `{"error":"boom"}`,
+			wantBody:   `{"error":"internal error"}`,
 			request: &proto.ExecuteRequest{
 				Operation: "panic_op",
 			},
