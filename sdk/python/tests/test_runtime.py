@@ -116,15 +116,19 @@ class RuntimeKindNormalizationTests(unittest.TestCase):
             ProviderKind.CACHE,
         )
 
-    def test_normalized_runtime_kind_falls_back_to_integration_for_unknown_values(self) -> None:
+    def test_normalized_runtime_kind_defaults_none_to_integration(self) -> None:
         self.assertEqual(
-            _runtime._normalized_runtime_kind("typo"),
+            _runtime._normalized_runtime_kind(None),
             ProviderKind.INTEGRATION,
         )
-        self.assertEqual(
-            _runtime._normalized_runtime_kind(object()),
-            ProviderKind.INTEGRATION,
-        )
+
+    def test_normalized_runtime_kind_rejects_unknown_values(self) -> None:
+        with self.assertRaisesRegex(ValueError, "unsupported runtime kind"):
+            _runtime._normalized_runtime_kind("typo")
+
+    def test_normalized_runtime_kind_rejects_unsupported_types(self) -> None:
+        with self.assertRaisesRegex(TypeError, "unsupported runtime kind"):
+            _runtime._normalized_runtime_kind(object())
 
 
 class DurationConversionTests(unittest.TestCase):

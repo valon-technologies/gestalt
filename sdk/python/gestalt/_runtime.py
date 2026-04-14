@@ -704,9 +704,9 @@ def _normalized_runtime_kind(kind: object | None) -> ProviderKind:
             return ProviderKind.INTEGRATION
         try:
             return ProviderKind(normalized)
-        except ValueError:
-            return ProviderKind.INTEGRATION
-    return ProviderKind.INTEGRATION
+        except ValueError as exc:
+            raise ValueError(f"unsupported runtime kind: {kind!r}") from exc
+    raise TypeError(f"unsupported runtime kind: {kind!r}")
 
 
 def _duration_to_timedelta(duration: Any) -> dt.timedelta | None:
