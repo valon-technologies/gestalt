@@ -129,7 +129,8 @@ The built-in admin UI is served at `/admin`. If you configure
 listener. If you also set `server.admin.authorizationPolicy`, Gestalt applies
 browser session auth and role checks to `/admin`; on split
 public/management deployments, set `server.management.baseUrl` so login can
-return the browser to the management listener after callback. Use the same
+return the browser to the management listener's built-in `/admin` route after
+callback. Use the same
 hostname as `server.baseUrl`, and keep it on `https` whenever
 `server.baseUrl` is `https`, so the session cookie is reusable across both
 listeners. See the
