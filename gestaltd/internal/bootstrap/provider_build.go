@@ -44,6 +44,7 @@ func buildRegistrationStore(deps Deps) mcpoauth.RegistrationStore {
 }
 
 func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.ProviderMap[core.Provider], <-chan struct{}, func() map[string]map[string]OAuthHandler, error) {
+	cfg.SyncCompatFields()
 	reg := registry.New()
 	connAuth := make(map[string]map[string]OAuthHandler)
 	var connMu sync.Mutex
@@ -58,14 +59,14 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 	}
 
 	ready := make(chan struct{})
-	if len(cfg.Providers.Plugins) == 0 {
+	if len(cfg.Plugins) == 0 {
 		close(ready)
 		return &reg.Providers, ready, func() map[string]map[string]OAuthHandler { return connAuth }, nil
 	}
 
 	var wg sync.WaitGroup
-	for name := range cfg.Providers.Plugins {
-		intgDef := cfg.Providers.Plugins[name]
+	for name := range cfg.Plugins {
+		intgDef := cfg.Plugins[name]
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

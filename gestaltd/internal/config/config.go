@@ -27,6 +27,7 @@ const (
 
 	DefaultIndexedDBProvider = DefaultProviderRepo + "/indexeddb/relationaldb"
 	DefaultIndexedDBVersion  = "0.0.1-alpha.2"
+	DefaultProviderInstance  = "default"
 )
 
 // PluginConnectionName is the implicit connection name used when storing
@@ -39,18 +40,41 @@ const PluginConnectionName = "_plugin"
 const PluginConnectionAlias = "plugin"
 
 type Config struct {
-	Server    ServerConfig    `yaml:"server"`
-	Providers ProvidersConfig `yaml:"providers"`
+	Server    ServerConfig              `yaml:"server"`
+	Providers ProvidersConfig           `yaml:"providers"`
+	Plugins   map[string]*ProviderEntry `yaml:"plugins,omitempty"`
 }
 
 type ProvidersConfig struct {
-	Auth       *ProviderEntry            `yaml:"auth,omitempty"`
-	Secrets    *ProviderEntry            `yaml:"secrets,omitempty"`
-	Telemetry  *ProviderEntry            `yaml:"telemetry,omitempty"`
-	Audit      *ProviderEntry            `yaml:"audit,omitempty"`
-	UI         map[string]*UIEntry       `yaml:"ui,omitempty"`
-	IndexedDBs map[string]*ProviderEntry `yaml:"indexeddbs,omitempty"`
-	Plugins    map[string]*ProviderEntry `yaml:"plugins,omitempty"`
+	Auth      map[string]*ProviderEntry `yaml:"auth,omitempty"`
+	Secrets   map[string]*ProviderEntry `yaml:"secrets,omitempty"`
+	Telemetry map[string]*ProviderEntry `yaml:"telemetry,omitempty"`
+	Audit     map[string]*ProviderEntry `yaml:"audit,omitempty"`
+	UI        map[string]*UIEntry       `yaml:"ui,omitempty"`
+	IndexedDB map[string]*ProviderEntry `yaml:"indexeddb,omitempty"`
+
+	// Legacy aliases retained for internal call sites and tests while the
+	// canonical YAML shape is migrating to top-level plugins and indexeddb.
+	IndexedDBs map[string]*ProviderEntry `yaml:"-"`
+	Plugins    map[string]*ProviderEntry `yaml:"-"`
+}
+
+type HostProviderKind string
+
+const (
+	HostProviderKindAuth      HostProviderKind = "auth"
+	HostProviderKindSecrets   HostProviderKind = "secrets"
+	HostProviderKindTelemetry HostProviderKind = "telemetry"
+	HostProviderKindAudit     HostProviderKind = "audit"
+	HostProviderKindIndexedDB HostProviderKind = "indexeddb"
+)
+
+type ServerProvidersConfig struct {
+	Auth      string `yaml:"auth,omitempty"`
+	Secrets   string `yaml:"secrets,omitempty"`
+	Telemetry string `yaml:"telemetry,omitempty"`
+	Audit     string `yaml:"audit,omitempty"`
+	IndexedDB string `yaml:"indexeddb,omitempty"`
 }
 
 // ProviderSource supports three modes via custom UnmarshalYAML:
@@ -90,6 +114,7 @@ func (s ProviderSource) IsLocal() bool   { return s.Path != "" }
 type ProviderEntry struct {
 	Source       ProviderSource    `yaml:"source"`
 	Config       yaml.Node         `yaml:"config,omitempty"`
+	Default      bool              `yaml:"default,omitempty"`
 	Disabled     bool              `yaml:"disabled,omitempty"`
 	Env          map[string]string `yaml:"env,omitempty"`
 	AllowedHosts []string          `yaml:"allowedHosts,omitempty"`
@@ -100,7 +125,7 @@ type ProviderEntry struct {
 	// Plugin-specific config fields (parsed from YAML, only valid on plugin entries)
 	Connections       map[string]*ConnectionDef     `yaml:"connections,omitempty"`
 	AllowedOperations map[string]*OperationOverride `yaml:"allowedOperations,omitempty"`
-	IndexedDBs        []string                      `yaml:"indexeddbs,omitempty"`
+	IndexedDBs        []string                      `yaml:"indexeddb,omitempty"`
 	Surfaces          *ProviderSurfaceOverrides     `yaml:"surfaces,omitempty"`
 
 	// Runtime-resolved fields (populated during init/bootstrap, not from YAML)
@@ -227,15 +252,16 @@ type ListenerConfig struct {
 }
 
 type ServerConfig struct {
-	Public        ListenerConfig      `yaml:"public"`
-	Management    ListenerConfig      `yaml:"management"`
-	BaseURL       string              `yaml:"baseUrl"`
-	EncryptionKey string              `yaml:"encryptionKey"`
-	APITokenTTL   string              `yaml:"apiTokenTtl"`
-	ArtifactsDir  string              `yaml:"artifactsDir"`
-	IndexedDB     string              `yaml:"indexeddb,omitempty"`
-	Egress        EgressConfig        `yaml:"egress,omitempty"`
-	Authorization AuthorizationConfig `yaml:"authorization,omitempty"`
+	Public        ListenerConfig        `yaml:"public"`
+	Management    ListenerConfig        `yaml:"management"`
+	BaseURL       string                `yaml:"baseUrl"`
+	EncryptionKey string                `yaml:"encryptionKey"`
+	APITokenTTL   string                `yaml:"apiTokenTtl"`
+	ArtifactsDir  string                `yaml:"artifactsDir"`
+	Providers     ServerProvidersConfig `yaml:"providers,omitempty"`
+	IndexedDB     string                `yaml:"-"`
+	Egress        EgressConfig          `yaml:"egress,omitempty"`
+	Authorization AuthorizationConfig   `yaml:"authorization,omitempty"`
 }
 
 func (s ServerConfig) PublicListener() ListenerConfig {
@@ -576,9 +602,13 @@ func OverlayManagedPluginConfig(path string, cfg *Config) error {
 	if err := dec.Decode(&root); err != nil && err != io.EOF {
 		return fmt.Errorf("parsing config YAML: %w", err)
 	}
+	if err := normalizeConfigRoot(&root); err != nil {
+		return err
+	}
+	doc := documentValueNode(&root)
 	providersNode := mappingValueNode(documentValueNode(&root), "providers")
-	pluginsNode := mappingValueNode(providersNode, "plugins")
-	for name, entry := range cfg.Providers.Plugins {
+	pluginsNode := mappingValueNode(doc, "plugins")
+	for name, entry := range cfg.Plugins {
 		if entry == nil || !entry.HasManagedSource() {
 			continue
 		}
@@ -586,21 +616,25 @@ func OverlayManagedPluginConfig(path string, cfg *Config) error {
 			return err
 		}
 	}
-	for _, c := range []struct {
-		name  string
-		entry *ProviderEntry
+	for _, collection := range []struct {
+		kind    HostProviderKind
+		entries map[string]*ProviderEntry
 	}{
-		{"auth", cfg.Providers.Auth},
-		{"secrets", cfg.Providers.Secrets},
-		{"telemetry", cfg.Providers.Telemetry},
-		{"audit", cfg.Providers.Audit},
+		{HostProviderKindAuth, cfg.Providers.Auth},
+		{HostProviderKindSecrets, cfg.Providers.Secrets},
+		{HostProviderKindTelemetry, cfg.Providers.Telemetry},
+		{HostProviderKindAudit, cfg.Providers.Audit},
+		{HostProviderKindIndexedDB, cfg.Providers.IndexedDB},
 	} {
-		if c.entry == nil || !c.entry.HasManagedSource() {
-			continue
-		}
-		node := mappingValueNode(providersNode, c.name)
-		if err := overlayManagedEntryConfigNode(node, c.entry, c.name); err != nil {
-			return err
+		kindNode := mappingValueNode(providersNode, string(collection.kind))
+		for name, entry := range collection.entries {
+			if entry == nil || !entry.HasManagedSource() {
+				continue
+			}
+			subject := fmt.Sprintf("%s %q", collection.kind, name)
+			if err := overlayManagedEntryConfigNode(mappingValueNode(kindNode, name), entry, subject); err != nil {
+				return err
+			}
 		}
 	}
 	uiNode := mappingValueNode(providersNode, "ui")
@@ -654,6 +688,243 @@ func mappingValueNode(node *yaml.Node, key string) *yaml.Node {
 	return nil
 }
 
+type configShapeUsage struct {
+	legacy    bool
+	canonical bool
+}
+
+var legacyProviderEntryKeys = map[string]struct{}{
+	"source":            {},
+	"config":            {},
+	"default":           {},
+	"disabled":          {},
+	"env":               {},
+	"allowedHosts":      {},
+	"displayName":       {},
+	"description":       {},
+	"iconFile":          {},
+	"connections":       {},
+	"allowedOperations": {},
+	"indexeddb":         {},
+	"indexeddbs":        {},
+	"surfaces":          {},
+}
+
+func normalizeConfigRoot(root *yaml.Node) error {
+	doc := documentValueNode(root)
+	if doc == nil || doc.Kind == 0 {
+		return nil
+	}
+	if doc.Kind != yaml.MappingNode {
+		return fmt.Errorf("parsing config YAML: expected mapping document")
+	}
+
+	usage := configShapeUsage{}
+	providersNode := mappingValueNode(doc, "providers")
+	if err := normalizePluginsNode(doc, providersNode, &usage); err != nil {
+		return err
+	}
+	if err := normalizeProvidersNode(providersNode, &usage); err != nil {
+		return err
+	}
+	if err := normalizeServerNode(mappingValueNode(doc, "server"), &usage); err != nil {
+		return err
+	}
+	if err := normalizePluginBindings(mappingValueNode(doc, "plugins"), &usage); err != nil {
+		return err
+	}
+	return nil
+}
+
+func normalizePluginsNode(root, providersNode *yaml.Node, usage *configShapeUsage) error {
+	root = documentValueNode(root)
+	providersNode = documentValueNode(providersNode)
+	canonical := mappingValueNode(root, "plugins")
+	legacy := mappingValueNode(providersNode, "plugins")
+	if canonical != nil {
+		usage.canonical = true
+	}
+	if legacy != nil {
+		usage.legacy = true
+	}
+	if canonical != nil && legacy != nil {
+		return fmt.Errorf("config validation: plugins must be configured using top-level plugins or providers.plugins, not both")
+	}
+	if canonical == nil && legacy != nil {
+		setMappingValueNode(root, "plugins", legacy)
+		removeMappingKey(providersNode, "plugins")
+	}
+	return nil
+}
+
+func normalizeProvidersNode(providersNode *yaml.Node, usage *configShapeUsage) error {
+	providersNode = documentValueNode(providersNode)
+	if providersNode == nil {
+		return nil
+	}
+	legacyIndexedDB := mappingValueNode(providersNode, "indexeddbs")
+	canonicalIndexedDB := mappingValueNode(providersNode, "indexeddb")
+	if legacyIndexedDB != nil {
+		usage.legacy = true
+	}
+	if canonicalIndexedDB != nil {
+		usage.canonical = true
+	}
+	if legacyIndexedDB != nil && canonicalIndexedDB != nil {
+		return fmt.Errorf("config validation: providers.indexeddb must be configured using indexeddb or indexeddbs, not both")
+	}
+	if canonicalIndexedDB == nil && legacyIndexedDB != nil {
+		setMappingValueNode(providersNode, "indexeddb", legacyIndexedDB)
+		removeMappingKey(providersNode, "indexeddbs")
+	}
+
+	for _, kind := range []string{"auth", "secrets", "telemetry", "audit"} {
+		node := mappingValueNode(providersNode, kind)
+		if node == nil {
+			continue
+		}
+		if isLegacySingletonProviderNode(node) {
+			usage.legacy = true
+			setMappingValueNode(providersNode, kind, wrapLegacyProviderNode(kind, node))
+			continue
+		}
+		usage.canonical = true
+	}
+	return nil
+}
+
+func normalizeServerNode(serverNode *yaml.Node, usage *configShapeUsage) error {
+	serverNode = documentValueNode(serverNode)
+	if serverNode == nil {
+		return nil
+	}
+	providersNode := mappingValueNode(serverNode, "providers")
+	legacyIndexedDB := mappingValueNode(serverNode, "indexeddb")
+	if providersNode != nil {
+		usage.canonical = true
+	}
+	if legacyIndexedDB != nil {
+		usage.legacy = true
+	}
+	if providersNode != nil && legacyIndexedDB != nil && mappingValueNode(providersNode, "indexeddb") != nil {
+		return fmt.Errorf("config validation: server.providers.indexeddb and server.indexeddb cannot both be set")
+	}
+	if legacyIndexedDB != nil {
+		if providersNode == nil {
+			providersNode = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+			setMappingValueNode(serverNode, "providers", providersNode)
+		}
+		if mappingValueNode(providersNode, "indexeddb") == nil {
+			setMappingValueNode(providersNode, "indexeddb", legacyIndexedDB)
+		}
+		removeMappingKey(serverNode, "indexeddb")
+	}
+	return nil
+}
+
+func normalizePluginBindings(pluginsNode *yaml.Node, usage *configShapeUsage) error {
+	pluginsNode = documentValueNode(pluginsNode)
+	if pluginsNode == nil || pluginsNode.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(pluginsNode.Content); i += 2 {
+		entryNode := documentValueNode(pluginsNode.Content[i+1])
+		if entryNode == nil || entryNode.Kind != yaml.MappingNode {
+			continue
+		}
+		legacy := mappingValueNode(entryNode, "indexeddbs")
+		canonical := mappingValueNode(entryNode, "indexeddb")
+		if legacy != nil {
+			usage.legacy = true
+		}
+		if canonical != nil {
+			usage.canonical = true
+		}
+		if legacy != nil && canonical != nil {
+			return fmt.Errorf("config validation: plugin %q cannot set both indexeddb and indexeddbs", pluginsNode.Content[i].Value)
+		}
+		if canonical == nil && legacy != nil {
+			setMappingValueNode(entryNode, "indexeddb", legacy)
+			removeMappingKey(entryNode, "indexeddbs")
+		}
+	}
+	return nil
+}
+
+func isLegacySingletonProviderNode(node *yaml.Node) bool {
+	node = documentValueNode(node)
+	if node == nil || node.Kind != yaml.MappingNode || len(node.Content) == 0 {
+		return false
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		key := node.Content[i].Value
+		if _, ok := legacyProviderEntryKeys[key]; !ok {
+			return false
+		}
+		if !looksLikeProviderEntryMap(node.Content[i+1]) {
+			return true
+		}
+	}
+	return false
+}
+
+func looksLikeProviderEntryMap(node *yaml.Node) bool {
+	node = documentValueNode(node)
+	if node == nil || node.Kind != yaml.MappingNode {
+		return false
+	}
+	if len(node.Content) == 0 {
+		return true
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if _, ok := legacyProviderEntryKeys[node.Content[i].Value]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func wrapLegacyProviderNode(name string, node *yaml.Node) *yaml.Node {
+	return &yaml.Node{
+		Kind: yaml.MappingNode,
+		Tag:  "!!map",
+		Content: []*yaml.Node{
+			{Kind: yaml.ScalarNode, Tag: "!!str", Value: name},
+			node,
+		},
+	}
+}
+
+func setMappingValueNode(node *yaml.Node, key string, value *yaml.Node) {
+	node = documentValueNode(node)
+	if node == nil || node.Kind != yaml.MappingNode {
+		return
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == key {
+			node.Content[i+1] = value
+			return
+		}
+	}
+	node.Content = append(node.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key},
+		value,
+	)
+}
+
+func removeMappingKey(node *yaml.Node, key string) {
+	node = documentValueNode(node)
+	if node == nil || node.Kind != yaml.MappingNode {
+		return
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		if node.Content[i].Value == key {
+			node.Content = append(node.Content[:i], node.Content[i+2:]...)
+			return
+		}
+	}
+}
+
 func loadWithLookup(path string, lookup func(string) (string, bool), allowMissing bool) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -668,8 +939,21 @@ func loadWithLookup(path string, lookup func(string) (string, bool), allowMissin
 		return nil, fmt.Errorf("expanding config environment variables: environment variable %q not set; use ${%s:-} to allow an empty default", firstMissing, firstMissing)
 	}
 
+	var root yaml.Node
+	normalizeDecoder := yaml.NewDecoder(strings.NewReader(resolved))
+	if err := normalizeDecoder.Decode(&root); err != nil && err != io.EOF {
+		return nil, fmt.Errorf("parsing config YAML: %w", err)
+	}
+	if err := normalizeConfigRoot(&root); err != nil {
+		return nil, err
+	}
+	normalized, err := yaml.Marshal(documentValueNode(&root))
+	if err != nil {
+		return nil, fmt.Errorf("marshaling normalized config YAML: %w", err)
+	}
+
 	var cfg Config
-	dec := yaml.NewDecoder(strings.NewReader(resolved))
+	dec := yaml.NewDecoder(strings.NewReader(string(normalized)))
 	dec.KnownFields(true)
 	if err := dec.Decode(&cfg); err != nil && err != io.EOF {
 		return nil, fmt.Errorf("parsing config YAML: %w", err)
@@ -764,24 +1048,53 @@ func overlayEnvIntoNode(node yaml.Node, lookup func(string) (string, bool), pres
 }
 
 func applyDefaults(cfg *Config) {
+	cfg.SyncCompatFields()
 	if cfg.Server.Public.Port == 0 {
 		cfg.Server.Public.Port = 8080
 	}
-	if cfg.Providers.Secrets == nil {
-		cfg.Providers.Secrets = &ProviderEntry{Source: ProviderSource{Builtin: "env"}}
-	} else if !cfg.Providers.Secrets.Disabled && !cfg.Providers.Secrets.Source.IsBuiltin() && !cfg.Providers.Secrets.Source.IsManaged() && !cfg.Providers.Secrets.Source.IsLocal() {
-		cfg.Providers.Secrets.Source.Builtin = "env"
+	cfg.Plugins = nonNilProviderEntryMap(cfg.Plugins)
+	cfg.Providers.UI = nonNilUIEntryMap(cfg.Providers.UI)
+	cfg.Providers.Auth = nonNilProviderEntryMap(cfg.Providers.Auth)
+	cfg.Providers.Secrets = applyDefaultBuiltinProviderEntries(cfg.Providers.Secrets, DefaultProviderInstance, "env")
+	cfg.Providers.Telemetry = applyDefaultBuiltinProviderEntries(cfg.Providers.Telemetry, DefaultProviderInstance, "stdout")
+	cfg.Providers.Audit = applyDefaultBuiltinProviderEntries(cfg.Providers.Audit, DefaultProviderInstance, "inherit")
+	cfg.Providers.IndexedDB = nonNilProviderEntryMap(cfg.Providers.IndexedDB)
+	cfg.Providers.Plugins = cfg.Plugins
+	cfg.Providers.IndexedDBs = cfg.Providers.IndexedDB
+	cfg.Server.IndexedDB = cfg.Server.Providers.IndexedDB
+	cfg.SyncCompatFields()
+}
+
+func nonNilProviderEntryMap(entries map[string]*ProviderEntry) map[string]*ProviderEntry {
+	if entries == nil {
+		return make(map[string]*ProviderEntry)
 	}
-	if cfg.Providers.Telemetry == nil {
-		cfg.Providers.Telemetry = &ProviderEntry{Source: ProviderSource{Builtin: "stdout"}}
-	} else if !cfg.Providers.Telemetry.Disabled && !cfg.Providers.Telemetry.Source.IsBuiltin() && !cfg.Providers.Telemetry.Source.IsManaged() && !cfg.Providers.Telemetry.Source.IsLocal() {
-		cfg.Providers.Telemetry.Source.Builtin = "stdout"
+	return entries
+}
+
+func nonNilUIEntryMap(entries map[string]*UIEntry) map[string]*UIEntry {
+	if entries == nil {
+		return make(map[string]*UIEntry)
 	}
-	if cfg.Providers.Audit == nil {
-		cfg.Providers.Audit = &ProviderEntry{Source: ProviderSource{Builtin: "inherit"}}
-	} else if !cfg.Providers.Audit.Disabled && !cfg.Providers.Audit.Source.IsBuiltin() && !cfg.Providers.Audit.Source.IsManaged() && !cfg.Providers.Audit.Source.IsLocal() {
-		cfg.Providers.Audit.Source.Builtin = "inherit"
+	return entries
+}
+
+func applyDefaultBuiltinProviderEntries(entries map[string]*ProviderEntry, defaultName, builtin string) map[string]*ProviderEntry {
+	if len(entries) == 0 {
+		return map[string]*ProviderEntry{
+			defaultName: {
+				Source:  ProviderSource{Builtin: builtin},
+				Default: true,
+			},
+		}
 	}
+	for _, entry := range entries {
+		if entry == nil || entry.Disabled || entry.Source.IsBuiltin() || entry.Source.IsManaged() || entry.Source.IsLocal() {
+			continue
+		}
+		entry.Source.Builtin = builtin
+	}
+	return entries
 }
 
 func resolveBaseURL(cfg *Config) {
@@ -806,19 +1119,27 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		entry.Source.Path = resolveRelativePath(baseDir, entry.Source.Path)
 	}
 
-	resolveEntry(cfg.Providers.Auth)
-	resolveEntry(cfg.Providers.Secrets)
-	resolveEntry(cfg.Providers.Telemetry)
-	resolveEntry(cfg.Providers.Audit)
+	for _, entry := range cfg.Providers.Auth {
+		resolveEntry(entry)
+	}
+	for _, entry := range cfg.Providers.Secrets {
+		resolveEntry(entry)
+	}
+	for _, entry := range cfg.Providers.Telemetry {
+		resolveEntry(entry)
+	}
+	for _, entry := range cfg.Providers.Audit {
+		resolveEntry(entry)
+	}
 	for _, entry := range cfg.Providers.UI {
 		if entry != nil {
 			resolveEntry(&entry.ProviderEntry)
 		}
 	}
-	for _, entry := range cfg.Providers.IndexedDBs {
+	for _, entry := range cfg.Providers.IndexedDB {
 		resolveEntry(entry)
 	}
-	for _, entry := range cfg.Providers.Plugins {
+	for _, entry := range cfg.Plugins {
 		resolveEntry(entry)
 	}
 }

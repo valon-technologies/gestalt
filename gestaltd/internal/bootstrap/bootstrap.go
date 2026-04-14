@@ -302,12 +302,12 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		return nil, err
 	}
 
-	if cfg.Server.IndexedDB == "" {
-		return nil, fmt.Errorf("bootstrap: datastore resource name is required")
+	selectedIndexedDBName, def, err := cfg.SelectedIndexedDBProvider()
+	if err != nil {
+		return nil, err
 	}
-	def, ok := cfg.Providers.IndexedDBs[cfg.Server.IndexedDB]
-	if !ok {
-		return nil, fmt.Errorf("bootstrap: indexeddb references unknown indexeddb %q", cfg.Server.IndexedDB)
+	if selectedIndexedDBName == "" || def == nil {
+		return nil, fmt.Errorf("bootstrap: datastore resource name is required")
 	}
 	enc, encErr := crypto.NewAESGCM(encKey)
 	if encErr != nil {
@@ -315,18 +315,18 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	}
 	store, storeErr := buildIndexedDB(def, factories)
 	if storeErr != nil {
-		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", cfg.Server.IndexedDB, storeErr)
+		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", selectedIndexedDBName, storeErr)
 	}
 	store = metricutil.InstrumentIndexedDB(store)
 	svc, svcErr := coredata.New(store, enc)
 	if svcErr != nil {
 		_ = store.Close()
-		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", cfg.Server.IndexedDB, svcErr)
+		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", selectedIndexedDBName, svcErr)
 	}
-	hostIndexedDBs := map[string]indexeddb.IndexedDB{cfg.Server.IndexedDB: store}
+	hostIndexedDBs := map[string]indexeddb.IndexedDB{selectedIndexedDBName: store}
 	var extraIndexedDBs []indexeddb.IndexedDB
-	for name, entry := range cfg.Providers.IndexedDBs {
-		if name == cfg.Server.IndexedDB {
+	for name, entry := range cfg.Providers.IndexedDB {
+		if name == selectedIndexedDBName {
 			continue
 		}
 		ds, err := buildIndexedDB(entry, factories)
@@ -414,7 +414,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	if err != nil {
 		return nil, err
 	}
-	authz, err := authorization.New(cfg.Server.Authorization, cfg.Providers.Plugins, providers, connMaps.DefaultConnection)
+	authz, err := authorization.New(cfg.Server.Authorization, cfg.Plugins, providers, connMaps.DefaultConnection)
 	if err != nil {
 		return nil, err
 	}
@@ -456,7 +456,10 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 }
 
 func buildTelemetry(cfg *config.Config, factories *FactoryRegistry) (core.TelemetryProvider, error) {
-	tel := cfg.Providers.Telemetry
+	_, tel, err := cfg.SelectedTelemetryProvider()
+	if err != nil {
+		return nil, err
+	}
 	if tel != nil && tel.Disabled {
 		factory, ok := factories.Telemetry["noop"]
 		if !ok {
@@ -485,7 +488,10 @@ func buildTelemetry(cfg *config.Config, factories *FactoryRegistry) (core.Teleme
 }
 
 func buildAuditSink(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error) {
-	audit := cfg.Providers.Audit
+	_, audit, err := cfg.SelectedAuditProvider()
+	if err != nil {
+		return nil, nil, err
+	}
 	if audit != nil && audit.Disabled {
 		return invocation.NewLoggerAuditSink(slog.New(slog.DiscardHandler)), nil, nil
 	}
@@ -523,7 +529,10 @@ func (disabledSecretManager) GetSecret(_ context.Context, _ string) (string, err
 }
 
 func buildSecretManager(cfg *config.Config, factories *FactoryRegistry) (core.SecretManager, error) {
-	secrets := cfg.Providers.Secrets
+	_, secrets, err := cfg.SelectedSecretsProvider()
+	if err != nil {
+		return nil, err
+	}
 	if secrets != nil && secrets.Disabled {
 		return disabledSecretManager{}, nil
 	}
@@ -584,7 +593,10 @@ func closeSecretManager(sm core.SecretManager) error {
 }
 
 func buildAuth(cfg *config.Config, factories *FactoryRegistry, deps Deps) (core.AuthProvider, error) {
-	authEntry := cfg.Providers.Auth
+	_, authEntry, err := cfg.SelectedAuthProvider()
+	if err != nil {
+		return nil, err
+	}
 	if authEntry == nil || authEntry.Disabled {
 		return nil, nil
 	}

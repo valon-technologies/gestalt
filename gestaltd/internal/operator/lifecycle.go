@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
@@ -31,7 +30,7 @@ const (
 	PreparedTelemetryDir = ".gestaltd/telemetry"
 	PreparedAuditDir     = ".gestaltd/audit"
 	PreparedUIDir        = ".gestaltd/ui"
-	LockVersion          = 5
+	LockVersion          = 6
 
 	platformKeyGeneric = "generic"
 )
@@ -39,11 +38,11 @@ const (
 type Lockfile struct {
 	Version    int                          `json:"version"`
 	Providers  map[string]LockProviderEntry `json:"providers"`
-	Auth       *LockEntry                   `json:"auth,omitempty"`
+	Auth       map[string]LockEntry         `json:"auth,omitempty"`
 	IndexedDBs map[string]LockEntry         `json:"indexeddbs,omitempty"`
-	Secrets    *LockEntry                   `json:"secrets,omitempty"`
-	Telemetry  *LockEntry                   `json:"telemetry,omitempty"`
-	Audit      *LockEntry                   `json:"audit,omitempty"`
+	Secrets    map[string]LockEntry         `json:"secrets,omitempty"`
+	Telemetry  map[string]LockEntry         `json:"telemetry,omitempty"`
+	Audit      map[string]LockEntry         `json:"audit,omitempty"`
 	UIs        map[string]LockUIEntry       `json:"ui,omitempty"`
 }
 
@@ -122,7 +121,7 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 		return nil, nil, fmt.Errorf("loading config: %v", err)
 	}
 	paths := initPathsForConfigWithArtifactsDir(configPath, resolveArtifactsDir(configPath, cfg, artifactsDir))
-	secretsEntry, err := l.primeSecretsProviderForConfigResolution(context.Background(), paths, cfg, nil)
+	secretsEntries, err := l.primeSecretsProviderForConfigResolution(context.Background(), paths, cfg, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -136,7 +135,11 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 	lock := &Lockfile{
 		Version:    LockVersion,
 		Providers:  make(map[string]LockProviderEntry),
+		Auth:       make(map[string]LockEntry),
 		IndexedDBs: make(map[string]LockEntry),
+		Secrets:    make(map[string]LockEntry),
+		Telemetry:  make(map[string]LockEntry),
+		Audit:      make(map[string]LockEntry),
 		UIs:        make(map[string]LockUIEntry),
 	}
 
@@ -147,33 +150,30 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 	for name := range resolvedProviders {
 		lock.Providers[name] = resolvedProviders[name]
 	}
-	if cfg.Providers.Auth != nil && cfg.Providers.Auth.HasManagedSource() {
-		entry, err := l.writeComponentArtifact(context.Background(), paths, providermanifestv1.KindAuth, "auth", authDestDir(paths), cfg.Providers.Auth, cfg.Providers.Auth.Config)
-		if err != nil {
-			return nil, nil, err
+	for _, collection := range hostProviderCollections(cfg) {
+		for name, entry := range collection.entries {
+			if entry == nil || !entry.HasManagedSource() {
+				continue
+			}
+			if collection.kind == config.HostProviderKindSecrets {
+				if _, alreadyPrepared := secretsEntries[name]; alreadyPrepared {
+					continue
+				}
+			}
+			destDir := componentDestDir(paths, collection.kind, name)
+			lockEntry, err := l.writeComponentArtifact(context.Background(), paths, providerManifestKind(collection.kind), name, destDir, entry, entry.Config)
+			if err != nil {
+				return nil, nil, err
+			}
+			lockEntriesForKind(lock, collection.kind)[name] = lockEntry
 		}
-		lock.Auth = &entry
 	}
-	if secretsEntry != nil {
-		lock.Secrets = secretsEntry
+	for name, lockEntry := range secretsEntries {
+		lock.Secrets[name] = lockEntry
 	}
-	if cfg.Providers.Telemetry != nil && cfg.Providers.Telemetry.HasManagedSource() {
-		entry, err := l.writeComponentArtifact(context.Background(), paths, providermanifestv1.KindPlugin, "telemetry", telemetryDestDir(paths), cfg.Providers.Telemetry, cfg.Providers.Telemetry.Config)
-		if err != nil {
-			return nil, nil, err
-		}
-		lock.Telemetry = &entry
-	}
-	if cfg.Providers.Audit != nil && cfg.Providers.Audit.HasManagedSource() {
-		entry, err := l.writeComponentArtifact(context.Background(), paths, providermanifestv1.KindPlugin, "audit", auditDestDir(paths), cfg.Providers.Audit, cfg.Providers.Audit.Config)
-		if err != nil {
-			return nil, nil, err
-		}
-		lock.Audit = &entry
-	}
-	for name, def := range cfg.Providers.IndexedDBs {
+	for name, def := range cfg.Providers.IndexedDB {
 		if def != nil && def.HasManagedSource() {
-			entry, err := l.writeComponentArtifact(context.Background(), paths, providermanifestv1.KindIndexedDB, "indexeddb-"+name, indexeddbDestDir(paths, name), def, def.Config)
+			entry, err := l.writeComponentArtifact(context.Background(), paths, providermanifestv1.KindIndexedDB, name, indexeddbDestDir(paths, name), def, def.Config)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -200,24 +200,26 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 		return nil, nil, err
 	}
 
-	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "auth", lock.Auth != nil, "indexeddbs", len(lock.IndexedDBs), "secrets", lock.Secrets != nil, "telemetry", lock.Telemetry != nil, "audit", lock.Audit != nil, "uis", len(lock.UIs))
+	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "auth", len(lock.Auth), "indexeddbs", len(lock.IndexedDBs), "secrets", len(lock.Secrets), "telemetry", len(lock.Telemetry), "audit", len(lock.Audit), "uis", len(lock.UIs))
 	slog.Info("wrote lockfile", "path", paths.lockfilePath)
 	return lock, cfg, nil
 }
 
 func buildSourceTokenMap(cfg *config.Config) map[string]string {
 	tokens := make(map[string]string)
-	for _, entry := range cfg.Providers.Plugins {
+	for _, entry := range cfg.Plugins {
 		if entry != nil && entry.Source.Auth != nil {
 			tokens[entry.SourceRef()] = entry.Source.Auth.Token
 		}
 	}
-	for _, p := range []*config.ProviderEntry{cfg.Providers.Auth, cfg.Providers.Secrets, cfg.Providers.Telemetry, cfg.Providers.Audit} {
-		if p != nil && p.Source.Auth != nil {
-			tokens[p.SourceRef()] = p.Source.Auth.Token
+	for _, collection := range hostProviderCollections(cfg) {
+		for _, entry := range collection.entries {
+			if entry != nil && entry.Source.Auth != nil {
+				tokens[entry.SourceRef()] = entry.Source.Auth.Token
+			}
 		}
 	}
-	for _, def := range cfg.Providers.IndexedDBs {
+	for _, def := range cfg.Providers.IndexedDB {
 		if def != nil && def.Source.Auth != nil {
 			tokens[def.SourceRef()] = def.Source.Auth.Token
 		}
@@ -285,7 +287,14 @@ func (l *Lifecycle) resolveConfigSecrets(ctx context.Context, cfg *config.Config
 }
 
 func (l *Lifecycle) lockForSecretsBootstrap(configPath, artifactsDir string, paths initPaths, cfg *config.Config, locked bool) (*Lockfile, error) {
-	if cfg == nil || cfg.Providers.Secrets == nil || !cfg.Providers.Secrets.HasManagedSource() {
+	if cfg == nil {
+		return nil, nil
+	}
+	_, provider, err := cfg.SelectedSecretsProvider()
+	if err != nil {
+		return nil, err
+	}
+	if provider == nil || !provider.HasManagedSource() {
 		return nil, nil
 	}
 	if !configHasManagedProviderSources(cfg) {
@@ -302,35 +311,42 @@ func (l *Lifecycle) lockForSecretsBootstrap(configPath, artifactsDir string, pat
 	return lock, nil
 }
 
-func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context, paths initPaths, cfg *config.Config, lock *Lockfile) (*LockEntry, error) {
-	if cfg == nil || cfg.Providers.Secrets == nil {
+func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context, paths initPaths, cfg *config.Config, lock *Lockfile) (map[string]LockEntry, error) {
+	if cfg == nil {
 		return nil, nil
 	}
+	name, provider, err := cfg.SelectedSecretsProvider()
+	if err != nil || provider == nil {
+		return nil, err
+	}
 
-	provider := cfg.Providers.Secrets
-	configMap, err := config.NodeToMap(cfg.Providers.Secrets.Config)
+	configMap, err := config.NodeToMap(provider.Config)
 	if err != nil {
-		return nil, fmt.Errorf("decode provider config for %s %q: %w", providermanifestv1.KindSecrets, "secrets", err)
+		return nil, fmt.Errorf("decode provider config for %s %q: %w", providermanifestv1.KindSecrets, name, err)
 	}
 
 	switch {
 	case provider.HasManagedSource():
 		if lock != nil {
-			if err := l.applyLockedComponentEntry(paths, lock.Secrets, providermanifestv1.KindSecrets, "secrets", provider, configMap, false); err != nil {
+			lockEntry, ok := lock.Secrets[name]
+			if !ok {
+				return nil, fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init --config %s`", providermanifestv1.KindSecrets, name, paths.configPath)
+			}
+			if err := l.applyLockedComponentEntry(paths, &lockEntry, providermanifestv1.KindSecrets, name, provider, configMap, secretsDestDir(paths, name), false); err != nil {
 				return nil, err
 			}
 			return nil, nil
 		}
-		entry, err := l.writeComponentArtifact(ctx, paths, providermanifestv1.KindSecrets, "secrets", secretsDestDir(paths), provider, cfg.Providers.Secrets.Config)
+		entry, err := l.writeComponentArtifact(ctx, paths, providermanifestv1.KindSecrets, name, secretsDestDir(paths, name), provider, provider.Config)
 		if err != nil {
 			return nil, err
 		}
-		if err := l.applyLockedComponentEntry(paths, &entry, providermanifestv1.KindSecrets, "secrets", provider, configMap, false); err != nil {
+		if err := l.applyLockedComponentEntry(paths, &entry, providermanifestv1.KindSecrets, name, provider, configMap, secretsDestDir(paths, name), false); err != nil {
 			return nil, err
 		}
-		return &entry, nil
+		return map[string]LockEntry{name: entry}, nil
 	case provider.HasLocalSource():
-		if err := applyLocalComponentManifest(providermanifestv1.KindSecrets, "secrets", provider, configMap); err != nil {
+		if err := applyLocalComponentManifest(providermanifestv1.KindSecrets, name, provider, configMap); err != nil {
 			return nil, err
 		}
 	}
@@ -357,15 +373,52 @@ type providerFingerprintInput struct {
 	Version string `json:"version,omitempty"`
 }
 
+func hostProviderCollections(cfg *config.Config) []struct {
+	kind    config.HostProviderKind
+	entries map[string]*config.ProviderEntry
+} {
+	return []struct {
+		kind    config.HostProviderKind
+		entries map[string]*config.ProviderEntry
+	}{
+		{config.HostProviderKindAuth, cfg.Providers.Auth},
+		{config.HostProviderKindSecrets, cfg.Providers.Secrets},
+		{config.HostProviderKindTelemetry, cfg.Providers.Telemetry},
+		{config.HostProviderKindAudit, cfg.Providers.Audit},
+	}
+}
+
+func lockEntriesForKind(lock *Lockfile, kind config.HostProviderKind) map[string]LockEntry {
+	if lock == nil {
+		return nil
+	}
+	switch kind {
+	case config.HostProviderKindAuth:
+		return lock.Auth
+	case config.HostProviderKindSecrets:
+		return lock.Secrets
+	case config.HostProviderKindTelemetry:
+		return lock.Telemetry
+	case config.HostProviderKindAudit:
+		return lock.Audit
+	case config.HostProviderKindIndexedDB:
+		return lock.IndexedDBs
+	default:
+		return nil
+	}
+}
+
 func configHasProviderLoading(cfg *config.Config) bool {
-	for _, entry := range cfg.Providers.Plugins {
+	for _, entry := range cfg.Plugins {
 		if entry.HasManagedSource() || entry.HasLocalSource() {
 			return true
 		}
 	}
-	for _, p := range []*config.ProviderEntry{cfg.Providers.Auth, cfg.Providers.Secrets, cfg.Providers.Telemetry, cfg.Providers.Audit} {
-		if p != nil && (p.HasManagedSource() || p.HasLocalSource()) {
-			return true
+	for _, collection := range hostProviderCollections(cfg) {
+		for _, entry := range collection.entries {
+			if entry != nil && (entry.HasManagedSource() || entry.HasLocalSource()) {
+				return true
+			}
 		}
 	}
 	for _, entry := range cfg.Providers.UI {
@@ -373,7 +426,7 @@ func configHasProviderLoading(cfg *config.Config) bool {
 			return true
 		}
 	}
-	for _, def := range cfg.Providers.IndexedDBs {
+	for _, def := range cfg.Providers.IndexedDB {
 		if def != nil && (def.HasManagedSource() || def.HasLocalSource()) {
 			return true
 		}
@@ -382,14 +435,16 @@ func configHasProviderLoading(cfg *config.Config) bool {
 }
 
 func configHasManagedProviderSources(cfg *config.Config) bool {
-	for _, entry := range cfg.Providers.Plugins {
+	for _, entry := range cfg.Plugins {
 		if entry.HasManagedSource() {
 			return true
 		}
 	}
-	for _, p := range []*config.ProviderEntry{cfg.Providers.Auth, cfg.Providers.Secrets, cfg.Providers.Telemetry, cfg.Providers.Audit} {
-		if p != nil && p.HasManagedSource() {
-			return true
+	for _, collection := range hostProviderCollections(cfg) {
+		for _, entry := range collection.entries {
+			if entry != nil && entry.HasManagedSource() {
+				return true
+			}
 		}
 	}
 	for _, entry := range cfg.Providers.UI {
@@ -397,7 +452,7 @@ func configHasManagedProviderSources(cfg *config.Config) bool {
 			return true
 		}
 	}
-	for _, def := range cfg.Providers.IndexedDBs {
+	for _, def := range cfg.Providers.IndexedDB {
 		if def != nil && def.HasManagedSource() {
 			return true
 		}
@@ -459,24 +514,56 @@ func uiDestDir(paths initPaths, name string) string {
 	return filepath.Join(paths.uiDir, name)
 }
 
-func authDestDir(paths initPaths) string {
-	return paths.authDir
+func authDestDir(paths initPaths, name string) string {
+	return filepath.Join(paths.authDir, name)
 }
 
-func secretsDestDir(paths initPaths) string {
-	return paths.secretsDir
+func secretsDestDir(paths initPaths, name string) string {
+	return filepath.Join(paths.secretsDir, name)
 }
 
-func telemetryDestDir(paths initPaths) string {
-	return paths.telemetryDir
+func telemetryDestDir(paths initPaths, name string) string {
+	return filepath.Join(paths.telemetryDir, name)
 }
 
-func auditDestDir(paths initPaths) string {
-	return paths.auditDir
+func auditDestDir(paths initPaths, name string) string {
+	return filepath.Join(paths.auditDir, name)
 }
 
 func indexeddbDestDir(paths initPaths, name string) string {
 	return filepath.Join(paths.artifactsDir, "indexeddb", name)
+}
+
+func componentDestDir(paths initPaths, kind config.HostProviderKind, name string) string {
+	switch kind {
+	case config.HostProviderKindAuth:
+		return authDestDir(paths, name)
+	case config.HostProviderKindSecrets:
+		return secretsDestDir(paths, name)
+	case config.HostProviderKindTelemetry:
+		return telemetryDestDir(paths, name)
+	case config.HostProviderKindAudit:
+		return auditDestDir(paths, name)
+	case config.HostProviderKindIndexedDB:
+		return indexeddbDestDir(paths, name)
+	default:
+		return ""
+	}
+}
+
+func providerManifestKind(kind config.HostProviderKind) string {
+	switch kind {
+	case config.HostProviderKindAuth:
+		return providermanifestv1.KindAuth
+	case config.HostProviderKindSecrets:
+		return providermanifestv1.KindSecrets
+	case config.HostProviderKindTelemetry, config.HostProviderKindAudit:
+		return providermanifestv1.KindPlugin
+	case config.HostProviderKindIndexedDB:
+		return providermanifestv1.KindIndexedDB
+	default:
+		return ""
+	}
 }
 
 func writeJSONFile(path string, v any) error {
@@ -509,6 +596,18 @@ func ReadLockfile(path string) (*Lockfile, error) {
 	if lock.Providers == nil {
 		lock.Providers = make(map[string]LockProviderEntry)
 	}
+	if lock.Auth == nil {
+		lock.Auth = make(map[string]LockEntry)
+	}
+	if lock.Secrets == nil {
+		lock.Secrets = make(map[string]LockEntry)
+	}
+	if lock.Telemetry == nil {
+		lock.Telemetry = make(map[string]LockEntry)
+	}
+	if lock.Audit == nil {
+		lock.Audit = make(map[string]LockEntry)
+	}
 	if lock.IndexedDBs == nil {
 		lock.IndexedDBs = make(map[string]LockEntry)
 	}
@@ -529,7 +628,7 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 	if lock == nil || lock.Version != LockVersion {
 		return false
 	}
-	for name, entry := range cfg.Providers.Plugins {
+	for name, entry := range cfg.Plugins {
 		if !entry.HasManagedSource() {
 			continue
 		}
@@ -538,32 +637,24 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 			return false
 		}
 	}
-	if cfg.Providers.Auth != nil && cfg.Providers.Auth.HasManagedSource() {
-		if lock.Auth == nil || !lockEntryMatches(paths, "auth", cfg.Providers.Auth, *lock.Auth, true) {
-			return false
+	for _, collection := range hostProviderCollections(cfg) {
+		lockEntries := lockEntriesForKind(lock, collection.kind)
+		for name, entry := range collection.entries {
+			if entry == nil || !entry.HasManagedSource() {
+				continue
+			}
+			lockEntry, found := lockEntries[name]
+			if !lockEntryMatches(paths, name, entry, lockEntry, found) {
+				return false
+			}
 		}
 	}
-	if cfg.Providers.Secrets != nil && cfg.Providers.Secrets.HasManagedSource() {
-		if lock.Secrets == nil || !lockEntryMatches(paths, "secrets", cfg.Providers.Secrets, *lock.Secrets, true) {
-			return false
-		}
-	}
-	if cfg.Providers.Telemetry != nil && cfg.Providers.Telemetry.HasManagedSource() {
-		if lock.Telemetry == nil || !lockEntryMatches(paths, "telemetry", cfg.Providers.Telemetry, *lock.Telemetry, true) {
-			return false
-		}
-	}
-	if cfg.Providers.Audit != nil && cfg.Providers.Audit.HasManagedSource() {
-		if lock.Audit == nil || !lockEntryMatches(paths, "audit", cfg.Providers.Audit, *lock.Audit, true) {
-			return false
-		}
-	}
-	for name, entry := range cfg.Providers.IndexedDBs {
+	for name, entry := range cfg.Providers.IndexedDB {
 		if entry == nil || !entry.HasManagedSource() {
 			continue
 		}
 		lockEntry, found := lock.IndexedDBs[name]
-		if !lockEntryMatches(paths, "indexeddb-"+name, entry, lockEntry, found) {
+		if !lockEntryMatches(paths, name, entry, lockEntry, found) {
 			return false
 		}
 	}
@@ -706,7 +797,7 @@ func (l *Lifecycle) buildArchivesMap(ctx context.Context, src pluginsource.Sourc
 
 func (l *Lifecycle) writeProviderArtifacts(ctx context.Context, cfg *config.Config, paths initPaths) (map[string]LockProviderEntry, error) {
 	written := make(map[string]LockProviderEntry)
-	for name, entry := range cfg.Providers.Plugins {
+	for name, entry := range cfg.Plugins {
 		if entry == nil {
 			continue
 		}
@@ -943,7 +1034,7 @@ func (l *Lifecycle) applyLockedProviders(configPath, artifactsDir string, cfg *c
 		}
 	}
 
-	for name, entry := range cfg.Providers.Plugins {
+	for name, entry := range cfg.Plugins {
 		if entry == nil {
 			continue
 		}
@@ -969,29 +1060,24 @@ func (l *Lifecycle) applyLockedProviders(configPath, artifactsDir string, cfg *c
 		}
 		entry.IconFile = cmp.Or(entry.IconFile, entry.ResolvedIconFile)
 	}
-	if cfg.Providers.Auth != nil {
-		if err := l.applyComponentProvider(paths, lock, providermanifestv1.KindAuth, "auth", cfg.Providers.Auth, cfg.Providers.Auth.Config, &cfg.Providers.Auth.Config, locked); err != nil {
-			return err
+	for _, collection := range hostProviderCollections(cfg) {
+		lockEntries := lockEntriesForKind(lock, collection.kind)
+		for name, entry := range collection.entries {
+			if entry == nil {
+				continue
+			}
+			if err := l.applyComponentProvider(paths, lockEntries, providerManifestKind(collection.kind), name, entry, entry.Config, &entry.Config, componentDestDir(paths, collection.kind, name), locked); err != nil {
+				return err
+			}
 		}
 	}
-	if cfg.Providers.Secrets != nil {
-		if err := l.applyComponentProvider(paths, lock, providermanifestv1.KindSecrets, "secrets", cfg.Providers.Secrets, cfg.Providers.Secrets.Config, &cfg.Providers.Secrets.Config, locked); err != nil {
-			return err
-		}
+	indexedDBLocks := map[string]LockEntry(nil)
+	if lock != nil {
+		indexedDBLocks = lock.IndexedDBs
 	}
-	if cfg.Providers.Telemetry != nil {
-		if err := l.applyComponentProvider(paths, lock, providermanifestv1.KindPlugin, "telemetry", cfg.Providers.Telemetry, cfg.Providers.Telemetry.Config, &cfg.Providers.Telemetry.Config, locked); err != nil {
-			return err
-		}
-	}
-	if cfg.Providers.Audit != nil {
-		if err := l.applyComponentProvider(paths, lock, providermanifestv1.KindPlugin, "audit", cfg.Providers.Audit, cfg.Providers.Audit.Config, &cfg.Providers.Audit.Config, locked); err != nil {
-			return err
-		}
-	}
-	for name, def := range cfg.Providers.IndexedDBs {
+	for name, def := range cfg.Providers.IndexedDB {
 		if def != nil {
-			if err := l.applyComponentProvider(paths, lock, providermanifestv1.KindIndexedDB, "indexeddb-"+name, def, def.Config, &def.Config, locked); err != nil {
+			if err := l.applyComponentProvider(paths, indexedDBLocks, providermanifestv1.KindIndexedDB, name, def, def.Config, &def.Config, indexeddbDestDir(paths, name), locked); err != nil {
 				return err
 			}
 		}
@@ -1083,7 +1169,7 @@ func (l *Lifecycle) applyConfiguredUIProvider(paths initPaths, lockEntry *LockUI
 	}
 }
 
-func (l *Lifecycle) applyComponentProvider(paths initPaths, lock *Lockfile, kind, name string, provider *config.ProviderEntry, providerConfig yaml.Node, targetNode *yaml.Node, locked bool) error {
+func (l *Lifecycle) applyComponentProvider(paths initPaths, lockEntries map[string]LockEntry, kind, name string, provider *config.ProviderEntry, providerConfig yaml.Node, targetNode *yaml.Node, destDir string, locked bool) error {
 	if provider == nil {
 		return nil
 	}
@@ -1093,28 +1179,14 @@ func (l *Lifecycle) applyComponentProvider(paths initPaths, lock *Lockfile, kind
 	}
 	switch {
 	case provider.HasManagedSource():
-		if lock == nil {
+		if lockEntries == nil {
 			return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init --config %s`", kind, name, paths.configPath)
 		}
-		var entry *LockEntry
-		switch name {
-		case "auth":
-			entry = lock.Auth
-		case "secrets":
-			entry = lock.Secrets
-		case "telemetry":
-			entry = lock.Telemetry
-		case "audit":
-			entry = lock.Audit
-		default:
-			if kind == providermanifestv1.KindIndexedDB && strings.HasPrefix(name, "indexeddb-") {
-				binding := strings.TrimPrefix(name, "indexeddb-")
-				if lockEntry, ok := lock.IndexedDBs[binding]; ok {
-					entry = &lockEntry
-				}
-			}
+		lockEntry, ok := lockEntries[name]
+		if !ok {
+			return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init --config %s`", kind, name, paths.configPath)
 		}
-		if err := l.applyLockedComponentEntry(paths, entry, kind, name, provider, configMap, locked); err != nil {
+		if err := l.applyLockedComponentEntry(paths, &lockEntry, kind, name, provider, configMap, destDir, locked); err != nil {
 			return err
 		}
 	case provider.HasLocalSource():
@@ -1281,7 +1353,7 @@ func (l *Lifecycle) applyLockedProviderEntry(paths initPaths, lock *Lockfile, na
 	return nil
 }
 
-func (l *Lifecycle) applyLockedComponentEntry(paths initPaths, entry *LockEntry, kind, name string, plugin *config.ProviderEntry, configMap map[string]any, locked bool) error {
+func (l *Lifecycle) applyLockedComponentEntry(paths initPaths, entry *LockEntry, kind, name string, plugin *config.ProviderEntry, configMap map[string]any, destDir string, locked bool) error {
 	if entry == nil {
 		return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init --config %s`", kind, name, paths.configPath)
 	}
@@ -1314,7 +1386,7 @@ func (l *Lifecycle) applyLockedComponentEntry(paths initPaths, entry *LockEntry,
 		}
 	}
 	if needMaterialize {
-		if err := l.materializeLockedComponent(context.Background(), paths, kind, name, plugin, *entry, locked); err != nil {
+		if err := l.materializeLockedComponent(context.Background(), paths, kind, name, plugin, *entry, destDir, locked); err != nil {
 			return err
 		}
 	}
@@ -1435,7 +1507,7 @@ func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPat
 	return nil
 }
 
-func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPaths, kind, name string, plugin *config.ProviderEntry, entry LockEntry, locked bool) error {
+func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPaths, kind, name string, plugin *config.ProviderEntry, entry LockEntry, destDir string, locked bool) error {
 	platform := providerpkg.CurrentPlatformString()
 	archive, _, ok := resolveArchiveForPlatform(entry, platform)
 	if !ok || archive.URL == "" {
@@ -1470,21 +1542,7 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 		return fmt.Errorf("locked source provider digest mismatch for %s %q: got %s, want %s", kind, name, download.SHA256Hex, archive.SHA256)
 	}
 
-	var destDir string
-	switch name {
-	case "auth":
-		destDir = authDestDir(paths)
-	case "secrets":
-		destDir = secretsDestDir(paths)
-	case "telemetry":
-		destDir = telemetryDestDir(paths)
-	case "audit":
-		destDir = auditDestDir(paths)
-	default:
-		if kind == providermanifestv1.KindIndexedDB && strings.HasPrefix(name, "indexeddb-") {
-			destDir = indexeddbDestDir(paths, strings.TrimPrefix(name, "indexeddb-"))
-			break
-		}
+	if destDir == "" {
 		return fmt.Errorf("unsupported component %q", name)
 	}
 	if err := os.RemoveAll(destDir); err != nil {
@@ -1571,12 +1629,12 @@ func hashPlatformInEntries(ctx context.Context, lock *Lockfile, platformKey stri
 		}
 		lock.Providers[name] = entry
 	}
-	for _, entry := range []*LockEntry{lock.Auth, lock.Secrets, lock.Telemetry, lock.Audit} {
-		if entry == nil {
-			continue
-		}
-		if err := hashArchiveEntry(ctx, entry, platformKey, tokenForSource); err != nil {
-			return err
+	for _, lockEntries := range []map[string]LockEntry{lock.Auth, lock.Secrets, lock.Telemetry, lock.Audit} {
+		for name, entry := range lockEntries {
+			if err := hashArchiveEntry(ctx, &entry, platformKey, tokenForSource); err != nil {
+				return err
+			}
+			lockEntries[name] = entry
 		}
 	}
 	for name, entry := range lock.IndexedDBs {

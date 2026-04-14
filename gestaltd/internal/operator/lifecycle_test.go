@@ -99,6 +99,24 @@ func requiredIndexedDBConfigYAML(t *testing.T, dir, dbPath string) string {
 	return requiredComponentConfigYAML(t, dir, dbPath)
 }
 
+func mustSelectedHostProviderEntry(t *testing.T, cfg *config.Config, kind config.HostProviderKind) *config.ProviderEntry {
+	t.Helper()
+	_, entry, err := cfg.SelectedHostProvider(kind)
+	if err != nil {
+		t.Fatalf("SelectedHostProvider(%s): %v", kind, err)
+	}
+	return entry
+}
+
+func mustLockEntryByName(t *testing.T, entries map[string]LockEntry, name string) LockEntry {
+	t.Helper()
+	entry, ok := entries[name]
+	if !ok {
+		t.Fatalf("lock entry %q not found in %#v", name, entries)
+	}
+	return entry
+}
+
 func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *testing.T) {
 	t.Parallel()
 
@@ -141,7 +159,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *te
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
 
-	intg := loaded.Providers.Plugins["example"]
+	intg := loaded.Plugins["example"]
 	if intg.DisplayName != "Local Provider" {
 		t.Fatalf("DisplayName = %q", intg.DisplayName)
 	}
@@ -202,7 +220,7 @@ spec:
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
 
-	intg := loaded.Providers.Plugins["notion"]
+	intg := loaded.Plugins["notion"]
 	if intg == nil || intg.ResolvedManifest == nil || intg.ResolvedManifest.Spec == nil {
 		t.Fatalf("ResolvedManifest = %+v", intg)
 	}
@@ -480,16 +498,17 @@ server:
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
 
-	if loaded.Providers.Auth == nil || loaded.Providers.Auth.ResolvedManifest == nil {
-		t.Fatalf("auth resolved manifest = %+v", loaded.Providers.Auth)
+	authEntry := mustSelectedHostProviderEntry(t, loaded, config.HostProviderKindAuth)
+	if authEntry == nil || authEntry.ResolvedManifest == nil {
+		t.Fatalf("auth resolved manifest = %+v", authEntry)
 	}
-	if loaded.Providers.Auth.Command != authExecutablePath {
-		t.Fatalf("auth command = %q, want %q", loaded.Providers.Auth.Command, authExecutablePath)
+	if authEntry.Command != authExecutablePath {
+		t.Fatalf("auth command = %q, want %q", authEntry.Command, authExecutablePath)
 	}
-	if got := loaded.Providers.Auth.Args; len(got) != 1 || got[0] != "serve-auth" {
+	if got := authEntry.Args; len(got) != 1 || got[0] != "serve-auth" {
 		t.Fatalf("auth args = %v, want [serve-auth]", got)
 	}
-	authCfg := decodeNodeMap(t, loaded.Providers.Auth.Config)
+	authCfg := decodeNodeMap(t, authEntry.Config)
 	if authCfg["command"] != authExecutablePath {
 		t.Fatalf("auth config command = %v, want %q", authCfg["command"], authExecutablePath)
 	}
@@ -563,13 +582,14 @@ server:
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
 
-	if loaded.Providers.Auth == nil || loaded.Providers.Auth.ResolvedManifest == nil {
-		t.Fatalf("auth resolved manifest = %+v", loaded.Providers.Auth)
+	authEntry := mustSelectedHostProviderEntry(t, loaded, config.HostProviderKindAuth)
+	if authEntry == nil || authEntry.ResolvedManifest == nil {
+		t.Fatalf("auth resolved manifest = %+v", authEntry)
 	}
-	if loaded.Providers.Auth.Command != "" {
-		t.Fatalf("auth command = %q, want empty", loaded.Providers.Auth.Command)
+	if authEntry.Command != "" {
+		t.Fatalf("auth command = %q, want empty", authEntry.Command)
 	}
-	authCfg := decodeNodeMap(t, loaded.Providers.Auth.Config)
+	authCfg := decodeNodeMap(t, authEntry.Config)
 	if authCfg["manifestPath"] != authManifestPath {
 		t.Fatalf("auth manifest_path = %v, want %q", authCfg["manifestPath"], authManifestPath)
 	}
@@ -626,7 +646,7 @@ func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalSourceHybridPlugin
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
 
-	intg := loaded.Providers.Plugins["example"]
+	intg := loaded.Plugins["example"]
 	if intg == nil || intg.ResolvedManifest == nil {
 		t.Fatalf("ResolvedManifest = %+v", intg)
 	}
@@ -851,7 +871,7 @@ print(json.dumps({
 		t.Fatalf("LoadForExecutionAtPath: %v", err)
 	}
 
-	intg := loaded.Providers.Plugins["example"]
+	intg := loaded.Plugins["example"]
 	if intg == nil || intg.ResolvedManifest == nil {
 		t.Fatalf("ResolvedManifest = %+v", intg)
 	}
@@ -1127,14 +1147,14 @@ func TestApplyLockedPlugins_SkipsNilIntegrationPlugins(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load config: %v", err)
 	}
-	loaded.Providers.Plugins["missing"] = &config.ProviderEntry{}
+	loaded.Plugins["missing"] = &config.ProviderEntry{}
 
 	lc := NewLifecycle(nil)
 	if err := lc.applyLockedProviders(cfgPath, "", loaded, false); err != nil {
 		t.Fatalf("applyLockedProviders: %v", err)
 	}
-	if loaded.Providers.Plugins["example"] == nil || loaded.Providers.Plugins["example"].ResolvedManifest == nil {
-		t.Fatalf("ResolvedManifest = %+v", loaded.Providers.Plugins["example"])
+	if loaded.Plugins["example"] == nil || loaded.Plugins["example"].ResolvedManifest == nil {
+		t.Fatalf("ResolvedManifest = %+v", loaded.Plugins["example"])
 	}
 }
 

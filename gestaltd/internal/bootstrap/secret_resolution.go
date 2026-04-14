@@ -42,7 +42,7 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 	if err := resolveStringFields(&cfg.Server, resolve); err != nil {
 		return err
 	}
-	for name, entry := range cfg.Providers.Plugins {
+	for name, entry := range cfg.Plugins {
 		if entry == nil {
 			continue
 		}
@@ -56,12 +56,18 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 				}
 			}
 		}
-		cfg.Providers.Plugins[name] = entry
+		cfg.Plugins[name] = entry
 	}
-	for _, entry := range []*config.ProviderEntry{cfg.Providers.Auth, cfg.Providers.Telemetry, cfg.Providers.Audit} {
-		if entry != nil {
-			if err := resolveStringFields(entry, resolve); err != nil {
-				return err
+	for _, entries := range []map[string]*config.ProviderEntry{
+		cfg.Providers.Auth,
+		cfg.Providers.Telemetry,
+		cfg.Providers.Audit,
+	} {
+		for _, entry := range entries {
+			if entry != nil {
+				if err := resolveStringFields(entry, resolve); err != nil {
+					return err
+				}
 			}
 		}
 	}
@@ -75,25 +81,29 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 		cfg.Providers.UI[name] = entry
 	}
 	// Resolve secrets provider struct fields (Source, Env, AllowedHosts, etc.)
-	// but skip its Config node to avoid self-referential resolution.
-	if cfg.Providers.Secrets != nil {
-		savedConfig := cfg.Providers.Secrets.Config
-		cfg.Providers.Secrets.Config = yaml.Node{}
-		if err := resolveStringFields(cfg.Providers.Secrets, resolve); err != nil {
-			cfg.Providers.Secrets.Config = savedConfig
+	// but skip their Config nodes to avoid self-referential resolution.
+	for name, entry := range cfg.Providers.Secrets {
+		if entry == nil {
+			continue
+		}
+		savedConfig := entry.Config
+		entry.Config = yaml.Node{}
+		if err := resolveStringFields(entry, resolve); err != nil {
+			entry.Config = savedConfig
 			return err
 		}
-		cfg.Providers.Secrets.Config = savedConfig
+		entry.Config = savedConfig
+		cfg.Providers.Secrets[name] = entry
 	}
 
-	for name, ds := range cfg.Providers.IndexedDBs {
+	for name, ds := range cfg.Providers.IndexedDB {
 		if ds == nil {
 			continue
 		}
 		if err := resolveStringFields(ds, resolve); err != nil {
 			return err
 		}
-		cfg.Providers.IndexedDBs[name] = ds
+		cfg.Providers.IndexedDB[name] = ds
 	}
 
 	return nil

@@ -476,8 +476,8 @@ func TestSourcePluginLoadForExecution(t *testing.T) {
 	if _, err := os.Stat(executablePath); err != nil {
 		t.Fatalf("executable not rehydrated at %s: %v", executablePath, err)
 	}
-	if cfg.Providers.Plugins["gadget"].Command != executablePath {
-		t.Fatalf("plugin command = %q, want %q", cfg.Providers.Plugins["gadget"].Command, executablePath)
+	if cfg.Plugins["gadget"].Command != executablePath {
+		t.Fatalf("plugin command = %q, want %q", cfg.Plugins["gadget"].Command, executablePath)
 	}
 }
 
@@ -567,7 +567,7 @@ func TestSourcePluginLoadForExecution_RehydratesWhenCachedManifestVersionMismatc
 		t.Fatalf("download count during locked rehydration = %d, want 1", got)
 	}
 
-	gotManifest := cfg.Providers.Plugins["gadget"].ResolvedManifest
+	gotManifest := cfg.Plugins["gadget"].ResolvedManifest
 	if gotManifest == nil {
 		t.Fatal("ResolvedManifest is nil")
 	}
@@ -652,13 +652,11 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InitAtPath: %v", err)
 	}
-	if lock.Auth == nil {
-		t.Fatal("lock auth entry not found")
+	authLockEntry := mustLockEntryByName(t, lock.Auth, "auth")
+	if authLockEntry.Source != source {
+		t.Fatalf("lock.Auth[auth].Source = %q, want %q", authLockEntry.Source, source)
 	}
-	if lock.Auth.Source != source {
-		t.Fatalf("lock.Auth.Source = %q, want %q", lock.Auth.Source, source)
-	}
-	if lock.Auth.Executable == "" {
+	if authLockEntry.Executable == "" {
 		t.Fatal("lock.Auth.Executable is empty")
 	}
 	if resolver.lastSrc.String() != source {
@@ -694,14 +692,15 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 		t.Fatalf("download count during locked rehydration = %d, want 1", got)
 	}
 
-	if cfg.Providers.Auth == nil {
+	authProvider := mustSelectedHostProviderEntry(t, cfg, config.HostProviderKindAuth)
+	if authProvider == nil {
 		t.Fatal("auth provider is nil after load")
 	}
-	executablePath := resolveLockPath(artifactsDir, lock.Auth.Executable)
-	if cfg.Providers.Auth.Command != executablePath {
-		t.Fatalf("auth provider command = %q, want %q", cfg.Providers.Auth.Command, executablePath)
+	executablePath := resolveLockPath(artifactsDir, authLockEntry.Executable)
+	if authProvider.Command != executablePath {
+		t.Fatalf("auth provider command = %q, want %q", authProvider.Command, executablePath)
 	}
-	authCfg, err := config.NodeToMap(cfg.Providers.Auth.Config)
+	authCfg, err := config.NodeToMap(authProvider.Config)
 	if err != nil {
 		t.Fatalf("NodeToMap(auth config): %v", err)
 	}
@@ -811,16 +810,16 @@ func TestManagedIndexedDBSourcesLoadForExecutionWithMultipleBindings(t *testing.
 	}
 
 	for _, name := range []string{"main", "archive"} {
-		entry := cfg.Providers.IndexedDBs[name]
+		entry := cfg.Providers.IndexedDB[name]
 		if entry == nil {
-			t.Fatalf("cfg.Providers.IndexedDBs[%q] = nil", name)
+			t.Fatalf("cfg.Providers.IndexedDB[%q] = nil", name)
 		}
 		if entry.ResolvedManifest == nil {
-			t.Fatalf("cfg.Providers.IndexedDBs[%q].ResolvedManifest = nil", name)
+			t.Fatalf("cfg.Providers.IndexedDB[%q].ResolvedManifest = nil", name)
 		}
 		wantCommand := resolveLockPath(artifactsDir, lock.IndexedDBs[name].Executable)
 		if entry.Command != wantCommand {
-			t.Fatalf("cfg.Providers.IndexedDBs[%q].Command = %q, want %q", name, entry.Command, wantCommand)
+			t.Fatalf("cfg.Providers.IndexedDB[%q].Command = %q, want %q", name, entry.Command, wantCommand)
 		}
 	}
 }
@@ -944,12 +943,8 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InitAtPath: %v", err)
 	}
-	if lock.Secrets == nil {
-		t.Fatal("lock secrets entry not found")
-	}
-	if lock.Auth == nil {
-		t.Fatal("lock auth entry not found")
-	}
+	secretsLockEntry := mustLockEntryByName(t, lock.Secrets, "secrets")
+	authLockEntry := mustLockEntryByName(t, lock.Auth, "auth")
 	if got := len(resolver.calls); got != 2 {
 		t.Fatalf("resolver calls = %d, want 2", got)
 	}
@@ -989,23 +984,25 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 	if got := authDownloads.Load(); got != 1 {
 		t.Fatalf("auth download count = %d, want 1", got)
 	}
-	if cfg.Providers.Auth == nil || cfg.Providers.Auth.Source.Auth == nil {
-		t.Fatalf("auth provider source auth = %#v", cfg.Providers.Auth)
+	authProvider := mustSelectedHostProviderEntry(t, cfg, config.HostProviderKindAuth)
+	if authProvider == nil || authProvider.Source.Auth == nil {
+		t.Fatalf("auth provider source auth = %#v", authProvider)
 	}
-	if cfg.Providers.Auth.Source.Auth.Token != "ghp_inline_auth_source_token" {
-		t.Fatalf("resolved auth source token = %q, want %q", cfg.Providers.Auth.Source.Auth.Token, "ghp_inline_auth_source_token")
+	if authProvider.Source.Auth.Token != "ghp_inline_auth_source_token" {
+		t.Fatalf("resolved auth source token = %q, want %q", authProvider.Source.Auth.Token, "ghp_inline_auth_source_token")
 	}
 
-	secretsExecutablePath := resolveLockPath(artifactsDir, lock.Secrets.Executable)
-	if cfg.Providers.Secrets == nil {
+	secretsExecutablePath := resolveLockPath(artifactsDir, secretsLockEntry.Executable)
+	secretsProvider := mustSelectedHostProviderEntry(t, cfg, config.HostProviderKindSecrets)
+	if secretsProvider == nil {
 		t.Fatal("secrets provider is nil after load")
 	}
-	if cfg.Providers.Secrets.Command != secretsExecutablePath {
-		t.Fatalf("secrets provider command = %q, want %q", cfg.Providers.Secrets.Command, secretsExecutablePath)
+	if secretsProvider.Command != secretsExecutablePath {
+		t.Fatalf("secrets provider command = %q, want %q", secretsProvider.Command, secretsExecutablePath)
 	}
-	authExecutablePath := resolveLockPath(artifactsDir, lock.Auth.Executable)
-	if cfg.Providers.Auth.Command != authExecutablePath {
-		t.Fatalf("auth provider command = %q, want %q", cfg.Providers.Auth.Command, authExecutablePath)
+	authExecutablePath := resolveLockPath(artifactsDir, authLockEntry.Executable)
+	if authProvider.Command != authExecutablePath {
+		t.Fatalf("auth provider command = %q, want %q", authProvider.Command, authExecutablePath)
 	}
 }
 
@@ -1197,7 +1194,7 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 	if got := assetCount.Load() - assetsBefore; got != 1 {
 		t.Errorf("asset request count during locked load = %d, want 1", got)
 	}
-	if cfg.Providers.Plugins["alpha"].Command != executablePath {
-		t.Errorf("plugin command = %q, want %q", cfg.Providers.Plugins["alpha"].Command, executablePath)
+	if cfg.Plugins["alpha"].Command != executablePath {
+		t.Errorf("plugin command = %q, want %q", cfg.Plugins["alpha"].Command, executablePath)
 	}
 }
