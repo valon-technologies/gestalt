@@ -2,7 +2,7 @@ import { Tabs } from 'nextra/components'
 
 # Config File
 
-Every `gestaltd` deployment reads a single YAML config file. The top-level keys are `server` (listener, encryption, egress, and indexeddb selection), `authorization` (shared human/workload access policy), `providers` (auth, secrets, telemetry, audit, mounted UI bundles, and indexeddb), and `plugins` (executable integrations):
+Every `gestaltd` deployment reads a single YAML config file. The top-level keys are `server` (listener, encryption, egress, and indexeddb selection), `authorization` (shared human/workload access policy), `providers` (auth, fileapi, secrets, telemetry, audit, mounted UI bundles, and indexeddb), and `plugins` (executable integrations):
 
 ```yaml
 server:
@@ -12,6 +12,7 @@ authorization:
   workloads: {}
 providers:
   auth: {}
+  fileapi: {}
   secrets: {}
   telemetry: {}
   audit: {}
@@ -202,6 +203,27 @@ Common first-party IndexedDB packages:
 | RelationalDB | `github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb` | `dsn` |
 | DynamoDB | `github.com/valon-technologies/gestalt-providers/indexeddb/dynamodb` | `table`, `region`, optional `endpoint` |
 | MongoDB | `github.com/valon-technologies/gestalt-providers/indexeddb/mongodb` | `uri`, optional `database` |
+
+## `providers.fileapi`
+
+File API providers expose browser-style `Blob`, `File`, and object URL services to executable plugins. Configure one or more named entries under `providers.fileapi`, then opt a plugin into those host services with `plugins.<name>.fileapi`.
+
+```yaml
+providers:
+  fileapi:
+    uploads:
+      source:
+        path: ./providers/uploads-fileapi/manifest.yaml
+
+plugins:
+  document_processor:
+    source:
+      path: ./plugins/document-processor/manifest.yaml
+    fileapi:
+      - uploads
+```
+
+Each `plugins.<name>.fileapi` entry must name a configured `providers.fileapi.<name>` provider. Gestalt serves each binding to the plugin over the same provider-host transport used for other executable provider dependencies. When a plugin binds exactly one File API provider, Gestalt also sets the default File API SDK socket env var for compatibility.
 
 ## `providers.secrets`
 
@@ -482,6 +504,7 @@ plugins:
 | `surfaces` | Typed host-side overrides for manifest-declared surfaces, such as `surfaces.openapi.baseUrl` or `surfaces.graphql.url`. |
 | `connections` | Named connection declarations. See [connections](#connections) below. |
 | `allowedOperations` | Allowlist with optional `alias`, `description`, and `allowedRoles` overrides per operation. |
+| `fileapi` | Optional list of named File API bindings. Each item must match a configured `providers.fileapi.<name>` entry. Gestalt serves those bindings to the plugin over provider-host sockets. A single binding also populates the default File API SDK env var for compatibility. |
 | `indexeddb` | Optional list of plugin IndexedDB bindings. The scalar shorthand `- main` is still supported; the object form accepts `name` plus optional `objectStore` allowlists to pin logical stores to a binding. A given `objectStore` may appear in at most one binding; duplicates are rejected during config validation. When any binding declares `objectStore`, one additional binding may omit it and acts as the catch-all for unassigned stores. Each binding is rebuilt as a plugin-scoped IndexedDB instance before being served to the plugin. A single binding also populates the default IndexedDB SDK env var for compatibility. |
 | `indexeddbSchema` | Optional override for the plugin IndexedDB namespace. When omitted, Gestalt uses the plugin name. RelationalDB bindings pass this through as `schema` on Postgres, MySQL, and SQL Server, use `<indexeddbSchema>_` table prefixes on SQLite, and other IndexedDB backends fall back to `<indexeddbSchema>_` transport-level store prefixes. |
 
@@ -770,7 +793,7 @@ Structural validation runs at config load time (`init`, `validate`, `serve`). Ru
 
 Each plugin uses a `source` block. Every plugin must use exactly one loading mode: local `source.path` or managed `source.ref`. `source.version` is required with `source.ref` and invalid with `source.path`.
 
-Auth providers and indexeddb entries use the same external provider shape. When `providers.auth` or `providers.indexeddb.<name>` is set, `source.ref` or `source.path` must be present. `providers.auth.config` and `providers.indexeddb.<name>.config` are only allowed when their corresponding source is set.
+Auth providers, fileapi entries, and indexeddb entries use the same external provider shape. When `providers.auth`, `providers.fileapi.<name>`, or `providers.indexeddb.<name>` is set, `source.ref` or `source.path` must be present. `providers.auth.config`, `providers.fileapi.<name>.config`, and `providers.indexeddb.<name>.config` are only allowed when their corresponding source is set.
 
 Only `connections.default` may define `params` or `discovery`. All connections in a plugin must share the same mode.
 

@@ -13,6 +13,7 @@ CompleteLoginRequest: Any = _auth_pb2.CompleteLoginRequest  # ty: ignore[unresol
 class ProviderKind(str, Enum):
     INTEGRATION = "integration"
     AUTH = "auth"
+    FILEAPI = "fileapi"
     SECRETS = "secrets"
     TELEMETRY = "telemetry"
 
@@ -113,5 +114,4 @@ class SecretsProvider(PluginProvider):
         from . import _runtime
 
         _runtime.serve(self, runtime_kind=ProviderKind.SECRETS)
-
 

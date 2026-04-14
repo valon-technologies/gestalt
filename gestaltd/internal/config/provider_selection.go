@@ -22,6 +22,12 @@ func (c *Config) SyncCompatFields() {
 	if c.Providers.IndexedDBs == nil && c.Providers.IndexedDB != nil {
 		c.Providers.IndexedDBs = c.Providers.IndexedDB
 	}
+	if c.Providers.FileAPI == nil && c.Providers.FileAPIs != nil {
+		c.Providers.FileAPI = c.Providers.FileAPIs
+	}
+	if c.Providers.FileAPIs == nil && c.Providers.FileAPI != nil {
+		c.Providers.FileAPIs = c.Providers.FileAPI
+	}
 	if c.Server.Providers.IndexedDB == "" && c.Server.IndexedDB != "" {
 		c.Server.Providers.IndexedDB = c.Server.IndexedDB
 	}

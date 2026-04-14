@@ -619,6 +619,8 @@ function providerKindToProto(kind: ProviderKind): ProtoProviderKind {
       return ProtoProviderKind.INTEGRATION;
     case "auth":
       return ProtoProviderKind.AUTH;
+    case "fileapi":
+      return ProtoProviderKind.FILEAPI;
     case "secrets":
       return ProtoProviderKind.SECRETS;
     case "telemetry":

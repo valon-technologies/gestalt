@@ -587,6 +587,7 @@ def _provider_kind_to_proto(kind: ProviderKind | str) -> Any:
     return {
         ProviderKind.INTEGRATION: runtime_pb2.ProviderKind.PROVIDER_KIND_INTEGRATION,
         ProviderKind.AUTH: runtime_pb2.ProviderKind.PROVIDER_KIND_AUTH,
+        ProviderKind.FILEAPI: runtime_pb2.ProviderKind.PROVIDER_KIND_FILEAPI,
         ProviderKind.SECRETS: runtime_pb2.ProviderKind.PROVIDER_KIND_SECRETS,
         ProviderKind.TELEMETRY: runtime_pb2.ProviderKind.PROVIDER_KIND_TELEMETRY,
     }.get(normalized, runtime_pb2.ProviderKind.PROVIDER_KIND_UNSPECIFIED)

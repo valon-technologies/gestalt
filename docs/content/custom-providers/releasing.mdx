@@ -12,7 +12,7 @@ the executable artifacts for packaged providers, and optional static assets.
 
 ## What can be released
 
-Gestalt uses the same release system for executable provider packages, auth and datastore component packages, and packaged web UI bundles. Every package is described by a provider manifest file: `manifest.yaml`, `manifest.yml`, or `manifest.json`.
+Gestalt uses the same release system for executable provider packages, auth, fileapi, and datastore component packages, and packaged web UI bundles. Every package is described by a provider manifest file: `manifest.yaml`, `manifest.yml`, or `manifest.json`.
 
 ## Source manifests vs release manifests
 
@@ -129,8 +129,8 @@ packaging.
 
 Source manifests may optionally define a `release.build` command. Gestalt runs
 it before source-manifest preparation, which lets web UI packages generate
-static assets and lets provider/auth/datastore packages generate support files
-such as config schemas before packaging.
+static assets and lets provider/auth/fileapi/datastore packages generate
+support files such as config schemas before packaging.
 
 ```yaml
 kind: webui
@@ -196,7 +196,7 @@ Release tags are derived from the package path after the repository. For example
 
 For executable Go, Rust, Python, and TypeScript source providers,
 `provider release` materializes the executable catalog automatically and builds
-the host-platform artifact by default. Go, Rust, and TypeScript auth/datastore
+the host-platform artifact by default. Go and Rust auth/fileapi/datastore
 source packages use the same release flow without catalog generation. Pass
 `--platform` with a comma-separated list such as
 `--platform linux/amd64,darwin/arm64` to build explicit targets. Pass `--platform all` in CI release jobs to build the

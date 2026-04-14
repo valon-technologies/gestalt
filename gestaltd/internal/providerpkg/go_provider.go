@@ -194,6 +194,12 @@ func detectSourceComponent(root, kind, goos, goarch string) (sourceKind string, 
 	} else if !errors.Is(err, ErrNoSourceComponentPackage) {
 		return "", "", err
 	}
+	if kind == providermanifestv1.KindFileAPI {
+		if goToolUnavailable != nil {
+			return "", "", goToolUnavailable
+		}
+		return "", "", ErrNoSourceComponentPackage
+	}
 
 	if _, err := detectRustPackage(root); err == nil {
 		return sourceProviderKindRust, "", nil
@@ -485,7 +491,7 @@ func slugPluginName(value string) string {
 
 func validateSourceComponentKind(kind string) error {
 	switch kind {
-	case providermanifestv1.KindAuth, providermanifestv1.KindIndexedDB, providermanifestv1.KindSecrets:
+	case providermanifestv1.KindAuth, providermanifestv1.KindIndexedDB, providermanifestv1.KindFileAPI, providermanifestv1.KindSecrets:
 		return nil
 	default:
 		return fmt.Errorf("unsupported source component kind %q", kind)
@@ -498,6 +504,8 @@ func componentServeCall(kind string) (string, error) {
 		return "gestalt.ServeAuthProvider(ctx, providerpkg.New())", nil
 	case providermanifestv1.KindIndexedDB:
 		return "gestalt.ServeIndexedDBProvider(ctx, providerpkg.New())", nil
+	case providermanifestv1.KindFileAPI:
+		return "gestalt.ServeFileAPIProvider(ctx, providerpkg.New())", nil
 	case providermanifestv1.KindSecrets:
 		return "gestalt.ServeSecretsProvider(ctx, providerpkg.New())", nil
 	default:

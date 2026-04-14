@@ -516,6 +516,13 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		execCfg.HostServices = hostServices
 		cleanup = chainCleanup(cleanup, indexedDBCleanup)
 	}
+	if len(entry.FileAPIs) > 0 {
+		hostServices, err := buildPluginFileAPIHostServices(name, entry, deps)
+		if err != nil {
+			return nil, err
+		}
+		execCfg.HostServices = append(execCfg.HostServices, hostServices...)
+	}
 	execCfg.Cleanup = cleanup
 	prov, err := providerhost.NewExecutableProvider(ctx, execCfg)
 	if err != nil {
@@ -576,6 +583,39 @@ func buildPluginIndexedDBHostServices(pluginName string, entry *config.ProviderE
 	return hostServices, func() {
 		_ = closeIndexedDBs(boundStores...)
 	}, nil
+}
+
+func buildPluginFileAPIHostServices(pluginName string, entry *config.ProviderEntry, deps Deps) ([]providerhost.HostService, error) {
+	if len(deps.FileAPIs) == 0 {
+		return nil, fmt.Errorf("fileapi host services are not available")
+	}
+	hostServices := make([]providerhost.HostService, 0, len(entry.FileAPIs)+1)
+	for _, binding := range entry.FileAPIs {
+		api, ok := deps.FileAPIs[binding]
+		if !ok || api == nil {
+			return nil, fmt.Errorf("fileapi %q is not available", binding)
+		}
+		server := providerhost.NewFileAPIServer(api, pluginName, binding)
+		hostServices = append(hostServices, providerhost.HostService{
+			EnvVar: providerhost.FileAPISocketEnv(binding),
+			Register: func(server proto.FileAPIServer) func(*grpc.Server) {
+				return func(srv *grpc.Server) {
+					proto.RegisterFileAPIServer(srv, server)
+				}
+			}(server),
+		})
+		if len(entry.FileAPIs) == 1 {
+			hostServices = append(hostServices, providerhost.HostService{
+				EnvVar: providerhost.DefaultFileAPISocketEnv,
+				Register: func(server proto.FileAPIServer) func(*grpc.Server) {
+					return func(srv *grpc.Server) {
+						proto.RegisterFileAPIServer(srv, server)
+					}
+				}(server),
+			})
+		}
+	}
+	return hostServices, nil
 }
 
 func buildPluginScopedIndexedDB(pluginName string, binding config.PluginIndexedDBBinding, schema string, deniedStores []string, deps Deps) (indexeddb.IndexedDB, error) {

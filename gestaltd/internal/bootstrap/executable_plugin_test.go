@@ -17,6 +17,7 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/core/fileapi"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -871,6 +872,85 @@ func TestPluginIndexedDBBindingsExposeHostSocketEnv(t *testing.T) {
 	}
 	if got := checkEnv(t, []config.PluginIndexedDBBinding{{Name: "main"}, {Name: "archive"}}, providerhost.IndexedDBSocketEnv("archive")); !got {
 		t.Fatal(`named IndexedDB env for "archive" should be set with multiple plugin indexeddb bindings`)
+	}
+}
+
+func TestPluginFileAPIBindingsExposeHostSocketEnv(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+
+	makeConfig := func(bindings []string) *config.Config {
+		return &config.Config{
+			Providers: config.ProvidersConfig{
+				Plugins: map[string]*config.ProviderEntry{
+					"echoext": {
+						Command:              bin,
+						Args:                 []string{"provider"},
+						ResolvedManifest:     manifest,
+						ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+						FileAPIs:             bindings,
+					},
+				},
+			},
+		}
+	}
+
+	checkEnv := func(t *testing.T, bindings []string, envName string) bool {
+		t.Helper()
+		providers, _, err := buildProvidersStrict(context.Background(), makeConfig(bindings), NewFactoryRegistry(), Deps{
+			FileAPIs: map[string]fileapi.FileAPI{
+				"main":    &coretesting.StubFileAPI{},
+				"archive": &coretesting.StubFileAPI{},
+			},
+		})
+		if err != nil {
+			t.Fatalf("buildProvidersStrict: %v", err)
+		}
+		defer func() { _ = CloseProviders(providers) }()
+
+		prov, err := providers.Get("echoext")
+		if err != nil {
+			t.Fatalf("providers.Get: %v", err)
+		}
+		result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": envName}, "")
+		if err != nil {
+			t.Fatalf("Execute read_env: %v", err)
+		}
+		var env struct {
+			Value string `json:"value"`
+			Found bool   `json:"found"`
+		}
+		if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		return env.Found && env.Value != ""
+	}
+
+	if got := checkEnv(t, nil, providerhost.DefaultFileAPISocketEnv); got {
+		t.Fatal("default FileAPI env should not be set without plugin fileapi bindings")
+	}
+	if got := checkEnv(t, []string{"main"}, providerhost.DefaultFileAPISocketEnv); !got {
+		t.Fatal("default FileAPI env should be set with a single plugin fileapi binding")
+	}
+	if got := checkEnv(t, []string{"main"}, providerhost.FileAPISocketEnv("main")); !got {
+		t.Fatal("named FileAPI env should be set with a single plugin fileapi binding")
+	}
+	if got := checkEnv(t, []string{"main", "archive"}, providerhost.DefaultFileAPISocketEnv); got {
+		t.Fatal("default FileAPI env should not be set with multiple plugin fileapi bindings")
+	}
+	if got := checkEnv(t, []string{"main", "archive"}, providerhost.FileAPISocketEnv("main")); !got {
+		t.Fatal(`named FileAPI env for "main" should be set with multiple plugin fileapi bindings`)
+	}
+	if got := checkEnv(t, []string{"main", "archive"}, providerhost.FileAPISocketEnv("archive")); !got {
+		t.Fatal(`named FileAPI env for "archive" should be set with multiple plugin fileapi bindings`)
 	}
 }
 

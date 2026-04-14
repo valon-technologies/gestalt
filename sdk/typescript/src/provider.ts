@@ -3,6 +3,7 @@ import type { MaybePromise } from "./api.ts";
 export type ProviderKind =
   | "integration"
   | "auth"
+  | "fileapi"
   | "secrets"
   | "telemetry";
 

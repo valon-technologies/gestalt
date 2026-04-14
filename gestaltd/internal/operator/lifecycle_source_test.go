@@ -824,6 +824,109 @@ func TestManagedIndexedDBSourcesLoadForExecutionWithMultipleBindings(t *testing.
 	}
 }
 
+func TestManagedFileAPISourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	mainSource := "github.com/acme/providers/fileapi-main"
+	archiveSource := "github.com/acme/providers/fileapi-archive"
+	version := "1.0.0"
+
+	mainArchivePath := buildExecutableArchive(t, dir, "fileapi-main-src", mainSource, version, providermanifestv1.KindFileAPI, "fileapi-main", "main-fileapi-binary")
+	archiveArchivePath := buildExecutableArchive(t, dir, "fileapi-archive-src", archiveSource, version, providermanifestv1.KindFileAPI, "fileapi-archive", "archive-fileapi-binary")
+
+	mainArchiveData, err := os.ReadFile(mainArchivePath)
+	if err != nil {
+		t.Fatalf("read main fileapi archive: %v", err)
+	}
+	mainArchiveSum := sha256.Sum256(mainArchiveData)
+
+	archiveArchiveData, err := os.ReadFile(archiveArchivePath)
+	if err != nil {
+		t.Fatalf("read archive fileapi archive: %v", err)
+	}
+	archiveArchiveSum := sha256.Sum256(archiveArchiveData)
+
+	resolver := &fakeMultiResolver{
+		results: map[string]fakeResolverResult{
+			mainSource: {
+				archivePath: mainArchivePath,
+				resolvedURL: "https://example.com/fileapi-main.tar.gz",
+				sha256:      hex.EncodeToString(mainArchiveSum[:]),
+			},
+			archiveSource: {
+				archivePath: archiveArchivePath,
+				resolvedURL: "https://example.com/fileapi-archive.tar.gz",
+				sha256:      hex.EncodeToString(archiveArchiveSum[:]),
+			},
+		},
+	}
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configYAML := requiredIndexedDBConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
+		"  fileapi:",
+		"    main:",
+		"      source:",
+		"        ref: " + mainSource,
+		"        version: " + version,
+		"      config:",
+		`        root: "/tmp/main"`,
+		"    archive:",
+		"      source:",
+		"        ref: " + archiveSource,
+		"        version: " + version,
+		"      config:",
+		`        root: "/tmp/archive"`,
+		"server:",
+		"  indexeddb: sqlite",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle(resolver)
+	lock, err := lc.InitAtPath(configPath)
+	if err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+	if len(lock.FileAPI) != 2 {
+		t.Fatalf("lock.FileAPI = %#v, want 2 entries", lock.FileAPI)
+	}
+	if _, ok := lock.FileAPI["main"]; !ok {
+		t.Fatal(`lock.FileAPI["main"] not found`)
+	}
+	if _, ok := lock.FileAPI["archive"]; !ok {
+		t.Fatal(`lock.FileAPI["archive"] not found`)
+	}
+
+	callsBefore := len(resolver.calls)
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
+	}
+	if len(resolver.calls) != callsBefore {
+		t.Fatalf("resolver called during locked load: got %d calls, want %d", len(resolver.calls), callsBefore)
+	}
+
+	for _, name := range []string{"main", "archive"} {
+		entry := cfg.Providers.FileAPI[name]
+		if entry == nil {
+			t.Fatalf("cfg.Providers.FileAPI[%q] = nil", name)
+		}
+		if entry.ResolvedManifest == nil {
+			t.Fatalf("cfg.Providers.FileAPI[%q].ResolvedManifest = nil", name)
+		}
+		wantCommand := resolveLockPath(artifactsDir, lock.FileAPI[name].Executable)
+		if entry.Command != wantCommand {
+			t.Fatalf("cfg.Providers.FileAPI[%q].Command = %q, want %q", name, entry.Command, wantCommand)
+		}
+	}
+}
+
 func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 	t.Parallel()
 

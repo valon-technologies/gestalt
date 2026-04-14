@@ -54,10 +54,13 @@ type ProvidersConfig struct {
 	Audit     map[string]*ProviderEntry `yaml:"audit,omitempty"`
 	UI        map[string]*UIEntry       `yaml:"ui,omitempty"`
 	IndexedDB map[string]*ProviderEntry `yaml:"indexeddb,omitempty"`
+	FileAPI   map[string]*ProviderEntry `yaml:"fileapi,omitempty"`
 
 	// Legacy aliases retained for internal call sites and tests while the
-	// canonical YAML shape is migrating to top-level plugins and indexeddb.
+	// canonical YAML shape is migrating to top-level plugins, indexeddb, and
+	// fileapi.
 	IndexedDBs map[string]*ProviderEntry `yaml:"-"`
+	FileAPIs   map[string]*ProviderEntry `yaml:"-"`
 	Plugins    map[string]*ProviderEntry `yaml:"-"`
 }
 
@@ -130,6 +133,7 @@ type ProviderEntry struct {
 	Connections       map[string]*ConnectionDef     `yaml:"connections,omitempty"`
 	AllowedOperations map[string]*OperationOverride `yaml:"allowedOperations,omitempty"`
 	IndexedDBs        []PluginIndexedDBBinding      `yaml:"indexeddb,omitempty"`
+	FileAPIs          []string                      `yaml:"fileapi,omitempty"`
 	IndexedDBSchema   string                        `yaml:"indexeddbSchema,omitempty"`
 	Surfaces          *ProviderSurfaceOverrides     `yaml:"surfaces,omitempty"`
 
@@ -672,6 +676,15 @@ func OverlayManagedPluginConfig(path string, cfg *Config) error {
 			}
 		}
 	}
+	fileAPINode := mappingValueNode(providersNode, "fileapi")
+	for name, entry := range cfg.Providers.FileAPI {
+		if entry == nil || !entry.HasManagedSource() {
+			continue
+		}
+		if err := overlayManagedEntryConfigNode(mappingValueNode(fileAPINode, name), entry, "fileapi "+strconv.Quote(name)); err != nil {
+			return err
+		}
+	}
 	uiNode := mappingValueNode(providersNode, "ui")
 	for name, entry := range cfg.Providers.UI {
 		if entry == nil || !entry.HasManagedSource() {
@@ -742,6 +755,8 @@ var legacyProviderEntryKeys = map[string]struct{}{
 	"allowedOperations": {},
 	"indexeddb":         {},
 	"indexeddbs":        {},
+	"fileapi":           {},
+	"fileapis":          {},
 	"surfaces":          {},
 }
 
@@ -799,6 +814,8 @@ func normalizeProvidersNode(providersNode *yaml.Node, usage *configShapeUsage) e
 	}
 	legacyIndexedDB := mappingValueNode(providersNode, "indexeddbs")
 	canonicalIndexedDB := mappingValueNode(providersNode, "indexeddb")
+	legacyFileAPI := mappingValueNode(providersNode, "fileapis")
+	canonicalFileAPI := mappingValueNode(providersNode, "fileapi")
 	if legacyIndexedDB != nil {
 		usage.legacy = true
 	}
@@ -811,6 +828,19 @@ func normalizeProvidersNode(providersNode *yaml.Node, usage *configShapeUsage) e
 	if canonicalIndexedDB == nil && legacyIndexedDB != nil {
 		setMappingValueNode(providersNode, "indexeddb", legacyIndexedDB)
 		removeMappingKey(providersNode, "indexeddbs")
+	}
+	if legacyFileAPI != nil {
+		usage.legacy = true
+	}
+	if canonicalFileAPI != nil {
+		usage.canonical = true
+	}
+	if legacyFileAPI != nil && canonicalFileAPI != nil {
+		return fmt.Errorf("config validation: providers.fileapi must be configured using fileapi or fileapis, not both")
+	}
+	if canonicalFileAPI == nil && legacyFileAPI != nil {
+		setMappingValueNode(providersNode, "fileapi", legacyFileAPI)
+		removeMappingKey(providersNode, "fileapis")
 	}
 
 	for _, kind := range []string{"auth", "secrets", "telemetry", "audit"} {
@@ -881,6 +911,21 @@ func normalizePluginBindings(pluginsNode *yaml.Node, usage *configShapeUsage) er
 		if canonical == nil && legacy != nil {
 			setMappingValueNode(entryNode, "indexeddb", legacy)
 			removeMappingKey(entryNode, "indexeddbs")
+		}
+		legacy = mappingValueNode(entryNode, "fileapis")
+		canonical = mappingValueNode(entryNode, "fileapi")
+		if legacy != nil {
+			usage.legacy = true
+		}
+		if canonical != nil {
+			usage.canonical = true
+		}
+		if legacy != nil && canonical != nil {
+			return fmt.Errorf("config validation: plugin %q cannot set both fileapi and fileapis", pluginsNode.Content[i].Value)
+		}
+		if canonical == nil && legacy != nil {
+			setMappingValueNode(entryNode, "fileapi", legacy)
+			removeMappingKey(entryNode, "fileapis")
 		}
 	}
 	return nil
@@ -1097,8 +1142,10 @@ func applyDefaults(cfg *Config) {
 	cfg.Providers.Telemetry = applyDefaultBuiltinProviderEntries(cfg.Providers.Telemetry, DefaultProviderInstance, "stdout")
 	cfg.Providers.Audit = applyDefaultBuiltinProviderEntries(cfg.Providers.Audit, DefaultProviderInstance, "inherit")
 	cfg.Providers.IndexedDB = nonNilProviderEntryMap(cfg.Providers.IndexedDB)
+	cfg.Providers.FileAPI = nonNilProviderEntryMap(cfg.Providers.FileAPI)
 	cfg.Providers.Plugins = cfg.Plugins
 	cfg.Providers.IndexedDBs = cfg.Providers.IndexedDB
+	cfg.Providers.FileAPIs = cfg.Providers.FileAPI
 	cfg.Server.IndexedDB = cfg.Server.Providers.IndexedDB
 	cfg.SyncCompatFields()
 }
@@ -1248,6 +1295,9 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		}
 	}
 	for _, entry := range cfg.Providers.IndexedDB {
+		resolveEntry(entry)
+	}
+	for _, entry := range cfg.Providers.FileAPI {
 		resolveEntry(entry)
 	}
 	for _, entry := range cfg.Plugins {

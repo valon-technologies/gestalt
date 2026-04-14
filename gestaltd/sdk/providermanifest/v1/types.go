@@ -8,6 +8,7 @@ const (
 	KindPlugin    = "plugin"
 	KindAuth      = "auth"
 	KindIndexedDB = "indexeddb"
+	KindFileAPI   = "fileapi"
 	KindSecrets   = "secrets"
 	KindWebUI     = "webui"
 )

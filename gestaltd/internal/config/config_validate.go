@@ -85,6 +85,9 @@ func ValidateStructure(cfg *Config) error {
 	if err := validateDatastoreConfig(cfg); err != nil {
 		return err
 	}
+	if err := validateFileAPIConfig(cfg); err != nil {
+		return err
+	}
 
 	// Validate plugins
 	for name, entry := range cfg.Plugins {
@@ -288,6 +291,9 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry) error {
 	if err := validatePluginIndexedDBBindings(cfg, name, entry); err != nil {
 		return err
 	}
+	if err := validatePluginFileAPIBindings(cfg, name, entry); err != nil {
+		return err
+	}
 	if err := validateAuthorizationPolicyReference(cfg, "plugin", name, entry.AuthorizationPolicy); err != nil {
 		return err
 	}
@@ -318,6 +324,9 @@ func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) erro
 	}
 	if len(entry.IndexedDBs) > 0 {
 		return fmt.Errorf("config validation: %s.indexeddb is only supported on plugins.*", subject)
+	}
+	if len(entry.FileAPIs) > 0 {
+		return fmt.Errorf("config validation: %s.fileapi is only supported on plugins.*", subject)
 	}
 	if strings.TrimSpace(entry.IndexedDBSchema) != "" {
 		return fmt.Errorf("config validation: %s.indexeddbSchema is only supported on plugins.*", subject)
@@ -445,6 +454,70 @@ func indexedDBSocketEnv(name string) string {
 	}
 	var b strings.Builder
 	b.WriteString("GESTALT_INDEXEDDB_SOCKET")
+	b.WriteByte('_')
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r - ('a' - 'A'))
+		case r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	return b.String()
+}
+
+func validateFileAPIConfig(cfg *Config) error {
+	for name, entry := range cfg.Providers.FileAPI {
+		if entry == nil {
+			return fmt.Errorf("config validation: providers.fileapi.%s is required", name)
+		}
+		if err := validatePluginOnlyProviderFields("providers.fileapi."+name, entry); err != nil {
+			return err
+		}
+		if err := validateProviderEntrySource("fileapi", name, entry); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validatePluginFileAPIBindings(cfg *Config, name string, entry *ProviderEntry) error {
+	if entry == nil {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(entry.FileAPIs))
+	envNames := make(map[string]string, len(entry.FileAPIs))
+	for i, binding := range entry.FileAPIs {
+		binding = strings.TrimSpace(binding)
+		if binding == "" {
+			return fmt.Errorf("config validation: plugin %q fileapi[%d] is required", name, i)
+		}
+		if _, exists := seen[binding]; exists {
+			return fmt.Errorf("config validation: plugin %q fileapi[%d] duplicates %q", name, i, binding)
+		}
+		if _, ok := cfg.Providers.FileAPI[binding]; !ok {
+			return fmt.Errorf("config validation: plugin %q fileapi[%d] references unknown fileapi %q", name, i, binding)
+		}
+		envName := fileAPISocketEnv(binding)
+		if otherBinding, exists := envNames[envName]; exists {
+			return fmt.Errorf("config validation: plugin %q fileapi[%d] %q conflicts with %q after FileAPI env normalization (%s)", name, i, binding, otherBinding, envName)
+		}
+		seen[binding] = struct{}{}
+		envNames[envName] = binding
+		entry.FileAPIs[i] = binding
+	}
+	return nil
+}
+
+func fileAPISocketEnv(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "GESTALT_FILEAPI_SOCKET"
+	}
+	var b strings.Builder
+	b.WriteString("GESTALT_FILEAPI_SOCKET")
 	b.WriteByte('_')
 	for _, r := range name {
 		switch {

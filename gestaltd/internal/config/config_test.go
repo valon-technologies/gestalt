@@ -1306,6 +1306,154 @@ server:
 	})
 }
 
+func TestLoadConfigPluginFileAPIBindings(t *testing.T) {
+	t.Parallel()
+
+	t.Run("plugin accepts fileapi bindings", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    fileapi:
+      - primary
+      - archive
+providers:
+  fileapi:
+    primary:
+      source:
+        path: ./providers/fileapi/primary
+    archive:
+      source:
+        path: ./providers/fileapi/archive
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		want := []string{"primary", "archive"}
+		if got := cfg.Plugins["roadmap"].FileAPIs; !reflect.DeepEqual(got, want) {
+			t.Fatalf("Plugins[roadmap].FileAPIs = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("normalizes legacy fileapi collection and bindings", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    fileapis:
+      - archive
+providers:
+  fileapis:
+    archive:
+      source:
+        path: ./providers/fileapi/archive
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if got := cfg.Plugins["roadmap"].FileAPIs; !reflect.DeepEqual(got, []string{"archive"}) {
+			t.Fatalf("Plugins[roadmap].FileAPIs = %v, want [archive]", got)
+		}
+		if cfg.Providers.FileAPI["archive"] == nil {
+			t.Fatal(`Providers.FileAPI["archive"] = nil`)
+		}
+	})
+
+	t.Run("rejects fileapi bindings outside plugins", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  ui:
+    root:
+      source:
+        path: ./web/root/manifest.yaml
+      path: /app
+      fileapi:
+        - primary
+  fileapi:
+    primary:
+      source:
+        path: ./providers/fileapi/primary
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `ui.root.fileapi is only supported on plugins.*`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects unknown fileapi binding names", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    fileapi:
+      - primary
+      - missing
+providers:
+  fileapi:
+    primary:
+      source:
+        path: ./providers/fileapi/primary
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `plugin "roadmap" fileapi[1] references unknown fileapi "missing"`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects fileapi bindings that normalize to the same env var", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    fileapi:
+      - main-db
+      - main_db
+providers:
+  fileapi:
+    main-db:
+      source:
+        path: ./providers/fileapi/main-db
+    main_db:
+      source:
+        path: ./providers/fileapi/main_db
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `plugin "roadmap" fileapi[1] "main_db" conflicts with "main-db" after FileAPI env normalization (GESTALT_FILEAPI_SOCKET_MAIN_DB)`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
 func TestLoadRejectsUnknownProviderFields(t *testing.T) {
 	t.Parallel()
 
@@ -1447,6 +1595,20 @@ providers:
 `,
 		},
 		{
+			name: "fileapi collection cannot use legacy and canonical keys together",
+			yaml: `
+providers:
+  fileapis:
+    legacy:
+      source:
+        path: ./legacy/manifest.yaml
+  fileapi:
+    canonical:
+      source:
+        path: ./canonical/manifest.yaml
+`,
+		},
+		{
 			name: "plugins cannot use legacy and canonical keys together",
 			yaml: `
 providers:
@@ -1458,6 +1620,27 @@ plugins:
   canonical:
     source:
       path: ./canonical/manifest.yaml
+`,
+		},
+		{
+			name: "plugin fileapi bindings cannot use legacy and canonical keys together",
+			yaml: `
+plugins:
+  roadmap:
+    source:
+      path: ./roadmap/manifest.yaml
+    fileapi:
+      - canonical
+    fileapis:
+      - legacy
+providers:
+  fileapi:
+    canonical:
+      source:
+        path: ./canonical/manifest.yaml
+    legacy:
+      source:
+        path: ./legacy/manifest.yaml
 `,
 		},
 		{
