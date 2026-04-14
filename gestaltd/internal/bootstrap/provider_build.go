@@ -592,10 +592,9 @@ func buildPluginScopedIndexedDB(pluginName string, binding config.PluginIndexedD
 		return nil, fmt.Errorf("indexeddb %q: %w", binding.Name, err)
 	}
 	ds = newPluginIndexedDBTransport(ds, pluginIndexedDBTransportOptions{
-		StorePrefix:       transportPrefix,
-		LegacyStorePrefix: legacyPluginIndexedDBPrefix(pluginName),
-		AllowedStores:     binding.ObjectStores,
-		DeniedStores:      deniedStores,
+		StorePrefix:   transportPrefix,
+		AllowedStores: binding.ObjectStores,
+		DeniedStores:  deniedStores,
 	})
 	return metricutil.InstrumentIndexedDB(ds, binding.Name), nil
 }
@@ -614,11 +613,9 @@ func newPluginScopedIndexedDBDef(entry *config.ProviderEntry, pluginName, schema
 
 	transportPrefix := ""
 	if pluginIndexedDBUsesScopedProviderConfig(entry, cfg) {
+		delete(cfg, "legacy_table_prefix")
 		delete(cfg, "legacy_prefix")
 		delete(cfg, "namespace")
-		if legacyPrefix := legacyPluginIndexedDBPrefix(pluginName); legacyPrefix != "" {
-			cfg["legacy_table_prefix"] = legacyPrefix
-		}
 		if isSQLiteIndexedDBConfig(cfg) {
 			delete(cfg, "schema")
 			cfg["table_prefix"] = schema + "_"
@@ -665,14 +662,6 @@ func isRelationalIndexedDBEntry(entry *config.ProviderEntry) bool {
 			strings.HasSuffix(path, "/relationaldb/manifest.yaml")
 	}
 	return false
-}
-
-func legacyPluginIndexedDBPrefix(pluginName string) string {
-	pluginName = strings.TrimSpace(pluginName)
-	if pluginName == "" {
-		return ""
-	}
-	return "plugin_" + pluginName + "_"
 }
 
 func isSQLiteIndexedDBConfig(cfg map[string]any) bool {

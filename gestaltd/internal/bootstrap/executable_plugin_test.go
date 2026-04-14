@@ -1003,8 +1003,8 @@ func TestPluginIndexedDBBindingsBuildScopedConfig(t *testing.T) {
 			if _, ok := postgresCfg.Config["namespace"]; ok {
 				t.Fatalf("postgres namespace should be removed, got %#v", postgresCfg.Config["namespace"])
 			}
-			if got := postgresCfg.Config["legacy_table_prefix"]; got != "plugin_echoext_" {
-				t.Fatalf("postgres legacy_table_prefix = %#v, want %q", got, "plugin_echoext_")
+			if _, ok := postgresCfg.Config["legacy_table_prefix"]; ok {
+				t.Fatalf("postgres legacy_table_prefix should be removed, got %#v", postgresCfg.Config["legacy_table_prefix"])
 			}
 			if _, ok := postgresCfg.Config["legacy_prefix"]; ok {
 				t.Fatalf("postgres legacy_prefix should be removed, got %#v", postgresCfg.Config["legacy_prefix"])
@@ -1026,8 +1026,8 @@ func TestPluginIndexedDBBindingsBuildScopedConfig(t *testing.T) {
 			if _, ok := localPostgresCfg.Config["namespace"]; ok {
 				t.Fatalf("local postgres namespace should be removed, got %#v", localPostgresCfg.Config["namespace"])
 			}
-			if got := localPostgresCfg.Config["legacy_table_prefix"]; got != "plugin_echoext_" {
-				t.Fatalf("local postgres legacy_table_prefix = %#v, want %q", got, "plugin_echoext_")
+			if _, ok := localPostgresCfg.Config["legacy_table_prefix"]; ok {
+				t.Fatalf("local postgres legacy_table_prefix should be removed, got %#v", localPostgresCfg.Config["legacy_table_prefix"])
 			}
 			if _, ok := localPostgresCfg.Config["legacy_prefix"]; ok {
 				t.Fatalf("local postgres legacy_prefix should be removed, got %#v", localPostgresCfg.Config["legacy_prefix"])
@@ -1050,8 +1050,8 @@ func TestPluginIndexedDBBindingsBuildScopedConfig(t *testing.T) {
 			if _, ok := sqliteCfg.Config["namespace"]; ok {
 				t.Fatalf("sqlite namespace should be removed, got %#v", sqliteCfg.Config["namespace"])
 			}
-			if got := sqliteCfg.Config["legacy_table_prefix"]; got != "plugin_echoext_" {
-				t.Fatalf("sqlite legacy_table_prefix = %#v, want %q", got, "plugin_echoext_")
+			if _, ok := sqliteCfg.Config["legacy_table_prefix"]; ok {
+				t.Fatalf("sqlite legacy_table_prefix should be removed, got %#v", sqliteCfg.Config["legacy_table_prefix"])
 			}
 			if _, ok := sqliteCfg.Config["legacy_prefix"]; ok {
 				t.Fatalf("sqlite legacy_prefix should be removed, got %#v", sqliteCfg.Config["legacy_prefix"])
@@ -1164,94 +1164,6 @@ func TestPluginIndexedDBBindingsRouteObjectStoresAndTransportPrefix(t *testing.T
 	providers = nil
 	if got := closeCount.Load(); got != 1 {
 		t.Fatalf("closeCount after provider shutdown = %d, want 1", got)
-	}
-}
-
-func TestPluginIndexedDBBindingsPreserveLegacyTransportPrefixedData(t *testing.T) {
-	t.Parallel()
-
-	bin := buildEchoPluginBinary(t)
-	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
-		Name: "echoext",
-		Operations: []catalog.CatalogOperation{
-			{
-				ID:     "indexeddb_roundtrip",
-				Method: http.MethodPost,
-				Parameters: []catalog.CatalogParameter{
-					{Name: "store", Type: "string", Required: true},
-					{Name: "id", Type: "string", Required: true},
-					{Name: "value", Type: "string", Required: true},
-				},
-			},
-		},
-	})
-	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
-
-	var boundDB *trackedIndexedDB
-	providers, _, err := buildProvidersStrict(context.Background(), &config.Config{
-		Providers: config.ProvidersConfig{
-			Plugins: map[string]*config.ProviderEntry{
-				"echoext": {
-					Command:              bin,
-					Args:                 []string{"provider"},
-					ResolvedManifest:     manifest,
-					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-					IndexedDBSchema:      "roadmap",
-					IndexedDBs: []config.PluginIndexedDBBinding{
-						{Name: "memory", ObjectStores: []string{"tasks"}},
-					},
-				},
-			},
-		},
-	}, NewFactoryRegistry(), Deps{
-		IndexedDBDefs: map[string]*config.ProviderEntry{
-			"memory": {
-				Source: config.ProviderSource{Path: "./providers/datastore/memory"},
-				Config: mustNode(t, map[string]any{"bucket": "plugin-state"}),
-			},
-		},
-		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) {
-			boundDB = &trackedIndexedDB{
-				StubIndexedDB: coretesting.StubIndexedDB{},
-			}
-			return boundDB, nil
-		},
-	})
-	if err != nil {
-		t.Fatalf("buildProvidersStrict: %v", err)
-	}
-	t.Cleanup(func() { _ = CloseProviders(providers) })
-
-	if err := boundDB.CreateObjectStore(context.Background(), "plugin_echoext_tasks", indexeddb.ObjectStoreSchema{}); err != nil {
-		t.Fatalf("CreateObjectStore legacy tasks: %v", err)
-	}
-	if err := boundDB.ObjectStore("plugin_echoext_tasks").Put(context.Background(), indexeddb.Record{
-		"id":    "legacy-task",
-		"value": "already-there",
-	}); err != nil {
-		t.Fatalf("Put legacy task: %v", err)
-	}
-
-	prov, err := providers.Get("echoext")
-	if err != nil {
-		t.Fatalf("providers.Get: %v", err)
-	}
-	if _, err := prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
-		"store": "tasks",
-		"id":    "task-1",
-		"value": "ship-it",
-	}, ""); err != nil {
-		t.Fatalf("Execute indexeddb_roundtrip: %v", err)
-	}
-
-	if _, err := boundDB.ObjectStore("plugin_echoext_tasks").Get(context.Background(), "task-1"); err != nil {
-		t.Fatalf("legacy backing store should receive new writes: %v", err)
-	}
-	if _, err := boundDB.ObjectStore("plugin_echoext_tasks").Get(context.Background(), "legacy-task"); err != nil {
-		t.Fatalf("legacy backing store should keep old rows: %v", err)
-	}
-	if _, err := boundDB.ObjectStore("roadmap_tasks").Get(context.Background(), "task-1"); err == nil {
-		t.Fatal("new transport-prefixed store should remain unused while only legacy data exists")
 	}
 }
 
