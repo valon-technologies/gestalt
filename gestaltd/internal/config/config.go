@@ -1225,8 +1225,7 @@ func applyAppBindings(cfg *Config) error {
 		return nil
 	}
 
-	appNames := mapsKeys(cfg.Apps)
-	slices.Sort(appNames)
+	appNames := slices.Sorted(maps.Keys(cfg.Apps))
 	seenPlugins := make(map[string]string, len(appNames))
 	seenUIs := make(map[string]string, len(appNames))
 	for _, appName := range appNames {
@@ -1248,9 +1247,6 @@ func applyAppBindings(cfg *Config) error {
 		if app.Plugin == "" {
 			return fmt.Errorf("config validation: apps.%s.plugin is required", appName)
 		}
-		if app.UI == "" {
-			return fmt.Errorf("config validation: apps.%s.ui is required", appName)
-		}
 		if app.Path == "" {
 			return fmt.Errorf("config validation: apps.%s.path is required", appName)
 		}
@@ -1265,16 +1261,24 @@ func applyAppBindings(cfg *Config) error {
 		if prev, exists := seenPlugins[app.Plugin]; exists && prev != appName {
 			return fmt.Errorf("config validation: apps.%s.plugin %q duplicates apps.%s", appName, app.Plugin, prev)
 		}
-		if prev, exists := seenUIs[app.UI]; exists && prev != appName {
-			return fmt.Errorf("config validation: apps.%s.ui %q duplicates apps.%s", appName, app.UI, prev)
-		}
-
 		plugin := cfg.Plugins[app.Plugin]
 		if plugin == nil {
 			return fmt.Errorf("config validation: apps.%s.plugin references unknown plugin %q", appName, app.Plugin)
 		}
 		if plugin.Disabled {
 			return fmt.Errorf("config validation: apps.%s.plugin references disabled plugin %q", appName, app.Plugin)
+		}
+		if current := strings.TrimSpace(plugin.AuthorizationPolicy); current != "" && current != app.AuthorizationPolicy {
+			return fmt.Errorf("config validation: apps.%s.plugin %q conflicts with plugins.%s.authorizationPolicy", appName, app.Plugin, app.Plugin)
+		}
+		plugin.AuthorizationPolicy = app.AuthorizationPolicy
+		seenPlugins[app.Plugin] = appName
+
+		if app.UI == "" {
+			continue
+		}
+		if prev, exists := seenUIs[app.UI]; exists && prev != appName {
+			return fmt.Errorf("config validation: apps.%s.ui %q duplicates apps.%s", appName, app.UI, prev)
 		}
 		ui := cfg.Providers.UI[app.UI]
 		if ui == nil {
@@ -1283,20 +1287,14 @@ func applyAppBindings(cfg *Config) error {
 		if ui.Disabled {
 			return fmt.Errorf("config validation: apps.%s.ui references disabled ui %q", appName, app.UI)
 		}
-		if current := strings.TrimSpace(plugin.AuthorizationPolicy); current != "" && current != app.AuthorizationPolicy {
-			return fmt.Errorf("config validation: apps.%s.plugin %q conflicts with plugins.%s.authorizationPolicy", appName, app.Plugin, app.Plugin)
-		}
 		if current := strings.TrimSpace(ui.AuthorizationPolicy); current != "" && current != app.AuthorizationPolicy {
 			return fmt.Errorf("config validation: apps.%s.ui %q conflicts with providers.ui.%s.authorizationPolicy", appName, app.UI, app.UI)
 		}
 		if current := strings.TrimSpace(ui.Path); current != "" && current != app.Path {
 			return fmt.Errorf("config validation: apps.%s.ui %q conflicts with providers.ui.%s.path", appName, app.UI, app.UI)
 		}
-
-		plugin.AuthorizationPolicy = app.AuthorizationPolicy
 		ui.AuthorizationPolicy = app.AuthorizationPolicy
 		ui.Path = app.Path
-		seenPlugins[app.Plugin] = appName
 		seenUIs[app.UI] = appName
 	}
 

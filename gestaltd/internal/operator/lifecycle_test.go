@@ -1,6 +1,8 @@
 package operator
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -31,6 +33,63 @@ type staticSourceResolver struct {
 func (r staticSourceResolver) Resolve(context.Context, pluginsource.Source, string) (*pluginsource.ResolvedPackage, error) {
 	return &pluginsource.ResolvedPackage{
 		LocalPath: r.localPath,
+		Cleanup:   func() {},
+	}, nil
+}
+
+type mappedSourceResolver struct {
+	paths map[string]string
+}
+
+func (r mappedSourceResolver) Resolve(_ context.Context, src pluginsource.Source, _ string) (*pluginsource.ResolvedPackage, error) {
+	localPath, ok := r.paths[src.String()]
+	if !ok {
+		return nil, fmt.Errorf("no test package for %s", src.String())
+	}
+	return &pluginsource.ResolvedPackage{
+		LocalPath: localPath,
+		Cleanup:   func() {},
+	}, nil
+}
+
+type authMappedSourceResolver struct {
+	paths  map[string]string
+	tokens map[string]string
+}
+
+func (r authMappedSourceResolver) Resolve(_ context.Context, src pluginsource.Source, _ string) (*pluginsource.ResolvedPackage, error) {
+	if wantToken, ok := r.tokens[src.String()]; ok && src.Token != wantToken {
+		return nil, fmt.Errorf("source %s token = %q, want %q", src.String(), src.Token, wantToken)
+	}
+	localPath, ok := r.paths[src.String()]
+	if !ok {
+		return nil, fmt.Errorf("no test package for %s", src.String())
+	}
+	return &pluginsource.ResolvedPackage{
+		LocalPath: localPath,
+		Cleanup:   func() {},
+	}, nil
+}
+
+type versionedSourceResolver struct {
+	paths  map[string]map[string]string
+	tokens map[string]string
+}
+
+func (r versionedSourceResolver) Resolve(_ context.Context, src pluginsource.Source, version string) (*pluginsource.ResolvedPackage, error) {
+	if wantToken, ok := r.tokens[src.String()]; ok && src.Token != wantToken {
+		return nil, fmt.Errorf("source %s token = %q, want %q", src.String(), src.Token, wantToken)
+	}
+	versions, ok := r.paths[src.String()]
+	if !ok {
+		return nil, fmt.Errorf("no test package for %s", src.String())
+	}
+	localPath, ok := versions[version]
+	if !ok {
+		return nil, fmt.Errorf("no test package for %s version %s", src.String(), version)
+	}
+	return &pluginsource.ResolvedPackage{
+		LocalPath: localPath,
 		Cleanup:   func() {},
 	}, nil
 }
@@ -246,8 +305,10 @@ func TestLoadForExecutionAtPath_ResolvesLocalMountedWebUIWithoutLockfile(t *test
 		name         string
 		uiConfigYAML string
 		extraYAML    string
+		uiKey        string
 		wantPath     string
 		wantPolicy   string
+		ownedUIPath  string
 		wantErr      string
 	}{
 		{
@@ -258,6 +319,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalMountedWebUIWithoutLockfile(t *test
         path: ./webui/manifest.yaml
       path: /create-customer-roadmap-review
 `,
+			uiKey:    "roadmap",
 			wantPath: "/create-customer-roadmap-review",
 		},
 		{
@@ -285,11 +347,12 @@ authorization:
         - email: viewer@example.test
           role: viewer
 `,
+			uiKey:      "roadmap",
 			wantPath:   "/create-customer-roadmap-review",
 			wantPolicy: "roadmap_policy",
 		},
 		{
-			name: "disabled app binding does not suppress ui path validation",
+			name: "disabled explicit app binding does not suppress ui path validation",
 			uiConfigYAML: `  ui:
     roadmap:
       source:
@@ -303,6 +366,7 @@ authorization:
       source:
         path: ./plugin/manifest.yaml
 `,
+			uiKey: "roadmap",
 			extraYAML: `apps:
   roadmap_review:
     disabled: true
@@ -312,6 +376,98 @@ authorization:
     authorizationPolicy: roadmap_policy
 `,
 			wantErr: "config validation: ui.roadmap.path: path is required",
+		},
+		{
+			name: "disabled app does not suppress matching ui path validation",
+			uiConfigYAML: `  ui:
+    roadmap_review:
+      source:
+        path: ./webui/manifest.yaml
+  plugins:
+    roadmap:
+      source:
+        path: ./plugin/manifest.yaml
+`,
+			extraYAML: `apps:
+  roadmap_review:
+    disabled: true
+    plugin: roadmap
+`,
+			wantErr: "config validation: ui.roadmap_review.path: path is required",
+		},
+		{
+			name: "plugin owned ui via app binding",
+			uiConfigYAML: `  plugins:
+    roadmap:
+      source:
+        path: ./plugin/manifest.yaml
+`,
+			extraYAML: `apps:
+  roadmap_review:
+    plugin: roadmap
+    path: /create-customer-roadmap-review
+    authorizationPolicy: roadmap_policy
+authorization:
+  policies:
+    roadmap_policy:
+      default: deny
+      members:
+        - email: viewer@example.test
+          role: viewer
+`,
+			uiKey:       "roadmap_review",
+			wantPath:    "/create-customer-roadmap-review",
+			wantPolicy:  "roadmap_policy",
+			ownedUIPath: "../webui/manifest.yaml",
+		},
+		{
+			name: "plugin owned ui with same-name ui overlay",
+			uiConfigYAML: `  ui:
+    roadmap_review:
+      source:
+        path: ./webui/manifest.yaml
+  plugins:
+    roadmap:
+      source:
+        path: ./plugin/manifest.yaml
+`,
+			extraYAML: `apps:
+  roadmap_review:
+    plugin: roadmap
+    path: /create-customer-roadmap-review
+    authorizationPolicy: roadmap_policy
+authorization:
+  policies:
+    roadmap_policy:
+      default: deny
+      members:
+        - email: viewer@example.test
+          role: viewer
+`,
+			uiKey:       "roadmap_review",
+			wantPath:    "/create-customer-roadmap-review",
+			wantPolicy:  "roadmap_policy",
+			ownedUIPath: "../webui/manifest.yaml",
+		},
+		{
+			name: "disabled same-name ui overlay is rejected",
+			uiConfigYAML: `  ui:
+    roadmap_review:
+      disabled: true
+      source:
+        path: ./webui/manifest.yaml
+  plugins:
+    roadmap:
+      source:
+        path: ./plugin/manifest.yaml
+`,
+			extraYAML: `apps:
+  roadmap_review:
+    plugin: roadmap
+    path: /create-customer-roadmap-review
+`,
+			wantErr:     "config validation: apps.roadmap_review owned ui conflicts with disabled providers.ui.roadmap_review",
+			ownedUIPath: "../webui/manifest.yaml",
 		},
 	}
 
@@ -348,19 +504,23 @@ authorization:
 			if err := os.WriteFile(manifestPath, manifest, 0o644); err != nil {
 				t.Fatalf("WriteFile manifest: %v", err)
 			}
-			if tc.extraYAML != "" {
+			if tc.extraYAML != "" || tc.ownedUIPath != "" {
 				pluginManifestPath := filepath.Join(dir, "plugin", "manifest.yaml")
 				if err := os.MkdirAll(filepath.Dir(pluginManifestPath), 0o755); err != nil {
 					t.Fatalf("MkdirAll plugin dir: %v", err)
+				}
+				pluginSpec := &providermanifestv1.Spec{
+					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+				}
+				if tc.ownedUIPath != "" {
+					pluginSpec.UI = &providermanifestv1.OwnedUIRef{Path: tc.ownedUIPath}
 				}
 				pluginManifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
 					Source:      "github.com/testowner/plugins/roadmap",
 					Version:     "0.0.1-alpha.1",
 					DisplayName: "Roadmap Plugin",
 					Kind:        providermanifestv1.KindPlugin,
-					Spec: &providermanifestv1.Spec{
-						Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
-					},
+					Spec:        pluginSpec,
 				}, providerpkg.ManifestFormatYAML)
 				if err != nil {
 					t.Fatalf("EncodePluginManifest: %v", err)
@@ -396,9 +556,9 @@ authorization:
 				t.Fatalf("LoadForExecutionAtPath: %v", err)
 			}
 
-			entry := loaded.Providers.UI["roadmap"]
+			entry := loaded.Providers.UI[tc.uiKey]
 			if entry == nil {
-				t.Fatal(`Providers.UI["roadmap"] = nil`)
+				t.Fatalf(`Providers.UI[%q] = nil`, tc.uiKey)
 			}
 			if entry.ResolvedManifest == nil {
 				t.Fatal("ResolvedManifest = nil")
@@ -429,6 +589,434 @@ authorization:
 				t.Fatalf("lockfile should not be created, got err=%v", err)
 			}
 		})
+	}
+}
+
+func TestLoadForExecutionAtPath_ReinitializesManagedPluginOwnedUIWhenUILockEntryIsMissing(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	const pluginRef = "github.com/testowner/plugins/roadmap"
+	const webUIRef = "github.com/testowner/web/roadmap-review"
+	const version = "0.0.1-alpha.1"
+
+	webUIPkg := mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindWebUI,
+		Source:      webUIRef,
+		Version:     version,
+		DisplayName: "Roadmap Review UI",
+		Spec: &providermanifestv1.Spec{
+			AssetRoot: "dist",
+		},
+	}, map[string]string{
+		"dist/index.html": "<html>roadmap review</html>",
+	}, false)
+
+	pluginPkg := mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindPlugin,
+		Source:      pluginRef,
+		Version:     version,
+		DisplayName: "Roadmap Review",
+		Entrypoint: &providermanifestv1.Entrypoint{
+			ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin")),
+		},
+		Spec: &providermanifestv1.Spec{
+			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+			UI: &providermanifestv1.OwnedUIRef{
+				Ref:     webUIRef,
+				Version: version,
+				Auth:    &providermanifestv1.SourceAuth{Token: "owned-ui-token"},
+			},
+		},
+	}, map[string]string{
+		filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin")): "plugin-binary",
+	}, true)
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  ui:
+    roadmap_review:
+      source:
+        ref: ` + webUIRef + `
+        version: ` + version + `
+      path: /create-customer-roadmap-review
+  plugins:
+    roadmap:
+      source:
+        ref: ` + pluginRef + `
+        version: ` + version + `
+` + `server:
+` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+apps:
+  roadmap_review:
+    plugin: roadmap
+    path: /create-customer-roadmap-review
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	lc := NewLifecycle(authMappedSourceResolver{
+		paths: map[string]string{
+			pluginRef: pluginPkg,
+			webUIRef:  webUIPkg,
+		},
+		tokens: map[string]string{
+			webUIRef: "owned-ui-token",
+		},
+	})
+	lock, err := lc.InitAtPath(cfgPath)
+	if err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+	delete(lock.UIs, "roadmap_review")
+	if err := WriteLockfile(filepath.Join(dir, InitLockfileName), lock); err != nil {
+		t.Fatalf("WriteLockfile: %v", err)
+	}
+
+	loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath: %v", err)
+	}
+	entry := loaded.Providers.UI["roadmap_review"]
+	if entry == nil || entry.ResolvedManifest == nil {
+		t.Fatalf("Resolved app-owned UI = %+v", entry)
+	}
+	if entry.Path != "/create-customer-roadmap-review" {
+		t.Fatalf("entry.Path = %q", entry.Path)
+	}
+
+	rewrittenLock, err := ReadLockfile(filepath.Join(dir, InitLockfileName))
+	if err != nil {
+		t.Fatalf("ReadLockfile: %v", err)
+	}
+	if _, ok := rewrittenLock.UIs["roadmap_review"]; !ok {
+		t.Fatalf("lock.UIs = %#v, want roadmap_review entry restored", rewrittenLock.UIs)
+	}
+}
+
+func TestLoadForExecutionAtPath_ResolvesManagedPluginOwnedUIFromManagedPath(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	const pluginRef = "github.com/testowner/plugins/roadmap"
+	const version = "0.0.1-alpha.1"
+
+	pkgDir := filepath.Join(dir, "roadmap-plugin-pkg")
+	if err := os.MkdirAll(pkgDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll package dir: %v", err)
+	}
+
+	artifactPath := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin"))
+	artifactContent := []byte("plugin-binary")
+	artifactFullPath := filepath.Join(pkgDir, filepath.FromSlash(artifactPath))
+	if err := os.MkdirAll(filepath.Dir(artifactFullPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll artifact dir: %v", err)
+	}
+	if err := os.WriteFile(artifactFullPath, artifactContent, 0o755); err != nil {
+		t.Fatalf("WriteFile artifact: %v", err)
+	}
+
+	ownedUIManifestPath := filepath.ToSlash(filepath.Join("_owned_ui", "roadmap-ui", providerpkg.ManifestFile))
+	ownedUIManifestBytes, err := providerpkg.EncodeManifest(&providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindWebUI,
+		Source:      "github.com/testowner/web/roadmap-review",
+		Version:     version,
+		DisplayName: "Roadmap Review UI",
+		Spec: &providermanifestv1.Spec{
+			AssetRoot: "dist",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Encode owned UI manifest: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(pkgDir, "_owned_ui", "roadmap-ui", "dist"), 0o755); err != nil {
+		t.Fatalf("MkdirAll owned UI dist: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(pkgDir, filepath.FromSlash(ownedUIManifestPath)), ownedUIManifestBytes, 0o644); err != nil {
+		t.Fatalf("WriteFile owned UI manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(pkgDir, "_owned_ui", "roadmap-ui", "dist", "index.html"), []byte("<html>roadmap review</html>"), 0o644); err != nil {
+		t.Fatalf("WriteFile owned UI index: %v", err)
+	}
+
+	sum := sha256.Sum256(artifactContent)
+	pluginManifestBytes, err := providerpkg.EncodeManifest(&providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindPlugin,
+		Source:      pluginRef,
+		Version:     version,
+		DisplayName: "Roadmap Review",
+		Entrypoint: &providermanifestv1.Entrypoint{
+			ArtifactPath: artifactPath,
+		},
+		Artifacts: []providermanifestv1.Artifact{{
+			OS:     runtime.GOOS,
+			Arch:   runtime.GOARCH,
+			Path:   artifactPath,
+			SHA256: hex.EncodeToString(sum[:]),
+		}},
+		Spec: &providermanifestv1.Spec{
+			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+			UI: &providermanifestv1.OwnedUIRef{
+				Path: ownedUIManifestPath,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Encode plugin manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(pkgDir, providerpkg.ManifestFile), pluginManifestBytes, 0o644); err != nil {
+		t.Fatalf("WriteFile plugin manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(pkgDir, "catalog.yaml"), []byte("name: roadmap\noperations:\n  - id: ping\n    method: GET\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile catalog: %v", err)
+	}
+
+	pkgPath := filepath.Join(dir, "roadmap-plugin-pkg.tar.gz")
+	if err := providerpkg.CreatePackageFromDir(pkgDir, pkgPath); err != nil {
+		t.Fatalf("CreatePackageFromDir: %v", err)
+	}
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  plugins:
+    roadmap:
+      source:
+        ref: ` + pluginRef + `
+        version: ` + version + `
+` + `server:
+` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+apps:
+  roadmap_review:
+    plugin: roadmap
+    path: /create-customer-roadmap-review
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	lc := NewLifecycle(mappedSourceResolver{paths: map[string]string{pluginRef: pkgPath}})
+	if _, err := lc.InitAtPath(cfgPath); err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+
+	loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath: %v", err)
+	}
+	entry := loaded.Providers.UI["roadmap_review"]
+	if entry == nil || entry.ResolvedManifest == nil {
+		t.Fatalf("Resolved app-owned UI = %+v", entry)
+	}
+	if entry.Path != "/create-customer-roadmap-review" {
+		t.Fatalf("entry.Path = %q", entry.Path)
+	}
+	if got, want := filepath.ToSlash(entry.ResolvedManifestPath), filepath.ToSlash(filepath.Join("_owned_ui", "roadmap-ui", providerpkg.ManifestFile)); !strings.HasSuffix(got, want) {
+		t.Fatalf("ResolvedManifestPath = %q, want suffix %q", got, want)
+	}
+	if got, want := filepath.ToSlash(entry.ResolvedAssetRoot), filepath.ToSlash(filepath.Join("_owned_ui", "roadmap-ui", "dist")); !strings.HasSuffix(got, want) {
+		t.Fatalf("ResolvedAssetRoot = %q, want suffix %q", got, want)
+	}
+
+	rewrittenLock, err := ReadLockfile(filepath.Join(dir, InitLockfileName))
+	if err != nil {
+		t.Fatalf("ReadLockfile: %v", err)
+	}
+	if len(rewrittenLock.UIs) != 0 {
+		t.Fatalf("lock.UIs = %#v, want no separate UI entries for in-package owned UI", rewrittenLock.UIs)
+	}
+}
+
+func TestLoadForExecutionAtPath_ReinitializesManagedPluginOwnedUIWhenPluginLockIsStale(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	const pluginRef = "github.com/testowner/plugins/roadmap"
+	const webUIRef = "github.com/testowner/web/roadmap-review"
+	const oldVersion = "0.0.1-alpha.1"
+	const newVersion = "0.0.2-alpha.1"
+
+	buildWebUIPackage := func(version string) string {
+		return mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
+			Kind:        providermanifestv1.KindWebUI,
+			Source:      webUIRef,
+			Version:     version,
+			DisplayName: "Roadmap Review UI",
+			Spec: &providermanifestv1.Spec{
+				AssetRoot: "dist",
+			},
+		}, map[string]string{
+			"dist/index.html": "<html>roadmap review " + version + "</html>",
+		}, false)
+	}
+	buildPluginPackage := func(version string) string {
+		return mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
+			Kind:        providermanifestv1.KindPlugin,
+			Source:      pluginRef,
+			Version:     version,
+			DisplayName: "Roadmap Review",
+			Entrypoint: &providermanifestv1.Entrypoint{
+				ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin")),
+			},
+			Spec: &providermanifestv1.Spec{
+				Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+				UI: &providermanifestv1.OwnedUIRef{
+					Ref:     webUIRef,
+					Version: version,
+					Auth:    &providermanifestv1.SourceAuth{Token: "owned-ui-token"},
+				},
+			},
+		}, map[string]string{
+			filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin")): "plugin-binary-" + version,
+		}, true)
+	}
+
+	oldWebUIPkg := buildWebUIPackage(oldVersion)
+	oldPluginPkg := buildPluginPackage(oldVersion)
+	newWebUIPkg := buildWebUIPackage(newVersion)
+	newPluginPkg := buildPluginPackage(newVersion)
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	writeConfig := func(version string) {
+		cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  plugins:
+    roadmap:
+      source:
+        ref: ` + pluginRef + `
+        version: ` + version + `
+` + `server:
+` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+apps:
+  roadmap_review:
+    plugin: roadmap
+    path: /create-customer-roadmap-review
+`
+		if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+			t.Fatalf("WriteFile config: %v", err)
+		}
+	}
+	writeConfig(oldVersion)
+
+	lc := NewLifecycle(versionedSourceResolver{
+		paths: map[string]map[string]string{
+			pluginRef: {
+				oldVersion: oldPluginPkg,
+				newVersion: newPluginPkg,
+			},
+			webUIRef: {
+				oldVersion: oldWebUIPkg,
+				newVersion: newWebUIPkg,
+			},
+		},
+		tokens: map[string]string{
+			webUIRef: "owned-ui-token",
+		},
+	})
+	if _, err := lc.InitAtPath(cfgPath); err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+
+	writeConfig(newVersion)
+
+	loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath: %v", err)
+	}
+	entry := loaded.Providers.UI["roadmap_review"]
+	if entry == nil || entry.ResolvedManifest == nil {
+		t.Fatalf("Resolved app-owned UI = %+v", entry)
+	}
+	if got := entry.ResolvedManifest.Version; got != newVersion {
+		t.Fatalf("ResolvedManifest.Version = %q, want %q", got, newVersion)
+	}
+	if entry.Path != "/create-customer-roadmap-review" {
+		t.Fatalf("entry.Path = %q", entry.Path)
+	}
+
+	rewrittenLock, err := ReadLockfile(filepath.Join(dir, InitLockfileName))
+	if err != nil {
+		t.Fatalf("ReadLockfile: %v", err)
+	}
+	lockEntry, ok := rewrittenLock.UIs["roadmap_review"]
+	if !ok {
+		t.Fatalf("lock.UIs = %#v, want roadmap_review entry restored", rewrittenLock.UIs)
+	}
+	if got := lockEntry.Version; got != newVersion {
+		t.Fatalf("lock.UIs[roadmap_review].Version = %q, want %q", got, newVersion)
+	}
+}
+
+func TestInitAtPath_RejectsManagedPluginOwnedUIPathOutsidePackage(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	const pluginRef = "github.com/testowner/plugins/roadmap"
+	const version = "0.0.1-alpha.1"
+
+	pkgDir := filepath.Join(dir, "roadmap-managed-pkg")
+	if err := os.MkdirAll(pkgDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll package dir: %v", err)
+	}
+	artifactPath := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin"))
+	artifactContent := []byte("plugin-binary")
+	artifactFullPath := filepath.Join(pkgDir, filepath.FromSlash(artifactPath))
+	if err := os.MkdirAll(filepath.Dir(artifactFullPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll artifact dir: %v", err)
+	}
+	if err := os.WriteFile(artifactFullPath, artifactContent, 0o755); err != nil {
+		t.Fatalf("WriteFile artifact: %v", err)
+	}
+	sum := sha256.Sum256(artifactContent)
+	manifestBytes, err := json.Marshal(&providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindPlugin,
+		Source:      pluginRef,
+		Version:     version,
+		DisplayName: "Roadmap Review",
+		Entrypoint: &providermanifestv1.Entrypoint{
+			ArtifactPath: artifactPath,
+		},
+		Artifacts: []providermanifestv1.Artifact{{
+			OS:     runtime.GOOS,
+			Arch:   runtime.GOARCH,
+			Path:   artifactPath,
+			SHA256: hex.EncodeToString(sum[:]),
+		}},
+		Spec: &providermanifestv1.Spec{
+			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+			UI: &providermanifestv1.OwnedUIRef{
+				Path: "../owned-ui/manifest.json",
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("Marshal manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(pkgDir, providerpkg.ManifestFile), manifestBytes, 0o644); err != nil {
+		t.Fatalf("WriteFile manifest: %v", err)
+	}
+	pkgPath := filepath.Join(dir, "roadmap-managed-pkg.tar.gz")
+	mustCreateLifecycleArchive(t, pkgPath,
+		lifecycleArchiveFile{name: providerpkg.ManifestFile, data: manifestBytes, mode: 0o644},
+		lifecycleArchiveFile{name: artifactPath, data: artifactContent, mode: 0o755},
+	)
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  plugins:
+    roadmap:
+      source:
+        ref: ` + pluginRef + `
+        version: ` + version + `
+server:
+` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+apps:
+  roadmap_review:
+    plugin: roadmap
+    path: /create-customer-roadmap-review
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	lc := NewLifecycle(mappedSourceResolver{paths: map[string]string{pluginRef: pkgPath}})
+	if _, err := lc.InitAtPath(cfgPath); err == nil || !strings.Contains(err.Error(), "spec.ui.path must stay within the package") {
+		t.Fatalf("InitAtPath error = %v, want substring %q", err, "spec.ui.path must stay within the package")
 	}
 }
 
@@ -1534,6 +2122,50 @@ func mustBuildManagedProviderPackage(t *testing.T, dir string, manifest *provide
 		t.Fatalf("CreatePackageFromDir: %v", err)
 	}
 	return pkgPath
+}
+
+type lifecycleArchiveFile struct {
+	name string
+	data []byte
+	mode int64
+}
+
+func mustCreateLifecycleArchive(t *testing.T, archivePath string, files ...lifecycleArchiveFile) {
+	t.Helper()
+
+	out, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatalf("Create(%q): %v", archivePath, err)
+	}
+	defer func() {
+		if err := out.Close(); err != nil {
+			t.Fatalf("close archive: %v", err)
+		}
+	}()
+
+	gzw := gzip.NewWriter(out)
+	defer func() {
+		if err := gzw.Close(); err != nil {
+			t.Fatalf("close gzip: %v", err)
+		}
+	}()
+
+	tw := tar.NewWriter(gzw)
+	defer func() {
+		if err := tw.Close(); err != nil {
+			t.Fatalf("close tar: %v", err)
+		}
+	}()
+
+	for _, file := range files {
+		hdr := &tar.Header{Name: file.name, Mode: file.mode, Size: int64(len(file.data))}
+		if err := tw.WriteHeader(hdr); err != nil {
+			t.Fatalf("WriteHeader(%q): %v", file.name, err)
+		}
+		if _, err := tw.Write(file.data); err != nil {
+			t.Fatalf("Write(%q): %v", file.name, err)
+		}
+	}
 }
 
 func TestReadWriteLockfile_RoundTrip(t *testing.T) {

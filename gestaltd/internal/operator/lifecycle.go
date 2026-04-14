@@ -8,10 +8,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
@@ -168,6 +171,12 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 			lockEntriesForKind(lock, collection.kind)[name] = lockEntry
 		}
 	}
+	if err := l.resolveConfiguredPlugins(paths, lock, cfg, true); err != nil {
+		return nil, nil, err
+	}
+	if err := synthesizeAppOwnedUIEntries(cfg); err != nil {
+		return nil, nil, err
+	}
 	for name, lockEntry := range secretsEntries {
 		lock.Secrets[name] = lockEntry
 	}
@@ -249,6 +258,9 @@ func (l *Lifecycle) LoadForExecutionAtPath(configPath string, locked bool) (*con
 func (l *Lifecycle) LoadForExecutionAtPathWithArtifactsDir(configPath, artifactsDir string, locked bool) (*config.Config, map[string]string, error) {
 	cfg, err := config.Load(configPath)
 	if err != nil {
+		return nil, nil, fmt.Errorf("loading config: %v", err)
+	}
+	if err := synthesizeLocalSourceAppOwnedUIEntries(cfg); err != nil {
 		return nil, nil, fmt.Errorf("loading config: %v", err)
 	}
 	paths := initPathsForConfigWithArtifactsDir(configPath, resolveArtifactsDir(configPath, cfg, artifactsDir))
@@ -1025,8 +1037,16 @@ func (l *Lifecycle) applyLockedProviders(configPath, artifactsDir string, cfg *c
 	var lock *Lockfile
 	var err error
 	if configHasManagedProviderSources(cfg) {
+		var synthesizedLockedAppUIs map[string]struct{}
 		lock, err = ReadLockfile(paths.lockfilePath)
+		if err == nil {
+			synthesizedLockedAppUIs, err = synthesizeLockedSourceAppOwnedUIEntries(cfg, paths, lock)
+			if err != nil {
+				clearSynthesizedAppOwnedUIEntries(cfg, synthesizedLockedAppUIs)
+			}
+		}
 		if !locked && (err != nil || !lockMatchesConfig(cfg, paths, lock)) {
+			clearSynthesizedAppOwnedUIEntries(cfg, synthesizedLockedAppUIs)
 			lock, err = l.InitAtPathWithArtifactsDir(configPath, artifactsDir)
 		}
 		if err != nil {
@@ -1034,31 +1054,11 @@ func (l *Lifecycle) applyLockedProviders(configPath, artifactsDir string, cfg *c
 		}
 	}
 
-	for name, entry := range cfg.Plugins {
-		if entry == nil {
-			continue
-		}
-		configMap, err := config.NodeToMap(entry.Config)
-		if err != nil {
-			return fmt.Errorf("decode provider config for provider %q: %w", name, err)
-		}
-		switch {
-		case entry.HasManagedSource():
-			if err := l.applyLockedProviderEntry(paths, lock, name, entry, configMap, locked); err != nil {
-				return err
-			}
-		case entry.HasLocalSource():
-			if err := applyLocalProviderManifest(name, entry, configMap); err != nil {
-				return err
-			}
-		default:
-			continue
-		}
-		if manifest := entry.ResolvedManifest; manifest != nil {
-			entry.DisplayName = cmp.Or(entry.DisplayName, manifest.DisplayName)
-			entry.Description = cmp.Or(entry.Description, manifest.Description)
-		}
-		entry.IconFile = cmp.Or(entry.IconFile, entry.ResolvedIconFile)
+	if err := l.resolveConfiguredPlugins(paths, lock, cfg, locked); err != nil {
+		return err
+	}
+	if err := synthesizeAppOwnedUIEntries(cfg); err != nil {
+		return err
 	}
 	for _, collection := range hostProviderCollections(cfg) {
 		lockEntries := lockEntriesForKind(lock, collection.kind)
@@ -1099,6 +1099,266 @@ func (l *Lifecycle) applyLockedProviders(configPath, artifactsDir string, cfg *c
 		entry.ResolvedAssetRoot = resolvedAssetRoot
 	}
 
+	return nil
+}
+
+func (l *Lifecycle) resolveConfiguredPlugins(paths initPaths, lock *Lockfile, cfg *config.Config, locked bool) error {
+	for name, entry := range cfg.Plugins {
+		if entry == nil {
+			continue
+		}
+		configMap, err := config.NodeToMap(entry.Config)
+		if err != nil {
+			return fmt.Errorf("decode provider config for provider %q: %w", name, err)
+		}
+		switch {
+		case entry.HasManagedSource():
+			if err := l.applyLockedProviderEntry(paths, lock, name, entry, configMap, locked); err != nil {
+				return err
+			}
+		case entry.HasLocalSource():
+			if err := applyLocalProviderManifest(name, entry, configMap); err != nil {
+				return err
+			}
+		default:
+			continue
+		}
+		if manifest := entry.ResolvedManifest; manifest != nil {
+			entry.DisplayName = cmp.Or(entry.DisplayName, manifest.DisplayName)
+			entry.Description = cmp.Or(entry.Description, manifest.Description)
+		}
+		entry.IconFile = cmp.Or(entry.IconFile, entry.ResolvedIconFile)
+	}
+	return nil
+}
+
+func synthesizeAppOwnedUIEntries(cfg *config.Config) error {
+	if cfg == nil || len(cfg.Apps) == 0 {
+		return nil
+	}
+	if cfg.Providers.UI == nil {
+		cfg.Providers.UI = map[string]*config.UIEntry{}
+	}
+
+	appNames := slices.Sorted(maps.Keys(cfg.Apps))
+	for _, appName := range appNames {
+		app := cfg.Apps[appName]
+		if app == nil || app.Disabled || strings.TrimSpace(app.UI) != "" {
+			continue
+		}
+		pluginName := strings.TrimSpace(app.Plugin)
+		plugin := cfg.Plugins[pluginName]
+		if plugin == nil {
+			return fmt.Errorf("config validation: apps.%s.plugin references unknown plugin %q", appName, pluginName)
+		}
+		manifestSpec := plugin.ManifestSpec()
+		if manifestSpec == nil || manifestSpec.UI == nil {
+			return fmt.Errorf("app %q plugin %q does not declare spec.ui", appName, pluginName)
+		}
+		ownedUI := manifestSpec.UI
+		entry, err := ownedUIEntryForPlugin(plugin, ownedUI)
+		if err != nil {
+			return fmt.Errorf("app %q plugin %q ui: %w", appName, pluginName, err)
+		}
+		entry.Path = strings.TrimSpace(app.Path)
+		entry.AuthorizationPolicy = strings.TrimSpace(app.AuthorizationPolicy)
+		if existing := cfg.Providers.UI[appName]; existing != nil {
+			if err := validateSynthesizedAppUIEntry(appName, existing, entry); err != nil {
+				return err
+			}
+			if existing.Source.Auth == nil && entry.Source.Auth != nil {
+				existing.Source.Auth = entry.Source.Auth
+			}
+			existing.Path = cmp.Or(existing.Path, entry.Path)
+			existing.AuthorizationPolicy = cmp.Or(existing.AuthorizationPolicy, entry.AuthorizationPolicy)
+			continue
+		}
+		cfg.Providers.UI[appName] = entry
+	}
+	return nil
+}
+
+func synthesizeLocalSourceAppOwnedUIEntries(cfg *config.Config) error {
+	if cfg == nil || len(cfg.Apps) == 0 {
+		return nil
+	}
+	if cfg.Providers.UI == nil {
+		cfg.Providers.UI = map[string]*config.UIEntry{}
+	}
+	appNames := slices.Sorted(maps.Keys(cfg.Apps))
+	for _, appName := range appNames {
+		app := cfg.Apps[appName]
+		if app == nil || app.Disabled || strings.TrimSpace(app.UI) != "" {
+			continue
+		}
+		pluginName := strings.TrimSpace(app.Plugin)
+		plugin := cfg.Plugins[pluginName]
+		if plugin == nil || !plugin.HasLocalSource() {
+			continue
+		}
+		manifestPath := plugin.SourcePath()
+		if manifestPath == "" {
+			continue
+		}
+		_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
+		if err != nil {
+			return fmt.Errorf("prepare manifest for provider %q: %w", pluginName, err)
+		}
+		if manifest == nil || manifest.Spec == nil || manifest.Spec.UI == nil {
+			continue
+		}
+		entry, err := ownedUIEntryFromManifest(manifestPath, manifest.Version, manifest.Spec.UI)
+		if err != nil {
+			return fmt.Errorf("app %q plugin %q ui: %w", appName, pluginName, err)
+		}
+		entry.Path = strings.TrimSpace(app.Path)
+		entry.AuthorizationPolicy = strings.TrimSpace(app.AuthorizationPolicy)
+		if existing := cfg.Providers.UI[appName]; existing != nil {
+			if err := validateSynthesizedAppUIEntry(appName, existing, entry); err != nil {
+				return err
+			}
+			if existing.Source.Auth == nil && entry.Source.Auth != nil {
+				existing.Source.Auth = entry.Source.Auth
+			}
+			existing.Path = cmp.Or(existing.Path, entry.Path)
+			existing.AuthorizationPolicy = cmp.Or(existing.AuthorizationPolicy, entry.AuthorizationPolicy)
+			continue
+		}
+		cfg.Providers.UI[appName] = entry
+	}
+	return nil
+}
+
+func synthesizeLockedSourceAppOwnedUIEntries(cfg *config.Config, paths initPaths, lock *Lockfile) (map[string]struct{}, error) {
+	added := map[string]struct{}{}
+	if cfg == nil || len(cfg.Apps) == 0 || lock == nil {
+		return added, nil
+	}
+	if cfg.Providers.UI == nil {
+		cfg.Providers.UI = map[string]*config.UIEntry{}
+	}
+	appNames := slices.Sorted(maps.Keys(cfg.Apps))
+	for _, appName := range appNames {
+		app := cfg.Apps[appName]
+		if app == nil || app.Disabled || strings.TrimSpace(app.UI) != "" {
+			continue
+		}
+		pluginName := strings.TrimSpace(app.Plugin)
+		plugin := cfg.Plugins[pluginName]
+		if plugin == nil || !plugin.HasManagedSource() {
+			continue
+		}
+		lockEntry, ok := lock.Providers[pluginName]
+		if !ok || strings.TrimSpace(lockEntry.Manifest) == "" {
+			continue
+		}
+		manifestPath := resolveLockPath(paths.artifactsDir, lockEntry.Manifest)
+		_, manifest, err := providerpkg.ReadManifestFile(manifestPath)
+		if err != nil {
+			return added, fmt.Errorf("prepare manifest for provider %q: %w", pluginName, err)
+		}
+		if manifest == nil || manifest.Spec == nil || manifest.Spec.UI == nil {
+			continue
+		}
+		entry, err := ownedUIEntryFromManifest(manifestPath, manifest.Version, manifest.Spec.UI)
+		if err != nil {
+			return added, fmt.Errorf("app %q plugin %q ui: %w", appName, pluginName, err)
+		}
+		entry.Path = strings.TrimSpace(app.Path)
+		entry.AuthorizationPolicy = strings.TrimSpace(app.AuthorizationPolicy)
+		if existing := cfg.Providers.UI[appName]; existing != nil {
+			if err := validateSynthesizedAppUIEntry(appName, existing, entry); err != nil {
+				return added, err
+			}
+			if existing.Source.Auth == nil && entry.Source.Auth != nil {
+				existing.Source.Auth = entry.Source.Auth
+			}
+			existing.Path = cmp.Or(existing.Path, entry.Path)
+			existing.AuthorizationPolicy = cmp.Or(existing.AuthorizationPolicy, entry.AuthorizationPolicy)
+			continue
+		}
+		cfg.Providers.UI[appName] = entry
+		added[appName] = struct{}{}
+	}
+	return added, nil
+}
+
+func clearSynthesizedAppOwnedUIEntries(cfg *config.Config, added map[string]struct{}) {
+	if cfg == nil || len(added) == 0 || cfg.Providers.UI == nil {
+		return
+	}
+	for name := range added {
+		delete(cfg.Providers.UI, name)
+	}
+}
+
+func ownedUIEntryForPlugin(plugin *config.ProviderEntry, ownedUI *providermanifestv1.OwnedUIRef) (*config.UIEntry, error) {
+	if plugin == nil || ownedUI == nil {
+		return nil, fmt.Errorf("owned ui definition is required")
+	}
+	manifestVersion := plugin.SourceVersion()
+	if plugin.ResolvedManifest != nil {
+		manifestVersion = cmp.Or(plugin.ResolvedManifest.Version, manifestVersion)
+	}
+	return ownedUIEntryFromManifest(plugin.ResolvedManifestPath, manifestVersion, ownedUI)
+}
+
+func ownedUIEntryFromManifest(manifestPath, manifestVersion string, ownedUI *providermanifestv1.OwnedUIRef) (*config.UIEntry, error) {
+	if ownedUI == nil {
+		return nil, fmt.Errorf("owned ui definition is required")
+	}
+	entry := &config.UIEntry{}
+	switch {
+	case strings.TrimSpace(ownedUI.Ref) != "":
+		entry.Source.Ref = strings.TrimSpace(ownedUI.Ref)
+		entry.Source.Version = cmp.Or(strings.TrimSpace(ownedUI.Version), manifestVersion)
+		if ownedUI.Auth != nil {
+			entry.Source.Auth = &config.SourceAuthDef{Token: strings.TrimSpace(ownedUI.Auth.Token)}
+		}
+	case strings.TrimSpace(ownedUI.Path) != "":
+		if strings.TrimSpace(manifestPath) == "" {
+			return nil, fmt.Errorf("resolved plugin manifest path is required for spec.ui.path")
+		}
+		entry.Source.Path = filepath.Clean(filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(ownedUI.Path)))
+	default:
+		return nil, fmt.Errorf("spec.ui.path or spec.ui.ref is required")
+	}
+	return entry, nil
+}
+
+func validateSynthesizedAppUIEntry(appName string, existing, expected *config.UIEntry) error {
+	if existing == nil || expected == nil {
+		return nil
+	}
+	if existing.Disabled {
+		return fmt.Errorf("config validation: apps.%s owned ui conflicts with disabled providers.ui.%s", appName, appName)
+	}
+	if current := strings.TrimSpace(existing.Source.Ref); current != "" && current != expected.Source.Ref {
+		return fmt.Errorf("config validation: apps.%s owned ui conflicts with providers.ui.%s.source.ref", appName, appName)
+	}
+	if current := strings.TrimSpace(existing.Source.Version); current != "" && current != expected.Source.Version {
+		return fmt.Errorf("config validation: apps.%s owned ui conflicts with providers.ui.%s.source.version", appName, appName)
+	}
+	currentAuth := ""
+	if existing.Source.Auth != nil {
+		currentAuth = strings.TrimSpace(existing.Source.Auth.Token)
+	}
+	expectedAuth := ""
+	if expected.Source.Auth != nil {
+		expectedAuth = strings.TrimSpace(expected.Source.Auth.Token)
+	}
+	if currentAuth != "" && currentAuth != expectedAuth {
+		return fmt.Errorf("config validation: apps.%s owned ui conflicts with providers.ui.%s.source.auth.token", appName, appName)
+	}
+	if current := strings.TrimSpace(existing.Source.Path); current != "" && current != expected.Source.Path {
+		return fmt.Errorf("config validation: apps.%s owned ui conflicts with providers.ui.%s.source.path", appName, appName)
+	}
+	if current := strings.TrimSpace(existing.Path); current != "" && current != expected.Path {
+		return fmt.Errorf("config validation: apps.%s.path %q conflicts with providers.ui.%s.path", appName, expected.Path, appName)
+	}
+	if current := strings.TrimSpace(existing.AuthorizationPolicy); current != "" && current != expected.AuthorizationPolicy {
+		return fmt.Errorf("config validation: apps.%s.authorizationPolicy conflicts with providers.ui.%s.authorizationPolicy", appName, appName)
+	}
 	return nil
 }
 

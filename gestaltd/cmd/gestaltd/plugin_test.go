@@ -1181,6 +1181,48 @@ func TestRun_PluginReleaseCopiesWebUISupportFiles(t *testing.T) {
 	}
 }
 
+func TestRun_PluginReleaseStagesOwnedWebUIPackage(t *testing.T) {
+	t.Parallel()
+
+	pluginDir := newSourceProviderReleaseFixtureWithOwnedUI(t, t.TempDir())
+	outputDir := t.TempDir()
+	testVersion := "0.0.3-owned-ui"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
+		"--output", outputDir,
+	)
+
+	archiveName := "gestalt-plugin-release-test_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
+	extractDir := extractReleasedArchive(t, outputDir, archiveName)
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+	if manifest.Spec == nil || manifest.Spec.UI == nil {
+		t.Fatalf("released manifest spec.ui = %+v", manifest.Spec)
+	}
+	const wantOwnedUIPath = "_owned_ui/roadmap-ui/manifest.json"
+	if got := manifest.Spec.UI.Path; got != wantOwnedUIPath {
+		t.Fatalf("spec.ui.path = %q, want %q", got, wantOwnedUIPath)
+	}
+	for _, rel := range []string{
+		wantOwnedUIPath,
+		"_owned_ui/roadmap-ui/branding/icon.svg",
+		"_owned_ui/roadmap-ui/dist/index.html",
+		"_owned_ui/roadmap-ui/dist/static/app.js",
+	} {
+		if _, err := os.Stat(filepath.Join(extractDir, filepath.FromSlash(rel))); err != nil {
+			t.Fatalf("expected %s in archive: %v", rel, err)
+		}
+	}
+	_, ownedUIManifest, err := providerpkg.ReadManifestFile(filepath.Join(extractDir, filepath.FromSlash(wantOwnedUIPath)))
+	if err != nil {
+		t.Fatalf("read owned ui manifest: %v", err)
+	}
+	if ownedUIManifest.Release != nil {
+		t.Fatalf("owned ui manifest unexpectedly retained release metadata: %+v", ownedUIManifest.Release)
+	}
+}
+
 func TestRun_ProviderReleaseBuildsProviderSupportFilesBeforePackaging(t *testing.T) {
 	t.Parallel()
 
@@ -2502,6 +2544,39 @@ func newBuiltWebUIReleaseFixture(t *testing.T, dir string) string {
 	})
 	writeTestFile(t, pluginDir, releaseTestIconPath, []byte("<svg></svg>\n"), 0644)
 	writeReleaseBuildScript(t, pluginDir, filepath.Join("ui", "build.sh"), "mkdir -p out/static\nprintf '<html></html>\\n' > out/index.html\nprintf 'console.log(\"ok\")\\n' > out/static/app.js\n")
+	return pluginDir
+}
+
+func newSourceProviderReleaseFixtureWithOwnedUI(t *testing.T, dir string) string {
+	t.Helper()
+
+	pluginDir := newSourceProviderReleaseFixture(t, dir)
+	uiDir := filepath.Join(dir, "roadmap-ui")
+	if err := os.MkdirAll(uiDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(uiDir): %v", err)
+	}
+	writeReleaseTestManifest(t, uiDir, &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindWebUI,
+		Source:      "github.com/testowner/web/roadmap-ui",
+		Version:     "0.0.1",
+		DisplayName: "Roadmap UI",
+		IconFile:    releaseTestIconPath,
+		Spec: &providermanifestv1.Spec{
+			AssetRoot: "dist",
+		},
+	})
+	writeTestFile(t, uiDir, releaseTestIconPath, []byte("<svg></svg>\n"), 0o644)
+	writeTestFile(t, uiDir, "dist/index.html", []byte("<html>roadmap</html>\n"), 0o644)
+	writeTestFile(t, uiDir, "dist/static/app.js", []byte("console.log('roadmap')\n"), 0o644)
+
+	manifestPath := filepath.Join(pluginDir, providerpkg.ManifestFile)
+	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadSourceManifestFile(%s): %v", providerpkg.ManifestFile, err)
+	}
+	manifest.Spec.UI = &providermanifestv1.OwnedUIRef{Path: "../roadmap-ui/" + providerpkg.ManifestFile}
+	writeReleaseTestManifest(t, pluginDir, manifest)
+
 	return pluginDir
 }
 
