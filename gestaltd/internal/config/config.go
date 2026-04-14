@@ -43,8 +43,17 @@ const PluginConnectionAlias = "plugin"
 type Config struct {
 	Server        ServerConfig              `yaml:"server"`
 	Authorization AuthorizationConfig       `yaml:"authorization,omitempty"`
+	Apps          map[string]*AppEntry      `yaml:"apps,omitempty"`
 	Providers     ProvidersConfig           `yaml:"providers"`
 	Plugins       map[string]*ProviderEntry `yaml:"plugins,omitempty"`
+}
+
+type AppEntry struct {
+	Plugin              string `yaml:"plugin"`
+	UI                  string `yaml:"ui"`
+	Path                string `yaml:"path,omitempty"`
+	AuthorizationPolicy string `yaml:"authorizationPolicy,omitempty"`
+	Disabled            bool   `yaml:"disabled,omitempty"`
 }
 
 type ProvidersConfig struct {
@@ -623,7 +632,10 @@ func LoadAllowMissingEnv(path string) (*Config, error) {
 }
 
 func NormalizeCompatibility(cfg *Config) error {
-	return normalizeAuthorizationConfig(cfg)
+	if err := normalizeAuthorizationConfig(cfg); err != nil {
+		return err
+	}
+	return applyAppBindings(cfg)
 }
 
 func OverlayManagedPluginConfig(path string, cfg *Config) error {
@@ -1206,6 +1218,89 @@ func normalizedWorkloadDef(workload WorkloadDef) WorkloadDef {
 	}
 	workload.Providers = providers
 	return workload
+}
+
+func applyAppBindings(cfg *Config) error {
+	if cfg == nil || len(cfg.Apps) == 0 {
+		return nil
+	}
+
+	appNames := mapsKeys(cfg.Apps)
+	slices.Sort(appNames)
+	seenPlugins := make(map[string]string, len(appNames))
+	seenUIs := make(map[string]string, len(appNames))
+	for _, appName := range appNames {
+		app := cfg.Apps[appName]
+		if app == nil {
+			return fmt.Errorf("config validation: apps.%s is required", appName)
+		}
+		if app.Disabled {
+			continue
+		}
+		if strings.TrimSpace(appName) == "" {
+			return fmt.Errorf("config validation: apps keys must be non-empty")
+		}
+		app.Plugin = strings.TrimSpace(app.Plugin)
+		app.UI = strings.TrimSpace(app.UI)
+		app.Path = strings.TrimSpace(app.Path)
+		app.AuthorizationPolicy = strings.TrimSpace(app.AuthorizationPolicy)
+
+		if app.Plugin == "" {
+			return fmt.Errorf("config validation: apps.%s.plugin is required", appName)
+		}
+		if app.UI == "" {
+			return fmt.Errorf("config validation: apps.%s.ui is required", appName)
+		}
+		if app.Path == "" {
+			return fmt.Errorf("config validation: apps.%s.path is required", appName)
+		}
+		normalizedPath, err := normalizeMountedUIPath(app.Path)
+		if err != nil {
+			return fmt.Errorf("config validation: apps.%s.path: %w", appName, err)
+		}
+		app.Path = normalizedPath
+		if err := validateAuthorizationPolicyReference(cfg, "app", appName, app.AuthorizationPolicy); err != nil {
+			return err
+		}
+		if prev, exists := seenPlugins[app.Plugin]; exists && prev != appName {
+			return fmt.Errorf("config validation: apps.%s.plugin %q duplicates apps.%s", appName, app.Plugin, prev)
+		}
+		if prev, exists := seenUIs[app.UI]; exists && prev != appName {
+			return fmt.Errorf("config validation: apps.%s.ui %q duplicates apps.%s", appName, app.UI, prev)
+		}
+
+		plugin := cfg.Plugins[app.Plugin]
+		if plugin == nil {
+			return fmt.Errorf("config validation: apps.%s.plugin references unknown plugin %q", appName, app.Plugin)
+		}
+		if plugin.Disabled {
+			return fmt.Errorf("config validation: apps.%s.plugin references disabled plugin %q", appName, app.Plugin)
+		}
+		ui := cfg.Providers.UI[app.UI]
+		if ui == nil {
+			return fmt.Errorf("config validation: apps.%s.ui references unknown ui %q", appName, app.UI)
+		}
+		if ui.Disabled {
+			return fmt.Errorf("config validation: apps.%s.ui references disabled ui %q", appName, app.UI)
+		}
+		if current := strings.TrimSpace(plugin.AuthorizationPolicy); current != "" && current != app.AuthorizationPolicy {
+			return fmt.Errorf("config validation: apps.%s.plugin %q conflicts with plugins.%s.authorizationPolicy", appName, app.Plugin, app.Plugin)
+		}
+		if current := strings.TrimSpace(ui.AuthorizationPolicy); current != "" && current != app.AuthorizationPolicy {
+			return fmt.Errorf("config validation: apps.%s.ui %q conflicts with providers.ui.%s.authorizationPolicy", appName, app.UI, app.UI)
+		}
+		if current := strings.TrimSpace(ui.Path); current != "" && current != app.Path {
+			return fmt.Errorf("config validation: apps.%s.ui %q conflicts with providers.ui.%s.path", appName, app.UI, app.UI)
+		}
+
+		plugin.AuthorizationPolicy = app.AuthorizationPolicy
+		ui.AuthorizationPolicy = app.AuthorizationPolicy
+		ui.Path = app.Path
+		seenPlugins[app.Plugin] = appName
+		seenUIs[app.UI] = appName
+	}
+
+	return nil
 }
 
 func resolveBaseURL(cfg *Config) {

@@ -20,7 +20,8 @@ func ValidateStructure(cfg *Config) error {
 	if err := NormalizeCompatibility(cfg); err != nil {
 		return err
 	}
-	if err := normalizeMountedUIPaths(cfg); err != nil {
+	appUIRefs := appReferencedUIs(cfg)
+	if err := normalizeMountedUIPaths(cfg, appUIRefs); err != nil {
 		return err
 	}
 	if err := validateAuthorizationPolicies(cfg); err != nil {
@@ -74,6 +75,9 @@ func ValidateStructure(cfg *Config) error {
 			return err
 		}
 		if entry.Path == "" {
+			if _, ok := appUIRefs[name]; ok {
+				continue
+			}
 			return fmt.Errorf("config validation: ui.%s.path is required", name)
 		}
 	}
@@ -459,10 +463,15 @@ func indexedDBSocketEnv(name string) string {
 	return b.String()
 }
 
-func normalizeMountedUIPaths(cfg *Config) error {
+func normalizeMountedUIPaths(cfg *Config, appUIRefs map[string]struct{}) error {
 	for name, entry := range cfg.Providers.UI {
 		if entry == nil || entry.Disabled {
 			continue
+		}
+		if strings.TrimSpace(entry.Path) == "" {
+			if _, ok := appUIRefs[name]; ok {
+				continue
+			}
 		}
 		normalized, err := normalizeMountedUIPath(entry.Path)
 		if err != nil {
@@ -507,7 +516,7 @@ func validateMountedUICollisions(cfg *Config) error {
 	sort.Strings(names)
 	for i, name := range names {
 		entry := cfg.Providers.UI[name]
-		if entry == nil || entry.Disabled {
+		if entry == nil || entry.Disabled || strings.TrimSpace(entry.Path) == "" {
 			continue
 		}
 		if entry.Path == "/" {
@@ -529,7 +538,7 @@ func validateMountedUICollisions(cfg *Config) error {
 		}
 		for _, otherName := range names[i+1:] {
 			other := cfg.Providers.UI[otherName]
-			if other == nil || other.Disabled {
+			if other == nil || other.Disabled || strings.TrimSpace(other.Path) == "" {
 				continue
 			}
 			if mountedUIPathsConflict(entry.Path, other.Path) {
@@ -545,6 +554,19 @@ func mountedUIPathsConflict(a, b string) bool {
 		return true
 	}
 	return strings.HasPrefix(a, b+"/") || strings.HasPrefix(b, a+"/")
+}
+
+func appReferencedUIs(cfg *Config) map[string]struct{} {
+	refs := make(map[string]struct{}, len(cfg.Apps))
+	for _, app := range cfg.Apps {
+		if app == nil || app.Disabled {
+			continue
+		}
+		if ui := strings.TrimSpace(app.UI); ui != "" {
+			refs[ui] = struct{}{}
+		}
+	}
+	return refs
 }
 
 func mapsKeys[V any](m map[string]V) []string {

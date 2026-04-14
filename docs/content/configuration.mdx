@@ -4,7 +4,7 @@ Gestalt is configured from a single YAML file. This page covers the key concepts
 
 ## Config file structure
 
-A Gestalt config has four top-level keys: `server` for host settings, `authorization` for shared human/workload access policy, `providers` for pluggable host components, and `plugins` for executable integrations.
+A Gestalt config has five top-level keys: `server` for host settings, `authorization` for shared human/workload access policy, `apps` for deployment-owned plugin/UI bindings, `providers` for host-scoped providers and web UIs, and `plugins` for executable integrations.
 
 ```yaml
 server:
@@ -20,6 +20,13 @@ server:
     port: ...
   egress:                   # outbound request policy
     defaultAction: ...      # "allow" or "deny"
+
+authorization:
+  policies: ...             # shared human access policies
+  workloads: ...            # workload bearer-token policy
+
+apps:
+  <name>: ...               # plugin/UI binding with path + auth policy
 
 providers:
   auth: ...                 # platform login (ProviderEntry)

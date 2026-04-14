@@ -242,67 +242,193 @@ spec:
 func TestLoadForExecutionAtPath_ResolvesLocalMountedWebUIWithoutLockfile(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-	webUIDir := filepath.Join(dir, "webui")
-	if err := os.MkdirAll(filepath.Join(webUIDir, "dist"), 0o755); err != nil {
-		t.Fatalf("MkdirAll webui dist: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(webUIDir, "dist", "index.html"), []byte("<html>roadmap</html>"), 0o644); err != nil {
-		t.Fatalf("WriteFile index.html: %v", err)
-	}
-	manifestPath := filepath.Join(webUIDir, "manifest.yaml")
-	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Kind:        providermanifestv1.KindWebUI,
-		Source:      "github.com/testowner/web/roadmap",
-		Version:     "0.0.1-alpha.1",
-		DisplayName: "Roadmap UI",
-		Spec:        &providermanifestv1.Spec{AssetRoot: "dist"},
-	}, providerpkg.ManifestFormatYAML)
-	if err != nil {
-		t.Fatalf("EncodeManifest: %v", err)
-	}
-	if err := os.WriteFile(manifestPath, manifest, 0o644); err != nil {
-		t.Fatalf("WriteFile manifest: %v", err)
-	}
-
-	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  ui:
+	tests := []struct {
+		name         string
+		uiConfigYAML string
+		extraYAML    string
+		wantPath     string
+		wantPolicy   string
+		wantErr      string
+	}{
+		{
+			name: "direct mounted ui",
+			uiConfigYAML: `  ui:
     roadmap:
       source:
         path: ./webui/manifest.yaml
       path: /create-customer-roadmap-review
-` + `server:
+`,
+			wantPath: "/create-customer-roadmap-review",
+		},
+		{
+			name: "app bound mounted ui",
+			uiConfigYAML: `  ui:
+    roadmap:
+      source:
+        path: ./webui/manifest.yaml
+  plugins:
+    roadmap:
+      source:
+        path: ./plugin/manifest.yaml
+`,
+			extraYAML: `apps:
+  roadmap_review:
+    plugin: roadmap
+    ui: roadmap
+    path: /create-customer-roadmap-review
+    authorizationPolicy: roadmap_policy
+authorization:
+  policies:
+    roadmap_policy:
+      default: deny
+      members:
+        - email: viewer@example.test
+          role: viewer
+`,
+			wantPath:   "/create-customer-roadmap-review",
+			wantPolicy: "roadmap_policy",
+		},
+		{
+			name: "disabled app binding does not suppress ui path validation",
+			uiConfigYAML: `  ui:
+    roadmap:
+      source:
+        path: ./webui/manifest.yaml
+    console:
+      source:
+        path: ./webui/manifest.yaml
+      path: /console
+  plugins:
+    roadmap:
+      source:
+        path: ./plugin/manifest.yaml
+`,
+			extraYAML: `apps:
+  roadmap_review:
+    disabled: true
+    plugin: roadmap
+    ui: roadmap
+    path: /create-customer-roadmap-review
+    authorizationPolicy: roadmap_policy
+`,
+			wantErr: "config validation: ui.roadmap.path: path is required",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			webUIDir := filepath.Join(dir, "webui")
+			if err := os.MkdirAll(filepath.Join(webUIDir, "dist"), 0o755); err != nil {
+				t.Fatalf("MkdirAll webui dist: %v", err)
+			}
+			if err := os.WriteFile(filepath.Join(webUIDir, "dist", "index.html"), []byte("<html>roadmap</html>"), 0o644); err != nil {
+				t.Fatalf("WriteFile index.html: %v", err)
+			}
+			manifestPath := filepath.Join(webUIDir, "manifest.yaml")
+			spec := &providermanifestv1.Spec{AssetRoot: "dist"}
+			if tc.wantPolicy != "" {
+				spec.Routes = []providermanifestv1.WebUIRoute{
+					{Path: "/", AllowedRoles: []string{"viewer"}},
+				}
+			}
+			manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
+				Kind:        providermanifestv1.KindWebUI,
+				Source:      "github.com/testowner/web/roadmap",
+				Version:     "0.0.1-alpha.1",
+				DisplayName: "Roadmap UI",
+				Spec:        spec,
+			}, providerpkg.ManifestFormatYAML)
+			if err != nil {
+				t.Fatalf("EncodeManifest: %v", err)
+			}
+			if err := os.WriteFile(manifestPath, manifest, 0o644); err != nil {
+				t.Fatalf("WriteFile manifest: %v", err)
+			}
+			if tc.extraYAML != "" {
+				pluginManifestPath := filepath.Join(dir, "plugin", "manifest.yaml")
+				if err := os.MkdirAll(filepath.Dir(pluginManifestPath), 0o755); err != nil {
+					t.Fatalf("MkdirAll plugin dir: %v", err)
+				}
+				pluginManifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
+					Source:      "github.com/testowner/plugins/roadmap",
+					Version:     "0.0.1-alpha.1",
+					DisplayName: "Roadmap Plugin",
+					Kind:        providermanifestv1.KindPlugin,
+					Spec: &providermanifestv1.Spec{
+						Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+					},
+				}, providerpkg.ManifestFormatYAML)
+				if err != nil {
+					t.Fatalf("EncodePluginManifest: %v", err)
+				}
+				if err := os.WriteFile(pluginManifestPath, pluginManifest, 0o644); err != nil {
+					t.Fatalf("WriteFile plugin manifest: %v", err)
+				}
+				if err := os.WriteFile(filepath.Join(dir, "plugin", "catalog.yaml"), []byte("name: roadmap\noperations:\n  - id: ping\n    method: GET\n"), 0o644); err != nil {
+					t.Fatalf("WriteFile plugin catalog: %v", err)
+				}
+			}
+
+			cfgPath := filepath.Join(dir, "config.yaml")
+			cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + tc.uiConfigYAML + tc.extraYAML + `server:
 ` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
+			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+				t.Fatalf("WriteFile config: %v", err)
+			}
 
-	lc := NewLifecycle(nil)
-	loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
-	if err != nil {
-		t.Fatalf("LoadForExecutionAtPath: %v", err)
-	}
+			lc := NewLifecycle(nil)
+			loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
+			if tc.wantErr != "" {
+				if err == nil {
+					t.Fatalf("LoadForExecutionAtPath: expected error containing %q", tc.wantErr)
+				}
+				if !strings.Contains(err.Error(), tc.wantErr) {
+					t.Fatalf("LoadForExecutionAtPath error = %q, want substring %q", err, tc.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("LoadForExecutionAtPath: %v", err)
+			}
 
-	entry := loaded.Providers.UI["roadmap"]
-	if entry == nil {
-		t.Fatal(`Providers.UI["roadmap"] = nil`)
-	}
-	if entry.ResolvedManifest == nil {
-		t.Fatal("ResolvedManifest = nil")
-	}
-	if got := entry.ResolvedManifestPath; got != manifestPath {
-		t.Fatalf("ResolvedManifestPath = %q, want %q", got, manifestPath)
-	}
-	wantAssetRoot := filepath.Join(webUIDir, "dist")
-	if got := entry.ResolvedAssetRoot; got != wantAssetRoot {
-		t.Fatalf("ResolvedAssetRoot = %q, want %q", got, wantAssetRoot)
-	}
-	if got := entry.Path; got != "/create-customer-roadmap-review" {
-		t.Fatalf("Path = %q, want %q", got, "/create-customer-roadmap-review")
-	}
-	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); !os.IsNotExist(err) {
-		t.Fatalf("lockfile should not be created, got err=%v", err)
+			entry := loaded.Providers.UI["roadmap"]
+			if entry == nil {
+				t.Fatal(`Providers.UI["roadmap"] = nil`)
+			}
+			if entry.ResolvedManifest == nil {
+				t.Fatal("ResolvedManifest = nil")
+			}
+			if got := entry.ResolvedManifestPath; got != manifestPath {
+				t.Fatalf("ResolvedManifestPath = %q, want %q", got, manifestPath)
+			}
+			wantAssetRoot := filepath.Join(webUIDir, "dist")
+			if got := entry.ResolvedAssetRoot; got != wantAssetRoot {
+				t.Fatalf("ResolvedAssetRoot = %q, want %q", got, wantAssetRoot)
+			}
+			if got := entry.Path; got != tc.wantPath {
+				t.Fatalf("Path = %q, want %q", got, tc.wantPath)
+			}
+			if got := entry.AuthorizationPolicy; got != tc.wantPolicy {
+				t.Fatalf("AuthorizationPolicy = %q, want %q", got, tc.wantPolicy)
+			}
+			if tc.wantPolicy != "" {
+				plugin := loaded.Plugins["roadmap"]
+				if plugin == nil {
+					t.Fatal(`Plugins["roadmap"] = nil`)
+				}
+				if got := plugin.AuthorizationPolicy; got != tc.wantPolicy {
+					t.Fatalf("Plugin AuthorizationPolicy = %q, want %q", got, tc.wantPolicy)
+				}
+			}
+			if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); !os.IsNotExist(err) {
+				t.Fatalf("lockfile should not be created, got err=%v", err)
+			}
+		})
 	}
 }
 
