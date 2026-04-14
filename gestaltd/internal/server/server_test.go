@@ -4930,6 +4930,9 @@ func TestWorkloadAuthorization_ExecuteOperation_UsesBoundIdentityAndRejectsSelec
 	if accessDeniedAudit["error"] != "operation access denied" {
 		t.Fatalf("unexpected denied operation error: %v", accessDeniedAudit["error"])
 	}
+	if accessDeniedAudit["authorization_decision"] != "operation_binding_denied" {
+		t.Fatalf("expected denied operation authorization_decision operation_binding_denied, got %v", accessDeniedAudit["authorization_decision"])
+	}
 
 	var selectorAudit map[string]any
 	if err := json.Unmarshal(lines[len(lines)-1], &selectorAudit); err != nil {
@@ -5010,12 +5013,14 @@ func TestHumanAuthorization_ExecuteOperation_UsesResolvedRoleAndRejectsDisallowe
 		},
 	}, nil, pluginDefs, nil)
 
+	var auditBuf bytes.Buffer
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.Services = svc
 		cfg.Authorizer = authz
 		cfg.PluginDefs = pluginDefs
+		cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -5048,6 +5053,43 @@ func TestHumanAuthorization_ExecuteOperation_UsesResolvedRoleAndRejectsDisallowe
 	if resp.StatusCode != http.StatusForbidden {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("expected 403, got %d: %s", resp.StatusCode, body)
+	}
+
+	lines := bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
+	if len(lines) == 0 {
+		t.Fatal("expected denial audit record")
+	}
+
+	var deniedAudit map[string]any
+	if err := json.Unmarshal(lines[len(lines)-1], &deniedAudit); err != nil {
+		t.Fatalf("parsing denied audit record: %v\nraw: %s", err, auditBuf.String())
+	}
+	if deniedAudit["provider"] != "svc" {
+		t.Fatalf("expected denied audit provider svc, got %v", deniedAudit["provider"])
+	}
+	if deniedAudit["operation"] != "admin" {
+		t.Fatalf("expected denied audit operation admin, got %v", deniedAudit["operation"])
+	}
+	if deniedAudit["allowed"] != false {
+		t.Fatalf("expected denied audit allowed=false, got %v", deniedAudit["allowed"])
+	}
+	if deniedAudit["auth_source"] != "api_token" {
+		t.Fatalf("expected denied audit auth_source api_token, got %v", deniedAudit["auth_source"])
+	}
+	if deniedAudit["subject_id"] != principal.UserSubjectID(viewer.ID) {
+		t.Fatalf("expected denied audit subject_id %q, got %v", principal.UserSubjectID(viewer.ID), deniedAudit["subject_id"])
+	}
+	if deniedAudit["access_policy"] != "sample_policy" {
+		t.Fatalf("expected denied audit access_policy sample_policy, got %v", deniedAudit["access_policy"])
+	}
+	if deniedAudit["access_role"] != "viewer" {
+		t.Fatalf("expected denied audit access_role viewer, got %v", deniedAudit["access_role"])
+	}
+	if deniedAudit["authorization_decision"] != "catalog_role_denied" {
+		t.Fatalf("expected denied audit authorization_decision catalog_role_denied, got %v", deniedAudit["authorization_decision"])
+	}
+	if deniedAudit["error"] != "operation access denied" {
+		t.Fatalf("expected denied audit error operation access denied, got %v", deniedAudit["error"])
 	}
 }
 
