@@ -155,9 +155,10 @@ func (r *Resolver) resolveWorkloadToken(token string) (*Principal, error) {
 		return nil, ErrInvalidToken
 	}
 	return &Principal{
-		Kind:      KindWorkload,
-		SubjectID: WorkloadSubjectID(workload.ID),
-		Source:    SourceWorkloadToken,
+		Kind:        KindWorkload,
+		SubjectID:   WorkloadSubjectID(workload.ID),
+		DisplayName: workload.DisplayName,
+		Source:      SourceWorkloadToken,
 	}, nil
 }
 

@@ -90,11 +90,9 @@ func principalFromProto(subject *proto.SubjectContext) *principal.Principal {
 		return nil
 	}
 	p := &principal.Principal{
-		SubjectID: subject.GetId(),
-		Identity: &core.UserIdentity{
-			DisplayName: subject.GetDisplayName(),
-		},
-		Source: sourceFromString(subject.GetAuthSource()),
+		SubjectID:   subject.GetId(),
+		DisplayName: subject.GetDisplayName(),
+		Source:      sourceFromString(subject.GetAuthSource()),
 	}
 	switch subject.GetKind() {
 	case string(principal.KindUser):
@@ -110,10 +108,12 @@ func principalFromProto(subject *proto.SubjectContext) *principal.Principal {
 	} else if strings.HasPrefix(subject.GetId(), "workload:") && p.Kind == "" {
 		p.Kind = principal.KindWorkload
 	}
-	if p.Identity.DisplayName == "" {
-		p.Identity = nil
+	if p.Kind == principal.KindUser && subject.GetDisplayName() != "" {
+		p.Identity = &core.UserIdentity{
+			DisplayName: subject.GetDisplayName(),
+		}
 	}
-	if p.UserID == "" && p.SubjectID == "" && p.Kind == "" && p.Identity == nil && p.Source == principal.SourceUnknown {
+	if p.UserID == "" && p.SubjectID == "" && p.Kind == "" && p.DisplayName == "" && p.Identity == nil && p.Source == principal.SourceUnknown {
 		return &principal.Principal{}
 	}
 	return p
