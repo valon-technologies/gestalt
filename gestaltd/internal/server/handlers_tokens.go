@@ -30,8 +30,9 @@ type createTokenResponse struct {
 func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 	auditAllowed := false
 	auditErr := errors.New("api token creation failed")
+	auditTarget := auditTarget{}
 	defer func() {
-		s.auditHTTPEvent(r.Context(), PrincipalFromContext(r.Context()), "", "api_token.create", auditAllowed, auditErr)
+		s.auditHTTPEventWithTarget(r.Context(), PrincipalFromContext(r.Context()), "", "api_token.create", auditAllowed, auditErr, auditTarget)
 	}()
 
 	userID, err := s.resolveUserID(w, r)
@@ -52,6 +53,7 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "name is required")
 		return
 	}
+	auditTarget = apiTokenAuditTarget("", req.Name)
 
 	if req.Scopes != "" {
 		for _, scope := range strings.Fields(req.Scopes) {
@@ -69,6 +71,7 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to generate token")
 		return
 	}
+	auditTarget = apiTokenAuditTarget(apiToken.ID, apiToken.Name)
 
 	auditAllowed = true
 	auditErr = nil
@@ -110,8 +113,10 @@ func (s *Server) listAPITokens(w http.ResponseWriter, r *http.Request) {
 func (s *Server) revokeAPIToken(w http.ResponseWriter, r *http.Request) {
 	auditAllowed := false
 	auditErr := errors.New("api token revoke failed")
+	id := chi.URLParam(r, "id")
+	auditTarget := apiTokenAuditTarget(id, "")
 	defer func() {
-		s.auditHTTPEvent(r.Context(), PrincipalFromContext(r.Context()), "", "api_token.revoke", auditAllowed, auditErr)
+		s.auditHTTPEventWithTarget(r.Context(), PrincipalFromContext(r.Context()), "", "api_token.revoke", auditAllowed, auditErr, auditTarget)
 	}()
 
 	userID, err := s.resolveUserID(w, r)
@@ -120,7 +125,6 @@ func (s *Server) revokeAPIToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	id := chi.URLParam(r, "id")
 	if err := s.apiTokens.RevokeAPIToken(r.Context(), userID, id); err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			auditErr = errors.New("token not found")
@@ -139,8 +143,9 @@ func (s *Server) revokeAPIToken(w http.ResponseWriter, r *http.Request) {
 func (s *Server) revokeAllAPITokens(w http.ResponseWriter, r *http.Request) {
 	auditAllowed := false
 	auditErr := errors.New("api token revoke all failed")
+	auditTarget := apiTokenCollectionAuditTarget()
 	defer func() {
-		s.auditHTTPEvent(r.Context(), PrincipalFromContext(r.Context()), "", "api_token.revoke_all", auditAllowed, auditErr)
+		s.auditHTTPEventWithTarget(r.Context(), PrincipalFromContext(r.Context()), "", "api_token.revoke_all", auditAllowed, auditErr, auditTarget)
 	}()
 
 	userID, err := s.resolveUserID(w, r)

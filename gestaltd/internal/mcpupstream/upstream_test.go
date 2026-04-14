@@ -104,6 +104,7 @@ func TestUpstream_DiscoverTools(t *testing.T) {
 	cat := u.Catalog()
 	if cat == nil {
 		t.Fatal("expected non-nil catalog")
+		return
 	}
 	if len(cat.Operations) != 2 {
 		t.Fatalf("expected 2 catalog operations, got %d", len(cat.Operations))
@@ -580,6 +581,7 @@ func TestUpstream_DiscoverToolsPreservesOutputSchema(t *testing.T) {
 	cat := u.Catalog()
 	if cat == nil {
 		t.Fatal("expected non-nil catalog")
+		return
 	}
 	if len(cat.Operations) != 1 {
 		t.Fatalf("expected 1 catalog operation, got %d", len(cat.Operations))

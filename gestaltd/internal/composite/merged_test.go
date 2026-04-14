@@ -138,6 +138,7 @@ func TestMergedCatalogIncludesConstructorMetadata(t *testing.T) {
 	cat := merged.Catalog()
 	if cat == nil {
 		t.Fatal("expected non-nil catalog")
+		return
 	}
 	if cat.DisplayName != "Override" {
 		t.Fatalf("DisplayName = %q, want %q", cat.DisplayName, "Override")

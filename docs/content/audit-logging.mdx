@@ -33,6 +33,9 @@ These fields are emitted when available:
 | --- | --- |
 | `auth_source` | Auth mechanism for the caller: `session`, `api_token`, `workload_token`, or `env` |
 | `user_id` | Stable internal user ID |
+| `target_kind` | Generic kind for the object the event acted on, such as `api_token` or `connection` |
+| `target_id` | Stable identifier for the affected object when one exists |
+| `target_name` | Human-readable label for the affected object |
 | `error` | Denial or failure reason |
 | `client_ip` | Client IP, preferring `X-Forwarded-For` |
 | `remote_addr` | Immediate peer address |
@@ -42,6 +45,13 @@ These fields are emitted when available:
 
 For platform-level events such as failed auth or API-token lifecycle, `provider` is empty because
 the event is not tied to a specific plugin.
+
+Management events populate the generic target fields when they can identify a
+single object. API-token create and revoke events use `target_kind=api_token`
+with the token ID and, for creates, the token name. Connection lifecycle events
+use `target_kind=connection` with `target_id` and `target_name` derived from the
+provider, connection, and instance being changed. Bulk revocations use
+`target_kind=api_token_collection` because no single token ID applies.
 
 ## Event Names
 

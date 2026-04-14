@@ -318,13 +318,14 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 	auditErr := errors.New("pending connection selection failed")
 	auditUserID := ""
 	auditAuthSource := ""
+	auditTarget := auditTarget{Kind: auditTargetKindConnection}
 	providerName := ""
 	defer func() {
 		if auditUserID != "" {
-			s.auditHTTPEventWithUserID(r.Context(), auditUserID, auditAuthSource, providerName, "connection.pending.select", auditAllowed, auditErr)
+			s.auditHTTPEventWithUserIDAndTarget(r.Context(), auditUserID, auditAuthSource, providerName, "connection.pending.select", auditAllowed, auditErr, auditTarget)
 			return
 		}
-		s.auditHTTPEvent(r.Context(), PrincipalFromContext(r.Context()), providerName, "connection.pending.select", auditAllowed, auditErr)
+		s.auditHTTPEventWithTarget(r.Context(), PrincipalFromContext(r.Context()), providerName, "connection.pending.select", auditAllowed, auditErr, auditTarget)
 	}()
 
 	if err := r.ParseForm(); err != nil {
@@ -353,6 +354,7 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	providerName = state.Token.Integration
+	auditTarget = connectionAuditTarget(state.Token.Integration, state.Token.Connection, state.Token.Instance)
 	if !s.authorizePendingConnection(w, r, state) {
 		auditErr = errors.New("pending connection authorization required")
 		return

@@ -489,6 +489,7 @@ func TestExecutableSDKExampleProviderAppliesConfigMetadataOverrides(t *testing.T
 	cat := prov.Catalog()
 	if cat == nil {
 		t.Fatal("expected non-nil catalog")
+		return
 	}
 	if cat.DisplayName != "Config Display" {
 		t.Fatalf("catalog DisplayName = %q, want %q", cat.DisplayName, "Config Display")

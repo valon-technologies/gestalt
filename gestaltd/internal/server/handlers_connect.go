@@ -30,12 +30,13 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	startedAt := time.Now()
 	auditAllowed := false
 	auditErr := errors.New("manual connection failed")
+	auditTarget := auditTarget{Kind: auditTargetKindConnection}
 	providerName := ""
 	metricProviderName := metricutil.UnknownAttrValue
 	connectionMode := metricutil.UnknownAttrValue
 	defer func() {
 		metricutil.RecordConnectionAuthMetrics(r.Context(), startedAt, metricProviderName, "manual", "complete", connectionMode, auditErr != nil)
-		s.auditHTTPEvent(r.Context(), PrincipalFromContext(r.Context()), providerName, "connection.manual.connect", auditAllowed, auditErr)
+		s.auditHTTPEventWithTarget(r.Context(), PrincipalFromContext(r.Context()), providerName, "connection.manual.connect", auditAllowed, auditErr, auditTarget)
 	}()
 	if p := PrincipalFromContext(r.Context()); p != nil && p.Kind == principal.KindWorkload {
 		auditErr = errWorkloadForbidden
@@ -89,6 +90,7 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		auditErr = errors.New("invalid instance")
 		return
 	}
+	auditTarget = connectionAuditTarget(req.Integration, manualConnection, manualInstance)
 
 	effectiveCredential, credErr := buildEffectiveManualCredential(req, auth)
 	if credErr != nil {
