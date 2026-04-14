@@ -95,6 +95,9 @@ func ValidateStructure(cfg *Config) error {
 	if err := validateDatastoreConfig(cfg); err != nil {
 		return err
 	}
+	if err := validateCacheConfig(cfg); err != nil {
+		return err
+	}
 
 	// Validate plugins
 	for name, entry := range cfg.Plugins {
@@ -314,6 +317,9 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry) error {
 	if err := validatePluginIndexedDBConfig(cfg, name, entry); err != nil {
 		return err
 	}
+	if err := validatePluginCacheBindings(cfg, name, entry); err != nil {
+		return err
+	}
 	if err := validateAuthorizationPolicyReference(cfg, "plugin", name, entry.AuthorizationPolicy); err != nil {
 		return err
 	}
@@ -338,6 +344,24 @@ func validateDatastoreConfig(cfg *Config) error {
 	return nil
 }
 
+func validateCacheConfig(cfg *Config) error {
+	for name, entry := range cfg.Providers.Cache {
+		if entry == nil {
+			return fmt.Errorf("config validation: providers.cache.%s is required", name)
+		}
+		if entry.Default {
+			return fmt.Errorf("config validation: providers.cache.%s.default is not supported", name)
+		}
+		if err := validatePluginOnlyProviderFields("providers.cache."+name, entry); err != nil {
+			return err
+		}
+		if err := validateProviderEntrySource("cache", name, entry); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) error {
 	if entry == nil {
 		return nil
@@ -347,6 +371,9 @@ func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) erro
 	}
 	if strings.TrimSpace(entry.IndexedDBSchema) != "" {
 		return fmt.Errorf("config validation: %s.indexeddbSchema is only supported on plugins.*", subject)
+	}
+	if len(entry.Cache) > 0 {
+		return fmt.Errorf("config validation: %s.cache is only supported on plugins.*", subject)
 	}
 	if entry.Surfaces != nil {
 		return fmt.Errorf("config validation: %s.surfaces is only supported on plugins.*", subject)
@@ -519,6 +546,55 @@ func validatePluginIndexedDBConfig(cfg *Config, name string, entry *ProviderEntr
 		return err
 	}
 	return nil
+}
+
+func validatePluginCacheBindings(cfg *Config, name string, entry *ProviderEntry) error {
+	if entry == nil {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(entry.Cache))
+	envNames := make(map[string]string, len(entry.Cache))
+	for i, binding := range entry.Cache {
+		binding = strings.TrimSpace(binding)
+		if binding == "" {
+			return fmt.Errorf("config validation: plugin %q cache[%d] is required", name, i)
+		}
+		if _, exists := seen[binding]; exists {
+			return fmt.Errorf("config validation: plugin %q cache[%d] duplicates %q", name, i, binding)
+		}
+		if _, ok := cfg.Providers.Cache[binding]; !ok {
+			return fmt.Errorf("config validation: plugin %q cache[%d] references unknown cache %q", name, i, binding)
+		}
+		envName := cacheSocketEnv(binding)
+		if otherBinding, exists := envNames[envName]; exists {
+			return fmt.Errorf("config validation: plugin %q cache[%d] %q conflicts with %q after cache env normalization (%s)", name, i, binding, otherBinding, envName)
+		}
+		entry.Cache[i] = binding
+		seen[binding] = struct{}{}
+		envNames[envName] = binding
+	}
+	return nil
+}
+
+func cacheSocketEnv(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "GESTALT_CACHE_SOCKET"
+	}
+	var b strings.Builder
+	b.WriteString("GESTALT_CACHE_SOCKET")
+	b.WriteByte('_')
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z':
+			b.WriteRune(r - ('a' - 'A'))
+		case r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+			b.WriteRune(r)
+		default:
+			b.WriteByte('_')
+		}
+	}
+	return b.String()
 }
 
 func normalizeMountedUIPaths(cfg *Config, appUIRefs map[string]struct{}) error {

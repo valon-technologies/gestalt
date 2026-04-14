@@ -64,6 +64,7 @@ type ProvidersConfig struct {
 	Audit     map[string]*ProviderEntry `yaml:"audit,omitempty"`
 	UI        map[string]*UIEntry       `yaml:"ui,omitempty"`
 	IndexedDB map[string]*ProviderEntry `yaml:"indexeddb,omitempty"`
+	Cache     map[string]*ProviderEntry `yaml:"cache,omitempty"`
 
 	// Legacy aliases retained for internal call sites and tests while the
 	// canonical YAML shape is migrating to top-level plugins and indexeddb.
@@ -79,6 +80,7 @@ const (
 	HostProviderKindTelemetry HostProviderKind = "telemetry"
 	HostProviderKindAudit     HostProviderKind = "audit"
 	HostProviderKindIndexedDB HostProviderKind = "indexeddb"
+	HostProviderKindCache     HostProviderKind = "cache"
 )
 
 type ServerProvidersConfig struct {
@@ -140,6 +142,7 @@ type ProviderEntry struct {
 	Connections       map[string]*ConnectionDef     `yaml:"connections,omitempty"`
 	AllowedOperations map[string]*OperationOverride `yaml:"allowedOperations,omitempty"`
 	IndexedDB         *PluginIndexedDBConfig        `yaml:"indexeddb,omitempty"`
+	Cache             []string                      `yaml:"cache,omitempty"`
 	IndexedDBSchema   string                        `yaml:"indexeddbSchema,omitempty"` // Legacy alias for IndexedDB.DB.
 	Surfaces          *ProviderSurfaceOverrides     `yaml:"surfaces,omitempty"`
 
@@ -721,6 +724,7 @@ func OverlayManagedPluginConfig(path string, cfg *Config) error {
 		{HostProviderKindTelemetry, cfg.Providers.Telemetry},
 		{HostProviderKindAudit, cfg.Providers.Audit},
 		{HostProviderKindIndexedDB, cfg.Providers.IndexedDB},
+		{HostProviderKindCache, cfg.Providers.Cache},
 	} {
 		kindNode := mappingValueNode(providersNode, string(collection.kind))
 		for name, entry := range collection.entries {
@@ -803,6 +807,7 @@ var legacyProviderEntryKeys = map[string]struct{}{
 	"allowedOperations": {},
 	"indexeddb":         {},
 	"indexeddbs":        {},
+	"cache":             {},
 	"surfaces":          {},
 }
 
@@ -1158,6 +1163,7 @@ func applyDefaults(cfg *Config) {
 	cfg.Providers.Telemetry = applyDefaultBuiltinProviderEntries(cfg.Providers.Telemetry, DefaultProviderInstance, "stdout")
 	cfg.Providers.Audit = applyDefaultBuiltinProviderEntries(cfg.Providers.Audit, DefaultProviderInstance, "inherit")
 	cfg.Providers.IndexedDB = nonNilProviderEntryMap(cfg.Providers.IndexedDB)
+	cfg.Providers.Cache = nonNilProviderEntryMap(cfg.Providers.Cache)
 	cfg.Providers.Plugins = cfg.Plugins
 	cfg.Providers.IndexedDBs = cfg.Providers.IndexedDB
 	cfg.Server.IndexedDB = cfg.Server.Providers.IndexedDB

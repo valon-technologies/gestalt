@@ -20,6 +20,7 @@ enum ProviderKind {
   PROVIDER_KIND_INDEXEDDB = 3;
   PROVIDER_KIND_SECRETS = 4;
   PROVIDER_KIND_TELEMETRY = 5;
+  PROVIDER_KIND_CACHE = 6;
 }
 
 message ProviderIdentity {

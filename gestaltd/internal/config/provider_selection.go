@@ -43,6 +43,8 @@ func (s ServerProvidersConfig) Selection(kind HostProviderKind) string {
 		return s.Audit
 	case HostProviderKindIndexedDB:
 		return s.IndexedDB
+	case HostProviderKindCache:
+		return ""
 	default:
 		return ""
 	}
@@ -64,6 +66,8 @@ func (c *Config) HostProviderEntries(kind HostProviderKind) map[string]*Provider
 		return c.Providers.Audit
 	case HostProviderKindIndexedDB:
 		return c.Providers.IndexedDB
+	case HostProviderKindCache:
+		return c.Providers.Cache
 	default:
 		return nil
 	}

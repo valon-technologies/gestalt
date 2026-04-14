@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	"github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
@@ -128,12 +129,15 @@ type Deps struct {
 	IndexedDBs            map[string]indexeddb.IndexedDB
 	IndexedDBDefs         map[string]*config.ProviderEntry
 	IndexedDBFactory      IndexedDBFactory
+	CacheDefs             map[string]*config.ProviderEntry
+	CacheFactory          CacheFactory
 	Egress                EgressDeps
 }
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthProvider, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
 type IndexedDBFactory func(node yaml.Node) (indexeddb.IndexedDB, error)
+type CacheFactory func(node yaml.Node) (corecache.Cache, error)
 type TelemetryFactory func(node yaml.Node) (core.TelemetryProvider, error)
 type AuditFactory func(ctx context.Context, cfg config.ProviderEntry, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error)
 
@@ -141,6 +145,7 @@ type FactoryRegistry struct {
 	Auth      AuthFactory
 	Secrets   map[string]SecretManagerFactory
 	IndexedDB IndexedDBFactory
+	Cache     CacheFactory
 	Telemetry map[string]TelemetryFactory
 	Audit     AuditFactory
 	Builtins  []core.Provider
@@ -362,6 +367,8 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	deps.SelectedIndexedDBName = selectedIndexedDBName
 	deps.IndexedDBDefs = cfg.Providers.IndexedDBs
 	deps.IndexedDBFactory = factories.IndexedDB
+	deps.CacheDefs = cfg.Providers.Cache
+	deps.CacheFactory = factories.Cache
 
 	closeSM = false
 	shutdownTelemetry = false
@@ -647,4 +654,26 @@ func buildIndexedDB(entry *config.ProviderEntry, factories *FactoryRegistry) (in
 		return nil, fmt.Errorf("datastore provider: %w", err)
 	}
 	return ds, nil
+}
+
+func buildCache(entry *config.ProviderEntry, factories *FactoryRegistry) (corecache.Cache, error) {
+	if entry == nil {
+		return nil, fmt.Errorf("cache provider is required")
+	}
+	if factories.Cache == nil {
+		return nil, fmt.Errorf("cache factory is not registered")
+	}
+	node := entry.Config
+	if !config.IsComponentRuntimeConfigNode(node) {
+		var err error
+		node, err = config.BuildComponentRuntimeConfigNode("cache", "cache", entry, entry.Config)
+		if err != nil {
+			return nil, fmt.Errorf("cache provider: %w", err)
+		}
+	}
+	value, err := factories.Cache(node)
+	if err != nil {
+		return nil, fmt.Errorf("cache provider: %w", err)
+	}
+	return value, nil
 }

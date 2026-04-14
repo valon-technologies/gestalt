@@ -250,6 +250,38 @@ func setupAuthProviderDir(t *testing.T, baseDir, name string) string {
 	return providerDir
 }
 
+func setupCacheProviderDir(t *testing.T, baseDir, name string) string {
+	t.Helper()
+
+	providerDir := filepath.Join(baseDir, "cache", name)
+	if err := os.MkdirAll(providerDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", providerDir, err)
+	}
+	writeTestFile(t, providerDir, "go.mod", []byte(testutil.GeneratedProviderModuleSource(t, "example.com/providers/cache/"+name)), 0o644)
+	writeTestFile(t, providerDir, "go.sum", testutil.GeneratedProviderModuleSum(t), 0o644)
+	writeTestFile(t, providerDir, "cache.go", []byte(testutil.GeneratedCachePackageSource()), 0o644)
+	artifactRel := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "cache-provider"))
+	artifactPath := filepath.Join(providerDir, filepath.FromSlash(artifactRel))
+	if err := os.MkdirAll(filepath.Dir(artifactPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", filepath.Dir(artifactPath), err)
+	}
+	if _, err := providerpkg.BuildSourceComponentReleaseBinary(providerDir, artifactPath, providermanifestv1.KindCache, runtime.GOOS, runtime.GOARCH); err != nil {
+		t.Fatalf("BuildSourceComponentReleaseBinary(%s): %v", providerDir, err)
+	}
+	writeManifestFile(t, providerDir, &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindCache,
+		Source:      "github.com/test/providers/cache/" + name,
+		Version:     "0.0.1-alpha.1",
+		DisplayName: "Test Cache " + name,
+		Spec:        &providermanifestv1.Spec{},
+		Artifacts: []providermanifestv1.Artifact{
+			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: artifactRel},
+		},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
+	})
+	return providerDir
+}
+
 func authProviderSource(name string) string {
 	source := testutil.GeneratedAuthPackageSource()
 	displayName := name
@@ -480,12 +512,20 @@ providers:
 	return cfgPath
 }
 
-func startGestaltd(t *testing.T, dir string, mountedUI *mountedUITestConfig) string {
+func startGestaltdWithConfig(t *testing.T, cfgPath string) string {
 	t.Helper()
 
 	port, holder := reservePort(t)
-	cfgPath := writeServeConfig(t, dir, port, mountedUI)
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
+
+	cfgBytes, err := os.ReadFile(cfgPath)
+	if err != nil {
+		t.Fatalf("read config: %v", err)
+	}
+	cfg := strings.Replace(string(cfgBytes), "port: 0", fmt.Sprintf("port: %d", port), 1)
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
 
 	_ = holder.Close()
 	cmd := exec.Command(gestaltdBin, "serve", "--config", cfgPath)
@@ -533,6 +573,11 @@ func startGestaltd(t *testing.T, dir string, mountedUI *mountedUITestConfig) str
 	}
 
 	return baseURL
+}
+
+func startGestaltd(t *testing.T, dir string, mountedUI *mountedUITestConfig) string {
+	t.Helper()
+	return startGestaltdWithConfig(t, writeServeConfig(t, dir, 0, mountedUI))
 }
 
 func TestE2EServeAndHealthCheck(t *testing.T) {
@@ -657,6 +702,58 @@ func TestE2EAdminUI(t *testing.T) {
 			t.Fatalf("expected redirect to /admin/, got Location: %s", loc)
 		}
 	})
+}
+
+func TestE2EServeStartsWithPluginBoundCacheProvider(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping E2E cache serve test in short mode")
+	}
+
+	dir := t.TempDir()
+	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
+	cacheManifest := componentProviderManifestPath(t, setupCacheProviderDir(t, dir, "session"))
+	pluginManifest := componentProviderManifestPath(t, setupPrebuiltPluginDir(t, dir))
+	cfgPath := filepath.Join(dir, "config-cache.yaml")
+
+	cfg := fmt.Sprintf(`server:
+  public:
+    port: 0
+  encryptionKey: test-cache-serve-e2e-key
+  providers:
+    indexeddb: inmem
+providers:
+  indexeddb:
+    inmem:
+      source:
+        path: %s
+  cache:
+    session:
+      source:
+        path: %s
+plugins:
+  example:
+    source:
+      path: %s
+    cache:
+      - session
+`, indexedDBManifest, cacheManifest, pluginManifest)
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	baseURL := startGestaltdWithConfig(t, cfgPath)
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(baseURL + "/api/v1/integrations")
+	if err != nil {
+		t.Fatalf("GET /api/v1/integrations: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected /api/v1/integrations 200, got %d: %s", resp.StatusCode, body)
+	}
 }
 
 func TestE2EInitLocalProviders(t *testing.T) {

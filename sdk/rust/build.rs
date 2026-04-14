@@ -14,6 +14,7 @@ fn main() {
         proto_root.join("v1").join("plugin.proto"),
         proto_root.join("v1").join("runtime.proto"),
         proto_root.join("v1").join("auth.proto"),
+        proto_root.join("v1").join("cache.proto"),
         proto_root.join("v1").join("secrets.proto"),
         proto_root.join("v1").join("datastore.proto"),
     ];

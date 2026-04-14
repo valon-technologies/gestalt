@@ -824,6 +824,113 @@ func TestManagedIndexedDBSourcesLoadForExecutionWithMultipleBindings(t *testing.
 	}
 }
 
+func TestManagedCacheSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	sessionSource := "github.com/acme/providers/cache-session"
+	rateLimitSource := "github.com/acme/providers/cache-rate-limit"
+	version := "1.0.0"
+
+	sessionArchivePath := buildExecutableArchive(t, dir, "cache-session-src", sessionSource, version, providermanifestv1.KindCache, "cache-session", "session-cache-binary")
+	rateLimitArchivePath := buildExecutableArchive(t, dir, "cache-rate-limit-src", rateLimitSource, version, providermanifestv1.KindCache, "cache-rate-limit", "rate-limit-cache-binary")
+
+	sessionArchiveData, err := os.ReadFile(sessionArchivePath)
+	if err != nil {
+		t.Fatalf("read session cache archive: %v", err)
+	}
+	sessionArchiveSum := sha256.Sum256(sessionArchiveData)
+
+	rateLimitArchiveData, err := os.ReadFile(rateLimitArchivePath)
+	if err != nil {
+		t.Fatalf("read rate limit cache archive: %v", err)
+	}
+	rateLimitArchiveSum := sha256.Sum256(rateLimitArchiveData)
+
+	resolver := &fakeMultiResolver{
+		results: map[string]fakeResolverResult{
+			sessionSource: {
+				archivePath: sessionArchivePath,
+				resolvedURL: "https://example.com/cache-session.tar.gz",
+				sha256:      hex.EncodeToString(sessionArchiveSum[:]),
+			},
+			rateLimitSource: {
+				archivePath: rateLimitArchivePath,
+				resolvedURL: "https://example.com/cache-rate-limit.tar.gz",
+				sha256:      hex.EncodeToString(rateLimitArchiveSum[:]),
+			},
+		},
+	}
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	indexedDBManifestPath := writeStubIndexedDBManifest(t, dir)
+	configYAML := strings.Join([]string{
+		"providers:",
+		"  indexeddb:",
+		"    main:",
+		"      source:",
+		"        path: " + indexedDBManifestPath,
+		"      config:",
+		`        path: "` + filepath.Join(dir, "gestalt.db") + `"`,
+		"  cache:",
+		"    session:",
+		"      source:",
+		"        ref: " + sessionSource,
+		"        version: " + version,
+		"    rate_limit:",
+		"      source:",
+		"        ref: " + rateLimitSource,
+		"        version: " + version,
+		"server:",
+		"  indexeddb: main",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle(resolver)
+	lock, err := lc.InitAtPath(configPath)
+	if err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+	if len(lock.Caches) != 2 {
+		t.Fatalf("lock.Caches = %#v, want 2 entries", lock.Caches)
+	}
+	if _, ok := lock.Caches["session"]; !ok {
+		t.Fatal(`lock.Caches["session"] not found`)
+	}
+	if _, ok := lock.Caches["rate_limit"]; !ok {
+		t.Fatal(`lock.Caches["rate_limit"] not found`)
+	}
+
+	callsBefore := len(resolver.calls)
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
+	}
+	if len(resolver.calls) != callsBefore {
+		t.Fatalf("resolver called during locked load: got %d calls, want %d", len(resolver.calls), callsBefore)
+	}
+
+	for _, name := range []string{"session", "rate_limit"} {
+		entry := cfg.Providers.Cache[name]
+		if entry == nil {
+			t.Fatalf("cfg.Providers.Cache[%q] = nil", name)
+		}
+		if entry.ResolvedManifest == nil {
+			t.Fatalf("cfg.Providers.Cache[%q].ResolvedManifest = nil", name)
+		}
+		wantCommand := resolveLockPath(artifactsDir, lock.Caches[name].Executable)
+		if entry.Command != wantCommand {
+			t.Fatalf("cfg.Providers.Cache[%q].Command = %q, want %q", name, entry.Command, wantCommand)
+		}
+	}
+}
+
 func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 	t.Parallel()
 
