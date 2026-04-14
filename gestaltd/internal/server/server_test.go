@@ -3,9 +3,11 @@ package server_test
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -46,6 +48,16 @@ import (
 )
 
 func newTestServer(t *testing.T, opts ...func(*server.Config)) *httptest.Server {
+	t.Helper()
+	return newTestHTTPServer(t, httptest.NewServer, opts...)
+}
+
+func newTestHTTPServer(t *testing.T, start func(http.Handler) *httptest.Server, opts ...func(*server.Config)) *httptest.Server {
+	t.Helper()
+	return start(newTestHandler(t, opts...))
+}
+
+func newTestHandler(t *testing.T, opts ...func(*server.Config)) http.Handler {
 	t.Helper()
 	cfg := server.Config{
 		Auth:     &coretesting.StubAuthProvider{N: "none"},
@@ -93,7 +105,31 @@ func newTestServer(t *testing.T, opts ...func(*server.Config)) *httptest.Server 
 	if err != nil {
 		t.Fatalf("creating server: %v", err)
 	}
-	return httptest.NewServer(srv)
+	return srv
+}
+
+func newVirtualHostClient(t *testing.T, hostAddrs map[string]string) *http.Client {
+	t.Helper()
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("cookiejar.New: %v", err)
+	}
+	dialer := &net.Dialer{}
+	return &http.Client{
+		Jar: jar,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				if actual, ok := hostAddrs[addr]; ok {
+					addr = actual
+				}
+				return dialer.DialContext(ctx, network, addr)
+			},
+		},
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 }
 
 func extractHiddenInputValue(t *testing.T, html, name string) string {
@@ -272,6 +308,90 @@ func TestNewServerRequiresStateSecretWithAuth(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "state secret is required") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestNewServerAdminAuthorizationRequiresValidSplitBaseURLs(t *testing.T) {
+	t.Parallel()
+
+	makeConfig := func() server.Config {
+		svc := coretesting.NewStubServices(t)
+		reg := registry.New()
+		return server.Config{
+			Auth:      &coretesting.StubAuthProvider{N: "google"},
+			Services:  svc,
+			Providers: &reg.Providers,
+			Invoker:   invocation.NewBroker(&reg.Providers, svc.Users, svc.Tokens),
+			StateSecret: []byte(
+				"0123456789abcdef0123456789abcdef",
+			),
+			Admin: server.AdminRouteConfig{
+				AuthorizationPolicy: "admin_policy",
+			},
+		}
+	}
+
+	tests := []struct {
+		name              string
+		routeProfile      server.RouteProfile
+		publicBaseURL     string
+		managementBaseURL string
+		admin             server.AdminRouteConfig
+		want              string
+	}{
+		{
+			name:              "route profile all rejects management base url",
+			routeProfile:      server.RouteProfileAll,
+			publicBaseURL:     "https://gestalt.example.test",
+			managementBaseURL: "https://gestalt.example.test:9090",
+			admin:             server.AdminRouteConfig{AuthorizationPolicy: "admin_policy"},
+			want:              "ManagementBaseURL requires RouteProfilePublic or RouteProfileManagement",
+		},
+		{
+			name:              "route profile public rejects mismatched management hostname",
+			routeProfile:      server.RouteProfilePublic,
+			publicBaseURL:     "https://gestalt.example.test",
+			managementBaseURL: "https://evil.example.test:9090",
+			admin:             server.AdminRouteConfig{AuthorizationPolicy: "admin_policy"},
+			want:              "PublicBaseURL and ManagementBaseURL must use the same hostname",
+		},
+		{
+			name:              "route profile public rejects insecure management url",
+			routeProfile:      server.RouteProfilePublic,
+			publicBaseURL:     "https://gestalt.example.test",
+			managementBaseURL: "http://gestalt.example.test:9090",
+			admin:             server.AdminRouteConfig{AuthorizationPolicy: "admin_policy"},
+			want:              "ManagementBaseURL must use https when PublicBaseURL uses https",
+		},
+		{
+			name:         "blank allowed role is rejected",
+			routeProfile: server.RouteProfileAll,
+			admin: server.AdminRouteConfig{
+				AuthorizationPolicy: "admin_policy",
+				AllowedRoles:        []string{""},
+			},
+			want: "admin allowedRoles[0] is required",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := makeConfig()
+			cfg.RouteProfile = tc.routeProfile
+			cfg.PublicBaseURL = tc.publicBaseURL
+			cfg.ManagementBaseURL = tc.managementBaseURL
+			if tc.admin.AuthorizationPolicy != "" || tc.admin.AllowedRoles != nil {
+				cfg.Admin = tc.admin
+			}
+
+			_, err := server.New(cfg)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("server.New error = %v, want substring %q", err, tc.want)
+			}
+		})
 	}
 }
 
@@ -517,6 +637,358 @@ func TestMountedWebUIRoutes_HumanAuthorization(t *testing.T) {
 	}
 	if !strings.Contains(string(body), "protected-sample") {
 		t.Fatalf("asset body = %q, want protected sample asset", body)
+	}
+}
+
+func TestBuiltInAdminRoute_HumanAuthorization(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>protected-admin-shell</html>"), 0o644); err != nil {
+		t.Fatalf("WriteFile index.html: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "theme.css"), []byte("body{background:#eee;}"), 0o644); err != nil {
+		t.Fatalf("WriteFile theme.css: %v", err)
+	}
+	handler, err := testutilWebUIHandler(dir)
+	if err != nil {
+		t.Fatalf("webui handler: %v", err)
+	}
+
+	svc := coretesting.NewStubServices(t)
+	viewer := seedUser(t, svc, "viewer@example.test")
+	admin := seedUser(t, svc, "admin@example.test")
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"admin_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
+					{SubjectID: principal.UserSubjectID(admin.ID), Role: "admin"},
+				},
+			},
+		},
+	}, nil, nil, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				switch token {
+				case "viewer-session":
+					return &core.UserIdentity{Email: "viewer@example.test"}, nil
+				case "admin-session":
+					return &core.UserIdentity{Email: "admin@example.test"}, nil
+				default:
+					return nil, fmt.Errorf("invalid token")
+				}
+			},
+		}
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.Admin = server.AdminRouteConfig{
+			AuthorizationPolicy: "admin_policy",
+			AllowedRoles:        []string{"admin"},
+		}
+		cfg.AdminUI = handler
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	noRedirect := &http.Client{CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+
+	resp, err := noRedirect.Get(ts.URL + "/admin/?tab=members")
+	if err != nil {
+		t.Fatalf("GET protected admin without auth: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusFound)
+	}
+	if got, want := resp.Header.Get("Location"), "/api/v1/auth/login?next=%2Fadmin%2F%3Ftab%3Dmembers"; got != want {
+		t.Fatalf("Location = %q, want %q", got, want)
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin/", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET protected admin with viewer session: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("viewer admin status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET protected admin with admin session: %v", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll protected admin: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("admin status = %d, want 200", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), "protected-admin-shell") {
+		t.Fatalf("body = %q, want protected admin shell", body)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/theme.css", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET protected admin asset: %v", err)
+	}
+	body, err = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll protected admin asset: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("admin asset status = %d, want 200", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), "background") {
+		t.Fatalf("admin asset body = %q, want stylesheet", body)
+	}
+}
+
+func TestBuiltInAdminRoute_HumanAuthorizationOnManagementProfile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>protected-admin-shell</html>"), 0o644); err != nil {
+		t.Fatalf("WriteFile index.html: %v", err)
+	}
+	handler, err := testutilWebUIHandler(dir)
+	if err != nil {
+		t.Fatalf("webui handler: %v", err)
+	}
+
+	svc := coretesting.NewStubServices(t)
+	viewer := seedUser(t, svc, "viewer@example.test")
+	admin := seedUser(t, svc, "admin@example.test")
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"admin_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
+					{SubjectID: principal.UserSubjectID(admin.ID), Role: "admin"},
+				},
+			},
+		},
+	}, nil, nil, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				switch token {
+				case "viewer-session":
+					return &core.UserIdentity{Email: "viewer@example.test"}, nil
+				case "admin-session":
+					return &core.UserIdentity{Email: "admin@example.test"}, nil
+				default:
+					return nil, fmt.Errorf("invalid token")
+				}
+			},
+		}
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.RouteProfile = server.RouteProfileManagement
+		cfg.PublicBaseURL = "https://gestalt.example.test"
+		cfg.ManagementBaseURL = "https://gestalt.example.test:9090"
+		cfg.Admin = server.AdminRouteConfig{
+			AuthorizationPolicy: "admin_policy",
+			AllowedRoles:        []string{"admin"},
+		}
+		cfg.AdminUI = handler
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	noRedirect := &http.Client{CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+
+	resp, err := noRedirect.Get(ts.URL + "/admin/?tab=members")
+	if err != nil {
+		t.Fatalf("GET protected management admin without auth: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusFound)
+	}
+	if got, want := resp.Header.Get("Location"), "https://gestalt.example.test/api/v1/auth/login?next=https%3A%2F%2Fgestalt.example.test%3A9090%2Fadmin%2F%3Ftab%3Dmembers"; got != want {
+		t.Fatalf("Location = %q, want %q", got, want)
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin/", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET protected management admin with viewer session: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("viewer management admin status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET protected management admin with admin session: %v", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll protected management admin: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("management admin status = %d, want 200", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), "protected-admin-shell") {
+		t.Fatalf("body = %q, want protected admin shell", body)
+	}
+}
+
+func TestBuiltInAdminRoute_HumanAuthorizationSplitManagementLoginFlow(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>protected-admin-shell</html>"), 0o644); err != nil {
+		t.Fatalf("WriteFile index.html: %v", err)
+	}
+	handler, err := testutilWebUIHandler(dir)
+	if err != nil {
+		t.Fatalf("webui handler: %v", err)
+	}
+
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	auth := &stubHostIssuedSessionAuth{secret: secret}
+	svc := coretesting.NewStubServices(t)
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"admin_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{Email: "host@example.com", Role: "admin"},
+				},
+			},
+		},
+	}, nil, nil, nil)
+
+	publicListener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen public: %v", err)
+	}
+	managementListener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		_ = publicListener.Close()
+		t.Fatalf("listen management: %v", err)
+	}
+	publicPort := publicListener.Addr().(*net.TCPAddr).Port
+	managementPort := managementListener.Addr().(*net.TCPAddr).Port
+	publicURL := fmt.Sprintf("https://gestalt.example.test:%d", publicPort)
+	managementURL := fmt.Sprintf("https://gestalt.example.test:%d", managementPort)
+
+	publicTS := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
+		cfg.Auth = auth
+		cfg.StateSecret = secret
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.PublicBaseURL = publicURL
+		cfg.ManagementBaseURL = managementURL
+		cfg.RouteProfile = server.RouteProfilePublic
+		cfg.Admin = server.AdminRouteConfig{
+			AuthorizationPolicy: "admin_policy",
+		}
+	}))
+	publicTS.Listener = publicListener
+	publicTS.StartTLS()
+	testutil.CloseOnCleanup(t, publicTS)
+
+	managementTS := httptest.NewUnstartedServer(newTestHandler(t, func(cfg *server.Config) {
+		cfg.Auth = auth
+		cfg.StateSecret = secret
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.PublicBaseURL = publicURL
+		cfg.ManagementBaseURL = managementURL
+		cfg.RouteProfile = server.RouteProfileManagement
+		cfg.Admin = server.AdminRouteConfig{
+			AuthorizationPolicy: "admin_policy",
+		}
+		cfg.AdminUI = handler
+	}))
+	managementTS.Listener = managementListener
+	managementTS.StartTLS()
+	testutil.CloseOnCleanup(t, managementTS)
+
+	client := newVirtualHostClient(t, map[string]string{
+		fmt.Sprintf("gestalt.example.test:%d", publicPort):     publicTS.Listener.Addr().String(),
+		fmt.Sprintf("gestalt.example.test:%d", managementPort): managementTS.Listener.Addr().String(),
+	})
+
+	adminResp, err := client.Get(managementURL + "/admin/?tab=members")
+	if err != nil {
+		t.Fatalf("GET protected management admin without auth: %v", err)
+	}
+	defer func() { _ = adminResp.Body.Close() }()
+	if adminResp.StatusCode != http.StatusFound {
+		t.Fatalf("initial admin status = %d, want %d", adminResp.StatusCode, http.StatusFound)
+	}
+
+	loginStartURL := adminResp.Header.Get("Location")
+	if got, want := loginStartURL, publicURL+"/api/v1/auth/login?next="+url.QueryEscape(managementURL+"/admin/?tab=members"); got != want {
+		t.Fatalf("initial admin redirect = %q, want %q", got, want)
+	}
+
+	loginStartResp, err := client.Get(loginStartURL)
+	if err != nil {
+		t.Fatalf("GET browser login start: %v", err)
+	}
+	defer func() { _ = loginStartResp.Body.Close() }()
+	if loginStartResp.StatusCode != http.StatusFound {
+		t.Fatalf("login start status = %d, want %d", loginStartResp.StatusCode, http.StatusFound)
+	}
+	loginURL, err := url.Parse(loginStartResp.Header.Get("Location"))
+	if err != nil {
+		t.Fatalf("parse start login redirect: %v", err)
+	}
+
+	callbackResp, err := client.Get(publicURL + "/api/v1/auth/login/callback?code=good-code&state=" + url.QueryEscape(loginURL.Query().Get("state")))
+	if err != nil {
+		t.Fatalf("GET browser login callback: %v", err)
+	}
+	defer func() { _ = callbackResp.Body.Close() }()
+	if callbackResp.StatusCode != http.StatusFound {
+		t.Fatalf("callback status = %d, want %d", callbackResp.StatusCode, http.StatusFound)
+	}
+	if got, want := callbackResp.Header.Get("Location"), managementURL+"/admin/?tab=members"; got != want {
+		t.Fatalf("callback redirect = %q, want %q", got, want)
+	}
+
+	finalResp, err := client.Get(callbackResp.Header.Get("Location"))
+	if err != nil {
+		t.Fatalf("GET management admin after login: %v", err)
+	}
+	body, err := io.ReadAll(finalResp.Body)
+	_ = finalResp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll protected management admin after login: %v", err)
+	}
+	if finalResp.StatusCode != http.StatusOK {
+		t.Fatalf("final admin status = %d, want 200", finalResp.StatusCode)
+	}
+	if !strings.Contains(string(body), "protected-admin-shell") {
+		t.Fatalf("body = %q, want protected admin shell", body)
 	}
 }
 
@@ -9291,65 +9763,154 @@ func TestLoginCallback_HostIssuesSessionWhenProviderDoesNot(t *testing.T) {
 func TestBrowserLoginRedirect_RedirectsBackToNextPath(t *testing.T) {
 	t.Parallel()
 
-	secret := []byte("0123456789abcdef0123456789abcdef")
-	auth := &stubHostIssuedSessionAuth{secret: secret}
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatalf("cookiejar.New: %v", err)
-	}
-	client := &http.Client{
-		Jar: jar,
-		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-			return http.ErrUseLastResponse
+	tests := []struct {
+		name              string
+		next              string
+		publicBaseURL     string
+		managementBaseURL string
+		enableAdminAuth   bool
+		routeProfile      server.RouteProfile
+		wantStartStatus   int
+		wantState         string
+		wantRedirect      string
+	}{
+		{
+			name:            "relative next path",
+			next:            "/sample-portal/admin?tab=members",
+			wantStartStatus: http.StatusFound,
+			wantState:       "/sample-portal/admin",
+			wantRedirect:    "/sample-portal/admin?tab=members",
+		},
+		{
+			name:              "trusted absolute management next path",
+			next:              "https://gestalt.example.test:9090/admin?tab=members",
+			publicBaseURL:     "https://gestalt.example.test",
+			managementBaseURL: "https://gestalt.example.test:9090",
+			enableAdminAuth:   true,
+			routeProfile:      server.RouteProfilePublic,
+			wantStartStatus:   http.StatusFound,
+			wantState:         "/admin",
+			wantRedirect:      "https://gestalt.example.test:9090/admin?tab=members",
+		},
+		{
+			name:              "rejects absolute management next path when admin auth is disabled",
+			next:              "https://gestalt.example.test:9090/admin?tab=members",
+			publicBaseURL:     "https://gestalt.example.test",
+			managementBaseURL: "https://gestalt.example.test:9090",
+			routeProfile:      server.RouteProfilePublic,
+			wantStartStatus:   http.StatusBadRequest,
+		},
+		{
+			name:              "rejects untrusted absolute next path",
+			next:              "https://evil.example.test/admin?tab=members",
+			publicBaseURL:     "https://gestalt.example.test",
+			managementBaseURL: "https://gestalt.example.test:9090",
+			enableAdminAuth:   true,
+			routeProfile:      server.RouteProfilePublic,
+			wantStartStatus:   http.StatusBadRequest,
+		},
+		{
+			name:              "rejects absolute management next path outside admin",
+			next:              "https://gestalt.example.test:9090/metrics",
+			publicBaseURL:     "https://gestalt.example.test",
+			managementBaseURL: "https://gestalt.example.test:9090",
+			enableAdminAuth:   true,
+			routeProfile:      server.RouteProfilePublic,
+			wantStartStatus:   http.StatusBadRequest,
+		},
+		{
+			name:              "rejects absolute management next path with admin traversal",
+			next:              "https://gestalt.example.test:9090/admin/%2e%2e/metrics",
+			publicBaseURL:     "https://gestalt.example.test",
+			managementBaseURL: "https://gestalt.example.test:9090",
+			enableAdminAuth:   true,
+			routeProfile:      server.RouteProfilePublic,
+			wantStartStatus:   http.StatusBadRequest,
 		},
 	}
 
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Auth = auth
-		cfg.StateSecret = secret
-		cfg.Services = coretesting.NewStubServices(t)
-	})
-	testutil.CloseOnCleanup(t, ts)
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	startResp, err := client.Get(ts.URL + "/api/v1/auth/login?next=%2Fsample-portal%2Fadmin%3Ftab%3Dmembers")
-	if err != nil {
-		t.Fatalf("start browser login: %v", err)
-	}
-	defer func() { _ = startResp.Body.Close() }()
-	if startResp.StatusCode != http.StatusFound {
-		t.Fatalf("start status = %d, want %d", startResp.StatusCode, http.StatusFound)
-	}
-	loginURL, err := url.Parse(startResp.Header.Get("Location"))
-	if err != nil {
-		t.Fatalf("parse start login redirect: %v", err)
-	}
-	if got := loginURL.Host; got != "idp.example.test" {
-		t.Fatalf("login redirect host = %q, want %q", got, "idp.example.test")
-	}
-	if got := loginURL.Query().Get("state"); got != "/sample-portal/admin" {
-		t.Fatalf("login redirect state = %q, want %q", got, "/sample-portal/admin")
-	}
+			secret := []byte("0123456789abcdef0123456789abcdef")
+			auth := &stubHostIssuedSessionAuth{secret: secret}
+			jar, err := cookiejar.New(nil)
+			if err != nil {
+				t.Fatalf("cookiejar.New: %v", err)
+			}
+			client := &http.Client{
+				Jar: jar,
+				CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+					return http.ErrUseLastResponse
+				},
+			}
 
-	callbackResp, err := client.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=" + url.QueryEscape(loginURL.Query().Get("state")))
-	if err != nil {
-		t.Fatalf("browser login callback: %v", err)
-	}
-	defer func() { _ = callbackResp.Body.Close() }()
-	if callbackResp.StatusCode != http.StatusFound {
-		t.Fatalf("callback status = %d, want %d", callbackResp.StatusCode, http.StatusFound)
-	}
-	if got, want := callbackResp.Header.Get("Location"), "/sample-portal/admin?tab=members"; got != want {
-		t.Fatalf("callback redirect = %q, want %q", got, want)
-	}
+			ts := newTestServer(t, func(cfg *server.Config) {
+				cfg.Auth = auth
+				cfg.StateSecret = secret
+				cfg.Services = coretesting.NewStubServices(t)
+				cfg.PublicBaseURL = tc.publicBaseURL
+				cfg.ManagementBaseURL = tc.managementBaseURL
+				cfg.RouteProfile = tc.routeProfile
+				if tc.enableAdminAuth {
+					cfg.Admin = server.AdminRouteConfig{AuthorizationPolicy: "admin_policy"}
+				}
+			})
+			testutil.CloseOnCleanup(t, ts)
 
-	foundSession := false
-	for _, cookie := range jar.Cookies(callbackResp.Request.URL) {
-		if cookie.Name == "session_token" && cookie.Value != "" {
-			foundSession = true
-		}
-	}
-	if !foundSession {
-		t.Fatal("expected session cookie after browser login callback")
+			startResp, err := client.Get(ts.URL + "/api/v1/auth/login?next=" + url.QueryEscape(tc.next))
+			if err != nil {
+				t.Fatalf("start browser login: %v", err)
+			}
+			defer func() { _ = startResp.Body.Close() }()
+			if startResp.StatusCode != tc.wantStartStatus {
+				t.Fatalf("start status = %d, want %d", startResp.StatusCode, tc.wantStartStatus)
+			}
+			if tc.wantStartStatus != http.StatusFound {
+				body, readErr := io.ReadAll(startResp.Body)
+				if readErr != nil {
+					t.Fatalf("ReadAll start error body: %v", readErr)
+				}
+				if !strings.Contains(string(body), "invalid next path") {
+					t.Fatalf("start error body = %q, want %q", body, "invalid next path")
+				}
+				return
+			}
+			loginURL, err := url.Parse(startResp.Header.Get("Location"))
+			if err != nil {
+				t.Fatalf("parse start login redirect: %v", err)
+			}
+			if got := loginURL.Host; got != "idp.example.test" {
+				t.Fatalf("login redirect host = %q, want %q", got, "idp.example.test")
+			}
+			if got := loginURL.Query().Get("state"); got != tc.wantState {
+				t.Fatalf("login redirect state = %q, want %q", got, tc.wantState)
+			}
+
+			callbackResp, err := client.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=" + url.QueryEscape(loginURL.Query().Get("state")))
+			if err != nil {
+				t.Fatalf("browser login callback: %v", err)
+			}
+			defer func() { _ = callbackResp.Body.Close() }()
+			if callbackResp.StatusCode != http.StatusFound {
+				t.Fatalf("callback status = %d, want %d", callbackResp.StatusCode, http.StatusFound)
+			}
+			if got := callbackResp.Header.Get("Location"); got != tc.wantRedirect {
+				t.Fatalf("callback redirect = %q, want %q", got, tc.wantRedirect)
+			}
+
+			foundSession := false
+			for _, cookie := range jar.Cookies(callbackResp.Request.URL) {
+				if cookie.Name == "session_token" && cookie.Value != "" {
+					foundSession = true
+				}
+			}
+			if !foundSession {
+				t.Fatal("expected session cookie after browser login callback")
+			}
+		})
 	}
 }
 

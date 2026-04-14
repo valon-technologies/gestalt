@@ -21,6 +21,76 @@ type mountedWebUINavigationPathResolver interface {
 	NavigationPathForRequest(string) (string, bool)
 }
 
+type protectedUILoginRedirect func(http.ResponseWriter, *http.Request) error
+
+func normalizeAdminRouteConfig(admin AdminRouteConfig) (AdminRouteConfig, error) {
+	admin.AuthorizationPolicy = strings.TrimSpace(admin.AuthorizationPolicy)
+	if admin.AuthorizationPolicy == "" {
+		if len(admin.AllowedRoles) > 0 {
+			return AdminRouteConfig{}, fmt.Errorf("admin allowedRoles requires AuthorizationPolicy")
+		}
+		admin.AllowedRoles = nil
+		return admin, nil
+	}
+	if len(admin.AllowedRoles) == 0 {
+		admin.AllowedRoles = []string{"admin"}
+		return admin, nil
+	}
+
+	roles, err := providerpkg.NormalizeWebUIAllowedRoles("admin allowedRoles", admin.AllowedRoles)
+	if err != nil {
+		return AdminRouteConfig{}, err
+	}
+	admin.AllowedRoles = roles
+	return admin, nil
+}
+
+func validateAdminRouteRuntime(admin AdminRouteConfig, noAuth bool, publicBaseURL, managementBaseURL string, routeProfile RouteProfile) error {
+	if admin.AuthorizationPolicy == "" {
+		return nil
+	}
+	if noAuth {
+		return fmt.Errorf("admin authorization requires auth to be enabled")
+	}
+	if routeProfile == RouteProfileAll {
+		if strings.TrimSpace(managementBaseURL) != "" {
+			return fmt.Errorf("ManagementBaseURL requires RouteProfilePublic or RouteProfileManagement for admin authorization")
+		}
+		return nil
+	}
+
+	publicURL, err := parseAbsoluteBaseURL("PublicBaseURL", publicBaseURL)
+	if err != nil {
+		return err
+	}
+	managementURL, err := parseAbsoluteBaseURL("ManagementBaseURL", managementBaseURL)
+	if err != nil {
+		return err
+	}
+	if publicURL.Hostname() != managementURL.Hostname() {
+		return fmt.Errorf("PublicBaseURL and ManagementBaseURL must use the same hostname for admin authorization")
+	}
+	if strings.EqualFold(publicURL.Scheme, "https") && !strings.EqualFold(managementURL.Scheme, "https") {
+		return fmt.Errorf("ManagementBaseURL must use https when PublicBaseURL uses https for admin authorization")
+	}
+	return nil
+}
+
+func parseAbsoluteBaseURL(label, raw string) (*url.URL, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, fmt.Errorf("%s is required", label)
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || !parsed.IsAbs() || parsed.Host == "" {
+		return nil, fmt.Errorf("%s must be an absolute URL", label)
+	}
+	if parsed.RawQuery != "" || parsed.Fragment != "" {
+		return nil, fmt.Errorf("%s may not include query or fragment", label)
+	}
+	return parsed, nil
+}
+
 func normalizeMountedWebUIs(mounted []MountedWebUI) ([]MountedWebUI, error) {
 	if len(mounted) == 0 {
 		return nil, nil
@@ -120,12 +190,38 @@ func (s *Server) mountedWebUIHandler(mounted MountedWebUI) http.Handler {
 	if mounted.Path != "/" {
 		inner = http.StripPrefix(mounted.Path, inner)
 	}
+	return s.protectedUIHandler(mounted, inner, s.redirectMountedWebUILogin)
+}
+
+func (s *Server) adminUIHandler() http.Handler {
+	if s.adminUI == nil {
+		return http.NotFoundHandler()
+	}
+	mounted := s.adminMountedWebUI()
+	inner := http.StripPrefix(mounted.Path, mounted.Handler)
+	return s.protectedUIHandler(mounted, inner, s.redirectAdminUILogin)
+}
+
+func (s *Server) adminMountedWebUI() MountedWebUI {
+	return MountedWebUI{
+		Name:                "builtin_admin",
+		Path:                "/admin",
+		AuthorizationPolicy: s.adminRoute.AuthorizationPolicy,
+		Routes: []MountedWebUIRoute{{
+			Path:         "/*",
+			AllowedRoles: append([]string(nil), s.adminRoute.AllowedRoles...),
+		}},
+		Handler: s.adminUI,
+	}
+}
+
+func (s *Server) protectedUIHandler(mounted MountedWebUI, inner http.Handler, redirectLogin protectedUILoginRedirect) http.Handler {
 	if mounted.AuthorizationPolicy == "" {
 		return inner
 	}
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx, ok := s.authorizeMountedWebUIRequest(w, r, mounted)
+		ctx, ok := s.authorizeProtectedUIRequest(w, r, mounted, redirectLogin)
 		if !ok {
 			return
 		}
@@ -133,7 +229,7 @@ func (s *Server) mountedWebUIHandler(mounted MountedWebUI) http.Handler {
 	})
 }
 
-func (s *Server) authorizeMountedWebUIRequest(w http.ResponseWriter, r *http.Request, mounted MountedWebUI) (context.Context, bool) {
+func (s *Server) authorizeProtectedUIRequest(w http.ResponseWriter, r *http.Request, mounted MountedWebUI, redirectLogin protectedUILoginRedirect) (context.Context, bool) {
 	if s.authorizer == nil {
 		writeError(w, http.StatusInternalServerError, "app authorization is unavailable")
 		return nil, false
@@ -145,7 +241,11 @@ func (s *Server) authorizeMountedWebUIRequest(w http.ResponseWriter, r *http.Req
 		return nil, false
 	}
 	if !authenticated {
-		s.redirectMountedWebUILogin(w, r)
+		if redirectLogin != nil {
+			if err := redirectLogin(w, r); err != nil {
+				writeError(w, http.StatusInternalServerError, err.Error())
+			}
+		}
 		return nil, false
 	}
 	if p != nil && p.Kind == principal.KindWorkload {
@@ -196,9 +296,26 @@ func (s *Server) resolveMountedWebUIPrincipal(r *http.Request) (*principal.Princ
 	}
 }
 
-func (s *Server) redirectMountedWebUILogin(w http.ResponseWriter, r *http.Request) {
+func (s *Server) redirectMountedWebUILogin(w http.ResponseWriter, r *http.Request) error {
 	target := browserLoginPath + "?next=" + url.QueryEscape(r.URL.RequestURI())
 	http.Redirect(w, r, target, http.StatusFound)
+	return nil
+}
+
+func (s *Server) redirectAdminUILogin(w http.ResponseWriter, r *http.Request) error {
+	if s.routeProfile != RouteProfileManagement {
+		return s.redirectMountedWebUILogin(w, r)
+	}
+	if s.publicBaseURL == "" {
+		return fmt.Errorf("admin login redirect requires server.baseUrl")
+	}
+	if s.managementBaseURL == "" {
+		return fmt.Errorf("admin login redirect requires server.management.baseUrl")
+	}
+
+	target := s.publicBaseURL + browserLoginPath + "?next=" + url.QueryEscape(s.managementBaseURL+r.URL.RequestURI())
+	http.Redirect(w, r, target, http.StatusFound)
+	return nil
 }
 
 func (m MountedWebUI) routeForRequestPath(requestPath string) (MountedWebUIRoute, bool) {

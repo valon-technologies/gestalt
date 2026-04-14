@@ -74,7 +74,7 @@ func (s *Server) mountAdminUIRoutes(r chi.Router) {
 	r.Get("/admin", func(w http.ResponseWriter, r *http.Request) {
 		redirectPreservingQuery(w, r, "/admin/", http.StatusMovedPermanently)
 	})
-	r.Handle("/admin/*", http.StripPrefix("/admin", s.adminUI))
+	r.Handle("/admin/*", s.adminUIHandler())
 }
 
 func (s *Server) mountMountedWebUIRoutes(r chi.Router) {

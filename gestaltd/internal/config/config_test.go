@@ -529,6 +529,210 @@ server:
 	}
 }
 
+func TestLoadConfigAdminBaseURLValidation(t *testing.T) {
+	t.Parallel()
+
+	t.Run("invalid baseUrl is allowed when built-in admin auth is unset", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+server:
+  baseUrl: not a url
+  encryptionKey: server-key
+providers:
+  auth:
+    disabled: true
+  indexeddbs:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+`)
+
+		if _, err := Load(path); err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+	})
+
+	t.Run("invalid management.baseUrl is allowed when built-in admin auth is unset", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+server:
+  encryptionKey: server-key
+  management:
+    host: 127.0.0.1
+    port: 9090
+    baseUrl: not a url
+providers:
+  auth:
+    disabled: true
+  indexeddbs:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+`)
+
+		if _, err := Load(path); err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+	})
+
+	t.Run("invalid baseUrl is rejected for split built-in admin auth", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+server:
+  baseUrl: not a url
+  encryptionKey: server-key
+  providers:
+    auth: sample
+    indexeddb: sqlite
+  management:
+    host: 127.0.0.1
+    port: 9090
+    baseUrl: https://gestalt.example.test:9090
+  admin:
+    authorizationPolicy: admin_policy
+providers:
+  auth:
+    sample:
+      source:
+        path: ./providers/auth/sample
+  indexeddbs:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+authorization:
+  policies:
+    admin_policy:
+      default: deny
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "server.baseUrl must be an absolute URL") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("invalid management.baseUrl is rejected for split built-in admin auth", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+server:
+  baseUrl: https://gestalt.example.test
+  encryptionKey: server-key
+  providers:
+    auth: sample
+    indexeddb: sqlite
+  management:
+    host: 127.0.0.1
+    port: 9090
+    baseUrl: not a url
+  admin:
+    authorizationPolicy: admin_policy
+providers:
+  auth:
+    sample:
+      source:
+        path: ./providers/auth/sample
+  indexeddbs:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+authorization:
+  policies:
+    admin_policy:
+      default: deny
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "server.management.baseUrl must be an absolute URL") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("management.baseUrl without management listener is rejected for built-in admin auth", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+server:
+  baseUrl: https://gestalt.example.test
+  encryptionKey: server-key
+  providers:
+    auth: sample
+    indexeddb: sqlite
+  management:
+    baseUrl: https://gestalt.example.test:9090
+  admin:
+    authorizationPolicy: admin_policy
+providers:
+  auth:
+    sample:
+      source:
+        path: ./providers/auth/sample
+  indexeddbs:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+authorization:
+  policies:
+    admin_policy:
+      default: deny
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "server.management.baseUrl requires server.management.host/server.management.port when server.admin.authorizationPolicy is set") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("blank admin allowedRoles entry is rejected", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+server:
+  encryptionKey: server-key
+  providers:
+    auth: sample
+    indexeddb: sqlite
+  admin:
+    authorizationPolicy: admin_policy
+    allowedRoles:
+      - ""
+providers:
+  auth:
+    sample:
+      source:
+        path: ./providers/auth/sample
+  indexeddbs:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+authorization:
+  policies:
+    admin_policy:
+      default: deny
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "server.admin.allowedRoles[0] is required") {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+}
+
 func TestLoadSucceedsWithoutRuntimeFields(t *testing.T) {
 	t.Parallel()
 

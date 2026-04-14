@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"gopkg.in/yaml.v3"
 )
@@ -291,17 +292,28 @@ type ListenerConfig struct {
 	Port int    `yaml:"port"`
 }
 
+type ManagementListenerConfig struct {
+	ListenerConfig `yaml:",inline"`
+	BaseURL        string `yaml:"baseUrl,omitempty"`
+}
+
+type AdminConfig struct {
+	AuthorizationPolicy string   `yaml:"authorizationPolicy,omitempty"`
+	AllowedRoles        []string `yaml:"allowedRoles,omitempty"`
+}
+
 type ServerConfig struct {
-	Public        ListenerConfig        `yaml:"public"`
-	Management    ListenerConfig        `yaml:"management"`
-	BaseURL       string                `yaml:"baseUrl"`
-	EncryptionKey string                `yaml:"encryptionKey"`
-	APITokenTTL   string                `yaml:"apiTokenTtl"`
-	ArtifactsDir  string                `yaml:"artifactsDir"`
-	Providers     ServerProvidersConfig `yaml:"providers,omitempty"`
-	IndexedDB     string                `yaml:"-"`
-	Egress        EgressConfig          `yaml:"egress,omitempty"`
-	Authorization AuthorizationConfig   `yaml:"authorization,omitempty"`
+	Public        ListenerConfig           `yaml:"public"`
+	Management    ManagementListenerConfig `yaml:"management"`
+	BaseURL       string                   `yaml:"baseUrl"`
+	EncryptionKey string                   `yaml:"encryptionKey"`
+	APITokenTTL   string                   `yaml:"apiTokenTtl"`
+	ArtifactsDir  string                   `yaml:"artifactsDir"`
+	Providers     ServerProvidersConfig    `yaml:"providers,omitempty"`
+	IndexedDB     string                   `yaml:"-"`
+	Egress        EgressConfig             `yaml:"egress,omitempty"`
+	Authorization AuthorizationConfig      `yaml:"authorization,omitempty"`
+	Admin         AdminConfig              `yaml:"admin,omitempty"`
 }
 
 func (s ServerConfig) PublicListener() ListenerConfig {
@@ -324,7 +336,7 @@ func (s ServerConfig) ManagementListener() (ListenerConfig, bool) {
 	if s.Management.Port == 0 {
 		return ListenerConfig{}, false
 	}
-	return s.Management, true
+	return s.Management.ListenerConfig, true
 }
 
 func (s ServerConfig) ManagementAddr() string {
@@ -333,6 +345,10 @@ func (s ServerConfig) ManagementAddr() string {
 		return ""
 	}
 	return net.JoinHostPort(listener.Host, strconv.Itoa(listener.Port))
+}
+
+func (s ServerConfig) ManagementBaseURL() string {
+	return strings.TrimRight(strings.TrimSpace(s.Management.BaseURL), "/")
 }
 
 // ConnectionDef owns authentication and connection parameters for a named
@@ -633,6 +649,9 @@ func LoadAllowMissingEnv(path string) (*Config, error) {
 
 func NormalizeCompatibility(cfg *Config) error {
 	if err := normalizeAuthorizationConfig(cfg); err != nil {
+		return err
+	}
+	if err := normalizeAdminConfig(cfg); err != nil {
 		return err
 	}
 	return applyAppBindings(cfg)
@@ -1197,6 +1216,34 @@ func normalizedAuthorizationConfig(cfg AuthorizationConfig) AuthorizationConfig 
 	return cfg
 }
 
+func normalizeAdminConfig(cfg *Config) error {
+	if cfg == nil {
+		return nil
+	}
+	admin := cfg.Server.Admin
+	admin.AuthorizationPolicy = strings.TrimSpace(admin.AuthorizationPolicy)
+	if len(admin.AllowedRoles) == 0 {
+		if admin.AuthorizationPolicy != "" {
+			admin.AllowedRoles = []string{"admin"}
+		} else {
+			admin.AllowedRoles = nil
+		}
+		cfg.Server.Admin = admin
+		return nil
+	}
+
+	roles, err := providerpkg.NormalizeWebUIAllowedRoles("server.admin.allowedRoles", admin.AllowedRoles)
+	if err != nil {
+		if admin.AuthorizationPolicy == "" {
+			return fmt.Errorf("normalize admin config: server.admin.allowedRoles requires server.admin.authorizationPolicy")
+		}
+		return fmt.Errorf("normalize admin config: %w", err)
+	}
+	admin.AllowedRoles = roles
+	cfg.Server.Admin = admin
+	return nil
+}
+
 func normalizedHumanPolicyDef(policy HumanPolicyDef) HumanPolicyDef {
 	if len(policy.Members) == 0 {
 		policy.Members = nil
@@ -1302,11 +1349,8 @@ func applyAppBindings(cfg *Config) error {
 }
 
 func resolveBaseURL(cfg *Config) {
-	base := strings.TrimRight(cfg.Server.BaseURL, "/")
-	if base == "" {
-		return
-	}
-	cfg.Server.BaseURL = base
+	cfg.Server.BaseURL = strings.TrimRight(strings.TrimSpace(cfg.Server.BaseURL), "/")
+	cfg.Server.Management.BaseURL = strings.TrimRight(strings.TrimSpace(cfg.Server.Management.BaseURL), "/")
 }
 
 func resolveRelativePaths(configPath string, cfg *Config) {

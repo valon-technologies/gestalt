@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"maps"
 	"net"
+	"net/url"
 	"slices"
 	"sort"
 	"strconv"
@@ -30,6 +31,9 @@ func ValidateStructure(cfg *Config) error {
 		return err
 	}
 	if err := validateServerListeners(cfg.Server); err != nil {
+		return err
+	}
+	if err := validateAdminConfig(cfg); err != nil {
 		return err
 	}
 	if cfg.Server.APITokenTTL != "" {
@@ -387,6 +391,82 @@ func validateAuthorizationPolicyReference(cfg *Config, kind, name, policy string
 		return fmt.Errorf("config validation: %s %q authorizationPolicy references unknown policy %q", kind, name, policy)
 	}
 	return nil
+}
+
+func validateAdminConfig(cfg *Config) error {
+	if cfg == nil {
+		return nil
+	}
+	admin := cfg.Server.Admin
+	policy := strings.TrimSpace(admin.AuthorizationPolicy)
+	if policy == "" {
+		if len(admin.AllowedRoles) > 0 {
+			return fmt.Errorf("config validation: server.admin.allowedRoles requires server.admin.authorizationPolicy")
+		}
+	} else {
+		_, authProvider, err := cfg.SelectedAuthProvider()
+		if err != nil {
+			return err
+		}
+		if authProvider == nil || authProvider.Disabled {
+			return fmt.Errorf("config validation: server.admin.authorizationPolicy requires providers.auth to be configured and enabled")
+		}
+		if err := validateAuthorizationPolicyReference(cfg, "server.admin", "/admin", policy); err != nil {
+			return err
+		}
+		if len(admin.AllowedRoles) == 0 {
+			return fmt.Errorf("config validation: server.admin.allowedRoles must not be empty when server.admin.authorizationPolicy is set")
+		}
+	}
+
+	_, hasManagement := cfg.Server.ManagementListener()
+	if !hasManagement {
+		if policy != "" && strings.TrimSpace(cfg.Server.ManagementBaseURL()) != "" {
+			return fmt.Errorf("config validation: server.management.baseUrl requires server.management.host/server.management.port when server.admin.authorizationPolicy is set")
+		}
+		return nil
+	}
+	if policy == "" {
+		return nil
+	}
+
+	publicURL, err := validateAbsoluteBaseURL("server.baseUrl", cfg.Server.BaseURL)
+	if err != nil {
+		return err
+	}
+	managementURL, err := validateAbsoluteBaseURL("server.management.baseUrl", cfg.Server.ManagementBaseURL())
+	if err != nil {
+		return err
+	}
+
+	if publicURL == nil {
+		return fmt.Errorf("config validation: server.admin.authorizationPolicy on a split management listener requires server.baseUrl")
+	}
+	if managementURL == nil {
+		return fmt.Errorf("config validation: server.admin.authorizationPolicy on a split management listener requires server.management.baseUrl")
+	}
+	if publicURL.Hostname() != managementURL.Hostname() {
+		return fmt.Errorf("config validation: server.baseUrl and server.management.baseUrl must use the same hostname when server.admin.authorizationPolicy is enabled on a split management listener")
+	}
+	if strings.EqualFold(publicURL.Scheme, "https") && !strings.EqualFold(managementURL.Scheme, "https") {
+		return fmt.Errorf("config validation: server.management.baseUrl must use https when server.baseUrl uses https and server.admin.authorizationPolicy is enabled on a split management listener")
+	}
+	return nil
+}
+
+func validateAbsoluteBaseURL(label, raw string) (*url.URL, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+	parsed, err := url.Parse(raw)
+	if err != nil || !parsed.IsAbs() || parsed.Host == "" {
+		return nil, fmt.Errorf("config validation: %s must be an absolute URL", label)
+	}
+	if parsed.RawQuery != "" || parsed.Fragment != "" {
+		return nil, fmt.Errorf("config validation: %s may not include query or fragment", label)
+	}
+	return parsed, nil
 }
 
 func validatePluginIndexedDBBindings(cfg *Config, name string, entry *ProviderEntry) error {
