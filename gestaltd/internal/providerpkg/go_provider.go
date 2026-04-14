@@ -194,13 +194,6 @@ func detectSourceComponent(root, kind, goos, goarch string) (sourceKind string, 
 	} else if !errors.Is(err, ErrNoSourceComponentPackage) {
 		return "", "", err
 	}
-	if kind == providermanifestv1.KindFileAPI {
-		if goToolUnavailable != nil {
-			return "", "", goToolUnavailable
-		}
-		return "", "", ErrNoSourceComponentPackage
-	}
-
 	if _, err := detectRustPackage(root); err == nil {
 		return sourceProviderKindRust, "", nil
 	} else if !errors.Is(err, ErrNoRustProviderPackage) {

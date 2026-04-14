@@ -11,14 +11,20 @@ from google.protobuf import timestamp_pb2 as _timestamp_pb2
 
 from gestalt import (
     AuthProvider,
+    BytesResponse,
     Catalog,
     CatalogOperation,
+    CreateBlobRequest,
     ExternalTokenValidator,
+    FileAPIProvider,
+    FileObjectResponse,
     HealthChecker,
     MetadataProvider,
+    ObjectURLResponse,
     Plugin,
     ProviderKind,
     ProviderMetadata,
+    ReadChunk,
     Request,
     SessionTTLProvider,
     WarningsProvider,
@@ -26,10 +32,12 @@ from gestalt import (
     _runtime,
 )
 from gestalt.gen.v1 import auth_pb2 as _auth_pb2
+from gestalt.gen.v1 import fileapi_pb2 as _fileapi_pb2
 from gestalt.gen.v1 import plugin_pb2 as _plugin_pb2
 from gestalt.gen.v1 import runtime_pb2 as _runtime_pb2
 
 auth_pb2: Any = _auth_pb2
+fileapi_pb2: Any = _fileapi_pb2
 plugin_pb2: Any = _plugin_pb2
 runtime_pb2: Any = _runtime_pb2
 timestamp_pb2: Any = _timestamp_pb2
@@ -419,6 +427,155 @@ class AuthRuntimeTests(unittest.TestCase):
             grpc.StatusCode.NOT_FOUND,
             "token not recognized",
         )
+
+
+class FileAPIRuntimeTests(unittest.TestCase):
+    class StubFileAPIProvider(
+        FileAPIProvider,
+        MetadataProvider,
+        WarningsProvider,
+        HealthChecker,
+    ):
+        def metadata(self) -> ProviderMetadata:
+            return ProviderMetadata(
+                kind=ProviderKind.FILEAPI,
+                name="stub-fileapi",
+                display_name="Stub FileAPI",
+                description="test fileapi provider",
+                version="1.2.3",
+            )
+
+        def warnings(self) -> list[str]:
+            return ["set FILEAPI_ENV"]
+
+        def health_check(self) -> None:
+            return None
+
+        def create_blob(self, request: Any) -> Any:
+            return FileObjectResponse(
+                object=fileapi_pb2.FileObject(
+                    kind=fileapi_pb2.FileObjectKind.FILE_OBJECT_KIND_BLOB,
+                    id=f"blob:{len(request.parts)}",
+                    size=len(request.parts),
+                    mime_type=request.options.mime_type if request.HasField("options") else "",
+                )
+            )
+
+        def create_file(self, request: Any) -> Any:
+            return FileObjectResponse(
+                object=fileapi_pb2.FileObject(
+                    kind=fileapi_pb2.FileObjectKind.FILE_OBJECT_KIND_FILE,
+                    id=f"file:{request.name}",
+                    size=len(request.parts),
+                    mime_type=request.options.mime_type if request.HasField("options") else "",
+                    name=request.name,
+                )
+            )
+
+        def stat(self, request: Any) -> Any:
+            return FileObjectResponse(
+                object=fileapi_pb2.FileObject(
+                    kind=fileapi_pb2.FileObjectKind.FILE_OBJECT_KIND_FILE,
+                    id=request.id,
+                    size=7,
+                    mime_type="text/plain",
+                    name="fixture.txt",
+                )
+            )
+
+        def slice(self, request: Any) -> Any:
+            return FileObjectResponse(
+                object=fileapi_pb2.FileObject(
+                    kind=fileapi_pb2.FileObjectKind.FILE_OBJECT_KIND_BLOB,
+                    id=f"{request.id}:slice",
+                    size=2,
+                    mime_type=request.mime_type or "application/octet-stream",
+                )
+            )
+
+        def read_bytes(self, request: Any) -> Any:
+            return BytesResponse(data=f"bytes:{request.id}".encode("utf-8"))
+
+        def open_read_stream(self, request: Any) -> Any:
+            yield ReadChunk(data=f"{request.id}:chunk-1".encode("utf-8"))
+            yield ReadChunk(data=f"{request.id}:chunk-2".encode("utf-8"))
+
+        def create_object_url(self, request: Any) -> Any:
+            return ObjectURLResponse(url=f"memory://{request.id}")
+
+        def resolve_object_url(self, request: Any) -> Any:
+            return FileObjectResponse(
+                object=fileapi_pb2.FileObject(
+                    kind=fileapi_pb2.FileObjectKind.FILE_OBJECT_KIND_FILE,
+                    id=request.url.removeprefix("memory://"),
+                    size=9,
+                    mime_type="text/plain",
+                    name="resolved.txt",
+                )
+            )
+
+        def revoke_object_url(self, request: Any) -> None:
+            return None
+
+    def test_runtime_metadata_and_fileapi_servicer(self) -> None:
+        provider = self.StubFileAPIProvider()
+
+        runtime_servicer = _runtime._runtime_servicer(
+            provider=provider,
+            kind=ProviderKind.FILEAPI,
+        )
+        meta = runtime_servicer.GetProviderIdentity(mock.Mock(), mock.Mock())
+        self.assertEqual(meta.kind, runtime_pb2.ProviderKind.PROVIDER_KIND_FILEAPI)
+        self.assertEqual(meta.name, "stub-fileapi")
+        self.assertEqual(list(meta.warnings), ["set FILEAPI_ENV"])
+
+        fileapi_servicer = _runtime._fileapi_servicer(provider=provider)
+
+        blob = fileapi_servicer.CreateBlob(
+            CreateBlobRequest(
+                options=fileapi_pb2.BlobOptions(mime_type="text/plain"),
+            ),
+            mock.Mock(),
+        )
+        self.assertEqual(blob.object.id, "blob:0")
+
+        stat = fileapi_servicer.Stat(
+            fileapi_pb2.FileObjectRequest(id="blob:0"),
+            mock.Mock(),
+        )
+        self.assertEqual(stat.object.name, "fixture.txt")
+
+        data = fileapi_servicer.ReadBytes(
+            fileapi_pb2.FileObjectRequest(id="blob:0"),
+            mock.Mock(),
+        )
+        self.assertEqual(bytes(data.data), b"bytes:blob:0")
+
+        chunks = list(
+            fileapi_servicer.OpenReadStream(
+                fileapi_pb2.ReadStreamRequest(id="blob:0", chunk_size=4),
+                mock.Mock(),
+            )
+        )
+        self.assertEqual([bytes(chunk.data) for chunk in chunks], [b"blob:0:chunk-1", b"blob:0:chunk-2"])
+
+        object_url = fileapi_servicer.CreateObjectURL(
+            fileapi_pb2.CreateObjectURLRequest(id="blob:0"),
+            mock.Mock(),
+        )
+        self.assertEqual(object_url.url, "memory://blob:0")
+
+        resolved = fileapi_servicer.ResolveObjectURL(
+            fileapi_pb2.ObjectURLRequest(url=object_url.url),
+            mock.Mock(),
+        )
+        self.assertEqual(resolved.object.id, "blob:0")
+
+        revoked = fileapi_servicer.RevokeObjectURL(
+            fileapi_pb2.ObjectURLRequest(url=object_url.url),
+            mock.Mock(),
+        )
+        self.assertEqual(revoked.SerializeToString(), b"")
 
 
 if __name__ == "__main__":

@@ -110,6 +110,7 @@ func TestBuildRustComponentBinary_UsesKindSpecificWrapper(t *testing.T) {
 		expectedServeExport string
 	}{
 		{name: "auth", kind: "auth", expectedServeExport: "__gestalt_serve_auth"},
+		{name: "fileapi", kind: "fileapi", expectedServeExport: "__gestalt_serve_fileapi"},
 		{name: "indexeddb", kind: "indexeddb", expectedServeExport: "__gestalt_serve_indexeddb"},
 	}
 

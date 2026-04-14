@@ -16,6 +16,16 @@ import {
   type ValidateExternalTokenRequest,
 } from "../gen/v1/auth_pb.ts";
 import {
+  FileAPI as FileAPIService,
+  type CreateBlobRequest,
+  type CreateFileRequest,
+  type CreateObjectURLRequest,
+  type FileObjectRequest,
+  type ObjectURLRequest,
+  type ReadStreamRequest,
+  type SliceRequest,
+} from "../gen/v1/fileapi_pb.ts";
+import {
   SecretsProvider as SecretsProviderService,
   GetSecretResponseSchema,
   type GetSecretRequest,
@@ -49,6 +59,7 @@ import {
   isAuthProvider,
   type AuthenticatedUser,
 } from "./auth.ts";
+import { FileAPIProvider, isFileAPIProvider } from "./fileapi.ts";
 import { SecretsProvider, isSecretsProvider } from "./secrets.ts";
 import { catalogToYaml, type Catalog } from "./catalog.ts";
 import {
@@ -81,6 +92,7 @@ export type RuntimeArgs = {
 export type LoadedProvider =
   | IntegrationProvider
   | AuthProvider
+  | FileAPIProvider
   | SecretsProvider;
 
 export async function main(
@@ -120,8 +132,10 @@ export async function loadProviderFromTarget(
     );
   const target = parseProviderTarget(targetValue);
   const module = await import(resolveProviderImportUrl(root, target));
+  const kindExport = target.kind === "integration" ? "plugin" : target.kind;
   const candidate =
     (target.exportName ? module[target.exportName] : undefined) ??
+    module[kindExport] ??
     module.provider ??
     module.plugin ??
     module.default;
@@ -143,6 +157,15 @@ export async function loadProviderFromTarget(
       if (!isAuthProvider(candidate)) {
         throw new Error(
           `${targetValue} did not resolve to a Gestalt auth provider`,
+        );
+      }
+      candidate.resolveName(defaultName);
+      return candidate;
+    }
+    case "fileapi": {
+      if (!isFileAPIProvider(candidate)) {
+        throw new Error(
+          `${targetValue} did not resolve to a Gestalt FileAPI provider`,
         );
       }
       candidate.resolveName(defaultName);
@@ -245,6 +268,14 @@ export async function runBundledProvider(
       }
       loaded = provider;
       break;
+    case "fileapi":
+      if (!isFileAPIProvider(provider)) {
+        throw new Error(
+          "bundled target did not resolve to a Gestalt FileAPI provider",
+        );
+      }
+      loaded = provider;
+      break;
     case "secrets":
       if (!isSecretsProvider(provider)) {
         throw new Error(
@@ -293,6 +324,8 @@ export async function serve(provider: LoadedProvider): Promise<void> {
         );
       } else if (isAuthProvider(provider)) {
         router.service(AuthProviderService, createAuthService(provider));
+      } else if (isFileAPIProvider(provider)) {
+        router.service(FileAPIService, createFileAPIService(provider));
       } else if (isSecretsProvider(provider)) {
         router.service(SecretsProviderService, createSecretsService(provider));
       }
@@ -573,6 +606,43 @@ export function createSecretsService(
       return create(GetSecretResponseSchema, {
         value,
       });
+    },
+  };
+}
+
+export function createFileAPIService(
+  provider: FileAPIProvider,
+): Partial<ServiceImpl<typeof FileAPIService>> {
+  return {
+    async createBlob(request: CreateBlobRequest) {
+      return await provider.createBlob(request);
+    },
+    async createFile(request: CreateFileRequest) {
+      return await provider.createFile(request);
+    },
+    async stat(request: FileObjectRequest) {
+      return await provider.stat(request);
+    },
+    async slice(request: SliceRequest) {
+      return await provider.slice(request);
+    },
+    async readBytes(request: FileObjectRequest) {
+      return await provider.readBytes(request);
+    },
+    async *openReadStream(request: ReadStreamRequest) {
+      for await (const chunk of await provider.openReadStream(request)) {
+        yield chunk;
+      }
+    },
+    async createObjectURL(request: CreateObjectURLRequest) {
+      return await provider.createObjectURL(request);
+    },
+    async resolveObjectURL(request: ObjectURLRequest) {
+      return await provider.resolveObjectURL(request);
+    },
+    async revokeObjectURL(request: ObjectURLRequest) {
+      await provider.revokeObjectURL(request);
+      return create(EmptySchema, {});
     },
   };
 }

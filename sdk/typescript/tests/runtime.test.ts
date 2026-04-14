@@ -10,6 +10,13 @@ import {
   ValidateExternalTokenRequestSchema,
 } from "../gen/v1/auth_pb.ts";
 import {
+  CreateBlobRequestSchema,
+  CreateObjectURLRequestSchema,
+  FileObjectRequestSchema,
+  ObjectURLRequestSchema,
+  ReadStreamRequestSchema,
+} from "../gen/v1/fileapi_pb.ts";
+import {
   AccessContextSchema,
   CredentialContextSchema,
   ExecuteRequestSchema,
@@ -22,6 +29,7 @@ import { ConfigureProviderRequestSchema } from "../gen/v1/runtime_pb.ts";
 import {
   ENV_WRITE_CATALOG,
   createAuthService,
+  createFileAPIService,
   createProviderService,
   createRuntimeService,
   loadPluginFromTarget,
@@ -208,4 +216,72 @@ test("auth provider supports runtime metadata, login flows, and token validation
     }),
   );
   expect(validated.email).toBe("api-token@example.com");
+});
+
+test("fileapi provider supports runtime metadata and file operations", async () => {
+  const provider = await loadProviderFromTarget(fixturePath("fileapi-provider"));
+  const runtime = createRuntimeService(provider);
+  const fileapi = createFileAPIService(provider as any);
+
+  const metadata = await (runtime.getProviderIdentity as any)(
+    create(EmptySchema, {}),
+  );
+  expect(metadata.kind).toBe(6);
+  expect(metadata.displayName).toBe("Fixture FileAPI");
+
+  const blob = await (fileapi.createBlob as any)(
+    create(CreateBlobRequestSchema, {
+      parts: [],
+      options: {
+        mimeType: "text/plain",
+      },
+    }),
+  );
+  expect(blob.object?.id).toBe("blob:0");
+
+  const stat = await (fileapi.stat as any)(
+    create(FileObjectRequestSchema, {
+      id: "blob:0",
+    }),
+  );
+  expect(stat.object?.name).toBe("fixture.txt");
+
+  const bytes = await (fileapi.readBytes as any)(
+    create(FileObjectRequestSchema, {
+      id: "blob:0",
+    }),
+  );
+  expect(new TextDecoder().decode(bytes.data)).toBe("bytes:blob:0");
+
+  const chunks: string[] = [];
+  for await (const chunk of (fileapi.openReadStream as any)(
+    create(ReadStreamRequestSchema, {
+      id: "blob:0",
+      chunkSize: 4,
+    }),
+  )) {
+    chunks.push(new TextDecoder().decode(chunk.data));
+  }
+  expect(chunks).toEqual(["blob:0:chunk-1", "blob:0:chunk-2"]);
+
+  const objectURL = await (fileapi.createObjectURL as any)(
+    create(CreateObjectURLRequestSchema, {
+      id: "blob:0",
+    }),
+  );
+  expect(objectURL.url).toBe("memory://blob:0");
+
+  const resolved = await (fileapi.resolveObjectURL as any)(
+    create(ObjectURLRequestSchema, {
+      url: objectURL.url,
+    }),
+  );
+  expect(resolved.object?.id).toBe("blob:0");
+
+  const revoked = await (fileapi.revokeObjectURL as any)(
+    create(ObjectURLRequestSchema, {
+      url: objectURL.url,
+    }),
+  );
+  expect(revoked).toEqual(create(EmptySchema, {}));
 });

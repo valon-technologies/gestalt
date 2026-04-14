@@ -22,6 +22,7 @@ from ._providers import (
     AuthProvider,
     Closer,
     ExternalTokenValidator,
+    FileAPIProvider,
     HealthChecker,
     MetadataProvider,
     PluginProvider,
@@ -35,6 +36,8 @@ from ._providers import (
 from ._serialization import json_body
 from .gen.v1 import auth_pb2 as _auth_pb2
 from .gen.v1 import auth_pb2_grpc as _auth_pb2_grpc
+from .gen.v1 import fileapi_pb2 as _fileapi_pb2
+from .gen.v1 import fileapi_pb2_grpc as _fileapi_pb2_grpc
 from .gen.v1 import plugin_pb2 as _plugin_pb2
 from .gen.v1 import plugin_pb2_grpc as _plugin_pb2_grpc
 from .gen.v1 import runtime_pb2 as _runtime_pb2
@@ -49,6 +52,8 @@ runtime_pb2: Any = _runtime_pb2
 runtime_pb2_grpc: Any = _runtime_pb2_grpc
 auth_pb2: Any = _auth_pb2
 auth_pb2_grpc: Any = _auth_pb2_grpc
+fileapi_pb2: Any = _fileapi_pb2
+fileapi_pb2_grpc: Any = _fileapi_pb2_grpc
 secrets_pb2: Any = _secrets_pb2
 secrets_pb2_grpc: Any = _secrets_pb2_grpc
 
@@ -161,7 +166,9 @@ def _parse_runtime_args(args: list[str]) -> RuntimeArgs | None:
     )
 
 
-def _load_target(args: RuntimeArgs) -> Plugin | PluginProviderAdapter | PluginProvider:
+def _load_target(
+    args: RuntimeArgs,
+) -> Plugin | PluginProviderAdapter | PluginProvider:
     if args.root is not None:
         root = str(args.root)
         if root not in sys.path:
@@ -180,11 +187,13 @@ def _load_target(args: RuntimeArgs) -> Plugin | PluginProviderAdapter | PluginPr
 
     if resolved_kind == ProviderKind.AUTH and isinstance(target, AuthProvider):
         return _auth_runtime_plugin(target)
+    if resolved_kind == ProviderKind.FILEAPI and isinstance(target, FileAPIProvider):
+        return _fileapi_runtime_plugin(target)
     if resolved_kind == ProviderKind.SECRETS and isinstance(target, SecretsProvider):
         return _secrets_runtime_plugin(target)
     if isinstance(target, PluginProvider):
         raise RuntimeError(
-            "providers must be wrapped in gestalt.PluginProviderAdapter unless runtime_kind is auth or secrets"
+            "providers must be wrapped in gestalt.PluginProviderAdapter unless runtime_kind is auth, fileapi, or secrets"
         )
     raise RuntimeError(f"{args.target} did not resolve to a supported gestalt target")
 
@@ -263,6 +272,8 @@ def _servable_target(
     kind = _normalized_runtime_kind(runtime_kind)
     if kind == ProviderKind.AUTH and isinstance(target, AuthProvider):
         return _auth_runtime_plugin(target)
+    if kind == ProviderKind.FILEAPI and isinstance(target, FileAPIProvider):
+        return _fileapi_runtime_plugin(target)
     if kind == ProviderKind.SECRETS and isinstance(target, SecretsProvider):
         return _secrets_runtime_plugin(target)
     raise RuntimeError("unsupported runtime target")
@@ -283,6 +294,25 @@ def _register_auth_services(server: Any, provider: PluginProvider) -> None:
     )
     auth_pb2_grpc.add_AuthProviderServicer_to_server(
         _auth_servicer(provider=provider),
+        server,
+    )
+
+
+def _fileapi_runtime_plugin(provider: FileAPIProvider) -> PluginProviderAdapter:
+    return PluginProviderAdapter(
+        kind=ProviderKind.FILEAPI,
+        provider=provider,
+        register_services=_register_fileapi_services,
+    )
+
+
+def _register_fileapi_services(server: Any, provider: PluginProvider) -> None:
+    runtime_pb2_grpc.add_ProviderLifecycleServicer_to_server(
+        _runtime_servicer(provider=provider, kind=ProviderKind.FILEAPI),
+        server,
+    )
+    fileapi_pb2_grpc.add_FileAPIServicer_to_server(
+        _fileapi_servicer(provider=provider),
         server,
     )
 
@@ -487,6 +517,51 @@ def _auth_servicer(*, provider: PluginProvider) -> Any:
             return auth_pb2.AuthSessionSettings(session_ttl_seconds=seconds)
 
     return AuthServicer()
+
+
+def _fileapi_servicer(*, provider: PluginProvider) -> Any:
+    fileapi_provider = cast(FileAPIProvider, provider)
+
+    class FileAPIServicer(fileapi_pb2_grpc.FileAPIServicer):
+        @_grpc_handler("create blob")
+        def CreateBlob(self, request: Any, _context: Any) -> Any:
+            return fileapi_provider.create_blob(request)
+
+        @_grpc_handler("create file")
+        def CreateFile(self, request: Any, _context: Any) -> Any:
+            return fileapi_provider.create_file(request)
+
+        @_grpc_handler("stat")
+        def Stat(self, request: Any, _context: Any) -> Any:
+            return fileapi_provider.stat(request)
+
+        @_grpc_handler("slice")
+        def Slice(self, request: Any, _context: Any) -> Any:
+            return fileapi_provider.slice(request)
+
+        @_grpc_handler("read bytes")
+        def ReadBytes(self, request: Any, _context: Any) -> Any:
+            return fileapi_provider.read_bytes(request)
+
+        @_grpc_handler("open read stream")
+        def OpenReadStream(self, request: Any, _context: Any) -> Any:
+            for chunk in fileapi_provider.open_read_stream(request):
+                yield chunk
+
+        @_grpc_handler("create object url")
+        def CreateObjectURL(self, request: Any, _context: Any) -> Any:
+            return fileapi_provider.create_object_url(request)
+
+        @_grpc_handler("resolve object url")
+        def ResolveObjectURL(self, request: Any, _context: Any) -> Any:
+            return fileapi_provider.resolve_object_url(request)
+
+        @_grpc_handler("revoke object url")
+        def RevokeObjectURL(self, request: Any, _context: Any) -> Any:
+            fileapi_provider.revoke_object_url(request)
+            return empty_pb2.Empty()
+
+    return FileAPIServicer()
 
 
 def _secrets_servicer(*, provider: PluginProvider) -> Any:

@@ -6,6 +6,8 @@ mod auth_server;
 mod catalog;
 mod env;
 mod error;
+mod fileapi;
+mod fileapi_server;
 pub mod indexeddb;
 mod provider_server;
 mod router;
@@ -33,6 +35,12 @@ pub use auth::{
 pub use catalog::{Catalog, CatalogOperation};
 pub use env::{CURRENT_PROTOCOL_VERSION, ENV_PROVIDER_SOCKET};
 pub use error::{Error, Result};
+pub use fileapi::{
+    BlobOptions, BlobPart, BytesResponse, CreateBlobRequest, CreateFileRequest,
+    CreateObjectUrlRequest, FileAPIProvider, FileAPIReadStream, FileObject, FileObjectRequest,
+    FileObjectResponse, FileOptions, ObjectUrlRequest, ObjectUrlResponse, ReadChunk,
+    ReadStreamRequest, SliceRequest,
+};
 pub use indexeddb::{Cursor, CursorDirection, IndexedDB, IndexedDBError};
 #[doc(hidden)]
 pub use provider_server::{OperationResult, ProviderServer};
@@ -87,6 +95,16 @@ macro_rules! export_auth_provider {
         pub fn __gestalt_serve_auth(_name: &str) -> $crate::Result<()> {
             let provider = std::sync::Arc::new($constructor());
             $crate::runtime::run_auth_provider(provider)
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! export_fileapi_provider {
+    (constructor = $constructor:path $(,)?) => {
+        pub fn __gestalt_serve_fileapi(_name: &str) -> $crate::Result<()> {
+            let provider = std::sync::Arc::new($constructor());
+            $crate::runtime::run_fileapi_provider(provider)
         }
     };
 }

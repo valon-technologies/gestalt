@@ -41,6 +41,13 @@ export {
   type CompleteLoginRequest,
 } from "./auth.ts";
 export {
+  FileAPIProvider,
+  defineFileAPIProvider,
+  isFileAPIProvider,
+  type FileAPIProviderOptions,
+  type FileAPIReadStream,
+} from "./fileapi.ts";
+export {
   defineSecretsProvider,
   isSecretsProvider,
   type SecretsProviderOptions,
@@ -93,6 +100,7 @@ export {
   ENV_PROVIDER_SOCKET,
   ENV_WRITE_CATALOG,
   createAuthService,
+  createFileAPIService,
   createSecretsService,
   createProviderService,
   createRuntimeService,

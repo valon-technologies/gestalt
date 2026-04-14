@@ -398,7 +398,6 @@ func validatePluginIndexedDBBindings(cfg *Config, name string, entry *ProviderEn
 	}
 	seen := make(map[string]struct{}, len(entry.IndexedDBs))
 	envNames := make(map[string]string, len(entry.IndexedDBs))
-	objectStores := make(map[string]string)
 	restrictedBindingCount := 0
 	unrestrictedBindingCount := 0
 	for i := range entry.IndexedDBs {
@@ -431,11 +430,7 @@ func validatePluginIndexedDBBindings(cfg *Config, name string, entry *ProviderEn
 			if _, exists := seenStores[store]; exists {
 				return fmt.Errorf("config validation: plugin %q indexeddb[%d].objectStore[%d] duplicates %q", name, i, j, store)
 			}
-			if otherBinding, exists := objectStores[store]; exists {
-				return fmt.Errorf("config validation: plugin %q indexeddb[%d].objectStore[%d] %q duplicates indexeddb %q", name, i, j, store, otherBinding)
-			}
 			seenStores[store] = struct{}{}
-			objectStores[store] = binding.Name
 			binding.ObjectStores[j] = store
 		}
 		seen[binding.Name] = struct{}{}

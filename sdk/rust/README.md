@@ -9,9 +9,9 @@ Current scope:
 - vendored `protoc` via `protoc-bin-vendored`
 - generated protocol bindings exposed via `proto::v1`
 - typed integration-provider authoring helpers for requests, responses, catalogs, and routing
-- auth-provider and secrets-provider traits that map to the shared executable runtime protocol
-- runtime servers for the integration, auth, and secrets provider surfaces over the Unix socket exposed by `gestaltd`
-- `export_provider!`, `export_auth_provider!`, and `export_secrets_provider!` macros for source builds that let `gestaltd` synthesize the executable wrapper
+- auth-provider, fileapi-provider, and secrets-provider traits that map to the shared executable runtime protocol
+- runtime servers for the integration, auth, fileapi, and secrets provider surfaces over the Unix socket exposed by `gestaltd`
+- `export_provider!`, `export_auth_provider!`, `export_fileapi_provider!`, and `export_secrets_provider!` macros for source builds that let `gestaltd` synthesize the executable wrapper
 
 ## Codegen strategy
 
@@ -32,6 +32,7 @@ The crate is intentionally small:
 
 - `Provider`, `Request`, `Response`, and `ok(...)` model integration providers
 - `AuthProvider`, `BeginLoginRequest`, `BeginLoginResponse`, `CompleteLoginRequest`, and `AuthenticatedUser` model auth providers
+- `FileAPIProvider` plus the generated fileapi request/response messages model fileapi providers
 - `SecretsProvider` models secrets providers
 - `Router` and `Operation` register typed operations and derive catalog metadata from `serde` + `schemars`
 - `Catalog` types expose explicit static or session-scoped catalogs when needed
@@ -39,6 +40,7 @@ The crate is intentionally small:
 - `runtime` runs the integration, auth, or secrets gRPC servers, or writes the static catalog when `GESTALT_PLUGIN_WRITE_CATALOG` is set
 - `export_provider!` exports `__gestalt_serve` and `__gestalt_write_catalog` for integration providers
 - `export_auth_provider!` exports `__gestalt_serve_auth` for auth providers
+- `export_fileapi_provider!` exports `__gestalt_serve_fileapi` for fileapi providers
 - `export_secrets_provider!` exports `__gestalt_serve_secrets` for secrets providers
 
 ## Package layout

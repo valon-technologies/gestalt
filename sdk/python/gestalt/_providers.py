@@ -3,11 +3,26 @@ from enum import Enum
 from typing import Any, Callable
 
 from .gen.v1 import auth_pb2 as _auth_pb2
+from .gen.v1 import fileapi_pb2 as _fileapi_pb2
 
 AuthenticatedUser: Any = _auth_pb2.AuthenticatedUser  # ty: ignore[unresolved-attribute]
 BeginLoginRequest: Any = _auth_pb2.BeginLoginRequest  # ty: ignore[unresolved-attribute]
 BeginLoginResponse: Any = _auth_pb2.BeginLoginResponse  # ty: ignore[unresolved-attribute]
 CompleteLoginRequest: Any = _auth_pb2.CompleteLoginRequest  # ty: ignore[unresolved-attribute]
+BlobPart: Any = _fileapi_pb2.BlobPart  # ty: ignore[unresolved-attribute]
+BlobOptions: Any = _fileapi_pb2.BlobOptions  # ty: ignore[unresolved-attribute]
+BytesResponse: Any = _fileapi_pb2.BytesResponse  # ty: ignore[unresolved-attribute]
+CreateBlobRequest: Any = _fileapi_pb2.CreateBlobRequest  # ty: ignore[unresolved-attribute]
+CreateFileRequest: Any = _fileapi_pb2.CreateFileRequest  # ty: ignore[unresolved-attribute]
+CreateObjectURLRequest: Any = _fileapi_pb2.CreateObjectURLRequest  # ty: ignore[unresolved-attribute]
+FileObject: Any = _fileapi_pb2.FileObject  # ty: ignore[unresolved-attribute]
+FileObjectRequest: Any = _fileapi_pb2.FileObjectRequest  # ty: ignore[unresolved-attribute]
+FileObjectResponse: Any = _fileapi_pb2.FileObjectResponse  # ty: ignore[unresolved-attribute]
+ObjectURLRequest: Any = _fileapi_pb2.ObjectURLRequest  # ty: ignore[unresolved-attribute]
+ObjectURLResponse: Any = _fileapi_pb2.ObjectURLResponse  # ty: ignore[unresolved-attribute]
+ReadChunk: Any = _fileapi_pb2.ReadChunk  # ty: ignore[unresolved-attribute]
+ReadStreamRequest: Any = _fileapi_pb2.ReadStreamRequest  # ty: ignore[unresolved-attribute]
+SliceRequest: Any = _fileapi_pb2.SliceRequest  # ty: ignore[unresolved-attribute]
 
 
 class ProviderKind(str, Enum):
@@ -115,3 +130,36 @@ class SecretsProvider(PluginProvider):
 
         _runtime.serve(self, runtime_kind=ProviderKind.SECRETS)
 
+
+class FileAPIProvider(PluginProvider):
+    def create_blob(self, request: Any) -> Any:
+        raise NotImplementedError
+
+    def create_file(self, request: Any) -> Any:
+        raise NotImplementedError
+
+    def stat(self, request: Any) -> Any:
+        raise NotImplementedError
+
+    def slice(self, request: Any) -> Any:
+        raise NotImplementedError
+
+    def read_bytes(self, request: Any) -> Any:
+        raise NotImplementedError
+
+    def open_read_stream(self, request: Any) -> Any:
+        raise NotImplementedError
+
+    def create_object_url(self, request: Any) -> Any:
+        raise NotImplementedError
+
+    def resolve_object_url(self, request: Any) -> Any:
+        raise NotImplementedError
+
+    def revoke_object_url(self, request: Any) -> None:
+        raise NotImplementedError
+
+    def serve(self) -> None:
+        from . import _runtime
+
+        _runtime.serve(self, runtime_kind=ProviderKind.FILEAPI)

@@ -64,6 +64,7 @@ func TestDetectPythonComponentTarget(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte(`[tool.gestalt]
 plugin = "provider"
 auth = "provider:auth_provider"
+fileapi = "provider:fileapi_provider"
 indexeddb = "provider:indexeddb_provider"
 `), 0o644); err != nil {
 		t.Fatalf("WriteFile(pyproject.toml): %v", err)
@@ -75,6 +76,14 @@ indexeddb = "provider:indexeddb_provider"
 	}
 	if authTarget != "provider:auth_provider" {
 		t.Fatalf("auth target = %q, want %q", authTarget, "provider:auth_provider")
+	}
+
+	fileAPITarget, err := DetectPythonComponentTarget(root, providermanifestv1.KindFileAPI)
+	if err != nil {
+		t.Fatalf("DetectPythonComponentTarget(fileapi): %v", err)
+	}
+	if fileAPITarget != "provider:fileapi_provider" {
+		t.Fatalf("fileapi target = %q, want %q", fileAPITarget, "provider:fileapi_provider")
 	}
 
 	datastoreTarget, err := DetectPythonComponentTarget(root, providermanifestv1.KindIndexedDB)
@@ -151,7 +160,7 @@ func TestPythonComponentExecutionCommand_PassesRuntimeKind(t *testing.T) {
 	pythonPath := pythonTestInterpreterPath(root, runtime.GOOS, ".venv")
 	mustWritePythonInterpreter(t, pythonPath)
 
-	command, args, cleanup, err := pythonComponentExecutionCommand(root, "provider:auth_provider", pythonRuntimeKindAuth)
+	command, args, cleanup, err := pythonComponentExecutionCommand(root, "provider:fileapi_provider", pythonRuntimeKindFileAPI)
 	if err != nil {
 		t.Fatalf("pythonComponentExecutionCommand: %v", err)
 	}
@@ -164,7 +173,7 @@ func TestPythonComponentExecutionCommand_PassesRuntimeKind(t *testing.T) {
 	if len(args) != 5 {
 		t.Fatalf("args = %q, want 5 args", args)
 	}
-	if got := strings.Join(args, " "); got != "-m gestalt._runtime "+root+" provider:auth_provider auth" {
+	if got := strings.Join(args, " "); got != "-m gestalt._runtime "+root+" provider:fileapi_provider fileapi" {
 		t.Fatalf("args = %q", got)
 	}
 }
