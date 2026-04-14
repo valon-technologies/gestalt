@@ -16,6 +16,8 @@ const (
 	typeScriptTestPluginTarget          = "plugin:./provider.ts#plugin"
 	typeScriptTestAuthModuleTarget      = "./auth.ts#auth"
 	typeScriptTestAuthTarget            = "auth:./auth.ts#auth"
+	typeScriptTestCacheModuleTarget     = "./cache.ts#cache"
+	typeScriptTestCacheTarget           = "cache:./cache.ts#cache"
 	typeScriptTestDatastoreModuleTarget = "./datastore.ts#datastore"
 	typeScriptTestDatastoreTarget       = "indexeddb:./datastore.ts#datastore"
 )
@@ -189,6 +191,11 @@ func TestDetectTypeScriptComponentTarget(t *testing.T) {
 			target: typeScriptTestAuthTarget,
 		},
 		{
+			name:   "cache",
+			kind:   providermanifestv1.KindCache,
+			target: typeScriptTestCacheTarget,
+		},
+		{
 			name:   "indexeddb",
 			kind:   providermanifestv1.KindIndexedDB,
 			target: typeScriptTestDatastoreTarget,
@@ -243,6 +250,14 @@ func TestHasSourceComponentPackage_TypeScript(t *testing.T) {
 	}
 	if !ok {
 		t.Fatal("HasSourceComponentPackage(auth) = false, want true")
+	}
+
+	ok, err = HasSourceComponentPackage(root, providermanifestv1.KindCache)
+	if err != nil {
+		t.Fatalf("HasSourceComponentPackage(cache): %v", err)
+	}
+	if ok {
+		t.Fatal("HasSourceComponentPackage(cache) = true, want false")
 	}
 
 	ok, err = HasSourceComponentPackage(root, providermanifestv1.KindIndexedDB)
@@ -320,6 +335,11 @@ func TestSourceComponentExecutionCommand_TypeScript(t *testing.T) {
 			name:   "auth",
 			kind:   providermanifestv1.KindAuth,
 			target: typeScriptTestAuthTarget,
+		},
+		{
+			name:   "cache",
+			kind:   providermanifestv1.KindCache,
+			target: typeScriptTestCacheTarget,
 		},
 		{
 			name:   "indexeddb",
@@ -403,6 +423,11 @@ func TestValidateSourceComponentRelease_TypeScript(t *testing.T) {
 			target: typeScriptTestAuthTarget,
 		},
 		{
+			name:   "cache",
+			kind:   providermanifestv1.KindCache,
+			target: typeScriptTestCacheTarget,
+		},
+		{
 			name:   "indexeddb",
 			kind:   providermanifestv1.KindIndexedDB,
 			target: typeScriptTestDatastoreTarget,
@@ -464,6 +489,12 @@ func TestBuildSourceComponentReleaseBinary_TypeScript(t *testing.T) {
 			kind:       providermanifestv1.KindAuth,
 			target:     typeScriptTestAuthTarget,
 			pluginName: "ts-auth-release",
+		},
+		{
+			name:       "cache",
+			kind:       providermanifestv1.KindCache,
+			target:     typeScriptTestCacheTarget,
+			pluginName: "ts-cache-release",
 		},
 		{
 			name:       "indexeddb",
@@ -532,7 +563,7 @@ func mustWriteTypeScriptPackageConfig(t *testing.T, root string, gestalt map[str
 	t.Helper()
 
 	var fields []string
-	for _, key := range []string{typeScriptProviderKey, typeScriptPluginKey, typeScriptAuthKey, typeScriptIndexedDBKey} {
+	for _, key := range []string{typeScriptProviderKey, typeScriptPluginKey, typeScriptAuthKey, typeScriptCacheKey, typeScriptIndexedDBKey} {
 		value, ok := gestalt[key]
 		if !ok {
 			continue
@@ -565,7 +596,7 @@ func mustWriteTypeScriptTargetModule(t *testing.T, root, target string) {
 
 func runtimeTargetModulePath(t *testing.T, target string) string {
 	t.Helper()
-	for _, prefix := range []string{"plugin:", "integration:", "auth:", "indexeddb:", "secrets:", "telemetry:"} {
+	for _, prefix := range []string{"plugin:", "integration:", "auth:", "cache:", "indexeddb:", "secrets:", "telemetry:"} {
 		if strings.HasPrefix(target, prefix) {
 			return strings.TrimPrefix(target, prefix)
 		}

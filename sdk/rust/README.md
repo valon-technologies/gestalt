@@ -9,9 +9,9 @@ Current scope:
 - vendored `protoc` via `protoc-bin-vendored`
 - generated protocol bindings exposed via `proto::v1`
 - typed integration-provider authoring helpers for requests, responses, catalogs, and routing
-- auth-provider and secrets-provider traits that map to the shared executable runtime protocol
-- runtime servers for the integration, auth, and secrets provider surfaces over the Unix socket exposed by `gestaltd`
-- `export_provider!`, `export_auth_provider!`, and `export_secrets_provider!` macros for source builds that let `gestaltd` synthesize the executable wrapper
+- auth-provider, cache-provider, and secrets-provider traits that map to the shared executable runtime protocol
+- runtime servers for the integration, auth, cache, and secrets provider surfaces over the Unix socket exposed by `gestaltd`
+- `export_provider!`, `export_auth_provider!`, `export_cache_provider!`, and `export_secrets_provider!` macros for source builds that let `gestaltd` synthesize the executable wrapper
 
 ## Codegen strategy
 
@@ -32,13 +32,15 @@ The crate is intentionally small:
 
 - `Provider`, `Request`, `Response`, and `ok(...)` model integration providers
 - `AuthProvider`, `BeginLoginRequest`, `BeginLoginResponse`, `CompleteLoginRequest`, and `AuthenticatedUser` model auth providers
+- `Cache`, `CacheProvider`, `CacheEntry`, and `CacheSetOptions` model cache clients and providers
 - `SecretsProvider` models secrets providers
 - `Router` and `Operation` register typed operations and derive catalog metadata from `serde` + `schemars`
 - `Catalog` types expose explicit static or session-scoped catalogs when needed
 - `RuntimeMetadata` lets any provider kind describe its runtime name/display metadata and version
-- `runtime` runs the integration, auth, or secrets gRPC servers, or writes the static catalog when `GESTALT_PLUGIN_WRITE_CATALOG` is set
+- `runtime` runs the integration, auth, cache, or secrets gRPC servers, or writes the static catalog when `GESTALT_PLUGIN_WRITE_CATALOG` is set
 - `export_provider!` exports `__gestalt_serve` and `__gestalt_write_catalog` for integration providers
 - `export_auth_provider!` exports `__gestalt_serve_auth` for auth providers
+- `export_cache_provider!` exports `__gestalt_serve_cache` for cache providers
 - `export_secrets_provider!` exports `__gestalt_serve_secrets` for secrets providers
 
 ## Package layout

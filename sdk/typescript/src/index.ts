@@ -41,6 +41,16 @@ export {
   type CompleteLoginRequest,
 } from "./auth.ts";
 export {
+  Cache,
+  CacheProvider,
+  cacheSocketEnv,
+  defineCacheProvider,
+  isCacheProvider,
+  type CacheEntry,
+  type CacheProviderOptions,
+  type CacheSetOptions,
+} from "./cache.ts";
+export {
   defineSecretsProvider,
   isSecretsProvider,
   type SecretsProviderOptions,
@@ -93,6 +103,7 @@ export {
   ENV_PROVIDER_SOCKET,
   ENV_WRITE_CATALOG,
   createAuthService,
+  createCacheService,
   createSecretsService,
   createProviderService,
   createRuntimeService,

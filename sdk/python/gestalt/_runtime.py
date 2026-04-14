@@ -1,3 +1,4 @@
+import datetime as dt
 import functools
 import importlib
 import os
@@ -11,15 +12,18 @@ from http import HTTPStatus
 from typing import Any, Final, cast
 
 import grpc
+from google.protobuf import duration_pb2 as _duration_pb2
 from google.protobuf import empty_pb2 as _empty_pb2
 from google.protobuf import json_format
 
 from ._api import Access, Credential, Request, Subject
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
+from ._cache import CacheEntry
 from ._catalog import catalog_to_proto
 from ._plugin import Plugin, _module_plugin
 from ._providers import (
     AuthProvider,
+    CacheProvider,
     Closer,
     ExternalTokenValidator,
     HealthChecker,
@@ -35,6 +39,8 @@ from ._providers import (
 from ._serialization import json_body
 from .gen.v1 import auth_pb2 as _auth_pb2
 from .gen.v1 import auth_pb2_grpc as _auth_pb2_grpc
+from .gen.v1 import cache_pb2 as _cache_pb2
+from .gen.v1 import cache_pb2_grpc as _cache_pb2_grpc
 from .gen.v1 import plugin_pb2 as _plugin_pb2
 from .gen.v1 import plugin_pb2_grpc as _plugin_pb2_grpc
 from .gen.v1 import runtime_pb2 as _runtime_pb2
@@ -43,12 +49,15 @@ from .gen.v1 import secrets_pb2 as _secrets_pb2
 from .gen.v1 import secrets_pb2_grpc as _secrets_pb2_grpc
 
 empty_pb2: Any = _empty_pb2
+duration_pb2: Any = _duration_pb2
 plugin_pb2: Any = _plugin_pb2
 plugin_pb2_grpc: Any = _plugin_pb2_grpc
 runtime_pb2: Any = _runtime_pb2
 runtime_pb2_grpc: Any = _runtime_pb2_grpc
 auth_pb2: Any = _auth_pb2
 auth_pb2_grpc: Any = _auth_pb2_grpc
+cache_pb2: Any = _cache_pb2
+cache_pb2_grpc: Any = _cache_pb2_grpc
 secrets_pb2: Any = _secrets_pb2
 secrets_pb2_grpc: Any = _secrets_pb2_grpc
 
@@ -180,11 +189,13 @@ def _load_target(args: RuntimeArgs) -> Plugin | PluginProviderAdapter | PluginPr
 
     if resolved_kind == ProviderKind.AUTH and isinstance(target, AuthProvider):
         return _auth_runtime_plugin(target)
+    if resolved_kind == ProviderKind.CACHE and isinstance(target, CacheProvider):
+        return _cache_runtime_plugin(target)
     if resolved_kind == ProviderKind.SECRETS and isinstance(target, SecretsProvider):
         return _secrets_runtime_plugin(target)
     if isinstance(target, PluginProvider):
         raise RuntimeError(
-            "providers must be wrapped in gestalt.PluginProviderAdapter unless runtime_kind is auth or secrets"
+            "providers must be wrapped in gestalt.PluginProviderAdapter unless runtime_kind is auth, cache, or secrets"
         )
     raise RuntimeError(f"{args.target} did not resolve to a supported gestalt target")
 
@@ -263,6 +274,8 @@ def _servable_target(
     kind = _normalized_runtime_kind(runtime_kind)
     if kind == ProviderKind.AUTH and isinstance(target, AuthProvider):
         return _auth_runtime_plugin(target)
+    if kind == ProviderKind.CACHE and isinstance(target, CacheProvider):
+        return _cache_runtime_plugin(target)
     if kind == ProviderKind.SECRETS and isinstance(target, SecretsProvider):
         return _secrets_runtime_plugin(target)
     raise RuntimeError("unsupported runtime target")
@@ -302,6 +315,25 @@ def _register_secrets_services(server: Any, provider: PluginProvider) -> None:
     )
     secrets_pb2_grpc.add_SecretsProviderServicer_to_server(
         _secrets_servicer(provider=provider),
+        server,
+    )
+
+
+def _cache_runtime_plugin(provider: CacheProvider) -> PluginProviderAdapter:
+    return PluginProviderAdapter(
+        kind=ProviderKind.CACHE,
+        provider=provider,
+        register_services=_register_cache_services,
+    )
+
+
+def _register_cache_services(server: Any, provider: PluginProvider) -> None:
+    runtime_pb2_grpc.add_ProviderLifecycleServicer_to_server(
+        _runtime_servicer(provider=provider, kind=ProviderKind.CACHE),
+        server,
+    )
+    cache_pb2_grpc.add_CacheServicer_to_server(
+        _cache_servicer(provider=provider),
         server,
     )
 
@@ -501,6 +533,74 @@ def _secrets_servicer(*, provider: PluginProvider) -> Any:
     return SecretsServicer()
 
 
+def _cache_servicer(*, provider: PluginProvider) -> Any:
+    cache_provider = cast(CacheProvider, provider)
+
+    class CacheServicer(cache_pb2_grpc.CacheServicer):
+        @_grpc_handler("cache get")
+        def Get(self, request: Any, _context: Any) -> Any:
+            value = cache_provider.get(request.key)
+            if value is None:
+                return cache_pb2.CacheGetResponse(found=False, value=b"")
+            return cache_pb2.CacheGetResponse(found=True, value=bytes(value))
+
+        @_grpc_handler("cache get_many")
+        def GetMany(self, request: Any, _context: Any) -> Any:
+            values = cache_provider.get_many(list(request.keys))
+            entries = []
+            for key in request.keys:
+                value = values.get(key)
+                if value is None:
+                    entries.append(cache_pb2.CacheResult(key=key, found=False, value=b""))
+                else:
+                    entries.append(
+                        cache_pb2.CacheResult(key=key, found=True, value=bytes(value))
+                    )
+            return cache_pb2.CacheGetManyResponse(entries=entries)
+
+        @_grpc_handler("cache set")
+        def Set(self, request: Any, _context: Any) -> Any:
+            cache_provider.set(
+                request.key,
+                bytes(request.value),
+                _duration_to_timedelta(request.ttl),
+            )
+            return empty_pb2.Empty()
+
+        @_grpc_handler("cache set_many")
+        def SetMany(self, request: Any, _context: Any) -> Any:
+            cache_provider.set_many(
+                [CacheEntry(key=entry.key, value=bytes(entry.value)) for entry in request.entries],
+                _duration_to_timedelta(request.ttl),
+            )
+            return empty_pb2.Empty()
+
+        @_grpc_handler("cache delete")
+        def Delete(self, request: Any, _context: Any) -> Any:
+            return cache_pb2.CacheDeleteResponse(
+                deleted=bool(cache_provider.delete(request.key))
+            )
+
+        @_grpc_handler("cache delete_many")
+        def DeleteMany(self, request: Any, _context: Any) -> Any:
+            return cache_pb2.CacheDeleteManyResponse(
+                deleted=int(cache_provider.delete_many(list(request.keys)))
+            )
+
+        @_grpc_handler("cache touch")
+        def Touch(self, request: Any, _context: Any) -> Any:
+            return cache_pb2.CacheTouchResponse(
+                touched=bool(
+                    cache_provider.touch(
+                        request.key,
+                        _duration_to_timedelta(request.ttl) or dt.timedelta(),
+                    )
+                )
+            )
+
+    return CacheServicer()
+
+
 def _plugin_request(request: Any) -> Request:
     return Request(
         token=getattr(request, "token", ""),
@@ -587,12 +687,13 @@ def _provider_kind_to_proto(kind: ProviderKind | str) -> Any:
     return {
         ProviderKind.INTEGRATION: runtime_pb2.ProviderKind.PROVIDER_KIND_INTEGRATION,
         ProviderKind.AUTH: runtime_pb2.ProviderKind.PROVIDER_KIND_AUTH,
+        ProviderKind.CACHE: runtime_pb2.ProviderKind.PROVIDER_KIND_CACHE,
         ProviderKind.SECRETS: runtime_pb2.ProviderKind.PROVIDER_KIND_SECRETS,
         ProviderKind.TELEMETRY: runtime_pb2.ProviderKind.PROVIDER_KIND_TELEMETRY,
     }.get(normalized, runtime_pb2.ProviderKind.PROVIDER_KIND_UNSPECIFIED)
 
 
-def _normalized_runtime_kind(kind: ProviderKind | str | None) -> ProviderKind:
+def _normalized_runtime_kind(kind: object | None) -> ProviderKind:
     if kind is None:
         return ProviderKind.INTEGRATION
     if isinstance(kind, ProviderKind):
@@ -603,11 +704,19 @@ def _normalized_runtime_kind(kind: ProviderKind | str | None) -> ProviderKind:
             return ProviderKind.INTEGRATION
         try:
             return ProviderKind(normalized)
-        except ValueError as error:
-            raise RuntimeError(
-                f"unsupported Python runtime kind {kind!r}"
-            ) from error
-    raise RuntimeError(f"unsupported Python runtime kind {kind!r}")
+        except ValueError:
+            return ProviderKind.INTEGRATION
+    return ProviderKind.INTEGRATION
+
+
+def _duration_to_timedelta(duration: Any) -> dt.timedelta | None:
+    if duration is None:
+        return None
+    seconds = getattr(duration, "seconds", 0)
+    nanos = getattr(duration, "nanos", 0)
+    if seconds == 0 and nanos == 0:
+        return None
+    return dt.timedelta(seconds=seconds, microseconds=nanos // 1000)
 
 
 if __name__ == "__main__":

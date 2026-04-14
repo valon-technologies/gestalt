@@ -9,6 +9,7 @@ from ._api import (
     Subject,
     field,
 )
+from ._cache import Cache, CacheEntry, cache_socket_env
 from ._catalog import (
     Catalog,
     CatalogOperation,
@@ -38,6 +39,7 @@ from ._providers import (
     AuthProvider,
     BeginLoginRequest,
     BeginLoginResponse,
+    CacheProvider,
     Closer,
     CompleteLoginRequest,
     ExternalTokenValidator,
@@ -56,6 +58,9 @@ __all__ = [
     "AlreadyExistsError",
     "AuthProvider",
     "AuthenticatedUser",
+    "Cache",
+    "CacheEntry",
+    "CacheProvider",
     "Access",
     "BeginLoginRequest",
     "BeginLoginResponse",
@@ -96,6 +101,7 @@ __all__ = [
     "SessionCatalogProvider",
     "SessionTTLProvider",
     "WarningsProvider",
+    "cache_socket_env",
     "field",
     "indexeddb_socket_env",
     "operation",

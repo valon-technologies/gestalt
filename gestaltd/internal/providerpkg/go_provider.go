@@ -23,7 +23,6 @@ const goReadonlyFlag = "-mod=readonly"
 
 var ErrNoGoProviderPackage = errors.New("no Go provider package found")
 var ErrNoSourceComponentPackage = errors.New("no source component package found")
-var ErrCacheSourceComponentRequiresGo = errors.New("cache source components currently require a Go package")
 var ErrGoToolUnavailable = errors.New("go tool unavailable")
 var goProviderNameSlugPattern = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
 
@@ -194,13 +193,6 @@ func detectSourceComponent(root, kind, goos, goarch string) (sourceKind string, 
 		goToolUnavailable = err
 	} else if !errors.Is(err, ErrNoSourceComponentPackage) {
 		return "", "", err
-	}
-
-	if kind == providermanifestv1.KindCache {
-		if goToolUnavailable != nil {
-			return "", "", goToolUnavailable
-		}
-		return "", "", fmt.Errorf("%w: %w", ErrNoSourceComponentPackage, ErrCacheSourceComponentRequiresGo)
 	}
 
 	if _, err := detectRustPackage(root); err == nil {

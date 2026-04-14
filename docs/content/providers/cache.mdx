@@ -1,0 +1,113 @@
+# Cache
+
+Cache providers are plugin-bound utilities for short-lived key/value state.
+They are configured under `providers.cache` and attached to plugins with
+`plugins.<name>.cache`.
+
+Unlike IndexedDB, cache providers are not selected through `server.providers`.
+They are only exposed to plugins that request them.
+
+## Configuration
+
+```yaml
+providers:
+  cache:
+    session:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/cache/redis
+        version: 0.0.1-alpha.1
+      config:
+        addr: ${VALKEY_ADDR}
+        db: 0
+
+    rate_limit:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/cache/redis
+        version: 0.0.1-alpha.1
+      config:
+        addr: ${VALKEY_ADDR}
+        db: 1
+
+plugins:
+  search:
+    source:
+      path: ./providers/search/manifest.yaml
+    cache:
+      - session
+      - rate_limit
+```
+
+## How bindings work
+
+- `plugins.<name>.cache` is a list of named cache bindings.
+- Cache names must exist under `providers.cache`.
+- Duplicate cache names are rejected during config validation.
+- With one binding, the host sets both `GESTALT_CACHE_SOCKET` and the named env var.
+- With multiple bindings, the host sets only the named env vars:
+  `GESTALT_CACHE_SOCKET_<NAME>`.
+
+For a binding named `session`, the SDK env var is:
+
+```text
+GESTALT_CACHE_SOCKET_SESSION
+```
+
+Names are normalized to uppercase with non-alphanumeric characters replaced by `_`.
+
+## SDK use
+
+Go:
+
+```go
+cache, err := gestalt.Cache("session")
+if err != nil {
+    panic(err)
+}
+defer cache.Close()
+
+value, found, err := cache.Get(ctx, "user:1")
+if err != nil {
+    panic(err)
+}
+_ = value
+_ = found
+```
+
+Python:
+
+```python
+import datetime as dt
+import gestalt
+
+cache = gestalt.Cache("session")
+cache.set("user:1", b"alpha", ttl=dt.timedelta(minutes=5))
+value = cache.get("user:1")
+cache.close()
+```
+
+Rust:
+
+```rust
+let mut cache = gestalt::Cache::connect_named("session").await?;
+let value = cache.get("user:1").await?;
+```
+
+TypeScript:
+
+```ts
+import { Cache } from "@valon-technologies/gestalt";
+
+const cache = new Cache("session");
+const value = await cache.get("user:1");
+```
+
+## First-party providers
+
+First-party cache backends can live under
+`github.com/valon-technologies/gestalt-providers/cache/...`.
+The exact package set depends on what has been published so far.
+
+## Custom implementations
+
+For manifests, SDK authoring surfaces, and release flow, see
+[Custom Providers > Cache](/custom-providers/cache).

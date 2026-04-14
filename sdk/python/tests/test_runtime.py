@@ -7,10 +7,13 @@ from typing import Any
 from unittest import mock
 
 import grpc
+from google.protobuf import duration_pb2 as _duration_pb2
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 
 from gestalt import (
     AuthProvider,
+    CacheEntry,
+    CacheProvider,
     Catalog,
     CatalogOperation,
     ExternalTokenValidator,
@@ -26,10 +29,13 @@ from gestalt import (
     _runtime,
 )
 from gestalt.gen.v1 import auth_pb2 as _auth_pb2
+from gestalt.gen.v1 import cache_pb2 as _cache_pb2
 from gestalt.gen.v1 import plugin_pb2 as _plugin_pb2
 from gestalt.gen.v1 import runtime_pb2 as _runtime_pb2
 
 auth_pb2: Any = _auth_pb2
+cache_pb2: Any = _cache_pb2
+duration_pb2: Any = _duration_pb2
 plugin_pb2: Any = _plugin_pb2
 runtime_pb2: Any = _runtime_pb2
 timestamp_pb2: Any = _timestamp_pb2
@@ -101,6 +107,32 @@ class ParseRuntimeArgsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdir:
             with mock.patch.object(_runtime.sys, "_MEIPASS", tmpdir, create=True):
                 self.assertIsNone(_runtime._parse_runtime_args([]))
+
+
+class RuntimeKindNormalizationTests(unittest.TestCase):
+    def test_normalized_runtime_kind_recognizes_cache(self) -> None:
+        self.assertEqual(
+            _runtime._normalized_runtime_kind("cache"),
+            ProviderKind.CACHE,
+        )
+
+    def test_normalized_runtime_kind_falls_back_to_integration_for_unknown_values(self) -> None:
+        self.assertEqual(
+            _runtime._normalized_runtime_kind("typo"),
+            ProviderKind.INTEGRATION,
+        )
+        self.assertEqual(
+            _runtime._normalized_runtime_kind(object()),
+            ProviderKind.INTEGRATION,
+        )
+
+
+class DurationConversionTests(unittest.TestCase):
+    def test_duration_to_timedelta_truncates_submicrosecond_nanos(self) -> None:
+        self.assertEqual(
+            _runtime._duration_to_timedelta(duration_pb2.Duration(nanos=5_999)),
+            dt.timedelta(microseconds=5),
+        )
 
 
 class ManifestNameTests(unittest.TestCase):
@@ -418,6 +450,194 @@ class AuthRuntimeTests(unittest.TestCase):
         unknown_context.abort.assert_called_once_with(
             grpc.StatusCode.NOT_FOUND,
             "token not recognized",
+        )
+
+
+class CacheRuntimeTests(unittest.TestCase):
+    class FallbackCacheProvider(CacheProvider):
+        def __init__(self) -> None:
+            self.values: dict[str, bytes] = {}
+
+        def get(self, key: str) -> bytes | None:
+            return self.values.get(key)
+
+        def set(
+            self,
+            key: str,
+            value: bytes,
+            ttl: dt.timedelta | None = None,
+        ) -> None:
+            self.values[key] = bytes(value)
+
+        def delete(self, key: str) -> bool:
+            return self.values.pop(key, None) is not None
+
+        def touch(self, key: str, ttl: dt.timedelta) -> bool:
+            return key in self.values
+
+    class StubCacheProvider(
+        CacheProvider,
+        MetadataProvider,
+        WarningsProvider,
+        HealthChecker,
+    ):
+        def __init__(self) -> None:
+            self.configured: list[tuple[str, dict[str, object]]] = []
+            self.values: dict[str, bytes] = {}
+
+        def configure(self, name: str, config: dict[str, Any]) -> None:
+            self.configured.append((name, dict(config)))
+
+        def metadata(self) -> ProviderMetadata:
+            return ProviderMetadata(
+                kind=ProviderKind.CACHE,
+                name="stub-cache",
+                display_name="Stub Cache",
+                description="test cache provider",
+                version="1.0.0",
+            )
+
+        def warnings(self) -> list[str]:
+            return ["set CACHE_ENV"]
+
+        def health_check(self) -> None:
+            return None
+
+        def get(self, key: str) -> bytes | None:
+            return self.values.get(key)
+
+        def set(
+            self,
+            key: str,
+            value: bytes,
+            ttl: dt.timedelta | None = None,
+        ) -> None:
+            self.values[key] = bytes(value)
+
+        def delete(self, key: str) -> bool:
+            return self.values.pop(key, None) is not None
+
+        def touch(self, key: str, ttl: dt.timedelta) -> bool:
+            return key in self.values
+
+        def set_many(
+            self,
+            entries: list[Any],
+            ttl: dt.timedelta | None = None,
+        ) -> None:
+            for entry in entries:
+                self.values[entry.key] = bytes(entry.value)
+
+        def get_many(self, keys: list[str]) -> dict[str, bytes]:
+            return {
+                key: value
+                for key in keys
+                if (value := self.values.get(key)) is not None
+            }
+
+        def delete_many(self, keys: list[str]) -> int:
+            deleted = 0
+            seen: set[str] = set()
+            for key in keys:
+                if key in seen:
+                    continue
+                seen.add(key)
+                if self.values.pop(key, None) is not None:
+                    deleted += 1
+            return deleted
+
+    def test_runtime_metadata_and_cache_servicer(self) -> None:
+        provider = self.StubCacheProvider()
+
+        runtime_servicer = _runtime._runtime_servicer(
+            provider=provider,
+            kind=ProviderKind.CACHE,
+        )
+        meta = runtime_servicer.GetProviderIdentity(mock.Mock(), mock.Mock())
+        self.assertEqual(meta.kind, runtime_pb2.ProviderKind.PROVIDER_KIND_CACHE)
+        self.assertEqual(meta.name, "stub-cache")
+        self.assertEqual(list(meta.warnings), ["set CACHE_ENV"])
+
+        cache_servicer = _runtime._cache_servicer(provider=provider)
+        cache_servicer.Set(
+            cache_pb2.CacheSetRequest(
+                key="session",
+                value=b"alpha",
+            ),
+            mock.Mock(),
+        )
+        self.assertEqual(
+            cache_servicer.Get(
+                cache_pb2.CacheGetRequest(key="session"),
+                mock.Mock(),
+            ).value,
+            b"alpha",
+        )
+
+        cache_servicer.SetMany(
+            cache_pb2.CacheSetManyRequest(
+                entries=[
+                    cache_pb2.CacheSetEntry(key="a", value=b"one"),
+                    cache_pb2.CacheSetEntry(key="b", value=b"two"),
+                ]
+            ),
+            mock.Mock(),
+        )
+        many = cache_servicer.GetMany(
+            cache_pb2.CacheGetManyRequest(keys=["session", "a", "missing"]),
+            mock.Mock(),
+        )
+        self.assertEqual(
+            [(entry.key, entry.found, bytes(entry.value)) for entry in many.entries],
+            [
+                ("session", True, b"alpha"),
+                ("a", True, b"one"),
+                ("missing", False, b""),
+            ],
+        )
+        deleted = cache_servicer.DeleteMany(
+            cache_pb2.CacheDeleteManyRequest(keys=["a", "missing", "a"]),
+            mock.Mock(),
+        )
+        self.assertEqual(deleted.deleted, 1)
+        self.assertTrue(
+            cache_servicer.Touch(
+                cache_pb2.CacheTouchRequest(key="session"),
+                mock.Mock(),
+            ).touched
+        )
+        self.assertFalse(
+            cache_servicer.Touch(
+                cache_pb2.CacheTouchRequest(key="missing"),
+                mock.Mock(),
+            ).touched
+        )
+
+    def test_cache_provider_batch_fallbacks(self) -> None:
+        provider = self.FallbackCacheProvider()
+        provider.set("session", b"alpha")
+        provider.set_many(
+            [
+                CacheEntry(key="a", value=b"one"),
+                CacheEntry(key="b", value=b"two"),
+            ],
+            ttl=dt.timedelta(minutes=5),
+        )
+
+        self.assertEqual(
+            provider.get_many(["session", "a", "missing"]),
+            {
+                "session": b"alpha",
+                "a": b"one",
+            },
+        )
+        self.assertEqual(provider.delete_many(["a", "missing", "a"]), 1)
+        self.assertEqual(
+            provider.get_many(["session", "a", "b"]),
+            {
+                "session": b"alpha",
+                "b": b"two",
+            },
         )
 
 

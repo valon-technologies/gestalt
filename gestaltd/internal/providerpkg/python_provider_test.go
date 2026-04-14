@@ -64,6 +64,7 @@ func TestDetectPythonComponentTarget(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte(`[tool.gestalt]
 plugin = "provider"
 auth = "provider:auth_provider"
+cache = "provider:cache_provider"
 indexeddb = "provider:indexeddb_provider"
 `), 0o644); err != nil {
 		t.Fatalf("WriteFile(pyproject.toml): %v", err)
@@ -75,6 +76,14 @@ indexeddb = "provider:indexeddb_provider"
 	}
 	if authTarget != "provider:auth_provider" {
 		t.Fatalf("auth target = %q, want %q", authTarget, "provider:auth_provider")
+	}
+
+	cacheTarget, err := DetectPythonComponentTarget(root, providermanifestv1.KindCache)
+	if err != nil {
+		t.Fatalf("DetectPythonComponentTarget(cache): %v", err)
+	}
+	if cacheTarget != "provider:cache_provider" {
+		t.Fatalf("cache target = %q, want %q", cacheTarget, "provider:cache_provider")
 	}
 
 	datastoreTarget, err := DetectPythonComponentTarget(root, providermanifestv1.KindIndexedDB)
@@ -166,6 +175,18 @@ func TestPythonComponentExecutionCommand_PassesRuntimeKind(t *testing.T) {
 	}
 	if got := strings.Join(args, " "); got != "-m gestalt._runtime "+root+" provider:auth_provider auth" {
 		t.Fatalf("args = %q", got)
+	}
+}
+
+func TestPythonRuntimeKind_Cache(t *testing.T) {
+	t.Parallel()
+
+	got, err := pythonRuntimeKind(providermanifestv1.KindCache)
+	if err != nil {
+		t.Fatalf("pythonRuntimeKind(cache): %v", err)
+	}
+	if got != pythonRuntimeKindCache {
+		t.Fatalf("runtime kind = %q, want %q", got, pythonRuntimeKindCache)
 	}
 }
 

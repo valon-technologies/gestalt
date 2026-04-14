@@ -41,3 +41,23 @@ func TestDetectSourceComponent_WorkspaceCargoManifestIsMiss(t *testing.T) {
 		t.Fatalf("error = %v, want %v", err, ErrNoSourceComponentPackage)
 	}
 }
+
+func TestDetectSourceComponent_CacheFallsBackToPython(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	mustWriteFile(t, filepath.Join(root, pythonProjectFile), []byte(`[tool.gestalt]
+cache = "provider:cache_provider"
+`), 0o644)
+
+	kind, target, err := detectSourceComponent(root, providermanifestv1.KindCache, runtime.GOOS, runtime.GOARCH)
+	if err != nil {
+		t.Fatalf("detectSourceComponent(cache): %v", err)
+	}
+	if kind != sourceProviderKindPython {
+		t.Fatalf("kind = %q, want %q", kind, sourceProviderKindPython)
+	}
+	if target != "provider:cache_provider" {
+		t.Fatalf("target = %q, want %q", target, "provider:cache_provider")
+	}
+}

@@ -4,7 +4,9 @@ import { Tabs } from 'nextra/components'
 
 Gestalt provider packages and release archives are described by a manifest file: `manifest.yaml`, `manifest.yml`, or `manifest.json`. YAML is the easiest format to author by hand.
 
-Providers are the umbrella concept in Gestalt. Auth providers, indexeddb providers, and plugins all use this manifest format. The `plugin` manifest kind is reserved for providers that expose callable operations.
+Providers are the umbrella concept in Gestalt. Auth providers, cache providers,
+indexeddb providers, and plugins all use this manifest format. The `plugin`
+manifest kind is reserved for providers that expose callable operations.
 
 ## Manifest Kinds
 
@@ -14,6 +16,7 @@ Every manifest defines exactly one provider kind, set by the `kind` field:
 | --- | --- |
 | `plugin` | Plugin (REST, OpenAPI, GraphQL, MCP, or executable). |
 | `auth` | Platform auth provider. |
+| `cache` | Cache backend for plugin-bound cache bindings. |
 | `indexeddb` | Persistence backend. |
 | `secrets` | Secret manager for resolving `secret://` references. |
 | `webui` | Static UI package served by `gestaltd`. |
@@ -26,7 +29,7 @@ These fields appear at the top level of every manifest regardless of kind.
 
 | Field | Type | Required | Purpose |
 | --- | --- | --- | --- |
-| `kind` | string | yes | The provider kind (`plugin`, `auth`, `indexeddb`, `secrets`, `webui`). |
+| `kind` | string | yes | The provider kind (`plugin`, `auth`, `cache`, `indexeddb`, `secrets`, `webui`). |
 | `source` | string | yes | Canonical provider source identifier. Use `github.com/<org>/<repo>/<path>`. The final path segment is the provider package name; preceding segments are used for release tags and source resolution. |
 | `version` | string | yes | Semver version. Pre-release suffixes like `-alpha.1` are allowed. |
 | `displayName` | string | no | Human-readable label shown in the UI. |

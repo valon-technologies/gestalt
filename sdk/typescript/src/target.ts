@@ -29,6 +29,7 @@ const EXTERNAL_PROVIDER_KIND_TOKENS = new Set<string>([
   "plugin",
   "integration",
   "auth",
+  "cache",
   "secrets",
   "telemetry",
 ]);
@@ -157,7 +158,7 @@ export function formatModuleTarget(target: ModuleTarget): string {
 }
 
 function parseKindPrefixedTarget(target: string): ProviderTarget | undefined {
-  const match = target.match(/^(plugin|integration|auth|secrets|telemetry):(.*)$/);
+  const match = target.match(/^(plugin|integration|auth|cache|secrets|telemetry):(.*)$/);
   if (!match) {
     return undefined;
   }

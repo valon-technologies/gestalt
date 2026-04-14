@@ -11,15 +11,16 @@ pub fn env_lock() -> &'static tokio::sync::Mutex<()> {
 }
 
 pub struct EnvGuard {
-    key: &'static str,
+    key: String,
     previous: Option<OsString>,
 }
 
 impl EnvGuard {
-    pub fn set(key: &'static str, value: impl AsRef<std::ffi::OsStr>) -> Self {
-        let previous = std::env::var_os(key);
+    pub fn set(key: impl Into<String>, value: impl AsRef<std::ffi::OsStr>) -> Self {
+        let key = key.into();
+        let previous = std::env::var_os(&key);
         unsafe {
-            std::env::set_var(key, value);
+            std::env::set_var(&key, value);
         }
         Self { key, previous }
     }
@@ -29,9 +30,9 @@ impl Drop for EnvGuard {
     fn drop(&mut self) {
         unsafe {
             if let Some(previous) = &self.previous {
-                std::env::set_var(self.key, previous);
+                std::env::set_var(&self.key, previous);
             } else {
-                std::env::remove_var(self.key);
+                std::env::remove_var(&self.key);
             }
         }
     }

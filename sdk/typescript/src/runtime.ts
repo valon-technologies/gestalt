@@ -16,6 +16,15 @@ import {
   type ValidateExternalTokenRequest,
 } from "../gen/v1/auth_pb.ts";
 import {
+  Cache as CacheService,
+  CacheDeleteManyResponseSchema,
+  CacheDeleteResponseSchema,
+  CacheGetManyResponseSchema,
+  CacheGetResponseSchema,
+  CacheResultSchema,
+  CacheTouchResponseSchema,
+} from "../gen/v1/cache_pb.ts";
+import {
   SecretsProvider as SecretsProviderService,
   GetSecretResponseSchema,
   type GetSecretRequest,
@@ -49,6 +58,7 @@ import {
   isAuthProvider,
   type AuthenticatedUser,
 } from "./auth.ts";
+import { CacheProvider, isCacheProvider } from "./cache.ts";
 import { SecretsProvider, isSecretsProvider } from "./secrets.ts";
 import { catalogToYaml, type Catalog } from "./catalog.ts";
 import {
@@ -81,6 +91,7 @@ export type RuntimeArgs = {
 export type LoadedProvider =
   | IntegrationProvider
   | AuthProvider
+  | CacheProvider
   | SecretsProvider;
 
 export async function main(
@@ -143,6 +154,15 @@ export async function loadProviderFromTarget(
       if (!isAuthProvider(candidate)) {
         throw new Error(
           `${targetValue} did not resolve to a Gestalt auth provider`,
+        );
+      }
+      candidate.resolveName(defaultName);
+      return candidate;
+    }
+    case "cache": {
+      if (!isCacheProvider(candidate)) {
+        throw new Error(
+          `${targetValue} did not resolve to a Gestalt cache provider`,
         );
       }
       candidate.resolveName(defaultName);
@@ -245,6 +265,14 @@ export async function runBundledProvider(
       }
       loaded = provider;
       break;
+    case "cache":
+      if (!isCacheProvider(provider)) {
+        throw new Error(
+          "bundled target did not resolve to a Gestalt cache provider",
+        );
+      }
+      loaded = provider;
+      break;
     case "secrets":
       if (!isSecretsProvider(provider)) {
         throw new Error(
@@ -293,6 +321,8 @@ export async function serve(provider: LoadedProvider): Promise<void> {
         );
       } else if (isAuthProvider(provider)) {
         router.service(AuthProviderService, createAuthService(provider));
+      } else if (isCacheProvider(provider)) {
+        router.service(CacheService, createCacheService(provider));
       } else if (isSecretsProvider(provider)) {
         router.service(SecretsProviderService, createSecretsService(provider));
       }
@@ -564,6 +594,70 @@ export function createAuthService(
   };
 }
 
+export function createCacheService(
+  provider: CacheProvider,
+): Partial<ServiceImpl<typeof CacheService>> {
+  return {
+    async get(request) {
+      const value = await provider.get(request.key);
+      return create(CacheGetResponseSchema, {
+        found: value !== undefined,
+        value: value ? cloneUint8Array(value) : new Uint8Array(),
+      });
+    },
+    async getMany(request) {
+      const entries = await provider.getMany([...request.keys]);
+      return create(CacheGetManyResponseSchema, {
+        entries: request.keys.map((key) => {
+          const found = Object.hasOwn(entries, key);
+          const value = found ? entries[key] : undefined;
+          return create(CacheResultSchema, {
+            key,
+            found,
+            value: value ? cloneUint8Array(value) : new Uint8Array(),
+          });
+        }),
+      });
+    },
+    async set(request) {
+      await provider.set(
+        request.key,
+        cloneUint8Array(request.value),
+        durationToSetOptions(request.ttl),
+      );
+      return create(EmptySchema, {});
+    },
+    async setMany(request) {
+      await provider.setMany(
+        request.entries.map((entry) => ({
+          key: entry.key,
+          value: cloneUint8Array(entry.value),
+        })),
+        durationToSetOptions(request.ttl),
+      );
+      return create(EmptySchema, {});
+    },
+    async delete(request) {
+      return create(CacheDeleteResponseSchema, {
+        deleted: await provider.delete(request.key),
+      });
+    },
+    async deleteMany(request) {
+      return create(CacheDeleteManyResponseSchema, {
+        deleted: normalizeBigInt(await provider.deleteMany([...request.keys])),
+      });
+    },
+    async touch(request) {
+      return create(CacheTouchResponseSchema, {
+        touched: await provider.touch(
+          request.key,
+          durationToMs(request.ttl),
+        ),
+      });
+    },
+  };
+}
+
 export function createSecretsService(
   provider: SecretsProvider,
 ): Partial<ServiceImpl<typeof SecretsProviderService>> {
@@ -619,6 +713,8 @@ function providerKindToProto(kind: ProviderKind): ProtoProviderKind {
       return ProtoProviderKind.INTEGRATION;
     case "auth":
       return ProtoProviderKind.AUTH;
+    case "cache":
+      return ProtoProviderKind.CACHE;
     case "secrets":
       return ProtoProviderKind.SECRETS;
     case "telemetry":
@@ -698,6 +794,31 @@ function cloneUint8Array(value: Uint8Array | undefined): Uint8Array {
     return new Uint8Array();
   }
   return new Uint8Array(value);
+}
+
+function durationToMs(
+  value: { seconds: bigint; nanos: number } | undefined,
+): number {
+  if (!value) {
+    return 0;
+  }
+  const seconds = Number(value.seconds ?? 0n);
+  const nanos = Number(value.nanos ?? 0);
+  if (!Number.isFinite(seconds) || !Number.isFinite(nanos)) {
+    return 0;
+  }
+  return Math.max(0, (seconds * 1000) + Math.trunc(nanos / 1_000_000));
+}
+
+function durationToSetOptions(
+  value: { seconds: bigint; nanos: number } | undefined,
+): { ttlMs: number } | undefined {
+  if (!value) {
+    return undefined;
+  }
+  return {
+    ttlMs: durationToMs(value),
+  };
 }
 
 if (import.meta.main) {
