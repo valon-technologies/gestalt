@@ -294,22 +294,12 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry) error {
 	if entry.Default {
 		return fmt.Errorf("config validation: plugins.%s.default is not supported on plugins", name)
 	}
-	entry.IndexedDBSchema = strings.TrimSpace(entry.IndexedDBSchema)
 	if entry.IndexedDB != nil {
 		entry.IndexedDB.Provider = strings.TrimSpace(entry.IndexedDB.Provider)
 		entry.IndexedDB.DB = strings.TrimSpace(entry.IndexedDB.DB)
 		for i, store := range entry.IndexedDB.ObjectStores {
 			entry.IndexedDB.ObjectStores[i] = strings.TrimSpace(store)
 		}
-	}
-	if entry.IndexedDBSchema != "" {
-		if entry.IndexedDB == nil {
-			entry.IndexedDB = &PluginIndexedDBConfig{}
-		}
-		if entry.IndexedDB.DB != "" {
-			return fmt.Errorf("config validation: plugins.%s may not set both indexeddb.db and indexeddbSchema", name)
-		}
-		entry.IndexedDB.DB = entry.IndexedDBSchema
 	}
 	if err := validateProviderEntrySource("plugin", name, entry); err != nil {
 		return err
@@ -368,9 +358,6 @@ func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) erro
 	}
 	if entry.IndexedDB != nil {
 		return fmt.Errorf("config validation: %s.indexeddb is only supported on plugins.*", subject)
-	}
-	if strings.TrimSpace(entry.IndexedDBSchema) != "" {
-		return fmt.Errorf("config validation: %s.indexeddbSchema is only supported on plugins.*", subject)
 	}
 	if len(entry.Cache) > 0 {
 		return fmt.Errorf("config validation: %s.cache is only supported on plugins.*", subject)

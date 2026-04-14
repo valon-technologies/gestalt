@@ -65,11 +65,6 @@ type ProvidersConfig struct {
 	UI        map[string]*UIEntry       `yaml:"ui,omitempty"`
 	IndexedDB map[string]*ProviderEntry `yaml:"indexeddb,omitempty"`
 	Cache     map[string]*ProviderEntry `yaml:"cache,omitempty"`
-
-	// Legacy aliases retained for internal call sites and tests while the
-	// canonical YAML shape is migrating to top-level plugins and indexeddb.
-	IndexedDBs map[string]*ProviderEntry `yaml:"-"`
-	Plugins    map[string]*ProviderEntry `yaml:"-"`
 }
 
 type HostProviderKind string
@@ -143,7 +138,6 @@ type ProviderEntry struct {
 	AllowedOperations map[string]*OperationOverride `yaml:"allowedOperations,omitempty"`
 	IndexedDB         *PluginIndexedDBConfig        `yaml:"indexeddb,omitempty"`
 	Cache             []string                      `yaml:"cache,omitempty"`
-	IndexedDBSchema   string                        `yaml:"indexeddbSchema,omitempty"` // Legacy alias for IndexedDB.DB.
 	Surfaces          *ProviderSurfaceOverrides     `yaml:"surfaces,omitempty"`
 
 	// Runtime-resolved fields (populated during init/bootstrap, not from YAML)
@@ -177,37 +171,13 @@ type PluginIndexedDBConfig struct {
 	ObjectStores []string `yaml:"objectStores,omitempty"`
 }
 
-type legacyPluginIndexedDBBinding struct {
-	Name         string   `yaml:"name,omitempty"`
-	ObjectStores []string `yaml:"objectStore,omitempty"`
-}
-
 func (c *PluginIndexedDBConfig) UnmarshalYAML(value *yaml.Node) error {
 	switch value.Kind {
 	case yaml.ScalarNode:
 		c.Provider = strings.TrimSpace(value.Value)
 		return nil
 	case yaml.SequenceNode:
-		switch len(value.Content) {
-		case 0:
-			c.Disabled = true
-			return nil
-		case 1:
-			item := value.Content[0]
-			if item.Kind == yaml.ScalarNode {
-				c.Provider = strings.TrimSpace(item.Value)
-				return nil
-			}
-			var binding legacyPluginIndexedDBBinding
-			if err := item.Decode(&binding); err != nil {
-				return err
-			}
-			c.Provider = strings.TrimSpace(binding.Name)
-			c.ObjectStores = slices.Clone(binding.ObjectStores)
-			return nil
-		default:
-			return fmt.Errorf("plugin indexeddb legacy list supports at most one entry")
-		}
+		return fmt.Errorf("plugin indexeddb must be a mapping or scalar provider name")
 	default:
 		type raw PluginIndexedDBConfig
 		return value.Decode((*raw)(c))
@@ -343,7 +313,6 @@ type ServerConfig struct {
 	APITokenTTL   string                   `yaml:"apiTokenTtl"`
 	ArtifactsDir  string                   `yaml:"artifactsDir"`
 	Providers     ServerProvidersConfig    `yaml:"providers,omitempty"`
-	IndexedDB     string                   `yaml:"-"`
 	Egress        EgressConfig             `yaml:"egress,omitempty"`
 	Authorization AuthorizationConfig      `yaml:"authorization,omitempty"`
 	Admin         AdminConfig              `yaml:"admin,omitempty"`
@@ -788,29 +757,6 @@ func mappingValueNode(node *yaml.Node, key string) *yaml.Node {
 	return nil
 }
 
-type configShapeUsage struct {
-	legacy    bool
-	canonical bool
-}
-
-var legacyProviderEntryKeys = map[string]struct{}{
-	"source":            {},
-	"config":            {},
-	"default":           {},
-	"disabled":          {},
-	"env":               {},
-	"allowedHosts":      {},
-	"displayName":       {},
-	"description":       {},
-	"iconFile":          {},
-	"connections":       {},
-	"allowedOperations": {},
-	"indexeddb":         {},
-	"indexeddbs":        {},
-	"cache":             {},
-	"surfaces":          {},
-}
-
 func normalizeConfigRoot(root *yaml.Node) error {
 	doc := documentValueNode(root)
 	if doc == nil || doc.Kind == 0 {
@@ -819,211 +765,7 @@ func normalizeConfigRoot(root *yaml.Node) error {
 	if doc.Kind != yaml.MappingNode {
 		return fmt.Errorf("parsing config YAML: expected mapping document")
 	}
-
-	usage := configShapeUsage{}
-	providersNode := mappingValueNode(doc, "providers")
-	if err := normalizePluginsNode(doc, providersNode, &usage); err != nil {
-		return err
-	}
-	if err := normalizeProvidersNode(providersNode, &usage); err != nil {
-		return err
-	}
-	if err := normalizeServerNode(mappingValueNode(doc, "server"), &usage); err != nil {
-		return err
-	}
-	if err := normalizePluginBindings(mappingValueNode(doc, "plugins"), &usage); err != nil {
-		return err
-	}
 	return nil
-}
-
-func normalizePluginsNode(root, providersNode *yaml.Node, usage *configShapeUsage) error {
-	root = documentValueNode(root)
-	providersNode = documentValueNode(providersNode)
-	canonical := mappingValueNode(root, "plugins")
-	legacy := mappingValueNode(providersNode, "plugins")
-	if canonical != nil {
-		usage.canonical = true
-	}
-	if legacy != nil {
-		usage.legacy = true
-	}
-	if canonical != nil && legacy != nil {
-		return fmt.Errorf("config validation: plugins must be configured using top-level plugins or providers.plugins, not both")
-	}
-	if canonical == nil && legacy != nil {
-		setMappingValueNode(root, "plugins", legacy)
-		removeMappingKey(providersNode, "plugins")
-	}
-	return nil
-}
-
-func normalizeProvidersNode(providersNode *yaml.Node, usage *configShapeUsage) error {
-	providersNode = documentValueNode(providersNode)
-	if providersNode == nil {
-		return nil
-	}
-	legacyIndexedDB := mappingValueNode(providersNode, "indexeddbs")
-	canonicalIndexedDB := mappingValueNode(providersNode, "indexeddb")
-	if legacyIndexedDB != nil {
-		usage.legacy = true
-	}
-	if canonicalIndexedDB != nil {
-		usage.canonical = true
-	}
-	if legacyIndexedDB != nil && canonicalIndexedDB != nil {
-		return fmt.Errorf("config validation: providers.indexeddb must be configured using indexeddb or indexeddbs, not both")
-	}
-	if canonicalIndexedDB == nil && legacyIndexedDB != nil {
-		setMappingValueNode(providersNode, "indexeddb", legacyIndexedDB)
-		removeMappingKey(providersNode, "indexeddbs")
-	}
-
-	for _, kind := range []string{"auth", "secrets", "telemetry", "audit"} {
-		node := mappingValueNode(providersNode, kind)
-		if node == nil {
-			continue
-		}
-		if isLegacySingletonProviderNode(node) {
-			usage.legacy = true
-			setMappingValueNode(providersNode, kind, wrapLegacyProviderNode(kind, node))
-			continue
-		}
-		usage.canonical = true
-	}
-	return nil
-}
-
-func normalizeServerNode(serverNode *yaml.Node, usage *configShapeUsage) error {
-	serverNode = documentValueNode(serverNode)
-	if serverNode == nil {
-		return nil
-	}
-	providersNode := mappingValueNode(serverNode, "providers")
-	legacyIndexedDB := mappingValueNode(serverNode, "indexeddb")
-	if providersNode != nil {
-		usage.canonical = true
-	}
-	if legacyIndexedDB != nil {
-		usage.legacy = true
-	}
-	if providersNode != nil && legacyIndexedDB != nil && mappingValueNode(providersNode, "indexeddb") != nil {
-		return fmt.Errorf("config validation: server.providers.indexeddb and server.indexeddb cannot both be set")
-	}
-	if legacyIndexedDB != nil {
-		if providersNode == nil {
-			providersNode = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-			setMappingValueNode(serverNode, "providers", providersNode)
-		}
-		if mappingValueNode(providersNode, "indexeddb") == nil {
-			setMappingValueNode(providersNode, "indexeddb", legacyIndexedDB)
-		}
-		removeMappingKey(serverNode, "indexeddb")
-	}
-	return nil
-}
-
-func normalizePluginBindings(pluginsNode *yaml.Node, usage *configShapeUsage) error {
-	pluginsNode = documentValueNode(pluginsNode)
-	if pluginsNode == nil || pluginsNode.Kind != yaml.MappingNode {
-		return nil
-	}
-	for i := 0; i+1 < len(pluginsNode.Content); i += 2 {
-		entryNode := documentValueNode(pluginsNode.Content[i+1])
-		if entryNode == nil || entryNode.Kind != yaml.MappingNode {
-			continue
-		}
-		legacy := mappingValueNode(entryNode, "indexeddbs")
-		canonical := mappingValueNode(entryNode, "indexeddb")
-		if legacy != nil {
-			usage.legacy = true
-		}
-		if canonical != nil {
-			usage.canonical = true
-		}
-		if legacy != nil && canonical != nil {
-			return fmt.Errorf("config validation: plugin %q cannot set both indexeddb and indexeddbs", pluginsNode.Content[i].Value)
-		}
-		if canonical == nil && legacy != nil {
-			setMappingValueNode(entryNode, "indexeddb", legacy)
-			removeMappingKey(entryNode, "indexeddbs")
-		}
-	}
-	return nil
-}
-
-func isLegacySingletonProviderNode(node *yaml.Node) bool {
-	node = documentValueNode(node)
-	if node == nil || node.Kind != yaml.MappingNode || len(node.Content) == 0 {
-		return false
-	}
-	for i := 0; i+1 < len(node.Content); i += 2 {
-		key := node.Content[i].Value
-		if _, ok := legacyProviderEntryKeys[key]; !ok {
-			return false
-		}
-		if !looksLikeProviderEntryMap(node.Content[i+1]) {
-			return true
-		}
-	}
-	return false
-}
-
-func looksLikeProviderEntryMap(node *yaml.Node) bool {
-	node = documentValueNode(node)
-	if node == nil || node.Kind != yaml.MappingNode {
-		return false
-	}
-	if len(node.Content) == 0 {
-		return true
-	}
-	for i := 0; i+1 < len(node.Content); i += 2 {
-		if _, ok := legacyProviderEntryKeys[node.Content[i].Value]; ok {
-			return true
-		}
-	}
-	return false
-}
-
-func wrapLegacyProviderNode(name string, node *yaml.Node) *yaml.Node {
-	return &yaml.Node{
-		Kind: yaml.MappingNode,
-		Tag:  "!!map",
-		Content: []*yaml.Node{
-			{Kind: yaml.ScalarNode, Tag: "!!str", Value: name},
-			node,
-		},
-	}
-}
-
-func setMappingValueNode(node *yaml.Node, key string, value *yaml.Node) {
-	node = documentValueNode(node)
-	if node == nil || node.Kind != yaml.MappingNode {
-		return
-	}
-	for i := 0; i+1 < len(node.Content); i += 2 {
-		if node.Content[i].Value == key {
-			node.Content[i+1] = value
-			return
-		}
-	}
-	node.Content = append(node.Content,
-		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key},
-		value,
-	)
-}
-
-func removeMappingKey(node *yaml.Node, key string) {
-	node = documentValueNode(node)
-	if node == nil || node.Kind != yaml.MappingNode {
-		return
-	}
-	for i := 0; i+1 < len(node.Content); i += 2 {
-		if node.Content[i].Value == key {
-			node.Content = append(node.Content[:i], node.Content[i+2:]...)
-			return
-		}
-	}
 }
 
 func loadWithLookup(path string, lookup func(string) (string, bool), allowMissing bool) (*Config, error) {
@@ -1152,7 +894,6 @@ func overlayEnvIntoNode(node yaml.Node, lookup func(string) (string, bool), pres
 }
 
 func applyDefaults(cfg *Config) {
-	cfg.SyncCompatFields()
 	if cfg.Server.Public.Port == 0 {
 		cfg.Server.Public.Port = 8080
 	}
@@ -1164,10 +905,6 @@ func applyDefaults(cfg *Config) {
 	cfg.Providers.Audit = applyDefaultBuiltinProviderEntries(cfg.Providers.Audit, DefaultProviderInstance, "inherit")
 	cfg.Providers.IndexedDB = nonNilProviderEntryMap(cfg.Providers.IndexedDB)
 	cfg.Providers.Cache = nonNilProviderEntryMap(cfg.Providers.Cache)
-	cfg.Providers.Plugins = cfg.Plugins
-	cfg.Providers.IndexedDBs = cfg.Providers.IndexedDB
-	cfg.Server.IndexedDB = cfg.Server.Providers.IndexedDB
-	cfg.SyncCompatFields()
 }
 
 func nonNilProviderEntryMap(entries map[string]*ProviderEntry) map[string]*ProviderEntry {

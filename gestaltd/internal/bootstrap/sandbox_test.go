@@ -62,16 +62,14 @@ func TestSandboxedPluginCannotReadUnauthorizedFile(t *testing.T) {
 	)
 
 	cfg := &config.Config{
-		Providers: config.ProvidersConfig{
-			Plugins: map[string]*config.ProviderEntry{
-				"sandboxed": {
-					Command:              bin,
-					Args:                 []string{"provider"},
-					AllowedHosts:         []string{"localhost"},
-					HostBinary:           hostBin,
-					ResolvedManifest:     manifest,
-					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				},
+		Plugins: map[string]*config.ProviderEntry{
+			"sandboxed": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				AllowedHosts:         []string{"localhost"},
+				HostBinary:           hostBin,
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 			},
 		},
 	}
@@ -108,16 +106,14 @@ func TestSandboxedPluginCanCommunicateViaGRPC(t *testing.T) {
 	)
 
 	cfg := &config.Config{
-		Providers: config.ProvidersConfig{
-			Plugins: map[string]*config.ProviderEntry{
-				"sandboxed": {
-					Command:              bin,
-					Args:                 []string{"provider"},
-					AllowedHosts:         []string{"localhost"},
-					HostBinary:           hostBin,
-					ResolvedManifest:     manifest,
-					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				},
+		Plugins: map[string]*config.ProviderEntry{
+			"sandboxed": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				AllowedHosts:         []string{"localhost"},
+				HostBinary:           hostBin,
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 			},
 		},
 	}
@@ -157,17 +153,15 @@ func TestSandboxedSynthesizedSourcePluginCanStart(t *testing.T) {
 	}
 
 	cfg := &config.Config{
-		Providers: config.ProvidersConfig{
-			Plugins: map[string]*config.ProviderEntry{
-				"example": {
-					AllowedHosts:         []string{"localhost"},
-					HostBinary:           hostBin,
-					ResolvedManifest:     manifest,
-					ResolvedManifestPath: manifestPath,
-					Config: mustNode(t, map[string]any{
-						"greeting": "Hello from sandbox",
-					}),
-				},
+		Plugins: map[string]*config.ProviderEntry{
+			"example": {
+				AllowedHosts:         []string{"localhost"},
+				HostBinary:           hostBin,
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: manifestPath,
+				Config: mustNode(t, map[string]any{
+					"greeting": "Hello from sandbox",
+				}),
 			},
 		},
 	}
@@ -211,14 +205,12 @@ func TestSandboxDisabledByDefault(t *testing.T) {
 	)
 
 	cfg := &config.Config{
-		Providers: config.ProvidersConfig{
-			Plugins: map[string]*config.ProviderEntry{
-				"nosandbox": {
-					Command:              bin,
-					Args:                 []string{"provider"},
-					ResolvedManifest:     manifest,
-					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				},
+		Plugins: map[string]*config.ProviderEntry{
+			"nosandbox": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 			},
 		},
 	}
@@ -260,16 +252,14 @@ func TestSandboxedPluginHTTPProxyAllowsConfiguredHosts(t *testing.T) {
 	)
 
 	cfg := &config.Config{
-		Providers: config.ProvidersConfig{
-			Plugins: map[string]*config.ProviderEntry{
-				"proxied": {
-					Command:              bin,
-					Args:                 []string{"provider"},
-					AllowedHosts:         []string{host},
-					HostBinary:           hostBin,
-					ResolvedManifest:     manifest,
-					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				},
+		Plugins: map[string]*config.ProviderEntry{
+			"proxied": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				AllowedHosts:         []string{host},
+				HostBinary:           hostBin,
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 			},
 		},
 	}
@@ -318,16 +308,14 @@ func TestSandboxedPluginHTTPProxyBlocksUnconfiguredHosts(t *testing.T) {
 	)
 
 	cfg := &config.Config{
-		Providers: config.ProvidersConfig{
-			Plugins: map[string]*config.ProviderEntry{
-				"blocked": {
-					Command:              bin,
-					Args:                 []string{"provider"},
-					AllowedHosts:         []string{"not-a-real-host.example.com"},
-					HostBinary:           hostBin,
-					ResolvedManifest:     manifest,
-					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				},
+		Plugins: map[string]*config.ProviderEntry{
+			"blocked": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				AllowedHosts:         []string{"not-a-real-host.example.com"},
+				HostBinary:           hostBin,
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 			},
 		},
 	}
