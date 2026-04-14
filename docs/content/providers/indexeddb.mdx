@@ -21,6 +21,65 @@ fall back to `<db>_` transport-level store prefixes. Plugins may also set
 `plugins.<name>.indexeddb.objectStores` to allowlist logical stores such as
 `tasks`.
 
+## How plugins use IndexedDB in code
+
+Executable plugins do not choose raw database DSNs or relational schemas at
+runtime. They receive one IndexedDB SDK socket from the host, and the host
+decides what that socket points to from config.
+
+- In plugin code, use `new IndexedDB()` to open the plugin's configured
+  IndexedDB connection.
+- `plugins.<name>.indexeddb.provider` selects which named
+  `providers.indexeddb` entry backs that socket.
+- `plugins.<name>.indexeddb.db` selects the plugin-visible database name used
+  for backend scoping. On schema-capable backends such as RelationalDB, that
+  becomes the backend schema name.
+- If the plugin omits `plugins.<name>.indexeddb`, it inherits the
+  host-selected IndexedDB provider and uses the plugin key as the default `db`
+  name.
+
+For example:
+
+```yaml
+server:
+  providers:
+    indexeddb: main
+
+providers:
+  indexeddb:
+    main:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
+      config:
+        dsn: ${SYSTEM_DATABASE_URL}
+    workplaceHub:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
+      config:
+        dsn: ${APP_DATABASE_URL}
+
+plugins:
+  workplace_hub:
+    source:
+      path: ./plugin/manifest.yaml
+    indexeddb:
+      provider: workplaceHub
+      db: workplace_hub
+```
+
+Then inside the plugin:
+
+```ts
+const db = new IndexedDB();
+```
+
+The TypeScript SDK also accepts `new IndexedDB("name")`, which looks for a
+named `GESTALT_INDEXEDDB_SOCKET_<NAME>` environment variable. Standard plugin
+config does not expose multiple IndexedDB sockets, so normal plugins should
+select provider and `db` in YAML and use `new IndexedDB()`.
+
 ## First-party IndexedDB providers
 
 First-party storage backends live under
