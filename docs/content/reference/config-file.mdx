@@ -72,7 +72,7 @@ authorization:
 
 `management.host` and `management.port` bind a separate listener for operator traffic. When `management.port` is omitted, `/admin` and `/metrics` stay on the public listener, a mode best kept to local development or other trusted-network deployments. For production, prefer configuring `server.management` so the operator surface leaves the public listener entirely.
 
-`management.baseUrl` is the browser-facing absolute URL for the management listener. It is only needed when `/admin` is protected with `server.admin.authorizationPolicy` on a split public/management deployment. In that mode, unauthenticated `/admin` requests round-trip through the public listener's login flow and return to this management URL after callback. `management.baseUrl` must share a hostname with `server.baseUrl` so the session cookie can be reused across listeners. If `server.baseUrl` uses `https`, `management.baseUrl` must also use `https`.
+`management.baseUrl` is the browser-facing absolute URL for the management listener. It is only needed when `/admin` is protected with `server.admin.authorizationPolicy` on a split public/management deployment. In that mode, unauthenticated management `/admin` requests round-trip through the public listener's login flow and return to the built-in management `/admin` route after callback. `management.baseUrl` must share a hostname with `server.baseUrl` so the session cookie can be reused across listeners. If `server.baseUrl` uses `https`, `management.baseUrl` must also use `https`.
 
 `baseUrl` derives OAuth callback URLs when explicit redirect URLs are omitted, and gives the management admin UI an absolute link back to the public client UI. When unset, the management admin UI omits the `Client UI` link rather than sending operators to a broken same-origin `/`.
 
@@ -92,7 +92,7 @@ authorization:
 | `public.port` | `8080` | Port for the public listener. |
 | `management.host` | | Bind address for the management listener. |
 | `management.port` | | Port for the management listener. Required when `management.host` is set. |
-| `management.baseUrl` | | Browser-facing absolute URL for the management listener. Required when `server.management` and `server.admin.authorizationPolicy` are both set. |
+| `management.baseUrl` | | Browser-facing absolute URL for the management listener. Required for protected built-in `/admin` on split public/management deployments. |
 | `baseUrl` | | Public origin URL used for OAuth callbacks and admin UI links. |
 | `encryptionKey` | | **Required.** Root encryption key. Typically a `secret://` reference. |
 | `apiTokenTtl` | `30d` | Lifetime of newly issued API tokens. Go durations or day suffixes (`30d`). |
