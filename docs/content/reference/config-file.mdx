@@ -483,7 +483,7 @@ plugins:
 | `connections` | Named connection declarations. See [connections](#connections) below. |
 | `allowedOperations` | Allowlist with optional `alias`, `description`, and `allowedRoles` overrides per operation. |
 | `indexeddb` | Optional list of plugin IndexedDB bindings. The scalar shorthand `- main` is still supported; the object form accepts `name` plus optional `objectStore` allowlists to pin logical stores to a binding. A given `objectStore` may appear in at most one binding; duplicates are rejected during config validation. When any binding declares `objectStore`, one additional binding may omit it and acts as the catch-all for unassigned stores. Each binding is rebuilt as a plugin-scoped IndexedDB instance before being served to the plugin. A single binding also populates the default IndexedDB SDK env var for compatibility. |
-| `indexeddbSchema` | Optional override for the plugin IndexedDB namespace. When omitted, Gestalt uses the plugin name. RelationalDB bindings pass this through as `schema` / `namespace` on Postgres, MySQL, and SQL Server, use `<indexeddbSchema>_` table prefixes on SQLite, and other IndexedDB backends fall back to `<indexeddbSchema>_` transport-level store prefixes. |
+| `indexeddbSchema` | Optional override for the plugin IndexedDB namespace. When omitted, Gestalt uses the plugin name. RelationalDB bindings pass this through as `schema` on Postgres, MySQL, and SQL Server, use `<indexeddbSchema>_` table prefixes on SQLite, and other IndexedDB backends fall back to `<indexeddbSchema>_` transport-level store prefixes. |
 
 ### `plugins.*.source`
 

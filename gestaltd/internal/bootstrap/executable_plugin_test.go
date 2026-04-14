@@ -918,38 +918,44 @@ func TestPluginIndexedDBBindingsBuildScopedConfig(t *testing.T) {
 		"postgres": {
 			Source: config.ProviderSource{Ref: "github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb"},
 			Config: mustNode(t, map[string]any{
-				"dsn":       "postgres://db.example.test/gestalt",
-				"schema":    "host_schema",
-				"namespace": "host_schema",
+				"dsn":                 "postgres://db.example.test/gestalt",
+				"schema":              "host_schema",
+				"namespace":           "host_schema_alias_should_be_removed",
+				"legacy_table_prefix": "host_legacy_should_be_replaced_",
+				"legacy_prefix":       "host_legacy_alias_should_be_removed_",
 			}),
 		},
 		"sqlite": {
 			Source: config.ProviderSource{Ref: "github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb"},
 			Config: mustNode(t, map[string]any{
-				"dsn":          "sqlite://plugin-state.db",
-				"table_prefix": "host_",
-				"prefix":       "host_",
-				"schema":       "should_be_removed",
-				"namespace":    "should_be_removed",
+				"dsn":                 "sqlite://plugin-state.db",
+				"table_prefix":        "host_",
+				"prefix":              "host_",
+				"schema":              "should_be_removed",
+				"namespace":           "should_be_removed",
+				"legacy_table_prefix": "host_legacy_should_be_replaced_",
+				"legacy_prefix":       "host_legacy_alias_should_be_removed_",
 			}),
 		},
 		"local-postgres": {
 			Source: config.ProviderSource{Path: "./relationaldb/manifest.yaml"},
 			Config: mustNode(t, map[string]any{
-				"dsn":       "postgres://local.example.test/gestalt",
-				"schema":    "host_local",
-				"namespace": "host_local",
+				"dsn":                 "postgres://local.example.test/gestalt",
+				"schema":              "host_local",
+				"namespace":           "host_local_alias_should_be_removed",
+				"legacy_table_prefix": "host_local_legacy_should_be_replaced_",
+				"legacy_prefix":       "host_local_legacy_alias_should_be_removed_",
 			}),
 		},
 	}
 
 	cases := []struct {
-		name          string
-		schema        string
-		wantNamespace string
+		name       string
+		schema     string
+		wantSchema string
 	}{
-		{name: "defaults to plugin name", wantNamespace: "echoext"},
-		{name: "uses plugin override", schema: "roadmap_state", wantNamespace: "roadmap_state"},
+		{name: "defaults to plugin name", wantSchema: "echoext"},
+		{name: "uses plugin override", schema: "roadmap_state", wantSchema: "roadmap_state"},
 	}
 
 	for _, tc := range cases {
@@ -991,17 +997,17 @@ func TestPluginIndexedDBBindingsBuildScopedConfig(t *testing.T) {
 			if !ok {
 				t.Fatal("missing captured postgres indexeddb config")
 			}
-			if got := postgresCfg.Config["schema"]; got != tc.wantNamespace {
-				t.Fatalf("postgres schema = %#v, want %q", got, tc.wantNamespace)
+			if got := postgresCfg.Config["schema"]; got != tc.wantSchema {
+				t.Fatalf("postgres schema = %#v, want %q", got, tc.wantSchema)
 			}
-			if got := postgresCfg.Config["namespace"]; got != tc.wantNamespace {
-				t.Fatalf("postgres namespace = %#v, want %q", got, tc.wantNamespace)
+			if _, ok := postgresCfg.Config["namespace"]; ok {
+				t.Fatalf("postgres namespace should be removed, got %#v", postgresCfg.Config["namespace"])
 			}
 			if got := postgresCfg.Config["legacy_table_prefix"]; got != "plugin_echoext_" {
 				t.Fatalf("postgres legacy_table_prefix = %#v, want %q", got, "plugin_echoext_")
 			}
-			if got := postgresCfg.Config["legacy_prefix"]; got != "plugin_echoext_" {
-				t.Fatalf("postgres legacy_prefix = %#v, want %q", got, "plugin_echoext_")
+			if _, ok := postgresCfg.Config["legacy_prefix"]; ok {
+				t.Fatalf("postgres legacy_prefix should be removed, got %#v", postgresCfg.Config["legacy_prefix"])
 			}
 			if _, ok := postgresCfg.Config["table_prefix"]; ok {
 				t.Fatalf("postgres table_prefix should be removed, got %#v", postgresCfg.Config["table_prefix"])
@@ -1014,24 +1020,24 @@ func TestPluginIndexedDBBindingsBuildScopedConfig(t *testing.T) {
 			if !ok {
 				t.Fatal("missing captured local postgres indexeddb config")
 			}
-			if got := localPostgresCfg.Config["schema"]; got != tc.wantNamespace {
-				t.Fatalf("local postgres schema = %#v, want %q", got, tc.wantNamespace)
+			if got := localPostgresCfg.Config["schema"]; got != tc.wantSchema {
+				t.Fatalf("local postgres schema = %#v, want %q", got, tc.wantSchema)
 			}
-			if got := localPostgresCfg.Config["namespace"]; got != tc.wantNamespace {
-				t.Fatalf("local postgres namespace = %#v, want %q", got, tc.wantNamespace)
+			if _, ok := localPostgresCfg.Config["namespace"]; ok {
+				t.Fatalf("local postgres namespace should be removed, got %#v", localPostgresCfg.Config["namespace"])
 			}
 			if got := localPostgresCfg.Config["legacy_table_prefix"]; got != "plugin_echoext_" {
 				t.Fatalf("local postgres legacy_table_prefix = %#v, want %q", got, "plugin_echoext_")
 			}
-			if got := localPostgresCfg.Config["legacy_prefix"]; got != "plugin_echoext_" {
-				t.Fatalf("local postgres legacy_prefix = %#v, want %q", got, "plugin_echoext_")
+			if _, ok := localPostgresCfg.Config["legacy_prefix"]; ok {
+				t.Fatalf("local postgres legacy_prefix should be removed, got %#v", localPostgresCfg.Config["legacy_prefix"])
 			}
 
 			sqliteCfg, ok := captured["sqlite://plugin-state.db"]
 			if !ok {
 				t.Fatal("missing captured sqlite indexeddb config")
 			}
-			wantPrefix := tc.wantNamespace + "_"
+			wantPrefix := tc.wantSchema + "_"
 			if got := sqliteCfg.Config["table_prefix"]; got != wantPrefix {
 				t.Fatalf("sqlite table_prefix = %#v, want %q", got, wantPrefix)
 			}
@@ -1047,8 +1053,8 @@ func TestPluginIndexedDBBindingsBuildScopedConfig(t *testing.T) {
 			if got := sqliteCfg.Config["legacy_table_prefix"]; got != "plugin_echoext_" {
 				t.Fatalf("sqlite legacy_table_prefix = %#v, want %q", got, "plugin_echoext_")
 			}
-			if got := sqliteCfg.Config["legacy_prefix"]; got != "plugin_echoext_" {
-				t.Fatalf("sqlite legacy_prefix = %#v, want %q", got, "plugin_echoext_")
+			if _, ok := sqliteCfg.Config["legacy_prefix"]; ok {
+				t.Fatalf("sqlite legacy_prefix should be removed, got %#v", sqliteCfg.Config["legacy_prefix"])
 			}
 
 			_ = CloseProviders(providers)
