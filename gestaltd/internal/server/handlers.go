@@ -568,8 +568,20 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if !s.allowProvider(p, providerName) || !s.allowOperation(p, providerName, operationName) {
-		s.auditHTTPEvent(r.Context(), p, providerName, operationName, false, errOperationAccess)
+	access := s.providerAccessContext(p, providerName)
+	providerAllowed := s.allowProvider(p, providerName)
+	operationAllowed := s.allowOperation(p, providerName, operationName)
+	if !providerAllowed || !operationAllowed {
+		authz := auditAuthorization{
+			Policy: access.Policy,
+			Role:   access.Role,
+		}
+		if !providerAllowed {
+			authz.Decision = auditDecisionProviderAccessDenied
+		} else {
+			authz.Decision = auditDecisionOperationBindingDenied
+		}
+		s.auditHTTPAuthorizationEvent(r.Context(), p, providerName, operationName, false, errOperationAccess, authz)
 		writeError(w, http.StatusForbidden, errOperationAccess.Error())
 		return
 	}
@@ -653,7 +665,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		connection = requestedConnection
 	}
 	ctx := r.Context()
-	ctx = invocation.WithAccessContext(ctx, s.providerAccessContext(p, providerName))
+	ctx = invocation.WithAccessContext(ctx, access)
 
 	var resolver invocation.TokenResolver
 	if tr, ok := s.invoker.(invocation.TokenResolver); ok {
@@ -731,6 +743,11 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.authorizer != nil && !s.authorizer.AllowCatalogOperation(p, providerName, opMeta) {
+		s.auditHTTPAuthorizationEvent(ctx, p, providerName, operationName, false, errOperationAccess, auditAuthorization{
+			Policy:   access.Policy,
+			Role:     access.Role,
+			Decision: auditDecisionCatalogRoleDenied,
+		})
 		writeError(w, http.StatusForbidden, "operation access denied")
 		return
 	}

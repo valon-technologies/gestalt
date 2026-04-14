@@ -67,6 +67,13 @@ func buildAuditEntry(ctx context.Context, p *principal.Principal, source, provid
 			entry.SubjectKind = string(p.Kind)
 		}
 	}
+	access := AccessContextFromContext(ctx)
+	if access.Policy != "" {
+		entry.AccessPolicy = access.Policy
+	}
+	if access.Role != "" {
+		entry.AccessRole = access.Role
+	}
 	return entry
 }
 
@@ -112,6 +119,15 @@ func (s *SlogAuditSink) Log(ctx context.Context, entry core.AuditEntry) {
 	}
 	if entry.SubjectKind != "" {
 		attrs = append(attrs, slog.String("subject_kind", entry.SubjectKind))
+	}
+	if entry.AccessPolicy != "" {
+		attrs = append(attrs, slog.String("access_policy", entry.AccessPolicy))
+	}
+	if entry.AccessRole != "" {
+		attrs = append(attrs, slog.String("access_role", entry.AccessRole))
+	}
+	if entry.AuthorizationDecision != "" {
+		attrs = append(attrs, slog.String("authorization_decision", entry.AuthorizationDecision))
 	}
 	if entry.CredentialMode != "" {
 		attrs = append(attrs, slog.String("credential_mode", entry.CredentialMode))
