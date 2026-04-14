@@ -16,10 +16,10 @@ A cache provider manifest declares `kind: cache`:
 
 ```yaml
 kind: cache
-source: github.com/valon-technologies/gestalt-providers/cache/redis
-version: 0.0.1
-displayName: Redis Cache
-description: Cache provider backed by Redis or Valkey.
+source: github.com/your-org/gestalt-providers/cache/customcache
+version: 0.0.1-alpha.1
+displayName: Custom Cache
+description: Example custom cache provider.
 spec:
   configSchemaPath: ./cache_config.json
 ```
@@ -41,7 +41,7 @@ The Cache service includes:
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
     ```go
-    package rediscache
+    package customcache
 
     import (
         "context"
@@ -82,7 +82,7 @@ The Cache service includes:
 
     import gestalt
 
-    class RedisCache(gestalt.CacheProvider):
+    class CustomCache(gestalt.CacheProvider):
         def get(self, key: str) -> bytes | None:
             return None
 
@@ -104,10 +104,10 @@ The Cache service includes:
   <Tabs.Tab>
     ```rust
     #[derive(Default)]
-    struct RedisCache;
+    struct CustomCache;
 
     #[gestalt::async_trait]
-    impl gestalt::CacheProvider for RedisCache {
+    impl gestalt::CacheProvider for CustomCache {
         async fn get(&self, key: &str) -> gestalt::Result<Option<Vec<u8>>> {
             let _ = key;
             Ok(None)
@@ -134,7 +134,7 @@ The Cache service includes:
         }
     }
 
-    gestalt::export_cache_provider!(constructor = RedisCache::default);
+    gestalt::export_cache_provider!(constructor = CustomCache::default);
     ```
   </Tabs.Tab>
   <Tabs.Tab>

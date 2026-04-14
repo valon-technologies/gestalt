@@ -14,18 +14,18 @@ providers:
   cache:
     session:
       source:
-        ref: github.com/valon-technologies/gestalt-providers/cache/redis
-        version: 0.0.1-alpha.1
+        path: /path/to/local/cache-provider/manifest.yaml
       config:
-        addr: ${VALKEY_ADDR}
+        addresses:
+          - ${VALKEY_ADDR}
         db: 0
 
     rate_limit:
       source:
-        ref: github.com/valon-technologies/gestalt-providers/cache/redis
-        version: 0.0.1-alpha.1
+        path: /path/to/local/cache-provider/manifest.yaml
       config:
-        addr: ${VALKEY_ADDR}
+        addresses:
+          - ${VALKEY_ADDR}
         db: 1
 
 plugins:
@@ -35,6 +35,16 @@ plugins:
     cache:
       - session
       - rate_limit
+```
+
+Until `cache/valkey` is published as a managed package, reference it through a
+local `source.path` checkout that points at your unpublished Valkey provider
+manifest. Once a release exists, switch to:
+
+```yaml
+source:
+  ref: github.com/valon-technologies/gestalt-providers/cache/valkey
+  version: 0.0.1-alpha.1
 ```
 
 ## How bindings work
@@ -103,9 +113,9 @@ const value = await cache.get("user:1");
 
 ## First-party providers
 
-First-party cache backends can live under
-`github.com/valon-technologies/gestalt-providers/cache/...`.
-The exact package set depends on what has been published so far.
+The first-party cache backend is the Valkey provider at:
+
+- `github.com/valon-technologies/gestalt-providers/cache/valkey`
 
 ## Custom implementations
 
