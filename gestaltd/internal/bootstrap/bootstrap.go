@@ -317,7 +317,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	if storeErr != nil {
 		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", cfg.Server.IndexedDB, storeErr)
 	}
-	store = metricutil.InstrumentIndexedDB(store)
+	store = metricutil.InstrumentIndexedDB(store, cfg.Server.IndexedDB)
 	svc, svcErr := coredata.New(store, enc)
 	if svcErr != nil {
 		_ = store.Close()
@@ -335,7 +335,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 			_ = closeIndexedDBs(extraIndexedDBs...)
 			return nil, fmt.Errorf("bootstrap: indexeddb from resource %q: %w", name, err)
 		}
-		ds = metricutil.InstrumentIndexedDB(ds)
+		ds = metricutil.InstrumentIndexedDB(ds, name)
 		hostIndexedDBs[name] = ds
 		extraIndexedDBs = append(extraIndexedDBs, ds)
 	}

@@ -227,17 +227,21 @@ plugin host traffic are covered.
   </Tabs.Tab>
 </Tabs>
 
-These metrics carry two low-cardinality attributes:
+These metrics carry low-cardinality attributes:
 
-- `gestalt.store` identifies the table being accessed, such as `users`,
-  `integration_tokens`, or `api_tokens`. Plugins that declare IndexedDB
-  access produce their own store names here.
+- `gestalt.db` identifies the logical IndexedDB resource configured in
+  `gestaltd`, such as the server's primary IndexedDB binding.
+- `gestalt.object_store` identifies the IndexedDB object store being accessed,
+  such as `users`, `integration_tokens`, or `api_tokens`.
+- `gestalt.plugin` identifies the plugin namespace for plugin-hosted IndexedDB
+  traffic. Core services omit this attribute.
 - `gestalt.method` identifies the operation. Values correspond to the
   methods on the ObjectStore and Index interfaces inspired by the
   [IndexedDB API](https://www.w3.org/TR/IndexedDB/): `Get`, `GetKey`,
   `Put`, `Add`, `Delete`, `Clear`, `GetAll`, `GetAllKeys`, `Count`,
-  `DeleteRange`, `Index.Get`, `Index.GetKey`, `Index.GetAll`,
-  `Index.GetAllKeys`, `Index.Count`, and `Index.Delete`.
+  `DeleteRange`, `OpenCursor`, `OpenKeyCursor`, `Index.Get`,
+  `Index.GetKey`, `Index.GetAll`, `Index.GetAllKeys`, `Index.Count`,
+  `Index.Delete`, `Index.OpenCursor`, and `Index.OpenKeyCursor`.
 
 Expected misses that return `ErrNotFound` still increment
 `gestaltd.indexeddb.count` and `gestaltd.indexeddb.duration`, but do not

@@ -85,6 +85,36 @@ func RequireNoInt64Sum(t *testing.T, rm metricdata.ResourceMetrics, name string,
 	}
 }
 
+func RequireInt64SumOmitsAttr(t *testing.T, rm metricdata.ResourceMetrics, name string, attrs map[string]string, forbiddenKey string) {
+	t.Helper()
+
+	found := false
+	for _, scope := range rm.ScopeMetrics {
+		for _, metric := range scope.Metrics {
+			if metric.Name != name {
+				continue
+			}
+			sum, ok := metric.Data.(metricdata.Sum[int64])
+			if !ok {
+				t.Fatalf("metric %q is %T, want Sum[int64]", name, metric.Data)
+			}
+			for _, point := range sum.DataPoints {
+				if !AttrsMatch(point.Attributes, attrs) {
+					continue
+				}
+				found = true
+				if _, ok := point.Attributes.Value(attribute.Key(forbiddenKey)); ok {
+					t.Fatalf("metric %q attrs %v unexpectedly include %q", name, attrs, forbiddenKey)
+				}
+			}
+		}
+	}
+
+	if !found {
+		t.Fatalf("metric %q with attrs %v not found", name, attrs)
+	}
+}
+
 func RequireFloat64Histogram(t *testing.T, rm metricdata.ResourceMetrics, name string, attrs map[string]string) {
 	t.Helper()
 
