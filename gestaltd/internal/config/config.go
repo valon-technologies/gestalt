@@ -171,11 +171,6 @@ type PluginIndexedDBConfig struct {
 	ObjectStores []string `yaml:"objectStores,omitempty"`
 }
 
-type legacyPluginIndexedDBBinding struct {
-	Name         string   `yaml:"name,omitempty"`
-	ObjectStores []string `yaml:"objectStore,omitempty"`
-}
-
 func (c *PluginIndexedDBConfig) UnmarshalYAML(value *yaml.Node) error {
 	switch value.Kind {
 	case yaml.ScalarNode:
