@@ -19,7 +19,6 @@ type indexedDBServer struct {
 	ds     indexeddb.IndexedDB
 	db     string
 	plugin string
-	prefix string
 }
 
 func NewIndexedDBServer(ds indexeddb.IndexedDB, pluginName string) proto.IndexedDBServer {
@@ -27,12 +26,11 @@ func NewIndexedDBServer(ds indexeddb.IndexedDB, pluginName string) proto.Indexed
 		ds:     ds,
 		db:     metricutil.IndexedDBName(ds),
 		plugin: pluginName,
-		prefix: "plugin_" + pluginName + "_",
 	}
 }
 
 func (s *indexedDBServer) storeName(name string) string {
-	return s.prefix + name
+	return name
 }
 
 func (s *indexedDBServer) objectStore(name string) indexeddb.ObjectStore {

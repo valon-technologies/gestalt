@@ -2,7 +2,7 @@ import { Tabs } from 'nextra/components'
 
 # Config File
 
-Every `gestaltd` deployment reads a single YAML config file. The top-level keys are `server` (listener, encryption, egress, and indexeddb selection), `authorization` (shared human/workload access policy), `providers` (auth, secrets, telemetry, audit, mounted UI bundles, and indexeddbs), and `plugins` (executable integrations):
+Every `gestaltd` deployment reads a single YAML config file. The top-level keys are `server` (listener, encryption, egress, and indexeddb selection), `authorization` (shared human/workload access policy), `providers` (auth, secrets, telemetry, audit, mounted UI bundles, and indexeddb), and `plugins` (executable integrations):
 
 ```yaml
 server:
@@ -451,6 +451,12 @@ plugins:
     surfaces:
       openapi:
         baseUrl: https://api.github.com
+    indexeddb:
+      - name: main
+        objectStore:
+          - tasks
+          - snapshots
+    indexeddbSchema: github_plugin
     connections:
       default:
         mode: user
@@ -476,7 +482,8 @@ plugins:
 | `surfaces` | Typed host-side overrides for manifest-declared surfaces, such as `surfaces.openapi.baseUrl` or `surfaces.graphql.url`. |
 | `connections` | Named connection declarations. See [connections](#connections) below. |
 | `allowedOperations` | Allowlist with optional `alias`, `description`, and `allowedRoles` overrides per operation. |
-| `indexeddbs` | Optional list of named `providers.indexeddb` bindings exposed to the executable plugin through the SDK transport. Store names are automatically prefixed per plugin. A single binding also populates the default IndexedDB SDK env var for compatibility. |
+| `indexeddb` | Optional list of plugin IndexedDB bindings. The scalar shorthand `- main` is still supported; the object form accepts `name` plus optional `objectStore` allowlists to pin logical stores to a binding. A given `objectStore` may appear in at most one binding; duplicates are rejected during config validation. When any binding declares `objectStore`, one additional binding may omit it and acts as the catch-all for unassigned stores. Each binding is rebuilt as a plugin-scoped IndexedDB instance before being served to the plugin. A single binding also populates the default IndexedDB SDK env var for compatibility. |
+| `indexeddbSchema` | Optional override for the plugin IndexedDB namespace. When omitted, Gestalt uses the plugin name. RelationalDB bindings pass this through as `schema` / `namespace` on Postgres, MySQL, and SQL Server, use `<indexeddbSchema>_` table prefixes on SQLite, and other IndexedDB backends fall back to `<indexeddbSchema>_` transport-level store prefixes. |
 
 ### `plugins.*.source`
 

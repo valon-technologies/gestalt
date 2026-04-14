@@ -146,8 +146,9 @@ plugins:
 	if indexedDBName != "archive" || indexedDBEntry == nil {
 		t.Fatalf("SelectedIndexedDBProvider = (%q, %#v), want archive", indexedDBName, indexedDBEntry)
 	}
-	if got := cfg.Plugins["service-a"].IndexedDBs; !reflect.DeepEqual(got, []string{"archive"}) {
-		t.Fatalf("Plugins[service-a].IndexedDBs = %v, want [archive]", got)
+	wantBindings := []PluginIndexedDBBinding{{Name: "archive"}}
+	if got := cfg.Plugins["service-a"].IndexedDBs; !reflect.DeepEqual(got, wantBindings) {
+		t.Fatalf("Plugins[service-a].IndexedDBs = %v, want %v", got, wantBindings)
 	}
 }
 
@@ -911,10 +912,57 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
+		want := []PluginIndexedDBBinding{
+			{Name: "sqlite"},
+			{Name: "archive"},
+		}
 		got := cfg.Plugins["roadmap"].IndexedDBs
-		want := []string{"sqlite", "archive"}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("Plugins[roadmap].IndexedDBs = %v, want %v", got, want)
+		}
+	})
+
+	t.Run("loads plugin indexeddb object store routing", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    indexeddb:
+      - name: sqlite
+        objectStore:
+          - tasks
+          - snapshots
+      - name: archive
+        objectStore:
+          - events
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+    archive:
+      source:
+        path: ./providers/datastore/archive
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		got := cfg.Plugins["roadmap"].IndexedDBs
+		want := []PluginIndexedDBBinding{
+			{Name: "sqlite", ObjectStores: []string{"tasks", "snapshots"}},
+			{Name: "archive", ObjectStores: []string{"events"}},
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("Plugins[roadmap].IndexedDBs = %#v, want %#v", got, want)
 		}
 	})
 
@@ -983,6 +1031,35 @@ server:
 		}
 	})
 
+	t.Run("loads plugin indexeddb schema override", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+plugins:
+  datadog:
+    source:
+      path: ./plugin/manifest.yaml
+    indexeddbSchema: plugin_data
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+  `)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if got := cfg.Plugins["datadog"].IndexedDBSchema; got != "plugin_data" {
+			t.Fatalf("Plugins[datadog].IndexedDBSchema = %q, want %q", got, "plugin_data")
+		}
+	})
+
 	t.Run("rejects surface overrides outside plugins", func(t *testing.T) {
 		t.Parallel()
 
@@ -1011,6 +1088,36 @@ server:
 			t.Fatal("Load: expected error, got nil")
 		}
 		if !strings.Contains(err.Error(), `ui.root.surfaces is only supported on plugins.*`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects indexeddb schema overrides outside plugins", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  ui:
+    root:
+      source:
+        path: ./web/root/manifest.yaml
+      path: /app
+      indexeddbSchema: root_ui
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `ui.root.indexeddbSchema is only supported on plugins.*`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -1076,6 +1183,124 @@ server:
 			t.Fatal("Load: expected error, got nil")
 		}
 		if !strings.Contains(err.Error(), `plugin "roadmap" indexeddb[1] "main_db" conflicts with "main-db" after IndexedDB env normalization (GESTALT_INDEXEDDB_SOCKET_MAIN_DB)`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects duplicate indexeddb object stores across bindings", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    indexeddb:
+      - name: main
+        objectStore:
+          - tasks
+      - name: archive
+        objectStore:
+          - tasks
+providers:
+  indexeddb:
+    main:
+      source:
+        path: ./providers/datastore/main
+    archive:
+      source:
+        path: ./providers/datastore/archive
+server:
+  providers:
+    indexeddb: main
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `plugin "roadmap" indexeddb[1].objectStore[0] "tasks" duplicates indexeddb "main"`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("loads mixed explicit and catch-all indexeddb bindings", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    indexeddb:
+      - name: main
+        objectStore:
+          - tasks
+      - name: archive
+providers:
+  indexeddb:
+    main:
+      source:
+        path: ./providers/datastore/main
+    archive:
+      source:
+        path: ./providers/datastore/archive
+server:
+  providers:
+    indexeddb: main
+  encryptionKey: server-key
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		want := []PluginIndexedDBBinding{
+			{Name: "main", ObjectStores: []string{"tasks"}},
+			{Name: "archive"},
+		}
+		if got := cfg.Plugins["roadmap"].IndexedDBs; !reflect.DeepEqual(got, want) {
+			t.Fatalf("Plugins[roadmap].IndexedDBs = %#v, want %#v", got, want)
+		}
+	})
+
+	t.Run("rejects multiple catch-all indexeddb bindings when allowlists are used", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    indexeddb:
+      - name: main
+        objectStore:
+          - tasks
+      - name: archive
+      - name: backup
+providers:
+  indexeddb:
+    main:
+      source:
+        path: ./providers/datastore/main
+    archive:
+      source:
+        path: ./providers/datastore/archive
+    backup:
+      source:
+        path: ./providers/datastore/backup
+server:
+  providers:
+    indexeddb: main
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `plugin "roadmap" indexeddb may declare at most one unrestricted binding when objectStore allowlists are used`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

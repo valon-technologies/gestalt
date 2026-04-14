@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -31,6 +32,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"google.golang.org/grpc"
+	"gopkg.in/yaml.v3"
 )
 
 func buildRegistrationStore(deps Deps) mcpoauth.RegistrationStore {
@@ -505,37 +507,16 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		AllowedHosts:  entry.AllowedHosts,
 		DefaultAction: deps.Egress.DefaultAction,
 		HostBinary:    entry.HostBinary,
-		Cleanup:       cleanup,
 	}
 	if len(entry.IndexedDBs) > 0 {
-		if len(deps.IndexedDBs) == 0 {
-			return nil, fmt.Errorf("indexeddb host services are not available")
+		hostServices, indexedDBCleanup, err := buildPluginIndexedDBHostServices(name, entry, deps)
+		if err != nil {
+			return nil, err
 		}
-		execCfg.HostServices = make([]providerhost.HostService, 0, len(entry.IndexedDBs)+1)
-		for _, binding := range entry.IndexedDBs {
-			ds, ok := deps.IndexedDBs[binding]
-			if !ok || ds == nil {
-				return nil, fmt.Errorf("indexeddb %q is not available", binding)
-			}
-			execCfg.HostServices = append(execCfg.HostServices, providerhost.HostService{
-				EnvVar: providerhost.IndexedDBSocketEnv(binding),
-				Register: func(ds indexeddb.IndexedDB) func(*grpc.Server) {
-					return func(srv *grpc.Server) {
-						proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(ds, indexedDBNamespace(name)))
-					}
-				}(ds),
-			})
-		}
-		if len(entry.IndexedDBs) == 1 {
-			ds := deps.IndexedDBs[entry.IndexedDBs[0]]
-			execCfg.HostServices = append(execCfg.HostServices, providerhost.HostService{
-				EnvVar: providerhost.DefaultIndexedDBSocketEnv,
-				Register: func(srv *grpc.Server) {
-					proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(ds, indexedDBNamespace(name)))
-				},
-			})
-		}
+		execCfg.HostServices = hostServices
+		cleanup = chainCleanup(cleanup, indexedDBCleanup)
 	}
+	execCfg.Cleanup = cleanup
 	prov, err := providerhost.NewExecutableProvider(ctx, execCfg)
 	if err != nil {
 		return nil, err
@@ -544,8 +525,213 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 	return prov, nil
 }
 
-func indexedDBNamespace(providerName string) string {
-	return providerName
+func buildPluginIndexedDBHostServices(pluginName string, entry *config.ProviderEntry, deps Deps) ([]providerhost.HostService, func(), error) {
+	if deps.IndexedDBFactory == nil || len(deps.IndexedDBDefs) == 0 {
+		return nil, nil, fmt.Errorf("indexeddb host services are not available")
+	}
+
+	effectiveSchema := effectivePluginIndexedDBSchema(pluginName, entry)
+	explicitStores := make(map[string]struct{})
+	for _, binding := range entry.IndexedDBs {
+		for _, store := range binding.ObjectStores {
+			explicitStores[store] = struct{}{}
+		}
+	}
+	reservedStores := make([]string, 0, len(explicitStores))
+	for store := range explicitStores {
+		reservedStores = append(reservedStores, store)
+	}
+	hostServices := make([]providerhost.HostService, 0, len(entry.IndexedDBs)+1)
+	boundStores := make([]indexeddb.IndexedDB, 0, len(entry.IndexedDBs))
+	for _, binding := range entry.IndexedDBs {
+		var deniedStores []string
+		if len(binding.ObjectStores) == 0 && len(reservedStores) > 0 {
+			deniedStores = reservedStores
+		}
+		ds, err := buildPluginScopedIndexedDB(pluginName, binding, effectiveSchema, deniedStores, deps)
+		if err != nil {
+			_ = closeIndexedDBs(boundStores...)
+			return nil, nil, err
+		}
+		boundStores = append(boundStores, ds)
+		hostServices = append(hostServices, providerhost.HostService{
+			EnvVar: providerhost.IndexedDBSocketEnv(binding.Name),
+			Register: func(ds indexeddb.IndexedDB) func(*grpc.Server) {
+				return func(srv *grpc.Server) {
+					proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(ds, pluginName))
+				}
+			}(ds),
+		})
+	}
+	if len(boundStores) == 1 {
+		ds := boundStores[0]
+		hostServices = append(hostServices, providerhost.HostService{
+			EnvVar: providerhost.DefaultIndexedDBSocketEnv,
+			Register: func(srv *grpc.Server) {
+				proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(ds, pluginName))
+			},
+		})
+	}
+
+	return hostServices, func() {
+		_ = closeIndexedDBs(boundStores...)
+	}, nil
+}
+
+func buildPluginScopedIndexedDB(pluginName string, binding config.PluginIndexedDBBinding, schema string, deniedStores []string, deps Deps) (indexeddb.IndexedDB, error) {
+	def, ok := deps.IndexedDBDefs[binding.Name]
+	if !ok || def == nil {
+		return nil, fmt.Errorf("indexeddb %q is not available", binding.Name)
+	}
+	scopedDef, transportPrefix, err := newPluginScopedIndexedDBDef(def, pluginName, schema)
+	if err != nil {
+		return nil, fmt.Errorf("indexeddb %q: %w", binding.Name, err)
+	}
+	ds, err := buildIndexedDB(scopedDef, &FactoryRegistry{IndexedDB: deps.IndexedDBFactory})
+	if err != nil {
+		return nil, fmt.Errorf("indexeddb %q: %w", binding.Name, err)
+	}
+	ds = newPluginIndexedDBTransport(ds, pluginIndexedDBTransportOptions{
+		StorePrefix:       transportPrefix,
+		LegacyStorePrefix: legacyPluginIndexedDBPrefix(pluginName),
+		AllowedStores:     binding.ObjectStores,
+		DeniedStores:      deniedStores,
+	})
+	return metricutil.InstrumentIndexedDB(ds, binding.Name), nil
+}
+
+func newPluginScopedIndexedDBDef(entry *config.ProviderEntry, pluginName, schema string) (*config.ProviderEntry, string, error) {
+	if entry == nil {
+		return nil, "", fmt.Errorf("datastore provider is required")
+	}
+	cfg, err := config.NodeToMap(entry.Config)
+	if err != nil {
+		return nil, "", fmt.Errorf("decode config: %w", err)
+	}
+	if cfg == nil {
+		cfg = make(map[string]any)
+	}
+
+	transportPrefix := ""
+	if pluginIndexedDBUsesScopedProviderConfig(entry, cfg) {
+		if legacyPrefix := legacyPluginIndexedDBPrefix(pluginName); legacyPrefix != "" {
+			cfg["legacy_table_prefix"] = legacyPrefix
+			cfg["legacy_prefix"] = legacyPrefix
+		}
+		if isSQLiteIndexedDBConfig(cfg) {
+			delete(cfg, "schema")
+			delete(cfg, "namespace")
+			cfg["table_prefix"] = schema + "_"
+			cfg["prefix"] = schema + "_"
+		} else {
+			delete(cfg, "table_prefix")
+			delete(cfg, "prefix")
+			cfg["schema"] = schema
+			cfg["namespace"] = schema
+		}
+	} else {
+		transportPrefix = schema + "_"
+	}
+
+	configNode, err := mapToYAMLNode(cfg)
+	if err != nil {
+		return nil, "", fmt.Errorf("encode config: %w", err)
+	}
+
+	cloned := *entry
+	cloned.Config = configNode
+	return &cloned, transportPrefix, nil
+}
+
+func pluginIndexedDBUsesScopedProviderConfig(entry *config.ProviderEntry, cfg map[string]any) bool {
+	if !isRelationalIndexedDBEntry(entry) {
+		return false
+	}
+	dsn, _ := cfg["dsn"].(string)
+	return strings.TrimSpace(dsn) != ""
+}
+
+func isRelationalIndexedDBEntry(entry *config.ProviderEntry) bool {
+	if entry == nil {
+		return false
+	}
+	if ref := strings.TrimSpace(entry.SourceRef()); ref != "" {
+		return strings.HasSuffix(ref, "/indexeddb/relationaldb")
+	}
+	if path := strings.TrimSpace(entry.SourcePath()); path != "" {
+		path = filepath.ToSlash(path)
+		return strings.HasSuffix(path, "/indexeddb/relationaldb") ||
+			strings.HasSuffix(path, "/relationaldb") ||
+			strings.HasSuffix(path, "/indexeddb/relationaldb/manifest.yaml") ||
+			strings.HasSuffix(path, "/relationaldb/manifest.yaml")
+	}
+	return false
+}
+
+func legacyPluginIndexedDBPrefix(pluginName string) string {
+	pluginName = strings.TrimSpace(pluginName)
+	if pluginName == "" {
+		return ""
+	}
+	return "plugin_" + pluginName + "_"
+}
+
+func isSQLiteIndexedDBConfig(cfg map[string]any) bool {
+	dsn, _ := cfg["dsn"].(string)
+	dsn = strings.TrimSpace(dsn)
+	if dsn == "" {
+		return false
+	}
+	switch {
+	case strings.HasPrefix(dsn, "postgres://"), strings.HasPrefix(dsn, "postgresql://"):
+		return false
+	case strings.HasPrefix(dsn, "mysql://"), strings.Contains(dsn, "@tcp("), strings.Contains(dsn, "@unix("):
+		return false
+	case strings.HasPrefix(dsn, "sqlserver://"):
+		return false
+	default:
+		return true
+	}
+}
+
+func mapToYAMLNode(value map[string]any) (yaml.Node, error) {
+	data, err := yaml.Marshal(value)
+	if err != nil {
+		return yaml.Node{}, err
+	}
+	var out yaml.Node
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	if err := dec.Decode(&out); err != nil {
+		return yaml.Node{}, err
+	}
+	if out.Kind == yaml.DocumentNode && len(out.Content) == 1 {
+		return *out.Content[0], nil
+	}
+	return out, nil
+}
+
+func effectivePluginIndexedDBSchema(pluginName string, entry *config.ProviderEntry) string {
+	if entry != nil && strings.TrimSpace(entry.IndexedDBSchema) != "" {
+		return strings.TrimSpace(entry.IndexedDBSchema)
+	}
+	return pluginName
+}
+
+func chainCleanup(cleanups ...func()) func() {
+	var combined []func()
+	for _, cleanup := range cleanups {
+		if cleanup != nil {
+			combined = append(combined, cleanup)
+		}
+	}
+	if len(combined) == 0 {
+		return nil
+	}
+	return func() {
+		for i := len(combined) - 1; i >= 0; i-- {
+			combined[i]()
+		}
+	}
 }
 
 func clonePluginEnv(src map[string]string) map[string]string {

@@ -120,12 +120,14 @@ func (m providerMetadata) descriptionOr(v string) string {
 }
 
 type Deps struct {
-	EncryptionKey []byte
-	BaseURL       string
-	SecretManager core.SecretManager
-	Services      *coredata.Services
-	IndexedDBs    map[string]indexeddb.IndexedDB
-	Egress        EgressDeps
+	EncryptionKey    []byte
+	BaseURL          string
+	SecretManager    core.SecretManager
+	Services         *coredata.Services
+	IndexedDBs       map[string]indexeddb.IndexedDB
+	IndexedDBDefs    map[string]*config.ProviderEntry
+	IndexedDBFactory IndexedDBFactory
+	Egress           EgressDeps
 }
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthProvider, error)
@@ -356,6 +358,8 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	deps.Egress = newEgressDeps(cfg)
 	deps.Services = svc
 	deps.IndexedDBs = hostIndexedDBs
+	deps.IndexedDBDefs = cfg.Providers.IndexedDBs
+	deps.IndexedDBFactory = factories.IndexedDB
 
 	closeSM = false
 	shutdownTelemetry = false

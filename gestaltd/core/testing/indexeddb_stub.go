@@ -54,6 +54,16 @@ func (s *StubIndexedDB) DeleteObjectStore(_ context.Context, name string) error 
 func (s *StubIndexedDB) Ping(context.Context) error { return s.Err }
 func (s *StubIndexedDB) Close() error               { return nil }
 
+func (s *StubIndexedDB) HasObjectStore(name string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	if s.stores == nil {
+		return false
+	}
+	_, ok := s.stores[name]
+	return ok
+}
+
 type stubObjectStore struct {
 	db      *StubIndexedDB
 	mu      sync.RWMutex

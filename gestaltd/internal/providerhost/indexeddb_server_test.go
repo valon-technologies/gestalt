@@ -12,7 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
 )
 
-func TestIndexedDBServerPrefixesStoreNamesPerPlugin(t *testing.T) {
+func TestIndexedDBServerUsesStoreNamesAsProvided(t *testing.T) {
 	t.Parallel()
 
 	db := &coretesting.StubIndexedDB{}
@@ -30,11 +30,8 @@ func TestIndexedDBServerPrefixesStoreNamesPerPlugin(t *testing.T) {
 		t.Fatalf("Put: %v", err)
 	}
 
-	if _, err := db.ObjectStore("plugin_roadmap_snapshots").Get(ctx, "snap-1"); err != nil {
-		t.Fatalf("expected prefixed object store record to exist")
-	}
-	if _, err := db.ObjectStore("snapshots").Get(ctx, "snap-1"); err == nil {
-		t.Fatal("unprefixed object store should not contain the record")
+	if _, err := db.ObjectStore("snapshots").Get(ctx, "snap-1"); err != nil {
+		t.Fatalf("expected object store record to exist: %v", err)
 	}
 }
 
@@ -46,7 +43,7 @@ func TestIndexedDBServerRecordsPluginMetricAttributes(t *testing.T) {
 
 	db := metricutil.InstrumentIndexedDB(&coretesting.StubIndexedDB{}, "system")
 	srv := NewIndexedDBServer(db, "roadmap")
-	if err := metricutil.UnwrapIndexedDB(db).CreateObjectStore(ctx, "plugin_roadmap_snapshots", indexeddb.ObjectStoreSchema{
+	if err := metricutil.UnwrapIndexedDB(db).CreateObjectStore(ctx, "snapshots", indexeddb.ObjectStoreSchema{
 		Indexes: []indexeddb.IndexSchema{{Name: "by_type", KeyPath: []string{"type"}}},
 	}); err != nil {
 		t.Fatalf("CreateObjectStore: %v", err)

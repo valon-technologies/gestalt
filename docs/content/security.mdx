@@ -62,15 +62,14 @@ server:
   egress:
     defaultAction: deny
 
-providers:
-  plugins:
-    my-plugin:
-      source:
-        ref: github.com/acme/plugins/my-plugin
-        version: 1.0.0
-      allowedHosts:
-        - "api.example.com"
-        - "*.slack.com"
+plugins:
+  my-plugin:
+    source:
+      ref: github.com/acme/plugins/my-plugin
+      version: 1.0.0
+    allowedHosts:
+      - "api.example.com"
+      - "*.slack.com"
 ```
 
 Wildcards are supported (`*.example.com` matches `api.example.com`). The same check applies uniformly to REST, GraphQL, and MCP providers.
@@ -94,7 +93,7 @@ Executable plugin providers run with additional OS-level isolation when `allowed
 | `server.baseUrl` | Must match the public URL exactly. OAuth callbacks are derived from it. |
 | TLS termination | Gestalt does not terminate TLS. Deploy behind a reverse proxy that handles TLS. |
 | `providers.secrets` | Use a dedicated secret manager in production. `env` is acceptable but secrets may appear in process listings. |
-| `providers.indexeddbs` and `server.indexeddb` | Use a production-grade datastore provider for multi-replica deployments. SQLite is single-writer and not suitable for multi-replica deployments. |
+| `providers.indexeddb` and `server.providers.indexeddb` | Use a production-grade datastore provider for multi-replica deployments. SQLite is single-writer and not suitable for multi-replica deployments. |
 
 ## Known limitations
 

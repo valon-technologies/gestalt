@@ -230,6 +230,16 @@ You implement the [IndexedDB gRPC service](https://www.w3.org/TR/IndexedDB/#obje
 
 Plugins access the IndexedDB provider through the SDK. The host serves the IndexedDB interface over a gRPC socket, and the SDK wraps it into native types for each language.
 
+When a plugin binds a datastore through `plugins.<name>.indexeddb`, the host now rebuilds
+that provider with a plugin-scoped namespace before exposing it over the SDK
+socket. Plugins still use plain store names like `tasks` or `snapshots`; the
+host applies isolation outside the plugin. For schema-capable backends, that
+means a plugin-specific schema or namespace. For SQLite-backed relationaldb
+bindings, the host falls back to `<indexeddbSchema>_` table prefixes. Other
+IndexedDB providers fall back to transport-level `<indexeddbSchema>_` store
+prefixes. Plugin bindings can also declare `objectStore` allowlists so the host rejects stores
+that were assigned to a different binding.
+
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
     ```go
@@ -372,14 +382,15 @@ the SDK call makes the store portable across both styles of backend.
 
 ## Config reference
 
-Reference an IndexedDB provider in the `providers.indexeddbs` section, and set `server.indexeddb` to the name of the active provider. For local development, SQLite keeps things simple with a file path:
+Reference an IndexedDB provider in the `providers.indexeddb` section, and set `server.providers.indexeddb` to the name of the active provider. For local development, SQLite keeps things simple with a file path:
 
 ```yaml
 server:
-  indexeddb: main
+  providers:
+    indexeddb: main
 
 providers:
-  indexeddbs:
+  indexeddb:
     main:
       source:
         path: ./relationaldb/manifest.yaml
@@ -391,7 +402,7 @@ For production, use `source.ref` and `version` to reference a published release:
 
 ```yaml
 providers:
-  indexeddbs:
+  indexeddb:
     main:
       source:
         ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
@@ -402,7 +413,7 @@ providers:
 
 `DATABASE_URL` is a connection string for your database. The RelationalDB provider accepts `postgres://`, `mysql://`, `sqlite://`, and `sqlserver://` prefixes.
 
-Object store names are automatically namespaced per plugin to prevent cross-plugin data access.
+Object store names remain logical inside plugins. The host scopes plugin data by rebuilding schema-capable providers with a plugin-specific schema or namespace, or by applying a `<indexeddbSchema>_` prefix on backends without schema support.
 
 ## What to read next
 

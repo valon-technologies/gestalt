@@ -798,7 +798,7 @@ func TestPluginIndexedDBBindingsExposeHostSocketEnv(t *testing.T) {
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 
-	makeConfig := func(bindings []string) *config.Config {
+	makeConfig := func(bindings []config.PluginIndexedDBBinding) *config.Config {
 		return &config.Config{
 			Providers: config.ProvidersConfig{
 				Plugins: map[string]*config.ProviderEntry{
@@ -814,17 +814,22 @@ func TestPluginIndexedDBBindingsExposeHostSocketEnv(t *testing.T) {
 		}
 	}
 
-	services := coretesting.NewStubServices(t)
-	indexedDBBindings := map[string]indexeddb.IndexedDB{
-		"main":    services.DB,
-		"archive": &coretesting.StubIndexedDB{},
+	indexedDBBindings := map[string]*config.ProviderEntry{
+		"main": {
+			Config: mustNode(t, map[string]any{"dsn": "postgres://main.example.test/gestalt"}),
+		},
+		"archive": {
+			Config: mustNode(t, map[string]any{"dsn": "sqlite://archive.db"}),
+		},
 	}
 
-	checkEnv := func(t *testing.T, bindings []string, envName string) bool {
+	checkEnv := func(t *testing.T, bindings []config.PluginIndexedDBBinding, envName string) bool {
 		t.Helper()
 		providers, _, err := buildProvidersStrict(context.Background(), makeConfig(bindings), NewFactoryRegistry(), Deps{
-			Services:   services,
-			IndexedDBs: indexedDBBindings,
+			IndexedDBDefs: indexedDBBindings,
+			IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) {
+				return &coretesting.StubIndexedDB{}, nil
+			},
 		})
 		if err != nil {
 			t.Fatalf("buildProvidersStrict: %v", err)
@@ -852,32 +857,523 @@ func TestPluginIndexedDBBindingsExposeHostSocketEnv(t *testing.T) {
 	if got := checkEnv(t, nil, providerhost.DefaultIndexedDBSocketEnv); got {
 		t.Fatal("default IndexedDB env should not be set without plugin indexeddb bindings")
 	}
-	if got := checkEnv(t, []string{"main"}, providerhost.DefaultIndexedDBSocketEnv); !got {
+	if got := checkEnv(t, []config.PluginIndexedDBBinding{{Name: "main"}}, providerhost.DefaultIndexedDBSocketEnv); !got {
 		t.Fatal("default IndexedDB env should be set with a single plugin indexeddb binding")
 	}
-	if got := checkEnv(t, []string{"main"}, providerhost.IndexedDBSocketEnv("main")); !got {
+	if got := checkEnv(t, []config.PluginIndexedDBBinding{{Name: "main"}}, providerhost.IndexedDBSocketEnv("main")); !got {
 		t.Fatal("named IndexedDB env should be set with a single plugin indexeddb binding")
 	}
-	if got := checkEnv(t, []string{"main", "archive"}, providerhost.DefaultIndexedDBSocketEnv); got {
+	if got := checkEnv(t, []config.PluginIndexedDBBinding{{Name: "main"}, {Name: "archive"}}, providerhost.DefaultIndexedDBSocketEnv); got {
 		t.Fatal("default IndexedDB env should not be set with multiple plugin indexeddb bindings")
 	}
-	if got := checkEnv(t, []string{"main", "archive"}, providerhost.IndexedDBSocketEnv("main")); !got {
+	if got := checkEnv(t, []config.PluginIndexedDBBinding{{Name: "main"}, {Name: "archive"}}, providerhost.IndexedDBSocketEnv("main")); !got {
 		t.Fatal(`named IndexedDB env for "main" should be set with multiple plugin indexeddb bindings`)
 	}
-	if got := checkEnv(t, []string{"main", "archive"}, providerhost.IndexedDBSocketEnv("archive")); !got {
+	if got := checkEnv(t, []config.PluginIndexedDBBinding{{Name: "main"}, {Name: "archive"}}, providerhost.IndexedDBSocketEnv("archive")); !got {
 		t.Fatal(`named IndexedDB env for "archive" should be set with multiple plugin indexeddb bindings`)
 	}
 }
 
-func TestIndexedDBNamespaceUsesProviderName(t *testing.T) {
+func TestPluginIndexedDBBindingsBuildScopedConfig(t *testing.T) {
 	t.Parallel()
 
-	if got := indexedDBNamespace("roadmap-review"); got != "roadmap-review" {
-		t.Fatalf("indexedDBNamespace() = %q, want %q", got, "roadmap-review")
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+
+	type capturedIndexedDBConfig struct {
+		Config map[string]any `yaml:"config"`
 	}
-	if got := indexedDBNamespace("source-backed"); got != "source-backed" {
-		t.Fatalf("indexedDBNamespace() = %q, want %q", got, "source-backed")
+
+	makeConfig := func(schema string) *config.Config {
+		entry := &config.ProviderEntry{
+			Command:              bin,
+			Args:                 []string{"provider"},
+			ResolvedManifest:     manifest,
+			ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+			IndexedDBs: []config.PluginIndexedDBBinding{
+				{Name: "postgres"},
+				{Name: "sqlite"},
+				{Name: "local-postgres"},
+			},
+		}
+		if schema != "" {
+			entry.IndexedDBSchema = schema
+		}
+		return &config.Config{
+			Providers: config.ProvidersConfig{
+				Plugins: map[string]*config.ProviderEntry{
+					"echoext": entry,
+				},
+			},
+		}
 	}
+
+	bindingDefs := map[string]*config.ProviderEntry{
+		"postgres": {
+			Source: config.ProviderSource{Ref: "github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb"},
+			Config: mustNode(t, map[string]any{
+				"dsn":       "postgres://db.example.test/gestalt",
+				"schema":    "host_schema",
+				"namespace": "host_schema",
+			}),
+		},
+		"sqlite": {
+			Source: config.ProviderSource{Ref: "github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb"},
+			Config: mustNode(t, map[string]any{
+				"dsn":          "sqlite://plugin-state.db",
+				"table_prefix": "host_",
+				"prefix":       "host_",
+				"schema":       "should_be_removed",
+				"namespace":    "should_be_removed",
+			}),
+		},
+		"local-postgres": {
+			Source: config.ProviderSource{Path: "./relationaldb/manifest.yaml"},
+			Config: mustNode(t, map[string]any{
+				"dsn":       "postgres://local.example.test/gestalt",
+				"schema":    "host_local",
+				"namespace": "host_local",
+			}),
+		},
+	}
+
+	cases := []struct {
+		name          string
+		schema        string
+		wantNamespace string
+	}{
+		{name: "defaults to plugin name", wantNamespace: "echoext"},
+		{name: "uses plugin override", schema: "roadmap_state", wantNamespace: "roadmap_state"},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			var closeCount atomic.Int32
+			captured := make(map[string]capturedIndexedDBConfig)
+			providers, _, err := buildProvidersStrict(context.Background(), makeConfig(tc.schema), NewFactoryRegistry(), Deps{
+				IndexedDBDefs: bindingDefs,
+				IndexedDBFactory: func(node yaml.Node) (indexeddb.IndexedDB, error) {
+					var decoded capturedIndexedDBConfig
+					if err := node.Decode(&decoded); err != nil {
+						return nil, err
+					}
+					dsn, _ := decoded.Config["dsn"].(string)
+					captured[dsn] = decoded
+					return &trackedIndexedDB{
+						StubIndexedDB: coretesting.StubIndexedDB{},
+						onClose:       closeCount.Add,
+					}, nil
+				},
+			})
+			if err != nil {
+				t.Fatalf("buildProvidersStrict: %v", err)
+			}
+			t.Cleanup(func() {
+				if providers != nil {
+					_ = CloseProviders(providers)
+				}
+			})
+
+			if got := closeCount.Load(); got != 0 {
+				t.Fatalf("closeCount before provider shutdown = %d, want 0", got)
+			}
+
+			postgresCfg, ok := captured["postgres://db.example.test/gestalt"]
+			if !ok {
+				t.Fatal("missing captured postgres indexeddb config")
+			}
+			if got := postgresCfg.Config["schema"]; got != tc.wantNamespace {
+				t.Fatalf("postgres schema = %#v, want %q", got, tc.wantNamespace)
+			}
+			if got := postgresCfg.Config["namespace"]; got != tc.wantNamespace {
+				t.Fatalf("postgres namespace = %#v, want %q", got, tc.wantNamespace)
+			}
+			if got := postgresCfg.Config["legacy_table_prefix"]; got != "plugin_echoext_" {
+				t.Fatalf("postgres legacy_table_prefix = %#v, want %q", got, "plugin_echoext_")
+			}
+			if got := postgresCfg.Config["legacy_prefix"]; got != "plugin_echoext_" {
+				t.Fatalf("postgres legacy_prefix = %#v, want %q", got, "plugin_echoext_")
+			}
+			if _, ok := postgresCfg.Config["table_prefix"]; ok {
+				t.Fatalf("postgres table_prefix should be removed, got %#v", postgresCfg.Config["table_prefix"])
+			}
+			if _, ok := postgresCfg.Config["prefix"]; ok {
+				t.Fatalf("postgres prefix should be removed, got %#v", postgresCfg.Config["prefix"])
+			}
+
+			localPostgresCfg, ok := captured["postgres://local.example.test/gestalt"]
+			if !ok {
+				t.Fatal("missing captured local postgres indexeddb config")
+			}
+			if got := localPostgresCfg.Config["schema"]; got != tc.wantNamespace {
+				t.Fatalf("local postgres schema = %#v, want %q", got, tc.wantNamespace)
+			}
+			if got := localPostgresCfg.Config["namespace"]; got != tc.wantNamespace {
+				t.Fatalf("local postgres namespace = %#v, want %q", got, tc.wantNamespace)
+			}
+			if got := localPostgresCfg.Config["legacy_table_prefix"]; got != "plugin_echoext_" {
+				t.Fatalf("local postgres legacy_table_prefix = %#v, want %q", got, "plugin_echoext_")
+			}
+			if got := localPostgresCfg.Config["legacy_prefix"]; got != "plugin_echoext_" {
+				t.Fatalf("local postgres legacy_prefix = %#v, want %q", got, "plugin_echoext_")
+			}
+
+			sqliteCfg, ok := captured["sqlite://plugin-state.db"]
+			if !ok {
+				t.Fatal("missing captured sqlite indexeddb config")
+			}
+			wantPrefix := tc.wantNamespace + "_"
+			if got := sqliteCfg.Config["table_prefix"]; got != wantPrefix {
+				t.Fatalf("sqlite table_prefix = %#v, want %q", got, wantPrefix)
+			}
+			if got := sqliteCfg.Config["prefix"]; got != wantPrefix {
+				t.Fatalf("sqlite prefix = %#v, want %q", got, wantPrefix)
+			}
+			if _, ok := sqliteCfg.Config["schema"]; ok {
+				t.Fatalf("sqlite schema should be removed, got %#v", sqliteCfg.Config["schema"])
+			}
+			if _, ok := sqliteCfg.Config["namespace"]; ok {
+				t.Fatalf("sqlite namespace should be removed, got %#v", sqliteCfg.Config["namespace"])
+			}
+			if got := sqliteCfg.Config["legacy_table_prefix"]; got != "plugin_echoext_" {
+				t.Fatalf("sqlite legacy_table_prefix = %#v, want %q", got, "plugin_echoext_")
+			}
+			if got := sqliteCfg.Config["legacy_prefix"]; got != "plugin_echoext_" {
+				t.Fatalf("sqlite legacy_prefix = %#v, want %q", got, "plugin_echoext_")
+			}
+
+			_ = CloseProviders(providers)
+			providers = nil
+			if got := closeCount.Load(); got != 3 {
+				t.Fatalf("closeCount after provider shutdown = %d, want 3", got)
+			}
+		})
+	}
+}
+
+func TestPluginIndexedDBBindingsRouteObjectStoresAndTransportPrefix(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{
+				ID:     "indexeddb_roundtrip",
+				Method: http.MethodPost,
+				Parameters: []catalog.CatalogParameter{
+					{Name: "store", Type: "string", Required: true},
+					{Name: "id", Type: "string", Required: true},
+					{Name: "value", Type: "string", Required: true},
+				},
+			},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+
+	var (
+		closeCount atomic.Int32
+		boundDB    *trackedIndexedDB
+	)
+	providers, _, err := buildProvidersStrict(context.Background(), &config.Config{
+		Providers: config.ProvidersConfig{
+			Plugins: map[string]*config.ProviderEntry{
+				"echoext": {
+					Command:              bin,
+					Args:                 []string{"provider"},
+					ResolvedManifest:     manifest,
+					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+					IndexedDBSchema:      "roadmap",
+					IndexedDBs: []config.PluginIndexedDBBinding{
+						{Name: "memory", ObjectStores: []string{"tasks"}},
+					},
+				},
+			},
+		},
+	}, NewFactoryRegistry(), Deps{
+		IndexedDBDefs: map[string]*config.ProviderEntry{
+			"memory": {
+				Source: config.ProviderSource{Path: "./providers/datastore/memory"},
+				Config: mustNode(t, map[string]any{"bucket": "plugin-state"}),
+			},
+		},
+		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) {
+			boundDB = &trackedIndexedDB{
+				StubIndexedDB: coretesting.StubIndexedDB{},
+				onClose:       closeCount.Add,
+			}
+			return boundDB, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get: %v", err)
+	}
+
+	result, err := prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
+		"store": "tasks",
+		"id":    "task-1",
+		"value": "ship-it",
+	}, "")
+	if err != nil {
+		t.Fatalf("Execute indexeddb_roundtrip: %v", err)
+	}
+	var record map[string]any
+	if err := json.Unmarshal([]byte(result.Body), &record); err != nil {
+		t.Fatalf("unmarshal record: %v", err)
+	}
+	if got := record["value"]; got != "ship-it" {
+		t.Fatalf("record value = %#v, want %q", got, "ship-it")
+	}
+	if _, err := boundDB.ObjectStore("roadmap_tasks").Get(context.Background(), "task-1"); err != nil {
+		t.Fatalf("prefixed backing store should contain task: %v", err)
+	}
+	if _, err := boundDB.ObjectStore("tasks").Get(context.Background(), "task-1"); err == nil {
+		t.Fatal("unprefixed backing store should remain empty")
+	}
+
+	if _, err := prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
+		"store": "events",
+		"id":    "evt-1",
+		"value": "blocked",
+	}, ""); err == nil {
+		t.Fatal("indexeddb_roundtrip on disallowed object store should fail")
+	}
+
+	_ = CloseProviders(providers)
+	providers = nil
+	if got := closeCount.Load(); got != 1 {
+		t.Fatalf("closeCount after provider shutdown = %d, want 1", got)
+	}
+}
+
+func TestPluginIndexedDBBindingsPreserveLegacyTransportPrefixedData(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{
+				ID:     "indexeddb_roundtrip",
+				Method: http.MethodPost,
+				Parameters: []catalog.CatalogParameter{
+					{Name: "store", Type: "string", Required: true},
+					{Name: "id", Type: "string", Required: true},
+					{Name: "value", Type: "string", Required: true},
+				},
+			},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+
+	var boundDB *trackedIndexedDB
+	providers, _, err := buildProvidersStrict(context.Background(), &config.Config{
+		Providers: config.ProvidersConfig{
+			Plugins: map[string]*config.ProviderEntry{
+				"echoext": {
+					Command:              bin,
+					Args:                 []string{"provider"},
+					ResolvedManifest:     manifest,
+					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+					IndexedDBSchema:      "roadmap",
+					IndexedDBs: []config.PluginIndexedDBBinding{
+						{Name: "memory", ObjectStores: []string{"tasks"}},
+					},
+				},
+			},
+		},
+	}, NewFactoryRegistry(), Deps{
+		IndexedDBDefs: map[string]*config.ProviderEntry{
+			"memory": {
+				Source: config.ProviderSource{Path: "./providers/datastore/memory"},
+				Config: mustNode(t, map[string]any{"bucket": "plugin-state"}),
+			},
+		},
+		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) {
+			boundDB = &trackedIndexedDB{
+				StubIndexedDB: coretesting.StubIndexedDB{},
+			}
+			return boundDB, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	if err := boundDB.CreateObjectStore(context.Background(), "plugin_echoext_tasks", indexeddb.ObjectStoreSchema{}); err != nil {
+		t.Fatalf("CreateObjectStore legacy tasks: %v", err)
+	}
+	if err := boundDB.ObjectStore("plugin_echoext_tasks").Put(context.Background(), indexeddb.Record{
+		"id":    "legacy-task",
+		"value": "already-there",
+	}); err != nil {
+		t.Fatalf("Put legacy task: %v", err)
+	}
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get: %v", err)
+	}
+	if _, err := prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
+		"store": "tasks",
+		"id":    "task-1",
+		"value": "ship-it",
+	}, ""); err != nil {
+		t.Fatalf("Execute indexeddb_roundtrip: %v", err)
+	}
+
+	if _, err := boundDB.ObjectStore("plugin_echoext_tasks").Get(context.Background(), "task-1"); err != nil {
+		t.Fatalf("legacy backing store should receive new writes: %v", err)
+	}
+	if _, err := boundDB.ObjectStore("plugin_echoext_tasks").Get(context.Background(), "legacy-task"); err != nil {
+		t.Fatalf("legacy backing store should keep old rows: %v", err)
+	}
+	if _, err := boundDB.ObjectStore("roadmap_tasks").Get(context.Background(), "task-1"); err == nil {
+		t.Fatal("new transport-prefixed store should remain unused while only legacy data exists")
+	}
+}
+
+func TestPluginIndexedDBBindingsRouteExplicitAndCatchAllStores(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{
+				ID:     "indexeddb_roundtrip",
+				Method: http.MethodPost,
+				Parameters: []catalog.CatalogParameter{
+					{Name: "binding", Type: "string"},
+					{Name: "store", Type: "string", Required: true},
+					{Name: "id", Type: "string", Required: true},
+					{Name: "value", Type: "string", Required: true},
+				},
+			},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+
+	boundDBs := make(map[string]*trackedIndexedDB)
+	providers, _, err := buildProvidersStrict(context.Background(), &config.Config{
+		Providers: config.ProvidersConfig{
+			Plugins: map[string]*config.ProviderEntry{
+				"echoext": {
+					Command:              bin,
+					Args:                 []string{"provider"},
+					ResolvedManifest:     manifest,
+					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+					IndexedDBSchema:      "roadmap",
+					IndexedDBs: []config.PluginIndexedDBBinding{
+						{Name: "main", ObjectStores: []string{"tasks"}},
+						{Name: "archive"},
+					},
+				},
+			},
+		},
+	}, NewFactoryRegistry(), Deps{
+		IndexedDBDefs: map[string]*config.ProviderEntry{
+			"main": {
+				Source: config.ProviderSource{Path: "./providers/datastore/main"},
+				Config: mustNode(t, map[string]any{"bucket": "main"}),
+			},
+			"archive": {
+				Source: config.ProviderSource{Path: "./providers/datastore/archive"},
+				Config: mustNode(t, map[string]any{"bucket": "archive"}),
+			},
+		},
+		IndexedDBFactory: func(node yaml.Node) (indexeddb.IndexedDB, error) {
+			var decoded struct {
+				Config map[string]any `yaml:"config"`
+			}
+			if err := node.Decode(&decoded); err != nil {
+				return nil, err
+			}
+			bucket, _ := decoded.Config["bucket"].(string)
+			db := &trackedIndexedDB{StubIndexedDB: coretesting.StubIndexedDB{}}
+			boundDBs[bucket] = db
+			return db, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get: %v", err)
+	}
+
+	if _, err := prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
+		"binding": "main",
+		"store":   "tasks",
+		"id":      "task-1",
+		"value":   "ship-it",
+	}, ""); err != nil {
+		t.Fatalf("Execute main tasks roundtrip: %v", err)
+	}
+	if _, err := boundDBs["main"].ObjectStore("roadmap_tasks").Get(context.Background(), "task-1"); err != nil {
+		t.Fatalf("main binding should own tasks store: %v", err)
+	}
+
+	if _, err := prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
+		"binding": "main",
+		"store":   "events",
+		"id":      "evt-main",
+		"value":   "blocked",
+	}, ""); err == nil {
+		t.Fatal("main binding should reject stores outside its explicit objectStore allowlist")
+	}
+
+	if _, err := prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
+		"binding": "archive",
+		"store":   "events",
+		"id":      "evt-1",
+		"value":   "stored",
+	}, ""); err != nil {
+		t.Fatalf("Execute archive events roundtrip: %v", err)
+	}
+	if _, err := boundDBs["archive"].ObjectStore("roadmap_events").Get(context.Background(), "evt-1"); err != nil {
+		t.Fatalf("archive binding should act as catch-all for unassigned stores: %v", err)
+	}
+
+	if _, err := prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
+		"binding": "archive",
+		"store":   "tasks",
+		"id":      "task-archive",
+		"value":   "blocked",
+	}, ""); err == nil {
+		t.Fatal("archive catch-all binding should reject stores explicitly assigned to another binding")
+	}
+}
+
+type trackedIndexedDB struct {
+	coretesting.StubIndexedDB
+	onClose func(int32) int32
+}
+
+func (t *trackedIndexedDB) Close() error {
+	if t.onClose != nil {
+		t.onClose(1)
+	}
+	return t.StubIndexedDB.Close()
 }
 
 func TestExecutablePluginRequiresManifest(t *testing.T) {

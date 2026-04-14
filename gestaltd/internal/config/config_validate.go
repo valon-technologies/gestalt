@@ -281,6 +281,7 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry) error {
 	if entry.Default {
 		return fmt.Errorf("config validation: plugins.%s.default is not supported on plugins", name)
 	}
+	entry.IndexedDBSchema = strings.TrimSpace(entry.IndexedDBSchema)
 	if err := validateProviderEntrySource("plugin", name, entry); err != nil {
 		return err
 	}
@@ -318,11 +319,14 @@ func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) erro
 	if len(entry.IndexedDBs) > 0 {
 		return fmt.Errorf("config validation: %s.indexeddb is only supported on plugins.*", subject)
 	}
+	if strings.TrimSpace(entry.IndexedDBSchema) != "" {
+		return fmt.Errorf("config validation: %s.indexeddbSchema is only supported on plugins.*", subject)
+	}
 	if entry.Surfaces != nil {
 		return fmt.Errorf("config validation: %s.surfaces is only supported on plugins.*", subject)
 	}
 	if entry.AuthorizationPolicy != "" && !strings.HasPrefix(subject, "ui.") {
-		return fmt.Errorf("config validation: %s.authorizationPolicy is only supported on providers.plugins.* and providers.ui.*", subject)
+		return fmt.Errorf("config validation: %s.authorizationPolicy is only supported on plugins.* and ui.*", subject)
 	}
 	return nil
 }
@@ -385,24 +389,51 @@ func validatePluginIndexedDBBindings(cfg *Config, name string, entry *ProviderEn
 	}
 	seen := make(map[string]struct{}, len(entry.IndexedDBs))
 	envNames := make(map[string]string, len(entry.IndexedDBs))
-	for i, binding := range entry.IndexedDBs {
-		binding = strings.TrimSpace(binding)
-		if binding == "" {
+	objectStores := make(map[string]string)
+	restrictedBindingCount := 0
+	unrestrictedBindingCount := 0
+	for i := range entry.IndexedDBs {
+		binding := &entry.IndexedDBs[i]
+		binding.Name = strings.TrimSpace(binding.Name)
+		if binding.Name == "" {
 			return fmt.Errorf("config validation: plugin %q indexeddb[%d] is required", name, i)
 		}
-		if _, exists := seen[binding]; exists {
-			return fmt.Errorf("config validation: plugin %q indexeddb[%d] duplicates %q", name, i, binding)
+		if _, exists := seen[binding.Name]; exists {
+			return fmt.Errorf("config validation: plugin %q indexeddb[%d] duplicates %q", name, i, binding.Name)
 		}
-		if _, ok := cfg.Providers.IndexedDB[binding]; !ok {
-			return fmt.Errorf("config validation: plugin %q indexeddb[%d] references unknown indexeddb %q", name, i, binding)
+		if _, ok := cfg.Providers.IndexedDB[binding.Name]; !ok {
+			return fmt.Errorf("config validation: plugin %q indexeddb[%d] references unknown indexeddb %q", name, i, binding.Name)
 		}
-		envName := indexedDBSocketEnv(binding)
+		envName := indexedDBSocketEnv(binding.Name)
 		if otherBinding, exists := envNames[envName]; exists {
-			return fmt.Errorf("config validation: plugin %q indexeddb[%d] %q conflicts with %q after IndexedDB env normalization (%s)", name, i, binding, otherBinding, envName)
+			return fmt.Errorf("config validation: plugin %q indexeddb[%d] %q conflicts with %q after IndexedDB env normalization (%s)", name, i, binding.Name, otherBinding, envName)
 		}
-		seen[binding] = struct{}{}
-		envNames[envName] = binding
-		entry.IndexedDBs[i] = binding
+		seenStores := make(map[string]struct{}, len(binding.ObjectStores))
+		if len(binding.ObjectStores) > 0 {
+			restrictedBindingCount++
+		} else {
+			unrestrictedBindingCount++
+		}
+		for j, store := range binding.ObjectStores {
+			store = strings.TrimSpace(store)
+			if store == "" {
+				return fmt.Errorf("config validation: plugin %q indexeddb[%d].objectStore[%d] is required", name, i, j)
+			}
+			if _, exists := seenStores[store]; exists {
+				return fmt.Errorf("config validation: plugin %q indexeddb[%d].objectStore[%d] duplicates %q", name, i, j, store)
+			}
+			if otherBinding, exists := objectStores[store]; exists {
+				return fmt.Errorf("config validation: plugin %q indexeddb[%d].objectStore[%d] %q duplicates indexeddb %q", name, i, j, store, otherBinding)
+			}
+			seenStores[store] = struct{}{}
+			objectStores[store] = binding.Name
+			binding.ObjectStores[j] = store
+		}
+		seen[binding.Name] = struct{}{}
+		envNames[envName] = binding.Name
+	}
+	if restrictedBindingCount > 0 && unrestrictedBindingCount > 1 {
+		return fmt.Errorf("config validation: plugin %q indexeddb may declare at most one unrestricted binding when objectStore allowlists are used", name)
 	}
 	return nil
 }

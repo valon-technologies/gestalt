@@ -1,7 +1,7 @@
 # Plugins
 
 Plugin providers are the packages that expose tools through Gestalt. Operators
-configure them under `providers.plugins`, while the host takes care of catalog
+configure them under `plugins`, while the host takes care of catalog
 loading, token storage, connection management, HTTP routing, and MCP exposure.
 
 ## How plugin providers work
@@ -38,27 +38,25 @@ their package layouts.
 ## Configuring a plugin provider
 
 ```yaml
-providers:
-  plugins:
-    github:
-      displayName: GitHub
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/plugins/github
-        version: 0.0.1-alpha.1
-      config:
-        apiBaseUrl: https://api.github.com
-        clientId: ${GITHUB_CLIENT_ID}
-        clientSecret: secret://github-client-secret
+plugins:
+  github:
+    displayName: GitHub
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/plugins/github
+      version: 0.0.1-alpha.1
+    config:
+      apiBaseUrl: https://api.github.com
+      clientId: ${GITHUB_CLIENT_ID}
+      clientSecret: secret://github-client-secret
 ```
 
 During local development, point at a source manifest instead:
 
 ```yaml
-providers:
-  plugins:
-    support:
-      source:
-        path: ./plugins/support/manifest.yaml
+plugins:
+  support:
+    source:
+      path: ./plugins/support/manifest.yaml
 ```
 
 ## Connections and credentials
@@ -82,28 +80,26 @@ the plugin's `config` block when the provider requires them.
 Use `allowedOperations` to publish only a subset of a large plugin catalog:
 
 ```yaml
-providers:
-  plugins:
-    support:
-      source:
-        ref: github.com/acme/providers/support
-        version: 2.4.0
-      allowedOperations:
-        tickets.list:
-          alias: list_tickets
-        tickets.get:
-          alias: get_ticket
+plugins:
+  support:
+    source:
+      ref: github.com/acme/providers/support
+      version: 2.4.0
+    allowedOperations:
+      tickets.list:
+        alias: list_tickets
+      tickets.get:
+        alias: get_ticket
 ```
 
 Use `allowedHosts` when a plugin needs explicit outbound access:
 
 ```yaml
-providers:
-  plugins:
-    github:
-      allowedHosts:
-        - api.github.com
-        - "*.github.com"
+plugins:
+  github:
+    allowedHosts:
+      - api.github.com
+      - "*.github.com"
 ```
 
 ## Building your own plugin

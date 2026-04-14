@@ -14,9 +14,9 @@ starts it with the permissions and request context it needs.
 
 | Kind | Purpose | Config location |
 | --- | --- | --- |
-| `plugin` | Tool providers that expose operations over CLI, HTTP API, and MCP | `providers.plugins.<name>` |
+| `plugin` | Tool providers that expose operations over CLI, HTTP API, and MCP | `plugins.<name>` |
 | `auth` | Platform login backends | `providers.auth` |
-| `indexeddb` | Persistent state backends for users, sessions, tokens, and credentials | `providers.indexeddbs.<name>` |
+| `indexeddb` | Persistent state backends for users, sessions, tokens, and credentials | `providers.indexeddb.<name>` |
 | `secrets` | Secret managers that resolve `secret://` references | `providers.secrets` |
 | `webui` | Public UI bundles served under configured path prefixes | `providers.ui` |
 
@@ -41,9 +41,9 @@ The repository is organized by provider type:
 
 | Type | Repository path | Typical config key |
 | --- | --- | --- |
-| Plugins | [`plugins/`](https://github.com/valon-technologies/gestalt-providers/tree/main/plugins) | `providers.plugins.<name>` |
+| Plugins | [`plugins/`](https://github.com/valon-technologies/gestalt-providers/tree/main/plugins) | `plugins.<name>` |
 | Auth | [`auth/`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth) | `providers.auth` |
-| IndexedDB | [`indexeddb/`](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb) | `providers.indexeddbs.<name>` |
+| IndexedDB | [`indexeddb/`](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb) | `providers.indexeddb.<name>` |
 | Secrets | [`secrets/`](https://github.com/valon-technologies/gestalt-providers/tree/main/secrets) | `providers.secrets` |
 | Web UI bundles | [`web/`](https://github.com/valon-technologies/gestalt-providers/tree/main/web) | `providers.ui` |
 
@@ -53,7 +53,8 @@ Reference the package you want to run, then initialize or start the server:
 
 ```yaml
 server:
-  indexeddb: main
+  providers:
+    indexeddb: main
 
 providers:
   auth:
@@ -65,7 +66,7 @@ providers:
       clientId: ${OIDC_CLIENT_ID}
       clientSecret: secret://oidc-client-secret
 
-  indexeddbs:
+  indexeddb:
     main:
       source:
         ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
@@ -73,11 +74,11 @@ providers:
       config:
         dsn: ${DATABASE_URL}
 
-  plugins:
-    github:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/plugins/github
-        version: 0.0.1-alpha.1
+plugins:
+  github:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/plugins/github
+      version: 0.0.1-alpha.1
 ```
 
 Run `gestaltd init` when you want to resolve and pin published releases ahead
