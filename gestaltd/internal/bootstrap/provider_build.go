@@ -614,20 +614,19 @@ func newPluginScopedIndexedDBDef(entry *config.ProviderEntry, pluginName, schema
 
 	transportPrefix := ""
 	if pluginIndexedDBUsesScopedProviderConfig(entry, cfg) {
+		delete(cfg, "legacy_prefix")
+		delete(cfg, "namespace")
 		if legacyPrefix := legacyPluginIndexedDBPrefix(pluginName); legacyPrefix != "" {
 			cfg["legacy_table_prefix"] = legacyPrefix
-			cfg["legacy_prefix"] = legacyPrefix
 		}
 		if isSQLiteIndexedDBConfig(cfg) {
 			delete(cfg, "schema")
-			delete(cfg, "namespace")
 			cfg["table_prefix"] = schema + "_"
 			cfg["prefix"] = schema + "_"
 		} else {
 			delete(cfg, "table_prefix")
 			delete(cfg, "prefix")
 			cfg["schema"] = schema
-			cfg["namespace"] = schema
 		}
 	} else {
 		transportPrefix = schema + "_"

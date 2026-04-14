@@ -12,10 +12,10 @@ to one of the named entries under `providers.indexeddb`. Gestalt talks to that p
 through the IndexedDB service contract while keeping plugin state isolated with
 plugin-scoped datastore instances. By default, a plugin binding uses the plugin
 name as its IndexedDB schema; `plugins.<name>.indexeddbSchema` can
-override that namespace. Plugin bindings can also declare `objectStore`
+override that schema name. Plugin bindings can also declare `objectStore`
 allowlists so a store like `tasks` is only served through one configured
 binding. With the first-party RelationalDB provider, Postgres, MySQL, and SQL
-Server receive the namespace as `schema` / `namespace`, while SQLite falls back
+Server receive that value as `schema`, while SQLite falls back
 to `<schema>_` table prefixes because it has no schema support. Other IndexedDB
 providers fall back to `<schema>_` transport-level store prefixes.
 

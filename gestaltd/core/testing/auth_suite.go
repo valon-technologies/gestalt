@@ -21,6 +21,7 @@ import (
 func RunAuthProviderTests(t *testing.T, newProvider func(t *testing.T, mockURL string) core.AuthProvider, mockServer *httptest.Server) {
 	if mockServer == nil {
 		t.Fatal("RunAuthProviderTests requires a mock server")
+		return
 	}
 	provider := newProvider(t, mockServer.URL)
 
