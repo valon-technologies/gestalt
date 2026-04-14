@@ -326,6 +326,12 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	if err != nil {
 		return nil, err
 	}
+	closeAuthProvider := true
+	defer func() {
+		if closeAuthProvider {
+			_ = closeAuth(auth)
+		}
+	}()
 
 	selectedIndexedDBName, def, err := cfg.SelectedIndexedDBProvider()
 	if err != nil {
@@ -404,6 +410,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 
 	closeSM = false
 	shutdownTelemetry = false
+	closeAuthProvider = false
 	closeSvc = false
 	closeExtraStores = false
 	closeExtraFileAPIs = false

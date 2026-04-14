@@ -322,28 +322,64 @@ func TestBootstrapSkipsDisabledFileAPIProviders(t *testing.T) {
 	<-result.ProvidersReady
 }
 
-func TestResultCloseClosesAuthProvider(t *testing.T) {
+func TestAuthProviderCloses(t *testing.T) {
 	t.Parallel()
 
-	closed := &atomic.Bool{}
-	factories := validFactories()
-	factories.Auth = func(yaml.Node, bootstrap.Deps) (core.AuthProvider, error) {
-		return &closableAuthProvider{
-			StubAuthProvider: &coretesting.StubAuthProvider{N: "test-auth"},
-			closed:           closed,
-		}, nil
-	}
+	t.Run("result close", func(t *testing.T) {
+		t.Parallel()
 
-	result, err := bootstrap.Bootstrap(context.Background(), validConfig(), factories)
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	if err := result.Close(context.Background()); err != nil {
-		t.Fatalf("Result.Close: %v", err)
-	}
-	if !closed.Load() {
-		t.Fatal("auth provider was not closed")
-	}
+		closed := &atomic.Bool{}
+		factories := validFactories()
+		factories.Auth = func(yaml.Node, bootstrap.Deps) (core.AuthProvider, error) {
+			return &closableAuthProvider{
+				StubAuthProvider: &coretesting.StubAuthProvider{N: "test-auth"},
+				closed:           closed,
+			}, nil
+		}
+
+		result, err := bootstrap.Bootstrap(context.Background(), validConfig(), factories)
+		if err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		if err := result.Close(context.Background()); err != nil {
+			t.Fatalf("Result.Close: %v", err)
+		}
+		if !closed.Load() {
+			t.Fatal("auth provider was not closed")
+		}
+	})
+
+	t.Run("bootstrap failure after auth init", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := validConfig()
+		cfg.Providers.FileAPI = map[string]*config.ProviderEntry{
+			"broken": {
+				Source: config.ProviderSource{Path: "stub"},
+				Config: yaml.Node{Kind: yaml.MappingNode},
+			},
+		}
+
+		closed := &atomic.Bool{}
+		factories := validFactories()
+		factories.Auth = func(yaml.Node, bootstrap.Deps) (core.AuthProvider, error) {
+			return &closableAuthProvider{
+				StubAuthProvider: &coretesting.StubAuthProvider{N: "test-auth"},
+				closed:           closed,
+			}, nil
+		}
+
+		_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+		if err == nil {
+			t.Fatal("Bootstrap: expected error")
+		}
+		if !strings.Contains(err.Error(), "fileapi factory is not registered") {
+			t.Fatalf("Bootstrap error = %v, want fileapi factory failure", err)
+		}
+		if !closed.Load() {
+			t.Fatal("auth provider was not closed after bootstrap failure")
+		}
+	})
 }
 
 func TestValidate(t *testing.T) {
