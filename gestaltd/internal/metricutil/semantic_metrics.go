@@ -53,7 +53,7 @@ var (
 )
 
 func RecordAuthMetrics(ctx context.Context, startedAt time.Time, provider string, action string, failed bool) {
-	metrics := authMetricsCache.Load(meterName, func(meter metric.Meter) counterMetrics {
+	metrics := authMetricsCache.Load(ctx, meterName, func(meter metric.Meter) counterMetrics {
 		return newCounterMetrics(meter, "gestaltd.auth", "gestaltd auth actions")
 	})
 	recordCounterMetrics(ctx, metrics, startedAt, failed,
@@ -63,7 +63,7 @@ func RecordAuthMetrics(ctx context.Context, startedAt time.Time, provider string
 }
 
 func RecordConnectionAuthMetrics(ctx context.Context, startedAt time.Time, provider string, authType string, action string, connectionMode string, failed bool) {
-	metrics := connectionAuthMetricsCache.Load(meterName, func(meter metric.Meter) counterMetrics {
+	metrics := connectionAuthMetricsCache.Load(ctx, meterName, func(meter metric.Meter) counterMetrics {
 		return newCounterMetrics(meter, "gestaltd.connection.auth", "gestaltd connection auth actions")
 	})
 	recordCounterMetrics(ctx, metrics, startedAt, failed,
@@ -75,7 +75,7 @@ func RecordConnectionAuthMetrics(ctx context.Context, startedAt time.Time, provi
 }
 
 func RecordIndexedDBMetrics(ctx context.Context, startedAt time.Time, store string, method string, failed bool) {
-	metrics := indexedDBMetricsCache.Load(meterName, func(meter metric.Meter) counterMetrics {
+	metrics := indexedDBMetricsCache.Load(ctx, meterName, func(meter metric.Meter) counterMetrics {
 		return newCounterMetrics(meter, "gestaltd.indexeddb", "gestaltd indexeddb operations")
 	})
 	recordCounterMetrics(ctx, metrics, startedAt, failed,

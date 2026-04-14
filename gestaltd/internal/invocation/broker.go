@@ -41,6 +41,13 @@ const (
 
 type connectionCtxKey struct{}
 
+func withResolvedPrincipal(ctx context.Context, p *principal.Principal) context.Context {
+	if p == nil {
+		return ctx
+	}
+	return principal.WithPrincipal(ctx, p)
+}
+
 func WithConnection(ctx context.Context, connection string) context.Context {
 	return context.WithValue(ctx, connectionCtxKey{}, connection)
 }
@@ -201,21 +208,39 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	if p.Scopes != nil && !slices.Contains(p.Scopes, providerName) {
 		return fail(fmt.Errorf("%w: %s", ErrScopeDenied, providerName))
 	}
-	if b.authorizer != nil && b.authorizer.IsWorkload(p) {
-		if binding, ok := b.authorizer.Binding(p, providerName); ok {
-			SetCredentialAudit(ctx, binding.Mode, binding.CredentialSubjectID, binding.Connection, binding.Instance)
-		}
+	if err := b.resolveUserPrincipal(ctx, p); err != nil {
+		return fail(err)
 	}
-	if b.authorizer != nil && !b.authorizer.AllowOperation(p, providerName, operation) {
-		return fail(fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operation))
+	ctx = withResolvedPrincipal(ctx, p)
+	if p.UserID != "" {
+		span.SetAttributes(attrUserID.String(p.UserID))
+	}
+	if b.authorizer != nil {
+		access, allowed := b.authorizer.ResolveAccess(p, providerName)
+		if access.Policy != "" || access.Role != "" {
+			ctx = WithAccessContext(ctx, access)
+		}
+		if b.authorizer.IsWorkload(p) {
+			if binding, ok := b.authorizer.Binding(p, providerName); ok {
+				SetCredentialAudit(ctx, binding.Mode, binding.CredentialSubjectID, binding.Connection, binding.Instance)
+			}
+		} else if !allowed {
+			return fail(fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName))
+		}
 	}
 
 	conn := ConnectionFromContext(ctx)
 	conn, instance = b.workloadSelectors(p, providerName, conn, instance)
+	if b.authorizer != nil && b.authorizer.IsWorkload(p) && !b.authorizer.AllowOperation(p, providerName, operation) {
+		return fail(fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operation))
+	}
 
-	transport, err := b.resolveTransport(ctx, p, prov, providerName, operation, conn, instance)
+	opMeta, transport, err := b.resolveOperation(ctx, p, prov, providerName, operation, conn, instance)
 	if err != nil {
 		return fail(err)
+	}
+	if b.authorizer != nil && !b.authorizer.AllowCatalogOperation(p, providerName, opMeta) {
+		return fail(fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operation))
 	}
 	metricOperation = operation
 	metricTransport = metricutil.AttrValue(transport)
@@ -264,9 +289,13 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	return result, nil
 }
 
-func (b *Broker) resolveTransport(ctx context.Context, p *principal.Principal, prov core.Provider, providerName, operation, connection, instance string) (string, error) {
-	if transport, ok := CatalogOperationTransport(providerCatalog(prov), operation); ok {
-		return transport, nil
+func (b *Broker) resolveOperation(ctx context.Context, p *principal.Principal, prov core.Provider, providerName, operation, connection, instance string) (catalog.CatalogOperation, string, error) {
+	if op, ok := CatalogOperationFromContext(ctx, providerName, operation); ok {
+		return op, catalogOperationTransport(op), nil
+	}
+
+	if op, ok := CatalogOperation(providerCatalog(prov), operation); ok {
+		return op, catalogOperationTransport(op), nil
 	}
 
 	if _, ok := prov.(core.SessionCatalogProvider); ok {
@@ -275,14 +304,14 @@ func (b *Broker) resolveTransport(ctx context.Context, p *principal.Principal, p
 		}
 		cat, err := resolveSessionCatalog(ctx, prov, providerName, b, p, connection, instance)
 		if err != nil {
-			return "", err
+			return catalog.CatalogOperation{}, "", err
 		}
-		if transport, ok := CatalogOperationTransport(cat, operation); ok {
-			return transport, nil
+		if op, ok := CatalogOperation(cat, operation); ok {
+			return op, catalogOperationTransport(op), nil
 		}
 	}
 
-	return "", fmt.Errorf("%w: %q on provider %q", ErrOperationNotFound, operation, providerName)
+	return catalog.CatalogOperation{}, "", fmt.Errorf("%w: %q on provider %q", ErrOperationNotFound, operation, providerName)
 }
 
 func (b *Broker) mcpConnection(providerName string) string {
@@ -295,6 +324,10 @@ func (b *Broker) mcpConnection(providerName string) string {
 		return b.connMapper.ConnectionForProvider(providerName)
 	}
 	return ""
+}
+
+func (b *Broker) MCPConnection(providerName string) string {
+	return b.mcpConnection(providerName)
 }
 
 func (b *Broker) workloadSelectors(p *principal.Principal, providerName, connection, instance string) (string, string) {
@@ -364,6 +397,10 @@ func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, provi
 	if p != nil && p.Scopes != nil && !slices.Contains(p.Scopes, providerName) {
 		return ctx, "", fmt.Errorf("%w: %s", ErrScopeDenied, providerName)
 	}
+	if err := b.resolveUserPrincipal(ctx, p); err != nil {
+		return ctx, "", err
+	}
+	ctx = withResolvedPrincipal(ctx, p)
 	if b.authorizer != nil && !b.authorizer.AllowProvider(p, providerName) {
 		return ctx, "", fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName)
 	}
@@ -378,11 +415,18 @@ func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, provi
 }
 
 func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error) {
+	resolved := principal.FromContext(ctx)
+	if resolved != nil {
+		p = resolved
+	}
 	if b.authorizer != nil && b.authorizer.IsWorkload(p) {
 		return b.resolveWorkloadToken(ctx, prov, p, providerName, connection, instance)
 	}
-	if err := b.resolveUserPrincipal(ctx, p); err != nil {
-		return ctx, "", err
+	if resolved == nil {
+		if err := b.resolveUserPrincipal(ctx, p); err != nil {
+			return ctx, "", err
+		}
+		ctx = withResolvedPrincipal(ctx, p)
 	}
 
 	mode := prov.ConnectionMode()

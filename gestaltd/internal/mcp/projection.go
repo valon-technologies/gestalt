@@ -20,10 +20,7 @@ func buildToolMap(cfg Config, provName string, cat *catalog.Catalog) map[string]
 	tools := make(map[string]mcpserver.ServerTool, len(cat.Operations))
 	for i := range cat.Operations {
 		op := &cat.Operations[i]
-		if op.Visible != nil && !*op.Visible {
-			continue
-		}
-		if cfg.IncludeREST != nil && op.Transport == catalog.TransportREST && !cfg.IncludeREST[provName] {
+		if !catalogOperationProjectedToMCP(cfg, provName, *op) {
 			continue
 		}
 
@@ -47,9 +44,19 @@ func buildToolMap(cfg Config, provName string, cat *catalog.Catalog) map[string]
 			tool.RawOutputSchema = op.OutputSchema
 		}
 
-		tools[name] = mcpserver.ServerTool{Tool: tool, Handler: makeHandler(cfg.Invoker, provName, op.ID, "")}
+		tools[name] = mcpserver.ServerTool{Tool: tool, Handler: makeHandler(cfg, provName, op.ID, "")}
 	}
 	return tools
+}
+
+func catalogOperationProjectedToMCP(cfg Config, provName string, op catalog.CatalogOperation) bool {
+	if op.Visible != nil && !*op.Visible {
+		return false
+	}
+	if cfg.IncludeREST != nil && op.Transport == catalog.TransportREST && !cfg.IncludeREST[provName] {
+		return false
+	}
+	return true
 }
 
 func providerNameForTool(prefixes map[string]string, providers []string, tool string) string {

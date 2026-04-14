@@ -175,6 +175,10 @@ func hydrationMarkerToolName(provider string) string {
 	return "__gestalt_internal_hydrated__:" + provider
 }
 
+func sessionCatalogOperationMarkerToolName(provider, operation string) string {
+	return "__gestalt_internal_catalog_op__:" + provider + ":" + operation
+}
+
 func (s *testSessionWithTools) Initialize() { s.initialized = true }
 func (s *testSessionWithTools) Initialized() bool {
 	return s.initialized
@@ -311,8 +315,9 @@ func TestNewServer_ListsToolsFromCatalogProvider(t *testing.T) {
 	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
-		Invoker:   broker,
-		Providers: providers,
+		Invoker:       broker,
+		TokenResolver: broker,
+		Providers:     providers,
 	})
 
 	tools := srv.ListTools()
@@ -361,8 +366,9 @@ func TestNewServer_SkipsFlatOnlyProvider(t *testing.T) {
 	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
-		Invoker:   broker,
-		Providers: providers,
+		Invoker:       broker,
+		TokenResolver: broker,
+		Providers:     providers,
 	})
 
 	tools := srv.ListTools()
@@ -425,8 +431,9 @@ func TestNewServer_ToolCallRoutesThrough(t *testing.T) {
 	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
-		Invoker:   broker,
-		Providers: providers,
+		Invoker:       broker,
+		TokenResolver: broker,
+		Providers:     providers,
 	})
 
 	tool := srv.GetTool("test_do_thing")
@@ -536,8 +543,9 @@ func TestNewServer_ErrorResultSetsIsError(t *testing.T) {
 	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
-		Invoker:   broker,
-		Providers: providers,
+		Invoker:       broker,
+		TokenResolver: broker,
+		Providers:     providers,
 	})
 
 	tool := srv.GetTool("test_forbidden_op")
@@ -572,8 +580,9 @@ func TestNewServer_BrokerErrorReturnsToolError(t *testing.T) {
 	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
-		Invoker:   broker,
-		Providers: providers,
+		Invoker:       broker,
+		TokenResolver: broker,
+		Providers:     providers,
 	})
 
 	tool := srv.GetTool("test_flaky_op")
@@ -863,6 +872,7 @@ func TestNewServer_SessionCatalogConnectionModeNoneSetsCredentialContext(t *test
 	t.Parallel()
 
 	var seen invocation.CredentialContext
+	var seenPrincipal *principal.Principal
 	prov := &directCallerProvider{
 		StubIntegration: coretesting.StubIntegration{N: "clickhouse", ConnMode: core.ConnectionModeNone},
 		cat:             &catalog.Catalog{Name: "clickhouse"},
@@ -871,6 +881,7 @@ func TestNewServer_SessionCatalogConnectionModeNoneSetsCredentialContext(t *test
 				t.Fatalf("session catalog token = %q, want empty", token)
 			}
 			seen = invocation.CredentialContextFromContext(ctx)
+			seenPrincipal = principal.FromContext(ctx)
 			return &catalog.Catalog{
 				Name: "clickhouse",
 				Operations: []catalog.CatalogOperation{
@@ -889,12 +900,13 @@ func TestNewServer_SessionCatalogConnectionModeNoneSetsCredentialContext(t *test
 	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
 
 	srv := gestaltmcp.NewServer(gestaltmcp.Config{
-		Invoker:   broker,
-		Providers: providers,
+		Invoker:       broker,
+		TokenResolver: broker,
+		Providers:     providers,
 	})
 
 	session := newTestSessionWithTools()
-	result := listToolsForSession(t, srv, ctxWithPrincipal(userID), session)
+	result := listToolsForSession(t, srv, ctxWithIdentityPrincipal("test@example.com", ""), session)
 	if len(result.Tools) != 1 || result.Tools[0].Name != "clickhouse_run_query" {
 		t.Fatalf("unexpected tools = %+v", result.Tools)
 	}
@@ -903,6 +915,12 @@ func TestNewServer_SessionCatalogConnectionModeNoneSetsCredentialContext(t *test
 	}
 	if seen.SubjectID != "" || seen.Connection != "" || seen.Instance != "" {
 		t.Fatalf("unexpected credential context: %+v", seen)
+	}
+	if seenPrincipal == nil || seenPrincipal.UserID != userID {
+		t.Fatalf("principal userID = %+v, want %q", seenPrincipal, userID)
+	}
+	if seenPrincipal.SubjectID != principal.UserSubjectID(userID) {
+		t.Fatalf("principal subjectID = %q, want %q", seenPrincipal.SubjectID, principal.UserSubjectID(userID))
 	}
 }
 
@@ -1027,6 +1045,605 @@ func TestNewServer_WorkloadListToolsFiltersStaticAndSessionTools(t *testing.T) {
 	}
 	if _, ok := sessionTools[hydrationMarkerToolName("clickhouse")]; !ok {
 		t.Fatal("expected hydration marker to remain in session tool state")
+	}
+}
+
+func TestNewServer_HumanListToolsFiltersRoleRestrictedTools(t *testing.T) {
+	t.Parallel()
+
+	staticCat := &catalog.Catalog{
+		Name: "sampledb",
+		Operations: []catalog.CatalogOperation{
+			{
+				ID:           "run_query",
+				Description:  "run a query",
+				Transport:    catalog.TransportMCPPassthrough,
+				AllowedRoles: []string{"viewer", "admin"},
+			},
+			{
+				ID:           "delete_table",
+				Description:  "delete a table",
+				Transport:    catalog.TransportMCPPassthrough,
+				AllowedRoles: []string{"admin"},
+			},
+			{
+				ID:          "export_results",
+				Description: "export results",
+				Transport:   catalog.TransportMCPPassthrough,
+			},
+		},
+	}
+
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{N: "sampledb", ConnMode: core.ConnectionModeNone},
+		cat:             staticCat,
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	_, userID := stubServicesWithToken(t, "sampledb")
+	authz, err := authorization.New(config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID(userID), Role: "viewer"},
+				},
+			},
+		},
+	}, map[string]*config.ProviderEntry{
+		"sampledb": {AuthorizationPolicy: "sample_policy"},
+	}, providers, map[string]string{})
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker: &testutil.StubInvoker{
+			InvokeFn: func(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		Providers:  providers,
+		Authorizer: authz,
+	})
+
+	result := listToolsForSession(t, srv, ctxWithPrincipal(userID), newTestSessionWithTools())
+	if len(result.Tools) != 1 || result.Tools[0].Name != "sampledb_run_query" {
+		t.Fatalf("tool names = %+v, want only sampledb_run_query", result.Tools)
+	}
+}
+
+func TestNewServer_HumanListToolsUsesSessionMetadataForStaticCollisions(t *testing.T) {
+	t.Parallel()
+
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{N: "sampledb", ConnMode: core.ConnectionModeUser},
+		cat: &catalog.Catalog{
+			Name: "sampledb",
+			Operations: []catalog.CatalogOperation{
+				{
+					ID:           "run_query",
+					Description:  "static query",
+					Transport:    catalog.TransportMCPPassthrough,
+					AllowedRoles: []string{"viewer"},
+				},
+			},
+		},
+		sessionCatalogFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			if token != "default-token" {
+				t.Fatalf("session catalog token = %q, want %q", token, "default-token")
+			}
+			return &catalog.Catalog{
+				Name: "sampledb",
+				Operations: []catalog.CatalogOperation{
+					{
+						ID:           "run_query",
+						Description:  "session query",
+						Transport:    catalog.TransportMCPPassthrough,
+						AllowedRoles: []string{"admin"},
+					},
+				},
+			}, nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	ds := coretesting.NewStubServices(t)
+	const userID = "viewer-user"
+	if err := ds.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
+		ID:          "tok-default",
+		UserID:      userID,
+		Integration: "sampledb",
+		Connection:  "workspace",
+		Instance:    "default",
+		AccessToken: "default-token",
+	}); err != nil {
+		t.Fatalf("StoreToken: %v", err)
+	}
+	authz, err := authorization.New(config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID(userID), Role: "viewer"},
+				},
+			},
+		},
+	}, map[string]*config.ProviderEntry{
+		"sampledb": {AuthorizationPolicy: "sample_policy"},
+	}, providers, map[string]string{})
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens, invocation.WithAuthorizer(authz))
+
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:       broker,
+		TokenResolver: broker,
+		Providers:     providers,
+		Authorizer:    authz,
+		MCPConnection: map[string]string{"sampledb": "workspace"},
+	})
+
+	result := listToolsForSession(t, srv, ctxWithPrincipal(userID), newTestSessionWithTools())
+	if len(result.Tools) != 0 {
+		t.Fatalf("tool names = %+v, want no visible tools", result.Tools)
+	}
+}
+
+func TestNewServer_HumanListToolsUsesHydratedSessionCatalogSnapshot(t *testing.T) {
+	t.Parallel()
+
+	var sessionCatalogCalls int
+	sessionCatalog := &catalog.Catalog{
+		Name: "sampledb",
+		Operations: []catalog.CatalogOperation{
+			{
+				ID:           "run_query",
+				Description:  "run a query",
+				Transport:    catalog.TransportMCPPassthrough,
+				AllowedRoles: []string{"viewer"},
+			},
+		},
+	}
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{N: "sampledb", ConnMode: core.ConnectionModeNone},
+		sessionCatalogFn: func(_ context.Context, _ string) (*catalog.Catalog, error) {
+			sessionCatalogCalls++
+			if sessionCatalogCalls > 1 {
+				return nil, fmt.Errorf("catalog unavailable")
+			}
+			return sessionCatalog, nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	ds, userID := stubServicesWithToken(t, "sampledb")
+	authz, err := authorization.New(config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID(userID), Role: "viewer"},
+				},
+			},
+		},
+	}, map[string]*config.ProviderEntry{
+		"sampledb": {AuthorizationPolicy: "sample_policy"},
+	}, providers, map[string]string{})
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens, invocation.WithAuthorizer(authz))
+
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:       broker,
+		TokenResolver: broker,
+		Providers:     providers,
+		Authorizer:    authz,
+	})
+
+	session := newTestSessionWithTools()
+	result := listToolsForSession(t, srv, ctxWithPrincipal(userID), session)
+	if len(result.Tools) != 1 || result.Tools[0].Name != "sampledb_run_query" {
+		t.Fatalf("tool names = %+v, want only sampledb_run_query", result.Tools)
+	}
+	if _, ok := session.GetSessionTools()["sampledb_run_query"]; !ok {
+		t.Fatal("expected session hydration to cache the session tool")
+	}
+	if sessionCatalogCalls != 1 {
+		t.Fatalf("sessionCatalogCalls = %d, want 1", sessionCatalogCalls)
+	}
+
+	sessionCatalog.Operations[0].AllowedRoles = []string{"admin"}
+	result = listToolsForSession(t, srv, ctxWithPrincipal(userID), session)
+	if len(result.Tools) != 1 || result.Tools[0].Name != "sampledb_run_query" {
+		t.Fatalf("tool names after mutation = %+v, want only sampledb_run_query", result.Tools)
+	}
+	callResult := callToolForSession(t, srv, ctxWithPrincipal(userID), session, "sampledb_run_query", map[string]any{
+		"sql": "select 1",
+	})
+	if callResult.IsError {
+		t.Fatalf("call result = %+v, want success", callResult)
+	}
+	if sessionCatalogCalls != 1 {
+		t.Fatalf("sessionCatalogCalls after call = %d, want 1", sessionCatalogCalls)
+	}
+}
+
+func TestNewServer_HumanListToolsIgnoresHiddenStaticCollisions(t *testing.T) {
+	t.Parallel()
+
+	hidden := false
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{N: "sampledb", ConnMode: core.ConnectionModeNone},
+		cat: &catalog.Catalog{
+			Name: "sampledb",
+			Operations: []catalog.CatalogOperation{
+				{
+					ID:           "run_query",
+					Description:  "hidden static query",
+					Transport:    catalog.TransportMCPPassthrough,
+					AllowedRoles: []string{"admin"},
+					Visible:      &hidden,
+				},
+			},
+		},
+		sessionCatalogFn: func(_ context.Context, _ string) (*catalog.Catalog, error) {
+			return &catalog.Catalog{
+				Name: "sampledb",
+				Operations: []catalog.CatalogOperation{
+					{
+						ID:           "run_query",
+						Description:  "viewer session query",
+						Transport:    catalog.TransportMCPPassthrough,
+						AllowedRoles: []string{"viewer"},
+					},
+				},
+			}, nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	ds, userID := stubServicesWithToken(t, "sampledb")
+	authz, err := authorization.New(config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID(userID), Role: "viewer"},
+				},
+			},
+		},
+	}, map[string]*config.ProviderEntry{
+		"sampledb": {AuthorizationPolicy: "sample_policy"},
+	}, providers, map[string]string{})
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens, invocation.WithAuthorizer(authz))
+
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:       broker,
+		TokenResolver: broker,
+		Providers:     providers,
+		Authorizer:    authz,
+	})
+
+	result := listToolsForSession(t, srv, ctxWithPrincipal(userID), newTestSessionWithTools())
+	if len(result.Tools) != 1 || result.Tools[0].Name != "sampledb_run_query" {
+		t.Fatalf("tool names = %+v, want only sampledb_run_query", result.Tools)
+	}
+}
+
+func TestNewServer_SessionCatalogSuppressionHidesStaticMCPTool(t *testing.T) {
+	t.Parallel()
+
+	visible := true
+	hidden := false
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "sampledb",
+			ConnMode: core.ConnectionModeUser,
+		},
+		cat: &catalog.Catalog{
+			Name: "sampledb",
+			Operations: []catalog.CatalogOperation{
+				{
+					ID:          "run_query",
+					Description: "static query",
+					Transport:   catalog.TransportMCPPassthrough,
+					Visible:     &visible,
+				},
+			},
+		},
+		sessionCatalogFn: func(_ context.Context, _ string) (*catalog.Catalog, error) {
+			return &catalog.Catalog{
+				Name: "sampledb",
+				Operations: []catalog.CatalogOperation{
+					{
+						ID:          "run_query",
+						Description: "hidden session query",
+						Transport:   catalog.TransportMCPPassthrough,
+						Visible:     &hidden,
+					},
+				},
+			}, nil
+		},
+		callFn: func(context.Context, string, map[string]any) (*mcpgo.CallToolResult, error) {
+			return mcpgo.NewToolResultText("unexpected provider call"), nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	ds, userID := stubServicesWithToken(t, "sampledb")
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens)
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:       broker,
+		TokenResolver: broker,
+		Providers:     providers,
+	})
+
+	result := listToolsForSession(t, srv, ctxWithPrincipal(userID), newTestSessionWithTools())
+	if len(result.Tools) != 0 {
+		t.Fatalf("tool names = %+v, want no visible tools", result.Tools)
+	}
+
+	callResult := callToolForSession(t, srv, ctxWithPrincipal(userID), newTestSessionWithTools(), "sampledb_run_query", map[string]any{
+		"sql": "select 1",
+	})
+	if !callResult.IsError {
+		t.Fatalf("expected error result, got %+v", callResult)
+	}
+	text, ok := callResult.Content[0].(mcpgo.TextContent)
+	if !ok || text.Text != "requested instance is unavailable for this tool" {
+		t.Fatalf("unexpected call error content: %+v", callResult.Content)
+	}
+}
+
+func TestNewServer_HumanListToolsDoesNotLeakAcrossStatelessSessions(t *testing.T) {
+	t.Parallel()
+
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{N: "sampledb", ConnMode: core.ConnectionModeNone},
+		sessionCatalogFn: func(ctx context.Context, _ string) (*catalog.Catalog, error) {
+			switch invocation.AccessContextFromContext(ctx).Role {
+			case "viewer":
+				return &catalog.Catalog{
+					Name: "sampledb",
+					Operations: []catalog.CatalogOperation{
+						{
+							ID:           "viewer_query",
+							Description:  "viewer query",
+							Transport:    catalog.TransportMCPPassthrough,
+							AllowedRoles: []string{"viewer"},
+						},
+					},
+				}, nil
+			case "admin":
+				return &catalog.Catalog{
+					Name: "sampledb",
+					Operations: []catalog.CatalogOperation{
+						{
+							ID:           "admin_query",
+							Description:  "admin query",
+							Transport:    catalog.TransportMCPPassthrough,
+							AllowedRoles: []string{"admin"},
+						},
+					},
+				}, nil
+			default:
+				return &catalog.Catalog{Name: "sampledb"}, nil
+			}
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	ds := coretesting.NewStubServices(t)
+	viewer, err := ds.Users.FindOrCreateUser(context.Background(), "viewer@example.test")
+	if err != nil {
+		t.Fatalf("FindOrCreateUser viewer: %v", err)
+	}
+	admin, err := ds.Users.FindOrCreateUser(context.Background(), "admin@example.test")
+	if err != nil {
+		t.Fatalf("FindOrCreateUser admin: %v", err)
+	}
+	authz, err := authorization.New(config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
+					{SubjectID: principal.UserSubjectID(admin.ID), Role: "admin"},
+				},
+			},
+		},
+	}, map[string]*config.ProviderEntry{
+		"sampledb": {AuthorizationPolicy: "sample_policy"},
+	}, providers, map[string]string{})
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens, invocation.WithAuthorizer(authz))
+
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:       broker,
+		TokenResolver: broker,
+		Providers:     providers,
+		Authorizer:    authz,
+	})
+
+	viewerSession := newTestSessionWithTools()
+	viewerSession.id = ""
+	viewerResult := listToolsForSession(t, srv, ctxWithPrincipal(viewer.ID), viewerSession)
+	if len(viewerResult.Tools) != 1 || viewerResult.Tools[0].Name != "sampledb_viewer_query" {
+		t.Fatalf("viewer tool names = %+v, want only sampledb_viewer_query", viewerResult.Tools)
+	}
+
+	adminSession := newTestSessionWithTools()
+	adminSession.id = ""
+	adminResult := listToolsForSession(t, srv, ctxWithPrincipal(admin.ID), adminSession)
+	if len(adminResult.Tools) != 1 || adminResult.Tools[0].Name != "sampledb_admin_query" {
+		t.Fatalf("admin tool names = %+v, want only sampledb_admin_query", adminResult.Tools)
+	}
+}
+
+func TestNewServer_HumanListToolsHidesInternalInstanceMarkers(t *testing.T) {
+	t.Parallel()
+
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{N: "sampledb", ConnMode: core.ConnectionModeNone},
+		cat: &catalog.Catalog{
+			Name: "sampledb",
+			Operations: []catalog.CatalogOperation{
+				{
+					ID:          "run_query",
+					Description: "run a query",
+					Transport:   catalog.TransportMCPPassthrough,
+				},
+			},
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker: &testutil.StubInvoker{
+			InvokeFn: func(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		Providers: providers,
+	})
+
+	session := newTestSessionWithTools()
+	session.SetSessionTools(map[string]mcpserver.ServerTool{
+		"__gestalt_internal_instance_tool__:sampledb:cnVuX3F1ZXJ5:dGVhbS1i": {
+			Tool: mcpgo.NewTool("__gestalt_internal_instance_tool__:sampledb:cnVuX3F1ZXJ5:dGVhbS1i"),
+		},
+	})
+
+	result := listToolsForSession(t, srv, ctxWithPrincipal("viewer-user"), session)
+	if len(result.Tools) != 1 || result.Tools[0].Name != "sampledb_run_query" {
+		t.Fatalf("tool names = %+v, want only sampledb_run_query", result.Tools)
+	}
+}
+
+func TestNewServer_HumanSessionCatalogReceivesAccessContext(t *testing.T) {
+	t.Parallel()
+
+	var seen []invocation.AccessContext
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{N: "sampledb", ConnMode: core.ConnectionModeNone},
+		sessionCatalogFn: func(ctx context.Context, _ string) (*catalog.Catalog, error) {
+			seen = append(seen, invocation.AccessContextFromContext(ctx))
+			return &catalog.Catalog{
+				Name: "sampledb",
+				Operations: []catalog.CatalogOperation{
+					{
+						ID:           "run_query",
+						Description:  "run a query",
+						Transport:    catalog.TransportMCPPassthrough,
+						AllowedRoles: []string{"viewer"},
+					},
+				},
+			}, nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	ds, userID := stubServicesWithToken(t, "sampledb")
+	authz, err := authorization.New(config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID(userID), Role: "viewer"},
+				},
+			},
+		},
+	}, map[string]*config.ProviderEntry{
+		"sampledb": {AuthorizationPolicy: "sample_policy"},
+	}, providers, map[string]string{})
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens, invocation.WithAuthorizer(authz))
+
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:       broker,
+		TokenResolver: broker,
+		Providers:     providers,
+		Authorizer:    authz,
+	})
+
+	result := listToolsForSession(t, srv, ctxWithPrincipal(userID), newTestSessionWithTools())
+	if len(result.Tools) != 1 || result.Tools[0].Name != "sampledb_run_query" {
+		t.Fatalf("tool names = %+v, want only sampledb_run_query", result.Tools)
+	}
+	if len(seen) == 0 {
+		t.Fatal("expected session catalog to receive access context")
+	}
+	for _, access := range seen {
+		if access.Policy != "sample_policy" || access.Role != "viewer" {
+			t.Fatalf("access context = %+v, want policy=sample_policy role=viewer", access)
+		}
+	}
+}
+
+func TestNewServer_HumanCallToolDeniedWhenAllowedRolesAreMissing(t *testing.T) {
+	t.Parallel()
+
+	var called bool
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{N: "sampledb", ConnMode: core.ConnectionModeNone},
+		cat: &catalog.Catalog{
+			Name: "sampledb",
+			Operations: []catalog.CatalogOperation{
+				{
+					ID:          "export_results",
+					Description: "export results",
+					Transport:   catalog.TransportMCPPassthrough,
+				},
+			},
+		},
+		callFn: func(context.Context, string, map[string]any) (*mcpgo.CallToolResult, error) {
+			called = true
+			return mcpgo.NewToolResultText("should not run"), nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	ds, userID := stubServicesWithToken(t, "sampledb")
+	authz, err := authorization.New(config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID(userID), Role: "viewer"},
+				},
+			},
+		},
+	}, map[string]*config.ProviderEntry{
+		"sampledb": {AuthorizationPolicy: "sample_policy"},
+	}, providers, map[string]string{})
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens, invocation.WithAuthorizer(authz))
+
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:       broker,
+		TokenResolver: broker,
+		Providers:     providers,
+		Authorizer:    authz,
+	})
+
+	result := callToolForSession(t, srv, ctxWithPrincipal(userID), newTestSessionWithTools(), "sampledb_export_results", map[string]any{})
+	if called {
+		t.Fatal("expected export_results to be denied before provider execution")
+	}
+	if !result.IsError {
+		t.Fatalf("expected error result, got %+v", result)
 	}
 }
 
@@ -1258,8 +1875,637 @@ func TestNewServer_WorkloadCallToolUsesBoundConnectionForSessionOnlyProvider(t *
 	if !called {
 		t.Fatal("expected workload tool call to reach provider")
 	}
-	if sessionCatalogCalls != 2 {
-		t.Fatalf("session catalog calls = %d, want %d", sessionCatalogCalls, 2)
+	if sessionCatalogCalls != 1 {
+		t.Fatalf("session catalog calls = %d, want %d", sessionCatalogCalls, 1)
+	}
+}
+
+func TestNewServer_WorkloadCallToolRejectsInstanceOverride(t *testing.T) {
+	t.Parallel()
+
+	var sessionCatalogCalls int
+	var called bool
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "sampledb",
+			ConnMode: core.ConnectionModeIdentity,
+		},
+		cat: &catalog.Catalog{
+			Name: "sampledb",
+			Operations: []catalog.CatalogOperation{
+				{
+					ID:          "run_query",
+					Description: "run a query",
+					Transport:   catalog.TransportMCPPassthrough,
+				},
+			},
+		},
+		sessionCatalogFn: func(_ context.Context, _ string) (*catalog.Catalog, error) {
+			sessionCatalogCalls++
+			return &catalog.Catalog{
+				Name: "sampledb",
+				Operations: []catalog.CatalogOperation{
+					{
+						ID:          "run_query",
+						Description: "run a query",
+						Transport:   catalog.TransportMCPPassthrough,
+					},
+				},
+			}, nil
+		},
+		callFn: func(context.Context, string, map[string]any) (*mcpgo.CallToolResult, error) {
+			called = true
+			return mcpgo.NewToolResultText("unexpected provider call"), nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	ds := coretesting.NewStubServices(t)
+	ctx := context.Background()
+	if err := ds.Tokens.StoreToken(ctx, &core.IntegrationToken{
+		ID:          "tok-identity",
+		UserID:      principal.IdentityPrincipal,
+		Integration: "sampledb",
+		Connection:  "workspace",
+		Instance:    "team-a",
+		AccessToken: "identity-token",
+	}); err != nil {
+		t.Fatalf("StoreToken: %v", err)
+	}
+
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Workloads: map[string]config.WorkloadDef{
+			"triage-bot": {
+				Token: "gst_wld_triage-bot-token",
+				Providers: map[string]config.WorkloadProviderDef{
+					"sampledb": {
+						Connection: "workspace",
+						Instance:   "team-a",
+						Allow:      []string{"run_query"},
+					},
+				},
+			},
+		},
+	}, providers)
+
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens, invocation.WithAuthorizer(authz))
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:       broker,
+		TokenResolver: broker,
+		Providers:     providers,
+		Authorizer:    authz,
+		MCPConnection: map[string]string{"sampledb": "default"},
+	})
+
+	result := callToolForSession(t, srv, ctxWithWorkloadPrincipal("triage-bot"), newTestSessionWithTools(), "sampledb_run_query", map[string]any{
+		"sql":       "select 1",
+		"_instance": "team-b",
+	})
+	if !result.IsError {
+		t.Fatalf("expected MCP error result, got %+v", result)
+	}
+	text, ok := result.Content[0].(mcpgo.TextContent)
+	if !ok || text.Text != "workload callers may not override connection or instance bindings" {
+		t.Fatalf("unexpected MCP error content: %+v", result.Content)
+	}
+	if called {
+		t.Fatal("expected workload override to stop before provider execution")
+	}
+	if sessionCatalogCalls != 0 {
+		t.Fatalf("session catalog calls = %d, want %d", sessionCatalogCalls, 0)
+	}
+}
+
+func TestNewServer_HumanCallToolUsesInstanceMetadataForStaticCollisions(t *testing.T) {
+	t.Parallel()
+
+	var sessionCatalogCalls int
+	var called bool
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "sampledb",
+			ConnMode: core.ConnectionModeUser,
+		},
+		cat: &catalog.Catalog{
+			Name: "sampledb",
+			Operations: []catalog.CatalogOperation{
+				{
+					ID:           "run_query",
+					Description:  "static query",
+					Transport:    catalog.TransportMCPPassthrough,
+					AllowedRoles: []string{"viewer"},
+				},
+			},
+		},
+		sessionCatalogFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			sessionCatalogCalls++
+			if token != "team-b-token" {
+				t.Fatalf("session catalog token = %q, want %q", token, "team-b-token")
+			}
+			return &catalog.Catalog{
+				Name: "sampledb",
+				Operations: []catalog.CatalogOperation{
+					{
+						ID:           "run_query",
+						Description:  "instance query",
+						Transport:    catalog.TransportMCPPassthrough,
+						AllowedRoles: []string{"admin"},
+					},
+				},
+			}, nil
+		},
+		callFn: func(context.Context, string, map[string]any) (*mcpgo.CallToolResult, error) {
+			called = true
+			return mcpgo.NewToolResultText("unexpected provider call"), nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	ds := coretesting.NewStubServices(t)
+	const userID = "viewer-user"
+	if err := ds.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
+		ID:          "tok-team-b",
+		UserID:      userID,
+		Integration: "sampledb",
+		Connection:  "workspace",
+		Instance:    "team-b",
+		AccessToken: "team-b-token",
+	}); err != nil {
+		t.Fatalf("StoreToken: %v", err)
+	}
+	authz, err := authorization.New(config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID(userID), Role: "viewer"},
+				},
+			},
+		},
+	}, map[string]*config.ProviderEntry{
+		"sampledb": {AuthorizationPolicy: "sample_policy"},
+	}, providers, map[string]string{})
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens, invocation.WithAuthorizer(authz))
+
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:       broker,
+		TokenResolver: broker,
+		Providers:     providers,
+		Authorizer:    authz,
+		MCPConnection: map[string]string{"sampledb": "workspace"},
+	})
+
+	result := callToolForSession(t, srv, ctxWithPrincipal(userID), newTestSessionWithTools(), "sampledb_run_query", map[string]any{
+		"sql":       "select 1",
+		"_instance": "team-b",
+	})
+	if !result.IsError {
+		t.Fatalf("expected MCP error result, got %+v", result)
+	}
+	text, ok := result.Content[0].(mcpgo.TextContent)
+	if !ok || text.Text != "operation access denied" {
+		t.Fatalf("unexpected MCP error content: %+v", result.Content)
+	}
+	if called {
+		t.Fatal("expected stricter instance metadata to stop provider execution")
+	}
+	if sessionCatalogCalls != 1 {
+		t.Fatalf("session catalog calls = %d, want %d", sessionCatalogCalls, 1)
+	}
+}
+
+func TestNewServer_NoneModeInstanceHydrationUsesRequestedInstance(t *testing.T) {
+	t.Parallel()
+
+	var sessionCatalogCalls int
+	var called bool
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "sampledb",
+			ConnMode: core.ConnectionModeNone,
+		},
+		cat: &catalog.Catalog{
+			Name: "sampledb",
+			Operations: []catalog.CatalogOperation{
+				{
+					ID:          "run_query",
+					Description: "static query",
+					Transport:   catalog.TransportMCPPassthrough,
+				},
+			},
+		},
+		sessionCatalogFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			sessionCatalogCalls++
+			if token != "team-b-token" {
+				t.Fatalf("session catalog token = %q, want %q", token, "team-b-token")
+			}
+			return &catalog.Catalog{
+				Name: "sampledb",
+				Operations: []catalog.CatalogOperation{
+					{
+						ID:          "run_query",
+						Description: "instance query",
+						Transport:   catalog.TransportMCPPassthrough,
+					},
+				},
+			}, nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker: &testutil.StubInvoker{
+			InvokeFn: func(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
+				called = true
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		TokenResolver: &stubTokenResolver{
+			resolveFn: func(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error) {
+				if providerName != "sampledb" {
+					t.Fatalf("providerName = %q, want %q", providerName, "sampledb")
+				}
+				if connection != "" {
+					t.Fatalf("connection = %q, want empty connection", connection)
+				}
+				if instance != "team-b" {
+					t.Fatalf("instance = %q, want %q", instance, "team-b")
+				}
+				return ctx, "team-b-token", nil
+			},
+		},
+		Providers: providers,
+	})
+
+	result := callToolForSession(t, srv, ctxWithPrincipal("viewer-user"), newTestSessionWithTools(), "sampledb_run_query", map[string]any{
+		"sql":       "select 1",
+		"_instance": "team-b",
+	})
+	if result.IsError {
+		t.Fatalf("expected success result, got %+v", result)
+	}
+	if !called {
+		t.Fatal("expected instance-specific none-mode call to reach invoker")
+	}
+	if sessionCatalogCalls != 1 {
+		t.Fatalf("session catalog calls = %d, want %d", sessionCatalogCalls, 1)
+	}
+}
+
+func TestNewServer_InstanceCallFailsClosedWhenHydrationFailsOnStaticCollision(t *testing.T) {
+	t.Parallel()
+
+	var called bool
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "sampledb",
+			ConnMode: core.ConnectionModeNone,
+		},
+		cat: &catalog.Catalog{
+			Name: "sampledb",
+			Operations: []catalog.CatalogOperation{
+				{
+					ID:          "run_query",
+					Description: "static query",
+					Transport:   catalog.TransportMCPPassthrough,
+				},
+			},
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker: &testutil.StubInvoker{
+			InvokeFn: func(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
+				called = true
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		TokenResolver: &stubTokenResolver{
+			resolveFn: func(context.Context, *principal.Principal, string, string, string) (context.Context, string, error) {
+				return context.Background(), "", fmt.Errorf("token unavailable")
+			},
+		},
+		Providers: providers,
+	})
+
+	result := callToolForSession(t, srv, ctxWithPrincipal("viewer-user"), newTestSessionWithTools(), "sampledb_run_query", map[string]any{
+		"sql":       "select 1",
+		"_instance": "team-b",
+	})
+	if !result.IsError {
+		t.Fatalf("expected error result, got %+v", result)
+	}
+	text, ok := result.Content[0].(mcpgo.TextContent)
+	if !ok || text.Text != "requested instance is unavailable for this tool" {
+		t.Fatalf("unexpected error content: %+v", result.Content)
+	}
+	if called {
+		t.Fatal("expected failed hydration to stop before invoker execution")
+	}
+}
+
+func TestNewServer_DefaultInstanceCallFailsClosedWhenHydrationFailsOnStaticCollision(t *testing.T) {
+	t.Parallel()
+
+	var called bool
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "sampledb",
+			ConnMode: core.ConnectionModeNone,
+		},
+		cat: &catalog.Catalog{
+			Name: "sampledb",
+			Operations: []catalog.CatalogOperation{
+				{
+					ID:          "run_query",
+					Description: "static query",
+					Transport:   catalog.TransportMCPPassthrough,
+				},
+			},
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker: &testutil.StubInvoker{
+			InvokeFn: func(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
+				called = true
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		TokenResolver: &stubTokenResolver{
+			resolveFn: func(context.Context, *principal.Principal, string, string, string) (context.Context, string, error) {
+				return context.Background(), "", fmt.Errorf("token unavailable")
+			},
+		},
+		Providers: providers,
+	})
+
+	result := callToolForSession(t, srv, ctxWithPrincipal("viewer-user"), newTestSessionWithTools(), "sampledb_run_query", map[string]any{
+		"sql": "select 1",
+	})
+	if !result.IsError {
+		t.Fatalf("expected error result, got %+v", result)
+	}
+	text, ok := result.Content[0].(mcpgo.TextContent)
+	if !ok || text.Text != "requested instance is unavailable for this tool" {
+		t.Fatalf("unexpected error content: %+v", result.Content)
+	}
+	if called {
+		t.Fatal("expected failed default hydration to stop before invoker execution")
+	}
+}
+
+func TestNewServer_DefaultHydrationFailureHidesStaticCollisionWithoutAuthorizer(t *testing.T) {
+	t.Parallel()
+
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "sampledb",
+			ConnMode: core.ConnectionModeUser,
+		},
+		cat: &catalog.Catalog{
+			Name: "sampledb",
+			Operations: []catalog.CatalogOperation{
+				{
+					ID:          "run_query",
+					Description: "static query",
+					Transport:   catalog.TransportMCPPassthrough,
+				},
+			},
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker: &testutil.StubInvoker{},
+		TokenResolver: &stubTokenResolver{
+			resolveFn: func(context.Context, *principal.Principal, string, string, string) (context.Context, string, error) {
+				return context.Background(), "", fmt.Errorf("token unavailable")
+			},
+		},
+		Providers: providers,
+	})
+
+	result := listToolsForSession(t, srv, ctxWithPrincipal("viewer-user"), newTestSessionWithTools())
+	if len(result.Tools) != 0 {
+		t.Fatalf("tool names = %+v, want no visible tools", result.Tools)
+	}
+}
+
+func TestNewServer_SessionHydratedRESTToolUsesHydrationConnection(t *testing.T) {
+	t.Parallel()
+
+	var seenToken string
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "sampledb",
+			ConnMode: core.ConnectionModeUser,
+			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
+				seenToken = token
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		sessionCatalogFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			switch token {
+			case "catalog-token":
+				return &catalog.Catalog{
+					Name: "sampledb",
+					Operations: []catalog.CatalogOperation{
+						{ID: "run_query", Description: "run a query", Method: http.MethodGet, Transport: catalog.TransportREST},
+					},
+				}, nil
+			case "rest-token":
+				return &catalog.Catalog{Name: "sampledb"}, nil
+			default:
+				return nil, fmt.Errorf("unexpected token %q", token)
+			}
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	ds := coretesting.NewStubServices(t)
+	const userID = "viewer-user"
+	if err := ds.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
+		ID:          "tok-catalog",
+		UserID:      userID,
+		Integration: "sampledb",
+		Connection:  "catalog-conn",
+		Instance:    "default",
+		AccessToken: "catalog-token",
+	}); err != nil {
+		t.Fatalf("StoreToken catalog: %v", err)
+	}
+	if err := ds.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
+		ID:          "tok-rest",
+		UserID:      userID,
+		Integration: "sampledb",
+		Connection:  "rest-conn",
+		Instance:    "default",
+		AccessToken: "rest-token",
+	}); err != nil {
+		t.Fatalf("StoreToken rest: %v", err)
+	}
+
+	broker := invocation.NewBroker(
+		providers,
+		ds.Users,
+		ds.Tokens,
+		invocation.WithConnectionMapper(invocation.ConnectionMap(map[string]string{"sampledb": "rest-conn"})),
+		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(map[string]string{"sampledb": "catalog-conn"})),
+	)
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:       broker,
+		TokenResolver: broker,
+		Providers:     providers,
+		MCPConnection: map[string]string{"sampledb": "catalog-conn"},
+	})
+
+	result := callToolForSession(t, srv, ctxWithPrincipal(userID), newTestSessionWithTools(), "sampledb_run_query", map[string]any{
+		"sql": "select 1",
+	})
+	if result.IsError {
+		t.Fatalf("expected success result, got %+v", result)
+	}
+	if seenToken != "catalog-token" {
+		t.Fatalf("execute token = %q, want %q", seenToken, "catalog-token")
+	}
+}
+
+func TestNewServer_HumanCallToolUsesNormalizedRequestedInstanceWithoutOverwritingDefaultTools(t *testing.T) {
+	t.Parallel()
+
+	var sessionCatalogCalls int
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "sampledb",
+			ConnMode: core.ConnectionModeUser,
+		},
+		sessionCatalogFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			sessionCatalogCalls++
+			description := "default query"
+			switch token {
+			case "default-token":
+			case "team-b-token":
+				description = "team-b query"
+			default:
+				t.Fatalf("session catalog token = %q, want one of default-token or team-b-token", token)
+			}
+			return &catalog.Catalog{
+				Name: "sampledb",
+				Operations: []catalog.CatalogOperation{
+					{
+						ID:           "run_query",
+						Description:  description,
+						Transport:    catalog.TransportMCPPassthrough,
+						AllowedRoles: []string{"viewer"},
+					},
+				},
+			}, nil
+		},
+		callFn: func(_ context.Context, _ string, _ map[string]any) (*mcpgo.CallToolResult, error) {
+			return mcpgo.NewToolResultText("ok"), nil
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	const userID = "viewer-user"
+	authz, err := authorization.New(config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID(userID), Role: "viewer"},
+				},
+			},
+		},
+	}, map[string]*config.ProviderEntry{
+		"sampledb": {AuthorizationPolicy: "sample_policy"},
+	}, providers, map[string]string{})
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker: &testutil.StubInvoker{
+			InvokeFn: func(_ context.Context, _ *principal.Principal, providerName, instance, operation string, args map[string]any) (*core.OperationResult, error) {
+				if providerName != "sampledb" {
+					t.Fatalf("providerName = %q, want %q", providerName, "sampledb")
+				}
+				if instance != "team-b" {
+					t.Fatalf("instance = %q, want %q", instance, "team-b")
+				}
+				if operation != "run_query" {
+					t.Fatalf("operation = %q, want %q", operation, "run_query")
+				}
+				if _, ok := args["_instance"]; ok {
+					t.Fatalf("unexpected _instance in args: %#v", args)
+				}
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		TokenResolver: &stubTokenResolver{
+			resolveFn: func(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error) {
+				if providerName != "sampledb" {
+					t.Fatalf("providerName = %q, want %q", providerName, "sampledb")
+				}
+				if connection != "workspace" {
+					t.Fatalf("connection = %q, want %q", connection, "workspace")
+				}
+				if p == nil || p.UserID != userID {
+					t.Fatalf("principal = %+v, want userID %q", p, userID)
+				}
+				switch instance {
+				case "":
+					return ctx, "default-token", nil
+				case "team-b":
+					return ctx, "team-b-token", nil
+				default:
+					return ctx, "", fmt.Errorf("unexpected instance %q", instance)
+				}
+			},
+		},
+		Providers:     providers,
+		Authorizer:    authz,
+		MCPConnection: map[string]string{"sampledb": "workspace"},
+	})
+
+	session := newTestSessionWithTools()
+	first := listToolsForSession(t, srv, ctxWithPrincipal(userID), session)
+	if len(first.Tools) != 1 || first.Tools[0].Name != "sampledb_run_query" {
+		t.Fatalf("default tools = %+v, want only sampledb_run_query", first.Tools)
+	}
+	if first.Tools[0].Description != "default query" {
+		t.Fatalf("default tool description = %q, want %q", first.Tools[0].Description, "default query")
+	}
+
+	result := callToolForSession(t, srv, ctxWithPrincipal(userID), session, "sampledb_run_query", map[string]any{
+		"sql":       "select 1",
+		"_instance": " team-b ",
+	})
+	if result.IsError {
+		t.Fatalf("expected success result, got %+v", result)
+	}
+	second := listToolsForSession(t, srv, ctxWithPrincipal(userID), session)
+	if len(second.Tools) != 1 || second.Tools[0].Name != "sampledb_run_query" {
+		t.Fatalf("default tools after instance call = %+v, want only sampledb_run_query", second.Tools)
+	}
+	if second.Tools[0].Description != "default query" {
+		t.Fatalf("default tool description after instance call = %q, want %q", second.Tools[0].Description, "default query")
+	}
+	third := callToolForSession(t, srv, ctxWithPrincipal(userID), session, "sampledb_run_query", map[string]any{
+		"sql":       "select 1",
+		"_instance": "team-b",
+	})
+	if third.IsError {
+		t.Fatalf("expected second instance call to succeed, got %+v", third)
+	}
+	if sessionCatalogCalls != 3 {
+		t.Fatalf("session catalog calls = %d, want %d", sessionCatalogCalls, 3)
 	}
 }
 
@@ -1316,11 +2562,14 @@ func TestNewServer_DynamicCatalogProviderDoesNotRehydrateAfterExactCollisionOnly
 		t.Fatalf("second tools = %+v, want only clickhouse_run_query", second.Tools)
 	}
 	tools := session.GetSessionTools()
-	if len(tools) != 1 {
-		t.Fatalf("session tools = %+v, want only hydration marker after exact collision hydration", tools)
+	if len(tools) != 2 {
+		t.Fatalf("session tools = %+v, want hydration and metadata markers after exact collision hydration", tools)
 	}
 	if _, ok := tools[hydrationMarkerToolName("clickhouse")]; !ok {
 		t.Fatalf("session tools = %+v, want hydration marker after exact collision hydration", tools)
+	}
+	if _, ok := tools[sessionCatalogOperationMarkerToolName("clickhouse", "run_query")]; !ok {
+		t.Fatalf("session tools = %+v, want session catalog marker after exact collision hydration", tools)
 	}
 }
 

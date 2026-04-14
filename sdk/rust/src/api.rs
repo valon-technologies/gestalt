@@ -23,11 +23,18 @@ pub struct Credential {
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct Access {
+    pub policy: String,
+    pub role: String,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Request {
     pub token: String,
     pub connection_params: BTreeMap<String, String>,
     pub subject: Subject,
     pub credential: Credential,
+    pub access: Access,
 }
 
 impl Request {

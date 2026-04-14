@@ -38,6 +38,14 @@ server:
   apiTokenTtl: 30d
   artifactsDir: ./state
   authorization:
+    policies:
+      support_staff:
+        default: deny
+        members:
+          - email: viewer@example.test
+            role: viewer
+          - subjectID: user:admin-user
+            role: admin
     workloads:
       triage-bot:
         displayName: Triage Bot
@@ -64,6 +72,8 @@ server:
 
 `apiTokenTtl` controls the lifetime of newly issued API tokens, defaulting to `30d`. It accepts Go duration strings (`1h`, `720h`) and day suffixes (`30d`). `artifactsDir` is a writable directory for prepared artifacts produced by `init` and consumed by `serve --locked` when no CLI override is supplied; it defaults to the config file's directory. See [Configuration](/configuration) for the full `init`/`serve` lifecycle.
 
+`server.authorization.policies` configures shared human access policies. Each policy resolves a caller to exactly one role by matching either `subjectID` or `email`, then applies a `default` fallback (`allow` or `deny`) when no member matches. Plugins opt into a policy explicitly through `authorizationPolicy`.
+
 `server.authorization.workloads` configures non-human workload callers. Each workload uses a dedicated bearer token with the `gst_wld_` prefix and a per-provider allowlist. In v1, workloads may bind only to `identity` or `none` providers. For `identity` providers, `connection` and `instance` resolve the exact stored identity credential the workload may use; `instance` defaults to `default` and `connection` falls back to the provider's default connection when omitted. For `none` providers, omit `connection` and `instance`.
 
 | Field | Default | Description |
@@ -76,6 +86,7 @@ server:
 | `encryptionKey` | | **Required.** Root encryption key. Typically a `secret://` reference. |
 | `apiTokenTtl` | `30d` | Lifetime of newly issued API tokens. Go durations or day suffixes (`30d`). |
 | `artifactsDir` | config directory | Directory for prepared `init` artifacts. |
+| `authorization.policies` | | Shared human access policies resolved by `subjectID` or `email`. |
 | `authorization.workloads` | | Workload bearer tokens, per-provider allowlists, and identity credential bindings. |
 
 When `server.management` is configured, Gestalt serves `/`, `/api/v1/*`, auth routes, and `/mcp` on the public listener, while `/admin`, `/metrics`, `/health`, and `/ready` move to the management listener. The management listener is intended to be protected by deployment infrastructure such as private networking, VPN, or an internal-only reverse proxy. Gestalt does not apply its own session or API-token auth to `/metrics` on the management listener.
@@ -428,6 +439,7 @@ providers:
       displayName: GitHub
       description: Public GitHub operations
       iconFile: ./icons/github.svg
+      authorizationPolicy: support_staff
       source:
         ref: github.com/valon-technologies/gestalt-providers/github
         version: 1.2.3
@@ -442,6 +454,8 @@ providers:
       allowedOperations:
         repos.get:
           alias: get_repo
+          allowedRoles:
+            - admin
 ```
 
 ### Plugin Fields
@@ -451,11 +465,12 @@ providers:
 | `displayName` | Human-readable name shown in the UI and API. |
 | `description` | Short description of the plugin. |
 | `iconFile` | SVG icon path, resolved relative to the config directory. |
+| `authorizationPolicy` | Optional shared human access policy from `server.authorization.policies`. When set, host-side operation filtering and execution checks use the resolved role for this plugin. |
 | `source` | **Required.** The backing provider source. See [source shape](#providerspluginssource) below. |
 | `config` | Provider-specific configuration passed into the provider package. |
 | `surfaces` | Typed host-side overrides for manifest-declared surfaces, such as `surfaces.openapi.baseUrl` or `surfaces.graphql.url`. |
 | `connections` | Named connection declarations. See [connections](#connections) below. |
-| `allowedOperations` | Allowlist with optional `alias` and `description` overrides per operation. |
+| `allowedOperations` | Allowlist with optional `alias`, `description`, and `allowedRoles` overrides per operation. |
 | `indexeddbs` | Optional list of named `providers.indexeddbs` bindings exposed to the executable plugin through the SDK transport. Store names are automatically prefixed per plugin. A single binding also populates the default IndexedDB SDK env var for compatibility. |
 
 ### `providers.plugins.*.source`
@@ -751,6 +766,8 @@ Each `providers.ui.<name>` entry must use exactly one mode: `disabled: true`, or
 Mounted UI bundles are served on the public listener only. The built-in admin UI remains at `/admin`.
 
 `server.egress.defaultAction` must be `allow` or `deny`.
+
+`server.authorization.policies.<name>.default` must be `allow` or `deny` when set. Each policy member must set exactly one of `subjectID` or `email`, and every member must set a non-empty `role`.
 
 Server listener ports must be greater than zero. When `server.management` is configured, it must differ from `server.public`.
 

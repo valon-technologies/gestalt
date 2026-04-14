@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use gestalt::proto::v1::integration_provider_client::IntegrationProviderClient;
 use gestalt::proto::v1::{
-    CredentialContext, ExecuteRequest, GetSessionCatalogRequest, PostConnectRequest,
+    AccessContext, CredentialContext, ExecuteRequest, GetSessionCatalogRequest, PostConnectRequest,
     RequestContext, StartProviderRequest, SubjectContext,
 };
 use gestalt::{Catalog, CatalogOperation, Operation, Provider, Request, Response, Router, ok};
@@ -45,10 +45,11 @@ impl Provider for TestProvider {
         Ok(Some(Catalog {
             name: "session-example".to_string(),
             display_name: format!(
-                "{}|{}|{}",
+                "{}|{}|{}|{}",
                 request.connection_param("tenant").unwrap_or_default(),
                 request.subject.id,
                 request.credential.mode,
+                request.access.role,
             ),
             description: String::new(),
             icon_svg: String::new(),
@@ -66,6 +67,7 @@ impl Provider for TestProvider {
                 read_only: false,
                 visible: None,
                 transport: String::new(),
+                allowed_roles: Vec::new(),
             }],
         }))
     }
@@ -81,6 +83,7 @@ struct Output {
     message: String,
     subject_id: String,
     credential_mode: String,
+    access_role: String,
 }
 
 #[tokio::test]
@@ -98,6 +101,7 @@ async fn serves_provider_requests_over_unix_socket() {
                     message: format!("{greeting}, {}!", input.name),
                     subject_id: request.subject.id,
                     credential_mode: request.credential.mode,
+                    access_role: request.access.role,
                 }))
             },
         )
@@ -174,6 +178,10 @@ async fn serves_provider_requests_over_unix_socket() {
                     mode: "identity".to_string(),
                     ..Default::default()
                 }),
+                access: Some(AccessContext {
+                    policy: "sample_policy".to_string(),
+                    role: "admin".to_string(),
+                }),
             }),
         })
         .await
@@ -183,7 +191,7 @@ async fn serves_provider_requests_over_unix_socket() {
     assert_eq!(response.status, 200);
     assert_eq!(
         response.body,
-        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","credential_mode":"identity"}"#
+        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","credential_mode":"identity","access_role":"admin"}"#
     );
 
     let session_catalog = client
@@ -203,6 +211,10 @@ async fn serves_provider_requests_over_unix_socket() {
                     mode: "identity".to_string(),
                     ..Default::default()
                 }),
+                access: Some(AccessContext {
+                    policy: "sample_policy".to_string(),
+                    role: "viewer".to_string(),
+                }),
             }),
         })
         .await
@@ -210,7 +222,7 @@ async fn serves_provider_requests_over_unix_socket() {
         .into_inner();
     let catalog = session_catalog.catalog.expect("session catalog");
     assert_eq!(catalog.name, "session-example");
-    assert_eq!(catalog.display_name, "acme|user:user-123|identity");
+    assert_eq!(catalog.display_name, "acme|user:user-123|identity|viewer");
 
     let err = client
         .post_connect(PostConnectRequest::default())

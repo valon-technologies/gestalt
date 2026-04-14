@@ -65,7 +65,9 @@ async fn executes_registered_operation() {
 fn catalog_includes_parameters() {
     let router = Router::<TestProvider>::new()
         .register(
-            Operation::<EchoInput, EchoOutput>::new("echo").read_only(true),
+            Operation::<EchoInput, EchoOutput>::new("echo")
+                .read_only(true)
+                .allowed_roles(vec!["viewer".to_owned(), "admin".to_owned()]),
             |_: Arc<TestProvider>, input: EchoInput, _request: Request| async move {
                 Ok::<Response<EchoOutput>, std::convert::Infallible>(ok(EchoOutput {
                     message: input.message,
@@ -81,6 +83,7 @@ fn catalog_includes_parameters() {
     assert_eq!(catalog.operations[0].parameters.len(), 1);
     assert_eq!(catalog.operations[0].parameters[0].name, "message");
     assert!(catalog.operations[0].read_only);
+    assert_eq!(catalog.operations[0].allowed_roles, vec!["viewer", "admin"]);
 }
 
 #[derive(Default)]
@@ -205,6 +208,7 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
                     mode: "identity".to_owned(),
                     ..Default::default()
                 }),
+                access: None,
             }),
         }))
         .await

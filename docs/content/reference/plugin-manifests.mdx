@@ -185,6 +185,7 @@ The `allowedOperations` map selectively exposes and customizes operations from a
 | --- | --- | --- |
 | `alias` | string | Rename the operation for Gestalt consumers. |
 | `description` | string | Override the operation description. |
+| `allowedRoles` | string[] | Restrict the operation to callers whose resolved human role matches one of these values. This only takes effect when the deployment binds the plugin to `authorizationPolicy`. |
 | `paginate` | bool | Enable automatic pagination for this operation. Uses the plugin-level pagination config. |
 | `pagination` | ManifestPaginationConfig | Per-operation pagination config that overrides the plugin-level default. |
 
@@ -193,9 +194,11 @@ spec:
   allowedOperations:
     tickets.list:
       alias: list_tickets
+      allowedRoles: [viewer, admin]
       paginate: true
     tickets.get:
       alias: get_ticket
+      allowedRoles: [admin]
 ```
 
 ### Response Mapping
@@ -514,10 +517,12 @@ spec:
           description: Return open tickets
           method: GET
           path: /tickets
+          allowedRoles: [viewer, admin]
         - name: get_ticket
           description: Return one ticket
           method: GET
           path: /tickets/{ticket_id}
+          allowedRoles: [admin]
 ```
 
 ## Authoring Notes

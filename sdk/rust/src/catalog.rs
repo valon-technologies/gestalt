@@ -89,6 +89,9 @@ fn operation_to_json_value(op: &CatalogOperation) -> JsonValue {
     if !op.transport.is_empty() {
         obj.insert("transport".to_owned(), json!(op.transport));
     }
+    if !op.allowed_roles.is_empty() {
+        obj.insert("allowedRoles".to_owned(), json!(op.allowed_roles));
+    }
     if !op.parameters.is_empty() {
         let params: Vec<JsonValue> = op
             .parameters

@@ -96,6 +96,8 @@ type ProviderEntry struct {
 	DisplayName  string            `yaml:"displayName,omitempty"`
 	Description  string            `yaml:"description,omitempty"`
 	IconFile     string            `yaml:"iconFile,omitempty"`
+	// AuthorizationPolicy binds this provider to a shared human access policy.
+	AuthorizationPolicy string `yaml:"authorizationPolicy,omitempty"`
 
 	// Plugin-specific config fields (parsed from YAML, only valid on plugin entries)
 	Connections       map[string]*ConnectionDef     `yaml:"connections,omitempty"`
@@ -206,7 +208,19 @@ type EgressConfig struct {
 }
 
 type AuthorizationConfig struct {
-	Workloads map[string]WorkloadDef `yaml:"workloads,omitempty"`
+	Workloads map[string]WorkloadDef    `yaml:"workloads,omitempty"`
+	Policies  map[string]HumanPolicyDef `yaml:"policies,omitempty"`
+}
+
+type HumanPolicyDef struct {
+	Default string                 `yaml:"default,omitempty"`
+	Members []HumanPolicyMemberDef `yaml:"members,omitempty"`
+}
+
+type HumanPolicyMemberDef struct {
+	SubjectID string `yaml:"subjectID,omitempty"`
+	Email     string `yaml:"email,omitempty"`
+	Role      string `yaml:"role"`
 }
 
 type WorkloadDef struct {

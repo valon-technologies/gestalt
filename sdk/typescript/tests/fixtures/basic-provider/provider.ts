@@ -1,4 +1,10 @@
-import { connectionParam, definePlugin, ok, operation, s } from "../../../src/index.ts";
+import {
+  connectionParam,
+  definePlugin,
+  ok,
+  operation,
+  s,
+} from "../../../src/index.ts";
 
 let configuredName = "";
 let configuredConfig: Record<string, unknown> = {};
@@ -20,9 +26,10 @@ export const plugin = definePlugin({
         {
           id: "session-hello",
           method: "GET",
+          allowedRoles: ["viewer", "admin"],
           title: scope
-            ? `Session Hello ${scope} ${request.subject.id} ${request.credential.mode}`.trim()
-            : `Session Hello ${request.subject.id} ${request.credential.mode}`.trim(),
+            ? `Session Hello ${scope} ${request.subject.id} ${request.credential.mode} ${request.access.role}`.trim()
+            : `Session Hello ${request.subject.id} ${request.credential.mode} ${request.access.role}`.trim(),
         },
       ],
     };
@@ -34,6 +41,7 @@ export const plugin = definePlugin({
       title: "Hello",
       description: "Return a greeting",
       tags: ["fixture"],
+      allowedRoles: ["viewer", "admin"],
       readOnly: true,
       input: s.object({
         name: s.string({
@@ -53,6 +61,8 @@ export const plugin = definePlugin({
         configuredRegion: s.string(),
         subjectId: s.string(),
         credentialMode: s.string(),
+        accessPolicy: s.string(),
+        accessRole: s.string(),
       }),
       handler(input, request) {
         const region = connectionParam(request, "region") ?? "";
@@ -63,6 +73,8 @@ export const plugin = definePlugin({
           configuredRegion: String(configuredConfig.region ?? ""),
           subjectId: request.subject.id,
           credentialMode: request.credential.mode,
+          accessPolicy: request.access.policy,
+          accessRole: request.access.role,
         });
       },
     }),

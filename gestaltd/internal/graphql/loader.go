@@ -53,6 +53,7 @@ func addOperations(schema *Schema, def *provider.Definition, root *TypeName, isM
 
 		desc := field.Description
 		opName := field.Name
+		var allowedRoles []string
 		if override := allowedOps[field.Name]; override != nil {
 			if override.Description != "" {
 				desc = override.Description
@@ -60,14 +61,16 @@ func addOperations(schema *Schema, def *provider.Definition, root *TypeName, isM
 			if override.Alias != "" {
 				opName = override.Alias
 			}
+			allowedRoles = override.AllowedRoles
 		}
 
 		query := generateQuery(schema, field, isMutation)
 
 		opDef := provider.OperationDef{
-			Description: provider.TruncateDescription(desc),
-			Transport:   "graphql",
-			Query:       query,
+			Description:  provider.TruncateDescription(desc),
+			AllowedRoles: allowedRoles,
+			Transport:    "graphql",
+			Query:        query,
 		}
 
 		opDef.Parameters = argsToParams(schema, field.Args)

@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from dataclasses import dataclass
 
-from gestalt import OK, Credential, Error, Plugin, Request, Response, Subject
+from gestalt import OK, Access, Credential, Error, Plugin, Request, Response, Subject
 
 
 class PluginOperationTests(unittest.TestCase):
@@ -90,6 +90,7 @@ class PluginOperationTests(unittest.TestCase):
             return "first"
 
         with self.assertRaises(ValueError, msg="duplicate operation id"):
+
             @plugin.operation(id="dup")
             def second() -> str:
                 return "second"
@@ -105,6 +106,7 @@ class PluginOperationTests(unittest.TestCase):
                 "region": req.connection_param("region") or "",
                 "subject_id": req.subject.id,
                 "credential_mode": req.credential.mode,
+                "access_role": req.access.role,
             }
 
         result = plugin.execute(
@@ -115,6 +117,7 @@ class PluginOperationTests(unittest.TestCase):
                 connection_params={"region": "us-east-1"},
                 subject=Subject(id="user:user-123", kind="user"),
                 credential=Credential(mode="identity"),
+                access=Access(role="admin"),
             ),
         )
         body = json.loads(result.body)
@@ -122,6 +125,7 @@ class PluginOperationTests(unittest.TestCase):
         self.assertEqual(body["region"], "us-east-1")
         self.assertEqual(body["subject_id"], "user:user-123")
         self.assertEqual(body["credential_mode"], "identity")
+        self.assertEqual(body["access_role"], "admin")
 
     def test_async_handler(self) -> None:
         plugin = Plugin("test-plugin")
@@ -197,6 +201,21 @@ class PluginCatalogTests(unittest.TestCase):
         self.assertEqual(op["method"], "GET")
         self.assertTrue(op.get("read_only", op.get("readOnly", False)))
 
+    def test_catalog_preserves_allowed_roles(self) -> None:
+        plugin = Plugin("test-plugin")
+
+        @plugin.operation(method="GET", allowed_roles=["viewer", "admin", "viewer"])
+        def greet() -> str:
+            return "hello"
+
+        catalog = plugin.catalog_dict()
+        self.assertEqual(
+            catalog["operations"][0].get(
+                "allowed_roles", catalog["operations"][0].get("allowedRoles")
+            ),
+            ["viewer", "admin"],
+        )
+
     def test_write_catalog(self) -> None:
         """write_catalog should produce a file on disk."""
         plugin = Plugin("test-plugin")
@@ -227,7 +246,9 @@ class PluginNameTests(unittest.TestCase):
             manifest = pathlib.Path(tmpdir) / "manifest.yaml"
             manifest.write_text('display_name: "Test Plugin"\n', encoding="utf-8")
 
-            plugin = Plugin.from_manifest("manifest.yaml", base_dir=pathlib.Path(tmpdir))
+            plugin = Plugin.from_manifest(
+                "manifest.yaml", base_dir=pathlib.Path(tmpdir)
+            )
             self.assertEqual(plugin.name, "Test-Plugin")
 
 

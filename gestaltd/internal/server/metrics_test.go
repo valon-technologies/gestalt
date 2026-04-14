@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/server"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	"github.com/valon-technologies/gestalt/server/internal/testutil/metrictest"
+	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 )
 
 type manualMetricsProvider struct {
@@ -66,26 +68,38 @@ func (s *metricsHostIssuedSessionAuth) SessionTokenTTL() time.Duration {
 	return time.Hour
 }
 
+func hasMetricWithPrefix(rm metricdata.ResourceMetrics, prefix string) bool {
+	for _, scope := range rm.ScopeMetrics {
+		for _, metric := range scope.Metrics {
+			if strings.HasPrefix(metric.Name, prefix) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func TestConnectionAuthMetrics(t *testing.T) {
 	t.Parallel()
 
-	reader := metrictest.UseManualMeterProvider(t)
-	const providerName = "metrics-slack"
+	metrics := metrictest.NewManualMeterProvider(t)
+	const providerName = "sample-oauth"
 
 	handler := &testOAuthHandler{
-		authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
+		authorizationBaseURLVal: "https://idp.example.test/authorize",
 		exchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
 			if code == "good-code" {
-				return &core.TokenResponse{AccessToken: "slack-token"}, nil
+				return &core.TokenResponse{AccessToken: "oauth-token"}, nil
 			}
 			return nil, context.DeadlineExceeded
 		},
 	}
 
 	oauthServer := newTestServer(t, func(cfg *server.Config) {
+		cfg.MeterProvider = metrics.Provider
 		cfg.Providers = testutil.NewProviderRegistry(t, &stubIntegrationWithAuthURL{
 			StubIntegration: coretesting.StubIntegration{N: providerName},
-			authURL:         "https://slack.com/oauth/v2/authorize",
+			authURL:         "https://idp.example.test/authorize",
 		})
 		cfg.DefaultConnection = map[string]string{providerName: testDefaultConnection}
 		cfg.ConnectionAuth = testConnectionAuth(providerName, handler)
@@ -133,7 +147,7 @@ func TestConnectionAuthMetrics(t *testing.T) {
 		t.Fatalf("failed oauth callback status = %d, want %d", status, http.StatusBadGateway)
 	}
 
-	rm := metrictest.CollectMetrics(t, reader)
+	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.connection.auth.count", 2, map[string]string{
 		"gestalt.provider":        providerName,
 		"gestalt.type":            "oauth",
@@ -162,8 +176,8 @@ func TestConnectionAuthMetrics(t *testing.T) {
 func TestRefreshAndOperationResultMetrics(t *testing.T) {
 	t.Parallel()
 
-	reader := metrictest.UseManualMeterProvider(t)
-	const providerName = "metrics-fake"
+	metrics := metrictest.NewManualMeterProvider(t)
+	const providerName = "sample-refresh"
 
 	successStub := &stubOAuthIntegration{
 		stubIntegrationWithOps: stubIntegrationWithOps{
@@ -193,6 +207,7 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 	})
 
 	successServer := newTestServer(t, func(cfg *server.Config) {
+		cfg.MeterProvider = metrics.Provider
 		cfg.Providers = testutil.NewProviderRegistry(t, successStub)
 		cfg.DefaultConnection = map[string]string{providerName: testDefaultConnection}
 		cfg.ConnectionAuth = oauthRefreshConnectionAuth(providerName, successStub.refreshTokenFn)
@@ -232,6 +247,7 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 	})
 
 	errorServer := newTestServer(t, func(cfg *server.Config) {
+		cfg.MeterProvider = metrics.Provider
 		cfg.Providers = testutil.NewProviderRegistry(t, errorStub)
 		cfg.DefaultConnection = map[string]string{providerName: testDefaultConnection}
 		cfg.ConnectionAuth = oauthRefreshConnectionAuth(providerName, errorStub.refreshTokenFn)
@@ -249,7 +265,7 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 		t.Fatalf("refresh error status = %d, want %d", errorResp.StatusCode, http.StatusBadGateway)
 	}
 
-	rm := metrictest.CollectMetrics(t, reader)
+	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.connection.auth.count", 2, map[string]string{
 		"gestalt.provider":        providerName,
 		"gestalt.type":            "oauth",
@@ -281,13 +297,60 @@ func TestRefreshAndOperationResultMetrics(t *testing.T) {
 	})
 }
 
+func TestOperationMetricsDefaultRESTTransportFromCatalogContext(t *testing.T) {
+	t.Parallel()
+
+	metrics := metrictest.NewManualMeterProvider(t)
+	const providerName = "sample-rest"
+
+	srv := newTestServer(t, func(cfg *server.Config) {
+		cfg.MeterProvider = metrics.Provider
+		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Providers = testutil.NewProviderRegistry(t, &stubIntegrationWithCatalog{
+			StubIntegration: coretesting.StubIntegration{
+				N:        providerName,
+				ConnMode: core.ConnectionModeNone,
+				ExecuteFn: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
+					return &core.OperationResult{Status: http.StatusOK, Body: `{"operation":"` + operation + `"}`}, nil
+				},
+			},
+			catalog: &catalog.Catalog{
+				Name: providerName,
+				Operations: []catalog.CatalogOperation{
+					{ID: "list", Method: http.MethodGet, Path: "/list"},
+				},
+			},
+		})
+	})
+	testutil.CloseOnCleanup(t, srv)
+
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/api/v1/"+providerName+"/list", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("operation request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("operation status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	rm := metrictest.CollectMetrics(t, metrics.Reader)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.operation.count", 1, map[string]string{
+		"gestalt.provider":        providerName,
+		"gestalt.operation":       "list",
+		"gestalt.transport":       "rest",
+		"gestalt.connection_mode": "none",
+	})
+}
+
 func TestManualConnectionMetrics(t *testing.T) {
 	t.Parallel()
 
-	reader := metrictest.UseManualMeterProvider(t)
+	metrics := metrictest.NewManualMeterProvider(t)
 	const providerName = "manual-metrics"
 
 	srv := newTestServer(t, func(cfg *server.Config) {
+		cfg.MeterProvider = metrics.Provider
 		cfg.Services = coretesting.NewStubServices(t)
 		cfg.Providers = testutil.NewProviderRegistry(t, &manualMetricsProvider{name: providerName})
 		cfg.DefaultConnection = map[string]string{providerName: testDefaultConnection}
@@ -306,7 +369,7 @@ func TestManualConnectionMetrics(t *testing.T) {
 		t.Fatalf("manual connect status = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 
-	rm := metrictest.CollectMetrics(t, reader)
+	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.connection.auth.count", 1, map[string]string{
 		"gestalt.provider":        providerName,
 		"gestalt.type":            "manual",
@@ -318,8 +381,10 @@ func TestManualConnectionMetrics(t *testing.T) {
 func TestConnectionAuthMetricsUseUnknownProviderForMissingIntegration(t *testing.T) {
 	t.Parallel()
 
-	reader := metrictest.UseManualMeterProvider(t)
-	srv := newTestServer(t)
+	metrics := metrictest.NewManualMeterProvider(t)
+	srv := newTestServer(t, func(cfg *server.Config) {
+		cfg.MeterProvider = metrics.Provider
+	})
 	testutil.CloseOnCleanup(t, srv)
 
 	startBody := bytes.NewBufferString(`{"integration":"typo-oauth"}`)
@@ -346,7 +411,7 @@ func TestConnectionAuthMetricsUseUnknownProviderForMissingIntegration(t *testing
 		t.Fatalf("manual connect status = %d, want %d", manualResp.StatusCode, http.StatusNotFound)
 	}
 
-	rm := metrictest.CollectMetrics(t, reader)
+	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.connection.auth.count", 1, map[string]string{
 		"gestalt.provider":        "unknown",
 		"gestalt.type":            "oauth",
@@ -376,7 +441,7 @@ func TestConnectionAuthMetricsUseUnknownProviderForMissingIntegration(t *testing
 func TestPlatformAuthMetrics(t *testing.T) {
 	t.Parallel()
 
-	reader := metrictest.UseManualMeterProvider(t)
+	metrics := metrictest.NewManualMeterProvider(t)
 	secret := []byte("0123456789abcdef0123456789abcdef")
 	var auditBuf bytes.Buffer
 
@@ -388,6 +453,7 @@ func TestPlatformAuthMetrics(t *testing.T) {
 	client.Jar = jar
 
 	srv := newTestServer(t, func(cfg *server.Config) {
+		cfg.MeterProvider = metrics.Provider
 		cfg.Auth = &metricsHostIssuedSessionAuth{secret: secret, name: "metrics-host-issued"}
 		cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 		cfg.StateSecret = secret
@@ -440,7 +506,7 @@ func TestPlatformAuthMetrics(t *testing.T) {
 		t.Fatalf("validate-token and datastore read should not emit audit logs, got: %s", got)
 	}
 
-	rm := metrictest.CollectMetrics(t, reader)
+	rm := metrictest.CollectMetrics(t, metrics.Reader)
 	metrictest.RequireInt64Sum(t, rm, "gestaltd.auth.count", 1, map[string]string{
 		"gestalt.provider": "metrics-host-issued",
 		"gestalt.action":   "begin_login",
@@ -457,4 +523,29 @@ func TestPlatformAuthMetrics(t *testing.T) {
 		"gestalt.provider": "metrics-host-issued",
 		"gestalt.action":   "complete_login",
 	})
+}
+
+func TestHTTPMiddlewareMetricsUseConfiguredMeterProvider(t *testing.T) {
+	t.Parallel()
+
+	metrics := metrictest.NewManualMeterProvider(t)
+	srv := newTestServer(t, func(cfg *server.Config) {
+		cfg.MeterProvider = metrics.Provider
+	})
+	testutil.CloseOnCleanup(t, srv)
+
+	req, _ := http.NewRequest(http.MethodGet, srv.URL+"/ready", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	rm := metrictest.CollectMetrics(t, metrics.Reader)
+	if !hasMetricWithPrefix(rm, "http.server.") {
+		t.Fatalf("expected otelhttp metrics in configured meter provider, got %+v", rm.ScopeMetrics)
+	}
 }

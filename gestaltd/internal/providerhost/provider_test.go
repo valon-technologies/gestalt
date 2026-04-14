@@ -43,9 +43,10 @@ func (p *roundTripProvider) Execute(ctx context.Context, operation string, param
 		}
 	}
 	credential := invocation.CredentialContextFromContext(ctx)
+	access := invocation.AccessContextFromContext(ctx)
 	return &core.OperationResult{
 		Status: 201,
-		Body:   fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s", operation, token, params["message"], core.ConnectionParams(ctx)["tenant"], subjectID, subjectKind, displayName, identityPresent, authSource, credential.Mode, credential.SubjectID),
+		Body:   fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s", operation, token, params["message"], core.ConnectionParams(ctx)["tenant"], subjectID, subjectKind, displayName, identityPresent, authSource, credential.Mode, credential.SubjectID, access.Policy, access.Role),
 	}, nil
 }
 
@@ -55,7 +56,7 @@ func (p *roundTripProvider) Catalog() *catalog.Catalog {
 		DisplayName: "Round Trip",
 		Description: "test provider",
 		Operations: []catalog.CatalogOperation{
-			{ID: "echo", Method: http.MethodPost},
+			{ID: "echo", Method: http.MethodPost, AllowedRoles: []string{"admin"}},
 		},
 	}
 }
@@ -79,12 +80,13 @@ func (p *roundTripProvider) CatalogForRequest(ctx context.Context, token string)
 		}
 	}
 	credential := invocation.CredentialContextFromContext(ctx)
+	access := invocation.AccessContextFromContext(ctx)
 	return &catalog.Catalog{
 		Name:        "roundtrip-session",
-		DisplayName: fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s", token, subjectID, subjectKind, displayName, identityPresent, authSource, credential.Mode),
+		DisplayName: fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%s|%s", token, subjectID, subjectKind, displayName, identityPresent, authSource, credential.Mode, access.Policy, access.Role),
 		Description: "session catalog",
 		Operations: []catalog.CatalogOperation{
-			{ID: "echo", Method: http.MethodPost},
+			{ID: "echo", Method: http.MethodPost, AllowedRoles: []string{"viewer"}},
 		},
 	}, nil
 }
@@ -110,7 +112,7 @@ func roundTripStaticSpec() StaticProviderSpec {
 			DisplayName: "Round Trip",
 			Description: "test provider",
 			Operations: []catalog.CatalogOperation{
-				{ID: "echo", Method: http.MethodPost},
+				{ID: "echo", Method: http.MethodPost, AllowedRoles: []string{"admin"}},
 			},
 		},
 		AuthTypes: []string{"manual"},
@@ -197,8 +199,8 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 				Identity:    &core.UserIdentity{DisplayName: "Ada"},
 				Source:      principal.SourceAPIToken,
 			},
-			wantExecuteBody:    "echo|secret-token|hi|acme|user:user-123|user|Ada|true|api_token|identity|identity:__identity__",
-			wantSessionCatalog: "token-123|user:user-123|user|Ada|true|api_token|identity",
+			wantExecuteBody:    "echo|secret-token|hi|acme|user:user-123|user|Ada|true|api_token|identity|identity:__identity__|roadmap|admin",
+			wantSessionCatalog: "token-123|user:user-123|user|Ada|true|api_token|identity|roadmap|admin",
 		},
 		{
 			name: "workload subject",
@@ -208,8 +210,8 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 				Kind:        principal.KindWorkload,
 				Source:      principal.SourceWorkloadToken,
 			},
-			wantExecuteBody:    "echo|secret-token|hi|acme|workload:triage-bot|workload|Triage Bot|false|workload_token|identity|identity:__identity__",
-			wantSessionCatalog: "token-123|workload:triage-bot|workload|Triage Bot|false|workload_token|identity",
+			wantExecuteBody:    "echo|secret-token|hi|acme|workload:triage-bot|workload|Triage Bot|false|workload_token|identity|identity:__identity__|roadmap|admin",
+			wantSessionCatalog: "token-123|workload:triage-bot|workload|Triage Bot|false|workload_token|identity|roadmap|admin",
 		},
 	}
 
@@ -226,6 +228,10 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 				Connection: "workspace",
 				Instance:   "default",
 			})
+			ctx = invocation.WithAccessContext(ctx, invocation.AccessContext{
+				Policy: "roadmap",
+				Role:   "admin",
+			})
 
 			result, err := prov.Execute(ctx, "echo", map[string]any{"message": "hi"}, "secret-token")
 			if err != nil {
@@ -237,6 +243,8 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 
 			if cat := prov.Catalog(); cat == nil || cat.Name != "roundtrip" {
 				t.Fatalf("unexpected static catalog: %+v", cat)
+			} else if got := cat.Operations[0].AllowedRoles; len(got) != 1 || got[0] != "admin" {
+				t.Fatalf("unexpected static catalog allowedRoles: %#v", got)
 			}
 
 			scp := prov.(core.SessionCatalogProvider)
@@ -246,6 +254,9 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 			}
 			if sessionCat.Name != "roundtrip-session" || sessionCat.DisplayName != tc.wantSessionCatalog {
 				t.Fatalf("unexpected session catalog: %+v", sessionCat)
+			}
+			if got := sessionCat.Operations[0].AllowedRoles; len(got) != 1 || got[0] != "viewer" {
+				t.Fatalf("unexpected session catalog allowedRoles: %#v", got)
 			}
 		})
 	}
@@ -265,6 +276,10 @@ func TestRequestContextProto_PreservesWorkloadDisplayName(t *testing.T) {
 		Kind:        principal.KindWorkload,
 		Source:      principal.SourceWorkloadToken,
 	})
+	ctx = invocation.WithAccessContext(ctx, invocation.AccessContext{
+		Policy: "roadmap",
+		Role:   "viewer",
+	})
 
 	reqCtx := requestContextProto(ctx)
 	if reqCtx == nil || reqCtx.GetSubject() == nil {
@@ -272,6 +287,9 @@ func TestRequestContextProto_PreservesWorkloadDisplayName(t *testing.T) {
 	}
 	if got := reqCtx.GetSubject().GetDisplayName(); got != "Triage Bot" {
 		t.Fatalf("subject display name = %q, want %q", got, "Triage Bot")
+	}
+	if reqCtx.GetAccess() == nil || reqCtx.GetAccess().GetPolicy() != "roadmap" || reqCtx.GetAccess().GetRole() != "viewer" {
+		t.Fatalf("unexpected access context: %#v", reqCtx.GetAccess())
 	}
 }
 

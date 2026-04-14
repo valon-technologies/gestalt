@@ -242,6 +242,58 @@ server:
 	}
 }
 
+func TestValidateStructureRejectsDuplicateAuthorizationPolicyMembers(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		members []HumanPolicyMemberDef
+		want    string
+	}{
+		{
+			name: "duplicate subject id",
+			members: []HumanPolicyMemberDef{
+				{SubjectID: "user:123", Role: "viewer"},
+				{SubjectID: "user:123", Role: "admin"},
+			},
+			want: "subjectID duplicates",
+		},
+		{
+			name: "duplicate email after normalization",
+			members: []HumanPolicyMemberDef{
+				{Email: "Viewer@Test.local", Role: "viewer"},
+				{Email: " viewer@test.local ", Role: "admin"},
+			},
+			want: "email duplicates",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			cfg := &Config{
+				Server: ServerConfig{
+					Authorization: AuthorizationConfig{
+						Policies: map[string]HumanPolicyDef{
+							"roadmap": {
+								Default: "deny",
+								Members: tc.members,
+							},
+						},
+					},
+				},
+			}
+
+			err := ValidateStructure(cfg)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("ValidateStructure error = %v, want substring %q", err, tc.want)
+			}
+		})
+	}
+}
+
 func TestExpandEnvVariablesPreservesMissingPlaceholder(t *testing.T) {
 	t.Parallel()
 

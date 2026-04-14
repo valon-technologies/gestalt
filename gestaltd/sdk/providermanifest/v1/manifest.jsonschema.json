@@ -664,6 +664,13 @@
           "type": "string",
           "minLength": 1
         },
+        "allowedRoles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
         "parameters": {
           "type": "array",
           "items": {
@@ -804,6 +811,13 @@
         },
         "description": {
           "type": "string"
+        },
+        "allowedRoles": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
         },
         "paginate": {
           "type": "boolean"

@@ -83,12 +83,13 @@ func NewDeclarativeProvider(manifest *providermanifestv1.Manifest, httpClient *h
 	for i := range ops {
 		mop := &ops[i]
 		catOp := catalog.CatalogOperation{
-			ID:          mop.Name,
-			Method:      mop.Method,
-			Path:        mop.Path,
-			Description: mop.Description,
-			Transport:   catalog.TransportREST,
-			Parameters:  make([]catalog.CatalogParameter, 0, len(mop.Parameters)),
+			ID:           mop.Name,
+			Method:       mop.Method,
+			Path:         mop.Path,
+			Description:  mop.Description,
+			AllowedRoles: mop.AllowedRoles,
+			Transport:    catalog.TransportREST,
+			Parameters:   make([]catalog.CatalogParameter, 0, len(mop.Parameters)),
 		}
 		for _, mp := range mop.Parameters {
 			catOp.Parameters = append(catOp.Parameters, catalog.CatalogParameter{

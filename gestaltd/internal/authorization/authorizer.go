@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
@@ -38,16 +39,61 @@ type Workload struct {
 	Providers   map[string]WorkloadProviderBinding
 }
 
+type AccessContext struct {
+	Policy string
+	Role   string
+}
+
+type HumanPolicy struct {
+	ID               string
+	DefaultAllow     bool
+	RolesBySubjectID map[string]string
+	RolesByEmail     map[string]string
+}
+
 type Authorizer struct {
 	workloadsByHash      map[string]*Workload
 	workloadsBySubjectID map[string]*Workload
+	policies             map[string]*HumanPolicy
+	providerPolicies     map[string]string
 }
 
 func New(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderEntry, providers *registry.ProviderMap[core.Provider], defaultConnections map[string]string) (*Authorizer, error) {
 	a := &Authorizer{
 		workloadsByHash:      map[string]*Workload{},
 		workloadsBySubjectID: map[string]*Workload{},
+		policies:             map[string]*HumanPolicy{},
+		providerPolicies:     map[string]string{},
 	}
+
+	for policyID, def := range cfg.Policies {
+		policy := &HumanPolicy{
+			ID:               policyID,
+			DefaultAllow:     strings.EqualFold(strings.TrimSpace(def.Default), "allow"),
+			RolesBySubjectID: make(map[string]string, len(def.Members)),
+			RolesByEmail:     make(map[string]string, len(def.Members)),
+		}
+		for _, member := range def.Members {
+			role := strings.TrimSpace(member.Role)
+			if subjectID := strings.TrimSpace(member.SubjectID); subjectID != "" {
+				policy.RolesBySubjectID[subjectID] = role
+				continue
+			}
+			if email := normalizeEmail(member.Email); email != "" {
+				policy.RolesByEmail[email] = role
+			}
+		}
+		a.policies[policyID] = policy
+	}
+	for providerName, entry := range pluginDefs {
+		if entry == nil {
+			continue
+		}
+		if policy := strings.TrimSpace(entry.AuthorizationPolicy); policy != "" {
+			a.providerPolicies[providerName] = policy
+		}
+	}
+
 	if len(cfg.Workloads) == 0 {
 		return a, nil
 	}
@@ -117,7 +163,8 @@ func (a *Authorizer) IsWorkload(p *principal.Principal) bool {
 
 func (a *Authorizer) AllowProvider(p *principal.Principal, provider string) bool {
 	if !a.IsWorkload(p) {
-		return true
+		_, allowed := a.ResolveAccess(p, provider)
+		return allowed
 	}
 	_, ok := a.bindingForSubject(p, provider)
 	return ok
@@ -125,7 +172,7 @@ func (a *Authorizer) AllowProvider(p *principal.Principal, provider string) bool
 
 func (a *Authorizer) AllowOperation(p *principal.Principal, provider, operation string) bool {
 	if !a.IsWorkload(p) {
-		return true
+		return a.AllowProvider(p, provider)
 	}
 	binding, ok := a.bindingForSubject(p, provider)
 	if !ok {
@@ -146,6 +193,55 @@ func (a *Authorizer) Binding(p *principal.Principal, provider string) (Credentia
 	return binding.CredentialBinding, true
 }
 
+func (a *Authorizer) ResolveAccess(p *principal.Principal, provider string) (AccessContext, bool) {
+	if a == nil || a.IsWorkload(p) {
+		return AccessContext{}, true
+	}
+	policyName := strings.TrimSpace(a.providerPolicies[provider])
+	if policyName == "" {
+		return AccessContext{}, true
+	}
+	policy := a.policies[policyName]
+	if policy == nil {
+		return AccessContext{}, false
+	}
+	access := AccessContext{Policy: policyName}
+	if role, ok := policy.roleForPrincipal(p); ok {
+		access.Role = role
+		return access, true
+	}
+	if policy.DefaultAllow {
+		return access, true
+	}
+	return access, false
+}
+
+func (a *Authorizer) AllowCatalogOperation(p *principal.Principal, provider string, op catalog.CatalogOperation) bool {
+	if a.IsWorkload(p) {
+		return a.AllowOperation(p, provider, op.ID)
+	}
+	access, allowed := a.ResolveAccess(p, provider)
+	if !allowed {
+		return false
+	}
+	if access.Policy == "" {
+		return true
+	}
+	if access.Policy != "" && len(op.AllowedRoles) == 0 {
+		policy := a.policies[access.Policy]
+		return policy != nil && policy.DefaultAllow
+	}
+	if access.Role == "" {
+		return false
+	}
+	for _, role := range op.AllowedRoles {
+		if strings.TrimSpace(role) == access.Role {
+			return true
+		}
+	}
+	return false
+}
+
 func (a *Authorizer) bindingForSubject(p *principal.Principal, provider string) (WorkloadProviderBinding, bool) {
 	if a == nil || p == nil || p.SubjectID == "" {
 		return WorkloadProviderBinding{}, false
@@ -156,6 +252,28 @@ func (a *Authorizer) bindingForSubject(p *principal.Principal, provider string) 
 	}
 	binding, ok := workload.Providers[provider]
 	return binding, ok
+}
+
+func (p *HumanPolicy) roleForPrincipal(pr *principal.Principal) (string, bool) {
+	if p == nil || pr == nil {
+		return "", false
+	}
+	if pr.SubjectID != "" {
+		if role, ok := p.RolesBySubjectID[pr.SubjectID]; ok {
+			return role, true
+		}
+	}
+	if pr.UserID != "" {
+		if role, ok := p.RolesBySubjectID[principal.UserSubjectID(pr.UserID)]; ok {
+			return role, true
+		}
+	}
+	if pr.Identity != nil {
+		if role, ok := p.RolesByEmail[normalizeEmail(pr.Identity.Email)]; ok {
+			return role, true
+		}
+	}
+	return "", false
 }
 
 func buildBinding(mode core.ConnectionMode, workloadID, provider string, def config.WorkloadProviderDef, defaultConnections map[string]string) (WorkloadProviderBinding, error) {
@@ -216,6 +334,10 @@ func normalizeAllowedOperations(ops []string) map[string]struct{} {
 		allowed[name] = struct{}{}
 	}
 	return allowed
+}
+
+func normalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
 }
 
 func providerMode(provider string, pluginDefs map[string]*config.ProviderEntry, providers *registry.ProviderMap[core.Provider]) (core.ConnectionMode, bool, error) {

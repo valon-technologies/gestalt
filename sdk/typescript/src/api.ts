@@ -12,11 +12,17 @@ export interface Credential {
   instance: string;
 }
 
+export interface Access {
+  policy: string;
+  role: string;
+}
+
 export interface Request {
   token: string;
   connectionParams: Record<string, string>;
   subject: Subject;
   credential: Credential;
+  access: Access;
 }
 
 export const responseBrand: unique symbol = Symbol("gestalt.response");
@@ -51,6 +57,7 @@ export function request(
   connectionParams: Record<string, string> = {},
   subject: Partial<Subject> = {},
   credential: Partial<Credential> = {},
+  access: Partial<Access> = {},
 ): Request {
   return {
     token,
@@ -69,10 +76,17 @@ export function request(
       connection: credential.connection ?? "",
       instance: credential.instance ?? "",
     },
+    access: {
+      policy: access.policy ?? "",
+      role: access.role ?? "",
+    },
   };
 }
 
-export function connectionParam(input: Request | undefined, name: string): string | undefined {
+export function connectionParam(
+  input: Request | undefined,
+  name: string,
+): string | undefined {
   return input?.connectionParams[name];
 }
 

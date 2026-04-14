@@ -47,7 +47,7 @@ func recordOperationMetrics(
 	connectionMode string,
 	failed bool,
 ) {
-	metrics := operationMetricsCache.Load(tracerName, newOperationMetrics)
+	metrics := operationMetricsCache.Load(ctx, tracerName, newOperationMetrics)
 	attrs := []attribute.KeyValue{
 		attrProvider.String(metricutil.AttrValue(provider)),
 		attrOperation.String(metricutil.AttrValue(operation)),
