@@ -39,6 +39,7 @@ const defaultPlatforms = "darwin/amd64,darwin/arm64,linux/amd64,linux/arm64"
 const allPlatformsValue = "all"
 const defaultReleaseOutputDir = "dist/"
 const releaseBinaryPrefix = "gestalt-plugin-"
+const releaseOwnedUIRoot = "_owned_ui"
 const windowsOS = "windows"
 const windowsExecutableSuffix = ".exe"
 
@@ -392,11 +393,11 @@ func prepareBuiltPackageDir(stagingDir, sourceDir string, srcManifest *providerm
 	if err != nil {
 		return nil, releasePlatform{}, fmt.Errorf("hash binary: %w", err)
 	}
-	if err := copyReleasePackageFiles(srcManifest, sourceDir, stagingDir, false); err != nil {
-		return nil, releasePlatform{}, err
-	}
 	manifest, err := buildReleaseManifest(srcManifest, version, binaryName, buildKind, plat, digest)
 	if err != nil {
+		return nil, releasePlatform{}, err
+	}
+	if err := copyReleasePackageFiles(manifest, sourceDir, stagingDir, false); err != nil {
 		return nil, releasePlatform{}, err
 	}
 	return manifest, plat, nil
@@ -538,6 +539,9 @@ func copyReleasePackageFiles(manifest *providermanifestv1.Manifest, sourceDir, s
 	if manifest == nil {
 		return nil
 	}
+	if err := stageReleaseOwnedUI(manifest, sourceDir, stagingDir); err != nil {
+		return err
+	}
 
 	copied := make(map[string]struct{})
 	copyPath := func(rel string, optional bool) error {
@@ -607,6 +611,53 @@ func copyReleasePackageFiles(manifest *providermanifestv1.Manifest, sourceDir, s
 		}
 	}
 	return nil
+}
+
+func stageReleaseOwnedUI(manifest *providermanifestv1.Manifest, sourceDir, stagingDir string) error {
+	if manifest == nil || manifest.Kind != providermanifestv1.KindPlugin || manifest.Spec == nil || manifest.Spec.UI == nil {
+		return nil
+	}
+	ownedUI := manifest.Spec.UI
+	if strings.TrimSpace(ownedUI.Path) == "" {
+		return nil
+	}
+
+	uiManifestPath := filepath.Join(sourceDir, filepath.FromSlash(ownedUI.Path))
+	_, uiManifest, err := providerpkg.ReadSourceManifestFile(uiManifestPath)
+	if err != nil {
+		return fmt.Errorf("read owned ui manifest %s: %w", ownedUI.Path, err)
+	}
+	if err := providerpkg.RunSourceReleaseBuild(uiManifestPath, uiManifest); err != nil {
+		return fmt.Errorf("build owned ui package %s: %w", ownedUI.Path, err)
+	}
+
+	packagedManifest, err := cloneManifest(uiManifest)
+	if err != nil {
+		return fmt.Errorf("clone owned ui manifest %s: %w", ownedUI.Path, err)
+	}
+	packagedManifest.Release = nil
+
+	packagedRelPath := packagedOwnedUIManifestPath(ownedUI.Path)
+	packagedDir := filepath.Join(stagingDir, filepath.FromSlash(path.Dir(packagedRelPath)))
+	if err := copyReleasePackageFiles(packagedManifest, filepath.Dir(uiManifestPath), packagedDir, true); err != nil {
+		return fmt.Errorf("copy owned ui package %s: %w", ownedUI.Path, err)
+	}
+	if err := writeReleaseManifestFile(packagedDir, path.Base(packagedRelPath), providerpkg.ManifestFormatFromPath(uiManifestPath), packagedManifest); err != nil {
+		return fmt.Errorf("write owned ui manifest %s: %w", ownedUI.Path, err)
+	}
+
+	ownedUI.Path = packagedRelPath
+	return nil
+}
+
+func packagedOwnedUIManifestPath(rel string) string {
+	cleanRel := path.Clean(strings.ReplaceAll(rel, "\\", "/"))
+	manifestFile := path.Base(cleanRel)
+	parent := path.Base(path.Dir(cleanRel))
+	if parent == "." || parent == "/" || parent == "" {
+		return path.Join(releaseOwnedUIRoot, manifestFile)
+	}
+	return path.Join(releaseOwnedUIRoot, parent, manifestFile)
 }
 
 func validateReleaseOutputDir(manifest *providermanifestv1.Manifest, sourceDir, outputDir string) error {

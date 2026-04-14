@@ -177,6 +177,9 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 		if err := validateExecutableProviderMetadata(spec); err != nil {
 			return err
 		}
+		if err := validateOwnedUIRef(spec.UI, sourceMode); err != nil {
+			return err
+		}
 		if spec != nil && spec.IsDeclarative() {
 			if err := validateDeclarativeProvider(spec); err != nil {
 				return err
@@ -219,6 +222,72 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 		return fmt.Errorf("unsupported manifest kind %q", kind)
 	}
 
+	return nil
+}
+
+func validateOwnedUIRef(ref *providermanifestv1.OwnedUIRef, sourceMode bool) error {
+	if ref == nil {
+		return nil
+	}
+	pathValue := strings.TrimSpace(ref.Path)
+	refValue := strings.TrimSpace(ref.Ref)
+	versionValue := strings.TrimSpace(ref.Version)
+	var authValue *providermanifestv1.SourceAuth
+	if ref.Auth != nil {
+		token := strings.TrimSpace(ref.Auth.Token)
+		if token == "" {
+			return fmt.Errorf("spec.ui.auth.token is required when spec.ui.auth is set")
+		}
+		authValue = &providermanifestv1.SourceAuth{Token: token}
+	}
+	modeCount := 0
+	if pathValue != "" {
+		modeCount++
+	}
+	if refValue != "" {
+		modeCount++
+	}
+	switch modeCount {
+	case 0:
+		return fmt.Errorf("spec.ui.path or spec.ui.ref is required when spec.ui is set")
+	case 2:
+		return fmt.Errorf("spec.ui.path and spec.ui.ref are mutually exclusive")
+	}
+	if pathValue != "" {
+		if authValue != nil {
+			return fmt.Errorf("spec.ui.auth is only valid with spec.ui.ref")
+		}
+		if !sourceMode {
+			if err := validateRelativePackagePath(pathValue, "spec.ui.path"); err != nil {
+				return err
+			}
+			ref.Path = pathValue
+		} else {
+			if filepath.IsAbs(pathValue) {
+				return fmt.Errorf("spec.ui.path must be relative")
+			}
+			cleaned := path.Clean(filepath.ToSlash(pathValue))
+			if cleaned == "." || cleaned == "" {
+				return fmt.Errorf("spec.ui.path must not be empty")
+			}
+			ref.Path = cleaned
+		}
+		if versionValue != "" {
+			return fmt.Errorf("spec.ui.version is only valid with spec.ui.ref")
+		}
+		return nil
+	}
+	if _, err := pluginsource.Parse(refValue); err != nil {
+		return fmt.Errorf("spec.ui.ref: %w", err)
+	}
+	if versionValue != "" {
+		if err := pluginsource.ValidateVersion(versionValue); err != nil {
+			return fmt.Errorf("spec.ui.version: %w", err)
+		}
+	}
+	ref.Ref = refValue
+	ref.Version = versionValue
+	ref.Auth = authValue
 	return nil
 }
 

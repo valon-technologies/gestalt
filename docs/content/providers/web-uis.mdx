@@ -57,6 +57,35 @@ apps:
     authorizationPolicy: roadmap_review
 ```
 
+Or let the plugin manifest own the UI bundle and keep only the deployment binding in config:
+
+```yaml
+providers:
+  plugins:
+    roadmap_review:
+      source:
+        path: ./customer-roadmap-review/plugin/manifest.yaml
+
+apps:
+  roadmap_review:
+    plugin: roadmap_review
+    path: /create-customer-roadmap-review
+    authorizationPolicy: roadmap_review
+```
+
+With a plugin manifest like:
+
+```yaml
+kind: plugin
+source: github.com/acme/plugins/roadmap-review
+version: 1.0.0
+spec:
+  auth:
+    type: none
+  ui:
+    path: ../ui/manifest.yaml
+```
+
 Reference a published bundle in production:
 
 ```yaml

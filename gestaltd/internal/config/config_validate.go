@@ -2,7 +2,9 @@ package config
 
 import (
 	"fmt"
+	"maps"
 	"net"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -512,37 +514,53 @@ func validateMountedUICollisions(cfg *Config) error {
 		"/health",
 		"/ready",
 	}
-	names := mapsKeys(cfg.Providers.UI)
-	sort.Strings(names)
-	for i, name := range names {
+	type mountedPathSubject struct {
+		label string
+		path  string
+	}
+	subjects := make([]mountedPathSubject, 0, len(cfg.Providers.UI)+len(cfg.Apps))
+	names := slices.Sorted(maps.Keys(cfg.Providers.UI))
+	for _, name := range names {
 		entry := cfg.Providers.UI[name]
 		if entry == nil || entry.Disabled || strings.TrimSpace(entry.Path) == "" {
 			continue
 		}
-		if entry.Path == "/" {
-			for _, otherName := range names[i+1:] {
-				other := cfg.Providers.UI[otherName]
-				if other == nil || other.Disabled {
-					continue
-				}
-				if other.Path == "/" {
-					return fmt.Errorf("config validation: ui.%s.path %q conflicts with ui.%s.path %q", name, entry.Path, otherName, other.Path)
+		subjects = append(subjects, mountedPathSubject{
+			label: "ui." + name + ".path",
+			path:  entry.Path,
+		})
+	}
+	appNames := slices.Sorted(maps.Keys(cfg.Apps))
+	for _, name := range appNames {
+		app := cfg.Apps[name]
+		if app == nil || app.Disabled || strings.TrimSpace(app.UI) != "" || strings.TrimSpace(app.Path) == "" {
+			continue
+		}
+		if ui := cfg.Providers.UI[name]; ui != nil && !ui.Disabled && strings.TrimSpace(ui.Path) != "" {
+			continue
+		}
+		subjects = append(subjects, mountedPathSubject{
+			label: "apps." + name + ".path",
+			path:  app.Path,
+		})
+	}
+	for i, subject := range subjects {
+		if subject.path == "/" {
+			for _, other := range subjects[i+1:] {
+				if other.path == "/" {
+					return fmt.Errorf("config validation: %s %q conflicts with %s %q", subject.label, subject.path, other.label, other.path)
 				}
 			}
 			continue
 		}
 		for _, reservedPath := range reserved {
-			if mountedUIPathsConflict(entry.Path, reservedPath) {
-				return fmt.Errorf("config validation: ui.%s.path %q conflicts with reserved path %q", name, entry.Path, reservedPath)
+			if mountedUIPathsConflict(subject.path, reservedPath) {
+				return fmt.Errorf("config validation: %s %q conflicts with reserved path %q", subject.label, subject.path, reservedPath)
 			}
 		}
-		for _, otherName := range names[i+1:] {
-			other := cfg.Providers.UI[otherName]
-			if other == nil || other.Disabled || strings.TrimSpace(other.Path) == "" {
-				continue
-			}
-			if mountedUIPathsConflict(entry.Path, other.Path) {
-				return fmt.Errorf("config validation: ui.%s.path %q conflicts with ui.%s.path %q", name, entry.Path, otherName, other.Path)
+		for _, other := range subjects[i+1:] {
+			if mountedUIPathsConflict(subject.path, other.path) {
+				return fmt.Errorf("config validation: %s %q conflicts with %s %q", subject.label, subject.path, other.label, other.path)
 			}
 		}
 	}
@@ -558,23 +576,17 @@ func mountedUIPathsConflict(a, b string) bool {
 
 func appReferencedUIs(cfg *Config) map[string]struct{} {
 	refs := make(map[string]struct{}, len(cfg.Apps))
-	for _, app := range cfg.Apps {
+	for name, app := range cfg.Apps {
 		if app == nil || app.Disabled {
 			continue
 		}
 		if ui := strings.TrimSpace(app.UI); ui != "" {
 			refs[ui] = struct{}{}
+			continue
 		}
+		refs[name] = struct{}{}
 	}
 	return refs
-}
-
-func mapsKeys[V any](m map[string]V) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	return keys
 }
 
 type inlineConnectionReference struct {
