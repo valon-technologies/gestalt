@@ -2,7 +2,7 @@ package mcp
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"testing"
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -20,8 +20,8 @@ func (s stubInvoker) Invoke(context.Context, *principal.Principal, string, strin
 	return s.result, s.err
 }
 
-func TestMakeHandlerSanitizesInvokerErrors(t *testing.T) {
-	handler := makeHandler(stubInvoker{err: errors.New("database DSN leaked")}, "demo", "op", "")
+func TestMakeHandlerSanitizesInternalErrors(t *testing.T) {
+	handler := makeHandler(stubInvoker{err: fmt.Errorf("%w: database DSN leaked", invocation.ErrInternal)}, "demo", "op", "")
 
 	result, err := handler(testPrincipalContext(), mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{Arguments: map[string]any{}},
@@ -32,7 +32,7 @@ func TestMakeHandlerSanitizesInvokerErrors(t *testing.T) {
 	if !result.IsError {
 		t.Fatalf("expected tool error result")
 	}
-	if text := toolResultText(t, result); text != "operation failed" {
+	if text := toolResultText(t, result); text != "internal error" {
 		t.Fatalf("unexpected tool error text %q", text)
 	}
 }
@@ -50,6 +50,23 @@ func TestMakeHandlerPreservesAccessDeniedErrors(t *testing.T) {
 		t.Fatalf("expected tool error result")
 	}
 	if text := toolResultText(t, result); text != "operation access denied" {
+		t.Fatalf("unexpected tool error text %q", text)
+	}
+}
+
+func TestMakeHandlerPreservesNoTokenErrors(t *testing.T) {
+	handler := makeHandler(stubInvoker{err: fmt.Errorf("%w: no token stored for integration %q", invocation.ErrNoToken, "demo")}, "demo", "op", "")
+
+	result, err := handler(testPrincipalContext(), mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{Arguments: map[string]any{}},
+	})
+	if err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatalf("expected tool error result")
+	}
+	if text := toolResultText(t, result); text != `no integration token: no token stored for integration "demo"` {
 		t.Fatalf("unexpected tool error text %q", text)
 	}
 }

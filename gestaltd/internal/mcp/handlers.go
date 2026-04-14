@@ -33,7 +33,13 @@ func makeHandler(invoker invocation.Invoker, provName, opName, connection string
 			if errors.Is(err, invocation.ErrAuthorizationDenied) || errors.Is(err, invocation.ErrScopeDenied) {
 				return mcpgo.NewToolResultError("operation access denied"), nil
 			}
-			return mcpgo.NewToolResultError("operation failed"), nil
+			if errors.Is(err, invocation.ErrUserResolution) {
+				return mcpgo.NewToolResultError("failed to resolve user"), nil
+			}
+			if errors.Is(err, invocation.ErrInternal) {
+				return mcpgo.NewToolResultError("internal error"), nil
+			}
+			return mcpgo.NewToolResultError(err.Error()), nil
 		}
 		if result == nil {
 			return mcpgo.NewToolResultText("{}"), nil
