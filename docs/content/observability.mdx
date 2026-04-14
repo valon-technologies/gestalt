@@ -96,7 +96,7 @@ collectors can still split the stream by filtering on `log.type=audit`.
 
 The built-in metric surface covers Prometheus exporter metadata, inbound HTTP
 requests handled by `gestaltd`, broker operation execution, connection auth
-flows, platform auth actions, IndexedDB operations, and outbound gRPC calls
+flows, platform auth actions, credentialed HTTP catalog discovery, IndexedDB operations, and outbound gRPC calls
 from `gestaltd` to provider processes.
 
 Gestalt documents metric names using their OpenTelemetry instrument names. The
@@ -203,6 +203,36 @@ These metrics carry low-cardinality attributes: `gestalt.provider` (the auth
 provider name) and `gestalt.action` (`begin_login`, `complete_login`, or
 `validate_token`).
 
+### Discovery Metrics
+
+These metrics are recorded around credentialed HTTP catalog discovery, currently
+`GET /api/v1/integrations/{name}/operations` when `gestaltd` resolves a
+session catalog with stored or identity credentials.
+
+<Tabs items={['OpenTelemetry', 'Prometheus']}>
+  <Tabs.Tab>
+    | Metric | Type | Meaning |
+    | --- | --- | --- |
+    | `gestaltd.discovery.count` | Counter | Credentialed discovery attempts |
+    | `gestaltd.discovery.error_count` | Counter | Failed credentialed discovery attempts |
+    | `gestaltd.discovery.duration` | Histogram | Credentialed discovery duration |
+  </Tabs.Tab>
+  <Tabs.Tab>
+    | Metric | Type | Meaning |
+    | --- | --- | --- |
+    | `gestaltd_discovery_count_total` | Counter | Credentialed discovery attempts |
+    | `gestaltd_discovery_error_count_total` | Counter | Failed credentialed discovery attempts |
+    | `gestaltd_discovery_duration_seconds` | Histogram | Credentialed discovery duration |
+  </Tabs.Tab>
+</Tabs>
+
+These metrics carry low-cardinality attributes: `gestalt.provider` (the plugin
+key), `gestalt.action` (currently `list_operations`), and
+`gestalt.connection_mode` (the provider auth mode: `none`, `user`, `identity`,
+or `either`). `gestaltd.discovery.error_count` increments when the
+credentialed session-catalog path fails, even if `gestaltd` falls back to a
+static catalog and still serves a successful HTTP response.
+
 ### IndexedDB Metrics
 
 These metrics are recorded around every ObjectStore and Index operation on the
@@ -261,7 +291,9 @@ need actor, target, and outcome details.
 | Pre-invoker authorization denials | No dedicated semantic metric family | Yes | Denied workload access before guarded invocation dispatch is audited with the attempted operation or `operations.list`. |
 | Connection auth start and completion | Yes: `gestaltd.connection.auth.*` | Yes | Covers OAuth start and completion plus manual connect completion. |
 | Connection credential refresh | Yes: `gestaltd.connection.auth.*` with `action=refresh` | No | Refresh is system maintenance behavior, not a user-facing audit event. |
+| Credentialed HTTP catalog discovery | Yes: `gestaltd.discovery.*` with `action=list_operations` | No | Operation listing stays metrics-only even when it resolves session catalogs. |
 | IndexedDB operations | Yes: `gestaltd.indexeddb.*` | No | Audit the higher-level user action instead of low-level storage calls. |
+| API token inventory read | No dedicated semantic metric family | Yes | `api_token.list` is audited because it exposes stored API-token inventory. |
 | API token lifecycle | No dedicated semantic metric family | Yes | `api_token.create`, `api_token.revoke`, and `api_token.revoke_all` are audited. |
 | Logout, pending selection, disconnect | No dedicated semantic metric family | Yes | These are workflow and security events rather than aggregate telemetry series. |
 

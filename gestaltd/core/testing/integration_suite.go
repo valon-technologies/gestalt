@@ -23,6 +23,7 @@ import (
 func RunIntegrationTests(t *testing.T, newIntegration func(t *testing.T, mockURL string) core.OAuthProvider, mockServer *httptest.Server) {
 	if mockServer == nil {
 		t.Fatal("RunIntegrationTests requires a mock server")
+		return
 	}
 	integration := newIntegration(t, mockServer.URL)
 
@@ -63,6 +64,7 @@ func RunIntegrationTests(t *testing.T, newIntegration func(t *testing.T, mockURL
 		}
 		if resp == nil {
 			t.Fatal("ExchangeCode returned nil")
+			return
 		}
 		if resp.AccessToken == "" {
 			t.Error("AccessToken is empty")

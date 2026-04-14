@@ -51,6 +51,7 @@ func newCounterMetrics(meter metric.Meter, prefix, desc string) counterMetrics {
 var (
 	authMetricsCache           MeterCache[counterMetrics]
 	connectionAuthMetricsCache MeterCache[counterMetrics]
+	discoveryMetricsCache      MeterCache[counterMetrics]
 	indexedDBMetricsCache      MeterCache[counterMetrics]
 )
 
@@ -71,6 +72,17 @@ func RecordConnectionAuthMetrics(ctx context.Context, startedAt time.Time, provi
 	recordCounterMetrics(ctx, metrics, startedAt, failed,
 		attrProvider.String(AttrValue(provider)),
 		attrType.String(AttrValue(authType)),
+		attrAction.String(AttrValue(action)),
+		attrConnectionMode.String(AttrValue(connectionMode)),
+	)
+}
+
+func RecordDiscoveryMetrics(ctx context.Context, startedAt time.Time, provider string, action string, connectionMode string, failed bool) {
+	metrics := discoveryMetricsCache.Load(ctx, meterName, func(meter metric.Meter) counterMetrics {
+		return newCounterMetrics(meter, "gestaltd.discovery", "gestaltd credentialed discovery actions")
+	})
+	recordCounterMetrics(ctx, metrics, startedAt, failed,
+		attrProvider.String(AttrValue(provider)),
 		attrAction.String(AttrValue(action)),
 		attrConnectionMode.String(AttrValue(connectionMode)),
 	)

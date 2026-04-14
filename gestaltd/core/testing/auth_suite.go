@@ -21,6 +21,7 @@ import (
 func RunAuthProviderTests(t *testing.T, newProvider func(t *testing.T, mockURL string) core.AuthProvider, mockServer *httptest.Server) {
 	if mockServer == nil {
 		t.Fatal("RunAuthProviderTests requires a mock server")
+		return
 	}
 	provider := newProvider(t, mockServer.URL)
 
@@ -52,6 +53,7 @@ func RunAuthProviderTests(t *testing.T, newProvider func(t *testing.T, mockURL s
 		}
 		if identity == nil {
 			t.Fatal("HandleCallback returned nil identity")
+			return
 		}
 		if identity.Email == "" {
 			t.Error("identity.Email is empty")
@@ -72,6 +74,7 @@ func RunAuthProviderTests(t *testing.T, newProvider func(t *testing.T, mockURL s
 		}
 		if identity == nil {
 			t.Fatal("ValidateToken returned nil identity")
+			return
 		}
 		if identity.Email == "" {
 			t.Error("identity.Email is empty")

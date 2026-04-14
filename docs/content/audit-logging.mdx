@@ -8,7 +8,7 @@ backend without having to reconstruct behavior from mixed application logs.
 
 ## Coverage
 
-Audit events cover HTTP and MCP operation invocations, other guarded runtime surfaces such as binding hooks, failed auth on protected routes, HTTP authorization denials rejected before `GuardedInvoker` runs, login and logout flows, plugin connect and disconnect flows, and API token lifecycle. Each event carries a `source` field (`http`, `mcp`, or a surface-specific value like `binding:...`) so consumers can filter by surface.
+Audit events cover HTTP and MCP operation invocations, other guarded runtime surfaces such as binding hooks, failed auth on protected routes, HTTP authorization denials rejected before `GuardedInvoker` runs, login and logout flows, plugin connect and disconnect flows, and API token inventory and lifecycle events. Each event carries a `source` field (`http`, `mcp`, or a surface-specific value like `binding:...`) so consumers can filter by surface.
 
 `gestaltd` resolves the authenticated user ID before emitting session-backed audit events, so both session requests and API-token requests produce stable `user_id` values when a user identity exists.
 
@@ -40,7 +40,7 @@ These fields are emitted when available:
 | `trace_id` | Active OpenTelemetry trace ID |
 | `span_id` | Active OpenTelemetry span ID |
 
-For platform-level events such as failed auth or API-token lifecycle, `provider` is empty because
+For platform-level events such as failed auth or API-token inventory and lifecycle, `provider` is empty because
 the event is not tied to a specific plugin.
 
 ## Event Names
@@ -58,6 +58,7 @@ Non-invocation audit events use explicit operation names:
 - `connection.manual.connect`
 - `connection.pending.select`
 - `connection.disconnect`
+- `api_token.list`
 - `operations.list`
 - `api_token.create`
 - `api_token.revoke`
@@ -82,7 +83,9 @@ rejects the request before invocation.
 | HTTP pre-invoker authorization denials | No dedicated semantic metric family | Yes | Denied workload access before invocation dispatch is audited with the attempted operation or `operations.list`. |
 | Connection auth start and completion | Yes: `gestaltd.connection.auth.*` | Yes | Covers OAuth start and completion plus manual connect completion. |
 | Connection credential refresh | Yes: `gestaltd.connection.auth.*` with `action=refresh` | No | Refresh remains metrics-only to avoid audit noise. |
-| Datastore methods | Yes: `gestaltd.datastore.*` | No | Datastore calls are internal implementation telemetry, not audit events. |
+| Credentialed HTTP catalog discovery | Yes: `gestaltd.discovery.*` with `action=list_operations` | No | Operation listing that resolves a session catalog stays metrics-only to avoid audit spam. |
+| IndexedDB operations | Yes: `gestaltd.indexeddb.*` | No | Datastore calls are internal implementation telemetry, not audit events. |
+| API token inventory read | No dedicated semantic metric family | Yes | `api_token.list` is audited because it exposes stored API-token inventory. |
 | API token lifecycle | No dedicated semantic metric family | Yes | Audit records exist for explicit token create/revoke flows and CLI token minting. |
 | Logout, pending selection, disconnect | No dedicated semantic metric family | Yes | These remain audit-only workflow events. |
 

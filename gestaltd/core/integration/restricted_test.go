@@ -58,6 +58,7 @@ func TestCatalogFilters(t *testing.T) {
 	cat := r.Catalog()
 	if cat == nil {
 		t.Fatal("Catalog() returned nil")
+		return
 	}
 	if len(cat.Operations) != 2 {
 		t.Fatalf("Catalog().Operations: got %d, want 2", len(cat.Operations))
@@ -306,6 +307,7 @@ func TestCatalogRenamesAliasedOperations(t *testing.T) {
 	cat := r.Catalog()
 	if cat == nil {
 		t.Fatal("Catalog() returned nil")
+		return
 	}
 	if len(cat.Operations) != 1 {
 		t.Fatalf("Catalog().Operations: got %d, want 1", len(cat.Operations))
