@@ -4,7 +4,7 @@ Gestalt is configured from a single YAML file. This page covers the key concepts
 
 ## Config file structure
 
-A Gestalt config has five top-level keys: `server` for host settings, `authorization` for shared human/workload access policy, `apps` for deployment-owned plugin/UI bindings, `providers` for host-scoped providers and web UIs, and `plugins` for executable integrations.
+A Gestalt config has four top-level keys: `server` for host settings, `authorization` for shared human/workload access policy, `providers` for host-scoped providers and web UIs, and `plugins` for executable integrations and optional plugin-backed UI mounts.
 
 ```yaml
 server:
@@ -24,9 +24,6 @@ server:
 authorization:
   policies: ...             # shared human access policies
   workloads: ...            # workload bearer-token policy
-
-apps:
-  <name>: ...               # plugin/UI binding with path + auth policy
 
 providers:
   auth: ...                 # platform login (ProviderEntry)
@@ -51,7 +48,7 @@ Gestalt has six core concepts you configure in YAML:
 - **[IndexedDB.](/providers/indexeddb)** The persistent storage layer. Stores users, sessions, tokens, and credentials through a provider that implements the IndexedDB interface.
 - **[Auth.](/providers/auth)** Platform login for the Gestalt server. Separate from connection auth, which is per-plugin and per-upstream.
 - **[Secrets.](/providers/secrets)** Resolves `secret://` references in the config at startup. Backed by environment variables, files, or cloud secret managers.
-- **[UI.](/providers/web-uis)** Public static UI bundles served under configured path prefixes. Omit `providers.ui` to run headless.
+- **[UI.](/providers/web-uis)** Public static UI bundles served under configured path prefixes, either directly from `providers.ui` or through `plugins.<name>.mountPath`. Omit `providers.ui` to run headless.
 
 ## Adding a plugin
 
@@ -67,6 +64,8 @@ plugins:
     surfaces:
       openapi:
         baseUrl: https://api.github.com
+    mountPath: /github
+    ui: github_console
 ```
 
 `source.ref` points at a published provider package. Gestalt resolves and downloads it on startup. First-party providers are published to `github.com/valon-technologies/gestalt-providers/`.

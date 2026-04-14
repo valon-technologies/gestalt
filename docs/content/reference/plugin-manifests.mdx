@@ -70,7 +70,7 @@ The `spec` block for a `kind: plugin` manifest describes a plugin. It supports d
 | `surfaces` | Surfaces | Spec-loaded and declarative REST surfaces. See [Surfaces](#surfaces). |
 | `defaultConnection` | string | Name of the connection to use when none is specified. |
 | `requires` | string[] | Provider source identifiers that this provider depends on. Gestalt ensures the listed providers are available before starting this provider. |
-| `ui` | OwnedUIRef | Optional owned web UI reference for app-backed plugins. |
+| `ui` | OwnedUIRef | Optional owned web UI reference for plugins that publish a mounted UI. |
 
 ### Owned UI
 
@@ -85,7 +85,7 @@ Plugins that back mounted apps may declare their UI artifact in the plugin manif
 | `version` | string | Optional version for `ref`. Defaults to the plugin manifest version when omitted. |
 | `auth.token` | string | Optional source token used when resolving a private managed `ref`. Only valid with `ref`. |
 
-When a deployment defines `apps.<name>` with `plugin: <plugin>` and omits `apps.<name>.ui`, Gestalt synthesizes the mounted UI binding from this block.
+When a deployment sets `plugins.<name>.mountPath` and omits `plugins.<name>.ui`, Gestalt synthesizes the mounted UI binding from this block.
 
 Source-manifest example:
 
