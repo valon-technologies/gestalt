@@ -50,7 +50,7 @@ config:
         issuerUrl: "${OIDC_ISSUER_URL}"
         clientId: "${OIDC_CLIENT_ID}"
         clientSecret: "${OIDC_CLIENT_SECRET}"
-    indexeddbs:
+    indexeddb:
       main:
         source:
           ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
@@ -130,7 +130,7 @@ config:
         clientId: "${OIDC_CLIENT_ID}"
         clientSecret: "${OIDC_CLIENT_SECRET}"
         redirectUrl: "${OIDC_REDIRECT_URL}"
-    indexeddbs:
+    indexeddb:
       main:
         source:
           ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
@@ -178,7 +178,7 @@ Service rather than exposing it on the public ingress.
 
 ## When to enable `pluginInit`
 
-Enable the init container when your config uses `providers.plugins.*.source.ref`, `providers.auth.source.ref`, `providers.indexeddbs.*.source.ref`, or `providers.ui.*.source.ref` and you want that state prepared before the main container starts. The init container copies the rendered config and runs:
+Enable the init container when your config uses `plugins.*.source.ref`, `providers.auth.source.ref`, `providers.indexeddb.*.source.ref`, or `providers.ui.*.source.ref` and you want that state prepared before the main container starts. The init container copies the rendered config and runs:
 
 `/gestaltd init --config /etc/gestalt/config.yaml`
 

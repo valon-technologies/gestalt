@@ -29,14 +29,15 @@ To disable platform auth entirely, omit the `providers.auth` block or set `provi
 
 ## IndexedDB Providers
 
-Datastore providers back the persistent state layer. They are configured under named entries in `providers.indexeddbs`, and `server.indexeddb` selects which one the host uses. Gestalt does not compile datastore drivers into the binary; it starts the configured external datastore provider process at runtime.
+Datastore providers back the persistent state layer. They are configured under named entries in `providers.indexeddb`, and `server.providers.indexeddb` selects which one the host uses. Gestalt does not compile datastore drivers into the binary; it starts the configured external datastore provider process at runtime.
 
 ```yaml
 server:
-  indexeddb: main
+  providers:
+    indexeddb: main
 
 providers:
-  indexeddbs:
+  indexeddb:
     main:
       source:
         ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
@@ -74,15 +75,14 @@ Telemetry providers are compiled into the binary.
 
 ## Plugins
 
-Plugins (BigQuery, Jira, Slack, and others) are published separately from [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers). They are configured under `providers.plugins`:
+Plugins (BigQuery, Jira, Slack, and others) are published separately from [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers). They are configured under `plugins`:
 
 ```yaml
-providers:
-  plugins:
-    jira:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/jira
-        version: 1.0.0
+plugins:
+  jira:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/jira
+      version: 1.0.0
 ```
 
 ## Community and Custom Providers

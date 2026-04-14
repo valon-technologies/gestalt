@@ -89,9 +89,10 @@ config:
     # Set it to your public HTTPS URL when auth callbacks or external
     # integrations need it.
     # baseUrl: "${GESTALT_BASE_URL}"
-    indexeddb: main
+    providers:
+      indexeddb: main
   providers:
-    indexeddbs:
+    indexeddb:
       main:
         # SQLite is appropriate for local development or single-instance
         # deployments with mounted persistent storage at /data.

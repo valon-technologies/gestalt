@@ -29,7 +29,6 @@ func Start(socketPath string) (*Server, error) {
 	}
 	stub := &coretesting.StubIndexedDB{}
 	srv := grpc.NewServer()
-	// Empty prefix -- SDK clients don't expect prefixed store names.
 	proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(stub, ""))
 	go func() { _ = srv.Serve(lis) }()
 	return &Server{srv: srv, lis: lis, Socket: socketPath}, nil

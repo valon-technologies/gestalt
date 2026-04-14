@@ -217,11 +217,10 @@ binaries during release.
 Use `source.path` to point at the source tree directly. Gestalt synthesizes the executable wrapper and materializes the catalog automatically:
 
 ```yaml
-providers:
-  plugins:
-    my-plugin:
-      source:
-        path: ./plugins/my-plugin/manifest.yaml
+plugins:
+  my-plugin:
+    source:
+      path: ./plugins/my-plugin/manifest.yaml
 ```
 
 UI bundles work the same way:
@@ -240,12 +239,11 @@ providers:
 Reference a published release by source and version:
 
 ```yaml
-providers:
-  plugins:
-    my-plugin:
-      source:
-        ref: github.com/your-org/your-plugins/my-plugin
-        version: 0.0.1-alpha.1
+plugins:
+  my-plugin:
+    source:
+      ref: github.com/your-org/your-plugins/my-plugin
+      version: 0.0.1-alpha.1
 ```
 
 UI bundles use the same pattern under `providers.ui.<name>`:

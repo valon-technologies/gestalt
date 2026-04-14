@@ -29,7 +29,6 @@ providers:
   ui: ...                   # web UI bundle (ProviderEntry)
   indexeddb:                # named storage providers
     <name>: ...             # each is a ProviderEntry
-
 plugins:
   <name>: ...               # each is a ProviderEntry
 ```
@@ -328,7 +327,8 @@ A production deployment with OIDC auth, a GitHub plugin with per-user connection
 server:
   baseUrl: https://gestalt.example.com
   encryptionKey: secret://gestalt-encryption-key
-  indexeddb: main
+  providers:
+    indexeddb: main
 
 providers:
   auth:
@@ -340,7 +340,7 @@ providers:
       clientId: ${OIDC_CLIENT_ID}
       clientSecret: secret://oidc-client-secret
 
-  indexeddbs:
+  indexeddb:
     main:
       source:
         ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
@@ -348,27 +348,27 @@ providers:
       config:
         dsn: sqlite://./gestalt.db
 
-  plugins:
-    github:
-      displayName: GitHub
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/plugins/github
-        version: 0.0.1-alpha.1
-      surfaces:
-        openapi:
-          baseUrl: https://api.github.com
-      connections:
-        api:
-          mode: user
-          auth:
-            type: bearer
-            credentials:
-              - name: token
-                label: Personal Access Token
-        mcp:
-          mode: user
-          auth:
-            type: mcp_oauth
+plugins:
+  github:
+    displayName: GitHub
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/plugins/github
+      version: 0.0.1-alpha.1
+    surfaces:
+      openapi:
+        baseUrl: https://api.github.com
+    connections:
+      api:
+        mode: user
+        auth:
+          type: bearer
+          credentials:
+            - name: token
+              label: Personal Access Token
+      mcp:
+        mode: user
+        auth:
+          type: mcp_oauth
 ```
 
 ## Minimal config
@@ -381,10 +381,11 @@ server:
     port: 8080
   baseUrl: http://localhost:8080
   encryptionKey: ${GESTALT_ENCRYPTION_KEY}
-  indexeddb: main
+  providers:
+    indexeddb: main
 
 providers:
-  indexeddbs:
+  indexeddb:
     main:
       source:
         ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb

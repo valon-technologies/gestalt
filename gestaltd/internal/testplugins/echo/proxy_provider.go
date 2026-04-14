@@ -3,11 +3,13 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
 	"os"
 
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 )
@@ -60,6 +62,17 @@ func (p *proxyProvider) Catalog() *catalog.Catalog {
 				{Name: "url", Type: "string", Required: true},
 			},
 		},
+		catalog.CatalogOperation{
+			ID:        "indexeddb_roundtrip",
+			Method:    http.MethodPost,
+			Transport: catalog.TransportPlugin,
+			Parameters: []catalog.CatalogParameter{
+				{Name: "binding", Type: "string"},
+				{Name: "store", Type: "string", Required: true},
+				{Name: "id", Type: "string", Required: true},
+				{Name: "value", Type: "string", Required: true},
+			},
+		},
 	)
 	return cat
 }
@@ -110,6 +123,39 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 			"status": resp.StatusCode,
 			"body":   string(respBody),
 		})
+		return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+
+	case "indexeddb_roundtrip":
+		binding, _ := params["binding"].(string)
+		store, _ := params["store"].(string)
+		id, _ := params["id"].(string)
+		value, _ := params["value"].(string)
+
+		var (
+			db  *gestalt.IndexedDBClient
+			err error
+		)
+		if binding != "" {
+			db, err = gestalt.IndexedDB(binding)
+		} else {
+			db, err = gestalt.IndexedDB()
+		}
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = db.Close() }()
+
+		if err := db.CreateObjectStore(ctx, store, gestalt.ObjectStoreSchema{}); err != nil && !errors.Is(err, gestalt.ErrAlreadyExists) {
+			return nil, err
+		}
+		if err := db.ObjectStore(store).Put(ctx, map[string]any{"id": id, "value": value}); err != nil {
+			return nil, err
+		}
+		record, err := db.ObjectStore(store).Get(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		body, _ := json.Marshal(record)
 		return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
 
 	default:

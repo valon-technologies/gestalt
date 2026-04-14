@@ -16,7 +16,7 @@ When `/ready` returns `503`, the server has not finished initialization. Readine
 
 ## Operation invocation
 
-A "provider not found" error means the plugin key in the request does not match any entry in `providers.plugins`. Verify the spelling and confirm the plugin loaded without errors at startup.
+A "provider not found" error means the plugin key in the request does not match any entry in `plugins`. Verify the spelling and confirm the plugin loaded without errors at startup.
 
 An "operation not found" error means the operation ID does not exist in the plugin's catalog. Check that the operation is exposed and that `allowedOperations`, if set, includes it.
 

@@ -24,11 +24,11 @@ func newCursorTestDB(t *testing.T) (*coretesting.StubIndexedDB, indexeddb.Indexe
 		},
 	}
 	ctx := context.Background()
-	if err := stub.CreateObjectStore(ctx, "plugin_test_items", schema); err != nil {
+	if err := stub.CreateObjectStore(ctx, "items", schema); err != nil {
 		t.Fatal(err)
 	}
 
-	store := stub.ObjectStore("plugin_test_items")
+	store := stub.ObjectStore("items")
 	records := []indexeddb.Record{
 		{"id": "a", "name": "Alice", "status": "active", "email": "alice@test.com"},
 		{"id": "b", "name": "Bob", "status": "active", "email": "bob@test.com"},
@@ -42,7 +42,7 @@ func newCursorTestDB(t *testing.T) (*coretesting.StubIndexedDB, indexeddb.Indexe
 	}
 
 	conn := newBufconnConn(t, func(srv *grpc.Server) {
-		proto.RegisterIndexedDBServer(srv, NewIndexedDBServer(stub, "test"))
+		proto.RegisterIndexedDBServer(srv, NewIndexedDBServer(stub, ""))
 	})
 	remote := &remoteIndexedDB{
 		client: proto.NewIndexedDBClient(conn),
@@ -88,10 +88,10 @@ func TestCursor_EmptyCursor(t *testing.T) {
 
 	stub := &coretesting.StubIndexedDB{}
 	ctx := context.Background()
-	_ = stub.CreateObjectStore(ctx, "plugin_test_empty", indexeddb.ObjectStoreSchema{})
+	_ = stub.CreateObjectStore(ctx, "empty", indexeddb.ObjectStoreSchema{})
 
 	conn := newBufconnConn(t, func(srv *grpc.Server) {
-		proto.RegisterIndexedDBServer(srv, NewIndexedDBServer(stub, "test"))
+		proto.RegisterIndexedDBServer(srv, NewIndexedDBServer(stub, ""))
 	})
 	remote := &remoteIndexedDB{client: proto.NewIndexedDBClient(conn)}
 
@@ -548,11 +548,11 @@ func TestCursor_IndexContinueToKeyRoundTrip(t *testing.T) {
 	schema := indexeddb.ObjectStoreSchema{
 		Indexes: []indexeddb.IndexSchema{{Name: "by_num", KeyPath: []string{"n"}}},
 	}
-	if err := stub.CreateObjectStore(ctx, "plugin_test_items", schema); err != nil {
+	if err := stub.CreateObjectStore(ctx, "items", schema); err != nil {
 		t.Fatal(err)
 	}
 
-	store := stub.ObjectStore("plugin_test_items")
+	store := stub.ObjectStore("items")
 	for _, r := range []indexeddb.Record{
 		{"id": "a", "n": 1},
 		{"id": "b", "n": 2},
@@ -564,7 +564,7 @@ func TestCursor_IndexContinueToKeyRoundTrip(t *testing.T) {
 	}
 
 	conn := newBufconnConn(t, func(srv *grpc.Server) {
-		proto.RegisterIndexedDBServer(srv, NewIndexedDBServer(stub, "test"))
+		proto.RegisterIndexedDBServer(srv, NewIndexedDBServer(stub, ""))
 	})
 	remote := &remoteIndexedDB{client: proto.NewIndexedDBClient(conn)}
 
@@ -591,7 +591,7 @@ func TestCursor_StubSingleFieldIndexKeyMatchesRemoteShape(t *testing.T) {
 	stub, _ := newCursorTestDB(t)
 	ctx := context.Background()
 
-	cursor, err := stub.ObjectStore("plugin_test_items").Index("by_status").OpenCursor(ctx, nil, indexeddb.CursorNext)
+	cursor, err := stub.ObjectStore("items").Index("by_status").OpenCursor(ctx, nil, indexeddb.CursorNext)
 	if err != nil {
 		t.Fatalf("OpenCursor: %v", err)
 	}
@@ -616,10 +616,10 @@ func TestCursor_EmptyResultSetDoneOnly(t *testing.T) {
 	t.Parallel()
 	stub := &coretesting.StubIndexedDB{}
 	ctx := context.Background()
-	_ = stub.CreateObjectStore(ctx, "plugin_test_empty", indexeddb.ObjectStoreSchema{})
+	_ = stub.CreateObjectStore(ctx, "empty", indexeddb.ObjectStoreSchema{})
 
 	conn := newBufconnConn(t, func(srv *grpc.Server) {
-		proto.RegisterIndexedDBServer(srv, NewIndexedDBServer(stub, "test"))
+		proto.RegisterIndexedDBServer(srv, NewIndexedDBServer(stub, ""))
 	})
 	remote := &remoteIndexedDB{client: proto.NewIndexedDBClient(conn)}
 

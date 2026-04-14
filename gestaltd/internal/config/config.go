@@ -129,7 +129,8 @@ type ProviderEntry struct {
 	// Plugin-specific config fields (parsed from YAML, only valid on plugin entries)
 	Connections       map[string]*ConnectionDef     `yaml:"connections,omitempty"`
 	AllowedOperations map[string]*OperationOverride `yaml:"allowedOperations,omitempty"`
-	IndexedDBs        []string                      `yaml:"indexeddb,omitempty"`
+	IndexedDBs        []PluginIndexedDBBinding      `yaml:"indexeddb,omitempty"`
+	IndexedDBSchema   string                        `yaml:"indexeddbSchema,omitempty"`
 	Surfaces          *ProviderSurfaceOverrides     `yaml:"surfaces,omitempty"`
 
 	// Runtime-resolved fields (populated during init/bootstrap, not from YAML)
@@ -154,6 +155,20 @@ type ProviderSurfaceOverrides struct {
 	OpenAPI *ProviderOpenAPISurfaceOverride `yaml:"openapi,omitempty"`
 	GraphQL *ProviderGraphQLSurfaceOverride `yaml:"graphql,omitempty"`
 	MCP     *ProviderMCPSurfaceOverride     `yaml:"mcp,omitempty"`
+}
+
+type PluginIndexedDBBinding struct {
+	Name         string   `yaml:"name,omitempty"`
+	ObjectStores []string `yaml:"objectStore,omitempty"`
+}
+
+func (b *PluginIndexedDBBinding) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.ScalarNode {
+		b.Name = strings.TrimSpace(value.Value)
+		return nil
+	}
+	type raw PluginIndexedDBBinding
+	return value.Decode((*raw)(b))
 }
 
 type ProviderRESTSurfaceOverride struct {
