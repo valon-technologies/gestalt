@@ -647,6 +647,9 @@ plugins:
 		t.Fatalf("InitAtPath: %v", err)
 	}
 	delete(lock.UIs, "roadmap")
+	pluginLock := lock.Providers["roadmap"]
+	pluginLock.Manifest = ""
+	lock.Providers["roadmap"] = pluginLock
 	if err := WriteLockfile(filepath.Join(dir, InitLockfileName), lock); err != nil {
 		t.Fatalf("WriteLockfile: %v", err)
 	}
@@ -773,27 +776,43 @@ func TestLoadForExecutionAtPath_ResolvesManagedPluginOwnedUIFromManagedPath(t *t
 		t.Fatalf("InitAtPath: %v", err)
 	}
 
-	loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
+	lock, err := ReadLockfile(filepath.Join(dir, InitLockfileName))
 	if err != nil {
-		t.Fatalf("LoadForExecutionAtPath: %v", err)
+		t.Fatalf("ReadLockfile: %v", err)
 	}
-	entry := loaded.Providers.UI["roadmap"]
-	if entry == nil || entry.ResolvedManifest == nil {
-		t.Fatalf("Resolved plugin-owned UI = %+v", entry)
+	pluginLock := lock.Providers["roadmap"]
+	pluginLock.Manifest = ""
+	lock.Providers["roadmap"] = pluginLock
+	if err := WriteLockfile(filepath.Join(dir, InitLockfileName), lock); err != nil {
+		t.Fatalf("WriteLockfile: %v", err)
 	}
-	if entry.Path != "/create-customer-roadmap-review" {
-		t.Fatalf("entry.Path = %q", entry.Path)
-	}
-	if got, want := filepath.ToSlash(entry.ResolvedManifestPath), filepath.ToSlash(filepath.Join("_owned_ui", "roadmap-ui", providerpkg.ManifestFile)); !strings.HasSuffix(got, want) {
-		t.Fatalf("ResolvedManifestPath = %q, want suffix %q", got, want)
-	}
-	if got, want := filepath.ToSlash(entry.ResolvedAssetRoot), filepath.ToSlash(filepath.Join("_owned_ui", "roadmap-ui", "dist")); !strings.HasSuffix(got, want) {
-		t.Fatalf("ResolvedAssetRoot = %q, want suffix %q", got, want)
+
+	for _, locked := range []bool{false, true} {
+		loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, locked)
+		if err != nil {
+			t.Fatalf("LoadForExecutionAtPath(locked=%t): %v", locked, err)
+		}
+		entry := loaded.Providers.UI["roadmap"]
+		if entry == nil || entry.ResolvedManifest == nil {
+			t.Fatalf("Resolved plugin-owned UI = %+v", entry)
+		}
+		if entry.Path != "/create-customer-roadmap-review" {
+			t.Fatalf("entry.Path = %q, want %q", entry.Path, "/create-customer-roadmap-review")
+		}
+		if got, want := filepath.ToSlash(entry.ResolvedManifestPath), filepath.ToSlash(filepath.Join("_owned_ui", "roadmap-ui", providerpkg.ManifestFile)); !strings.HasSuffix(got, want) {
+			t.Fatalf("ResolvedManifestPath = %q, want suffix %q", got, want)
+		}
+		if got, want := filepath.ToSlash(entry.ResolvedAssetRoot), filepath.ToSlash(filepath.Join("_owned_ui", "roadmap-ui", "dist")); !strings.HasSuffix(got, want) {
+			t.Fatalf("ResolvedAssetRoot = %q, want suffix %q", got, want)
+		}
 	}
 
 	rewrittenLock, err := ReadLockfile(filepath.Join(dir, InitLockfileName))
 	if err != nil {
 		t.Fatalf("ReadLockfile: %v", err)
+	}
+	if got := rewrittenLock.Providers["roadmap"].Manifest; got != "" {
+		t.Fatalf("lock.Providers[roadmap].Manifest = %q, want stale value preserved", got)
 	}
 	if len(rewrittenLock.UIs) != 0 {
 		t.Fatalf("lock.UIs = %#v, want no separate UI entries for in-package owned UI", rewrittenLock.UIs)
@@ -912,6 +931,162 @@ func TestLoadForExecutionAtPath_ReinitializesManagedPluginOwnedUIWhenPluginLockI
 	}
 	if got := lockEntry.Version; got != newVersion {
 		t.Fatalf("lock.UIs[roadmap].Version = %q, want %q", got, newVersion)
+	}
+}
+
+func TestLoadForExecutionAtPath_UsesDerivedPreparedPathsWhenLockPathsAreStale(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	const pluginRef = "github.com/testowner/plugins/example"
+	const indexedDBRef = "github.com/testowner/indexeddb/main"
+	const webUIRef = "github.com/testowner/web/roadmap"
+	const version = "0.0.1-alpha.1"
+
+	pluginPkg := mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindPlugin,
+		Source:      pluginRef,
+		Version:     version,
+		DisplayName: "Example Plugin",
+		Entrypoint: &providermanifestv1.Entrypoint{
+			ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin")),
+			Args:         []string{"serve-plugin"},
+		},
+		Spec: &providermanifestv1.Spec{
+			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+		},
+	}, map[string]string{
+		filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin")): "plugin-binary",
+	}, true)
+
+	indexedDBPkg := mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindIndexedDB,
+		Source:      indexedDBRef,
+		Version:     version,
+		DisplayName: "Main IndexedDB",
+		Entrypoint: &providermanifestv1.Entrypoint{
+			ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "indexeddb")),
+			Args:         []string{"serve-indexeddb"},
+		},
+		Spec: &providermanifestv1.Spec{},
+	}, map[string]string{
+		filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "indexeddb")): "indexeddb-binary",
+	}, false)
+
+	webUIPkg := mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindWebUI,
+		Source:      webUIRef,
+		Version:     version,
+		DisplayName: "Roadmap UI",
+		Spec: &providermanifestv1.Spec{
+			AssetRoot: "dist",
+		},
+	}, map[string]string{
+		"dist/index.html": "<html>roadmap</html>",
+	}, false)
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := fmt.Sprintf(`providers:
+  indexeddb:
+    main:
+      source:
+        ref: %s
+        version: %s
+      config:
+        path: %q
+  ui:
+    roadmap:
+      source:
+        ref: %s
+        version: %s
+      path: /roadmap
+plugins:
+  example:
+    source:
+      ref: %s
+      version: %s
+server:
+  providers:
+    indexeddb: main
+  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`, indexedDBRef, version, filepath.Join(dir, "gestalt.db"), webUIRef, version, pluginRef, version)
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	lc := NewLifecycle(mappedSourceResolver{paths: map[string]string{
+		pluginRef:    pluginPkg,
+		indexedDBRef: indexedDBPkg,
+		webUIRef:     webUIPkg,
+	}})
+	lock, err := lc.InitAtPath(cfgPath)
+	if err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+
+	lock.Providers["example"] = LockProviderEntry{
+		Fingerprint: lock.Providers["example"].Fingerprint,
+		Source:      lock.Providers["example"].Source,
+		Version:     lock.Providers["example"].Version,
+		Archives:    lock.Providers["example"].Archives,
+		Manifest:    "stale/provider/manifest.json",
+		Executable:  "stale/provider/executable",
+	}
+	indexedDBEntry := lock.IndexedDBs["main"]
+	indexedDBEntry.Manifest = "stale/indexeddb/manifest.json"
+	indexedDBEntry.Executable = "stale/indexeddb/executable"
+	lock.IndexedDBs["main"] = indexedDBEntry
+	uiEntry := lock.UIs["roadmap"]
+	uiEntry.Manifest = "stale/ui/manifest.json"
+	uiEntry.AssetRoot = "stale/ui/assets"
+	lock.UIs["roadmap"] = uiEntry
+	if err := WriteLockfile(filepath.Join(dir, InitLockfileName), lock); err != nil {
+		t.Fatalf("WriteLockfile: %v", err)
+	}
+
+	for _, locked := range []bool{false, true} {
+		loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, locked)
+		if err != nil {
+			t.Fatalf("LoadForExecutionAtPath(locked=%t): %v", locked, err)
+		}
+
+		plugin := loaded.Plugins["example"]
+		if plugin == nil || plugin.ResolvedManifest == nil {
+			t.Fatalf("Plugins[example] = %+v", plugin)
+		}
+		if got := plugin.Command; strings.Contains(got, "stale/provider/executable") {
+			t.Fatalf("plugin.Command = %q, want derived prepared path", got)
+		}
+
+		indexedDB := mustSelectedHostProviderEntry(t, loaded, config.HostProviderKindIndexedDB)
+		if indexedDB == nil || indexedDB.ResolvedManifest == nil {
+			t.Fatalf("SelectedHostProvider(indexeddb) = %+v", indexedDB)
+		}
+		if got := indexedDB.Command; strings.Contains(got, "stale/indexeddb/executable") {
+			t.Fatalf("indexeddb.Command = %q, want derived prepared path", got)
+		}
+
+		ui := loaded.Providers.UI["roadmap"]
+		if ui == nil || ui.ResolvedManifest == nil {
+			t.Fatalf("Providers.UI[roadmap] = %+v", ui)
+		}
+		if got := ui.ResolvedAssetRoot; strings.Contains(got, "stale/ui/assets") {
+			t.Fatalf("ResolvedAssetRoot = %q, want derived prepared path", got)
+		}
+	}
+
+	rewrittenLock, err := ReadLockfile(filepath.Join(dir, InitLockfileName))
+	if err != nil {
+		t.Fatalf("ReadLockfile: %v", err)
+	}
+	if got := rewrittenLock.Providers["example"].Manifest; got != "stale/provider/manifest.json" {
+		t.Fatalf("lock.Providers[example].Manifest = %q, want stale path preserved", got)
+	}
+	if got := rewrittenLock.IndexedDBs["main"].Executable; got != "stale/indexeddb/executable" {
+		t.Fatalf("lock.IndexedDBs[main].Executable = %q, want stale path preserved", got)
+	}
+	if got := rewrittenLock.UIs["roadmap"].AssetRoot; got != "stale/ui/assets" {
+		t.Fatalf("lock.UIs[roadmap].AssetRoot = %q, want stale path preserved", got)
 	}
 }
 
