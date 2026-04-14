@@ -23,6 +23,7 @@ const goReadonlyFlag = "-mod=readonly"
 
 var ErrNoGoProviderPackage = errors.New("no Go provider package found")
 var ErrNoSourceComponentPackage = errors.New("no source component package found")
+var ErrCacheSourceComponentRequiresGo = errors.New("cache source components currently require a Go package")
 var ErrGoToolUnavailable = errors.New("go tool unavailable")
 var goProviderNameSlugPattern = regexp.MustCompile(`[^A-Za-z0-9._-]+`)
 
@@ -193,6 +194,13 @@ func detectSourceComponent(root, kind, goos, goarch string) (sourceKind string, 
 		goToolUnavailable = err
 	} else if !errors.Is(err, ErrNoSourceComponentPackage) {
 		return "", "", err
+	}
+
+	if kind == providermanifestv1.KindCache {
+		if goToolUnavailable != nil {
+			return "", "", goToolUnavailable
+		}
+		return "", "", fmt.Errorf("%w: %w", ErrNoSourceComponentPackage, ErrCacheSourceComponentRequiresGo)
 	}
 
 	if _, err := detectRustPackage(root); err == nil {
@@ -485,7 +493,7 @@ func slugPluginName(value string) string {
 
 func validateSourceComponentKind(kind string) error {
 	switch kind {
-	case providermanifestv1.KindAuth, providermanifestv1.KindIndexedDB, providermanifestv1.KindSecrets:
+	case providermanifestv1.KindAuth, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindSecrets:
 		return nil
 	default:
 		return fmt.Errorf("unsupported source component kind %q", kind)
@@ -498,6 +506,8 @@ func componentServeCall(kind string) (string, error) {
 		return "gestalt.ServeAuthProvider(ctx, providerpkg.New())", nil
 	case providermanifestv1.KindIndexedDB:
 		return "gestalt.ServeIndexedDBProvider(ctx, providerpkg.New())", nil
+	case providermanifestv1.KindCache:
+		return "gestalt.ServeCacheProvider(ctx, providerpkg.New())", nil
 	case providermanifestv1.KindSecrets:
 		return "gestalt.ServeSecretsProvider(ctx, providerpkg.New())", nil
 	default:

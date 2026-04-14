@@ -593,14 +593,21 @@ def _provider_kind_to_proto(kind: ProviderKind | str) -> Any:
 
 
 def _normalized_runtime_kind(kind: ProviderKind | str | None) -> ProviderKind:
+    if kind is None:
+        return ProviderKind.INTEGRATION
     if isinstance(kind, ProviderKind):
         return kind
     if isinstance(kind, str):
-        try:
-            return ProviderKind(kind.strip().lower())
-        except ValueError:
+        normalized = kind.strip().lower()
+        if normalized == "":
             return ProviderKind.INTEGRATION
-    return ProviderKind.INTEGRATION
+        try:
+            return ProviderKind(normalized)
+        except ValueError as error:
+            raise RuntimeError(
+                f"unsupported Python runtime kind {kind!r}"
+            ) from error
+    raise RuntimeError(f"unsupported Python runtime kind {kind!r}")
 
 
 if __name__ == "__main__":

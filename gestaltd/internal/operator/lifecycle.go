@@ -32,8 +32,9 @@ const (
 	PreparedSecretsDir   = ".gestaltd/secrets"
 	PreparedTelemetryDir = ".gestaltd/telemetry"
 	PreparedAuditDir     = ".gestaltd/audit"
+	PreparedCacheDir     = ".gestaltd/cache"
 	PreparedUIDir        = ".gestaltd/ui"
-	LockVersion          = 6
+	LockVersion          = 7
 
 	platformKeyGeneric = "generic"
 )
@@ -43,6 +44,7 @@ type Lockfile struct {
 	Providers  map[string]LockProviderEntry `json:"providers"`
 	Auth       map[string]LockEntry         `json:"auth,omitempty"`
 	IndexedDBs map[string]LockEntry         `json:"indexeddbs,omitempty"`
+	Caches     map[string]LockEntry         `json:"cache,omitempty"`
 	Secrets    map[string]LockEntry         `json:"secrets,omitempty"`
 	Telemetry  map[string]LockEntry         `json:"telemetry,omitempty"`
 	Audit      map[string]LockEntry         `json:"audit,omitempty"`
@@ -140,6 +142,7 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 		Providers:  make(map[string]LockProviderEntry),
 		Auth:       make(map[string]LockEntry),
 		IndexedDBs: make(map[string]LockEntry),
+		Caches:     make(map[string]LockEntry),
 		Secrets:    make(map[string]LockEntry),
 		Telemetry:  make(map[string]LockEntry),
 		Audit:      make(map[string]LockEntry),
@@ -209,7 +212,7 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 		return nil, nil, err
 	}
 
-	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "auth", len(lock.Auth), "indexeddbs", len(lock.IndexedDBs), "secrets", len(lock.Secrets), "telemetry", len(lock.Telemetry), "audit", len(lock.Audit), "uis", len(lock.UIs))
+	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "auth", len(lock.Auth), "indexeddbs", len(lock.IndexedDBs), "cache", len(lock.Caches), "secrets", len(lock.Secrets), "telemetry", len(lock.Telemetry), "audit", len(lock.Audit), "uis", len(lock.UIs))
 	slog.Info("wrote lockfile", "path", paths.lockfilePath)
 	return lock, cfg, nil
 }
@@ -376,6 +379,7 @@ type initPaths struct {
 	secretsDir   string
 	telemetryDir string
 	auditDir     string
+	cacheDir     string
 	uiDir        string
 }
 
@@ -397,6 +401,7 @@ func hostProviderCollections(cfg *config.Config) []struct {
 		{config.HostProviderKindSecrets, cfg.Providers.Secrets},
 		{config.HostProviderKindTelemetry, cfg.Providers.Telemetry},
 		{config.HostProviderKindAudit, cfg.Providers.Audit},
+		{config.HostProviderKindCache, cfg.Providers.Cache},
 	}
 }
 
@@ -413,6 +418,8 @@ func lockEntriesForKind(lock *Lockfile, kind config.HostProviderKind) map[string
 		return lock.Telemetry
 	case config.HostProviderKindAudit:
 		return lock.Audit
+	case config.HostProviderKindCache:
+		return lock.Caches
 	case config.HostProviderKindIndexedDB:
 		return lock.IndexedDBs
 	default:
@@ -514,6 +521,7 @@ func initPathsForConfigWithArtifactsDir(configPath, artifactsDir string) initPat
 		secretsDir:   filepath.Join(artifactsDir, filepath.FromSlash(PreparedSecretsDir)),
 		telemetryDir: filepath.Join(artifactsDir, filepath.FromSlash(PreparedTelemetryDir)),
 		auditDir:     filepath.Join(artifactsDir, filepath.FromSlash(PreparedAuditDir)),
+		cacheDir:     filepath.Join(artifactsDir, filepath.FromSlash(PreparedCacheDir)),
 		uiDir:        filepath.Join(artifactsDir, filepath.FromSlash(PreparedUIDir)),
 	}
 }
@@ -542,6 +550,10 @@ func auditDestDir(paths initPaths, name string) string {
 	return filepath.Join(paths.auditDir, name)
 }
 
+func cacheDestDir(paths initPaths, name string) string {
+	return filepath.Join(paths.cacheDir, name)
+}
+
 func indexeddbDestDir(paths initPaths, name string) string {
 	return filepath.Join(paths.artifactsDir, "indexeddb", name)
 }
@@ -556,6 +568,8 @@ func componentDestDir(paths initPaths, kind config.HostProviderKind, name string
 		return telemetryDestDir(paths, name)
 	case config.HostProviderKindAudit:
 		return auditDestDir(paths, name)
+	case config.HostProviderKindCache:
+		return cacheDestDir(paths, name)
 	case config.HostProviderKindIndexedDB:
 		return indexeddbDestDir(paths, name)
 	default:
@@ -571,6 +585,8 @@ func providerManifestKind(kind config.HostProviderKind) string {
 		return providermanifestv1.KindSecrets
 	case config.HostProviderKindTelemetry, config.HostProviderKindAudit:
 		return providermanifestv1.KindPlugin
+	case config.HostProviderKindCache:
+		return providermanifestv1.KindCache
 	case config.HostProviderKindIndexedDB:
 		return providermanifestv1.KindIndexedDB
 	default:
@@ -613,6 +629,9 @@ func ReadLockfile(path string) (*Lockfile, error) {
 	}
 	if lock.Secrets == nil {
 		lock.Secrets = make(map[string]LockEntry)
+	}
+	if lock.Caches == nil {
+		lock.Caches = make(map[string]LockEntry)
 	}
 	if lock.Telemetry == nil {
 		lock.Telemetry = make(map[string]LockEntry)

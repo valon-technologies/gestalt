@@ -14,6 +14,7 @@ import (
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
+	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	"github.com/valon-technologies/gestalt/server/internal/composite"
@@ -517,8 +518,16 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		if err != nil {
 			return nil, err
 		}
-		execCfg.HostServices = hostServices
+		execCfg.HostServices = append(execCfg.HostServices, hostServices...)
 		cleanup = chainCleanup(cleanup, indexedDBCleanup)
+	}
+	if len(entry.Cache) > 0 {
+		hostServices, cacheCleanup, err := buildPluginCacheHostServices(name, entry, deps)
+		if err != nil {
+			return nil, err
+		}
+		execCfg.HostServices = append(execCfg.HostServices, hostServices...)
+		cleanup = chainCleanup(cleanup, cacheCleanup)
 	}
 	execCfg.Cleanup = cleanup
 	prov, err := providerhost.NewExecutableProvider(ctx, execCfg)
@@ -549,6 +558,48 @@ func buildPluginIndexedDBHostServices(pluginName string, effective config.Effect
 	}}
 	return hostServices, func() {
 		_ = closeIndexedDBs(ds)
+	}, nil
+}
+
+func buildPluginCacheHostServices(pluginName string, entry *config.ProviderEntry, deps Deps) ([]providerhost.HostService, func(), error) {
+	if deps.CacheFactory == nil || len(deps.CacheDefs) == 0 {
+		return nil, nil, fmt.Errorf("cache host services are not available")
+	}
+
+	hostServices := make([]providerhost.HostService, 0, len(entry.Cache)+1)
+	boundCaches := make([]corecache.Cache, 0, len(entry.Cache))
+	for _, bindingName := range entry.Cache {
+		def, ok := deps.CacheDefs[bindingName]
+		if !ok || def == nil {
+			_ = closeCaches(boundCaches...)
+			return nil, nil, fmt.Errorf("cache %q is not available", bindingName)
+		}
+		value, err := buildCache(def, &FactoryRegistry{Cache: deps.CacheFactory})
+		if err != nil {
+			_ = closeCaches(boundCaches...)
+			return nil, nil, fmt.Errorf("cache %q: %w", bindingName, err)
+		}
+		boundCaches = append(boundCaches, value)
+		hostServices = append(hostServices, providerhost.HostService{
+			EnvVar: providerhost.CacheSocketEnv(bindingName),
+			Register: func(cacheValue corecache.Cache) func(*grpc.Server) {
+				return func(srv *grpc.Server) {
+					proto.RegisterCacheServer(srv, providerhost.NewCacheServer(cacheValue, pluginName))
+				}
+			}(value),
+		})
+	}
+	if len(boundCaches) == 1 {
+		value := boundCaches[0]
+		hostServices = append(hostServices, providerhost.HostService{
+			EnvVar: providerhost.DefaultCacheSocketEnv,
+			Register: func(srv *grpc.Server) {
+				proto.RegisterCacheServer(srv, providerhost.NewCacheServer(value, pluginName))
+			},
+		})
+	}
+	return hostServices, func() {
+		_ = closeCaches(boundCaches...)
 	}, nil
 }
 
@@ -685,6 +736,19 @@ func chainCleanup(cleanups ...func()) func() {
 			combined[i]()
 		}
 	}
+}
+
+func closeCaches(values ...corecache.Cache) error {
+	var errs []error
+	for _, value := range values {
+		if value == nil {
+			continue
+		}
+		if err := value.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func clonePluginEnv(src map[string]string) map[string]string {

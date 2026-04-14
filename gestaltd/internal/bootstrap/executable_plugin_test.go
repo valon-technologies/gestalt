@@ -16,6 +16,7 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/valon-technologies/gestalt/server/core"
+	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
@@ -873,6 +874,92 @@ func TestPluginIndexedDBExposeHostSocketEnv(t *testing.T) {
 	}
 	if got := checkEnv(t, &config.PluginIndexedDBConfig{Disabled: true}, providerhost.DefaultIndexedDBSocketEnv); got {
 		t.Fatal("default IndexedDB env should not be set when plugin indexeddb is disabled")
+	}
+}
+
+func TestPluginCacheBindingsExposeHostSocketEnv(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+
+	makeConfig := func(bindings []string) *config.Config {
+		return &config.Config{
+			Providers: config.ProvidersConfig{
+				Plugins: map[string]*config.ProviderEntry{
+					"echoext": {
+						Command:              bin,
+						Args:                 []string{"provider"},
+						ResolvedManifest:     manifest,
+						ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+						Cache:                bindings,
+					},
+				},
+			},
+		}
+	}
+
+	cacheBindings := map[string]*config.ProviderEntry{
+		"session": {Config: mustNode(t, map[string]any{"namespace": "session"})},
+		"rate_limit": {
+			Config: mustNode(t, map[string]any{"namespace": "rate_limit"}),
+		},
+	}
+
+	checkEnv := func(t *testing.T, bindings []string, envName string) bool {
+		t.Helper()
+		providers, _, err := buildProvidersStrict(context.Background(), makeConfig(bindings), NewFactoryRegistry(), Deps{
+			CacheDefs: cacheBindings,
+			CacheFactory: func(yaml.Node) (corecache.Cache, error) {
+				return coretesting.NewStubCache(), nil
+			},
+		})
+		if err != nil {
+			t.Fatalf("buildProvidersStrict: %v", err)
+		}
+		defer func() { _ = CloseProviders(providers) }()
+
+		prov, err := providers.Get("echoext")
+		if err != nil {
+			t.Fatalf("providers.Get: %v", err)
+		}
+		result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": envName}, "")
+		if err != nil {
+			t.Fatalf("Execute read_env: %v", err)
+		}
+		var env struct {
+			Value string `json:"value"`
+			Found bool   `json:"found"`
+		}
+		if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		return env.Found && env.Value != ""
+	}
+
+	if got := checkEnv(t, nil, providerhost.DefaultCacheSocketEnv); got {
+		t.Fatal("default cache env should not be set without plugin cache bindings")
+	}
+	if got := checkEnv(t, []string{"session"}, providerhost.DefaultCacheSocketEnv); !got {
+		t.Fatal("default cache env should be set with a single plugin cache binding")
+	}
+	if got := checkEnv(t, []string{"session"}, providerhost.CacheSocketEnv("session")); !got {
+		t.Fatal("named cache env should be set with a single plugin cache binding")
+	}
+	if got := checkEnv(t, []string{"session", "rate_limit"}, providerhost.DefaultCacheSocketEnv); got {
+		t.Fatal("default cache env should not be set with multiple plugin cache bindings")
+	}
+	if got := checkEnv(t, []string{"session", "rate_limit"}, providerhost.CacheSocketEnv("session")); !got {
+		t.Fatal(`named cache env for "session" should be set with multiple plugin cache bindings`)
+	}
+	if got := checkEnv(t, []string{"session", "rate_limit"}, providerhost.CacheSocketEnv("rate_limit")); !got {
+		t.Fatal(`named cache env for "rate_limit" should be set with multiple plugin cache bindings`)
 	}
 }
 

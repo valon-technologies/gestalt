@@ -15,7 +15,10 @@ import (
 	"google.golang.org/grpc/status"
 )
 
-var testClient *gestalt.IndexedDBClient
+var (
+	testClient      *gestalt.IndexedDBClient
+	testCacheClient *gestalt.CacheClient
+)
 
 func TestMain(m *testing.M) {
 	if runtime.GOOS == "windows" {
@@ -56,13 +59,50 @@ func TestMain(m *testing.M) {
 	}
 	testClient = client
 
+	cacheHarnessDir := filepath.Join("..", "..", "gestaltd", "internal", "testutil", "cmd", "cachetransportd")
+	cacheBin := filepath.Join(os.TempDir(), "cachetransportd")
+	cacheBuild := exec.Command("go", "build", "-o", cacheBin, ".")
+	cacheBuild.Dir = cacheHarnessDir
+	if out, err := cacheBuild.CombinedOutput(); err != nil {
+		panic("build cache harness: " + string(out))
+	}
+
+	cacheSock := filepath.Join(os.TempDir(), "go-sdk-cache-test.sock")
+	_ = os.Remove(cacheSock)
+
+	cacheCmd := exec.Command(cacheBin, "--socket", cacheSock)
+	cacheStdout, _ := cacheCmd.StdoutPipe()
+	if err := cacheCmd.Start(); err != nil {
+		panic("start cache harness: " + err.Error())
+	}
+
+	cacheScanner := bufio.NewScanner(cacheStdout)
+	if !cacheScanner.Scan() || cacheScanner.Text() != "READY" {
+		cacheCmd.Process.Kill()
+		panic("cache harness did not print READY")
+	}
+
+	os.Setenv(gestalt.EnvCacheSocket, cacheSock)
+	os.Setenv(gestalt.CacheSocketEnv("test"), cacheSock)
+	cacheClient, err := gestalt.Cache()
+	if err != nil {
+		cacheCmd.Process.Kill()
+		panic("connect cache: " + err.Error())
+	}
+	testCacheClient = cacheClient
+
 	code := m.Run()
 
 	_ = client.Close()
+	_ = cacheClient.Close()
 	cmd.Process.Kill()
+	cacheCmd.Process.Kill()
 	_ = cmd.Wait()
+	_ = cacheCmd.Wait()
 	_ = os.Remove(sock)
+	_ = os.Remove(cacheSock)
 	_ = os.Remove(bin)
+	_ = os.Remove(cacheBin)
 	os.Exit(code)
 }
 
