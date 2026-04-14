@@ -9,6 +9,8 @@ import (
 )
 
 func TestInstrumentIndexedDBRecordsDBAndObjectStoreAttributes(t *testing.T) {
+	t.Parallel()
+
 	metrics := metrictest.NewManualMeterProvider(t)
 	ctx := WithMeterProvider(context.Background(), metrics.Provider)
 

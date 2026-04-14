@@ -39,6 +39,8 @@ func TestIndexedDBServerPrefixesStoreNamesPerPlugin(t *testing.T) {
 }
 
 func TestIndexedDBServerRecordsPluginMetricAttributes(t *testing.T) {
+	t.Parallel()
+
 	metrics := metrictest.NewManualMeterProvider(t)
 	ctx := metricutil.WithMeterProvider(context.Background(), metrics.Provider)
 
