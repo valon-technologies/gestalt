@@ -781,9 +781,14 @@ func TestE2EInitLocalProviders(t *testing.T) {
 	if err := json.Unmarshal(lockData, &lock); err != nil {
 		t.Fatalf("invalid lock file JSON: %v", err)
 	}
-	version, _ := lock["version"].(float64)
-	if version < 1 {
-		t.Fatalf("expected lock version >= 1, got %v", lock["version"])
+	if got, _ := lock["schema"].(string); got != "gestaltd-provider-lock" {
+		t.Fatalf("expected provider lock schema, got %v", lock["schema"])
+	}
+	if got, _ := lock["schemaVersion"].(float64); got < 1 {
+		t.Fatalf("expected schemaVersion >= 1, got %v", lock["schemaVersion"])
+	}
+	if _, ok := lock["version"]; ok {
+		t.Fatalf("expected schema-based lockfile, found legacy version field: %v", lock["version"])
 	}
 }
 

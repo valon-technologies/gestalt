@@ -344,12 +344,12 @@ func TestSourcePluginEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read lockfile: %v", err)
 	}
-	var written Lockfile
+	var written providerLockfile
 	if err := json.Unmarshal(lockData, &written); err != nil {
 		t.Fatalf("parse lockfile: %v", err)
 	}
-	if written.Version != LockVersion {
-		t.Errorf("written lockfile version = %d, want %d", written.Version, LockVersion)
+	if written.Schema != providerLockSchemaName {
+		t.Errorf("written lockfile schema = %q, want %q", written.Schema, providerLockSchemaName)
 	}
 
 	readBack, err := ReadLockfile(lockPath)
@@ -476,8 +476,12 @@ func TestSourcePluginLoadForExecution(t *testing.T) {
 	if _, err := os.Stat(executablePath); err != nil {
 		t.Fatalf("executable not rehydrated at %s: %v", executablePath, err)
 	}
-	if cfg.Plugins["gadget"].Command != executablePath {
-		t.Fatalf("plugin command = %q, want %q", cfg.Plugins["gadget"].Command, executablePath)
+	install, err := inspectPreparedInstall(pluginRoot)
+	if err != nil {
+		t.Fatalf("inspectPreparedInstall(%s): %v", pluginRoot, err)
+	}
+	if cfg.Plugins["gadget"].Command != install.executablePath {
+		t.Fatalf("plugin command = %q, want %q", cfg.Plugins["gadget"].Command, install.executablePath)
 	}
 }
 
@@ -539,8 +543,14 @@ func TestSourcePluginLoadForExecution_RehydratesWhenCachedManifestVersionMismatc
 	if err != nil {
 		t.Fatalf("ReadLockfile: %v", err)
 	}
-	entry := lock.Providers["gadget"]
-	manifestPath := resolveLockPath(artifactsDir, entry.Manifest)
+	if _, ok := lock.Providers["gadget"]; !ok {
+		t.Fatal(`lock.Providers["gadget"] not found`)
+	}
+	install, err := inspectPreparedInstall(filepath.Join(artifactsDir, ".gestaltd", "providers", "gadget"))
+	if err != nil {
+		t.Fatalf("inspectPreparedInstall: %v", err)
+	}
+	manifestPath := install.manifestPath
 
 	_, staleManifest, err := providerpkg.ReadManifestFile(manifestPath)
 	if err != nil {
@@ -914,6 +924,21 @@ func TestManagedCacheSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
 	if _, ok := lock.Caches["rate_limit"]; !ok {
 		t.Fatal(`lock.Caches["rate_limit"] not found`)
 	}
+	lockPath := filepath.Join(dir, InitLockfileName)
+	lockData, err := os.ReadFile(lockPath)
+	if err != nil {
+		t.Fatalf("ReadFile lockfile: %v", err)
+	}
+	var diskLock providerLockfile
+	if err := json.Unmarshal(lockData, &diskLock); err != nil {
+		t.Fatalf("Unmarshal lockfile: %v", err)
+	}
+	if _, ok := diskLock.Providers.Cache["session"]; !ok {
+		t.Fatal(`disk lock cache["session"] not found`)
+	}
+	if _, ok := diskLock.Providers.Cache["rate_limit"]; !ok {
+		t.Fatal(`disk lock cache["rate_limit"] not found`)
+	}
 
 	callsBefore := len(resolver.calls)
 	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
@@ -1263,6 +1288,30 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 
 	configDir := filepath.Dir(configPath)
 	lockPath := filepath.Join(configDir, InitLockfileName)
+	lockData, err := os.ReadFile(lockPath)
+	if err != nil {
+		t.Fatalf("ReadFile lockfile: %v", err)
+	}
+	if !strings.Contains(string(lockData), `"schema": "gestaltd-provider-lock"`) {
+		t.Fatalf("lockfile = %s, want provider lock schema", lockData)
+	}
+	if strings.Contains(string(lockData), `"version": 7`) {
+		t.Fatalf("lockfile = %s, want schema-based versioning", lockData)
+	}
+	if strings.Contains(string(lockData), `"manifest"`) || strings.Contains(string(lockData), `"executable"`) {
+		t.Fatalf("lockfile = %s, want portable entries only", lockData)
+	}
+	var diskLock providerLockfile
+	if err := json.Unmarshal(lockData, &diskLock); err != nil {
+		t.Fatalf("Unmarshal lockfile: %v", err)
+	}
+	diskEntry, ok := diskLock.Providers.Plugin["alpha"]
+	if !ok {
+		t.Fatal(`disk lock providers.plugin["alpha"] not found`)
+	}
+	if diskEntry.Source != testSource || diskEntry.Version != testVersion {
+		t.Fatalf("disk lock plugin entry = %#v", diskEntry)
+	}
 	readBack, err := ReadLockfile(lockPath)
 	if err != nil {
 		t.Fatalf("ReadLockfile: %v", err)
@@ -1317,5 +1366,185 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 	}
 	if cfg.Plugins["alpha"].Command != executablePath {
 		t.Errorf("plugin command = %q, want %q", cfg.Plugins["alpha"].Command, executablePath)
+	}
+}
+
+func TestSourcePluginInitWithPlatformsPersistsExtraPlatformHash(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "wrong-env-token")
+
+	dir := t.TempDir()
+
+	src := pluginsource.Source{
+		Host:  pluginsource.HostGitHub,
+		Owner: testOwner,
+		Repo:  testRepo,
+		Path:  "plugins/" + testPlugin,
+	}
+	expectedTag := src.ReleaseTag(testVersion)
+	releasePath := "/repos/" + testOwner + "/" + testRepo + "/releases/tags/" + expectedTag
+
+	currentAssetName := fmt.Sprintf("gestalt-plugin-%s_v%s_%s_%s.tar.gz", src.PluginName(), testVersion, runtime.GOOS, runtime.GOARCH)
+	extraPlatform := struct {
+		goos   string
+		goarch string
+	}{
+		goos:   "linux",
+		goarch: "amd64",
+	}
+	for _, candidate := range []struct {
+		goos   string
+		goarch string
+	}{
+		{goos: "linux", goarch: "amd64"},
+		{goos: "linux", goarch: "arm64"},
+		{goos: "darwin", goarch: "amd64"},
+		{goos: "darwin", goarch: "arm64"},
+	} {
+		if candidate.goos != runtime.GOOS || candidate.goarch != runtime.GOARCH {
+			extraPlatform = candidate
+			break
+		}
+	}
+	extraPlatformKey := providerpkg.PlatformString(extraPlatform.goos, extraPlatform.goarch)
+	extraAssetName := fmt.Sprintf("gestalt-plugin-%s_v%s_%s_%s.tar.gz", src.PluginName(), testVersion, extraPlatform.goos, extraPlatform.goarch)
+
+	currentArchivePath := buildV2Archive(t, dir, testSource, testVersion, testBinary)
+	currentArchiveData, err := os.ReadFile(currentArchivePath)
+	if err != nil {
+		t.Fatalf("read current archive: %v", err)
+	}
+	extraArchiveData := []byte("extra-platform-archive")
+	extraArchiveSHA := sha256.Sum256(extraArchiveData)
+
+	var releaseCount atomic.Int64
+	var currentAssetCount atomic.Int64
+	var extraAssetCount atomic.Int64
+	handlerErrs := make(chan error, 4)
+	nextHandlerErr := func() error {
+		t.Helper()
+		select {
+		case err := <-handlerErrs:
+			return err
+		default:
+			return nil
+		}
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case releasePath:
+			releaseCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "token test-token" {
+				handlerErrs <- fmt.Errorf("release authorization = %q, want %q", got, "token test-token")
+				http.Error(w, "bad release authorization", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			resp := map[string]any{
+				"assets": []map[string]any{
+					{
+						"name":                 currentAssetName,
+						"url":                  "http://" + r.Host + "/asset-current",
+						"browser_download_url": "https://github.com/" + testOwner + "/" + testRepo + "/releases/download/" + expectedTag + "/" + currentAssetName,
+					},
+					{
+						"name":                 extraAssetName,
+						"url":                  "http://" + r.Host + "/asset-extra",
+						"browser_download_url": "https://github.com/" + testOwner + "/" + testRepo + "/releases/download/" + expectedTag + "/" + extraAssetName,
+					},
+				},
+			}
+			_ = json.NewEncoder(w).Encode(resp)
+		case "/asset-current":
+			currentAssetCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "token test-token" {
+				handlerErrs <- fmt.Errorf("current asset authorization = %q, want %q", got, "token test-token")
+				http.Error(w, "bad asset authorization", http.StatusBadRequest)
+				return
+			}
+			if got := r.Header.Get("Accept"); got != "application/octet-stream" {
+				handlerErrs <- fmt.Errorf("current asset accept = %q, want %q", got, "application/octet-stream")
+				http.Error(w, "bad asset accept", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(currentArchiveData)
+		case "/asset-extra":
+			extraAssetCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "token test-token" {
+				handlerErrs <- fmt.Errorf("extra asset authorization = %q, want %q", got, "token test-token")
+				http.Error(w, "bad asset authorization", http.StatusBadRequest)
+				return
+			}
+			if got := r.Header.Get("Accept"); got != "application/octet-stream" {
+				handlerErrs <- fmt.Errorf("extra asset accept = %q, want %q", got, "application/octet-stream")
+				http.Error(w, "bad asset accept", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(extraArchiveData)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
+		"plugins:",
+		"  alpha:",
+		"    source:",
+		"      ref: " + testSource,
+		"      version: " + testVersion,
+		"      auth:",
+		"        token: test-token",
+		"server:",
+		"  providers:",
+		"    indexeddb: sqlite",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	resolver := &ghresolver.GitHubResolver{BaseURL: srv.URL}
+	lc := NewLifecycle(resolver)
+	lock, err := lc.InitAtPathWithPlatforms(configPath, "", []struct{ GOOS, GOARCH, LibC string }{
+		{GOOS: extraPlatform.goos, GOARCH: extraPlatform.goarch},
+	})
+	if err != nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+		t.Fatalf("InitAtPathWithPlatforms: %v", err)
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+	if got := currentAssetCount.Load(); got != 1 {
+		t.Fatalf("current asset request count = %d, want 1", got)
+	}
+	if got := extraAssetCount.Load(); got != 1 {
+		t.Fatalf("extra asset request count = %d, want 1", got)
+	}
+	if got := releaseCount.Load(); got < 2 {
+		t.Fatalf("release request count = %d, want at least 2", got)
+	}
+
+	entry, ok := lock.Providers["alpha"]
+	if !ok {
+		t.Fatal(`lock.Providers["alpha"] not found`)
+	}
+	if got := entry.Archives[extraPlatformKey].SHA256; got != hex.EncodeToString(extraArchiveSHA[:]) {
+		t.Fatalf("lock extra-platform SHA256 = %q, want %q", got, hex.EncodeToString(extraArchiveSHA[:]))
+	}
+
+	readBack, err := ReadLockfile(filepath.Join(dir, InitLockfileName))
+	if err != nil {
+		t.Fatalf("ReadLockfile: %v", err)
+	}
+	if got := readBack.Providers["alpha"].Archives[extraPlatformKey].SHA256; got != hex.EncodeToString(extraArchiveSHA[:]) {
+		t.Fatalf("readBack extra-platform SHA256 = %q, want %q", got, hex.EncodeToString(extraArchiveSHA[:]))
 	}
 }
