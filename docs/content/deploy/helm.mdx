@@ -25,7 +25,8 @@ The default chart profile is intentionally minimal:
 - no ingress
 
 That profile is suitable for local development and trusted internal clusters.
-It is not a production-ready security posture.
+It is not a production-ready security posture. Override `config.server.encryptionKey`
+before any shared, persistent, or production deployment.
 
 ## Production Install Pattern
 

@@ -3,15 +3,18 @@
 ## Quick start
 
 ```sh
+export GESTALT_ENCRYPTION_KEY="$(openssl rand -hex 32)"
+
 docker run --rm \
   -p 8080:8080 \
-  -e GESTALT_ENCRYPTION_KEY=change-me \
+  -e GESTALT_ENCRYPTION_KEY="${GESTALT_ENCRYPTION_KEY}" \
   -v "$(pwd)/config.yaml:/etc/gestalt/config.yaml:ro" \
   -v gestalt-data:/data \
   valontechnologies/gestaltd:latest
 ```
 
 Mount a config file at `/etc/gestalt/config.yaml`. The image is not zero-config and will fail to start without one.
+Generate the encryption key once with `openssl rand -hex 32` and reuse that value for the deployment.
 
 ## Docker Compose
 
@@ -25,7 +28,7 @@ services:
       - ./config.yaml:/etc/gestalt/config.yaml:ro
       - gestalt-data:/data
     environment:
-      GESTALT_ENCRYPTION_KEY: change-me
+      GESTALT_ENCRYPTION_KEY: "${GESTALT_ENCRYPTION_KEY}"
 
 volumes:
   gestalt-data:
