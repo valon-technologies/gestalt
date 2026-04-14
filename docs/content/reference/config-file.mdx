@@ -460,11 +460,11 @@ plugins:
       openapi:
         baseUrl: https://api.github.com
     indexeddb:
-      - name: main
-        objectStore:
-          - tasks
-          - snapshots
-    indexeddbSchema: github_plugin
+      provider: main
+      db: github_plugin
+      objectStores:
+        - tasks
+        - snapshots
     connections:
       default:
         mode: user
@@ -490,8 +490,7 @@ plugins:
 | `surfaces` | Typed host-side overrides for manifest-declared surfaces, such as `surfaces.openapi.baseUrl` or `surfaces.graphql.url`. |
 | `connections` | Named connection declarations. See [connections](#connections) below. |
 | `allowedOperations` | Allowlist with optional `alias`, `description`, and `allowedRoles` overrides per operation. |
-| `indexeddb` | Optional list of plugin IndexedDB bindings. The scalar shorthand `- main` is still supported; the object form accepts `name` plus optional `objectStore` allowlists to pin logical stores to a binding. A given `objectStore` may appear in at most one binding; duplicates are rejected during config validation. When any binding declares `objectStore`, one additional binding may omit it and acts as the catch-all for unassigned stores. Each binding is rebuilt as a plugin-scoped IndexedDB instance before being served to the plugin. A single binding also populates the default IndexedDB SDK env var for compatibility. |
-| `indexeddbSchema` | Optional override for the plugin IndexedDB namespace. When omitted, Gestalt uses the plugin name. RelationalDB bindings pass this through as `schema` on Postgres, MySQL, and SQL Server, use `<indexeddbSchema>_` table prefixes on SQLite, and other IndexedDB backends fall back to `<indexeddbSchema>_` transport-level store prefixes. |
+| `indexeddb` | Optional plugin IndexedDB config. `indexeddb.provider` selects which named `providers.indexeddb` entry to expose to the plugin; when omitted, the plugin inherits the selected/default host IndexedDB. `indexeddb.db` overrides the plugin-visible database name and defaults to the plugin key. `indexeddb.objectStores` optionally allowlists the logical object stores the plugin may use. `indexeddb.disabled: true` opts out entirely. Plugins receive one IndexedDB SDK socket via `GESTALT_INDEXEDDB_SOCKET`. |
 
 ### `plugins.*.source`
 

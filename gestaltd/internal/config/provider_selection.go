@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -91,6 +92,71 @@ func (c *Config) SelectedAuditProvider() (string, *ProviderEntry, error) {
 
 func (c *Config) SelectedIndexedDBProvider() (string, *ProviderEntry, error) {
 	return c.SelectedHostProvider(HostProviderKindIndexedDB)
+}
+
+type EffectivePluginIndexedDB struct {
+	Enabled      bool
+	ProviderName string
+	Provider     *ProviderEntry
+	DB           string
+	ObjectStores []string
+}
+
+func (c *Config) EffectivePluginIndexedDB(pluginName string, entry *ProviderEntry) (EffectivePluginIndexedDB, error) {
+	c.SyncCompatFields()
+	selectedName, _, err := c.SelectedIndexedDBProvider()
+	if err != nil {
+		return EffectivePluginIndexedDB{}, err
+	}
+	return ResolveEffectivePluginIndexedDB(pluginName, entry, selectedName, c.Providers.IndexedDB)
+}
+
+func ResolveEffectivePluginIndexedDB(pluginName string, entry *ProviderEntry, selectedName string, entries map[string]*ProviderEntry) (EffectivePluginIndexedDB, error) {
+	if entry == nil {
+		return EffectivePluginIndexedDB{}, nil
+	}
+	if entry.IndexedDB != nil && entry.IndexedDB.Disabled {
+		return EffectivePluginIndexedDB{}, nil
+	}
+
+	providerName := ""
+	if entry.IndexedDB != nil {
+		providerName = strings.TrimSpace(entry.IndexedDB.Provider)
+	}
+	if providerName == "" {
+		providerName = strings.TrimSpace(selectedName)
+	}
+	if providerName == "" {
+		return EffectivePluginIndexedDB{}, nil
+	}
+
+	provider, ok := entries[providerName]
+	if !ok || provider == nil {
+		return EffectivePluginIndexedDB{}, fmt.Errorf("config validation: plugins.%s.indexeddb.provider references unknown indexeddb %q", pluginName, providerName)
+	}
+	if provider.Disabled {
+		return EffectivePluginIndexedDB{}, fmt.Errorf("config validation: plugins.%s.indexeddb.provider references disabled indexeddb %q", pluginName, providerName)
+	}
+
+	dbName := pluginName
+	if entry.IndexedDB != nil && strings.TrimSpace(entry.IndexedDB.DB) != "" {
+		dbName = strings.TrimSpace(entry.IndexedDB.DB)
+	} else if legacyDB := strings.TrimSpace(entry.IndexedDBSchema); legacyDB != "" {
+		dbName = legacyDB
+	}
+
+	var objectStores []string
+	if entry.IndexedDB != nil {
+		objectStores = slices.Clone(entry.IndexedDB.ObjectStores)
+	}
+
+	return EffectivePluginIndexedDB{
+		Enabled:      true,
+		ProviderName: providerName,
+		Provider:     provider,
+		DB:           dbName,
+		ObjectStores: objectStores,
+	}, nil
 }
 
 func ResolveSelectedHostProvider(kind HostProviderKind, explicit string, entries map[string]*ProviderEntry) (string, *ProviderEntry, error) {

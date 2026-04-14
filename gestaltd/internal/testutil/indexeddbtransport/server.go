@@ -29,7 +29,7 @@ func Start(socketPath string) (*Server, error) {
 	}
 	stub := &coretesting.StubIndexedDB{}
 	srv := grpc.NewServer()
-	proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(stub, ""))
+	proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(stub, "", providerhost.IndexedDBServerOptions{}))
 	go func() { _ = srv.Serve(lis) }()
 	return &Server{srv: srv, lis: lis, Socket: socketPath}, nil
 }

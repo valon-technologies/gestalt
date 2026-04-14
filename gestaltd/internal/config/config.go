@@ -139,8 +139,8 @@ type ProviderEntry struct {
 	// Plugin-specific config fields (parsed from YAML, only valid on plugin entries)
 	Connections       map[string]*ConnectionDef     `yaml:"connections,omitempty"`
 	AllowedOperations map[string]*OperationOverride `yaml:"allowedOperations,omitempty"`
-	IndexedDBs        []PluginIndexedDBBinding      `yaml:"indexeddb,omitempty"`
-	IndexedDBSchema   string                        `yaml:"indexeddbSchema,omitempty"`
+	IndexedDB         *PluginIndexedDBConfig        `yaml:"indexeddb,omitempty"`
+	IndexedDBSchema   string                        `yaml:"indexeddbSchema,omitempty"` // Legacy alias for IndexedDB.DB.
 	Surfaces          *ProviderSurfaceOverrides     `yaml:"surfaces,omitempty"`
 
 	// Runtime-resolved fields (populated during init/bootstrap, not from YAML)
@@ -167,18 +167,48 @@ type ProviderSurfaceOverrides struct {
 	MCP     *ProviderMCPSurfaceOverride     `yaml:"mcp,omitempty"`
 }
 
-type PluginIndexedDBBinding struct {
+type PluginIndexedDBConfig struct {
+	Disabled     bool     `yaml:"disabled,omitempty"`
+	Provider     string   `yaml:"provider,omitempty"`
+	DB           string   `yaml:"db,omitempty"`
+	ObjectStores []string `yaml:"objectStores,omitempty"`
+}
+
+type legacyPluginIndexedDBBinding struct {
 	Name         string   `yaml:"name,omitempty"`
 	ObjectStores []string `yaml:"objectStore,omitempty"`
 }
 
-func (b *PluginIndexedDBBinding) UnmarshalYAML(value *yaml.Node) error {
-	if value.Kind == yaml.ScalarNode {
-		b.Name = strings.TrimSpace(value.Value)
+func (c *PluginIndexedDBConfig) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.ScalarNode:
+		c.Provider = strings.TrimSpace(value.Value)
 		return nil
+	case yaml.SequenceNode:
+		switch len(value.Content) {
+		case 0:
+			c.Disabled = true
+			return nil
+		case 1:
+			item := value.Content[0]
+			if item.Kind == yaml.ScalarNode {
+				c.Provider = strings.TrimSpace(item.Value)
+				return nil
+			}
+			var binding legacyPluginIndexedDBBinding
+			if err := item.Decode(&binding); err != nil {
+				return err
+			}
+			c.Provider = strings.TrimSpace(binding.Name)
+			c.ObjectStores = slices.Clone(binding.ObjectStores)
+			return nil
+		default:
+			return fmt.Errorf("plugin indexeddb legacy list supports at most one entry")
+		}
+	default:
+		type raw PluginIndexedDBConfig
+		return value.Decode((*raw)(c))
 	}
-	type raw PluginIndexedDBBinding
-	return value.Decode((*raw)(b))
 }
 
 type ProviderRESTSurfaceOverride struct {
