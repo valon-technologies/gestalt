@@ -19,6 +19,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 
 	"google.golang.org/grpc/codes"
@@ -470,13 +471,22 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 	if tr, ok := s.invoker.(invocation.TokenResolver); ok {
 		resolver = tr
 	}
-	resolveCatalog := invocation.ResolveCatalog
+	recordDiscoveryMetrics := false
+	discoveryStartedAt := time.Time{}
+	discoveryConnectionMode := ""
+	discoveryFailed := false
+	if _, ok := prov.(core.SessionCatalogProvider); ok && resolver != nil && p != nil && prov.ConnectionMode() != core.ConnectionModeNone {
+		recordDiscoveryMetrics = true
+		discoveryStartedAt = time.Now()
+		discoveryConnectionMode = metricutil.NormalizeConnectionMode(prov.ConnectionMode())
+	}
+	resolveCatalog := invocation.ResolveCatalogWithMetadata
 	strictCatalog := false
 	if requestedConnection != "" || requestedInstance != "" {
-		resolveCatalog = invocation.ResolveCatalogStrict
+		resolveCatalog = invocation.ResolveCatalogStrictWithMetadata
 		strictCatalog = true
 	} else if _, ok := prov.(core.SessionCatalogProvider); ok {
-		resolveCatalog = invocation.ResolveCatalogStrict
+		resolveCatalog = invocation.ResolveCatalogStrictWithMetadata
 		strictCatalog = true
 	}
 	ctx := invocation.WithAccessContext(r.Context(), s.providerAccessContext(p, name))
@@ -496,9 +506,13 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 		var firstErr error
 		for _, catalogConnection := range catalogConnections {
 			resolvedConnection, catalogInstance := s.workloadBindingSelectors(p, name, catalogConnection, requestedInstance)
-			var err error
-			cat, err = resolveCatalog(ctx, prov, name, resolver, p, resolvedConnection, catalogInstance)
+			var (
+				err      error
+				metadata invocation.CatalogResolutionMetadata
+			)
+			cat, metadata, err = resolveCatalog(ctx, prov, name, resolver, p, resolvedConnection, catalogInstance)
 			if err == nil {
+				discoveryFailed = metadata.SessionFailed
 				break
 			}
 			if firstErr == nil {
@@ -507,6 +521,10 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 			cat = nil
 		}
 		if cat == nil && firstErr != nil {
+			discoveryFailed = true
+			if recordDiscoveryMetrics {
+				metricutil.RecordDiscoveryMetrics(r.Context(), discoveryStartedAt, name, "list_operations", discoveryConnectionMode, discoveryFailed)
+			}
 			s.writeInvocationError(w, r, name, "", firstErr)
 			return
 		}
@@ -516,12 +534,22 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 			catalogConnection = s.catalogLookupConnection(name, requestedConnection)
 		}
 		catalogConnection, catalogInstance := s.workloadBindingSelectors(p, name, catalogConnection, requestedInstance)
-		var err error
-		cat, err = resolveCatalog(ctx, prov, name, resolver, p, catalogConnection, catalogInstance)
+		var (
+			err      error
+			metadata invocation.CatalogResolutionMetadata
+		)
+		cat, metadata, err = resolveCatalog(ctx, prov, name, resolver, p, catalogConnection, catalogInstance)
+		discoveryFailed = metadata.SessionFailed || err != nil
 		if err != nil {
+			if recordDiscoveryMetrics {
+				metricutil.RecordDiscoveryMetrics(r.Context(), discoveryStartedAt, name, "list_operations", discoveryConnectionMode, discoveryFailed)
+			}
 			s.writeInvocationError(w, r, name, "", err)
 			return
 		}
+	}
+	if recordDiscoveryMetrics {
+		metricutil.RecordDiscoveryMetrics(r.Context(), discoveryStartedAt, name, "list_operations", discoveryConnectionMode, discoveryFailed)
 	}
 	cat = invocation.FilterCatalogForPrincipal(cat, name, p, s.authorizer)
 	ops := httpVisibleCatalogOperations(cat.Operations)

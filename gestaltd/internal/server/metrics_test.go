@@ -502,8 +502,22 @@ func TestPlatformAuthMetrics(t *testing.T) {
 	if tokensResp.StatusCode != http.StatusOK {
 		t.Fatalf("list tokens status = %d, want %d", tokensResp.StatusCode, http.StatusOK)
 	}
-	if got := bytes.TrimSpace(auditBuf.Bytes()); len(got) != 0 {
-		t.Fatalf("validate-token and datastore read should not emit audit logs, got: %s", got)
+	lines := bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
+	if len(lines) != 1 {
+		t.Fatalf("expected exactly one audit record for api token inventory read, got %d\nraw: %s", len(lines), auditBuf.String())
+	}
+	var auditRecord map[string]any
+	if err := json.Unmarshal(lines[0], &auditRecord); err != nil {
+		t.Fatalf("parse audit record: %v\nraw: %s", err, auditBuf.String())
+	}
+	if auditRecord["operation"] != "api_token.list" {
+		t.Fatalf("expected audit operation api_token.list, got %v", auditRecord["operation"])
+	}
+	if auditRecord["auth_source"] != "session" {
+		t.Fatalf("expected audit auth_source session, got %v", auditRecord["auth_source"])
+	}
+	if auditRecord["allowed"] != true {
+		t.Fatalf("expected audit allowed=true, got %v", auditRecord["allowed"])
 	}
 
 	rm := metrictest.CollectMetrics(t, metrics.Reader)
@@ -548,4 +562,127 @@ func TestHTTPMiddlewareMetricsUseConfiguredMeterProvider(t *testing.T) {
 	if !hasMetricWithPrefix(rm, "http.server.") {
 		t.Fatalf("expected otelhttp metrics in configured meter provider, got %+v", rm.ScopeMetrics)
 	}
+}
+
+func TestHTTPDiscoveryMetrics(t *testing.T) {
+	t.Parallel()
+
+	metrics := metrictest.NewManualMeterProvider(t)
+	const providerName = "metrics-session-catalog"
+
+	prov := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: providerName, ConnMode: core.ConnectionModeIdentity},
+		},
+		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			if token != "identity-token" {
+				t.Fatalf("catalog token = %q, want %q", token, "identity-token")
+			}
+			return &catalog.Catalog{
+				Name: providerName,
+				Operations: []catalog.CatalogOperation{
+					{ID: "list_projects", Description: "List projects", Method: http.MethodGet, Transport: catalog.TransportREST},
+				},
+			}, nil
+		},
+	}
+
+	svc := coretesting.NewStubServices(t)
+	seedIdentityToken(t, svc, providerName, testDefaultConnection, "default", "identity-token")
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.MeterProvider = metrics.Provider
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "session-token" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: "user@example.com"}, nil
+			},
+		}
+		cfg.Providers = testutil.NewProviderRegistry(t, prov)
+		cfg.DefaultConnection = map[string]string{providerName: testDefaultConnection}
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/"+providerName+"/operations", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("list operations request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("list operations status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+
+	rm := metrictest.CollectMetrics(t, metrics.Reader)
+	attrs := map[string]string{
+		"gestalt.provider":        providerName,
+		"gestalt.action":          "list_operations",
+		"gestalt.connection_mode": "identity",
+	}
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.discovery.count", 1, attrs)
+	metrictest.RequireNoInt64Sum(t, rm, "gestaltd.discovery.error_count", attrs)
+	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.discovery.duration", attrs)
+}
+
+func TestHTTPDiscoveryMetrics_FailureRecordsErrorCount(t *testing.T) {
+	t.Parallel()
+
+	metrics := metrictest.NewManualMeterProvider(t)
+	const providerName = "metrics-session-catalog-error"
+
+	prov := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: providerName, ConnMode: core.ConnectionModeIdentity},
+		},
+		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			if token != "identity-token" {
+				t.Fatalf("catalog token = %q, want %q", token, "identity-token")
+			}
+			return nil, context.DeadlineExceeded
+		},
+	}
+
+	svc := coretesting.NewStubServices(t)
+	seedIdentityToken(t, svc, providerName, testDefaultConnection, "default", "identity-token")
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.MeterProvider = metrics.Provider
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "session-token" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: "user@example.com"}, nil
+			},
+		}
+		cfg.Providers = testutil.NewProviderRegistry(t, prov)
+		cfg.DefaultConnection = map[string]string{providerName: testDefaultConnection}
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/"+providerName+"/operations", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("list operations request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadGateway {
+		t.Fatalf("list operations status = %d, want %d", resp.StatusCode, http.StatusBadGateway)
+	}
+
+	rm := metrictest.CollectMetrics(t, metrics.Reader)
+	attrs := map[string]string{
+		"gestalt.provider":        providerName,
+		"gestalt.action":          "list_operations",
+		"gestalt.connection_mode": "identity",
+	}
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.discovery.count", 1, attrs)
+	metrictest.RequireInt64Sum(t, rm, "gestaltd.discovery.error_count", 1, attrs)
+	metrictest.RequireFloat64Histogram(t, rm, "gestaltd.discovery.duration", attrs)
 }

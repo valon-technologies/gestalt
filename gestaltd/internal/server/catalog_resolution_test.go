@@ -502,9 +502,15 @@ func TestResolveCatalog_TokenResolutionFailure_NonFatal(t *testing.T) {
 	resolver := &stubTokenResolver{err: fmt.Errorf("token expired")}
 	p := &principal.Principal{UserID: "u1"}
 
-	cat, err := invocation.ResolveCatalog(context.Background(), prov, "auth-api", resolver, p, "default", "")
+	cat, metadata, err := invocation.ResolveCatalogWithMetadata(context.Background(), prov, "auth-api", resolver, p, "default", "")
 	if err != nil {
 		t.Fatalf("expected no error on token failure, got: %v", err)
+	}
+	if !metadata.SessionAttempted {
+		t.Fatal("expected session resolution attempt to be reported")
+	}
+	if !metadata.SessionFailed {
+		t.Fatal("expected session resolution failure to be reported")
 	}
 	if len(cat.Operations) != 1 {
 		t.Fatalf("expected 1 operation (static only), got %d", len(cat.Operations))

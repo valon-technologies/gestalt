@@ -92,13 +92,21 @@ type apiTokenInfo struct {
 }
 
 func (s *Server) listAPITokens(w http.ResponseWriter, r *http.Request) {
+	auditAllowed := false
+	auditErr := errors.New("api token list failed")
+	defer func() {
+		s.auditHTTPEvent(r.Context(), PrincipalFromContext(r.Context()), "", "api_token.list", auditAllowed, auditErr)
+	}()
+
 	userID, err := s.resolveUserID(w, r)
 	if err != nil {
+		auditErr = err
 		return
 	}
 
 	tokens, err := s.apiTokens.ListAPITokens(r.Context(), userID)
 	if err != nil {
+		auditErr = errors.New("failed to list tokens")
 		writeError(w, http.StatusInternalServerError, "failed to list tokens")
 		return
 	}
@@ -107,6 +115,8 @@ func (s *Server) listAPITokens(w http.ResponseWriter, r *http.Request) {
 	for _, t := range tokens {
 		out = append(out, apiTokenInfoFromCore(t))
 	}
+	auditAllowed = true
+	auditErr = nil
 	writeJSON(w, http.StatusOK, out)
 }
 

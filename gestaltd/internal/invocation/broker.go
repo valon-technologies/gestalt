@@ -302,7 +302,7 @@ func (b *Broker) resolveOperation(ctx context.Context, p *principal.Principal, p
 		if connection == "" {
 			connection = b.mcpConnection(providerName)
 		}
-		cat, err := resolveSessionCatalog(ctx, prov, providerName, b, p, connection, instance)
+		cat, _, err := resolveSessionCatalog(ctx, prov, providerName, b, p, connection, instance)
 		if err != nil {
 			return catalog.CatalogOperation{}, "", err
 		}
