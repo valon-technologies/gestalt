@@ -8,7 +8,7 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/landlock-lsm/go-landlock v0.8.0
 	github.com/mark3labs/mcp-go v0.48.0
-	github.com/pb33f/libopenapi v0.36.0
+	github.com/pb33f/libopenapi v0.36.1
 	github.com/prometheus/client_golang v1.23.2
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/valon-technologies/gestalt/sdk/go v0.0.0-00010101000000-000000000000
