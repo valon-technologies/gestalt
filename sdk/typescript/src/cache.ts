@@ -40,7 +40,7 @@ export function cacheSocketEnv(name?: string): string {
   if (!trimmed) {
     return ENV_CACHE_SOCKET;
   }
-  return `${ENV_CACHE_SOCKET}_${trimmed.replace(/[^A-Za-z0-9]/g, "_").toUpperCase()}`;
+  return `${ENV_CACHE_SOCKET}_${trimmed.replace(/[^A-Za-z0-9]/gu, "_").toUpperCase()}`;
 }
 
 export class Cache {
