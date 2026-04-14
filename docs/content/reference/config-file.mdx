@@ -2,19 +2,22 @@ import { Tabs } from 'nextra/components'
 
 # Config File
 
-Every `gestaltd` deployment reads a single YAML config file. The two top-level keys are `server` (listener, encryption, egress, and indexeddb selection) and `providers` (auth, secrets, telemetry, audit, mounted UI bundles, indexeddbs, and plugins):
+Every `gestaltd` deployment reads a single YAML config file. The top-level keys are `server` (listener, encryption, egress, and indexeddb selection), `authorization` (shared human/workload access policy), `providers` (auth, secrets, telemetry, audit, mounted UI bundles, and indexeddbs), and `plugins` (executable integrations):
 
 ```yaml
 server:
   # listener, encryption, egress, indexeddb selector
+authorization:
+  policies: {}
+  workloads: {}
 providers:
   auth: {}
   secrets: {}
   telemetry: {}
   audit: {}
   ui: {}
-  indexeddbs: {}
-  plugins: {}
+  indexeddb: {}
+plugins: {}
 ```
 
 ## Load Semantics
@@ -22,6 +25,8 @@ providers:
 `${ENV_VAR}` references are expanded before YAML decoding. When a referenced variable is unset, Gestalt checks for a corresponding `ENV_VAR_FILE` variable and reads that file path instead. If neither is set, config loading fails. Use `${ENV_VAR:-}` when an explicit empty default is intentional. Unknown YAML fields are rejected.
 
 Several fields carry defaults when omitted: `server.public.port` defaults to `8080`, `providers.secrets.source` to `env`, and `providers.telemetry.source` to `stdout`. Relative paths resolve relative to the config file's directory. `secret://...` values are resolved during bootstrap, not during YAML parsing.
+
+`authorization` is the canonical location for shared human and workload access policy. Existing deployments may continue to use `server.authorization` as a deprecated compatibility alias; Gestalt normalizes it into the top-level block during config load and bootstrap.
 
 ## `server`
 
@@ -37,29 +42,29 @@ server:
   encryptionKey: secret://gestalt-encryption-key
   apiTokenTtl: 30d
   artifactsDir: ./state
-  authorization:
-    policies:
-      support_staff:
-        default: deny
-        members:
-          - email: viewer@example.test
-            role: viewer
-          - subjectID: user:admin-user
-            role: admin
-    workloads:
-      triage-bot:
-        displayName: Triage Bot
-        token: secret://triage-bot-token
-        providers:
-          github:
-            connection: default
-            instance: default
-            allow:
-              - list_issues
-              - get_issue
-          weather:
-            allow:
-              - get_forecast
+authorization:
+  policies:
+    support_staff:
+      default: deny
+      members:
+        - email: viewer@example.test
+          role: viewer
+        - subjectID: user:admin-user
+          role: admin
+  workloads:
+    triage-bot:
+      displayName: Triage Bot
+      token: secret://triage-bot-token
+      providers:
+        github:
+          connection: default
+          instance: default
+          allow:
+            - list_issues
+            - get_issue
+        weather:
+          allow:
+            - get_forecast
 ```
 
 `public.host` and `public.port` control the public listener address. Both default to all-interfaces on port `8080`.
@@ -72,9 +77,9 @@ server:
 
 `apiTokenTtl` controls the lifetime of newly issued API tokens, defaulting to `30d`. It accepts Go duration strings (`1h`, `720h`) and day suffixes (`30d`). `artifactsDir` is a writable directory for prepared artifacts produced by `init` and consumed by `serve --locked` when no CLI override is supplied; it defaults to the config file's directory. See [Configuration](/configuration) for the full `init`/`serve` lifecycle.
 
-`server.authorization.policies` configures shared human access policies. Each policy resolves a caller to exactly one role by matching either `subjectID` or `email`, then applies a `default` fallback (`allow` or `deny`) when no member matches. Plugins opt into a policy explicitly through `authorizationPolicy`.
+`authorization.policies` configures shared human access policies. Each policy resolves a caller to exactly one role by matching either `subjectID` or `email`, then applies a `default` fallback (`allow` or `deny`) when no member matches. Plugins opt into a policy explicitly through `authorizationPolicy`.
 
-`server.authorization.workloads` configures non-human workload callers. Each workload uses a dedicated bearer token with the `gst_wld_` prefix and a per-provider allowlist. In v1, workloads may bind only to `identity` or `none` providers. For `identity` providers, `connection` and `instance` resolve the exact stored identity credential the workload may use; `instance` defaults to `default` and `connection` falls back to the provider's default connection when omitted. For `none` providers, omit `connection` and `instance`.
+`authorization.workloads` configures non-human workload callers. Each workload uses a dedicated bearer token with the `gst_wld_` prefix and a per-provider allowlist. In v1, workloads may bind only to `identity` or `none` providers. For `identity` providers, `connection` and `instance` resolve the exact stored identity credential the workload may use; `instance` defaults to `default` and `connection` falls back to the provider's default connection when omitted. For `none` providers, omit `connection` and `instance`.
 
 | Field | Default | Description |
 | --- | --- | --- |
@@ -169,16 +174,17 @@ Both `google` and `oidc` use the same PluginDef provider reference shape under `
 | `env` | Extra environment variables passed to the provider process. |
 | `allowedHosts` | Network allowlist for sandboxed provider processes. |
 
-## `providers.indexeddbs`
+## `providers.indexeddb`
 
-Indexed databases are provider-based. Configure one or more named entries under `providers.indexeddbs`, then set `server.indexeddb` to the name the host should use for system storage. First-party indexeddb providers are published at `github.com/valon-technologies/gestalt-providers/indexeddb/<name>`.
+Indexed databases are provider-based. Configure one or more named entries under `providers.indexeddb`, then set `server.providers.indexeddb` to the name the host should use for system storage. First-party indexeddb providers are published at `github.com/valon-technologies/gestalt-providers/indexeddb/<name>`.
 
 ```yaml
 server:
-  indexeddb: main
+  providers:
+    indexeddb: main
 
 providers:
-  indexeddbs:
+  indexeddb:
     main:
       source:
         ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
@@ -187,7 +193,7 @@ providers:
         dsn: ${DATABASE_URL}
 ```
 
-The exact config fields depend on the selected external indexeddb provider package. Gestalt itself does not have a built-in indexeddb driver matrix; it loads the configured provider process and passes the selected `providers.indexeddbs.<name>.config` block through to that provider.
+The exact config fields depend on the selected external indexeddb provider package. Gestalt itself does not have a built-in indexeddb driver matrix; it loads the configured provider process and passes the selected `providers.indexeddb.<name>.config` block through to that provider.
 
 Common first-party IndexedDB packages:
 
@@ -428,34 +434,33 @@ providers:
 
 Disables audit output explicitly. `providers.audit.config` is not allowed when `providers.audit.source` is `noop`.
 
-## `providers.plugins`
+## `plugins`
 
-Each entry in the `providers.plugins` map is a named plugin backed by an executable provider package. The provider package is the source of truth for operations and transport details. Server config selects the provider, passes provider-specific config, and declares connection policy. The HTTP API route paths still use "integrations" (e.g. `/api/v1/integrations`) as stable code surface, but the CLI and config both use `plugins` as the canonical term.
+Each entry in the `plugins` map is a named plugin backed by an executable provider package. The provider package is the source of truth for operations and transport details. Server config selects the provider, passes provider-specific config, and declares connection policy. The HTTP API route paths still use "integrations" (e.g. `/api/v1/integrations`) as stable code surface, but the CLI and config both use `plugins` as the canonical term.
 
 ```yaml
-providers:
-  plugins:
-    github:
-      displayName: GitHub
-      description: Public GitHub operations
-      iconFile: ./icons/github.svg
-      authorizationPolicy: support_staff
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/github
-        version: 1.2.3
-      surfaces:
-        openapi:
-          baseUrl: https://api.github.com
-      connections:
-        default:
-          mode: user
-          auth:
-            type: oauth2
-      allowedOperations:
-        repos.get:
-          alias: get_repo
-          allowedRoles:
-            - admin
+plugins:
+  github:
+    displayName: GitHub
+    description: Public GitHub operations
+    iconFile: ./icons/github.svg
+    authorizationPolicy: support_staff
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/github
+      version: 1.2.3
+    surfaces:
+      openapi:
+        baseUrl: https://api.github.com
+    connections:
+      default:
+        mode: user
+        auth:
+          type: oauth2
+    allowedOperations:
+      repos.get:
+        alias: get_repo
+        allowedRoles:
+          - admin
 ```
 
 ### Plugin Fields
@@ -465,15 +470,15 @@ providers:
 | `displayName` | Human-readable name shown in the UI and API. |
 | `description` | Short description of the plugin. |
 | `iconFile` | SVG icon path, resolved relative to the config directory. |
-| `authorizationPolicy` | Optional shared human access policy from `server.authorization.policies`. When set, host-side operation filtering and execution checks use the resolved role for this plugin. |
-| `source` | **Required.** The backing provider source. See [source shape](#providerspluginssource) below. |
+| `authorizationPolicy` | Optional shared human access policy from `authorization.policies`. When set, host-side operation filtering and execution checks use the resolved role for this plugin. |
+| `source` | **Required.** The backing provider source. See [source shape](#pluginssource) below. |
 | `config` | Provider-specific configuration passed into the provider package. |
 | `surfaces` | Typed host-side overrides for manifest-declared surfaces, such as `surfaces.openapi.baseUrl` or `surfaces.graphql.url`. |
 | `connections` | Named connection declarations. See [connections](#connections) below. |
 | `allowedOperations` | Allowlist with optional `alias`, `description`, and `allowedRoles` overrides per operation. |
-| `indexeddbs` | Optional list of named `providers.indexeddbs` bindings exposed to the executable plugin through the SDK transport. Store names are automatically prefixed per plugin. A single binding also populates the default IndexedDB SDK env var for compatibility. |
+| `indexeddbs` | Optional list of named `providers.indexeddb` bindings exposed to the executable plugin through the SDK transport. Store names are automatically prefixed per plugin. A single binding also populates the default IndexedDB SDK env var for compatibility. |
 
-### `providers.plugins.*.source`
+### `plugins.*.source`
 
 Every plugin uses a `source` block to declare its backing provider.
 
@@ -707,17 +712,16 @@ server:
   egress:
     defaultAction: deny
 
-providers:
-  plugins:
-    github:
-      allowedHosts:
-        - api.github.com
-        - "*.github.com"
-    my-plugin:
-      source:
-        path: ./plugins/my-plugin
-      allowedHosts:
-        - external-api.com
+plugins:
+  github:
+    allowedHosts:
+      - api.github.com
+      - "*.github.com"
+  my-plugin:
+    source:
+      path: ./plugins/my-plugin
+    allowedHosts:
+      - external-api.com
 ```
 
 | Field | Description |
@@ -759,7 +763,7 @@ Structural validation runs at config load time (`init`, `validate`, `serve`). Ru
 
 Each plugin uses a `source` block. Every plugin must use exactly one loading mode: local `source.path` or managed `source.ref`. `source.version` is required with `source.ref` and invalid with `source.path`.
 
-Auth providers and indexeddb entries use the same external provider shape. When `providers.auth` or `providers.indexeddbs.<name>` is set, `source.ref` or `source.path` must be present. `providers.auth.config` and `providers.indexeddbs.<name>.config` are only allowed when their corresponding source is set.
+Auth providers and indexeddb entries use the same external provider shape. When `providers.auth` or `providers.indexeddb.<name>` is set, `source.ref` or `source.path` must be present. `providers.auth.config` and `providers.indexeddb.<name>.config` are only allowed when their corresponding source is set.
 
 Only `connections.default` may define `params` or `discovery`. All connections in a plugin must share the same mode.
 
@@ -769,10 +773,10 @@ Mounted UI bundles are served on the public listener only. The built-in admin UI
 
 `server.egress.defaultAction` must be `allow` or `deny`.
 
-`server.authorization.policies.<name>.default` must be `allow` or `deny` when set. Each policy member must set exactly one of `subjectID` or `email`, and every member must set a non-empty `role`.
+`authorization.policies.<name>.default` must be `allow` or `deny` when set. Each policy member must set exactly one of `subjectID` or `email`, and every member must set a non-empty `role`.
 
 Server listener ports must be greater than zero. When `server.management` is configured, it must differ from `server.public`.
 
 ### Runtime
 
-`server.indexeddb`, `providers.indexeddbs`, and `server.encryptionKey` are required at `serve` time. `providers.auth` is optional.
+`server.providers.indexeddb`, `providers.indexeddb`, and `server.encryptionKey` are required at `serve` time. `providers.auth` is optional.

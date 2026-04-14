@@ -42,6 +42,9 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 	if err := resolveStringFields(&cfg.Server, resolve); err != nil {
 		return err
 	}
+	if err := resolveStringFields(&cfg.Authorization, resolve); err != nil {
+		return err
+	}
 	for name, entry := range cfg.Plugins {
 		if entry == nil {
 			continue
@@ -104,6 +107,9 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 			return err
 		}
 		cfg.Providers.IndexedDB[name] = ds
+	}
+	if err := config.NormalizeCompatibility(cfg); err != nil {
+		return err
 	}
 
 	return nil

@@ -4,13 +4,14 @@ Gestalt is configured from a single YAML file. This page covers the key concepts
 
 ## Config file structure
 
-A Gestalt config has two top-level keys: `server` for host settings and `providers` for all pluggable components.
+A Gestalt config has four top-level keys: `server` for host settings, `authorization` for shared human/workload access policy, `providers` for pluggable host components, and `plugins` for executable integrations.
 
 ```yaml
 server:
   encryptionKey: ...        # required, root deployment secret
   baseUrl: ...              # public URL for OAuth callbacks
-  indexeddb: ...            # name of the active storage provider
+  providers:
+    indexeddb: ...          # selected storage provider
   public:                   # public listener (default port 8080)
     host: ...
     port: ...
@@ -26,10 +27,11 @@ providers:
   telemetry: ...            # metrics and tracing (default: stdout)
   audit: ...                # audit log routing (default: inherit)
   ui: ...                   # web UI bundle (ProviderEntry)
-  plugins:                  # named plugin providers
+  indexeddb:                # named storage providers
     <name>: ...             # each is a ProviderEntry
-  indexeddbs:               # named storage providers
-    <name>: ...             # each is a ProviderEntry
+
+plugins:
+  <name>: ...               # each is a ProviderEntry
 ```
 
 Each provider entry accepts `source` (where to load it from), `config` (provider-specific settings), `disabled`, `allowedHosts`, `connections`, and optional metadata fields. See the [Config File](/reference/config-file) reference for every field.
@@ -47,19 +49,18 @@ Gestalt has six core concepts you configure in YAML:
 
 ## Adding a plugin
 
-Each entry under `providers.plugins` registers a plugin backed by a provider package:
+Each entry under `plugins` registers a plugin backed by a provider package:
 
 ```yaml
-providers:
-  plugins:
-    github:
-      displayName: GitHub
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/plugins/github
-        version: 0.0.1-alpha.1
-      surfaces:
-        openapi:
-          baseUrl: https://api.github.com
+plugins:
+  github:
+    displayName: GitHub
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/plugins/github
+      version: 0.0.1-alpha.1
+    surfaces:
+      openapi:
+        baseUrl: https://api.github.com
 ```
 
 `source.ref` points at a published provider package. Gestalt resolves and downloads it on startup. First-party providers are published to `github.com/valon-technologies/gestalt-providers/`.
@@ -67,11 +68,10 @@ providers:
 During development, point at a local provider manifest instead:
 
 ```yaml
-providers:
-  plugins:
-    support:
-      source:
-        path: ./plugins/support/manifest.yaml
+plugins:
+  support:
+    source:
+      path: ./plugins/support/manifest.yaml
 ```
 
 See [Custom Providers](/custom-providers) if you need to build your own.
@@ -81,17 +81,16 @@ See [Custom Providers](/custom-providers) if you need to build your own.
 A provider package may expose a large catalog. Use `allowedOperations` to publish only the subset you want:
 
 ```yaml
-providers:
-  plugins:
-    support:
-      source:
-        ref: github.com/acme/providers/support
-        version: 2.4.0
-      allowedOperations:
-        tickets.list:
-          alias: list_tickets
-        tickets.get:
-          alias: get_ticket
+plugins:
+  support:
+    source:
+      ref: github.com/acme/providers/support
+      version: 2.4.0
+    allowedOperations:
+      tickets.list:
+        alias: list_tickets
+      tickets.get:
+        alias: get_ticket
 ```
 
 Each entry can set an `alias` to rename the operation as it appears to callers.
@@ -101,15 +100,14 @@ Each entry can set an `alias` to rename the operation as it appears to callers.
 Every provider supports `allowedHosts` to restrict which upstream hosts it can reach. When `server.egress.defaultAction` is `deny`, providers without an explicit allowlist are blocked from all outbound requests. Executable plugin providers are additionally sandboxed at the OS level when egress restrictions are active.
 
 ```yaml
-providers:
-  plugins:
-    example:
-      source:
-        ref: github.com/acme/providers/example
-        version: 1.0.0
-      allowedHosts:
-        - api.example.com
-        - cdn.example.com
+plugins:
+  example:
+    source:
+      ref: github.com/acme/providers/example
+      version: 1.0.0
+    allowedHosts:
+      - api.example.com
+      - cdn.example.com
 ```
 
 ## Connecting to upstream APIs
@@ -117,14 +115,13 @@ providers:
 Connections define how Gestalt authenticates to upstream services on behalf of callers. Each plugin declares its connections under `connections:`:
 
 ```yaml
-providers:
-  plugins:
-    github:
-      connections:
-        default:
-          mode: user
-          auth:
-            type: oauth2
+plugins:
+  github:
+    connections:
+      default:
+        mode: user
+        auth:
+          type: oauth2
 ```
 
 ### Connection modes
@@ -153,15 +150,14 @@ Plugins that use `oauth2` connections typically require you to register an OAuth
 For example, the GitHub plugin requires OAuth app credentials from the [GitHub Developer Settings](https://github.com/settings/developers):
 
 ```yaml
-providers:
-  plugins:
-    github:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/plugins/github
-        version: 0.0.1
-      config:
-        clientId: ${GITHUB_CLIENT_ID}
-        clientSecret: secret://github-client-secret
+plugins:
+  github:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/plugins/github
+      version: 0.0.1
+    config:
+      clientId: ${GITHUB_CLIENT_ID}
+      clientSecret: secret://github-client-secret
 ```
 
 Not all providers need this. Some providers (like Slack) use OAuth flows that do not require operator-provided app credentials. Check the provider's documentation or config schema for required fields.
@@ -170,7 +166,7 @@ Not all providers need this. Some providers (like Slack) use OAuth flows that do
 
 `connections.default` is the common case. When a provider defines more than one connection, callers pass `_connection` and `_instance` through the [HTTP API](/reference/http-api) to select which stored credential to use. Connection parameters (`params`) and post-connect discovery are only supported on `connections.default`.
 
-Gestalt stores upstream credentials keyed by user, plugin name, connection name, and instance. Renaming a plugin key under `providers.plugins` is a breaking change for stored connections.
+Gestalt stores upstream credentials keyed by user, plugin name, connection name, and instance. Renaming a plugin key under `plugins` is a breaking change for stored connections.
 
 ## Exposing over MCP
 
@@ -257,14 +253,15 @@ For programmatic access, Gestalt issues API tokens prefixed with `gst_api_`. The
 
 ## Configuring storage
 
-The `providers.indexeddbs` block declares storage providers. The `server.indexeddb` field selects which one Gestalt uses:
+The `providers.indexeddb` block declares storage providers. `server.providers.indexeddb` selects which one Gestalt uses:
 
 ```yaml
 server:
-  indexeddb: main
+  providers:
+    indexeddb: main
 
 providers:
-  indexeddbs:
+  indexeddb:
     main:
       source:
         ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
@@ -319,7 +316,7 @@ gestaltd validate --config ./config.yaml
 
 ### Defaults and required fields
 
-Gestalt defaults `server.public.port` to `8080`, `providers.secrets` to `env`, and `providers.telemetry` to `stdout`. The required fields are `providers.indexeddbs`, `server.indexeddb`, and `server.encryptionKey`. Platform auth is optional.
+Gestalt defaults `server.public.port` to `8080`, `providers.secrets` to `env`, and `providers.telemetry` to `stdout`. The required fields are `providers.indexeddb`, `server.providers.indexeddb`, and `server.encryptionKey`. Platform auth is optional.
 
 `server.encryptionKey` is the root deployment secret. Gestalt derives token encryption and session material from it. Changing this key invalidates all existing sessions and tokens, so treat it as a meaningful deployment event.
 
