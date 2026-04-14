@@ -367,6 +367,9 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	hostFileAPIs := make(map[string]fileapi.FileAPI, len(cfg.Providers.FileAPI))
 	var extraFileAPIs []fileapi.FileAPI
 	for name, entry := range cfg.Providers.FileAPI {
+		if entry != nil && entry.Disabled {
+			continue
+		}
 		api, err := buildFileAPI(name, entry, factories)
 		if err != nil {
 			_ = svc.Close()

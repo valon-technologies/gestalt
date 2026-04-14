@@ -119,9 +119,7 @@ export function isFileAPIProvider(value: unknown): value is FileAPIProvider {
   const requiredMethods = [
     "resolveName",
     "configureProvider",
-    "runtimeMetadata",
     "supportsHealthCheck",
-    "healthCheck",
     "warnings",
     "closeProvider",
     "createBlob",

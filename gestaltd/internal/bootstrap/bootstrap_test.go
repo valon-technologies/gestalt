@@ -305,6 +305,23 @@ func TestBootstrap(t *testing.T) {
 	})
 }
 
+func TestBootstrapSkipsDisabledFileAPIProviders(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.FileAPI = map[string]*config.ProviderEntry{
+		"disabled": {Disabled: true},
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, validFactories())
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	t.Cleanup(func() { _ = result.Close(context.Background()) })
+
+	<-result.ProvidersReady
+}
+
 func TestResultCloseClosesAuthProvider(t *testing.T) {
 	t.Parallel()
 
