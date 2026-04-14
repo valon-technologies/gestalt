@@ -577,6 +577,39 @@ func componentDestDir(paths initPaths, kind config.HostProviderKind, name string
 	}
 }
 
+type preparedInstall struct {
+	manifestPath   string
+	executablePath string
+	assetRootPath  string
+	manifest       *providermanifestv1.Manifest
+}
+
+func inspectPreparedInstall(destDir string) (*preparedInstall, error) {
+	manifestPath, err := providerpkg.FindManifestFile(destDir)
+	if err != nil {
+		return nil, err
+	}
+	_, manifest, err := providerpkg.ReadManifestFile(manifestPath)
+	if err != nil {
+		return nil, err
+	}
+
+	install := &preparedInstall{
+		manifestPath: manifestPath,
+		manifest:     manifest,
+	}
+	if entry := providerpkg.EntrypointForKind(manifest, ""); entry != nil {
+		if strings.TrimSpace(entry.ArtifactPath) == "" {
+			return nil, fmt.Errorf("manifest entrypoint artifact_path is required")
+		}
+		install.executablePath = filepath.Join(destDir, filepath.FromSlash(entry.ArtifactPath))
+	}
+	if manifest != nil && manifest.Spec != nil && strings.TrimSpace(manifest.Spec.AssetRoot) != "" {
+		install.assetRootPath = filepath.Join(destDir, filepath.FromSlash(manifest.Spec.AssetRoot))
+	}
+	return install, nil
+}
+
 func providerManifestKind(kind config.HostProviderKind) string {
 	switch kind {
 	case config.HostProviderKindAuth:
@@ -664,7 +697,7 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 			continue
 		}
 		lockEntry, found := lock.Providers[name]
-		if !lockEntryMatches(paths, name, entry, lockEntry, found) {
+		if !lockEntryMatches(paths, name, entry, lockEntry, found, providerDestDir(paths, name)) {
 			return false
 		}
 	}
@@ -675,7 +708,7 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 				continue
 			}
 			lockEntry, found := lockEntries[name]
-			if !lockEntryMatches(paths, name, entry, lockEntry, found) {
+			if !lockEntryMatches(paths, name, entry, lockEntry, found, componentDestDir(paths, collection.kind, name)) {
 				return false
 			}
 		}
@@ -685,7 +718,7 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 			continue
 		}
 		lockEntry, found := lock.IndexedDBs[name]
-		if !lockEntryMatches(paths, name, entry, lockEntry, found) {
+		if !lockEntryMatches(paths, name, entry, lockEntry, found, indexeddbDestDir(paths, name)) {
 			return false
 		}
 	}
@@ -701,12 +734,17 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 		if err != nil || lockEntry.Fingerprint != fingerprint {
 			return false
 		}
-		manifestPath := resolveLockPath(paths.artifactsDir, lockEntry.Manifest)
-		if _, err := os.Stat(manifestPath); err != nil {
+		install, err := inspectPreparedInstall(uiDestDir(paths, name))
+		if err != nil {
 			return false
 		}
-		assetRootPath := resolveLockPath(paths.artifactsDir, lockEntry.AssetRoot)
-		if _, err := os.Stat(assetRootPath); err != nil {
+		if !preparedManifestMatchesLock(lockEntry, install.manifest) {
+			return false
+		}
+		if install.assetRootPath == "" {
+			return false
+		}
+		if _, err := os.Stat(install.assetRootPath); err != nil {
 			return false
 		}
 	}
@@ -736,7 +774,7 @@ func NamedUIProviderFingerprint(name string, entry *config.ProviderEntry) (strin
 	return ProviderFingerprint("ui:"+name, entry, "")
 }
 
-func lockEntryMatches(paths initPaths, name string, providerEntry *config.ProviderEntry, entry LockEntry, found bool) bool {
+func lockEntryMatches(paths initPaths, name string, providerEntry *config.ProviderEntry, entry LockEntry, found bool, destDir string) bool {
 	if !found {
 		return false
 	}
@@ -753,13 +791,15 @@ func lockEntryMatches(paths initPaths, name string, providerEntry *config.Provid
 			return false
 		}
 	}
-	manifestPath := resolveLockPath(paths.artifactsDir, entry.Manifest)
-	if _, err := os.Stat(manifestPath); err != nil {
+	install, err := inspectPreparedInstall(destDir)
+	if err != nil {
 		return false
 	}
-	if entry.Executable != "" {
-		executablePath := resolveLockPath(paths.artifactsDir, entry.Executable)
-		if _, err := os.Stat(executablePath); err != nil {
+	if !preparedManifestMatchesLock(entry, install.manifest) {
+		return false
+	}
+	if install.executablePath != "" {
+		if _, err := os.Stat(install.executablePath); err != nil {
 			return false
 		}
 	}
@@ -1253,18 +1293,20 @@ func synthesizeLockedSourcePluginOwnedUIEntries(cfg *config.Config, paths initPa
 			continue
 		}
 		lockEntry, ok := lock.Providers[pluginName]
-		if !ok || strings.TrimSpace(lockEntry.Manifest) == "" {
+		if !ok {
 			continue
 		}
-		manifestPath := resolveLockPath(paths.artifactsDir, lockEntry.Manifest)
-		_, manifest, err := providerpkg.ReadManifestFile(manifestPath)
+		install, err := inspectPreparedInstall(providerDestDir(paths, pluginName))
 		if err != nil {
 			return added, fmt.Errorf("prepare manifest for provider %q: %w", pluginName, err)
 		}
-		if manifest == nil || manifest.Spec == nil || manifest.Spec.UI == nil {
+		if !preparedManifestMatchesLock(lockEntry, install.manifest) {
+			return added, fmt.Errorf("prepared manifest for provider %q is missing or stale", pluginName)
+		}
+		if install.manifest == nil || install.manifest.Spec == nil || install.manifest.Spec.UI == nil {
 			continue
 		}
-		entry, err := ownedUIEntryFromManifest(manifestPath, manifest.Version, manifest.Spec.UI)
+		entry, err := ownedUIEntryFromManifest(install.manifestPath, install.manifest.Version, install.manifest.Spec.UI)
 		if err != nil {
 			return added, fmt.Errorf("plugin %q ui: %w", pluginName, err)
 		}
@@ -1383,23 +1425,13 @@ func (l *Lifecycle) applyConfiguredUIProvider(paths initPaths, lockEntry *LockUI
 		if err != nil || lockEntry.Fingerprint != fingerprint {
 			return "", fmt.Errorf("prepared artifact for %s is missing or stale; run `gestaltd init --config %s`", subject, paths.configPath)
 		}
-		manifestPath := resolveLockPath(paths.artifactsDir, lockEntry.Manifest)
-		assetRootPath := resolveLockPath(paths.artifactsDir, lockEntry.AssetRoot)
-		needMaterialize := false
-		if _, err := os.Stat(manifestPath); err != nil {
+		install, err := inspectPreparedInstall(destDir)
+		needMaterialize := err != nil || !preparedManifestMatchesLock(*lockEntry, install.manifest)
+		if !needMaterialize && install.assetRootPath == "" {
 			needMaterialize = true
 		}
 		if !needMaterialize {
-			if _, err := os.Stat(assetRootPath); err != nil {
-				needMaterialize = true
-			}
-		}
-		if !needMaterialize {
-			_, manifest, err := providerpkg.ReadManifestFile(manifestPath)
-			if err != nil {
-				return "", fmt.Errorf("read prepared manifest for %s: %w", subject, err)
-			}
-			if !preparedManifestMatchesLock(*lockEntry, manifest) {
+			if _, err := os.Stat(install.assetRootPath); err != nil {
 				needMaterialize = true
 			}
 		}
@@ -1407,21 +1439,21 @@ func (l *Lifecycle) applyConfiguredUIProvider(paths initPaths, lockEntry *LockUI
 			if err := l.materializeLockedUIProvider(context.Background(), paths, provider, *lockEntry, destDir, locked); err != nil {
 				return "", err
 			}
+			install, err = inspectPreparedInstall(destDir)
+			if err != nil {
+				return "", fmt.Errorf("read prepared manifest for %s: %w", subject, err)
+			}
 		}
-		if _, err := os.Stat(manifestPath); err != nil {
-			return "", fmt.Errorf("prepared manifest for %s not found at %s", subject, manifestPath)
+		if install.assetRootPath == "" {
+			return "", fmt.Errorf("prepared asset root for %s not found in %s", subject, destDir)
 		}
-		if _, err := os.Stat(assetRootPath); err != nil {
-			return "", fmt.Errorf("prepared asset root for %s not found at %s", subject, assetRootPath)
+		if _, err := os.Stat(install.assetRootPath); err != nil {
+			return "", fmt.Errorf("prepared asset root for %s not found at %s", subject, install.assetRootPath)
 		}
-		_, manifest, err := providerpkg.ReadManifestFile(manifestPath)
-		if err != nil {
-			return "", fmt.Errorf("read prepared manifest for %s: %w", subject, err)
-		}
-		if err := bindResolvedUIManifest(provider, manifestPath, manifest, configMap); err != nil {
+		if err := bindResolvedUIManifest(provider, install.manifestPath, install.manifest, configMap); err != nil {
 			return "", err
 		}
-		return assetRootPath, nil
+		return install.assetRootPath, nil
 	case provider.HasLocalSource():
 		var resolvedAssetRoot string
 		if err := applyLocalUIManifest(provider, configMap, &resolvedAssetRoot); err != nil {
@@ -1567,23 +1599,11 @@ func (l *Lifecycle) applyLockedProviderEntry(paths initPaths, lock *Lockfile, na
 		return fmt.Errorf("prepared artifact for provider %q is missing or stale; run `gestaltd init --config %s`", name, paths.configPath)
 	}
 
-	manifestPath := resolveLockPath(paths.artifactsDir, entry.Manifest)
-	executablePath := resolveLockPath(paths.artifactsDir, entry.Executable)
-	needMaterialize := false
-	if _, err := os.Stat(manifestPath); err != nil {
-		needMaterialize = true
-	}
-	if !needMaterialize && entry.Executable != "" {
-		if _, err := os.Stat(executablePath); err != nil {
-			needMaterialize = true
-		}
-	}
-	if !needMaterialize {
-		_, manifest, err := providerpkg.ReadManifestFile(manifestPath)
-		if err != nil {
-			return fmt.Errorf("read prepared manifest for provider %q: %w", name, err)
-		}
-		if !preparedManifestMatchesLock(entry, manifest) {
+	destDir := providerDestDir(paths, name)
+	install, err := inspectPreparedInstall(destDir)
+	needMaterialize := err != nil || !preparedManifestMatchesLock(entry, install.manifest)
+	if !needMaterialize && install.executablePath != "" {
+		if _, err := os.Stat(install.executablePath); err != nil {
 			needMaterialize = true
 		}
 	}
@@ -1591,27 +1611,23 @@ func (l *Lifecycle) applyLockedProviderEntry(paths initPaths, lock *Lockfile, na
 		if err := l.materializeLockedProvider(context.Background(), paths, name, plugin, entry, locked); err != nil {
 			return err
 		}
+		install, err = inspectPreparedInstall(destDir)
+		if err != nil {
+			return fmt.Errorf("read prepared manifest for provider %q: %w", name, err)
+		}
 	}
-	if _, err := os.Stat(manifestPath); err != nil {
-		return fmt.Errorf("prepared manifest for provider %q not found at %s; run `gestaltd init --config %s`", name, manifestPath, paths.configPath)
-	}
-
-	_, manifest, err := providerpkg.ReadManifestFile(manifestPath)
-	if err != nil {
-		return fmt.Errorf("read prepared manifest for provider %q: %w", name, err)
-	}
-	if err := bindResolvedProviderManifest(name, plugin, manifestPath, manifest, configMap); err != nil {
+	if err := bindResolvedProviderManifest(name, plugin, install.manifestPath, install.manifest, configMap); err != nil {
 		return err
 	}
-	if entry.Executable != "" {
-		if _, err := os.Stat(executablePath); err != nil {
-			return fmt.Errorf("prepared executable for provider %q not found at %s; run `gestaltd init --config %s`", name, executablePath, paths.configPath)
+	if install.executablePath != "" {
+		if _, err := os.Stat(install.executablePath); err != nil {
+			return fmt.Errorf("prepared executable for provider %q not found at %s; run `gestaltd init --config %s`", name, install.executablePath, paths.configPath)
 		}
-		args, err := providerEntrypointArgs(manifest)
+		args, err := providerEntrypointArgs(install.manifest)
 		if err != nil {
 			return fmt.Errorf("resolve entrypoint for provider %q: %w", name, err)
 		}
-		plugin.Command = executablePath
+		plugin.Command = install.executablePath
 		plugin.Args = append([]string(nil), args...)
 	}
 	return nil
@@ -1629,23 +1645,13 @@ func (l *Lifecycle) applyLockedComponentEntry(paths initPaths, entry *LockEntry,
 		return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init --config %s`", kind, name, paths.configPath)
 	}
 
-	manifestPath := resolveLockPath(paths.artifactsDir, entry.Manifest)
-	executablePath := resolveLockPath(paths.artifactsDir, entry.Executable)
-	needMaterialize := false
-	if _, err := os.Stat(manifestPath); err != nil {
+	install, err := inspectPreparedInstall(destDir)
+	needMaterialize := err != nil || !preparedManifestMatchesLock(*entry, install.manifest)
+	if !needMaterialize && install.executablePath == "" {
 		needMaterialize = true
 	}
 	if !needMaterialize {
-		if _, err := os.Stat(executablePath); err != nil {
-			needMaterialize = true
-		}
-	}
-	if !needMaterialize {
-		_, manifest, err := providerpkg.ReadManifestFile(manifestPath)
-		if err != nil {
-			return fmt.Errorf("read prepared manifest for %s %q: %w", kind, name, err)
-		}
-		if !preparedManifestMatchesLock(*entry, manifest) {
+		if _, err := os.Stat(install.executablePath); err != nil {
 			needMaterialize = true
 		}
 	}
@@ -1653,26 +1659,25 @@ func (l *Lifecycle) applyLockedComponentEntry(paths initPaths, entry *LockEntry,
 		if err := l.materializeLockedComponent(context.Background(), paths, kind, name, plugin, *entry, destDir, locked); err != nil {
 			return err
 		}
+		install, err = inspectPreparedInstall(destDir)
+		if err != nil {
+			return fmt.Errorf("read prepared manifest for %s %q: %w", kind, name, err)
+		}
 	}
-	if _, err := os.Stat(manifestPath); err != nil {
-		return fmt.Errorf("prepared manifest for %s %q not found at %s; run `gestaltd init --config %s`", kind, name, manifestPath, paths.configPath)
+	if install.executablePath == "" {
+		return fmt.Errorf("prepared executable for %s %q not found in %s; run `gestaltd init --config %s`", kind, name, destDir, paths.configPath)
 	}
-
-	_, manifest, err := providerpkg.ReadManifestFile(manifestPath)
-	if err != nil {
-		return fmt.Errorf("read prepared manifest for %s %q: %w", kind, name, err)
-	}
-	if err := bindResolvedComponentManifest(kind, name, plugin, manifestPath, manifest, configMap); err != nil {
+	if err := bindResolvedComponentManifest(kind, name, plugin, install.manifestPath, install.manifest, configMap); err != nil {
 		return err
 	}
-	if _, err := os.Stat(executablePath); err != nil {
-		return fmt.Errorf("prepared executable for %s %q not found at %s; run `gestaltd init --config %s`", kind, name, executablePath, paths.configPath)
+	if _, err := os.Stat(install.executablePath); err != nil {
+		return fmt.Errorf("prepared executable for %s %q not found at %s; run `gestaltd init --config %s`", kind, name, install.executablePath, paths.configPath)
 	}
-	args, err := componentEntrypointArgs(manifest, kind)
+	args, err := componentEntrypointArgs(install.manifest, kind)
 	if err != nil {
 		return fmt.Errorf("resolve entrypoint for %s %q: %w", kind, name, err)
 	}
-	plugin.Command = executablePath
+	plugin.Command = install.executablePath
 	plugin.Args = append([]string(nil), args...)
 	return nil
 }
