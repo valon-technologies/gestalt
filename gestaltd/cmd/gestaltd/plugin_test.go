@@ -2033,6 +2033,42 @@ func pythonReleaseOtherPlatform() (string, string) {
 	return "linux", "amd64"
 }
 
+func TestExpandReleasePlatformValue_AllIncludesLinuxArm(t *testing.T) {
+	t.Parallel()
+
+	got, err := expandReleasePlatformValue(allPlatformsValue)
+	if err != nil {
+		t.Fatalf("expandReleasePlatformValue(%q): %v", allPlatformsValue, err)
+	}
+	if got != defaultPlatforms {
+		t.Fatalf("expandReleasePlatformValue(%q) = %q, want %q", allPlatformsValue, got, defaultPlatforms)
+	}
+
+	platforms, err := parseReleasePlatforms(got)
+	if err != nil {
+		t.Fatalf("parseReleasePlatforms(%q): %v", got, err)
+	}
+
+	for _, want := range []releasePlatform{
+		{GOOS: "darwin", GOARCH: "amd64"},
+		{GOOS: "darwin", GOARCH: "arm64"},
+		{GOOS: "linux", GOARCH: "amd64"},
+		{GOOS: "linux", GOARCH: "arm"},
+		{GOOS: "linux", GOARCH: "arm64"},
+	} {
+		found := false
+		for _, platform := range platforms {
+			if platform == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expanded platforms = %#v, missing %+v", platforms, want)
+		}
+	}
+}
+
 func defaultReleasePlatformsForTest(t *testing.T) []releasePlatform {
 	t.Helper()
 
