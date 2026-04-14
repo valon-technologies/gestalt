@@ -31,7 +31,7 @@ The target is a relative file path with an optional export suffix. The runtime
 accepts:
 
 - `gestalt.provider` as `{ "kind": "...", "target": "./file.ts#export" }`
-- `gestalt.provider` as a string like `"plugin:./provider.ts#provider"` or `"auth:./auth.ts#provider"`
+- `gestalt.provider` as a string like `"plugin:./provider.ts#provider"` or `"cache:./cache.ts#provider"`
 - legacy integration-only `gestalt.plugin`
 
 Use `"plugin"` as the kind token for executable integration providers. The
@@ -96,10 +96,15 @@ Use `ok(body)` for normal responses and `response(status, body)` when a handler
 needs to set a non-200 status. Plain objects with `status` and `body` fields
 are treated as user data.
 
-Auth providers and secrets providers use dedicated helpers:
+Auth providers, cache providers, and secrets providers use dedicated helpers:
 
 ```ts
-import { defineAuthProvider, defineSecretsProvider } from "@valon-technologies/gestalt";
+import {
+  Cache,
+  defineAuthProvider,
+  defineCacheProvider,
+  defineSecretsProvider,
+} from "@valon-technologies/gestalt";
 ```
 
 ## Runtime and build entrypoints
@@ -113,7 +118,7 @@ gestalt-ts-runtime ROOT plugin:./provider.ts#provider
 Release build:
 
 ```sh
-gestalt-ts-build ROOT auth:./auth.ts#provider OUTPUT PROVIDER_NAME GOOS GOARCH
+gestalt-ts-build ROOT cache:./cache.ts#provider OUTPUT PROVIDER_NAME GOOS GOARCH
 ```
 
 The build entrypoint compiles a standalone executable with Bun and bundles the

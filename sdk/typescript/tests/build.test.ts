@@ -7,8 +7,10 @@ import { EmptySchema } from "@bufbuild/protobuf/wkt";
 import { expect, test } from "bun:test";
 
 import { AuthProvider as AuthProviderService, BeginLoginRequestSchema } from "../gen/v1/auth_pb.ts";
+import { Cache as CacheService } from "../gen/v1/cache_pb.ts";
 import { ConfigureProviderRequestSchema, ProviderKind as ProtoProviderKind, ProviderLifecycle } from "../gen/v1/runtime_pb.ts";
 import { buildProviderBinary, bunTarget, parseBuildArgs } from "../src/build.ts";
+import { Cache, cacheSocketEnv } from "../src/cache.ts";
 import { CURRENT_PROTOCOL_VERSION, ENV_PROVIDER_SOCKET } from "../src/runtime.ts";
 import {
   createUnixGrpcClient,
@@ -103,7 +105,131 @@ test("buildProviderBinary compiles a runnable auth provider executable", async (
     }
     removeTempDir(tempDir);
   }
-});
+}, 15_000);
+
+test("buildProviderBinary compiles a runnable cache provider executable", async () => {
+  const { goos, goarch, executableSuffix } = hostTarget();
+  const tempDir = makeTempDir("gts-cache-");
+  const outputPath = join(tempDir, `fixture-cache${executableSuffix}`);
+  const socketPath = join(tempDir, "p.sock");
+  const previousDefaultSocket = process.env.GESTALT_CACHE_SOCKET;
+  const previousNamedSocket = process.env[cacheSocketEnv("named")];
+  let child: ChildProcess | undefined;
+  let stderr = "";
+
+  try {
+    buildProviderBinary({
+      root: fixturePath("cache-provider"),
+      target: "cache:./cache.ts#provider",
+      outputPath,
+      providerName: "fixture-cache-built",
+      goos,
+      goarch,
+    });
+
+    expect(existsSync(outputPath)).toBe(true);
+
+    child = spawn(outputPath, [], {
+      env: {
+        ...process.env,
+        [ENV_PROVIDER_SOCKET]: socketPath,
+      },
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    child.stderr?.setEncoding("utf8");
+    child.stderr?.on("data", (chunk: string) => {
+      stderr += chunk;
+    });
+
+    try {
+      await waitForPath(socketPath);
+    } catch (error) {
+      throw new Error(`${String(error)}${stderr ? `\n${stderr}` : ""}`);
+    }
+
+    const runtime = createUnixGrpcClient(ProviderLifecycle, socketPath);
+    const rawCache = createUnixGrpcClient(CacheService, socketPath);
+
+    const metadata = await runtime.getProviderIdentity(create(EmptySchema, {}));
+    expect(metadata.kind).toBe(ProtoProviderKind.CACHE);
+    expect(metadata.name).toBe("fixture-cache-built");
+
+    await runtime.configureProvider(
+      create(ConfigureProviderRequestSchema, {
+        name: "fixture-cache-built",
+        config: {
+          prefix: "binary",
+        },
+        protocolVersion: CURRENT_PROTOCOL_VERSION,
+      }),
+    );
+
+    process.env.GESTALT_CACHE_SOCKET = socketPath;
+    process.env[cacheSocketEnv("named")] = socketPath;
+
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
+    const cache = new Cache();
+    const namedCache = new Cache("named");
+
+    await cache.set("alpha", encoder.encode("one"), {
+      ttlMs: 1_500,
+    });
+    await namedCache.setMany([
+      { key: "beta", value: encoder.encode("two") },
+      { key: "gamma", value: encoder.encode("three") },
+      { key: "toString", value: encoder.encode("reserved") },
+      { key: "__proto__", value: encoder.encode("proto") },
+    ]);
+
+    expect(decoder.decode((await cache.get("alpha"))!)).toBe("one");
+    expect(
+      Object.fromEntries(
+        Object.entries(await namedCache.getMany(["alpha", "missing", "gamma"])).map(
+          ([key, value]) => [key, decoder.decode(value)],
+        ),
+      ),
+    ).toEqual({
+      alpha: "one",
+      gamma: "three",
+    });
+    const reserved = await namedCache.getMany(["toString", "__proto__", "missing"]);
+    expect(Object.keys(reserved).sort()).toEqual(["__proto__", "toString"]);
+    expect(decoder.decode(reserved["toString"]!)).toBe("reserved");
+    expect(decoder.decode(reserved["__proto__"]!)).toBe("proto");
+    expect(await cache.touch("gamma", 2_500)).toBe(true);
+    expect(await cache.delete("beta")).toBe(true);
+    expect(
+      await namedCache.deleteMany(["alpha", "missing", "gamma", "toString", "__proto__"]),
+    ).toBe(4);
+
+    const remaining = await rawCache.getMany({
+      keys: ["alpha", "beta", "gamma", "toString", "__proto__"],
+    });
+    expect(remaining.entries.map((entry) => entry.found)).toEqual([
+      false,
+      false,
+      false,
+      false,
+      false,
+    ]);
+  } finally {
+    if (previousDefaultSocket === undefined) {
+      delete process.env.GESTALT_CACHE_SOCKET;
+    } else {
+      process.env.GESTALT_CACHE_SOCKET = previousDefaultSocket;
+    }
+    if (previousNamedSocket === undefined) {
+      delete process.env[cacheSocketEnv("named")];
+    } else {
+      process.env[cacheSocketEnv("named")] = previousNamedSocket;
+    }
+    if (child) {
+      await stopProcess(child);
+    }
+    removeTempDir(tempDir);
+  }
+}, 15_000);
 
 async function stopProcess(child: ChildProcess): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) {

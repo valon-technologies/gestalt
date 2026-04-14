@@ -1,0 +1,240 @@
+import { Tabs } from 'nextra/components'
+
+# Cache
+
+This page covers building custom cache providers. If you only need to bind a
+cache into a plugin, use [Providers > Cache](/providers/cache).
+
+Cache providers expose a small portable interface for cache-oriented backends
+such as Redis, Valkey, Memcached-style services, or in-memory implementations.
+The contract is intentionally narrower than IndexedDB: opaque byte values,
+relative TTLs, batch helpers, delete, and touch.
+
+## Manifest
+
+A cache provider manifest declares `kind: cache`:
+
+```yaml
+kind: cache
+source: github.com/valon-technologies/gestalt-providers/cache/redis
+version: 0.0.1
+displayName: Redis Cache
+description: Cache provider backed by Redis or Valkey.
+spec:
+  configSchemaPath: ./cache_config.json
+```
+
+## Provider interface
+
+The Cache service includes:
+
+| Method | Purpose |
+| --- | --- |
+| `Get` | Read a value by key |
+| `GetMany` | Read multiple keys in one request |
+| `Set` | Write a value with optional TTL |
+| `SetMany` | Write multiple values with one TTL policy |
+| `Delete` | Remove one key |
+| `DeleteMany` | Remove multiple keys |
+| `Touch` | Refresh TTL for an existing key |
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    package rediscache
+
+    import (
+        "context"
+        "time"
+
+        gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    )
+
+    type Provider struct{}
+
+    func New() *Provider { return &Provider{} }
+
+    func (p *Provider) Configure(_ context.Context, _ string, config map[string]any) error {
+        return nil
+    }
+
+    func (p *Provider) Get(ctx context.Context, key string) ([]byte, bool, error) {
+        return nil, false, nil
+    }
+
+    func (p *Provider) Set(ctx context.Context, key string, value []byte, opts gestalt.CacheSetOptions) error {
+        _ = opts.TTL
+        return nil
+    }
+
+    func (p *Provider) Delete(ctx context.Context, key string) (bool, error) {
+        return false, nil
+    }
+
+    func (p *Provider) Touch(ctx context.Context, key string, ttl time.Duration) (bool, error) {
+        return false, nil
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    import datetime as dt
+
+    import gestalt
+
+    class RedisCache(gestalt.CacheProvider):
+        def get(self, key: str) -> bytes | None:
+            return None
+
+        def set(
+            self,
+            key: str,
+            value: bytes,
+            ttl: dt.timedelta | None = None,
+        ) -> None:
+            pass
+
+        def delete(self, key: str) -> bool:
+            return False
+
+        def touch(self, key: str, ttl: dt.timedelta) -> bool:
+            return False
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    #[derive(Default)]
+    struct RedisCache;
+
+    #[gestalt::async_trait]
+    impl gestalt::CacheProvider for RedisCache {
+        async fn get(&self, key: &str) -> gestalt::Result<Option<Vec<u8>>> {
+            let _ = key;
+            Ok(None)
+        }
+
+        async fn set(
+            &self,
+            key: &str,
+            value: &[u8],
+            options: gestalt::CacheSetOptions,
+        ) -> gestalt::Result<()> {
+            let _ = (key, value, options.ttl);
+            Ok(())
+        }
+
+        async fn delete(&self, key: &str) -> gestalt::Result<bool> {
+            let _ = key;
+            Ok(false)
+        }
+
+        async fn touch(&self, key: &str, ttl: std::time::Duration) -> gestalt::Result<bool> {
+            let _ = (key, ttl);
+            Ok(false)
+        }
+    }
+
+    gestalt::export_cache_provider!(constructor = RedisCache::default);
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import { defineCacheProvider } from "@valon-technologies/gestalt";
+
+    export const cache = defineCacheProvider({
+      async get(key) {
+        return undefined;
+      },
+
+      async set(key, value, options) {
+        void key;
+        void value;
+        void options?.ttlMs;
+      },
+
+      async delete(key) {
+        void key;
+        return false;
+      },
+
+      async touch(key, ttlMs) {
+        void key;
+        void ttlMs;
+        return false;
+      },
+    });
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+Python, Rust, and TypeScript cache providers inherit default implementations
+for `GetMany`, `SetMany`, and `DeleteMany`. Override the batch helpers only
+when the backing cache can do better than repeated single-key calls.
+
+## Plugin SDK
+
+Plugins consume bound caches through the language SDK. The host exposes a Unix
+socket for each requested cache binding.
+
+When a plugin binds exactly one cache, the host sets both:
+
+- `GESTALT_CACHE_SOCKET`
+- `GESTALT_CACHE_SOCKET_<NAME>`
+
+When a plugin binds multiple caches, only the named env vars are set.
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    cache, err := gestalt.Cache("")
+    if err != nil {
+        panic(err)
+    }
+    defer cache.Close()
+
+    if err := cache.Set(ctx, "session", []byte("alpha"), gestalt.CacheSetOptions{}); err != nil {
+        panic(err)
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    import datetime as dt
+    import gestalt
+
+    cache = gestalt.Cache("session")
+    cache.set("user:1", b"alpha", ttl=dt.timedelta(minutes=5))
+    value = cache.get("user:1")
+    cache.close()
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    let mut cache = gestalt::Cache::connect_named("session").await?;
+    cache
+        .set(
+            "user:1",
+            b"alpha",
+            gestalt::CacheSetOptions {
+                ttl: Some(std::time::Duration::from_secs(300)),
+            },
+        )
+        .await?;
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import { Cache } from "@valon-technologies/gestalt";
+
+    const cache = new Cache("session");
+    await cache.set("user:1", new TextEncoder().encode("alpha"), { ttlMs: 300_000 });
+    const value = await cache.get("user:1");
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+## Release flow
+
+Managed cache providers follow the same `gestaltd init` / lockfile / release
+flow as other source-backed provider kinds. Point a manifest at a published
+source ref, run `gestaltd init`, and package releases with `gestaltd provider release`.

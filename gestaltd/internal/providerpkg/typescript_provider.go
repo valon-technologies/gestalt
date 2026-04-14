@@ -23,6 +23,7 @@ const (
 	typeScriptProviderKey  = "provider"
 	typeScriptPluginKey    = "plugin"
 	typeScriptAuthKey      = "auth"
+	typeScriptCacheKey     = "cache"
 	typeScriptIndexedDBKey = "indexeddb"
 )
 
@@ -171,6 +172,8 @@ func typeScriptComponentKind(kind string) (string, error) {
 	switch kind {
 	case providermanifestv1.KindAuth:
 		return "auth", nil
+	case providermanifestv1.KindCache:
+		return "cache", nil
 	case providermanifestv1.KindIndexedDB:
 		return "indexeddb", nil
 	case providermanifestv1.KindSecrets:
@@ -186,6 +189,8 @@ func typeScriptLegacyTargetKey(kind string) (string, bool) {
 		return typeScriptPluginKey, true
 	case "auth":
 		return typeScriptAuthKey, true
+	case "cache":
+		return typeScriptCacheKey, true
 	case "indexeddb":
 		return typeScriptIndexedDBKey, true
 	default:
@@ -313,6 +318,8 @@ func normalizeTypeScriptProviderKind(value string) string {
 		return "integration"
 	case "auth":
 		return "auth"
+	case "cache":
+		return "cache"
 	case "indexeddb":
 		return "indexeddb"
 	case "secrets":

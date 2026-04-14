@@ -2,6 +2,7 @@ import datetime as dt
 from enum import Enum
 from typing import Any, Callable
 
+from ._cache import CacheEntry
 from .gen.v1 import auth_pb2 as _auth_pb2
 
 AuthenticatedUser: Any = _auth_pb2.AuthenticatedUser  # ty: ignore[unresolved-attribute]
@@ -13,6 +14,7 @@ CompleteLoginRequest: Any = _auth_pb2.CompleteLoginRequest  # ty: ignore[unresol
 class ProviderKind(str, Enum):
     INTEGRATION = "integration"
     AUTH = "auth"
+    CACHE = "cache"
     SECRETS = "secrets"
     TELEMETRY = "telemetry"
 
@@ -115,3 +117,43 @@ class SecretsProvider(PluginProvider):
         _runtime.serve(self, runtime_kind=ProviderKind.SECRETS)
 
 
+class CacheProvider(PluginProvider):
+    def get(self, key: str) -> bytes | None:
+        raise NotImplementedError
+
+    def get_many(self, keys: list[str]) -> dict[str, bytes]:
+        values: dict[str, bytes] = {}
+        for key in keys:
+            value = self.get(key)
+            if value is not None:
+                values[key] = bytes(value)
+        return values
+
+    def set(self, key: str, value: bytes, ttl: dt.timedelta | None = None) -> None:
+        raise NotImplementedError
+
+    def set_many(self, entries: list[CacheEntry], ttl: dt.timedelta | None = None) -> None:
+        for entry in entries:
+            self.set(entry.key, entry.value, ttl)
+
+    def delete(self, key: str) -> bool:
+        raise NotImplementedError
+
+    def delete_many(self, keys: list[str]) -> int:
+        deleted = 0
+        seen: set[str] = set()
+        for key in keys:
+            if key in seen:
+                continue
+            seen.add(key)
+            if self.delete(key):
+                deleted += 1
+        return deleted
+
+    def touch(self, key: str, ttl: dt.timedelta) -> bool:
+        raise NotImplementedError
+
+    def serve(self) -> None:
+        from . import _runtime
+
+        _runtime.serve(self, runtime_kind=ProviderKind.CACHE)

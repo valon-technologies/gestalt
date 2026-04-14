@@ -295,6 +295,8 @@ func rustServeFunction(kind string) (string, bool, error) {
 		return "__gestalt_serve", true, nil
 	case providermanifestv1.KindAuth:
 		return "__gestalt_serve_auth", false, nil
+	case providermanifestv1.KindCache:
+		return "__gestalt_serve_cache", false, nil
 	case providermanifestv1.KindIndexedDB:
 		return "__gestalt_serve_indexeddb", false, nil
 	case providermanifestv1.KindSecrets:
@@ -306,7 +308,7 @@ func rustServeFunction(kind string) (string, bool, error) {
 
 func rustBinaryName(kind string) string {
 	switch kind {
-	case providermanifestv1.KindAuth, providermanifestv1.KindIndexedDB, providermanifestv1.KindSecrets:
+	case providermanifestv1.KindAuth, providermanifestv1.KindCache, providermanifestv1.KindIndexedDB, providermanifestv1.KindSecrets:
 		return kind
 	default:
 		return "provider"

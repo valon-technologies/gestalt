@@ -3,6 +3,8 @@
 mod api;
 mod auth;
 mod auth_server;
+mod cache;
+mod cache_server;
 mod catalog;
 mod env;
 mod error;
@@ -29,6 +31,10 @@ pub mod proto {
 pub use api::{Access, Credential, Provider, Request, Response, RuntimeMetadata, Subject, ok};
 pub use auth::{
     AuthProvider, AuthenticatedUser, BeginLoginRequest, BeginLoginResponse, CompleteLoginRequest,
+};
+pub use cache::{
+    Cache, CacheEntry, CacheError, CacheProvider, CacheSetOptions, ENV_CACHE_SOCKET,
+    cache_socket_env,
 };
 pub use catalog::{Catalog, CatalogOperation};
 pub use env::{CURRENT_PROTOCOL_VERSION, ENV_PROVIDER_SOCKET};
@@ -87,6 +93,16 @@ macro_rules! export_auth_provider {
         pub fn __gestalt_serve_auth(_name: &str) -> $crate::Result<()> {
             let provider = std::sync::Arc::new($constructor());
             $crate::runtime::run_auth_provider(provider)
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! export_cache_provider {
+    (constructor = $constructor:path $(,)?) => {
+        pub fn __gestalt_serve_cache(_name: &str) -> $crate::Result<()> {
+            let provider = std::sync::Arc::new($constructor());
+            $crate::runtime::run_cache_provider(provider)
         }
     };
 }

@@ -5,6 +5,7 @@ use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 
 use crate::api::RuntimeMetadata;
 use crate::auth::AuthProvider;
+use crate::cache::CacheProvider;
 use crate::error::Result;
 use crate::generated::v1::provider_lifecycle_server::ProviderLifecycle;
 use crate::generated::v1::{
@@ -34,6 +35,10 @@ struct ProviderRuntime<P> {
 }
 
 struct AuthRuntime<P> {
+    provider: Arc<P>,
+}
+
+struct CacheRuntime<P> {
     provider: Arc<P>,
 }
 
@@ -73,6 +78,7 @@ macro_rules! impl_runtime_hooks {
 
 impl_runtime_hooks!(ProviderRuntime, Provider);
 impl_runtime_hooks!(AuthRuntime, AuthProvider);
+impl_runtime_hooks!(CacheRuntime, CacheProvider);
 impl_runtime_hooks!(SecretsRuntime, SecretsProvider);
 
 #[derive(Clone)]
@@ -99,6 +105,16 @@ impl RuntimeServer {
         Self {
             kind: ProviderKind::Auth,
             provider: Arc::new(AuthRuntime { provider }),
+        }
+    }
+
+    pub fn for_cache<P>(provider: Arc<P>) -> Self
+    where
+        P: CacheProvider,
+    {
+        Self {
+            kind: ProviderKind::Cache,
+            provider: Arc::new(CacheRuntime { provider }),
         }
     }
 

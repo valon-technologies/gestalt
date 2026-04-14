@@ -218,6 +218,40 @@ Common first-party IndexedDB packages:
 | DynamoDB | `github.com/valon-technologies/gestalt-providers/indexeddb/dynamodb` | `table`, `region`, optional `endpoint` |
 | MongoDB | `github.com/valon-technologies/gestalt-providers/indexeddb/mongodb` | `uri`, optional `database` |
 
+## `providers.cache`
+
+Caches are provider-based and plugin-bound. Configure one or more named entries
+under `providers.cache`, then reference those names from `plugins.<name>.cache`.
+Unlike IndexedDB, caches are not selected through `server.providers`.
+
+```yaml
+providers:
+  cache:
+    session:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/cache/redis
+        version: 0.0.1-alpha.1
+      config:
+        address: ${REDIS_ADDR}
+        database: 0
+
+plugins:
+  github:
+    cache:
+      - session
+```
+
+First-party cache providers are published at
+`github.com/valon-technologies/gestalt-providers/cache/<name>`.
+
+| Field | Description |
+| --- | --- |
+| `source.ref` | Managed provider source address. |
+| `source.version` | Required with `source.ref`. SemVer without a leading `v`. |
+| `config` | Arbitrary provider-specific config passed through to the cache provider. |
+| `env` | Extra environment variables passed to the provider process. |
+| `allowedHosts` | Network allowlist for sandboxed provider processes. |
+
 ## `providers.secrets`
 
 The secrets manager resolves `secret://` references at startup. Two built-in sources (`env` and `file`) are selected by the `source` field. Cloud secret backends are loaded as external providers using `source.ref`, the same way auth and indexeddb providers work.

@@ -339,10 +339,8 @@ func missingReleaseSourceBuildTargetError(kind string) error {
 	switch kind {
 	case providermanifestv1.KindPlugin:
 		return fmt.Errorf("no Go, Rust, Python, or TypeScript provider package found")
-	case providermanifestv1.KindAuth, providermanifestv1.KindIndexedDB, providermanifestv1.KindSecrets:
+	case providermanifestv1.KindAuth, providermanifestv1.KindCache, providermanifestv1.KindIndexedDB, providermanifestv1.KindSecrets:
 		return fmt.Errorf("no Go, Rust, Python, or TypeScript %s source package found", kind)
-	case providermanifestv1.KindCache:
-		return fmt.Errorf("no Go cache source package found")
 	default:
 		return fmt.Errorf("unsupported release build target kind %q", kind)
 	}

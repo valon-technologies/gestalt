@@ -1,0 +1,10 @@
+{
+  "name": "@fixtures/cache-provider",
+  "type": "module",
+  "gestalt": {
+    "provider": {
+      "kind": "cache",
+      "target": "./cache.ts#provider"
+    }
+  }
+}

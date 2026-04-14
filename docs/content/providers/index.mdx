@@ -6,9 +6,9 @@ asIndexPage: true
 
 Gestalt loads most integration and platform surfaces as providers instead of
 compiling them into `gestaltd`. Plugins, auth backends, IndexedDB backends,
-external secret managers, and public web UIs all use the same provider model:
-you reference a package in config, the host resolves it, validates it, and
-starts it with the permissions and request context it needs.
+cache backends, external secret managers, and public web UIs all use the same
+provider model: you reference a package in config, the host resolves it,
+validates it, and starts it with the permissions and request context it needs.
 
 ## Provider kinds
 
@@ -16,6 +16,7 @@ starts it with the permissions and request context it needs.
 | --- | --- | --- |
 | `plugin` | Tool providers that expose operations over CLI, HTTP API, and MCP | `plugins.<name>` |
 | `auth` | Platform login backends | `providers.auth` |
+| `cache` | Plugin-bound cache backends | `providers.cache.<name>` |
 | `indexeddb` | Persistent state backends for users, sessions, tokens, and credentials | `providers.indexeddb.<name>` |
 | `secrets` | Secret managers that resolve `secret://` references | `providers.secrets` |
 | `webui` | Public UI bundles served under configured path prefixes | `providers.ui` |
@@ -43,6 +44,7 @@ The repository is organized by provider type:
 | --- | --- | --- |
 | Plugins | [`plugins/`](https://github.com/valon-technologies/gestalt-providers/tree/main/plugins) | `plugins.<name>` |
 | Auth | [`auth/`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth) | `providers.auth` |
+| Cache | [`cache/`](https://github.com/valon-technologies/gestalt-providers/tree/main/cache) | `providers.cache.<name>` |
 | IndexedDB | [`indexeddb/`](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb) | `providers.indexeddb.<name>` |
 | Secrets | [`secrets/`](https://github.com/valon-technologies/gestalt-providers/tree/main/secrets) | `providers.secrets` |
 | Web UI bundles | [`web/`](https://github.com/valon-technologies/gestalt-providers/tree/main/web) | `providers.ui` |
@@ -74,11 +76,21 @@ providers:
       config:
         dsn: ${DATABASE_URL}
 
+  cache:
+    session:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/cache/redis
+        version: 0.0.1-alpha.1
+      config:
+        address: ${REDIS_ADDR}
+
 plugins:
   github:
     source:
       ref: github.com/valon-technologies/gestalt-providers/plugins/github
       version: 0.0.1-alpha.1
+    cache:
+      - session
 ```
 
 Run `gestaltd init` when you want to resolve and pin published releases ahead
@@ -93,6 +105,7 @@ release workflow now lives under [Custom Providers](/custom-providers).
 
 - [Plugins](/providers/plugins): choosing and configuring plugin providers
 - [Auth](/providers/auth): platform login providers
+- [Cache](/providers/cache): plugin-bound cache backends
 - [IndexedDB](/providers/indexeddb): storage backends
 - [Secrets](/providers/secrets): built-in and external secret managers
 - [Web UIs](/providers/web-uis): public UI bundles

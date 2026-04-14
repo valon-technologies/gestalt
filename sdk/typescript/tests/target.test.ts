@@ -50,6 +50,11 @@ test("provider target parsing supports plugin defaults and kind prefixes", () =>
     modulePath: "./auth.ts",
     exportName: "provider",
   });
+  expect(parseProviderTarget("cache:./cache.ts#provider")).toEqual({
+    kind: "cache",
+    modulePath: "./cache.ts",
+    exportName: "provider",
+  });
 });
 
 test("package config reads legacy plugin targets and provider targets", () => {
@@ -82,5 +87,18 @@ test("package config reads legacy plugin targets and provider targets", () => {
   });
   expect(formatProviderTarget(readPackageProviderTarget(authRoot))).toBe(
     "auth:./auth.ts#provider",
+  );
+
+  const cacheRoot = fixturePath("cache-provider");
+  expect(readPackageConfig(cacheRoot)).toEqual({
+    name: "@fixtures/cache-provider",
+    providerTarget: {
+      kind: "cache",
+      modulePath: "./cache.ts",
+      exportName: "provider",
+    },
+  });
+  expect(formatProviderTarget(readPackageProviderTarget(cacheRoot))).toBe(
+    "cache:./cache.ts#provider",
   );
 });
