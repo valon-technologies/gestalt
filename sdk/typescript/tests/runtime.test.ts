@@ -285,3 +285,11 @@ test("fileapi provider supports runtime metadata and file operations", async () 
   );
   expect(revoked).toEqual(create(EmptySchema, {}));
 });
+
+test("fileapi provider rejects plain exports missing revokeObjectURL", async () => {
+  await expect(
+    loadProviderFromTarget(fixturePath("fileapi-provider-missing-revoke")),
+  ).rejects.toThrow(
+    "did not resolve to a Gestalt FileAPI provider",
+  );
+});

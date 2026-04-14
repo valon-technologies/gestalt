@@ -1187,7 +1187,7 @@ server:
 		}
 	})
 
-	t.Run("allows duplicate indexeddb object stores across bindings", func(t *testing.T) {
+	t.Run("rejects duplicate indexeddb object stores across bindings", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -1216,16 +1216,12 @@ server:
   encryptionKey: server-key
 `)
 
-		cfg, err := Load(path)
-		if err != nil {
-			t.Fatalf("Load: %v", err)
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
 		}
-		want := []PluginIndexedDBBinding{
-			{Name: "main", ObjectStores: []string{"tasks"}},
-			{Name: "archive", ObjectStores: []string{"tasks"}},
-		}
-		if got := cfg.Plugins["roadmap"].IndexedDBs; !reflect.DeepEqual(got, want) {
-			t.Fatalf("Plugins[roadmap].IndexedDBs = %#v, want %#v", got, want)
+		if !strings.Contains(err.Error(), `plugin "roadmap" indexeddb[1].objectStore[0] "tasks" duplicates indexeddb "main"`) {
+			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 

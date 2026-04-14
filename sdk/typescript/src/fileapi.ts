@@ -37,7 +37,7 @@ export interface FileAPIProviderOptions extends RuntimeProviderOptions {
   resolveObjectURL: (
     request: ObjectURLRequest,
   ) => MaybePromise<FileObjectResponse>;
-  revokeObjectURL?: (request: ObjectURLRequest) => MaybePromise<void>;
+  revokeObjectURL: (request: ObjectURLRequest) => MaybePromise<void>;
 }
 
 export class FileAPIProvider extends RuntimeProvider {
@@ -101,7 +101,7 @@ export class FileAPIProvider extends RuntimeProvider {
   }
 
   async revokeObjectURL(request: ObjectURLRequest): Promise<void> {
-    await this.revokeObjectURLHandler?.(request);
+    await this.revokeObjectURLHandler(request);
   }
 }
 
@@ -120,6 +120,7 @@ export function isFileAPIProvider(value: unknown): value is FileAPIProvider {
       (value as { kind?: unknown }).kind === "fileapi" &&
       "createBlob" in value &&
       "openReadStream" in value &&
-      "resolveObjectURL" in value)
+      "resolveObjectURL" in value &&
+      "revokeObjectURL" in value)
   );
 }
