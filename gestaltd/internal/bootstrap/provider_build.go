@@ -548,7 +548,7 @@ func buildPluginIndexedDBHostServices(pluginName string, entry *config.ProviderE
 		if len(binding.ObjectStores) == 0 && len(reservedStores) > 0 {
 			deniedStores = reservedStores
 		}
-		ds, err := buildPluginScopedIndexedDB(pluginName, binding, effectiveSchema, deniedStores, deps)
+		ds, err := buildPluginScopedIndexedDB(binding, effectiveSchema, deniedStores, deps)
 		if err != nil {
 			_ = closeIndexedDBs(boundStores...)
 			return nil, nil, err
@@ -578,12 +578,12 @@ func buildPluginIndexedDBHostServices(pluginName string, entry *config.ProviderE
 	}, nil
 }
 
-func buildPluginScopedIndexedDB(pluginName string, binding config.PluginIndexedDBBinding, schema string, deniedStores []string, deps Deps) (indexeddb.IndexedDB, error) {
+func buildPluginScopedIndexedDB(binding config.PluginIndexedDBBinding, schema string, deniedStores []string, deps Deps) (indexeddb.IndexedDB, error) {
 	def, ok := deps.IndexedDBDefs[binding.Name]
 	if !ok || def == nil {
 		return nil, fmt.Errorf("indexeddb %q is not available", binding.Name)
 	}
-	scopedDef, transportPrefix, err := newPluginScopedIndexedDBDef(def, pluginName, schema)
+	scopedDef, transportPrefix, err := newPluginScopedIndexedDBDef(def, schema)
 	if err != nil {
 		return nil, fmt.Errorf("indexeddb %q: %w", binding.Name, err)
 	}
@@ -599,7 +599,7 @@ func buildPluginScopedIndexedDB(pluginName string, binding config.PluginIndexedD
 	return metricutil.InstrumentIndexedDB(ds, binding.Name), nil
 }
 
-func newPluginScopedIndexedDBDef(entry *config.ProviderEntry, pluginName, schema string) (*config.ProviderEntry, string, error) {
+func newPluginScopedIndexedDBDef(entry *config.ProviderEntry, schema string) (*config.ProviderEntry, string, error) {
 	if entry == nil {
 		return nil, "", fmt.Errorf("datastore provider is required")
 	}
