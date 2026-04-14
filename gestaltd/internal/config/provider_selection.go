@@ -6,36 +6,6 @@ import (
 	"strings"
 )
 
-func (c *Config) SyncCompatFields() {
-	if c == nil {
-		return
-	}
-	if c.Plugins == nil && c.Providers.Plugins != nil {
-		c.Plugins = c.Providers.Plugins
-	}
-	if c.Providers.Plugins == nil && c.Plugins != nil {
-		c.Providers.Plugins = c.Plugins
-	}
-	if c.Providers.IndexedDB == nil && c.Providers.IndexedDBs != nil {
-		c.Providers.IndexedDB = c.Providers.IndexedDBs
-	}
-	if c.Providers.IndexedDBs == nil && c.Providers.IndexedDB != nil {
-		c.Providers.IndexedDBs = c.Providers.IndexedDB
-	}
-	if c.Providers.FileAPI == nil && c.Providers.FileAPIs != nil {
-		c.Providers.FileAPI = c.Providers.FileAPIs
-	}
-	if c.Providers.FileAPIs == nil && c.Providers.FileAPI != nil {
-		c.Providers.FileAPIs = c.Providers.FileAPI
-	}
-	if c.Server.Providers.IndexedDB == "" && c.Server.IndexedDB != "" {
-		c.Server.Providers.IndexedDB = c.Server.IndexedDB
-	}
-	if c.Server.IndexedDB == "" && c.Server.Providers.IndexedDB != "" {
-		c.Server.IndexedDB = c.Server.Providers.IndexedDB
-	}
-}
-
 func (s ServerProvidersConfig) Selection(kind HostProviderKind) string {
 	switch kind {
 	case HostProviderKindAuth:
@@ -57,7 +27,6 @@ func (c *Config) HostProviderEntries(kind HostProviderKind) map[string]*Provider
 	if c == nil {
 		return nil
 	}
-	c.SyncCompatFields()
 	switch kind {
 	case HostProviderKindAuth:
 		return c.Providers.Auth
@@ -75,7 +44,6 @@ func (c *Config) HostProviderEntries(kind HostProviderKind) map[string]*Provider
 }
 
 func (c *Config) SelectedHostProvider(kind HostProviderKind) (string, *ProviderEntry, error) {
-	c.SyncCompatFields()
 	return ResolveSelectedHostProvider(kind, c.Server.Providers.Selection(kind), c.HostProviderEntries(kind))
 }
 

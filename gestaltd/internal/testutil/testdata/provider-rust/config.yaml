@@ -1,21 +1,20 @@
-indexeddbs:
-  main:
-    provider:
+providers:
+  indexeddb:
+    main:
       source:
         ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
         version: 0.0.1-alpha.2
-    config:
-      dsn: sqlite://./example.db
-
-datastore: main
+      config:
+        dsn: sqlite://./example.db
 
 server:
+  providers:
+    indexeddb: main
   encryptionKey: dev-key-for-example-only
 
 plugins:
   example:
-    provider:
-      source:
-        path: ./plugin.yaml
+    source:
+      path: ./plugin.yaml
     config:
       greeting: "Hello from example Rust plugin"

@@ -35,16 +35,14 @@ func TestExecutableSDKExampleProviderReceivesStartConfig(t *testing.T) {
 	manifestRoot := exampleProviderRoot(t)
 	manifest := newExecutableManifest("Example Provider", "A minimal example provider built with the public SDK")
 	cfg := &config.Config{
-		Providers: config.ProvidersConfig{
-			Plugins: map[string]*config.ProviderEntry{
-				"example": {
-					Command:              bin,
-					ResolvedManifest:     manifest,
-					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-					Config: mustNode(t, map[string]any{
-						"greeting": "Hello from config",
-					}),
-				},
+		Plugins: map[string]*config.ProviderEntry{
+			"example": {
+				Command:              bin,
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Config: mustNode(t, map[string]any{
+					"greeting": "Hello from config",
+				}),
 			},
 		},
 	}
@@ -161,15 +159,13 @@ plugin = "provider"
 	t.Setenv("PATH", t.TempDir())
 
 	cfg := &config.Config{
-		Providers: config.ProvidersConfig{
-			Plugins: map[string]*config.ProviderEntry{
-				"python-source": {
-					ResolvedManifest:     manifest,
-					ResolvedManifestPath: manifestPath,
-					Config: mustNode(t, map[string]any{
-						"greeting": "Hi",
-					}),
-				},
+		Plugins: map[string]*config.ProviderEntry{
+			"python-source": {
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: manifestPath,
+				Config: mustNode(t, map[string]any{
+					"greeting": "Hi",
+				}),
 			},
 		},
 	}
@@ -252,27 +248,25 @@ paths:
 	}
 
 	cfg := &config.Config{
-		Providers: config.ProvidersConfig{
-			Plugins: map[string]*config.ProviderEntry{
-				"example": {
-					ResolvedManifestPath: manifestPath,
-					ResolvedManifest: &providermanifestv1.Manifest{
-						Kind:        providermanifestv1.KindPlugin,
-						DisplayName: "Example",
-						Description: "OpenAPI example",
-						Spec: &providermanifestv1.Spec{
-							Surfaces: &providermanifestv1.ProviderSurfaces{
-								OpenAPI: &providermanifestv1.OpenAPISurface{
-									Document: "openapi.yaml",
-									BaseURL:  manifestSrv.URL,
-								},
+		Plugins: map[string]*config.ProviderEntry{
+			"example": {
+				ResolvedManifestPath: manifestPath,
+				ResolvedManifest: &providermanifestv1.Manifest{
+					Kind:        providermanifestv1.KindPlugin,
+					DisplayName: "Example",
+					Description: "OpenAPI example",
+					Spec: &providermanifestv1.Spec{
+						Surfaces: &providermanifestv1.ProviderSurfaces{
+							OpenAPI: &providermanifestv1.OpenAPISurface{
+								Document: "openapi.yaml",
+								BaseURL:  manifestSrv.URL,
 							},
 						},
 					},
-					Surfaces: &config.ProviderSurfaceOverrides{
-						OpenAPI: &config.ProviderOpenAPISurfaceOverride{
-							BaseURL: configSrv.URL,
-						},
+				},
+				Surfaces: &config.ProviderSurfaceOverrides{
+					OpenAPI: &config.ProviderOpenAPISurfaceOverride{
+						BaseURL: configSrv.URL,
 					},
 				},
 			},
@@ -365,22 +359,20 @@ paths:
 	}
 
 	cfg := &config.Config{
-		Providers: config.ProvidersConfig{
-			Plugins: map[string]*config.ProviderEntry{
-				"notion": {
-					ResolvedManifestPath: manifestPath,
-					ResolvedManifest: &providermanifestv1.Manifest{
-						Kind:        providermanifestv1.KindPlugin,
-						DisplayName: "Notion",
-						Description: "Dual-surface provider",
-						Spec: &providermanifestv1.Spec{
-							Surfaces: &providermanifestv1.ProviderSurfaces{
-								OpenAPI: &providermanifestv1.OpenAPISurface{
-									Document: "openapi.yaml",
-								},
-								MCP: &providermanifestv1.MCPSurface{
-									URL: mcpHTTP.URL,
-								},
+		Plugins: map[string]*config.ProviderEntry{
+			"notion": {
+				ResolvedManifestPath: manifestPath,
+				ResolvedManifest: &providermanifestv1.Manifest{
+					Kind:        providermanifestv1.KindPlugin,
+					DisplayName: "Notion",
+					Description: "Dual-surface provider",
+					Spec: &providermanifestv1.Spec{
+						Surfaces: &providermanifestv1.ProviderSurfaces{
+							OpenAPI: &providermanifestv1.OpenAPISurface{
+								Document: "openapi.yaml",
+							},
+							MCP: &providermanifestv1.MCPSurface{
+								URL: mcpHTTP.URL,
 							},
 						},
 					},
@@ -455,16 +447,14 @@ func TestExecutableSDKExampleProviderAppliesConfigMetadataOverrides(t *testing.T
 	manifest := newExecutableManifest("Manifest Display", "Manifest Description")
 
 	cfg := &config.Config{
-		Providers: config.ProvidersConfig{
-			Plugins: map[string]*config.ProviderEntry{
-				"example": {
-					DisplayName:          "Config Display",
-					Description:          "Config Description",
-					IconFile:             iconPath,
-					Command:              bin,
-					ResolvedManifest:     manifest,
-					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				},
+		Plugins: map[string]*config.ProviderEntry{
+			"example": {
+				DisplayName:          "Config Display",
+				Description:          "Config Description",
+				IconFile:             iconPath,
+				Command:              bin,
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 			},
 		},
 	}
@@ -576,18 +566,16 @@ func TestPluginManifestOAuthWiresConnectionAuth(t *testing.T) {
 		Scopes:           []string{"read", "write"},
 	}
 	cfg := &config.Config{
-		Providers: config.ProvidersConfig{
-			Plugins: map[string]*config.ProviderEntry{
-				"echoauth": {
-					Command: bin,
-					Args:    []string{"provider"},
-					Config: mustNode(t, map[string]any{
-						"clientId":     "test-client-id",
-						"clientSecret": "test-client-secret",
-					}),
-					ResolvedManifest:     manifest,
-					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoauth": {
+				Command: bin,
+				Args:    []string{"provider"},
+				Config: mustNode(t, map[string]any{
+					"clientId":     "test-client-id",
+					"clientSecret": "test-client-secret",
+				}),
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 			},
 		},
 	}
@@ -639,14 +627,12 @@ func TestPluginManifestNoAuthSkipsConnectionAuth(t *testing.T) {
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	cfg := &config.Config{
-		Providers: config.ProvidersConfig{
-			Plugins: map[string]*config.ProviderEntry{
-				"echonoauth": {
-					Command:              bin,
-					Args:                 []string{"provider"},
-					ResolvedManifest:     manifest,
-					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				},
+		Plugins: map[string]*config.ProviderEntry{
+			"echonoauth": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 			},
 		},
 	}
@@ -676,29 +662,27 @@ func TestPluginManifestNamedOAuthKeepsProviderTokenMode(t *testing.T) {
 	})
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 	cfg := &config.Config{
-		Providers: config.ProvidersConfig{
-			Plugins: map[string]*config.ProviderEntry{
-				"echoauth": {
-					Command:           bin,
-					Args:              []string{"provider"},
-					Source:            config.ProviderSource{Ref: "github.com/acme/plugins/test", Version: "1.0.0"},
-					DefaultConnection: "workspace",
-					Connections: map[string]*config.ConnectionDef{
-						"workspace": {
-							Auth: config.ConnectionAuthDef{
-								Type:             providermanifestv1.AuthTypeOAuth2,
-								AuthorizationURL: "https://example.com/authorize",
-								TokenURL:         "https://example.com/token",
-							},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoauth": {
+				Command:           bin,
+				Args:              []string{"provider"},
+				Source:            config.ProviderSource{Ref: "github.com/acme/plugins/test", Version: "1.0.0"},
+				DefaultConnection: "workspace",
+				Connections: map[string]*config.ConnectionDef{
+					"workspace": {
+						Auth: config.ConnectionAuthDef{
+							Type:             providermanifestv1.AuthTypeOAuth2,
+							AuthorizationURL: "https://example.com/authorize",
+							TokenURL:         "https://example.com/token",
 						},
 					},
-					Config: mustNode(t, map[string]any{
-						"clientId":     "test-client-id",
-						"clientSecret": "test-client-secret",
-					}),
-					ResolvedManifest:     manifest,
-					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 				},
+				Config: mustNode(t, map[string]any{
+					"clientId":     "test-client-id",
+					"clientSecret": "test-client-secret",
+				}),
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 			},
 		},
 	}
@@ -735,14 +719,12 @@ func TestPluginProcessEnvIsolation(t *testing.T) {
 	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
 
 	cfg := &config.Config{
-		Providers: config.ProvidersConfig{
-			Plugins: map[string]*config.ProviderEntry{
-				"echoext": {
-					Command:              bin,
-					Args:                 []string{"provider"},
-					ResolvedManifest:     manifest,
-					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-				},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
 			},
 		},
 	}
@@ -801,15 +783,13 @@ func TestPluginIndexedDBBindingsExposeHostSocketEnv(t *testing.T) {
 
 	makeConfig := func(bindings []config.PluginIndexedDBBinding) *config.Config {
 		return &config.Config{
-			Providers: config.ProvidersConfig{
-				Plugins: map[string]*config.ProviderEntry{
-					"echoext": {
-						Command:              bin,
-						Args:                 []string{"provider"},
-						ResolvedManifest:     manifest,
-						ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-						IndexedDBs:           bindings,
-					},
+			Plugins: map[string]*config.ProviderEntry{
+				"echoext": {
+					Command:              bin,
+					Args:                 []string{"provider"},
+					ResolvedManifest:     manifest,
+					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+					IndexedDBs:           bindings,
 				},
 			},
 		}
@@ -889,15 +869,13 @@ func TestPluginFileAPIBindingsExposeHostSocketEnv(t *testing.T) {
 
 	makeConfig := func(bindings []string) *config.Config {
 		return &config.Config{
-			Providers: config.ProvidersConfig{
-				Plugins: map[string]*config.ProviderEntry{
-					"echoext": {
-						Command:              bin,
-						Args:                 []string{"provider"},
-						ResolvedManifest:     manifest,
-						ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-						FileAPIs:             bindings,
-					},
+			Plugins: map[string]*config.ProviderEntry{
+				"echoext": {
+					Command:              bin,
+					Args:                 []string{"provider"},
+					ResolvedManifest:     manifest,
+					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+					FileAPIs:             bindings,
 				},
 			},
 		}
@@ -986,10 +964,8 @@ func TestPluginIndexedDBBindingsBuildScopedConfig(t *testing.T) {
 			entry.IndexedDBSchema = schema
 		}
 		return &config.Config{
-			Providers: config.ProvidersConfig{
-				Plugins: map[string]*config.ProviderEntry{
-					"echoext": entry,
-				},
+			Plugins: map[string]*config.ProviderEntry{
+				"echoext": entry,
 			},
 		}
 	}
@@ -1171,17 +1147,15 @@ func TestPluginIndexedDBBindingsRouteObjectStoresAndTransportPrefix(t *testing.T
 		boundDB    *trackedIndexedDB
 	)
 	providers, _, err := buildProvidersStrict(context.Background(), &config.Config{
-		Providers: config.ProvidersConfig{
-			Plugins: map[string]*config.ProviderEntry{
-				"echoext": {
-					Command:              bin,
-					Args:                 []string{"provider"},
-					ResolvedManifest:     manifest,
-					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-					IndexedDBSchema:      "roadmap",
-					IndexedDBs: []config.PluginIndexedDBBinding{
-						{Name: "memory", ObjectStores: []string{"tasks"}},
-					},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				IndexedDBSchema:      "roadmap",
+				IndexedDBs: []config.PluginIndexedDBBinding{
+					{Name: "memory", ObjectStores: []string{"tasks"}},
 				},
 			},
 		},
@@ -1269,17 +1243,15 @@ func TestPluginIndexedDBBindingsPreserveLegacyTransportPrefixedData(t *testing.T
 
 	var boundDB *trackedIndexedDB
 	providers, _, err := buildProvidersStrict(context.Background(), &config.Config{
-		Providers: config.ProvidersConfig{
-			Plugins: map[string]*config.ProviderEntry{
-				"echoext": {
-					Command:              bin,
-					Args:                 []string{"provider"},
-					ResolvedManifest:     manifest,
-					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-					IndexedDBSchema:      "roadmap",
-					IndexedDBs: []config.PluginIndexedDBBinding{
-						{Name: "memory", ObjectStores: []string{"tasks"}},
-					},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				IndexedDBSchema:      "roadmap",
+				IndexedDBs: []config.PluginIndexedDBBinding{
+					{Name: "memory", ObjectStores: []string{"tasks"}},
 				},
 			},
 		},
@@ -1358,18 +1330,16 @@ func TestPluginIndexedDBBindingsRouteExplicitAndCatchAllStores(t *testing.T) {
 
 	boundDBs := make(map[string]*trackedIndexedDB)
 	providers, _, err := buildProvidersStrict(context.Background(), &config.Config{
-		Providers: config.ProvidersConfig{
-			Plugins: map[string]*config.ProviderEntry{
-				"echoext": {
-					Command:              bin,
-					Args:                 []string{"provider"},
-					ResolvedManifest:     manifest,
-					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
-					IndexedDBSchema:      "roadmap",
-					IndexedDBs: []config.PluginIndexedDBBinding{
-						{Name: "main", ObjectStores: []string{"tasks"}},
-						{Name: "archive"},
-					},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				IndexedDBSchema:      "roadmap",
+				IndexedDBs: []config.PluginIndexedDBBinding{
+					{Name: "main", ObjectStores: []string{"tasks"}},
+					{Name: "archive"},
 				},
 			},
 		},
@@ -1467,12 +1437,10 @@ func TestExecutablePluginRequiresManifest(t *testing.T) {
 
 	bin := buildEchoPluginBinary(t)
 	cfg := &config.Config{
-		Providers: config.ProvidersConfig{
-			Plugins: map[string]*config.ProviderEntry{
-				"echoext": {
-					Command: bin,
-					Args:    []string{"provider"},
-				},
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command: bin,
+				Args:    []string{"provider"},
 			},
 		},
 	}

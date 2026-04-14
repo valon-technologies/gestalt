@@ -19,7 +19,6 @@ type ConnectionMaps struct {
 }
 
 func BuildConnectionMaps(cfg *config.Config) (ConnectionMaps, error) {
-	cfg.SyncCompatFields()
 	maps := ConnectionMaps{
 		DefaultConnection: make(map[string]string, len(cfg.Plugins)),
 		APIConnection:     make(map[string]string, len(cfg.Plugins)),

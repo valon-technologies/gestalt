@@ -220,12 +220,11 @@ func writeConfigYAML(t *testing.T, dir, source, version, artifactsDir string) st
 	t.Helper()
 
 	lines := []string{
-		"providers:",
-		"  plugins:",
-		"    alpha:",
-		"      source:",
-		"        ref: " + source,
-		"        version: " + version,
+		"plugins:",
+		"  alpha:",
+		"    source:",
+		"      ref: " + source,
+		"      version: " + version,
 		"server:",
 		"  artifactsDir: " + artifactsDir,
 	}
@@ -414,13 +413,14 @@ func TestSourcePluginLoadForExecution(t *testing.T) {
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	yaml := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
-		"  plugins:",
-		"    gadget:",
-		"      source:",
-		"        ref: " + source,
-		"        version: " + version,
+		"plugins:",
+		"  gadget:",
+		"    source:",
+		"      ref: " + source,
+		"      version: " + version,
 		"server:",
-		"  indexeddb: sqlite",
+		"  providers:",
+		"    indexeddb: sqlite",
 		"  artifactsDir: " + artifactsDir,
 		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}, "\n") + "\n"
@@ -513,13 +513,14 @@ func TestSourcePluginLoadForExecution_RehydratesWhenCachedManifestVersionMismatc
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	yaml := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
-		"  plugins:",
-		"    gadget:",
-		"      source:",
-		"        ref: " + source,
-		"        version: " + version,
+		"plugins:",
+		"  gadget:",
+		"    source:",
+		"      ref: " + source,
+		"      version: " + version,
 		"server:",
-		"  indexeddb: sqlite",
+		"  providers:",
+		"    indexeddb: sqlite",
 		"  artifactsDir: " + artifactsDir,
 		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}, "\n") + "\n"
@@ -618,17 +619,20 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 	configYAML := strings.Join([]string{
 		requiredIndexedDBConfigYAML(t, dir, filepath.Join(dir, "data.db")),
 		"  secrets:",
-		"    source: test-secrets",
+		"    default:",
+		"      source: test-secrets",
 		"  auth:",
-		"    source:",
-		"      ref: " + source,
-		"      version: " + version,
-		"      auth:",
-		"        token: secret://source-token",
-		"    config:",
-		"      clientId: managed-auth-client",
+		"    default:",
+		"      source:",
+		"        ref: " + source,
+		"        version: " + version,
+		"        auth:",
+		"          token: secret://source-token",
+		"      config:",
+		"        clientId: managed-auth-client",
 		"server:",
-		"  indexeddb: sqlite",
+		"  providers:",
+		"    indexeddb: sqlite",
 		"  artifactsDir: " + artifactsDir,
 		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}, "\n") + "\n"
@@ -652,7 +656,7 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InitAtPath: %v", err)
 	}
-	authLockEntry := mustLockEntryByName(t, lock.Auth, "auth")
+	authLockEntry := mustLockEntryByName(t, lock.Auth, config.DefaultProviderInstance)
 	if authLockEntry.Source != source {
 		t.Fatalf("lock.Auth[auth].Source = %q, want %q", authLockEntry.Source, source)
 	}
@@ -761,7 +765,7 @@ func TestManagedIndexedDBSourcesLoadForExecutionWithMultipleBindings(t *testing.
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configYAML := strings.Join([]string{
 		"providers:",
-		"  indexeddbs:",
+		"  indexeddb:",
 		"    main:",
 		"      source:",
 		"        ref: " + mainSource,
@@ -775,7 +779,8 @@ func TestManagedIndexedDBSourcesLoadForExecutionWithMultipleBindings(t *testing.
 		"      config:",
 		`        dsn: "sqlite://archive.db"`,
 		"server:",
-		"  indexeddb: main",
+		"  providers:",
+		"    indexeddb: main",
 		"  artifactsDir: " + artifactsDir,
 		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}, "\n") + "\n"
@@ -878,7 +883,8 @@ func TestManagedFileAPISourcesLoadForExecutionWithMultipleBindings(t *testing.T)
 		"      config:",
 		`        root: "/tmp/archive"`,
 		"server:",
-		"  indexeddb: sqlite",
+		"  providers:",
+		"    indexeddb: sqlite",
 		"  artifactsDir: " + artifactsDir,
 		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}, "\n") + "\n"
@@ -1013,19 +1019,22 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 	configYAML := strings.Join([]string{
 		requiredIndexedDBConfigYAML(t, dir, filepath.Join(dir, "data.db")),
 		"  secrets:",
-		"    source:",
-		"      ref: " + secretsSource,
-		"      version: " + secretsVersion,
+		"    default:",
+		"      source:",
+		"        ref: " + secretsSource,
+		"        version: " + secretsVersion,
 		"  auth:",
-		"    source:",
-		"      ref: " + authSource,
-		"      version: " + authVersion,
-		"      auth:",
-		"        token: secret://source-token",
-		"    config:",
-		"      clientId: managed-auth-client",
+		"    default:",
+		"      source:",
+		"        ref: " + authSource,
+		"        version: " + authVersion,
+		"        auth:",
+		"          token: secret://source-token",
+		"      config:",
+		"        clientId: managed-auth-client",
 		"server:",
-		"  indexeddb: sqlite",
+		"  providers:",
+		"    indexeddb: sqlite",
 		"  artifactsDir: " + artifactsDir,
 		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}, "\n") + "\n"
@@ -1046,8 +1055,8 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("InitAtPath: %v", err)
 	}
-	secretsLockEntry := mustLockEntryByName(t, lock.Secrets, "secrets")
-	authLockEntry := mustLockEntryByName(t, lock.Auth, "auth")
+	secretsLockEntry := mustLockEntryByName(t, lock.Secrets, config.DefaultProviderInstance)
+	authLockEntry := mustLockEntryByName(t, lock.Auth, config.DefaultProviderInstance)
 	if got := len(resolver.calls); got != 2 {
 		t.Fatalf("resolver calls = %d, want 2", got)
 	}
@@ -1184,15 +1193,16 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 
 	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
-		"  plugins:",
-		"    alpha:",
-		"      source:",
-		"        ref: " + testSource,
-		"        version: " + testVersion,
-		"        auth:",
-		"          token: test-token",
+		"plugins:",
+		"  alpha:",
+		"    source:",
+		"      ref: " + testSource,
+		"      version: " + testVersion,
+		"      auth:",
+		"        token: test-token",
 		"server:",
-		"  indexeddb: sqlite",
+		"  providers:",
+		"    indexeddb: sqlite",
 		"  artifactsDir: " + artifactsDir,
 		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}, "\n") + "\n"

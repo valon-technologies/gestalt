@@ -348,7 +348,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	if storeErr != nil {
 		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", selectedIndexedDBName, storeErr)
 	}
-	store = metricutil.InstrumentIndexedDB(store, cfg.Server.IndexedDB)
+	store = metricutil.InstrumentIndexedDB(store, selectedIndexedDBName)
 	svc, svcErr := coredata.New(store, enc)
 	if svcErr != nil {
 		_ = store.Close()
@@ -404,7 +404,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	deps.Egress = newEgressDeps(cfg)
 	deps.Services = svc
 	deps.IndexedDBs = hostIndexedDBs
-	deps.IndexedDBDefs = cfg.Providers.IndexedDBs
+	deps.IndexedDBDefs = cfg.Providers.IndexedDB
 	deps.IndexedDBFactory = factories.IndexedDB
 	deps.FileAPIs = hostFileAPIs
 

@@ -152,7 +152,7 @@ plugins:
 	}
 }
 
-func TestLoadConfigAcceptsLegacyAndCanonicalProviderFormsWhenKeysDoNotConflict(t *testing.T) {
+func TestLoadConfigAcceptsCanonicalProviderForms(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
@@ -161,7 +161,7 @@ server:
     indexeddb: main
   encryptionKey: server-key
 providers:
-  indexeddbs:
+  indexeddb:
     main:
       source:
         path: ./providers/datastore/sqlite
@@ -260,12 +260,13 @@ func TestLoadConfigEnvFileFallback(t *testing.T) {
 
 	path := mustWriteConfigFile(t, `
 providers:
-  indexeddbs:
+  indexeddb:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
 server:
-  indexeddb: sqlite
+  providers:
+    indexeddb: sqlite
   encryptionKey: ${TEST_ENCRYPTION}
 `)
 
@@ -293,12 +294,13 @@ func TestLoadConfigMissingEnvVariableFails(t *testing.T) {
 	portEnv := encryptionEnv + "_PORT"
 	path := mustWriteConfigFile(t, fmt.Sprintf(`
 providers:
-  indexeddbs:
+  indexeddb:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
 server:
-  indexeddb: sqlite
+  providers:
+    indexeddb: sqlite
   encryptionKey: ${%s}
   public:
     port: ${%s}
@@ -334,12 +336,13 @@ func TestLoadConfigEmptyDefaultEnvSyntax(t *testing.T) {
 
 	path := mustWriteConfigFile(t, `
 providers:
-  indexeddbs:
+  indexeddb:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
 server:
-  indexeddb: sqlite
+  providers:
+    indexeddb: sqlite
   encryptionKey: ${TEST_ENCRYPTION:-}
 `)
 
@@ -449,12 +452,13 @@ func TestValidateRuntime(t *testing.T) {
 			name: "missing auth provider is allowed",
 			yaml: `
 providers:
-  indexeddbs:
+  indexeddb:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
 server:
-  indexeddb: sqlite
+  providers:
+    indexeddb: sqlite
   encryptionKey: server-key
 `,
 			wantErr: false,
@@ -464,7 +468,8 @@ server:
 			yaml: `
 providers:
   auth:
-    disabled: true
+    default:
+      disabled: true
 server:
   encryptionKey: server-key
 `,
@@ -474,12 +479,13 @@ server:
 			name: "missing encryption key",
 			yaml: `
 providers:
-  indexeddbs:
+  indexeddb:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
 server:
-  indexeddb: sqlite
+  providers:
+    indexeddb: sqlite
 `,
 			wantErr: true,
 		},
@@ -488,13 +494,15 @@ server:
 			yaml: `
 providers:
   auth:
-    disabled: true
-  indexeddbs:
+    default:
+      disabled: true
+  indexeddb:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
 server:
-  indexeddb: sqlite
+  providers:
+    indexeddb: sqlite
   encryptionKey: server-key
 `,
 			wantErr: false,
@@ -533,8 +541,7 @@ func TestLoadSucceedsWithoutRuntimeFields(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
-providers:
-  plugins:
+plugins:
     custom_tool:
       source:
         path: ./manifest.yaml
@@ -557,12 +564,13 @@ func TestLoadConfigUIEntries(t *testing.T) {
 
 		path := mustWriteConfigFile(t, `
 providers:
-  indexeddbs:
+  indexeddb:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
 server:
-  indexeddb: sqlite
+  providers:
+    indexeddb: sqlite
   encryptionKey: server-key
 `)
 
@@ -583,12 +591,13 @@ providers:
   ui:
     roadmap:
       disabled: true
-  indexeddbs:
+  indexeddb:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
 server:
-  indexeddb: sqlite
+  providers:
+    indexeddb: sqlite
   encryptionKey: server-key
 `)
 
@@ -618,12 +627,13 @@ providers:
   ui:
     roadmap:
       disabled: %s
-  indexeddbs:
+  indexeddb:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
 server:
-  indexeddb: sqlite
+  providers:
+    indexeddb: sqlite
   encryptionKey: server-key
 `, variant))
 
@@ -648,12 +658,13 @@ providers:
       disabled: true
       config:
         brand_name: Acme
-  indexeddbs:
+  indexeddb:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
 server:
-  indexeddb: sqlite
+  providers:
+    indexeddb: sqlite
   encryptionKey: server-key
 `)
 
@@ -673,12 +684,13 @@ providers:
       source:
         path: ./web/default/provider.yaml
       path: /create-customer-roadmap-review
-  indexeddbs:
+  indexeddb:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
 server:
-  indexeddb: sqlite
+  providers:
+    indexeddb: sqlite
   encryptionKey: server-key
 `)
 
@@ -710,12 +722,13 @@ providers:
       source:
         path: ./web/roadmap/manifest.yaml
       path: /create-customer-roadmap-review/
-  indexeddbs:
+  indexeddb:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
 server:
-  indexeddb: sqlite
+  providers:
+    indexeddb: sqlite
   encryptionKey: server-key
 `)
 
@@ -746,12 +759,13 @@ providers:
       source:
         path: ./web/api/manifest.yaml
       path: /api
-  indexeddbs:
+  indexeddb:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
 server:
-  indexeddb: sqlite
+  providers:
+    indexeddb: sqlite
   encryptionKey: server-key
 `)
 
@@ -774,12 +788,13 @@ providers:
       source:
         path: ./web/metrics/manifest.yaml
       path: /metrics/dashboard
-  indexeddbs:
+  indexeddb:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
 server:
-  indexeddb: sqlite
+  providers:
+    indexeddb: sqlite
   encryptionKey: server-key
 `)
 
@@ -806,12 +821,13 @@ providers:
       source:
         path: ./web/child/manifest.yaml
       path: /tools/admin
-  indexeddbs:
+  indexeddb:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
 server:
-  indexeddb: sqlite
+  providers:
+    indexeddb: sqlite
   encryptionKey: server-key
 `)
 
@@ -834,12 +850,13 @@ providers:
       source:
         path: ./web/root/manifest.yaml
       path: /
-  indexeddbs:
+  indexeddb:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
 server:
-  indexeddb: sqlite
+  providers:
+    indexeddb: sqlite
   encryptionKey: server-key
 `)
 
@@ -861,12 +878,13 @@ providers:
     roadmap:
       source: stdout
       path: /create-customer-roadmap-review
-  indexeddbs:
+  indexeddb:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
 server:
-  indexeddb: sqlite
+  providers:
+    indexeddb: sqlite
   encryptionKey: server-key
 `)
 
@@ -1340,7 +1358,7 @@ providers:
 		}
 	})
 
-	t.Run("normalizes legacy fileapi collection and bindings", func(t *testing.T) {
+	t.Run("rejects legacy fileapi collection and bindings", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -1357,15 +1375,12 @@ providers:
         path: ./providers/fileapi/archive
 `)
 
-		cfg, err := Load(path)
-		if err != nil {
-			t.Fatalf("Load: %v", err)
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
 		}
-		if got := cfg.Plugins["roadmap"].FileAPIs; !reflect.DeepEqual(got, []string{"archive"}) {
-			t.Fatalf("Plugins[roadmap].FileAPIs = %v, want [archive]", got)
-		}
-		if cfg.Providers.FileAPI["archive"] == nil {
-			t.Fatal(`Providers.FileAPI["archive"] = nil`)
+		if !strings.Contains(err.Error(), `field fileapis not found`) {
+			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
@@ -1536,7 +1551,8 @@ func TestLoadAcceptsNewComponentForms(t *testing.T) {
 			yaml: `
 providers:
   telemetry:
-    source: stdout
+    default:
+      source: stdout
 `,
 		},
 		{
@@ -1553,9 +1569,10 @@ providers:
 			yaml: `
 providers:
   auth:
-    source:
-      ref: github.com/valon-technologies/gestalt-providers/auth/google
-      version: 1.0.0
+    default:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/auth/google
+        version: 1.0.0
 `,
 		},
 	}
@@ -1582,10 +1599,9 @@ func TestLoadConfigValidation(t *testing.T) {
 		{
 			name: "provider with no source or surfaces",
 			yaml: `
-providers:
-  plugins:
-    service-a:
-      displayName: Service A
+plugins:
+  service-a:
+    displayName: Service A
 `,
 		},
 		{
@@ -1597,72 +1613,53 @@ server:
 `,
 		},
 		{
-			name: "server indexeddb selector cannot use legacy and canonical keys together",
+			name: "legacy server indexeddb selector is rejected",
 			yaml: `
 server:
   indexeddb: legacy
-  providers:
-    indexeddb: canonical
 `,
 		},
 		{
-			name: "indexeddb collection cannot use legacy and canonical keys together",
+			name: "legacy indexeddb collection is rejected",
 			yaml: `
 providers:
   indexeddbs:
     legacy:
       source:
         path: ./legacy/manifest.yaml
-  indexeddb:
-    canonical:
-      source:
-        path: ./canonical/manifest.yaml
 `,
 		},
 		{
-			name: "fileapi collection cannot use legacy and canonical keys together",
+			name: "legacy fileapi collection is rejected",
 			yaml: `
 providers:
   fileapis:
     legacy:
       source:
         path: ./legacy/manifest.yaml
-  fileapi:
-    canonical:
-      source:
-        path: ./canonical/manifest.yaml
 `,
 		},
 		{
-			name: "plugins cannot use legacy and canonical keys together",
+			name: "legacy plugin collection is rejected",
 			yaml: `
 providers:
   plugins:
     legacy:
       source:
         path: ./legacy/manifest.yaml
-plugins:
-  canonical:
-    source:
-      path: ./canonical/manifest.yaml
 `,
 		},
 		{
-			name: "plugin fileapi bindings cannot use legacy and canonical keys together",
+			name: "legacy plugin fileapi bindings are rejected",
 			yaml: `
 plugins:
   roadmap:
     source:
       path: ./roadmap/manifest.yaml
-    fileapi:
-      - canonical
     fileapis:
       - legacy
 providers:
   fileapi:
-    canonical:
-      source:
-        path: ./canonical/manifest.yaml
     legacy:
       source:
         path: ./legacy/manifest.yaml
@@ -1705,8 +1702,7 @@ func TestValidConfigurations(t *testing.T) {
 		{
 			name: "managed source plugin only",
 			yaml: `
-providers:
-  plugins:
+plugins:
     custom_tool:
       source:
         ref: github.com/acme-corp/tools/widget
@@ -1716,8 +1712,7 @@ providers:
 		{
 			name: "plugin with local source",
 			yaml: `
-providers:
-  plugins:
+plugins:
     service:
       source:
         path: /usr/bin/manifest.yaml
@@ -1748,8 +1743,7 @@ func TestPluginValidation(t *testing.T) {
 		{
 			name: "integration plugin source path is valid",
 			yaml: `
-providers:
-  plugins:
+plugins:
     external:
       source:
         path: ./plugins/dummy/manifest.yaml
@@ -1758,8 +1752,7 @@ providers:
 		{
 			name: "plugin source path and ref are mutually exclusive",
 			yaml: `
-providers:
-  plugins:
+plugins:
     external:
       source:
         path: ./plugins/dummy/manifest.yaml
@@ -1771,8 +1764,7 @@ providers:
 		{
 			name: "plugin env with local source is valid",
 			yaml: `
-providers:
-  plugins:
+plugins:
     external:
       source:
         path: ./plugins/dummy/manifest.yaml
@@ -1783,8 +1775,7 @@ providers:
 		{
 			name: "plugin config with source is valid",
 			yaml: `
-providers:
-  plugins:
+plugins:
     external:
       source:
         path: ./plugins/dummy/manifest.yaml
@@ -1795,8 +1786,7 @@ providers:
 		{
 			name: "plugin source is required for external",
 			yaml: `
-providers:
-  plugins:
+plugins:
     external:
       {}
 `,
@@ -1805,8 +1795,7 @@ providers:
 		{
 			name: "plugin source path with version is rejected",
 			yaml: `
-providers:
-  plugins:
+plugins:
     external:
       source:
         path: ./plugins/dummy/manifest.yaml
@@ -1817,8 +1806,7 @@ providers:
 		{
 			name: "plugin source with version is valid",
 			yaml: `
-providers:
-  plugins:
+plugins:
     external:
       source:
         ref: github.com/acme-corp/tools/widget
@@ -1828,8 +1816,7 @@ providers:
 		{
 			name: "plugin source with base_url override is rejected",
 			yaml: `
-providers:
-  plugins:
+plugins:
     external:
       source:
         ref: github.com/acme-corp/tools/widget
@@ -1841,8 +1828,7 @@ providers:
 		{
 			name: "plugin source without version is rejected",
 			yaml: `
-providers:
-  plugins:
+plugins:
     external:
       source:
         ref: github.com/acme-corp/tools/widget
@@ -1852,8 +1838,7 @@ providers:
 		{
 			name: "non-default connection params are accepted",
 			yaml: `
-providers:
-  plugins:
+plugins:
     external:
       source:
         path: ./plugins/dummy/manifest.yaml
@@ -2072,19 +2057,21 @@ func TestLoadConfigResolvesRelativePaths(t *testing.T) {
 	if err := os.WriteFile(cfgPath, []byte(`
 providers:
   auth:
-    source:
-      path: ../auth-plugin/provider.yaml
-  indexeddbs:
+    default:
+      source:
+        path: ../auth-plugin/provider.yaml
+  indexeddb:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
-  plugins:
-    service-a:
-      iconFile: ../assets/service.svg
-      source:
-        path: ../bin/manifest.yaml
+plugins:
+  service-a:
+    iconFile: ../assets/service.svg
+    source:
+      path: ../bin/manifest.yaml
 server:
-  indexeddb: sqlite
+  providers:
+    indexeddb: sqlite
 `), 0o644); err != nil {
 		t.Fatalf("WriteFile config: %v", err)
 	}
@@ -2115,19 +2102,21 @@ func TestAuthConfigMap(t *testing.T) {
 	path := mustWriteConfigFile(t, `
 providers:
   auth:
-    source:
-      ref: github.com/valon-technologies/gestalt-providers/auth/google
-      version: 1.0.0
-    config:
-      clientId: client-1
-      clientSecret: secret-1
-      redirectUrl: https://example.test/callback
-  indexeddbs:
+    default:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/auth/google
+        version: 1.0.0
+      config:
+        clientId: client-1
+        clientSecret: secret-1
+        redirectUrl: https://example.test/callback
+  indexeddb:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
 server:
-  indexeddb: sqlite
+  providers:
+    indexeddb: sqlite
   encryptionKey: server-key
 `)
 
@@ -2217,8 +2206,7 @@ func TestLoad_ResolvesRelativePluginSourcePath(t *testing.T) {
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := `providers:
-  plugins:
+	cfg := `plugins:
     sample:
       source:
         path: ./my-plugin/manifest.yaml
