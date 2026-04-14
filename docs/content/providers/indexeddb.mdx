@@ -7,9 +7,13 @@ contract can map cleanly to relational, document, or key-value backends.
 
 ## How IndexedDB providers work
 
-The active datastore is selected by `server.indexeddb`, which points to one of
-the named entries under `providers.indexeddbs`. Gestalt talks to that provider
-through the IndexedDB service contract while keeping plugin state namespaced so
+The active datastore is selected by `server.providers.indexeddb`, by a single
+`default: true` entry under `providers.indexeddb`, or by the only
+`providers.indexeddb` entry when there is exactly one. Disabled IndexedDB
+entries may stay in the config for later reuse, but Gestalt will not select
+them as the active datastore or expose them to plugins. Gestalt talks to the
+active datastore and any enabled plugin-bound host IndexedDB providers through
+the IndexedDB service contract while keeping plugin state namespaced so
 plugins cannot read or overwrite each other's records directly.
 
 ## First-party IndexedDB providers
@@ -29,11 +33,13 @@ For local development, SQLite keeps setup simple:
 
 ```yaml
 server:
-  indexeddb: main
+  providers:
+    indexeddb: main
 
 providers:
-  indexeddbs:
+  indexeddb:
     main:
+      default: true
       source:
         path: ./relationaldb/manifest.yaml
       config:
@@ -44,10 +50,11 @@ For production, reference a published release:
 
 ```yaml
 server:
-  indexeddb: main
+  providers:
+    indexeddb: main
 
 providers:
-  indexeddbs:
+  indexeddb:
     main:
       source:
         ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
@@ -63,7 +70,7 @@ Other first-party IndexedDB providers use their own config blocks:
 
 ```yaml
 providers:
-  indexeddbs:
+  indexeddb:
     main:
       source:
         ref: github.com/valon-technologies/gestalt-providers/indexeddb/dynamodb
@@ -76,7 +83,7 @@ providers:
 
 ```yaml
 providers:
-  indexeddbs:
+  indexeddb:
     main:
       source:
         ref: github.com/valon-technologies/gestalt-providers/indexeddb/mongodb
@@ -88,11 +95,18 @@ providers:
 
 ## Operational notes
 
-- Gestalt needs exactly one active datastore selected by `server.indexeddb`.
+- Gestalt needs exactly one active datastore selected by
+  `server.providers.indexeddb`, resolved from a single `default: true`
+  `providers.indexeddb` entry, or inferred from the only
+  `providers.indexeddb` entry.
 - Published datastore packages can be prepared with `gestaltd init` just like
   other provider types.
 - Plugins still go through the host's request and auth model; they do not talk
   to the datastore provider directly.
+- When a plugin omits `plugins.<name>.indexeddb`, Gestalt exposes the
+  selected/default host IndexedDB to that plugin automatically. An explicit
+  `plugins.<name>.indexeddb` list overrides that inheritance, and
+  `plugins.<name>.indexeddb: []` disables inherited IndexedDB access.
 
 ## Building your own datastore provider
 

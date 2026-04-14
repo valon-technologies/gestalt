@@ -120,12 +120,13 @@ func (m providerMetadata) descriptionOr(v string) string {
 }
 
 type Deps struct {
-	EncryptionKey []byte
-	BaseURL       string
-	SecretManager core.SecretManager
-	Services      *coredata.Services
-	IndexedDBs    map[string]indexeddb.IndexedDB
-	Egress        EgressDeps
+	EncryptionKey         []byte
+	BaseURL               string
+	SecretManager         core.SecretManager
+	Services              *coredata.Services
+	SelectedIndexedDBName string
+	IndexedDBs            map[string]indexeddb.IndexedDB
+	Egress                EgressDeps
 }
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthProvider, error)
@@ -312,6 +313,9 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	if selectedIndexedDBName == "" || def == nil {
 		return nil, fmt.Errorf("bootstrap: datastore resource name is required")
 	}
+	if def.Disabled {
+		return nil, fmt.Errorf("bootstrap: indexeddb resource %q is disabled", selectedIndexedDBName)
+	}
 	enc, encErr := crypto.NewAESGCM(encKey)
 	if encErr != nil {
 		return nil, fmt.Errorf("bootstrap: create encryptor: %w", encErr)
@@ -320,7 +324,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	if storeErr != nil {
 		return nil, fmt.Errorf("bootstrap: system indexeddb from resource %q: %w", selectedIndexedDBName, storeErr)
 	}
-	store = metricutil.InstrumentIndexedDB(store, cfg.Server.IndexedDB)
+	store = metricutil.InstrumentIndexedDB(store, selectedIndexedDBName)
 	svc, svcErr := coredata.New(store, enc)
 	if svcErr != nil {
 		_ = store.Close()
@@ -329,7 +333,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	hostIndexedDBs := map[string]indexeddb.IndexedDB{selectedIndexedDBName: store}
 	var extraIndexedDBs []indexeddb.IndexedDB
 	for name, entry := range cfg.Providers.IndexedDB {
-		if name == selectedIndexedDBName {
+		if name == selectedIndexedDBName || entry == nil || entry.Disabled {
 			continue
 		}
 		ds, err := buildIndexedDB(entry, factories)
@@ -355,6 +359,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 
 	deps.Egress = newEgressDeps(cfg)
 	deps.Services = svc
+	deps.SelectedIndexedDBName = selectedIndexedDBName
 	deps.IndexedDBs = hostIndexedDBs
 
 	closeSM = false

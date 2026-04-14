@@ -2,21 +2,33 @@ import { Tabs } from 'nextra/components'
 
 # Config File
 
-Every `gestaltd` deployment reads a single YAML config file. The top-level keys are `server` (listener, encryption, egress, and indexeddb selection), `authorization` (shared human/workload access policy), `providers` (auth, secrets, telemetry, audit, mounted UI bundles, and indexeddbs), and `plugins` (executable integrations):
+Every `gestaltd` deployment reads a single YAML config file. The canonical
+top-level keys are `server` (listener, encryption, egress, and host provider
+selection), `authorization` (shared human and workload access policy),
+`providers` (auth, secrets, telemetry, audit, mounted UI bundles, and
+indexeddb), and `plugins` (executable integrations):
 
 ```yaml
 server:
-  # listener, encryption, egress, indexeddb selector
+  # listener, encryption, egress, host provider selection
+  providers:
+    indexeddb: main
 authorization:
   policies: {}
   workloads: {}
 providers:
-  auth: {}
-  secrets: {}
-  telemetry: {}
-  audit: {}
-  ui: {}
-  indexeddb: {}
+  auth:
+    <name>: {}
+  secrets:
+    <name>: {}
+  telemetry:
+    <name>: {}
+  audit:
+    <name>: {}
+  ui:
+    <name>: {}
+  indexeddb:
+    <name>: {}
 plugins: {}
 ```
 
@@ -24,7 +36,7 @@ plugins: {}
 
 `${ENV_VAR}` references are expanded before YAML decoding. When a referenced variable is unset, Gestalt checks for a corresponding `ENV_VAR_FILE` variable and reads that file path instead. If neither is set, config loading fails. Use `${ENV_VAR:-}` when an explicit empty default is intentional. Unknown YAML fields are rejected.
 
-Several fields carry defaults when omitted: `server.public.port` defaults to `8080`, `providers.secrets.source` to `env`, and `providers.telemetry.source` to `stdout`. Relative paths resolve relative to the config file's directory. `secret://...` values are resolved during bootstrap, not during YAML parsing.
+Several fields carry defaults when omitted: `server.public.port` defaults to `8080`, `providers.secrets.default` defaults to builtin `env`, `providers.telemetry.default` defaults to builtin `stdout`, and `providers.audit.default` defaults to builtin `inherit`. Relative paths resolve relative to the config file's directory. `secret://...` values are resolved during bootstrap, not during YAML parsing.
 
 `authorization` is the canonical location for shared human and workload access policy. Existing deployments may continue to use `server.authorization` as a deprecated compatibility alias; Gestalt normalizes it into the top-level block during config load and bootstrap.
 
@@ -39,6 +51,12 @@ server:
     host: 127.0.0.1
     port: 9090
   baseUrl: https://gestalt.example.com
+  providers:
+    auth: corp-sso
+    secrets: vault
+    telemetry: observability
+    audit: compliance
+    indexeddb: main
   encryptionKey: secret://gestalt-encryption-key
   apiTokenTtl: 30d
   artifactsDir: ./state
@@ -88,6 +106,11 @@ authorization:
 | `management.host` | | Bind address for the management listener. |
 | `management.port` | | Port for the management listener. Required when `management.host` is set. |
 | `baseUrl` | | Public origin URL used for OAuth callbacks and admin UI links. |
+| `providers.auth` | | Named `providers.auth` entry the host uses for platform login. |
+| `providers.secrets` | | Named `providers.secrets` entry the host uses for config secret resolution. |
+| `providers.telemetry` | | Named `providers.telemetry` entry the host uses for logs, traces, and metrics. |
+| `providers.audit` | | Named `providers.audit` entry the host uses for audit output. |
+| `providers.indexeddb` | | Named `providers.indexeddb` entry the host uses for system storage. |
 | `encryptionKey` | | **Required.** Root encryption key. Typically a `secret://` reference. |
 | `apiTokenTtl` | `30d` | Lifetime of newly issued API tokens. Go durations or day suffixes (`30d`). |
 | `artifactsDir` | config directory | Directory for prepared `init` artifacts. |
@@ -98,33 +121,51 @@ When `server.management` is configured, Gestalt serves `/`, `/api/v1/*`, auth ro
 
 ## `providers.auth`
 
-Platform auth is optional. Omit the `providers.auth` block entirely to disable platform authentication, or set `providers: { auth: { disabled: true } }` explicitly. When auth is enabled, configure it with `providers.auth.source` and `providers.auth.config`. The source uses the same provider-reference shape as plugins: a `source` block plus optional `env` and `allowedHosts`.
+Platform auth is optional. Omit `providers.auth` entirely to disable platform authentication. When auth is enabled, configure one or more named entries under `providers.auth`, then select the active one with `server.providers.auth` or by marking exactly one entry `default: true`. If exactly one auth entry exists, Gestalt selects it automatically.
 
-### `disabled`
+Auth entries use the same provider-reference shape as plugins: a `source` block plus optional `env` and `allowedHosts`.
 
 ```yaml
+server:
+  providers:
+    auth: corp-sso
+
 providers:
   auth:
-    disabled: true
+    corp-sso:
+      default: true
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/auth/oidc
+        version: 0.0.1-alpha.1
+      config:
+        issuerUrl: https://login.example.com
+        clientId: ${OIDC_CLIENT_ID}
+        clientSecret: secret://oidc-client-secret
 ```
 
-Disables platform authentication. Every request is treated as a single anonymous user. Omitting the `providers.auth` block has the same effect.
+If `providers.auth` is omitted, every request is treated as anonymous.
 
 ### `google`
 
 ```yaml
+server:
+  providers:
+    auth: workspace-google
+
 providers:
   auth:
-    source:
-      ref: github.com/valon-technologies/gestalt-providers/auth/google
-      version: 0.0.1-alpha.1
-    config:
-      clientId: ${GOOGLE_CLIENT_ID}
-      clientSecret: secret://google-client-secret
-      redirectUrl: https://gestalt.example.com/api/v1/auth/login/callback
-      allowedDomains:
-        - example.com
-      sessionTtl: 24h
+    workspace-google:
+      default: true
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/auth/google
+        version: 0.0.1-alpha.1
+      config:
+        clientId: ${GOOGLE_CLIENT_ID}
+        clientSecret: secret://google-client-secret
+        redirectUrl: https://gestalt.example.com/api/v1/auth/login/callback
+        allowedDomains:
+          - example.com
+        sessionTtl: 24h
 ```
 
 `clientId` and `clientSecret` are both required and identify your Google OAuth application. `redirectUrl` defaults to a path derived from `server.baseUrl` when omitted. `allowedDomains` restricts login to specific email domains. `sessionTtl` controls session token lifetime and defaults to `24h`.
@@ -134,25 +175,31 @@ Google checks `email_verified` on every login. Unverified accounts are rejected.
 ### `oidc`
 
 ```yaml
+server:
+  providers:
+    auth: corp-sso
+
 providers:
   auth:
-    source:
-      ref: github.com/valon-technologies/gestalt-providers/auth/oidc
-      version: 0.0.1-alpha.1
-    config:
-      issuerUrl: https://login.example.com
-      clientId: ${OIDC_CLIENT_ID}
-      clientSecret: secret://oidc-client-secret
-      redirectUrl: https://gestalt.example.com/api/v1/auth/login/callback
-      allowedDomains:
-        - example.com
-      scopes:
-        - openid
-        - email
-        - profile
-      sessionTtl: 24h
-      pkce: true
-      displayName: Company SSO
+    corp-sso:
+      default: true
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/auth/oidc
+        version: 0.0.1-alpha.1
+      config:
+        issuerUrl: https://login.example.com
+        clientId: ${OIDC_CLIENT_ID}
+        clientSecret: secret://oidc-client-secret
+        redirectUrl: https://gestalt.example.com/api/v1/auth/login/callback
+        allowedDomains:
+          - example.com
+        scopes:
+          - openid
+          - email
+          - profile
+        sessionTtl: 24h
+        pkce: true
+        displayName: Company SSO
 ```
 
 Two fields are required: `issuerUrl` (the OIDC discovery base URL) and `clientId`. `clientSecret` may be omitted for PKCE-only public clients.
@@ -165,18 +212,22 @@ OIDC checks `email_verified` when the claim is present. Unverified accounts are 
 
 ### `providers.auth` shape
 
-Both `google` and `oidc` use the same PluginDef provider reference shape under `providers.auth`. First-party auth providers are published at `github.com/valon-technologies/gestalt-providers/auth/<name>`.
+Both `google` and `oidc` use the same provider-entry shape under `providers.auth.<name>`. First-party auth providers are published at `github.com/valon-technologies/gestalt-providers/auth/<name>`.
 
 | Field | Description |
 | --- | --- |
+| `default` | Marks this entry as the fallback when `server.providers.auth` is omitted. At most one auth entry may set it. |
+| `disabled` | Disables this named auth entry without deleting it from the file. |
 | `source.ref` | Managed provider source address. |
 | `source.version` | Required with `source.ref`. SemVer without a leading `v`. |
+| `source.path` | Local provider manifest path for development or custom auth providers. |
 | `env` | Extra environment variables passed to the provider process. |
 | `allowedHosts` | Network allowlist for sandboxed provider processes. |
+| `config` | Provider-specific config passed through to the auth provider. |
 
 ## `providers.indexeddb`
 
-Indexed databases are provider-based. Configure one or more named entries under `providers.indexeddb`, then set `server.providers.indexeddb` to the name the host should use for system storage. First-party indexeddb providers are published at `github.com/valon-technologies/gestalt-providers/indexeddb/<name>`.
+Indexed databases are provider-based. Configure one or more named entries under `providers.indexeddb`, then select the host datastore with `server.providers.indexeddb` or mark one entry `default: true`. If exactly one IndexedDB entry exists, Gestalt selects it automatically. Disabled IndexedDB entries may stay in the config, but Gestalt will not select them as the active datastore or expose them to plugins. First-party indexeddb providers are published at `github.com/valon-technologies/gestalt-providers/indexeddb/<name>`.
 
 ```yaml
 server:
@@ -186,6 +237,7 @@ server:
 providers:
   indexeddb:
     main:
+      default: true
       source:
         ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
         version: 0.0.1-alpha.2
@@ -194,6 +246,8 @@ providers:
 ```
 
 The exact config fields depend on the selected external indexeddb provider package. Gestalt itself does not have a built-in indexeddb driver matrix; it loads the configured provider process and passes the selected `providers.indexeddb.<name>.config` block through to that provider.
+
+Plugins can request specific IndexedDB bindings with `plugins.<name>.indexeddb`. When a plugin omits that field, Gestalt now inherits the selected/default host IndexedDB for that plugin automatically. Set `indexeddb: []` to disable that inheritance for a plugin.
 
 Common first-party IndexedDB packages:
 
@@ -205,14 +259,22 @@ Common first-party IndexedDB packages:
 
 ## `providers.secrets`
 
-The secrets manager resolves `secret://` references at startup. Two built-in sources (`env` and `file`) are selected by the `source` field. Cloud secret backends are loaded as external providers using `source.ref`, the same way auth and indexeddb providers work.
+The secrets manager resolves `secret://` references at startup. Configure one or more named entries under `providers.secrets`, then select the active one with `server.providers.secrets` or by marking exactly one entry `default: true`. If `providers.secrets` is omitted entirely, Gestalt inserts a builtin `default` entry with `source: env`.
+
+Two built-in sources (`env` and `file`) use a scalar `source` value. Cloud secret backends are loaded as external providers using `source.ref`, the same way auth and indexeddb providers work.
 
 ```yaml
+server:
+  providers:
+    secrets: filesystem
+
 providers:
   secrets:
-    source: file
-    config:
-      dir: /etc/gestalt-secrets
+    filesystem:
+      default: true
+      source: file
+      config:
+        dir: /etc/gestalt-secrets
 ```
 
 | Source | Config fields | Purpose |
@@ -225,13 +287,19 @@ providers:
 Cloud secret managers are external providers configured with `source.ref` instead of a string `source`:
 
 ```yaml
+server:
+  providers:
+    secrets: google
+
 providers:
   secrets:
-    source:
-      ref: github.com/valon-technologies/gestalt-providers/secrets/google
-      version: 0.0.1-alpha.13
-    config:
-      project: my-gcp-project
+    google:
+      default: true
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/secrets/google
+        version: 0.0.1-alpha.13
+      config:
+        project: my-gcp-project
 ```
 
 | Provider | Source ref | Config fields |
@@ -245,7 +313,7 @@ See [Secrets Providers](/providers/secrets) for the complete reference and SDK i
 
 ### Bootstrap credentials
 
-`secret://` references are resolved through the configured secret manager at startup, but the secret manager's own configuration (`providers.secrets.config`) cannot use `secret://` because it would be self-referential. Use `${ENV_VAR}` or `${ENV_VAR_FILE}` placeholders for any credentials the secret manager itself needs.
+`secret://` references are resolved through the configured secret manager at startup, but the secret manager's own configuration (`providers.secrets.<name>.config`) cannot use `secret://` because it would be self-referential. Use `${ENV_VAR}` or `${ENV_VAR_FILE}` placeholders for any credentials the secret manager itself needs.
 
 Each provider authenticates to its backing service differently. The `env` and `file` providers are built in. The remaining rows apply when using the corresponding external provider from `gestalt-providers`:
 
@@ -264,16 +332,24 @@ For local development, `env` or `file` avoids external dependencies entirely. Sw
 
 Gestalt uses [OpenTelemetry](https://opentelemetry.io) for distributed traces, metrics, and structured logs. Every HTTP request, broker invocation, and plugin gRPC call is automatically traced. See [Observability](/observability) for the emitted metric inventory and Prometheus name translation.
 
+Configure one or more named entries under `providers.telemetry`, then select the active one with `server.providers.telemetry` or by marking exactly one entry `default: true`. If `providers.telemetry` is omitted entirely, Gestalt inserts a builtin `default` entry with `source: stdout`.
+
 ### `stdout`
 
 ```yaml
+server:
+  providers:
+    telemetry: local
+
 providers:
   telemetry:
-    source: stdout
-    config:
-      format: text
-      level: info
-      serviceName: gestaltd
+    local:
+      default: true
+      source: stdout
+      config:
+        format: text
+        level: info
+        serviceName: gestaltd
 ```
 
 Outputs structured logs to standard output. Traces remain disabled, but metrics are collected locally and exposed through the Prometheus-compatible `/metrics` endpoint. The built-in admin UI at `/admin` reads that same scrape surface. This is the default when `providers.telemetry` is omitted.
@@ -289,26 +365,32 @@ Outputs structured logs to standard output. Traces remain disabled, but metrics 
 ### `otlp`
 
 ```yaml
+server:
+  providers:
+    telemetry: observability
+
 providers:
   telemetry:
-    source: otlp
-    config:
-      endpoint: otel-collector:4317
-      protocol: grpc
-      serviceName: gestaltd
-      insecure: false
-      headers:
-        Authorization: Bearer ${OTEL_TOKEN}
-      resourceAttributes:
-        deployment.environment: production
-        service.version: "1.0.0"
-      traces:
-        samplingRatio: 1.0
-      metrics:
-        interval: 60s
-      logs:
-        exporter: otlp
-        level: info
+    observability:
+      default: true
+      source: otlp
+      config:
+        endpoint: otel-collector:4317
+        protocol: grpc
+        serviceName: gestaltd
+        insecure: false
+        headers:
+          Authorization: Bearer ${OTEL_TOKEN}
+        resourceAttributes:
+          deployment.environment: production
+          service.version: "1.0.0"
+        traces:
+          samplingRatio: 1.0
+        metrics:
+          interval: 60s
+        logs:
+          exporter: otlp
+          level: info
 ```
 
 Exports to any OpenTelemetry-compatible collector (Jaeger, Grafana Alloy, Datadog Agent) while still keeping local `/metrics` available by default. The built-in admin UI at `/admin` reads that same local scrape surface.
@@ -331,26 +413,37 @@ Exports to any OpenTelemetry-compatible collector (Jaeger, Grafana Alloy, Datado
 To keep system logs on stdout while still exporting traces and metrics over OTLP:
 
 ```yaml
+server:
+  providers:
+    telemetry: observability
+
 providers:
   telemetry:
-    source: otlp
-    config:
-      endpoint: otel-collector:4317
-      protocol: grpc
-      metrics:
-        interval: 60s
-      logs:
-        exporter: stdout
-        format: json
-        level: info
+    observability:
+      source: otlp
+      config:
+        endpoint: otel-collector:4317
+        protocol: grpc
+        metrics:
+          interval: 60s
+        logs:
+          exporter: stdout
+          format: json
+          level: info
 ```
 
 ### `noop`
 
 ```yaml
+server:
+  providers:
+    telemetry: disabled
+
 providers:
   telemetry:
-    source: noop
+    disabled:
+      default: true
+      source: noop
 ```
 
 Disables all telemetry. Instrumentation points remain but produce zero overhead. This disables Prometheus scraping. `/metrics` returns a clear unavailable response, and the built-in admin UI shows that metrics are unavailable.
@@ -365,28 +458,42 @@ Disables all telemetry. Instrumentation points remain but produce zero overhead.
 
 ## `providers.audit`
 
-Audit records are emitted as structured log entries with `log.type=audit`. By default they inherit the normal telemetry log pipeline, but you can override that with a dedicated `providers.audit` block. See [Audit Logging](/audit-logging) for the event schema and coverage details, and [Observability](/observability) for export options. If you keep `providers: { audit: { source: inherit } }`, you can still route audit traffic to a dedicated backend by filtering on `log.type=audit` in your collector.
+Audit records are emitted as structured log entries with `log.type=audit`. Configure one or more named entries under `providers.audit`, then select the active one with `server.providers.audit` or by marking exactly one entry `default: true`. If `providers.audit` is omitted entirely, Gestalt inserts a builtin `default` entry with `source: inherit`.
+
+By default audit output inherits the normal telemetry log pipeline, but you can override that with a dedicated audit entry. See [Audit Logging](/audit-logging) for the event schema and coverage details, and [Observability](/observability) for export options. If you keep `source: inherit`, you can still route audit traffic to a dedicated backend by filtering on `log.type=audit` in your collector.
 
 ### `inherit`
 
 ```yaml
+server:
+  providers:
+    audit: default
+
 providers:
   audit:
-    source: inherit
+    default:
+      default: true
+      source: inherit
 ```
 
 This is the default when `providers.audit` is omitted. Audit records follow the same log route as `providers.telemetry`: when telemetry uses `stdout`, audit logs go to standard output; when telemetry uses `otlp`, audit logs export through the OTLP log pipeline; when telemetry uses `noop`, audit output is disabled unless you override it here.
 
-`providers.audit.config` is not allowed when `providers.audit.source` is `inherit`.
+`providers.audit.<name>.config` is not allowed when that entry uses `source: inherit`.
 
 ### `stdout`
 
 ```yaml
+server:
+  providers:
+    audit: compliance
+
 providers:
   audit:
-    source: stdout
-    config:
-      format: json
+    compliance:
+      default: true
+      source: stdout
+      config:
+        format: json
 ```
 
 Writes audit records to standard output even if the main telemetry pipeline is using a different provider.
@@ -399,18 +506,24 @@ Writes audit records to standard output even if the main telemetry pipeline is u
 ### `otlp`
 
 ```yaml
+server:
+  providers:
+    audit: compliance
+
 providers:
   audit:
-    source: otlp
-    config:
-      endpoint: audit-collector:4317
-      protocol: grpc
-      serviceName: gestaltd
-      insecure: false
-      headers:
-        Authorization: Bearer ${AUDIT_OTLP_TOKEN}
-      resourceAttributes:
-        log.stream: audit
+    compliance:
+      default: true
+      source: otlp
+      config:
+        endpoint: audit-collector:4317
+        protocol: grpc
+        serviceName: gestaltd
+        insecure: false
+        headers:
+          Authorization: Bearer ${AUDIT_OTLP_TOKEN}
+        resourceAttributes:
+          log.stream: audit
 ```
 
 Exports audit records over OTLP without changing where application logs, metrics, or traces go. Use this when you want audit records in a dedicated compliance pipeline while keeping the rest of `gestaltd` on `stdout` or a different OTLP collector.
@@ -427,16 +540,22 @@ Exports audit records over OTLP without changing where application logs, metrics
 ### `noop`
 
 ```yaml
+server:
+  providers:
+    audit: disabled
+
 providers:
   audit:
-    source: noop
+    disabled:
+      default: true
+      source: noop
 ```
 
-Disables audit output explicitly. `providers.audit.config` is not allowed when `providers.audit.source` is `noop`.
+Disables audit output explicitly. `providers.audit.<name>.config` is not allowed when that entry uses `source: noop`.
 
 ## `plugins`
 
-Each entry in the `plugins` map is a named plugin backed by an executable provider package. The provider package is the source of truth for operations and transport details. Server config selects the provider, passes provider-specific config, and declares connection policy. The HTTP API route paths still use "integrations" (e.g. `/api/v1/integrations`) as stable code surface, but the CLI and config both use `plugins` as the canonical term.
+Each entry in the top-level `plugins` map is a named plugin backed by an executable provider package. The provider package is the source of truth for operations and transport details. Server config loads the plugin, passes provider-specific config, and declares connection policy. The HTTP API route paths still use "integrations" (e.g. `/api/v1/integrations`) as stable code surface, but the CLI and config both use `plugins` as the canonical term.
 
 ```yaml
 plugins:
@@ -446,8 +565,10 @@ plugins:
     iconFile: ./icons/github.svg
     authorizationPolicy: support_staff
     source:
-      ref: github.com/valon-technologies/gestalt-providers/github
+      ref: github.com/valon-technologies/gestalt-providers/plugins/github
       version: 1.2.3
+    indexeddb:
+      - archive
     surfaces:
       openapi:
         baseUrl: https://api.github.com
@@ -476,7 +597,7 @@ plugins:
 | `surfaces` | Typed host-side overrides for manifest-declared surfaces, such as `surfaces.openapi.baseUrl` or `surfaces.graphql.url`. |
 | `connections` | Named connection declarations. See [connections](#connections) below. |
 | `allowedOperations` | Allowlist with optional `alias`, `description`, and `allowedRoles` overrides per operation. |
-| `indexeddbs` | Optional list of named `providers.indexeddb` bindings exposed to the executable plugin through the SDK transport. Store names are automatically prefixed per plugin. A single binding also populates the default IndexedDB SDK env var for compatibility. |
+| `indexeddb` | Optional list of named `providers.indexeddb` bindings exposed to the executable plugin through the SDK transport. When omitted, the plugin inherits the selected/default host IndexedDB. Set `indexeddb: []` to disable inheritance. A single effective binding also populates the default IndexedDB SDK env var for compatibility. |
 
 ### `plugins.*.source`
 
@@ -484,7 +605,7 @@ Every plugin uses a `source` block to declare its backing provider.
 
 ```yaml
 source:
-  ref: github.com/valon-technologies/gestalt-providers/github
+  ref: github.com/valon-technologies/gestalt-providers/plugins/github
   version: 1.2.3
 ```
 
@@ -763,7 +884,9 @@ Structural validation runs at config load time (`init`, `validate`, `serve`). Ru
 
 Each plugin uses a `source` block. Every plugin must use exactly one loading mode: local `source.path` or managed `source.ref`. `source.version` is required with `source.ref` and invalid with `source.path`.
 
-Auth providers and indexeddb entries use the same external provider shape. When `providers.auth` or `providers.indexeddb.<name>` is set, `source.ref` or `source.path` must be present. `providers.auth.config` and `providers.indexeddb.<name>.config` are only allowed when their corresponding source is set.
+Host provider maps (`providers.auth`, `providers.secrets`, `providers.telemetry`, `providers.audit`, and `providers.indexeddb`) use named entries. `server.providers.<kind>` may select an entry explicitly. When the selector is omitted, Gestalt uses exactly one `default: true` entry, or the only entry if there is just one.
+
+Auth providers and indexeddb entries use the same external provider shape. When `providers.auth.<name>` or `providers.indexeddb.<name>` is set, `source.ref` or `source.path` must be present. `providers.auth.<name>.config` and `providers.indexeddb.<name>.config` are only allowed when their corresponding source is set.
 
 Only `connections.default` may define `params` or `discovery`. All connections in a plugin must share the same mode.
 
@@ -779,4 +902,4 @@ Server listener ports must be greater than zero. When `server.management` is con
 
 ### Runtime
 
-`server.providers.indexeddb`, `providers.indexeddb`, and `server.encryptionKey` are required at `serve` time. `providers.auth` is optional.
+`providers.indexeddb` and `server.encryptionKey` are required at `serve` time. The active datastore must resolve from `server.providers.indexeddb`, a single `default: true` `providers.indexeddb` entry, or the only `providers.indexeddb` entry, and that selected datastore may not be disabled. `providers.auth` is optional.

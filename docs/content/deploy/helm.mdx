@@ -40,18 +40,23 @@ config:
   server:
     baseUrl: "${GESTALT_BASE_URL}"
     encryptionKey: "${GESTALT_ENCRYPTION_KEY}"
-    indexeddb: main
+    providers:
+      auth: corp-sso
+      indexeddb: main
   providers:
     auth:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/auth/oidc
-        version: 0.0.1-alpha.1
-      config:
-        issuerUrl: "${OIDC_ISSUER_URL}"
-        clientId: "${OIDC_CLIENT_ID}"
-        clientSecret: "${OIDC_CLIENT_SECRET}"
-    indexeddbs:
+      corp-sso:
+        default: true
+        source:
+          ref: github.com/valon-technologies/gestalt-providers/auth/oidc
+          version: 0.0.1-alpha.1
+        config:
+          issuerUrl: "${OIDC_ISSUER_URL}"
+          clientId: "${OIDC_CLIENT_ID}"
+          clientSecret: "${OIDC_CLIENT_SECRET}"
+    indexeddb:
       main:
+        default: true
         source:
           ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
           version: 0.0.1-alpha.2
@@ -119,19 +124,24 @@ config:
       port: 9090
     baseUrl: "${GESTALT_BASE_URL}"
     encryptionKey: "${GESTALT_ENCRYPTION_KEY}"
-    indexeddb: main
+    providers:
+      auth: corp-sso
+      indexeddb: main
   providers:
     auth:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/auth/oidc
-        version: 0.0.1-alpha.1
-      config:
-        issuerUrl: "${OIDC_ISSUER_URL}"
-        clientId: "${OIDC_CLIENT_ID}"
-        clientSecret: "${OIDC_CLIENT_SECRET}"
-        redirectUrl: "${OIDC_REDIRECT_URL}"
-    indexeddbs:
+      corp-sso:
+        default: true
+        source:
+          ref: github.com/valon-technologies/gestalt-providers/auth/oidc
+          version: 0.0.1-alpha.1
+        config:
+          issuerUrl: "${OIDC_ISSUER_URL}"
+          clientId: "${OIDC_CLIENT_ID}"
+          clientSecret: "${OIDC_CLIENT_SECRET}"
+          redirectUrl: "${OIDC_REDIRECT_URL}"
+    indexeddb:
       main:
+        default: true
         source:
           ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
           version: 0.0.1-alpha.2
@@ -178,7 +188,7 @@ Service rather than exposing it on the public ingress.
 
 ## When to enable `pluginInit`
 
-Enable the init container when your config uses `providers.plugins.*.source.ref`, `providers.auth.source.ref`, `providers.indexeddbs.*.source.ref`, or `providers.ui.*.source.ref` and you want that state prepared before the main container starts. The init container copies the rendered config and runs:
+Enable the init container when your config uses `plugins.*.source.ref`, `providers.auth.*.source.ref`, `providers.indexeddb.*.source.ref`, or `providers.ui.*.source.ref` and you want that state prepared before the main container starts. The init container copies the rendered config and runs:
 
 `/gestaltd init --config /etc/gestalt/config.yaml`
 

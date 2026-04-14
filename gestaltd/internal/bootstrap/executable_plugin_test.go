@@ -820,11 +820,12 @@ func TestPluginIndexedDBBindingsExposeHostSocketEnv(t *testing.T) {
 		"archive": &coretesting.StubIndexedDB{},
 	}
 
-	checkEnv := func(t *testing.T, bindings []string, envName string) bool {
+	checkEnv := func(t *testing.T, bindings []string, selectedIndexedDBName, envName string) bool {
 		t.Helper()
 		providers, _, err := buildProvidersStrict(context.Background(), makeConfig(bindings), NewFactoryRegistry(), Deps{
-			Services:   services,
-			IndexedDBs: indexedDBBindings,
+			Services:              services,
+			SelectedIndexedDBName: selectedIndexedDBName,
+			IndexedDBs:            indexedDBBindings,
 		})
 		if err != nil {
 			t.Fatalf("buildProvidersStrict: %v", err)
@@ -849,22 +850,34 @@ func TestPluginIndexedDBBindingsExposeHostSocketEnv(t *testing.T) {
 		return env.Found && env.Value != ""
 	}
 
-	if got := checkEnv(t, nil, providerhost.DefaultIndexedDBSocketEnv); got {
-		t.Fatal("default IndexedDB env should not be set without plugin indexeddb bindings")
+	if got := checkEnv(t, nil, "main", providerhost.DefaultIndexedDBSocketEnv); !got {
+		t.Fatal("default IndexedDB env should inherit the selected host indexeddb when plugin bindings are omitted")
 	}
-	if got := checkEnv(t, []string{"main"}, providerhost.DefaultIndexedDBSocketEnv); !got {
+	if got := checkEnv(t, nil, "main", providerhost.IndexedDBSocketEnv("main")); !got {
+		t.Fatal("named IndexedDB env should inherit the selected host indexeddb when plugin bindings are omitted")
+	}
+	if got := checkEnv(t, nil, "main", providerhost.IndexedDBSocketEnv("archive")); got {
+		t.Fatal(`named IndexedDB env for "archive" should not be set when plugin bindings are omitted and the selected host indexeddb is "main"`)
+	}
+	if got := checkEnv(t, []string{}, "main", providerhost.DefaultIndexedDBSocketEnv); got {
+		t.Fatal("default IndexedDB env should not be set when an explicit empty plugin indexeddb list disables inheritance")
+	}
+	if got := checkEnv(t, []string{}, "main", providerhost.IndexedDBSocketEnv("main")); got {
+		t.Fatal(`named IndexedDB env for "main" should not be set when an explicit empty plugin indexeddb list disables inheritance`)
+	}
+	if got := checkEnv(t, []string{"main"}, "archive", providerhost.DefaultIndexedDBSocketEnv); !got {
 		t.Fatal("default IndexedDB env should be set with a single plugin indexeddb binding")
 	}
-	if got := checkEnv(t, []string{"main"}, providerhost.IndexedDBSocketEnv("main")); !got {
+	if got := checkEnv(t, []string{"main"}, "archive", providerhost.IndexedDBSocketEnv("main")); !got {
 		t.Fatal("named IndexedDB env should be set with a single plugin indexeddb binding")
 	}
-	if got := checkEnv(t, []string{"main", "archive"}, providerhost.DefaultIndexedDBSocketEnv); got {
+	if got := checkEnv(t, []string{"main", "archive"}, "main", providerhost.DefaultIndexedDBSocketEnv); got {
 		t.Fatal("default IndexedDB env should not be set with multiple plugin indexeddb bindings")
 	}
-	if got := checkEnv(t, []string{"main", "archive"}, providerhost.IndexedDBSocketEnv("main")); !got {
+	if got := checkEnv(t, []string{"main", "archive"}, "main", providerhost.IndexedDBSocketEnv("main")); !got {
 		t.Fatal(`named IndexedDB env for "main" should be set with multiple plugin indexeddb bindings`)
 	}
-	if got := checkEnv(t, []string{"main", "archive"}, providerhost.IndexedDBSocketEnv("archive")); !got {
+	if got := checkEnv(t, []string{"main", "archive"}, "main", providerhost.IndexedDBSocketEnv("archive")); !got {
 		t.Fatal(`named IndexedDB env for "archive" should be set with multiple plugin indexeddb bindings`)
 	}
 }

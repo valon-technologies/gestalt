@@ -261,12 +261,15 @@ func ValidateResolvedStructure(cfg *Config) error {
 // ValidateRuntime checks runtime-only requirements: encryption key plus the
 // required top-level datastore provider.
 func ValidateRuntime(cfg *Config) error {
-	name, _, err := cfg.SelectedIndexedDBProvider()
+	name, entry, err := cfg.SelectedIndexedDBProvider()
 	if err != nil {
 		return err
 	}
 	if name == "" {
 		return fmt.Errorf("config validation: server.providers.indexeddb is required (set server.providers.indexeddb or mark one providers.indexeddb entry default: true)")
+	}
+	if entry != nil && entry.Disabled {
+		return fmt.Errorf("config validation: selected indexeddb %q is disabled", name)
 	}
 	if cfg.Server.EncryptionKey == "" {
 		return fmt.Errorf("config validation: server.encryption_key is required")
@@ -315,14 +318,14 @@ func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) erro
 	if entry == nil {
 		return nil
 	}
-	if len(entry.IndexedDBs) > 0 {
+	if entry.IndexedDBs != nil {
 		return fmt.Errorf("config validation: %s.indexeddb is only supported on plugins.*", subject)
 	}
 	if entry.Surfaces != nil {
 		return fmt.Errorf("config validation: %s.surfaces is only supported on plugins.*", subject)
 	}
 	if entry.AuthorizationPolicy != "" && !strings.HasPrefix(subject, "ui.") {
-		return fmt.Errorf("config validation: %s.authorizationPolicy is only supported on providers.plugins.* and providers.ui.*", subject)
+		return fmt.Errorf("config validation: %s.authorizationPolicy is only supported on plugins.* and providers.ui.*", subject)
 	}
 	return nil
 }
@@ -383,9 +386,14 @@ func validatePluginIndexedDBBindings(cfg *Config, name string, entry *ProviderEn
 	if entry == nil {
 		return nil
 	}
-	seen := make(map[string]struct{}, len(entry.IndexedDBs))
-	envNames := make(map[string]string, len(entry.IndexedDBs))
-	for i, binding := range entry.IndexedDBs {
+	bindings, err := cfg.EffectivePluginIndexedDBBindings(entry)
+	if err != nil {
+		return err
+	}
+	explicitBindings := entry.IndexedDBs != nil
+	seen := make(map[string]struct{}, len(bindings))
+	envNames := make(map[string]string, len(bindings))
+	for i, binding := range bindings {
 		binding = strings.TrimSpace(binding)
 		if binding == "" {
 			return fmt.Errorf("config validation: plugin %q indexeddb[%d] is required", name, i)
@@ -396,13 +404,18 @@ func validatePluginIndexedDBBindings(cfg *Config, name string, entry *ProviderEn
 		if _, ok := cfg.Providers.IndexedDB[binding]; !ok {
 			return fmt.Errorf("config validation: plugin %q indexeddb[%d] references unknown indexeddb %q", name, i, binding)
 		}
+		if cfg.Providers.IndexedDB[binding].Disabled {
+			return fmt.Errorf("config validation: plugin %q indexeddb[%d] references disabled indexeddb %q", name, i, binding)
+		}
 		envName := indexedDBSocketEnv(binding)
 		if otherBinding, exists := envNames[envName]; exists {
 			return fmt.Errorf("config validation: plugin %q indexeddb[%d] %q conflicts with %q after IndexedDB env normalization (%s)", name, i, binding, otherBinding, envName)
 		}
 		seen[binding] = struct{}{}
 		envNames[envName] = binding
-		entry.IndexedDBs[i] = binding
+		if explicitBindings {
+			entry.IndexedDBs[i] = binding
+		}
 	}
 	return nil
 }

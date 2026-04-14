@@ -372,15 +372,17 @@ the SDK call makes the store portable across both styles of backend.
 
 ## Config reference
 
-Reference an IndexedDB provider in the `providers.indexeddbs` section, and set `server.indexeddb` to the name of the active provider. For local development, SQLite keeps things simple with a file path:
+Reference an IndexedDB provider in the `providers.indexeddb` section, and set `server.providers.indexeddb` to the name of the active provider. For local development, SQLite keeps things simple with a file path:
 
 ```yaml
 server:
-  indexeddb: main
+  providers:
+    indexeddb: main
 
 providers:
-  indexeddbs:
+  indexeddb:
     main:
+      default: true
       source:
         path: ./relationaldb/manifest.yaml
       config:
@@ -390,9 +392,14 @@ providers:
 For production, use `source.ref` and `version` to reference a published release:
 
 ```yaml
+server:
+  providers:
+    indexeddb: main
+
 providers:
-  indexeddbs:
+  indexeddb:
     main:
+      default: true
       source:
         ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
         version: 0.0.1

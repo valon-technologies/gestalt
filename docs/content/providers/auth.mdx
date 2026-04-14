@@ -1,16 +1,16 @@
 # Auth
 
 Auth providers handle platform login for the Gestalt server. They are separate
-from plugin connections: `providers.auth` decides how users sign in to the
-deployment itself, while plugin connections decide how Gestalt authenticates to
-upstream APIs on behalf of callers.
+from plugin connections: named entries under `providers.auth` decide how users
+sign in to the deployment itself, while plugin connections decide how Gestalt
+authenticates to upstream APIs on behalf of callers.
 
 ## How auth providers work
 
-When a request arrives without a valid session, Gestalt asks the configured
-auth provider to begin login, redirects the user to the identity provider, and
-then calls the provider again to complete the callback. After that, Gestalt
-issues and stores its own session.
+When a request arrives without a valid session, Gestalt asks the selected auth
+provider to begin login, redirects the user to the identity provider, and then
+calls the provider again to complete the callback. After that, Gestalt issues
+and stores its own session.
 
 Some auth providers also support:
 
@@ -31,42 +31,53 @@ First-party auth providers live under
 ## Configuring `providers.auth`
 
 ```yaml
+server:
+  providers:
+    auth: workspace-google
+
 providers:
   auth:
-    source:
-      ref: github.com/valon-technologies/gestalt-providers/auth/google
-      version: 0.0.1-alpha.1
-    config:
-      clientId: ${GOOGLE_CLIENT_ID}
-      clientSecret: secret://google-client-secret
-      allowedDomains:
-        - example.com
+    workspace-google:
+      default: true
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/auth/google
+        version: 0.0.1-alpha.1
+      config:
+        clientId: ${GOOGLE_CLIENT_ID}
+        clientSecret: secret://google-client-secret
+        allowedDomains:
+          - example.com
 ```
 
 Secret references such as `secret://google-client-secret` are resolved through
-`providers.secrets` before the auth provider receives its config.
+the selected `providers.secrets` entry before the auth provider receives its
+config.
 
-To disable platform auth entirely, omit `providers.auth` or set:
+Use `server.providers.auth` when you have more than one auth entry. If there is
+only one auth entry, Gestalt selects it automatically; otherwise mark one entry
+`default: true`.
 
-```yaml
-providers:
-  auth:
-    disabled: true
-```
+To disable platform auth entirely, omit `providers.auth`.
 
-For local development, that disabled mode is the simple default: every request
+For local development, that no-auth mode is the simple default: every request
 is treated as the same anonymous user.
 
 ## Local source during development
 
 ```yaml
+server:
+  providers:
+    auth: local-auth
+
 providers:
   auth:
-    source:
-      path: ./google-auth/manifest.yaml
-    config:
-      clientId: ${GOOGLE_CLIENT_ID}
-      clientSecret: secret://google-client-secret
+    local-auth:
+      default: true
+      source:
+        path: ./google-auth/manifest.yaml
+      config:
+        clientId: ${GOOGLE_CLIENT_ID}
+        clientSecret: secret://google-client-secret
 ```
 
 ## Building your own auth provider

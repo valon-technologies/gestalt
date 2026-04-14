@@ -6,7 +6,7 @@ This page covers building custom plugin providers. If you only need to
 configure a published plugin in a Gestalt deployment, use
 [Providers > Plugins](/providers/plugins).
 
-Plugins are one provider kind. Their manifests use a top-level `spec:` block, and deployments reference them under `providers.plugins`. A plugin can define operations as executable code (handled by the provider process), as passthrough surfaces (REST, OpenAPI, GraphQL, or MCP endpoints forwarded by the host), or both.
+Plugins are one provider kind. Their manifests use a top-level `spec:` block, and deployments reference them under top-level `plugins`. A plugin can define operations as executable code (handled by the provider process), as passthrough surfaces (REST, OpenAPI, GraphQL, or MCP endpoints forwarded by the host), or both.
 
 The examples on this page use a Slack plugin as the running example, since it demonstrates most plugin features: OAuth connections, REST passthrough surfaces, executable operations, and MCP.
 
@@ -515,11 +515,10 @@ spec:
 You configure a declarative plugin the same way as any other. Point the config at the manifest, and the declared operations appear in the catalog:
 
 ```yaml
-providers:
-  plugins:
-    slack-readonly:
-      source:
-        path: ./slack-readonly/manifest.yaml
+plugins:
+  slack-readonly:
+    source:
+      path: ./slack-readonly/manifest.yaml
 ```
 
 ```sh
@@ -644,13 +643,12 @@ A Slack plugin could use this to check which Slack workspace the caller is conne
 Point a local config at the source plugin. Gestalt synthesizes the executable wrapper and materializes the catalog automatically:
 
 ```yaml
-providers:
-  plugins:
-    slack:
-      source:
-        path: ./slack/manifest.yaml
-      allowedHosts:
-        - slack.com
+plugins:
+  slack:
+    source:
+      path: ./slack/manifest.yaml
+    allowedHosts:
+      - slack.com
 ```
 
 Start the server and invoke an operation:

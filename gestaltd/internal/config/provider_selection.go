@@ -93,6 +93,33 @@ func (c *Config) SelectedIndexedDBProvider() (string, *ProviderEntry, error) {
 	return c.SelectedHostProvider(HostProviderKindIndexedDB)
 }
 
+func (c *Config) EffectivePluginIndexedDBBindings(plugin *ProviderEntry) ([]string, error) {
+	c.SyncCompatFields()
+	selectedName, _, err := c.SelectedIndexedDBProvider()
+	if err != nil {
+		return nil, err
+	}
+	return ResolveEffectivePluginIndexedDBBindings(plugin, selectedName), nil
+}
+
+func ResolveEffectivePluginIndexedDBBindings(plugin *ProviderEntry, selectedName string) []string {
+	if plugin == nil {
+		return nil
+	}
+	if plugin.IndexedDBs != nil {
+		bindings := make([]string, len(plugin.IndexedDBs))
+		for i, binding := range plugin.IndexedDBs {
+			bindings[i] = strings.TrimSpace(binding)
+		}
+		return bindings
+	}
+	selectedName = strings.TrimSpace(selectedName)
+	if selectedName == "" {
+		return nil
+	}
+	return []string{selectedName}
+}
+
 func ResolveSelectedHostProvider(kind HostProviderKind, explicit string, entries map[string]*ProviderEntry) (string, *ProviderEntry, error) {
 	if len(entries) == 0 {
 		return "", nil, nil

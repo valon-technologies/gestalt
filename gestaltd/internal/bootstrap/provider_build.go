@@ -507,12 +507,13 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		HostBinary:    entry.HostBinary,
 		Cleanup:       cleanup,
 	}
-	if len(entry.IndexedDBs) > 0 {
+	indexedDBBindings := config.ResolveEffectivePluginIndexedDBBindings(entry, deps.SelectedIndexedDBName)
+	if len(indexedDBBindings) > 0 {
 		if len(deps.IndexedDBs) == 0 {
 			return nil, fmt.Errorf("indexeddb host services are not available")
 		}
-		execCfg.HostServices = make([]providerhost.HostService, 0, len(entry.IndexedDBs)+1)
-		for _, binding := range entry.IndexedDBs {
+		execCfg.HostServices = make([]providerhost.HostService, 0, len(indexedDBBindings)+1)
+		for _, binding := range indexedDBBindings {
 			ds, ok := deps.IndexedDBs[binding]
 			if !ok || ds == nil {
 				return nil, fmt.Errorf("indexeddb %q is not available", binding)
@@ -526,8 +527,8 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 				}(ds),
 			})
 		}
-		if len(entry.IndexedDBs) == 1 {
-			ds := deps.IndexedDBs[entry.IndexedDBs[0]]
+		if len(indexedDBBindings) == 1 {
+			ds := deps.IndexedDBs[indexedDBBindings[0]]
 			execCfg.HostServices = append(execCfg.HostServices, providerhost.HostService{
 				EnvVar: providerhost.DefaultIndexedDBSocketEnv,
 				Register: func(srv *grpc.Server) {

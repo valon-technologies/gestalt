@@ -6,7 +6,7 @@ Two simple secrets providers (`env` and `file`), telemetry, and audit remain bui
 
 ## Auth Providers
 
-Auth providers handle platform login. They are configured under `providers.auth` in your config file.
+Auth providers handle platform login. They are configured under named entries in `providers.auth`, and `server.providers.auth` selects the active one when more than one is present.
 
 | Name | Purpose |
 | --- | --- |
@@ -15,29 +15,37 @@ Auth providers handle platform login. They are configured under `providers.auth`
 | `oidc` | Generic OpenID Connect. Works with Okta, Auth0, Azure AD, Keycloak, and others. |
 
 ```yaml
+server:
+  providers:
+    auth: workspace-google
+
 providers:
   auth:
-    source:
-      ref: github.com/valon-technologies/gestalt-providers/auth/google
-      version: 1.0.0
-    config:
-      allowedDomains:
-        - example.com
+    workspace-google:
+      default: true
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/auth/google
+        version: 1.0.0
+      config:
+        allowedDomains:
+          - example.com
 ```
 
-To disable platform auth entirely, omit the `providers.auth` block or set `providers: { auth: { disabled: true } }`.
+To disable platform auth entirely, omit the `providers.auth` block.
 
 ## IndexedDB Providers
 
-Datastore providers back the persistent state layer. They are configured under named entries in `providers.indexeddbs`, and `server.indexeddb` selects which one the host uses. Gestalt does not compile datastore drivers into the binary; it starts the configured external datastore provider process at runtime.
+Datastore providers back the persistent state layer. They are configured under named entries in `providers.indexeddb`, and `server.providers.indexeddb` selects which one the host uses. Gestalt does not compile datastore drivers into the binary; it starts the configured external datastore provider process at runtime.
 
 ```yaml
 server:
-  indexeddb: main
+  providers:
+    indexeddb: main
 
 providers:
-  indexeddbs:
+  indexeddb:
     main:
+      default: true
       source:
         ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
         version: 1.0.0
@@ -60,7 +68,7 @@ Two secret managers are compiled into the `gestaltd` binary and resolve `secret:
 | `env` | Resolves secrets from environment variables. Default when `providers.secrets` is omitted. |
 | `file` | Resolves secrets from files in a configured directory. Works with Kubernetes volume-mounted secrets. |
 
-For cloud backends (Google Secret Manager, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault), see [Secrets Providers](/providers/secrets#available-providers). These use a `source:` config key under `providers.secrets`.
+For cloud backends (Google Secret Manager, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault), see [Secrets Providers](/providers/secrets#available-providers). These use named entries under `providers.secrets`.
 
 ## Telemetry Providers (built-in)
 
@@ -68,21 +76,20 @@ Telemetry providers are compiled into the binary.
 
 | Name | Purpose |
 | --- | --- |
-| `stdout` | Outputs structured logs to standard output. Traces stay disabled, and metrics are exposed locally through the built-in Prometheus bridge. Default when `telemetry` is omitted. |
+| `stdout` | Outputs structured logs to standard output. Traces stay disabled, and metrics are exposed locally through the built-in Prometheus bridge. Default when `providers.telemetry` is omitted. |
 | `otlp` | Exports traces, metrics, and logs via OpenTelemetry Protocol. |
 | `noop` | Disables all telemetry collection. |
 
 ## Plugins
 
-Plugins (BigQuery, Jira, Slack, and others) are published separately from [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers). They are configured under `providers.plugins`:
+Plugins (BigQuery, Jira, Slack, and others) are published separately from [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers). They are configured under top-level `plugins`:
 
 ```yaml
-providers:
-  plugins:
-    jira:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/jira
-        version: 1.0.0
+plugins:
+  jira:
+    source:
+      ref: github.com/valon-technologies/gestalt-providers/plugins/jira
+      version: 1.0.0
 ```
 
 ## Community and Custom Providers
