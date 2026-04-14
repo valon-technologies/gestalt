@@ -383,7 +383,7 @@ server:
   public:
     port: 8080
   baseUrl: http://localhost:8080
-  encryptionKey: change-me
+  encryptionKey: "REPLACE-WITH-OUTPUT-OF-openssl-rand-hex-32"
   indexeddb: main
 
 providers:
@@ -395,5 +395,7 @@ providers:
       config:
         dsn: sqlite://./gestalt.db
 ```
+
+Generate `server.encryptionKey` once with `openssl rand -hex 32`. Do not use a shared placeholder value in a real deployment.
 
 See [Observability](/observability) for adding metrics, logs, and OTLP export. See [Deploy](/deploy) for production startup workflows, lockfiles, and prepared artifacts.

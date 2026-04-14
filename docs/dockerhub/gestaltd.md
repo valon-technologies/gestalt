@@ -45,11 +45,13 @@ Mount a config file and writable `/data` volume before starting the container:
 ```sh
 docker run --rm \
   -p 8080:8080 \
-  -e GESTALT_ENCRYPTION_KEY=change-me \
+  -e GESTALT_ENCRYPTION_KEY=REPLACE-WITH-OUTPUT-OF-openssl-rand-hex-32 \
   -v "$(pwd)/gestalt.yaml:/etc/gestalt/config.yaml:ro" \
   -v gestalt-data:/data \
   valontechnologies/gestaltd:latest
 ```
+
+Generate the encryption key once with `openssl rand -hex 32` and use that value for the deployment.
 
 Example minimal config:
 
@@ -86,7 +88,7 @@ services:
       - ./config.yaml:/etc/gestalt/config.yaml:ro
       - gestalt-data:/data
     environment:
-      GESTALT_ENCRYPTION_KEY: change-me
+      GESTALT_ENCRYPTION_KEY: "REPLACE-WITH-OUTPUT-OF-openssl-rand-hex-32"
 
 volumes:
   gestalt-data:
