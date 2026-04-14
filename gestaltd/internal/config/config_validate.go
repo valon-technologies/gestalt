@@ -69,9 +69,6 @@ func ValidateStructure(cfg *Config) error {
 		if err := validatePluginOnlyProviderFields("ui."+name, &entry.ProviderEntry); err != nil {
 			return err
 		}
-		if entry.Disabled {
-			continue
-		}
 		if entry.Source.IsBuiltin() {
 			return fmt.Errorf("config validation: ui %q does not support builtin providers; use a provider source reference", name)
 		}
@@ -102,6 +99,9 @@ func ValidateStructure(cfg *Config) error {
 	if err := validateS3Config(cfg); err != nil {
 		return err
 	}
+	if err := validateConfigSecretRefs(cfg); err != nil {
+		return err
+	}
 
 	// Validate plugins
 	for name, entry := range cfg.Plugins {
@@ -129,15 +129,12 @@ func validateHostProviderEntries(kind HostProviderKind, entries map[string]*Prov
 				return err
 			}
 		case HostProviderKindSecrets, HostProviderKindTelemetry:
-			if !entry.Disabled && !entry.Source.IsBuiltin() {
+			if !entry.Source.IsBuiltin() {
 				if err := validateProviderEntrySource(string(kind), name, entry); err != nil {
 					return err
 				}
 			}
 		case HostProviderKindAudit:
-			if entry.Disabled {
-				continue
-			}
 			if entry.Source.IsBuiltin() {
 				if err := validateBuiltinAudit(entry); err != nil {
 					return err
@@ -216,7 +213,7 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error 
 	if src.IsManaged() {
 		modeCount++
 	}
-	if modeCount == 0 && !entry.Disabled {
+	if modeCount == 0 {
 		return fmt.Errorf("config validation: %s %q source.path or source.ref is required", kind, name)
 	}
 	if modeCount > 1 {
@@ -247,6 +244,20 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error 
 	return nil
 }
 
+func validateConfigSecretRefs(cfg *Config) error {
+	referenced, err := ReferencedConfigSecretProviders(cfg)
+	if err != nil {
+		return fmt.Errorf("config validation: %w", err)
+	}
+	for name := range referenced {
+		entry, ok := cfg.Providers.Secrets[name]
+		if !ok || entry == nil {
+			return fmt.Errorf("config validation: secret refs reference unknown secrets provider %q", name)
+		}
+	}
+	return nil
+}
+
 // ValidateResolvedStructure checks integration fields whose support depends on
 // resolved managed plugin manifests.
 func ValidateResolvedStructure(cfg *Config) error {
@@ -257,7 +268,7 @@ func ValidateResolvedStructure(cfg *Config) error {
 		if err := validateManifestBackedIntegration(name, entry); err != nil {
 			return err
 		}
-		if entry.Disabled || strings.TrimSpace(entry.MountPath) == "" || strings.TrimSpace(entry.UI) != "" {
+		if strings.TrimSpace(entry.MountPath) == "" || strings.TrimSpace(entry.UI) != "" {
 			continue
 		}
 		if entry.ResolvedManifest == nil || entry.ManifestSpec() == nil || entry.ManifestSpec().UI == nil {
@@ -268,7 +279,7 @@ func ValidateResolvedStructure(cfg *Config) error {
 		if entry == nil {
 			return fmt.Errorf("config validation: ui %q requires a source", name)
 		}
-		if entry.Disabled || entry.AuthorizationPolicy == "" {
+		if entry.AuthorizationPolicy == "" {
 			continue
 		}
 		if entry.ResolvedManifest == nil || entry.ManifestSpec() == nil {
@@ -378,9 +389,6 @@ func validateS3Config(cfg *Config) error {
 		if err := validatePluginOnlyProviderFields("providers.s3."+name, entry); err != nil {
 			return err
 		}
-		if entry.Disabled {
-			continue
-		}
 		if err := validateProviderEntrySource("s3", name, entry); err != nil {
 			return err
 		}
@@ -483,8 +491,8 @@ func validateAdminConfig(cfg *Config) error {
 		if err != nil {
 			return err
 		}
-		if authProvider == nil || authProvider.Disabled {
-			return fmt.Errorf("config validation: server.admin.authorizationPolicy requires providers.auth to be configured and enabled")
+		if authProvider == nil {
+			return fmt.Errorf("config validation: server.admin.authorizationPolicy requires providers.auth to be configured")
 		}
 		if err := validateAuthorizationPolicyReference(cfg, "server.admin", "/admin", policy); err != nil {
 			return err
@@ -552,18 +560,6 @@ func validatePluginIndexedDBConfig(cfg *Config, name string, entry *ProviderEntr
 		return nil
 	}
 	indexedDB := entry.IndexedDB
-	if indexedDB.Disabled {
-		switch {
-		case indexedDB.Provider != "":
-			return fmt.Errorf("config validation: plugins.%s.indexeddb.disabled may not be combined with indexeddb.provider", name)
-		case indexedDB.DB != "":
-			return fmt.Errorf("config validation: plugins.%s.indexeddb.disabled may not be combined with indexeddb.db", name)
-		case len(indexedDB.ObjectStores) > 0:
-			return fmt.Errorf("config validation: plugins.%s.indexeddb.disabled may not be combined with indexeddb.objectStores", name)
-		default:
-			return nil
-		}
-	}
 	seenStores := make(map[string]struct{}, len(indexedDB.ObjectStores))
 	for i, store := range indexedDB.ObjectStores {
 		if store == "" {
@@ -598,9 +594,6 @@ func validatePluginS3Bindings(cfg *Config, name string, entry *ProviderEntry) er
 		if !ok || boundEntry == nil {
 			return fmt.Errorf("config validation: plugin %q s3[%d] references unknown s3 %q", name, i, binding)
 		}
-		if boundEntry.Disabled {
-			return fmt.Errorf("config validation: plugin %q s3[%d] references disabled s3 %q", name, i, binding)
-		}
 		envName := providerenv.S3SocketEnv(binding)
 		if otherBinding, exists := envNames[envName]; exists {
 			return fmt.Errorf("config validation: plugin %q s3[%d] %q conflicts with %q after S3 env normalization (%s)", name, i, binding, otherBinding, envName)
@@ -626,7 +619,8 @@ func validatePluginCacheBindings(cfg *Config, name string, entry *ProviderEntry)
 		if _, exists := seen[binding]; exists {
 			return fmt.Errorf("config validation: plugin %q cache[%d] duplicates %q", name, i, binding)
 		}
-		if _, ok := cfg.Providers.Cache[binding]; !ok {
+		boundEntry, ok := cfg.Providers.Cache[binding]
+		if !ok || boundEntry == nil {
 			return fmt.Errorf("config validation: plugin %q cache[%d] references unknown cache %q", name, i, binding)
 		}
 		envName := cacheSocketEnv(binding)
@@ -662,7 +656,7 @@ func cacheSocketEnv(name string) string {
 }
 func normalizeMountedUIPaths(cfg *Config, pluginOwnedUIRefs map[string]struct{}) error {
 	for name, entry := range cfg.Providers.UI {
-		if entry == nil || entry.Disabled {
+		if entry == nil {
 			continue
 		}
 		if strings.TrimSpace(entry.Path) == "" {
@@ -719,7 +713,7 @@ func validateMountedUICollisions(cfg *Config, pluginOwnedUIRefs map[string]struc
 	names := slices.Sorted(maps.Keys(cfg.Providers.UI))
 	for _, name := range names {
 		entry := cfg.Providers.UI[name]
-		if entry == nil || entry.Disabled || strings.TrimSpace(entry.Path) == "" {
+		if entry == nil || strings.TrimSpace(entry.Path) == "" {
 			continue
 		}
 		subjects = append(subjects, mountedPathSubject{
@@ -731,11 +725,11 @@ func validateMountedUICollisions(cfg *Config, pluginOwnedUIRefs map[string]struc
 	pluginNames := slices.Sorted(maps.Keys(cfg.Plugins))
 	for _, name := range pluginNames {
 		entry := cfg.Plugins[name]
-		if entry == nil || entry.Disabled || strings.TrimSpace(entry.UI) != "" || strings.TrimSpace(entry.MountPath) == "" {
+		if entry == nil || strings.TrimSpace(entry.UI) != "" || strings.TrimSpace(entry.MountPath) == "" {
 			continue
 		}
 		if _, ok := pluginOwnedUIRefs[name]; ok {
-			if ui := cfg.Providers.UI[name]; ui != nil && !ui.Disabled && mountedUIPathsMatch(ui.Path, entry.MountPath) {
+			if ui := cfg.Providers.UI[name]; ui != nil && mountedUIPathsMatch(ui.Path, entry.MountPath) {
 				continue
 			}
 		}
@@ -793,7 +787,7 @@ func mountedUIPathsMatch(uiPath, mountPath string) bool {
 func pluginOwnedUIRefs(cfg *Config) map[string]struct{} {
 	refs := make(map[string]struct{}, len(cfg.Plugins))
 	for name, entry := range cfg.Plugins {
-		if entry == nil || entry.Disabled || strings.TrimSpace(entry.UI) != "" || strings.TrimSpace(entry.MountPath) == "" {
+		if entry == nil || strings.TrimSpace(entry.UI) != "" || strings.TrimSpace(entry.MountPath) == "" {
 			continue
 		}
 		refs[name] = struct{}{}

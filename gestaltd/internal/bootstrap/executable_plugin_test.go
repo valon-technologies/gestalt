@@ -11,6 +11,7 @@ import (
 	"runtime"
 	"slices"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -854,9 +855,6 @@ func TestPluginIndexedDBExposeHostSocketEnv(t *testing.T) {
 	if got := checkEnv(t, &config.PluginIndexedDBConfig{Provider: "archive"}, providerhost.IndexedDBSocketEnv("archive")); got {
 		t.Fatal("named IndexedDB env should not be set when plugins expose a single indexeddb socket")
 	}
-	if got := checkEnv(t, &config.PluginIndexedDBConfig{Disabled: true}, providerhost.DefaultIndexedDBSocketEnv); got {
-		t.Fatal("default IndexedDB env should not be set when plugin indexeddb is disabled")
-	}
 }
 
 func TestPluginCacheBindingsExposeHostSocketEnv(t *testing.T) {
@@ -940,6 +938,48 @@ func TestPluginCacheBindingsExposeHostSocketEnv(t *testing.T) {
 	}
 	if got := checkEnv(t, []string{"session", "rate_limit"}, providerhost.CacheSocketEnv("rate_limit")); !got {
 		t.Fatal(`named cache env for "rate_limit" should be set with multiple plugin cache bindings`)
+	}
+}
+
+func TestPluginCacheBindingsRejectUnknownCaches(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+
+	cfg := &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Cache:                []string{"missing"},
+			},
+		},
+	}
+
+	_, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{
+		CacheDefs: map[string]*config.ProviderEntry{
+			"session": {
+				Config: mustNode(t, map[string]any{"namespace": "session"}),
+			},
+		},
+		CacheFactory: func(yaml.Node) (corecache.Cache, error) {
+			return coretesting.NewStubCache(), nil
+		},
+	})
+	if err == nil {
+		t.Fatal("buildProvidersStrict: expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), `cache "missing" is not available`) {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

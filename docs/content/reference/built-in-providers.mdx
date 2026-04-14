@@ -26,7 +26,7 @@ providers:
           - example.com
 ```
 
-To disable platform auth entirely, omit the `providers.auth` block or set `providers.auth.default.disabled: true`.
+To disable platform auth entirely, omit the `providers.auth` block.
 
 ## IndexedDB Providers
 
@@ -55,7 +55,7 @@ providers:
 
 ## Secret Managers
 
-Two secret managers are compiled into the `gestaltd` binary and resolve `secret://` references during bootstrap. Cloud secret backends are available as external providers published from [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers).
+Two secret managers are compiled into the `gestaltd` binary and resolve structured secret refs during bootstrap. Cloud secret backends are available as external providers published from [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers).
 
 | Name | Purpose |
 | --- | --- |

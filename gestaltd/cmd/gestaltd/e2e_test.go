@@ -196,6 +196,79 @@ func TestE2EValidateRejectsMalformedYAML(t *testing.T) {
 	}
 }
 
+func TestE2EValidateRejectsLegacyConfigSecretSyntax(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := `server:
+  encryptionKey: secret://enc-key
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected validate to fail for legacy secret syntax, output: %s", out)
+	}
+	if !strings.Contains(string(out), "legacy secret:// syntax") {
+		t.Fatalf("expected output to mention legacy secret syntax, got: %s", out)
+	}
+}
+
+func TestE2EValidateRejectsMalformedStructuredSecretRef(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name      string
+		cfg       string
+		wantError string
+	}{
+		{
+			name: "missing provider",
+			cfg: `server:
+  encryptionKey:
+    secret:
+      name: enc-key
+`,
+			wantError: "secret.provider is required",
+		},
+		{
+			name: "extra key",
+			cfg: `server:
+  encryptionKey:
+    secret:
+      provider: env
+      name: enc-key
+      from: somewhere
+`,
+			wantError: "secret.from is not supported",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			cfgPath := filepath.Join(dir, "config.yaml")
+			if err := os.WriteFile(cfgPath, []byte(tc.cfg), 0o644); err != nil {
+				t.Fatalf("WriteFile config: %v", err)
+			}
+
+			out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+			if err == nil {
+				t.Fatalf("expected validate to fail for malformed structured secret ref, output: %s", out)
+			}
+			if !strings.Contains(string(out), tc.wantError) {
+				t.Fatalf("expected output to mention %q, got: %s", tc.wantError, out)
+			}
+		})
+	}
+}
+
 func setupPluginDir(t *testing.T, baseDir string) string {
 	t.Helper()
 	return setupPluginDirWithVersion(t, baseDir, "0.0.1-alpha.1")

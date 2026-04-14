@@ -330,6 +330,42 @@ server:
 	}
 }
 
+func TestLoadConfigStructuredSecretRefMissingEnvVariableFails(t *testing.T) {
+	t.Parallel()
+
+	providerEnv := "GESTALT_TEST_SECRET_PROVIDER_" + strings.ToUpper(strings.ReplaceAll(t.Name(), "/", "_"))
+	path := mustWriteConfigFile(t, fmt.Sprintf(`
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+  secrets:
+    default:
+      source: env
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey:
+    secret:
+      provider: ${%s}
+      name: enc-key
+`, providerEnv))
+
+	_, err := LoadWithLookup(path, func(string) (string, bool) {
+		return "", false
+	})
+	if err == nil {
+		t.Fatal("LoadWithLookup: expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), fmt.Sprintf(`environment variable %q not set`, providerEnv)) {
+		t.Fatalf("expected missing env error, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), fmt.Sprintf("${%s:-}", providerEnv)) {
+		t.Fatalf("expected empty-default hint, got: %v", err)
+	}
+}
+
 func TestLoadConfigEmptyDefaultEnvSyntax(t *testing.T) {
 	t.Parallel()
 
@@ -556,10 +592,6 @@ server:
 		{
 			name: "missing datastore",
 			yaml: `
-providers:
-  auth:
-    auth:
-      disabled: true
 server:
   encryptionKey: server-key
 `,
@@ -580,12 +612,9 @@ server:
 			wantErr: true,
 		},
 		{
-			name: "auth disabled is allowed",
+			name: "omitted auth is allowed",
 			yaml: `
 providers:
-  auth:
-    auth:
-      disabled: true
   indexeddb:
     sqlite:
       source:
@@ -596,20 +625,6 @@ server:
   encryptionKey: server-key
 `,
 			wantErr: false,
-		},
-		{
-			name: "disabled singleton datastore is rejected",
-			yaml: `
-providers:
-  indexeddb:
-    only:
-      disabled: true
-      source:
-        path: ./providers/datastore/sqlite
-server:
-  encryptionKey: server-key
-`,
-			wantErr: true,
 		},
 	}
 
@@ -631,10 +646,10 @@ server:
 			if err != nil {
 				t.Fatalf("ValidateRuntime: %v", err)
 			}
-			if tc.name == "auth disabled is allowed" {
+			if tc.name == "omitted auth is allowed" {
 				_, auth := mustSelectedProvider(t, cfg, HostProviderKindAuth)
-				if auth == nil || !auth.Disabled {
-					t.Fatalf("SelectedAuthProvider = %#v, want disabled auth entry", auth)
+				if auth != nil {
+					t.Fatalf("SelectedAuthProvider = %#v, want nil", auth)
 				}
 			}
 		})
@@ -652,9 +667,6 @@ server:
   baseUrl: not a url
   encryptionKey: server-key
 providers:
-  auth:
-    auth:
-      disabled: true
   indexeddb:
     sqlite:
       source:
@@ -677,9 +689,6 @@ server:
     port: 9090
     baseUrl: not a url
 providers:
-  auth:
-    auth:
-      disabled: true
   indexeddb:
     sqlite:
       source:
@@ -894,7 +903,7 @@ server:
 		}
 	})
 
-	t.Run("ui entry can be disabled", func(t *testing.T) {
+	t.Run("ui entry rejects disabled field", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -912,20 +921,16 @@ server:
   encryptionKey: server-key
 `)
 
-		cfg, err := Load(path)
-		if err != nil {
-			t.Fatalf("Load: %v", err)
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
 		}
-		entry := cfg.Providers.UI["roadmap"]
-		if entry == nil {
-			t.Fatal(`Providers.UI["roadmap"] = nil`)
-		}
-		if !entry.Disabled {
-			t.Fatal(`Providers.UI["roadmap"].Disabled = false, want true`)
+		if !strings.Contains(err.Error(), `field disabled not found`) {
+			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
-	t.Run("disabled field accepts all YAML boolean variants", func(t *testing.T) {
+	t.Run("ui disabled field rejects YAML boolean variants", func(t *testing.T) {
 		t.Parallel()
 
 		for _, variant := range []string{"true", "True", "TRUE"} {
@@ -948,18 +953,18 @@ server:
   encryptionKey: server-key
 `, variant))
 
-				cfg, err := Load(path)
-				if err != nil {
-					t.Fatalf("Load: %v", err)
+				_, err := Load(path)
+				if err == nil {
+					t.Fatal("Load: expected error, got nil")
 				}
-				if !cfg.Providers.UI["roadmap"].Disabled {
-					t.Fatalf(`Providers.UI["roadmap"].Disabled = false with disabled: %s, want true`, variant)
+				if !strings.Contains(err.Error(), `field disabled not found`) {
+					t.Fatalf("disabled: %s unexpected error: %v", variant, err)
 				}
 			})
 		}
 	})
 
-	t.Run("ui config is accepted when disabled", func(t *testing.T) {
+	t.Run("ui config is rejected when disabled field is present", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -980,8 +985,11 @@ server:
 `)
 
 		_, err := Load(path)
-		if err != nil {
-			t.Fatalf("Load: %v", err)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `field disabled not found`) {
+			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
@@ -1142,6 +1150,42 @@ server:
 		}
 	})
 
+	t.Run("nested mounted ui provider paths are allowed", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  ui:
+    docs:
+      source:
+        path: ./web/docs/manifest.yaml
+      path: /docs
+    admin:
+      source:
+        path: ./web/docs-admin/manifest.yaml
+      path: /docs/admin
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if got := cfg.Providers.UI["docs"].Path; got != "/docs" {
+			t.Fatalf(`Providers.UI["docs"].Path = %q, want %q`, got, "/docs")
+		}
+		if got := cfg.Providers.UI["admin"].Path; got != "/docs/admin" {
+			t.Fatalf(`Providers.UI["admin"].Path = %q, want %q`, got, "/docs/admin")
+		}
+	})
+
 	t.Run("reserved path is rejected", func(t *testing.T) {
 		t.Parallel()
 
@@ -1267,39 +1311,37 @@ server:
 		}
 	})
 
-	t.Run("nested ui paths are accepted", func(t *testing.T) {
+	t.Run("plugin mount path prefix collision with mounted ui is rejected", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
 providers:
   ui:
-    parent:
+    docs:
       source:
-        path: ./web/parent/manifest.yaml
+        path: ./web/docs/manifest.yaml
       path: /tools
-    child:
-      source:
-        path: ./web/child/manifest.yaml
-      path: /tools/admin
   indexeddb:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
+plugins:
+  admin:
+    source:
+      path: ./plugin/manifest.yaml
+    mountPath: /tools/admin
 server:
   providers:
     indexeddb: sqlite
   encryptionKey: server-key
 `)
 
-		cfg, err := Load(path)
-		if err != nil {
-			t.Fatalf("Load: %v", err)
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
 		}
-		if got := cfg.Providers.UI["parent"].Path; got != "/tools" {
-			t.Fatalf(`Providers.UI["parent"].Path = %q, want %q`, got, "/tools")
-		}
-		if got := cfg.Providers.UI["child"].Path; got != "/tools/admin" {
-			t.Fatalf(`Providers.UI["child"].Path = %q, want %q`, got, "/tools/admin")
+		if !strings.Contains(err.Error(), `ui.docs.path "/tools" conflicts with plugins.admin.mountPath "/tools/admin"`) {
+			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
@@ -1440,7 +1482,7 @@ server:
 		}
 	})
 
-	t.Run("plugin accepts explicit disabled indexeddb config", func(t *testing.T) {
+	t.Run("plugin rejects disabled indexeddb config", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -1461,13 +1503,12 @@ server:
   encryptionKey: server-key
 `)
 
-		cfg, err := Load(path)
-		if err != nil {
-			t.Fatalf("Load: %v", err)
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
 		}
-		want := &PluginIndexedDBConfig{Disabled: true}
-		if got := cfg.Plugins["roadmap"].IndexedDB; !reflect.DeepEqual(got, want) {
-			t.Fatalf("Plugins[roadmap].IndexedDB = %#v, want %#v", got, want)
+		if !strings.Contains(err.Error(), `field disabled not found`) {
+			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 
@@ -1765,37 +1806,12 @@ server:
 				wantIndexedDB: true,
 			},
 			{
-				name: "empty object with disabled-only host indexeddb",
+				name: "omitted indexeddb with no host indexeddb definitions",
 				body: `
 plugins:
   roadmap:
     source:
       path: ./plugin/manifest.yaml
-    indexeddb: {}
-providers:
-  indexeddb:
-    only:
-      disabled: true
-      source:
-        path: ./providers/datastore/sqlite
-server:
-  encryptionKey: server-key
-`,
-				wantIndexedDB: true,
-			},
-			{
-				name: "omitted indexeddb with disabled-only host indexeddb",
-				body: `
-plugins:
-  roadmap:
-    source:
-      path: ./plugin/manifest.yaml
-providers:
-  indexeddb:
-    only:
-      disabled: true
-      source:
-        path: ./providers/datastore/sqlite
 server:
   encryptionKey: server-key
 `,
@@ -1821,7 +1837,7 @@ server:
 		}
 	})
 
-	t.Run("rejects disabled indexeddb mixed with provider override", func(t *testing.T) {
+	t.Run("rejects indexeddb disabled field", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -1847,7 +1863,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `plugins.roadmap.indexeddb.disabled may not be combined with indexeddb.provider`) {
+		if !strings.Contains(err.Error(), `field disabled not found`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -1953,7 +1969,7 @@ server:
 		}
 	})
 
-	t.Run("rejects disabled s3 binding names", func(t *testing.T) {
+	t.Run("rejects s3 disabled field", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -1981,7 +1997,40 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `plugin "roadmap" s3[0] references disabled s3 "assets"`) {
+		if !strings.Contains(err.Error(), `field disabled not found`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects cache disabled field", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    cache:
+      - session
+providers:
+  cache:
+    session:
+      disabled: true
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `field disabled not found`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -2015,6 +2064,19 @@ providers:
 `,
 			wantErr: `field builtin not found`,
 		},
+		{
+			name: "disabled field wins over missing env",
+			yaml: `
+providers:
+  ui:
+    roadmap:
+      disabled: true
+      source:
+        path: ${MISSING_UI_PATH}
+      path: /roadmap
+`,
+			wantErr: `field disabled not found`,
+		},
 	}
 
 	for _, tc := range cases {
@@ -2046,29 +2108,6 @@ providers:
   telemetry:
     primary:
       source: stdout
-`,
-		},
-		{
-			name: "disabled true",
-			yaml: `
-providers:
-  ui:
-    roadmap:
-      disabled: true
-`,
-		},
-		{
-			name: "disabled s3 entry",
-			yaml: `
-providers:
-  s3:
-    assets:
-      disabled: true
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/s3/compatible
-        version: 1.0.0
-      config:
-        bucket: ${MISSING_S3_BUCKET}
 `,
 		},
 		{
@@ -2515,20 +2554,20 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			wantErr: `source.path or source.ref is required`,
 		},
 		{
-			name: "auth config accepted when auth disabled",
+			name: "auth config requires source",
 			cfg: &Config{
 				Providers: ProvidersConfig{
-					Auth: singletonProviderEntry(&ProviderEntry{Config: yaml.Node{Kind: yaml.MappingNode}, Disabled: true}),
+					Auth: singletonProviderEntry(&ProviderEntry{Config: yaml.Node{Kind: yaml.MappingNode}}),
 				},
 			},
+			wantErr: `source.path or source.ref is required`,
 		},
 		{
-			name: "disabled s3 entry skips source validation",
+			name: "s3 entry validates source",
 			cfg: &Config{
 				Providers: ProvidersConfig{
 					S3: map[string]*ProviderEntry{
 						"assets": {
-							Disabled: true,
 							Source: ProviderSource{
 								Ref: "not-a-valid-ref",
 							},
@@ -2536,6 +2575,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 					},
 				},
 			},
+			wantErr: `source.ref`,
 		},
 		{
 			name: "plugin auth rejects mcp oauth early",

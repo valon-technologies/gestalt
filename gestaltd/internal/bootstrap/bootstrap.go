@@ -269,33 +269,94 @@ type preparedCore struct {
 	Deps            Deps
 }
 
-func prepareSecretManager(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) (core.SecretManager, error) {
-	sm, err := buildSecretManager(cfg, factories)
+type configSecretManagers struct {
+	ctx       context.Context
+	cfg       *config.Config
+	factories *FactoryRegistry
+	managers  map[string]core.SecretManager
+}
+
+func newConfigSecretManagers(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) (*configSecretManagers, error) {
+	referenced, err := config.ReferencedConfigSecretProviders(cfg)
 	if err != nil {
 		return nil, err
 	}
-	if err := resolveSecretRefs(ctx, cfg, sm); err != nil {
-		_ = closeSecretManager(sm)
+	if len(referenced) == 0 {
+		return nil, nil
+	}
+	return &configSecretManagers{
+		ctx:       ctx,
+		cfg:       cfg,
+		factories: factories,
+		managers:  make(map[string]core.SecretManager, len(referenced)),
+	}, nil
+}
+
+func (r *configSecretManagers) resolve(ref config.SecretRef) (string, error) {
+	sm, err := r.manager(ref.Provider)
+	if err != nil {
+		return "", err
+	}
+	value, err := sm.GetSecret(r.ctx, ref.Name)
+	if err != nil {
+		return "", fmt.Errorf("provider %q: %w", ref.Provider, err)
+	}
+	return value, nil
+}
+
+func (r *configSecretManagers) manager(name string) (core.SecretManager, error) {
+	if sm, ok := r.managers[name]; ok {
+		return sm, nil
+	}
+	entry := r.cfg.Providers.Secrets[name]
+	if entry == nil {
+		return nil, fmt.Errorf("config validation: secret refs reference unknown secrets provider %q", name)
+	}
+	sm, err := buildNamedSecretManager(name, entry, r.factories)
+	if err != nil {
 		return nil, err
 	}
+	r.managers[name] = sm
 	return sm, nil
 }
 
-// ResolveConfigSecrets resolves secret:// references in config using the
-// configured secrets provider, then closes the temporary secret manager.
-func ResolveConfigSecrets(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) error {
-	sm, err := prepareSecretManager(ctx, cfg, factories)
+func (r *configSecretManagers) Close() error {
+	if r == nil {
+		return nil
+	}
+	var errs []error
+	for _, sm := range r.managers {
+		errs = append(errs, closeSecretManager(sm))
+	}
+	return errors.Join(errs...)
+}
+
+func resolveConfigSecrets(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) error {
+	resolver, err := newConfigSecretManagers(ctx, cfg, factories)
 	if err != nil {
 		return err
 	}
-	return closeSecretManager(sm)
+	if resolver == nil {
+		return nil
+	}
+	defer func() { _ = resolver.Close() }()
+	return resolveSecretRefs(cfg, resolver.resolve)
+}
+
+// ResolveConfigSecrets resolves structured config secret refs using their
+// referenced secrets providers, then closes the temporary secret managers.
+func ResolveConfigSecrets(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) error {
+	return resolveConfigSecrets(ctx, cfg, factories)
 }
 
 func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, requireEncryptionKey bool) (*preparedCore, error) {
 	if err := config.NormalizeCompatibility(cfg); err != nil {
 		return nil, err
 	}
-	sm, err := prepareSecretManager(ctx, cfg, factories)
+	if err := resolveConfigSecrets(ctx, cfg, factories); err != nil {
+		return nil, err
+	}
+	sm, err := buildRuntimeSecretManager(cfg, factories)
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +418,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	hostIndexedDBs := map[string]indexeddb.IndexedDB{selectedIndexedDBName: store}
 	var extraIndexedDBs []indexeddb.IndexedDB
 	for name, entry := range cfg.Providers.IndexedDB {
-		if name == selectedIndexedDBName {
+		if name == selectedIndexedDBName || entry == nil {
 			continue
 		}
 		ds, err := buildIndexedDB(entry, factories)
@@ -384,7 +445,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	hostS3s := make(map[string]s3store.Client, len(cfg.Providers.S3))
 	var extraS3s []s3store.Client
 	for name, entry := range cfg.Providers.S3 {
-		if entry == nil || entry.Disabled {
+		if entry == nil {
 			continue
 		}
 		client, err := buildS3(name, entry, factories)
@@ -522,13 +583,6 @@ func buildTelemetry(cfg *config.Config, factories *FactoryRegistry) (core.Teleme
 	if err != nil {
 		return nil, err
 	}
-	if tel != nil && tel.Disabled {
-		factory, ok := factories.Telemetry["noop"]
-		if !ok {
-			return nil, fmt.Errorf("bootstrap: noop telemetry factory is not registered")
-		}
-		return factory(tel.Config)
-	}
 	if tel != nil && !tel.Source.IsBuiltin() {
 		return nil, fmt.Errorf("bootstrap: provider-based telemetry providers are not yet supported")
 	}
@@ -553,9 +607,6 @@ func buildAuditSink(ctx context.Context, cfg *config.Config, factories *FactoryR
 	_, audit, err := cfg.SelectedAuditProvider()
 	if err != nil {
 		return nil, nil, err
-	}
-	if audit != nil && audit.Disabled {
-		return invocation.NewLoggerAuditSink(slog.New(slog.DiscardHandler)), nil, nil
 	}
 	if audit != nil && !audit.Source.IsBuiltin() {
 		return nil, nil, fmt.Errorf("bootstrap: provider-based audit providers are not yet supported")
@@ -582,23 +633,21 @@ func buildAuditSink(ctx context.Context, cfg *config.Config, factories *FactoryR
 	return sink, closeFn, nil
 }
 
-type disabledSecretManager struct{}
-
-var errSecretsDisabled = fmt.Errorf("%w: secrets provider is disabled", core.ErrSecretNotFound)
-
-func (disabledSecretManager) GetSecret(_ context.Context, _ string) (string, error) {
-	return "", errSecretsDisabled
-}
-
-func buildSecretManager(cfg *config.Config, factories *FactoryRegistry) (core.SecretManager, error) {
-	_, secrets, err := cfg.SelectedSecretsProvider()
+func buildRuntimeSecretManager(cfg *config.Config, factories *FactoryRegistry) (core.SecretManager, error) {
+	name, secrets, err := cfg.SelectedSecretsProvider()
 	if err != nil {
 		return nil, err
 	}
-	if secrets != nil && secrets.Disabled {
-		return disabledSecretManager{}, nil
+	return buildNamedSecretManager(name, secrets, factories)
+}
+
+func buildNamedSecretManager(name string, secrets *config.ProviderEntry, factories *FactoryRegistry) (core.SecretManager, error) {
+	logicalName := name
+	if logicalName == "" {
+		logicalName = "secrets"
 	}
-	if secrets != nil && !secrets.Source.IsBuiltin() {
+
+	if secrets != nil && (secrets.Source.IsManaged() || secrets.Source.IsLocal()) {
 		factory, ok := factories.Secrets["provider"]
 		if !ok {
 			return nil, fmt.Errorf("bootstrap: secrets provider factory is not registered")
@@ -606,34 +655,43 @@ func buildSecretManager(cfg *config.Config, factories *FactoryRegistry) (core.Se
 		node := secrets.Config
 		if !config.IsComponentRuntimeConfigNode(node) {
 			var err error
-			node, err = config.BuildComponentRuntimeConfigNode("secrets", "secrets", secrets, secrets.Config)
+			node, err = config.BuildComponentRuntimeConfigNode(logicalName, "secrets", secrets, secrets.Config)
 			if err != nil {
-				return nil, fmt.Errorf("bootstrap: secrets provider: %w", err)
+				return nil, fmt.Errorf("bootstrap: secrets provider %q: %w", logicalName, err)
 			}
 		}
 		sm, err := factory(node)
 		if err != nil {
-			return nil, fmt.Errorf("bootstrap: secrets provider: %w", err)
+			return nil, fmt.Errorf("bootstrap: secrets provider %q: %w", logicalName, err)
 		}
 		return sm, nil
 	}
 
-	name := ""
+	builtinName := ""
 	var configNode yaml.Node
 	if secrets != nil {
-		name = secrets.Source.Builtin
+		builtinName = secrets.Source.Builtin
 		configNode = secrets.Config
+		if builtinName == "" {
+			return nil, fmt.Errorf("bootstrap: secrets provider %q has no source", logicalName)
+		}
 	}
-	if name == "" {
-		name = "env"
+	if builtinName == "" {
+		builtinName = "env"
 	}
-	factory, ok := factories.Secrets[name]
+	factory, ok := factories.Secrets[builtinName]
 	if !ok {
-		return nil, fmt.Errorf("bootstrap: unknown secrets provider %q", name)
+		if secrets != nil {
+			return nil, fmt.Errorf("bootstrap: secrets provider %q references unknown builtin %q", logicalName, builtinName)
+		}
+		return nil, fmt.Errorf("bootstrap: unknown secrets provider %q", builtinName)
 	}
 	sm, err := factory(configNode)
 	if err != nil {
-		return nil, fmt.Errorf("bootstrap: secrets provider %q: %w", name, err)
+		if secrets != nil {
+			return nil, fmt.Errorf("bootstrap: secrets provider %q: %w", logicalName, err)
+		}
+		return nil, fmt.Errorf("bootstrap: secrets provider %q: %w", builtinName, err)
 	}
 	return sm, nil
 }
@@ -659,7 +717,7 @@ func buildAuth(cfg *config.Config, factories *FactoryRegistry, deps Deps) (core.
 	if err != nil {
 		return nil, err
 	}
-	if authEntry == nil || authEntry.Disabled {
+	if authEntry == nil {
 		return nil, nil
 	}
 	if factories.Auth == nil {

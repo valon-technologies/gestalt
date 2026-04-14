@@ -120,7 +120,6 @@ type ProviderEntry struct {
 	Source       ProviderSource    `yaml:"source"`
 	Config       yaml.Node         `yaml:"config,omitempty"`
 	Default      bool              `yaml:"default,omitempty"`
-	Disabled     bool              `yaml:"disabled,omitempty"`
 	Env          map[string]string `yaml:"env,omitempty"`
 	AllowedHosts []string          `yaml:"allowedHosts,omitempty"`
 	DisplayName  string            `yaml:"displayName,omitempty"`
@@ -164,7 +163,6 @@ type ProviderSurfaceOverrides struct {
 }
 
 type PluginIndexedDBConfig struct {
-	Disabled     bool     `yaml:"disabled,omitempty"`
 	Provider     string   `yaml:"provider,omitempty"`
 	DB           string   `yaml:"db,omitempty"`
 	ObjectStores []string `yaml:"objectStores,omitempty"`
@@ -178,6 +176,11 @@ func (c *PluginIndexedDBConfig) UnmarshalYAML(value *yaml.Node) error {
 	case yaml.SequenceNode:
 		return fmt.Errorf("plugin indexeddb must be a mapping or scalar provider name")
 	default:
+		for i := 0; i+1 < len(value.Content); i += 2 {
+			if key := value.Content[i]; key != nil && key.Value == "disabled" {
+				return fmt.Errorf("field disabled not found in type config.raw")
+			}
+		}
 		type raw PluginIndexedDBConfig
 		return value.Decode((*raw)(c))
 	}
@@ -707,7 +710,7 @@ func OverlayManagedPluginConfig(path string, cfg *Config) error {
 	}
 	s3Node := mappingValueNode(providersNode, "s3")
 	for name, entry := range cfg.Providers.S3 {
-		if entry == nil || entry.Disabled || !entry.HasManagedSource() {
+		if entry == nil || !entry.HasManagedSource() {
 			continue
 		}
 		if err := overlayManagedEntryConfigNode(mappingValueNode(s3Node, name), entry, "s3 "+strconv.Quote(name)); err != nil {
@@ -737,6 +740,10 @@ func overlayManagedEntryConfigNode(raw *yaml.Node, entry *ProviderEntry, subject
 	node, err := overlayEnvIntoNode(*configNode, os.LookupEnv, true)
 	if err != nil {
 		return fmt.Errorf("expanding managed provider config for %s: %w", subject, err)
+	}
+	allowSecretRefs := !strings.HasPrefix(subject, "secrets ")
+	if err := NormalizeOpaqueSecretRefs(&node, allowSecretRefs); err != nil {
+		return err
 	}
 	entry.Config = node
 	return nil
@@ -776,48 +783,6 @@ func normalizeConfigRoot(root *yaml.Node) error {
 	return nil
 }
 
-func cloneConfigRoot(node *yaml.Node) (*yaml.Node, error) {
-	data, err := yaml.Marshal(documentValueNode(node))
-	if err != nil {
-		return nil, fmt.Errorf("marshaling normalized config YAML: %w", err)
-	}
-	var out yaml.Node
-	dec := yaml.NewDecoder(strings.NewReader(string(data)))
-	if err := dec.Decode(&out); err != nil && err != io.EOF {
-		return nil, fmt.Errorf("parsing config YAML: %w", err)
-	}
-	return &out, nil
-}
-
-func removeDisabledS3Entries(root *yaml.Node) {
-	providersNode := mappingValueNode(root, "providers")
-	s3Node := documentValueNode(mappingValueNode(providersNode, "s3"))
-	if s3Node == nil || s3Node.Kind != yaml.MappingNode {
-		return
-	}
-	filtered := s3Node.Content[:0]
-	for i := 0; i+1 < len(s3Node.Content); i += 2 {
-		keyNode := s3Node.Content[i]
-		entryNode := s3Node.Content[i+1]
-		if providerEntryDisabled(entryNode) {
-			continue
-		}
-		filtered = append(filtered, keyNode, entryNode)
-	}
-	s3Node.Content = filtered
-}
-
-func providerEntryDisabled(node *yaml.Node) bool {
-	disabledNode := mappingValueNode(node, "disabled")
-	if disabledNode == nil {
-		return false
-	}
-	var disabled bool
-	if err := disabledNode.Decode(&disabled); err != nil {
-		return false
-	}
-	return disabled
-}
 func loadWithLookup(path string, lookup func(string) (string, bool), allowMissing bool) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -848,13 +813,14 @@ func loadWithLookup(path string, lookup func(string) (string, bool), allowMissin
 	if err := normalizeConfigRoot(&root); err != nil {
 		return nil, err
 	}
+	if err := rejectRemovedDisabledFields(&root); err != nil {
+		return nil, err
+	}
+	if err := NormalizeConfigSecretRefs(&root); err != nil {
+		return nil, err
+	}
 	if !allowMissing {
-		validationRoot, err := cloneConfigRoot(&root)
-		if err != nil {
-			return nil, err
-		}
-		removeDisabledS3Entries(validationRoot)
-		firstMissing := firstMissingEnvSentinel(validationRoot, missingEnvSentinelContext)
+		firstMissing := firstMissingEnvSentinel(&root, missingEnvSentinelContext)
 		if firstMissing != "" {
 			return nil, fmt.Errorf("expanding config environment variables: environment variable %q not set; use ${%s:-} to allow an empty default", firstMissing, firstMissing)
 		}
@@ -889,6 +855,42 @@ func loadWithLookup(path string, lookup func(string) (string, bool), allowMissin
 	return &cfg, nil
 }
 
+func rejectRemovedDisabledFields(root *yaml.Node) error {
+	if err := rejectRemovedDisabledEntryFields(mappingValueNode(root, "plugins"), "plugins"); err != nil {
+		return err
+	}
+	providersNode := mappingValueNode(root, "providers")
+	for _, section := range []string{"auth", "secrets", "telemetry", "audit", "indexeddb", "cache", "s3", "ui"} {
+		if err := rejectRemovedDisabledEntryFields(mappingValueNode(providersNode, section), "providers."+section); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func rejectRemovedDisabledEntryFields(node *yaml.Node, prefix string) error {
+	node = documentValueNode(node)
+	if node == nil || node.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(node.Content); i += 2 {
+		keyNode := node.Content[i]
+		entryNode := node.Content[i+1]
+		if keyNode == nil || entryNode == nil {
+			continue
+		}
+		if mappingValueNode(entryNode, "disabled") != nil {
+			return fmt.Errorf("parsing config YAML: %s.%s.disabled: field disabled not found; omit the entry instead", prefix, keyNode.Value)
+		}
+		if prefix == "plugins" {
+			if indexedDBNode := mappingValueNode(entryNode, "indexeddb"); indexedDBNode != nil && mappingValueNode(indexedDBNode, "disabled") != nil {
+				return fmt.Errorf("parsing config YAML: %s.%s.indexeddb.disabled: field disabled not found; omit indexeddb to inherit the host provider", prefix, keyNode.Value)
+			}
+		}
+	}
+	return nil
+}
+
 const (
 	missingEnvSentinelPrefix = "__GESTALT_MISSING_ENV_"
 	missingEnvSentinelSuffix = "__"
@@ -917,12 +919,12 @@ func firstMissingEnvSentinelInString(value, sentinelPrefix string) string {
 	for start := 0; start < len(value); {
 		idx := strings.Index(value[start:], sentinelPrefix)
 		if idx < 0 {
-			return ""
+			break
 		}
 		idx += start + len(sentinelPrefix)
 		end := strings.Index(value[idx:], missingEnvSentinelSuffix)
 		if end < 0 {
-			return ""
+			break
 		}
 		decoded, err := base64.RawURLEncoding.DecodeString(value[idx : idx+end])
 		if err == nil {
@@ -930,7 +932,14 @@ func firstMissingEnvSentinelInString(value, sentinelPrefix string) string {
 		}
 		start = idx + end + len(missingEnvSentinelSuffix)
 	}
-	return ""
+	ref, ok, err := ParseSecretRefTransport(value)
+	if err != nil || !ok {
+		return ""
+	}
+	if name := firstMissingEnvSentinelInString(ref.Provider, sentinelPrefix); name != "" {
+		return name
+	}
+	return firstMissingEnvSentinelInString(ref.Name, sentinelPrefix)
 }
 
 func restoreMissingEnvSentinels(input, sentinelPrefix string) string {
@@ -1126,7 +1135,7 @@ func applyDefaultBuiltinProviderEntries(entries map[string]*ProviderEntry, defau
 		}
 	}
 	for _, entry := range entries {
-		if entry == nil || entry.Disabled || entry.Source.IsBuiltin() || entry.Source.IsManaged() || entry.Source.IsLocal() {
+		if entry == nil || entry.Source.IsBuiltin() || entry.Source.IsManaged() || entry.Source.IsLocal() {
 			continue
 		}
 		entry.Source.Builtin = builtin
@@ -1247,9 +1256,6 @@ func applyPluginMountBindings(cfg *Config) error {
 		if plugin == nil {
 			return fmt.Errorf("config validation: plugins.%s is required", pluginName)
 		}
-		if plugin.Disabled {
-			continue
-		}
 		plugin.UI = strings.TrimSpace(plugin.UI)
 		plugin.MountPath = strings.TrimSpace(plugin.MountPath)
 		plugin.AuthorizationPolicy = strings.TrimSpace(plugin.AuthorizationPolicy)
@@ -1277,9 +1283,6 @@ func applyPluginMountBindings(cfg *Config) error {
 		ui := cfg.Providers.UI[plugin.UI]
 		if ui == nil {
 			return fmt.Errorf("config validation: plugins.%s.ui references unknown ui %q", pluginName, plugin.UI)
-		}
-		if ui.Disabled {
-			return fmt.Errorf("config validation: plugins.%s.ui references disabled ui %q", pluginName, plugin.UI)
 		}
 		if current := strings.TrimSpace(ui.AuthorizationPolicy); current != "" && current != plugin.AuthorizationPolicy {
 			return fmt.Errorf("config validation: plugins.%s.ui %q conflicts with providers.ui.%s.authorizationPolicy", pluginName, plugin.UI, plugin.UI)

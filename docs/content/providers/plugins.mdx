@@ -47,7 +47,10 @@ plugins:
     config:
       apiBaseUrl: https://api.github.com
       clientId: ${GITHUB_CLIENT_ID}
-      clientSecret: secret://github-client-secret
+      clientSecret:
+        secret:
+          provider: default
+          name: github-client-secret
 ```
 
 During local development, point at a source manifest instead:

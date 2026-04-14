@@ -115,6 +115,13 @@ func validFactories() *bootstrap.FactoryRegistry {
 	return f
 }
 
+func transportSecretRef(name string) string {
+	return config.EncodeSecretRefTransport(config.SecretRef{
+		Provider: "default",
+		Name:     name,
+	})
+}
+
 func TestBootstrap(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -623,7 +630,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 
-	t.Run("resolves secret:// in encryption key", func(t *testing.T) {
+	t.Run("resolves config secret ref in encryption key", func(t *testing.T) {
 		t.Parallel()
 
 		var receivedKey []byte
@@ -639,7 +646,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 
 		cfg := validConfig()
-		cfg.Server.EncryptionKey = "secret://enc-key"
+		cfg.Server.EncryptionKey = transportSecretRef("enc-key")
 
 		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
 		if err != nil {
@@ -671,7 +678,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		t.Parallel()
 
 		cfg := validConfig()
-		cfg.Server.EncryptionKey = "secret://missing-key"
+		cfg.Server.EncryptionKey = transportSecretRef("missing-key")
 
 		_, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
 		if err == nil {
@@ -693,7 +700,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 
 		cfg := validConfig()
-		cfg.Server.EncryptionKey = "secret://empty-secret"
+		cfg.Server.EncryptionKey = transportSecretRef("empty-secret")
 
 		_, err := bootstrap.Bootstrap(ctx, cfg, factories)
 		if err == nil {
@@ -704,7 +711,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 	})
 
-	t.Run("resolves secret:// in yaml.Node auth config", func(t *testing.T) {
+	t.Run("resolves config secret ref in yaml.Node auth config", func(t *testing.T) {
 		t.Parallel()
 
 		factories := validFactories()
@@ -725,7 +732,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			Kind: yaml.MappingNode,
 			Content: []*yaml.Node{
 				{Kind: yaml.ScalarNode, Value: "clientSecret", Tag: "!!str"},
-				{Kind: yaml.ScalarNode, Value: "secret://auth-secret", Tag: "!!str"},
+				{Kind: yaml.ScalarNode, Value: transportSecretRef("auth-secret"), Tag: "!!str"},
 			},
 		}
 
@@ -750,7 +757,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 	})
 
-	t.Run("resolves secret:// in yaml.Node indexeddb config", func(t *testing.T) {
+	t.Run("resolves config secret ref in yaml.Node indexeddb config", func(t *testing.T) {
 		t.Parallel()
 
 		factories := validFactories()
@@ -772,7 +779,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			Kind: yaml.MappingNode,
 			Content: []*yaml.Node{
 				{Kind: yaml.ScalarNode, Value: "dsn", Tag: "!!str"},
-				{Kind: yaml.ScalarNode, Value: "secret://indexeddb-dsn", Tag: "!!str"},
+				{Kind: yaml.ScalarNode, Value: transportSecretRef("indexeddb-dsn"), Tag: "!!str"},
 			},
 		}
 		cfg.Providers.IndexedDB["test"] = ds
@@ -795,7 +802,54 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 	})
 
-	t.Run("resolves secret:// in workload tokens", func(t *testing.T) {
+	t.Run("resolves config secret ref in yaml.Node s3 config", func(t *testing.T) {
+		t.Parallel()
+
+		factories := validFactories()
+		factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
+			return &coretesting.StubSecretManager{
+				Secrets: map[string]string{"s3-token": "resolved-s3-token"},
+			}, nil
+		}
+
+		var receivedNode yaml.Node
+		factories.S3 = func(node yaml.Node) (s3store.Client, error) {
+			receivedNode = node
+			return &coretesting.StubS3{}, nil
+		}
+
+		cfg := validConfig()
+		cfg.Providers.S3 = map[string]*config.ProviderEntry{
+			"assets": {
+				Source: config.ProviderSource{Path: "stub"},
+				Config: yaml.Node{
+					Kind: yaml.MappingNode,
+					Content: []*yaml.Node{
+						{Kind: yaml.ScalarNode, Value: "token", Tag: "!!str"},
+						{Kind: yaml.ScalarNode, Value: transportSecretRef("s3-token"), Tag: "!!str"},
+					},
+				},
+			},
+		}
+
+		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+		if err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		<-result.ProvidersReady
+
+		var decoded struct {
+			Config map[string]string `yaml:"config"`
+		}
+		if err := receivedNode.Decode(&decoded); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if decoded.Config["token"] != "resolved-s3-token" {
+			t.Errorf("token: got %q, want %q", decoded.Config["token"], "resolved-s3-token")
+		}
+	})
+
+	t.Run("resolves config secret ref in workload tokens", func(t *testing.T) {
 		t.Parallel()
 
 		tests := []struct {
@@ -835,7 +889,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 				tc.apply(cfg, config.AuthorizationConfig{
 					Workloads: map[string]config.WorkloadDef{
 						"triage-bot": {
-							Token: "secret://workload-token",
+							Token: transportSecretRef("workload-token"),
 							Providers: map[string]config.WorkloadProviderDef{
 								"weather": {Allow: []string{"forecast"}},
 							},
@@ -859,29 +913,55 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 	})
 
-	t.Run("skips secret resolution for disabled mounted webuis", func(t *testing.T) {
+	t.Run("requires configured provider for programmatic config refs", func(t *testing.T) {
 		t.Parallel()
 
 		cfg := validConfig()
-		cfg.Providers.UI = map[string]*config.UIEntry{
-			"roadmap": {
-				ProviderEntry: config.ProviderEntry{
-					Disabled: true,
-					Source: config.ProviderSource{
-						Ref:     "github.com/testowner/web/roadmap",
-						Version: "0.0.1-alpha.1",
-						Auth:    &config.SourceAuthDef{Token: "secret://disabled-webui-token"},
-					},
-				},
-				Path: "/create-customer-roadmap-review",
-			},
+		delete(cfg.Providers.Secrets, "default")
+		cfg.Server.EncryptionKey = config.EncodeSecretRefTransport(config.SecretRef{
+			Provider: "env",
+			Name:     "GESTALT_ENCRYPTION_KEY",
+		})
+
+		_, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `unknown secrets provider "env"`) {
+			t.Fatalf("expected unknown provider error, got %v", err)
+		}
+	})
+
+	t.Run("configured secrets provider without source errors with config key", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := validConfig()
+		cfg.Providers.Secrets["default"] = &config.ProviderEntry{}
+
+		_, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `secrets provider "default" has no source`) {
+			t.Fatalf("expected missing source error, got %v", err)
+		}
+	})
+
+	t.Run("configured builtin secrets provider errors keep config key", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := validConfig()
+		cfg.Providers.Secrets["default"] = &config.ProviderEntry{
+			Source: config.ProviderSource{Builtin: "missing-builtin"},
 		}
 
-		result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
-		if err != nil {
-			t.Fatalf("Bootstrap: %v", err)
+		_, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+		if err == nil {
+			t.Fatal("expected error, got nil")
 		}
-		<-result.ProvidersReady
+		if !strings.Contains(err.Error(), `secrets provider "default" references unknown builtin "missing-builtin"`) {
+			t.Fatalf("expected config-key builtin error, got %v", err)
+		}
 	})
 
 	t.Run("passes top-level provider selection to auth factory", func(t *testing.T) {
@@ -1038,99 +1118,4 @@ func TestBootstrapWorkloadAuthorizationRejectsEitherProvider(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestBootstrapDisabledComponents(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-
-	t.Run("disabled telemetry uses noop", func(t *testing.T) {
-		t.Parallel()
-
-		cfg := validConfig()
-		cfg.Providers.Telemetry = map[string]*config.ProviderEntry{"default": {Disabled: true}}
-
-		factories := validFactories()
-		factories.Telemetry["noop"] = telemetrynoop.Factory
-
-		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
-		if err != nil {
-			t.Fatalf("Bootstrap: %v", err)
-		}
-		<-result.ProvidersReady
-		if result.Telemetry == nil {
-			t.Fatal("Telemetry is nil")
-		}
-		if err := result.Close(context.Background()); err != nil {
-			t.Fatalf("Close: %v", err)
-		}
-	})
-
-	t.Run("disabled secrets returns not found", func(t *testing.T) {
-		t.Parallel()
-
-		cfg := validConfig()
-		cfg.Providers.Secrets = map[string]*config.ProviderEntry{"default": {Disabled: true}}
-
-		result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
-		if err != nil {
-			t.Fatalf("Bootstrap: %v", err)
-		}
-		<-result.ProvidersReady
-		if result.SecretManager == nil {
-			t.Fatal("SecretManager is nil")
-		}
-		_, getErr := result.SecretManager.GetSecret(ctx, "any-key")
-		if getErr == nil {
-			t.Fatal("expected error from disabled secret manager")
-		}
-		if !strings.Contains(getErr.Error(), "disabled") {
-			t.Fatalf("error should mention disabled: %v", getErr)
-		}
-		if err := result.Close(context.Background()); err != nil {
-			t.Fatalf("Close: %v", err)
-		}
-	})
-
-	t.Run("disabled singleton indexeddb is rejected", func(t *testing.T) {
-		t.Parallel()
-
-		cfg := validConfig()
-		cfg.Providers.IndexedDB = map[string]*config.ProviderEntry{
-			"only": {
-				Disabled: true,
-				Source:   config.ProviderSource{Path: "stub"},
-			},
-		}
-		cfg.Server.Providers.IndexedDB = ""
-
-		_, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
-		if err == nil {
-			t.Fatal("Bootstrap: expected error, got nil")
-		}
-		if !strings.Contains(err.Error(), "datastore resource name is required") {
-			t.Fatalf("unexpected error: %v", err)
-		}
-	})
-
-	t.Run("disabled s3 is skipped", func(t *testing.T) {
-		t.Parallel()
-
-		cfg := validConfig()
-		cfg.Providers.S3 = map[string]*config.ProviderEntry{
-			"assets": {Disabled: true},
-		}
-
-		result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
-		if err != nil {
-			t.Fatalf("Bootstrap: %v", err)
-		}
-		<-result.ProvidersReady
-		if got := len(result.ExtraS3s); got != 0 {
-			t.Fatalf("ExtraS3s = %d, want 0", got)
-		}
-		if err := result.Close(context.Background()); err != nil {
-			t.Fatalf("Close: %v", err)
-		}
-	})
 }

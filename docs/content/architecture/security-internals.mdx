@@ -50,7 +50,7 @@ API tokens (`gst_api_*`) work differently: the plaintext is never stored.
 
 ## Secret resolution
 
-`secret://` resolution is a one-shot operation at startup. Gestalt resolves every reference, replaces it in memory, and never consults the secret manager again. If a secret rotates after startup, restart Gestalt to pick it up.
+Structured secret resolution is a one-shot operation at startup. Gestalt resolves every reference, replaces it in memory, and never consults the secret manager again. If a secret rotates after startup, restart Gestalt to pick it up.
 
 The selected secret manager's `providers.secrets.<name>.config` block is excluded from resolution. Use `${ENV_VAR}` or `${ENV_VAR_FILE}` for secret manager credentials.
 

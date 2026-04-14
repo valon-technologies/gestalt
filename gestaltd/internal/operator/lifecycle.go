@@ -184,7 +184,7 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 		}
 	}
 	for name, def := range cfg.Providers.S3 {
-		if def != nil && !def.Disabled && def.HasManagedSource() {
+		if def != nil && def.HasManagedSource() {
 			entry, err := l.writeComponentArtifact(context.Background(), paths, providermanifestv1.KindS3, name, s3DestDir(paths, name), def, def.Config)
 			if err != nil {
 				return nil, nil, err
@@ -193,7 +193,7 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 		}
 	}
 	for name, entry := range cfg.Providers.UI {
-		if entry != nil && !entry.Disabled && entry.HasManagedSource() {
+		if entry != nil && entry.HasManagedSource() {
 			uiEntry, err := l.writeNamedUIProviderArtifact(context.Background(), paths, name, &entry.ProviderEntry, uiDestDir(paths, name), "ui "+strconv.Quote(name))
 			if err != nil {
 				return nil, nil, err
@@ -237,12 +237,12 @@ func buildSourceTokenMap(cfg *config.Config) map[string]string {
 		}
 	}
 	for _, def := range cfg.Providers.S3 {
-		if def != nil && !def.Disabled && def.Source.Auth != nil {
+		if def != nil && def.Source.Auth != nil {
 			tokens[def.SourceRef()] = def.Source.Auth.Token
 		}
 	}
 	for _, entry := range cfg.Providers.UI {
-		if entry != nil && !entry.Disabled && entry.Source.Auth != nil {
+		if entry != nil && entry.Source.Auth != nil {
 			tokens[entry.SourceRef()] = entry.Source.Auth.Token
 		}
 	}
@@ -306,15 +306,79 @@ func (l *Lifecycle) resolveConfigSecrets(ctx context.Context, cfg *config.Config
 	return config.ValidateStructure(cfg)
 }
 
+func referencedConfigSecretsProviders(cfg *config.Config) (map[string]*config.ProviderEntry, error) {
+	referenced, err := config.ReferencedConfigSecretProviders(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if len(referenced) == 0 {
+		return nil, nil
+	}
+	entries := make(map[string]*config.ProviderEntry, len(referenced))
+	for name := range referenced {
+		entries[name] = cfg.Providers.Secrets[name]
+	}
+	return entries, nil
+}
+
+func secretsProviderMetadataDependencies(name string, provider *config.ProviderEntry) (map[string]struct{}, error) {
+	if provider == nil {
+		return nil, nil
+	}
+	tmp := &config.Config{
+		Providers: config.ProvidersConfig{
+			Secrets: map[string]*config.ProviderEntry{
+				name: provider,
+			},
+		},
+	}
+	deps, err := config.ReferencedConfigSecretProviders(tmp)
+	if err != nil {
+		return nil, err
+	}
+	delete(deps, name)
+	if len(deps) == 0 {
+		return nil, nil
+	}
+	return deps, nil
+}
+
+func (l *Lifecycle) resolveSecretsProviderMetadata(ctx context.Context, name string, provider *config.ProviderEntry, available map[string]*config.ProviderEntry) error {
+	if l.configSecretResolver == nil || provider == nil {
+		return nil
+	}
+	secrets := make(map[string]*config.ProviderEntry, len(available)+1)
+	for availableName, entry := range available {
+		secrets[availableName] = entry
+	}
+	secrets[name] = provider
+	tmp := &config.Config{
+		Providers: config.ProvidersConfig{
+			Secrets: secrets,
+		},
+	}
+	if err := l.configSecretResolver(ctx, tmp); err != nil {
+		return fmt.Errorf("resolve metadata for %s %q: %w", providermanifestv1.KindSecrets, name, err)
+	}
+	return nil
+}
+
 func (l *Lifecycle) lockForSecretsBootstrap(configPath, artifactsDir string, paths initPaths, cfg *config.Config, locked bool) (*Lockfile, error) {
 	if cfg == nil {
 		return nil, nil
 	}
-	_, provider, err := cfg.SelectedSecretsProvider()
+	referenced, err := referencedConfigSecretsProviders(cfg)
 	if err != nil {
 		return nil, err
 	}
-	if provider == nil || !provider.HasManagedSource() {
+	needsManagedSecrets := false
+	for _, provider := range referenced {
+		if provider != nil && provider.HasManagedSource() {
+			needsManagedSecrets = true
+			break
+		}
+	}
+	if !needsManagedSecrets {
 		return nil, nil
 	}
 	if !configHasManagedProviderSources(cfg) {
@@ -335,43 +399,114 @@ func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context,
 	if cfg == nil {
 		return nil, nil
 	}
-	name, provider, err := cfg.SelectedSecretsProvider()
-	if err != nil || provider == nil {
+	referenced, err := referencedConfigSecretsProviders(cfg)
+	if err != nil {
 		return nil, err
 	}
-
-	configMap, err := config.NodeToMap(provider.Config)
-	if err != nil {
-		return nil, fmt.Errorf("decode provider config for %s %q: %w", providermanifestv1.KindSecrets, name, err)
-	}
-
-	switch {
-	case provider.HasManagedSource():
-		if lock != nil {
-			lockEntry, ok := lock.Secrets[name]
-			if !ok {
-				return nil, fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init --config %s`", providermanifestv1.KindSecrets, name, paths.configPath)
-			}
-			if err := l.applyLockedComponentEntry(paths, &lockEntry, providermanifestv1.KindSecrets, name, provider, configMap, secretsDestDir(paths, name), false); err != nil {
-				return nil, err
-			}
-			return nil, nil
+	available := make(map[string]*config.ProviderEntry, len(referenced))
+	pending := make(map[string]*config.ProviderEntry, len(referenced))
+	dependencies := make(map[string]map[string]struct{}, len(referenced))
+	for name, provider := range referenced {
+		if provider == nil {
+			continue
 		}
-		entry, err := l.writeComponentArtifact(ctx, paths, providermanifestv1.KindSecrets, name, secretsDestDir(paths, name), provider, provider.Config)
+		deps, err := secretsProviderMetadataDependencies(name, provider)
 		if err != nil {
 			return nil, err
 		}
-		if err := l.applyLockedComponentEntry(paths, &entry, providermanifestv1.KindSecrets, name, provider, configMap, secretsDestDir(paths, name), false); err != nil {
-			return nil, err
+		dependencies[name] = deps
+		if provider.Source.IsBuiltin() {
+			available[name] = provider
+			continue
 		}
-		return map[string]LockEntry{name: entry}, nil
-	case provider.HasLocalSource():
-		if err := applyLocalComponentManifest(providermanifestv1.KindSecrets, name, provider, configMap); err != nil {
-			return nil, err
-		}
+		pending[name] = provider
 	}
+	prepared := make(map[string]LockEntry)
+	for len(pending) > 0 {
+		progress := false
+		names := make([]string, 0, len(pending))
+		for name := range pending {
+			names = append(names, name)
+		}
+		slices.Sort(names)
+		for _, name := range names {
+			provider := pending[name]
+			ready := true
+			for dep := range dependencies[name] {
+				depProvider := referenced[dep]
+				if depProvider == nil {
+					return nil, fmt.Errorf("config validation: secret refs reference unknown secrets provider %q", dep)
+				}
+				if _, ok := available[dep]; !ok {
+					ready = false
+					break
+				}
+			}
+			if !ready {
+				continue
+			}
+			if err := l.resolveSecretsProviderMetadata(ctx, name, provider, available); err != nil {
+				return nil, err
+			}
+			configMap, err := config.NodeToMap(provider.Config)
+			if err != nil {
+				return nil, fmt.Errorf("decode provider config for %s %q: %w", providermanifestv1.KindSecrets, name, err)
+			}
 
-	return nil, nil
+			switch {
+			case provider.HasManagedSource():
+				if lock != nil {
+					lockEntry, ok := lock.Secrets[name]
+					if !ok {
+						return nil, fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init --config %s`", providermanifestv1.KindSecrets, name, paths.configPath)
+					}
+					if err := l.applyLockedComponentEntry(paths, &lockEntry, providermanifestv1.KindSecrets, name, provider, configMap, secretsDestDir(paths, name), false); err != nil {
+						return nil, err
+					}
+				} else {
+					entry, err := l.writeComponentArtifact(ctx, paths, providermanifestv1.KindSecrets, name, secretsDestDir(paths, name), provider, provider.Config)
+					if err != nil {
+						return nil, err
+					}
+					if err := l.applyLockedComponentEntry(paths, &entry, providermanifestv1.KindSecrets, name, provider, configMap, secretsDestDir(paths, name), false); err != nil {
+						return nil, err
+					}
+					prepared[name] = entry
+				}
+			case provider.HasLocalSource():
+				if err := applyLocalComponentManifest(providermanifestv1.KindSecrets, name, provider, configMap); err != nil {
+					return nil, err
+				}
+			}
+
+			available[name] = provider
+			delete(pending, name)
+			progress = true
+		}
+		if progress {
+			continue
+		}
+		blocked := make([]string, 0, len(pending))
+		for _, name := range names {
+			deps := make([]string, 0, len(dependencies[name]))
+			for dep := range dependencies[name] {
+				if _, ok := available[dep]; !ok {
+					deps = append(deps, dep)
+				}
+			}
+			slices.Sort(deps)
+			if len(deps) == 0 {
+				blocked = append(blocked, name)
+				continue
+			}
+			blocked = append(blocked, fmt.Sprintf("%s -> %s", name, strings.Join(deps, ", ")))
+		}
+		return nil, fmt.Errorf("bootstrap %s providers for config resolution: unresolved dependencies: %s", providermanifestv1.KindSecrets, strings.Join(blocked, "; "))
+	}
+	if len(prepared) == 0 {
+		return nil, nil
+	}
+	return prepared, nil
 }
 
 type initPaths struct {
@@ -446,7 +581,7 @@ func configHasProviderLoading(cfg *config.Config) bool {
 		}
 	}
 	for _, entry := range cfg.Providers.UI {
-		if entry != nil && !entry.Disabled && (entry.HasManagedSource() || entry.HasLocalSource()) {
+		if entry != nil && (entry.HasManagedSource() || entry.HasLocalSource()) {
 			return true
 		}
 	}
@@ -456,7 +591,7 @@ func configHasProviderLoading(cfg *config.Config) bool {
 		}
 	}
 	for _, def := range cfg.Providers.S3 {
-		if def != nil && !def.Disabled && (def.HasManagedSource() || def.HasLocalSource()) {
+		if def != nil && (def.HasManagedSource() || def.HasLocalSource()) {
 			return true
 		}
 	}
@@ -477,7 +612,7 @@ func configHasManagedProviderSources(cfg *config.Config) bool {
 		}
 	}
 	for _, entry := range cfg.Providers.UI {
-		if entry != nil && !entry.Disabled && entry.HasManagedSource() {
+		if entry != nil && entry.HasManagedSource() {
 			return true
 		}
 	}
@@ -487,7 +622,7 @@ func configHasManagedProviderSources(cfg *config.Config) bool {
 		}
 	}
 	for _, def := range cfg.Providers.S3 {
-		if def != nil && !def.Disabled && def.HasManagedSource() {
+		if def != nil && def.HasManagedSource() {
 			return true
 		}
 	}
@@ -733,7 +868,7 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 		}
 	}
 	for name, entry := range cfg.Providers.S3 {
-		if entry == nil || entry.Disabled || !entry.HasManagedSource() {
+		if entry == nil || !entry.HasManagedSource() {
 			continue
 		}
 		lockEntry, found := lock.S3[name]
@@ -742,7 +877,7 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 		}
 	}
 	for name, entry := range cfg.Providers.UI {
-		if entry == nil || entry.Disabled || !entry.HasManagedSource() {
+		if entry == nil || !entry.HasManagedSource() {
 			continue
 		}
 		lockEntry, ok := lock.UIs[name]
@@ -1177,14 +1312,14 @@ func (l *Lifecycle) applyLockedProviders(configPath, artifactsDir string, cfg *c
 		s3Locks = lock.S3
 	}
 	for name, def := range cfg.Providers.S3 {
-		if def != nil && !def.Disabled {
+		if def != nil {
 			if err := l.applyComponentProvider(paths, s3Locks, providermanifestv1.KindS3, name, def, def.Config, &def.Config, s3DestDir(paths, name), locked); err != nil {
 				return err
 			}
 		}
 	}
 	for name, entry := range cfg.Providers.UI {
-		if entry == nil || entry.Disabled {
+		if entry == nil {
 			continue
 		}
 		var lockEntry *LockUIEntry
@@ -1244,7 +1379,7 @@ func synthesizePluginOwnedUIEntries(cfg *config.Config) error {
 	pluginNames := slices.Sorted(maps.Keys(cfg.Plugins))
 	for _, pluginName := range pluginNames {
 		plugin := cfg.Plugins[pluginName]
-		if plugin == nil || plugin.Disabled || strings.TrimSpace(plugin.UI) != "" || strings.TrimSpace(plugin.MountPath) == "" {
+		if plugin == nil || strings.TrimSpace(plugin.UI) != "" || strings.TrimSpace(plugin.MountPath) == "" {
 			continue
 		}
 		manifestSpec := plugin.ManifestSpec()
@@ -1284,7 +1419,7 @@ func synthesizeLocalSourcePluginOwnedUIEntries(cfg *config.Config) error {
 	pluginNames := slices.Sorted(maps.Keys(cfg.Plugins))
 	for _, pluginName := range pluginNames {
 		plugin := cfg.Plugins[pluginName]
-		if plugin == nil || plugin.Disabled || strings.TrimSpace(plugin.UI) != "" || strings.TrimSpace(plugin.MountPath) == "" || !plugin.HasLocalSource() {
+		if plugin == nil || strings.TrimSpace(plugin.UI) != "" || strings.TrimSpace(plugin.MountPath) == "" || !plugin.HasLocalSource() {
 			continue
 		}
 		manifestPath := plugin.SourcePath()
@@ -1331,7 +1466,7 @@ func synthesizeLockedSourcePluginOwnedUIEntries(cfg *config.Config, paths initPa
 	pluginNames := slices.Sorted(maps.Keys(cfg.Plugins))
 	for _, pluginName := range pluginNames {
 		plugin := cfg.Plugins[pluginName]
-		if plugin == nil || plugin.Disabled || strings.TrimSpace(plugin.UI) != "" || strings.TrimSpace(plugin.MountPath) == "" || !plugin.HasManagedSource() {
+		if plugin == nil || strings.TrimSpace(plugin.UI) != "" || strings.TrimSpace(plugin.MountPath) == "" || !plugin.HasManagedSource() {
 			continue
 		}
 		lockEntry, ok := lock.Providers[pluginName]
@@ -1417,9 +1552,6 @@ func ownedUIEntryFromManifest(manifestPath, manifestVersion string, ownedUI *pro
 func validateSynthesizedPluginUIEntry(pluginName string, existing, expected *config.UIEntry) error {
 	if existing == nil || expected == nil {
 		return nil
-	}
-	if existing.Disabled {
-		return fmt.Errorf("config validation: plugins.%s owned ui conflicts with disabled providers.ui.%s", pluginName, pluginName)
 	}
 	if current := strings.TrimSpace(existing.Source.Ref); current != "" && current != expected.Source.Ref {
 		return fmt.Errorf("config validation: plugins.%s owned ui conflicts with providers.ui.%s.source.ref", pluginName, pluginName)
