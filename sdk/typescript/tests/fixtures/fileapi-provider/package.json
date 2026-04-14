@@ -1,0 +1,11 @@
+{
+  "name": "@fixtures/fileapi-provider",
+  "version": "0.0.1",
+  "type": "module",
+  "gestalt": {
+    "provider": {
+      "kind": "fileapi",
+      "target": "./fileapi.ts#provider"
+    }
+  }
+}

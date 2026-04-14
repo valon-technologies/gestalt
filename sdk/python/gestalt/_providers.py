@@ -13,6 +13,7 @@ CompleteLoginRequest: Any = _auth_pb2.CompleteLoginRequest  # ty: ignore[unresol
 class ProviderKind(str, Enum):
     INTEGRATION = "integration"
     AUTH = "auth"
+    FILEAPI = "fileapi"
     SECRETS = "secrets"
     TELEMETRY = "telemetry"
 
@@ -95,6 +96,13 @@ class AuthProvider(PluginProvider):
         _runtime.serve(self, runtime_kind=ProviderKind.AUTH)
 
 
+class FileAPIProvider(PluginProvider):
+    def serve(self) -> None:
+        from . import _runtime
+
+        _runtime.serve(self, runtime_kind=ProviderKind.FILEAPI)
+
+
 class ExternalTokenValidator:
     def validate_external_token(self, token: str) -> Any:
         raise NotImplementedError
@@ -113,5 +121,4 @@ class SecretsProvider(PluginProvider):
         from . import _runtime
 
         _runtime.serve(self, runtime_kind=ProviderKind.SECRETS)
-
 

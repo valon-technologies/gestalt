@@ -14,6 +14,7 @@ from gestalt import (
     Catalog,
     CatalogOperation,
     ExternalTokenValidator,
+    FileAPIProvider,
     HealthChecker,
     MetadataProvider,
     Plugin,
@@ -390,6 +391,63 @@ class AuthRuntimeTests(unittest.TestCase):
             grpc.StatusCode.NOT_FOUND,
             "token not recognized",
         )
+
+
+class FileAPIRuntimeTests(unittest.TestCase):
+    class StubFileAPIProvider(FileAPIProvider, MetadataProvider):
+        def metadata(self) -> ProviderMetadata:
+            return ProviderMetadata(
+                kind=ProviderKind.FILEAPI,
+                name="stub-fileapi",
+                display_name="Stub FileAPI",
+                description="test file api provider",
+                version="1.0.0",
+            )
+
+    def test_servable_target_wraps_fileapi_provider(self) -> None:
+        provider = self.StubFileAPIProvider()
+
+        adapter = _runtime._servable_target(provider, runtime_kind=ProviderKind.FILEAPI)
+
+        self.assertEqual(adapter.kind, ProviderKind.FILEAPI)
+        self.assertIs(adapter.provider, provider)
+
+    def test_register_fileapi_services_uses_dynamic_grpc_modules(self) -> None:
+        provider = self.StubFileAPIProvider()
+        server = mock.Mock()
+        register_fileapi = mock.Mock()
+        fake_fileapi_pb2_grpc = mock.Mock(add_FileAPIServicer_to_server=register_fileapi)
+
+        with mock.patch.object(
+            _runtime,
+            "_load_fileapi_proto_modules",
+            return_value=(mock.Mock(), fake_fileapi_pb2_grpc),
+        ), mock.patch.object(
+            _runtime.runtime_pb2_grpc,
+            "add_ProviderLifecycleServicer_to_server",
+        ) as add_runtime:
+            _runtime._register_fileapi_services(server, provider)
+
+        add_runtime.assert_called_once()
+        register_fileapi.assert_called_once_with(provider, server)
+
+    def test_fileapi_provider_serve_uses_fileapi_runtime_kind(self) -> None:
+        provider = self.StubFileAPIProvider()
+
+        with mock.patch.object(_runtime, "serve") as serve:
+            provider.serve()
+
+        serve.assert_called_once_with(provider, runtime_kind=ProviderKind.FILEAPI)
+
+    def test_fileapi_provider_kind_maps_to_proto_when_available(self) -> None:
+        actual = _runtime._provider_kind_to_proto(ProviderKind.FILEAPI)
+        expected = getattr(
+            runtime_pb2.ProviderKind,
+            "PROVIDER_KIND_FILEAPI",
+            runtime_pb2.ProviderKind.PROVIDER_KIND_UNSPECIFIED,
+        )
+
+        self.assertEqual(actual, expected)
 
 
 if __name__ == "__main__":

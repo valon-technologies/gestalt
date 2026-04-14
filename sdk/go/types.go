@@ -12,6 +12,7 @@ type ProviderKind string
 const (
 	ProviderKindIntegration ProviderKind = "integration"
 	ProviderKindAuth        ProviderKind = "auth"
+	ProviderKindFileAPI     ProviderKind = "fileapi"
 	ProviderKindIndexedDB   ProviderKind = "datastore"
 	ProviderKindSecrets     ProviderKind = "secrets"
 )

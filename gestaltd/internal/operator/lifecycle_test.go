@@ -1336,6 +1336,18 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 				Executable: "indexeddb/archive/artifacts/darwin/arm64/indexeddb-archive",
 			},
 		},
+		FileAPIs: map[string]LockEntry{
+			"main": {
+				Fingerprint: "fileapi-main-fp",
+				Source:      "github.com/test-org/test-repo/fileapi-main",
+				Version:     "1.3.0",
+				Archives: map[string]LockArchive{
+					"darwin/arm64": {URL: "https://example.com/fileapi-main.tar.gz", SHA256: "ghi999"},
+				},
+				Manifest:   "fileapi/main/manifest.json",
+				Executable: "fileapi/main/artifacts/darwin/arm64/fileapi-main",
+			},
+		},
 		UIs: map[string]LockUIEntry{
 			"roadmap": {
 				Fingerprint: "ui-fp",
@@ -1371,6 +1383,12 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	}
 	if got.IndexedDBs["archive"].Executable != want.IndexedDBs["archive"].Executable {
 		t.Fatal("indexeddb executable mismatch")
+	}
+	if got.FileAPIs["main"].Fingerprint != want.FileAPIs["main"].Fingerprint {
+		t.Fatal("fileapi fingerprint mismatch")
+	}
+	if got.FileAPIs["main"].Executable != want.FileAPIs["main"].Executable {
+		t.Fatal("fileapi executable mismatch")
 	}
 	if got.UIs["roadmap"].Source != want.UIs["roadmap"].Source || got.UIs["roadmap"].Version != want.UIs["roadmap"].Version {
 		t.Fatal("ui lock entry mismatch")

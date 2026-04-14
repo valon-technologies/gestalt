@@ -95,6 +95,15 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 		}
 		cfg.Providers.IndexedDBs[name] = ds
 	}
+	for name, api := range cfg.Providers.FileAPIs {
+		if api == nil {
+			continue
+		}
+		if err := resolveStringFields(api, resolve); err != nil {
+			return err
+		}
+		cfg.Providers.FileAPIs[name] = api
+	}
 
 	return nil
 }

@@ -6,6 +6,7 @@ mod auth_server;
 mod catalog;
 mod env;
 mod error;
+pub mod fileapi;
 pub mod indexeddb;
 mod provider_server;
 mod router;
@@ -33,6 +34,11 @@ pub use auth::{
 pub use catalog::{Catalog, CatalogOperation};
 pub use env::{CURRENT_PROTOCOL_VERSION, ENV_PROVIDER_SOCKET};
 pub use error::{Error, Result};
+pub use fileapi::{
+    Blob, BlobPart, BlobPropertyBag, ENV_FILEAPI_SOCKET, File, FileAPI, FileAPIError,
+    FileAPIProvider, FileObjectHandle, FileObjectKind, FilePropertyBag, LineEndings,
+    fileapi_socket_env,
+};
 pub use indexeddb::{Cursor, CursorDirection, IndexedDB, IndexedDBError};
 #[doc(hidden)]
 pub use provider_server::{OperationResult, ProviderServer};
@@ -97,6 +103,16 @@ macro_rules! export_secrets_provider {
         pub fn __gestalt_serve_secrets(_name: &str) -> $crate::Result<()> {
             let provider = std::sync::Arc::new($constructor());
             $crate::runtime::run_secrets_provider(provider)
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! export_fileapi_provider {
+    (constructor = $constructor:path $(,)?) => {
+        pub fn __gestalt_serve_fileapi(_name: &str) -> $crate::Result<()> {
+            let provider = std::sync::Arc::new($constructor());
+            $crate::runtime::run_fileapi_provider(provider)
         }
     };
 }

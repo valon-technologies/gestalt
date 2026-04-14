@@ -8,6 +8,7 @@ option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
 //   Base provider interface:  Provider
 //   Auth provider:            AuthProvider
 //   IndexedDB provider:       IndexedDBProvider
+//   FileAPI provider:         FileAPIProvider
 //   Lifecycle service:        ProviderLifecycle (internal, not user-facing)
 
 import "google/protobuf/empty.proto";
@@ -20,6 +21,7 @@ enum ProviderKind {
   PROVIDER_KIND_INDEXEDDB = 3;
   PROVIDER_KIND_SECRETS = 4;
   PROVIDER_KIND_TELEMETRY = 5;
+  PROVIDER_KIND_FILEAPI = 6;
 }
 
 message ProviderIdentity {

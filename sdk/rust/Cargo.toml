@@ -11,6 +11,7 @@ keywords = ["gestalt", "grpc", "protobuf", "sdk"]
 categories = ["api-bindings", "development-tools"]
 
 [dependencies]
+base64 = "0.22"
 libc = "0.2"
 prost = "0.14"
 prost-types = "0.14"

@@ -16,6 +16,13 @@ import {
   type ValidateExternalTokenRequest,
 } from "../gen/v1/auth_pb.ts";
 import {
+  BytesResponseSchema,
+  FileAPI as FileAPIService,
+  FileObjectResponseSchema,
+  ObjectURLResponseSchema,
+  ReadChunkSchema,
+} from "../gen/v1/fileapi_pb.ts";
+import {
   SecretsProvider as SecretsProviderService,
   GetSecretResponseSchema,
   type GetSecretRequest,
@@ -45,6 +52,13 @@ import {
 } from "../gen/v1/runtime_pb.ts";
 import { errorMessage, type Request } from "./api.ts";
 import { AuthProvider, isAuthProvider, type AuthenticatedUser } from "./auth.ts";
+import {
+  FileAPIProvider,
+  fileAPIPartFromProto,
+  fileObjectToProto,
+  isFileAPIProvider,
+  lineEndingModeFromProto,
+} from "./fileapi.ts";
 import { SecretsProvider, isSecretsProvider } from "./secrets.ts";
 import { catalogToYaml, type Catalog } from "./catalog.ts";
 import {
@@ -74,7 +88,7 @@ export type RuntimeArgs = {
   target: string;
 };
 
-export type LoadedProvider = IntegrationProvider | AuthProvider | SecretsProvider;
+export type LoadedProvider = IntegrationProvider | AuthProvider | FileAPIProvider | SecretsProvider;
 
 export async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
   const args = parseRuntimeArgs(argv);
@@ -108,11 +122,7 @@ export async function loadProviderFromTarget(
     rawTarget?.trim() || formatProviderTarget(config.providerTarget ?? readPackageProviderTarget(root));
   const target = parseProviderTarget(targetValue);
   const module = await import(resolveProviderImportUrl(root, target));
-  const candidate =
-    (target.exportName ? module[target.exportName] : undefined) ??
-    module.provider ??
-    module.plugin ??
-    module.default;
+  const candidate = resolveProviderCandidate(module, target.kind, target.exportName);
 
   const defaultName =
     slugName(config.name ?? "") || slugName(dirname(resolve(root, target.modulePath)));
@@ -127,6 +137,13 @@ export async function loadProviderFromTarget(
     case "auth": {
       if (!isAuthProvider(candidate)) {
         throw new Error(`${targetValue} did not resolve to a Gestalt auth provider`);
+      }
+      candidate.resolveName(defaultName);
+      return candidate;
+    }
+    case "fileapi": {
+      if (!isFileAPIProvider(candidate)) {
+        throw new Error(`${targetValue} did not resolve to a Gestalt fileapi provider`);
       }
       candidate.resolveName(defaultName);
       return candidate;
@@ -218,6 +235,12 @@ export async function runBundledProvider(
       }
       loaded = provider;
       break;
+    case "fileapi":
+      if (!isFileAPIProvider(provider)) {
+        throw new Error("bundled target did not resolve to a Gestalt fileapi provider");
+      }
+      loaded = provider;
+      break;
     case "secrets":
       if (!isSecretsProvider(provider)) {
         throw new Error("bundled target did not resolve to a Gestalt secrets provider");
@@ -256,6 +279,8 @@ export async function serve(provider: LoadedProvider): Promise<void> {
         router.service(IntegrationProviderService, createProviderService(provider));
       } else if (isAuthProvider(provider)) {
         router.service(AuthProviderService, createAuthService(provider));
+      } else if (isFileAPIProvider(provider)) {
+        router.service(FileAPIService, createFileAPIService(provider));
       } else if (isSecretsProvider(provider)) {
         router.service(SecretsProviderService, createSecretsService(provider));
       }
@@ -490,6 +515,105 @@ export function createAuthService(
   };
 }
 
+export function createFileAPIService(
+  provider: FileAPIProvider,
+): Partial<ServiceImpl<typeof FileAPIService>> {
+  return {
+    async createBlob(request) {
+      const options: {
+        mimeType?: string;
+        endings?: "transparent" | "native";
+      } = {
+        endings: lineEndingModeFromProto(request.options?.endings ?? 0),
+      };
+      if (request.options?.mimeType) {
+        options.mimeType = request.options.mimeType;
+      }
+      return create(FileObjectResponseSchema, {
+        object: fileObjectToProto(
+          await provider.createBlob(request.parts.map(fileAPIPartFromProto), options),
+        ),
+      });
+    },
+    async createFile(request) {
+      const options: {
+        mimeType?: string;
+        endings?: "transparent" | "native";
+        lastModified?: number;
+      } = {
+        endings: lineEndingModeFromProto(request.options?.endings ?? 0),
+      };
+      if (request.options?.mimeType) {
+        options.mimeType = request.options.mimeType;
+      }
+      if (request.options) {
+        options.lastModified = Number(request.options.lastModified);
+      }
+      return create(FileObjectResponseSchema, {
+        object: fileObjectToProto(
+          await provider.createFile(request.fileBits.map(fileAPIPartFromProto), request.fileName, options),
+        ),
+      });
+    },
+    async stat(request) {
+      return create(FileObjectResponseSchema, {
+        object: fileObjectToProto(await provider.stat(request.id)),
+      });
+    },
+    async slice(request) {
+      const sliceRequest: {
+        id: string;
+        start?: number;
+        end?: number;
+        contentType?: string;
+      } = {
+        id: request.id,
+      };
+      if (request.start !== undefined) {
+        sliceRequest.start = Number(request.start);
+      }
+      if (request.end !== undefined) {
+        sliceRequest.end = Number(request.end);
+      }
+      if (request.contentType) {
+        sliceRequest.contentType = request.contentType;
+      }
+      return create(FileObjectResponseSchema, {
+        object: fileObjectToProto(
+          await provider.slice(sliceRequest),
+        ),
+      });
+    },
+    async readBytes(request) {
+      return create(BytesResponseSchema, {
+        data: await provider.readBytes(request.id),
+      });
+    },
+    async *openReadStream(request) {
+      const stream = await provider.openReadStream(request.id);
+      for await (const chunk of stream) {
+        yield create(ReadChunkSchema, {
+          data: chunk,
+        });
+      }
+    },
+    async createObjectURL(request) {
+      return create(ObjectURLResponseSchema, {
+        url: await provider.createObjectURL(request.id),
+      });
+    },
+    async resolveObjectURL(request) {
+      return create(FileObjectResponseSchema, {
+        object: fileObjectToProto(await provider.resolveObjectURL(request.url)),
+      });
+    },
+    async revokeObjectURL(request) {
+      await provider.revokeObjectURL(request.url);
+      return create(EmptySchema, {});
+    },
+  };
+}
+
 export function createSecretsService(
   provider: SecretsProvider,
 ): Partial<ServiceImpl<typeof SecretsProviderService>> {
@@ -540,6 +664,8 @@ function providerKindToProto(kind: ProviderKind): ProtoProviderKind {
       return ProtoProviderKind.INTEGRATION;
     case "auth":
       return ProtoProviderKind.AUTH;
+    case "fileapi":
+      return ProtoProviderKind.FILEAPI;
     case "secrets":
       return ProtoProviderKind.SECRETS;
     case "telemetry":
@@ -547,6 +673,24 @@ function providerKindToProto(kind: ProviderKind): ProtoProviderKind {
     default:
       return ProtoProviderKind.UNSPECIFIED;
   }
+}
+
+function resolveProviderCandidate(
+  module: Record<string, unknown>,
+  kind: ProviderKind,
+  exportName?: string,
+): unknown {
+  if (exportName) {
+    return module[exportName];
+  }
+  const namedByKind: Record<string, unknown[]> = {
+    integration: [module.provider, module.plugin, module.default],
+    auth: [module.auth, module.provider, module.default],
+    fileapi: [module.fileapi, module.provider, module.default],
+    secrets: [module.secrets, module.provider, module.default],
+    telemetry: [module.telemetry, module.provider, module.default],
+  };
+  return [...(namedByKind[kind] ?? []), module.plugin].find((value) => value !== undefined);
 }
 
 function objectFromUnknown(value: unknown): Record<string, unknown> {

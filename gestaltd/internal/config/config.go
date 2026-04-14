@@ -49,6 +49,7 @@ type ProvidersConfig struct {
 	Telemetry  *ProviderEntry            `yaml:"telemetry,omitempty"`
 	Audit      *ProviderEntry            `yaml:"audit,omitempty"`
 	UI         map[string]*UIEntry       `yaml:"ui,omitempty"`
+	FileAPIs   map[string]*ProviderEntry `yaml:"fileapis,omitempty"`
 	IndexedDBs map[string]*ProviderEntry `yaml:"indexeddbs,omitempty"`
 	Plugins    map[string]*ProviderEntry `yaml:"plugins,omitempty"`
 }
@@ -100,6 +101,7 @@ type ProviderEntry struct {
 	// Plugin-specific config fields (parsed from YAML, only valid on plugin entries)
 	Connections       map[string]*ConnectionDef     `yaml:"connections,omitempty"`
 	AllowedOperations map[string]*OperationOverride `yaml:"allowedOperations,omitempty"`
+	FileAPIs          []string                      `yaml:"fileapis,omitempty"`
 	IndexedDBs        []string                      `yaml:"indexeddbs,omitempty"`
 	Surfaces          *ProviderSurfaceOverrides     `yaml:"surfaces,omitempty"`
 
@@ -814,6 +816,9 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		if entry != nil {
 			resolveEntry(&entry.ProviderEntry)
 		}
+	}
+	for _, entry := range cfg.Providers.FileAPIs {
+		resolveEntry(entry)
 	}
 	for _, entry := range cfg.Providers.IndexedDBs {
 		resolveEntry(entry)

@@ -86,6 +86,8 @@ func providerKindToProto(kind ProviderKind) proto.ProviderKind {
 		return proto.ProviderKind_PROVIDER_KIND_INTEGRATION
 	case ProviderKindAuth:
 		return proto.ProviderKind_PROVIDER_KIND_AUTH
+	case ProviderKindFileAPI:
+		return proto.ProviderKind_PROVIDER_KIND_FILEAPI
 	case ProviderKindIndexedDB:
 		return proto.ProviderKind_PROVIDER_KIND_INDEXEDDB
 	case ProviderKindSecrets:

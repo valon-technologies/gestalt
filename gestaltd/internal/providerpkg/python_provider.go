@@ -254,6 +254,7 @@ func SplitPythonProviderTarget(target string) (module string, attr string, err e
 const (
 	pythonRuntimeKindIntegration = "integration"
 	pythonRuntimeKindAuth        = "auth"
+	pythonRuntimeKindFileAPI     = "fileapi"
 	pythonRuntimeKindIndexedDB   = "indexeddb"
 	pythonRuntimeKindSecrets     = "secrets"
 )
@@ -264,6 +265,8 @@ func pythonRuntimeKind(kind string) (string, error) {
 		return pythonRuntimeKindIntegration, nil
 	case providermanifestv1.KindAuth:
 		return pythonRuntimeKindAuth, nil
+	case providermanifestv1.KindFileAPI:
+		return pythonRuntimeKindFileAPI, nil
 	case providermanifestv1.KindIndexedDB:
 		return pythonRuntimeKindIndexedDB, nil
 	case providermanifestv1.KindSecrets:

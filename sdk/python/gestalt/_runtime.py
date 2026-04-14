@@ -22,6 +22,7 @@ from ._providers import (
     AuthProvider,
     Closer,
     ExternalTokenValidator,
+    FileAPIProvider,
     HealthChecker,
     MetadataProvider,
     PluginProvider,
@@ -172,6 +173,8 @@ def _load_target(args: RuntimeArgs) -> Plugin | PluginProviderAdapter | PluginPr
     if isinstance(target, (Plugin, PluginProviderAdapter)):
         return target
 
+    if resolved_kind == ProviderKind.FILEAPI and isinstance(target, FileAPIProvider):
+        return _fileapi_runtime_plugin(target)
     if resolved_kind == ProviderKind.AUTH and isinstance(target, AuthProvider):
         return _auth_runtime_plugin(target)
     if resolved_kind == ProviderKind.SECRETS and isinstance(target, SecretsProvider):
@@ -253,6 +256,8 @@ def _servable_target(
         return target
 
     kind = _normalized_runtime_kind(runtime_kind)
+    if kind == ProviderKind.FILEAPI and isinstance(target, FileAPIProvider):
+        return _fileapi_runtime_plugin(target)
     if kind == ProviderKind.AUTH and isinstance(target, AuthProvider):
         return _auth_runtime_plugin(target)
     if kind == ProviderKind.SECRETS and isinstance(target, SecretsProvider):
@@ -266,6 +271,37 @@ def _auth_runtime_plugin(provider: AuthProvider) -> PluginProviderAdapter:
         provider=provider,
         register_services=_register_auth_services,
     )
+
+
+def _fileapi_runtime_plugin(provider: FileAPIProvider) -> PluginProviderAdapter:
+    return PluginProviderAdapter(
+        kind=ProviderKind.FILEAPI,
+        provider=provider,
+        register_services=_register_fileapi_services,
+    )
+
+
+def _load_fileapi_proto_modules() -> tuple[Any, Any]:
+    try:
+        fileapi_pb2 = importlib.import_module(".gen.v1.fileapi_pb2", __package__)
+        fileapi_pb2_grpc = importlib.import_module(".gen.v1.fileapi_pb2_grpc", __package__)
+    except ImportError as error:
+        raise RuntimeError("generated FileAPI protobuf stubs are unavailable") from error
+    return fileapi_pb2, fileapi_pb2_grpc
+
+
+def _register_fileapi_services(server: Any, provider: PluginProvider) -> None:
+    runtime_pb2_grpc.add_ProviderLifecycleServicer_to_server(
+        _runtime_servicer(provider=provider, kind=ProviderKind.FILEAPI),
+        server,
+    )
+    _fileapi_pb2, fileapi_pb2_grpc = _load_fileapi_proto_modules()
+    register = getattr(fileapi_pb2_grpc, "add_FileAPIServicer_to_server", None)
+    if register is None:
+        raise RuntimeError(
+            "generated FileAPI gRPC stubs do not define add_FileAPIServicer_to_server"
+        )
+    register(provider, server)
 
 
 def _register_auth_services(server: Any, provider: PluginProvider) -> None:
@@ -561,6 +597,11 @@ def _provider_kind_to_proto(kind: ProviderKind | str) -> Any:
     return {
         ProviderKind.INTEGRATION: runtime_pb2.ProviderKind.PROVIDER_KIND_INTEGRATION,
         ProviderKind.AUTH: runtime_pb2.ProviderKind.PROVIDER_KIND_AUTH,
+        ProviderKind.FILEAPI: getattr(
+            runtime_pb2.ProviderKind,
+            "PROVIDER_KIND_FILEAPI",
+            runtime_pb2.ProviderKind.PROVIDER_KIND_UNSPECIFIED,
+        ),
         ProviderKind.SECRETS: runtime_pb2.ProviderKind.PROVIDER_KIND_SECRETS,
         ProviderKind.TELEMETRY: runtime_pb2.ProviderKind.PROVIDER_KIND_TELEMETRY,
     }.get(normalized, runtime_pb2.ProviderKind.PROVIDER_KIND_UNSPECIFIED)

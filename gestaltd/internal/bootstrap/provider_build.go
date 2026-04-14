@@ -14,6 +14,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/core/fileapi"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	"github.com/valon-technologies/gestalt/server/internal/composite"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -531,6 +532,37 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 				EnvVar: providerhost.DefaultIndexedDBSocketEnv,
 				Register: func(srv *grpc.Server) {
 					proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(ds, indexedDBNamespace(name)))
+				},
+			})
+		}
+	}
+	if len(entry.FileAPIs) > 0 {
+		if len(deps.FileAPIs) == 0 {
+			return nil, fmt.Errorf("fileapi host services are not available")
+		}
+		if execCfg.HostServices == nil {
+			execCfg.HostServices = make([]providerhost.HostService, 0, len(entry.FileAPIs)+1)
+		}
+		for _, binding := range entry.FileAPIs {
+			api, ok := deps.FileAPIs[binding]
+			if !ok || api == nil {
+				return nil, fmt.Errorf("fileapi %q is not available", binding)
+			}
+			execCfg.HostServices = append(execCfg.HostServices, providerhost.HostService{
+				EnvVar: providerhost.FileAPISocketEnv(binding),
+				Register: func(api fileapi.FileAPI) func(*grpc.Server) {
+					return func(srv *grpc.Server) {
+						proto.RegisterFileAPIServer(srv, providerhost.NewFileAPIServer(api, indexedDBNamespace(name)))
+					}
+				}(api),
+			})
+		}
+		if len(entry.FileAPIs) == 1 {
+			api := deps.FileAPIs[entry.FileAPIs[0]]
+			execCfg.HostServices = append(execCfg.HostServices, providerhost.HostService{
+				EnvVar: providerhost.DefaultFileAPISocketEnv,
+				Register: func(srv *grpc.Server) {
+					proto.RegisterFileAPIServer(srv, providerhost.NewFileAPIServer(api, indexedDBNamespace(name)))
 				},
 			})
 		}

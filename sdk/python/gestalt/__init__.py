@@ -6,6 +6,7 @@ from ._catalog import (
     OperationAnnotations,
     SessionCatalogProvider,
 )
+from ._fileapi import Blob, File, FileAPI, FileList, fileapi_socket_env
 from ._indexeddb import (
     CURSOR_NEXT,
     CURSOR_NEXT_UNIQUE,
@@ -31,6 +32,7 @@ from ._providers import (
     Closer,
     CompleteLoginRequest,
     ExternalTokenValidator,
+    FileAPIProvider,
     HealthChecker,
     MetadataProvider,
     PluginProvider,
@@ -48,6 +50,7 @@ __all__ = [
     "AuthenticatedUser",
     "BeginLoginRequest",
     "BeginLoginResponse",
+    "Blob",
     "CURSOR_NEXT",
     "CURSOR_NEXT_UNIQUE",
     "CURSOR_PREV",
@@ -61,6 +64,10 @@ __all__ = [
     "Cursor",
     "Error",
     "ExternalTokenValidator",
+    "File",
+    "FileAPI",
+    "FileAPIProvider",
+    "FileList",
     "HealthChecker",
     "Index",
     "IndexedDB",
@@ -85,6 +92,7 @@ __all__ = [
     "SessionCatalogProvider",
     "SessionTTLProvider",
     "WarningsProvider",
+    "fileapi_socket_env",
     "field",
     "indexeddb_socket_env",
     "operation",

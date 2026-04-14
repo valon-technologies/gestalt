@@ -27,6 +27,7 @@ const (
 	InitLockfileName     = "gestalt.lock.json"
 	PreparedProvidersDir = ".gestaltd/providers"
 	PreparedAuthDir      = ".gestaltd/auth"
+	PreparedFileAPIDir   = ".gestaltd/fileapi"
 	PreparedSecretsDir   = ".gestaltd/secrets"
 	PreparedTelemetryDir = ".gestaltd/telemetry"
 	PreparedAuditDir     = ".gestaltd/audit"
@@ -40,6 +41,7 @@ type Lockfile struct {
 	Version    int                          `json:"version"`
 	Providers  map[string]LockProviderEntry `json:"providers"`
 	Auth       *LockEntry                   `json:"auth,omitempty"`
+	FileAPIs   map[string]LockEntry         `json:"fileapis,omitempty"`
 	IndexedDBs map[string]LockEntry         `json:"indexeddbs,omitempty"`
 	Secrets    *LockEntry                   `json:"secrets,omitempty"`
 	Telemetry  *LockEntry                   `json:"telemetry,omitempty"`
@@ -136,6 +138,7 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 	lock := &Lockfile{
 		Version:    LockVersion,
 		Providers:  make(map[string]LockProviderEntry),
+		FileAPIs:   make(map[string]LockEntry),
 		IndexedDBs: make(map[string]LockEntry),
 		UIs:        make(map[string]LockUIEntry),
 	}
@@ -171,6 +174,15 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 		}
 		lock.Audit = &entry
 	}
+	for name, def := range cfg.Providers.FileAPIs {
+		if def != nil && def.HasManagedSource() {
+			entry, err := l.writeComponentArtifact(context.Background(), paths, providermanifestv1.KindFileAPI, "fileapi-"+name, fileapiDestDir(paths, name), def, def.Config)
+			if err != nil {
+				return nil, nil, err
+			}
+			lock.FileAPIs[name] = entry
+		}
+	}
 	for name, def := range cfg.Providers.IndexedDBs {
 		if def != nil && def.HasManagedSource() {
 			entry, err := l.writeComponentArtifact(context.Background(), paths, providermanifestv1.KindIndexedDB, "indexeddb-"+name, indexeddbDestDir(paths, name), def, def.Config)
@@ -200,7 +212,7 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 		return nil, nil, err
 	}
 
-	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "auth", lock.Auth != nil, "indexeddbs", len(lock.IndexedDBs), "secrets", lock.Secrets != nil, "telemetry", lock.Telemetry != nil, "audit", lock.Audit != nil, "uis", len(lock.UIs))
+	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "auth", lock.Auth != nil, "fileapis", len(lock.FileAPIs), "indexeddbs", len(lock.IndexedDBs), "secrets", lock.Secrets != nil, "telemetry", lock.Telemetry != nil, "audit", lock.Audit != nil, "uis", len(lock.UIs))
 	slog.Info("wrote lockfile", "path", paths.lockfilePath)
 	return lock, cfg, nil
 }
@@ -215,6 +227,11 @@ func buildSourceTokenMap(cfg *config.Config) map[string]string {
 	for _, p := range []*config.ProviderEntry{cfg.Providers.Auth, cfg.Providers.Secrets, cfg.Providers.Telemetry, cfg.Providers.Audit} {
 		if p != nil && p.Source.Auth != nil {
 			tokens[p.SourceRef()] = p.Source.Auth.Token
+		}
+	}
+	for _, def := range cfg.Providers.FileAPIs {
+		if def != nil && def.Source.Auth != nil {
+			tokens[def.SourceRef()] = def.Source.Auth.Token
 		}
 	}
 	for _, def := range cfg.Providers.IndexedDBs {
@@ -368,6 +385,11 @@ func configHasProviderLoading(cfg *config.Config) bool {
 			return true
 		}
 	}
+	for _, def := range cfg.Providers.FileAPIs {
+		if def != nil && (def.HasManagedSource() || def.HasLocalSource()) {
+			return true
+		}
+	}
 	for _, entry := range cfg.Providers.UI {
 		if entry != nil && !entry.Disabled && (entry.HasManagedSource() || entry.HasLocalSource()) {
 			return true
@@ -389,6 +411,11 @@ func configHasManagedProviderSources(cfg *config.Config) bool {
 	}
 	for _, p := range []*config.ProviderEntry{cfg.Providers.Auth, cfg.Providers.Secrets, cfg.Providers.Telemetry, cfg.Providers.Audit} {
 		if p != nil && p.HasManagedSource() {
+			return true
+		}
+	}
+	for _, def := range cfg.Providers.FileAPIs {
+		if def != nil && def.HasManagedSource() {
 			return true
 		}
 	}
@@ -479,6 +506,10 @@ func indexeddbDestDir(paths initPaths, name string) string {
 	return filepath.Join(paths.artifactsDir, "indexeddb", name)
 }
 
+func fileapiDestDir(paths initPaths, name string) string {
+	return filepath.Join(paths.artifactsDir, "fileapi", name)
+}
+
 func writeJSONFile(path string, v any) error {
 	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
@@ -508,6 +539,9 @@ func ReadLockfile(path string) (*Lockfile, error) {
 	}
 	if lock.Providers == nil {
 		lock.Providers = make(map[string]LockProviderEntry)
+	}
+	if lock.FileAPIs == nil {
+		lock.FileAPIs = make(map[string]LockEntry)
 	}
 	if lock.IndexedDBs == nil {
 		lock.IndexedDBs = make(map[string]LockEntry)
@@ -555,6 +589,15 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 	}
 	if cfg.Providers.Audit != nil && cfg.Providers.Audit.HasManagedSource() {
 		if lock.Audit == nil || !lockEntryMatches(paths, "audit", cfg.Providers.Audit, *lock.Audit, true) {
+			return false
+		}
+	}
+	for name, entry := range cfg.Providers.FileAPIs {
+		if entry == nil || !entry.HasManagedSource() {
+			continue
+		}
+		lockEntry, found := lock.FileAPIs[name]
+		if !lockEntryMatches(paths, "fileapi-"+name, entry, lockEntry, found) {
 			return false
 		}
 	}
@@ -989,6 +1032,13 @@ func (l *Lifecycle) applyLockedProviders(configPath, artifactsDir string, cfg *c
 			return err
 		}
 	}
+	for name, def := range cfg.Providers.FileAPIs {
+		if def != nil {
+			if err := l.applyComponentProvider(paths, lock, providermanifestv1.KindFileAPI, "fileapi-"+name, def, def.Config, &def.Config, locked); err != nil {
+				return err
+			}
+		}
+	}
 	for name, def := range cfg.Providers.IndexedDBs {
 		if def != nil {
 			if err := l.applyComponentProvider(paths, lock, providermanifestv1.KindIndexedDB, "indexeddb-"+name, def, def.Config, &def.Config, locked); err != nil {
@@ -1107,6 +1157,12 @@ func (l *Lifecycle) applyComponentProvider(paths initPaths, lock *Lockfile, kind
 		case "audit":
 			entry = lock.Audit
 		default:
+			if kind == providermanifestv1.KindFileAPI && strings.HasPrefix(name, "fileapi-") {
+				binding := strings.TrimPrefix(name, "fileapi-")
+				if lockEntry, ok := lock.FileAPIs[binding]; ok {
+					entry = &lockEntry
+				}
+			}
 			if kind == providermanifestv1.KindIndexedDB && strings.HasPrefix(name, "indexeddb-") {
 				binding := strings.TrimPrefix(name, "indexeddb-")
 				if lockEntry, ok := lock.IndexedDBs[binding]; ok {
@@ -1481,6 +1537,10 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 	case "audit":
 		destDir = auditDestDir(paths)
 	default:
+		if kind == providermanifestv1.KindFileAPI && strings.HasPrefix(name, "fileapi-") {
+			destDir = fileapiDestDir(paths, strings.TrimPrefix(name, "fileapi-"))
+			break
+		}
 		if kind == providermanifestv1.KindIndexedDB && strings.HasPrefix(name, "indexeddb-") {
 			destDir = indexeddbDestDir(paths, strings.TrimPrefix(name, "indexeddb-"))
 			break
@@ -1578,6 +1638,12 @@ func hashPlatformInEntries(ctx context.Context, lock *Lockfile, platformKey stri
 		if err := hashArchiveEntry(ctx, entry, platformKey, tokenForSource); err != nil {
 			return err
 		}
+	}
+	for name, entry := range lock.FileAPIs {
+		if err := hashArchiveEntry(ctx, &entry, platformKey, tokenForSource); err != nil {
+			return err
+		}
+		lock.FileAPIs[name] = entry
 	}
 	for name, entry := range lock.IndexedDBs {
 		if err := hashArchiveEntry(ctx, &entry, platformKey, tokenForSource); err != nil {

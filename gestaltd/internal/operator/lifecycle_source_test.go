@@ -825,6 +825,116 @@ func TestManagedIndexedDBSourcesLoadForExecutionWithMultipleBindings(t *testing.
 	}
 }
 
+func TestManagedFileAPISourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	mainSource := "github.com/acme/providers/fileapi-main"
+	archiveSource := "github.com/acme/providers/fileapi-archive"
+	indexedDBSource := "github.com/acme/providers/indexeddb-default"
+	version := "1.0.0"
+
+	mainArchivePath := buildExecutableArchive(t, dir, "fileapi-main-src", mainSource, version, providermanifestv1.KindFileAPI, "fileapi-main", "main-fileapi-binary")
+	archiveArchivePath := buildExecutableArchive(t, dir, "fileapi-archive-src", archiveSource, version, providermanifestv1.KindFileAPI, "fileapi-archive", "archive-fileapi-binary")
+	_ = buildExecutableArchive(t, dir, "indexeddb-default-src", indexedDBSource, version, providermanifestv1.KindIndexedDB, "indexeddb-default", "default-indexeddb-binary")
+
+	mainArchiveData, err := os.ReadFile(mainArchivePath)
+	if err != nil {
+		t.Fatalf("read main fileapi archive: %v", err)
+	}
+	mainArchiveSum := sha256.Sum256(mainArchiveData)
+
+	archiveArchiveData, err := os.ReadFile(archiveArchivePath)
+	if err != nil {
+		t.Fatalf("read archive fileapi archive: %v", err)
+	}
+	archiveArchiveSum := sha256.Sum256(archiveArchiveData)
+
+	resolver := &fakeMultiResolver{
+		results: map[string]fakeResolverResult{
+			mainSource: {
+				archivePath: mainArchivePath,
+				resolvedURL: "https://example.com/fileapi-main.tar.gz",
+				sha256:      hex.EncodeToString(mainArchiveSum[:]),
+			},
+			archiveSource: {
+				archivePath: archiveArchivePath,
+				resolvedURL: "https://example.com/fileapi-archive.tar.gz",
+				sha256:      hex.EncodeToString(archiveArchiveSum[:]),
+			},
+		},
+	}
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configYAML := strings.Join([]string{
+		"providers:",
+		"  indexeddbs:",
+		"    main:",
+		"      source:",
+		`        path: "` + filepath.Join(dir, "indexeddb-default-src", "manifest.json") + `"`,
+		"      config:",
+		`        dsn: "sqlite://main.db"`,
+		"  fileapis:",
+		"    main:",
+		"      source:",
+		"        ref: " + mainSource,
+		"        version: " + version,
+		"      config: {}",
+		"    archive:",
+		"      source:",
+		"        ref: " + archiveSource,
+		"        version: " + version,
+		"      config: {}",
+		"server:",
+		"  indexeddb: main",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle(resolver)
+	lock, err := lc.InitAtPath(configPath)
+	if err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+	if len(lock.FileAPIs) != 2 {
+		t.Fatalf("lock.FileAPIs = %#v, want 2 entries", lock.FileAPIs)
+	}
+	if _, ok := lock.FileAPIs["main"]; !ok {
+		t.Fatal(`lock.FileAPIs["main"] not found`)
+	}
+	if _, ok := lock.FileAPIs["archive"]; !ok {
+		t.Fatal(`lock.FileAPIs["archive"] not found`)
+	}
+
+	callsBefore := len(resolver.calls)
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
+	}
+	if len(resolver.calls) != callsBefore {
+		t.Fatalf("resolver called during locked load: got %d calls, want %d", len(resolver.calls), callsBefore)
+	}
+
+	for _, name := range []string{"main", "archive"} {
+		entry := cfg.Providers.FileAPIs[name]
+		if entry == nil {
+			t.Fatalf("cfg.Providers.FileAPIs[%q] = nil", name)
+		}
+		if entry.ResolvedManifest == nil {
+			t.Fatalf("cfg.Providers.FileAPIs[%q].ResolvedManifest = nil", name)
+		}
+		wantCommand := resolveLockPath(artifactsDir, lock.FileAPIs[name].Executable)
+		if entry.Command != wantCommand {
+			t.Fatalf("cfg.Providers.FileAPIs[%q].Command = %q, want %q", name, entry.Command, wantCommand)
+		}
+	}
+}
+
 func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 	t.Parallel()
 

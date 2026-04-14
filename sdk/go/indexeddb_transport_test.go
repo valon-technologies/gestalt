@@ -56,6 +56,36 @@ func TestMain(m *testing.M) {
 	}
 	testClient = client
 
+	fileHarnessDir := filepath.Join("..", "..", "gestaltd", "internal", "testutil", "cmd", "fileapitransportd")
+	fileBin := filepath.Join(os.TempDir(), "fileapitransportd")
+	fileBuild := exec.Command("go", "build", "-o", fileBin, ".")
+	fileBuild.Dir = fileHarnessDir
+	if out, err := fileBuild.CombinedOutput(); err != nil {
+		panic("build fileapi harness: " + string(out))
+	}
+
+	fileSock := filepath.Join(os.TempDir(), "go-sdk-fileapi-test.sock")
+	_ = os.Remove(fileSock)
+	fileCmd := exec.Command(fileBin, "--socket", fileSock)
+	fileStdout, _ := fileCmd.StdoutPipe()
+	if err := fileCmd.Start(); err != nil {
+		panic("start fileapi harness: " + err.Error())
+	}
+	fileScanner := bufio.NewScanner(fileStdout)
+	if !fileScanner.Scan() || fileScanner.Text() != "READY" {
+		fileCmd.Process.Kill()
+		panic("fileapi harness did not print READY")
+	}
+
+	os.Setenv(gestalt.EnvFileAPISocket, fileSock)
+	os.Setenv(gestalt.FileAPISocketEnv("test"), fileSock)
+	fileClient, err := gestalt.FileAPI()
+	if err != nil {
+		fileCmd.Process.Kill()
+		panic("connect fileapi: " + err.Error())
+	}
+	testFileAPI = fileClient
+
 	code := m.Run()
 
 	_ = client.Close()
@@ -63,6 +93,11 @@ func TestMain(m *testing.M) {
 	_ = cmd.Wait()
 	_ = os.Remove(sock)
 	_ = os.Remove(bin)
+	_ = fileClient.Close()
+	fileCmd.Process.Kill()
+	_ = fileCmd.Wait()
+	_ = os.Remove(fileSock)
+	_ = os.Remove(fileBin)
 	os.Exit(code)
 }
 

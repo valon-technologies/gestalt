@@ -1,0 +1,108 @@
+syntax = "proto3";
+
+package gestalt.provider.v1;
+
+option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
+
+import "google/protobuf/empty.proto";
+
+enum FileObjectKind {
+  FILE_OBJECT_KIND_UNSPECIFIED = 0;
+  FILE_OBJECT_KIND_BLOB = 1;
+  FILE_OBJECT_KIND_FILE = 2;
+}
+
+enum LineEndings {
+  LINE_ENDINGS_TRANSPARENT = 0;
+  LINE_ENDINGS_NATIVE = 1;
+}
+
+message BlobPart {
+  oneof kind {
+    string string_data = 1;
+    bytes bytes_data = 2;
+    string blob_id = 3;
+  }
+}
+
+message BlobOptions {
+  string mime_type = 1;
+  LineEndings endings = 2;
+}
+
+message FileOptions {
+  string mime_type = 1;
+  LineEndings endings = 2;
+  int64 last_modified = 3;
+}
+
+message FileObject {
+  string id = 1;
+  FileObjectKind kind = 2;
+  int64 size = 3;
+  string type = 4;
+  string name = 5;
+  int64 last_modified = 6;
+}
+
+message CreateBlobRequest {
+  repeated BlobPart parts = 1;
+  BlobOptions options = 2;
+}
+
+message CreateFileRequest {
+  repeated BlobPart file_bits = 1;
+  string file_name = 2;
+  FileOptions options = 3;
+}
+
+message FileObjectRequest {
+  string id = 1;
+}
+
+message FileObjectResponse {
+  FileObject object = 1;
+}
+
+message SliceRequest {
+  string id = 1;
+  optional int64 start = 2;
+  optional int64 end = 3;
+  string content_type = 4;
+}
+
+message BytesResponse {
+  bytes data = 1;
+}
+
+message ReadStreamRequest {
+  string id = 1;
+}
+
+message ReadChunk {
+  bytes data = 1;
+}
+
+message CreateObjectURLRequest {
+  string id = 1;
+}
+
+message ObjectURLRequest {
+  string url = 1;
+}
+
+message ObjectURLResponse {
+  string url = 1;
+}
+
+service FileAPI {
+  rpc CreateBlob(CreateBlobRequest) returns (FileObjectResponse);
+  rpc CreateFile(CreateFileRequest) returns (FileObjectResponse);
+  rpc Stat(FileObjectRequest) returns (FileObjectResponse);
+  rpc Slice(SliceRequest) returns (FileObjectResponse);
+  rpc ReadBytes(FileObjectRequest) returns (BytesResponse);
+  rpc OpenReadStream(ReadStreamRequest) returns (stream ReadChunk);
+  rpc CreateObjectURL(CreateObjectURLRequest) returns (ObjectURLResponse);
+  rpc ResolveObjectURL(ObjectURLRequest) returns (FileObjectResponse);
+  rpc RevokeObjectURL(ObjectURLRequest) returns (google.protobuf.Empty);
+}

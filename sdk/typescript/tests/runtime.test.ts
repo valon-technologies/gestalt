@@ -10,6 +10,12 @@ import {
   ValidateExternalTokenRequestSchema,
 } from "../gen/v1/auth_pb.ts";
 import {
+  CreateBlobRequestSchema,
+  CreateObjectURLRequestSchema,
+  FileObjectKind,
+  FileObjectRequestSchema,
+} from "../gen/v1/fileapi_pb.ts";
+import {
   CredentialContextSchema,
   ExecuteRequestSchema,
   GetSessionCatalogRequestSchema,
@@ -21,6 +27,7 @@ import { ConfigureProviderRequestSchema } from "../gen/v1/runtime_pb.ts";
 import {
   ENV_WRITE_CATALOG,
   createAuthService,
+  createFileAPIService,
   createProviderService,
   createRuntimeService,
   loadPluginFromTarget,
@@ -183,4 +190,45 @@ test("auth provider supports runtime metadata, login flows, and token validation
     }),
   );
   expect(validated.email).toBe("api-token@example.com");
+});
+
+test("fileapi provider loads and exposes metadata plus core rpc handlers", async () => {
+  const provider = await loadProviderFromTarget(fixturePath("fileapi-provider"));
+  const runtime = createRuntimeService(provider);
+  const fileapi = createFileAPIService(provider as any);
+
+  const metadata = await (runtime.getProviderIdentity as any)(create(EmptySchema, {}));
+  expect(metadata.kind).toBe(6);
+  expect(metadata.displayName).toBe("Fixture FileAPI");
+
+  const created = await (fileapi.createBlob as any)(
+    create(CreateBlobRequestSchema, {
+      parts: [{ kind: { case: "stringData", value: "hello" } }],
+      options: {
+        mimeType: "text/plain",
+      },
+    }),
+  );
+  expect(created.object?.kind).toBe(FileObjectKind.BLOB);
+
+  const stat = await (fileapi.stat as any)(
+    create(FileObjectRequestSchema, {
+      id: created.object?.id ?? "",
+    }),
+  );
+  expect(stat.object?.id).toBe(created.object?.id);
+
+  const bytes = await (fileapi.readBytes as any)(
+    create(FileObjectRequestSchema, {
+      id: created.object?.id ?? "",
+    }),
+  );
+  expect(new TextDecoder().decode(bytes.data)).toBe("hello");
+
+  const objectUrl = await (fileapi.createObjectURL as any)(
+    create(CreateObjectURLRequestSchema, {
+      id: created.object?.id ?? "",
+    }),
+  );
+  expect(objectUrl.url).toMatch(/^blob:gestalt:/);
 });

@@ -50,6 +50,11 @@ test("provider target parsing supports plugin defaults and kind prefixes", () =>
     modulePath: "./auth.ts",
     exportName: "provider",
   });
+  expect(parseProviderTarget("fileapi:./fileapi.ts#provider")).toEqual({
+    kind: "fileapi",
+    modulePath: "./fileapi.ts",
+    exportName: "provider",
+  });
 });
 
 test("package config reads legacy plugin targets and provider targets", () => {
@@ -82,5 +87,18 @@ test("package config reads legacy plugin targets and provider targets", () => {
   });
   expect(formatProviderTarget(readPackageProviderTarget(authRoot))).toBe(
     "auth:./auth.ts#provider",
+  );
+
+  const fileAPIRoot = fixturePath("fileapi-provider");
+  expect(readPackageConfig(fileAPIRoot)).toEqual({
+    name: "@fixtures/fileapi-provider",
+    providerTarget: {
+      kind: "fileapi",
+      modulePath: "./fileapi.ts",
+      exportName: "provider",
+    },
+  });
+  expect(formatProviderTarget(readPackageProviderTarget(fileAPIRoot))).toBe(
+    "fileapi:./fileapi.ts#provider",
   );
 });

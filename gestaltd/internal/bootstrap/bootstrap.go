@@ -9,6 +9,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/crypto"
+	"github.com/valon-technologies/gestalt/server/core/fileapi"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -124,12 +125,14 @@ type Deps struct {
 	BaseURL       string
 	SecretManager core.SecretManager
 	Services      *coredata.Services
+	FileAPIs      map[string]fileapi.FileAPI
 	IndexedDBs    map[string]indexeddb.IndexedDB
 	Egress        EgressDeps
 }
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthProvider, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
+type FileAPIFactory func(node yaml.Node) (fileapi.FileAPI, error)
 type IndexedDBFactory func(node yaml.Node) (indexeddb.IndexedDB, error)
 type TelemetryFactory func(node yaml.Node) (core.TelemetryProvider, error)
 type AuditFactory func(ctx context.Context, cfg config.ProviderEntry, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error)
@@ -137,6 +140,7 @@ type AuditFactory func(ctx context.Context, cfg config.ProviderEntry, telemetry 
 type FactoryRegistry struct {
 	Auth      AuthFactory
 	Secrets   map[string]SecretManagerFactory
+	FileAPI   FileAPIFactory
 	IndexedDB IndexedDBFactory
 	Telemetry map[string]TelemetryFactory
 	Audit     AuditFactory
@@ -153,6 +157,7 @@ func NewFactoryRegistry() *FactoryRegistry {
 type Result struct {
 	Auth             core.AuthProvider
 	Services         *coredata.Services
+	ExtraFileAPIs    []fileapi.FileAPI
 	ExtraIndexedDBs  []indexeddb.IndexedDB
 	Providers        *registry.ProviderMap[core.Provider]
 	ProvidersReady   <-chan struct{}
@@ -198,6 +203,7 @@ func (r *Result) Close(ctx context.Context) error {
 		closeAuth(r.Auth),
 		CloseProviders(r.Providers),
 		r.Services.Close(),
+		closeFileAPIs(r.ExtraFileAPIs...),
 		closeIndexedDBs(r.ExtraIndexedDBs...),
 		closeSecretManager(r.SecretManager),
 	)
@@ -232,9 +238,23 @@ func closeIndexedDBs(stores ...indexeddb.IndexedDB) error {
 	return errors.Join(errs...)
 }
 
+func closeFileAPIs(apis ...fileapi.FileAPI) error {
+	var errs []error
+	for _, api := range apis {
+		if api == nil {
+			continue
+		}
+		if err := api.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
 type preparedCore struct {
 	Auth            core.AuthProvider
 	Services        *coredata.Services
+	ExtraFileAPIs   []fileapi.FileAPI
 	ExtraIndexedDBs []indexeddb.IndexedDB
 	SecretManager   core.SecretManager
 	Telemetry       core.TelemetryProvider
@@ -325,6 +345,7 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	}
 	hostIndexedDBs := map[string]indexeddb.IndexedDB{cfg.Server.IndexedDB: store}
 	var extraIndexedDBs []indexeddb.IndexedDB
+	var extraFileAPIs []fileapi.FileAPI
 	for name, entry := range cfg.Providers.IndexedDBs {
 		if name == cfg.Server.IndexedDB {
 			continue
@@ -341,9 +362,13 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	}
 	closeSvc := true
 	closeExtraStores := true
+	closeExtraFileAPIs := true
 	defer func() {
 		if closeSvc {
 			_ = svc.Close()
+		}
+		if closeExtraFileAPIs {
+			_ = closeFileAPIs(extraFileAPIs...)
 		}
 		if closeExtraStores {
 			_ = closeIndexedDBs(extraIndexedDBs...)
@@ -353,14 +378,26 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	deps.Egress = newEgressDeps(cfg)
 	deps.Services = svc
 	deps.IndexedDBs = hostIndexedDBs
+	hostFileAPIs := make(map[string]fileapi.FileAPI, len(cfg.Providers.FileAPIs))
+	for name, entry := range cfg.Providers.FileAPIs {
+		api, err := buildFileAPI(entry, factories)
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: fileapi from resource %q: %w", name, err)
+		}
+		hostFileAPIs[name] = api
+		extraFileAPIs = append(extraFileAPIs, api)
+	}
+	deps.FileAPIs = hostFileAPIs
 
 	closeSM = false
 	shutdownTelemetry = false
 	closeSvc = false
 	closeExtraStores = false
+	closeExtraFileAPIs = false
 	return &preparedCore{
 		Auth:            auth,
 		Services:        svc,
+		ExtraFileAPIs:   extraFileAPIs,
 		ExtraIndexedDBs: extraIndexedDBs,
 		SecretManager:   sm,
 		Telemetry:       tp,
@@ -377,6 +414,7 @@ func (p *preparedCore) Close(ctx context.Context) error {
 	errs = append(errs,
 		closeAuth(p.Auth),
 		p.Services.Close(),
+		closeFileAPIs(p.ExtraFileAPIs...),
 		closeIndexedDBs(p.ExtraIndexedDBs...),
 		closeSecretManager(p.SecretManager),
 	)
@@ -441,6 +479,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	return &Result{
 		Auth:             prepared.Auth,
 		Services:         prepared.Services,
+		ExtraFileAPIs:    prepared.ExtraFileAPIs,
 		ExtraIndexedDBs:  prepared.ExtraIndexedDBs,
 		Providers:        providers,
 		ProvidersReady:   providersReady,
@@ -626,4 +665,26 @@ func buildIndexedDB(entry *config.ProviderEntry, factories *FactoryRegistry) (in
 		return nil, fmt.Errorf("datastore provider: %w", err)
 	}
 	return ds, nil
+}
+
+func buildFileAPI(entry *config.ProviderEntry, factories *FactoryRegistry) (fileapi.FileAPI, error) {
+	if entry == nil || entry.Disabled {
+		return nil, nil
+	}
+	if factories.FileAPI == nil {
+		return nil, fmt.Errorf("bootstrap: fileapi factory is not configured")
+	}
+	node := entry.Config
+	if entry.Command != "" || len(entry.Args) > 0 {
+		var err error
+		node, err = config.BuildComponentRuntimeConfigNode("fileapi", "fileapi", entry, entry.Config)
+		if err != nil {
+			return nil, fmt.Errorf("fileapi provider: %w", err)
+		}
+	}
+	api, err := factories.FileAPI(node)
+	if err != nil {
+		return nil, fmt.Errorf("fileapi provider: %w", err)
+	}
+	return api, nil
 }
