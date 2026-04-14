@@ -52,7 +52,7 @@ providers:
 ```
 
 When `authorizationPolicy` is set, Gestalt authenticates the caller, resolves
-their role from `server.authorization.policies.<policy>`, and checks the web
+their role from `authorization.policies.<policy>`, and checks the web
 UI manifest's `spec.routes[].allowedRoles` before serving the route or its
 associated static assets.
 

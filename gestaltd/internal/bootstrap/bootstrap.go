@@ -264,6 +264,9 @@ func ResolveConfigSecrets(ctx context.Context, cfg *config.Config, factories *Fa
 }
 
 func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, requireEncryptionKey bool) (*preparedCore, error) {
+	if err := config.NormalizeCompatibility(cfg); err != nil {
+		return nil, err
+	}
 	sm, err := prepareSecretManager(ctx, cfg, factories)
 	if err != nil {
 		return nil, err
@@ -414,7 +417,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	if err != nil {
 		return nil, err
 	}
-	authz, err := authorization.New(cfg.Server.Authorization, cfg.Plugins, providers, connMaps.DefaultConnection)
+	authz, err := authorization.New(cfg.Authorization, cfg.Plugins, providers, connMaps.DefaultConnection)
 	if err != nil {
 		return nil, err
 	}

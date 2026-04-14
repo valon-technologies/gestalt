@@ -398,25 +398,54 @@ func TestInitAtPath_RejectsPolicyBoundManagedMountedWebUIWithoutExplicitRouteCov
 			want: "must declare a route covering /",
 		},
 	}
+	authBlocks := []struct {
+		name string
+		yaml string
+	}{
+		{
+			name: "top level authorization",
+			yaml: `authorization:
+  policies:
+    sample_policy:
+      default: deny
+      members:
+        - email: viewer@example.test
+          role: viewer
+`,
+		},
+		{
+			name: "legacy server authorization",
+			yaml: `  authorization:
+    policies:
+      sample_policy:
+        default: deny
+        members:
+          - email: viewer@example.test
+            role: viewer
+`,
+		},
+	}
 
 	for _, tc := range tests {
 		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
+		for _, authBlock := range authBlocks {
+			authBlock := authBlock
+			t.Run(tc.name+"/"+authBlock.name, func(t *testing.T) {
+				t.Parallel()
 
-			dir := t.TempDir()
-			pkgPath := mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
-				Kind:        providermanifestv1.KindWebUI,
-				Source:      "github.com/testowner/web/sample-portal",
-				Version:     "0.0.1-alpha.1",
-				DisplayName: "Sample Portal",
-				Spec:        tc.spec,
-			}, map[string]string{
-				"dist/index.html": "<html>sample portal</html>",
-			}, false)
+				dir := t.TempDir()
+				pkgPath := mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
+					Kind:        providermanifestv1.KindWebUI,
+					Source:      "github.com/testowner/web/sample-portal",
+					Version:     "0.0.1-alpha.1",
+					DisplayName: "Sample Portal",
+					Spec:        tc.spec,
+				}, map[string]string{
+					"dist/index.html": "<html>sample portal</html>",
+				}, false)
 
-			cfgPath := filepath.Join(dir, "config.yaml")
-			cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  ui:
+				cfgPath := filepath.Join(dir, "config.yaml")
+				cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  ui:
     sample_portal:
       source:
         ref: github.com/testowner/web/sample-portal
@@ -425,24 +454,18 @@ func TestInitAtPath_RejectsPolicyBoundManagedMountedWebUIWithoutExplicitRouteCov
       authorizationPolicy: sample_policy
 ` + `server:
 ` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-  authorization:
-    policies:
-      sample_policy:
-        default: deny
-        members:
-          - email: viewer@example.test
-            role: viewer
-`
-			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-				t.Fatalf("WriteFile config: %v", err)
-			}
+` + authBlock.yaml
+				if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+					t.Fatalf("WriteFile config: %v", err)
+				}
 
-			lc := NewLifecycle(staticSourceResolver{localPath: pkgPath})
-			_, err := lc.InitAtPath(cfgPath)
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("InitAtPath error = %v, want substring %q", err, tc.want)
-			}
-		})
+				lc := NewLifecycle(staticSourceResolver{localPath: pkgPath})
+				_, err := lc.InitAtPath(cfgPath)
+				if err == nil || !strings.Contains(err.Error(), tc.want) {
+					t.Fatalf("InitAtPath error = %v, want substring %q", err, tc.want)
+				}
+			})
+		}
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -40,9 +41,10 @@ const PluginConnectionName = "_plugin"
 const PluginConnectionAlias = "plugin"
 
 type Config struct {
-	Server    ServerConfig              `yaml:"server"`
-	Providers ProvidersConfig           `yaml:"providers"`
-	Plugins   map[string]*ProviderEntry `yaml:"plugins,omitempty"`
+	Server        ServerConfig              `yaml:"server"`
+	Authorization AuthorizationConfig       `yaml:"authorization,omitempty"`
+	Providers     ProvidersConfig           `yaml:"providers"`
+	Plugins       map[string]*ProviderEntry `yaml:"plugins,omitempty"`
 }
 
 type ProvidersConfig struct {
@@ -605,6 +607,10 @@ func LoadAllowMissingEnv(path string) (*Config, error) {
 	return loadWithLookup(path, os.LookupEnv, true)
 }
 
+func NormalizeCompatibility(cfg *Config) error {
+	return normalizeAuthorizationConfig(cfg)
+}
+
 func OverlayManagedPluginConfig(path string, cfg *Config) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -974,6 +980,9 @@ func loadWithLookup(path string, lookup func(string) (string, bool), allowMissin
 	}
 
 	applyDefaults(&cfg)
+	if err := NormalizeCompatibility(&cfg); err != nil {
+		return nil, err
+	}
 	resolveBaseURL(&cfg)
 	resolveRelativePaths(path, &cfg)
 
@@ -1109,6 +1118,79 @@ func applyDefaultBuiltinProviderEntries(entries map[string]*ProviderEntry, defau
 		entry.Source.Builtin = builtin
 	}
 	return entries
+}
+
+func normalizeAuthorizationConfig(cfg *Config) error {
+	if cfg == nil {
+		return nil
+	}
+	cfg.Authorization = normalizedAuthorizationConfig(cfg.Authorization)
+	cfg.Server.Authorization = normalizedAuthorizationConfig(cfg.Server.Authorization)
+	topLevelSet := hasAuthorizationConfig(cfg.Authorization)
+	legacySet := hasAuthorizationConfig(cfg.Server.Authorization)
+	switch {
+	case topLevelSet && legacySet:
+		if !reflect.DeepEqual(cfg.Authorization, cfg.Server.Authorization) {
+			return fmt.Errorf("config validation: authorization and server.authorization may not both be set with different values")
+		}
+	case topLevelSet:
+		cfg.Server.Authorization = cfg.Authorization
+	case legacySet:
+		cfg.Authorization = cfg.Server.Authorization
+	default:
+		cfg.Authorization = AuthorizationConfig{}
+		cfg.Server.Authorization = AuthorizationConfig{}
+	}
+	return nil
+}
+
+func hasAuthorizationConfig(cfg AuthorizationConfig) bool {
+	return len(cfg.Policies) > 0 || len(cfg.Workloads) > 0
+}
+
+func normalizedAuthorizationConfig(cfg AuthorizationConfig) AuthorizationConfig {
+	if len(cfg.Policies) == 0 {
+		cfg.Policies = nil
+	} else {
+		policies := make(map[string]HumanPolicyDef, len(cfg.Policies))
+		for name, policy := range cfg.Policies {
+			policies[name] = normalizedHumanPolicyDef(policy)
+		}
+		cfg.Policies = policies
+	}
+	if len(cfg.Workloads) == 0 {
+		cfg.Workloads = nil
+	} else {
+		workloads := make(map[string]WorkloadDef, len(cfg.Workloads))
+		for name, workload := range cfg.Workloads {
+			workloads[name] = normalizedWorkloadDef(workload)
+		}
+		cfg.Workloads = workloads
+	}
+	return cfg
+}
+
+func normalizedHumanPolicyDef(policy HumanPolicyDef) HumanPolicyDef {
+	if len(policy.Members) == 0 {
+		policy.Members = nil
+	}
+	return policy
+}
+
+func normalizedWorkloadDef(workload WorkloadDef) WorkloadDef {
+	if len(workload.Providers) == 0 {
+		workload.Providers = nil
+		return workload
+	}
+	providers := make(map[string]WorkloadProviderDef, len(workload.Providers))
+	for name, provider := range workload.Providers {
+		if len(provider.Allow) == 0 {
+			provider.Allow = nil
+		}
+		providers[name] = provider
+	}
+	workload.Providers = providers
+	return workload
 }
 
 func resolveBaseURL(cfg *Config) {
