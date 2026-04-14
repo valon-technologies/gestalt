@@ -45,6 +45,7 @@ type Lockfile struct {
 	Auth       map[string]LockEntry         `json:"auth,omitempty"`
 	IndexedDBs map[string]LockEntry         `json:"indexeddbs,omitempty"`
 	Caches     map[string]LockEntry         `json:"cache,omitempty"`
+	S3         map[string]LockEntry         `json:"s3,omitempty"`
 	Secrets    map[string]LockEntry         `json:"secrets,omitempty"`
 	Telemetry  map[string]LockEntry         `json:"telemetry,omitempty"`
 	Audit      map[string]LockEntry         `json:"audit,omitempty"`
@@ -182,6 +183,15 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 			lock.IndexedDBs[name] = entry
 		}
 	}
+	for name, def := range cfg.Providers.S3 {
+		if def != nil && !def.Disabled && def.HasManagedSource() {
+			entry, err := l.writeComponentArtifact(context.Background(), paths, providermanifestv1.KindS3, name, s3DestDir(paths, name), def, def.Config)
+			if err != nil {
+				return nil, nil, err
+			}
+			lock.S3[name] = entry
+		}
+	}
 	for name, entry := range cfg.Providers.UI {
 		if entry != nil && !entry.Disabled && entry.HasManagedSource() {
 			uiEntry, err := l.writeNamedUIProviderArtifact(context.Background(), paths, name, &entry.ProviderEntry, uiDestDir(paths, name), "ui "+strconv.Quote(name))
@@ -202,7 +212,7 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 		return nil, nil, err
 	}
 
-	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "auth", len(lock.Auth), "indexeddbs", len(lock.IndexedDBs), "cache", len(lock.Caches), "secrets", len(lock.Secrets), "telemetry", len(lock.Telemetry), "audit", len(lock.Audit), "uis", len(lock.UIs))
+	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "auth", len(lock.Auth), "indexeddbs", len(lock.IndexedDBs), "cache", len(lock.Caches), "s3", len(lock.S3), "secrets", len(lock.Secrets), "telemetry", len(lock.Telemetry), "audit", len(lock.Audit), "uis", len(lock.UIs))
 	slog.Info("wrote lockfile", "path", paths.lockfilePath)
 	return lock, cfg, nil
 }
@@ -223,6 +233,11 @@ func buildSourceTokenMap(cfg *config.Config) map[string]string {
 	}
 	for _, def := range cfg.Providers.IndexedDB {
 		if def != nil && def.Source.Auth != nil {
+			tokens[def.SourceRef()] = def.Source.Auth.Token
+		}
+	}
+	for _, def := range cfg.Providers.S3 {
+		if def != nil && !def.Disabled && def.Source.Auth != nil {
 			tokens[def.SourceRef()] = def.Source.Auth.Token
 		}
 	}
@@ -440,6 +455,11 @@ func configHasProviderLoading(cfg *config.Config) bool {
 			return true
 		}
 	}
+	for _, def := range cfg.Providers.S3 {
+		if def != nil && !def.Disabled && (def.HasManagedSource() || def.HasLocalSource()) {
+			return true
+		}
+	}
 	return false
 }
 
@@ -463,6 +483,11 @@ func configHasManagedProviderSources(cfg *config.Config) bool {
 	}
 	for _, def := range cfg.Providers.IndexedDB {
 		if def != nil && def.HasManagedSource() {
+			return true
+		}
+	}
+	for _, def := range cfg.Providers.S3 {
+		if def != nil && !def.Disabled && def.HasManagedSource() {
 			return true
 		}
 	}
@@ -546,6 +571,10 @@ func cacheDestDir(paths initPaths, name string) string {
 
 func indexeddbDestDir(paths initPaths, name string) string {
 	return filepath.Join(paths.artifactsDir, "indexeddb", name)
+}
+
+func s3DestDir(paths initPaths, name string) string {
+	return filepath.Join(paths.artifactsDir, "s3", name)
 }
 
 func componentDestDir(paths initPaths, kind config.HostProviderKind, name string) string {
@@ -703,6 +732,15 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 			return false
 		}
 	}
+	for name, entry := range cfg.Providers.S3 {
+		if entry == nil || entry.Disabled || !entry.HasManagedSource() {
+			continue
+		}
+		lockEntry, found := lock.S3[name]
+		if !lockEntryMatches(paths, name, entry, lockEntry, found, s3DestDir(paths, name)) {
+			return false
+		}
+	}
 	for name, entry := range cfg.Providers.UI {
 		if entry == nil || entry.Disabled || !entry.HasManagedSource() {
 			continue
@@ -770,6 +808,18 @@ func lockEntryMatches(paths initPaths, name string, providerEntry *config.Provid
 		platform := providerpkg.CurrentPlatformString()
 		if _, _, ok := resolveArchiveForPlatform(entry, platform); !ok {
 			return false
+		}
+	}
+	if strings.TrimSpace(entry.Manifest) != "" {
+		manifestPath := resolveLockPath(paths.artifactsDir, entry.Manifest)
+		if _, err := os.Stat(manifestPath); err == nil {
+			if entry.Executable != "" {
+				executablePath := resolveLockPath(paths.artifactsDir, entry.Executable)
+				if _, err := os.Stat(executablePath); err != nil {
+					return false
+				}
+			}
+			return true
 		}
 	}
 	install, err := inspectPreparedInstall(destDir)
@@ -1118,6 +1168,17 @@ func (l *Lifecycle) applyLockedProviders(configPath, artifactsDir string, cfg *c
 	for name, def := range cfg.Providers.IndexedDB {
 		if def != nil {
 			if err := l.applyComponentProvider(paths, indexedDBLocks, providermanifestv1.KindIndexedDB, name, def, def.Config, &def.Config, indexeddbDestDir(paths, name), locked); err != nil {
+				return err
+			}
+		}
+	}
+	s3Locks := map[string]LockEntry(nil)
+	if lock != nil {
+		s3Locks = lock.S3
+	}
+	for name, def := range cfg.Providers.S3 {
+		if def != nil && !def.Disabled {
+			if err := l.applyComponentProvider(paths, s3Locks, providermanifestv1.KindS3, name, def, def.Config, &def.Config, s3DestDir(paths, name), locked); err != nil {
 				return err
 			}
 		}

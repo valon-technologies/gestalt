@@ -30,9 +30,11 @@ use crate::generated::v1::integration_provider_server::IntegrationProviderServer
 #[cfg(unix)]
 use crate::generated::v1::provider_lifecycle_server::ProviderLifecycleServer;
 #[cfg(unix)]
+use crate::generated::v1::s3_server::S3Server;
+#[cfg(unix)]
 use crate::generated::v1::secrets_provider_server::SecretsProviderServer;
 use crate::provider_server::ProviderServer;
-use crate::{AuthProvider, CacheProvider, SecretsProvider};
+use crate::{AuthProvider, CacheProvider, S3Provider, SecretsProvider};
 use crate::{Provider, Router};
 #[cfg(unix)]
 use crate::{
@@ -66,6 +68,10 @@ pub fn run_cache_provider<P: CacheProvider>(provider: Arc<P>) -> Result<()> {
 
 pub fn run_secrets_provider<P: SecretsProvider>(provider: Arc<P>) -> Result<()> {
     build_runtime_and_block_on(|| serve_secrets_provider(provider))
+}
+
+pub fn run_s3_provider<P: S3Provider>(provider: Arc<P>) -> Result<()> {
+    build_runtime_and_block_on(|| serve_s3_provider(provider))
 }
 
 pub fn write_catalog_path<P>(router: &Router<P>, path: impl AsRef<Path>) -> Result<()> {
@@ -175,6 +181,26 @@ where
     .await
 }
 
+#[cfg(unix)]
+pub async fn serve_s3_provider<P>(provider: Arc<P>) -> Result<()>
+where
+    P: S3Provider,
+{
+    serve_unix_provider(
+        provider,
+        move |incoming, provider| {
+            Server::builder()
+                .add_service(ProviderLifecycleServer::new(RuntimeServer::for_s3(
+                    Arc::clone(&provider),
+                )))
+                .add_service(S3Server::new(Arc::clone(&provider)))
+                .serve_with_incoming_shutdown(incoming, shutdown_signal(parent_pid()))
+        },
+        |provider| async move { provider.close().await },
+    )
+    .await
+}
+
 #[cfg(not(unix))]
 pub async fn serve_provider<P>(_provider: Arc<P>, router: Router<P>) -> Result<()>
 where
@@ -212,6 +238,16 @@ where
 pub async fn serve_secrets_provider<P>(_provider: Arc<P>) -> Result<()>
 where
     P: SecretsProvider,
+{
+    Err(Error::internal(
+        "unix sockets are unsupported on this platform",
+    ))
+}
+
+#[cfg(not(unix))]
+pub async fn serve_s3_provider<P>(_provider: Arc<P>) -> Result<()>
+where
+    P: S3Provider,
 {
     Err(Error::internal(
         "unix sockets are unsupported on this platform",

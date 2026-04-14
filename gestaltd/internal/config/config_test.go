@@ -356,6 +356,97 @@ server:
 	}
 }
 
+func TestLoadConfigEnvValueWithDollarSignDoesNotReexpand(t *testing.T) {
+	t.Parallel()
+
+	secretEnv := "GESTALT_TEST_SECRET_" + strings.ToUpper(strings.ReplaceAll(t.Name(), "/", "_"))
+	path := mustWriteConfigFile(t, fmt.Sprintf(`
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: ${%s}
+`, secretEnv))
+
+	cfg, err := LoadWithLookup(path, func(key string) (string, bool) {
+		if key == secretEnv {
+			return "p$ssword", true
+		}
+		return "", false
+	})
+	if err != nil {
+		t.Fatalf("LoadWithLookup: %v", err)
+	}
+	if cfg.Server.EncryptionKey != "p$ssword" {
+		t.Fatalf("Server.EncryptionKey = %q, want p$ssword", cfg.Server.EncryptionKey)
+	}
+}
+
+func TestLoadConfigEnvValueWithPlaceholderSyntaxDoesNotReexpand(t *testing.T) {
+	t.Parallel()
+
+	secretEnv := "GESTALT_TEST_SECRET_" + strings.ToUpper(strings.ReplaceAll(t.Name(), "/", "_"))
+	path := mustWriteConfigFile(t, fmt.Sprintf(`
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: ${%s}
+`, secretEnv))
+
+	cfg, err := LoadWithLookup(path, func(key string) (string, bool) {
+		if key == secretEnv {
+			return "abc${INNER}", true
+		}
+		return "", false
+	})
+	if err != nil {
+		t.Fatalf("LoadWithLookup: %v", err)
+	}
+	if cfg.Server.EncryptionKey != "abc${INNER}" {
+		t.Fatalf("Server.EncryptionKey = %q, want abc${INNER}", cfg.Server.EncryptionKey)
+	}
+}
+
+func TestLoadConfigEnvValueWithSentinelLookingSubstringDoesNotCorruptValue(t *testing.T) {
+	t.Parallel()
+
+	secretEnv := "GESTALT_TEST_SECRET_" + strings.ToUpper(strings.ReplaceAll(t.Name(), "/", "_"))
+	path := mustWriteConfigFile(t, fmt.Sprintf(`
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: ${%s}
+`, secretEnv))
+
+	want := "prefix__GESTALT_MISSING_ENV_SU5ORVI__suffix"
+	cfg, err := LoadWithLookup(path, func(key string) (string, bool) {
+		if key == secretEnv {
+			return want, true
+		}
+		return "", false
+	})
+	if err != nil {
+		t.Fatalf("LoadWithLookup: %v", err)
+	}
+	if cfg.Server.EncryptionKey != want {
+		t.Fatalf("Server.EncryptionKey = %q, want %q", cfg.Server.EncryptionKey, want)
+	}
+}
+
 func TestValidateStructureRejectsDuplicateAuthorizationPolicyMembers(t *testing.T) {
 	t.Parallel()
 
@@ -925,6 +1016,39 @@ server:
 		wantPath := filepath.Join(filepath.Dir(path), "web", "default", "provider.yaml")
 		if got := entry.Source.Path; got != wantPath {
 			t.Fatalf(`Providers.UI["roadmap"].Source.Path = %q, want %q`, got, wantPath)
+		}
+	})
+
+	t.Run("relative s3 provider path resolves from config directory", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  s3:
+    minio:
+      source:
+        path: ./providers/s3/minio/manifest.yaml
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		entry := cfg.Providers.S3["minio"]
+		if entry == nil {
+			t.Fatal(`Providers.S3["minio"] = nil`)
+		}
+		wantPath := filepath.Join(filepath.Dir(path), "providers", "s3", "minio", "manifest.yaml")
+		if got := entry.Source.Path; got != wantPath {
+			t.Fatalf(`Providers.S3["minio"].Source.Path = %q, want %q`, got, wantPath)
 		}
 	})
 }
@@ -1791,6 +1915,73 @@ server:
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
+
+	t.Run("plugin accepts s3 bindings", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    s3:
+      - assets
+providers:
+  s3:
+    assets:
+      source:
+        path: ./providers/s3/assets
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if got := cfg.Plugins["roadmap"].S3; !reflect.DeepEqual(got, []string{"assets"}) {
+			t.Fatalf("Plugins[roadmap].S3 = %#v, want %#v", got, []string{"assets"})
+		}
+	})
+
+	t.Run("rejects disabled s3 binding names", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    s3:
+      - assets
+providers:
+  s3:
+    assets:
+      disabled: true
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `plugin "roadmap" s3[0] references disabled s3 "assets"`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 }
 
 func TestLoadRejectsUnknownProviderFields(t *testing.T) {
@@ -1861,6 +2052,20 @@ providers:
   ui:
     roadmap:
       disabled: true
+`,
+		},
+		{
+			name: "disabled s3 entry",
+			yaml: `
+providers:
+  s3:
+    assets:
+      disabled: true
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/s3/compatible
+        version: 1.0.0
+      config:
+        bucket: ${MISSING_S3_BUCKET}
 `,
 		},
 		{
@@ -2311,6 +2516,21 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			cfg: &Config{
 				Providers: ProvidersConfig{
 					Auth: singletonProviderEntry(&ProviderEntry{Config: yaml.Node{Kind: yaml.MappingNode}, Disabled: true}),
+				},
+			},
+		},
+		{
+			name: "disabled s3 entry skips source validation",
+			cfg: &Config{
+				Providers: ProvidersConfig{
+					S3: map[string]*ProviderEntry{
+						"assets": {
+							Disabled: true,
+							Source: ProviderSource{
+								Ref: "not-a-valid-ref",
+							},
+						},
+					},
 				},
 			},
 		},

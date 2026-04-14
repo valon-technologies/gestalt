@@ -1,0 +1,146 @@
+syntax = "proto3";
+
+package gestalt.provider.v1;
+
+option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/timestamp.proto";
+
+message S3ObjectRef {
+  string bucket = 1;
+  string key = 2;
+  string version_id = 3;
+}
+
+message S3ObjectMeta {
+  S3ObjectRef ref = 1;
+  string etag = 2;
+  int64 size = 3;
+  string content_type = 4;
+  google.protobuf.Timestamp last_modified = 5;
+  map<string, string> metadata = 6;
+  string storage_class = 7;
+}
+
+message ByteRange {
+  optional int64 start = 1;
+  optional int64 end = 2;
+}
+
+message HeadObjectRequest {
+  S3ObjectRef ref = 1;
+}
+
+message HeadObjectResponse {
+  S3ObjectMeta meta = 1;
+}
+
+message ReadObjectRequest {
+  S3ObjectRef ref = 1;
+  optional ByteRange range = 2;
+  string if_match = 3;
+  string if_none_match = 4;
+  google.protobuf.Timestamp if_modified_since = 5;
+  google.protobuf.Timestamp if_unmodified_since = 6;
+}
+
+message ReadObjectChunk {
+  oneof result {
+    S3ObjectMeta meta = 1;
+    bytes data = 2;
+  }
+}
+
+message WriteObjectOpen {
+  S3ObjectRef ref = 1;
+  string content_type = 2;
+  string cache_control = 3;
+  string content_disposition = 4;
+  string content_encoding = 5;
+  string content_language = 6;
+  map<string, string> metadata = 7;
+  string if_match = 8;
+  string if_none_match = 9;
+}
+
+message WriteObjectRequest {
+  oneof msg {
+    WriteObjectOpen open = 1;
+    bytes data = 2;
+  }
+}
+
+message WriteObjectResponse {
+  S3ObjectMeta meta = 1;
+}
+
+message DeleteObjectRequest {
+  S3ObjectRef ref = 1;
+}
+
+message ListObjectsRequest {
+  string bucket = 1;
+  string prefix = 2;
+  string delimiter = 3;
+  string continuation_token = 4;
+  string start_after = 5;
+  int32 max_keys = 6;
+}
+
+message ListObjectsResponse {
+  repeated S3ObjectMeta objects = 1;
+  repeated string common_prefixes = 2;
+  string next_continuation_token = 3;
+  bool has_more = 4;
+}
+
+message CopyObjectRequest {
+  S3ObjectRef source = 1;
+  S3ObjectRef destination = 2;
+  string if_match = 3;
+  string if_none_match = 4;
+}
+
+message CopyObjectResponse {
+  S3ObjectMeta meta = 1;
+}
+
+enum PresignMethod {
+  PRESIGN_METHOD_UNSPECIFIED = 0;
+  PRESIGN_METHOD_GET = 1;
+  PRESIGN_METHOD_PUT = 2;
+  PRESIGN_METHOD_DELETE = 3;
+  PRESIGN_METHOD_HEAD = 4;
+}
+
+message PresignObjectRequest {
+  S3ObjectRef ref = 1;
+  PresignMethod method = 2;
+  int64 expires_seconds = 3;
+  string content_type = 4;
+  string content_disposition = 5;
+  map<string, string> headers = 6;
+}
+
+message PresignObjectResponse {
+  string url = 1;
+  PresignMethod method = 2;
+  google.protobuf.Timestamp expires_at = 3;
+  map<string, string> headers = 4;
+}
+
+service S3 {
+  rpc HeadObject(HeadObjectRequest) returns (HeadObjectResponse);
+  // The first response frame carries object metadata. All subsequent frames
+  // carry byte chunks. Zero-byte objects therefore emit exactly one frame.
+  rpc ReadObject(ReadObjectRequest) returns (stream ReadObjectChunk);
+  // The first request frame must carry WriteObjectOpen metadata. All
+  // subsequent frames carry raw bytes. The response is emitted only after the
+  // object has been durably committed by the provider.
+  rpc WriteObject(stream WriteObjectRequest) returns (WriteObjectResponse);
+  rpc DeleteObject(DeleteObjectRequest) returns (google.protobuf.Empty);
+  rpc ListObjects(ListObjectsRequest) returns (ListObjectsResponse);
+  rpc CopyObject(CopyObjectRequest) returns (CopyObjectResponse);
+  rpc PresignObject(PresignObjectRequest) returns (PresignObjectResponse);
+}

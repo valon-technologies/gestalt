@@ -8,6 +8,7 @@ import { expect, test } from "bun:test";
 
 import { AuthProvider as AuthProviderService, BeginLoginRequestSchema } from "../gen/v1/auth_pb.ts";
 import { Cache as CacheService } from "../gen/v1/cache_pb.ts";
+import { S3 as S3Service } from "../gen/v1/s3_pb.ts";
 import { ConfigureProviderRequestSchema, ProviderKind as ProtoProviderKind, ProviderLifecycle } from "../gen/v1/runtime_pb.ts";
 import { buildProviderBinary, bunTarget, parseBuildArgs } from "../src/build.ts";
 import { Cache, cacheSocketEnv } from "../src/cache.ts";
@@ -230,6 +231,87 @@ test("buildProviderBinary compiles a runnable cache provider executable", async 
     removeTempDir(tempDir);
   }
 }, 15_000);
+
+test("buildProviderBinary compiles a runnable s3 provider executable", async () => {
+  const { goos, goarch, executableSuffix } = hostTarget();
+  const tempDir = makeTempDir("gestalt-typescript-s3-build-test-");
+  const outputPath = join(tempDir, `fixture-s3${executableSuffix}`);
+  const socketPath = join(tempDir, "provider.sock");
+  let child: ChildProcess | undefined;
+
+  try {
+    buildProviderBinary({
+      root: fixturePath("s3-provider"),
+      target: "s3:./s3.ts#provider",
+      outputPath,
+      providerName: "fixture-s3",
+      goos,
+      goarch,
+    });
+
+    expect(existsSync(outputPath)).toBe(true);
+
+    child = spawn(outputPath, [], {
+      env: {
+        ...process.env,
+        [ENV_PROVIDER_SOCKET]: socketPath,
+      },
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+
+    await waitForPath(socketPath);
+
+    const runtime = createUnixGrpcClient(ProviderLifecycle, socketPath);
+    const s3 = createUnixGrpcClient(S3Service, socketPath);
+
+    const metadata = await runtime.getProviderIdentity(create(EmptySchema, {}));
+    expect(metadata.kind).toBe(ProtoProviderKind.S3);
+    expect(metadata.name).toBe("fixture-s3");
+
+    await runtime.configureProvider(
+      create(ConfigureProviderRequestSchema, {
+        name: "fixture-s3",
+        config: {},
+        protocolVersion: CURRENT_PROTOCOL_VERSION,
+      }),
+    );
+
+    const written = await s3.writeObject((async function* () {
+      yield {
+        msg: {
+          case: "open",
+          value: {
+            ref: {
+              bucket: "build-bucket",
+              key: "hello.txt",
+            },
+            contentType: "text/plain",
+          },
+        },
+      };
+      yield {
+        msg: {
+          case: "data",
+          value: new TextEncoder().encode("hello"),
+        },
+      };
+    })());
+    expect(written.meta?.ref?.key).toBe("hello.txt");
+
+    const headed = await s3.headObject({
+      ref: {
+        bucket: "build-bucket",
+        key: "hello.txt",
+      },
+    });
+    expect(headed.meta?.size).toBe(5n);
+  } finally {
+    if (child) {
+      await stopProcess(child);
+    }
+    removeTempDir(tempDir);
+  }
+});
 
 async function stopProcess(child: ChildProcess): Promise<void> {
   if (child.exitCode !== null || child.signalCode !== null) {

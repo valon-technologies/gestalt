@@ -5,6 +5,7 @@ export type ProviderKind =
   | "auth"
   | "cache"
   | "secrets"
+  | "s3"
   | "telemetry";
 
 export type ProviderMetadata = {

@@ -11,6 +11,7 @@ import (
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	"github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
+	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
@@ -131,6 +132,7 @@ type Deps struct {
 	IndexedDBFactory      IndexedDBFactory
 	CacheDefs             map[string]*config.ProviderEntry
 	CacheFactory          CacheFactory
+	S3                    map[string]s3store.Client
 	Egress                EgressDeps
 }
 
@@ -138,6 +140,7 @@ type AuthFactory func(node yaml.Node, deps Deps) (core.AuthProvider, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
 type IndexedDBFactory func(node yaml.Node) (indexeddb.IndexedDB, error)
 type CacheFactory func(node yaml.Node) (corecache.Cache, error)
+type S3Factory func(node yaml.Node) (s3store.Client, error)
 type TelemetryFactory func(node yaml.Node) (core.TelemetryProvider, error)
 type AuditFactory func(ctx context.Context, cfg config.ProviderEntry, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error)
 
@@ -146,6 +149,7 @@ type FactoryRegistry struct {
 	Secrets   map[string]SecretManagerFactory
 	IndexedDB IndexedDBFactory
 	Cache     CacheFactory
+	S3        S3Factory
 	Telemetry map[string]TelemetryFactory
 	Audit     AuditFactory
 	Builtins  []core.Provider
@@ -162,6 +166,7 @@ type Result struct {
 	Auth             core.AuthProvider
 	Services         *coredata.Services
 	ExtraIndexedDBs  []indexeddb.IndexedDB
+	ExtraS3s         []s3store.Client
 	Providers        *registry.ProviderMap[core.Provider]
 	ProvidersReady   <-chan struct{}
 	Authorizer       *authorization.Authorizer
@@ -207,6 +212,7 @@ func (r *Result) Close(ctx context.Context) error {
 		CloseProviders(r.Providers),
 		r.Services.Close(),
 		closeIndexedDBs(r.ExtraIndexedDBs...),
+		closeS3s(r.ExtraS3s...),
 		closeSecretManager(r.SecretManager),
 	)
 	if r.auditClose != nil {
@@ -240,10 +246,24 @@ func closeIndexedDBs(stores ...indexeddb.IndexedDB) error {
 	return errors.Join(errs...)
 }
 
+func closeS3s(clients ...s3store.Client) error {
+	var errs []error
+	for _, client := range clients {
+		if client == nil {
+			continue
+		}
+		if err := client.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
 type preparedCore struct {
 	Auth            core.AuthProvider
 	Services        *coredata.Services
 	ExtraIndexedDBs []indexeddb.IndexedDB
+	ExtraS3s        []s3store.Client
 	SecretManager   core.SecretManager
 	Telemetry       core.TelemetryProvider
 	Deps            Deps
@@ -361,6 +381,27 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		}
 	}()
 
+	hostS3s := make(map[string]s3store.Client, len(cfg.Providers.S3))
+	var extraS3s []s3store.Client
+	for name, entry := range cfg.Providers.S3 {
+		if entry == nil || entry.Disabled {
+			continue
+		}
+		client, err := buildS3(name, entry, factories)
+		if err != nil {
+			_ = closeS3s(extraS3s...)
+			return nil, fmt.Errorf("bootstrap: s3 from resource %q: %w", name, err)
+		}
+		hostS3s[name] = client
+		extraS3s = append(extraS3s, client)
+	}
+	closeExtraS3s := true
+	defer func() {
+		if closeExtraS3s {
+			_ = closeS3s(extraS3s...)
+		}
+	}()
+
 	deps.Egress = newEgressDeps(cfg)
 	deps.Services = svc
 	deps.IndexedDBs = hostIndexedDBs
@@ -369,15 +410,18 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	deps.IndexedDBFactory = factories.IndexedDB
 	deps.CacheDefs = cfg.Providers.Cache
 	deps.CacheFactory = factories.Cache
+	deps.S3 = hostS3s
 
 	closeSM = false
 	shutdownTelemetry = false
 	closeSvc = false
 	closeExtraStores = false
+	closeExtraS3s = false
 	return &preparedCore{
 		Auth:            auth,
 		Services:        svc,
 		ExtraIndexedDBs: extraIndexedDBs,
+		ExtraS3s:        extraS3s,
 		SecretManager:   sm,
 		Telemetry:       tp,
 		Deps:            deps,
@@ -394,6 +438,7 @@ func (p *preparedCore) Close(ctx context.Context) error {
 		closeAuth(p.Auth),
 		p.Services.Close(),
 		closeIndexedDBs(p.ExtraIndexedDBs...),
+		closeS3s(p.ExtraS3s...),
 		closeSecretManager(p.SecretManager),
 	)
 	if p.Telemetry != nil {
@@ -458,6 +503,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Auth:             prepared.Auth,
 		Services:         prepared.Services,
 		ExtraIndexedDBs:  prepared.ExtraIndexedDBs,
+		ExtraS3s:         prepared.ExtraS3s,
 		Providers:        providers,
 		ProvidersReady:   providersReady,
 		Authorizer:       authz,
@@ -676,4 +722,26 @@ func buildCache(entry *config.ProviderEntry, factories *FactoryRegistry) (coreca
 		return nil, fmt.Errorf("cache provider: %w", err)
 	}
 	return value, nil
+}
+
+func buildS3(name string, entry *config.ProviderEntry, factories *FactoryRegistry) (s3store.Client, error) {
+	if entry == nil {
+		return nil, fmt.Errorf("s3 provider is required")
+	}
+	if factories.S3 == nil {
+		return nil, fmt.Errorf("s3 factory is not registered")
+	}
+	node := entry.Config
+	if !config.IsComponentRuntimeConfigNode(node) {
+		var err error
+		node, err = config.BuildComponentRuntimeConfigNode(name, "s3", entry, entry.Config)
+		if err != nil {
+			return nil, fmt.Errorf("s3 provider: %w", err)
+		}
+	}
+	client, err := factories.S3(node)
+	if err != nil {
+		return nil, fmt.Errorf("s3 provider: %w", err)
+	}
+	return client, nil
 }

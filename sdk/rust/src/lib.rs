@@ -14,11 +14,13 @@ mod router;
 mod rpc_status;
 pub mod runtime;
 mod runtime_server;
+pub mod s3;
 mod secrets;
 mod secrets_server;
 
 /// Generated protobuf and gRPC bindings compiled from `sdk/proto/v1/*.proto`.
 mod generated {
+    #[allow(clippy::large_enum_variant)]
     pub mod v1 {
         tonic::include_proto!("gestalt.provider.v1");
     }
@@ -43,6 +45,7 @@ pub use indexeddb::{Cursor, CursorDirection, IndexedDB, IndexedDBError};
 #[doc(hidden)]
 pub use provider_server::{OperationResult, ProviderServer};
 pub use router::{Operation, Router};
+pub use s3::{S3, S3Error, S3Provider};
 pub use secrets::SecretsProvider;
 pub use tonic::codegen::async_trait;
 
@@ -113,6 +116,16 @@ macro_rules! export_secrets_provider {
         pub fn __gestalt_serve_secrets(_name: &str) -> $crate::Result<()> {
             let provider = std::sync::Arc::new($constructor());
             $crate::runtime::run_secrets_provider(provider)
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! export_s3_provider {
+    (constructor = $constructor:path $(,)?) => {
+        pub fn __gestalt_serve_s3(_name: &str) -> $crate::Result<()> {
+            let provider = std::sync::Arc::new($constructor());
+            $crate::runtime::run_s3_provider(provider)
         }
     };
 }

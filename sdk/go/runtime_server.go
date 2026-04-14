@@ -92,6 +92,8 @@ func providerKindToProto(kind ProviderKind) proto.ProviderKind {
 		return proto.ProviderKind_PROVIDER_KIND_CACHE
 	case ProviderKindSecrets:
 		return proto.ProviderKind_PROVIDER_KIND_SECRETS
+	case ProviderKindS3:
+		return proto.ProviderKind_PROVIDER_KIND_S3
 	default:
 		return proto.ProviderKind_PROVIDER_KIND_UNSPECIFIED
 	}

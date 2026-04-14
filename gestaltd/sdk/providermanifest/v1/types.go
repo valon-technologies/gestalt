@@ -9,6 +9,7 @@ const (
 	KindAuth      = "auth"
 	KindIndexedDB = "indexeddb"
 	KindCache     = "cache"
+	KindS3        = "s3"
 	KindSecrets   = "secrets"
 	KindWebUI     = "webui"
 )

@@ -4,6 +4,7 @@ from typing import Any, Callable
 
 from ._cache import CacheEntry
 from .gen.v1 import auth_pb2 as _auth_pb2
+from .gen.v1 import s3_pb2_grpc as _s3_pb2_grpc
 
 AuthenticatedUser: Any = _auth_pb2.AuthenticatedUser  # ty: ignore[unresolved-attribute]
 BeginLoginRequest: Any = _auth_pb2.BeginLoginRequest  # ty: ignore[unresolved-attribute]
@@ -15,6 +16,7 @@ class ProviderKind(str, Enum):
     INTEGRATION = "integration"
     AUTH = "auth"
     CACHE = "cache"
+    S3 = "s3"
     SECRETS = "secrets"
     TELEMETRY = "telemetry"
 
@@ -157,3 +159,10 @@ class CacheProvider(PluginProvider):
         from . import _runtime
 
         _runtime.serve(self, runtime_kind=ProviderKind.CACHE)
+
+
+class S3Provider(PluginProvider, _s3_pb2_grpc.S3Servicer):
+    def serve(self) -> None:
+        from . import _runtime
+
+        _runtime.serve(self, runtime_kind=ProviderKind.S3)

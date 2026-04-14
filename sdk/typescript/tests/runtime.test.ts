@@ -43,7 +43,8 @@ import {
   main,
   parseRuntimeArgs,
 } from "../src/runtime.ts";
-import { defineCacheProvider } from "../src/index.ts";
+import { PresignMethod, S3, defineCacheProvider, defineS3Provider } from "../src/index.ts";
+import { createS3Service } from "../src/s3.ts";
 import { fixturePath, makeTempDir, removeTempDir } from "./helpers.ts";
 
 test("runtime arg parsing requires root and target", () => {
@@ -384,4 +385,256 @@ test("cache provider deleteMany fallback deletes each unique key once", async ()
     ]),
   ).toBe(2);
   expect(calls).toEqual(["alpha", "missing", "beta"]);
+});
+
+test("s3 provider target resolves and serves runtime metadata plus object operations", async () => {
+  const provider = await loadProviderFromTarget(fixturePath("s3-provider"));
+  const runtime = createRuntimeService(provider);
+  const s3 = createS3Service(provider as any);
+
+  await (runtime.configureProvider as any)(
+    create(ConfigureProviderRequestSchema, {
+      name: "fixture-s3",
+      config: {},
+      protocolVersion: 2,
+    }),
+  );
+
+  const metadata = await (runtime.getProviderIdentity as any)(
+    create(EmptySchema, {}),
+  );
+  expect(metadata.kind).toBe(ProtoProviderKind.S3);
+  expect(metadata.displayName).toBe("Fixture S3");
+
+  const written = await (s3.writeObject as any)(
+    (async function* () {
+      yield {
+        msg: {
+          case: "open",
+          value: {
+            ref: {
+              bucket: "runtime-bucket",
+              key: "runtime.txt",
+            },
+            contentType: "text/plain",
+            metadata: {
+              env: "test",
+            },
+          },
+        },
+      };
+      yield {
+        msg: {
+          case: "data",
+          value: new TextEncoder().encode("runtime"),
+        },
+      };
+    })(),
+  );
+  expect(written.meta?.ref?.key).toBe("runtime.txt");
+
+  const headed = await (s3.headObject as any)({
+    ref: {
+      bucket: "runtime-bucket",
+      key: "runtime.txt",
+    },
+  });
+  expect(headed.meta?.size).toBe(7n);
+
+  const listed = await (s3.listObjects as any)({
+    bucket: "runtime-bucket",
+  });
+  expect(listed.objects.map((object: any) => object.ref?.key)).toEqual([
+    "runtime.txt",
+  ]);
+
+  const copied = await (s3.copyObject as any)({
+    source: {
+      bucket: "runtime-bucket",
+      key: "runtime.txt",
+    },
+    destination: {
+      bucket: "runtime-bucket",
+      key: "copy.txt",
+    },
+  });
+  expect(copied.meta?.ref?.key).toBe("copy.txt");
+
+  const presigned = await (s3.presignObject as any)({
+    ref: {
+      bucket: "runtime-bucket",
+      key: "copy.txt",
+    },
+    method: 2,
+    headers: {
+      "x-test": "1",
+    },
+  });
+  expect(presigned.url).toContain("method=PUT");
+  expect(presigned.headers).toEqual({ "x-test": "1" });
+});
+
+test("s3 writeObject closes unread request frames when provider returns early", async () => {
+  let requestClosed = false;
+  const provider = defineS3Provider({
+    async headObject(ref) {
+      return {
+        ref,
+        etag: "",
+        size: 0n,
+        contentType: "",
+        metadata: {},
+        storageClass: "",
+      };
+    },
+    async readObject(ref) {
+      return {
+        meta: {
+          ref,
+          etag: "",
+          size: 0n,
+          contentType: "",
+          metadata: {},
+          storageClass: "",
+        },
+      };
+    },
+    async writeObject(ref, body) {
+      const iterator = body[Symbol.asyncIterator]();
+      const first = await iterator.next();
+      expect(first.done).toBe(false);
+      return {
+        ref,
+        etag: "etag",
+        size: BigInt(first.value?.byteLength ?? 0),
+        contentType: "text/plain",
+        metadata: {},
+        storageClass: "STANDARD",
+      };
+    },
+    async deleteObject() {},
+    async listObjects() {
+      return {
+        objects: [],
+        commonPrefixes: [],
+        nextContinuationToken: "",
+        hasMore: false,
+      };
+    },
+    async copyObject(_source, destination) {
+      return {
+        ref: destination,
+        etag: "",
+        size: 0n,
+        contentType: "",
+        metadata: {},
+        storageClass: "",
+      };
+    },
+    async presignObject() {
+      return {
+        url: "https://example.invalid",
+        method: PresignMethod.Get,
+        headers: {},
+      };
+    },
+  });
+  const s3 = createS3Service(provider);
+
+  const response = await (s3.writeObject as any)(
+    (async function* () {
+      try {
+        yield {
+          msg: {
+            case: "open",
+            value: {
+              ref: {
+                bucket: "runtime-bucket",
+                key: "runtime.txt",
+              },
+            },
+          },
+        };
+        yield {
+          msg: {
+            case: "data",
+            value: new TextEncoder().encode("hello"),
+          },
+        };
+        yield {
+          msg: {
+            case: "data",
+            value: new TextEncoder().encode("goodbye"),
+          },
+        };
+      } finally {
+        requestClosed = true;
+      }
+    })(),
+  );
+
+  expect(response.meta?.size).toBe(5n);
+  expect(requestClosed).toBe(true);
+});
+
+test("s3 client writeObject cancels unread readable streams when upload ends early", async () => {
+  let canceled = false;
+  let pulls = 0;
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) {
+      pulls += 1;
+      if (pulls === 1) {
+        controller.enqueue(new TextEncoder().encode("hello"));
+        return;
+      }
+      controller.enqueue(new TextEncoder().encode("goodbye"));
+    },
+    cancel() {
+      canceled = true;
+    },
+  });
+
+  const s3 = Object.create(S3.prototype) as {
+    client: {
+      writeObject: (requests: AsyncIterable<unknown>) => Promise<{
+        meta: {
+          ref: { bucket: string; key: string };
+          etag: string;
+          size: bigint;
+          contentType: string;
+          metadata: Record<string, string>;
+          storageClass: string;
+        };
+      }>;
+    };
+  };
+  s3.client = {
+    async writeObject(requests: AsyncIterable<unknown>) {
+      const iterator = requests[Symbol.asyncIterator]();
+      const open = await iterator.next();
+      expect(open.done).toBe(false);
+      const firstChunk = await iterator.next();
+      expect(firstChunk.done).toBe(false);
+      await iterator.return?.();
+      return {
+        meta: {
+          ref: { bucket: "runtime-bucket", key: "runtime.txt" },
+          etag: "etag",
+          size: BigInt((firstChunk.value as { msg: { value: Uint8Array } }).msg.value.byteLength),
+          contentType: "text/plain",
+          metadata: {},
+          storageClass: "STANDARD",
+        },
+      };
+    },
+  };
+
+  const meta = await S3.prototype.writeObject.call(
+    s3,
+    { bucket: "runtime-bucket", key: "runtime.txt" },
+    body,
+  );
+
+  expect(meta.size).toBe(5n);
+  expect(canceled).toBe(true);
 });

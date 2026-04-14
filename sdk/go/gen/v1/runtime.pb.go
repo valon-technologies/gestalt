@@ -33,6 +33,7 @@ const (
 	ProviderKind_PROVIDER_KIND_SECRETS     ProviderKind = 4
 	ProviderKind_PROVIDER_KIND_TELEMETRY   ProviderKind = 5
 	ProviderKind_PROVIDER_KIND_CACHE       ProviderKind = 6
+	ProviderKind_PROVIDER_KIND_S3          ProviderKind = 7
 )
 
 // Enum value maps for ProviderKind.
@@ -45,6 +46,7 @@ var (
 		4: "PROVIDER_KIND_SECRETS",
 		5: "PROVIDER_KIND_TELEMETRY",
 		6: "PROVIDER_KIND_CACHE",
+		7: "PROVIDER_KIND_S3",
 	}
 	ProviderKind_value = map[string]int32{
 		"PROVIDER_KIND_UNSPECIFIED": 0,
@@ -54,6 +56,7 @@ var (
 		"PROVIDER_KIND_SECRETS":     4,
 		"PROVIDER_KIND_TELEMETRY":   5,
 		"PROVIDER_KIND_CACHE":       6,
+		"PROVIDER_KIND_S3":          7,
 	}
 )
 
@@ -363,7 +366,7 @@ const file_v1_runtime_proto_rawDesc = "" +
 	"\x10protocol_version\x18\x01 \x01(\x05R\x0fprotocolVersion\"E\n" +
 	"\x13HealthCheckResponse\x12\x14\n" +
 	"\x05ready\x18\x01 \x01(\bR\x05ready\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage*\xd2\x01\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage*\xe8\x01\n" +
 	"\fProviderKind\x12\x1d\n" +
 	"\x19PROVIDER_KIND_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19PROVIDER_KIND_INTEGRATION\x10\x01\x12\x16\n" +
@@ -371,7 +374,8 @@ const file_v1_runtime_proto_rawDesc = "" +
 	"\x17PROVIDER_KIND_INDEXEDDB\x10\x03\x12\x19\n" +
 	"\x15PROVIDER_KIND_SECRETS\x10\x04\x12\x1b\n" +
 	"\x17PROVIDER_KIND_TELEMETRY\x10\x05\x12\x17\n" +
-	"\x13PROVIDER_KIND_CACHE\x10\x062\xae\x02\n" +
+	"\x13PROVIDER_KIND_CACHE\x10\x06\x12\x14\n" +
+	"\x10PROVIDER_KIND_S3\x10\a2\xae\x02\n" +
 	"\x11ProviderLifecycle\x12T\n" +
 	"\x13GetProviderIdentity\x12\x16.google.protobuf.Empty\x1a%.gestalt.provider.v1.ProviderIdentity\x12r\n" +
 	"\x11ConfigureProvider\x12-.gestalt.provider.v1.ConfigureProviderRequest\x1a..gestalt.provider.v1.ConfigureProviderResponse\x12O\n" +

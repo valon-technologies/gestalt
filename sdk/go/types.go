@@ -15,6 +15,7 @@ const (
 	ProviderKindIndexedDB   ProviderKind = "datastore"
 	ProviderKindCache       ProviderKind = "cache"
 	ProviderKindSecrets     ProviderKind = "secrets"
+	ProviderKindS3          ProviderKind = "s3"
 )
 
 // ProviderMetadata describes a provider instance independent of its concrete

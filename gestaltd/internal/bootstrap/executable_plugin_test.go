@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -19,6 +20,7 @@ import (
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
+	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
@@ -1183,8 +1185,8 @@ func TestPluginIndexedDBBuildScopedConfig(t *testing.T) {
 			if _, ok := cfg.Config["namespace"]; ok {
 				t.Fatalf("namespace should be removed, got %#v", cfg.Config["namespace"])
 			}
-			if _, ok := cfg.Config["legacy_table_prefix"]; ok {
-				t.Fatalf("legacy_table_prefix should be removed, got %#v", cfg.Config["legacy_table_prefix"])
+			if got := cfg.Config["legacy_table_prefix"]; got != "plugin_echoext_" {
+				t.Fatalf("legacy_table_prefix = %#v, want %q", got, "plugin_echoext_")
 			}
 			if _, ok := cfg.Config["legacy_prefix"]; ok {
 				t.Fatalf("legacy_prefix should be removed, got %#v", cfg.Config["legacy_prefix"])
@@ -1300,6 +1302,200 @@ func TestPluginIndexedDBRouteObjectStoresAndTransportPrefix(t *testing.T) {
 	}
 }
 
+func TestPluginIndexedDBRouteObjectStoresWithoutTransportPrefix(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{
+				ID:     "indexeddb_roundtrip",
+				Method: http.MethodPost,
+				Parameters: []catalog.CatalogParameter{
+					{Name: "store", Type: "string", Required: true},
+					{Name: "id", Type: "string", Required: true},
+					{Name: "value", Type: "string", Required: true},
+				},
+			},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+
+	var (
+		closeCount atomic.Int32
+		boundDB    *trackedIndexedDB
+	)
+	providers, _, err := buildProvidersStrict(context.Background(), &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				IndexedDB: &config.PluginIndexedDBConfig{
+					Provider:     "postgres",
+					DB:           "roadmap",
+					ObjectStores: []string{"tasks"},
+				},
+			},
+		},
+	}, NewFactoryRegistry(), Deps{
+		SelectedIndexedDBName: "postgres",
+		IndexedDBDefs: map[string]*config.ProviderEntry{
+			"postgres": {
+				Source: config.ProviderSource{Ref: "github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb"},
+				Config: mustNode(t, map[string]any{
+					"dsn":                 "postgres://db.example.test/gestalt",
+					"schema":              "host_schema",
+					"legacy_table_prefix": "host_legacy_",
+				}),
+			},
+		},
+		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) {
+			boundDB = &trackedIndexedDB{
+				StubIndexedDB: coretesting.StubIndexedDB{},
+				onClose:       closeCount.Add,
+			}
+			return boundDB, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get: %v", err)
+	}
+
+	result, err := prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
+		"store": "tasks",
+		"id":    "task-1",
+		"value": "ship-it",
+	}, "")
+	if err != nil {
+		t.Fatalf("Execute indexeddb_roundtrip: %v", err)
+	}
+	var record map[string]any
+	if err := json.Unmarshal([]byte(result.Body), &record); err != nil {
+		t.Fatalf("unmarshal record: %v", err)
+	}
+	if got := record["value"]; got != "ship-it" {
+		t.Fatalf("record value = %#v, want %q", got, "ship-it")
+	}
+	if _, err := boundDB.ObjectStore("tasks").Get(context.Background(), "task-1"); err != nil {
+		t.Fatalf("scoped-provider indexeddb should use the requested store name directly: %v", err)
+	}
+	if _, err := boundDB.ObjectStore("roadmap_tasks").Get(context.Background(), "task-1"); err == nil {
+		t.Fatal("transport-prefixed backing store should remain empty when scoped provider config is used")
+	}
+	if _, err := boundDB.ObjectStore("plugin_echoext_tasks").Get(context.Background(), "task-1"); err == nil {
+		t.Fatal("legacy transport-prefixed backing store should remain empty when scoped provider config is used")
+	}
+
+	if _, err := prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
+		"store": "events",
+		"id":    "evt-1",
+		"value": "blocked",
+	}, ""); err == nil {
+		t.Fatal("indexeddb_roundtrip on disallowed object store should fail when only allowed stores are configured")
+	}
+
+	_ = CloseProviders(providers)
+	providers = nil
+	if got := closeCount.Load(); got != 1 {
+		t.Fatalf("closeCount after provider shutdown = %d, want 1", got)
+	}
+}
+
+func TestPluginIndexedDBPreserveLegacyTransportPrefixedData(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{
+				ID:     "indexeddb_roundtrip",
+				Method: http.MethodPost,
+				Parameters: []catalog.CatalogParameter{
+					{Name: "store", Type: "string", Required: true},
+					{Name: "id", Type: "string", Required: true},
+					{Name: "value", Type: "string", Required: true},
+				},
+			},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+
+	var boundDB *trackedIndexedDB
+	providers, _, err := buildProvidersStrict(context.Background(), &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				IndexedDB: &config.PluginIndexedDBConfig{
+					Provider:     "memory",
+					DB:           "roadmap",
+					ObjectStores: []string{"tasks"},
+				},
+			},
+		},
+	}, NewFactoryRegistry(), Deps{
+		SelectedIndexedDBName: "memory",
+		IndexedDBDefs: map[string]*config.ProviderEntry{
+			"memory": {
+				Source: config.ProviderSource{Path: "./providers/datastore/memory"},
+				Config: mustNode(t, map[string]any{"bucket": "plugin-state"}),
+			},
+		},
+		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) {
+			boundDB = &trackedIndexedDB{StubIndexedDB: coretesting.StubIndexedDB{}}
+			return boundDB, nil
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	if err := boundDB.CreateObjectStore(context.Background(), "plugin_echoext_tasks", indexeddb.ObjectStoreSchema{}); err != nil {
+		t.Fatalf("CreateObjectStore legacy tasks: %v", err)
+	}
+	if err := boundDB.ObjectStore("plugin_echoext_tasks").Put(context.Background(), indexeddb.Record{
+		"id":    "legacy-task",
+		"value": "already-there",
+	}); err != nil {
+		t.Fatalf("Put legacy task: %v", err)
+	}
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get: %v", err)
+	}
+	if _, err := prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
+		"store": "tasks",
+		"id":    "task-1",
+		"value": "ship-it",
+	}, ""); err != nil {
+		t.Fatalf("Execute indexeddb_roundtrip: %v", err)
+	}
+
+	if _, err := boundDB.ObjectStore("plugin_echoext_tasks").Get(context.Background(), "task-1"); err != nil {
+		t.Fatalf("legacy backing store should receive new writes: %v", err)
+	}
+	if _, err := boundDB.ObjectStore("plugin_echoext_tasks").Get(context.Background(), "legacy-task"); err != nil {
+		t.Fatalf("legacy backing store should keep old rows: %v", err)
+	}
+	if _, err := boundDB.ObjectStore("roadmap_tasks").Get(context.Background(), "task-1"); err == nil {
+		t.Fatal("new transport-prefixed store should remain unused while only legacy data exists")
+	}
+}
+
 func TestPluginIndexedDBProviderOverrideUsesExplicitHostIndexedDB(t *testing.T) {
 	t.Parallel()
 
@@ -1393,6 +1589,310 @@ func TestPluginIndexedDBProviderOverrideUsesExplicitHostIndexedDB(t *testing.T) 
 	if _, err := boundDBs["archive"].ObjectStore("roadmap_events").Get(context.Background(), "evt-1"); err != nil {
 		t.Fatalf("archive backing store should contain event: %v", err)
 	}
+}
+
+func TestPluginIndexedDBBindingsCleanupOnS3BindingFailure(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+
+	var closeCount atomic.Int32
+	_, _, err := buildProvidersStrict(context.Background(), &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				IndexedDB:            &config.PluginIndexedDBConfig{Provider: "main"},
+				S3:                   []string{"missing"},
+			},
+		},
+	}, NewFactoryRegistry(), Deps{
+		SelectedIndexedDBName: "main",
+		IndexedDBDefs: map[string]*config.ProviderEntry{
+			"main": {
+				Source: config.ProviderSource{Path: "./providers/datastore/main"},
+				Config: mustNode(t, map[string]any{"bucket": "main"}),
+			},
+		},
+		IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) {
+			return &trackedIndexedDB{
+				StubIndexedDB: coretesting.StubIndexedDB{},
+				onClose:       closeCount.Add,
+			}, nil
+		},
+		S3: map[string]s3store.Client{},
+	})
+	if err == nil {
+		t.Fatal("expected buildProvidersStrict to fail for missing S3 binding")
+	}
+	if got := closeCount.Load(); got != 1 {
+		t.Fatalf("closeCount after S3 binding failure = %d, want 1", got)
+	}
+}
+
+func TestPluginS3BindingsRoundtripAndNamespaceKeys(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{
+				ID:     "s3_roundtrip",
+				Method: http.MethodPost,
+				Parameters: []catalog.CatalogParameter{
+					{Name: "bucket", Type: "string", Required: true},
+					{Name: "key", Type: "string", Required: true},
+					{Name: "value", Type: "string", Required: true},
+				},
+			},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+
+	stubS3 := &coretesting.StubS3{}
+	providers, _, err := buildProvidersStrict(context.Background(), &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				S3:                   []string{"main"},
+			},
+		},
+	}, NewFactoryRegistry(), Deps{
+		Services: coretesting.NewStubServices(t),
+		S3: map[string]s3store.Client{
+			"main": stubS3,
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get: %v", err)
+	}
+
+	result, err := prov.Execute(context.Background(), "s3_roundtrip", map[string]any{
+		"bucket": "assets",
+		"key":    "plans/q1.txt",
+		"value":  "ship-it",
+	}, "")
+	if err != nil {
+		t.Fatalf("Execute s3_roundtrip: %v", err)
+	}
+	var body struct {
+		Body  string   `json:"body"`
+		Key   string   `json:"key"`
+		Keys  []string `json:"keys"`
+		Type  string   `json:"type"`
+		Size  int64    `json:"size"`
+		Found bool     `json:"found"`
+	}
+	if err := json.Unmarshal([]byte(result.Body), &body); err != nil {
+		t.Fatalf("unmarshal roundtrip body: %v", err)
+	}
+	if body.Body != "ship-it" {
+		t.Fatalf("body = %q, want %q", body.Body, "ship-it")
+	}
+	if body.Key != "plans/q1.txt" {
+		t.Fatalf("key = %q, want %q", body.Key, "plans/q1.txt")
+	}
+	if !slices.Equal(body.Keys, []string{"plans/q1.txt"}) {
+		t.Fatalf("keys = %#v, want %#v", body.Keys, []string{"plans/q1.txt"})
+	}
+	if body.Type != "text/plain" {
+		t.Fatalf("content type = %q, want %q", body.Type, "text/plain")
+	}
+	if body.Size != int64(len("ship-it")) {
+		t.Fatalf("size = %d, want %d", body.Size, len("ship-it"))
+	}
+	if !body.Found {
+		t.Fatal("expected list operation to find the written object")
+	}
+
+	if _, err := stubS3.HeadObject(context.Background(), s3store.ObjectRef{
+		Bucket: "assets",
+		Key:    testPluginS3NamespacePrefix("echoext") + "plans/q1.txt",
+	}); err != nil {
+		t.Fatalf("expected namespaced backing key: %v", err)
+	}
+	if _, err := stubS3.HeadObject(context.Background(), s3store.ObjectRef{
+		Bucket: "assets",
+		Key:    "plans/q1.txt",
+	}); err == nil {
+		t.Fatal("unnamespaced backing key should remain empty")
+	}
+}
+
+func TestPluginS3BindingsRouteExplicitBinding(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{
+				ID:     "s3_roundtrip",
+				Method: http.MethodPost,
+				Parameters: []catalog.CatalogParameter{
+					{Name: "binding", Type: "string"},
+					{Name: "bucket", Type: "string", Required: true},
+					{Name: "key", Type: "string", Required: true},
+					{Name: "value", Type: "string", Required: true},
+				},
+			},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+
+	mainS3 := &coretesting.StubS3{}
+	archiveS3 := &coretesting.StubS3{}
+	providers, _, err := buildProvidersStrict(context.Background(), &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				S3:                   []string{"main", "archive"},
+			},
+		},
+	}, NewFactoryRegistry(), Deps{
+		Services: coretesting.NewStubServices(t),
+		S3: map[string]s3store.Client{
+			"main":    mainS3,
+			"archive": archiveS3,
+		},
+	})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get: %v", err)
+	}
+	if _, err := prov.Execute(context.Background(), "s3_roundtrip", map[string]any{
+		"binding": "archive",
+		"bucket":  "assets",
+		"key":     "plans/q2.txt",
+		"value":   "ship-archive",
+	}, ""); err != nil {
+		t.Fatalf("Execute s3_roundtrip: %v", err)
+	}
+
+	if _, err := archiveS3.HeadObject(context.Background(), s3store.ObjectRef{
+		Bucket: "assets",
+		Key:    testPluginS3NamespacePrefix("echoext") + "plans/q2.txt",
+	}); err != nil {
+		t.Fatalf("archive binding should receive the write: %v", err)
+	}
+	if _, err := mainS3.HeadObject(context.Background(), s3store.ObjectRef{
+		Bucket: "assets",
+		Key:    testPluginS3NamespacePrefix("echoext") + "plans/q2.txt",
+	}); err == nil {
+		t.Fatal("main binding should remain untouched when archive is selected explicitly")
+	}
+}
+
+func TestPluginS3BindingsExposeHostSocketEnv(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+
+	makeConfig := func(bindings []string) *config.Config {
+		return &config.Config{
+			Plugins: map[string]*config.ProviderEntry{
+				"echoext": {
+					Command:              bin,
+					Args:                 []string{"provider"},
+					ResolvedManifest:     manifest,
+					ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+					S3:                   bindings,
+				},
+			},
+		}
+	}
+
+	services := coretesting.NewStubServices(t)
+	s3Bindings := map[string]s3store.Client{
+		"main":    &coretesting.StubS3{},
+		"archive": &coretesting.StubS3{},
+	}
+
+	checkEnv := func(t *testing.T, bindings []string, envName string) bool {
+		t.Helper()
+		providers, _, err := buildProvidersStrict(context.Background(), makeConfig(bindings), NewFactoryRegistry(), Deps{
+			Services: services,
+			S3:       s3Bindings,
+		})
+		if err != nil {
+			t.Fatalf("buildProvidersStrict: %v", err)
+		}
+		defer func() { _ = CloseProviders(providers) }()
+
+		prov, err := providers.Get("echoext")
+		if err != nil {
+			t.Fatalf("providers.Get: %v", err)
+		}
+		result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": envName}, "")
+		if err != nil {
+			t.Fatalf("Execute read_env: %v", err)
+		}
+		var env struct {
+			Value string `json:"value"`
+			Found bool   `json:"found"`
+		}
+		if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		return env.Found && env.Value != ""
+	}
+
+	if got := checkEnv(t, nil, providerhost.DefaultS3SocketEnv); got {
+		t.Fatal("default S3 env should not be set without plugin s3 bindings")
+	}
+	if got := checkEnv(t, []string{"main"}, providerhost.DefaultS3SocketEnv); !got {
+		t.Fatal("default S3 env should be set with a single plugin s3 binding")
+	}
+	if got := checkEnv(t, []string{"main"}, providerhost.S3SocketEnv("main")); !got {
+		t.Fatal("named S3 env should be set with a single plugin s3 binding")
+	}
+	if got := checkEnv(t, []string{"main", "archive"}, providerhost.DefaultS3SocketEnv); got {
+		t.Fatal("default S3 env should not be set with multiple plugin s3 bindings")
+	}
+	if got := checkEnv(t, []string{"main", "archive"}, providerhost.S3SocketEnv("main")); !got {
+		t.Fatal(`named S3 env for "main" should be set with multiple plugin s3 bindings`)
+	}
+	if got := checkEnv(t, []string{"main", "archive"}, providerhost.S3SocketEnv("archive")); !got {
+		t.Fatal(`named S3 env for "archive" should be set with multiple plugin s3 bindings`)
+	}
+}
+
+func testPluginS3NamespacePrefix(pluginName string) string {
+	return "plugin_" + strconv.Itoa(len(pluginName)) + "_" + pluginName + "/"
 }
 
 type trackedIndexedDB struct {

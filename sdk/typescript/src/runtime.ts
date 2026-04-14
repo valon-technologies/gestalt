@@ -52,6 +52,7 @@ import {
   ProviderLifecycle,
   type ConfigureProviderRequest,
 } from "../gen/v1/runtime_pb.ts";
+import { S3 as S3Service } from "../gen/v1/s3_pb.ts";
 import { errorMessage, type Request } from "./api.ts";
 import {
   AuthProvider,
@@ -68,6 +69,7 @@ import {
   isIntegrationProvider,
 } from "./plugin.ts";
 import { type ProviderKind, slugName } from "./provider.ts";
+import { S3Provider, createS3Service, isS3Provider } from "./s3.ts";
 import {
   defaultProviderName,
   formatProviderTarget,
@@ -92,7 +94,8 @@ export type LoadedProvider =
   | IntegrationProvider
   | AuthProvider
   | CacheProvider
-  | SecretsProvider;
+  | SecretsProvider
+  | S3Provider;
 
 export async function main(
   argv: string[] = process.argv.slice(2),
@@ -133,9 +136,7 @@ export async function loadProviderFromTarget(
   const module = await import(resolveProviderImportUrl(root, target));
   const candidate =
     (target.exportName ? module[target.exportName] : undefined) ??
-    module.provider ??
-    module.plugin ??
-    module.default;
+    defaultProviderExport(module, target.kind);
 
   const defaultName =
     slugName(config.name ?? "") ||
@@ -173,6 +174,13 @@ export async function loadProviderFromTarget(
         throw new Error(
           `${targetValue} did not resolve to a Gestalt secrets provider`,
         );
+      }
+      candidate.resolveName(defaultName);
+      return candidate;
+    }
+    case "s3": {
+      if (!isS3Provider(candidate)) {
+        throw new Error(`${targetValue} did not resolve to a Gestalt s3 provider`);
       }
       candidate.resolveName(defaultName);
       return candidate;
@@ -281,6 +289,12 @@ export async function runBundledProvider(
       }
       loaded = provider;
       break;
+    case "s3":
+      if (!isS3Provider(provider)) {
+        throw new Error("bundled target did not resolve to a Gestalt s3 provider");
+      }
+      loaded = provider;
+      break;
     default:
       throw new Error(
         `TypeScript SDK does not yet support provider kind ${JSON.stringify(kind)}`,
@@ -323,6 +337,8 @@ export async function serve(provider: LoadedProvider): Promise<void> {
         router.service(AuthProviderService, createAuthService(provider));
       } else if (isCacheProvider(provider)) {
         router.service(CacheService, createCacheService(provider));
+      } else if (isS3Provider(provider)) {
+        router.service(S3Service, createS3Service(provider));
       } else if (isSecretsProvider(provider)) {
         router.service(SecretsProviderService, createSecretsService(provider));
       }
@@ -717,10 +733,29 @@ function providerKindToProto(kind: ProviderKind): ProtoProviderKind {
       return ProtoProviderKind.CACHE;
     case "secrets":
       return ProtoProviderKind.SECRETS;
+    case "s3":
+      return ProtoProviderKind.S3;
     case "telemetry":
       return ProtoProviderKind.TELEMETRY;
     default:
       return ProtoProviderKind.UNSPECIFIED;
+  }
+}
+
+function defaultProviderExport(module: Record<string, unknown>, kind: ProviderKind): unknown {
+  switch (kind) {
+    case "integration":
+      return module.provider ?? module.plugin ?? module.default;
+    case "auth":
+      return module.auth ?? module.provider ?? module.default;
+    case "cache":
+      return module.cache ?? module.provider ?? module.default;
+    case "secrets":
+      return module.secrets ?? module.provider ?? module.default;
+    case "s3":
+      return module.s3 ?? module.provider ?? module.default;
+    case "telemetry":
+      return module.telemetry ?? module.provider ?? module.default;
   }
 }
 
