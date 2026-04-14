@@ -31,15 +31,15 @@ func (s *Server) workloadBinding(p *principal.Principal, provider string) (autho
 	return s.authorizer.Binding(p, provider)
 }
 
-func rejectWorkloadSelectors(w http.ResponseWriter, p *principal.Principal, connection, instance string) bool {
+func rejectWorkloadSelectors(w http.ResponseWriter, p *principal.Principal, connection, instance string) error {
 	if p == nil || p.Kind != principal.KindWorkload {
-		return false
+		return nil
 	}
 	if connection == "" && instance == "" {
-		return false
+		return nil
 	}
-	writeError(w, http.StatusForbidden, "workload callers may not override connection or instance bindings")
-	return true
+	writeError(w, http.StatusForbidden, errWorkloadSelector.Error())
+	return errWorkloadSelector
 }
 
 func (s *Server) workloadBindingSelectors(p *principal.Principal, provider, connection, instance string) (string, string) {

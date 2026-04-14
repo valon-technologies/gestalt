@@ -41,6 +41,8 @@ var (
 	errNotAuthenticated  = errors.New("not authenticated")
 	errResolveUser       = errors.New("failed to resolve user")
 	errWorkloadForbidden = errors.New("workload callers are not allowed on this route")
+	errOperationAccess   = errors.New("operation access denied")
+	errWorkloadSelector  = errors.New("workload callers may not override connection or instance bindings")
 )
 
 var (
@@ -426,6 +428,8 @@ func resolveConnectionParams(w http.ResponseWriter, prov core.Provider, provided
 }
 
 func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
+	const operation = "operations.list"
+
 	name := chi.URLParam(r, "name")
 	prov, ok := s.getProvider(w, name)
 	if !ok {
@@ -433,7 +437,8 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 	}
 	p := PrincipalFromContext(r.Context())
 	if !s.allowProvider(p, name) {
-		writeError(w, http.StatusForbidden, "operation access denied")
+		s.auditHTTPEvent(r.Context(), p, name, operation, false, errOperationAccess)
+		writeError(w, http.StatusForbidden, errOperationAccess.Error())
 		return
 	}
 	requestedConnection := r.URL.Query().Get(httpConnectionParam)
@@ -452,7 +457,8 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if rejectWorkloadSelectors(w, p, requestedConnection, requestedInstance) {
+	if err := rejectWorkloadSelectors(w, p, requestedConnection, requestedInstance); err != nil {
+		s.auditHTTPEvent(r.Context(), p, name, operation, false, err)
 		return
 	}
 	var resolver invocation.TokenResolver
@@ -486,7 +492,8 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.allowProvider(p, providerName) || !s.allowOperation(p, providerName, operationName) {
-		writeError(w, http.StatusForbidden, "operation access denied")
+		s.auditHTTPEvent(r.Context(), p, providerName, operationName, false, errOperationAccess)
+		writeError(w, http.StatusForbidden, errOperationAccess.Error())
 		return
 	}
 
@@ -506,7 +513,8 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if rejectWorkloadSelectors(w, p, requestedConnection, requestedInstance) {
+	if err := rejectWorkloadSelectors(w, p, requestedConnection, requestedInstance); err != nil {
+		s.auditHTTPEvent(r.Context(), p, providerName, operationName, false, err)
 		return
 	}
 
@@ -559,7 +567,8 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("conflicting connection parameter %q in query string and JSON body", httpConnectionParam))
 		return
 	}
-	if rejectWorkloadSelectors(w, p, bodyConnection, bodyInstance) {
+	if err := rejectWorkloadSelectors(w, p, bodyConnection, bodyInstance); err != nil {
+		s.auditHTTPEvent(r.Context(), p, providerName, operationName, false, err)
 		return
 	}
 	connection := bodyConnection

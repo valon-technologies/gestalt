@@ -281,6 +281,7 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusInternalServerError, "failed to issue CLI API token")
 			return
 		}
+		s.auditHTTPEventWithUserID(r.Context(), dbUser.ID, principal.SourceSession.String(), "", "api_token.create", true, nil)
 		auditAllowed = true
 		auditErr = nil
 		writeJSON(w, http.StatusOK, createTokenResponse{

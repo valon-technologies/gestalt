@@ -103,6 +103,30 @@ func requestBearerToken(r *http.Request) (string, error) {
 	return bearer, nil
 }
 
+func requestedAuthSource(r *http.Request) string {
+	header := r.Header.Get("Authorization")
+	if header != "" {
+		bearer := strings.TrimPrefix(header, core.BearerScheme)
+		if bearer == header {
+			return ""
+		}
+		if typ, ok := principal.ParseTokenType(bearer); ok {
+			switch typ {
+			case principal.TokenTypeAPI:
+				return principal.SourceAPIToken.String()
+			case principal.TokenTypeWorkload:
+				return principal.SourceWorkloadToken.String()
+			}
+		}
+		return principal.SourceSession.String()
+	}
+
+	if c, err := r.Cookie(sessionCookieName); err == nil && c.Value != "" {
+		return principal.SourceSession.String()
+	}
+	return ""
+}
+
 func (s *Server) resolveRequestPrincipal(r *http.Request) (*principal.Principal, error) {
 	var lastErr error
 
@@ -166,19 +190,24 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
+		authSource := requestedAuthSource(r)
 		switch {
 		case err == nil:
+			s.auditRequestEventWithAuthSource(r, authSource, "", "auth.authenticate", false, errors.New("missing authorization"))
 			writeError(w, http.StatusUnauthorized, "missing authorization")
 			return
 		case errors.Is(err, errInvalidAuthorizationHeader):
+			s.auditRequestEventWithAuthSource(r, authSource, "", "auth.authenticate", false, errInvalidAuthorizationHeader)
 			writeError(w, http.StatusUnauthorized, "invalid authorization header format")
 			return
 		case errors.Is(err, principal.ErrInvalidToken):
 			slog.InfoContext(r.Context(), "auth: invalid token", "remote_addr", r.RemoteAddr)
+			s.auditRequestEventWithAuthSource(r, authSource, "", "auth.authenticate", false, principal.ErrInvalidToken)
 			writeError(w, http.StatusUnauthorized, "invalid token")
 			return
 		default:
 			slog.ErrorContext(r.Context(), "auth: token validation failed", "remote_addr", r.RemoteAddr, "error", err)
+			s.auditRequestEventWithAuthSource(r, authSource, "", "auth.authenticate", false, errors.New("token validation failed"))
 			writeError(w, http.StatusInternalServerError, "token validation failed")
 			return
 		}
