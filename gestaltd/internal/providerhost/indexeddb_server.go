@@ -8,6 +8,7 @@ import (
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
+	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -16,15 +17,33 @@ import (
 type indexedDBServer struct {
 	proto.UnimplementedIndexedDBServer
 	ds     indexeddb.IndexedDB
+	db     string
+	plugin string
 	prefix string
 }
 
 func NewIndexedDBServer(ds indexeddb.IndexedDB, pluginName string) proto.IndexedDBServer {
-	return &indexedDBServer{ds: ds, prefix: "plugin_" + pluginName + "_"}
+	return &indexedDBServer{
+		ds:     ds,
+		db:     metricutil.IndexedDBName(ds),
+		plugin: pluginName,
+		prefix: "plugin_" + pluginName + "_",
+	}
 }
 
 func (s *indexedDBServer) storeName(name string) string {
 	return s.prefix + name
+}
+
+func (s *indexedDBServer) objectStore(name string) indexeddb.ObjectStore {
+	return metricutil.InstrumentObjectStore(
+		metricutil.UnwrapIndexedDB(s.ds).ObjectStore(s.storeName(name)),
+		metricutil.IndexedDBMetricLabels{
+			DB:          s.db,
+			Plugin:      s.plugin,
+			ObjectStore: name,
+		},
+	)
 }
 
 func (s *indexedDBServer) CreateObjectStore(ctx context.Context, req *proto.CreateObjectStoreRequest) (*emptypb.Empty, error) {
@@ -43,7 +62,7 @@ func (s *indexedDBServer) DeleteObjectStore(ctx context.Context, req *proto.Dele
 }
 
 func (s *indexedDBServer) Get(ctx context.Context, req *proto.ObjectStoreRequest) (*proto.RecordResponse, error) {
-	rec, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Get(ctx, req.GetId())
+	rec, err := s.objectStore(req.GetStore()).Get(ctx, req.GetId())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -51,7 +70,7 @@ func (s *indexedDBServer) Get(ctx context.Context, req *proto.ObjectStoreRequest
 }
 
 func (s *indexedDBServer) GetKey(ctx context.Context, req *proto.ObjectStoreRequest) (*proto.KeyResponse, error) {
-	key, err := s.ds.ObjectStore(s.storeName(req.GetStore())).GetKey(ctx, req.GetId())
+	key, err := s.objectStore(req.GetStore()).GetKey(ctx, req.GetId())
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -63,7 +82,7 @@ func (s *indexedDBServer) Add(ctx context.Context, req *proto.RecordRequest) (*e
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "unmarshal record: %v", err)
 	}
-	if err := s.ds.ObjectStore(s.storeName(req.GetStore())).Add(ctx, record); err != nil {
+	if err := s.objectStore(req.GetStore()).Add(ctx, record); err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
 	return &emptypb.Empty{}, nil
@@ -74,21 +93,21 @@ func (s *indexedDBServer) Put(ctx context.Context, req *proto.RecordRequest) (*e
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "unmarshal record: %v", err)
 	}
-	if err := s.ds.ObjectStore(s.storeName(req.GetStore())).Put(ctx, record); err != nil {
+	if err := s.objectStore(req.GetStore()).Put(ctx, record); err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
 	return &emptypb.Empty{}, nil
 }
 
 func (s *indexedDBServer) Delete(ctx context.Context, req *proto.ObjectStoreRequest) (*emptypb.Empty, error) {
-	if err := s.ds.ObjectStore(s.storeName(req.GetStore())).Delete(ctx, req.GetId()); err != nil {
+	if err := s.objectStore(req.GetStore()).Delete(ctx, req.GetId()); err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
 	return &emptypb.Empty{}, nil
 }
 
 func (s *indexedDBServer) Clear(ctx context.Context, req *proto.ObjectStoreNameRequest) (*emptypb.Empty, error) {
-	if err := s.ds.ObjectStore(s.storeName(req.GetStore())).Clear(ctx); err != nil {
+	if err := s.objectStore(req.GetStore()).Clear(ctx); err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
 	return &emptypb.Empty{}, nil
@@ -99,7 +118,7 @@ func (s *indexedDBServer) GetAll(ctx context.Context, req *proto.ObjectStoreRang
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
 	}
-	recs, err := s.ds.ObjectStore(s.storeName(req.GetStore())).GetAll(ctx, keyRange)
+	recs, err := s.objectStore(req.GetStore()).GetAll(ctx, keyRange)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -111,7 +130,7 @@ func (s *indexedDBServer) GetAllKeys(ctx context.Context, req *proto.ObjectStore
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
 	}
-	keys, err := s.ds.ObjectStore(s.storeName(req.GetStore())).GetAllKeys(ctx, keyRange)
+	keys, err := s.objectStore(req.GetStore()).GetAllKeys(ctx, keyRange)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -123,7 +142,7 @@ func (s *indexedDBServer) Count(ctx context.Context, req *proto.ObjectStoreRange
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "unmarshal key range: %v", err)
 	}
-	count, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Count(ctx, keyRange)
+	count, err := s.objectStore(req.GetStore()).Count(ctx, keyRange)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -138,7 +157,7 @@ func (s *indexedDBServer) DeleteRange(ctx context.Context, req *proto.ObjectStor
 	if kr == nil {
 		return nil, status.Error(codes.InvalidArgument, "key range is required for DeleteRange")
 	}
-	deleted, err := s.ds.ObjectStore(s.storeName(req.GetStore())).DeleteRange(ctx, *kr)
+	deleted, err := s.objectStore(req.GetStore()).DeleteRange(ctx, *kr)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -150,7 +169,7 @@ func (s *indexedDBServer) IndexGet(ctx context.Context, req *proto.IndexQueryReq
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", err)
 	}
-	rec, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Index(req.GetIndex()).Get(ctx, values...)
+	rec, err := s.objectStore(req.GetStore()).Index(req.GetIndex()).Get(ctx, values...)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -162,7 +181,7 @@ func (s *indexedDBServer) IndexGetKey(ctx context.Context, req *proto.IndexQuery
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", err)
 	}
-	key, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Index(req.GetIndex()).GetKey(ctx, values...)
+	key, err := s.objectStore(req.GetStore()).Index(req.GetIndex()).GetKey(ctx, values...)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -178,7 +197,7 @@ func (s *indexedDBServer) IndexGetAll(ctx context.Context, req *proto.IndexQuery
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", err)
 	}
-	recs, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Index(req.GetIndex()).GetAll(ctx, keyRange, values...)
+	recs, err := s.objectStore(req.GetStore()).Index(req.GetIndex()).GetAll(ctx, keyRange, values...)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -194,7 +213,7 @@ func (s *indexedDBServer) IndexGetAllKeys(ctx context.Context, req *proto.IndexQ
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", err)
 	}
-	keys, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Index(req.GetIndex()).GetAllKeys(ctx, keyRange, values...)
+	keys, err := s.objectStore(req.GetStore()).Index(req.GetIndex()).GetAllKeys(ctx, keyRange, values...)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -210,7 +229,7 @@ func (s *indexedDBServer) IndexCount(ctx context.Context, req *proto.IndexQueryR
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", err)
 	}
-	count, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Index(req.GetIndex()).Count(ctx, keyRange, values...)
+	count, err := s.objectStore(req.GetStore()).Index(req.GetIndex()).Count(ctx, keyRange, values...)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -222,7 +241,7 @@ func (s *indexedDBServer) IndexDelete(ctx context.Context, req *proto.IndexQuery
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "unmarshal index values: %v", err)
 	}
-	deleted, err := s.ds.ObjectStore(s.storeName(req.GetStore())).Index(req.GetIndex()).Delete(ctx, values...)
+	deleted, err := s.objectStore(req.GetStore()).Index(req.GetIndex()).Delete(ctx, values...)
 	if err != nil {
 		return nil, indexeddbToGRPCErr(err)
 	}
@@ -260,7 +279,7 @@ func (s *indexedDBServer) OpenCursor(stream proto.IndexedDB_OpenCursorServer) er
 	ctx := stream.Context()
 
 	var cursor indexeddb.Cursor
-	store := s.ds.ObjectStore(s.storeName(openReq.GetStore()))
+	store := s.objectStore(openReq.GetStore())
 
 	if openReq.GetIndex() != "" {
 		values, vErr := protoValuesToAny(openReq.GetValues())

@@ -13,9 +13,11 @@ const meterName = "gestaltd"
 var (
 	attrProvider       = attribute.Key("gestalt.provider")
 	attrAction         = attribute.Key("gestalt.action")
+	attrDB             = attribute.Key("gestalt.db")
 	attrType           = attribute.Key("gestalt.type")
 	attrMethod         = attribute.Key("gestalt.method")
-	attrStore          = attribute.Key("gestalt.store")
+	attrObjectStore    = attribute.Key("gestalt.object_store")
+	attrPlugin         = attribute.Key("gestalt.plugin")
 	attrConnectionMode = attribute.Key("gestalt.connection_mode")
 )
 
@@ -74,14 +76,25 @@ func RecordConnectionAuthMetrics(ctx context.Context, startedAt time.Time, provi
 	)
 }
 
-func RecordIndexedDBMetrics(ctx context.Context, startedAt time.Time, store string, method string, failed bool) {
+type IndexedDBMetricLabels struct {
+	DB          string
+	Plugin      string
+	ObjectStore string
+}
+
+func RecordIndexedDBMetrics(ctx context.Context, startedAt time.Time, labels IndexedDBMetricLabels, method string, failed bool) {
 	metrics := indexedDBMetricsCache.Load(ctx, meterName, func(meter metric.Meter) counterMetrics {
 		return newCounterMetrics(meter, "gestaltd.indexeddb", "gestaltd indexeddb operations")
 	})
-	recordCounterMetrics(ctx, metrics, startedAt, failed,
-		attrStore.String(AttrValue(store)),
+	attrs := []attribute.KeyValue{
+		attrDB.String(AttrValue(labels.DB)),
+		attrObjectStore.String(AttrValue(labels.ObjectStore)),
 		attrMethod.String(AttrValue(method)),
-	)
+	}
+	if labels.Plugin != "" {
+		attrs = append(attrs, attrPlugin.String(AttrValue(labels.Plugin)))
+	}
+	recordCounterMetrics(ctx, metrics, startedAt, failed, attrs...)
 }
 
 func recordCounterMetrics(ctx context.Context, metrics counterMetrics, startedAt time.Time, failed bool, attrs ...attribute.KeyValue) {
