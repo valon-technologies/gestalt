@@ -1,5 +1,9 @@
 import type { MaybePromise } from "./api.ts";
-import { RuntimeProvider, type RuntimeProviderOptions } from "./provider.ts";
+import {
+  isRuntimeProvider,
+  RuntimeProvider,
+  type RuntimeProviderOptions,
+} from "./provider.ts";
 import type {
   BytesResponse,
   CreateBlobRequest,
@@ -114,8 +118,7 @@ export function defineFileAPIProvider(
 export function isFileAPIProvider(value: unknown): value is FileAPIProvider {
   return (
     value instanceof FileAPIProvider ||
-    (typeof value === "object" &&
-      value !== null &&
+    (isRuntimeProvider(value) &&
       "kind" in value &&
       (value as { kind?: unknown }).kind === "fileapi" &&
       "createBlob" in value &&

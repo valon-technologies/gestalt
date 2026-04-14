@@ -286,7 +286,7 @@ test("fileapi provider supports runtime metadata and file operations", async () 
   expect(revoked).toEqual(create(EmptySchema, {}));
 });
 
-test("fileapi provider rejects plain exports missing revokeObjectURL", async () => {
+test("fileapi provider rejects plain-object exports without runtime provider methods", async () => {
   await expect(
     loadProviderFromTarget(fixturePath("fileapi-provider-missing-revoke")),
   ).rejects.toThrow(

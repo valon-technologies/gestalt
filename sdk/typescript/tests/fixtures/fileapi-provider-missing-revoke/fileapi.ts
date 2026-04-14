@@ -24,4 +24,7 @@ export const provider = {
   resolveObjectURL() {
     throw new Error("not implemented");
   },
+  revokeObjectURL() {
+    throw new Error("not implemented");
+  },
 };
