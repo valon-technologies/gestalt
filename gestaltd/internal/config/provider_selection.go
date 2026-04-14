@@ -91,7 +91,15 @@ func (c *Config) SelectedAuditProvider() (string, *ProviderEntry, error) {
 }
 
 func (c *Config) SelectedIndexedDBProvider() (string, *ProviderEntry, error) {
-	return c.SelectedHostProvider(HostProviderKindIndexedDB)
+	c.SyncCompatFields()
+	name, entry, err := ResolveSelectedHostProvider(HostProviderKindIndexedDB, c.Server.Providers.Selection(HostProviderKindIndexedDB), c.HostProviderEntries(HostProviderKindIndexedDB))
+	if err != nil {
+		return "", nil, err
+	}
+	if strings.TrimSpace(c.Server.Providers.IndexedDB) == "" && entry != nil && entry.Disabled {
+		return "", nil, nil
+	}
+	return name, entry, nil
 }
 
 type EffectivePluginIndexedDB struct {
@@ -127,6 +135,9 @@ func ResolveEffectivePluginIndexedDB(pluginName string, entry *ProviderEntry, se
 		providerName = strings.TrimSpace(selectedName)
 	}
 	if providerName == "" {
+		if entry.IndexedDB != nil && (strings.TrimSpace(entry.IndexedDB.DB) != "" || len(entry.IndexedDB.ObjectStores) > 0) {
+			return EffectivePluginIndexedDB{}, fmt.Errorf("config validation: plugins.%s.indexeddb requires indexeddb.provider or an available selected/default host indexeddb", pluginName)
+		}
 		return EffectivePluginIndexedDB{}, nil
 	}
 

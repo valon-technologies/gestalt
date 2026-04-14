@@ -499,6 +499,20 @@ server:
 `,
 			wantErr: false,
 		},
+		{
+			name: "disabled singleton datastore is rejected",
+			yaml: `
+providers:
+  indexeddb:
+    only:
+      disabled: true
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  encryptionKey: server-key
+`,
+			wantErr: true,
+		},
 	}
 
 	for _, tc := range cases {
@@ -1382,6 +1396,138 @@ server:
 		}
 		if !strings.Contains(err.Error(), `plugins.roadmap.indexeddb.provider references unknown indexeddb "missing"`) {
 			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects explicit indexeddb object without provider or inherited host indexeddb", func(t *testing.T) {
+		t.Parallel()
+
+		cases := []struct {
+			name string
+			body string
+		}{
+			{
+				name: "db override",
+				body: `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    indexeddb:
+      db: roadmap_state
+server:
+  encryptionKey: server-key
+`,
+			},
+			{
+				name: "objectStores only",
+				body: `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    indexeddb:
+      objectStores:
+        - tasks
+server:
+  encryptionKey: server-key
+`,
+			},
+		}
+
+		for _, tc := range cases {
+			tc := tc
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+
+				path := mustWriteConfigFile(t, tc.body)
+
+				_, err := Load(path)
+				if err == nil {
+					t.Fatal("Load: expected error, got nil")
+				}
+				if !strings.Contains(err.Error(), `plugins.roadmap.indexeddb requires indexeddb.provider or an available selected/default host indexeddb`) {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			})
+		}
+	})
+
+	t.Run("accepts empty indexeddb object without inherited host indexeddb", func(t *testing.T) {
+		t.Parallel()
+
+		cases := []struct {
+			name          string
+			body          string
+			wantIndexedDB bool
+		}{
+			{
+				name: "empty object with no host indexeddb definitions",
+				body: `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    indexeddb: {}
+server:
+  encryptionKey: server-key
+`,
+				wantIndexedDB: true,
+			},
+			{
+				name: "empty object with disabled-only host indexeddb",
+				body: `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    indexeddb: {}
+providers:
+  indexeddb:
+    only:
+      disabled: true
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  encryptionKey: server-key
+`,
+				wantIndexedDB: true,
+			},
+			{
+				name: "omitted indexeddb with disabled-only host indexeddb",
+				body: `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+providers:
+  indexeddb:
+    only:
+      disabled: true
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  encryptionKey: server-key
+`,
+				wantIndexedDB: false,
+			},
+		}
+
+		for _, tc := range cases {
+			tc := tc
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+
+				path := mustWriteConfigFile(t, tc.body)
+
+				cfg, err := Load(path)
+				if err != nil {
+					t.Fatalf("Load: %v", err)
+				}
+				if got := cfg.Plugins["roadmap"].IndexedDB != nil; got != tc.wantIndexedDB {
+					t.Fatalf("IndexedDB presence = %v, want %v", got, tc.wantIndexedDB)
+				}
+			})
 		}
 	})
 

@@ -876,6 +876,96 @@ func TestPluginIndexedDBExposeHostSocketEnv(t *testing.T) {
 	}
 }
 
+func TestPluginIndexedDBInheritsHostSelectionAndDefaultDBName(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{
+				ID:     "indexeddb_roundtrip",
+				Method: http.MethodPost,
+				Parameters: []catalog.CatalogParameter{
+					{Name: "store", Type: "string", Required: true},
+					{Name: "id", Type: "string", Required: true},
+					{Name: "value", Type: "string", Required: true},
+				},
+			},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+
+	cases := []struct {
+		name      string
+		indexedDB *config.PluginIndexedDBConfig
+	}{
+		{name: "omitted indexeddb inherits host selection"},
+		{name: "empty indexeddb inherits host selection", indexedDB: &config.PluginIndexedDBConfig{}},
+		{name: "objectStores-only indexeddb inherits host selection", indexedDB: &config.PluginIndexedDBConfig{ObjectStores: []string{"tasks"}}},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			boundDB := &trackedIndexedDB{StubIndexedDB: coretesting.StubIndexedDB{}}
+			providers, _, err := buildProvidersStrict(context.Background(), &config.Config{
+				Providers: config.ProvidersConfig{
+					Plugins: map[string]*config.ProviderEntry{
+						"echoext": {
+							Command:              bin,
+							Args:                 []string{"provider"},
+							ResolvedManifest:     manifest,
+							ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+							IndexedDB:            tc.indexedDB,
+						},
+					},
+				},
+			}, NewFactoryRegistry(), Deps{
+				SelectedIndexedDBName: "memory",
+				IndexedDBDefs: map[string]*config.ProviderEntry{
+					"memory": {
+						Source: config.ProviderSource{Path: "./providers/datastore/memory"},
+						Config: mustNode(t, map[string]any{"bucket": "plugin-state"}),
+					},
+				},
+				IndexedDBFactory: func(yaml.Node) (indexeddb.IndexedDB, error) {
+					return boundDB, nil
+				},
+			})
+			if err != nil {
+				t.Fatalf("buildProvidersStrict: %v", err)
+			}
+			t.Cleanup(func() { _ = CloseProviders(providers) })
+
+			prov, err := providers.Get("echoext")
+			if err != nil {
+				t.Fatalf("providers.Get: %v", err)
+			}
+			result, err := prov.Execute(context.Background(), "indexeddb_roundtrip", map[string]any{
+				"store": "tasks",
+				"id":    "task-1",
+				"value": "ship-it",
+			}, "")
+			if err != nil {
+				t.Fatalf("Execute indexeddb_roundtrip: %v", err)
+			}
+			var record map[string]any
+			if err := json.Unmarshal([]byte(result.Body), &record); err != nil {
+				t.Fatalf("unmarshal record: %v", err)
+			}
+			if got := record["value"]; got != "ship-it" {
+				t.Fatalf("record value = %#v, want %q", got, "ship-it")
+			}
+			if _, err := boundDB.ObjectStore("echoext_tasks").Get(context.Background(), "task-1"); err != nil {
+				t.Fatalf("inherited host indexeddb should use plugin-name default db prefix: %v", err)
+			}
+		})
+	}
+}
+
 func TestPluginIndexedDBBuildScopedConfig(t *testing.T) {
 	t.Parallel()
 
