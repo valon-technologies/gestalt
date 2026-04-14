@@ -31,29 +31,32 @@ func mustWriteConfigFile(t *testing.T, content string) string {
 	return path
 }
 
+func mustSelectedProvider(t *testing.T, cfg *Config, kind HostProviderKind) (string, *ProviderEntry) {
+	t.Helper()
+	name, entry, err := cfg.SelectedHostProvider(kind)
+	if err != nil {
+		t.Fatalf("SelectedHostProvider(%s): %v", kind, err)
+	}
+	return name, entry
+}
+
+func singletonProviderEntry(entry *ProviderEntry) map[string]*ProviderEntry {
+	if entry == nil {
+		return nil
+	}
+	return map[string]*ProviderEntry{
+		DefaultProviderInstance: entry,
+	}
+}
+
 func TestLoadConfigGenericFixture(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
-providers:
-  auth:
-    source:
-      ref: github.com/valon-technologies/gestalt-providers/auth/google
-      version: 1.0.0
-    config:
-      clientId: client-1
-      clientSecret: secret-1
-  indexeddbs:
-    sqlite:
-      source:
-        path: ./providers/datastore/sqlite
-  plugins:
-    service-a:
-      displayName: Service A
-      source:
-        path: /tmp/manifest.yaml
 server:
-  indexeddb: sqlite
+  providers:
+    auth: google
+    indexeddb: sqlite
   encryptionKey: server-key
   public:
     host: 127.0.0.1
@@ -61,6 +64,24 @@ server:
   management:
     host: 127.0.0.1
     port: 9191
+providers:
+  auth:
+    google:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/auth/google
+        version: 1.0.0
+      config:
+        clientId: client-1
+        clientSecret: secret-1
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+plugins:
+  service-a:
+    displayName: Service A
+    source:
+      path: /tmp/manifest.yaml
 `)
 
 	cfg, err := Load(path)
@@ -74,8 +95,90 @@ server:
 	if cfg.Server.EncryptionKey != "server-key" {
 		t.Fatalf("Server.EncryptionKey = %q", cfg.Server.EncryptionKey)
 	}
-	if got := cfg.Providers.Plugins["service-a"].DisplayName; got != "Service A" {
+	if got := cfg.Plugins["service-a"].DisplayName; got != "Service A" {
 		t.Fatalf("Integrations[service-a].DisplayName = %q", got)
+	}
+}
+
+func TestLoadConfigSelectsDefaultProvidersFromNamedMaps(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+server:
+  encryptionKey: server-key
+providers:
+  auth:
+    primary:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/auth/google
+        version: 1.0.0
+    backup:
+      default: true
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/auth/github
+        version: 1.0.0
+  indexeddb:
+    main:
+      source:
+        path: ./providers/datastore/sqlite
+    archive:
+      default: true
+      source:
+        path: ./providers/datastore/archive
+plugins:
+  service-a:
+    source:
+      path: /tmp/manifest.yaml
+    indexeddb:
+      - archive
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	authName, authEntry := mustSelectedProvider(t, cfg, HostProviderKindAuth)
+	if authName != "backup" || authEntry == nil {
+		t.Fatalf("SelectedAuthProvider = (%q, %#v), want backup", authName, authEntry)
+	}
+	indexedDBName, indexedDBEntry := mustSelectedProvider(t, cfg, HostProviderKindIndexedDB)
+	if indexedDBName != "archive" || indexedDBEntry == nil {
+		t.Fatalf("SelectedIndexedDBProvider = (%q, %#v), want archive", indexedDBName, indexedDBEntry)
+	}
+	if got := cfg.Plugins["service-a"].IndexedDBs; !reflect.DeepEqual(got, []string{"archive"}) {
+		t.Fatalf("Plugins[service-a].IndexedDBs = %v, want [archive]", got)
+	}
+}
+
+func TestLoadConfigAcceptsLegacyAndCanonicalProviderFormsWhenKeysDoNotConflict(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+server:
+  providers:
+    indexeddb: main
+  encryptionKey: server-key
+providers:
+  indexeddbs:
+    main:
+      source:
+        path: ./providers/datastore/sqlite
+plugins:
+  service-a:
+    source:
+      path: /tmp/manifest.yaml
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.Plugins["service-a"] == nil {
+		t.Fatal("Plugins[service-a] = nil")
+	}
+	if _, indexeddb := mustSelectedProvider(t, cfg, HostProviderKindIndexedDB); indexeddb == nil {
+		t.Fatal("SelectedIndexedDBProvider = nil")
 	}
 }
 
@@ -90,24 +193,27 @@ func TestLoadConfigDefaultsAndEnv(t *testing.T) {
 	}
 
 	path := mustWriteConfigFile(t, `
+server:
+  providers:
+    auth: local
+    indexeddb: sqlite
+  encryptionKey: ${TEST_ENCRYPTION}
 providers:
   auth:
-    source:
-      ref: github.com/valon-technologies/gestalt-providers/auth/google
-      version: 1.0.0
-    config:
-      clientId: ${TEST_CLIENT_ID}
-  indexeddbs:
+    local:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/auth/google
+        version: 1.0.0
+      config:
+        clientId: ${TEST_CLIENT_ID}
+  indexeddb:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
-  plugins:
-    service-a:
-      source:
-        path: /tmp/manifest.yaml
-server:
-  indexeddb: sqlite
-  encryptionKey: ${TEST_ENCRYPTION}
+plugins:
+  service-a:
+    source:
+      path: /tmp/manifest.yaml
 `)
 
 	cfg, err := LoadWithLookup(path, func(key string) (string, bool) {
@@ -121,17 +227,22 @@ server:
 	if cfg.Server.Public.Port != 8080 {
 		t.Fatalf("Server.Public.Port = %d, want 8080", cfg.Server.Public.Port)
 	}
-	if cfg.Providers.Secrets.Source.Builtin != "env" {
-		t.Fatalf("Secrets.Source.Builtin = %q, want env", cfg.Providers.Secrets.Source.Builtin)
+	_, secrets := mustSelectedProvider(t, cfg, HostProviderKindSecrets)
+	if secrets == nil || secrets.Source.Builtin != "env" {
+		if secrets == nil {
+			t.Fatal("SelectedSecretsProvider = nil, want env builtin")
+		}
+		t.Fatalf("Secrets.Source.Builtin = %q, want env", secrets.Source.Builtin)
 	}
 	if cfg.Server.EncryptionKey != "encryption-from-env" {
 		t.Fatalf("Server.EncryptionKey = %q", cfg.Server.EncryptionKey)
 	}
 
-	if cfg.Providers.Auth == nil {
-		t.Fatal("Providers.Auth = nil")
+	_, auth := mustSelectedProvider(t, cfg, HostProviderKindAuth)
+	if auth == nil {
+		t.Fatal("SelectedAuthProvider = nil")
 	}
-	authCfg := mustDecodeNode(t, cfg.Providers.Auth.Config)
+	authCfg := mustDecodeNode(t, auth.Config)
 	if authCfg["clientId"] != "client-from-env" {
 		t.Fatalf("Auth.Config.clientId = %#v", authCfg["clientId"])
 	}
@@ -407,8 +518,11 @@ server:
 			if err != nil {
 				t.Fatalf("ValidateRuntime: %v", err)
 			}
-			if tc.name == "auth disabled is allowed" && !cfg.Providers.Auth.Disabled {
-				t.Fatal("Auth.Disabled = false, want true")
+			if tc.name == "auth disabled is allowed" {
+				_, auth := mustSelectedProvider(t, cfg, HostProviderKindAuth)
+				if auth == nil || !auth.Disabled {
+					t.Fatalf("SelectedAuthProvider = %#v, want disabled auth entry", auth)
+				}
 			}
 		})
 	}
@@ -429,7 +543,7 @@ providers:
 	if err != nil {
 		t.Fatalf("Load: %v", err)
 	}
-	if got := cfg.Providers.Plugins["custom_tool"].SourcePath(); got != filepath.Join(filepath.Dir(path), "manifest.yaml") {
+	if got := cfg.Plugins["custom_tool"].SourcePath(); got != filepath.Join(filepath.Dir(path), "manifest.yaml") {
 		t.Fatalf("unexpected plugin source path: %q", got)
 	}
 }
@@ -772,15 +886,15 @@ func TestLoadConfigPluginIndexedDBBindings(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    indexeddb:
+      - sqlite
+      - archive
 providers:
-  plugins:
-    roadmap:
-      source:
-        path: ./plugin/manifest.yaml
-      indexeddbs:
-        - sqlite
-        - archive
-  indexeddbs:
+  indexeddb:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
@@ -788,7 +902,8 @@ providers:
       source:
         path: ./providers/datastore/archive
 server:
-  indexeddb: sqlite
+  providers:
+    indexeddb: sqlite
   encryptionKey: server-key
 `)
 
@@ -796,7 +911,7 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		got := cfg.Providers.Plugins["roadmap"].IndexedDBs
+		got := cfg.Plugins["roadmap"].IndexedDBs
 		want := []string{"sqlite", "archive"}
 		if !reflect.DeepEqual(got, want) {
 			t.Fatalf("Plugins[roadmap].IndexedDBs = %v, want %v", got, want)
@@ -813,14 +928,15 @@ providers:
       source:
         path: ./web/root/manifest.yaml
       path: /app
-      indexeddbs:
+      indexeddb:
         - sqlite
-  indexeddbs:
+  indexeddb:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
 server:
-  indexeddb: sqlite
+  providers:
+    indexeddb: sqlite
   encryptionKey: server-key
 `)
 
@@ -828,7 +944,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `ui.root.indexeddbs is only supported on providers.plugins.*`) {
+		if !strings.Contains(err.Error(), `ui.root.indexeddb is only supported on plugins.*`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -837,20 +953,21 @@ server:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
+plugins:
+  datadog:
+    source:
+      path: ./plugin/manifest.yaml
+    surfaces:
+      openapi:
+        baseUrl: https://api.us5.datadoghq.com
 providers:
-  plugins:
-    datadog:
-      source:
-        path: ./plugin/manifest.yaml
-      surfaces:
-        openapi:
-          baseUrl: https://api.us5.datadoghq.com
-  indexeddbs:
+  indexeddb:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
 server:
-  indexeddb: sqlite
+  providers:
+    indexeddb: sqlite
   encryptionKey: server-key
   `)
 
@@ -858,10 +975,10 @@ server:
 		if err != nil {
 			t.Fatalf("Load: %v", err)
 		}
-		if cfg.Providers.Plugins["datadog"].Surfaces == nil || cfg.Providers.Plugins["datadog"].Surfaces.OpenAPI == nil {
+		if cfg.Plugins["datadog"].Surfaces == nil || cfg.Plugins["datadog"].Surfaces.OpenAPI == nil {
 			t.Fatal("Plugins[datadog].Surfaces.OpenAPI is nil")
 		}
-		if got := cfg.Providers.Plugins["datadog"].Surfaces.OpenAPI.BaseURL; got != "https://api.us5.datadoghq.com" {
+		if got := cfg.Plugins["datadog"].Surfaces.OpenAPI.BaseURL; got != "https://api.us5.datadoghq.com" {
 			t.Fatalf("Plugins[datadog].Surfaces.OpenAPI.BaseURL = %q, want %q", got, "https://api.us5.datadoghq.com")
 		}
 	})
@@ -879,12 +996,13 @@ providers:
       surfaces:
         mcp:
           url: https://mcp.example.test
-  indexeddbs:
+  indexeddb:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
 server:
-  indexeddb: sqlite
+  providers:
+    indexeddb: sqlite
   encryptionKey: server-key
 `)
 
@@ -892,7 +1010,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `ui.root.surfaces is only supported on providers.plugins.*`) {
+		if !strings.Contains(err.Error(), `ui.root.surfaces is only supported on plugins.*`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -901,20 +1019,21 @@ server:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    indexeddb:
+      - sqlite
+      - missing
 providers:
-  plugins:
-    roadmap:
-      source:
-        path: ./plugin/manifest.yaml
-      indexeddbs:
-        - sqlite
-        - missing
-  indexeddbs:
+  indexeddb:
     sqlite:
       source:
         path: ./providers/datastore/sqlite
 server:
-  indexeddb: sqlite
+  providers:
+    indexeddb: sqlite
   encryptionKey: server-key
 `)
 
@@ -922,7 +1041,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `plugin "roadmap" indexeddbs[1] references unknown indexeddb "missing"`) {
+		if !strings.Contains(err.Error(), `plugin "roadmap" indexeddb[1] references unknown indexeddb "missing"`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -931,15 +1050,15 @@ server:
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    indexeddb:
+      - main-db
+      - main_db
 providers:
-  plugins:
-    roadmap:
-      source:
-        path: ./plugin/manifest.yaml
-      indexeddbs:
-        - main-db
-        - main_db
-  indexeddbs:
+  indexeddb:
     main-db:
       source:
         path: ./providers/datastore/main-db
@@ -947,7 +1066,8 @@ providers:
       source:
         path: ./providers/datastore/main_db
 server:
-  indexeddb: main-db
+  providers:
+    indexeddb: main-db
   encryptionKey: server-key
 `)
 
@@ -955,7 +1075,7 @@ server:
 		if err == nil {
 			t.Fatal("Load: expected error, got nil")
 		}
-		if !strings.Contains(err.Error(), `plugin "roadmap" indexeddbs[1] "main_db" conflicts with "main-db" after IndexedDB env normalization (GESTALT_INDEXEDDB_SOCKET_MAIN_DB)`) {
+		if !strings.Contains(err.Error(), `plugin "roadmap" indexeddb[1] "main_db" conflicts with "main-db" after IndexedDB env normalization (GESTALT_INDEXEDDB_SOCKET_MAIN_DB)`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
@@ -974,7 +1094,8 @@ func TestLoadRejectsUnknownProviderFields(t *testing.T) {
 			yaml: `
 providers:
   secrets:
-    provider: none
+    primary:
+      provider: none
 `,
 			wantErr: `field provider not found`,
 		},
@@ -983,7 +1104,8 @@ providers:
 			yaml: `
 providers:
   telemetry:
-    builtin: stdout
+    primary:
+      builtin: stdout
 `,
 			wantErr: `field builtin not found`,
 		},
@@ -1074,6 +1196,56 @@ providers:
 server:
   egress:
     defaultAction: block
+`,
+		},
+		{
+			name: "server indexeddb selector cannot use legacy and canonical keys together",
+			yaml: `
+server:
+  indexeddb: legacy
+  providers:
+    indexeddb: canonical
+`,
+		},
+		{
+			name: "indexeddb collection cannot use legacy and canonical keys together",
+			yaml: `
+providers:
+  indexeddbs:
+    legacy:
+      source:
+        path: ./legacy/manifest.yaml
+  indexeddb:
+    canonical:
+      source:
+        path: ./canonical/manifest.yaml
+`,
+		},
+		{
+			name: "plugins cannot use legacy and canonical keys together",
+			yaml: `
+providers:
+  plugins:
+    legacy:
+      source:
+        path: ./legacy/manifest.yaml
+plugins:
+  canonical:
+    source:
+      path: ./canonical/manifest.yaml
+`,
+		},
+		{
+			name: "multiple auth providers require selection or default",
+			yaml: `
+providers:
+  auth:
+    one:
+      source:
+        path: ./one/manifest.yaml
+    two:
+      source:
+        path: ./two/manifest.yaml
 `,
 		},
 	}
@@ -1321,30 +1493,24 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 		{
 			name: "local source valid",
 			cfg: &Config{
-				Providers: ProvidersConfig{
-					Plugins: map[string]*ProviderEntry{
-						"sample": {Source: ProviderSource{Path: "./some-dir/manifest.yaml"}},
-					},
+				Plugins: map[string]*ProviderEntry{
+					"sample": {Source: ProviderSource{Path: "./some-dir/manifest.yaml"}},
 				},
 			},
 		},
 		{
 			name: "source valid",
 			cfg: &Config{
-				Providers: ProvidersConfig{
-					Plugins: map[string]*ProviderEntry{
-						"sample": {Source: ProviderSource{Ref: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}},
-					},
+				Plugins: map[string]*ProviderEntry{
+					"sample": {Source: ProviderSource{Ref: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}},
 				},
 			},
 		},
 		{
 			name: "source path and ref rejected",
 			cfg: &Config{
-				Providers: ProvidersConfig{
-					Plugins: map[string]*ProviderEntry{
-						"sample": {Source: ProviderSource{Path: "./manifest.yaml", Ref: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}},
-					},
+				Plugins: map[string]*ProviderEntry{
+					"sample": {Source: ProviderSource{Path: "./manifest.yaml", Ref: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}},
 				},
 			},
 			wantErr: "mutually exclusive",
@@ -1352,10 +1518,8 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 		{
 			name: "nil plugin rejected",
 			cfg: &Config{
-				Providers: ProvidersConfig{
-					Plugins: map[string]*ProviderEntry{
-						"sample": {},
-					},
+				Plugins: map[string]*ProviderEntry{
+					"sample": {},
 				},
 			},
 			wantErr: "source.path or source.ref is required",
@@ -1363,10 +1527,8 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 		{
 			name: "source without version rejected",
 			cfg: &Config{
-				Providers: ProvidersConfig{
-					Plugins: map[string]*ProviderEntry{
-						"sample": {Source: ProviderSource{Ref: "github.com/test-org/test-repo/test-plugin"}},
-					},
+				Plugins: map[string]*ProviderEntry{
+					"sample": {Source: ProviderSource{Ref: "github.com/test-org/test-repo/test-plugin"}},
 				},
 			},
 			wantErr: "source.version is required when source.ref is set",
@@ -1374,10 +1536,8 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 		{
 			name: "source version without ref rejected",
 			cfg: &Config{
-				Providers: ProvidersConfig{
-					Plugins: map[string]*ProviderEntry{
-						"sample": {Source: ProviderSource{Version: "1.0.0"}},
-					},
+				Plugins: map[string]*ProviderEntry{
+					"sample": {Source: ProviderSource{Version: "1.0.0"}},
 				},
 			},
 			wantErr: "source.path or source.ref is required",
@@ -1386,7 +1546,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			name: "auth provider valid",
 			cfg: &Config{
 				Providers: ProvidersConfig{
-					Auth: &ProviderEntry{Source: ProviderSource{Ref: "github.com/test-org/test-repo/test-auth", Version: "1.0.0"}},
+					Auth: singletonProviderEntry(&ProviderEntry{Source: ProviderSource{Ref: "github.com/test-org/test-repo/test-auth", Version: "1.0.0"}}),
 				},
 			},
 		},
@@ -1398,7 +1558,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			name: "auth provider invalid when source missing",
 			cfg: &Config{
 				Providers: ProvidersConfig{
-					Auth: &ProviderEntry{},
+					Auth: singletonProviderEntry(&ProviderEntry{}),
 				},
 			},
 			wantErr: `source.path or source.ref is required`,
@@ -1407,19 +1567,17 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			name: "auth config accepted when auth disabled",
 			cfg: &Config{
 				Providers: ProvidersConfig{
-					Auth: &ProviderEntry{Config: yaml.Node{Kind: yaml.MappingNode}, Disabled: true},
+					Auth: singletonProviderEntry(&ProviderEntry{Config: yaml.Node{Kind: yaml.MappingNode}, Disabled: true}),
 				},
 			},
 		},
 		{
 			name: "plugin auth rejects mcp oauth early",
 			cfg: &Config{
-				Providers: ProvidersConfig{
-					Plugins: map[string]*ProviderEntry{
-						"sample": {
-							Source: ProviderSource{Path: "./manifest.yaml"},
-							Auth:   &ConnectionAuthDef{Type: providermanifestv1.AuthTypeMCPOAuth},
-						},
+				Plugins: map[string]*ProviderEntry{
+					"sample": {
+						Source: ProviderSource{Path: "./manifest.yaml"},
+						Auth:   &ConnectionAuthDef{Type: providermanifestv1.AuthTypeMCPOAuth},
 					},
 				},
 			},
@@ -1428,13 +1586,11 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 		{
 			name: "named connection rejects mcp oauth early",
 			cfg: &Config{
-				Providers: ProvidersConfig{
-					Plugins: map[string]*ProviderEntry{
-						"sample": {
-							Source: ProviderSource{Path: "./manifest.yaml"},
-							Connections: map[string]*ConnectionDef{
-								"default": {Auth: ConnectionAuthDef{Type: providermanifestv1.AuthTypeMCPOAuth}},
-							},
+				Plugins: map[string]*ProviderEntry{
+					"sample": {
+						Source: ProviderSource{Path: "./manifest.yaml"},
+						Connections: map[string]*ConnectionDef{
+							"default": {Auth: ConnectionAuthDef{Type: providermanifestv1.AuthTypeMCPOAuth}},
 						},
 					},
 				},
@@ -1505,13 +1661,17 @@ server:
 		t.Fatalf("Load: %v", err)
 	}
 
-	if got := cfg.Providers.Plugins["service-a"].IconFile; got != iconPath {
+	if got := cfg.Plugins["service-a"].IconFile; got != iconPath {
 		t.Fatalf("IconFile = %q, want %q", got, iconPath)
 	}
-	if got := cfg.Providers.Auth.SourcePath(); got != filepath.Join(dir, "auth-plugin", "provider.yaml") {
+	_, auth := mustSelectedProvider(t, cfg, HostProviderKindAuth)
+	if auth == nil {
+		t.Fatal("SelectedAuthProvider = nil")
+	}
+	if got := auth.SourcePath(); got != filepath.Join(dir, "auth-plugin", "provider.yaml") {
 		t.Fatalf("auth plugin source path = %q, want %q", got, filepath.Join(dir, "auth-plugin", "provider.yaml"))
 	}
-	if got := cfg.Providers.Plugins["service-a"].SourcePath(); got != filepath.Join(dir, "bin", "manifest.yaml") {
+	if got := cfg.Plugins["service-a"].SourcePath(); got != filepath.Join(dir, "bin", "manifest.yaml") {
 		t.Fatalf("integration plugin source path = %q, want %q", got, filepath.Join(dir, "bin", "manifest.yaml"))
 	}
 }
@@ -1543,10 +1703,11 @@ server:
 		t.Fatalf("Load: %v", err)
 	}
 
-	if cfg.Providers.Auth == nil {
-		t.Fatal("Providers.Auth = nil")
+	_, auth := mustSelectedProvider(t, cfg, HostProviderKindAuth)
+	if auth == nil {
+		t.Fatal("SelectedAuthProvider = nil")
 	}
-	authCfg := mustDecodeNode(t, cfg.Providers.Auth.Config)
+	authCfg := mustDecodeNode(t, auth.Config)
 	if len(authCfg) != 3 {
 		t.Fatalf("Auth.Config length = %d, want 3", len(authCfg))
 	}
@@ -1638,7 +1799,7 @@ func TestLoad_ResolvesRelativePluginSourcePath(t *testing.T) {
 		t.Fatalf("Load: %v", err)
 	}
 
-	entry := loaded.Providers.Plugins["sample"]
+	entry := loaded.Plugins["sample"]
 	if entry == nil {
 		t.Fatal("expected plugin to be loaded")
 	}

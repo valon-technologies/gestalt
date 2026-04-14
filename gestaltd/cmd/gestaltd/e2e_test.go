@@ -31,10 +31,13 @@ func TestE2EValidateRejectsAuditConfigWhenProviderInheritsTelemetry(t *testing.T
 	if err != nil {
 		t.Fatalf("read config: %v", err)
 	}
-	cfgBytes = append(cfgBytes, []byte(`  audit:
-    config:
-      format: json
-`)...)
+	cfgText := strings.Replace(string(cfgBytes), "plugins:\n", `  audit:
+    primary:
+      config:
+        format: json
+plugins:
+`, 1)
+	cfgBytes = []byte(cfgText)
 	if err := os.WriteFile(cfgPath, cfgBytes, 0o644); err != nil {
 		t.Fatalf("write config audit: %v", err)
 	}
@@ -59,25 +62,28 @@ func TestE2EValidateRejectsInvalidAuditSettings(t *testing.T) {
 		{
 			name: "unknown audit provider",
 			auditYAML: `  audit:
-    source: bogus
+    primary:
+      source: bogus
 `,
 			wantError: "unknown audit provider",
 		},
 		{
 			name: "stdout audit requires mapping config",
 			auditYAML: `  audit:
-    source: stdout
-    config: nope
+    primary:
+      source: stdout
+      config: nope
 `,
 			wantError: "stdout audit: parsing config",
 		},
 		{
 			name: "otlp audit rejects non-otlp logs exporter",
 			auditYAML: `  audit:
-    source: otlp
-    config:
-      logs:
-        exporter: stdout
+    primary:
+      source: otlp
+      config:
+        logs:
+          exporter: stdout
 `,
 			wantError: "otlp audit: logs.exporter must be",
 		},
@@ -96,7 +102,8 @@ func TestE2EValidateRejectsInvalidAuditSettings(t *testing.T) {
 			if err != nil {
 				t.Fatalf("read config: %v", err)
 			}
-			cfgBytes = append(cfgBytes, []byte(tc.auditYAML)...)
+			cfgText := strings.Replace(string(cfgBytes), "plugins:\n", tc.auditYAML+"plugins:\n", 1)
+			cfgBytes = []byte(cfgText)
 			if err := os.WriteFile(cfgPath, cfgBytes, 0o644); err != nil {
 				t.Fatalf("write config audit: %v", err)
 			}
@@ -152,7 +159,7 @@ params:
 
 			dir := t.TempDir()
 			cfgPath := filepath.Join(dir, "config.yaml")
-			cfg := "server:\n  encryptionKey: test-key\n" + authIndexedDBConfigYAML(t, dir, "local", "sqlite", filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`  plugins:
+			cfg := "server:\n  encryptionKey: test-key\n" + authIndexedDBConfigYAML(t, dir, "local", "sqlite", filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
     example:
       %s
 `, strings.ReplaceAll(tc.pluginYAML, "\n", "\n      "))
@@ -268,23 +275,28 @@ func authIndexedDBConfigYAML(t *testing.T, dir, authName, datastoreName, dbPath 
 	t.Helper()
 
 	authBlock := ""
+	serverProvidersBlock := fmt.Sprintf(`  providers:
+    indexeddb: %s
+`, datastoreName)
 	if authName != "" {
 		authManifestPath := componentProviderManifestPath(t, setupAuthProviderDir(t, dir, authName))
+		serverProvidersBlock += fmt.Sprintf("    auth: %s\n", authName)
 		authBlock = fmt.Sprintf(`  auth:
-    source:
-      path: %s
-`, authManifestPath)
+    %s:
+      source:
+        path: %s
+`, authName, authManifestPath)
 	}
-	return fmt.Sprintf(`  indexeddb: %s
+	return fmt.Sprintf(`%s
 providers:
-%s  indexeddbs:
+%s  indexeddb:
     %s:
       source:
         ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
         version: 0.0.1-alpha.2
       config:
         dsn: %q
-`, datastoreName, authBlock, datastoreName, "sqlite://"+dbPath)
+`, serverProvidersBlock, authBlock, datastoreName, "sqlite://"+dbPath)
 }
 
 func writeManifestFile(t *testing.T, pluginDir string, manifest *providermanifestv1.Manifest) {
@@ -434,31 +446,32 @@ func writeServeConfig(t *testing.T, dir string, port int, mountedUI *mountedUITe
 	if err != nil {
 		t.Fatalf("FindManifestFile(%s): %v", pluginDir, err)
 	}
-
-	cfg := fmt.Sprintf(`server:
-  public:
-    port: %d
-  encryptionKey: test-serve-e2e-key
-  indexeddb: inmem
-providers:
-  indexeddbs:
-    inmem:
-      source:
-        path: %s
-  plugins:
-    example:
-      source:
-        path: %s
-`, port, indexedDBManifest, pluginManifest)
-
+	uiBlock := ""
 	if mountedUI != nil {
-		cfg += fmt.Sprintf(`  ui:
+		uiBlock = fmt.Sprintf(`  ui:
     %s:
       source:
         path: %q
       path: %s
 `, mountedUI.Name, mountedUI.ManifestPath, mountedUI.Path)
 	}
+
+	cfg := fmt.Sprintf(`server:
+  public:
+    port: %d
+  encryptionKey: test-serve-e2e-key
+  providers:
+    indexeddb: inmem
+providers:
+  indexeddb:
+    inmem:
+      source:
+        path: %s
+%splugins:
+  example:
+    source:
+      path: %s
+`, port, indexedDBManifest, uiBlock, pluginManifest)
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
@@ -840,7 +853,7 @@ func writeE2EConfigWithPaths(t *testing.T, dir, pluginDir, dbPath, artifactsDir 
 	if artifactsDir != "" {
 		serverBlock += fmt.Sprintf("  artifactsDir: %s\n", artifactsDir)
 	}
-	cfg := serverBlock + authIndexedDBConfigYAML(t, dir, "", "sqlite", dbPath) + fmt.Sprintf(`  plugins:
+	cfg := serverBlock + authIndexedDBConfigYAML(t, dir, "", "sqlite", dbPath) + fmt.Sprintf(`plugins:
     example:
       source:
         path: %s

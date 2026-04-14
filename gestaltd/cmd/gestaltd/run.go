@@ -157,7 +157,7 @@ func runServer(env *bootstrapEnv) error {
 		DefaultConnection: connMaps.DefaultConnection,
 		CatalogConnection: connMaps.MCPConnection,
 		ConnectionAuth:    result.ConnectionAuth,
-		PluginDefs:        env.Config.Providers.Plugins,
+		PluginDefs:        env.Config.Plugins,
 		Authorizer:        result.Authorizer,
 		PublicBaseURL:     env.Config.Server.BaseURL,
 		SecureCookies:     strings.HasPrefix(env.Config.Server.BaseURL, "https://"),
@@ -378,7 +378,7 @@ func buildMCPSurface(cfg *config.Config, connMaps bootstrap.ConnectionMaps) mcpS
 		mcpConnection: make(map[string]string),
 	}
 
-	for name, entry := range cfg.Providers.Plugins {
+	for name, entry := range cfg.Plugins {
 		if entry == nil {
 			continue
 		}
@@ -478,12 +478,12 @@ func logConfigSummary(path string, cfg *config.Config) {
 		"server_management_addr", maskEmpty(cfg.Server.ManagementAddr()),
 		"server_base_url", maskEmpty(cfg.Server.BaseURL),
 		"server_encryption", maskSecret(cfg.Server.EncryptionKey),
-		"auth_provider", providerEntryLabel(cfg.Providers.Auth),
-		"secrets_provider", secretsProviderLabel(cfg.Providers.Secrets),
-		"telemetry_provider", providerEntryLabel(cfg.Providers.Telemetry),
+		"auth_provider", selectedProviderLabel(cfg.SelectedAuthProvider()),
+		"secrets_provider", selectedProviderLabel(cfg.SelectedSecretsProvider()),
+		"telemetry_provider", selectedProviderLabel(cfg.SelectedTelemetryProvider()),
 	)
 
-	for name, entry := range cfg.Providers.Plugins {
+	for name, entry := range cfg.Plugins {
 		if entry != nil {
 			slog.Info("integration configured", "integration", name, "type", "plugin")
 		}
@@ -506,9 +506,9 @@ func providerEntryLabel(entry *config.ProviderEntry) string {
 	}
 }
 
-func secretsProviderLabel(entry *config.ProviderEntry) string {
-	if entry == nil {
-		return "env"
+func selectedProviderLabel(_ string, entry *config.ProviderEntry, err error) string {
+	if err != nil {
+		return "(invalid)"
 	}
 	return providerEntryLabel(entry)
 }

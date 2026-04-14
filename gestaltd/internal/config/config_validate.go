@@ -35,47 +35,21 @@ func ValidateStructure(cfg *Config) error {
 		return err
 	}
 
-	// Validate singleton providers
-	if cfg.Providers.Auth != nil {
-		if cfg.Providers.Auth.Source.IsBuiltin() {
-			return fmt.Errorf("config validation: auth does not support builtin providers; use a provider source reference or omit auth")
-		}
-		if err := validateProviderEntrySource("auth", "auth", cfg.Providers.Auth); err != nil {
+	for _, collection := range []struct {
+		kind    HostProviderKind
+		entries map[string]*ProviderEntry
+	}{
+		{HostProviderKindAuth, cfg.Providers.Auth},
+		{HostProviderKindSecrets, cfg.Providers.Secrets},
+		{HostProviderKindTelemetry, cfg.Providers.Telemetry},
+		{HostProviderKindAudit, cfg.Providers.Audit},
+	} {
+		if err := validateHostProviderEntries(collection.kind, collection.entries); err != nil {
 			return err
 		}
-	}
-	if cfg.Providers.Secrets != nil && !cfg.Providers.Secrets.Disabled && !cfg.Providers.Secrets.Source.IsBuiltin() {
-		if err := validateProviderEntrySource("secrets", "secrets", cfg.Providers.Secrets); err != nil {
+		if _, _, err := cfg.SelectedHostProvider(collection.kind); err != nil {
 			return err
 		}
-	}
-	if cfg.Providers.Telemetry != nil && !cfg.Providers.Telemetry.Disabled && !cfg.Providers.Telemetry.Source.IsBuiltin() {
-		if err := validateProviderEntrySource("telemetry", "telemetry", cfg.Providers.Telemetry); err != nil {
-			return err
-		}
-	}
-	if cfg.Providers.Audit != nil && !cfg.Providers.Audit.Disabled {
-		if cfg.Providers.Audit.Source.IsBuiltin() {
-			if err := validateBuiltinAudit(cfg.Providers.Audit); err != nil {
-				return err
-			}
-		} else {
-			if err := validateProviderEntrySource("audit", "audit", cfg.Providers.Audit); err != nil {
-				return err
-			}
-		}
-	}
-	if err := validatePluginOnlyProviderFields("auth", cfg.Providers.Auth); err != nil {
-		return err
-	}
-	if err := validatePluginOnlyProviderFields("secrets", cfg.Providers.Secrets); err != nil {
-		return err
-	}
-	if err := validatePluginOnlyProviderFields("telemetry", cfg.Providers.Telemetry); err != nil {
-		return err
-	}
-	if err := validatePluginOnlyProviderFields("audit", cfg.Providers.Audit); err != nil {
-		return err
 	}
 	for name, entry := range cfg.Providers.UI {
 		if entry == nil {
@@ -110,9 +84,49 @@ func ValidateStructure(cfg *Config) error {
 	}
 
 	// Validate plugins
-	for name, entry := range cfg.Providers.Plugins {
+	for name, entry := range cfg.Plugins {
 		if err := validatePlugin(cfg, name, entry); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+func validateHostProviderEntries(kind HostProviderKind, entries map[string]*ProviderEntry) error {
+	for name, entry := range entries {
+		if entry == nil {
+			return fmt.Errorf("config validation: providers.%s.%s is required", kind, name)
+		}
+		if err := validatePluginOnlyProviderFields("providers."+string(kind)+"."+name, entry); err != nil {
+			return err
+		}
+		switch kind {
+		case HostProviderKindAuth:
+			if entry.Source.IsBuiltin() {
+				return fmt.Errorf("config validation: auth provider %q does not support builtin providers; use a provider source reference or omit auth", name)
+			}
+			if err := validateProviderEntrySource("auth", name, entry); err != nil {
+				return err
+			}
+		case HostProviderKindSecrets, HostProviderKindTelemetry:
+			if !entry.Disabled && !entry.Source.IsBuiltin() {
+				if err := validateProviderEntrySource(string(kind), name, entry); err != nil {
+					return err
+				}
+			}
+		case HostProviderKindAudit:
+			if entry.Disabled {
+				continue
+			}
+			if entry.Source.IsBuiltin() {
+				if err := validateBuiltinAudit(entry); err != nil {
+					return err
+				}
+			} else {
+				if err := validateProviderEntrySource("audit", name, entry); err != nil {
+					return err
+				}
+			}
 		}
 	}
 	return nil
@@ -216,7 +230,7 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error 
 // ValidateResolvedStructure checks integration fields whose support depends on
 // resolved managed plugin manifests.
 func ValidateResolvedStructure(cfg *Config) error {
-	for name, entry := range cfg.Providers.Plugins {
+	for name, entry := range cfg.Plugins {
 		if entry == nil {
 			return fmt.Errorf("config validation: integration %q requires a source", name)
 		}
@@ -244,11 +258,12 @@ func ValidateResolvedStructure(cfg *Config) error {
 // ValidateRuntime checks runtime-only requirements: encryption key plus the
 // required top-level datastore provider.
 func ValidateRuntime(cfg *Config) error {
-	if cfg.Server.IndexedDB == "" {
-		return fmt.Errorf("config validation: server.indexeddb is required (set server.indexeddb referencing a providers.indexeddbs entry)")
+	name, _, err := cfg.SelectedIndexedDBProvider()
+	if err != nil {
+		return err
 	}
-	if _, ok := cfg.Providers.IndexedDBs[cfg.Server.IndexedDB]; !ok {
-		return fmt.Errorf("config validation: server.indexeddb references unknown datastore %q", cfg.Server.IndexedDB)
+	if name == "" {
+		return fmt.Errorf("config validation: server.providers.indexeddb is required (set server.providers.indexeddb or mark one providers.indexeddb entry default: true)")
 	}
 	if cfg.Server.EncryptionKey == "" {
 		return fmt.Errorf("config validation: server.encryption_key is required")
@@ -259,6 +274,9 @@ func ValidateRuntime(cfg *Config) error {
 func validatePlugin(cfg *Config, name string, entry *ProviderEntry) error {
 	if entry == nil {
 		return fmt.Errorf("config validation: plugin %q requires a source", name)
+	}
+	if entry.Default {
+		return fmt.Errorf("config validation: plugins.%s.default is not supported on plugins", name)
 	}
 	if err := validateProviderEntrySource("plugin", name, entry); err != nil {
 		return err
@@ -273,21 +291,19 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry) error {
 }
 
 func validateDatastoreConfig(cfg *Config) error {
-	if cfg.Server.IndexedDB != "" {
-		if _, ok := cfg.Providers.IndexedDBs[cfg.Server.IndexedDB]; !ok {
-			return fmt.Errorf("config validation: server.indexeddb references unknown datastore %q", cfg.Server.IndexedDB)
-		}
-	}
-	for name, entry := range cfg.Providers.IndexedDBs {
+	for name, entry := range cfg.Providers.IndexedDB {
 		if entry == nil {
-			return fmt.Errorf("config validation: indexeddbs.%s is required", name)
+			return fmt.Errorf("config validation: providers.indexeddb.%s is required", name)
 		}
-		if err := validatePluginOnlyProviderFields("indexeddbs."+name, entry); err != nil {
+		if err := validatePluginOnlyProviderFields("providers.indexeddb."+name, entry); err != nil {
 			return err
 		}
 		if err := validateProviderEntrySource("indexeddb", name, entry); err != nil {
 			return err
 		}
+	}
+	if _, _, err := cfg.SelectedIndexedDBProvider(); err != nil {
+		return err
 	}
 	return nil
 }
@@ -297,10 +313,10 @@ func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) erro
 		return nil
 	}
 	if len(entry.IndexedDBs) > 0 {
-		return fmt.Errorf("config validation: %s.indexeddbs is only supported on providers.plugins.*", subject)
+		return fmt.Errorf("config validation: %s.indexeddb is only supported on plugins.*", subject)
 	}
 	if entry.Surfaces != nil {
-		return fmt.Errorf("config validation: %s.surfaces is only supported on providers.plugins.*", subject)
+		return fmt.Errorf("config validation: %s.surfaces is only supported on plugins.*", subject)
 	}
 	if entry.AuthorizationPolicy != "" && !strings.HasPrefix(subject, "ui.") {
 		return fmt.Errorf("config validation: %s.authorizationPolicy is only supported on providers.plugins.* and providers.ui.*", subject)
@@ -369,17 +385,17 @@ func validatePluginIndexedDBBindings(cfg *Config, name string, entry *ProviderEn
 	for i, binding := range entry.IndexedDBs {
 		binding = strings.TrimSpace(binding)
 		if binding == "" {
-			return fmt.Errorf("config validation: plugin %q indexeddbs[%d] is required", name, i)
+			return fmt.Errorf("config validation: plugin %q indexeddb[%d] is required", name, i)
 		}
 		if _, exists := seen[binding]; exists {
-			return fmt.Errorf("config validation: plugin %q indexeddbs[%d] duplicates %q", name, i, binding)
+			return fmt.Errorf("config validation: plugin %q indexeddb[%d] duplicates %q", name, i, binding)
 		}
-		if _, ok := cfg.Providers.IndexedDBs[binding]; !ok {
-			return fmt.Errorf("config validation: plugin %q indexeddbs[%d] references unknown indexeddb %q", name, i, binding)
+		if _, ok := cfg.Providers.IndexedDB[binding]; !ok {
+			return fmt.Errorf("config validation: plugin %q indexeddb[%d] references unknown indexeddb %q", name, i, binding)
 		}
 		envName := indexedDBSocketEnv(binding)
 		if otherBinding, exists := envNames[envName]; exists {
-			return fmt.Errorf("config validation: plugin %q indexeddbs[%d] %q conflicts with %q after IndexedDB env normalization (%s)", name, i, binding, otherBinding, envName)
+			return fmt.Errorf("config validation: plugin %q indexeddb[%d] %q conflicts with %q after IndexedDB env normalization (%s)", name, i, binding, otherBinding, envName)
 		}
 		seen[binding] = struct{}{}
 		envNames[envName] = binding

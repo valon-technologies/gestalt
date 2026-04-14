@@ -64,9 +64,10 @@ func defaultManagedConfig(dbPath, encryptionKey string) string {
   public:
     port: 8080
   encryptionKey: %q
-  indexeddb: main
+  providers:
+    indexeddb: main
 providers:
-  indexeddbs:
+  indexeddb:
     main:
       source:
         ref: %s
@@ -74,15 +75,16 @@ providers:
       config:
         dsn: %q
   secrets:
-    source: env
-  plugins:
-    httpbin:
-      displayName: HTTPBin
-      source:
-        ref: %s
-        version: %s
-      allowedHosts:
-        - httpbin.org
+    env:
+      source: env
+plugins:
+  httpbin:
+    displayName: HTTPBin
+    source:
+      ref: %s
+      version: %s
+    allowedHosts:
+      - httpbin.org
 `, encryptionKey, config.DefaultIndexedDBProvider, config.DefaultIndexedDBVersion, "sqlite://"+dbPath, defaultHTTPBinProvider, defaultHTTPBinVersion)
 }
 
@@ -91,18 +93,22 @@ func defaultLocalSourceConfig(providersDir, dbPath, encryptionKey string) string
   public:
     port: 8080
   encryptionKey: %q
-  indexeddb: main
+  providers:
+    indexeddb: main
 providers:
-  indexeddbs:
+  indexeddb:
     main:
       source:
         path: %q
       config:
         dsn: %q
   ui:
-    source:
-      path: %q
+    root:
+      source:
+        path: %q
+      path: /
   secrets:
-    source: env
+    env:
+      source: env
 `, encryptionKey, filepath.Join(providersDir, "indexeddb", "relationaldb", "manifest.yaml"), "sqlite://"+dbPath, filepath.Join(providersDir, "web", "default", "manifest.yaml"))
 }

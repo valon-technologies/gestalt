@@ -60,6 +60,7 @@ func validateMCPCatalogs(providers *registry.ProviderMap[core.Provider]) error {
 }
 
 func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.ProviderMap[core.Provider], map[string]map[string]OAuthHandler, error) {
+	cfg.SyncCompatFields()
 	reg := registry.New()
 	connAuth := make(map[string]map[string]OAuthHandler)
 
@@ -72,11 +73,11 @@ func buildProvidersStrict(ctx context.Context, cfg *config.Config, factories *Fa
 		}
 	}
 
-	names := slices.Sorted(maps.Keys(cfg.Providers.Plugins))
+	names := slices.Sorted(maps.Keys(cfg.Plugins))
 
 	var errs []error
 	for _, name := range names {
-		entry := cfg.Providers.Plugins[name]
+		entry := cfg.Plugins[name]
 		result, err := buildProviderForValidation(ctx, name, entry, deps)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("integration %q: %w", name, err))

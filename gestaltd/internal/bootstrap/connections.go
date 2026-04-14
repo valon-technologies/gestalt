@@ -19,13 +19,14 @@ type ConnectionMaps struct {
 }
 
 func BuildConnectionMaps(cfg *config.Config) (ConnectionMaps, error) {
+	cfg.SyncCompatFields()
 	maps := ConnectionMaps{
-		DefaultConnection: make(map[string]string, len(cfg.Providers.Plugins)),
-		APIConnection:     make(map[string]string, len(cfg.Providers.Plugins)),
-		MCPConnection:     make(map[string]string, len(cfg.Providers.Plugins)),
+		DefaultConnection: make(map[string]string, len(cfg.Plugins)),
+		APIConnection:     make(map[string]string, len(cfg.Plugins)),
+		MCPConnection:     make(map[string]string, len(cfg.Plugins)),
 	}
 
-	for name, entry := range cfg.Providers.Plugins {
+	for name, entry := range cfg.Plugins {
 		defaultConnection := config.PluginConnectionName
 		apiConnection := config.PluginConnectionName
 		mcpConnection := config.PluginConnectionName
