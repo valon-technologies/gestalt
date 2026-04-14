@@ -46,7 +46,10 @@ func TestResolveLastModified(t *testing.T) {
 	if got := ResolveLastModified(1234); got != 1234 {
 		t.Fatalf("ResolveLastModified = %d, want 1234", got)
 	}
-	if got := ResolveLastModified(0); got <= 0 {
+	if got := ResolveLastModified(0); got != 0 {
+		t.Fatalf("ResolveLastModified epoch = %d, want 0", got)
+	}
+	if got := ResolveLastModified(-1); got <= 0 {
 		t.Fatalf("ResolveLastModified default = %d, want > 0", got)
 	}
 }

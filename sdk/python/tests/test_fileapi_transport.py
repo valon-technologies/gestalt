@@ -98,6 +98,7 @@ class TestCreateBlob(unittest.TestCase):
         self.assertEqual(blob.bytes(), b"hello world")
         self.assertEqual(blob.array_buffer(), b"hello world")
         statted = client.stat(blob.id)
+        self.assertNotIsInstance(statted, _fileapi.File)
         self.assertEqual(statted.bytes(), b"hello world")
         client.close()
 
@@ -140,6 +141,7 @@ class TestObjectURLLifecycle(unittest.TestCase):
         url = blob.create_object_url()
         resolved = client.resolve_object_url(url)
 
+        self.assertNotIsInstance(resolved, _fileapi.File)
         self.assertEqual(resolved.bytes(), b"url-data")
         client.revoke_object_url(url)
         with self.assertRaises(_fileapi.NotFoundError):

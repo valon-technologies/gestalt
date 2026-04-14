@@ -620,7 +620,7 @@ fn normalize_type(value: &str) -> String {
 }
 
 fn resolve_last_modified(last_modified: i64) -> i64 {
-    if last_modified > 0 {
+    if last_modified >= 0 {
         last_modified
     } else {
         current_time_millis()

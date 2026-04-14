@@ -35,7 +35,11 @@ func NewFileAPIServer(api fileapi.FileAPI, pluginName string) proto.FileAPIServe
 }
 
 func (s *fileAPIServer) CreateBlob(ctx context.Context, req *proto.CreateBlobRequest) (*proto.FileObjectResponse, error) {
-	info, err := s.api.CreateBlob(ctx, protoToBlobParts(req.GetParts()), protoToBlobOptions(req.GetOptions()))
+	parts, err := s.protoToBlobParts(req.GetParts())
+	if err != nil {
+		return nil, fileapiToGRPCErr(err)
+	}
+	info, err := s.api.CreateBlob(ctx, parts, protoToBlobOptions(req.GetOptions()))
 	if err != nil {
 		return nil, fileapiToGRPCErr(err)
 	}
@@ -43,7 +47,11 @@ func (s *fileAPIServer) CreateBlob(ctx context.Context, req *proto.CreateBlobReq
 }
 
 func (s *fileAPIServer) CreateFile(ctx context.Context, req *proto.CreateFileRequest) (*proto.FileObjectResponse, error) {
-	info, err := s.api.CreateFile(ctx, protoToBlobParts(req.GetFileBits()), req.GetFileName(), protoToFileOptions(req.GetOptions()))
+	parts, err := s.protoToBlobParts(req.GetFileBits())
+	if err != nil {
+		return nil, fileapiToGRPCErr(err)
+	}
+	info, err := s.api.CreateFile(ctx, parts, req.GetFileName(), protoToFileOptions(req.GetOptions()))
 	if err != nil {
 		return nil, fileapiToGRPCErr(err)
 	}
@@ -144,9 +152,9 @@ func (s *fileAPIServer) RevokeObjectURL(ctx context.Context, req *proto.ObjectUR
 	return &emptypb.Empty{}, nil
 }
 
-func protoToBlobParts(parts []*proto.BlobPart) []fileapi.BlobPart {
+func (s *fileAPIServer) protoToBlobParts(parts []*proto.BlobPart) ([]fileapi.BlobPart, error) {
 	if len(parts) == 0 {
-		return nil
+		return nil, nil
 	}
 	out := make([]fileapi.BlobPart, 0, len(parts))
 	for _, part := range parts {
@@ -156,10 +164,14 @@ func protoToBlobParts(parts []*proto.BlobPart) []fileapi.BlobPart {
 		case *proto.BlobPart_BytesData:
 			out = append(out, fileapi.BytesPart(value.BytesData))
 		case *proto.BlobPart_BlobId:
-			out = append(out, fileapi.BlobRefPart(value.BlobId))
+			id, err := s.stripID(value.BlobId)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, fileapi.BlobRefPart(id))
 		}
 	}
-	return out
+	return out, nil
 }
 
 func protoToBlobOptions(options *proto.BlobOptions) fileapi.BlobOptions {

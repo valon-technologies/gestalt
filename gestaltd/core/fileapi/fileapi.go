@@ -114,7 +114,7 @@ func ConvertStringPart(value string, endings LineEndings) []byte {
 }
 
 func ResolveLastModified(lastModified int64) int64 {
-	if lastModified > 0 {
+	if lastModified >= 0 {
 		return lastModified
 	}
 	return time.Now().UnixMilli()

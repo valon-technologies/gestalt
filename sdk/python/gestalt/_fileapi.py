@@ -128,7 +128,7 @@ def _looks_like_blob_message(message: Any) -> bool:
 
 def _looks_like_file_message(message: Any) -> bool:
     fields = _message_fields(message)
-    return _looks_like_blob_message(message) and "name" in fields and "last_modified" in fields
+    return _looks_like_blob_message(message) and "kind" in fields and int(getattr(message, "kind", 0)) == 2
 
 
 def _extract_blob_proto(response: Any) -> Any:
@@ -520,14 +520,6 @@ class FileAPI:
             raise RuntimeError("generated FileAPI object-url request does not expose a url field")
         method = _resolve_stub_method(self._stub, "RevokeObjectURL")
         _grpc_call(method, request)
-
-    def list_files(self) -> FileList:
-        request_type = _proto_type(self._pb, "ListFilesRequest")
-        if request_type is None:
-            raise RuntimeError("generated FileAPI protobuf stubs do not define ListFilesRequest")
-        method = _resolve_stub_method(self._stub, "ListFiles")
-        response = _grpc_call(method, request_type())
-        return FileList([File(self._stub, proto) for proto in _extract_files_proto(response)])
 
     def __enter__(self) -> FileAPI:
         return self
