@@ -35,6 +35,7 @@ providers:
       source:
         path: ./customer-roadmap-review/ui/manifest.yaml
       path: /create-customer-roadmap-review
+      authorizationPolicy: roadmap_review
 ```
 
 Reference a published bundle in production:
@@ -47,7 +48,13 @@ providers:
         ref: github.com/your-org/web/customer-roadmap-review
         version: 0.0.1
       path: /create-customer-roadmap-review
+      authorizationPolicy: roadmap_review
 ```
+
+When `authorizationPolicy` is set, Gestalt authenticates the caller, resolves
+their role from `server.authorization.policies.<policy>`, and checks the web
+UI manifest's `spec.routes[].allowedRoles` before serving the route or its
+associated static assets.
 
 ## Locked deployments
 

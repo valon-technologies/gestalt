@@ -84,14 +84,15 @@ func (s *Server) mountMountedWebUIRoutes(r chi.Router) {
 			continue
 		}
 		path := mounted.Path
+		handler := s.mountedWebUIHandler(mounted)
 		if path == "/" {
-			rootHandler = mounted.Handler
+			rootHandler = handler
 			continue
 		}
 		r.Get(path, func(w http.ResponseWriter, r *http.Request) {
 			redirectPreservingQuery(w, r, path+"/", http.StatusMovedPermanently)
 		})
-		r.Handle(path+"/*", http.StripPrefix(path, mounted.Handler))
+		r.Handle(path+"/*", handler)
 	}
 	if rootHandler != nil {
 		r.NotFound(rootHandler.ServeHTTP)

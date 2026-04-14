@@ -29,9 +29,20 @@ release:
       - ./build.sh
 spec:
   assetRoot: out
+  routes:
+    - path: /
+      allowedRoles: [viewer, admin]
+    - path: /admin/*
+      allowedRoles: [admin]
 ```
 
 The `assetRoot` path is relative to the manifest file. It should contain the output of your frontend build (typically an `index.html` and accompanying JS, CSS, and image files).
+
+`spec.routes` is optional unless a deployment binds the UI to
+`providers.ui.<name>.authorizationPolicy`. In that case, Gestalt uses these
+route rules to enforce role-based access before serving the mounted route or
+its static assets. At least one route must cover `/`, and every route must
+declare non-empty `allowedRoles`.
 
 ## Build step
 
@@ -67,6 +78,7 @@ providers:
       source:
         path: ./web-default/manifest.yaml
       path: /dashboard
+      authorizationPolicy: dashboard_users
 ```
 
 For production, reference a published release by source and version:
@@ -79,6 +91,7 @@ providers:
         ref: github.com/valon-technologies/gestalt-providers/web/default
         version: 0.0.1
       path: /dashboard
+      authorizationPolicy: dashboard_users
 ```
 
 When a config references a published UI bundle, run `gestaltd init` to resolve

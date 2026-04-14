@@ -356,6 +356,78 @@ func TestInitAtPath_SkipsDisabledManagedMountedWebUI(t *testing.T) {
 	}
 }
 
+func TestInitAtPath_RejectsPolicyBoundManagedMountedWebUIWithoutExplicitRouteCoverage(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		spec *providermanifestv1.Spec
+		want string
+	}{
+		{
+			name: "missing routes",
+			spec: &providermanifestv1.Spec{AssetRoot: "dist"},
+			want: "must declare at least one route",
+		},
+		{
+			name: "missing root coverage",
+			spec: &providermanifestv1.Spec{
+				AssetRoot: "dist",
+				Routes: []providermanifestv1.WebUIRoute{
+					{Path: "/reports", AllowedRoles: []string{"admin"}},
+				},
+			},
+			want: "must declare a route covering /",
+		},
+	}
+
+	for _, tc := range tests {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			pkgPath := mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
+				Kind:        providermanifestv1.KindWebUI,
+				Source:      "github.com/testowner/web/sample-portal",
+				Version:     "0.0.1-alpha.1",
+				DisplayName: "Sample Portal",
+				Spec:        tc.spec,
+			}, map[string]string{
+				"dist/index.html": "<html>sample portal</html>",
+			}, false)
+
+			cfgPath := filepath.Join(dir, "config.yaml")
+			cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  ui:
+    sample_portal:
+      source:
+        ref: github.com/testowner/web/sample-portal
+        version: 0.0.1-alpha.1
+      path: /sample-portal
+      authorizationPolicy: sample_policy
+` + `server:
+` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  authorization:
+    policies:
+      sample_policy:
+        default: deny
+        members:
+          - email: viewer@example.test
+            role: viewer
+`
+			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+				t.Fatalf("WriteFile config: %v", err)
+			}
+
+			lc := NewLifecycle(staticSourceResolver{localPath: pkgPath})
+			_, err := lc.InitAtPath(cfgPath)
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("InitAtPath error = %v, want substring %q", err, tc.want)
+			}
+		})
+	}
+}
+
 func TestLockProviderEntryForSource_RejectsManifestWithoutProviderKind(t *testing.T) {
 	t.Parallel()
 

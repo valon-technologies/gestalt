@@ -333,9 +333,22 @@ func resolveMountedWebUIHandlers(cfg *config.Config) ([]server.MountedWebUI, err
 		if err != nil {
 			return nil, fmt.Errorf("ui %q: %w", name, err)
 		}
+		var routes []server.MountedWebUIRoute
+		if spec := entry.ManifestSpec(); spec != nil && len(spec.Routes) > 0 {
+			routes = make([]server.MountedWebUIRoute, 0, len(spec.Routes))
+			for _, route := range spec.Routes {
+				routes = append(routes, server.MountedWebUIRoute{
+					Path:         route.Path,
+					AllowedRoles: append([]string(nil), route.AllowedRoles...),
+				})
+			}
+		}
 		mounted = append(mounted, server.MountedWebUI{
-			Path:    entry.Path,
-			Handler: handler,
+			Name:                name,
+			Path:                entry.Path,
+			AuthorizationPolicy: entry.AuthorizationPolicy,
+			Routes:              routes,
+			Handler:             handler,
 		})
 	}
 	return mounted, nil

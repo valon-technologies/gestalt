@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	stdpath "path"
 	"strings"
 	"time"
 )
@@ -48,34 +49,102 @@ func Handler(cfg Config) (http.Handler, error) {
 
 	fileServer := http.FileServer(http.FS(cfg.FS))
 
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		path := strings.TrimPrefix(r.URL.Path, "/")
-		if path == "" {
-			path = "index.html"
-		}
+	return &handler{
+		fs:         cfg.FS,
+		fileServer: fileServer,
+		readIndex:  readIndex,
+	}, nil
+}
 
-		if info, err := fs.Stat(cfg.FS, path); err == nil && !info.IsDir() {
+type handler struct {
+	fs         fs.FS
+	fileServer http.Handler
+	readIndex  func() ([]byte, error)
+}
+
+func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	resolution := h.resolve(strings.TrimPrefix(r.URL.Path, "/"))
+	switch {
+	case resolution.serveIndex:
+		serveIndex(w, r, h.readIndex)
+	case resolution.servePath != "":
+		serve(h.fileServer, w, r, resolution.servePath)
+	default:
+		serveIndex(w, r, h.readIndex)
+	}
+}
+
+func (h *handler) NavigationPathForRequest(requestPath string) (string, bool) {
+	resolution := h.resolve(strings.TrimPrefix(requestPath, "/"))
+	return resolution.routePath, resolution.navigation
+}
+
+type requestResolution struct {
+	navigation bool
+	routePath  string
+	serveIndex bool
+	servePath  string
+}
+
+func (h *handler) resolve(path string) requestResolution {
+	if path == "" {
+		path = "index.html"
+	}
+	path = strings.TrimPrefix(path, "/")
+
+	if info, err := fs.Stat(h.fs, path); err == nil && !info.IsDir() {
+		if routePath, ok := navigationRoutePath(path); ok {
 			if path == "index.html" {
-				serveIndex(w, r, readIndex)
-				return
+				return requestResolution{navigation: true, routePath: routePath, serveIndex: true}
 			}
-			fileServer.ServeHTTP(w, r)
-			return
+			return requestResolution{navigation: true, routePath: routePath, servePath: "/" + path}
 		}
+		return requestResolution{servePath: "/" + path}
+	}
 
-		if !strings.Contains(path, ".") {
-			if _, err := fs.Stat(cfg.FS, path+".html"); err == nil {
-				serve(fileServer, w, r, "/"+path+".html")
-				return
-			}
-			if _, err := fs.Stat(cfg.FS, path+"/index.html"); err == nil {
-				serve(fileServer, w, r, "/"+path+"/index.html")
-				return
+	if !strings.Contains(path, ".") {
+		if _, err := fs.Stat(h.fs, path+".html"); err == nil {
+			return requestResolution{
+				navigation: true,
+				routePath:  cleanRoutePath("/" + path),
+				servePath:  "/" + path + ".html",
 			}
 		}
+		if _, err := fs.Stat(h.fs, path+"/index.html"); err == nil {
+			return requestResolution{
+				navigation: true,
+				routePath:  cleanRoutePath("/" + path),
+				servePath:  "/" + path + "/index.html",
+			}
+		}
+	}
 
-		serveIndex(w, r, readIndex)
-	}), nil
+	return requestResolution{
+		navigation: true,
+		routePath:  cleanRoutePath("/" + path),
+		serveIndex: true,
+	}
+}
+
+func navigationRoutePath(path string) (string, bool) {
+	switch {
+	case path == "index.html":
+		return "/", true
+	case strings.HasSuffix(path, "/index.html"):
+		return cleanRoutePath("/" + strings.TrimSuffix(path, "/index.html")), true
+	case strings.HasSuffix(path, ".html"):
+		return cleanRoutePath("/" + strings.TrimSuffix(path, ".html")), true
+	default:
+		return "", false
+	}
+}
+
+func cleanRoutePath(path string) string {
+	path = stdpath.Clean(path)
+	if path == "." {
+		return "/"
+	}
+	return path
 }
 
 func serveIndex(w http.ResponseWriter, r *http.Request, readIndex func() ([]byte, error)) {

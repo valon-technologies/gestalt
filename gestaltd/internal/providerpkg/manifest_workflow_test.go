@@ -78,7 +78,13 @@ func TestManifestWorkflow_RoundTripsWebUIPackage(t *testing.T) {
 		Kind:    providermanifestv1.KindWebUI,
 		Source:  "github.com/acme/plugins/webui",
 		Version: "1.0.0",
-		Spec:    &providermanifestv1.Spec{AssetRoot: "ui/dist"},
+		Spec: &providermanifestv1.Spec{
+			AssetRoot: "ui/dist",
+			Routes: []providermanifestv1.WebUIRoute{
+				{Path: "/admin/*", AllowedRoles: []string{"admin"}},
+				{Path: "/*", AllowedRoles: []string{"viewer", "admin"}},
+			},
+		},
 	}
 
 	mustWriteManifestData(t, sourceDir, "manifest.yml", mustManifestYAML(t, manifest))
@@ -93,6 +99,9 @@ func TestManifestWorkflow_RoundTripsWebUIPackage(t *testing.T) {
 	}
 	if manifest.Spec == nil || manifest.Spec.AssetRoot != "ui/dist" {
 		t.Fatalf("unexpected webui manifest: %#v", manifest.Spec)
+	}
+	if len(manifest.Spec.Routes) != 2 || manifest.Spec.Routes[0].Path != "/admin/*" || manifest.Spec.Routes[1].Path != "/*" {
+		t.Fatalf("unexpected webui routes: %#v", manifest.Spec.Routes)
 	}
 
 	archivePath := filepath.Join(root, "webui.tar.gz")
@@ -217,6 +226,39 @@ func TestManifestWorkflow_RejectsInvalidPackageInputs(t *testing.T) {
 				}))
 			},
 			wantError: "manifest kind is required",
+		},
+		{
+			name: "rejects webui route without allowed roles",
+			buildData: func(t *testing.T, dir string) string {
+				mustWriteFile(t, filepath.Join(dir, "ui", "dist", "index.html"), []byte("<html/>"), 0o644)
+				return mustWriteManifestData(t, dir, "manifest.yml", []byte(`
+kind: webui
+source: github.com/acme/plugins/webui-routes
+version: 1.0.0
+spec:
+  assetRoot: ui/dist
+  routes:
+    - path: /admin
+`))
+			},
+			wantError: "allowedRoles must not be empty",
+		},
+		{
+			name: "rejects non-terminal wildcard webui route",
+			buildData: func(t *testing.T, dir string) string {
+				mustWriteFile(t, filepath.Join(dir, "ui", "dist", "index.html"), []byte("<html/>"), 0o644)
+				return mustWriteManifestData(t, dir, "manifest.yml", []byte(`
+kind: webui
+source: github.com/acme/plugins/webui-routes
+version: 1.0.0
+spec:
+  assetRoot: ui/dist
+  routes:
+    - path: /admin/*/settings
+      allowedRoles: [admin]
+`))
+			},
+			wantError: "wildcards are only supported as a terminal /*",
 		},
 		{
 			name: "entrypoint references unknown artifact",

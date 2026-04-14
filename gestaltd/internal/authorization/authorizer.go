@@ -194,12 +194,19 @@ func (a *Authorizer) Binding(p *principal.Principal, provider string) (Credentia
 }
 
 func (a *Authorizer) ResolveAccess(p *principal.Principal, provider string) (AccessContext, bool) {
-	if a == nil || a.IsWorkload(p) {
+	policyName := strings.TrimSpace(a.providerPolicies[provider])
+	return a.ResolvePolicyAccess(p, policyName)
+}
+
+func (a *Authorizer) ResolvePolicyAccess(p *principal.Principal, policyName string) (AccessContext, bool) {
+	if a == nil {
 		return AccessContext{}, true
 	}
-	policyName := strings.TrimSpace(a.providerPolicies[provider])
 	if policyName == "" {
 		return AccessContext{}, true
+	}
+	if a.IsWorkload(p) {
+		return AccessContext{Policy: policyName}, false
 	}
 	policy := a.policies[policyName]
 	if policy == nil {
