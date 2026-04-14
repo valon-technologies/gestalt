@@ -300,7 +300,7 @@ The `spec` block for a `kind: auth` manifest describes a platform auth provider 
 
 | Field | Type | Purpose |
 | --- | --- | --- |
-| `configSchemaPath` | string | Path to a JSON/YAML schema that validates the `auth.config` block in the server config. |
+| `configSchemaPath` | string | Path to a JSON/YAML schema that validates the `providers.auth.<name>.config` block in the server config. |
 
 Auth providers require an executable entrypoint. Declare it under `entrypoint`.
 
@@ -325,7 +325,7 @@ The `spec` block for a `kind: indexeddb` manifest describes a persistence backen
 
 | Field | Type | Purpose |
 | --- | --- | --- |
-| `configSchemaPath` | string | Path to a JSON/YAML schema that validates the `datastores.<name>.config` block in the server config. |
+| `configSchemaPath` | string | Path to a JSON/YAML schema that validates the `providers.indexeddb.<name>.config` block in the server config. |
 
 IndexedDB providers require an executable entrypoint. Declare it under `entrypoint`.
 

@@ -6,7 +6,7 @@ Two simple secrets providers (`env` and `file`), telemetry, and audit remain bui
 
 ## Auth Providers
 
-Auth providers handle platform login. They are configured under `providers.auth` in your config file.
+Auth providers handle platform login. They are configured under `providers.auth.<name>` in your config file.
 
 | Name | Purpose |
 | --- | --- |
@@ -17,15 +17,16 @@ Auth providers handle platform login. They are configured under `providers.auth`
 ```yaml
 providers:
   auth:
-    source:
-      ref: github.com/valon-technologies/gestalt-providers/auth/google
-      version: 1.0.0
-    config:
-      allowedDomains:
-        - example.com
+    google:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/auth/google
+        version: 0.0.1-alpha.1
+      config:
+        allowedDomains:
+          - example.com
 ```
 
-To disable platform auth entirely, omit the `providers.auth` block or set `providers: { auth: { disabled: true } }`.
+To disable platform auth entirely, omit the `providers.auth` block or set `providers.auth.default.disabled: true`.
 
 ## IndexedDB Providers
 
@@ -41,7 +42,7 @@ providers:
     main:
       source:
         ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
-        version: 1.0.0
+        version: 0.0.1-alpha.2
       config:
         dsn: ${DATABASE_URL}
 ```
@@ -61,7 +62,7 @@ Two secret managers are compiled into the `gestaltd` binary and resolve `secret:
 | `env` | Resolves secrets from environment variables. Default when `providers.secrets` is omitted. |
 | `file` | Resolves secrets from files in a configured directory. Works with Kubernetes volume-mounted secrets. |
 
-For cloud backends (Google Secret Manager, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault), see [Secrets Providers](/providers/secrets#available-providers). These use a `source:` config key under `providers.secrets`.
+For cloud backends (Google Secret Manager, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault), see [Secrets Providers](/providers/secrets#available-providers). These use a `source:` config key under `providers.secrets.<name>`.
 
 ## Telemetry Providers (built-in)
 
@@ -81,8 +82,8 @@ Plugins (BigQuery, Jira, Slack, and others) are published separately from [`valo
 plugins:
   jira:
     source:
-      ref: github.com/valon-technologies/gestalt-providers/jira
-      version: 1.0.0
+      ref: github.com/valon-technologies/gestalt-providers/plugins/jira
+      version: 0.0.1-alpha.1
 ```
 
 ## Community and Custom Providers

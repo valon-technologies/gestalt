@@ -14,7 +14,7 @@ First, the YAML config file is loaded and `${ENV_VAR}` placeholders are expanded
 
 Next, Gestalt initializes the secret manager from `providers.secrets`. This is the one part of config that *cannot* use `secret://` references, because the secret manager doesn't exist yet. Credentials for the secret manager itself have to come in through `${ENV_VAR}` or `${ENV_VAR_FILE}`.
 
-Once the secret manager is ready, Gestalt resolves every `secret://` reference across the rest of the config: server settings, auth, indexeddb, telemetry, audit, and all plugin configs. The `providers.secrets.config` block is skipped to avoid a circular dependency.
+Once the secret manager is ready, Gestalt resolves every `secret://` reference across the rest of the config: server settings, auth, indexeddb, telemetry, audit, and all plugin configs. The selected secret manager's `providers.secrets.<name>.config` block is skipped to avoid a circular dependency.
 
 With secrets resolved, `server.encryptionKey` gets converted into a 32-byte AES key. A 64-character hex string is decoded directly; anything else goes through Argon2id derivation. This derived key protects all stored tokens.
 

@@ -30,7 +30,7 @@ When `providers.auth` points to a Google or OIDC auth provider, the web UI redir
 
 Public web UI bundles are configured through the `providers.ui` map.
 
-- Omit `ui` to run headless with no public UI bundles.
+- Omit `providers.ui` to run headless with no public UI bundles.
 - Add `ui.<name>` entries with `source` and explicit `path` fields to mount static SPAs under public URL prefixes.
 - UI bundles use the normal `/api/v1` and `/mcp` surfaces; there is no separate plugin-local browser route surface.
 
