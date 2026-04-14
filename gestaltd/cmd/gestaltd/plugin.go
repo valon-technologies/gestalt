@@ -35,7 +35,7 @@ func runProvider(args []string) error {
 	}
 }
 
-const defaultPlatforms = "darwin/amd64,darwin/arm64,linux/amd64,linux/arm64"
+const defaultPlatforms = "darwin/amd64,darwin/arm64,linux/amd64,linux/arm,linux/arm64"
 const allPlatformsValue = "all"
 const defaultReleaseOutputDir = "dist/"
 const releaseBinaryPrefix = "gestalt-plugin-"
