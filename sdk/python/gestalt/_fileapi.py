@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import builtins as _builtins
 import datetime as _dt
 import importlib
 import os
 from collections.abc import Iterator, Sequence
-from typing import Any
+from typing import Any, overload
 
 import grpc
 from google.protobuf.descriptor import FieldDescriptor as _FieldDescriptor
@@ -299,10 +300,10 @@ class Blob:
     def text(self) -> str:
         return self.bytes().decode("utf-8")
 
-    def array_buffer(self) -> bytes:
+    def array_buffer(self) -> _builtins.bytes:
         return self.bytes()
 
-    def bytes(self) -> bytes:
+    def bytes(self) -> _builtins.bytes:
         pb, _pb_grpc = _require_generated_fileapi_modules()
         request_type = _require_proto_type(
             pb,
@@ -316,7 +317,7 @@ class Blob:
         method = _resolve_stub_method(self._stub, "ReadBytes")
         return bytes(_extract_scalar(_grpc_call(method, request), "data", "bytes", "value"))
 
-    def stream(self) -> Iterator[bytes]:
+    def stream(self) -> Iterator[_builtins.bytes]:
         pb, _pb_grpc = _require_generated_fileapi_modules()
         request_type = _require_proto_type(pb, "ReadStreamRequest", "BlobReadRequest", "ReadRequest")
         request = request_type()
@@ -359,7 +360,13 @@ class FileList(Sequence[File]):
     def __init__(self, files: Sequence[File]) -> None:
         self._files = list(files)
 
-    def __getitem__(self, index: int) -> File:
+    @overload
+    def __getitem__(self, index: int) -> File: ...
+
+    @overload
+    def __getitem__(self, index: slice) -> Sequence[File]: ...
+
+    def __getitem__(self, index: int | slice) -> File | Sequence[File]:
         return self._files[index]
 
     def __len__(self) -> int:

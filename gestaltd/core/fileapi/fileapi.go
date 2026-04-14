@@ -57,8 +57,8 @@ func BlobRefPart(id string) BlobPart {
 }
 
 type BlobOptions struct {
-	Type     string
-	Endings  LineEndings
+	Type    string
+	Endings LineEndings
 }
 
 type FileOptions struct {

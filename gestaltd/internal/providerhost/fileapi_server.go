@@ -21,9 +21,9 @@ type fileAPIServer struct {
 	api      fileapi.FileAPI
 	idPrefix string
 
-	urlMu    sync.RWMutex
-	nextURL  int
-	urlMap   map[string]string
+	urlMu   sync.RWMutex
+	nextURL int
+	urlMap  map[string]string
 }
 
 func NewFileAPIServer(api fileapi.FileAPI, pluginName string) proto.FileAPIServer {

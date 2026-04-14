@@ -3,7 +3,7 @@ import json
 import pathlib
 import tempfile
 import unittest
-from typing import Any
+from typing import Any, cast
 from unittest import mock
 
 import grpc
@@ -407,7 +407,7 @@ class FileAPIRuntimeTests(unittest.TestCase):
     def test_servable_target_wraps_fileapi_provider(self) -> None:
         provider = self.StubFileAPIProvider()
 
-        adapter = _runtime._servable_target(provider, runtime_kind=ProviderKind.FILEAPI)
+        adapter = cast(Any, _runtime._servable_target(provider, runtime_kind=ProviderKind.FILEAPI))
 
         self.assertEqual(adapter.kind, ProviderKind.FILEAPI)
         self.assertIs(adapter.provider, provider)

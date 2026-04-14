@@ -5,6 +5,8 @@ import (
 )
 
 func TestNormalizeType(t *testing.T) {
+	t.Parallel()
+
 	if got := NormalizeType("TEXT/PLAIN"); got != "text/plain" {
 		t.Fatalf("NormalizeType = %q, want text/plain", got)
 	}
@@ -14,6 +16,8 @@ func TestNormalizeType(t *testing.T) {
 }
 
 func TestSliceBounds(t *testing.T) {
+	t.Parallel()
+
 	start, end := int64(2), int64(5)
 	gotStart, gotEnd := SliceBounds(10, &start, &end)
 	if gotStart != 2 || gotEnd != 5 {
@@ -28,6 +32,8 @@ func TestSliceBounds(t *testing.T) {
 }
 
 func TestSliceBytes(t *testing.T) {
+	t.Parallel()
+
 	start, end := int64(1), int64(4)
 	if got := string(SliceBytes([]byte("hello"), &start, &end)); got != "ell" {
 		t.Fatalf("SliceBytes = %q, want ell", got)
@@ -35,6 +41,8 @@ func TestSliceBytes(t *testing.T) {
 }
 
 func TestResolveLastModified(t *testing.T) {
+	t.Parallel()
+
 	if got := ResolveLastModified(1234); got != 1234 {
 		t.Fatalf("ResolveLastModified = %d, want 1234", got)
 	}
@@ -44,6 +52,8 @@ func TestResolveLastModified(t *testing.T) {
 }
 
 func TestPackageDataURL(t *testing.T) {
+	t.Parallel()
+
 	got := PackageDataURL("text/plain", []byte("hello"))
 	want := "data:text/plain;base64,aGVsbG8="
 	if got != want {
