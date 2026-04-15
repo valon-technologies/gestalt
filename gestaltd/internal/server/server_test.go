@@ -505,6 +505,74 @@ func TestMountedWebUIRoutes(t *testing.T) {
 	}
 }
 
+func TestMountedWebUIRoutes_PrefersNestedMount(t *testing.T) {
+	t.Parallel()
+
+	parentDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(parentDir, "index.html"), []byte("<html>parent-shell</html>"), 0o644); err != nil {
+		t.Fatalf("WriteFile parent index.html: %v", err)
+	}
+	childDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(childDir, "index.html"), []byte("<html>child-shell</html>"), 0o644); err != nil {
+		t.Fatalf("WriteFile child index.html: %v", err)
+	}
+
+	parentHandler, err := testutilWebUIHandler(parentDir)
+	if err != nil {
+		t.Fatalf("parent webui handler: %v", err)
+	}
+	childHandler, err := testutilWebUIHandler(childDir)
+	if err != nil {
+		t.Fatalf("child webui handler: %v", err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.MountedWebUIs = []server.MountedWebUI{
+			{
+				Path:    "/workplace-hub",
+				Handler: parentHandler,
+			},
+			{
+				Path:    "/workplace-hub/nyc-badges",
+				Handler: childHandler,
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/workplace-hub/nyc-badges/new-hire")
+	if err != nil {
+		t.Fatalf("GET nested mounted UI: %v", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll nested mounted UI: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), "child-shell") {
+		t.Fatalf("body = %q, want child shell", body)
+	}
+
+	resp, err = http.Get(ts.URL + "/workplace-hub/admin")
+	if err != nil {
+		t.Fatalf("GET parent mounted UI: %v", err)
+	}
+	body, err = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll parent mounted UI: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), "parent-shell") {
+		t.Fatalf("body = %q, want parent shell", body)
+	}
+}
+
 func TestMountedWebUIRoutes_HumanAuthorization(t *testing.T) {
 	t.Parallel()
 
