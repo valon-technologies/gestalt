@@ -515,13 +515,11 @@ func TestValidateStructureRejectsDuplicateAuthorizationPolicyMembers(t *testing.
 			t.Parallel()
 
 			cfg := &Config{
-				Server: ServerConfig{
-					Authorization: AuthorizationConfig{
-						Policies: map[string]HumanPolicyDef{
-							"roadmap": {
-								Default: "deny",
-								Members: tc.members,
-							},
+				Authorization: AuthorizationConfig{
+					Policies: map[string]HumanPolicyDef{
+						"roadmap": {
+							Default: "deny",
+							Members: tc.members,
 						},
 					},
 				},
@@ -2100,6 +2098,7 @@ func TestLoadAcceptsNewComponentForms(t *testing.T) {
 	cases := []struct {
 		name string
 		yaml string
+		want string
 	}{
 		{
 			name: "builtin string",
@@ -2141,6 +2140,7 @@ func TestLoadConfigValidation(t *testing.T) {
 	cases := []struct {
 		name string
 		yaml string
+		want string
 	}{
 		{
 			name: "provider with no source or surfaces",
@@ -2172,6 +2172,17 @@ providers:
         path: ./two/manifest.yaml
 `,
 		},
+		{
+			name: "legacy server authorization is rejected",
+			yaml: `
+server:
+  authorization:
+    policies:
+      sample_policy:
+        default: deny
+`,
+			want: `field authorization not found in type config.ServerConfig`,
+		},
 	}
 
 	for _, tc := range cases {
@@ -2181,6 +2192,9 @@ providers:
 			_, err := Load(path)
 			if err == nil {
 				t.Fatal("Load: expected error, got nil")
+			}
+			if tc.want != "" && !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Load error = %v, want substring %q", err, tc.want)
 			}
 		})
 	}

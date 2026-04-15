@@ -161,36 +161,6 @@ func TestBootstrap(t *testing.T) {
 		t.Fatal("expected shared invoker and capability lister to be the same instance")
 	}
 
-	t.Run("normalizes equivalent top level and legacy authorization shapes", func(t *testing.T) {
-		t.Parallel()
-
-		cfg := validConfig()
-		cfg.Authorization = config.AuthorizationConfig{
-			Policies: map[string]config.HumanPolicyDef{
-				"roadmap": {
-					Default: "deny",
-				},
-			},
-		}
-		cfg.Server.Authorization = config.AuthorizationConfig{
-			Policies: map[string]config.HumanPolicyDef{
-				"roadmap": {
-					Default: "deny",
-					Members: []config.HumanPolicyMemberDef{},
-				},
-			},
-		}
-
-		result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
-		if err != nil {
-			t.Fatalf("Bootstrap: %v", err)
-		}
-		<-result.ProvidersReady
-		if result.Authorizer == nil {
-			t.Fatal("Authorizer is nil")
-		}
-	})
-
 	t.Run("invoker uses resolved REST connections", func(t *testing.T) {
 		t.Parallel()
 
@@ -852,64 +822,39 @@ func TestBootstrapSecretResolution(t *testing.T) {
 	t.Run("resolves config secret ref in workload tokens", func(t *testing.T) {
 		t.Parallel()
 
-		tests := []struct {
-			name  string
-			apply func(*config.Config, config.AuthorizationConfig)
-		}{
-			{
-				name: "top level authorization",
-				apply: func(cfg *config.Config, authz config.AuthorizationConfig) {
-					cfg.Authorization = authz
-				},
-			},
-			{
-				name: "legacy server authorization",
-				apply: func(cfg *config.Config, authz config.AuthorizationConfig) {
-					cfg.Server.Authorization = authz
+		factories := validFactories()
+		factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
+			return &coretesting.StubSecretManager{
+				Secrets: map[string]string{"workload-token": "gst_wld_resolved-workload-token"},
+			}, nil
+		}
+		factories.Builtins = []core.Provider{
+			&coretesting.StubIntegration{N: "weather", ConnMode: core.ConnectionModeNone},
+		}
+
+		cfg := validConfig()
+		cfg.Authorization = config.AuthorizationConfig{
+			Workloads: map[string]config.WorkloadDef{
+				"triage-bot": {
+					Token: transportSecretRef("workload-token"),
+					Providers: map[string]config.WorkloadProviderDef{
+						"weather": {Allow: []string{"forecast"}},
+					},
 				},
 			},
 		}
 
-		for _, tc := range tests {
-			tc := tc
-			t.Run(tc.name, func(t *testing.T) {
-				t.Parallel()
+		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+		if err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		<-result.ProvidersReady
 
-				factories := validFactories()
-				factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
-					return &coretesting.StubSecretManager{
-						Secrets: map[string]string{"workload-token": "gst_wld_resolved-workload-token"},
-					}, nil
-				}
-				factories.Builtins = []core.Provider{
-					&coretesting.StubIntegration{N: "weather", ConnMode: core.ConnectionModeNone},
-				}
-
-				cfg := validConfig()
-				tc.apply(cfg, config.AuthorizationConfig{
-					Workloads: map[string]config.WorkloadDef{
-						"triage-bot": {
-							Token: transportSecretRef("workload-token"),
-							Providers: map[string]config.WorkloadProviderDef{
-								"weather": {Allow: []string{"forecast"}},
-							},
-						},
-					},
-				})
-
-				result, err := bootstrap.Bootstrap(ctx, cfg, factories)
-				if err != nil {
-					t.Fatalf("Bootstrap: %v", err)
-				}
-				<-result.ProvidersReady
-
-				if result.Authorizer == nil {
-					t.Fatal("Authorizer is nil")
-				}
-				if _, ok := result.Authorizer.ResolveWorkloadToken("gst_wld_resolved-workload-token"); !ok {
-					t.Fatal("expected resolved workload token to authenticate")
-				}
-			})
+		if result.Authorizer == nil {
+			t.Fatal("Authorizer is nil")
+		}
+		if _, ok := result.Authorizer.ResolveWorkloadToken("gst_wld_resolved-workload-token"); !ok {
+			t.Fatal("expected resolved workload token to authenticate")
 		}
 	})
 
@@ -1069,53 +1014,28 @@ func TestBootstrapSecretResolution(t *testing.T) {
 func TestBootstrapWorkloadAuthorizationRejectsEitherProvider(t *testing.T) {
 	t.Parallel()
 
-	tests := []struct {
-		name  string
-		apply func(*config.Config, config.AuthorizationConfig)
-	}{
-		{
-			name: "top level authorization",
-			apply: func(cfg *config.Config, authz config.AuthorizationConfig) {
-				cfg.Authorization = authz
-			},
-		},
-		{
-			name: "legacy server authorization",
-			apply: func(cfg *config.Config, authz config.AuthorizationConfig) {
-				cfg.Server.Authorization = authz
+	cfg := validConfig()
+	cfg.Authorization = config.AuthorizationConfig{
+		Workloads: map[string]config.WorkloadDef{
+			"triage-bot": {
+				Token: "gst_wld_triage-bot-token",
+				Providers: map[string]config.WorkloadProviderDef{
+					"svc": {Allow: []string{"run"}},
+				},
 			},
 		},
 	}
 
-	for _, tc := range tests {
-		tc := tc
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
+	factories := validFactories()
+	factories.Builtins = []core.Provider{
+		&coretesting.StubIntegration{N: "svc", ConnMode: core.ConnectionModeEither},
+	}
 
-			cfg := validConfig()
-			tc.apply(cfg, config.AuthorizationConfig{
-				Workloads: map[string]config.WorkloadDef{
-					"triage-bot": {
-						Token: "gst_wld_triage-bot-token",
-						Providers: map[string]config.WorkloadProviderDef{
-							"svc": {Allow: []string{"run"}},
-						},
-					},
-				},
-			})
-
-			factories := validFactories()
-			factories.Builtins = []core.Provider{
-				&coretesting.StubIntegration{N: "svc", ConnMode: core.ConnectionModeEither},
-			}
-
-			_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
-			if err == nil {
-				t.Fatal("expected error, got nil")
-			}
-			if !strings.Contains(err.Error(), `unsupported connection mode "either"`) {
-				t.Fatalf("unexpected error: %v", err)
-			}
-		})
+	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), `unsupported connection mode "either"`) {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

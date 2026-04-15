@@ -9,7 +9,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -316,7 +315,6 @@ type ServerConfig struct {
 	ArtifactsDir  string                   `yaml:"artifactsDir"`
 	Providers     ServerProvidersConfig    `yaml:"providers,omitempty"`
 	Egress        EgressConfig             `yaml:"egress,omitempty"`
-	Authorization AuthorizationConfig      `yaml:"authorization,omitempty"`
 	Admin         AdminConfig              `yaml:"admin,omitempty"`
 }
 
@@ -1392,27 +1390,7 @@ func normalizeAuthorizationConfig(cfg *Config) error {
 		return nil
 	}
 	cfg.Authorization = normalizedAuthorizationConfig(cfg.Authorization)
-	cfg.Server.Authorization = normalizedAuthorizationConfig(cfg.Server.Authorization)
-	topLevelSet := hasAuthorizationConfig(cfg.Authorization)
-	legacySet := hasAuthorizationConfig(cfg.Server.Authorization)
-	switch {
-	case topLevelSet && legacySet:
-		if !reflect.DeepEqual(cfg.Authorization, cfg.Server.Authorization) {
-			return fmt.Errorf("config validation: authorization and server.authorization may not both be set with different values")
-		}
-	case topLevelSet:
-		cfg.Server.Authorization = cfg.Authorization
-	case legacySet:
-		cfg.Authorization = cfg.Server.Authorization
-	default:
-		cfg.Authorization = AuthorizationConfig{}
-		cfg.Server.Authorization = AuthorizationConfig{}
-	}
 	return nil
-}
-
-func hasAuthorizationConfig(cfg AuthorizationConfig) bool {
-	return len(cfg.Policies) > 0 || len(cfg.Workloads) > 0
 }
 
 func normalizedAuthorizationConfig(cfg AuthorizationConfig) AuthorizationConfig {
