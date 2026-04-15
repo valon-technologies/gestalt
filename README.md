@@ -2,57 +2,80 @@
 
 [![Stability: Alpha](https://img.shields.io/badge/stability-alpha-f4d03f.svg)](https://github.com/valon-technologies/gestalt/issues)
 
-> **Alpha.** Gestalt is under active development. APIs and configuration may change between releases. We welcome feedback and bug reports via [GitHub Issues](https://github.com/valon-technologies/gestalt/issues).
+> Gestalt is under active development. APIs and configuration may change between releases. Feedback and bug reports are welcome via [GitHub Issues](https://github.com/valon-technologies/gestalt/issues).
 
-Gestalt is a platform for self-hostable, configurable integrations and tooling, with authentication and execution out-of-the-box.
+Gestalt is a self-hostable, open source platform for managing agentic tools and services, with declarative configuration and secure credential management built in.
 
-## How does Gestalt work?
+## Why Gestalt
 
-Gestalt works in three stages:
+Agents need tools. Tools need auth. Auth needs credential storage, encryption, token refresh, and scoped access control. Every team building with agents ends up solving the same infrastructure problems before they can ship.
 
-### Configure
+Gestalt handles this so individual agents and applications do not have to. A single YAML config declares which tools to expose, how users authenticate, and how credentials are managed.
 
-Define the integrations you need declaratively: which providers to enable, how users authenticate, and where secrets and tokens are stored.
+![Gestalt architecture diagram](./docs/public/images/architecture-diagram.png)
 
-### Connect
+- **Stored on infrastructure you control.** Credentials and connection data are stored, encrypted at rest, on infrastructure you control, however you configure it.
+- **Configure once, reuse everywhere.** A single YAML config replaces per-integration glue code, token management scripts, and bespoke OAuth callback servers.
+- **One definition, all harnesses.** The same operations are available over MCP, HTTP, CLI, and optional mounted web UIs for cloud agents, local coding assistants, and human operators.
+- **Pluggable by default.** Auth backends, IndexedDB storage, secrets managers, caches, telemetry, audit sinks, and public web UIs are all provider packages.
+- **Run anywhere.** Deploy on infrastructure you control with Docker, Helm, or your own container platform.
 
-Gestalt handles OAuth flows, token storage, and automatic refresh for every configured provider. Users authenticate once, and Gestalt manages their credentials from that point forward.
+## Core Concepts
 
-### Invoke
+- **`gestaltd`** is the server. It loads config, resolves providers, stores credentials and sessions, and serves the HTTP API, MCP endpoint, mounted public UIs, and the built-in admin UI.
+- **`gestalt`** is the CLI client. It helps users connect to a running Gestalt server, authenticate, invoke operations, and manage API tokens.
+- **Plugins** are provider-backed tools. They expose operations that users and agents invoke through Gestalt.
+- **Connections** define how a plugin authenticates to an upstream API on behalf of a user or shared identity.
+- **Providers** are the pluggable host components behind auth, IndexedDB, secrets, cache, telemetry, audit, and web UI bundles.
+- **Surfaces** are the ways callers reach the same operations: HTTP, MCP, CLI, and optional public web UI routes.
 
-Once connected, every provider is available through a unified gateway. The same authorization rules apply regardless of how a provider is reached.
+## What Gestalt Is Not
 
-## Why Gestalt?
+Gestalt is not a SaaS platform. It is open source and self-hostable on infrastructure you control, so you keep ownership of your data, credentials, and deployment.
 
-### Self-hosted and private
+Gestalt also does not replace your existing APIs. It sits between agents and upstream services, handling auth and credential lifecycle while your APIs stay where they are.
 
-Gestalt runs in your infrastructure. Credentials and data never leave your network.
+## Quick Start
 
-### One config, many integrations
+Install both binaries with Homebrew:
 
-A single YAML file replaces per-integration glue code, token management scripts, and bespoke OAuth callback servers. Cloud agents, local coding assistants, and other harnesses all share the same gateway and authorization platform, so you only configure your integrations once.
+```sh
+brew install valon-technologies/gestalt/gestaltd
+brew install valon-technologies/gestalt/gestalt
+```
 
-### Works with AI tooling
+Start the server:
 
-Gestalt exposes every configured integration via an optionally enabled, self-hosted MCP server, so AI agents and coding assistants can use your integrations directly. Gestalt's CLI ships with progressive disclosure, so non-technical users can work with integrations directly and effectively.
+```sh
+gestaltd
+```
 
-### Extensible
+When no config file exists, `gestaltd` generates `~/.gestaltd/config.yaml`, starts with SQLite storage via the first-party RelationalDB IndexedDB provider, enables a default HTTPBin plugin, and listens on `http://localhost:8080`.
 
-Write your own provider packages or point Gestalt at any OpenAPI spec, MCP server, or GraphQL endpoint to add a new integration plugin in minutes.
+In a second terminal, connect the CLI to the server:
 
-## Project layout
+```sh
+gestalt init
+gestalt plugins list
+gestalt plugins invoke httpbin get_ip
+```
+
+For the full walkthrough, see [Getting Started](https://gestaltd.ai/getting-started).
+
+## Repository Layout
 
 | Path | Description |
 | --- | --- |
-| [`gestaltd`](./gestaltd) | The Go server daemon. Loads config, serves the HTTP API, MCP surface, the client UI, and the built-in admin UI. |
-| [`gestalt`](./gestalt) | The Rust CLI client. Connects to a running `gestaltd` instance for authentication and operations. |
-| [`sdk`](./sdk) | Shared SDKs and provider manifest definitions. |
-| [`docs`](./docs) | The documentation site. |
-
-## Getting started
-
-See the [Getting Started](https://gestaltd.ai/getting-started) guide.
+| [`gestaltd`](./gestaltd) | Go server daemon, config loading, provider bootstrap, HTTP API, MCP surface, deployment assets, and admin UI serving code. |
+| [`gestalt`](./gestalt) | Rust CLI client for setup, auth, invocation, and token management. |
+| [`sdk`](./sdk) | Go, Python, Rust, and TypeScript SDKs plus shared protocol definitions. |
+| [`docs`](./docs) | Source for the public documentation site at `gestaltd.ai`. |
 
 ## Documentation
 
-[gestaltd.ai](https://gestaltd.ai)
+- [Overview](https://gestaltd.ai/)
+- [Getting Started](https://gestaltd.ai/getting-started)
+- [Configuration](https://gestaltd.ai/configuration)
+- [Providers](https://gestaltd.ai/providers)
+- [Deploy](https://gestaltd.ai/deploy)
+- [Contributing](./CONTRIBUTING.md)
