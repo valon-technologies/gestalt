@@ -6,7 +6,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/valon-technologies/gestalt/server/internal/config"
 )
 
 func (s *Server) routes() {
@@ -46,7 +45,6 @@ const (
 func (s *Server) mountCoreRoutes(r chi.Router, exposure metricsExposure) {
 	r.Get("/health", s.healthCheck)
 	r.Get("/ready", s.readinessCheck)
-	r.Get(config.BrowserAuthCallbackPath, s.browserLoginCallbackPage)
 	switch exposure {
 	case metricsAuthenticated:
 		r.Group(func(r chi.Router) {

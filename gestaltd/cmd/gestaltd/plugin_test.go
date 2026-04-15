@@ -720,7 +720,7 @@ func TestRun_PluginReleaseBuildsGoSourceAuthPlugin(t *testing.T) {
 	auth, err := providerhost.NewExecutableAuthProvider(context.Background(), providerhost.AuthExecConfig{
 		Command:     filepath.Join(extractDir, binaryName),
 		Name:        "auth-release",
-		CallbackURL: "https://gestalt.example.test/login/callback",
+		CallbackURL: "https://gestalt.example.test/api/v1/auth/login/callback",
 		SessionKey:  []byte("0123456789abcdef0123456789abcdef"),
 	})
 	if err != nil {
@@ -892,7 +892,7 @@ func TestRun_PluginReleaseBuildsRustSourceAuthPlugin(t *testing.T) {
 	auth, err := providerhost.NewExecutableAuthProvider(context.Background(), providerhost.AuthExecConfig{
 		Command:     filepath.Join(extractDir, binaryName),
 		Name:        "auth-release",
-		CallbackURL: "https://gestalt.example.test/login/callback",
+		CallbackURL: "https://gestalt.example.test/api/v1/auth/login/callback",
 		SessionKey:  []byte("0123456789abcdef0123456789abcdef"),
 	})
 	if err != nil {
@@ -989,7 +989,7 @@ func TestRun_PluginReleaseBuildsPythonSourceAuthPlugin(t *testing.T) {
 	auth, err := providerhost.NewExecutableAuthProvider(context.Background(), providerhost.AuthExecConfig{
 		Command:     filepath.Join(extractDir, binaryName),
 		Name:        pythonAuthReleasePluginName,
-		CallbackURL: "https://gestalt.example.test/login/callback",
+		CallbackURL: "https://gestalt.example.test/api/v1/auth/login/callback",
 		SessionKey:  []byte("0123456789abcdef0123456789abcdef"),
 	})
 	if err != nil {
@@ -1078,7 +1078,7 @@ func TestRun_PluginReleaseBuildsTypeScriptSourceAuthPlugin(t *testing.T) {
 	auth, err := providerhost.NewExecutableAuthProvider(context.Background(), providerhost.AuthExecConfig{
 		Command:     filepath.Join(extractDir, binaryName),
 		Name:        authReleasePluginName,
-		CallbackURL: "https://gestalt.example.test/login/callback",
+		CallbackURL: "https://gestalt.example.test/api/v1/auth/login/callback",
 		SessionKey:  []byte("0123456789abcdef0123456789abcdef"),
 	})
 	if err != nil {

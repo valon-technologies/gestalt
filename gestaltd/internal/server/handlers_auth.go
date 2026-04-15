@@ -356,12 +356,8 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	auditAllowed := false
 	auditErr := errors.New("login callback failed")
 	auditUserID := ""
-	deferredToBrowserCallback := false
 	providerName := s.authProviderName()
 	defer func() {
-		if deferredToBrowserCallback {
-			return
-		}
 		metricutil.RecordAuthMetrics(r.Context(), startedAt, providerName, "complete_login", auditErr != nil)
 		if auditUserID != "" {
 			s.auditHTTPEventWithUserID(r.Context(), auditUserID, principal.SourceSession.String(), s.authProviderName(), "auth.login.complete", auditAllowed, auditErr)
@@ -379,11 +375,6 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	if !s.authEnabled() {
 		auditErr = errors.New("auth is disabled")
 		writeError(w, http.StatusNotFound, "auth is disabled")
-		return
-	}
-	if s.shouldRedirectLegacyBrowserLoginCallback(r) {
-		deferredToBrowserCallback = true
-		http.Redirect(w, r, browserCallbackRedirectLocation(r), http.StatusFound)
 		return
 	}
 
@@ -472,11 +463,8 @@ func (s *Server) loginCallback(w http.ResponseWriter, r *http.Request) {
 	auditAllowed = true
 	auditErr = nil
 	if loginState != nil && loginState.NextPath != "" {
-		if isBrowserDocumentRequest(r) {
-			http.Redirect(w, r, loginState.NextPath, http.StatusFound)
-			return
-		}
-		resp["nextPath"] = loginState.NextPath
+		http.Redirect(w, r, loginState.NextPath, http.StatusFound)
+		return
 	}
 	writeJSON(w, http.StatusOK, resp)
 }
