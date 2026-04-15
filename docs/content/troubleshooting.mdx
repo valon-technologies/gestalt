@@ -81,7 +81,12 @@ Common source-package checks:
   </Tabs.Tab>
 </Tabs>
 
-A sandbox 403 means the provider process made an outbound request to a host not listed in `allowedHosts`. Add every upstream domain the plugin contacts to the allowlist in the plugin's config entry or manifest.
+A sandbox 403 means the provider process made an outbound request to a host not
+listed in `allowedHosts`. Add every upstream domain the plugin contacts to the
+allowlist in the plugin's config entry or manifest. If the deployment does not
+support executable-plugin sandboxing for that runtime, you may see startup or
+provider-load failures instead. See
+[Plugin Sandboxing](/architecture/plugin-sandboxing).
 
 An input decode error means the operation received a request body that does not match the expected schema. Check the operation's parameter definitions and ensure the caller is sending the correct types and required fields.
 

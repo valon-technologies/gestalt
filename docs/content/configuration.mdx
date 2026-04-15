@@ -116,7 +116,12 @@ Each entry can set an `alias` to rename the operation as it appears to callers.
 
 ### Egress control
 
-Every provider supports `allowedHosts` to restrict which upstream hosts it can reach. When `server.egress.defaultAction` is `deny`, providers without an explicit allowlist are blocked from all outbound requests. Executable plugin providers are additionally sandboxed at the OS level when egress restrictions are active.
+Every provider supports `allowedHosts` to declare which upstream hosts it can
+reach. When `server.egress.defaultAction` is `deny`, providers without an
+explicit allowlist are blocked from host-mediated outbound requests. Executable
+plugin providers may also use OS-level sandboxing when egress restrictions are
+active, but that path depends on runtime support and is not yet a portable
+security boundary. See [Plugin Sandboxing](/architecture/plugin-sandboxing).
 
 ```yaml
 plugins:

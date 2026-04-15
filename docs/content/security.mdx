@@ -56,7 +56,9 @@ The host resolves the caller's access token and passes it to the provider in eac
 
 ### Egress control
 
-Every provider entry supports `allowedHosts` to restrict which upstream hosts it can reach. When `server.egress.defaultAction` is `deny`, providers without an explicit allowlist are blocked from all outbound requests.
+Every provider entry supports `allowedHosts` to declare which upstream hosts it
+can reach. When `server.egress.defaultAction` is `deny`, providers without an
+explicit allowlist are blocked from host-mediated outbound requests.
 
 ```yaml
 server:
@@ -73,11 +75,16 @@ plugins:
       - "*.slack.com"
 ```
 
-Wildcards are supported (`*.example.com` matches `api.example.com`). The same check applies uniformly to REST, GraphQL, and MCP providers.
+Wildcards are supported (`*.example.com` matches `api.example.com`). The same
+check applies uniformly to REST, GraphQL, and MCP providers.
 
 ### OS-level sandbox
 
-Executable plugin providers run with additional OS-level isolation when `allowedHosts` is configured or when `server.egress.defaultAction` is `deny`.
+Executable plugin providers can run with additional OS-level isolation when
+`allowedHosts` is configured or when `server.egress.defaultAction` is `deny`.
+That isolation currently depends on host-specific runtime support, so it should
+not be treated as a portable security boundary by itself. See
+[Plugin Sandboxing](/architecture/plugin-sandboxing).
 
 **Filesystem.** On Linux, [Landlock](https://docs.kernel.org/userspace-api/landlock.html) restricts file access to system libraries, SSL certificates, and DNS configuration. Writes are limited to the socket directory and an isolated temp directory. On macOS, equivalent restrictions are applied via `sandbox-exec`.
 

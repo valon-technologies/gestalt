@@ -204,7 +204,7 @@ Both `google` and `oidc` use the same ProviderEntry shape under `providers.auth.
 | `source.version` | Required with `source.ref`. SemVer without a leading `v`. |
 | `config` | Provider-specific config passed into the auth provider. |
 | `env` | Extra environment variables passed to the provider process. |
-| `allowedHosts` | Network allowlist for sandboxed provider processes. |
+| `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
 
 ## `providers.indexeddb`
 
@@ -267,7 +267,7 @@ First-party cache providers are published at
 | `source.version` | Required with `source.ref`. SemVer without a leading `v`. |
 | `config` | Arbitrary provider-specific config passed through to the cache provider. |
 | `env` | Extra environment variables passed to the provider process. |
-| `allowedHosts` | Network allowlist for sandboxed provider processes. |
+| `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
 
 ## `providers.s3`
 
@@ -683,7 +683,7 @@ Gestalt synthesizes Go and Rust executable wrappers automatically when needed an
 | `source.version` | Required with `source.ref`. SemVer without a leading `v`. Invalid with `source.path`. |
 | `source.path` | Path to a local provider manifest. Mutually exclusive with `source.ref`. |
 | `env` | Extra environment variables passed to the provider process. |
-| `allowedHosts` | Network allowlist for sandboxed provider processes. |
+| `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
 
 ### `connections`
 
@@ -841,7 +841,11 @@ connections:
 
 ## `server.egress`
 
-`server.egress` sets the server-wide default for outbound network access. Per-provider `allowedHosts` lists control which hosts each provider can reach.
+`server.egress` sets the server-wide default for outbound network access.
+Per-provider `allowedHosts` lists declare which hosts each provider may reach.
+For executable plugins, that declaration is only a complete enforcement
+boundary when the deployment is using a supported sandboxed runtime. See
+[Plugin Sandboxing](/architecture/plugin-sandboxing).
 
 ```yaml
 server:
@@ -864,7 +868,12 @@ plugins:
 | --- | --- |
 | `defaultAction` | `allow` (default) or `deny`. Applies when a provider has no `allowedHosts`. |
 
-When `allowedHosts` is set on a provider, only listed hosts are reachable (exact match and `*.suffix` wildcards). When `allowedHosts` is empty, `defaultAction` decides: `allow` permits all outbound requests, `deny` blocks them. This applies uniformly to REST, GraphQL, MCP, and executable plugin providers. For executable plugins, `deny` also activates the OS-level sandbox even when no `allowedHosts` are configured.
+When `allowedHosts` is set on a provider, Gestalt applies that allowlist to
+host-mediated outbound checks using exact matches and `*.suffix` wildcards. When
+`allowedHosts` is empty, `defaultAction` decides: `allow` permits outbound
+requests, `deny` blocks them. For executable plugins, those rules are only a
+complete security boundary when the plugin is running inside a supported
+sandboxed runtime rather than relying on host-specific OS wrappers alone.
 
 ## `providers.ui`
 
