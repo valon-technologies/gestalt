@@ -10,6 +10,8 @@ from typing import Any, Union, get_args, get_origin, get_type_hints
 from ._api import Error, Request, Response
 from ._serialization import json_body
 
+INTERNAL_ERROR_MESSAGE = "internal error"
+
 
 @dataclass(frozen=True, slots=True)
 class OperationDefinition:
@@ -94,7 +96,7 @@ def execute_operation(
         return _error_result(error.status, error.message)
     except Exception as error:
         traceback.print_exception(error)
-        return _error_result(HTTPStatus.INTERNAL_SERVER_ERROR, str(error))
+        return _error_result(HTTPStatus.INTERNAL_SERVER_ERROR, INTERNAL_ERROR_MESSAGE)
 
 
 def decode_input(input_type: Any, params: dict[str, Any]) -> Any:

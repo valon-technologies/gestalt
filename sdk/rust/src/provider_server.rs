@@ -7,13 +7,14 @@ use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 use crate::api::{Access, Credential, Request, Response, Subject};
 use crate::catalog::object_map;
 use crate::env::CURRENT_PROTOCOL_VERSION;
-use crate::error::Error;
+use crate::error::{Error, HTTP_INTERNAL_SERVER_ERROR, INTERNAL_ERROR_MESSAGE};
 use crate::generated::v1::integration_provider_server::IntegrationProvider;
 use crate::generated::v1::{
     ExecuteRequest, GetSessionCatalogRequest, GetSessionCatalogResponse,
     OperationResult as ProtoOperationResult, PostConnectRequest, PostConnectResponse,
     ProviderMetadata, StartProviderRequest, StartProviderResponse,
 };
+use crate::rpc_status::rpc_status;
 use crate::{Provider, Router};
 
 #[derive(Clone)]
@@ -33,12 +34,20 @@ impl OperationResult {
         let status = response.status.unwrap_or(200);
         match serde_json::to_string(&response.body) {
             Ok(body) => Self { status, body },
-            Err(error) => Self::error(500, error.to_string()),
+            Err(error) => {
+                eprintln!("internal error in Gestalt operation response: {error}");
+                Self::error(HTTP_INTERNAL_SERVER_ERROR, INTERNAL_ERROR_MESSAGE)
+            }
         }
     }
 
     pub fn from_error(error: Error) -> Self {
-        Self::error(error.status().unwrap_or(500), error.message().to_owned())
+        let status = error.status().unwrap_or(HTTP_INTERNAL_SERVER_ERROR);
+        if !error.expose_message() {
+            eprintln!("internal error in Gestalt operation: {}", error.message());
+            return Self::error(HTTP_INTERNAL_SERVER_ERROR, INTERNAL_ERROR_MESSAGE);
+        }
+        Self::error(status, error.message().to_owned())
     }
 
     pub fn error(status: u16, message: impl Into<String>) -> Self {
@@ -80,7 +89,7 @@ where
         self.provider
             .configure(&request.name, object_map(request.config))
             .await
-            .map_err(|error| Status::unknown(format!("configure provider: {}", error.message())))?;
+            .map_err(|error| rpc_status("configure provider", error))?;
 
         Ok(GrpcResponse::new(StartProviderResponse {
             protocol_version: CURRENT_PROTOCOL_VERSION,
@@ -136,7 +145,7 @@ where
             .provider
             .catalog_for_request(&request)
             .await
-            .map_err(|error| Status::unknown(format!("session catalog: {}", error.message())))?;
+            .map_err(|error| rpc_status("session catalog", error))?;
 
         Ok(GrpcResponse::new(GetSessionCatalogResponse { catalog }))
     }

@@ -12,6 +12,7 @@ use crate::generated::v1::{
     ConfigureProviderRequest, ConfigureProviderResponse, HealthCheckResponse, ProviderIdentity,
     ProviderKind,
 };
+use crate::rpc_status::{rpc_error_message, rpc_status};
 use crate::secrets::SecretsProvider;
 use crate::{CURRENT_PROTOCOL_VERSION, Provider, S3Provider};
 
@@ -178,7 +179,7 @@ impl ProviderLifecycle for RuntimeServer {
         self.provider
             .configure(&request.name, config)
             .await
-            .map_err(|error| Status::unknown(format!("configure provider: {}", error.message())))?;
+            .map_err(|error| rpc_status("configure provider", error))?;
         Ok(GrpcResponse::new(ConfigureProviderResponse {
             protocol_version: CURRENT_PROTOCOL_VERSION,
         }))
@@ -195,8 +196,66 @@ impl ProviderLifecycle for RuntimeServer {
             })),
             Err(error) => Ok(GrpcResponse::new(HealthCheckResponse {
                 ready: false,
-                message: error.message().to_owned(),
+                message: rpc_error_message("health check", &error),
             })),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use tonic::Code;
+    use tonic::Request as GrpcRequest;
+
+    use super::*;
+    use crate::error::INTERNAL_ERROR_MESSAGE;
+
+    #[derive(Default)]
+    struct HiddenRuntimeProvider;
+
+    #[tonic::async_trait]
+    impl Provider for HiddenRuntimeProvider {
+        async fn configure(
+            &self,
+            _name: &str,
+            _config: serde_json::Map<String, serde_json::Value>,
+        ) -> Result<()> {
+            Err(std::io::Error::other("disk exploded").into())
+        }
+
+        async fn health_check(&self) -> Result<()> {
+            Err(std::io::Error::other("health failed").into())
+        }
+    }
+
+    #[tokio::test]
+    async fn configure_provider_sanitizes_hidden_internal_errors() {
+        let server = RuntimeServer::for_provider(Arc::new(HiddenRuntimeProvider));
+
+        let error = server
+            .configure_provider(GrpcRequest::new(ConfigureProviderRequest {
+                name: "broken".to_owned(),
+                config: None,
+                protocol_version: CURRENT_PROTOCOL_VERSION,
+            }))
+            .await
+            .expect_err("configure provider should fail");
+        assert_eq!(error.code(), Code::Unknown);
+        assert_eq!(error.message(), "configure provider: internal error");
+    }
+
+    #[tokio::test]
+    async fn health_check_sanitizes_hidden_internal_errors() {
+        let server = RuntimeServer::for_provider(Arc::new(HiddenRuntimeProvider));
+
+        let response = server
+            .health_check(GrpcRequest::new(()))
+            .await
+            .expect("health check response")
+            .into_inner();
+        assert!(!response.ready);
+        assert_eq!(response.message, INTERNAL_ERROR_MESSAGE);
     }
 }

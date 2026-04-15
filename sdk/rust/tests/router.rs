@@ -150,12 +150,61 @@ async fn fail(
     Err(gestalt::Error::internal("boom"))
 }
 
+async fn implicit_internal(
+    _provider: Arc<ErrorTestProvider>,
+    _input: EmptyInput,
+    _request: gestalt::Request,
+) -> gestalt::Result<gestalt::Response<GreetOutput>> {
+    Err(std::io::Error::other("disk exploded").into())
+}
+
+async fn not_found(
+    _provider: Arc<ErrorTestProvider>,
+    _input: EmptyInput,
+    _request: gestalt::Request,
+) -> gestalt::Result<gestalt::Response<GreetOutput>> {
+    Err(gestalt::Error::not_found("record not found"))
+}
+
+async fn explicit_500(
+    _provider: Arc<ErrorTestProvider>,
+    _input: EmptyInput,
+    _request: gestalt::Request,
+) -> gestalt::Result<gestalt::Response<GreetOutput>> {
+    Err(gestalt::Error::with_status(500, "service unavailable"))
+}
+
 async fn panic_op(
     _provider: Arc<ErrorTestProvider>,
     _input: EmptyInput,
     _request: gestalt::Request,
 ) -> gestalt::Result<gestalt::Response<GreetOutput>> {
     panic!("boom")
+}
+
+#[derive(Default)]
+struct HiddenLifecycleProvider;
+
+#[async_trait]
+impl gestalt::Provider for HiddenLifecycleProvider {
+    async fn configure(
+        &self,
+        _name: &str,
+        _config: JsonMap<String, JsonValue>,
+    ) -> gestalt::Result<()> {
+        Err(std::io::Error::other("disk exploded").into())
+    }
+
+    fn supports_session_catalog(&self) -> bool {
+        true
+    }
+
+    async fn catalog_for_request(
+        &self,
+        _request: &gestalt::Request,
+    ) -> gestalt::Result<Option<gestalt::Catalog>> {
+        Err(std::io::Error::other("catalog exploded").into())
+    }
 }
 
 fn error_test_router() -> gestalt::Result<gestalt::Router<ErrorTestProvider>> {
@@ -170,6 +219,18 @@ fn error_test_router() -> gestalt::Result<gestalt::Router<ErrorTestProvider>> {
         .register(
             gestalt::Operation::<EmptyInput, GreetOutput>::new("error"),
             fail,
+        )?
+        .register(
+            gestalt::Operation::<EmptyInput, GreetOutput>::new("implicit_error"),
+            implicit_internal,
+        )?
+        .register(
+            gestalt::Operation::<EmptyInput, GreetOutput>::new("not_found"),
+            not_found,
+        )?
+        .register(
+            gestalt::Operation::<EmptyInput, GreetOutput>::new("explicit_500"),
+            explicit_500,
         )?
         .register(
             gestalt::Operation::<EmptyInput, GreetOutput>::new("panic"),
@@ -255,6 +316,39 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
     assert_eq!(handler_error.status, 500);
     assert_eq!(handler_error.body, r#"{"error":"boom"}"#);
 
+    let implicit_handler_error = server
+        .execute(GrpcRequest::new(ExecuteRequest {
+            operation: "implicit_error".to_owned(),
+            ..ExecuteRequest::default()
+        }))
+        .await
+        .expect("execute implicit_error")
+        .into_inner();
+    assert_eq!(implicit_handler_error.status, 500);
+    assert_eq!(implicit_handler_error.body, r#"{"error":"internal error"}"#);
+
+    let not_found = server
+        .execute(GrpcRequest::new(ExecuteRequest {
+            operation: "not_found".to_owned(),
+            ..ExecuteRequest::default()
+        }))
+        .await
+        .expect("execute not_found")
+        .into_inner();
+    assert_eq!(not_found.status, 404);
+    assert_eq!(not_found.body, r#"{"error":"record not found"}"#);
+
+    let explicit_500 = server
+        .execute(GrpcRequest::new(ExecuteRequest {
+            operation: "explicit_500".to_owned(),
+            ..ExecuteRequest::default()
+        }))
+        .await
+        .expect("execute explicit_500")
+        .into_inner();
+    assert_eq!(explicit_500.status, 500);
+    assert_eq!(explicit_500.body, r#"{"error":"service unavailable"}"#);
+
     let panic = server
         .execute(GrpcRequest::new(ExecuteRequest {
             operation: "panic".to_owned(),
@@ -264,5 +358,36 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
         .expect("execute panic")
         .into_inner();
     assert_eq!(panic.status, 500);
-    assert_eq!(panic.body, r#"{"error":"boom"}"#);
+    assert_eq!(panic.body, r#"{"error":"internal error"}"#);
+}
+
+#[tokio::test]
+async fn lifecycle_rpcs_sanitize_hidden_internal_errors() {
+    let server = gestalt::ProviderServer::new(
+        Arc::new(HiddenLifecycleProvider),
+        gestalt::Router::<HiddenLifecycleProvider>::new(),
+    );
+
+    let configure_error = server
+        .start_provider(GrpcRequest::new(StartProviderRequest {
+            name: "broken".to_owned(),
+            config: None,
+            protocol_version: gestalt::CURRENT_PROTOCOL_VERSION,
+        }))
+        .await
+        .expect_err("start provider should fail");
+    assert_eq!(configure_error.code(), tonic::Code::Unknown);
+    assert_eq!(
+        configure_error.message(),
+        "configure provider: internal error"
+    );
+
+    let catalog_error = server
+        .get_session_catalog(GrpcRequest::new(
+            gestalt::proto::v1::GetSessionCatalogRequest::default(),
+        ))
+        .await
+        .expect_err("get session catalog should fail");
+    assert_eq!(catalog_error.code(), tonic::Code::Unknown);
+    assert_eq!(catalog_error.message(), "session catalog: internal error");
 }

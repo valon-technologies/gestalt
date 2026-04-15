@@ -16,6 +16,9 @@ on:
 
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   python-sdk:
     name: Python SDK Checks

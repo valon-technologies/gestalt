@@ -316,6 +316,22 @@ class MainEntrypointTests(unittest.TestCase):
         self.assertEqual(catalog.operations[0].method, "POST")
         self.assertEqual(list(catalog.operations[0].allowed_roles), ["viewer", "admin"])
 
+    def test_provider_servicer_sanitizes_unhandled_execute_exceptions(self) -> None:
+        plugin = Plugin("source-name")
+
+        @plugin.operation
+        def broken() -> None:
+            raise RuntimeError("sensitive details")
+
+        servicer = _runtime._provider_servicer(plugin=plugin)
+        execute_response = servicer.Execute(
+            plugin_pb2.ExecuteRequest(operation="broken"),
+            mock.Mock(),
+        )
+
+        self.assertEqual(execute_response.status, 500)
+        self.assertEqual(json.loads(execute_response.body), {"error": "internal error"})
+
     def test_provider_servicer_rejects_missing_session_catalog_support(self) -> None:
         plugin = Plugin("source-name")
         servicer = _runtime._provider_servicer(plugin=plugin)

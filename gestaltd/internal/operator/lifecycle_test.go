@@ -2358,8 +2358,8 @@ print(json.dumps({
 	if body["explode_status"] != float64(http.StatusInternalServerError) {
 		t.Fatalf("explode_status = %v, want %d", body["explode_status"], http.StatusInternalServerError)
 	}
-	if explodePayload["error"] != "boom" {
-		t.Fatalf("explode error = %v, want boom", explodePayload["error"])
+	if explodePayload["error"] != "internal error" {
+		t.Fatalf("explode error = %v, want internal error", explodePayload["error"])
 	}
 	listPayload, ok := body["list_body"].(map[string]any)
 	if !ok {

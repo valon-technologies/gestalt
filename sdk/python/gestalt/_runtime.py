@@ -20,6 +20,7 @@ from ._api import Access, Credential, Request, Subject
 from ._bootstrap import parse_plugin_target, read_bundled_plugin_config
 from ._cache import CacheEntry
 from ._catalog import catalog_to_proto
+from ._operations import INTERNAL_ERROR_MESSAGE
 from ._plugin import Plugin, _module_plugin
 from ._providers import (
     AuthProvider,
@@ -405,7 +406,7 @@ def _provider_servicer(*, plugin: Plugin) -> Any:
             except Exception as error:
                 traceback.print_exception(error)
                 status = HTTPStatus.INTERNAL_SERVER_ERROR
-                body = json_body({"error": str(error)})
+                body = json_body({"error": INTERNAL_ERROR_MESSAGE})
                 return plugin_pb2.OperationResult(status=status, body=body)
             return plugin_pb2.OperationResult(status=result.status, body=result.body)
 
