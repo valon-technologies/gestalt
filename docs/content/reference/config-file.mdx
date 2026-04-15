@@ -45,7 +45,7 @@ and default artifact directories stay rooted at the leftmost config file.
 
 Several fields carry defaults when omitted: `server.public.port` defaults to `8080`; the runtime secrets manager defaults to builtin `env` when `providers.secrets` is omitted; `providers.telemetry.default` defaults to builtin `stdout`; and `providers.audit.default` defaults to builtin `inherit`. Structured secret refs are resolved during bootstrap, not during YAML parsing.
 
-`authorization` is the canonical location for shared human and workload access policy. Existing deployments may continue to use `server.authorization` as a deprecated compatibility alias; Gestalt normalizes it into the top-level block during config load and bootstrap.
+`authorization` configures shared human and workload access policy at the top level.
 
 ### Layered example
 
