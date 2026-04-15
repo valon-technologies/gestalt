@@ -6,8 +6,8 @@ This page covers building custom S3 providers. If you only need to configure
 an object store for a deployment, use [Providers > S3](/providers/s3).
 
 Gestalt's S3 provider contract models the portable S3-compatible object API:
-object metadata, streaming reads and writes, prefix listing, object copy, and
-presigning. It intentionally excludes bucket administration, IAM policy
+object metadata, streaming reads and writes, prefix listing, server-side copy,
+and presigning. It intentionally excludes bucket administration, IAM policy
 management, and other control-plane features that do not transport cleanly
 across S3-compatible backends.
 
@@ -42,84 +42,198 @@ Implement the `S3` gRPC service:
 <Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
   <Tabs.Tab>
     ```go
-    package minio
+    package s3provider
 
     import (
     	"context"
+
     	gestalt "github.com/valon-technologies/gestalt/sdk/go"
     	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+    	"google.golang.org/grpc/codes"
+    	"google.golang.org/grpc/status"
     	"google.golang.org/protobuf/types/known/emptypb"
     )
 
     type Provider struct{}
 
     func (p *Provider) Configure(_ context.Context, _ string, config map[string]any) error {
+    	_ = config
     	return nil
     }
 
     func (p *Provider) HeadObject(ctx context.Context, req *proto.HeadObjectRequest) (*proto.HeadObjectResponse, error) {
-    	return nil, nil
+    	_ = ctx
+    	_ = req
+    	return nil, status.Error(codes.Unimplemented, "todo")
     }
 
     func (p *Provider) ReadObject(req *proto.ReadObjectRequest, stream proto.S3_ReadObjectServer) error {
-    	return nil
+    	_ = req
+    	_ = stream
+    	return status.Error(codes.Unimplemented, "todo")
     }
 
     func (p *Provider) WriteObject(stream proto.S3_WriteObjectServer) error {
-    	return nil
+    	_ = stream
+    	return status.Error(codes.Unimplemented, "todo")
     }
 
     func (p *Provider) DeleteObject(context.Context, *proto.DeleteObjectRequest) (*emptypb.Empty, error) {
-    	return &emptypb.Empty{}, nil
+    	return nil, status.Error(codes.Unimplemented, "todo")
     }
 
     func (p *Provider) ListObjects(context.Context, *proto.ListObjectsRequest) (*proto.ListObjectsResponse, error) {
-    	return nil, nil
+    	return nil, status.Error(codes.Unimplemented, "todo")
     }
 
     func (p *Provider) CopyObject(context.Context, *proto.CopyObjectRequest) (*proto.CopyObjectResponse, error) {
-    	return nil, nil
+    	return nil, status.Error(codes.Unimplemented, "todo")
     }
 
     func (p *Provider) PresignObject(context.Context, *proto.PresignObjectRequest) (*proto.PresignObjectResponse, error) {
-    	return nil, nil
+    	return nil, status.Error(codes.Unimplemented, "todo")
     }
 
     func main() {
-    	_ = gestalt.ServeS3Provider(context.Background(), &Provider{})
+    	if err := gestalt.ServeS3Provider(context.Background(), &Provider{}); err != nil {
+    		panic(err)
+    	}
     }
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```python
+    from collections.abc import Iterator
+
     import gestalt
+    from gestalt.gen.v1 import s3_pb2
 
     class MinIOS3(gestalt.S3Provider):
         def configure(self, name: str, config: dict[str, object]) -> None:
+            self.name = name
             self.endpoint = str(config["endpoint"])
 
-        def head_object(self, request: object) -> object:
-            ...
+        def HeadObject(
+            self,
+            request: s3_pb2.HeadObjectRequest,
+            context,
+        ) -> s3_pb2.HeadObjectResponse:
+            raise NotImplementedError
 
-        def read_object(self, request: object):
-            ...
+        def ReadObject(
+            self,
+            request: s3_pb2.ReadObjectRequest,
+            context,
+        ) -> Iterator[s3_pb2.ReadObjectChunk]:
+            raise NotImplementedError
 
-        def write_object(self, requests):
-            ...
+        def WriteObject(self, request_iterator, context) -> s3_pb2.WriteObjectResponse:
+            raise NotImplementedError
+
+        def DeleteObject(self, request: s3_pb2.DeleteObjectRequest, context):
+            raise NotImplementedError
+
+        def ListObjects(
+            self,
+            request: s3_pb2.ListObjectsRequest,
+            context,
+        ) -> s3_pb2.ListObjectsResponse:
+            raise NotImplementedError
+
+        def CopyObject(
+            self,
+            request: s3_pb2.CopyObjectRequest,
+            context,
+        ) -> s3_pb2.CopyObjectResponse:
+            raise NotImplementedError
+
+        def PresignObject(
+            self,
+            request: s3_pb2.PresignObjectRequest,
+            context,
+        ) -> s3_pb2.PresignObjectResponse:
+            raise NotImplementedError
+
+    if __name__ == "__main__":
+        MinIOS3().serve()
     ```
   </Tabs.Tab>
   <Tabs.Tab>
     ```rust
+    use std::pin::Pin;
+
+    use futures_core::Stream;
+    use gestalt::{self, proto::v1 as proto};
+    use tonic::{Request, Response, Status};
+
     #[derive(Default)]
     pub struct MinioS3;
 
     #[gestalt::async_trait]
     impl gestalt::S3Provider for MinioS3 {
+        async fn configure(
+            &self,
+            _name: &str,
+            _config: serde_json::Map<String, serde_json::Value>,
+        ) -> gestalt::Result<()> {
+            Ok(())
+        }
+    }
+
+    type ReadObjectStream =
+        Pin<Box<dyn Stream<Item = Result<proto::ReadObjectChunk, Status>> + Send>>;
+
+    #[gestalt::async_trait]
+    impl proto::s3_server::S3 for MinioS3 {
+        type ReadObjectStream = ReadObjectStream;
+
         async fn head_object(
             &self,
-            request: proto::HeadObjectRequest,
-        ) -> gestalt::Result<proto::HeadObjectResponse> {
-            todo!()
+            _request: Request<proto::HeadObjectRequest>,
+        ) -> Result<Response<proto::HeadObjectResponse>, Status> {
+            Err(Status::unimplemented("todo"))
+        }
+
+        async fn read_object(
+            &self,
+            _request: Request<proto::ReadObjectRequest>,
+        ) -> Result<Response<Self::ReadObjectStream>, Status> {
+            Err(Status::unimplemented("todo"))
+        }
+
+        async fn write_object(
+            &self,
+            _request: Request<tonic::Streaming<proto::WriteObjectRequest>>,
+        ) -> Result<Response<proto::WriteObjectResponse>, Status> {
+            Err(Status::unimplemented("todo"))
+        }
+
+        async fn delete_object(
+            &self,
+            _request: Request<proto::DeleteObjectRequest>,
+        ) -> Result<Response<()>, Status> {
+            Err(Status::unimplemented("todo"))
+        }
+
+        async fn list_objects(
+            &self,
+            _request: Request<proto::ListObjectsRequest>,
+        ) -> Result<Response<proto::ListObjectsResponse>, Status> {
+            Err(Status::unimplemented("todo"))
+        }
+
+        async fn copy_object(
+            &self,
+            _request: Request<proto::CopyObjectRequest>,
+        ) -> Result<Response<proto::CopyObjectResponse>, Status> {
+            Err(Status::unimplemented("todo"))
+        }
+
+        async fn presign_object(
+            &self,
+            _request: Request<proto::PresignObjectRequest>,
+        ) -> Result<Response<proto::PresignObjectResponse>, Status> {
+            Err(Status::unimplemented("todo"))
         }
     }
 
@@ -128,20 +242,76 @@ Implement the `S3` gRPC service:
   </Tabs.Tab>
   <Tabs.Tab>
     ```ts
-    import { defineS3Provider } from "@valon-technologies/gestalt";
+    import { PresignMethod, defineS3Provider } from "@valon-technologies/gestalt";
 
     export const provider = defineS3Provider({
       async configure(name, config) {
-        this.endpoint = String(config.endpoint);
+        void name;
+        void config.endpoint;
       },
 
-      async headObject(request) {
-        return {};
+      async headObject(ref) {
+        return {
+          ref,
+          etag: "",
+          size: 0n,
+          contentType: "",
+          lastModified: new Date(),
+          metadata: {},
+          storageClass: "",
+        };
+      },
+
+      async readObject(ref) {
+        return {
+          meta: await this.headObject(ref),
+          body: new Uint8Array(),
+        };
+      },
+
+      async writeObject(ref, body, options) {
+        void body;
+        void options;
+        return await this.headObject(ref);
+      },
+
+      async deleteObject(ref) {
+        void ref;
+      },
+
+      async listObjects(options) {
+        void options;
+        return {
+          objects: [],
+          commonPrefixes: [],
+          nextContinuationToken: "",
+          hasMore: false,
+        };
+      },
+
+      async copyObject(source, destination, options) {
+        void source;
+        void options;
+        return await this.headObject(destination);
+      },
+
+      async presignObject(ref, options) {
+        return {
+          url: `https://example.invalid/${ref.bucket}/${encodeURIComponent(ref.key)}`,
+          method: options?.method ?? PresignMethod.Get,
+          headers: { ...(options?.headers ?? {}) },
+          expiresAt: new Date(Date.now() + 60_000),
+        };
       },
     });
     ```
   </Tabs.Tab>
 </Tabs>
+
+Python S3 providers implement the generated `HeadObject`, `ReadObject`,
+`WriteObject`, `DeleteObject`, `ListObjects`, `CopyObject`, and
+`PresignObject` methods from `gestalt.gen.v1.s3_pb2_grpc.S3Servicer`.
+`gestalt.S3Provider` adds the runtime lifecycle wiring and `serve()` helper.
 
 ## Plugin SDK
 
@@ -168,17 +338,44 @@ _ = body
 
 The same contract exists across Go, Python, Rust, and TypeScript:
 
-- connect to the default binding with `S3()` / `new S3()` / `S3.connect()`
+- connect to the default binding with `S3()` / `new S3()` /
+  `S3::connect().await`
 - connect to a named binding with `S3("archive")` or its language equivalent
-- operate on object handles with `stat`, `bytes` / `text` / `json`, `write`, `delete`, and `presign`
+- operate on object handles with `stat`, `bytes` / `text` / `json`, `write`,
+  `delete`, and `presign`
+
+## Deploying the provider
+
+Custom S3 providers are wired into Gestalt the same way as first-party ones:
+
+```yaml
+providers:
+  s3:
+    assets:
+      source:
+        path: ./providers/s3/custom/manifest.yaml
+      config:
+        endpoint: http://127.0.0.1:9000
+        region: us-east-1
+
+plugins:
+  media:
+    source:
+      path: ./plugins/media/manifest.yaml
+    s3:
+      - assets
+```
 
 ## Implementation notes
 
 - Treat object references as `{bucket, key, version_id}` values, not filesystem paths.
 - Keep reads and writes streaming. Do not require the caller to buffer the full object in memory.
 - Preserve backend metadata that fits the portable model: `etag`, `size`, `content_type`, `last_modified`, `metadata`, and `storage_class`.
-- Use `FailedPrecondition` for conditional-write failures and `NotFound` for missing objects so SDK error mapping stays portable.
-- Prefer implementing multipart upload and backend retries internally instead of extending the public gRPC surface unless the caller truly needs those controls.
+- `CopyObject` conditionals apply to the source object, not the destination object.
+- Map missing objects to `NotFound`, conditional failures to `FailedPrecondition`, and invalid ranges to `OutOfRange` so SDK error mapping stays portable.
+- `PresignObject` should return only caller-required headers. Do not leak transport-generated headers such as `Host`.
+- Implement multipart upload and multipart copy internally when the backend needs them, or reject above the single-request S3 limit explicitly. Do not silently rely on backend-specific `PutObject` / `CopyObject` failures.
+- Plugin-scoped presigning is disabled by the host transport because signed URLs would expose the internal namespace prefix used to isolate plugin data.
 
 ## What to read next
 
