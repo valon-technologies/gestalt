@@ -1,7 +1,6 @@
 package server
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
 
@@ -208,12 +207,4 @@ func browserCallbackRedirectLocation(r *http.Request) string {
 		target += "?" + rawQuery
 	}
 	return target
-}
-
-func browserLoginCallbackPathForBase(baseURL string) string {
-	baseURL = strings.TrimRight(baseURL, "/")
-	if baseURL == "" {
-		return config.BrowserAuthCallbackPath
-	}
-	return fmt.Sprintf("%s%s", baseURL, config.BrowserAuthCallbackPath)
 }
