@@ -641,16 +641,18 @@
         <span class="label-text">Admin</span>
         <h1>Control surface</h1>
         <p>
-          Inspect live Prometheus telemetry and manage plugin-scoped human
-          authorization from the same protected surface. Static policy members
-          remain authoritative; dynamic grants only extend access where the
-          plugin already declares an authorization policy.
+          Inspect live Prometheus telemetry, manage plugin-scoped human
+          authorization, and maintain built-in Gestalt admins from the same
+          protected surface. Static policy members remain authoritative;
+          dynamic grants only extend access where the plugin or admin surface
+          already declares an authorization policy.
         </p>
       </section>
 
       <nav class="tab-nav animate-fade-in-up" style="animation-delay:40ms" aria-label="Admin views">
         <button id="tab-overview" class="tab-btn" type="button" data-tab="overview" aria-selected="true">Overview</button>
         <button id="tab-authorization" class="tab-btn" type="button" data-tab="authorization" aria-selected="false">Authorization</button>
+        <button id="tab-admins" class="tab-btn" type="button" data-tab="admins" aria-selected="false">Admins</button>
       </nav>
 
       <section id="panel-overview" class="tab-panel" data-tab-panel="overview">
@@ -835,8 +837,99 @@
           </article>
         </section>
       </section>
+
+      <section id="panel-admins" class="tab-panel" data-tab-panel="admins" hidden>
+        <section class="status animate-fade-in-up" style="animation-delay:60ms" id="admin-members-status">Loading Gestalt admins...</section>
+
+        <section class="card controls animate-fade-in-up" style="animation-delay:80ms">
+          <div class="control-cluster">
+            <span class="label-text">Built-in admin access</span>
+            <button class="action-btn secondary" type="button" id="admin-members-refresh-button">Refresh</button>
+          </div>
+
+          <p class="metric-note controls-note">
+            Dynamic Gestalt admins are evaluated after the static
+            <code>server.admin.authorizationPolicy</code> members. At least one
+            static <code>admin</code> role must remain configured so recovery is
+            always possible if dynamic grants are removed.
+          </p>
+        </section>
+
+        <section class="summary-grid animate-fade-in-up" style="animation-delay:100ms">
+          <article class="card summary-card">
+            <span class="label-text">Effective rows</span>
+            <div class="metric-value" id="admin-members-effective-count">--</div>
+            <p class="metric-note">Rows that currently contribute to admin access decisions.</p>
+          </article>
+          <article class="card summary-card">
+            <span class="label-text">Static admins</span>
+            <div class="metric-value" id="admin-members-static-count">--</div>
+            <p class="metric-note">Config-defined seed admins that remain authoritative.</p>
+          </article>
+          <article class="card summary-card">
+            <span class="label-text">Dynamic admins</span>
+            <div class="metric-value" id="admin-members-dynamic-count">--</div>
+            <p class="metric-note">Persisted built-in admin grants from the admin API.</p>
+          </article>
+          <article class="card summary-card">
+            <span class="label-text">Shadowed grants</span>
+            <div class="metric-value" id="admin-members-shadowed-count">--</div>
+            <p class="metric-note">Dynamic rows hidden by a static admin membership match.</p>
+          </article>
+        </section>
+
+        <section class="auth-grid animate-fade-in-up" style="animation-delay:120ms">
+          <article class="card panel-card">
+            <span class="label-text">Gestalt admins</span>
+            <h2>Add or update a built-in admin</h2>
+            <p class="metric-note auth-form-copy">
+              Roles are stored as opaque strings and checked against the
+              built-in admin route's existing <code>allowedRoles</code> rules.
+              Only callers with an allowed built-in admin role can mutate these rows.
+            </p>
+
+            <form id="admin-members-form" class="auth-form">
+              <label class="control-group" for="admin-members-email-input">
+                <span class="label-text">Email</span>
+                <input class="text-input" id="admin-members-email-input" name="email" type="email" autocomplete="email" placeholder="admin@example.test" />
+              </label>
+
+              <label class="control-group" for="admin-members-role-input">
+                <span class="label-text">Role</span>
+                <input class="text-input" id="admin-members-role-input" name="role" list="admin-members-role-options" placeholder="role-name" />
+              </label>
+
+              <button class="action-btn" type="submit" id="admin-members-submit-button">Save admin grant</button>
+            </form>
+
+            <p class="metric-note inline-note" id="admin-members-form-note">
+              Add a new dynamic Gestalt admin or update an existing dynamic admin role.
+            </p>
+          </article>
+
+          <article class="card panel-card">
+            <span class="label-text">Effective access</span>
+            <h2>Built-in admin members</h2>
+            <div class="member-table-wrap">
+              <table class="member-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Principal</th>
+                    <th scope="col">Role</th>
+                    <th scope="col">Source</th>
+                    <th scope="col">State</th>
+                    <th scope="col">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-members-body"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+      </section>
     </main>
     <datalist id="authorization-role-options"></datalist>
+    <datalist id="admin-members-role-options"></datalist>
     <script src="./echarts.min.js"></script>
     <script>
       (function () {
@@ -895,6 +988,16 @@
         let authPendingReload = false;
         let selectedPluginName = "";
         let authMembersRequestToken = 0;
+        let adminMembers = [];
+        let adminLoaded = false;
+        let adminLoading = false;
+        let adminSaving = false;
+        let adminDeletingUserID = "";
+        let adminPendingReload = false;
+        let adminMembersRequestToken = 0;
+        let adminAvailable = true;
+        let adminCanWrite = false;
+        let adminLoadErrorMessage = "";
 
         function byId(id) {
           return document.getElementById(id);
@@ -916,6 +1019,12 @@
           el.textContent = message;
         }
 
+        function setAdminMembersStatus(message, kind) {
+          var el = byId("admin-members-status");
+          el.className = kind ? "status " + kind : "status";
+          el.textContent = message;
+        }
+
         function clearAuthPendingReload() {
           authPendingReload = false;
         }
@@ -925,8 +1034,21 @@
           setAuthStatus(message, "error");
         }
 
+        function clearAdminMembersPendingReload() {
+          adminPendingReload = false;
+        }
+
+        function markAdminMembersPendingReload(message) {
+          adminPendingReload = true;
+          setAdminMembersStatus(message, "error");
+        }
+
         function normalizeTabKey(value) {
-          return value === "authorization" || value === "members" ? "authorization" : "overview";
+          return value === "authorization" || value === "members"
+            ? "authorization"
+            : value === "admins"
+              ? "admins"
+              : "overview";
         }
 
         function normalizePluginName(value) {
@@ -935,7 +1057,13 @@
 
         function updateURLState() {
           const url = new URL(window.location.href);
-          url.searchParams.set("tab", activeTabKey === "authorization" ? "members" : "overview");
+          if (activeTabKey === "authorization") {
+            url.searchParams.set("tab", "members");
+          } else if (activeTabKey === "admins") {
+            url.searchParams.set("tab", "admins");
+          } else {
+            url.searchParams.set("tab", "overview");
+          }
           if (selectedPluginName) {
             url.searchParams.set("plugin", selectedPluginName);
           } else {
@@ -945,7 +1073,7 @@
         }
 
         function applyActiveTab() {
-          ["overview", "authorization"].forEach(function (key) {
+          ["overview", "authorization", "admins"].forEach(function (key) {
             const button = byId("tab-" + key);
             const panel = byId("panel-" + key);
             const active = key === activeTabKey;
@@ -960,6 +1088,9 @@
           if (activeTabKey === "authorization" && !authLoaded && !authLoading) {
             loadAuthorizationPlugins();
           }
+          if (activeTabKey === "admins" && !adminLoaded && !adminLoading) {
+            loadAdminMembers();
+          }
         }
 
         function setActiveTab(nextKey) {
@@ -969,7 +1100,7 @@
         }
 
         function bindTabs() {
-          ["overview", "authorization"].forEach(function (key) {
+          ["overview", "authorization", "admins"].forEach(function (key) {
             const button = byId("tab-" + key);
             if (!button) return;
             button.addEventListener("click", function () {
@@ -1039,7 +1170,7 @@
             throw error;
           }
 
-          return { status: response.status, payload: payload };
+          return { status: response.status, payload: payload, headers: response.headers };
         }
 
         function formatCount(value) {
@@ -1163,6 +1294,32 @@
             }
           });
           const current = String(byId("authorization-role-input").value || "").trim();
+          if (current) {
+            values.add(current);
+          }
+          return Array.from(values).sort();
+        }
+
+        function adminStaticEmails() {
+          const emails = new Set();
+          adminMembers.forEach(function (row) {
+            if (!row || row.source !== "static") return;
+            const email = normalizedEmail(row.email || (row.selectorKind === "email" ? row.selectorValue : ""));
+            if (email) {
+              emails.add(email);
+            }
+          });
+          return emails;
+        }
+
+        function adminRoleSuggestions() {
+          const values = new Set();
+          adminMembers.forEach(function (row) {
+            if (row && typeof row.role === "string" && row.role.trim()) {
+              values.add(row.role.trim());
+            }
+          });
+          const current = String(byId("admin-members-role-input").value || "").trim();
           if (current) {
             values.add(current);
           }
@@ -1316,6 +1473,169 @@
           updateAuthorizationFormState();
         }
 
+        function compareAdminMemberRows(left, right) {
+          if ((left.source || "") !== (right.source || "")) {
+            return (left.source || "").localeCompare(right.source || "");
+          }
+          if ((left.selectorKind || "") !== (right.selectorKind || "")) {
+            return (left.selectorKind || "").localeCompare(right.selectorKind || "");
+          }
+          if ((left.selectorValue || "") !== (right.selectorValue || "")) {
+            return (left.selectorValue || "").localeCompare(right.selectorValue || "");
+          }
+          return (left.role || "").localeCompare(right.role || "");
+        }
+
+        function sortAdminMembers(rows) {
+          rows.sort(compareAdminMemberRows);
+          return rows;
+        }
+
+        function upsertDynamicAdminMember(row) {
+          if (!row || !row.userId) return;
+          const next = adminMembers.filter(function (existing) {
+            return !(existing && existing.source === "dynamic" && existing.userId === row.userId);
+          });
+          next.push(row);
+          adminMembers = sortAdminMembers(next);
+        }
+
+        function removeDynamicAdminMember(userID) {
+          adminMembers = adminMembers.filter(function (row) {
+            return !(row && row.source === "dynamic" && row.userId === userID);
+          });
+        }
+
+        function renderAdminMembersRows() {
+          const body = byId("admin-members-body");
+          const roleOptions = byId("admin-members-role-options");
+          roleOptions.textContent = "";
+          adminRoleSuggestions().forEach(function (role) {
+            const option = document.createElement("option");
+            option.value = role;
+            roleOptions.appendChild(option);
+          });
+
+          body.textContent = "";
+          if (adminLoading && adminMembers.length === 0) {
+            const row = document.createElement("tr");
+            row.innerHTML = '<td colspan="5"><div class="empty-state"><p class="metric-note">Loading built-in admin members...</p></div></td>';
+            body.appendChild(row);
+            return;
+          }
+          if (!adminAvailable && adminLoaded) {
+            const row = document.createElement("tr");
+            row.innerHTML = '<td colspan="5"><div class="empty-state"><p class="metric-note">Dynamic built-in admin management is unavailable on this server.</p></div></td>';
+            body.appendChild(row);
+            return;
+          }
+          if (adminLoadErrorMessage && adminMembers.length === 0) {
+            const row = document.createElement("tr");
+            row.innerHTML = '<td colspan="5"><div class="empty-state"><p class="metric-note">The last refresh failed. Use Refresh to retry.</p></div></td>';
+            body.appendChild(row);
+            return;
+          }
+          if (adminMembers.length === 0) {
+            const row = document.createElement("tr");
+            row.innerHTML = '<td colspan="5"><div class="empty-state"><p class="metric-note">No built-in admin members found.</p></div></td>';
+            body.appendChild(row);
+            return;
+          }
+
+          adminMembers.forEach(function (row) {
+            const tr = document.createElement("tr");
+            const sourceClass = row.source === "static" ? "source-static" : "source-dynamic";
+            const stateClass = row.effective ? "state-effective" : "state-shadowed";
+            const stateLabel = row.effective ? "Effective" : "Shadowed";
+            const mutableLabel = row.mutable ? "Mutable" : "Locked";
+            const actionDisabled =
+              !row.mutable ||
+              !row.userId ||
+              adminDeletingUserID === row.userId ||
+              !adminCanWrite ||
+              adminLoading ||
+              adminSaving;
+            tr.innerHTML =
+              '<td><div class="principal-value"></div><div class="principal-meta"></div></td>' +
+              '<td><code></code></td>' +
+              '<td><div class="pill-row"><span class="pill ' + sourceClass + '"></span><span class="pill ' + (row.mutable ? "" : "locked") + '"></span></div></td>' +
+              '<td><div class="pill-row"><span class="pill ' + stateClass + '"></span></div><div class="principal-meta state-copy"></div></td>' +
+              '<td><button class="danger-btn" type="button">Remove</button></td>';
+            tr.querySelector(".principal-value").textContent = principalLabel(row);
+            tr.querySelector(".principal-meta").textContent = principalMeta(row);
+            tr.querySelector("code").textContent = row.role || "";
+            const pills = tr.querySelectorAll(".pill");
+            pills[0].textContent = row.source || "";
+            pills[1].textContent = mutableLabel;
+            pills[2].textContent = stateLabel;
+            if (!row.effective && row.shadowedBy) {
+              tr.querySelector(".state-copy").textContent = "Hidden by " + row.shadowedBy;
+            }
+            const button = tr.querySelector("button");
+            if (actionDisabled) {
+              button.disabled = true;
+            }
+            if (row.mutable && row.userId) {
+              button.dataset.userId = row.userId;
+            }
+            if (!row.mutable) {
+              button.textContent = "Static";
+            } else if (adminDeletingUserID === row.userId) {
+              button.textContent = "Removing...";
+            } else if (!adminCanWrite) {
+              button.textContent = "Read-only";
+            }
+            body.appendChild(tr);
+          });
+        }
+
+        function renderAdminMembersSummary() {
+          const effective = adminMembers.filter(function (row) { return row && row.effective; }).length;
+          const staticCount = adminMembers.filter(function (row) { return row && row.source === "static"; }).length;
+          const dynamicCount = adminMembers.filter(function (row) { return row && row.source === "dynamic"; }).length;
+          const shadowedCount = adminMembers.filter(function (row) { return row && row.source === "dynamic" && !row.effective; }).length;
+          byId("admin-members-effective-count").textContent = formatCount(effective);
+          byId("admin-members-static-count").textContent = formatCount(staticCount);
+          byId("admin-members-dynamic-count").textContent = formatCount(dynamicCount);
+          byId("admin-members-shadowed-count").textContent = formatCount(shadowedCount);
+        }
+
+        function updateAdminMembersFormState() {
+          const emailInput = byId("admin-members-email-input");
+          const roleInput = byId("admin-members-role-input");
+          const submitButton = byId("admin-members-submit-button");
+          const formNote = byId("admin-members-form-note");
+
+          emailInput.disabled = !adminAvailable || !adminCanWrite || adminLoading || adminSaving;
+          roleInput.disabled = !adminAvailable || !adminCanWrite || adminLoading || adminSaving;
+
+          const email = normalizedEmail(emailInput.value);
+          const role = String(roleInput.value || "").trim();
+          const staticConflict = email && adminStaticEmails().has(email);
+          submitButton.disabled = !adminAvailable || !adminCanWrite || !email || !role || staticConflict || adminLoading || adminSaving;
+          submitButton.textContent = adminSaving ? "Saving..." : "Save admin grant";
+
+          if (adminLoading && !adminLoaded) {
+            formNote.textContent = "Loading built-in admin members...";
+          } else if (!adminAvailable && adminLoaded) {
+            formNote.textContent = "Dynamic built-in admin management is unavailable until server.admin.authorizationPolicy is configured with at least one static admin seed.";
+          } else if (adminLoadErrorMessage) {
+            formNote.textContent = "The last refresh failed. Use Refresh to retry before changing built-in admins.";
+          } else if (!adminCanWrite) {
+            formNote.textContent = "You can inspect built-in admin memberships here, but only callers with an allowed built-in admin role can change them.";
+          } else if (staticConflict) {
+            formNote.textContent = "This user already has static built-in admin authorization and cannot receive a dynamic admin grant.";
+          } else {
+            formNote.textContent = "Static seed admins remain read-only. Dynamic admin rows can be added, updated, or removed here.";
+          }
+        }
+
+        function renderAdminMembersWorkspace() {
+          renderAdminMembersSummary();
+          renderAdminMembersRows();
+          updateAdminMembersFormState();
+        }
+
         async function loadAuthorizationMembers() {
           authMembersRequestToken += 1;
           const requestToken = authMembersRequestToken;
@@ -1372,6 +1692,41 @@
             authLoading = false;
             renderAuthorization();
             setAuthStatus(error instanceof Error ? error.message : "Failed to load authorization plugins.", "error");
+          }
+        }
+
+        async function loadAdminMembers() {
+          adminMembersRequestToken += 1;
+          const requestToken = adminMembersRequestToken;
+          adminLoading = true;
+          adminLoadErrorMessage = "";
+          renderAdminMembersWorkspace();
+          setAdminMembersStatus("Loading Gestalt admins...", "");
+          try {
+            const result = await fetchJSON("/admin/api/v1/authorization/admins/members");
+            if (requestToken !== adminMembersRequestToken) return;
+            adminMembers = Array.isArray(result.payload) ? result.payload : [];
+            adminAvailable = true;
+            adminCanWrite = result.headers && result.headers.get("X-Gestalt-Can-Write") === "true";
+            adminLoaded = true;
+            setAdminMembersStatus("Loaded " + adminMembers.length + " built-in admin rows.", "ok");
+          } catch (error) {
+            if (requestToken !== adminMembersRequestToken) return;
+            adminCanWrite = false;
+            adminLoaded = true;
+            adminLoadErrorMessage = error instanceof Error ? error.message : "Failed to load Gestalt admins.";
+            if (error && error.status === 503) {
+              adminMembers = [];
+              adminAvailable = false;
+            } else {
+              adminAvailable = true;
+            }
+            setAdminMembersStatus(error instanceof Error ? error.message : "Failed to load Gestalt admins.", "error");
+          } finally {
+            if (requestToken === adminMembersRequestToken) {
+              adminLoading = false;
+              renderAdminMembersWorkspace();
+            }
           }
         }
 
@@ -1469,6 +1824,96 @@
             } finally {
               authDeletingUserID = "";
               renderAuthorization();
+            }
+          });
+        }
+
+        function bindAdminMembersControls() {
+          byId("admin-members-refresh-button").addEventListener("click", function () {
+            if (adminLoading || adminSaving) return;
+            clearAdminMembersPendingReload();
+            loadAdminMembers();
+          });
+
+          byId("admin-members-email-input").addEventListener("input", updateAdminMembersFormState);
+          byId("admin-members-role-input").addEventListener("input", updateAdminMembersFormState);
+
+          byId("admin-members-form").addEventListener("submit", async function (event) {
+            event.preventDefault();
+            if (adminSaving || !adminAvailable) return;
+
+            const emailInput = byId("admin-members-email-input");
+            const roleInput = byId("admin-members-role-input");
+            const email = String(emailInput.value || "").trim();
+            const role = String(roleInput.value || "").trim();
+            if (!email || !role) {
+              updateAdminMembersFormState();
+              return;
+            }
+
+            adminSaving = true;
+            updateAdminMembersFormState();
+            setAdminMembersStatus("Saving built-in admin grant...", "");
+            try {
+              const result = await fetchJSON("/admin/api/v1/authorization/admins/members", {
+                method: "PUT",
+                headers: {
+                  Accept: "application/json",
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ email: email, role: role }),
+              });
+              emailInput.value = "";
+              if (result.payload && result.payload.membership && result.payload.membership.role) {
+                roleInput.value = result.payload.membership.role;
+              }
+              if (result.payload && result.payload.reloaded === false) {
+                upsertDynamicAdminMember(result.payload && result.payload.membership ? result.payload.membership : null);
+                markAdminMembersPendingReload("Built-in admin grant persisted. Use Refresh after the local authorization snapshot converges to inspect the updated access state.");
+                renderAdminMembersWorkspace();
+              } else {
+                clearAdminMembersPendingReload();
+                setAdminMembersStatus("Built-in admin grant saved.", "ok");
+                await loadAdminMembers();
+              }
+            } catch (error) {
+              setAdminMembersStatus(error instanceof Error ? error.message : "Failed to save built-in admin grant.", "error");
+            } finally {
+              adminSaving = false;
+              updateAdminMembersFormState();
+            }
+          });
+
+          byId("admin-members-body").addEventListener("click", async function (event) {
+            const target = event.target;
+            if (!(target instanceof HTMLButtonElement)) return;
+            const userID = normalizePluginName(target.dataset.userId);
+            if (!userID || adminDeletingUserID || target.disabled) return;
+
+            adminDeletingUserID = userID;
+            renderAdminMembersWorkspace();
+            setAdminMembersStatus("Removing built-in admin grant...", "");
+            try {
+              const result = await fetchJSON(
+                "/admin/api/v1/authorization/admins/members/" + encodeURIComponent(userID),
+                {
+                  method: "DELETE",
+                },
+              );
+              if (result.payload && result.payload.reloaded === false) {
+                removeDynamicAdminMember(userID);
+                markAdminMembersPendingReload("Built-in admin grant removed from storage. Use Refresh after the local authorization snapshot converges to inspect the updated access state.");
+                renderAdminMembersWorkspace();
+              } else {
+                clearAdminMembersPendingReload();
+                setAdminMembersStatus("Built-in admin grant removed.", "ok");
+                await loadAdminMembers();
+              }
+            } catch (error) {
+              setAdminMembersStatus(error instanceof Error ? error.message : "Failed to remove built-in admin grant.", "error");
+            } finally {
+              adminDeletingUserID = "";
+              renderAdminMembersWorkspace();
             }
           });
         }
@@ -1966,8 +2411,10 @@
         bindTabs();
         bindControls();
         bindAuthorizationControls();
+        bindAdminMembersControls();
         clearDashboard("Loading metrics...");
         renderAuthorization();
+        renderAdminMembersWorkspace();
         refresh();
         scheduleRefreshTimer();
         window.addEventListener("resize", function () {
