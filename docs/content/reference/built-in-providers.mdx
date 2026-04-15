@@ -76,7 +76,10 @@ providers:
         endpoint: https://s3.us-east-1.amazonaws.com
         forcePathStyle: false
         accessKeyId: ${AWS_ACCESS_KEY_ID}
-        secretAccessKey: secret://aws-secret-access-key
+        secretAccessKey:
+          secret:
+            provider: default
+            name: aws-secret-access-key
 
 plugins:
   media:

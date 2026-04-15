@@ -54,7 +54,10 @@ providers:
         endpoint: https://s3.us-east-1.amazonaws.com
         forcePathStyle: false
         accessKeyId: ${AWS_ACCESS_KEY_ID}
-        secretAccessKey: secret://aws-secret-access-key
+        secretAccessKey:
+          secret:
+            provider: default
+            name: aws-secret-access-key
 
 plugins:
   media:
@@ -92,7 +95,10 @@ providers:
         endpoint: https://storage.googleapis.com
         forcePathStyle: true
         accessKeyId: ${GCS_HMAC_ACCESS_KEY}
-        secretAccessKey: secret://gcs-hmac-secret
+        secretAccessKey:
+          secret:
+            provider: default
+            name: gcs-hmac-secret
 ```
 
 ## Using S3 from a plugin
