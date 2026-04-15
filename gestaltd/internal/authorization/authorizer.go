@@ -13,7 +13,10 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
-const defaultInstance = "default"
+const (
+	defaultInstance  = "default"
+	defaultHumanRole = "viewer"
+)
 
 var (
 	safeConnectionValue = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
@@ -218,6 +221,7 @@ func (a *Authorizer) ResolvePolicyAccess(p *principal.Principal, policyName stri
 		return access, true
 	}
 	if policy.DefaultAllow {
+		access.Role = defaultHumanRole
 		return access, true
 	}
 	return access, false
