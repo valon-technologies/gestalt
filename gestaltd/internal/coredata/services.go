@@ -9,10 +9,11 @@ import (
 )
 
 type Services struct {
-	Users     *UserService
-	Tokens    *TokenService
-	APITokens *APITokenService
-	DB        indexeddb.IndexedDB
+	Users                *UserService
+	Tokens               *TokenService
+	APITokens            *APITokenService
+	PluginAuthorizations *PluginAuthorizationService
+	DB                   indexeddb.IndexedDB
 }
 
 func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, error) {
@@ -30,11 +31,15 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	if err := users.BackfillNormalizedEmails(ctx); err != nil {
 		return nil, fmt.Errorf("backfill users store: %w", err)
 	}
+	if err := ds.CreateObjectStore(ctx, StorePluginAuthorizationMemberships, PluginAuthorizationMembershipsSchema); err != nil {
+		return nil, fmt.Errorf("create plugin_authorization_memberships store: %w", err)
+	}
 	return &Services{
-		Users:     users,
-		Tokens:    NewTokenService(ds, enc),
-		APITokens: NewAPITokenService(ds),
-		DB:        ds,
+		Users:                users,
+		Tokens:               NewTokenService(ds, enc),
+		APITokens:            NewAPITokenService(ds),
+		PluginAuthorizations: NewPluginAuthorizationService(ds),
+		DB:                   ds,
 	}, nil
 }
 

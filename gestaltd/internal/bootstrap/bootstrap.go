@@ -192,6 +192,11 @@ func (r *Result) Start(ctx context.Context) error {
 	if r.closed {
 		return fmt.Errorf("bootstrap result already closed")
 	}
+	if r.Authorizer != nil {
+		if err := r.Authorizer.Start(ctx); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -208,6 +213,7 @@ func (r *Result) Close(ctx context.Context) error {
 
 	var errs []error
 	errs = append(errs,
+		r.Authorizer.Close(),
 		closeAuth(r.Auth),
 		CloseProviders(r.Providers),
 		r.Services.Close(),
@@ -536,7 +542,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	if err != nil {
 		return nil, err
 	}
-	authz, err := authorization.New(cfg.Authorization, cfg.Plugins, providers, connMaps.DefaultConnection)
+	authz, err := authorization.New(cfg.Authorization, cfg.Plugins, providers, connMaps.DefaultConnection, prepared.Services.PluginAuthorizations)
 	if err != nil {
 		return nil, err
 	}

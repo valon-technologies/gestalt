@@ -1488,6 +1488,75 @@ func TestNewServer_HumanListToolsDoesNotLeakAcrossStatelessSessions(t *testing.T
 	}
 }
 
+func TestNewServer_HumanListToolsFiltersRoleRestrictedTools_DynamicGrant(t *testing.T) {
+	t.Parallel()
+
+	staticCat := &catalog.Catalog{
+		Name: "sampledb",
+		Operations: []catalog.CatalogOperation{
+			{
+				ID:           "run_query",
+				Description:  "run a query",
+				Transport:    catalog.TransportMCPPassthrough,
+				AllowedRoles: []string{"viewer", "admin"},
+			},
+			{
+				ID:           "delete_table",
+				Description:  "delete a table",
+				Transport:    catalog.TransportMCPPassthrough,
+				AllowedRoles: []string{"admin"},
+			},
+			{
+				ID:          "export_results",
+				Description: "export results",
+				Transport:   catalog.TransportMCPPassthrough,
+			},
+		},
+	}
+
+	prov := &directCallerProvider{
+		StubIntegration: coretesting.StubIntegration{N: "sampledb", ConnMode: core.ConnectionModeNone},
+		cat:             staticCat,
+	}
+
+	providers := testutil.NewProviderRegistry(t, prov)
+	ds, userID := stubServicesWithToken(t, "sampledb")
+	authz, err := authorization.New(config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {Default: "deny"},
+		},
+	}, map[string]*config.ProviderEntry{
+		"sampledb": {AuthorizationPolicy: "sample_policy"},
+	}, providers, map[string]string{}, ds.PluginAuthorizations)
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+	if _, err := ds.PluginAuthorizations.UpsertPluginAuthorization(context.Background(), &coredata.PluginAuthorizationMembership{
+		Plugin: "sampledb",
+		UserID: userID,
+		Email:  "test@example.com",
+		Role:   "viewer",
+	}); err != nil {
+		t.Fatalf("UpsertPluginAuthorization: %v", err)
+	}
+	if err := authz.ReloadDynamic(context.Background()); err != nil {
+		t.Fatalf("ReloadDynamic: %v", err)
+	}
+
+	broker := invocation.NewBroker(providers, ds.Users, ds.Tokens, invocation.WithAuthorizer(authz))
+	srv := gestaltmcp.NewServer(gestaltmcp.Config{
+		Invoker:       broker,
+		TokenResolver: broker,
+		Providers:     providers,
+		Authorizer:    authz,
+	})
+
+	viewerResult := listToolsForSession(t, srv, ctxWithPrincipal(userID), newTestSessionWithTools())
+	if len(viewerResult.Tools) != 1 || viewerResult.Tools[0].Name != "sampledb_run_query" {
+		t.Fatalf("viewer tool names = %+v, want only sampledb_run_query", viewerResult.Tools)
+	}
+}
+
 func TestNewServer_HumanListToolsHidesInternalInstanceMarkers(t *testing.T) {
 	t.Parallel()
 

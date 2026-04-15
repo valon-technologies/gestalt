@@ -24,12 +24,14 @@ func (s *Server) routes() {
 	case RouteProfileManagement:
 		s.mountCoreRoutes(r, metricsUnauthenticated)
 		s.mountManagementRootRedirect(r)
+		s.mountAdminAPIRoutes(r)
 		s.mountAdminUIRoutes(r)
 	default:
 		s.mountCoreRoutes(r, metricsAuthenticated)
 		s.mountMCPRoutes(r)
 		s.mountAPIRoutes(r)
 		s.mountMountedWebUIRoutes(r)
+		s.mountAdminAPIRoutes(r)
 		s.mountAdminUIRoutes(r)
 	}
 }
@@ -77,6 +79,16 @@ func (s *Server) mountAdminUIRoutes(r chi.Router) {
 	r.Handle("/admin/*", s.adminUIHandler())
 }
 
+func (s *Server) mountAdminAPIRoutes(r chi.Router) {
+	r.Route("/admin/api/v1", func(r chi.Router) {
+		r.Use(middleware.Timeout(60 * time.Second))
+		if s.adminRoute.AuthorizationPolicy != "" {
+			r.Use(s.adminAPIAuthMiddleware)
+		}
+		s.mountAdminAuthorizationRoutes(r)
+	})
+}
+
 func (s *Server) mountMountedWebUIRoutes(r chi.Router) {
 	var rootHandler http.Handler
 	for _, mounted := range s.mountedWebUIs {
@@ -109,6 +121,8 @@ func redirectPreservingQuery(w http.ResponseWriter, r *http.Request, target stri
 func (s *Server) mountManagementHiddenRoutes(r chi.Router) {
 	notFound := http.NotFoundHandler()
 	r.Handle("/metrics", notFound)
+	r.Handle("/admin/api/v1", notFound)
+	r.Handle("/admin/api/v1/*", notFound)
 	r.Handle("/admin", notFound)
 	r.Handle("/admin/*", notFound)
 }
