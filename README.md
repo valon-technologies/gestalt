@@ -30,9 +30,10 @@ Gestalt also does not replace your existing APIs. It sits between agents and ups
 
 ## Quick Start
 
-Install both binaries with Homebrew:
+Tap the repository and install both binaries with Homebrew:
 
 ```sh
+brew tap valon-technologies/gestalt https://github.com/valon-technologies/gestalt
 brew install valon-technologies/gestalt/gestaltd
 brew install valon-technologies/gestalt/gestalt
 ```
