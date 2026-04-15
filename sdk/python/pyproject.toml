@@ -19,6 +19,7 @@ dependencies = [
 dev = [
   "pytest>=9.0.3",
   "ruff==0.15.9",
+  "sphinx==7.4.7",
   "ty==0.0.31",
   "vulture==2.16.0",
 ]

@@ -1,3 +1,10 @@
+"""Provider base classes for non-integration Gestalt runtimes.
+
+The generated request and response protobuf messages for auth and catalog data
+remain available through the public :mod:`gestalt` package, but these helpers
+document the handwritten provider interfaces that wrap those messages.
+"""
+
 import datetime as dt
 from enum import Enum
 from typing import Any, Callable
@@ -13,6 +20,8 @@ CompleteLoginRequest: Any = _auth_pb2.CompleteLoginRequest  # ty: ignore[unresol
 
 
 class ProviderKind(str, Enum):
+    """Runtime kinds supported by the Python SDK."""
+
     INTEGRATION = "integration"
     AUTH = "auth"
     CACHE = "cache"
@@ -22,6 +31,8 @@ class ProviderKind(str, Enum):
 
 
 class ProviderMetadata:
+    """Descriptive metadata returned by :class:`MetadataProvider`."""
+
     __slots__ = ("kind", "name", "display_name", "description", "version")
 
     def __init__(
@@ -40,27 +51,47 @@ class ProviderMetadata:
 
 
 class PluginProvider:
+    """Base interface shared by provider-style runtimes."""
+
     def configure(self, name: str, config: dict[str, Any]) -> None:
+        """Apply the host-provided provider name and parsed configuration."""
+
         pass
 
 
 class MetadataProvider:
+    """Optional mixin for providers that expose descriptive metadata."""
+
     def metadata(self) -> ProviderMetadata:
+        """Return metadata for the running provider instance."""
+
         raise NotImplementedError
 
 
 class HealthChecker:
+    """Optional mixin for providers that support health checks."""
+
     def health_check(self) -> None:
+        """Raise if the provider is unhealthy."""
+
         raise NotImplementedError
 
 
 class WarningsProvider:
+    """Optional mixin for providers that emit startup warnings."""
+
     def warnings(self) -> list[str]:
+        """Return human-readable warnings for the host to surface."""
+
         raise NotImplementedError
 
 
 class Closer:
+    """Optional mixin for providers with explicit shutdown work."""
+
     def close(self) -> None:
+        """Release any provider resources before the process exits."""
+
         raise NotImplementedError
 
 
@@ -68,6 +99,8 @@ RegisterServices = Callable[[Any, PluginProvider], None]
 
 
 class PluginProviderAdapter:
+    """Wrap a provider and registration callback for integration runtimes."""
+
     __slots__ = ("kind", "provider", "register_services")
 
     def __init__(
@@ -81,49 +114,79 @@ class PluginProviderAdapter:
         self.register_services = register_services
 
     def serve(self) -> None:
+        """Start the provider's gRPC runtime."""
+
         from . import _runtime
 
         _runtime.serve(self)
 
 
 class AuthProvider(PluginProvider):
+    """Base class for authentication providers."""
+
     def begin_login(self, request: Any) -> Any:
+        """Begin an interactive login flow."""
+
         raise NotImplementedError
 
     def complete_login(self, request: Any) -> Any:
+        """Complete an interactive login flow."""
+
         raise NotImplementedError
 
     def serve(self) -> None:
+        """Start the auth runtime."""
+
         from . import _runtime
 
         _runtime.serve(self, runtime_kind=ProviderKind.AUTH)
 
 
 class ExternalTokenValidator:
+    """Optional mixin for providers that validate external bearer tokens."""
+
     def validate_external_token(self, token: str) -> Any:
+        """Validate a bearer token and return the authenticated subject."""
+
         raise NotImplementedError
 
 
 class SessionTTLProvider:
+    """Optional mixin for providers that control session lifetimes."""
+
     def session_ttl(self) -> dt.timedelta:
+        """Return the requested session time-to-live."""
+
         raise NotImplementedError
 
 
 class SecretsProvider(PluginProvider):
+    """Base class for secret-provider runtimes."""
+
     def get_secret(self, name: str) -> str:
+        """Return a secret value by name."""
+
         raise NotImplementedError
 
     def serve(self) -> None:
+        """Start the secrets runtime."""
+
         from . import _runtime
 
         _runtime.serve(self, runtime_kind=ProviderKind.SECRETS)
 
 
 class CacheProvider(PluginProvider):
+    """Base class for cache-provider runtimes."""
+
     def get(self, key: str) -> bytes | None:
+        """Return a cached value or ``None`` if the key is missing."""
+
         raise NotImplementedError
 
     def get_many(self, keys: list[str]) -> dict[str, bytes]:
+        """Return the subset of ``keys`` that currently exist."""
+
         values: dict[str, bytes] = {}
         for key in keys:
             value = self.get(key)
@@ -132,16 +195,24 @@ class CacheProvider(PluginProvider):
         return values
 
     def set(self, key: str, value: bytes, ttl: dt.timedelta | None = None) -> None:
+        """Store ``value`` for ``key`` with an optional time-to-live."""
+
         raise NotImplementedError
 
     def set_many(self, entries: list[CacheEntry], ttl: dt.timedelta | None = None) -> None:
+        """Store multiple cache entries using repeated :meth:`set` calls."""
+
         for entry in entries:
             self.set(entry.key, entry.value, ttl)
 
     def delete(self, key: str) -> bool:
+        """Delete a cache entry and report whether it existed."""
+
         raise NotImplementedError
 
     def delete_many(self, keys: list[str]) -> int:
+        """Delete a batch of cache keys and return the number removed."""
+
         deleted = 0
         seen: set[str] = set()
         for key in keys:
@@ -153,16 +224,24 @@ class CacheProvider(PluginProvider):
         return deleted
 
     def touch(self, key: str, ttl: dt.timedelta) -> bool:
+        """Refresh the TTL for an existing key."""
+
         raise NotImplementedError
 
     def serve(self) -> None:
+        """Start the cache runtime."""
+
         from . import _runtime
 
         _runtime.serve(self, runtime_kind=ProviderKind.CACHE)
 
 
 class S3Provider(PluginProvider, _s3_pb2_grpc.S3Servicer):
+    """Base class for S3-compatible object store runtimes."""
+
     def serve(self) -> None:
+        """Start the S3 runtime."""
+
         from . import _runtime
 
         _runtime.serve(self, runtime_kind=ProviderKind.S3)

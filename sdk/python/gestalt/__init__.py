@@ -1,3 +1,26 @@
+"""Public authoring surface for Gestalt Python providers.
+
+The package is published as ``gestalt-sdk`` and imported as ``gestalt``.
+Provider authors typically build integrations around the re-exported symbols
+documented in the Sphinx reference:
+
+.. code-block:: python
+
+    from gestalt import Model, Plugin, operation
+
+    class SearchInput(Model):
+        query: str
+
+    plugin = Plugin("search")
+
+    @plugin.operation(title="Search")
+    def search(params: SearchInput):
+        return {"query": params.query}
+
+Generated protobuf bindings remain available under :mod:`gestalt.gen`, but the
+authored reference documentation focuses on the handwritten SDK surface.
+"""
+
 from ._api import (
     OK,
     Access,

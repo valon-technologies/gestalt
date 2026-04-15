@@ -3,6 +3,9 @@
 This package provides the Python authoring surface for executable Gestalt
 providers.
 
+It is published to PyPI as `gestalt-sdk` and imported in provider code as
+`gestalt`.
+
 It is intended to be used by source providers discovered through
 `[tool.gestalt].provider` in `pyproject.toml` (or the legacy
 `[tool.gestalt].plugin` key) and by packaged providers built from that
@@ -36,9 +39,24 @@ reproducible while `plugin_pb2.py` tracks the protobuf `6.33.1` runtime floor
 used by this SDK package and remains compatible with protobuf 7 runtimes.
 `buf` must be available on `PATH`.
 
+## API Reference
+
+The authored Python API reference is generated with Sphinx from the SDK's
+docstrings. Build it locally from `sdk/python` with:
+
+```sh
+uv sync --group dev
+uv run sphinx-build -W -b html -d docs/_build/doctrees docs docs/_build/html
+```
+
+The generated docs intentionally focus on the handwritten SDK surface. The
+checked-in protobuf stubs under `gestalt/gen` remain importable, but they are
+not expanded as authored reference pages.
+
 ## Publishing
 
-The SDK is published as the `gestalt` package to a private Python index.
+The SDK is published publicly as `gestalt-sdk` while keeping the import path
+`gestalt`.
 
 Release tags stay aligned with the repo's SDK tag convention:
 
@@ -51,41 +69,30 @@ The release workflow normalizes those tag versions to PEP 440 before building
 and publishing with `uv`, so `sdk/python/v0.0.1-alpha.1` becomes package
 version `0.0.1a1`.
 
-The GitHub Actions workflow expects these repository secrets:
+Releases are published to PyPI through GitHub Actions Trusted Publishing.
+The release workflow runs in the `pypi` environment and uses GitHub OIDC rather
+than a checked-in upload token. To enable publishing for this repo:
 
-- `GESTALT_PYTHON_PUBLISH_URL`
-- either `GESTALT_PYTHON_PUBLISH_TOKEN`
-- or `GESTALT_PYTHON_PUBLISH_USERNAME` and `GESTALT_PYTHON_PUBLISH_PASSWORD`
+- create or confirm the `gestalt-sdk` project on PyPI
+- add a Trusted Publisher pointing at `valon-technologies/gestalt`
+- set the workflow filename to `release-sdk.yml`
+- set the environment name to `pypi`
 
-## Consuming From A Private Index
+Once that publisher is configured, pushing an SDK release tag such as
+`sdk/python/v0.0.1-alpha.1` is enough for the workflow to build and publish the
+package.
 
-In an internal provider repo, pin `gestalt` to the private index with `uv` so
-the package does not fall back to PyPI:
-
-```toml
-[[tool.uv.index]]
-name = "valon-internal"
-url = "https://packages.example.com/simple"
-explicit = true
-authenticate = "always"
-
-[tool.uv.sources]
-gestalt = { index = "valon-internal" }
-
-[project]
-dependencies = ["gestalt==0.0.1a1"]
-```
-
-At install time, provide credentials via the environment variables derived from
-the index name:
+Install it in a provider repo with:
 
 ```sh
-export UV_INDEX_VALON_INTERNAL_USERNAME=...
-export UV_INDEX_VALON_INTERNAL_PASSWORD=...
+uv add gestalt-sdk
 ```
 
-That lets `~/src/gestalt-providers` depend on `gestalt` like any other Python
-package while keeping the SDK off the public package indexes.
+Then import the authored surface as:
+
+```python
+from gestalt import Model, Plugin
+```
 
 ## Local SDK Checks
 
@@ -98,6 +105,7 @@ uv run ruff check .
 uv run ty check --exclude 'gestalt/gen/**' gestalt scripts tests
 uv run vulture --config pyproject.toml
 uv run python -m unittest discover -s tests
+uv run sphinx-build -W -b html -d docs/_build/doctrees docs docs/_build/html
 ```
 
 The generated protobuf stubs under `gestalt/gen` are excluded from the static

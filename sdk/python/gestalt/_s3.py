@@ -1,3 +1,5 @@
+"""S3-compatible client helpers for provider processes."""
+
 from __future__ import annotations
 
 import datetime as _dt
@@ -18,6 +20,7 @@ pb: Any = _pb
 pb_grpc: Any = _pb_grpc
 timestamp_pb2: Any = _timestamp_pb2
 
+#: Base environment variable for discovering S3 runtime sockets.
 ENV_S3_SOCKET = "GESTALT_S3_SOCKET"
 _WRITE_CHUNK_SIZE = 64 * 1024
 _UTC = _dt.timezone.utc
@@ -27,6 +30,8 @@ ObjectBody = BytesLike | BinaryIO | Iterable[bytes] | None
 
 
 def s3_socket_env(name: str | None = None) -> str:
+    """Return the environment variable name for an S3 socket binding."""
+
     trimmed = (name or "").strip()
     if not trimmed:
         return ENV_S3_SOCKET
@@ -38,19 +43,27 @@ def s3_socket_env(name: str | None = None) -> str:
 
 
 class S3NotFoundError(Exception):
+    """Raised when the requested object does not exist."""
+
     pass
 
 
 class S3PreconditionFailedError(Exception):
+    """Raised when conditional request headers fail."""
+
     pass
 
 
 class S3InvalidRangeError(Exception):
+    """Raised when a requested byte range is invalid."""
+
     pass
 
 
 @dataclass
 class ObjectRef:
+    """Reference to an S3 object, optionally pinned to a version."""
+
     bucket: str
     key: str
     version_id: str = ""
@@ -58,6 +71,8 @@ class ObjectRef:
 
 @dataclass
 class ObjectMeta:
+    """Object metadata returned by S3 operations."""
+
     ref: ObjectRef
     etag: str = ""
     size: int = 0
@@ -69,12 +84,16 @@ class ObjectMeta:
 
 @dataclass
 class ByteRange:
+    """Inclusive byte range used for object reads."""
+
     start: int | None = None
     end: int | None = None
 
 
 @dataclass
 class ReadOptions:
+    """Conditional and ranged read options for an object request."""
+
     range: ByteRange | None = None
     if_match: str = ""
     if_none_match: str = ""
@@ -84,6 +103,8 @@ class ReadOptions:
 
 @dataclass
 class WriteOptions:
+    """Metadata and precondition options for object writes."""
+
     content_type: str = ""
     cache_control: str = ""
     content_disposition: str = ""
@@ -96,6 +117,8 @@ class WriteOptions:
 
 @dataclass
 class ListOptions:
+    """Query options for listing objects within a bucket."""
+
     bucket: str
     prefix: str = ""
     delimiter: str = ""
@@ -106,6 +129,8 @@ class ListOptions:
 
 @dataclass
 class ListPage:
+    """One page of object-listing results."""
+
     objects: list[ObjectMeta] = field(default_factory=list)
     common_prefixes: list[str] = field(default_factory=list)
     next_continuation_token: str = ""
@@ -114,11 +139,15 @@ class ListPage:
 
 @dataclass
 class CopyOptions:
+    """Conditional headers for copy operations."""
+
     if_match: str = ""
     if_none_match: str = ""
 
 
 class PresignMethod(str, Enum):
+    """HTTP methods supported by presigned object URLs."""
+
     GET = "GET"
     PUT = "PUT"
     DELETE = "DELETE"
@@ -127,6 +156,8 @@ class PresignMethod(str, Enum):
 
 @dataclass
 class PresignOptions:
+    """Options for generating a presigned object URL."""
+
     method: PresignMethod | str | None = None
     expires: _dt.timedelta | None = None
     content_type: str = ""
@@ -136,6 +167,8 @@ class PresignOptions:
 
 @dataclass
 class PresignResult:
+    """Presigned URL response returned by the provider."""
+
     url: str
     method: PresignMethod | str | None = None
     expires_at: _dt.datetime | None = None
@@ -143,21 +176,31 @@ class PresignResult:
 
 
 class S3ReadStream:
+    """Streaming object body reader returned by :meth:`S3.read_object`."""
+
     def __init__(self, stream: Any) -> None:
         self._stream = stream
         self._buffer = bytearray()
         self._closed = False
 
     def __iter__(self) -> Iterator[bytes]:
+        """Iterate over the remaining data chunks."""
+
         return self.iter_chunks()
 
     def __enter__(self) -> S3ReadStream:
+        """Return the stream for ``with`` statements."""
+
         return self
 
     def __exit__(self, *args: Any) -> None:
+        """Close the stream at the end of a context manager block."""
+
         self.close()
 
     def iter_chunks(self) -> Iterator[bytes]:
+        """Yield the remaining object body chunks."""
+
         if self._buffer:
             chunk = bytes(self._buffer)
             self._buffer.clear()
@@ -171,6 +214,8 @@ class S3ReadStream:
                 yield chunk
 
     def read(self, size: int = -1) -> bytes:
+        """Read up to ``size`` bytes from the stream."""
+
         if size == 0:
             return b""
         if size < 0:
@@ -197,6 +242,8 @@ class S3ReadStream:
         return out
 
     def close(self) -> None:
+        """Cancel the underlying RPC stream and discard buffered bytes."""
+
         self._closed = True
         self._buffer.clear()
         cancel = getattr(self._stream, "cancel", None)
@@ -220,6 +267,8 @@ class S3ReadStream:
 
 
 class S3:
+    """Client for a host-provided Gestalt S3 runtime."""
+
     def __init__(self, name: str | None = None) -> None:
         env_name = s3_socket_env(name)
         socket_path = os.environ.get(env_name, "")
@@ -229,15 +278,23 @@ class S3:
         self._stub = pb_grpc.S3Stub(self._channel)
 
     def close(self) -> None:
+        """Close the underlying gRPC channel."""
+
         self._channel.close()
 
     def object(self, bucket: str, key: str) -> S3Object:
+        """Return an object helper for the latest version."""
+
         return S3Object(self, ObjectRef(bucket=bucket, key=key))
 
     def object_version(self, bucket: str, key: str, version_id: str) -> S3Object:
+        """Return an object helper pinned to a specific version."""
+
         return S3Object(self, ObjectRef(bucket=bucket, key=key, version_id=version_id))
 
     def head_object(self, ref: ObjectRef) -> ObjectMeta:
+        """Fetch metadata for an object without reading its body."""
+
         resp = _grpc_call(self._stub.HeadObject, pb.HeadObjectRequest(ref=_object_ref_to_proto(ref)))
         return _object_meta_from_proto(resp.meta)
 
@@ -246,6 +303,8 @@ class S3:
         ref: ObjectRef,
         opts: ReadOptions | None = None,
     ) -> tuple[ObjectMeta, S3ReadStream]:
+        """Open a streaming read for an object."""
+
         request = pb.ReadObjectRequest(ref=_object_ref_to_proto(ref))
         if opts is not None:
             if opts.range is not None:
@@ -276,6 +335,8 @@ class S3:
         body: ObjectBody = None,
         opts: WriteOptions | None = None,
     ) -> ObjectMeta:
+        """Write an object body and return the resulting metadata."""
+
         open_request = pb.WriteObjectOpen(ref=_object_ref_to_proto(ref))
         if opts is not None:
             open_request.content_type = opts.content_type
@@ -293,9 +354,13 @@ class S3:
         return _object_meta_from_proto(response.meta)
 
     def delete_object(self, ref: ObjectRef) -> None:
+        """Delete an object."""
+
         _grpc_call(self._stub.DeleteObject, pb.DeleteObjectRequest(ref=_object_ref_to_proto(ref)))
 
     def list_objects(self, opts: ListOptions) -> ListPage:
+        """List objects within a bucket."""
+
         resp = _grpc_call(
             self._stub.ListObjects,
             pb.ListObjectsRequest(
@@ -315,6 +380,8 @@ class S3:
         destination: ObjectRef,
         opts: CopyOptions | None = None,
     ) -> ObjectMeta:
+        """Copy an object and return metadata for the destination."""
+
         request = pb.CopyObjectRequest(
             source=_object_ref_to_proto(source),
             destination=_object_ref_to_proto(destination),
@@ -330,6 +397,8 @@ class S3:
         ref: ObjectRef,
         opts: PresignOptions | None = None,
     ) -> PresignResult:
+        """Generate a presigned URL for an object operation."""
+
         request = pb.PresignObjectRequest(ref=_object_ref_to_proto(ref))
         if opts is not None:
             request.method = _presign_method_to_proto(opts.method)
@@ -345,21 +414,31 @@ class S3:
         return result
 
     def __enter__(self) -> S3:
+        """Return the client for ``with`` statements."""
+
         return self
 
     def __exit__(self, *args: Any) -> None:
+        """Close the client at the end of a context manager block."""
+
         self.close()
 
 
 class S3Object:
+    """Convenience wrapper for a single S3 object reference."""
+
     def __init__(self, client: S3, ref: ObjectRef) -> None:
         self._client = client
         self.ref = ref
 
     def stat(self) -> ObjectMeta:
+        """Fetch object metadata."""
+
         return self._client.head_object(self.ref)
 
     def exists(self) -> bool:
+        """Return whether the object exists."""
+
         try:
             self.stat()
             return True
@@ -367,17 +446,25 @@ class S3Object:
             return False
 
     def stream(self, opts: ReadOptions | None = None) -> tuple[ObjectMeta, S3ReadStream]:
+        """Open a streaming read for the object."""
+
         return self._client.read_object(self.ref, opts)
 
     def bytes(self, opts: ReadOptions | None = None) -> BytesData:
+        """Read the full object body as bytes."""
+
         _meta, stream = self.stream(opts)
         with stream:
             return stream.read()
 
     def text(self, opts: ReadOptions | None = None, *, encoding: str = "utf-8") -> str:
+        """Read the full object body as text."""
+
         return self.bytes(opts).decode(encoding)
 
     def json(self, opts: ReadOptions | None = None) -> Any:
+        """Read and decode the full object body as JSON."""
+
         return json.loads(self.bytes(opts))
 
     def write(
@@ -385,6 +472,8 @@ class S3Object:
         body: ObjectBody = None,
         opts: WriteOptions | None = None,
     ) -> ObjectMeta:
+        """Write an object body."""
+
         return self._client.write_object(self.ref, body, opts)
 
     def write_bytes(
@@ -392,6 +481,8 @@ class S3Object:
         body: BytesLike,
         opts: WriteOptions | None = None,
     ) -> ObjectMeta:
+        """Write bytes to the object."""
+
         return self.write(body, opts)
 
     def write_text(
@@ -401,9 +492,13 @@ class S3Object:
         *,
         encoding: str = "utf-8",
     ) -> ObjectMeta:
+        """Encode and write text to the object."""
+
         return self.write(body.encode(encoding), opts)
 
     def write_json(self, value: Any, opts: WriteOptions | None = None) -> ObjectMeta:
+        """Encode and write JSON to the object."""
+
         payload = json.dumps(value).encode("utf-8")
         if opts is None:
             opts = WriteOptions(content_type="application/json")
@@ -421,9 +516,13 @@ class S3Object:
         return self.write(payload, opts)
 
     def delete(self) -> None:
+        """Delete the object."""
+
         self._client.delete_object(self.ref)
 
     def presign(self, opts: PresignOptions | None = None) -> PresignResult:
+        """Generate a presigned URL for this object."""
+
         return self._client.presign_object(self.ref, opts)
 
 

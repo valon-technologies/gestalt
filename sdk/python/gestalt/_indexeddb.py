@@ -1,3 +1,5 @@
+"""IndexedDB-style client helpers for provider processes."""
+
 from __future__ import annotations
 
 import datetime as _dt
@@ -20,13 +22,19 @@ timestamp_pb2: Any = _timestamp_pb2
 
 ENV_INDEXEDDB_SOCKET = "GESTALT_INDEXEDDB_SOCKET"
 
+#: Iterate in ascending key order.
 CURSOR_NEXT = 0
+#: Iterate in ascending key order while collapsing duplicate index keys.
 CURSOR_NEXT_UNIQUE = 1
+#: Iterate in descending key order.
 CURSOR_PREV = 2
+#: Iterate in descending key order while collapsing duplicate index keys.
 CURSOR_PREV_UNIQUE = 3
 
 
 def indexeddb_socket_env(name: str | None = None) -> str:
+    """Return the environment variable name for an IndexedDB socket binding."""
+
     trimmed = (name or "").strip()
     if not trimmed:
         return ENV_INDEXEDDB_SOCKET
@@ -35,15 +43,21 @@ def indexeddb_socket_env(name: str | None = None) -> str:
 
 
 class NotFoundError(Exception):
+    """Raised when an IndexedDB record, store, or cursor target is missing."""
+
     pass
 
 
 class AlreadyExistsError(Exception):
+    """Raised when an IndexedDB object already exists."""
+
     pass
 
 
 @dataclass
 class KeyRange:
+    """Lower and upper bounds for a cursor or range query."""
+
     lower: Any = None
     upper: Any = None
     lower_open: bool = False
@@ -52,6 +66,8 @@ class KeyRange:
 
 @dataclass
 class IndexSchema:
+    """Definition for an index within an object store."""
+
     name: str
     key_path: list[str] = field(default_factory=list)
     unique: bool = False
@@ -59,10 +75,14 @@ class IndexSchema:
 
 @dataclass
 class ObjectStoreSchema:
+    """Schema definition for an object store."""
+
     indexes: list[IndexSchema] = field(default_factory=list)
 
 
 class IndexedDB:
+    """Client for a host-provided IndexedDB-compatible store."""
+
     def __init__(self, name: str | None = None) -> None:
         env_name = indexeddb_socket_env(name)
         socket_path = os.environ.get(env_name, "")
@@ -72,9 +92,13 @@ class IndexedDB:
         self._stub = pb_grpc.IndexedDBStub(self._channel)
 
     def close(self) -> None:
+        """Close the underlying gRPC channel."""
+
         self._channel.close()
 
     def create_object_store(self, name: str, schema: ObjectStoreSchema | None = None) -> None:
+        """Create an object store with an optional schema."""
+
         pb_schema = pb.ObjectStoreSchema()
         if schema:
             for idx in schema.indexes:
@@ -84,44 +108,68 @@ class IndexedDB:
         _grpc_call(self._stub.CreateObjectStore, pb.CreateObjectStoreRequest(name=name, schema=pb_schema))
 
     def delete_object_store(self, name: str) -> None:
+        """Delete an object store by name."""
+
         _grpc_call(self._stub.DeleteObjectStore, pb.DeleteObjectStoreRequest(name=name))
 
     def object_store(self, name: str) -> ObjectStore:
+        """Return a client bound to an object store."""
+
         return ObjectStore(self._stub, name)
 
     def __enter__(self) -> IndexedDB:
+        """Return the client for ``with`` statements."""
+
         return self
 
     def __exit__(self, *args: Any) -> None:
+        """Close the client at the end of a context manager block."""
+
         self.close()
 
 
 class ObjectStore:
+    """Client bound to a single IndexedDB object store."""
+
     def __init__(self, stub: Any, store: str) -> None:
         self._stub = stub
         self._store = store
 
     def get(self, id: str) -> dict[str, Any]:
+        """Fetch a record by primary key."""
+
         resp = _grpc_call(self._stub.Get, pb.ObjectStoreRequest(store=self._store, id=id))
         return _record_to_dict(resp.record)
 
     def get_key(self, id: str) -> str:
+        """Return the canonical key for a primary key lookup."""
+
         resp = _grpc_call(self._stub.GetKey, pb.ObjectStoreRequest(store=self._store, id=id))
         return resp.key
 
     def add(self, record: dict[str, Any]) -> None:
+        """Insert a new record."""
+
         _grpc_call(self._stub.Add, pb.RecordRequest(store=self._store, record=_dict_to_record(record)))
 
     def put(self, record: dict[str, Any]) -> None:
+        """Insert or replace a record."""
+
         _grpc_call(self._stub.Put, pb.RecordRequest(store=self._store, record=_dict_to_record(record)))
 
     def delete(self, id: str) -> None:
+        """Delete a record by primary key."""
+
         _grpc_call(self._stub.Delete, pb.ObjectStoreRequest(store=self._store, id=id))
 
     def clear(self) -> None:
+        """Delete every record in the store."""
+
         _grpc_call(self._stub.Clear, pb.ObjectStoreNameRequest(store=self._store))
 
     def get_all(self, key_range: KeyRange | None = None) -> list[dict[str, Any]]:
+        """Return all records that fall within ``key_range``."""
+
         resp = _grpc_call(
             self._stub.GetAll,
             pb.ObjectStoreRangeRequest(store=self._store, range=_kr_to_proto(key_range)),
@@ -129,6 +177,8 @@ class ObjectStore:
         return [_record_to_dict(r) for r in resp.records]
 
     def get_all_keys(self, key_range: KeyRange | None = None) -> list[str]:
+        """Return all primary keys that fall within ``key_range``."""
+
         resp = _grpc_call(
             self._stub.GetAllKeys,
             pb.ObjectStoreRangeRequest(store=self._store, range=_kr_to_proto(key_range)),
@@ -136,6 +186,8 @@ class ObjectStore:
         return list(resp.keys)
 
     def count(self, key_range: KeyRange | None = None) -> int:
+        """Return the number of matching records."""
+
         resp = _grpc_call(
             self._stub.Count,
             pb.ObjectStoreRangeRequest(store=self._store, range=_kr_to_proto(key_range)),
@@ -143,6 +195,8 @@ class ObjectStore:
         return resp.count
 
     def delete_range(self, key_range: KeyRange) -> int:
+        """Delete all records within ``key_range``."""
+
         resp = _grpc_call(
             self._stub.DeleteRange,
             pb.ObjectStoreRangeRequest(store=self._store, range=_kr_to_proto(key_range)),
@@ -154,6 +208,8 @@ class ObjectStore:
         key_range: KeyRange | None = None,
         direction: int = CURSOR_NEXT,
     ) -> Cursor:
+        """Open a record cursor over the store."""
+
         return Cursor(self._stub, self._store, key_range=key_range, direction=direction)
 
     def open_key_cursor(
@@ -161,41 +217,59 @@ class ObjectStore:
         key_range: KeyRange | None = None,
         direction: int = CURSOR_NEXT,
     ) -> Cursor:
+        """Open a key-only cursor over the store."""
+
         return Cursor(
             self._stub, self._store, key_range=key_range, direction=direction, keys_only=True
         )
 
     def index(self, name: str) -> Index:
+        """Return a client for a named index on this store."""
+
         return Index(self._stub, self._store, name)
 
 
 class Index:
+    """Client bound to a secondary index on an object store."""
+
     def __init__(self, stub: Any, store: str, index: str) -> None:
         self._stub = stub
         self._store = store
         self._index = index
 
     def get(self, *values: Any) -> dict[str, Any]:
+        """Fetch the first matching record for the indexed values."""
+
         resp = _grpc_call(self._stub.IndexGet, self._req(values))
         return _record_to_dict(resp.record)
 
     def get_key(self, *values: Any) -> str:
+        """Fetch the first matching primary key for the indexed values."""
+
         resp = _grpc_call(self._stub.IndexGetKey, self._req(values))
         return resp.key
 
     def get_all(self, *values: Any, key_range: KeyRange | None = None) -> list[dict[str, Any]]:
+        """Return all records matching the indexed values and key range."""
+
         resp = _grpc_call(self._stub.IndexGetAll, self._req(values, key_range))
         return [_record_to_dict(r) for r in resp.records]
 
     def get_all_keys(self, *values: Any, key_range: KeyRange | None = None) -> list[str]:
+        """Return all primary keys matching the indexed values and key range."""
+
         resp = _grpc_call(self._stub.IndexGetAllKeys, self._req(values, key_range))
         return list(resp.keys)
 
     def count(self, *values: Any, key_range: KeyRange | None = None) -> int:
+        """Return the number of records matching the indexed values."""
+
         resp = _grpc_call(self._stub.IndexCount, self._req(values, key_range))
         return resp.count
 
     def delete(self, *values: Any) -> int:
+        """Delete records matching the indexed values."""
+
         resp = _grpc_call(self._stub.IndexDelete, self._req(values))
         return resp.deleted
 
@@ -205,6 +279,8 @@ class Index:
         key_range: KeyRange | None = None,
         direction: int = CURSOR_NEXT,
     ) -> Cursor:
+        """Open a record cursor over the indexed results."""
+
         return Cursor(
             self._stub,
             self._store,
@@ -220,6 +296,8 @@ class Index:
         key_range: KeyRange | None = None,
         direction: int = CURSOR_NEXT,
     ) -> Cursor:
+        """Open a key-only cursor over the indexed results."""
+
         return Cursor(
             self._stub,
             self._store,
@@ -262,6 +340,8 @@ class _RequestIterator:
 
 
 class Cursor:
+    """Stateful cursor over object store or index results."""
+
     def __init__(
         self,
         stub: Any,
@@ -352,12 +432,16 @@ class Cursor:
         return True
 
     def continue_(self) -> bool:
+        """Advance to the next matching cursor entry."""
+
         if self._closed or self._exhausted:
             return False
         self._send_command(next=True)
         return self._advance_to_next()
 
     def continue_to_key(self, key: Any) -> bool:
+        """Advance the cursor to ``key`` or the next greater entry."""
+
         if self._closed or self._exhausted:
             return False
         self._send_command(
@@ -368,6 +452,8 @@ class Cursor:
         return self._advance_to_next()
 
     def advance(self, count: int) -> bool:
+        """Skip forward by ``count`` entries."""
+
         if self._closed or self._exhausted:
             return False
         self._send_command(advance=count)
@@ -375,14 +461,20 @@ class Cursor:
 
     @property
     def key(self) -> Any:
+        """Current key for the cursor entry."""
+
         return self._key
 
     @property
     def primary_key(self) -> str | None:
+        """Current primary key for the cursor entry."""
+
         return self._primary_key
 
     @property
     def value(self) -> dict[str, Any]:
+        """Current record value for the cursor entry."""
+
         if self._keys_only:
             raise TypeError("cursor opened with keys_only=True has no value")
         if self._record is None:
@@ -423,6 +515,8 @@ class Cursor:
             self._refresh_from_entry(resp.entry)
 
     def delete(self) -> None:
+        """Delete the current cursor entry."""
+
         if self._exhausted:
             raise NotFoundError("cursor is exhausted")
         if self._closed:
@@ -431,6 +525,8 @@ class Cursor:
         self._recv_mutation_ack()
 
     def update(self, value: dict[str, Any]) -> None:
+        """Replace the current cursor entry with ``value``."""
+
         if self._exhausted:
             raise NotFoundError("cursor is exhausted")
         if self._closed:
@@ -439,6 +535,8 @@ class Cursor:
         self._recv_mutation_ack()
 
     def close(self) -> None:
+        """Close the cursor stream."""
+
         if self._closed:
             return
         self._closed = True
@@ -452,9 +550,13 @@ class Cursor:
             pass
 
     def __enter__(self) -> Cursor:
+        """Return the cursor for ``with`` statements."""
+
         return self
 
     def __exit__(self, *args: Any) -> None:
+        """Close the cursor at the end of a context manager block."""
+
         self.close()
 
 

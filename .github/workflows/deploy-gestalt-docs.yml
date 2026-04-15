@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'docs/**'
+      - 'sdk/python/**'
       - '.github/workflows/deploy-gestalt-docs.yml'
   workflow_dispatch:
 
@@ -24,12 +25,29 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      UV_PYTHON: "3.10"
     permissions:
       contents: read
       id-token: write
 
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+
+      - name: Install Python
+        run: uv python install 3.10
+
+      - name: Sync Python SDK docs environment
+        working-directory: sdk/python
+        run: uv sync --frozen --group dev
+
+      - name: Build Python SDK API docs
+        working-directory: sdk/python
+        run: |
+          rm -rf ../../docs/public/api/python
+          uv run sphinx-build -W -b html -d docs/_build/deploy-doctrees docs ../../docs/public/api/python
 
       - name: Authenticate to Google Cloud
         id: gcp-auth
