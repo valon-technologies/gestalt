@@ -291,7 +291,8 @@ func runServer(env *bootstrapEnv) error {
 }
 
 const (
-	adminUIDirEnv = "GESTALTD_ADMIN_UI_DIR"
+	adminUIDirEnv    = "GESTALTD_ADMIN_UI_DIR"
+	adminUILoginPath = "/api/v1/auth/login"
 )
 
 func resolveUIHandlers(cfg *config.Config) ([]server.MountedWebUI, http.Handler, http.Handler, error) {
@@ -309,13 +310,19 @@ func resolveUIHandlers(cfg *config.Config) ([]server.MountedWebUI, http.Handler,
 	}
 	publicAdminUI, err := resolveAdminUIHandler(adminui.Options{
 		BrandHref: publicBrandHref,
+		LoginBase: adminUILoginPath,
 	})
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
+	managementLoginBase := adminUILoginPath
+	if baseURL := strings.TrimRight(cfg.Server.BaseURL, "/"); baseURL != "" {
+		managementLoginBase = baseURL + adminUILoginPath
+	}
 	managementAdminUI, err := resolveAdminUIHandler(adminui.Options{
 		BrandHref: "/admin/",
+		LoginBase: managementLoginBase,
 	})
 	if err != nil {
 		return nil, nil, nil, err
