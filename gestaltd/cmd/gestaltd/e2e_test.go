@@ -1,6 +1,9 @@
 package main
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,6 +18,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/operator"
+	"github.com/valon-technologies/gestalt/server/internal/pluginstore"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -488,8 +494,11 @@ func setupPrebuiltPluginDir(t *testing.T, baseDir string) string {
 	}
 
 	artifactRel := filepath.Base(binDest)
+	sum := sha256.Sum256(binData)
+	srcManifest.Source = "github.com/test/plugins/provider"
+	srcManifest.Version = "0.0.1-alpha.1"
 	srcManifest.Artifacts = []providermanifestv1.Artifact{
-		{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: artifactRel},
+		{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: artifactRel, SHA256: hex.EncodeToString(sum[:])},
 	}
 	srcManifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: artifactRel}
 	writeManifestFile(t, providerDir, srcManifest)
@@ -577,6 +586,36 @@ providers:
     source:
       path: %s
 `, port, indexedDBManifest, uiBlock, pluginManifest)
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	return cfgPath
+}
+
+func writeManagedSourceServeConfig(t *testing.T, dir string, port int) string {
+	t.Helper()
+
+	indexedDBDir := setupIndexedDBProviderDir(t, dir)
+	indexedDBManifest := componentProviderManifestPath(t, indexedDBDir)
+	cfg := fmt.Sprintf(`server:
+  public:
+    port: %d
+  encryptionKey: test-serve-e2e-key
+  providers:
+    indexeddb: inmem
+providers:
+  indexeddb:
+    inmem:
+      source:
+        path: %s
+plugins:
+  example:
+    source:
+      ref: github.com/test/plugins/provider
+      version: 0.0.1-alpha.1
+`, port, indexedDBManifest)
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
@@ -862,6 +901,77 @@ func TestE2EInitLocalProviders(t *testing.T) {
 	}
 	if _, ok := lock["version"]; ok {
 		t.Fatalf("expected schema-based lockfile, found legacy version field: %v", lock["version"])
+	}
+}
+
+func TestE2EServeLockedRejectsGenericArchiveForExecutablePlugin(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping locked generic archive E2E test in short mode")
+	}
+
+	dir := t.TempDir()
+	cfgPath := writeManagedSourceServeConfig(t, dir, 0)
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load(%s): %v", cfgPath, err)
+	}
+
+	fingerprint, err := operator.ProviderFingerprint("example", cfg.Plugins["example"], filepath.Dir(cfgPath))
+	if err != nil {
+		t.Fatalf("ProviderFingerprint(example): %v", err)
+	}
+
+	destDir := filepath.Join(dir, filepath.FromSlash(operator.PreparedProvidersDir), "example")
+	installed, err := pluginstore.InstallFromDir(setupPrebuiltPluginDir(t, dir), destDir)
+	if err != nil {
+		t.Fatalf("Install(prebuilt provider): %v", err)
+	}
+
+	manifestRel, err := filepath.Rel(dir, installed.ManifestPath)
+	if err != nil {
+		t.Fatalf("filepath.Rel(manifest): %v", err)
+	}
+	executableRel, err := filepath.Rel(dir, installed.ExecutablePath)
+	if err != nil {
+		t.Fatalf("filepath.Rel(executable): %v", err)
+	}
+
+	lockPath := filepath.Join(dir, "gestalt.lock.json")
+	lock := &operator.Lockfile{
+		Providers: map[string]operator.LockProviderEntry{
+			"example": {
+				Fingerprint: fingerprint,
+				Source:      cfg.Plugins["example"].SourceRef(),
+				Version:     cfg.Plugins["example"].SourceVersion(),
+				Archives: map[string]operator.LockArchive{
+					"generic": {
+						URL: "https://example.test/gestalt-plugin-provider_v0.0.1-alpha.1.tar.gz",
+					},
+				},
+				Manifest:   filepath.ToSlash(manifestRel),
+				Executable: filepath.ToSlash(executableRel),
+			},
+		},
+	}
+	if err := operator.WriteLockfile(lockPath, lock); err != nil {
+		t.Fatalf("WriteLockfile(%s): %v", lockPath, err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, gestaltdBin, "serve", "--locked", "--config", cfgPath)
+	out, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		t.Fatalf("gestaltd serve --locked unexpectedly stayed up after forcing a generic archive\noutput: %s", out)
+	}
+	if err == nil {
+		t.Fatalf("expected gestaltd serve --locked to fail, output: %s", out)
+	}
+	if !strings.Contains(string(out), "generic release archives are not allowed") {
+		t.Fatalf("expected generic-archive policy error, got: %s", out)
 	}
 }
 

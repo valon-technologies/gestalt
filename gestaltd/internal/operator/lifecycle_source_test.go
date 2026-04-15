@@ -1762,3 +1762,165 @@ func TestSourcePluginInitWithPlatformsPersistsExtraPlatformHash(t *testing.T) {
 		t.Fatalf("readBack extra-platform SHA256 = %q, want %q", got, hex.EncodeToString(extraArchiveSHA[:]))
 	}
 }
+
+func TestSourcePluginInitWithPlatformsRejectsGenericFallbackForExtraPlatform(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "wrong-env-token")
+
+	dir := t.TempDir()
+
+	src := pluginsource.Source{
+		Host:  pluginsource.HostGitHub,
+		Owner: testOwner,
+		Repo:  testRepo,
+		Path:  "plugins/" + testPlugin,
+	}
+	expectedTag := src.ReleaseTag(testVersion)
+	releasePath := "/repos/" + testOwner + "/" + testRepo + "/releases/tags/" + expectedTag
+
+	currentAssetName := fmt.Sprintf("gestalt-plugin-%s_v%s_%s_%s.tar.gz", src.PluginName(), testVersion, runtime.GOOS, runtime.GOARCH)
+	genericAssetName := src.AssetName(testVersion)
+	extraPlatform := struct {
+		goos   string
+		goarch string
+	}{
+		goos:   "linux",
+		goarch: "amd64",
+	}
+	for _, candidate := range []struct {
+		goos   string
+		goarch string
+	}{
+		{goos: "linux", goarch: "amd64"},
+		{goos: "linux", goarch: "arm64"},
+		{goos: "darwin", goarch: "amd64"},
+		{goos: "darwin", goarch: "arm64"},
+	} {
+		if candidate.goos != runtime.GOOS || candidate.goarch != runtime.GOARCH {
+			extraPlatform = candidate
+			break
+		}
+	}
+
+	currentArchivePath := buildV2Archive(t, dir, testSource, testVersion, testBinary)
+	currentArchiveData, err := os.ReadFile(currentArchivePath)
+	if err != nil {
+		t.Fatalf("read current archive: %v", err)
+	}
+	genericArchiveData := []byte("generic-platform-archive")
+
+	var releaseCount atomic.Int64
+	var currentAssetCount atomic.Int64
+	var genericAssetCount atomic.Int64
+	handlerErrs := make(chan error, 4)
+	nextHandlerErr := func() error {
+		t.Helper()
+		select {
+		case err := <-handlerErrs:
+			return err
+		default:
+			return nil
+		}
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case releasePath:
+			releaseCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "token test-token" {
+				handlerErrs <- fmt.Errorf("release authorization = %q, want %q", got, "token test-token")
+				http.Error(w, "bad release authorization", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			resp := map[string]any{
+				"assets": []map[string]any{
+					{
+						"name":                 currentAssetName,
+						"url":                  "http://" + r.Host + "/asset-current",
+						"browser_download_url": "https://github.com/" + testOwner + "/" + testRepo + "/releases/download/" + expectedTag + "/" + currentAssetName,
+					},
+					{
+						"name":                 genericAssetName,
+						"url":                  "http://" + r.Host + "/asset-generic",
+						"browser_download_url": "https://github.com/" + testOwner + "/" + testRepo + "/releases/download/" + expectedTag + "/" + genericAssetName,
+					},
+				},
+			}
+			_ = json.NewEncoder(w).Encode(resp)
+		case "/asset-current":
+			currentAssetCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "token test-token" {
+				handlerErrs <- fmt.Errorf("current asset authorization = %q, want %q", got, "token test-token")
+				http.Error(w, "bad asset authorization", http.StatusBadRequest)
+				return
+			}
+			if got := r.Header.Get("Accept"); got != "application/octet-stream" {
+				handlerErrs <- fmt.Errorf("current asset accept = %q, want %q", got, "application/octet-stream")
+				http.Error(w, "bad asset accept", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(currentArchiveData)
+		case "/asset-generic":
+			genericAssetCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "token test-token" {
+				handlerErrs <- fmt.Errorf("generic asset authorization = %q, want %q", got, "token test-token")
+				http.Error(w, "bad asset authorization", http.StatusBadRequest)
+				return
+			}
+			if got := r.Header.Get("Accept"); got != "application/octet-stream" {
+				handlerErrs <- fmt.Errorf("generic asset accept = %q, want %q", got, "application/octet-stream")
+				http.Error(w, "bad asset accept", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(genericArchiveData)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
+		"plugins:",
+		"  alpha:",
+		"    source:",
+		"      ref: " + testSource,
+		"      version: " + testVersion,
+		"      auth:",
+		"        token: test-token",
+		"server:",
+		"  providers:",
+		"    indexeddb: sqlite",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	resolver := &ghresolver.GitHubResolver{BaseURL: srv.URL}
+	lc := NewLifecycle(resolver)
+	_, err = lc.InitAtPathWithPlatforms(configPath, "", []struct{ GOOS, GOARCH, LibC string }{
+		{GOOS: extraPlatform.goos, GOARCH: extraPlatform.goarch},
+	})
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+	if err == nil {
+		t.Fatal("InitAtPathWithPlatforms unexpectedly succeeded with generic-only extra platform fallback")
+	}
+	if !strings.Contains(err.Error(), "generic release archives are not allowed") {
+		t.Fatalf("InitAtPathWithPlatforms error = %v, want generic archive policy rejection", err)
+	}
+	if got := currentAssetCount.Load(); got != 1 {
+		t.Fatalf("current asset request count = %d, want 1", got)
+	}
+	if got := genericAssetCount.Load(); got != 0 {
+		t.Fatalf("generic asset request count = %d, want 0", got)
+	}
+	if got := releaseCount.Load(); got < 2 {
+		t.Fatalf("release request count = %d, want at least 2", got)
+	}
+}

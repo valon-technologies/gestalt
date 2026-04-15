@@ -15,6 +15,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
@@ -106,8 +107,9 @@ func (l *Lifecycle) InitAtPathWithPlatforms(configPath, artifactsDir string, pla
 		return lock, nil
 	}
 
+	paths := initPathsForConfigWithArtifactsDir(configPath, resolveArtifactsDir(configPath, cfg, artifactsDir))
 	tokenForSource := buildSourceTokenMap(cfg)
-	if err := downloadPlatformArchives(context.Background(), lock, platforms, tokenForSource); err != nil {
+	if err := downloadPlatformArchives(context.Background(), lock, paths, platforms, tokenForSource); err != nil {
 		return nil, err
 	}
 
@@ -842,7 +844,7 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 			continue
 		}
 		lockEntry, found := lock.Providers[name]
-		if !lockEntryMatches(paths, name, entry, lockEntry, found, providerDestDir(paths, name)) {
+		if !lockEntryMatches(paths, providermanifestv1.KindPlugin, name, entry, lockEntry, found, providerDestDir(paths, name)) {
 			return false
 		}
 	}
@@ -853,7 +855,7 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 				continue
 			}
 			lockEntry, found := lockEntries[name]
-			if !lockEntryMatches(paths, name, entry, lockEntry, found, componentDestDir(paths, collection.kind, name)) {
+			if !lockEntryMatches(paths, providerManifestKind(collection.kind), name, entry, lockEntry, found, componentDestDir(paths, collection.kind, name)) {
 				return false
 			}
 		}
@@ -863,7 +865,7 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 			continue
 		}
 		lockEntry, found := lock.IndexedDBs[name]
-		if !lockEntryMatches(paths, name, entry, lockEntry, found, indexeddbDestDir(paths, name)) {
+		if !lockEntryMatches(paths, providermanifestv1.KindIndexedDB, name, entry, lockEntry, found, indexeddbDestDir(paths, name)) {
 			return false
 		}
 	}
@@ -872,7 +874,7 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 			continue
 		}
 		lockEntry, found := lock.S3[name]
-		if !lockEntryMatches(paths, name, entry, lockEntry, found, s3DestDir(paths, name)) {
+		if !lockEntryMatches(paths, providermanifestv1.KindS3, name, entry, lockEntry, found, s3DestDir(paths, name)) {
 			return false
 		}
 	}
@@ -928,7 +930,72 @@ func NamedUIProviderFingerprint(name string, entry *config.ProviderEntry) (strin
 	return ProviderFingerprint("ui:"+name, entry, "")
 }
 
-func lockEntryMatches(paths initPaths, name string, providerEntry *config.ProviderEntry, entry LockEntry, found bool, destDir string) bool {
+func archivePolicyKind(kind string) string {
+	switch kind {
+	case providerLockKindTelemetry, providerLockKindAudit:
+		return providermanifestv1.KindPlugin
+	default:
+		return kind
+	}
+}
+
+func archivePolicySubject(kind, name string) string {
+	switch archivePolicyKind(kind) {
+	case providermanifestv1.KindPlugin:
+		return fmt.Sprintf("provider %q", name)
+	case providermanifestv1.KindWebUI:
+		return fmt.Sprintf("ui provider %q", name)
+	default:
+		return fmt.Sprintf("%s %q", kind, name)
+	}
+}
+
+func lockEntryDestDir(paths initPaths, kind, name string) string {
+	switch kind {
+	case providermanifestv1.KindPlugin:
+		return providerDestDir(paths, name)
+	case providermanifestv1.KindAuth:
+		return authDestDir(paths, name)
+	case providermanifestv1.KindSecrets:
+		return secretsDestDir(paths, name)
+	case providermanifestv1.KindCache:
+		return cacheDestDir(paths, name)
+	case providermanifestv1.KindIndexedDB:
+		return indexeddbDestDir(paths, name)
+	case providermanifestv1.KindS3:
+		return s3DestDir(paths, name)
+	case providerLockKindTelemetry:
+		return telemetryDestDir(paths, name)
+	case providerLockKindAudit:
+		return auditDestDir(paths, name)
+	case providermanifestv1.KindWebUI:
+		return uiDestDir(paths, name)
+	default:
+		return ""
+	}
+}
+
+func readLockEntryManifest(paths initPaths, entry LockEntry, destDir string) (*providermanifestv1.Manifest, error) {
+	if strings.TrimSpace(entry.Manifest) != "" {
+		manifestPath := resolveLockPath(paths.artifactsDir, entry.Manifest)
+		if _, manifest, err := providerpkg.ReadManifestFile(manifestPath); err == nil {
+			return manifest, nil
+		}
+	}
+	if destDir == "" {
+		return nil, fmt.Errorf("manifest path is unavailable")
+	}
+	install, err := inspectPreparedInstall(destDir)
+	if err != nil {
+		return nil, err
+	}
+	if install.manifest == nil {
+		return nil, fmt.Errorf("prepared install at %s is missing a manifest", destDir)
+	}
+	return install.manifest, nil
+}
+
+func lockEntryMatches(paths initPaths, kind, name string, providerEntry *config.ProviderEntry, entry LockEntry, found bool, destDir string) bool {
 	if !found {
 		return false
 	}
@@ -941,7 +1008,19 @@ func lockEntryMatches(paths initPaths, name string, providerEntry *config.Provid
 	}
 	if len(entry.Archives) > 0 {
 		platform := providerpkg.CurrentPlatformString()
-		if _, _, ok := resolveArchiveForPlatform(entry, platform); !ok {
+		_, resolvedKey, ok := resolveArchiveForPlatform(entry, platform)
+		if !ok {
+			return false
+		}
+		policyKind := archivePolicyKind(kind)
+		var manifest *providermanifestv1.Manifest
+		if policyKind == providermanifestv1.KindPlugin {
+			manifest, err = readLockEntryManifest(paths, entry, destDir)
+			if err != nil {
+				return false
+			}
+		}
+		if err := validateLockedArchivePolicy(archivePolicySubject(kind, name), policyKind, manifest, entry, platform, resolvedKey); err != nil {
 			return false
 		}
 	}
@@ -1009,27 +1088,37 @@ func resolveArchiveForPlatform(entry LockEntry, platform string) (LockArchive, s
 // buildArchivesMap constructs the Archives map for a lock entry. It enumerates
 // all platform archives from the resolver (if supported) and records the
 // verified SHA256 for the current platform.
-func (l *Lifecycle) buildArchivesMap(ctx context.Context, src pluginsource.Source, version, currentURL, currentSHA256 string) map[string]LockArchive {
+func (l *Lifecycle) buildArchivesMap(ctx context.Context, src pluginsource.Source, version, currentURL, currentSHA256, kind, subject string, manifest *providermanifestv1.Manifest) (map[string]LockArchive, error) {
 	currentPlatform := providerpkg.CurrentPlatformString()
 	archives := map[string]LockArchive{
 		currentPlatform: {URL: currentURL, SHA256: currentSHA256},
 	}
 	enumerator, ok := l.sourceResolver.(pluginsource.PlatformEnumerator)
 	if !ok {
-		return archives
+		return archives, nil
 	}
 	platformArchives, err := enumerator.ListPlatformArchives(ctx, src, version)
 	if err != nil {
+		if !allowsGenericArchive(kind, manifest) {
+			return nil, fmt.Errorf("enumerate platform archives for %s: %w", subject, err)
+		}
 		slog.Warn("failed to enumerate platform archives; lockfile will only contain current platform", "error", err)
-		return archives
+		return archives, nil
 	}
+	available := make(map[string]LockArchive, len(platformArchives))
 	for _, pa := range platformArchives {
+		if _, exists := available[pa.Platform]; !exists {
+			available[pa.Platform] = LockArchive{URL: pa.URL}
+		}
 		if _, exists := archives[pa.Platform]; exists {
 			continue
 		}
 		archives[pa.Platform] = LockArchive{URL: pa.URL}
 	}
-	return archives
+	if err := validateResolvedArchivePolicy(subject, kind, manifest, currentPlatform, currentURL, available); err != nil {
+		return nil, err
+	}
+	return archives, nil
 }
 
 func (l *Lifecycle) writeProviderArtifacts(ctx context.Context, cfg *config.Config, paths initPaths) (map[string]LockProviderEntry, error) {
@@ -1110,7 +1199,10 @@ func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, paths initP
 	if err != nil {
 		return LockEntry{}, fmt.Errorf("compute executable path for %s %q: %w", kind, name, err)
 	}
-	archives := l.buildArchivesMap(ctx, src, plugin.SourceVersion(), resolved.ResolvedURL, resolved.ArchiveSHA256)
+	archives, err := l.buildArchivesMap(ctx, src, plugin.SourceVersion(), resolved.ResolvedURL, resolved.ArchiveSHA256, kind, fmt.Sprintf("%s %q", kind, name), installed.Manifest)
+	if err != nil {
+		return LockEntry{}, err
+	}
 	return LockEntry{
 		Fingerprint: fingerprint,
 		Source:      plugin.SourceRef(),
@@ -1169,7 +1261,10 @@ func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths initPa
 			return LockProviderEntry{}, fmt.Errorf("compute executable path for provider %q: %w", name, err)
 		}
 	}
-	archives := l.buildArchivesMap(ctx, src, plugin.SourceVersion(), resolved.ResolvedURL, resolved.ArchiveSHA256)
+	archives, err := l.buildArchivesMap(ctx, src, plugin.SourceVersion(), resolved.ResolvedURL, resolved.ArchiveSHA256, providermanifestv1.KindPlugin, fmt.Sprintf("provider %q", name), installed.Manifest)
+	if err != nil {
+		return LockProviderEntry{}, err
+	}
 	return LockProviderEntry{
 		Fingerprint: fingerprint,
 		Source:      plugin.SourceRef(),
@@ -1230,7 +1325,10 @@ func (l *Lifecycle) writeNamedUIProviderArtifact(ctx context.Context, paths init
 	if err != nil {
 		return LockUIEntry{}, fmt.Errorf("compute asset root path for %s: %w", subject, err)
 	}
-	archives := l.buildArchivesMap(ctx, src, plugin.SourceVersion(), resolved.ResolvedURL, resolved.ArchiveSHA256)
+	archives, err := l.buildArchivesMap(ctx, src, plugin.SourceVersion(), resolved.ResolvedURL, resolved.ArchiveSHA256, providermanifestv1.KindWebUI, subject, installed.Manifest)
+	if err != nil {
+		return LockUIEntry{}, err
+	}
 	return LockUIEntry{
 		Fingerprint: fingerprint,
 		Source:      plugin.SourceRef(),
@@ -1336,6 +1434,58 @@ func (l *Lifecycle) applyLockedProviders(configPath, artifactsDir string, cfg *c
 	}
 
 	return nil
+}
+
+func installLockedPackageAtomic(packagePath, destDir string) (*pluginstore.InstalledPlugin, func() error, func() error, error) {
+	if destDir == "" {
+		return nil, nil, nil, fmt.Errorf("destination directory is required")
+	}
+	parentDir := filepath.Dir(destDir)
+	if err := os.MkdirAll(parentDir, 0o755); err != nil {
+		return nil, nil, nil, fmt.Errorf("create destination parent directory: %w", err)
+	}
+	tempDir, err := os.MkdirTemp(parentDir, filepath.Base(destDir)+".tmp-*")
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("create temp install directory: %w", err)
+	}
+	cleanupDir := tempDir
+	installed, err := pluginstore.Install(packagePath, tempDir)
+	if err != nil {
+		_ = os.RemoveAll(cleanupDir)
+		return nil, nil, nil, err
+	}
+	commit := func() error {
+		backupDir := ""
+		if _, err := os.Stat(destDir); err == nil {
+			backupDir = destDir + ".backup-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+			if err := os.Rename(destDir, backupDir); err != nil {
+				return fmt.Errorf("stage existing provider cache at %s: %w", destDir, err)
+			}
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("inspect existing provider cache at %s: %w", destDir, err)
+		}
+		if err := os.Rename(tempDir, destDir); err != nil {
+			if backupDir != "" {
+				if restoreErr := os.Rename(backupDir, destDir); restoreErr != nil {
+					return fmt.Errorf("activate prepared install at %s: %w (rollback failed: %v)", destDir, err, restoreErr)
+				}
+			}
+			return fmt.Errorf("activate prepared install at %s: %w", destDir, err)
+		}
+		if backupDir != "" {
+			if err := os.RemoveAll(backupDir); err != nil {
+				return fmt.Errorf("remove staged provider cache backup at %s: %w", backupDir, err)
+			}
+		}
+		cleanupDir = ""
+		return nil
+	}
+	return installed, func() error {
+		if cleanupDir == "" {
+			return nil
+		}
+		return os.RemoveAll(cleanupDir)
+	}, commit, nil
 }
 
 func (l *Lifecycle) resolveConfiguredPlugins(paths initPaths, lock *Lockfile, cfg *config.Config, locked bool) error {
@@ -1776,6 +1926,14 @@ func (l *Lifecycle) applyLockedProviderEntry(paths initPaths, lock *Lockfile, na
 	destDir := providerDestDir(paths, name)
 	install, err := inspectPreparedInstall(destDir)
 	needMaterialize := err != nil || !preparedManifestMatchesLock(entry, install.manifest)
+	if err == nil && !needMaterialize {
+		platform := providerpkg.CurrentPlatformString()
+		if _, resolvedKey, ok := resolveArchiveForPlatform(entry, platform); ok {
+			if policyErr := validateLockedArchivePolicy(fmt.Sprintf("provider %q", name), providermanifestv1.KindPlugin, install.manifest, entry, platform, resolvedKey); policyErr != nil {
+				return policyErr
+			}
+		}
+	}
 	if !needMaterialize && install.executablePath != "" {
 		if _, err := os.Stat(install.executablePath); err != nil {
 			needMaterialize = true
@@ -1821,6 +1979,14 @@ func (l *Lifecycle) applyLockedComponentEntry(paths initPaths, entry *LockEntry,
 
 	install, err := inspectPreparedInstall(destDir)
 	needMaterialize := err != nil || !preparedManifestMatchesLock(*entry, install.manifest)
+	if err == nil && !needMaterialize {
+		platform := providerpkg.CurrentPlatformString()
+		if _, resolvedKey, ok := resolveArchiveForPlatform(*entry, platform); ok {
+			if policyErr := validateLockedArchivePolicy(fmt.Sprintf("%s %q", kind, name), kind, install.manifest, *entry, platform, resolvedKey); policyErr != nil {
+				return policyErr
+			}
+		}
+	}
 	if !needMaterialize && install.executablePath == "" {
 		needMaterialize = true
 	}
@@ -1900,7 +2066,7 @@ func bindResolvedUIManifest(plugin *config.ProviderEntry, manifestPath string, m
 
 func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPaths, name string, plugin *config.ProviderEntry, entry LockProviderEntry, locked bool) error {
 	platform := providerpkg.CurrentPlatformString()
-	archive, _, ok := resolveArchiveForPlatform(entry, platform)
+	archive, resolvedKey, ok := resolveArchiveForPlatform(entry, platform)
 	if !ok || archive.URL == "" {
 		return fmt.Errorf("no archive for platform %s for provider %q; run `gestaltd init --config %s`", platform, name, paths.configPath)
 	}
@@ -1934,25 +2100,29 @@ func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPat
 	}
 
 	destDir := providerDestDir(paths, name)
-	if err := os.RemoveAll(destDir); err != nil {
-		return fmt.Errorf("remove stale provider cache for provider %q: %w", name, err)
-	}
-	installed, err := pluginstore.Install(download.LocalPath, destDir)
+	installed, cleanupInstall, commitInstall, err := installLockedPackageAtomic(download.LocalPath, destDir)
 	if err != nil {
 		return fmt.Errorf("install locked source provider for provider %q: %w", name, err)
 	}
+	defer func() { _ = cleanupInstall() }()
 	if installed.Manifest.Source != entry.Source {
 		return fmt.Errorf("locked source provider manifest source mismatch for provider %q: got %q, want %q", name, installed.Manifest.Source, entry.Source)
 	}
 	if installed.Manifest.Version != entry.Version {
 		return fmt.Errorf("locked source provider manifest version mismatch for provider %q: got %q, want %q", name, installed.Manifest.Version, entry.Version)
 	}
+	if err := validateLockedArchivePolicy(fmt.Sprintf("provider %q", name), providermanifestv1.KindPlugin, installed.Manifest, entry, platform, resolvedKey); err != nil {
+		return err
+	}
+	if err := commitInstall(); err != nil {
+		return fmt.Errorf("activate locked source provider for provider %q: %w", name, err)
+	}
 	return nil
 }
 
 func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPaths, kind, name string, plugin *config.ProviderEntry, entry LockEntry, destDir string, locked bool) error {
 	platform := providerpkg.CurrentPlatformString()
-	archive, _, ok := resolveArchiveForPlatform(entry, platform)
+	archive, resolvedKey, ok := resolveArchiveForPlatform(entry, platform)
 	if !ok || archive.URL == "" {
 		return fmt.Errorf("no archive for platform %s for %s %q; run `gestaltd init --config %s`", platform, kind, name, paths.configPath)
 	}
@@ -1988,13 +2158,11 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 	if destDir == "" {
 		return fmt.Errorf("unsupported component %q", name)
 	}
-	if err := os.RemoveAll(destDir); err != nil {
-		return fmt.Errorf("remove stale provider cache for %s %q: %w", kind, name, err)
-	}
-	installed, err := pluginstore.Install(download.LocalPath, destDir)
+	installed, cleanupInstall, commitInstall, err := installLockedPackageAtomic(download.LocalPath, destDir)
 	if err != nil {
 		return fmt.Errorf("install locked source provider for %s %q: %w", kind, name, err)
 	}
+	defer func() { _ = cleanupInstall() }()
 	if err := validateInstalledManifestKind(kind, name, installed.Manifest); err != nil {
 		return err
 	}
@@ -2003,6 +2171,12 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 	}
 	if installed.Manifest.Version != entry.Version {
 		return fmt.Errorf("locked source provider manifest version mismatch for %s %q: got %q, want %q", kind, name, installed.Manifest.Version, entry.Version)
+	}
+	if err := validateLockedArchivePolicy(fmt.Sprintf("%s %q", kind, name), kind, installed.Manifest, entry, platform, resolvedKey); err != nil {
+		return err
+	}
+	if err := commitInstall(); err != nil {
+		return fmt.Errorf("activate locked source provider for %s %q: %w", kind, name, err)
 	}
 	return nil
 }
@@ -2055,21 +2229,21 @@ func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths initP
 	return nil
 }
 
-func downloadPlatformArchives(ctx context.Context, lock *Lockfile, platforms []struct{ GOOS, GOARCH, LibC string }, tokenForSource map[string]string) error {
+func downloadPlatformArchives(ctx context.Context, lock *Lockfile, paths initPaths, platforms []struct{ GOOS, GOARCH, LibC string }, tokenForSource map[string]string) error {
 	for _, plat := range platforms {
 		platformKey := providerpkg.PlatformString(plat.GOOS, plat.GOARCH)
-		if err := hashPlatformInEntries(ctx, lock, platformKey, tokenForSource); err != nil {
+		if err := hashPlatformInEntries(ctx, lock, paths, platformKey, tokenForSource); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func hashPlatformInEntries(ctx context.Context, lock *Lockfile, platformKey string, tokenForSource map[string]string) error {
+func hashPlatformInEntries(ctx context.Context, lock *Lockfile, paths initPaths, platformKey string, tokenForSource map[string]string) error {
 	for _, kind := range providerLockKinds() {
 		lockEntries := lockEntriesForProviderKind(lock, kind)
 		for name, entry := range lockEntries {
-			if err := hashArchiveEntry(ctx, &entry, platformKey, tokenForSource); err != nil {
+			if err := hashArchiveEntry(ctx, kind, name, &entry, paths, platformKey, tokenForSource); err != nil {
 				return err
 			}
 			lockEntries[name] = entry
@@ -2078,13 +2252,25 @@ func hashPlatformInEntries(ctx context.Context, lock *Lockfile, platformKey stri
 	return nil
 }
 
-func hashArchiveEntry(ctx context.Context, entry *LockEntry, platformKey string, tokenForSource map[string]string) error {
+func hashArchiveEntry(ctx context.Context, kind, name string, entry *LockEntry, paths initPaths, platformKey string, tokenForSource map[string]string) error {
 	if entry.Archives == nil {
 		return nil
 	}
 	archive, resolvedKey, ok := resolveArchiveForPlatform(*entry, platformKey)
 	if !ok || archive.URL == "" || archive.SHA256 != "" {
 		return nil
+	}
+	policyKind := archivePolicyKind(kind)
+	var manifest *providermanifestv1.Manifest
+	if policyKind == providermanifestv1.KindPlugin {
+		var manifestErr error
+		manifest, manifestErr = readLockEntryManifest(paths, *entry, lockEntryDestDir(paths, kind, name))
+		if manifestErr != nil {
+			return fmt.Errorf("load manifest for %s: %w", archivePolicySubject(kind, name), manifestErr)
+		}
+	}
+	if err := validateLockedArchivePolicy(archivePolicySubject(kind, name), policyKind, manifest, *entry, platformKey, resolvedKey); err != nil {
+		return err
 	}
 	token := tokenForSource[entry.Source]
 	src, parseErr := pluginsource.Parse(entry.Source)

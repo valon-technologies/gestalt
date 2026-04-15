@@ -934,6 +934,226 @@ func TestLoadForExecutionAtPath_ReinitializesManagedPluginOwnedUIWhenPluginLockI
 	}
 }
 
+func TestLoadForExecutionAtPath_ReinitializesManagedPluginWhenGenericArchiveLockIsStale(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	const pluginRef = "github.com/testowner/plugins/roadmap"
+	const version = "0.0.1-alpha.1"
+
+	pluginPkg := mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindPlugin,
+		Source:      pluginRef,
+		Version:     version,
+		DisplayName: "Roadmap Review",
+		Entrypoint: &providermanifestv1.Entrypoint{
+			ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin")),
+		},
+		Spec: &providermanifestv1.Spec{
+			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+		},
+	}, map[string]string{
+		filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin")): "plugin-binary-" + version,
+	}, true)
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
+  roadmap:
+    source:
+      ref: ` + pluginRef + `
+      version: ` + version + `
+server:
+` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	lc := NewLifecycle(versionedSourceResolver{
+		paths: map[string]map[string]string{
+			pluginRef: {
+				version: pluginPkg,
+			},
+		},
+	})
+	if _, err := lc.InitAtPath(cfgPath); err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+
+	loadedCfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	paths := initPathsForConfig(cfgPath)
+	staleLock := &Lockfile{
+		Version: LockVersion,
+		Providers: map[string]LockProviderEntry{
+			"roadmap": {
+				Fingerprint: mustFingerprint(t, "roadmap", loadedCfg.Plugins["roadmap"], paths.configDir),
+				Source:      pluginRef,
+				Version:     version,
+				Archives: map[string]LockArchive{
+					"generic": {URL: "https://example.com/roadmap.tar.gz", SHA256: "abc123"},
+				},
+			},
+		},
+	}
+	if err := WriteLockfile(filepath.Join(dir, InitLockfileName), staleLock); err != nil {
+		t.Fatalf("WriteLockfile: %v", err)
+	}
+
+	loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath: %v", err)
+	}
+	if loaded.Plugins["roadmap"] == nil || loaded.Plugins["roadmap"].ResolvedManifest == nil {
+		t.Fatalf("ResolvedManifest = %+v", loaded.Plugins["roadmap"])
+	}
+	if loaded.Plugins["roadmap"].Command == "" {
+		t.Fatal("loaded plugin command is empty")
+	}
+
+	rewrittenLock, err := ReadLockfile(filepath.Join(dir, InitLockfileName))
+	if err != nil {
+		t.Fatalf("ReadLockfile: %v", err)
+	}
+	if _, ok := rewrittenLock.Providers["roadmap"].Archives["generic"]; ok {
+		t.Fatalf("rewritten lock still contains generic archive: %#v", rewrittenLock.Providers["roadmap"].Archives)
+	}
+	if _, ok := rewrittenLock.Providers["roadmap"].Archives[providerpkg.CurrentPlatformString()]; !ok {
+		t.Fatalf("rewritten lock missing current platform archive: %#v", rewrittenLock.Providers["roadmap"].Archives)
+	}
+}
+
+func TestLoadForExecutionAtPath_LockedManagedDeclarativePluginMaterializesBeforeGenericPolicyCheck(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	const pluginRef = "github.com/testowner/plugins/roadmap"
+	const oldVersion = "0.0.1-alpha.1"
+	const newVersion = "0.0.2-alpha.1"
+
+	buildExecutablePlugin := func(version string) string {
+		return mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
+			Kind:        providermanifestv1.KindPlugin,
+			Source:      pluginRef,
+			Version:     version,
+			DisplayName: "Roadmap Review",
+			Entrypoint: &providermanifestv1.Entrypoint{
+				ArtifactPath: filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin")),
+			},
+			Spec: &providermanifestv1.Spec{
+				Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+			},
+		}, map[string]string{
+			filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin")): "plugin-binary-" + version,
+		}, true)
+	}
+	buildDeclarativePlugin := func(version string) string {
+		return mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
+			Kind:        providermanifestv1.KindPlugin,
+			Source:      pluginRef,
+			Version:     version,
+			DisplayName: "Roadmap Review",
+			Spec: &providermanifestv1.Spec{
+				Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+				Surfaces: &providermanifestv1.ProviderSurfaces{
+					REST: &providermanifestv1.RESTSurface{
+						BaseURL: "https://api.example.com",
+						Operations: []providermanifestv1.ProviderOperation{
+							{
+								Name:   "ping",
+								Method: "GET",
+								Path:   "/ping",
+							},
+						},
+					},
+				},
+			},
+		}, nil, false)
+	}
+
+	oldPluginPkg := buildExecutablePlugin(oldVersion)
+	newPluginPkg := buildDeclarativePlugin(newVersion)
+	newPluginArchive, err := os.ReadFile(newPluginPkg)
+	if err != nil {
+		t.Fatalf("ReadFile new declarative package: %v", err)
+	}
+	newPluginArchiveSum := sha256.Sum256(newPluginArchive)
+	archiveServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(newPluginArchive)
+	}))
+	defer archiveServer.Close()
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	writeConfig := func(version string) {
+		cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
+  roadmap:
+    source:
+      ref: ` + pluginRef + `
+      version: ` + version + `
+server:
+` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`
+		if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+			t.Fatalf("WriteFile config: %v", err)
+		}
+	}
+	writeConfig(oldVersion)
+
+	lc := NewLifecycle(versionedSourceResolver{
+		paths: map[string]map[string]string{
+			pluginRef: {
+				oldVersion: oldPluginPkg,
+				newVersion: newPluginPkg,
+			},
+		},
+	})
+	if _, err := lc.InitAtPath(cfgPath); err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+
+	writeConfig(newVersion)
+	loadedCfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	paths := initPathsForConfig(cfgPath)
+	lock := &Lockfile{
+		Version: LockVersion,
+		Providers: map[string]LockProviderEntry{
+			"roadmap": {
+				Fingerprint: mustFingerprint(t, "roadmap", loadedCfg.Plugins["roadmap"], paths.configDir),
+				Source:      pluginRef,
+				Version:     newVersion,
+				Archives: map[string]LockArchive{
+					"generic": {URL: archiveServer.URL, SHA256: hex.EncodeToString(newPluginArchiveSum[:])},
+				},
+			},
+		},
+	}
+	if err := WriteLockfile(filepath.Join(dir, InitLockfileName), lock); err != nil {
+		t.Fatalf("WriteLockfile: %v", err)
+	}
+
+	loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, true)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
+	}
+	if loaded.Plugins["roadmap"] == nil || loaded.Plugins["roadmap"].ResolvedManifest == nil {
+		t.Fatalf("ResolvedManifest = %+v", loaded.Plugins["roadmap"])
+	}
+	if got := loaded.Plugins["roadmap"].ResolvedManifest.Version; got != newVersion {
+		t.Fatalf("ResolvedManifest.Version = %q, want %q", got, newVersion)
+	}
+	if !loaded.Plugins["roadmap"].ResolvedManifest.IsDeclarativeOnlyProvider() {
+		t.Fatalf("ResolvedManifest = %+v, want declarative-only provider", loaded.Plugins["roadmap"].ResolvedManifest)
+	}
+	if loaded.Plugins["roadmap"].Command != "" {
+		t.Fatalf("loaded plugin command = %q, want declarative plugin without executable", loaded.Plugins["roadmap"].Command)
+	}
+}
+
 func TestLoadForExecutionAtPath_UsesDerivedPreparedPathsWhenLockPathsAreStale(t *testing.T) {
 	t.Parallel()
 
@@ -1547,7 +1767,7 @@ func TestHashPlatformInEntries_HashesMountedWebUIAndProviderArchives(t *testing.
 			"session": {
 				Source: "github.com/testowner/cache/session",
 				Archives: map[string]LockArchive{
-					platformKeyGeneric: {URL: srv.URL},
+					providerpkg.CurrentPlatformString(): {URL: srv.URL},
 				},
 			},
 		},
@@ -1555,7 +1775,7 @@ func TestHashPlatformInEntries_HashesMountedWebUIAndProviderArchives(t *testing.
 			"assets": {
 				Source: "github.com/testowner/providers/s3",
 				Archives: map[string]LockArchive{
-					platformKeyGeneric: {URL: srv.URL},
+					providerpkg.CurrentPlatformString(): {URL: srv.URL},
 				},
 			},
 		},
@@ -1569,7 +1789,7 @@ func TestHashPlatformInEntries_HashesMountedWebUIAndProviderArchives(t *testing.
 		},
 	}
 
-	if err := hashPlatformInEntries(context.Background(), lock, providerpkg.CurrentPlatformString(), map[string]string{}); err != nil {
+	if err := hashPlatformInEntries(context.Background(), lock, initPaths{}, providerpkg.CurrentPlatformString(), map[string]string{}); err != nil {
 		t.Fatalf("hashPlatformInEntries: %v", err)
 	}
 
@@ -1578,10 +1798,10 @@ func TestHashPlatformInEntries_HashesMountedWebUIAndProviderArchives(t *testing.
 	if got != want {
 		t.Fatalf("webui SHA256 = %q, want %q", got, want)
 	}
-	if got := lock.Caches["session"].Archives[platformKeyGeneric].SHA256; got != want {
+	if got := lock.Caches["session"].Archives[providerpkg.CurrentPlatformString()].SHA256; got != want {
 		t.Fatalf("cache SHA256 = %q, want %q", got, want)
 	}
-	if got := lock.S3["assets"].Archives[platformKeyGeneric].SHA256; got != want {
+	if got := lock.S3["assets"].Archives[providerpkg.CurrentPlatformString()].SHA256; got != want {
 		t.Fatalf("S3 SHA256 = %q, want %q", got, want)
 	}
 }
@@ -2719,7 +2939,7 @@ func TestHashArchiveEntry_HashesFallbackArchive(t *testing.T) {
 		},
 	}
 
-	if err := hashArchiveEntry(context.Background(), &entry, "linux/amd64", nil); err != nil {
+	if err := hashArchiveEntry(context.Background(), providermanifestv1.KindWebUI, "roadmap", &entry, initPaths{}, "linux/amd64", nil); err != nil {
 		t.Fatalf("hashArchiveEntry: %v", err)
 	}
 
