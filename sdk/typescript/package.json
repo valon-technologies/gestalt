@@ -3,6 +3,10 @@
   "version": "0.0.1-alpha.1",
   "description": "TypeScript SDK for Gestalt executable providers",
   "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/valon-technologies/gestalt.git"
+  },
   "exports": {
     ".": "./src/index.ts",
     "./build": "./src/build.ts",
@@ -11,8 +15,8 @@
     "./target": "./src/target.ts"
   },
   "bin": {
-    "gestalt-ts-build": "./src/build.ts",
-    "gestalt-ts-runtime": "./src/runtime.ts"
+    "gestalt-ts-build": "src/build.ts",
+    "gestalt-ts-runtime": "src/runtime.ts"
   },
   "files": [
     "src",
@@ -20,6 +24,9 @@
     "README.md",
     "tsconfig.json"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build:proto": "buf generate --template ../proto/buf.typescript.gen.yaml ../proto",
     "typecheck": "tsc --noEmit",
