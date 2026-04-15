@@ -236,7 +236,7 @@ func TestS3ServerWriteObjectPropagatesProviderErrorAfterStoppingReadEarly(t *tes
 		{
 			Msg: &proto.WriteObjectRequest_Open{
 				Open: &proto.WriteObjectOpen{
-					Ref: &proto.S3ObjectRef{Bucket: "docs", Key: "plans/q4.txt"},
+					Ref:         &proto.S3ObjectRef{Bucket: "docs", Key: "plans/q4.txt"},
 					IfNoneMatch: "*",
 				},
 			},
