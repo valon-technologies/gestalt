@@ -8,9 +8,9 @@ and services, with declarative configuration and secure credential management
 built in.
 
 <Callout type="warning">
-  **Alpha.** Gestalt is under active development. APIs and
-  configuration may change between releases. Feedback and bug reports are
-  welcome via [GitHub Issues](https://github.com/valon-technologies/gestalt/issues).
+  **Alpha.** Gestalt is under active development. APIs and configuration may
+  change between releases. Feedback and bug reports are welcome via [GitHub
+  Issues](https://github.com/valon-technologies/gestalt/issues).
 </Callout>
 
 ## Why Gestalt
@@ -23,9 +23,9 @@ Gestalt handles this so individual agents and applications don't have to. A sing
 
 ### What Gestalt provides
 
-- **[Declarative tool configuration.](/configuration)** Add a tool by declaring it in YAML. Gestalt resolves the provider package, sets up connections, and exposes operations automatically.
-- **[Secure credential management.](/security)** Connect to upstream APIs through OAuth, API keys, or custom credentials. Gestalt encrypts, stores, and refreshes tokens automatically so agents never handle raw secrets.
-- **[One definition, all harnesses.](/reference/http-api)** Define tools once and access them over MCP, HTTP, CLI across local and cloud environments, using any harness.
+- **[Stored on infrastructure you control.](/security)** Credentials and connection data are stored, encrypted at rest, on infrastructure you control, however you configure it.
+- **[Configure once, reuse everywhere.](/configuration)** A single YAML config replaces per-integration glue code, token management scripts, and bespoke OAuth callback servers.
+- **[One definition, all harnesses.](/reference/http-api)** The same operations are available over MCP, HTTP, CLI, and optional mounted web UIs for cloud agents, local coding assistants, and human operators.
 - **[Pluggable by default.](/reference/built-in-providers)** Auth backends, datastores, secret managers, and the web UI are all replaceable provider packages. Use the first-party providers or write your own in Go, Python, Rust, or TypeScript. Gestalt provides the building blocks; you choose the components.
 - **[Run anywhere.](/deploy)** Deploy on any infrastructure you control with Docker, Helm, or bare containers. No hosted dependency, no vendor lock-in.
 
