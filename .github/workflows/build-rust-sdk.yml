@@ -50,7 +50,12 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             sdk/rust/target/
-          key: ${{ runner.os }}-cargo-rust-sdk-${{ hashFiles('sdk/rust/Cargo.toml', 'sdk/rust/Cargo.lock', 'sdk/rust/**/Cargo.toml') }}
+          key: ${{ runner.os }}-cargo-rust-sdk-${{ hashFiles('sdk/rust/Cargo.toml', 'sdk/rust/Cargo.lock', 'sdk/rust/**/Cargo.toml', 'tools/rust-sdk-codegen/Cargo.toml', 'tools/rust-sdk-codegen/Cargo.lock') }}
+
+      - name: Verify checked-in generated bindings
+        run: |
+          ./scripts/generate_stubs.sh
+          git diff --exit-code -- src/generated/gestalt.provider.v1.rs
 
       - name: Check formatting
         run: cargo fmt --check

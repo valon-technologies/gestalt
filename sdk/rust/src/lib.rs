@@ -8,6 +8,7 @@ mod cache_server;
 mod catalog;
 mod env;
 mod error;
+mod generated;
 pub mod indexeddb;
 mod provider_server;
 mod router;
@@ -17,14 +18,6 @@ mod runtime_server;
 pub mod s3;
 mod secrets;
 mod secrets_server;
-
-/// Generated protobuf and gRPC bindings compiled from `sdk/proto/v1/*.proto`.
-mod generated {
-    #[allow(clippy::large_enum_variant)]
-    pub mod v1 {
-        tonic::include_proto!("gestalt.provider.v1");
-    }
-}
 
 pub mod proto {
     pub use crate::generated::v1;

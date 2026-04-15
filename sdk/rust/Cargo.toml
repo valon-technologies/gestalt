@@ -28,9 +28,4 @@ tonic-prost = "0.14"
 tower = "0.5"
 hyper-util = "0.1"
 
-[build-dependencies]
-prost-build = "0.14"
-protoc-bin-vendored = "3"
-tonic-prost-build = "0.14"
-
 [dev-dependencies]
