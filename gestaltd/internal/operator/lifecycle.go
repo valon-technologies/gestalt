@@ -87,19 +87,35 @@ func (l *Lifecycle) WithConfigSecretResolver(resolve func(context.Context, *conf
 }
 
 func (l *Lifecycle) InitAtPath(configPath string) (*Lockfile, error) {
-	lock, _, err := l.initAtPath(configPath, "")
+	lock, _, err := l.initAtPaths([]string{configPath}, "")
 	return lock, err
 }
 
 func (l *Lifecycle) InitAtPathWithArtifactsDir(configPath, artifactsDir string) (*Lockfile, error) {
-	lock, _, err := l.initAtPath(configPath, artifactsDir)
+	lock, _, err := l.initAtPaths([]string{configPath}, artifactsDir)
+	return lock, err
+}
+
+func (l *Lifecycle) InitAtPaths(configPaths []string) (*Lockfile, error) {
+	lock, _, err := l.initAtPaths(configPaths, "")
+	return lock, err
+}
+
+func (l *Lifecycle) InitAtPathsWithArtifactsDir(configPaths []string, artifactsDir string) (*Lockfile, error) {
+	lock, _, err := l.initAtPaths(configPaths, artifactsDir)
 	return lock, err
 }
 
 // InitAtPathWithPlatforms runs init and additionally downloads and hashes
 // archives for the specified extra platforms.
 func (l *Lifecycle) InitAtPathWithPlatforms(configPath, artifactsDir string, platforms []struct{ GOOS, GOARCH, LibC string }) (*Lockfile, error) {
-	lock, cfg, err := l.initAtPath(configPath, artifactsDir)
+	return l.InitAtPathsWithPlatforms([]string{configPath}, artifactsDir, platforms)
+}
+
+// InitAtPathsWithPlatforms runs init and additionally downloads and hashes
+// archives for the specified extra platforms.
+func (l *Lifecycle) InitAtPathsWithPlatforms(configPaths []string, artifactsDir string, platforms []struct{ GOOS, GOARCH, LibC string }) (*Lockfile, error) {
+	lock, cfg, err := l.initAtPaths(configPaths, artifactsDir)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +123,8 @@ func (l *Lifecycle) InitAtPathWithPlatforms(configPath, artifactsDir string, pla
 		return lock, nil
 	}
 
-	paths := initPathsForConfigWithArtifactsDir(configPath, resolveArtifactsDir(configPath, cfg, artifactsDir))
+	configPath := primaryConfigPath(configPaths)
+	paths := initPathsForConfigsWithArtifactsDir(configPaths, resolveArtifactsDir(configPath, cfg, artifactsDir))
 	tokenForSource := buildSourceTokenMap(cfg)
 	if err := downloadPlatformArchives(context.Background(), lock, paths, platforms, tokenForSource); err != nil {
 		return nil, err
@@ -120,15 +137,16 @@ func (l *Lifecycle) InitAtPathWithPlatforms(configPath, artifactsDir string, pla
 	return lock, nil
 }
 
-func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *config.Config, error) {
-	cfg, err := config.LoadAllowMissingEnv(configPath)
+func (l *Lifecycle) initAtPaths(configPaths []string, artifactsDir string) (*Lockfile, *config.Config, error) {
+	configPath := primaryConfigPath(configPaths)
+	cfg, err := config.LoadAllowMissingEnvPaths(configPaths)
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading config: %v", err)
 	}
-	if err := config.OverlayManagedPluginConfig(configPath, cfg); err != nil {
+	if err := config.OverlayManagedPluginConfigPaths(configPaths, cfg); err != nil {
 		return nil, nil, fmt.Errorf("loading config: %v", err)
 	}
-	paths := initPathsForConfigWithArtifactsDir(configPath, resolveArtifactsDir(configPath, cfg, artifactsDir))
+	paths := initPathsForConfigsWithArtifactsDir(configPaths, resolveArtifactsDir(configPath, cfg, artifactsDir))
 	secretsEntries, err := l.primeSecretsProviderForConfigResolution(context.Background(), paths, cfg, nil)
 	if err != nil {
 		return nil, nil, err
@@ -207,7 +225,7 @@ func (l *Lifecycle) initAtPath(configPath, artifactsDir string) (*Lockfile, *con
 	if err := WriteLockfile(paths.lockfilePath, lock); err != nil {
 		return nil, nil, err
 	}
-	if err := l.applyLockedProviders(configPath, artifactsDir, cfg, true); err != nil {
+	if err := l.applyLockedProviders(configPaths, artifactsDir, cfg, true); err != nil {
 		return nil, nil, err
 	}
 	if err := config.ValidateResolvedStructure(cfg); err != nil {
@@ -262,19 +280,28 @@ func lockfilePathForConfig(configPath string) string {
 }
 
 func (l *Lifecycle) LoadForExecutionAtPath(configPath string, locked bool) (*config.Config, map[string]string, error) {
-	return l.LoadForExecutionAtPathWithArtifactsDir(configPath, "", locked)
+	return l.LoadForExecutionAtPaths([]string{configPath}, locked)
 }
 
 func (l *Lifecycle) LoadForExecutionAtPathWithArtifactsDir(configPath, artifactsDir string, locked bool) (*config.Config, map[string]string, error) {
-	cfg, err := config.Load(configPath)
+	return l.LoadForExecutionAtPathsWithArtifactsDir([]string{configPath}, artifactsDir, locked)
+}
+
+func (l *Lifecycle) LoadForExecutionAtPaths(configPaths []string, locked bool) (*config.Config, map[string]string, error) {
+	return l.LoadForExecutionAtPathsWithArtifactsDir(configPaths, "", locked)
+}
+
+func (l *Lifecycle) LoadForExecutionAtPathsWithArtifactsDir(configPaths []string, artifactsDir string, locked bool) (*config.Config, map[string]string, error) {
+	configPath := primaryConfigPath(configPaths)
+	cfg, err := config.LoadPaths(configPaths)
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading config: %v", err)
 	}
 	if err := synthesizeLocalSourcePluginOwnedUIEntries(cfg); err != nil {
 		return nil, nil, fmt.Errorf("loading config: %v", err)
 	}
-	paths := initPathsForConfigWithArtifactsDir(configPath, resolveArtifactsDir(configPath, cfg, artifactsDir))
-	secretsLock, err := l.lockForSecretsBootstrap(configPath, artifactsDir, paths, cfg, locked)
+	paths := initPathsForConfigsWithArtifactsDir(configPaths, resolveArtifactsDir(configPath, cfg, artifactsDir))
+	secretsLock, err := l.lockForSecretsBootstrap(configPaths, artifactsDir, paths, cfg, locked)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -288,7 +315,7 @@ func (l *Lifecycle) LoadForExecutionAtPathWithArtifactsDir(configPath, artifacts
 		return nil, nil, err
 	}
 
-	if err := l.applyLockedProviders(configPath, artifactsDir, cfg, locked); err != nil {
+	if err := l.applyLockedProviders(configPaths, artifactsDir, cfg, locked); err != nil {
 		return nil, nil, err
 	}
 	if err := config.ValidateResolvedStructure(cfg); err != nil {
@@ -365,7 +392,7 @@ func (l *Lifecycle) resolveSecretsProviderMetadata(ctx context.Context, name str
 	return nil
 }
 
-func (l *Lifecycle) lockForSecretsBootstrap(configPath, artifactsDir string, paths initPaths, cfg *config.Config, locked bool) (*Lockfile, error) {
+func (l *Lifecycle) lockForSecretsBootstrap(configPaths []string, artifactsDir string, paths initPaths, cfg *config.Config, locked bool) (*Lockfile, error) {
 	if cfg == nil {
 		return nil, nil
 	}
@@ -389,10 +416,10 @@ func (l *Lifecycle) lockForSecretsBootstrap(configPath, artifactsDir string, pat
 
 	lock, err := ReadLockfile(paths.lockfilePath)
 	if !locked && (err != nil || !lockMatchesConfig(cfg, paths, lock)) {
-		lock, err = l.InitAtPathWithArtifactsDir(configPath, artifactsDir)
+		lock, err = l.InitAtPathsWithArtifactsDir(configPaths, artifactsDir)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("managed providers require prepared artifacts; run `gestaltd init --config %s`: %w", configPath, err)
+		return nil, fmt.Errorf("managed providers require prepared artifacts; run `gestaltd init %s`: %w", formatConfigFlags(configPaths), err)
 	}
 	return lock, nil
 }
@@ -460,7 +487,7 @@ func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context,
 				if lock != nil {
 					lockEntry, ok := lock.Secrets[name]
 					if !ok {
-						return nil, fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init --config %s`", providermanifestv1.KindSecrets, name, paths.configPath)
+						return nil, fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init %s`", providermanifestv1.KindSecrets, name, paths.configFlags)
 					}
 					if err := l.applyLockedComponentEntry(paths, &lockEntry, providermanifestv1.KindSecrets, name, provider, configMap, secretsDestDir(paths, name), false); err != nil {
 						return nil, err
@@ -512,6 +539,8 @@ func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context,
 }
 
 type initPaths struct {
+	configPaths  []string
+	configFlags  string
 	configPath   string
 	configDir    string
 	artifactsDir string
@@ -523,6 +552,24 @@ type initPaths struct {
 	auditDir     string
 	cacheDir     string
 	uiDir        string
+}
+
+func primaryConfigPath(paths []string) string {
+	if len(paths) == 0 {
+		return ""
+	}
+	return paths[0]
+}
+
+func formatConfigFlags(paths []string) string {
+	if len(paths) == 0 {
+		return ""
+	}
+	args := make([]string, 0, len(paths)*2)
+	for _, path := range paths {
+		args = append(args, "--config", path)
+	}
+	return strings.Join(args, " ")
 }
 
 type providerFingerprintInput struct {
@@ -653,10 +700,11 @@ func resolveArtifactsDir(configPath string, cfg *config.Config, override string)
 }
 
 func initPathsForConfig(configPath string) initPaths {
-	return initPathsForConfigWithArtifactsDir(configPath, "")
+	return initPathsForConfigsWithArtifactsDir([]string{configPath}, "")
 }
 
-func initPathsForConfigWithArtifactsDir(configPath, artifactsDir string) initPaths {
+func initPathsForConfigsWithArtifactsDir(configPaths []string, artifactsDir string) initPaths {
+	configPath := primaryConfigPath(configPaths)
 	configDir := filepath.Dir(configPath)
 	if artifactsDir == "" {
 		artifactsDir = configDir
@@ -664,6 +712,8 @@ func initPathsForConfigWithArtifactsDir(configPath, artifactsDir string) initPat
 		artifactsDir = filepath.Join(configDir, artifactsDir)
 	}
 	return initPaths{
+		configPaths:  append([]string(nil), configPaths...),
+		configFlags:  formatConfigFlags(configPaths),
 		configPath:   configPath,
 		configDir:    configDir,
 		artifactsDir: artifactsDir,
@@ -1351,12 +1401,13 @@ func sourceForProvider(providerEntry *config.ProviderEntry) (pluginsource.Source
 	return src, nil
 }
 
-func (l *Lifecycle) applyLockedProviders(configPath, artifactsDir string, cfg *config.Config, locked bool) error {
+func (l *Lifecycle) applyLockedProviders(configPaths []string, artifactsDir string, cfg *config.Config, locked bool) error {
 	if !configHasProviderLoading(cfg) {
 		return nil
 	}
 
-	paths := initPathsForConfigWithArtifactsDir(configPath, resolveArtifactsDir(configPath, cfg, artifactsDir))
+	configPath := primaryConfigPath(configPaths)
+	paths := initPathsForConfigsWithArtifactsDir(configPaths, resolveArtifactsDir(configPath, cfg, artifactsDir))
 	var lock *Lockfile
 	var err error
 	if configHasManagedProviderSources(cfg) {
@@ -1370,10 +1421,10 @@ func (l *Lifecycle) applyLockedProviders(configPath, artifactsDir string, cfg *c
 		}
 		if !locked && (err != nil || !lockMatchesConfig(cfg, paths, lock)) {
 			clearSynthesizedPluginOwnedUIEntries(cfg, synthesizedLockedPluginUIs)
-			lock, err = l.InitAtPathWithArtifactsDir(configPath, artifactsDir)
+			lock, err = l.InitAtPathsWithArtifactsDir(configPaths, artifactsDir)
 		}
 		if err != nil {
-			return fmt.Errorf("managed providers require prepared artifacts; run `gestaltd init --config %s`: %w", configPath, err)
+			return fmt.Errorf("managed providers require prepared artifacts; run `gestaltd init %s`: %w", formatConfigFlags(configPaths), err)
 		}
 	}
 
@@ -1743,11 +1794,11 @@ func (l *Lifecycle) applyConfiguredUIProvider(paths initPaths, lockEntry *LockUI
 	switch {
 	case provider.HasManagedSource():
 		if lockEntry == nil {
-			return "", fmt.Errorf("prepared artifact for %s is missing or stale; run `gestaltd init --config %s`", subject, paths.configPath)
+			return "", fmt.Errorf("prepared artifact for %s is missing or stale; run `gestaltd init %s`", subject, paths.configFlags)
 		}
 		fingerprint, err := NamedUIProviderFingerprint(logicalName, provider)
 		if err != nil || lockEntry.Fingerprint != fingerprint {
-			return "", fmt.Errorf("prepared artifact for %s is missing or stale; run `gestaltd init --config %s`", subject, paths.configPath)
+			return "", fmt.Errorf("prepared artifact for %s is missing or stale; run `gestaltd init %s`", subject, paths.configFlags)
 		}
 		install, err := inspectPreparedInstall(destDir)
 		needMaterialize := err != nil || !preparedManifestMatchesLock(*lockEntry, install.manifest)
@@ -1800,11 +1851,11 @@ func (l *Lifecycle) applyComponentProvider(paths initPaths, lockEntries map[stri
 	switch {
 	case provider.HasManagedSource():
 		if lockEntries == nil {
-			return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init --config %s`", kind, name, paths.configPath)
+			return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init %s`", kind, name, paths.configFlags)
 		}
 		lockEntry, ok := lockEntries[name]
 		if !ok {
-			return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init --config %s`", kind, name, paths.configPath)
+			return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init %s`", kind, name, paths.configFlags)
 		}
 		if err := l.applyLockedComponentEntry(paths, &lockEntry, kind, name, provider, configMap, destDir, locked); err != nil {
 			return err
@@ -1913,14 +1964,14 @@ func applyLocalUIManifest(plugin *config.ProviderEntry, configMap map[string]any
 func (l *Lifecycle) applyLockedProviderEntry(paths initPaths, lock *Lockfile, name string, plugin *config.ProviderEntry, configMap map[string]any, locked bool) error {
 	entry, ok := lock.Providers[name]
 	if !ok {
-		return fmt.Errorf("prepared artifact for provider %q is missing or stale; run `gestaltd init --config %s`", name, paths.configPath)
+		return fmt.Errorf("prepared artifact for provider %q is missing or stale; run `gestaltd init %s`", name, paths.configFlags)
 	}
 	fingerprint, err := ProviderFingerprint(name, plugin, paths.configDir)
 	if err != nil {
 		return fmt.Errorf("fingerprinting provider %q: %w", name, err)
 	}
 	if entry.Fingerprint != fingerprint || entry.Source != plugin.SourceRef() || entry.Version != plugin.SourceVersion() {
-		return fmt.Errorf("prepared artifact for provider %q is missing or stale; run `gestaltd init --config %s`", name, paths.configPath)
+		return fmt.Errorf("prepared artifact for provider %q is missing or stale; run `gestaltd init %s`", name, paths.configFlags)
 	}
 
 	destDir := providerDestDir(paths, name)
@@ -1953,7 +2004,7 @@ func (l *Lifecycle) applyLockedProviderEntry(paths initPaths, lock *Lockfile, na
 	}
 	if install.executablePath != "" {
 		if _, err := os.Stat(install.executablePath); err != nil {
-			return fmt.Errorf("prepared executable for provider %q not found at %s; run `gestaltd init --config %s`", name, install.executablePath, paths.configPath)
+			return fmt.Errorf("prepared executable for provider %q not found at %s; run `gestaltd init %s`", name, install.executablePath, paths.configFlags)
 		}
 		args, err := providerEntrypointArgs(install.manifest)
 		if err != nil {
@@ -1967,14 +2018,14 @@ func (l *Lifecycle) applyLockedProviderEntry(paths initPaths, lock *Lockfile, na
 
 func (l *Lifecycle) applyLockedComponentEntry(paths initPaths, entry *LockEntry, kind, name string, plugin *config.ProviderEntry, configMap map[string]any, destDir string, locked bool) error {
 	if entry == nil {
-		return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init --config %s`", kind, name, paths.configPath)
+		return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init %s`", kind, name, paths.configFlags)
 	}
 	fingerprint, err := ProviderFingerprint(name, plugin, paths.configDir)
 	if err != nil {
 		return fmt.Errorf("fingerprinting %s %q provider: %w", kind, name, err)
 	}
 	if entry.Fingerprint != fingerprint || entry.Source != plugin.SourceRef() || entry.Version != plugin.SourceVersion() {
-		return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init --config %s`", kind, name, paths.configPath)
+		return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init %s`", kind, name, paths.configFlags)
 	}
 
 	install, err := inspectPreparedInstall(destDir)
@@ -2005,13 +2056,13 @@ func (l *Lifecycle) applyLockedComponentEntry(paths initPaths, entry *LockEntry,
 		}
 	}
 	if install.executablePath == "" {
-		return fmt.Errorf("prepared executable for %s %q not found in %s; run `gestaltd init --config %s`", kind, name, destDir, paths.configPath)
+		return fmt.Errorf("prepared executable for %s %q not found in %s; run `gestaltd init %s`", kind, name, destDir, paths.configFlags)
 	}
 	if err := bindResolvedComponentManifest(kind, name, plugin, install.manifestPath, install.manifest, configMap); err != nil {
 		return err
 	}
 	if _, err := os.Stat(install.executablePath); err != nil {
-		return fmt.Errorf("prepared executable for %s %q not found at %s; run `gestaltd init --config %s`", kind, name, install.executablePath, paths.configPath)
+		return fmt.Errorf("prepared executable for %s %q not found at %s; run `gestaltd init %s`", kind, name, install.executablePath, paths.configFlags)
 	}
 	args, err := componentEntrypointArgs(install.manifest, kind)
 	if err != nil {
@@ -2068,7 +2119,7 @@ func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPat
 	platform := providerpkg.CurrentPlatformString()
 	archive, resolvedKey, ok := resolveArchiveForPlatform(entry, platform)
 	if !ok || archive.URL == "" {
-		return fmt.Errorf("no archive for platform %s for provider %q; run `gestaltd init --config %s`", platform, name, paths.configPath)
+		return fmt.Errorf("no archive for platform %s for provider %q; run `gestaltd init %s`", platform, name, paths.configFlags)
 	}
 	if locked && archive.SHA256 == "" {
 		return fmt.Errorf("no verified hash for platform %s for provider %q; run `gestaltd init --platform %s`", platform, name, platform)
@@ -2124,7 +2175,7 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 	platform := providerpkg.CurrentPlatformString()
 	archive, resolvedKey, ok := resolveArchiveForPlatform(entry, platform)
 	if !ok || archive.URL == "" {
-		return fmt.Errorf("no archive for platform %s for %s %q; run `gestaltd init --config %s`", platform, kind, name, paths.configPath)
+		return fmt.Errorf("no archive for platform %s for %s %q; run `gestaltd init %s`", platform, kind, name, paths.configFlags)
 	}
 	if locked && archive.SHA256 == "" {
 		return fmt.Errorf("no verified hash for platform %s for %s %q; run `gestaltd init --platform %s`", platform, kind, name, platform)
@@ -2185,7 +2236,7 @@ func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths initP
 	platform := providerpkg.CurrentPlatformString()
 	archive, _, ok := resolveArchiveForPlatform(entry, platform)
 	if !ok || archive.URL == "" {
-		return fmt.Errorf("no archive for platform %s for ui provider; run `gestaltd init --config %s`", platform, paths.configPath)
+		return fmt.Errorf("no archive for platform %s for ui provider; run `gestaltd init %s`", platform, paths.configFlags)
 	}
 	if locked && archive.SHA256 == "" {
 		return fmt.Errorf("no verified hash for platform %s for ui provider; run `gestaltd init --platform %s`", platform, platform)

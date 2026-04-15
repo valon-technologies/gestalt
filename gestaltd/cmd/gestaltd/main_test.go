@@ -18,18 +18,18 @@ func TestE2ECLIHelp(t *testing.T) {
 		{
 			name:      "root",
 			args:      []string{"--help"},
-			wantParts: []string{"gestaltd validate", "gestaltd init", "gestaltd provider <command> [flags]", "gestaltd serve", "--locked"},
+			wantParts: []string{"gestaltd validate", "gestaltd init", "gestaltd provider <command> [flags]", "gestaltd serve", "--locked", "[--config PATH]..."},
 			notWant:   []string{"gestaltd bundle", "gestaltd dev"},
 		},
 		{
 			name:      "validate",
 			args:      []string{"validate", "--help"},
-			wantParts: []string{"gestaltd validate"},
+			wantParts: []string{"gestaltd validate", "Repeated --config flags merge left-to-right."},
 		},
 		{
 			name:      "init",
 			args:      []string{"init", "--help"},
-			wantParts: []string{"gestaltd init"},
+			wantParts: []string{"gestaltd init", "When repeated, --config files merge left-to-right."},
 		},
 		{
 			name:      "provider",

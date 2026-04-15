@@ -754,6 +754,101 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 	}
 }
 
+func TestSourceAuthPluginInitAllowsMissingEnvPlaceholderInNonStringField(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	source := "github.com/acme/tools/auth-widget"
+	version := "2.0.0"
+	portEnv := "GESTALT_TEST_PORT_" + strings.ToUpper(strings.ReplaceAll(t.Name(), "/", "_"))
+
+	archivePath := buildExecutableArchive(t, dir, "auth-src", source, version, providermanifestv1.KindAuth, "auth-plugin", "fake-auth-binary")
+	archiveData, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("read archive: %v", err)
+	}
+	archiveSum := sha256.Sum256(archiveData)
+	archiveSHA := hex.EncodeToString(archiveSum[:])
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(archiveData)
+	}))
+	defer srv.Close()
+
+	resolver := &fakeResolver{
+		archivePath: archivePath,
+		resolvedURL: srv.URL + "/plugin.tar.gz",
+		sha256:      archiveSHA,
+	}
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configYAML := strings.Join([]string{
+		requiredIndexedDBConfigYAML(t, dir, filepath.Join(dir, "data.db")),
+		"  secrets:",
+		"    secrets:",
+		"      source: test-secrets",
+		"  auth:",
+		"    auth:",
+		"      source:",
+		"        ref: " + source,
+		"        version: " + version,
+		"        auth:",
+		"          token:",
+		"            secret:",
+		"              provider: secrets",
+		"              name: source-token",
+		"      config:",
+		"        clientId: managed-auth-client",
+		"server:",
+		"  providers:",
+		"    indexeddb: sqlite",
+		"    secrets: secrets",
+		"    auth: auth",
+		"  public:",
+		"    port: ${" + portEnv + "}",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	factories := bootstrap.NewFactoryRegistry()
+	factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
+		return &coretesting.StubSecretManager{
+			Secrets: map[string]string{"source-token": "ghp_inline_auth_source_token"},
+		}, nil
+	}
+
+	lc := NewLifecycle(resolver).WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
+		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
+	})
+	lock, err := lc.InitAtPath(configPath)
+	if err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+
+	authLockEntry := mustLockEntryByName(t, lock.Auth, "auth")
+	if authLockEntry.Source != source {
+		t.Fatalf("lock.Auth[auth].Source = %q, want %q", authLockEntry.Source, source)
+	}
+	if authLockEntry.Executable == "" {
+		t.Fatal("lock.Auth.Executable is empty")
+	}
+	if resolver.lastSrc.String() != source {
+		t.Fatalf("resolver source = %q, want %q", resolver.lastSrc.String(), source)
+	}
+	if resolver.lastVersion != version {
+		t.Fatalf("resolver version = %q, want %q", resolver.lastVersion, version)
+	}
+	if resolver.lastSrc.Token != "ghp_inline_auth_source_token" {
+		t.Fatalf("resolver source token = %q, want %q", resolver.lastSrc.Token, "ghp_inline_auth_source_token")
+	}
+}
+
 func TestManagedIndexedDBSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
 	t.Parallel()
 

@@ -2523,7 +2523,7 @@ func TestApplyLockedPlugins_SkipsNilIntegrationPlugins(t *testing.T) {
 	loaded.Plugins["missing"] = &config.ProviderEntry{}
 
 	lc := NewLifecycle(nil)
-	if err := lc.applyLockedProviders(cfgPath, "", loaded, false); err != nil {
+	if err := lc.applyLockedProviders([]string{cfgPath}, "", loaded, false); err != nil {
 		t.Fatalf("applyLockedProviders: %v", err)
 	}
 	if loaded.Plugins["example"] == nil || loaded.Plugins["example"].ResolvedManifest == nil {

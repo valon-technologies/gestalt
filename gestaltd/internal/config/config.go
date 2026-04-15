@@ -640,15 +640,27 @@ func EffectiveNamedConnectionDef(plugin *ProviderEntry, manifestPlugin *provider
 type OperationOverride = providermanifestv1.ManifestOperationOverride
 
 func Load(path string) (*Config, error) {
-	return loadWithLookup(path, os.LookupEnv, false)
+	return LoadPaths([]string{path})
+}
+
+func LoadPaths(paths []string) (*Config, error) {
+	return loadWithLookupPaths(paths, os.LookupEnv, false)
 }
 
 func LoadWithLookup(path string, lookup func(string) (string, bool)) (*Config, error) {
-	return loadWithLookup(path, lookup, false)
+	return LoadWithLookupPaths([]string{path}, lookup)
+}
+
+func LoadWithLookupPaths(paths []string, lookup func(string) (string, bool)) (*Config, error) {
+	return loadWithLookupPaths(paths, lookup, false)
 }
 
 func LoadAllowMissingEnv(path string) (*Config, error) {
-	return loadWithLookup(path, os.LookupEnv, true)
+	return LoadAllowMissingEnvPaths([]string{path})
+}
+
+func LoadAllowMissingEnvPaths(paths []string) (*Config, error) {
+	return loadWithLookupPaths(paths, os.LookupEnv, true)
 }
 
 func NormalizeCompatibility(cfg *Config) error {
@@ -662,17 +674,12 @@ func NormalizeCompatibility(cfg *Config) error {
 }
 
 func OverlayManagedPluginConfig(path string, cfg *Config) error {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("reading config file: %w", err)
-	}
+	return OverlayManagedPluginConfigPaths([]string{path}, cfg)
+}
 
-	var root yaml.Node
-	dec := yaml.NewDecoder(strings.NewReader(string(data)))
-	if err := dec.Decode(&root); err != nil && err != io.EOF {
-		return fmt.Errorf("parsing config YAML: %w", err)
-	}
-	if err := normalizeConfigRoot(&root); err != nil {
+func OverlayManagedPluginConfigPaths(paths []string, cfg *Config) error {
+	root, err := loadMergedConfigRoot(paths, os.LookupEnv, envMissingPreserve, "")
+	if err != nil {
 		return err
 	}
 	doc := documentValueNode(&root)
@@ -729,6 +736,14 @@ func OverlayManagedPluginConfig(path string, cfg *Config) error {
 	return nil
 }
 
+type envMissingMode int
+
+const (
+	envMissingBlank envMissingMode = iota
+	envMissingSentinel
+	envMissingPreserve
+)
+
 func overlayManagedEntryConfigNode(raw *yaml.Node, entry *ProviderEntry, subject string) error {
 	if entry == nil || !entry.HasManagedSource() || raw == nil {
 		return nil
@@ -783,34 +798,20 @@ func normalizeConfigRoot(root *yaml.Node) error {
 	return nil
 }
 
-func loadWithLookup(path string, lookup func(string) (string, bool), allowMissing bool) (*Config, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("reading config file: %w", err)
-	}
-
-	var (
-		resolved                  string
-		missingEnvSentinelContext string
-	)
-	if allowMissing {
-		resolved, _, err = expandEnvVariables(string(data), lookup, false)
-	} else {
+func loadWithLookupPaths(paths []string, lookup func(string) (string, bool), allowMissing bool) (*Config, error) {
+	mode := envMissingBlank
+	missingEnvSentinelContext := ""
+	if !allowMissing {
+		mode = envMissingSentinel
+		var err error
 		missingEnvSentinelContext, err = newMissingEnvSentinelPrefix()
-		if err == nil {
-			resolved, err = expandEnvVariablesWithMissingSentinels(string(data), lookup, missingEnvSentinelContext)
+		if err != nil {
+			return nil, err
 		}
 	}
-	if err != nil {
-		return nil, err
-	}
 
-	var root yaml.Node
-	normalizeDecoder := yaml.NewDecoder(strings.NewReader(resolved))
-	if err := normalizeDecoder.Decode(&root); err != nil && err != io.EOF {
-		return nil, fmt.Errorf("parsing config YAML: %w", err)
-	}
-	if err := normalizeConfigRoot(&root); err != nil {
+	root, err := loadMergedConfigRoot(paths, lookup, mode, missingEnvSentinelContext)
+	if err != nil {
 		return nil, err
 	}
 	if err := rejectRemovedDisabledFields(&root); err != nil {
@@ -846,13 +847,256 @@ func loadWithLookup(path string, lookup func(string) (string, bool), allowMissin
 		return nil, err
 	}
 	resolveBaseURL(&cfg)
-	resolveRelativePaths(path, &cfg)
+	resolveRelativePaths(primaryConfigPath(paths), &cfg)
 
 	if err := ValidateStructure(&cfg); err != nil {
 		return nil, err
 	}
 
 	return &cfg, nil
+}
+
+func primaryConfigPath(paths []string) string {
+	if len(paths) == 0 {
+		return ""
+	}
+	return paths[0]
+}
+
+func loadMergedConfigRoot(paths []string, lookup func(string) (string, bool), mode envMissingMode, sentinelPrefix string) (yaml.Node, error) {
+	if len(paths) == 0 {
+		return yaml.Node{}, fmt.Errorf("reading config file: no config files provided")
+	}
+
+	var merged any
+	for _, path := range paths {
+		value, err := loadConfigValue(path, lookup, mode, sentinelPrefix)
+		if err != nil {
+			return yaml.Node{}, err
+		}
+		merged = mergeConfigValues(merged, value)
+	}
+
+	if merged == nil {
+		return yaml.Node{}, nil
+	}
+
+	data, err := yaml.Marshal(merged)
+	if err != nil {
+		return yaml.Node{}, fmt.Errorf("marshaling merged config YAML: %w", err)
+	}
+
+	var root yaml.Node
+	dec := yaml.NewDecoder(strings.NewReader(string(data)))
+	if err := dec.Decode(&root); err != nil && err != io.EOF {
+		return yaml.Node{}, fmt.Errorf("parsing config YAML: %w", err)
+	}
+	if err := normalizeConfigRoot(&root); err != nil {
+		return yaml.Node{}, err
+	}
+	return root, nil
+}
+
+func loadConfigValue(path string, lookup func(string) (string, bool), mode envMissingMode, sentinelPrefix string) (any, error) {
+	root, err := loadValidatedConfigRoot(path, lookup, mode, sentinelPrefix)
+	if err != nil {
+		return nil, err
+	}
+	doc := documentValueNode(&root)
+	if doc == nil || doc.Kind == 0 {
+		return nil, nil
+	}
+
+	var raw any
+	if err := doc.Decode(&raw); err != nil {
+		return nil, fmt.Errorf("parsing config YAML: %w", err)
+	}
+
+	normalized, err := normalizeConfigValue(raw)
+	if err != nil {
+		return nil, fmt.Errorf("parsing config YAML: %w", err)
+	}
+	if normalized != nil {
+		root, ok := normalized.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("expected mapping document")
+		}
+		resolveRelativePathsInValue(path, root)
+	}
+	return normalized, nil
+}
+
+func loadValidatedConfigRoot(path string, lookup func(string) (string, bool), mode envMissingMode, sentinelPrefix string) (yaml.Node, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return yaml.Node{}, fmt.Errorf("reading config file: %w", err)
+	}
+
+	resolved, err := expandConfigInput(string(data), lookup, mode, sentinelPrefix)
+	if err != nil {
+		return yaml.Node{}, err
+	}
+
+	var root yaml.Node
+	dec := yaml.NewDecoder(strings.NewReader(resolved))
+	if err := dec.Decode(&root); err != nil && err != io.EOF {
+		return yaml.Node{}, fmt.Errorf("parsing config YAML: %w", err)
+	}
+	if err := normalizeConfigRoot(&root); err != nil {
+		return yaml.Node{}, err
+	}
+	if err := rejectRemovedDisabledFields(&root); err != nil {
+		return yaml.Node{}, err
+	}
+
+	validationRoot, err := cloneConfigRoot(root)
+	if err != nil {
+		return yaml.Node{}, err
+	}
+	if err := NormalizeOpaqueSecretRefs(&validationRoot, true); err != nil {
+		return yaml.Node{}, err
+	}
+	normalizedData, err := yaml.Marshal(documentValueNode(&validationRoot))
+	if err != nil {
+		return yaml.Node{}, fmt.Errorf("marshaling config YAML: %w", err)
+	}
+	normalizedInput := string(normalizedData)
+	if mode == envMissingSentinel {
+		normalizedInput = restoreMissingEnvSentinels(normalizedInput, sentinelPrefix)
+	}
+	validationInput := normalizedInput
+	if mode == envMissingSentinel || mode == envMissingPreserve {
+		validationInput, _, err = expandEnvVariables(normalizedInput, func(string) (string, bool) {
+			return "", false
+		}, false)
+		if err != nil {
+			return yaml.Node{}, err
+		}
+	}
+	var cfg Config
+	dec = yaml.NewDecoder(strings.NewReader(validationInput))
+	dec.KnownFields(true)
+	if err := dec.Decode(&cfg); err != nil && err != io.EOF {
+		return yaml.Node{}, fmt.Errorf("parsing config YAML: %w", err)
+	}
+
+	return root, nil
+}
+
+func cloneConfigRoot(root yaml.Node) (yaml.Node, error) {
+	data, err := yaml.Marshal(documentValueNode(&root))
+	if err != nil {
+		return yaml.Node{}, fmt.Errorf("marshaling config YAML: %w", err)
+	}
+
+	var clone yaml.Node
+	dec := yaml.NewDecoder(strings.NewReader(string(data)))
+	if err := dec.Decode(&clone); err != nil && err != io.EOF {
+		return yaml.Node{}, fmt.Errorf("parsing config YAML: %w", err)
+	}
+	if err := normalizeConfigRoot(&clone); err != nil {
+		return yaml.Node{}, err
+	}
+	return clone, nil
+}
+
+func expandConfigInput(input string, lookup func(string) (string, bool), mode envMissingMode, sentinelPrefix string) (string, error) {
+	switch mode {
+	case envMissingBlank:
+		resolved, _, err := expandEnvVariables(input, lookup, false)
+		return resolved, err
+	case envMissingSentinel:
+		return expandEnvVariablesWithMissingSentinels(input, lookup, sentinelPrefix)
+	case envMissingPreserve:
+		resolved, _, err := expandEnvVariables(input, lookup, true)
+		return resolved, err
+	default:
+		return "", fmt.Errorf("unsupported env expansion mode %d", mode)
+	}
+}
+
+func normalizeConfigValue(value any) (any, error) {
+	switch current := value.(type) {
+	case nil:
+		return nil, nil
+	case map[string]any:
+		out := make(map[string]any, len(current))
+		for key, child := range current {
+			normalized, err := normalizeConfigValue(child)
+			if err != nil {
+				return nil, err
+			}
+			out[key] = normalized
+		}
+		return out, nil
+	case map[any]any:
+		out := make(map[string]any, len(current))
+		for key, child := range current {
+			keyString, ok := key.(string)
+			if !ok {
+				return nil, fmt.Errorf("expected string mapping key, got %T", key)
+			}
+			normalized, err := normalizeConfigValue(child)
+			if err != nil {
+				return nil, err
+			}
+			out[keyString] = normalized
+		}
+		return out, nil
+	case []any:
+		out := make([]any, len(current))
+		for i, child := range current {
+			normalized, err := normalizeConfigValue(child)
+			if err != nil {
+				return nil, err
+			}
+			out[i] = normalized
+		}
+		return out, nil
+	default:
+		return current, nil
+	}
+}
+
+func mergeConfigValues(base, overlay any) any {
+	if overlay == nil {
+		return cloneConfigValue(base)
+	}
+
+	baseMap, baseIsMap := base.(map[string]any)
+	overlayMap, overlayIsMap := overlay.(map[string]any)
+	if baseIsMap && overlayIsMap {
+		out := cloneConfigValue(baseMap).(map[string]any)
+		for key, value := range overlayMap {
+			if value == nil {
+				delete(out, key)
+				continue
+			}
+			out[key] = mergeConfigValues(out[key], value)
+		}
+		return out
+	}
+
+	return cloneConfigValue(overlay)
+}
+
+func cloneConfigValue(value any) any {
+	switch current := value.(type) {
+	case map[string]any:
+		out := make(map[string]any, len(current))
+		for key, child := range current {
+			out[key] = cloneConfigValue(child)
+		}
+		return out
+	case []any:
+		out := make([]any, len(current))
+		for i, child := range current {
+			out[i] = cloneConfigValue(child)
+		}
+		return out
+	default:
+		return current
+	}
 }
 
 func rejectRemovedDisabledFields(root *yaml.Node) error {
@@ -1303,6 +1547,73 @@ func resolveBaseURL(cfg *Config) {
 	cfg.Server.Management.BaseURL = strings.TrimRight(strings.TrimSpace(cfg.Server.Management.BaseURL), "/")
 }
 
+func resolveRelativePathsInValue(configPath string, root map[string]any) {
+	baseDir := filepath.Dir(configPath)
+	if absPath, err := filepath.Abs(configPath); err == nil {
+		baseDir = filepath.Dir(absPath)
+	}
+
+	if server := nestedMap(root, "server"); server != nil {
+		resolveRelativeStringField(server, "artifactsDir", baseDir)
+	}
+
+	if providers := nestedMap(root, "providers"); providers != nil {
+		for _, kind := range []string{"auth", "secrets", "telemetry", "audit", "ui", "indexeddb", "cache", "s3"} {
+			for _, entry := range mapValues(nestedMap(providers, kind)) {
+				resolveRelativePathsInEntry(entry, baseDir)
+			}
+		}
+	}
+
+	for _, entry := range mapValues(nestedMap(root, "plugins")) {
+		resolveRelativePathsInEntry(entry, baseDir)
+	}
+}
+
+func resolveRelativePathsInEntry(entry map[string]any, baseDir string) {
+	if entry == nil {
+		return
+	}
+	resolveRelativeStringField(entry, "iconFile", baseDir)
+	if source := nestedMap(entry, "source"); source != nil {
+		resolveRelativeStringField(source, "path", baseDir)
+	}
+}
+
+func resolveRelativeStringField(fields map[string]any, key, baseDir string) {
+	if fields == nil {
+		return
+	}
+	value, ok := fields[key].(string)
+	if !ok {
+		return
+	}
+	fields[key] = resolveRelativeConfigValue(baseDir, value)
+}
+
+func nestedMap(root map[string]any, key string) map[string]any {
+	if root == nil {
+		return nil
+	}
+	current, _ := root[key].(map[string]any)
+	return current
+}
+
+func mapValues(entries map[string]any) []map[string]any {
+	if len(entries) == 0 {
+		return nil
+	}
+	values := make([]map[string]any, 0, len(entries))
+	for _, entry := range entries {
+		entryMap, ok := entry.(map[string]any)
+		if !ok {
+			continue
+		}
+		values = append(values, entryMap)
+	}
+	return values
+}
+
 func resolveRelativePaths(configPath string, cfg *Config) {
 	baseDir := filepath.Dir(configPath)
 	if absPath, err := filepath.Abs(configPath); err == nil {
@@ -1346,7 +1657,14 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 }
 
 func resolveRelativePath(baseDir, value string) string {
+	return resolveRelativeConfigValue(baseDir, value)
+}
+
+func resolveRelativeConfigValue(baseDir, value string) string {
 	if value == "" || filepath.IsAbs(value) {
+		return value
+	}
+	if strings.Contains(value, "${") {
 		return value
 	}
 	return filepath.Clean(filepath.Join(baseDir, value))
