@@ -14,8 +14,12 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// EnvIndexedDBSocket is the default Unix-socket environment variable used by
+// [IndexedDB].
 const EnvIndexedDBSocket = "GESTALT_INDEXEDDB_SOCKET"
 
+// IndexedDBSocketEnv returns the environment variable name used for a named
+// IndexedDB transport socket.
 func IndexedDBSocketEnv(name string) string {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -38,22 +42,34 @@ func IndexedDBSocketEnv(name string) string {
 }
 
 var (
-	ErrNotFound      = fmt.Errorf("indexeddb: not found")
+	// ErrNotFound indicates that the requested store entry or cursor row does
+	// not exist.
+	ErrNotFound = fmt.Errorf("indexeddb: not found")
+	// ErrAlreadyExists indicates that a record or object store already exists.
 	ErrAlreadyExists = fmt.Errorf("indexeddb: already exists")
-	ErrKeysOnly      = fmt.Errorf("indexeddb: value not available on key-only cursor")
+	// ErrKeysOnly indicates that the current cursor was opened in key-only mode
+	// and therefore has no value payload.
+	ErrKeysOnly = fmt.Errorf("indexeddb: value not available on key-only cursor")
 )
 
+// CursorDirection controls IndexedDB cursor traversal order.
 type CursorDirection string
 
 const (
-	CursorNext       CursorDirection = "next"
+	// CursorNext iterates forward and emits duplicate index keys.
+	CursorNext CursorDirection = "next"
+	// CursorNextUnique iterates forward while collapsing duplicate index keys.
 	CursorNextUnique CursorDirection = "nextunique"
-	CursorPrev       CursorDirection = "prev"
+	// CursorPrev iterates backward and emits duplicate index keys.
+	CursorPrev CursorDirection = "prev"
+	// CursorPrevUnique iterates backward while collapsing duplicate index keys.
 	CursorPrevUnique CursorDirection = "prevunique"
 )
 
+// Record is the JSON-like value stored in an object store row.
 type Record = map[string]any
 
+// KeyRange constrains range queries and cursors by lower and upper bounds.
 type KeyRange struct {
 	Lower     any
 	Upper     any
@@ -61,21 +77,25 @@ type KeyRange struct {
 	UpperOpen bool
 }
 
+// IndexSchema describes one secondary index on an object store.
 type IndexSchema struct {
 	Name    string
 	KeyPath []string
 	Unique  bool
 }
 
+// ObjectStoreSchema describes the indexes attached to an object store.
 type ObjectStoreSchema struct {
 	Indexes []IndexSchema
 }
 
+// IndexedDBClient speaks to a running IndexedDB provider over a Unix socket.
 type IndexedDBClient struct {
 	client proto.IndexedDBClient
 	conn   *grpc.ClientConn
 }
 
+// IndexedDB connects to the IndexedDB provider exposed by gestaltd.
 func IndexedDB(name ...string) (*IndexedDBClient, error) {
 	envName := EnvIndexedDBSocket
 	if len(name) > 0 {
@@ -100,10 +120,12 @@ func IndexedDB(name ...string) (*IndexedDBClient, error) {
 	}, nil
 }
 
+// Close closes the underlying gRPC transport.
 func (db *IndexedDBClient) Close() error {
 	return db.conn.Close()
 }
 
+// CreateObjectStore creates a named object store with the supplied schema.
 func (db *IndexedDBClient) CreateObjectStore(ctx context.Context, name string, schema ObjectStoreSchema) error {
 	indexes := make([]*proto.IndexSchema, len(schema.Indexes))
 	for i, idx := range schema.Indexes {
@@ -115,20 +137,25 @@ func (db *IndexedDBClient) CreateObjectStore(ctx context.Context, name string, s
 	return grpcErr(err)
 }
 
+// DeleteObjectStore removes a named object store.
 func (db *IndexedDBClient) DeleteObjectStore(ctx context.Context, name string) error {
 	_, err := db.client.DeleteObjectStore(ctx, &proto.DeleteObjectStoreRequest{Name: name})
 	return grpcErr(err)
 }
 
+// ObjectStore returns a typed handle for working with one object store.
 func (db *IndexedDBClient) ObjectStore(name string) *ObjectStoreClient {
 	return &ObjectStoreClient{client: db.client, store: name}
 }
 
+// ObjectStoreClient provides CRUD, range-query, and cursor access to one
+// object store.
 type ObjectStoreClient struct {
 	client proto.IndexedDBClient
 	store  string
 }
 
+// Get loads one record by primary key.
 func (o *ObjectStoreClient) Get(ctx context.Context, id string) (Record, error) {
 	resp, err := o.client.Get(ctx, &proto.ObjectStoreRequest{Store: o.store, Id: id})
 	if err != nil {
@@ -141,6 +168,7 @@ func (o *ObjectStoreClient) Get(ctx context.Context, id string) (Record, error) 
 	return record, nil
 }
 
+// GetKey resolves the primary key for the supplied lookup id.
 func (o *ObjectStoreClient) GetKey(ctx context.Context, id string) (string, error) {
 	resp, err := o.client.GetKey(ctx, &proto.ObjectStoreRequest{Store: o.store, Id: id})
 	if err != nil {
@@ -149,6 +177,7 @@ func (o *ObjectStoreClient) GetKey(ctx context.Context, id string) (string, erro
 	return resp.GetKey(), nil
 }
 
+// Add inserts a new record and fails if its primary key already exists.
 func (o *ObjectStoreClient) Add(ctx context.Context, record Record) error {
 	pbRecord, err := RecordToProto(record)
 	if err != nil {
@@ -158,6 +187,7 @@ func (o *ObjectStoreClient) Add(ctx context.Context, record Record) error {
 	return grpcErr(err)
 }
 
+// Put upserts a record by primary key.
 func (o *ObjectStoreClient) Put(ctx context.Context, record Record) error {
 	pbRecord, err := RecordToProto(record)
 	if err != nil {
@@ -167,16 +197,19 @@ func (o *ObjectStoreClient) Put(ctx context.Context, record Record) error {
 	return grpcErr(err)
 }
 
+// Delete removes one record by primary key.
 func (o *ObjectStoreClient) Delete(ctx context.Context, id string) error {
 	_, err := o.client.Delete(ctx, &proto.ObjectStoreRequest{Store: o.store, Id: id})
 	return grpcErr(err)
 }
 
+// Clear removes every record from the object store.
 func (o *ObjectStoreClient) Clear(ctx context.Context) error {
 	_, err := o.client.Clear(ctx, &proto.ObjectStoreNameRequest{Store: o.store})
 	return grpcErr(err)
 }
 
+// GetAll loads all records that match r.
 func (o *ObjectStoreClient) GetAll(ctx context.Context, r *KeyRange) ([]Record, error) {
 	kr, err := krToProto(r)
 	if err != nil {
@@ -193,6 +226,7 @@ func (o *ObjectStoreClient) GetAll(ctx context.Context, r *KeyRange) ([]Record, 
 	return records, nil
 }
 
+// GetAllKeys loads the primary keys for all records that match r.
 func (o *ObjectStoreClient) GetAllKeys(ctx context.Context, r *KeyRange) ([]string, error) {
 	kr, err := krToProto(r)
 	if err != nil {
@@ -205,6 +239,7 @@ func (o *ObjectStoreClient) GetAllKeys(ctx context.Context, r *KeyRange) ([]stri
 	return resp.GetKeys(), nil
 }
 
+// Count returns the number of records that match r.
 func (o *ObjectStoreClient) Count(ctx context.Context, r *KeyRange) (int64, error) {
 	kr, err := krToProto(r)
 	if err != nil {
@@ -217,6 +252,8 @@ func (o *ObjectStoreClient) Count(ctx context.Context, r *KeyRange) (int64, erro
 	return resp.GetCount(), nil
 }
 
+// DeleteRange removes all records that match r and reports how many were
+// deleted.
 func (o *ObjectStoreClient) DeleteRange(ctx context.Context, r KeyRange) (int64, error) {
 	kr, err := krToProto(&r)
 	if err != nil {
@@ -229,24 +266,29 @@ func (o *ObjectStoreClient) DeleteRange(ctx context.Context, r KeyRange) (int64,
 	return resp.GetDeleted(), nil
 }
 
+// OpenCursor opens a full-value cursor over the object store.
 func (o *ObjectStoreClient) OpenCursor(ctx context.Context, r *KeyRange, dir CursorDirection) (*Cursor, error) {
 	return openCursor(ctx, o.client, o.store, "", r, dir, false, nil)
 }
 
+// OpenKeyCursor opens a key-only cursor over the object store.
 func (o *ObjectStoreClient) OpenKeyCursor(ctx context.Context, r *KeyRange, dir CursorDirection) (*Cursor, error) {
 	return openCursor(ctx, o.client, o.store, "", r, dir, true, nil)
 }
 
+// Index returns a typed handle for a secondary index on the object store.
 func (o *ObjectStoreClient) Index(name string) *IndexClient {
 	return &IndexClient{client: o.client, store: o.store, index: name}
 }
 
+// IndexClient provides lookup and cursor access through one secondary index.
 type IndexClient struct {
 	client proto.IndexedDBClient
 	store  string
 	index  string
 }
 
+// Get loads the first record that matches the supplied index key.
 func (idx *IndexClient) Get(ctx context.Context, values ...any) (Record, error) {
 	vals, err := anyToProtoValues(values)
 	if err != nil {
@@ -265,6 +307,7 @@ func (idx *IndexClient) Get(ctx context.Context, values ...any) (Record, error) 
 	return record, nil
 }
 
+// GetKey resolves the primary key for the first row that matches values.
 func (idx *IndexClient) GetKey(ctx context.Context, values ...any) (string, error) {
 	vals, err := anyToProtoValues(values)
 	if err != nil {
@@ -279,6 +322,7 @@ func (idx *IndexClient) GetKey(ctx context.Context, values ...any) (string, erro
 	return resp.GetKey(), nil
 }
 
+// GetAll loads every record that matches values and r.
 func (idx *IndexClient) GetAll(ctx context.Context, r *KeyRange, values ...any) ([]Record, error) {
 	vals, err := anyToProtoValues(values)
 	if err != nil {
@@ -301,6 +345,7 @@ func (idx *IndexClient) GetAll(ctx context.Context, r *KeyRange, values ...any) 
 	return records, nil
 }
 
+// GetAllKeys loads every primary key that matches values and r.
 func (idx *IndexClient) GetAllKeys(ctx context.Context, r *KeyRange, values ...any) ([]string, error) {
 	vals, err := anyToProtoValues(values)
 	if err != nil {
@@ -319,6 +364,7 @@ func (idx *IndexClient) GetAllKeys(ctx context.Context, r *KeyRange, values ...a
 	return resp.GetKeys(), nil
 }
 
+// Count returns the number of rows that match values and r.
 func (idx *IndexClient) Count(ctx context.Context, r *KeyRange, values ...any) (int64, error) {
 	vals, err := anyToProtoValues(values)
 	if err != nil {
@@ -337,6 +383,7 @@ func (idx *IndexClient) Count(ctx context.Context, r *KeyRange, values ...any) (
 	return resp.GetCount(), nil
 }
 
+// Delete removes all rows that match values.
 func (idx *IndexClient) Delete(ctx context.Context, values ...any) (int64, error) {
 	vals, err := anyToProtoValues(values)
 	if err != nil {
@@ -351,14 +398,17 @@ func (idx *IndexClient) Delete(ctx context.Context, values ...any) (int64, error
 	return resp.GetDeleted(), nil
 }
 
+// OpenCursor opens a full-value cursor over one secondary index.
 func (idx *IndexClient) OpenCursor(ctx context.Context, r *KeyRange, dir CursorDirection, values ...any) (*Cursor, error) {
 	return openCursor(ctx, idx.client, idx.store, idx.index, r, dir, false, values)
 }
 
+// OpenKeyCursor opens a key-only cursor over one secondary index.
 func (idx *IndexClient) OpenKeyCursor(ctx context.Context, r *KeyRange, dir CursorDirection, values ...any) (*Cursor, error) {
 	return openCursor(ctx, idx.client, idx.store, idx.index, r, dir, true, values)
 }
 
+// Cursor streams IndexedDB rows one at a time.
 type Cursor struct {
 	stream      proto.IndexedDB_OpenCursorClient
 	cancel      context.CancelFunc
@@ -369,12 +419,15 @@ type Cursor struct {
 	done        bool
 }
 
+// Continue advances the cursor by one row.
 func (c *Cursor) Continue() bool {
 	return c.sendAndRecv(&proto.CursorCommand{
 		Command: &proto.CursorCommand_Next{Next: true},
 	})
 }
 
+// ContinueToKey advances the cursor to the supplied key, or exhausts it if the
+// key does not exist.
 func (c *Cursor) ContinueToKey(key any) bool {
 	kvs, err := CursorKeyToProto(key, c.indexCursor)
 	if err != nil {
@@ -386,12 +439,14 @@ func (c *Cursor) ContinueToKey(key any) bool {
 	})
 }
 
+// Advance skips count rows ahead.
 func (c *Cursor) Advance(count int) bool {
 	return c.sendAndRecv(&proto.CursorCommand{
 		Command: &proto.CursorCommand_Advance{Advance: int32(count)},
 	})
 }
 
+// Key returns the current cursor key.
 func (c *Cursor) Key() any {
 	if c.entry == nil || len(c.entry.GetKey()) == 0 {
 		return nil
@@ -407,6 +462,7 @@ func (c *Cursor) Key() any {
 	return parts
 }
 
+// PrimaryKey returns the current record's primary key.
 func (c *Cursor) PrimaryKey() string {
 	if c.entry == nil {
 		return ""
@@ -414,6 +470,7 @@ func (c *Cursor) PrimaryKey() string {
 	return c.entry.GetPrimaryKey()
 }
 
+// Value returns the current record.
 func (c *Cursor) Value() (Record, error) {
 	if c.keysOnly {
 		return nil, ErrKeysOnly
@@ -424,6 +481,7 @@ func (c *Cursor) Value() (Record, error) {
 	return RecordFromProto(c.entry.GetRecord())
 }
 
+// Delete removes the current row and keeps the cursor open.
 func (c *Cursor) Delete() error {
 	if c.err != nil {
 		return c.err
@@ -462,6 +520,7 @@ func (c *Cursor) Delete() error {
 	return nil
 }
 
+// Update replaces the current row and keeps the cursor open.
 func (c *Cursor) Update(value Record) error {
 	if c.err != nil {
 		return c.err
@@ -506,6 +565,7 @@ func (c *Cursor) Update(value Record) error {
 	return nil
 }
 
+// Err returns the terminal cursor error, if any.
 func (c *Cursor) Err() error {
 	return c.err
 }
@@ -529,6 +589,7 @@ func (c *Cursor) setErr(err error) error {
 	return c.err
 }
 
+// Close closes the cursor stream and releases its transport resources.
 func (c *Cursor) Close() error {
 	c.done = true
 	c.entry = nil

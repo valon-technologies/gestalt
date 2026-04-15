@@ -32,6 +32,8 @@ const (
 // S3Client is the client API for S3 service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// S3 models the shared Gestalt S3-provider protocol.
 type S3Client interface {
 	HeadObject(ctx context.Context, in *HeadObjectRequest, opts ...grpc.CallOption) (*HeadObjectResponse, error)
 	// The first response frame carries object metadata. All subsequent frames
@@ -140,6 +142,8 @@ func (c *s3Client) PresignObject(ctx context.Context, in *PresignObjectRequest, 
 // S3Server is the server API for S3 service.
 // All implementations must embed UnimplementedS3Server
 // for forward compatibility.
+//
+// S3 models the shared Gestalt S3-provider protocol.
 type S3Server interface {
 	HeadObject(context.Context, *HeadObjectRequest) (*HeadObjectResponse, error)
 	// The first response frame carries object metadata. All subsequent frames

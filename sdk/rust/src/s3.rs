@@ -15,10 +15,12 @@ use crate::generated::v1::{self as pb, s3_client::S3Client as ProtoS3Client};
 
 type ClientResult<T> = std::result::Result<T, S3Error>;
 
+/// Default Unix-socket environment variable used by [`S3::connect`].
 pub const ENV_S3_SOCKET: &str = "GESTALT_S3_SOCKET";
 const WRITE_CHUNK_SIZE: usize = 64 * 1024;
 
 #[derive(Debug, thiserror::Error)]
+/// Errors returned by the S3 transport client.
 pub enum S3Error {
     #[error("not found")]
     NotFound,
@@ -41,6 +43,7 @@ pub enum S3Error {
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
+/// Identifies one object or object version.
 pub struct ObjectRef {
     pub bucket: String,
     pub key: String,
@@ -48,6 +51,7 @@ pub struct ObjectRef {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
+/// Describes an object returned by the provider.
 pub struct ObjectMeta {
     pub reference: ObjectRef,
     pub etag: String,
@@ -59,12 +63,14 @@ pub struct ObjectMeta {
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
+/// Requests a half-open slice of an object's bytes.
 pub struct ByteRange {
     pub start: Option<i64>,
     pub end: Option<i64>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
+/// Configures conditional and ranged reads.
 pub struct ReadOptions {
     pub range: Option<ByteRange>,
     pub if_match: String,
@@ -74,6 +80,7 @@ pub struct ReadOptions {
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
+/// Configures object writes.
 pub struct WriteOptions {
     pub content_type: String,
     pub cache_control: String,
@@ -86,6 +93,7 @@ pub struct WriteOptions {
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
+/// Configures list-objects requests.
 pub struct ListOptions {
     pub bucket: String,
     pub prefix: String,
@@ -96,6 +104,7 @@ pub struct ListOptions {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
+/// Represents one page of list-objects results.
 pub struct ListPage {
     pub objects: Vec<ObjectMeta>,
     pub common_prefixes: Vec<String>,
@@ -104,12 +113,14 @@ pub struct ListPage {
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
+/// Configures conditional copy requests.
 pub struct CopyOptions {
     pub if_match: String,
     pub if_none_match: String,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+/// Identifies the HTTP verb encoded into a presigned URL.
 pub enum PresignMethod {
     #[default]
     Unspecified,
@@ -120,6 +131,7 @@ pub enum PresignMethod {
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
+/// Configures presigned URL generation.
 pub struct PresignOptions {
     pub method: PresignMethod,
     pub expires: Duration,
@@ -129,6 +141,7 @@ pub struct PresignOptions {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
+/// Contains a presigned URL plus any required headers.
 pub struct PresignResult {
     pub url: String,
     pub method: PresignMethod,
@@ -137,7 +150,9 @@ pub struct PresignResult {
 }
 
 #[async_trait]
+/// Lifecycle and RPC contract for S3-compatible providers.
 pub trait S3Provider: pb::s3_server::S3 + Send + Sync + 'static {
+    /// Configures the provider before it starts serving requests.
     async fn configure(
         &self,
         _name: &str,
@@ -146,18 +161,22 @@ pub trait S3Provider: pb::s3_server::S3 + Send + Sync + 'static {
         Ok(())
     }
 
+    /// Returns runtime metadata that should augment the static manifest.
     fn metadata(&self) -> Option<RuntimeMetadata> {
         None
     }
 
+    /// Returns non-fatal warnings the host should surface to users.
     fn warnings(&self) -> Vec<String> {
         Vec::new()
     }
 
+    /// Performs an optional health check.
     async fn health_check(&self) -> ProviderResult<()> {
         Ok(())
     }
 
+    /// Shuts the provider down before the runtime exits.
     async fn close(&self) -> ProviderResult<()> {
         Ok(())
     }
@@ -220,15 +239,18 @@ where
     }
 }
 
+/// Client for a running S3 provider.
 pub struct S3 {
     client: ProtoS3Client<Channel>,
 }
 
 impl S3 {
+    /// Connects to the default S3 transport socket.
     pub async fn connect() -> ClientResult<Self> {
         Self::connect_named("").await
     }
 
+    /// Connects to a named S3 transport socket.
     pub async fn connect_named(name: &str) -> ClientResult<Self> {
         let env_name = s3_socket_env(name);
         let socket_path =
@@ -250,6 +272,7 @@ impl S3 {
         })
     }
 
+    /// Returns a convenience handle for one object key.
     pub fn object(&self, bucket: &str, key: &str) -> Object {
         Object {
             client: self.client.clone(),
@@ -261,6 +284,7 @@ impl S3 {
         }
     }
 
+    /// Returns a convenience handle for one object version.
     pub fn object_version(&self, bucket: &str, key: &str, version_id: &str) -> Object {
         Object {
             client: self.client.clone(),
@@ -272,6 +296,7 @@ impl S3 {
         }
     }
 
+    /// Fetches metadata for one object.
     pub async fn head_object(&mut self, reference: ObjectRef) -> ClientResult<ObjectMeta> {
         let response = self
             .client
@@ -286,6 +311,7 @@ impl S3 {
         )
     }
 
+    /// Opens a streaming object reader.
     pub async fn read_object(
         &mut self,
         reference: ObjectRef,
@@ -328,6 +354,7 @@ impl S3 {
         Ok(ObjectReader { meta, stream })
     }
 
+    /// Uploads an object from a contiguous byte slice.
     pub async fn write_object<B>(
         &mut self,
         reference: ObjectRef,
@@ -372,6 +399,7 @@ impl S3 {
         )
     }
 
+    /// Uploads an object from multiple pre-chunked buffers.
     pub async fn write_object_chunks<I, B>(
         &mut self,
         reference: ObjectRef,
@@ -419,6 +447,7 @@ impl S3 {
         )
     }
 
+    /// Deletes one object.
     pub async fn delete_object(&mut self, reference: ObjectRef) -> ClientResult<()> {
         self.client
             .delete_object(pb::DeleteObjectRequest {
@@ -429,6 +458,7 @@ impl S3 {
         Ok(())
     }
 
+    /// Lists objects in a bucket.
     pub async fn list_objects(&mut self, options: ListOptions) -> ClientResult<ListPage> {
         let response = self
             .client
@@ -445,6 +475,7 @@ impl S3 {
         Ok(list_page_from_proto(response.into_inner()))
     }
 
+    /// Copies one object to another location.
     pub async fn copy_object(
         &mut self,
         source: ObjectRef,
@@ -468,6 +499,7 @@ impl S3 {
         )
     }
 
+    /// Creates a provider-generated presigned URL.
     pub async fn presign_object(
         &mut self,
         reference: ObjectRef,
@@ -494,16 +526,19 @@ impl S3 {
     }
 }
 
+/// Convenience wrapper around repeated operations on one object key.
 pub struct Object {
     client: ProtoS3Client<Channel>,
     reference: ObjectRef,
 }
 
 impl Object {
+    /// Returns the referenced object key and version.
     pub fn reference(&self) -> &ObjectRef {
         &self.reference
     }
 
+    /// Fetches metadata for the current object.
     pub async fn stat(&mut self) -> ClientResult<ObjectMeta> {
         let mut client = S3 {
             client: self.client.clone(),
@@ -511,6 +546,7 @@ impl Object {
         client.head_object(self.reference.clone()).await
     }
 
+    /// Reports whether the current object exists.
     pub async fn exists(&mut self) -> ClientResult<bool> {
         match self.stat().await {
             Ok(_) => Ok(true),
@@ -519,6 +555,7 @@ impl Object {
         }
     }
 
+    /// Opens a streaming reader for the current object.
     pub async fn stream(&mut self, options: Option<ReadOptions>) -> ClientResult<ObjectReader> {
         let mut client = S3 {
             client: self.client.clone(),
@@ -526,14 +563,17 @@ impl Object {
         client.read_object(self.reference.clone(), options).await
     }
 
+    /// Reads the entire object into memory.
     pub async fn bytes(&mut self, options: Option<ReadOptions>) -> ClientResult<Vec<u8>> {
         self.stream(options).await?.bytes().await
     }
 
+    /// Reads the entire object as UTF-8 text.
     pub async fn text(&mut self, options: Option<ReadOptions>) -> ClientResult<String> {
         self.stream(options).await?.text().await
     }
 
+    /// Reads and decodes the entire object as JSON.
     pub async fn json<T>(&mut self, options: Option<ReadOptions>) -> ClientResult<T>
     where
         T: DeserializeOwned,
@@ -541,6 +581,7 @@ impl Object {
         self.stream(options).await?.json().await
     }
 
+    /// Uploads a new object body.
     pub async fn write<B>(
         &mut self,
         body: B,
@@ -557,6 +598,7 @@ impl Object {
             .await
     }
 
+    /// Uploads a pre-chunked object body.
     pub async fn write_chunks<I, B>(
         &mut self,
         chunks: I,
@@ -575,6 +617,7 @@ impl Object {
             .await
     }
 
+    /// Uploads raw bytes.
     pub async fn write_bytes(
         &mut self,
         body: impl AsRef<[u8]>,
@@ -583,6 +626,7 @@ impl Object {
         self.write(body, options).await
     }
 
+    /// Uploads UTF-8 text.
     pub async fn write_string(
         &mut self,
         body: impl AsRef<str>,
@@ -591,6 +635,7 @@ impl Object {
         self.write(body.as_ref().as_bytes(), options).await
     }
 
+    /// Uploads JSON, defaulting the content type when omitted.
     pub async fn write_json<T>(
         &mut self,
         value: &T,
@@ -615,6 +660,7 @@ impl Object {
         self.write(body, options).await
     }
 
+    /// Deletes the current object.
     pub async fn delete(&mut self) -> ClientResult<()> {
         let mut client = S3 {
             client: self.client.clone(),
@@ -622,6 +668,7 @@ impl Object {
         client.delete_object(self.reference.clone()).await
     }
 
+    /// Creates a presigned URL for the current object.
     pub async fn presign(
         &mut self,
         options: Option<PresignOptions>,
@@ -633,16 +680,19 @@ impl Object {
     }
 }
 
+/// Streaming reader returned by [`S3::read_object`] and [`Object::stream`].
 pub struct ObjectReader {
     meta: ObjectMeta,
     stream: tonic::Streaming<pb::ReadObjectChunk>,
 }
 
 impl ObjectReader {
+    /// Returns the metadata frame emitted at the start of the stream.
     pub fn meta(&self) -> &ObjectMeta {
         &self.meta
     }
 
+    /// Returns the next non-empty body chunk.
     pub async fn next_chunk(&mut self) -> ClientResult<Option<Vec<u8>>> {
         loop {
             let Some(message) = self.stream.message().await.map_err(map_status)? else {
@@ -666,6 +716,7 @@ impl ObjectReader {
         }
     }
 
+    /// Reads the remainder of the stream into memory.
     pub async fn bytes(mut self) -> ClientResult<Vec<u8>> {
         let mut body = Vec::new();
         while let Some(chunk) = self.next_chunk().await? {
@@ -674,10 +725,12 @@ impl ObjectReader {
         Ok(body)
     }
 
+    /// Reads the remainder of the stream as UTF-8 text.
     pub async fn text(self) -> ClientResult<String> {
         Ok(String::from_utf8(self.bytes().await?)?)
     }
 
+    /// Reads and decodes the remainder of the stream as JSON.
     pub async fn json<T>(self) -> ClientResult<T>
     where
         T: DeserializeOwned,
@@ -686,6 +739,7 @@ impl ObjectReader {
     }
 }
 
+/// Returns the environment variable used for a named S3 socket.
 pub fn s3_socket_env(name: &str) -> String {
     let trimmed = name.trim();
     if trimmed.is_empty() {

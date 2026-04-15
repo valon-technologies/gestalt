@@ -9,13 +9,14 @@ import (
 )
 
 var schemeDriverMap = map[string]string{
-	"postgres":  "postgres",
+	"postgres":   "postgres",
 	"postgresql": "postgres",
-	"mysql":     "mysql",
-	"sqlite":    "sqlite3",
-	"sqlite3":   "sqlite3",
+	"mysql":      "mysql",
+	"sqlite":     "sqlite3",
+	"sqlite3":    "sqlite3",
 }
 
+// OpenDB opens the datastore DSN configured at `GESTALT_DATASTORE_<ALIAS>`.
 func OpenDB(alias string) (*sql.DB, error) {
 	envKey := "GESTALT_DATASTORE_" + strings.ToUpper(alias)
 	dsn := os.Getenv(envKey)

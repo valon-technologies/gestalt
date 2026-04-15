@@ -19,7 +19,9 @@
 // operations.
 //
 // The package also includes first-pass runtime/auth/datastore protocol types
-// for non-integration provider kinds. The current host-side execution flow
+// for non-integration provider kinds, plus transport helpers like [Cache],
+// [IndexedDB], and [S3] for speaking to sibling provider components. The
+// current host-side execution flow
 // remains integration-focused and is anchored on [ServeProvider].
 //
 // # Implementing a Provider

@@ -44,6 +44,8 @@ const (
 // IndexedDBClient is the client API for IndexedDB service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// IndexedDB models the shared Gestalt IndexedDB-provider protocol.
 type IndexedDBClient interface {
 	// Lifecycle
 	CreateObjectStore(ctx context.Context, in *CreateObjectStoreRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
@@ -275,6 +277,8 @@ type IndexedDB_OpenCursorClient = grpc.BidiStreamingClient[CursorClientMessage, 
 // IndexedDBServer is the server API for IndexedDB service.
 // All implementations must embed UnimplementedIndexedDBServer
 // for forward compatibility.
+//
+// IndexedDB models the shared Gestalt IndexedDB-provider protocol.
 type IndexedDBServer interface {
 	// Lifecycle
 	CreateObjectStore(context.Context, *CreateObjectStoreRequest) (*emptypb.Empty, error)

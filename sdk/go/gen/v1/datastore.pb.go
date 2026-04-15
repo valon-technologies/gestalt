@@ -24,6 +24,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// CursorDirection controls IndexedDB cursor traversal order.
 type CursorDirection int32
 
 const (
@@ -76,6 +77,7 @@ func (CursorDirection) EnumDescriptor() ([]byte, []int) {
 	return file_v1_datastore_proto_rawDescGZIP(), []int{0}
 }
 
+// TypedValue stores one scalar or structured value in an IndexedDB record.
 type TypedValue struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Kind:
@@ -254,6 +256,7 @@ func (*TypedValue_BytesValue) isTypedValue_Kind() {}
 
 func (*TypedValue_JsonValue) isTypedValue_Kind() {}
 
+// Record is one JSON-like row in an object store.
 type Record struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Fields        map[string]*TypedValue `protobuf:"bytes,1,rep,name=fields,proto3" json:"fields,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
@@ -298,6 +301,8 @@ func (x *Record) GetFields() map[string]*TypedValue {
 	return nil
 }
 
+// ObjectStoreSchema describes the indexes and columns attached to an object
+// store.
 type ObjectStoreSchema struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Indexes       []*IndexSchema         `protobuf:"bytes,1,rep,name=indexes,proto3" json:"indexes,omitempty"`
@@ -350,6 +355,7 @@ func (x *ObjectStoreSchema) GetColumns() []*ColumnDef {
 	return nil
 }
 
+// IndexSchema describes one secondary index on an object store.
 type IndexSchema struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -410,6 +416,7 @@ func (x *IndexSchema) GetUnique() bool {
 	return false
 }
 
+// ColumnDef is reserved for providers that preserve SQL-style column metadata.
 type ColumnDef struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -486,6 +493,7 @@ func (x *ColumnDef) GetUnique() bool {
 	return false
 }
 
+// KeyRange constrains a query or cursor by lower and upper bounds.
 type KeyRange struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Lower         *TypedValue            `protobuf:"bytes,1,opt,name=lower,proto3" json:"lower,omitempty"`
@@ -554,6 +562,7 @@ func (x *KeyRange) GetUpperOpen() bool {
 	return false
 }
 
+// RecordRequest addresses one object store and carries one row payload.
 type RecordRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Store         string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
@@ -606,6 +615,7 @@ func (x *RecordRequest) GetRecord() *Record {
 	return nil
 }
 
+// RecordResponse wraps one row payload.
 type RecordResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Record        *Record                `protobuf:"bytes,1,opt,name=record,proto3" json:"record,omitempty"`
@@ -650,6 +660,7 @@ func (x *RecordResponse) GetRecord() *Record {
 	return nil
 }
 
+// RecordsResponse wraps repeated row payloads.
 type RecordsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Records       []*Record              `protobuf:"bytes,1,rep,name=records,proto3" json:"records,omitempty"`
@@ -694,6 +705,7 @@ func (x *RecordsResponse) GetRecords() []*Record {
 	return nil
 }
 
+// KeysResponse wraps repeated primary keys.
 type KeysResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Keys          []string               `protobuf:"bytes,1,rep,name=keys,proto3" json:"keys,omitempty"`
@@ -738,6 +750,7 @@ func (x *KeysResponse) GetKeys() []string {
 	return nil
 }
 
+// ObjectStoreRequest addresses one object store row by primary key.
 type ObjectStoreRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Store         string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
@@ -790,6 +803,7 @@ func (x *ObjectStoreRequest) GetId() string {
 	return ""
 }
 
+// ObjectStoreNameRequest addresses an object store without a specific row key.
 type ObjectStoreNameRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Store         string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
@@ -834,6 +848,7 @@ func (x *ObjectStoreNameRequest) GetStore() string {
 	return ""
 }
 
+// ObjectStoreRangeRequest addresses an object store plus an optional key range.
 type ObjectStoreRangeRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Store         string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
@@ -886,6 +901,7 @@ func (x *ObjectStoreRangeRequest) GetRange() *KeyRange {
 	return nil
 }
 
+// CreateObjectStoreRequest creates a new object store.
 type CreateObjectStoreRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -938,6 +954,7 @@ func (x *CreateObjectStoreRequest) GetSchema() *ObjectStoreSchema {
 	return nil
 }
 
+// DeleteObjectStoreRequest removes an object store.
 type DeleteObjectStoreRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -982,6 +999,8 @@ func (x *DeleteObjectStoreRequest) GetName() string {
 	return ""
 }
 
+// IndexQueryRequest addresses a secondary index plus optional key values and
+// range constraints.
 type IndexQueryRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Store         string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
@@ -1050,6 +1069,7 @@ func (x *IndexQueryRequest) GetRange() *KeyRange {
 	return nil
 }
 
+// CountResponse reports how many rows matched a query.
 type CountResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Count         int64                  `protobuf:"varint,1,opt,name=count,proto3" json:"count,omitempty"`
@@ -1094,14 +1114,18 @@ func (x *CountResponse) GetCount() int64 {
 	return 0
 }
 
+// OpenCursorRequest starts a streaming cursor over an object store or index.
 type OpenCursorRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Store         string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
-	Range         *KeyRange              `protobuf:"bytes,2,opt,name=range,proto3,oneof" json:"range,omitempty"`
-	Direction     CursorDirection        `protobuf:"varint,3,opt,name=direction,proto3,enum=gestalt.provider.v1.CursorDirection" json:"direction,omitempty"`
-	KeysOnly      bool                   `protobuf:"varint,4,opt,name=keys_only,json=keysOnly,proto3" json:"keys_only,omitempty"`
-	Index         string                 `protobuf:"bytes,5,opt,name=index,proto3" json:"index,omitempty"`
-	Values        []*TypedValue          `protobuf:"bytes,6,rep,name=values,proto3" json:"values,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Store     string                 `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
+	Range     *KeyRange              `protobuf:"bytes,2,opt,name=range,proto3,oneof" json:"range,omitempty"`
+	Direction CursorDirection        `protobuf:"varint,3,opt,name=direction,proto3,enum=gestalt.provider.v1.CursorDirection" json:"direction,omitempty"`
+	// keys_only suppresses row payloads and returns only keys.
+	KeysOnly bool `protobuf:"varint,4,opt,name=keys_only,json=keysOnly,proto3" json:"keys_only,omitempty"`
+	// index selects a secondary index when non-empty.
+	Index string `protobuf:"bytes,5,opt,name=index,proto3" json:"index,omitempty"`
+	// values selects a compound index key prefix when index is set.
+	Values        []*TypedValue `protobuf:"bytes,6,rep,name=values,proto3" json:"values,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1306,6 +1330,7 @@ func (x *KeyValueArray) GetElements() []*KeyValue {
 	return nil
 }
 
+// CursorKeyTarget addresses a specific cursor position.
 type CursorKeyTarget struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Key           []*KeyValue            `protobuf:"bytes,1,rep,name=key,proto3" json:"key,omitempty"`
@@ -1350,6 +1375,7 @@ func (x *CursorKeyTarget) GetKey() []*KeyValue {
 	return nil
 }
 
+// CursorCommand advances, mutates, or closes an open cursor.
 type CursorCommand struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Command:
@@ -1496,6 +1522,7 @@ func (*CursorCommand_Delete) isCursorCommand_Command() {}
 
 func (*CursorCommand_Close) isCursorCommand_Command() {}
 
+// CursorClientMessage is one frame in the bidirectional cursor stream.
 type CursorClientMessage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Msg:
@@ -1578,6 +1605,7 @@ func (*CursorClientMessage_Open) isCursorClientMessage_Msg() {}
 
 func (*CursorClientMessage_Command) isCursorClientMessage_Msg() {}
 
+// CursorEntry is one streamed cursor row.
 type CursorEntry struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Key components per index KeyPath field. Each component is a KeyValue
@@ -1641,6 +1669,7 @@ func (x *CursorEntry) GetRecord() *Record {
 	return nil
 }
 
+// CursorResponse is one streamed cursor frame.
 type CursorResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Result:
@@ -1723,6 +1752,7 @@ func (*CursorResponse_Entry) isCursorResponse_Result() {}
 
 func (*CursorResponse_Done) isCursorResponse_Result() {}
 
+// DeleteResponse reports how many rows were deleted.
 type DeleteResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Deleted       int64                  `protobuf:"varint,1,opt,name=deleted,proto3" json:"deleted,omitempty"`
@@ -1767,6 +1797,7 @@ func (x *DeleteResponse) GetDeleted() int64 {
 	return 0
 }
 
+// KeyResponse wraps one primary key.
 type KeyResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`

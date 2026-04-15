@@ -11,20 +11,24 @@ use crate::api::RuntimeMetadata;
 use crate::error::Result;
 use crate::generated::v1::{self as pb, cache_client::CacheClient};
 
+/// Default Unix-socket environment variable used by [`Cache::connect`].
 pub const ENV_CACHE_SOCKET: &str = "GESTALT_CACHE_SOCKET";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+/// One cache entry written through [`Cache::set_many`].
 pub struct CacheEntry {
     pub key: String,
     pub value: Vec<u8>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+/// Options applied to cache writes.
 pub struct CacheSetOptions {
     pub ttl: Option<Duration>,
 }
 
 #[derive(Debug, thiserror::Error)]
+/// Errors returned by the cache client transport.
 pub enum CacheError {
     #[error("{0}")]
     Transport(#[from] tonic::transport::Error),
@@ -35,7 +39,9 @@ pub enum CacheError {
 }
 
 #[async_trait]
+/// Lifecycle and RPC contract for cache providers.
 pub trait CacheProvider: Send + Sync + 'static {
+    /// Configures the provider before it starts serving requests.
     async fn configure(
         &self,
         _name: &str,
@@ -44,24 +50,31 @@ pub trait CacheProvider: Send + Sync + 'static {
         Ok(())
     }
 
+    /// Returns runtime metadata that should augment the static manifest.
     fn metadata(&self) -> Option<RuntimeMetadata> {
         None
     }
 
+    /// Returns non-fatal warnings the host should surface to users.
     fn warnings(&self) -> Vec<String> {
         Vec::new()
     }
 
+    /// Performs an optional health check.
     async fn health_check(&self) -> Result<()> {
         Ok(())
     }
 
+    /// Shuts the provider down before the runtime exits.
     async fn close(&self) -> Result<()> {
         Ok(())
     }
 
+    /// Loads one cache value.
     async fn get(&self, key: &str) -> Result<Option<Vec<u8>>>;
 
+    /// Loads many cache values, defaulting to repeated [`CacheProvider::get`]
+    /// calls.
     async fn get_many(&self, keys: &[String]) -> Result<BTreeMap<String, Vec<u8>>> {
         let mut values = BTreeMap::new();
         for key in keys {
@@ -72,8 +85,11 @@ pub trait CacheProvider: Send + Sync + 'static {
         Ok(values)
     }
 
+    /// Stores one cache value.
     async fn set(&self, key: &str, value: &[u8], options: CacheSetOptions) -> Result<()>;
 
+    /// Stores many cache values, defaulting to repeated [`CacheProvider::set`]
+    /// calls.
     async fn set_many(&self, entries: &[CacheEntry], options: CacheSetOptions) -> Result<()> {
         for entry in entries {
             self.set(&entry.key, &entry.value, options).await?;
@@ -81,8 +97,11 @@ pub trait CacheProvider: Send + Sync + 'static {
         Ok(())
     }
 
+    /// Deletes one cache key.
     async fn delete(&self, key: &str) -> Result<bool>;
 
+    /// Deletes many cache keys, defaulting to repeated
+    /// [`CacheProvider::delete`] calls.
     async fn delete_many(&self, keys: &[String]) -> Result<i64> {
         let mut deleted = 0_i64;
         let mut seen = BTreeSet::new();
@@ -97,18 +116,22 @@ pub trait CacheProvider: Send + Sync + 'static {
         Ok(deleted)
     }
 
+    /// Updates the TTL for one cache key.
     async fn touch(&self, key: &str, ttl: Duration) -> Result<bool>;
 }
 
+/// Client for a running cache provider.
 pub struct Cache {
     client: CacheClient<Channel>,
 }
 
 impl Cache {
+    /// Connects to the default cache transport socket.
     pub async fn connect() -> std::result::Result<Self, CacheError> {
         Self::connect_named("").await
     }
 
+    /// Connects to a named cache transport socket.
     pub async fn connect_named(name: &str) -> std::result::Result<Self, CacheError> {
         let env_name = cache_socket_env(name);
         let socket_path = std::env::var(&env_name)
@@ -126,6 +149,7 @@ impl Cache {
         })
     }
 
+    /// Loads one cache value.
     pub async fn get(&mut self, key: &str) -> std::result::Result<Option<Vec<u8>>, CacheError> {
         let response = self
             .client
@@ -140,6 +164,7 @@ impl Cache {
         Ok(Some(response.value))
     }
 
+    /// Loads all present values for keys.
     pub async fn get_many<S>(
         &mut self,
         keys: &[S],
@@ -162,6 +187,7 @@ impl Cache {
         Ok(values)
     }
 
+    /// Stores one cache value.
     pub async fn set(
         &mut self,
         key: &str,
@@ -178,6 +204,7 @@ impl Cache {
         Ok(())
     }
 
+    /// Stores multiple cache values in one RPC.
     pub async fn set_many(
         &mut self,
         entries: &[CacheEntry],
@@ -198,6 +225,7 @@ impl Cache {
         Ok(())
     }
 
+    /// Deletes one cache key.
     pub async fn delete(&mut self, key: &str) -> std::result::Result<bool, CacheError> {
         let response = self
             .client
@@ -209,6 +237,7 @@ impl Cache {
         Ok(response.deleted)
     }
 
+    /// Deletes many cache keys.
     pub async fn delete_many<S>(&mut self, keys: &[S]) -> std::result::Result<i64, CacheError>
     where
         S: AsRef<str>,
@@ -223,6 +252,7 @@ impl Cache {
         Ok(response.deleted)
     }
 
+    /// Updates the TTL for one cache key.
     pub async fn touch(
         &mut self,
         key: &str,
@@ -240,6 +270,7 @@ impl Cache {
     }
 }
 
+/// Returns the environment variable used for a named cache socket.
 pub fn cache_socket_env(name: &str) -> String {
     let trimmed = name.trim();
     if trimmed.is_empty() {

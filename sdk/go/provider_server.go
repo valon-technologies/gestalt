@@ -21,6 +21,8 @@ type ProviderServer struct {
 	sessionCat func() (SessionCatalogProvider, bool)
 }
 
+// NewProviderServer adapts provider plus router into the gRPC integration
+// surface used by gestaltd.
 func NewProviderServer[P any, PP interface {
 	*P
 	Provider

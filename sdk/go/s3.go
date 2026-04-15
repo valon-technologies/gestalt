@@ -18,8 +18,11 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// EnvS3Socket is the default Unix-socket environment variable used by [S3].
 const EnvS3Socket = "GESTALT_S3_SOCKET"
 
+// S3SocketEnv returns the environment variable name used for a named S3
+// transport socket.
 func S3SocketEnv(name string) string {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -42,17 +45,23 @@ func S3SocketEnv(name string) string {
 }
 
 var (
-	ErrS3NotFound           = fmt.Errorf("s3: not found")
+	// ErrS3NotFound indicates that the requested object does not exist.
+	ErrS3NotFound = fmt.Errorf("s3: not found")
+	// ErrS3PreconditionFailed indicates that the request failed an If-Match or
+	// If-None-Match style precondition.
 	ErrS3PreconditionFailed = fmt.Errorf("s3: precondition failed")
-	ErrS3InvalidRange       = fmt.Errorf("s3: invalid range")
+	// ErrS3InvalidRange indicates that the requested byte range is invalid.
+	ErrS3InvalidRange = fmt.Errorf("s3: invalid range")
 )
 
+// ObjectRef identifies one object or object version.
 type ObjectRef struct {
 	Bucket    string
 	Key       string
 	VersionID string
 }
 
+// ObjectMeta describes an object returned by the provider.
 type ObjectMeta struct {
 	Ref          ObjectRef
 	ETag         string
@@ -63,11 +72,13 @@ type ObjectMeta struct {
 	StorageClass string
 }
 
+// ByteRange requests a half-open slice of an object's bytes.
 type ByteRange struct {
 	Start *int64
 	End   *int64
 }
 
+// ReadOptions configures conditional and ranged reads.
 type ReadOptions struct {
 	Range             *ByteRange
 	IfMatch           string
@@ -76,6 +87,7 @@ type ReadOptions struct {
 	IfUnmodifiedSince *time.Time
 }
 
+// WriteOptions configures object writes.
 type WriteOptions struct {
 	ContentType        string
 	CacheControl       string
@@ -87,6 +99,7 @@ type WriteOptions struct {
 	IfNoneMatch        string
 }
 
+// ListOptions configures list-objects requests.
 type ListOptions struct {
 	Bucket            string
 	Prefix            string
@@ -96,6 +109,7 @@ type ListOptions struct {
 	MaxKeys           int32
 }
 
+// ListPage is one page of list-objects results.
 type ListPage struct {
 	Objects               []ObjectMeta
 	CommonPrefixes        []string
@@ -103,20 +117,27 @@ type ListPage struct {
 	HasMore               bool
 }
 
+// CopyOptions configures conditional copy requests.
 type CopyOptions struct {
 	IfMatch     string
 	IfNoneMatch string
 }
 
+// PresignMethod identifies the HTTP verb encoded into a presigned URL.
 type PresignMethod string
 
 const (
-	PresignMethodGet    PresignMethod = "GET"
-	PresignMethodPut    PresignMethod = "PUT"
+	// PresignMethodGet creates a download URL.
+	PresignMethodGet PresignMethod = "GET"
+	// PresignMethodPut creates an upload URL.
+	PresignMethodPut PresignMethod = "PUT"
+	// PresignMethodDelete creates a delete URL.
 	PresignMethodDelete PresignMethod = "DELETE"
-	PresignMethodHead   PresignMethod = "HEAD"
+	// PresignMethodHead creates a metadata-only URL.
+	PresignMethodHead PresignMethod = "HEAD"
 )
 
+// PresignOptions configures presigned URL generation.
 type PresignOptions struct {
 	Method             PresignMethod
 	Expires            time.Duration
@@ -125,6 +146,7 @@ type PresignOptions struct {
 	Headers            map[string]string
 }
 
+// PresignResult is a presigned URL plus any required headers.
 type PresignResult struct {
 	URL       string
 	Method    PresignMethod
@@ -132,11 +154,13 @@ type PresignResult struct {
 	Headers   map[string]string
 }
 
+// S3Client speaks to a running S3 provider over a Unix socket.
 type S3Client struct {
 	client proto.S3Client
 	conn   *grpc.ClientConn
 }
 
+// S3 connects to the S3 provider exposed by gestaltd.
 func S3(name ...string) (*S3Client, error) {
 	envName := EnvS3Socket
 	if len(name) > 0 {
@@ -158,16 +182,20 @@ func S3(name ...string) (*S3Client, error) {
 	return &S3Client{client: proto.NewS3Client(conn), conn: conn}, nil
 }
 
+// Close closes the underlying gRPC transport.
 func (c *S3Client) Close() error { return c.conn.Close() }
 
+// Object returns a convenience handle for one object key.
 func (c *S3Client) Object(bucket, key string) *Object {
 	return &Object{client: c, ref: ObjectRef{Bucket: bucket, Key: key}}
 }
 
+// ObjectVersion returns a convenience handle for one object version.
 func (c *S3Client) ObjectVersion(bucket, key, versionID string) *Object {
 	return &Object{client: c, ref: ObjectRef{Bucket: bucket, Key: key, VersionID: versionID}}
 }
 
+// HeadObject fetches metadata for one object.
 func (c *S3Client) HeadObject(ctx context.Context, ref ObjectRef) (ObjectMeta, error) {
 	resp, err := c.client.HeadObject(ctx, &proto.HeadObjectRequest{Ref: objectRefToProto(ref)})
 	if err != nil {
@@ -176,6 +204,7 @@ func (c *S3Client) HeadObject(ctx context.Context, ref ObjectRef) (ObjectMeta, e
 	return requiredObjectMeta(resp.GetMeta(), "head object")
 }
 
+// ReadObject opens a streaming object reader.
 func (c *S3Client) ReadObject(ctx context.Context, ref ObjectRef, opts *ReadOptions) (ObjectMeta, io.ReadCloser, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -213,6 +242,7 @@ func (c *S3Client) ReadObject(ctx context.Context, ref ObjectRef, opts *ReadOpti
 	return objectMetaFromProto(meta), &s3ReadCloser{stream: stream, cancel: cancel}, nil
 }
 
+// WriteObject uploads an object from body.
 func (c *S3Client) WriteObject(ctx context.Context, ref ObjectRef, body io.Reader, opts *WriteOptions) (ObjectMeta, error) {
 	stream, err := c.client.WriteObject(ctx)
 	if err != nil {
@@ -262,11 +292,13 @@ func (c *S3Client) WriteObject(ctx context.Context, ref ObjectRef, body io.Reade
 	return requiredObjectMeta(resp.GetMeta(), "write object")
 }
 
+// DeleteObject removes one object.
 func (c *S3Client) DeleteObject(ctx context.Context, ref ObjectRef) error {
 	_, err := c.client.DeleteObject(ctx, &proto.DeleteObjectRequest{Ref: objectRefToProto(ref)})
 	return grpcS3Err(err)
 }
 
+// ListObjects lists objects in a bucket.
 func (c *S3Client) ListObjects(ctx context.Context, opts ListOptions) (ListPage, error) {
 	resp, err := c.client.ListObjects(ctx, &proto.ListObjectsRequest{
 		Bucket:            opts.Bucket,
@@ -282,6 +314,7 @@ func (c *S3Client) ListObjects(ctx context.Context, opts ListOptions) (ListPage,
 	return listPageFromProto(resp), nil
 }
 
+// CopyObject copies source to destination.
 func (c *S3Client) CopyObject(ctx context.Context, source, destination ObjectRef, opts *CopyOptions) (ObjectMeta, error) {
 	req := &proto.CopyObjectRequest{
 		Source:      objectRefToProto(source),
@@ -298,6 +331,7 @@ func (c *S3Client) CopyObject(ctx context.Context, source, destination ObjectRef
 	return requiredObjectMeta(resp.GetMeta(), "copy object")
 }
 
+// PresignObject creates a provider-generated presigned URL.
 func (c *S3Client) PresignObject(ctx context.Context, ref ObjectRef, opts *PresignOptions) (PresignResult, error) {
 	req := &proto.PresignObjectRequest{
 		Ref: objectRefToProto(ref),
@@ -318,15 +352,18 @@ func (c *S3Client) PresignObject(ctx context.Context, ref ObjectRef, opts *Presi
 	return presignResultFromProto(resp, requestedMethod), nil
 }
 
+// Object is a convenience wrapper around repeated operations on one object key.
 type Object struct {
 	client *S3Client
 	ref    ObjectRef
 }
 
+// Stat returns metadata for the current object.
 func (o *Object) Stat(ctx context.Context) (ObjectMeta, error) {
 	return o.client.HeadObject(ctx, o.ref)
 }
 
+// Exists reports whether the current object exists.
 func (o *Object) Exists(ctx context.Context) (bool, error) {
 	_, err := o.Stat(ctx)
 	if err == nil {
@@ -338,10 +375,12 @@ func (o *Object) Exists(ctx context.Context) (bool, error) {
 	return false, err
 }
 
+// Stream opens a streaming reader for the current object.
 func (o *Object) Stream(ctx context.Context, opts *ReadOptions) (ObjectMeta, io.ReadCloser, error) {
 	return o.client.ReadObject(ctx, o.ref, opts)
 }
 
+// Bytes reads the entire current object into memory.
 func (o *Object) Bytes(ctx context.Context, opts *ReadOptions) ([]byte, error) {
 	_, body, err := o.Stream(ctx, opts)
 	if err != nil {
@@ -351,6 +390,7 @@ func (o *Object) Bytes(ctx context.Context, opts *ReadOptions) ([]byte, error) {
 	return io.ReadAll(body)
 }
 
+// Text reads the entire current object as UTF-8 text.
 func (o *Object) Text(ctx context.Context, opts *ReadOptions) (string, error) {
 	data, err := o.Bytes(ctx, opts)
 	if err != nil {
@@ -359,6 +399,7 @@ func (o *Object) Text(ctx context.Context, opts *ReadOptions) (string, error) {
 	return string(data), nil
 }
 
+// JSON reads and decodes the entire current object as JSON.
 func (o *Object) JSON(ctx context.Context, opts *ReadOptions) (any, error) {
 	data, err := o.Bytes(ctx, opts)
 	if err != nil {
@@ -371,18 +412,22 @@ func (o *Object) JSON(ctx context.Context, opts *ReadOptions) (any, error) {
 	return value, nil
 }
 
+// Write uploads a new object body from body.
 func (o *Object) Write(ctx context.Context, body io.Reader, opts *WriteOptions) (ObjectMeta, error) {
 	return o.client.WriteObject(ctx, o.ref, body, opts)
 }
 
+// WriteBytes uploads body as raw bytes.
 func (o *Object) WriteBytes(ctx context.Context, body []byte, opts *WriteOptions) (ObjectMeta, error) {
 	return o.Write(ctx, bytes.NewReader(body), opts)
 }
 
+// WriteString uploads body as text.
 func (o *Object) WriteString(ctx context.Context, body string, opts *WriteOptions) (ObjectMeta, error) {
 	return o.WriteBytes(ctx, []byte(body), opts)
 }
 
+// WriteJSON uploads value as JSON, defaulting the content type when omitted.
 func (o *Object) WriteJSON(ctx context.Context, value any, opts *WriteOptions) (ObjectMeta, error) {
 	body, err := json.Marshal(value)
 	if err != nil {
@@ -396,10 +441,12 @@ func (o *Object) WriteJSON(ctx context.Context, value any, opts *WriteOptions) (
 	return o.WriteBytes(ctx, body, opts)
 }
 
+// Delete removes the current object.
 func (o *Object) Delete(ctx context.Context) error {
 	return o.client.DeleteObject(ctx, o.ref)
 }
 
+// Presign creates a presigned URL for the current object.
 func (o *Object) Presign(ctx context.Context, opts *PresignOptions) (PresignResult, error) {
 	return o.client.PresignObject(ctx, o.ref, opts)
 }

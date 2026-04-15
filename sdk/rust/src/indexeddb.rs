@@ -8,11 +8,13 @@ use tower::service_fn;
 
 use crate::generated::v1::{self as pb, indexed_db_client::IndexedDbClient};
 
+/// Default Unix-socket environment variable used by [`IndexedDB::connect`].
 pub const ENV_INDEXEDDB_SOCKET: &str = "GESTALT_INDEXEDDB_SOCKET";
 
 const CURSOR_CHANNEL_BUFFER: usize = 1;
 
 #[derive(Debug, thiserror::Error)]
+/// Errors returned by the IndexedDB transport client.
 pub enum IndexedDBError {
     #[error("not found")]
     NotFound,
@@ -28,8 +30,10 @@ pub enum IndexedDBError {
     Env(String),
 }
 
+/// JSON-like value stored in an object store row.
 pub type Record = BTreeMap<String, serde_json::Value>;
 
+/// Constrains a query or cursor by lower and upper bounds.
 pub struct KeyRange {
     pub lower: Option<serde_json::Value>,
     pub upper: Option<serde_json::Value>,
@@ -37,17 +41,20 @@ pub struct KeyRange {
     pub upper_open: bool,
 }
 
+/// Describes one secondary index on an object store.
 pub struct IndexSchema {
     pub name: String,
     pub key_path: Vec<String>,
     pub unique: bool,
 }
 
+/// Describes the indexes attached to an object store.
 pub struct ObjectStoreSchema {
     pub indexes: Vec<IndexSchema>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Controls cursor traversal order.
 pub enum CursorDirection {
     Next,
     NextUnique,
@@ -66,6 +73,7 @@ impl CursorDirection {
     }
 }
 
+/// Streaming cursor over object store or secondary index rows.
 pub struct Cursor {
     tx: mpsc::Sender<pb::CursorClientMessage>,
     stream: tonic::Streaming<pb::CursorResponse>,
@@ -76,6 +84,7 @@ pub struct Cursor {
 }
 
 impl Cursor {
+    /// Returns the current cursor key.
     pub fn key(&self) -> Option<serde_json::Value> {
         let entry = self.entry.as_ref()?;
         match entry.key.len() {
@@ -87,6 +96,7 @@ impl Cursor {
         }
     }
 
+    /// Returns the current row's primary key.
     pub fn primary_key(&self) -> &str {
         self.entry
             .as_ref()
@@ -94,6 +104,7 @@ impl Cursor {
             .unwrap_or("")
     }
 
+    /// Returns the current row value.
     pub fn value(&self) -> Result<Record, IndexedDBError> {
         if self.keys_only {
             return Err(IndexedDBError::KeysOnly);
@@ -106,11 +117,13 @@ impl Cursor {
             .unwrap_or_default())
     }
 
+    /// Advances the cursor by one row.
     pub async fn continue_next(&mut self) -> Result<bool, IndexedDBError> {
         let cmd = pb::cursor_command::Command::Next(true);
         self.send_and_recv(cmd).await
     }
 
+    /// Advances the cursor to key, or exhausts it if key does not exist.
     pub async fn continue_to_key(
         &mut self,
         key: serde_json::Value,
@@ -121,11 +134,13 @@ impl Cursor {
         self.send_and_recv(cmd).await
     }
 
+    /// Skips count rows ahead.
     pub async fn advance(&mut self, count: i32) -> Result<bool, IndexedDBError> {
         let cmd = pb::cursor_command::Command::Advance(count);
         self.send_and_recv(cmd).await
     }
 
+    /// Deletes the current row and keeps the cursor open.
     pub async fn delete(&mut self) -> Result<(), IndexedDBError> {
         if self.done {
             return Err(IndexedDBError::NotFound);
@@ -134,6 +149,7 @@ impl Cursor {
         self.send_mutation(cmd).await
     }
 
+    /// Replaces the current row and keeps the cursor open.
     pub async fn update(&mut self, value: Record) -> Result<(), IndexedDBError> {
         if self.done {
             return Err(IndexedDBError::NotFound);
@@ -142,6 +158,7 @@ impl Cursor {
         self.send_mutation(cmd).await
     }
 
+    /// Closes the cursor stream and releases its transport resources.
     pub async fn close(self) -> Result<(), IndexedDBError> {
         let msg = pb::CursorClientMessage {
             msg: Some(pb::cursor_client_message::Msg::Command(pb::CursorCommand {
@@ -291,15 +308,18 @@ async fn open_cursor_inner(
     })
 }
 
+/// Client for a running IndexedDB provider.
 pub struct IndexedDB {
     client: IndexedDbClient<Channel>,
 }
 
 impl IndexedDB {
+    /// Connects to the default IndexedDB transport socket.
     pub async fn connect() -> Result<Self, IndexedDBError> {
         Self::connect_named("").await
     }
 
+    /// Connects to a named IndexedDB transport socket.
     pub async fn connect_named(name: &str) -> Result<Self, IndexedDBError> {
         let env_name = indexeddb_socket_env(name);
         let socket_path = std::env::var(&env_name)
@@ -321,6 +341,7 @@ impl IndexedDB {
         })
     }
 
+    /// Creates a named object store.
     pub async fn create_object_store(
         &mut self,
         name: &str,
@@ -348,6 +369,7 @@ impl IndexedDB {
         Ok(())
     }
 
+    /// Deletes a named object store.
     pub async fn delete_object_store(&mut self, name: &str) -> Result<(), IndexedDBError> {
         self.client
             .delete_object_store(pb::DeleteObjectStoreRequest {
@@ -358,6 +380,7 @@ impl IndexedDB {
         Ok(())
     }
 
+    /// Returns a typed handle for one object store.
     pub fn object_store(&self, name: &str) -> ObjectStore {
         ObjectStore {
             client: self.client.clone(),
@@ -366,12 +389,14 @@ impl IndexedDB {
     }
 }
 
+/// CRUD, range-query, and cursor access for one object store.
 pub struct ObjectStore {
     client: IndexedDbClient<Channel>,
     store: String,
 }
 
 impl ObjectStore {
+    /// Loads one record by primary key.
     pub async fn get(&mut self, id: &str) -> Result<Record, IndexedDBError> {
         let resp = self
             .client
@@ -389,6 +414,7 @@ impl ObjectStore {
             .unwrap_or_default())
     }
 
+    /// Resolves the primary key for id.
     pub async fn get_key(&mut self, id: &str) -> Result<String, IndexedDBError> {
         let resp = self
             .client
@@ -401,6 +427,7 @@ impl ObjectStore {
         Ok(resp.into_inner().key)
     }
 
+    /// Inserts a new row and fails if the key already exists.
     pub async fn add(&mut self, record: Record) -> Result<(), IndexedDBError> {
         self.client
             .add(pb::RecordRequest {
@@ -412,6 +439,7 @@ impl ObjectStore {
         Ok(())
     }
 
+    /// Upserts a row by primary key.
     pub async fn put(&mut self, record: Record) -> Result<(), IndexedDBError> {
         self.client
             .put(pb::RecordRequest {
@@ -423,6 +451,7 @@ impl ObjectStore {
         Ok(())
     }
 
+    /// Deletes one row by primary key.
     pub async fn delete(&mut self, id: &str) -> Result<(), IndexedDBError> {
         self.client
             .delete(pb::ObjectStoreRequest {
@@ -434,6 +463,7 @@ impl ObjectStore {
         Ok(())
     }
 
+    /// Deletes every row in the object store.
     pub async fn clear(&mut self) -> Result<(), IndexedDBError> {
         self.client
             .clear(pb::ObjectStoreNameRequest {
@@ -444,6 +474,7 @@ impl ObjectStore {
         Ok(())
     }
 
+    /// Loads every row that matches range.
     pub async fn get_all(
         &mut self,
         range: Option<KeyRange>,
@@ -464,6 +495,7 @@ impl ObjectStore {
             .collect())
     }
 
+    /// Loads every primary key that matches range.
     pub async fn get_all_keys(
         &mut self,
         range: Option<KeyRange>,
@@ -479,6 +511,7 @@ impl ObjectStore {
         Ok(resp.into_inner().keys)
     }
 
+    /// Counts rows that match range.
     pub async fn count(&mut self, range: Option<KeyRange>) -> Result<i64, IndexedDBError> {
         let resp = self
             .client
@@ -491,6 +524,7 @@ impl ObjectStore {
         Ok(resp.into_inner().count)
     }
 
+    /// Deletes rows that match range and returns the delete count.
     pub async fn delete_range(&mut self, range: KeyRange) -> Result<i64, IndexedDBError> {
         let resp = self
             .client
@@ -503,6 +537,7 @@ impl ObjectStore {
         Ok(resp.into_inner().deleted)
     }
 
+    /// Returns a typed handle for one secondary index.
     pub fn index(&self, name: &str) -> IndexClient {
         IndexClient {
             client: self.client.clone(),
@@ -511,6 +546,7 @@ impl ObjectStore {
         }
     }
 
+    /// Opens a full-value cursor over the object store.
     pub async fn open_cursor(
         &mut self,
         range: Option<KeyRange>,
@@ -527,6 +563,7 @@ impl ObjectStore {
         open_cursor_inner(&mut self.client, req).await
     }
 
+    /// Opens a key-only cursor over the object store.
     pub async fn open_key_cursor(
         &mut self,
         range: Option<KeyRange>,
@@ -544,6 +581,7 @@ impl ObjectStore {
     }
 }
 
+/// Lookup and cursor access through one secondary index.
 pub struct IndexClient {
     client: IndexedDbClient<Channel>,
     store: String,
@@ -551,6 +589,7 @@ pub struct IndexClient {
 }
 
 impl IndexClient {
+    /// Loads the first row that matches values.
     pub async fn get(&mut self, values: &[serde_json::Value]) -> Result<Record, IndexedDBError> {
         let resp = self
             .client
@@ -570,6 +609,7 @@ impl IndexClient {
             .unwrap_or_default())
     }
 
+    /// Resolves the primary key for the first row that matches values.
     pub async fn get_key(
         &mut self,
         values: &[serde_json::Value],
@@ -587,6 +627,7 @@ impl IndexClient {
         Ok(resp.into_inner().key)
     }
 
+    /// Loads every row that matches values and range.
     pub async fn get_all(
         &mut self,
         values: &[serde_json::Value],
@@ -610,6 +651,7 @@ impl IndexClient {
             .collect())
     }
 
+    /// Loads every primary key that matches values and range.
     pub async fn get_all_keys(
         &mut self,
         values: &[serde_json::Value],
@@ -628,6 +670,7 @@ impl IndexClient {
         Ok(resp.into_inner().keys)
     }
 
+    /// Counts rows that match values and range.
     pub async fn count(
         &mut self,
         values: &[serde_json::Value],
@@ -646,6 +689,7 @@ impl IndexClient {
         Ok(resp.into_inner().count)
     }
 
+    /// Deletes rows that match values and returns the delete count.
     pub async fn delete(&mut self, values: &[serde_json::Value]) -> Result<i64, IndexedDBError> {
         let resp = self
             .client
@@ -660,6 +704,7 @@ impl IndexClient {
         Ok(resp.into_inner().deleted)
     }
 
+    /// Opens a full-value cursor over the secondary index.
     pub async fn open_cursor(
         &mut self,
         values: &[serde_json::Value],
@@ -677,6 +722,7 @@ impl IndexClient {
         open_cursor_inner(&mut self.client, req).await
     }
 
+    /// Opens a key-only cursor over the secondary index.
     pub async fn open_key_cursor(
         &mut self,
         values: &[serde_json::Value],
@@ -857,6 +903,7 @@ fn key_range_to_pb(kr: KeyRange) -> pb::KeyRange {
         upper_open: kr.upper_open,
     }
 }
+/// Returns the environment variable used for a named IndexedDB socket.
 pub fn indexeddb_socket_env(name: &str) -> String {
     let trimmed = name.trim();
     if trimmed.is_empty() {

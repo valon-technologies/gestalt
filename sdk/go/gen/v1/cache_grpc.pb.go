@@ -32,6 +32,8 @@ const (
 // CacheClient is the client API for Cache service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// Cache models the shared Gestalt cache-provider protocol.
 type CacheClient interface {
 	Get(ctx context.Context, in *CacheGetRequest, opts ...grpc.CallOption) (*CacheGetResponse, error)
 	GetMany(ctx context.Context, in *CacheGetManyRequest, opts ...grpc.CallOption) (*CacheGetManyResponse, error)
@@ -123,6 +125,8 @@ func (c *cacheClient) Touch(ctx context.Context, in *CacheTouchRequest, opts ...
 // CacheServer is the server API for Cache service.
 // All implementations must embed UnimplementedCacheServer
 // for forward compatibility.
+//
+// Cache models the shared Gestalt cache-provider protocol.
 type CacheServer interface {
 	Get(context.Context, *CacheGetRequest) (*CacheGetResponse, error)
 	GetMany(context.Context, *CacheGetManyRequest) (*CacheGetManyResponse, error)

@@ -2,12 +2,14 @@ syntax = "proto3";
 
 package gestalt.provider.v1;
 
-option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
-
 import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
+option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
+
+// CatalogParameter describes one input parameter surfaced in the generated
+// catalog for an operation.
 message CatalogParameter {
   string name = 1;
   string type = 2;
@@ -16,6 +18,8 @@ message CatalogParameter {
   google.protobuf.Value default = 5;
 }
 
+// OperationAnnotations carries optional host hints about how an operation
+// behaves.
 message OperationAnnotations {
   optional bool read_only_hint = 1;
   optional bool idempotent_hint = 2;
@@ -23,6 +27,8 @@ message OperationAnnotations {
   optional bool open_world_hint = 4;
 }
 
+// CatalogOperation is one executable operation exposed by an integration
+// provider.
 message CatalogOperation {
   string id = 1;
   string method = 2;
@@ -40,6 +46,8 @@ message CatalogOperation {
   repeated string allowed_roles = 14;
 }
 
+// Catalog is the static or request-scoped executable surface exposed by a
+// provider.
 message Catalog {
   string name = 1;
   string display_name = 2;
@@ -48,6 +56,7 @@ message Catalog {
   repeated CatalogOperation operations = 5;
 }
 
+// ConnectionMode describes which credential sources a provider accepts.
 enum ConnectionMode {
   CONNECTION_MODE_UNSPECIFIED = 0;
   CONNECTION_MODE_NONE = 1;
@@ -56,6 +65,7 @@ enum ConnectionMode {
   CONNECTION_MODE_EITHER = 4;
 }
 
+// ConnectionParamDef describes one provider-defined connection parameter.
 message ConnectionParamDef {
   bool required = 1;
   string description = 2;
@@ -64,6 +74,7 @@ message ConnectionParamDef {
   string field = 5;
 }
 
+// ProviderMetadata describes an integration provider's static capabilities.
 message ProviderMetadata {
   string name = 1;
   string display_name = 2;
@@ -78,12 +89,14 @@ message ProviderMetadata {
   int32 max_protocol_version = 12;
 }
 
-
+// OperationResult is the serialized result returned from an Execute call.
 message OperationResult {
   int32 status = 1;
   string body = 2;
 }
 
+// IntegrationToken is the host-managed token payload passed into post-connect
+// hooks.
 message IntegrationToken {
   string id = 1;
   string user_id = 2;
@@ -100,6 +113,7 @@ message IntegrationToken {
   google.protobuf.Timestamp updated_at = 13;
 }
 
+// SubjectContext identifies the caller that initiated an operation.
 message SubjectContext {
   string id = 1;
   string kind = 2;
@@ -107,6 +121,7 @@ message SubjectContext {
   string auth_source = 4;
 }
 
+// CredentialContext describes the resolved credential used for an operation.
 message CredentialContext {
   string mode = 1;
   string subject_id = 2;
@@ -114,17 +129,21 @@ message CredentialContext {
   string instance = 4;
 }
 
+// AccessContext describes the host-side access decision for an operation.
 message AccessContext {
   string policy = 1;
   string role = 2;
 }
 
+// RequestContext bundles the caller, credential, and access metadata for one
+// operation.
 message RequestContext {
   SubjectContext subject = 1;
   CredentialContext credential = 2;
   AccessContext access = 3;
 }
 
+// ExecuteRequest invokes one executable operation.
 message ExecuteRequest {
   string operation = 1;
   google.protobuf.Struct params = 2;
@@ -134,7 +153,8 @@ message ExecuteRequest {
   RequestContext context = 6;
 }
 
-
+// GetSessionCatalogRequest asks a provider for request-scoped catalog
+// extensions.
 message GetSessionCatalogRequest {
   string token = 1;
   map<string, string> connection_params = 2;
@@ -142,28 +162,36 @@ message GetSessionCatalogRequest {
   RequestContext context = 4;
 }
 
+// GetSessionCatalogResponse returns request-scoped catalog extensions.
 message GetSessionCatalogResponse {
   Catalog catalog = 1;
 }
 
+// PostConnectRequest notifies a provider that a connection has completed.
 message PostConnectRequest {
   IntegrationToken token = 1;
 }
 
+// PostConnectResponse returns provider-defined metadata captured after
+// connection.
 message PostConnectResponse {
   map<string, string> metadata = 1;
 }
 
+// StartProviderRequest configures an integration provider for one runtime
+// session.
 message StartProviderRequest {
   string name = 1;
   google.protobuf.Struct config = 2;
   int32 protocol_version = 4;
 }
 
+// StartProviderResponse confirms the protocol version the provider is serving.
 message StartProviderResponse {
   int32 protocol_version = 1;
 }
 
+// IntegrationProvider models the shared Gestalt integration-provider protocol.
 service IntegrationProvider {
   rpc GetMetadata(google.protobuf.Empty) returns (ProviderMetadata);
   rpc StartProvider(StartProviderRequest) returns (StartProviderResponse);

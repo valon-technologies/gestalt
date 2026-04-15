@@ -115,9 +115,14 @@ func operationErrorBody(message string) string {
 }
 
 var (
-	ErrSecretNotFound                     = errors.New("secret not found")
+	// ErrSecretNotFound indicates that a named secret does not exist.
+	ErrSecretNotFound = errors.New("secret not found")
+	// ErrExternalTokenValidationUnsupported indicates that the auth provider
+	// does not implement external token validation.
 	ErrExternalTokenValidationUnsupported = errors.New("auth provider does not support external token validation")
-	ErrOAuthRegistrationStoreUnsupported  = errors.New("datastore provider does not support oauth registrations")
+	// ErrOAuthRegistrationStoreUnsupported indicates that the datastore provider
+	// does not implement OAuth registration storage.
+	ErrOAuthRegistrationStoreUnsupported = errors.New("datastore provider does not support oauth registrations")
 )
 
 func providerRPCError(operation string, err error) error {

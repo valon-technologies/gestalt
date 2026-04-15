@@ -2,12 +2,13 @@ syntax = "proto3";
 
 package gestalt.provider.v1;
 
-option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
-
 import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
 
+option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
+
+// TypedValue stores one scalar or structured value in an IndexedDB record.
 message TypedValue {
   oneof kind {
     google.protobuf.NullValue null_value = 1;
@@ -21,21 +22,26 @@ message TypedValue {
   }
 }
 
+// Record is one JSON-like row in an object store.
 message Record {
   map<string, TypedValue> fields = 1;
 }
 
+// ObjectStoreSchema describes the indexes and columns attached to an object
+// store.
 message ObjectStoreSchema {
   repeated IndexSchema indexes = 1;
   repeated ColumnDef columns = 2;
 }
 
+// IndexSchema describes one secondary index on an object store.
 message IndexSchema {
   string name = 1;
   repeated string key_path = 2;
   bool unique = 3;
 }
 
+// ColumnDef is reserved for providers that preserve SQL-style column metadata.
 message ColumnDef {
   string name = 1;
   int32 type = 2;
@@ -44,6 +50,7 @@ message ColumnDef {
   bool unique = 5;
 }
 
+// KeyRange constrains a query or cursor by lower and upper bounds.
 message KeyRange {
   TypedValue lower = 1;
   TypedValue upper = 2;
@@ -51,46 +58,57 @@ message KeyRange {
   bool upper_open = 4;
 }
 
+// RecordRequest addresses one object store and carries one row payload.
 message RecordRequest {
   string store = 1;
   Record record = 2;
 }
 
+// RecordResponse wraps one row payload.
 message RecordResponse {
   Record record = 1;
 }
 
+// RecordsResponse wraps repeated row payloads.
 message RecordsResponse {
   repeated Record records = 1;
 }
 
+// KeysResponse wraps repeated primary keys.
 message KeysResponse {
   repeated string keys = 1;
 }
 
+// ObjectStoreRequest addresses one object store row by primary key.
 message ObjectStoreRequest {
   string store = 1;
   string id = 2;
 }
 
+// ObjectStoreNameRequest addresses an object store without a specific row key.
 message ObjectStoreNameRequest {
   string store = 1;
 }
 
+// ObjectStoreRangeRequest addresses an object store plus an optional key range.
 message ObjectStoreRangeRequest {
   string store = 1;
   optional KeyRange range = 2;
 }
 
+// CreateObjectStoreRequest creates a new object store.
 message CreateObjectStoreRequest {
   string name = 1;
   ObjectStoreSchema schema = 2;
 }
 
+// DeleteObjectStoreRequest removes an object store.
 message DeleteObjectStoreRequest {
   string name = 1;
 }
 
+// IndexQueryRequest addresses a secondary index plus optional key values and
+// range constraints.
 message IndexQueryRequest {
   string store = 1;
   string index = 2;
@@ -98,10 +116,12 @@ message IndexQueryRequest {
   optional KeyRange range = 4;
 }
 
+// CountResponse reports how many rows matched a query.
 message CountResponse {
   int64 count = 1;
 }
 
+// CursorDirection controls IndexedDB cursor traversal order.
 enum CursorDirection {
   CURSOR_NEXT = 0;
   CURSOR_NEXT_UNIQUE = 1;
@@ -109,12 +129,16 @@ enum CursorDirection {
   CURSOR_PREV_UNIQUE = 3;
 }
 
+// OpenCursorRequest starts a streaming cursor over an object store or index.
 message OpenCursorRequest {
   string store = 1;
   optional KeyRange range = 2;
   CursorDirection direction = 3;
+  // keys_only suppresses row payloads and returns only keys.
   bool keys_only = 4;
+  // index selects a secondary index when non-empty.
   string index = 5;
+  // values selects a compound index key prefix when index is set.
   repeated TypedValue values = 6;
 }
 
@@ -131,10 +155,12 @@ message KeyValueArray {
   repeated KeyValue elements = 1;
 }
 
+// CursorKeyTarget addresses a specific cursor position.
 message CursorKeyTarget {
   repeated KeyValue key = 1;
 }
 
+// CursorCommand advances, mutates, or closes an open cursor.
 message CursorCommand {
   oneof command {
     bool next = 1;
@@ -146,6 +172,7 @@ message CursorCommand {
   }
 }
 
+// CursorClientMessage is one frame in the bidirectional cursor stream.
 message CursorClientMessage {
   oneof msg {
     OpenCursorRequest open = 1;
@@ -153,6 +180,7 @@ message CursorClientMessage {
   }
 }
 
+// CursorEntry is one streamed cursor row.
 message CursorEntry {
   // Key components per index KeyPath field. Each component is a KeyValue
   // that can be a scalar or a nested array, preserving the full W3C IndexedDB
@@ -162,6 +190,7 @@ message CursorEntry {
   Record record = 3;
 }
 
+// CursorResponse is one streamed cursor frame.
 message CursorResponse {
   oneof result {
     CursorEntry entry = 1;
@@ -169,14 +198,17 @@ message CursorResponse {
   }
 }
 
+// DeleteResponse reports how many rows were deleted.
 message DeleteResponse {
   int64 deleted = 1;
 }
 
+// KeyResponse wraps one primary key.
 message KeyResponse {
   string key = 1;
 }
 
+// IndexedDB models the shared Gestalt IndexedDB-provider protocol.
 service IndexedDB {
   // Lifecycle
   rpc CreateObjectStore(CreateObjectStoreRequest) returns (google.protobuf.Empty);
