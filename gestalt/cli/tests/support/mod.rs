@@ -116,12 +116,46 @@ pub(crate) struct LoginFlowState {
 struct HttpRequest {
     method: Method,
     target: String,
+    headers: Vec<(String, String)>,
     body: Vec<u8>,
 }
 
 pub(crate) struct LoginServer {
     pub(crate) base_url: String,
     pub(crate) state: Arc<Mutex<LoginFlowState>>,
+    pub(crate) handle: std::thread::JoinHandle<()>,
+}
+
+pub(crate) struct OAuthConnectServerConfig<'a> {
+    pub(crate) integrations_path: &'a str,
+    pub(crate) start_path: &'a str,
+    pub(crate) integration_name: &'a str,
+    pub(crate) integrations_response: Option<&'a str>,
+    pub(crate) selection_required: bool,
+}
+
+#[derive(Clone)]
+struct OAuthConnectHandlerConfig {
+    browser_url: String,
+    integrations_path: String,
+    start_path: String,
+    integration_name: String,
+    integrations_response: Option<String>,
+    selection_required: bool,
+}
+
+#[derive(Default)]
+pub(crate) struct OAuthConnectFlowState {
+    pub(crate) callback_port: Option<u16>,
+    pub(crate) callback_state: Option<String>,
+    pub(crate) oauth_state: Option<String>,
+    pub(crate) browser_response_html: Option<String>,
+    pub(crate) start_body: Option<serde_json::Value>,
+}
+
+pub(crate) struct OAuthConnectServer {
+    pub(crate) base_url: String,
+    pub(crate) state: Arc<Mutex<OAuthConnectFlowState>>,
     pub(crate) handle: std::thread::JoinHandle<()>,
 }
 
@@ -146,6 +180,47 @@ pub(crate) fn spawn_login_server() -> LoginServer {
         }
     });
     LoginServer {
+        base_url,
+        state,
+        handle,
+    }
+}
+
+pub(crate) fn spawn_oauth_connect_server(
+    config: OAuthConnectServerConfig<'_>,
+) -> OAuthConnectServer {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let base_url = format!("http://{}", listener.local_addr().unwrap());
+    let handler_config = OAuthConnectHandlerConfig {
+        browser_url: format!("{base_url}/browser-oauth"),
+        integrations_path: config.integrations_path.to_string(),
+        start_path: config.start_path.to_string(),
+        integration_name: config.integration_name.to_string(),
+        integrations_response: config.integrations_response.map(str::to_string),
+        selection_required: config.selection_required,
+    };
+    let state = Arc::new(Mutex::new(OAuthConnectFlowState::default()));
+    let server_state = Arc::clone(&state);
+    let expected_request_count = if handler_config.selection_required {
+        5
+    } else {
+        4
+    };
+    let handle = std::thread::spawn(move || {
+        let mut workers = Vec::new();
+        for _ in 0..expected_request_count {
+            let (stream, _) = listener.accept().unwrap();
+            let state = Arc::clone(&server_state);
+            let handler_config = handler_config.clone();
+            workers.push(std::thread::spawn(move || {
+                handle_oauth_connect_request(stream, state, &handler_config);
+            }));
+        }
+        for worker in workers {
+            worker.join().unwrap();
+        }
+    });
+    OAuthConnectServer {
         base_url,
         state,
         handle,
@@ -222,17 +297,144 @@ fn handle_login_request(
     }
 }
 
+fn handle_oauth_connect_request(
+    mut stream: TcpStream,
+    state: Arc<Mutex<OAuthConnectFlowState>>,
+    config: &OAuthConnectHandlerConfig,
+) {
+    let request = read_http_request(&mut stream);
+    match request.target.as_str() {
+        target if request.method == Method::GET && target == config.integrations_path => {
+            let body = config.integrations_response.clone().unwrap_or_else(|| {
+                format!(
+                    r#"[{{"name":"{}","authTypes":["oauth"],"connected":false}}]"#,
+                    config.integration_name
+                )
+            });
+            write_http_response(&mut stream, StatusCode::OK, http::APPLICATION_JSON, &body);
+        }
+        target if request.method == Method::POST && target == config.start_path => {
+            let body: serde_json::Value = serde_json::from_slice(&request.body).unwrap();
+            let mut state = state.lock().unwrap();
+            state.callback_port = Some(body["callbackPort"].as_u64().unwrap() as u16);
+            state.callback_state = Some(body["callbackState"].as_str().unwrap().to_string());
+            state.oauth_state = Some("oauth-state".to_string());
+            state.start_body = Some(body.clone());
+            write_http_response(
+                &mut stream,
+                StatusCode::OK,
+                http::APPLICATION_JSON,
+                &format!(
+                    r#"{{"url":"{}","state":"oauth-state"}}"#,
+                    config.browser_url
+                ),
+            );
+        }
+        "/browser-oauth" if request.method == Method::GET => {
+            let (callback_port, callback_state, oauth_state) = {
+                let state = state.lock().unwrap();
+                (
+                    state.callback_port.expect("missing callback port"),
+                    state
+                        .callback_state
+                        .clone()
+                        .expect("missing callback state"),
+                    state.oauth_state.clone().expect("missing oauth state"),
+                )
+            };
+            let callback_url = format!(
+                "http://127.0.0.1:{callback_port}/?code=test-code&state={oauth_state}&cli_state={callback_state}"
+            );
+            let html = reqwest::blocking::get(callback_url)
+                .unwrap()
+                .text()
+                .unwrap();
+            state.lock().unwrap().browser_response_html = Some(html);
+            write_http_response(&mut stream, StatusCode::OK, http::TEXT_PLAIN, "ok");
+        }
+        target if request.method == Method::GET && target.starts_with("/api/v1/auth/callback?") => {
+            let url = url::Url::parse(&format!("http://localhost{target}")).unwrap();
+            let params = url
+                .query_pairs()
+                .collect::<std::collections::HashMap<_, _>>();
+            let oauth_state = state.lock().unwrap().oauth_state.clone().unwrap();
+            assert_eq!(params.get("code").map(|v| v.as_ref()), Some("test-code"));
+            assert_eq!(params.get("cli").map(|v| v.as_ref()), Some("1"));
+            assert_eq!(
+                params.get("state").map(|v| v.as_ref()),
+                Some(oauth_state.as_str())
+            );
+            if config.selection_required {
+                write_http_response(
+                    &mut stream,
+                    StatusCode::OK,
+                    http::APPLICATION_JSON,
+                    &format!(
+                        r#"{{
+                            "status":"selection_required",
+                            "integration":"{}",
+                            "selectionUrl":"/api/v1/auth/pending-connection",
+                            "pendingToken":"pending-123",
+                            "candidates":[
+                                {{"id":"site-a","name":"Site A"}}
+                            ]
+                        }}"#,
+                        config.integration_name
+                    ),
+                );
+                return;
+            }
+            write_http_response(
+                &mut stream,
+                StatusCode::OK,
+                http::APPLICATION_JSON,
+                &format!(
+                    r#"{{"status":"connected","integration":"{}"}}"#,
+                    config.integration_name
+                ),
+            );
+        }
+        "/api/v1/auth/pending-connection" if request.method == Method::POST => {
+            assert!(
+                config.selection_required,
+                "unexpected pending-connection request"
+            );
+            let expected_bearer = test_bearer();
+            assert_eq!(
+                request_auth_header(&request).as_deref(),
+                Some(expected_bearer.as_str()),
+                "expected bearer auth on pending selection request"
+            );
+            assert_eq!(
+                String::from_utf8(request.body).unwrap(),
+                "pending_token=pending-123&candidate_index=0"
+            );
+            write_http_response(
+                &mut stream,
+                StatusCode::OK,
+                http::TEXT_HTML,
+                "<html>ok</html>",
+            );
+        }
+        _ => panic!("unexpected request: {} {}", request.method, request.target),
+    }
+}
+
 fn read_http_request(stream: &mut TcpStream) -> HttpRequest {
     let mut reader = BufReader::new(stream.try_clone().unwrap());
     let mut request_line = String::new();
     reader.read_line(&mut request_line).unwrap();
 
     let mut content_length = 0usize;
+    let mut headers = Vec::new();
     loop {
         let mut line = String::new();
         reader.read_line(&mut line).unwrap();
         if line == "\r\n" {
             break;
+        }
+        if let Some((name, value)) = line.split_once(':') {
+            headers.push((name.trim().to_string(), value.trim().to_string()));
         }
         if let Some((name, value)) = line.split_once(':')
             && name.eq_ignore_ascii_case(header::CONTENT_LENGTH.as_str())
@@ -248,8 +450,17 @@ fn read_http_request(stream: &mut TcpStream) -> HttpRequest {
     HttpRequest {
         method: Method::from_bytes(parts.next().unwrap().as_bytes()).unwrap(),
         target: parts.next().unwrap().to_string(),
+        headers,
         body,
     }
+}
+
+fn request_auth_header(request: &HttpRequest) -> Option<String> {
+    request
+        .headers
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case(header::AUTHORIZATION.as_str()))
+        .map(|(_, value)| value.clone())
 }
 
 fn write_http_response(stream: &mut TcpStream, status: StatusCode, content_type: &str, body: &str) {

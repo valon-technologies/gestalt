@@ -1,9 +1,13 @@
 use std::collections::BTreeMap;
+use std::io::{BufRead, BufReader};
+use std::net::TcpListener;
+use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use serde::{Deserialize, Serialize};
 
 use crate::api::ApiClient;
+use crate::commands::auth::{random_hex_string, send_browser_response};
 use crate::interactive::{InputPrompt, PromptOption, prompt_input, prompt_select};
 use crate::output;
 
@@ -87,6 +91,10 @@ struct StartOAuthRequest<'a> {
     connection: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     instance: Option<&'a str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    callback_port: Option<u16>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    callback_state: Option<&'a str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     connection_params: Option<&'a BTreeMap<String, String>>,
 }
@@ -267,13 +275,7 @@ pub fn connect_with_browser_opener<F>(
 where
     F: FnOnce(&str) -> Result<()>,
 {
-    let integration = fetch_plugin(client, name)?;
-    let flow = ResolvedConnectFlow::resolve(&integration, connection)?;
-
-    match flow.mode {
-        ConnectMode::OAuth => start_oauth(client, &flow, instance, open_browser),
-        ConnectMode::Manual => connect_manual(client, &flow, instance),
-    }
+    connect_with_browser_opener_and_wait(client, name, connection, instance, open_browser)
 }
 
 pub(crate) fn connect_identity(
@@ -283,12 +285,47 @@ pub(crate) fn connect_identity(
     connection: Option<&str>,
     instance: Option<&str>,
 ) -> Result<()> {
-    connect_identity_with_browser_opener(client, identity, name, connection, instance, |url| {
-        open::that(url).map(|_| ()).map_err(Into::into)
-    })
+    connect_identity_with_browser_opener_and_wait(
+        client,
+        identity,
+        name,
+        connection,
+        instance,
+        |url| open::that(url).map(|_| ()).map_err(Into::into),
+    )
 }
 
-pub fn connect_identity_with_browser_opener<F>(
+pub fn connect_with_browser_opener_and_wait<F>(
+    client: &ApiClient,
+    name: &str,
+    connection: Option<&str>,
+    instance: Option<&str>,
+    open_browser: F,
+) -> Result<()>
+where
+    F: FnOnce(&str) -> Result<()>,
+{
+    let integration = fetch_plugin(client, name)?;
+    let flow = ResolvedConnectFlow::resolve(&integration, connection)?;
+
+    match flow.mode {
+        ConnectMode::OAuth => complete_oauth(
+            client,
+            &flow,
+            instance,
+            OAuthCompletionMessages {
+                failure_context: "failed to start OAuth flow".to_string(),
+                success_template: "Connected {integration}.".to_string(),
+                selection_success_template: "Connected {integration} ({candidate})".to_string(),
+            },
+            |body| client.post("/api/v1/auth/start-oauth", body),
+            open_browser,
+        ),
+        ConnectMode::Manual => connect_manual(client, &flow, instance),
+    }
+}
+
+pub fn connect_identity_with_browser_opener_and_wait<F>(
     client: &ApiClient,
     identity: &str,
     name: &str,
@@ -317,78 +354,254 @@ where
             &format!("Connected {{integration}} ({{candidate}}) for identity {identity}."),
             |body| client.connect_identity_manual(identity, body),
         ),
-        ConnectMode::OAuth => start_identity_oauth(client, identity, &flow, instance, open_browser),
+        ConnectMode::OAuth => complete_oauth(
+            client,
+            &flow,
+            instance,
+            OAuthCompletionMessages {
+                failure_context: format!("failed to start OAuth flow for identity {identity}"),
+                success_template: format!("Connected {{integration}} for identity {identity}."),
+                selection_success_template: format!(
+                    "Connected {{integration}} ({{candidate}}) for identity {identity}."
+                ),
+            },
+            |body| client.start_identity_oauth(identity, body),
+            open_browser,
+        ),
     }
 }
 
-fn start_oauth<F>(
-    client: &ApiClient,
-    flow: &ResolvedConnectFlow<'_>,
-    instance: Option<&str>,
-    open_browser: F,
-) -> Result<()>
-where
-    F: FnOnce(&str) -> Result<()>,
-{
-    start_oauth_via(
-        "failed to start OAuth flow",
-        |body| client.post("/api/v1/auth/start-oauth", body),
-        flow,
-        instance,
-        open_browser,
-    )
-}
-
-fn start_identity_oauth<F>(
+pub fn connect_identity_with_browser_opener<F>(
     client: &ApiClient,
     identity: &str,
-    flow: &ResolvedConnectFlow<'_>,
+    name: &str,
+    connection: Option<&str>,
     instance: Option<&str>,
     open_browser: F,
 ) -> Result<()>
 where
     F: FnOnce(&str) -> Result<()>,
 {
-    start_oauth_via(
-        &format!("failed to start OAuth flow for identity {identity}"),
-        |body| client.start_identity_oauth(identity, body),
-        flow,
+    connect_identity_with_browser_opener_and_wait(
+        client,
+        identity,
+        name,
+        connection,
         instance,
         open_browser,
     )
 }
 
-fn start_oauth_via<F, G>(
-    failure_context: &str,
-    start_request: G,
+struct OAuthCompletionMessages {
+    failure_context: String,
+    success_template: String,
+    selection_success_template: String,
+}
+
+fn complete_oauth<F, G>(
+    client: &ApiClient,
     flow: &ResolvedConnectFlow<'_>,
     instance: Option<&str>,
+    messages: OAuthCompletionMessages,
+    start_request: G,
     open_browser: F,
 ) -> Result<()>
 where
     F: FnOnce(&str) -> Result<()>,
     G: FnOnce(&StartOAuthRequest<'_>) -> Result<serde_json::Value>,
 {
+    let listener =
+        TcpListener::bind("127.0.0.1:0").context("failed to bind OAuth callback listener")?;
+    let callback_port = listener.local_addr()?.port();
+    let callback_state = random_hex_string();
     let connection_params = prompt_connection_params(flow.connection_param_defs())?;
     let resp = start_request(&StartOAuthRequest {
         integration: flow.integration_name(),
         connection: flow.connection_name(),
         instance,
+        callback_port: Some(callback_port),
+        callback_state: Some(&callback_state),
         connection_params: connection_params.as_ref(),
     })
-    .with_context(|| failure_context.to_string())?;
+    .with_context(|| messages.failure_context.clone())?;
     let url = resp["url"]
         .as_str()
         .context("response missing 'url' field")?;
 
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(listener.accept());
+    });
+
     eprintln!("Opening browser to connect {}...", flow.integration_name());
     eprintln!("If the browser doesn't open, visit: {}", url);
-
     if open_browser(url).is_err() {
         eprintln!("Could not open browser automatically.");
     }
 
-    Ok(())
+    eprintln!(
+        "Waiting for OAuth callback on http://127.0.0.1:{}/ ...",
+        callback_port
+    );
+
+    let (stream, _) = rx
+        .recv_timeout(Duration::from_secs(300))
+        .map_err(|_| anyhow::anyhow!("timed out waiting for OAuth callback after 5 minutes"))?
+        .context("failed to accept OAuth callback")?;
+
+    let callback = parse_oauth_callback_request(&stream, &callback_state)?;
+    let callback_value = match client
+        .complete_integration_oauth_callback(&callback.code, &callback.state)
+    {
+        Ok(value) => value,
+        Err(err) => {
+            let _ = send_browser_response(
+                &stream,
+                "Connection failed",
+                "The CLI could not finish exchanging the OAuth callback. Check the terminal for details.",
+            );
+            return Err(err).context("failed to exchange OAuth callback");
+        }
+    };
+    let callback_response: ConnectManualResponse = match serde_json::from_value(callback_value) {
+        Ok(response) => response,
+        Err(err) => {
+            let _ = send_browser_response(
+                &stream,
+                "Connection failed",
+                "The CLI received an invalid OAuth completion response. Check the terminal for details.",
+            );
+            return Err(err).context("failed to parse OAuth callback response");
+        }
+    };
+
+    match callback_response.status.as_str() {
+        "connected" => {
+            let _ =
+                send_browser_response(&stream, "Connection successful", "You can close this tab.");
+            output::print_success(&render_connect_success(
+                &messages.success_template,
+                callback_response
+                    .integration
+                    .as_deref()
+                    .unwrap_or(flow.integration_name()),
+                None,
+            ));
+            Ok(())
+        }
+        "selection_required" => {
+            let integration = callback_response
+                .integration
+                .as_deref()
+                .unwrap_or(flow.integration_name());
+            let selection_result = complete_pending_selection_with_message(
+                client,
+                integration,
+                callback_response.selection_url.as_deref(),
+                callback_response.pending_token.as_deref(),
+                &callback_response.candidates,
+                &messages.selection_success_template,
+            );
+            match selection_result {
+                Ok(()) => {
+                    let _ = send_browser_response(
+                        &stream,
+                        "Connection successful",
+                        "You can close this tab.",
+                    );
+                    Ok(())
+                }
+                Err(err) => {
+                    let _ = send_browser_response(
+                        &stream,
+                        "Connection failed",
+                        "The CLI could not finish selecting the connected account. Check the terminal for details.",
+                    );
+                    Err(err)
+                }
+            }
+        }
+        other => {
+            let _ = send_browser_response(
+                &stream,
+                "Connection failed",
+                "The OAuth flow returned an unexpected result. Check the terminal for details.",
+            );
+            bail!("unexpected OAuth callback response status '{}'", other)
+        }
+    }
+}
+
+struct OAuthCallbackRequest {
+    code: String,
+    state: String,
+}
+
+fn parse_oauth_callback_request(
+    stream: &std::net::TcpStream,
+    expected_callback_state: &str,
+) -> Result<OAuthCallbackRequest> {
+    let browser_error = |detail: &str| {
+        let _ = send_browser_response(stream, "Connection failed", detail);
+    };
+    let mut reader = BufReader::new(stream);
+    let mut request_line = String::new();
+    if let Err(err) = BufRead::read_line(&mut reader, &mut request_line) {
+        browser_error(
+            "The CLI could not read the OAuth callback request. Check the terminal for details.",
+        );
+        return Err(err).context("failed to read OAuth callback request");
+    }
+
+    let callback_params = match request_line
+        .split_whitespace()
+        .nth(1)
+        .and_then(|path| url::Url::parse(&format!("http://localhost{}", path)).ok())
+    {
+        Some(params) => params,
+        None => {
+            browser_error(
+                "The CLI received an invalid OAuth callback request. Check the terminal for details.",
+            );
+            bail!("failed to parse OAuth callback request");
+        }
+    };
+    let cli_state = callback_params
+        .query_pairs()
+        .find(|(key, _)| key == "cli_state")
+        .map(|(_, value)| value.into_owned());
+    if cli_state.as_deref() != Some(expected_callback_state) {
+        browser_error("The callback state did not match. Check the terminal for details.");
+        bail!("OAuth callback state mismatch - possible CSRF attack");
+    }
+
+    let code = match callback_params
+        .query_pairs()
+        .find(|(key, _)| key == "code")
+        .map(|(_, value)| value.into_owned())
+    {
+        Some(code) => code,
+        None => {
+            browser_error(
+                "The OAuth provider did not return an authorization code. Check the terminal for details.",
+            );
+            bail!("callback did not contain an authorization code");
+        }
+    };
+    let state = match callback_params
+        .query_pairs()
+        .find(|(key, _)| key == "state")
+        .map(|(_, value)| value.into_owned())
+    {
+        Some(state) => state,
+        None => {
+            browser_error(
+                "The OAuth provider did not return state. Check the terminal for details.",
+            );
+            bail!("callback did not contain OAuth state");
+        }
+    };
+    Ok(OAuthCallbackRequest { code, state })
 }
 
 fn connect_manual(

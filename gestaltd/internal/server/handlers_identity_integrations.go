@@ -226,6 +226,17 @@ func (s *Server) connectManagedIdentityManual(w http.ResponseWriter, r *http.Req
 		writeError(w, http.StatusBadRequest, "integration is required")
 		return
 	}
+	returnPath, err := normalizeReturnPath(req.ReturnPath)
+	if err != nil {
+		auditErr = err
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if err := validateManagedIdentityReturnPath(returnPath, core.IntegrationTokenOwnerKindManagedIdentity, actor.Identity.ID); err != nil {
+		auditErr = err
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
 
 	viewer := PrincipalFromContext(r.Context())
 	if !s.managedIdentityGrantPluginVisible(req.Integration, viewer) {
@@ -316,7 +327,7 @@ func (s *Server) connectManagedIdentityManual(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	result, err := s.runPostConnect(r.Context(), prov, tm)
+	result, err := s.runPostConnect(r.Context(), prov, tm, returnPath)
 	if err != nil {
 		if s.writeManagedIdentityConnectionWriteError(w, req.Integration, err) {
 			auditErr = err

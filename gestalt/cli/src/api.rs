@@ -19,6 +19,7 @@ pub const PROJECT_CONFIG_FILE: &str = ".gestalt/config.json";
 pub const AUTH_INFO_PATH: &str = "/api/v1/auth/info";
 pub const AUTH_LOGIN_PATH: &str = "/api/v1/auth/login";
 pub const AUTH_LOGIN_CALLBACK_PATH: &str = "/api/v1/auth/login/callback";
+pub const AUTH_INTEGRATION_CALLBACK_PATH: &str = "/api/v1/auth/callback";
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -346,6 +347,16 @@ impl ApiClient {
             &format!("/api/v1/identities/{identity}/auth/start-oauth"),
             body,
         )
+    }
+
+    pub fn complete_integration_oauth_callback(
+        &self,
+        code: &str,
+        state: &str,
+    ) -> Result<serde_json::Value> {
+        let query = serde_urlencoded::to_string([("code", code), ("state", state), ("cli", "1")])
+            .context("failed to encode oauth callback query")?;
+        self.get(&format!("{AUTH_INTEGRATION_CALLBACK_PATH}?{query}"))
     }
 
     pub fn disconnect_identity_integration(

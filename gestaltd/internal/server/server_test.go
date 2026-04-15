@@ -3,6 +3,7 @@ package server_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -9398,11 +9399,16 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		startBody := bytes.NewBufferString(`{"integration":"slack"}`)
+		startBody := bytes.NewBufferString(`{"integration":"slack","returnPath":"/workspace/connections?tab=oauth"}`)
 		startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
 		startReq.Header.Set("Content-Type", "application/json")
 		startReq.Header.Set("Authorization", "Bearer session-token")
-		startResp, err := http.DefaultClient.Do(startReq)
+		jar, err := cookiejar.New(nil)
+		if err != nil {
+			t.Fatalf("cookie jar: %v", err)
+		}
+		startClient := &http.Client{Jar: jar}
+		startResp, err := startClient.Do(startReq)
 		if err != nil {
 			t.Fatalf("start request: %v", err)
 		}
@@ -9416,8 +9422,17 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		if err := json.NewDecoder(startResp.Body).Decode(&startResult); err != nil {
 			t.Fatalf("decoding start response: %v", err)
 		}
+		callbackURL, err := url.Parse(ts.URL + "/api/v1/auth/callback")
+		if err != nil {
+			t.Fatalf("callback url: %v", err)
+		}
+		stateCookieName := oauthStateCookieNameForTest(startResult["state"])
+		if !cookieJarHasCookie(jar, callbackURL, stateCookieName) {
+			t.Fatalf("expected oauth state cookie %q to be set before callback", stateCookieName)
+		}
 
 		noRedirect := &http.Client{
+			Jar: jar,
 			CheckRedirect: func(*http.Request, []*http.Request) error {
 				return http.ErrUseLastResponse
 			},
@@ -9433,8 +9448,11 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 			t.Fatalf("expected 303, got %d", resp.StatusCode)
 		}
 		loc := resp.Header.Get("Location")
-		if loc != "/integrations?connected=slack" {
-			t.Fatalf("expected redirect to /integrations?connected=slack, got %q", loc)
+		if loc != "/workspace/connections?connected=slack&tab=oauth" {
+			t.Fatalf("expected redirect to /workspace/connections?connected=slack&tab=oauth, got %q", loc)
+		}
+		if cookieJarHasCookie(jar, callbackURL, stateCookieName) {
+			t.Fatalf("expected oauth state cookie %q to be cleared after callback", stateCookieName)
 		}
 		u, _ := svc.Users.FindOrCreateUser(context.Background(), "user@example.com")
 		tokens, _ := svc.Tokens.ListTokens(context.Background(), u.ID)
@@ -9474,6 +9492,121 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		}
 		if auditRecord["target_name"] != "default/default" {
 			t.Fatalf("expected audit target_name default/default, got %v", auditRecord["target_name"])
+		}
+	})
+
+	t.Run("rejects_invalid_return_path", func(t *testing.T) {
+		t.Parallel()
+
+		for _, returnPath := range []string{
+			"///evil.com",
+			`/workspace\connections`,
+			"/%5cevil.com",
+			"/%0d%0aevil.com",
+			"/workspace?tab=%09oauth",
+			"/workspace?tab=%zz",
+		} {
+			t.Run(returnPath, func(t *testing.T) {
+				t.Parallel()
+
+				ts := newTestServer(t, func(cfg *server.Config) {
+					cfg.Providers = testutil.NewProviderRegistry(t, &stubManualProvider{
+						StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
+					})
+					cfg.DefaultConnection = map[string]string{"manual-svc": config.PluginConnectionName}
+				})
+				testutil.CloseOnCleanup(t, ts)
+
+				body := bytes.NewBufferString(fmt.Sprintf(`{"integration":"manual-svc","credential":"my-api-key","returnPath":%q}`, returnPath))
+				req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
+				req.Header.Set("Content-Type", "application/json")
+				resp, err := http.DefaultClient.Do(req)
+				if err != nil {
+					t.Fatalf("request: %v", err)
+				}
+				defer func() { _ = resp.Body.Close() }()
+
+				if resp.StatusCode != http.StatusBadRequest {
+					t.Fatalf("expected 400, got %d", resp.StatusCode)
+				}
+				bodyBytes, err := io.ReadAll(resp.Body)
+				if err != nil {
+					t.Fatalf("read body: %v", err)
+				}
+				if !strings.Contains(string(bodyBytes), "invalid returnPath") {
+					t.Fatalf("expected invalid returnPath error, got %q", string(bodyBytes))
+				}
+			})
+		}
+	})
+
+	t.Run("rejects_missing_oauth_state_cookie", func(t *testing.T) {
+		t.Parallel()
+
+		svc := coretesting.NewStubServices(t)
+		handler := &testOAuthHandler{
+			authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
+			exchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
+				if code == "good-code" {
+					return &core.TokenResponse{AccessToken: "slack-token"}, nil
+				}
+				return nil, fmt.Errorf("bad code")
+			},
+		}
+		stub := &stubIntegrationWithAuthURL{
+			StubIntegration: coretesting.StubIntegration{N: "slack"},
+			authURL:         "https://slack.com/oauth/v2/authorize",
+		}
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					if token != "session-token" {
+						return nil, fmt.Errorf("bad token")
+					}
+					return &core.UserIdentity{Email: "user@example.com"}, nil
+				},
+			}
+			cfg.Providers = testutil.NewProviderRegistry(t, stub)
+			cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
+			cfg.ConnectionAuth = testConnectionAuth("slack", handler)
+			cfg.Services = svc
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", bytes.NewBufferString(`{"integration":"slack"}`))
+		startReq.Header.Set("Content-Type", "application/json")
+		startReq.Header.Set("Authorization", "Bearer session-token")
+		startResp, err := http.DefaultClient.Do(startReq)
+		if err != nil {
+			t.Fatalf("start request: %v", err)
+		}
+		defer func() { _ = startResp.Body.Close() }()
+		if startResp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200 from start-oauth, got %d", startResp.StatusCode)
+		}
+
+		var startResult map[string]string
+		if err := json.NewDecoder(startResp.Body).Decode(&startResult); err != nil {
+			t.Fatalf("decoding start response: %v", err)
+		}
+
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state="+url.QueryEscape(startResult["state"]), nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("callback request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusBadRequest {
+			t.Fatalf("expected 400, got %d", resp.StatusCode)
+		}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		if !strings.Contains(string(body), "invalid or expired oauth state") {
+			t.Fatalf("expected invalid oauth state error, got %q", string(body))
 		}
 	})
 
@@ -9524,11 +9657,16 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		startBody := bytes.NewBufferString(`{"integration":"slack"}`)
+		startBody := bytes.NewBufferString(`{"integration":"slack","returnPath":"/workspace/select?source=oauth"}`)
 		startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
 		startReq.Header.Set("Content-Type", "application/json")
 		startReq.Header.Set("Authorization", "Bearer cli-api-token")
-		startResp, err := http.DefaultClient.Do(startReq)
+		jar, err := cookiejar.New(nil)
+		if err != nil {
+			t.Fatalf("cookie jar: %v", err)
+		}
+		startClient := &http.Client{Jar: jar}
+		startResp, err := startClient.Do(startReq)
 		if err != nil {
 			t.Fatalf("start request: %v", err)
 		}
@@ -9539,10 +9677,6 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 			t.Fatalf("decoding start response: %v", err)
 		}
 
-		jar, err := cookiejar.New(nil)
-		if err != nil {
-			t.Fatalf("cookie jar: %v", err)
-		}
 		noRedirect := &http.Client{
 			Jar: jar,
 			CheckRedirect: func(*http.Request, []*http.Request) error {
@@ -9620,6 +9754,207 @@ func TestIntegrationOAuthCallback(t *testing.T) {
 			t.Fatalf("stored token integration = %q, want %q", stored.Integration, "slack")
 		}
 	})
+
+	t.Run("allows_multiple_browser_flows_in_parallel", func(t *testing.T) {
+		t.Parallel()
+
+		svc := coretesting.NewStubServices(t)
+		handler := &testOAuthHandler{
+			authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
+			exchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
+				if code == "good-code" {
+					return &core.TokenResponse{AccessToken: "slack-token"}, nil
+				}
+				return nil, fmt.Errorf("bad code")
+			},
+		}
+		stub := &stubIntegrationWithAuthURL{
+			StubIntegration: coretesting.StubIntegration{N: "slack"},
+			authURL:         "https://slack.com/oauth/v2/authorize",
+		}
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					if token != "session-token" {
+						return nil, fmt.Errorf("bad token")
+					}
+					return &core.UserIdentity{Email: "user@example.com"}, nil
+				},
+			}
+			cfg.Providers = testutil.NewProviderRegistry(t, stub)
+			cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
+			cfg.ConnectionAuth = testConnectionAuth("slack", handler)
+			cfg.Services = svc
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		jar, err := cookiejar.New(nil)
+		if err != nil {
+			t.Fatalf("cookie jar: %v", err)
+		}
+		startClient := &http.Client{Jar: jar}
+		startFlow := func() string {
+			startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", bytes.NewBufferString(`{"integration":"slack"}`))
+			startReq.Header.Set("Content-Type", "application/json")
+			startReq.Header.Set("Authorization", "Bearer session-token")
+			startResp, err := startClient.Do(startReq)
+			if err != nil {
+				t.Fatalf("start request: %v", err)
+			}
+			defer func() { _ = startResp.Body.Close() }()
+			if startResp.StatusCode != http.StatusOK {
+				t.Fatalf("expected 200 from start-oauth, got %d", startResp.StatusCode)
+			}
+			var startResult map[string]string
+			if err := json.NewDecoder(startResp.Body).Decode(&startResult); err != nil {
+				t.Fatalf("decoding start response: %v", err)
+			}
+			return startResult["state"]
+		}
+
+		firstState := startFlow()
+		secondState := startFlow()
+
+		noRedirect := &http.Client{
+			Jar: jar,
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
+		for _, encodedState := range []string{firstState, secondState} {
+			req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state="+url.QueryEscape(encodedState), nil)
+			resp, err := noRedirect.Do(req)
+			if err != nil {
+				t.Fatalf("callback request: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+			if resp.StatusCode != http.StatusSeeOther {
+				t.Fatalf("expected 303 for state %q, got %d", encodedState, resp.StatusCode)
+			}
+		}
+	})
+
+	t.Run("cli_relay_and_finalize", func(t *testing.T) {
+		t.Parallel()
+
+		svc := coretesting.NewStubServices(t)
+		handler := &testOAuthHandler{
+			authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
+			exchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
+				if code == "good-code" {
+					return &core.TokenResponse{AccessToken: "slack-token"}, nil
+				}
+				return nil, fmt.Errorf("bad code")
+			},
+		}
+		stub := &stubIntegrationWithAuthURL{
+			StubIntegration: coretesting.StubIntegration{N: "slack"},
+			authURL:         "https://slack.com/oauth/v2/authorize",
+		}
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					if token != "cli-api-token" {
+						return nil, fmt.Errorf("bad token")
+					}
+					return &core.UserIdentity{Email: "cli@test.local"}, nil
+				},
+			}
+			cfg.Providers = testutil.NewProviderRegistry(t, stub)
+			cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
+			cfg.ConnectionAuth = testConnectionAuth("slack", handler)
+			cfg.Services = svc
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", bytes.NewBufferString(`{"integration":"slack","callbackPort":43123,"callbackState":"cli-state"}`))
+		startReq.Header.Set("Content-Type", "application/json")
+		startReq.Header.Set("Authorization", "Bearer cli-api-token")
+		startResp, err := http.DefaultClient.Do(startReq)
+		if err != nil {
+			t.Fatalf("start request: %v", err)
+		}
+		defer func() { _ = startResp.Body.Close() }()
+		if startResp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200 from start-oauth, got %d", startResp.StatusCode)
+		}
+
+		var startResult map[string]string
+		if err := json.NewDecoder(startResp.Body).Decode(&startResult); err != nil {
+			t.Fatalf("decoding start response: %v", err)
+		}
+
+		relayReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state="+url.QueryEscape(startResult["state"]), nil)
+		relayResp, err := http.DefaultClient.Do(relayReq)
+		if err != nil {
+			t.Fatalf("relay request: %v", err)
+		}
+		defer func() { _ = relayResp.Body.Close() }()
+		if relayResp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(relayResp.Body)
+			t.Fatalf("expected 200 relay response, got %d: %s", relayResp.StatusCode, body)
+		}
+		relayBody, err := io.ReadAll(relayResp.Body)
+		if err != nil {
+			t.Fatalf("read relay body: %v", err)
+		}
+		relayText := string(relayBody)
+		if !strings.Contains(relayText, "127.0.0.1:43123") || !strings.Contains(relayText, "cli_state") {
+			t.Fatalf("expected relay page to target localhost callback, got %q", relayText)
+		}
+		u, _ := svc.Users.FindOrCreateUser(context.Background(), "cli@test.local")
+		tokens, _ := svc.Tokens.ListTokens(context.Background(), u.ID)
+		if len(tokens) != 0 {
+			t.Fatalf("expected no token to be stored before cli finalization, got %d", len(tokens))
+		}
+
+		finalizeReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state="+url.QueryEscape(startResult["state"])+"&cli=1", nil)
+		finalizeReq.Header.Set("Authorization", "Bearer cli-api-token")
+		finalizeResp, err := http.DefaultClient.Do(finalizeReq)
+		if err != nil {
+			t.Fatalf("finalize request: %v", err)
+		}
+		defer func() { _ = finalizeResp.Body.Close() }()
+		if finalizeResp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(finalizeResp.Body)
+			t.Fatalf("expected 200 finalization response, got %d: %s", finalizeResp.StatusCode, body)
+		}
+		var finalizeResult map[string]string
+		if err := json.NewDecoder(finalizeResp.Body).Decode(&finalizeResult); err != nil {
+			t.Fatalf("decode finalization response: %v", err)
+		}
+		if finalizeResult["status"] != "connected" || finalizeResult["integration"] != "slack" {
+			t.Fatalf("unexpected finalization response: %+v", finalizeResult)
+		}
+		tokens, _ = svc.Tokens.ListTokens(context.Background(), u.ID)
+		if len(tokens) != 1 {
+			t.Fatalf("expected token to be stored after cli finalization, got %d", len(tokens))
+		}
+	})
+}
+
+func cookieJarHasCookie(jar http.CookieJar, target *url.URL, name string) bool {
+	if jar == nil || target == nil || name == "" {
+		return false
+	}
+	for _, cookie := range jar.Cookies(target) {
+		if cookie.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
+func oauthStateCookieNameForTest(encodedState string) string {
+	if encodedState == "" {
+		return "oauth_state"
+	}
+	sum := sha256.Sum256([]byte(encodedState))
+	return "oauth_state_" + fmt.Sprintf("%x", sum[:8])
 }
 
 func TestIntegrationOAuthCallback_InvalidState(t *testing.T) {
@@ -9764,11 +10099,16 @@ func TestManagedIdentityIntegrationOAuthCallback(t *testing.T) {
 		doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"OAuth Bot"}`, http.StatusCreated, &createResp)
 		doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/members", "admin-session", `{"email":"editor@example.test","role":"editor"}`, http.StatusOK, nil)
 
-		startBody := bytes.NewBufferString(`{"integration":"slack"}`)
+		startBody := bytes.NewBufferString(fmt.Sprintf(`{"integration":"slack","returnPath":"/identities/%s"}`, createResp.ID))
 		startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/identities/"+createResp.ID+"/auth/start-oauth", startBody)
 		startReq.Header.Set("Content-Type", "application/json")
 		startReq.Header.Set("Authorization", "Bearer editor-session")
-		startResp, err := http.DefaultClient.Do(startReq)
+		jar, err := cookiejar.New(nil)
+		if err != nil {
+			t.Fatalf("cookie jar: %v", err)
+		}
+		startClient := &http.Client{Jar: jar}
+		startResp, err := startClient.Do(startReq)
 		if err != nil {
 			t.Fatalf("start request: %v", err)
 		}
@@ -9784,6 +10124,7 @@ func TestManagedIdentityIntegrationOAuthCallback(t *testing.T) {
 		}
 
 		noRedirect := &http.Client{
+			Jar: jar,
 			CheckRedirect: func(*http.Request, []*http.Request) error {
 				return http.ErrUseLastResponse
 			},
@@ -9799,7 +10140,7 @@ func TestManagedIdentityIntegrationOAuthCallback(t *testing.T) {
 			body, _ := io.ReadAll(resp.Body)
 			t.Fatalf("expected 303, got %d: %s", resp.StatusCode, body)
 		}
-		expectedLocation := "/identities?connected=slack&id=" + url.QueryEscape(createResp.ID)
+		expectedLocation := "/identities/" + url.PathEscape(createResp.ID) + "?connected=slack"
 		if loc := resp.Header.Get("Location"); loc != expectedLocation {
 			t.Fatalf("expected redirect to %s, got %q", expectedLocation, loc)
 		}
@@ -9893,7 +10234,12 @@ func TestManagedIdentityIntegrationOAuthCallback(t *testing.T) {
 		startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/identities/"+createResp.ID+"/auth/start-oauth", bytes.NewBufferString(`{"integration":"slack"}`))
 		startReq.Header.Set("Content-Type", "application/json")
 		startReq.Header.Set("Authorization", "Bearer editor-session")
-		startResp, err := http.DefaultClient.Do(startReq)
+		jar, err := cookiejar.New(nil)
+		if err != nil {
+			t.Fatalf("cookie jar: %v", err)
+		}
+		startClient := &http.Client{Jar: jar}
+		startResp, err := startClient.Do(startReq)
 		if err != nil {
 			t.Fatalf("start request: %v", err)
 		}
@@ -9909,6 +10255,7 @@ func TestManagedIdentityIntegrationOAuthCallback(t *testing.T) {
 		}
 
 		noRedirect := &http.Client{
+			Jar: jar,
 			CheckRedirect: func(*http.Request, []*http.Request) error {
 				return http.ErrUseLastResponse
 			},
@@ -10059,6 +10406,89 @@ func TestManagedIdentityIntegrationOAuthCallback(t *testing.T) {
 		}
 	})
 
+	t.Run("rejects mismatched identity returnPath", func(t *testing.T) {
+		t.Parallel()
+
+		svc := coretesting.NewStubServices(t)
+		admin := seedUser(t, svc, "admin@example.test")
+		editor := seedUser(t, svc, "editor@example.test")
+
+		stub := &stubIntegrationWithAuthURL{
+			StubIntegration: coretesting.StubIntegration{N: "slack"},
+			authURL:         "https://slack.com/oauth/v2/authorize",
+		}
+		providers := testutil.NewProviderRegistry(t, stub)
+		pluginDefs := map[string]*config.ProviderEntry{
+			"slack": {AuthorizationPolicy: "slack_policy"},
+		}
+		authz := mustAuthorizer(
+			t,
+			config.AuthorizationConfig{
+				Policies: map[string]config.HumanPolicyDef{
+					"slack_policy": {
+						Members: []config.HumanPolicyMemberDef{{
+							Email: editor.Email,
+							Role:  "editor",
+						}},
+					},
+				},
+			},
+			providers,
+			pluginDefs,
+			map[string]string{"slack": testDefaultConnection},
+		)
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					switch token {
+					case "admin-session":
+						return &core.UserIdentity{Email: admin.Email}, nil
+					case "editor-session":
+						return &core.UserIdentity{Email: editor.Email}, nil
+					default:
+						return nil, fmt.Errorf("bad token %q", token)
+					}
+				},
+			}
+			cfg.Providers = providers
+			cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
+			cfg.Services = svc
+			cfg.Authorizer = authz
+			cfg.PluginDefs = pluginDefs
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		createResp := struct {
+			ID string `json:"id"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"OAuth Bot"}`, http.StatusCreated, &createResp)
+		doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/members", "admin-session", `{"email":"editor@example.test","role":"editor"}`, http.StatusOK, nil)
+
+		for _, returnPath := range []string{
+			"/identities/other-identity",
+			"/workspace/../identities/other-identity",
+			"/identities//other-identity",
+		} {
+			t.Run(returnPath, func(t *testing.T) {
+				t.Parallel()
+				startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/identities/"+createResp.ID+"/auth/start-oauth", bytes.NewBufferString(fmt.Sprintf(`{"integration":"slack","returnPath":%q}`, returnPath)))
+				startReq.Header.Set("Content-Type", "application/json")
+				startReq.Header.Set("Authorization", "Bearer editor-session")
+				startResp, err := http.DefaultClient.Do(startReq)
+				if err != nil {
+					t.Fatalf("start request: %v", err)
+				}
+				defer func() { _ = startResp.Body.Close() }()
+				if startResp.StatusCode != http.StatusBadRequest {
+					body, _ := io.ReadAll(startResp.Body)
+					t.Fatalf("expected 400 from mismatched identity start-oauth, got %d: %s", startResp.StatusCode, body)
+				}
+			})
+		}
+	})
+
 	t.Run("selection_required", func(t *testing.T) {
 		t.Parallel()
 
@@ -10143,11 +10573,16 @@ func TestManagedIdentityIntegrationOAuthCallback(t *testing.T) {
 		doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"OAuth Bot"}`, http.StatusCreated, &createResp)
 		doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/members", "admin-session", `{"email":"editor@example.test","role":"editor"}`, http.StatusOK, nil)
 
-		startBody := bytes.NewBufferString(`{"integration":"slack"}`)
+		startBody := bytes.NewBufferString(fmt.Sprintf(`{"integration":"slack","returnPath":"/identities/%s"}`, createResp.ID))
 		startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/identities/"+createResp.ID+"/auth/start-oauth", startBody)
 		startReq.Header.Set("Content-Type", "application/json")
 		startReq.Header.Set("Authorization", "Bearer editor-session")
-		startResp, err := http.DefaultClient.Do(startReq)
+		jar, err := cookiejar.New(nil)
+		if err != nil {
+			t.Fatalf("cookie jar: %v", err)
+		}
+		startClient := &http.Client{Jar: jar}
+		startResp, err := startClient.Do(startReq)
 		if err != nil {
 			t.Fatalf("start request: %v", err)
 		}
@@ -10158,10 +10593,6 @@ func TestManagedIdentityIntegrationOAuthCallback(t *testing.T) {
 			t.Fatalf("decoding start response: %v", err)
 		}
 
-		jar, err := cookiejar.New(nil)
-		if err != nil {
-			t.Fatalf("cookie jar: %v", err)
-		}
 		noRedirect := &http.Client{
 			Jar: jar,
 			CheckRedirect: func(*http.Request, []*http.Request) error {
@@ -10218,6 +10649,13 @@ func TestManagedIdentityIntegrationOAuthCallback(t *testing.T) {
 		if selectResp.StatusCode != http.StatusOK {
 			body, _ := io.ReadAll(selectResp.Body)
 			t.Fatalf("expected 200, got %d: %s", selectResp.StatusCode, body)
+		}
+		successBody, err := io.ReadAll(selectResp.Body)
+		if err != nil {
+			t.Fatalf("read selection success body: %v", err)
+		}
+		if !strings.Contains(string(successBody), fmt.Sprintf(`/identities/%s?connected=slack`, createResp.ID)) {
+			t.Fatalf("expected success page link to identity detail, got %q", string(successBody))
 		}
 		tokens, err := svc.Tokens.ListTokensByOwner(context.Background(), core.IntegrationTokenOwnerKindManagedIdentity, createResp.ID)
 		if err != nil {
@@ -11073,7 +11511,12 @@ func TestIntegrationOAuthCallback_PKCEUsesVerifier(t *testing.T) {
 	startBody := bytes.NewBufferString(`{"integration":"gitlab"}`)
 	startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
 	startReq.Header.Set("Content-Type", "application/json")
-	startResp, err := http.DefaultClient.Do(startReq)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("cookie jar: %v", err)
+	}
+	startClient := &http.Client{Jar: jar}
+	startResp, err := startClient.Do(startReq)
 	if err != nil {
 		t.Fatalf("start request: %v", err)
 	}
@@ -11089,6 +11532,7 @@ func TestIntegrationOAuthCallback_PKCEUsesVerifier(t *testing.T) {
 	}
 
 	noRedirect := &http.Client{
+		Jar: jar,
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
@@ -12117,7 +12561,7 @@ func TestConnectManual(t *testing.T) {
 			},
 		}
 
-		connectBody := bytes.NewBufferString(`{"integration":"manual-svc","credential":"my-api-key"}`)
+		connectBody := bytes.NewBufferString(`{"integration":"manual-svc","credential":"my-api-key","returnPath":"/workspace/manual?tab=select"}`)
 		connectReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", connectBody)
 		connectReq.Header.Set("Content-Type", "application/json")
 		connectReq.Header.Set("Authorization", "Bearer same-user-token")
@@ -12283,8 +12727,8 @@ func TestConnectManual(t *testing.T) {
 		if selectResp.StatusCode != http.StatusSeeOther {
 			t.Fatalf("expected 303, got %d", selectResp.StatusCode)
 		}
-		if loc := selectResp.Header.Get("Location"); loc != "/integrations?connected=manual-svc" {
-			t.Fatalf("expected redirect to /integrations?connected=manual-svc, got %q", loc)
+		if loc := selectResp.Header.Get("Location"); loc != "/workspace/manual?connected=manual-svc&tab=select" {
+			t.Fatalf("expected redirect to /workspace/manual?connected=manual-svc&tab=select, got %q", loc)
 		}
 		u, _ := svc.Users.FindOrCreateUser(context.Background(), "same@test.local")
 		tokens, _ := svc.Tokens.ListTokens(context.Background(), u.ID)
@@ -12911,7 +13355,12 @@ func TestOAuthCallback_UsesStateConnection(t *testing.T) {
 	startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/start-oauth", startBody)
 	startReq.Header.Set("X-Dev-User-Email", "dev@example.com")
 	startReq.Header.Set("Content-Type", "application/json")
-	startResp, err := http.DefaultClient.Do(startReq)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("cookie jar: %v", err)
+	}
+	startClient := &http.Client{Jar: jar}
+	startResp, err := startClient.Do(startReq)
 	if err != nil {
 		t.Fatalf("start request: %v", err)
 	}
@@ -12925,6 +13374,7 @@ func TestOAuthCallback_UsesStateConnection(t *testing.T) {
 	}
 
 	noRedirect := &http.Client{
+		Jar: jar,
 		CheckRedirect: func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
@@ -16855,6 +17305,19 @@ func TestManagedIdentityManualConnections(t *testing.T) {
 		t.Fatalf("viewer connect status = %d, want %d: %s", connectDeniedResp.StatusCode, http.StatusForbidden, body)
 	}
 
+	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/api/v1/identities/"+createResp.ID+"/auth/connect-manual", bytes.NewBufferString(`{"integration":"manual-svc","credential":"editor-token","returnPath":"/identities/other-identity"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "editor-session"})
+	invalidReturnPathResp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("invalid returnPath connect request: %v", err)
+	}
+	defer func() { _ = invalidReturnPathResp.Body.Close() }()
+	if invalidReturnPathResp.StatusCode != http.StatusBadRequest {
+		body, _ := io.ReadAll(invalidReturnPathResp.Body)
+		t.Fatalf("invalid returnPath connect status = %d, want %d: %s", invalidReturnPathResp.StatusCode, http.StatusBadRequest, body)
+	}
+
 	connectResp := struct {
 		Status      string `json:"status"`
 		Integration string `json:"integration"`
@@ -17251,7 +17714,7 @@ func TestManagedIdentityManualConnectionSelectionRequired(t *testing.T) {
 		},
 	}
 
-	connectReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/identities/"+createResp.ID+"/auth/connect-manual", bytes.NewBufferString(`{"integration":"manual-svc","credential":"identity-token"}`))
+	connectReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/identities/"+createResp.ID+"/auth/connect-manual", bytes.NewBufferString(fmt.Sprintf(`{"integration":"manual-svc","credential":"identity-token","returnPath":"/identities/%s"}`, createResp.ID)))
 	connectReq.Header.Set("Content-Type", "application/json")
 	connectReq.AddCookie(&http.Cookie{Name: "session_token", Value: "editor-session"})
 	connectResp, err := noRedirect.Do(connectReq)
@@ -17328,8 +17791,8 @@ func TestManagedIdentityManualConnectionSelectionRequired(t *testing.T) {
 		body, _ := io.ReadAll(selectResp.Body)
 		t.Fatalf("selection status = %d, want %d: %s", selectResp.StatusCode, http.StatusSeeOther, body)
 	}
-	if location := selectResp.Header.Get("Location"); location != fmt.Sprintf("/identities?connected=manual-svc&id=%s", createResp.ID) {
-		t.Fatalf("selection redirect = %q, want identity redirect", location)
+	if location := selectResp.Header.Get("Location"); location != fmt.Sprintf("/identities/%s?connected=manual-svc", createResp.ID) {
+		t.Fatalf("selection redirect = %q, want identity detail redirect", location)
 	}
 
 	tokens, err := svc.Tokens.ListTokensByOwner(context.Background(), core.IntegrationTokenOwnerKindManagedIdentity, createResp.ID)

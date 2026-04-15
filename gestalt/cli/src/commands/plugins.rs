@@ -6,7 +6,10 @@ use crate::api::ApiClient;
 use crate::output::{self, Format};
 
 pub(crate) use connect::connect_identity;
-pub use connect::{connect, connect_identity_with_browser_opener, connect_with_browser_opener};
+pub use connect::{
+    connect, connect_identity_with_browser_opener, connect_identity_with_browser_opener_and_wait,
+    connect_with_browser_opener, connect_with_browser_opener_and_wait,
+};
 
 const PLUGIN_CONNECTION_NAME: &str = "_plugin";
 const PLUGIN_CONNECTION_ALIAS: &str = "plugin";

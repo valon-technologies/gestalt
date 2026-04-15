@@ -141,7 +141,7 @@ func writePendingConnectionPage(w http.ResponseWriter, status int, view pendingC
 	_, _ = w.Write(buf.Bytes())
 }
 
-func (s *Server) encodePendingConnectionToken(tm tokenMaterial, candidates []core.DiscoveryCandidate) (string, error) {
+func (s *Server) encodePendingConnectionToken(tm tokenMaterial, candidates []core.DiscoveryCandidate, returnPath string) (string, error) {
 	if s.encryptor == nil {
 		return "", fmt.Errorf("pending connection encryption is not configured")
 	}
@@ -149,6 +149,7 @@ func (s *Server) encodePendingConnectionToken(tm tokenMaterial, candidates []cor
 		Token:      tm,
 		BindingKey: uuid.NewString(),
 		Candidates: candidates,
+		ReturnPath: returnPath,
 		ExpiresAt:  s.now().Add(pendingConnectionTTL).Unix(),
 	})
 }
@@ -232,7 +233,7 @@ func (s *Server) writePendingConnectionSelectionPage(w http.ResponseWriter, stat
 
 func (s *Server) writePendingConnectionSuccessPage(w http.ResponseWriter, integration, linkURL string) {
 	s.clearPendingConnectionCookie(w)
-	linkLabel := "Open integrations"
+	linkLabel := "Open app"
 	if linkURL == "" {
 		linkURL = "/integrations"
 	}
@@ -542,7 +543,13 @@ func pendingConnectionInitiatorUserID(state *pendingConnectionState) string {
 }
 
 func pendingConnectionRedirectPath(state *pendingConnectionState) string {
-	if state != nil && state.Token.OwnerKind == core.IntegrationTokenOwnerKindManagedIdentity && strings.TrimSpace(state.Token.OwnerID) != "" {
+	if state == nil {
+		return "/integrations"
+	}
+	if state.ReturnPath != "" {
+		return state.ReturnPath
+	}
+	if state.Token.OwnerKind == core.IntegrationTokenOwnerKindManagedIdentity && strings.TrimSpace(state.Token.OwnerID) != "" {
 		return "/identities?id=" + url.QueryEscape(state.Token.OwnerID)
 	}
 	return "/integrations"

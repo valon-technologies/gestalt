@@ -194,7 +194,7 @@ where
     Ok(())
 }
 
-fn send_browser_response(
+pub(crate) fn send_browser_response(
     stream: &std::net::TcpStream,
     title: &str,
     detail: &str,
@@ -209,7 +209,7 @@ fn send_browser_response(
     )
 }
 
-fn build_browser_response_html(title: &str, detail: &str) -> String {
+pub(crate) fn build_browser_response_html(title: &str, detail: &str) -> String {
     let data = serde_json::json!({
         "detail": detail,
         "title": title,
@@ -361,7 +361,7 @@ pub fn status(url_override: Option<&str>, format: Format) -> Result<()> {
     Ok(())
 }
 
-fn random_hex_string() -> String {
+pub(crate) fn random_hex_string() -> String {
     let mut buf = [0u8; 16];
     getrandom::fill(&mut buf).expect("failed to generate random bytes");
     buf.iter().map(|b| format!("{b:02x}")).collect()

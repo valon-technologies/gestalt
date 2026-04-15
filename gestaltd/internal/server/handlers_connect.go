@@ -25,6 +25,7 @@ type connectManualRequest struct {
 	Integration      string            `json:"integration"`
 	Connection       string            `json:"connection"`
 	Instance         string            `json:"instance"`
+	ReturnPath       string            `json:"returnPath"`
 	Credential       string            `json:"credential"`
 	Credentials      map[string]string `json:"credentials"`
 	ConnectionParams map[string]string `json:"connectionParams"`
@@ -59,6 +60,12 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	if req.Integration == "" {
 		auditErr = errors.New("integration is required")
 		writeError(w, http.StatusBadRequest, "integration is required")
+		return
+	}
+	returnPath, err := normalizeReturnPath(req.ReturnPath)
+	if err != nil {
+		auditErr = err
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -129,7 +136,7 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		MetadataJSON:    manualMeta,
 	}
 
-	result, err := s.runPostConnect(r.Context(), prov, tm)
+	result, err := s.runPostConnect(r.Context(), prov, tm, returnPath)
 	if err != nil {
 		auditErr = errors.New("connection setup failed")
 		slog.ErrorContext(r.Context(), "post_connect failed", "provider", req.Integration, "error", err)
@@ -586,7 +593,7 @@ func mergeMetadataJSON(existing string, extra map[string]string) (string, error)
 	return string(b), nil
 }
 
-func (s *Server) runPostConnect(ctx context.Context, prov core.Provider, tm tokenMaterial) (*postConnectResult, error) {
+func (s *Server) runPostConnect(ctx context.Context, prov core.Provider, tm tokenMaterial, returnPath string) (*postConnectResult, error) {
 	if cfg := prov.DiscoveryConfig(); cfg != nil {
 		client := &http.Client{
 			Timeout:   30 * time.Second,
@@ -614,7 +621,7 @@ func (s *Server) runPostConnect(ctx context.Context, prov core.Provider, tm toke
 			return &postConnectResult{Status: "connected", Integration: tm.Integration}, nil
 		}
 
-		pendingToken, err := s.encodePendingConnectionToken(tm, candidates)
+		pendingToken, err := s.encodePendingConnectionToken(tm, candidates, returnPath)
 		if err != nil {
 			return nil, fmt.Errorf("encode pending connection: %w", err)
 		}

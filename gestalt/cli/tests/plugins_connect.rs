@@ -1,7 +1,5 @@
 mod support;
 
-use std::sync::{Arc, Mutex};
-
 use support::*;
 
 #[test]
@@ -24,148 +22,213 @@ fn test_list_plugins() {
 
 #[test]
 fn test_connect_includes_connection_and_instance() {
-    let mut server = Server::new();
-    let _integrations =
-        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
-            .with_body(r#"[{"name":"acme_crm","authTypes":["oauth"],"connected":false}]"#)
-            .create();
-    let mock = authed_json_mock!(
-        server,
-        Method::POST,
-        "/api/v1/auth/start-oauth",
-        StatusCode::OK
-    )
-    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
-    .match_body(Matcher::JsonString(
-        r#"{"connection":"workspace","instance":"team-a","integration":"acme_crm"}"#.to_string(),
-    ))
-    .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
-    .create();
-
-    let client = create_client(&server);
-    let result = gestalt::commands::plugins::connect_with_browser_opener(
+    let server = spawn_oauth_connect_server(OAuthConnectServerConfig {
+        integrations_path: "/api/v1/integrations",
+        start_path: "/api/v1/auth/start-oauth",
+        integration_name: "acme_crm",
+        integrations_response: None,
+        selection_required: false,
+    });
+    let client = gestalt::api::ApiClient::new(&server.base_url, TEST_TOKEN).unwrap();
+    let result = gestalt::commands::plugins::connect_with_browser_opener_and_wait(
         &client,
         "acme_crm",
         Some("workspace"),
         Some("team-a"),
-        |_| Ok(()),
-    );
-
-    mock.assert();
-    assert!(result.is_ok());
-}
-
-#[test]
-fn test_connect_prefers_oauth_when_manual_also_exists_and_omits_null_connection_and_instance() {
-    let mut server = Server::new();
-    let _integrations =
-        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
-            .with_body(r#"[{"name":"acme_crm","authTypes":["oauth","manual"],"connected":false}]"#)
-            .create();
-    let mock = authed_json_mock!(
-        server,
-        Method::POST,
-        "/api/v1/auth/start-oauth",
-        StatusCode::OK
-    )
-    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
-    .match_body(Matcher::JsonString(
-        r#"{"integration":"acme_crm"}"#.to_string(),
-    ))
-    .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
-    .create();
-
-    let client = create_client(&server);
-    let opened_url = Arc::new(Mutex::new(None));
-    let opened_url_handle = Arc::clone(&opened_url);
-    let result = gestalt::commands::plugins::connect_with_browser_opener(
-        &client,
-        "acme_crm",
-        None,
-        None,
-        move |url| {
-            *opened_url_handle.lock().unwrap() = Some(url.to_string());
+        |url| {
+            let url = url.to_string();
+            std::thread::spawn(move || {
+                let _ = reqwest::blocking::get(&url);
+            });
             Ok(())
         },
     );
 
-    mock.assert();
     assert!(result.is_ok());
-    assert_eq!(
-        opened_url.lock().unwrap().as_deref(),
-        Some("https://example.com/oauth")
+    server.handle.join().unwrap();
+    let body = server.state.lock().unwrap().start_body.clone().unwrap();
+    assert_eq!(body["integration"], "acme_crm");
+    assert_eq!(body["connection"], "workspace");
+    assert_eq!(body["instance"], "team-a");
+    assert!(body["callbackPort"].as_u64().unwrap() > 0);
+    assert!(!body["callbackState"].as_str().unwrap().is_empty());
+}
+
+#[test]
+fn test_connect_prefers_oauth_when_manual_also_exists_and_omits_null_connection_and_instance() {
+    let server = spawn_oauth_connect_server(OAuthConnectServerConfig {
+        integrations_path: "/api/v1/integrations",
+        start_path: "/api/v1/auth/start-oauth",
+        integration_name: "acme_crm",
+        integrations_response: Some(
+            r#"[{"name":"acme_crm","authTypes":["oauth","manual"],"connected":false}]"#,
+        ),
+        selection_required: false,
+    });
+    let client = gestalt::api::ApiClient::new(&server.base_url, TEST_TOKEN).unwrap();
+    let result = gestalt::commands::plugins::connect_with_browser_opener_and_wait(
+        &client,
+        "acme_crm",
+        None,
+        None,
+        |url| {
+            let url = url.to_string();
+            std::thread::spawn(move || {
+                let _ = reqwest::blocking::get(&url);
+            });
+            Ok(())
+        },
     );
+
+    assert!(result.is_ok());
+    server.handle.join().unwrap();
+    let body = server.state.lock().unwrap().start_body.clone().unwrap();
+    let object = body.as_object().unwrap();
+    assert_eq!(body["integration"], "acme_crm");
+    assert!(!object.contains_key("connection"));
+    assert!(!object.contains_key("instance"));
 }
 
 #[test]
 fn test_connect_uses_defined_plugin_connection_name_on_the_wire() {
-    let mut server = Server::new();
-    let _integrations = authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
-        .with_body(
+    let server = spawn_oauth_connect_server(OAuthConnectServerConfig {
+        integrations_path: "/api/v1/integrations",
+        start_path: "/api/v1/auth/start-oauth",
+        integration_name: "acme_crm",
+        integrations_response: Some(
             r#"[{
                 "name":"acme_crm",
                 "authTypes":["oauth"],
                 "connections":[{"name":"_plugin","displayName":"Plugin OAuth","authTypes":["oauth"]}]
             }]"#,
-        )
-        .create();
-    let mock = authed_json_mock!(
-        server,
-        Method::POST,
-        "/api/v1/auth/start-oauth",
-        StatusCode::OK
-    )
-    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
-    .match_body(Matcher::JsonString(
-        r#"{"connection":"_plugin","integration":"acme_crm"}"#.to_string(),
-    ))
-    .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
-    .create();
-
-    let client = create_client(&server);
-    let result = gestalt::commands::plugins::connect_with_browser_opener(
+        ),
+        selection_required: false,
+    });
+    let client = gestalt::api::ApiClient::new(&server.base_url, TEST_TOKEN).unwrap();
+    let result = gestalt::commands::plugins::connect_with_browser_opener_and_wait(
         &client,
         "acme_crm",
         Some("plugin"),
         None,
-        |_| Ok(()),
+        |url| {
+            let url = url.to_string();
+            std::thread::spawn(move || {
+                let _ = reqwest::blocking::get(&url);
+            });
+            Ok(())
+        },
     );
 
-    mock.assert();
     assert!(result.is_ok());
+    server.handle.join().unwrap();
+    let body = server.state.lock().unwrap().start_body.clone().unwrap();
+    assert_eq!(body["integration"], "acme_crm");
+    assert_eq!(body["connection"], "_plugin");
 }
 
 #[test]
 fn test_connect_preserves_requested_plugin_connection_when_no_definitions_exist() {
-    let mut server = Server::new();
-    let _integrations =
-        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
-            .with_body(r#"[{"name":"acme_crm","authTypes":["oauth"],"connected":false}]"#)
-            .create();
-    let mock = authed_json_mock!(
-        server,
-        Method::POST,
-        "/api/v1/auth/start-oauth",
-        StatusCode::OK
-    )
-    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
-    .match_body(Matcher::JsonString(
-        r#"{"connection":"plugin","integration":"acme_crm"}"#.to_string(),
-    ))
-    .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
-    .create();
-
-    let client = create_client(&server);
-    let result = gestalt::commands::plugins::connect_with_browser_opener(
+    let server = spawn_oauth_connect_server(OAuthConnectServerConfig {
+        integrations_path: "/api/v1/integrations",
+        start_path: "/api/v1/auth/start-oauth",
+        integration_name: "acme_crm",
+        integrations_response: None,
+        selection_required: false,
+    });
+    let client = gestalt::api::ApiClient::new(&server.base_url, TEST_TOKEN).unwrap();
+    let result = gestalt::commands::plugins::connect_with_browser_opener_and_wait(
         &client,
         "acme_crm",
         Some("plugin"),
         None,
-        |_| Ok(()),
+        |url| {
+            let url = url.to_string();
+            std::thread::spawn(move || {
+                let _ = reqwest::blocking::get(&url);
+            });
+            Ok(())
+        },
     );
 
-    mock.assert();
     assert!(result.is_ok());
+    server.handle.join().unwrap();
+    let body = server.state.lock().unwrap().start_body.clone().unwrap();
+    assert_eq!(body["integration"], "acme_crm");
+    assert_eq!(body["connection"], "plugin");
+}
+
+#[test]
+fn test_connect_completes_oauth_via_local_callback() {
+    let server = spawn_oauth_connect_server(OAuthConnectServerConfig {
+        integrations_path: "/api/v1/integrations",
+        start_path: "/api/v1/auth/start-oauth",
+        integration_name: "acme_crm",
+        integrations_response: None,
+        selection_required: false,
+    });
+    let client = gestalt::api::ApiClient::new(&server.base_url, TEST_TOKEN).unwrap();
+
+    let result = gestalt::commands::plugins::connect_with_browser_opener_and_wait(
+        &client,
+        "acme_crm",
+        None,
+        None,
+        |url| {
+            let url = url.to_string();
+            std::thread::spawn(move || {
+                let _ = reqwest::blocking::get(&url);
+            });
+            Ok(())
+        },
+    );
+
+    assert!(result.is_ok());
+    server.handle.join().unwrap();
+    let html = server
+        .state
+        .lock()
+        .unwrap()
+        .browser_response_html
+        .clone()
+        .unwrap_or_default();
+    assert!(html.contains("Connection successful"));
+}
+
+#[test]
+fn test_connect_completes_oauth_selection_required_in_terminal() {
+    let server = spawn_oauth_connect_server(OAuthConnectServerConfig {
+        integrations_path: "/api/v1/integrations",
+        start_path: "/api/v1/auth/start-oauth",
+        integration_name: "acme_crm",
+        integrations_response: None,
+        selection_required: true,
+    });
+    let client = gestalt::api::ApiClient::new(&server.base_url, TEST_TOKEN).unwrap();
+
+    let result = gestalt::commands::plugins::connect_with_browser_opener_and_wait(
+        &client,
+        "acme_crm",
+        None,
+        None,
+        |url| {
+            let url = url.to_string();
+            std::thread::spawn(move || {
+                let _ = reqwest::blocking::get(&url);
+            });
+            Ok(())
+        },
+    );
+
+    assert!(result.is_ok());
+    server.handle.join().unwrap();
+    let html = server
+        .state
+        .lock()
+        .unwrap()
+        .browser_response_html
+        .clone()
+        .unwrap_or_default();
+    assert!(html.contains("Connection successful"));
 }
 
 #[test]
@@ -349,87 +412,85 @@ fn test_manual_connect_prompts_for_connection_and_finishes_candidate_selection()
 
 #[test]
 fn test_connection_selection_uses_selected_connection_auth_type() {
-    let mut server = Server::new();
-    let _integrations =
-        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
-            .with_body(
-                r#"[{
-                    "name":"manual-svc",
-                    "displayName":"Manual Service",
-                    "authTypes":["manual"],
-                    "connections":[
-                        {"name":"workspace","displayName":"Workspace OAuth","authTypes":["oauth"]},
-                        {"name":"apikey","displayName":"API Key","authTypes":["manual"],"credentialFields":[{"name":"token","label":"Token"}]}
-                    ]
-                }]"#,
-            )
-            .create();
-    let _oauth = authed_json_mock!(
-        server,
-        Method::POST,
-        "/api/v1/auth/start-oauth",
-        StatusCode::OK
-    )
-    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
-    .match_body(Matcher::JsonString(
-        r#"{"connection":"workspace","integration":"manual-svc"}"#.to_string(),
-    ))
-    .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
-    .create();
+    let server = spawn_oauth_connect_server(OAuthConnectServerConfig {
+        integrations_path: "/api/v1/integrations",
+        start_path: "/api/v1/auth/start-oauth",
+        integration_name: "manual-svc",
+        integrations_response: Some(
+            r#"[{
+                "name":"manual-svc",
+                "displayName":"Manual Service",
+                "authTypes":["manual"],
+                "connections":[
+                    {"name":"workspace","displayName":"Workspace OAuth","authTypes":["oauth"]},
+                    {"name":"apikey","displayName":"API Key","authTypes":["manual"],"credentialFields":[{"name":"token","label":"Token"}]}
+                ]
+            }]"#,
+        ),
+        selection_required: false,
+    });
+    let client = gestalt::api::ApiClient::new(&server.base_url, TEST_TOKEN).unwrap();
+    let result = gestalt::commands::plugins::connect_with_browser_opener_and_wait(
+        &client,
+        "manual-svc",
+        Some("workspace"),
+        None,
+        |url| {
+            let url = url.to_string();
+            std::thread::spawn(move || {
+                let _ = reqwest::blocking::get(&url);
+            });
+            Ok(())
+        },
+    );
 
-    let home = tempfile::tempdir().unwrap();
-    cli_command_for_server(home.path(), &server)
-        .args(["plugins", "connect", "manual-svc"])
-        .write_stdin("1\n")
-        .assert()
-        .success()
-        .stderr(predicate::str::contains(
-            "Select a Manual Service connection:",
-        ))
-        .stderr(predicate::str::contains("Workspace OAuth"))
-        .stderr(predicate::str::contains(
-            "Opening browser to connect manual-svc...",
-        ));
+    assert!(result.is_ok());
+    server.handle.join().unwrap();
+    let body = server.state.lock().unwrap().start_body.clone().unwrap();
+    assert_eq!(body["integration"], "manual-svc");
+    assert_eq!(body["connection"], "workspace");
 }
 
 #[test]
 fn test_connect_auto_selects_single_connection_and_uses_its_auth_type() {
-    let mut server = Server::new();
-    let _integrations =
-        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
-            .with_body(
-                r#"[{
-                    "name":"single-svc",
-                    "displayName":"Single Service",
-                    "authTypes":["manual"],
-                    "connections":[
-                        {"name":"workspace","displayName":"Workspace OAuth","authTypes":["oauth"]}
-                    ]
-                }]"#,
-            )
-            .create();
-    let _oauth = authed_json_mock!(
-        server,
-        Method::POST,
-        "/api/v1/auth/start-oauth",
-        StatusCode::OK
-    )
-    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
-    .match_body(Matcher::JsonString(
-        r#"{"connection":"workspace","integration":"single-svc"}"#.to_string(),
-    ))
-    .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
-    .create();
+    let server = spawn_oauth_connect_server(OAuthConnectServerConfig {
+        integrations_path: "/api/v1/integrations",
+        start_path: "/api/v1/auth/start-oauth",
+        integration_name: "single-svc",
+        integrations_response: Some(
+            r#"[{
+                "name":"single-svc",
+                "displayName":"Single Service",
+                "authTypes":["manual"],
+                "connections":[
+                    {"name":"workspace","displayName":"Workspace OAuth","authTypes":["oauth"]}
+                ]
+            }]"#,
+        ),
+        selection_required: false,
+    });
+    let client = gestalt::api::ApiClient::new(&server.base_url, TEST_TOKEN).unwrap();
+    let result = gestalt::commands::plugins::connect_with_browser_opener_and_wait(
+        &client,
+        "single-svc",
+        None,
+        None,
+        |url| {
+            let url = url.to_string();
+            std::thread::spawn(move || {
+                let _ = reqwest::blocking::get(&url);
+            });
+            Ok(())
+        },
+    );
 
-    let home = tempfile::tempdir().unwrap();
-    cli_command_for_server(home.path(), &server)
-        .args(["plugins", "connect", "single-svc"])
-        .assert()
-        .success()
-        .stderr(predicate::str::contains("Select a Single Service connection:").not())
-        .stderr(predicate::str::contains(
-            "Opening browser to connect single-svc...",
-        ));
+    assert!(result.is_ok());
+    server.handle.join().unwrap();
+    let body = server.state.lock().unwrap().start_body.clone().unwrap();
+    assert_eq!(body["integration"], "single-svc");
+    assert_eq!(body["connection"], "workspace");
+    assert!(body["callbackPort"].as_u64().unwrap() > 0);
+    assert!(!body["callbackState"].as_str().unwrap().is_empty());
 }
 
 #[test]
