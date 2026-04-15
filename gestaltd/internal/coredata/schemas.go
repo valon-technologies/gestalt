@@ -24,6 +24,19 @@ var UsersSchema = indexeddb.ObjectStoreSchema{
 	},
 }
 
+var LegacyUsersSchema = indexeddb.ObjectStoreSchema{
+	Indexes: []indexeddb.IndexSchema{
+		{Name: "by_email", KeyPath: []string{"email"}, Unique: true},
+	},
+	Columns: []indexeddb.ColumnDef{
+		{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
+		{Name: "email", Type: indexeddb.TypeString, NotNull: true, Unique: true},
+		{Name: "display_name", Type: indexeddb.TypeString},
+		{Name: "created_at", Type: indexeddb.TypeTime},
+		{Name: "updated_at", Type: indexeddb.TypeTime},
+	},
+}
+
 var IntegrationTokensSchema = indexeddb.ObjectStoreSchema{
 	Indexes: []indexeddb.IndexSchema{
 		{Name: "by_user", KeyPath: []string{"user_id"}},

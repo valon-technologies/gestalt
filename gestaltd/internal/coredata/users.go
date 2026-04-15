@@ -14,14 +14,21 @@ import (
 )
 
 type UserService struct {
-	store indexeddb.ObjectStore
+	store                indexeddb.ObjectStore
+	normalizedEmailIndex bool
 }
 
-func NewUserService(ds indexeddb.IndexedDB) *UserService {
-	return &UserService{store: ds.ObjectStore(StoreUsers)}
+func NewUserService(ds indexeddb.IndexedDB, normalizedEmailIndex bool) *UserService {
+	return &UserService{
+		store:                ds.ObjectStore(StoreUsers),
+		normalizedEmailIndex: normalizedEmailIndex,
+	}
 }
 
 func (s *UserService) BackfillNormalizedEmails(ctx context.Context) error {
+	if !s.normalizedEmailIndex {
+		return nil
+	}
 	recs, err := s.store.GetAll(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("list users: %w", err)
@@ -68,12 +75,14 @@ func (s *UserService) FindOrCreateUser(ctx context.Context, email string) (*core
 
 	now := time.Now()
 	newRec := indexeddb.Record{
-		"id":               uuid.New().String(),
-		"email":            email,
-		"normalized_email": email,
-		"display_name":     "",
-		"created_at":       now,
-		"updated_at":       now,
+		"id":           uuid.New().String(),
+		"email":        email,
+		"display_name": "",
+		"created_at":   now,
+		"updated_at":   now,
+	}
+	if s.normalizedEmailIndex {
+		newRec["normalized_email"] = email
 	}
 	if err := s.store.Add(ctx, newRec); err != nil {
 		user, retryErr := s.findUserByNormalizedEmail(ctx, rawEmail, email)
@@ -95,6 +104,10 @@ func (s *UserService) FindUserByEmail(ctx context.Context, email string) (*core.
 }
 
 func (s *UserService) findUserByNormalizedEmail(ctx context.Context, rawEmail, normalizedEmail string) (*core.User, error) {
+	if !s.normalizedEmailIndex {
+		return s.findUserByNormalizedEmailLegacy(ctx, rawEmail, normalizedEmail)
+	}
+
 	recs, err := s.store.Index("by_normalized_email").GetAll(ctx, nil, normalizedEmail)
 	if err != nil {
 		return nil, fmt.Errorf("find user: %w", err)
@@ -142,6 +155,77 @@ func (s *UserService) findUserByNormalizedEmail(ctx context.Context, rawEmail, n
 		updated := cloneRecord(match)
 		updated["email"] = normalizedEmail
 		updated["normalized_email"] = normalizedEmail
+		updated["updated_at"] = time.Now()
+		if err := s.store.Put(ctx, updated); err == nil {
+			match = updated
+		}
+	}
+	return recordToUser(match), nil
+}
+
+func (s *UserService) findUserByNormalizedEmailLegacy(ctx context.Context, rawEmail, normalizedEmail string) (*core.User, error) {
+	rec, err := s.store.Index("by_email").Get(ctx, normalizedEmail)
+	if err == nil {
+		return recordToUser(rec), nil
+	}
+	if err != indexeddb.ErrNotFound {
+		return nil, fmt.Errorf("find user: %w", err)
+	}
+
+	if rawEmail != "" && rawEmail != normalizedEmail {
+		rec, err := s.store.Index("by_email").Get(ctx, rawEmail)
+		if err == nil {
+			return recordToUser(rec), nil
+		}
+		if err != indexeddb.ErrNotFound {
+			return nil, fmt.Errorf("find user: %w", err)
+		}
+	}
+
+	recs, err := s.store.GetAll(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("find user: %w", err)
+	}
+
+	var canonicalMatch indexeddb.Record
+	var rawMatch indexeddb.Record
+	var fallbackMatch indexeddb.Record
+	matchCount := 0
+	for _, rec := range recs {
+		email := strings.TrimSpace(recString(rec, "email"))
+		if emailutil.Normalize(email) != normalizedEmail {
+			continue
+		}
+		matchCount++
+		switch {
+		case email == normalizedEmail:
+			if preferUserRecord(rec, canonicalMatch) {
+				canonicalMatch = rec
+			}
+		case rawEmail != "" && email == rawEmail:
+			if preferUserRecord(rec, rawMatch) {
+				rawMatch = rec
+			}
+		case preferUserRecord(rec, fallbackMatch):
+			fallbackMatch = rec
+		}
+	}
+	if canonicalMatch == nil && rawMatch == nil && matchCount > 1 {
+		return nil, fmt.Errorf("find user: ambiguous case-insensitive duplicate users for %q", normalizedEmail)
+	}
+	match := canonicalMatch
+	if match == nil {
+		match = rawMatch
+	}
+	if match == nil {
+		match = fallbackMatch
+	}
+	if match == nil {
+		return nil, core.ErrNotFound
+	}
+	if matchCount == 1 && recString(match, "email") != normalizedEmail {
+		updated := cloneRecord(match)
+		updated["email"] = normalizedEmail
 		updated["updated_at"] = time.Now()
 		if err := s.store.Put(ctx, updated); err == nil {
 			match = updated
