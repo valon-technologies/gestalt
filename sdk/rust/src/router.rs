@@ -16,6 +16,7 @@ use crate::error::{Error, INTERNAL_ERROR_MESSAGE, Result};
 use crate::provider_server::OperationResult;
 
 #[derive(Clone, Debug)]
+/// Describes one statically declared executable operation.
 pub struct Operation<In, Out> {
     pub id: String,
     pub method: String,
@@ -33,6 +34,7 @@ where
     In: JsonSchema,
     Out: JsonSchema,
 {
+    /// Creates a new operation definition with the supplied stable id.
     pub fn new(id: impl Into<String>) -> Self {
         Self {
             id: id.into(),
@@ -47,6 +49,7 @@ where
         }
     }
 
+    /// Overrides the HTTP verb advertised in the derived catalog.
     pub fn method(mut self, method: impl AsRef<str>) -> Self {
         let method = method.as_ref().trim().to_ascii_uppercase();
         if !method.is_empty() {
@@ -55,31 +58,37 @@ where
         self
     }
 
+    /// Sets the human-readable title shown in the derived catalog.
     pub fn title(mut self, title: impl Into<String>) -> Self {
         self.title = title.into();
         self
     }
 
+    /// Sets the human-readable description shown in the derived catalog.
     pub fn description(mut self, description: impl Into<String>) -> Self {
         self.description = description.into();
         self
     }
 
+    /// Restricts the operation to the supplied host-side roles.
     pub fn allowed_roles(mut self, allowed_roles: impl Into<Vec<String>>) -> Self {
         self.allowed_roles = allowed_roles.into();
         self
     }
 
+    /// Attaches free-form tags to the derived catalog entry.
     pub fn tags(mut self, tags: impl Into<Vec<String>>) -> Self {
         self.tags = tags.into();
         self
     }
 
+    /// Marks the operation as read-only in the derived catalog.
     pub fn read_only(mut self, read_only: bool) -> Self {
         self.read_only = read_only;
         self
     }
 
+    /// Controls whether the operation should be visible to callers.
     pub fn visible(mut self, visible: bool) -> Self {
         self.visible = Some(visible);
         self
@@ -92,6 +101,7 @@ type Handler<P> = Arc<
         + Sync,
 >;
 
+/// Dispatches typed operations and exposes the corresponding static catalog.
 pub struct Router<P> {
     catalog: Catalog,
     handlers: BTreeMap<String, Handler<P>>,
@@ -113,6 +123,7 @@ impl<P> Default for Router<P> {
 }
 
 impl<P> Router<P> {
+    /// Creates an empty router.
     pub fn new() -> Self {
         Self {
             catalog: Catalog::default(),
@@ -120,6 +131,7 @@ impl<P> Router<P> {
         }
     }
 
+    /// Returns a copy of the router with the catalog name overridden.
     pub fn with_name(mut self, name: impl Into<String>) -> Self {
         let name = name.into();
         if !name.trim().is_empty() {
@@ -128,10 +140,12 @@ impl<P> Router<P> {
         self
     }
 
+    /// Returns the router's derived static catalog.
     pub fn catalog(&self) -> &Catalog {
         &self.catalog
     }
 
+    /// Executes one named operation against provider.
     pub async fn execute(
         &self,
         provider: Arc<P>,
@@ -154,6 +168,8 @@ impl<P> Router<P>
 where
     P: Send + Sync + 'static,
 {
+    /// Registers a typed handler and derives the corresponding catalog entry
+    /// from its `serde` and `schemars` types.
     pub fn register<In, Out, F, Fut, R, E>(
         mut self,
         operation: Operation<In, Out>,

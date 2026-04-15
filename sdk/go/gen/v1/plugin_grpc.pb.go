@@ -30,6 +30,8 @@ const (
 // IntegrationProviderClient is the client API for IntegrationProvider service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// IntegrationProvider models the shared Gestalt integration-provider protocol.
 type IntegrationProviderClient interface {
 	GetMetadata(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ProviderMetadata, error)
 	StartProvider(ctx context.Context, in *StartProviderRequest, opts ...grpc.CallOption) (*StartProviderResponse, error)
@@ -99,6 +101,8 @@ func (c *integrationProviderClient) PostConnect(ctx context.Context, in *PostCon
 // IntegrationProviderServer is the server API for IntegrationProvider service.
 // All implementations must embed UnimplementedIntegrationProviderServer
 // for forward compatibility.
+//
+// IntegrationProvider models the shared Gestalt integration-provider protocol.
 type IntegrationProviderServer interface {
 	GetMetadata(context.Context, *emptypb.Empty) (*ProviderMetadata, error)
 	StartProvider(context.Context, *StartProviderRequest) (*StartProviderResponse, error)

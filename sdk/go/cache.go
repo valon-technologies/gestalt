@@ -13,22 +13,29 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
+// EnvCacheSocket is the default Unix-socket environment variable used by
+// [Cache].
 const EnvCacheSocket = "GESTALT_CACHE_SOCKET"
 
+// CacheEntry is one key/value pair written through [CacheClient.SetMany].
 type CacheEntry struct {
 	Key   string
 	Value []byte
 }
 
+// CacheSetOptions controls cache writes.
 type CacheSetOptions struct {
 	TTL time.Duration
 }
 
+// CacheClient speaks to a running cache provider over a Unix socket.
 type CacheClient struct {
 	client proto.CacheClient
 	conn   *grpc.ClientConn
 }
 
+// CacheSocketEnv returns the environment variable name used for a named cache
+// transport socket.
 func CacheSocketEnv(name string) string {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -50,6 +57,7 @@ func CacheSocketEnv(name string) string {
 	return b.String()
 }
 
+// Cache connects to the cache provider exposed by gestaltd.
 func Cache(name ...string) (*CacheClient, error) {
 	envName := EnvCacheSocket
 	if len(name) > 0 {
@@ -74,6 +82,7 @@ func Cache(name ...string) (*CacheClient, error) {
 	}, nil
 }
 
+// Close closes the underlying gRPC transport.
 func (c *CacheClient) Close() error {
 	if c == nil || c.conn == nil {
 		return nil
@@ -81,6 +90,7 @@ func (c *CacheClient) Close() error {
 	return c.conn.Close()
 }
 
+// Get loads one cached value.
 func (c *CacheClient) Get(ctx context.Context, key string) ([]byte, bool, error) {
 	resp, err := c.client.Get(ctx, &proto.CacheGetRequest{Key: key})
 	if err != nil {
@@ -92,6 +102,7 @@ func (c *CacheClient) Get(ctx context.Context, key string) ([]byte, bool, error)
 	return append([]byte(nil), resp.GetValue()...), true, nil
 }
 
+// GetMany loads all present values for keys.
 func (c *CacheClient) GetMany(ctx context.Context, keys []string) (map[string][]byte, error) {
 	resp, err := c.client.GetMany(ctx, &proto.CacheGetManyRequest{Keys: keys})
 	if err != nil {
@@ -107,6 +118,7 @@ func (c *CacheClient) GetMany(ctx context.Context, keys []string) (map[string][]
 	return out, nil
 }
 
+// Set stores one value, replacing any existing entry at key.
 func (c *CacheClient) Set(ctx context.Context, key string, value []byte, opts CacheSetOptions) error {
 	_, err := c.client.Set(ctx, &proto.CacheSetRequest{
 		Key:   key,
@@ -116,6 +128,7 @@ func (c *CacheClient) Set(ctx context.Context, key string, value []byte, opts Ca
 	return err
 }
 
+// SetMany stores multiple entries in one RPC.
 func (c *CacheClient) SetMany(ctx context.Context, entries []CacheEntry, opts CacheSetOptions) error {
 	protoEntries := make([]*proto.CacheSetEntry, 0, len(entries))
 	for _, entry := range entries {
@@ -131,6 +144,7 @@ func (c *CacheClient) SetMany(ctx context.Context, entries []CacheEntry, opts Ca
 	return err
 }
 
+// Delete removes one cached value and reports whether it existed.
 func (c *CacheClient) Delete(ctx context.Context, key string) (bool, error) {
 	resp, err := c.client.Delete(ctx, &proto.CacheDeleteRequest{Key: key})
 	if err != nil {
@@ -139,6 +153,7 @@ func (c *CacheClient) Delete(ctx context.Context, key string) (bool, error) {
 	return resp.GetDeleted(), nil
 }
 
+// DeleteMany removes multiple cached values and reports how many were deleted.
 func (c *CacheClient) DeleteMany(ctx context.Context, keys []string) (int64, error) {
 	resp, err := c.client.DeleteMany(ctx, &proto.CacheDeleteManyRequest{Keys: keys})
 	if err != nil {
@@ -147,6 +162,7 @@ func (c *CacheClient) DeleteMany(ctx context.Context, keys []string) (int64, err
 	return resp.GetDeleted(), nil
 }
 
+// Touch updates the TTL for one cached value.
 func (c *CacheClient) Touch(ctx context.Context, key string, ttl time.Duration) (bool, error) {
 	resp, err := c.client.Touch(ctx, &proto.CacheTouchRequest{Key: key, Ttl: cacheTTLToProto(ttl)})
 	if err != nil {

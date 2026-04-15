@@ -7,11 +7,15 @@ use serde_json::{Value as JsonValue, json};
 use crate::error::{Error, Result};
 use crate::generated::v1;
 
+/// Generated catalog schema used by the provider runtime.
 pub type Catalog = v1::Catalog;
+/// Generated catalog operation schema.
 pub type CatalogOperation = v1::CatalogOperation;
+/// Generated catalog parameter schema.
 pub type CatalogParameter = v1::CatalogParameter;
 
 impl Catalog {
+    /// Returns a copy of the catalog with a non-empty name override applied.
     pub fn with_name(mut self, name: impl Into<String>) -> Self {
         let name = name.into();
         if !name.trim().is_empty() {
@@ -21,6 +25,7 @@ impl Catalog {
     }
 }
 
+/// Writes catalog to path using the JSON shape expected by `gestaltd`.
 pub fn write_catalog(catalog: &Catalog, path: impl AsRef<Path>) -> Result<()> {
     let path = path.as_ref();
     if let Some(parent) = path.parent()

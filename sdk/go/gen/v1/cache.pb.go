@@ -23,6 +23,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// CacheSetEntry is one key/value pair written by SetMany.
 type CacheSetEntry struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
@@ -75,6 +76,7 @@ func (x *CacheSetEntry) GetValue() []byte {
 	return nil
 }
 
+// CacheResult is one lookup result returned by GetMany.
 type CacheResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
@@ -135,6 +137,7 @@ func (x *CacheResult) GetValue() []byte {
 	return nil
 }
 
+// CacheGetRequest loads one cache key.
 type CacheGetRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
@@ -179,6 +182,7 @@ func (x *CacheGetRequest) GetKey() string {
 	return ""
 }
 
+// CacheGetResponse is the result of looking up one cache key.
 type CacheGetResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Found         bool                   `protobuf:"varint,1,opt,name=found,proto3" json:"found,omitempty"`
@@ -231,6 +235,7 @@ func (x *CacheGetResponse) GetValue() []byte {
 	return nil
 }
 
+// CacheGetManyRequest loads multiple cache keys in one RPC.
 type CacheGetManyRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Keys          []string               `protobuf:"bytes,1,rep,name=keys,proto3" json:"keys,omitempty"`
@@ -275,6 +280,7 @@ func (x *CacheGetManyRequest) GetKeys() []string {
 	return nil
 }
 
+// CacheGetManyResponse returns every lookup result for GetMany.
 type CacheGetManyResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Entries       []*CacheResult         `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
@@ -319,11 +325,13 @@ func (x *CacheGetManyResponse) GetEntries() []*CacheResult {
 	return nil
 }
 
+// CacheSetRequest writes one cache key.
 type CacheSetRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-	Value         []byte                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
-	Ttl           *durationpb.Duration   `protobuf:"bytes,3,opt,name=ttl,proto3" json:"ttl,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Key   string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Value []byte                 `protobuf:"bytes,2,opt,name=value,proto3" json:"value,omitempty"`
+	// ttl applies an optional expiration to the entry.
+	Ttl           *durationpb.Duration `protobuf:"bytes,3,opt,name=ttl,proto3" json:"ttl,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -379,6 +387,7 @@ func (x *CacheSetRequest) GetTtl() *durationpb.Duration {
 	return nil
 }
 
+// CacheSetManyRequest writes multiple cache keys in one RPC.
 type CacheSetManyRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Entries       []*CacheSetEntry       `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
@@ -431,6 +440,7 @@ func (x *CacheSetManyRequest) GetTtl() *durationpb.Duration {
 	return nil
 }
 
+// CacheDeleteRequest removes one cache key.
 type CacheDeleteRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
@@ -475,6 +485,7 @@ func (x *CacheDeleteRequest) GetKey() string {
 	return ""
 }
 
+// CacheDeleteResponse reports whether one key existed and was deleted.
 type CacheDeleteResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Deleted       bool                   `protobuf:"varint,1,opt,name=deleted,proto3" json:"deleted,omitempty"`
@@ -519,6 +530,7 @@ func (x *CacheDeleteResponse) GetDeleted() bool {
 	return false
 }
 
+// CacheDeleteManyRequest removes multiple cache keys in one RPC.
 type CacheDeleteManyRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Keys          []string               `protobuf:"bytes,1,rep,name=keys,proto3" json:"keys,omitempty"`
@@ -563,6 +575,7 @@ func (x *CacheDeleteManyRequest) GetKeys() []string {
 	return nil
 }
 
+// CacheDeleteManyResponse reports how many keys were deleted.
 type CacheDeleteManyResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Deleted       int64                  `protobuf:"varint,1,opt,name=deleted,proto3" json:"deleted,omitempty"`
@@ -607,6 +620,7 @@ func (x *CacheDeleteManyResponse) GetDeleted() int64 {
 	return 0
 }
 
+// CacheTouchRequest extends the TTL for one cache key.
 type CacheTouchRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Key           string                 `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
@@ -659,6 +673,7 @@ func (x *CacheTouchRequest) GetTtl() *durationpb.Duration {
 	return nil
 }
 
+// CacheTouchResponse reports whether a key existed and had its TTL updated.
 type CacheTouchResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Touched       bool                   `protobuf:"varint,1,opt,name=touched,proto3" json:"touched,omitempty"`

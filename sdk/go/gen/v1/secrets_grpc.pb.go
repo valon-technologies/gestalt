@@ -25,6 +25,8 @@ const (
 // SecretsProviderClient is the client API for SecretsProvider service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// SecretsProvider models the shared Gestalt secrets-provider protocol.
 type SecretsProviderClient interface {
 	GetSecret(ctx context.Context, in *GetSecretRequest, opts ...grpc.CallOption) (*GetSecretResponse, error)
 }
@@ -50,6 +52,8 @@ func (c *secretsProviderClient) GetSecret(ctx context.Context, in *GetSecretRequ
 // SecretsProviderServer is the server API for SecretsProvider service.
 // All implementations must embed UnimplementedSecretsProviderServer
 // for forward compatibility.
+//
+// SecretsProvider models the shared Gestalt secrets-provider protocol.
 type SecretsProviderServer interface {
 	GetSecret(context.Context, *GetSecretRequest) (*GetSecretResponse, error)
 	mustEmbedUnimplementedSecretsProviderServer()

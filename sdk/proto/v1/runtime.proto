@@ -2,8 +2,6 @@ syntax = "proto3";
 
 package gestalt.provider.v1;
 
-option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
-
 // SDK Naming Convention (all languages):
 //   Base provider interface:  Provider
 //   Auth provider:            AuthProvider
@@ -12,6 +10,8 @@ option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
 
 import "google/protobuf/empty.proto";
 import "google/protobuf/struct.proto";
+
+option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
 
 enum ProviderKind {
   PROVIDER_KIND_UNSPECIFIED = 0;
@@ -24,6 +24,8 @@ enum ProviderKind {
   PROVIDER_KIND_S3 = 7;
 }
 
+// ProviderIdentity describes a provider surface and the protocol versions it
+// supports.
 message ProviderIdentity {
   ProviderKind kind = 1;
   string name = 2;
@@ -35,21 +37,28 @@ message ProviderIdentity {
   int32 max_protocol_version = 11;
 }
 
+// ConfigureProviderRequest configures a non-integration provider for one
+// runtime session.
 message ConfigureProviderRequest {
   string name = 1;
   google.protobuf.Struct config = 2;
   int32 protocol_version = 3;
 }
 
+// ConfigureProviderResponse confirms the protocol version the provider is
+// serving.
 message ConfigureProviderResponse {
   int32 protocol_version = 1;
 }
 
+// HealthCheckResponse reports runtime readiness for a provider surface.
 message HealthCheckResponse {
   bool ready = 1;
   string message = 2;
 }
 
+// ProviderLifecycle is the common lifecycle protocol shared by every provider
+// kind.
 service ProviderLifecycle {
   rpc GetProviderIdentity(google.protobuf.Empty) returns (ProviderIdentity);
   rpc ConfigureProvider(ConfigureProviderRequest) returns (ConfigureProviderResponse);

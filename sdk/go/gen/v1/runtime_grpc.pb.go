@@ -28,6 +28,9 @@ const (
 // ProviderLifecycleClient is the client API for ProviderLifecycle service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// ProviderLifecycle is the common lifecycle protocol shared by every provider
+// kind.
 type ProviderLifecycleClient interface {
 	GetProviderIdentity(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ProviderIdentity, error)
 	ConfigureProvider(ctx context.Context, in *ConfigureProviderRequest, opts ...grpc.CallOption) (*ConfigureProviderResponse, error)
@@ -75,6 +78,9 @@ func (c *providerLifecycleClient) HealthCheck(ctx context.Context, in *emptypb.E
 // ProviderLifecycleServer is the server API for ProviderLifecycle service.
 // All implementations must embed UnimplementedProviderLifecycleServer
 // for forward compatibility.
+//
+// ProviderLifecycle is the common lifecycle protocol shared by every provider
+// kind.
 type ProviderLifecycleServer interface {
 	GetProviderIdentity(context.Context, *emptypb.Empty) (*ProviderIdentity, error)
 	ConfigureProvider(context.Context, *ConfigureProviderRequest) (*ConfigureProviderResponse, error)

@@ -2,6 +2,59 @@
 
 This directory contains the Rust SDK for Gestalt executable providers.
 
+## Quick start
+
+The main integration-provider flow stays small:
+
+```rust,no_run
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
+#[derive(Default)]
+struct EchoProvider;
+
+#[gestalt::async_trait]
+impl gestalt::Provider for EchoProvider {}
+
+#[derive(Deserialize, JsonSchema)]
+struct EchoInput {
+    message: String,
+}
+
+#[derive(Serialize, JsonSchema)]
+struct EchoOutput {
+    echoed: String,
+}
+
+fn router() -> gestalt::Result<gestalt::Router<EchoProvider>> {
+    gestalt::Router::new().register(
+        gestalt::Operation::<EchoInput, EchoOutput>::new("echo")
+            .description("Echo one message back to the caller"),
+        |_: Arc<EchoProvider>, input, _request| async move {
+            Ok::<_, gestalt::Error>(gestalt::ok(EchoOutput {
+                echoed: input.message,
+            }))
+        },
+    )
+}
+
+gestalt::export_provider!(constructor = EchoProvider::default, router = router);
+```
+
+Sibling provider surfaces stay source-native too:
+
+```rust,no_run
+# async fn example() -> Result<(), Box<dyn std::error::Error>> {
+let mut cache = gestalt::Cache::connect().await?;
+cache.set("token", b"abc123", Default::default()).await?;
+
+let mut object = gestalt::S3::connect().await?.object("docs", "hello.txt");
+object.write_string("hello", None).await?;
+# Ok(())
+# }
+```
+
 Current scope:
 
 - standalone Cargo package published as `gestalt-sdk`

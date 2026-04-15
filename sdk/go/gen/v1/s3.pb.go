@@ -23,6 +23,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// PresignMethod identifies the HTTP verb encoded into a presigned URL.
 type PresignMethod int32
 
 const (
@@ -78,6 +79,7 @@ func (PresignMethod) EnumDescriptor() ([]byte, []int) {
 	return file_v1_s3_proto_rawDescGZIP(), []int{0}
 }
 
+// S3ObjectRef identifies one object or object version.
 type S3ObjectRef struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Bucket        string                 `protobuf:"bytes,1,opt,name=bucket,proto3" json:"bucket,omitempty"`
@@ -138,6 +140,7 @@ func (x *S3ObjectRef) GetVersionId() string {
 	return ""
 }
 
+// S3ObjectMeta describes one object returned by the provider.
 type S3ObjectMeta struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Ref           *S3ObjectRef           `protobuf:"bytes,1,opt,name=ref,proto3" json:"ref,omitempty"`
@@ -230,6 +233,7 @@ func (x *S3ObjectMeta) GetStorageClass() string {
 	return ""
 }
 
+// ByteRange requests a half-open slice of an object's bytes.
 type ByteRange struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Start         *int64                 `protobuf:"varint,1,opt,name=start,proto3,oneof" json:"start,omitempty"`
@@ -282,6 +286,7 @@ func (x *ByteRange) GetEnd() int64 {
 	return 0
 }
 
+// HeadObjectRequest fetches metadata for one object.
 type HeadObjectRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Ref           *S3ObjectRef           `protobuf:"bytes,1,opt,name=ref,proto3" json:"ref,omitempty"`
@@ -326,6 +331,7 @@ func (x *HeadObjectRequest) GetRef() *S3ObjectRef {
 	return nil
 }
 
+// HeadObjectResponse returns object metadata.
 type HeadObjectResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Meta          *S3ObjectMeta          `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
@@ -370,6 +376,7 @@ func (x *HeadObjectResponse) GetMeta() *S3ObjectMeta {
 	return nil
 }
 
+// ReadObjectRequest opens a streaming object read.
 type ReadObjectRequest struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	Ref               *S3ObjectRef           `protobuf:"bytes,1,opt,name=ref,proto3" json:"ref,omitempty"`
@@ -454,6 +461,7 @@ func (x *ReadObjectRequest) GetIfUnmodifiedSince() *timestamppb.Timestamp {
 	return nil
 }
 
+// ReadObjectChunk is one frame in a streaming object read.
 type ReadObjectChunk struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Result:
@@ -536,6 +544,8 @@ func (*ReadObjectChunk_Meta) isReadObjectChunk_Result() {}
 
 func (*ReadObjectChunk_Data) isReadObjectChunk_Result() {}
 
+// WriteObjectOpen carries the metadata frame that must be sent first in a
+// write-object stream.
 type WriteObjectOpen struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	Ref                *S3ObjectRef           `protobuf:"bytes,1,opt,name=ref,proto3" json:"ref,omitempty"`
@@ -644,6 +654,7 @@ func (x *WriteObjectOpen) GetIfNoneMatch() string {
 	return ""
 }
 
+// WriteObjectRequest is one frame in a write-object stream.
 type WriteObjectRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Msg:
@@ -726,6 +737,7 @@ func (*WriteObjectRequest_Open) isWriteObjectRequest_Msg() {}
 
 func (*WriteObjectRequest_Data) isWriteObjectRequest_Msg() {}
 
+// WriteObjectResponse returns metadata for the committed object.
 type WriteObjectResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Meta          *S3ObjectMeta          `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
@@ -770,6 +782,7 @@ func (x *WriteObjectResponse) GetMeta() *S3ObjectMeta {
 	return nil
 }
 
+// DeleteObjectRequest removes one object.
 type DeleteObjectRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Ref           *S3ObjectRef           `protobuf:"bytes,1,opt,name=ref,proto3" json:"ref,omitempty"`
@@ -814,6 +827,7 @@ func (x *DeleteObjectRequest) GetRef() *S3ObjectRef {
 	return nil
 }
 
+// ListObjectsRequest lists objects in a bucket.
 type ListObjectsRequest struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	Bucket            string                 `protobuf:"bytes,1,opt,name=bucket,proto3" json:"bucket,omitempty"`
@@ -898,6 +912,7 @@ func (x *ListObjectsRequest) GetMaxKeys() int32 {
 	return 0
 }
 
+// ListObjectsResponse is one page of list-objects results.
 type ListObjectsResponse struct {
 	state                 protoimpl.MessageState `protogen:"open.v1"`
 	Objects               []*S3ObjectMeta        `protobuf:"bytes,1,rep,name=objects,proto3" json:"objects,omitempty"`
@@ -966,6 +981,7 @@ func (x *ListObjectsResponse) GetHasMore() bool {
 	return false
 }
 
+// CopyObjectRequest copies one object to another location.
 type CopyObjectRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Source        *S3ObjectRef           `protobuf:"bytes,1,opt,name=source,proto3" json:"source,omitempty"`
@@ -1034,6 +1050,7 @@ func (x *CopyObjectRequest) GetIfNoneMatch() string {
 	return ""
 }
 
+// CopyObjectResponse returns metadata for the copied object.
 type CopyObjectResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Meta          *S3ObjectMeta          `protobuf:"bytes,1,opt,name=meta,proto3" json:"meta,omitempty"`
@@ -1078,6 +1095,7 @@ func (x *CopyObjectResponse) GetMeta() *S3ObjectMeta {
 	return nil
 }
 
+// PresignObjectRequest asks the provider to mint a presigned URL.
 type PresignObjectRequest struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	Ref                *S3ObjectRef           `protobuf:"bytes,1,opt,name=ref,proto3" json:"ref,omitempty"`
@@ -1162,6 +1180,7 @@ func (x *PresignObjectRequest) GetHeaders() map[string]string {
 	return nil
 }
 
+// PresignObjectResponse returns a presigned URL plus any required headers.
 type PresignObjectResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Url           string                 `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`

@@ -2,17 +2,19 @@ syntax = "proto3";
 
 package gestalt.provider.v1;
 
-option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
-
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 
+option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
+
+// S3ObjectRef identifies one object or object version.
 message S3ObjectRef {
   string bucket = 1;
   string key = 2;
   string version_id = 3;
 }
 
+// S3ObjectMeta describes one object returned by the provider.
 message S3ObjectMeta {
   S3ObjectRef ref = 1;
   string etag = 2;
@@ -23,19 +25,23 @@ message S3ObjectMeta {
   string storage_class = 7;
 }
 
+// ByteRange requests a half-open slice of an object's bytes.
 message ByteRange {
   optional int64 start = 1;
   optional int64 end = 2;
 }
 
+// HeadObjectRequest fetches metadata for one object.
 message HeadObjectRequest {
   S3ObjectRef ref = 1;
 }
 
+// HeadObjectResponse returns object metadata.
 message HeadObjectResponse {
   S3ObjectMeta meta = 1;
 }
 
+// ReadObjectRequest opens a streaming object read.
 message ReadObjectRequest {
   S3ObjectRef ref = 1;
   optional ByteRange range = 2;
@@ -45,6 +51,7 @@ message ReadObjectRequest {
   google.protobuf.Timestamp if_unmodified_since = 6;
 }
 
+// ReadObjectChunk is one frame in a streaming object read.
 message ReadObjectChunk {
   oneof result {
     S3ObjectMeta meta = 1;
@@ -52,6 +59,8 @@ message ReadObjectChunk {
   }
 }
 
+// WriteObjectOpen carries the metadata frame that must be sent first in a
+// write-object stream.
 message WriteObjectOpen {
   S3ObjectRef ref = 1;
   string content_type = 2;
@@ -64,6 +73,7 @@ message WriteObjectOpen {
   string if_none_match = 9;
 }
 
+// WriteObjectRequest is one frame in a write-object stream.
 message WriteObjectRequest {
   oneof msg {
     WriteObjectOpen open = 1;
@@ -71,14 +81,17 @@ message WriteObjectRequest {
   }
 }
 
+// WriteObjectResponse returns metadata for the committed object.
 message WriteObjectResponse {
   S3ObjectMeta meta = 1;
 }
 
+// DeleteObjectRequest removes one object.
 message DeleteObjectRequest {
   S3ObjectRef ref = 1;
 }
 
+// ListObjectsRequest lists objects in a bucket.
 message ListObjectsRequest {
   string bucket = 1;
   string prefix = 2;
@@ -88,6 +101,7 @@ message ListObjectsRequest {
   int32 max_keys = 6;
 }
 
+// ListObjectsResponse is one page of list-objects results.
 message ListObjectsResponse {
   repeated S3ObjectMeta objects = 1;
   repeated string common_prefixes = 2;
@@ -95,6 +109,7 @@ message ListObjectsResponse {
   bool has_more = 4;
 }
 
+// CopyObjectRequest copies one object to another location.
 message CopyObjectRequest {
   S3ObjectRef source = 1;
   S3ObjectRef destination = 2;
@@ -102,10 +117,12 @@ message CopyObjectRequest {
   string if_none_match = 4;
 }
 
+// CopyObjectResponse returns metadata for the copied object.
 message CopyObjectResponse {
   S3ObjectMeta meta = 1;
 }
 
+// PresignMethod identifies the HTTP verb encoded into a presigned URL.
 enum PresignMethod {
   PRESIGN_METHOD_UNSPECIFIED = 0;
   PRESIGN_METHOD_GET = 1;
@@ -114,6 +131,7 @@ enum PresignMethod {
   PRESIGN_METHOD_HEAD = 4;
 }
 
+// PresignObjectRequest asks the provider to mint a presigned URL.
 message PresignObjectRequest {
   S3ObjectRef ref = 1;
   PresignMethod method = 2;
@@ -123,6 +141,7 @@ message PresignObjectRequest {
   map<string, string> headers = 6;
 }
 
+// PresignObjectResponse returns a presigned URL plus any required headers.
 message PresignObjectResponse {
   string url = 1;
   PresignMethod method = 2;
@@ -130,6 +149,7 @@ message PresignObjectResponse {
   map<string, string> headers = 4;
 }
 
+// S3 models the shared Gestalt S3-provider protocol.
 service S3 {
   rpc HeadObject(HeadObjectRequest) returns (HeadObjectResponse);
   // The first response frame carries object metadata. All subsequent frames

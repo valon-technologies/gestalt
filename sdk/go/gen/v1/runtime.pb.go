@@ -87,6 +87,8 @@ func (ProviderKind) EnumDescriptor() ([]byte, []int) {
 	return file_v1_runtime_proto_rawDescGZIP(), []int{0}
 }
 
+// ProviderIdentity describes a provider surface and the protocol versions it
+// supports.
 type ProviderIdentity struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	Kind               ProviderKind           `protobuf:"varint,1,opt,name=kind,proto3,enum=gestalt.provider.v1.ProviderKind" json:"kind,omitempty"`
@@ -187,6 +189,8 @@ func (x *ProviderIdentity) GetMaxProtocolVersion() int32 {
 	return 0
 }
 
+// ConfigureProviderRequest configures a non-integration provider for one
+// runtime session.
 type ConfigureProviderRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -247,6 +251,8 @@ func (x *ConfigureProviderRequest) GetProtocolVersion() int32 {
 	return 0
 }
 
+// ConfigureProviderResponse confirms the protocol version the provider is
+// serving.
 type ConfigureProviderResponse struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	ProtocolVersion int32                  `protobuf:"varint,1,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
@@ -291,6 +297,7 @@ func (x *ConfigureProviderResponse) GetProtocolVersion() int32 {
 	return 0
 }
 
+// HealthCheckResponse reports runtime readiness for a provider surface.
 type HealthCheckResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Ready         bool                   `protobuf:"varint,1,opt,name=ready,proto3" json:"ready,omitempty"`

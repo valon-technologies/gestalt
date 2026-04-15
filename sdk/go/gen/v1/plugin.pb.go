@@ -24,6 +24,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// ConnectionMode describes which credential sources a provider accepts.
 type ConnectionMode int32
 
 const (
@@ -79,6 +80,8 @@ func (ConnectionMode) EnumDescriptor() ([]byte, []int) {
 	return file_v1_plugin_proto_rawDescGZIP(), []int{0}
 }
 
+// CatalogParameter describes one input parameter surfaced in the generated
+// catalog for an operation.
 type CatalogParameter struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -155,6 +158,8 @@ func (x *CatalogParameter) GetDefault() *structpb.Value {
 	return nil
 }
 
+// OperationAnnotations carries optional host hints about how an operation
+// behaves.
 type OperationAnnotations struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	ReadOnlyHint    *bool                  `protobuf:"varint,1,opt,name=read_only_hint,json=readOnlyHint,proto3,oneof" json:"read_only_hint,omitempty"`
@@ -223,6 +228,8 @@ func (x *OperationAnnotations) GetOpenWorldHint() bool {
 	return false
 }
 
+// CatalogOperation is one executable operation exposed by an integration
+// provider.
 type CatalogOperation struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Id             string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -371,6 +378,8 @@ func (x *CatalogOperation) GetAllowedRoles() []string {
 	return nil
 }
 
+// Catalog is the static or request-scoped executable surface exposed by a
+// provider.
 type Catalog struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -447,6 +456,7 @@ func (x *Catalog) GetOperations() []*CatalogOperation {
 	return nil
 }
 
+// ConnectionParamDef describes one provider-defined connection parameter.
 type ConnectionParamDef struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Required      bool                   `protobuf:"varint,1,opt,name=required,proto3" json:"required,omitempty"`
@@ -523,6 +533,7 @@ func (x *ConnectionParamDef) GetField() string {
 	return ""
 }
 
+// ProviderMetadata describes an integration provider's static capabilities.
 type ProviderMetadata struct {
 	state                  protoimpl.MessageState         `protogen:"open.v1"`
 	Name                   string                         `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -647,6 +658,7 @@ func (x *ProviderMetadata) GetMaxProtocolVersion() int32 {
 	return 0
 }
 
+// OperationResult is the serialized result returned from an Execute call.
 type OperationResult struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Status        int32                  `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
@@ -699,6 +711,8 @@ func (x *OperationResult) GetBody() string {
 	return ""
 }
 
+// IntegrationToken is the host-managed token payload passed into post-connect
+// hooks.
 type IntegrationToken struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	Id                string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -839,6 +853,7 @@ func (x *IntegrationToken) GetUpdatedAt() *timestamppb.Timestamp {
 	return nil
 }
 
+// SubjectContext identifies the caller that initiated an operation.
 type SubjectContext struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -907,6 +922,7 @@ func (x *SubjectContext) GetAuthSource() string {
 	return ""
 }
 
+// CredentialContext describes the resolved credential used for an operation.
 type CredentialContext struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Mode          string                 `protobuf:"bytes,1,opt,name=mode,proto3" json:"mode,omitempty"`
@@ -975,6 +991,7 @@ func (x *CredentialContext) GetInstance() string {
 	return ""
 }
 
+// AccessContext describes the host-side access decision for an operation.
 type AccessContext struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Policy        string                 `protobuf:"bytes,1,opt,name=policy,proto3" json:"policy,omitempty"`
@@ -1027,6 +1044,8 @@ func (x *AccessContext) GetRole() string {
 	return ""
 }
 
+// RequestContext bundles the caller, credential, and access metadata for one
+// operation.
 type RequestContext struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Subject       *SubjectContext        `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
@@ -1087,6 +1106,7 @@ func (x *RequestContext) GetAccess() *AccessContext {
 	return nil
 }
 
+// ExecuteRequest invokes one executable operation.
 type ExecuteRequest struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	Operation        string                 `protobuf:"bytes,1,opt,name=operation,proto3" json:"operation,omitempty"`
@@ -1171,6 +1191,8 @@ func (x *ExecuteRequest) GetContext() *RequestContext {
 	return nil
 }
 
+// GetSessionCatalogRequest asks a provider for request-scoped catalog
+// extensions.
 type GetSessionCatalogRequest struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	Token            string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
@@ -1239,6 +1261,7 @@ func (x *GetSessionCatalogRequest) GetContext() *RequestContext {
 	return nil
 }
 
+// GetSessionCatalogResponse returns request-scoped catalog extensions.
 type GetSessionCatalogResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Catalog       *Catalog               `protobuf:"bytes,1,opt,name=catalog,proto3" json:"catalog,omitempty"`
@@ -1283,6 +1306,7 @@ func (x *GetSessionCatalogResponse) GetCatalog() *Catalog {
 	return nil
 }
 
+// PostConnectRequest notifies a provider that a connection has completed.
 type PostConnectRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Token         *IntegrationToken      `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
@@ -1327,6 +1351,8 @@ func (x *PostConnectRequest) GetToken() *IntegrationToken {
 	return nil
 }
 
+// PostConnectResponse returns provider-defined metadata captured after
+// connection.
 type PostConnectResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Metadata      map[string]string      `protobuf:"bytes,1,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
@@ -1371,6 +1397,8 @@ func (x *PostConnectResponse) GetMetadata() map[string]string {
 	return nil
 }
 
+// StartProviderRequest configures an integration provider for one runtime
+// session.
 type StartProviderRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Name            string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -1431,6 +1459,7 @@ func (x *StartProviderRequest) GetProtocolVersion() int32 {
 	return 0
 }
 
+// StartProviderResponse confirms the protocol version the provider is serving.
 type StartProviderResponse struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	ProtocolVersion int32                  `protobuf:"varint,1,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`

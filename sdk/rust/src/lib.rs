@@ -1,3 +1,4 @@
+#![warn(rustdoc::broken_intra_doc_links)]
 #![doc = include_str!("../README.md")]
 
 mod api;
@@ -9,16 +10,20 @@ mod catalog;
 mod env;
 mod error;
 mod generated;
+/// IndexedDB-style datastore client and provider helpers.
 pub mod indexeddb;
 mod provider_server;
 mod router;
 mod rpc_status;
+/// Runtime entrypoints for serving Gestalt provider surfaces over Unix sockets.
 pub mod runtime;
 mod runtime_server;
+/// S3-compatible client and provider helpers.
 pub mod s3;
 mod secrets;
 mod secrets_server;
 
+/// Generated protobuf and gRPC bindings for the Gestalt provider protocol.
 pub mod proto {
     pub use crate::generated::v1;
 }
@@ -60,6 +65,7 @@ impl<P> IntoRouterResult<P> for Result<Router<P>> {
 }
 
 #[doc(hidden)]
+/// Converts router-like values used by the export macros into a [`Router`].
 pub fn into_router_result<P, R>(router: R) -> Result<Router<P>>
 where
     R: IntoRouterResult<P>,
@@ -67,6 +73,7 @@ where
     router.into_router_result()
 }
 
+/// Exports the integration-provider entrypoints expected by `gestaltd`.
 #[macro_export]
 macro_rules! export_provider {
     (constructor = $constructor:path, router = $router:path $(,)?) => {
@@ -83,6 +90,7 @@ macro_rules! export_provider {
     };
 }
 
+/// Exports the auth-provider entrypoint expected by `gestaltd`.
 #[macro_export]
 macro_rules! export_auth_provider {
     (constructor = $constructor:path $(,)?) => {
@@ -93,6 +101,7 @@ macro_rules! export_auth_provider {
     };
 }
 
+/// Exports the cache-provider entrypoint expected by `gestaltd`.
 #[macro_export]
 macro_rules! export_cache_provider {
     (constructor = $constructor:path $(,)?) => {
@@ -103,6 +112,7 @@ macro_rules! export_cache_provider {
     };
 }
 
+/// Exports the secrets-provider entrypoint expected by `gestaltd`.
 #[macro_export]
 macro_rules! export_secrets_provider {
     (constructor = $constructor:path $(,)?) => {
@@ -113,6 +123,7 @@ macro_rules! export_secrets_provider {
     };
 }
 
+/// Exports the S3-provider entrypoint expected by `gestaltd`.
 #[macro_export]
 macro_rules! export_s3_provider {
     (constructor = $constructor:path $(,)?) => {

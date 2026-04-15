@@ -7,6 +7,7 @@ use crate::catalog::Catalog;
 use crate::error::{Error, Result};
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
+/// Identifies the caller that initiated an operation.
 pub struct Subject {
     pub id: String,
     pub kind: String,
@@ -15,6 +16,7 @@ pub struct Subject {
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
+/// Describes the resolved credential used to authorize an operation.
 pub struct Credential {
     pub mode: String,
     pub subject_id: String,
@@ -23,12 +25,14 @@ pub struct Credential {
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
+/// Summarizes the host-side access decision attached to an operation.
 pub struct Access {
     pub policy: String,
     pub role: String,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
+/// Carries execution-scoped metadata into typed operation handlers.
 pub struct Request {
     pub token: String,
     pub connection_params: BTreeMap<String, String>,
@@ -38,18 +42,21 @@ pub struct Request {
 }
 
 impl Request {
+    /// Returns one resolved connection parameter by name.
     pub fn connection_param(&self, name: &str) -> Option<&str> {
         self.connection_params.get(name).map(String::as_str)
     }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
+/// Wraps a typed handler response plus an optional explicit HTTP status code.
 pub struct Response<T> {
     pub status: Option<u16>,
     pub body: T,
 }
 
 impl<T> Response<T> {
+    /// Creates a response with an explicit HTTP status code.
     pub fn new(status: u16, body: T) -> Self {
         Self {
             status: Some(status),
@@ -58,10 +65,12 @@ impl<T> Response<T> {
     }
 }
 
+/// Returns a successful JSON response with status code `200`.
 pub fn ok<T>(body: T) -> Response<T> {
     Response::new(200, body)
 }
 
+/// Converts handler return values into a typed [`Response`].
 pub trait IntoResponse<T> {
     fn into_response(self) -> Response<T>;
 }
@@ -79,6 +88,7 @@ impl<T> IntoResponse<T> for T {
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
+/// Describes provider metadata that should be surfaced by the runtime.
 pub struct RuntimeMetadata {
     pub name: String,
     pub display_name: String,
@@ -87,7 +97,9 @@ pub struct RuntimeMetadata {
 }
 
 #[async_trait]
+/// Shared lifecycle contract for Gestalt integration providers.
 pub trait Provider: Send + Sync + 'static {
+    /// Configures the provider before it starts serving requests.
     async fn configure(
         &self,
         _name: &str,
@@ -96,26 +108,33 @@ pub trait Provider: Send + Sync + 'static {
         Ok(())
     }
 
+    /// Returns runtime metadata that should augment the static manifest.
     fn metadata(&self) -> Option<RuntimeMetadata> {
         None
     }
 
+    /// Returns non-fatal warnings the host should surface to users.
     fn warnings(&self) -> Vec<String> {
         Vec::new()
     }
 
+    /// Performs an optional health check.
     async fn health_check(&self) -> Result<()> {
         Ok(())
     }
 
+    /// Reports whether this provider can derive additional operations from the
+    /// current request context.
     fn supports_session_catalog(&self) -> bool {
         false
     }
 
+    /// Returns an optional request-scoped catalog extension.
     async fn catalog_for_request(&self, _request: &Request) -> Result<Option<Catalog>> {
         Ok(None)
     }
 
+    /// Shuts the provider down before the runtime exits.
     async fn close(&self) -> Result<()> {
         Ok(())
     }

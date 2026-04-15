@@ -29,6 +29,8 @@ const (
 // AuthProviderClient is the client API for AuthProvider service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+//
+// AuthProvider models the shared Gestalt auth-provider protocol.
 type AuthProviderClient interface {
 	BeginLogin(ctx context.Context, in *BeginLoginRequest, opts ...grpc.CallOption) (*BeginLoginResponse, error)
 	CompleteLogin(ctx context.Context, in *CompleteLoginRequest, opts ...grpc.CallOption) (*AuthenticatedUser, error)
@@ -87,6 +89,8 @@ func (c *authProviderClient) GetSessionSettings(ctx context.Context, in *emptypb
 // AuthProviderServer is the server API for AuthProvider service.
 // All implementations must embed UnimplementedAuthProviderServer
 // for forward compatibility.
+//
+// AuthProvider models the shared Gestalt auth-provider protocol.
 type AuthProviderServer interface {
 	BeginLogin(context.Context, *BeginLoginRequest) (*BeginLoginResponse, error)
 	CompleteLogin(context.Context, *CompleteLoginRequest) (*AuthenticatedUser, error)

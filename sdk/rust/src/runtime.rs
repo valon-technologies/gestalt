@@ -54,30 +54,38 @@ where
     runtime.block_on(f())
 }
 
+/// Runs an integration provider on the Unix socket exposed by `gestaltd`.
 pub fn run_provider<P: Provider>(provider: Arc<P>, router: Router<P>) -> Result<()> {
     build_runtime_and_block_on(|| serve_provider(provider, router))
 }
 
+/// Runs an auth provider on the Unix socket exposed by `gestaltd`.
 pub fn run_auth_provider<P: AuthProvider>(provider: Arc<P>) -> Result<()> {
     build_runtime_and_block_on(|| serve_auth_provider(provider))
 }
 
+/// Runs a cache provider on the Unix socket exposed by `gestaltd`.
 pub fn run_cache_provider<P: CacheProvider>(provider: Arc<P>) -> Result<()> {
     build_runtime_and_block_on(|| serve_cache_provider(provider))
 }
 
+/// Runs a secrets provider on the Unix socket exposed by `gestaltd`.
 pub fn run_secrets_provider<P: SecretsProvider>(provider: Arc<P>) -> Result<()> {
     build_runtime_and_block_on(|| serve_secrets_provider(provider))
 }
 
+/// Runs an S3 provider on the Unix socket exposed by `gestaltd`.
 pub fn run_s3_provider<P: S3Provider>(provider: Arc<P>) -> Result<()> {
     build_runtime_and_block_on(|| serve_s3_provider(provider))
 }
 
+/// Writes the router's derived catalog to path.
 pub fn write_catalog_path<P>(router: &Router<P>, path: impl AsRef<Path>) -> Result<()> {
     write_catalog(router.catalog(), path)
 }
 
+/// Writes the router's derived catalog when `GESTALT_PLUGIN_WRITE_CATALOG` is
+/// set, returning whether anything was written.
 pub fn maybe_write_catalog<P>(router: &Router<P>) -> Result<bool> {
     let Some(path) = env::var_os(ENV_WRITE_CATALOG) else {
         return Ok(false);
@@ -94,6 +102,7 @@ pub fn maybe_write_catalog<P>(router: &Router<P>) -> Result<bool> {
 }
 
 #[cfg(unix)]
+/// Serves an integration provider over the configured Unix socket.
 pub async fn serve_provider<P>(provider: Arc<P>, router: Router<P>) -> Result<()>
 where
     P: Provider,
@@ -118,6 +127,7 @@ where
 }
 
 #[cfg(unix)]
+/// Serves an auth provider over the configured Unix socket.
 pub async fn serve_auth_provider<P>(provider: Arc<P>) -> Result<()>
 where
     P: AuthProvider,
@@ -140,6 +150,7 @@ where
 }
 
 #[cfg(unix)]
+/// Serves a cache provider over the configured Unix socket.
 pub async fn serve_cache_provider<P>(provider: Arc<P>) -> Result<()>
 where
     P: CacheProvider,
@@ -160,6 +171,7 @@ where
 }
 
 #[cfg(unix)]
+/// Serves a secrets provider over the configured Unix socket.
 pub async fn serve_secrets_provider<P>(provider: Arc<P>) -> Result<()>
 where
     P: SecretsProvider,
@@ -182,6 +194,7 @@ where
 }
 
 #[cfg(unix)]
+/// Serves an S3 provider over the configured Unix socket.
 pub async fn serve_s3_provider<P>(provider: Arc<P>) -> Result<()>
 where
     P: S3Provider,

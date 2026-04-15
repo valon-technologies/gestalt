@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	gproto "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -64,6 +65,12 @@ type Registration[P any] struct {
 }
 
 // Register ties a typed operation definition to a typed handler.
+//
+// Typical usage looks like:
+//
+//	var Router = gestalt.MustRouter(
+//		gestalt.Register(listWidgets, (*Provider).ListWidgets),
+//	)
 func Register[P any, In any, Out any](
 	op Operation[In, Out],
 	handler func(*P, context.Context, In, Request) (Response[Out], error),
@@ -143,6 +150,7 @@ func MustRouter[P any](registrations ...Registration[P]) *Router[P] {
 	return router
 }
 
+// Catalog returns a defensive copy of the router's derived static catalog.
 func (r *Router[P]) Catalog() *proto.Catalog {
 	if r == nil {
 		return nil
@@ -150,6 +158,7 @@ func (r *Router[P]) Catalog() *proto.Catalog {
 	return cloneCatalog(r.catalog)
 }
 
+// WithName returns a copy of r with the catalog name overridden.
 func (r *Router[P]) WithName(name string) *Router[P] {
 	if r == nil {
 		return nil
@@ -172,18 +181,11 @@ func cloneCatalog(src *proto.Catalog) *proto.Catalog {
 	if src == nil {
 		return &proto.Catalog{}
 	}
-	ops := make([]*proto.CatalogOperation, len(src.Operations))
-	copy(ops, src.Operations)
-	return &proto.Catalog{
-		Name:        src.Name,
-		DisplayName: src.DisplayName,
-		Description: src.Description,
-		IconSvg:     src.IconSvg,
-		Operations:  ops,
-	}
+	return gproto.Clone(src).(*proto.Catalog)
 }
 
-// Execute decodes params into the typed input struct and dispatches the named operation.
+// Execute decodes params into the typed input struct and dispatches the named
+// operation.
 func (r *Router[P]) Execute(ctx context.Context, provider *P, operation string, params map[string]any, token string) (*OperationResult, error) {
 	if r == nil {
 		return operationResult(http.StatusInternalServerError, routerNilMessage), nil
