@@ -1,13 +1,19 @@
 package authorization
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/emailutil"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
@@ -18,6 +24,8 @@ const (
 	defaultInstance  = "default"
 	defaultHumanRole = "viewer"
 )
+
+const defaultDynamicReloadInterval = 5 * time.Second
 
 var (
 	safeConnectionValue = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
@@ -55,20 +63,52 @@ type HumanPolicy struct {
 	RolesByEmail     map[string]string
 }
 
+type StaticHumanMember struct {
+	SubjectID string
+	Email     string
+	Role      string
+}
+
+type dynamicGrant struct {
+	UserID string
+	Email  string
+	Role   string
+}
+
+type dynamicSnapshot struct {
+	byPluginUserID map[string]map[string]dynamicGrant
+	byPluginEmail  map[string]map[string]dynamicGrant
+}
+
 type Authorizer struct {
 	workloadsByHash      map[string]*Workload
 	workloadsBySubjectID map[string]*Workload
 	policies             map[string]*HumanPolicy
 	providerPolicies     map[string]string
+	dynamicService       *coredata.PluginAuthorizationService
+	dynamicReloadEvery   time.Duration
+	dynamic              atomic.Pointer[dynamicSnapshot]
+	lifecycleMu          sync.Mutex
+	started              bool
+	closed               bool
+	pollCancel           context.CancelFunc
+	pollDone             chan struct{}
 }
 
-func New(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderEntry, providers *registry.ProviderMap[core.Provider], defaultConnections map[string]string) (*Authorizer, error) {
+func New(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderEntry, providers *registry.ProviderMap[core.Provider], defaultConnections map[string]string, dynamicServices ...*coredata.PluginAuthorizationService) (*Authorizer, error) {
+	var dynamicService *coredata.PluginAuthorizationService
+	if len(dynamicServices) > 0 {
+		dynamicService = dynamicServices[0]
+	}
 	a := &Authorizer{
 		workloadsByHash:      map[string]*Workload{},
 		workloadsBySubjectID: map[string]*Workload{},
 		policies:             map[string]*HumanPolicy{},
 		providerPolicies:     map[string]string{},
+		dynamicService:       dynamicService,
+		dynamicReloadEvery:   defaultDynamicReloadInterval,
 	}
+	a.dynamic.Store(emptyDynamicSnapshot())
 
 	for policyID, def := range cfg.Policies {
 		policy := &HumanPolicy{
@@ -150,6 +190,121 @@ func New(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderE
 	return a, nil
 }
 
+func (a *Authorizer) Start(ctx context.Context) error {
+	if a == nil || a.dynamicService == nil {
+		return nil
+	}
+
+	a.lifecycleMu.Lock()
+	defer a.lifecycleMu.Unlock()
+	if a.closed {
+		return fmt.Errorf("authorizer already closed")
+	}
+	if a.started {
+		return nil
+	}
+	if err := a.ReloadDynamic(ctx); err != nil {
+		return err
+	}
+
+	pollCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	a.pollCancel = cancel
+	a.pollDone = done
+	a.started = true
+	go a.pollLoop(pollCtx, done)
+	return nil
+}
+
+func (a *Authorizer) Close() error {
+	if a == nil {
+		return nil
+	}
+
+	a.lifecycleMu.Lock()
+	if a.closed {
+		a.lifecycleMu.Unlock()
+		return nil
+	}
+	cancel := a.pollCancel
+	done := a.pollDone
+	a.pollCancel = nil
+	a.pollDone = nil
+	a.closed = true
+	a.lifecycleMu.Unlock()
+
+	if cancel != nil {
+		cancel()
+	}
+	if done != nil {
+		<-done
+	}
+	return nil
+}
+
+func (a *Authorizer) HasDynamicAuthorizations() bool {
+	return a != nil && a.dynamicService != nil
+}
+
+func (a *Authorizer) ReloadDynamic(ctx context.Context) error {
+	if a == nil || a.dynamicService == nil {
+		return nil
+	}
+
+	grants, err := a.dynamicService.ListPluginAuthorizations(ctx)
+	if err != nil {
+		return fmt.Errorf("reload dynamic authorizations: %w", err)
+	}
+	snapshot := emptyDynamicSnapshot()
+	for _, grant := range grants {
+		if grant == nil {
+			continue
+		}
+		plugin := strings.TrimSpace(grant.Plugin)
+		userID := strings.TrimSpace(grant.UserID)
+		email := normalizeEmail(grant.Email)
+		role := strings.TrimSpace(grant.Role)
+		if plugin == "" || role == "" {
+			continue
+		}
+		if userID != "" {
+			byUserID := snapshot.byPluginUserID[plugin]
+			if byUserID == nil {
+				byUserID = map[string]dynamicGrant{}
+				snapshot.byPluginUserID[plugin] = byUserID
+			}
+			byUserID[userID] = dynamicGrant{UserID: userID, Email: email, Role: role}
+		}
+		if email != "" {
+			byEmail := snapshot.byPluginEmail[plugin]
+			if byEmail == nil {
+				byEmail = map[string]dynamicGrant{}
+				snapshot.byPluginEmail[plugin] = byEmail
+			}
+			byEmail[email] = dynamicGrant{UserID: userID, Email: email, Role: role}
+		}
+	}
+	a.dynamic.Store(snapshot)
+	return nil
+}
+
+func (a *Authorizer) pollLoop(ctx context.Context, done chan struct{}) {
+	defer close(done)
+	ticker := time.NewTicker(a.dynamicReloadEvery)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := a.ReloadDynamic(ctx); err != nil {
+				slog.WarnContext(ctx, "authorization: dynamic reload failed", "error", err)
+			}
+		}
+	}
+}
+
 func (a *Authorizer) ResolveWorkloadToken(token string) (*principal.ResolvedWorkload, bool) {
 	if a == nil {
 		return nil, false
@@ -198,8 +353,91 @@ func (a *Authorizer) Binding(p *principal.Principal, provider string) (Credentia
 }
 
 func (a *Authorizer) ResolveAccess(p *principal.Principal, provider string) (AccessContext, bool) {
+	if a == nil {
+		return AccessContext{}, true
+	}
 	policyName := strings.TrimSpace(a.providerPolicies[provider])
-	return a.ResolvePolicyAccess(p, policyName)
+	if policyName == "" {
+		return AccessContext{}, true
+	}
+	if a.IsWorkload(p) {
+		return a.ResolvePolicyAccess(p, policyName)
+	}
+
+	policy := a.policies[policyName]
+	if policy == nil {
+		return AccessContext{}, false
+	}
+
+	access := AccessContext{Policy: policyName}
+	if role, ok := policy.roleForPrincipal(p); ok {
+		access.Role = role
+		return access, true
+	}
+	if role, ok := a.dynamicRoleForPrincipal(provider, p); ok {
+		access.Role = role
+		return access, true
+	}
+	if policy.DefaultAllow {
+		access.Role = defaultHumanRole
+		return access, true
+	}
+	return access, false
+}
+
+func (a *Authorizer) PolicyNameForProvider(provider string) string {
+	if a == nil {
+		return ""
+	}
+	return strings.TrimSpace(a.providerPolicies[provider])
+}
+
+func (a *Authorizer) StaticRoleForProviderIdentity(provider, subjectID, userID, email string) (AccessContext, bool) {
+	if a == nil {
+		return AccessContext{}, false
+	}
+	policyName := a.PolicyNameForProvider(provider)
+	if policyName == "" {
+		return AccessContext{}, false
+	}
+	policy := a.policies[policyName]
+	if policy == nil {
+		return AccessContext{}, false
+	}
+	access := AccessContext{Policy: policyName}
+	if role, ok := policy.staticRoleForIdentity(subjectID, userID, email); ok {
+		access.Role = role
+		return access, true
+	}
+	return access, false
+}
+
+func (a *Authorizer) StaticMembersForProvider(provider string) (string, []StaticHumanMember, bool) {
+	if a == nil {
+		return "", nil, false
+	}
+	policyName := a.PolicyNameForProvider(provider)
+	if policyName == "" {
+		return "", nil, false
+	}
+	policy := a.policies[policyName]
+	if policy == nil {
+		return policyName, nil, false
+	}
+	members := make([]StaticHumanMember, 0, len(policy.RolesBySubjectID)+len(policy.RolesByEmail))
+	for subjectID, role := range policy.RolesBySubjectID {
+		members = append(members, StaticHumanMember{
+			SubjectID: subjectID,
+			Role:      role,
+		})
+	}
+	for email, role := range policy.RolesByEmail {
+		members = append(members, StaticHumanMember{
+			Email: email,
+			Role:  role,
+		})
+	}
+	return policyName, members, true
 }
 
 func (a *Authorizer) ResolvePolicyAccess(p *principal.Principal, policyName string) (AccessContext, bool) {
@@ -270,18 +508,29 @@ func (p *HumanPolicy) roleForPrincipal(pr *principal.Principal) (string, bool) {
 	if p == nil || pr == nil {
 		return "", false
 	}
-	if pr.SubjectID != "" {
-		if role, ok := p.RolesBySubjectID[pr.SubjectID]; ok {
-			return role, true
-		}
-	}
-	if pr.UserID != "" {
-		if role, ok := p.RolesBySubjectID[principal.UserSubjectID(pr.UserID)]; ok {
-			return role, true
-		}
-	}
+	email := ""
 	if pr.Identity != nil {
-		if role, ok := p.RolesByEmail[normalizeEmail(pr.Identity.Email)]; ok {
+		email = pr.Identity.Email
+	}
+	return p.staticRoleForIdentity(pr.SubjectID, pr.UserID, email)
+}
+
+func (p *HumanPolicy) staticRoleForIdentity(subjectID, userID, email string) (string, bool) {
+	if p == nil {
+		return "", false
+	}
+	if subjectID = strings.TrimSpace(subjectID); subjectID != "" {
+		if role, ok := p.RolesBySubjectID[subjectID]; ok {
+			return role, true
+		}
+	}
+	if userID = strings.TrimSpace(userID); userID != "" {
+		if role, ok := p.RolesBySubjectID[principal.UserSubjectID(userID)]; ok {
+			return role, true
+		}
+	}
+	if email = normalizeEmail(email); email != "" {
+		if role, ok := p.RolesByEmail[email]; ok {
 			return role, true
 		}
 	}
@@ -346,6 +595,42 @@ func normalizeAllowedOperations(ops []string) map[string]struct{} {
 		allowed[name] = struct{}{}
 	}
 	return allowed
+}
+
+func (a *Authorizer) dynamicRoleForPrincipal(provider string, p *principal.Principal) (string, bool) {
+	if a == nil || p == nil {
+		return "", false
+	}
+	snapshot := a.dynamic.Load()
+	if snapshot == nil {
+		return "", false
+	}
+	if p.UserID != "" {
+		if byUserID := snapshot.byPluginUserID[provider]; byUserID != nil {
+			if grant, ok := byUserID[p.UserID]; ok {
+				return grant.Role, true
+			}
+		}
+	}
+	email := ""
+	if p.Identity != nil {
+		email = p.Identity.Email
+	}
+	if email = normalizeEmail(email); email != "" {
+		if byEmail := snapshot.byPluginEmail[provider]; byEmail != nil {
+			if grant, ok := byEmail[email]; ok {
+				return grant.Role, true
+			}
+		}
+	}
+	return "", false
+}
+
+func emptyDynamicSnapshot() *dynamicSnapshot {
+	return &dynamicSnapshot{
+		byPluginUserID: map[string]map[string]dynamicGrant{},
+		byPluginEmail:  map[string]map[string]dynamicGrant{},
+	}
 }
 
 func normalizeEmail(email string) string {

@@ -85,6 +85,15 @@ func (s *UserService) FindOrCreateUser(ctx context.Context, email string) (*core
 	return recordToUser(newRec), nil
 }
 
+func (s *UserService) FindUserByEmail(ctx context.Context, email string) (*core.User, error) {
+	rawEmail := strings.TrimSpace(email)
+	email = emailutil.Normalize(email)
+	if email == "" {
+		return nil, fmt.Errorf("find user: email is required")
+	}
+	return s.findUserByNormalizedEmail(ctx, rawEmail, email)
+}
+
 func (s *UserService) findUserByNormalizedEmail(ctx context.Context, rawEmail, normalizedEmail string) (*core.User, error) {
 	recs, err := s.store.Index("by_normalized_email").GetAll(ctx, nil, normalizedEmail)
 	if err != nil {

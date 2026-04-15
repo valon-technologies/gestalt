@@ -253,7 +253,15 @@ func (s *Server) authorizeProtectedUIRequest(w http.ResponseWriter, r *http.Requ
 		return nil, false
 	}
 
-	access, allowed := s.authorizer.ResolvePolicyAccess(p, mounted.AuthorizationPolicy)
+	var (
+		access  invocation.AccessContext
+		allowed bool
+	)
+	if mounted.PluginName != "" {
+		access, allowed = s.authorizer.ResolveAccess(p, mounted.PluginName)
+	} else {
+		access, allowed = s.authorizer.ResolvePolicyAccess(p, mounted.AuthorizationPolicy)
+	}
 	if !allowed {
 		writeError(w, http.StatusForbidden, "app access denied")
 		return nil, false

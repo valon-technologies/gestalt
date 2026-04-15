@@ -43,6 +43,7 @@ type MountedWebUIRoute struct {
 type MountedWebUI struct {
 	Name                string
 	Path                string
+	PluginName          string
 	AuthorizationPolicy string
 	Routes              []MountedWebUIRoute
 	Handler             http.Handler
@@ -54,38 +55,39 @@ type AdminRouteConfig struct {
 }
 
 type Server struct {
-	router             chi.Router
-	handler            http.Handler
-	auth               core.AuthProvider
-	auditSink          core.AuditSink
-	users              *coredata.UserService
-	tokens             *coredata.TokenService
-	apiTokens          *coredata.APITokenService
-	providers          *registry.ProviderMap[core.Provider]
-	resolver           *principal.Resolver
-	invoker            invocation.Invoker
-	defaultConnection  map[string]string
-	catalogConnection  map[string]string
-	connectionAuth     func() map[string]map[string]bootstrap.OAuthHandler
-	pluginDefs         map[string]*config.ProviderEntry
-	authorizer         *authorization.Authorizer
-	noAuth             bool
-	anonymousPrincipal *principal.Principal
-	publicBaseURL      string
-	managementBaseURL  string
-	secureCookies      bool
-	encryptor          *cryptoutil.AESGCMEncryptor
-	sessionIssuer      []byte
-	stateCodec         *integrationOAuthStateCodec
-	apiTokenTTL        time.Duration
-	now                func() time.Time
-	readiness          ReadinessChecker
-	prometheusMetrics  http.Handler
-	mcpHandler         http.Handler
-	mountedWebUIs      []MountedWebUI
-	adminRoute         AdminRouteConfig
-	adminUI            http.Handler
-	routeProfile       RouteProfile
+	router               chi.Router
+	handler              http.Handler
+	auth                 core.AuthProvider
+	auditSink            core.AuditSink
+	users                *coredata.UserService
+	tokens               *coredata.TokenService
+	apiTokens            *coredata.APITokenService
+	pluginAuthorizations *coredata.PluginAuthorizationService
+	providers            *registry.ProviderMap[core.Provider]
+	resolver             *principal.Resolver
+	invoker              invocation.Invoker
+	defaultConnection    map[string]string
+	catalogConnection    map[string]string
+	connectionAuth       func() map[string]map[string]bootstrap.OAuthHandler
+	pluginDefs           map[string]*config.ProviderEntry
+	authorizer           *authorization.Authorizer
+	noAuth               bool
+	anonymousPrincipal   *principal.Principal
+	publicBaseURL        string
+	managementBaseURL    string
+	secureCookies        bool
+	encryptor            *cryptoutil.AESGCMEncryptor
+	sessionIssuer        []byte
+	stateCodec           *integrationOAuthStateCodec
+	apiTokenTTL          time.Duration
+	now                  func() time.Time
+	readiness            ReadinessChecker
+	prometheusMetrics    http.Handler
+	mcpHandler           http.Handler
+	mountedWebUIs        []MountedWebUI
+	adminRoute           AdminRouteConfig
+	adminUI              http.Handler
+	routeProfile         RouteProfile
 }
 
 type Config struct {
@@ -155,6 +157,7 @@ func New(cfg Config) (*Server, error) {
 	users := cfg.Services.Users
 	tokens := cfg.Services.Tokens
 	apiTokens := cfg.Services.APITokens
+	pluginAuthorizations := cfg.Services.PluginAuthorizations
 	resolver := principal.NewResolver(cfg.Auth, users, apiTokens, cfg.Authorizer)
 
 	router := chi.NewRouter()
@@ -163,37 +166,38 @@ func New(cfg Config) (*Server, error) {
 		otelOptions = append(otelOptions, otelhttp.WithMeterProvider(cfg.MeterProvider))
 	}
 	s := &Server{
-		router:            router,
-		handler:           withRequestMeterProvider(otelhttp.NewHandler(router, "gestaltd", otelOptions...), cfg.MeterProvider),
-		auth:              cfg.Auth,
-		auditSink:         cfg.AuditSink,
-		users:             users,
-		tokens:            tokens,
-		apiTokens:         apiTokens,
-		providers:         cfg.Providers,
-		resolver:          resolver,
-		invoker:           cfg.Invoker,
-		defaultConnection: cfg.DefaultConnection,
-		catalogConnection: cfg.CatalogConnection,
-		connectionAuth:    cfg.ConnectionAuth,
-		pluginDefs:        cfg.PluginDefs,
-		authorizer:        cfg.Authorizer,
-		noAuth:            noAuth,
-		publicBaseURL:     strings.TrimRight(cfg.PublicBaseURL, "/"),
-		managementBaseURL: strings.TrimRight(cfg.ManagementBaseURL, "/"),
-		secureCookies:     cfg.SecureCookies,
-		encryptor:         encryptor,
-		sessionIssuer:     cfg.StateSecret,
-		stateCodec:        stateCodec,
-		apiTokenTTL:       cfg.APITokenTTL,
-		now:               now,
-		readiness:         cfg.Readiness,
-		prometheusMetrics: cfg.PrometheusMetrics,
-		mcpHandler:        cfg.MCPHandler,
-		mountedWebUIs:     mountedWebUIs,
-		adminRoute:        adminRoute,
-		adminUI:           cfg.AdminUI,
-		routeProfile:      cfg.RouteProfile,
+		router:               router,
+		handler:              withRequestMeterProvider(otelhttp.NewHandler(router, "gestaltd", otelOptions...), cfg.MeterProvider),
+		auth:                 cfg.Auth,
+		auditSink:            cfg.AuditSink,
+		users:                users,
+		tokens:               tokens,
+		apiTokens:            apiTokens,
+		pluginAuthorizations: pluginAuthorizations,
+		providers:            cfg.Providers,
+		resolver:             resolver,
+		invoker:              cfg.Invoker,
+		defaultConnection:    cfg.DefaultConnection,
+		catalogConnection:    cfg.CatalogConnection,
+		connectionAuth:       cfg.ConnectionAuth,
+		pluginDefs:           cfg.PluginDefs,
+		authorizer:           cfg.Authorizer,
+		noAuth:               noAuth,
+		publicBaseURL:        strings.TrimRight(cfg.PublicBaseURL, "/"),
+		managementBaseURL:    strings.TrimRight(cfg.ManagementBaseURL, "/"),
+		secureCookies:        cfg.SecureCookies,
+		encryptor:            encryptor,
+		sessionIssuer:        cfg.StateSecret,
+		stateCodec:           stateCodec,
+		apiTokenTTL:          cfg.APITokenTTL,
+		now:                  now,
+		readiness:            cfg.Readiness,
+		prometheusMetrics:    cfg.PrometheusMetrics,
+		mcpHandler:           cfg.MCPHandler,
+		mountedWebUIs:        mountedWebUIs,
+		adminRoute:           adminRoute,
+		adminUI:              cfg.AdminUI,
+		routeProfile:         cfg.RouteProfile,
 	}
 	if noAuth {
 		s.anonymousPrincipal = resolver.ResolveEmail(anonymousEmail)
