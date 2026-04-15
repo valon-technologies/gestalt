@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -42,6 +43,8 @@ type putAdminAuthorizationMemberRequest struct {
 	Email string `json:"email"`
 	Role  string `json:"role"`
 }
+
+const adminAuthorizationCanWriteHeader = "X-Gestalt-Can-Write"
 
 func (s *Server) mountAdminAuthorizationRoutes(r chi.Router) {
 	r.Get("/authorization/admins/members", s.listAdminAuthorizationAdminMembers)
@@ -256,6 +259,8 @@ func (s *Server) listAdminAuthorizationAdminMembers(w http.ResponseWriter, r *ht
 		writeError(w, http.StatusInternalServerError, "failed to list admin members")
 		return
 	}
+	access := invocation.AccessContextFromContext(r.Context())
+	w.Header().Set(adminAuthorizationCanWriteHeader, strconv.FormatBool(s.adminRoleCanMutate(access.Role)))
 	writeJSON(w, http.StatusOK, rows)
 }
 

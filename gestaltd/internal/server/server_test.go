@@ -1491,9 +1491,14 @@ func TestBuiltInAdminRoute_EmbeddedAdminUIIncludesAuthorizationWorkspace(t *test
 		"Authorization rules",
 		`data-tab="authorization"`,
 		`data-tab-panel="authorization"`,
+		`data-tab="admins"`,
+		`data-tab-panel="admins"`,
 		"/admin/api/v1/authorization/plugins",
+		"/admin/api/v1/authorization/admins/members",
 		`window.__gestaltAdminShell.loginBase = "/api/v1/auth/login"`,
 		"Save dynamic grant",
+		"Save admin grant",
+		"Built-in admin members",
 		"window.history.replaceState",
 		"Prometheus telemetry",
 	} {
@@ -1587,6 +1592,9 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		t.Fatalf("dynamic admin api status = %d, want 200: %s", resp.StatusCode, body)
+	}
+	if got := resp.Header.Get("X-Gestalt-Can-Write"); got != "true" {
+		t.Fatalf("dynamic admin can-write header = %q, want true", got)
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/plugins", nil)
@@ -2110,11 +2118,26 @@ func TestAdminAPI_AdminAuthorizationWriteUsesAllowedAdminRoles(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	body := bytes.NewBufferString(`{"email":"viewer@example.test","role":"ops-admin"}`)
-	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/admins/members", body)
-	req.Header.Set("Content-Type", "application/json")
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/admins/members", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "ops-admin-session"})
 	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("ops-admin GET admin members: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("ops-admin get admin members status = %d, want 200: %s", resp.StatusCode, respBody)
+	}
+	if got := resp.Header.Get("X-Gestalt-Can-Write"); got != "true" {
+		t.Fatalf("ops-admin can-write header = %q, want true", got)
+	}
+
+	body := bytes.NewBufferString(`{"email":"viewer@example.test","role":"ops-admin"}`)
+	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/admins/members", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "ops-admin-session"})
+	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("ops-admin PUT admin member: %v", err)
 	}
