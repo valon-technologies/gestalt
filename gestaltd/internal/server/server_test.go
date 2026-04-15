@@ -15,6 +15,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -3060,6 +3061,9 @@ func TestListIntegrations_IncludesMountedPath(t *testing.T) {
 	t.Parallel()
 
 	stub := &coretesting.StubIntegration{N: "github", DN: "GitHub"}
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, stub)
 		cfg.PluginDefs = map[string]*config.ProviderEntry{
@@ -3067,6 +3071,12 @@ func TestListIntegrations_IncludesMountedPath(t *testing.T) {
 				MountPath: "/github",
 			},
 		}
+		cfg.MountedWebUIs = []server.MountedWebUI{{
+			Name:       "github",
+			PluginName: "github",
+			Path:       "/github",
+			Handler:    handler,
+		}}
 		cfg.Services = coretesting.NewStubServices(t)
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -3100,6 +3110,170 @@ func TestListIntegrations_IncludesMountedPath(t *testing.T) {
 	}
 }
 
+func TestListIntegrations_HumanAuthorizationFiltersByMountedUIAccessAndVisibleOperations(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	viewer := seedUser(t, svc, "viewer@example.test")
+	policyMembers := []config.HumanPolicyMemberDef{
+		{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
+	}
+
+	opsVisibleProvider := &stubNonOAuthProvider{
+		name: "ops-visible",
+		catalog: serverTestCatalog("ops-visible", []catalog.CatalogOperation{{
+			ID:           "list",
+			Method:       http.MethodGet,
+			Path:         "/list",
+			Transport:    catalog.TransportREST,
+			AllowedRoles: []string{"viewer"},
+		}}),
+	}
+	settingsVisibleProvider := &stubIntegrationWithCatalog{
+		StubIntegration: coretesting.StubIntegration{N: "settings-visible", DN: "Settings Visible"},
+		catalog: serverTestCatalog("settings-visible", []catalog.CatalogOperation{{
+			ID:           "sync",
+			Method:       http.MethodPost,
+			Transport:    catalog.TransportMCPPassthrough,
+			AllowedRoles: []string{"viewer"},
+		}}),
+	}
+	uiVisibleProvider := &stubNonOAuthProvider{
+		name: "ui-visible",
+		catalog: serverTestCatalog("ui-visible", []catalog.CatalogOperation{{
+			ID:           "sync",
+			Method:       http.MethodPost,
+			Transport:    catalog.TransportMCPPassthrough,
+			AllowedRoles: []string{"viewer"},
+		}}),
+	}
+	hiddenProvider := &stubNonOAuthProvider{
+		name: "hidden",
+		catalog: serverTestCatalog("hidden", []catalog.CatalogOperation{{
+			ID:           "sync",
+			Method:       http.MethodPost,
+			Transport:    catalog.TransportMCPPassthrough,
+			AllowedRoles: []string{"viewer"},
+		}}),
+	}
+	providers := testutil.NewProviderRegistry(t, opsVisibleProvider, settingsVisibleProvider, uiVisibleProvider, hiddenProvider)
+	pluginDefs := map[string]*config.ProviderEntry{
+		"ops-visible":      {MountPath: "/ops-visible", AuthorizationPolicy: "sample_policy"},
+		"settings-visible": {MountPath: "/settings-visible", AuthorizationPolicy: "sample_policy"},
+		"ui-visible":       {MountPath: "/ui-visible", AuthorizationPolicy: "sample_policy"},
+		"hidden":           {MountPath: "/hidden", AuthorizationPolicy: "sample_policy"},
+	}
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "deny",
+				Members: policyMembers,
+			},
+		},
+	}, providers, pluginDefs, nil)
+
+	handler := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "viewer-session" {
+					return nil, fmt.Errorf("invalid token")
+				}
+				return &core.UserIdentity{Email: "viewer@example.test"}, nil
+			},
+		}
+		cfg.Providers = providers
+		cfg.PluginDefs = pluginDefs
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.MountedWebUIs = []server.MountedWebUI{
+			{
+				Name:                "ops-visible",
+				PluginName:          "ops-visible",
+				Path:                "/ops-visible",
+				AuthorizationPolicy: "sample_policy",
+				Routes: []server.MountedWebUIRoute{
+					{Path: "/*", AllowedRoles: []string{"admin"}},
+				},
+				Handler: handler,
+			},
+			{
+				Name:                "settings-visible",
+				PluginName:          "settings-visible",
+				Path:                "/settings-visible",
+				AuthorizationPolicy: "sample_policy",
+				Routes: []server.MountedWebUIRoute{
+					{Path: "/*", AllowedRoles: []string{"admin"}},
+				},
+				Handler: handler,
+			},
+			{
+				Name:                "ui-visible",
+				PluginName:          "ui-visible",
+				Path:                "/ui-visible",
+				AuthorizationPolicy: "sample_policy",
+				Routes: []server.MountedWebUIRoute{
+					{Path: "/*", AllowedRoles: []string{"viewer"}},
+				},
+				Handler: handler,
+			},
+			{
+				Name:                "hidden",
+				PluginName:          "hidden",
+				Path:                "/hidden",
+				AuthorizationPolicy: "sample_policy",
+				Routes: []server.MountedWebUIRoute{
+					{Path: "/*", AllowedRoles: []string{"admin"}},
+				},
+				Handler: handler,
+			},
+		}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req.Header.Set("Authorization", "Bearer viewer-session")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	var integrations []struct {
+		Name        string `json:"name"`
+		MountedPath string `json:"mountedPath"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+
+	got := make(map[string]string, len(integrations))
+	for _, integration := range integrations {
+		got[integration.Name] = integration.MountedPath
+	}
+
+	if !reflect.DeepEqual(sortedKeys(got), []string{"ops-visible", "settings-visible", "ui-visible"}) {
+		t.Fatalf("integration names = %v, want %v", sortedKeys(got), []string{"ops-visible", "settings-visible", "ui-visible"})
+	}
+	if got["ops-visible"] != "" {
+		t.Fatalf("ops-visible mounted path = %q, want empty", got["ops-visible"])
+	}
+	if got["settings-visible"] != "" {
+		t.Fatalf("settings-visible mounted path = %q, want empty", got["settings-visible"])
+	}
+	if got["ui-visible"] != "/ui-visible" {
+		t.Fatalf("ui-visible mounted path = %q, want /ui-visible", got["ui-visible"])
+	}
+}
+
 func TestWorkloadAuthorization_ListIntegrationsFiltersAndHidesConnectionAffordances(t *testing.T) {
 	t.Parallel()
 
@@ -3119,18 +3293,27 @@ func TestWorkloadAuthorization_ListIntegrationsFiltersAndHidesConnectionAffordan
 		StubIntegration: coretesting.StubIntegration{N: "weather", DN: "Weather", ConnMode: core.ConnectionModeNone},
 		ops:             []core.Operation{{Name: "forecast", Method: http.MethodGet}},
 	}
+	mcpOnlyProvider := &stubIntegrationWithCatalog{
+		StubIntegration: coretesting.StubIntegration{N: "mcp-only", DN: "MCP Only", ConnMode: core.ConnectionModeNone},
+		catalog: serverTestCatalog("mcp-only", []catalog.CatalogOperation{{
+			ID:        "inspect",
+			Method:    http.MethodPost,
+			Transport: catalog.TransportMCPPassthrough,
+		}}),
+	}
 	secretProvider := &stubIntegrationWithOps{
 		StubIntegration: coretesting.StubIntegration{N: "secret", DN: "Secret", ConnMode: core.ConnectionModeNone},
 		ops:             []core.Operation{{Name: "peek", Method: http.MethodGet}},
 	}
-	providers := testutil.NewProviderRegistry(t, svcProvider, weatherProvider, secretProvider)
+	providers := testutil.NewProviderRegistry(t, svcProvider, weatherProvider, mcpOnlyProvider, secretProvider)
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
 		Workloads: map[string]config.WorkloadDef{
 			"triage-bot": {
 				Token: workloadToken,
 				Providers: map[string]config.WorkloadProviderDef{
-					"svc":     {Allow: []string{"run"}},
-					"weather": {Allow: []string{"forecast"}},
+					"svc":      {Allow: []string{"run"}},
+					"weather":  {Allow: []string{"forecast"}},
+					"mcp-only": {Allow: []string{"inspect"}},
 				},
 			},
 		},
@@ -3201,6 +3384,9 @@ func TestWorkloadAuthorization_ListIntegrationsFiltersAndHidesConnectionAffordan
 	}
 	if _, ok := got["secret"]; ok {
 		t.Fatalf("unauthorized integration was visible: %+v", integrations)
+	}
+	if _, ok := got["mcp-only"]; ok {
+		t.Fatalf("mcp-only integration should not be visible over HTTP: %+v", integrations)
 	}
 	if !got["svc"].Connected {
 		t.Fatalf("expected bound identity integration to be connected, got %+v", got["svc"])
@@ -3453,7 +3639,10 @@ func TestListIntegrations_AuthTypes(t *testing.T) {
 	manualStub := &stubManualProvider{
 		StubIntegration: coretesting.StubIntegration{N: "manual-svc", DN: "Manual Service"},
 	}
-	mcpStub := &stubNonOAuthProvider{name: "clickhouse"}
+	mcpStub := &stubNonOAuthProvider{
+		name: "clickhouse",
+		ops:  []core.Operation{{Name: "query", Method: http.MethodGet}},
+	}
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Providers = testutil.NewProviderRegistry(t, oauthStub, manualStub, mcpStub)
 		cfg.Services = coretesting.NewStubServices(t)
@@ -3967,6 +4156,7 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 				Ref:     "github.com/acme/plugins/clickhouse",
 				Version: "1.0.0",
 			},
+			MountPath: "/clickhouse",
 			ResolvedManifest: &providermanifestv1.Manifest{
 				Spec: &providermanifestv1.Spec{
 					Surfaces: &providermanifestv1.ProviderSurfaces{
@@ -3984,6 +4174,14 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 				"clickhouse": plugin,
 			}
 			cfg.Services = coretesting.NewStubServices(t)
+			cfg.MountedWebUIs = []server.MountedWebUI{{
+				Name:       "clickhouse",
+				PluginName: "clickhouse",
+				Path:       "/clickhouse",
+				Handler: http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+					w.WriteHeader(http.StatusOK)
+				}),
+			}}
 		})
 		testutil.CloseOnCleanup(t, ts)
 
@@ -8921,9 +9119,10 @@ func (s *stubOAuthIntegration) RefreshToken(ctx context.Context, token string) (
 
 // stubNonOAuthProvider implements core.Provider but NOT core.OAuthProvider.
 type stubNonOAuthProvider struct {
-	name   string
-	ops    []core.Operation
-	execFn func(context.Context, string, map[string]any, string) (*core.OperationResult, error)
+	name    string
+	ops     []core.Operation
+	catalog *catalog.Catalog
+	execFn  func(context.Context, string, map[string]any, string) (*core.OperationResult, error)
 }
 
 func (s *stubNonOAuthProvider) Name() string                        { return s.name }
@@ -8931,6 +9130,9 @@ func (s *stubNonOAuthProvider) DisplayName() string                 { return s.n
 func (s *stubNonOAuthProvider) Description() string                 { return "" }
 func (s *stubNonOAuthProvider) ConnectionMode() core.ConnectionMode { return core.ConnectionModeUser }
 func (s *stubNonOAuthProvider) Catalog() *catalog.Catalog {
+	if s.catalog != nil {
+		return s.catalog
+	}
 	return serverTestCatalogFromOperations(s.name, s.ops)
 }
 func (s *stubNonOAuthProvider) Execute(ctx context.Context, op string, params map[string]any, token string) (*core.OperationResult, error) {
@@ -8967,6 +9169,24 @@ func serverTestCatalogFromOperations(name string, ops []core.Operation) *catalog
 	}
 	coreintegration.CompileSchemas(cat)
 	return cat
+}
+
+func serverTestCatalog(name string, ops []catalog.CatalogOperation) *catalog.Catalog {
+	cat := &catalog.Catalog{
+		Name:       name,
+		Operations: append([]catalog.CatalogOperation(nil), ops...),
+	}
+	coreintegration.CompileSchemas(cat)
+	return cat
+}
+
+func sortedKeys[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for key := range m {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+	return keys
 }
 
 func TestExecuteOperation_RefreshesExpiredToken(t *testing.T) {

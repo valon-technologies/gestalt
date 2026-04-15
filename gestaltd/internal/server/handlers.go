@@ -175,6 +175,10 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 				}
 				info.Connected = bindingConnected
 			}
+			info.MountedPath = s.integrationMountedPathForPrincipal(p, name, info.MountedPath)
+			if !s.integrationHasUsableSurface(p, name, prov, info) {
+				continue
+			}
 			out = append(out, info)
 			continue
 		}
@@ -208,6 +212,10 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 			authTypes = []string{}
 		}
 		info.AuthTypes = authTypes
+		info.MountedPath = s.integrationMountedPathForPrincipal(p, name, info.MountedPath)
+		if !s.integrationHasUsableSurface(p, name, prov, info) {
+			continue
+		}
 		out = append(out, info)
 	}
 	writeJSON(w, http.StatusOK, out)
