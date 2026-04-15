@@ -9,12 +9,12 @@ import { Callout } from 'nextra/components'
 | Command | Purpose |
 | --- | --- |
 | `gestaltd` | Local-friendly startup. Generates a config if needed and serves. |
-| `gestaltd serve --config PATH` | Start the server. |
-| `gestaltd serve --locked --config PATH` | Start from lock state. Uses prepared artifacts when present and can materialize missing artifacts from the lockfile. |
+| `gestaltd serve --config PATH` | Start the server. Repeat `--config` to layer overrides. |
+| `gestaltd serve --locked --config PATH` | Start from lock state. Uses prepared artifacts when present and can materialize missing artifacts from the lockfile. Repeat `--config` to layer overrides. |
 | `gestaltd serve --artifacts-dir DIR` | Directory for prepared provider artifacts. |
-| `gestaltd init --config PATH` | Resolve published plugin sources and write lock state. |
+| `gestaltd init --config PATH` | Resolve published plugin sources and write lock state. Repeat `--config` to layer overrides. |
 | `gestaltd init --artifacts-dir DIR` | Directory for prepared provider artifacts. |
-| `gestaltd validate --config PATH` | Validate config without serving. |
+| `gestaltd validate --config PATH` | Validate config without serving. Repeat `--config` to layer overrides. |
 | `gestaltd validate --artifacts-dir DIR` | Directory for prepared provider artifacts. |
 | `gestaltd --version` | Print the server version. |
 
@@ -39,9 +39,16 @@ gestaltd
 gestaltd init --config ./config.yaml
 gestaltd serve --locked --config ./config.yaml
 gestaltd validate --config ./config.yaml
+gestaltd init --config ./base.yaml --config ./overrides/local.yaml
+gestaltd serve --locked --config ./base.yaml --config ./overrides/prod.yaml
 gestaltd provider release --version 0.0.1-alpha.1
 gestaltd provider release --version 0.0.1-alpha.1 --platform all
 gestaltd provider release --version 0.0.1-alpha.1 --platform linux/amd64,linux/arm64
 ```
+
+When repeated, `--config` files merge left-to-right. Maps deep-merge, later
+scalar values win, lists replace inherited lists, and `null` deletes inherited
+keys. Lockfiles and default artifact paths stay rooted at the leftmost config
+file.
 
 See [Configuration](/configuration) for the relationship between `init`, `serve --locked`, and `validate`.

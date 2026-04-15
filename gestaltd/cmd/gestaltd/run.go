@@ -30,6 +30,17 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 )
 
+type repeatedStringFlag []string
+
+func (f *repeatedStringFlag) String() string {
+	return strings.Join(*f, ",")
+}
+
+func (f *repeatedStringFlag) Set(value string) error {
+	*f = append(*f, value)
+	return nil
+}
+
 func run(args []string) error {
 	if len(args) > 0 {
 		switch args[0] {
@@ -62,7 +73,8 @@ func runDefaultServe(args []string) error {
 func runServe(args []string) error {
 	fs := flag.NewFlagSet("gestaltd serve", flag.ContinueOnError)
 	fs.Usage = func() { printServeUsage(fs.Output()) }
-	configPath := fs.String("config", "", "path to config file")
+	var configPaths repeatedStringFlag
+	fs.Var(&configPaths, "config", "path to config file (repeat to layer overrides)")
 	artifactsDir := fs.String("artifacts-dir", "", "path to writable prepared-artifacts directory")
 	locked := fs.Bool("locked", false, "require exact lock state; do not auto-init")
 	if err := fs.Parse(args); err != nil {
@@ -72,7 +84,7 @@ func runServe(args []string) error {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
 	}
 
-	env, err := setupBootstrapWithArtifactsDir(*configPath, *artifactsDir, *locked)
+	env, err := setupBootstrapWithArtifactsDir(configPaths, *artifactsDir, *locked)
 	if err != nil {
 		return err
 	}
@@ -82,7 +94,8 @@ func runServe(args []string) error {
 func runStartCommand(name string, usage func(io.Writer), args []string, locked bool, autoGenerate bool) error {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.Usage = func() { usage(fs.Output()) }
-	configPath := fs.String("config", "", "path to config file")
+	var configPaths repeatedStringFlag
+	fs.Var(&configPaths, "config", "path to config file (repeat to layer overrides)")
 	artifactsDir := fs.String("artifacts-dir", "", "path to writable prepared-artifacts directory")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -91,19 +104,19 @@ func runStartCommand(name string, usage func(io.Writer), args []string, locked b
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
 	}
 
-	if autoGenerate && *configPath == "" {
-		resolved := resolveConfigPath("")
+	if autoGenerate && len(configPaths) == 0 {
+		resolved := resolvePrimaryConfigPath(nil)
 		if _, err := os.Stat(resolved); os.IsNotExist(err) {
 			if p := operator.DefaultLocalConfigPath(); p != "" {
 				generated, genErr := operator.GenerateDefaultConfig(filepath.Dir(p))
 				if genErr == nil {
-					*configPath = generated
+					configPaths = append(configPaths, generated)
 				}
 			}
 		}
 	}
 
-	env, err := setupBootstrapWithArtifactsDir(*configPath, *artifactsDir, locked)
+	env, err := setupBootstrapWithArtifactsDir(configPaths, *artifactsDir, locked)
 	if err != nil {
 		return err
 	}
@@ -455,7 +468,8 @@ func (s mcpSurface) handler(result *bootstrap.Result, invoker invocation.Invoker
 func runInit(args []string) error {
 	fs := flag.NewFlagSet("gestaltd init", flag.ContinueOnError)
 	fs.Usage = func() { printInitUsage(fs.Output()) }
-	configPath := fs.String("config", "", "path to config file")
+	var configPaths repeatedStringFlag
+	fs.Var(&configPaths, "config", "path to config file (repeat to layer overrides)")
 	artifactsDir := fs.String("artifacts-dir", "", "path to writable prepared-artifacts directory")
 	platformFlag := fs.String("platform", "", "additional platforms to verify hashes for (comma-separated os/arch[/libc] or \"all\")")
 	if err := fs.Parse(args); err != nil {
@@ -465,13 +479,14 @@ func runInit(args []string) error {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
 	}
 
-	return initConfigWithArtifactsDir(*configPath, *artifactsDir, *platformFlag)
+	return initConfigWithArtifactsDir(configPaths, *artifactsDir, *platformFlag)
 }
 
 func runValidate(args []string) error {
 	fs := flag.NewFlagSet("gestaltd validate", flag.ContinueOnError)
 	fs.Usage = func() { printValidateUsage(fs.Output()) }
-	configPath := fs.String("config", "", "path to config file")
+	var configPaths repeatedStringFlag
+	fs.Var(&configPaths, "config", "path to config file (repeat to layer overrides)")
 	artifactsDir := fs.String("artifacts-dir", "", "path to writable prepared-artifacts directory")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -480,11 +495,11 @@ func runValidate(args []string) error {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
 	}
 
-	return validateConfigWithArtifactsDir(*configPath, *artifactsDir)
+	return validateConfigWithArtifactsDir(configPaths, *artifactsDir)
 }
 
-func validateConfigWithArtifactsDir(configFlag, artifactsDir string) error {
-	path, cfg, err := loadConfigForExecutionWithArtifactsDir(configFlag, artifactsDir, true)
+func validateConfigWithArtifactsDir(configFlags []string, artifactsDir string) error {
+	paths, cfg, err := loadConfigForExecutionWithArtifactsDir(configFlags, artifactsDir, true)
 	if err != nil {
 		return err
 	}
@@ -494,7 +509,7 @@ func validateConfigWithArtifactsDir(configFlag, artifactsDir string) error {
 		return err
 	}
 
-	logConfigSummary(path, cfg)
+	logConfigSummary(paths, cfg)
 	for _, w := range warnings {
 		slog.Warn(w)
 	}
@@ -502,9 +517,9 @@ func validateConfigWithArtifactsDir(configFlag, artifactsDir string) error {
 	return nil
 }
 
-func logConfigSummary(path string, cfg *config.Config) {
+func logConfigSummary(paths []string, cfg *config.Config) {
 	slog.Info("config loaded",
-		"config_file", path,
+		"config_files", paths,
 		"server_port", cfg.Server.PublicListener().Port,
 		"server_public_addr", cfg.Server.PublicAddr(),
 		"server_management_addr", maskEmpty(cfg.Server.ManagementAddr()),
@@ -561,11 +576,11 @@ func maskEmpty(s string) string {
 
 func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd [--config PATH] [--artifacts-dir PATH]")
-	writeUsageLine(w, "  gestaltd init [--config PATH] [--artifacts-dir PATH] [--platform PLATFORMS]")
-	writeUsageLine(w, "  gestaltd serve [--config PATH] [--artifacts-dir PATH] [--locked]")
+	writeUsageLine(w, "  gestaltd [--config PATH]... [--artifacts-dir PATH]")
+	writeUsageLine(w, "  gestaltd init [--config PATH]... [--artifacts-dir PATH] [--platform PLATFORMS]")
+	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--locked]")
 	writeUsageLine(w, "  gestaltd provider <command> [flags]")
-	writeUsageLine(w, "  gestaltd validate [--config PATH] [--artifacts-dir PATH]")
+	writeUsageLine(w, "  gestaltd validate [--config PATH]... [--artifacts-dir PATH]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Commands:")
 	writeUsageLine(w, "  init        Resolve providers and plugins and write lock state")
@@ -575,23 +590,25 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "  version     Print the version and exit")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")
-	writeUsageLine(w, "  --config          Path to the config file")
+	writeUsageLine(w, "  --config          Path to a config file; repeat to layer left-to-right")
 	writeUsageLine(w, "  --artifacts-dir   Path to writable prepared-artifacts directory")
 }
 
 func printServeUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd serve [--config PATH] [--artifacts-dir PATH] [--locked]")
+	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--locked]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Start the server. Auto-inits if lock state is missing or stale.")
 	writeUsageLine(w, "For production, strongly prefer --locked so startup uses the pinned")
 	writeUsageLine(w, "lockfile state instead of resolving new artifacts or mutating state.")
 	writeUsageLine(w, "When locked, run `gestaltd init` first to prepare artifacts.")
+	writeUsageLine(w, "When repeated, --config files merge left-to-right. Maps deep-merge,")
+	writeUsageLine(w, "later scalars win, lists replace, and null deletes inherited keys.")
 }
 
 func printInitUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd init [--config PATH] [--artifacts-dir PATH] [--platform PLATFORMS]")
+	writeUsageLine(w, "  gestaltd init [--config PATH]... [--artifacts-dir PATH] [--platform PLATFORMS]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Resolve managed plugin sources and write lock state.")
 	writeUsageLine(w, "Creates gestalt.lock.json in the config directory and prepared artifacts")
@@ -599,18 +616,20 @@ func printInitUsage(w io.Writer) {
 	writeUsageLine(w, "discovered platforms and verified SHA256 hashes for the current platform.")
 	writeUsageLine(w, "Use --platform to pre-verify hashes for additional deploy targets.")
 	writeUsageLine(w, "Use this before `gestaltd serve --locked` for production deployments.")
+	writeUsageLine(w, "When repeated, --config files merge left-to-right.")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")
-	writeUsageLine(w, "  --config          Path to the config file")
+	writeUsageLine(w, "  --config          Path to a config file; repeat to layer left-to-right")
 	writeUsageLine(w, "  --artifacts-dir   Path to writable prepared-artifacts directory")
 	writeUsageLine(w, "  --platform        Additional platforms to verify (comma-separated os/arch[/libc] or \"all\")")
 }
 
 func printValidateUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd validate [--config PATH] [--artifacts-dir PATH]")
+	writeUsageLine(w, "  gestaltd validate [--config PATH]... [--artifacts-dir PATH]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Validate configuration without starting the server or running migrations.")
+	writeUsageLine(w, "Repeated --config flags merge left-to-right.")
 }
 
 func writeUsageLine(w io.Writer, line string) {

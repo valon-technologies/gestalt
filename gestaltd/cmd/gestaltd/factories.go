@@ -35,8 +35,8 @@ type bootstrapEnv struct {
 	prevLogger *slog.Logger
 }
 
-func setupBootstrapWithArtifactsDir(configFlag, artifactsDir string, locked bool) (*bootstrapEnv, error) {
-	_, cfg, err := loadConfigForExecutionWithArtifactsDir(configFlag, artifactsDir, locked)
+func setupBootstrapWithArtifactsDir(configFlags []string, artifactsDir string, locked bool) (*bootstrapEnv, error) {
+	_, cfg, err := loadConfigForExecutionWithArtifactsDir(configFlags, artifactsDir, locked)
 	if err != nil {
 		return nil, err
 	}
@@ -126,25 +126,33 @@ func buildFactories() *bootstrap.FactoryRegistry {
 	return factories
 }
 
-func resolveConfigPath(flagValue string) string {
-	if flagValue != "" {
-		return flagValue
+func resolveConfigPaths(flagValues []string) []string {
+	if len(flagValues) > 0 {
+		return append([]string(nil), flagValues...)
 	}
 	if envPath := os.Getenv("GESTALT_CONFIG"); envPath != "" {
-		return envPath
+		return []string{envPath}
 	}
 	if _, err := os.Stat("config.yaml"); err == nil {
-		return "config.yaml"
+		return []string{"config.yaml"}
 	}
 	for _, p := range operator.LocalConfigPaths() {
 		if p == "" {
 			continue
 		}
 		if _, err := os.Stat(p); err == nil {
-			return p
+			return []string{p}
 		}
 	}
-	return operator.DefaultLocalConfigPath()
+	return []string{operator.DefaultLocalConfigPath()}
+}
+
+func resolvePrimaryConfigPath(flagValues []string) string {
+	configPaths := resolveConfigPaths(flagValues)
+	if len(configPaths) == 0 {
+		return ""
+	}
+	return configPaths[0]
 }
 
 const gracefulShutdownTimeout = 15 * time.Second

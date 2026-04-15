@@ -185,6 +185,63 @@ params:
 	}
 }
 
+func TestE2EValidateRejectsUnknownYAMLFieldInOverriddenAwayBranch(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name            string
+		baseServerExtra string
+		overrideCfg     string
+	}{
+		{
+			name: "masked branch still fails",
+			overrideCfg: `plugins:
+  example: null
+`,
+		},
+		{
+			name:            "masked branch still fails when base has unrelated missing env fixed later",
+			baseServerExtra: "  baseUrl: ${GESTALT_TEST_BASE_URL}\n",
+			overrideCfg: `server:
+  baseUrl: https://example.test
+plugins:
+  example: null
+`,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			basePath := filepath.Join(dir, "base.yaml")
+			overridePath := filepath.Join(dir, "override.yaml")
+			baseCfg := "server:\n  encryptionKey: test-key\n" + tc.baseServerExtra + authIndexedDBConfigYAML(t, dir, "local", "sqlite", filepath.Join(dir, "gestalt.db")) + `plugins:
+  example:
+    source:
+      path: /tmp/manifest.yaml
+    dispalyName: Example
+`
+			if err := os.WriteFile(basePath, []byte(baseCfg), 0o644); err != nil {
+				t.Fatalf("WriteFile base config: %v", err)
+			}
+			if err := os.WriteFile(overridePath, []byte(tc.overrideCfg), 0o644); err != nil {
+				t.Fatalf("WriteFile override config: %v", err)
+			}
+
+			out, err := exec.Command(gestaltdBin, "validate", "--config", basePath, "--config", overridePath).CombinedOutput()
+			if err == nil {
+				t.Fatalf("expected validate to fail for masked unknown field, output: %s", out)
+			}
+			if !strings.Contains(string(out), "dispalyName") || !strings.Contains(string(out), "parsing config YAML") {
+				t.Fatalf("expected output to mention dispalyName and YAML parsing, got: %s", out)
+			}
+		})
+	}
+}
+
 //nolint:paralleltest // Spawns the CLI binary; keeping it serial avoids package-level e2e flake.
 func TestE2EValidateRejectsMalformedYAML(t *testing.T) {
 	dir := t.TempDir()
@@ -272,6 +329,70 @@ func TestE2EValidateRejectsMalformedStructuredSecretRef(t *testing.T) {
 				t.Fatalf("expected output to mention %q, got: %s", tc.wantError, out)
 			}
 		})
+	}
+}
+
+func TestE2EValidateAcceptsLayeredConfigs(t *testing.T) {
+	t.Parallel()
+
+	rootDir := t.TempDir()
+	baseDir := filepath.Join(rootDir, "base")
+	overrideDir := filepath.Join(rootDir, "overrides")
+	if err := os.MkdirAll(baseDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll base: %v", err)
+	}
+	if err := os.MkdirAll(overrideDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll overrides: %v", err)
+	}
+
+	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, rootDir))
+	setupPluginDir(t, overrideDir)
+
+	baseConfigPath := filepath.Join(baseDir, "base.yaml")
+	baseConfig := fmt.Sprintf(`server:
+  encryptionKey: test-key
+  providers:
+    indexeddb: sqlite
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: %s
+      config:
+        path: %q
+plugins:
+  example:
+    source:
+      path: ./missing/manifest.yaml
+`, indexedDBManifest, filepath.Join(rootDir, "gestalt.db"))
+	if err := os.WriteFile(baseConfigPath, []byte(baseConfig), 0o644); err != nil {
+		t.Fatalf("WriteFile base config: %v", err)
+	}
+
+	overrideConfigPath := filepath.Join(overrideDir, "local.yaml")
+	overrideConfig := `plugins:
+  example:
+    source:
+      path: ./plugin-src/manifest.yaml
+`
+	if err := os.WriteFile(overrideConfigPath, []byte(overrideConfig), 0o644); err != nil {
+		t.Fatalf("WriteFile override config: %v", err)
+	}
+
+	out, err := exec.Command(gestaltdBin, "validate", "--config", baseConfigPath).CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected base config validate to fail, output: %s", out)
+	}
+	if !strings.Contains(string(out), "missing/manifest.yaml") {
+		t.Fatalf("expected base config failure to mention missing manifest, got: %s", out)
+	}
+
+	out, err = exec.Command(gestaltdBin, "validate", "--config", baseConfigPath, "--config", overrideConfigPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("expected layered config validate to succeed: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "config ok") {
+		t.Fatalf("expected layered config output to mention success, got: %s", out)
 	}
 }
 
@@ -624,23 +745,34 @@ plugins:
 	return cfgPath
 }
 
-func startGestaltdWithConfig(t *testing.T, cfgPath string) string {
+func startGestaltdWithConfigs(t *testing.T, cfgPaths []string, locked bool) string {
 	t.Helper()
+	if len(cfgPaths) == 0 {
+		t.Fatal("startGestaltdWithConfigs requires at least one config path")
+	}
 
 	port, holder := reservePort(t)
 	baseURL := fmt.Sprintf("http://127.0.0.1:%d", port)
 
-	cfgBytes, err := os.ReadFile(cfgPath)
+	primaryCfgPath := cfgPaths[0]
+	cfgBytes, err := os.ReadFile(primaryCfgPath)
 	if err != nil {
 		t.Fatalf("read config: %v", err)
 	}
 	cfg := strings.Replace(string(cfgBytes), "port: 0", fmt.Sprintf("port: %d", port), 1)
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+	if err := os.WriteFile(primaryCfgPath, []byte(cfg), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
 	_ = holder.Close()
-	cmd := exec.Command(gestaltdBin, "serve", "--config", cfgPath)
+	args := []string{"serve"}
+	if locked {
+		args = append(args, "--locked")
+	}
+	for _, cfgPath := range cfgPaths {
+		args = append(args, "--config", cfgPath)
+	}
+	cmd := exec.Command(gestaltdBin, args...)
 	cmd.Stdout = os.Stderr
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
@@ -685,6 +817,11 @@ func startGestaltdWithConfig(t *testing.T, cfgPath string) string {
 	}
 
 	return baseURL
+}
+
+func startGestaltdWithConfig(t *testing.T, cfgPath string) string {
+	t.Helper()
+	return startGestaltdWithConfigs(t, []string{cfgPath}, false)
 }
 
 func startGestaltd(t *testing.T, dir string, mountedUI *mountedUITestConfig) string {
@@ -904,6 +1041,37 @@ func TestE2EInitLocalProviders(t *testing.T) {
 	}
 }
 
+func TestE2EInitAndServeLayeredConfigs(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping layered config E2E test in short mode")
+	}
+
+	dir := t.TempDir()
+	basePath, overridePath, lockPath, _ := writeLayeredE2EConfigs(t, dir, 0)
+
+	out, err := exec.Command(gestaltdBin, "init", "--config", basePath, "--config", overridePath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd init with layered configs failed: %v\noutput: %s", err, out)
+	}
+	if _, err := os.Stat(lockPath); err != nil {
+		t.Fatalf("expected lock file at %s: %v", lockPath, err)
+	}
+
+	baseURL := startGestaltdWithConfigs(t, []string{basePath, overridePath}, true)
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Get(baseURL + "/api/v1/integrations")
+	if err != nil {
+		t.Fatalf("GET /api/v1/integrations: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("expected /api/v1/integrations 401 with layered auth override, got %d: %s", resp.StatusCode, body)
+	}
+}
+
 func TestE2EServeLockedRejectsGenericArchiveForExecutablePlugin(t *testing.T) {
 	t.Parallel()
 
@@ -1116,6 +1284,71 @@ func TestE2EMountedWebUI(t *testing.T) {
 func writeE2EConfig(t *testing.T, dir, pluginDir string, port int) string {
 	t.Helper()
 	return writeE2EConfigWithPaths(t, dir, pluginDir, filepath.Join(dir, "gestalt.db"), "", port)
+}
+
+func writeLayeredE2EConfigs(t *testing.T, dir string, port int) (string, string, string, string) {
+	t.Helper()
+
+	deployDir := filepath.Join(dir, "deploy")
+	overrideDir := filepath.Join(deployDir, "overrides")
+	if err := os.MkdirAll(overrideDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", overrideDir, err)
+	}
+
+	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
+	pluginManifest := componentProviderManifestPath(t, setupPrebuiltPluginDir(t, dir))
+	authManifest := componentProviderManifestPath(t, setupAuthProviderDir(t, dir, "local"))
+
+	indexedDBRel, err := filepath.Rel(deployDir, indexedDBManifest)
+	if err != nil {
+		t.Fatalf("filepath.Rel(indexeddb): %v", err)
+	}
+	pluginRel, err := filepath.Rel(deployDir, pluginManifest)
+	if err != nil {
+		t.Fatalf("filepath.Rel(plugin): %v", err)
+	}
+	authRel, err := filepath.Rel(overrideDir, authManifest)
+	if err != nil {
+		t.Fatalf("filepath.Rel(auth): %v", err)
+	}
+
+	basePath := filepath.Join(deployDir, "base.yaml")
+	overridePath := filepath.Join(overrideDir, "local.yaml")
+	baseCfg := fmt.Sprintf(`server:
+  public:
+    port: %d
+  encryptionKey: test-layered-e2e-key
+  providers:
+    indexeddb: inmem
+providers:
+  indexeddb:
+    inmem:
+      source:
+        path: %s
+plugins:
+  example:
+    source:
+      path: %s
+`, port, filepath.ToSlash(indexedDBRel), filepath.ToSlash(pluginRel))
+	overrideCfg := fmt.Sprintf(`server:
+  providers:
+    auth: local
+  artifactsDir: ../artifacts/local
+providers:
+  auth:
+    local:
+      source:
+        path: %s
+`, filepath.ToSlash(authRel))
+
+	if err := os.WriteFile(basePath, []byte(baseCfg), 0o644); err != nil {
+		t.Fatalf("write base config: %v", err)
+	}
+	if err := os.WriteFile(overridePath, []byte(overrideCfg), 0o644); err != nil {
+		t.Fatalf("write override config: %v", err)
+	}
+
+	return basePath, overridePath, filepath.Join(deployDir, "gestalt.lock.json"), filepath.Join(deployDir, "artifacts", "local")
 }
 
 func writeE2EConfigWithPaths(t *testing.T, dir, pluginDir, dbPath, artifactsDir string, port int) string {

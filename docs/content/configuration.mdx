@@ -1,6 +1,6 @@
 # Configuration
 
-Gestalt is configured from a single YAML file. This page covers the key concepts and how to set up each part. The [Config File](/reference/config-file) reference documents every field and its validation rules.
+Gestalt is configured from one or more YAML files. This page covers the key concepts and how to set up each part. The [Config File](/reference/config-file) reference documents every field and its validation rules.
 
 ## Config file structure
 
@@ -379,6 +379,15 @@ When `--config` is not supplied, `gestaltd` looks for a config file in this orde
 
 If nothing is found, `gestaltd` generates a default config at `~/.gestaltd/config.yaml` with SQLite storage, no auth, a random encryption key, and an HTTPBin test plugin.
 
+When `--config` is repeated, Gestalt loads the files left-to-right and merges them with these rules:
+
+- maps deep-merge
+- later scalar values win
+- later lists replace inherited lists
+- `null` deletes inherited keys
+
+Lockfiles and default prepared-artifact paths stay rooted at the leftmost config file. Relative paths resolve from the directory of the file that declared the value, so override files can safely use their own `source.path`, `iconFile`, and `server.artifactsDir` entries.
+
 ### Environment expansion
 
 Gestalt expands `${ENV_VAR}` placeholders before YAML decoding. When a referenced variable is unset, Gestalt checks for a corresponding `ENV_VAR_FILE` variable and reads that file path instead. If neither is set, config loading fails. Use `${ENV_VAR:-}` when an explicit empty default is intentional. This is useful for container runtimes that mount secrets as files.
@@ -389,10 +398,11 @@ Structured secret refs are resolved through the named secret manager during boot
 
 ### Validation
 
-Unknown YAML fields are rejected at load time. Relative paths resolve from the config file's directory. You can check a config without starting the server:
+Unknown YAML fields are rejected at load time. When multiple config files are layered, each relative path resolves from the directory of the file that introduced it. You can check a config without starting the server:
 
 ```sh
 gestaltd validate --config ./config.yaml
+gestaltd validate --config ./deploy/base.yaml --config ./deploy/overrides/local.yaml
 ```
 
 ### Defaults and required fields
