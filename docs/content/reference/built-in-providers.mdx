@@ -1,6 +1,11 @@
 # First-Party Providers
 
-Gestalt does not compile auth or datastore providers into the `gestaltd` binary. Both are loaded at startup as external provider processes through the same runtime model that also powers plugins. The first-party implementations are published from [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers) and maintained alongside the server.
+Gestalt does not compile auth, IndexedDB, or S3 providers into the `gestaltd`
+binary. They are loaded at startup as external provider processes through the
+same runtime model that also powers plugins. The first-party implementations
+are published from
+[`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers)
+and maintained alongside the server.
 
 Two simple secrets providers (`env` and `file`), telemetry, and audit remain built into the binary. Cloud secret backends (Google Secret Manager, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault) are available as external providers from [`valon-technologies/gestalt-providers`](https://github.com/valon-technologies/gestalt-providers). See [Secrets Providers](/providers/secrets) for the full list and configuration.
 
@@ -52,6 +57,43 @@ providers:
 | `relationaldb` | SQL-backed IndexedDB provider for PostgreSQL, MySQL, SQLite, and SQL Server. |
 | `dynamodb` | Amazon DynamoDB-backed IndexedDB provider for managed key-value and document storage. |
 | `mongodb` | MongoDB-backed IndexedDB provider for document-oriented storage. |
+
+## S3 Providers
+
+S3 providers expose portable object storage to executable plugins. They are
+configured under named entries in `providers.s3`, then bound into plugins with
+`plugins.<name>.s3`.
+
+```yaml
+providers:
+  s3:
+    assets:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/s3/s3
+        version: 0.0.1-alpha.1
+      config:
+        region: us-east-1
+        endpoint: https://s3.us-east-1.amazonaws.com
+        forcePathStyle: false
+        accessKeyId: ${AWS_ACCESS_KEY_ID}
+        secretAccessKey: secret://aws-secret-access-key
+
+plugins:
+  media:
+    source:
+      path: ./plugins/media/manifest.yaml
+    s3:
+      - assets
+```
+
+| Name | Purpose |
+| --- | --- |
+| `s3` | Portable S3-compatible object store provider for AWS S3, MinIO, GCS XML interoperability, and similar backends. |
+
+If `accessKeyId` and `secretAccessKey` are omitted, the first-party provider
+falls back to the AWS SDK default credential chain. `sessionToken`, custom
+`endpoint`, and `forcePathStyle` are available for temporary credentials and
+non-AWS S3-compatible backends.
 
 ## Secret Managers
 

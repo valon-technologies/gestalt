@@ -6,9 +6,10 @@ asIndexPage: true
 
 Gestalt loads most integration and platform surfaces as providers instead of
 compiling them into `gestaltd`. Plugins, auth backends, IndexedDB backends,
-cache backends, external secret managers, and public web UIs all use the same
-provider model: you reference a package in config, the host resolves it,
-validates it, and starts it with the permissions and request context it needs.
+cache backends, S3 object stores, external secret managers, and public web UIs
+all use the same provider model: you reference a package in config, the host
+resolves it, validates it, and starts it with the permissions and request
+context it needs.
 
 ## Provider kinds
 

@@ -1,17 +1,29 @@
+import { Tabs } from 'nextra/components'
+
 # S3
 
-S3 providers expose portable object storage to plugins. Gestalt models the
-de facto S3-compatible object API rather than a filesystem API, so one plugin
-surface can work against AWS S3, MinIO, Cloudflare R2, GCS interoperability
-mode, and other compatible backends.
+S3 providers expose portable object storage to executable plugins. Gestalt
+models the de facto S3-compatible object API rather than a filesystem API, so
+the same plugin code can target AWS S3, MinIO, GCS XML interoperability mode,
+Cloudflare R2, and other compatible backends.
 
 ## How S3 providers work
 
-Each named entry under `providers.s3` starts one S3 provider process. Plugins
-opt into those bindings with `plugins.<name>.s3`. When a plugin is
-bound to one S3 provider, the host sets the default SDK socket env var
-(`GESTALT_S3_SOCKET`). With multiple bindings, the host sets only named env
-vars such as `GESTALT_S3_SOCKET_ARCHIVE`.
+Configure one or more named entries under `providers.s3`, then bind them into
+executable plugins with `plugins.<name>.s3`. The host starts one provider
+process per enabled named entry and only exposes the bindings each plugin is
+granted.
+
+When a plugin binds exactly one S3 provider, Gestalt sets both:
+
+- `GESTALT_S3_SOCKET`
+- `GESTALT_S3_SOCKET_<NAME>`
+
+When a plugin binds multiple S3 providers, only the named env vars are set.
+
+Plugins still work with ordinary `{bucket, key, version_id}` references. The
+host keeps plugin data isolated with an internal namespace prefix, so plugins
+do not need to invent their own storage prefix scheme.
 
 The portable contract covers:
 
@@ -25,70 +37,159 @@ The portable contract covers:
 | `CopyObject` | `CopyObject` |
 | `PresignObject` | presigned `GET` / `PUT` / `DELETE` / `HEAD` |
 
-## Configuring an S3 provider
+## Configuring the first-party S3 provider
+
+The first-party package lives at
+`github.com/valon-technologies/gestalt-providers/s3/s3`:
 
 ```yaml
 providers:
   s3:
     assets:
       source:
-        path: ./providers/s3/minio/manifest.yaml
+        ref: github.com/valon-technologies/gestalt-providers/s3/s3
+        version: 0.0.1-alpha.1
       config:
-        endpoint: http://127.0.0.1:9000
         region: us-east-1
-        accessKeyId: ${MINIO_ROOT_USER}
-        secretAccessKey: secret://minio-root-password
+        endpoint: https://s3.us-east-1.amazonaws.com
+        forcePathStyle: false
+        accessKeyId: ${AWS_ACCESS_KEY_ID}
+        secretAccessKey: secret://aws-secret-access-key
 
-  plugins:
-    media:
-      source:
-        path: ./plugins/media/manifest.yaml
-      s3:
-        - assets
+plugins:
+  media:
+    source:
+      path: ./plugins/media/manifest.yaml
+    s3:
+      - assets
 ```
 
-The shape of `config` is provider-specific. Gestalt passes the selected
-`providers.s3.<name>.config` block through to that provider unchanged.
+The first-party provider accepts these config fields:
+
+- `region`: signing region for the backend.
+- `endpoint`: optional base URL for S3-compatible services such as MinIO or
+  GCS XML interoperability.
+- `forcePathStyle`: toggles path-style versus virtual-host-style requests.
+- `accessKeyId`: optional static HMAC access key.
+- `secretAccessKey`: optional static HMAC secret key.
+- `sessionToken`: optional session token for temporary credentials.
+
+If static credentials are omitted, the provider falls back to the AWS SDK
+default credential chain.
+
+GCS XML interoperability uses the same provider with a different endpoint and
+HMAC credentials:
+
+```yaml
+providers:
+  s3:
+    archive:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/s3/s3
+        version: 0.0.1-alpha.1
+      config:
+        region: auto
+        endpoint: https://storage.googleapis.com
+        forcePathStyle: true
+        accessKeyId: ${GCS_HMAC_ACCESS_KEY}
+        secretAccessKey: secret://gcs-hmac-secret
+```
 
 ## Using S3 from a plugin
 
-The SDK presents object handles rather than raw gRPC stubs:
+The SDK exposes an S3 client plus object-handle helpers in every supported
+language.
 
-```go
-ctx := context.Background()
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    ctx := context.Background()
 
-s3, err := gestalt.S3()
-if err != nil {
-	log.Fatal(err)
-}
-defer s3.Close()
+    s3, err := gestalt.S3()
+    if err != nil {
+    	log.Fatal(err)
+    }
+    defer s3.Close()
 
-avatar := s3.Object("uploads", "avatars/user-123.png")
+    avatar := s3.Object("uploads", "avatars/user-123.png")
+    if _, err := avatar.WriteBytes(ctx, pngBytes, &gestalt.WriteOptions{
+    	ContentType: "image/png",
+    }); err != nil {
+    	log.Fatal(err)
+    }
 
-if _, err := avatar.WriteBytes(ctx, pngBytes, &gestalt.WriteOptions{
-	ContentType: "image/png",
-}); err != nil {
-	log.Fatal(err)
-}
+    body, err := avatar.Bytes(ctx, nil)
+    if err != nil {
+    	log.Fatal(err)
+    }
+    _ = body
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    import gestalt
 
-url, err := avatar.Presign(ctx, &gestalt.PresignOptions{
-	Method:  gestalt.PresignMethodGet,
-	Expires: 15 * time.Minute,
-})
-if err != nil {
-	log.Fatal(err)
-}
-fmt.Println(url.URL)
-```
+    s3 = gestalt.S3()
+    avatar = s3.object("uploads", "avatars/user-123.png")
+    avatar.write_bytes(
+        png_bytes,
+        gestalt.WriteOptions(content_type="image/png"),
+    )
+    body = avatar.bytes()
+    s3.close()
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    let s3 = gestalt::S3::connect().await?;
+    let mut avatar = s3.object("uploads", "avatars/user-123.png");
 
-Use `gestalt.S3("archive")` when a plugin binds multiple named S3 providers.
+    avatar
+        .write_bytes(
+            &png_bytes,
+            Some(gestalt::WriteOptions {
+                content_type: "image/png".to_string(),
+                ..Default::default()
+            }),
+        )
+        .await?;
+
+    let body = avatar.bytes(None).await?;
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import { S3 } from "@valon-technologies/gestalt";
+
+    const s3 = new S3();
+    const avatar = s3.object("uploads", "avatars/user-123.png");
+
+    await avatar.write(pngBytes, { contentType: "image/png" });
+    const body = await avatar.bytes();
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+Use the named helpers when a plugin binds more than one S3 provider: Go and
+Python use `gestalt.S3("archive")`, Rust uses
+`gestalt::S3::connect_named("archive")`, and TypeScript uses
+`new S3("archive")`.
 
 ## Operational notes
 
-- Gestalt does not use S3 providers for its own system state. They are plugin-only bindings.
-- Named S3 bindings are isolated at the process and socket level; plugins only see the bindings explicitly granted in config.
-- Plugin-scoped presigning is not available. Signed URLs expose the provider-internal key namespace used to isolate plugin data.
-- `gestaltd init` can prepare published S3 provider packages the same way it prepares auth, indexeddb, and secrets providers.
+- Gestalt does not use S3 providers for its own system state. They are
+  plugin-only bindings.
+- The first-party provider preserves the portable object identity
+  `{bucket, key, version_id}`. Buckets are chosen by the caller, not fixed in
+  provider config.
+- Plugin-scoped presigning is not available through the SDK transport. Signed
+  URLs would expose the provider-internal namespace prefix that the host uses
+  to isolate plugin data.
+- The first-party provider currently rejects writes and copies above the
+  single-request S3 limit instead of exposing multipart controls through the
+  public contract.
+- `gestaltd init` can prepare published S3 provider packages the same way it
+  prepares auth, indexeddb, cache, and secrets providers.
 
 ## Building your own S3 provider
 

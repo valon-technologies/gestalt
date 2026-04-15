@@ -2,8 +2,11 @@ import { Tabs } from 'nextra/components'
 
 # Config File
 
-Every `gestaltd` deployment reads a single YAML config file. The top-level keys are `server` (listener, encryption, egress, and host-provider selection), `authorization` (shared human/workload access policy), `providers` (named auth, secrets, telemetry, audit, UI, indexeddb, and cache entries), and `plugins` (executable integrations and optional plugin-backed UI mounts):
-S3-compatible object stores are also configured under `providers.s3`.
+Every `gestaltd` deployment reads a single YAML config file. The top-level
+keys are `server` (listener, encryption, egress, and host-provider selection),
+`authorization` (shared human/workload access policy), `providers` (named
+auth, secrets, telemetry, audit, UI, indexeddb, cache, and s3 entries), and
+`plugins` (executable integrations and optional plugin-backed UI mounts):
 
 ```yaml
 server:
@@ -603,6 +606,9 @@ plugins:
 | `indexeddb` | Optional plugin IndexedDB config. `indexeddb.provider` selects which named `providers.indexeddb` entry backs the plugin's single IndexedDB SDK socket; when omitted, the plugin inherits the selected/default host IndexedDB. `indexeddb.db` overrides the plugin-visible database name and defaults to the plugin key. Schema-capable backends derive plugin scoping from that `db` name. `indexeddb.objectStores` optionally allowlists the logical object stores the plugin may use. Plugins then call `new IndexedDB()` (or the equivalent SDK helper) against `GESTALT_INDEXEDDB_SOCKET`; they do not choose arbitrary schemas or DSNs at runtime. |
 | `s3` | Optional list of named `providers.s3` bindings exposed to the executable plugin through the SDK transport. A single binding also populates the default S3 SDK env var for compatibility. |
 
+S3 bindings are exposed as `GESTALT_S3_SOCKET_<NAME>`. When exactly one S3
+binding is configured, Gestalt also sets `GESTALT_S3_SOCKET`.
+
 ### `plugins.*.source`
 
 Every plugin uses a `source` block to declare its backing provider.
@@ -888,13 +894,22 @@ Structural validation runs at config load time (`init`, `validate`, `serve`). Ru
 
 Each plugin uses a `source` block. Every plugin must use exactly one loading mode: local `source.path` or managed `source.ref`. `source.version` is required with `source.ref` and invalid with `source.path`.
 
-Host-provider entries use the same ProviderEntry shape. When `providers.auth.<name>` or `providers.indexeddb.<name>` is set, `source.ref` or `source.path` must be present. `providers.auth.<name>.config` and `providers.indexeddb.<name>.config` are only allowed when their corresponding source is set.
+Host-provider entries use the same ProviderEntry shape. When
+`providers.auth.<name>`, `providers.cache.<name>`,
+`providers.indexeddb.<name>`, or `providers.s3.<name>` is set, `source.ref` or
+`source.path` must be present.
+`providers.auth.<name>.config`, `providers.cache.<name>.config`,
+`providers.indexeddb.<name>.config`, and `providers.s3.<name>.config` are only
+allowed when their corresponding source is set.
 
 Only `connections.default` may define `params` or `discovery`. All connections in a plugin must share the same mode.
 
 Each `providers.ui.<name>` entry must use exactly one loading mode: local `providers.ui.<name>.source.path` or managed `providers.ui.<name>.source.ref`. `providers.ui.<name>.source.version` is required with `providers.ui.<name>.source.ref` and invalid with `providers.ui.<name>.source.path`. `providers.ui.<name>.config` is only allowed when `providers.ui.<name>.source` is set.
 
 Each `plugins.<name>` entry may set `mountPath` to publish a plugin-backed UI. When `plugins.<name>.ui` is set, it must reference an existing UI bundle. When `plugins.<name>.ui` is omitted and `plugins.<name>.mountPath` is set, the plugin manifest must declare `spec.ui`. A given UI may be bound by at most one plugin entry. `plugins.<name>.mountPath` must use the same path rules as a directly mounted UI.
+
+Each name in `plugins.<name>.s3` must reference an existing enabled
+`providers.s3.<name>` entry.
 
 Mounted UI bundles are served on the public listener only. The built-in admin UI remains at `/admin`.
 
