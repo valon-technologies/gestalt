@@ -117,6 +117,10 @@ func (s *s3Server) WriteObject(stream proto.S3_WriteObjectServer) error {
 	meta, err := s.client.WriteObject(stream.Context(), s.namespacedWriteRequest(open, pr))
 	if err != nil {
 		_ = pr.CloseWithError(err)
+		select {
+		case <-done:
+		case <-stream.Context().Done():
+		}
 		return s3ToGRPCErr(err)
 	}
 	meta, err = s.requireOwnedMetaNamespace(meta)

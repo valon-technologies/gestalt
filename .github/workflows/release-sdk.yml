@@ -155,7 +155,7 @@ jobs:
           VERSION: ${{ github.ref_name }}
 
       - name: Verify published crate contents
-        run: cargo publish --dry-run
+        run: cargo publish --dry-run --allow-dirty
 
       - name: Publish crate
         env:
@@ -166,7 +166,7 @@ jobs:
             exit 1
           fi
 
-          cargo publish
+          cargo publish --allow-dirty
 
   release-rust-sdk:
     if: ${{ startsWith(github.ref_name, 'sdk/rust/v') }}

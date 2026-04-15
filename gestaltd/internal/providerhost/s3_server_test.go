@@ -224,6 +224,41 @@ func TestS3ServerWriteObjectReturnsWhenProviderStopsReadingEarly(t *testing.T) {
 	}
 }
 
+func TestS3ServerWriteObjectPropagatesProviderErrorAfterStoppingReadEarly(t *testing.T) {
+	t.Parallel()
+
+	srv := NewS3Server(funcS3Client{
+		writeObject: func(_ context.Context, req s3store.WriteRequest) (s3store.ObjectMeta, error) {
+			return s3store.ObjectMeta{}, s3store.ErrPreconditionFailed
+		},
+	}, "roadmap")
+	stream := newStubS3WriteObjectServer(context.Background(), []*proto.WriteObjectRequest{
+		{
+			Msg: &proto.WriteObjectRequest_Open{
+				Open: &proto.WriteObjectOpen{
+					Ref: &proto.S3ObjectRef{Bucket: "docs", Key: "plans/q4.txt"},
+					IfNoneMatch: "*",
+				},
+			},
+		},
+		{Msg: &proto.WriteObjectRequest_Data{Data: []byte("payload")}},
+	})
+
+	done := make(chan error, 1)
+	go func() {
+		done <- srv.WriteObject(stream)
+	}()
+
+	select {
+	case err := <-done:
+		if status.Code(err) != codes.FailedPrecondition {
+			t.Fatalf("WriteObject error = %v, want codes.FailedPrecondition", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("WriteObject hung when provider returned an early precondition error")
+	}
+}
+
 func TestS3ServerWriteObjectPropagatesRecvErrorObservedDuringSendAndClose(t *testing.T) {
 	t.Parallel()
 
