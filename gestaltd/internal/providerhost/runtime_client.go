@@ -60,13 +60,22 @@ func configureRuntimeProvider(ctx context.Context, client proto.ProviderLifecycl
 		return nil, fmt.Errorf("provider responded with protocol version %d, host requires %d", resp.GetProtocolVersion(), proto.CurrentProtocolVersion)
 	}
 
+	// Some providers expose configured metadata such as display names only after
+	// ConfigureProvider has applied the runtime config.
+	configuredMetaCtx, configuredCancel := providerConfigureContext(ctx)
+	defer configuredCancel()
+	configuredMeta, err := client.GetProviderIdentity(configuredMetaCtx, &emptypb.Empty{})
+	if err != nil {
+		return nil, fmt.Errorf("get configured provider identity: %w", err)
+	}
+
 	return &runtimeProviderMetadata{
-		Kind:        meta.GetKind(),
-		Name:        meta.GetName(),
-		DisplayName: meta.GetDisplayName(),
-		Description: meta.GetDescription(),
-		Version:     meta.GetVersion(),
-		Warnings:    append([]string(nil), meta.GetWarnings()...),
+		Kind:        configuredMeta.GetKind(),
+		Name:        configuredMeta.GetName(),
+		DisplayName: configuredMeta.GetDisplayName(),
+		Description: configuredMeta.GetDescription(),
+		Version:     configuredMeta.GetVersion(),
+		Warnings:    append([]string(nil), configuredMeta.GetWarnings()...),
 	}, nil
 }
 
