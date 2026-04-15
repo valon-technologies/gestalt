@@ -485,7 +485,7 @@ func slugPluginName(value string) string {
 
 func validateSourceComponentKind(kind string) error {
 	switch kind {
-	case providermanifestv1.KindAuth, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindSecrets:
+	case providermanifestv1.KindAuth, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindSecrets:
 		return nil
 	default:
 		return fmt.Errorf("unsupported source component kind %q", kind)
@@ -500,6 +500,8 @@ func componentServeCall(kind string) (string, error) {
 		return "gestalt.ServeIndexedDBProvider(ctx, providerpkg.New())", nil
 	case providermanifestv1.KindCache:
 		return "gestalt.ServeCacheProvider(ctx, providerpkg.New())", nil
+	case providermanifestv1.KindS3:
+		return "gestalt.ServeS3Provider(ctx, providerpkg.New())", nil
 	case providermanifestv1.KindSecrets:
 		return "gestalt.ServeSecretsProvider(ctx, providerpkg.New())", nil
 	default:

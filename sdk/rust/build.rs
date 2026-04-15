@@ -17,6 +17,7 @@ fn main() {
         proto_root.join("v1").join("cache.proto"),
         proto_root.join("v1").join("secrets.proto"),
         proto_root.join("v1").join("datastore.proto"),
+        proto_root.join("v1").join("s3.proto"),
     ];
     let includes = [proto_root];
     let mut prost_config = prost_build::Config::new();

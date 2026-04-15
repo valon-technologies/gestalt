@@ -12,6 +12,7 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
+	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -54,6 +55,18 @@ func stubIndexedDBFactory() bootstrap.IndexedDBFactory {
 	return func(yaml.Node) (indexeddb.IndexedDB, error) {
 		return &coretesting.StubIndexedDB{}, nil
 	}
+}
+
+type trackedIndexedDB struct {
+	*coretesting.StubIndexedDB
+	closed *atomic.Int32
+}
+
+func (t *trackedIndexedDB) Close() error {
+	if t.closed != nil {
+		t.closed.Add(1)
+	}
+	return nil
 }
 
 func validConfig() *config.Config {
@@ -303,6 +316,96 @@ func TestBootstrap(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestBootstrapPassesConfiguredS3ResourceNamesToProviders(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.S3 = map[string]*config.ProviderEntry{
+		"archive": {Source: config.ProviderSource{Path: "stub"}},
+		"main":    {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	factories := validFactories()
+	seen := make(map[string]struct{}, len(cfg.Providers.S3))
+	factories.S3 = func(node yaml.Node) (s3store.Client, error) {
+		var runtime struct {
+			Name string `yaml:"name"`
+		}
+		if err := node.Decode(&runtime); err != nil {
+			return nil, err
+		}
+		seen[runtime.Name] = struct{}{}
+		return &coretesting.StubS3{}, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(seen) != 2 {
+		t.Fatalf("seen S3 runtime names = %v, want 2 entries", seen)
+	}
+	for _, name := range []string{"archive", "main"} {
+		if _, ok := seen[name]; !ok {
+			t.Fatalf("missing S3 runtime name %q in %v", name, seen)
+		}
+	}
+}
+
+func TestBootstrapS3BuildFailureClosesIndexedDBsOnce(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.IndexedDB["archive"] = &config.ProviderEntry{
+		Source: config.ProviderSource{Path: "stub"},
+	}
+	cfg.Providers.S3 = map[string]*config.ProviderEntry{
+		"assets": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	var selectedClosed atomic.Int32
+	var extraClosed atomic.Int32
+	var indexeddbBuilds atomic.Int32
+
+	factories := validFactories()
+	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) {
+		switch indexeddbBuilds.Add(1) {
+		case 1:
+			return &trackedIndexedDB{
+				StubIndexedDB: &coretesting.StubIndexedDB{},
+				closed:        &selectedClosed,
+			}, nil
+		case 2:
+			return &trackedIndexedDB{
+				StubIndexedDB: &coretesting.StubIndexedDB{},
+				closed:        &extraClosed,
+			}, nil
+		default:
+			return nil, fmt.Errorf("unexpected indexeddb build #%d", indexeddbBuilds.Load())
+		}
+	}
+	factories.S3 = func(yaml.Node) (s3store.Client, error) {
+		return nil, fmt.Errorf("boom")
+	}
+
+	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err == nil {
+		t.Fatal("Bootstrap: expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), `bootstrap: s3 from resource "assets": s3 provider: boom`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := selectedClosed.Load(); got != 1 {
+		t.Fatalf("selected indexeddb close count = %d, want 1", got)
+	}
+	if got := extraClosed.Load(); got != 1 {
+		t.Fatalf("extra indexeddb close count = %d, want 1", got)
+	}
 }
 
 func TestResultCloseClosesAuthProvider(t *testing.T) {
@@ -1007,6 +1110,27 @@ func TestBootstrapDisabledComponents(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "datastore resource name is required") {
 			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("disabled s3 is skipped", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := validConfig()
+		cfg.Providers.S3 = map[string]*config.ProviderEntry{
+			"assets": {Disabled: true},
+		}
+
+		result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+		if err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		<-result.ProvidersReady
+		if got := len(result.ExtraS3s); got != 0 {
+			t.Fatalf("ExtraS3s = %d, want 0", got)
+		}
+		if err := result.Close(context.Background()); err != nil {
+			t.Fatalf("Close: %v", err)
 		}
 	})
 }

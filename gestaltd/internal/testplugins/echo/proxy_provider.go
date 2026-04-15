@@ -73,6 +73,17 @@ func (p *proxyProvider) Catalog() *catalog.Catalog {
 				{Name: "value", Type: "string", Required: true},
 			},
 		},
+		catalog.CatalogOperation{
+			ID:        "s3_roundtrip",
+			Method:    http.MethodPost,
+			Transport: catalog.TransportPlugin,
+			Parameters: []catalog.CatalogParameter{
+				{Name: "binding", Type: "string"},
+				{Name: "bucket", Type: "string", Required: true},
+				{Name: "key", Type: "string", Required: true},
+				{Name: "value", Type: "string", Required: true},
+			},
+		},
 	)
 	return cat
 }
@@ -156,6 +167,57 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 			return nil, err
 		}
 		body, _ := json.Marshal(record)
+		return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+
+	case "s3_roundtrip":
+		binding, _ := params["binding"].(string)
+		bucket, _ := params["bucket"].(string)
+		key, _ := params["key"].(string)
+		value, _ := params["value"].(string)
+
+		var (
+			client *gestalt.S3Client
+			err    error
+		)
+		if binding != "" {
+			client, err = gestalt.S3(binding)
+		} else {
+			client, err = gestalt.S3()
+		}
+		if err != nil {
+			return nil, err
+		}
+		defer func() { _ = client.Close() }()
+
+		obj := client.Object(bucket, key)
+		if _, err := obj.WriteString(ctx, value, &gestalt.WriteOptions{ContentType: "text/plain"}); err != nil {
+			return nil, err
+		}
+		text, err := obj.Text(ctx, nil)
+		if err != nil {
+			return nil, err
+		}
+		stat, err := obj.Stat(ctx)
+		if err != nil {
+			return nil, err
+		}
+		page, err := client.ListObjects(ctx, gestalt.ListOptions{Bucket: bucket, Prefix: key})
+		if err != nil {
+			return nil, err
+		}
+		keys := make([]string, 0, len(page.Objects))
+		for i := range page.Objects {
+			keys = append(keys, page.Objects[i].Ref.Key)
+		}
+		body, _ := json.Marshal(map[string]any{
+			"body":  text,
+			"key":   stat.Ref.Key,
+			"size":  stat.Size,
+			"keys":  keys,
+			"type":  stat.ContentType,
+			"etag":  stat.ETag,
+			"found": len(page.Objects) > 0,
+		})
 		return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
 
 	default:

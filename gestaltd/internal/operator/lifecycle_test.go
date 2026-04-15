@@ -1368,7 +1368,7 @@ func TestLockProviderEntryForSource_RejectsManifestWithoutProviderKind(t *testin
 	}
 }
 
-func TestHashPlatformInEntries_HashesMountedWebUIAndCacheArchives(t *testing.T) {
+func TestHashPlatformInEntries_HashesMountedWebUIAndProviderArchives(t *testing.T) {
 	t.Parallel()
 
 	archiveBytes := []byte("mounted-web-ui-archive")
@@ -1382,6 +1382,14 @@ func TestHashPlatformInEntries_HashesMountedWebUIAndCacheArchives(t *testing.T) 
 		Caches: map[string]LockEntry{
 			"session": {
 				Source: "github.com/testowner/cache/session",
+				Archives: map[string]LockArchive{
+					platformKeyGeneric: {URL: srv.URL},
+				},
+			},
+		},
+		S3: map[string]LockEntry{
+			"assets": {
+				Source: "github.com/testowner/providers/s3",
 				Archives: map[string]LockArchive{
 					platformKeyGeneric: {URL: srv.URL},
 				},
@@ -1408,6 +1416,9 @@ func TestHashPlatformInEntries_HashesMountedWebUIAndCacheArchives(t *testing.T) 
 	}
 	if got := lock.Caches["session"].Archives[platformKeyGeneric].SHA256; got != want {
 		t.Fatalf("cache SHA256 = %q, want %q", got, want)
+	}
+	if got := lock.S3["assets"].Archives[platformKeyGeneric].SHA256; got != want {
+		t.Fatalf("S3 SHA256 = %q, want %q", got, want)
 	}
 }
 
@@ -2154,6 +2165,61 @@ func TestLockMatchesConfig_FalseWithNilLock(t *testing.T) {
 	if lockMatchesConfig(cfg, paths, nil) {
 		t.Fatal("lockMatchesConfig returned true for nil lock")
 	}
+}
+
+func TestLockMatchesConfig_ManagedS3UsesResourceNameFingerprint(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := &config.Config{
+		Providers: config.ProvidersConfig{
+			S3: map[string]*config.ProviderEntry{
+				"assets": {
+					Source: config.ProviderSource{
+						Ref:     "github.com/testowner/providers/s3",
+						Version: "0.0.1-alpha.1",
+					},
+				},
+			},
+		},
+	}
+	paths := initPathsForConfig(cfgPath)
+	if err := os.MkdirAll(paths.artifactsDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll artifacts: %v", err)
+	}
+	lockEntry := LockEntry{
+		Source:      cfg.Providers.S3["assets"].SourceRef(),
+		Version:     cfg.Providers.S3["assets"].SourceVersion(),
+		Fingerprint: mustFingerprint(t, "assets", cfg.Providers.S3["assets"], paths.configDir),
+		Manifest:    filepath.ToSlash(filepath.Join("s3", "assets", "manifest.yaml")),
+	}
+	manifestPath := resolveLockPath(paths.artifactsDir, lockEntry.Manifest)
+	if err := os.MkdirAll(filepath.Dir(manifestPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll manifest dir: %v", err)
+	}
+	if err := os.WriteFile(manifestPath, []byte("kind: s3\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile manifest: %v", err)
+	}
+
+	lock := &Lockfile{
+		Version: LockVersion,
+		S3: map[string]LockEntry{
+			"assets": lockEntry,
+		},
+	}
+	if !lockMatchesConfig(cfg, paths, lock) {
+		t.Fatal("lockMatchesConfig returned false for matching managed S3 lock entry")
+	}
+}
+
+func mustFingerprint(t *testing.T, name string, entry *config.ProviderEntry, configDir string) string {
+	t.Helper()
+	fingerprint, err := ProviderFingerprint(name, entry, configDir)
+	if err != nil {
+		t.Fatalf("ProviderFingerprint(%q): %v", name, err)
+	}
+	return fingerprint
 }
 
 func TestProviderFingerprint_Stable(t *testing.T) {

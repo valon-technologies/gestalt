@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"maps"
@@ -58,6 +60,7 @@ type ProvidersConfig struct {
 	UI        map[string]*UIEntry       `yaml:"ui,omitempty"`
 	IndexedDB map[string]*ProviderEntry `yaml:"indexeddb,omitempty"`
 	Cache     map[string]*ProviderEntry `yaml:"cache,omitempty"`
+	S3        map[string]*ProviderEntry `yaml:"s3,omitempty"`
 }
 
 type HostProviderKind string
@@ -133,6 +136,7 @@ type ProviderEntry struct {
 	AllowedOperations map[string]*OperationOverride `yaml:"allowedOperations,omitempty"`
 	IndexedDB         *PluginIndexedDBConfig        `yaml:"indexeddb,omitempty"`
 	Cache             []string                      `yaml:"cache,omitempty"`
+	S3                []string                      `yaml:"s3,omitempty"`
 	Surfaces          *ProviderSurfaceOverrides     `yaml:"surfaces,omitempty"`
 
 	// Runtime-resolved fields (populated during init/bootstrap, not from YAML)
@@ -701,6 +705,15 @@ func OverlayManagedPluginConfig(path string, cfg *Config) error {
 			}
 		}
 	}
+	s3Node := mappingValueNode(providersNode, "s3")
+	for name, entry := range cfg.Providers.S3 {
+		if entry == nil || entry.Disabled || !entry.HasManagedSource() {
+			continue
+		}
+		if err := overlayManagedEntryConfigNode(mappingValueNode(s3Node, name), entry, "s3 "+strconv.Quote(name)); err != nil {
+			return err
+		}
+	}
 	uiNode := mappingValueNode(providersNode, "ui")
 	for name, entry := range cfg.Providers.UI {
 		if entry == nil || !entry.HasManagedSource() {
@@ -763,18 +776,68 @@ func normalizeConfigRoot(root *yaml.Node) error {
 	return nil
 }
 
+func cloneConfigRoot(node *yaml.Node) (*yaml.Node, error) {
+	data, err := yaml.Marshal(documentValueNode(node))
+	if err != nil {
+		return nil, fmt.Errorf("marshaling normalized config YAML: %w", err)
+	}
+	var out yaml.Node
+	dec := yaml.NewDecoder(strings.NewReader(string(data)))
+	if err := dec.Decode(&out); err != nil && err != io.EOF {
+		return nil, fmt.Errorf("parsing config YAML: %w", err)
+	}
+	return &out, nil
+}
+
+func removeDisabledS3Entries(root *yaml.Node) {
+	providersNode := mappingValueNode(root, "providers")
+	s3Node := documentValueNode(mappingValueNode(providersNode, "s3"))
+	if s3Node == nil || s3Node.Kind != yaml.MappingNode {
+		return
+	}
+	filtered := s3Node.Content[:0]
+	for i := 0; i+1 < len(s3Node.Content); i += 2 {
+		keyNode := s3Node.Content[i]
+		entryNode := s3Node.Content[i+1]
+		if providerEntryDisabled(entryNode) {
+			continue
+		}
+		filtered = append(filtered, keyNode, entryNode)
+	}
+	s3Node.Content = filtered
+}
+
+func providerEntryDisabled(node *yaml.Node) bool {
+	disabledNode := mappingValueNode(node, "disabled")
+	if disabledNode == nil {
+		return false
+	}
+	var disabled bool
+	if err := disabledNode.Decode(&disabled); err != nil {
+		return false
+	}
+	return disabled
+}
 func loadWithLookup(path string, lookup func(string) (string, bool), allowMissing bool) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("reading config file: %w", err)
 	}
 
-	resolved, firstMissing, err := expandEnvVariables(string(data), lookup, !allowMissing)
+	var (
+		resolved                  string
+		missingEnvSentinelContext string
+	)
+	if allowMissing {
+		resolved, _, err = expandEnvVariables(string(data), lookup, false)
+	} else {
+		missingEnvSentinelContext, err = newMissingEnvSentinelPrefix()
+		if err == nil {
+			resolved, err = expandEnvVariablesWithMissingSentinels(string(data), lookup, missingEnvSentinelContext)
+		}
+	}
 	if err != nil {
 		return nil, err
-	}
-	if !allowMissing && firstMissing != "" {
-		return nil, fmt.Errorf("expanding config environment variables: environment variable %q not set; use ${%s:-} to allow an empty default", firstMissing, firstMissing)
 	}
 
 	var root yaml.Node
@@ -785,13 +848,28 @@ func loadWithLookup(path string, lookup func(string) (string, bool), allowMissin
 	if err := normalizeConfigRoot(&root); err != nil {
 		return nil, err
 	}
+	if !allowMissing {
+		validationRoot, err := cloneConfigRoot(&root)
+		if err != nil {
+			return nil, err
+		}
+		removeDisabledS3Entries(validationRoot)
+		firstMissing := firstMissingEnvSentinel(validationRoot, missingEnvSentinelContext)
+		if firstMissing != "" {
+			return nil, fmt.Errorf("expanding config environment variables: environment variable %q not set; use ${%s:-} to allow an empty default", firstMissing, firstMissing)
+		}
+	}
 	normalized, err := yaml.Marshal(documentValueNode(&root))
 	if err != nil {
 		return nil, fmt.Errorf("marshaling normalized config YAML: %w", err)
 	}
+	normalizedInput := string(normalized)
+	if !allowMissing {
+		normalizedInput = restoreMissingEnvSentinels(normalizedInput, missingEnvSentinelContext)
+	}
 
 	var cfg Config
-	dec := yaml.NewDecoder(strings.NewReader(string(normalized)))
+	dec := yaml.NewDecoder(strings.NewReader(normalizedInput))
 	dec.KnownFields(true)
 	if err := dec.Decode(&cfg); err != nil && err != io.EOF {
 		return nil, fmt.Errorf("parsing config YAML: %w", err)
@@ -809,6 +887,93 @@ func loadWithLookup(path string, lookup func(string) (string, bool), allowMissin
 	}
 
 	return &cfg, nil
+}
+
+const (
+	missingEnvSentinelPrefix = "__GESTALT_MISSING_ENV_"
+	missingEnvSentinelSuffix = "__"
+)
+
+func firstMissingEnvSentinel(node *yaml.Node, sentinelPrefix string) string {
+	node = documentValueNode(node)
+	if node == nil {
+		return ""
+	}
+	if node.Kind == yaml.ScalarNode {
+		return firstMissingEnvSentinelInString(node.Value, sentinelPrefix)
+	}
+	for _, child := range node.Content {
+		if name := firstMissingEnvSentinel(child, sentinelPrefix); name != "" {
+			return name
+		}
+	}
+	return ""
+}
+
+func firstMissingEnvSentinelInString(value, sentinelPrefix string) string {
+	if sentinelPrefix == "" {
+		return ""
+	}
+	for start := 0; start < len(value); {
+		idx := strings.Index(value[start:], sentinelPrefix)
+		if idx < 0 {
+			return ""
+		}
+		idx += start + len(sentinelPrefix)
+		end := strings.Index(value[idx:], missingEnvSentinelSuffix)
+		if end < 0 {
+			return ""
+		}
+		decoded, err := base64.RawURLEncoding.DecodeString(value[idx : idx+end])
+		if err == nil {
+			return string(decoded)
+		}
+		start = idx + end + len(missingEnvSentinelSuffix)
+	}
+	return ""
+}
+
+func restoreMissingEnvSentinels(input, sentinelPrefix string) string {
+	if sentinelPrefix == "" {
+		return input
+	}
+	var b strings.Builder
+	b.Grow(len(input))
+	for start := 0; start < len(input); {
+		idx := strings.Index(input[start:], sentinelPrefix)
+		if idx < 0 {
+			b.WriteString(input[start:])
+			break
+		}
+		idx += start
+		b.WriteString(input[start:idx])
+		encodedStart := idx + len(sentinelPrefix)
+		end := strings.Index(input[encodedStart:], missingEnvSentinelSuffix)
+		if end < 0 {
+			b.WriteString(input[idx:])
+			break
+		}
+		encodedEnd := encodedStart + end
+		decoded, err := base64.RawURLEncoding.DecodeString(input[encodedStart:encodedEnd])
+		if err != nil {
+			b.WriteString(input[idx : encodedEnd+len(missingEnvSentinelSuffix)])
+			start = encodedEnd + len(missingEnvSentinelSuffix)
+			continue
+		}
+		b.WriteString("${")
+		b.Write(decoded)
+		b.WriteString("}")
+		start = encodedEnd + len(missingEnvSentinelSuffix)
+	}
+	return b.String()
+}
+
+func newMissingEnvSentinelPrefix() (string, error) {
+	var token [9]byte
+	if _, err := rand.Read(token[:]); err != nil {
+		return "", fmt.Errorf("creating missing env sentinel: %w", err)
+	}
+	return missingEnvSentinelPrefix + base64.RawURLEncoding.EncodeToString(token[:]) + "_", nil
 }
 
 func parseEnvPlaceholder(key string) (name string, allowEmptyDefault bool, err error) {
@@ -866,6 +1031,40 @@ func expandEnvVariables(input string, lookup func(string) (string, bool), preser
 	return resolved, firstMissing, nil
 }
 
+func expandEnvVariablesWithMissingSentinels(input string, lookup func(string) (string, bool), sentinelPrefix string) (string, error) {
+	var expandErr error
+	resolved := os.Expand(input, func(key string) string {
+		if expandErr != nil {
+			return ""
+		}
+		name, allowEmptyDefault, err := parseEnvPlaceholder(key)
+		if err != nil {
+			expandErr = err
+			return ""
+		}
+		if val, ok := lookup(name); ok {
+			return val
+		}
+		filePath, ok := lookup(name + "_FILE")
+		if !ok || filePath == "" {
+			if allowEmptyDefault {
+				return ""
+			}
+			return sentinelPrefix + base64.RawURLEncoding.EncodeToString([]byte(name)) + missingEnvSentinelSuffix
+		}
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			expandErr = fmt.Errorf("resolving %s_FILE: %w", name, err)
+			return ""
+		}
+		return strings.TrimRight(string(data), "\r\n")
+	})
+	if expandErr != nil {
+		return "", fmt.Errorf("expanding config environment variables: %w", expandErr)
+	}
+	return resolved, nil
+}
+
 func overlayEnvIntoNode(node yaml.Node, lookup func(string) (string, bool), preserveMissing bool) (yaml.Node, error) {
 	data, err := yaml.Marshal(&node)
 	if err != nil {
@@ -900,6 +1099,7 @@ func applyDefaults(cfg *Config) {
 	cfg.Providers.Audit = applyDefaultBuiltinProviderEntries(cfg.Providers.Audit, DefaultProviderInstance, "inherit")
 	cfg.Providers.IndexedDB = nonNilProviderEntryMap(cfg.Providers.IndexedDB)
 	cfg.Providers.Cache = nonNilProviderEntryMap(cfg.Providers.Cache)
+	cfg.Providers.S3 = nonNilProviderEntryMap(cfg.Providers.S3)
 }
 
 func nonNilProviderEntryMap(entries map[string]*ProviderEntry) map[string]*ProviderEntry {
@@ -1132,6 +1332,9 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		}
 	}
 	for _, entry := range cfg.Providers.IndexedDB {
+		resolveEntry(entry)
+	}
+	for _, entry := range cfg.Providers.S3 {
 		resolveEntry(entry)
 	}
 	for _, entry := range cfg.Plugins {

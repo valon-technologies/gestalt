@@ -32,6 +32,7 @@ from ._providers import (
     PluginProviderAdapter,
     ProviderKind,
     ProviderMetadata,
+    S3Provider,
     SecretsProvider,
     SessionTTLProvider,
     WarningsProvider,
@@ -45,6 +46,7 @@ from .gen.v1 import plugin_pb2 as _plugin_pb2
 from .gen.v1 import plugin_pb2_grpc as _plugin_pb2_grpc
 from .gen.v1 import runtime_pb2 as _runtime_pb2
 from .gen.v1 import runtime_pb2_grpc as _runtime_pb2_grpc
+from .gen.v1 import s3_pb2_grpc as _s3_pb2_grpc
 from .gen.v1 import secrets_pb2 as _secrets_pb2
 from .gen.v1 import secrets_pb2_grpc as _secrets_pb2_grpc
 
@@ -58,6 +60,7 @@ auth_pb2: Any = _auth_pb2
 auth_pb2_grpc: Any = _auth_pb2_grpc
 cache_pb2: Any = _cache_pb2
 cache_pb2_grpc: Any = _cache_pb2_grpc
+s3_pb2_grpc: Any = _s3_pb2_grpc
 secrets_pb2: Any = _secrets_pb2
 secrets_pb2_grpc: Any = _secrets_pb2_grpc
 
@@ -191,11 +194,13 @@ def _load_target(args: RuntimeArgs) -> Plugin | PluginProviderAdapter | PluginPr
         return _auth_runtime_plugin(target)
     if resolved_kind == ProviderKind.CACHE and isinstance(target, CacheProvider):
         return _cache_runtime_plugin(target)
+    if resolved_kind == ProviderKind.S3 and isinstance(target, S3Provider):
+        return _s3_runtime_plugin(target)
     if resolved_kind == ProviderKind.SECRETS and isinstance(target, SecretsProvider):
         return _secrets_runtime_plugin(target)
     if isinstance(target, PluginProvider):
         raise RuntimeError(
-            "providers must be wrapped in gestalt.PluginProviderAdapter unless runtime_kind is auth, cache, or secrets"
+            "providers must be wrapped in gestalt.PluginProviderAdapter unless runtime_kind is auth, cache, s3, or secrets"
         )
     raise RuntimeError(f"{args.target} did not resolve to a supported gestalt target")
 
@@ -276,6 +281,8 @@ def _servable_target(
         return _auth_runtime_plugin(target)
     if kind == ProviderKind.CACHE and isinstance(target, CacheProvider):
         return _cache_runtime_plugin(target)
+    if kind == ProviderKind.S3 and isinstance(target, S3Provider):
+        return _s3_runtime_plugin(target)
     if kind == ProviderKind.SECRETS and isinstance(target, SecretsProvider):
         return _secrets_runtime_plugin(target)
     raise RuntimeError("unsupported runtime target")
@@ -298,6 +305,22 @@ def _register_auth_services(server: Any, provider: PluginProvider) -> None:
         _auth_servicer(provider=provider),
         server,
     )
+
+
+def _s3_runtime_plugin(provider: S3Provider) -> PluginProviderAdapter:
+    return PluginProviderAdapter(
+        kind=ProviderKind.S3,
+        provider=provider,
+        register_services=_register_s3_services,
+    )
+
+
+def _register_s3_services(server: Any, provider: PluginProvider) -> None:
+    runtime_pb2_grpc.add_ProviderLifecycleServicer_to_server(
+        _runtime_servicer(provider=provider, kind=ProviderKind.S3),
+        server,
+    )
+    s3_pb2_grpc.add_S3Servicer_to_server(provider, server)
 
 
 def _secrets_runtime_plugin(provider: SecretsProvider) -> PluginProviderAdapter:
@@ -688,6 +711,7 @@ def _provider_kind_to_proto(kind: ProviderKind | str) -> Any:
         ProviderKind.INTEGRATION: runtime_pb2.ProviderKind.PROVIDER_KIND_INTEGRATION,
         ProviderKind.AUTH: runtime_pb2.ProviderKind.PROVIDER_KIND_AUTH,
         ProviderKind.CACHE: runtime_pb2.ProviderKind.PROVIDER_KIND_CACHE,
+        ProviderKind.S3: runtime_pb2.ProviderKind.PROVIDER_KIND_S3,
         ProviderKind.SECRETS: runtime_pb2.ProviderKind.PROVIDER_KIND_SECRETS,
         ProviderKind.TELEMETRY: runtime_pb2.ProviderKind.PROVIDER_KIND_TELEMETRY,
     }.get(normalized, runtime_pb2.ProviderKind.PROVIDER_KIND_UNSPECIFIED)

@@ -3,7 +3,7 @@ import json
 import pathlib
 import tempfile
 import unittest
-from typing import Any
+from typing import Any, cast
 from unittest import mock
 
 import grpc
@@ -20,9 +20,11 @@ from gestalt import (
     HealthChecker,
     MetadataProvider,
     Plugin,
+    PluginProviderAdapter,
     ProviderKind,
     ProviderMetadata,
     Request,
+    S3Provider,
     SessionTTLProvider,
     WarningsProvider,
     _bootstrap,
@@ -32,12 +34,14 @@ from gestalt.gen.v1 import auth_pb2 as _auth_pb2
 from gestalt.gen.v1 import cache_pb2 as _cache_pb2
 from gestalt.gen.v1 import plugin_pb2 as _plugin_pb2
 from gestalt.gen.v1 import runtime_pb2 as _runtime_pb2
+from gestalt.gen.v1 import s3_pb2_grpc as _s3_pb2_grpc
 
 auth_pb2: Any = _auth_pb2
 cache_pb2: Any = _cache_pb2
 duration_pb2: Any = _duration_pb2
 plugin_pb2: Any = _plugin_pb2
 runtime_pb2: Any = _runtime_pb2
+s3_pb2_grpc: Any = _s3_pb2_grpc
 timestamp_pb2: Any = _timestamp_pb2
 
 UTC = dt.timezone.utc
@@ -643,6 +647,55 @@ class CacheRuntimeTests(unittest.TestCase):
                 "b": b"two",
             },
         )
+
+
+class S3RuntimeTests(unittest.TestCase):
+    class StubS3Provider(
+        S3Provider,
+        MetadataProvider,
+        WarningsProvider,
+        HealthChecker,
+    ):
+        def configure(self, name: str, config: dict[str, Any]) -> None:
+            self.configured = (name, dict(config))
+
+        def metadata(self) -> ProviderMetadata:
+            return ProviderMetadata(
+                kind=ProviderKind.S3,
+                name="stub-s3",
+                display_name="Stub S3",
+                description="test s3 provider",
+                version="0.1.0",
+            )
+
+        def warnings(self) -> list[str]:
+            return ["set S3_ENDPOINT"]
+
+        def health_check(self) -> None:
+            return None
+
+    def test_runtime_metadata_and_s3_registration(self) -> None:
+        provider = self.StubS3Provider()
+
+        runtime_servicer = _runtime._runtime_servicer(provider=provider, kind=ProviderKind.S3)
+        meta = runtime_servicer.GetProviderIdentity(mock.Mock(), mock.Mock())
+        self.assertEqual(meta.kind, runtime_pb2.ProviderKind.PROVIDER_KIND_S3)
+        self.assertEqual(meta.name, "stub-s3")
+        self.assertEqual(list(meta.warnings), ["set S3_ENDPOINT"])
+
+        adapter = _runtime._s3_runtime_plugin(provider)
+        server = mock.Mock()
+        with mock.patch.object(s3_pb2_grpc, "add_S3Servicer_to_server") as add_s3:
+            adapter.register_services(server, provider)
+        add_s3.assert_called_once_with(provider, server)
+
+    def test_servable_target_wraps_s3_provider(self) -> None:
+        provider = self.StubS3Provider()
+        servable = _runtime._servable_target(provider, runtime_kind=ProviderKind.S3)
+        self.assertIsInstance(servable, PluginProviderAdapter)
+        servable = cast(PluginProviderAdapter, servable)
+        self.assertEqual(servable.kind, ProviderKind.S3)
+        self.assertIs(servable.provider, provider)
 
 
 if __name__ == "__main__":

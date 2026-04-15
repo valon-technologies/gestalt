@@ -13,7 +13,7 @@ use crate::generated::v1::{
     ProviderKind,
 };
 use crate::secrets::SecretsProvider;
-use crate::{CURRENT_PROTOCOL_VERSION, Provider};
+use crate::{CURRENT_PROTOCOL_VERSION, Provider, S3Provider};
 
 #[async_trait]
 trait RuntimeHooks: Send + Sync {
@@ -43,6 +43,10 @@ struct CacheRuntime<P> {
 }
 
 struct SecretsRuntime<P> {
+    provider: Arc<P>,
+}
+
+struct S3Runtime<P> {
     provider: Arc<P>,
 }
 
@@ -80,6 +84,7 @@ impl_runtime_hooks!(ProviderRuntime, Provider);
 impl_runtime_hooks!(AuthRuntime, AuthProvider);
 impl_runtime_hooks!(CacheRuntime, CacheProvider);
 impl_runtime_hooks!(SecretsRuntime, SecretsProvider);
+impl_runtime_hooks!(S3Runtime, S3Provider);
 
 #[derive(Clone)]
 pub struct RuntimeServer {
@@ -125,6 +130,16 @@ impl RuntimeServer {
         Self {
             kind: ProviderKind::Secrets,
             provider: Arc::new(SecretsRuntime { provider }),
+        }
+    }
+
+    pub fn for_s3<P>(provider: Arc<P>) -> Self
+    where
+        P: S3Provider,
+    {
+        Self {
+            kind: ProviderKind::S3,
+            provider: Arc::new(S3Runtime { provider }),
         }
     }
 }

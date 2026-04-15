@@ -15,6 +15,7 @@ import (
 	authprovider "github.com/valon-technologies/gestalt/server/internal/drivers/auth/provider"
 	cacheprovider "github.com/valon-technologies/gestalt/server/internal/drivers/cache/provider"
 	indexeddbprovider "github.com/valon-technologies/gestalt/server/internal/drivers/indexeddb/provider"
+	s3provider "github.com/valon-technologies/gestalt/server/internal/drivers/s3/provider"
 	secretsenv "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/env"
 	secretsfile "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/file"
 	secretsprovider "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/provider"
@@ -118,6 +119,7 @@ func buildFactories() *bootstrap.FactoryRegistry {
 	factories.Auth = authprovider.Factory
 	factories.IndexedDB = indexeddbprovider.Factory
 	factories.Cache = cacheprovider.Factory
+	factories.S3 = s3provider.Factory
 	factories.Secrets["env"] = secretsenv.Factory
 	factories.Secrets["file"] = secretsfile.Factory
 	factories.Secrets["provider"] = secretsprovider.Factory

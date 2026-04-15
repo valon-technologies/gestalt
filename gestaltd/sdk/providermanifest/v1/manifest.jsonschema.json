@@ -16,6 +16,7 @@
         "auth",
         "indexeddb",
         "cache",
+        "s3",
         "secrets",
         "webui"
       ]

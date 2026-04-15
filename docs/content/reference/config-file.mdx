@@ -3,6 +3,7 @@ import { Tabs } from 'nextra/components'
 # Config File
 
 Every `gestaltd` deployment reads a single YAML config file. The top-level keys are `server` (listener, encryption, egress, and host-provider selection), `authorization` (shared human/workload access policy), `providers` (named auth, secrets, telemetry, audit, UI, indexeddb, and cache entries), and `plugins` (executable integrations and optional plugin-backed UI mounts):
+S3-compatible object stores are also configured under `providers.s3`.
 
 ```yaml
 server:
@@ -18,6 +19,7 @@ providers:
   ui: {}
   indexeddb: {}
   cache: {}
+  s3: {}
 plugins: {}
 ```
 
@@ -261,6 +263,38 @@ First-party cache providers are published at
 | `config` | Arbitrary provider-specific config passed through to the cache provider. |
 | `env` | Extra environment variables passed to the provider process. |
 | `allowedHosts` | Network allowlist for sandboxed provider processes. |
+
+## `providers.s3`
+
+S3-compatible object stores are provider-based. Configure one or more named
+entries under `providers.s3`, then bind them into executable plugins with
+`plugins.<name>.s3`. Gestalt does not use S3 providers for its own system
+state; they are mounted only for plugin code.
+
+```yaml
+providers:
+  s3:
+    assets:
+      source:
+        path: ./providers/s3/minio/manifest.yaml
+      config:
+        endpoint: http://127.0.0.1:9000
+        region: us-east-1
+        accessKeyId: ${MINIO_ROOT_USER}
+        secretAccessKey: secret://minio-root-password
+plugins:
+  media:
+    source:
+      path: ./plugins/media/manifest.yaml
+    s3:
+      - assets
+```
+
+The exact config fields depend on the selected S3 provider package. Gestalt's
+portable S3 contract covers `HeadObject`, `ReadObject`, `WriteObject`,
+`DeleteObject`, `ListObjects`, `CopyObject`, and `PresignObject`, so a single
+plugin can target AWS S3, MinIO, Cloudflare R2, GCS interoperability mode, or
+other S3-compatible backends without changing application code.
 
 ## `providers.secrets`
 
@@ -558,6 +592,7 @@ plugins:
 | `connections` | Named connection declarations. See [connections](#connections) below. |
 | `allowedOperations` | Allowlist with optional `alias`, `description`, and `allowedRoles` overrides per operation. |
 | `indexeddb` | Optional plugin IndexedDB config. `indexeddb.provider` selects which named `providers.indexeddb` entry backs the plugin's single IndexedDB SDK socket; when omitted, the plugin inherits the selected/default host IndexedDB. `indexeddb.db` overrides the plugin-visible database name and defaults to the plugin key. Schema-capable backends derive plugin scoping from that `db` name. `indexeddb.objectStores` optionally allowlists the logical object stores the plugin may use. `indexeddb.disabled: true` opts out entirely. Plugins then call `new IndexedDB()` (or the equivalent SDK helper) against `GESTALT_INDEXEDDB_SOCKET`; they do not choose arbitrary schemas or DSNs at runtime. |
+| `s3` | Optional list of named `providers.s3` bindings exposed to the executable plugin through the SDK transport. A single binding also populates the default S3 SDK env var for compatibility. |
 
 ### `plugins.*.source`
 

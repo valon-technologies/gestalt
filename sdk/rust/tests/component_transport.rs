@@ -8,16 +8,23 @@ use std::time::Duration;
 
 use gestalt::proto::v1::auth_provider_client::AuthProviderClient;
 use gestalt::proto::v1::provider_lifecycle_client::ProviderLifecycleClient;
+use gestalt::proto::v1::s3_client::S3Client;
+use gestalt::proto::v1::s3_server::S3 as ProtoS3;
 use gestalt::proto::v1::{
-    BeginLoginRequest, CompleteLoginRequest, ConfigureProviderRequest, ProviderKind,
-    ValidateExternalTokenRequest,
+    BeginLoginRequest, CompleteLoginRequest, ConfigureProviderRequest, CopyObjectRequest,
+    CopyObjectResponse, DeleteObjectRequest, HeadObjectRequest, HeadObjectResponse,
+    ListObjectsRequest, ListObjectsResponse, PresignObjectRequest, PresignObjectResponse,
+    ProviderKind, ReadObjectChunk, ReadObjectRequest, S3ObjectMeta, S3ObjectRef,
+    ValidateExternalTokenRequest, WriteObjectRequest, WriteObjectResponse,
 };
 use gestalt::{AuthProvider, RuntimeMetadata};
 use hyper_util::rt::tokio::TokioIo;
 use tokio::net::UnixStream;
+use tokio_stream::iter as stream_iter;
 use tonic::Code;
 use tonic::codegen::async_trait;
 use tonic::transport::Endpoint;
+use tonic::{Request as GrpcRequest, Response as GrpcResponse, Status};
 use tower::service_fn;
 
 struct TestAuthProvider {
@@ -103,6 +110,224 @@ impl AuthProvider for TestAuthProvider {
 
     fn session_ttl(&self) -> Option<Duration> {
         Some(Duration::from_secs(7200))
+    }
+}
+
+#[derive(Default)]
+struct TestS3Provider {
+    configured_name: Mutex<String>,
+    objects: Mutex<BTreeMap<String, Vec<u8>>>,
+}
+
+#[async_trait]
+impl gestalt::S3Provider for TestS3Provider {
+    async fn configure(
+        &self,
+        name: &str,
+        _config: serde_json::Map<String, serde_json::Value>,
+    ) -> gestalt::Result<()> {
+        *self.configured_name.lock().expect("lock configured_name") = name.to_string();
+        Ok(())
+    }
+
+    fn metadata(&self) -> Option<RuntimeMetadata> {
+        Some(RuntimeMetadata {
+            name: "s3-example".to_string(),
+            display_name: "S3 Example".to_string(),
+            description: "Test s3 provider".to_string(),
+            version: "0.1.0".to_string(),
+        })
+    }
+
+    fn warnings(&self) -> Vec<String> {
+        vec!["set STORAGE_BUCKET".to_string()]
+    }
+}
+
+#[tonic::async_trait]
+impl ProtoS3 for TestS3Provider {
+    type ReadObjectStream =
+        tokio_stream::Iter<std::vec::IntoIter<std::result::Result<ReadObjectChunk, Status>>>;
+
+    async fn head_object(
+        &self,
+        request: GrpcRequest<HeadObjectRequest>,
+    ) -> std::result::Result<GrpcResponse<HeadObjectResponse>, Status> {
+        let reference = request
+            .into_inner()
+            .r#ref
+            .ok_or_else(|| Status::invalid_argument("missing ref"))?;
+        let key = object_key(&reference.bucket, &reference.key);
+        let objects = self.objects.lock().expect("lock objects");
+        let body = objects
+            .get(&key)
+            .ok_or_else(|| Status::not_found("object not found"))?;
+        Ok(GrpcResponse::new(HeadObjectResponse {
+            meta: Some(object_meta(
+                reference,
+                body.len() as i64,
+                "application/octet-stream",
+            )),
+        }))
+    }
+
+    async fn read_object(
+        &self,
+        request: GrpcRequest<ReadObjectRequest>,
+    ) -> std::result::Result<GrpcResponse<Self::ReadObjectStream>, Status> {
+        let reference = request
+            .into_inner()
+            .r#ref
+            .ok_or_else(|| Status::invalid_argument("missing ref"))?;
+        let key = object_key(&reference.bucket, &reference.key);
+        let objects = self.objects.lock().expect("lock objects");
+        let body = objects
+            .get(&key)
+            .cloned()
+            .ok_or_else(|| Status::not_found("object not found"))?;
+        drop(objects);
+
+        let mut messages = vec![Ok(ReadObjectChunk {
+            result: Some(gestalt::proto::v1::read_object_chunk::Result::Meta(
+                object_meta(reference, body.len() as i64, "application/octet-stream"),
+            )),
+        })];
+        if !body.is_empty() {
+            messages.push(Ok(ReadObjectChunk {
+                result: Some(gestalt::proto::v1::read_object_chunk::Result::Data(body)),
+            }));
+        }
+
+        Ok(GrpcResponse::new(stream_iter(messages)))
+    }
+
+    async fn write_object(
+        &self,
+        request: GrpcRequest<tonic::Streaming<WriteObjectRequest>>,
+    ) -> std::result::Result<GrpcResponse<WriteObjectResponse>, Status> {
+        let mut stream = request.into_inner();
+        let mut reference = None;
+        let mut content_type = String::new();
+        let mut body = Vec::new();
+
+        while let Some(message) = stream.message().await? {
+            match message.msg {
+                Some(gestalt::proto::v1::write_object_request::Msg::Open(open)) => {
+                    reference = open.r#ref;
+                    content_type = open.content_type;
+                }
+                Some(gestalt::proto::v1::write_object_request::Msg::Data(chunk)) => {
+                    body.extend_from_slice(&chunk);
+                }
+                None => {}
+            }
+        }
+
+        let reference = reference.ok_or_else(|| Status::invalid_argument("missing open frame"))?;
+        self.objects
+            .lock()
+            .expect("lock objects")
+            .insert(object_key(&reference.bucket, &reference.key), body.clone());
+
+        Ok(GrpcResponse::new(WriteObjectResponse {
+            meta: Some(object_meta(reference, body.len() as i64, &content_type)),
+        }))
+    }
+
+    async fn delete_object(
+        &self,
+        request: GrpcRequest<DeleteObjectRequest>,
+    ) -> std::result::Result<GrpcResponse<()>, Status> {
+        let reference = request
+            .into_inner()
+            .r#ref
+            .ok_or_else(|| Status::invalid_argument("missing ref"))?;
+        self.objects
+            .lock()
+            .expect("lock objects")
+            .remove(&object_key(&reference.bucket, &reference.key));
+        Ok(GrpcResponse::new(()))
+    }
+
+    async fn list_objects(
+        &self,
+        request: GrpcRequest<ListObjectsRequest>,
+    ) -> std::result::Result<GrpcResponse<ListObjectsResponse>, Status> {
+        let request = request.into_inner();
+        let objects = self.objects.lock().expect("lock objects");
+        let mut metas = Vec::new();
+        for (key, body) in objects.iter() {
+            let Some((bucket, object_key)) = key.split_once('/') else {
+                continue;
+            };
+            if bucket != request.bucket {
+                continue;
+            }
+            if !request.prefix.is_empty() && !object_key.starts_with(&request.prefix) {
+                continue;
+            }
+            metas.push(object_meta(
+                S3ObjectRef {
+                    bucket: bucket.to_string(),
+                    key: object_key.to_string(),
+                    version_id: String::new(),
+                },
+                body.len() as i64,
+                "application/octet-stream",
+            ));
+        }
+        Ok(GrpcResponse::new(ListObjectsResponse {
+            objects: metas,
+            ..ListObjectsResponse::default()
+        }))
+    }
+
+    async fn copy_object(
+        &self,
+        request: GrpcRequest<CopyObjectRequest>,
+    ) -> std::result::Result<GrpcResponse<CopyObjectResponse>, Status> {
+        let request = request.into_inner();
+        let source = request
+            .source
+            .ok_or_else(|| Status::invalid_argument("missing source"))?;
+        let destination = request
+            .destination
+            .ok_or_else(|| Status::invalid_argument("missing destination"))?;
+        let mut objects = self.objects.lock().expect("lock objects");
+        let body = objects
+            .get(&object_key(&source.bucket, &source.key))
+            .cloned()
+            .ok_or_else(|| Status::not_found("object not found"))?;
+        objects.insert(
+            object_key(&destination.bucket, &destination.key),
+            body.clone(),
+        );
+        Ok(GrpcResponse::new(CopyObjectResponse {
+            meta: Some(object_meta(
+                destination,
+                body.len() as i64,
+                "application/octet-stream",
+            )),
+        }))
+    }
+
+    async fn presign_object(
+        &self,
+        request: GrpcRequest<PresignObjectRequest>,
+    ) -> std::result::Result<GrpcResponse<PresignObjectResponse>, Status> {
+        let request = request.into_inner();
+        let reference = request
+            .r#ref
+            .ok_or_else(|| Status::invalid_argument("missing ref"))?;
+        Ok(GrpcResponse::new(PresignObjectResponse {
+            url: format!(
+                "https://example.invalid/{}/{}",
+                reference.bucket, reference.key
+            ),
+            method: request.method,
+            expires_at: None,
+            headers: request.headers,
+        }))
     }
 }
 
@@ -206,6 +431,158 @@ async fn serves_auth_provider_and_runtime_over_unix_socket() {
 
     serve_task.abort();
     let _ = serve_task.await;
+}
+
+#[tokio::test]
+async fn serves_s3_provider_and_runtime_over_unix_socket() {
+    let _env_lock = helpers::env_lock().lock().await;
+    let socket = helpers::temp_socket("gestalt-rust-s3.sock");
+    let _socket_guard = helpers::EnvGuard::set(gestalt::ENV_PROVIDER_SOCKET, socket.as_os_str());
+
+    let provider = Arc::new(TestS3Provider::default());
+    let serve_provider = Arc::clone(&provider);
+    let serve_task = tokio::spawn(async move {
+        gestalt::runtime::serve_s3_provider(serve_provider)
+            .await
+            .expect("serve s3 provider");
+    });
+
+    helpers::wait_for_socket(&socket).await;
+
+    let channel = connect_unix(&socket).await;
+    let mut runtime = ProviderLifecycleClient::new(channel.clone());
+    let mut s3 = S3Client::new(channel);
+
+    let metadata = runtime
+        .get_provider_identity(())
+        .await
+        .expect("get provider identity")
+        .into_inner();
+    assert_eq!(
+        ProviderKind::try_from(metadata.kind)
+            .expect("valid provider kind")
+            .as_str_name(),
+        "PROVIDER_KIND_S3"
+    );
+    assert_eq!(metadata.name, "s3-example");
+    assert_eq!(metadata.warnings, vec!["set STORAGE_BUCKET"]);
+
+    runtime
+        .configure_provider(ConfigureProviderRequest {
+            name: "s3-runtime".to_string(),
+            config: Some(helpers::struct_from_json(
+                serde_json::json!({ "bucket": "sdk-bucket" }),
+            )),
+            protocol_version: gestalt::CURRENT_PROTOCOL_VERSION,
+        })
+        .await
+        .expect("configure provider");
+    assert_eq!(
+        *provider
+            .configured_name
+            .lock()
+            .expect("lock configured_name"),
+        "s3-runtime"
+    );
+
+    let reference = S3ObjectRef {
+        bucket: "bucket".to_string(),
+        key: "docs/example.txt".to_string(),
+        version_id: String::new(),
+    };
+    s3.write_object(stream_iter(vec![
+        WriteObjectRequest {
+            msg: Some(gestalt::proto::v1::write_object_request::Msg::Open(
+                gestalt::proto::v1::WriteObjectOpen {
+                    r#ref: Some(reference.clone()),
+                    ..gestalt::proto::v1::WriteObjectOpen::default()
+                },
+            )),
+        },
+        WriteObjectRequest {
+            msg: Some(gestalt::proto::v1::write_object_request::Msg::Data(
+                b"hello".to_vec(),
+            )),
+        },
+    ]))
+    .await
+    .expect("write object");
+
+    let head = s3
+        .head_object(HeadObjectRequest {
+            r#ref: Some(reference.clone()),
+        })
+        .await
+        .expect("head object")
+        .into_inner();
+    assert_eq!(head.meta.expect("meta").size, 5);
+
+    let listed = s3
+        .list_objects(ListObjectsRequest {
+            bucket: "bucket".to_string(),
+            prefix: "docs/".to_string(),
+            ..ListObjectsRequest::default()
+        })
+        .await
+        .expect("list objects")
+        .into_inner();
+    assert_eq!(listed.objects.len(), 1);
+    assert_eq!(
+        listed.objects[0].r#ref.as_ref().expect("ref").key,
+        "docs/example.txt"
+    );
+
+    let mut stream = s3
+        .read_object(ReadObjectRequest {
+            r#ref: Some(reference),
+            ..ReadObjectRequest::default()
+        })
+        .await
+        .expect("read object")
+        .into_inner();
+    let first = stream
+        .message()
+        .await
+        .expect("recv meta")
+        .expect("meta frame");
+    assert!(matches!(
+        first.result,
+        Some(gestalt::proto::v1::read_object_chunk::Result::Meta(_))
+    ));
+    let second = stream
+        .message()
+        .await
+        .expect("recv data")
+        .expect("data frame");
+    assert_eq!(
+        second
+            .result
+            .and_then(|result| match result {
+                gestalt::proto::v1::read_object_chunk::Result::Data(data) => Some(data),
+                _ => None,
+            })
+            .expect("data payload"),
+        b"hello".to_vec()
+    );
+
+    serve_task.abort();
+    let _ = serve_task.await;
+}
+
+fn object_key(bucket: &str, key: &str) -> String {
+    format!("{bucket}/{key}")
+}
+
+fn object_meta(reference: S3ObjectRef, size: i64, content_type: &str) -> S3ObjectMeta {
+    S3ObjectMeta {
+        r#ref: Some(reference),
+        etag: String::new(),
+        size,
+        content_type: content_type.to_string(),
+        last_modified: None,
+        metadata: BTreeMap::new(),
+        storage_class: String::new(),
+    }
 }
 
 async fn connect_unix(path: &Path) -> tonic::transport::Channel {

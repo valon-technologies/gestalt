@@ -1,0 +1,10 @@
+{
+  "name": "@fixtures/s3-provider",
+  "type": "module",
+  "gestalt": {
+    "provider": {
+      "kind": "s3",
+      "target": "./s3.ts#provider"
+    }
+  }
+}

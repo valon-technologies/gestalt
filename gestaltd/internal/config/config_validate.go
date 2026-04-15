@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
+	"github.com/valon-technologies/gestalt/server/internal/providerenv"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
@@ -96,6 +97,9 @@ func ValidateStructure(cfg *Config) error {
 		return err
 	}
 	if err := validateCacheConfig(cfg); err != nil {
+		return err
+	}
+	if err := validateS3Config(cfg); err != nil {
 		return err
 	}
 
@@ -321,6 +325,9 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry) error {
 	if err := validatePluginCacheBindings(cfg, name, entry); err != nil {
 		return err
 	}
+	if err := validatePluginS3Bindings(cfg, name, entry); err != nil {
+		return err
+	}
 	if err := validateAuthorizationPolicyReference(cfg, "plugin", name, entry.AuthorizationPolicy); err != nil {
 		return err
 	}
@@ -363,6 +370,24 @@ func validateCacheConfig(cfg *Config) error {
 	return nil
 }
 
+func validateS3Config(cfg *Config) error {
+	for name, entry := range cfg.Providers.S3 {
+		if entry == nil {
+			return fmt.Errorf("config validation: providers.s3.%s is required", name)
+		}
+		if err := validatePluginOnlyProviderFields("providers.s3."+name, entry); err != nil {
+			return err
+		}
+		if entry.Disabled {
+			continue
+		}
+		if err := validateProviderEntrySource("s3", name, entry); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) error {
 	if entry == nil {
 		return nil
@@ -378,6 +403,9 @@ func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) erro
 	}
 	if len(entry.Cache) > 0 {
 		return fmt.Errorf("config validation: %s.cache is only supported on plugins.*", subject)
+	}
+	if len(entry.S3) > 0 {
+		return fmt.Errorf("config validation: %s.s3 is only supported on plugins.*", subject)
 	}
 	if entry.Surfaces != nil {
 		return fmt.Errorf("config validation: %s.surfaces is only supported on plugins.*", subject)
@@ -552,6 +580,38 @@ func validatePluginIndexedDBConfig(cfg *Config, name string, entry *ProviderEntr
 	return nil
 }
 
+func validatePluginS3Bindings(cfg *Config, name string, entry *ProviderEntry) error {
+	if entry == nil {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(entry.S3))
+	envNames := make(map[string]string, len(entry.S3))
+	for i, binding := range entry.S3 {
+		binding = strings.TrimSpace(binding)
+		if binding == "" {
+			return fmt.Errorf("config validation: plugin %q s3[%d] is required", name, i)
+		}
+		if _, exists := seen[binding]; exists {
+			return fmt.Errorf("config validation: plugin %q s3[%d] duplicates %q", name, i, binding)
+		}
+		boundEntry, ok := cfg.Providers.S3[binding]
+		if !ok || boundEntry == nil {
+			return fmt.Errorf("config validation: plugin %q s3[%d] references unknown s3 %q", name, i, binding)
+		}
+		if boundEntry.Disabled {
+			return fmt.Errorf("config validation: plugin %q s3[%d] references disabled s3 %q", name, i, binding)
+		}
+		envName := providerenv.S3SocketEnv(binding)
+		if otherBinding, exists := envNames[envName]; exists {
+			return fmt.Errorf("config validation: plugin %q s3[%d] %q conflicts with %q after S3 env normalization (%s)", name, i, binding, otherBinding, envName)
+		}
+		seen[binding] = struct{}{}
+		envNames[envName] = binding
+		entry.S3[i] = binding
+	}
+	return nil
+}
+
 func validatePluginCacheBindings(cfg *Config, name string, entry *ProviderEntry) error {
 	if entry == nil {
 		return nil
@@ -600,7 +660,6 @@ func cacheSocketEnv(name string) string {
 	}
 	return b.String()
 }
-
 func normalizeMountedUIPaths(cfg *Config, pluginOwnedUIRefs map[string]struct{}) error {
 	for name, entry := range cfg.Providers.UI {
 		if entry == nil || entry.Disabled {

@@ -17,6 +17,7 @@ import (
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
+	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	"github.com/valon-technologies/gestalt/server/internal/composite"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/graphql"
@@ -466,6 +467,11 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 	args := entry.Args
 	env := clonePluginEnv(entry.Env)
 	var cleanup func()
+	defer func() {
+		if cleanup != nil {
+			cleanup()
+		}
+	}()
 	if command == "" {
 		if entry.ResolvedManifestPath == "" {
 			return nil, fmt.Errorf("resolved manifest path is required for synthesized source provider execution")
@@ -490,14 +496,6 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 			maps.Copy(env, execEnv)
 		}
 	}
-	if cleanup != nil {
-		defer func() {
-			if cleanup != nil {
-				cleanup()
-			}
-		}()
-	}
-
 	execCfg := providerhost.ExecConfig{
 		Command:       command,
 		Args:          args,
@@ -528,6 +526,13 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		execCfg.HostServices = append(execCfg.HostServices, hostServices...)
 		cleanup = chainCleanup(cleanup, cacheCleanup)
 	}
+	if len(entry.S3) > 0 {
+		hostServices, err := buildPluginS3HostServices(name, entry, deps)
+		if err != nil {
+			return nil, err
+		}
+		execCfg.HostServices = append(execCfg.HostServices, hostServices...)
+	}
 	execCfg.Cleanup = cleanup
 	prov, err := providerhost.NewExecutableProvider(ctx, execCfg)
 	if err != nil {
@@ -542,7 +547,7 @@ func buildPluginIndexedDBHostServices(pluginName string, effective config.Effect
 		return nil, nil, fmt.Errorf("indexeddb host services are not available")
 	}
 
-	ds, err := buildPluginScopedIndexedDB(effective, deps)
+	ds, err := buildPluginScopedIndexedDB(pluginName, effective, deps)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -602,12 +607,43 @@ func buildPluginCacheHostServices(pluginName string, entry *config.ProviderEntry
 	}, nil
 }
 
-func buildPluginScopedIndexedDB(effective config.EffectivePluginIndexedDB, deps Deps) (indexeddb.IndexedDB, error) {
+func buildPluginS3HostServices(pluginName string, entry *config.ProviderEntry, deps Deps) ([]providerhost.HostService, error) {
+	if len(deps.S3) == 0 {
+		return nil, fmt.Errorf("s3 host services are not available")
+	}
+
+	hostServices := make([]providerhost.HostService, 0, len(entry.S3)+1)
+	for _, binding := range entry.S3 {
+		client, ok := deps.S3[binding]
+		if !ok || client == nil {
+			return nil, fmt.Errorf("s3 %q is not available", binding)
+		}
+		hostServices = append(hostServices, providerhost.HostService{
+			EnvVar: providerhost.S3SocketEnv(binding),
+			Register: func(client s3store.Client) func(*grpc.Server) {
+				return func(srv *grpc.Server) {
+					proto.RegisterS3Server(srv, providerhost.NewS3Server(client, pluginName))
+				}
+			}(client),
+		})
+	}
+	if len(entry.S3) == 1 {
+		client := deps.S3[entry.S3[0]]
+		hostServices = append(hostServices, providerhost.HostService{
+			EnvVar: providerhost.DefaultS3SocketEnv,
+			Register: func(srv *grpc.Server) {
+				proto.RegisterS3Server(srv, providerhost.NewS3Server(client, pluginName))
+			},
+		})
+	}
+	return hostServices, nil
+}
+func buildPluginScopedIndexedDB(pluginName string, effective config.EffectivePluginIndexedDB, deps Deps) (indexeddb.IndexedDB, error) {
 	def, ok := deps.IndexedDBDefs[effective.ProviderName]
 	if !ok || def == nil {
 		return nil, fmt.Errorf("indexeddb %q is not available", effective.ProviderName)
 	}
-	scopedDef, transportPrefix, err := newPluginScopedIndexedDBDef(def, effective.DB)
+	scopedDef, transportPrefix, err := newPluginScopedIndexedDBDef(def, pluginName, effective.DB)
 	if err != nil {
 		return nil, fmt.Errorf("indexeddb %q: %w", effective.ProviderName, err)
 	}
@@ -616,12 +652,14 @@ func buildPluginScopedIndexedDB(effective config.EffectivePluginIndexedDB, deps 
 		return nil, fmt.Errorf("indexeddb %q: %w", effective.ProviderName, err)
 	}
 	ds = newPluginIndexedDBTransport(ds, pluginIndexedDBTransportOptions{
-		StorePrefix: transportPrefix,
+		StorePrefix:       transportPrefix,
+		LegacyStorePrefix: legacyPluginIndexedDBPrefix(pluginName),
+		AllowedStores:     effective.ObjectStores,
 	})
 	return metricutil.InstrumentIndexedDB(ds, effective.ProviderName), nil
 }
 
-func newPluginScopedIndexedDBDef(entry *config.ProviderEntry, db string) (*config.ProviderEntry, string, error) {
+func newPluginScopedIndexedDBDef(entry *config.ProviderEntry, pluginName, db string) (*config.ProviderEntry, string, error) {
 	if entry == nil {
 		return nil, "", fmt.Errorf("datastore provider is required")
 	}
@@ -635,7 +673,9 @@ func newPluginScopedIndexedDBDef(entry *config.ProviderEntry, db string) (*confi
 
 	transportPrefix := ""
 	if pluginIndexedDBUsesScopedProviderConfig(entry, cfg) {
-		delete(cfg, "legacy_table_prefix")
+		if legacyPrefix := legacyPluginIndexedDBPrefix(pluginName); legacyPrefix != "" {
+			cfg["legacy_table_prefix"] = legacyPrefix
+		}
 		delete(cfg, "legacy_prefix")
 		delete(cfg, "namespace")
 		if isSQLiteIndexedDBConfig(cfg) {
@@ -684,6 +724,14 @@ func isRelationalIndexedDBEntry(entry *config.ProviderEntry) bool {
 			strings.HasSuffix(path, "/relationaldb/manifest.yaml")
 	}
 	return false
+}
+
+func legacyPluginIndexedDBPrefix(pluginName string) string {
+	pluginName = strings.TrimSpace(pluginName)
+	if pluginName == "" {
+		return ""
+	}
+	return "plugin_" + pluginName + "_"
 }
 
 func isSQLiteIndexedDBConfig(cfg map[string]any) bool {

@@ -1,0 +1,187 @@
+import { Tabs } from 'nextra/components'
+
+# S3
+
+This page covers building custom S3 providers. If you only need to configure
+an object store for a deployment, use [Providers > S3](/providers/s3).
+
+Gestalt's S3 provider contract models the portable S3-compatible object API:
+object metadata, streaming reads and writes, prefix listing, object copy, and
+presigning. It intentionally excludes bucket administration, IAM policy
+management, and other control-plane features that do not transport cleanly
+across S3-compatible backends.
+
+## Manifest
+
+An S3 provider manifest declares `kind: s3`:
+
+```yaml
+kind: s3
+source: github.com/acme/gestalt-providers/s3/minio
+version: 0.0.1-alpha.1
+displayName: MinIO S3
+description: S3-compatible object storage provider backed by MinIO.
+spec:
+  configSchemaPath: ./config.schema.json
+```
+
+## Provider interface
+
+Implement the `S3` gRPC service:
+
+| Method | Purpose |
+| --- | --- |
+| `HeadObject` | Return metadata for one object reference. |
+| `ReadObject` | Stream one object: metadata frame first, then byte frames. |
+| `WriteObject` | Accept one metadata frame followed by byte frames, then return committed metadata. |
+| `DeleteObject` | Delete one object reference. |
+| `ListObjects` | List objects by bucket, prefix, delimiter, and continuation token. |
+| `CopyObject` | Copy an object server-side between object references. |
+| `PresignObject` | Produce a presigned request URL plus required headers. |
+
+<Tabs items={['Go', 'Python', 'Rust', 'TypeScript']}>
+  <Tabs.Tab>
+    ```go
+    package minio
+
+    import (
+    	"context"
+    	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+    	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+    	"google.golang.org/protobuf/types/known/emptypb"
+    )
+
+    type Provider struct{}
+
+    func (p *Provider) Configure(_ context.Context, _ string, config map[string]any) error {
+    	return nil
+    }
+
+    func (p *Provider) HeadObject(ctx context.Context, req *proto.HeadObjectRequest) (*proto.HeadObjectResponse, error) {
+    	return nil, nil
+    }
+
+    func (p *Provider) ReadObject(req *proto.ReadObjectRequest, stream proto.S3_ReadObjectServer) error {
+    	return nil
+    }
+
+    func (p *Provider) WriteObject(stream proto.S3_WriteObjectServer) error {
+    	return nil
+    }
+
+    func (p *Provider) DeleteObject(context.Context, *proto.DeleteObjectRequest) (*emptypb.Empty, error) {
+    	return &emptypb.Empty{}, nil
+    }
+
+    func (p *Provider) ListObjects(context.Context, *proto.ListObjectsRequest) (*proto.ListObjectsResponse, error) {
+    	return nil, nil
+    }
+
+    func (p *Provider) CopyObject(context.Context, *proto.CopyObjectRequest) (*proto.CopyObjectResponse, error) {
+    	return nil, nil
+    }
+
+    func (p *Provider) PresignObject(context.Context, *proto.PresignObjectRequest) (*proto.PresignObjectResponse, error) {
+    	return nil, nil
+    }
+
+    func main() {
+    	_ = gestalt.ServeS3Provider(context.Background(), &Provider{})
+    }
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```python
+    import gestalt
+
+    class MinIOS3(gestalt.S3Provider):
+        def configure(self, name: str, config: dict[str, object]) -> None:
+            self.endpoint = str(config["endpoint"])
+
+        def head_object(self, request: object) -> object:
+            ...
+
+        def read_object(self, request: object):
+            ...
+
+        def write_object(self, requests):
+            ...
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```rust
+    #[derive(Default)]
+    pub struct MinioS3;
+
+    #[gestalt::async_trait]
+    impl gestalt::S3Provider for MinioS3 {
+        async fn head_object(
+            &self,
+            request: proto::HeadObjectRequest,
+        ) -> gestalt::Result<proto::HeadObjectResponse> {
+            todo!()
+        }
+    }
+
+    gestalt::export_s3_provider!(constructor = MinioS3::default);
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```ts
+    import { defineS3Provider } from "@valon-technologies/gestalt";
+
+    export const provider = defineS3Provider({
+      async configure(name, config) {
+        this.endpoint = String(config.endpoint);
+      },
+
+      async headObject(request) {
+        return {};
+      },
+    });
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+## Plugin SDK
+
+Plugins consume S3 providers through the SDK, not by speaking gRPC directly.
+Each SDK exposes a client plus object-handle helpers:
+
+```go
+s3, err := gestalt.S3()
+if err != nil {
+	return err
+}
+defer s3.Close()
+
+obj := s3.Object("artifacts", "jobs/123/output.json")
+if _, err := obj.WriteJSON(ctx, map[string]any{"ok": true}, nil); err != nil {
+	return err
+}
+body, err := obj.JSON(ctx, nil)
+if err != nil {
+	return err
+}
+_ = body
+```
+
+The same contract exists across Go, Python, Rust, and TypeScript:
+
+- connect to the default binding with `S3()` / `new S3()` / `S3.connect()`
+- connect to a named binding with `S3("archive")` or its language equivalent
+- operate on object handles with `stat`, `bytes` / `text` / `json`, `write`, `delete`, and `presign`
+
+## Implementation notes
+
+- Treat object references as `{bucket, key, version_id}` values, not filesystem paths.
+- Keep reads and writes streaming. Do not require the caller to buffer the full object in memory.
+- Preserve backend metadata that fits the portable model: `etag`, `size`, `content_type`, `last_modified`, `metadata`, and `storage_class`.
+- Use `FailedPrecondition` for conditional-write failures and `NotFound` for missing objects so SDK error mapping stays portable.
+- Prefer implementing multipart upload and backend retries internally instead of extending the public gRPC surface unless the caller truly needs those controls.
+
+## What to read next
+
+- [Providers > S3](/providers/s3): deployment configuration
+- [Config File](/reference/config-file#providerss3): YAML shape
+- [Provider Manifests](/reference/plugin-manifests): manifest fields and packaging

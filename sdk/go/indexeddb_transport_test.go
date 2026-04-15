@@ -18,6 +18,7 @@ import (
 var (
 	testClient      *gestalt.IndexedDBClient
 	testCacheClient *gestalt.CacheClient
+	testS3Client    *gestalt.S3Client
 )
 
 func TestMain(m *testing.M) {
@@ -25,16 +26,76 @@ func TestMain(m *testing.M) {
 		os.Exit(0)
 	}
 
-	// Build the test harness binary.
-	harnessDir := filepath.Join("..", "..", "gestaltd", "internal", "testutil", "cmd", "indexeddbtransportd")
-	bin := filepath.Join(os.TempDir(), "indexeddbtransportd")
+	idbBin, idbSock, idbCmd := buildAndStartHarness("indexeddbtransportd", "go-sdk-idb-test.sock")
+	cacheBin, cacheSock, cacheCmd := buildAndStartHarness("cachetransportd", "go-sdk-cache-test.sock")
+	s3Bin, s3Sock, s3Cmd := buildAndStartHarness("s3transportd", "go-sdk-s3-test.sock")
+
+	os.Setenv(gestalt.EnvIndexedDBSocket, idbSock)
+	os.Setenv(gestalt.IndexedDBSocketEnv("test"), idbSock)
+	client, err := gestalt.IndexedDB()
+	if err != nil {
+		_ = idbCmd.Process.Kill()
+		_ = cacheCmd.Process.Kill()
+		_ = s3Cmd.Process.Kill()
+		panic("connect: " + err.Error())
+	}
+	testClient = client
+
+	os.Setenv(gestalt.EnvCacheSocket, cacheSock)
+	os.Setenv(gestalt.CacheSocketEnv("test"), cacheSock)
+	cacheClient, err := gestalt.Cache()
+	if err != nil {
+		_ = client.Close()
+		_ = idbCmd.Process.Kill()
+		_ = cacheCmd.Process.Kill()
+		_ = s3Cmd.Process.Kill()
+		panic("connect cache: " + err.Error())
+	}
+	testCacheClient = cacheClient
+
+	os.Setenv(gestalt.EnvS3Socket, s3Sock)
+	os.Setenv(gestalt.S3SocketEnv("test"), s3Sock)
+	s3Client, err := gestalt.S3()
+	if err != nil {
+		_ = client.Close()
+		_ = cacheClient.Close()
+		_ = idbCmd.Process.Kill()
+		_ = cacheCmd.Process.Kill()
+		_ = s3Cmd.Process.Kill()
+		panic("connect s3: " + err.Error())
+	}
+	testS3Client = s3Client
+
+	code := m.Run()
+
+	_ = client.Close()
+	_ = cacheClient.Close()
+	_ = s3Client.Close()
+	_ = idbCmd.Process.Kill()
+	_ = cacheCmd.Process.Kill()
+	_ = s3Cmd.Process.Kill()
+	_ = idbCmd.Wait()
+	_ = cacheCmd.Wait()
+	_ = s3Cmd.Wait()
+	_ = os.Remove(idbSock)
+	_ = os.Remove(cacheSock)
+	_ = os.Remove(s3Sock)
+	_ = os.Remove(idbBin)
+	_ = os.Remove(cacheBin)
+	_ = os.Remove(s3Bin)
+	os.Exit(code)
+}
+
+func buildAndStartHarness(binaryName, socketName string) (string, string, *exec.Cmd) {
+	harnessDir := filepath.Join("..", "..", "gestaltd", "internal", "testutil", "cmd", binaryName)
+	bin := filepath.Join(os.TempDir(), binaryName)
 	build := exec.Command("go", "build", "-o", bin, ".")
 	build.Dir = harnessDir
 	if out, err := build.CombinedOutput(); err != nil {
 		panic("build harness: " + string(out))
 	}
 
-	sock := filepath.Join(os.TempDir(), "go-sdk-idb-test.sock")
+	sock := filepath.Join(os.TempDir(), socketName)
 	_ = os.Remove(sock)
 
 	cmd := exec.Command(bin, "--socket", sock)
@@ -43,67 +104,12 @@ func TestMain(m *testing.M) {
 		panic("start harness: " + err.Error())
 	}
 
-	// Wait for READY.
 	scanner := bufio.NewScanner(stdout)
 	if !scanner.Scan() || scanner.Text() != "READY" {
-		cmd.Process.Kill()
+		_ = cmd.Process.Kill()
 		panic("harness did not print READY")
 	}
-
-	os.Setenv(gestalt.EnvIndexedDBSocket, sock)
-	os.Setenv(gestalt.IndexedDBSocketEnv("test"), sock)
-	client, err := gestalt.IndexedDB()
-	if err != nil {
-		cmd.Process.Kill()
-		panic("connect: " + err.Error())
-	}
-	testClient = client
-
-	cacheHarnessDir := filepath.Join("..", "..", "gestaltd", "internal", "testutil", "cmd", "cachetransportd")
-	cacheBin := filepath.Join(os.TempDir(), "cachetransportd")
-	cacheBuild := exec.Command("go", "build", "-o", cacheBin, ".")
-	cacheBuild.Dir = cacheHarnessDir
-	if out, err := cacheBuild.CombinedOutput(); err != nil {
-		panic("build cache harness: " + string(out))
-	}
-
-	cacheSock := filepath.Join(os.TempDir(), "go-sdk-cache-test.sock")
-	_ = os.Remove(cacheSock)
-
-	cacheCmd := exec.Command(cacheBin, "--socket", cacheSock)
-	cacheStdout, _ := cacheCmd.StdoutPipe()
-	if err := cacheCmd.Start(); err != nil {
-		panic("start cache harness: " + err.Error())
-	}
-
-	cacheScanner := bufio.NewScanner(cacheStdout)
-	if !cacheScanner.Scan() || cacheScanner.Text() != "READY" {
-		cacheCmd.Process.Kill()
-		panic("cache harness did not print READY")
-	}
-
-	os.Setenv(gestalt.EnvCacheSocket, cacheSock)
-	os.Setenv(gestalt.CacheSocketEnv("test"), cacheSock)
-	cacheClient, err := gestalt.Cache()
-	if err != nil {
-		cacheCmd.Process.Kill()
-		panic("connect cache: " + err.Error())
-	}
-	testCacheClient = cacheClient
-
-	code := m.Run()
-
-	_ = client.Close()
-	_ = cacheClient.Close()
-	cmd.Process.Kill()
-	cacheCmd.Process.Kill()
-	_ = cmd.Wait()
-	_ = cacheCmd.Wait()
-	_ = os.Remove(sock)
-	_ = os.Remove(cacheSock)
-	_ = os.Remove(bin)
-	_ = os.Remove(cacheBin)
-	os.Exit(code)
+	return bin, sock, cmd
 }
 
 func TestTransport_NamedSocketEnv(t *testing.T) {

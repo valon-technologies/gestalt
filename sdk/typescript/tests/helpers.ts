@@ -41,12 +41,25 @@ export function hostTarget(): { goos: string; goarch: string; executableSuffix: 
 export async function waitForPath(path: string, timeoutMs = 5_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (existsSync(path)) {
+    if (existsSync(path) && (await canConnect(path))) {
       return;
     }
     await Bun.sleep(25);
   }
   throw new Error(`timed out waiting for ${path}`);
+}
+
+async function canConnect(path: string): Promise<boolean> {
+  return await new Promise((resolve) => {
+    const socket = connect(path);
+    const finish = (ready: boolean) => {
+      socket.removeAllListeners();
+      socket.destroy();
+      resolve(ready);
+    };
+    socket.once("connect", () => finish(true));
+    socket.once("error", () => finish(false));
+  });
 }
 
 export function createUnixGrpcClient<T extends DescService>(service: T, socketPath: string): Client<T> {

@@ -124,12 +124,30 @@ import { runBundledProvider } from ${runtimePath};
 const candidate = ${
     target.exportName
       ? `bundledModule[${exportName}]`
-      : "bundledModule.provider ?? bundledModule.plugin ?? bundledModule.default"
+      : defaultBundledCandidateExpression(target.kind)
   };
 await runBundledProvider(candidate, ${JSON.stringify(target.kind)}, ${JSON.stringify(providerName)});
 `;
   writeFileSync(wrapperPath, source, "utf8");
   return wrapperPath;
+}
+
+function defaultBundledCandidateExpression(kind: ProviderTarget["kind"]): string {
+  switch (kind) {
+    case "integration":
+      return "bundledModule.provider ?? bundledModule.plugin ?? bundledModule.default";
+    case "auth":
+      return "bundledModule.auth ?? bundledModule.provider ?? bundledModule.default";
+    case "cache":
+      return "bundledModule.cache ?? bundledModule.provider ?? bundledModule.default";
+    case "secrets":
+      return "bundledModule.secrets ?? bundledModule.provider ?? bundledModule.default";
+    case "s3":
+      return "bundledModule.s3 ?? bundledModule.provider ?? bundledModule.default";
+    case "telemetry":
+      return "bundledModule.telemetry ?? bundledModule.provider ?? bundledModule.default";
+  }
+  throw new Error(`unsupported provider kind: ${kind satisfies never}`);
 }
 
 function resolveBunExecutable(): string {

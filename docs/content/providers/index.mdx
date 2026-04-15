@@ -18,6 +18,7 @@ validates it, and starts it with the permissions and request context it needs.
 | `auth` | Platform login backends | `providers.auth.<name>` |
 | `cache` | Plugin-bound cache backends | `providers.cache.<name>` |
 | `indexeddb` | Persistent state backends for users, sessions, tokens, and credentials | `providers.indexeddb.<name>` |
+| `s3` | S3-compatible object stores mounted into plugins | `providers.s3.<name>` |
 | `secrets` | Secret managers that resolve `secret://` references | `providers.secrets.<name>` |
 | `webui` | Public UI bundles served under configured path prefixes | `providers.ui` |
 
@@ -46,6 +47,7 @@ The repository is organized by provider type:
 | Auth | [`auth/`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth) | `providers.auth.<name>` |
 | Cache | [`cache/`](https://github.com/valon-technologies/gestalt-providers/tree/main/cache) | `providers.cache.<name>` |
 | IndexedDB | [`indexeddb/`](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb) | `providers.indexeddb.<name>` |
+| S3 | [`s3/`](https://github.com/valon-technologies/gestalt-providers/tree/main/s3) | `providers.s3.<name>` |
 | Secrets | [`secrets/`](https://github.com/valon-technologies/gestalt-providers/tree/main/secrets) | `providers.secrets.<name>` |
 | Web UI bundles | [`web/`](https://github.com/valon-technologies/gestalt-providers/tree/main/web) | `providers.ui` |
 
@@ -85,6 +87,16 @@ providers:
       config:
         address: ${VALKEY_ADDR}
 
+  s3:
+    assets:
+      source:
+        path: ./providers/s3/minio/manifest.yaml
+      config:
+        endpoint: http://127.0.0.1:9000
+        region: us-east-1
+        accessKeyId: ${MINIO_ROOT_USER}
+        secretAccessKey: secret://minio-root-password
+
 plugins:
   github:
     source:
@@ -92,6 +104,12 @@ plugins:
       version: 0.0.1-alpha.1
     cache:
       - session
+
+  media:
+    source:
+      path: ./plugins/media/manifest.yaml
+    s3:
+      - assets
 ```
 
 Run `gestaltd init` when you want to resolve and pin published releases ahead
@@ -108,6 +126,7 @@ release workflow now lives under [Custom Providers](/custom-providers).
 - [Auth](/providers/auth): platform login providers
 - [Cache](/providers/cache): plugin-bound cache backends
 - [IndexedDB](/providers/indexeddb): storage backends
+- [S3](/providers/s3): S3-compatible object store providers
 - [Secrets](/providers/secrets): built-in and external secret managers
 - [Web UIs](/providers/web-uis): public UI bundles
 - [Custom Providers](/custom-providers): advanced implementation and release docs
