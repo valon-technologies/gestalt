@@ -276,6 +276,38 @@ where
     }
 }
 
+pub(crate) fn connect_identity(
+    client: &ApiClient,
+    identity: &str,
+    name: &str,
+    connection: Option<&str>,
+    instance: Option<&str>,
+) -> Result<()> {
+    let integration = fetch_plugin_from_path(
+        client,
+        &format!("/api/v1/identities/{identity}/integrations"),
+        &format!("failed to load connections for identity {identity}"),
+        name,
+    )?;
+    let flow = ResolvedConnectFlow::resolve(&integration, connection)?;
+
+    match flow.mode {
+        ConnectMode::Manual => connect_manual_via(
+            client,
+            &flow,
+            instance,
+            &format!("failed to connect plugin for identity {identity}"),
+            &format!("Connected {{integration}} for identity {identity}."),
+            &format!("Connected {{integration}} ({{candidate}}) for identity {identity}."),
+            |body| client.connect_identity_manual(identity, body),
+        ),
+        ConnectMode::OAuth => bail!(
+            "identity connections do not support OAuth in the CLI yet for plugin '{}'",
+            name
+        ),
+    }
+}
+
 fn start_oauth<F>(
     client: &ApiClient,
     flow: &ResolvedConnectFlow<'_>,
@@ -316,6 +348,29 @@ fn connect_manual(
     flow: &ResolvedConnectFlow<'_>,
     instance: Option<&str>,
 ) -> Result<()> {
+    connect_manual_via(
+        client,
+        flow,
+        instance,
+        "failed to connect plugin",
+        "Connected {integration}.",
+        "Connected {integration} ({candidate})",
+        |body| client.post("/api/v1/auth/connect-manual", body),
+    )
+}
+
+fn connect_manual_via<F>(
+    client: &ApiClient,
+    flow: &ResolvedConnectFlow<'_>,
+    instance: Option<&str>,
+    failure_context: &str,
+    success_template: &str,
+    selection_success_template: &str,
+    send_request: F,
+) -> Result<()>
+where
+    F: FnOnce(&ConnectManualRequest<'_>) -> Result<serde_json::Value>,
+{
     eprintln!(
         "Connecting {} with manual auth.",
         flow.integration_display_name()
@@ -329,34 +384,31 @@ fn connect_manual(
 
     let connection_params = prompt_connection_params(flow.connection_param_defs())?;
     let credentials = ManualCredentials::collect(flow.credential_fields())?;
+    let request = ConnectManualRequest {
+        integration: flow.integration_name(),
+        credentials: credentials.request(),
+        connection: flow.connection_name(),
+        instance,
+        connection_params: connection_params.as_ref(),
+    };
     let response: ConnectManualResponse = serde_json::from_value(
-        client
-            .post(
-                "/api/v1/auth/connect-manual",
-                &ConnectManualRequest {
-                    integration: flow.integration_name(),
-                    credentials: credentials.request(),
-                    connection: flow.connection_name(),
-                    instance,
-                    connection_params: connection_params.as_ref(),
-                },
-            )
-            .context("failed to connect plugin")?,
+        send_request(&request).with_context(|| failure_context.to_string())?,
     )
     .context("failed to parse manual connect response")?;
 
     match response.status.as_str() {
         "connected" => {
-            output::print_success(&format!(
-                "Connected {}.",
+            output::print_success(&render_connect_success(
+                success_template,
                 response
                     .integration
                     .as_deref()
-                    .unwrap_or(flow.integration_name())
+                    .unwrap_or(flow.integration_name()),
+                None,
             ));
             Ok(())
         }
-        "selection_required" => complete_pending_selection(
+        "selection_required" => complete_pending_selection_with_message(
             client,
             response
                 .integration
@@ -365,17 +417,19 @@ fn connect_manual(
             response.selection_url.as_deref(),
             response.pending_token.as_deref(),
             &response.candidates,
+            selection_success_template,
         ),
         other => bail!("unexpected manual connect response status '{}'", other),
     }
 }
 
-fn complete_pending_selection(
+fn complete_pending_selection_with_message(
     client: &ApiClient,
     integration: &str,
     selection_url: Option<&str>,
     pending_token: Option<&str>,
     candidates: &[DiscoveryCandidateInfo],
+    success_template: &str,
 ) -> Result<()> {
     let selection_url = selection_url.context("manual connect response missing selection_url")?;
     let pending_token = pending_token.context("manual connect response missing pending_token")?;
@@ -412,26 +466,45 @@ fn complete_pending_selection(
         )
         .context("failed to finalize selected connection")?;
 
-    output::print_success(&format!(
-        "Connected {} ({})",
+    output::print_success(&render_connect_success(
+        success_template,
         integration,
-        candidates[selected].display_name()
+        Some(candidates[selected].display_name().as_str()),
     ));
     Ok(())
 }
 
 fn fetch_plugin(client: &ApiClient, name: &str) -> Result<IntegrationInfo> {
-    let plugins: Vec<IntegrationInfo> = serde_json::from_value(
-        client
-            .get("/api/v1/integrations")
-            .context("failed to load plugins")?,
+    fetch_plugin_from_path(
+        client,
+        "/api/v1/integrations",
+        "failed to load plugins",
+        name,
     )
-    .context("failed to parse plugins")?;
+}
+
+fn fetch_plugin_from_path(
+    client: &ApiClient,
+    path: &str,
+    load_error: &str,
+    name: &str,
+) -> Result<IntegrationInfo> {
+    let plugins: Vec<IntegrationInfo> =
+        serde_json::from_value(client.get(path).with_context(|| load_error.to_string())?)
+            .context("failed to parse plugins")?;
 
     plugins
         .into_iter()
         .find(|plugin| plugin.name == name)
         .with_context(|| format!("plugin '{}' not found", name))
+}
+
+fn render_connect_success(template: &str, integration: &str, candidate: Option<&str>) -> String {
+    let rendered = template.replace("{integration}", integration);
+    match candidate {
+        Some(candidate) => rendered.replace("{candidate}", candidate),
+        None => rendered.replace(" ({candidate})", ""),
+    }
 }
 
 fn resolve_connection<'a>(

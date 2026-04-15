@@ -208,7 +208,7 @@ func (p *startupProviderProxy) CatalogForRequest(ctx context.Context, token stri
 	scoped, ok := provider.(core.SessionCatalogProvider)
 	if !ok {
 		if p.spec.Catalog != nil {
-			return nil, fmt.Errorf("%w: provider %q does not support session catalogs", core.ErrSessionCatalogUnavailable, p.spec.Name)
+			return p.spec.Catalog.Clone(), nil
 		}
 		return nil, fmt.Errorf("provider %q does not support session catalogs", p.spec.Name)
 	}

@@ -17,6 +17,8 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
 
+var errManagedIdentityIntegrationNotFound = errors.New("managed identity integration not found")
+
 type connectManualRequest struct {
 	Integration      string            `json:"integration"`
 	Connection       string            `json:"connection"`
@@ -110,13 +112,15 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		authSource = p.AuthSource()
 	}
 	tm := tokenMaterial{
-		UserID:       dbUserID,
-		AuthSource:   authSource,
-		Integration:  req.Integration,
-		Connection:   manualConnection,
-		Instance:     manualInstance,
-		AccessToken:  effectiveCredential,
-		MetadataJSON: manualMeta,
+		OwnerKind:       core.IntegrationTokenOwnerKindUser,
+		OwnerID:         dbUserID,
+		InitiatorUserID: dbUserID,
+		AuthSource:      authSource,
+		Integration:     req.Integration,
+		Connection:      manualConnection,
+		Instance:        manualInstance,
+		AccessToken:     effectiveCredential,
+		MetadataJSON:    manualMeta,
 	}
 
 	result, err := s.runPostConnect(r.Context(), prov, tm)
@@ -237,15 +241,18 @@ func (t *bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 type tokenMaterial struct {
-	UserID         string
-	AuthSource     string
-	Integration    string
-	Connection     string
-	Instance       string
-	AccessToken    string
-	RefreshToken   string
-	TokenExpiresAt *time.Time
-	MetadataJSON   string
+	OwnerKind       string
+	OwnerID         string
+	InitiatorUserID string
+	LegacyUserID    string `json:"UserID,omitempty"`
+	AuthSource      string
+	Integration     string
+	Connection      string
+	Instance        string
+	AccessToken     string
+	RefreshToken    string
+	TokenExpiresAt  *time.Time
+	MetadataJSON    string
 }
 
 type postConnectResult struct {
@@ -262,10 +269,20 @@ type discoveryCandidateInfo struct {
 }
 
 func (s *Server) storeTokenFromMaterial(ctx context.Context, tm tokenMaterial) (*core.IntegrationToken, error) {
+	if tm.OwnerKind == core.IntegrationTokenOwnerKindManagedIdentity {
+		s.managedIdentityMu.Lock()
+		defer s.managedIdentityMu.Unlock()
+		if err := s.validateManagedIdentityConnectionWrite(ctx, tm); err != nil {
+			return nil, err
+		}
+	}
+
 	now := s.now().UTC().Truncate(time.Second)
 	tok := &core.IntegrationToken{
 		ID:              uuid.NewString(),
-		UserID:          tm.UserID,
+		UserID:          core.IntegrationTokenStoredUserID(tm.OwnerKind, tm.OwnerID),
+		OwnerKind:       tm.OwnerKind,
+		OwnerID:         tm.OwnerID,
 		Integration:     tm.Integration,
 		Connection:      tm.Connection,
 		Instance:        tm.Instance,
@@ -281,6 +298,33 @@ func (s *Server) storeTokenFromMaterial(ctx context.Context, tm tokenMaterial) (
 		return nil, err
 	}
 	return tok, nil
+}
+
+func (s *Server) validateManagedIdentityConnectionWrite(ctx context.Context, tm tokenMaterial) error {
+	if tm.OwnerID == "" {
+		return core.ErrNotFound
+	}
+	if _, err := s.managedIdentityActor(ctx, tm.OwnerID, tm.InitiatorUserID, managedIdentityRoleEditor); err != nil {
+		return err
+	}
+	if !s.managedIdentityGrantPluginVisible(tm.Integration, PrincipalFromContext(ctx)) {
+		return errManagedIdentityIntegrationNotFound
+	}
+	return nil
+}
+
+func (s *Server) writeManagedIdentityConnectionWriteError(w http.ResponseWriter, integration string, err error) bool {
+	switch {
+	case errors.Is(err, core.ErrNotFound):
+		writeError(w, http.StatusNotFound, "identity not found")
+	case errors.Is(err, errManagedIdentityAccessDenied):
+		writeError(w, http.StatusForbidden, "identity access denied")
+	case errors.Is(err, errManagedIdentityIntegrationNotFound):
+		writeError(w, http.StatusNotFound, fmt.Sprintf("integration %q not found", integration))
+	default:
+		return false
+	}
+	return true
 }
 
 func validateDiscoveryMetadata(metadata map[string]string) error {

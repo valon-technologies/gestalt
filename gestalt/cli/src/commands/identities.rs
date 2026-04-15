@@ -3,6 +3,7 @@ use serde_json::json;
 
 use crate::api::{ApiClient, TokenPermission};
 use crate::cli::IdentityPermissionArg;
+use crate::commands::plugins;
 use crate::output::{self, Format};
 
 pub fn list(client: &ApiClient, format: Format) -> Result<()> {
@@ -211,6 +212,30 @@ pub fn revoke_token(client: &ApiClient, identity: &str, id: &str, format: Format
     }
 
     Ok(())
+}
+
+pub fn list_connections(client: &ApiClient, identity: &str, format: Format) -> Result<()> {
+    plugins::list_identity(client, identity, format)
+}
+
+pub fn connect(
+    client: &ApiClient,
+    identity: &str,
+    plugin: &str,
+    connection: Option<&str>,
+    instance: Option<&str>,
+) -> Result<()> {
+    plugins::connect_identity(client, identity, plugin, connection, instance)
+}
+
+pub fn disconnect(
+    client: &ApiClient,
+    identity: &str,
+    plugin: &str,
+    connection: Option<&str>,
+    instance: Option<&str>,
+) -> Result<()> {
+    plugins::disconnect_identity(client, identity, plugin, connection, instance)
 }
 
 fn print_identity(value: &serde_json::Value, format: Format) {

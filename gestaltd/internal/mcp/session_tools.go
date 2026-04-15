@@ -389,7 +389,7 @@ func internalSessionToolHandler(context.Context, mcpgo.CallToolRequest) (*mcpgo.
 func sessionTokenSelectors(cfg Config, p *principal.Principal, provName, instanceOverride string) (string, string) {
 	connection := cfg.MCPConnection[provName]
 	instance := normalizedSessionCatalogInstance(instanceOverride)
-	if cfg.Authorizer == nil || !cfg.Authorizer.IsWorkload(p) {
+	if cfg.Authorizer == nil || !principal.IsStaticWorkloadPrincipal(p) {
 		return connection, instance
 	}
 	if binding, ok := cfg.Authorizer.Binding(p, provName); ok {
@@ -437,5 +437,5 @@ func normalizedSessionCatalogInstance(value any) string {
 }
 
 func workloadInstanceOverrideRequested(authz *authorization.Authorizer, p *principal.Principal, instance string) bool {
-	return authz != nil && p != nil && authz.IsWorkload(p) && instance != ""
+	return authz != nil && principal.IsStaticWorkloadPrincipal(p) && instance != ""
 }

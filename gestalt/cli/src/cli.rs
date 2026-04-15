@@ -231,6 +231,11 @@ pub enum IdentityCommands {
         #[command(subcommand)]
         command: IdentityTokenCommands,
     },
+    /// Manage identity-owned plugin connections
+    Connections {
+        #[command(subcommand)]
+        command: IdentityConnectionCommands,
+    },
 }
 
 #[derive(Subcommand)]
@@ -358,6 +363,41 @@ pub enum IdentityTokenCommands {
         identity: String,
         /// Token ID
         id: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum IdentityConnectionCommands {
+    /// List plugin connections for an identity
+    List {
+        /// Identity ID
+        identity: String,
+    },
+    /// Connect a plugin for an identity via manual auth
+    Connect {
+        /// Identity ID
+        identity: String,
+        /// Plugin name (e.g., github, slack)
+        plugin: String,
+        /// Named connection to connect
+        #[arg(long)]
+        connection: Option<String>,
+        /// Instance name to create or refresh
+        #[arg(long)]
+        instance: Option<String>,
+    },
+    /// Disconnect a plugin for an identity
+    Disconnect {
+        /// Identity ID
+        identity: String,
+        /// Plugin name (e.g., github, slack)
+        plugin: String,
+        /// Target a specific named connection
+        #[arg(long)]
+        connection: Option<String>,
+        /// Target a specific stored instance
+        #[arg(long)]
+        instance: Option<String>,
     },
 }
 

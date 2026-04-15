@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/emailutil"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
@@ -34,6 +35,8 @@ var managedIdentityRoleRank = map[string]int{
 	managedIdentityRoleEditor: 2,
 	managedIdentityRoleAdmin:  3,
 }
+
+var errManagedIdentityAccessDenied = errors.New("identity access denied")
 
 type managedIdentityInfo struct {
 	ID          string    `json:"id"`
@@ -405,6 +408,9 @@ func (s *Server) deleteManagedIdentity(w http.ResponseWriter, r *http.Request) {
 	var warnings []string
 	if _, err := s.apiTokens.RevokeAllAPITokensByOwner(r.Context(), core.APITokenOwnerKindManagedIdentity, actor.Identity.ID); err != nil {
 		warnings = append(warnings, "failed to delete identity api tokens")
+	}
+	if _, err := s.tokens.DeleteAllTokensByOwner(r.Context(), core.IntegrationTokenOwnerKindManagedIdentity, actor.Identity.ID); err != nil {
+		warnings = append(warnings, "failed to delete identity connections")
 	}
 	if len(warnings) > 0 {
 		response["cleanup"] = "partial"
@@ -793,33 +799,45 @@ func (s *Server) resolveManagedIdentityActor(w http.ResponseWriter, r *http.Requ
 		writeError(w, http.StatusBadRequest, "identityID is required")
 		return nil, false
 	}
-	identity, err := s.managedIdentities.GetIdentity(r.Context(), identityID)
+	actor, err := s.managedIdentityActor(r.Context(), identityID, userID, requiredRole)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "identity not found")
+			return nil, false
+		}
+		if errors.Is(err, errManagedIdentityAccessDenied) {
+			writeError(w, http.StatusForbidden, "identity access denied")
 			return nil, false
 		}
 		writeError(w, http.StatusInternalServerError, "failed to resolve identity")
 		return nil, false
 	}
-	membership, err := s.identityMemberships.GetMembership(r.Context(), identityID, userID)
+	return actor, true
+}
+
+func (s *Server) managedIdentityActor(ctx context.Context, identityID, userID, requiredRole string) (*managedIdentityActor, error) {
+	identity, err := s.managedIdentities.GetIdentity(ctx, identityID)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "identity not found")
-			return nil, false
+			return nil, core.ErrNotFound
 		}
-		writeError(w, http.StatusInternalServerError, "failed to resolve identity membership")
-		return nil, false
+		return nil, err
+	}
+	membership, err := s.identityMemberships.GetMembership(ctx, identityID, userID)
+	if err != nil {
+		if errors.Is(err, core.ErrNotFound) {
+			return nil, core.ErrNotFound
+		}
+		return nil, err
 	}
 	if !managedIdentityRoleAllows(membership.Role, requiredRole) {
-		writeError(w, http.StatusForbidden, "identity access denied")
-		return nil, false
+		return nil, errManagedIdentityAccessDenied
 	}
 	return &managedIdentityActor{
 		UserID:     userID,
 		Identity:   identity,
 		Membership: membership,
-	}, true
+	}, nil
 }
 
 func (s *Server) ensureManagedIdentityRoutesAvailable(w http.ResponseWriter) bool {
@@ -1054,14 +1072,21 @@ func (s *Server) managedIdentityGrantVisibleToActor(plugin string, p *principal.
 }
 
 func (s *Server) managedIdentityInvocationSupported(plugin string) bool {
-	if entry, ok := s.pluginDefs[plugin]; ok && entry != nil {
-		return managedIdentityPluginConnectionMode(entry) == core.ConnectionModeNone
+	var entry *config.ProviderEntry
+	if configured, ok := s.pluginDefs[plugin]; ok && configured != nil {
+		entry = configured
 	}
 	prov, err := s.providers.Get(plugin)
-	if err != nil || prov == nil {
+	if entry == nil && (err != nil || prov == nil) {
 		return false
 	}
-	return prov.ConnectionMode() == core.ConnectionModeNone
+	if entry != nil {
+		return authorization.ManagedIdentityProviderSupported(entry, prov, managedIdentityPluginConnectionMode(entry))
+	}
+	if prov == nil {
+		return false
+	}
+	return authorization.ManagedIdentityProviderSupported(nil, prov, prov.ConnectionMode())
 }
 
 func managedIdentityPluginConnectionMode(entry *config.ProviderEntry) core.ConnectionMode {
@@ -1327,6 +1352,9 @@ func (s *Server) managedIdentityGrantUserSessionContext(ctx context.Context, pro
 	if userResolver, ok := resolver.(managedIdentitySessionTokenResolver); ok {
 		enrichedCtx, token, err := userResolver.ResolveUserToken(ctx, prov, p.UserID, plugin, connection, instance)
 		if err != nil {
+			if errors.Is(err, invocation.ErrUserTokenUnsupported) {
+				goto tokenStoreFallback
+			}
 			if errors.Is(err, invocation.ErrNoToken) {
 				return ctx, "", false, nil
 			}
@@ -1334,6 +1362,7 @@ func (s *Server) managedIdentityGrantUserSessionContext(ctx context.Context, pro
 		}
 		return enrichedCtx, token, true, nil
 	}
+tokenStoreFallback:
 	if s.tokens == nil {
 		return ctx, "", false, nil
 	}

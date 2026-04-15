@@ -149,9 +149,6 @@ func encodePendingConnectionState(enc *cryptoutil.AESGCMEncryptor, state pending
 }
 
 func validatePendingConnectionState(state *pendingConnectionState, now time.Time) error {
-	if state.Token.UserID == "" {
-		return fmt.Errorf("pending connection missing user ID")
-	}
 	if state.Token.Integration == "" {
 		return fmt.Errorf("pending connection missing integration")
 	}

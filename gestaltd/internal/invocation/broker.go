@@ -323,7 +323,7 @@ func (b *Broker) MCPConnection(providerName string) string {
 }
 
 func (b *Broker) workloadSelectors(p *principal.Principal, providerName, connection, instance string) (string, string) {
-	if b.authorizer == nil || !b.authorizer.IsWorkload(p) {
+	if b.authorizer == nil || !principal.IsStaticWorkloadPrincipal(p) {
 		return connection, instance
 	}
 	binding, ok := b.authorizer.Binding(p, providerName)
@@ -411,7 +411,10 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 	if resolved != nil {
 		p = resolved
 	}
-	if b.authorizer != nil && b.authorizer.IsWorkload(p) {
+	if principal.IsManagedIdentityPrincipal(p) {
+		return b.resolveManagedIdentityToken(ctx, prov, p, providerName, connection, instance)
+	}
+	if principal.IsStaticWorkloadPrincipal(p) {
 		return b.resolveWorkloadToken(ctx, prov, p, providerName, connection, instance)
 	}
 	if resolved == nil {
@@ -519,12 +522,44 @@ func (b *Broker) resolveWorkloadToken(ctx context.Context, prov core.Provider, p
 	}
 }
 
+func (b *Broker) resolveManagedIdentityToken(ctx context.Context, prov core.Provider, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error) {
+	identityID := principal.ManagedIdentityIDFromSubjectID(strings.TrimSpace(p.SubjectID))
+	if identityID == "" {
+		return ctx, "", fmt.Errorf("%w: missing managed identity subject", ErrAuthorizationDenied)
+	}
+
+	switch prov.ConnectionMode() {
+	case core.ConnectionModeNone:
+		SetCredentialAudit(ctx, core.ConnectionModeNone, "", "", "")
+		ctx = WithCredentialContext(ctx, CredentialContext{Mode: core.ConnectionModeNone})
+		return ctx, "", nil
+	case core.ConnectionModeUser, core.ConnectionModeIdentity, core.ConnectionModeEither, "":
+		return b.resolveOwnerToken(
+			ctx,
+			prov,
+			core.IntegrationTokenOwnerKindManagedIdentity,
+			identityID,
+			providerName,
+			connection,
+			instance,
+			core.ConnectionModeIdentity,
+			p.SubjectID,
+		)
+	default:
+		return ctx, "", fmt.Errorf("%w: unknown connection mode %q", ErrInternal, prov.ConnectionMode())
+	}
+}
+
 func (b *Broker) resolveUserToken(ctx context.Context, prov core.Provider, userID, providerName, connection, instance string, credentialMode core.ConnectionMode, credentialSubjectID string) (context.Context, string, error) {
+	return b.resolveOwnerToken(ctx, prov, core.IntegrationTokenOwnerKindUser, userID, providerName, connection, instance, credentialMode, credentialSubjectID)
+}
+
+func (b *Broker) resolveOwnerToken(ctx context.Context, prov core.Provider, ownerKind, ownerID, providerName, connection, instance string, credentialMode core.ConnectionMode, credentialSubjectID string) (context.Context, string, error) {
 	var storedToken *core.IntegrationToken
 	var err error
 
 	if instance != "" {
-		storedToken, err = b.tokens.Token(ctx, userID, providerName, connection, instance)
+		storedToken, err = b.tokens.TokenByOwner(ctx, ownerKind, ownerID, providerName, connection, instance)
 		if err != nil {
 			if errors.Is(err, core.ErrNotFound) {
 				return ctx, "", fmt.Errorf("%w: no token stored for integration %q instance %q", ErrNoToken, providerName, instance)
@@ -532,7 +567,7 @@ func (b *Broker) resolveUserToken(ctx context.Context, prov core.Provider, userI
 			return ctx, "", fmt.Errorf("%w: retrieving integration token: %v", ErrInternal, err)
 		}
 	} else {
-		tokens, listErr := b.tokens.ListTokensForConnection(ctx, userID, providerName, connection)
+		tokens, listErr := b.tokens.ListTokensForConnectionByOwner(ctx, ownerKind, ownerID, providerName, connection)
 		if listErr != nil {
 			return ctx, "", fmt.Errorf("%w: listing tokens: %v", ErrInternal, listErr)
 		}
@@ -599,7 +634,8 @@ func (b *Broker) refreshTokenIfNeeded(ctx context.Context, token *core.Integrati
 		return token.AccessToken, nil
 	}
 
-	key := token.UserID + ":" + providerName + ":" + connection + ":" + token.Instance
+	ownerKind, ownerID := integrationTokenLookupOwner(token)
+	key := ownerKind + ":" + ownerID + ":" + providerName + ":" + token.Connection + ":" + token.Instance
 	v, err, _ := b.refreshGroup.Do(key, func() (any, error) {
 		refreshCtx := context.WithoutCancel(ctx)
 		startedAt := time.Now()
@@ -608,7 +644,7 @@ func (b *Broker) refreshTokenIfNeeded(ctx context.Context, token *core.Integrati
 		return resp, err
 	})
 	if err != nil {
-		fresh, fetchErr := b.tokens.Token(ctx, token.UserID, token.Integration, token.Connection, token.Instance)
+		fresh, fetchErr := b.tokens.TokenByOwner(ctx, ownerKind, ownerID, token.Integration, token.Connection, token.Instance)
 		if fetchErr == nil && fresh != nil && fresh.AccessToken != token.AccessToken {
 			return fresh.AccessToken, nil
 		}
@@ -643,6 +679,19 @@ func (b *Broker) refreshTokenIfNeeded(ctx context.Context, token *core.Integrati
 		return "", fmt.Errorf("persisting refreshed token: %w", err)
 	}
 	return token.AccessToken, nil
+}
+
+func integrationTokenLookupOwner(token *core.IntegrationToken) (string, string) {
+	if token == nil {
+		return "", ""
+	}
+	if token.OwnerKind != "" && token.OwnerID != "" {
+		return token.OwnerKind, token.OwnerID
+	}
+	if token.UserID != "" {
+		return core.IntegrationTokenOwnerKindUser, token.UserID
+	}
+	return "", ""
 }
 
 func (b *Broker) resolveRefresher(integration, connection string) OAuthRefresher {

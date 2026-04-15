@@ -258,15 +258,17 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	}
 
 	tm := tokenMaterial{
-		UserID:         state.UserID,
-		AuthSource:     state.AuthSource,
-		Integration:    providerName,
-		Connection:     state.Connection,
-		Instance:       callbackInstance,
-		AccessToken:    tokenResp.AccessToken,
-		RefreshToken:   tokenResp.RefreshToken,
-		TokenExpiresAt: tokenExpiresAt,
-		MetadataJSON:   metadata,
+		OwnerKind:       core.IntegrationTokenOwnerKindUser,
+		OwnerID:         state.UserID,
+		InitiatorUserID: state.UserID,
+		AuthSource:      state.AuthSource,
+		Integration:     providerName,
+		Connection:      state.Connection,
+		Instance:        callbackInstance,
+		AccessToken:     tokenResp.AccessToken,
+		RefreshToken:    tokenResp.RefreshToken,
+		TokenExpiresAt:  tokenExpiresAt,
+		MetadataJSON:    metadata,
 	}
 
 	result, err := s.runPostConnect(r.Context(), prov, tm)

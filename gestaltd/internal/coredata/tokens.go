@@ -32,9 +32,14 @@ func (s *TokenService) StoreToken(ctx context.Context, token *core.IntegrationTo
 	if token.ID == "" {
 		token.ID = uuid.New().String()
 	}
+	ownerKind := integrationTokenOwnerKind(token)
+	ownerID := integrationTokenOwnerID(token)
+	storedUserID := integrationTokenStoredUserID(token, ownerKind, ownerID)
 	now := time.Now()
 	fields := indexeddb.Record{
-		"user_id":                 token.UserID,
+		"user_id":                 storedUserID,
+		"owner_kind":              ownerKind,
+		"owner_id":                ownerID,
 		"integration":             token.Integration,
 		"connection":              token.Connection,
 		"instance":                token.Instance,
@@ -48,7 +53,7 @@ func (s *TokenService) StoreToken(ctx context.Context, token *core.IntegrationTo
 		"updated_at":              now,
 	}
 
-	existing, err := s.tokenRecord(ctx, token.UserID, token.Integration, token.Connection, token.Instance)
+	existing, err := s.tokenRecordByOwner(ctx, ownerKind, ownerID, token.Integration, token.Connection, token.Instance)
 	switch err {
 	case nil:
 		token.ID = recString(existing, "id")
@@ -71,14 +76,18 @@ func (s *TokenService) StoreToken(ctx context.Context, token *core.IntegrationTo
 		return fmt.Errorf("check existing token: %w", err)
 	}
 
-	if err := s.deleteDuplicateLookupRecords(ctx, token.ID, token.UserID, token.Integration, token.Connection, token.Instance); err != nil {
+	if err := s.deleteDuplicateLookupRecords(ctx, token.ID, ownerKind, ownerID, token.Integration, token.Connection, token.Instance); err != nil {
 		return err
 	}
 	return nil
 }
 
 func (s *TokenService) Token(ctx context.Context, userID, integration, connection, instance string) (*core.IntegrationToken, error) {
-	rec, err := s.tokenRecord(ctx, userID, integration, connection, instance)
+	return s.TokenByOwner(ctx, core.IntegrationTokenOwnerKindUser, userID, integration, connection, instance)
+}
+
+func (s *TokenService) TokenByOwner(ctx context.Context, ownerKind, ownerID, integration, connection, instance string) (*core.IntegrationToken, error) {
+	rec, err := s.tokenRecordByOwner(ctx, ownerKind, ownerID, integration, connection, instance)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +95,22 @@ func (s *TokenService) Token(ctx context.Context, userID, integration, connectio
 }
 
 func (s *TokenService) ListTokens(ctx context.Context, userID string) ([]*core.IntegrationToken, error) {
-	recs, err := s.store.Index("by_user").GetAll(ctx, nil, userID)
+	return s.ListTokensByOwner(ctx, core.IntegrationTokenOwnerKindUser, userID)
+}
+
+func (s *TokenService) ListTokensByOwner(ctx context.Context, ownerKind, ownerID string) ([]*core.IntegrationToken, error) {
+	var (
+		recs []indexeddb.Record
+		err  error
+	)
+	if ownerKind == core.IntegrationTokenOwnerKindUser {
+		recs, err = s.store.Index("by_user").GetAll(ctx, nil, ownerID)
+		if err == nil && len(recs) == 0 {
+			recs, err = s.store.Index("by_owner").GetAll(ctx, nil, ownerKind, ownerID)
+		}
+	} else {
+		recs, err = s.store.Index("by_owner").GetAll(ctx, nil, ownerKind, ownerID)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("list tokens: %w", err)
 	}
@@ -94,7 +118,22 @@ func (s *TokenService) ListTokens(ctx context.Context, userID string) ([]*core.I
 }
 
 func (s *TokenService) ListTokensForIntegration(ctx context.Context, userID, integration string) ([]*core.IntegrationToken, error) {
-	recs, err := s.store.Index("by_user_integration").GetAll(ctx, nil, userID, integration)
+	return s.ListTokensForIntegrationByOwner(ctx, core.IntegrationTokenOwnerKindUser, userID, integration)
+}
+
+func (s *TokenService) ListTokensForIntegrationByOwner(ctx context.Context, ownerKind, ownerID, integration string) ([]*core.IntegrationToken, error) {
+	var (
+		recs []indexeddb.Record
+		err  error
+	)
+	if ownerKind == core.IntegrationTokenOwnerKindUser {
+		recs, err = s.store.Index("by_user_integration").GetAll(ctx, nil, ownerID, integration)
+		if err == nil && len(recs) == 0 {
+			recs, err = s.store.Index("by_owner_integration").GetAll(ctx, nil, ownerKind, ownerID, integration)
+		}
+	} else {
+		recs, err = s.store.Index("by_owner_integration").GetAll(ctx, nil, ownerKind, ownerID, integration)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("list tokens for integration: %w", err)
 	}
@@ -102,7 +141,22 @@ func (s *TokenService) ListTokensForIntegration(ctx context.Context, userID, int
 }
 
 func (s *TokenService) ListTokensForConnection(ctx context.Context, userID, integration, connection string) ([]*core.IntegrationToken, error) {
-	recs, err := s.store.Index("by_user_connection").GetAll(ctx, nil, userID, integration, connection)
+	return s.ListTokensForConnectionByOwner(ctx, core.IntegrationTokenOwnerKindUser, userID, integration, connection)
+}
+
+func (s *TokenService) ListTokensForConnectionByOwner(ctx context.Context, ownerKind, ownerID, integration, connection string) ([]*core.IntegrationToken, error) {
+	var (
+		recs []indexeddb.Record
+		err  error
+	)
+	if ownerKind == core.IntegrationTokenOwnerKindUser {
+		recs, err = s.store.Index("by_user_connection").GetAll(ctx, nil, ownerID, integration, connection)
+		if err == nil && len(recs) == 0 {
+			recs, err = s.store.Index("by_owner_connection").GetAll(ctx, nil, ownerKind, ownerID, integration, connection)
+		}
+	} else {
+		recs, err = s.store.Index("by_owner_connection").GetAll(ctx, nil, ownerKind, ownerID, integration, connection)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("list tokens for connection: %w", err)
 	}
@@ -113,6 +167,40 @@ func (s *TokenService) DeleteToken(ctx context.Context, id string) error {
 	return s.store.Delete(ctx, id)
 }
 
+func (s *TokenService) DeleteAllTokensByOwner(ctx context.Context, ownerKind, ownerID string) (int64, error) {
+	var (
+		deleted int64
+		err     error
+	)
+	if ownerKind == core.IntegrationTokenOwnerKindUser {
+		deleted, err = s.store.Index("by_user").Delete(ctx, ownerID)
+		if err == nil && deleted == 0 {
+			deleted, err = s.store.Index("by_owner").Delete(ctx, ownerKind, ownerID)
+		}
+	} else {
+		deleted, err = s.store.Index("by_owner").Delete(ctx, ownerKind, ownerID)
+		if err == nil && deleted == 0 {
+			tokens, listErr := s.ListTokensByOwner(ctx, ownerKind, ownerID)
+			if listErr != nil {
+				return 0, fmt.Errorf("delete tokens by owner: %w", listErr)
+			}
+			for _, token := range tokens {
+				if token == nil || token.ID == "" {
+					continue
+				}
+				if deleteErr := s.store.Delete(ctx, token.ID); deleteErr != nil {
+					return 0, fmt.Errorf("delete tokens by owner: %w", deleteErr)
+				}
+				deleted++
+			}
+		}
+	}
+	if err != nil {
+		return 0, fmt.Errorf("delete tokens by owner: %w", err)
+	}
+	return deleted, nil
+}
+
 func (s *TokenService) recordToToken(rec indexeddb.Record) (*core.IntegrationToken, error) {
 	access, refresh, err := s.enc.DecryptTokenPair(
 		recString(rec, "access_token_encrypted"),
@@ -121,9 +209,11 @@ func (s *TokenService) recordToToken(rec indexeddb.Record) (*core.IntegrationTok
 	if err != nil {
 		return nil, fmt.Errorf("decrypt token pair: %w", err)
 	}
-	return &core.IntegrationToken{
+	token := &core.IntegrationToken{
 		ID:                recString(rec, "id"),
 		UserID:            recString(rec, "user_id"),
+		OwnerKind:         recString(rec, "owner_kind"),
+		OwnerID:           recString(rec, "owner_id"),
 		Integration:       recString(rec, "integration"),
 		Connection:        recString(rec, "connection"),
 		Instance:          recString(rec, "instance"),
@@ -136,7 +226,17 @@ func (s *TokenService) recordToToken(rec indexeddb.Record) (*core.IntegrationTok
 		MetadataJSON:      recString(rec, "metadata_json"),
 		CreatedAt:         recTime(rec, "created_at"),
 		UpdatedAt:         recTime(rec, "updated_at"),
-	}, nil
+	}
+	if token.OwnerKind == "" && token.UserID != "" {
+		token.OwnerKind = core.IntegrationTokenOwnerKindUser
+	}
+	if token.OwnerID == "" && token.OwnerKind == core.IntegrationTokenOwnerKindUser && token.UserID != "" {
+		token.OwnerID = token.UserID
+	}
+	if token.OwnerKind != "" && token.OwnerKind != core.IntegrationTokenOwnerKindUser {
+		token.UserID = ""
+	}
+	return token, nil
 }
 
 func (s *TokenService) recordsToTokens(recs []indexeddb.Record) ([]*core.IntegrationToken, error) {
@@ -152,8 +252,9 @@ func (s *TokenService) recordsToTokens(recs []indexeddb.Record) ([]*core.Integra
 	return out, nil
 }
 
-func (s *TokenService) tokenRecord(ctx context.Context, userID, integration, connection, instance string) (indexeddb.Record, error) {
-	recs, err := s.store.Index("by_lookup").GetAll(ctx, nil, userID, integration, connection, instance)
+func (s *TokenService) tokenRecordByOwner(ctx context.Context, ownerKind, ownerID, integration, connection, instance string) (indexeddb.Record, error) {
+	storedUserID := core.IntegrationTokenStoredUserID(ownerKind, ownerID)
+	recs, err := s.store.Index("by_lookup").GetAll(ctx, nil, storedUserID, integration, connection, instance)
 	if err != nil {
 		return nil, fmt.Errorf("get token: %w", err)
 	}
@@ -164,11 +265,13 @@ func (s *TokenService) tokenRecord(ctx context.Context, userID, integration, con
 	return recs[0], nil
 }
 
-func (s *TokenService) deleteDuplicateLookupRecords(ctx context.Context, keepID, userID, integration, connection, instance string) error {
-	recs, err := s.store.Index("by_lookup").GetAll(ctx, nil, userID, integration, connection, instance)
+func (s *TokenService) deleteDuplicateLookupRecords(ctx context.Context, keepID, ownerKind, ownerID, integration, connection, instance string) error {
+	storedUserID := core.IntegrationTokenStoredUserID(ownerKind, ownerID)
+	recs, err := s.store.Index("by_lookup").GetAll(ctx, nil, storedUserID, integration, connection, instance)
 	if err != nil {
 		return fmt.Errorf("list duplicate tokens: %w", err)
 	}
+	recs = dedupeTokenRecords(recs)
 	for _, rec := range recs {
 		id := recString(rec, "id")
 		if id == "" || id == keepID {
@@ -206,7 +309,8 @@ func dedupeTokenRecords(recs []indexeddb.Record) []indexeddb.Record {
 }
 
 func tokenLookupKey(rec indexeddb.Record) string {
-	return recString(rec, "user_id") + "\x00" +
+	return tokenRecordOwnerKind(rec) + "\x00" +
+		tokenRecordOwnerID(rec) + "\x00" +
 		recString(rec, "integration") + "\x00" +
 		recString(rec, "connection") + "\x00" +
 		recString(rec, "instance")
@@ -226,4 +330,57 @@ func tokenRecordLess(a, b indexeddb.Record) bool {
 	}
 
 	return recString(a, "id") < recString(b, "id")
+}
+
+func integrationTokenOwnerKind(token *core.IntegrationToken) string {
+	if token == nil {
+		return ""
+	}
+	if token.OwnerKind != "" {
+		return token.OwnerKind
+	}
+	if token.UserID != "" {
+		return core.IntegrationTokenOwnerKindUser
+	}
+	return ""
+}
+
+func integrationTokenOwnerID(token *core.IntegrationToken) string {
+	if token == nil {
+		return ""
+	}
+	if token.OwnerID != "" {
+		return token.OwnerID
+	}
+	if token.UserID != "" {
+		return token.UserID
+	}
+	return ""
+}
+
+func integrationTokenStoredUserID(token *core.IntegrationToken, ownerKind, ownerID string) string {
+	if token == nil {
+		return core.IntegrationTokenStoredUserID(ownerKind, ownerID)
+	}
+	if token.UserID != "" {
+		return token.UserID
+	}
+	return core.IntegrationTokenStoredUserID(ownerKind, ownerID)
+}
+
+func tokenRecordOwnerKind(rec indexeddb.Record) string {
+	if ownerKind := recString(rec, "owner_kind"); ownerKind != "" {
+		return ownerKind
+	}
+	if recString(rec, "user_id") != "" {
+		return core.IntegrationTokenOwnerKindUser
+	}
+	return ""
+}
+
+func tokenRecordOwnerID(rec indexeddb.Record) string {
+	if ownerID := recString(rec, "owner_id"); ownerID != "" {
+		return ownerID
+	}
+	return recString(rec, "user_id")
 }

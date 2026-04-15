@@ -180,7 +180,7 @@ func (g *GuardedInvoker) ResolveUserToken(ctx context.Context, prov core.Provide
 	if r, ok := g.inner.(resolver); ok {
 		return r.ResolveUserToken(ctx, prov, userID, providerName, connection, instance)
 	}
-	return ctx, "", fmt.Errorf("user token resolution not supported")
+	return ctx, "", ErrUserTokenUnsupported
 }
 
 func (g *GuardedInvoker) logAudit(ctx context.Context, entry core.AuditEntry) {

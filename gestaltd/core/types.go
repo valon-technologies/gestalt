@@ -16,6 +16,8 @@ type User struct {
 type IntegrationToken struct {
 	ID                string
 	UserID            string
+	OwnerKind         string
+	OwnerID           string
 	Integration       string
 	Connection        string
 	Instance          string
@@ -28,6 +30,21 @@ type IntegrationToken struct {
 	MetadataJSON      string
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
+}
+
+const (
+	IntegrationTokenOwnerKindUser            = "user"
+	IntegrationTokenOwnerKindManagedIdentity = "managed_identity"
+)
+
+func IntegrationTokenStoredUserID(ownerKind, ownerID string) string {
+	if ownerKind == IntegrationTokenOwnerKindUser {
+		return ownerID
+	}
+	if ownerKind == "" || ownerID == "" {
+		return ""
+	}
+	return ownerKind + ":" + ownerID
 }
 
 type APIToken struct {

@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use crate::api::ApiClient;
 use crate::output::{self, Format};
 
+pub(crate) use connect::connect_identity;
 pub use connect::{connect, connect_with_browser_opener};
 
 const PLUGIN_CONNECTION_NAME: &str = "_plugin";
@@ -50,8 +51,22 @@ pub fn list(client: &ApiClient, format: Format) -> Result<()> {
         .get("/api/v1/integrations")
         .context("failed to list plugins")?;
 
+    print_integrations(&resp, format);
+    Ok(())
+}
+
+pub(crate) fn list_identity(client: &ApiClient, identity: &str, format: Format) -> Result<()> {
+    let resp = client
+        .get_identity_integrations(identity)
+        .with_context(|| format!("failed to list connections for identity {identity}"))?;
+
+    print_integrations(&resp, format);
+    Ok(())
+}
+
+fn print_integrations(resp: &serde_json::Value, format: Format) {
     match format {
-        Format::Json => output::print_json(&resp),
+        Format::Json => output::print_json(resp),
         Format::Table => {
             let rows: Vec<Vec<String>> = resp
                 .as_array()
@@ -72,7 +87,6 @@ pub fn list(client: &ApiClient, format: Format) -> Result<()> {
             output::print_table(&["Name", "Description", "Connected"], &rows);
         }
     }
-    Ok(())
 }
 
 pub fn disconnect(
@@ -100,5 +114,24 @@ pub fn disconnect(
         .with_context(|| format!("failed to disconnect plugin '{}'", name))?;
 
     output::print_success(&format!("Disconnected {}.", name));
+    Ok(())
+}
+
+pub(crate) fn disconnect_identity(
+    client: &ApiClient,
+    identity: &str,
+    name: &str,
+    connection: Option<&str>,
+    instance: Option<&str>,
+) -> Result<()> {
+    let normalized_connection = connection.map(|value| ConnectionName::new(value).canonical());
+    client
+        .disconnect_identity_integration(identity, name, normalized_connection, instance)
+        .with_context(|| format!("failed to disconnect plugin '{name}' for identity {identity}"))?;
+
+    output::print_success(&format!(
+        "Disconnected {} from identity {}.",
+        name, identity
+    ));
     Ok(())
 }

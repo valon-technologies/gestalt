@@ -128,11 +128,21 @@ func (s *Server) readinessCheck(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 	p := PrincipalFromContext(r.Context())
 	connected := map[string][]instanceInfo{}
-	if p == nil || p.Kind != principal.KindWorkload {
+	switch {
+	case p == nil || p.Kind != principal.KindWorkload:
 		var err error
 		connected, err = s.userConnectedIntegrations(r)
 		if err != nil {
 			slog.ErrorContext(r.Context(), "listing integrations", "error", err)
+			writeError(w, http.StatusInternalServerError, "failed to check integration status")
+			return
+		}
+	case principal.IsManagedIdentityPrincipal(p):
+		identityID := principal.ManagedIdentityIDFromSubjectID(strings.TrimSpace(p.SubjectID))
+		var err error
+		connected, err = s.connectedIntegrationsByOwner(r.Context(), core.IntegrationTokenOwnerKindManagedIdentity, identityID)
+		if err != nil {
+			slog.ErrorContext(r.Context(), "listing managed identity integrations", "identity_id", identityID, "error", err)
 			writeError(w, http.StatusInternalServerError, "failed to check integration status")
 			return
 		}
@@ -165,7 +175,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		if entry, ok := s.pluginDefs[name]; ok && entry != nil {
 			info.MountedPath = strings.TrimSpace(entry.MountPath)
 		}
-		if p != nil && p.Kind == principal.KindWorkload {
+		if principal.IsStaticWorkloadPrincipal(p) {
 			if binding, ok := s.workloadBinding(p, name); ok {
 				bindingConnected, err := s.workloadBindingConnected(r.Context(), binding, name)
 				if err != nil {
@@ -185,6 +195,9 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 
 		instances := connected[name]
 		info.Connected = len(instances) > 0
+		if prov.ConnectionMode() == core.ConnectionModeNone {
+			info.Connected = true
+		}
 		info.Instances = append(make([]instanceInfo, 0, len(instances)), instances...)
 		s.populateIntegrationSettings(&info, prov)
 		info.MountedPath = s.integrationMountedPathForPrincipal(p, name, info.MountedPath)
@@ -702,18 +715,12 @@ func (s *Server) sessionCatalogConnections(providerName string, p *principal.Pri
 	if explicit != "" {
 		return []string{config.ResolveConnectionAlias(explicit)}
 	}
-	if s.authorizer != nil && s.authorizer.IsWorkload(p) {
+	if principal.IsStaticWorkloadPrincipal(p) {
 		return []string{""}
 	}
 
 	connections := make([]string, 0, 2)
-	if conn := s.catalogConnection[providerName]; conn != "" {
-		connections = append(connections, conn)
-	} else if broker, ok := s.invoker.(interface{ MCPConnection(string) string }); ok {
-		if conn := broker.MCPConnection(providerName); conn != "" {
-			connections = append(connections, conn)
-		}
-	} else if conn := s.defaultConnection[providerName]; conn != "" {
+	if conn := s.catalogLookupConnection(providerName, ""); conn != "" {
 		connections = append(connections, conn)
 	}
 	if conn := s.defaultConnection[providerName]; conn != "" && (len(connections) == 0 || connections[0] != conn) && s.catalogConnection[providerName] == "" {
@@ -747,6 +754,21 @@ func (s *Server) boundSessionCatalogTargets(providerName string, p *principal.Pr
 		})
 	}
 	return targets
+}
+
+func (s *Server) catalogLookupConnection(providerName, explicit string) string {
+	if explicit != "" {
+		return config.ResolveConnectionAlias(explicit)
+	}
+	if conn := s.catalogConnection[providerName]; conn != "" {
+		return conn
+	}
+	if broker, ok := s.invoker.(interface{ MCPConnection(string) string }); ok {
+		if conn := broker.MCPConnection(providerName); conn != "" {
+			return conn
+		}
+	}
+	return s.defaultConnection[providerName]
 }
 
 func httpVisibleCatalogOperations(ops []catalog.CatalogOperation) []catalog.CatalogOperation {

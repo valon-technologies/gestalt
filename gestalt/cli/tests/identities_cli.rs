@@ -269,3 +269,117 @@ fn test_cli_revokes_identity_token() {
             "Token itok-2 for identity agent-1 revoked.",
         ));
 }
+
+#[test]
+fn test_cli_lists_identity_connections() {
+    let mut server = Server::new();
+    let _integrations = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/identities/agent-1/integrations",
+        StatusCode::OK
+    )
+    .with_body(
+        r#"[{"name":"widget_metrics","description":"Metrics and logs","connected":true},{"name":"slack","description":"Team chat","connected":false}]"#,
+    )
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["identities", "connections", "list", "agent-1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("widget_metrics"))
+        .stdout(predicate::str::contains("Metrics and logs"))
+        .stdout(predicate::str::contains("slack"))
+        .stdout(predicate::str::contains("yes"))
+        .stdout(predicate::str::contains("no"));
+}
+
+#[test]
+fn test_cli_connects_identity_connection_via_manual_auth() {
+    let mut server = Server::new();
+    let _integrations = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/identities/agent-1/integrations",
+        StatusCode::OK
+    )
+    .with_body(
+        r#"[{
+            "name":"widget_metrics",
+            "displayName":"Widget Metrics",
+            "description":"Metrics and logs",
+            "authTypes":["manual"],
+            "connectionParams":{"region":{"description":"API region","default":"us-east","required":true}},
+            "credentialFields":[{"name":"api_key","label":"API key","description":"Use a personal API key"}]
+        }]"#,
+    )
+    .create();
+    let _connect = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/identities/agent-1/auth/connect-manual",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"connection":"workspace","connectionParams":{"region":"eu-west"},"credential":"wm-key","instance":"team-a","integration":"widget_metrics"}"#.to_string(),
+    ))
+    .with_body(r#"{"status":"connected","integration":"widget_metrics"}"#)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "identities",
+            "connections",
+            "connect",
+            "agent-1",
+            "widget_metrics",
+            "--connection",
+            "workspace",
+            "--instance",
+            "team-a",
+        ])
+        .write_stdin("eu-west\nwm-key\n")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("API region"))
+        .stderr(predicate::str::contains("API key"))
+        .stderr(predicate::str::contains(
+            "Connected widget_metrics for identity agent-1.",
+        ));
+}
+
+#[test]
+fn test_cli_disconnects_identity_connection_with_connection_and_instance() {
+    let mut server = Server::new();
+    let _disconnect = authed_json_mock!(
+        server,
+        Method::DELETE,
+        "/api/v1/identities/agent-1/integrations/widget_metrics?connection=workspace&instance=team-a",
+        StatusCode::OK
+    )
+    .with_body(r#"{"status":"disconnected"}"#)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "identities",
+            "connections",
+            "disconnect",
+            "agent-1",
+            "widget_metrics",
+            "--connection",
+            "workspace",
+            "--instance",
+            "team-a",
+        ])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "Disconnected widget_metrics from identity agent-1.",
+        ));
+}

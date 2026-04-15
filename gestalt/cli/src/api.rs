@@ -324,6 +324,39 @@ impl ApiClient {
         self.delete(&format!("/api/v1/identities/{identity}/tokens/{id}"))
     }
 
+    pub fn get_identity_integrations(&self, identity: &str) -> Result<serde_json::Value> {
+        self.get(&format!("/api/v1/identities/{identity}/integrations"))
+    }
+
+    pub fn connect_identity_manual<T>(&self, identity: &str, body: &T) -> Result<serde_json::Value>
+    where
+        T: Serialize + ?Sized,
+    {
+        self.post(
+            &format!("/api/v1/identities/{identity}/auth/connect-manual"),
+            body,
+        )
+    }
+
+    pub fn disconnect_identity_integration(
+        &self,
+        identity: &str,
+        name: &str,
+        connection: Option<&str>,
+        instance: Option<&str>,
+    ) -> Result<serde_json::Value> {
+        let mut path = format!("/api/v1/identities/{identity}/integrations/{name}");
+        let params: Vec<(&str, &str)> = [("connection", connection), ("instance", instance)]
+            .into_iter()
+            .filter_map(|(key, value)| value.map(|v| (key, v)))
+            .collect();
+        if !params.is_empty() {
+            let query = serde_urlencoded::to_string(&params).context("failed to encode query")?;
+            path = format!("{path}?{query}");
+        }
+        self.delete(&path)
+    }
+
     fn send(&self, method: Method, path: &str) -> Result<serde_json::Value> {
         self.send_request(method, path, None::<&serde_json::Value>)
     }

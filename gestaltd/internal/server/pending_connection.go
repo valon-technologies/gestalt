@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -228,9 +230,15 @@ func (s *Server) writePendingConnectionSelectionPage(w http.ResponseWriter, stat
 	}, "failed to render pending connection page")
 }
 
-func (s *Server) writePendingConnectionSuccessPage(w http.ResponseWriter, integration string) {
+func (s *Server) writePendingConnectionSuccessPage(w http.ResponseWriter, integration, linkURL string) {
 	s.clearPendingConnectionCookie(w)
-	linkURL := "/integrations"
+	linkLabel := "Open integrations"
+	if linkURL == "" {
+		linkURL = "/integrations"
+	}
+	if strings.HasPrefix(linkURL, "/identities") {
+		linkLabel = "Open identity"
+	}
 	if connectedURL, err := setURLQueryParam(linkURL, "connected", integration); err == nil {
 		linkURL = connectedURL
 	}
@@ -238,31 +246,31 @@ func (s *Server) writePendingConnectionSuccessPage(w http.ResponseWriter, integr
 		Title:     integration + " connected",
 		Message:   "Your connection has been saved. You can close this tab now.",
 		LinkURL:   linkURL,
-		LinkLabel: "Open integrations",
+		LinkLabel: linkLabel,
 	}, "failed to render success page")
 }
 
-func (s *Server) resolvePendingConnectionUserID(r *http.Request) (string, bool, error) {
+func (s *Server) resolvePendingConnectionPrincipal(r *http.Request) (*principal.Principal, bool, error) {
 	if s.noAuth {
-		return "", false, nil
+		return nil, false, nil
 	}
 	p, err := s.resolveRequestPrincipalWithUserID(r)
 	if err != nil {
 		if errors.Is(err, errInvalidAuthorizationHeader) {
-			return "", true, principal.ErrInvalidToken
+			return nil, true, principal.ErrInvalidToken
 		}
-		return "", true, err
+		return nil, true, err
 	}
 	if p == nil {
-		return "", false, nil
+		return nil, false, nil
 	}
 	if p.Kind == principal.KindWorkload {
-		return "", true, errWorkloadForbidden
+		return nil, true, errWorkloadForbidden
 	}
 	if p.UserID == "" {
-		return "", true, fmt.Errorf("authenticated principal missing user ID")
+		return nil, true, fmt.Errorf("authenticated principal missing user ID")
 	}
-	return p.UserID, true, nil
+	return p, true, nil
 }
 
 func (s *Server) authorizePendingConnectionByCookie(r *http.Request, state *pendingConnectionState) error {
@@ -286,31 +294,39 @@ func (s *Server) authorizePendingConnectionByCookie(r *http.Request, state *pend
 	return nil
 }
 
-func (s *Server) authorizePendingConnection(w http.ResponseWriter, r *http.Request, state *pendingConnectionState) bool {
-	userID, authenticated, err := s.resolvePendingConnectionUserID(r)
+func (s *Server) authorizePendingConnection(w http.ResponseWriter, r *http.Request, state *pendingConnectionState) (*principal.Principal, bool) {
+	p, authenticated, err := s.resolvePendingConnectionPrincipal(r)
 	if err != nil {
 		if errors.Is(err, errWorkloadForbidden) {
 			writeError(w, http.StatusForbidden, "workload callers are not allowed on this route")
-			return false
+			return nil, false
 		}
 		if errors.Is(err, principal.ErrInvalidToken) {
 			writeError(w, http.StatusUnauthorized, "invalid token")
-			return false
+			return nil, false
 		}
 		writeError(w, http.StatusInternalServerError, "failed to validate pending connection")
-		return false
+		return nil, false
 	}
-	if authenticated && userID != state.Token.UserID {
+	normalizeLegacyPendingConnectionState(state, p)
+	if authenticated && p.UserID != pendingConnectionInitiatorUserID(state) {
 		writeError(w, http.StatusNotFound, "pending connection not found")
-		return false
+		return nil, false
+	}
+	if state != nil && state.Token.OwnerKind == core.IntegrationTokenOwnerKindManagedIdentity {
+		if !authenticated {
+			writeError(w, http.StatusUnauthorized, "identity connection authorization required")
+			return nil, false
+		}
+		return p, true
 	}
 	if !authenticated {
 		if err := s.authorizePendingConnectionByCookie(r, state); err != nil {
 			writeError(w, http.StatusUnauthorized, "pending connection authorization required")
-			return false
+			return nil, false
 		}
 	}
-	return true
+	return p, true
 }
 
 func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request) {
@@ -355,12 +371,33 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 	}
 	providerName = state.Token.Integration
 	auditTarget = connectionAuditTarget(state.Token.Integration, state.Token.Connection, state.Token.Instance)
-	if !s.authorizePendingConnection(w, r, state) {
+	viewer, ok := s.authorizePendingConnection(w, r, state)
+	if !ok {
 		auditErr = errors.New("pending connection authorization required")
 		return
 	}
-	auditUserID = state.Token.UserID
+	auditUserID = pendingConnectionInitiatorUserID(state)
 	auditAuthSource = state.Token.AuthSource
+	storeCtx := r.Context()
+	if viewer != nil {
+		storeCtx = principal.WithPrincipal(storeCtx, viewer)
+	}
+	if err := validatePendingConnectionOwnerState(state); err != nil {
+		auditErr = errors.New("pending connection authorization required")
+		writeError(w, http.StatusUnauthorized, "pending connection authorization required")
+		return
+	}
+	if state.Token.OwnerKind == core.IntegrationTokenOwnerKindManagedIdentity {
+		if err := s.validateManagedIdentityConnectionWrite(storeCtx, state.Token); err != nil {
+			if s.writeManagedIdentityConnectionWriteError(w, state.Token.Integration, err) {
+				auditErr = err
+				return
+			}
+			auditErr = errors.New("pending connection authorization required")
+			writeError(w, http.StatusUnauthorized, "pending connection authorization required")
+			return
+		}
+	}
 	if candidateIndex == "" && candidateID == "" {
 		auditAllowed = true
 		auditErr = nil
@@ -403,7 +440,11 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 
 	tm := state.Token
 	tm.MetadataJSON = merged
-	if _, err := s.storeTokenFromMaterial(r.Context(), tm); err != nil {
+	if _, err := s.storeTokenFromMaterial(storeCtx, tm); err != nil {
+		if s.writeManagedIdentityConnectionWriteError(w, state.Token.Integration, err) {
+			auditErr = err
+			return
+		}
 		auditErr = errors.New("failed to store connection")
 		writeError(w, http.StatusInternalServerError, "failed to store connection")
 		return
@@ -411,7 +452,7 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 
 	if _, err := r.Cookie(sessionCookieName); err == nil {
 		s.clearPendingConnectionCookie(w)
-		connectedURL := "/integrations"
+		connectedURL := pendingConnectionRedirectPath(state)
 		if nextURL, err := setURLQueryParam(connectedURL, "connected", state.Token.Integration); err == nil {
 			connectedURL = nextURL
 		}
@@ -423,5 +464,69 @@ func (s *Server) selectPendingConnection(w http.ResponseWriter, r *http.Request)
 
 	auditAllowed = true
 	auditErr = nil
-	s.writePendingConnectionSuccessPage(w, state.Token.Integration)
+	s.writePendingConnectionSuccessPage(w, state.Token.Integration, pendingConnectionRedirectPath(state))
+}
+
+func normalizeLegacyPendingConnectionState(state *pendingConnectionState, p *principal.Principal) {
+	if state == nil {
+		return
+	}
+	legacyUserID := strings.TrimSpace(state.Token.LegacyUserID)
+	if state.Token.OwnerKind == "" {
+		state.Token.OwnerKind = core.IntegrationTokenOwnerKindUser
+	}
+	if state.Token.InitiatorUserID == "" {
+		switch {
+		case legacyUserID != "":
+			state.Token.InitiatorUserID = legacyUserID
+		case p != nil && p.UserID != "":
+			state.Token.InitiatorUserID = p.UserID
+		}
+	}
+	if state.Token.OwnerKind == core.IntegrationTokenOwnerKindUser && state.Token.OwnerID == "" {
+		switch {
+		case legacyUserID != "":
+			state.Token.OwnerID = legacyUserID
+		case p != nil && p.UserID != "":
+			state.Token.OwnerID = p.UserID
+		case state.Token.InitiatorUserID != "":
+			state.Token.OwnerID = state.Token.InitiatorUserID
+		}
+	}
+}
+
+func validatePendingConnectionOwnerState(state *pendingConnectionState) error {
+	if state == nil {
+		return fmt.Errorf("pending connection missing state")
+	}
+	if strings.TrimSpace(state.Token.OwnerKind) == "" || strings.TrimSpace(state.Token.OwnerID) == "" {
+		return fmt.Errorf("pending connection missing owner")
+	}
+	if strings.TrimSpace(pendingConnectionInitiatorUserID(state)) == "" {
+		return fmt.Errorf("pending connection missing initiator user ID")
+	}
+	return nil
+}
+
+func pendingConnectionInitiatorUserID(state *pendingConnectionState) string {
+	if state == nil {
+		return ""
+	}
+	if state.Token.InitiatorUserID != "" {
+		return state.Token.InitiatorUserID
+	}
+	if state.Token.LegacyUserID != "" {
+		return state.Token.LegacyUserID
+	}
+	if state.Token.OwnerKind == core.IntegrationTokenOwnerKindUser {
+		return state.Token.OwnerID
+	}
+	return ""
+}
+
+func pendingConnectionRedirectPath(state *pendingConnectionState) string {
+	if state != nil && state.Token.OwnerKind == core.IntegrationTokenOwnerKindManagedIdentity && strings.TrimSpace(state.Token.OwnerID) != "" {
+		return "/identities?id=" + url.QueryEscape(state.Token.OwnerID)
+	}
+	return "/integrations"
 }

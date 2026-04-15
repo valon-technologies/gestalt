@@ -98,6 +98,14 @@ func ManagedIdentityIDFromSubjectID(subjectID string) string {
 	return strings.TrimPrefix(subjectID, managedIdentitySubjectPrefix)
 }
 
+func IsManagedIdentityPrincipal(p *Principal) bool {
+	return p != nil && p.Kind == KindWorkload && ManagedIdentityIDFromSubjectID(strings.TrimSpace(p.SubjectID)) != ""
+}
+
+func IsStaticWorkloadPrincipal(p *Principal) bool {
+	return p != nil && p.Kind == KindWorkload && !IsManagedIdentityPrincipal(p)
+}
+
 func CompilePermissions(perms []core.AccessPermission) PermissionSet {
 	if len(perms) == 0 {
 		return nil

@@ -2,8 +2,8 @@ use clap::{CommandFactory, Parser};
 use gestalt::api::{self, ApiClient};
 use gestalt::cli::{
     AuthCommands, Cli, Commands, ConfigCommands, DescribeArgs, IdentityCommands,
-    IdentityGrantCommands, IdentityMemberCommands, IdentityTokenCommands, InvokeArgs,
-    PluginCommands, TokenCommands,
+    IdentityConnectionCommands, IdentityGrantCommands, IdentityMemberCommands,
+    IdentityTokenCommands, InvokeArgs, PluginCommands, TokenCommands,
 };
 use gestalt::commands;
 use gestalt::output;
@@ -123,6 +123,35 @@ fn run() -> anyhow::Result<()> {
                     IdentityTokenCommands::Revoke { identity, id } => {
                         commands::identities::revoke_token(&client, &identity, &id, format)
                     }
+                },
+                IdentityCommands::Connections { command } => match command {
+                    IdentityConnectionCommands::List { identity } => {
+                        commands::identities::list_connections(&client, &identity, format)
+                    }
+                    IdentityConnectionCommands::Connect {
+                        identity,
+                        plugin,
+                        connection,
+                        instance,
+                    } => commands::identities::connect(
+                        &client,
+                        &identity,
+                        &plugin,
+                        connection.as_deref(),
+                        instance.as_deref(),
+                    ),
+                    IdentityConnectionCommands::Disconnect {
+                        identity,
+                        plugin,
+                        connection,
+                        instance,
+                    } => commands::identities::disconnect(
+                        &client,
+                        &identity,
+                        &plugin,
+                        connection.as_deref(),
+                        instance.as_deref(),
+                    ),
                 },
             }
         }

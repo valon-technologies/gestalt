@@ -18,6 +18,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/emailutil"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
 const (
@@ -88,6 +89,7 @@ type Authorizer struct {
 	policies             map[string]*HumanPolicy
 	providerPolicies     map[string]string
 	providerModes        map[string]core.ConnectionMode
+	providerManagedIdent map[string]bool
 	dynamicService       *coredata.PluginAuthorizationService
 	adminDynamicService  *coredata.AdminAuthorizationService
 	dynamicReloadEvery   time.Duration
@@ -110,6 +112,7 @@ func New(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderE
 		policies:             map[string]*HumanPolicy{},
 		providerPolicies:     map[string]string{},
 		providerModes:        map[string]core.ConnectionMode{},
+		providerManagedIdent: map[string]bool{},
 		dynamicService:       dynamicService,
 		dynamicReloadEvery:   defaultDynamicReloadInterval,
 	}
@@ -143,6 +146,15 @@ func New(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderE
 		} else if ok {
 			a.providerModes[providerName] = mode
 		}
+		if providers != nil {
+			if prov, err := providers.Get(providerName); err == nil && prov != nil {
+				a.providerManagedIdent[providerName] = ManagedIdentityProviderSupported(entry, prov, a.providerModes[providerName])
+			} else {
+				a.providerManagedIdent[providerName] = ManagedIdentityProviderSupported(entry, nil, a.providerModes[providerName])
+			}
+		} else {
+			a.providerManagedIdent[providerName] = ManagedIdentityProviderSupported(entry, nil, a.providerModes[providerName])
+		}
 		if policy := strings.TrimSpace(entry.AuthorizationPolicy); policy != "" {
 			a.providerPolicies[providerName] = policy
 		}
@@ -157,6 +169,7 @@ func New(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderE
 				continue
 			}
 			a.providerModes[providerName] = prov.ConnectionMode()
+			a.providerManagedIdent[providerName] = ManagedIdentityProviderSupported(nil, prov, a.providerModes[providerName])
 		}
 	}
 
@@ -370,10 +383,7 @@ func (a *Authorizer) AllowOperation(p *principal.Principal, provider, operation 
 
 func (a *Authorizer) Binding(p *principal.Principal, provider string) (CredentialBinding, bool) {
 	if a.isManagedIdentityPrincipal(p) {
-		if !a.allowManagedIdentityProvider(p, provider) {
-			return CredentialBinding{}, false
-		}
-		return CredentialBinding{Mode: core.ConnectionModeNone}, true
+		return CredentialBinding{}, false
 	}
 	if !a.IsWorkload(p) {
 		return CredentialBinding{}, false
@@ -851,7 +861,7 @@ func normalizeEmail(email string) string {
 }
 
 func (a *Authorizer) isManagedIdentityPrincipal(p *principal.Principal) bool {
-	return a.IsWorkload(p) && principal.ManagedIdentityIDFromSubjectID(strings.TrimSpace(p.SubjectID)) != ""
+	return principal.IsManagedIdentityPrincipal(p)
 }
 
 func (a *Authorizer) allowManagedIdentityProvider(p *principal.Principal, provider string) bool {
@@ -861,11 +871,11 @@ func (a *Authorizer) allowManagedIdentityProvider(p *principal.Principal, provid
 	if !principal.AllowsProviderPermission(p, provider) {
 		return false
 	}
-	mode, ok := a.providerModes[provider]
+	_, ok := a.providerModes[provider]
 	if !ok {
 		return false
 	}
-	return mode == core.ConnectionModeNone
+	return a.providerManagedIdent[provider]
 }
 
 func providerMode(provider string, pluginDefs map[string]*config.ProviderEntry, providers *registry.ProviderMap[core.Provider]) (core.ConnectionMode, bool, error) {
@@ -883,4 +893,68 @@ func providerMode(provider string, pluginDefs map[string]*config.ProviderEntry, 
 		}
 	}
 	return "", false, nil
+}
+
+func namedConnectionNames(entry *config.ProviderEntry) map[string]struct{} {
+	names := make(map[string]struct{})
+	if entry == nil {
+		return names
+	}
+	if spec := entry.ManifestSpec(); spec != nil {
+		for name := range spec.Connections {
+			resolved := config.ResolveConnectionAlias(name)
+			if resolved != "" && resolved != config.PluginConnectionName {
+				names[resolved] = struct{}{}
+			}
+		}
+	}
+	for name := range entry.Connections {
+		resolved := config.ResolveConnectionAlias(name)
+		if resolved != "" && resolved != config.PluginConnectionName {
+			names[resolved] = struct{}{}
+		}
+	}
+	return names
+}
+
+func ManagedIdentityProviderSupported(entry *config.ProviderEntry, prov core.Provider, mode core.ConnectionMode) bool {
+	if mode == core.ConnectionModeNone {
+		return true
+	}
+	if entry != nil {
+		if connectionSupportsManagedIdentityAuth(config.EffectivePluginConnectionDef(entry, entry.ManifestSpec())) {
+			return true
+		}
+		for name := range namedConnectionNames(entry) {
+			conn, ok := config.EffectiveNamedConnectionDef(entry, entry.ManifestSpec(), name)
+			if ok && connectionSupportsManagedIdentityAuth(conn) {
+				return true
+			}
+		}
+	}
+	return providerSupportsManagedIdentityAuth(prov)
+}
+
+func connectionSupportsManagedIdentityAuth(conn config.ConnectionDef) bool {
+	return managedIdentityAuthTypeSupported(string(conn.Auth.Type))
+}
+
+func providerSupportsManagedIdentityAuth(prov core.Provider) bool {
+	if prov == nil {
+		return false
+	}
+	for _, authType := range prov.AuthTypes() {
+		if managedIdentityAuthTypeSupported(authType) {
+			return true
+		}
+	}
+	if mp, ok := prov.(interface{ SupportsManualAuth() bool }); ok && mp.SupportsManualAuth() {
+		return true
+	}
+	return false
+}
+
+func managedIdentityAuthTypeSupported(authType string) bool {
+	authType = strings.ToLower(strings.TrimSpace(authType))
+	return authType == string(providermanifestv1.AuthTypeManual)
 }
