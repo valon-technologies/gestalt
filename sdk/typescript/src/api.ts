@@ -35,6 +35,7 @@ export interface Request {
   subject: Subject;
   credential: Credential;
   access: Access;
+  requestHandle: string;
 }
 
 /**
@@ -98,6 +99,7 @@ export function request(
   subject: Partial<Subject> = {},
   credential: Partial<Credential> = {},
   access: Partial<Access> = {},
+  requestHandle = "",
 ): Request {
   return {
     token,
@@ -120,6 +122,7 @@ export function request(
       policy: access.policy ?? "",
       role: access.role ?? "",
     },
+    requestHandle,
   };
 }
 

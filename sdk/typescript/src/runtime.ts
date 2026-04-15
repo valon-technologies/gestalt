@@ -529,6 +529,7 @@ export function createProviderService(
             request.token,
             request.connectionParams,
             request.context,
+            request.requestHandle,
           ),
         ),
       );
@@ -739,6 +740,7 @@ function providerRequest(
   token: string,
   connectionParams: Record<string, string>,
   requestContext?: ProtoRequestContext,
+  requestHandle = "",
 ): Request {
   const subject = requestContext?.subject;
   const credential = requestContext?.credential;
@@ -764,6 +766,7 @@ function providerRequest(
       policy: access?.policy ?? "",
       role: access?.role ?? "",
     },
+    requestHandle,
   };
 }
 

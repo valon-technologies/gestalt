@@ -56,6 +56,7 @@ from ._indexeddb import (
     ObjectStoreSchema,
     indexeddb_socket_env,
 )
+from ._invoker import ENV_PLUGIN_INVOKER_SOCKET, PluginInvoker
 from ._plugin import Plugin, operation, session_catalog
 from ._providers import (
     AuthenticatedUser,
@@ -122,6 +123,7 @@ __all__ = [
     "Cursor",
     "Error",
     "ENV_S3_SOCKET",
+    "ENV_PLUGIN_INVOKER_SOCKET",
     "ExternalTokenValidator",
     "HealthChecker",
     "Index",
@@ -140,6 +142,7 @@ __all__ = [
     "ObjectStoreSchema",
     "OperationAnnotations",
     "Plugin",
+    "PluginInvoker",
     "PluginProvider",
     "PluginProviderAdapter",
     "PresignMethod",

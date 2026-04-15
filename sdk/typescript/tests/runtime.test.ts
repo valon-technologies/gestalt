@@ -287,6 +287,7 @@ test("integration provider service exposes metadata, configure, execute, and ses
           role: "admin",
         }),
       }),
+      requestHandle: "request-handle-123",
     }),
   );
   expect(JSON.parse(result.body)).toEqual({
@@ -298,6 +299,7 @@ test("integration provider service exposes metadata, configure, execute, and ses
     credentialMode: "identity",
     accessPolicy: "sample_policy",
     accessRole: "admin",
+    requestHandle: "request-handle-123",
   });
 
   const sessionCatalog = await (service.getSessionCatalog as any)(

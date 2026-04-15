@@ -39,12 +39,23 @@ pub struct Request {
     pub subject: Subject,
     pub credential: Credential,
     pub access: Access,
+    pub request_handle: String,
 }
 
 impl Request {
     /// Returns one resolved connection parameter by name.
     pub fn connection_param(&self, name: &str) -> Option<&str> {
         self.connection_params.get(name).map(String::as_str)
+    }
+
+    pub fn request_handle(&self) -> &str {
+        &self.request_handle
+    }
+
+    pub async fn invoker(
+        &self,
+    ) -> std::result::Result<crate::PluginInvoker, crate::PluginInvokerError> {
+        crate::PluginInvoker::connect(self.request_handle()).await
     }
 }
 
