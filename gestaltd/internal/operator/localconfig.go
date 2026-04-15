@@ -74,6 +74,12 @@ providers:
         version: %s
       config:
         dsn: %q
+  ui:
+    root:
+      source:
+        ref: %s
+        version: %s
+      path: /
   secrets:
     env:
       source: env
@@ -85,7 +91,7 @@ plugins:
       version: %s
     allowedHosts:
       - httpbin.org
-`, encryptionKey, config.DefaultIndexedDBProvider, config.DefaultIndexedDBVersion, "sqlite://"+dbPath, defaultHTTPBinProvider, defaultHTTPBinVersion)
+`, encryptionKey, config.DefaultIndexedDBProvider, config.DefaultIndexedDBVersion, "sqlite://"+dbPath, config.DefaultWebUIProvider, config.DefaultWebUIVersion, defaultHTTPBinProvider, defaultHTTPBinVersion)
 }
 
 func defaultLocalSourceConfig(providersDir, dbPath, encryptionKey string) string {
