@@ -265,6 +265,20 @@ impl ApiClient {
         self.send_json(Method::POST, path, body)
     }
 
+    pub fn put<T>(&self, path: &str, body: &T) -> Result<serde_json::Value>
+    where
+        T: Serialize + ?Sized,
+    {
+        self.send_json(Method::PUT, path, body)
+    }
+
+    pub fn patch<T>(&self, path: &str, body: &T) -> Result<serde_json::Value>
+    where
+        T: Serialize + ?Sized,
+    {
+        self.send_json(Method::PATCH, path, body)
+    }
+
     pub fn post_form<T>(&self, path: &str, body: &T) -> Result<String>
     where
         T: Serialize + ?Sized,

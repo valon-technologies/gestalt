@@ -6,6 +6,9 @@ const (
 	StoreUsers                          = "users"
 	StoreIntegrationTokens              = "integration_tokens"
 	StoreAPITokens                      = "api_tokens"
+	StoreManagedIdentities              = "managed_identities"
+	StoreManagedIdentityMemberships     = "managed_identity_memberships"
+	StoreManagedIdentityGrants          = "managed_identity_grants"
 	StorePluginAuthorizationMemberships = "plugin_authorization_memberships"
 	StoreAdminAuthorizationMemberships  = "admin_authorization_memberships"
 )
@@ -63,6 +66,47 @@ var APITokensSchema = indexeddb.ObjectStoreSchema{
 		{Name: "hashed_token", Type: indexeddb.TypeString, NotNull: true, Unique: true},
 		{Name: "scopes", Type: indexeddb.TypeString},
 		{Name: "expires_at", Type: indexeddb.TypeTime},
+		{Name: "created_at", Type: indexeddb.TypeTime},
+		{Name: "updated_at", Type: indexeddb.TypeTime},
+	},
+}
+
+var ManagedIdentitiesSchema = indexeddb.ObjectStoreSchema{
+	Columns: []indexeddb.ColumnDef{
+		{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
+		{Name: "display_name", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "created_at", Type: indexeddb.TypeTime},
+		{Name: "updated_at", Type: indexeddb.TypeTime},
+	},
+}
+
+var ManagedIdentityMembershipsSchema = indexeddb.ObjectStoreSchema{
+	Indexes: []indexeddb.IndexSchema{
+		{Name: "by_identity", KeyPath: []string{"identity_id"}},
+		{Name: "by_user", KeyPath: []string{"user_id"}},
+		{Name: "by_identity_user", KeyPath: []string{"identity_id", "user_id"}, Unique: true},
+	},
+	Columns: []indexeddb.ColumnDef{
+		{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
+		{Name: "identity_id", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "user_id", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "email", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "role", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "created_at", Type: indexeddb.TypeTime},
+		{Name: "updated_at", Type: indexeddb.TypeTime},
+	},
+}
+
+var ManagedIdentityGrantsSchema = indexeddb.ObjectStoreSchema{
+	Indexes: []indexeddb.IndexSchema{
+		{Name: "by_identity", KeyPath: []string{"identity_id"}},
+		{Name: "by_identity_plugin", KeyPath: []string{"identity_id", "plugin"}, Unique: true},
+	},
+	Columns: []indexeddb.ColumnDef{
+		{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
+		{Name: "identity_id", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "plugin", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "operations_json", Type: indexeddb.TypeString},
 		{Name: "created_at", Type: indexeddb.TypeTime},
 		{Name: "updated_at", Type: indexeddb.TypeTime},
 	},

@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -139,6 +140,157 @@ func (s *putFailingObjectStore) Put(ctx context.Context, record indexeddb.Record
 	return s.ObjectStore.Put(ctx, record)
 }
 
+type addFailingIndexedDB struct {
+	indexeddb.IndexedDB
+	failStoreAdds    map[string]*atomic.Bool
+	failStorePuts    map[string]*deleteFailureRule
+	failStoreDeletes map[string]*deleteFailureRule
+}
+
+func (d *addFailingIndexedDB) ObjectStore(name string) indexeddb.ObjectStore {
+	store := d.IndexedDB.ObjectStore(name)
+	failAdd := d.failStoreAdds[name]
+	failPut := d.failStorePuts[name]
+	failDelete := d.failStoreDeletes[name]
+	if failAdd == nil && failPut == nil && failDelete == nil {
+		return store
+	}
+	return &addFailingObjectStore{
+		ObjectStore: store,
+		storeName:   name,
+		failAdd:     failAdd,
+		failPut:     failPut,
+		failDelete:  failDelete,
+	}
+}
+
+type addFailingObjectStore struct {
+	indexeddb.ObjectStore
+	storeName  string
+	failAdd    *atomic.Bool
+	failPut    *deleteFailureRule
+	failDelete *deleteFailureRule
+}
+
+func (s *addFailingObjectStore) Add(ctx context.Context, record indexeddb.Record) error {
+	if s.failAdd != nil && s.failAdd.Load() {
+		return fmt.Errorf("forced add failure")
+	}
+	return s.ObjectStore.Add(ctx, record)
+}
+
+func (s *addFailingObjectStore) Put(ctx context.Context, record indexeddb.Record) error {
+	if s.failPut.shouldFail() {
+		return fmt.Errorf("forced %s put failure", s.storeName)
+	}
+	return s.ObjectStore.Put(ctx, record)
+}
+
+func (s *addFailingObjectStore) Delete(ctx context.Context, id string) error {
+	if s.failDelete.shouldFail() {
+		return fmt.Errorf("forced %s delete failure", s.storeName)
+	}
+	return s.ObjectStore.Delete(ctx, id)
+}
+
+type deleteFailingIndexedDB struct {
+	indexeddb.IndexedDB
+	failStoreDeletes map[string]*deleteFailureRule
+	failIndexDeletes map[string]*deleteFailureRule
+	failStorePuts    map[string]*deleteFailureRule
+}
+
+func (d *deleteFailingIndexedDB) ObjectStore(name string) indexeddb.ObjectStore {
+	store := d.IndexedDB.ObjectStore(name)
+	return &deleteFailingObjectStore{
+		ObjectStore:      store,
+		storeName:        name,
+		failDelete:       d.failStoreDeletes[name],
+		failIndexDeletes: d.failIndexDeletes,
+		failPut:          d.failStorePuts[name],
+	}
+}
+
+type deleteFailingObjectStore struct {
+	indexeddb.ObjectStore
+	storeName        string
+	failDelete       *deleteFailureRule
+	failIndexDeletes map[string]*deleteFailureRule
+	failPut          *deleteFailureRule
+}
+
+func (s *deleteFailingObjectStore) Delete(ctx context.Context, id string) error {
+	if s.failDelete.shouldFail() {
+		return fmt.Errorf("forced %s delete failure", s.storeName)
+	}
+	return s.ObjectStore.Delete(ctx, id)
+}
+
+func (s *deleteFailingObjectStore) Put(ctx context.Context, record indexeddb.Record) error {
+	if s.failPut.shouldFail() {
+		return fmt.Errorf("forced %s put failure", s.storeName)
+	}
+	return s.ObjectStore.Put(ctx, record)
+}
+
+func (s *deleteFailingObjectStore) Index(name string) indexeddb.Index {
+	idx := s.ObjectStore.Index(name)
+	failDelete := s.failIndexDeletes[s.storeName+"/"+name]
+	if failDelete == nil {
+		return idx
+	}
+	return &deleteFailingIndex{Index: idx, name: s.storeName + "/" + name, failDelete: failDelete}
+}
+
+type deleteFailingIndex struct {
+	indexeddb.Index
+	name       string
+	failDelete *deleteFailureRule
+}
+
+func (i *deleteFailingIndex) Delete(ctx context.Context, values ...any) (int64, error) {
+	if i.failDelete.shouldFail() {
+		return 0, fmt.Errorf("forced %s delete failure", i.name)
+	}
+	return i.Index.Delete(ctx, values...)
+}
+
+type deleteFailureRule struct {
+	failAfter int64
+	enabled   atomic.Bool
+	calls     atomic.Int64
+}
+
+func newDeleteFailureRule(failAfter int64) *deleteFailureRule {
+	if failAfter < 1 {
+		failAfter = 1
+	}
+	return &deleteFailureRule{failAfter: failAfter}
+}
+
+func (r *deleteFailureRule) Enable() {
+	if r == nil {
+		return
+	}
+	r.calls.Store(0)
+	r.enabled.Store(true)
+}
+
+func (r *deleteFailureRule) Disable() {
+	if r == nil {
+		return
+	}
+	r.enabled.Store(false)
+	r.calls.Store(0)
+}
+
+func (r *deleteFailureRule) shouldFail() bool {
+	if r == nil || !r.enabled.Load() {
+		return false
+	}
+	return r.calls.Add(1) == r.failAfter
+}
+
 func newTestServicesWithUsersPutFailure(t *testing.T) (*coredata.Services, *atomic.Bool) {
 	t.Helper()
 	enc, err := corecrypto.NewAESGCM([]byte("0123456789abcdef0123456789abcdef"))
@@ -194,6 +346,118 @@ func newTestServicesWithAdminAuthorizationPutFailure(t *testing.T) (*coredata.Se
 		t.Fatalf("newTestServicesWithAdminAuthorizationPutFailure: %v", err)
 	}
 	return svc, failPut
+}
+
+func newTestServicesWithManagedIdentityMembershipAddFailure(t *testing.T) (*coredata.Services, *atomic.Bool, *deleteFailureRule, *deleteFailureRule, indexeddb.IndexedDB) {
+	t.Helper()
+	enc, err := corecrypto.NewAESGCM([]byte("0123456789abcdef0123456789abcdef"))
+	if err != nil {
+		t.Fatalf("newTestServicesWithManagedIdentityMembershipAddFailure encryptor: %v", err)
+	}
+	failAdd := &atomic.Bool{}
+	failPut := newDeleteFailureRule(1)
+	failDelete := newDeleteFailureRule(1)
+	db := &addFailingIndexedDB{
+		IndexedDB: &coretesting.StubIndexedDB{},
+		failStoreAdds: map[string]*atomic.Bool{
+			coredata.StoreManagedIdentityMemberships: failAdd,
+		},
+		failStorePuts: map[string]*deleteFailureRule{
+			coredata.StoreManagedIdentityMemberships: failPut,
+		},
+		failStoreDeletes: map[string]*deleteFailureRule{
+			coredata.StoreManagedIdentities: failDelete,
+		},
+	}
+	svc, err := coredata.New(db, enc)
+	if err != nil {
+		t.Fatalf("newTestServicesWithManagedIdentityMembershipAddFailure: %v", err)
+	}
+	return svc, failAdd, failPut, failDelete, db
+}
+
+func newTestServicesWithManagedIdentityGrantDeleteFailure(t *testing.T, failAfter int64) (*coredata.Services, *deleteFailureRule) {
+	t.Helper()
+
+	key, err := corecrypto.NewAESGCM([]byte("0123456789abcdef0123456789abcdef"))
+	if err != nil {
+		t.Fatalf("newTestServicesWithManagedIdentityGrantDeleteFailure encryptor: %v", err)
+	}
+	failDelete := newDeleteFailureRule(failAfter)
+	svc, err := coredata.New(&deleteFailingIndexedDB{
+		IndexedDB: &coretesting.StubIndexedDB{},
+		failIndexDeletes: map[string]*deleteFailureRule{
+			coredata.StoreManagedIdentityGrants + "/by_identity_plugin": failDelete,
+		},
+	}, key)
+	if err != nil {
+		t.Fatalf("newTestServicesWithManagedIdentityGrantDeleteFailure: %v", err)
+	}
+	return svc, failDelete
+}
+
+func newTestServicesWithManagedIdentityMembershipDeleteFailure(t *testing.T, failAfter int64) (*coredata.Services, *deleteFailureRule) {
+	t.Helper()
+
+	key, err := corecrypto.NewAESGCM([]byte("0123456789abcdef0123456789abcdef"))
+	if err != nil {
+		t.Fatalf("newTestServicesWithManagedIdentityMembershipDeleteFailure encryptor: %v", err)
+	}
+	failDelete := newDeleteFailureRule(failAfter)
+	svc, err := coredata.New(&deleteFailingIndexedDB{
+		IndexedDB: &coretesting.StubIndexedDB{},
+		failIndexDeletes: map[string]*deleteFailureRule{
+			coredata.StoreManagedIdentityMemberships + "/by_identity_user": failDelete,
+		},
+	}, key)
+	if err != nil {
+		t.Fatalf("newTestServicesWithManagedIdentityMembershipDeleteFailure: %v", err)
+	}
+	return svc, failDelete
+}
+
+func newTestServicesWithManagedIdentityDeleteFailure(t *testing.T) (*coredata.Services, *deleteFailureRule) {
+	t.Helper()
+
+	key, err := corecrypto.NewAESGCM([]byte("0123456789abcdef0123456789abcdef"))
+	if err != nil {
+		t.Fatalf("newTestServicesWithManagedIdentityDeleteFailure encryptor: %v", err)
+	}
+	failDelete := newDeleteFailureRule(1)
+	svc, err := coredata.New(&deleteFailingIndexedDB{
+		IndexedDB: &coretesting.StubIndexedDB{},
+		failStoreDeletes: map[string]*deleteFailureRule{
+			coredata.StoreManagedIdentities: failDelete,
+		},
+	}, key)
+	if err != nil {
+		t.Fatalf("newTestServicesWithManagedIdentityDeleteFailure: %v", err)
+	}
+	return svc, failDelete
+}
+
+func newTestServicesWithManagedIdentityDeleteAndMembershipRestoreFailure(t *testing.T, membershipRestoreFailAfter int64) (*coredata.Services, *deleteFailureRule, *deleteFailureRule) {
+	t.Helper()
+
+	key, err := corecrypto.NewAESGCM([]byte("0123456789abcdef0123456789abcdef"))
+	if err != nil {
+		t.Fatalf("newTestServicesWithManagedIdentityDeleteAndMembershipRestoreFailure encryptor: %v", err)
+	}
+	deleteFail := newDeleteFailureRule(1)
+	membershipRestoreFail := newDeleteFailureRule(membershipRestoreFailAfter)
+	svc, err := coredata.New(&deleteFailingIndexedDB{
+		IndexedDB: &coretesting.StubIndexedDB{},
+		failStoreDeletes: map[string]*deleteFailureRule{
+			coredata.StoreManagedIdentities: deleteFail,
+		},
+		failStorePuts: map[string]*deleteFailureRule{
+			coredata.StoreManagedIdentityMemberships: membershipRestoreFail,
+		},
+	}, key)
+	if err != nil {
+		t.Fatalf("newTestServicesWithManagedIdentityDeleteAndMembershipRestoreFailure: %v", err)
+	}
+	return svc, deleteFail, membershipRestoreFail
 }
 
 func newVirtualHostClient(t *testing.T, hostAddrs map[string]string) *http.Client {
@@ -13367,5 +13631,1518 @@ func TestCreateAPIToken_InvalidScope(t *testing.T) {
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestManagedIdentityCRUDAndMemberships(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	admin := seedUser(t, svc, "admin@example.test")
+	seedUser(t, svc, "viewer@example.test")
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				switch token {
+				case "admin-session":
+					return &core.UserIdentity{Email: "admin@example.test"}, nil
+				case "viewer-session":
+					return &core.UserIdentity{Email: "viewer@example.test"}, nil
+				default:
+					return nil, fmt.Errorf("unknown session %q", token)
+				}
+			},
+		}
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	createResp := struct {
+		ID          string `json:"id"`
+		DisplayName string `json:"displayName"`
+		Role        string `json:"role"`
+	}{}
+	doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Release Bot"}`, http.StatusCreated, &createResp)
+	if createResp.Role != "admin" {
+		t.Fatalf("create role = %q, want admin", createResp.Role)
+	}
+	if createResp.DisplayName != "Release Bot" {
+		t.Fatalf("displayName = %q, want %q", createResp.DisplayName, "Release Bot")
+	}
+	createdIdentity, err := svc.ManagedIdentities.GetIdentity(context.Background(), createResp.ID)
+	if err != nil {
+		t.Fatalf("GetIdentity after create: %v", err)
+	}
+
+	var listResp []struct {
+		ID          string `json:"id"`
+		DisplayName string `json:"displayName"`
+		Role        string `json:"role"`
+	}
+	doJSONRequestAndDecode(t, http.MethodGet, ts.URL+"/api/v1/identities", "admin-session", "", http.StatusOK, &listResp)
+	if len(listResp) != 1 || listResp[0].ID != createResp.ID || listResp[0].Role != "admin" {
+		t.Fatalf("list response = %+v, want single admin identity %q", listResp, createResp.ID)
+	}
+
+	memberResp := struct {
+		UserID string `json:"userId"`
+		Email  string `json:"email"`
+		Role   string `json:"role"`
+	}{}
+	doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/members", "admin-session", `{"email":"viewer@example.test","role":"viewer"}`, http.StatusOK, &memberResp)
+	if memberResp.Role != "viewer" || memberResp.Email != "viewer@example.test" {
+		t.Fatalf("member response = %+v, want viewer@example.test viewer", memberResp)
+	}
+
+	var viewerList []struct {
+		ID          string `json:"id"`
+		DisplayName string `json:"displayName"`
+		Role        string `json:"role"`
+	}
+	doJSONRequestAndDecode(t, http.MethodGet, ts.URL+"/api/v1/identities", "viewer-session", "", http.StatusOK, &viewerList)
+	if len(viewerList) != 1 || viewerList[0].Role != "viewer" {
+		t.Fatalf("viewer list response = %+v, want single viewer identity", viewerList)
+	}
+
+	reqBody := bytes.NewBufferString(`{"displayName":"Nope"}`)
+	req, _ := http.NewRequest(http.MethodPatch, ts.URL+"/api/v1/identities/"+createResp.ID, reqBody)
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("viewer patch request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("viewer patch status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+
+	updateResp := struct {
+		DisplayName string `json:"displayName"`
+	}{}
+	doJSONRequestAndDecode(t, http.MethodPatch, ts.URL+"/api/v1/identities/"+createResp.ID, "admin-session", `{"displayName":"Release Automation"}`, http.StatusOK, &updateResp)
+	if updateResp.DisplayName != "Release Automation" {
+		t.Fatalf("updated displayName = %q, want %q", updateResp.DisplayName, "Release Automation")
+	}
+	updatedIdentity, err := svc.ManagedIdentities.GetIdentity(context.Background(), createResp.ID)
+	if err != nil {
+		t.Fatalf("GetIdentity after update: %v", err)
+	}
+	if !updatedIdentity.CreatedAt.Equal(createdIdentity.CreatedAt) {
+		t.Fatalf("createdAt changed across update: got %v want %v", updatedIdentity.CreatedAt, createdIdentity.CreatedAt)
+	}
+
+	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/identities/"+createResp.ID+"/members/"+admin.Email, nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("delete admin membership request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusConflict {
+		t.Fatalf("delete last admin status = %d, want %d", resp.StatusCode, http.StatusConflict)
+	}
+
+	doJSONRequestAndDecode(t, http.MethodDelete, ts.URL+"/api/v1/identities/"+createResp.ID, "admin-session", "", http.StatusOK, nil)
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/identities/"+createResp.ID, nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("get deleted identity request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("get deleted identity status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+}
+
+func TestManagedIdentityCreateRecoversWhenMembershipCreateFails(t *testing.T) {
+	t.Parallel()
+
+	t.Run("restores membership via put fallback", func(t *testing.T) {
+		t.Parallel()
+
+		svc, failAdd, _, _, db := newTestServicesWithManagedIdentityMembershipAddFailure(t)
+		seedUser(t, svc, "admin@example.test")
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					switch token {
+					case "admin-session":
+						return &core.UserIdentity{Email: "admin@example.test"}, nil
+					default:
+						return nil, fmt.Errorf("unknown session %q", token)
+					}
+				},
+			}
+			cfg.Services = svc
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		failAdd.Store(true)
+
+		createResp := struct {
+			ID string `json:"id"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Recovered Bot"}`, http.StatusCreated, &createResp)
+
+		identityCount, err := db.ObjectStore(coredata.StoreManagedIdentities).Count(context.Background(), nil)
+		if err != nil {
+			t.Fatalf("Count managed identities: %v", err)
+		}
+		if identityCount != 1 {
+			t.Fatalf("managed identity count = %d, want 1", identityCount)
+		}
+		membershipCount, err := db.ObjectStore(coredata.StoreManagedIdentityMemberships).Count(context.Background(), nil)
+		if err != nil {
+			t.Fatalf("Count managed identity memberships: %v", err)
+		}
+		if membershipCount != 1 {
+			t.Fatalf("managed identity membership count = %d, want 1", membershipCount)
+		}
+		if createResp.ID == "" {
+			t.Fatal("expected created identity id")
+		}
+	})
+
+	t.Run("retries membership restore after rollback delete failure", func(t *testing.T) {
+		t.Parallel()
+
+		svc, failAdd, failPut, failDelete, db := newTestServicesWithManagedIdentityMembershipAddFailure(t)
+		seedUser(t, svc, "admin@example.test")
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					switch token {
+					case "admin-session":
+						return &core.UserIdentity{Email: "admin@example.test"}, nil
+					default:
+						return nil, fmt.Errorf("unknown session %q", token)
+					}
+				},
+			}
+			cfg.Services = svc
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		failAdd.Store(true)
+		failPut.Enable()
+		failDelete.Enable()
+
+		createResp := struct {
+			ID string `json:"id"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Retried Bot"}`, http.StatusCreated, &createResp)
+
+		identityCount, err := db.ObjectStore(coredata.StoreManagedIdentities).Count(context.Background(), nil)
+		if err != nil {
+			t.Fatalf("Count managed identities: %v", err)
+		}
+		if identityCount != 1 {
+			t.Fatalf("managed identity count = %d, want 1", identityCount)
+		}
+		membershipCount, err := db.ObjectStore(coredata.StoreManagedIdentityMemberships).Count(context.Background(), nil)
+		if err != nil {
+			t.Fatalf("Count managed identity memberships: %v", err)
+		}
+		if membershipCount != 1 {
+			t.Fatalf("managed identity membership count = %d, want 1", membershipCount)
+		}
+		if createResp.ID == "" {
+			t.Fatal("expected created identity id")
+		}
+	})
+}
+
+func TestManagedIdentityGrantsRespectActorAuthorization(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	admin := seedUser(t, svc, "admin@example.test")
+	seedUser(t, svc, "viewer@example.test")
+
+	alpha := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{N: "alpha", ConnMode: core.ConnectionModeNone},
+		ops:             []core.Operation{{Name: "read", Method: http.MethodGet}},
+	}
+	beta := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{N: "beta", ConnMode: core.ConnectionModeNone},
+		ops:             []core.Operation{{Name: "read", Method: http.MethodGet}},
+	}
+	gamma := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{N: "gamma", ConnMode: core.ConnectionModeNone},
+		ops:             []core.Operation{{Name: "read", Method: http.MethodGet}},
+	}
+	alphaCatalog := &stubIntegrationWithCatalog{
+		StubIntegration: alpha.StubIntegration,
+		catalog: serverTestCatalog("alpha", []catalog.CatalogOperation{
+			{ID: "read", Method: http.MethodGet, Path: "/read", Transport: catalog.TransportREST, AllowedRoles: []string{"viewer"}},
+			{ID: "write", Method: http.MethodPost, Path: "/write", Transport: catalog.TransportREST, AllowedRoles: []string{"admin"}},
+		}),
+	}
+	gammaCatalog := &stubIntegrationWithCatalog{
+		StubIntegration: gamma.StubIntegration,
+		catalog: serverTestCatalog("gamma", []catalog.CatalogOperation{
+			{ID: "read", Method: http.MethodGet, Path: "/read", Transport: catalog.TransportREST, AllowedRoles: []string{"viewer"}},
+		}),
+	}
+	providers := testutil.NewProviderRegistry(t, alphaCatalog, beta, gammaCatalog)
+	pluginDefs := map[string]*config.ProviderEntry{
+		"alpha": {AuthorizationPolicy: "alpha_policy"},
+		"beta":  {AuthorizationPolicy: "beta_policy"},
+		"gamma": {AuthorizationPolicy: "gamma_policy"},
+	}
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"alpha_policy": {
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID(admin.ID), Role: "viewer"},
+				},
+			},
+			"beta_policy": {},
+			"gamma_policy": {
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID(admin.ID), Role: "viewer"},
+				},
+			},
+		},
+	}, providers, pluginDefs, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				switch token {
+				case "admin-session":
+					return &core.UserIdentity{Email: "admin@example.test"}, nil
+				case "viewer-session":
+					return &core.UserIdentity{Email: "viewer@example.test"}, nil
+				default:
+					return nil, fmt.Errorf("unknown session %q", token)
+				}
+			},
+		}
+		cfg.Services = svc
+		cfg.Providers = providers
+		cfg.PluginDefs = pluginDefs
+		cfg.Authorizer = authz
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	createResp := struct {
+		ID string `json:"id"`
+	}{}
+	doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Grant Bot"}`, http.StatusCreated, &createResp)
+	doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/members", "admin-session", `{"email":"viewer@example.test","role":"viewer"}`, http.StatusOK, nil)
+
+	grantResp := struct {
+		Plugin     string   `json:"plugin"`
+		Operations []string `json:"operations"`
+	}{}
+	doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/alpha", "admin-session", `{"operations":["read","read"]}`, http.StatusOK, &grantResp)
+	if grantResp.Plugin != "alpha" || !reflect.DeepEqual(grantResp.Operations, []string{"read"}) {
+		t.Fatalf("grant response = %+v, want alpha [read]", grantResp)
+	}
+
+	var (
+		req  *http.Request
+		resp *http.Response
+		err  error
+	)
+	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/alpha", bytes.NewBufferString(`{"operations":[" ",""]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("blank alpha grant request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("blank alpha grant status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+
+	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/alpha", bytes.NewBufferString(`{"operations":["missing.op"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("invalid alpha grant request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("invalid alpha grant status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+
+	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/alpha", bytes.NewBufferString(`{"operations":["write"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("unauthorized alpha grant request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("unauthorized alpha grant status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+
+	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/alpha", bytes.NewBufferString(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("plugin-wide alpha grant request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("plugin-wide alpha grant status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+
+	doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/gamma", "admin-session", `{}`, http.StatusOK, &grantResp)
+	if grantResp.Plugin != "gamma" || !reflect.DeepEqual(grantResp.Operations, []string{}) {
+		t.Fatalf("plugin-wide grant response = %+v, want gamma []", grantResp)
+	}
+
+	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/beta", bytes.NewBufferString(`{"operations":["read"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("beta grant request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("beta grant status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+
+	var adminGrantList []struct {
+		Plugin     string   `json:"plugin"`
+		Operations []string `json:"operations"`
+	}
+	doJSONRequestAndDecode(t, http.MethodGet, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants", "admin-session", "", http.StatusOK, &adminGrantList)
+	if len(adminGrantList) != 2 || adminGrantList[0].Plugin != "alpha" || adminGrantList[1].Plugin != "gamma" {
+		t.Fatalf("admin grant list = %+v, want alpha and gamma grants", adminGrantList)
+	}
+	if !reflect.DeepEqual(adminGrantList[0].Operations, []string{"read"}) {
+		t.Fatalf("alpha grant operations = %+v, want [read]", adminGrantList[0].Operations)
+	}
+	if !reflect.DeepEqual(adminGrantList[1].Operations, []string{}) {
+		t.Fatalf("gamma grant operations = %+v, want []", adminGrantList[1].Operations)
+	}
+
+	var viewerGrantList []struct {
+		Plugin string `json:"plugin"`
+	}
+	doJSONRequestAndDecode(t, http.MethodGet, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants", "viewer-session", "", http.StatusOK, &viewerGrantList)
+	if len(viewerGrantList) != 0 {
+		t.Fatalf("viewer grant list = %+v, want hidden grants", viewerGrantList)
+	}
+
+	t.Run("removed providers remain deletable", func(t *testing.T) {
+		t.Parallel()
+
+		svc := coretesting.NewStubServices(t)
+		seedUser(t, svc, "admin@example.test")
+		viewer := seedUser(t, svc, "viewer@example.test")
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					switch token {
+					case "admin-session":
+						return &core.UserIdentity{Email: "admin@example.test"}, nil
+					case "viewer-session":
+						return &core.UserIdentity{Email: "viewer@example.test"}, nil
+					default:
+						return nil, fmt.Errorf("unknown session %q", token)
+					}
+				},
+			}
+			cfg.Services = svc
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		createResp := struct {
+			ID string `json:"id"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Removed Provider Bot"}`, http.StatusCreated, &createResp)
+		if _, err := svc.IdentityGrants.UpsertGrant(context.Background(), &core.ManagedIdentityGrant{
+			IdentityID: createResp.ID,
+			Plugin:     "removed-plugin",
+		}); err != nil {
+			t.Fatalf("UpsertGrant: %v", err)
+		}
+		if _, err := svc.IdentityMemberships.UpsertMembership(context.Background(), &core.ManagedIdentityMembership{
+			IdentityID: createResp.ID,
+			UserID:     viewer.ID,
+			Email:      viewer.Email,
+			Role:       "viewer",
+		}); err != nil {
+			t.Fatalf("UpsertMembership: %v", err)
+		}
+
+		var grants []struct {
+			Plugin string `json:"plugin"`
+		}
+		doJSONRequestAndDecode(t, http.MethodGet, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants", "admin-session", "", http.StatusOK, &grants)
+		if len(grants) != 1 || grants[0].Plugin != "removed-plugin" {
+			t.Fatalf("removed-provider grant list = %+v, want single removed-plugin grant", grants)
+		}
+
+		var viewerGrants []struct {
+			Plugin string `json:"plugin"`
+		}
+		doJSONRequestAndDecode(t, http.MethodGet, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants", "viewer-session", "", http.StatusOK, &viewerGrants)
+		if len(viewerGrants) != 0 {
+			t.Fatalf("viewer removed-provider grant list = %+v, want hidden grant", viewerGrants)
+		}
+
+		doJSONRequestAndDecode(t, http.MethodDelete, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/removed-plugin", "admin-session", "", http.StatusOK, nil)
+
+		if _, err := svc.IdentityGrants.GetGrant(context.Background(), createResp.ID, "removed-plugin"); !errors.Is(err, core.ErrNotFound) {
+			t.Fatalf("GetGrant after delete error = %v, want not found", err)
+		}
+	})
+
+	t.Run("malformed stored grants fail closed", func(t *testing.T) {
+		t.Parallel()
+
+		svc := coretesting.NewStubServices(t)
+		seedUser(t, svc, "admin@example.test")
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					if token != "admin-session" {
+						return nil, fmt.Errorf("unknown session %q", token)
+					}
+					return &core.UserIdentity{Email: "admin@example.test"}, nil
+				},
+			}
+			cfg.Services = svc
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		createResp := struct {
+			ID string `json:"id"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Malformed Grant Bot"}`, http.StatusCreated, &createResp)
+
+		if err := svc.DB.ObjectStore(coredata.StoreManagedIdentityGrants).Add(context.Background(), indexeddb.Record{
+			"id":              "bad-grant",
+			"identity_id":     createResp.ID,
+			"plugin":          "alpha",
+			"operations_json": "{not-json",
+			"created_at":      time.Now(),
+			"updated_at":      time.Now(),
+		}); err != nil {
+			t.Fatalf("Add malformed grant: %v", err)
+		}
+
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants", nil)
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("GET malformed grants: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusInternalServerError {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("malformed grants status = %d, want %d: %s", resp.StatusCode, http.StatusInternalServerError, body)
+		}
+	})
+}
+
+func TestManagedIdentityGrantValidationUsesSessionCatalog(t *testing.T) {
+	t.Parallel()
+
+	t.Run("uses request catalog when provider catalog is empty", func(t *testing.T) {
+		t.Parallel()
+
+		svc := coretesting.NewStubServices(t)
+		seedUser(t, svc, "admin@example.test")
+
+		sessionOnly := &stubIntegrationWithSessionCatalog{
+			stubIntegrationWithOps: stubIntegrationWithOps{
+				StubIntegration: coretesting.StubIntegration{N: "session-only", ConnMode: core.ConnectionModeNone},
+			},
+			catalogForRequestFn: func(context.Context, string) (*catalog.Catalog, error) {
+				return serverTestCatalog("session-only", []catalog.CatalogOperation{{
+					ID:        "discover",
+					Method:    http.MethodGet,
+					Path:      "/discover",
+					Transport: catalog.TransportREST,
+				}}), nil
+			},
+		}
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					switch token {
+					case "admin-session":
+						return &core.UserIdentity{Email: "admin@example.test"}, nil
+					default:
+						return nil, fmt.Errorf("unknown session %q", token)
+					}
+				},
+			}
+			cfg.Services = svc
+			cfg.Providers = testutil.NewProviderRegistry(t, sessionOnly)
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		createResp := struct {
+			ID string `json:"id"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Session Catalog Bot"}`, http.StatusCreated, &createResp)
+
+		grantResp := struct {
+			Plugin     string   `json:"plugin"`
+			Operations []string `json:"operations"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/session-only", "admin-session", `{"operations":["discover"]}`, http.StatusOK, &grantResp)
+		if grantResp.Plugin != "session-only" || !reflect.DeepEqual(grantResp.Operations, []string{"discover"}) {
+			t.Fatalf("grant response = %+v, want session-only [discover]", grantResp)
+		}
+	})
+
+	t.Run("falls back across session catalog connections", func(t *testing.T) {
+		t.Parallel()
+
+		svc := coretesting.NewStubServices(t)
+		admin := seedUser(t, svc, "admin@example.test")
+		seedToken(t, svc, &core.IntegrationToken{
+			ID:          "tok-default",
+			UserID:      admin.ID,
+			Integration: "session-fallback",
+			Connection:  "default",
+			Instance:    "default",
+			AccessToken: "default-token",
+		})
+
+		sessionFallback := &stubIntegrationWithSessionCatalog{
+			stubIntegrationWithOps: stubIntegrationWithOps{
+				StubIntegration: coretesting.StubIntegration{N: "session-fallback", ConnMode: core.ConnectionModeUser},
+			},
+			catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+				if token != "default-token" {
+					return nil, fmt.Errorf("missing session token")
+				}
+				return serverTestCatalog("session-fallback", []catalog.CatalogOperation{{
+					ID:        "discover",
+					Method:    http.MethodGet,
+					Path:      "/discover",
+					Transport: catalog.TransportREST,
+				}}), nil
+			},
+		}
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					switch token {
+					case "admin-session":
+						return &core.UserIdentity{Email: "admin@example.test"}, nil
+					default:
+						return nil, fmt.Errorf("unknown session %q", token)
+					}
+				},
+			}
+			cfg.Services = svc
+			cfg.Providers = testutil.NewProviderRegistry(t, sessionFallback)
+			cfg.DefaultConnection = map[string]string{"session-fallback": "default"}
+			cfg.Invoker = invocation.NewBroker(
+				cfg.Providers,
+				svc.Users,
+				svc.Tokens,
+				invocation.WithMCPConnectionMapper(invocation.ConnectionMap(map[string]string{"session-fallback": "catalog"})),
+			)
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		createResp := struct {
+			ID string `json:"id"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Session Fallback Bot"}`, http.StatusCreated, &createResp)
+
+		grantResp := struct {
+			Plugin     string   `json:"plugin"`
+			Operations []string `json:"operations"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/session-fallback", "admin-session", `{"operations":["discover"]}`, http.StatusOK, &grantResp)
+		if grantResp.Plugin != "session-fallback" || !reflect.DeepEqual(grantResp.Operations, []string{"discover"}) {
+			t.Fatalf("grant response = %+v, want session-fallback [discover]", grantResp)
+		}
+	})
+
+	t.Run("rejects static-only operations when session catalog narrows visibility", func(t *testing.T) {
+		t.Parallel()
+
+		svc := coretesting.NewStubServices(t)
+		seedUser(t, svc, "admin@example.test")
+
+		mixedCatalog := &stubIntegrationWithSessionCatalog{
+			stubIntegrationWithOps: stubIntegrationWithOps{
+				StubIntegration: coretesting.StubIntegration{N: "mixed-catalog", ConnMode: core.ConnectionModeNone},
+			},
+			catalog: serverTestCatalog("mixed-catalog", []catalog.CatalogOperation{{
+				ID:        "static-only",
+				Method:    http.MethodPost,
+				Path:      "/static-only",
+				Transport: catalog.TransportREST,
+			}}),
+			catalogForRequestFn: func(context.Context, string) (*catalog.Catalog, error) {
+				return serverTestCatalog("mixed-catalog", []catalog.CatalogOperation{{
+					ID:        "session-only",
+					Method:    http.MethodGet,
+					Path:      "/session-only",
+					Transport: catalog.TransportREST,
+				}}), nil
+			},
+		}
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					switch token {
+					case "admin-session":
+						return &core.UserIdentity{Email: "admin@example.test"}, nil
+					default:
+						return nil, fmt.Errorf("unknown session %q", token)
+					}
+				},
+			}
+			cfg.Services = svc
+			cfg.Providers = testutil.NewProviderRegistry(t, mixedCatalog)
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		createResp := struct {
+			ID string `json:"id"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Mixed Catalog Bot"}`, http.StatusCreated, &createResp)
+
+		req, err := http.NewRequest(http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/mixed-catalog", strings.NewReader(`{"operations":["static-only"]}`))
+		if err != nil {
+			t.Fatalf("new request: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("grant static-only request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusBadRequest {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("grant static-only status = %d, want %d: %s", resp.StatusCode, http.StatusBadRequest, body)
+		}
+
+		grantResp := struct {
+			Plugin     string   `json:"plugin"`
+			Operations []string `json:"operations"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/mixed-catalog", "admin-session", `{"operations":["session-only"]}`, http.StatusOK, &grantResp)
+		if grantResp.Plugin != "mixed-catalog" || !reflect.DeepEqual(grantResp.Operations, []string{"session-only"}) {
+			t.Fatalf("grant response = %+v, want mixed-catalog [session-only]", grantResp)
+		}
+	})
+
+	t.Run("falls back to static catalog when request catalog is absent", func(t *testing.T) {
+		t.Parallel()
+
+		svc := coretesting.NewStubServices(t)
+		seedUser(t, svc, "admin@example.test")
+
+		optionalSessionCatalog := &stubIntegrationWithSessionCatalog{
+			stubIntegrationWithOps: stubIntegrationWithOps{
+				StubIntegration: coretesting.StubIntegration{N: "optional-session", ConnMode: core.ConnectionModeNone},
+			},
+			catalog: serverTestCatalog("optional-session", []catalog.CatalogOperation{{
+				ID:        "static-op",
+				Method:    http.MethodGet,
+				Path:      "/static-op",
+				Transport: catalog.TransportREST,
+			}}),
+			catalogForRequestFn: func(context.Context, string) (*catalog.Catalog, error) {
+				return nil, nil
+			},
+		}
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					switch token {
+					case "admin-session":
+						return &core.UserIdentity{Email: "admin@example.test"}, nil
+					default:
+						return nil, fmt.Errorf("unknown session %q", token)
+					}
+				},
+			}
+			cfg.Services = svc
+			cfg.Providers = testutil.NewProviderRegistry(t, optionalSessionCatalog)
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		createResp := struct {
+			ID string `json:"id"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Optional Session Bot"}`, http.StatusCreated, &createResp)
+
+		grantResp := struct {
+			Plugin     string   `json:"plugin"`
+			Operations []string `json:"operations"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/optional-session", "admin-session", `{"operations":["static-op"]}`, http.StatusOK, &grantResp)
+		if grantResp.Plugin != "optional-session" || !reflect.DeepEqual(grantResp.Operations, []string{"static-op"}) {
+			t.Fatalf("grant response = %+v, want optional-session [static-op]", grantResp)
+		}
+	})
+
+	t.Run("probes stored named connections and instances", func(t *testing.T) {
+		t.Parallel()
+
+		svc := coretesting.NewStubServices(t)
+		admin := seedUser(t, svc, "admin@example.test")
+		seedToken(t, svc, &core.IntegrationToken{
+			ID:          "tok-team-a-primary",
+			UserID:      admin.ID,
+			Integration: "team-catalog",
+			Connection:  "team-a",
+			Instance:    "primary",
+			AccessToken: "team-a-primary-token",
+		})
+		seedToken(t, svc, &core.IntegrationToken{
+			ID:          "tok-team-a-secondary",
+			UserID:      admin.ID,
+			Integration: "team-catalog",
+			Connection:  "team-a",
+			Instance:    "secondary",
+			AccessToken: "team-a-secondary-token",
+		})
+
+		teamCatalog := &stubIntegrationWithSessionCatalog{
+			stubIntegrationWithOps: stubIntegrationWithOps{
+				StubIntegration: coretesting.StubIntegration{N: "team-catalog", ConnMode: core.ConnectionModeUser},
+			},
+			catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+				switch token {
+				case "team-a-primary-token", "team-a-secondary-token":
+					return serverTestCatalog("team-catalog", []catalog.CatalogOperation{{
+						ID:        "discover",
+						Method:    http.MethodGet,
+						Path:      "/discover",
+						Transport: catalog.TransportREST,
+					}}), nil
+				default:
+					return nil, fmt.Errorf("unexpected session token %q", token)
+				}
+			},
+		}
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					switch token {
+					case "admin-session":
+						return &core.UserIdentity{Email: "admin@example.test"}, nil
+					default:
+						return nil, fmt.Errorf("unknown session %q", token)
+					}
+				},
+			}
+			cfg.Services = svc
+			cfg.Providers = testutil.NewProviderRegistry(t, teamCatalog)
+			cfg.Invoker = invocation.NewBroker(cfg.Providers, svc.Users, svc.Tokens)
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		createResp := struct {
+			ID string `json:"id"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Team Catalog Bot"}`, http.StatusCreated, &createResp)
+
+		grantResp := struct {
+			Plugin     string   `json:"plugin"`
+			Operations []string `json:"operations"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/team-catalog", "admin-session", `{"operations":["discover"]}`, http.StatusOK, &grantResp)
+		if grantResp.Plugin != "team-catalog" || !reflect.DeepEqual(grantResp.Operations, []string{"discover"}) {
+			t.Fatalf("grant response = %+v, want team-catalog [discover]", grantResp)
+		}
+	})
+
+	t.Run("allows mcp-passthrough-only operations", func(t *testing.T) {
+		t.Parallel()
+
+		svc := coretesting.NewStubServices(t)
+		seedUser(t, svc, "admin@example.test")
+
+		mcpOnly := &stubIntegrationWithCatalog{
+			StubIntegration: coretesting.StubIntegration{N: "mcp-only", ConnMode: core.ConnectionModeNone},
+			catalog: serverTestCatalog("mcp-only", []catalog.CatalogOperation{{
+				ID:        "discover",
+				Transport: catalog.TransportMCPPassthrough,
+			}}),
+		}
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					if token != "admin-session" {
+						return nil, fmt.Errorf("unknown session %q", token)
+					}
+					return &core.UserIdentity{Email: "admin@example.test"}, nil
+				},
+			}
+			cfg.Services = svc
+			cfg.Providers = testutil.NewProviderRegistry(t, mcpOnly)
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		createResp := struct {
+			ID string `json:"id"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"MCP Grant Bot"}`, http.StatusCreated, &createResp)
+
+		grantResp := struct {
+			Plugin     string   `json:"plugin"`
+			Operations []string `json:"operations"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/mcp-only", "admin-session", `{"operations":["discover"]}`, http.StatusOK, &grantResp)
+		if grantResp.Plugin != "mcp-only" || !reflect.DeepEqual(grantResp.Operations, []string{"discover"}) {
+			t.Fatalf("grant response = %+v, want mcp-only [discover]", grantResp)
+		}
+	})
+}
+
+func TestManagedIdentityDeleteFailuresPreserveRetryPath(t *testing.T) {
+	t.Parallel()
+
+	newServer := func(t *testing.T, svc *coredata.Services) (*httptest.Server, *core.User) {
+		t.Helper()
+
+		admin := seedUser(t, svc, "admin@example.test")
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					switch token {
+					case "admin-session":
+						return &core.UserIdentity{Email: "admin@example.test"}, nil
+					default:
+						return nil, fmt.Errorf("unknown session %q", token)
+					}
+				},
+			}
+			cfg.Services = svc
+		})
+		return ts, admin
+	}
+
+	t.Run("grant delete failure restores prior grants", func(t *testing.T) {
+		t.Parallel()
+
+		svc, failDelete := newTestServicesWithManagedIdentityGrantDeleteFailure(t, 2)
+		ts, _ := newServer(t, svc)
+		testutil.CloseOnCleanup(t, ts)
+
+		createResp := struct {
+			ID string `json:"id"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Grant Retry Bot"}`, http.StatusCreated, &createResp)
+		if _, err := svc.IdentityGrants.UpsertGrant(context.Background(), &core.ManagedIdentityGrant{
+			IdentityID: createResp.ID,
+			Plugin:     "alpha",
+		}); err != nil {
+			t.Fatalf("UpsertGrant alpha: %v", err)
+		}
+		if _, err := svc.IdentityGrants.UpsertGrant(context.Background(), &core.ManagedIdentityGrant{
+			IdentityID: createResp.ID,
+			Plugin:     "beta",
+		}); err != nil {
+			t.Fatalf("UpsertGrant beta: %v", err)
+		}
+
+		failDelete.Enable()
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/identities/"+createResp.ID, nil)
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("delete request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusInternalServerError {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("delete status = %d, want %d: %s", resp.StatusCode, http.StatusInternalServerError, body)
+		}
+
+		failDelete.Disable()
+		doJSONRequestAndDecode(t, http.MethodGet, ts.URL+"/api/v1/identities/"+createResp.ID, "admin-session", "", http.StatusOK, nil)
+
+		grants, err := svc.IdentityGrants.ListGrantsByIdentity(context.Background(), createResp.ID)
+		if err != nil {
+			t.Fatalf("ListGrantsByIdentity: %v", err)
+		}
+		if len(grants) != 2 {
+			t.Fatalf("grant count = %d, want 2", len(grants))
+		}
+	})
+
+	t.Run("membership delete failure restores deleted grants and members", func(t *testing.T) {
+		t.Parallel()
+
+		svc, failDelete := newTestServicesWithManagedIdentityMembershipDeleteFailure(t, 2)
+		ts, admin := newServer(t, svc)
+		testutil.CloseOnCleanup(t, ts)
+
+		viewer := seedUser(t, svc, "viewer@example.test")
+
+		createResp := struct {
+			ID string `json:"id"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Member Retry Bot"}`, http.StatusCreated, &createResp)
+		originalGrant, err := svc.IdentityGrants.UpsertGrant(context.Background(), &core.ManagedIdentityGrant{
+			IdentityID: createResp.ID,
+			Plugin:     "alpha",
+		})
+		if err != nil {
+			t.Fatalf("UpsertGrant: %v", err)
+		}
+		originalViewerMembership, err := svc.IdentityMemberships.UpsertMembership(context.Background(), &core.ManagedIdentityMembership{
+			IdentityID: createResp.ID,
+			UserID:     viewer.ID,
+			Email:      viewer.Email,
+			Role:       "viewer",
+		})
+		if err != nil {
+			t.Fatalf("UpsertMembership viewer: %v", err)
+		}
+
+		failDelete.Enable()
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/identities/"+createResp.ID, nil)
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("delete request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusInternalServerError {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("delete status = %d, want %d: %s", resp.StatusCode, http.StatusInternalServerError, body)
+		}
+
+		failDelete.Disable()
+		doJSONRequestAndDecode(t, http.MethodGet, ts.URL+"/api/v1/identities/"+createResp.ID, "admin-session", "", http.StatusOK, nil)
+
+		grants, err := svc.IdentityGrants.ListGrantsByIdentity(context.Background(), createResp.ID)
+		if err != nil {
+			t.Fatalf("ListGrantsByIdentity: %v", err)
+		}
+		if len(grants) != 1 || grants[0].Plugin != "alpha" {
+			t.Fatalf("grants = %+v, want single alpha grant", grants)
+		}
+		restoredGrant, err := svc.IdentityGrants.GetGrant(context.Background(), createResp.ID, "alpha")
+		if err != nil {
+			t.Fatalf("GetGrant alpha: %v", err)
+		}
+		if restoredGrant.ID != originalGrant.ID || !restoredGrant.CreatedAt.Equal(originalGrant.CreatedAt) || !restoredGrant.UpdatedAt.Equal(originalGrant.UpdatedAt) {
+			t.Fatalf("restored grant = %+v, want original metadata %+v", restoredGrant, originalGrant)
+		}
+		memberships, err := svc.IdentityMemberships.ListMembershipsByIdentity(context.Background(), createResp.ID)
+		if err != nil {
+			t.Fatalf("ListMembershipsByIdentity: %v", err)
+		}
+		if len(memberships) != 2 {
+			t.Fatalf("membership count = %d, want 2", len(memberships))
+		}
+		if _, err := svc.IdentityMemberships.GetMembership(context.Background(), createResp.ID, admin.ID); err != nil {
+			t.Fatalf("GetMembership admin: %v", err)
+		}
+		restoredViewerMembership, err := svc.IdentityMemberships.GetMembership(context.Background(), createResp.ID, viewer.ID)
+		if err != nil {
+			t.Fatalf("GetMembership viewer: %v", err)
+		}
+		if restoredViewerMembership.ID != originalViewerMembership.ID || !restoredViewerMembership.CreatedAt.Equal(originalViewerMembership.CreatedAt) || !restoredViewerMembership.UpdatedAt.Equal(originalViewerMembership.UpdatedAt) {
+			t.Fatalf("restored viewer membership = %+v, want original metadata %+v", restoredViewerMembership, originalViewerMembership)
+		}
+	})
+
+	t.Run("identity delete failure restores all child state", func(t *testing.T) {
+		t.Parallel()
+
+		svc, failDelete := newTestServicesWithManagedIdentityDeleteFailure(t)
+		ts, admin := newServer(t, svc)
+		testutil.CloseOnCleanup(t, ts)
+
+		viewer := seedUser(t, svc, "delete-viewer@example.test")
+
+		createResp := struct {
+			ID string `json:"id"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Delete Retry Bot"}`, http.StatusCreated, &createResp)
+		originalGrant, err := svc.IdentityGrants.UpsertGrant(context.Background(), &core.ManagedIdentityGrant{
+			IdentityID: createResp.ID,
+			Plugin:     "alpha",
+		})
+		if err != nil {
+			t.Fatalf("UpsertGrant: %v", err)
+		}
+		originalViewerMembership, err := svc.IdentityMemberships.UpsertMembership(context.Background(), &core.ManagedIdentityMembership{
+			IdentityID: createResp.ID,
+			UserID:     viewer.ID,
+			Email:      viewer.Email,
+			Role:       "viewer",
+		})
+		if err != nil {
+			t.Fatalf("UpsertMembership viewer: %v", err)
+		}
+
+		failDelete.Enable()
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/identities/"+createResp.ID, nil)
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("delete request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusInternalServerError {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("delete status = %d, want %d: %s", resp.StatusCode, http.StatusInternalServerError, body)
+		}
+
+		failDelete.Disable()
+		doJSONRequestAndDecode(t, http.MethodGet, ts.URL+"/api/v1/identities/"+createResp.ID, "admin-session", "", http.StatusOK, nil)
+
+		grants, err := svc.IdentityGrants.ListGrantsByIdentity(context.Background(), createResp.ID)
+		if err != nil {
+			t.Fatalf("ListGrantsByIdentity: %v", err)
+		}
+		if len(grants) != 1 || grants[0].Plugin != "alpha" {
+			t.Fatalf("grants after failed parent delete = %+v, want single alpha grant", grants)
+		}
+		restoredGrant, err := svc.IdentityGrants.GetGrant(context.Background(), createResp.ID, "alpha")
+		if err != nil {
+			t.Fatalf("GetGrant alpha: %v", err)
+		}
+		if restoredGrant.ID != originalGrant.ID || !restoredGrant.CreatedAt.Equal(originalGrant.CreatedAt) || !restoredGrant.UpdatedAt.Equal(originalGrant.UpdatedAt) {
+			t.Fatalf("restored grant = %+v, want original metadata %+v", restoredGrant, originalGrant)
+		}
+		memberships, err := svc.IdentityMemberships.ListMembershipsByIdentity(context.Background(), createResp.ID)
+		if err != nil {
+			t.Fatalf("ListMembershipsByIdentity: %v", err)
+		}
+		if len(memberships) != 2 {
+			t.Fatalf("membership count after failed parent delete = %d, want 2", len(memberships))
+		}
+		if _, err := svc.IdentityMemberships.GetMembership(context.Background(), createResp.ID, admin.ID); err != nil {
+			t.Fatalf("GetMembership admin: %v", err)
+		}
+		restoredViewerMembership, err := svc.IdentityMemberships.GetMembership(context.Background(), createResp.ID, viewer.ID)
+		if err != nil {
+			t.Fatalf("GetMembership viewer: %v", err)
+		}
+		if restoredViewerMembership.ID != originalViewerMembership.ID || !restoredViewerMembership.CreatedAt.Equal(originalViewerMembership.CreatedAt) || !restoredViewerMembership.UpdatedAt.Equal(originalViewerMembership.UpdatedAt) {
+			t.Fatalf("restored viewer membership = %+v, want original metadata %+v", restoredViewerMembership, originalViewerMembership)
+		}
+
+		doJSONRequestAndDecode(t, http.MethodDelete, ts.URL+"/api/v1/identities/"+createResp.ID, "admin-session", "", http.StatusOK, nil)
+	})
+
+	t.Run("identity delete failure retries later restore failure and preserves child state", func(t *testing.T) {
+		t.Parallel()
+
+		svc, deleteFail, membershipRestoreFail := newTestServicesWithManagedIdentityDeleteAndMembershipRestoreFailure(t, 2)
+		ts, _ := newServer(t, svc)
+		testutil.CloseOnCleanup(t, ts)
+
+		viewer := seedUser(t, svc, "restore-viewer@example.test")
+
+		createResp := struct {
+			ID string `json:"id"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Restore Retry Bot"}`, http.StatusCreated, &createResp)
+		originalGrant, err := svc.IdentityGrants.UpsertGrant(context.Background(), &core.ManagedIdentityGrant{
+			IdentityID: createResp.ID,
+			Plugin:     "alpha",
+		})
+		if err != nil {
+			t.Fatalf("UpsertGrant: %v", err)
+		}
+		if _, err := svc.IdentityMemberships.UpsertMembership(context.Background(), &core.ManagedIdentityMembership{
+			IdentityID: createResp.ID,
+			UserID:     viewer.ID,
+			Email:      viewer.Email,
+			Role:       "viewer",
+		}); err != nil {
+			t.Fatalf("UpsertMembership viewer: %v", err)
+		}
+
+		deleteFail.Enable()
+		membershipRestoreFail.Enable()
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/identities/"+createResp.ID, nil)
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("delete request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusInternalServerError {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("delete status = %d, want %d: %s", resp.StatusCode, http.StatusInternalServerError, body)
+		}
+
+		deleteFail.Disable()
+		membershipRestoreFail.Disable()
+		doJSONRequestAndDecode(t, http.MethodGet, ts.URL+"/api/v1/identities/"+createResp.ID, "admin-session", "", http.StatusOK, nil)
+		restoredGrant, err := svc.IdentityGrants.GetGrant(context.Background(), createResp.ID, "alpha")
+		if err != nil {
+			t.Fatalf("GetGrant alpha: %v", err)
+		}
+		if restoredGrant.ID != originalGrant.ID || !restoredGrant.CreatedAt.Equal(originalGrant.CreatedAt) || !restoredGrant.UpdatedAt.Equal(originalGrant.UpdatedAt) {
+			t.Fatalf("restored grant = %+v, want original metadata %+v", restoredGrant, originalGrant)
+		}
+		memberships, err := svc.IdentityMemberships.ListMembershipsByIdentity(context.Background(), createResp.ID)
+		if err != nil {
+			t.Fatalf("ListMembershipsByIdentity: %v", err)
+		}
+		if len(memberships) != 2 {
+			t.Fatalf("membership count after restore retry = %d, want 2", len(memberships))
+		}
+		if _, err := svc.IdentityMemberships.GetMembership(context.Background(), createResp.ID, viewer.ID); err != nil {
+			t.Fatalf("GetMembership viewer after restore retry: %v", err)
+		}
+	})
+}
+
+func TestManagedIdentityRoutesRequireConfiguredAuth(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Services = coretesting.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/identities", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusServiceUnavailable)
+	}
+}
+
+func TestServerAllowsProviderNamedIdentities(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	seedUser(t, svc, "admin@example.test")
+	getOnlyOperation := "00000000-0000-0000-0000-000000000044"
+	patchOperation := "11111111-1111-1111-1111-111111111111"
+	deleteOperation := "22222222-2222-2222-2222-222222222222"
+	missingIdentityID := "33333333-3333-3333-3333-333333333333"
+
+	providers := testutil.NewProviderRegistry(t, &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "identities",
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q}`, operation)}, nil
+			},
+		},
+		ops: []core.Operation{
+			{Name: "read", Method: http.MethodGet},
+			{Name: "write", Method: http.MethodPost},
+			{Name: getOnlyOperation, Method: http.MethodGet},
+			{Name: patchOperation, Method: http.MethodPatch},
+			{Name: deleteOperation, Method: http.MethodDelete},
+		},
+	})
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "admin-session" {
+					return nil, fmt.Errorf("unknown session %q", token)
+				}
+				return &core.UserIdentity{Email: "admin@example.test"}, nil
+			},
+		}
+		cfg.Services = svc
+		cfg.Providers = providers
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	createResp := struct {
+		ID string `json:"id"`
+	}{}
+	doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Named Provider Bot"}`, http.StatusCreated, &createResp)
+
+	readReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/identities/read", nil)
+	readReq.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	readResp, err := http.DefaultClient.Do(readReq)
+	if err != nil {
+		t.Fatalf("GET identities/read: %v", err)
+	}
+	defer func() { _ = readResp.Body.Close() }()
+	if readResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(readResp.Body)
+		t.Fatalf("GET identities/read status = %d, want %d: %s", readResp.StatusCode, http.StatusOK, body)
+	}
+
+	writeReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/identities/write", bytes.NewBufferString(`{}`))
+	writeReq.Header.Set("Content-Type", "application/json")
+	writeReq.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	writeResp, err := http.DefaultClient.Do(writeReq)
+	if err != nil {
+		t.Fatalf("POST identities/write: %v", err)
+	}
+	defer func() { _ = writeResp.Body.Close() }()
+	if writeResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(writeResp.Body)
+		t.Fatalf("POST identities/write status = %d, want %d: %s", writeResp.StatusCode, http.StatusOK, body)
+	}
+
+	patchReq, _ := http.NewRequest(http.MethodPatch, ts.URL+"/api/v1/identities/"+patchOperation, nil)
+	patchReq.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	patchResp, err := http.DefaultClient.Do(patchReq)
+	if err != nil {
+		t.Fatalf("PATCH identities/%s: %v", patchOperation, err)
+	}
+	defer func() { _ = patchResp.Body.Close() }()
+	if patchResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(patchResp.Body)
+		t.Fatalf("PATCH identities/%s status = %d, want %d: %s", patchOperation, patchResp.StatusCode, http.StatusOK, body)
+	}
+
+	deleteReq, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/identities/"+deleteOperation, nil)
+	deleteReq.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	deleteResp, err := http.DefaultClient.Do(deleteReq)
+	if err != nil {
+		t.Fatalf("DELETE identities/%s: %v", deleteOperation, err)
+	}
+	defer func() { _ = deleteResp.Body.Close() }()
+	if deleteResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(deleteResp.Body)
+		t.Fatalf("DELETE identities/%s status = %d, want %d: %s", deleteOperation, deleteResp.StatusCode, http.StatusOK, body)
+	}
+
+	getOnlyReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/identities/"+getOnlyOperation, nil)
+	getOnlyReq.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	getOnlyResp, err := http.DefaultClient.Do(getOnlyReq)
+	if err != nil {
+		t.Fatalf("GET identities/%s: %v", getOnlyOperation, err)
+	}
+	defer func() { _ = getOnlyResp.Body.Close() }()
+	if getOnlyResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(getOnlyResp.Body)
+		t.Fatalf("GET identities/%s status = %d, want %d: %s", getOnlyOperation, getOnlyResp.StatusCode, http.StatusOK, body)
+	}
+
+	getOnlyPatchReq, _ := http.NewRequest(http.MethodPatch, ts.URL+"/api/v1/identities/"+getOnlyOperation, bytes.NewBufferString(`{"displayName":"Still Missing"}`))
+	getOnlyPatchReq.Header.Set("Content-Type", "application/json")
+	getOnlyPatchReq.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	getOnlyPatchResp, err := http.DefaultClient.Do(getOnlyPatchReq)
+	if err != nil {
+		t.Fatalf("PATCH identities/%s: %v", getOnlyOperation, err)
+	}
+	defer func() { _ = getOnlyPatchResp.Body.Close() }()
+	if getOnlyPatchResp.StatusCode != http.StatusNotFound {
+		body, _ := io.ReadAll(getOnlyPatchResp.Body)
+		t.Fatalf("PATCH identities/%s status = %d, want %d: %s", getOnlyOperation, getOnlyPatchResp.StatusCode, http.StatusNotFound, body)
+	}
+
+	missingGetReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/identities/"+missingIdentityID, nil)
+	missingGetReq.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	missingGetResp, err := http.DefaultClient.Do(missingGetReq)
+	if err != nil {
+		t.Fatalf("GET identities/%s: %v", missingIdentityID, err)
+	}
+	defer func() { _ = missingGetResp.Body.Close() }()
+	if missingGetResp.StatusCode != http.StatusNotFound {
+		body, _ := io.ReadAll(missingGetResp.Body)
+		t.Fatalf("GET identities/%s status = %d, want %d: %s", missingIdentityID, missingGetResp.StatusCode, http.StatusNotFound, body)
+	}
+
+	missingDeleteReq, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/identities/"+missingIdentityID, nil)
+	missingDeleteReq.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	missingDeleteResp, err := http.DefaultClient.Do(missingDeleteReq)
+	if err != nil {
+		t.Fatalf("DELETE identities/%s: %v", missingIdentityID, err)
+	}
+	defer func() { _ = missingDeleteResp.Body.Close() }()
+	if missingDeleteResp.StatusCode != http.StatusNotFound {
+		body, _ := io.ReadAll(missingDeleteResp.Body)
+		t.Fatalf("DELETE identities/%s status = %d, want %d: %s", missingIdentityID, missingDeleteResp.StatusCode, http.StatusNotFound, body)
+	}
+
+	getResp := struct {
+		ID string `json:"id"`
+	}{}
+	doJSONRequestAndDecode(t, http.MethodGet, ts.URL+"/api/v1/identities/"+createResp.ID, "admin-session", "", http.StatusOK, &getResp)
+	if getResp.ID != createResp.ID {
+		t.Fatalf("get identity response = %+v, want id %q", getResp, createResp.ID)
+	}
+}
+
+func TestServerAllowsProviderNamedIdentitiesWhenManagedIdentityStoresUnavailable(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	svc.ManagedIdentities = nil
+	svc.IdentityMemberships = nil
+	svc.IdentityGrants = nil
+
+	providers := testutil.NewProviderRegistry(t, &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "identities",
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q}`, operation)}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "read", Method: http.MethodGet}},
+	})
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "admin-session" {
+					return nil, fmt.Errorf("unknown session %q", token)
+				}
+				return &core.UserIdentity{Email: "admin@example.test"}, nil
+			},
+		}
+		cfg.Services = svc
+		cfg.Providers = providers
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	readReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/identities/read", nil)
+	readReq.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	readResp, err := http.DefaultClient.Do(readReq)
+	if err != nil {
+		t.Fatalf("GET identities/read: %v", err)
+	}
+	defer func() { _ = readResp.Body.Close() }()
+	if readResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(readResp.Body)
+		t.Fatalf("GET identities/read status = %d, want %d: %s", readResp.StatusCode, http.StatusOK, body)
+	}
+
+	missingReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/identities/33333333-3333-3333-3333-333333333333", nil)
+	missingReq.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	missingResp, err := http.DefaultClient.Do(missingReq)
+	if err != nil {
+		t.Fatalf("GET missing identity UUID: %v", err)
+	}
+	defer func() { _ = missingResp.Body.Close() }()
+	if missingResp.StatusCode != http.StatusServiceUnavailable {
+		body, _ := io.ReadAll(missingResp.Body)
+		t.Fatalf("GET missing identity UUID status = %d, want %d: %s", missingResp.StatusCode, http.StatusServiceUnavailable, body)
+	}
+}
+
+func TestDeleteManagedIdentityMemberDecodesEscapedEmailPath(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	seedUser(t, svc, "admin@example.test")
+	member := seedUser(t, svc, "editor/alias@example.test")
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "admin-session" {
+					return nil, fmt.Errorf("unknown session %q", token)
+				}
+				return &core.UserIdentity{Email: "admin@example.test"}, nil
+			},
+		}
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	createResp := struct {
+		ID string `json:"id"`
+	}{}
+	doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Escaped Email Bot"}`, http.StatusCreated, &createResp)
+	doJSONRequestAndDecode(
+		t,
+		http.MethodPut,
+		ts.URL+"/api/v1/identities/"+createResp.ID+"/members",
+		"admin-session",
+		`{"email":"editor/alias@example.test","role":"viewer"}`,
+		http.StatusOK,
+		nil,
+	)
+
+	doJSONRequestAndDecode(
+		t,
+		http.MethodDelete,
+		ts.URL+"/api/v1/identities/"+createResp.ID+"/members/"+url.PathEscape(member.Email),
+		"admin-session",
+		"",
+		http.StatusOK,
+		nil,
+	)
+
+	members, err := svc.IdentityMemberships.ListMembershipsByIdentity(context.Background(), createResp.ID)
+	if err != nil {
+		t.Fatalf("ListMembershipsByIdentity: %v", err)
+	}
+	if len(members) != 1 || members[0].UserID == member.ID {
+		t.Fatalf("members after delete = %+v, expected only the admin membership to remain", members)
+	}
+}
+
+func doJSONRequestAndDecode(t *testing.T, method, url, sessionToken, body string, wantStatus int, dst any) {
+	t.Helper()
+
+	var reqBody io.Reader
+	if body != "" {
+		reqBody = bytes.NewBufferString(body)
+	}
+	req, _ := http.NewRequest(method, url, reqBody)
+	if body != "" {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	if sessionToken != "" {
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: sessionToken})
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, url, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != wantStatus {
+		payload, _ := io.ReadAll(resp.Body)
+		t.Fatalf("%s %s status = %d, want %d: %s", method, url, resp.StatusCode, wantStatus, strings.TrimSpace(string(payload)))
+	}
+	if dst == nil {
+		return
+	}
+	if err := json.NewDecoder(resp.Body).Decode(dst); err != nil {
+		t.Fatalf("%s %s decode: %v", method, url, err)
 	}
 }

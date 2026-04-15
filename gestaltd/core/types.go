@@ -41,6 +41,32 @@ type APIToken struct {
 	UpdatedAt   time.Time
 }
 
+type ManagedIdentity struct {
+	ID          string
+	DisplayName string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+type ManagedIdentityMembership struct {
+	ID         string
+	IdentityID string
+	UserID     string
+	Email      string
+	Role       string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
+type ManagedIdentityGrant struct {
+	ID         string
+	IdentityID string
+	Plugin     string
+	Operations []string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
 type UserIdentity struct {
 	Email       string
 	DisplayName string
