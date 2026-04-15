@@ -4,9 +4,10 @@ This directory contains the Rust SDK for Gestalt executable providers.
 
 Current scope:
 
-- standalone Cargo package named `gestalt`
-- build-time protobuf/gRPC generation from `sdk/proto/v1/*.proto`
-- vendored `protoc` via `protoc-bin-vendored`
+- standalone Cargo package published as `gestalt-sdk`
+- library crate name remains `gestalt` in Rust code
+- checked-in protobuf/gRPC bindings generated from `sdk/proto/v1/*.proto`
+- maintainer-only stub generation via vendored `protoc`
 - generated protocol bindings exposed via `proto::v1`
 - typed integration-provider authoring helpers for requests, responses, catalogs, and routing
 - auth-provider, cache-provider, and secrets-provider traits that map to the shared executable runtime protocol
@@ -16,15 +17,17 @@ Current scope:
 
 ## Codegen strategy
 
-Bindings are generated during `cargo build` and `cargo test` by [`build.rs`](build.rs).
-The build script compiles the shared proto definitions from [`sdk/proto`](../proto) using a vendored `protoc`, so maintainers do not need a system protobuf toolchain to work on the crate.
+Bindings are checked into [`src/generated`](src/generated) so crate consumers do
+not need a protobuf toolchain when building `gestalt-sdk`.
 
-Generated Rust sources are not checked into git. They are emitted under Cargo's build output in `sdk/rust/target/` and should not be committed.
+Maintainers regenerate them from the shared proto definitions in
+[`sdk/proto`](../proto) with a helper binary under `tools/rust-sdk-codegen/`,
+which uses a vendored `protoc`.
 
-To regenerate the bindings from a clean slate and run the smoke tests:
+To regenerate the bindings:
 
 ```bash
-./scripts/generate_stubs.sh
+sdk/rust/scripts/generate_stubs.sh
 ```
 
 ## Public surface

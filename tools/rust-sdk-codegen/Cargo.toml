@@ -1,0 +1,10 @@
+[package]
+name = "rust-sdk-codegen"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+prost-build = "0.14"
+protoc-bin-vendored = "3"
+tonic-prost-build = "0.14"
