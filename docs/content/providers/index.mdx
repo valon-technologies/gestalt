@@ -99,7 +99,10 @@ providers:
         endpoint: http://127.0.0.1:9000
         region: us-east-1
         accessKeyId: ${MINIO_ROOT_USER}
-        secretAccessKey: secret://minio-root-password
+        secretAccessKey:
+          secret:
+            provider: default
+            name: minio-root-password
 
 plugins:
   github:
