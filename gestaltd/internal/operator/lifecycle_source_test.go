@@ -47,9 +47,10 @@ type fakeResolver struct {
 }
 
 type fakeResolverResult struct {
-	archivePath string
-	resolvedURL string
-	sha256      string
+	archivePath      string
+	resolvedURL      string
+	sha256           string
+	platformArchives []pluginsource.PlatformArchive
 }
 
 type fakeResolverCall struct {
@@ -87,6 +88,14 @@ func (f *fakeMultiResolver) Resolve(_ context.Context, src pluginsource.Source, 
 		ArchiveSHA256: result.sha256,
 		ResolvedURL:   result.resolvedURL,
 	}, nil
+}
+
+func (f *fakeMultiResolver) ListPlatformArchives(_ context.Context, src pluginsource.Source, _ string) ([]pluginsource.PlatformArchive, error) {
+	result, ok := f.results[src.String()]
+	if !ok {
+		return nil, fmt.Errorf("unexpected source %q", src.String())
+	}
+	return append([]pluginsource.PlatformArchive(nil), result.platformArchives...), nil
 }
 
 func sha256hex(data string) string {
@@ -350,6 +359,12 @@ func TestSourcePluginEndToEnd(t *testing.T) {
 	}
 	if written.Schema != providerLockSchemaName {
 		t.Errorf("written lockfile schema = %q, want %q", written.Schema, providerLockSchemaName)
+	}
+	if written.SchemaVersion != providerLockSchemaVersion {
+		t.Errorf("written lockfile schemaVersion = %d, want %d", written.SchemaVersion, providerLockSchemaVersion)
+	}
+	if _, ok := written.Providers.Plugin["alpha"]; !ok {
+		t.Fatalf(`written.Providers.Plugin["alpha"] not found`)
 	}
 
 	readBack, err := ReadLockfile(lockPath)
@@ -637,7 +652,10 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 		"        ref: " + source,
 		"        version: " + version,
 		"        auth:",
-		"          token: secret://source-token",
+		"          token:",
+		"            secret:",
+		"              provider: secrets",
+		"              name: source-token",
 		"      config:",
 		"        clientId: managed-auth-client",
 		"server:",
@@ -883,6 +901,11 @@ func TestManagedCacheSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
 	indexedDBManifestPath := writeStubIndexedDBManifest(t, dir)
 	configYAML := strings.Join([]string{
 		"providers:",
+		"  secrets:",
+		"    session:",
+		"      source: session-secrets",
+		"    rate_limit:",
+		"      source: rate-limit-secrets",
 		"  indexeddb:",
 		"    main:",
 		"      source:",
@@ -894,13 +917,24 @@ func TestManagedCacheSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
 		"      source:",
 		"        ref: " + sessionSource,
 		"        version: " + version,
+		"      config:",
+		"        password:",
+		"          secret:",
+		"            provider: session",
+		"            name: session-cache-password",
 		"    rate_limit:",
 		"      source:",
 		"        ref: " + rateLimitSource,
 		"        version: " + version,
+		"      config:",
+		"        password:",
+		"          secret:",
+		"            provider: rate_limit",
+		"            name: rate-limit-cache-password",
 		"server:",
 		"  providers:",
 		"    indexeddb: main",
+		"    secrets: session",
 		"  artifactsDir: " + artifactsDir,
 		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 	}, "\n") + "\n"
@@ -910,7 +944,21 @@ func TestManagedCacheSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	lc := NewLifecycle(resolver)
+	factories := bootstrap.NewFactoryRegistry()
+	factories.Secrets["session-secrets"] = func(yaml.Node) (core.SecretManager, error) {
+		return &coretesting.StubSecretManager{
+			Secrets: map[string]string{"session-cache-password": "resolved-session-cache-password"},
+		}, nil
+	}
+	factories.Secrets["rate-limit-secrets"] = func(yaml.Node) (core.SecretManager, error) {
+		return &coretesting.StubSecretManager{
+			Secrets: map[string]string{"rate-limit-cache-password": "resolved-rate-limit-cache-password"},
+		}, nil
+	}
+
+	lc := NewLifecycle(resolver).WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
+		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
+	})
 	lock, err := lc.InitAtPath(configPath)
 	if err != nil {
 		t.Fatalf("InitAtPath: %v", err)
@@ -949,6 +997,10 @@ func TestManagedCacheSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
 		t.Fatalf("resolver called during locked load: got %d calls, want %d", len(resolver.calls), callsBefore)
 	}
 
+	wantPasswords := map[string]string{
+		"session":    "resolved-session-cache-password",
+		"rate_limit": "resolved-rate-limit-cache-password",
+	}
 	for _, name := range []string{"session", "rate_limit"} {
 		entry := cfg.Providers.Cache[name]
 		if entry == nil {
@@ -961,6 +1013,119 @@ func TestManagedCacheSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
 		if entry.Command != wantCommand {
 			t.Fatalf("cfg.Providers.Cache[%q].Command = %q, want %q", name, entry.Command, wantCommand)
 		}
+		runtimeCfg, err := config.NodeToMap(entry.Config)
+		if err != nil {
+			t.Fatalf("NodeToMap(cache %q config): %v", name, err)
+		}
+		configMap, ok := runtimeCfg["config"].(map[string]any)
+		if !ok {
+			t.Fatalf("cache %q runtime config = %#v", name, runtimeCfg["config"])
+		}
+		if got := configMap["password"]; got != wantPasswords[name] {
+			t.Fatalf("cache %q password = %#v, want %q", name, got, wantPasswords[name])
+		}
+	}
+}
+
+func TestManagedCacheSourcesInitAtPathWithPlatformsHashesExtraPlatformArchives(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cacheSource := "github.com/acme/tools/cache-session"
+	version := "1.0.0"
+
+	cacheArchivePath := buildExecutableArchive(
+		t,
+		dir,
+		"cache-src",
+		cacheSource,
+		version,
+		providermanifestv1.KindCache,
+		"cache-plugin",
+		"fake-cache-binary",
+	)
+	cacheArchiveData, err := os.ReadFile(cacheArchivePath)
+	if err != nil {
+		t.Fatalf("read cache archive: %v", err)
+	}
+	cacheArchiveSum := sha256.Sum256(cacheArchiveData)
+
+	extraPlatform := struct{ GOOS, GOARCH, LibC string }{GOOS: "linux", GOARCH: "amd64"}
+	if runtime.GOOS == extraPlatform.GOOS && runtime.GOARCH == extraPlatform.GOARCH {
+		extraPlatform = struct{ GOOS, GOARCH, LibC string }{GOOS: "darwin", GOARCH: "arm64"}
+	}
+	extraPlatformKey := providerpkg.PlatformString(extraPlatform.GOOS, extraPlatform.GOARCH)
+	extraArchiveData := []byte("fake-cache-extra-platform-archive")
+	extraArchiveSum := sha256.Sum256(extraArchiveData)
+
+	var extraAssetCount atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/cache-extra.tar.gz":
+			extraAssetCount.Add(1)
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(extraArchiveData)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	resolver := &fakeMultiResolver{
+		results: map[string]fakeResolverResult{
+			cacheSource: {
+				archivePath: cacheArchivePath,
+				resolvedURL: srv.URL + "/cache-current.tar.gz",
+				sha256:      hex.EncodeToString(cacheArchiveSum[:]),
+				platformArchives: []pluginsource.PlatformArchive{
+					{Platform: extraPlatformKey, URL: srv.URL + "/cache-extra.tar.gz"},
+				},
+			},
+		},
+	}
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + strings.Join([]string{
+		"  cache:",
+		"    session:",
+		"      source:",
+		"        ref: " + cacheSource,
+		"        version: " + version,
+		"server:",
+		"  providers:",
+		"    indexeddb: sqlite",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle(resolver)
+	lock, err := lc.InitAtPathWithPlatforms(configPath, "", []struct{ GOOS, GOARCH, LibC string }{extraPlatform})
+	if err != nil {
+		t.Fatalf("InitAtPathWithPlatforms: %v", err)
+	}
+	if got := extraAssetCount.Load(); got != 1 {
+		t.Fatalf("extra asset request count = %d, want 1", got)
+	}
+
+	entry, ok := lock.Caches["session"]
+	if !ok {
+		t.Fatal(`lock.Caches["session"] not found`)
+	}
+	if got := entry.Archives[extraPlatformKey].SHA256; got != hex.EncodeToString(extraArchiveSum[:]) {
+		t.Fatalf("lock extra-platform SHA256 = %q, want %q", got, hex.EncodeToString(extraArchiveSum[:]))
+	}
+
+	readBack, err := ReadLockfile(filepath.Join(dir, InitLockfileName))
+	if err != nil {
+		t.Fatalf("ReadLockfile: %v", err)
+	}
+	if got := readBack.Caches["session"].Archives[extraPlatformKey].SHA256; got != hex.EncodeToString(extraArchiveSum[:]) {
+		t.Fatalf("readBack extra-platform SHA256 = %q, want %q", got, hex.EncodeToString(extraArchiveSum[:]))
 	}
 }
 
@@ -968,10 +1133,42 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
+	secretsSourceToken := "ghp_inline_auth_source_token"
+	bootstrapSource := "github.com/acme/tools/bootstrap-secrets"
+	bootstrapVersion := "0.1.0"
 	secretsSource := "github.com/acme/tools/secrets-widget"
 	secretsVersion := "1.0.0"
 	authSource := "github.com/acme/tools/auth-widget"
 	authVersion := "2.0.0"
+	bootstrapArtifact := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "bootstrap-secrets"))
+	bootstrapManifestPath := filepath.Join(dir, "bootstrap-secrets-manifest.yaml")
+	bootstrapManifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
+		Kind:    providermanifestv1.KindSecrets,
+		Source:  bootstrapSource,
+		Version: bootstrapVersion,
+		Spec:    &providermanifestv1.Spec{},
+		Artifacts: []providermanifestv1.Artifact{
+			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: bootstrapArtifact},
+		},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: bootstrapArtifact},
+	}, providerpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeSourceManifestFormat bootstrap: %v", err)
+	}
+	if err := os.WriteFile(bootstrapManifestPath, bootstrapManifest, 0o644); err != nil {
+		t.Fatalf("write bootstrap manifest: %v", err)
+	}
+	bootstrapBinaryData, err := os.ReadFile(buildGoSourceSecretsBinary(t))
+	if err != nil {
+		t.Fatalf("read bootstrap binary: %v", err)
+	}
+	bootstrapBinaryPath := filepath.Join(dir, filepath.FromSlash(bootstrapArtifact))
+	if err := os.MkdirAll(filepath.Dir(bootstrapBinaryPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll bootstrap artifact: %v", err)
+	}
+	if err := os.WriteFile(bootstrapBinaryPath, bootstrapBinaryData, 0o755); err != nil {
+		t.Fatalf("write bootstrap artifact: %v", err)
+	}
 
 	secretsArchivePath := buildExecutableArchiveFromBinaryPath(
 		t,
@@ -1011,8 +1208,8 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 		switch r.URL.Path {
 		case "/secrets.tar.gz":
 			secretsDownloads.Add(1)
-			if got := r.Header.Get("Authorization"); got != "" {
-				http.Error(w, "unexpected auth header for secrets download", http.StatusUnauthorized)
+			if got := r.Header.Get("Authorization"); got != "token "+secretsSourceToken {
+				http.Error(w, "bad auth header for secrets download", http.StatusUnauthorized)
 				return
 			}
 			w.Header().Set("Content-Type", "application/octet-stream")
@@ -1050,17 +1247,28 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 	configYAML := strings.Join([]string{
 		requiredIndexedDBConfigYAML(t, dir, filepath.Join(dir, "data.db")),
 		"  secrets:",
+		"    bootstrap:",
+		"      source:",
+		"        path: ./bootstrap-secrets-manifest.yaml",
 		"    secrets:",
 		"      source:",
 		"        ref: " + secretsSource,
 		"        version: " + secretsVersion,
+		"        auth:",
+		"          token:",
+		"            secret:",
+		"              provider: bootstrap",
+		"              name: source-token",
 		"  auth:",
 		"    auth:",
 		"      source:",
 		"        ref: " + authSource,
 		"        version: " + authVersion,
 		"        auth:",
-		"          token: secret://source-token",
+		"          token:",
+		"            secret:",
+		"              provider: secrets",
+		"              name: source-token",
 		"      config:",
 		"        clientId: managed-auth-client",
 		"server:",
@@ -1096,8 +1304,8 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 	if resolver.calls[0].src.String() != secretsSource {
 		t.Fatalf("first resolver source = %q, want %q", resolver.calls[0].src.String(), secretsSource)
 	}
-	if resolver.calls[0].src.Token != "" {
-		t.Fatalf("secrets resolver token = %q, want empty", resolver.calls[0].src.Token)
+	if resolver.calls[0].src.Token != secretsSourceToken {
+		t.Fatalf("secrets resolver token = %q, want %q", resolver.calls[0].src.Token, secretsSourceToken)
 	}
 	if resolver.calls[1].src.String() != authSource {
 		t.Fatalf("second resolver source = %q, want %q", resolver.calls[1].src.String(), authSource)
@@ -1141,6 +1349,12 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 	secretsProvider := mustSelectedHostProviderEntry(t, cfg, config.HostProviderKindSecrets)
 	if secretsProvider == nil {
 		t.Fatal("secrets provider is nil after load")
+	}
+	if secretsProvider.Source.Auth == nil {
+		t.Fatalf("secrets provider source auth = %#v", secretsProvider)
+	}
+	if secretsProvider.Source.Auth.Token != secretsSourceToken {
+		t.Fatalf("resolved secrets source token = %q, want %q", secretsProvider.Source.Auth.Token, secretsSourceToken)
 	}
 	if secretsProvider.Command != secretsExecutablePath {
 		t.Fatalf("secrets provider command = %q, want %q", secretsProvider.Command, secretsExecutablePath)

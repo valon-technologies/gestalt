@@ -27,7 +27,7 @@ plugins: {}
 
 `${ENV_VAR}` references are expanded before YAML decoding. When a referenced variable is unset, Gestalt checks for a corresponding `ENV_VAR_FILE` variable and reads that file path instead. If neither is set, config loading fails. Use `${ENV_VAR:-}` when an explicit empty default is intentional. Unknown YAML fields are rejected.
 
-Several fields carry defaults when omitted: `server.public.port` defaults to `8080`; `providers.secrets.default` defaults to builtin `env`; `providers.telemetry.default` defaults to builtin `stdout`; and `providers.audit.default` defaults to builtin `inherit`. Relative paths resolve relative to the config file's directory. `secret://...` values are resolved during bootstrap, not during YAML parsing.
+Several fields carry defaults when omitted: `server.public.port` defaults to `8080`; the runtime secrets manager defaults to builtin `env` when `providers.secrets` is omitted; `providers.telemetry.default` defaults to builtin `stdout`; and `providers.audit.default` defaults to builtin `inherit`. Relative paths resolve relative to the config file's directory. Structured secret refs are resolved during bootstrap, not during YAML parsing.
 
 `authorization` is the canonical location for shared human and workload access policy. Existing deployments may continue to use `server.authorization` as a deprecated compatibility alias; Gestalt normalizes it into the top-level block during config load and bootstrap.
 
@@ -42,7 +42,10 @@ server:
     host: 127.0.0.1
     port: 9090
   baseUrl: https://gestalt.example.com
-  encryptionKey: secret://gestalt-encryption-key
+  encryptionKey:
+    secret:
+      provider: default
+      name: gestalt-encryption-key
   apiTokenTtl: 30d
   artifactsDir: ./state
   providers:
@@ -60,7 +63,10 @@ authorization:
   workloads:
     triage-bot:
       displayName: Triage Bot
-      token: secret://triage-bot-token
+      token:
+        secret:
+          provider: default
+          name: triage-bot-token
       providers:
         github:
           connection: default
@@ -99,10 +105,10 @@ authorization:
 | `management.port` | | Port for the management listener. Required when `management.host` is set. |
 | `management.baseUrl` | | Browser-facing absolute URL for the management listener. Required for protected built-in `/admin` on split public/management deployments. |
 | `baseUrl` | | Public origin URL used for OAuth callbacks and admin UI links. |
-| `encryptionKey` | | **Required.** Root encryption key. Typically a `secret://` reference. |
+| `encryptionKey` | | **Required.** Root encryption key. Typically a structured secret ref. |
 | `apiTokenTtl` | `30d` | Lifetime of newly issued API tokens. Go durations or day suffixes (`30d`). |
 | `artifactsDir` | config directory | Directory for prepared `init` artifacts. |
-| `providers.auth` / `providers.secrets` / `providers.telemetry` / `providers.audit` / `providers.indexeddb` | | Optional selectors for the named host-provider entries under `providers.*`. Required for IndexedDB whenever more than one enabled entry exists and recommended for other host-provider maps when more than one entry exists. |
+| `providers.auth` / `providers.secrets` / `providers.telemetry` / `providers.audit` / `providers.indexeddb` | | Optional selectors for the named host-provider entries under `providers.*`. Required for IndexedDB whenever more than one entry exists and recommended for other host-provider maps when more than one entry exists. |
 | `admin.authorizationPolicy` | | Shared human access policy applied to the built-in `/admin` route. |
 | `admin.allowedRoles` | `[admin]` | Roles allowed to load the built-in `/admin` route when `admin.authorizationPolicy` is set. |
 | `authorization.policies` | | Shared human access policies resolved by `subjectID` or `email`. |
@@ -112,18 +118,7 @@ When `server.management` is configured, Gestalt serves `/`, `/api/v1/*`, auth ro
 
 ## `providers.auth`
 
-Platform auth is optional. Omit the `providers.auth` block entirely to disable platform authentication, or add a disabled named entry explicitly. When auth is enabled, configure one or more named entries under `providers.auth`. If more than one entry is enabled, set `server.providers.auth` to pick which one the host should use.
-
-### `disabled`
-
-```yaml
-providers:
-  auth:
-    default:
-      disabled: true
-```
-
-Disables platform authentication. Every request is treated as a single anonymous user. Omitting the `providers.auth` block has the same effect.
+Platform auth is optional. Omit the `providers.auth` block entirely to disable platform authentication. When auth is enabled, configure one or more named entries under `providers.auth`. If more than one entry exists, set `server.providers.auth` to pick which one the host should use.
 
 ### `google`
 
@@ -136,7 +131,10 @@ providers:
         version: 0.0.1-alpha.1
       config:
         clientId: ${GOOGLE_CLIENT_ID}
-        clientSecret: secret://google-client-secret
+        clientSecret:
+          secret:
+            provider: default
+            name: google-client-secret
         redirectUrl: https://gestalt.example.com/api/v1/auth/login/callback
         allowedDomains:
           - example.com
@@ -159,7 +157,10 @@ providers:
       config:
         issuerUrl: https://login.example.com
         clientId: ${OIDC_CLIENT_ID}
-        clientSecret: secret://oidc-client-secret
+        clientSecret:
+          secret:
+            provider: default
+            name: oidc-client-secret
         redirectUrl: https://gestalt.example.com/api/v1/auth/login/callback
         allowedDomains:
           - example.com
@@ -193,7 +194,6 @@ Both `google` and `oidc` use the same ProviderEntry shape under `providers.auth.
 
 | Field | Description |
 | --- | --- |
-| `disabled` | `true` disables this named auth entry. |
 | `default` | Marks this named auth entry as the default selection when `server.providers.auth` is omitted. |
 | `source.ref` | Managed provider source address. |
 | `source.version` | Required with `source.ref`. SemVer without a leading `v`. |
@@ -298,7 +298,16 @@ other S3-compatible backends without changing application code.
 
 ## `providers.secrets`
 
-The secrets manager resolves `secret://` references at startup. Configure one or more named entries under `providers.secrets`; when omitted entirely, Gestalt synthesizes `providers.secrets.default` with builtin `env`. If you configure more than one enabled entry, set `server.providers.secrets` to pick the active one.
+Structured secret refs name the provider explicitly:
+
+```yaml
+encryptionKey:
+  secret:
+    provider: default
+    name: gestalt-encryption-key
+```
+
+Configure one or more named entries under `providers.secrets`. Every config secret ref uses `secret.provider` to choose one of those named entries. When `providers.secrets` is omitted entirely, the runtime secrets manager defaults to builtin `env`, but structured refs still require an explicit named provider entry. `server.providers.secrets` continues to select the runtime host secrets provider when one is needed outside config resolution.
 
 ```yaml
 providers:
@@ -340,7 +349,7 @@ See [Secrets Providers](/providers/secrets) for the complete reference and SDK i
 
 ### Bootstrap credentials
 
-`secret://` references are resolved through the configured secret manager at startup, but the secret manager's own configuration (`providers.secrets.<name>.config`) cannot use `secret://` because it would be self-referential. Use `${ENV_VAR}` or `${ENV_VAR_FILE}` placeholders for any credentials the secret manager itself needs.
+Structured secret refs are resolved through the named secret manager at startup, but the secret manager's own configuration (`providers.secrets.<name>.config`) cannot use secret refs because it would be self-referential. Use `${ENV_VAR}` or `${ENV_VAR_FILE}` placeholders for any credentials the secret manager itself needs.
 
 Each provider authenticates to its backing service differently. The `env` and `file` providers are built in. The remaining rows apply when using the corresponding external provider from `gestalt-providers`:
 
@@ -359,7 +368,7 @@ For local development, `env` or `file` avoids external dependencies entirely. Sw
 
 Gestalt uses [OpenTelemetry](https://opentelemetry.io) for distributed traces, metrics, and structured logs. Every HTTP request, broker invocation, and plugin gRPC call is automatically traced. See [Observability](/observability) for the emitted metric inventory and Prometheus name translation.
 
-Configure one or more named telemetry entries under `providers.telemetry`. When the block is omitted, Gestalt synthesizes `providers.telemetry.default` with builtin `stdout`. If you configure more than one enabled entry, set `server.providers.telemetry` to pick the active one.
+Configure one or more named telemetry entries under `providers.telemetry`. When the block is omitted, Gestalt synthesizes `providers.telemetry.default` with builtin `stdout`. If you configure more than one entry, set `server.providers.telemetry` to pick the active one.
 
 ### `stdout`
 
@@ -466,7 +475,7 @@ Disables all telemetry. Instrumentation points remain but produce zero overhead.
 
 ## `providers.audit`
 
-Audit records are emitted as structured log entries with `log.type=audit`. Configure one or more named entries under `providers.audit`; when the block is omitted, Gestalt synthesizes `providers.audit.default` with builtin `inherit`. If you configure more than one enabled entry, set `server.providers.audit` to pick the active one. See [Audit Logging](/audit-logging) for the event schema and coverage details, and [Observability](/observability) for export options. If you keep `providers.audit.default.source: inherit`, you can still route audit traffic to a dedicated backend by filtering on `log.type=audit` in your collector.
+Audit records are emitted as structured log entries with `log.type=audit`. Configure one or more named entries under `providers.audit`; when the block is omitted, Gestalt synthesizes `providers.audit.default` with builtin `inherit`. If you configure more than one entry, set `server.providers.audit` to pick the active one. See [Audit Logging](/audit-logging) for the event schema and coverage details, and [Observability](/observability) for export options. If you keep `providers.audit.default.source: inherit`, you can still route audit traffic to a dedicated backend by filtering on `log.type=audit` in your collector.
 
 ### `inherit`
 
@@ -591,7 +600,7 @@ plugins:
 | `surfaces` | Typed host-side overrides for manifest-declared surfaces, such as `surfaces.openapi.baseUrl` or `surfaces.graphql.url`. |
 | `connections` | Named connection declarations. See [connections](#connections) below. |
 | `allowedOperations` | Allowlist with optional `alias`, `description`, and `allowedRoles` overrides per operation. |
-| `indexeddb` | Optional plugin IndexedDB config. `indexeddb.provider` selects which named `providers.indexeddb` entry backs the plugin's single IndexedDB SDK socket; when omitted, the plugin inherits the selected/default host IndexedDB. `indexeddb.db` overrides the plugin-visible database name and defaults to the plugin key. Schema-capable backends derive plugin scoping from that `db` name. `indexeddb.objectStores` optionally allowlists the logical object stores the plugin may use. `indexeddb.disabled: true` opts out entirely. Plugins then call `new IndexedDB()` (or the equivalent SDK helper) against `GESTALT_INDEXEDDB_SOCKET`; they do not choose arbitrary schemas or DSNs at runtime. |
+| `indexeddb` | Optional plugin IndexedDB config. `indexeddb.provider` selects which named `providers.indexeddb` entry backs the plugin's single IndexedDB SDK socket; when omitted, the plugin inherits the selected/default host IndexedDB. `indexeddb.db` overrides the plugin-visible database name and defaults to the plugin key. Schema-capable backends derive plugin scoping from that `db` name. `indexeddb.objectStores` optionally allowlists the logical object stores the plugin may use. Plugins then call `new IndexedDB()` (or the equivalent SDK helper) against `GESTALT_INDEXEDDB_SOCKET`; they do not choose arbitrary schemas or DSNs at runtime. |
 | `s3` | Optional list of named `providers.s3` bindings exposed to the executable plugin through the SDK transport. A single binding also populates the default S3 SDK env var for compatibility. |
 
 ### `plugins.*.source`
@@ -868,7 +877,6 @@ When `authorizationPolicy` is set on a mounted UI, the referenced web UI manifes
 | --- | --- |
 | `path` | Direct mount prefix for this UI when not bound through `plugins.<name>.mountPath`. |
 | `authorizationPolicy` | Direct policy binding for this UI when not bound through `plugins.<name>.mountPath`. |
-| `disabled` | `true` to disable an individual mounted UI entry. |
 | `source` | A source mapping with `source.path` or `source.ref`. |
 | `config` | Optional UI-provider config validated against the bundle schema when present. |
 
@@ -880,13 +888,13 @@ Structural validation runs at config load time (`init`, `validate`, `serve`). Ru
 
 Each plugin uses a `source` block. Every plugin must use exactly one loading mode: local `source.path` or managed `source.ref`. `source.version` is required with `source.ref` and invalid with `source.path`.
 
-Host-provider entries use the same ProviderEntry shape. When `providers.auth.<name>` or `providers.indexeddb.<name>` is set, `source.ref` or `source.path` must be present unless the entry is explicitly disabled. `providers.auth.<name>.config` and `providers.indexeddb.<name>.config` are only allowed when their corresponding source is set.
+Host-provider entries use the same ProviderEntry shape. When `providers.auth.<name>` or `providers.indexeddb.<name>` is set, `source.ref` or `source.path` must be present. `providers.auth.<name>.config` and `providers.indexeddb.<name>.config` are only allowed when their corresponding source is set.
 
 Only `connections.default` may define `params` or `discovery`. All connections in a plugin must share the same mode.
 
-Each `providers.ui.<name>` entry must use exactly one mode: `disabled: true`, or a source mapping with exactly one loading mode: local `providers.ui.<name>.source.path` or managed `providers.ui.<name>.source.ref`. `providers.ui.<name>.source.version` is required with `providers.ui.<name>.source.ref` and invalid with `providers.ui.<name>.source.path`. `providers.ui.<name>.config` is only allowed when `providers.ui.<name>.source` is set.
+Each `providers.ui.<name>` entry must use exactly one loading mode: local `providers.ui.<name>.source.path` or managed `providers.ui.<name>.source.ref`. `providers.ui.<name>.source.version` is required with `providers.ui.<name>.source.ref` and invalid with `providers.ui.<name>.source.path`. `providers.ui.<name>.config` is only allowed when `providers.ui.<name>.source` is set.
 
-Each enabled `plugins.<name>` entry may set `mountPath` to publish a plugin-backed UI. When `plugins.<name>.ui` is set, it must reference an existing enabled UI bundle. When `plugins.<name>.ui` is omitted and `plugins.<name>.mountPath` is set, the plugin manifest must declare `spec.ui`. A given UI may be bound by at most one enabled plugin entry. `plugins.<name>.mountPath` must use the same path rules as a directly mounted UI.
+Each `plugins.<name>` entry may set `mountPath` to publish a plugin-backed UI. When `plugins.<name>.ui` is set, it must reference an existing UI bundle. When `plugins.<name>.ui` is omitted and `plugins.<name>.mountPath` is set, the plugin manifest must declare `spec.ui`. A given UI may be bound by at most one plugin entry. `plugins.<name>.mountPath` must use the same path rules as a directly mounted UI.
 
 Mounted UI bundles are served on the public listener only. The built-in admin UI remains at `/admin`.
 

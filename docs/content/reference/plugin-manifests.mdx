@@ -20,7 +20,7 @@ Every manifest defines exactly one provider kind, set by the `kind` field:
 | `cache` | Cache backend for plugin-bound cache bindings. |
 | `indexeddb` | Persistence backend. |
 | `s3` | S3-compatible object store backend. |
-| `secrets` | Secret manager for resolving `secret://` references. |
+| `secrets` | Secret manager for resolving structured secret refs. |
 | `webui` | Static UI package served by `gestaltd`. |
 
 The `kind` field is required. Kind-specific configuration goes under the `spec` block.
@@ -115,7 +115,10 @@ spec:
     ref: github.com/acme/web/roadmap-review
     version: 1.0.0
     auth:
-      token: secret://roadmap-review-ui-source-token
+      token:
+        secret:
+          provider: default
+          name: roadmap-review-ui-source-token
 ```
 
 ### Connections

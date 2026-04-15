@@ -116,7 +116,7 @@ Gestalt expands `${VAR}` placeholders in the config before YAML decoding. The
 image also supports the `*_FILE` convention: if `VAR` is not set but `VAR_FILE`
 is, `${VAR}` resolves to the contents of that file. This works well with
 Docker secrets. See the [configuration documentation](https://gestaltd.ai/configuration)
-for the full config model and `secret://` reference support.
+for the full config model and structured secret-ref support.
 
 ## Health endpoints
 

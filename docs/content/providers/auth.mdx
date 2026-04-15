@@ -39,25 +39,22 @@ providers:
         version: 0.0.1-alpha.1
       config:
         clientId: ${GOOGLE_CLIENT_ID}
-        clientSecret: secret://google-client-secret
+        clientSecret:
+          secret:
+            provider: default
+            name: google-client-secret
         allowedDomains:
           - example.com
 ```
 
-Secret references such as `secret://google-client-secret` are resolved through
-`providers.secrets` before the auth provider receives its config.
+Structured secret refs such as `clientSecret.secret.provider: default` are
+resolved through `providers.secrets` before the auth provider receives its
+config.
 
-To disable platform auth entirely, omit `providers.auth` or set:
+To disable platform auth entirely, omit `providers.auth`.
 
-```yaml
-providers:
-  auth:
-    default:
-      disabled: true
-```
-
-For local development, that disabled mode is the simple default: every request
-is treated as the same anonymous user.
+For local development, omission is the simple default: every request is treated
+as the same anonymous user.
 
 ## Local source during development
 
@@ -69,7 +66,10 @@ providers:
         path: ./google-auth/manifest.yaml
       config:
         clientId: ${GOOGLE_CLIENT_ID}
-        clientSecret: secret://google-client-secret
+        clientSecret:
+          secret:
+            provider: default
+            name: google-client-secret
 ```
 
 ## Building your own auth provider

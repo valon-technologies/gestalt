@@ -69,14 +69,7 @@ func (c *Config) SelectedAuditProvider() (string, *ProviderEntry, error) {
 }
 
 func (c *Config) SelectedIndexedDBProvider() (string, *ProviderEntry, error) {
-	name, entry, err := ResolveSelectedHostProvider(HostProviderKindIndexedDB, c.Server.Providers.Selection(HostProviderKindIndexedDB), c.HostProviderEntries(HostProviderKindIndexedDB))
-	if err != nil {
-		return "", nil, err
-	}
-	if strings.TrimSpace(c.Server.Providers.IndexedDB) == "" && entry != nil && entry.Disabled {
-		return "", nil, nil
-	}
-	return name, entry, nil
+	return ResolveSelectedHostProvider(HostProviderKindIndexedDB, c.Server.Providers.Selection(HostProviderKindIndexedDB), c.HostProviderEntries(HostProviderKindIndexedDB))
 }
 
 type EffectivePluginIndexedDB struct {
@@ -99,9 +92,6 @@ func ResolveEffectivePluginIndexedDB(pluginName string, entry *ProviderEntry, se
 	if entry == nil {
 		return EffectivePluginIndexedDB{}, nil
 	}
-	if entry.IndexedDB != nil && entry.IndexedDB.Disabled {
-		return EffectivePluginIndexedDB{}, nil
-	}
 
 	providerName := ""
 	if entry.IndexedDB != nil {
@@ -120,9 +110,6 @@ func ResolveEffectivePluginIndexedDB(pluginName string, entry *ProviderEntry, se
 	provider, ok := entries[providerName]
 	if !ok || provider == nil {
 		return EffectivePluginIndexedDB{}, fmt.Errorf("config validation: plugins.%s.indexeddb.provider references unknown indexeddb %q", pluginName, providerName)
-	}
-	if provider.Disabled {
-		return EffectivePluginIndexedDB{}, fmt.Errorf("config validation: plugins.%s.indexeddb.provider references disabled indexeddb %q", pluginName, providerName)
 	}
 
 	dbName := pluginName
@@ -154,49 +141,33 @@ func ResolveSelectedHostProvider(kind HostProviderKind, explicit string, entries
 		if !ok || entry == nil {
 			return "", nil, fmt.Errorf("config validation: server.providers.%s references unknown provider %q", kind, explicit)
 		}
-		if entry.Disabled {
-			return "", nil, fmt.Errorf("config validation: server.providers.%s references disabled provider %q", kind, explicit)
-		}
 		return explicit, entry, nil
 	}
 
-	allNames := make([]string, 0, len(entries))
-	enabledNames := make([]string, 0, len(entries))
+	names := make([]string, 0, len(entries))
 	defaultNames := make([]string, 0, len(entries))
 	for name, entry := range entries {
 		if entry == nil {
 			continue
 		}
-		allNames = append(allNames, name)
+		names = append(names, name)
 		if entry.Default {
 			defaultNames = append(defaultNames, name)
 		}
-		if entry.Disabled {
-			continue
-		}
-		enabledNames = append(enabledNames, name)
 	}
 
 	switch {
 	case len(defaultNames) == 1:
 		name := defaultNames[0]
-		if entries[name].Disabled {
-			return "", nil, fmt.Errorf("config validation: providers.%s.%s cannot be both default and disabled", kind, name)
-		}
 		return name, entries[name], nil
 	case len(defaultNames) > 1:
 		sort.Strings(defaultNames)
 		return "", nil, fmt.Errorf("config validation: providers.%s declares multiple defaults: %s", kind, strings.Join(defaultNames, ", "))
-	case len(enabledNames) == 1:
-		name := enabledNames[0]
+	case len(names) == 1:
+		name := names[0]
 		return name, entries[name], nil
-	case len(allNames) == 1:
-		name := allNames[0]
-		return name, entries[name], nil
-	case len(enabledNames) == 0:
-		return "", nil, nil
 	default:
-		sort.Strings(enabledNames)
-		return "", nil, fmt.Errorf("config validation: providers.%s has multiple enabled providers but no selection or default: %s", kind, strings.Join(enabledNames, ", "))
+		sort.Strings(names)
+		return "", nil, fmt.Errorf("config validation: providers.%s has multiple providers but no selection or default: %s", kind, strings.Join(names, ", "))
 	}
 }

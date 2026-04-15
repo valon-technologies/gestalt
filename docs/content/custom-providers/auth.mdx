@@ -234,17 +234,20 @@ providers:
         path: ./google-auth/manifest.yaml
       config:
         clientId: ${GOOGLE_CLIENT_ID}
-        clientSecret: secret://google-client-secret
+        clientSecret:
+          secret:
+            provider: default
+            name: google-client-secret
         allowedDomains:
           - example.com
 ```
 
 `source.path` points at the auth provider's `manifest.yaml` during development. For production, use `source.ref` and `version` to reference a published release. The `config` block is passed to `Configure` at startup and validated against the config schema if one was declared in the manifest.
 
-Secret references like `secret://google-client-secret` are resolved through the configured secret manager before reaching the provider. Environment variable placeholders like `${GOOGLE_CLIENT_ID}` are expanded during config loading. See [Configuration](/configuration) for details on both.
+Structured secret refs like `clientSecret.secret.provider: default` are resolved through the configured secret manager before reaching the provider. Environment variable placeholders like `${GOOGLE_CLIENT_ID}` are expanded during config loading. See [Configuration](/configuration) for details on both.
 
 ## What to read next
 
-- [Secrets](/providers/secrets): configuring the secret manager that resolves `secret://` references
+- [Secrets](/providers/secrets): configuring the secret manager that resolves structured secret refs
 - [Releasing](/custom-providers/releasing): packaging and publishing provider releases
 - [Built-in Providers](/reference/built-in-providers): first-party auth provider reference

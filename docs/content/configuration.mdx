@@ -32,7 +32,7 @@ authorization:
 providers:
   auth:                     # named auth providers
     <name>: ...            # each is a ProviderEntry
-  secrets:                  # named secret managers (default: providers.secrets.default = env)
+  secrets:                  # named secret managers
     <name>: ...            # each is a ProviderEntry
   telemetry:                # named telemetry pipelines (default: providers.telemetry.default = stdout)
     <name>: ...            # each is a ProviderEntry
@@ -48,7 +48,7 @@ plugins:
   <name>: ...               # each is a ProviderEntry
 ```
 
-ProviderEntry-backed entries accept `source` (where to load it from), `config` (provider-specific settings), `disabled`, `allowedHosts`, and optional metadata fields. Plugin entries additionally support plugin-only fields such as `connections`, `allowedOperations`, `mountPath`, and `ui`. See the [Config File](/reference/config-file) reference for every field.
+ProviderEntry-backed entries accept `source` (where to load it from), `config` (provider-specific settings), `allowedHosts`, and optional metadata fields. Plugin entries additionally support plugin-only fields such as `connections`, `allowedOperations`, `mountPath`, and `ui`. See the [Config File](/reference/config-file) reference for every field.
 
 ## Key concepts
 
@@ -58,7 +58,7 @@ Gestalt has six core concepts you configure in YAML:
 - **Connection.** How Gestalt authenticates to an upstream API on behalf of a user or service. Connections handle OAuth flows, API keys, and manual credentials.
 - **[IndexedDB.](/providers/indexeddb)** The persistent storage layer. Stores users, sessions, tokens, and credentials through a provider that implements the IndexedDB interface.
 - **[Auth.](/providers/auth)** Platform login for the Gestalt server. Separate from connection auth, which is per-plugin and per-upstream.
-- **[Secrets.](/providers/secrets)** Resolves `secret://` references in the config at startup. Backed by environment variables, files, or cloud secret managers.
+- **[Secrets.](/providers/secrets)** Resolves structured secret refs in the config at startup. Backed by environment variables, files, or cloud secret managers.
 - **[UI.](/providers/web-uis)** Public static UI bundles served under configured path prefixes, either directly from `providers.ui` or through `plugins.<name>.mountPath`. Omit `providers.ui` to run headless.
 
 ## Adding a plugin
@@ -173,7 +173,10 @@ plugins:
       version: 0.0.1
     config:
       clientId: ${GITHUB_CLIENT_ID}
-      clientSecret: secret://github-client-secret
+      clientSecret:
+        secret:
+          provider: default
+          name: github-client-secret
 ```
 
 Not all providers need this. Some providers (like Slack) use OAuth flows that do not require operator-provided app credentials. Check the provider's documentation or config schema for required fields.
@@ -190,7 +193,17 @@ MCP tool exposure is declared in the provider manifest via `spec.mcp: true`. Whe
 
 ## Secrets
 
-The `providers.secrets` map configures how `secret://` references in the config are resolved at startup. When omitted entirely, Gestalt synthesizes `providers.secrets.default` with builtin `env`:
+The `providers.secrets` map configures named secret managers. Each config secret ref names one of those providers explicitly:
+
+```yaml
+server:
+  encryptionKey:
+    secret:
+      provider: default
+      name: gestalt-encryption-key
+```
+
+When `providers.secrets` is omitted entirely, the runtime secrets manager defaults to builtin `env`, but structured refs still require an explicit named provider entry:
 
 ```yaml
 providers:
@@ -236,14 +249,7 @@ The built-in admin UI at `/admin` is always available regardless of this setting
 
 ## Platform auth
 
-The `providers.auth` map protects the web UI, HTTP API, and `/mcp` endpoint. For local development, omit it or disable it explicitly:
-
-```yaml
-providers:
-  auth:
-    default:
-      disabled: true
-```
+The `providers.auth` map protects the web UI, HTTP API, and `/mcp` endpoint. For local development, omit it:
 
 For multi-user deployments, point at a published auth provider:
 
@@ -261,7 +267,10 @@ providers:
       config:
         issuerUrl: https://login.example.com
         clientId: ${OIDC_CLIENT_ID}
-        clientSecret: secret://oidc-client-secret
+        clientSecret:
+          secret:
+            provider: default
+            name: oidc-client-secret
 ```
 
 For production OIDC providers, keep `issuerUrl` on `https://`. If you run a
@@ -270,7 +279,7 @@ local plaintext issuer on loopback for development, add
 
 | Scenario | Configuration |
 | --- | --- |
-| Local development | Omit `providers.auth` or set `providers.auth.default.disabled: true` |
+| Local development | Omit `providers.auth` |
 | Multi-user deployment | `providers.auth.<name>` with a published OIDC or Google auth provider |
 | Per-user upstream access | `mode: user` on plugin connections |
 | Shared service credential | `mode: identity` on plugin connections |
@@ -334,7 +343,7 @@ Gestalt expands `${ENV_VAR}` placeholders before YAML decoding. When a reference
 
 ### Secret resolution
 
-Values prefixed with `secret://` are resolved through the configured secret manager during bootstrap, not during YAML parsing. This lets you reference secrets from Vault, AWS Secrets Manager, Google Secret Manager, or Azure Key Vault without embedding them in the config file.
+Structured secret refs are resolved through the named secret manager during bootstrap, not during YAML parsing. This lets you reference secrets from Vault, AWS Secrets Manager, Google Secret Manager, or Azure Key Vault without embedding them in the config file.
 
 ### Validation
 
@@ -346,7 +355,7 @@ gestaltd validate --config ./config.yaml
 
 ### Defaults and required fields
 
-Gestalt defaults `server.public.port` to `8080`, `providers.secrets.default` to `env`, `providers.telemetry.default` to `stdout`, and `providers.audit.default` to `inherit`. The required fields are `providers.indexeddb`, `server.providers.indexeddb`, and `server.encryptionKey`. Platform auth is optional.
+Gestalt defaults `server.public.port` to `8080`, the runtime secrets manager to builtin `env` when `providers.secrets` is omitted, `providers.telemetry.default` to `stdout`, and `providers.audit.default` to `inherit`. The required fields are `providers.indexeddb`, `server.providers.indexeddb`, and `server.encryptionKey`. Platform auth is optional.
 
 `server.encryptionKey` is the root deployment secret. Gestalt derives token encryption and session material from it. Changing this key invalidates all existing sessions and tokens, so treat it as a meaningful deployment event.
 
@@ -357,12 +366,22 @@ A production deployment with OIDC auth, a GitHub plugin with per-user connection
 ```yaml
 server:
   baseUrl: https://gestalt.example.com
-  encryptionKey: secret://gestalt-encryption-key
+  encryptionKey:
+    secret:
+      provider: default
+      name: gestalt-encryption-key
   providers:
     auth: oidc
+    secrets: default
     indexeddb: main
 
 providers:
+  secrets:
+    default:
+      source: file
+      config:
+        dir: /etc/gestalt-secrets
+
   auth:
     oidc:
       source:
@@ -371,7 +390,10 @@ providers:
       config:
         issuerUrl: https://login.example.com
         clientId: ${OIDC_CLIENT_ID}
-        clientSecret: secret://oidc-client-secret
+        clientSecret:
+          secret:
+            provider: default
+            name: oidc-client-secret
 
   indexeddb:
     main:

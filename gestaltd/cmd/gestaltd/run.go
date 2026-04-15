@@ -335,7 +335,7 @@ func resolveMountedWebUIHandlers(cfg *config.Config) ([]server.MountedWebUI, err
 	mounted := make([]server.MountedWebUI, 0, len(names))
 	for _, name := range names {
 		entry := cfg.Providers.UI[name]
-		if entry == nil || entry.Disabled {
+		if entry == nil {
 			continue
 		}
 		if entry.ResolvedAssetRoot == "" {
@@ -491,7 +491,7 @@ func logConfigSummary(path string, cfg *config.Config) {
 		"server_base_url", maskEmpty(cfg.Server.BaseURL),
 		"server_encryption", maskSecret(cfg.Server.EncryptionKey),
 		"auth_provider", selectedProviderLabel(cfg.SelectedAuthProvider()),
-		"secrets_provider", selectedProviderLabel(cfg.SelectedSecretsProvider()),
+		"runtime_secrets_provider", selectedProviderLabel(cfg.SelectedSecretsProvider()),
 		"telemetry_provider", selectedProviderLabel(cfg.SelectedTelemetryProvider()),
 	)
 

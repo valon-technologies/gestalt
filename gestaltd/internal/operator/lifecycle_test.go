@@ -350,7 +350,7 @@ plugins:
 			wantPolicy: "roadmap_policy",
 		},
 		{
-			name: "disabled explicit plugin mount does not suppress ui path validation",
+			name: "disabled explicit plugin mount is rejected",
 			uiConfigYAML: `  ui:
     roadmap:
       source:
@@ -369,10 +369,10 @@ plugins:
       authorizationPolicy: roadmap_policy
 `,
 			uiKey:   "roadmap",
-			wantErr: "config validation: ui.roadmap.path: path is required",
+			wantErr: "field disabled not found",
 		},
 		{
-			name: "disabled plugin does not suppress matching ui path validation",
+			name: "disabled plugin is rejected",
 			uiConfigYAML: `  ui:
     roadmap:
       source:
@@ -384,7 +384,7 @@ plugins:
         path: ./plugin/manifest.yaml
       mountPath: /create-customer-roadmap-review
 `,
-			wantErr: "config validation: ui.roadmap.path: path is required",
+			wantErr: "field disabled not found",
 		},
 		{
 			name: "plugin owned ui via plugin mount",
@@ -435,7 +435,7 @@ plugins:
 			ownedUIPath: "../webui/manifest.yaml",
 		},
 		{
-			name: "disabled same-name ui overlay is rejected",
+			name: "disabled same-name ui overlay is rejected at parse time",
 			uiConfigYAML: `  ui:
     roadmap:
       disabled: true
@@ -447,7 +447,7 @@ plugins:
         path: ./plugin/manifest.yaml
       mountPath: /create-customer-roadmap-review
 `,
-			wantErr:     "config validation: plugins.roadmap owned ui conflicts with disabled providers.ui.roadmap",
+			wantErr:     "field disabled not found",
 			ownedUIPath: "../webui/manifest.yaml",
 		},
 	}
@@ -1172,7 +1172,7 @@ server:
 	}
 }
 
-func TestLoadForExecutionAtPath_SkipsDisabledLocalMountedWebUIWithoutLockfile(t *testing.T) {
+func TestLoadForExecutionAtPath_RejectsDisabledLocalMountedWebUIWithoutLockfile(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -1191,27 +1191,16 @@ func TestLoadForExecutionAtPath_SkipsDisabledLocalMountedWebUIWithoutLockfile(t 
 	}
 
 	lc := NewLifecycle(nil)
-	loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
-	if err != nil {
-		t.Fatalf("LoadForExecutionAtPath: %v", err)
+	_, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
+	if err == nil {
+		t.Fatal("LoadForExecutionAtPath: expected error, got nil")
 	}
-
-	entry := loaded.Providers.UI["roadmap"]
-	if entry == nil {
-		t.Fatal(`Providers.UI["roadmap"] = nil`)
-	}
-	if entry.ResolvedManifest != nil {
-		t.Fatalf("ResolvedManifest = %#v, want nil", entry.ResolvedManifest)
-	}
-	if entry.ResolvedAssetRoot != "" {
-		t.Fatalf("ResolvedAssetRoot = %q, want empty", entry.ResolvedAssetRoot)
-	}
-	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); !os.IsNotExist(err) {
-		t.Fatalf("lockfile should not be created, got err=%v", err)
+	if !strings.Contains(err.Error(), "field disabled not found") {
+		t.Fatalf("LoadForExecutionAtPath error = %v, want substring %q", err, "field disabled not found")
 	}
 }
 
-func TestInitAtPath_SkipsDisabledManagedMountedWebUI(t *testing.T) {
+func TestInitAtPath_RejectsDisabledManagedMountedWebUI(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -1222,6 +1211,11 @@ func TestInitAtPath_SkipsDisabledManagedMountedWebUI(t *testing.T) {
       source:
         ref: github.com/testowner/web/roadmap
         version: 0.0.1-alpha.1
+        auth:
+          token:
+            secret:
+              provider: missing
+              name: disabled-webui-token
       path: /create-customer-roadmap-review
 ` + `server:
 ` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
@@ -1231,12 +1225,182 @@ func TestInitAtPath_SkipsDisabledManagedMountedWebUI(t *testing.T) {
 	}
 
 	lc := NewLifecycle(nil)
-	lock, err := lc.InitAtPath(cfgPath)
-	if err != nil {
-		t.Fatalf("InitAtPath: %v", err)
+	_, err := lc.InitAtPath(cfgPath)
+	if err == nil {
+		t.Fatal("InitAtPath: expected error, got nil")
 	}
-	if len(lock.UIs) != 0 {
-		t.Fatalf("UIs = %#v, want empty", lock.UIs)
+	if !strings.Contains(err.Error(), "field disabled not found") {
+		t.Fatalf("InitAtPath error = %v, want substring %q", err, "field disabled not found")
+	}
+}
+
+func TestInitAtPath_RejectsDisabledManagedHostProvidersWithStructuredSecretRefs(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	manifestPath := writeStubIndexedDBManifest(t, dir)
+	cfg := `providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: ` + manifestPath + `
+      config:
+        path: "` + filepath.Join(dir, "gestalt.db") + `"
+    disabled:
+      disabled: true
+      config:
+        path:
+          secret:
+            provider: missing
+            name: disabled-indexeddb-path
+  auth:
+    disabled:
+      disabled: true
+      config:
+        clientSecret:
+          secret:
+            provider: missing
+            name: disabled-auth-token
+  telemetry:
+    disabled:
+      disabled: true
+      config:
+        endpoint:
+          secret:
+            provider: missing
+            name: disabled-telemetry-endpoint
+  audit:
+    disabled:
+      disabled: true
+      config:
+        endpoint:
+          secret:
+            provider: missing
+            name: disabled-audit-endpoint
+  secrets:
+    disabled:
+      disabled: true
+      displayName:
+        secret:
+          provider: missing
+          name: disabled-secrets-token
+  cache:
+    disabled:
+      disabled: true
+      config:
+        password:
+          secret:
+            provider: missing
+            name: disabled-cache-password
+` + `server:
+` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	lc := NewLifecycle(nil)
+	_, err := lc.InitAtPath(cfgPath)
+	if err == nil {
+		t.Fatal("InitAtPath: expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "field disabled not found") {
+		t.Fatalf("InitAtPath error = %v, want substring %q", err, "field disabled not found")
+	}
+}
+
+func TestLoadForExecutionAtPath_RejectsDisabledManagedHostProvidersWithoutLockfile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	manifestPath := writeStubIndexedDBManifest(t, dir)
+	cfg := `providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: ` + manifestPath + `
+      config:
+        path: "` + filepath.Join(dir, "gestalt.db") + `"
+    disabled:
+      disabled: true
+      source:
+        ref: github.com/testowner/indexeddb/disabled
+        version: 0.0.1-alpha.1
+      config:
+        path:
+          secret:
+            provider: missing
+            name: disabled-indexeddb-path
+  auth:
+    disabled:
+      disabled: true
+      source:
+        ref: github.com/testowner/auth/disabled
+        version: 0.0.1-alpha.1
+      config:
+        clientSecret:
+          secret:
+            provider: missing
+            name: disabled-auth-token
+  telemetry:
+    disabled:
+      disabled: true
+      source:
+        ref: github.com/testowner/plugins/telemetry-disabled
+        version: 0.0.1-alpha.1
+      config:
+        endpoint:
+          secret:
+            provider: missing
+            name: disabled-telemetry-endpoint
+  audit:
+    disabled:
+      disabled: true
+      source:
+        ref: github.com/testowner/plugins/audit-disabled
+        version: 0.0.1-alpha.1
+      config:
+        endpoint:
+          secret:
+            provider: missing
+            name: disabled-audit-endpoint
+  secrets:
+    disabled:
+      disabled: true
+      source:
+        ref: github.com/testowner/secrets/disabled
+        version: 0.0.1-alpha.1
+      displayName:
+        secret:
+          provider: missing
+          name: disabled-secrets-token
+  cache:
+    disabled:
+      disabled: true
+      source:
+        ref: github.com/testowner/cache/disabled
+        version: 0.0.1-alpha.1
+      config:
+        password:
+          secret:
+            provider: missing
+            name: disabled-cache-password
+` + `server:
+` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	lc := NewLifecycle(nil)
+	_, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
+	if err == nil {
+		t.Fatal("LoadForExecutionAtPath: expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "field disabled not found") {
+		t.Fatalf("LoadForExecutionAtPath error = %v, want substring %q", err, "field disabled not found")
 	}
 }
 

@@ -12,7 +12,7 @@ The server image `valontechnologies/gestaltd:latest` is published for `linux/amd
 
 **Database.** SQLite works for single-instance deployments. For multi-replica or horizontally scaled deployments, use a networked datastore provider such as the first-party `indexeddb/relationaldb`, `indexeddb/dynamodb`, or `indexeddb/mongodb` packages. See [IndexedDB](/providers/indexeddb) for the provider model.
 
-**Secrets.** Use `file` or a cloud secret manager instead of `env` in production. `file` is built in and works with Kubernetes volume-mounted secrets. Cloud backends (Google Secret Manager, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault) are available as external providers from [`gestalt-providers`](https://github.com/valon-technologies/gestalt-providers). Gestalt config supports `secret://` references that are resolved at boot time through the configured secrets provider. See [Secrets Providers](/providers/secrets) for setup details.
+**Secrets.** Use `file` or a cloud secret manager instead of `env` in production. `file` is built in and works with Kubernetes volume-mounted secrets. Cloud backends (Google Secret Manager, AWS Secrets Manager, HashiCorp Vault, Azure Key Vault) are available as external providers from [`gestalt-providers`](https://github.com/valon-technologies/gestalt-providers). Gestalt config supports structured secret refs that are resolved at boot time through the configured secrets provider. See [Secrets Providers](/providers/secrets) for setup details.
 
 **TLS.** Gestalt does not terminate TLS. Deploy behind a reverse proxy or load balancer that handles TLS termination. Set `server.baseUrl` to the public HTTPS URL so that OAuth callback URLs are derived correctly.
 

@@ -19,7 +19,7 @@ validates it, and starts it with the permissions and request context it needs.
 | `cache` | Plugin-bound cache backends | `providers.cache.<name>` |
 | `indexeddb` | Persistent state backends for users, sessions, tokens, and credentials | `providers.indexeddb.<name>` |
 | `s3` | S3-compatible object stores mounted into plugins | `providers.s3.<name>` |
-| `secrets` | Secret managers that resolve `secret://` references | `providers.secrets.<name>` |
+| `secrets` | Secret managers that resolve structured secret refs | `providers.secrets.<name>` |
 | `webui` | Public UI bundles served under configured path prefixes | `providers.ui` |
 
 ## How providers work
@@ -69,7 +69,10 @@ providers:
       config:
         issuerUrl: https://login.example.com
         clientId: ${OIDC_CLIENT_ID}
-        clientSecret: secret://oidc-client-secret
+        clientSecret:
+          secret:
+            provider: default
+            name: oidc-client-secret
 
   indexeddb:
     main:

@@ -1,60 +1,65 @@
 package bootstrap
 
 import (
-	"context"
+	"errors"
 	"fmt"
 	"reflect"
-	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"gopkg.in/yaml.v3"
 )
 
-const secretPrefix = "secret://"
-
-var yamlNodeType = reflect.TypeOf(yaml.Node{})
-
 // resolveSecretRefs walks the config struct and replaces any string value
-// starting with "secret://" with the resolved secret value. The
-// SecretsConfig.Config node is skipped to avoid self-referential resolution,
-// but secrets.provider metadata is still resolved after the secret manager has
-// been prepared so managed source auth can use secret-backed credentials.
-func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretManager) error {
-	resolve := func(val string) (string, error) {
-		name, ok := strings.CutPrefix(val, secretPrefix)
+// containing internal structured secret refs with resolved secret values. The
+// providers.secrets.<name>.config subtree is skipped to avoid self-referential
+// resolution, but the remaining secrets-provider metadata still resolves so
+// managed source auth can use secret-backed credentials.
+func resolveSecretRefs(cfg *config.Config, resolve func(config.SecretRef) (string, error)) error {
+	resolveValue := func(val string) (string, error) {
+		ref, ok, err := config.ParseSecretRefTransport(val)
+		if err != nil {
+			return "", err
+		}
 		if !ok {
+			if config.IsLegacySecretRefString(val) {
+				return "", fmt.Errorf("legacy secret:// syntax should have been rejected during config load")
+			}
 			return val, nil
 		}
-		resolved, err := sm.GetSecret(ctx, name)
+		resolved, err := resolve(ref)
 		if err != nil {
-			return "", &core.SecretResolutionError{Name: name, Err: err}
+			var secretErr *core.SecretResolutionError
+			if errors.As(err, &secretErr) {
+				return "", err
+			}
+			return "", &core.SecretResolutionError{
+				Name: ref.Name,
+				Err:  err,
+			}
 		}
 		if resolved == "" {
-			return "", &core.SecretResolutionError{
-				Name: name,
-				Err:  fmt.Errorf("resolved to empty value"),
-			}
+			return "", &core.SecretResolutionError{Name: ref.Name, Err: fmt.Errorf("resolved to empty value")}
 		}
 		return resolved, nil
 	}
 
-	if err := resolveStringFields(&cfg.Server, resolve); err != nil {
+	if err := resolveStringFields(&cfg.Server, resolveValue); err != nil {
 		return err
 	}
-	if err := resolveStringFields(&cfg.Authorization, resolve); err != nil {
+	if err := resolveStringFields(&cfg.Authorization, resolveValue); err != nil {
 		return err
 	}
 	for name, entry := range cfg.Plugins {
 		if entry == nil {
 			continue
 		}
-		if err := resolveStringFields(entry, resolve); err != nil {
+		if err := resolveStringFields(entry, resolveValue); err != nil {
 			return err
 		}
 		for _, conn := range entry.Connections {
 			if conn != nil {
-				if err := resolveStringFields(conn, resolve); err != nil {
+				if err := resolveStringFields(conn, resolveValue); err != nil {
 					return err
 				}
 			}
@@ -65,20 +70,23 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 		cfg.Providers.Auth,
 		cfg.Providers.Telemetry,
 		cfg.Providers.Audit,
+		cfg.Providers.Cache,
+		cfg.Providers.S3,
 	} {
 		for _, entry := range entries {
-			if entry != nil {
-				if err := resolveStringFields(entry, resolve); err != nil {
-					return err
-				}
+			if entry == nil {
+				continue
+			}
+			if err := resolveStringFields(entry, resolveValue); err != nil {
+				return err
 			}
 		}
 	}
 	for name, entry := range cfg.Providers.UI {
-		if entry == nil || entry.Disabled {
+		if entry == nil {
 			continue
 		}
-		if err := resolveStringFields(entry, resolve); err != nil {
+		if err := resolveStringFields(entry, resolveValue); err != nil {
 			return err
 		}
 		cfg.Providers.UI[name] = entry
@@ -91,7 +99,7 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 		}
 		savedConfig := entry.Config
 		entry.Config = yaml.Node{}
-		if err := resolveStringFields(entry, resolve); err != nil {
+		if err := resolveStringFields(entry, resolveValue); err != nil {
 			entry.Config = savedConfig
 			return err
 		}
@@ -103,7 +111,7 @@ func resolveSecretRefs(ctx context.Context, cfg *config.Config, sm core.SecretMa
 		if ds == nil {
 			continue
 		}
-		if err := resolveStringFields(ds, resolve); err != nil {
+		if err := resolveStringFields(ds, resolveValue); err != nil {
 			return err
 		}
 		cfg.Providers.IndexedDB[name] = ds
@@ -132,7 +140,7 @@ func resolveStringFields(ptr any, resolve func(string) (string, error)) error {
 			field.SetString(resolved)
 		case reflect.Struct:
 			if field.CanSet() {
-				if field.Type() == yamlNodeType {
+				if field.Type() == config.YAMLNodeType {
 					nodePtr := field.Addr().Interface().(*yaml.Node)
 					if err := resolveYAMLNode(nodePtr, resolve); err != nil {
 						return err
