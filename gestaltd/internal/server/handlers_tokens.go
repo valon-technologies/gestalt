@@ -20,10 +20,11 @@ type createTokenRequest struct {
 }
 
 type createTokenResponse struct {
-	ID        string     `json:"id"`
-	Name      string     `json:"name"`
-	Token     string     `json:"token"`
-	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+	ID          string                  `json:"id"`
+	Name        string                  `json:"name"`
+	Token       string                  `json:"token"`
+	Permissions []core.AccessPermission `json:"permissions,omitempty"`
+	ExpiresAt   *time.Time              `json:"expiresAt,omitempty"`
 }
 
 func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
@@ -75,19 +76,21 @@ func (s *Server) createAPIToken(w http.ResponseWriter, r *http.Request) {
 	auditAllowed = true
 	auditErr = nil
 	writeJSON(w, http.StatusCreated, createTokenResponse{
-		ID:        apiToken.ID,
-		Name:      apiToken.Name,
-		Token:     plaintext,
-		ExpiresAt: apiToken.ExpiresAt,
+		ID:          apiToken.ID,
+		Name:        apiToken.Name,
+		Token:       plaintext,
+		Permissions: append([]core.AccessPermission(nil), apiToken.Permissions...),
+		ExpiresAt:   apiToken.ExpiresAt,
 	})
 }
 
 type apiTokenInfo struct {
-	ID        string     `json:"id"`
-	Name      string     `json:"name"`
-	Scopes    string     `json:"scopes"`
-	CreatedAt time.Time  `json:"createdAt"`
-	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
+	ID          string                  `json:"id"`
+	Name        string                  `json:"name"`
+	Scopes      string                  `json:"scopes"`
+	Permissions []core.AccessPermission `json:"permissions,omitempty"`
+	CreatedAt   time.Time               `json:"createdAt"`
+	ExpiresAt   *time.Time              `json:"expiresAt,omitempty"`
 }
 
 func (s *Server) listAPITokens(w http.ResponseWriter, r *http.Request) {

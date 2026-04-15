@@ -34,6 +34,9 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 			r.Get("/{identityID}/grants", s.listManagedIdentityGrants)
 			r.Put("/{identityID}/grants/{plugin}", s.putManagedIdentityGrant)
 			r.Delete("/{identityID}/grants/{plugin}", s.deleteManagedIdentityGrant)
+			r.Get("/{identityID}/tokens", s.listManagedIdentityTokens)
+			r.Post("/{identityID}/tokens", s.createManagedIdentityToken)
+			r.Delete("/{identityID}/tokens/{id}", s.revokeManagedIdentityToken)
 		})
 	})
 }

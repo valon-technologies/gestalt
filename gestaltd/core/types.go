@@ -33,14 +33,26 @@ type IntegrationToken struct {
 type APIToken struct {
 	ID          string
 	UserID      string
+	OwnerKind   string
+	OwnerID     string
 	Name        string
 	HashedToken string
 	Scopes      string
+	Permissions []AccessPermission
 	ExpiresAt   *time.Time
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
 
+const (
+	APITokenOwnerKindUser            = "user"
+	APITokenOwnerKindManagedIdentity = "managed_identity"
+)
+
+type AccessPermission struct {
+	Plugin     string   `json:"plugin"`
+	Operations []string `json:"operations,omitempty"`
+}
 type ManagedIdentity struct {
 	ID          string
 	DisplayName string

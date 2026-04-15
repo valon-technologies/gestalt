@@ -114,6 +114,18 @@ func newTestHandler(t *testing.T, opts ...func(*server.Config)) http.Handler {
 	return srv
 }
 
+type stubResolver struct {
+	token string
+	err   error
+}
+
+func (s *stubResolver) ResolveToken(ctx context.Context, _ *principal.Principal, _ string, _ string, _ string) (context.Context, string, error) {
+	if s == nil {
+		return ctx, "", nil
+	}
+	return ctx, s.token, s.err
+}
+
 type putFailingIndexedDB struct {
 	indexeddb.IndexedDB
 	failStorePuts map[string]*atomic.Bool
@@ -9711,6 +9723,79 @@ func TestCreateAndListAPITokens(t *testing.T) {
 	}
 }
 
+func TestListAPITokensIncludesLegacyAndOwnedUserRecords(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	legacyTime := time.Date(2026, 2, 3, 4, 5, 6, 0, time.UTC)
+	if err := svc.DB.ObjectStore(coredata.StoreAPITokens).Add(context.Background(), indexeddb.Record{
+		"id":           "legacy-token",
+		"user_id":      u.ID,
+		"name":         "legacy-token",
+		"hashed_token": "sha256:legacy-token",
+		"created_at":   legacyTime,
+		"updated_at":   legacyTime,
+	}); err != nil {
+		t.Fatalf("seed legacy api token: %v", err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"name":"owned-token"}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/tokens", body)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("create request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("create status = %d, want %d: %s", resp.StatusCode, http.StatusCreated, respBody)
+	}
+
+	var createResp struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&createResp); err != nil {
+		t.Fatalf("decode create response: %v", err)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/tokens", nil)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("list request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("list status = %d, want %d: %s", resp.StatusCode, http.StatusOK, respBody)
+	}
+
+	var tokens []struct {
+		ID string `json:"id"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&tokens); err != nil {
+		t.Fatalf("decode list response: %v", err)
+	}
+	if len(tokens) != 2 {
+		t.Fatalf("tokens = %+v, want 2 entries", tokens)
+	}
+	gotIDs := map[string]struct{}{}
+	for _, token := range tokens {
+		gotIDs[token.ID] = struct{}{}
+	}
+	for _, wantID := range []string{"legacy-token", createResp.ID} {
+		if _, ok := gotIDs[wantID]; !ok {
+			t.Fatalf("token ids = %+v, want %q present", gotIDs, wantID)
+		}
+	}
+}
+
 func TestRevokeAPIToken(t *testing.T) {
 	t.Parallel()
 
@@ -10279,6 +10364,12 @@ func (s *stubIntegrationWithSessionCatalog) CallTool(ctx context.Context, name s
 	}
 	return mcpgo.NewToolResultText("passthrough:" + name), nil
 }
+
+type stubSessionCatalogWithoutManagedIdentitySupport struct {
+	stubIntegrationWithSessionCatalog
+}
+
+func (s *stubSessionCatalogWithoutManagedIdentitySupport) AuthTypes() []string { return nil }
 
 type stubAuthWithLoginURL struct {
 	coretesting.StubAuthProvider
@@ -14486,7 +14577,186 @@ func TestManagedIdentityGrantValidationUsesSessionCatalog(t *testing.T) {
 		}
 	})
 
-	t.Run("falls back across session catalog connections", func(t *testing.T) {
+	t.Run("token validation patches session principal user ID", func(t *testing.T) {
+		t.Parallel()
+
+		svc := coretesting.NewStubServices(t)
+		admin := seedUser(t, svc, "admin@example.test")
+		seedToken(t, svc, &core.IntegrationToken{
+			ID:          "tok-session-only",
+			UserID:      admin.ID,
+			Integration: "session-only",
+			Connection:  "default",
+			Instance:    "default",
+			AccessToken: "session-token",
+		})
+
+		sessionOnly := &stubIntegrationWithSessionCatalog{
+			stubIntegrationWithOps: stubIntegrationWithOps{
+				StubIntegration: coretesting.StubIntegration{N: "session-only", ConnMode: core.ConnectionModeNone},
+			},
+			catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+				if token != "session-token" {
+					return nil, fmt.Errorf("missing session token")
+				}
+				return serverTestCatalog("session-only", []catalog.CatalogOperation{{
+					ID:        "discover",
+					Method:    http.MethodGet,
+					Path:      "/discover",
+					Transport: catalog.TransportREST,
+				}}), nil
+			},
+		}
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					switch token {
+					case "admin-session":
+						return &core.UserIdentity{Email: "admin@example.test"}, nil
+					default:
+						return nil, fmt.Errorf("unknown session %q", token)
+					}
+				},
+			}
+			cfg.Services = svc
+			cfg.Providers = testutil.NewProviderRegistry(t, sessionOnly)
+			cfg.DefaultConnection = map[string]string{"session-only": "default"}
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		createResp := struct {
+			ID string `json:"id"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Session Token Bot"}`, http.StatusCreated, &createResp)
+		doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/session-only", "admin-session", `{"operations":["discover"]}`, http.StatusOK, nil)
+
+		createTokenResp := struct {
+			ID          string                  `json:"id"`
+			Permissions []core.AccessPermission `json:"permissions"`
+		}{}
+		doJSONRequestAndDecode(
+			t,
+			http.MethodPost,
+			ts.URL+"/api/v1/identities/"+createResp.ID+"/tokens",
+			"admin-session",
+			`{"name":"session-discover","permissions":[{"plugin":"session-only","operations":["discover"]}]}`,
+			http.StatusCreated,
+			&createTokenResp,
+		)
+		want := []core.AccessPermission{{Plugin: "session-only", Operations: []string{"discover"}}}
+		if !reflect.DeepEqual(createTokenResp.Permissions, want) {
+			t.Fatalf("token permissions = %+v, want %+v", createTokenResp.Permissions, want)
+		}
+	})
+
+	t.Run("refreshes expired session tokens during validation", func(t *testing.T) {
+		t.Parallel()
+
+		svc := coretesting.NewStubServices(t)
+		admin := seedUser(t, svc, "admin@example.test")
+		expired := time.Now().Add(-time.Hour).UTC()
+		seedToken(t, svc, &core.IntegrationToken{
+			ID:           "tok-session-refresh",
+			UserID:       admin.ID,
+			Integration:  "session-refresh",
+			Connection:   "default",
+			Instance:     "default",
+			AccessToken:  "expired-session-token",
+			RefreshToken: "refresh-session-token",
+			ExpiresAt:    &expired,
+		})
+
+		sessionRefresh := &stubIntegrationWithSessionCatalog{
+			stubIntegrationWithOps: stubIntegrationWithOps{
+				StubIntegration: coretesting.StubIntegration{N: "session-refresh", ConnMode: core.ConnectionModeNone},
+			},
+			catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+				if token != "fresh-session-token" {
+					return nil, fmt.Errorf("expected refreshed token, got %q", token)
+				}
+				return serverTestCatalog("session-refresh", []catalog.CatalogOperation{{
+					ID:        "discover",
+					Method:    http.MethodGet,
+					Path:      "/discover",
+					Transport: catalog.TransportREST,
+				}}), nil
+			},
+		}
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					switch token {
+					case "admin-session":
+						return &core.UserIdentity{Email: "admin@example.test"}, nil
+					default:
+						return nil, fmt.Errorf("unknown session %q", token)
+					}
+				},
+			}
+			cfg.Services = svc
+			cfg.Providers = testutil.NewProviderRegistry(t, sessionRefresh)
+			cfg.DefaultConnection = map[string]string{"session-refresh": "default"}
+			cfg.ConnectionAuth = oauthRefreshConnectionAuth("session-refresh", func(_ context.Context, refreshToken string) (*core.TokenResponse, error) {
+				if refreshToken != "refresh-session-token" {
+					return nil, fmt.Errorf("unexpected refresh token %q", refreshToken)
+				}
+				return &core.TokenResponse{AccessToken: "fresh-session-token", ExpiresIn: 3600}, nil
+			})
+			authFn := cfg.ConnectionAuth
+			broker := invocation.NewBroker(cfg.Providers, svc.Users, svc.Tokens, invocation.WithConnectionAuth(func() map[string]map[string]invocation.OAuthRefresher {
+				m := authFn()
+				refreshers := make(map[string]map[string]invocation.OAuthRefresher, len(m))
+				for integration, connections := range m {
+					inner := make(map[string]invocation.OAuthRefresher, len(connections))
+					for connection, handler := range connections {
+						inner[connection] = handler
+					}
+					refreshers[integration] = inner
+				}
+				return refreshers
+			}))
+			cfg.Invoker = invocation.NewGuarded(broker, nil, "test", nil)
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		createResp := struct {
+			ID string `json:"id"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Refresh Session Bot"}`, http.StatusCreated, &createResp)
+
+		grantResp := struct {
+			Plugin     string   `json:"plugin"`
+			Operations []string `json:"operations"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/session-refresh", "admin-session", `{"operations":["discover"]}`, http.StatusOK, &grantResp)
+		if grantResp.Plugin != "session-refresh" || !reflect.DeepEqual(grantResp.Operations, []string{"discover"}) {
+			t.Fatalf("grant response = %+v, want session-refresh [discover]", grantResp)
+		}
+
+		createTokenResp := struct {
+			ID          string                  `json:"id"`
+			Permissions []core.AccessPermission `json:"permissions"`
+		}{}
+		doJSONRequestAndDecode(
+			t,
+			http.MethodPost,
+			ts.URL+"/api/v1/identities/"+createResp.ID+"/tokens",
+			"admin-session",
+			`{"name":"refresh-discover","permissions":[{"plugin":"session-refresh","operations":["discover"]}]}`,
+			http.StatusCreated,
+			&createTokenResp,
+		)
+		want := []core.AccessPermission{{Plugin: "session-refresh", Operations: []string{"discover"}}}
+		if !reflect.DeepEqual(createTokenResp.Permissions, want) {
+			t.Fatalf("token permissions = %+v, want %+v", createTokenResp.Permissions, want)
+		}
+	})
+
+	t.Run("rejects session catalog fallback outside mode-none phase", func(t *testing.T) {
 		t.Parallel()
 
 		svc := coretesting.NewStubServices(t)
@@ -14500,20 +14770,22 @@ func TestManagedIdentityGrantValidationUsesSessionCatalog(t *testing.T) {
 			AccessToken: "default-token",
 		})
 
-		sessionFallback := &stubIntegrationWithSessionCatalog{
-			stubIntegrationWithOps: stubIntegrationWithOps{
-				StubIntegration: coretesting.StubIntegration{N: "session-fallback", ConnMode: core.ConnectionModeUser},
-			},
-			catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
-				if token != "default-token" {
-					return nil, fmt.Errorf("missing session token")
-				}
-				return serverTestCatalog("session-fallback", []catalog.CatalogOperation{{
-					ID:        "discover",
-					Method:    http.MethodGet,
-					Path:      "/discover",
-					Transport: catalog.TransportREST,
-				}}), nil
+		sessionFallback := &stubSessionCatalogWithoutManagedIdentitySupport{
+			stubIntegrationWithSessionCatalog: stubIntegrationWithSessionCatalog{
+				stubIntegrationWithOps: stubIntegrationWithOps{
+					StubIntegration: coretesting.StubIntegration{N: "session-fallback", ConnMode: core.ConnectionModeUser},
+				},
+				catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+					if token != "default-token" {
+						return nil, fmt.Errorf("missing session token")
+					}
+					return serverTestCatalog("session-fallback", []catalog.CatalogOperation{{
+						ID:        "discover",
+						Method:    http.MethodGet,
+						Path:      "/discover",
+						Transport: catalog.TransportREST,
+					}}), nil
+				},
 			},
 		}
 
@@ -14546,13 +14818,17 @@ func TestManagedIdentityGrantValidationUsesSessionCatalog(t *testing.T) {
 		}{}
 		doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Session Fallback Bot"}`, http.StatusCreated, &createResp)
 
-		grantResp := struct {
-			Plugin     string   `json:"plugin"`
-			Operations []string `json:"operations"`
-		}{}
-		doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/session-fallback", "admin-session", `{"operations":["discover"]}`, http.StatusOK, &grantResp)
-		if grantResp.Plugin != "session-fallback" || !reflect.DeepEqual(grantResp.Operations, []string{"discover"}) {
-			t.Fatalf("grant response = %+v, want session-fallback [discover]", grantResp)
+		req, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/session-fallback", bytes.NewBufferString(`{"operations":["discover"]}`))
+		req.Header.Set("Content-Type", "application/json")
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("session-fallback grant request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusBadRequest {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("session-fallback grant status = %d, want %d: %s", resp.StatusCode, http.StatusBadRequest, body)
 		}
 	})
 
@@ -14630,6 +14906,66 @@ func TestManagedIdentityGrantValidationUsesSessionCatalog(t *testing.T) {
 		}
 	})
 
+	t.Run("rejects static fallback when session catalog errors", func(t *testing.T) {
+		t.Parallel()
+
+		svc := coretesting.NewStubServices(t)
+		seedUser(t, svc, "admin@example.test")
+
+		brokenSessionCatalog := &stubIntegrationWithSessionCatalog{
+			stubIntegrationWithOps: stubIntegrationWithOps{
+				StubIntegration: coretesting.StubIntegration{N: "broken-session", ConnMode: core.ConnectionModeNone},
+			},
+			catalog: serverTestCatalog("broken-session", []catalog.CatalogOperation{{
+				ID:        "static-only",
+				Method:    http.MethodPost,
+				Path:      "/static-only",
+				Transport: catalog.TransportREST,
+			}}),
+			catalogForRequestFn: func(context.Context, string) (*catalog.Catalog, error) {
+				return nil, fmt.Errorf("session catalog failed")
+			},
+		}
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					switch token {
+					case "admin-session":
+						return &core.UserIdentity{Email: "admin@example.test"}, nil
+					default:
+						return nil, fmt.Errorf("unknown session %q", token)
+					}
+				},
+			}
+			cfg.Services = svc
+			cfg.Providers = testutil.NewProviderRegistry(t, brokenSessionCatalog)
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		createResp := struct {
+			ID string `json:"id"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Broken Session Bot"}`, http.StatusCreated, &createResp)
+
+		req, err := http.NewRequest(http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/broken-session", strings.NewReader(`{"operations":["static-only"]}`))
+		if err != nil {
+			t.Fatalf("new request: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("grant broken-session request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusBadRequest {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("grant broken-session status = %d, want %d: %s", resp.StatusCode, http.StatusBadRequest, body)
+		}
+	})
+
 	t.Run("falls back to static catalog when request catalog is absent", func(t *testing.T) {
 		t.Parallel()
 
@@ -14683,6 +15019,78 @@ func TestManagedIdentityGrantValidationUsesSessionCatalog(t *testing.T) {
 		}
 	})
 
+	t.Run("propagates session catalog resolver errors for mode-none providers", func(t *testing.T) {
+		t.Parallel()
+
+		svc := coretesting.NewStubServices(t)
+		seedUser(t, svc, "admin@example.test")
+
+		sessionFallback := &stubIntegrationWithSessionCatalog{
+			stubIntegrationWithOps: stubIntegrationWithOps{
+				StubIntegration: coretesting.StubIntegration{N: "resolver-error", ConnMode: core.ConnectionModeNone},
+			},
+			catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+				if token != "" {
+					return nil, fmt.Errorf("unexpected session token %q", token)
+				}
+				return serverTestCatalog("resolver-error", []catalog.CatalogOperation{{
+					ID:        "discover",
+					Method:    http.MethodGet,
+					Path:      "/discover",
+					Transport: catalog.TransportREST,
+				}}), nil
+			},
+		}
+
+		broker := invocation.NewBroker(testutil.NewProviderRegistry(t, sessionFallback), svc.Users, svc.Tokens)
+		wrappedInvoker := struct {
+			invocation.Invoker
+			invocation.TokenResolver
+		}{
+			Invoker:       broker,
+			TokenResolver: &stubResolver{err: fmt.Errorf("resolver boom")},
+		}
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					switch token {
+					case "admin-session":
+						return &core.UserIdentity{Email: "admin@example.test"}, nil
+					default:
+						return nil, fmt.Errorf("unknown session %q", token)
+					}
+				},
+			}
+			cfg.Services = svc
+			cfg.Providers = testutil.NewProviderRegistry(t, sessionFallback)
+			cfg.Invoker = wrappedInvoker
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		createResp := struct {
+			ID string `json:"id"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Resolver Error Bot"}`, http.StatusCreated, &createResp)
+
+		req, err := http.NewRequest(http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/resolver-error", strings.NewReader(`{"operations":["discover"]}`))
+		if err != nil {
+			t.Fatalf("new request: %v", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("grant resolver-error request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusBadRequest {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("grant resolver-error status = %d, want %d: %s", resp.StatusCode, http.StatusBadRequest, body)
+		}
+	})
+
 	t.Run("probes stored named connections and instances", func(t *testing.T) {
 		t.Parallel()
 
@@ -14707,7 +15115,7 @@ func TestManagedIdentityGrantValidationUsesSessionCatalog(t *testing.T) {
 
 		teamCatalog := &stubIntegrationWithSessionCatalog{
 			stubIntegrationWithOps: stubIntegrationWithOps{
-				StubIntegration: coretesting.StubIntegration{N: "team-catalog", ConnMode: core.ConnectionModeUser},
+				StubIntegration: coretesting.StubIntegration{N: "team-catalog", ConnMode: core.ConnectionModeNone},
 			},
 			catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
 				switch token {
@@ -15099,6 +15507,500 @@ func TestManagedIdentityDeleteFailuresPreserveRetryPath(t *testing.T) {
 			t.Fatalf("GetMembership viewer after restore retry: %v", err)
 		}
 	})
+}
+
+func TestManagedIdentityTokens_RoleMatrix(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	seedUser(t, svc, "admin@example.test")
+	seedUser(t, svc, "viewer@example.test")
+	seedUser(t, svc, "editor@example.test")
+
+	alphaStub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{N: "alpha", ConnMode: core.ConnectionModeNone},
+		ops: []core.Operation{
+			{Name: "read", Method: http.MethodGet},
+			{Name: "write", Method: http.MethodGet},
+		},
+	}
+	betaStub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{N: "beta", ConnMode: core.ConnectionModeNone},
+		ops:             []core.Operation{{Name: "query", Method: http.MethodGet}},
+	}
+	gammaStub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{N: "gamma", ConnMode: core.ConnectionModeUser},
+		ops:             []core.Operation{{Name: "query", Method: http.MethodGet}},
+	}
+	providers := testutil.NewProviderRegistry(t, alphaStub, betaStub, gammaStub)
+	authz, err := authorization.New(config.AuthorizationConfig{}, nil, providers, nil)
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				switch token {
+				case "admin-session":
+					return &core.UserIdentity{Email: "admin@example.test"}, nil
+				case "viewer-session":
+					return &core.UserIdentity{Email: "viewer@example.test"}, nil
+				case "editor-session":
+					return &core.UserIdentity{Email: "editor@example.test"}, nil
+				default:
+					return nil, fmt.Errorf("unknown session %q", token)
+				}
+			},
+		}
+		cfg.Providers = providers
+		cfg.Services = svc
+		cfg.Authorizer = authz
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	createResp := struct {
+		ID string `json:"id"`
+	}{}
+	doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Release Bot"}`, http.StatusCreated, &createResp)
+	doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/members", "admin-session", `{"email":"viewer@example.test","role":"viewer"}`, http.StatusOK, nil)
+	doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/members", "admin-session", `{"email":"editor@example.test","role":"editor"}`, http.StatusOK, nil)
+	doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/alpha", "admin-session", `{"operations":["read"]}`, http.StatusOK, nil)
+	doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/beta", "admin-session", `{"operations":["query"]}`, http.StatusOK, nil)
+
+	//nolint:paralleltest // Subtests intentionally share the same managed identity and token state.
+	t.Run("viewer can create and list tokens", func(t *testing.T) {
+		createTokenResp := struct {
+			ID          string                  `json:"id"`
+			Name        string                  `json:"name"`
+			Token       string                  `json:"token"`
+			Permissions []core.AccessPermission `json:"permissions"`
+		}{}
+		doJSONRequestAndDecode(
+			t,
+			http.MethodPost,
+			ts.URL+"/api/v1/identities/"+createResp.ID+"/tokens",
+			"viewer-session",
+			`{"name":"deploy-token","permissions":[{"plugin":"alpha","operations":["read"]},{"plugin":"beta","operations":["query"]}]}`,
+			http.StatusCreated,
+			&createTokenResp,
+		)
+		if createTokenResp.Token == "" {
+			t.Fatal("expected plaintext token in create response")
+		}
+		if len(createTokenResp.Permissions) != 2 {
+			t.Fatalf("permissions = %+v, want 2 entries", createTokenResp.Permissions)
+		}
+
+		var listResp []struct {
+			ID          string                  `json:"id"`
+			Name        string                  `json:"name"`
+			Permissions []core.AccessPermission `json:"permissions"`
+		}
+		doJSONRequestAndDecode(t, http.MethodGet, ts.URL+"/api/v1/identities/"+createResp.ID+"/tokens", "viewer-session", "", http.StatusOK, &listResp)
+		if len(listResp) != 1 || listResp[0].ID != createTokenResp.ID {
+			t.Fatalf("list response = %+v, want single token %q", listResp, createTokenResp.ID)
+		}
+		if len(listResp[0].Permissions) != 2 {
+			t.Fatalf("listed permissions = %+v, want 2 entries", listResp[0].Permissions)
+		}
+	})
+
+	//nolint:paralleltest // Subtests intentionally share the same managed identity and token state.
+	t.Run("viewer cannot revoke tokens", func(t *testing.T) {
+		createTokenResp := struct {
+			ID string `json:"id"`
+		}{}
+		doJSONRequestAndDecode(
+			t,
+			http.MethodPost,
+			ts.URL+"/api/v1/identities/"+createResp.ID+"/tokens",
+			"viewer-session",
+			`{"name":"viewer-owned","permissions":[{"plugin":"alpha","operations":["read"]}]}`,
+			http.StatusCreated,
+			&createTokenResp,
+		)
+
+		req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/identities/"+createResp.ID+"/tokens/"+createTokenResp.ID, nil)
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("revoke request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusForbidden {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 403, got %d: %s", resp.StatusCode, body)
+		}
+	})
+
+	//nolint:paralleltest // Subtests intentionally share the same managed identity and token state.
+	t.Run("editor can revoke tokens", func(t *testing.T) {
+		createTokenResp := struct {
+			ID string `json:"id"`
+		}{}
+		doJSONRequestAndDecode(
+			t,
+			http.MethodPost,
+			ts.URL+"/api/v1/identities/"+createResp.ID+"/tokens",
+			"viewer-session",
+			`{"name":"revoke-me","permissions":[{"plugin":"alpha","operations":["read"]}]}`,
+			http.StatusCreated,
+			&createTokenResp,
+		)
+		doJSONRequestAndDecode(t, http.MethodDelete, ts.URL+"/api/v1/identities/"+createResp.ID+"/tokens/"+createTokenResp.ID, "editor-session", "", http.StatusOK, nil)
+	})
+
+	//nolint:paralleltest // Subtests intentionally share the same managed identity and token state.
+	t.Run("token permissions must be non-empty and within grants", func(t *testing.T) {
+		cases := []struct {
+			name         string
+			body         string
+			wantContains string
+		}{
+			{
+				name: "empty permissions rejected",
+				body: `{"name":"invalid","permissions":[]}`,
+			},
+			{
+				name:         "unsupported plugin rejected",
+				body:         `{"name":"invalid","permissions":[{"plugin":"gamma","operations":["query"]}]}`,
+				wantContains: "does not yet support managed-identity invocation",
+			},
+			{
+				name: "broader than grant rejected",
+				body: `{"name":"invalid","permissions":[{"plugin":"alpha"}]}`,
+			},
+			{
+				name: "operation outside grant rejected",
+				body: `{"name":"invalid","permissions":[{"plugin":"alpha","operations":["write"]}]}`,
+			},
+			{
+				name:         "blank operations rejected",
+				body:         `{"name":"invalid","permissions":[{"plugin":"alpha","operations":[" "]}]}`,
+				wantContains: "must contain at least one non-blank operation",
+			},
+		}
+		for _, tc := range cases {
+			tc := tc
+			//nolint:paralleltest // Subtests intentionally share the same managed identity and token state.
+			t.Run(tc.name, func(t *testing.T) {
+				req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/identities/"+createResp.ID+"/tokens", bytes.NewBufferString(tc.body))
+				req.Header.Set("Content-Type", "application/json")
+				req.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+				resp, err := http.DefaultClient.Do(req)
+				if err != nil {
+					t.Fatalf("create request: %v", err)
+				}
+				defer func() { _ = resp.Body.Close() }()
+				if resp.StatusCode != http.StatusBadRequest {
+					body, _ := io.ReadAll(resp.Body)
+					t.Fatalf("expected 400, got %d: %s", resp.StatusCode, body)
+				}
+				if tc.wantContains != "" {
+					body, _ := io.ReadAll(resp.Body)
+					if !strings.Contains(string(body), tc.wantContains) {
+						t.Fatalf("response body = %q, want substring %q", string(body), tc.wantContains)
+					}
+				}
+			})
+		}
+	})
+
+	//nolint:paralleltest // Subtests intentionally share the same managed identity and token state.
+	t.Run("listed permissions track current grants", func(t *testing.T) {
+		identityResp := struct {
+			ID string `json:"id"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Grant Drift Bot"}`, http.StatusCreated, &identityResp)
+		doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+identityResp.ID+"/members", "admin-session", `{"email":"viewer@example.test","role":"viewer"}`, http.StatusOK, nil)
+		doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+identityResp.ID+"/grants/alpha", "admin-session", `{"operations":["read"]}`, http.StatusOK, nil)
+		doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+identityResp.ID+"/grants/beta", "admin-session", `{"operations":["query"]}`, http.StatusOK, nil)
+
+		createTokenResp := struct {
+			ID string `json:"id"`
+		}{}
+		doJSONRequestAndDecode(
+			t,
+			http.MethodPost,
+			ts.URL+"/api/v1/identities/"+identityResp.ID+"/tokens",
+			"viewer-session",
+			`{"name":"grant-drift","permissions":[{"plugin":"alpha","operations":["read"]},{"plugin":"beta","operations":["query"]}]}`,
+			http.StatusCreated,
+			&createTokenResp,
+		)
+
+		findPermissions := func(t *testing.T) []core.AccessPermission {
+			t.Helper()
+
+			var listResp []struct {
+				ID          string                  `json:"id"`
+				Permissions []core.AccessPermission `json:"permissions"`
+			}
+			doJSONRequestAndDecode(t, http.MethodGet, ts.URL+"/api/v1/identities/"+identityResp.ID+"/tokens", "viewer-session", "", http.StatusOK, &listResp)
+			for _, token := range listResp {
+				if token.ID == createTokenResp.ID {
+					return token.Permissions
+				}
+			}
+			t.Fatalf("token %q missing from list response %+v", createTokenResp.ID, listResp)
+			return nil
+		}
+
+		before := findPermissions(t)
+		if len(before) != 2 {
+			t.Fatalf("permissions before grant update = %+v, want 2 entries", before)
+		}
+
+		doJSONRequestAndDecode(t, http.MethodDelete, ts.URL+"/api/v1/identities/"+identityResp.ID+"/grants/beta", "admin-session", "", http.StatusOK, nil)
+
+		after := findPermissions(t)
+		want := []core.AccessPermission{{Plugin: "alpha", Operations: []string{"read"}}}
+		if !reflect.DeepEqual(after, want) {
+			t.Fatalf("permissions after grant update = %+v, want %+v", after, want)
+		}
+	})
+}
+
+func TestManagedIdentityTokenPermissionsUsePluginLevelViewerCeiling(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	admin := seedUser(t, svc, "admin@example.test")
+
+	alpha := &stubIntegrationWithCatalog{
+		StubIntegration: coretesting.StubIntegration{N: "alpha", ConnMode: core.ConnectionModeNone},
+		catalog: serverTestCatalog("alpha", []catalog.CatalogOperation{
+			{ID: "read", Method: http.MethodGet, Path: "/read", Transport: catalog.TransportREST, AllowedRoles: []string{"viewer"}},
+			{ID: "write", Method: http.MethodPost, Path: "/write", Transport: catalog.TransportREST, AllowedRoles: []string{"admin"}},
+		}),
+	}
+	providers := testutil.NewProviderRegistry(t, alpha)
+	pluginDefs := map[string]*config.ProviderEntry{
+		"alpha": {AuthorizationPolicy: "alpha_policy"},
+	}
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"alpha_policy": {
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID(admin.ID), Role: "viewer"},
+				},
+			},
+		},
+	}, providers, pluginDefs, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "admin-session" {
+					return nil, fmt.Errorf("unknown session %q", token)
+				}
+				return &core.UserIdentity{Email: "admin@example.test"}, nil
+			},
+		}
+		cfg.Services = svc
+		cfg.Providers = providers
+		cfg.PluginDefs = pluginDefs
+		cfg.Authorizer = authz
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	createResp := struct {
+		ID string `json:"id"`
+	}{}
+	doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Plugin Wide Bot"}`, http.StatusCreated, &createResp)
+	if _, err := svc.IdentityGrants.UpsertGrant(context.Background(), &core.ManagedIdentityGrant{
+		IdentityID: createResp.ID,
+		Plugin:     "alpha",
+	}); err != nil {
+		t.Fatalf("UpsertGrant alpha: %v", err)
+	}
+
+	createTokenResp := struct {
+		ID          string                  `json:"id"`
+		Permissions []core.AccessPermission `json:"permissions"`
+	}{}
+	doJSONRequestAndDecode(
+		t,
+		http.MethodPost,
+		ts.URL+"/api/v1/identities/"+createResp.ID+"/tokens",
+		"admin-session",
+		`{"name":"write-only","permissions":[{"plugin":"alpha","operations":["write"]}]}`,
+		http.StatusCreated,
+		&createTokenResp,
+	)
+	want := []core.AccessPermission{{Plugin: "alpha", Operations: []string{"write"}}}
+	if !reflect.DeepEqual(createTokenResp.Permissions, want) {
+		t.Fatalf("permissions = %+v, want %+v", createTokenResp.Permissions, want)
+	}
+
+	listResp := []struct {
+		ID          string                  `json:"id"`
+		Permissions []core.AccessPermission `json:"permissions"`
+	}{}
+	doJSONRequestAndDecode(
+		t,
+		http.MethodGet,
+		ts.URL+"/api/v1/identities/"+createResp.ID+"/tokens",
+		"admin-session",
+		"",
+		http.StatusOK,
+		&listResp,
+	)
+	if len(listResp) != 1 {
+		t.Fatalf("listed tokens = %d, want 1", len(listResp))
+	}
+	if !reflect.DeepEqual(listResp[0].Permissions, want) {
+		t.Fatalf("listed permissions = %+v, want %+v", listResp[0].Permissions, want)
+	}
+}
+
+func TestManagedIdentityAPITokenInvocation_ModeNoneOnly(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	seedUser(t, svc, "admin@example.test")
+
+	alphaStub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "alpha",
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		ops: []core.Operation{
+			{Name: "read", Method: http.MethodGet},
+			{Name: "write", Method: http.MethodGet},
+		},
+	}
+	betaStub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "beta",
+			ConnMode: core.ConnectionModeNone,
+			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "query", Method: http.MethodGet}},
+	}
+	gammaStub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N:        "gamma",
+			ConnMode: core.ConnectionModeUser,
+			ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+				return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+			},
+		},
+		ops: []core.Operation{{Name: "query", Method: http.MethodGet}},
+	}
+	providers := testutil.NewProviderRegistry(t, alphaStub, betaStub, gammaStub)
+	authz, err := authorization.New(config.AuthorizationConfig{}, nil, providers, nil)
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "admin-session" {
+					return nil, fmt.Errorf("unknown session %q", token)
+				}
+				return &core.UserIdentity{Email: "admin@example.test"}, nil
+			},
+		}
+		cfg.Providers = providers
+		cfg.Services = svc
+		cfg.Authorizer = authz
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	createResp := struct {
+		ID string `json:"id"`
+	}{}
+	doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Invoke Bot"}`, http.StatusCreated, &createResp)
+	doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/alpha", "admin-session", `{"operations":["read"]}`, http.StatusOK, nil)
+	doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/beta", "admin-session", `{"operations":["query"]}`, http.StatusOK, nil)
+
+	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/gamma", bytes.NewBufferString(`{"operations":["query"]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("gamma grant request: %v", err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("gamma grant status = %d, want %d: %s", resp.StatusCode, http.StatusBadRequest, body)
+	}
+	if !strings.Contains(string(body), "does not yet support managed-identity invocation") {
+		t.Fatalf("gamma grant body = %q, want managed-identity invocation rejection", string(body))
+	}
+
+	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/api/v1/identities/"+createResp.ID+"/tokens", bytes.NewBufferString(`{"name":"invalid-token","permissions":[{"plugin":"gamma","operations":["query"]}]}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("gamma token request: %v", err)
+	}
+	body, _ = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("gamma token status = %d, want %d: %s", resp.StatusCode, http.StatusBadRequest, body)
+	}
+	if !strings.Contains(string(body), "does not yet support managed-identity invocation") {
+		t.Fatalf("gamma token body = %q, want managed-identity invocation rejection", string(body))
+	}
+
+	createTokenResp := struct {
+		Token string `json:"token"`
+	}{}
+	doJSONRequestAndDecode(
+		t,
+		http.MethodPost,
+		ts.URL+"/api/v1/identities/"+createResp.ID+"/tokens",
+		"admin-session",
+		`{"name":"invoke-token","permissions":[{"plugin":"alpha","operations":["read"]},{"plugin":"beta","operations":["query"]}]}`,
+		http.StatusCreated,
+		&createTokenResp,
+	)
+	if createTokenResp.Token == "" {
+		t.Fatal("expected plaintext token for invocation test")
+	}
+
+	call := func(path string) int {
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+path, nil)
+		req.Header.Set("Authorization", "Bearer "+createTokenResp.Token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("invoke %s: %v", path, err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		return resp.StatusCode
+	}
+
+	if status := call("/api/v1/alpha/read"); status != http.StatusOK {
+		t.Fatalf("alpha/read status = %d, want 200", status)
+	}
+	if status := call("/api/v1/alpha/write"); status != http.StatusForbidden {
+		t.Fatalf("alpha/write status = %d, want 403", status)
+	}
+	if status := call("/api/v1/beta/query"); status != http.StatusOK {
+		t.Fatalf("beta/query status = %d, want 200", status)
+	}
+	if status := call("/api/v1/gamma/query"); status != http.StatusForbidden {
+		t.Fatalf("gamma/query status = %d, want 403", status)
+	}
+
+	doJSONRequestAndDecode(t, http.MethodDelete, ts.URL+"/api/v1/identities/"+createResp.ID, "admin-session", "", http.StatusOK, nil)
+	if status := call("/api/v1/alpha/read"); status != http.StatusUnauthorized {
+		t.Fatalf("alpha/read after identity delete status = %d, want 401", status)
+	}
 }
 
 func TestManagedIdentityRoutesRequireConfiguredAuth(t *testing.T) {
