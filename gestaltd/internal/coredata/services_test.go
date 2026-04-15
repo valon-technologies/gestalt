@@ -167,7 +167,6 @@ func (o *countingObjectStore) OpenCursor(ctx context.Context, r *indexeddb.KeyRa
 func (o *countingObjectStore) OpenKeyCursor(ctx context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection) (indexeddb.Cursor, error) {
 	return o.inner.OpenKeyCursor(ctx, r, dir)
 }
-
 func TestNew(t *testing.T) {
 	t.Parallel()
 
