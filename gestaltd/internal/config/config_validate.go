@@ -711,8 +711,9 @@ func validateMountedUICollisions(cfg *Config, pluginOwnedUIRefs map[string]struc
 		"/ready",
 	}
 	type mountedPathSubject struct {
-		label string
-		path  string
+		label           string
+		path            string
+		allowNestedPath bool
 	}
 	subjects := make([]mountedPathSubject, 0, len(cfg.Providers.UI)+len(cfg.Plugins))
 	names := slices.Sorted(maps.Keys(cfg.Providers.UI))
@@ -722,8 +723,9 @@ func validateMountedUICollisions(cfg *Config, pluginOwnedUIRefs map[string]struc
 			continue
 		}
 		subjects = append(subjects, mountedPathSubject{
-			label: "ui." + name + ".path",
-			path:  entry.Path,
+			label:           "ui." + name + ".path",
+			path:            entry.Path,
+			allowNestedPath: true,
 		})
 	}
 	pluginNames := slices.Sorted(maps.Keys(cfg.Plugins))
@@ -757,12 +759,24 @@ func validateMountedUICollisions(cfg *Config, pluginOwnedUIRefs map[string]struc
 			}
 		}
 		for _, other := range subjects[i+1:] {
-			if mountedUIPathsConflict(subject.path, other.path) {
+			if subject.path == other.path {
 				return fmt.Errorf("config validation: %s %q conflicts with %s %q", subject.label, subject.path, other.label, other.path)
+			}
+			if !subject.allowNestedPath || !other.allowNestedPath {
+				if mountedUIPathsConflict(subject.path, other.path) {
+					return fmt.Errorf("config validation: %s %q conflicts with %s %q", subject.label, subject.path, other.label, other.path)
+				}
 			}
 		}
 	}
 	return nil
+}
+
+func mountedUIPathsConflict(a, b string) bool {
+	if a == b {
+		return true
+	}
+	return strings.HasPrefix(a, b+"/") || strings.HasPrefix(b, a+"/")
 }
 
 func mountedUIPathsMatch(uiPath, mountPath string) bool {
@@ -774,13 +788,6 @@ func mountedUIPathsMatch(uiPath, mountPath string) bool {
 		return false
 	}
 	return uiPath == normalizedMountPath
-}
-
-func mountedUIPathsConflict(a, b string) bool {
-	if a == b {
-		return true
-	}
-	return strings.HasPrefix(a, b+"/") || strings.HasPrefix(b, a+"/")
 }
 
 func pluginOwnedUIRefs(cfg *Config) map[string]struct{} {

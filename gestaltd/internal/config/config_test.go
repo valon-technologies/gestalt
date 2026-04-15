@@ -1267,7 +1267,7 @@ server:
 		}
 	})
 
-	t.Run("prefix collision is rejected", func(t *testing.T) {
+	t.Run("nested ui paths are accepted", func(t *testing.T) {
 		t.Parallel()
 
 		path := mustWriteConfigFile(t, `
@@ -1291,12 +1291,15 @@ server:
   encryptionKey: server-key
 `)
 
-		_, err := Load(path)
-		if err == nil {
-			t.Fatal("Load: expected error, got nil")
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
 		}
-		if !strings.Contains(err.Error(), `ui.`) || !strings.Contains(err.Error(), `"/tools"`) || !strings.Contains(err.Error(), `"/tools/admin"`) {
-			t.Fatalf("unexpected error: %v", err)
+		if got := cfg.Providers.UI["parent"].Path; got != "/tools" {
+			t.Fatalf(`Providers.UI["parent"].Path = %q, want %q`, got, "/tools")
+		}
+		if got := cfg.Providers.UI["child"].Path; got != "/tools/admin" {
+			t.Fatalf(`Providers.UI["child"].Path = %q, want %q`, got, "/tools/admin")
 		}
 	})
 

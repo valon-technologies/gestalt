@@ -325,7 +325,7 @@ providers:
     %s:
       source:
         ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
-        version: 0.0.1-alpha.2
+        version: 0.0.1-alpha.1
       config:
         dsn: %q
 `, serverProvidersBlock, authBlock, datastoreName, "sqlite://"+dbPath)
