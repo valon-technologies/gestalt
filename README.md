@@ -12,6 +12,8 @@ Agents need tools. Tools need auth. Auth needs credential storage, encryption, t
 
 Gestalt handles this so individual agents and applications do not have to. A single YAML config declares which tools to expose, how users authenticate, and how credentials are managed.
 
+![Gestalt architecture diagram](./docs/public/images/architecture-diagram.png)
+
 - **Stored on infrastructure you control.** Credentials and connection data are stored, encrypted at rest, on infrastructure you control, however you configure it.
 - **Configure once, reuse everywhere.** A single YAML config replaces per-integration glue code, token management scripts, and bespoke OAuth callback servers.
 - **One definition, all harnesses.** The same operations are available over MCP, HTTP, CLI, and optional mounted web UIs for cloud agents, local coding assistants, and human operators.
