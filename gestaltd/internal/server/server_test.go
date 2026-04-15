@@ -177,6 +177,25 @@ func newTestServicesWithPluginAuthorizationPutFailure(t *testing.T) (*coredata.S
 	return svc, failPut
 }
 
+func newTestServicesWithAdminAuthorizationPutFailure(t *testing.T) (*coredata.Services, *atomic.Bool) {
+	t.Helper()
+	enc, err := corecrypto.NewAESGCM([]byte("0123456789abcdef0123456789abcdef"))
+	if err != nil {
+		t.Fatalf("newTestServicesWithAdminAuthorizationPutFailure encryptor: %v", err)
+	}
+	failPut := &atomic.Bool{}
+	svc, err := coredata.New(&putFailingIndexedDB{
+		IndexedDB: &coretesting.StubIndexedDB{},
+		failStorePuts: map[string]*atomic.Bool{
+			coredata.StoreAdminAuthorizationMemberships: failPut,
+		},
+	}, enc)
+	if err != nil {
+		t.Fatalf("newTestServicesWithAdminAuthorizationPutFailure: %v", err)
+	}
+	return svc, failPut
+}
+
 func newVirtualHostClient(t *testing.T, hostAddrs map[string]string) *http.Client {
 	t.Helper()
 	jar, err := cookiejar.New(nil)
@@ -392,6 +411,26 @@ func mustAuthorizer(t *testing.T, cfg config.AuthorizationConfig, providers *reg
 		t.Fatalf("authorization.New: %v", err)
 	}
 	return authz
+}
+
+func seedDynamicAdminMembership(t *testing.T, svc *coredata.Services, authz *authorization.Authorizer, email, role string) *core.User {
+	t.Helper()
+	authz.SetAdminAuthorizationService(svc.AdminAuthorizations)
+	user, err := svc.Users.FindOrCreateUser(context.Background(), email)
+	if err != nil {
+		t.Fatalf("FindOrCreateUser dynamic admin: %v", err)
+	}
+	if _, err := svc.AdminAuthorizations.UpsertAdminAuthorization(context.Background(), &coredata.AdminAuthorizationMembership{
+		UserID: user.ID,
+		Email:  user.Email,
+		Role:   role,
+	}); err != nil {
+		t.Fatalf("UpsertAdminAuthorization: %v", err)
+	}
+	if err := authz.ReloadDynamic(context.Background()); err != nil {
+		t.Fatalf("ReloadDynamic: %v", err)
+	}
+	return user
 }
 
 func seedToken(t *testing.T, svc *coredata.Services, tok *core.IntegrationToken) {
@@ -1060,6 +1099,7 @@ func TestBuiltInAdminRoute_HumanAuthorization(t *testing.T) {
 			},
 		},
 	}, nil, nil, nil)
+	seedDynamicAdminMembership(t, svc, authz, "dynamic-admin@example.test", "admin")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -1070,6 +1110,8 @@ func TestBuiltInAdminRoute_HumanAuthorization(t *testing.T) {
 					return &core.UserIdentity{Email: "viewer@example.test"}, nil
 				case "admin-session":
 					return &core.UserIdentity{Email: "admin@example.test"}, nil
+				case "dynamic-admin-session":
+					return &core.UserIdentity{Email: "dynamic-admin@example.test"}, nil
 				default:
 					return nil, fmt.Errorf("invalid token")
 				}
@@ -1113,12 +1155,30 @@ func TestBuiltInAdminRoute_HumanAuthorization(t *testing.T) {
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "dynamic-admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET protected admin with dynamic admin session: %v", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll protected admin dynamic admin: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("dynamic admin status = %d, want 200", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), "protected-admin-shell") {
+		t.Fatalf("dynamic admin body = %q, want protected admin shell", body)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("GET protected admin with admin session: %v", err)
 	}
-	body, err := io.ReadAll(resp.Body)
+	body, err = io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
 	if err != nil {
 		t.Fatalf("ReadAll protected admin: %v", err)
@@ -1175,6 +1235,7 @@ func TestBuiltInAdminRoute_HumanAuthorizationOnManagementProfile(t *testing.T) {
 			},
 		},
 	}, nil, nil, nil)
+	seedDynamicAdminMembership(t, svc, authz, "dynamic-admin@example.test", "admin")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -1185,6 +1246,8 @@ func TestBuiltInAdminRoute_HumanAuthorizationOnManagementProfile(t *testing.T) {
 					return &core.UserIdentity{Email: "viewer@example.test"}, nil
 				case "admin-session":
 					return &core.UserIdentity{Email: "admin@example.test"}, nil
+				case "dynamic-admin-session":
+					return &core.UserIdentity{Email: "dynamic-admin@example.test"}, nil
 				default:
 					return nil, fmt.Errorf("invalid token")
 				}
@@ -1231,12 +1294,30 @@ func TestBuiltInAdminRoute_HumanAuthorizationOnManagementProfile(t *testing.T) {
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "dynamic-admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET protected management admin with dynamic admin session: %v", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll protected management admin dynamic admin: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("management dynamic admin status = %d, want 200", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), "protected-admin-shell") {
+		t.Fatalf("body = %q, want protected admin shell", body)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/", nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("GET protected management admin with admin session: %v", err)
 	}
-	body, err := io.ReadAll(resp.Body)
+	body, err = io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
 	if err != nil {
 		t.Fatalf("ReadAll protected management admin: %v", err)
@@ -1442,6 +1523,7 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 	}, nil, map[string]*config.ProviderEntry{
 		"sample_plugin": {AuthorizationPolicy: "sample_policy"},
 	}, nil)
+	seedDynamicAdminMembership(t, svc, authz, "dynamic-admin@example.test", "admin")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -1452,6 +1534,8 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 					return &core.UserIdentity{Email: "viewer@example.test"}, nil
 				case "admin-session":
 					return &core.UserIdentity{Email: "admin@example.test"}, nil
+				case "dynamic-admin-session":
+					return &core.UserIdentity{Email: "dynamic-admin@example.test"}, nil
 				default:
 					return nil, fmt.Errorf("invalid token")
 				}
@@ -1491,6 +1575,18 @@ func TestAdminAPI_HumanAuthorization(t *testing.T) {
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("viewer admin api status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/admins/members", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "dynamic-admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET admin members api with dynamic admin session: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("dynamic admin api status = %d, want 200: %s", resp.StatusCode, body)
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/plugins", nil)
@@ -1562,15 +1658,20 @@ func TestAdminAPI_HumanAuthorizationOnManagementProfile(t *testing.T) {
 	}, nil, map[string]*config.ProviderEntry{
 		"sample_plugin": {AuthorizationPolicy: "sample_policy"},
 	}, nil)
+	seedDynamicAdminMembership(t, svc, authz, "dynamic-admin@example.test", "admin")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
 			N: "test",
 			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
-				if token != "admin-session" {
+				switch token {
+				case "admin-session":
+					return &core.UserIdentity{Email: "admin@example.test"}, nil
+				case "dynamic-admin-session":
+					return &core.UserIdentity{Email: "dynamic-admin@example.test"}, nil
+				default:
 					return nil, fmt.Errorf("invalid token")
 				}
-				return &core.UserIdentity{Email: "admin@example.test"}, nil
 			},
 		}
 		cfg.Services = svc
@@ -1591,9 +1692,21 @@ func TestAdminAPI_HumanAuthorizationOnManagementProfile(t *testing.T) {
 	})
 	testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/plugins", nil)
-	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/admins/members", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "dynamic-admin-session"})
 	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET management admin members api with dynamic admin session: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("management dynamic admin api status = %d, want 200: %s", resp.StatusCode, body)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/plugins", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("GET management admin api with admin session: %v", err)
 	}
@@ -1805,6 +1918,229 @@ func TestAdminAPI_PluginAuthorizationCRUD(t *testing.T) {
 	}
 }
 
+func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	seedUser(t, svc, "static-admin@example.test")
+	const adminRole = "owner"
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"admin_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{Email: "static-admin@example.test", Role: adminRole},
+				},
+			},
+		},
+	}, nil, nil, nil)
+	authz.SetAdminAuthorizationService(svc.AdminAuthorizations)
+	if err := authz.ReloadDynamic(context.Background()); err != nil {
+		t.Fatalf("ReloadDynamic: %v", err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "admin-session" {
+					return nil, fmt.Errorf("invalid token")
+				}
+				return &core.UserIdentity{Email: "static-admin@example.test"}, nil
+			},
+		}
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.Admin = server.AdminRouteConfig{
+			AuthorizationPolicy: "admin_policy",
+			AllowedRoles:        []string{adminRole},
+		}
+		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("admin"))
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/admins/members", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET admin members: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("admin members status = %d, want 200: %s", resp.StatusCode, body)
+	}
+
+	var members []map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&members); err != nil {
+		t.Fatalf("decoding admin members: %v", err)
+	}
+	if len(members) != 1 || members[0]["source"] != "static" {
+		t.Fatalf("admin members = %+v, want one static row", members)
+	}
+
+	body := bytes.NewBufferString(`{"email":"dynamic-admin@example.test","role":"owner"}`)
+	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/admins/members", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT admin member: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("put admin member status = %d, want 200: %s", resp.StatusCode, respBody)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/admins/members", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET admin members after put: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("admin members after put status = %d, want 200", resp.StatusCode)
+	}
+	members = nil
+	if err := json.NewDecoder(resp.Body).Decode(&members); err != nil {
+		t.Fatalf("decoding admin members after put: %v", err)
+	}
+	if len(members) != 2 {
+		t.Fatalf("expected 2 merged admin members, got %d (%+v)", len(members), members)
+	}
+
+	body = bytes.NewBufferString(`{"email":"static-admin@example.test","role":"owner"}`)
+	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/admins/members", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT static admin conflict: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusConflict {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("put static admin conflict status = %d, want 409: %s", resp.StatusCode, respBody)
+	}
+
+	user, err := svc.Users.FindUserByEmail(context.Background(), "dynamic-admin@example.test")
+	if err != nil {
+		t.Fatalf("find dynamic admin user: %v", err)
+	}
+	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/admins/members/"+url.PathEscape(user.ID), nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE admin member: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("delete admin member status = %d, want 200: %s", resp.StatusCode, respBody)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/admins/members", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET admin members after delete: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("admin members after delete status = %d, want 200", resp.StatusCode)
+	}
+	members = nil
+	if err := json.NewDecoder(resp.Body).Decode(&members); err != nil {
+		t.Fatalf("decoding admin members after delete: %v", err)
+	}
+	if len(members) != 1 || members[0]["source"] != "static" {
+		t.Fatalf("admin members after delete = %+v, want only static row", members)
+	}
+}
+
+func TestAdminAPI_AdminAuthorizationWriteUsesAllowedAdminRoles(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	seedUser(t, svc, "static-admin@example.test")
+	seedUser(t, svc, "viewer@example.test")
+	const adminRole = "ops-admin"
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"admin_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{Email: "static-admin@example.test", Role: adminRole},
+				},
+			},
+		},
+	}, nil, nil, nil)
+	authz.SetAdminAuthorizationService(svc.AdminAuthorizations)
+	if err := authz.ReloadDynamic(context.Background()); err != nil {
+		t.Fatalf("ReloadDynamic: %v", err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				switch token {
+				case "ops-admin-session":
+					return &core.UserIdentity{Email: "static-admin@example.test"}, nil
+				case "viewer-session":
+					return &core.UserIdentity{Email: "viewer@example.test"}, nil
+				default:
+					return nil, fmt.Errorf("invalid token")
+				}
+			},
+		}
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.Admin = server.AdminRouteConfig{
+			AuthorizationPolicy: "admin_policy",
+			AllowedRoles:        []string{adminRole},
+		}
+		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("admin"))
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"email":"viewer@example.test","role":"ops-admin"}`)
+	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/admins/members", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "ops-admin-session"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("ops-admin PUT admin member: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("ops-admin put admin member status = %d, want 200: %s", resp.StatusCode, respBody)
+	}
+
+	user, err := svc.Users.FindUserByEmail(context.Background(), "viewer@example.test")
+	if err != nil {
+		t.Fatalf("find dynamic admin user: %v", err)
+	}
+	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/admins/members/"+url.PathEscape(user.ID), nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "ops-admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("ops-admin DELETE admin member: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("ops-admin delete admin member status = %d, want 200: %s", resp.StatusCode, respBody)
+	}
+}
+
 func TestAdminAPI_PluginAuthorizationUnavailable(t *testing.T) {
 	t.Parallel()
 
@@ -1840,6 +2176,97 @@ func TestAdminAPI_PluginAuthorizationUnavailable(t *testing.T) {
 	if resp.StatusCode != http.StatusServiceUnavailable {
 		t.Fatalf("members status = %d, want 503", resp.StatusCode)
 	}
+}
+
+func TestAdminAPI_AdminAuthorizationUnavailable(t *testing.T) {
+	t.Parallel()
+
+	t.Run("admin policy unset", func(t *testing.T) {
+		t.Parallel()
+
+		svc := coretesting.NewStubServices(t)
+		authz := mustAuthorizer(t, config.AuthorizationConfig{}, nil, nil, nil)
+		authz.SetAdminAuthorizationService(svc.AdminAuthorizations)
+		if err := authz.ReloadDynamic(context.Background()); err != nil {
+			t.Fatalf("ReloadDynamic: %v", err)
+		}
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					if token != "admin-session" {
+						return nil, fmt.Errorf("invalid token")
+					}
+					return &core.UserIdentity{Email: "admin@example.test"}, nil
+				},
+			}
+			cfg.Services = svc
+			cfg.Authorizer = authz
+			cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte("admin"))
+			})
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/admins/members", nil)
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("GET admin members with admin policy unset: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusServiceUnavailable {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("status = %d, want 503: %s", resp.StatusCode, body)
+		}
+	})
+
+	t.Run("static seed missing", func(t *testing.T) {
+		t.Parallel()
+
+		svc := coretesting.NewStubServices(t)
+		authz := mustAuthorizer(t, config.AuthorizationConfig{
+			Policies: map[string]config.HumanPolicyDef{
+				"admin_policy": {Default: "deny"},
+			},
+		}, nil, nil, nil)
+		seedDynamicAdminMembership(t, svc, authz, "admin@example.test", "admin")
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					if token != "admin-session" {
+						return nil, fmt.Errorf("invalid token")
+					}
+					return &core.UserIdentity{Email: "admin@example.test"}, nil
+				},
+			}
+			cfg.Services = svc
+			cfg.Authorizer = authz
+			cfg.Admin = server.AdminRouteConfig{
+				AuthorizationPolicy: "admin_policy",
+				AllowedRoles:        []string{"admin"},
+			}
+			cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte("admin"))
+			})
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/admins/members", nil)
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("GET admin members without static seed: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		if resp.StatusCode != http.StatusServiceUnavailable {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("status = %d, want 503: %s", resp.StatusCode, body)
+		}
+	})
 }
 
 func TestAdminAPI_PluginAuthorizationPutFailureReturnsServerError(t *testing.T) {
@@ -1881,6 +2308,64 @@ func TestAdminAPI_PluginAuthorizationPutFailureReturnsServerError(t *testing.T) 
 	if resp.StatusCode != http.StatusInternalServerError {
 		respBody, _ := io.ReadAll(resp.Body)
 		t.Fatalf("put dynamic member status = %d, want 500: %s", resp.StatusCode, respBody)
+	}
+}
+
+func TestAdminAPI_AdminAuthorizationPutFailureReturnsServerError(t *testing.T) {
+	t.Parallel()
+
+	svc, failPut := newTestServicesWithAdminAuthorizationPutFailure(t)
+	seedUser(t, svc, "static-admin@example.test")
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"admin_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{Email: "static-admin@example.test", Role: "admin"},
+				},
+			},
+		},
+	}, nil, nil, nil)
+	authz.SetAdminAuthorizationService(svc.AdminAuthorizations)
+	if err := authz.ReloadDynamic(context.Background()); err != nil {
+		t.Fatalf("ReloadDynamic: %v", err)
+	}
+	failPut.Store(true)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "admin-session" {
+					return nil, fmt.Errorf("invalid token")
+				}
+				return &core.UserIdentity{Email: "static-admin@example.test"}, nil
+			},
+		}
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.Admin = server.AdminRouteConfig{
+			AuthorizationPolicy: "admin_policy",
+			AllowedRoles:        []string{"admin"},
+		}
+		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("admin"))
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"email":"dynamic-admin@example.test","role":"admin"}`)
+	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/admins/members", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT admin member: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusInternalServerError {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("put admin member status = %d, want 500: %s", resp.StatusCode, respBody)
 	}
 }
 
@@ -1977,6 +2462,76 @@ func TestMountedWebUIAuthorizationPolicyRequiresExplicitRouteCoverage(t *testing
 				t.Fatalf("server.New error = %v, want substring %q", err, tc.want)
 			}
 		})
+	}
+}
+
+func TestMountedWebUIAuthorizationPolicyNamedBuiltinAdminDoesNotUseAdminResolver(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>custom-builtin-admin-name</html>"), 0o644); err != nil {
+		t.Fatalf("WriteFile index.html: %v", err)
+	}
+	handler, err := testutilWebUIHandler(dir)
+	if err != nil {
+		t.Fatalf("webui handler: %v", err)
+	}
+
+	svc := coretesting.NewStubServices(t)
+	seedUser(t, svc, "static-admin@example.test")
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"admin_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{Email: "static-admin@example.test", Role: "admin"},
+				},
+			},
+			"sample_policy": {
+				Default: "deny",
+			},
+		},
+	}, nil, nil, nil)
+	seedDynamicAdminMembership(t, svc, authz, "dynamic-admin@example.test", "admin")
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "dynamic-admin-session" {
+					return nil, fmt.Errorf("invalid token")
+				}
+				return &core.UserIdentity{Email: "dynamic-admin@example.test"}, nil
+			},
+		}
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.Admin = server.AdminRouteConfig{
+			AuthorizationPolicy: "admin_policy",
+			AllowedRoles:        []string{"admin"},
+		}
+		cfg.MountedWebUIs = []server.MountedWebUI{{
+			Name:                "builtin_admin",
+			Path:                "/sample-portal",
+			AuthorizationPolicy: "sample_policy",
+			Routes: []server.MountedWebUIRoute{
+				{Path: "/*", AllowedRoles: []string{"admin"}},
+			},
+			Handler: handler,
+		}}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/sample-portal/", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "dynamic-admin-session"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET custom builtin_admin-named mounted ui: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusForbidden {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 403: %s", resp.StatusCode, body)
 	}
 }
 

@@ -7,6 +7,7 @@ const (
 	StoreIntegrationTokens              = "integration_tokens"
 	StoreAPITokens                      = "api_tokens"
 	StorePluginAuthorizationMemberships = "plugin_authorization_memberships"
+	StoreAdminAuthorizationMemberships  = "admin_authorization_memberships"
 )
 
 var UsersSchema = indexeddb.ObjectStoreSchema{
@@ -75,6 +76,20 @@ var PluginAuthorizationMembershipsSchema = indexeddb.ObjectStoreSchema{
 	Columns: []indexeddb.ColumnDef{
 		{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
 		{Name: "plugin", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "user_id", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "email", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "role", Type: indexeddb.TypeString, NotNull: true},
+		{Name: "created_at", Type: indexeddb.TypeTime},
+		{Name: "updated_at", Type: indexeddb.TypeTime},
+	},
+}
+
+var AdminAuthorizationMembershipsSchema = indexeddb.ObjectStoreSchema{
+	Indexes: []indexeddb.IndexSchema{
+		{Name: "by_user", KeyPath: []string{"user_id"}, Unique: true},
+	},
+	Columns: []indexeddb.ColumnDef{
+		{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
 		{Name: "user_id", Type: indexeddb.TypeString, NotNull: true},
 		{Name: "email", Type: indexeddb.TypeString, NotNull: true},
 		{Name: "role", Type: indexeddb.TypeString, NotNull: true},

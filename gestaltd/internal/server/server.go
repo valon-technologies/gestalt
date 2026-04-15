@@ -47,6 +47,7 @@ type MountedWebUI struct {
 	AuthorizationPolicy string
 	Routes              []MountedWebUIRoute
 	Handler             http.Handler
+	builtInAdmin        bool
 }
 
 type AdminRouteConfig struct {
@@ -63,6 +64,7 @@ type Server struct {
 	tokens               *coredata.TokenService
 	apiTokens            *coredata.APITokenService
 	pluginAuthorizations *coredata.PluginAuthorizationService
+	adminAuthorizations  *coredata.AdminAuthorizationService
 	providers            *registry.ProviderMap[core.Provider]
 	resolver             *principal.Resolver
 	invoker              invocation.Invoker
@@ -158,6 +160,7 @@ func New(cfg Config) (*Server, error) {
 	tokens := cfg.Services.Tokens
 	apiTokens := cfg.Services.APITokens
 	pluginAuthorizations := cfg.Services.PluginAuthorizations
+	adminAuthorizations := cfg.Services.AdminAuthorizations
 	resolver := principal.NewResolver(cfg.Auth, users, apiTokens, cfg.Authorizer)
 
 	router := chi.NewRouter()
@@ -174,6 +177,7 @@ func New(cfg Config) (*Server, error) {
 		tokens:               tokens,
 		apiTokens:            apiTokens,
 		pluginAuthorizations: pluginAuthorizations,
+		adminAuthorizations:  adminAuthorizations,
 		providers:            cfg.Providers,
 		resolver:             resolver,
 		invoker:              cfg.Invoker,
