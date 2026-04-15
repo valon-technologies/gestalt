@@ -23,11 +23,11 @@ Gestalt handles this so individual agents and applications don't have to. A sing
 
 ### What Gestalt provides
 
-- **[Stored on infrastructure you control.](/security)** Credentials and connection data are stored, encrypted at rest, on infrastructure you control, however you configure it.
-- **[Configure once, reuse everywhere.](/configuration)** A single YAML config replaces per-integration glue code, token management scripts, and bespoke OAuth callback servers.
-- **[One definition, all harnesses.](/reference/http-api)** The same operations are available over MCP, HTTP, CLI, and optional mounted web UIs for cloud agents, local coding assistants, and human operators.
-- **[Pluggable by default.](/reference/built-in-providers)** Auth backends, datastores, secret managers, and the web UI are all replaceable provider packages. Use the first-party providers or write your own in Go, Python, Rust, or TypeScript. Gestalt provides the building blocks; you choose the components.
-- **[Run anywhere.](/deploy)** Deploy on any infrastructure you control with Docker, Helm, or bare containers. No hosted dependency, no vendor lock-in.
+- Credentials and connection data are encrypted at rest, on infrastructure you control. See [Security](/security).
+- A single YAML config declaratively defines which tools to expose, how users authenticate, and how credentials are managed. See [Configuration](/configuration).
+- The same operations are available over MCP, HTTP, CLI, and optional mounted web UIs for cloud agents, local coding assistants, and human operators. See [HTTP API](/reference/http-api).
+- Auth backends, datastores, secret managers, and the web UI are replaceable provider packages. Use the first-party providers or write your own in Go, Python, Rust, or TypeScript. See [Built-in Providers](/reference/built-in-providers).
+- Deploy on any infrastructure you control with Docker, Helm, or bare containers. See [Deploy](/deploy).
 
 ## What Gestalt is not
 
