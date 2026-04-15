@@ -118,6 +118,12 @@ The built-in admin UI is always served at `/admin`, regardless of whether
 custom UI bundles are configured. Mounted bundles own only their configured
 public prefixes.
 
+The built-in shell includes two operator views: the Prometheus metrics
+dashboard and a plugin authorization workspace at `/admin/?tab=members`.
+Plugin-backed mounted UIs inherit the owning plugin's dynamic grants when that
+plugin declares `authorizationPolicy`; direct `providers.ui.<name>.authorizationPolicy`
+bindings remain static-only.
+
 ## Building your own web UI bundle
 
 Asset-root layout, build hooks, and release packaging now live under
