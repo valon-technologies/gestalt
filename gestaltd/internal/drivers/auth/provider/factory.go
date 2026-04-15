@@ -36,7 +36,7 @@ var Factory bootstrap.AuthFactory = func(node yaml.Node, deps bootstrap.Deps) (c
 
 	callbackURL := cfg.CallbackURL
 	if callbackURL == "" && deps.BaseURL != "" {
-		callbackURL = deps.BaseURL + config.AuthCallbackPath
+		callbackURL = deps.BaseURL + config.BrowserAuthCallbackPath
 	}
 	return providerhost.NewExecutableAuthProvider(context.Background(), providerhost.AuthExecConfig{
 		Command:      cfg.Command,

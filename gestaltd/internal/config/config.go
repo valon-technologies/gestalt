@@ -22,6 +22,7 @@ import (
 
 // Callback paths must match the routes registered in server.go.
 const (
+	BrowserAuthCallbackPath = "/login/callback"
 	AuthCallbackPath        = "/api/v1/auth/login/callback"
 	IntegrationCallbackPath = "/api/v1/auth/callback"
 )
