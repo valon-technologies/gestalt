@@ -1,5 +1,11 @@
+/**
+ * Catalog schema kinds supported by the TypeScript SDK.
+ */
 export type CatalogType = "string" | "integer" | "number" | "boolean" | "object" | "array";
 
+/**
+ * Runtime schema that validates operation input and output values.
+ */
 export interface Schema<T> {
   readonly catalogType: CatalogType;
   readonly description: string;
@@ -10,10 +16,16 @@ export interface Schema<T> {
   parse(value: unknown, path?: string): T;
 }
 
+/**
+ * Extracts the TypeScript type represented by a {@link Schema}.
+ */
 export type InferSchema<TSchema extends Schema<unknown>> = TSchema extends Schema<infer T>
   ? T
   : never;
 
+/**
+ * Shared options supported by all schema builders.
+ */
 export interface SchemaOptions<T> {
   description?: string;
   required?: boolean;
@@ -53,6 +65,9 @@ function withMeta<T>(
   };
 }
 
+/**
+ * Creates a string schema.
+ */
 export function string(options?: SchemaOptions<string>): Schema<string> {
   return withMeta(
     "string",
@@ -66,6 +81,9 @@ export function string(options?: SchemaOptions<string>): Schema<string> {
   );
 }
 
+/**
+ * Creates an integer schema.
+ */
 export function integer(options?: SchemaOptions<number>): Schema<number> {
   return withMeta(
     "integer",
@@ -85,6 +103,9 @@ export function integer(options?: SchemaOptions<number>): Schema<number> {
   );
 }
 
+/**
+ * Creates a floating-point or integer number schema.
+ */
 export function number(options?: SchemaOptions<number>): Schema<number> {
   return withMeta(
     "number",
@@ -107,6 +128,9 @@ export function number(options?: SchemaOptions<number>): Schema<number> {
   );
 }
 
+/**
+ * Creates a boolean schema that accepts `true` / `false` and `1` / `0`.
+ */
 export function boolean(options?: SchemaOptions<boolean>): Schema<boolean> {
   return withMeta(
     "boolean",
@@ -129,6 +153,9 @@ export function boolean(options?: SchemaOptions<boolean>): Schema<boolean> {
   );
 }
 
+/**
+ * Creates an array schema for repeated values.
+ */
 export function array<T>(item: Schema<T>, options?: SchemaOptions<T[]>): Schema<T[]> {
   const base = withMeta<T[]>(
     "array",
@@ -147,6 +174,19 @@ export function array<T>(item: Schema<T>, options?: SchemaOptions<T[]>): Schema<
   };
 }
 
+/**
+ * Creates an object schema from a field map.
+ *
+ * @example
+ * ```ts
+ * import { s } from "@valon-technologies/gestalt";
+ *
+ * const input = s.object({
+ *   name: s.string(),
+ *   excited: s.optional(s.boolean()),
+ * });
+ * ```
+ */
 export function object<T extends Record<string, unknown>>(
   fields: { [K in keyof T]: Schema<T[K]> },
   options?: SchemaOptions<T>,
@@ -176,6 +216,9 @@ export function object<T extends Record<string, unknown>>(
   };
 }
 
+/**
+ * Marks another schema as optional while preserving its metadata.
+ */
 export function optional<T>(schema: Schema<T>): Schema<T | undefined> {
   const wrapped: Schema<T | undefined> = {
     catalogType: schema.catalogType,
@@ -201,6 +244,9 @@ export function optional<T>(schema: Schema<T>): Schema<T | undefined> {
   };
 }
 
+/**
+ * Namespace-style schema builder helpers.
+ */
 export const s = {
   string,
   integer,

@@ -7,6 +7,9 @@ import {
 
 const ENV_INDEXEDDB_SOCKET = "GESTALT_INDEXEDDB_SOCKET";
 
+/**
+ * Returns the environment variable name used to discover an IndexedDB socket.
+ */
 export function indexedDBSocketEnv(name?: string): string {
   const trimmed = name?.trim() ?? "";
   if (!trimmed) return ENV_INDEXEDDB_SOCKET;
@@ -64,6 +67,9 @@ class AsyncQueue<T> implements AsyncIterable<T> {
   }
 }
 
+/**
+ * Cursor iteration direction.
+ */
 export enum CursorDirection {
   Next = 0,
   NextUnique = 1,
@@ -78,11 +84,17 @@ const CURSOR_DIRECTION_TO_PROTO: { [K in CursorDirection]: ProtoCursorDirection 
   [CursorDirection.PrevUnique]: ProtoCursorDirection.CURSOR_PREV_UNIQUE,
 };
 
+/**
+ * Options for opening a cursor over an object store or index.
+ */
 export interface OpenCursorOptions {
   range?: KeyRange;
   direction?: CursorDirection;
 }
 
+/**
+ * Streaming cursor over an object store or secondary index.
+ */
 export class Cursor {
   private sendQueue: AsyncQueue<any>;
   private responseIterator: AsyncIterator<any>;
@@ -103,6 +115,11 @@ export class Cursor {
     this._indexCursor = indexCursor;
   }
 
+  /**
+   * Opens a low-level cursor stream for object-store and index helpers.
+   *
+   * @internal
+   */
   static async open(
     client: Client<typeof IndexedDBService>,
     store: string,
@@ -135,22 +152,37 @@ export class Cursor {
     return cursor;
   }
 
+  /**
+   * Current cursor key.
+   */
   get key(): unknown {
     return this._key;
   }
 
+  /**
+   * Current primary key for the pointed record.
+   */
   get primaryKey(): string {
     return this._primaryKey;
   }
 
+  /**
+   * Current record value.
+   */
   get value(): Record | undefined {
     return this._value;
   }
 
+  /**
+   * Whether the cursor has reached the end of the stream.
+   */
   get done(): boolean {
     return this._done;
   }
 
+  /**
+   * Advances the cursor to the next entry.
+   */
   async continue(): Promise<boolean> {
     this.sendQueue.push({
       msg: { case: "command" as const, value: { command: { case: "next" as const, value: true } } },
@@ -158,6 +190,9 @@ export class Cursor {
     return this.pull();
   }
 
+  /**
+   * Advances the cursor to a specific key.
+   */
   async continueToKey(key: unknown): Promise<boolean> {
     this.sendQueue.push({
       msg: {
@@ -173,6 +208,9 @@ export class Cursor {
     return this.pull();
   }
 
+  /**
+   * Advances the cursor by `count` entries.
+   */
   async advance(count: number): Promise<boolean> {
     this.sendQueue.push({
       msg: {
@@ -183,6 +221,9 @@ export class Cursor {
     return this.pull();
   }
 
+  /**
+   * Deletes the current entry.
+   */
   async delete(): Promise<void> {
     if (this._done) throw new NotFoundError("cursor is exhausted");
     this.sendQueue.push({
@@ -194,6 +235,9 @@ export class Cursor {
     await this.recvMutationAck();
   }
 
+  /**
+   * Updates the current entry with a replacement record.
+   */
   async update(record: Record): Promise<void> {
     if (this._done) throw new NotFoundError("cursor is exhausted");
     this.sendQueue.push({
@@ -205,6 +249,9 @@ export class Cursor {
     await this.recvMutationAck();
   }
 
+  /**
+   * Closes the cursor stream.
+   */
   close(): void {
     this.sendQueue.push({
       msg: {
@@ -310,6 +357,9 @@ export class Cursor {
   }
 }
 
+/**
+ * Error returned when an IndexedDB record cannot be found.
+ */
 export class NotFoundError extends Error {
   constructor(message?: string) {
     super(message ?? "not found");
@@ -317,6 +367,9 @@ export class NotFoundError extends Error {
   }
 }
 
+/**
+ * Error returned when a write conflicts with an existing unique value.
+ */
 export class AlreadyExistsError extends Error {
   constructor(message?: string) {
     super(message ?? "already exists");
@@ -324,8 +377,14 @@ export class AlreadyExistsError extends Error {
   }
 }
 
+/**
+ * Plain object record stored in IndexedDB.
+ */
 export type Record = { [key: string]: unknown };
 
+/**
+ * Key range used to filter object store and index operations.
+ */
 export interface KeyRange {
   lower?: unknown;
   upper?: unknown;
@@ -333,12 +392,18 @@ export interface KeyRange {
   upperOpen?: boolean;
 }
 
+/**
+ * Secondary index definition for an object store.
+ */
 export interface IndexSchema {
   name: string;
   keyPath: string[];
   unique?: boolean;
 }
 
+/**
+ * Column type metadata used by the datastore schema.
+ */
 export enum ColumnType {
   String = 0,
   Int = 1,
@@ -349,6 +414,9 @@ export enum ColumnType {
   JSON = 6,
 }
 
+/**
+ * Column definition for an object store schema.
+ */
 export interface ColumnSchema {
   name: string;
   type?: ColumnType;
@@ -357,11 +425,25 @@ export interface ColumnSchema {
   unique?: boolean;
 }
 
+/**
+ * Object store schema used during store creation.
+ */
 export interface ObjectStoreSchema {
   indexes?: IndexSchema[];
   columns?: ColumnSchema[];
 }
 
+/**
+ * Client for invoking a host-provided IndexedDB service over the Gestalt transport.
+ *
+ * @example
+ * ```ts
+ * import { IndexedDB } from "@valon-technologies/gestalt";
+ *
+ * const db = new IndexedDB();
+ * const todos = db.objectStore("todos");
+ * ```
+ */
 export class IndexedDB {
   private client: Client<typeof IndexedDBService>;
 
@@ -378,6 +460,9 @@ export class IndexedDB {
     this.client = createClient(IndexedDBService, transport);
   }
 
+  /**
+   * Creates an object store.
+   */
   async createObjectStore(name: string, schema?: ObjectStoreSchema): Promise<void> {
     await this.client.createObjectStore({
       name,
@@ -398,47 +483,80 @@ export class IndexedDB {
     });
   }
 
+  /**
+   * Deletes an object store.
+   */
   async deleteObjectStore(name: string): Promise<void> {
     await this.client.deleteObjectStore({ name });
   }
 
+  /**
+   * Returns a client bound to a single object store.
+   */
   objectStore(name: string): ObjectStore {
     return new ObjectStore(this.client, name);
   }
 }
 
+/**
+ * Object store client used for primary-key operations.
+ */
 export class ObjectStore {
+  /**
+   * @internal
+   */
   constructor(
     private client: Client<typeof IndexedDBService>,
     private store: string,
   ) {}
 
+  /**
+   * Reads a record by primary key.
+   */
   async get(id: string): Promise<Record> {
     const resp = await rpc(() => this.client.get({ store: this.store, id }));
     return fromProtoRecord(resp.record);
   }
 
+  /**
+   * Reads the generated primary key for a record.
+   */
   async getKey(id: string): Promise<string> {
     const resp = await rpc(() => this.client.getKey({ store: this.store, id }));
     return resp.key;
   }
 
+  /**
+   * Inserts a new record and fails if it already exists.
+   */
   async add(record: Record): Promise<void> {
     await rpc(() => this.client.add({ store: this.store, record: toProtoRecord(record) }));
   }
 
+  /**
+   * Inserts or replaces a record.
+   */
   async put(record: Record): Promise<void> {
     await rpc(() => this.client.put({ store: this.store, record: toProtoRecord(record) }));
   }
 
+  /**
+   * Deletes a record by primary key.
+   */
   async delete(id: string): Promise<void> {
     await rpc(() => this.client.delete({ store: this.store, id }));
   }
 
+  /**
+   * Removes all records from the object store.
+   */
   async clear(): Promise<void> {
     await this.client.clear({ store: this.store });
   }
 
+  /**
+   * Reads all records in the object store or within a key range.
+   */
   async getAll(keyRange?: KeyRange): Promise<Record[]> {
     const resp = await this.client.getAll({
       store: this.store,
@@ -447,6 +565,9 @@ export class ObjectStore {
     return resp.records.map((r) => fromProtoRecord(r));
   }
 
+  /**
+   * Reads all primary keys in the object store or within a key range.
+   */
   async getAllKeys(keyRange?: KeyRange): Promise<string[]> {
     const resp = await this.client.getAllKeys({
       store: this.store,
@@ -455,6 +576,9 @@ export class ObjectStore {
     return resp.keys;
   }
 
+  /**
+   * Counts records in the object store or within a key range.
+   */
   async count(keyRange?: KeyRange): Promise<number> {
     const resp = await this.client.count({
       store: this.store,
@@ -463,6 +587,9 @@ export class ObjectStore {
     return Number(resp.count);
   }
 
+  /**
+   * Deletes records within a key range.
+   */
   async deleteRange(keyRange: KeyRange): Promise<number> {
     const resp = await this.client.deleteRange({
       store: this.store,
@@ -471,26 +598,44 @@ export class ObjectStore {
     return Number(resp.deleted);
   }
 
+  /**
+   * Opens a cursor over the object store.
+   */
   async openCursor(options?: OpenCursorOptions): Promise<Cursor | null> {
     return Cursor.open(this.client, this.store, options);
   }
 
+  /**
+   * Opens a key-only cursor over the object store.
+   */
   async openKeyCursor(options?: OpenCursorOptions): Promise<Cursor | null> {
     return Cursor.open(this.client, this.store, { ...options, keysOnly: true });
   }
 
+  /**
+   * Returns a client bound to a secondary index.
+   */
   index(name: string): Index {
     return new Index(this.client, this.store, name);
   }
 }
 
+/**
+ * Secondary-index client used for lookup and cursor operations.
+ */
 export class Index {
+  /**
+   * @internal
+   */
   constructor(
     private client: Client<typeof IndexedDBService>,
     private store: string,
     private indexName: string,
   ) {}
 
+  /**
+   * Reads the first record matching the supplied index values.
+   */
   async get(...values: unknown[]): Promise<Record> {
     const resp = await rpc(() =>
       this.client.indexGet({
@@ -502,6 +647,9 @@ export class Index {
     return fromProtoRecord(resp.record);
   }
 
+  /**
+   * Reads the primary key for the first matching index entry.
+   */
   async getKey(...values: unknown[]): Promise<string> {
     const resp = await rpc(() =>
       this.client.indexGetKey({
@@ -513,6 +661,9 @@ export class Index {
     return resp.key;
   }
 
+  /**
+   * Reads all records matching the supplied index values and optional range.
+   */
   async getAll(keyRange?: KeyRange, ...values: unknown[]): Promise<Record[]> {
     const resp = await this.client.indexGetAll({
       store: this.store,
@@ -523,6 +674,9 @@ export class Index {
     return resp.records.map((r) => fromProtoRecord(r));
   }
 
+  /**
+   * Reads all primary keys matching the supplied index values and optional range.
+   */
   async getAllKeys(keyRange?: KeyRange, ...values: unknown[]): Promise<string[]> {
     const resp = await this.client.indexGetAllKeys({
       store: this.store,
@@ -533,6 +687,9 @@ export class Index {
     return resp.keys;
   }
 
+  /**
+   * Counts records matching the supplied index values and optional range.
+   */
   async count(keyRange?: KeyRange, ...values: unknown[]): Promise<number> {
     const resp = await this.client.indexCount({
       store: this.store,
@@ -543,6 +700,9 @@ export class Index {
     return Number(resp.count);
   }
 
+  /**
+   * Deletes records matching the supplied index values.
+   */
   async delete(...values: unknown[]): Promise<number> {
     const resp = await this.client.indexDelete({
       store: this.store,
@@ -552,6 +712,9 @@ export class Index {
     return Number(resp.deleted);
   }
 
+  /**
+   * Opens a cursor over the index.
+   */
   async openCursor(options?: OpenCursorOptions, ...values: unknown[]): Promise<Cursor | null> {
     return Cursor.open(this.client, this.store, {
       ...options,
@@ -560,6 +723,9 @@ export class Index {
     });
   }
 
+  /**
+   * Opens a key-only cursor over the index.
+   */
   async openKeyCursor(options?: OpenCursorOptions, ...values: unknown[]): Promise<Cursor | null> {
     return Cursor.open(this.client, this.store, {
       ...options,

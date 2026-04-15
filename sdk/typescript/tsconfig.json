@@ -15,6 +15,7 @@
     ]
   },
   "include": [
+    "docs/entrypoints/**/*.ts",
     "src/**/*.ts",
     "tests/**/*.ts",
     "gen/**/*.ts"

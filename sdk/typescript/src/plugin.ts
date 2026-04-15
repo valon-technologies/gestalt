@@ -18,6 +18,9 @@ import {
 import { RuntimeProvider, type RuntimeProviderOptions } from "./provider.ts";
 import type { Schema } from "./schema.ts";
 
+/**
+ * How an integration provider expects to authenticate or connect.
+ */
 export type ConnectionMode =
   | "unspecified"
   | "none"
@@ -25,6 +28,9 @@ export type ConnectionMode =
   | "identity"
   | "either";
 
+/**
+ * Metadata for a single connection parameter exposed by a provider.
+ */
 export interface ConnectionParamDefinition {
   required?: boolean;
   description?: string;
@@ -33,6 +39,9 @@ export interface ConnectionParamDefinition {
   field?: string;
 }
 
+/**
+ * Operation definition accepted by {@link operation} and {@link definePlugin}.
+ */
 export interface OperationOptions<In, Out> {
   id: string;
   method?: string;
@@ -47,16 +56,29 @@ export interface OperationOptions<In, Out> {
   handler: (input: In, request: Request) => MaybePromise<Out | Response<Out>>;
 }
 
+/**
+ * Normalized integration operation definition.
+ */
 export interface OperationDefinition<In, Out> extends OperationOptions<
   In,
   Out
 > {}
 
+/**
+ * Session-specific catalog payload returned by a provider at runtime.
+ */
 export type SessionCatalog = Catalog | Record<string, unknown>;
+
+/**
+ * Callback used to resolve a catalog for an authenticated request context.
+ */
 export type SessionCatalogHandler = (
   request: Request,
 ) => MaybePromise<SessionCatalog | null | undefined>;
 
+/**
+ * Runtime hooks required to implement an integration provider.
+ */
 export interface PluginDefinitionOptions extends RuntimeProviderOptions {
   connectionMode?: ConnectionMode;
   authTypes?: string[];
@@ -66,8 +88,14 @@ export interface PluginDefinitionOptions extends RuntimeProviderOptions {
   sessionCatalog?: SessionCatalogHandler;
 }
 
+/**
+ * Alias for integration providers to mirror the Go and Python SDKs.
+ */
 export type IntegrationProviderOptions = PluginDefinitionOptions;
 
+/**
+ * Normalizes an integration operation definition.
+ */
 export function operation<In, Out>(
   options: OperationOptions<In, Out>,
 ): OperationDefinition<In, Out> {
@@ -82,6 +110,30 @@ export function operation<In, Out>(
   };
 }
 
+/**
+ * Integration provider implementation consumed by the Gestalt runtime.
+ *
+ * @example
+ * ```ts
+ * import { defineIntegrationProvider, ok, operation, s } from "@valon-technologies/gestalt";
+ *
+ * export const provider = defineIntegrationProvider({
+ *   displayName: "Example Provider",
+ *   operations: [
+ *     operation({
+ *       id: "ping",
+ *       method: "GET",
+ *       readOnly: true,
+ *       input: s.object({ name: s.string({ default: "World" }) }),
+ *       output: s.object({ message: s.string() }),
+ *       async handler(input) {
+ *         return ok({ message: `Hello, ${input.name}` });
+ *       },
+ *     }),
+ *   ],
+ * });
+ * ```
+ */
 export class IntegrationProvider extends RuntimeProvider {
   readonly kind = "integration" as const;
   readonly iconSvg: string;
@@ -123,16 +175,25 @@ export class IntegrationProvider extends RuntimeProvider {
     }
   }
 
+  /**
+   * Reports whether the provider exposes a session-specific catalog.
+   */
   supportsSessionCatalog(): boolean {
     return this.sessionCatalogHandler !== undefined;
   }
 
+  /**
+   * Resolves a catalog for the current request context, if configured.
+   */
   async catalogForRequest(
     request: Request,
   ): Promise<SessionCatalog | null | undefined> {
     return await this.sessionCatalogHandler?.(request);
   }
 
+  /**
+   * Returns the static catalog emitted during provider startup.
+   */
   staticCatalog(): Catalog {
     const catalog: Catalog = {
       operations: [...this.operations.values()].map<CatalogOperation>(
@@ -197,14 +258,23 @@ export class IntegrationProvider extends RuntimeProvider {
     return catalog;
   }
 
+  /**
+   * Writes the provider's static catalog to disk as YAML.
+   */
   writeCatalog(path: string): void {
     writeCatalogYaml(path, this.staticCatalog());
   }
 
+  /**
+   * Returns the static catalog serialized as JSON.
+   */
   catalogJson(): string {
     return catalogToJson(this.staticCatalog());
   }
 
+  /**
+   * Executes an operation against validated input and request metadata.
+   */
   async execute(
     operationId: string,
     params: Record<string, unknown>,
@@ -244,20 +314,32 @@ export class IntegrationProvider extends RuntimeProvider {
   }
 }
 
+/**
+ * Backwards-compatible alias for the integration provider class.
+ */
 export const Plugin = IntegrationProvider;
 
+/**
+ * Creates an integration provider.
+ */
 export function defineIntegrationProvider(
   options: PluginDefinitionOptions,
 ): IntegrationProvider {
   return new IntegrationProvider(options);
 }
 
+/**
+ * Backwards-compatible alias for {@link defineIntegrationProvider}.
+ */
 export function definePlugin(
   options: PluginDefinitionOptions,
 ): IntegrationProvider {
   return new IntegrationProvider(options);
 }
 
+/**
+ * Runtime type guard for integration providers loaded from user modules.
+ */
 export function isIntegrationProvider(
   value: unknown,
 ): value is IntegrationProvider {
@@ -353,6 +435,9 @@ function errorResult(status: number, message: string): OperationResult {
   };
 }
 
+/**
+ * Converts a connection mode into the shared protocol enum value.
+ */
 export function connectionModeToProtoValue(mode: ConnectionMode): number {
   switch (mode) {
     case "none":
@@ -369,6 +454,9 @@ export function connectionModeToProtoValue(mode: ConnectionMode): number {
   }
 }
 
+/**
+ * Converts a connection parameter definition into protocol wire metadata.
+ */
 export function connectionParamToProto(value: ConnectionParamDefinition): {
   required?: boolean;
   description?: string;

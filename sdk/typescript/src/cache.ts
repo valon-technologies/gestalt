@@ -9,15 +9,24 @@ import type { MaybePromise } from "./api.ts";
 
 const ENV_CACHE_SOCKET = "GESTALT_CACHE_SOCKET";
 
+/**
+ * Single cache entry used by batch cache APIs.
+ */
 export interface CacheEntry {
   key: string;
   value: Uint8Array;
 }
 
+/**
+ * Optional TTL applied when setting cache values.
+ */
 export interface CacheSetOptions {
   ttlMs?: number;
 }
 
+/**
+ * Runtime hooks required to implement a Gestalt cache provider.
+ */
 export interface CacheProviderOptions extends RuntimeProviderOptions {
   get: (key: string) => MaybePromise<Uint8Array | null | undefined>;
   set: (
@@ -35,6 +44,9 @@ export interface CacheProviderOptions extends RuntimeProviderOptions {
   deleteMany?: (keys: string[]) => MaybePromise<number | bigint>;
 }
 
+/**
+ * Returns the environment variable name used to discover a cache socket.
+ */
 export function cacheSocketEnv(name?: string): string {
   const trimmed = name?.trim() ?? "";
   if (!trimmed) {
@@ -43,6 +55,17 @@ export function cacheSocketEnv(name?: string): string {
   return `${ENV_CACHE_SOCKET}_${trimmed.replace(/[^A-Za-z0-9]/gu, "_").toUpperCase()}`;
 }
 
+/**
+ * Client for invoking a host-provided cache over the Gestalt transport.
+ *
+ * @example
+ * ```ts
+ * import { Cache } from "@valon-technologies/gestalt";
+ *
+ * const cache = new Cache();
+ * await cache.set("session", new TextEncoder().encode("hello"));
+ * ```
+ */
 export class Cache {
   private readonly client: Client<typeof CacheService>;
 
@@ -127,6 +150,9 @@ export class Cache {
   }
 }
 
+/**
+ * Cache provider implementation consumed by the Gestalt runtime.
+ */
 export class CacheProvider extends RuntimeProvider {
   readonly kind = "cache" as const;
 
@@ -219,10 +245,16 @@ export class CacheProvider extends RuntimeProvider {
   }
 }
 
+/**
+ * Creates a cache provider from standard CRUD handlers.
+ */
 export function defineCacheProvider(options: CacheProviderOptions): CacheProvider {
   return new CacheProvider(options);
 }
 
+/**
+ * Runtime type guard for cache providers loaded from user modules.
+ */
 export function isCacheProvider(value: unknown): value is CacheProvider {
   return (
     value instanceof CacheProvider ||

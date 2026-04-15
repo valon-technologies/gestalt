@@ -5,9 +5,15 @@ import { join, resolve } from "node:path";
 
 import { parseProviderTarget, resolveProviderModulePath, type ProviderTarget } from "./target.ts";
 
+/**
+ * Command-line usage for the bundled build entrypoint.
+ */
 export const USAGE =
   "usage: bun run build.ts ROOT PROVIDER_TARGET OUTPUT PROVIDER_NAME GOOS GOARCH";
 
+/**
+ * Parsed arguments for the build entrypoint.
+ */
 export type BuildArgs = {
   root: string;
   target: string;
@@ -17,6 +23,9 @@ export type BuildArgs = {
   goarch: string;
 };
 
+/**
+ * CLI entrypoint that compiles a provider into a standalone Bun executable.
+ */
 export async function main(argv: string[] = process.argv.slice(2)): Promise<number> {
   const args = parseBuildArgs(argv);
   if (!args) {
@@ -27,6 +36,9 @@ export async function main(argv: string[] = process.argv.slice(2)): Promise<numb
   return 0;
 }
 
+/**
+ * Parses `gestalt-ts-build` CLI arguments.
+ */
 export function parseBuildArgs(argv: string[]): BuildArgs | undefined {
   if (argv.length !== 6) {
     return undefined;
@@ -41,6 +53,9 @@ export function parseBuildArgs(argv: string[]): BuildArgs | undefined {
   };
 }
 
+/**
+ * Bundles a provider into a standalone executable for the requested target.
+ */
 export function buildProviderBinary(args: BuildArgs): void {
   const root = resolve(args.root);
   const outputPath = resolve(args.outputPath);
@@ -65,8 +80,14 @@ export function buildProviderBinary(args: BuildArgs): void {
   }
 }
 
+/**
+ * Backwards-compatible alias for integration provider builds.
+ */
 export const buildPluginBinary = buildProviderBinary;
 
+/**
+ * Constructs the Bun command used to compile a provider binary.
+ */
 export function bunBuildCommand(
   wrapperPath: string,
   outputPath: string,
@@ -87,6 +108,9 @@ export function bunBuildCommand(
   };
 }
 
+/**
+ * Maps a Go-style `GOOS` / `GOARCH` target into Bun's compile target format.
+ */
 export function bunTarget(goos: string, goarch: string): string {
   const key = `${goos}/${goarch}`;
   switch (key) {

@@ -4,26 +4,28 @@ import { pathToFileURL } from "node:url";
 
 import { slugName, type ProviderKind } from "./provider.ts";
 
+/**
+ * Relative module target with an optional named export.
+ */
 export type ModuleTarget = {
   modulePath: string;
   exportName?: string;
 };
 
+/**
+ * Provider target with an explicit Gestalt provider kind.
+ */
 export type ProviderTarget = ModuleTarget & {
   kind: ProviderKind;
 };
 
+/**
+ * Gestalt-specific package metadata read from `package.json`.
+ */
 export type PackageConfig = {
   name?: string;
   providerTarget?: ProviderTarget;
 };
-
-type PackageProviderConfig =
-  | string
-  | {
-      kind?: string;
-      target?: string;
-    };
 
 const EXTERNAL_PROVIDER_KIND_TOKENS = new Set<string>([
   "plugin",
@@ -35,6 +37,9 @@ const EXTERNAL_PROVIDER_KIND_TOKENS = new Set<string>([
   "telemetry",
 ]);
 
+/**
+ * Parses a relative module target in the form `./file.ts#namedExport`.
+ */
 export function parseModuleTarget(target: string, label = "gestalt provider target"): ModuleTarget {
   const [modulePathRaw, exportNameRaw] = target.split("#", 2);
   const modulePath = modulePathRaw?.trim() ?? "";
@@ -59,7 +64,12 @@ export function parseModuleTarget(target: string, label = "gestalt provider targ
   return parsed;
 }
 
-export function parseProviderTarget(target: string | PackageProviderConfig): ProviderTarget {
+/**
+ * Parses either a string or object-form provider target from `package.json`.
+ */
+export function parseProviderTarget(
+  target: string | { kind?: string; target?: string },
+): ProviderTarget {
   if (typeof target === "string") {
     const prefixed = parseKindPrefixedTarget(target);
     if (prefixed) {
@@ -81,8 +91,14 @@ export function parseProviderTarget(target: string | PackageProviderConfig): Pro
   };
 }
 
+/**
+ * Backwards-compatible alias for integration-only package targets.
+ */
 export const parsePluginTarget = parseModuleTarget;
 
+/**
+ * Reads the Gestalt-specific provider metadata from a package directory.
+ */
 export function readPackageConfig(root: string): PackageConfig {
   const packagePath = resolve(root, "package.json");
   const raw = JSON.parse(readFileSync(packagePath, "utf8")) as Record<string, unknown>;
@@ -111,6 +127,9 @@ export function readPackageConfig(root: string): PackageConfig {
   return config;
 }
 
+/**
+ * Reads and validates the configured provider target from `package.json`.
+ */
 export function readPackageProviderTarget(root: string): ProviderTarget {
   const config = readPackageConfig(root);
   if (!config.providerTarget) {
@@ -119,6 +138,9 @@ export function readPackageProviderTarget(root: string): ProviderTarget {
   return config.providerTarget;
 }
 
+/**
+ * Reads the integration-provider target from `package.json`.
+ */
 export function readPackagePluginTarget(root: string): string {
   const target = readPackageProviderTarget(root);
   if (target.kind !== "integration") {
@@ -127,13 +149,22 @@ export function readPackagePluginTarget(root: string): string {
   return formatModuleTarget(target);
 }
 
+/**
+ * Computes a default provider slug from the package name.
+ */
 export function defaultProviderName(root: string): string {
   const config = readPackageConfig(root);
   return slugName(config.name ?? "");
 }
 
+/**
+ * Backwards-compatible alias for integration providers.
+ */
 export const defaultPluginName = defaultProviderName;
 
+/**
+ * Resolves a provider target to an absolute file path.
+ */
 export function resolveProviderModulePath(root: string, target: ProviderTarget | ModuleTarget): string {
   const absolute = resolve(root, target.modulePath);
   if (!isAbsolute(absolute)) {
@@ -142,18 +173,33 @@ export function resolveProviderModulePath(root: string, target: ProviderTarget |
   return normalize(absolute);
 }
 
+/**
+ * Backwards-compatible alias for integration providers.
+ */
 export const resolvePluginModulePath = resolveProviderModulePath;
 
+/**
+ * Resolves a provider target to an importable file URL.
+ */
 export function resolveProviderImportUrl(root: string, target: ProviderTarget | ModuleTarget): string {
   return pathToFileURL(resolveProviderModulePath(root, target)).href;
 }
 
+/**
+ * Backwards-compatible alias for integration providers.
+ */
 export const resolvePluginImportUrl = resolveProviderImportUrl;
 
+/**
+ * Formats a provider target using the public `kind:./path#export` syntax.
+ */
 export function formatProviderTarget(target: ProviderTarget): string {
   return `${formatProviderKind(target.kind)}:${formatModuleTarget(target)}`;
 }
 
+/**
+ * Formats a module target using the public `./path#export` syntax.
+ */
 export function formatModuleTarget(target: ModuleTarget): string {
   return `${target.modulePath}${target.exportName ? `#${target.exportName}` : ""}`;
 }

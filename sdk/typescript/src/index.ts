@@ -1,3 +1,33 @@
+/**
+ * @packageDocumentation
+ *
+ * Authored TypeScript APIs for building Gestalt providers, helper CLIs, and
+ * runtime adapters.
+ *
+ * @example
+ * ```ts
+ * import { defineIntegrationProvider, ok, operation, s } from "@valon-technologies/gestalt";
+ *
+ * export const provider = defineIntegrationProvider({
+ *   displayName: "Example Provider",
+ *   operations: [
+ *     operation({
+ *       id: "hello",
+ *       input: s.object({ name: s.string({ default: "World" }) }),
+ *       output: s.object({ message: s.string() }),
+ *       async handler(input) {
+ *         return ok({ message: `Hello, ${input.name}` });
+ *       },
+ *     }),
+ *   ],
+ * });
+ * ```
+ *
+ * @example
+ * ```ts
+ * import { parseRuntimeArgs, serve } from "@valon-technologies/gestalt/runtime";
+ * ```
+ */
 export {
   connectionParam,
   ok,
@@ -124,6 +154,7 @@ export {
   formatModuleTarget,
   formatProviderTarget,
   parseModuleTarget,
+  parsePluginTarget,
   parseProviderTarget,
   readPackageConfig,
   readPackagePluginTarget,

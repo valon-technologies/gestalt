@@ -1,6 +1,7 @@
 export default {
   "config-file": "Config File",
   "python-sdk": "Python SDK API",
+  "typescript-sdk": "TypeScript SDK",
   "plugin-manifests": "Provider Manifests",
   "http-api": "HTTP API",
   cli: "Server CLI",
