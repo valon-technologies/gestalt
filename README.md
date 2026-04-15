@@ -14,11 +14,13 @@ Gestalt handles this so individual agents and applications do not have to. A sin
 
 ![Gestalt architecture diagram](./docs/public/images/architecture-diagram.png)
 
-- **Stored on infrastructure you control.** Credentials and connection data are stored, encrypted at rest, on infrastructure you control, however you configure it.
-- **Configure once, reuse everywhere.** A single YAML config replaces per-integration glue code, token management scripts, and bespoke OAuth callback servers.
-- **One definition, all harnesses.** The same operations are available over MCP, HTTP, CLI, and optional mounted web UIs for cloud agents, local coding assistants, and human operators.
-- **Pluggable by default.** Auth backends, [IndexedDB](https://www.w3.org/TR/IndexedDB/) storage, secrets managers, caches, telemetry, audit sinks, and public web UIs are all provider packages.
-- **Run anywhere.** Deploy on infrastructure you control with Docker, Helm, or your own container platform.
+### What Gestalt provides
+
+- Credentials and connection data are encrypted at rest, on infrastructure you control.
+- A single YAML config declaratively defines which tools to expose, how users authenticate, and how credentials are managed.
+- The same operations are available over MCP, HTTP, CLI, and optional mounted web UIs for cloud agents, local coding assistants, and human operators.
+- Auth backends, [IndexedDB](https://www.w3.org/TR/IndexedDB/) storage, secrets managers, caches, telemetry, audit sinks, and public web UIs are all provider packages.
+- Deploy on infrastructure you control with Docker, Helm, or your own container platform.
 
 ## What Gestalt Is Not
 
