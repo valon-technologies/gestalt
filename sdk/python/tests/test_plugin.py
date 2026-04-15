@@ -152,7 +152,7 @@ class PluginOperationTests(unittest.TestCase):
 
         result = plugin.execute("broken", {}, Request())
         self.assertEqual(result.status, 500)
-        self.assertIn("something broke", json.loads(result.body)["error"])
+        self.assertEqual(json.loads(result.body), {"error": "internal error"})
 
         result = plugin.execute("missing", {}, Request())
         self.assertEqual(result.status, 404)

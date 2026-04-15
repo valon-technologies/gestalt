@@ -17,6 +17,7 @@ const (
 	unknownOperationMessage   = "unknown operation"
 	routerNilMessage          = "router is nil"
 	nilResultMessage          = "provider returned nil result"
+	internalErrorMessage      = "internal error"
 	internalErrorBodyFallback = `{"error":"internal error"}`
 )
 
@@ -59,7 +60,7 @@ func operationResultFromError(err error) *OperationResult {
 		return nil
 	}
 	status := http.StatusInternalServerError
-	message := err.Error()
+	message := internalErrorMessage
 	var opErr *operationError
 	if errors.As(err, &opErr) {
 		if opErr.status != 0 {
@@ -69,19 +70,20 @@ func operationResultFromError(err error) *OperationResult {
 		if message == "" {
 			message = opErr.Error()
 		}
+	} else {
+		fmt.Fprintf(os.Stderr, "internal error in Gestalt operation: %v\n", err)
 	}
 	return operationResult(status, message)
 }
 
 func recoveredOperationResult(operation string, recovered any) *OperationResult {
-	message := fmt.Sprint(recovered)
 	if operation == "" {
 		fmt.Fprintf(os.Stderr, "panic in Gestalt operation: %v\n", recovered)
 	} else {
 		fmt.Fprintf(os.Stderr, "panic in Gestalt operation %q: %v\n", operation, recovered)
 	}
 	_, _ = os.Stderr.Write(debug.Stack())
-	return operationResult(http.StatusInternalServerError, message)
+	return operationResult(http.StatusInternalServerError, internalErrorMessage)
 }
 
 func protectedOperationResult(operation string, fn func() (*OperationResult, error)) (result *OperationResult) {

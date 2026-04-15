@@ -12,7 +12,7 @@ use serde_json::Value;
 
 use crate::api::{IntoResponse, Request};
 use crate::catalog::{Catalog, CatalogOperation, schema_json, schema_parameters};
-use crate::error::{Error, Result};
+use crate::error::{Error, INTERNAL_ERROR_MESSAGE, Result};
 use crate::provider_server::OperationResult;
 
 #[derive(Clone, Debug)]
@@ -253,18 +253,21 @@ fn is_empty_object(value: &Value) -> bool {
 
 fn join_error_message(error: tokio::task::JoinError) -> String {
     if error.is_panic() {
-        return panic_message(error.try_into_panic().expect("panic payload"));
+        let payload = error.try_into_panic().expect("panic payload");
+        log_panic_payload(payload);
+    } else {
+        eprintln!("internal error in Gestalt operation task: {error}");
     }
-    error.to_string()
+    INTERNAL_ERROR_MESSAGE.to_owned()
 }
 
-fn panic_message(payload: Box<dyn Any + Send + 'static>) -> String {
+fn log_panic_payload(payload: Box<dyn Any + Send + 'static>) {
     if let Some(text) = payload.downcast_ref::<&'static str>() {
-        (*text).to_owned()
+        eprintln!("panic in Gestalt operation: {}", text);
     } else if let Some(text) = payload.downcast_ref::<String>() {
-        text.clone()
+        eprintln!("panic in Gestalt operation: {}", text);
     } else {
-        "panic in Gestalt operation".to_owned()
+        eprintln!("panic in Gestalt operation");
     }
 }
 

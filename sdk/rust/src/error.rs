@@ -3,12 +3,14 @@
 pub struct Error {
     status: Option<u16>,
     message: String,
+    expose_message: bool,
 }
 
 pub(crate) const HTTP_BAD_REQUEST: u16 = 400;
 pub(crate) const HTTP_NOT_FOUND: u16 = 404;
 pub(crate) const HTTP_INTERNAL_SERVER_ERROR: u16 = 500;
 pub(crate) const HTTP_NOT_IMPLEMENTED: u16 = 501;
+pub(crate) const INTERNAL_ERROR_MESSAGE: &str = "internal error";
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -17,6 +19,7 @@ impl Error {
         Self {
             status: None,
             message: message.into(),
+            expose_message: true,
         }
     }
 
@@ -24,6 +27,7 @@ impl Error {
         Self {
             status: Some(status),
             message: message.into(),
+            expose_message: true,
         }
     }
 
@@ -50,22 +54,34 @@ impl Error {
     pub fn message(&self) -> &str {
         &self.message
     }
+
+    pub(crate) fn expose_message(&self) -> bool {
+        self.expose_message
+    }
+
+    pub(crate) fn hidden_internal(message: impl Into<String>) -> Self {
+        Self {
+            status: Some(HTTP_INTERNAL_SERVER_ERROR),
+            message: message.into(),
+            expose_message: false,
+        }
+    }
 }
 
 impl From<serde_json::Error> for Error {
     fn from(value: serde_json::Error) -> Self {
-        Self::internal(value.to_string())
+        Self::hidden_internal(value.to_string())
     }
 }
 
 impl From<std::io::Error> for Error {
     fn from(value: std::io::Error) -> Self {
-        Self::internal(value.to_string())
+        Self::hidden_internal(value.to_string())
     }
 }
 
 impl From<tonic::transport::Error> for Error {
     fn from(value: tonic::transport::Error) -> Self {
-        Self::internal(value.to_string())
+        Self::hidden_internal(value.to_string())
     }
 }
