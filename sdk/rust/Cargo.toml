@@ -1,5 +1,5 @@
 [package]
-name = "gestalt"
+name = "gestalt-sdk"
 version = "0.0.1-alpha.1"
 edition = "2024"
 rust-version = "1.85"
@@ -9,6 +9,9 @@ readme = "README.md"
 repository = "https://github.com/valon-technologies/gestalt"
 keywords = ["gestalt", "grpc", "protobuf", "sdk"]
 categories = ["api-bindings", "development-tools"]
+
+[lib]
+name = "gestalt"
 
 [dependencies]
 libc = "0.2"
