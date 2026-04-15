@@ -16,7 +16,6 @@ Thanks for contributing. Before opening a PR, run the checks that match the part
 | `sdk/python` | Python SDK. |
 | `sdk/rust` | Rust SDK. |
 | `sdk/typescript` | TypeScript SDK. |
-| `plugins` | Checked-in first-party plugin release artifacts. |
 | `docs` | Documentation site source for `https://gestaltd.ai`. |
 
 ## Working Principles

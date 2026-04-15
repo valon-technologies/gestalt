@@ -67,7 +67,6 @@ For the full walkthrough, see [Getting Started](https://gestaltd.ai/getting-star
 | [`gestaltd`](./gestaltd) | Go server daemon, config loading, provider bootstrap, HTTP API, MCP surface, deployment assets, and admin UI serving code. |
 | [`gestalt`](./gestalt) | Rust CLI client for setup, auth, invocation, and token management. |
 | [`sdk`](./sdk) | Go, Python, Rust, and TypeScript SDKs plus shared protocol definitions. |
-| [`plugins`](./plugins) | First-party plugin release artifacts checked into the repository. |
 | [`docs`](./docs) | Source for the public documentation site at `gestaltd.ai`. |
 
 ## Documentation
