@@ -105,6 +105,7 @@ type connectionParamsKey struct{}
 type subjectKey struct{}
 type credentialKey struct{}
 type accessKey struct{}
+type requestHandleKey struct{}
 
 // WithConnectionParams returns a child context carrying the given connection
 // parameters. The host calls this before invoking an executable operation so
@@ -153,4 +154,17 @@ func WithAccess(ctx context.Context, access Access) context.Context {
 func AccessFromContext(ctx context.Context) Access {
 	access, _ := ctx.Value(accessKey{}).(Access)
 	return access
+}
+
+func withRequestHandle(ctx context.Context, handle string) context.Context {
+	return context.WithValue(ctx, requestHandleKey{}, handle)
+}
+
+func requestHandleFromContext(ctx context.Context) string {
+	handle, _ := ctx.Value(requestHandleKey{}).(string)
+	return handle
+}
+
+func RequestHandleFromContext(ctx context.Context) string {
+	return requestHandleFromContext(ctx)
 }

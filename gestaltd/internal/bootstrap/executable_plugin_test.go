@@ -20,16 +20,55 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	corecrypto "github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"gopkg.in/yaml.v3"
 )
+
+type invokePluginEnvelope struct {
+	OK                     bool               `json:"ok"`
+	TargetPlugin           string             `json:"target_plugin"`
+	TargetOperation        string             `json:"target_operation"`
+	UsedConnectionOverride bool               `json:"used_connection_override"`
+	Status                 int                `json:"status"`
+	Body                   requestContextBody `json:"body"`
+	Error                  string             `json:"error"`
+}
+
+type requestContextBody struct {
+	Subject struct {
+		ID          string `json:"id"`
+		Kind        string `json:"kind"`
+		DisplayName string `json:"display_name"`
+		AuthSource  string `json:"auth_source"`
+	} `json:"subject"`
+	Credential struct {
+		Mode       string `json:"mode"`
+		SubjectID  string `json:"subject_id"`
+		Connection string `json:"connection"`
+		Instance   string `json:"instance"`
+	} `json:"credential"`
+	Access struct {
+		Policy string `json:"policy"`
+		Role   string `json:"role"`
+	} `json:"access"`
+	RequestHandle string `json:"request_handle"`
+}
+
+type nestedInvokeHarness struct {
+	invoker  invocation.Invoker
+	services *coredata.Services
+}
 
 func TestExecutableSDKExampleProviderReceivesStartConfig(t *testing.T) {
 	t.Parallel()
@@ -68,7 +107,7 @@ func TestExecutableSDKExampleProviderReceivesStartConfig(t *testing.T) {
 		t.Fatalf("Description = %q", prov.Description())
 	}
 	cat := prov.Catalog()
-	if cat == nil || len(cat.Operations) != 3 {
+	if cat == nil || len(cat.Operations) != 5 {
 		t.Fatalf("unexpected catalog: %+v", cat)
 	}
 	if cat.DisplayName != "Example Provider" || cat.Description != "A minimal example provider built with the public SDK" {
@@ -628,6 +667,102 @@ func newExecutableManifest(displayName, description string) *providermanifestv1.
 	}
 }
 
+func newNestedInvokeHarness(t *testing.T, brokerOpts ...invocation.BrokerOption) *nestedInvokeHarness {
+	t.Helper()
+
+	callerBin := buildEchoPluginBinary(t)
+	callerRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "caller",
+		Operations: []catalog.CatalogOperation{
+			{ID: "invoke_plugin", Method: http.MethodPost},
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	exampleBin := buildExampleProviderBinary(t)
+	exampleRoot := exampleProviderRoot(t)
+	callerManifest := newExecutableManifest("Caller", "Invokes another plugin")
+	callerManifest.Spec.Auth = &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer}
+	exampleManifest := newExecutableManifest("Example Provider", "Reports request context")
+	exampleManifest.Spec.Auth = &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer}
+
+	bridge := newLazyInvoker()
+	cfg := &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"caller": {
+				Command:              callerBin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     callerManifest,
+				ResolvedManifestPath: filepath.Join(callerRoot, "manifest.yaml"),
+				Invokes: []config.PluginInvocationDependency{
+					{Plugin: "example", Operation: "request_context"},
+				},
+			},
+			"example": {
+				Command:              exampleBin,
+				ResolvedManifest:     exampleManifest,
+				ResolvedManifestPath: filepath.Join(exampleRoot, "manifest.yaml"),
+				Invokes: []config.PluginInvocationDependency{
+					{Plugin: "example", Operation: "request_context"},
+				},
+				Config: mustNode(t, map[string]any{
+					"greeting": "Hello from nested invoke",
+				}),
+			},
+		},
+	}
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{
+		PluginInvoker: bridge,
+	})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	t.Cleanup(func() { _ = CloseProviders(providers) })
+
+	enc, err := corecrypto.NewAESGCM(corecrypto.DeriveKey("plugin-invokes-test-key"))
+	if err != nil {
+		t.Fatalf("NewAESGCM: %v", err)
+	}
+	services, err := coredata.New(&coretesting.StubIndexedDB{}, enc)
+	if err != nil {
+		t.Fatalf("coredata.New: %v", err)
+	}
+	t.Cleanup(func() { _ = services.Close() })
+
+	broker := invocation.NewBroker(providers, services.Users, services.Tokens, brokerOpts...)
+	bridge.SetTarget(invocation.NewGuarded(broker, nil, "plugin", nil, invocation.WithoutRateLimit()))
+
+	return &nestedInvokeHarness{
+		invoker:  invocation.NewGuarded(broker, nil, "test", nil, invocation.WithoutRateLimit()),
+		services: services,
+	}
+}
+
+func newNestedInvokeUser(t *testing.T, harness *nestedInvokeHarness, ctx context.Context, email string) *core.User {
+	t.Helper()
+
+	user, err := harness.services.Users.FindOrCreateUser(ctx, email)
+	if err != nil {
+		t.Fatalf("FindOrCreateUser(%q): %v", email, err)
+	}
+	return user
+}
+
+func storeNestedInvokeToken(t *testing.T, harness *nestedInvokeHarness, ctx context.Context, userID, plugin, connection, instance string) {
+	t.Helper()
+
+	if err := harness.services.Tokens.StoreToken(ctx, &core.IntegrationToken{
+		UserID:       userID,
+		Integration:  plugin,
+		Connection:   connection,
+		Instance:     instance,
+		AccessToken:  plugin + "-" + connection + "-token",
+		RefreshToken: "refresh-token",
+	}); err != nil {
+		t.Fatalf("StoreToken(%s,%s,%s): %v", plugin, connection, instance, err)
+	}
+}
+
 func TestPluginManifestOAuthWiresConnectionAuth(t *testing.T) {
 	t.Parallel()
 
@@ -931,6 +1066,531 @@ func TestPluginIndexedDBExposeHostSocketEnv(t *testing.T) {
 	}
 	if got := checkEnv(t, &config.PluginIndexedDBConfig{Provider: "archive"}, providerhost.IndexedDBSocketEnv("archive")); got {
 		t.Fatal("named IndexedDB env should not be set when plugins expose a single indexeddb socket")
+	}
+}
+
+func TestPluginInvokesExposeHostSocketEnv(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "caller",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+			{ID: "invoke_plugin", Method: http.MethodPost},
+		},
+	})
+	manifest := newExecutableManifest("Caller", "Invokes another plugin")
+
+	cfg := &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"caller": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Invokes: []config.PluginInvocationDependency{
+					{Plugin: "callee", Operation: "request_context"},
+				},
+			},
+		},
+	}
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("caller")
+	if err != nil {
+		t.Fatalf("providers.Get(caller): %v", err)
+	}
+
+	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": providerhost.DefaultPluginInvokerSocketEnv}, "")
+	if err != nil {
+		t.Fatalf("Execute read_env: %v", err)
+	}
+
+	var env struct {
+		Value string `json:"value"`
+		Found bool   `json:"found"`
+	}
+	if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !env.Found || env.Value == "" {
+		t.Fatalf("plugin invoker env %q should be set when plugin declares invokes", providerhost.DefaultPluginInvokerSocketEnv)
+	}
+}
+
+func TestPluginInvokesInheritAmbientConnectionAndAllowOverride(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name                string
+		email               string
+		outerConnection     string
+		outerInstance       string
+		invokeConnection    string
+		wantConnection      string
+		wantInstance        string
+		wantOverrideApplied bool
+	}{
+		{
+			name:            "inherits ambient connection",
+			email:           "nested-ambient-success@test.com",
+			outerConnection: "work",
+			wantConnection:  "work",
+			wantInstance:    "default",
+		},
+		{
+			name:                "uses explicit connection override",
+			email:               "nested-override-success@test.com",
+			outerConnection:     "work",
+			outerInstance:       "primary",
+			invokeConnection:    "backup",
+			wantConnection:      "backup",
+			wantInstance:        "default",
+			wantOverrideApplied: true,
+		},
+		{
+			name:                "ignores whitespace-only connection override",
+			email:               "nested-whitespace-override-success@test.com",
+			outerConnection:     "work",
+			outerInstance:       "primary",
+			invokeConnection:    "   ",
+			wantConnection:      "work",
+			wantInstance:        "primary",
+			wantOverrideApplied: false,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			harness := newNestedInvokeHarness(t)
+			ctx := context.Background()
+			user := newNestedInvokeUser(t, harness, ctx, tc.email)
+			storeNestedInvokeToken(t, harness, ctx, user.ID, "caller", "work", "default")
+			if tc.outerInstance != "" {
+				storeNestedInvokeToken(t, harness, ctx, user.ID, "caller", "work", tc.outerInstance)
+			}
+			storeNestedInvokeToken(t, harness, ctx, user.ID, "example", "work", "default")
+			if tc.outerInstance != "" && strings.TrimSpace(tc.invokeConnection) == "" {
+				storeNestedInvokeToken(t, harness, ctx, user.ID, "example", "work", tc.outerInstance)
+			}
+			storeNestedInvokeToken(t, harness, ctx, user.ID, "example", "backup", "default")
+
+			invokeCtx := invocation.WithConnection(context.Background(), tc.outerConnection)
+			callerPrincipal := &principal.Principal{
+				UserID:      user.ID,
+				Kind:        principal.KindUser,
+				Source:      principal.SourceSession,
+				DisplayName: "Nested Success",
+				Scopes:      []string{"caller", "example"},
+			}
+
+			params := map[string]any{
+				"plugin":    "example",
+				"operation": "request_context",
+			}
+			if tc.invokeConnection != "" {
+				params["connection"] = tc.invokeConnection
+			}
+
+			result, err := harness.invoker.Invoke(invokeCtx, callerPrincipal, "caller", tc.outerInstance, "invoke_plugin", params)
+			if err != nil {
+				t.Fatalf("Invoke(caller.invoke_plugin): %v", err)
+			}
+			if result.Status != http.StatusOK {
+				t.Fatalf("status = %d, want %d", result.Status, http.StatusOK)
+			}
+
+			var got invokePluginEnvelope
+			if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
+				t.Fatalf("json.Unmarshal: %v", err)
+			}
+			if !got.OK {
+				t.Fatalf("invoke_plugin returned error envelope: %+v", got)
+			}
+			if got.TargetPlugin != "example" || got.TargetOperation != "request_context" {
+				t.Fatalf("unexpected target: %+v", got)
+			}
+			if got.UsedConnectionOverride != tc.wantOverrideApplied {
+				t.Fatalf("used_connection_override = %v, want %v", got.UsedConnectionOverride, tc.wantOverrideApplied)
+			}
+			if got.Status != http.StatusOK {
+				t.Fatalf("nested status = %d, want %d", got.Status, http.StatusOK)
+			}
+			if got.Body.Credential.Connection != tc.wantConnection {
+				t.Fatalf("nested credential.connection = %q, want %q", got.Body.Credential.Connection, tc.wantConnection)
+			}
+			if got.Body.Credential.Instance != tc.wantInstance {
+				t.Fatalf("nested credential.instance = %q, want %q", got.Body.Credential.Instance, tc.wantInstance)
+			}
+			if got.Body.Subject.ID != principal.UserSubjectID(user.ID) {
+				t.Fatalf("nested subject.id = %q, want %q", got.Body.Subject.ID, principal.UserSubjectID(user.ID))
+			}
+			if got.Body.Subject.Kind != string(principal.KindUser) {
+				t.Fatalf("nested subject.kind = %q, want %q", got.Body.Subject.Kind, principal.KindUser)
+			}
+			if got.Body.Subject.AuthSource != principal.SourceSession.String() {
+				t.Fatalf("nested subject.auth_source = %q, want %q", got.Body.Subject.AuthSource, principal.SourceSession.String())
+			}
+		})
+	}
+}
+
+func TestPluginInvokesInheritResolvedCredentialConnection(t *testing.T) {
+	t.Parallel()
+
+	harness := newNestedInvokeHarness(t, invocation.WithConnectionMapper(invocation.ConnectionMap{
+		"caller": "work",
+	}))
+	ctx := context.Background()
+	user := newNestedInvokeUser(t, harness, ctx, "nested-resolved-connection@test.com")
+	storeNestedInvokeToken(t, harness, ctx, user.ID, "caller", "work", "default")
+	storeNestedInvokeToken(t, harness, ctx, user.ID, "example", "work", "default")
+
+	result, err := harness.invoker.Invoke(
+		context.Background(),
+		&principal.Principal{
+			UserID: user.ID,
+			Kind:   principal.KindUser,
+			Source: principal.SourceSession,
+			Scopes: []string{"caller", "example"},
+		},
+		"caller",
+		"",
+		"invoke_plugin",
+		map[string]any{
+			"plugin":    "example",
+			"operation": "request_context",
+		},
+	)
+	if err != nil {
+		t.Fatalf("Invoke(caller.invoke_plugin): %v", err)
+	}
+	if result.Status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", result.Status, http.StatusOK)
+	}
+
+	var got invokePluginEnvelope
+	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if !got.OK {
+		t.Fatalf("invoke_plugin returned error envelope: %+v", got)
+	}
+	if got.Body.Credential.Connection != "work" {
+		t.Fatalf("nested credential.connection = %q, want %q", got.Body.Credential.Connection, "work")
+	}
+}
+
+func TestPluginInvokesPreserveCallerScopes(t *testing.T) {
+	t.Parallel()
+
+	harness := newNestedInvokeHarness(t)
+	ctx := context.Background()
+	user := newNestedInvokeUser(t, harness, ctx, "nested-scope@test.com")
+	storeNestedInvokeToken(t, harness, ctx, user.ID, "caller", "work", "default")
+	storeNestedInvokeToken(t, harness, ctx, user.ID, "example", "work", "default")
+
+	result, err := harness.invoker.Invoke(
+		invocation.WithConnection(context.Background(), "work"),
+		&principal.Principal{
+			UserID: user.ID,
+			Kind:   principal.KindUser,
+			Source: principal.SourceAPIToken,
+			Scopes: []string{"caller"},
+		},
+		"caller",
+		"",
+		"invoke_plugin",
+		map[string]any{
+			"plugin":    "example",
+			"operation": "request_context",
+		},
+	)
+	if err != nil {
+		t.Fatalf("Invoke(caller.invoke_plugin): %v", err)
+	}
+	if result.Status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", result.Status, http.StatusOK)
+	}
+
+	var got invokePluginEnvelope
+	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if got.OK {
+		t.Fatalf("expected scope denial envelope, got success: %+v", got)
+	}
+	if !strings.Contains(got.Error, invocation.ErrScopeDenied.Error()) || !strings.Contains(got.Error, "example") {
+		t.Fatalf("scope denial error = %q, want token scope denied for example", got.Error)
+	}
+}
+
+func TestPluginInvokesSupportInvokerFromContext(t *testing.T) {
+	t.Parallel()
+
+	harness := newNestedInvokeHarness(t)
+	ctx := context.Background()
+	user := newNestedInvokeUser(t, harness, ctx, "nested-context-invoker@test.com")
+	storeNestedInvokeToken(t, harness, ctx, user.ID, "example", "work", "primary")
+	storeNestedInvokeToken(t, harness, ctx, user.ID, "example", "work", "secondary")
+
+	result, err := harness.invoker.Invoke(
+		invocation.WithConnection(context.Background(), "work"),
+		&principal.Principal{
+			UserID: user.ID,
+			Kind:   principal.KindUser,
+			Source: principal.SourceSession,
+			Scopes: []string{"example"},
+		},
+		"example",
+		"primary",
+		"invoke_request_context",
+		nil,
+	)
+	if err != nil {
+		t.Fatalf("Invoke(example.invoke_request_context): %v", err)
+	}
+	if result.Status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", result.Status, http.StatusOK)
+	}
+
+	var got requestContextBody
+	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if got.RequestHandle == "" {
+		t.Fatalf("nested request_handle = %q, want non-empty", got.RequestHandle)
+	}
+	if got.Credential.Connection != "work" {
+		t.Fatalf("nested credential.connection = %q, want %q", got.Credential.Connection, "work")
+	}
+	if got.Credential.Instance != "primary" {
+		t.Fatalf("nested credential.instance = %q, want %q", got.Credential.Instance, "primary")
+	}
+}
+
+func TestPluginInvokesDoNotLeakCallerAccessToPolicylessTargets(t *testing.T) {
+	t.Parallel()
+
+	harness := newNestedInvokeHarness(t)
+	ctx := context.Background()
+	user := newNestedInvokeUser(t, harness, ctx, "nested-access@test.com")
+	storeNestedInvokeToken(t, harness, ctx, user.ID, "caller", "work", "default")
+	storeNestedInvokeToken(t, harness, ctx, user.ID, "example", "work", "default")
+
+	invokeCtx := invocation.WithConnection(context.Background(), "work")
+	invokeCtx = invocation.WithAccessContext(invokeCtx, invocation.AccessContext{
+		Policy: "caller-policy",
+		Role:   "admin",
+	})
+
+	result, err := harness.invoker.Invoke(
+		invokeCtx,
+		&principal.Principal{
+			UserID: user.ID,
+			Kind:   principal.KindUser,
+			Source: principal.SourceSession,
+			Scopes: []string{"caller", "example"},
+		},
+		"caller",
+		"",
+		"invoke_plugin",
+		map[string]any{
+			"plugin":    "example",
+			"operation": "request_context",
+		},
+	)
+	if err != nil {
+		t.Fatalf("Invoke(caller.invoke_plugin): %v", err)
+	}
+	if result.Status != http.StatusOK {
+		t.Fatalf("status = %d, want %d", result.Status, http.StatusOK)
+	}
+
+	var got invokePluginEnvelope
+	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if !got.OK {
+		t.Fatalf("invoke_plugin returned error envelope: %+v", got)
+	}
+	if got.Body.Access.Policy != "" || got.Body.Access.Role != "" {
+		t.Fatalf("nested access leaked caller context: %+v", got.Body.Access)
+	}
+}
+
+func TestPluginInvokesRejectUndeclaredTargets(t *testing.T) {
+	t.Parallel()
+
+	harness := newNestedInvokeHarness(t)
+	ctx := context.Background()
+	user := newNestedInvokeUser(t, harness, ctx, "nested-declared@test.com")
+	storeNestedInvokeToken(t, harness, ctx, user.ID, "caller", "work", "default")
+	storeNestedInvokeToken(t, harness, ctx, user.ID, "example", "work", "default")
+
+	result, err := harness.invoker.Invoke(
+		invocation.WithConnection(context.Background(), "work"),
+		&principal.Principal{
+			UserID: user.ID,
+			Kind:   principal.KindUser,
+			Source: principal.SourceSession,
+			Scopes: []string{"caller", "example"},
+		},
+		"caller",
+		"",
+		"invoke_plugin",
+		map[string]any{
+			"plugin":    "example",
+			"operation": "status",
+		},
+	)
+	if err != nil {
+		t.Fatalf("Invoke(caller.invoke_plugin): %v", err)
+	}
+
+	var got invokePluginEnvelope
+	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if got.OK {
+		t.Fatalf("expected undeclared target rejection, got success: %+v", got)
+	}
+	if !strings.Contains(got.Error, `may not invoke example.status`) {
+		t.Fatalf("undeclared target error = %q, want target rejection", got.Error)
+	}
+}
+
+func TestPluginInvokesRejectInvalidRequestHandle(t *testing.T) {
+	t.Parallel()
+
+	harness := newNestedInvokeHarness(t)
+	ctx := context.Background()
+	user := newNestedInvokeUser(t, harness, ctx, "nested-invalid-handle@test.com")
+	storeNestedInvokeToken(t, harness, ctx, user.ID, "caller", "work", "default")
+	storeNestedInvokeToken(t, harness, ctx, user.ID, "example", "work", "default")
+
+	result, err := harness.invoker.Invoke(
+		invocation.WithConnection(context.Background(), "work"),
+		&principal.Principal{
+			UserID: user.ID,
+			Kind:   principal.KindUser,
+			Source: principal.SourceSession,
+			Scopes: []string{"caller", "example"},
+		},
+		"caller",
+		"",
+		"invoke_plugin",
+		map[string]any{
+			"plugin":         "example",
+			"operation":      "request_context",
+			"request_handle": "forged-handle",
+		},
+	)
+	if err != nil {
+		t.Fatalf("Invoke(caller.invoke_plugin): %v", err)
+	}
+
+	var got invokePluginEnvelope
+	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if got.OK {
+		t.Fatalf("expected invalid request handle rejection, got success: %+v", got)
+	}
+	if !strings.Contains(got.Error, "invalid or expired") {
+		t.Fatalf("invalid request handle error = %q, want invalid or expired", got.Error)
+	}
+}
+
+func TestPluginInvokesMissingTargetTokenReturnsFailedPrecondition(t *testing.T) {
+	t.Parallel()
+
+	harness := newNestedInvokeHarness(t)
+	ctx := context.Background()
+	user := newNestedInvokeUser(t, harness, ctx, "nested-no-target-token@test.com")
+	storeNestedInvokeToken(t, harness, ctx, user.ID, "caller", "work", "default")
+
+	result, err := harness.invoker.Invoke(
+		invocation.WithConnection(context.Background(), "work"),
+		&principal.Principal{
+			UserID: user.ID,
+			Kind:   principal.KindUser,
+			Source: principal.SourceSession,
+			Scopes: []string{"caller", "example"},
+		},
+		"caller",
+		"",
+		"invoke_plugin",
+		map[string]any{
+			"plugin":    "example",
+			"operation": "request_context",
+		},
+	)
+	if err != nil {
+		t.Fatalf("Invoke(caller.invoke_plugin): %v", err)
+	}
+
+	var got invokePluginEnvelope
+	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if got.OK {
+		t.Fatalf("expected missing target token envelope, got success: %+v", got)
+	}
+	if !strings.Contains(got.Error, "code = FailedPrecondition") {
+		t.Fatalf("missing target token error = %q, want FailedPrecondition", got.Error)
+	}
+}
+
+func TestPluginInvokesAmbiguousTargetInstanceReturnsAborted(t *testing.T) {
+	t.Parallel()
+
+	harness := newNestedInvokeHarness(t)
+	ctx := context.Background()
+	user := newNestedInvokeUser(t, harness, ctx, "nested-ambiguous-target@test.com")
+	storeNestedInvokeToken(t, harness, ctx, user.ID, "caller", "work", "default")
+	storeNestedInvokeToken(t, harness, ctx, user.ID, "example", "work", "primary")
+	storeNestedInvokeToken(t, harness, ctx, user.ID, "example", "work", "secondary")
+
+	result, err := harness.invoker.Invoke(
+		invocation.WithConnection(context.Background(), "work"),
+		&principal.Principal{
+			UserID: user.ID,
+			Kind:   principal.KindUser,
+			Source: principal.SourceSession,
+			Scopes: []string{"caller", "example"},
+		},
+		"caller",
+		"",
+		"invoke_plugin",
+		map[string]any{
+			"plugin":     "example",
+			"operation":  "request_context",
+			"connection": "work",
+		},
+	)
+	if err != nil {
+		t.Fatalf("Invoke(caller.invoke_plugin): %v", err)
+	}
+
+	var got invokePluginEnvelope
+	if err := json.Unmarshal([]byte(result.Body), &got); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
+	if got.OK {
+		t.Fatalf("expected ambiguous target instance envelope, got success: %+v", got)
+	}
+	if !strings.Contains(got.Error, "code = Aborted") {
+		t.Fatalf("ambiguous target instance error = %q, want Aborted", got.Error)
 	}
 }
 

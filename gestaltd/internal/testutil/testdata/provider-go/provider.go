@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -36,6 +37,36 @@ type StatusOutput struct {
 	Greeting string `json:"greeting"`
 }
 
+type RequestContextInput struct{}
+
+type InvokeRequestContextInput struct{}
+
+type RequestContextSubject struct {
+	ID          string `json:"id"`
+	Kind        string `json:"kind"`
+	DisplayName string `json:"display_name"`
+	AuthSource  string `json:"auth_source"`
+}
+
+type RequestContextCredential struct {
+	Mode       string `json:"mode"`
+	SubjectID  string `json:"subject_id"`
+	Connection string `json:"connection"`
+	Instance   string `json:"instance"`
+}
+
+type RequestContextAccess struct {
+	Policy string `json:"policy"`
+	Role   string `json:"role"`
+}
+
+type RequestContextOutput struct {
+	Subject       RequestContextSubject    `json:"subject"`
+	Credential    RequestContextCredential `json:"credential"`
+	Access        RequestContextAccess     `json:"access"`
+	RequestHandle string                   `json:"request_handle"`
+}
+
 var (
 	greetOperation = gestalt.Operation[GreetInput, GreetOutput]{
 		ID:          "greet",
@@ -53,10 +84,24 @@ var (
 		Description: "Return provider startup state",
 		ReadOnly:    true,
 	}
+	requestContextOperation = gestalt.Operation[RequestContextInput, RequestContextOutput]{
+		ID:          "request_context",
+		Method:      http.MethodGet,
+		Description: "Return the request context received by the provider",
+		ReadOnly:    true,
+	}
+	invokeRequestContextOperation = gestalt.Operation[InvokeRequestContextInput, RequestContextOutput]{
+		ID:          "invoke_request_context",
+		Method:      http.MethodGet,
+		Description: "Invoke request_context through InvokerFromContext",
+		ReadOnly:    true,
+	}
 	Router = gestalt.MustRouter(
 		gestalt.Register(greetOperation, (*Provider).greet),
 		gestalt.Register(echoOperation, (*Provider).echo),
 		gestalt.Register(statusOperation, (*Provider).status),
+		gestalt.Register(requestContextOperation, (*Provider).requestContext),
+		gestalt.Register(invokeRequestContextOperation, (*Provider).invokeRequestContext),
 	)
 )
 
@@ -85,6 +130,47 @@ func (p *Provider) status(_ context.Context, _ StatusInput, _ gestalt.Request) (
 		Name:     p.startedName,
 		Greeting: p.greeting,
 	}), nil
+}
+
+func (p *Provider) requestContext(_ context.Context, _ RequestContextInput, req gestalt.Request) (gestalt.Response[RequestContextOutput], error) {
+	return gestalt.OK(RequestContextOutput{
+		Subject: RequestContextSubject{
+			ID:          req.Subject.ID,
+			Kind:        req.Subject.Kind,
+			DisplayName: req.Subject.DisplayName,
+			AuthSource:  req.Subject.AuthSource,
+		},
+		Credential: RequestContextCredential{
+			Mode:       req.Credential.Mode,
+			SubjectID:  req.Credential.SubjectID,
+			Connection: req.Credential.Connection,
+			Instance:   req.Credential.Instance,
+		},
+		Access: RequestContextAccess{
+			Policy: req.Access.Policy,
+			Role:   req.Access.Role,
+		},
+		RequestHandle: req.RequestHandle(),
+	}), nil
+}
+
+func (p *Provider) invokeRequestContext(ctx context.Context, _ InvokeRequestContextInput, _ gestalt.Request) (gestalt.Response[RequestContextOutput], error) {
+	invoker, err := gestalt.InvokerFromContext(ctx)
+	if err != nil {
+		return gestalt.Response[RequestContextOutput]{}, err
+	}
+	defer func() { _ = invoker.Close() }()
+
+	result, err := invoker.Invoke(ctx, "example", "request_context", nil, nil)
+	if err != nil {
+		return gestalt.Response[RequestContextOutput]{}, err
+	}
+
+	var out RequestContextOutput
+	if err := json.Unmarshal([]byte(result.Body), &out); err != nil {
+		return gestalt.Response[RequestContextOutput]{}, err
+	}
+	return gestalt.OK(out), nil
 }
 
 func (p *Provider) greetingFor(name string) string {

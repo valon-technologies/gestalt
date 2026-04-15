@@ -19,3 +19,11 @@ operations:
     method: GET
     description: Return provider startup state
     readOnly: true
+  - id: request_context
+    method: GET
+    description: Return the request context received by the provider
+    readOnly: true
+  - id: invoke_request_context
+    method: GET
+    description: Invoke request_context through InvokerFromContext
+    readOnly: true

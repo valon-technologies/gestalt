@@ -28,6 +28,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
 	"github.com/valon-technologies/gestalt/server/internal/openapi"
 	"github.com/valon-technologies/gestalt/server/internal/operationexposure"
+	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
@@ -547,6 +548,11 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		}
 		execCfg.HostServices = append(execCfg.HostServices, hostServices...)
 	}
+	if len(entry.Invokes) > 0 {
+		hostService, snapshots := buildPluginInvokerHostService(name, entry, deps)
+		execCfg.HostServices = append(execCfg.HostServices, hostService)
+		execCfg.RequestSnapshots = snapshots
+	}
 	execCfg.Cleanup = cleanup
 	prov, err := providerhost.NewExecutableProvider(ctx, execCfg)
 	if err != nil {
@@ -652,6 +658,27 @@ func buildPluginS3HostServices(pluginName string, entry *config.ProviderEntry, d
 	}
 	return hostServices, nil
 }
+
+func buildPluginInvokerHostService(pluginName string, entry *config.ProviderEntry, deps Deps) (providerhost.HostService, *providerhost.RequestSnapshotStore) {
+	invoker := deps.PluginInvoker
+	if invoker == nil {
+		invoker = unavailablePluginInvoker{}
+	}
+	snapshots := providerhost.NewRequestSnapshotStore()
+	return providerhost.HostService{
+		EnvVar: providerhost.DefaultPluginInvokerSocketEnv,
+		Register: func(srv *grpc.Server) {
+			proto.RegisterPluginInvokerServer(srv, providerhost.NewPluginInvokerServer(pluginName, entry.Invokes, invoker, snapshots))
+		},
+	}, snapshots
+}
+
+type unavailablePluginInvoker struct{}
+
+func (unavailablePluginInvoker) Invoke(context.Context, *principal.Principal, string, string, string, map[string]any) (*core.OperationResult, error) {
+	return nil, fmt.Errorf("plugin invoker is not available")
+}
+
 func buildPluginScopedIndexedDB(pluginName string, effective config.EffectivePluginIndexedDB, deps Deps) (indexeddb.IndexedDB, error) {
 	def, ok := deps.IndexedDBDefs[effective.ProviderName]
 	if !ok || def == nil {
