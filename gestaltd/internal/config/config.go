@@ -29,6 +29,8 @@ const (
 
 	DefaultIndexedDBProvider = DefaultProviderRepo + "/indexeddb/relationaldb"
 	DefaultIndexedDBVersion  = "0.0.1-alpha.2"
+	DefaultWebUIProvider     = DefaultProviderRepo + "/web/default"
+	DefaultWebUIVersion      = "0.0.1-alpha.5"
 	DefaultProviderInstance  = "default"
 )
 
