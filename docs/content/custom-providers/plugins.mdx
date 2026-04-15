@@ -661,7 +661,12 @@ gestaltd serve --config ./config.yaml
 gestalt plugins invoke slack conversations.getMessage -p channel=C01ABC23DEF -p ts=1712161829.000300
 ```
 
-If your plugin makes outbound HTTP requests and you see 403 errors, check `allowedHosts`. Executable providers run inside a network sandbox, and requests to hosts not in the allowlist are rejected. Add every upstream domain the provider contacts to `allowedHosts` in the config or manifest.
+If your plugin makes outbound HTTP requests and you see 403 errors, check
+`allowedHosts`. In deployments with executable-plugin sandboxing enabled,
+requests to hosts not in the allowlist are rejected. That sandboxing story is
+still runtime-dependent today, so unsupported environments may fail differently.
+Add every upstream domain the provider contacts to `allowedHosts` in the config
+or manifest.
 
 ## Hybrid providers
 

@@ -15,7 +15,7 @@ From a deployment point of view, the important pieces are:
 - `source.path` or `source.ref` to choose the package
 - `config` for provider-specific settings such as OAuth app credentials
 - `allowedOperations` to publish only part of a large catalog
-- `allowedHosts` to control outbound egress
+- `allowedHosts` to declare outbound egress policy
 
 If the manifest enables MCP, the same operations are also exposed through the
 server's `/mcp` endpoint.
@@ -104,6 +104,12 @@ plugins:
       - api.github.com
       - "*.github.com"
 ```
+
+For executable plugins, `allowedHosts` is only a complete security boundary when
+the plugin is running inside a supported sandboxed provider runtime. The current
+host-local wrappers are OS-dependent, so operators should treat `allowedHosts`
+as declarative policy plus best-effort enforcement unless the deployment target
+provides that sandbox contract.
 
 ## Building your own plugin
 

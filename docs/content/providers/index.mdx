@@ -31,8 +31,8 @@ context it needs.
 - Executable providers run as child processes and connect back to the host over
   gRPC on a temporary Unix socket.
 - Web UI providers are static asset bundles rather than executable processes.
-- `allowedHosts` and `server.egress` govern outbound access for executable
-  providers.
+- `allowedHosts` and `server.egress` declare outbound policy for executable
+  providers, with complete enforcement depending on the sandbox runtime in use.
 - Two simple secret managers, `env` and `file`, remain built into
   `gestaltd`. Telemetry and audit backends are also built in.
 
