@@ -75,6 +75,7 @@ type integrationInfo struct {
 	DisplayName      string                         `json:"displayName,omitempty"`
 	Description      string                         `json:"description,omitempty"`
 	IconSVG          string                         `json:"iconSvg,omitempty"`
+	MountedPath      string                         `json:"mountedPath,omitempty"`
 	Connected        bool                           `json:"connected"`
 	Instances        []instanceInfo                 `json:"instances"`
 	AuthTypes        []string                       `json:"authTypes"`
@@ -160,6 +161,9 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		}
 		if cat := prov.Catalog(); cat != nil {
 			info.IconSVG = cat.IconSVG
+		}
+		if entry, ok := s.pluginDefs[name]; ok && entry != nil {
+			info.MountedPath = strings.TrimSpace(entry.MountPath)
 		}
 		if p != nil && p.Kind == principal.KindWorkload {
 			if binding, ok := s.workloadBinding(p, name); ok {
