@@ -1,0 +1,33 @@
+---
+title: Python SDK API
+---
+
+# Python SDK API
+
+The Python SDK is published as `gestalt-sdk` and imported as `gestalt`.
+
+Use it for authored provider code such as:
+
+```python
+from gestalt import Model, Plugin
+
+
+class SearchInput(Model):
+    query: str
+
+
+plugin = Plugin("search")
+
+
+@plugin.operation(title="Search")
+def search(params: SearchInput):
+    return {"query": params.query}
+```
+
+The generated API reference is published separately as static HTML:
+
+- [Python SDK Reference](/api/python/)
+
+Those pages focus on the handwritten SDK surface. Generated protobuf bindings
+under `gestalt.gen` remain available to provider code, but they are not
+expanded as authored reference pages.

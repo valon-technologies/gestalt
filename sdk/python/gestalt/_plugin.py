@@ -1,3 +1,5 @@
+"""Plugin registration and decorator helpers for integration providers."""
+
 import inspect
 import json
 import pathlib
@@ -28,6 +30,25 @@ DEFAULT_OPERATION_METHOD: Final[str] = "POST"
 
 
 class Plugin(SessionCatalogProvider):
+    """Integration plugin definition and operation registry.
+
+    ``Plugin`` collects operation handlers, optional configuration hooks, and
+    optional session catalog hooks before handing control to the runtime:
+
+    .. code-block:: python
+
+        from gestalt import Model, Plugin
+
+        class SearchInput(Model):
+            query: str
+
+        plugin = Plugin("search")
+
+        @plugin.operation(title="Search")
+        def search(params: SearchInput):
+            return {"query": params.query}
+    """
+
     def __init__(self, name: str, *, module_name: str | None = None) -> None:
         self.name = _slug_name(name)
         self._module_name = module_name
@@ -42,6 +63,8 @@ class Plugin(SessionCatalogProvider):
         *,
         base_dir: pathlib.Path | None = None,
     ) -> "Plugin":
+        """Build a plugin name from a manifest path."""
+
         manifest_path = pathlib.Path(path)
         if not manifest_path.is_absolute():
             resolved_base = base_dir if base_dir is not None else pathlib.Path.cwd()
@@ -49,10 +72,14 @@ class Plugin(SessionCatalogProvider):
         return cls(_derive_name_from_manifest(manifest_path))
 
     def configure(self, func: Any) -> Any:
+        """Register a configuration hook for provider name and config data."""
+
         self._configure_handler = func
         return func
 
     def session_catalog(self, func: Any) -> Any:
+        """Register a per-request catalog hook."""
+
         self._session_catalog_handler = (func, _inspect_session_catalog_handler(func))
         return func
 
@@ -70,6 +97,8 @@ class Plugin(SessionCatalogProvider):
         read_only: bool = False,
         visible: bool | None = None,
     ) -> Any:
+        """Register an operation handler on this plugin."""
+
         def decorator(handler: Any) -> Any:
             operation_id = (id or handler.__name__).strip()
             if not operation_id:
@@ -98,6 +127,8 @@ class Plugin(SessionCatalogProvider):
         return decorator(func)
 
     def configure_provider(self, name: str, config: dict[str, Any]) -> None:
+        """Invoke the registered configuration hook if one exists."""
+
         handler = self._resolve_configure_handler()
         if handler is None:
             return
@@ -106,6 +137,8 @@ class Plugin(SessionCatalogProvider):
     def execute(
         self, operation: str, params: dict[str, Any], request: Request
     ) -> OperationResult:
+        """Execute a registered operation against request parameters."""
+
         return execute_operation(
             self._operations.get(operation),
             params=params,
@@ -119,15 +152,23 @@ class Plugin(SessionCatalogProvider):
         )
 
     def catalog_dict(self) -> dict[str, Any]:
+        """Return the static plugin catalog as a plain dictionary."""
+
         return catalog_to_dict(self._static_catalog())
 
     def write_catalog(self, path: str | pathlib.Path) -> None:
+        """Write the static plugin catalog to disk."""
+
         write_catalog(path, catalog=self._static_catalog())
 
     def supports_session_catalog(self) -> bool:
+        """Report whether the plugin exposes a session catalog hook."""
+
         return self._resolve_session_catalog_handler() is not None
 
     def catalog_for_request(self, request: Request) -> Catalog | dict[str, Any] | None:
+        """Return a per-request catalog if the plugin defines one."""
+
         definition = self._resolve_session_catalog_handler()
         if definition is None:
             return None
@@ -138,6 +179,8 @@ class Plugin(SessionCatalogProvider):
         return run_sync(handler())
 
     def serve(self) -> None:
+        """Start the integration runtime for this plugin."""
+
         from . import _runtime
 
         _runtime.serve(self)
@@ -223,6 +266,23 @@ def operation(
     read_only: bool = False,
     visible: bool | None = None,
 ) -> Any:
+    """Register an operation on the calling module's implicit plugin.
+
+    This decorator is useful when a module-level ``plugin`` object would be
+    redundant:
+
+    .. code-block:: python
+
+        from gestalt import Model, operation
+
+        class SearchInput(Model):
+            query: str
+
+        @operation(title="Search")
+        def search(params: SearchInput):
+            return {"query": params.query}
+    """
+
     def decorator(handler: Any) -> Any:
         plugin = _MODULE_PLUGINS.for_function(handler)
         return plugin.operation(
@@ -242,6 +302,8 @@ def operation(
 
 
 def session_catalog(func: Any | None = None, /) -> Any:
+    """Register a per-request catalog hook on the implicit module plugin."""
+
     def decorator(handler: Any) -> Any:
         plugin = _MODULE_PLUGINS.for_function(handler)
         return plugin.session_catalog(handler)

@@ -52,3 +52,6 @@ jobs:
 
       - name: Run unit tests
         run: uv run python -m unittest discover -s tests
+
+      - name: Build Sphinx docs
+        run: uv run sphinx-build -W -b html -d docs/_build/doctrees docs docs/_build/html

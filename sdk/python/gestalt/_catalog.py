@@ -1,3 +1,9 @@
+"""Catalog helpers for integration plugins.
+
+The handwritten helpers in this module build and serialize catalog documents
+around the generated ``Catalog`` protobuf messages exported by :mod:`gestalt`.
+"""
+
 import dataclasses
 import pathlib
 from collections.abc import Mapping
@@ -30,6 +36,8 @@ OperationAnnotations: Any = plugin_pb2.OperationAnnotations  # ty: ignore[unreso
 
 @runtime_checkable
 class SessionCatalogProvider(Protocol):
+    """Protocol for plugins that return a per-request catalog."""
+
     def catalog_for_request(
         self, request: Request
     ) -> Catalog | Mapping[str, Any] | None: ...
@@ -40,6 +48,8 @@ def build_catalog(
     plugin_name: str,
     operations: Iterable[OperationDefinition],
 ) -> Catalog:
+    """Build a catalog protobuf from authored operation definitions."""
+
     return Catalog(
         name=plugin_name,
         operations=[_catalog_operation(op) for op in operations],
@@ -47,6 +57,8 @@ def build_catalog(
 
 
 def catalog_to_proto(catalog: Catalog | Mapping[str, Any] | None) -> Catalog | None:
+    """Normalize catalog input to a protobuf message."""
+
     if catalog is None:
         return None
     if isinstance(catalog, Catalog):
@@ -59,6 +71,8 @@ def catalog_to_proto(catalog: Catalog | Mapping[str, Any] | None) -> Catalog | N
 def catalog_to_dict(
     catalog: Catalog | Mapping[str, Any], *, field_style: str = "yaml"
 ) -> dict[str, Any]:
+    """Convert a catalog protobuf or mapping into plain Python data."""
+
     if isinstance(catalog, Catalog):
         raw = json_format.MessageToDict(
             catalog, preserving_proto_field_name=(field_style == "yaml")
@@ -74,6 +88,8 @@ def catalog_to_dict(
 def write_catalog(
     path: str | pathlib.Path, *, catalog: Catalog | Mapping[str, Any]
 ) -> None:
+    """Write a catalog document to YAML on disk."""
+
     if isinstance(catalog, Mapping):
         catalog = _catalog_from_mapping(catalog)
     catalog_path = pathlib.Path(path)
