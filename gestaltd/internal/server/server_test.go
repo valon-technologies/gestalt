@@ -2233,6 +2233,50 @@ func TestListIntegrations(t *testing.T) {
 	}
 }
 
+func TestListIntegrations_IncludesMountedPath(t *testing.T) {
+	t.Parallel()
+
+	stub := &coretesting.StubIntegration{N: "github", DN: "GitHub"}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"github": {
+				MountPath: "/github",
+			},
+		}
+		cfg.Services = coretesting.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var integrations []struct {
+		Name        string `json:"name"`
+		MountedPath string `json:"mountedPath"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if len(integrations) != 1 {
+		t.Fatalf("expected 1 integration, got %d", len(integrations))
+	}
+	if integrations[0].Name != "github" {
+		t.Fatalf("expected github, got %q", integrations[0].Name)
+	}
+	if integrations[0].MountedPath != "/github" {
+		t.Fatalf("expected mounted path /github, got %q", integrations[0].MountedPath)
+	}
+}
+
 func TestWorkloadAuthorization_ListIntegrationsFiltersAndHidesConnectionAffordances(t *testing.T) {
 	t.Parallel()
 
