@@ -13,6 +13,7 @@ type Services struct {
 	Tokens               *TokenService
 	APITokens            *APITokenService
 	PluginAuthorizations *PluginAuthorizationService
+	AdminAuthorizations  *AdminAuthorizationService
 	DB                   indexeddb.IndexedDB
 }
 
@@ -34,11 +35,15 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	if err := ds.CreateObjectStore(ctx, StorePluginAuthorizationMemberships, PluginAuthorizationMembershipsSchema); err != nil {
 		return nil, fmt.Errorf("create plugin_authorization_memberships store: %w", err)
 	}
+	if err := ds.CreateObjectStore(ctx, StoreAdminAuthorizationMemberships, AdminAuthorizationMembershipsSchema); err != nil {
+		return nil, fmt.Errorf("create admin_authorization_memberships store: %w", err)
+	}
 	return &Services{
 		Users:                users,
 		Tokens:               NewTokenService(ds, enc),
 		APITokens:            NewAPITokenService(ds),
 		PluginAuthorizations: NewPluginAuthorizationService(ds),
+		AdminAuthorizations:  NewAdminAuthorizationService(ds),
 		DB:                   ds,
 	}, nil
 }

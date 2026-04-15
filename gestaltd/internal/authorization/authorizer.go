@@ -2,6 +2,7 @@ package authorization
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"regexp"
@@ -78,6 +79,8 @@ type dynamicGrant struct {
 type dynamicSnapshot struct {
 	byPluginUserID map[string]map[string]dynamicGrant
 	byPluginEmail  map[string]map[string]dynamicGrant
+	adminByUserID  map[string]dynamicGrant
+	adminByEmail   map[string]dynamicGrant
 }
 
 type Authorizer struct {
@@ -86,6 +89,7 @@ type Authorizer struct {
 	policies             map[string]*HumanPolicy
 	providerPolicies     map[string]string
 	dynamicService       *coredata.PluginAuthorizationService
+	adminDynamicService  *coredata.AdminAuthorizationService
 	dynamicReloadEvery   time.Duration
 	dynamic              atomic.Pointer[dynamicSnapshot]
 	lifecycleMu          sync.Mutex
@@ -190,8 +194,15 @@ func New(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderE
 	return a, nil
 }
 
+func (a *Authorizer) SetAdminAuthorizationService(svc *coredata.AdminAuthorizationService) {
+	if a == nil {
+		return
+	}
+	a.adminDynamicService = svc
+}
+
 func (a *Authorizer) Start(ctx context.Context) error {
-	if a == nil || a.dynamicService == nil {
+	if a == nil || !a.hasDynamicSources() {
 		return nil
 	}
 
@@ -242,50 +253,42 @@ func (a *Authorizer) Close() error {
 	return nil
 }
 
-func (a *Authorizer) HasDynamicAuthorizations() bool {
+func (a *Authorizer) HasDynamicPluginAuthorizations() bool {
 	return a != nil && a.dynamicService != nil
 }
 
+func (a *Authorizer) HasDynamicAdminAuthorizations() bool {
+	return a != nil && a.adminDynamicService != nil
+}
+
 func (a *Authorizer) ReloadDynamic(ctx context.Context) error {
-	if a == nil || a.dynamicService == nil {
+	if a == nil || !a.hasDynamicSources() {
 		return nil
 	}
 
-	grants, err := a.dynamicService.ListPluginAuthorizations(ctx)
-	if err != nil {
-		return fmt.Errorf("reload dynamic authorizations: %w", err)
-	}
+	previous := a.dynamic.Load()
 	snapshot := emptyDynamicSnapshot()
-	for _, grant := range grants {
-		if grant == nil {
-			continue
+	var reloadErr error
+	if a.dynamicService != nil {
+		grants, err := a.dynamicService.ListPluginAuthorizations(ctx)
+		if err != nil {
+			copyPluginDynamicSnapshot(snapshot, previous)
+			reloadErr = errors.Join(reloadErr, fmt.Errorf("reload dynamic authorizations: %w", err))
+		} else {
+			loadPluginDynamicSnapshot(snapshot, grants)
 		}
-		plugin := strings.TrimSpace(grant.Plugin)
-		userID := strings.TrimSpace(grant.UserID)
-		email := normalizeEmail(grant.Email)
-		role := strings.TrimSpace(grant.Role)
-		if plugin == "" || role == "" {
-			continue
-		}
-		if userID != "" {
-			byUserID := snapshot.byPluginUserID[plugin]
-			if byUserID == nil {
-				byUserID = map[string]dynamicGrant{}
-				snapshot.byPluginUserID[plugin] = byUserID
-			}
-			byUserID[userID] = dynamicGrant{UserID: userID, Email: email, Role: role}
-		}
-		if email != "" {
-			byEmail := snapshot.byPluginEmail[plugin]
-			if byEmail == nil {
-				byEmail = map[string]dynamicGrant{}
-				snapshot.byPluginEmail[plugin] = byEmail
-			}
-			byEmail[email] = dynamicGrant{UserID: userID, Email: email, Role: role}
+	}
+	if a.adminDynamicService != nil {
+		grants, err := a.adminDynamicService.ListAdminAuthorizations(ctx)
+		if err != nil {
+			copyAdminDynamicSnapshot(snapshot, previous)
+			reloadErr = errors.Join(reloadErr, fmt.Errorf("reload admin authorizations: %w", err))
+		} else {
+			loadAdminDynamicSnapshot(snapshot, grants)
 		}
 	}
 	a.dynamic.Store(snapshot)
-	return nil
+	return reloadErr
 }
 
 func (a *Authorizer) pollLoop(ctx context.Context, done chan struct{}) {
@@ -392,11 +395,11 @@ func (a *Authorizer) PolicyNameForProvider(provider string) string {
 	return strings.TrimSpace(a.providerPolicies[provider])
 }
 
-func (a *Authorizer) StaticRoleForProviderIdentity(provider, subjectID, userID, email string) (AccessContext, bool) {
+func (a *Authorizer) StaticRoleForPolicyIdentity(policyName, subjectID, userID, email string) (AccessContext, bool) {
 	if a == nil {
 		return AccessContext{}, false
 	}
-	policyName := a.PolicyNameForProvider(provider)
+	policyName = strings.TrimSpace(policyName)
 	if policyName == "" {
 		return AccessContext{}, false
 	}
@@ -412,17 +415,25 @@ func (a *Authorizer) StaticRoleForProviderIdentity(provider, subjectID, userID, 
 	return access, false
 }
 
-func (a *Authorizer) StaticMembersForProvider(provider string) (string, []StaticHumanMember, bool) {
+func (a *Authorizer) StaticRoleForProviderIdentity(provider, subjectID, userID, email string) (AccessContext, bool) {
 	if a == nil {
-		return "", nil, false
+		return AccessContext{}, false
 	}
 	policyName := a.PolicyNameForProvider(provider)
+	return a.StaticRoleForPolicyIdentity(policyName, subjectID, userID, email)
+}
+
+func (a *Authorizer) StaticMembersForPolicy(policyName string) ([]StaticHumanMember, bool) {
+	if a == nil {
+		return nil, false
+	}
+	policyName = strings.TrimSpace(policyName)
 	if policyName == "" {
-		return "", nil, false
+		return nil, false
 	}
 	policy := a.policies[policyName]
 	if policy == nil {
-		return policyName, nil, false
+		return nil, false
 	}
 	members := make([]StaticHumanMember, 0, len(policy.RolesBySubjectID)+len(policy.RolesByEmail))
 	for subjectID, role := range policy.RolesBySubjectID {
@@ -436,6 +447,21 @@ func (a *Authorizer) StaticMembersForProvider(provider string) (string, []Static
 			Email: email,
 			Role:  role,
 		})
+	}
+	return members, true
+}
+
+func (a *Authorizer) StaticMembersForProvider(provider string) (string, []StaticHumanMember, bool) {
+	if a == nil {
+		return "", nil, false
+	}
+	policyName := a.PolicyNameForProvider(provider)
+	if policyName == "" {
+		return "", nil, false
+	}
+	members, ok := a.StaticMembersForPolicy(policyName)
+	if !ok {
+		return policyName, nil, false
 	}
 	return policyName, members, true
 }
@@ -456,6 +482,37 @@ func (a *Authorizer) ResolvePolicyAccess(p *principal.Principal, policyName stri
 	}
 	access := AccessContext{Policy: policyName}
 	if role, ok := policy.roleForPrincipal(p); ok {
+		access.Role = role
+		return access, true
+	}
+	if policy.DefaultAllow {
+		access.Role = defaultHumanRole
+		return access, true
+	}
+	return access, false
+}
+
+func (a *Authorizer) ResolveAdminAccess(p *principal.Principal, policyName string) (AccessContext, bool) {
+	if a == nil {
+		return AccessContext{}, true
+	}
+	policyName = strings.TrimSpace(policyName)
+	if policyName == "" {
+		return AccessContext{}, true
+	}
+	if a.IsWorkload(p) {
+		return AccessContext{Policy: policyName}, false
+	}
+	policy := a.policies[policyName]
+	if policy == nil {
+		return AccessContext{}, false
+	}
+	access := AccessContext{Policy: policyName}
+	if role, ok := policy.roleForPrincipal(p); ok {
+		access.Role = role
+		return access, true
+	}
+	if role, ok := a.dynamicAdminRoleForPrincipal(p); ok {
 		access.Role = role
 		return access, true
 	}
@@ -626,10 +683,130 @@ func (a *Authorizer) dynamicRoleForPrincipal(provider string, p *principal.Princ
 	return "", false
 }
 
+func (a *Authorizer) dynamicAdminRoleForPrincipal(p *principal.Principal) (string, bool) {
+	if a == nil || p == nil {
+		return "", false
+	}
+	snapshot := a.dynamic.Load()
+	if snapshot == nil {
+		return "", false
+	}
+	if p.UserID != "" {
+		if grant, ok := snapshot.adminByUserID[p.UserID]; ok {
+			return grant.Role, true
+		}
+	}
+	email := ""
+	if p.Identity != nil {
+		email = p.Identity.Email
+	}
+	if email = normalizeEmail(email); email != "" {
+		if grant, ok := snapshot.adminByEmail[email]; ok {
+			return grant.Role, true
+		}
+	}
+	return "", false
+}
+
+func (a *Authorizer) hasDynamicSources() bool {
+	return a != nil && (a.dynamicService != nil || a.adminDynamicService != nil)
+}
+
+func loadPluginDynamicSnapshot(snapshot *dynamicSnapshot, grants []*coredata.PluginAuthorizationMembership) {
+	if snapshot == nil {
+		return
+	}
+	for _, grant := range grants {
+		if grant == nil {
+			continue
+		}
+		plugin := strings.TrimSpace(grant.Plugin)
+		userID := strings.TrimSpace(grant.UserID)
+		email := normalizeEmail(grant.Email)
+		role := strings.TrimSpace(grant.Role)
+		if plugin == "" || role == "" {
+			continue
+		}
+		if userID != "" {
+			byUserID := snapshot.byPluginUserID[plugin]
+			if byUserID == nil {
+				byUserID = map[string]dynamicGrant{}
+				snapshot.byPluginUserID[plugin] = byUserID
+			}
+			byUserID[userID] = dynamicGrant{UserID: userID, Email: email, Role: role}
+		}
+		if email != "" {
+			byEmail := snapshot.byPluginEmail[plugin]
+			if byEmail == nil {
+				byEmail = map[string]dynamicGrant{}
+				snapshot.byPluginEmail[plugin] = byEmail
+			}
+			byEmail[email] = dynamicGrant{UserID: userID, Email: email, Role: role}
+		}
+	}
+}
+
+func loadAdminDynamicSnapshot(snapshot *dynamicSnapshot, grants []*coredata.AdminAuthorizationMembership) {
+	if snapshot == nil {
+		return
+	}
+	for _, grant := range grants {
+		if grant == nil {
+			continue
+		}
+		userID := strings.TrimSpace(grant.UserID)
+		email := normalizeEmail(grant.Email)
+		role := strings.TrimSpace(grant.Role)
+		if role == "" {
+			continue
+		}
+		if userID != "" {
+			snapshot.adminByUserID[userID] = dynamicGrant{UserID: userID, Email: email, Role: role}
+		}
+		if email != "" {
+			snapshot.adminByEmail[email] = dynamicGrant{UserID: userID, Email: email, Role: role}
+		}
+	}
+}
+
+func copyPluginDynamicSnapshot(dst, src *dynamicSnapshot) {
+	if dst == nil || src == nil {
+		return
+	}
+	for plugin, byUserID := range src.byPluginUserID {
+		cloned := make(map[string]dynamicGrant, len(byUserID))
+		for userID, grant := range byUserID {
+			cloned[userID] = grant
+		}
+		dst.byPluginUserID[plugin] = cloned
+	}
+	for plugin, byEmail := range src.byPluginEmail {
+		cloned := make(map[string]dynamicGrant, len(byEmail))
+		for email, grant := range byEmail {
+			cloned[email] = grant
+		}
+		dst.byPluginEmail[plugin] = cloned
+	}
+}
+
+func copyAdminDynamicSnapshot(dst, src *dynamicSnapshot) {
+	if dst == nil || src == nil {
+		return
+	}
+	for userID, grant := range src.adminByUserID {
+		dst.adminByUserID[userID] = grant
+	}
+	for email, grant := range src.adminByEmail {
+		dst.adminByEmail[email] = grant
+	}
+}
+
 func emptyDynamicSnapshot() *dynamicSnapshot {
 	return &dynamicSnapshot{
 		byPluginUserID: map[string]map[string]dynamicGrant{},
 		byPluginEmail:  map[string]map[string]dynamicGrant{},
+		adminByUserID:  map[string]dynamicGrant{},
+		adminByEmail:   map[string]dynamicGrant{},
 	}
 }
 

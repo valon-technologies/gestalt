@@ -207,6 +207,7 @@ func (s *Server) adminMountedWebUI() MountedWebUI {
 		Name:                "builtin_admin",
 		Path:                "/admin",
 		AuthorizationPolicy: s.adminRoute.AuthorizationPolicy,
+		builtInAdmin:        true,
 		Routes: []MountedWebUIRoute{{
 			Path:         "/*",
 			AllowedRoles: append([]string(nil), s.adminRoute.AllowedRoles...),
@@ -257,9 +258,12 @@ func (s *Server) authorizeProtectedUIRequest(w http.ResponseWriter, r *http.Requ
 		access  invocation.AccessContext
 		allowed bool
 	)
-	if mounted.PluginName != "" {
+	switch {
+	case mounted.PluginName != "":
 		access, allowed = s.authorizer.ResolveAccess(p, mounted.PluginName)
-	} else {
+	case mounted.builtInAdmin:
+		access, allowed = s.authorizer.ResolveAdminAccess(p, mounted.AuthorizationPolicy)
+	default:
 		access, allowed = s.authorizer.ResolvePolicyAccess(p, mounted.AuthorizationPolicy)
 	}
 	if !allowed {

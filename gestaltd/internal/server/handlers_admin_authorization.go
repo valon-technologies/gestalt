@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	"github.com/valon-technologies/gestalt/server/internal/emailutil"
@@ -43,6 +44,9 @@ type putAdminAuthorizationMemberRequest struct {
 }
 
 func (s *Server) mountAdminAuthorizationRoutes(r chi.Router) {
+	r.Get("/authorization/admins/members", s.listAdminAuthorizationAdminMembers)
+	r.Put("/authorization/admins/members", s.putAdminAuthorizationAdminMember)
+	r.Delete("/authorization/admins/members/{userID}", s.deleteAdminAuthorizationAdminMember)
 	r.Get("/authorization/plugins", s.listAdminAuthorizationPlugins)
 	r.Get("/authorization/plugins/{plugin}/members", s.listAdminAuthorizationPluginMembers)
 	r.Put("/authorization/plugins/{plugin}/members", s.putAdminAuthorizationPluginMember)
@@ -74,7 +78,7 @@ func (s *Server) adminAPIAuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		access, allowed := s.authorizer.ResolvePolicyAccess(p, s.adminRoute.AuthorizationPolicy)
+		access, allowed := s.authorizer.ResolveAdminAccess(p, s.adminRoute.AuthorizationPolicy)
 		if !allowed || !mountedWebUIRoleAllowed(access.Role, s.adminRoute.AllowedRoles) {
 			writeError(w, http.StatusForbidden, "admin access denied")
 			return
@@ -242,6 +246,124 @@ func (s *Server) deleteAdminAuthorizationPluginMember(w http.ResponseWriter, r *
 	})
 }
 
+func (s *Server) listAdminAuthorizationAdminMembers(w http.ResponseWriter, r *http.Request) {
+	if !s.ensureAdminDynamicAdminAvailable(w) {
+		return
+	}
+
+	rows, err := s.adminAuthorizationAdminRows(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list admin members")
+		return
+	}
+	writeJSON(w, http.StatusOK, rows)
+}
+
+func (s *Server) putAdminAuthorizationAdminMember(w http.ResponseWriter, r *http.Request) {
+	if !s.ensureAdminDynamicAdminAvailable(w) {
+		return
+	}
+	if !s.ensureAdminAuthorizationWriteAccess(w, r) {
+		return
+	}
+
+	var req putAdminAuthorizationMemberRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if emailutil.Normalize(req.Email) == "" {
+		writeError(w, http.StatusBadRequest, "email is required")
+		return
+	}
+	if strings.TrimSpace(req.Role) == "" {
+		writeError(w, http.StatusBadRequest, "role is required")
+		return
+	}
+	user, err := s.users.FindOrCreateUser(r.Context(), req.Email)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to resolve user")
+		return
+	}
+	if access, ok := s.authorizer.StaticRoleForPolicyIdentity(s.adminRoute.AuthorizationPolicy, principal.UserSubjectID(user.ID), user.ID, user.Email); ok && access.Role != "" {
+		writeError(w, http.StatusConflict, "user already has static admin authorization")
+		return
+	}
+
+	membership, err := s.adminAuthorizations.UpsertAdminAuthorization(r.Context(), &coredata.AdminAuthorizationMembership{
+		UserID: user.ID,
+		Email:  user.Email,
+		Role:   req.Role,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to persist admin member")
+		return
+	}
+
+	row := adminAuthorizationMemberRow{
+		Role:          membership.Role,
+		Source:        "dynamic",
+		Effective:     true,
+		Mutable:       true,
+		SelectorKind:  "user_id",
+		SelectorValue: membership.UserID,
+		UserID:        membership.UserID,
+		Email:         membership.Email,
+	}
+	if err := s.reloadDynamicAuthorizations(r.Context()); err != nil {
+		writeJSON(w, http.StatusAccepted, map[string]any{
+			"status":     "persisted_pending_reload",
+			"persisted":  true,
+			"reloaded":   false,
+			"membership": row,
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":     "ok",
+		"persisted":  true,
+		"reloaded":   true,
+		"membership": row,
+	})
+}
+
+func (s *Server) deleteAdminAuthorizationAdminMember(w http.ResponseWriter, r *http.Request) {
+	if !s.ensureAdminDynamicAdminAvailable(w) {
+		return
+	}
+	if !s.ensureAdminAuthorizationWriteAccess(w, r) {
+		return
+	}
+	userID := strings.TrimSpace(chi.URLParam(r, "userID"))
+	if userID == "" {
+		writeError(w, http.StatusBadRequest, "userID is required")
+		return
+	}
+
+	if err := s.adminAuthorizations.DeleteAdminAuthorization(r.Context(), userID); err != nil {
+		if errors.Is(err, core.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "admin member not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to delete admin member")
+		return
+	}
+
+	if err := s.reloadDynamicAuthorizations(r.Context()); err != nil {
+		writeJSON(w, http.StatusAccepted, map[string]any{
+			"status":    "persisted_pending_reload",
+			"persisted": true,
+			"reloaded":  false,
+		})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"status":    "deleted",
+		"persisted": true,
+		"reloaded":  true,
+	})
+}
+
 func (s *Server) adminAuthorizationPluginEntry(plugin string) (string, *config.ProviderEntry, error) {
 	plugin = strings.TrimSpace(plugin)
 	if plugin == "" {
@@ -271,7 +393,7 @@ func (s *Server) writeAdminAuthorizationPluginError(w http.ResponseWriter, err e
 }
 
 func (s *Server) adminAuthorizationMemberRows(ctx context.Context, plugin string) ([]adminAuthorizationMemberRow, error) {
-	if s.pluginAuthorizations == nil || s.authorizer == nil || !s.authorizer.HasDynamicAuthorizations() {
+	if s.pluginAuthorizations == nil || s.authorizer == nil || !s.authorizer.HasDynamicPluginAuthorizations() {
 		return nil, errAdminAuthorizationUnavailable
 	}
 	staticRows, err := s.adminAuthorizationStaticRows(ctx, plugin)
@@ -338,11 +460,90 @@ func (s *Server) adminAuthorizationMemberRows(ctx context.Context, plugin string
 	return rows, nil
 }
 
+func (s *Server) adminAuthorizationAdminRows(ctx context.Context) ([]adminAuthorizationMemberRow, error) {
+	if s.adminAuthorizations == nil || s.authorizer == nil || !s.authorizer.HasDynamicAdminAuthorizations() {
+		return nil, errAdminAuthorizationUnavailable
+	}
+	staticRows, err := s.adminAuthorizationStaticAdminRows(ctx)
+	if err != nil {
+		return nil, err
+	}
+	dynamicMemberships, err := s.adminAuthorizations.ListAdminAuthorizations(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	staticByUserID := make(map[string]string, len(staticRows))
+	staticByEmail := make(map[string]string, len(staticRows))
+	rows := make([]adminAuthorizationMemberRow, 0, len(staticRows)+len(dynamicMemberships))
+	for i := range staticRows {
+		row := &staticRows[i]
+		rows = append(rows, *row)
+		key := row.adminAuthorizationRowKey()
+		if row.UserID != "" {
+			staticByUserID[row.UserID] = key
+		}
+		if email := normalizedRowEmail(*row); email != "" {
+			staticByEmail[email] = key
+		}
+	}
+
+	for _, membership := range dynamicMemberships {
+		if membership == nil {
+			continue
+		}
+		row := adminAuthorizationMemberRow{
+			Role:          membership.Role,
+			Source:        "dynamic",
+			Effective:     true,
+			Mutable:       true,
+			SelectorKind:  "user_id",
+			SelectorValue: membership.UserID,
+			UserID:        membership.UserID,
+			Email:         membership.Email,
+		}
+		if shadow, ok := staticByUserID[row.UserID]; ok {
+			row.Effective = false
+			row.ShadowedBy = shadow
+		} else if shadow, ok := staticByEmail[normalizedRowEmail(row)]; ok {
+			row.Effective = false
+			row.ShadowedBy = shadow
+		}
+		rows = append(rows, row)
+	}
+
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].Source != rows[j].Source {
+			return rows[i].Source < rows[j].Source
+		}
+		if rows[i].SelectorKind != rows[j].SelectorKind {
+			return rows[i].SelectorKind < rows[j].SelectorKind
+		}
+		if rows[i].SelectorValue != rows[j].SelectorValue {
+			return rows[i].SelectorValue < rows[j].SelectorValue
+		}
+		return rows[i].Role < rows[j].Role
+	})
+	return rows, nil
+}
+
 func (s *Server) adminAuthorizationStaticRows(ctx context.Context, plugin string) ([]adminAuthorizationMemberRow, error) {
 	_, members, ok := s.authorizer.StaticMembersForProvider(plugin)
 	if !ok {
 		return nil, nil
 	}
+	return s.adminAuthorizationRowsFromStaticMembers(ctx, plugin, members)
+}
+
+func (s *Server) adminAuthorizationStaticAdminRows(ctx context.Context) ([]adminAuthorizationMemberRow, error) {
+	members, ok := s.authorizer.StaticMembersForPolicy(s.adminRoute.AuthorizationPolicy)
+	if !ok {
+		return nil, nil
+	}
+	return s.adminAuthorizationRowsFromStaticMembers(ctx, "", members)
+}
+
+func (s *Server) adminAuthorizationRowsFromStaticMembers(ctx context.Context, plugin string, members []authorization.StaticHumanMember) ([]adminAuthorizationMemberRow, error) {
 	rows := make([]adminAuthorizationMemberRow, 0, len(members))
 	for _, member := range members {
 		row := adminAuthorizationMemberRow{
@@ -434,9 +635,50 @@ var (
 )
 
 func (s *Server) ensureAdminDynamicAuthorizationAvailable(w http.ResponseWriter) bool {
-	if s.pluginAuthorizations == nil || s.authorizer == nil || !s.authorizer.HasDynamicAuthorizations() {
+	if s.pluginAuthorizations == nil || s.authorizer == nil || !s.authorizer.HasDynamicPluginAuthorizations() {
 		writeError(w, http.StatusServiceUnavailable, "dynamic authorization is unavailable")
 		return false
 	}
 	return true
+}
+
+func (s *Server) ensureAdminDynamicAdminAvailable(w http.ResponseWriter) bool {
+	if strings.TrimSpace(s.adminRoute.AuthorizationPolicy) == "" {
+		writeError(w, http.StatusServiceUnavailable, "dynamic admin authorization is unavailable")
+		return false
+	}
+	if s.adminAuthorizations == nil || s.authorizer == nil || !s.authorizer.HasDynamicAdminAuthorizations() {
+		writeError(w, http.StatusServiceUnavailable, "dynamic admin authorization is unavailable")
+		return false
+	}
+	members, ok := s.authorizer.StaticMembersForPolicy(s.adminRoute.AuthorizationPolicy)
+	if !ok || len(members) == 0 {
+		writeError(w, http.StatusServiceUnavailable, "dynamic admin authorization requires at least one static admin member")
+		return false
+	}
+	hasSeedAdmin := false
+	for _, member := range members {
+		if s.adminRoleCanMutate(member.Role) {
+			hasSeedAdmin = true
+			break
+		}
+	}
+	if !hasSeedAdmin {
+		writeError(w, http.StatusServiceUnavailable, "dynamic admin authorization requires at least one static admin member")
+		return false
+	}
+	return true
+}
+
+func (s *Server) ensureAdminAuthorizationWriteAccess(w http.ResponseWriter, r *http.Request) bool {
+	access := invocation.AccessContextFromContext(r.Context())
+	if !s.adminRoleCanMutate(access.Role) {
+		writeError(w, http.StatusForbidden, "admin membership changes require an allowed admin role")
+		return false
+	}
+	return true
+}
+
+func (s *Server) adminRoleCanMutate(role string) bool {
+	return mountedWebUIRoleAllowed(strings.TrimSpace(role), s.adminRoute.AllowedRoles)
 }
