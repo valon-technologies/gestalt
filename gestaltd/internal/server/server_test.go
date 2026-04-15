@@ -29,6 +29,7 @@ import (
 	coreintegration "github.com/valon-technologies/gestalt/server/core/integration"
 	"github.com/valon-technologies/gestalt/server/core/session"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	"github.com/valon-technologies/gestalt/server/internal/adminui"
 	"github.com/valon-technologies/gestalt/server/internal/apiexec"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
@@ -1378,6 +1379,45 @@ func TestBuiltInAdminRoute_HumanAuthorizationSplitManagementLoginFlow(t *testing
 	}
 	if !strings.Contains(string(body), "protected-admin-shell") {
 		t.Fatalf("body = %q, want protected admin shell", body)
+	}
+}
+
+func TestBuiltInAdminRoute_EmbeddedAdminUIIncludesAuthorizationWorkspace(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.AdminUI = adminui.EmbeddedHandler(adminui.Options{BrandHref: "/"})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	resp, err := http.Get(ts.URL + "/admin/?tab=members")
+	if err != nil {
+		t.Fatalf("GET embedded admin ui: %v", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll embedded admin ui: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("embedded admin ui status = %d, want 200", resp.StatusCode)
+	}
+
+	text := string(body)
+	for _, want := range []string{
+		"Control surface",
+		"Authorization rules",
+		`data-tab="authorization"`,
+		`data-tab-panel="authorization"`,
+		"/admin/api/v1/authorization/plugins",
+		`window.__gestaltAdminShell.loginBase = "/api/v1/auth/login"`,
+		"Save dynamic grant",
+		"window.history.replaceState",
+		"Prometheus telemetry",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("embedded admin ui body missing %q", want)
+		}
 	}
 }
 

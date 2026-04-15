@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/staticui"
@@ -17,6 +18,7 @@ var assets embed.FS
 
 type Options struct {
 	BrandHref string
+	LoginBase string
 }
 
 func EmbeddedHandler(opts Options) http.Handler {
@@ -57,6 +59,7 @@ func renderIndexHTML(indexHTML []byte, opts Options) []byte {
 	)
 
 	replaced = strings.Replace(replaced, `<a href="/">Client UI</a>`, "", 1)
+	replaced = strings.Replace(replaced, `__GESTALT_ADMIN_LOGIN_BASE__`, strconv.Quote(normalized.LoginBase), 1)
 	return []byte(replaced)
 }
 
@@ -64,6 +67,10 @@ func normalizeOptions(opts Options) Options {
 	opts.BrandHref = strings.TrimSpace(opts.BrandHref)
 	if opts.BrandHref == "" {
 		opts.BrandHref = "/"
+	}
+	opts.LoginBase = strings.TrimSpace(opts.LoginBase)
+	if opts.LoginBase == "" {
+		opts.LoginBase = "/api/v1/auth/login"
 	}
 	return opts
 }
