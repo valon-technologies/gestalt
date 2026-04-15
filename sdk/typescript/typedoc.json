@@ -1,0 +1,24 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "entryPoints": [
+    "docs/entrypoints/@valon-technologies/gestalt",
+    "docs/entrypoints/build",
+    "docs/entrypoints/runtime",
+    "docs/entrypoints/schema",
+    "docs/entrypoints/target"
+  ],
+  "displayBasePath": "docs/entrypoints",
+  "tsconfig": "tsconfig.json",
+  "readme": "README.md",
+  "excludePrivate": true,
+  "excludeProtected": true,
+  "excludeInternal": true,
+  "sort": [
+    "source-order"
+  ],
+  "treatWarningsAsErrors": true,
+  "validation": {
+    "notExported": false,
+    "invalidLink": true
+  }
+}

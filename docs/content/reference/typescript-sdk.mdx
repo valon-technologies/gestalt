@@ -1,0 +1,32 @@
+# TypeScript SDK
+
+The TypeScript SDK reference is generated from the authored public surface in
+`sdk/typescript/src`. It covers the root package exports from
+`@valon-technologies/gestalt` together with the `build`, `runtime`, `schema`,
+and `target` entrypoints used by Bun-based providers.
+
+[Open the TypeScript API reference](/api/typescript/index.html)
+
+```ts
+import { defineIntegrationProvider, ok, operation, s } from "@valon-technologies/gestalt";
+
+export const provider = defineIntegrationProvider({
+  displayName: "Example Provider",
+  operations: [
+    operation({
+      id: "hello",
+      input: s.object({ name: s.string({ default: "World" }) }),
+      output: s.object({ message: s.string() }),
+      async handler(input) {
+        return ok({ message: `Hello, ${input.name}` });
+      },
+    }),
+  ],
+});
+```
+
+```ts
+import { parseRuntimeArgs, serve } from "@valon-technologies/gestalt/runtime";
+
+const args = parseRuntimeArgs(process.argv.slice(2));
+```

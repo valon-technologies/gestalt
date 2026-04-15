@@ -79,17 +79,38 @@ import {
   resolveProviderImportUrl,
 } from "./target.ts";
 
+/**
+ * Environment variable containing the Unix socket path for a running provider.
+ */
 export const ENV_PROVIDER_SOCKET = "GESTALT_PLUGIN_SOCKET";
+/**
+ * Environment variable containing the parent process ID supplied by the host.
+ */
 export const ENV_PROVIDER_PARENT_PID = "GESTALT_PLUGIN_PARENT_PID";
+/**
+ * Environment variable used to request static catalog generation.
+ */
 export const ENV_WRITE_CATALOG = "GESTALT_PLUGIN_WRITE_CATALOG";
+/**
+ * Protocol version currently implemented by the TypeScript runtime.
+ */
 export const CURRENT_PROTOCOL_VERSION = 2;
+/**
+ * Command-line usage for the runtime entrypoint.
+ */
 export const USAGE = "usage: bun run runtime.ts ROOT PROVIDER_TARGET";
 
+/**
+ * Parsed arguments for the runtime entrypoint.
+ */
 export type RuntimeArgs = {
   root: string;
   target: string;
 };
 
+/**
+ * Provider implementations supported by the runtime host.
+ */
 export type LoadedProvider =
   | IntegrationProvider
   | AuthProvider
@@ -97,6 +118,9 @@ export type LoadedProvider =
   | SecretsProvider
   | S3Provider;
 
+/**
+ * CLI entrypoint that loads a provider from source and starts serving it.
+ */
 export async function main(
   argv: string[] = process.argv.slice(2),
 ): Promise<number> {
@@ -112,6 +136,9 @@ export async function main(
   return 0;
 }
 
+/**
+ * Parses `gestalt-ts-runtime` CLI arguments.
+ */
 export function parseRuntimeArgs(argv: string[]): RuntimeArgs | undefined {
   if (argv.length !== 2) {
     return undefined;
@@ -122,6 +149,9 @@ export function parseRuntimeArgs(argv: string[]): RuntimeArgs | undefined {
   };
 }
 
+/**
+ * Loads any supported provider kind from a package root and optional target.
+ */
 export async function loadProviderFromTarget(
   root: string,
   rawTarget?: string,
@@ -192,6 +222,9 @@ export async function loadProviderFromTarget(
   }
 }
 
+/**
+ * Loads an integration provider from a package root and optional target.
+ */
 export async function loadPluginFromTarget(
   root: string,
   rawTarget?: string,
@@ -203,6 +236,9 @@ export async function loadPluginFromTarget(
   return provider;
 }
 
+/**
+ * Runs a provider that has already been loaded into memory.
+ */
 export async function runLoadedProvider(
   provider: LoadedProvider,
   options: {
@@ -230,6 +266,9 @@ export async function runLoadedProvider(
   await serve(provider);
 }
 
+/**
+ * Runs an integration provider that has already been loaded into memory.
+ */
 export async function runLoadedPlugin(
   plugin: IntegrationProvider,
   options: {
@@ -250,6 +289,9 @@ export async function runLoadedPlugin(
   await runLoadedProvider(plugin, runtimeOptions);
 }
 
+/**
+ * Runs a bundled provider export after validating its provider kind.
+ */
 export async function runBundledProvider(
   provider: unknown,
   kind: ProviderKind,
@@ -306,6 +348,9 @@ export async function runBundledProvider(
   });
 }
 
+/**
+ * Runs a bundled integration provider export.
+ */
 export async function runBundledPlugin(
   plugin: unknown,
   pluginName: string,
@@ -313,6 +358,9 @@ export async function runBundledPlugin(
   await runBundledProvider(plugin, "integration", pluginName);
 }
 
+/**
+ * Starts serving a provider over the Gestalt Unix socket transport.
+ */
 export async function serve(provider: LoadedProvider): Promise<void> {
   const socketPath = process.env[ENV_PROVIDER_SOCKET];
   if (!socketPath) {
@@ -392,6 +440,11 @@ export async function serve(provider: LoadedProvider): Promise<void> {
   }
 }
 
+/**
+ * Adapts the provider lifecycle service used during startup and health checks.
+ *
+ * @internal
+ */
 export function createRuntimeService(
   provider: LoadedProvider,
 ): Partial<ServiceImpl<typeof ProviderLifecycle>> {
@@ -451,6 +504,11 @@ export function createRuntimeService(
   };
 }
 
+/**
+ * Adapts an integration provider to the shared protocol service implementation.
+ *
+ * @internal
+ */
 export function createProviderService(
   provider: IntegrationProvider,
 ): Partial<ServiceImpl<typeof IntegrationProviderService>> {
@@ -542,6 +600,11 @@ export function createProviderService(
   };
 }
 
+/**
+ * Adapts an auth provider to the shared protocol service implementation.
+ *
+ * @internal
+ */
 export function createAuthService(
   provider: AuthProvider,
 ): Partial<ServiceImpl<typeof AuthProviderService>> {
@@ -610,6 +673,11 @@ export function createAuthService(
   };
 }
 
+/**
+ * Adapts a cache provider to the shared protocol service implementation.
+ *
+ * @internal
+ */
 export function createCacheService(
   provider: CacheProvider,
 ): Partial<ServiceImpl<typeof CacheService>> {
@@ -674,6 +742,11 @@ export function createCacheService(
   };
 }
 
+/**
+ * Adapts a secrets provider to the shared protocol service implementation.
+ *
+ * @internal
+ */
 export function createSecretsService(
   provider: SecretsProvider,
 ): Partial<ServiceImpl<typeof SecretsProviderService>> {
@@ -687,6 +760,9 @@ export function createSecretsService(
   };
 }
 
+/**
+ * Serializes an integration provider's static catalog as YAML.
+ */
 export function pluginCatalogYaml(plugin: IntegrationProvider): string {
   return catalogToYaml(plugin.staticCatalog());
 }

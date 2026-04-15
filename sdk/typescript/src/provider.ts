@@ -1,5 +1,8 @@
 import type { MaybePromise } from "./api.ts";
 
+/**
+ * Provider kinds supported by the TypeScript SDK runtime.
+ */
 export type ProviderKind =
   | "integration"
   | "auth"
@@ -8,6 +11,9 @@ export type ProviderKind =
   | "s3"
   | "telemetry";
 
+/**
+ * Runtime metadata reported to the Gestalt host during startup.
+ */
 export type ProviderMetadata = {
   kind?: ProviderKind;
   name?: string;
@@ -16,17 +22,32 @@ export type ProviderMetadata = {
   version?: string;
 };
 
+/**
+ * Optional configuration hook invoked after the host starts the provider.
+ */
 export type ConfigureHandler = (
   name: string,
   config: Record<string, unknown>,
 ) => MaybePromise<void>;
 
+/**
+ * Optional readiness probe invoked by the Gestalt host.
+ */
 export type HealthCheckHandler = () => MaybePromise<void>;
 
+/**
+ * Optional callback that returns non-fatal runtime warnings.
+ */
 export type WarningsHandler = () => MaybePromise<string[]>;
 
+/**
+ * Optional shutdown hook invoked when the provider process exits.
+ */
 export type CloseHandler = () => MaybePromise<void>;
 
+/**
+ * Shared runtime metadata and lifecycle hooks for authored providers.
+ */
 export interface RuntimeProviderOptions {
   name?: string;
   displayName?: string;
@@ -38,6 +59,9 @@ export interface RuntimeProviderOptions {
   close?: CloseHandler;
 }
 
+/**
+ * Base class shared by all TypeScript SDK provider implementations.
+ */
 export abstract class RuntimeProvider {
   abstract readonly kind: ProviderKind;
 
@@ -116,6 +140,9 @@ export abstract class RuntimeProvider {
   }
 }
 
+/**
+ * Runtime type guard for values that implement the provider base contract.
+ */
 export function isRuntimeProvider(value: unknown): value is RuntimeProvider {
   return (
     value instanceof RuntimeProvider ||
@@ -127,6 +154,9 @@ export function isRuntimeProvider(value: unknown): value is RuntimeProvider {
   );
 }
 
+/**
+ * Normalizes package and provider names into Gestalt's slug format.
+ */
 export function slugName(value: string): string {
   const normalized = value.trim().replace(/^@[^/]+\//, "");
   return normalized.replace(/[^A-Za-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "");

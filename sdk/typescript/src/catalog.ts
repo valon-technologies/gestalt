@@ -4,6 +4,9 @@ import YAML from "yaml";
 
 import type { Schema } from "./schema.ts";
 
+/**
+ * Query-style parameter metadata derived from a Gestalt schema.
+ */
 export interface CatalogParameter {
   name: string;
   type: string;
@@ -12,6 +15,9 @@ export interface CatalogParameter {
   default?: unknown;
 }
 
+/**
+ * JSON-schema-like description used in provider catalogs.
+ */
 export interface CatalogSchema {
   type: string;
   description?: string;
@@ -21,6 +27,9 @@ export interface CatalogSchema {
   items?: CatalogSchema;
 }
 
+/**
+ * Static operation metadata emitted by a provider catalog.
+ */
 export interface CatalogOperation {
   id: string;
   method: string;
@@ -35,6 +44,9 @@ export interface CatalogOperation {
   allowedRoles?: string[];
 }
 
+/**
+ * Static provider catalog emitted to the Gestalt host.
+ */
 export interface Catalog {
   name?: string;
   displayName?: string;
@@ -43,6 +55,9 @@ export interface Catalog {
   operations: CatalogOperation[];
 }
 
+/**
+ * Extracts top-level parameter metadata from an object schema.
+ */
 export function schemaToParameters(
   schema: Schema<unknown> | undefined,
 ): CatalogParameter[] {
@@ -67,6 +82,9 @@ export function schemaToParameters(
   });
 }
 
+/**
+ * Converts a runtime schema into catalog-friendly metadata.
+ */
 export function schemaToCatalogSchema(
   schema: Schema<unknown> | undefined,
 ): CatalogSchema | undefined {
@@ -102,6 +120,9 @@ export function schemaToCatalogSchema(
   return output;
 }
 
+/**
+ * Serializes a catalog to JSON for host consumption.
+ */
 export function catalogToJson(
   catalog: Catalog | Record<string, unknown> | null | undefined,
 ): string {
@@ -111,12 +132,18 @@ export function catalogToJson(
   return JSON.stringify(toCatalogJsonObject(catalog));
 }
 
+/**
+ * Serializes a catalog to YAML for release artifacts.
+ */
 export function catalogToYaml(
   catalog: Catalog | Record<string, unknown>,
 ): string {
   return YAML.stringify(toCatalogJsonObject(catalog));
 }
 
+/**
+ * Writes a catalog to disk as YAML.
+ */
 export function writeCatalogYaml(
   path: string,
   catalog: Catalog | Record<string, unknown>,

@@ -28,12 +28,18 @@ const ENV_S3_SOCKET = "GESTALT_S3_SOCKET";
 const WRITE_CHUNK_SIZE = 64 * 1024;
 const textEncoder = new TextEncoder();
 
+/**
+ * Returns the environment variable name used to discover an S3 socket.
+ */
 export function s3SocketEnv(name?: string): string {
   const trimmed = name?.trim() ?? "";
   if (!trimmed) return ENV_S3_SOCKET;
   return `${ENV_S3_SOCKET}_${trimmed.replace(/[^A-Za-z0-9]/g, "_").toUpperCase()}`;
 }
 
+/**
+ * Error returned when an object reference does not exist.
+ */
 export class S3NotFoundError extends Error {
   constructor(message?: string) {
     super(message ?? "s3: not found");
@@ -41,6 +47,9 @@ export class S3NotFoundError extends Error {
   }
 }
 
+/**
+ * Error returned when conditional read or write preconditions fail.
+ */
 export class S3PreconditionFailedError extends Error {
   constructor(message?: string) {
     super(message ?? "s3: precondition failed");
@@ -48,6 +57,9 @@ export class S3PreconditionFailedError extends Error {
   }
 }
 
+/**
+ * Error returned when the requested byte range is invalid.
+ */
 export class S3InvalidRangeError extends Error {
   constructor(message?: string) {
     super(message ?? "s3: invalid range");
@@ -55,12 +67,18 @@ export class S3InvalidRangeError extends Error {
   }
 }
 
+/**
+ * Identifies a concrete object or object version.
+ */
 export interface ObjectRef {
   bucket: string;
   key: string;
   versionId?: string;
 }
 
+/**
+ * Metadata returned for an S3 object.
+ */
 export interface ObjectMeta {
   ref: ObjectRef;
   etag: string;
@@ -71,11 +89,17 @@ export interface ObjectMeta {
   storageClass: string;
 }
 
+/**
+ * Byte range for partial object reads.
+ */
 export interface ByteRange {
   start?: number | bigint;
   end?: number | bigint;
 }
 
+/**
+ * Conditional and range options for reads.
+ */
 export interface ReadOptions {
   range?: ByteRange;
   ifMatch?: string;
@@ -84,6 +108,9 @@ export interface ReadOptions {
   ifUnmodifiedSince?: Date;
 }
 
+/**
+ * Optional headers and conditions for writes.
+ */
 export interface WriteOptions {
   contentType?: string;
   cacheControl?: string;
@@ -95,6 +122,9 @@ export interface WriteOptions {
   ifNoneMatch?: string;
 }
 
+/**
+ * Listing options for object pagination and prefix filtering.
+ */
 export interface ListOptions {
   bucket: string;
   prefix?: string;
@@ -104,6 +134,9 @@ export interface ListOptions {
   maxKeys?: number;
 }
 
+/**
+ * Single page of results returned by {@link S3.listObjects}.
+ */
 export interface ListPage {
   objects: ObjectMeta[];
   commonPrefixes: string[];
@@ -111,11 +144,17 @@ export interface ListPage {
   hasMore: boolean;
 }
 
+/**
+ * Conditional options for server-side copy operations.
+ */
 export interface CopyOptions {
   ifMatch?: string;
   ifNoneMatch?: string;
 }
 
+/**
+ * Supported presign methods.
+ */
 export enum PresignMethod {
   Get = "GET",
   Put = "PUT",
@@ -123,6 +162,9 @@ export enum PresignMethod {
   Head = "HEAD",
 }
 
+/**
+ * Options used when generating a presigned URL.
+ */
 export interface PresignOptions {
   method?: PresignMethod;
   expiresSeconds?: number | bigint;
@@ -131,6 +173,9 @@ export interface PresignOptions {
   headers?: Record<string, string>;
 }
 
+/**
+ * Result returned by {@link S3.presignObject} or {@link S3Object.presign}.
+ */
 export interface PresignResult {
   url: string;
   method: PresignMethod;
@@ -138,6 +183,9 @@ export interface PresignResult {
   headers: Record<string, string>;
 }
 
+/**
+ * Accepted write body sources for the S3 client.
+ */
 export type S3BodySource =
   | string
   | Uint8Array
@@ -149,16 +197,25 @@ export type S3BodySource =
   | null
   | undefined;
 
+/**
+ * Streaming read result returned by the S3 client.
+ */
 export interface ReadResult {
   meta: ObjectMeta;
   stream: AsyncIterable<Uint8Array>;
 }
 
+/**
+ * Result returned by an authored S3 provider implementation.
+ */
 export interface ProviderReadResult {
   meta: ObjectMeta;
   body?: S3BodySource;
 }
 
+/**
+ * Runtime hooks required to implement a Gestalt S3 provider.
+ */
 export interface S3ProviderOptions extends RuntimeProviderOptions {
   headObject: (ref: ObjectRef) => MaybePromise<ObjectMeta>;
   readObject: (ref: ObjectRef, options?: ReadOptions) => MaybePromise<ProviderReadResult>;
@@ -180,6 +237,9 @@ export interface S3ProviderOptions extends RuntimeProviderOptions {
   ) => MaybePromise<PresignResult>;
 }
 
+/**
+ * S3 provider implementation consumed by the Gestalt runtime.
+ */
 export class S3Provider extends RuntimeProvider {
   readonly kind = "s3" as const;
 
@@ -239,10 +299,16 @@ export class S3Provider extends RuntimeProvider {
   }
 }
 
+/**
+ * Creates an S3 provider from standard object storage handlers.
+ */
 export function defineS3Provider(options: S3ProviderOptions): S3Provider {
   return new S3Provider(options);
 }
 
+/**
+ * Runtime type guard for S3 providers loaded from user modules.
+ */
 export function isS3Provider(value: unknown): value is S3Provider {
   return (
     value instanceof S3Provider ||
@@ -260,6 +326,11 @@ export function isS3Provider(value: unknown): value is S3Provider {
   );
 }
 
+/**
+ * Adapts an authored S3 provider to the shared protocol service implementation.
+ *
+ * @internal
+ */
 export function createS3Service(
   provider: S3Provider,
 ): Partial<ServiceImpl<typeof S3Service>> {
@@ -411,6 +482,17 @@ export function createS3Service(
   };
 }
 
+/**
+ * Client for invoking a host-provided S3 service over the Gestalt transport.
+ *
+ * @example
+ * ```ts
+ * import { S3 } from "@valon-technologies/gestalt";
+ *
+ * const s3 = new S3();
+ * await s3.object("example-bucket", "hello.json").writeJSON({ ok: true });
+ * ```
+ */
 export class S3 {
   private readonly client: Client<typeof S3Service>;
 
@@ -543,16 +625,25 @@ export class S3 {
   }
 }
 
+/**
+ * Convenience wrapper for working with a single S3 object reference.
+ */
 export class S3Object {
   constructor(
     private readonly client: S3,
     readonly ref: ObjectRef,
   ) {}
 
+  /**
+   * Loads object metadata without downloading the object body.
+   */
   async stat(): Promise<ObjectMeta> {
     return await this.client.headObject(this.ref);
   }
 
+  /**
+   * Returns `true` when the referenced object exists.
+   */
   async exists(): Promise<boolean> {
     try {
       await this.stat();
@@ -565,40 +656,67 @@ export class S3Object {
     }
   }
 
+  /**
+   * Reads an object and returns its metadata and byte stream.
+   */
   async read(options?: ReadOptions): Promise<ReadResult> {
     return await this.client.readObject(this.ref, options);
   }
 
+  /**
+   * Reads only the object byte stream.
+   */
   async stream(options?: ReadOptions): Promise<AsyncIterable<Uint8Array>> {
     const result = await this.read(options);
     return result.stream;
   }
 
+  /**
+   * Reads an object into memory as bytes.
+   */
   async bytes(options?: ReadOptions): Promise<Uint8Array> {
     const result = await this.read(options);
     return await collectBytes(result.stream);
   }
 
+  /**
+   * Reads an object into memory as a string.
+   */
   async text(options?: ReadOptions, encoding = "utf-8"): Promise<string> {
     return new TextDecoder(encoding).decode(await this.bytes(options));
   }
 
+  /**
+   * Reads and parses an object as JSON.
+   */
   async json<T = unknown>(options?: ReadOptions): Promise<T> {
     return JSON.parse(await this.text(options)) as T;
   }
 
+  /**
+   * Writes an object body to storage.
+   */
   async write(body?: S3BodySource, options?: WriteOptions): Promise<ObjectMeta> {
     return await this.client.writeObject(this.ref, body, options);
   }
 
+  /**
+   * Writes binary content to storage.
+   */
   async writeBytes(body: Uint8Array | ArrayBuffer | ArrayBufferView): Promise<ObjectMeta> {
     return await this.write(body);
   }
 
+  /**
+   * Writes string content to storage.
+   */
   async writeString(body: string, options?: WriteOptions): Promise<ObjectMeta> {
     return await this.write(body, options);
   }
 
+  /**
+   * Writes JSON content using `application/json` by default.
+   */
   async writeJSON(value: unknown, options: WriteOptions = {}): Promise<ObjectMeta> {
     return await this.write(JSON.stringify(value), {
       ...options,
@@ -606,10 +724,16 @@ export class S3Object {
     });
   }
 
+  /**
+   * Deletes the referenced object.
+   */
   async delete(): Promise<void> {
     await this.client.deleteObject(this.ref);
   }
 
+  /**
+   * Generates a presigned URL for the referenced object.
+   */
   async presign(options?: PresignOptions): Promise<PresignResult> {
     return await this.client.presignObject(this.ref, options);
   }
