@@ -1031,7 +1031,9 @@ func TestBuiltInAdminRoute_HumanAuthorizationSplitManagementLoginFlow(t *testing
 		t.Fatalf("parse start login redirect: %v", err)
 	}
 
-	callbackResp, err := client.Get(publicURL + "/api/v1/auth/login/callback?code=good-code&state=" + url.QueryEscape(loginURL.Query().Get("state")))
+	callbackReq, _ := http.NewRequest(http.MethodGet, publicURL+"/api/v1/auth/login/callback?code=good-code&state="+url.QueryEscape(loginURL.Query().Get("state")), nil)
+	callbackReq.Header.Set("Accept", "text/html")
+	callbackResp, err := client.Do(callbackReq)
 	if err != nil {
 		t.Fatalf("GET browser login callback: %v", err)
 	}
@@ -6105,6 +6107,54 @@ func TestLoginCallback(t *testing.T) {
 	}
 }
 
+func TestLoginCallback_BrowserNavigationRedirectsToBrowserCallbackPage(t *testing.T) {
+	t.Parallel()
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			HandleCallbackFn: func(_ context.Context, code string) (*core.UserIdentity, error) {
+				if code == "good-code" {
+					return &core.UserIdentity{Email: "user@example.com", DisplayName: "User"}, nil
+				}
+				return nil, fmt.Errorf("bad code")
+			},
+		}
+		cfg.Services = coretesting.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{
+		Jar: jar,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	body := bytes.NewBufferString(`{"state":"test-state"}`)
+	loginResp, err := client.Post(ts.URL+"/api/v1/auth/login", "application/json", body)
+	if err != nil {
+		t.Fatalf("start login: %v", err)
+	}
+	_ = loginResp.Body.Close()
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/login/callback?code=good-code&state=test-state", nil)
+	req.Header.Set("Accept", "text/html")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("callback request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusFound {
+		t.Fatalf("expected 302, got %d", resp.StatusCode)
+	}
+	if got, want := resp.Header.Get("Location"), config.BrowserAuthCallbackPath+"?code=good-code&state=test-state"; got != want {
+		t.Fatalf("redirect location = %q, want %q", got, want)
+	}
+}
+
 func TestLoginCallbackForCLI(t *testing.T) {
 	t.Parallel()
 
@@ -6211,6 +6261,62 @@ func TestLoginCallbackForCLI(t *testing.T) {
 	}
 	if loginAudit["operation"] != "auth.login.complete" {
 		t.Fatalf("expected auth.login.complete audit operation, got %v", loginAudit["operation"])
+	}
+}
+
+func TestLoginCallback_FetchIncludesNextPath(t *testing.T) {
+	t.Parallel()
+
+	secret := []byte("0123456789abcdef0123456789abcdef")
+	auth := &stubHostIssuedSessionAuth{secret: secret}
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatalf("cookiejar.New: %v", err)
+	}
+	client := &http.Client{
+		Jar: jar,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = auth
+		cfg.StateSecret = secret
+		cfg.Services = coretesting.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	startResp, err := client.Get(ts.URL + "/api/v1/auth/login?next=" + url.QueryEscape("/sample-portal/sync?code=invite-code&state=abc123"))
+	if err != nil {
+		t.Fatalf("start browser login: %v", err)
+	}
+	defer func() { _ = startResp.Body.Close() }()
+	if startResp.StatusCode != http.StatusFound {
+		t.Fatalf("start status = %d, want %d", startResp.StatusCode, http.StatusFound)
+	}
+	loginURL, err := url.Parse(startResp.Header.Get("Location"))
+	if err != nil {
+		t.Fatalf("parse start login redirect: %v", err)
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/login/callback?code=good-code&state="+url.QueryEscape(loginURL.Query().Get("state")), nil)
+	req.Header.Set("Accept", "application/json")
+	callbackResp, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("fetch callback: %v", err)
+	}
+	defer func() { _ = callbackResp.Body.Close() }()
+	if callbackResp.StatusCode != http.StatusOK {
+		t.Fatalf("callback status = %d, want %d", callbackResp.StatusCode, http.StatusOK)
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(callbackResp.Body).Decode(&result); err != nil {
+		t.Fatalf("decode callback response: %v", err)
+	}
+	if got, want := result["nextPath"], "/sample-portal/sync?code=invite-code&state=abc123"; got != want {
+		t.Fatalf("nextPath = %v, want %q", got, want)
 	}
 }
 
@@ -7514,6 +7620,22 @@ func TestCallbackPathConstants(t *testing.T) {
 	_ = resp.Body.Close()
 	if resp.StatusCode == http.StatusNotFound {
 		t.Errorf("config.AuthCallbackPath %q is not a registered route (got 404)", config.AuthCallbackPath)
+	}
+
+	resp, err = http.Get(ts.URL + config.BrowserAuthCallbackPath)
+	if err != nil {
+		t.Fatalf("GET %s: %v", config.BrowserAuthCallbackPath, err)
+	}
+	body, readErr := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if readErr != nil {
+		t.Fatalf("ReadAll %s: %v", config.BrowserAuthCallbackPath, readErr)
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		t.Errorf("config.BrowserAuthCallbackPath %q is not a registered route (got 404)", config.BrowserAuthCallbackPath)
+	}
+	if !strings.Contains(string(body), config.AuthCallbackPath) {
+		t.Fatalf("browser callback page missing auth callback path %q", config.AuthCallbackPath)
 	}
 
 	// Integration callback: should be public and return 400 for missing params,
@@ -10161,7 +10283,9 @@ func TestBrowserLoginRedirect_RedirectsBackToNextPath(t *testing.T) {
 				t.Fatalf("login redirect state = %q, want %q", got, tc.wantState)
 			}
 
-			callbackResp, err := client.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=" + url.QueryEscape(loginURL.Query().Get("state")))
+			callbackReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/login/callback?code=good-code&state="+url.QueryEscape(loginURL.Query().Get("state")), nil)
+			callbackReq.Header.Set("Accept", "text/html")
+			callbackResp, err := client.Do(callbackReq)
 			if err != nil {
 				t.Fatalf("browser login callback: %v", err)
 			}
