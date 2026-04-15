@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -17,14 +18,19 @@ const pendingConnectionTTL = 30 * time.Minute
 var errPendingConnectionExpired = errors.New("pending connection expired")
 
 type integrationOAuthState struct {
-	UserID           string            `json:"uid"`
-	AuthSource       string            `json:"src,omitempty"`
-	Integration      string            `json:"int"`
-	Connection       string            `json:"con,omitempty"`
-	Instance         string            `json:"ins,omitempty"`
-	Verifier         string            `json:"ver,omitempty"`
-	ConnectionParams map[string]string `json:"cp,omitempty"`
-	ExpiresAt        int64             `json:"exp"`
+	UserID           string                  `json:"uid,omitempty"`
+	OwnerKind        string                  `json:"ok,omitempty"`
+	OwnerID          string                  `json:"oid,omitempty"`
+	InitiatorUserID  string                  `json:"iuid,omitempty"`
+	AuthSource       string                  `json:"src,omitempty"`
+	ViewerScopes     []string                `json:"vsc,omitempty"`
+	ViewerPerms      []core.AccessPermission `json:"vpm,omitempty"`
+	Integration      string                  `json:"int"`
+	Connection       string                  `json:"con,omitempty"`
+	Instance         string                  `json:"ins,omitempty"`
+	Verifier         string                  `json:"ver,omitempty"`
+	ConnectionParams map[string]string       `json:"cp,omitempty"`
+	ExpiresAt        int64                   `json:"exp"`
 }
 
 type integrationOAuthStateCodec struct {
@@ -65,8 +71,12 @@ func decodeEncryptedState[T any](enc *cryptoutil.AESGCMEncryptor, label, encoded
 }
 
 func validateIntegrationOAuthState(state *integrationOAuthState, now time.Time) error {
-	if state.UserID == "" {
-		return fmt.Errorf("oauth state missing user ID")
+	normalizeIntegrationOAuthState(state)
+	if state.OwnerKind == "" || state.OwnerID == "" {
+		return fmt.Errorf("oauth state missing owner")
+	}
+	if state.InitiatorUserID == "" {
+		return fmt.Errorf("oauth state missing initiator user ID")
 	}
 	if state.Integration == "" {
 		return fmt.Errorf("oauth state missing integration")
@@ -78,6 +88,34 @@ func validateIntegrationOAuthState(state *integrationOAuthState, now time.Time) 
 		return fmt.Errorf("oauth state expired")
 	}
 	return nil
+}
+
+func normalizeIntegrationOAuthState(state *integrationOAuthState) {
+	if state == nil {
+		return
+	}
+	if state.OwnerKind == "" {
+		if strings.TrimSpace(state.OwnerID) != "" {
+			state.OwnerKind = core.IntegrationTokenOwnerKindUser
+		} else if strings.TrimSpace(state.UserID) != "" {
+			state.OwnerKind = core.IntegrationTokenOwnerKindUser
+			state.OwnerID = strings.TrimSpace(state.UserID)
+		}
+	}
+	if state.OwnerID == "" && state.OwnerKind == core.IntegrationTokenOwnerKindUser {
+		state.OwnerID = strings.TrimSpace(state.UserID)
+	}
+	if state.UserID == "" && state.OwnerKind == core.IntegrationTokenOwnerKindUser {
+		state.UserID = strings.TrimSpace(state.OwnerID)
+	}
+	if state.InitiatorUserID == "" {
+		switch state.OwnerKind {
+		case core.IntegrationTokenOwnerKindUser:
+			state.InitiatorUserID = strings.TrimSpace(state.OwnerID)
+		default:
+			state.InitiatorUserID = strings.TrimSpace(state.UserID)
+		}
+	}
 }
 
 func (c *integrationOAuthStateCodec) Encode(state integrationOAuthState) (string, error) {
@@ -93,6 +131,20 @@ func (c *integrationOAuthStateCodec) Decode(encoded string, now time.Time) (*int
 		return nil, err
 	}
 	return state, nil
+}
+
+func integrationOAuthRedirectPath(state *integrationOAuthState) string {
+	if state == nil {
+		return "/integrations"
+	}
+	if state.OwnerKind == core.IntegrationTokenOwnerKindManagedIdentity && strings.TrimSpace(state.OwnerID) != "" {
+		u := &url.URL{Path: "/identities"}
+		q := u.Query()
+		q.Set("id", state.OwnerID)
+		u.RawQuery = q.Encode()
+		return u.String()
+	}
+	return "/integrations"
 }
 
 const loginStateTTL = 10 * time.Minute

@@ -951,10 +951,11 @@ func providerSupportsManagedIdentityAuth(prov core.Provider) bool {
 	if mp, ok := prov.(interface{ SupportsManualAuth() bool }); ok && mp.SupportsManualAuth() {
 		return true
 	}
-	return false
+	_, ok := prov.(core.OAuthProvider)
+	return ok
 }
 
 func managedIdentityAuthTypeSupported(authType string) bool {
 	authType = strings.ToLower(strings.TrimSpace(authType))
-	return authType == string(providermanifestv1.AuthTypeManual)
+	return authType == string(providermanifestv1.AuthTypeManual) || strings.HasPrefix(authType, "oauth")
 }

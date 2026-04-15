@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -15,6 +16,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/discovery"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
 var errManagedIdentityIntegrationNotFound = errors.New("managed identity integration not found")
@@ -108,14 +110,18 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	}
 
 	authSource := ""
-	if p := PrincipalFromContext(r.Context()); p != nil {
-		authSource = p.AuthSource()
+	viewer := PrincipalFromContext(r.Context())
+	if viewer != nil {
+		authSource = viewer.AuthSource()
 	}
+	viewerScopes, viewerPerms := viewerCeilingForConnectionState(viewer)
 	tm := tokenMaterial{
 		OwnerKind:       core.IntegrationTokenOwnerKindUser,
 		OwnerID:         dbUserID,
 		InitiatorUserID: dbUserID,
 		AuthSource:      authSource,
+		ViewerScopes:    viewerScopes,
+		ViewerPerms:     viewerPerms,
 		Integration:     req.Integration,
 		Connection:      manualConnection,
 		Instance:        manualInstance,
@@ -246,6 +252,8 @@ type tokenMaterial struct {
 	InitiatorUserID string
 	LegacyUserID    string `json:"UserID,omitempty"`
 	AuthSource      string
+	ViewerScopes    []string                `json:"vsc,omitempty"`
+	ViewerPerms     []core.AccessPermission `json:"vpm,omitempty"`
 	Integration     string
 	Connection      string
 	Instance        string
@@ -307,10 +315,235 @@ func (s *Server) validateManagedIdentityConnectionWrite(ctx context.Context, tm 
 	if _, err := s.managedIdentityActor(ctx, tm.OwnerID, tm.InitiatorUserID, managedIdentityRoleEditor); err != nil {
 		return err
 	}
-	if !s.managedIdentityGrantPluginVisible(tm.Integration, PrincipalFromContext(ctx)) {
+	if !s.managedIdentityGrantPluginVisible(tm.Integration, s.managedIdentityConnectionViewerPrincipal(ctx, tm)) {
+		return errManagedIdentityIntegrationNotFound
+	}
+	if !s.managedIdentityConnectionVisible(tm.Integration, tm.Connection) {
 		return errManagedIdentityIntegrationNotFound
 	}
 	return nil
+}
+
+func (s *Server) managedIdentityConnectionViewerPrincipal(ctx context.Context, tm tokenMaterial) *principal.Principal {
+	initiatorUserID := strings.TrimSpace(tm.InitiatorUserID)
+	applyViewerCeiling := func(p *principal.Principal) *principal.Principal {
+		if p == nil {
+			return nil
+		}
+		if len(tm.ViewerScopes) == 0 && len(tm.ViewerPerms) == 0 {
+			return p
+		}
+		clone := *p
+		if len(tm.ViewerScopes) > 0 {
+			clone.Scopes = append([]string(nil), tm.ViewerScopes...)
+		}
+		if len(tm.ViewerPerms) > 0 {
+			clone.TokenPermissions = principal.CompilePermissions(tm.ViewerPerms)
+		}
+		return &clone
+	}
+	if initiatorUserID == "" {
+		return applyViewerCeiling(PrincipalFromContext(ctx))
+	}
+	if p := PrincipalFromContext(ctx); p != nil && p.UserID == initiatorUserID {
+		return applyViewerCeiling(p)
+	}
+	p := &principal.Principal{
+		UserID:    initiatorUserID,
+		SubjectID: principal.UserSubjectID(initiatorUserID),
+		Kind:      principal.KindUser,
+	}
+	if s.users != nil {
+		if user, err := s.users.GetUser(ctx, initiatorUserID); err == nil && user != nil {
+			p.Identity = &core.UserIdentity{
+				Email:       user.Email,
+				DisplayName: user.DisplayName,
+			}
+		}
+	}
+	return applyViewerCeiling(p)
+}
+
+func viewerCeilingForConnectionState(p *principal.Principal) ([]string, []core.AccessPermission) {
+	if p == nil {
+		return nil, nil
+	}
+	var scopes []string
+	if len(p.Scopes) > 0 {
+		scopes = append([]string(nil), p.Scopes...)
+	}
+	perms := principal.PermissionsToAccessPermissions(p.TokenPermissions)
+	if len(perms) > 0 {
+		perms = append([]core.AccessPermission(nil), perms...)
+	}
+	return scopes, perms
+}
+
+func (s *Server) managedIdentityConnectionVisible(integration, connection string) bool {
+	connection = config.ResolveConnectionAlias(strings.TrimSpace(connection))
+	if connection == "" {
+		return false
+	}
+	entry := s.pluginDefs[integration]
+	if entry == nil {
+		defaultConnection := config.ResolveConnectionAlias(s.defaultConnection[integration])
+		if defaultConnection == "" {
+			defaultConnection = config.PluginConnectionName
+		}
+		return connection == config.PluginConnectionName || connection == defaultConnection
+	}
+	names, err := s.managedIdentityAdvertisedConnectionNames(entry)
+	if err != nil {
+		return false
+	}
+	advertised := false
+	for _, name := range names {
+		if name == connection {
+			advertised = true
+			break
+		}
+	}
+	manifestProvider := entry.ManifestSpec()
+	if !advertised {
+		defaultConnection := config.ResolveConnectionAlias(s.defaultConnection[integration])
+		if manifestProvider == nil && defaultConnection != "" && connection == defaultConnection {
+			return true
+		}
+		return false
+	}
+	if connection == config.PluginConnectionName {
+		return userFacingConnection(config.EffectivePluginConnectionDef(entry, manifestProvider))
+	}
+	conn, ok := config.EffectiveNamedConnectionDef(entry, manifestProvider, connection)
+	if !ok {
+		return false
+	}
+	return userFacingConnection(conn)
+}
+
+func (s *Server) managedIdentityAdvertisedConnectionNames(entry *config.ProviderEntry) ([]string, error) {
+	if entry == nil {
+		return []string{}, nil
+	}
+	manifestProvider := entry.ManifestSpec()
+	if manifestProvider == nil {
+		plan, err := config.BuildStaticConnectionPlan(entry, nil)
+		if err != nil {
+			return nil, err
+		}
+		return plan.AdvertisedConnectionNames(), nil
+	}
+
+	names := make([]string, 0, 4)
+	seen := map[string]struct{}{}
+	add := func(name string) {
+		name = config.ResolveConnectionAlias(strings.TrimSpace(name))
+		if name == "" {
+			return
+		}
+		if _, ok := seen[name]; ok {
+			return
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
+	}
+
+	defaultConnection := s.managedIdentityExplicitDefaultConnection(entry, manifestProvider)
+	add(defaultConnection)
+	if surfaceConnection, ok := s.managedIdentityRESTConnectionName(entry, manifestProvider); ok {
+		add(surfaceConnection)
+	}
+	for _, surface := range config.OrderedSpecSurfaces {
+		if !s.managedIdentityHasConfiguredSurface(entry, manifestProvider, surface) {
+			continue
+		}
+		surfaceConnection, ok := s.managedIdentitySurfaceConnectionName(entry, manifestProvider, surface)
+		if !ok {
+			continue
+		}
+		add(surfaceConnection)
+	}
+	return names, nil
+}
+
+func (s *Server) managedIdentityExplicitDefaultConnection(entry *config.ProviderEntry, manifestProvider *providermanifestv1.Spec) string {
+	if entry != nil {
+		if name := config.ResolveConnectionAlias(strings.TrimSpace(entry.DefaultConnection)); name != "" {
+			return name
+		}
+	}
+	if manifestProvider != nil {
+		if name := config.ResolveConnectionAlias(strings.TrimSpace(manifestProvider.DefaultConnection)); name != "" {
+			return name
+		}
+	}
+	return ""
+}
+
+func (s *Server) managedIdentityRESTConnectionName(entry *config.ProviderEntry, manifestProvider *providermanifestv1.Spec) (string, bool) {
+	if (entry == nil || entry.Surfaces == nil || entry.Surfaces.REST == nil) && (manifestProvider == nil || manifestProvider.Surfaces == nil || manifestProvider.Surfaces.REST == nil) {
+		return "", false
+	}
+	defaultConnection := s.managedIdentityExplicitDefaultConnection(entry, manifestProvider)
+	if defaultConnection != "" {
+		return defaultConnection, true
+	}
+	return s.managedIdentityFallbackSurfaceConnection(entry, manifestProvider), true
+}
+
+func (s *Server) managedIdentitySurfaceConnectionName(entry *config.ProviderEntry, manifestProvider *providermanifestv1.Spec, surface config.SpecSurface) (string, bool) {
+	if !s.managedIdentityHasConfiguredSurface(entry, manifestProvider, surface) {
+		return "", false
+	}
+	if name := config.ResolveConnectionAlias(strings.TrimSpace(config.ManifestProviderSurfaceConnectionName(manifestProvider, surface))); name != "" {
+		return name, true
+	}
+	defaultConnection := s.managedIdentityExplicitDefaultConnection(entry, manifestProvider)
+	if defaultConnection != "" {
+		return defaultConnection, true
+	}
+	return s.managedIdentityFallbackSurfaceConnection(entry, manifestProvider), true
+}
+
+func (s *Server) managedIdentityFallbackSurfaceConnection(entry *config.ProviderEntry, manifestProvider *providermanifestv1.Spec) string {
+	names := managedIdentityNamedConnectionNames(entry, manifestProvider)
+	if len(names) == 1 {
+		return names[0]
+	}
+	return config.PluginConnectionName
+}
+
+func managedIdentityNamedConnectionNames(entry *config.ProviderEntry, manifestProvider *providermanifestv1.Spec) []string {
+	seen := map[string]struct{}{}
+	names := make([]string, 0)
+	if manifestProvider != nil {
+		for name := range manifestProvider.Connections {
+			if name = config.ResolveConnectionAlias(strings.TrimSpace(name)); name != "" {
+				if _, ok := seen[name]; !ok {
+					seen[name] = struct{}{}
+					names = append(names, name)
+				}
+			}
+		}
+	}
+	if entry != nil {
+		for name := range entry.Connections {
+			if name = config.ResolveConnectionAlias(strings.TrimSpace(name)); name != "" {
+				if _, ok := seen[name]; !ok {
+					seen[name] = struct{}{}
+					names = append(names, name)
+				}
+			}
+		}
+	}
+	return names
+}
+
+func (s *Server) managedIdentityHasConfiguredSurface(entry *config.ProviderEntry, manifestProvider *providermanifestv1.Spec, surface config.SpecSurface) bool {
+	if url := strings.TrimSpace(config.ProviderSurfaceURLOverride(entry, surface)); url != "" {
+		return true
+	}
+	return strings.TrimSpace(config.ManifestProviderSurfaceURL(manifestProvider, surface)) != ""
 }
 
 func (s *Server) writeManagedIdentityConnectionWriteError(w http.ResponseWriter, integration string, err error) bool {

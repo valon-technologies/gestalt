@@ -39,6 +39,7 @@ func (s *Server) mountAuthenticatedRoutes(r chi.Router) {
 			r.Delete("/{identityID}/tokens/{id}", s.revokeManagedIdentityToken)
 			r.Get("/{identityID}/integrations", s.listManagedIdentityIntegrations)
 			r.Delete("/{identityID}/integrations/{name}", s.disconnectManagedIdentityIntegration)
+			r.Post("/{identityID}/auth/start-oauth", s.startManagedIdentityOAuth)
 			r.Post("/{identityID}/auth/connect-manual", s.connectManagedIdentityManual)
 		})
 	})

@@ -3,9 +3,9 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"strings"
 	"time"
 
@@ -22,6 +22,13 @@ type startOAuthRequest struct {
 	Instance         string            `json:"instance"`
 	Scopes           []string          `json:"scopes"`
 	ConnectionParams map[string]string `json:"connectionParams"`
+}
+
+type oauthStartTarget struct {
+	OwnerKind       string
+	OwnerID         string
+	InitiatorUserID string
+	AuthSource      string
 }
 
 func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
@@ -50,41 +57,123 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	}
 	providerName = req.Integration
 
-	prov, connection, err := s.resolveConnectionProvider(w, req.Integration, req.Connection)
+	dbUserID, err := s.resolveUserID(w, r)
 	if err != nil {
 		auditErr = err
 		return
 	}
-	metricProviderName = req.Integration
-	connectionMode = metricutil.NormalizeConnectionMode(prov.ConnectionMode())
+
+	authSource := ""
+	if p := PrincipalFromContext(r.Context()); p != nil {
+		authSource = p.AuthSource()
+	}
+	metricProviderName, connectionMode, auditTarget, err = s.startIntegrationOAuthForOwner(w, r, req, oauthStartTarget{
+		OwnerKind:       core.IntegrationTokenOwnerKindUser,
+		OwnerID:         dbUserID,
+		InitiatorUserID: dbUserID,
+		AuthSource:      authSource,
+	})
+	if err != nil {
+		auditErr = err
+		return
+	}
+	providerName = metricProviderName
+
+	auditAllowed = true
+	auditErr = nil
+}
+
+func (s *Server) startManagedIdentityOAuth(w http.ResponseWriter, r *http.Request) {
+	startedAt := time.Now()
+	auditAllowed := false
+	auditErr := errors.New("identity oauth start failed")
+	auditTarget := auditTarget{Kind: auditTargetKindConnection}
+	providerName := ""
+	metricProviderName := metricutil.UnknownAttrValue
+	connectionMode := metricutil.UnknownAttrValue
+	defer func() {
+		metricutil.RecordConnectionAuthMetrics(r.Context(), startedAt, metricProviderName, "oauth", "start", connectionMode, auditErr != nil)
+		s.auditHTTPEventWithTarget(r.Context(), PrincipalFromContext(r.Context()), providerName, "identity.connection.oauth.start", auditAllowed, auditErr, auditTarget)
+	}()
+
+	actor, ok := s.resolveManagedIdentityActor(w, r, managedIdentityRoleEditor)
+	if !ok {
+		return
+	}
+
+	var req startOAuthRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		auditErr = errors.New("invalid JSON body")
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	providerName = req.Integration
+	if !s.managedIdentityGrantPluginVisible(req.Integration, PrincipalFromContext(r.Context())) {
+		auditErr = errors.New("integration not found")
+		writeError(w, http.StatusNotFound, "integration not found")
+		return
+	}
+
+	authSource := ""
+	if p := PrincipalFromContext(r.Context()); p != nil {
+		authSource = p.AuthSource()
+	}
+	metricProviderName, connectionMode, auditTarget, err := s.startIntegrationOAuthForOwner(w, r, req, oauthStartTarget{
+		OwnerKind:       core.IntegrationTokenOwnerKindManagedIdentity,
+		OwnerID:         actor.Identity.ID,
+		InitiatorUserID: actor.UserID,
+		AuthSource:      authSource,
+	})
+	if err != nil {
+		auditErr = err
+		return
+	}
+	providerName = metricProviderName
+	auditAllowed = true
+	auditErr = nil
+}
+
+func (s *Server) startIntegrationOAuthForOwner(w http.ResponseWriter, r *http.Request, req startOAuthRequest, target oauthStartTarget) (string, string, auditTarget, error) {
+	prov, ok := s.getProvider(w, req.Integration)
+	if !ok {
+		return metricutil.UnknownAttrValue, metricutil.UnknownAttrValue, auditTarget{Kind: auditTargetKindConnection}, errors.New("integration not found")
+	}
+	connectionMode := metricutil.NormalizeConnectionMode(prov.ConnectionMode())
+
+	connection, ok := s.resolveRequestedConnection(w, req.Integration, req.Connection)
+	if !ok {
+		return req.Integration, connectionMode, auditTarget{Kind: auditTargetKindConnection}, errors.New("invalid connection")
+	}
+	if target.OwnerKind == core.IntegrationTokenOwnerKindManagedIdentity && !s.managedIdentityConnectionVisible(req.Integration, connection) {
+		writeError(w, http.StatusNotFound, fmt.Sprintf("integration %q not found", req.Integration))
+		return req.Integration, connectionMode, auditTarget{Kind: auditTargetKindConnection}, errors.New("integration not found")
+	}
 
 	handler, ok := s.requireOAuthHandler(w, req.Integration, connection)
 	if !ok {
-		auditErr = errors.New("oauth is not configured")
-		return
+		return req.Integration, connectionMode, auditTarget{Kind: auditTargetKindConnection}, errors.New("oauth is not configured")
 	}
 
 	if s.stateCodec == nil {
-		auditErr = errors.New("oauth state encryption is not configured")
 		writeError(w, http.StatusInternalServerError, "oauth state encryption is not configured")
-		return
+		return req.Integration, connectionMode, auditTarget{Kind: auditTargetKindConnection}, errors.New("oauth state encryption is not configured")
 	}
 
-	dbUserID, instance, err := s.resolveUserConnectionSetup(w, r, req.Instance)
-	if err != nil {
-		auditErr = err
-		return
+	instance, ok := resolveRequestedInstance(w, req.Instance)
+	if !ok {
+		return req.Integration, connectionMode, auditTarget{Kind: auditTargetKindConnection}, errors.New("invalid instance")
 	}
-	auditTarget = connectionAuditTarget(req.Integration, connection, instance)
+	auditTarget := connectionAuditTarget(req.Integration, connection, instance)
 
 	connParams, ok := resolveConnectionParams(w, prov, req.ConnectionParams)
 	if !ok {
-		auditErr = errors.New("invalid connection parameters")
-		return
+		return req.Integration, connectionMode, auditTarget, errors.New("invalid connection parameters")
 	}
 
-	var authURL, verifier string
-
+	var (
+		authURL  string
+		verifier string
+	)
 	if len(connParams) > 0 {
 		rawAuthURL := handler.AuthorizationBaseURL()
 		resolvedAuthURL := paraminterp.Interpolate(rawAuthURL, connParams)
@@ -96,13 +185,19 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		authURL, verifier = handler.StartOAuth("_", req.Scopes)
 	}
 
-	authSource := ""
-	if p := PrincipalFromContext(r.Context()); p != nil {
-		authSource = p.AuthSource()
+	legacyUserID := target.InitiatorUserID
+	if target.OwnerKind == core.IntegrationTokenOwnerKindUser {
+		legacyUserID = target.OwnerID
 	}
-	state, err := s.stateCodec.Encode(integrationOAuthState{
-		UserID:           dbUserID,
-		AuthSource:       authSource,
+	viewerScopes, viewerPerms := viewerCeilingForConnectionState(PrincipalFromContext(r.Context()))
+	encodedState, err := s.stateCodec.Encode(integrationOAuthState{
+		UserID:           legacyUserID,
+		OwnerKind:        target.OwnerKind,
+		OwnerID:          target.OwnerID,
+		InitiatorUserID:  target.InitiatorUserID,
+		AuthSource:       target.AuthSource,
+		ViewerScopes:     viewerScopes,
+		ViewerPerms:      viewerPerms,
 		Integration:      req.Integration,
 		Connection:       connection,
 		Instance:         instance,
@@ -111,21 +206,18 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		ExpiresAt:        s.now().Add(integrationOAuthStateTTL).Unix(),
 	})
 	if err != nil {
-		auditErr = errors.New("failed to encode oauth state")
 		writeError(w, http.StatusInternalServerError, "failed to encode oauth state")
-		return
+		return req.Integration, connectionMode, auditTarget, errors.New("failed to encode oauth state")
 	}
 
-	authURL, err = setURLQueryParam(authURL, "state", state)
+	authURL, err = setURLQueryParam(authURL, "state", encodedState)
 	if err != nil {
-		auditErr = errors.New("failed to prepare oauth URL")
 		writeError(w, http.StatusInternalServerError, "failed to prepare oauth URL")
-		return
+		return req.Integration, connectionMode, auditTarget, errors.New("failed to prepare oauth URL")
 	}
 
-	auditAllowed = true
-	auditErr = nil
-	writeJSON(w, http.StatusOK, map[string]string{"url": authURL, "state": state})
+	writeJSON(w, http.StatusOK, map[string]string{"url": authURL, "state": encodedState})
+	return req.Integration, connectionMode, auditTarget, nil
 }
 
 func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request) {
@@ -195,7 +287,7 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 		return
 	}
 	providerName = state.Integration
-	auditUserID = state.UserID
+	auditUserID = state.InitiatorUserID
 	stateAuthSource = state.AuthSource
 	auditTarget = connectionAuditTarget(state.Integration, state.Connection, state.Instance)
 	handler, ok := s.requireOAuthHandler(w, providerName, state.Connection)
@@ -207,6 +299,62 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	prov, _ := s.providers.Get(providerName)
 	if prov != nil {
 		connectionMode = metricutil.NormalizeConnectionMode(prov.ConnectionMode())
+	}
+	writeManagedIdentityCallbackError := func(err error) bool {
+		switch {
+		case errors.Is(err, core.ErrNotFound):
+			auditErr = errors.New("identity not found")
+			writeCallbackError(
+				http.StatusNotFound,
+				"identity not found",
+				providerName+" connection expired",
+				"This identity is no longer available. Start the connection again from Integrations.",
+			)
+		case errors.Is(err, errManagedIdentityAccessDenied):
+			auditErr = errManagedIdentityAccessDenied
+			writeCallbackError(
+				http.StatusForbidden,
+				"identity access denied",
+				providerName+" connection expired",
+				"You no longer have access to finish this identity connection. Start the connection again from Integrations.",
+			)
+		case errors.Is(err, errManagedIdentityIntegrationNotFound):
+			auditErr = errors.New("integration not found")
+			writeCallbackError(
+				http.StatusNotFound,
+				"integration not found",
+				providerName+" connection expired",
+				"You no longer have access to finish this identity connection. Start the connection again from Integrations.",
+			)
+		default:
+			return false
+		}
+		return true
+	}
+	if state.OwnerKind == core.IntegrationTokenOwnerKindManagedIdentity {
+		if err := s.validateManagedIdentityConnectionWrite(r.Context(), tokenMaterial{
+			OwnerKind:       state.OwnerKind,
+			OwnerID:         state.OwnerID,
+			InitiatorUserID: state.InitiatorUserID,
+			AuthSource:      state.AuthSource,
+			ViewerScopes:    append([]string(nil), state.ViewerScopes...),
+			ViewerPerms:     append([]core.AccessPermission(nil), state.ViewerPerms...),
+			Integration:     providerName,
+			Connection:      state.Connection,
+			Instance:        state.Instance,
+		}); err != nil {
+			if writeManagedIdentityCallbackError(err) {
+				return
+			}
+			auditErr = errors.New("connection setup failed")
+			writeCallbackError(
+				http.StatusInternalServerError,
+				"connection setup failed",
+				providerName+" connection failed",
+				"Gestalt could not finish saving this connection. Start the connection again from Integrations.",
+			)
+			return
+		}
 	}
 
 	var exchangeOpts []oauth.ExchangeOption
@@ -258,10 +406,12 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	}
 
 	tm := tokenMaterial{
-		OwnerKind:       core.IntegrationTokenOwnerKindUser,
-		OwnerID:         state.UserID,
-		InitiatorUserID: state.UserID,
+		OwnerKind:       state.OwnerKind,
+		OwnerID:         state.OwnerID,
+		InitiatorUserID: state.InitiatorUserID,
 		AuthSource:      state.AuthSource,
+		ViewerScopes:    append([]string(nil), state.ViewerScopes...),
+		ViewerPerms:     append([]core.AccessPermission(nil), state.ViewerPerms...),
 		Integration:     providerName,
 		Connection:      state.Connection,
 		Instance:        callbackInstance,
@@ -273,6 +423,11 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 
 	result, err := s.runPostConnect(r.Context(), prov, tm)
 	if err != nil {
+		if state.OwnerKind == core.IntegrationTokenOwnerKindManagedIdentity {
+			if writeManagedIdentityCallbackError(err) {
+				return
+			}
+		}
 		auditErr = errors.New("connection setup failed")
 		slog.ErrorContext(r.Context(), "post_connect failed", "provider", providerName, "error", err)
 		writeCallbackError(
@@ -298,5 +453,17 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	}
 	auditAllowed = true
 	auditErr = nil
-	http.Redirect(w, r, "/integrations?connected="+url.QueryEscape(providerName), http.StatusSeeOther)
+	redirectURL, err := setURLQueryParam(integrationOAuthRedirectPath(state), "connected", providerName)
+	if err != nil {
+		auditAllowed = false
+		auditErr = errors.New("failed to prepare redirect URL")
+		writeCallbackError(
+			http.StatusInternalServerError,
+			"failed to prepare redirect URL",
+			providerName+" connection failed",
+			"Gestalt saved the connection but could not redirect you back to the app.",
+		)
+		return
+	}
+	http.Redirect(w, r, redirectURL, http.StatusSeeOther)
 }

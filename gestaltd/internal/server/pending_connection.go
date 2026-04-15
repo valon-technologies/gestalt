@@ -315,7 +315,24 @@ func (s *Server) authorizePendingConnection(w http.ResponseWriter, r *http.Reque
 	}
 	if state != nil && state.Token.OwnerKind == core.IntegrationTokenOwnerKindManagedIdentity {
 		if !authenticated {
-			writeError(w, http.StatusUnauthorized, "identity connection authorization required")
+			if err := s.authorizePendingConnectionByCookie(r, state); err != nil {
+				writeError(w, http.StatusUnauthorized, "identity connection authorization required")
+				return nil, false
+			}
+			p = s.managedIdentityConnectionViewerPrincipal(r.Context(), state.Token)
+		}
+		if _, err := s.managedIdentityActor(
+			r.Context(),
+			state.Token.OwnerID,
+			pendingConnectionInitiatorUserID(state),
+			managedIdentityRoleEditor,
+		); err != nil {
+			switch {
+			case errors.Is(err, core.ErrNotFound), errors.Is(err, errManagedIdentityAccessDenied):
+				writeError(w, http.StatusNotFound, "pending connection not found")
+			default:
+				writeError(w, http.StatusInternalServerError, "failed to validate pending connection")
+			}
 			return nil, false
 		}
 		return p, true

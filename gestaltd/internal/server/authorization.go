@@ -12,6 +12,9 @@ import (
 )
 
 func (s *Server) allowProvider(p *principal.Principal, provider string) bool {
+	if p != nil && !principal.AllowsProviderPermission(p, provider) {
+		return false
+	}
 	if s.authorizer == nil {
 		return true
 	}
@@ -19,6 +22,9 @@ func (s *Server) allowProvider(p *principal.Principal, provider string) bool {
 }
 
 func (s *Server) allowOperation(p *principal.Principal, provider, operation string) bool {
+	if p != nil && !principal.AllowsOperationPermission(p, provider, operation) {
+		return false
+	}
 	if s.authorizer == nil {
 		return true
 	}

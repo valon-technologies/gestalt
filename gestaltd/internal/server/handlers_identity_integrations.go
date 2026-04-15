@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 )
 
@@ -60,11 +61,19 @@ func (s *Server) listManagedIdentityIntegrations(w http.ResponseWriter, r *http.
 		if prov.ConnectionMode() == core.ConnectionModeNone {
 			info.Connected = true
 		}
-		info.Instances = append(make([]instanceInfo, 0, len(instances)), instances...)
+		visibleInstances := make([]instanceInfo, 0, len(instances))
+		for _, instance := range instances {
+			if !s.managedIdentityConnectionVisible(name, instance.Connection) {
+				continue
+			}
+			visibleInstances = append(visibleInstances, instance)
+		}
+		info.Instances = append(make([]instanceInfo, 0, len(visibleInstances)), visibleInstances...)
 		s.populateIntegrationSettings(&info, prov)
 		definedConnections := len(info.Connections) > 0
+		info.Connections = s.filterManagedIdentityConnectableConnections(name, info.Connections)
 		info.Connections = managedIdentityConnectableConnections(info.Connections)
-		info.AuthTypes = s.managedIdentitySupportedAuthTypes(name, prov, definedConnections, info.Connections, info.AuthTypes)
+		info.AuthTypes = s.managedIdentitySupportedAuthTypes(name, prov, definedConnections, info.Connections)
 		info.CredentialFields = credentialFieldInfosFromProvider(prov, info.AuthTypes)
 		if info.AuthTypes == nil {
 			info.AuthTypes = []string{}
@@ -86,22 +95,54 @@ func (s *Server) connectedIntegrationsByOwner(ctx context.Context, ownerKind, ow
 	}
 	connected := make(map[string][]instanceInfo, len(tokens))
 	for _, tok := range tokens {
+		connection := tok.Connection
+		if connection == "" {
+			connection = config.PluginConnectionName
+		}
 		connected[tok.Integration] = append(connected[tok.Integration], instanceInfo{
 			Name:       tok.Instance,
-			Connection: userFacingConnectionName(tok.Connection),
+			Connection: userFacingConnectionName(connection),
 		})
 	}
 	return connected, nil
 }
 
-func (s *Server) managedIdentitySupportedAuthTypes(integration string, prov core.Provider, definedConnections bool, connections []connectionDefInfo, authTypes []string) []string {
+func (s *Server) filterManagedIdentityConnectableConnections(integration string, connections []connectionDefInfo) []connectionDefInfo {
+	if len(connections) == 0 {
+		return nil
+	}
+	visible := make([]connectionDefInfo, 0, len(connections))
+	for _, connection := range connections {
+		if !s.managedIdentityConnectionVisible(integration, connection.Name) {
+			continue
+		}
+		visible = append(visible, connection)
+	}
+	return visible
+}
+
+func (s *Server) managedIdentitySupportedAuthTypes(integration string, prov core.Provider, definedConnections bool, connections []connectionDefInfo) []string {
 	if len(connections) > 0 {
 		return authTypesFromConnectionInfos(connections)
 	}
 	if definedConnections {
 		return nil
 	}
-	if authTypes := managedIdentityConnectableAuthTypes(authTypes); len(authTypes) > 0 {
+	entry := s.pluginDefs[integration]
+	defaultConnection := s.defaultConnection[integration]
+	if defaultConnection == "" {
+		defaultConnection = config.PluginConnectionName
+	}
+	if !s.managedIdentityConnectionVisible(integration, defaultConnection) {
+		if entry != nil {
+			return nil
+		}
+		defaultConnection = config.PluginConnectionName
+	}
+	baseAuthTypes := userFacingAuthTypes(prov.AuthTypes())
+	authTypes := connectionAuthTypes(s.effectiveConnectionAuth(integration, defaultConnection), baseAuthTypes)
+	authTypes = s.supportedConnectionAuthTypes(integration, defaultConnection, authTypes)
+	if authTypes = managedIdentityConnectableAuthTypes(authTypes); len(authTypes) > 0 {
 		return authTypes
 	}
 	if mp, ok := prov.(interface{ SupportsManualAuth() bool }); ok && mp.SupportsManualAuth() {
@@ -122,6 +163,35 @@ func authTypesFromConnectionInfos(connections []connectionDefInfo) []string {
 			}
 			out = append(out, authType)
 		}
+	}
+	return out
+}
+
+func managedIdentityConnectableAuthTypes(authTypes []string) []string {
+	if len(authTypes) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(authTypes))
+	for _, authType := range authTypes {
+		if (authType != "manual" && authType != "oauth") || authTypesContain(out, authType) {
+			continue
+		}
+		out = append(out, authType)
+	}
+	return out
+}
+
+func managedIdentityConnectableConnections(connections []connectionDefInfo) []connectionDefInfo {
+	if len(connections) == 0 {
+		return nil
+	}
+	out := make([]connectionDefInfo, 0, len(connections))
+	for _, connection := range connections {
+		connection.AuthTypes = managedIdentityConnectableAuthTypes(connection.AuthTypes)
+		if len(connection.AuthTypes) == 0 {
+			continue
+		}
+		out = append(out, connection)
 	}
 	return out
 }
@@ -221,16 +291,29 @@ func (s *Server) connectManagedIdentityManual(w http.ResponseWriter, r *http.Req
 	if viewer != nil {
 		authSource = viewer.AuthSource()
 	}
+	viewerScopes, viewerPerms := viewerCeilingForConnectionState(viewer)
 	tm := tokenMaterial{
 		OwnerKind:       core.IntegrationTokenOwnerKindManagedIdentity,
 		OwnerID:         actor.Identity.ID,
 		InitiatorUserID: actor.UserID,
 		AuthSource:      authSource,
+		ViewerScopes:    viewerScopes,
+		ViewerPerms:     viewerPerms,
 		Integration:     req.Integration,
 		Connection:      manualConnection,
 		Instance:        manualInstance,
 		AccessToken:     effectiveCredential,
 		MetadataJSON:    manualMeta,
+	}
+
+	if err := s.validateManagedIdentityConnectionWrite(r.Context(), tm); err != nil {
+		if s.writeManagedIdentityConnectionWriteError(w, req.Integration, err) {
+			auditErr = err
+			return
+		}
+		auditErr = err
+		writeError(w, http.StatusForbidden, err.Error())
+		return
 	}
 
 	result, err := s.runPostConnect(r.Context(), prov, tm)
@@ -305,7 +388,11 @@ func (s *Server) disconnectManagedIdentityIntegration(w http.ResponseWriter, r *
 
 	var matched []*core.IntegrationToken
 	for _, tok := range tokens {
-		if requestedConnection != "" && tok.Connection != requestedConnection {
+		connection := tok.Connection
+		if connection == "" {
+			connection = config.PluginConnectionName
+		}
+		if requestedConnection != "" && connection != requestedConnection {
 			continue
 		}
 		matched = append(matched, tok)
@@ -361,33 +448,4 @@ func (s *Server) disconnectManagedIdentityIntegration(w http.ResponseWriter, r *
 	auditAllowed = true
 	auditErr = nil
 	writeJSON(w, http.StatusOK, map[string]string{"status": "disconnected"})
-}
-
-func managedIdentityConnectableAuthTypes(authTypes []string) []string {
-	if len(authTypes) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(authTypes))
-	for _, authType := range authTypes {
-		if authType != "manual" || authTypesContain(out, authType) {
-			continue
-		}
-		out = append(out, authType)
-	}
-	return out
-}
-
-func managedIdentityConnectableConnections(connections []connectionDefInfo) []connectionDefInfo {
-	if len(connections) == 0 {
-		return nil
-	}
-	out := make([]connectionDefInfo, 0, len(connections))
-	for _, connection := range connections {
-		connection.AuthTypes = managedIdentityConnectableAuthTypes(connection.AuthTypes)
-		if len(connection.AuthTypes) == 0 {
-			continue
-		}
-		out = append(out, connection)
-	}
-	return out
 }

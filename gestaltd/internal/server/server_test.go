@@ -9690,6 +9690,668 @@ func TestIntegrationOAuthCallback_InvalidState(t *testing.T) {
 	})
 }
 
+func TestManagedIdentityIntegrationOAuthCallback(t *testing.T) {
+	t.Parallel()
+
+	t.Run("connected", func(t *testing.T) {
+		t.Parallel()
+
+		svc := coretesting.NewStubServices(t)
+		admin := seedUser(t, svc, "admin@example.test")
+		editor := seedUser(t, svc, "editor@example.test")
+
+		handler := &testOAuthHandler{
+			authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
+			exchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
+				if code == "good-code" {
+					return &core.TokenResponse{AccessToken: "slack-token"}, nil
+				}
+				return nil, fmt.Errorf("bad code")
+			},
+		}
+
+		stub := &stubIntegrationWithAuthURL{
+			StubIntegration: coretesting.StubIntegration{N: "slack"},
+			authURL:         "https://slack.com/oauth/v2/authorize",
+		}
+		providers := testutil.NewProviderRegistry(t, stub)
+		pluginDefs := map[string]*config.ProviderEntry{
+			"slack": {AuthorizationPolicy: "slack_policy"},
+		}
+		authz := mustAuthorizer(
+			t,
+			config.AuthorizationConfig{
+				Policies: map[string]config.HumanPolicyDef{
+					"slack_policy": {
+						Members: []config.HumanPolicyMemberDef{{
+							Email: editor.Email,
+							Role:  "editor",
+						}},
+					},
+				},
+			},
+			providers,
+			pluginDefs,
+			map[string]string{"slack": testDefaultConnection},
+		)
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					switch token {
+					case "admin-session":
+						return &core.UserIdentity{Email: admin.Email}, nil
+					case "editor-session":
+						return &core.UserIdentity{Email: editor.Email}, nil
+					default:
+						return nil, fmt.Errorf("bad token %q", token)
+					}
+				},
+			}
+			cfg.Providers = providers
+			cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
+			cfg.ConnectionAuth = testConnectionAuth("slack", handler)
+			cfg.Services = svc
+			cfg.Authorizer = authz
+			cfg.PluginDefs = pluginDefs
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		createResp := struct {
+			ID string `json:"id"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"OAuth Bot"}`, http.StatusCreated, &createResp)
+		doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/members", "admin-session", `{"email":"editor@example.test","role":"editor"}`, http.StatusOK, nil)
+
+		startBody := bytes.NewBufferString(`{"integration":"slack"}`)
+		startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/identities/"+createResp.ID+"/auth/start-oauth", startBody)
+		startReq.Header.Set("Content-Type", "application/json")
+		startReq.Header.Set("Authorization", "Bearer editor-session")
+		startResp, err := http.DefaultClient.Do(startReq)
+		if err != nil {
+			t.Fatalf("start request: %v", err)
+		}
+		defer func() { _ = startResp.Body.Close() }()
+		if startResp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(startResp.Body)
+			t.Fatalf("expected 200 from identity start-oauth, got %d: %s", startResp.StatusCode, body)
+		}
+
+		var startResult map[string]string
+		if err := json.NewDecoder(startResp.Body).Decode(&startResult); err != nil {
+			t.Fatalf("decoding start response: %v", err)
+		}
+
+		noRedirect := &http.Client{
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state="+url.QueryEscape(startResult["state"]), nil)
+		resp, err := noRedirect.Do(req)
+		if err != nil {
+			t.Fatalf("callback request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusSeeOther {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 303, got %d: %s", resp.StatusCode, body)
+		}
+		expectedLocation := "/identities?connected=slack&id=" + url.QueryEscape(createResp.ID)
+		if loc := resp.Header.Get("Location"); loc != expectedLocation {
+			t.Fatalf("expected redirect to %s, got %q", expectedLocation, loc)
+		}
+
+		tokens, err := svc.Tokens.ListTokensByOwner(context.Background(), core.IntegrationTokenOwnerKindManagedIdentity, createResp.ID)
+		if err != nil {
+			t.Fatalf("ListTokensByOwner: %v", err)
+		}
+		if len(tokens) != 1 {
+			t.Fatalf("expected 1 identity-owned oauth token, got %d", len(tokens))
+		}
+		if tokens[0].OwnerKind != core.IntegrationTokenOwnerKindManagedIdentity || tokens[0].OwnerID != createResp.ID {
+			t.Fatalf("stored token owner = (%q,%q), want managed_identity/%q", tokens[0].OwnerKind, tokens[0].OwnerID, createResp.ID)
+		}
+		if tokens[0].AccessToken != "slack-token" {
+			t.Fatalf("stored access token = %q, want slack-token", tokens[0].AccessToken)
+		}
+	})
+
+	t.Run("connected_uses_initiator_visibility_not_browser_session", func(t *testing.T) {
+		t.Parallel()
+
+		svc := coretesting.NewStubServices(t)
+		admin := seedUser(t, svc, "admin@example.test")
+		editor := seedUser(t, svc, "editor@example.test")
+
+		handler := &testOAuthHandler{
+			authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
+			exchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
+				if code == "good-code" {
+					return &core.TokenResponse{AccessToken: "slack-token"}, nil
+				}
+				return nil, fmt.Errorf("bad code")
+			},
+		}
+
+		stub := &stubIntegrationWithAuthURL{
+			StubIntegration: coretesting.StubIntegration{N: "slack"},
+			authURL:         "https://slack.com/oauth/v2/authorize",
+		}
+		providers := testutil.NewProviderRegistry(t, stub)
+		pluginDefs := map[string]*config.ProviderEntry{
+			"slack": {AuthorizationPolicy: "slack_policy"},
+		}
+		authz := mustAuthorizer(
+			t,
+			config.AuthorizationConfig{
+				Policies: map[string]config.HumanPolicyDef{
+					"slack_policy": {
+						Members: []config.HumanPolicyMemberDef{{
+							Email: editor.Email,
+							Role:  "editor",
+						}},
+					},
+				},
+			},
+			providers,
+			pluginDefs,
+			map[string]string{"slack": testDefaultConnection},
+		)
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					switch token {
+					case "admin-session":
+						return &core.UserIdentity{Email: admin.Email}, nil
+					case "editor-session":
+						return &core.UserIdentity{Email: editor.Email}, nil
+					default:
+						return nil, fmt.Errorf("bad token %q", token)
+					}
+				},
+			}
+			cfg.Providers = providers
+			cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
+			cfg.ConnectionAuth = testConnectionAuth("slack", handler)
+			cfg.Services = svc
+			cfg.Authorizer = authz
+			cfg.PluginDefs = pluginDefs
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		createResp := struct {
+			ID string `json:"id"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"OAuth Bot"}`, http.StatusCreated, &createResp)
+		doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/members", "admin-session", `{"email":"editor@example.test","role":"editor"}`, http.StatusOK, nil)
+
+		startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/identities/"+createResp.ID+"/auth/start-oauth", bytes.NewBufferString(`{"integration":"slack"}`))
+		startReq.Header.Set("Content-Type", "application/json")
+		startReq.Header.Set("Authorization", "Bearer editor-session")
+		startResp, err := http.DefaultClient.Do(startReq)
+		if err != nil {
+			t.Fatalf("start request: %v", err)
+		}
+		defer func() { _ = startResp.Body.Close() }()
+		if startResp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(startResp.Body)
+			t.Fatalf("expected 200 from identity start-oauth, got %d: %s", startResp.StatusCode, body)
+		}
+
+		var startResult map[string]string
+		if err := json.NewDecoder(startResp.Body).Decode(&startResult); err != nil {
+			t.Fatalf("decoding start response: %v", err)
+		}
+
+		noRedirect := &http.Client{
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state="+url.QueryEscape(startResult["state"]), nil)
+		req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+		resp, err := noRedirect.Do(req)
+		if err != nil {
+			t.Fatalf("callback request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusSeeOther {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 303, got %d: %s", resp.StatusCode, body)
+		}
+		expectedLocation := "/identities?connected=slack&id=" + url.QueryEscape(createResp.ID)
+		if loc := resp.Header.Get("Location"); loc != expectedLocation {
+			t.Fatalf("expected redirect to %s, got %q", expectedLocation, loc)
+		}
+	})
+
+	t.Run("start_state_preserves_api_token_viewer_ceiling", func(t *testing.T) {
+		t.Parallel()
+
+		svc := coretesting.NewStubServices(t)
+		admin := seedUser(t, svc, "admin@example.test")
+		editor := seedUser(t, svc, "editor@example.test")
+
+		handler := &testOAuthHandler{
+			authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
+		}
+		stub := &stubIntegrationWithAuthURL{
+			StubIntegration: coretesting.StubIntegration{N: "slack"},
+			authURL:         "https://slack.com/oauth/v2/authorize",
+		}
+		providers := testutil.NewProviderRegistry(t, stub)
+		pluginDefs := map[string]*config.ProviderEntry{
+			"slack": {AuthorizationPolicy: "slack_policy"},
+		}
+		authz := mustAuthorizer(
+			t,
+			config.AuthorizationConfig{
+				Policies: map[string]config.HumanPolicyDef{
+					"slack_policy": {
+						Members: []config.HumanPolicyMemberDef{{
+							Email: editor.Email,
+							Role:  "editor",
+						}},
+					},
+				},
+			},
+			providers,
+			pluginDefs,
+			map[string]string{"slack": testDefaultConnection},
+		)
+
+		apiToken, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
+		if err != nil {
+			t.Fatalf("GenerateToken: %v", err)
+		}
+		exp := time.Now().Add(24 * time.Hour)
+		if err := svc.APITokens.StoreAPIToken(context.Background(), &core.APIToken{
+			ID:          "editor-api-token",
+			UserID:      editor.ID,
+			OwnerKind:   core.APITokenOwnerKindUser,
+			OwnerID:     editor.ID,
+			Name:        "editor-api-token",
+			HashedToken: hashed,
+			Permissions: []core.AccessPermission{{Plugin: "slack"}},
+			ExpiresAt:   &exp,
+		}); err != nil {
+			t.Fatalf("StoreAPIToken: %v", err)
+		}
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					switch token {
+					case "admin-session":
+						return &core.UserIdentity{Email: admin.Email}, nil
+					case "editor-session":
+						return &core.UserIdentity{Email: editor.Email}, nil
+					default:
+						return nil, fmt.Errorf("bad token %q", token)
+					}
+				},
+			}
+			cfg.Providers = providers
+			cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
+			cfg.ConnectionAuth = testConnectionAuth("slack", handler)
+			cfg.Services = svc
+			cfg.Authorizer = authz
+			cfg.PluginDefs = pluginDefs
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		createResp := struct {
+			ID string `json:"id"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"OAuth Bot"}`, http.StatusCreated, &createResp)
+		doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/members", "admin-session", `{"email":"editor@example.test","role":"editor"}`, http.StatusOK, nil)
+
+		startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/identities/"+createResp.ID+"/auth/start-oauth", bytes.NewBufferString(`{"integration":"slack"}`))
+		startReq.Header.Set("Content-Type", "application/json")
+		startReq.Header.Set("Authorization", "Bearer "+apiToken)
+		startResp, err := http.DefaultClient.Do(startReq)
+		if err != nil {
+			t.Fatalf("start request: %v", err)
+		}
+		defer func() { _ = startResp.Body.Close() }()
+		if startResp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(startResp.Body)
+			t.Fatalf("expected 200 from identity start-oauth, got %d: %s", startResp.StatusCode, body)
+		}
+
+		var startResult map[string]string
+		if err := json.NewDecoder(startResp.Body).Decode(&startResult); err != nil {
+			t.Fatalf("decoding start response: %v", err)
+		}
+
+		enc, err := corecrypto.NewAESGCM([]byte("0123456789abcdef0123456789abcdef"))
+		if err != nil {
+			t.Fatalf("NewAESGCM: %v", err)
+		}
+		plaintext, err := enc.DecryptURLSafe(startResult["state"])
+		if err != nil {
+			t.Fatalf("DecryptURLSafe: %v", err)
+		}
+
+		var decoded struct {
+			ViewerScopes    []string                `json:"vsc"`
+			ViewerPerms     []core.AccessPermission `json:"vpm"`
+			InitiatorUserID string                  `json:"iuid"`
+		}
+		if err := json.Unmarshal([]byte(plaintext), &decoded); err != nil {
+			t.Fatalf("Unmarshal state: %v", err)
+		}
+		if decoded.InitiatorUserID != editor.ID {
+			t.Fatalf("initiator user id = %q, want %q", decoded.InitiatorUserID, editor.ID)
+		}
+		if !reflect.DeepEqual(decoded.ViewerScopes, []string{"slack"}) {
+			t.Fatalf("viewer scopes = %+v, want [slack]", decoded.ViewerScopes)
+		}
+		if !reflect.DeepEqual(decoded.ViewerPerms, []core.AccessPermission{{Plugin: "slack"}}) {
+			t.Fatalf("viewer permissions = %+v, want [{Plugin: slack}]", decoded.ViewerPerms)
+		}
+	})
+
+	t.Run("selection_required", func(t *testing.T) {
+		t.Parallel()
+
+		const pendingSelectionPath = "/api/v1/auth/pending-connection"
+
+		discoverySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `[{"id":"site-a","name":"Site A","workspace":"alpha"},{"id":"site-b","name":"Site B","workspace":"beta"}]`)
+		}))
+		testutil.CloseOnCleanup(t, discoverySrv)
+
+		svc := coretesting.NewStubServices(t)
+		admin := seedUser(t, svc, "admin@example.test")
+		editor := seedUser(t, svc, "editor@example.test")
+
+		handler := &testOAuthHandler{
+			authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
+			exchangeCodeFn: func(_ context.Context, code string) (*core.TokenResponse, error) {
+				if code == "good-code" {
+					return &core.TokenResponse{AccessToken: "slack-token"}, nil
+				}
+				return nil, fmt.Errorf("bad code")
+			},
+		}
+
+		stub := &stubDiscoveringProvider{
+			StubIntegration: coretesting.StubIntegration{N: "slack"},
+			discovery: &core.DiscoveryConfig{
+				URL:      discoverySrv.URL,
+				IDPath:   "id",
+				NamePath: "name",
+				Metadata: map[string]string{"workspace": "workspace"},
+			},
+		}
+		providers := testutil.NewProviderRegistry(t, stub)
+		pluginDefs := map[string]*config.ProviderEntry{
+			"slack": {AuthorizationPolicy: "slack_policy"},
+		}
+		authz := mustAuthorizer(
+			t,
+			config.AuthorizationConfig{
+				Policies: map[string]config.HumanPolicyDef{
+					"slack_policy": {
+						Members: []config.HumanPolicyMemberDef{{
+							Email: editor.Email,
+							Role:  "editor",
+						}},
+					},
+				},
+			},
+			providers,
+			pluginDefs,
+			map[string]string{"slack": testDefaultConnection},
+		)
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					switch token {
+					case "admin-session":
+						return &core.UserIdentity{Email: admin.Email}, nil
+					case "editor-session":
+						return &core.UserIdentity{Email: editor.Email}, nil
+					default:
+						return nil, fmt.Errorf("bad token %q", token)
+					}
+				},
+			}
+			cfg.Providers = providers
+			cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
+			cfg.ConnectionAuth = testConnectionAuth("slack", handler)
+			cfg.Services = svc
+			cfg.Authorizer = authz
+			cfg.PluginDefs = pluginDefs
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		createResp := struct {
+			ID string `json:"id"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"OAuth Bot"}`, http.StatusCreated, &createResp)
+		doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/members", "admin-session", `{"email":"editor@example.test","role":"editor"}`, http.StatusOK, nil)
+
+		startBody := bytes.NewBufferString(`{"integration":"slack"}`)
+		startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/identities/"+createResp.ID+"/auth/start-oauth", startBody)
+		startReq.Header.Set("Content-Type", "application/json")
+		startReq.Header.Set("Authorization", "Bearer editor-session")
+		startResp, err := http.DefaultClient.Do(startReq)
+		if err != nil {
+			t.Fatalf("start request: %v", err)
+		}
+		defer func() { _ = startResp.Body.Close() }()
+
+		var startResult map[string]string
+		if err := json.NewDecoder(startResp.Body).Decode(&startResult); err != nil {
+			t.Fatalf("decoding start response: %v", err)
+		}
+
+		jar, err := cookiejar.New(nil)
+		if err != nil {
+			t.Fatalf("cookie jar: %v", err)
+		}
+		noRedirect := &http.Client{
+			Jar: jar,
+			CheckRedirect: func(*http.Request, []*http.Request) error {
+				return http.ErrUseLastResponse
+			},
+		}
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/auth/callback?code=good-code&state="+url.QueryEscape(startResult["state"]), nil)
+		resp, err := noRedirect.Do(req)
+		if err != nil {
+			t.Fatalf("callback request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		text := string(body)
+		if !strings.Contains(text, "Select a slack connection") {
+			t.Fatalf("expected selection page, got %q", text)
+		}
+		selectionURL, err := url.Parse(ts.URL + pendingSelectionPath)
+		if err != nil {
+			t.Fatalf("parse selection url: %v", err)
+		}
+		cookies := jar.Cookies(selectionURL)
+		foundPendingCookie := false
+		for _, cookie := range cookies {
+			if cookie.Name == "pending_connection_state" {
+				foundPendingCookie = true
+				break
+			}
+		}
+		if !foundPendingCookie {
+			t.Fatal("expected pending connection cookie to be set on callback response")
+		}
+
+		form := url.Values{
+			"pending_token":   {extractHiddenInputValue(t, text, "pending_token")},
+			"candidate_index": {"1"},
+		}
+		selectReq, _ := http.NewRequest(http.MethodPost, ts.URL+pendingSelectionPath, strings.NewReader(form.Encode()))
+		selectReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		selectResp, err := noRedirect.Do(selectReq)
+		if err != nil {
+			t.Fatalf("select request: %v", err)
+		}
+		defer func() { _ = selectResp.Body.Close() }()
+
+		if selectResp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(selectResp.Body)
+			t.Fatalf("expected 200, got %d: %s", selectResp.StatusCode, body)
+		}
+		tokens, err := svc.Tokens.ListTokensByOwner(context.Background(), core.IntegrationTokenOwnerKindManagedIdentity, createResp.ID)
+		if err != nil {
+			t.Fatalf("ListTokensByOwner: %v", err)
+		}
+		if len(tokens) != 1 {
+			t.Fatalf("expected 1 identity-owned oauth token after selection, got %d", len(tokens))
+		}
+		if !strings.Contains(tokens[0].MetadataJSON, `"workspace":"beta"`) {
+			t.Fatalf("metadata json = %q, want selected candidate metadata", tokens[0].MetadataJSON)
+		}
+	})
+
+	t.Run("rejects_hidden_identity_connection", func(t *testing.T) {
+		t.Parallel()
+
+		svc := coretesting.NewStubServices(t)
+		admin := seedUser(t, svc, "admin@example.test")
+		editor := seedUser(t, svc, "editor@example.test")
+
+		handler := &testOAuthHandler{
+			authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
+		}
+		stub := &stubIntegrationWithAuthURL{
+			StubIntegration: coretesting.StubIntegration{N: "slack"},
+			authURL:         "https://slack.com/oauth/v2/authorize",
+		}
+		providers := testutil.NewProviderRegistry(t, stub)
+		pluginDefs := map[string]*config.ProviderEntry{
+			"slack": {
+				AuthorizationPolicy: "slack_policy",
+				ResolvedManifest: &providermanifestv1.Manifest{
+					Spec: &providermanifestv1.Spec{
+						DefaultConnection: testDefaultConnection,
+						Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+							testDefaultConnection: {
+								Mode: providermanifestv1.ConnectionModeUser,
+								Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeOAuth2},
+							},
+							"identity": {
+								Mode: providermanifestv1.ConnectionModeIdentity,
+								Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeOAuth2},
+							},
+						},
+					},
+				},
+			},
+		}
+		authz := mustAuthorizer(
+			t,
+			config.AuthorizationConfig{
+				Policies: map[string]config.HumanPolicyDef{
+					"slack_policy": {
+						Members: []config.HumanPolicyMemberDef{{
+							Email: editor.Email,
+							Role:  "editor",
+						}},
+					},
+				},
+			},
+			providers,
+			pluginDefs,
+			map[string]string{"slack": testDefaultConnection},
+		)
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Auth = &coretesting.StubAuthProvider{
+				N: "test",
+				ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+					switch token {
+					case "admin-session":
+						return &core.UserIdentity{Email: admin.Email}, nil
+					case "editor-session":
+						return &core.UserIdentity{Email: editor.Email}, nil
+					default:
+						return nil, fmt.Errorf("bad token %q", token)
+					}
+				},
+			}
+			cfg.Providers = providers
+			cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
+			cfg.ConnectionAuth = func() map[string]map[string]bootstrap.OAuthHandler {
+				return map[string]map[string]bootstrap.OAuthHandler{
+					"slack": {
+						testDefaultConnection: handler,
+						"identity":            handler,
+						"hidden":              handler,
+					},
+				}
+			}
+			cfg.Services = svc
+			cfg.Authorizer = authz
+			cfg.PluginDefs = pluginDefs
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		createResp := struct {
+			ID string `json:"id"`
+		}{}
+		doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"OAuth Bot"}`, http.StatusCreated, &createResp)
+		doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/members", "admin-session", `{"email":"editor@example.test","role":"editor"}`, http.StatusOK, nil)
+
+		startBody := bytes.NewBufferString(`{"integration":"slack","connection":"identity"}`)
+		startReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/identities/"+createResp.ID+"/auth/start-oauth", startBody)
+		startReq.Header.Set("Content-Type", "application/json")
+		startReq.Header.Set("Authorization", "Bearer editor-session")
+		startResp, err := http.DefaultClient.Do(startReq)
+		if err != nil {
+			t.Fatalf("start request: %v", err)
+		}
+		defer func() { _ = startResp.Body.Close() }()
+
+		if startResp.StatusCode != http.StatusNotFound {
+			body, _ := io.ReadAll(startResp.Body)
+			t.Fatalf("expected 404 from hidden identity start-oauth, got %d: %s", startResp.StatusCode, body)
+		}
+
+		unadvertisedBody := bytes.NewBufferString(`{"integration":"slack","connection":"hidden"}`)
+		unadvertisedReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/identities/"+createResp.ID+"/auth/start-oauth", unadvertisedBody)
+		unadvertisedReq.Header.Set("Content-Type", "application/json")
+		unadvertisedReq.Header.Set("Authorization", "Bearer editor-session")
+		unadvertisedResp, err := http.DefaultClient.Do(unadvertisedReq)
+		if err != nil {
+			t.Fatalf("unadvertised start request: %v", err)
+		}
+		defer func() { _ = unadvertisedResp.Body.Close() }()
+
+		if unadvertisedResp.StatusCode != http.StatusNotFound {
+			body, _ := io.ReadAll(unadvertisedResp.Body)
+			t.Fatalf("expected 404 from unadvertised identity start-oauth, got %d: %s", unadvertisedResp.StatusCode, body)
+		}
+	})
+}
+
 func TestCreateAndListAPITokens(t *testing.T) {
 	t.Parallel()
 
@@ -10292,11 +10954,39 @@ func (s *stubIntegrationWithSessionCatalog) CallTool(ctx context.Context, name s
 	return mcpgo.NewToolResultText("passthrough:" + name), nil
 }
 
-type stubSessionCatalogWithoutManagedIdentitySupport struct {
-	stubIntegrationWithSessionCatalog
+type stubNonOAuthSessionCatalogProvider struct {
+	name                string
+	connMode            core.ConnectionMode
+	catalog             *catalog.Catalog
+	catalogForRequestFn func(context.Context, string) (*catalog.Catalog, error)
 }
 
-func (s *stubSessionCatalogWithoutManagedIdentitySupport) AuthTypes() []string { return nil }
+func (s *stubNonOAuthSessionCatalogProvider) Name() string        { return s.name }
+func (s *stubNonOAuthSessionCatalogProvider) DisplayName() string { return s.name }
+func (s *stubNonOAuthSessionCatalogProvider) Description() string { return "" }
+func (s *stubNonOAuthSessionCatalogProvider) ConnectionMode() core.ConnectionMode {
+	if s.connMode == "" {
+		return core.ConnectionModeUser
+	}
+	return s.connMode
+}
+func (s *stubNonOAuthSessionCatalogProvider) AuthTypes() []string { return nil }
+func (s *stubNonOAuthSessionCatalogProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
+	return nil
+}
+func (s *stubNonOAuthSessionCatalogProvider) CredentialFields() []core.CredentialFieldDef { return nil }
+func (s *stubNonOAuthSessionCatalogProvider) DiscoveryConfig() *core.DiscoveryConfig      { return nil }
+func (s *stubNonOAuthSessionCatalogProvider) ConnectionForOperation(string) string        { return "" }
+func (s *stubNonOAuthSessionCatalogProvider) Catalog() *catalog.Catalog                   { return s.catalog }
+func (s *stubNonOAuthSessionCatalogProvider) Execute(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
+	return nil, nil
+}
+func (s *stubNonOAuthSessionCatalogProvider) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
+	if s.catalogForRequestFn != nil {
+		return s.catalogForRequestFn(ctx, token)
+	}
+	return s.catalog, nil
+}
 
 type stubAuthWithLoginURL struct {
 	coretesting.StubAuthProvider
@@ -10457,6 +11147,24 @@ func (s *stubOAuthIntegration) RefreshToken(ctx context.Context, token string) (
 	if s.refreshTokenFn != nil {
 		return s.refreshTokenFn(ctx, token)
 	}
+	return nil, nil
+}
+
+type stubOAuthIntegrationWithOps struct {
+	stubIntegrationWithOps
+}
+
+func (s *stubOAuthIntegrationWithOps) AuthTypes() []string { return []string{"oauth"} }
+
+func (s *stubOAuthIntegrationWithOps) AuthorizationURL(_ string, _ []string) string {
+	return "https://oauth.example/authorize"
+}
+
+func (s *stubOAuthIntegrationWithOps) ExchangeCode(context.Context, string) (*core.TokenResponse, error) {
+	return nil, nil
+}
+
+func (s *stubOAuthIntegrationWithOps) RefreshToken(context.Context, string) (*core.TokenResponse, error) {
 	return nil, nil
 }
 
@@ -14941,22 +15649,19 @@ func TestManagedIdentityGrantValidationUsesSessionCatalog(t *testing.T) {
 			AccessToken: "default-token",
 		})
 
-		sessionFallback := &stubSessionCatalogWithoutManagedIdentitySupport{
-			stubIntegrationWithSessionCatalog: stubIntegrationWithSessionCatalog{
-				stubIntegrationWithOps: stubIntegrationWithOps{
-					StubIntegration: coretesting.StubIntegration{N: "session-fallback", ConnMode: core.ConnectionModeUser},
-				},
-				catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
-					if token != "default-token" {
-						return nil, fmt.Errorf("missing session token")
-					}
-					return serverTestCatalog("session-fallback", []catalog.CatalogOperation{{
-						ID:        "discover",
-						Method:    http.MethodGet,
-						Path:      "/discover",
-						Transport: catalog.TransportREST,
-					}}), nil
-				},
+		sessionFallback := &stubNonOAuthSessionCatalogProvider{
+			name:     "session-fallback",
+			connMode: core.ConnectionModeUser,
+			catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+				if token != "default-token" {
+					return nil, fmt.Errorf("missing session token")
+				}
+				return serverTestCatalog("session-fallback", []catalog.CatalogOperation{{
+					ID:        "discover",
+					Method:    http.MethodGet,
+					Path:      "/discover",
+					Transport: catalog.TransportREST,
+				}}), nil
 			},
 		}
 
@@ -16130,10 +16835,10 @@ func TestManagedIdentityManualConnections(t *testing.T) {
 		t.Fatalf("initial integrations = %+v, want oauth-svc listed", initialIntegrations)
 	} else {
 		if len(oauthInfo.AuthTypes) != 0 {
-			t.Fatalf("oauth-svc auth types = %+v, want none in manual-only identity surface", oauthInfo.AuthTypes)
+			t.Fatalf("oauth-svc auth types = %+v, want none without oauth handler wiring", oauthInfo.AuthTypes)
 		}
 		if len(oauthInfo.Connections) != 0 {
-			t.Fatalf("oauth-svc connections = %+v, want no connectable identity connections", oauthInfo.Connections)
+			t.Fatalf("oauth-svc connections = %+v, want no explicit connections without oauth handler wiring", oauthInfo.Connections)
 		}
 	}
 
@@ -16218,7 +16923,7 @@ func TestManagedIdentityManualConnections(t *testing.T) {
 	}
 }
 
-func TestManagedIdentityIntegrationsHideProvidersWithoutUsableManualConnection(t *testing.T) {
+func TestManagedIdentityIntegrationsHideProvidersWithoutUsableConnectionSurface(t *testing.T) {
 	t.Parallel()
 
 	svc := coretesting.NewStubServices(t)
@@ -16228,13 +16933,6 @@ func TestManagedIdentityIntegrationsHideProvidersWithoutUsableManualConnection(t
 		"hidden-svc": {
 			ResolvedManifest: &providermanifestv1.Manifest{
 				Spec: &providermanifestv1.Spec{
-					DefaultConnection: "workspace",
-					Surfaces: &providermanifestv1.ProviderSurfaces{
-						MCP: &providermanifestv1.MCPSurface{
-							Connection: "workspace",
-							URL:        "https://hidden-svc.example/mcp",
-						},
-					},
 					Connections: map[string]*providermanifestv1.ManifestConnectionDef{
 						"workspace": {
 							Mode: providermanifestv1.ConnectionModeUser,
@@ -16274,7 +16972,204 @@ func TestManagedIdentityIntegrationsHideProvidersWithoutUsableManualConnection(t
 	}
 	doJSONRequestAndDecode(t, http.MethodGet, ts.URL+"/api/v1/identities/"+createResp.ID+"/integrations", "admin-session", "", http.StatusOK, &integrations)
 	if len(integrations) != 0 {
-		t.Fatalf("integrations = %+v, want hidden-svc omitted without a usable manual surface", integrations)
+		t.Fatalf("integrations = %+v, want hidden-svc omitted without an advertised connectable surface", integrations)
+	}
+}
+
+func TestManagedIdentityManualConnectionsRejectHiddenConnectionBeforeDiscovery(t *testing.T) {
+	t.Parallel()
+
+	var discoveryCalls atomic.Int32
+	discoverySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		discoveryCalls.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `[{"id":"site-a","name":"Site A","workspace":"alpha"}]`)
+	}))
+	testutil.CloseOnCleanup(t, discoverySrv)
+
+	svc := coretesting.NewStubServices(t)
+	seedUser(t, svc, "admin@example.test")
+	seedUser(t, svc, "editor@example.test")
+
+	pluginDefs := map[string]*config.ProviderEntry{
+		"manual-svc": {
+			ResolvedManifest: &providermanifestv1.Manifest{
+				Spec: &providermanifestv1.Spec{
+					DefaultConnection: "workspace",
+					Surfaces: &providermanifestv1.ProviderSurfaces{
+						MCP: &providermanifestv1.MCPSurface{
+							Connection: "workspace",
+							URL:        "https://manual.example/mcp",
+						},
+					},
+					Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+						"workspace": {
+							Mode: providermanifestv1.ConnectionModeUser,
+							Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeManual},
+						},
+						"hidden": {
+							Mode: providermanifestv1.ConnectionModeUser,
+							Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeManual},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				switch token {
+				case "admin-session":
+					return &core.UserIdentity{Email: "admin@example.test"}, nil
+				case "editor-session":
+					return &core.UserIdentity{Email: "editor@example.test"}, nil
+				default:
+					return nil, fmt.Errorf("unknown session %q", token)
+				}
+			},
+		}
+		cfg.Providers = testutil.NewProviderRegistry(t, &stubDiscoveringManualProvider{
+			stubManualProvider: stubManualProvider{
+				StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
+			},
+			discovery: &core.DiscoveryConfig{
+				URL:      discoverySrv.URL,
+				IDPath:   "id",
+				NamePath: "name",
+				Metadata: map[string]string{"workspace": "workspace"},
+			},
+		})
+		cfg.DefaultConnection = map[string]string{"manual-svc": "workspace"}
+		cfg.PluginDefs = pluginDefs
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	createResp := struct {
+		ID string `json:"id"`
+	}{}
+	doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Hidden Manual Bot"}`, http.StatusCreated, &createResp)
+	doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/members", "admin-session", `{"email":"editor@example.test","role":"editor"}`, http.StatusOK, nil)
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/identities/"+createResp.ID+"/auth/connect-manual", bytes.NewBufferString(`{"integration":"manual-svc","connection":"hidden","credential":"hidden-token"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "editor-session"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("hidden connection request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusNotFound {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("hidden connection status = %d, want %d: %s", resp.StatusCode, http.StatusNotFound, body)
+	}
+	if calls := discoveryCalls.Load(); calls != 0 {
+		t.Fatalf("expected hidden connection rejection before discovery, got %d discovery calls", calls)
+	}
+}
+
+func TestManagedIdentityIntegrationsUseAdvertisedOAuthConnections(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	seedUser(t, svc, "admin@example.test")
+
+	handler := &testOAuthHandler{
+		authorizationBaseURLVal: "https://slack.com/oauth/v2/authorize",
+	}
+	pluginDefs := map[string]*config.ProviderEntry{
+		"slack": {
+			ResolvedManifest: &providermanifestv1.Manifest{
+				Spec: &providermanifestv1.Spec{
+					DefaultConnection: "workspace",
+					Surfaces: &providermanifestv1.ProviderSurfaces{
+						MCP: &providermanifestv1.MCPSurface{
+							Connection: "workspace",
+							URL:        "https://slack.example/mcp",
+						},
+					},
+					Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+						"workspace": {
+							Mode: providermanifestv1.ConnectionModeUser,
+							Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeOAuth2},
+						},
+						"hidden": {
+							Mode: providermanifestv1.ConnectionModeUser,
+							Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeOAuth2},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "admin-session" {
+					return nil, fmt.Errorf("unknown session %q", token)
+				}
+				return &core.UserIdentity{Email: "admin@example.test"}, nil
+			},
+		}
+		cfg.Providers = testutil.NewProviderRegistry(t, &stubIntegrationWithAuthURL{
+			StubIntegration: coretesting.StubIntegration{N: "slack"},
+			authURL:         "https://slack.com/oauth/v2/authorize",
+		})
+		cfg.DefaultConnection = map[string]string{"slack": "workspace"}
+		cfg.ConnectionAuth = func() map[string]map[string]bootstrap.OAuthHandler {
+			return map[string]map[string]bootstrap.OAuthHandler{
+				"slack": {"workspace": handler},
+			}
+		}
+		cfg.PluginDefs = pluginDefs
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	createResp := struct {
+		ID string `json:"id"`
+	}{}
+	doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"OAuth Visibility Bot"}`, http.StatusCreated, &createResp)
+
+	seedToken(t, svc, &core.IntegrationToken{
+		ID:          "hidden-plugin-connection",
+		OwnerKind:   core.IntegrationTokenOwnerKindManagedIdentity,
+		OwnerID:     createResp.ID,
+		Integration: "slack",
+		Connection:  "",
+		Instance:    "default",
+		AccessToken: "hidden-token",
+	})
+
+	var integrations []struct {
+		Name        string   `json:"name"`
+		Connected   bool     `json:"connected"`
+		AuthTypes   []string `json:"authTypes"`
+		Connections []struct {
+			Name      string   `json:"name"`
+			AuthTypes []string `json:"authTypes"`
+		} `json:"connections"`
+	}
+	doJSONRequestAndDecode(t, http.MethodGet, ts.URL+"/api/v1/identities/"+createResp.ID+"/integrations", "admin-session", "", http.StatusOK, &integrations)
+	if len(integrations) != 1 || integrations[0].Name != "slack" {
+		t.Fatalf("integrations = %+v, want single slack integration", integrations)
+	}
+	if !integrations[0].Connected {
+		t.Fatalf("integrations = %+v, want hidden plugin connection to count as connected", integrations)
+	}
+	if !reflect.DeepEqual(integrations[0].AuthTypes, []string{"oauth"}) {
+		t.Fatalf("top-level auth types = %+v, want [oauth]", integrations[0].AuthTypes)
+	}
+	if len(integrations[0].Connections) != 1 || integrations[0].Connections[0].Name != "workspace" {
+		t.Fatalf("connections = %+v, want single workspace connection", integrations[0].Connections)
+	}
+	if !reflect.DeepEqual(integrations[0].Connections[0].AuthTypes, []string{"oauth"}) {
+		t.Fatalf("workspace auth types = %+v, want [oauth]", integrations[0].Connections[0].AuthTypes)
 	}
 }
 
@@ -16714,7 +17609,19 @@ func TestManagedIdentityAPITokenInvocation(t *testing.T) {
 			ops: []core.Operation{{Name: "query", Method: http.MethodGet}},
 		},
 	}
-	providers := testutil.NewProviderRegistry(t, alphaStub, identityStub)
+	oauthStub := &stubOAuthIntegrationWithOps{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "oauth-svc",
+				ConnMode: core.ConnectionModeUser,
+				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
+					return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"token":%q}`, token)}, nil
+				},
+			},
+			ops: []core.Operation{{Name: "query", Method: http.MethodGet}},
+		},
+	}
+	providers := testutil.NewProviderRegistry(t, alphaStub, identityStub, oauthStub)
 	authz, err := authorization.New(config.AuthorizationConfig{}, nil, providers, nil)
 	if err != nil {
 		t.Fatalf("authorization.New: %v", err)
@@ -16742,6 +17649,7 @@ func TestManagedIdentityAPITokenInvocation(t *testing.T) {
 	doJSONRequestAndDecode(t, http.MethodPost, ts.URL+"/api/v1/identities", "admin-session", `{"displayName":"Invoke Bot"}`, http.StatusCreated, &createResp)
 	doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/alpha", "admin-session", `{"operations":["read"]}`, http.StatusOK, nil)
 	doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/identity-svc", "admin-session", `{"operations":["query"]}`, http.StatusOK, nil)
+	doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/oauth-svc", "admin-session", `{"operations":["query"]}`, http.StatusOK, nil)
 
 	createTokenResp := struct {
 		Token string `json:"token"`
@@ -16751,7 +17659,7 @@ func TestManagedIdentityAPITokenInvocation(t *testing.T) {
 		http.MethodPost,
 		ts.URL+"/api/v1/identities/"+createResp.ID+"/tokens",
 		"admin-session",
-		`{"name":"invoke-token","permissions":[{"plugin":"alpha","operations":["read"]},{"plugin":"identity-svc","operations":["query"]}]}`,
+		`{"name":"invoke-token","permissions":[{"plugin":"alpha","operations":["read"]},{"plugin":"identity-svc","operations":["query"]},{"plugin":"oauth-svc","operations":["query"]}]}`,
 		http.StatusCreated,
 		&createTokenResp,
 	)
@@ -16776,6 +17684,15 @@ func TestManagedIdentityAPITokenInvocation(t *testing.T) {
 		Connection:  "",
 		Instance:    "team-b",
 		AccessToken: "identity-token-b",
+	})
+	seedToken(t, svc, &core.IntegrationToken{
+		ID:          "oauth-svc-default",
+		OwnerKind:   core.IntegrationTokenOwnerKindManagedIdentity,
+		OwnerID:     createResp.ID,
+		Integration: "oauth-svc",
+		Connection:  "",
+		Instance:    "default",
+		AccessToken: "oauth-token",
 	})
 
 	integrationsReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
@@ -16805,6 +17722,9 @@ func TestManagedIdentityAPITokenInvocation(t *testing.T) {
 	}
 	if !connectedByName["identity-svc"] {
 		t.Fatalf("integrations = %+v, want identity-svc connected with stored identity token", integrations)
+	}
+	if !connectedByName["oauth-svc"] {
+		t.Fatalf("integrations = %+v, want oauth-svc connected with stored identity token", integrations)
 	}
 
 	call := func(path string) (int, string) {
@@ -16841,6 +17761,16 @@ func TestManagedIdentityAPITokenInvocation(t *testing.T) {
 	}
 	if result["token"] != "identity-token-b" {
 		t.Fatalf("identity-svc result = %+v, want token identity-token-b", result)
+	}
+	status, body = call("/api/v1/oauth-svc/query")
+	if status != http.StatusOK {
+		t.Fatalf("oauth-svc/query status = %d, want 200: %s", status, body)
+	}
+	if err := json.Unmarshal([]byte(body), &result); err != nil {
+		t.Fatalf("unmarshal oauth-svc result: %v", err)
+	}
+	if result["token"] != "oauth-token" {
+		t.Fatalf("oauth-svc result = %+v, want token oauth-token", result)
 	}
 
 	doJSONRequestAndDecode(t, http.MethodDelete, ts.URL+"/api/v1/identities/"+createResp.ID, "admin-session", "", http.StatusOK, nil)

@@ -283,6 +283,22 @@ pub(crate) fn connect_identity(
     connection: Option<&str>,
     instance: Option<&str>,
 ) -> Result<()> {
+    connect_identity_with_browser_opener(client, identity, name, connection, instance, |url| {
+        open::that(url).map(|_| ()).map_err(Into::into)
+    })
+}
+
+pub fn connect_identity_with_browser_opener<F>(
+    client: &ApiClient,
+    identity: &str,
+    name: &str,
+    connection: Option<&str>,
+    instance: Option<&str>,
+    open_browser: F,
+) -> Result<()>
+where
+    F: FnOnce(&str) -> Result<()>,
+{
     let integration = fetch_plugin_from_path(
         client,
         &format!("/api/v1/identities/{identity}/integrations"),
@@ -301,10 +317,7 @@ pub(crate) fn connect_identity(
             &format!("Connected {{integration}} ({{candidate}}) for identity {identity}."),
             |body| client.connect_identity_manual(identity, body),
         ),
-        ConnectMode::OAuth => bail!(
-            "identity connections do not support OAuth in the CLI yet for plugin '{}'",
-            name
-        ),
+        ConnectMode::OAuth => start_identity_oauth(client, identity, &flow, instance, open_browser),
     }
 }
 
@@ -317,18 +330,53 @@ fn start_oauth<F>(
 where
     F: FnOnce(&str) -> Result<()>,
 {
+    start_oauth_via(
+        "failed to start OAuth flow",
+        |body| client.post("/api/v1/auth/start-oauth", body),
+        flow,
+        instance,
+        open_browser,
+    )
+}
+
+fn start_identity_oauth<F>(
+    client: &ApiClient,
+    identity: &str,
+    flow: &ResolvedConnectFlow<'_>,
+    instance: Option<&str>,
+    open_browser: F,
+) -> Result<()>
+where
+    F: FnOnce(&str) -> Result<()>,
+{
+    start_oauth_via(
+        &format!("failed to start OAuth flow for identity {identity}"),
+        |body| client.start_identity_oauth(identity, body),
+        flow,
+        instance,
+        open_browser,
+    )
+}
+
+fn start_oauth_via<F, G>(
+    failure_context: &str,
+    start_request: G,
+    flow: &ResolvedConnectFlow<'_>,
+    instance: Option<&str>,
+    open_browser: F,
+) -> Result<()>
+where
+    F: FnOnce(&str) -> Result<()>,
+    G: FnOnce(&StartOAuthRequest<'_>) -> Result<serde_json::Value>,
+{
     let connection_params = prompt_connection_params(flow.connection_param_defs())?;
-    let resp = client
-        .post(
-            "/api/v1/auth/start-oauth",
-            &StartOAuthRequest {
-                integration: flow.integration_name(),
-                connection: flow.connection_name(),
-                instance,
-                connection_params: connection_params.as_ref(),
-            },
-        )
-        .context("failed to start OAuth flow")?;
+    let resp = start_request(&StartOAuthRequest {
+        integration: flow.integration_name(),
+        connection: flow.connection_name(),
+        instance,
+        connection_params: connection_params.as_ref(),
+    })
+    .with_context(|| failure_context.to_string())?;
     let url = resp["url"]
         .as_str()
         .context("response missing 'url' field")?;

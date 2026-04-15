@@ -1,5 +1,7 @@
 mod support;
 
+use std::sync::{Arc, Mutex};
+
 use support::*;
 
 #[test]
@@ -382,4 +384,89 @@ fn test_cli_disconnects_identity_connection_with_connection_and_instance() {
         .stderr(predicate::str::contains(
             "Disconnected widget_metrics from identity agent-1.",
         ));
+}
+
+#[test]
+fn test_identity_connect_starts_oauth_with_connection_and_instance() {
+    let mut server = Server::new();
+    let _integrations = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/identities/agent-1/integrations",
+        StatusCode::OK
+    )
+    .with_body(r#"[{"name":"acme_crm","authTypes":["oauth"],"connected":false}]"#)
+    .create();
+    let mock = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/identities/agent-1/auth/start-oauth",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"connection":"workspace","instance":"team-a","integration":"acme_crm"}"#.to_string(),
+    ))
+    .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
+    .create();
+
+    let client = create_client(&server);
+    let result = gestalt::commands::plugins::connect_identity_with_browser_opener(
+        &client,
+        "agent-1",
+        "acme_crm",
+        Some("workspace"),
+        Some("team-a"),
+        |_| Ok(()),
+    );
+
+    mock.assert();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_identity_connect_prefers_oauth_when_manual_also_exists() {
+    let mut server = Server::new();
+    let _integrations = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/identities/agent-1/integrations",
+        StatusCode::OK
+    )
+    .with_body(r#"[{"name":"acme_crm","authTypes":["oauth","manual"],"connected":false}]"#)
+    .create();
+    let mock = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/identities/agent-1/auth/start-oauth",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"integration":"acme_crm"}"#.to_string(),
+    ))
+    .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
+    .create();
+
+    let client = create_client(&server);
+    let opened_url = Arc::new(Mutex::new(None));
+    let opened_url_handle = Arc::clone(&opened_url);
+    let result = gestalt::commands::plugins::connect_identity_with_browser_opener(
+        &client,
+        "agent-1",
+        "acme_crm",
+        None,
+        None,
+        move |url| {
+            *opened_url_handle.lock().unwrap() = Some(url.to_string());
+            Ok(())
+        },
+    );
+
+    mock.assert();
+    assert!(result.is_ok());
+    assert_eq!(
+        opened_url.lock().unwrap().as_deref(),
+        Some("https://example.com/oauth")
+    );
 }

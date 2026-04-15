@@ -338,6 +338,16 @@ impl ApiClient {
         )
     }
 
+    pub fn start_identity_oauth<T>(&self, identity: &str, body: &T) -> Result<serde_json::Value>
+    where
+        T: Serialize + ?Sized,
+    {
+        self.post(
+            &format!("/api/v1/identities/{identity}/auth/start-oauth"),
+            body,
+        )
+    }
+
     pub fn disconnect_identity_integration(
         &self,
         identity: &str,
