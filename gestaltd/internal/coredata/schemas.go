@@ -11,10 +11,12 @@ const (
 var UsersSchema = indexeddb.ObjectStoreSchema{
 	Indexes: []indexeddb.IndexSchema{
 		{Name: "by_email", KeyPath: []string{"email"}, Unique: true},
+		{Name: "by_normalized_email", KeyPath: []string{"normalized_email"}},
 	},
 	Columns: []indexeddb.ColumnDef{
 		{Name: "id", Type: indexeddb.TypeString, PrimaryKey: true},
 		{Name: "email", Type: indexeddb.TypeString, NotNull: true, Unique: true},
+		{Name: "normalized_email", Type: indexeddb.TypeString},
 		{Name: "display_name", Type: indexeddb.TypeString},
 		{Name: "created_at", Type: indexeddb.TypeTime},
 		{Name: "updated_at", Type: indexeddb.TypeTime},

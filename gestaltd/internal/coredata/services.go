@@ -26,8 +26,12 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	if err := ds.CreateObjectStore(ctx, StoreAPITokens, APITokensSchema); err != nil {
 		return nil, fmt.Errorf("create api_tokens store: %w", err)
 	}
+	users := NewUserService(ds)
+	if err := users.BackfillNormalizedEmails(ctx); err != nil {
+		return nil, fmt.Errorf("backfill users store: %w", err)
+	}
 	return &Services{
-		Users:     NewUserService(ds),
+		Users:     users,
 		Tokens:    NewTokenService(ds, enc),
 		APITokens: NewAPITokenService(ds),
 		DB:        ds,

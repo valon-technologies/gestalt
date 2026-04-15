@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/server/internal/emailutil"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	"github.com/valon-technologies/gestalt/server/internal/providerenv"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
@@ -438,7 +439,7 @@ func validateAuthorizationPolicies(cfg *Config) error {
 		seenEmails := make(map[string]int, len(policy.Members))
 		for i, member := range policy.Members {
 			subjectID := strings.TrimSpace(member.SubjectID)
-			email := strings.ToLower(strings.TrimSpace(member.Email))
+			email := emailutil.Normalize(member.Email)
 			role := strings.TrimSpace(member.Role)
 			switch {
 			case role == "":
