@@ -696,7 +696,6 @@ func validateMountedUICollisions(cfg *Config, pluginOwnedUIRefs map[string]struc
 	reserved := []string{
 		"/api",
 		"/api/v1",
-		BrowserAuthCallbackPath,
 		AuthCallbackPath,
 		IntegrationCallbackPath,
 		"/mcp",

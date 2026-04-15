@@ -138,7 +138,7 @@ providers:
           secret:
             provider: default
             name: google-client-secret
-        redirectUrl: https://gestalt.example.com/login/callback
+        redirectUrl: https://gestalt.example.com/api/v1/auth/login/callback
         allowedDomains:
           - example.com
         sessionTtl: 24h
@@ -164,7 +164,7 @@ providers:
           secret:
             provider: default
             name: oidc-client-secret
-        redirectUrl: https://gestalt.example.com/login/callback
+        redirectUrl: https://gestalt.example.com/api/v1/auth/login/callback
         allowedDomains:
           - example.com
         scopes:

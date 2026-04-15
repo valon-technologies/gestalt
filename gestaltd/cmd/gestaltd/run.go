@@ -126,7 +126,6 @@ func runServer(env *bootstrapEnv) error {
 	if env.Config.Server.BaseURL != "" {
 		slog.Info("gestaltd base URL configured",
 			"base_url", env.Config.Server.BaseURL,
-			"browser_auth_callback", env.Config.Server.BaseURL+config.BrowserAuthCallbackPath,
 			"auth_callback", env.Config.Server.BaseURL+config.AuthCallbackPath,
 			"integration_callback", env.Config.Server.BaseURL+config.IntegrationCallbackPath,
 		)
