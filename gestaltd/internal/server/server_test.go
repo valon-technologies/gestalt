@@ -195,7 +195,6 @@ func newTestServicesWithAdminAuthorizationPutFailure(t *testing.T) (*coredata.Se
 	}
 	return svc, failPut
 }
-
 func newVirtualHostClient(t *testing.T, hostAddrs map[string]string) *http.Client {
 	t.Helper()
 	jar, err := cookiejar.New(nil)
@@ -391,7 +390,6 @@ func seedPluginAuthorization(t *testing.T, svc *coredata.Services, authz *author
 	}
 	return user
 }
-
 func seedIdentityToken(t *testing.T, svc *coredata.Services, integration, connection, instance, accessToken string) {
 	t.Helper()
 	seedToken(t, svc, &core.IntegrationToken{
