@@ -1,6 +1,6 @@
 # HTTP API
 
-`gestaltd` exposes a REST API and an optional MCP endpoint. When `server.management` is not configured, every route below is served from the public listener. When `server.management` is configured, `/admin`, `/metrics`, `/health`, and `/ready` move to the management listener and return `404` on the public listener. Prefer the split-listener setup for production so the operator surface does not share the public listener.
+`gestaltd` exposes a REST API and an optional MCP endpoint. When `server.management` is not configured, every route below is served from the public listener. When `server.management` is configured, `/admin`, `/admin/api/v1/*`, `/metrics`, `/health`, and `/ready` move to the management listener and return `404` on the public listener. Prefer the split-listener setup for production so the operator surface does not share the public listener.
 
 The HTTP API uses "integrations" in route paths (e.g. `/api/v1/integrations`) as a stable code surface. The CLI and config both use "plugins" as the canonical term. See [Config File](/reference/config-file#providersplugins) for context.
 
@@ -14,7 +14,7 @@ Authenticated routes accept a `session_token` cookie or an `Authorization: Beare
 | --- | --- | --- |
 | `GET` | `/health` | Basic liveness check. |
 | `GET` | `/ready` | Readiness check. Returns `503` until providers and datastore are ready. |
-| `GET` | `/admin` and `/admin/*` | Embedded admin UI shell. When `server.admin.authorizationPolicy` is set, Gestalt requires browser session auth and the configured roles before serving the shell or its assets. On split public/management deployments, configure `server.management.baseUrl` so unauthenticated management `/admin` requests can round-trip through the public login flow and return to the management listener's built-in `/admin` route. Use the same hostname as `server.baseUrl`, and keep both on `https` when the public listener uses `https`, so the session cookie can be reused across listeners. `/admin` still reads same-origin `/metrics`, which remains unauthenticated on the management listener. When `server.baseUrl` is set, the management admin UI links back to that public URL for `Client UI`; otherwise it omits that link. |
+| `GET` | `/admin` and `/admin/*` | Embedded admin UI shell. The built-in shell now includes a Prometheus dashboard and a plugin authorization workspace at `?tab=members`. When `server.admin.authorizationPolicy` is set, Gestalt requires browser session auth and the configured roles before serving the shell or its assets. On split public/management deployments, configure `server.management.baseUrl` so unauthenticated management `/admin` requests can round-trip through the public login flow and return to the management listener's built-in `/admin` route. Use the same hostname as `server.baseUrl`, and keep both on `https` when the public listener uses `https`, so the session cookie can be reused across listeners. `/admin` still reads same-origin `/metrics`, which remains unauthenticated on the management listener. When `server.baseUrl` is set, the management admin UI links back to that public URL for `Client UI`; otherwise it omits that link. |
 | `GET` | `/api/v1/auth/info` | Returns platform auth metadata, including whether interactive login is supported. |
 | `POST` | `/api/v1/auth/login` | Starts platform login and returns an absolute browser URL. |
 | `GET` | `/api/v1/auth/login/callback` | Completes platform login. |
@@ -54,6 +54,14 @@ Authenticated routes accept a `session_token` cookie or an `Authorization: Beare
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/metrics` | Prometheus scrape endpoint for emitted metrics. Requires Gestalt auth only when served on the public listener. The recommended production pattern is to move it to `server.management` and protect that listener at the network or proxy layer. |
+| `GET` | `/admin/api/v1/authorization/plugins` | List plugins that declare `authorizationPolicy`, including the bound policy name and mounted UI path when present. |
+| `GET` | `/admin/api/v1/authorization/plugins/{plugin}/members` | List merged static and dynamic human membership rows for one plugin. Rows include `source`, `effective`, `mutable`, and selector metadata. |
+| `PUT` | `/admin/api/v1/authorization/plugins/{plugin}/members` | Upsert one dynamic human membership row for a plugin by email and role. Rejects users who already have static authorization on that plugin. |
+| `DELETE` | `/admin/api/v1/authorization/plugins/{plugin}/members/{userID}` | Remove one dynamic human membership row for a plugin. Static rows are read-only and cannot be deleted through the API. |
+
+`/admin/api/v1/...` mirrors the built-in `/admin` protection model: when `server.admin.authorizationPolicy` is unset, the routes are open wherever `/admin` is open; when it is set, they require the same browser session and role checks as `/admin`, but return JSON `401`/`403` instead of browser redirects.
+
+`PUT` and `DELETE` may return `202 Accepted` with `status: "persisted_pending_reload"` when the dynamic grant was written successfully but the local in-memory authorization snapshot has not reloaded yet. In that case, retry access checks only after the local snapshot converges.
 
 ## MCP
 
@@ -93,4 +101,9 @@ curl 'http://localhost:8080/api/v1/slack/chat.postMessage?_connection=mcp&_insta
 curl -X POST http://localhost:8080/api/v1/slack/chat.postMessage \
   -H 'Content-Type: application/json' \
   -d '{"_connection": "mcp", "channel": "C123", "text": "hello"}'
+
+# Add a dynamic plugin member from the management/admin surface
+curl -X PUT http://localhost:9090/admin/api/v1/authorization/plugins/sample_plugin/members \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"viewer@example.test","role":"viewer"}'
 ```

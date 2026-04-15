@@ -98,6 +98,8 @@ authorization:
 
 `authorization.policies` configures shared human access policies. Each policy resolves a caller to exactly one role by matching either `subjectID` or `email`, then applies a `default` fallback (`allow` or `deny`) when no member matches. Plugins opt into a policy explicitly through `authorizationPolicy`.
 
+Dynamic human grants are plugin-scoped, not policy-scoped. When a plugin sets `authorizationPolicy`, operators can manage additional dynamic members for that plugin from the built-in admin UI at `/admin/?tab=members` or through `/admin/api/v1/authorization/...`. Static policy members always win over dynamic grants, and Gestalt rejects dynamic writes for users who already have static authorization on that plugin.
+
 `authorization.workloads` configures non-human workload callers. Each workload uses a dedicated bearer token with the `gst_wld_` prefix and a per-provider allowlist. In v1, workloads may bind only to `identity` or `none` providers. For `identity` providers, `connection` and `instance` resolve the exact stored identity credential the workload may use; `instance` defaults to `default` and `connection` falls back to the provider's default connection when omitted. For `none` providers, omit `connection` and `instance`.
 
 | Field | Default | Description |
@@ -117,7 +119,7 @@ authorization:
 | `authorization.policies` | | Shared human access policies resolved by `subjectID` or `email`. |
 | `authorization.workloads` | | Workload bearer tokens, per-provider allowlists, and identity credential bindings. |
 
-When `server.management` is configured, Gestalt serves `/`, `/api/v1/*`, auth routes, and `/mcp` on the public listener, while `/admin`, `/metrics`, `/health`, and `/ready` move to the management listener. The management listener is intended to be protected by deployment infrastructure such as private networking, VPN, or an internal-only reverse proxy. Gestalt does not apply its own session or API-token auth to `/metrics` on the management listener. When `server.admin.authorizationPolicy` is set, Gestalt does apply browser session auth plus role-based policy checks to `/admin`.
+When `server.management` is configured, Gestalt serves `/`, `/api/v1/*`, auth routes, and `/mcp` on the public listener, while `/admin`, `/admin/api/v1/*`, `/metrics`, `/health`, and `/ready` move to the management listener. The management listener is intended to be protected by deployment infrastructure such as private networking, VPN, or an internal-only reverse proxy. Gestalt does not apply its own session or API-token auth to `/metrics` on the management listener. When `server.admin.authorizationPolicy` is set, Gestalt does apply browser session auth plus role-based policy checks to `/admin` and `/admin/api/v1/*`.
 
 ## `providers.auth`
 
@@ -598,7 +600,7 @@ plugins:
 | `displayName` | Human-readable name shown in the UI and API. |
 | `description` | Short description of the plugin. |
 | `iconFile` | SVG icon path, resolved relative to the config directory. |
-| `authorizationPolicy` | Optional shared human access policy from `authorization.policies`. When set, host-side operation filtering and execution checks use the resolved role for this plugin. |
+| `authorizationPolicy` | Optional shared human access policy from `authorization.policies`. When set, host-side operation filtering and execution checks use the resolved role for this plugin, and the built-in admin UI / admin API can manage plugin-scoped dynamic grants for additional human members. Static policy members still take precedence. |
 | `mountPath` | Optional public path prefix for a plugin-backed mounted UI. When set, Gestalt mounts either `plugins.<name>.ui` or the plugin manifest's `spec.ui`. |
 | `ui` | Optional UI key from `providers.ui` used with `mountPath`. Omit it to mount the plugin manifest's owned `spec.ui`. |
 | `source` | **Required.** The backing provider source. See [source shape](#pluginssource) below. |
@@ -879,6 +881,8 @@ providers:
 ```
 
 `providers.ui` is a map of `webui` bundles. Entries may mount directly by setting `path`, or they may act as named UI bundles that `plugins.<name>.ui` binds to `plugins.<name>.mountPath`. When a plugin manifest declares `spec.ui`, `plugins.<name>.ui` may be omitted entirely and Gestalt synthesizes the mounted UI entry from the plugin-owned reference. The built-in admin UI remains available at `/admin`. Omit `providers.ui` entirely to run headless with no public UI bundles.
+
+Plugin-backed mounted UIs inherit the owning plugin's dynamic authorization grants when that plugin sets `authorizationPolicy`. Direct `providers.ui.<name>.authorizationPolicy` bindings remain static-only.
 
 When `authorizationPolicy` is set on a mounted UI, the referenced web UI manifest must declare `spec.routes` with non-empty `allowedRoles`, and at least one route must cover `/`.
 

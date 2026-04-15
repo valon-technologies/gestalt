@@ -136,6 +136,12 @@ listeners. See the
 [deployment documentation](https://gestaltd.ai/deploy) for the recommended
 split-listener production pattern.
 
+The built-in `/admin` shell now includes both the Prometheus metrics dashboard
+and a plugin authorization workspace. For any plugin that already declares
+`authorizationPolicy`, operators can open `/admin/?tab=members&plugin=<name>`
+to inspect merged static/dynamic rows and manage dynamic grants. Static policy
+members remain authoritative.
+
 ## SQLite and `/data`
 
 SQLite works for local development, demos, and single-instance deployments.
