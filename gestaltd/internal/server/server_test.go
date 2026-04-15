@@ -708,6 +708,107 @@ func TestMountedWebUIRoutes_HumanAuthorization(t *testing.T) {
 	}
 }
 
+func TestMountedWebUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUsersAsViewer(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>protected-sample-shell</html>"), 0o644); err != nil {
+		t.Fatalf("WriteFile index.html: %v", err)
+	}
+	handler, err := testutilWebUIHandler(dir)
+	if err != nil {
+		t.Fatalf("webui handler: %v", err)
+	}
+
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "allow",
+				Members: []config.HumanPolicyMemberDef{
+					{Email: "admin@example.test", Role: "admin"},
+				},
+			},
+		},
+	}, nil, map[string]*config.ProviderEntry{
+		"sample_portal": {AuthorizationPolicy: "sample_policy"},
+	}, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				switch token {
+				case "viewer-session":
+					return &core.UserIdentity{Email: "viewer@example.test"}, nil
+				case "admin-session":
+					return &core.UserIdentity{Email: "admin@example.test"}, nil
+				default:
+					return nil, fmt.Errorf("invalid token")
+				}
+			},
+		}
+		cfg.Authorizer = authz
+		cfg.MountedWebUIs = []server.MountedWebUI{{
+			Name:                "sample_portal",
+			Path:                "/sample-portal",
+			AuthorizationPolicy: "sample_policy",
+			Routes: []server.MountedWebUIRoute{
+				{Path: "/admin/*", AllowedRoles: []string{"admin"}},
+				{Path: "/*", AllowedRoles: []string{"viewer", "admin"}},
+			},
+			Handler: handler,
+		}}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/sample-portal/sync", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET default-allow mounted sync with viewer session: %v", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll default-allow mounted sync: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("default-allow viewer status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	if !strings.Contains(string(body), "protected-sample-shell") {
+		t.Fatalf("body = %q, want protected sample shell", body)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/sample-portal/admin", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET default-allow mounted admin with viewer session: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("default-allow viewer admin status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/sample-portal/admin", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET default-allow mounted admin with admin session: %v", err)
+	}
+	body, err = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll default-allow mounted admin: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("default-allow admin status = %d, want %d", resp.StatusCode, http.StatusOK)
+	}
+	if !strings.Contains(string(body), "protected-sample-shell") {
+		t.Fatalf("admin body = %q, want protected sample shell", body)
+	}
+}
+
 func TestBuiltInAdminRoute_HumanAuthorization(t *testing.T) {
 	t.Parallel()
 
@@ -5120,6 +5221,140 @@ func TestHumanAuthorization_ExecuteOperation_UsesResolvedRoleAndRejectsDisallowe
 				Members: []config.HumanPolicyMemberDef{
 					{Email: "viewer-user@test.local", Role: "viewer"},
 					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
+				},
+			},
+		},
+	}, nil, pluginDefs, nil)
+
+	var auditBuf bytes.Buffer
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{N: "test"}
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.PluginDefs = pluginDefs
+		cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/run", nil)
+	req.Header.Set("Authorization", "Bearer "+plaintext)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if result["policy"] != "sample_policy" || result["role"] != "viewer" {
+		t.Fatalf("unexpected access context in execute response: %+v", result)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/admin", nil)
+	req.Header.Set("Authorization", "Bearer "+plaintext)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("admin request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusForbidden {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 403, got %d: %s", resp.StatusCode, body)
+	}
+
+	lines := bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
+	if len(lines) == 0 {
+		t.Fatal("expected denial audit record")
+	}
+
+	var deniedAudit map[string]any
+	if err := json.Unmarshal(lines[len(lines)-1], &deniedAudit); err != nil {
+		t.Fatalf("parsing denied audit record: %v\nraw: %s", err, auditBuf.String())
+	}
+	if deniedAudit["provider"] != "svc" {
+		t.Fatalf("expected denied audit provider svc, got %v", deniedAudit["provider"])
+	}
+	if deniedAudit["operation"] != "admin" {
+		t.Fatalf("expected denied audit operation admin, got %v", deniedAudit["operation"])
+	}
+	if deniedAudit["allowed"] != false {
+		t.Fatalf("expected denied audit allowed=false, got %v", deniedAudit["allowed"])
+	}
+	if deniedAudit["auth_source"] != "api_token" {
+		t.Fatalf("expected denied audit auth_source api_token, got %v", deniedAudit["auth_source"])
+	}
+	if deniedAudit["subject_id"] != principal.UserSubjectID(viewer.ID) {
+		t.Fatalf("expected denied audit subject_id %q, got %v", principal.UserSubjectID(viewer.ID), deniedAudit["subject_id"])
+	}
+	if deniedAudit["access_policy"] != "sample_policy" {
+		t.Fatalf("expected denied audit access_policy sample_policy, got %v", deniedAudit["access_policy"])
+	}
+	if deniedAudit["access_role"] != "viewer" {
+		t.Fatalf("expected denied audit access_role viewer, got %v", deniedAudit["access_role"])
+	}
+	if deniedAudit["authorization_decision"] != "catalog_role_denied" {
+		t.Fatalf("expected denied audit authorization_decision catalog_role_denied, got %v", deniedAudit["authorization_decision"])
+	}
+	if deniedAudit["error"] != "operation access denied" {
+		t.Fatalf("expected denied audit error operation access denied, got %v", deniedAudit["error"])
+	}
+}
+
+func TestHumanAuthorization_ExecuteOperation_DefaultAllowTreatsAuthenticatedUsersAsViewer(t *testing.T) {
+	t.Parallel()
+
+	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+
+	svc := coretesting.NewStubServices(t)
+	seedAPIToken(t, svc, plaintext, hashed, "viewer-user")
+	viewer := seedUser(t, svc, "viewer-user@test.local")
+
+	stub := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "svc",
+				ConnMode: core.ConnectionModeNone,
+				ExecuteFn: func(ctx context.Context, op string, _ map[string]any, _ string) (*core.OperationResult, error) {
+					access := invocation.AccessContextFromContext(ctx)
+					body, err := json.Marshal(map[string]string{
+						"operation": op,
+						"policy":    access.Policy,
+						"role":      access.Role,
+					})
+					if err != nil {
+						return nil, err
+					}
+					return &core.OperationResult{Status: http.StatusOK, Body: string(body)}, nil
+				},
+			},
+		},
+		catalog: &catalog.Catalog{
+			Name: "svc",
+			Operations: []catalog.CatalogOperation{
+				{ID: "run", Method: http.MethodGet, Transport: catalog.TransportREST, AllowedRoles: []string{"viewer"}},
+				{ID: "admin", Method: http.MethodGet, Transport: catalog.TransportREST, AllowedRoles: []string{"admin"}},
+			},
+		},
+	}
+
+	pluginDefs := map[string]*config.ProviderEntry{
+		"svc": {AuthorizationPolicy: "sample_policy"},
+	}
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "allow",
+				Members: []config.HumanPolicyMemberDef{
+					{Email: "admin-user@test.local", Role: "admin"},
 				},
 			},
 		},

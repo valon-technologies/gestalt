@@ -368,6 +368,56 @@ func TestFilterCatalogForPrincipal_HumanDefaultAllowKeepsUnannotatedOperations(t
 	}
 }
 
+func TestFilterCatalogForPrincipal_HumanDefaultAllowTreatsUnmatchedUsersAsViewer(t *testing.T) {
+	t.Parallel()
+
+	prov := &stubCatalogProvider{
+		stubProvider: stubProvider{
+			name:     "sample-api",
+			connMode: core.ConnectionModeUser,
+		},
+		cat: &catalog.Catalog{
+			Name: "sample-api",
+			Operations: []catalog.CatalogOperation{
+				{ID: "baseline_op", Method: http.MethodGet, Transport: catalog.TransportREST},
+				{ID: "viewer_op", Method: http.MethodGet, Transport: catalog.TransportREST, AllowedRoles: []string{"viewer"}},
+				{ID: "admin_op", Method: http.MethodGet, Transport: catalog.TransportREST, AllowedRoles: []string{"admin"}},
+			},
+		},
+	}
+
+	authz, err := authorization.New(config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "allow",
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID("admin-user"), Role: "admin"},
+				},
+			},
+		},
+	}, map[string]*config.ProviderEntry{
+		"sample-api": {AuthorizationPolicy: "sample_policy"},
+	}, nil, nil)
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+
+	p := &principal.Principal{
+		Kind:      principal.KindUser,
+		UserID:    "viewer-user",
+		SubjectID: principal.UserSubjectID("viewer-user"),
+	}
+	filtered := invocation.FilterCatalogForPrincipal(prov.Catalog(), "sample-api", p, authz)
+	if len(filtered.Operations) != 2 {
+		t.Fatalf("expected 2 operations after default-allow filtering, got %d", len(filtered.Operations))
+	}
+	gotIDs := []string{filtered.Operations[0].ID, filtered.Operations[1].ID}
+	wantIDs := []string{"baseline_op", "viewer_op"}
+	if fmt.Sprint(gotIDs) != fmt.Sprint(wantIDs) {
+		t.Fatalf("filtered operation IDs = %#v, want %#v", gotIDs, wantIDs)
+	}
+}
+
 func TestFilterCatalogForPrincipal_HumanUnboundProviderKeepsRoleAnnotatedOperations(t *testing.T) {
 	t.Parallel()
 
