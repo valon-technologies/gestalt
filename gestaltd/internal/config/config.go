@@ -30,9 +30,9 @@ const (
 	DefaultProviderRepo = "github.com/valon-technologies/gestalt-providers"
 
 	DefaultIndexedDBProvider = DefaultProviderRepo + "/indexeddb/relationaldb"
-	DefaultIndexedDBVersion  = "0.0.1-alpha.2"
+	DefaultIndexedDBVersion  = "0.0.1-alpha.1"
 	DefaultWebUIProvider     = DefaultProviderRepo + "/web/default"
-	DefaultWebUIVersion      = "0.0.1-alpha.5"
+	DefaultWebUIVersion      = "0.0.1-alpha.1"
 	DefaultProviderInstance  = "default"
 )
 
