@@ -24,6 +24,8 @@ import (
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	corecrypto "github.com/valon-technologies/gestalt/server/core/crypto"
+	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coreintegration "github.com/valon-technologies/gestalt/server/core/integration"
 	"github.com/valon-technologies/gestalt/server/core/session"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
@@ -33,6 +35,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/composite"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	"github.com/valon-technologies/gestalt/server/internal/emailutil"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	gestaltmcp "github.com/valon-technologies/gestalt/server/internal/mcp"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
@@ -106,6 +109,48 @@ func newTestHandler(t *testing.T, opts ...func(*server.Config)) http.Handler {
 		t.Fatalf("creating server: %v", err)
 	}
 	return srv
+}
+
+type putFailingIndexedDB struct {
+	indexeddb.IndexedDB
+	failUsersPut *atomic.Bool
+}
+
+func (d *putFailingIndexedDB) ObjectStore(name string) indexeddb.ObjectStore {
+	store := d.IndexedDB.ObjectStore(name)
+	if name != coredata.StoreUsers {
+		return store
+	}
+	return &putFailingObjectStore{ObjectStore: store, failPut: d.failUsersPut}
+}
+
+type putFailingObjectStore struct {
+	indexeddb.ObjectStore
+	failPut *atomic.Bool
+}
+
+func (s *putFailingObjectStore) Put(ctx context.Context, record indexeddb.Record) error {
+	if s.failPut != nil && s.failPut.Load() {
+		return fmt.Errorf("forced users put failure")
+	}
+	return s.ObjectStore.Put(ctx, record)
+}
+
+func newTestServicesWithUsersPutFailure(t *testing.T) (*coredata.Services, *atomic.Bool) {
+	t.Helper()
+	enc, err := corecrypto.NewAESGCM([]byte("0123456789abcdef0123456789abcdef"))
+	if err != nil {
+		t.Fatalf("newTestServicesWithUsersPutFailure encryptor: %v", err)
+	}
+	failPut := &atomic.Bool{}
+	svc, err := coredata.New(&putFailingIndexedDB{
+		IndexedDB:    &coretesting.StubIndexedDB{},
+		failUsersPut: failPut,
+	}, enc)
+	if err != nil {
+		t.Fatalf("newTestServicesWithUsersPutFailure: %v", err)
+	}
+	return svc, failPut
 }
 
 func newVirtualHostClient(t *testing.T, hostAddrs map[string]string) *http.Client {
@@ -259,6 +304,29 @@ func seedUser(t *testing.T, svc *coredata.Services, email string) *core.User {
 		t.Fatalf("seedUser: %v", err)
 	}
 	return u
+}
+
+func seedLegacyUserRecord(t *testing.T, svc *coredata.Services, id, email string, createdAt time.Time) *core.User {
+	t.Helper()
+	ctx := context.Background()
+	rec := indexeddb.Record{
+		"id":               id,
+		"email":            email,
+		"normalized_email": emailutil.Normalize(email),
+		"display_name":     "",
+		"created_at":       createdAt,
+		"updated_at":       createdAt,
+	}
+	if err := svc.DB.ObjectStore(coredata.StoreUsers).Add(ctx, rec); err != nil {
+		t.Fatalf("seedLegacyUserRecord: %v", err)
+	}
+	return &core.User{
+		ID:          id,
+		Email:       email,
+		DisplayName: "",
+		CreatedAt:   createdAt,
+		UpdatedAt:   createdAt,
+	}
 }
 
 func seedIdentityToken(t *testing.T, svc *coredata.Services, integration, connection, instance, accessToken string) {
@@ -3589,7 +3657,7 @@ func TestListIntegrations_ShowsConnectedStatus(t *testing.T) {
 	t.Parallel()
 
 	svc := coretesting.NewStubServices(t)
-	u := seedUser(t, svc, "anonymous@gestalt")
+	u := seedLegacyUserRecord(t, svc, "user-a", "user@example.com", time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
 	seedToken(t, svc, &core.IntegrationToken{
 		ID: "tok1", UserID: u.ID, Integration: "slack",
 		Connection: "default", Instance: "default", AccessToken: "test-token",
@@ -3598,12 +3666,22 @@ func TestListIntegrations_ShowsConnectedStatus(t *testing.T) {
 	stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
 	stub2 := &coretesting.StubIntegration{N: "github", DN: "GitHub"}
 	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "session-token" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: "USER@example.com"}, nil
+			},
+		}
 		cfg.Providers = testutil.NewProviderRegistry(t, stub, stub2)
 		cfg.Services = svc
 	})
 	testutil.CloseOnCleanup(t, ts)
 
 	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("request: %v", err)
@@ -3634,6 +3712,172 @@ func TestListIntegrations_ShowsConnectedStatus(t *testing.T) {
 	}
 	if connected["github"] {
 		t.Fatal("expected github to be disconnected")
+	}
+}
+
+func TestListIntegrations_ShowsConnectedStatus_PrefersCanonicalLowercaseEmailOverExactRawDuplicate(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	seedLegacyUserRecord(t, svc, "user-a", "user@example.com", time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
+	userB := seedLegacyUserRecord(t, svc, "user-b", "USER@example.com", time.Date(2026, 1, 2, 12, 0, 0, 0, time.UTC))
+	seedToken(t, svc, &core.IntegrationToken{
+		ID: "tok1", UserID: userB.ID, Integration: "slack",
+		Connection: "default", Instance: "default", AccessToken: "test-token",
+	})
+
+	stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "session-token" {
+					return nil, core.ErrNotFound
+				}
+				return &core.UserIdentity{Email: "USER@example.com"}, nil
+			},
+		}
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var integrations []struct {
+		Name      string `json:"name"`
+		Connected bool   `json:"connected"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if len(integrations) != 1 {
+		t.Fatalf("expected 1 integration, got %d", len(integrations))
+	}
+	if integrations[0].Connected {
+		t.Fatal("expected canonical lowercase user to win over the exact raw-email duplicate")
+	}
+}
+
+func TestListIntegrations_ShowsConnectedStatus_AmbiguousMixedCaseDuplicatesFailClosed(t *testing.T) {
+	t.Parallel()
+
+	for _, email := range []string{"user@example.com", "USER@example.com"} {
+		email := email
+		t.Run(email, func(t *testing.T) {
+			t.Parallel()
+
+			svc := coretesting.NewStubServices(t)
+			seedLegacyUserRecord(t, svc, "user-a", "User@example.com", time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
+			seedLegacyUserRecord(t, svc, "user-b", "USER@example.com", time.Date(2026, 1, 2, 12, 0, 0, 0, time.UTC))
+
+			stub := &coretesting.StubIntegration{N: "slack", DN: "Slack"}
+			ts := newTestServer(t, func(cfg *server.Config) {
+				cfg.Auth = &coretesting.StubAuthProvider{
+					N: "stub",
+					ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+						if token != "session-token" {
+							return nil, core.ErrNotFound
+						}
+						return &core.UserIdentity{Email: email}, nil
+					},
+				}
+				cfg.Providers = testutil.NewProviderRegistry(t, stub)
+				cfg.Services = svc
+			})
+			testutil.CloseOnCleanup(t, ts)
+
+			req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+			req.AddCookie(&http.Cookie{Name: "session_token", Value: "session-token"})
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("request: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+
+			if resp.StatusCode != http.StatusInternalServerError {
+				t.Fatalf("expected 500, got %d", resp.StatusCode)
+			}
+		})
+	}
+}
+
+func TestLoginCallback_LegacyMixedCaseRepairFailureStillSucceeds(t *testing.T) {
+	t.Parallel()
+
+	svc, failPut := newTestServicesWithUsersPutFailure(t)
+	existing := seedLegacyUserRecord(t, svc, "legacy-user", "User@Example.com", time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
+	failPut.Store(true)
+
+	var auditBuf bytes.Buffer
+	auditSink := invocation.NewSlogAuditSink(&auditBuf)
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &stubAuthWithToken{
+			StubAuthProvider: coretesting.StubAuthProvider{
+				N: "test",
+				HandleCallbackFn: func(_ context.Context, code string) (*core.UserIdentity, error) {
+					if code == "good-code" {
+						return &core.UserIdentity{Email: "user@example.com", DisplayName: "User"}, nil
+					}
+					return nil, fmt.Errorf("bad code")
+				},
+			},
+		}
+		cfg.Services = svc
+		cfg.AuditSink = auditSink
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+
+	body := bytes.NewBufferString(`{"state":"test-state"}`)
+	loginResp, err := client.Post(ts.URL+"/api/v1/auth/login", "application/json", body)
+	if err != nil {
+		t.Fatalf("start login: %v", err)
+	}
+	_ = loginResp.Body.Close()
+
+	resp, err := client.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=test-state")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	stored, err := svc.Users.GetUser(context.Background(), existing.ID)
+	if err != nil {
+		t.Fatalf("get user: %v", err)
+	}
+	if stored.Email != "User@Example.com" {
+		t.Fatalf("expected user email to remain unrepaired after forced put failure, got %q", stored.Email)
+	}
+
+	lines := bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
+	if len(lines) == 0 {
+		t.Fatal("expected login audit record")
+	}
+	var auditRecord map[string]any
+	if err := json.Unmarshal(lines[len(lines)-1], &auditRecord); err != nil {
+		t.Fatalf("parsing audit record: %v\nraw: %s", err, auditBuf.String())
+	}
+	if auditRecord["operation"] != "auth.login.complete" {
+		t.Fatalf("expected audit operation auth.login.complete, got %v", auditRecord["operation"])
+	}
+	if uid, ok := auditRecord["user_id"].(string); !ok || uid != existing.ID {
+		t.Fatalf("expected audit user_id %q, got %v", existing.ID, auditRecord["user_id"])
 	}
 }
 
@@ -6039,6 +6283,8 @@ func TestStartLogin_NoAuthInvalidJSON(t *testing.T) {
 func TestLoginCallback(t *testing.T) {
 	t.Parallel()
 
+	svc := coretesting.NewStubServices(t)
+	existing := seedLegacyUserRecord(t, svc, "legacy-user", "User@Example.com", time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
 	var auditBuf bytes.Buffer
 	auditSink := invocation.NewSlogAuditSink(&auditBuf)
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -6053,7 +6299,7 @@ func TestLoginCallback(t *testing.T) {
 				},
 			},
 		}
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = svc
 		cfg.AuditSink = auditSink
 	})
 	testutil.CloseOnCleanup(t, ts)
@@ -6085,6 +6331,13 @@ func TestLoginCallback(t *testing.T) {
 	if result["email"] != "user@example.com" {
 		t.Fatalf("unexpected email: %v", result["email"])
 	}
+	stored, err := svc.Users.GetUser(context.Background(), existing.ID)
+	if err != nil {
+		t.Fatalf("get user: %v", err)
+	}
+	if stored.Email != "user@example.com" {
+		t.Fatalf("expected repaired user email %q, got %q", "user@example.com", stored.Email)
+	}
 
 	lines := bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
 	if len(lines) == 0 {
@@ -6100,8 +6353,8 @@ func TestLoginCallback(t *testing.T) {
 	if auditRecord["auth_source"] != "session" {
 		t.Fatalf("expected audit auth_source session, got %v", auditRecord["auth_source"])
 	}
-	if uid, ok := auditRecord["user_id"].(string); !ok || uid == "" {
-		t.Fatalf("expected non-empty audit user_id, got %v", auditRecord["user_id"])
+	if uid, ok := auditRecord["user_id"].(string); !ok || uid != existing.ID {
+		t.Fatalf("expected audit user_id %q, got %v", existing.ID, auditRecord["user_id"])
 	}
 }
 
@@ -6109,13 +6362,14 @@ func TestLoginCallbackForCLI(t *testing.T) {
 	t.Parallel()
 
 	svc := coretesting.NewStubServices(t)
+	u := seedUser(t, svc, "user@example.com")
 	var auditBuf bytes.Buffer
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
 			N: "test",
 			HandleCallbackFn: func(_ context.Context, code string) (*core.UserIdentity, error) {
 				if code == "good-code" {
-					return &core.UserIdentity{Email: "user@example.com", DisplayName: "User"}, nil
+					return &core.UserIdentity{Email: "User@Example.com", DisplayName: "User"}, nil
 				}
 				return nil, fmt.Errorf("bad code")
 			},
@@ -6159,10 +6413,6 @@ func TestLoginCallbackForCLI(t *testing.T) {
 		t.Fatalf("expected cli-token name in CLI login response, got %v", result["name"])
 	}
 
-	u, err := svc.Users.FindOrCreateUser(context.Background(), "user@example.com")
-	if err != nil {
-		t.Fatalf("find user: %v", err)
-	}
 	tokens, err := svc.APITokens.ListAPITokens(context.Background(), u.ID)
 	if err != nil {
 		t.Fatalf("list api tokens: %v", err)
@@ -6198,8 +6448,8 @@ func TestLoginCallbackForCLI(t *testing.T) {
 	if tokenAudit["auth_source"] != "session" {
 		t.Fatalf("expected token audit auth_source session, got %v", tokenAudit["auth_source"])
 	}
-	if uid, ok := tokenAudit["user_id"].(string); !ok || uid == "" {
-		t.Fatalf("expected non-empty token audit user_id, got %v", tokenAudit["user_id"])
+	if uid, ok := tokenAudit["user_id"].(string); !ok || uid != u.ID {
+		t.Fatalf("expected token audit user_id %q, got %v", u.ID, tokenAudit["user_id"])
 	}
 	if tokenAudit["allowed"] != true {
 		t.Fatalf("expected token audit allowed=true, got %v", tokenAudit["allowed"])
@@ -6211,6 +6461,9 @@ func TestLoginCallbackForCLI(t *testing.T) {
 	}
 	if loginAudit["operation"] != "auth.login.complete" {
 		t.Fatalf("expected auth.login.complete audit operation, got %v", loginAudit["operation"])
+	}
+	if uid, ok := loginAudit["user_id"].(string); !ok || uid != u.ID {
+		t.Fatalf("expected login audit user_id %q, got %v", u.ID, loginAudit["user_id"])
 	}
 }
 
@@ -6896,6 +7149,8 @@ func TestCreateAPIToken_DefaultExpiry(t *testing.T) {
 	t.Parallel()
 
 	fixedNow := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
+	svc := coretesting.NewStubServices(t)
+	existing := seedUser(t, svc, "user@example.com")
 	var auditBuf bytes.Buffer
 	auditSink := invocation.NewSlogAuditSink(&auditBuf)
 	ts := newTestServer(t, func(cfg *server.Config) {
@@ -6905,12 +7160,12 @@ func TestCreateAPIToken_DefaultExpiry(t *testing.T) {
 				if token != "session-token" {
 					return nil, core.ErrNotFound
 				}
-				return &core.UserIdentity{Email: "user@example.com"}, nil
+				return &core.UserIdentity{Email: "User@Example.com"}, nil
 			},
 		}
 		cfg.Now = func() time.Time { return fixedNow }
 		cfg.AuditSink = auditSink
-		cfg.Services = coretesting.NewStubServices(t)
+		cfg.Services = svc
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -6954,6 +7209,17 @@ func TestCreateAPIToken_DefaultExpiry(t *testing.T) {
 		t.Fatalf("expected expiresAt %v, got %v", expected, expiresAt)
 	}
 
+	tokens, err := svc.APITokens.ListAPITokens(context.Background(), existing.ID)
+	if err != nil {
+		t.Fatalf("list api tokens: %v", err)
+	}
+	if len(tokens) != 1 {
+		t.Fatalf("expected 1 API token for canonical user, got %d", len(tokens))
+	}
+	if tokens[0].ID != tokenID {
+		t.Fatalf("expected stored token ID %q, got %q", tokenID, tokens[0].ID)
+	}
+
 	var auditRecord map[string]any
 	if err := json.Unmarshal(auditBuf.Bytes(), &auditRecord); err != nil {
 		t.Fatalf("parsing audit record: %v\nraw: %s", err, auditBuf.String())
@@ -6967,8 +7233,8 @@ func TestCreateAPIToken_DefaultExpiry(t *testing.T) {
 	if auditRecord["auth_source"] != "session" {
 		t.Fatalf("expected audit auth_source session, got %v", auditRecord["auth_source"])
 	}
-	if uid, ok := auditRecord["user_id"].(string); !ok || uid == "" {
-		t.Fatalf("expected non-empty audit user_id, got %v", auditRecord["user_id"])
+	if uid, ok := auditRecord["user_id"].(string); !ok || uid != existing.ID {
+		t.Fatalf("expected audit user_id %q, got %v", existing.ID, auditRecord["user_id"])
 	}
 	if auditRecord["allowed"] != true {
 		t.Fatalf("expected audit allowed=true, got %v", auditRecord["allowed"])

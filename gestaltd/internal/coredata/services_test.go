@@ -13,6 +13,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
+	"github.com/valon-technologies/gestalt/server/internal/emailutil"
 )
 
 const testEncryptionKey = "0123456789abcdef0123456789abcdef"
@@ -45,6 +46,128 @@ func mustCreateUser(t *testing.T, svc *coredata.Services, email string) *core.Us
 	return user
 }
 
+func seedLegacyUserRecord(t *testing.T, svc *coredata.Services, id, email string, createdAt time.Time) *core.User {
+	t.Helper()
+	ctx := context.Background()
+	rec := indexeddb.Record{
+		"id":               id,
+		"email":            email,
+		"normalized_email": emailutil.Normalize(email),
+		"display_name":     "",
+		"created_at":       createdAt,
+		"updated_at":       createdAt,
+	}
+	if err := svc.DB.ObjectStore(coredata.StoreUsers).Add(ctx, rec); err != nil {
+		t.Fatalf("seedLegacyUserRecord: %v", err)
+	}
+	return &core.User{
+		ID:          id,
+		Email:       email,
+		DisplayName: "",
+		CreatedAt:   createdAt,
+		UpdatedAt:   createdAt,
+	}
+}
+
+type countingIndexedDB struct {
+	inner        indexeddb.IndexedDB
+	mu           sync.Mutex
+	getAllCounts map[string]int
+}
+
+func newCountingIndexedDB(inner indexeddb.IndexedDB) *countingIndexedDB {
+	return &countingIndexedDB{
+		inner:        inner,
+		getAllCounts: make(map[string]int),
+	}
+}
+
+func (d *countingIndexedDB) ObjectStore(name string) indexeddb.ObjectStore {
+	return &countingObjectStore{name: name, db: d, inner: d.inner.ObjectStore(name)}
+}
+
+func (d *countingIndexedDB) CreateObjectStore(ctx context.Context, name string, schema indexeddb.ObjectStoreSchema) error {
+	return d.inner.CreateObjectStore(ctx, name, schema)
+}
+
+func (d *countingIndexedDB) DeleteObjectStore(ctx context.Context, name string) error {
+	return d.inner.DeleteObjectStore(ctx, name)
+}
+
+func (d *countingIndexedDB) Ping(ctx context.Context) error { return d.inner.Ping(ctx) }
+func (d *countingIndexedDB) Close() error                   { return d.inner.Close() }
+
+func (d *countingIndexedDB) recordGetAll(name string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.getAllCounts[name]++
+}
+
+func (d *countingIndexedDB) getAllCount(name string) int {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.getAllCounts[name]
+}
+
+type countingObjectStore struct {
+	name  string
+	db    *countingIndexedDB
+	inner indexeddb.ObjectStore
+}
+
+func (o *countingObjectStore) Get(ctx context.Context, id string) (indexeddb.Record, error) {
+	return o.inner.Get(ctx, id)
+}
+
+func (o *countingObjectStore) GetKey(ctx context.Context, id string) (string, error) {
+	return o.inner.GetKey(ctx, id)
+}
+
+func (o *countingObjectStore) Add(ctx context.Context, record indexeddb.Record) error {
+	return o.inner.Add(ctx, record)
+}
+
+func (o *countingObjectStore) Put(ctx context.Context, record indexeddb.Record) error {
+	return o.inner.Put(ctx, record)
+}
+
+func (o *countingObjectStore) Delete(ctx context.Context, id string) error {
+	return o.inner.Delete(ctx, id)
+}
+
+func (o *countingObjectStore) Clear(ctx context.Context) error {
+	return o.inner.Clear(ctx)
+}
+
+func (o *countingObjectStore) GetAll(ctx context.Context, r *indexeddb.KeyRange) ([]indexeddb.Record, error) {
+	o.db.recordGetAll(o.name)
+	return o.inner.GetAll(ctx, r)
+}
+
+func (o *countingObjectStore) GetAllKeys(ctx context.Context, r *indexeddb.KeyRange) ([]string, error) {
+	return o.inner.GetAllKeys(ctx, r)
+}
+
+func (o *countingObjectStore) Count(ctx context.Context, r *indexeddb.KeyRange) (int64, error) {
+	return o.inner.Count(ctx, r)
+}
+
+func (o *countingObjectStore) DeleteRange(ctx context.Context, r indexeddb.KeyRange) (int64, error) {
+	return o.inner.DeleteRange(ctx, r)
+}
+
+func (o *countingObjectStore) Index(name string) indexeddb.Index {
+	return o.inner.Index(name)
+}
+
+func (o *countingObjectStore) OpenCursor(ctx context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection) (indexeddb.Cursor, error) {
+	return o.inner.OpenCursor(ctx, r, dir)
+}
+
+func (o *countingObjectStore) OpenKeyCursor(ctx context.Context, r *indexeddb.KeyRange, dir indexeddb.CursorDirection) (indexeddb.Cursor, error) {
+	return o.inner.OpenKeyCursor(ctx, r, dir)
+}
+
 func TestNew(t *testing.T) {
 	t.Parallel()
 
@@ -60,6 +183,41 @@ func TestNew(t *testing.T) {
 		}
 		if _, err := coredata.New(db, enc); err != nil {
 			t.Fatalf("second New: %v", err)
+		}
+	})
+
+	t.Run("backfills_normalized_email_for_legacy_users", func(t *testing.T) {
+		t.Parallel()
+
+		db := &coretesting.StubIndexedDB{}
+		ctx := context.Background()
+		createdAt := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+		legacy := indexeddb.Record{
+			"id":           "legacy-user",
+			"email":        "User@Example.com",
+			"display_name": "",
+			"created_at":   createdAt,
+			"updated_at":   createdAt,
+		}
+		if err := db.ObjectStore(coredata.StoreUsers).Add(ctx, legacy); err != nil {
+			t.Fatalf("seed legacy user: %v", err)
+		}
+
+		enc, err := corecrypto.NewAESGCM([]byte(testEncryptionKey))
+		if err != nil {
+			t.Fatalf("NewAESGCM: %v", err)
+		}
+		svc, err := coredata.New(db, enc)
+		if err != nil {
+			t.Fatalf("coredata.New: %v", err)
+		}
+
+		raw, err := svc.DB.ObjectStore(coredata.StoreUsers).Get(ctx, "legacy-user")
+		if err != nil {
+			t.Fatalf("Get legacy user: %v", err)
+		}
+		if got := raw["normalized_email"]; got != "user@example.com" {
+			t.Fatalf("normalized_email = %v, want %q", got, "user@example.com")
 		}
 	})
 }
@@ -115,6 +273,32 @@ func TestUserService(t *testing.T) {
 		}
 	})
 
+	t.Run("FindOrCreateUser_creates_new_without_full_table_scan", func(t *testing.T) {
+		t.Parallel()
+
+		db := newCountingIndexedDB(&coretesting.StubIndexedDB{})
+		enc, err := corecrypto.NewAESGCM([]byte(testEncryptionKey))
+		if err != nil {
+			t.Fatalf("NewAESGCM: %v", err)
+		}
+		svc, err := coredata.New(db, enc)
+		if err != nil {
+			t.Fatalf("coredata.New: %v", err)
+		}
+
+		before := db.getAllCount(coredata.StoreUsers)
+		user, err := svc.Users.FindOrCreateUser(context.Background(), "New@Example.com")
+		if err != nil {
+			t.Fatalf("FindOrCreateUser: %v", err)
+		}
+		if got := db.getAllCount(coredata.StoreUsers); got != before {
+			t.Fatalf("users GetAll count = %d, want %d", got, before)
+		}
+		if user.Email != "new@example.com" {
+			t.Fatalf("Email = %q, want %q", user.Email, "new@example.com")
+		}
+	})
+
 	t.Run("FindOrCreateUser_idempotent", func(t *testing.T) {
 		t.Parallel()
 		svc := newTestServices(t)
@@ -130,6 +314,45 @@ func TestUserService(t *testing.T) {
 		}
 		if u1.ID != u2.ID {
 			t.Errorf("not idempotent: first ID %q, second ID %q", u1.ID, u2.ID)
+		}
+	})
+
+	t.Run("FindOrCreateUser_prefers_canonical_row_over_raw_case_duplicate", func(t *testing.T) {
+		t.Parallel()
+		svc := newTestServices(t)
+		ctx := context.Background()
+
+		canonical := seedLegacyUserRecord(t, svc, "user-canonical", "user@example.com", time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
+		seedLegacyUserRecord(t, svc, "user-duplicate", "USER@example.com", time.Date(2026, 1, 2, 12, 0, 0, 0, time.UTC))
+
+		user, err := svc.Users.FindOrCreateUser(ctx, "USER@example.com")
+		if err != nil {
+			t.Fatalf("FindOrCreateUser: %v", err)
+		}
+		if user.ID != canonical.ID {
+			t.Fatalf("ID = %q, want canonical %q", user.ID, canonical.ID)
+		}
+		if user.Email != canonical.Email {
+			t.Fatalf("Email = %q, want canonical %q", user.Email, canonical.Email)
+		}
+	})
+
+	t.Run("FindOrCreateUser_canonicalizes_single_legacy_mixed_case_row", func(t *testing.T) {
+		t.Parallel()
+		svc := newTestServices(t)
+		ctx := context.Background()
+
+		legacy := seedLegacyUserRecord(t, svc, "user-legacy", "USER@example.com", time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC))
+
+		user, err := svc.Users.FindOrCreateUser(ctx, "USER@example.com")
+		if err != nil {
+			t.Fatalf("FindOrCreateUser: %v", err)
+		}
+		if user.ID != legacy.ID {
+			t.Fatalf("ID = %q, want legacy %q", user.ID, legacy.ID)
+		}
+		if user.Email != "user@example.com" {
+			t.Fatalf("Email = %q, want canonical %q", user.Email, "user@example.com")
 		}
 	})
 
