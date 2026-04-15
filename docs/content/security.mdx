@@ -83,8 +83,7 @@ check applies uniformly to REST, GraphQL, and MCP providers.
 Executable plugin providers can run with additional OS-level isolation when
 `allowedHosts` is configured or when `server.egress.defaultAction` is `deny`.
 That isolation currently depends on host-specific runtime support, so it should
-not be treated as a portable security boundary by itself. See
-[Plugin Sandboxing](/architecture/plugin-sandboxing).
+not be treated as a portable security boundary by itself.
 
 **Filesystem.** On Linux, [Landlock](https://docs.kernel.org/userspace-api/landlock.html) restricts file access to system libraries, SSL certificates, and DNS configuration. Writes are limited to the socket directory and an isolated temp directory. On macOS, equivalent restrictions are applied via `sandbox-exec`.
 

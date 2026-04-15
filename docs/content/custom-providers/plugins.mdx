@@ -665,8 +665,8 @@ If your plugin makes outbound HTTP requests and you see 403 errors, check
 `allowedHosts`. In deployments with executable-plugin sandboxing enabled,
 requests to hosts not in the allowlist are rejected. That sandboxing story is
 still runtime-dependent today, so unsupported environments may fail differently.
-See [Plugin Sandboxing](/architecture/plugin-sandboxing). Add every upstream
-domain the provider contacts to `allowedHosts` in the config or manifest.
+Add every upstream domain the provider contacts to `allowedHosts` in the config
+or manifest.
 
 ## Hybrid providers
 
