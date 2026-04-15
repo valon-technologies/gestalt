@@ -1,0 +1,50 @@
+---
+title: Rust SDK API
+---
+
+# Rust SDK API
+
+The Rust SDK is published to crates.io as `gestalt-sdk`, while Rust code
+imports it as `gestalt`.
+
+Its canonical API reference is hosted on `docs.rs`:
+
+- [Open the Rust SDK reference on docs.rs](https://docs.rs/gestalt-sdk/latest/gestalt/)
+
+```rust
+use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+
+#[derive(Default)]
+struct EchoProvider;
+
+#[gestalt::async_trait]
+impl gestalt::Provider for EchoProvider {}
+
+#[derive(Deserialize, JsonSchema)]
+struct EchoInput {
+    message: String,
+}
+
+#[derive(Serialize, JsonSchema)]
+struct EchoOutput {
+    echoed: String,
+}
+
+fn router() -> gestalt::Result<gestalt::Router<EchoProvider>> {
+    gestalt::Router::new().register(
+        gestalt::Operation::<EchoInput, EchoOutput>::new("echo"),
+        |_: Arc<EchoProvider>, input, _request| async move {
+            Ok::<_, gestalt::Error>(gestalt::ok(EchoOutput {
+                echoed: input.message,
+            }))
+        },
+    )
+}
+
+gestalt::export_provider!(constructor = EchoProvider::default, router = router);
+```
+
+`docs.rs` renders the crate docs, module docs, and symbol docs from the source
+and checked-in generated bindings.

@@ -1,0 +1,46 @@
+---
+title: Go SDK API
+---
+
+# Go SDK API
+
+The Go SDK is published as the module
+`github.com/valon-technologies/gestalt/sdk/go`.
+
+Its canonical API reference is hosted on `pkg.go.dev`:
+
+- [Open the Go SDK reference on pkg.go.dev](https://pkg.go.dev/github.com/valon-technologies/gestalt/sdk/go)
+
+```go
+package example
+
+import (
+	"context"
+	"net/http"
+
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+)
+
+type EchoProvider struct{}
+
+func (p *EchoProvider) Configure(ctx context.Context, name string, config map[string]any) error {
+	return nil
+}
+
+func New() *EchoProvider { return &EchoProvider{} }
+
+var Router = gestalt.MustRouter(
+	gestalt.Register(
+		gestalt.Operation[struct{ Message string }, struct{ Echoed string }]{
+			ID:     "echo",
+			Method: http.MethodPost,
+		},
+		func(_ *EchoProvider, _ context.Context, input struct{ Message string }, _ gestalt.Request) (gestalt.Response[struct{ Echoed string }], error) {
+			return gestalt.OK(struct{ Echoed string }{Echoed: input.Message}), nil
+		},
+	),
+)
+```
+
+`pkg.go.dev` renders the source comments directly, so package and symbol docs
+there are the primary Go reference surface.
