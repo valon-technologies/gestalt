@@ -17,17 +17,8 @@ Gestalt handles this so individual agents and applications do not have to. A sin
 - **Stored on infrastructure you control.** Credentials and connection data are stored, encrypted at rest, on infrastructure you control, however you configure it.
 - **Configure once, reuse everywhere.** A single YAML config replaces per-integration glue code, token management scripts, and bespoke OAuth callback servers.
 - **One definition, all harnesses.** The same operations are available over MCP, HTTP, CLI, and optional mounted web UIs for cloud agents, local coding assistants, and human operators.
-- **Pluggable by default.** Auth backends, IndexedDB storage, secrets managers, caches, telemetry, audit sinks, and public web UIs are all provider packages.
+- **Pluggable by default.** Auth backends, [IndexedDB](https://www.w3.org/TR/IndexedDB/) storage, secrets managers, caches, telemetry, audit sinks, and public web UIs are all provider packages.
 - **Run anywhere.** Deploy on infrastructure you control with Docker, Helm, or your own container platform.
-
-## Core Concepts
-
-- **`gestaltd`** is the server. It loads config, resolves providers, stores credentials and sessions, and serves the HTTP API, MCP endpoint, mounted public UIs, and the built-in admin UI.
-- **`gestalt`** is the CLI client. It helps users connect to a running Gestalt server, authenticate, invoke operations, and manage API tokens.
-- **Plugins** are provider-backed tools. They expose operations that users and agents invoke through Gestalt.
-- **Connections** define how a plugin authenticates to an upstream API on behalf of a user or shared identity.
-- **Providers** are the pluggable host components behind auth, IndexedDB, secrets, cache, telemetry, audit, and web UI bundles.
-- **Surfaces** are the ways callers reach the same operations: HTTP, MCP, CLI, and optional public web UI routes.
 
 ## What Gestalt Is Not
 
@@ -50,7 +41,7 @@ Start the server:
 gestaltd
 ```
 
-When no config file exists, `gestaltd` generates `~/.gestaltd/config.yaml`, starts with SQLite storage via the first-party RelationalDB IndexedDB provider, enables a default HTTPBin plugin, and listens on `http://localhost:8080`.
+When no config file exists, `gestaltd` generates `~/.gestaltd/config.yaml`, starts with SQLite storage via the first-party [RelationalDB](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb/relationaldb) provider, enables a default HTTPBin plugin, and listens on `http://localhost:8080`.
 
 In a second terminal, connect the CLI to the server:
 
@@ -69,13 +60,4 @@ For the full walkthrough, see [Getting Started](https://gestaltd.ai/getting-star
 | [`gestaltd`](./gestaltd) | Go server daemon, config loading, provider bootstrap, HTTP API, MCP surface, deployment assets, and admin UI serving code. |
 | [`gestalt`](./gestalt) | Rust CLI client for setup, auth, invocation, and token management. |
 | [`sdk`](./sdk) | Go, Python, Rust, and TypeScript SDKs plus shared protocol definitions. |
-| [`docs`](./docs) | Source for the public documentation site at `gestaltd.ai`. |
-
-## Documentation
-
-- [Overview](https://gestaltd.ai/)
-- [Getting Started](https://gestaltd.ai/getting-started)
-- [Configuration](https://gestaltd.ai/configuration)
-- [Providers](https://gestaltd.ai/providers)
-- [Deploy](https://gestaltd.ai/deploy)
-- [Contributing](./CONTRIBUTING.md)
+| [`docs`](./docs) | Source for the public documentation site at [gestaltd.ai](https://gestaltd.ai). |
