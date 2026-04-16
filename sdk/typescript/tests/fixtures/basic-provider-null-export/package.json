@@ -1,10 +1,10 @@
 {
-  "name": "@fixtures/basic-provider",
+  "name": "@fixtures/basic-provider-null-export",
   "type": "module",
   "gestalt": {
     "provider": {
       "kind": "plugin",
-      "target": "./provider.ts#plugin"
+      "target": "./provider.ts"
     }
   }
 }

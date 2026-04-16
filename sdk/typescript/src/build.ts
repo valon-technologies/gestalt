@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
+import { defaultProviderExportNames } from "./provider-kind.ts";
 import { parseProviderTarget, resolveProviderModulePath, type ProviderTarget } from "./target.ts";
 
 /**
@@ -81,7 +82,7 @@ export function buildProviderBinary(args: BuildArgs): void {
 }
 
 /**
- * Backwards-compatible alias for integration provider builds.
+ * Plugin-specific alias for provider builds.
  */
 export const buildPluginBinary = buildProviderBinary;
 
@@ -157,21 +158,9 @@ await runBundledProvider(candidate, ${JSON.stringify(target.kind)}, ${JSON.strin
 }
 
 function defaultBundledCandidateExpression(kind: ProviderTarget["kind"]): string {
-  switch (kind) {
-    case "integration":
-      return 'Reflect.get(bundledModule, "provider") ?? Reflect.get(bundledModule, "plugin") ?? bundledModule.default';
-    case "auth":
-      return 'Reflect.get(bundledModule, "auth") ?? Reflect.get(bundledModule, "provider") ?? bundledModule.default';
-    case "cache":
-      return 'Reflect.get(bundledModule, "cache") ?? Reflect.get(bundledModule, "provider") ?? bundledModule.default';
-    case "secrets":
-      return 'Reflect.get(bundledModule, "secrets") ?? Reflect.get(bundledModule, "provider") ?? bundledModule.default';
-    case "s3":
-      return 'Reflect.get(bundledModule, "s3") ?? Reflect.get(bundledModule, "provider") ?? bundledModule.default';
-    case "telemetry":
-      return 'Reflect.get(bundledModule, "telemetry") ?? Reflect.get(bundledModule, "provider") ?? bundledModule.default';
-  }
-  throw new Error(`unsupported provider kind: ${kind satisfies never}`);
+  return [...defaultProviderExportNames(kind), "default"]
+    .map((exportName) => `Reflect.get(bundledModule, ${JSON.stringify(exportName)})`)
+    .join(" ?? ");
 }
 
 function resolveBunExecutable(): string {

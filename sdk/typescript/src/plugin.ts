@@ -19,7 +19,7 @@ import { RuntimeProvider, type RuntimeProviderOptions } from "./provider.ts";
 import type { Schema } from "./schema.ts";
 
 /**
- * How an integration provider expects to authenticate or connect.
+ * How a plugin provider expects to authenticate or connect.
  */
 export type ConnectionMode =
   | "unspecified"
@@ -57,7 +57,7 @@ export interface OperationOptions<In, Out> {
 }
 
 /**
- * Normalized integration operation definition.
+ * Normalized plugin operation definition.
  */
 export interface OperationDefinition<In, Out> extends OperationOptions<
   In,
@@ -77,7 +77,7 @@ export type SessionCatalogHandler = (
 ) => MaybePromise<SessionCatalog | null | undefined>;
 
 /**
- * Runtime hooks required to implement an integration provider.
+ * Runtime hooks required to implement a plugin provider.
  */
 export interface PluginDefinitionOptions extends RuntimeProviderOptions {
   connectionMode?: ConnectionMode;
@@ -89,12 +89,7 @@ export interface PluginDefinitionOptions extends RuntimeProviderOptions {
 }
 
 /**
- * Alias for integration providers to mirror the Go and Python SDKs.
- */
-export type IntegrationProviderOptions = PluginDefinitionOptions;
-
-/**
- * Normalizes an integration operation definition.
+ * Normalizes a plugin operation definition.
  */
 export function operation<In, Out>(
   options: OperationOptions<In, Out>,
@@ -111,13 +106,13 @@ export function operation<In, Out>(
 }
 
 /**
- * Integration provider implementation consumed by the Gestalt runtime.
+ * Plugin provider implementation consumed by the Gestalt runtime.
  *
  * @example
  * ```ts
- * import { defineIntegrationProvider, ok, operation, s } from "@valon-technologies/gestalt";
+ * import { definePlugin, ok, operation, s } from "@valon-technologies/gestalt";
  *
- * export const provider = defineIntegrationProvider({
+ * export const plugin = definePlugin({
  *   displayName: "Example Provider",
  *   operations: [
  *     operation({
@@ -134,7 +129,7 @@ export function operation<In, Out>(
  * });
  * ```
  */
-export class IntegrationProvider extends RuntimeProvider {
+export class PluginProvider extends RuntimeProvider {
   readonly kind = "integration" as const;
   readonly iconSvg: string;
   readonly connectionMode: ConnectionMode;
@@ -315,36 +310,27 @@ export class IntegrationProvider extends RuntimeProvider {
 }
 
 /**
- * Backwards-compatible alias for the integration provider class.
+ * Plugin provider implementation consumed by the Gestalt runtime.
  */
-export const Plugin = IntegrationProvider;
+export const Plugin = PluginProvider;
 
 /**
- * Creates an integration provider.
- */
-export function defineIntegrationProvider(
-  options: PluginDefinitionOptions,
-): IntegrationProvider {
-  return new IntegrationProvider(options);
-}
-
-/**
- * Backwards-compatible alias for {@link defineIntegrationProvider}.
+ * Creates a plugin provider.
  */
 export function definePlugin(
   options: PluginDefinitionOptions,
-): IntegrationProvider {
-  return new IntegrationProvider(options);
+): PluginProvider {
+  return new PluginProvider(options);
 }
 
 /**
- * Runtime type guard for integration providers loaded from user modules.
+ * Runtime type guard for plugin providers loaded from user modules.
  */
-export function isIntegrationProvider(
+export function isPluginProvider(
   value: unknown,
-): value is IntegrationProvider {
+): value is PluginProvider {
   return (
-    value instanceof IntegrationProvider ||
+    value instanceof PluginProvider ||
     (typeof value === "object" &&
       value !== null &&
       "kind" in value &&

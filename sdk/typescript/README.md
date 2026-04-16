@@ -21,7 +21,7 @@ property in `package.json`:
   "gestalt": {
     "provider": {
       "kind": "plugin",
-      "target": "./provider.ts#provider"
+      "target": "./provider.ts#plugin"
     }
   }
 }
@@ -31,11 +31,9 @@ The target is a relative file path with an optional export suffix. The runtime
 accepts:
 
 - `gestalt.provider` as `{ "kind": "...", "target": "./file.ts#export" }`
-- `gestalt.provider` as a string like `"plugin:./provider.ts#provider"` or `"cache:./cache.ts#provider"`
-- legacy integration-only `gestalt.plugin`
+- `gestalt.provider` as a string like `"plugin:./provider.ts#plugin"` or `"cache:./cache.ts#provider"`
 
-Use `"plugin"` as the kind token for executable integration providers. The
-older `"integration"` spelling is still accepted for compatibility.
+Use `"plugin"` as the kind token for executable plugin providers.
 
 If the export suffix is omitted, the runtime looks for `provider`, then
 `plugin`, then the default export.
@@ -46,14 +44,14 @@ Use explicit runtime schemas to define plugin operation inputs and outputs:
 
 ```ts
 import {
-  defineIntegrationProvider,
+  definePlugin,
   ok,
   operation,
   response,
   s,
 } from "@valon-technologies/gestalt";
 
-export const provider = defineIntegrationProvider({
+export const plugin = definePlugin({
   displayName: "Example Provider",
   description: "A provider implemented with the Gestalt TypeScript SDK",
   configure(name, config) {
@@ -112,7 +110,7 @@ import {
 Source-mode runtime:
 
 ```sh
-gestalt-ts-runtime ROOT plugin:./provider.ts#provider
+gestalt-ts-runtime ROOT plugin:./provider.ts#plugin
 ```
 
 Release build:
