@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+const ConfigManagedSchedulePrefix = "cfg_"
+
 type RunStatus string
 
 const (

@@ -2071,6 +2071,12 @@ plugins:
       operations:
         - nightly_sync
         - backfill_items
+      schedules:
+        nightly:
+          cron: "0 2 * * *"
+          operation: nightly_sync
+          input:
+            source: yaml
 providers:
   workflow:
     temporal:
@@ -2093,6 +2099,16 @@ server:
 		want := &PluginWorkflowConfig{
 			Provider:   "temporal",
 			Operations: []string{"nightly_sync", "backfill_items"},
+			Schedules: map[string]PluginWorkflowSchedule{
+				"nightly": {
+					Cron:      "0 2 * * *",
+					Timezone:  "UTC",
+					Operation: "nightly_sync",
+					Input: map[string]any{
+						"source": "yaml",
+					},
+				},
+			},
 		}
 		if got := cfg.Plugins["roadmap"].Workflow; !reflect.DeepEqual(got, want) {
 			t.Fatalf("Plugins[roadmap].Workflow = %#v, want %#v", got, want)
@@ -2252,6 +2268,87 @@ server:
 			t.Fatal("Load: expected error, got nil")
 		}
 		if !strings.Contains(err.Error(), `providers.workflow declares multiple defaults: cleanup, temporal`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects workflow schedules with operations outside workflow bindings", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    workflow:
+      provider: temporal
+      operations:
+        - nightly_sync
+      schedules:
+        invalid:
+          cron: "*/5 * * * *"
+          operation: backfill_items
+providers:
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `workflow.schedules.invalid.operation "backfill_items" must be listed`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects invalid workflow schedule cron and timezone", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    workflow:
+      provider: temporal
+      operations:
+        - nightly_sync
+      schedules:
+        invalid:
+          cron: "0 0 0 * * *"
+          timezone: Mars/Olympus
+          operation: nightly_sync
+providers:
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `workflow.schedules.invalid.cron`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

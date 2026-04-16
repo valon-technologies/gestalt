@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"sort"
 	"strings"
@@ -93,6 +94,7 @@ type EffectivePluginWorkflow struct {
 	ProviderName string
 	Provider     *ProviderEntry
 	Operations   []string
+	Schedules    map[string]PluginWorkflowSchedule
 }
 
 func (c *Config) EffectivePluginIndexedDB(pluginName string, entry *ProviderEntry) (EffectivePluginIndexedDB, error) {
@@ -181,7 +183,20 @@ func ResolveEffectivePluginWorkflow(pluginName string, entry *ProviderEntry, sel
 		ProviderName: providerName,
 		Provider:     provider,
 		Operations:   slices.Clone(entry.Workflow.Operations),
+		Schedules:    clonePluginWorkflowSchedules(entry.Workflow.Schedules),
 	}, nil
+}
+
+func clonePluginWorkflowSchedules(src map[string]PluginWorkflowSchedule) map[string]PluginWorkflowSchedule {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make(map[string]PluginWorkflowSchedule, len(src))
+	for key, schedule := range src {
+		schedule.Input = maps.Clone(schedule.Input)
+		dst[key] = schedule
+	}
+	return dst
 }
 
 func ResolveSelectedHostProvider(kind HostProviderKind, explicit string, entries map[string]*ProviderEntry) (string, *ProviderEntry, error) {

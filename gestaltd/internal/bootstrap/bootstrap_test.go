@@ -2,6 +2,7 @@ package bootstrap_test
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
@@ -123,6 +124,118 @@ func (s *stubWorkflowProvider) PublishEvent(context.Context, coreworkflow.Publis
 }
 func (s *stubWorkflowProvider) Ping(context.Context) error { return nil }
 func (s *stubWorkflowProvider) Close() error               { return nil }
+
+type recordingWorkflowProvider struct {
+	upsertedSchedules     []coreworkflow.UpsertScheduleRequest
+	listedSchedules       []*coreworkflow.Schedule
+	listSchedulesErr      error
+	deletedSchedules      []coreworkflow.DeleteScheduleRequest
+	deleteScheduleErr     error
+	deleteMissingNotFound bool
+	getSchedule           *coreworkflow.Schedule
+	getScheduleErr        error
+	schedules             map[string]*coreworkflow.Schedule
+	closed                *atomic.Bool
+}
+
+func (p *recordingWorkflowProvider) StartRun(context.Context, coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
+	return &coreworkflow.Run{}, nil
+}
+func (p *recordingWorkflowProvider) GetRun(context.Context, coreworkflow.GetRunRequest) (*coreworkflow.Run, error) {
+	return &coreworkflow.Run{}, nil
+}
+func (p *recordingWorkflowProvider) ListRuns(context.Context, coreworkflow.ListRunsRequest) ([]*coreworkflow.Run, error) {
+	return nil, nil
+}
+func (p *recordingWorkflowProvider) CancelRun(context.Context, coreworkflow.CancelRunRequest) (*coreworkflow.Run, error) {
+	return &coreworkflow.Run{}, nil
+}
+func (p *recordingWorkflowProvider) UpsertSchedule(_ context.Context, req coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error) {
+	p.upsertedSchedules = append(p.upsertedSchedules, req)
+	schedule := &coreworkflow.Schedule{
+		ID:        req.ScheduleID,
+		Cron:      req.Cron,
+		Timezone:  req.Timezone,
+		Target:    req.Target,
+		Paused:    req.Paused,
+		CreatedBy: req.RequestedBy,
+	}
+	if p.schedules == nil {
+		p.schedules = map[string]*coreworkflow.Schedule{}
+	}
+	p.schedules[req.ScheduleID] = schedule
+	return schedule, nil
+}
+func (p *recordingWorkflowProvider) GetSchedule(_ context.Context, req coreworkflow.GetScheduleRequest) (*coreworkflow.Schedule, error) {
+	if p.getSchedule != nil || p.getScheduleErr != nil {
+		return p.getSchedule, p.getScheduleErr
+	}
+	if p.schedules != nil {
+		if schedule, ok := p.schedules[req.ScheduleID]; ok {
+			return schedule, nil
+		}
+	}
+	return nil, core.ErrNotFound
+}
+func (p *recordingWorkflowProvider) ListSchedules(context.Context, coreworkflow.ListSchedulesRequest) ([]*coreworkflow.Schedule, error) {
+	if p.listSchedulesErr != nil {
+		return nil, p.listSchedulesErr
+	}
+	return append([]*coreworkflow.Schedule(nil), p.listedSchedules...), nil
+}
+func (p *recordingWorkflowProvider) DeleteSchedule(_ context.Context, req coreworkflow.DeleteScheduleRequest) error {
+	p.deletedSchedules = append(p.deletedSchedules, req)
+	if p.deleteScheduleErr != nil {
+		return p.deleteScheduleErr
+	}
+	if p.schedules != nil {
+		if _, ok := p.schedules[req.ScheduleID]; ok {
+			delete(p.schedules, req.ScheduleID)
+			return nil
+		}
+	}
+	if p.deleteMissingNotFound {
+		return core.ErrNotFound
+	}
+	if p.schedules != nil {
+		delete(p.schedules, req.ScheduleID)
+	}
+	return nil
+}
+func (p *recordingWorkflowProvider) PauseSchedule(context.Context, coreworkflow.PauseScheduleRequest) (*coreworkflow.Schedule, error) {
+	return &coreworkflow.Schedule{}, nil
+}
+func (p *recordingWorkflowProvider) ResumeSchedule(context.Context, coreworkflow.ResumeScheduleRequest) (*coreworkflow.Schedule, error) {
+	return &coreworkflow.Schedule{}, nil
+}
+func (p *recordingWorkflowProvider) UpsertEventTrigger(context.Context, coreworkflow.UpsertEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+	return &coreworkflow.EventTrigger{}, nil
+}
+func (p *recordingWorkflowProvider) GetEventTrigger(context.Context, coreworkflow.GetEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+	return &coreworkflow.EventTrigger{}, nil
+}
+func (p *recordingWorkflowProvider) ListEventTriggers(context.Context, coreworkflow.ListEventTriggersRequest) ([]*coreworkflow.EventTrigger, error) {
+	return nil, nil
+}
+func (p *recordingWorkflowProvider) DeleteEventTrigger(context.Context, coreworkflow.DeleteEventTriggerRequest) error {
+	return nil
+}
+func (p *recordingWorkflowProvider) PauseEventTrigger(context.Context, coreworkflow.PauseEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+	return &coreworkflow.EventTrigger{}, nil
+}
+func (p *recordingWorkflowProvider) ResumeEventTrigger(context.Context, coreworkflow.ResumeEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+	return &coreworkflow.EventTrigger{}, nil
+}
+func (p *recordingWorkflowProvider) PublishEvent(context.Context, coreworkflow.PublishEventRequest) error {
+	return nil
+}
+func (p *recordingWorkflowProvider) Ping(context.Context) error { return nil }
+func (p *recordingWorkflowProvider) Close() error {
+	if p.closed != nil {
+		p.closed.Store(true)
+	}
+	return nil
+}
 
 type trackedIndexedDB struct {
 	*coretesting.StubIndexedDB
@@ -583,6 +696,639 @@ func TestBootstrapPassesConfiguredWorkflowResourceNamesToProviders(t *testing.T)
 			t.Fatalf("workflow host env for %q = %q, want %q", name, got, providerhost.DefaultWorkflowHostSocketEnv)
 		}
 	}
+}
+
+func TestBootstrapAppliesConfiguredWorkflowSchedules(t *testing.T) {
+	t.Parallel()
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "temporal",
+		Operations: []string{"sync"},
+		Schedules: map[string]config.PluginWorkflowSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "America/New_York",
+				Operation: "sync",
+				Input: map[string]any{
+					"source": "yaml",
+				},
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	factories := validFactories()
+	recorders := map[string]*recordingWorkflowProvider{}
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		recorder := &recordingWorkflowProvider{}
+		recorders[name] = recorder
+		return recorder, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	recorder := recorders["temporal"]
+	if recorder == nil {
+		t.Fatal("missing workflow recorder for temporal")
+	}
+	if len(recorder.upsertedSchedules) != 1 {
+		t.Fatalf("upserted schedules = %d, want 1", len(recorder.upsertedSchedules))
+	}
+	got := recorder.upsertedSchedules[0]
+	if got.ScheduleID != workflowConfigScheduleID("roadmap", "nightly_sync") {
+		t.Fatalf("schedule id = %q", got.ScheduleID)
+	}
+	if got.Cron != "0 2 * * *" || got.Timezone != "America/New_York" {
+		t.Fatalf("schedule timing = %#v", got)
+	}
+	if got.Target.PluginName != "roadmap" || got.Target.Operation != "sync" {
+		t.Fatalf("target = %#v", got.Target)
+	}
+	if got.Target.Input["source"] != "yaml" {
+		t.Fatalf("target input = %#v", got.Target.Input)
+	}
+	if got.RequestedBy.SubjectID != "config:workflow:roadmap" || got.RequestedBy.SubjectKind != "system" || got.RequestedBy.AuthSource != "config" {
+		t.Fatalf("requestedBy = %#v", got.RequestedBy)
+	}
+}
+
+func TestValidateDoesNotApplyConfiguredWorkflowSchedules(t *testing.T) {
+	t.Parallel()
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "temporal",
+		Operations: []string{"sync"},
+		Schedules: map[string]config.PluginWorkflowSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+				Paused:    true,
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	factories := validFactories()
+	recorders := map[string]*recordingWorkflowProvider{}
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		recorder := &recordingWorkflowProvider{}
+		recorders[name] = recorder
+		return recorder, nil
+	}
+
+	if _, err := bootstrap.Validate(context.Background(), cfg, factories); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+
+	recorder := recorders["temporal"]
+	if recorder == nil {
+		t.Fatal("missing workflow recorder for temporal")
+	}
+	if len(recorder.upsertedSchedules) != 0 {
+		t.Fatalf("upserted schedules = %d, want 0", len(recorder.upsertedSchedules))
+	}
+	if len(recorder.deletedSchedules) != 0 {
+		t.Fatalf("deleted schedules = %d, want 0", len(recorder.deletedSchedules))
+	}
+}
+
+func TestBootstrapDeletesRemovedConfiguredWorkflowSchedules(t *testing.T) {
+	t.Parallel()
+
+	db := &coretesting.StubIndexedDB{}
+	factories := validFactories()
+	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
+	recorders := []*recordingWorkflowProvider{}
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		recorder := &recordingWorkflowProvider{}
+		recorders = append(recorders, recorder)
+		return recorder, nil
+	}
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "temporal",
+		Operations: []string{"sync"},
+		Schedules: map[string]config.PluginWorkflowSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+				Input: map[string]any{
+					"limit": 1,
+				},
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	if len(recorders) != 1 || len(recorders[0].upsertedSchedules) != 1 {
+		t.Fatalf("initial upserts = %#v", recorders)
+	}
+	_ = result.Close(context.Background())
+
+	cfg = workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "temporal",
+		Operations: []string{"sync"},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap remove schedule: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(recorders) != 2 {
+		t.Fatalf("recorders = %d, want 2", len(recorders))
+	}
+	staleID := workflowConfigScheduleID("roadmap", "nightly_sync")
+	recorder := recorders[1]
+	if len(recorder.deletedSchedules) != 1 {
+		t.Fatalf("deleted schedules = %d, want 1", len(recorder.deletedSchedules))
+	}
+	if recorder.deletedSchedules[0].ScheduleID != staleID || recorder.deletedSchedules[0].PluginName != "roadmap" {
+		t.Fatalf("delete request = %#v", recorder.deletedSchedules[0])
+	}
+	if len(recorder.upsertedSchedules) != 0 {
+		t.Fatalf("upserted schedules = %d, want 0", len(recorder.upsertedSchedules))
+	}
+}
+
+func TestBootstrapIgnoresUserSchedulesThatOnlyShareCfgPrefix(t *testing.T) {
+	t.Parallel()
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "temporal",
+		Operations: []string{"sync"},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	factories := validFactories()
+	recorders := map[string]*recordingWorkflowProvider{}
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		recorder := &recordingWorkflowProvider{
+			listedSchedules: []*coreworkflow.Schedule{{ID: "cfg_backup"}},
+		}
+		recorders[name] = recorder
+		return recorder, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	recorder := recorders["temporal"]
+	if recorder == nil {
+		t.Fatal("missing workflow recorder for temporal")
+	}
+	if len(recorder.deletedSchedules) != 0 {
+		t.Fatalf("deleted schedules = %d, want 0", len(recorder.deletedSchedules))
+	}
+}
+
+func TestBootstrapMovesConfiguredWorkflowSchedulesToNewProvider(t *testing.T) {
+	t.Parallel()
+
+	db := &coretesting.StubIndexedDB{}
+	factories := validFactories()
+	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
+	recorders := map[string][]*recordingWorkflowProvider{}
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		recorder := &recordingWorkflowProvider{}
+		recorders[name] = append(recorders[name], recorder)
+		return recorder, nil
+	}
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "temporal",
+		Operations: []string{"sync"},
+		Schedules: map[string]config.PluginWorkflowSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+				Input: map[string]any{
+					"limit": 1,
+				},
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+		"backup":   {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	if len(recorders["temporal"]) != 1 || len(recorders["temporal"][0].upsertedSchedules) != 1 {
+		t.Fatalf("initial temporal recorders = %#v", recorders["temporal"])
+	}
+	_ = result.Close(context.Background())
+
+	cfg = workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "backup",
+		Operations: []string{"sync"},
+		Schedules: map[string]config.PluginWorkflowSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+				Input: map[string]any{
+					"limit": 1,
+				},
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+		"backup":   {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap move provider: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(recorders["temporal"]) != 2 || len(recorders["backup"]) != 2 {
+		t.Fatalf("recorders = %#v", recorders)
+	}
+	if len(recorders["temporal"][1].deletedSchedules) != 1 {
+		t.Fatalf("temporal deleted schedules = %d, want 1", len(recorders["temporal"][1].deletedSchedules))
+	}
+	if len(recorders["backup"][1].upsertedSchedules) != 1 {
+		t.Fatalf("backup upserted schedules = %d, want 1", len(recorders["backup"][1].upsertedSchedules))
+	}
+}
+
+func TestBootstrapClosesWorkflowProvidersWhenConfigScheduleReconcileFails(t *testing.T) {
+	t.Parallel()
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "temporal",
+		Operations: []string{"sync"},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	closed := &atomic.Bool{}
+	db := &coretesting.StubIndexedDB{}
+	factories := validFactories()
+	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		return &recordingWorkflowProvider{closed: closed}, nil
+	}
+
+	cfg.Plugins["roadmap"].Workflow.Schedules = map[string]config.PluginWorkflowSchedule{
+		"nightly_sync": {
+			Cron:      "0 2 * * *",
+			Timezone:  "UTC",
+			Operation: "sync",
+		},
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap initial: %v", err)
+	}
+	_ = result.Close(context.Background())
+
+	cfg = workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "backup",
+		Operations: []string{"sync"},
+		Schedules: map[string]config.PluginWorkflowSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+				Input: map[string]any{
+					"limit": 1,
+				},
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"backup": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	_, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err == nil || !strings.Contains(err.Error(), `requires provider "temporal"`) {
+		t.Fatalf("Bootstrap error = %v, want missing old provider cleanup failure", err)
+	}
+	if !closed.Load() {
+		t.Fatal("workflow provider was not closed after reconcile failure")
+	}
+}
+
+func TestBootstrapDoesNotApplyConfiguredWorkflowSchedulesWhenAuditBuildFails(t *testing.T) {
+	t.Parallel()
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "temporal",
+		Operations: []string{"sync"},
+		Schedules: map[string]config.PluginWorkflowSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+				Input: map[string]any{
+					"limit": 1,
+				},
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+	cfg.Providers.Audit = map[string]*config.ProviderEntry{
+		"default": {Source: config.ProviderSource{Builtin: "test-audit"}},
+	}
+
+	factories := validFactories()
+	recorder := &recordingWorkflowProvider{}
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		return recorder, nil
+	}
+	factories.Audit = func(context.Context, config.ProviderEntry, core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error) {
+		return nil, nil, fmt.Errorf("audit boom")
+	}
+
+	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err == nil || !strings.Contains(err.Error(), "audit boom") {
+		t.Fatalf("Bootstrap error = %v, want audit failure", err)
+	}
+	if len(recorder.upsertedSchedules) != 0 {
+		t.Fatalf("upserted schedules = %d, want 0", len(recorder.upsertedSchedules))
+	}
+}
+
+func TestBootstrapRejectsExistingUnmanagedWorkflowScheduleID(t *testing.T) {
+	t.Parallel()
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "temporal",
+		Operations: []string{"sync"},
+		Schedules: map[string]config.PluginWorkflowSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	recorder := &recordingWorkflowProvider{
+		getSchedule: &coreworkflow.Schedule{ID: workflowConfigScheduleID("roadmap", "nightly_sync")},
+	}
+	factories := validFactories()
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		return recorder, nil
+	}
+
+	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err == nil || !strings.Contains(err.Error(), "conflicts with existing unmanaged schedule id") {
+		t.Fatalf("Bootstrap error = %v, want ownership conflict", err)
+	}
+	if len(recorder.upsertedSchedules) != 0 {
+		t.Fatalf("upserted schedules = %d, want 0", len(recorder.upsertedSchedules))
+	}
+}
+
+func TestBootstrapReAdoptsManagedSchedulesWhenOwnershipStateIsMissing(t *testing.T) {
+	t.Parallel()
+
+	provider := &recordingWorkflowProvider{}
+	db1 := &coretesting.StubIndexedDB{}
+	db2 := &coretesting.StubIndexedDB{}
+	factories := validFactories()
+	currentDB := db1
+	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return currentDB, nil }
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		return provider, nil
+	}
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "temporal",
+		Operations: []string{"sync"},
+		Schedules: map[string]config.PluginWorkflowSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap initial: %v", err)
+	}
+	_ = result.Close(context.Background())
+	if len(provider.upsertedSchedules) != 1 {
+		t.Fatalf("initial upserted schedules = %d, want 1", len(provider.upsertedSchedules))
+	}
+	provider.schedules[workflowConfigScheduleID("roadmap", "nightly_sync")].Target.Input = map[string]any{
+		"limit": float64(1),
+	}
+
+	currentDB = db2
+	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap re-adopt: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(provider.upsertedSchedules) != 2 {
+		t.Fatalf("upserted schedules = %d, want 2", len(provider.upsertedSchedules))
+	}
+}
+
+func TestBootstrapIgnoresMissingRemovedConfiguredWorkflowSchedule(t *testing.T) {
+	t.Parallel()
+
+	db := &coretesting.StubIndexedDB{}
+	provider := &recordingWorkflowProvider{deleteMissingNotFound: true}
+	factories := validFactories()
+	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		return provider, nil
+	}
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "temporal",
+		Operations: []string{"sync"},
+		Schedules: map[string]config.PluginWorkflowSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap initial: %v", err)
+	}
+	_ = result.Close(context.Background())
+	provider.schedules = map[string]*coreworkflow.Schedule{}
+
+	cfg = workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "temporal",
+		Operations: []string{"sync"},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap remove missing schedule: %v", err)
+	}
+	_ = result.Close(context.Background())
+
+	if len(provider.deletedSchedules) != 1 {
+		t.Fatalf("deleted schedules = %d, want 1", len(provider.deletedSchedules))
+	}
+
+	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap remove missing schedule replay: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(provider.deletedSchedules) != 1 {
+		t.Fatalf("deleted schedules after replay = %d, want 1", len(provider.deletedSchedules))
+	}
+}
+
+func TestBootstrapIgnoresMissingOldScheduleDuringWorkflowProviderMove(t *testing.T) {
+	t.Parallel()
+
+	db := &coretesting.StubIndexedDB{}
+	temporal := &recordingWorkflowProvider{deleteMissingNotFound: true}
+	backup := &recordingWorkflowProvider{}
+	factories := validFactories()
+	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		if name == "backup" {
+			return backup, nil
+		}
+		return temporal, nil
+	}
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "temporal",
+		Operations: []string{"sync"},
+		Schedules: map[string]config.PluginWorkflowSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+		"backup":   {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap initial: %v", err)
+	}
+	_ = result.Close(context.Background())
+	temporal.schedules = map[string]*coreworkflow.Schedule{}
+
+	cfg = workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "backup",
+		Operations: []string{"sync"},
+		Schedules: map[string]config.PluginWorkflowSchedule{
+			"nightly_sync": {
+				Cron:      "0 2 * * *",
+				Timezone:  "UTC",
+				Operation: "sync",
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+		"backup":   {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap move provider: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(backup.upsertedSchedules) != 1 {
+		t.Fatalf("backup upserted schedules = %d, want 1", len(backup.upsertedSchedules))
+	}
+	if len(temporal.deletedSchedules) == 0 {
+		t.Fatal("expected temporal cleanup delete to be attempted")
+	}
+}
+
+func workflowConfigScheduleID(pluginName, scheduleKey string) string {
+	sum := sha256.Sum256([]byte(pluginName + "\x00" + scheduleKey))
+	return coreworkflow.ConfigManagedSchedulePrefix + hex.EncodeToString(sum[:])
 }
 
 func TestBootstrapStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {

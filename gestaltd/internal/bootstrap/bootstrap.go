@@ -639,13 +639,16 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	if err != nil {
 		return nil, err
 	}
-	pluginInvoker.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "plugin", audit, invocation.WithoutRateLimit()))
 	closeAudit := true
 	defer func() {
 		if closeAudit && auditClose != nil {
 			_ = auditClose(context.Background())
 		}
 	}()
+	pluginInvoker.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "plugin", audit, invocation.WithoutRateLimit()))
+	if err := reconcileWorkflowConfigSchedules(ctx, cfg, prepared.Deps.WorkflowRuntime, prepared.Services.DB); err != nil {
+		return nil, err
+	}
 
 	closeProviders = false
 	closeCore = false

@@ -3,6 +3,7 @@ package providerhost
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,6 +33,9 @@ type workflowProviderFunc struct {
 	startRun           func(context.Context, coreworkflow.StartRunRequest) (*coreworkflow.Run, error)
 	getRun             func(context.Context, coreworkflow.GetRunRequest) (*coreworkflow.Run, error)
 	upsertSchedule     func(context.Context, coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error)
+	deleteSchedule     func(context.Context, coreworkflow.DeleteScheduleRequest) error
+	pauseSchedule      func(context.Context, coreworkflow.PauseScheduleRequest) (*coreworkflow.Schedule, error)
+	resumeSchedule     func(context.Context, coreworkflow.ResumeScheduleRequest) (*coreworkflow.Schedule, error)
 	upsertEventTrigger func(context.Context, coreworkflow.UpsertEventTriggerRequest) (*coreworkflow.EventTrigger, error)
 }
 
@@ -72,15 +76,24 @@ func (p workflowProviderFunc) ListSchedules(context.Context, coreworkflow.ListSc
 	return nil, nil
 }
 
-func (p workflowProviderFunc) DeleteSchedule(context.Context, coreworkflow.DeleteScheduleRequest) error {
+func (p workflowProviderFunc) DeleteSchedule(ctx context.Context, req coreworkflow.DeleteScheduleRequest) error {
+	if p.deleteSchedule != nil {
+		return p.deleteSchedule(ctx, req)
+	}
 	return nil
 }
 
-func (p workflowProviderFunc) PauseSchedule(context.Context, coreworkflow.PauseScheduleRequest) (*coreworkflow.Schedule, error) {
+func (p workflowProviderFunc) PauseSchedule(ctx context.Context, req coreworkflow.PauseScheduleRequest) (*coreworkflow.Schedule, error) {
+	if p.pauseSchedule != nil {
+		return p.pauseSchedule(ctx, req)
+	}
 	return &coreworkflow.Schedule{}, nil
 }
 
-func (p workflowProviderFunc) ResumeSchedule(context.Context, coreworkflow.ResumeScheduleRequest) (*coreworkflow.Schedule, error) {
+func (p workflowProviderFunc) ResumeSchedule(ctx context.Context, req coreworkflow.ResumeScheduleRequest) (*coreworkflow.Schedule, error) {
+	if p.resumeSchedule != nil {
+		return p.resumeSchedule(ctx, req)
+	}
 	return &coreworkflow.Schedule{}, nil
 }
 
@@ -255,8 +268,8 @@ func TestWorkflowServerStartRunScopesTargetToPlugin(t *testing.T) {
 	t.Parallel()
 
 	provider := &recordingWorkflowProvider{}
-	srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, error) {
-		return provider, map[string]struct{}{"refresh": {}}, nil
+	srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, map[string]struct{}, error) {
+		return provider, map[string]struct{}{"refresh": {}}, nil, nil
 	})
 	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
 		SubjectID:   principal.UserSubjectID("user-123"),
@@ -308,8 +321,8 @@ func TestWorkflowServerRejectsDisabledScheduleOperations(t *testing.T) {
 	t.Parallel()
 
 	provider := &recordingWorkflowProvider{}
-	srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, error) {
-		return provider, map[string]struct{}{"refresh": {}}, nil
+	srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, map[string]struct{}, error) {
+		return provider, map[string]struct{}{"refresh": {}}, nil, nil
 	})
 
 	_, err := srv.UpsertSchedule(context.Background(), &proto.UpsertWorkflowScheduleRequest{
@@ -328,12 +341,117 @@ func TestWorkflowServerRejectsDisabledScheduleOperations(t *testing.T) {
 	}
 }
 
+func TestWorkflowServerRejectsConfigManagedScheduleMutations(t *testing.T) {
+	t.Parallel()
+
+	managedID := coreworkflow.ConfigManagedSchedulePrefix + strings.Repeat("a", 64)
+	for _, tc := range []struct {
+		name string
+		run  func(t *testing.T, srv *WorkflowServer) error
+	}{
+		{
+			name: "upsert",
+			run: func(t *testing.T, srv *WorkflowServer) error {
+				_, err := srv.UpsertSchedule(context.Background(), &proto.UpsertWorkflowScheduleRequest{
+					ScheduleId: managedID,
+					Cron:       "*/5 * * * *",
+					Timezone:   "UTC",
+					Target:     &proto.WorkflowTarget{Operation: "refresh"},
+				})
+				return err
+			},
+		},
+		{
+			name: "delete",
+			run: func(t *testing.T, srv *WorkflowServer) error {
+				_, err := srv.DeleteSchedule(context.Background(), &proto.DeleteWorkflowScheduleRequest{
+					ScheduleId: managedID,
+				})
+				return err
+			},
+		},
+		{
+			name: "pause",
+			run: func(t *testing.T, srv *WorkflowServer) error {
+				_, err := srv.PauseSchedule(context.Background(), &proto.PauseWorkflowScheduleRequest{
+					ScheduleId: managedID,
+				})
+				return err
+			},
+		},
+		{
+			name: "resume",
+			run: func(t *testing.T, srv *WorkflowServer) error {
+				_, err := srv.ResumeSchedule(context.Background(), &proto.ResumeWorkflowScheduleRequest{
+					ScheduleId: managedID,
+				})
+				return err
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, map[string]struct{}, error) {
+				return workflowProviderFunc{
+					upsertSchedule: func(context.Context, coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error) {
+						t.Fatal("provider UpsertSchedule should not be called for config-managed ids")
+						return nil, nil
+					},
+					deleteSchedule: func(context.Context, coreworkflow.DeleteScheduleRequest) error {
+						t.Fatal("provider DeleteSchedule should not be called for config-managed ids")
+						return nil
+					},
+					pauseSchedule: func(context.Context, coreworkflow.PauseScheduleRequest) (*coreworkflow.Schedule, error) {
+						t.Fatal("provider PauseSchedule should not be called for config-managed ids")
+						return nil, nil
+					},
+					resumeSchedule: func(context.Context, coreworkflow.ResumeScheduleRequest) (*coreworkflow.Schedule, error) {
+						t.Fatal("provider ResumeSchedule should not be called for config-managed ids")
+						return nil, nil
+					},
+				}, map[string]struct{}{"refresh": {}}, map[string]struct{}{managedID: {}}, nil
+			})
+
+			err := tc.run(t, srv)
+			if status.Code(err) != codes.PermissionDenied {
+				t.Fatalf("status code = %v, want %v", status.Code(err), codes.PermissionDenied)
+			}
+		})
+	}
+}
+
+func TestWorkflowServerAllowsUserScheduleIDsThatOnlyShareCfgPrefix(t *testing.T) {
+	t.Parallel()
+
+	provider := &recordingWorkflowProvider{}
+	srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, map[string]struct{}, error) {
+		return provider, map[string]struct{}{"refresh": {}}, nil, nil
+	})
+
+	_, err := srv.UpsertSchedule(context.Background(), &proto.UpsertWorkflowScheduleRequest{
+		ScheduleId: "cfg_backup",
+		Cron:       "*/5 * * * *",
+		Timezone:   "UTC",
+		Target:     &proto.WorkflowTarget{Operation: "refresh"},
+	})
+	if err != nil {
+		t.Fatalf("UpsertSchedule: %v", err)
+	}
+	if !provider.upsertScheduleCalled {
+		t.Fatal("provider UpsertSchedule was not called")
+	}
+	if provider.upsertScheduleReq.ScheduleID != "cfg_backup" {
+		t.Fatalf("schedule id = %q, want cfg_backup", provider.upsertScheduleReq.ScheduleID)
+	}
+}
+
 func TestWorkflowServerPrefersWorkflowCreatorForWorkflowMutations(t *testing.T) {
 	t.Parallel()
 
 	provider := &recordingWorkflowProvider{}
-	srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, error) {
-		return provider, map[string]struct{}{"refresh": {}}, nil
+	srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, map[string]struct{}, error) {
+		return provider, map[string]struct{}{"refresh": {}}, nil, nil
 	})
 	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
 		SubjectID:   principal.WorkloadSubjectID("planner"),
@@ -409,7 +527,7 @@ func TestWorkflowServerRejectsCrossPluginProviderResponses(t *testing.T) {
 	t.Run("run", func(t *testing.T) {
 		t.Parallel()
 
-		srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, error) {
+		srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, map[string]struct{}, error) {
 			return workflowProviderFunc{
 				startRun: func(context.Context, coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
 					return &coreworkflow.Run{
@@ -421,7 +539,7 @@ func TestWorkflowServerRejectsCrossPluginProviderResponses(t *testing.T) {
 						},
 					}, nil
 				},
-			}, map[string]struct{}{"refresh": {}}, nil
+			}, map[string]struct{}{"refresh": {}}, nil, nil
 		})
 
 		_, err := srv.StartRun(context.Background(), &proto.StartWorkflowRunRequest{
@@ -435,7 +553,7 @@ func TestWorkflowServerRejectsCrossPluginProviderResponses(t *testing.T) {
 	t.Run("schedule", func(t *testing.T) {
 		t.Parallel()
 
-		srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, error) {
+		srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, map[string]struct{}, error) {
 			return workflowProviderFunc{
 				upsertSchedule: func(context.Context, coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error) {
 					return &coreworkflow.Schedule{
@@ -448,7 +566,7 @@ func TestWorkflowServerRejectsCrossPluginProviderResponses(t *testing.T) {
 						},
 					}, nil
 				},
-			}, map[string]struct{}{"refresh": {}}, nil
+			}, map[string]struct{}{"refresh": {}}, nil, nil
 		})
 
 		_, err := srv.UpsertSchedule(context.Background(), &proto.UpsertWorkflowScheduleRequest{
@@ -467,7 +585,7 @@ func TestWorkflowServerRejectsCrossPluginProviderResponses(t *testing.T) {
 	t.Run("event trigger", func(t *testing.T) {
 		t.Parallel()
 
-		srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, error) {
+		srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, map[string]struct{}, error) {
 			return workflowProviderFunc{
 				upsertEventTrigger: func(context.Context, coreworkflow.UpsertEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
 					return &coreworkflow.EventTrigger{
@@ -481,7 +599,7 @@ func TestWorkflowServerRejectsCrossPluginProviderResponses(t *testing.T) {
 						},
 					}, nil
 				},
-			}, map[string]struct{}{"refresh": {}}, nil
+			}, map[string]struct{}{"refresh": {}}, nil, nil
 		})
 
 		_, err := srv.UpsertEventTrigger(context.Background(), &proto.UpsertWorkflowEventTriggerRequest{
@@ -503,8 +621,8 @@ func TestWorkflowServerListCallsScopeToPlugin(t *testing.T) {
 	t.Parallel()
 
 	provider := &recordingWorkflowProvider{}
-	srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, error) {
-		return provider, map[string]struct{}{"refresh": {}}, nil
+	srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, map[string]struct{}, error) {
+		return provider, map[string]struct{}{"refresh": {}}, nil, nil
 	})
 
 	runs, err := srv.ListRuns(context.Background(), &proto.ListWorkflowRunsRequest{})
@@ -692,8 +810,8 @@ func TestWorkflowServerPublishEventScopesPlugin(t *testing.T) {
 	t.Parallel()
 
 	provider := &recordingWorkflowProvider{}
-	srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, error) {
-		return provider, map[string]struct{}{"refresh": {}}, nil
+	srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, map[string]struct{}, error) {
+		return provider, map[string]struct{}{"refresh": {}}, nil, nil
 	})
 
 	_, err := srv.PublishEvent(context.Background(), &proto.PublishWorkflowEventRequest{
@@ -716,12 +834,12 @@ func TestWorkflowServerPublishEventScopesPlugin(t *testing.T) {
 func TestWorkflowServerPreservesProviderStatusCodes(t *testing.T) {
 	t.Parallel()
 
-	srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, error) {
+	srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, map[string]struct{}, error) {
 		return workflowProviderFunc{
 			getRun: func(context.Context, coreworkflow.GetRunRequest) (*coreworkflow.Run, error) {
 				return nil, status.Error(codes.NotFound, "missing run")
 			},
-		}, map[string]struct{}{"refresh": {}}, nil
+		}, map[string]struct{}{"refresh": {}}, nil, nil
 	})
 
 	_, err := srv.GetRun(context.Background(), &proto.GetWorkflowRunRequest{RunId: "run-123"})
