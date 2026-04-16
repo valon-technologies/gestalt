@@ -668,16 +668,6 @@ func LoadAllowMissingEnvPaths(paths []string) (*Config, error) {
 	return loadWithLookupPaths(paths, os.LookupEnv, true)
 }
 
-func NormalizeCompatibility(cfg *Config) error {
-	if err := normalizeAuthorizationConfig(cfg); err != nil {
-		return err
-	}
-	if err := normalizeAdminConfig(cfg); err != nil {
-		return err
-	}
-	return applyPluginMountBindings(cfg)
-}
-
 func OverlayManagedPluginConfig(path string, cfg *Config) error {
 	return OverlayManagedPluginConfigPaths([]string{path}, cfg)
 }
