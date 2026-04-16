@@ -857,7 +857,7 @@ func TestMountedWebUIRoutes_HumanAuthorization(t *testing.T) {
 	}
 }
 
-func TestMountedWebUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUsersAsViewer(t *testing.T) {
+func TestMountedWebUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUsersAsViewerWithPluginName(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -900,6 +900,7 @@ func TestMountedWebUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUs
 		cfg.MountedWebUIs = []server.MountedWebUI{{
 			Name:                "sample_portal",
 			Path:                "/sample-portal",
+			PluginName:          "sample_portal",
 			AuthorizationPolicy: "sample_policy",
 			Routes: []server.MountedWebUIRoute{
 				{Path: "/admin/*", AllowedRoles: []string{"admin"}},
@@ -1062,6 +1063,76 @@ func TestMountedWebUIRoutes_HumanAuthorization_DynamicGrant(t *testing.T) {
 	}
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("static-over-dynamic admin status = %d, want 200", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), "protected-sample-shell") {
+		t.Fatalf("body = %q, want protected sample shell", body)
+	}
+}
+
+func TestMountedWebUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUsersAsViewerWithoutPluginName(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>protected-sample-shell</html>"), 0o644); err != nil {
+		t.Fatalf("WriteFile index.html: %v", err)
+	}
+	handler, err := testutilWebUIHandler(dir)
+	if err != nil {
+		t.Fatalf("webui handler: %v", err)
+	}
+
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "allow",
+				Members: []config.HumanPolicyMemberDef{
+					{Email: "admin@example.test", Role: "admin"},
+				},
+			},
+		},
+	}, nil, nil, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				switch token {
+				case "viewer-session":
+					return &core.UserIdentity{Email: "viewer@example.test"}, nil
+				case "admin-session":
+					return &core.UserIdentity{Email: "admin@example.test"}, nil
+				default:
+					return nil, fmt.Errorf("invalid token")
+				}
+			},
+		}
+		cfg.Authorizer = authz
+		cfg.MountedWebUIs = []server.MountedWebUI{{
+			Name:                "sample_portal",
+			Path:                "/sample-portal",
+			AuthorizationPolicy: "sample_policy",
+			Routes: []server.MountedWebUIRoute{
+				{Path: "/admin/*", AllowedRoles: []string{"admin"}},
+				{Path: "/*", AllowedRoles: []string{"viewer", "admin"}},
+			},
+			Handler: handler,
+		}}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/sample-portal/sync", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET default-allow mounted sync without plugin name: %v", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll default-allow mounted sync without plugin name: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("default-allow viewer status without plugin name = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	if !strings.Contains(string(body), "protected-sample-shell") {
 		t.Fatalf("body = %q, want protected sample shell", body)
@@ -11194,6 +11265,82 @@ func TestRefresh_UsesConnectionAuth(t *testing.T) {
 	}
 	if refreshedVia != "connection-handler" {
 		t.Fatalf("expected refresh via connection handler, got %q", refreshedVia)
+	}
+}
+
+func TestRefresh_UsesResolvedConnectionTokenURL(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	expired := time.Now().Add(-1 * time.Hour)
+	seedToken(t, svc, &core.IntegrationToken{
+		ID:           "tok1",
+		UserID:       u.ID,
+		Integration:  "fake",
+		Connection:   "default",
+		Instance:     "default",
+		AccessToken:  "old-token",
+		RefreshToken: "old-refresh",
+		ExpiresAt:    &expired,
+		MetadataJSON: `{"tenant":"acme"}`,
+	})
+
+	var refreshedURL string
+	var refreshedToken string
+	var usedToken string
+	stub := &stubOAuthIntegration{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N: "fake",
+				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
+					usedToken = token
+					return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				},
+			},
+			ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
+		},
+	}
+	handler := &testOAuthHandler{
+		tokenURLVal: "https://{tenant}.example.com/oauth/token",
+		refreshTokenFn: func(context.Context, string) (*core.TokenResponse, error) {
+			t.Fatal("expected refresh to use resolved token URL override")
+			return nil, nil
+		},
+		refreshTokenWithURLFn: func(_ context.Context, rt, tokenURL string) (*core.TokenResponse, error) {
+			refreshedToken = rt
+			refreshedURL = tokenURL
+			return &core.TokenResponse{AccessToken: "refreshed-token", ExpiresIn: 3600}, nil
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"fake": testDefaultConnection}
+		cfg.ConnectionAuth = testConnectionAuth("fake", handler)
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if refreshedToken != "old-refresh" {
+		t.Fatalf("expected refresh token old-refresh, got %q", refreshedToken)
+	}
+	if refreshedURL != "https://acme.example.com/oauth/token" {
+		t.Fatalf("expected resolved token URL, got %q", refreshedURL)
+	}
+	if usedToken != "refreshed-token" {
+		t.Fatalf("expected operation to use refreshed token, got %q", usedToken)
 	}
 }
 
