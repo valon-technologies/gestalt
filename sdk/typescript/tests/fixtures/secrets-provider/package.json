@@ -1,0 +1,10 @@
+{
+  "name": "@fixtures/secrets-provider",
+  "type": "module",
+  "gestalt": {
+    "provider": {
+      "kind": "secrets",
+      "target": "./secrets.ts"
+    }
+  }
+}

@@ -1,3 +1,4 @@
+import { type ChildProcess } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { connect } from "node:net";
 import { tmpdir } from "node:os";
@@ -70,4 +71,51 @@ export function createUnixGrpcClient<T extends DescService>(service: T, socketPa
     },
   });
   return createClient(service, transport);
+}
+
+export function captureChildStderr(child: ChildProcess): () => string {
+  let stderr = "";
+  child.stderr?.setEncoding("utf8");
+  child.stderr?.on("data", (chunk: string) => {
+    stderr += chunk;
+  });
+  return () => stderr;
+}
+
+export async function stopProcess(child: ChildProcess): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return;
+  }
+  child.kill("SIGTERM");
+  try {
+    await waitForExit(child, 2_000);
+  } catch {
+    child.kill("SIGKILL");
+    await waitForExit(child, 2_000);
+  }
+}
+
+async function waitForExit(
+  child: ChildProcess,
+  timeoutMs: number,
+): Promise<{ code: number | null; signal: NodeJS.Signals | null }> {
+  if (child.exitCode !== null || child.signalCode !== null) {
+    return {
+      code: child.exitCode,
+      signal: child.signalCode,
+    };
+  }
+  return await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error("timed out waiting for child process to exit"));
+    }, timeoutMs);
+    child.once("close", (code, signal) => {
+      clearTimeout(timer);
+      resolve({ code, signal });
+    });
+    child.once("error", (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
+  });
 }
