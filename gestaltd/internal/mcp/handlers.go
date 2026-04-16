@@ -47,7 +47,7 @@ func makeHandler(cfg Config, provName, opName, connection string) mcpserver.Tool
 				ctx = invocation.WithConnection(ctx, sessionConnection)
 			}
 		} else if prov, err := cfg.Providers.Get(provName); err == nil {
-			if _, sessionCapable := prov.(core.SessionCatalogProvider); sessionCapable {
+			if core.SupportsSessionCatalog(prov) {
 				if instance != "" || (sessionProviderHydrationAttemptedFromContext(ctx, provName, "") && !sessionProviderHydratedFromContext(ctx, provName, "")) {
 					return mcpgo.NewToolResultError("requested instance is unavailable for this tool"), nil
 				}

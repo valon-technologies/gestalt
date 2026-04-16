@@ -227,19 +227,17 @@ func userFacingConnectionName(name string) string {
 }
 
 func providerSupportsManualAuth(prov core.Provider) bool {
-	mp, ok := prov.(core.ManualProvider)
-	return ok && mp.SupportsManualAuth()
+	return core.SupportsManualAuth(prov)
 }
 
 func providerSupportsOAuth(prov core.Provider) bool {
-	_, ok := prov.(core.OAuthProvider)
-	return ok
+	return core.SupportsOAuth(prov)
 }
 
 func integrationAuthTypesForProvider(prov core.Provider) []string {
 	var authTypes []string
-	if atl, ok := prov.(core.AuthTypeLister); ok {
-		authTypes = atl.AuthTypes()
+	if core.HasAuthTypes(prov) {
+		authTypes = core.AuthTypes(prov)
 	} else if providerSupportsManualAuth(prov) {
 		authTypes = []string{"manual"}
 	} else if providerSupportsOAuth(prov) {
@@ -249,9 +247,8 @@ func integrationAuthTypesForProvider(prov core.Provider) []string {
 }
 
 func credentialFieldInfosFromProvider(prov core.Provider) []credentialFieldInfo {
-	cfp, ok := prov.(core.CredentialFieldsProvider)
-	if ok {
-		if fields := credentialFieldInfos(cfp.CredentialFields(), func(field core.CredentialFieldDef) credentialFieldInfo {
+	if fields := core.CredentialFields(prov); len(fields) > 0 {
+		if fields := credentialFieldInfos(fields, func(field core.CredentialFieldDef) credentialFieldInfo {
 			return credentialFieldInfo{
 				Name:        field.Name,
 				Label:       field.Label,

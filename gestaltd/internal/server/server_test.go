@@ -4483,6 +4483,108 @@ func TestListIntegrations_ManualProvidersWithoutDeclaredCredentialsExposeGeneric
 	}
 }
 
+func TestListIntegrations_CompositeProvidersExposeAPIConnectionMetadata(t *testing.T) {
+	t.Parallel()
+
+	apiProv := &stubManualProviderWithCapabilities{
+		stubManualProvider: stubManualProvider{
+			StubIntegration: coretesting.StubIntegration{N: "docs", DN: "Docs"},
+		},
+		credentialFields: []core.CredentialFieldDef{
+			{Name: "api_key", Label: "API Key", Description: "Docs API key"},
+		},
+		connectionParams: map[string]core.ConnectionParamDef{
+			"tenant": {
+				Required:    true,
+				Description: "Tenant slug",
+				Default:     "acme",
+			},
+		},
+	}
+	prov := composite.New("docs", apiProv, &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "docs-mcp", ConnMode: core.ConnectionModeNone},
+		},
+	})
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, prov)
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"docs": {},
+		}
+		cfg.Services = coretesting.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	type credentialField struct {
+		Name        string `json:"name"`
+		Label       string `json:"label"`
+		Description string `json:"description"`
+	}
+	type connectionParam struct {
+		Required    bool   `json:"required"`
+		Description string `json:"description"`
+		Default     string `json:"default"`
+	}
+	var integrations []struct {
+		Name             string                     `json:"name"`
+		AuthTypes        []string                   `json:"authTypes"`
+		CredentialFields []credentialField          `json:"credentialFields"`
+		ConnectionParams map[string]connectionParam `json:"connectionParams"`
+		Connections      []struct {
+			Name             string            `json:"name"`
+			AuthTypes        []string          `json:"authTypes"`
+			CredentialFields []credentialField `json:"credentialFields"`
+		} `json:"connections"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if len(integrations) != 1 {
+		t.Fatalf("expected 1 integration, got %d", len(integrations))
+	}
+
+	wantFields := []credentialField{{Name: "api_key", Label: "API Key", Description: "Docs API key"}}
+	if !reflect.DeepEqual(integrations[0].AuthTypes, []string{"manual"}) {
+		t.Fatalf("auth types = %v, want [manual]", integrations[0].AuthTypes)
+	}
+	if !reflect.DeepEqual(integrations[0].CredentialFields, wantFields) {
+		t.Fatalf("credential fields = %+v, want %+v", integrations[0].CredentialFields, wantFields)
+	}
+	if !reflect.DeepEqual(integrations[0].ConnectionParams, map[string]connectionParam{
+		"tenant": {
+			Required:    true,
+			Description: "Tenant slug",
+			Default:     "acme",
+		},
+	}) {
+		t.Fatalf("connection params = %+v", integrations[0].ConnectionParams)
+	}
+	if len(integrations[0].Connections) != 1 {
+		t.Fatalf("connections = %+v, want one default connection", integrations[0].Connections)
+	}
+	if integrations[0].Connections[0].Name != config.PluginConnectionAlias {
+		t.Fatalf("connection name = %q, want %q", integrations[0].Connections[0].Name, config.PluginConnectionAlias)
+	}
+	if !reflect.DeepEqual(integrations[0].Connections[0].AuthTypes, []string{"manual"}) {
+		t.Fatalf("connection auth types = %v, want [manual]", integrations[0].Connections[0].AuthTypes)
+	}
+	if !reflect.DeepEqual(integrations[0].Connections[0].CredentialFields, wantFields) {
+		t.Fatalf("connection credential fields = %+v, want %+v", integrations[0].Connections[0].CredentialFields, wantFields)
+	}
+}
+
 func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T) {
 	t.Parallel()
 
@@ -6702,6 +6804,97 @@ func TestExecuteOperation_UsesInjectedInvoker(t *testing.T) {
 	}
 	if _, ok := gotParams["_connection"]; ok {
 		t.Fatalf("expected _connection to be stripped from params, got %v", gotParams)
+	}
+}
+
+func TestExecuteOperation_WrappedProvidersPreserveOperationConnectionRouting(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	user, err := svc.Users.FindOrCreateUser(context.Background(), "wrapped@test.local")
+	if err != nil {
+		t.Fatalf("FindOrCreateUser: %v", err)
+	}
+	seedToken(t, svc, &core.IntegrationToken{
+		ID:          "svc-workspace-default",
+		UserID:      user.ID,
+		Integration: "svc",
+		Connection:  "workspace",
+		Instance:    "default",
+		AccessToken: "workspace-token",
+	})
+
+	backend := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{
+			N: "search-backend",
+			ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
+				return &core.OperationResult{
+					Status: http.StatusOK,
+					Body:   fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token),
+				}, nil
+			},
+		},
+		ops: []core.Operation{
+			{Name: "search", Description: "Search", Method: http.MethodGet},
+		},
+	}
+	merged, err := composite.NewMergedWithConnections("svc-api", "Svc API", "", "",
+		composite.BoundProvider{Provider: backend, Connection: "workspace"},
+	)
+	if err != nil {
+		t.Fatalf("NewMergedWithConnections: %v", err)
+	}
+	apiProv := coreintegration.NewRestricted(merged, map[string]string{"find": "search"})
+	prov := composite.New("svc", apiProv, &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "svc-mcp", ConnMode: core.ConnectionModeNone},
+		},
+	})
+	if got := core.OperationConnection(apiProv, "find"); got != "workspace" {
+		t.Fatalf("restricted op connection = %q, want workspace", got)
+	}
+	if got := core.OperationConnection(prov, "find"); got != "workspace" {
+		t.Fatalf("composite op connection = %q, want workspace", got)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "stub",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "user-token" {
+					return nil, fmt.Errorf("bad token")
+				}
+				return &core.UserIdentity{Email: "wrapped@test.local"}, nil
+			},
+		}
+		cfg.Providers = testutil.NewProviderRegistry(t, prov)
+		cfg.CatalogConnection = map[string]string{"svc": "workspace"}
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/svc/find", nil)
+	req.Header.Set("Authorization", "Bearer user-token")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+
+	var body map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if body["operation"] != "search" {
+		t.Fatalf("operation = %q, want search", body["operation"])
+	}
+	if body["token"] != "workspace-token" {
+		t.Fatalf("token = %q, want workspace-token", body["token"])
 	}
 }
 
@@ -10526,6 +10719,25 @@ func (s *stubDiscoveringProvider) DiscoveryConfig() *core.DiscoveryConfig {
 	return s.discovery
 }
 
+type stubManualProviderWithCapabilities struct {
+	stubManualProvider
+	credentialFields []core.CredentialFieldDef
+	connectionParams map[string]core.ConnectionParamDef
+	discovery        *core.DiscoveryConfig
+}
+
+func (s *stubManualProviderWithCapabilities) CredentialFields() []core.CredentialFieldDef {
+	return s.credentialFields
+}
+
+func (s *stubManualProviderWithCapabilities) ConnectionParamDefs() map[string]core.ConnectionParamDef {
+	return s.connectionParams
+}
+
+func (s *stubManualProviderWithCapabilities) DiscoveryConfig() *core.DiscoveryConfig {
+	return s.discovery
+}
+
 type stubDualAuthProvider struct {
 	coretesting.StubIntegration
 }
@@ -10838,6 +11050,204 @@ func TestConnectManual(t *testing.T) {
 		}
 		if metadata["workspace"] != "beta" {
 			t.Fatalf("expected workspace metadata beta, got %q", metadata["workspace"])
+		}
+	})
+}
+
+func TestConnectManual_CompositeProviderPreservesDiscoveryAndConnectionMetadata(t *testing.T) {
+	t.Parallel()
+
+	discoverySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `[{"id":"site-a","name":"Site A","workspace":"alpha"}]`)
+	}))
+	testutil.CloseOnCleanup(t, discoverySrv)
+
+	svc := coretesting.NewStubServices(t)
+	apiProv := &stubManualProviderWithCapabilities{
+		stubManualProvider: stubManualProvider{
+			StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
+		},
+		connectionParams: map[string]core.ConnectionParamDef{
+			"tenant": {
+				Required:    true,
+				Description: "Tenant slug",
+			},
+		},
+		discovery: &core.DiscoveryConfig{
+			URL:      discoverySrv.URL,
+			IDPath:   "id",
+			NamePath: "name",
+			Metadata: map[string]string{"workspace": "workspace"},
+		},
+	}
+	prov := composite.New("manual-svc", apiProv, &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "manual-svc-mcp", ConnMode: core.ConnectionModeNone},
+		},
+	})
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, prov)
+		cfg.DefaultConnection = map[string]string{"manual-svc": config.PluginConnectionName}
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"manual-svc": {},
+		}
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	body := bytes.NewBufferString(`{"integration":"manual-svc","credential":"my-api-key","connectionParams":{"tenant":"acme"}}`)
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result map[string]string
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if result["status"] != "connected" {
+		t.Fatalf("expected connected, got %q", result["status"])
+	}
+
+	u, _ := svc.Users.FindOrCreateUser(context.Background(), "anonymous@gestalt")
+	tokens, _ := svc.Tokens.ListTokens(context.Background(), u.ID)
+	if len(tokens) != 1 {
+		t.Fatalf("expected 1 stored token, got %d", len(tokens))
+	}
+
+	var metadata map[string]string
+	if err := json.Unmarshal([]byte(tokens[0].MetadataJSON), &metadata); err != nil {
+		t.Fatalf("unmarshal metadata: %v", err)
+	}
+	if !reflect.DeepEqual(metadata, map[string]string{
+		"tenant":    "acme",
+		"workspace": "alpha",
+	}) {
+		t.Fatalf("metadata = %+v", metadata)
+	}
+}
+
+func TestConnectManual_RestrictedProviderPreservesValidationAndDiscovery(t *testing.T) {
+	t.Parallel()
+
+	t.Run("rejects unknown connection params when provider exposes none", func(t *testing.T) {
+		t.Parallel()
+
+		prov := coreintegration.NewRestricted(&stubManualProviderWithCapabilities{
+			stubManualProvider: stubManualProvider{
+				StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
+			},
+			connectionParams: map[string]core.ConnectionParamDef{},
+		}, map[string]string{})
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, prov)
+			cfg.DefaultConnection = map[string]string{"manual-svc": config.PluginConnectionName}
+			cfg.PluginDefs = map[string]*config.ProviderEntry{
+				"manual-svc": {},
+			}
+			cfg.Services = coretesting.NewStubServices(t)
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		body := bytes.NewBufferString(`{"integration":"manual-svc","credential":"my-api-key","connectionParams":{"unknown":"nope"}}`)
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 400, got %d: %s", resp.StatusCode, body)
+		}
+	})
+
+	t.Run("preserves discovery and connection metadata", func(t *testing.T) {
+		t.Parallel()
+
+		discoverySrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `[{"id":"site-a","name":"Site A","workspace":"alpha"}]`)
+		}))
+		testutil.CloseOnCleanup(t, discoverySrv)
+
+		svc := coretesting.NewStubServices(t)
+		prov := coreintegration.NewRestricted(&stubManualProviderWithCapabilities{
+			stubManualProvider: stubManualProvider{
+				StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
+			},
+			connectionParams: map[string]core.ConnectionParamDef{
+				"tenant": {
+					Required:    true,
+					Description: "Tenant slug",
+				},
+			},
+			discovery: &core.DiscoveryConfig{
+				URL:      discoverySrv.URL,
+				IDPath:   "id",
+				NamePath: "name",
+				Metadata: map[string]string{"workspace": "workspace"},
+			},
+		}, map[string]string{})
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, prov)
+			cfg.DefaultConnection = map[string]string{"manual-svc": config.PluginConnectionName}
+			cfg.PluginDefs = map[string]*config.ProviderEntry{
+				"manual-svc": {},
+			}
+			cfg.Services = svc
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		body := bytes.NewBufferString(`{"integration":"manual-svc","credential":"my-api-key","connectionParams":{"tenant":"acme"}}`)
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+
+		var result map[string]string
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			t.Fatalf("decoding: %v", err)
+		}
+		if result["status"] != "connected" {
+			t.Fatalf("expected connected, got %q", result["status"])
+		}
+
+		u, _ := svc.Users.FindOrCreateUser(context.Background(), "anonymous@gestalt")
+		tokens, _ := svc.Tokens.ListTokens(context.Background(), u.ID)
+		if len(tokens) != 1 {
+			t.Fatalf("expected 1 stored token, got %d", len(tokens))
+		}
+
+		var metadata map[string]string
+		if err := json.Unmarshal([]byte(tokens[0].MetadataJSON), &metadata); err != nil {
+			t.Fatalf("unmarshal metadata: %v", err)
+		}
+		if !reflect.DeepEqual(metadata, map[string]string{
+			"tenant":    "acme",
+			"workspace": "alpha",
+		}) {
+			t.Fatalf("metadata = %+v", metadata)
 		}
 	})
 }

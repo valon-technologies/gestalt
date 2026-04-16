@@ -27,9 +27,13 @@ type Provider struct {
 }
 
 var (
-	_ core.Provider               = (*Provider)(nil)
-	_ core.SessionCatalogProvider = (*Provider)(nil)
-	_ core.AuthTypeLister         = (*Provider)(nil)
+	_ core.Provider                    = (*Provider)(nil)
+	_ core.SessionCatalogProvider      = (*Provider)(nil)
+	_ core.OperationConnectionProvider = (*Provider)(nil)
+	_ core.AuthTypeLister              = (*Provider)(nil)
+	_ core.ConnectionParamProvider     = (*Provider)(nil)
+	_ core.CredentialFieldsProvider    = (*Provider)(nil)
+	_ core.DiscoveryConfigProvider     = (*Provider)(nil)
 )
 
 // New creates a composite provider. If the API provider implements
@@ -88,6 +92,10 @@ func (p *Provider) CatalogForRequest(ctx context.Context, token string) (*catalo
 	return tagMCPCatalog(cat), nil
 }
 
+func (p *Provider) ConnectionForOperation(operation string) string {
+	return core.OperationConnection(p.api, operation)
+}
+
 func (p *Provider) CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
 	return p.mcp.CallTool(ctx, name, args)
 }
@@ -98,17 +106,23 @@ func (p *Provider) Inner() core.Provider { return p.api }
 // upstream's manual-auth support is irrelevant — the server uses this
 // to decide whether to block the OAuth connection flow.
 func (p *Provider) SupportsManualAuth() bool {
-	if mp, ok := p.api.(core.ManualProvider); ok {
-		return mp.SupportsManualAuth()
-	}
-	return false
+	return core.SupportsManualAuth(p.api)
 }
 
 func (p *Provider) AuthTypes() []string {
-	if atl, ok := p.api.(core.AuthTypeLister); ok {
-		return atl.AuthTypes()
-	}
-	return nil
+	return core.AuthTypes(p.api)
+}
+
+func (p *Provider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
+	return core.ConnectionParamDefs(p.api)
+}
+
+func (p *Provider) CredentialFields() []core.CredentialFieldDef {
+	return core.CredentialFields(p.api)
+}
+
+func (p *Provider) DiscoveryConfig() *core.DiscoveryConfig {
+	return core.DiscoveryConfigFor(p.api)
 }
 
 func (p *Provider) Close() error {

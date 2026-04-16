@@ -253,8 +253,8 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	if conn == "" {
 		if transport == catalog.TransportMCPPassthrough {
 			conn = b.mcpConnection(providerName)
-		} else if ocp, ok := prov.(core.OperationConnectionProvider); ok {
-			conn = ocp.ConnectionForOperation(operation)
+		} else {
+			conn = core.OperationConnection(prov, operation)
 		}
 	}
 	if conn == "" && b.connMapper != nil {
@@ -298,7 +298,7 @@ func (b *Broker) resolveOperation(ctx context.Context, p *principal.Principal, p
 		return op, catalogOperationTransport(op), nil
 	}
 
-	if _, ok := prov.(core.SessionCatalogProvider); ok {
+	if core.SupportsSessionCatalog(prov) {
 		if connection == "" {
 			connection = b.mcpConnection(providerName)
 		}

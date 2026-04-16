@@ -83,7 +83,7 @@ func catalogOperationForTool(ctx context.Context, cfg Config, providerName, oper
 	if op, _, ok := sessionCatalogOperationFromContext(ctx, providerName, operation, ""); ok {
 		return op, true
 	}
-	if _, sessionCapable := prov.(core.SessionCatalogProvider); sessionCapable &&
+	if core.SupportsSessionCatalog(prov) &&
 		sessionProviderHydrationAttemptedFromContext(ctx, providerName, "") &&
 		!sessionProviderHydratedFromContext(ctx, providerName, "") {
 		return catalog.CatalogOperation{}, false
@@ -91,7 +91,7 @@ func catalogOperationForTool(ctx context.Context, cfg Config, providerName, oper
 	if op, ok := invocation.CatalogOperation(prov.Catalog(), operation); ok && catalogOperationProjectedToMCP(cfg, providerName, op) {
 		return op, true
 	}
-	if _, ok := prov.(core.SessionCatalogProvider); !ok {
+	if !core.SupportsSessionCatalog(prov) {
 		return catalog.CatalogOperation{}, false
 	}
 	return catalog.CatalogOperation{}, false

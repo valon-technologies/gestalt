@@ -145,9 +145,6 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 }
 
 func validateConnectionParams(defs map[string]core.ConnectionParamDef, provided map[string]string) (map[string]string, error) {
-	if len(defs) == 0 {
-		return nil, nil
-	}
 	for key := range provided {
 		if _, ok := defs[key]; !ok {
 			return nil, fmt.Errorf("unknown connection parameter: %s", key)
@@ -181,8 +178,8 @@ func buildConnectionMetadata(prov core.Provider, userParams map[string]string, t
 		metadata[k] = v
 	}
 
-	if cpp, ok := prov.(core.ConnectionParamProvider); ok && tokenResp != nil && tokenResp.Extra != nil {
-		for name, def := range cpp.ConnectionParamDefs() {
+	if defs := core.ConnectionParamDefs(prov); tokenResp != nil && tokenResp.Extra != nil {
+		for name, def := range defs {
 			if def.From == "token_response" {
 				field := def.Field
 				if field == "" {
@@ -301,46 +298,44 @@ func mergeMetadataJSON(existing string, extra map[string]string) (string, error)
 }
 
 func (s *Server) runPostConnect(ctx context.Context, prov core.Provider, tm tokenMaterial) (*postConnectResult, error) {
-	if dcp, ok := prov.(core.DiscoveryConfigProvider); ok {
-		if cfg := dcp.DiscoveryConfig(); cfg != nil {
-			client := &http.Client{
-				Timeout:   30 * time.Second,
-				Transport: &bearerTransport{token: tm.AccessToken, base: http.DefaultTransport},
-			}
-			candidates, err := discovery.Run(ctx, cfg, client)
-			if err != nil {
-				return nil, fmt.Errorf("discovery: %w", err)
-			}
-			if len(candidates) == 0 {
-				return nil, fmt.Errorf("no resources discovered")
-			}
-			if len(candidates) == 1 {
-				if err := validateDiscoveryMetadata(candidates[0].Metadata); err != nil {
-					return nil, err
-				}
-				merged, err := mergeMetadataJSON(tm.MetadataJSON, candidates[0].Metadata)
-				if err != nil {
-					return nil, err
-				}
-				tm.MetadataJSON = merged
-				if _, err := s.storeTokenFromMaterial(ctx, tm); err != nil {
-					return nil, err
-				}
-				return &postConnectResult{Status: "connected", Integration: tm.Integration}, nil
-			}
-
-			pendingToken, err := s.encodePendingConnectionToken(tm, candidates)
-			if err != nil {
-				return nil, fmt.Errorf("encode pending connection: %w", err)
-			}
-			return &postConnectResult{
-				Status:       "selection_required",
-				Integration:  tm.Integration,
-				SelectionURL: pendingConnectionPath,
-				PendingToken: pendingToken,
-				Candidates:   discoveryCandidateInfos(candidates),
-			}, nil
+	if cfg := core.DiscoveryConfigFor(prov); cfg != nil {
+		client := &http.Client{
+			Timeout:   30 * time.Second,
+			Transport: &bearerTransport{token: tm.AccessToken, base: http.DefaultTransport},
 		}
+		candidates, err := discovery.Run(ctx, cfg, client)
+		if err != nil {
+			return nil, fmt.Errorf("discovery: %w", err)
+		}
+		if len(candidates) == 0 {
+			return nil, fmt.Errorf("no resources discovered")
+		}
+		if len(candidates) == 1 {
+			if err := validateDiscoveryMetadata(candidates[0].Metadata); err != nil {
+				return nil, err
+			}
+			merged, err := mergeMetadataJSON(tm.MetadataJSON, candidates[0].Metadata)
+			if err != nil {
+				return nil, err
+			}
+			tm.MetadataJSON = merged
+			if _, err := s.storeTokenFromMaterial(ctx, tm); err != nil {
+				return nil, err
+			}
+			return &postConnectResult{Status: "connected", Integration: tm.Integration}, nil
+		}
+
+		pendingToken, err := s.encodePendingConnectionToken(tm, candidates)
+		if err != nil {
+			return nil, fmt.Errorf("encode pending connection: %w", err)
+		}
+		return &postConnectResult{
+			Status:       "selection_required",
+			Integration:  tm.Integration,
+			SelectionURL: pendingConnectionPath,
+			PendingToken: pendingToken,
+			Candidates:   discoveryCandidateInfos(candidates),
+		}, nil
 	}
 
 	if _, err := s.storeTokenFromMaterial(ctx, tm); err != nil {

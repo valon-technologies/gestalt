@@ -24,7 +24,7 @@ func NewProviderServer(provider core.Provider) *ProviderServer {
 
 func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*proto.ProviderMetadata, error) {
 	return &proto.ProviderMetadata{
-		SupportsSessionCatalog: supportsSessionCatalog(s.provider),
+		SupportsSessionCatalog: core.SupportsSessionCatalog(s.provider),
 	}, nil
 }
 
@@ -47,24 +47,18 @@ func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest)
 }
 
 func (s *ProviderServer) GetSessionCatalog(ctx context.Context, req *proto.GetSessionCatalogRequest) (*proto.GetSessionCatalogResponse, error) {
-	scp, ok := s.provider.(core.SessionCatalogProvider)
-	if !ok {
+	if !core.SupportsSessionCatalog(s.provider) {
 		return nil, status.Error(codes.Unimplemented, "provider does not support session catalogs")
 	}
 	ctx = applyRequestContext(ctx, req.GetContext())
 	if len(req.GetConnectionParams()) > 0 {
 		ctx = core.WithConnectionParams(ctx, req.GetConnectionParams())
 	}
-	cat, err := scp.CatalogForRequest(ctx, req.GetToken())
+	cat, _, err := core.CatalogForRequest(ctx, s.provider, req.GetToken())
 	if err != nil {
 		return nil, status.Errorf(codes.Unknown, "session catalog: %v", err)
 	}
 	return &proto.GetSessionCatalogResponse{Catalog: catalogToProto(cat)}, nil
-}
-
-func supportsSessionCatalog(prov core.Provider) bool {
-	_, ok := prov.(core.SessionCatalogProvider)
-	return ok
 }
 
 func applyRequestContext(ctx context.Context, reqCtx *proto.RequestContext) context.Context {

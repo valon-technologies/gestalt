@@ -35,11 +35,15 @@ func WithAllowedRoles(roles map[string][]string) RestrictedOption {
 
 // Compile-time interface checks.
 var (
-	_ core.Provider       = (*Restricted)(nil)
-	_ core.ManualProvider = (*Restricted)(nil)
-	_ core.AuthTypeLister = (*Restricted)(nil)
-	_ core.OAuthProvider  = (*restrictedOAuth)(nil)
-	_ core.ManualProvider = (*restrictedOAuth)(nil)
+	_ core.Provider                    = (*Restricted)(nil)
+	_ core.ManualProvider              = (*Restricted)(nil)
+	_ core.AuthTypeLister              = (*Restricted)(nil)
+	_ core.OperationConnectionProvider = (*Restricted)(nil)
+	_ core.ConnectionParamProvider     = (*Restricted)(nil)
+	_ core.CredentialFieldsProvider    = (*Restricted)(nil)
+	_ core.DiscoveryConfigProvider     = (*Restricted)(nil)
+	_ core.OAuthProvider               = (*restrictedOAuth)(nil)
+	_ core.ManualProvider              = (*restrictedOAuth)(nil)
 )
 
 // NewRestricted returns a Provider that gates operations to the allowed set.
@@ -119,10 +123,7 @@ func (r *Restricted) Execute(ctx context.Context, operation string, params map[s
 }
 
 func (r *Restricted) SupportsManualAuth() bool {
-	if mp, ok := r.inner.(core.ManualProvider); ok {
-		return mp.SupportsManualAuth()
-	}
-	return false
+	return core.SupportsManualAuth(r.inner)
 }
 
 func (r *Restricted) Catalog() *catalog.Catalog {
@@ -209,22 +210,28 @@ func (r *restrictedOAuth) CatalogForRequest(ctx context.Context, token string) (
 }
 
 func (r *Restricted) AuthTypes() []string {
-	if atl, ok := r.inner.(core.AuthTypeLister); ok {
-		return atl.AuthTypes()
-	}
-	return nil
+	return core.AuthTypes(r.inner)
 }
 
 func (r *Restricted) ConnectionParamDefs() map[string]core.ConnectionParamDef {
-	if cpp, ok := r.inner.(core.ConnectionParamProvider); ok {
-		return cpp.ConnectionParamDefs()
-	}
-	return nil
+	return core.ConnectionParamDefs(r.inner)
 }
 
 func (r *Restricted) CredentialFields() []core.CredentialFieldDef {
-	if cfp, ok := r.inner.(core.CredentialFieldsProvider); ok {
-		return cfp.CredentialFields()
+	return core.CredentialFields(r.inner)
+}
+
+func (r *Restricted) DiscoveryConfig() *core.DiscoveryConfig {
+	return core.DiscoveryConfigFor(r.inner)
+}
+
+func (r *Restricted) ConnectionForOperation(operation string) string {
+	if _, ok := r.allowed[operation]; !ok {
+		return ""
 	}
-	return nil
+	innerOperation := operation
+	if alias, ok := r.aliases[operation]; ok {
+		innerOperation = alias
+	}
+	return core.OperationConnection(r.inner, innerOperation)
 }
