@@ -86,6 +86,10 @@ func releasePath() string {
 	return "/repos/" + testOwner + "/" + testRepo + "/releases/tags/" + expectedTag()
 }
 
+func expectedBrowserDownloadURL(assetName string) string {
+	return "https://github.com/" + testOwner + "/" + testRepo + "/releases/download/" + expectedTag() + "/" + assetName
+}
+
 type requestLog struct {
 	mu      sync.Mutex
 	headers []string
@@ -126,7 +130,7 @@ func withAssetStatus(code int) serverOption {
 
 func newTestServer(t *testing.T, assetName string, opts ...serverOption) *httptest.Server {
 	t.Helper()
-	browserURL := "https://github.com/" + testOwner + "/" + testRepo + "/releases/download/" + expectedTag() + "/" + assetName
+	browserURL := expectedBrowserDownloadURL(assetName)
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		for _, opt := range opts {
 			if opt(w, r) {
@@ -389,7 +393,7 @@ func TestResolveSuccess(t *testing.T) {
 	if pkg.ArchiveSHA256 != testAssetSHA256() {
 		t.Errorf("SHA256 = %s, want %s", pkg.ArchiveSHA256, testAssetSHA256())
 	}
-	wantURL := srv.URL + "/asset-dl"
+	wantURL := expectedBrowserDownloadURL(assetName)
 	if pkg.ResolvedURL != wantURL {
 		t.Errorf("ResolvedURL = %s, want %s", pkg.ResolvedURL, wantURL)
 	}
@@ -518,6 +522,15 @@ func TestResolveDownloadError(t *testing.T) {
 	}
 }
 
+func TestResolvedAssetURLFallsBackToAPIAssetURL(t *testing.T) {
+	t.Parallel()
+
+	assetURL := "https://api.github.com/repos/acme-corp/tools/releases/assets/123"
+	if got := resolvedAssetURL(releaseAsset{URL: assetURL}); got != assetURL {
+		t.Fatalf("resolvedAssetURL() = %q, want %q", got, assetURL)
+	}
+}
+
 func TestExtractPlatformFromAssetName_Canonical(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -623,8 +636,9 @@ func TestListPlatformArchives(t *testing.T) {
 	for _, a := range archives {
 		if a.Platform == runtime.GOOS+"/"+runtime.GOARCH || strings.HasPrefix(a.Platform, runtime.GOOS+"/"+runtime.GOARCH) {
 			found = true
-			if a.URL == "" {
-				t.Error("current platform archive has empty URL")
+			wantURL := expectedBrowserDownloadURL(assetName)
+			if a.URL != wantURL {
+				t.Errorf("current platform archive URL = %q, want %q", a.URL, wantURL)
 			}
 		}
 	}

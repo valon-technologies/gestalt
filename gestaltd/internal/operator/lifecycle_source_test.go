@@ -1626,7 +1626,7 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 				http.Error(w, "bad release authorization", http.StatusBadRequest)
 				return
 			}
-			browserURL := "https://github.com/" + testOwner + "/" + testRepo + "/releases/download/" + expectedTag + "/" + expectedAssetName
+			browserURL := "http://" + r.Host + "/browser-dl"
 			w.Header().Set("Content-Type", "application/json")
 			resp := map[string]any{
 				"assets": []map[string]any{
@@ -1639,6 +1639,20 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 			}
 			_ = json.NewEncoder(w).Encode(resp)
 		case "/asset-dl":
+			assetCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "token test-token" {
+				handlerErrs <- fmt.Errorf("asset authorization = %q, want %q", got, "token test-token")
+				http.Error(w, "bad asset authorization", http.StatusBadRequest)
+				return
+			}
+			if got := r.Header.Get("Accept"); got != "application/octet-stream" {
+				handlerErrs <- fmt.Errorf("asset accept = %q, want %q", got, "application/octet-stream")
+				http.Error(w, "bad asset accept", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(archiveData)
+		case "/browser-dl":
 			assetCount.Add(1)
 			if got := r.Header.Get("Authorization"); got != "token test-token" {
 				handlerErrs <- fmt.Errorf("asset authorization = %q, want %q", got, "token test-token")
@@ -1709,8 +1723,9 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 	if entry.Archives[providerpkg.CurrentPlatformString()].URL == "" {
 		t.Error("entry archive URL is empty")
 	}
-	if entry.Archives[providerpkg.CurrentPlatformString()].URL != srv.URL+"/asset-dl" {
-		t.Errorf("entry archive URL = %q, want %q", entry.Archives[providerpkg.CurrentPlatformString()].URL, srv.URL+"/asset-dl")
+	browserURL := srv.URL + "/browser-dl"
+	if entry.Archives[providerpkg.CurrentPlatformString()].URL != browserURL {
+		t.Errorf("entry archive URL = %q, want %q", entry.Archives[providerpkg.CurrentPlatformString()].URL, browserURL)
 	}
 	if entry.Archives[providerpkg.CurrentPlatformString()].SHA256 == "" {
 		t.Error("entry archive SHA256 is empty")
@@ -1878,12 +1893,12 @@ func TestSourcePluginInitWithPlatformsPersistsExtraPlatformHash(t *testing.T) {
 					{
 						"name":                 currentAssetName,
 						"url":                  "http://" + r.Host + "/asset-current",
-						"browser_download_url": "https://github.com/" + testOwner + "/" + testRepo + "/releases/download/" + expectedTag + "/" + currentAssetName,
+						"browser_download_url": "http://" + r.Host + "/browser-current",
 					},
 					{
 						"name":                 extraAssetName,
 						"url":                  "http://" + r.Host + "/asset-extra",
-						"browser_download_url": "https://github.com/" + testOwner + "/" + testRepo + "/releases/download/" + expectedTag + "/" + extraAssetName,
+						"browser_download_url": "http://" + r.Host + "/browser-extra",
 					},
 				},
 			}
@@ -1902,6 +1917,20 @@ func TestSourcePluginInitWithPlatformsPersistsExtraPlatformHash(t *testing.T) {
 			}
 			w.Header().Set("Content-Type", "application/octet-stream")
 			_, _ = w.Write(currentArchiveData)
+		case "/browser-current":
+			currentAssetCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "token test-token" {
+				handlerErrs <- fmt.Errorf("current browser asset authorization = %q, want %q", got, "token test-token")
+				http.Error(w, "bad asset authorization", http.StatusBadRequest)
+				return
+			}
+			if got := r.Header.Get("Accept"); got != "application/octet-stream" {
+				handlerErrs <- fmt.Errorf("current browser asset accept = %q, want %q", got, "application/octet-stream")
+				http.Error(w, "bad asset accept", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(currentArchiveData)
 		case "/asset-extra":
 			extraAssetCount.Add(1)
 			if got := r.Header.Get("Authorization"); got != "token test-token" {
@@ -1911,6 +1940,20 @@ func TestSourcePluginInitWithPlatformsPersistsExtraPlatformHash(t *testing.T) {
 			}
 			if got := r.Header.Get("Accept"); got != "application/octet-stream" {
 				handlerErrs <- fmt.Errorf("extra asset accept = %q, want %q", got, "application/octet-stream")
+				http.Error(w, "bad asset accept", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(extraArchiveData)
+		case "/browser-extra":
+			extraAssetCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "token test-token" {
+				handlerErrs <- fmt.Errorf("extra browser asset authorization = %q, want %q", got, "token test-token")
+				http.Error(w, "bad asset authorization", http.StatusBadRequest)
+				return
+			}
+			if got := r.Header.Get("Accept"); got != "application/octet-stream" {
+				handlerErrs <- fmt.Errorf("extra browser asset accept = %q, want %q", got, "application/octet-stream")
 				http.Error(w, "bad asset accept", http.StatusBadRequest)
 				return
 			}
@@ -2056,12 +2099,12 @@ func TestSourcePluginInitWithPlatformsRejectsGenericFallbackForExtraPlatform(t *
 					{
 						"name":                 currentAssetName,
 						"url":                  "http://" + r.Host + "/asset-current",
-						"browser_download_url": "https://github.com/" + testOwner + "/" + testRepo + "/releases/download/" + expectedTag + "/" + currentAssetName,
+						"browser_download_url": "http://" + r.Host + "/browser-current",
 					},
 					{
 						"name":                 genericAssetName,
 						"url":                  "http://" + r.Host + "/asset-generic",
-						"browser_download_url": "https://github.com/" + testOwner + "/" + testRepo + "/releases/download/" + expectedTag + "/" + genericAssetName,
+						"browser_download_url": "http://" + r.Host + "/browser-generic",
 					},
 				},
 			}
@@ -2080,6 +2123,20 @@ func TestSourcePluginInitWithPlatformsRejectsGenericFallbackForExtraPlatform(t *
 			}
 			w.Header().Set("Content-Type", "application/octet-stream")
 			_, _ = w.Write(currentArchiveData)
+		case "/browser-current":
+			currentAssetCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "token test-token" {
+				handlerErrs <- fmt.Errorf("current browser asset authorization = %q, want %q", got, "token test-token")
+				http.Error(w, "bad asset authorization", http.StatusBadRequest)
+				return
+			}
+			if got := r.Header.Get("Accept"); got != "application/octet-stream" {
+				handlerErrs <- fmt.Errorf("current browser asset accept = %q, want %q", got, "application/octet-stream")
+				http.Error(w, "bad asset accept", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(currentArchiveData)
 		case "/asset-generic":
 			genericAssetCount.Add(1)
 			if got := r.Header.Get("Authorization"); got != "token test-token" {
@@ -2089,6 +2146,20 @@ func TestSourcePluginInitWithPlatformsRejectsGenericFallbackForExtraPlatform(t *
 			}
 			if got := r.Header.Get("Accept"); got != "application/octet-stream" {
 				handlerErrs <- fmt.Errorf("generic asset accept = %q, want %q", got, "application/octet-stream")
+				http.Error(w, "bad asset accept", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(genericArchiveData)
+		case "/browser-generic":
+			genericAssetCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "token test-token" {
+				handlerErrs <- fmt.Errorf("generic browser asset authorization = %q, want %q", got, "token test-token")
+				http.Error(w, "bad asset authorization", http.StatusBadRequest)
+				return
+			}
+			if got := r.Header.Get("Accept"); got != "application/octet-stream" {
+				handlerErrs <- fmt.Errorf("generic browser asset accept = %q, want %q", got, "application/octet-stream")
 				http.Error(w, "bad asset accept", http.StatusBadRequest)
 				return
 			}

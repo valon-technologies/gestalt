@@ -94,7 +94,7 @@ func (r *GitHubResolver) Resolve(ctx context.Context, src pluginsource.Source, v
 		LocalPath:     dl.LocalPath,
 		Cleanup:       dl.Cleanup,
 		ArchiveSHA256: dl.SHA256Hex,
-		ResolvedURL:   asset.URL,
+		ResolvedURL:   resolvedAssetURL(asset),
 	}, nil
 }
 
@@ -124,10 +124,17 @@ func (r *GitHubResolver) ListPlatformArchives(ctx context.Context, src pluginsou
 	for platform, asset := range classified {
 		archives = append(archives, pluginsource.PlatformArchive{
 			Platform: platform,
-			URL:      asset.URL,
+			URL:      resolvedAssetURL(asset),
 		})
 	}
 	return archives, nil
+}
+
+func resolvedAssetURL(asset releaseAsset) string {
+	if strings.TrimSpace(asset.BrowserDownloadURL) != "" {
+		return asset.BrowserDownloadURL
+	}
+	return asset.URL
 }
 
 func (r *GitHubResolver) fetchRelease(ctx context.Context, client *http.Client, url, token, tag, slug string) (*releaseResponse, error) {
