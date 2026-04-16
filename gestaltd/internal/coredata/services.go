@@ -12,6 +12,9 @@ type Services struct {
 	Users                *UserService
 	Tokens               *TokenService
 	APITokens            *APITokenService
+	ManagedIdentities    *ManagedIdentityService
+	IdentityMemberships  *ManagedIdentityMembershipService
+	IdentityGrants       *ManagedIdentityGrantService
 	PluginAuthorizations *PluginAuthorizationService
 	AdminAuthorizations  *AdminAuthorizationService
 	DB                   indexeddb.IndexedDB
@@ -28,6 +31,15 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	if err := ds.CreateObjectStore(ctx, StoreAPITokens, APITokensSchema); err != nil {
 		return nil, fmt.Errorf("create api_tokens store: %w", err)
 	}
+	if err := ds.CreateObjectStore(ctx, StoreManagedIdentities, ManagedIdentitiesSchema); err != nil {
+		return nil, fmt.Errorf("create managed_identities store: %w", err)
+	}
+	if err := ds.CreateObjectStore(ctx, StoreManagedIdentityMemberships, ManagedIdentityMembershipsSchema); err != nil {
+		return nil, fmt.Errorf("create managed_identity_memberships store: %w", err)
+	}
+	if err := ds.CreateObjectStore(ctx, StoreManagedIdentityGrants, ManagedIdentityGrantsSchema); err != nil {
+		return nil, fmt.Errorf("create managed_identity_grants store: %w", err)
+	}
 	users := NewUserService(ds)
 	if err := users.BackfillNormalizedEmails(ctx); err != nil {
 		return nil, fmt.Errorf("backfill users store: %w", err)
@@ -42,6 +54,9 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 		Users:                users,
 		Tokens:               NewTokenService(ds, enc),
 		APITokens:            NewAPITokenService(ds),
+		ManagedIdentities:    NewManagedIdentityService(ds),
+		IdentityMemberships:  NewManagedIdentityMembershipService(ds),
+		IdentityGrants:       NewManagedIdentityGrantService(ds),
 		PluginAuthorizations: NewPluginAuthorizationService(ds),
 		AdminAuthorizations:  NewAdminAuthorizationService(ds),
 		DB:                   ds,

@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod config;
 pub mod describe;
+pub mod identities;
 pub mod init;
 pub mod invoke;
 pub mod plugins;

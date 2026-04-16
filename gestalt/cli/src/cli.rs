@@ -57,6 +57,12 @@ pub enum Commands {
         #[command(subcommand)]
         command: TokenCommands,
     },
+
+    /// Manage workspace-owned identities
+    Identities {
+        #[command(subcommand)]
+        command: IdentityCommands,
+    },
 }
 
 #[derive(Subcommand)]
@@ -180,4 +186,123 @@ pub enum TokenCommands {
         /// Token ID to revoke
         id: String,
     },
+}
+
+#[derive(Subcommand)]
+pub enum IdentityCommands {
+    /// List identities you can access
+    List,
+    /// Create a new identity
+    Create {
+        /// Display name for the identity
+        #[arg(long = "name")]
+        display_name: String,
+    },
+    /// Show one identity
+    Get {
+        /// Identity ID
+        id: String,
+    },
+    /// Update an identity's display name
+    Update {
+        /// Identity ID
+        id: String,
+        /// New display name
+        #[arg(long = "name")]
+        display_name: String,
+    },
+    /// Delete an identity
+    Delete {
+        /// Identity ID
+        id: String,
+    },
+    /// Manage identity members
+    Members {
+        #[command(subcommand)]
+        command: IdentityMemberCommands,
+    },
+    /// Manage identity grants
+    Grants {
+        #[command(subcommand)]
+        command: IdentityGrantCommands,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum IdentityMemberCommands {
+    /// List members for an identity
+    List {
+        /// Identity ID
+        identity: String,
+    },
+    /// Add a member to an identity
+    Add {
+        /// Identity ID
+        identity: String,
+        /// User email
+        email: String,
+        /// Membership role
+        #[arg(long, value_enum)]
+        role: IdentityRole,
+    },
+    /// Update a member's role on an identity
+    Update {
+        /// Identity ID
+        identity: String,
+        /// User email
+        email: String,
+        /// Membership role
+        #[arg(long, value_enum)]
+        role: IdentityRole,
+    },
+    /// Remove a member from an identity
+    Remove {
+        /// Identity ID
+        identity: String,
+        /// User email
+        email: String,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum IdentityGrantCommands {
+    /// List grants for an identity
+    List {
+        /// Identity ID
+        identity: String,
+    },
+    /// Set or replace a plugin grant for an identity
+    Set {
+        /// Identity ID
+        identity: String,
+        /// Plugin name
+        plugin: String,
+        /// Restrict the grant to specific operations
+        #[arg(long = "operation")]
+        operations: Vec<String>,
+    },
+    /// Remove a plugin grant from an identity
+    Revoke {
+        /// Identity ID
+        identity: String,
+        /// Plugin name
+        plugin: String,
+    },
+}
+
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IdentityRole {
+    Viewer,
+    Editor,
+    Admin,
+}
+
+impl IdentityRole {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Viewer => "viewer",
+            Self::Editor => "editor",
+            Self::Admin => "admin",
+        }
+    }
 }

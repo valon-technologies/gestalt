@@ -12,12 +12,15 @@ import (
 )
 
 const (
-	auditTargetKindAPIToken             = "api_token"
-	auditTargetKindAPITokenCollection   = "api_token_collection"
-	auditTargetKindConnection           = "connection"
-	auditDecisionProviderAccessDenied   = "provider_access_denied"
-	auditDecisionOperationBindingDenied = "operation_binding_denied"
-	auditDecisionCatalogRoleDenied      = "catalog_role_denied"
+	auditTargetKindAPIToken              = "api_token"
+	auditTargetKindAPITokenCollection    = "api_token_collection"
+	auditTargetKindConnection            = "connection"
+	auditTargetKindManagedIdentity       = "managed_identity"
+	auditTargetKindManagedIdentityMember = "managed_identity_member"
+	auditTargetKindManagedIdentityGrant  = "managed_identity_grant"
+	auditDecisionProviderAccessDenied    = "provider_access_denied"
+	auditDecisionOperationBindingDenied  = "operation_binding_denied"
+	auditDecisionCatalogRoleDenied       = "catalog_role_denied"
 )
 
 type auditTarget struct {
@@ -164,6 +167,30 @@ func connectionAuditTarget(provider, connection, instance string) auditTarget {
 		ID:   strings.Join(idParts, "/"),
 		Kind: auditTargetKindConnection,
 		Name: connection + "/" + instance,
+	}
+}
+
+func managedIdentityAuditTarget(id, name string) auditTarget {
+	return auditTarget{
+		ID:   strings.TrimSpace(id),
+		Kind: auditTargetKindManagedIdentity,
+		Name: strings.TrimSpace(name),
+	}
+}
+
+func managedIdentityMemberAuditTarget(identityID, email string) auditTarget {
+	return auditTarget{
+		ID:   strings.TrimSpace(identityID),
+		Kind: auditTargetKindManagedIdentityMember,
+		Name: strings.TrimSpace(email),
+	}
+}
+
+func managedIdentityGrantAuditTarget(identityID, plugin string) auditTarget {
+	return auditTarget{
+		ID:   strings.TrimSpace(identityID),
+		Kind: auditTargetKindManagedIdentityGrant,
+		Name: strings.TrimSpace(plugin),
 	}
 }
 

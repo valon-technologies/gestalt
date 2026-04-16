@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -66,8 +67,12 @@ type Server struct {
 	users                *coredata.UserService
 	tokens               *coredata.TokenService
 	apiTokens            *coredata.APITokenService
+	managedIdentities    *coredata.ManagedIdentityService
+	identityMemberships  *coredata.ManagedIdentityMembershipService
+	identityGrants       *coredata.ManagedIdentityGrantService
 	pluginAuthorizations *coredata.PluginAuthorizationService
 	adminAuthorizations  *coredata.AdminAuthorizationService
+	managedIdentityMu    sync.Mutex
 	providers            *registry.ProviderMap[core.Provider]
 	resolver             *principal.Resolver
 	invoker              invocation.Invoker
@@ -178,6 +183,9 @@ func New(cfg Config) (*Server, error) {
 	users := cfg.Services.Users
 	tokens := cfg.Services.Tokens
 	apiTokens := cfg.Services.APITokens
+	managedIdentities := cfg.Services.ManagedIdentities
+	identityMemberships := cfg.Services.IdentityMemberships
+	identityGrants := cfg.Services.IdentityGrants
 	pluginAuthorizations := cfg.Services.PluginAuthorizations
 	adminAuthorizations := cfg.Services.AdminAuthorizations
 	resolver := principal.NewResolver(cfg.Auth, users, apiTokens, cfg.Authorizer)
@@ -195,6 +203,9 @@ func New(cfg Config) (*Server, error) {
 		users:                users,
 		tokens:               tokens,
 		apiTokens:            apiTokens,
+		managedIdentities:    managedIdentities,
+		identityMemberships:  identityMemberships,
+		identityGrants:       identityGrants,
 		pluginAuthorizations: pluginAuthorizations,
 		adminAuthorizations:  adminAuthorizations,
 		providers:            cfg.Providers,
