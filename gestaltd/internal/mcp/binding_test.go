@@ -3070,7 +3070,7 @@ func TestNewServer_IncludeRESTFiltering(t *testing.T) {
 		wantCount   int
 	}{
 		{"excluded", false, 1},
-		{"included", true, 2},
+		{"included", true, 3},
 	}
 
 	for _, tc := range cases {
@@ -3081,6 +3081,7 @@ func TestNewServer_IncludeRESTFiltering(t *testing.T) {
 				Name: "acme",
 				Operations: []catalog.CatalogOperation{
 					{ID: "api_op", Method: http.MethodGet, Path: "/api", Transport: catalog.TransportREST},
+					{ID: "graphql_op", Description: "graphql-backed", Transport: "graphql"},
 					{ID: "mcp_op", Description: "passthrough", Transport: catalog.TransportMCPPassthrough},
 				},
 			}
@@ -3107,6 +3108,9 @@ func TestNewServer_IncludeRESTFiltering(t *testing.T) {
 			}
 			if tools["acme_mcp_op"] == nil {
 				t.Fatal("expected acme_mcp_op to always be present")
+			}
+			if !tc.includeREST && tools["acme_graphql_op"] != nil {
+				t.Fatal("expected acme_graphql_op to be excluded when IncludeREST=false")
 			}
 		})
 	}

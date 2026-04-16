@@ -140,6 +140,7 @@ type ProviderEntry struct {
 	S3                []string                      `yaml:"s3,omitempty"`
 	Workflow          *PluginWorkflowConfig         `yaml:"workflow,omitempty"`
 	Surfaces          *ProviderSurfaceOverrides     `yaml:"surfaces,omitempty"`
+	MCP               bool                          `yaml:"mcp,omitempty"`
 
 	// Runtime-resolved fields (populated during init/bootstrap, not from YAML)
 	Command              string                                `yaml:"-"`
@@ -152,7 +153,6 @@ type ProviderEntry struct {
 	Auth                 *ConnectionAuthDef                    `yaml:"-"`
 	DefaultConnection    string                                `yaml:"-"`
 	ConnectionParams     map[string]ConnectionParamDef         `yaml:"-"`
-	MCP                  bool                                  `yaml:"-"`
 	Discovery            *providermanifestv1.ProviderDiscovery `yaml:"-"`
 	ResolvedAssetRoot    string                                `yaml:"-"`
 	MCPToolPrefix        string                                `yaml:"-"`
@@ -263,6 +263,24 @@ func (e *ProviderEntry) DeclaresMCP() bool {
 		return false
 	}
 	return spec.MCP
+}
+
+func (e *ProviderEntry) HasMCPSurface() bool {
+	if e == nil {
+		return false
+	}
+	if ProviderSurfaceURLOverride(e, SpecSurfaceMCP) != "" {
+		return true
+	}
+	return ManifestProviderSurfaceURL(e.ManifestSpec(), SpecSurfaceMCP) != ""
+}
+
+func (e *ProviderEntry) ExposesMCP() bool {
+	return e.DeclaresMCP() || e.HasMCPSurface()
+}
+
+func (e *ProviderEntry) IncludeRESTInMCP() bool {
+	return e.DeclaresMCP()
 }
 
 type SourceAuthDef struct {
