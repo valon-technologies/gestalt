@@ -31,7 +31,13 @@ func ValidateStructure(cfg *Config) error {
 // CanonicalizeStructure applies the config-shape normalization required before
 // structural validation or bootstrap consumers operate on the config.
 func CanonicalizeStructure(cfg *Config) error {
-	if err := NormalizeCompatibility(cfg); err != nil {
+	if err := normalizeAuthorizationConfig(cfg); err != nil {
+		return err
+	}
+	if err := normalizeAdminConfig(cfg); err != nil {
+		return err
+	}
+	if err := applyPluginMountBindings(cfg); err != nil {
 		return err
 	}
 	pluginOwnedUIRefs := pluginOwnedUIRefs(cfg)

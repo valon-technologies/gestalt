@@ -338,7 +338,9 @@ func (r *configSecretManagers) Close() error {
 	return errors.Join(errs...)
 }
 
-func resolveConfigSecrets(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) error {
+// ResolveConfigSecrets resolves structured config secret refs using their
+// referenced secrets providers, then closes the temporary secret managers.
+func ResolveConfigSecrets(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) error {
 	if err := config.CanonicalizeStructure(cfg); err != nil {
 		return err
 	}
@@ -350,17 +352,41 @@ func resolveConfigSecrets(ctx context.Context, cfg *config.Config, factories *Fa
 		return nil
 	}
 	defer func() { _ = resolver.Close() }()
-	return resolveSecretRefs(cfg, resolver.resolve)
-}
-
-// ResolveConfigSecrets resolves structured config secret refs using their
-// referenced secrets providers, then closes the temporary secret managers.
-func ResolveConfigSecrets(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) error {
-	return resolveConfigSecrets(ctx, cfg, factories)
+	resolveValue := func(val string) (string, error) {
+		ref, ok, err := config.ParseSecretRefTransport(val)
+		if err != nil {
+			return "", err
+		}
+		if !ok {
+			if config.IsLegacySecretRefString(val) {
+				return "", fmt.Errorf("legacy secret:// syntax should have been rejected during config load")
+			}
+			return val, nil
+		}
+		resolved, err := resolver.resolve(ref)
+		if err != nil {
+			var secretErr *core.SecretResolutionError
+			if errors.As(err, &secretErr) {
+				return "", err
+			}
+			return "", &core.SecretResolutionError{
+				Name: ref.Name,
+				Err:  err,
+			}
+		}
+		if resolved == "" {
+			return "", &core.SecretResolutionError{Name: ref.Name, Err: fmt.Errorf("resolved to empty value")}
+		}
+		return resolved, nil
+	}
+	if err := config.TransformConfigStringFields(cfg, resolveValue); err != nil {
+		return err
+	}
+	return nil
 }
 
 func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, requireEncryptionKey bool) (*preparedCore, error) {
-	if err := resolveConfigSecrets(ctx, cfg, factories); err != nil {
+	if err := ResolveConfigSecrets(ctx, cfg, factories); err != nil {
 		return nil, err
 	}
 	sm, err := buildRuntimeSecretManager(cfg, factories)

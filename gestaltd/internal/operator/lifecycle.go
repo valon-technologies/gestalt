@@ -358,48 +358,6 @@ func referencedConfigSecretsProviders(cfg *config.Config) (map[string]*config.Pr
 	return entries, nil
 }
 
-func secretsProviderMetadataDependencies(name string, provider *config.ProviderEntry) (map[string]struct{}, error) {
-	if provider == nil {
-		return nil, nil
-	}
-	tmp := &config.Config{
-		Providers: config.ProvidersConfig{
-			Secrets: map[string]*config.ProviderEntry{
-				name: provider,
-			},
-		},
-	}
-	deps, err := config.ReferencedConfigSecretProviders(tmp)
-	if err != nil {
-		return nil, err
-	}
-	delete(deps, name)
-	if len(deps) == 0 {
-		return nil, nil
-	}
-	return deps, nil
-}
-
-func (l *Lifecycle) resolveSecretsProviderMetadata(ctx context.Context, name string, provider *config.ProviderEntry, available map[string]*config.ProviderEntry) error {
-	if l.configSecretResolver == nil || provider == nil {
-		return nil
-	}
-	secrets := make(map[string]*config.ProviderEntry, len(available)+1)
-	for availableName, entry := range available {
-		secrets[availableName] = entry
-	}
-	secrets[name] = provider
-	tmp := &config.Config{
-		Providers: config.ProvidersConfig{
-			Secrets: secrets,
-		},
-	}
-	if err := l.configSecretResolver(ctx, tmp); err != nil {
-		return fmt.Errorf("resolve metadata for %s %q: %w", providermanifestv1.KindSecrets, name, err)
-	}
-	return nil
-}
-
 func (l *Lifecycle) lockForSecretsBootstrap(configPaths []string, artifactsDir string, paths initPaths, cfg *config.Config, locked bool) (*Lockfile, error) {
 	if cfg == nil {
 		return nil, nil
@@ -447,10 +405,18 @@ func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context,
 		if provider == nil {
 			continue
 		}
-		deps, err := secretsProviderMetadataDependencies(name, provider)
+		tmp := &config.Config{
+			Providers: config.ProvidersConfig{
+				Secrets: map[string]*config.ProviderEntry{
+					name: provider,
+				},
+			},
+		}
+		deps, err := config.ReferencedConfigSecretProviders(tmp)
 		if err != nil {
 			return nil, err
 		}
+		delete(deps, name)
 		dependencies[name] = deps
 		if provider.Source.IsBuiltin() {
 			available[name] = provider
@@ -482,8 +448,20 @@ func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context,
 			if !ready {
 				continue
 			}
-			if err := l.resolveSecretsProviderMetadata(ctx, name, provider, available); err != nil {
-				return nil, err
+			if l.configSecretResolver != nil {
+				secrets := make(map[string]*config.ProviderEntry, len(available)+1)
+				for availableName, entry := range available {
+					secrets[availableName] = entry
+				}
+				secrets[name] = provider
+				tmp := &config.Config{
+					Providers: config.ProvidersConfig{
+						Secrets: secrets,
+					},
+				}
+				if err := l.configSecretResolver(ctx, tmp); err != nil {
+					return nil, fmt.Errorf("resolve metadata for %s %q: %w", providermanifestv1.KindSecrets, name, err)
+				}
 			}
 			configMap, err := config.NodeToMap(provider.Config)
 			if err != nil {
