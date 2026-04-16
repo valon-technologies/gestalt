@@ -66,8 +66,9 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	metricProviderName = req.Integration
 	connectionMode = metricutil.NormalizeConnectionMode(prov.ConnectionMode())
 
-	auth := s.effectiveConnectionAuth(req.Integration, manualConnection)
-	if !manualConnectionAllowed(prov, auth) {
+	fallbackAuthTypes := s.resolvedIntegrationAuthTypes(req.Integration, s.pluginDefs[req.Integration], userFacingAuthTypes(prov.AuthTypes()))
+	auth := s.configuredConnectionAuth(req.Integration, manualConnection)
+	if !authTypesContain(s.resolvedConnectionAuthTypes(req.Integration, manualConnection, auth, fallbackAuthTypes), "manual") {
 		auditErr = errors.New("integration does not support manual auth")
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("integration %q does not support manual auth; use OAuth connect instead", req.Integration))
 		return
@@ -356,13 +357,6 @@ func (s *Server) runPostConnect(ctx context.Context, prov core.Provider, tm toke
 	return &postConnectResult{Status: "connected", Integration: tm.Integration}, nil
 }
 
-func manualConnectionAllowed(prov core.Provider, auth config.ConnectionAuthDef) bool {
-	if authTypesContain(connectionAuthTypes(auth, nil), "manual") {
-		return true
-	}
-	return authTypesContain(userFacingAuthTypes(prov.AuthTypes()), "manual")
-}
-
 func discoveryCandidateInfos(candidates []core.DiscoveryCandidate) []discoveryCandidateInfo {
 	if len(candidates) == 0 {
 		return nil
@@ -375,22 +369,6 @@ func discoveryCandidateInfos(candidates []core.DiscoveryCandidate) []discoveryCa
 		}
 	}
 	return out
-}
-
-func (s *Server) effectiveConnectionAuth(integration, connection string) config.ConnectionAuthDef {
-	entry, ok := s.pluginDefs[integration]
-	if !ok || entry == nil {
-		return config.ConnectionAuthDef{}
-	}
-	manifestProvider := entry.ManifestSpec()
-	if connection == config.PluginConnectionName {
-		return config.EffectivePluginConnectionDef(entry, manifestProvider).Auth
-	}
-	conn, ok := config.EffectiveNamedConnectionDef(entry, manifestProvider, connection)
-	if !ok {
-		return config.ConnectionAuthDef{}
-	}
-	return conn.Auth
 }
 
 func buildEffectiveManualCredential(req connectManualRequest, auth config.ConnectionAuthDef) (string, error) {

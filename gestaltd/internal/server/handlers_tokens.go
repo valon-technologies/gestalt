@@ -175,14 +175,14 @@ func (s *Server) revokeAllAPITokens(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"status": "revoked", "count": count})
 }
 
-func (s *Server) connectionInfosForPlugin(integration string, plugin *config.ProviderEntry, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo) ([]string, []connectionDefInfo) {
+func (s *Server) connectionInfosForPlugin(integration string, plugin *config.ProviderEntry, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo) []connectionDefInfo {
 	if plugin == nil {
-		return integrationAuthTypes, []connectionDefInfo{}
+		return []connectionDefInfo{}
 	}
 	manifestProvider := plugin.ManifestSpec()
 	names, err := bootstrap.AdvertisedConnectionNames(plugin)
 	if err != nil {
-		return integrationAuthTypes, []connectionDefInfo{}
+		return []connectionDefInfo{}
 	}
 	resolve := func(name string) (string, config.ConnectionDef, bool, bool) {
 		infoName, includeWithoutAuth := name, true
@@ -199,20 +199,6 @@ func (s *Server) connectionInfosForPlugin(integration string, plugin *config.Pro
 		}
 		return infoName, conn, includeWithoutAuth, true
 	}
-	if len(integrationAuthTypes) == 0 {
-		combined := make([]string, 0, 2)
-		for _, name := range names {
-			infoName, conn, _, ok := resolve(name)
-			if !ok {
-				continue
-			}
-			combined = append(combined, s.supportedConnectionAuthTypes(integration, infoName, connectionAuthTypes(conn.Auth, nil))...)
-		}
-		integrationAuthTypes = userFacingAuthTypes(combined)
-		if integrationAuthTypes == nil {
-			integrationAuthTypes = []string{}
-		}
-	}
 	infos := make([]connectionDefInfo, 0, len(names))
 	for _, name := range names {
 		infoName, conn, includeWithoutAuth, ok := resolve(name)
@@ -223,7 +209,7 @@ func (s *Server) connectionInfosForPlugin(integration string, plugin *config.Pro
 			infos = append(infos, info)
 		}
 	}
-	return integrationAuthTypes, infos
+	return infos
 }
 
 func userFacingConnectionName(name string) string {
@@ -234,10 +220,11 @@ func userFacingConnectionName(name string) string {
 }
 
 func (s *Server) populateIntegrationSettings(info *integrationInfo, prov core.Provider) {
-	authTypes := userFacingAuthTypes(prov.AuthTypes())
+	authTypes := s.resolvedIntegrationAuthTypes(info.Name, s.pluginDefs[info.Name], userFacingAuthTypes(prov.AuthTypes()))
 	info.ConnectionParams = connectionParamInfosFromProvider(prov)
 	info.CredentialFields = credentialFieldInfosFromProvider(prov, authTypes)
-	info.AuthTypes, info.Connections = s.connectionInfosForPlugin(info.Name, s.pluginDefs[info.Name], authTypes, info.CredentialFields)
+	info.AuthTypes = authTypes
+	info.Connections = s.connectionInfosForPlugin(info.Name, s.pluginDefs[info.Name], authTypes, info.CredentialFields)
 }
 
 func credentialFieldInfosFromProvider(prov core.Provider, authTypes []string) []credentialFieldInfo {
@@ -284,9 +271,26 @@ func credentialFieldInfos[T any](fields []T, mapField func(T) credentialFieldInf
 	return infos
 }
 
+func defaultManualCredentialFieldInfos() []credentialFieldInfo {
+	return []credentialFieldInfo{{
+		Name:  "credential",
+		Label: "Credential",
+	}}
+}
+
+func (s *Server) resolvedIntegrationAuthTypes(integration string, plugin *config.ProviderEntry, providerAuthTypes []string) []string {
+	if len(providerAuthTypes) > 0 || plugin == nil {
+		return providerAuthTypes
+	}
+	combined := make([]string, 0, 2)
+	for _, info := range s.connectionInfosForPlugin(integration, plugin, nil, nil) {
+		combined = append(combined, info.AuthTypes...)
+	}
+	return userFacingAuthTypes(combined)
+}
+
 func (s *Server) connectionInfoFromAuth(integration, name string, conn config.ConnectionDef, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo, includeWithoutAuth bool) (connectionDefInfo, bool) {
-	authTypes := connectionAuthTypes(conn.Auth, integrationAuthTypes)
-	authTypes = s.supportedConnectionAuthTypes(integration, name, authTypes)
+	authTypes := s.resolvedConnectionAuthTypes(integration, name, conn.Auth, integrationAuthTypes)
 	if len(authTypes) == 0 && !includeWithoutAuth {
 		return connectionDefInfo{}, false
 	}
@@ -319,11 +323,34 @@ func (s *Server) connectionInfoFromAuth(integration, name string, conn config.Co
 	return info, true
 }
 
-func defaultManualCredentialFieldInfos() []credentialFieldInfo {
-	return []credentialFieldInfo{{
-		Name:  "credential",
-		Label: "Credential",
-	}}
+func removeAuthType(authTypes []string, drop string) []string {
+	filtered := make([]string, 0, len(authTypes))
+	for _, authType := range authTypes {
+		if authType != drop {
+			filtered = append(filtered, authType)
+		}
+	}
+	return filtered
+}
+
+func (s *Server) resolvedConnectionAuthTypes(integration, connection string, auth config.ConnectionAuthDef, integrationAuthTypes []string) []string {
+	return s.supportedConnectionAuthTypes(integration, connection, connectionAuthTypes(auth, integrationAuthTypes))
+}
+
+func (s *Server) configuredConnectionAuth(integration, connection string) config.ConnectionAuthDef {
+	entry, ok := s.pluginDefs[integration]
+	if !ok || entry == nil {
+		return config.ConnectionAuthDef{}
+	}
+	manifestProvider := entry.ManifestSpec()
+	if connection == config.PluginConnectionName {
+		return config.EffectivePluginConnectionDef(entry, manifestProvider).Auth
+	}
+	conn, ok := config.EffectiveNamedConnectionDef(entry, manifestProvider, connection)
+	if !ok {
+		return config.ConnectionAuthDef{}
+	}
+	return conn.Auth
 }
 
 func (s *Server) supportedConnectionAuthTypes(integration, connection string, authTypes []string) []string {
@@ -340,16 +367,6 @@ func (s *Server) supportedConnectionAuthTypes(integration, connection string, au
 		return authTypes
 	}
 	return removeAuthType(authTypes, "oauth")
-}
-
-func removeAuthType(authTypes []string, drop string) []string {
-	filtered := make([]string, 0, len(authTypes))
-	for _, authType := range authTypes {
-		if authType != drop {
-			filtered = append(filtered, authType)
-		}
-	}
-	return filtered
 }
 
 func connectionAuthTypes(auth config.ConnectionAuthDef, integrationAuthTypes []string) []string {

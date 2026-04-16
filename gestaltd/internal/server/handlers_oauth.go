@@ -198,15 +198,14 @@ func (s *Server) integrationOAuthCallback(w http.ResponseWriter, r *http.Request
 	auditUserID = state.UserID
 	stateAuthSource = state.AuthSource
 	auditTarget = connectionAuditTarget(state.Integration, state.Connection, state.Instance)
+	prov, _ := s.providers.Get(providerName)
+	if prov != nil {
+		connectionMode = metricutil.NormalizeConnectionMode(prov.ConnectionMode())
+	}
 	handler, ok := s.requireOAuthHandler(w, providerName, state.Connection)
 	if !ok {
 		auditErr = errors.New("oauth is not configured")
 		return
-	}
-
-	prov, _ := s.providers.Get(providerName)
-	if prov != nil {
-		connectionMode = metricutil.NormalizeConnectionMode(prov.ConnectionMode())
 	}
 
 	var exchangeOpts []oauth.ExchangeOption

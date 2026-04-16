@@ -13837,7 +13837,7 @@ func TestConnectManual_MultiCredential(t *testing.T) {
 		{
 			name:        "explicit manual connection auth does not require provider manual interface",
 			integration: "clickhouse-manual",
-			requestBody: `{"integration":"clickhouse-manual","credentials":{"api_key":"api-key-abc"}}`,
+			requestBody: `{"integration":"clickhouse-manual","connection":"warehouse","credentials":{"api_key":"api-key-abc"}}`,
 			provider: func() core.Provider {
 				return &stubNonOAuthProvider{name: "clickhouse-manual"}
 			},
@@ -13848,6 +13848,9 @@ func TestConnectManual_MultiCredential(t *testing.T) {
 						Credentials: []config.CredentialFieldDef{
 							{Name: "api_key", Label: "API Key"},
 						},
+					},
+					Connections: map[string]*config.ConnectionDef{
+						"warehouse": {},
 					},
 				},
 			},
