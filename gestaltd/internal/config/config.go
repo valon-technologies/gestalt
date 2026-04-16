@@ -132,6 +132,7 @@ type ProviderEntry struct {
 	UI                string                        `yaml:"ui,omitempty"`
 	Connections       map[string]*ConnectionDef     `yaml:"connections,omitempty"`
 	AllowedOperations map[string]*OperationOverride `yaml:"allowedOperations,omitempty"`
+	Invokes           []PluginInvocationDependency  `yaml:"invokes,omitempty"`
 	IndexedDB         *PluginIndexedDBConfig        `yaml:"indexeddb,omitempty"`
 	Cache             []string                      `yaml:"cache,omitempty"`
 	S3                []string                      `yaml:"s3,omitempty"`
@@ -636,6 +637,11 @@ func EffectiveNamedConnectionDef(plugin *ProviderEntry, manifestPlugin *provider
 
 // OperationOverride holds optional alias and description for an allowed operation.
 type OperationOverride = providermanifestv1.ManifestOperationOverride
+
+type PluginInvocationDependency struct {
+	Plugin    string `yaml:"plugin,omitempty"`
+	Operation string `yaml:"operation,omitempty"`
+}
 
 func Load(path string) (*Config, error) {
 	return LoadPaths([]string{path})

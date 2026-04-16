@@ -11,6 +11,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
+	"github.com/valon-technologies/gestalt/server/internal/plugininvocation"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
 )
 
@@ -18,6 +19,10 @@ import (
 // starting the server or running migrations. Unlike Bootstrap, provider
 // validation is strict: any provider construction failure is returned.
 func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) ([]string, error) {
+	if err := plugininvocation.ValidateDependencies(ctx, cfg); err != nil {
+		return nil, err
+	}
+
 	prepared, err := prepareCore(ctx, cfg, factories, false)
 	if err != nil {
 		return nil, err
