@@ -1118,6 +1118,16 @@ func TestInitAtPath_RejectsUnknownOperationInvokesTargets(t *testing.T) {
 			wantError:   `unknown effective operation "private_status" on plugin "target"`,
 		},
 		{
+			name:        "declarative alias mismatch",
+			buildTarget: func(t *testing.T, dir string) string { return writeLocalDeclarativePlugin(t, dir, "target", "status") },
+			operation:   "status",
+			targetConfigYAML: `      allowedOperations:
+        status:
+          alias: renamed_status
+`,
+			wantError: `unknown effective operation "status" on plugin "target"`,
+		},
+		{
 			name: "executable declarative alias mismatch",
 			buildTarget: func(t *testing.T, dir string) string {
 				return writeLocalExecutableAndDeclarativePlugin(t, dir, "target", []string{"echo"}, []string{"status"})
@@ -1126,6 +1136,18 @@ func TestInitAtPath_RejectsUnknownOperationInvokesTargets(t *testing.T) {
 			targetConfigYAML: `      allowedOperations:
         echo:
           alias: renamed_echo
+        status:
+          alias: renamed_status
+`,
+			wantError: `unknown effective operation "status" on plugin "target"`,
+		},
+		{
+			name: "executable declarative alias without static catalog mismatch",
+			buildTarget: func(t *testing.T, dir string) string {
+				return writeLocalExecutableAndDeclarativePlugin(t, dir, "target", nil, []string{"status"})
+			},
+			operation: "status",
+			targetConfigYAML: `      allowedOperations:
         status:
           alias: renamed_status
 `,

@@ -470,11 +470,11 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 	ctx := invocation.WithAccessContext(r.Context(), s.providerAccessContext(p, name))
 	var cat *catalog.Catalog
 	var err, firstErr error
+	var sessionFailed bool
 	for _, connection := range connections {
-		var metadata invocation.CatalogResolutionMetadata
-		cat, metadata, err = invocation.ResolveCatalogWithMetadata(ctx, prov, name, resolver, p, connection, instance, strictCatalog)
+		cat, sessionFailed, err = invocation.ResolveCatalogWithMetadata(ctx, prov, name, resolver, p, connection, instance, strictCatalog)
 		if err == nil {
-			discoveryFailed = metadata.SessionFailed
+			discoveryFailed = sessionFailed
 			break
 		}
 		if firstErr == nil {

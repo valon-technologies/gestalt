@@ -2448,20 +2448,30 @@ func TestNewServer_SessionHydratedRESTToolUsesHydrationConnection(t *testing.T) 
 		t.Parallel()
 
 		seenToken = ""
+		var seenOperation catalog.CatalogOperation
+		var sawOperationContext bool
 		usedDirectTool := false
 		collisionProv := &directCallerProvider{
 			StubIntegration: coretesting.StubIntegration{
 				N:        "sampledb",
 				ConnMode: core.ConnectionModeUser,
-				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
+				ExecuteFn: func(ctx context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
 					seenToken = token
+					seenOperation, sawOperationContext = catalog.OperationFromContext(ctx, "sampledb", "run_query")
 					return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
 				},
 			},
 			cat: &catalog.Catalog{
 				Name: "sampledb",
 				Operations: []catalog.CatalogOperation{
-					{ID: "run_query", Description: "static query", Transport: catalog.TransportMCPPassthrough},
+					{
+						ID:          "run_query",
+						Description: "static query",
+						Transport:   catalog.TransportMCPPassthrough,
+						Parameters: []catalog.CatalogParameter{
+							{Name: "sql", Type: "string", Required: true},
+						},
+					},
 				},
 			},
 			sessionCatalogFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
@@ -2511,6 +2521,21 @@ func TestNewServer_SessionHydratedRESTToolUsesHydrationConnection(t *testing.T) 
 		}
 		if seenToken != "catalog-token" {
 			t.Fatalf("execute token = %q, want %q", seenToken, "catalog-token")
+		}
+		if !sawOperationContext {
+			t.Fatal("expected session catalog operation metadata in execution context")
+		}
+		if seenOperation.Description != "session query" {
+			t.Fatalf("operation description = %q, want %q", seenOperation.Description, "session query")
+		}
+		if seenOperation.Transport != catalog.TransportREST {
+			t.Fatalf("operation transport = %q, want %q", seenOperation.Transport, catalog.TransportREST)
+		}
+		if got := seenOperation.Parameters; len(got) != 1 || got[0].Name != "sql" || !got[0].Required {
+			t.Fatalf("operation parameters = %#v, want hydrated sql parameter", got)
+		}
+		if len(seenOperation.InputSchema) == 0 {
+			t.Fatal("expected hydrated operation input schema in execution context")
 		}
 	})
 }
@@ -2661,6 +2686,9 @@ func TestNewServer_DynamicCatalogProviderDoesNotRehydrateAfterExactCollisionOnly
 					ID:          "run_query",
 					Description: "static query",
 					Transport:   catalog.TransportMCPPassthrough,
+					Parameters: []catalog.CatalogParameter{
+						{Name: "sql", Type: "string", Required: true},
+					},
 				},
 			},
 		},

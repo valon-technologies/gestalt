@@ -663,14 +663,11 @@ func TestResolveCatalog_TokenResolutionFailure_NonFatal(t *testing.T) {
 	resolver := &stubTokenResolver{err: fmt.Errorf("token expired")}
 	p := &principal.Principal{UserID: "u1"}
 
-	cat, metadata, err := invocation.ResolveCatalogWithMetadata(context.Background(), prov, "auth-api", resolver, p, "default", "", false)
+	cat, sessionFailed, err := invocation.ResolveCatalogWithMetadata(context.Background(), prov, "auth-api", resolver, p, "default", "", false)
 	if err != nil {
 		t.Fatalf("expected no error on token failure, got: %v", err)
 	}
-	if !metadata.SessionAttempted {
-		t.Fatal("expected session resolution attempt to be reported")
-	}
-	if !metadata.SessionFailed {
+	if !sessionFailed {
 		t.Fatal("expected session resolution failure to be reported")
 	}
 	if len(cat.Operations) != 1 {
@@ -705,9 +702,12 @@ func TestResolveCatalog_NilResolver(t *testing.T) {
 		},
 	}
 
-	cat, err := resolveCatalogForTest(context.Background(), prov, "noauth-api", nil, &principal.Principal{UserID: "u1"}, "default", "")
+	cat, sessionFailed, err := invocation.ResolveCatalogWithMetadata(context.Background(), prov, "noauth-api", nil, &principal.Principal{UserID: "u1"}, "default", "", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if sessionFailed {
+		t.Fatal("expected skipped session lookup not to report failure")
 	}
 	if len(cat.Operations) != 1 {
 		t.Fatalf("expected 1 operation (static only), got %d", len(cat.Operations))

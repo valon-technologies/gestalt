@@ -80,16 +80,9 @@ func hydrateSessionToolsForInstance(ctx context.Context, cfg Config, providerNam
 		if cat == nil {
 			continue
 		}
-		effectiveCat := cat.Clone()
-		if staticCat := prov.Catalog(); staticCat != nil {
-			for i := range effectiveCat.Operations {
-				if staticOp, ok := invocation.CatalogOperation(staticCat, effectiveCat.Operations[i].ID); ok {
-					effectiveCat.Operations[i] = invocation.MergeCatalogOperation(staticOp, effectiveCat.Operations[i])
-				}
-			}
-		}
+		effectiveCat := invocation.HydrateSessionCatalog(prov.Catalog(), cat)
 		coreintegration.CompileSchemas(effectiveCat)
-		storeSessionCatalogOperationMetadata(tools, cfg, provName, effectiveCat, staticToolNames, instance, connection)
+		storeSessionCatalogOperationMetadata(tools, cfg, provName, effectiveCat, instance, connection)
 		m := buildToolMap(cfg, provName, effectiveCat)
 		for name := range m {
 			if _, exists := staticToolNames[name]; exists {
@@ -183,19 +176,11 @@ func sessionProviderHydrationAttemptedFromContext(ctx context.Context, provider,
 	}
 	return sessionProviderHydrationAttempted(sessionWithTools.GetSessionTools(), provider, instance)
 }
-func storeSessionCatalogOperationMetadata(tools map[string]mcpserver.ServerTool, cfg Config, provider string, cat *catalog.Catalog, staticToolNames map[string]struct{}, instance string, connection string) {
+func storeSessionCatalogOperationMetadata(tools map[string]mcpserver.ServerTool, cfg Config, provider string, cat *catalog.Catalog, instance string, connection string) {
 	for i := range cat.Operations {
 		op := &cat.Operations[i]
 		payload, err := json.Marshal(sessionCatalogOperationMeta{
-			Operation: catalog.CatalogOperation{
-				ID:           op.ID,
-				AllowedRoles: append([]string(nil), op.AllowedRoles...),
-				Transport:    op.Transport,
-				Method:       op.Method,
-				Path:         op.Path,
-				Query:        op.Query,
-				Parameters:   append([]catalog.CatalogParameter(nil), op.Parameters...),
-			},
+			Operation:  *op,
 			Connection: connection,
 			Projected:  catalogOperationProjectedToMCP(cfg, provider, *op),
 		})
