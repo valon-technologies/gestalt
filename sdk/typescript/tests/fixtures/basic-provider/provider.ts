@@ -2,7 +2,6 @@ import {
   connectionParam,
   definePlugin,
   ok,
-  operation,
   s,
 } from "../../../src/index.ts";
 
@@ -35,13 +34,13 @@ export const plugin = definePlugin({
     };
   },
   operations: [
-    operation({
-      id: "hello",
-      method: "POST",
-      title: "Hello",
-      description: "Return a greeting",
+    {
+      id: "  hello  ",
+      method: " post ",
+      title: "  Hello  ",
+      description: "  Return a greeting  ",
       tags: ["fixture"],
-      allowedRoles: ["viewer", "admin"],
+      allowedRoles: ["viewer", "admin", "viewer"],
       readOnly: true,
       input: s.object({
         name: s.string({
@@ -77,12 +76,12 @@ export const plugin = definePlugin({
           accessRole: request.access.role,
         });
       },
-    }),
-    operation({
-      id: "count",
-      method: "POST",
-      title: "Count",
-      description: "Echo an integer count",
+    },
+    {
+      id: " count ",
+      method: " post ",
+      title: " Count ",
+      description: " Echo an integer count ",
       input: s.object({
         count: s.integer(),
       }),
@@ -94,6 +93,6 @@ export const plugin = definePlugin({
           count: input.count,
         });
       },
-    }),
+    },
   ],
 });

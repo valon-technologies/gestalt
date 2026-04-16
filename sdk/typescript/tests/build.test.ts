@@ -198,6 +198,21 @@ test("buildProviderBinary compiles a runnable plugin provider executable", async
       expect(
         metadata.staticCatalog?.operations?.some((operation) => operation.id === "count"),
       ).toBe(true);
+      expect(
+        metadata.staticCatalog?.operations?.find((operation) => operation.id === "hello"),
+      ).toMatchObject({
+        method: "POST",
+        title: "Hello",
+        description: "Return a greeting",
+        allowedRoles: ["viewer", "admin"],
+      });
+      expect(
+        metadata.staticCatalog?.operations?.find((operation) => operation.id === "count"),
+      ).toMatchObject({
+        method: "POST",
+        title: "Count",
+        description: "Echo an integer count",
+      });
 
       await expectConnectCode(
         provider.startProvider(

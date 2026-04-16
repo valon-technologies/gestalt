@@ -1,5 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { create } from "@bufbuild/protobuf";
@@ -122,6 +122,59 @@ test("loadPluginFromTarget falls through null exports to the next plugin candida
   expect(plugin.kind).toBe("integration");
   expect(plugin.name).toBe("basic-provider-null-export");
   expect(plugin.displayName).toBe("Fixture Provider Null Export");
+});
+
+test("loadPluginFromTarget ignores whitespace-only explicit targets", async () => {
+  const plugin = await loadPluginFromTarget(
+    fixturePath("basic-provider"),
+    "   ",
+  );
+  expect(plugin.kind).toBe("integration");
+  expect(plugin.name).toBe("basic-provider");
+  expect(plugin.displayName).toBe("Fixture Provider");
+});
+
+test("loadProviderFromTarget formats package target in errors when explicit target is whitespace", async () => {
+  const root = makeTempDir("gestalt-typescript-runtime-target-");
+  try {
+    const indexPath = join(import.meta.dir, "..", "src", "index.ts");
+    writeFileSync(
+      join(root, "package.json"),
+      JSON.stringify({
+        name: "broken-provider",
+        gestalt: {
+          provider: {
+            kind: "auth",
+            target: "./provider.ts#missing",
+          },
+        },
+      }),
+      "utf8",
+    );
+    writeFileSync(
+      join(root, "provider.ts"),
+      `import { definePlugin } from ${JSON.stringify(indexPath)};
+
+export const plugin = definePlugin({
+  operations: [
+    {
+      id: "hello",
+      handler() {
+        return { ok: true };
+      },
+    },
+  ],
+});
+`,
+      "utf8",
+    );
+
+    await expect(loadProviderFromTarget(root, "   ")).rejects.toThrow(
+      "auth:./provider.ts#missing did not resolve to a Gestalt auth provider",
+    );
+  } finally {
+    removeTempDir(root);
+  }
 });
 
 test("runtime serves a secrets provider over unix gRPC", async () => {

@@ -121,33 +121,6 @@ test("plugin executes operations and exposes catalog metadata", async () => {
   });
 });
 
-test("plugin normalizes operation identifiers before storing and executing", async () => {
-  const plugin = definePlugin({
-    operations: [
-      {
-        id: "  ping  ",
-        handler() {
-          return {
-            pong: true,
-          };
-        },
-      },
-    ],
-  });
-
-  const result = await plugin.execute("ping", {}, request());
-  expect(result.status).toBe(200);
-  expect(JSON.parse(result.body)).toEqual({
-    pong: true,
-  });
-  expect(plugin.staticCatalog().operations).toEqual([
-    {
-      id: "ping",
-      method: "POST",
-    },
-  ]);
-});
-
 test("plugin rejects duplicate operation identifiers after trimming", () => {
   expect(() =>
     definePlugin({

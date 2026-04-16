@@ -137,10 +137,7 @@ export class PluginProvider extends RuntimeProvider {
   readonly connectionParams: Record<string, ConnectionParamDefinition>;
 
   private readonly sessionCatalogHandler: SessionCatalogHandler | undefined;
-  private readonly operations = new Map<
-    string,
-    OperationDefinition<any, any>
-  >();
+  private readonly operations = new Map<string, OperationDefinition<any, any>>();
 
   constructor(options: PluginDefinitionOptions) {
     super(options);
@@ -150,23 +147,15 @@ export class PluginProvider extends RuntimeProvider {
     this.connectionParams = normalizeConnectionParams(options.connectionParams);
     this.sessionCatalogHandler = options.sessionCatalog;
 
-    for (const entry of options.operations) {
-      const id = entry.id.trim();
-      if (!id) {
+    for (const rawEntry of options.operations) {
+      const entry = operation(rawEntry);
+      if (!entry.id) {
         throw new Error("operation id is required");
       }
-      if (this.operations.has(id)) {
-        throw new Error(`duplicate operation id ${JSON.stringify(id)}`);
+      if (this.operations.has(entry.id)) {
+        throw new Error(`duplicate operation id ${JSON.stringify(entry.id)}`);
       }
-      this.operations.set(id, {
-        ...entry,
-        id,
-        method: normalizeMethod(entry.method),
-        title: entry.title?.trim() ?? "",
-        description: entry.description?.trim() ?? "",
-        allowedRoles: normalizeAllowedRoles(entry.allowedRoles),
-        tags: [...(entry.tags ?? [])],
-      });
+      this.operations.set(entry.id, entry);
     }
   }
 
