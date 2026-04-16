@@ -338,6 +338,9 @@ func (r *configSecretManagers) Close() error {
 }
 
 func resolveConfigSecrets(ctx context.Context, cfg *config.Config, factories *FactoryRegistry) error {
+	if err := config.CanonicalizeStructure(cfg); err != nil {
+		return err
+	}
 	resolver, err := newConfigSecretManagers(ctx, cfg, factories)
 	if err != nil {
 		return err
@@ -356,9 +359,6 @@ func ResolveConfigSecrets(ctx context.Context, cfg *config.Config, factories *Fa
 }
 
 func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, requireEncryptionKey bool) (*preparedCore, error) {
-	if err := config.NormalizeCompatibility(cfg); err != nil {
-		return nil, err
-	}
 	if err := resolveConfigSecrets(ctx, cfg, factories); err != nil {
 		return nil, err
 	}

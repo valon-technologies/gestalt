@@ -45,7 +45,7 @@ func resolveSecretRefs(cfg *config.Config, resolve func(config.SecretRef) (strin
 	if err := config.TransformConfigStringFields(cfg, resolveValue); err != nil {
 		return err
 	}
-	if err := config.NormalizeCompatibility(cfg); err != nil {
+	if err := config.CanonicalizeStructure(cfg); err != nil {
 		return err
 	}
 

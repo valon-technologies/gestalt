@@ -82,6 +82,8 @@ func NewLifecycle(sourceResolver pluginsource.Resolver) *Lifecycle {
 	return &Lifecycle{sourceResolver: sourceResolver}
 }
 
+// WithConfigSecretResolver installs a resolver that may mutate cfg in place and
+// must leave it in canonicalized form for subsequent structural validation.
 func (l *Lifecycle) WithConfigSecretResolver(resolve func(context.Context, *config.Config) error) *Lifecycle {
 	l.configSecretResolver = resolve
 	return l
@@ -338,7 +340,7 @@ func (l *Lifecycle) resolveConfigSecrets(ctx context.Context, cfg *config.Config
 	if err := l.configSecretResolver(ctx, cfg); err != nil {
 		return fmt.Errorf("resolving config secrets: %w", err)
 	}
-	return config.ValidateStructure(cfg)
+	return config.ValidateCanonicalStructure(cfg)
 }
 
 func referencedConfigSecretsProviders(cfg *config.Config) (map[string]*config.ProviderEntry, error) {
