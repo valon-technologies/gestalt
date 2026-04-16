@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{Args, Parser, Subcommand};
 
 use crate::output::Format;
 use crate::params;
@@ -38,55 +38,19 @@ pub enum Commands {
     },
 
     /// Manage plugins
+    #[command(alias = "integrations")]
     Plugins {
         #[command(subcommand)]
         command: PluginCommands,
     },
 
     #[command(hide = true)]
-    Integrations {
-        #[command(subcommand)]
-        command: PluginCommands,
-    },
-
-    #[command(hide = true)]
     /// Execute a plugin operation
-    Invoke {
-        /// Plugin name (e.g., github, slack)
-        plugin: String,
-
-        /// Operation name segments joined by "." (e.g., "chat postMessage" or "chat.postMessage"). Omit to list available operations.
-        operation: Vec<String>,
-
-        /// Parameters as key=value or key:=json pairs
-        #[arg(short = 'p', long = "param", value_parser = params::parse_param_entry)]
-        params: Vec<params::ParamEntry>,
-
-        /// Select a named connection for this invocation
-        #[arg(long)]
-        connection: Option<String>,
-
-        /// Select a stored connection instance
-        #[arg(long)]
-        instance: Option<String>,
-
-        /// Select a sub-path from the response (e.g., "data.items")
-        #[arg(long = "select")]
-        select: Option<String>,
-
-        /// Load parameters from a JSON file (use "-" for stdin)
-        #[arg(long = "input-file")]
-        input_file: Option<String>,
-    },
+    Invoke(InvokeArgs),
 
     #[command(hide = true)]
     /// Describe a plugin operation
-    Describe {
-        /// Plugin name
-        plugin: String,
-        /// Operation name
-        operation: String,
-    },
+    Describe(DescribeArgs),
 
     /// Manage API tokens
     Tokens {
@@ -159,40 +123,46 @@ pub enum PluginCommands {
         instance: Option<String>,
     },
     /// Execute a plugin operation
-    Invoke {
-        /// Plugin name (e.g., github, slack)
-        plugin: String,
-
-        /// Operation name segments joined by "." (e.g., "chat postMessage" or "chat.postMessage"). Omit to list available operations.
-        operation: Vec<String>,
-
-        /// Parameters as key=value or key:=json pairs
-        #[arg(short = 'p', long = "param", value_parser = params::parse_param_entry)]
-        params: Vec<params::ParamEntry>,
-
-        /// Select a named connection for this invocation
-        #[arg(long)]
-        connection: Option<String>,
-
-        /// Select a stored connection instance
-        #[arg(long)]
-        instance: Option<String>,
-
-        /// Select a sub-path from the response (e.g., "data.items")
-        #[arg(long = "select")]
-        select: Option<String>,
-
-        /// Load parameters from a JSON file (use "-" for stdin)
-        #[arg(long = "input-file")]
-        input_file: Option<String>,
-    },
+    Invoke(InvokeArgs),
     /// Describe a plugin operation
-    Describe {
-        /// Plugin name
-        plugin: String,
-        /// Operation name
-        operation: String,
-    },
+    Describe(DescribeArgs),
+}
+
+#[derive(Args)]
+pub struct InvokeArgs {
+    /// Plugin name (e.g., github, slack)
+    pub plugin: String,
+
+    /// Operation name segments joined by "." (e.g., "chat postMessage" or "chat.postMessage"). Omit to list available operations.
+    pub operation: Vec<String>,
+
+    /// Parameters as key=value or key:=json pairs
+    #[arg(short = 'p', long = "param", value_parser = params::parse_param_entry)]
+    pub params: Vec<params::ParamEntry>,
+
+    /// Select a named connection for this invocation
+    #[arg(long)]
+    pub connection: Option<String>,
+
+    /// Select a stored connection instance
+    #[arg(long)]
+    pub instance: Option<String>,
+
+    /// Select a sub-path from the response (e.g., "data.items")
+    #[arg(long = "select")]
+    pub select: Option<String>,
+
+    /// Load parameters from a JSON file (use "-" for stdin)
+    #[arg(long = "input-file")]
+    pub input_file: Option<String>,
+}
+
+#[derive(Args)]
+pub struct DescribeArgs {
+    /// Plugin name
+    pub plugin: String,
+    /// Operation name
+    pub operation: String,
 }
 
 #[derive(Subcommand)]
