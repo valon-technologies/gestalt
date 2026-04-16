@@ -453,23 +453,16 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, errOperationAccess.Error())
 		return
 	}
-	requestedConnection := r.URL.Query().Get(httpConnectionParam)
-	if requestedConnection != "" {
-		var ok bool
-		requestedConnection, ok = s.resolveRequestedConnection(w, name, requestedConnection)
-		if !ok {
-			return
-		}
+	selectors, ok := s.resolveRequestedSelectors(
+		w,
+		name,
+		r.URL.Query().Get(httpConnectionParam),
+		r.URL.Query().Get(httpInstanceParam),
+	)
+	if !ok {
+		return
 	}
-	requestedInstance := r.URL.Query().Get(httpInstanceParam)
-	if requestedInstance != "" {
-		var ok bool
-		requestedInstance, ok = resolveRequestedInstance(w, requestedInstance)
-		if !ok {
-			return
-		}
-	}
-	if err := rejectWorkloadSelectors(w, p, requestedConnection, requestedInstance); err != nil {
+	if err := rejectWorkloadSelectors(w, p, selectors.Connection, selectors.Instance); err != nil {
 		s.auditHTTPEvent(r.Context(), p, name, operation, false, err)
 		return
 	}
@@ -487,27 +480,21 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 		discoveryConnectionMode = metricutil.NormalizeConnectionMode(prov.ConnectionMode())
 	}
 	resolveCatalog := invocation.ResolveCatalogWithMetadata
-	strictCatalog := false
-	if requestedConnection != "" || requestedInstance != "" {
+	plan := s.planSessionCatalogResolution(p, name, selectors)
+	strictCatalog := plan.requiresStrictCatalog(prov)
+	if strictCatalog {
 		resolveCatalog = invocation.ResolveCatalogStrictWithMetadata
-		strictCatalog = true
-	} else if core.SupportsSessionCatalog(prov) {
-		resolveCatalog = invocation.ResolveCatalogStrictWithMetadata
-		strictCatalog = true
 	}
 	ctx := invocation.WithAccessContext(r.Context(), s.providerAccessContext(p, name))
 	var cat *catalog.Catalog
-	if strictCatalog && requestedConnection == "" && requestedInstance == "" &&
-		(s.authorizer == nil || !s.authorizer.IsWorkload(p)) {
-		catalogConnections := s.sessionCatalogConnections(name, p, requestedConnection)
+	if strictCatalog && plan.shouldTryAllTargets(p) {
 		var firstErr error
-		for _, catalogConnection := range catalogConnections {
-			resolvedConnection, catalogInstance := s.workloadBindingSelectors(p, name, catalogConnection, requestedInstance)
+		for _, target := range plan.Targets {
 			var (
 				err      error
 				metadata invocation.CatalogResolutionMetadata
 			)
-			cat, metadata, err = resolveCatalog(ctx, prov, name, resolver, p, resolvedConnection, catalogInstance)
+			cat, metadata, err = resolveCatalog(ctx, prov, name, resolver, p, target.Connection, target.Instance)
 			if err == nil {
 				discoveryFailed = metadata.SessionFailed
 				break
@@ -526,13 +513,12 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		catalogConnection := s.sessionCatalogConnections(name, p, requestedConnection)[0]
-		catalogConnection, catalogInstance := s.workloadBindingSelectors(p, name, catalogConnection, requestedInstance)
+		target := plan.Targets[0]
 		var (
 			err      error
 			metadata invocation.CatalogResolutionMetadata
 		)
-		cat, metadata, err = resolveCatalog(ctx, prov, name, resolver, p, catalogConnection, catalogInstance)
+		cat, metadata, err = resolveCatalog(ctx, prov, name, resolver, p, target.Connection, target.Instance)
 		discoveryFailed = metadata.SessionFailed || err != nil
 		if err != nil {
 			if recordDiscoveryMetrics {
@@ -580,23 +566,16 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	requestedConnection := r.URL.Query().Get(httpConnectionParam)
-	if requestedConnection != "" {
-		var ok bool
-		requestedConnection, ok = s.resolveRequestedConnection(w, providerName, requestedConnection)
-		if !ok {
-			return
-		}
+	querySelectors, ok := s.resolveRequestedSelectors(
+		w,
+		providerName,
+		r.URL.Query().Get(httpConnectionParam),
+		r.URL.Query().Get(httpInstanceParam),
+	)
+	if !ok {
+		return
 	}
-	requestedInstance := r.URL.Query().Get(httpInstanceParam)
-	if requestedInstance != "" {
-		var ok bool
-		requestedInstance, ok = resolveRequestedInstance(w, requestedInstance)
-		if !ok {
-			return
-		}
-	}
-	if err := rejectWorkloadSelectors(w, p, requestedConnection, requestedInstance); err != nil {
+	if err := rejectWorkloadSelectors(w, p, querySelectors.Connection, querySelectors.Instance); err != nil {
 		s.auditHTTPEvent(r.Context(), p, providerName, operationName, false, err)
 		return
 	}
@@ -623,40 +602,17 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	bodyConnection, _ := params[httpConnectionParam].(string)
 	delete(params, httpConnectionParam)
 
-	if bodyInstance != "" {
-		var ok bool
-		bodyInstance, ok = resolveRequestedInstance(w, bodyInstance)
-		if !ok {
-			return
-		}
-	}
-	if requestedInstance != "" && bodyInstance != "" && requestedInstance != bodyInstance {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("conflicting instance parameter %q in query string and JSON body", httpInstanceParam))
+	bodySelectors, ok := s.resolveRequestedSelectors(w, providerName, bodyConnection, bodyInstance)
+	if !ok {
 		return
 	}
-	instance := bodyInstance
-	if instance == "" {
-		instance = requestedInstance
-	}
-
-	if bodyConnection != "" {
-		var ok bool
-		bodyConnection, ok = s.resolveRequestedConnection(w, providerName, bodyConnection)
-		if !ok {
-			return
-		}
-	}
-	if requestedConnection != "" && bodyConnection != "" && requestedConnection != bodyConnection {
-		writeError(w, http.StatusBadRequest, fmt.Sprintf("conflicting connection parameter %q in query string and JSON body", httpConnectionParam))
-		return
-	}
-	if err := rejectWorkloadSelectors(w, p, bodyConnection, bodyInstance); err != nil {
+	if err := rejectWorkloadSelectors(w, p, bodySelectors.Connection, bodySelectors.Instance); err != nil {
 		s.auditHTTPEvent(r.Context(), p, providerName, operationName, false, err)
 		return
 	}
-	connection := bodyConnection
-	if connection == "" {
-		connection = requestedConnection
+	selectors, ok := mergeResolvedSelectors(w, querySelectors, bodySelectors)
+	if !ok {
+		return
 	}
 	ctx := r.Context()
 	ctx = invocation.WithAccessContext(ctx, access)
@@ -667,18 +623,17 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	}
 	opMeta, ok := invocation.CatalogOperation(prov.Catalog(), operationName)
 	sessionOpFound := false
+	plan := s.planSessionCatalogResolution(p, providerName, selectors)
 	if core.SupportsSessionCatalog(prov) {
 		var firstSessionErr error
 		sessionCatalogResolved := false
-		sessionConnections := s.sessionCatalogConnections(providerName, p, connection)
-		for _, sessionConnection := range sessionConnections {
-			sessionConnection, sessionInstance := s.workloadBindingSelectors(p, providerName, sessionConnection, instance)
-			sessionCat, err := invocation.ResolveSessionCatalog(ctx, prov, providerName, resolver, p, sessionConnection, sessionInstance)
+		for _, target := range plan.Targets {
+			sessionCat, err := invocation.ResolveSessionCatalog(ctx, prov, providerName, resolver, p, target.Connection, target.Instance)
 			if err != nil {
 				if firstSessionErr == nil {
 					firstSessionErr = err
 				}
-				if connection != "" {
+				if plan.ExplicitConnection {
 					s.writeInvocationError(w, r, providerName, operationName, err)
 					return
 				}
@@ -688,8 +643,8 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 			if sessionOp, sessionOK := invocation.CatalogOperation(sessionCat, operationName); sessionOK {
 				opMeta, ok = sessionOp, true
 				sessionOpFound = true
-				if connection == "" {
-					connection = sessionConnection
+				if !plan.ExplicitConnection {
+					selectors.Connection = target.Connection
 				}
 				break
 			}
@@ -698,7 +653,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 			s.writeInvocationError(w, r, providerName, operationName, firstSessionErr)
 			return
 		}
-		if instance != "" && !sessionOpFound {
+		if plan.ExplicitInstance && !sessionOpFound {
 			s.writeInvocationError(w, r, providerName, operationName, fmt.Errorf("%w: %q on provider %q", invocation.ErrOperationNotFound, operationName, providerName))
 			return
 		}
@@ -717,17 +672,17 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx = invocation.WithCatalogOperation(ctx, providerName, opMeta)
-	if connection != "" {
-		if !safeParamValue.MatchString(connection) {
+	if selectors.Connection != "" {
+		if !safeParamValue.MatchString(selectors.Connection) {
 			writeError(w, http.StatusBadRequest, "connection name contains invalid characters")
 			return
 		}
-		connection = config.ResolveConnectionAlias(connection)
-		ctx = invocation.WithConnection(ctx, connection)
+		selectors.Connection = config.ResolveConnectionAlias(selectors.Connection)
+		ctx = invocation.WithConnection(ctx, selectors.Connection)
 	}
 	ctx = invocation.WithInvocationSurface(ctx, invocation.InvocationSurfaceHTTP)
 
-	result, err := s.invoker.Invoke(ctx, p, providerName, instance, operationName, params)
+	result, err := s.invoker.Invoke(ctx, p, providerName, selectors.Instance, operationName, params)
 	if err != nil {
 		s.writeInvocationError(w, r, providerName, operationName, err)
 		return
