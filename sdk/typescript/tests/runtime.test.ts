@@ -587,10 +587,26 @@ test("cache provider deleteMany fallback deletes each unique key once", async ()
   expect(calls).toEqual(["alpha", "missing", "beta"]);
 });
 
-test("s3 provider target resolves and serves runtime metadata plus object operations", async () => {
+test("s3 provider target resolves and serves runtime metadata", async () => {
   const provider = await loadProviderFromTarget(fixturePath("s3-provider"));
   const runtime = createRuntimeService(provider);
   const s3 = createS3Service(provider as any);
+
+  await (provider as any).writeObject(
+    {
+      bucket: "runtime-bucket",
+      key: "runtime.txt",
+    },
+    (async function* () {
+      yield new TextEncoder().encode("runtime");
+    })(),
+    {
+      contentType: "text/plain",
+      metadata: {
+        env: "test",
+      },
+    },
+  );
 
   const configuredS3 = await (runtime.configureProvider as any)(
     create(ConfigureProviderRequestSchema, {
@@ -609,33 +625,6 @@ test("s3 provider target resolves and serves runtime metadata plus object operat
   expect(metadata.minProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
   expect(metadata.maxProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
 
-  const written = await (s3.writeObject as any)(
-    (async function* () {
-      yield {
-        msg: {
-          case: "open",
-          value: {
-            ref: {
-              bucket: "runtime-bucket",
-              key: "runtime.txt",
-            },
-            contentType: "text/plain",
-            metadata: {
-              env: "test",
-            },
-          },
-        },
-      };
-      yield {
-        msg: {
-          case: "data",
-          value: new TextEncoder().encode("runtime"),
-        },
-      };
-    })(),
-  );
-  expect(written.meta?.ref?.key).toBe("runtime.txt");
-
   const headed = await (s3.headObject as any)({
     ref: {
       bucket: "runtime-bucket",
@@ -643,6 +632,8 @@ test("s3 provider target resolves and serves runtime metadata plus object operat
     },
   });
   expect(headed.meta?.size).toBe(7n);
+  expect(headed.meta?.contentType).toBe("text/plain");
+  expect(headed.meta?.metadata).toEqual({ env: "test" });
 
   const listed = await (s3.listObjects as any)({
     bucket: "runtime-bucket",

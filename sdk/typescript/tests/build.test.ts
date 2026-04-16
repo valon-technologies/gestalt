@@ -746,6 +746,7 @@ test("buildProviderBinary compiles a runnable s3 provider executable", async () 
       },
     });
     expect(headed.meta?.size).toBe(5n);
+
   } finally {
     if (child) {
       await stopProcess(child);
