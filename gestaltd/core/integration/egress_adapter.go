@@ -3,6 +3,7 @@ package integration
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 
@@ -23,7 +24,7 @@ func (b *Base) executeREST(ctx context.Context, operation string, catOp *catalog
 	if strings.TrimSpace(catOp.Path) == "" {
 		return nil, fmt.Errorf("operation %q is missing path", operation)
 	}
-	bodyParams, queryParams, headerParams := partitionParams(catOp, params)
+	bodyParams, queryParams, headerParams := partitionParams(catOp, params, b.MethodDefaultParamLocations)
 
 	baseURL, headers := b.resolvedURLAndHeaders(ctx)
 	for k, v := range headerParams {
@@ -52,6 +53,7 @@ func (b *Base) executeREST(ctx context.Context, operation string, catOp *catalog
 		AuthHeader:    credential.Authorization,
 		CustomHeaders: headers,
 		CheckResponse: b.CheckResponse,
+		NoRetry:       b.NoRetry,
 	}
 
 	if pgn, ok := b.Pagination[operation]; ok {
@@ -117,14 +119,23 @@ func findCatalogOp(cat *catalog.Catalog, id string) *catalog.CatalogOperation {
 	return nil
 }
 
-func partitionParams(catOp *catalog.CatalogOperation, params map[string]any) (body map[string]any, query map[string]any, headers map[string]string) {
+func partitionParams(catOp *catalog.CatalogOperation, params map[string]any, useMethodDefault bool) (body map[string]any, query map[string]any, headers map[string]string) {
+	defaultLocation := "body"
+	if useMethodDefault {
+		defaultLocation = defaultParamLocation(catOp)
+	}
 	if catOp == nil || len(catOp.Parameters) == 0 {
+		if defaultLocation == "query" {
+			return nil, params, nil
+		}
 		return params, nil, nil
 	}
 
+	declared := make(map[string]struct{}, len(catOp.Parameters))
 	locations := make(map[string]string, len(catOp.Parameters))
 	var wireNames map[string]string
 	for _, p := range catOp.Parameters {
+		declared[p.Name] = struct{}{}
 		if p.Location != "" {
 			locations[p.Name] = p.Location
 		}
@@ -135,10 +146,6 @@ func partitionParams(catOp *catalog.CatalogOperation, params map[string]any) (bo
 			wireNames[p.Name] = p.WireName
 		}
 	}
-	if len(locations) == 0 {
-		return params, nil, nil
-	}
-
 	body = make(map[string]any)
 	query = make(map[string]any)
 	headers = make(map[string]string)
@@ -155,8 +162,31 @@ func partitionParams(catOp *catalog.CatalogOperation, params map[string]any) (bo
 		case "path":
 			body[httpKey] = v
 		default:
+			if _, ok := declared[k]; ok {
+				if useMethodDefault {
+					continue
+				}
+				body[k] = v
+				continue
+			}
+			if defaultLocation == "query" {
+				query[httpKey] = v
+				continue
+			}
 			body[k] = v
 		}
 	}
 	return body, query, headers
+}
+
+func defaultParamLocation(catOp *catalog.CatalogOperation) string {
+	if catOp == nil {
+		return "body"
+	}
+	switch strings.ToUpper(strings.TrimSpace(catOp.Method)) {
+	case http.MethodGet, http.MethodDelete:
+		return "query"
+	default:
+		return "body"
+	}
 }

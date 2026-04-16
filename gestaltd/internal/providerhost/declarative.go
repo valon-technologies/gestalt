@@ -10,45 +10,43 @@ import (
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/integration"
-	"github.com/valon-technologies/gestalt/server/internal/apiexec"
-	"github.com/valon-technologies/gestalt/server/internal/paraminterp"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
 const declarativeHTTPTimeout = 30 * time.Second
 
-type DeclarativeProviderOption func(*DeclarativeProvider)
+type declarativeOptions struct {
+	displayName    string
+	description    string
+	iconSVG        string
+	connectionMode core.ConnectionMode
+}
+
+type DeclarativeProviderOption func(*declarativeOptions)
 
 func WithDeclarativeMetadataOverrides(displayName, description, iconSVG string) DeclarativeProviderOption {
-	return func(p *DeclarativeProvider) {
+	return func(opts *declarativeOptions) {
 		if displayName != "" {
-			p.catalog.DisplayName = displayName
+			opts.displayName = displayName
 		}
 		if description != "" {
-			p.catalog.Description = description
+			opts.description = description
 		}
 		if iconSVG != "" {
-			p.catalog.IconSVG = iconSVG
+			opts.iconSVG = iconSVG
 		}
 	}
 }
 
 func WithDeclarativeConnectionMode(mode core.ConnectionMode) DeclarativeProviderOption {
-	return func(p *DeclarativeProvider) {
-		p.connectionMode = mode
-	}
+	return func(opts *declarativeOptions) { opts.connectionMode = mode }
 }
 
 type DeclarativeProvider struct {
-	catalog        *catalog.Catalog
-	opsByName      map[string]*catalog.CatalogOperation
-	baseURL        string
-	auth           *providermanifestv1.ProviderAuth
-	httpClient     *http.Client
-	discovery      *providermanifestv1.ProviderDiscovery
-	connectionDefs map[string]providermanifestv1.ProviderConnectionParam
-	connectionMode core.ConnectionMode
+	*integration.Base
+	authType         providermanifestv1.AuthType
+	authorizationURL string
 }
 
 func NewDeclarativeProvider(manifest *providermanifestv1.Manifest, httpClient *http.Client, opts ...DeclarativeProviderOption) (*DeclarativeProvider, error) {
@@ -63,23 +61,107 @@ func NewDeclarativeProvider(manifest *providermanifestv1.Manifest, httpClient *h
 		httpClient = &http.Client{Timeout: declarativeHTTPTimeout}
 	}
 
-	ops := manifest.Spec.RESTOperations()
-	p := &DeclarativeProvider{
-		catalog: &catalog.Catalog{
-			Name:        manifest.Source,
-			DisplayName: manifest.DisplayName,
-			Description: manifest.Description,
-			Headers:     maps.Clone(manifest.Spec.Headers),
-			Operations:  make([]catalog.CatalogOperation, 0, len(ops)),
-		},
-		opsByName:      make(map[string]*catalog.CatalogOperation, len(ops)),
-		baseURL:        manifest.Spec.RESTBaseURL(),
-		auth:           manifest.Spec.Auth,
-		httpClient:     httpClient,
-		discovery:      manifest.Spec.Discovery,
-		connectionDefs: manifest.Spec.ConnectionParams,
+	options := declarativeOptions{}
+	for _, opt := range opts {
+		opt(&options)
 	}
+	auth := manifest.Spec.Auth
+	cat := declarativeCatalog(manifest, options)
+	authType := providermanifestv1.AuthType("")
+	authorizationURL := ""
+	base := &integration.Base{
+		IntegrationName:             cat.Name,
+		IntegrationDisplay:          cat.DisplayName,
+		IntegrationDesc:             cat.Description,
+		ConnMode:                    declarativeConnectionMode(options.connectionMode, auth),
+		BaseURL:                     manifest.Spec.RESTBaseURL(),
+		Headers:                     maps.Clone(manifest.Spec.Headers),
+		HTTPClient:                  httpClient,
+		MethodDefaultParamLocations: true,
+		ConnectionDefs:              ConnectionParamDefsFromManifest(manifest.Spec.ConnectionParams),
+		DiscoveryDef:                DiscoveryConfigFromManifest(manifest.Spec.Discovery),
+		CredentialFieldDefs:         declarativeCredentialFields(auth),
+		NoRetry:                     true,
+	}
+	if auth != nil {
+		authType = auth.Type
+		authorizationURL = auth.AuthorizationURL
+		if auth.AuthMapping != nil && (len(auth.AuthMapping.Headers) > 0 || auth.AuthMapping.Basic != nil) {
+			base.TokenParser = provider.MappedCredentialParser(auth.AuthMapping)
+		}
+	}
+	base.SetCatalog(cat)
 
+	return &DeclarativeProvider{
+		Base:             base,
+		authType:         authType,
+		authorizationURL: authorizationURL,
+	}, nil
+}
+
+func (p *DeclarativeProvider) Catalog() *catalog.Catalog {
+	return p.Base.Catalog().Clone()
+}
+
+func (p *DeclarativeProvider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
+	if !declarativeHasOperation(p.Base.Catalog(), operation) {
+		return &core.OperationResult{Status: http.StatusNotFound, Body: `{"error":"unknown operation"}`}, nil
+	}
+	return p.Base.Execute(ctx, operation, params, token)
+}
+
+func (p *DeclarativeProvider) AuthTypes() []string {
+	switch p.authType {
+	case providermanifestv1.AuthTypeOAuth2:
+		return []string{"oauth"}
+	case providermanifestv1.AuthTypeBearer, providermanifestv1.AuthTypeManual:
+		return []string{"manual"}
+	case providermanifestv1.AuthTypeNone:
+		return nil
+	default:
+		return nil
+	}
+}
+
+func (p *DeclarativeProvider) AuthorizationURL(state string, scopes []string) string {
+	if p.authType != providermanifestv1.AuthTypeOAuth2 {
+		return ""
+	}
+	return p.authorizationURL
+}
+
+func (p *DeclarativeProvider) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
+	if p.authType != providermanifestv1.AuthTypeOAuth2 {
+		return nil, fmt.Errorf("provider does not support OAuth")
+	}
+	return nil, fmt.Errorf("declarative provider OAuth exchange not implemented")
+}
+
+func (p *DeclarativeProvider) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+	if p.authType != providermanifestv1.AuthTypeOAuth2 {
+		return nil, fmt.Errorf("provider does not support OAuth")
+	}
+	return nil, fmt.Errorf("declarative provider OAuth refresh not implemented")
+}
+
+func declarativeCatalog(manifest *providermanifestv1.Manifest, opts declarativeOptions) *catalog.Catalog {
+	ops := manifest.Spec.RESTOperations()
+	cat := &catalog.Catalog{
+		Name:        manifest.Source,
+		DisplayName: manifest.DisplayName,
+		Description: manifest.Description,
+		Headers:     maps.Clone(manifest.Spec.Headers),
+		Operations:  make([]catalog.CatalogOperation, 0, len(ops)),
+	}
+	if opts.displayName != "" {
+		cat.DisplayName = opts.displayName
+	}
+	if opts.description != "" {
+		cat.Description = opts.description
+	}
+	if opts.iconSVG != "" {
+		cat.IconSVG = opts.iconSVG
+	}
 	for i := range ops {
 		mop := &ops[i]
 		catOp := catalog.CatalogOperation{
@@ -100,161 +182,37 @@ func NewDeclarativeProvider(manifest *providermanifestv1.Manifest, httpClient *h
 				Required:    mp.Required,
 			})
 		}
-		p.catalog.Operations = append(p.catalog.Operations, catOp)
+		cat.Operations = append(cat.Operations, catOp)
 	}
-
-	integration.CompileSchemas(p.catalog)
-	for i := range p.catalog.Operations {
-		op := &p.catalog.Operations[i]
-		p.opsByName[op.ID] = op
-	}
-	for _, opt := range opts {
-		opt(p)
-	}
-	if p.connectionMode == "" {
-		if p.auth == nil || p.auth.Type == "" || p.auth.Type == providermanifestv1.AuthTypeNone {
-			p.connectionMode = core.ConnectionModeNone
-		} else {
-			p.connectionMode = core.ConnectionModeUser
-		}
-	}
-
-	return p, nil
+	integration.CompileSchemas(cat)
+	return cat
 }
 
-func (p *DeclarativeProvider) Name() string        { return p.catalog.Name }
-func (p *DeclarativeProvider) DisplayName() string { return p.catalog.DisplayName }
-func (p *DeclarativeProvider) Description() string { return p.catalog.Description }
-func (p *DeclarativeProvider) Catalog() *catalog.Catalog {
-	return p.catalog.Clone()
-}
-func (p *DeclarativeProvider) ConnectionMode() core.ConnectionMode { return p.connectionMode }
-
-func (p *DeclarativeProvider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
-	op, ok := p.opsByName[operation]
-	if !ok {
-		return &core.OperationResult{Status: http.StatusNotFound, Body: `{"error":"unknown operation"}`}, nil
+func declarativeConnectionMode(override core.ConnectionMode, auth *providermanifestv1.ProviderAuth) core.ConnectionMode {
+	if override != "" {
+		return override
 	}
-
-	queryParams := make(map[string]any)
-	bodyParams := make(map[string]any)
-	isBodyMethod := op.Method == http.MethodPost || op.Method == http.MethodPut || op.Method == http.MethodPatch
-
-	for k, v := range params {
-		loc, declared := declarativeParamLocation(op, k)
-		if !declared {
-			if isBodyMethod {
-				loc = "body"
-			} else {
-				loc = "query"
-			}
-		}
-		switch loc {
-		case "query":
-			queryParams[k] = v
-		case "body", "path":
-			bodyParams[k] = v
-		}
+	if auth == nil || auth.Type == "" || auth.Type == providermanifestv1.AuthTypeNone {
+		return core.ConnectionModeNone
 	}
-
-	baseURL := p.baseURL
-	headers := maps.Clone(p.catalog.Headers)
-	if cp := core.ConnectionParams(ctx); cp != nil {
-		baseURL = paraminterp.Interpolate(baseURL, cp)
-		for k, v := range headers {
-			headers[k] = paraminterp.Interpolate(v, cp)
-		}
-	}
-
-	authHeader := ""
-	if p.auth != nil && p.auth.AuthMapping != nil && (len(p.auth.AuthMapping.Headers) > 0 || p.auth.AuthMapping.Basic != nil) {
-		resolvedAuth, extraHeaders, err := provider.MappedCredentialParser(p.auth.AuthMapping)(token)
-		if err != nil {
-			return nil, err
-		}
-		authHeader = resolvedAuth
-		token = ""
-		if headers == nil && len(extraHeaders) > 0 {
-			headers = make(map[string]string, len(extraHeaders))
-		}
-		for k, v := range extraHeaders {
-			headers[k] = v
-		}
-	}
-
-	req := apiexec.Request{
-		Method:        op.Method,
-		BaseURL:       baseURL,
-		Path:          op.Path,
-		Params:        bodyParams,
-		QueryParams:   queryParams,
-		CustomHeaders: headers,
-		AuthHeader:    authHeader,
-		Token:         token,
-		NoRetry:       true,
-	}
-	return apiexec.Do(ctx, p.httpClient, req)
+	return core.ConnectionModeUser
 }
 
-func declarativeParamLocation(op *catalog.CatalogOperation, name string) (string, bool) {
-	for _, param := range op.Parameters {
-		if param.Name == name {
-			return param.Location, true
-		}
-	}
-	return "", false
-}
-
-func (p *DeclarativeProvider) CredentialFields() []core.CredentialFieldDef {
-	if p.auth == nil {
+func declarativeCredentialFields(auth *providermanifestv1.ProviderAuth) []core.CredentialFieldDef {
+	if auth == nil {
 		return nil
 	}
-	return CredentialFieldsFromManifest(p.auth.Credentials)
+	return CredentialFieldsFromManifest(auth.Credentials)
 }
 
-func (p *DeclarativeProvider) AuthTypes() []string {
-	if p.auth == nil {
-		return nil
+func declarativeHasOperation(cat *catalog.Catalog, operation string) bool {
+	if cat == nil {
+		return false
 	}
-	switch p.auth.Type {
-	case providermanifestv1.AuthTypeOAuth2:
-		return []string{"oauth"}
-	case providermanifestv1.AuthTypeBearer, providermanifestv1.AuthTypeManual:
-		return []string{"manual"}
-	case providermanifestv1.AuthTypeNone:
-		return nil
-	default:
-		return nil
+	for i := range cat.Operations {
+		if cat.Operations[i].ID == operation {
+			return true
+		}
 	}
-}
-
-func (p *DeclarativeProvider) ConnectionForOperation(string) string { return "" }
-
-func (p *DeclarativeProvider) AuthorizationURL(state string, scopes []string) string {
-	if p.auth == nil || p.auth.Type != providermanifestv1.AuthTypeOAuth2 {
-		return ""
-	}
-	return p.auth.AuthorizationURL
-}
-
-func (p *DeclarativeProvider) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
-	if p.auth == nil || p.auth.Type != providermanifestv1.AuthTypeOAuth2 {
-		return nil, fmt.Errorf("provider does not support OAuth")
-	}
-	return nil, fmt.Errorf("declarative provider OAuth exchange not implemented")
-}
-
-func (p *DeclarativeProvider) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
-	if p.auth == nil || p.auth.Type != providermanifestv1.AuthTypeOAuth2 {
-		return nil, fmt.Errorf("provider does not support OAuth")
-	}
-	return nil, fmt.Errorf("declarative provider OAuth refresh not implemented")
-}
-
-func (p *DeclarativeProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
-	return ConnectionParamDefsFromManifest(p.connectionDefs)
-}
-
-func (p *DeclarativeProvider) DiscoveryConfig() *core.DiscoveryConfig {
-	return DiscoveryConfigFromManifest(p.discovery)
+	return false
 }

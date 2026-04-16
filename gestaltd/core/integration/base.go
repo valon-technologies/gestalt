@@ -46,16 +46,18 @@ const (
 )
 
 type Base struct {
-	IntegrationName    string
-	IntegrationDisplay string
-	IntegrationDesc    string
-	ConnMode           core.ConnectionMode
-	Auth               AuthHandler
-	BaseURL            string
-	Headers            map[string]string
-	AuthStyle          AuthStyle
-	HTTPClient         *http.Client
-	Pagination         map[string]apiexec.PaginationConfig
+	IntegrationName             string
+	IntegrationDisplay          string
+	IntegrationDesc             string
+	ConnMode                    core.ConnectionMode
+	Auth                        AuthHandler
+	BaseURL                     string
+	Headers                     map[string]string
+	AuthStyle                   AuthStyle
+	HTTPClient                  *http.Client
+	Pagination                  map[string]apiexec.PaginationConfig
+	MethodDefaultParamLocations bool
+	NoRetry                     bool
 
 	TokenParser     func(token string) (authHeader string, extraHeaders map[string]string, err error)
 	CheckResponse   apiexec.ResponseChecker

@@ -16,7 +16,7 @@ func TestPartitionParams_NilCatalogOp(t *testing.T) {
 	t.Parallel()
 
 	params := map[string]any{"name": "x", "page": 2}
-	body, query, headers := partitionParams(nil, params)
+	body, query, headers := partitionParams(nil, params, false)
 
 	if body["name"] != "x" || body["page"] != 2 {
 		t.Fatalf("body = %v, want all params", body)
@@ -33,24 +33,44 @@ func TestPartitionParams_NoLocations(t *testing.T) {
 	t.Parallel()
 
 	catOp := &catalog.CatalogOperation{
-		ID: "op1",
+		ID:     "op1",
+		Method: http.MethodGet,
 		Parameters: []catalog.CatalogParameter{
 			{Name: "name", Type: "string"},
 			{Name: "count", Type: "integer"},
 		},
 	}
-	params := map[string]any{"name": "x", "count": 5}
-	body, query, headers := partitionParams(catOp, params)
+	t.Run("declared params remain dropped in method default mode", func(t *testing.T) {
+		t.Parallel()
+		params := map[string]any{"name": "x", "count": 5}
+		body, query, headers := partitionParams(catOp, params, true)
 
-	if body["name"] != "x" || body["count"] != 5 {
-		t.Fatalf("body = %v, want all params", body)
-	}
-	if query != nil {
-		t.Fatalf("query = %v, want nil", query)
-	}
-	if headers != nil {
-		t.Fatalf("headers = %v, want nil", headers)
-	}
+		if len(body) != 0 {
+			t.Fatalf("body = %v, want no declared params", body)
+		}
+		if len(query) != 0 {
+			t.Fatalf("query = %v, want no declared params", query)
+		}
+		if len(headers) != 0 {
+			t.Fatalf("headers = %v, want no header params", headers)
+		}
+	})
+
+	t.Run("undeclared params still use method defaults", func(t *testing.T) {
+		t.Parallel()
+		params := map[string]any{"name": "x", "count": 5, "page": 2}
+		body, query, headers := partitionParams(catOp, params, true)
+
+		if len(body) != 0 {
+			t.Fatalf("body = %v, want nil", body)
+		}
+		if query["page"] != 2 || len(query) != 1 {
+			t.Fatalf("query = %v, want only undeclared params", query)
+		}
+		if len(headers) != 0 {
+			t.Fatalf("headers = %v, want nil", headers)
+		}
+	})
 }
 
 func TestPartitionParams_MixedLocations(t *testing.T) {
@@ -71,7 +91,7 @@ func TestPartitionParams_MixedLocations(t *testing.T) {
 		"x_api_key": "secret",
 		"item_id":   "abc",
 	}
-	body, query, headers := partitionParams(catOp, params)
+	body, query, headers := partitionParams(catOp, params, false)
 
 	if body["name"] != "widget" {
 		t.Fatalf("body[name] = %v, want widget", body["name"])
@@ -91,7 +111,8 @@ func TestPartitionParams_UnknownParam(t *testing.T) {
 	t.Parallel()
 
 	catOp := &catalog.CatalogOperation{
-		ID: "op1",
+		ID:     "op1",
+		Method: http.MethodGet,
 		Parameters: []catalog.CatalogParameter{
 			{Name: "page", Type: "integer", Location: "query"},
 		},
@@ -100,13 +121,13 @@ func TestPartitionParams_UnknownParam(t *testing.T) {
 		"page":    1,
 		"unknown": "extra",
 	}
-	body, query, _ := partitionParams(catOp, params)
+	_, query, _ := partitionParams(catOp, params, true)
 
 	if query["page"] != 1 {
 		t.Fatalf("query[page] = %v, want 1", query["page"])
 	}
-	if body["unknown"] != "extra" {
-		t.Fatalf("body[unknown] = %v, want extra (unknown params default to body)", body["unknown"])
+	if query["unknown"] != "extra" {
+		t.Fatalf("query[unknown] = %v, want extra (unknown GET params default to query)", query["unknown"])
 	}
 }
 

@@ -2,6 +2,7 @@ package bootstrap_test
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"net/http"
@@ -167,8 +168,12 @@ func TestBootstrap(t *testing.T) {
 		cases := []struct {
 			name           string
 			restConnection string
+			specAuth       *providermanifestv1.ProviderAuth
 			connections    map[string]*providermanifestv1.ManifestConnectionDef
 			tokenConn      string
+			tokenValue     string
+			wantAuth       string
+			wantAPIKey     string
 		}{
 			{
 				name: "single named connection is inferred as default",
@@ -210,6 +215,63 @@ func TestBootstrap(t *testing.T) {
 				},
 				tokenConn: "workspace",
 			},
+			{
+				name: "declarative auth mapping basic preserves derived authorization header",
+				specAuth: &providermanifestv1.ProviderAuth{
+					Type: providermanifestv1.AuthTypeManual,
+					AuthMapping: &providermanifestv1.AuthMapping{
+						Basic: &providermanifestv1.BasicAuthMapping{
+							Username: providermanifestv1.AuthValue{
+								ValueFrom: &providermanifestv1.AuthValueFrom{
+									CredentialFieldRef: &providermanifestv1.CredentialFieldRef{Name: "username"},
+								},
+							},
+							Password: providermanifestv1.AuthValue{
+								ValueFrom: &providermanifestv1.AuthValueFrom{
+									CredentialFieldRef: &providermanifestv1.CredentialFieldRef{Name: "password"},
+								},
+							},
+						},
+					},
+				},
+				connections: map[string]*providermanifestv1.ManifestConnectionDef{
+					"default": {Mode: providermanifestv1.ConnectionModeUser},
+				},
+				tokenConn:  "default",
+				tokenValue: `{"username":"alice","password":"secret"}`,
+				wantAuth:   "Basic " + base64.StdEncoding.EncodeToString([]byte("alice:secret")),
+			},
+			{
+				name: "declarative auth mapping headers preserves derived upstream header",
+				specAuth: &providermanifestv1.ProviderAuth{
+					Type: providermanifestv1.AuthTypeManual,
+					AuthMapping: &providermanifestv1.AuthMapping{
+						Headers: map[string]providermanifestv1.AuthValue{
+							"X-API-Key": {
+								ValueFrom: &providermanifestv1.AuthValueFrom{
+									CredentialFieldRef: &providermanifestv1.CredentialFieldRef{Name: "api_key"},
+								},
+							},
+						},
+					},
+				},
+				connections: map[string]*providermanifestv1.ManifestConnectionDef{
+					"default": {Mode: providermanifestv1.ConnectionModeUser},
+				},
+				tokenConn:  "default",
+				tokenValue: `{"api_key":"secret-key"}`,
+				wantAPIKey: "secret-key",
+			},
+			{
+				name:     "auth none still forwards bearer token when connection mode is user",
+				specAuth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+				connections: map[string]*providermanifestv1.ManifestConnectionDef{
+					"workspace": {Mode: providermanifestv1.ConnectionModeUser},
+				},
+				restConnection: "workspace",
+				tokenConn:      "workspace",
+				wantAuth:       "Bearer workspace-access-token",
+			},
 		}
 
 		for _, tc := range cases {
@@ -218,9 +280,11 @@ func TestBootstrap(t *testing.T) {
 				t.Parallel()
 
 				var authHeader atomic.Value
+				var apiKeyHeader atomic.Value
 				var requestPath atomic.Value
 				srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 					authHeader.Store(r.Header.Get("Authorization"))
+					apiKeyHeader.Store(r.Header.Get("X-API-Key"))
 					requestPath.Store(r.URL.Path)
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusOK)
@@ -233,6 +297,7 @@ func TestBootstrap(t *testing.T) {
 					"slack": {
 						ResolvedManifest: &providermanifestv1.Manifest{
 							Spec: &providermanifestv1.Spec{
+								Auth: tc.specAuth,
 								Surfaces: &providermanifestv1.ProviderSurfaces{
 									REST: &providermanifestv1.RESTSurface{
 										BaseURL:    srv.URL,
@@ -260,6 +325,9 @@ func TestBootstrap(t *testing.T) {
 					t.Fatalf("FindOrCreateUser: %v", err)
 				}
 				tokenValue := tc.tokenConn + "-access-token"
+				if tc.tokenValue != "" {
+					tokenValue = tc.tokenValue
+				}
 				if err := result.Services.Tokens.StoreToken(ctx, &core.IntegrationToken{
 					UserID:       user.ID,
 					Integration:  "slack",
@@ -287,8 +355,14 @@ func TestBootstrap(t *testing.T) {
 					t.Fatalf("path = %q, want %q", gotPath, "/users")
 				}
 				wantAuth := "Bearer " + tokenValue
+				if tc.wantAuth != "" || tc.specAuth != nil {
+					wantAuth = tc.wantAuth
+				}
 				if gotAuth, _ := authHeader.Load().(string); gotAuth != wantAuth {
 					t.Fatalf("Authorization = %q, want %q", gotAuth, wantAuth)
+				}
+				if gotAPIKey, _ := apiKeyHeader.Load().(string); gotAPIKey != tc.wantAPIKey {
+					t.Fatalf("X-API-Key = %q, want %q", gotAPIKey, tc.wantAPIKey)
 				}
 			})
 		}
