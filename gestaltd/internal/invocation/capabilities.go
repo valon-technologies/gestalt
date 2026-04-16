@@ -25,7 +25,7 @@ func capabilitiesFromCatalog(name string, cat *catalog.Catalog) []core.Capabilit
 		}
 
 		method := strings.ToUpper(strings.TrimSpace(op.Method))
-		transport := catalogOperationTransport(op)
+		transport := OperationTransport(op)
 
 		caps = append(caps, core.Capability{
 			Provider:    name,
@@ -68,10 +68,10 @@ func CatalogOperationTransport(cat *catalog.Catalog, operation string) (string, 
 	if !ok {
 		return "", false
 	}
-	return catalogOperationTransport(op), true
+	return OperationTransport(op), true
 }
 
-func catalogOperationTransport(op catalog.CatalogOperation) string {
+func OperationTransport(op catalog.CatalogOperation) string {
 	transport := strings.TrimSpace(op.Transport)
 	if transport == "" && strings.TrimSpace(op.Method) != "" {
 		return catalog.TransportREST

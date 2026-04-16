@@ -2443,6 +2443,76 @@ func TestNewServer_SessionHydratedRESTToolUsesHydrationConnection(t *testing.T) 
 	if seenToken != "catalog-token" {
 		t.Fatalf("execute token = %q, want %q", seenToken, "catalog-token")
 	}
+
+	t.Run("broker resolution uses session metadata before static collision", func(t *testing.T) {
+		t.Parallel()
+
+		seenToken = ""
+		usedDirectTool := false
+		collisionProv := &directCallerProvider{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "sampledb",
+				ConnMode: core.ConnectionModeUser,
+				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
+					seenToken = token
+					return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				},
+			},
+			cat: &catalog.Catalog{
+				Name: "sampledb",
+				Operations: []catalog.CatalogOperation{
+					{ID: "run_query", Description: "static query", Transport: catalog.TransportMCPPassthrough},
+				},
+			},
+			sessionCatalogFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+				switch token {
+				case "catalog-token":
+					return &catalog.Catalog{
+						Name: "sampledb",
+						Operations: []catalog.CatalogOperation{
+							{ID: "run_query", Description: "session query", Method: http.MethodGet, Transport: catalog.TransportREST},
+						},
+					}, nil
+				case "rest-token":
+					return &catalog.Catalog{Name: "sampledb"}, nil
+				default:
+					return nil, fmt.Errorf("unexpected token %q", token)
+				}
+			},
+			callFn: func(_ context.Context, _ string, _ map[string]any) (*mcpgo.CallToolResult, error) {
+				usedDirectTool = true
+				return mcpgo.NewToolResultText("static"), nil
+			},
+		}
+
+		collisionProviders := testutil.NewProviderRegistry(t, collisionProv)
+		collisionBroker := invocation.NewBroker(
+			collisionProviders,
+			ds.Users,
+			ds.Tokens,
+			invocation.WithConnectionMapper(invocation.ConnectionMap(map[string]string{"sampledb": "rest-conn"})),
+			invocation.WithMCPConnectionMapper(invocation.ConnectionMap(map[string]string{"sampledb": "catalog-conn"})),
+		)
+		collisionServer := gestaltmcp.NewServer(gestaltmcp.Config{
+			Invoker:       collisionBroker,
+			TokenResolver: collisionBroker,
+			Providers:     collisionProviders,
+			MCPConnection: map[string]string{"sampledb": "catalog-conn"},
+		})
+
+		result := callToolForSession(t, collisionServer, ctxWithPrincipal(userID), newTestSessionWithTools(), "sampledb_run_query", map[string]any{
+			"sql": "select 1",
+		})
+		if result.IsError {
+			t.Fatalf("expected success result, got %+v", result)
+		}
+		if usedDirectTool {
+			t.Fatal("expected session REST metadata to beat static MCP collision")
+		}
+		if seenToken != "catalog-token" {
+			t.Fatalf("execute token = %q, want %q", seenToken, "catalog-token")
+		}
+	})
 }
 
 func TestNewServer_HumanCallToolUsesNormalizedRequestedInstanceWithoutOverwritingDefaultTools(t *testing.T) {
