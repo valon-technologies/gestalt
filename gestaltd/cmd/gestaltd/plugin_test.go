@@ -22,32 +22,35 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"gopkg.in/yaml.v3"
 )
 
 const (
-	releaseTestPluginName       = "release-test"
-	releaseTestSource           = "github.com/testowner/plugins/catalog/release-test"
-	releaseTestModule           = "example.com/release-test"
-	releaseTestIconPath         = "branding/icon.svg"
-	releaseProviderSchemaPath   = "schemas/provider.schema.json"
-	webUITestPluginName         = "webui-test"
-	webUITestSource             = "github.com/testowner/plugins/catalog/webui-test"
-	webUITestAssetRoot          = "out"
-	prebuiltProviderPluginName  = "prebuilt-provider"
-	prebuiltProviderSource      = "github.com/testowner/plugins/prebuilt-provider"
-	prebuiltProviderBinaryPath  = "bin/provider"
-	authReleasePluginName       = "auth-release"
-	authReleaseSource           = "github.com/testowner/plugins/auth-release"
-	authReleaseSchemaPath       = "schemas/auth.schema.json"
-	secretsReleasePluginName    = "secrets-release"
-	secretsReleaseSource        = "github.com/testowner/plugins/secrets-release"
-	secretsReleaseSchemaPath    = "schemas/secrets.schema.json"
-	rustReleasePluginName       = "provider-rust"
-	rustWrapperBinaryName       = "gestalt-provider-wrapper"
-	pythonAuthReleasePluginName = "python-auth-release"
-	pythonAuthReleaseSource     = "github.com/testowner/plugins/python-auth-release"
-	authReleaseTypeScriptModule = "./auth.ts#auth"
-	authReleaseTypeScriptTarget = "auth:./auth.ts#auth"
+	releaseTestPluginName        = "release-test"
+	releaseTestSource            = "github.com/testowner/plugins/catalog/release-test"
+	releaseTestModule            = "example.com/release-test"
+	releaseTestIconPath          = "branding/icon.svg"
+	releaseProviderSchemaPath    = "schemas/provider.schema.json"
+	declarativeReleasePluginName = "declarative-release"
+	declarativeReleaseSource     = "github.com/testowner/plugins/catalog/declarative-release"
+	webUITestPluginName          = "webui-test"
+	webUITestSource              = "github.com/testowner/plugins/catalog/webui-test"
+	webUITestAssetRoot           = "out"
+	prebuiltProviderPluginName   = "prebuilt-provider"
+	prebuiltProviderSource       = "github.com/testowner/plugins/prebuilt-provider"
+	prebuiltProviderBinaryPath   = "bin/provider"
+	authReleasePluginName        = "auth-release"
+	authReleaseSource            = "github.com/testowner/plugins/auth-release"
+	authReleaseSchemaPath        = "schemas/auth.schema.json"
+	secretsReleasePluginName     = "secrets-release"
+	secretsReleaseSource         = "github.com/testowner/plugins/secrets-release"
+	secretsReleaseSchemaPath     = "schemas/secrets.schema.json"
+	rustReleasePluginName        = "provider-rust"
+	rustWrapperBinaryName        = "gestalt-provider-wrapper"
+	pythonAuthReleasePluginName  = "python-auth-release"
+	pythonAuthReleaseSource      = "github.com/testowner/plugins/python-auth-release"
+	authReleaseTypeScriptModule  = "./auth.ts#auth"
+	authReleaseTypeScriptTarget  = "auth:./auth.ts#auth"
 )
 
 func TestRun_ProviderCLIUsageAndErrors(t *testing.T) {
@@ -661,6 +664,130 @@ plugin = "os import path\nimport os;os.system('cmd')#:attr"
 	}
 }
 
+func TestRun_PluginReleaseBuildsGoSourceAuthPlugin(t *testing.T) {
+	t.Parallel()
+
+	pluginDir := newSourceComponentReleaseFixture(t, t.TempDir(), sourceComponentReleaseFixtureParams{
+		pluginName: authReleasePluginName,
+		schemaPath: authReleaseSchemaPath,
+		sourceFile: "auth.go",
+		sourceCode: testutil.GeneratedAuthPackageSource(),
+		manifest: &providermanifestv1.Manifest{
+			Kind:   providermanifestv1.KindAuth,
+			Source: authReleaseSource, Version: "0.0.1", DisplayName: "Auth Release",
+			Spec: &providermanifestv1.Spec{ConfigSchemaPath: authReleaseSchemaPath},
+		},
+	})
+	outputDir := t.TempDir()
+	const testVersion = "0.0.15-test"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
+		"--output", outputDir,
+	)
+
+	archiveName := platformArchiveNameForTest(authReleasePluginName, testVersion, runtime.GOOS, runtime.GOARCH)
+	extractDir := extractReleasedArchive(t, outputDir, archiveName)
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+	binaryName := releaseBinaryName(authReleasePluginName, runtime.GOOS)
+
+	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
+		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
+	}
+	assertExpectedGoArtifactPlatform(t, manifest.Artifacts[0], runtime.GOOS, runtime.GOARCH, "")
+	if manifest.Entrypoint == nil || manifest.Entrypoint.ArtifactPath != binaryName {
+		t.Fatalf("auth entrypoint = %+v, want artifact path %q", manifest.Entrypoint, binaryName)
+	}
+	if _, err := os.Stat(filepath.Join(extractDir, authReleaseSchemaPath)); err != nil {
+		t.Fatalf("expected %s in archive: %v", authReleaseSchemaPath, err)
+	}
+	metadata := readProviderReleaseMetadata(t, outputDir)
+	if metadata.Package != authReleaseSource {
+		t.Fatalf("release metadata package = %q, want %q", metadata.Package, authReleaseSource)
+	}
+	if metadata.Kind != providermanifestv1.KindAuth {
+		t.Fatalf("release metadata kind = %q, want %q", metadata.Kind, providermanifestv1.KindAuth)
+	}
+	if metadata.Runtime != providerReleaseRuntimeKindExecutable {
+		t.Fatalf("release metadata runtime = %q, want %q", metadata.Runtime, providerReleaseRuntimeKindExecutable)
+	}
+	authArtifact, ok := metadata.Artifacts[providerpkg.CurrentPlatformString()]
+	if !ok {
+		t.Fatalf("release metadata artifacts missing current platform key %q: %+v", providerpkg.CurrentPlatformString(), metadata.Artifacts)
+	}
+	authDigest, err := providerpkg.ArchiveDigest(filepath.Join(outputDir, archiveName))
+	if err != nil {
+		t.Fatalf("hash auth archive: %v", err)
+	}
+	if authArtifact.Path != archiveName || authArtifact.SHA256 != authDigest {
+		t.Fatalf("release metadata auth artifact = %+v, want path %q sha %q", authArtifact, archiveName, authDigest)
+	}
+
+	auth, err := providerhost.NewExecutableAuthProvider(context.Background(), providerhost.AuthExecConfig{
+		Command:     filepath.Join(extractDir, binaryName),
+		Name:        "auth-release",
+		CallbackURL: "https://gestalt.example.test/api/v1/auth/login/callback",
+		SessionKey:  []byte("0123456789abcdef0123456789abcdef"),
+	})
+	if err != nil {
+		t.Fatalf("NewExecutableAuthProvider: %v", err)
+	}
+	defer func() {
+		if closer, ok := auth.(interface{ Close() error }); ok {
+			_ = closer.Close()
+		}
+	}()
+
+	loginURL, err := auth.LoginURL("host-state")
+	if err != nil {
+		t.Fatalf("LoginURL: %v", err)
+	}
+	parsed, err := url.Parse(loginURL)
+	if err != nil {
+		t.Fatalf("url.Parse(loginURL): %v", err)
+	}
+	state := parsed.Query().Get("state")
+	if state == "" {
+		t.Fatal("login URL did not include state")
+	}
+
+	callbackHandler, ok := auth.(interface {
+		HandleCallbackRequest(context.Context, url.Values) (*core.UserIdentity, string, error)
+	})
+	if !ok {
+		t.Fatal("auth provider did not expose HandleCallbackRequest")
+	}
+	identity, originalState, err := callbackHandler.HandleCallbackRequest(context.Background(), url.Values{
+		"code":   {"callback-code"},
+		"state":  {state},
+		"prompt": {parsed.Query().Get("prompt")},
+	})
+	if err != nil {
+		t.Fatalf("HandleCallbackRequest: %v", err)
+	}
+	if originalState != "host-state" {
+		t.Fatalf("original state = %q, want %q", originalState, "host-state")
+	}
+	if identity == nil || identity.Email != "generated-auth@example.com" {
+		t.Fatalf("identity = %+v", identity)
+	}
+	if ttlProvider, ok := auth.(interface{ SessionTokenTTL() time.Duration }); !ok || ttlProvider.SessionTokenTTL() != 90*time.Minute {
+		t.Fatalf("SessionTokenTTL = %v", ttlProvider)
+	}
+
+	externalJWT, err := session.IssueToken(&core.UserIdentity{Email: "jwt@example.com"}, []byte("abcdef0123456789abcdef0123456789"), 24*time.Hour)
+	if err != nil {
+		t.Fatalf("IssueToken: %v", err)
+	}
+	validated, err := auth.ValidateToken(context.Background(), externalJWT)
+	if err != nil {
+		t.Fatalf("ValidateToken(external jwt): %v", err)
+	}
+	if validated == nil || validated.Email != "jwt@example.com" {
+		t.Fatalf("validated = %+v", validated)
+	}
+}
 func TestRun_PluginReleaseBuildsGoSourceSecretsPlugin(t *testing.T) {
 	t.Parallel()
 
@@ -940,6 +1067,28 @@ func TestRun_PluginReleaseCopiesWebUISupportFiles(t *testing.T) {
 			t.Fatalf("expected %s in archive: %v", rel, err)
 		}
 	}
+
+	metadata := readProviderReleaseMetadata(t, outputDir)
+	if metadata.Package != webUITestSource {
+		t.Fatalf("release metadata package = %q, want %q", metadata.Package, webUITestSource)
+	}
+	if metadata.Kind != providermanifestv1.KindWebUI {
+		t.Fatalf("release metadata kind = %q, want %q", metadata.Kind, providermanifestv1.KindWebUI)
+	}
+	if metadata.Runtime != providerReleaseRuntimeKindWebUI {
+		t.Fatalf("release metadata runtime = %q, want %q", metadata.Runtime, providerReleaseRuntimeKindWebUI)
+	}
+	webUIArtifact, ok := metadata.Artifacts[providerReleaseGenericTarget]
+	if !ok {
+		t.Fatalf("release metadata artifacts missing generic key: %+v", metadata.Artifacts)
+	}
+	webUIDigest, err := providerpkg.ArchiveDigest(filepath.Join(outputDir, archiveName))
+	if err != nil {
+		t.Fatalf("hash webui archive: %v", err)
+	}
+	if webUIArtifact.Path != archiveName || webUIArtifact.SHA256 != webUIDigest {
+		t.Fatalf("release metadata webui artifact = %+v, want path %q sha %q", webUIArtifact, archiveName, webUIDigest)
+	}
 }
 
 func TestRun_PluginReleaseStagesOwnedWebUIPackage(t *testing.T) {
@@ -1006,6 +1155,42 @@ func TestRun_PluginReleaseStagesOwnedWebUIPackage(t *testing.T) {
 			}
 			if ownedUIManifest.Release != nil {
 				t.Fatalf("owned ui manifest unexpectedly retained release metadata: %+v", ownedUIManifest.Release)
+			}
+			metadata := readProviderReleaseMetadata(t, outputDir)
+			if metadata.Schema != providerReleaseSchemaName {
+				t.Fatalf("release metadata schema = %q, want %q", metadata.Schema, providerReleaseSchemaName)
+			}
+			if metadata.SchemaVersion != providerReleaseSchemaVersion {
+				t.Fatalf("release metadata schemaVersion = %d, want %d", metadata.SchemaVersion, providerReleaseSchemaVersion)
+			}
+			if metadata.Package != releaseTestSource {
+				t.Fatalf("release metadata package = %q, want %q", metadata.Package, releaseTestSource)
+			}
+			if metadata.Kind != providermanifestv1.KindPlugin {
+				t.Fatalf("release metadata kind = %q, want %q", metadata.Kind, providermanifestv1.KindPlugin)
+			}
+			if metadata.Version != testVersion {
+				t.Fatalf("release metadata version = %q, want %q", metadata.Version, testVersion)
+			}
+			if metadata.Runtime != providerReleaseRuntimeKindExecutable {
+				t.Fatalf("release metadata runtime = %q, want %q", metadata.Runtime, providerReleaseRuntimeKindExecutable)
+			}
+			if len(metadata.Artifacts) != 1 {
+				t.Fatalf("release metadata artifacts = %+v, want 1 entry", metadata.Artifacts)
+			}
+			artifact, ok := metadata.Artifacts[providerpkg.CurrentPlatformString()]
+			if !ok {
+				t.Fatalf("release metadata artifacts missing current platform key %q: %+v", providerpkg.CurrentPlatformString(), metadata.Artifacts)
+			}
+			if got := artifact.Path; got != archiveName {
+				t.Fatalf("release metadata artifact path = %q, want %q", got, archiveName)
+			}
+			digest, err := providerpkg.ArchiveDigest(filepath.Join(outputDir, archiveName))
+			if err != nil {
+				t.Fatalf("hash archive: %v", err)
+			}
+			if got := artifact.SHA256; got != digest {
+				t.Fatalf("release metadata artifact sha256 = %q, want %q", got, digest)
 			}
 
 			configDir := t.TempDir()
@@ -1179,6 +1364,55 @@ func TestRun_PluginReleaseTreatsGoModWithoutProviderPackageAsDeclarative(t *test
 	compiledArchiveName := "gestalt-plugin-webui-test_v" + testVersion + "_" + runtime.GOOS + "_" + runtime.GOARCH + ".tar.gz"
 	if _, err := os.Stat(filepath.Join(outputDir, compiledArchiveName)); !os.IsNotExist(err) {
 		t.Fatalf("unexpected compiled archive %s: %v", compiledArchiveName, err)
+	}
+}
+
+func TestRun_PluginReleaseWritesProviderReleaseMetadataForDeclarativePlugin(t *testing.T) {
+	t.Parallel()
+
+	pluginDir := newDeclarativeProviderReleaseFixture(t, t.TempDir())
+	outputDir := t.TempDir()
+	const testVersion = "0.0.4-declarative.1"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--output", outputDir,
+	)
+
+	archiveName := "gestalt-plugin-" + declarativeReleasePluginName + "_v" + testVersion + ".tar.gz"
+	if _, err := os.Stat(filepath.Join(outputDir, archiveName)); err != nil {
+		t.Fatalf("expected archive %s to exist: %v", archiveName, err)
+	}
+
+	metadata := readProviderReleaseMetadata(t, outputDir)
+	if metadata.Package != declarativeReleaseSource {
+		t.Fatalf("release metadata package = %q, want %q", metadata.Package, declarativeReleaseSource)
+	}
+	if metadata.Kind != providermanifestv1.KindPlugin {
+		t.Fatalf("release metadata kind = %q, want %q", metadata.Kind, providermanifestv1.KindPlugin)
+	}
+	if metadata.Version != testVersion {
+		t.Fatalf("release metadata version = %q, want %q", metadata.Version, testVersion)
+	}
+	if metadata.Runtime != providerReleaseRuntimeKindDeclarative {
+		t.Fatalf("release metadata runtime = %q, want %q", metadata.Runtime, providerReleaseRuntimeKindDeclarative)
+	}
+	if len(metadata.Artifacts) != 1 {
+		t.Fatalf("release metadata artifacts = %+v, want 1 entry", metadata.Artifacts)
+	}
+	artifact, ok := metadata.Artifacts[providerReleaseGenericTarget]
+	if !ok {
+		t.Fatalf("release metadata artifacts missing generic key: %+v", metadata.Artifacts)
+	}
+	if got := artifact.Path; got != archiveName {
+		t.Fatalf("release metadata artifact path = %q, want %q", got, archiveName)
+	}
+	digest, err := providerpkg.ArchiveDigest(filepath.Join(outputDir, archiveName))
+	if err != nil {
+		t.Fatalf("hash archive: %v", err)
+	}
+	if got := artifact.SHA256; got != digest {
+		t.Fatalf("release metadata artifact sha256 = %q, want %q", got, digest)
 	}
 }
 
@@ -1452,6 +1686,28 @@ func TestRun_PluginReleasePreservesPrebuiltProvider(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(extractDir, filepath.FromSlash(prebuiltProviderBinaryPath))); err != nil {
 		t.Fatalf("expected prebuilt artifact in archive: %v", err)
+	}
+
+	metadata := readProviderReleaseMetadata(t, outputDir)
+	if metadata.Package != prebuiltProviderSource {
+		t.Fatalf("release metadata package = %q, want %q", metadata.Package, prebuiltProviderSource)
+	}
+	if metadata.Kind != providermanifestv1.KindPlugin {
+		t.Fatalf("release metadata kind = %q, want %q", metadata.Kind, providermanifestv1.KindPlugin)
+	}
+	if metadata.Runtime != providerReleaseRuntimeKindExecutable {
+		t.Fatalf("release metadata runtime = %q, want %q", metadata.Runtime, providerReleaseRuntimeKindExecutable)
+	}
+	prebuiltArtifact, ok := metadata.Artifacts[providerpkg.CurrentPlatformString()]
+	if !ok {
+		t.Fatalf("release metadata artifacts missing current platform key %q: %+v", providerpkg.CurrentPlatformString(), metadata.Artifacts)
+	}
+	prebuiltDigest, err := providerpkg.ArchiveDigest(filepath.Join(outputDir, archiveName))
+	if err != nil {
+		t.Fatalf("hash prebuilt archive: %v", err)
+	}
+	if prebuiltArtifact.Path != archiveName || prebuiltArtifact.SHA256 != prebuiltDigest {
+		t.Fatalf("release metadata prebuilt artifact = %+v, want path %q sha %q", prebuiltArtifact, archiveName, prebuiltDigest)
 	}
 }
 
@@ -2249,6 +2505,36 @@ func newGoSourceReleaseFixture(t *testing.T, dir string) string {
 	return pluginDir
 }
 
+func newDeclarativeProviderReleaseFixture(t *testing.T, dir string) string {
+	t.Helper()
+
+	pluginDir := filepath.Join(dir, declarativeReleasePluginName)
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(pluginDir): %v", err)
+	}
+	writeReleaseTestManifest(t, pluginDir, &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindPlugin,
+		Source:      declarativeReleaseSource,
+		Version:     "0.0.1",
+		DisplayName: "Declarative Release",
+		Spec: &providermanifestv1.Spec{
+			Surfaces: &providermanifestv1.ProviderSurfaces{
+				REST: &providermanifestv1.RESTSurface{
+					BaseURL: "https://api.example.test",
+					Operations: []providermanifestv1.ProviderOperation{
+						{
+							Name:   "list_widgets",
+							Method: "GET",
+							Path:   "/widgets",
+						},
+					},
+				},
+			},
+		},
+	})
+	return pluginDir
+}
+
 func newSourceProviderReleaseFixtureWithoutCatalog(t *testing.T, dir string) string {
 	t.Helper()
 
@@ -2714,6 +3000,20 @@ func readReleasedManifest(t *testing.T, outputDir, archiveName string) *provider
 		t.Fatalf("read released manifest: %v", err)
 	}
 	return manifest
+}
+
+func readProviderReleaseMetadata(t *testing.T, outputDir string) *providerReleaseMetadata {
+	t.Helper()
+
+	data, err := os.ReadFile(filepath.Join(outputDir, providerReleaseMetadataFile))
+	if err != nil {
+		t.Fatalf("read %s: %v", providerReleaseMetadataFile, err)
+	}
+	var metadata providerReleaseMetadata
+	if err := yaml.Unmarshal(data, &metadata); err != nil {
+		t.Fatalf("decode %s: %v", providerReleaseMetadataFile, err)
+	}
+	return &metadata
 }
 
 func readManifestFromDir(t *testing.T, dir string) (string, *providermanifestv1.Manifest) {
