@@ -189,7 +189,8 @@ jobs:
       install-markdown: |
         - Crate: `cargo add gestalt-sdk`
         - In code, continue importing the library as `gestalt`
-        - Package docs: [crates.io/crates/gestalt-sdk](https://crates.io/crates/gestalt-sdk)
+        - API docs: [docs.rs/gestalt-sdk/latest/gestalt](https://docs.rs/gestalt-sdk/latest/gestalt/)
+        - Package page: [crates.io/crates/gestalt-sdk](https://crates.io/crates/gestalt-sdk)
 
   publish-python-sdk:
     if: ${{ startsWith(github.ref_name, 'sdk/python/v') }}
