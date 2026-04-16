@@ -4796,6 +4796,98 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 		}
 	})
 
+	t.Run("provider auth omitted still lets explicit plugin auth seed empty named connection auth", func(t *testing.T) {
+		t.Parallel()
+
+		stub := &stubNonOAuthProvider{name: "example"}
+		plugin := &config.ProviderEntry{
+			Source: config.ProviderSource{
+				Ref:     "github.com/acme/plugins/example",
+				Version: "1.0.0",
+			},
+			Auth: &config.ConnectionAuthDef{
+				Type: providermanifestv1.AuthTypeManual,
+				Credentials: []config.CredentialFieldDef{
+					{Name: "plugin_token", Label: "Plugin Token"},
+				},
+			},
+			Connections: map[string]*config.ConnectionDef{
+				"workspace": {
+					DisplayName: "Workspace Access",
+				},
+			},
+		}
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, stub)
+			cfg.PluginDefs = map[string]*config.ProviderEntry{
+				"example": plugin,
+			}
+			cfg.Services = coretesting.NewStubServices(t)
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("expected 200, got %d", resp.StatusCode)
+		}
+
+		type credentialField struct {
+			Name  string `json:"name"`
+			Label string `json:"label"`
+		}
+		type connectionInfo struct {
+			Name             string            `json:"name"`
+			DisplayName      string            `json:"displayName"`
+			AuthTypes        []string          `json:"authTypes"`
+			CredentialFields []credentialField `json:"credentialFields"`
+		}
+		var integrations []struct {
+			Name        string           `json:"name"`
+			AuthTypes   []string         `json:"authTypes"`
+			Connections []connectionInfo `json:"connections"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+			t.Fatalf("decoding: %v", err)
+		}
+		if len(integrations) != 1 {
+			t.Fatalf("expected 1 integration, got %d", len(integrations))
+		}
+		if !reflect.DeepEqual(integrations[0].AuthTypes, []string{"manual"}) {
+			t.Fatalf("top-level auth types = %+v, want [manual]", integrations[0].AuthTypes)
+		}
+
+		got := make(map[string]connectionInfo, len(integrations[0].Connections))
+		for _, conn := range integrations[0].Connections {
+			got[conn.Name] = conn
+		}
+		if !reflect.DeepEqual(got[config.PluginConnectionAlias].AuthTypes, []string{"manual"}) {
+			t.Fatalf("plugin connection auth types = %+v, want [manual]", got[config.PluginConnectionAlias].AuthTypes)
+		}
+		if !reflect.DeepEqual(got[config.PluginConnectionAlias].CredentialFields, []credentialField{
+			{Name: "plugin_token", Label: "Plugin Token"},
+		}) {
+			t.Fatalf("plugin connection credential fields = %+v", got[config.PluginConnectionAlias].CredentialFields)
+		}
+		if got["workspace"].DisplayName != "Workspace Access" {
+			t.Fatalf("workspace connection info = %+v", got["workspace"])
+		}
+		if !reflect.DeepEqual(got["workspace"].AuthTypes, []string{"manual"}) {
+			t.Fatalf("workspace auth types = %+v, want [manual]", got["workspace"].AuthTypes)
+		}
+		if !reflect.DeepEqual(got["workspace"].CredentialFields, []credentialField{
+			{Name: "credential", Label: "Credential"},
+		}) {
+			t.Fatalf("workspace credential fields = %+v", got["workspace"].CredentialFields)
+		}
+	})
+
 	t.Run("composite wrappers preserve API metadata", func(t *testing.T) {
 		t.Parallel()
 
@@ -4956,6 +5048,9 @@ func TestListIntegrations_ConnectionInfosUseResolvedConnectionDefs(t *testing.T)
 		}
 		if len(integrations) != 1 {
 			t.Fatalf("expected 1 integration, got %d", len(integrations))
+		}
+		if integrations[0].AuthTypes == nil {
+			t.Fatal("expected authTypes to encode as [], got null")
 		}
 		if len(integrations[0].AuthTypes) != 0 {
 			t.Fatalf("expected no auth types, got %+v", integrations[0].AuthTypes)
