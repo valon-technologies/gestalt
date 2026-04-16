@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use crate::config::ConfigStore;
-use crate::credentials::CredentialStore;
+use crate::credentials::{CredentialStore, Credentials};
 use crate::http;
 
 pub const DEFAULT_URL: &str = "http://localhost:8080";
@@ -24,6 +24,17 @@ pub const AUTH_LOGIN_CALLBACK_PATH: &str = "/api/v1/auth/login/callback";
 #[serde(rename_all = "camelCase")]
 pub struct AuthInfo {
     pub login_supported: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct ConfiguredServer {
+    pub url: String,
+    pub source: String,
+}
+
+pub struct CliAuthInputs {
+    pub configured_server: Result<Option<ConfiguredServer>>,
+    pub env_api_key: Option<String>,
 }
 
 pub fn normalize_url(url: &str) -> String {
@@ -94,6 +105,18 @@ pub fn fetch_auth_info(base_url: &str) -> Result<AuthInfo> {
 
 pub fn server_auth_disabled(base_url: &str) -> Result<bool> {
     Ok(!fetch_auth_info(base_url)?.login_supported)
+}
+
+pub fn load_cli_auth_inputs(url_override: Option<&str>) -> CliAuthInputs {
+    CliAuthInputs {
+        configured_server: find_configured_url_with_source(url_override)
+            .map(|server| server.map(|(url, source)| ConfiguredServer { url, source })),
+        env_api_key: env_api_key(),
+    }
+}
+
+pub fn load_stored_credentials() -> Result<Option<Credentials>> {
+    CredentialStore::new()?.load()
 }
 
 fn find_configured_url(url_override: Option<&str>) -> Result<Option<String>> {
@@ -183,10 +206,12 @@ pub enum TokenSource {
     StoredCredentials,
 }
 
+fn env_api_key() -> Option<String> {
+    std::env::var(ENV_API_KEY).ok().filter(|v| !v.is_empty())
+}
+
 pub fn env_api_key_is_set() -> bool {
-    std::env::var(ENV_API_KEY)
-        .map(|v| !v.is_empty())
-        .unwrap_or(false)
+    env_api_key().is_some()
 }
 
 pub struct ApiClient {
@@ -198,33 +223,48 @@ pub struct ApiClient {
 
 impl ApiClient {
     pub fn from_env(url_override: Option<&str>) -> Result<Self> {
-        let (token, source, stored_credentials) =
-            if let Some(key) = std::env::var(ENV_API_KEY).ok().filter(|v| !v.is_empty()) {
-                (key, TokenSource::EnvVar, None)
-            } else {
-                let store = CredentialStore::new()?;
-                match store.load()? {
-                    Some(creds) => (
-                        creds.api_token.clone(),
-                        TokenSource::StoredCredentials,
-                        Some(creds),
-                    ),
-                    None => {
-                        bail!(
-                            "not authenticated: set {} or run 'gestalt auth login'",
-                            ENV_API_KEY
-                        )
-                    }
-                }
-            };
+        let CliAuthInputs {
+            configured_server,
+            env_api_key,
+        } = load_cli_auth_inputs(url_override);
 
-        let base_url = match resolve_url(url_override) {
-            Ok(url) => url,
-            Err(err) => match stored_credentials
+        let mut stored_credentials = None;
+        let (token, source) = if let Some(key) = env_api_key {
+            (key, TokenSource::EnvVar)
+        } else {
+            match load_stored_credentials()? {
+                Some(creds) => {
+                    let token = creds.api_token.clone();
+                    stored_credentials = Some(creds);
+                    (token, TokenSource::StoredCredentials)
+                }
+                None => {
+                    bail!(
+                        "not authenticated: set {} or run 'gestalt auth login'",
+                        ENV_API_KEY
+                    )
+                }
+            }
+        };
+
+        let mut stored_api_url = || -> Result<Option<String>> {
+            if stored_credentials.is_none() {
+                stored_credentials = load_stored_credentials()?;
+            }
+            Ok(stored_credentials
                 .as_ref()
                 .and_then(|creds| creds.api_url())
-            {
-                Some(url) => normalize_url(url),
+                .map(normalize_url))
+        };
+
+        let base_url = match configured_server {
+            Ok(Some(server)) => server.url,
+            Ok(None) => match stored_api_url()? {
+                Some(url) => url,
+                None => bail_no_url_configured()?,
+            },
+            Err(err) => match stored_api_url()? {
+                Some(url) => url,
                 None => return Err(err),
             },
         };
