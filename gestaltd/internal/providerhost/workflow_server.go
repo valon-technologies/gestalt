@@ -12,7 +12,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-type workflowProviderResolver func() (coreworkflow.Provider, map[string]struct{}, error)
+type workflowProviderResolver func() (coreworkflow.Provider, map[string]struct{}, map[string]struct{}, error)
 
 type WorkflowServer struct {
 	proto.UnimplementedWorkflowServer
@@ -28,7 +28,7 @@ func NewWorkflowServer(pluginName string, resolver workflowProviderResolver) *Wo
 }
 
 func (s *WorkflowServer) StartRun(ctx context.Context, req *proto.StartWorkflowRunRequest) (*proto.WorkflowRun, error) {
-	provider, allowed, err := s.resolve()
+	provider, allowed, _, err := s.resolve()
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +48,7 @@ func (s *WorkflowServer) StartRun(ctx context.Context, req *proto.StartWorkflowR
 }
 
 func (s *WorkflowServer) GetRun(ctx context.Context, req *proto.GetWorkflowRunRequest) (*proto.WorkflowRun, error) {
-	provider, _, err := s.resolve()
+	provider, _, _, err := s.resolve()
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +63,7 @@ func (s *WorkflowServer) GetRun(ctx context.Context, req *proto.GetWorkflowRunRe
 }
 
 func (s *WorkflowServer) ListRuns(ctx context.Context, _ *proto.ListWorkflowRunsRequest) (*proto.ListWorkflowRunsResponse, error) {
-	provider, _, err := s.resolve()
+	provider, _, _, err := s.resolve()
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +83,7 @@ func (s *WorkflowServer) ListRuns(ctx context.Context, _ *proto.ListWorkflowRuns
 }
 
 func (s *WorkflowServer) CancelRun(ctx context.Context, req *proto.CancelWorkflowRunRequest) (*proto.WorkflowRun, error) {
-	provider, _, err := s.resolve()
+	provider, _, _, err := s.resolve()
 	if err != nil {
 		return nil, err
 	}
@@ -99,8 +99,11 @@ func (s *WorkflowServer) CancelRun(ctx context.Context, req *proto.CancelWorkflo
 }
 
 func (s *WorkflowServer) UpsertSchedule(ctx context.Context, req *proto.UpsertWorkflowScheduleRequest) (*proto.WorkflowSchedule, error) {
-	provider, allowed, err := s.resolve()
+	provider, allowed, managedIDs, err := s.resolve()
 	if err != nil {
+		return nil, err
+	}
+	if err := rejectManagedWorkflowScheduleID(req.GetScheduleId(), managedIDs); err != nil {
 		return nil, err
 	}
 	target := pluginWorkflowTargetFromProto(s.pluginName, req.GetTarget())
@@ -122,7 +125,7 @@ func (s *WorkflowServer) UpsertSchedule(ctx context.Context, req *proto.UpsertWo
 }
 
 func (s *WorkflowServer) GetSchedule(ctx context.Context, req *proto.GetWorkflowScheduleRequest) (*proto.WorkflowSchedule, error) {
-	provider, _, err := s.resolve()
+	provider, _, _, err := s.resolve()
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +140,7 @@ func (s *WorkflowServer) GetSchedule(ctx context.Context, req *proto.GetWorkflow
 }
 
 func (s *WorkflowServer) ListSchedules(ctx context.Context, _ *proto.ListWorkflowSchedulesRequest) (*proto.ListWorkflowSchedulesResponse, error) {
-	provider, _, err := s.resolve()
+	provider, _, _, err := s.resolve()
 	if err != nil {
 		return nil, err
 	}
@@ -157,8 +160,11 @@ func (s *WorkflowServer) ListSchedules(ctx context.Context, _ *proto.ListWorkflo
 }
 
 func (s *WorkflowServer) DeleteSchedule(ctx context.Context, req *proto.DeleteWorkflowScheduleRequest) (*emptypb.Empty, error) {
-	provider, _, err := s.resolve()
+	provider, _, managedIDs, err := s.resolve()
 	if err != nil {
+		return nil, err
+	}
+	if err := rejectManagedWorkflowScheduleID(req.GetScheduleId(), managedIDs); err != nil {
 		return nil, err
 	}
 	if err := provider.DeleteSchedule(ctx, coreworkflow.DeleteScheduleRequest{
@@ -171,8 +177,11 @@ func (s *WorkflowServer) DeleteSchedule(ctx context.Context, req *proto.DeleteWo
 }
 
 func (s *WorkflowServer) PauseSchedule(ctx context.Context, req *proto.PauseWorkflowScheduleRequest) (*proto.WorkflowSchedule, error) {
-	provider, _, err := s.resolve()
+	provider, _, managedIDs, err := s.resolve()
 	if err != nil {
+		return nil, err
+	}
+	if err := rejectManagedWorkflowScheduleID(req.GetScheduleId(), managedIDs); err != nil {
 		return nil, err
 	}
 	value, err := provider.PauseSchedule(ctx, coreworkflow.PauseScheduleRequest{
@@ -186,8 +195,11 @@ func (s *WorkflowServer) PauseSchedule(ctx context.Context, req *proto.PauseWork
 }
 
 func (s *WorkflowServer) ResumeSchedule(ctx context.Context, req *proto.ResumeWorkflowScheduleRequest) (*proto.WorkflowSchedule, error) {
-	provider, _, err := s.resolve()
+	provider, _, managedIDs, err := s.resolve()
 	if err != nil {
+		return nil, err
+	}
+	if err := rejectManagedWorkflowScheduleID(req.GetScheduleId(), managedIDs); err != nil {
 		return nil, err
 	}
 	value, err := provider.ResumeSchedule(ctx, coreworkflow.ResumeScheduleRequest{
@@ -201,7 +213,7 @@ func (s *WorkflowServer) ResumeSchedule(ctx context.Context, req *proto.ResumeWo
 }
 
 func (s *WorkflowServer) UpsertEventTrigger(ctx context.Context, req *proto.UpsertWorkflowEventTriggerRequest) (*proto.WorkflowEventTrigger, error) {
-	provider, allowed, err := s.resolve()
+	provider, allowed, _, err := s.resolve()
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +235,7 @@ func (s *WorkflowServer) UpsertEventTrigger(ctx context.Context, req *proto.Upse
 }
 
 func (s *WorkflowServer) GetEventTrigger(ctx context.Context, req *proto.GetWorkflowEventTriggerRequest) (*proto.WorkflowEventTrigger, error) {
-	provider, _, err := s.resolve()
+	provider, _, _, err := s.resolve()
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +250,7 @@ func (s *WorkflowServer) GetEventTrigger(ctx context.Context, req *proto.GetWork
 }
 
 func (s *WorkflowServer) ListEventTriggers(ctx context.Context, _ *proto.ListWorkflowEventTriggersRequest) (*proto.ListWorkflowEventTriggersResponse, error) {
-	provider, _, err := s.resolve()
+	provider, _, _, err := s.resolve()
 	if err != nil {
 		return nil, err
 	}
@@ -258,7 +270,7 @@ func (s *WorkflowServer) ListEventTriggers(ctx context.Context, _ *proto.ListWor
 }
 
 func (s *WorkflowServer) DeleteEventTrigger(ctx context.Context, req *proto.DeleteWorkflowEventTriggerRequest) (*emptypb.Empty, error) {
-	provider, _, err := s.resolve()
+	provider, _, _, err := s.resolve()
 	if err != nil {
 		return nil, err
 	}
@@ -272,7 +284,7 @@ func (s *WorkflowServer) DeleteEventTrigger(ctx context.Context, req *proto.Dele
 }
 
 func (s *WorkflowServer) PauseEventTrigger(ctx context.Context, req *proto.PauseWorkflowEventTriggerRequest) (*proto.WorkflowEventTrigger, error) {
-	provider, _, err := s.resolve()
+	provider, _, _, err := s.resolve()
 	if err != nil {
 		return nil, err
 	}
@@ -287,7 +299,7 @@ func (s *WorkflowServer) PauseEventTrigger(ctx context.Context, req *proto.Pause
 }
 
 func (s *WorkflowServer) ResumeEventTrigger(ctx context.Context, req *proto.ResumeWorkflowEventTriggerRequest) (*proto.WorkflowEventTrigger, error) {
-	provider, _, err := s.resolve()
+	provider, _, _, err := s.resolve()
 	if err != nil {
 		return nil, err
 	}
@@ -302,7 +314,7 @@ func (s *WorkflowServer) ResumeEventTrigger(ctx context.Context, req *proto.Resu
 }
 
 func (s *WorkflowServer) PublishEvent(ctx context.Context, req *proto.PublishWorkflowEventRequest) (*emptypb.Empty, error) {
-	provider, _, err := s.resolve()
+	provider, _, _, err := s.resolve()
 	if err != nil {
 		return nil, err
 	}
@@ -413,18 +425,18 @@ func validateWorkflowTargetScope(pluginName string, target coreworkflow.Target, 
 	return status.Errorf(codes.Internal, "workflow %s %q target plugin %q does not match scoped plugin %q", objectKind, objectID, target.PluginName, pluginName)
 }
 
-func (s *WorkflowServer) resolve() (coreworkflow.Provider, map[string]struct{}, error) {
+func (s *WorkflowServer) resolve() (coreworkflow.Provider, map[string]struct{}, map[string]struct{}, error) {
 	if s == nil || s.resolver == nil {
-		return nil, nil, status.Error(codes.FailedPrecondition, "workflow provider is not configured")
+		return nil, nil, nil, status.Error(codes.FailedPrecondition, "workflow provider is not configured")
 	}
-	provider, allowed, err := s.resolver()
+	provider, allowed, managedIDs, err := s.resolver()
 	if err != nil {
-		return nil, nil, status.Errorf(codes.FailedPrecondition, "workflow provider: %v", err)
+		return nil, nil, nil, status.Errorf(codes.FailedPrecondition, "workflow provider: %v", err)
 	}
 	if provider == nil {
-		return nil, nil, status.Error(codes.FailedPrecondition, "workflow provider is not available")
+		return nil, nil, nil, status.Error(codes.FailedPrecondition, "workflow provider is not available")
 	}
-	return provider, allowed, nil
+	return provider, allowed, managedIDs, nil
 }
 
 func validateWorkflowOperationAllowed(operation string, allowed map[string]struct{}) error {
@@ -436,6 +448,13 @@ func validateWorkflowOperationAllowed(operation string, allowed map[string]struc
 	}
 	if _, ok := allowed[operation]; !ok {
 		return status.Errorf(codes.PermissionDenied, "workflow target operation %q is not enabled", operation)
+	}
+	return nil
+}
+
+func rejectManagedWorkflowScheduleID(scheduleID string, managedIDs map[string]struct{}) error {
+	if _, ok := managedIDs[scheduleID]; ok {
+		return status.Errorf(codes.PermissionDenied, "workflow schedule id %q is reserved for config-managed schedules", scheduleID)
 	}
 	return nil
 }

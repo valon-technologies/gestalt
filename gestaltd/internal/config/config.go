@@ -172,8 +172,17 @@ type PluginIndexedDBConfig struct {
 }
 
 type PluginWorkflowConfig struct {
-	Provider   string   `yaml:"provider,omitempty"`
-	Operations []string `yaml:"operations,omitempty"`
+	Provider   string                            `yaml:"provider,omitempty"`
+	Operations []string                          `yaml:"operations,omitempty"`
+	Schedules  map[string]PluginWorkflowSchedule `yaml:"schedules,omitempty"`
+}
+
+type PluginWorkflowSchedule struct {
+	Cron      string         `yaml:"cron,omitempty"`
+	Timezone  string         `yaml:"timezone,omitempty"`
+	Operation string         `yaml:"operation,omitempty"`
+	Input     map[string]any `yaml:"input,omitempty"`
+	Paused    bool           `yaml:"paused,omitempty"`
 }
 
 func (c *PluginIndexedDBConfig) UnmarshalYAML(value *yaml.Node) error {

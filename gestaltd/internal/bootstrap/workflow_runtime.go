@@ -25,6 +25,7 @@ type workflowBinding struct {
 type workflowRuntime struct {
 	mu             sync.RWMutex
 	bindings       map[string]workflowBinding
+	managedIDs     map[string]map[string]struct{}
 	workloadTokens map[string]string
 	providers      map[string]coreworkflow.Provider
 	startupWaits   *startupWaitTracker
@@ -34,6 +35,7 @@ type workflowRuntime struct {
 func newWorkflowRuntime(cfg *config.Config) (*workflowRuntime, error) {
 	runtime := &workflowRuntime{
 		bindings:       make(map[string]workflowBinding, len(cfg.Plugins)),
+		managedIDs:     make(map[string]map[string]struct{}, len(cfg.Plugins)),
 		workloadTokens: make(map[string]string, len(cfg.Plugins)),
 		providers:      map[string]coreworkflow.Provider{},
 		startupWaits:   newStartupWaitTracker(),
@@ -54,6 +56,11 @@ func newWorkflowRuntime(cfg *config.Config) (*workflowRuntime, error) {
 			providerName: effective.ProviderName,
 			operations:   allowed,
 		}
+		managed := make(map[string]struct{}, len(effective.Schedules))
+		for scheduleKey := range effective.Schedules {
+			managed[workflowConfigScheduleID(pluginName, scheduleKey)] = struct{}{}
+		}
+		runtime.managedIDs[pluginName] = managed
 		runtime.workloadTokens[pluginName], err = workflowWorkloadToken()
 		if err != nil {
 			return nil, err
@@ -165,6 +172,28 @@ func (r *workflowRuntime) ResolvePlugin(pluginName string) (coreworkflow.Provide
 		return nil, nil, fmt.Errorf("workflow provider %q is not available", binding.providerName)
 	}
 	return provider, maps.Clone(binding.operations), nil
+}
+
+func (r *workflowRuntime) ResolveProvider(name string) (coreworkflow.Provider, error) {
+	if r == nil {
+		return nil, fmt.Errorf("workflow runtime is not configured")
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	provider, ok := r.providers[strings.TrimSpace(name)]
+	if !ok || provider == nil {
+		return nil, fmt.Errorf("workflow provider %q is not available", name)
+	}
+	return provider, nil
+}
+
+func (r *workflowRuntime) ManagedScheduleIDs(pluginName string) map[string]struct{} {
+	if r == nil {
+		return nil
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return maps.Clone(r.managedIDs[pluginName])
 }
 
 func (r *workflowRuntime) Allow(providerName, pluginName, operation string) bool {

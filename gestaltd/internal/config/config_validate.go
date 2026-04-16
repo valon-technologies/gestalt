@@ -9,7 +9,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
+	cronv3 "github.com/robfig/cron/v3"
 	"github.com/valon-technologies/gestalt/server/internal/emailutil"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	"github.com/valon-technologies/gestalt/server/internal/providerenv"
@@ -699,8 +701,54 @@ func validatePluginWorkflowConfig(cfg *Config, name string, entry *ProviderEntry
 	if len(entry.Workflow.Operations) == 0 {
 		return fmt.Errorf("config validation: plugins.%s.workflow.operations must not be empty", name)
 	}
+	if len(entry.Workflow.Schedules) > 0 {
+		normalized := make(map[string]PluginWorkflowSchedule, len(entry.Workflow.Schedules))
+		for key, schedule := range entry.Workflow.Schedules {
+			key = strings.TrimSpace(key)
+			if key == "" {
+				return fmt.Errorf("config validation: plugins.%s.workflow.schedules keys must not be empty", name)
+			}
+			if _, exists := normalized[key]; exists {
+				return fmt.Errorf("config validation: plugins.%s.workflow.schedules duplicates %q", name, key)
+			}
+			schedule.Cron = strings.TrimSpace(schedule.Cron)
+			if schedule.Cron == "" {
+				return fmt.Errorf("config validation: plugins.%s.workflow.schedules.%s.cron is required", name, key)
+			}
+			if err := validateWorkflowScheduleCron(name, key, schedule.Cron); err != nil {
+				return err
+			}
+			schedule.Operation = strings.TrimSpace(schedule.Operation)
+			if schedule.Operation == "" {
+				return fmt.Errorf("config validation: plugins.%s.workflow.schedules.%s.operation is required", name, key)
+			}
+			if _, exists := seenOps[schedule.Operation]; !exists {
+				return fmt.Errorf("config validation: plugins.%s.workflow.schedules.%s.operation %q must be listed in plugins.%s.workflow.operations", name, key, schedule.Operation, name)
+			}
+			schedule.Timezone = strings.TrimSpace(schedule.Timezone)
+			if schedule.Timezone == "" {
+				schedule.Timezone = "UTC"
+			}
+			if _, err := time.LoadLocation(schedule.Timezone); err != nil {
+				return fmt.Errorf("config validation: plugins.%s.workflow.schedules.%s.timezone %q is invalid: %w", name, key, schedule.Timezone, err)
+			}
+			normalized[key] = schedule
+		}
+		entry.Workflow.Schedules = normalized
+	}
 	if _, err := cfg.EffectivePluginWorkflow(name, entry); err != nil {
 		return err
+	}
+	return nil
+}
+
+var workflowScheduleCronParser = cronv3.NewParser(
+	cronv3.Minute | cronv3.Hour | cronv3.Dom | cronv3.Month | cronv3.Dow,
+)
+
+func validateWorkflowScheduleCron(pluginName, scheduleKey, spec string) error {
+	if _, err := workflowScheduleCronParser.Parse(spec); err != nil {
+		return fmt.Errorf("config validation: plugins.%s.workflow.schedules.%s.cron %q is invalid: %w", pluginName, scheduleKey, spec, err)
 	}
 	return nil
 }
