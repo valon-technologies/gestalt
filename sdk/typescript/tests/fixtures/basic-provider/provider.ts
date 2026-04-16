@@ -78,5 +78,22 @@ export const plugin = definePlugin({
         });
       },
     }),
+    operation({
+      id: "count",
+      method: "POST",
+      title: "Count",
+      description: "Echo an integer count",
+      input: s.object({
+        count: s.integer(),
+      }),
+      output: s.object({
+        count: s.integer(),
+      }),
+      handler(input) {
+        return ok({
+          count: input.count,
+        });
+      },
+    }),
   ],
 });

@@ -46,6 +46,9 @@ func (s *ProviderServer) StartProvider(ctx context.Context, req *proto.StartProv
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
+	if err := validateProtocolVersion(req.GetProtocolVersion()); err != nil {
+		return nil, err
+	}
 	config := req.GetConfig().AsMap()
 	if config == nil {
 		config = map[string]any{}
@@ -62,6 +65,8 @@ func (s *ProviderServer) GetMetadata(_ context.Context, _ *emptypb.Empty) (*prot
 	_, ok := s.sessionCat()
 	return &proto.ProviderMetadata{
 		SupportsSessionCatalog: ok,
+		MinProtocolVersion:     proto.CurrentProtocolVersion,
+		MaxProtocolVersion:     proto.CurrentProtocolVersion,
 	}, nil
 }
 

@@ -12,7 +12,7 @@ use crate::generated::v1::{
     ConfigureProviderRequest, ConfigureProviderResponse, HealthCheckResponse, ProviderIdentity,
     ProviderKind,
 };
-use crate::rpc_status::{rpc_error_message, rpc_status};
+use crate::rpc_status::{require_protocol_version, rpc_error_message, rpc_status};
 use crate::secrets::SecretsProvider;
 use crate::{CURRENT_PROTOCOL_VERSION, Provider, S3Provider};
 
@@ -169,12 +169,7 @@ impl ProviderLifecycle for RuntimeServer {
         request: GrpcRequest<ConfigureProviderRequest>,
     ) -> std::result::Result<GrpcResponse<ConfigureProviderResponse>, Status> {
         let request = request.into_inner();
-        if request.protocol_version != CURRENT_PROTOCOL_VERSION {
-            return Err(Status::failed_precondition(format!(
-                "host requested protocol version {}, provider requires {}",
-                request.protocol_version, CURRENT_PROTOCOL_VERSION
-            )));
-        }
+        require_protocol_version(request.protocol_version, CURRENT_PROTOCOL_VERSION)?;
         let config = crate::catalog::object_map(request.config);
         self.provider
             .configure(&request.name, config)

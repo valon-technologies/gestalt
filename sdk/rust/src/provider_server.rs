@@ -14,7 +14,7 @@ use crate::generated::v1::{
     OperationResult as ProtoOperationResult, PostConnectRequest, PostConnectResponse,
     ProviderMetadata, StartProviderRequest, StartProviderResponse,
 };
-use crate::rpc_status::rpc_status;
+use crate::rpc_status::{require_protocol_version, rpc_status};
 use crate::{Provider, Router};
 
 #[derive(Clone)]
@@ -86,6 +86,7 @@ where
         request: GrpcRequest<StartProviderRequest>,
     ) -> std::result::Result<GrpcResponse<StartProviderResponse>, Status> {
         let request = request.into_inner();
+        require_protocol_version(request.protocol_version, CURRENT_PROTOCOL_VERSION)?;
         self.provider
             .configure(&request.name, object_map(request.config))
             .await

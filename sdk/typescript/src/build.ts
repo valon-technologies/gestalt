@@ -159,17 +159,17 @@ await runBundledProvider(candidate, ${JSON.stringify(target.kind)}, ${JSON.strin
 function defaultBundledCandidateExpression(kind: ProviderTarget["kind"]): string {
   switch (kind) {
     case "integration":
-      return "bundledModule.provider ?? bundledModule.plugin ?? bundledModule.default";
+      return 'Reflect.get(bundledModule, "provider") ?? Reflect.get(bundledModule, "plugin") ?? bundledModule.default';
     case "auth":
-      return "bundledModule.auth ?? bundledModule.provider ?? bundledModule.default";
+      return 'Reflect.get(bundledModule, "auth") ?? Reflect.get(bundledModule, "provider") ?? bundledModule.default';
     case "cache":
-      return "bundledModule.cache ?? bundledModule.provider ?? bundledModule.default";
+      return 'Reflect.get(bundledModule, "cache") ?? Reflect.get(bundledModule, "provider") ?? bundledModule.default';
     case "secrets":
-      return "bundledModule.secrets ?? bundledModule.provider ?? bundledModule.default";
+      return 'Reflect.get(bundledModule, "secrets") ?? Reflect.get(bundledModule, "provider") ?? bundledModule.default';
     case "s3":
-      return "bundledModule.s3 ?? bundledModule.provider ?? bundledModule.default";
+      return 'Reflect.get(bundledModule, "s3") ?? Reflect.get(bundledModule, "provider") ?? bundledModule.default';
     case "telemetry":
-      return "bundledModule.telemetry ?? bundledModule.provider ?? bundledModule.default";
+      return 'Reflect.get(bundledModule, "telemetry") ?? Reflect.get(bundledModule, "provider") ?? bundledModule.default';
   }
   throw new Error(`unsupported provider kind: ${kind satisfies never}`);
 }

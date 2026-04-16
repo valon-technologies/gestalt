@@ -21,6 +21,15 @@ pub(crate) fn rpc_status(operation: &str, error: Error) -> Status {
     }
 }
 
+pub(crate) fn require_protocol_version(version: i32, current: i32) -> Result<(), Status> {
+    if version == current {
+        return Ok(());
+    }
+    Err(Status::failed_precondition(format!(
+        "host requested protocol version {version}, provider requires {current}"
+    )))
+}
+
 #[cfg(test)]
 mod tests {
     use tonic::Code;
@@ -39,5 +48,15 @@ mod tests {
         let status = rpc_status("get cache entry", Error::bad_request("bad key"));
         assert_eq!(status.code(), Code::InvalidArgument);
         assert_eq!(status.message(), "bad key");
+    }
+
+    #[test]
+    fn require_protocol_version_rejects_mismatch() {
+        let status = require_protocol_version(3, 2).expect_err("protocol mismatch");
+        assert_eq!(status.code(), Code::FailedPrecondition);
+        assert_eq!(
+            status.message(),
+            "host requested protocol version 3, provider requires 2"
+        );
     }
 }

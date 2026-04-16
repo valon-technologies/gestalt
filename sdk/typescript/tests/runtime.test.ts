@@ -1,8 +1,10 @@
+import { spawn, type ChildProcess } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { create } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
+import { Code, ConnectError } from "@connectrpc/connect";
 import { expect, test } from "bun:test";
 
 import {
@@ -29,12 +31,19 @@ import {
   SubjectContextSchema,
 } from "../gen/v1/plugin_pb.ts";
 import {
+  GetSecretRequestSchema,
+  SecretsProvider as SecretsProviderService,
+} from "../gen/v1/secrets_pb.ts";
+import {
   ConfigureProviderRequestSchema,
   ProviderKind as ProtoProviderKind,
+  ProviderLifecycle,
 } from "../gen/v1/runtime_pb.ts";
 import {
+  CURRENT_PROTOCOL_VERSION,
   createCacheService,
   ENV_WRITE_CATALOG,
+  ENV_PROVIDER_SOCKET,
   createAuthService,
   createProviderService,
   createRuntimeService,
@@ -45,7 +54,28 @@ import {
 } from "../src/runtime.ts";
 import { PresignMethod, S3, defineCacheProvider, defineS3Provider } from "../src/index.ts";
 import { createS3Service } from "../src/s3.ts";
-import { fixturePath, makeTempDir, removeTempDir } from "./helpers.ts";
+import {
+  captureChildStderr,
+  createUnixGrpcClient,
+  fixturePath,
+  makeTempDir,
+  removeTempDir,
+  stopProcess,
+  waitForPath,
+} from "./helpers.ts";
+
+async function expectConnectCode(
+  promise: Promise<unknown>,
+  code: Code,
+): Promise<void> {
+  try {
+    await promise;
+    throw new Error(`expected ConnectError with code ${Code[code]}`);
+  } catch (error) {
+    expect(error).toBeInstanceOf(ConnectError);
+    expect((error as ConnectError).code).toBe(code);
+  }
+}
 
 test("runtime arg parsing requires root and target", () => {
   expect(parseRuntimeArgs(["root", "plugin:./provider.ts#plugin"])).toEqual({
@@ -78,6 +108,93 @@ test("runtime main writes a static catalog in catalog mode", async () => {
   }
 });
 
+test("loadProviderFromTarget resolves a secrets provider from package metadata", async () => {
+  const provider = await loadProviderFromTarget(fixturePath("secrets-provider"));
+  expect(provider.kind).toBe("secrets");
+  expect(provider.name).toBe("secrets-provider");
+  expect(provider.displayName).toBe("Fixture Secrets");
+});
+
+test("runtime serves a secrets provider over unix gRPC", async () => {
+  const runtimeEntry = join(import.meta.dir, "..", "src", "runtime.ts");
+  const root = fixturePath("secrets-provider");
+  const tempDir = makeTempDir("gestalt-typescript-runtime-");
+  const socketPath = join(tempDir, "provider.sock");
+  let child: ChildProcess | undefined;
+
+  try {
+    child = spawn(process.execPath, [runtimeEntry, root, "secrets:./secrets.ts"], {
+      env: {
+        ...process.env,
+        [ENV_PROVIDER_SOCKET]: socketPath,
+      },
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    const stderrText = captureChildStderr(child);
+
+    try {
+      await waitForPath(socketPath);
+    } catch (error) {
+      throw new Error(`${String(error)}${stderrText() ? `\n${stderrText()}` : ""}`);
+    }
+
+    const runtime = createUnixGrpcClient(ProviderLifecycle, socketPath);
+    const secrets = createUnixGrpcClient(SecretsProviderService, socketPath);
+
+    const metadata = await runtime.getProviderIdentity(create(EmptySchema, {}));
+    expect(metadata.kind).toBe(ProtoProviderKind.SECRETS);
+    expect(metadata.name).toBe("secrets-provider");
+    expect(metadata.displayName).toBe("Fixture Secrets");
+    expect(metadata.minProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
+    expect(metadata.maxProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
+
+    await expectConnectCode(
+      runtime.configureProvider(
+        create(ConfigureProviderRequestSchema, {
+          name: "fixture-secrets",
+          config: {
+            scope: "runtime",
+          },
+          protocolVersion: CURRENT_PROTOCOL_VERSION + 1,
+        }),
+      ),
+      Code.FailedPrecondition,
+    );
+
+    const configured = await runtime.configureProvider(
+      create(ConfigureProviderRequestSchema, {
+        name: "fixture-secrets",
+        config: {
+          scope: "runtime",
+        },
+        protocolVersion: CURRENT_PROTOCOL_VERSION,
+      }),
+    );
+    expect(configured.protocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
+
+    const secret = await secrets.getSecret(
+      create(GetSecretRequestSchema, {
+        name: "db-password",
+      }),
+    );
+    expect(secret.value).toBe("fixture-secrets:runtime:hunter2");
+
+    await expectConnectCode(
+      secrets.getSecret(
+        create(GetSecretRequestSchema, {
+          name: "missing",
+        }),
+      ),
+      Code.NotFound,
+    );
+  } finally {
+    if (child) {
+      await stopProcess(child);
+    }
+    removeTempDir(tempDir);
+  }
+}, 15_000);
+
 test("integration provider service exposes metadata, configure, execute, and session catalog", async () => {
   const plugin = await loadPluginFromTarget(fixturePath("basic-provider"));
   const service = createProviderService(plugin);
@@ -85,6 +202,8 @@ test("integration provider service exposes metadata, configure, execute, and ses
   const metadata = await (service.getMetadata as any)();
   expect(metadata.name).toBe("basic-provider");
   expect(metadata.supportsSessionCatalog).toBe(true);
+  expect(metadata.minProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
+  expect(metadata.maxProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
   expect(
     metadata.staticCatalog?.operations?.some((op: any) => op.id === "hello"),
   ).toBe(true);
@@ -93,14 +212,46 @@ test("integration provider service exposes metadata, configure, execute, and ses
       ?.allowedRoles,
   ).toEqual(["viewer", "admin"]);
 
-  await (service.startProvider as any)(
+  await expectConnectCode(
+    (service.startProvider as any)(
+      create(StartProviderRequestSchema, {
+        name: "configured-provider",
+        config: {
+          region: "use1",
+        },
+        protocolVersion: CURRENT_PROTOCOL_VERSION + 1,
+      }),
+    ),
+    Code.FailedPrecondition,
+  );
+
+  const unconfiguredResult = await (service.execute as any)(
+    create(ExecuteRequestSchema, {
+      operation: "hello",
+      params: {
+        name: "Ada",
+      },
+      token: "token-123",
+      connectionParams: {
+        region: "iad",
+      },
+    }),
+  );
+  expect(JSON.parse(unconfiguredResult.body)).toMatchObject({
+    configuredName: "",
+    configuredRegion: "",
+  });
+
+  const started = await (service.startProvider as any)(
     create(StartProviderRequestSchema, {
       name: "configured-provider",
       config: {
         region: "use1",
       },
+      protocolVersion: CURRENT_PROTOCOL_VERSION,
     }),
   );
+  expect(started.protocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
 
   const result = await (service.execute as any)(
     create(ExecuteRequestSchema, {
@@ -179,21 +330,48 @@ test("auth provider supports runtime metadata, login flows, and token validation
   const runtime = createRuntimeService(provider);
   const auth = createAuthService(provider as any);
 
-  await (runtime.configureProvider as any)(
+  await expectConnectCode(
+    (runtime.configureProvider as any)(
+      create(ConfigureProviderRequestSchema, {
+        name: "fixture-auth",
+        config: {
+          issuer: "https://login.example.test",
+        },
+        protocolVersion: CURRENT_PROTOCOL_VERSION + 1,
+      }),
+    ),
+    Code.FailedPrecondition,
+  );
+
+  const defaultBegin = await (auth.beginLogin as any)(
+    create((await import("../gen/v1/auth_pb.ts")).BeginLoginRequestSchema, {
+      callbackUrl: "https://app.example.test/callback",
+      hostState: "host-state",
+      scopes: ["openid"],
+    }),
+  );
+  expect(defaultBegin.authorizationUrl).toContain(
+    "https://issuer.example.test/authorize",
+  );
+
+  const configuredAuth = await (runtime.configureProvider as any)(
     create(ConfigureProviderRequestSchema, {
       name: "fixture-auth",
       config: {
         issuer: "https://login.example.test",
       },
-      protocolVersion: 2,
+      protocolVersion: CURRENT_PROTOCOL_VERSION,
     }),
   );
+  expect(configuredAuth.protocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
 
   const metadata = await (runtime.getProviderIdentity as any)(
     create(EmptySchema, {}),
   );
   expect(metadata.kind).toBe(2);
   expect(metadata.displayName).toBe("Fixture Auth");
+  expect(metadata.minProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
+  expect(metadata.maxProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
 
   const begin = await (auth.beginLogin as any)(
     create((await import("../gen/v1/auth_pb.ts")).BeginLoginRequestSchema, {
@@ -231,21 +409,24 @@ test("cache provider supports runtime metadata and cache operations", async () =
   const runtime = createRuntimeService(provider);
   const cache = createCacheService(provider as any);
 
-  await (runtime.configureProvider as any)(
+  const configuredCache = await (runtime.configureProvider as any)(
     create(ConfigureProviderRequestSchema, {
       name: "fixture-cache",
       config: {
         prefix: "runtime",
       },
-      protocolVersion: 2,
+      protocolVersion: CURRENT_PROTOCOL_VERSION,
     }),
   );
+  expect(configuredCache.protocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
 
   const metadata = await (runtime.getProviderIdentity as any)(
     create(EmptySchema, {}),
   );
   expect(metadata.kind).toBe(ProtoProviderKind.CACHE);
   expect(metadata.displayName).toBe("Fixture Cache");
+  expect(metadata.minProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
+  expect(metadata.maxProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
 
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
@@ -392,19 +573,22 @@ test("s3 provider target resolves and serves runtime metadata plus object operat
   const runtime = createRuntimeService(provider);
   const s3 = createS3Service(provider as any);
 
-  await (runtime.configureProvider as any)(
+  const configuredS3 = await (runtime.configureProvider as any)(
     create(ConfigureProviderRequestSchema, {
       name: "fixture-s3",
       config: {},
-      protocolVersion: 2,
+      protocolVersion: CURRENT_PROTOCOL_VERSION,
     }),
   );
+  expect(configuredS3.protocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
 
   const metadata = await (runtime.getProviderIdentity as any)(
     create(EmptySchema, {}),
   );
   expect(metadata.kind).toBe(ProtoProviderKind.S3);
   expect(metadata.displayName).toBe("Fixture S3");
+  expect(metadata.minProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
+  expect(metadata.maxProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
 
   const written = await (s3.writeObject as any)(
     (async function* () {
