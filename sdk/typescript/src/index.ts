@@ -54,7 +54,6 @@ export {
   type CatalogSchema,
 } from "./catalog.ts";
 export {
-  buildPluginBinary,
   buildProviderBinary,
   bunBuildCommand,
   bunTarget,
@@ -91,7 +90,7 @@ export {
   type SecretsProviderOptions,
 } from "./secrets.ts";
 export {
-  Plugin,
+  PluginProvider,
   connectionModeToProtoValue,
   connectionParamToProto,
   definePlugin,
@@ -140,30 +139,21 @@ export {
   createSecretsService,
   createProviderService,
   createRuntimeService,
-  loadPluginFromTarget,
   loadProviderFromTarget,
   main as runtimeMain,
   parseRuntimeArgs,
-  pluginCatalogYaml,
-  runBundledPlugin,
   runBundledProvider,
-  runLoadedPlugin,
   runLoadedProvider,
   serve,
 } from "./runtime.ts";
 export {
-  defaultPluginName,
   defaultProviderName,
   formatModuleTarget,
   formatProviderTarget,
   parseModuleTarget,
-  parsePluginTarget,
   parseProviderTarget,
   readPackageConfig,
-  readPackagePluginTarget,
   readPackageProviderTarget,
-  resolvePluginImportUrl,
-  resolvePluginModulePath,
   resolveProviderImportUrl,
   resolveProviderModulePath,
   type ModuleTarget,

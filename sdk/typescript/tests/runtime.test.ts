@@ -47,7 +47,6 @@ import {
   createAuthService,
   createProviderService,
   createRuntimeService,
-  loadPluginFromTarget,
   loadProviderFromTarget,
   main,
   parseRuntimeArgs,
@@ -115,8 +114,8 @@ test("loadProviderFromTarget resolves a secrets provider from package metadata",
   expect(provider.displayName).toBe("Fixture Secrets");
 });
 
-test("loadPluginFromTarget falls through null exports to the next plugin candidate", async () => {
-  const plugin = await loadPluginFromTarget(
+test("loadProviderFromTarget falls through null exports to the next plugin candidate", async () => {
+  const plugin = await loadProviderFromTarget(
     fixturePath("basic-provider-null-export"),
   );
   expect(plugin.kind).toBe("integration");
@@ -124,8 +123,8 @@ test("loadPluginFromTarget falls through null exports to the next plugin candida
   expect(plugin.displayName).toBe("Fixture Provider Null Export");
 });
 
-test("loadPluginFromTarget ignores whitespace-only explicit targets", async () => {
-  const plugin = await loadPluginFromTarget(
+test("loadProviderFromTarget ignores whitespace-only explicit targets", async () => {
+  const plugin = await loadProviderFromTarget(
     fixturePath("basic-provider"),
     "   ",
   );
@@ -258,7 +257,7 @@ test("runtime serves a secrets provider over unix gRPC", async () => {
 }, 15_000);
 
 test("integration provider service exposes metadata, configure, execute, and session catalog", async () => {
-  const plugin = await loadPluginFromTarget(fixturePath("basic-provider"));
+  const plugin = await loadProviderFromTarget(fixturePath("basic-provider"));
   const service = createProviderService(plugin);
 
   const metadata = await (service.getMetadata as any)();
