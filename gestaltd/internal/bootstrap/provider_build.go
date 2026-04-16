@@ -176,11 +176,7 @@ func buildStartupProviderSpec(name string, entry *config.ProviderEntry) (provide
 	}
 
 	meta := resolveProviderMetadata(entry)
-	spec, err := buildPluginStaticSpec(name, entry, manifest, meta)
-	if err != nil {
-		return providerhost.StaticProviderSpec{}, nil, err
-	}
-	plan, err := config.BuildStaticConnectionPlan(entry, manifestPlugin)
+	spec, plan, err := buildPluginStaticSpec(name, entry, manifest, meta)
 	if err != nil {
 		return providerhost.StaticProviderSpec{}, nil, err
 	}
@@ -280,18 +276,13 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 	if manifest == nil || manifestPlugin == nil {
 		return nil, fmt.Errorf("build executable plugin provider %q: resolved manifest is required", name)
 	}
-	staticSpec, err := buildPluginStaticSpec(name, entry, manifest, meta)
+	staticSpec, plan, err := buildPluginStaticSpec(name, entry, manifest, meta)
 	if err != nil {
 		return nil, fmt.Errorf("build executable plugin provider %q: %w", name, err)
 	}
 	pluginProv, err := buildPluginProvider(ctx, name, entry, pluginConfig, staticSpec, deps)
 	if err != nil {
 		return nil, err
-	}
-	plan, err := config.BuildStaticConnectionPlan(entry, manifestPlugin)
-	if err != nil {
-		closeIfPossible(pluginProv)
-		return nil, fmt.Errorf("build executable plugin provider %q: %w", name, err)
 	}
 	mcpURL := ""
 	if resolved, ok := plan.ResolvedSurface(config.SpecSurfaceMCP); ok {
@@ -998,13 +989,13 @@ func clonePluginEnv(src map[string]string) map[string]string {
 	return dst
 }
 
-func buildPluginStaticSpec(name string, entry *config.ProviderEntry, manifest *providermanifestv1.Manifest, meta providerMetadata) (providerhost.StaticProviderSpec, error) {
+func buildPluginStaticSpec(name string, entry *config.ProviderEntry, manifest *providermanifestv1.Manifest, meta providerMetadata) (providerhost.StaticProviderSpec, config.StaticConnectionPlan, error) {
 	if manifest == nil || manifest.Spec == nil {
-		return providerhost.StaticProviderSpec{}, fmt.Errorf("resolved manifest is required")
+		return providerhost.StaticProviderSpec{}, config.StaticConnectionPlan{}, fmt.Errorf("resolved manifest is required")
 	}
 	plan, err := config.BuildStaticConnectionPlan(entry, manifest.Spec)
 	if err != nil {
-		return providerhost.StaticProviderSpec{}, err
+		return providerhost.StaticProviderSpec{}, config.StaticConnectionPlan{}, err
 	}
 
 	displayName := meta.displayNameOr(manifest.DisplayName)
@@ -1030,14 +1021,14 @@ func buildPluginStaticSpec(name string, entry *config.ProviderEntry, manifest *p
 		var err error
 		staticCatalog, err = providerpkg.ReadStaticCatalog(manifestRoot, name)
 		if err != nil {
-			return providerhost.StaticProviderSpec{}, err
+			return providerhost.StaticProviderSpec{}, config.StaticConnectionPlan{}, err
 		}
 	}
 	if staticCatalog == nil && providerpkg.StaticCatalogRequired(manifest) {
 		if entry.ResolvedManifestPath == "" {
-			return providerhost.StaticProviderSpec{}, fmt.Errorf("resolved manifest path is required for executable provider static catalog")
+			return providerhost.StaticProviderSpec{}, config.StaticConnectionPlan{}, fmt.Errorf("resolved manifest path is required for executable provider static catalog")
 		}
-		return providerhost.StaticProviderSpec{}, fmt.Errorf("executable providers without declarative or spec surfaces must define %s", providerpkg.StaticCatalogFile)
+		return providerhost.StaticProviderSpec{}, config.StaticConnectionPlan{}, fmt.Errorf("executable providers without declarative or spec surfaces must define %s", providerpkg.StaticCatalogFile)
 	}
 	if staticCatalog != nil {
 		if displayName != "" {
@@ -1062,7 +1053,7 @@ func buildPluginStaticSpec(name string, entry *config.ProviderEntry, manifest *p
 		ConnectionParams: providerhost.ConnectionParamDefsFromManifest(conn.ConnectionParams),
 		CredentialFields: providerhost.CredentialFieldsFromManifest(conn.Auth.Credentials),
 		DiscoveryConfig:  providerhost.DiscoveryConfigFromManifest(manifest.Spec.Discovery),
-	}, nil
+	}, plan, nil
 }
 
 func staticAuthTypes(authType providermanifestv1.AuthType) []string {
