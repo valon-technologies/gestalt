@@ -18,17 +18,16 @@ type TokenResolver interface {
 
 func ResolveCatalogWithMetadata(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, defaultConnection, instance string, strictSession bool) (*catalog.Catalog, bool, error) {
 	staticCat := prov.Catalog()
-	sessionCat, err := resolveSessionCatalog(ctx, prov, provName, resolver, p, defaultConnection, instance)
+	sessionCat, attempted, err := resolveSessionCatalog(ctx, prov, provName, resolver, p, defaultConnection, instance)
+	sessionFailed := attempted && err != nil
 	if err != nil {
 		if strictSession || staticCat == nil {
-			return nil, true, err
+			return nil, sessionFailed, err
 		}
 		slog.WarnContext(ctx, "catalog session resolution failed", "provider", provName, "error", err)
-		merged, err := mergeCatalogs(provName, staticCat, sessionCat)
-		return merged, true, err
 	}
 	merged, err := mergeCatalogs(provName, staticCat, sessionCat)
-	return merged, false, err
+	return merged, sessionFailed, err
 }
 
 func ResolveOperation(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, operation string, sessionConnections []string, instance string) (catalog.CatalogOperation, string, string, error) {
@@ -49,22 +48,21 @@ func ResolveOperation(ctx context.Context, prov core.Provider, provName string, 
 	return catalog.CatalogOperation{}, "", "", fmt.Errorf("%w: %q on provider %q", ErrOperationNotFound, operation, provName)
 }
 
-func resolveSessionCatalog(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, connection, instance string) (*catalog.Catalog, error) {
+func resolveSessionCatalog(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, connection, instance string) (*catalog.Catalog, bool, error) {
 	if !core.SupportsSessionCatalog(prov) || (prov.ConnectionMode() != core.ConnectionModeNone && (resolver == nil || p == nil)) {
-		return nil, nil
+		return nil, false, nil
 	}
 	token := ""
 	if resolver != nil && p != nil {
 		var err error
 		ctx, token, err = resolver.ResolveToken(ctx, p, provName, connection, instance)
 		if err != nil {
-			return nil, err
+			return nil, true, err
 		}
 	} else {
 		ctx = WithCredentialContext(ctx, CredentialContext{Mode: core.ConnectionModeNone})
 	}
-	cat, err := core.CatalogForRequest(ctx, prov, token)
-	return cat, err
+	return core.CatalogForRequest(ctx, prov, token)
 }
 
 func resolveSessionOperation(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, operation string, connections []string, instance string) (catalog.CatalogOperation, string, bool, error) {
@@ -73,14 +71,14 @@ func resolveSessionOperation(ctx context.Context, prov core.Provider, provName s
 	}
 	firstErr, resolved := error(nil), false
 	for _, connection := range connections {
-		cat, err := resolveSessionCatalog(ctx, prov, provName, resolver, p, connection, instance)
+		cat, attempted, err := resolveSessionCatalog(ctx, prov, provName, resolver, p, connection, instance)
 		if err != nil {
 			if firstErr == nil {
 				firstErr = err
 			}
 			continue
 		}
-		if cat == nil {
+		if !attempted || cat == nil {
 			continue
 		}
 		resolved = true

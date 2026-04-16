@@ -13,13 +13,13 @@ func SupportsSessionCatalog(prov Provider) bool {
 	return ok
 }
 
-func CatalogForRequest(ctx context.Context, prov Provider, token string) (*catalog.Catalog, error) {
+func CatalogForRequest(ctx context.Context, prov Provider, token string) (*catalog.Catalog, bool, error) {
 	scp, ok := prov.(SessionCatalogProvider)
 	if !ok {
-		return nil, nil
+		return nil, false, nil
 	}
 	cat, err := scp.CatalogForRequest(ctx, token)
-	return HydrateSessionCatalog(prov.Catalog(), cat), err
+	return HydrateSessionCatalog(prov.Catalog(), cat), true, err
 }
 
 func HydrateSessionCatalog(staticCat, sessionCat *catalog.Catalog) *catalog.Catalog {

@@ -670,9 +670,12 @@ func TestResolveCatalog_NilResolver(t *testing.T) {
 		},
 	}
 
-	cat, err := resolveCatalogForTest(context.Background(), prov, "noauth-api", nil, &principal.Principal{UserID: "u1"}, "default", "")
+	cat, sessionFailed, err := invocation.ResolveCatalogWithMetadata(context.Background(), prov, "noauth-api", nil, &principal.Principal{UserID: "u1"}, "default", "", false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if sessionFailed {
+		t.Fatal("expected skipped session lookup not to report failure")
 	}
 	if len(cat.Operations) != 1 {
 		t.Fatalf("expected 1 operation (static only), got %d", len(cat.Operations))

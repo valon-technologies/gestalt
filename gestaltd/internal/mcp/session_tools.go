@@ -66,7 +66,7 @@ func hydrateSessionToolsForInstance(ctx context.Context, cfg Config, providerNam
 		if err != nil {
 			continue
 		}
-		cat, err := core.CatalogForRequest(sessionCtx, prov, token)
+		cat, _, err := core.CatalogForRequest(sessionCtx, prov, token)
 		if err != nil {
 			continue
 		}
@@ -80,7 +80,7 @@ func hydrateSessionToolsForInstance(ctx context.Context, cfg Config, providerNam
 			continue
 		}
 		coreintegration.CompileSchemas(cat)
-		storeSessionCatalogOperationMetadata(tools, cfg, provName, cat, staticToolNames, instance, connection)
+		storeSessionCatalogOperationMetadata(tools, cfg, provName, cat, instance, connection)
 		m := buildToolMap(cfg, provName, cat)
 		for name := range m {
 			if _, exists := staticToolNames[name]; exists {
@@ -174,19 +174,11 @@ func sessionProviderHydrationAttemptedFromContext(ctx context.Context, provider,
 	}
 	return sessionProviderHydrationAttempted(sessionWithTools.GetSessionTools(), provider, instance)
 }
-func storeSessionCatalogOperationMetadata(tools map[string]mcpserver.ServerTool, cfg Config, provider string, cat *catalog.Catalog, staticToolNames map[string]struct{}, instance string, connection string) {
+func storeSessionCatalogOperationMetadata(tools map[string]mcpserver.ServerTool, cfg Config, provider string, cat *catalog.Catalog, instance string, connection string) {
 	for i := range cat.Operations {
 		op := &cat.Operations[i]
 		payload, err := json.Marshal(sessionCatalogOperationMeta{
-			Operation: catalog.CatalogOperation{
-				ID:           op.ID,
-				AllowedRoles: append([]string(nil), op.AllowedRoles...),
-				Transport:    op.Transport,
-				Method:       op.Method,
-				Path:         op.Path,
-				Query:        op.Query,
-				Parameters:   append([]catalog.CatalogParameter(nil), op.Parameters...),
-			},
+			Operation:  *op,
 			Connection: connection,
 			Projected:  catalogOperationProjectedToMCP(cfg, provider, *op),
 		})
