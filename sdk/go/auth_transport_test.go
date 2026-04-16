@@ -118,6 +118,12 @@ func TestAuthProviderRoundTrip(t *testing.T) {
 	if meta.GetVersion() != "1.0" {
 		t.Fatalf("version = %q, want %q", meta.GetVersion(), "1.0")
 	}
+	if meta.GetMinProtocolVersion() != proto.CurrentProtocolVersion {
+		t.Fatalf("min_protocol_version = %d, want %d", meta.GetMinProtocolVersion(), proto.CurrentProtocolVersion)
+	}
+	if meta.GetMaxProtocolVersion() != proto.CurrentProtocolVersion {
+		t.Fatalf("max_protocol_version = %d, want %d", meta.GetMaxProtocolVersion(), proto.CurrentProtocolVersion)
+	}
 	found := false
 	for _, w := range meta.GetWarnings() {
 		if w == "battery low" {
@@ -130,13 +136,16 @@ func TestAuthProviderRoundTrip(t *testing.T) {
 	}
 
 	cfg, _ := structpb.NewStruct(map[string]any{"clientId": "abc"})
-	_, err = runtimeClient.ConfigureProvider(rpcCtx, &proto.ConfigureProviderRequest{
+	configuredResp, err := runtimeClient.ConfigureProvider(rpcCtx, &proto.ConfigureProviderRequest{
 		Name:            "my-auth",
 		Config:          cfg,
 		ProtocolVersion: proto.CurrentProtocolVersion,
 	})
 	if err != nil {
 		t.Fatalf("ConfigureProvider: %v", err)
+	}
+	if configuredResp.GetProtocolVersion() != proto.CurrentProtocolVersion {
+		t.Fatalf("configured protocol_version = %d, want %d", configuredResp.GetProtocolVersion(), proto.CurrentProtocolVersion)
 	}
 	if len(provider.configured) != 1 {
 		t.Fatalf("configured calls = %d, want 1", len(provider.configured))
@@ -146,6 +155,21 @@ func TestAuthProviderRoundTrip(t *testing.T) {
 	}
 	if provider.configured[0].config["clientId"] != "abc" {
 		t.Fatalf("configured config[clientId] = %v, want %q", provider.configured[0].config["clientId"], "abc")
+	}
+
+	_, err = runtimeClient.ConfigureProvider(rpcCtx, &proto.ConfigureProviderRequest{
+		Name:            "my-auth",
+		Config:          cfg,
+		ProtocolVersion: proto.CurrentProtocolVersion + 1,
+	})
+	if err == nil {
+		t.Fatal("ConfigureProvider should fail for mismatched protocol version")
+	}
+	if s, ok := status.FromError(err); !ok || s.Code() != codes.FailedPrecondition {
+		t.Fatalf("ConfigureProvider code = %v, want FAILED_PRECONDITION", err)
+	}
+	if len(provider.configured) != 1 {
+		t.Fatalf("configured calls = %d after mismatch, want 1", len(provider.configured))
 	}
 
 	health, err := runtimeClient.HealthCheck(rpcCtx, &emptypb.Empty{})
@@ -175,7 +199,7 @@ func TestAuthProviderRoundTrip(t *testing.T) {
 	completeResp, err := authClient.CompleteLogin(rpcCtx, &proto.CompleteLoginRequest{
 		Query:         map[string]string{"code": "auth-code"},
 		ProviderState: []byte("state-data"),
-		CallbackUrl: "https://app.example.test/callback",
+		CallbackUrl:   "https://app.example.test/callback",
 	})
 	if err != nil {
 		t.Fatalf("CompleteLogin: %v", err)

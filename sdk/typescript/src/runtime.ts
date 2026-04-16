@@ -118,6 +118,16 @@ export type LoadedProvider =
   | SecretsProvider
   | S3Provider;
 
+function assertProtocolVersion(protocolVersion: number): void {
+  if (protocolVersion === CURRENT_PROTOCOL_VERSION) {
+    return;
+  }
+  throw new ConnectError(
+    `host requested protocol version ${protocolVersion}, provider requires ${CURRENT_PROTOCOL_VERSION}`,
+    Code.FailedPrecondition,
+  );
+}
+
 /**
  * CLI entrypoint that loads a provider from source and starts serving it.
  */
@@ -462,12 +472,7 @@ export function createRuntimeService(
       });
     },
     async configureProvider(request: ConfigureProviderRequest) {
-      if (request.protocolVersion !== CURRENT_PROTOCOL_VERSION) {
-        throw new ConnectError(
-          `host requested protocol version ${request.protocolVersion}, provider requires ${CURRENT_PROTOCOL_VERSION}`,
-          Code.FailedPrecondition,
-        );
-      }
+      assertProtocolVersion(request.protocolVersion);
       try {
         await provider.configureProvider(
           request.name,
@@ -536,6 +541,7 @@ export function createProviderService(
       });
     },
     async startProvider(request: StartProviderRequest) {
+      assertProtocolVersion(request.protocolVersion);
       try {
         await provider.configureProvider(
           request.name,

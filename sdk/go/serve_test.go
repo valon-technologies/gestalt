@@ -9,6 +9,8 @@ import (
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	protoutil "google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -134,6 +136,12 @@ func TestProviderServerGetMetadata(t *testing.T) {
 		if meta.GetSupportsSessionCatalog() {
 			t.Fatal("SupportsSessionCatalog = true, want false")
 		}
+		if meta.GetMinProtocolVersion() != proto.CurrentProtocolVersion {
+			t.Fatalf("MinProtocolVersion = %d, want %d", meta.GetMinProtocolVersion(), proto.CurrentProtocolVersion)
+		}
+		if meta.GetMaxProtocolVersion() != proto.CurrentProtocolVersion {
+			t.Fatalf("MaxProtocolVersion = %d, want %d", meta.GetMaxProtocolVersion(), proto.CurrentProtocolVersion)
+		}
 	})
 
 	t.Run("session catalog provider", func(t *testing.T) {
@@ -151,6 +159,12 @@ func TestProviderServerGetMetadata(t *testing.T) {
 		}
 		if !meta.GetSupportsSessionCatalog() {
 			t.Fatal("SupportsSessionCatalog = false, want true")
+		}
+		if meta.GetMinProtocolVersion() != proto.CurrentProtocolVersion {
+			t.Fatalf("MinProtocolVersion = %d, want %d", meta.GetMinProtocolVersion(), proto.CurrentProtocolVersion)
+		}
+		if meta.GetMaxProtocolVersion() != proto.CurrentProtocolVersion {
+			t.Fatalf("MaxProtocolVersion = %d, want %d", meta.GetMaxProtocolVersion(), proto.CurrentProtocolVersion)
 		}
 	})
 }
@@ -336,26 +350,52 @@ func TestProviderServerExecute(t *testing.T) {
 func TestProviderServerStartProvider(t *testing.T) {
 	t.Parallel()
 
-	prov := &startableStubProvider{}
-	client := newIntegrationProviderClient(t, prov, startableStubRouter)
-	ctx := context.Background()
+	t.Run("accepts matching protocol version", func(t *testing.T) {
+		prov := &startableStubProvider{}
+		client := newIntegrationProviderClient(t, prov, startableStubRouter)
+		ctx := context.Background()
 
-	cfg, _ := structpb.NewStruct(map[string]any{"key": "val"})
-	resp, err := client.StartProvider(ctx, &proto.StartProviderRequest{
-		Name:            "my-instance",
-		Config:          cfg,
-		ProtocolVersion: proto.CurrentProtocolVersion,
+		cfg, _ := structpb.NewStruct(map[string]any{"key": "val"})
+		resp, err := client.StartProvider(ctx, &proto.StartProviderRequest{
+			Name:            "my-instance",
+			Config:          cfg,
+			ProtocolVersion: proto.CurrentProtocolVersion,
+		})
+		if err != nil {
+			t.Fatalf("StartProvider: %v", err)
+		}
+		if resp.GetProtocolVersion() != proto.CurrentProtocolVersion {
+			t.Errorf("ProtocolVersion = %d, want %d", resp.GetProtocolVersion(), proto.CurrentProtocolVersion)
+		}
+		if prov.name != "my-instance" {
+			t.Errorf("name = %q, want %q", prov.name, "my-instance")
+		}
+		if prov.config["key"] != "val" {
+			t.Errorf("config[key] = %v, want %q", prov.config["key"], "val")
+		}
 	})
-	if err != nil {
-		t.Fatalf("StartProvider: %v", err)
-	}
-	if resp.GetProtocolVersion() != proto.CurrentProtocolVersion {
-		t.Errorf("ProtocolVersion = %d, want %d", resp.GetProtocolVersion(), proto.CurrentProtocolVersion)
-	}
-	if prov.name != "my-instance" {
-		t.Errorf("name = %q, want %q", prov.name, "my-instance")
-	}
-	if prov.config["key"] != "val" {
-		t.Errorf("config[key] = %v, want %q", prov.config["key"], "val")
-	}
+
+	t.Run("rejects mismatched protocol version", func(t *testing.T) {
+		prov := &startableStubProvider{}
+		client := newIntegrationProviderClient(t, prov, startableStubRouter)
+		ctx := context.Background()
+
+		_, err := client.StartProvider(ctx, &proto.StartProviderRequest{
+			Name:            "my-instance",
+			Config:          &structpb.Struct{},
+			ProtocolVersion: proto.CurrentProtocolVersion + 1,
+		})
+		if err == nil {
+			t.Fatal("StartProvider should fail for mismatched protocol version")
+		}
+		if code := status.Code(err); code != codes.FailedPrecondition {
+			t.Fatalf("StartProvider code = %v, want %v", code, codes.FailedPrecondition)
+		}
+		if prov.name != "" {
+			t.Fatalf("provider configured name = %q, want empty", prov.name)
+		}
+		if prov.config != nil {
+			t.Fatalf("provider config = %#v, want nil", prov.config)
+		}
+	})
 }

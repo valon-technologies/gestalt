@@ -49,13 +49,8 @@ func (s *runtimeServer) ConfigureProvider(ctx context.Context, req *proto.Config
 	if req == nil {
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
-	if req.GetProtocolVersion() != proto.CurrentProtocolVersion {
-		return nil, status.Errorf(
-			codes.FailedPrecondition,
-			"host requested protocol version %d, provider requires %d",
-			req.GetProtocolVersion(),
-			proto.CurrentProtocolVersion,
-		)
+	if err := validateProtocolVersion(req.GetProtocolVersion()); err != nil {
+		return nil, err
 	}
 	config := req.GetConfig().AsMap()
 	if config == nil {

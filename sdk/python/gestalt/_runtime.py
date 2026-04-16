@@ -100,6 +100,19 @@ def _grpc_handler(label: str):
     return decorator
 
 
+def _abort_if_protocol_version_mismatch(
+    protocol_version: int,
+    context: Any,
+) -> bool:
+    if protocol_version == CURRENT_PROTOCOL_VERSION:
+        return False
+    context.abort(
+        grpc.StatusCode.FAILED_PRECONDITION,
+        f"host requested protocol version {protocol_version}, provider requires {CURRENT_PROTOCOL_VERSION}",
+    )
+    return True
+
+
 def serve(
     target: Plugin | PluginProviderAdapter | PluginProvider,
     *,
@@ -371,7 +384,10 @@ def _provider_servicer(*, plugin: Plugin) -> Any:
                 max_protocol_version=CURRENT_PROTOCOL_VERSION,
             )
 
-        def StartProvider(self, request: Any, _context: Any) -> Any:
+        @_grpc_handler("configure provider")
+        def StartProvider(self, request: Any, context: Any) -> Any:
+            if _abort_if_protocol_version_mismatch(request.protocol_version, context):
+                return None
             plugin.configure_provider(
                 request.name,
                 _message_to_dict(
@@ -455,11 +471,8 @@ def _runtime_servicer(*, provider: PluginProvider, kind: ProviderKind) -> Any:
 
         @_grpc_handler("configure provider")
         def ConfigureProvider(self, request: Any, context: Any) -> Any:
-            if request.protocol_version != CURRENT_PROTOCOL_VERSION:
-                return context.abort(
-                    grpc.StatusCode.FAILED_PRECONDITION,
-                    f"host requested protocol version {request.protocol_version}, provider requires {CURRENT_PROTOCOL_VERSION}",
-                )
+            if _abort_if_protocol_version_mismatch(request.protocol_version, context):
+                return None
             config = _message_to_dict(
                 field_name="config",
                 message=request.config,

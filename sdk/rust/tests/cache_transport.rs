@@ -11,6 +11,7 @@ use gestalt::proto::v1::{ConfigureProviderRequest, ProviderKind};
 use gestalt::{CacheEntry, CacheProvider, CacheSetOptions, RuntimeMetadata};
 use hyper_util::rt::tokio::TokioIo;
 use tokio::net::UnixStream;
+use tonic::Code;
 use tonic::transport::Endpoint;
 use tower::service_fn;
 
@@ -144,8 +145,37 @@ async fn cache_runtime_and_client_round_trip_over_named_socket() {
     );
     assert_eq!(metadata.name, "cache-example");
     assert_eq!(metadata.warnings, vec!["set cache namespace"]);
+    assert_eq!(
+        metadata.min_protocol_version,
+        gestalt::CURRENT_PROTOCOL_VERSION
+    );
+    assert_eq!(
+        metadata.max_protocol_version,
+        gestalt::CURRENT_PROTOCOL_VERSION
+    );
 
-    runtime
+    let err = runtime
+        .configure_provider(ConfigureProviderRequest {
+            name: "cache-runtime".to_string(),
+            config: Some(helpers::struct_from_json(
+                serde_json::json!({ "namespace": "tenant-a" }),
+            )),
+            protocol_version: gestalt::CURRENT_PROTOCOL_VERSION + 1,
+        })
+        .await
+        .expect_err("configure provider should reject mismatched protocol version");
+    assert_eq!(err.code(), Code::FailedPrecondition);
+    assert_eq!(
+        provider
+            .configured_name
+            .lock()
+            .expect("configured_name lock")
+            .as_str(),
+        "",
+        "provider should not be configured on protocol mismatch"
+    );
+
+    let configured = runtime
         .configure_provider(ConfigureProviderRequest {
             name: "cache-runtime".to_string(),
             config: Some(helpers::struct_from_json(
@@ -154,7 +184,12 @@ async fn cache_runtime_and_client_round_trip_over_named_socket() {
             protocol_version: gestalt::CURRENT_PROTOCOL_VERSION,
         })
         .await
-        .expect("configure provider");
+        .expect("configure provider")
+        .into_inner();
+    assert_eq!(
+        configured.protocol_version,
+        gestalt::CURRENT_PROTOCOL_VERSION
+    );
 
     let mut cache = gestalt::Cache::connect_named("shared-cache")
         .await

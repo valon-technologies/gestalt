@@ -146,6 +146,23 @@ async fn serves_provider_requests_over_unix_socket() {
         gestalt::CURRENT_PROTOCOL_VERSION
     );
 
+    let err = client
+        .start_provider(StartProviderRequest {
+            name: "example".to_string(),
+            config: Some(helpers::struct_from_json(
+                serde_json::json!({ "greeting": "Hi" }),
+            )),
+            protocol_version: gestalt::CURRENT_PROTOCOL_VERSION + 1,
+        })
+        .await
+        .expect_err("start provider should reject mismatched protocol version");
+    assert_eq!(err.code(), Code::FailedPrecondition);
+    assert_eq!(
+        provider.greeting.lock().expect("lock greeting").as_str(),
+        "",
+        "provider should not be configured on protocol mismatch"
+    );
+
     let started = client
         .start_provider(StartProviderRequest {
             name: "example".to_string(),

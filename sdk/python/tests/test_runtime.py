@@ -8,6 +8,7 @@ from unittest import mock
 
 import grpc
 from google.protobuf import duration_pb2 as _duration_pb2
+from google.protobuf import json_format
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 
 from gestalt import (
@@ -51,6 +52,24 @@ def _ts(epoch_seconds: int) -> Any:
     ts = timestamp_pb2.Timestamp()
     ts.FromDatetime(dt.datetime.fromtimestamp(epoch_seconds, tz=UTC))
     return ts
+
+
+class AbortCalled(RuntimeError):
+    pass
+
+
+class AbortContext:
+    def __init__(self) -> None:
+        self._code: grpc.StatusCode | None = None
+        self.details: str | None = None
+
+    def abort(self, code: grpc.StatusCode, details: str) -> None:
+        self._code = code
+        self.details = details
+        raise AbortCalled(details)
+
+    def code(self) -> grpc.StatusCode | None:
+        return self._code
 
 
 class ParseRuntimeArgsTests(unittest.TestCase):
@@ -225,6 +244,11 @@ class MainEntrypointTests(unittest.TestCase):
 
     def test_provider_servicer_reports_and_serves_session_catalogs(self) -> None:
         plugin = Plugin("source-name")
+        configured: list[tuple[str, dict[str, Any]]] = []
+
+        @plugin.configure
+        def configure(name: str, config: dict[str, Any]) -> None:
+            configured.append((name, dict(config)))
 
         @plugin.operation
         def whoami(request: Request) -> dict[str, str]:
@@ -257,6 +281,31 @@ class MainEntrypointTests(unittest.TestCase):
 
         servicer = _runtime._provider_servicer(plugin=plugin)
         metadata = servicer.GetMetadata(mock.Mock(), mock.Mock())
+        bad_context = AbortContext()
+        with self.assertRaisesRegex(
+            AbortCalled,
+            "host requested protocol version",
+        ):
+            servicer.StartProvider(
+                plugin_pb2.StartProviderRequest(
+                    name="source-instance",
+                    protocol_version=_runtime.CURRENT_PROTOCOL_VERSION + 1,
+                ),
+                bad_context,
+            )
+        self.assertEqual(bad_context.code(), grpc.StatusCode.FAILED_PRECONDITION)
+        self.assertEqual(
+            bad_context.details,
+            f"host requested protocol version {_runtime.CURRENT_PROTOCOL_VERSION + 1}, provider requires {_runtime.CURRENT_PROTOCOL_VERSION}",
+        )
+        self.assertEqual(configured, [])
+
+        start_request = plugin_pb2.StartProviderRequest(
+            name="source-instance",
+            protocol_version=_runtime.CURRENT_PROTOCOL_VERSION,
+        )
+        json_format.ParseDict({"region": "use1"}, start_request.config)
+        start_response = servicer.StartProvider(start_request, mock.Mock())
         execute_response = servicer.Execute(
             plugin_pb2.ExecuteRequest(
                 operation="whoami",
@@ -296,6 +345,22 @@ class MainEntrypointTests(unittest.TestCase):
         )
 
         self.assertTrue(metadata.supports_session_catalog)
+        self.assertEqual(
+            metadata.min_protocol_version,
+            _runtime.CURRENT_PROTOCOL_VERSION,
+        )
+        self.assertEqual(
+            metadata.max_protocol_version,
+            _runtime.CURRENT_PROTOCOL_VERSION,
+        )
+        self.assertEqual(
+            start_response.protocol_version,
+            _runtime.CURRENT_PROTOCOL_VERSION,
+        )
+        self.assertEqual(
+            configured,
+            [("source-instance", {"region": "use1"})],
+        )
         self.assertEqual(
             json.loads(execute_response.body),
             {
@@ -402,10 +467,57 @@ class AuthRuntimeTests(unittest.TestCase):
             provider=provider,
             kind=ProviderKind.AUTH,
         )
+        bad_context = AbortContext()
+        with self.assertRaisesRegex(
+            AbortCalled,
+            "host requested protocol version",
+        ):
+            runtime_servicer.ConfigureProvider(
+                runtime_pb2.ConfigureProviderRequest(
+                    name="fixture-auth",
+                    protocol_version=_runtime.CURRENT_PROTOCOL_VERSION + 1,
+                ),
+                bad_context,
+            )
+        self.assertEqual(bad_context.code(), grpc.StatusCode.FAILED_PRECONDITION)
+        self.assertEqual(
+            bad_context.details,
+            f"host requested protocol version {_runtime.CURRENT_PROTOCOL_VERSION + 1}, provider requires {_runtime.CURRENT_PROTOCOL_VERSION}",
+        )
+        self.assertEqual(provider.configured, [])
+
+        configure_request = runtime_pb2.ConfigureProviderRequest(
+            name="fixture-auth",
+            protocol_version=_runtime.CURRENT_PROTOCOL_VERSION,
+        )
+        json_format.ParseDict(
+            {"issuer": "https://login.example.test"},
+            configure_request.config,
+        )
+        configure_response = runtime_servicer.ConfigureProvider(
+            configure_request,
+            mock.Mock(),
+        )
         meta = runtime_servicer.GetProviderIdentity(mock.Mock(), mock.Mock())
         self.assertEqual(meta.kind, runtime_pb2.ProviderKind.PROVIDER_KIND_AUTH)
         self.assertEqual(meta.name, "stub-auth")
         self.assertEqual(list(meta.warnings), ["set AUTH_ENV"])
+        self.assertEqual(
+            meta.min_protocol_version,
+            _runtime.CURRENT_PROTOCOL_VERSION,
+        )
+        self.assertEqual(
+            meta.max_protocol_version,
+            _runtime.CURRENT_PROTOCOL_VERSION,
+        )
+        self.assertEqual(
+            configure_response.protocol_version,
+            _runtime.CURRENT_PROTOCOL_VERSION,
+        )
+        self.assertEqual(
+            provider.configured,
+            [("fixture-auth", {"issuer": "https://login.example.test"})],
+        )
 
         auth_servicer = _runtime._auth_servicer(provider=provider)
         login = auth_servicer.BeginLogin(
