@@ -76,8 +76,8 @@ from ._providers import (
     S3Provider,
     SecretsProvider,
     SessionTTLProvider,
-    WorkflowProvider,
     WarningsProvider,
+    WorkflowProvider,
 )
 from ._s3 import (
     ENV_S3_SOCKET,

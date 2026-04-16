@@ -28,8 +28,8 @@ from gestalt import (
     Request,
     S3Provider,
     SessionTTLProvider,
-    WorkflowProvider,
     WarningsProvider,
+    WorkflowProvider,
     _bootstrap,
     _runtime,
 )
@@ -274,7 +274,6 @@ class MainEntrypointTests(unittest.TestCase):
                     request.workflow.get("trigger", {}).get("kind", "")
                 ),
                 "workflow": request.workflow,
-                "request_handle": request.request_handle,
             }
 
         @plugin.session_catalog

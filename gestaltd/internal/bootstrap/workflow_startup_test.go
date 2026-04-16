@@ -410,6 +410,8 @@ func TestValidatePluginStartupWorkflowCallWaitsForWorkflowProvider(t *testing.T)
 }
 
 func TestBootstrapFailsPendingWorkflowStartupClientsOnAuthorizationErrors(t *testing.T) {
+	t.Parallel()
+
 	bin, manifestRoot := buildModifiedExampleProviderBinary(t, func(source string) string {
 		return strings.Replace(source,
 			"func (p *Provider) Configure(_ context.Context, name string, config map[string]any) error {\n\tp.startedName = name\n\tif g, ok := config[\"greeting\"].(string); ok {\n\t\tp.greeting = g\n\t}\n\treturn nil\n}\n",
@@ -461,6 +463,8 @@ func TestBootstrapFailsPendingWorkflowStartupClientsOnAuthorizationErrors(t *tes
 }
 
 func TestBootstrapFailsWorkflowStartupDependencyCycles(t *testing.T) {
+	t.Parallel()
+
 	bin, manifestRoot := buildModifiedExampleProviderBinary(t, func(source string) string {
 		return strings.Replace(source,
 			"func (p *Provider) Configure(_ context.Context, name string, config map[string]any) error {\n\tp.startedName = name\n\tif g, ok := config[\"greeting\"].(string); ok {\n\t\tp.greeting = g\n\t}\n\treturn nil\n}\n",

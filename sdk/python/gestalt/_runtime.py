@@ -36,8 +36,8 @@ from ._providers import (
     S3Provider,
     SecretsProvider,
     SessionTTLProvider,
-    WorkflowProvider,
     WarningsProvider,
+    WorkflowProvider,
 )
 from ._serialization import json_body
 from .gen.v1 import auth_pb2 as _auth_pb2

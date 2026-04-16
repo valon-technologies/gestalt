@@ -53,7 +53,6 @@ import {
   createProviderService,
   createRuntimeService,
   createWorkflowService,
-  loadPluginFromTarget,
   loadProviderFromTarget,
   main,
   parseRuntimeArgs,

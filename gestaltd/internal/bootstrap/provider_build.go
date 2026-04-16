@@ -208,7 +208,8 @@ func operationConnectionsForCatalog(cat *catalog.Catalog, plan config.StaticConn
 		return map[string]string{}
 	}
 	operationConnections := make(map[string]string, len(cat.Operations))
-	for _, operation := range cat.Operations {
+	for i := range cat.Operations {
+		operation := &cat.Operations[i]
 		connection := config.PluginConnectionName
 		switch operation.Transport {
 		case catalog.TransportREST:

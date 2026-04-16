@@ -4,6 +4,10 @@
     {
       "tagName": "@module",
       "syntaxKind": "block"
+    },
+    {
+      "tagName": "@generated",
+      "syntaxKind": "block"
     }
   ]
 }

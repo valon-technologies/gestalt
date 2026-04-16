@@ -8,7 +8,7 @@ from concurrent import futures
 from typing import Any
 
 import grpc
-from google.protobuf import empty_pb2
+from google.protobuf import empty_pb2 as _empty_pb2
 
 from gestalt import (
     ENV_WORKFLOW_HOST_SOCKET,
@@ -21,6 +21,7 @@ from gestalt.gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
 
 workflow_pb2: Any = _workflow_pb2
 workflow_pb2_grpc: Any = _workflow_pb2_grpc
+empty_pb2: Any = _empty_pb2
 
 _server: grpc.Server | None = None
 _socket_path: str = ""

@@ -35,7 +35,6 @@ export interface Request {
   subject: Subject;
   credential: Credential;
   access: Access;
-  requestHandle: string;
   // Workflow callback metadata uses a JSON-style lowerCamelCase object such as
   // runId, target.pluginName, trigger.scheduleId, and trigger.event.specVersion.
   workflow: Record<string, unknown>;
@@ -127,7 +126,6 @@ export function request(
       policy: access.policy ?? "",
       role: access.role ?? "",
     },
-    requestHandle,
     workflow: {
       ...workflow,
     },
