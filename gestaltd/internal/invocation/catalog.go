@@ -16,6 +16,27 @@ type TokenResolver interface {
 	ResolveToken(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error)
 }
 
+func OrderedSessionSelectors(p *principal.Principal, explicitConnection, explicitInstance, preferredConnection, fallbackConnection, bindingConnection, bindingInstance string) ([]string, string) {
+	instance := explicitInstance
+	if instance == "" && p != nil && p.Kind == principal.KindWorkload {
+		instance = bindingInstance
+	}
+	switch {
+	case explicitConnection != "":
+		return []string{explicitConnection}, instance
+	case p != nil && p.Kind == principal.KindWorkload && bindingConnection != "":
+		return []string{bindingConnection}, instance
+	case preferredConnection != "" && fallbackConnection != "" && fallbackConnection != preferredConnection:
+		return []string{preferredConnection, fallbackConnection}, instance
+	case preferredConnection != "":
+		return []string{preferredConnection}, instance
+	case fallbackConnection != "":
+		return []string{fallbackConnection}, instance
+	default:
+		return []string{""}, instance
+	}
+}
+
 func ResolveCatalogWithMetadata(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, defaultConnection, instance string, strictSession bool) (*catalog.Catalog, bool, error) {
 	staticCat := prov.Catalog()
 	sessionCat, attempted, err := resolveSessionCatalog(ctx, prov, provName, resolver, p, defaultConnection, instance)
