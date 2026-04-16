@@ -8,13 +8,15 @@ import (
 )
 
 const (
-	providerLockSchemaName        = "gestaltd-provider-lock"
-	providerLockSchemaVersion     = 2
-	providerLockRevision          = 0
-	providerLockKindTelemetry     = "telemetry"
-	providerLockKindAudit         = "audit"
-	providerLockRuntimeExecutable = "executable"
-	providerLockRuntimeAssets     = "assets"
+	providerLockSchemaName         = "gestaltd-provider-lock"
+	providerLockSchemaVersion      = 2
+	providerLockRevision           = 0
+	providerLockKindTelemetry      = "telemetry"
+	providerLockKindAudit          = "audit"
+	providerLockRuntimeExecutable  = providerReleaseRuntimeExecutable
+	providerLockRuntimeDeclarative = providerReleaseRuntimeDeclarative
+	providerLockRuntimeWebUI       = providerReleaseRuntimeWebUI
+	providerLockRuntimeAssets      = providerLockRuntimeWebUI
 )
 
 type providerLockfile struct {
@@ -201,9 +203,9 @@ func portableEntriesFromLockEntries(entries map[string]LockEntry, kind string) m
 	for name, entry := range entries {
 		portable[name] = portableLockEntry{
 			InputDigest: entry.Fingerprint,
-			Package:     entry.Source,
-			Kind:        kind,
-			Runtime:     portableRuntimeForKind(kind),
+			Package:     lockEntryPackage(entry),
+			Kind:        lockEntryKind(entry, kind),
+			Runtime:     lockEntryRuntime(entry, kind),
 			Source:      entry.Source,
 			Version:     entry.Version,
 			Archives:    maps.Clone(entry.Archives),
@@ -224,17 +226,13 @@ func lockEntriesFromPortableEntries(entries map[string]portableLockEntry) map[st
 		}
 		runtimeEntries[name] = LockEntry{
 			Fingerprint: fingerprint,
+			Package:     entry.Package,
+			Kind:        entry.Kind,
+			Runtime:     entry.Runtime,
 			Source:      entry.Source,
 			Version:     entry.Version,
 			Archives:    maps.Clone(entry.Archives),
 		}
 	}
 	return runtimeEntries
-}
-
-func portableRuntimeForKind(kind string) string {
-	if kind == providermanifestv1.KindWebUI {
-		return providerLockRuntimeAssets
-	}
-	return providerLockRuntimeExecutable
 }

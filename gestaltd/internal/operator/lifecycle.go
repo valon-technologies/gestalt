@@ -19,7 +19,6 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
-	ghresolver "github.com/valon-technologies/gestalt/server/internal/pluginsource/github"
 	"github.com/valon-technologies/gestalt/server/internal/pluginstore"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -61,6 +60,9 @@ type LockArchive struct {
 
 type LockEntry struct {
 	Fingerprint string                 `json:"fingerprint"`
+	Package     string                 `json:"package,omitempty"`
+	Kind        string                 `json:"kind,omitempty"`
+	Runtime     string                 `json:"runtime,omitempty"`
 	Source      string                 `json:"source,omitempty"`
 	Version     string                 `json:"version,omitempty"`
 	Archives    map[string]LockArchive `json:"archives,omitempty"`
@@ -75,6 +77,7 @@ type LockUIEntry = LockEntry
 type Lifecycle struct {
 	sourceResolver       pluginsource.Resolver
 	configSecretResolver func(context.Context, *config.Config) error
+	httpClient           *http.Client
 }
 
 func NewLifecycle(sourceResolver pluginsource.Resolver) *Lifecycle {
@@ -84,6 +87,18 @@ func NewLifecycle(sourceResolver pluginsource.Resolver) *Lifecycle {
 func (l *Lifecycle) WithConfigSecretResolver(resolve func(context.Context, *config.Config) error) *Lifecycle {
 	l.configSecretResolver = resolve
 	return l
+}
+
+func (l *Lifecycle) WithHTTPClient(client *http.Client) *Lifecycle {
+	l.httpClient = client
+	return l
+}
+
+func (l *Lifecycle) metadataHTTPClient() *http.Client {
+	if l != nil && l.httpClient != nil {
+		return l.httpClient
+	}
+	return http.DefaultClient
 }
 
 func (l *Lifecycle) InitAtPath(configPath string) (*Lockfile, error) {
@@ -126,7 +141,7 @@ func (l *Lifecycle) InitAtPathsWithPlatforms(configPaths []string, artifactsDir 
 	configPath := primaryConfigPath(configPaths)
 	paths := initPathsForConfigsWithArtifactsDir(configPaths, resolveArtifactsDir(configPath, cfg, artifactsDir))
 	tokenForSource := buildSourceTokenMap(cfg)
-	if err := downloadPlatformArchives(context.Background(), lock, paths, platforms, tokenForSource); err != nil {
+	if err := l.downloadPlatformArchives(context.Background(), lock, paths, platforms, tokenForSource); err != nil {
 		return nil, err
 	}
 
@@ -893,6 +908,9 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 		if !entry.HasRemoteSource() {
 			continue
 		}
+		if entry.HasMetadataSource() {
+			return false
+		}
 		lockEntry, found := lock.Providers[name]
 		if !lockEntryMatches(paths, providermanifestv1.KindPlugin, name, entry, lockEntry, found, providerDestDir(paths, name)) {
 			return false
@@ -904,6 +922,9 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 			if entry == nil || !entry.HasRemoteSource() {
 				continue
 			}
+			if entry.HasMetadataSource() {
+				return false
+			}
 			lockEntry, found := lockEntries[name]
 			if !lockEntryMatches(paths, providerManifestKind(collection.kind), name, entry, lockEntry, found, componentDestDir(paths, collection.kind, name)) {
 				return false
@@ -914,6 +935,9 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 		if entry == nil || !entry.HasRemoteSource() {
 			continue
 		}
+		if entry.HasMetadataSource() {
+			return false
+		}
 		lockEntry, found := lock.IndexedDBs[name]
 		if !lockEntryMatches(paths, providermanifestv1.KindIndexedDB, name, entry, lockEntry, found, indexeddbDestDir(paths, name)) {
 			return false
@@ -923,6 +947,9 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 		if entry == nil || !entry.HasRemoteSource() {
 			continue
 		}
+		if entry.HasMetadataSource() {
+			return false
+		}
 		lockEntry, found := lock.S3[name]
 		if !lockEntryMatches(paths, providermanifestv1.KindS3, name, entry, lockEntry, found, s3DestDir(paths, name)) {
 			return false
@@ -931,6 +958,9 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 	for name, entry := range cfg.Providers.UI {
 		if entry == nil || !entry.HasRemoteSource() {
 			continue
+		}
+		if entry.HasMetadataSource() {
+			return false
 		}
 		lockEntry, ok := lock.UIs[name]
 		if !ok {
@@ -978,6 +1008,16 @@ func ProviderFingerprint(name string, entry *config.ProviderEntry, configDir str
 
 func NamedUIProviderFingerprint(name string, entry *config.ProviderEntry) (string, error) {
 	return ProviderFingerprint("ui:"+name, entry, "")
+}
+
+func lockEntryVersionMatchesConfig(providerEntry *config.ProviderEntry, entry LockEntry) bool {
+	if providerEntry == nil {
+		return false
+	}
+	if providerEntry.HasMetadataSource() {
+		return strings.TrimSpace(entry.Version) != ""
+	}
+	return entry.Version == providerEntry.SourceVersion()
 }
 
 func archivePolicyKind(kind string) string {
@@ -1053,7 +1093,7 @@ func lockEntryMatches(paths initPaths, kind, name string, providerEntry *config.
 	if err != nil || entry.Fingerprint != fingerprint {
 		return false
 	}
-	if entry.Source != providerEntry.SourceRemoteLocation() || entry.Version != providerEntry.SourceVersion() {
+	if entry.Source != providerEntry.SourceRemoteLocation() || !lockEntryVersionMatchesConfig(providerEntry, entry) {
 		return false
 	}
 	if len(entry.Archives) > 0 {
@@ -1105,7 +1145,7 @@ func preparedManifestMatchesLock(entry LockEntry, manifest *providermanifestv1.M
 	if manifest == nil {
 		return false
 	}
-	if entry.Source != "" && manifest.Source != entry.Source {
+	if expectedPackage := lockEntryPackage(entry); expectedPackage != "" && manifest.Source != expectedPackage {
 		return false
 	}
 	if entry.Version != "" && manifest.Version != entry.Version {
@@ -1171,6 +1211,69 @@ func (l *Lifecycle) buildArchivesMap(ctx context.Context, src pluginsource.Sourc
 	return archives, nil
 }
 
+func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKind, name, subject, destDir string, plugin *config.ProviderEntry) (*pluginstore.InstalledPlugin, LockEntry, error) {
+	sourceLocation := plugin.SourceMetadataURL()
+	metadata, err := fetchProviderReleaseMetadata(ctx, l.metadataHTTPClient(), sourceLocation, sourceAuthToken(plugin))
+	if err != nil {
+		return nil, LockEntry{}, fmt.Errorf("%s fetch metadata %q: %w", subject, sourceLocation, err)
+	}
+	if metadata.Kind != expectedKind {
+		return nil, LockEntry{}, fmt.Errorf("%s metadata kind %q does not match expected kind %q", subject, metadata.Kind, expectedKind)
+	}
+	archives, err := providerReleaseArchives(sourceLocation, metadata)
+	if err != nil {
+		return nil, LockEntry{}, fmt.Errorf("%s resolve archive metadata %q: %w", subject, sourceLocation, err)
+	}
+	entry := LockEntry{
+		Package:  metadata.Package,
+		Kind:     metadata.Kind,
+		Runtime:  metadata.Runtime,
+		Source:   sourceLocation,
+		Version:  metadata.Version,
+		Archives: archives,
+	}
+
+	currentPlatform := providerpkg.CurrentPlatformString()
+	archive, resolvedKey, ok := resolveArchiveForPlatform(entry, currentPlatform)
+	if !ok || archive.URL == "" {
+		return nil, LockEntry{}, fmt.Errorf("no archive for platform %s for %s; publish an explicit %s target or a generic package where allowed", currentPlatform, subject, currentPlatform)
+	}
+	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceLocation, sourceAuthToken(plugin), archive.URL)
+	if err != nil {
+		return nil, LockEntry{}, fmt.Errorf("download metadata source package for %s: %w", subject, err)
+	}
+	defer download.Cleanup()
+	if archive.SHA256 != "" && download.SHA256Hex != archive.SHA256 {
+		return nil, LockEntry{}, fmt.Errorf("metadata source digest mismatch for %s: got %s, want %s", subject, download.SHA256Hex, archive.SHA256)
+	}
+
+	installed, err := pluginstore.Install(download.LocalPath, destDir)
+	if err != nil {
+		return nil, LockEntry{}, fmt.Errorf("install metadata source package for %s: %w", subject, err)
+	}
+	if err := validateInstalledManifestKind(expectedKind, name, installed.Manifest); err != nil {
+		return nil, LockEntry{}, err
+	}
+	if installed.Manifest.Source != metadata.Package {
+		return nil, LockEntry{}, fmt.Errorf("%s manifest source %q does not match metadata package %q", subject, installed.Manifest.Source, metadata.Package)
+	}
+	if installed.Manifest.Version != metadata.Version {
+		return nil, LockEntry{}, fmt.Errorf("%s manifest version %q does not match metadata version %q", subject, installed.Manifest.Version, metadata.Version)
+	}
+	installedRuntime := releaseRuntimeForManifest(installed.Manifest, expectedKind)
+	if metadata.Runtime != installedRuntime {
+		return nil, LockEntry{}, fmt.Errorf("%s manifest runtime %q does not match metadata runtime %q", subject, installedRuntime, metadata.Runtime)
+	}
+	entry.Package = installed.Manifest.Source
+	entry.Kind = installed.Manifest.Kind
+	entry.Runtime = installedRuntime
+	entry.Version = installed.Manifest.Version
+	if err := validateLockedArchivePolicy(subject, expectedKind, installed.Manifest, entry, currentPlatform, resolvedKey); err != nil {
+		return nil, LockEntry{}, err
+	}
+	return installed, entry, nil
+}
+
 func (l *Lifecycle) writeProviderArtifacts(ctx context.Context, cfg *config.Config, paths initPaths) (map[string]LockProviderEntry, error) {
 	written := make(map[string]LockProviderEntry)
 	for name, entry := range cfg.Plugins {
@@ -1204,31 +1307,57 @@ func (l *Lifecycle) writeComponentArtifact(ctx context.Context, paths initPaths,
 
 func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, paths initPaths, kind, name, destDir string, plugin *config.ProviderEntry, configMap map[string]any) (LockEntry, error) {
 	sourceLocation := plugin.SourceRemoteLocation()
-	src, err := sourceForProvider(plugin)
-	if err != nil {
-		return LockEntry{}, fmt.Errorf("%s %q source %q: %w", kind, name, sourceLocation, err)
-	}
-	if l.sourceResolver == nil {
-		return LockEntry{}, fmt.Errorf("%s %q: source provider resolution requires a source resolver", kind, name)
-	}
-	resolved, err := l.sourceResolver.Resolve(ctx, src, plugin.SourceVersion())
-	if err != nil {
-		return LockEntry{}, fmt.Errorf("%s %q resolve source %q@%s: %w", kind, name, sourceLocation, plugin.SourceVersion(), err)
-	}
-	defer resolved.Cleanup()
+	expectedPackage := sourceLocation
+	var (
+		installed *pluginstore.InstalledPlugin
+		entry     LockEntry
+		err       error
+	)
+	subject := fmt.Sprintf("%s %q", kind, name)
+	if plugin.HasMetadataSource() {
+		installed, entry, err = l.installMetadataSourcePackage(ctx, kind, name, subject, destDir, plugin)
+		if err != nil {
+			return LockEntry{}, err
+		}
+		expectedPackage = lockEntryPackage(entry)
+	} else {
+		src, parseErr := sourceForProvider(plugin)
+		if parseErr != nil {
+			return LockEntry{}, fmt.Errorf("%s %q source %q: %w", kind, name, sourceLocation, parseErr)
+		}
+		if l.sourceResolver == nil {
+			return LockEntry{}, fmt.Errorf("%s %q: source provider resolution requires a source resolver", kind, name)
+		}
+		resolved, resolveErr := l.sourceResolver.Resolve(ctx, src, plugin.SourceVersion())
+		if resolveErr != nil {
+			return LockEntry{}, fmt.Errorf("%s %q resolve source %q@%s: %w", kind, name, sourceLocation, plugin.SourceVersion(), resolveErr)
+		}
+		defer resolved.Cleanup()
 
-	installed, err := pluginstore.Install(resolved.LocalPath, destDir)
-	if err != nil {
-		return LockEntry{}, fmt.Errorf("%s %q install source provider: %w", kind, name, err)
+		installed, err = pluginstore.Install(resolved.LocalPath, destDir)
+		if err != nil {
+			return LockEntry{}, fmt.Errorf("%s %q install source provider: %w", kind, name, err)
+		}
+		entry.Archives, err = l.buildArchivesMap(ctx, src, plugin.SourceVersion(), resolved.ResolvedURL, resolved.ArchiveSHA256, kind, subject, installed.Manifest)
+		if err != nil {
+			return LockEntry{}, err
+		}
+		entry.Package = installed.Manifest.Source
+		entry.Kind = installed.Manifest.Kind
+		entry.Runtime = releaseRuntimeForManifest(installed.Manifest, kind)
+		entry.Source = sourceLocation
+		entry.Version = plugin.SourceVersion()
 	}
-	if err := validateInstalledManifestKind(kind, name, installed.Manifest); err != nil {
-		return LockEntry{}, err
-	}
-	if installed.Manifest.Source != sourceLocation {
-		return LockEntry{}, fmt.Errorf("%s %q: manifest source %q does not match config source %q", kind, name, installed.Manifest.Source, sourceLocation)
-	}
-	if installed.Manifest.Version != plugin.SourceVersion() {
-		return LockEntry{}, fmt.Errorf("%s %q: manifest version %q does not match config version %q", kind, name, installed.Manifest.Version, plugin.SourceVersion())
+	if !plugin.HasMetadataSource() {
+		if err := validateInstalledManifestKind(kind, name, installed.Manifest); err != nil {
+			return LockEntry{}, err
+		}
+		if installed.Manifest.Source != expectedPackage {
+			return LockEntry{}, fmt.Errorf("%s %q: manifest source %q does not match expected package %q", kind, name, installed.Manifest.Source, expectedPackage)
+		}
+		if installed.Manifest.Version != entry.Version {
+			return LockEntry{}, fmt.Errorf("%s %q: manifest version %q does not match expected version %q", kind, name, installed.Manifest.Version, entry.Version)
+		}
 	}
 	if err := providerpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, kind, configMap); err != nil {
 		return LockEntry{}, fmt.Errorf("provider config validation for %s %q: %w", kind, name, err)
@@ -1250,49 +1379,65 @@ func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, paths initP
 	if err != nil {
 		return LockEntry{}, fmt.Errorf("compute executable path for %s %q: %w", kind, name, err)
 	}
-	archives, err := l.buildArchivesMap(ctx, src, plugin.SourceVersion(), resolved.ResolvedURL, resolved.ArchiveSHA256, kind, fmt.Sprintf("%s %q", kind, name), installed.Manifest)
-	if err != nil {
-		return LockEntry{}, err
-	}
-	return LockEntry{
-		Fingerprint: fingerprint,
-		Source:      sourceLocation,
-		Version:     plugin.SourceVersion(),
-		Archives:    archives,
-		Manifest:    filepath.ToSlash(manifestPath),
-		Executable:  filepath.ToSlash(executablePath),
-	}, nil
+	entry.Fingerprint = fingerprint
+	entry.Manifest = filepath.ToSlash(manifestPath)
+	entry.Executable = filepath.ToSlash(executablePath)
+	return entry, nil
 }
 
 func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths initPaths, name string, plugin *config.ProviderEntry, configMap map[string]any) (LockProviderEntry, error) {
 	sourceLocation := plugin.SourceRemoteLocation()
-	src, err := sourceForProvider(plugin)
-	if err != nil {
-		return LockProviderEntry{}, fmt.Errorf("provider %q source %q: %w", name, sourceLocation, err)
-	}
-	if l.sourceResolver == nil {
-		return LockProviderEntry{}, fmt.Errorf("provider %q: source provider resolution requires a source resolver", name)
-	}
-	resolved, err := l.sourceResolver.Resolve(ctx, src, plugin.SourceVersion())
-	if err != nil {
-		return LockProviderEntry{}, fmt.Errorf("provider %q resolve source %q@%s: %w", name, sourceLocation, plugin.SourceVersion(), err)
-	}
-	defer resolved.Cleanup()
-
+	expectedPackage := sourceLocation
 	destDir := providerDestDir(paths, name)
-	installed, err := pluginstore.Install(resolved.LocalPath, destDir)
-	if err != nil {
-		return LockProviderEntry{}, fmt.Errorf("provider %q install source provider: %w", name, err)
-	}
-	if err := validateInstalledManifestKind(providermanifestv1.KindPlugin, name, installed.Manifest); err != nil {
-		return LockProviderEntry{}, err
-	}
+	var (
+		installed *pluginstore.InstalledPlugin
+		entry     LockProviderEntry
+		err       error
+	)
+	if plugin.HasMetadataSource() {
+		installed, entry, err = l.installMetadataSourcePackage(ctx, providermanifestv1.KindPlugin, name, fmt.Sprintf("provider %q", name), destDir, plugin)
+		if err != nil {
+			return LockProviderEntry{}, err
+		}
+		expectedPackage = lockEntryPackage(entry)
+	} else {
+		src, parseErr := sourceForProvider(plugin)
+		if parseErr != nil {
+			return LockProviderEntry{}, fmt.Errorf("provider %q source %q: %w", name, sourceLocation, parseErr)
+		}
+		if l.sourceResolver == nil {
+			return LockProviderEntry{}, fmt.Errorf("provider %q: source provider resolution requires a source resolver", name)
+		}
+		resolved, resolveErr := l.sourceResolver.Resolve(ctx, src, plugin.SourceVersion())
+		if resolveErr != nil {
+			return LockProviderEntry{}, fmt.Errorf("provider %q resolve source %q@%s: %w", name, sourceLocation, plugin.SourceVersion(), resolveErr)
+		}
+		defer resolved.Cleanup()
 
-	if installed.Manifest.Source != sourceLocation {
-		return LockProviderEntry{}, fmt.Errorf("provider %q: manifest source %q does not match config source %q", name, installed.Manifest.Source, sourceLocation)
+		installed, err = pluginstore.Install(resolved.LocalPath, destDir)
+		if err != nil {
+			return LockProviderEntry{}, fmt.Errorf("provider %q install source provider: %w", name, err)
+		}
+		entry.Archives, err = l.buildArchivesMap(ctx, src, plugin.SourceVersion(), resolved.ResolvedURL, resolved.ArchiveSHA256, providermanifestv1.KindPlugin, fmt.Sprintf("provider %q", name), installed.Manifest)
+		if err != nil {
+			return LockProviderEntry{}, err
+		}
+		entry.Package = installed.Manifest.Source
+		entry.Kind = installed.Manifest.Kind
+		entry.Runtime = releaseRuntimeForManifest(installed.Manifest, providermanifestv1.KindPlugin)
+		entry.Source = sourceLocation
+		entry.Version = plugin.SourceVersion()
 	}
-	if installed.Manifest.Version != plugin.SourceVersion() {
-		return LockProviderEntry{}, fmt.Errorf("provider %q: manifest version %q does not match config version %q", name, installed.Manifest.Version, plugin.SourceVersion())
+	if !plugin.HasMetadataSource() {
+		if err := validateInstalledManifestKind(providermanifestv1.KindPlugin, name, installed.Manifest); err != nil {
+			return LockProviderEntry{}, err
+		}
+		if installed.Manifest.Source != expectedPackage {
+			return LockProviderEntry{}, fmt.Errorf("provider %q: manifest source %q does not match expected package %q", name, installed.Manifest.Source, expectedPackage)
+		}
+		if installed.Manifest.Version != entry.Version {
+			return LockProviderEntry{}, fmt.Errorf("provider %q: manifest version %q does not match expected version %q", name, installed.Manifest.Version, entry.Version)
+		}
 	}
 
 	if err := providerpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, providermanifestv1.KindPlugin, configMap); err != nil {
@@ -1313,18 +1458,10 @@ func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths initPa
 			return LockProviderEntry{}, fmt.Errorf("compute executable path for provider %q: %w", name, err)
 		}
 	}
-	archives, err := l.buildArchivesMap(ctx, src, plugin.SourceVersion(), resolved.ResolvedURL, resolved.ArchiveSHA256, providermanifestv1.KindPlugin, fmt.Sprintf("provider %q", name), installed.Manifest)
-	if err != nil {
-		return LockProviderEntry{}, err
-	}
-	return LockProviderEntry{
-		Fingerprint: fingerprint,
-		Source:      sourceLocation,
-		Version:     plugin.SourceVersion(),
-		Archives:    archives,
-		Manifest:    filepath.ToSlash(manifestPath),
-		Executable:  filepath.ToSlash(executableRel),
-	}, nil
+	entry.Fingerprint = fingerprint
+	entry.Manifest = filepath.ToSlash(manifestPath)
+	entry.Executable = filepath.ToSlash(executableRel)
+	return entry, nil
 }
 
 func (l *Lifecycle) writeNamedUIProviderArtifact(ctx context.Context, paths initPaths, name string, plugin *config.ProviderEntry, destDir string, subject string) (LockUIEntry, error) {
@@ -1339,32 +1476,57 @@ func (l *Lifecycle) writeNamedUIProviderArtifact(ctx context.Context, paths init
 	if err != nil {
 		return LockUIEntry{}, fmt.Errorf("fingerprinting %s: %w", subject, err)
 	}
+	expectedPackage := plugin.SourceRemoteLocation()
 
-	src, err := sourceForProvider(plugin)
-	if err != nil {
-		return LockUIEntry{}, fmt.Errorf("%s source %q: %w", subject, plugin.SourceRemoteLocation(), err)
-	}
-	if l.sourceResolver == nil {
-		return LockUIEntry{}, fmt.Errorf("%s: source resolution requires a source resolver", subject)
-	}
-	resolved, err := l.sourceResolver.Resolve(ctx, src, plugin.SourceVersion())
-	if err != nil {
-		return LockUIEntry{}, fmt.Errorf("%s resolve source %q@%s: %w", subject, plugin.SourceRemoteLocation(), plugin.SourceVersion(), err)
-	}
-	defer resolved.Cleanup()
+	var (
+		installed *pluginstore.InstalledPlugin
+		entry     LockUIEntry
+		opErr     error
+	)
+	if plugin.HasMetadataSource() {
+		installed, entry, opErr = l.installMetadataSourcePackage(ctx, providermanifestv1.KindWebUI, name, subject, destDir, plugin)
+		if opErr != nil {
+			return LockUIEntry{}, opErr
+		}
+		expectedPackage = lockEntryPackage(entry)
+	} else {
+		src, parseErr := sourceForProvider(plugin)
+		if parseErr != nil {
+			return LockUIEntry{}, fmt.Errorf("%s source %q: %w", subject, plugin.SourceRemoteLocation(), parseErr)
+		}
+		if l.sourceResolver == nil {
+			return LockUIEntry{}, fmt.Errorf("%s: source resolution requires a source resolver", subject)
+		}
+		resolved, resolveErr := l.sourceResolver.Resolve(ctx, src, plugin.SourceVersion())
+		if resolveErr != nil {
+			return LockUIEntry{}, fmt.Errorf("%s resolve source %q@%s: %w", subject, plugin.SourceRemoteLocation(), plugin.SourceVersion(), resolveErr)
+		}
+		defer resolved.Cleanup()
 
-	installed, err := pluginstore.Install(resolved.LocalPath, destDir)
-	if err != nil {
-		return LockUIEntry{}, fmt.Errorf("%s install source: %w", subject, err)
+		installed, opErr = pluginstore.Install(resolved.LocalPath, destDir)
+		if opErr != nil {
+			return LockUIEntry{}, fmt.Errorf("%s install source: %w", subject, opErr)
+		}
+		entry.Archives, opErr = l.buildArchivesMap(ctx, src, plugin.SourceVersion(), resolved.ResolvedURL, resolved.ArchiveSHA256, providermanifestv1.KindWebUI, subject, installed.Manifest)
+		if opErr != nil {
+			return LockUIEntry{}, opErr
+		}
+		entry.Package = installed.Manifest.Source
+		entry.Kind = installed.Manifest.Kind
+		entry.Runtime = releaseRuntimeForManifest(installed.Manifest, providermanifestv1.KindWebUI)
+		entry.Source = plugin.SourceRemoteLocation()
+		entry.Version = plugin.SourceVersion()
 	}
-	if err := validateInstalledManifestKind(providermanifestv1.KindWebUI, subject, installed.Manifest); err != nil {
-		return LockUIEntry{}, err
-	}
-	if installed.Manifest.Source != plugin.SourceRemoteLocation() {
-		return LockUIEntry{}, fmt.Errorf("%s manifest source %q does not match config source %q", subject, installed.Manifest.Source, plugin.SourceRemoteLocation())
-	}
-	if installed.Manifest.Version != plugin.SourceVersion() {
-		return LockUIEntry{}, fmt.Errorf("%s manifest version %q does not match config version %q", subject, installed.Manifest.Version, plugin.SourceVersion())
+	if !plugin.HasMetadataSource() {
+		if err := validateInstalledManifestKind(providermanifestv1.KindWebUI, subject, installed.Manifest); err != nil {
+			return LockUIEntry{}, err
+		}
+		if installed.Manifest.Source != expectedPackage {
+			return LockUIEntry{}, fmt.Errorf("%s manifest source %q does not match expected package %q", subject, installed.Manifest.Source, expectedPackage)
+		}
+		if installed.Manifest.Version != entry.Version {
+			return LockUIEntry{}, fmt.Errorf("%s manifest version %q does not match expected version %q", subject, installed.Manifest.Version, entry.Version)
+		}
 	}
 	if err := providerpkg.ValidateConfigForManifest(installed.ManifestPath, installed.Manifest, providermanifestv1.KindWebUI, configMap); err != nil {
 		return LockUIEntry{}, fmt.Errorf("provider config validation for %s: %w", subject, err)
@@ -1377,18 +1539,10 @@ func (l *Lifecycle) writeNamedUIProviderArtifact(ctx context.Context, paths init
 	if err != nil {
 		return LockUIEntry{}, fmt.Errorf("compute asset root path for %s: %w", subject, err)
 	}
-	archives, err := l.buildArchivesMap(ctx, src, plugin.SourceVersion(), resolved.ResolvedURL, resolved.ArchiveSHA256, providermanifestv1.KindWebUI, subject, installed.Manifest)
-	if err != nil {
-		return LockUIEntry{}, err
-	}
-	return LockUIEntry{
-		Fingerprint: fingerprint,
-		Source:      plugin.SourceRemoteLocation(),
-		Version:     plugin.SourceVersion(),
-		Archives:    archives,
-		Manifest:    filepath.ToSlash(manifestPath),
-		AssetRoot:   filepath.ToSlash(assetRoot),
-	}, nil
+	entry.Fingerprint = fingerprint
+	entry.Manifest = filepath.ToSlash(manifestPath)
+	entry.AssetRoot = filepath.ToSlash(assetRoot)
+	return entry, nil
 }
 
 func sourceForProvider(providerEntry *config.ProviderEntry) (pluginsource.Source, error) {
@@ -1975,7 +2129,7 @@ func (l *Lifecycle) applyLockedProviderEntry(paths initPaths, lock *Lockfile, na
 	if err != nil {
 		return fmt.Errorf("fingerprinting provider %q: %w", name, err)
 	}
-	if entry.Fingerprint != fingerprint || entry.Source != plugin.SourceRemoteLocation() || entry.Version != plugin.SourceVersion() {
+	if entry.Fingerprint != fingerprint || entry.Source != plugin.SourceRemoteLocation() || !lockEntryVersionMatchesConfig(plugin, entry) {
 		return fmt.Errorf("prepared artifact for provider %q is missing or stale; run `gestaltd init %s`", name, paths.configFlags)
 	}
 
@@ -2029,7 +2183,7 @@ func (l *Lifecycle) applyLockedComponentEntry(paths initPaths, entry *LockEntry,
 	if err != nil {
 		return fmt.Errorf("fingerprinting %s %q provider: %w", kind, name, err)
 	}
-	if entry.Fingerprint != fingerprint || entry.Source != plugin.SourceRemoteLocation() || entry.Version != plugin.SourceVersion() {
+	if entry.Fingerprint != fingerprint || entry.Source != plugin.SourceRemoteLocation() || !lockEntryVersionMatchesConfig(plugin, *entry) {
 		return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init %s`", kind, name, paths.configFlags)
 	}
 
@@ -2130,23 +2284,7 @@ func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPat
 		return fmt.Errorf("no verified hash for platform %s for provider %q; run `gestaltd init --platform %s`", platform, name, platform)
 	}
 
-	src, parseErr := sourceForProvider(plugin)
-	if parseErr != nil {
-		src, parseErr = pluginsource.Parse(entry.Source)
-	}
-	var (
-		download *providerpkg.DownloadResult
-		err      error
-	)
-	if parseErr == nil && src.Host == pluginsource.HostGitHub {
-		download, err = ghresolver.DownloadResolvedAsset(ctx, http.DefaultClient, archive.URL, src.Token)
-	} else {
-		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, archive.URL, nil)
-		if reqErr != nil {
-			return fmt.Errorf("create locked source provider request for provider %q: %w", name, reqErr)
-		}
-		download, err = providerpkg.DownloadRequest(http.DefaultClient, req)
-	}
+	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), entry.Source, sourceAuthToken(plugin), archive.URL)
 	if err != nil {
 		return fmt.Errorf("download locked source provider for provider %q: %w", name, err)
 	}
@@ -2161,8 +2299,8 @@ func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPat
 		return fmt.Errorf("install locked source provider for provider %q: %w", name, err)
 	}
 	defer func() { _ = cleanupInstall() }()
-	if installed.Manifest.Source != entry.Source {
-		return fmt.Errorf("locked source provider manifest source mismatch for provider %q: got %q, want %q", name, installed.Manifest.Source, entry.Source)
+	if installed.Manifest.Source != lockEntryPackage(entry) {
+		return fmt.Errorf("locked source provider manifest source mismatch for provider %q: got %q, want %q", name, installed.Manifest.Source, lockEntryPackage(entry))
 	}
 	if installed.Manifest.Version != entry.Version {
 		return fmt.Errorf("locked source provider manifest version mismatch for provider %q: got %q, want %q", name, installed.Manifest.Version, entry.Version)
@@ -2186,23 +2324,7 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 		return fmt.Errorf("no verified hash for platform %s for %s %q; run `gestaltd init --platform %s`", platform, kind, name, platform)
 	}
 
-	src, parseErr := sourceForProvider(plugin)
-	if parseErr != nil {
-		src, parseErr = pluginsource.Parse(entry.Source)
-	}
-	var (
-		download *providerpkg.DownloadResult
-		err      error
-	)
-	if parseErr == nil && src.Host == pluginsource.HostGitHub {
-		download, err = ghresolver.DownloadResolvedAsset(ctx, http.DefaultClient, archive.URL, src.Token)
-	} else {
-		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, archive.URL, nil)
-		if reqErr != nil {
-			return fmt.Errorf("create locked source provider request for %s %q: %w", kind, name, reqErr)
-		}
-		download, err = providerpkg.DownloadRequest(http.DefaultClient, req)
-	}
+	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), entry.Source, sourceAuthToken(plugin), archive.URL)
 	if err != nil {
 		return fmt.Errorf("download locked source provider for %s %q: %w", kind, name, err)
 	}
@@ -2222,8 +2344,8 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 	if err := validateInstalledManifestKind(kind, name, installed.Manifest); err != nil {
 		return err
 	}
-	if installed.Manifest.Source != entry.Source {
-		return fmt.Errorf("locked source provider manifest source mismatch for %s %q: got %q, want %q", kind, name, installed.Manifest.Source, entry.Source)
+	if installed.Manifest.Source != lockEntryPackage(entry) {
+		return fmt.Errorf("locked source provider manifest source mismatch for %s %q: got %q, want %q", kind, name, installed.Manifest.Source, lockEntryPackage(entry))
 	}
 	if installed.Manifest.Version != entry.Version {
 		return fmt.Errorf("locked source provider manifest version mismatch for %s %q: got %q, want %q", kind, name, installed.Manifest.Version, entry.Version)
@@ -2247,23 +2369,7 @@ func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths initP
 		return fmt.Errorf("no verified hash for platform %s for ui provider; run `gestaltd init --platform %s`", platform, platform)
 	}
 
-	src, parseErr := sourceForProvider(plugin)
-	if parseErr != nil {
-		src, parseErr = pluginsource.Parse(entry.Source)
-	}
-	var (
-		download *providerpkg.DownloadResult
-		err      error
-	)
-	if parseErr == nil && src.Host == pluginsource.HostGitHub {
-		download, err = ghresolver.DownloadResolvedAsset(ctx, http.DefaultClient, archive.URL, src.Token)
-	} else {
-		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, archive.URL, nil)
-		if reqErr != nil {
-			return fmt.Errorf("create locked source request for ui provider: %w", reqErr)
-		}
-		download, err = providerpkg.DownloadRequest(http.DefaultClient, req)
-	}
+	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), entry.Source, sourceAuthToken(plugin), archive.URL)
 	if err != nil {
 		return fmt.Errorf("download locked source for ui provider: %w", err)
 	}
@@ -2282,24 +2388,30 @@ func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths initP
 	if err := validateInstalledManifestKind(providermanifestv1.KindWebUI, "ui provider", installed.Manifest); err != nil {
 		return err
 	}
+	if installed.Manifest.Source != lockEntryPackage(entry) {
+		return fmt.Errorf("locked source manifest source mismatch for ui provider: got %q, want %q", installed.Manifest.Source, lockEntryPackage(entry))
+	}
+	if installed.Manifest.Version != entry.Version {
+		return fmt.Errorf("locked source manifest version mismatch for ui provider: got %q, want %q", installed.Manifest.Version, entry.Version)
+	}
 	return nil
 }
 
-func downloadPlatformArchives(ctx context.Context, lock *Lockfile, paths initPaths, platforms []struct{ GOOS, GOARCH, LibC string }, tokenForSource map[string]string) error {
+func (l *Lifecycle) downloadPlatformArchives(ctx context.Context, lock *Lockfile, paths initPaths, platforms []struct{ GOOS, GOARCH, LibC string }, tokenForSource map[string]string) error {
 	for _, plat := range platforms {
 		platformKey := providerpkg.PlatformString(plat.GOOS, plat.GOARCH)
-		if err := hashPlatformInEntries(ctx, lock, paths, platformKey, tokenForSource); err != nil {
+		if err := l.hashPlatformInEntries(ctx, lock, paths, platformKey, tokenForSource); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func hashPlatformInEntries(ctx context.Context, lock *Lockfile, paths initPaths, platformKey string, tokenForSource map[string]string) error {
+func (l *Lifecycle) hashPlatformInEntries(ctx context.Context, lock *Lockfile, paths initPaths, platformKey string, tokenForSource map[string]string) error {
 	for _, kind := range providerLockKinds() {
 		lockEntries := lockEntriesForProviderKind(lock, kind)
 		for name, entry := range lockEntries {
-			if err := hashArchiveEntry(ctx, kind, name, &entry, paths, platformKey, tokenForSource); err != nil {
+			if err := l.hashArchiveEntry(ctx, kind, name, &entry, paths, platformKey, tokenForSource); err != nil {
 				return err
 			}
 			lockEntries[name] = entry
@@ -2308,7 +2420,7 @@ func hashPlatformInEntries(ctx context.Context, lock *Lockfile, paths initPaths,
 	return nil
 }
 
-func hashArchiveEntry(ctx context.Context, kind, name string, entry *LockEntry, paths initPaths, platformKey string, tokenForSource map[string]string) error {
+func (l *Lifecycle) hashArchiveEntry(ctx context.Context, kind, name string, entry *LockEntry, paths initPaths, platformKey string, tokenForSource map[string]string) error {
 	if entry.Archives == nil {
 		return nil
 	}
@@ -2329,20 +2441,7 @@ func hashArchiveEntry(ctx context.Context, kind, name string, entry *LockEntry, 
 		return err
 	}
 	token := tokenForSource[entry.Source]
-	src, parseErr := pluginsource.Parse(entry.Source)
-	var (
-		dl  *providerpkg.DownloadResult
-		err error
-	)
-	if parseErr == nil && src.Host == pluginsource.HostGitHub {
-		dl, err = ghresolver.DownloadResolvedAsset(ctx, http.DefaultClient, archive.URL, token)
-	} else {
-		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, archive.URL, nil)
-		if reqErr != nil {
-			return fmt.Errorf("create request for platform %s, source %s: %w", platformKey, entry.Source, reqErr)
-		}
-		dl, err = providerpkg.DownloadRequest(http.DefaultClient, req)
-	}
+	dl, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), entry.Source, token, archive.URL)
 	if err != nil {
 		return fmt.Errorf("download archive for platform %s, source %s: %w", platformKey, entry.Source, err)
 	}

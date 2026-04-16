@@ -1765,7 +1765,7 @@ func TestHashPlatformInEntries_HashesMountedWebUIAndProviderArchives(t *testing.
 		},
 	}
 
-	if err := hashPlatformInEntries(context.Background(), lock, initPaths{}, providerpkg.CurrentPlatformString(), map[string]string{}); err != nil {
+	if err := NewLifecycle(nil).hashPlatformInEntries(context.Background(), lock, initPaths{}, providerpkg.CurrentPlatformString(), map[string]string{}); err != nil {
 		t.Fatalf("hashPlatformInEntries: %v", err)
 	}
 
@@ -3019,7 +3019,7 @@ func TestHashArchiveEntry_HashesFallbackArchive(t *testing.T) {
 		},
 	}
 
-	if err := hashArchiveEntry(context.Background(), providermanifestv1.KindWebUI, "roadmap", &entry, initPaths{}, "linux/amd64", nil); err != nil {
+	if err := NewLifecycle(nil).hashArchiveEntry(context.Background(), providermanifestv1.KindWebUI, "roadmap", &entry, initPaths{}, "linux/amd64", nil); err != nil {
 		t.Fatalf("hashArchiveEntry: %v", err)
 	}
 
