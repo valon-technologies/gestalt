@@ -463,7 +463,7 @@ fn resolve_connection<'a>(
         )));
     }
 
-    let options: Vec<PromptOption> = integration
+    let prompt_options: Vec<PromptOption> = integration
         .connections
         .iter()
         .map(|connection| PromptOption {
@@ -476,7 +476,7 @@ fn resolve_connection<'a>(
         .collect();
     let idx = prompt_select(
         &format!("Select a {} connection:", integration.display_name()),
-        &options,
+        &prompt_options,
     )?;
 
     Ok(Some(ResolvedConnection::from_definition(
@@ -589,7 +589,7 @@ impl IntegrationInfo {
     fn available_connections(&self) -> String {
         self.connections
             .iter()
-            .map(ConnectionDefInfo::display_name)
+            .map(|connection| ConnectionName::new(&connection.name).display().to_string())
             .collect::<Vec<_>>()
             .join(", ")
     }
