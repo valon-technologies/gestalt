@@ -7,16 +7,19 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"net/http"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
+	coreintegration "github.com/valon-technologies/gestalt/server/core/integration"
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	"github.com/valon-technologies/gestalt/server/internal/composite"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -134,7 +137,7 @@ func buildProvider(ctx context.Context, name string, entry *config.ProviderEntry
 		if err != nil {
 			return nil, fmt.Errorf("build declarative provider %q: %w", name, err)
 		}
-		prov, err := buildAllowedDeclarativeProvider(name, manifest, meta, plan, allowedOperations)
+		prov, err := buildAllowedDeclarativeProvider(name, manifest, meta, entry, plan, allowedOperations, deps)
 		if err != nil {
 			return nil, err
 		}
@@ -182,7 +185,7 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 			return nil, fmt.Errorf("load declarative catalog for %q: %w", name, err)
 		}
 		apiAllowedOperations := operationexposure.MatchingAllowedOperations(allowedOperations, apiCatalog)
-		apiProv, err := buildAllowedDeclarativeProvider(name, manifest, meta, plan, apiAllowedOperations)
+		apiProv, err := buildAllowedDeclarativeProvider(name, manifest, meta, entry, plan, apiAllowedOperations, deps)
 		if err != nil {
 			closeIfPossible(apiProv, pluginProv)
 			return nil, err
@@ -254,22 +257,53 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 	return newProviderBuildResult(name, entry, manifest, pluginConfig, merged, authFallback, deps)
 }
 
-func buildAllowedDeclarativeProvider(name string, manifest *providermanifestv1.Manifest, meta providerMetadata, plan pluginConnectionPlan, allowedOperations map[string]*config.OperationOverride) (core.Provider, error) {
-	declarative, err := providerhost.NewDeclarativeProvider(
+func buildAllowedDeclarativeProvider(name string, manifest *providermanifestv1.Manifest, meta providerMetadata, entry *config.ProviderEntry, plan pluginConnectionPlan, allowedOperations map[string]*config.OperationOverride, deps Deps) (core.Provider, error) {
+	conn, err := plan.connectionDef(plan.apiConnection())
+	if err != nil {
+		return nil, fmt.Errorf("resolve declarative connection for %q: %w", name, err)
+	}
+	def, err := providerhost.DefinitionFromDeclarativeManifest(
 		manifest,
-		nil,
 		providerhost.WithDeclarativeMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
 		providerhost.WithDeclarativeConnectionMode(plan.connectionMode()),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create declarative provider %q: %w", name, err)
 	}
+	if err := applyManagedParameters(def, manifest.Spec); err != nil {
+		return nil, fmt.Errorf("create declarative provider %q: %w", name, err)
+	}
+	applyProviderPagination(def, manifest.Spec, allowedOperations)
+	declarative, err := provider.Build(
+		def,
+		conn,
+		provider.WithEgressCheck(deps.Egress.CheckFunc(entry.AllowedHosts)),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create declarative provider %q: %w", name, err)
+	}
+	base := declarative.(*coreintegration.Base)
+	base.HTTPClient = &http.Client{Timeout: 30 * time.Second}
+	base.MethodDefaultParamLocations, base.NoRetry = true, true
+	cat := providerhost.CatalogFromDeclarativeDefinition(def, manifest.Spec.RESTOperations())
+	cat.DisplayName, cat.Description, cat.IconSVG = base.DisplayName(), base.Description(), def.IconSVG
+	base.SetCatalog(cat)
 	prov, err := applyAllowedOperations(name, allowedOperations, declarative)
 	if err != nil {
 		closeIfPossible(declarative)
 		return nil, err
 	}
-	return prov, nil
+	return declarativeCompatibilityProvider{Provider: prov}, nil
+}
+
+type declarativeCompatibilityProvider struct{ core.Provider }
+
+func (p declarativeCompatibilityProvider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
+	result, err := p.Provider.Execute(ctx, operation, params, token)
+	if errors.Is(err, coreintegration.ErrUnknownOperation) {
+		return &core.OperationResult{Status: http.StatusNotFound, Body: `{"error":"unknown operation"}`}, nil
+	}
+	return result, err
 }
 
 type specProviderConfig struct {
@@ -852,6 +886,10 @@ func buildPluginStaticSpec(name string, entry *config.ProviderEntry, manifest *p
 
 	conn := config.EffectivePluginConnectionDef(entry, manifest.Spec)
 	connMode := plan.connectionMode()
+	metadata, err := providerhost.StaticProviderMetadata(name, conn, manifest.Spec.Discovery)
+	if err != nil {
+		return providerhost.StaticProviderSpec{}, err
+	}
 
 	var staticCatalog *catalog.Catalog
 	if manifestRoot := filepath.Dir(entry.ResolvedManifestPath); entry.ResolvedManifestPath != "" {
@@ -886,22 +924,11 @@ func buildPluginStaticSpec(name string, entry *config.ProviderEntry, manifest *p
 		IconSVG:          iconSVG,
 		ConnectionMode:   connMode,
 		Catalog:          staticCatalog,
-		AuthTypes:        staticAuthTypes(conn.Auth.Type),
-		ConnectionParams: providerhost.ConnectionParamDefsFromManifest(conn.ConnectionParams),
-		CredentialFields: providerhost.CredentialFieldsFromManifest(conn.Auth.Credentials),
-		DiscoveryConfig:  providerhost.DiscoveryConfigFromManifest(manifest.Spec.Discovery),
+		AuthTypes:        metadata.AuthTypes,
+		ConnectionParams: metadata.ConnectionParams,
+		CredentialFields: metadata.CredentialFields,
+		DiscoveryConfig:  metadata.DiscoveryConfig,
 	}, nil
-}
-
-func staticAuthTypes(authType providermanifestv1.AuthType) []string {
-	switch authType {
-	case "", providermanifestv1.AuthTypeNone:
-		return nil
-	case providermanifestv1.AuthTypeManual, providermanifestv1.AuthTypeBearer:
-		return []string{"manual"}
-	default:
-		return []string{"oauth"}
-	}
 }
 
 func mcpOAuthBuildOpts(conn config.ConnectionDef, manifestPlugin *providermanifestv1.Spec, deps Deps) []provider.BuildOption {
@@ -935,7 +962,6 @@ func applyManagedParameters(def *provider.Definition, manifestPlugin *providerma
 	if def == nil || manifestPlugin == nil || len(manifestPlugin.ManagedParameters) == 0 {
 		return nil
 	}
-
 	if def.Headers == nil {
 		def.Headers = make(map[string]string)
 	}
@@ -953,7 +979,6 @@ func applyManagedParameters(def *provider.Definition, manifestPlugin *providerma
 			return fmt.Errorf("unsupported managed parameter location %q", param.In)
 		}
 	}
-
 	for opName := range def.Operations {
 		op := def.Operations[opName]
 		for _, param := range manifestPlugin.ManagedParameters {

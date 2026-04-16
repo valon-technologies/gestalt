@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -366,6 +367,288 @@ func TestBootstrap(t *testing.T) {
 				}
 			})
 		}
+
+		bootstrapDeclarative := func(t *testing.T, manifest *providermanifestv1.Manifest, allowed map[string]*config.OperationOverride) (*bootstrap.Result, string) {
+			t.Helper()
+
+			cfg := validConfig()
+			cfg.Plugins = map[string]*config.ProviderEntry{
+				"slack": {
+					AllowedOperations: allowed,
+					ResolvedManifest:  manifest,
+				},
+			}
+
+			result, err := bootstrap.Bootstrap(ctx, cfg, validFactories())
+			if err != nil {
+				t.Fatalf("Bootstrap: %v", err)
+			}
+			t.Cleanup(func() { _ = result.Close(context.Background()) })
+			<-result.ProvidersReady
+
+			user, err := result.Services.Users.FindOrCreateUser(ctx, "hugh@test.com")
+			if err != nil {
+				t.Fatalf("FindOrCreateUser: %v", err)
+			}
+			if err := result.Services.Tokens.StoreToken(ctx, &core.IntegrationToken{
+				UserID:       user.ID,
+				Integration:  "slack",
+				Connection:   "workspace",
+				Instance:     "default",
+				AccessToken:  "workspace-access-token",
+				RefreshToken: "refresh-token",
+			}); err != nil {
+				t.Fatalf("StoreToken: %v", err)
+			}
+			return result, user.ID
+		}
+
+		principalForInvoke := func(userID string) *principal.Principal {
+			return &principal.Principal{
+				UserID: userID,
+				Source: principal.SourceSession,
+				Scopes: []string{"slack"},
+			}
+		}
+
+		t.Run("declarative managed path parameters are materialized", func(t *testing.T) {
+			t.Parallel()
+
+			var requestPath atomic.Value
+			var requestQuery atomic.Value
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requestPath.Store(r.URL.Path)
+				requestQuery.Store(r.URL.RawQuery)
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"ok":true}`))
+			}))
+			defer srv.Close()
+
+			result, userID := bootstrapDeclarative(t, &providermanifestv1.Manifest{
+				Spec: &providermanifestv1.Spec{
+					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+					ManagedParameters: []providermanifestv1.ManagedParameter{
+						{In: "path", Name: "workspaceId", Value: "ws_123"},
+					},
+					Surfaces: &providermanifestv1.ProviderSurfaces{
+						REST: &providermanifestv1.RESTSurface{
+							BaseURL:    srv.URL,
+							Connection: "workspace",
+							Operations: []providermanifestv1.ProviderOperation{
+								{
+									Name:   "users.list",
+									Method: http.MethodGet,
+									Path:   "/workspaces/{workspaceId}/users",
+								},
+							},
+						},
+					},
+					Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+						"workspace": {Mode: providermanifestv1.ConnectionModeUser},
+					},
+				},
+			}, nil)
+
+			got, err := result.Invoker.Invoke(ctx, principalForInvoke(userID), "slack", "", "users.list", map[string]any{"limit": 1})
+			if err != nil {
+				t.Fatalf("Invoke: %v", err)
+			}
+			if got.Status != http.StatusOK {
+				t.Fatalf("status = %d, want %d", got.Status, http.StatusOK)
+			}
+			if gotPath, _ := requestPath.Load().(string); gotPath != "/workspaces/ws_123/users" {
+				t.Fatalf("path = %q, want %q", gotPath, "/workspaces/ws_123/users")
+			}
+			if gotQuery, _ := requestQuery.Load().(string); gotQuery != "limit=1" {
+				t.Fatalf("query = %q, want %q", gotQuery, "limit=1")
+			}
+		})
+
+		t.Run("declarative response mapping is applied", func(t *testing.T) {
+			t.Parallel()
+
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"results":[{"id":"1"},{"id":"2"}],"moreDataAvailable":true,"nextCursor":"cursor-abc"}`))
+			}))
+			defer srv.Close()
+
+			result, userID := bootstrapDeclarative(t, &providermanifestv1.Manifest{
+				Spec: &providermanifestv1.Spec{
+					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+					ResponseMapping: &providermanifestv1.ManifestResponseMapping{
+						DataPath: "results",
+						Pagination: &providermanifestv1.ManifestPaginationMapping{
+							HasMore: &providermanifestv1.ManifestValueSelector{Source: "body", Path: "moreDataAvailable"},
+							Cursor:  &providermanifestv1.ManifestValueSelector{Source: "body", Path: "nextCursor"},
+						},
+					},
+					Surfaces: &providermanifestv1.ProviderSurfaces{
+						REST: &providermanifestv1.RESTSurface{
+							BaseURL:    srv.URL,
+							Connection: "workspace",
+							Operations: []providermanifestv1.ProviderOperation{
+								{Name: "users.list", Method: http.MethodGet, Path: "/users"},
+							},
+						},
+					},
+					Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+						"workspace": {Mode: providermanifestv1.ConnectionModeUser},
+					},
+				},
+			}, nil)
+
+			got, err := result.Invoker.Invoke(ctx, principalForInvoke(userID), "slack", "", "users.list", nil)
+			if err != nil {
+				t.Fatalf("Invoke: %v", err)
+			}
+			if got.Status != http.StatusOK {
+				t.Fatalf("status = %d, want %d", got.Status, http.StatusOK)
+			}
+
+			var body map[string]any
+			if err := json.Unmarshal([]byte(got.Body), &body); err != nil {
+				t.Fatalf("json.Unmarshal: %v", err)
+			}
+			data, ok := body["data"].([]any)
+			if !ok || len(data) != 2 {
+				t.Fatalf("mapped data = %#v, want 2 items", body["data"])
+			}
+			pagination, ok := body["pagination"].(map[string]any)
+			if !ok {
+				t.Fatalf("pagination = %#v, want object", body["pagination"])
+			}
+			if pagination["hasMore"] != true || pagination["cursor"] != "cursor-abc" {
+				t.Fatalf("pagination = %#v, want hasMore=true cursor=cursor-abc", pagination)
+			}
+		})
+
+		t.Run("declarative pagination is applied", func(t *testing.T) {
+			t.Parallel()
+
+			var cursors []string
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				cursor := r.URL.Query().Get("cursor")
+				cursors = append(cursors, cursor)
+				w.Header().Set("Content-Type", "application/json")
+				switch cursor {
+				case "":
+					_, _ = w.Write([]byte(`{"results":[{"id":"1"},{"id":"2"}],"nextCursor":"cursor-2"}`))
+				case "cursor-2":
+					_, _ = w.Write([]byte(`{"results":[{"id":"3"}]}`))
+				default:
+					http.Error(w, "unexpected cursor", http.StatusBadRequest)
+				}
+			}))
+			defer srv.Close()
+
+			result, userID := bootstrapDeclarative(t, &providermanifestv1.Manifest{
+				Spec: &providermanifestv1.Spec{
+					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+					Pagination: &providermanifestv1.ManifestPaginationConfig{
+						Style:       providermanifestv1.PaginationStyleCursor,
+						CursorParam: "cursor",
+						Cursor:      &providermanifestv1.ManifestValueSelector{Source: "body", Path: "nextCursor"},
+						ResultsPath: "results",
+						MaxPages:    5,
+					},
+					Surfaces: &providermanifestv1.ProviderSurfaces{
+						REST: &providermanifestv1.RESTSurface{
+							BaseURL:    srv.URL,
+							Connection: "workspace",
+							Operations: []providermanifestv1.ProviderOperation{
+								{Name: "users.list", Method: http.MethodGet, Path: "/users"},
+							},
+						},
+					},
+					Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+						"workspace": {Mode: providermanifestv1.ConnectionModeUser},
+					},
+				},
+			}, map[string]*config.OperationOverride{
+				"users.list": {Paginate: true},
+			})
+
+			got, err := result.Invoker.Invoke(ctx, principalForInvoke(userID), "slack", "", "users.list", nil)
+			if err != nil {
+				t.Fatalf("Invoke: %v", err)
+			}
+			if got.Status != http.StatusOK {
+				t.Fatalf("status = %d, want %d", got.Status, http.StatusOK)
+			}
+			if got.Body != `[{"id":"1"},{"id":"2"},{"id":"3"}]` {
+				t.Fatalf("body = %s, want aggregated paginated results", got.Body)
+			}
+			if want := []string{"", "cursor-2"}; fmt.Sprint(cursors) != fmt.Sprint(want) {
+				t.Fatalf("cursors = %v, want %v", cursors, want)
+			}
+		})
+
+		t.Run("declarative unknown operations return not found", func(t *testing.T) {
+			t.Parallel()
+
+			result, _ := bootstrapDeclarative(t, &providermanifestv1.Manifest{
+				Spec: &providermanifestv1.Spec{
+					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+					Surfaces: &providermanifestv1.ProviderSurfaces{
+						REST: &providermanifestv1.RESTSurface{
+							BaseURL:    "https://example.test",
+							Connection: "workspace",
+							Operations: []providermanifestv1.ProviderOperation{
+								{Name: "users.list", Method: http.MethodGet, Path: "/users"},
+							},
+						},
+					},
+					Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+						"workspace": {Mode: providermanifestv1.ConnectionModeUser},
+					},
+				},
+			}, nil)
+
+			prov, err := result.Providers.Get("slack")
+			if err != nil {
+				t.Fatalf("Providers.Get: %v", err)
+			}
+			got, err := prov.Execute(ctx, "users.missing", nil, "")
+			if err != nil {
+				t.Fatalf("Execute: %v", err)
+			}
+			if got.Status != http.StatusNotFound || got.Body != `{"error":"unknown operation"}` {
+				t.Fatalf("result = %#v, want 404 unknown operation", got)
+			}
+		})
+
+		t.Run("declarative catalog preserves manifest order", func(t *testing.T) {
+			t.Parallel()
+
+			result, _ := bootstrapDeclarative(t, &providermanifestv1.Manifest{
+				Spec: &providermanifestv1.Spec{
+					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+					Surfaces: &providermanifestv1.ProviderSurfaces{
+						REST: &providermanifestv1.RESTSurface{
+							BaseURL:    "https://example.test",
+							Connection: "workspace",
+							Operations: []providermanifestv1.ProviderOperation{
+								{Name: "users.remove", Method: http.MethodDelete, Path: "/users/{id}"},
+								{Name: "users.list", Method: http.MethodGet, Path: "/users"},
+							},
+						},
+					},
+					Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+						"workspace": {Mode: providermanifestv1.ConnectionModeUser},
+					},
+				},
+			}, nil)
+
+			prov, err := result.Providers.Get("slack")
+			if err != nil {
+				t.Fatalf("Providers.Get: %v", err)
+			}
+			cat := prov.Catalog()
+			if got, want := []string{cat.Operations[0].ID, cat.Operations[1].ID}, []string{"users.remove", "users.list"}; fmt.Sprint(got) != fmt.Sprint(want) {
+				t.Fatalf("catalog operation order = %v, want %v", got, want)
+			}
+		})
 	})
 }
 

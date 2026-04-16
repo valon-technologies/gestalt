@@ -1,21 +1,17 @@
 package providerhost
 
 import (
-	"context"
-	"errors"
 	"fmt"
 	"maps"
-	"net/http"
-	"time"
+	"sort"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/integration"
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
-
-const declarativeHTTPTimeout = 30 * time.Second
 
 type declarativeOptions struct {
 	displayName    string
@@ -44,160 +40,92 @@ func WithDeclarativeConnectionMode(mode core.ConnectionMode) DeclarativeProvider
 	return func(opts *declarativeOptions) { opts.connectionMode = mode }
 }
 
-type DeclarativeProvider struct {
-	*integration.Base
-	authType         providermanifestv1.AuthType
-	authorizationURL string
-}
-
 func CatalogFromDeclarativeManifest(manifest *providermanifestv1.Manifest) (*catalog.Catalog, error) {
-	if manifest == nil {
-		return nil, fmt.Errorf("manifest is required")
+	def, err := DefinitionFromDeclarativeManifest(manifest)
+	if err != nil {
+		return nil, err
 	}
-	if manifest.Spec == nil || !manifest.Spec.IsDeclarative() {
-		return nil, fmt.Errorf("manifest is not a declarative provider")
-	}
-	return declarativeCatalog(manifest, declarativeOptions{}), nil
+	return CatalogFromDeclarativeDefinition(def, manifest.Spec.RESTOperations()), nil
 }
 
-func NewDeclarativeProvider(manifest *providermanifestv1.Manifest, httpClient *http.Client, opts ...DeclarativeProviderOption) (*DeclarativeProvider, error) {
+func StaticProviderMetadata(name string, conn config.ConnectionDef, discovery *providermanifestv1.ProviderDiscovery) (StaticProviderSpec, error) {
+	prov, err := provider.Build(&provider.Definition{
+		Provider:  name,
+		Discovery: declarativeDiscovery(discovery),
+	}, conn)
+	if err != nil {
+		return StaticProviderSpec{}, err
+	}
+	return StaticProviderSpec{
+		AuthTypes:        prov.AuthTypes(),
+		ConnectionParams: prov.ConnectionParamDefs(),
+		CredentialFields: prov.CredentialFields(),
+		DiscoveryConfig:  prov.DiscoveryConfig(),
+	}, nil
+}
+
+func CatalogFromDeclarativeDefinition(def *provider.Definition, ops []providermanifestv1.ProviderOperation) *catalog.Catalog {
+	cat := provider.CatalogFromDefinition(def)
+	order := make(map[string]int, len(ops))
+	for i, op := range ops {
+		order[op.Name] = i
+	}
+	sort.SliceStable(cat.Operations, func(i, j int) bool {
+		return order[cat.Operations[i].ID] < order[cat.Operations[j].ID]
+	})
+	integration.CompileSchemas(cat)
+	return cat
+}
+
+func DefinitionFromDeclarativeManifest(manifest *providermanifestv1.Manifest, opts ...DeclarativeProviderOption) (*provider.Definition, error) {
 	if manifest == nil {
 		return nil, fmt.Errorf("manifest is required")
 	}
 	if manifest.Spec == nil || !manifest.Spec.IsDeclarative() {
 		return nil, fmt.Errorf("manifest is not a declarative provider")
-	}
-
-	if httpClient == nil {
-		httpClient = &http.Client{Timeout: declarativeHTTPTimeout}
 	}
 
 	options := declarativeOptions{}
 	for _, opt := range opts {
 		opt(&options)
 	}
-	auth := manifest.Spec.Auth
-	cat := declarativeCatalog(manifest, options)
-	authType := providermanifestv1.AuthType("")
-	authorizationURL := ""
-	base := &integration.Base{
-		IntegrationName:             cat.Name,
-		IntegrationDisplay:          cat.DisplayName,
-		IntegrationDesc:             cat.Description,
-		ConnMode:                    declarativeConnectionMode(options.connectionMode, auth),
-		BaseURL:                     manifest.Spec.RESTBaseURL(),
-		Headers:                     maps.Clone(manifest.Spec.Headers),
-		HTTPClient:                  httpClient,
-		MethodDefaultParamLocations: true,
-		ConnectionDefs:              ConnectionParamDefsFromManifest(manifest.Spec.ConnectionParams),
-		DiscoveryDef:                DiscoveryConfigFromManifest(manifest.Spec.Discovery),
-		CredentialFieldDefs:         declarativeCredentialFields(auth),
-		NoRetry:                     true,
+
+	def := &provider.Definition{
+		Provider:       manifest.Source,
+		DisplayName:    manifest.DisplayName,
+		Description:    manifest.Description,
+		Headers:        maps.Clone(manifest.Spec.Headers),
+		BaseURL:        manifest.Spec.RESTBaseURL(),
+		ConnectionMode: string(declarativeConnectionMode(options.connectionMode, manifest.Spec.Auth)),
+		Connection:     declarativeConnection(manifest.Spec.ConnectionParams),
+		Discovery:      declarativeDiscovery(manifest.Spec.Discovery),
+		ResponseMapping: declarativeResponseMapping(
+			manifest.Spec.ResponseMapping,
+		),
+		Operations: declarativeOperations(manifest.Spec.RESTOperations()),
 	}
-	if auth != nil {
-		authType = auth.Type
-		authorizationURL = auth.AuthorizationURL
-		if auth.AuthMapping != nil && (len(auth.AuthMapping.Headers) > 0 || auth.AuthMapping.Basic != nil) {
-			base.TokenParser = provider.MappedCredentialParser(auth.AuthMapping)
+	if options.displayName != "" {
+		def.DisplayName = options.displayName
+	}
+	if options.description != "" {
+		def.Description = options.description
+	}
+	if options.iconSVG != "" {
+		def.IconSVG = options.iconSVG
+	}
+	if auth := manifest.Spec.Auth; auth != nil {
+		def.Auth = declarativeAuth(auth)
+		if len(auth.Credentials) > 0 {
+			def.CredentialFields = append([]provider.CredentialFieldDef(nil), auth.Credentials...)
+		}
+		if auth.AuthMapping != nil {
+			def.AuthMapping = config.CloneAuthMapping(auth.AuthMapping)
+			if auth.AuthMapping.Basic != nil {
+				def.AuthStyle = "basic"
+			}
 		}
 	}
-	base.SetCatalog(cat)
-
-	return &DeclarativeProvider{
-		Base:             base,
-		authType:         authType,
-		authorizationURL: authorizationURL,
-	}, nil
-}
-
-func (p *DeclarativeProvider) Catalog() *catalog.Catalog {
-	return p.Base.Catalog().Clone()
-}
-
-func (p *DeclarativeProvider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
-	result, err := p.Base.Execute(ctx, operation, params, token)
-	if errors.Is(err, integration.ErrUnknownOperation) {
-		return &core.OperationResult{Status: http.StatusNotFound, Body: `{"error":"unknown operation"}`}, nil
-	}
-	return result, err
-}
-
-func (p *DeclarativeProvider) AuthTypes() []string {
-	switch p.authType {
-	case providermanifestv1.AuthTypeOAuth2:
-		return []string{"oauth"}
-	case providermanifestv1.AuthTypeBearer, providermanifestv1.AuthTypeManual:
-		return []string{"manual"}
-	case providermanifestv1.AuthTypeNone:
-		return nil
-	default:
-		return nil
-	}
-}
-
-func (p *DeclarativeProvider) AuthorizationURL(state string, scopes []string) string {
-	if p.authType != providermanifestv1.AuthTypeOAuth2 {
-		return ""
-	}
-	return p.authorizationURL
-}
-
-func (p *DeclarativeProvider) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
-	if p.authType != providermanifestv1.AuthTypeOAuth2 {
-		return nil, fmt.Errorf("provider does not support OAuth")
-	}
-	return nil, fmt.Errorf("declarative provider OAuth exchange not implemented")
-}
-
-func (p *DeclarativeProvider) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
-	if p.authType != providermanifestv1.AuthTypeOAuth2 {
-		return nil, fmt.Errorf("provider does not support OAuth")
-	}
-	return nil, fmt.Errorf("declarative provider OAuth refresh not implemented")
-}
-
-func declarativeCatalog(manifest *providermanifestv1.Manifest, opts declarativeOptions) *catalog.Catalog {
-	ops := manifest.Spec.RESTOperations()
-	cat := &catalog.Catalog{
-		Name:        manifest.Source,
-		DisplayName: manifest.DisplayName,
-		Description: manifest.Description,
-		Headers:     maps.Clone(manifest.Spec.Headers),
-		Operations:  make([]catalog.CatalogOperation, 0, len(ops)),
-	}
-	if opts.displayName != "" {
-		cat.DisplayName = opts.displayName
-	}
-	if opts.description != "" {
-		cat.Description = opts.description
-	}
-	if opts.iconSVG != "" {
-		cat.IconSVG = opts.iconSVG
-	}
-	for i := range ops {
-		mop := &ops[i]
-		catOp := catalog.CatalogOperation{
-			ID:           mop.Name,
-			Method:       mop.Method,
-			Path:         mop.Path,
-			Description:  mop.Description,
-			AllowedRoles: mop.AllowedRoles,
-			Transport:    catalog.TransportREST,
-			Parameters:   make([]catalog.CatalogParameter, 0, len(mop.Parameters)),
-		}
-		for _, mp := range mop.Parameters {
-			catOp.Parameters = append(catOp.Parameters, catalog.CatalogParameter{
-				Name:        mp.Name,
-				Type:        mp.Type,
-				Location:    mp.In,
-				Description: mp.Description,
-				Required:    mp.Required,
-			})
-		}
-		cat.Operations = append(cat.Operations, catOp)
-	}
-	integration.CompileSchemas(cat)
-	return cat
+	return def, nil
 }
 
 func declarativeConnectionMode(override core.ConnectionMode, auth *providermanifestv1.ProviderAuth) core.ConnectionMode {
@@ -210,9 +138,103 @@ func declarativeConnectionMode(override core.ConnectionMode, auth *providermanif
 	return core.ConnectionModeUser
 }
 
-func declarativeCredentialFields(auth *providermanifestv1.ProviderAuth) []core.CredentialFieldDef {
-	if auth == nil {
+func declarativeConnection(defs map[string]providermanifestv1.ProviderConnectionParam) map[string]provider.ConnectionParamDef {
+	if len(defs) == 0 {
 		return nil
 	}
-	return CredentialFieldsFromManifest(auth.Credentials)
+	out := make(map[string]provider.ConnectionParamDef, len(defs))
+	for name, def := range defs {
+		out[name] = provider.ConnectionParamDef{
+			Required:    def.Required,
+			Description: def.Description,
+			From:        def.From,
+		}
+	}
+	return out
+}
+
+func declarativeDiscovery(discovery *providermanifestv1.ProviderDiscovery) *provider.DiscoveryDef {
+	if discovery == nil {
+		return nil
+	}
+	return &provider.DiscoveryDef{
+		URL:      discovery.URL,
+		IDPath:   discovery.IDPath,
+		NamePath: discovery.NamePath,
+		Metadata: maps.Clone(discovery.Metadata),
+	}
+}
+
+func declarativeResponseMapping(mapping *providermanifestv1.ManifestResponseMapping) *provider.ResponseMappingDef {
+	if mapping == nil {
+		return nil
+	}
+	out := &provider.ResponseMappingDef{DataPath: mapping.DataPath}
+	if mapping.Pagination != nil {
+		out.Pagination = &provider.PaginationMappingDef{
+			HasMore: declarativeValueSelector(mapping.Pagination.HasMore),
+			Cursor:  declarativeValueSelector(mapping.Pagination.Cursor),
+		}
+	}
+	return out
+}
+
+func declarativeValueSelector(in *providermanifestv1.ManifestValueSelector) *provider.ValueSelectorDef {
+	if in == nil {
+		return nil
+	}
+	return &provider.ValueSelectorDef{
+		Source: in.Source,
+		Path:   in.Path,
+	}
+}
+
+func declarativeOperations(ops []providermanifestv1.ProviderOperation) map[string]provider.OperationDef {
+	if len(ops) == 0 {
+		return nil
+	}
+	out := make(map[string]provider.OperationDef, len(ops))
+	for _, op := range ops {
+		params := make([]provider.ParameterDef, 0, len(op.Parameters))
+		for _, param := range op.Parameters {
+			params = append(params, provider.ParameterDef{
+				Name:        param.Name,
+				Type:        param.Type,
+				Location:    param.In,
+				Description: param.Description,
+				Required:    param.Required,
+			})
+		}
+		out[op.Name] = provider.OperationDef{
+			Description:  op.Description,
+			Method:       op.Method,
+			Path:         op.Path,
+			AllowedRoles: append([]string(nil), op.AllowedRoles...),
+			Parameters:   params,
+		}
+	}
+	return out
+}
+
+func declarativeAuth(auth *providermanifestv1.ProviderAuth) provider.AuthDef {
+	if auth == nil {
+		return provider.AuthDef{}
+	}
+	return provider.AuthDef{
+		Type:                string(auth.Type),
+		AuthorizationURL:    auth.AuthorizationURL,
+		TokenURL:            auth.TokenURL,
+		ClientAuth:          auth.ClientAuth,
+		TokenExchange:       auth.TokenExchange,
+		Scopes:              append([]string(nil), auth.Scopes...),
+		ScopeParam:          auth.ScopeParam,
+		ScopeSeparator:      auth.ScopeSeparator,
+		PKCE:                auth.PKCE,
+		AuthorizationParams: maps.Clone(auth.AuthorizationParams),
+		TokenParams:         maps.Clone(auth.TokenParams),
+		RefreshParams:       maps.Clone(auth.RefreshParams),
+		AcceptHeader:        auth.AcceptHeader,
+		TokenMetadata:       append([]string(nil), auth.TokenMetadata...),
+		AccessTokenPath:     auth.AccessTokenPath,
+	}
 }

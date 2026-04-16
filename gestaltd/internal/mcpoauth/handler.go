@@ -37,8 +37,6 @@ func NewHandler(cfg HandlerConfig) *Handler {
 	return &Handler{cfg: cfg}
 }
 
-func (h *Handler) IsManual() bool { return false }
-
 func (h *Handler) ensure() (*oauth.UpstreamHandler, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
