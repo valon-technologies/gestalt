@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -150,82 +151,11 @@ func (l *Lifecycle) initAtPaths(configPaths []string, artifactsDir string) (*Loc
 		return nil, nil, fmt.Errorf("loading config: %v", err)
 	}
 	paths := initPathsForConfigsWithArtifactsDir(configPaths, resolveArtifactsDir(configPath, cfg, artifactsDir))
-	secretsEntries, err := l.primeSecretsProviderForConfigResolution(context.Background(), paths, cfg, nil)
+	lock, err := l.prepareRuntimeLockFromLoadedConfig(context.Background(), paths, cfg)
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := l.resolveConfigSecrets(context.Background(), cfg); err != nil {
-		return nil, nil, err
-	}
-	if err := os.MkdirAll(paths.providersDir, 0o755); err != nil {
-		return nil, nil, fmt.Errorf("creating providers dir: %w", err)
-	}
-
-	lock := newLockfile()
-
-	resolvedProviders, err := l.writeProviderArtifacts(context.Background(), cfg, paths)
-	if err != nil {
-		return nil, nil, err
-	}
-	for name := range resolvedProviders {
-		lock.Providers[name] = resolvedProviders[name]
-	}
-	for _, collection := range hostProviderCollections(cfg) {
-		for name, entry := range collection.entries {
-			if entry == nil || !entry.HasManagedSource() {
-				continue
-			}
-			if collection.kind == config.HostProviderKindSecrets {
-				if _, alreadyPrepared := secretsEntries[name]; alreadyPrepared {
-					continue
-				}
-			}
-			destDir := componentDestDir(paths, collection.kind, name)
-			lockEntry, err := l.writeComponentArtifact(context.Background(), paths, providerManifestKind(collection.kind), name, destDir, entry, entry.Config)
-			if err != nil {
-				return nil, nil, err
-			}
-			lockEntriesForKind(lock, collection.kind)[name] = lockEntry
-		}
-	}
-	if err := l.resolveConfiguredPlugins(paths, lock, cfg, true); err != nil {
-		return nil, nil, err
-	}
-	if err := synthesizePluginOwnedUIEntries(cfg); err != nil {
-		return nil, nil, err
-	}
-	for name, lockEntry := range secretsEntries {
-		lock.Secrets[name] = lockEntry
-	}
-	for name, def := range cfg.Providers.IndexedDB {
-		if def != nil && def.HasManagedSource() {
-			entry, err := l.writeComponentArtifact(context.Background(), paths, providermanifestv1.KindIndexedDB, name, indexeddbDestDir(paths, name), def, def.Config)
-			if err != nil {
-				return nil, nil, err
-			}
-			lock.IndexedDBs[name] = entry
-		}
-	}
-	for name, def := range cfg.Providers.S3 {
-		if def != nil && def.HasManagedSource() {
-			entry, err := l.writeComponentArtifact(context.Background(), paths, providermanifestv1.KindS3, name, s3DestDir(paths, name), def, def.Config)
-			if err != nil {
-				return nil, nil, err
-			}
-			lock.S3[name] = entry
-		}
-	}
-	for name, entry := range cfg.Providers.UI {
-		if entry != nil && entry.HasManagedSource() {
-			uiEntry, err := l.writeNamedUIProviderArtifact(context.Background(), paths, name, &entry.ProviderEntry, uiDestDir(paths, name), "ui "+strconv.Quote(name))
-			if err != nil {
-				return nil, nil, err
-			}
-			lock.UIs[name] = uiEntry
-		}
-	}
-
-	if err := l.applyLockedProviders(configPaths, artifactsDir, cfg, true, lock); err != nil {
+	if err := l.applyPreparedProviders(paths, lock, cfg, true); err != nil {
 		return nil, nil, err
 	}
 	if err := config.ValidateResolvedStructure(cfg); err != nil {
@@ -241,6 +171,92 @@ func (l *Lifecycle) initAtPaths(configPaths []string, artifactsDir string) (*Loc
 	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "auth", len(lock.Auth), "indexeddbs", len(lock.IndexedDBs), "cache", len(lock.Caches), "s3", len(lock.S3), "secrets", len(lock.Secrets), "telemetry", len(lock.Telemetry), "audit", len(lock.Audit), "uis", len(lock.UIs))
 	slog.Info("wrote lockfile", "path", paths.lockfilePath)
 	return lock, cfg, nil
+}
+
+func (l *Lifecycle) prepareRuntimeLockFromLoadedConfig(ctx context.Context, paths initPaths, cfg *config.Config) (*Lockfile, error) {
+	secretsEntries, err := l.primeSecretsProviderForConfigResolution(ctx, paths, cfg, nil)
+	if err != nil {
+		return nil, err
+	}
+	if err := l.resolveConfigSecrets(ctx, cfg); err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(paths.providersDir, 0o755); err != nil {
+		return nil, fmt.Errorf("creating providers dir: %w", err)
+	}
+
+	lock := newLockfile()
+	resolvedProviders, err := l.writeProviderArtifacts(ctx, cfg, paths)
+	if err != nil {
+		return nil, err
+	}
+	for name := range resolvedProviders {
+		lock.Providers[name] = resolvedProviders[name]
+	}
+	for _, collection := range hostProviderCollections(cfg) {
+		for name, entry := range collection.entries {
+			if entry == nil || !sourceBacked(entry) {
+				continue
+			}
+			if collection.kind == config.HostProviderKindSecrets {
+				if _, alreadyPrepared := secretsEntries[name]; alreadyPrepared {
+					continue
+				}
+			}
+			destDir := componentDestDir(paths, collection.kind, name)
+			lockEntry, err := l.writeComponentArtifact(ctx, paths, providerManifestKind(collection.kind), name, destDir, entry, entry.Config)
+			if err != nil {
+				return nil, err
+			}
+			lockEntriesForKind(lock, collection.kind)[name] = lockEntry
+		}
+	}
+	if err := l.resolveConfiguredPlugins(paths, lock, cfg, true); err != nil {
+		return nil, err
+	}
+	existingUIEntries := make(map[string]struct{}, len(cfg.Providers.UI))
+	for name := range cfg.Providers.UI {
+		existingUIEntries[name] = struct{}{}
+	}
+	if err := synthesizePluginOwnedUIEntries(cfg); err != nil {
+		return nil, err
+	}
+	for name, lockEntry := range secretsEntries {
+		lock.Secrets[name] = lockEntry
+	}
+	for name, def := range cfg.Providers.IndexedDB {
+		if sourceBacked(def) {
+			entry, err := l.writeComponentArtifact(ctx, paths, providermanifestv1.KindIndexedDB, name, indexeddbDestDir(paths, name), def, def.Config)
+			if err != nil {
+				return nil, err
+			}
+			lock.IndexedDBs[name] = entry
+		}
+	}
+	for name, def := range cfg.Providers.S3 {
+		if sourceBacked(def) {
+			entry, err := l.writeComponentArtifact(ctx, paths, providermanifestv1.KindS3, name, s3DestDir(paths, name), def, def.Config)
+			if err != nil {
+				return nil, err
+			}
+			lock.S3[name] = entry
+		}
+	}
+	for name, entry := range cfg.Providers.UI {
+		if entry != nil && sourceBacked(&entry.ProviderEntry) {
+			if _, existed := existingUIEntries[name]; !existed && entry.HasLocalSource() {
+				if plugin := cfg.Plugins[name]; plugin != nil && strings.TrimSpace(plugin.UI) == "" && strings.TrimSpace(plugin.MountPath) != "" {
+					continue
+				}
+			}
+			uiEntry, err := l.writeNamedUIProviderArtifact(ctx, paths, name, &entry.ProviderEntry, uiDestDir(paths, name), "ui "+strconv.Quote(name))
+			if err != nil {
+				return nil, err
+			}
+			lock.UIs[name] = uiEntry
+		}
+	}
+	return lock, nil
 }
 
 func buildSourceTokenMap(cfg *config.Config) map[string]string {
@@ -303,11 +319,8 @@ func (l *Lifecycle) LoadForExecutionAtPathsWithArtifactsDir(configPaths []string
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading config: %v", err)
 	}
-	if err := synthesizeLocalSourcePluginOwnedUIEntries(cfg); err != nil {
-		return nil, nil, fmt.Errorf("loading config: %v", err)
-	}
 	paths := initPathsForConfigsWithArtifactsDir(configPaths, resolveArtifactsDir(configPath, cfg, artifactsDir))
-	secretsLock, err := l.lockForSecretsBootstrap(configPaths, artifactsDir, paths, cfg, locked)
+	secretsLock, secretsValidated, err := l.lockForSecretsBootstrap(configPaths, artifactsDir, paths, cfg, locked)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -321,16 +334,45 @@ func (l *Lifecycle) LoadForExecutionAtPathsWithArtifactsDir(configPaths []string
 		return nil, nil, err
 	}
 
-	if err := l.applyLockedProviders(configPaths, artifactsDir, cfg, locked, nil); err != nil {
+	dependenciesValidated, err := l.applyLockedProviders(configPaths, artifactsDir, cfg, locked, secretsLock)
+	if err != nil {
 		return nil, nil, err
 	}
 	if err := config.ValidateResolvedStructure(cfg); err != nil {
 		return nil, nil, err
 	}
-	if err := plugininvocation.ValidateDependencies(context.Background(), cfg); err != nil {
-		return nil, nil, err
+	if !secretsValidated && !dependenciesValidated {
+		if err := plugininvocation.ValidateDependencies(context.Background(), cfg); err != nil {
+			return nil, nil, err
+		}
 	}
 	return cfg, nil, nil
+}
+
+func (l *Lifecycle) LoadForValidationAtPathsWithArtifactsDir(configPaths []string, artifactsDir string) (*config.Config, error) {
+	configPath := primaryConfigPath(configPaths)
+	cfg, err := config.LoadPaths(configPaths)
+	if err != nil {
+		return nil, fmt.Errorf("loading config: %v", err)
+	}
+	paths := initPathsForConfigsWithArtifactsDir(configPaths, resolveArtifactsDir(configPath, cfg, artifactsDir))
+	lock, err := l.prepareRuntimeLockFromLoadedConfig(context.Background(), paths, cfg)
+	if err != nil {
+		return nil, err
+	}
+	if err := config.ValidateRuntime(cfg); err != nil {
+		return nil, err
+	}
+	if err := l.applyPreparedProviders(paths, lock, cfg, true); err != nil {
+		return nil, err
+	}
+	if err := config.ValidateResolvedStructure(cfg); err != nil {
+		return nil, err
+	}
+	if err := plugininvocation.ValidateDependencies(context.Background(), cfg); err != nil {
+		return nil, err
+	}
+	return cfg, nil
 }
 
 func (l *Lifecycle) resolveConfigSecrets(ctx context.Context, cfg *config.Config) error {
@@ -358,36 +400,80 @@ func referencedConfigSecretsProviders(cfg *config.Config) (map[string]*config.Pr
 	return entries, nil
 }
 
-func (l *Lifecycle) lockForSecretsBootstrap(configPaths []string, artifactsDir string, paths initPaths, cfg *config.Config, locked bool) (*Lockfile, error) {
-	if cfg == nil {
+func secretsProviderMetadataDependencies(name string, provider *config.ProviderEntry) (map[string]struct{}, error) {
+	if provider == nil {
 		return nil, nil
 	}
-	referenced, err := referencedConfigSecretsProviders(cfg)
+	tmp := &config.Config{
+		Providers: config.ProvidersConfig{
+			Secrets: map[string]*config.ProviderEntry{
+				name: provider,
+			},
+		},
+	}
+	deps, err := config.ReferencedConfigSecretProviders(tmp)
 	if err != nil {
 		return nil, err
 	}
-	needsManagedSecrets := false
+	delete(deps, name)
+	if len(deps) == 0 {
+		return nil, nil
+	}
+	return deps, nil
+}
+
+func (l *Lifecycle) resolveSecretsProviderMetadata(ctx context.Context, name string, provider *config.ProviderEntry, available map[string]*config.ProviderEntry) error {
+	if l.configSecretResolver == nil || provider == nil {
+		return nil
+	}
+	secrets := make(map[string]*config.ProviderEntry, len(available)+1)
+	for availableName, entry := range available {
+		secrets[availableName] = entry
+	}
+	secrets[name] = provider
+	tmp := &config.Config{
+		Providers: config.ProvidersConfig{
+			Secrets: secrets,
+		},
+	}
+	if err := l.configSecretResolver(ctx, tmp); err != nil {
+		return fmt.Errorf("resolve metadata for %s %q: %w", providermanifestv1.KindSecrets, name, err)
+	}
+	return nil
+}
+
+func (l *Lifecycle) lockForSecretsBootstrap(configPaths []string, artifactsDir string, paths initPaths, cfg *config.Config, locked bool) (*Lockfile, bool, error) {
+	if cfg == nil {
+		return nil, false, nil
+	}
+	referenced, err := referencedConfigSecretsProviders(cfg)
+	if err != nil {
+		return nil, false, err
+	}
+	needsPreparedSecrets := false
 	for _, provider := range referenced {
-		if provider != nil && provider.HasManagedSource() {
-			needsManagedSecrets = true
+		if sourceBacked(provider) {
+			needsPreparedSecrets = true
 			break
 		}
 	}
-	if !needsManagedSecrets {
-		return nil, nil
+	if !needsPreparedSecrets {
+		return nil, false, nil
 	}
-	if !configHasManagedProviderSources(cfg) {
-		return nil, nil
+	if !configHasProviderLoading(cfg) {
+		return nil, false, nil
 	}
 
 	lock, err := ReadLockfile(paths.lockfilePath)
-	if !locked && (err != nil || !lockMatchesConfig(cfg, paths, lock)) {
+	validatedDuringInit := false
+	if !locked && (err != nil || !lockMatchesConfig(cfg, paths, lock) || configHasLocalProviderSources(cfg)) {
 		lock, err = l.InitAtPathsWithArtifactsDir(configPaths, artifactsDir)
+		validatedDuringInit = err == nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("managed providers require prepared artifacts; run `gestaltd init %s`: %w", formatConfigFlags(configPaths), err)
+		return nil, false, fmt.Errorf("source-backed providers require prepared artifacts; run `gestaltd init %s`: %w", formatConfigFlags(configPaths), err)
 	}
-	return lock, nil
+	return lock, validatedDuringInit, nil
 }
 
 func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context, paths initPaths, cfg *config.Config, lock *Lockfile) (map[string]LockEntry, error) {
@@ -405,18 +491,10 @@ func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context,
 		if provider == nil {
 			continue
 		}
-		tmp := &config.Config{
-			Providers: config.ProvidersConfig{
-				Secrets: map[string]*config.ProviderEntry{
-					name: provider,
-				},
-			},
-		}
-		deps, err := config.ReferencedConfigSecretProviders(tmp)
+		deps, err := secretsProviderMetadataDependencies(name, provider)
 		if err != nil {
 			return nil, err
 		}
-		delete(deps, name)
 		dependencies[name] = deps
 		if provider.Source.IsBuiltin() {
 			available[name] = provider
@@ -448,28 +526,15 @@ func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context,
 			if !ready {
 				continue
 			}
-			if l.configSecretResolver != nil {
-				secrets := make(map[string]*config.ProviderEntry, len(available)+1)
-				for availableName, entry := range available {
-					secrets[availableName] = entry
-				}
-				secrets[name] = provider
-				tmp := &config.Config{
-					Providers: config.ProvidersConfig{
-						Secrets: secrets,
-					},
-				}
-				if err := l.configSecretResolver(ctx, tmp); err != nil {
-					return nil, fmt.Errorf("resolve metadata for %s %q: %w", providermanifestv1.KindSecrets, name, err)
-				}
+			if err := l.resolveSecretsProviderMetadata(ctx, name, provider, available); err != nil {
+				return nil, err
 			}
 			configMap, err := config.NodeToMap(provider.Config)
 			if err != nil {
 				return nil, fmt.Errorf("decode provider config for %s %q: %w", providermanifestv1.KindSecrets, name, err)
 			}
 
-			switch {
-			case provider.HasManagedSource():
+			if sourceBacked(provider) {
 				if lock != nil {
 					lockEntry, ok := lock.Secrets[name]
 					if !ok {
@@ -487,10 +552,6 @@ func (l *Lifecycle) primeSecretsProviderForConfigResolution(ctx context.Context,
 						return nil, err
 					}
 					prepared[name] = entry
-				}
-			case provider.HasLocalSource():
-				if err := applyLocalComponentManifest(providermanifestv1.KindSecrets, name, provider, configMap); err != nil {
-					return nil, err
 				}
 			}
 
@@ -562,6 +623,11 @@ type providerFingerprintInput struct {
 	Name    string `json:"name"`
 	Source  string `json:"source,omitempty"`
 	Version string `json:"version,omitempty"`
+	Path    string `json:"path,omitempty"`
+}
+
+func sourceBacked(entry *config.ProviderEntry) bool {
+	return entry != nil && (entry.HasManagedSource() || entry.HasLocalSource())
 }
 
 func hostProviderCollections(cfg *config.Config) []struct {
@@ -604,60 +670,60 @@ func lockEntriesForKind(lock *Lockfile, kind config.HostProviderKind) map[string
 
 func configHasProviderLoading(cfg *config.Config) bool {
 	for _, entry := range cfg.Plugins {
-		if entry.HasManagedSource() || entry.HasLocalSource() {
+		if sourceBacked(entry) {
 			return true
 		}
 	}
 	for _, collection := range hostProviderCollections(cfg) {
 		for _, entry := range collection.entries {
-			if entry != nil && (entry.HasManagedSource() || entry.HasLocalSource()) {
+			if sourceBacked(entry) {
 				return true
 			}
 		}
 	}
 	for _, entry := range cfg.Providers.UI {
-		if entry != nil && (entry.HasManagedSource() || entry.HasLocalSource()) {
+		if entry != nil && sourceBacked(&entry.ProviderEntry) {
 			return true
 		}
 	}
 	for _, def := range cfg.Providers.IndexedDB {
-		if def != nil && (def.HasManagedSource() || def.HasLocalSource()) {
+		if sourceBacked(def) {
 			return true
 		}
 	}
 	for _, def := range cfg.Providers.S3 {
-		if def != nil && (def.HasManagedSource() || def.HasLocalSource()) {
+		if sourceBacked(def) {
 			return true
 		}
 	}
 	return false
 }
 
-func configHasManagedProviderSources(cfg *config.Config) bool {
+func configHasLocalProviderSources(cfg *config.Config) bool {
 	for _, entry := range cfg.Plugins {
-		if entry.HasManagedSource() {
+		if entry.HasLocalSource() {
 			return true
 		}
 	}
 	for _, collection := range hostProviderCollections(cfg) {
 		for _, entry := range collection.entries {
-			if entry != nil && entry.HasManagedSource() {
+			if entry != nil && entry.HasLocalSource() {
 				return true
 			}
 		}
 	}
 	for _, entry := range cfg.Providers.UI {
-		if entry != nil && entry.HasManagedSource() {
+		if entry != nil && entry.HasLocalSource() {
 			return true
 		}
 	}
 	for _, def := range cfg.Providers.IndexedDB {
-		if def != nil && def.HasManagedSource() {
+		if def != nil && def.HasLocalSource() {
 			return true
 		}
 	}
 	for _, def := range cfg.Providers.S3 {
-		if def != nil && def.HasManagedSource() {
+		if def != nil && def.HasLocalSource() {
 			return true
 		}
 	}
@@ -876,7 +942,7 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 		return false
 	}
 	for name, entry := range cfg.Plugins {
-		if !entry.HasManagedSource() {
+		if !sourceBacked(entry) {
 			continue
 		}
 		lockEntry, found := lock.Providers[name]
@@ -887,7 +953,7 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 	for _, collection := range hostProviderCollections(cfg) {
 		lockEntries := lockEntriesForKind(lock, collection.kind)
 		for name, entry := range collection.entries {
-			if entry == nil || !entry.HasManagedSource() {
+			if entry == nil || !sourceBacked(entry) {
 				continue
 			}
 			lockEntry, found := lockEntries[name]
@@ -897,7 +963,7 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 		}
 	}
 	for name, entry := range cfg.Providers.IndexedDB {
-		if entry == nil || !entry.HasManagedSource() {
+		if !sourceBacked(entry) {
 			continue
 		}
 		lockEntry, found := lock.IndexedDBs[name]
@@ -906,7 +972,7 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 		}
 	}
 	for name, entry := range cfg.Providers.S3 {
-		if entry == nil || !entry.HasManagedSource() {
+		if !sourceBacked(entry) {
 			continue
 		}
 		lockEntry, found := lock.S3[name]
@@ -915,7 +981,7 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 		}
 	}
 	for name, entry := range cfg.Providers.UI {
-		if entry == nil || !entry.HasManagedSource() {
+		if entry == nil || !sourceBacked(&entry.ProviderEntry) {
 			continue
 		}
 		lockEntry, ok := lock.UIs[name]
@@ -952,6 +1018,9 @@ func ProviderFingerprint(name string, entry *config.ProviderEntry, configDir str
 		Name:    name,
 		Source:  entry.SourceRef(),
 		Version: entry.SourceVersion(),
+	}
+	if entry.HasLocalSource() {
+		input.Path = entry.SourcePath()
 	}
 
 	payload, err := json.Marshal(input)
@@ -1157,6 +1226,133 @@ func (l *Lifecycle) buildArchivesMap(ctx context.Context, src pluginsource.Sourc
 	return archives, nil
 }
 
+func prepareLocalSourceInstall(kind, name, manifestPath, destDir string) (*preparedInstall, error) {
+	if strings.TrimSpace(manifestPath) == "" {
+		return nil, fmt.Errorf("manifest path for %s %q is required", kind, name)
+	}
+	if _, err := os.Stat(manifestPath); err != nil {
+		return nil, fmt.Errorf("manifest for %s %q not found at %s: %w", kind, name, manifestPath, err)
+	}
+	parentDir := filepath.Dir(destDir)
+	if err := os.MkdirAll(parentDir, 0o755); err != nil {
+		return nil, fmt.Errorf("create destination parent directory: %w", err)
+	}
+	tempDir, err := os.MkdirTemp(parentDir, filepath.Base(destDir)+".tmp-*")
+	if err != nil {
+		return nil, fmt.Errorf("create temp install directory: %w", err)
+	}
+	cleanupDir := tempDir
+	defer func() {
+		if cleanupDir != "" {
+			_ = os.RemoveAll(cleanupDir)
+		}
+	}()
+
+	stageKind := kind
+	if stageKind == providerLockKindTelemetry || stageKind == providerLockKindAudit {
+		stageKind = providermanifestv1.KindPlugin
+	}
+	if _, err := providerpkg.StageSourcePreparedInstallDir(manifestPath, tempDir, providerpkg.StageSourcePreparedInstallOptions{
+		Kind:       stageKind,
+		PluginName: name,
+		GOOS:       runtime.GOOS,
+		GOARCH:     runtime.GOARCH,
+	}); err != nil {
+		return nil, fmt.Errorf("prepare manifest for %s %q: %w", kind, name, err)
+	}
+
+	backupDir := ""
+	if _, err := os.Stat(destDir); err == nil {
+		backupDir = destDir + ".backup-" + strconv.FormatInt(time.Now().UnixNano(), 10)
+		if err := os.Rename(destDir, backupDir); err != nil {
+			return nil, fmt.Errorf("stage existing provider cache at %s: %w", destDir, err)
+		}
+	} else if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("inspect existing provider cache at %s: %w", destDir, err)
+	}
+	if err := os.Rename(tempDir, destDir); err != nil {
+		if backupDir != "" {
+			if restoreErr := os.Rename(backupDir, destDir); restoreErr != nil {
+				return nil, fmt.Errorf("activate prepared install at %s: %w (rollback failed: %v)", destDir, err, restoreErr)
+			}
+		}
+		return nil, fmt.Errorf("activate prepared install at %s: %w", destDir, err)
+	}
+	cleanupDir = ""
+	if backupDir != "" {
+		if err := os.RemoveAll(backupDir); err != nil {
+			return nil, fmt.Errorf("remove staged provider cache backup at %s: %w", backupDir, err)
+		}
+	}
+	install, err := inspectPreparedInstall(destDir)
+	if err != nil {
+		return nil, fmt.Errorf("inspect prepared install for %s %q: %w", kind, name, err)
+	}
+	return install, nil
+}
+
+func relativePreparedPath(artifactsDir, path string) (string, error) {
+	if strings.TrimSpace(path) == "" {
+		return "", nil
+	}
+	rel, err := filepath.Rel(artifactsDir, path)
+	if err != nil {
+		return "", err
+	}
+	return filepath.ToSlash(rel), nil
+}
+
+func pathWithinRoot(root, target string) bool {
+	if strings.TrimSpace(root) == "" || strings.TrimSpace(target) == "" {
+		return false
+	}
+	rel, err := filepath.Rel(root, target)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator)))
+}
+
+func localLockEntryFromPreparedInstall(paths initPaths, kind, name string, plugin *config.ProviderEntry, install *preparedInstall) (LockEntry, error) {
+	fingerprint, err := ProviderFingerprint(name, plugin, paths.configDir)
+	if err != nil {
+		return LockEntry{}, fmt.Errorf("fingerprinting %s %q provider: %w", kind, name, err)
+	}
+	manifestPath, err := relativePreparedPath(paths.artifactsDir, install.manifestPath)
+	if err != nil {
+		return LockEntry{}, fmt.Errorf("compute manifest path for %s %q: %w", kind, name, err)
+	}
+	executablePath, err := relativePreparedPath(paths.artifactsDir, install.executablePath)
+	if err != nil {
+		return LockEntry{}, fmt.Errorf("compute executable path for %s %q: %w", kind, name, err)
+	}
+	return LockEntry{
+		Fingerprint: fingerprint,
+		Manifest:    manifestPath,
+		Executable:  executablePath,
+	}, nil
+}
+
+func localUILockEntryFromPreparedInstall(paths initPaths, name string, plugin *config.ProviderEntry, install *preparedInstall) (LockUIEntry, error) {
+	fingerprint, err := NamedUIProviderFingerprint(name, plugin)
+	if err != nil {
+		return LockUIEntry{}, fmt.Errorf("fingerprinting ui %q: %w", name, err)
+	}
+	manifestPath, err := relativePreparedPath(paths.artifactsDir, install.manifestPath)
+	if err != nil {
+		return LockUIEntry{}, fmt.Errorf("compute manifest path for ui %q: %w", name, err)
+	}
+	assetRoot, err := relativePreparedPath(paths.artifactsDir, install.assetRootPath)
+	if err != nil {
+		return LockUIEntry{}, fmt.Errorf("compute asset root path for ui %q: %w", name, err)
+	}
+	return LockUIEntry{
+		Fingerprint: fingerprint,
+		Manifest:    manifestPath,
+		AssetRoot:   assetRoot,
+	}, nil
+}
+
 func (l *Lifecycle) writeProviderArtifacts(ctx context.Context, cfg *config.Config, paths initPaths) (map[string]LockProviderEntry, error) {
 	written := make(map[string]LockProviderEntry)
 	for name, entry := range cfg.Plugins {
@@ -1167,7 +1363,7 @@ func (l *Lifecycle) writeProviderArtifacts(ctx context.Context, cfg *config.Conf
 		if err != nil {
 			return nil, fmt.Errorf("decode provider config for provider %q: %w", name, err)
 		}
-		if !entry.HasManagedSource() {
+		if !sourceBacked(entry) {
 			continue
 		}
 		lockEntry, err := l.lockProviderEntryForSource(ctx, paths, name, entry, configMap)
@@ -1189,6 +1385,20 @@ func (l *Lifecycle) writeComponentArtifact(ctx context.Context, paths initPaths,
 }
 
 func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, paths initPaths, kind, name, destDir string, plugin *config.ProviderEntry, configMap map[string]any) (LockEntry, error) {
+	if plugin != nil && plugin.HasLocalSource() {
+		install, err := prepareLocalSourceInstall(kind, name, plugin.SourcePath(), destDir)
+		if err != nil {
+			return LockEntry{}, err
+		}
+		if err := validateInstalledManifestKind(kind, name, install.manifest); err != nil {
+			return LockEntry{}, err
+		}
+		if err := providerpkg.ValidateConfigForManifest(install.manifestPath, install.manifest, kind, configMap); err != nil {
+			return LockEntry{}, fmt.Errorf("provider config validation for %s %q: %w", kind, name, err)
+		}
+		return localLockEntryFromPreparedInstall(paths, kind, name, plugin, install)
+	}
+
 	src, err := sourceForProvider(plugin)
 	if err != nil {
 		return LockEntry{}, fmt.Errorf("%s %q source.ref %q: %w", kind, name, plugin.SourceRef(), err)
@@ -1250,6 +1460,20 @@ func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, paths initP
 }
 
 func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths initPaths, name string, plugin *config.ProviderEntry, configMap map[string]any) (LockProviderEntry, error) {
+	if plugin != nil && plugin.HasLocalSource() {
+		install, err := prepareLocalSourceInstall(providermanifestv1.KindPlugin, name, plugin.SourcePath(), providerDestDir(paths, name))
+		if err != nil {
+			return LockProviderEntry{}, err
+		}
+		if err := validateInstalledManifestKind(providermanifestv1.KindPlugin, name, install.manifest); err != nil {
+			return LockProviderEntry{}, err
+		}
+		if err := providerpkg.ValidateConfigForManifest(install.manifestPath, install.manifest, providermanifestv1.KindPlugin, configMap); err != nil {
+			return LockProviderEntry{}, fmt.Errorf("provider config validation for provider %q: %w", name, err)
+		}
+		return localLockEntryFromPreparedInstall(paths, providermanifestv1.KindPlugin, name, plugin, install)
+	}
+
 	src, err := sourceForProvider(plugin)
 	if err != nil {
 		return LockProviderEntry{}, fmt.Errorf("provider %q source.ref %q: %w", name, plugin.SourceRef(), err)
@@ -1312,8 +1536,8 @@ func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths initPa
 }
 
 func (l *Lifecycle) writeNamedUIProviderArtifact(ctx context.Context, paths initPaths, name string, plugin *config.ProviderEntry, destDir string, subject string) (LockUIEntry, error) {
-	if plugin == nil || !plugin.HasManagedSource() {
-		return LockUIEntry{}, fmt.Errorf("%s requires managed source", subject)
+	if plugin == nil || !sourceBacked(plugin) {
+		return LockUIEntry{}, fmt.Errorf("%s requires source configuration", subject)
 	}
 	configMap, err := config.NodeToMap(plugin.Config)
 	if err != nil {
@@ -1322,6 +1546,24 @@ func (l *Lifecycle) writeNamedUIProviderArtifact(ctx context.Context, paths init
 	fingerprint, err := NamedUIProviderFingerprint(name, plugin)
 	if err != nil {
 		return LockUIEntry{}, fmt.Errorf("fingerprinting %s: %w", subject, err)
+	}
+	if plugin.HasLocalSource() {
+		install, err := prepareLocalSourceInstall(providermanifestv1.KindWebUI, name, plugin.SourcePath(), destDir)
+		if err != nil {
+			return LockUIEntry{}, err
+		}
+		if err := validateInstalledManifestKind(providermanifestv1.KindWebUI, subject, install.manifest); err != nil {
+			return LockUIEntry{}, err
+		}
+		if err := providerpkg.ValidateConfigForManifest(install.manifestPath, install.manifest, providermanifestv1.KindWebUI, configMap); err != nil {
+			return LockUIEntry{}, fmt.Errorf("provider config validation for %s: %w", subject, err)
+		}
+		entry, err := localUILockEntryFromPreparedInstall(paths, name, plugin, install)
+		if err != nil {
+			return LockUIEntry{}, err
+		}
+		entry.Fingerprint = fingerprint
+		return entry, nil
 	}
 
 	src, err := sourceForProvider(plugin)
@@ -1387,45 +1629,22 @@ func sourceForProvider(providerEntry *config.ProviderEntry) (pluginsource.Source
 	return src, nil
 }
 
-func (l *Lifecycle) applyLockedProviders(configPaths []string, artifactsDir string, cfg *config.Config, locked bool, preparedLock *Lockfile) error {
+func (l *Lifecycle) applyPreparedProviders(paths initPaths, lock *Lockfile, cfg *config.Config, locked bool) error {
 	if !configHasProviderLoading(cfg) {
 		return nil
 	}
 
-	configPath := primaryConfigPath(configPaths)
-	paths := initPathsForConfigsWithArtifactsDir(configPaths, resolveArtifactsDir(configPath, cfg, artifactsDir))
-	var lock *Lockfile
-	var err error
-	if configHasManagedProviderSources(cfg) {
-		var synthesizedLockedPluginUIs map[string]struct{}
-		lock = preparedLock
-		if lock == nil {
-			lock, err = ReadLockfile(paths.lockfilePath)
-			if err == nil {
-				synthesizedLockedPluginUIs, err = synthesizeLockedSourcePluginOwnedUIEntries(cfg, paths, lock)
-				if err != nil {
-					clearSynthesizedPluginOwnedUIEntries(cfg, synthesizedLockedPluginUIs)
-				}
-			}
-			if !locked && (err != nil || !lockMatchesConfig(cfg, paths, lock)) {
-				clearSynthesizedPluginOwnedUIEntries(cfg, synthesizedLockedPluginUIs)
-				lock, err = l.InitAtPathsWithArtifactsDir(configPaths, artifactsDir)
-			}
-		} else {
-			synthesizedLockedPluginUIs, err = synthesizeLockedSourcePluginOwnedUIEntries(cfg, paths, lock)
-			if err != nil {
-				clearSynthesizedPluginOwnedUIEntries(cfg, synthesizedLockedPluginUIs)
-			}
-		}
-		if err != nil {
-			return fmt.Errorf("managed providers require prepared artifacts; run `gestaltd init %s`: %w", formatConfigFlags(configPaths), err)
-		}
+	synthesizedPluginUIs, err := synthesizeLockedSourcePluginOwnedUIEntries(cfg, paths, lock)
+	if err != nil {
+		return err
 	}
 
 	if err := l.resolveConfiguredPlugins(paths, lock, cfg, locked); err != nil {
+		clearSynthesizedPluginOwnedUIEntries(cfg, synthesizedPluginUIs)
 		return err
 	}
 	if err := synthesizePluginOwnedUIEntries(cfg); err != nil {
+		clearSynthesizedPluginOwnedUIEntries(cfg, synthesizedPluginUIs)
 		return err
 	}
 	for _, collection := range hostProviderCollections(cfg) {
@@ -1435,6 +1654,7 @@ func (l *Lifecycle) applyLockedProviders(configPaths []string, artifactsDir stri
 				continue
 			}
 			if err := l.applyComponentProvider(paths, lockEntries, providerManifestKind(collection.kind), name, entry, entry.Config, &entry.Config, componentDestDir(paths, collection.kind, name), locked); err != nil {
+				clearSynthesizedPluginOwnedUIEntries(cfg, synthesizedPluginUIs)
 				return err
 			}
 		}
@@ -1446,6 +1666,7 @@ func (l *Lifecycle) applyLockedProviders(configPaths []string, artifactsDir stri
 	for name, def := range cfg.Providers.IndexedDB {
 		if def != nil {
 			if err := l.applyComponentProvider(paths, indexedDBLocks, providermanifestv1.KindIndexedDB, name, def, def.Config, &def.Config, indexeddbDestDir(paths, name), locked); err != nil {
+				clearSynthesizedPluginOwnedUIEntries(cfg, synthesizedPluginUIs)
 				return err
 			}
 		}
@@ -1457,6 +1678,7 @@ func (l *Lifecycle) applyLockedProviders(configPaths []string, artifactsDir stri
 	for name, def := range cfg.Providers.S3 {
 		if def != nil {
 			if err := l.applyComponentProvider(paths, s3Locks, providermanifestv1.KindS3, name, def, def.Config, &def.Config, s3DestDir(paths, name), locked); err != nil {
+				clearSynthesizedPluginOwnedUIEntries(cfg, synthesizedPluginUIs)
 				return err
 			}
 		}
@@ -1473,12 +1695,39 @@ func (l *Lifecycle) applyLockedProviders(configPaths []string, artifactsDir stri
 		}
 		resolvedAssetRoot, err := l.applyConfiguredUIProvider(paths, lockEntry, &entry.ProviderEntry, name, "ui "+strconv.Quote(name), uiDestDir(paths, name), locked)
 		if err != nil {
+			clearSynthesizedPluginOwnedUIEntries(cfg, synthesizedPluginUIs)
 			return err
 		}
 		entry.ResolvedAssetRoot = resolvedAssetRoot
 	}
 
 	return nil
+}
+
+func (l *Lifecycle) applyLockedProviders(configPaths []string, artifactsDir string, cfg *config.Config, locked bool, bootstrapLock *Lockfile) (bool, error) {
+	if !configHasProviderLoading(cfg) {
+		return false, nil
+	}
+
+	configPath := primaryConfigPath(configPaths)
+	paths := initPathsForConfigsWithArtifactsDir(configPaths, resolveArtifactsDir(configPath, cfg, artifactsDir))
+	lock := bootstrapLock
+	var err error
+	validatedDuringInit := false
+	if lock == nil {
+		lock, err = ReadLockfile(paths.lockfilePath)
+	}
+	if !locked && (err != nil || !lockMatchesConfig(cfg, paths, lock) || (bootstrapLock == nil && configHasLocalProviderSources(cfg))) {
+		lock, err = l.InitAtPathsWithArtifactsDir(configPaths, artifactsDir)
+		validatedDuringInit = err == nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("source-backed providers require prepared artifacts; run `gestaltd init %s`: %w", formatConfigFlags(configPaths), err)
+	}
+	if err := l.applyPreparedProviders(paths, lock, cfg, locked); err != nil {
+		return false, err
+	}
+	return validatedDuringInit, nil
 }
 
 func installLockedPackageAtomic(packagePath, destDir string) (*pluginstore.InstalledPlugin, func() error, func() error, error) {
@@ -1543,12 +1792,8 @@ func (l *Lifecycle) resolveConfiguredPlugins(paths initPaths, lock *Lockfile, cf
 			return fmt.Errorf("decode provider config for provider %q: %w", name, err)
 		}
 		switch {
-		case entry.HasManagedSource():
+		case sourceBacked(entry):
 			if err := l.applyLockedProviderEntry(paths, lock, name, entry, configMap, locked); err != nil {
-				return err
-			}
-		case entry.HasLocalSource():
-			if err := applyLocalProviderManifest(name, entry, configMap); err != nil {
 				return err
 			}
 		default:
@@ -1606,54 +1851,6 @@ func synthesizePluginOwnedUIEntries(cfg *config.Config) error {
 	return nil
 }
 
-func synthesizeLocalSourcePluginOwnedUIEntries(cfg *config.Config) error {
-	if cfg == nil || len(cfg.Plugins) == 0 {
-		return nil
-	}
-	if cfg.Providers.UI == nil {
-		cfg.Providers.UI = map[string]*config.UIEntry{}
-	}
-	pluginNames := slices.Sorted(maps.Keys(cfg.Plugins))
-	for _, pluginName := range pluginNames {
-		plugin := cfg.Plugins[pluginName]
-		if plugin == nil || strings.TrimSpace(plugin.UI) != "" || strings.TrimSpace(plugin.MountPath) == "" || !plugin.HasLocalSource() {
-			continue
-		}
-		manifestPath := plugin.SourcePath()
-		if manifestPath == "" {
-			continue
-		}
-		_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
-		if err != nil {
-			return fmt.Errorf("prepare manifest for provider %q: %w", pluginName, err)
-		}
-		if manifest == nil || manifest.Spec == nil || manifest.Spec.UI == nil {
-			continue
-		}
-		entry, err := ownedUIEntryFromManifest(manifestPath, manifest.Version, manifest.Spec.UI)
-		if err != nil {
-			return fmt.Errorf("plugin %q ui: %w", pluginName, err)
-		}
-		entry.Path = strings.TrimSpace(plugin.MountPath)
-		entry.AuthorizationPolicy = strings.TrimSpace(plugin.AuthorizationPolicy)
-		entry.OwnerPlugin = pluginName
-		if existing := cfg.Providers.UI[pluginName]; existing != nil {
-			if err := validateSynthesizedPluginUIEntry(pluginName, existing, entry); err != nil {
-				return err
-			}
-			if existing.Source.Auth == nil && entry.Source.Auth != nil {
-				existing.Source.Auth = entry.Source.Auth
-			}
-			existing.Path = cmp.Or(existing.Path, entry.Path)
-			existing.AuthorizationPolicy = cmp.Or(existing.AuthorizationPolicy, entry.AuthorizationPolicy)
-			existing.OwnerPlugin = cmp.Or(existing.OwnerPlugin, entry.OwnerPlugin)
-			continue
-		}
-		cfg.Providers.UI[pluginName] = entry
-	}
-	return nil
-}
-
 func synthesizeLockedSourcePluginOwnedUIEntries(cfg *config.Config, paths initPaths, lock *Lockfile) (map[string]struct{}, error) {
 	added := map[string]struct{}{}
 	if cfg == nil || len(cfg.Plugins) == 0 || lock == nil {
@@ -1665,7 +1862,7 @@ func synthesizeLockedSourcePluginOwnedUIEntries(cfg *config.Config, paths initPa
 	pluginNames := slices.Sorted(maps.Keys(cfg.Plugins))
 	for _, pluginName := range pluginNames {
 		plugin := cfg.Plugins[pluginName]
-		if plugin == nil || strings.TrimSpace(plugin.UI) != "" || strings.TrimSpace(plugin.MountPath) == "" || !plugin.HasManagedSource() {
+		if plugin == nil || strings.TrimSpace(plugin.UI) != "" || strings.TrimSpace(plugin.MountPath) == "" || !sourceBacked(plugin) {
 			continue
 		}
 		lockEntry, ok := lock.Providers[pluginName]
@@ -1771,7 +1968,7 @@ func validateSynthesizedPluginUIEntry(pluginName string, existing, expected *con
 	if currentAuth != "" && currentAuth != expectedAuth {
 		return fmt.Errorf("config validation: plugins.%s owned ui conflicts with providers.ui.%s.source.auth.token", pluginName, pluginName)
 	}
-	if current := strings.TrimSpace(existing.Source.Path); current != "" && current != expected.Source.Path {
+	if current := strings.TrimSpace(existing.Source.Path); current != "" && !equivalentProviderManifestPath(current, expected.Source.Path) {
 		return fmt.Errorf("config validation: plugins.%s owned ui conflicts with providers.ui.%s.source.path", pluginName, pluginName)
 	}
 	if current := strings.TrimSpace(existing.Path); current != "" && current != expected.Path {
@@ -1786,6 +1983,26 @@ func validateSynthesizedPluginUIEntry(pluginName string, existing, expected *con
 	return nil
 }
 
+func equivalentProviderManifestPath(current, expected string) bool {
+	current = strings.TrimSpace(current)
+	expected = strings.TrimSpace(expected)
+	if current == expected {
+		return true
+	}
+	if current == "" || expected == "" {
+		return false
+	}
+	_, currentManifest, currentErr := providerpkg.ReadManifestFile(current)
+	_, expectedManifest, expectedErr := providerpkg.ReadManifestFile(expected)
+	if currentErr != nil || expectedErr != nil {
+		return false
+	}
+	return currentManifest != nil && expectedManifest != nil &&
+		currentManifest.Kind == expectedManifest.Kind &&
+		currentManifest.Source == expectedManifest.Source &&
+		currentManifest.Version == expectedManifest.Version
+}
+
 func (l *Lifecycle) applyConfiguredUIProvider(paths initPaths, lockEntry *LockUIEntry, provider *config.ProviderEntry, logicalName, subject, destDir string, locked bool) (string, error) {
 	if provider == nil {
 		return "", nil
@@ -1795,8 +2012,11 @@ func (l *Lifecycle) applyConfiguredUIProvider(paths initPaths, lockEntry *LockUI
 		return "", fmt.Errorf("decode %s config: %w", subject, err)
 	}
 	switch {
-	case provider.HasManagedSource():
+	case sourceBacked(provider):
 		if lockEntry == nil {
+			if provider.HasLocalSource() && pathWithinRoot(filepath.Join(paths.artifactsDir, ".gestaltd"), provider.SourcePath()) {
+				return bindPathBackedUIManifest(provider, configMap)
+			}
 			return "", fmt.Errorf("prepared artifact for %s is missing or stale; run `gestaltd init %s`", subject, paths.configFlags)
 		}
 		fingerprint, err := NamedUIProviderFingerprint(logicalName, provider)
@@ -1814,6 +2034,9 @@ func (l *Lifecycle) applyConfiguredUIProvider(paths initPaths, lockEntry *LockUI
 			}
 		}
 		if needMaterialize {
+			if len(lockEntry.Archives) == 0 {
+				return "", fmt.Errorf("prepared artifact for %s is missing or stale; run `gestaltd init %s`", subject, paths.configFlags)
+			}
 			if err := l.materializeLockedUIProvider(context.Background(), paths, provider, *lockEntry, destDir, locked); err != nil {
 				return "", err
 			}
@@ -1832,12 +2055,6 @@ func (l *Lifecycle) applyConfiguredUIProvider(paths initPaths, lockEntry *LockUI
 			return "", err
 		}
 		return install.assetRootPath, nil
-	case provider.HasLocalSource():
-		var resolvedAssetRoot string
-		if err := applyLocalUIManifest(provider, configMap, &resolvedAssetRoot); err != nil {
-			return "", err
-		}
-		return resolvedAssetRoot, nil
 	default:
 		return "", nil
 	}
@@ -1852,7 +2069,7 @@ func (l *Lifecycle) applyComponentProvider(paths initPaths, lockEntries map[stri
 		return fmt.Errorf("decode provider config for %s %q: %w", kind, name, err)
 	}
 	switch {
-	case provider.HasManagedSource():
+	case sourceBacked(provider):
 		if lockEntries == nil {
 			return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init %s`", kind, name, paths.configFlags)
 		}
@@ -1861,10 +2078,6 @@ func (l *Lifecycle) applyComponentProvider(paths initPaths, lockEntries map[stri
 			return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init %s`", kind, name, paths.configFlags)
 		}
 		if err := l.applyLockedComponentEntry(paths, &lockEntry, kind, name, provider, configMap, destDir, locked); err != nil {
-			return err
-		}
-	case provider.HasLocalSource():
-		if err := applyLocalComponentManifest(kind, name, provider, configMap); err != nil {
 			return err
 		}
 	default:
@@ -1876,91 +2089,6 @@ func (l *Lifecycle) applyComponentProvider(paths initPaths, lockEntries map[stri
 		return err
 	}
 	*targetNode = node
-	return nil
-}
-
-func applyLocalProviderManifest(name string, plugin *config.ProviderEntry, configMap map[string]any) error {
-	if plugin == nil || !plugin.HasLocalSource() {
-		return nil
-	}
-
-	manifestPath := plugin.SourcePath()
-	if _, err := os.Stat(manifestPath); err != nil {
-		return fmt.Errorf("manifest for provider %q not found at %s: %w", name, manifestPath, err)
-	}
-
-	_, manifest, err := providerpkg.PrepareSourceManifest(manifestPath)
-	if err != nil {
-		return fmt.Errorf("prepare manifest for provider %q: %w", name, err)
-	}
-	if err := bindResolvedProviderManifest(name, plugin, manifestPath, manifest, configMap); err != nil {
-		return err
-	}
-	if plugin.Command != "" {
-		return nil
-	}
-	if entry := providerpkg.EntrypointForKind(plugin.ResolvedManifest, providermanifestv1.KindPlugin); entry != nil {
-		candidate := filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(entry.ArtifactPath))
-		if _, err := os.Stat(candidate); err == nil {
-			plugin.Command = candidate
-			plugin.Args = append([]string(nil), entry.Args...)
-		}
-	}
-	return nil
-}
-
-func applyLocalComponentManifest(kind, name string, plugin *config.ProviderEntry, configMap map[string]any) error {
-	if plugin == nil || !plugin.HasLocalSource() {
-		return nil
-	}
-
-	manifestPath := plugin.SourcePath()
-	if _, err := os.Stat(manifestPath); err != nil {
-		return fmt.Errorf("manifest for %s %q not found at %s: %w", kind, name, manifestPath, err)
-	}
-
-	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
-	if err != nil {
-		return fmt.Errorf("prepare manifest for %s %q: %w", kind, name, err)
-	}
-	if err := bindResolvedComponentManifest(kind, name, plugin, manifestPath, manifest, configMap); err != nil {
-		return err
-	}
-	if plugin.Command != "" {
-		return nil
-	}
-	if entry := providerpkg.EntrypointForKind(plugin.ResolvedManifest, kind); entry != nil {
-		candidate := filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(entry.ArtifactPath))
-		if _, err := os.Stat(candidate); err == nil {
-			plugin.Command = candidate
-			plugin.Args = append([]string(nil), entry.Args...)
-		}
-	}
-	return nil
-}
-
-func applyLocalUIManifest(plugin *config.ProviderEntry, configMap map[string]any, resolvedAssetRoot *string) error {
-	if plugin == nil || !plugin.HasLocalSource() {
-		return nil
-	}
-
-	manifestPath := plugin.SourcePath()
-	if _, err := os.Stat(manifestPath); err != nil {
-		return fmt.Errorf("manifest for ui provider not found at %s: %w", manifestPath, err)
-	}
-
-	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
-	if err != nil {
-		return fmt.Errorf("prepare manifest for ui provider: %w", err)
-	}
-	if err := bindResolvedUIManifest(plugin, manifestPath, manifest, configMap); err != nil {
-		return err
-	}
-	assetRoot := filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(manifest.Spec.AssetRoot))
-	if _, err := os.Stat(assetRoot); err != nil {
-		return fmt.Errorf("ui provider asset root not found at %s: %w", assetRoot, err)
-	}
-	*resolvedAssetRoot = assetRoot
 	return nil
 }
 
@@ -1994,6 +2122,9 @@ func (l *Lifecycle) applyLockedProviderEntry(paths initPaths, lock *Lockfile, na
 		}
 	}
 	if needMaterialize {
+		if len(entry.Archives) == 0 {
+			return fmt.Errorf("prepared artifact for provider %q is missing or stale; run `gestaltd init %s`", name, paths.configFlags)
+		}
 		if err := l.materializeLockedProvider(context.Background(), paths, name, plugin, entry, locked); err != nil {
 			return err
 		}
@@ -2050,6 +2181,9 @@ func (l *Lifecycle) applyLockedComponentEntry(paths initPaths, entry *LockEntry,
 		}
 	}
 	if needMaterialize {
+		if len(entry.Archives) == 0 {
+			return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init %s`", kind, name, paths.configFlags)
+		}
 		if err := l.materializeLockedComponent(context.Background(), paths, kind, name, plugin, *entry, destDir, locked); err != nil {
 			return err
 		}
@@ -2116,6 +2250,28 @@ func bindResolvedUIManifest(plugin *config.ProviderEntry, manifestPath string, m
 	plugin.ResolvedManifestPath = manifestPath
 	plugin.ResolvedManifest = manifest
 	return nil
+}
+
+func bindPathBackedUIManifest(plugin *config.ProviderEntry, configMap map[string]any) (string, error) {
+	manifestPath := plugin.SourcePath()
+	if strings.TrimSpace(manifestPath) == "" {
+		return "", fmt.Errorf("resolved ui manifest path is required")
+	}
+	if _, err := os.Stat(manifestPath); err != nil {
+		return "", fmt.Errorf("ui provider manifest not found at %s: %w", manifestPath, err)
+	}
+	_, manifest, err := providerpkg.ReadManifestFile(manifestPath)
+	if err != nil {
+		return "", fmt.Errorf("prepare manifest for ui provider: %w", err)
+	}
+	if err := bindResolvedUIManifest(plugin, manifestPath, manifest, configMap); err != nil {
+		return "", err
+	}
+	assetRoot := filepath.Join(filepath.Dir(manifestPath), filepath.FromSlash(manifest.Spec.AssetRoot))
+	if _, err := os.Stat(assetRoot); err != nil {
+		return "", fmt.Errorf("ui provider asset root not found at %s: %w", assetRoot, err)
+	}
+	return assetRoot, nil
 }
 
 func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPaths, name string, plugin *config.ProviderEntry, entry LockProviderEntry, locked bool) error {

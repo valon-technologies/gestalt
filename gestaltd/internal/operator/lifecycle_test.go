@@ -2,6 +2,7 @@ package operator
 
 import (
 	"archive/tar"
+	"cmp"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -139,12 +140,27 @@ func decodeNodeMap(t *testing.T, node any) map[string]any {
 
 func writeStubIndexedDBManifest(t *testing.T, dir string) string {
 	t.Helper()
-	manifestPath := filepath.Join(dir, "indexeddb-manifest.yaml")
+	providerDir := filepath.Join(dir, "indexeddb-stub")
+	manifestPath := filepath.Join(providerDir, "indexeddb-manifest.yaml")
+	artifactRel := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "indexeddb"))
+	artifactPath := filepath.Join(providerDir, filepath.FromSlash(artifactRel))
+	if err := os.MkdirAll(filepath.Dir(artifactPath), 0o755); err != nil {
+		t.Fatalf("mkdir indexeddb artifact dir: %v", err)
+	}
+	if err := os.WriteFile(artifactPath, []byte("stub-indexeddb"), 0o755); err != nil {
+		t.Fatalf("write indexeddb artifact: %v", err)
+	}
 	data, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
 		Source:  "github.com/test/providers/indexeddb-stub",
 		Version: "0.0.1-alpha.1",
 		Kind:    providermanifestv1.KindIndexedDB,
 		Spec:    &providermanifestv1.Spec{},
+		Artifacts: []providermanifestv1.Artifact{{
+			OS:   runtime.GOOS,
+			Arch: runtime.GOARCH,
+			Path: artifactRel,
+		}},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("encode indexeddb manifest: %v", err)
@@ -180,12 +196,29 @@ func writeLocalExecutablePlugin(t *testing.T, dir, name string, operations ...st
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		t.Fatalf("MkdirAll(%s): %v", root, err)
 	}
+	artifactPath := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin"))
+	artifactFullPath := filepath.Join(root, filepath.FromSlash(artifactPath))
+	if err := os.MkdirAll(filepath.Dir(artifactFullPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", filepath.Dir(artifactFullPath), err)
+	}
+	artifactContent := []byte(name + "-binary")
+	if err := os.WriteFile(artifactFullPath, artifactContent, 0o755); err != nil {
+		t.Fatalf("WriteFile(%s): %v", artifactFullPath, err)
+	}
+	artifactSum := sha256.Sum256(artifactContent)
 	manifestPath := filepath.Join(root, "manifest.yaml")
 	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
 		Kind:        providermanifestv1.KindPlugin,
 		Source:      "github.com/test/plugins/" + name,
 		Version:     "0.0.1-alpha.1",
 		DisplayName: testDisplayName(name),
+		Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: artifactPath},
+		Artifacts: []providermanifestv1.Artifact{{
+			OS:     runtime.GOOS,
+			Arch:   runtime.GOARCH,
+			Path:   artifactPath,
+			SHA256: hex.EncodeToString(artifactSum[:]),
+		}},
 		Spec: &providermanifestv1.Spec{
 			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
 		},
@@ -389,6 +422,14 @@ func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *te
 
 	dir := t.TempDir()
 	manifestPath := filepath.Join(dir, "manifest.yaml")
+	artifactRel := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider"))
+	artifactPath := filepath.Join(dir, filepath.FromSlash(artifactRel))
+	if err := os.MkdirAll(filepath.Dir(artifactPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll artifact dir: %v", err)
+	}
+	if err := os.WriteFile(artifactPath, []byte("local-provider"), 0o755); err != nil {
+		t.Fatalf("WriteFile artifact: %v", err)
+	}
 	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
 		Source:      "github.com/testowner/plugins/local-provider",
 		Version:     "0.0.1-alpha.1",
@@ -397,6 +438,12 @@ func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *te
 		Kind:        providermanifestv1.KindPlugin, Spec: &providermanifestv1.Spec{
 			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
 		},
+		Artifacts: []providermanifestv1.Artifact{{
+			OS:   runtime.GOOS,
+			Arch: runtime.GOARCH,
+			Path: artifactRel,
+		}},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("EncodeManifest: %v", err)
@@ -436,11 +483,14 @@ func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *te
 	if intg == nil || intg.ResolvedManifest == nil {
 		t.Fatalf("ResolvedManifest = %+v", intg)
 	}
-	if intg.ResolvedManifestPath != manifestPath {
-		t.Fatalf("ResolvedManifestPath = %q, want %q", intg.ResolvedManifestPath, manifestPath)
+	if !strings.HasSuffix(filepath.ToSlash(intg.ResolvedManifestPath), filepath.ToSlash(filepath.Join(".gestaltd", "providers", "example", "manifest.yaml"))) {
+		t.Fatalf("ResolvedManifestPath = %q", intg.ResolvedManifestPath)
 	}
-	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); !os.IsNotExist(err) {
-		t.Fatalf("lockfile should not be created, got err=%v", err)
+	if intg.Command == "" {
+		t.Fatal("Command = empty, want prepared executable path")
+	}
+	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); err != nil {
+		t.Fatalf("expected lockfile to be created: %v", err)
 	}
 }
 
@@ -501,8 +551,8 @@ spec:
 	if got := conn.Auth.Type; got != providermanifestv1.AuthTypeMCPOAuth {
 		t.Fatalf("MCP auth type = %q, want %q", got, providermanifestv1.AuthTypeMCPOAuth)
 	}
-	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); !os.IsNotExist(err) {
-		t.Fatalf("lockfile should not be created, got err=%v", err)
+	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); err != nil {
+		t.Fatalf("expected lockfile to be created: %v", err)
 	}
 }
 
@@ -1038,6 +1088,7 @@ func TestLoadForExecutionAtPath_ResolvesLocalMountedWebUIWithoutLockfile(t *test
 		wantPath     string
 		wantPolicy   string
 		ownedUIPath  string
+		uiManifest   string
 		wantErr      string
 	}{
 		{
@@ -1137,6 +1188,29 @@ plugins:
 			ownedUIPath: "../webui/manifest.yaml",
 		},
 		{
+			name: "plugin owned ui via plugin mount with noncanonical manifest filename",
+			uiConfigYAML: `plugins:
+    roadmap:
+      source:
+        path: ./plugin/manifest.yaml
+      mountPath: /create-customer-roadmap-review
+      authorizationPolicy: roadmap_policy
+`,
+			extraYAML: `authorization:
+  policies:
+    roadmap_policy:
+      default: deny
+      members:
+        - email: viewer@example.test
+          role: viewer
+`,
+			uiKey:       "roadmap",
+			wantPath:    "/create-customer-roadmap-review",
+			wantPolicy:  "roadmap_policy",
+			ownedUIPath: "../webui/ui-manifest.yaml",
+			uiManifest:  "ui-manifest.yaml",
+		},
+		{
 			name: "plugin owned ui with same-name ui overlay",
 			uiConfigYAML: `  ui:
     roadmap:
@@ -1193,7 +1267,8 @@ plugins:
 			if err := os.WriteFile(filepath.Join(webUIDir, "dist", "index.html"), []byte("<html>roadmap</html>"), 0o644); err != nil {
 				t.Fatalf("WriteFile index.html: %v", err)
 			}
-			manifestPath := filepath.Join(webUIDir, "manifest.yaml")
+			manifestName := cmp.Or(tc.uiManifest, "manifest.yaml")
+			manifestPath := filepath.Join(webUIDir, manifestName)
 			spec := &providermanifestv1.Spec{AssetRoot: "dist"}
 			if tc.wantPolicy != "" {
 				spec.Routes = []providermanifestv1.WebUIRoute{
@@ -1218,6 +1293,14 @@ plugins:
 				if err := os.MkdirAll(filepath.Dir(pluginManifestPath), 0o755); err != nil {
 					t.Fatalf("MkdirAll plugin dir: %v", err)
 				}
+				pluginArtifactRel := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin"))
+				pluginArtifactPath := filepath.Join(dir, "plugin", filepath.FromSlash(pluginArtifactRel))
+				if err := os.MkdirAll(filepath.Dir(pluginArtifactPath), 0o755); err != nil {
+					t.Fatalf("MkdirAll plugin artifact dir: %v", err)
+				}
+				if err := os.WriteFile(pluginArtifactPath, []byte("roadmap-plugin"), 0o755); err != nil {
+					t.Fatalf("WriteFile plugin artifact: %v", err)
+				}
 				pluginSpec := &providermanifestv1.Spec{
 					Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
 				}
@@ -1230,6 +1313,12 @@ plugins:
 					DisplayName: "Roadmap Plugin",
 					Kind:        providermanifestv1.KindPlugin,
 					Spec:        pluginSpec,
+					Artifacts: []providermanifestv1.Artifact{{
+						OS:   runtime.GOOS,
+						Arch: runtime.GOARCH,
+						Path: pluginArtifactRel,
+					}},
+					Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: pluginArtifactRel},
 				}, providerpkg.ManifestFormatYAML)
 				if err != nil {
 					t.Fatalf("EncodePluginManifest: %v", err)
@@ -1272,12 +1361,17 @@ plugins:
 			if entry.ResolvedManifest == nil {
 				t.Fatal("ResolvedManifest = nil")
 			}
-			if got := entry.ResolvedManifestPath; got != manifestPath {
-				t.Fatalf("ResolvedManifestPath = %q, want %q", got, manifestPath)
+			gotManifestPath := filepath.ToSlash(entry.ResolvedManifestPath)
+			wantUIManifest := filepath.ToSlash(filepath.Join(".gestaltd", "ui", tc.uiKey, "manifest.yaml"))
+			wantOwnedManifest := filepath.ToSlash(filepath.Join(".gestaltd", "providers", "roadmap", "_owned_ui", "webui", "manifest.yaml"))
+			if !strings.HasSuffix(gotManifestPath, wantUIManifest) && !strings.HasSuffix(gotManifestPath, wantOwnedManifest) {
+				t.Fatalf("ResolvedManifestPath = %q", gotManifestPath)
 			}
-			wantAssetRoot := filepath.Join(webUIDir, "dist")
-			if got := entry.ResolvedAssetRoot; got != wantAssetRoot {
-				t.Fatalf("ResolvedAssetRoot = %q, want %q", got, wantAssetRoot)
+			gotAssetRoot := filepath.ToSlash(entry.ResolvedAssetRoot)
+			wantUIAssetRoot := filepath.ToSlash(filepath.Join(".gestaltd", "ui", tc.uiKey, "dist"))
+			wantOwnedAssetRoot := filepath.ToSlash(filepath.Join(".gestaltd", "providers", "roadmap", "_owned_ui", "webui", "dist"))
+			if !strings.HasSuffix(gotAssetRoot, wantUIAssetRoot) && !strings.HasSuffix(gotAssetRoot, wantOwnedAssetRoot) {
+				t.Fatalf("ResolvedAssetRoot = %q", gotAssetRoot)
 			}
 			if got := entry.Path; got != tc.wantPath {
 				t.Fatalf("Path = %q, want %q", got, tc.wantPath)
@@ -1299,10 +1393,67 @@ plugins:
 					t.Fatalf("Plugin AuthorizationPolicy = %q, want %q", got, tc.wantPolicy)
 				}
 			}
-			if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); !os.IsNotExist(err) {
-				t.Fatalf("lockfile should not be created, got err=%v", err)
+			if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); err != nil {
+				t.Fatalf("expected lockfile to be created: %v", err)
 			}
 		})
+	}
+}
+
+func TestLoadForExecutionAtPath_RejectsLockedExplicitLocalUIWithoutPreparedUILockEntry(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	webUIDir := filepath.Join(dir, "webui")
+	if err := os.MkdirAll(filepath.Join(webUIDir, "dist"), 0o755); err != nil {
+		t.Fatalf("MkdirAll webui dist: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(webUIDir, "dist", "index.html"), []byte("<html>roadmap</html>"), 0o644); err != nil {
+		t.Fatalf("WriteFile index.html: %v", err)
+	}
+	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindWebUI,
+		Source:      "github.com/testowner/web/roadmap",
+		Version:     "0.0.1-alpha.1",
+		DisplayName: "Roadmap UI",
+		Spec:        &providermanifestv1.Spec{AssetRoot: "dist"},
+	}, providerpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeManifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(webUIDir, "manifest.yaml"), manifest, 0o644); err != nil {
+		t.Fatalf("WriteFile manifest: %v", err)
+	}
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  ui:
+    roadmap:
+      source:
+        path: ./webui/manifest.yaml
+      path: /create-customer-roadmap-review
+server:
+` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	lc := NewLifecycle(nil)
+	if _, err := lc.InitAtPath(cfgPath); err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+	lockPath := filepath.Join(dir, InitLockfileName)
+	lock, err := ReadLockfile(lockPath)
+	if err != nil {
+		t.Fatalf("ReadLockfile: %v", err)
+	}
+	delete(lock.UIs, "roadmap")
+	if err := WriteLockfile(lockPath, lock); err != nil {
+		t.Fatalf("WriteLockfile: %v", err)
+	}
+
+	if _, _, err := lc.LoadForExecutionAtPath(cfgPath, true); err == nil || !strings.Contains(err.Error(), `prepared artifact for ui "roadmap" is missing or stale`) {
+		t.Fatalf("LoadForExecutionAtPath locked error = %v, want missing prepared artifact", err)
 	}
 }
 
@@ -1842,7 +1993,8 @@ server:
 			},
 		},
 	})
-	if _, err := lc.InitAtPath(cfgPath); err != nil {
+	initialLock, err := lc.InitAtPath(cfgPath)
+	if err != nil {
 		t.Fatalf("InitAtPath: %v", err)
 	}
 
@@ -1852,16 +2004,14 @@ server:
 		t.Fatalf("Load: %v", err)
 	}
 	paths := initPathsForConfig(cfgPath)
-	lock := &Lockfile{
-		Version: LockVersion,
-		Providers: map[string]LockProviderEntry{
-			"roadmap": {
-				Fingerprint: mustFingerprint(t, "roadmap", loadedCfg.Plugins["roadmap"], paths.configDir),
-				Source:      pluginRef,
-				Version:     newVersion,
-				Archives: map[string]LockArchive{
-					"generic": {URL: archiveServer.URL, SHA256: hex.EncodeToString(newPluginArchiveSum[:])},
-				},
+	lock := normalizeLockfile(initialLock)
+	lock.Providers = map[string]LockProviderEntry{
+		"roadmap": {
+			Fingerprint: mustFingerprint(t, "roadmap", loadedCfg.Plugins["roadmap"], paths.configDir),
+			Source:      pluginRef,
+			Version:     newVersion,
+			Archives: map[string]LockArchive{
+				"generic": {URL: archiveServer.URL, SHA256: hex.EncodeToString(newPluginArchiveSum[:])},
 			},
 		},
 	}
@@ -2581,23 +2731,23 @@ server:
 	if authEntry == nil || authEntry.ResolvedManifest == nil {
 		t.Fatalf("auth resolved manifest = %+v", authEntry)
 	}
-	if authEntry.Command != authExecutablePath {
-		t.Fatalf("auth command = %q, want %q", authEntry.Command, authExecutablePath)
+	if !strings.HasSuffix(filepath.ToSlash(authEntry.Command), filepath.ToSlash(filepath.Join(".gestaltd", "auth", "auth", filepath.FromSlash(authArtifact)))) {
+		t.Fatalf("auth command = %q", authEntry.Command)
 	}
 	if got := authEntry.Args; len(got) != 1 || got[0] != "serve-auth" {
 		t.Fatalf("auth args = %v, want [serve-auth]", got)
 	}
 	authCfg := decodeNodeMap(t, authEntry.Config)
-	if authCfg["command"] != authExecutablePath {
-		t.Fatalf("auth config command = %v, want %q", authCfg["command"], authExecutablePath)
+	if authCfg["command"] != authEntry.Command {
+		t.Fatalf("auth config command = %v, want %q", authCfg["command"], authEntry.Command)
 	}
 	authPluginCfg, ok := authCfg["config"].(map[string]any)
 	if !ok || authPluginCfg["clientId"] != "local-auth-client" {
 		t.Fatalf("auth nested config = %#v", authCfg["config"])
 	}
 
-	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); !os.IsNotExist(err) {
-		t.Fatalf("lockfile should not be created, got err=%v", err)
+	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); err != nil {
+		t.Fatalf("expected lockfile to be created: %v", err)
 	}
 }
 
@@ -2668,17 +2818,20 @@ server:
 	if authEntry == nil || authEntry.ResolvedManifest == nil {
 		t.Fatalf("auth resolved manifest = %+v", authEntry)
 	}
-	if authEntry.Command != "" {
-		t.Fatalf("auth command = %q, want empty", authEntry.Command)
+	if authEntry.Command == "" {
+		t.Fatal("auth command = empty, want prepared executable path")
 	}
 	authCfg := decodeNodeMap(t, authEntry.Config)
-	if authCfg["manifestPath"] != authManifestPath {
-		t.Fatalf("auth manifest_path = %v, want %q", authCfg["manifestPath"], authManifestPath)
+	manifestPathValue, _ := authCfg["manifestPath"].(string)
+	if !strings.HasSuffix(filepath.ToSlash(manifestPathValue), filepath.ToSlash(filepath.Join(".gestaltd", "auth", "auth", "manifest.yaml"))) {
+		t.Fatalf("auth manifest_path = %v", authCfg["manifestPath"])
 	}
-	if authCfg["command"] != "" {
-		t.Fatalf("auth config command = %v, want empty", authCfg["command"])
+	if authCfg["command"] == "" {
+		t.Fatalf("auth config command = %v, want prepared executable path", authCfg["command"])
 	}
-
+	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); err != nil {
+		t.Fatalf("expected lockfile to be created: %v", err)
+	}
 }
 
 func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalSourceHybridPlugin(t *testing.T) {
@@ -2739,12 +2892,14 @@ func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalSourceHybridPlugin
 	if !strings.Contains(string(catalogData), "generated_op") {
 		t.Fatalf("unexpected catalog contents: %s", catalogData)
 	}
-	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); !os.IsNotExist(err) {
-		t.Fatalf("lockfile should not be created, got err=%v", err)
+	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); err != nil {
+		t.Fatalf("expected lockfile to be created: %v", err)
 	}
 }
 
 func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalPythonSourcePlugin(t *testing.T) {
+	t.Parallel()
+
 	if runtime.GOOS == "windows" {
 		t.Skip("local Python source plugin fixture is POSIX-only")
 	}
@@ -2753,6 +2908,13 @@ func TestLoadForExecutionAtPath_GeneratesStaticCatalogForLocalPythonSourcePlugin
 	python3Path, err := exec.LookPath("python3")
 	if err != nil {
 		t.Skipf("python3 not found: %v", err)
+	}
+	if runtime.GOOS == "darwin" {
+		for _, tool := range []string{"arch", "lipo", "install_name_tool"} {
+			if _, err := exec.LookPath(tool); err != nil {
+				t.Skipf("%s not found: %v", tool, err)
+			}
+		}
 	}
 	writeTestFile := func(rel string, data []byte, mode os.FileMode) {
 		t.Helper()
@@ -2869,6 +3031,8 @@ def session_catalog(request: gestalt.Request) -> gestalt.Catalog:
     )
 `), 0o644)
 	createLocalPythonSDKVenv(t, python3Path, filepath.Join(dir, ".venv"), localPythonSDKPath(t))
+	artifactRel := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider"))
+	writeTestFile(artifactRel, []byte("python-provider"), 0o755)
 
 	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
 		Source:      "github.com/testowner/plugins/local-python-provider",
@@ -2877,6 +3041,12 @@ def session_catalog(request: gestalt.Request) -> gestalt.Catalog:
 		Kind:        providermanifestv1.KindPlugin, Spec: &providermanifestv1.Spec{
 			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
 		},
+		Artifacts: []providermanifestv1.Artifact{{
+			OS:   runtime.GOOS,
+			Arch: runtime.GOARCH,
+			Path: artifactRel,
+		}},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("EncodeManifestFormat: %v", err)
@@ -2945,7 +3115,6 @@ print(json.dumps({
     "zero_body": json.loads(zero_body),
 }, sort_keys=True))
 `), 0o644)
-	t.Setenv("PATH", t.TempDir())
 
 	lc := NewLifecycle(nil)
 	loaded, _, err := lc.LoadForExecutionAtPath(filepath.Join(dir, "config.yaml"), false)
@@ -3141,8 +3310,8 @@ print(json.dumps({
 		t.Fatalf("zero_status = %v, want 0", body["zero_status"])
 	}
 
-	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); !os.IsNotExist(err) {
-		t.Fatalf("lockfile should not be created, got err=%v", err)
+	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); err != nil {
+		t.Fatalf("expected lockfile to be created: %v", err)
 	}
 }
 
@@ -3195,6 +3364,14 @@ func TestApplyLockedPlugins_SkipsNilIntegrationPlugins(t *testing.T) {
 
 	dir := t.TempDir()
 	manifestPath := filepath.Join(dir, "manifest.yaml")
+	artifactRel := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "provider"))
+	artifactPath := filepath.Join(dir, filepath.FromSlash(artifactRel))
+	if err := os.MkdirAll(filepath.Dir(artifactPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll artifact dir: %v", err)
+	}
+	if err := os.WriteFile(artifactPath, []byte("local-provider"), 0o755); err != nil {
+		t.Fatalf("WriteFile artifact: %v", err)
+	}
 	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
 		Source:      "github.com/testowner/plugins/local-provider",
 		Version:     "0.0.1-alpha.1",
@@ -3202,6 +3379,12 @@ func TestApplyLockedPlugins_SkipsNilIntegrationPlugins(t *testing.T) {
 		Kind:        providermanifestv1.KindPlugin, Spec: &providermanifestv1.Spec{
 			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
 		},
+		Artifacts: []providermanifestv1.Artifact{{
+			OS:   runtime.GOOS,
+			Arch: runtime.GOARCH,
+			Path: artifactRel,
+		}},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactRel},
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("EncodeManifest: %v", err)
@@ -3232,7 +3415,7 @@ func TestApplyLockedPlugins_SkipsNilIntegrationPlugins(t *testing.T) {
 	loaded.Plugins["missing"] = &config.ProviderEntry{}
 
 	lc := NewLifecycle(nil)
-	if err := lc.applyLockedProviders([]string{cfgPath}, "", loaded, false, nil); err != nil {
+	if _, err := lc.applyLockedProviders([]string{cfgPath}, "", loaded, false, nil); err != nil {
 		t.Fatalf("applyLockedProviders: %v", err)
 	}
 	if loaded.Plugins["example"] == nil || loaded.Plugins["example"].ResolvedManifest == nil {
