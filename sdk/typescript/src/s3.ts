@@ -549,9 +549,10 @@ export class S3 {
     body?: S3BodySource,
     options?: WriteOptions,
   ): Promise<ObjectMeta> {
-    const snapshot = snapshotS3Body(body);
+    const byteBody = asS3ByteArray(body);
+    const preparedBody = byteBody ? cloneBytes(byteBody) : body;
     const response = await s3Rpc(() =>
-      this.client.writeObject(writeRequests(ref, snapshot, options)),
+      this.client.writeObject(writeRequests(ref, preparedBody, options)),
     );
     return fromProtoObjectMeta(response.meta);
   }
@@ -879,16 +880,9 @@ async function* toAsyncByteStream(body?: S3BodySource): AsyncIterable<Uint8Array
     yield* chunkBytes(textEncoder.encode(body));
     return;
   }
-  if (body instanceof Uint8Array) {
-    yield* chunkBytes(body);
-    return;
-  }
-  if (body instanceof ArrayBuffer) {
-    yield* chunkBytes(new Uint8Array(body));
-    return;
-  }
-  if (ArrayBuffer.isView(body)) {
-    yield* chunkBytes(new Uint8Array(body.buffer, body.byteOffset, body.byteLength));
+  const bytes = asS3ByteArray(body);
+  if (bytes) {
+    yield* chunkBytes(bytes);
     return;
   }
   if (body instanceof Blob) {
@@ -914,20 +908,17 @@ function* chunkBytes(bytes: Uint8Array): Iterable<Uint8Array> {
   }
 }
 
-function snapshotS3Body(body?: S3BodySource): S3BodySource | undefined {
-  if (body == null || typeof body === "string") {
+function asS3ByteArray(body?: S3BodySource): Uint8Array | undefined {
+  if (body instanceof Uint8Array) {
     return body;
   }
-  if (body instanceof Uint8Array) {
-    return cloneBytes(body);
-  }
   if (body instanceof ArrayBuffer) {
-    return body.slice(0);
+    return new Uint8Array(body);
   }
   if (ArrayBuffer.isView(body)) {
-    return new Uint8Array(body.buffer.slice(body.byteOffset, body.byteOffset + body.byteLength));
+    return new Uint8Array(body.buffer, body.byteOffset, body.byteLength);
   }
-  return body;
+  return undefined;
 }
 
 async function* readableStreamToAsyncIterable(
