@@ -58,19 +58,13 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	prov, ok := s.getProvider(w, req.Integration)
-	if !ok {
-		auditErr = errors.New("integration not found")
+	prov, manualConnection, err := s.resolveConnectionProvider(w, req.Integration, req.Connection)
+	if err != nil {
+		auditErr = err
 		return
 	}
 	metricProviderName = req.Integration
 	connectionMode = metricutil.NormalizeConnectionMode(prov.ConnectionMode())
-
-	manualConnection, ok := s.resolveRequestedConnection(w, req.Integration, req.Connection)
-	if !ok {
-		auditErr = errors.New("invalid connection")
-		return
-	}
 
 	auth := s.effectiveConnectionAuth(req.Integration, manualConnection)
 	if !manualConnectionAllowed(prov, auth) {
@@ -79,15 +73,9 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbUserID, err := s.resolveUserID(w, r)
+	dbUserID, manualInstance, err := s.resolveUserConnectionSetup(w, r, req.Instance)
 	if err != nil {
 		auditErr = err
-		return
-	}
-
-	manualInstance, ok := resolveRequestedInstance(w, req.Instance)
-	if !ok {
-		auditErr = errors.New("invalid instance")
 		return
 	}
 	auditTarget = connectionAuditTarget(req.Integration, manualConnection, manualInstance)
@@ -142,6 +130,30 @@ func (s *Server) connectManual(w http.ResponseWriter, r *http.Request) {
 	auditAllowed = true
 	auditErr = nil
 	writeJSON(w, http.StatusOK, result)
+}
+
+func (s *Server) resolveConnectionProvider(w http.ResponseWriter, integration, requestedConnection string) (core.Provider, string, error) {
+	prov, ok := s.getProvider(w, integration)
+	if !ok {
+		return nil, "", errors.New("integration not found")
+	}
+	connection, ok := s.resolveRequestedConnection(w, integration, requestedConnection)
+	if !ok {
+		return nil, "", errors.New("invalid connection")
+	}
+	return prov, connection, nil
+}
+
+func (s *Server) resolveUserConnectionSetup(w http.ResponseWriter, r *http.Request, requestedInstance string) (string, string, error) {
+	userID, err := s.resolveUserID(w, r)
+	if err != nil {
+		return "", "", err
+	}
+	instance, ok := resolveRequestedInstance(w, requestedInstance)
+	if !ok {
+		return "", "", errors.New("invalid instance")
+	}
+	return userID, instance, nil
 }
 
 func validateConnectionParams(defs map[string]core.ConnectionParamDef, provided map[string]string) (map[string]string, error) {

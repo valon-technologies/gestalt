@@ -8917,6 +8917,38 @@ func TestStartIntegrationOAuth(t *testing.T) {
 	if auditRecord["target_name"] != "default/default" {
 		t.Fatalf("expected audit target_name default/default, got %v", auditRecord["target_name"])
 	}
+
+	var invalidAuditBuf bytes.Buffer
+	invalidTS := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"slack": testDefaultConnection}
+		cfg.ConnectionAuth = testConnectionAuth("slack", handler)
+		cfg.AuditSink = invocation.NewSlogAuditSink(&invalidAuditBuf)
+		cfg.Services = coretesting.NewStubServices(t)
+	})
+	testutil.CloseOnCleanup(t, invalidTS)
+
+	invalidBody := bytes.NewBufferString(`{"integration":"slack","connectionParams":{"unknown":"nope"}}`)
+	invalidReq, _ := http.NewRequest(http.MethodPost, invalidTS.URL+"/api/v1/auth/start-oauth", invalidBody)
+	invalidReq.Header.Set("Content-Type", "application/json")
+	invalidResp, err := http.DefaultClient.Do(invalidReq)
+	if err != nil {
+		t.Fatalf("invalid request: %v", err)
+	}
+	defer func() { _ = invalidResp.Body.Close() }()
+
+	if invalidResp.StatusCode != http.StatusBadRequest {
+		body, _ := io.ReadAll(invalidResp.Body)
+		t.Fatalf("expected 400, got %d: %s", invalidResp.StatusCode, body)
+	}
+
+	var invalidAuditRecord map[string]any
+	if err := json.Unmarshal(invalidAuditBuf.Bytes(), &invalidAuditRecord); err != nil {
+		t.Fatalf("parsing invalid audit record: %v\nraw: %s", err, invalidAuditBuf.String())
+	}
+	if invalidAuditRecord["target_id"] != "slack/default/default" {
+		t.Fatalf("expected invalid audit target_id slack/default/default, got %v", invalidAuditRecord["target_id"])
+	}
 }
 
 func TestIntegrationOAuthCallback(t *testing.T) {
@@ -11152,6 +11184,51 @@ func TestConnectManual(t *testing.T) {
 	t.Run("rejects unknown connection params when provider exposes none", func(t *testing.T) {
 		t.Parallel()
 
+		var auditBuf bytes.Buffer
+		prov := coreintegration.NewRestricted(&stubManualProviderWithCapabilities{
+			stubManualProvider: stubManualProvider{
+				StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
+			},
+			connectionParams: map[string]core.ConnectionParamDef{},
+		}, map[string]string{})
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, prov)
+			cfg.DefaultConnection = map[string]string{"manual-svc": config.PluginConnectionName}
+			cfg.PluginDefs = map[string]*config.ProviderEntry{
+				"manual-svc": {},
+			}
+			cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
+			cfg.Services = coretesting.NewStubServices(t)
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		body := bytes.NewBufferString(`{"integration":"manual-svc","credential":"my-api-key","connectionParams":{"unknown":"nope"}}`)
+		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusBadRequest {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 400, got %d: %s", resp.StatusCode, body)
+		}
+
+		var auditRecord map[string]any
+		if err := json.Unmarshal(auditBuf.Bytes(), &auditRecord); err != nil {
+			t.Fatalf("parsing audit record: %v\nraw: %s", err, auditBuf.String())
+		}
+		if auditRecord["target_id"] != "manual-svc/plugin/default" {
+			t.Fatalf("expected audit target_id manual-svc/plugin/default, got %v", auditRecord["target_id"])
+		}
+	})
+
+	t.Run("credential validation still wins before connection params", func(t *testing.T) {
+		t.Parallel()
+
 		prov := coreintegration.NewRestricted(&stubManualProviderWithCapabilities{
 			stubManualProvider: stubManualProvider{
 				StubIntegration: coretesting.StubIntegration{N: "manual-svc"},
@@ -11169,7 +11246,7 @@ func TestConnectManual(t *testing.T) {
 		})
 		testutil.CloseOnCleanup(t, ts)
 
-		body := bytes.NewBufferString(`{"integration":"manual-svc","credential":"my-api-key","connectionParams":{"unknown":"nope"}}`)
+		body := bytes.NewBufferString(`{"integration":"manual-svc","connectionParams":{"unknown":"nope"}}`)
 		req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/connect-manual", body)
 		req.Header.Set("Content-Type", "application/json")
 		resp, err := http.DefaultClient.Do(req)
@@ -11181,6 +11258,14 @@ func TestConnectManual(t *testing.T) {
 		if resp.StatusCode != http.StatusBadRequest {
 			body, _ := io.ReadAll(resp.Body)
 			t.Fatalf("expected 400, got %d: %s", resp.StatusCode, body)
+		}
+
+		var result map[string]string
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			t.Fatalf("decoding: %v", err)
+		}
+		if result["error"] != "credential is required" {
+			t.Fatalf("expected credential validation error, got %q", result["error"])
 		}
 	})
 
