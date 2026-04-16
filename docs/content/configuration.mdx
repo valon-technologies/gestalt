@@ -386,7 +386,7 @@ When `--config` is repeated, Gestalt loads the files left-to-right and merges th
 - later lists replace inherited lists
 - `null` deletes inherited keys
 
-Lockfiles and default prepared-artifact paths stay rooted at the leftmost config file. Relative paths resolve from the directory of the file that declared the value, so override files can safely use their own `source.path`, `iconFile`, and `server.artifactsDir` entries.
+By default, lockfiles and prepared-artifact paths stay rooted at the leftmost config file. `--lockfile` overrides only the lockfile path and resolves like a normal CLI path. Relative config values still resolve from the directory of the file that declared them, so override files can safely use their own `source.path`, `iconFile`, and `server.artifactsDir` entries.
 
 ### Environment expansion
 

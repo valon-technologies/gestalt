@@ -41,7 +41,8 @@ When multiple config files are loaded, Gestalt applies these merge rules:
 
 Relative file paths resolve relative to the config file that introduced them.
 That includes `source.path`, `iconFile`, and `server.artifactsDir`. Lockfiles
-and default artifact directories stay rooted at the leftmost config file.
+and, by default, artifact directories stay rooted at the leftmost config file.
+`--lockfile` overrides only the lockfile path.
 
 Several fields carry defaults when omitted: `server.public.port` defaults to `8080`; the runtime secrets manager defaults to builtin `env` when `providers.secrets` is omitted; `providers.telemetry.default` defaults to builtin `stdout`; and `providers.audit.default` defaults to builtin `inherit`. Structured secret refs are resolved during bootstrap, not during YAML parsing.
 

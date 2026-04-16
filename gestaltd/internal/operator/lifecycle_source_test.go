@@ -1941,10 +1941,11 @@ func TestSourcePluginInitWithPlatformsPersistsExtraPlatformHash(t *testing.T) {
 	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
+	lockPath := filepath.Join(dir, "state", "platforms", InitLockfileName)
 
 	resolver := &ghresolver.GitHubResolver{BaseURL: srv.URL}
 	lc := NewLifecycle(resolver)
-	lock, err := lc.InitAtPathWithPlatforms(configPath, "", []struct{ GOOS, GOARCH, LibC string }{
+	lock, err := lc.InitAtPathsWithPlatforms([]string{configPath}, StatePaths{LockfilePath: lockPath}, []struct{ GOOS, GOARCH, LibC string }{
 		{GOOS: extraPlatform.goos, GOARCH: extraPlatform.goarch},
 	})
 	if err != nil {
@@ -1974,12 +1975,15 @@ func TestSourcePluginInitWithPlatformsPersistsExtraPlatformHash(t *testing.T) {
 		t.Fatalf("lock extra-platform SHA256 = %q, want %q", got, hex.EncodeToString(extraArchiveSHA[:]))
 	}
 
-	readBack, err := ReadLockfile(filepath.Join(dir, InitLockfileName))
+	readBack, err := ReadLockfile(lockPath)
 	if err != nil {
 		t.Fatalf("ReadLockfile: %v", err)
 	}
 	if got := readBack.Providers["alpha"].Archives[extraPlatformKey].SHA256; got != hex.EncodeToString(extraArchiveSHA[:]) {
 		t.Fatalf("readBack extra-platform SHA256 = %q, want %q", got, hex.EncodeToString(extraArchiveSHA[:]))
+	}
+	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); !os.IsNotExist(err) {
+		t.Fatalf("default lockfile should not be written, got err=%v", err)
 	}
 }
 

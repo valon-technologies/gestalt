@@ -12,9 +12,12 @@ import { Callout } from 'nextra/components'
 | `gestaltd serve --config PATH` | Start the server. Repeat `--config` to layer overrides. |
 | `gestaltd serve --locked --config PATH` | Start from lock state. Uses prepared artifacts when present and can materialize missing artifacts from the lockfile. Repeat `--config` to layer overrides. |
 | `gestaltd serve --artifacts-dir DIR` | Directory for prepared provider artifacts. |
+| `gestaltd serve --lockfile PATH` | Override the lockfile location. `PATH` resolves like a normal CLI path. |
 | `gestaltd init --config PATH` | Resolve published plugin sources and write lock state. Repeat `--config` to layer overrides. |
 | `gestaltd init --artifacts-dir DIR` | Directory for prepared provider artifacts. |
+| `gestaltd init --lockfile PATH` | Override the lockfile location. `PATH` resolves like a normal CLI path. |
 | `gestaltd validate --config PATH` | Validate config without serving. Repeat `--config` to layer overrides. |
+| `gestaltd validate --lockfile PATH` | Accept the same explicit lockfile path used by `init` and `serve` without mutating it. |
 | `gestaltd --version` | Print the server version. |
 
 <Callout type="warning">
@@ -38,6 +41,9 @@ gestaltd
 gestaltd init --config ./config.yaml
 gestaltd serve --locked --config ./config.yaml
 gestaltd validate --config ./config.yaml
+gestaltd init --config ./config.yaml --lockfile ./local/gestalt.lock.json
+gestaltd serve --config ./config.yaml --lockfile ./local/gestalt.lock.json
+gestaltd serve --locked --config ./config.yaml --lockfile ./local/gestalt.lock.json
 gestaltd init --config ./base.yaml --config ./overrides/local.yaml
 gestaltd serve --locked --config ./base.yaml --config ./overrides/prod.yaml
 gestaltd provider release --version 0.0.1-alpha.1
@@ -47,7 +53,8 @@ gestaltd provider release --version 0.0.1-alpha.1 --platform linux/amd64,linux/a
 
 When repeated, `--config` files merge left-to-right. Maps deep-merge, later
 scalar values win, lists replace inherited lists, and `null` deletes inherited
-keys. Lockfiles and default artifact paths stay rooted at the leftmost config
-file.
+keys. By default, lockfiles and artifact paths stay rooted at the leftmost
+config file. `--lockfile` overrides only the lockfile path. `--artifacts-dir`
+keeps its existing config-relative behavior for backward compatibility.
 
 See [Configuration](/configuration) for the relationship between `init`, `serve --locked`, and `validate`.

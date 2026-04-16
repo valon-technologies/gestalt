@@ -23,6 +23,7 @@ import (
 	telemetrystdout "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/stdout"
 	workflowprovider "github.com/valon-technologies/gestalt/server/internal/drivers/workflow/provider"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
+	"github.com/valon-technologies/gestalt/server/internal/operator"
 )
 
 type bootstrapEnv struct {
@@ -34,8 +35,8 @@ type bootstrapEnv struct {
 	prevLogger *slog.Logger
 }
 
-func setupBootstrapWithConfigPaths(configPaths []string, artifactsDir string, locked bool) (*bootstrapEnv, error) {
-	cfg, err := loadConfigForExecutionAtPathsWithArtifactsDir(configPaths, artifactsDir, locked)
+func setupBootstrapWithConfigPaths(configPaths []string, state operator.StatePaths, locked bool) (*bootstrapEnv, error) {
+	cfg, err := loadConfigForExecutionAtPathsWithStatePaths(configPaths, state, locked)
 	if err != nil {
 		return nil, err
 	}
