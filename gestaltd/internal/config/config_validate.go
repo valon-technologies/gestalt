@@ -151,11 +151,19 @@ func validateHostProviderEntries(kind HostProviderKind, entries map[string]*Prov
 			if err := validateProviderEntrySource("auth", name, entry); err != nil {
 				return err
 			}
-		case HostProviderKindSecrets, HostProviderKindTelemetry:
+		case HostProviderKindSecrets:
 			if !entry.Source.IsBuiltin() {
 				if err := validateProviderEntrySource(string(kind), name, entry); err != nil {
 					return err
 				}
+			}
+		case HostProviderKindTelemetry:
+			switch {
+			case entry.Source.IsBuiltin():
+			case entry.Source.IsLocal() || entry.Source.IsManaged():
+				return fmt.Errorf("config validation: telemetry provider %q does not support source.path or source.ref; use a builtin provider name or omit telemetry", name)
+			default:
+				return fmt.Errorf("config validation: telemetry provider %q source is required", name)
 			}
 		case HostProviderKindAudit:
 			if entry.Source.IsBuiltin() {

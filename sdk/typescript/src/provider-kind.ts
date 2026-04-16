@@ -38,12 +38,6 @@ const PROVIDER_KIND_DEFINITIONS = {
     defaultExportNames: ["s3", "provider"],
     label: "s3 provider",
   },
-  telemetry: {
-    tokens: ["telemetry"],
-    formatToken: "telemetry",
-    defaultExportNames: ["telemetry", "provider"],
-    label: "telemetry provider",
-  },
 } satisfies Record<ProviderKind, ProviderKindDefinition>;
 
 const EXTERNAL_PROVIDER_KIND_TOKEN_SET = new Set<string>(

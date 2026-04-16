@@ -8,8 +8,7 @@ export type ProviderKind =
   | "auth"
   | "cache"
   | "secrets"
-  | "s3"
-  | "telemetry";
+  | "s3";
 
 /**
  * Runtime metadata reported to the Gestalt host during startup.

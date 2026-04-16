@@ -175,6 +175,24 @@ func TestDetectTypeScriptProviderTarget_RejectsLegacyIntegrationPrefix(t *testin
 	}
 }
 
+func TestDetectTypeScriptProviderTarget_RejectsTelemetryPrefix(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	mustWriteTypeScriptPackageConfig(t, root, map[string]string{
+		typeScriptProviderKey: "telemetry:./provider.ts#plugin",
+	})
+	mustWriteTypeScriptTargetModule(t, root, typeScriptTestPluginTarget)
+
+	_, err := DetectTypeScriptProviderTarget(root)
+	if err == nil {
+		t.Fatal("expected unsupported TypeScript provider kind error")
+	}
+	if want := `unsupported provider kind "telemetry"`; !containsString(err.Error(), want) {
+		t.Fatalf("error = %q, want mention of %q", err, want)
+	}
+}
+
 func TestDetectTypeScriptProviderTarget_ObjectConfig(t *testing.T) {
 	t.Parallel()
 
@@ -197,6 +215,31 @@ func TestDetectTypeScriptProviderTarget_ObjectConfig(t *testing.T) {
 	}
 	if got != typeScriptTestPluginTarget {
 		t.Fatalf("target = %q, want %q", got, typeScriptTestPluginTarget)
+	}
+}
+
+func TestDetectTypeScriptProviderTarget_ObjectConfigRejectsTelemetryKind(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	mustWriteFile(t, filepath.Join(root, typeScriptProjectFile), []byte(`{
+  "name": "ts-release",
+  "version": "0.0.1",
+  "gestalt": {
+    "provider": {
+      "kind": "telemetry",
+      "target": "./provider.ts#plugin"
+    }
+  }
+}`), 0o644)
+	mustWriteTypeScriptTargetModule(t, root, typeScriptTestPluginTarget)
+
+	_, err := DetectTypeScriptProviderTarget(root)
+	if err == nil {
+		t.Fatal("expected unsupported TypeScript provider kind error")
+	}
+	if want := `unsupported provider kind "telemetry"`; !containsString(err.Error(), want) {
+		t.Fatalf("error = %q, want mention of %q", err, want)
 	}
 }
 
@@ -631,7 +674,7 @@ func mustWriteTypeScriptTargetModule(t *testing.T, root, target string) {
 
 func runtimeTargetModulePath(t *testing.T, target string) string {
 	t.Helper()
-	for _, prefix := range []string{"plugin:", "auth:", "cache:", "indexeddb:", "secrets:", "telemetry:"} {
+	for _, prefix := range []string{"plugin:", "auth:", "cache:", "indexeddb:", "secrets:"} {
 		if strings.HasPrefix(target, prefix) {
 			return strings.TrimPrefix(target, prefix)
 		}

@@ -305,8 +305,6 @@ func normalizeTypeScriptProviderKind(value string) string {
 		return "s3"
 	case "secrets":
 		return "secrets"
-	case "telemetry":
-		return "telemetry"
 	default:
 		return ""
 	}

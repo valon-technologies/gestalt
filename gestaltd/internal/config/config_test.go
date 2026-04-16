@@ -2424,6 +2424,17 @@ plugins:
 			wantErr: "source.version is required when source.ref is set",
 		},
 		{
+			name: "telemetry source provider is rejected early",
+			yaml: `
+providers:
+  telemetry:
+    custom:
+      source:
+        path: ./providers/telemetry
+`,
+			wantErr: "does not support source.path or source.ref",
+		},
+		{
 			name: "non-default connection params are accepted",
 			yaml: `
 providers:

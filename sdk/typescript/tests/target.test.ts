@@ -44,6 +44,9 @@ test("provider target parsing supports plugin defaults and kind prefixes", () =>
     modulePath: "./provider.ts",
     exportName: "plugin",
   });
+  expect(() =>
+    parseProviderTarget({ kind: "telemetry", target: "./provider.ts#plugin" }),
+  ).toThrow('unsupported provider kind "telemetry"');
   expect(parseProviderTarget("auth:./auth.ts#provider")).toEqual({
     kind: "auth",
     modulePath: "./auth.ts",
@@ -54,6 +57,9 @@ test("provider target parsing supports plugin defaults and kind prefixes", () =>
     modulePath: "./cache.ts",
     exportName: "provider",
   });
+  expect(() => parseProviderTarget("telemetry:./provider.ts#provider")).toThrow(
+    'unsupported provider kind "telemetry"',
+  );
   expect(() => parseProviderTarget("integration:./provider.ts#plugin")).toThrow(
     'unsupported provider kind "integration"',
   );
