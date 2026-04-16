@@ -1,11 +1,30 @@
 use anyhow::{Result, bail};
 
 use crate::api::ApiClient;
-use crate::catalog;
+use crate::catalog::{self, CatalogSelectors};
 use crate::output::{self, Format};
 
-pub fn describe(client: &ApiClient, plugin: &str, operation: &str, format: Format) -> Result<()> {
-    let cat = catalog::fetch_catalog(client, plugin)?;
+#[derive(Default)]
+pub struct DescribeOptions<'a> {
+    pub connection: Option<&'a str>,
+    pub instance: Option<&'a str>,
+}
+
+pub fn describe(
+    client: &ApiClient,
+    plugin: &str,
+    operation: &str,
+    options: DescribeOptions<'_>,
+    format: Format,
+) -> Result<()> {
+    let cat = catalog::fetch_catalog(
+        client,
+        plugin,
+        CatalogSelectors {
+            connection: options.connection,
+            instance: options.instance,
+        },
+    )?;
 
     let op = match cat.find_operation(operation) {
         Some(op) => op,

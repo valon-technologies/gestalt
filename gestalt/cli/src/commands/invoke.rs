@@ -1,8 +1,10 @@
 use anyhow::{Context, Result};
+use reqwest::Method;
 
 use crate::api::ApiClient;
 use crate::catalog::{
-    self, CatalogOperation, CatalogParameter, OperationsCatalog, ResolvedOperation,
+    self, CatalogOperation, CatalogParameter, CatalogSelectors, OperationsCatalog,
+    ResolvedOperation,
 };
 use crate::output::{self, Format};
 use crate::params::{self, ParamEntry};
@@ -23,7 +25,14 @@ pub fn run(
     options: InvokeOptions<'_>,
     format: Format,
 ) -> Result<()> {
-    let cat = catalog::fetch_catalog(client, plugin)?;
+    let cat = catalog::fetch_catalog(
+        client,
+        plugin,
+        CatalogSelectors {
+            connection: options.connection,
+            instance: options.instance,
+        },
+    )?;
     let query = segments.join(".");
 
     match cat.resolve(&query)? {
@@ -31,9 +40,7 @@ pub fn run(
             warn_ignored_params(params, "no operation specified");
             display_operations(ops, format)
         }
-        ResolvedOperation::Exact(_) => {
-            execute(client, &cat, plugin, &query, params, options, format)
-        }
+        ResolvedOperation::Exact(op) => execute(client, &cat, op, plugin, params, options, format),
         ResolvedOperation::Prefix(matches) => {
             let n = matches.len();
             let reason = format!(
@@ -55,25 +62,35 @@ pub fn invoke(
     options: InvokeOptions<'_>,
     format: Format,
 ) -> Result<()> {
-    let cat = catalog::fetch_catalog(client, plugin)?;
-    execute(client, &cat, plugin, operation, params, options, format)
+    let cat = catalog::fetch_catalog(
+        client,
+        plugin,
+        CatalogSelectors {
+            connection: options.connection,
+            instance: options.instance,
+        },
+    )?;
+    let op = cat
+        .find_operation(operation)
+        .ok_or_else(|| anyhow::anyhow!("operation '{}' not found", operation))?;
+    execute(client, &cat, op, plugin, params, options, format)
 }
 
 pub fn list_operations(client: &ApiClient, plugin: &str, format: Format) -> Result<()> {
-    let cat = catalog::fetch_catalog(client, plugin)?;
+    let cat = catalog::fetch_catalog(client, plugin, CatalogSelectors::default())?;
     display_operations(cat.operations(), format)
 }
 
 fn execute(
     client: &ApiClient,
     cat: &OperationsCatalog,
+    op: &CatalogOperation,
     plugin: &str,
-    operation: &str,
     params: &[ParamEntry],
     options: InvokeOptions<'_>,
     format: Format,
 ) -> Result<()> {
-    let mut param_map = params::assemble_params(params, Some(cat), operation)?;
+    let mut param_map = params::assemble_params(params, Some(cat), &op.id)?;
 
     if let Some(file_path) = options.input_file {
         let file_map = params::load_input_file(file_path)?;
@@ -93,12 +110,13 @@ fn execute(
         );
     }
 
-    let path = format!("/api/v1/{}/{}", plugin, operation);
-    let resp = (if param_map.is_empty() {
-        client.get(&path)
-    } else {
-        client.post(&path, &serde_json::Value::Object(param_map))
-    })
+    let path = format!("/api/v1/{}/{}", plugin, op.id);
+    let method = resolve_invocation_method(op, param_map.is_empty())?;
+    let resp = match method {
+        Method::GET => client.get_with_query(&path, &build_query_pairs(&param_map)?),
+        Method::POST => client.post(&path, &serde_json::Value::Object(param_map)),
+        _ => unreachable!("only GET and POST are supported"),
+    }
     .map_err(|err| {
         let message = err.to_string();
         if !message.contains("no token stored for integration") {
@@ -121,7 +139,7 @@ fn execute(
             connect_command,
         )
     })
-    .with_context(|| format!("failed to invoke {}.{}", plugin, operation))?;
+    .with_context(|| format!("failed to invoke {}.{}", plugin, op.id))?;
 
     let output_value = match options.select {
         Some(sel_path) => output::select_path(&resp, sel_path)?,
@@ -134,6 +152,74 @@ fn execute(
     }
 
     Ok(())
+}
+
+fn resolve_invocation_method(op: &CatalogOperation, params_empty: bool) -> Result<Method> {
+    let method = op.method.trim();
+    if method.eq_ignore_ascii_case("GET") {
+        return Ok(Method::GET);
+    }
+    if method.eq_ignore_ascii_case("POST") {
+        return Ok(Method::POST);
+    }
+    if method.is_empty() {
+        // Compatibility fallback for older catalogs that omit method metadata.
+        return Ok(if params_empty {
+            Method::GET
+        } else {
+            Method::POST
+        });
+    }
+    anyhow::bail!(
+        "unsupported operation method '{}' for '{}'; expected GET or POST",
+        op.method,
+        op.id
+    );
+}
+
+fn build_query_pairs(
+    params: &serde_json::Map<String, serde_json::Value>,
+) -> Result<Vec<(String, String)>> {
+    let mut query = Vec::new();
+    for (key, value) in params {
+        append_query_pairs(&mut query, key, value)?;
+    }
+    Ok(query)
+}
+
+fn append_query_pairs(
+    query: &mut Vec<(String, String)>,
+    key: &str,
+    value: &serde_json::Value,
+) -> Result<()> {
+    match value {
+        serde_json::Value::Array(items) => {
+            for item in items {
+                query.push((key.to_string(), query_value(key, item)?));
+            }
+        }
+        _ => query.push((key.to_string(), query_value(key, value)?)),
+    }
+    Ok(())
+}
+
+fn query_value(key: &str, value: &serde_json::Value) -> Result<String> {
+    match value {
+        serde_json::Value::String(s) => Ok(s.clone()),
+        serde_json::Value::Bool(_) | serde_json::Value::Number(_) => Ok(value.to_string()),
+        serde_json::Value::Null => anyhow::bail!(
+            "GET query parameter '{}' cannot be null; omit it or use POST",
+            key
+        ),
+        serde_json::Value::Array(_) => anyhow::bail!(
+            "GET query parameter '{}' must be a scalar or flat array of scalars",
+            key
+        ),
+        serde_json::Value::Object(_) => anyhow::bail!(
+            "GET query parameter '{}' cannot be an object; use POST for structured input",
+            key
+        ),
+    }
 }
 
 fn display_operations<'a>(
