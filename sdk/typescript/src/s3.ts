@@ -402,26 +402,8 @@ export function createS3Service(
       return create(EmptySchema, {});
     },
     async listObjects(request) {
-      const options: ListOptions = {
-        bucket: request.bucket,
-      };
-      if (request.prefix) {
-        options.prefix = request.prefix;
-      }
-      if (request.delimiter) {
-        options.delimiter = request.delimiter;
-      }
-      if (request.continuationToken) {
-        options.continuationToken = request.continuationToken;
-      }
-      if (request.startAfter) {
-        options.startAfter = request.startAfter;
-      }
-      if (request.maxKeys > 0) {
-        options.maxKeys = request.maxKeys;
-      }
       const page = await invokeS3Provider("list objects", () =>
-        provider.listObjects(options),
+        provider.listObjects(fromProtoListOptions(request)),
       );
       return create(ListObjectsResponseSchema, {
         objects: page.objects.map(toProtoObjectMeta),
@@ -431,53 +413,23 @@ export function createS3Service(
       });
     },
     async copyObject(request) {
-      const options: CopyOptions = {};
-      if (request.ifMatch) {
-        options.ifMatch = request.ifMatch;
-      }
-      if (request.ifNoneMatch) {
-        options.ifNoneMatch = request.ifNoneMatch;
-      }
       const meta = await invokeS3Provider("copy object", () =>
         provider.copyObject(
           fromProtoObjectRef(request.source),
           fromProtoObjectRef(request.destination),
-          options,
+          fromProtoCopyOptions(request),
         ),
       );
       return create(CopyObjectResponseSchema, { meta: toProtoObjectMeta(meta) });
     },
     async presignObject(request) {
-      const options: PresignOptions = {
-        method: fromProtoPresignMethod(request.method),
-        headers: cloneStringMap(request.headers),
-      };
-      if (request.expiresSeconds !== 0n) {
-        options.expiresSeconds = request.expiresSeconds;
-      }
-      if (request.contentType) {
-        options.contentType = request.contentType;
-      }
-      if (request.contentDisposition) {
-        options.contentDisposition = request.contentDisposition;
-      }
       const result = await invokeS3Provider("presign object", () =>
-        provider.presignObject(fromProtoObjectRef(request.ref), options),
+        provider.presignObject(
+          fromProtoObjectRef(request.ref),
+          fromProtoPresignOptions(request),
+        ),
       );
-      const response = {
-        url: result.url,
-        method: toProtoPresignMethod(result.method),
-        headers: cloneStringMap(result.headers),
-      } as {
-        url: string;
-        method: ProtoPresignMethod;
-        headers: Record<string, string>;
-        expiresAt?: { seconds: bigint; nanos: number };
-      };
-      if (result.expiresAt) {
-        response.expiresAt = toProtoTimestamp(result.expiresAt);
-      }
-      return create(PresignObjectResponseSchema, response);
+      return create(PresignObjectResponseSchema, toProtoPresignResult(result));
     },
   };
 }
@@ -566,14 +518,7 @@ export class S3 {
 
   async listObjects(options: ListOptions): Promise<ListPage> {
     const response = await s3Rpc(() =>
-      this.client.listObjects({
-        bucket: options.bucket,
-        prefix: options.prefix ?? "",
-        delimiter: options.delimiter ?? "",
-        continuationToken: options.continuationToken ?? "",
-        startAfter: options.startAfter ?? "",
-        maxKeys: options.maxKeys ?? 0,
-      }),
+      this.client.listObjects(toProtoListRequest(options)),
     );
     return {
       objects: response.objects.map(fromProtoObjectMeta),
@@ -589,12 +534,7 @@ export class S3 {
     options?: CopyOptions,
   ): Promise<ObjectMeta> {
     const response = await s3Rpc(() =>
-      this.client.copyObject({
-        source: toProtoObjectRef(source),
-        destination: toProtoObjectRef(destination),
-        ifMatch: options?.ifMatch ?? "",
-        ifNoneMatch: options?.ifNoneMatch ?? "",
-      }),
+      this.client.copyObject(toProtoCopyRequest(source, destination, options)),
     );
     return fromProtoObjectMeta(response.meta);
   }
@@ -602,26 +542,9 @@ export class S3 {
   async presignObject(ref: ObjectRef, options?: PresignOptions): Promise<PresignResult> {
     const requestedMethod = options?.method ?? PresignMethod.Get;
     const response = await s3Rpc(() =>
-      this.client.presignObject({
-        ref: toProtoObjectRef(ref),
-        method: toProtoPresignMethod(requestedMethod),
-        expiresSeconds: normalizeProtoInt(options?.expiresSeconds),
-        contentType: options?.contentType ?? "",
-        contentDisposition: options?.contentDisposition ?? "",
-        headers: cloneStringMap(options?.headers),
-      }),
+      this.client.presignObject(toProtoPresignRequest(ref, requestedMethod, options)),
     );
-    const result: PresignResult = {
-      url: response.url,
-      method: response.method === ProtoPresignMethod.UNSPECIFIED
-        ? requestedMethod
-        : fromProtoPresignMethod(response.method),
-      headers: cloneStringMap(response.headers),
-    };
-    if (response.expiresAt) {
-      result.expiresAt = fromProtoTimestamp(response.expiresAt);
-    }
-    return result;
+    return fromProtoPresignResult(response, requestedMethod);
   }
 }
 
@@ -1033,6 +956,74 @@ function fromProtoObjectMeta(meta: {
   return value;
 }
 
+function toProtoListRequest(options: ListOptions) {
+  return {
+    bucket: options.bucket,
+    prefix: options.prefix ?? "",
+    delimiter: options.delimiter ?? "",
+    continuationToken: options.continuationToken ?? "",
+    startAfter: options.startAfter ?? "",
+    maxKeys: options.maxKeys ?? 0,
+  };
+}
+
+function fromProtoListOptions(request: {
+  bucket?: string;
+  prefix?: string;
+  delimiter?: string;
+  continuationToken?: string;
+  startAfter?: string;
+  maxKeys?: number;
+}): ListOptions {
+  const options: ListOptions = {
+    bucket: request.bucket ?? "",
+  };
+  if (request.prefix) {
+    options.prefix = request.prefix;
+  }
+  if (request.delimiter) {
+    options.delimiter = request.delimiter;
+  }
+  if (request.continuationToken) {
+    options.continuationToken = request.continuationToken;
+  }
+  if (request.startAfter) {
+    options.startAfter = request.startAfter;
+  }
+  const maxKeys = request.maxKeys;
+  if (typeof maxKeys === "number" && maxKeys > 0) {
+    options.maxKeys = maxKeys;
+  }
+  return options;
+}
+
+function toProtoCopyRequest(
+  source: ObjectRef,
+  destination: ObjectRef,
+  options?: CopyOptions,
+) {
+  return {
+    source: toProtoObjectRef(source),
+    destination: toProtoObjectRef(destination),
+    ifMatch: options?.ifMatch ?? "",
+    ifNoneMatch: options?.ifNoneMatch ?? "",
+  };
+}
+
+function fromProtoCopyOptions(request: {
+  ifMatch?: string;
+  ifNoneMatch?: string;
+}): CopyOptions {
+  const options: CopyOptions = {};
+  if (request.ifMatch) {
+    options.ifMatch = request.ifMatch;
+  }
+  if (request.ifNoneMatch) {
+    options.ifNoneMatch = request.ifNoneMatch;
+  }
+  return options;
+}
+
 function toProtoReadOptions(options?: ReadOptions) {
   const proto: Record<string, unknown> = {
     ifMatch: options?.ifMatch ?? "",
@@ -1114,6 +1105,45 @@ function fromProtoWriteOptions(open: {
   return options;
 }
 
+function toProtoPresignRequest(
+  ref: ObjectRef,
+  requestedMethod: PresignMethod,
+  options?: PresignOptions,
+) {
+  return {
+    ref: toProtoObjectRef(ref),
+    method: toProtoPresignMethod(requestedMethod),
+    expiresSeconds: normalizeProtoInt(options?.expiresSeconds),
+    contentType: options?.contentType ?? "",
+    contentDisposition: options?.contentDisposition ?? "",
+    headers: cloneStringMap(options?.headers),
+  };
+}
+
+function fromProtoPresignOptions(request: {
+  method?: ProtoPresignMethod;
+  expiresSeconds?: bigint;
+  contentType?: string;
+  contentDisposition?: string;
+  headers?: Record<string, string>;
+}): PresignOptions {
+  const options: PresignOptions = {
+    method: fromProtoPresignMethod(request.method),
+    headers: cloneStringMap(request.headers),
+  };
+  const expiresSeconds = request.expiresSeconds;
+  if (expiresSeconds !== undefined && expiresSeconds !== 0n) {
+    options.expiresSeconds = expiresSeconds;
+  }
+  if (request.contentType) {
+    options.contentType = request.contentType;
+  }
+  if (request.contentDisposition) {
+    options.contentDisposition = request.contentDisposition;
+  }
+  return options;
+}
+
 function toProtoByteRange(range: ByteRange) {
   const proto: Record<string, unknown> = {};
   if (range.start !== undefined) {
@@ -1136,6 +1166,50 @@ function fromProtoByteRange(range: { start?: bigint; end?: bigint }): ByteRange 
   return value;
 }
 
+function toProtoPresignResult(result: PresignResult): {
+  url: string;
+  method: ProtoPresignMethod;
+  headers: Record<string, string>;
+  expiresAt?: { seconds: bigint; nanos: number };
+} {
+  const response = {
+    url: result.url,
+    method: toProtoPresignMethod(result.method),
+    headers: cloneStringMap(result.headers),
+  } as {
+    url: string;
+    method: ProtoPresignMethod;
+    headers: Record<string, string>;
+    expiresAt?: { seconds: bigint; nanos: number };
+  };
+  if (result.expiresAt) {
+    response.expiresAt = toProtoTimestamp(result.expiresAt);
+  }
+  return response;
+}
+
+function fromProtoPresignResult(
+  response: {
+    url?: string;
+    method?: ProtoPresignMethod;
+    headers?: Record<string, string>;
+    expiresAt?: { seconds?: bigint; nanos?: number };
+  },
+  requestedMethod: PresignMethod,
+): PresignResult {
+  const result: PresignResult = {
+    url: response.url ?? "",
+    method: response.method === ProtoPresignMethod.UNSPECIFIED
+      ? requestedMethod
+      : fromProtoPresignMethod(response.method),
+    headers: cloneStringMap(response.headers),
+  };
+  if (response.expiresAt) {
+    result.expiresAt = fromProtoTimestamp(response.expiresAt);
+  }
+  return result;
+}
+
 function toProtoPresignMethod(method?: PresignMethod): ProtoPresignMethod {
   switch (method ?? PresignMethod.Get) {
     case PresignMethod.Get:
@@ -1149,7 +1223,7 @@ function toProtoPresignMethod(method?: PresignMethod): ProtoPresignMethod {
   }
 }
 
-function fromProtoPresignMethod(method: ProtoPresignMethod): PresignMethod {
+function fromProtoPresignMethod(method?: ProtoPresignMethod): PresignMethod {
   switch (method) {
     case ProtoPresignMethod.PUT:
       return PresignMethod.Put;
