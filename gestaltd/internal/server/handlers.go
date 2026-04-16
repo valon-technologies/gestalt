@@ -463,10 +463,13 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 		discoveryConnectionMode = metricutil.NormalizeConnectionMode(prov.ConnectionMode())
 	}
 	strictCatalog := requestedConnection != "" || requestedInstance != "" || core.SupportsSessionCatalog(prov)
-	connections, instance := s.boundSessionCatalogConnections(name, p, requestedConnection, requestedInstance)
-	if !strictCatalog || requestedConnection != "" || requestedInstance != "" || (s.authorizer != nil && s.authorizer.IsWorkload(p)) {
-		connections = connections[:1]
-	}
+	connections, instance := s.orderedSessionSelectors(
+		p,
+		name,
+		requestedConnection,
+		requestedInstance,
+		strictCatalog && requestedConnection == "" && requestedInstance == "" && (s.authorizer == nil || !s.authorizer.IsWorkload(p)),
+	)
 	ctx := invocation.WithAccessContext(r.Context(), s.providerAccessContext(p, name))
 	var cat *catalog.Catalog
 	var err, firstErr error
@@ -615,7 +618,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	if tr, ok := s.invoker.(invocation.TokenResolver); ok {
 		resolver = tr
 	}
-	boundSessionConnections, sessionInstance := s.boundSessionCatalogConnections(providerName, p, connection, instance)
+	boundSessionConnections, sessionInstance := s.orderedSessionSelectors(p, providerName, connection, instance, true)
 	opMeta, _, resolvedConnection, err := invocation.ResolveOperation(ctx, prov, providerName, resolver, p, operationName, boundSessionConnections, sessionInstance)
 	if err != nil {
 		s.writeInvocationError(w, r, providerName, operationName, err)
@@ -704,48 +707,33 @@ func (s *Server) writeInvocationError(w http.ResponseWriter, r *http.Request, pr
 	}
 }
 
-func (s *Server) boundSessionCatalogConnections(providerName string, p *principal.Principal, explicit, instance string) ([]string, string) {
-	var connections []string
-	switch {
-	case explicit != "":
-		connections = []string{config.ResolveConnectionAlias(explicit)}
-	case s.authorizer != nil && s.authorizer.IsWorkload(p):
-		connections = []string{""}
-	default:
-		preferred := s.resolvedSessionCatalogConnection(providerName, "")
-		defaultConnection := s.defaultConnection[providerName]
-		if preferred != "" {
-			connections = append(connections, preferred)
-		}
-		if defaultConnection != "" && preferred != defaultConnection && s.catalogConnection[providerName] == "" {
-			connections = append(connections, defaultConnection)
-		}
-		if len(connections) == 0 {
-			connections = []string{""}
-		}
-	}
-	boundConnections := make([]string, 0, len(connections))
-	boundInstance := instance
-	for _, connection := range connections {
-		connection, boundInstance = s.workloadBindingSelectors(p, providerName, connection, instance)
-		boundConnections = append(boundConnections, connection)
-	}
-	return boundConnections, boundInstance
-}
-
-func (s *Server) resolvedSessionCatalogConnection(providerName, explicit string) string {
-	if explicit != "" {
-		return config.ResolveConnectionAlias(explicit)
-	}
+func (s *Server) sessionCatalogPreferredConnection(providerName string) string {
 	if conn := s.catalogConnection[providerName]; conn != "" {
-		return conn
+		return config.ResolveConnectionAlias(conn)
 	}
 	if broker, ok := s.invoker.(interface{ MCPConnection(string) string }); ok {
 		if conn := broker.MCPConnection(providerName); conn != "" {
-			return conn
+			return config.ResolveConnectionAlias(conn)
 		}
 	}
 	return s.defaultConnection[providerName]
+}
+
+func (s *Server) orderedSessionSelectors(p *principal.Principal, providerName, explicitConnection, explicitInstance string, allowFallback bool) ([]string, string) {
+	bindingConnection, bindingInstance := s.workloadSessionBinding(p, providerName)
+	fallbackConnection := ""
+	if allowFallback && s.catalogConnection[providerName] == "" {
+		fallbackConnection = s.defaultConnection[providerName]
+	}
+	return invocation.OrderedSessionSelectors(
+		p,
+		explicitConnection,
+		explicitInstance,
+		s.sessionCatalogPreferredConnection(providerName),
+		fallbackConnection,
+		bindingConnection,
+		bindingInstance,
+	)
 }
 
 func httpVisibleCatalogOperations(ops []catalog.CatalogOperation) []catalog.CatalogOperation {

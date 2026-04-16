@@ -215,6 +215,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	if p.UserID != "" {
 		span.SetAttributes(attrUserID.String(p.UserID))
 	}
+	bindingConnection, bindingInstance := "", ""
 	if b.authorizer != nil {
 		access, allowed := b.authorizer.ResolveAccess(p, providerName)
 		if access.Policy != "" || access.Role != "" {
@@ -223,6 +224,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		if b.authorizer.IsWorkload(p) {
 			if binding, ok := b.authorizer.Binding(p, providerName); ok {
 				SetCredentialAudit(ctx, binding.Mode, binding.CredentialSubjectID, binding.Connection, binding.Instance)
+				bindingConnection, bindingInstance = binding.Connection, binding.Instance
 			}
 		} else if !allowed {
 			return fail(fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName))
@@ -230,12 +232,10 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	}
 
 	conn := ConnectionFromContext(ctx)
-	conn, instance = b.workloadSelectors(p, providerName, conn, instance)
 	if b.authorizer != nil && b.authorizer.IsWorkload(p) && !b.authorizer.AllowOperation(p, providerName, operation) {
 		return fail(fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operation))
 	}
-
-	opMeta, transport, resolvedConnection, err := b.resolveOperation(ctx, p, prov, providerName, operation, conn, instance)
+	opMeta, transport, resolvedConnection, err := b.resolveOperation(ctx, p, prov, providerName, operation, conn, instance, bindingConnection, bindingInstance)
 	if err != nil {
 		return fail(err)
 	}
@@ -251,6 +251,12 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		return fail(core.ErrMCPOnly)
 	}
 
+	if conn == "" {
+		conn = bindingConnection
+	}
+	if instance == "" {
+		instance = bindingInstance
+	}
 	if conn == "" {
 		conn = resolvedConnection
 	}
@@ -293,15 +299,8 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	return result, nil
 }
 
-func (b *Broker) resolveOperation(ctx context.Context, p *principal.Principal, prov core.Provider, providerName, operation, connection, instance string) (catalog.CatalogOperation, string, string, error) {
-	sessionConnections := []string{connection}
-	if connection == "" {
-		sessionConnections = nil
-		if mcpConnection := b.mcpConnection(providerName); mcpConnection != "" {
-			sessionConnections = []string{mcpConnection}
-		}
-	}
-
+func (b *Broker) resolveOperation(ctx context.Context, p *principal.Principal, prov core.Provider, providerName, operation, connection, instance, bindingConnection, bindingInstance string) (catalog.CatalogOperation, string, string, error) {
+	sessionConnections, instance := OrderedSessionSelectors(p, connection, instance, b.mcpConnection(providerName), "", bindingConnection, bindingInstance)
 	return ResolveOperation(ctx, prov, providerName, b, p, operation, sessionConnections, instance)
 }
 
@@ -319,23 +318,6 @@ func (b *Broker) mcpConnection(providerName string) string {
 
 func (b *Broker) MCPConnection(providerName string) string {
 	return b.mcpConnection(providerName)
-}
-
-func (b *Broker) workloadSelectors(p *principal.Principal, providerName, connection, instance string) (string, string) {
-	if b.authorizer == nil || !b.authorizer.IsWorkload(p) {
-		return connection, instance
-	}
-	binding, ok := b.authorizer.Binding(p, providerName)
-	if !ok {
-		return connection, instance
-	}
-	if connection == "" {
-		connection = binding.Connection
-	}
-	if instance == "" {
-		instance = binding.Instance
-	}
-	return connection, instance
 }
 
 func toolResultToOperationResult(result *mcpgo.CallToolResult) (*core.OperationResult, error) {

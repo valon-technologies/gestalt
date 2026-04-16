@@ -6262,13 +6262,17 @@ func TestListOperations_UsesBrokerCatalogConnectionFallback(t *testing.T) {
 func TestListOperations_RetriesDefaultConnectionAfterBrokerCatalogError(t *testing.T) {
 	t.Parallel()
 
+	var resolvedToken atomic.Value
 	stub := &stubIntegrationWithSessionCatalog{
 		stubIntegrationWithOps: stubIntegrationWithOps{
 			StubIntegration: coretesting.StubIntegration{N: "sample-int", ConnMode: core.ConnectionModeUser},
 		},
 		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			resolvedToken.Store(token)
 			switch token {
 			case "rest-token":
+				fallthrough
+			case "rest-team-b-token":
 				return &catalog.Catalog{
 					Name: "sample-int",
 					Operations: []catalog.CatalogOperation{
@@ -6323,6 +6327,45 @@ func TestListOperations_RetriesDefaultConnectionAfterBrokerCatalogError(t *testi
 	}
 	if len(ops) != 1 || ops[0]["id"] != "run" {
 		t.Fatalf("operations = %+v, want only run", ops)
+	}
+	if got, _ := resolvedToken.Load().(string); got != "rest-token" {
+		t.Fatalf("resolved token = %q, want %q", got, "rest-token")
+	}
+
+	seedToken(t, svc, &core.IntegrationToken{
+		ID: "tok-rest-team-b", UserID: u.ID, Integration: "sample-int",
+		Connection: "rest-conn", Instance: "team-b", AccessToken: "rest-team-b-token",
+	})
+
+	ts = newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = providers
+		cfg.Services = svc
+		cfg.Invoker = invocation.NewBroker(providers, svc.Users, svc.Tokens)
+		cfg.DefaultConnection = map[string]string{"sample-int": "rest-conn"}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/sample-int/operations?_instance=team-b", nil)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("instance-only request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200 for instance-only discovery, got %d: %s", resp.StatusCode, body)
+	}
+
+	ops = nil
+	if err := json.NewDecoder(resp.Body).Decode(&ops); err != nil {
+		t.Fatalf("decoding instance-only response: %v", err)
+	}
+	if len(ops) != 1 || ops[0]["id"] != "run" {
+		t.Fatalf("instance-only operations = %+v, want only run", ops)
+	}
+	if got, _ := resolvedToken.Load().(string); got != "rest-team-b-token" {
+		t.Fatalf("instance-only resolved token = %q, want %q", got, "rest-team-b-token")
 	}
 }
 

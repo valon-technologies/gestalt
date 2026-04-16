@@ -106,7 +106,7 @@ func resolveSessionToken(ctx context.Context, cfg Config, provName string, prov 
 		if cfg.TokenResolver != nil {
 			p := principal.FromContext(ctx)
 			if p != nil {
-				connection, instance := sessionTokenSelectors(cfg, p, provName, instanceOverride)
+				connection, instance := orderedSessionSelectors(cfg, p, provName, instanceOverride)
 				sessionCtx, token, err := cfg.TokenResolver.ResolveToken(ctx, p, provName, connection, instance)
 				if err != nil {
 					return sessionCtx, token, connection, err
@@ -123,7 +123,7 @@ func resolveSessionToken(ctx context.Context, cfg Config, provName string, prov 
 	if p == nil {
 		return ctx, "", "", fmt.Errorf("not authenticated")
 	}
-	connection, instance := sessionTokenSelectors(cfg, p, provName, instanceOverride)
+	connection, instance := orderedSessionSelectors(cfg, p, provName, instanceOverride)
 	sessionCtx, token, err := cfg.TokenResolver.ResolveToken(ctx, p, provName, connection, instance)
 	if err != nil {
 		return sessionCtx, token, connection, err
@@ -366,16 +366,23 @@ func internalSessionToolHandler(context.Context, mcpgo.CallToolRequest) (*mcpgo.
 	return mcpgo.NewToolResultError("tool not found"), nil
 }
 
-func sessionTokenSelectors(cfg Config, p *principal.Principal, provName, instanceOverride string) (string, string) {
-	connection := cfg.MCPConnection[provName]
-	instance := normalizedSessionCatalogInstance(instanceOverride)
-	if cfg.Authorizer == nil || !cfg.Authorizer.IsWorkload(p) {
-		return connection, instance
+func orderedSessionSelectors(cfg Config, p *principal.Principal, provName, instanceOverride string) (string, string) {
+	bindingConnection, bindingInstance := "", ""
+	if cfg.Authorizer != nil && cfg.Authorizer.IsWorkload(p) {
+		if binding, ok := cfg.Authorizer.Binding(p, provName); ok {
+			bindingConnection, bindingInstance = binding.Connection, binding.Instance
+		}
 	}
-	if binding, ok := cfg.Authorizer.Binding(p, provName); ok {
-		return binding.Connection, binding.Instance
-	}
-	return connection, ""
+	connections, instance := invocation.OrderedSessionSelectors(
+		p,
+		"",
+		normalizedSessionCatalogInstance(instanceOverride),
+		cfg.MCPConnection[provName],
+		"",
+		bindingConnection,
+		bindingInstance,
+	)
+	return connections[0], instance
 }
 
 func encodeSessionCatalogMarkerSegment(value string) string {
