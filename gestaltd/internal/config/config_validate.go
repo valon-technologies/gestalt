@@ -22,6 +22,15 @@ import (
 // Called by Load (and therefore by init, validate, and serve). Does not require
 // runtime secrets like encryption_key.
 func ValidateStructure(cfg *Config) error {
+	if err := CanonicalizeStructure(cfg); err != nil {
+		return err
+	}
+	return ValidateCanonicalStructure(cfg)
+}
+
+// CanonicalizeStructure applies the config-shape normalization required before
+// structural validation or bootstrap consumers operate on the config.
+func CanonicalizeStructure(cfg *Config) error {
 	if err := NormalizeCompatibility(cfg); err != nil {
 		return err
 	}
@@ -29,6 +38,13 @@ func ValidateStructure(cfg *Config) error {
 	if err := normalizeMountedUIPaths(cfg, pluginOwnedUIRefs); err != nil {
 		return err
 	}
+	return nil
+}
+
+// ValidateCanonicalStructure checks config shape assuming canonicalization has
+// already run on the config.
+func ValidateCanonicalStructure(cfg *Config) error {
+	pluginOwnedUIRefs := pluginOwnedUIRefs(cfg)
 	if err := validateAuthorizationPolicies(cfg); err != nil {
 		return err
 	}

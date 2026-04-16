@@ -848,13 +848,13 @@ func loadWithLookupPaths(paths []string, lookup func(string) (string, bool), all
 	}
 
 	applyDefaults(&cfg)
-	if err := NormalizeCompatibility(&cfg); err != nil {
+	if err := CanonicalizeStructure(&cfg); err != nil {
 		return nil, err
 	}
 	resolveBaseURL(&cfg)
 	resolveRelativePaths(primaryConfigPath(paths), &cfg)
 
-	if err := ValidateStructure(&cfg); err != nil {
+	if err := ValidateCanonicalStructure(&cfg); err != nil {
 		return nil, err
 	}
 
