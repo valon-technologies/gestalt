@@ -16,7 +16,7 @@ func operatorLifecycle() *operator.Lifecycle {
 }
 
 func initConfigWithArtifactsDir(configFlags []string, artifactsDir, platformFlag string) error {
-	configPaths := resolveConfigPaths(configFlags)
+	configPaths := operator.ResolveConfigPaths(configFlags)
 	if platformFlag == "" {
 		_, err := operatorLifecycle().InitAtPathsWithArtifactsDir(configPaths, artifactsDir)
 		return err
@@ -40,11 +40,10 @@ func initConfigWithArtifactsDir(configFlags []string, artifactsDir, platformFlag
 	return err
 }
 
-func loadConfigForExecutionWithArtifactsDir(configFlags []string, artifactsDir string, locked bool) ([]string, *config.Config, error) {
-	configPaths := resolveConfigPaths(configFlags)
+func loadConfigForExecutionAtPathsWithArtifactsDir(configPaths []string, artifactsDir string, locked bool) (*config.Config, error) {
 	cfg, _, err := operatorLifecycle().LoadForExecutionAtPathsWithArtifactsDir(configPaths, artifactsDir, locked)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return configPaths, cfg, nil
+	return cfg, nil
 }

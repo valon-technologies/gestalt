@@ -35,6 +35,56 @@ func LocalConfigPaths() []string {
 		filepath.Join(home, localConfigDirName, "config.yaml"),
 	}
 }
+
+func ResolveConfigPaths(flagValues []string) []string {
+	if len(flagValues) > 0 {
+		return append([]string(nil), flagValues...)
+	}
+	if envPath := os.Getenv("GESTALT_CONFIG"); envPath != "" {
+		return []string{envPath}
+	}
+	if _, err := os.Stat("config.yaml"); err == nil {
+		return []string{"config.yaml"}
+	}
+	for _, p := range LocalConfigPaths() {
+		if p == "" {
+			continue
+		}
+		if _, err := os.Stat(p); err == nil {
+			return []string{p}
+		}
+	}
+	if p := DefaultLocalConfigPath(); p != "" {
+		return []string{p}
+	}
+	return nil
+}
+
+func ResolveStartConfigPaths(flagValues []string) ([]string, error) {
+	configPaths := ResolveConfigPaths(flagValues)
+	if len(flagValues) > 0 || len(configPaths) == 0 {
+		return configPaths, nil
+	}
+
+	defaultPath := DefaultLocalConfigPath()
+	primaryPath := configPaths[0]
+	if defaultPath == "" || primaryPath != defaultPath {
+		return configPaths, nil
+	}
+
+	if _, err := os.Stat(primaryPath); err == nil {
+		return configPaths, nil
+	} else if !os.IsNotExist(err) {
+		return nil, fmt.Errorf("stat default config: %w", err)
+	}
+
+	generated, err := GenerateDefaultConfig(filepath.Dir(primaryPath))
+	if err != nil {
+		return nil, err
+	}
+	return []string{generated}, nil
+}
+
 func GenerateDefaultConfig(configDir string) (string, error) {
 	configPath := filepath.Join(configDir, "config.yaml")
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
