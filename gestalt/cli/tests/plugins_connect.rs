@@ -98,6 +98,77 @@ fn test_connect_prefers_oauth_when_manual_also_exists_and_omits_null_connection_
 }
 
 #[test]
+fn test_connect_uses_defined_plugin_connection_name_on_the_wire() {
+    let mut server = Server::new();
+    let _integrations = authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
+        .with_body(
+            r#"[{
+                "name":"acme_crm",
+                "authTypes":["oauth"],
+                "connections":[{"name":"_plugin","displayName":"Plugin OAuth","authTypes":["oauth"]}]
+            }]"#,
+        )
+        .create();
+    let mock = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/auth/start-oauth",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"connection":"_plugin","integration":"acme_crm"}"#.to_string(),
+    ))
+    .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
+    .create();
+
+    let client = create_client(&server);
+    let result = gestalt::commands::plugins::connect_with_browser_opener(
+        &client,
+        "acme_crm",
+        Some("plugin"),
+        None,
+        |_| Ok(()),
+    );
+
+    mock.assert();
+    assert!(result.is_ok());
+}
+
+#[test]
+fn test_connect_preserves_requested_plugin_connection_when_no_definitions_exist() {
+    let mut server = Server::new();
+    let _integrations =
+        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
+            .with_body(r#"[{"name":"acme_crm","authTypes":["oauth"],"connected":false}]"#)
+            .create();
+    let mock = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/auth/start-oauth",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"connection":"plugin","integration":"acme_crm"}"#.to_string(),
+    ))
+    .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
+    .create();
+
+    let client = create_client(&server);
+    let result = gestalt::commands::plugins::connect_with_browser_opener(
+        &client,
+        "acme_crm",
+        Some("plugin"),
+        None,
+        |_| Ok(()),
+    );
+
+    mock.assert();
+    assert!(result.is_ok());
+}
+
+#[test]
 fn test_disconnect_sends_delete_with_connection_and_instance() {
     let mut server = Server::new();
     let mock = authed_json_mock!(
@@ -268,11 +339,98 @@ fn test_manual_connect_prompts_for_connection_and_finishes_candidate_selection()
             "Select a Manual Service connection:",
         ))
         .stderr(predicate::str::contains("Workspace OAuth"))
+        .stderr(predicate::str::contains("Connection: workspace"))
         .stderr(predicate::str::contains("Workspace token"))
         .stderr(predicate::str::contains(
             "Gestalt found more than one manual-svc connection. Choose one to save:",
         ))
         .stderr(predicate::str::contains("Connected manual-svc (Site B)"));
+}
+
+#[test]
+fn test_connection_selection_uses_selected_connection_auth_type() {
+    let mut server = Server::new();
+    let _integrations =
+        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
+            .with_body(
+                r#"[{
+                    "name":"manual-svc",
+                    "displayName":"Manual Service",
+                    "authTypes":["manual"],
+                    "connections":[
+                        {"name":"workspace","displayName":"Workspace OAuth","authTypes":["oauth"]},
+                        {"name":"apikey","displayName":"API Key","authTypes":["manual"],"credentialFields":[{"name":"token","label":"Token"}]}
+                    ]
+                }]"#,
+            )
+            .create();
+    let _oauth = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/auth/start-oauth",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"connection":"workspace","integration":"manual-svc"}"#.to_string(),
+    ))
+    .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["plugins", "connect", "manual-svc"])
+        .write_stdin("1\n")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "Select a Manual Service connection:",
+        ))
+        .stderr(predicate::str::contains("Workspace OAuth"))
+        .stderr(predicate::str::contains(
+            "Opening browser to connect manual-svc...",
+        ));
+}
+
+#[test]
+fn test_manual_connect_uses_credentials_object_for_multi_field_auth() {
+    let mut server = Server::new();
+    let _integrations =
+        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
+            .with_body(
+                r#"[{
+                "name":"widget_metrics",
+                "displayName":"Widget Metrics",
+                "authTypes":["manual"],
+                "credentialFields":[
+                    {"name":"api_key","label":"API key"},
+                    {"name":"workspace_id","label":"Workspace ID"}
+                ]
+            }]"#,
+            )
+            .create();
+    let _connect = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/auth/connect-manual",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"credentials":{"api_key":"wm-key","workspace_id":"workspace-42"},"integration":"widget_metrics"}"#.to_string(),
+    ))
+    .with_body(r#"{"status":"connected","integration":"widget_metrics"}"#)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["plugins", "connect", "widget_metrics"])
+        .write_stdin("wm-key\nworkspace-42\n")
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("API key"))
+        .stderr(predicate::str::contains("Workspace ID"))
+        .stderr(predicate::str::contains("Connected widget_metrics."));
 }
 
 #[test]
