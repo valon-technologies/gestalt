@@ -50,19 +50,13 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 	}
 	providerName = req.Integration
 
-	prov, ok := s.getProvider(w, req.Integration)
-	if !ok {
-		auditErr = errors.New("integration not found")
+	prov, connection, err := s.resolveConnectionProvider(w, req.Integration, req.Connection)
+	if err != nil {
+		auditErr = err
 		return
 	}
 	metricProviderName = req.Integration
 	connectionMode = metricutil.NormalizeConnectionMode(prov.ConnectionMode())
-
-	connection, ok := s.resolveRequestedConnection(w, req.Integration, req.Connection)
-	if !ok {
-		auditErr = errors.New("invalid connection")
-		return
-	}
 
 	handler, ok := s.requireOAuthHandler(w, req.Integration, connection)
 	if !ok {
@@ -76,15 +70,9 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbUserID, err := s.resolveUserID(w, r)
+	dbUserID, instance, err := s.resolveUserConnectionSetup(w, r, req.Instance)
 	if err != nil {
 		auditErr = err
-		return
-	}
-
-	instance, ok := resolveRequestedInstance(w, req.Instance)
-	if !ok {
-		auditErr = errors.New("invalid instance")
 		return
 	}
 	auditTarget = connectionAuditTarget(req.Integration, connection, instance)
@@ -95,10 +83,7 @@ func (s *Server) startIntegrationOAuth(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var (
-		authURL  string
-		verifier string
-	)
+	var authURL, verifier string
 
 	if len(connParams) > 0 {
 		rawAuthURL := handler.AuthorizationBaseURL()
