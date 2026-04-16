@@ -311,6 +311,83 @@ paths:
 	}
 }
 
+func TestHybridExecutableProviderAppliesAllowedOperationsToStaticAndOpenAPICatalogs(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "hybrid",
+		Operations: []catalog.CatalogOperation{
+			{ID: "echo", Method: http.MethodPost, Parameters: []catalog.CatalogParameter{{Name: "message", Type: "string", Required: true}}},
+		},
+	})
+	openapiDoc := `openapi: "3.1.0"
+info:
+  title: Hybrid
+  version: "1.0.0"
+paths:
+  /status:
+    get:
+      operationId: status
+      responses:
+        "200":
+          description: OK
+`
+	if err := os.WriteFile(filepath.Join(manifestRoot, "openapi.yaml"), []byte(openapiDoc), 0o644); err != nil {
+		t.Fatalf("WriteFile(openapi.yaml): %v", err)
+	}
+
+	manifest := newExecutableManifest("Hybrid", "Hybrid provider")
+	manifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: "ignored-for-command-mode"}
+	manifest.Spec.Surfaces = &providermanifestv1.ProviderSurfaces{
+		OpenAPI: &providermanifestv1.OpenAPISurface{Document: "openapi.yaml"},
+	}
+	manifestPath := filepath.Join(manifestRoot, "manifest.yaml")
+
+	cfg := &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"hybrid": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: manifestPath,
+				AllowedOperations: map[string]*config.OperationOverride{
+					"echo":   {Alias: "renamed_echo"},
+					"status": {Alias: "renamed_status"},
+				},
+			},
+		},
+	}
+
+	factories := NewFactoryRegistry()
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("hybrid")
+	if err != nil {
+		t.Fatalf("providers.Get(hybrid): %v", err)
+	}
+	cat := prov.Catalog()
+	if cat == nil {
+		t.Fatal("Catalog() = nil")
+	}
+
+	hasOperation := func(id string) bool {
+		return slices.ContainsFunc(cat.Operations, func(op catalog.CatalogOperation) bool {
+			return op.ID == id
+		})
+	}
+	if !hasOperation("renamed_echo") || !hasOperation("renamed_status") {
+		t.Fatalf("catalog operations = %+v, want renamed static and OpenAPI operations", cat.Operations)
+	}
+	if hasOperation("echo") || hasOperation("status") {
+		t.Fatalf("catalog operations = %+v, want original operation ids hidden", cat.Operations)
+	}
+}
+
 func TestSpecLoadedDualSurfaceProviderBuildsMCPOperations(t *testing.T) {
 	t.Parallel()
 

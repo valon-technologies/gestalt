@@ -419,6 +419,28 @@ func TestValidate(t *testing.T) {
 			t.Fatalf("Validate: %v", err)
 		}
 	})
+
+	t.Run("rejects invalid plugin invokes dependency", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := validConfig()
+		cfg.Plugins = map[string]*config.ProviderEntry{
+			"caller": {
+				ResolvedManifest: &providermanifestv1.Manifest{
+					Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: "caller"},
+					Spec:       &providermanifestv1.Spec{},
+				},
+				Invokes: []config.PluginInvocationDependency{
+					{Plugin: "missing", Operation: "ping"},
+				},
+			},
+		}
+
+		_, err := bootstrap.Validate(context.Background(), cfg, validFactories())
+		if err == nil || !strings.Contains(err.Error(), `plugins.caller.invokes[0] references unknown plugin "missing"`) {
+			t.Fatalf("Validate error = %v, want unknown plugin invokes error", err)
+		}
+	})
 }
 
 func TestBootstrapNoIntegrations(t *testing.T) {

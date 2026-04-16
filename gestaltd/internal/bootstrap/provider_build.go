@@ -177,8 +177,15 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 	if allowedOperations == nil && manifestPlugin != nil {
 		allowedOperations = maps.Clone(manifestPlugin.AllowedOperations)
 	}
+	staticAllowedOperations := operationexposure.MatchingAllowedOperations(allowedOperations, pluginProv.Catalog())
 
 	if manifestPlugin.IsDeclarative() {
+		filteredPluginProv, err := applyAllowedOperations(name, staticAllowedOperations, pluginProv)
+		if err != nil {
+			closeIfPossible(pluginProv)
+			return nil, err
+		}
+		pluginProv = filteredPluginProv
 		declarative, err := providerhost.NewDeclarativeProvider(
 			manifest,
 			nil,
@@ -189,7 +196,8 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 			closeIfPossible(pluginProv)
 			return nil, fmt.Errorf("create declarative provider %q: %w", name, err)
 		}
-		apiProv, err := applyAllowedOperations(name, allowedOperations, declarative)
+		apiAllowedOperations := operationexposure.MatchingAllowedOperations(allowedOperations, declarative.Catalog())
+		apiProv, err := applyAllowedOperations(name, apiAllowedOperations, declarative)
 		if err != nil {
 			closeIfPossible(apiProv, pluginProv)
 			return nil, err
@@ -218,6 +226,12 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 		}
 		return newProviderBuildResult(name, entry, manifest, pluginConfig, restricted, nil, deps)
 	}
+	filteredPluginProv, err := applyAllowedOperations(name, staticAllowedOperations, pluginProv)
+	if err != nil {
+		closeIfPossible(pluginProv)
+		return nil, err
+	}
+	pluginProv = filteredPluginProv
 
 	specProv, specDef, err := buildConfiguredSpecProvider(ctx, name, resolved, meta, specProviderConfig{
 		manifestPlugin:       manifestPlugin,
@@ -337,7 +351,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, entry *config.Pro
 		return nil, fmt.Errorf("build spec-loaded provider %q: unexpected mcp provider type %T", name, mcpProv)
 	}
 
-	filtered := matchingAllowedOperations(allowedOperations, mcpUp.Catalog())
+	filtered := operationexposure.MatchingAllowedOperations(allowedOperations, mcpUp.Catalog())
 	if len(filtered) > 0 {
 		filterable, ok := any(mcpUp).(interface {
 			FilterOperations(map[string]*config.OperationOverride) error
@@ -1082,26 +1096,6 @@ func firstProviderIconSVG(providers ...core.Provider) string {
 		}
 	}
 	return ""
-}
-
-func matchingAllowedOperations(allowed map[string]*config.OperationOverride, cat *catalog.Catalog) map[string]*config.OperationOverride {
-	if len(allowed) == 0 || cat == nil || len(cat.Operations) == 0 {
-		return nil
-	}
-	available := make(map[string]struct{}, len(cat.Operations))
-	for i := range cat.Operations {
-		available[cat.Operations[i].ID] = struct{}{}
-	}
-	filtered := make(map[string]*config.OperationOverride)
-	for name, override := range allowed {
-		if _, ok := available[name]; ok {
-			filtered[name] = override
-		}
-	}
-	if len(filtered) == 0 {
-		return nil
-	}
-	return filtered
 }
 
 func buildOAuthHandlerFromAuth(auth *config.ConnectionAuthDef, pluginConfig map[string]any, deps Deps) (OAuthHandler, error) {

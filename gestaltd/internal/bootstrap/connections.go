@@ -2,9 +2,7 @@ package bootstrap
 
 import (
 	"fmt"
-	"path/filepath"
 	"sort"
-	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/internal/config"
@@ -311,24 +309,7 @@ func surfaceURL(plugin *config.ProviderEntry, manifestPlugin *providermanifestv1
 	if url == "" {
 		return ""
 	}
-	return resolveManifestRelativeSpecURL(plugin, url)
-}
-
-func resolveManifestRelativeSpecURL(plugin *config.ProviderEntry, raw string) string {
-	if plugin == nil || plugin.ResolvedManifestPath == "" || raw == "" {
-		return raw
-	}
-	if filepath.IsAbs(raw) || strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
-		return raw
-	}
-	if strings.HasPrefix(raw, "file://") {
-		path := strings.TrimPrefix(raw, "file://")
-		if filepath.IsAbs(path) {
-			return raw
-		}
-		return "file://" + filepath.Clean(filepath.Join(filepath.Dir(plugin.ResolvedManifestPath), path))
-	}
-	return filepath.Clean(filepath.Join(filepath.Dir(plugin.ResolvedManifestPath), raw))
+	return config.ResolveManifestRelativeSpecURL(plugin, url)
 }
 
 func buildConnectionAuthMap(name string, entry *config.ProviderEntry, manifest *providermanifestv1.Manifest, pluginConfig map[string]any, authFallback *specAuthFallback, deps Deps) (map[string]OAuthHandler, error) {

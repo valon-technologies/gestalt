@@ -1,6 +1,7 @@
 package config
 
 import (
+	"path/filepath"
 	"strings"
 
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -93,4 +94,21 @@ func EffectiveProviderSpecBaseURL(entry *ProviderEntry, provider *providermanife
 		return ""
 	}
 	return provider.SpecBaseURL()
+}
+
+func ResolveManifestRelativeSpecURL(entry *ProviderEntry, raw string) string {
+	if entry == nil || entry.ResolvedManifestPath == "" || raw == "" {
+		return raw
+	}
+	if filepath.IsAbs(raw) || strings.HasPrefix(raw, "http://") || strings.HasPrefix(raw, "https://") {
+		return raw
+	}
+	if strings.HasPrefix(raw, "file://") {
+		path := strings.TrimPrefix(raw, "file://")
+		if filepath.IsAbs(path) {
+			return raw
+		}
+		return "file://" + filepath.Clean(filepath.Join(filepath.Dir(entry.ResolvedManifestPath), path))
+	}
+	return filepath.Clean(filepath.Join(filepath.Dir(entry.ResolvedManifestPath), raw))
 }

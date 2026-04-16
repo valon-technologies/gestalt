@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/plugininvocation"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	ghresolver "github.com/valon-technologies/gestalt/server/internal/pluginsource/github"
 	"github.com/valon-technologies/gestalt/server/internal/pluginstore"
@@ -222,13 +223,16 @@ func (l *Lifecycle) initAtPaths(configPaths []string, artifactsDir string) (*Loc
 		}
 	}
 
-	if err := WriteLockfile(paths.lockfilePath, lock); err != nil {
-		return nil, nil, err
-	}
-	if err := l.applyLockedProviders(configPaths, artifactsDir, cfg, true); err != nil {
+	if err := l.applyLockedProviders(configPaths, artifactsDir, cfg, true, lock); err != nil {
 		return nil, nil, err
 	}
 	if err := config.ValidateResolvedStructure(cfg); err != nil {
+		return nil, nil, err
+	}
+	if err := plugininvocation.ValidateDependencies(context.Background(), cfg); err != nil {
+		return nil, nil, err
+	}
+	if err := WriteLockfile(paths.lockfilePath, lock); err != nil {
 		return nil, nil, err
 	}
 
@@ -315,13 +319,15 @@ func (l *Lifecycle) LoadForExecutionAtPathsWithArtifactsDir(configPaths []string
 		return nil, nil, err
 	}
 
-	if err := l.applyLockedProviders(configPaths, artifactsDir, cfg, locked); err != nil {
+	if err := l.applyLockedProviders(configPaths, artifactsDir, cfg, locked, nil); err != nil {
 		return nil, nil, err
 	}
 	if err := config.ValidateResolvedStructure(cfg); err != nil {
 		return nil, nil, err
 	}
-
+	if err := plugininvocation.ValidateDependencies(context.Background(), cfg); err != nil {
+		return nil, nil, err
+	}
 	return cfg, nil, nil
 }
 
@@ -1401,7 +1407,7 @@ func sourceForProvider(providerEntry *config.ProviderEntry) (pluginsource.Source
 	return src, nil
 }
 
-func (l *Lifecycle) applyLockedProviders(configPaths []string, artifactsDir string, cfg *config.Config, locked bool) error {
+func (l *Lifecycle) applyLockedProviders(configPaths []string, artifactsDir string, cfg *config.Config, locked bool, preparedLock *Lockfile) error {
 	if !configHasProviderLoading(cfg) {
 		return nil
 	}
@@ -1412,16 +1418,24 @@ func (l *Lifecycle) applyLockedProviders(configPaths []string, artifactsDir stri
 	var err error
 	if configHasManagedProviderSources(cfg) {
 		var synthesizedLockedPluginUIs map[string]struct{}
-		lock, err = ReadLockfile(paths.lockfilePath)
-		if err == nil {
+		lock = preparedLock
+		if lock == nil {
+			lock, err = ReadLockfile(paths.lockfilePath)
+			if err == nil {
+				synthesizedLockedPluginUIs, err = synthesizeLockedSourcePluginOwnedUIEntries(cfg, paths, lock)
+				if err != nil {
+					clearSynthesizedPluginOwnedUIEntries(cfg, synthesizedLockedPluginUIs)
+				}
+			}
+			if !locked && (err != nil || !lockMatchesConfig(cfg, paths, lock)) {
+				clearSynthesizedPluginOwnedUIEntries(cfg, synthesizedLockedPluginUIs)
+				lock, err = l.InitAtPathsWithArtifactsDir(configPaths, artifactsDir)
+			}
+		} else {
 			synthesizedLockedPluginUIs, err = synthesizeLockedSourcePluginOwnedUIEntries(cfg, paths, lock)
 			if err != nil {
 				clearSynthesizedPluginOwnedUIEntries(cfg, synthesizedLockedPluginUIs)
 			}
-		}
-		if !locked && (err != nil || !lockMatchesConfig(cfg, paths, lock)) {
-			clearSynthesizedPluginOwnedUIEntries(cfg, synthesizedLockedPluginUIs)
-			lock, err = l.InitAtPathsWithArtifactsDir(configPaths, artifactsDir)
 		}
 		if err != nil {
 			return fmt.Errorf("managed providers require prepared artifacts; run `gestaltd init %s`: %w", formatConfigFlags(configPaths), err)

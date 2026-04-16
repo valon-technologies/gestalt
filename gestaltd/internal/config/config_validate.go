@@ -325,6 +325,22 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry) error {
 			entry.IndexedDB.ObjectStores[i] = strings.TrimSpace(store)
 		}
 	}
+	seenInvokes := make(map[string]int, len(entry.Invokes))
+	for i := range entry.Invokes {
+		entry.Invokes[i].Plugin = strings.TrimSpace(entry.Invokes[i].Plugin)
+		entry.Invokes[i].Operation = strings.TrimSpace(entry.Invokes[i].Operation)
+		switch {
+		case entry.Invokes[i].Plugin == "":
+			return fmt.Errorf("config validation: plugins.%s.invokes[%d].plugin is required", name, i)
+		case entry.Invokes[i].Operation == "":
+			return fmt.Errorf("config validation: plugins.%s.invokes[%d].operation is required", name, i)
+		}
+		key := entry.Invokes[i].Plugin + "\x00" + entry.Invokes[i].Operation
+		if prev, ok := seenInvokes[key]; ok {
+			return fmt.Errorf("config validation: plugins.%s.invokes[%d] duplicates invokes[%d]", name, i, prev)
+		}
+		seenInvokes[key] = i
+	}
 	if entry.UI != "" && entry.MountPath == "" {
 		return fmt.Errorf("config validation: plugins.%s.ui requires plugins.%s.mountPath", name, name)
 	}
@@ -415,6 +431,9 @@ func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) erro
 	}
 	if len(entry.S3) > 0 {
 		return fmt.Errorf("config validation: %s.s3 is only supported on plugins.*", subject)
+	}
+	if len(entry.Invokes) > 0 {
+		return fmt.Errorf("config validation: %s.invokes is only supported on plugins.*", subject)
 	}
 	if entry.Surfaces != nil {
 		return fmt.Errorf("config validation: %s.surfaces is only supported on plugins.*", subject)
