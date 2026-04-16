@@ -13,6 +13,7 @@ import (
 	coreintegration "github.com/valon-technologies/gestalt/server/core/integration"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
 type roundTripProvider struct{}
@@ -416,5 +417,37 @@ func TestRemoteProviderManualAuthOnly(t *testing.T) {
 	}
 	if cat.Operations[0].Transport != catalog.TransportPlugin {
 		t.Fatalf("Transport = %q, want %q", cat.Operations[0].Transport, catalog.TransportPlugin)
+	}
+}
+
+func TestDeclarativeProviderUnknownOperationReturnsNotFound(t *testing.T) {
+	t.Parallel()
+
+	prov, err := NewDeclarativeProvider(&providermanifestv1.Manifest{
+		Source:      "declarative",
+		DisplayName: "Declarative",
+		Description: "REST manifest provider",
+		Spec: &providermanifestv1.Spec{
+			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+			Surfaces: &providermanifestv1.ProviderSurfaces{
+				REST: &providermanifestv1.RESTSurface{
+					BaseURL: "https://api.example.com",
+					Operations: []providermanifestv1.ProviderOperation{
+						{Name: "echo", Method: http.MethodGet, Path: "/echo"},
+					},
+				},
+			},
+		},
+	}, nil)
+	if err != nil {
+		t.Fatalf("NewDeclarativeProvider: %v", err)
+	}
+
+	result, err := prov.Execute(context.Background(), "missing", nil, "")
+	if err != nil {
+		t.Fatalf("Execute(missing): %v", err)
+	}
+	if result.Status != http.StatusNotFound || result.Body != `{"error":"unknown operation"}` {
+		t.Fatalf("missing operation result = %+v", result)
 	}
 }

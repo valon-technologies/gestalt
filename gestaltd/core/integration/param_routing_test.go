@@ -131,46 +131,6 @@ func TestPartitionParams_UnknownParam(t *testing.T) {
 	}
 }
 
-func TestFindCatalogOp_Found(t *testing.T) {
-	t.Parallel()
-
-	cat := &catalog.Catalog{
-		Name: "test",
-		Operations: []catalog.CatalogOperation{
-			{ID: "op_alpha", Method: http.MethodGet, Path: "/alpha"},
-			{ID: "op_beta", Method: http.MethodPost, Path: "/beta"},
-		},
-	}
-	got := findCatalogOp(cat, "op_beta")
-	if got == nil || got.ID != "op_beta" {
-		t.Fatalf("findCatalogOp = %v, want op_beta", got)
-	}
-}
-
-func TestFindCatalogOp_NilCatalog(t *testing.T) {
-	t.Parallel()
-
-	got := findCatalogOp(nil, "anything")
-	if got != nil {
-		t.Fatalf("findCatalogOp(nil) = %v, want nil", got)
-	}
-}
-
-func TestFindCatalogOp_NotFound(t *testing.T) {
-	t.Parallel()
-
-	cat := &catalog.Catalog{
-		Name: "test",
-		Operations: []catalog.CatalogOperation{
-			{ID: "op_alpha", Method: http.MethodGet, Path: "/alpha"},
-		},
-	}
-	got := findCatalogOp(cat, "nonexistent")
-	if got != nil {
-		t.Fatalf("findCatalogOp = %v, want nil", got)
-	}
-}
-
 func TestExecuteREST_CatalogQueryParam(t *testing.T) {
 	t.Parallel()
 

@@ -2,6 +2,7 @@ package providerhost
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"net/http"
@@ -104,10 +105,11 @@ func (p *DeclarativeProvider) Catalog() *catalog.Catalog {
 }
 
 func (p *DeclarativeProvider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
-	if !declarativeHasOperation(p.Base.Catalog(), operation) {
+	result, err := p.Base.Execute(ctx, operation, params, token)
+	if errors.Is(err, integration.ErrUnknownOperation) {
 		return &core.OperationResult{Status: http.StatusNotFound, Body: `{"error":"unknown operation"}`}, nil
 	}
-	return p.Base.Execute(ctx, operation, params, token)
+	return result, err
 }
 
 func (p *DeclarativeProvider) AuthTypes() []string {
@@ -203,16 +205,4 @@ func declarativeCredentialFields(auth *providermanifestv1.ProviderAuth) []core.C
 		return nil
 	}
 	return CredentialFieldsFromManifest(auth.Credentials)
-}
-
-func declarativeHasOperation(cat *catalog.Catalog, operation string) bool {
-	if cat == nil {
-		return false
-	}
-	for i := range cat.Operations {
-		if cat.Operations[i].ID == operation {
-			return true
-		}
-	}
-	return false
 }

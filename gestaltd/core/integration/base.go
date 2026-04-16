@@ -2,7 +2,6 @@ package integration
 
 import (
 	"context"
-	"fmt"
 	"maps"
 	"net/http"
 	"time"
@@ -61,7 +60,6 @@ type Base struct {
 
 	TokenParser     func(token string) (authHeader string, extraHeaders map[string]string, err error)
 	CheckResponse   apiexec.ResponseChecker
-	ExecuteFunc     func(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error)
 	CheckEgress     func(host string) error
 	ResponseMapping *ResponseMappingConfig
 
@@ -146,23 +144,14 @@ func (b *Base) httpClient() *http.Client {
 }
 
 func (b *Base) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
-	if b.ExecuteFunc != nil {
-		return b.ExecuteFunc(ctx, operation, params, token)
+	catOp, err := lookupCatalogOperation(ctx, b.IntegrationName, b.catalog, operation)
+	if err != nil {
+		return nil, err
 	}
-	var catOp catalog.CatalogOperation
-	if op, ok := catalog.OperationFromContext(ctx, b.IntegrationName, operation); ok {
-		catOp = op
-	} else {
-		found := findCatalogOp(b.catalog, operation)
-		if found == nil {
-			return nil, fmt.Errorf("unknown operation: %s", operation)
-		}
-		catOp = *found
+	if isGraphQLOperation(catOp) {
+		return b.executeGraphQL(ctx, catOp, params, token)
 	}
-	if catOp.Transport == transportGraphQL || (catOp.Transport == "" && catOp.Path == "" && catOp.Query != "") {
-		return b.executeGraphQL(ctx, operation, catOp.Query, params, token)
-	}
-	return b.executeREST(ctx, operation, &catOp, params, token)
+	return b.executeREST(ctx, catOp, params, token)
 }
 func (b *Base) egressAuthStyle() egress.AuthStyle {
 	switch b.AuthStyle {

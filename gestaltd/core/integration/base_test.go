@@ -235,28 +235,6 @@ func TestBaseExecuteRESTEgressDenyBlocksRequest(t *testing.T) {
 	}
 }
 
-func TestBaseExecuteFuncOverridesDefaultExecution(t *testing.T) {
-	t.Parallel()
-
-	b := &Base{
-		Auth: mockAuth{},
-		ExecuteFunc: func(_ context.Context, operation string, _ map[string]any, _ string) (*core.OperationResult, error) {
-			return &core.OperationResult{Status: 299, Body: "custom-" + operation}, nil
-		},
-	}
-
-	result, err := b.Execute(context.Background(), "anything", nil, "tok")
-	if err != nil {
-		t.Fatalf("Execute: %v", err)
-	}
-	if result.Status != 299 {
-		t.Fatalf("status = %d, want 299", result.Status)
-	}
-	if result.Body != "custom-anything" {
-		t.Fatalf("body = %q, want %q", result.Body, "custom-anything")
-	}
-}
-
 func TestBaseExecuteRoutesGraphQLOperations(t *testing.T) {
 	t.Parallel()
 
@@ -466,19 +444,5 @@ func TestBaseExecuteBasicAuthStyle(t *testing.T) {
 	want := "Basic " + base64.StdEncoding.EncodeToString([]byte("user:pass"))
 	if resp["auth"] != want {
 		t.Fatalf("auth = %v, want %v", resp["auth"], want)
-	}
-}
-
-func TestBaseExecuteUnknownOperationFallsThrough(t *testing.T) {
-	t.Parallel()
-
-	b := &Base{Auth: mockAuth{}}
-
-	_, err := b.Execute(context.Background(), "nonexistent", nil, "tok")
-	if err == nil {
-		t.Fatal("expected error for unknown operation, got nil")
-	}
-	if !strings.Contains(err.Error(), "unknown operation") {
-		t.Fatalf("error = %v, want to contain 'unknown operation'", err)
 	}
 }

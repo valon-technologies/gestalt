@@ -1,12 +1,17 @@
 package integration
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 )
+
+var ErrUnknownOperation = errors.New("unknown operation")
 
 func ConvertParameters(params []catalog.CatalogParameter) []core.Parameter {
 	out := make([]core.Parameter, 0, len(params))
@@ -32,14 +37,10 @@ func OperationsList(c *catalog.Catalog) []core.Operation {
 		if op.Transport == transportGraphQL && op.Query == "" {
 			continue
 		}
-		method := strings.ToUpper(strings.TrimSpace(op.Method))
-		if method == "" && op.Query != "" {
-			method = http.MethodPost
-		}
 		ops = append(ops, core.Operation{
 			Name:        op.ID,
 			Description: op.Description,
-			Method:      method,
+			Method:      operationMethod(*op),
 			Parameters:  ConvertParameters(op.Parameters),
 		})
 	}
@@ -47,3 +48,29 @@ func OperationsList(c *catalog.Catalog) []core.Operation {
 }
 
 const transportGraphQL = "graphql"
+
+func lookupCatalogOperation(ctx context.Context, provider string, cat *catalog.Catalog, operation string) (catalog.CatalogOperation, error) {
+	if op, ok := catalog.OperationFromContext(ctx, provider, operation); ok {
+		return op, nil
+	}
+	if cat != nil {
+		for i := range cat.Operations {
+			if cat.Operations[i].ID == operation {
+				return cat.Operations[i], nil
+			}
+		}
+	}
+	return catalog.CatalogOperation{}, fmt.Errorf("%w: %s", ErrUnknownOperation, operation)
+}
+
+func operationMethod(op catalog.CatalogOperation) string {
+	method := strings.ToUpper(strings.TrimSpace(op.Method))
+	if method == "" && isGraphQLOperation(op) {
+		return http.MethodPost
+	}
+	return method
+}
+
+func isGraphQLOperation(op catalog.CatalogOperation) bool {
+	return op.Transport == transportGraphQL || (op.Transport == "" && op.Path == "" && op.Query != "")
+}
