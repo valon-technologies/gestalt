@@ -1,3 +1,4 @@
+import { spawn, type ChildProcess } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -30,13 +31,19 @@ import {
   SubjectContextSchema,
 } from "../gen/v1/plugin_pb.ts";
 import {
+  GetSecretRequestSchema,
+  SecretsProvider as SecretsProviderService,
+} from "../gen/v1/secrets_pb.ts";
+import {
   ConfigureProviderRequestSchema,
   ProviderKind as ProtoProviderKind,
+  ProviderLifecycle,
 } from "../gen/v1/runtime_pb.ts";
 import {
   CURRENT_PROTOCOL_VERSION,
   createCacheService,
   ENV_WRITE_CATALOG,
+  ENV_PROVIDER_SOCKET,
   createAuthService,
   createProviderService,
   createRuntimeService,
@@ -47,7 +54,15 @@ import {
 } from "../src/runtime.ts";
 import { PresignMethod, S3, defineCacheProvider, defineS3Provider } from "../src/index.ts";
 import { createS3Service } from "../src/s3.ts";
-import { fixturePath, makeTempDir, removeTempDir } from "./helpers.ts";
+import {
+  captureChildStderr,
+  createUnixGrpcClient,
+  fixturePath,
+  makeTempDir,
+  removeTempDir,
+  stopProcess,
+  waitForPath,
+} from "./helpers.ts";
 
 async function expectConnectCode(
   promise: Promise<unknown>,
@@ -92,6 +107,93 @@ test("runtime main writes a static catalog in catalog mode", async () => {
     removeTempDir(tempDir);
   }
 });
+
+test("loadProviderFromTarget resolves a secrets provider from package metadata", async () => {
+  const provider = await loadProviderFromTarget(fixturePath("secrets-provider"));
+  expect(provider.kind).toBe("secrets");
+  expect(provider.name).toBe("secrets-provider");
+  expect(provider.displayName).toBe("Fixture Secrets");
+});
+
+test("runtime serves a secrets provider over unix gRPC", async () => {
+  const runtimeEntry = join(import.meta.dir, "..", "src", "runtime.ts");
+  const root = fixturePath("secrets-provider");
+  const tempDir = makeTempDir("gestalt-typescript-runtime-");
+  const socketPath = join(tempDir, "provider.sock");
+  let child: ChildProcess | undefined;
+
+  try {
+    child = spawn(process.execPath, [runtimeEntry, root, "secrets:./secrets.ts"], {
+      env: {
+        ...process.env,
+        [ENV_PROVIDER_SOCKET]: socketPath,
+      },
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    const stderrText = captureChildStderr(child);
+
+    try {
+      await waitForPath(socketPath);
+    } catch (error) {
+      throw new Error(`${String(error)}${stderrText() ? `\n${stderrText()}` : ""}`);
+    }
+
+    const runtime = createUnixGrpcClient(ProviderLifecycle, socketPath);
+    const secrets = createUnixGrpcClient(SecretsProviderService, socketPath);
+
+    const metadata = await runtime.getProviderIdentity(create(EmptySchema, {}));
+    expect(metadata.kind).toBe(ProtoProviderKind.SECRETS);
+    expect(metadata.name).toBe("secrets-provider");
+    expect(metadata.displayName).toBe("Fixture Secrets");
+    expect(metadata.minProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
+    expect(metadata.maxProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
+
+    await expectConnectCode(
+      runtime.configureProvider(
+        create(ConfigureProviderRequestSchema, {
+          name: "fixture-secrets",
+          config: {
+            scope: "runtime",
+          },
+          protocolVersion: CURRENT_PROTOCOL_VERSION + 1,
+        }),
+      ),
+      Code.FailedPrecondition,
+    );
+
+    const configured = await runtime.configureProvider(
+      create(ConfigureProviderRequestSchema, {
+        name: "fixture-secrets",
+        config: {
+          scope: "runtime",
+        },
+        protocolVersion: CURRENT_PROTOCOL_VERSION,
+      }),
+    );
+    expect(configured.protocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
+
+    const secret = await secrets.getSecret(
+      create(GetSecretRequestSchema, {
+        name: "db-password",
+      }),
+    );
+    expect(secret.value).toBe("fixture-secrets:runtime:hunter2");
+
+    await expectConnectCode(
+      secrets.getSecret(
+        create(GetSecretRequestSchema, {
+          name: "missing",
+        }),
+      ),
+      Code.NotFound,
+    );
+  } finally {
+    if (child) {
+      await stopProcess(child);
+    }
+    removeTempDir(tempDir);
+  }
+}, 15_000);
 
 test("integration provider service exposes metadata, configure, execute, and session catalog", async () => {
   const plugin = await loadPluginFromTarget(fixturePath("basic-provider"));
