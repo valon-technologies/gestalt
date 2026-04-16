@@ -72,20 +72,7 @@ func detectTypeScriptTarget(root, expectedKind string, missingErr error) (string
 			return formatTypeScriptRuntimeTarget(kind, target), nil
 		}
 	}
-
-	key, ok := typeScriptLegacyTargetKey(expectedKind)
-	if !ok {
-		return "", missingErr
-	}
-	target, ok := config.Gestalt[key].(string)
-	target = strings.TrimSpace(target)
-	if !ok || target == "" {
-		return "", missingErr
-	}
-	if _, _, err := SplitTypeScriptProviderTarget(target); err != nil {
-		return "", fmt.Errorf("%s gestalt.%s: %w", typeScriptProjectFile, key, err)
-	}
-	return formatTypeScriptRuntimeTarget(expectedKind, target), nil
+	return "", missingErr
 }
 
 func typeScriptExecutionCommand(root, target string) (string, []string, func(), error) {
@@ -186,23 +173,6 @@ func typeScriptComponentKind(kind string) (string, error) {
 	}
 }
 
-func typeScriptLegacyTargetKey(kind string) (string, bool) {
-	switch kind {
-	case "integration":
-		return typeScriptPluginKey, true
-	case "auth":
-		return typeScriptAuthKey, true
-	case "cache":
-		return typeScriptCacheKey, true
-	case "indexeddb":
-		return typeScriptIndexedDBKey, true
-	case "s3":
-		return typeScriptS3Key, true
-	default:
-		return "", false
-	}
-}
-
 func DetectBunExecutable() (string, error) {
 	for _, candidate := range bunExecutableCandidates() {
 		if candidate == "" {
@@ -297,6 +267,12 @@ func parseTypeScriptProviderString(raw string) (kind string, target string, err 
 		return prefix, rest, nil
 	}
 	if _, _, err := SplitTypeScriptProviderTarget(trimmed); err != nil {
+		if prefix, _, found := strings.Cut(trimmed, ":"); found {
+			prefix = strings.TrimSpace(prefix)
+			if prefix != "" && !strings.HasPrefix(prefix, ".") && !strings.HasPrefix(prefix, "/") {
+				return "", "", fmt.Errorf("unsupported provider kind %q", prefix)
+			}
+		}
 		return "", "", err
 	}
 	return "integration", trimmed, nil
@@ -319,7 +295,7 @@ func parseTypeScriptKindPrefixedTarget(raw string) (kind string, target string, 
 
 func normalizeTypeScriptProviderKind(value string) string {
 	switch strings.TrimSpace(strings.ToLower(value)) {
-	case "", "plugin", "integration":
+	case "", "plugin":
 		return "integration"
 	case "auth":
 		return "auth"

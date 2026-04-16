@@ -192,7 +192,7 @@ The manifest is the source of truth for display name, description, the connectio
       "gestalt": {
         "provider": {
           "kind": "plugin",
-          "target": "./provider.ts#provider"
+          "target": "./provider.ts#plugin"
         }
       }
     }
@@ -350,9 +350,9 @@ The following example defines a `conversations.getMessage` operation that fetche
   </Tabs.Tab>
   <Tabs.Tab>
     ```typescript
-    import { defineIntegrationProvider, ok, operation, s } from "@valon-technologies/gestalt";
+    import { definePlugin, ok, operation, s } from "@valon-technologies/gestalt";
 
-    export const provider = defineIntegrationProvider({
+    export const plugin = definePlugin({
       operations: [
         operation({
           id: "conversations.getMessage",
@@ -378,7 +378,7 @@ The following example defines a `conversations.getMessage` operation that fetche
 
     The `package.json` field `gestalt.provider` points Gestalt at the provider
     module and optional export. Use a string target such as
-    `./provider.ts#provider` for plugin providers, or an object with `kind` and
+    `./provider.ts#plugin` for plugin providers, or an object with `kind` and
     `target` for auth and datastore providers.
   </Tabs.Tab>
 </Tabs>
@@ -618,7 +618,7 @@ A Slack plugin could use this to check which Slack workspace the caller is conne
     Export a `sessionCatalog` function from your plugin provider definition:
 
     ```typescript
-    export const provider = defineIntegrationProvider({
+    export const plugin = definePlugin({
       sessionCatalog(request) {
         return {
           name: "slack-session",

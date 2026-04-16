@@ -4,7 +4,12 @@ import { dirname, resolve } from "node:path";
 
 import { create } from "@bufbuild/protobuf";
 import { EmptySchema } from "@bufbuild/protobuf/wkt";
-import { Code, ConnectError, type ServiceImpl } from "@connectrpc/connect";
+import {
+  Code,
+  ConnectError,
+  type ConnectRouter,
+  type ServiceImpl,
+} from "@connectrpc/connect";
 import { connectNodeAdapter } from "@connectrpc/connect-node";
 
 import {
@@ -63,11 +68,15 @@ import { CacheProvider, isCacheProvider } from "./cache.ts";
 import { SecretsProvider, isSecretsProvider } from "./secrets.ts";
 import { catalogToYaml, type Catalog } from "./catalog.ts";
 import {
-  IntegrationProvider,
+  PluginProvider,
   connectionModeToProtoValue,
   connectionParamToProto,
-  isIntegrationProvider,
+  isPluginProvider,
 } from "./plugin.ts";
+import {
+  providerKindLabel,
+  resolveDefaultProviderExport,
+} from "./provider-kind.ts";
 import { type ProviderKind, slugName } from "./provider.ts";
 import { S3Provider, createS3Service, isS3Provider } from "./s3.ts";
 import {
@@ -112,11 +121,69 @@ export type RuntimeArgs = {
  * Provider implementations supported by the runtime host.
  */
 export type LoadedProvider =
-  | IntegrationProvider
+  | PluginProvider
   | AuthProvider
   | CacheProvider
   | SecretsProvider
   | S3Provider;
+
+type ProviderRuntimeEntry = {
+  isProvider: (value: unknown) => value is LoadedProvider;
+  protoKind: ProtoProviderKind;
+  registerService: (router: ConnectRouter, provider: LoadedProvider) => void;
+};
+
+const PROVIDER_RUNTIME_ENTRIES: Partial<
+  Record<ProviderKind, ProviderRuntimeEntry>
+> = {
+  integration: {
+    isProvider: isPluginProvider as (value: unknown) => value is LoadedProvider,
+    protoKind: ProtoProviderKind.INTEGRATION,
+    registerService(router, provider) {
+      router.service(
+        IntegrationProviderService,
+        createProviderService(provider as PluginProvider),
+      );
+    },
+  },
+  auth: {
+    isProvider: isAuthProvider as (value: unknown) => value is LoadedProvider,
+    protoKind: ProtoProviderKind.AUTH,
+    registerService(router, provider) {
+      router.service(
+        AuthProviderService,
+        createAuthService(provider as AuthProvider),
+      );
+    },
+  },
+  cache: {
+    isProvider: isCacheProvider as (value: unknown) => value is LoadedProvider,
+    protoKind: ProtoProviderKind.CACHE,
+    registerService(router, provider) {
+      router.service(
+        CacheService,
+        createCacheService(provider as CacheProvider),
+      );
+    },
+  },
+  secrets: {
+    isProvider: isSecretsProvider as (value: unknown) => value is LoadedProvider,
+    protoKind: ProtoProviderKind.SECRETS,
+    registerService(router, provider) {
+      router.service(
+        SecretsProviderService,
+        createSecretsService(provider as SecretsProvider),
+      );
+    },
+  },
+  s3: {
+    isProvider: isS3Provider as (value: unknown) => value is LoadedProvider,
+    protoKind: ProtoProviderKind.S3,
+    registerService(router, provider) {
+      router.service(S3Service, createS3Service(provider as S3Provider));
+    },
+  },
+};
 
 function assertProtocolVersion(protocolVersion: number): void {
   if (protocolVersion === CURRENT_PROTOCOL_VERSION) {
@@ -175,73 +242,27 @@ export async function loadProviderFromTarget(
   const target = parseProviderTarget(targetValue);
   const module = await import(resolveProviderImportUrl(root, target));
   const candidate =
-    (target.exportName ? module[target.exportName] : undefined) ??
-    defaultProviderExport(module, target.kind);
+    (target.exportName ? Reflect.get(module, target.exportName) : undefined) ??
+    resolveDefaultProviderExport(module, target.kind);
 
   const defaultName =
     slugName(config.name ?? "") ||
     slugName(dirname(resolve(root, target.modulePath)));
-  switch (target.kind) {
-    case "integration": {
-      if (!isIntegrationProvider(candidate)) {
-        throw new Error(
-          `${targetValue} did not resolve to a Gestalt integration provider`,
-        );
-      }
-      candidate.resolveName(defaultName);
-      return candidate;
-    }
-    case "auth": {
-      if (!isAuthProvider(candidate)) {
-        throw new Error(
-          `${targetValue} did not resolve to a Gestalt auth provider`,
-        );
-      }
-      candidate.resolveName(defaultName);
-      return candidate;
-    }
-    case "cache": {
-      if (!isCacheProvider(candidate)) {
-        throw new Error(
-          `${targetValue} did not resolve to a Gestalt cache provider`,
-        );
-      }
-      candidate.resolveName(defaultName);
-      return candidate;
-    }
-    case "secrets": {
-      if (!isSecretsProvider(candidate)) {
-        throw new Error(
-          `${targetValue} did not resolve to a Gestalt secrets provider`,
-        );
-      }
-      candidate.resolveName(defaultName);
-      return candidate;
-    }
-    case "s3": {
-      if (!isS3Provider(candidate)) {
-        throw new Error(`${targetValue} did not resolve to a Gestalt s3 provider`);
-      }
-      candidate.resolveName(defaultName);
-      return candidate;
-    }
-    default:
-      throw new Error(
-        `TypeScript SDK does not yet support provider kind ${JSON.stringify(target.kind)}`,
-      );
-  }
+  const provider = resolveLoadedProvider(candidate, target.kind, targetValue);
+  provider.resolveName(defaultName);
+  return provider;
 }
 
 /**
- * Loads an integration provider from a package root and optional target.
+ * Loads a plugin provider from a package root and optional target.
  */
 export async function loadPluginFromTarget(
   root: string,
   rawTarget?: string,
-): Promise<IntegrationProvider> {
+): Promise<PluginProvider> {
   const provider = await loadProviderFromTarget(root, rawTarget);
-  if (!isIntegrationProvider(provider)) {
-    throw new Error("target did not resolve to an integration provider");
+  if (!isPluginProvider(provider)) {
+    throw new Error("target did not resolve to a plugin provider");
   }
   return provider;
 }
@@ -264,9 +285,9 @@ export async function runLoadedProvider(
 
   const catalogPath = process.env[ENV_WRITE_CATALOG];
   if (catalogPath) {
-    if (!isIntegrationProvider(provider)) {
+    if (!isPluginProvider(provider)) {
       throw new Error(
-        "static catalog generation is only supported for integration providers",
+        "static catalog generation is only supported for plugin providers",
       );
     }
     writeFileSync(catalogPath, pluginCatalogYaml(provider), "utf8");
@@ -277,10 +298,10 @@ export async function runLoadedProvider(
 }
 
 /**
- * Runs an integration provider that has already been loaded into memory.
+ * Runs a plugin provider that has already been loaded into memory.
  */
 export async function runLoadedPlugin(
-  plugin: IntegrationProvider,
+  plugin: PluginProvider,
   options: {
     root?: string;
     pluginName?: string;
@@ -307,59 +328,13 @@ export async function runBundledProvider(
   kind: ProviderKind,
   providerName: string,
 ): Promise<void> {
-  let loaded: LoadedProvider;
-  switch (kind) {
-    case "integration":
-      if (!isIntegrationProvider(provider)) {
-        throw new Error(
-          "bundled target did not resolve to a Gestalt integration provider",
-        );
-      }
-      loaded = provider;
-      break;
-    case "auth":
-      if (!isAuthProvider(provider)) {
-        throw new Error(
-          "bundled target did not resolve to a Gestalt auth provider",
-        );
-      }
-      loaded = provider;
-      break;
-    case "cache":
-      if (!isCacheProvider(provider)) {
-        throw new Error(
-          "bundled target did not resolve to a Gestalt cache provider",
-        );
-      }
-      loaded = provider;
-      break;
-    case "secrets":
-      if (!isSecretsProvider(provider)) {
-        throw new Error(
-          "bundled target did not resolve to a Gestalt secrets provider",
-        );
-      }
-      loaded = provider;
-      break;
-    case "s3":
-      if (!isS3Provider(provider)) {
-        throw new Error("bundled target did not resolve to a Gestalt s3 provider");
-      }
-      loaded = provider;
-      break;
-    default:
-      throw new Error(
-        `TypeScript SDK does not yet support provider kind ${JSON.stringify(kind)}`,
-      );
-  }
-  loaded.name = slugName(providerName);
-  await runLoadedProvider(loaded, {
+  await runLoadedProvider(resolveLoadedProvider(provider, kind, "bundled target"), {
     providerName,
   });
 }
 
 /**
- * Runs a bundled integration provider export.
+ * Runs a bundled plugin provider export.
  */
 export async function runBundledPlugin(
   plugin: unknown,
@@ -386,20 +361,7 @@ export async function serve(provider: LoadedProvider): Promise<void> {
     connect: false,
     routes(router) {
       router.service(ProviderLifecycle, createRuntimeService(provider));
-      if (isIntegrationProvider(provider)) {
-        router.service(
-          IntegrationProviderService,
-          createProviderService(provider),
-        );
-      } else if (isAuthProvider(provider)) {
-        router.service(AuthProviderService, createAuthService(provider));
-      } else if (isCacheProvider(provider)) {
-        router.service(CacheService, createCacheService(provider));
-      } else if (isS3Provider(provider)) {
-        router.service(S3Service, createS3Service(provider));
-      } else if (isSecretsProvider(provider)) {
-        router.service(SecretsProviderService, createSecretsService(provider));
-      }
+      registerProviderService(router, provider);
     },
   });
 
@@ -461,7 +423,7 @@ export function createRuntimeService(
   return {
     async getProviderIdentity() {
       return create(ProviderIdentitySchema, {
-        kind: providerKindToProto(provider.kind),
+        kind: providerRuntimeEntry(provider.kind).protoKind,
         name: provider.name,
         displayName: provider.displayName,
         description: provider.description,
@@ -510,12 +472,12 @@ export function createRuntimeService(
 }
 
 /**
- * Adapts an integration provider to the shared protocol service implementation.
+ * Adapts a plugin provider to the shared protocol service implementation.
  *
  * @internal
  */
 export function createProviderService(
-  provider: IntegrationProvider,
+  provider: PluginProvider,
 ): Partial<ServiceImpl<typeof IntegrationProviderService>> {
   return {
     getMetadata() {
@@ -767,9 +729,9 @@ export function createSecretsService(
 }
 
 /**
- * Serializes an integration provider's static catalog as YAML.
+ * Serializes a plugin provider's static catalog as YAML.
  */
-export function pluginCatalogYaml(plugin: IntegrationProvider): string {
+export function pluginCatalogYaml(plugin: PluginProvider): string {
   return catalogToYaml(plugin.staticCatalog());
 }
 
@@ -805,40 +767,37 @@ function providerRequest(
   };
 }
 
-function providerKindToProto(kind: ProviderKind): ProtoProviderKind {
-  switch (kind) {
-    case "integration":
-      return ProtoProviderKind.INTEGRATION;
-    case "auth":
-      return ProtoProviderKind.AUTH;
-    case "cache":
-      return ProtoProviderKind.CACHE;
-    case "secrets":
-      return ProtoProviderKind.SECRETS;
-    case "s3":
-      return ProtoProviderKind.S3;
-    case "telemetry":
-      return ProtoProviderKind.TELEMETRY;
-    default:
-      return ProtoProviderKind.UNSPECIFIED;
+function providerRuntimeEntry(
+  kind: ProviderKind,
+): ProviderRuntimeEntry {
+  const entry = PROVIDER_RUNTIME_ENTRIES[kind];
+  if (!entry) {
+    throw new Error(
+      `TypeScript SDK does not yet support provider kind ${JSON.stringify(kind)}`,
+    );
   }
+  return entry;
 }
 
-function defaultProviderExport(module: Record<string, unknown>, kind: ProviderKind): unknown {
-  switch (kind) {
-    case "integration":
-      return module.provider ?? module.plugin ?? module.default;
-    case "auth":
-      return module.auth ?? module.provider ?? module.default;
-    case "cache":
-      return module.cache ?? module.provider ?? module.default;
-    case "secrets":
-      return module.secrets ?? module.provider ?? module.default;
-    case "s3":
-      return module.s3 ?? module.provider ?? module.default;
-    case "telemetry":
-      return module.telemetry ?? module.provider ?? module.default;
+function resolveLoadedProvider(
+  candidate: unknown,
+  kind: ProviderKind,
+  source: string,
+): LoadedProvider {
+  const entry = providerRuntimeEntry(kind);
+  if (!entry.isProvider(candidate)) {
+    throw new Error(
+      `${source} did not resolve to a Gestalt ${providerKindLabel(kind)}`,
+    );
   }
+  return candidate;
+}
+
+function registerProviderService(
+  router: ConnectRouter,
+  provider: LoadedProvider,
+): void {
+  providerRuntimeEntry(provider.kind).registerService(router, provider);
 }
 
 function objectFromUnknown(value: unknown): Record<string, unknown> {

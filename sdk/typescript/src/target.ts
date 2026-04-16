@@ -2,6 +2,11 @@ import { readFileSync } from "node:fs";
 import { isAbsolute, normalize, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 
+import {
+  formatExternalProviderKind,
+  isExternalProviderKindToken,
+  parseExternalProviderKind,
+} from "./provider-kind.ts";
 import { slugName, type ProviderKind } from "./provider.ts";
 
 /**
@@ -26,16 +31,6 @@ export type PackageConfig = {
   name?: string;
   providerTarget?: ProviderTarget;
 };
-
-const EXTERNAL_PROVIDER_KIND_TOKENS = new Set<string>([
-  "plugin",
-  "integration",
-  "auth",
-  "cache",
-  "secrets",
-  "s3",
-  "telemetry",
-]);
 
 /**
  * Parses a relative module target in the form `./file.ts#namedExport`.
@@ -81,7 +76,7 @@ export function parseProviderTarget(
     };
   }
 
-  const kind = parseProviderKind(target.kind ?? "integration");
+  const kind = parseExternalProviderKind(target.kind ?? "plugin");
   if (!target.target || typeof target.target !== "string") {
     throw new Error("gestalt.provider.target is required");
   }
@@ -92,7 +87,7 @@ export function parseProviderTarget(
 }
 
 /**
- * Backwards-compatible alias for integration-only package targets.
+ * Parses a plugin module target in the form `./file.ts#namedExport`.
  */
 export const parsePluginTarget = parseModuleTarget;
 
@@ -110,11 +105,6 @@ export function readPackageConfig(root: string): PackageConfig {
     providerTarget = parseProviderTarget(gestalt.provider);
   } else if (isProviderConfigObject(gestalt.provider)) {
     providerTarget = parseProviderTarget(gestalt.provider);
-  } else if (typeof gestalt.plugin === "string") {
-    providerTarget = {
-      kind: "integration",
-      ...parseModuleTarget(gestalt.plugin, "gestalt.plugin"),
-    };
   }
 
   const config: PackageConfig = {};
@@ -133,18 +123,18 @@ export function readPackageConfig(root: string): PackageConfig {
 export function readPackageProviderTarget(root: string): ProviderTarget {
   const config = readPackageConfig(root);
   if (!config.providerTarget) {
-    throw new Error("package.json gestalt.provider or gestalt.plugin is required");
+    throw new Error("package.json gestalt.provider is required");
   }
   return config.providerTarget;
 }
 
 /**
- * Reads the integration-provider target from `package.json`.
+ * Reads the plugin-provider target from `package.json`.
  */
 export function readPackagePluginTarget(root: string): string {
   const target = readPackageProviderTarget(root);
   if (target.kind !== "integration") {
-    throw new Error(`package.json provider kind ${JSON.stringify(target.kind)} is not an integration provider`);
+    throw new Error(`package.json provider kind ${JSON.stringify(target.kind)} is not a plugin provider`);
   }
   return formatModuleTarget(target);
 }
@@ -158,7 +148,7 @@ export function defaultProviderName(root: string): string {
 }
 
 /**
- * Backwards-compatible alias for integration providers.
+ * Computes a default plugin slug from the package name.
  */
 export const defaultPluginName = defaultProviderName;
 
@@ -174,7 +164,7 @@ export function resolveProviderModulePath(root: string, target: ProviderTarget |
 }
 
 /**
- * Backwards-compatible alias for integration providers.
+ * Resolves a plugin target to an absolute file path.
  */
 export const resolvePluginModulePath = resolveProviderModulePath;
 
@@ -186,7 +176,7 @@ export function resolveProviderImportUrl(root: string, target: ProviderTarget | 
 }
 
 /**
- * Backwards-compatible alias for integration providers.
+ * Resolves a plugin target to an importable file URL.
  */
 export const resolvePluginImportUrl = resolveProviderImportUrl;
 
@@ -205,32 +195,25 @@ export function formatModuleTarget(target: ModuleTarget): string {
 }
 
 function parseKindPrefixedTarget(target: string): ProviderTarget | undefined {
-  const match = target.match(/^(plugin|integration|auth|cache|secrets|s3|telemetry):(.*)$/);
-  if (!match) {
+  const separator = target.indexOf(":");
+  if (separator < 0) {
+    return undefined;
+  }
+  const kindToken = target.slice(0, separator);
+  if (!kindToken || !isExternalProviderKindToken(kindToken)) {
+    if (kindToken && !kindToken.startsWith(".") && !kindToken.startsWith("/")) {
+      parseExternalProviderKind(kindToken);
+    }
     return undefined;
   }
   return {
-    kind: parseProviderKind(match[1]!),
-    ...parseModuleTarget(match[2]!, "provider target"),
+    kind: parseExternalProviderKind(kindToken),
+    ...parseModuleTarget(target.slice(separator + 1), "provider target"),
   };
 }
 
-function parseProviderKind(value: string): ProviderKind {
-  const normalized = value.trim().toLowerCase();
-  if (!EXTERNAL_PROVIDER_KIND_TOKENS.has(normalized)) {
-    throw new Error(`unsupported provider kind ${JSON.stringify(value)}`);
-  }
-  if (normalized === "plugin") {
-    return "integration";
-  }
-  return normalized as ProviderKind;
-}
-
 function formatProviderKind(kind: ProviderKind): string {
-  if (kind === "integration") {
-    return "plugin";
-  }
-  return kind;
+  return formatExternalProviderKind(kind);
 }
 
 function isProviderConfigObject(value: unknown): value is { kind?: string; target?: string } {

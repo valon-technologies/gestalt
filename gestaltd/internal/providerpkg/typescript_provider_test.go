@@ -103,11 +103,6 @@ func TestDetectTypeScriptProviderTarget(t *testing.T) {
 			target: typeScriptTestPluginTarget,
 			want:   typeScriptTestPluginTarget,
 		},
-		{
-			name:   "legacy integration prefix",
-			target: "integration:./provider.ts#plugin",
-			want:   typeScriptTestPluginTarget,
-		},
 	}
 
 	for _, tt := range tests {
@@ -133,13 +128,13 @@ func TestDetectTypeScriptProviderTarget_InvalidTarget(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	mustWriteFile(t, filepath.Join(root, typeScriptProjectFile), []byte(`{"name":"ts-release","gestalt":{"plugin":"provider.ts"}}`), 0o644)
+	mustWriteFile(t, filepath.Join(root, typeScriptProjectFile), []byte(`{"name":"ts-release","gestalt":{"provider":"provider.ts"}}`), 0o644)
 
 	_, err := DetectTypeScriptProviderTarget(root)
 	if err == nil {
 		t.Fatal("expected invalid TypeScript provider target error")
 	}
-	if want := "package.json gestalt.plugin"; !containsString(err.Error(), want) {
+	if want := "package.json gestalt.provider"; !containsString(err.Error(), want) {
 		t.Fatalf("error = %q, want mention of %q", err, want)
 	}
 }
@@ -159,6 +154,49 @@ func TestDetectTypeScriptProviderTarget_RejectsEmptyKindPrefix(t *testing.T) {
 	}
 	if want := "package.json gestalt.provider"; !containsString(err.Error(), want) {
 		t.Fatalf("error = %q, want mention of %q", err, want)
+	}
+}
+
+func TestDetectTypeScriptProviderTarget_RejectsLegacyIntegrationPrefix(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	mustWriteTypeScriptPackageConfig(t, root, map[string]string{
+		typeScriptProviderKey: "integration:./provider.ts#plugin",
+	})
+	mustWriteTypeScriptTargetModule(t, root, typeScriptTestPluginTarget)
+
+	_, err := DetectTypeScriptProviderTarget(root)
+	if err == nil {
+		t.Fatal("expected unsupported TypeScript provider kind error")
+	}
+	if want := `unsupported provider kind "integration"`; !containsString(err.Error(), want) {
+		t.Fatalf("error = %q, want mention of %q", err, want)
+	}
+}
+
+func TestDetectTypeScriptProviderTarget_ObjectConfig(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	mustWriteFile(t, filepath.Join(root, typeScriptProjectFile), []byte(`{
+  "name": "ts-release",
+  "version": "0.0.1",
+  "gestalt": {
+    "provider": {
+      "kind": "plugin",
+      "target": "./provider.ts#plugin"
+    }
+  }
+}`), 0o644)
+	mustWriteTypeScriptTargetModule(t, root, typeScriptTestPluginTarget)
+
+	got, err := DetectTypeScriptProviderTarget(root)
+	if err != nil {
+		t.Fatalf("DetectTypeScriptProviderTarget: %v", err)
+	}
+	if got != typeScriptTestPluginTarget {
+		t.Fatalf("target = %q, want %q", got, typeScriptTestPluginTarget)
 	}
 }
 
@@ -226,14 +264,14 @@ func TestDetectTypeScriptComponentTarget_InvalidTarget(t *testing.T) {
 
 	root := t.TempDir()
 	mustWriteTypeScriptPackageConfig(t, root, map[string]string{
-		typeScriptAuthKey: "auth.ts",
+		typeScriptProviderKey: "auth:auth.ts",
 	})
 
 	_, err := DetectTypeScriptComponentTarget(root, providermanifestv1.KindAuth)
 	if err == nil {
 		t.Fatal("expected invalid TypeScript auth target error")
 	}
-	if want := "package.json gestalt.auth"; !containsString(err.Error(), want) {
+	if want := "package.json gestalt.provider"; !containsString(err.Error(), want) {
 		t.Fatalf("error = %q, want mention of %q", err, want)
 	}
 }
@@ -596,7 +634,7 @@ func mustWriteTypeScriptTargetModule(t *testing.T, root, target string) {
 
 func runtimeTargetModulePath(t *testing.T, target string) string {
 	t.Helper()
-	for _, prefix := range []string{"plugin:", "integration:", "auth:", "cache:", "indexeddb:", "secrets:", "telemetry:"} {
+	for _, prefix := range []string{"plugin:", "auth:", "cache:", "indexeddb:", "secrets:", "telemetry:"} {
 		if strings.HasPrefix(target, prefix) {
 			return strings.TrimPrefix(target, prefix)
 		}

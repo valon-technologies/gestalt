@@ -115,6 +115,15 @@ test("loadProviderFromTarget resolves a secrets provider from package metadata",
   expect(provider.displayName).toBe("Fixture Secrets");
 });
 
+test("loadPluginFromTarget falls through null exports to the next plugin candidate", async () => {
+  const plugin = await loadPluginFromTarget(
+    fixturePath("basic-provider-null-export"),
+  );
+  expect(plugin.kind).toBe("integration");
+  expect(plugin.name).toBe("basic-provider-null-export");
+  expect(plugin.displayName).toBe("Fixture Provider Null Export");
+});
+
 test("runtime serves a secrets provider over unix gRPC", async () => {
   const runtimeEntry = join(import.meta.dir, "..", "src", "runtime.ts");
   const root = fixturePath("secrets-provider");

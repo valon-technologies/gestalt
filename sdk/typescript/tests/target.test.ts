@@ -40,7 +40,7 @@ test("provider target parsing supports plugin defaults and kind prefixes", () =>
     modulePath: "./provider.ts",
     exportName: "plugin",
   });
-  expect(parseProviderTarget("integration:./provider.ts#plugin")).toEqual({
+  expect(parseProviderTarget({ target: "./provider.ts#plugin" })).toEqual({
     kind: "integration",
     modulePath: "./provider.ts",
     exportName: "plugin",
@@ -55,9 +55,12 @@ test("provider target parsing supports plugin defaults and kind prefixes", () =>
     modulePath: "./cache.ts",
     exportName: "provider",
   });
+  expect(() => parseProviderTarget("integration:./provider.ts#plugin")).toThrow(
+    'unsupported provider kind "integration"',
+  );
 });
 
-test("package config reads legacy plugin targets and provider targets", () => {
+test("package config reads provider targets", () => {
   const pluginRoot = fixturePath("basic-provider");
   expect(readPackageConfig(pluginRoot)).toEqual({
     name: "@fixtures/basic-provider",

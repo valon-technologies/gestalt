@@ -54,7 +54,7 @@ async function expectConnectCode(
 
 async function waitForSocket(path: string, stderrText: () => string): Promise<void> {
   try {
-    await waitForPath(path);
+    await waitForPath(path, 15_000);
   } catch (error) {
     throw new Error(`${String(error)}${stderrText() ? `\n${stderrText()}` : ""}`);
   }
@@ -142,197 +142,317 @@ test("buildProviderBinary compiles a runnable auth provider executable", async (
   }
 }, 15_000);
 
-test("buildProviderBinary compiles a runnable integration provider executable for plugin and integration targets", async () => {
+test("buildProviderBinary compiles a runnable plugin provider executable", async () => {
   const { goos, goarch, executableSuffix } = hostTarget();
   const tempDir = makeTempDir("gts-integration-");
 
   try {
-    for (const [label, target] of [
-      ["plugin", "plugin:./provider.ts#plugin"],
-      ["integration", "integration:./provider.ts#plugin"],
-    ] as const) {
-      const outputPath = join(tempDir, `fixture-${label}${executableSuffix}`);
-      const socketPath = join(tempDir, `${label}.sock`);
-      let child: ChildProcess | undefined;
+    const label = "plugin";
+    const outputPath = join(tempDir, `fixture-${label}${executableSuffix}`);
+    const socketPath = join(tempDir, `${label}.sock`);
+    let child: ChildProcess | undefined;
 
-      try {
-        buildProviderBinary({
-          root: fixturePath("basic-provider"),
-          target,
-          outputPath,
-          providerName: `fixture-${label}`,
-          goos,
-          goarch,
-        });
+    try {
+      buildProviderBinary({
+        root: fixturePath("basic-provider"),
+        target: "plugin:./provider.ts#plugin",
+        outputPath,
+        providerName: `fixture-${label}`,
+        goos,
+        goarch,
+      });
 
-        expect(existsSync(outputPath)).toBe(true);
+      expect(existsSync(outputPath)).toBe(true);
 
-        child = spawn(outputPath, [], {
-          env: {
-            ...process.env,
-            [ENV_PROVIDER_SOCKET]: socketPath,
-          },
-          stdio: ["ignore", "ignore", "pipe"],
-        });
-        const stderrText = captureChildStderr(child);
+      child = spawn(outputPath, [], {
+        env: {
+          ...process.env,
+          [ENV_PROVIDER_SOCKET]: socketPath,
+        },
+        stdio: ["ignore", "ignore", "pipe"],
+      });
+      const stderrText = captureChildStderr(child);
 
-        await waitForSocket(socketPath, stderrText);
+      await waitForSocket(socketPath, stderrText);
 
-        const runtime = createUnixGrpcClient(ProviderLifecycle, socketPath);
-        const provider = createUnixGrpcClient(
-          IntegrationProviderService,
-          socketPath,
-        );
+      const runtime = createUnixGrpcClient(ProviderLifecycle, socketPath);
+      const provider = createUnixGrpcClient(
+        IntegrationProviderService,
+        socketPath,
+      );
 
-        const identity = await runtime.getProviderIdentity(create(EmptySchema, {}));
-        expect(identity.kind).toBe(ProtoProviderKind.INTEGRATION);
-        expect(identity.name).toBe(`fixture-${label}`);
-        expect(identity.minProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
-        expect(identity.maxProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
+      const identity = await runtime.getProviderIdentity(create(EmptySchema, {}));
+      expect(identity.kind).toBe(ProtoProviderKind.INTEGRATION);
+      expect(identity.name).toBe(`fixture-${label}`);
+      expect(identity.minProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
+      expect(identity.maxProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
 
-        const metadata = await provider.getMetadata(create(EmptySchema, {}));
-        expect(metadata.name).toBe(`fixture-${label}`);
-        expect(metadata.supportsSessionCatalog).toBe(true);
-        expect(metadata.minProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
-        expect(metadata.maxProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
-        expect(
-          metadata.staticCatalog?.operations?.some((operation) => operation.id === "hello"),
-        ).toBe(true);
-        expect(
-          metadata.staticCatalog?.operations?.some((operation) => operation.id === "count"),
-        ).toBe(true);
+      const metadata = await provider.getMetadata(create(EmptySchema, {}));
+      expect(metadata.name).toBe(`fixture-${label}`);
+      expect(metadata.supportsSessionCatalog).toBe(true);
+      expect(metadata.minProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
+      expect(metadata.maxProtocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
+      expect(
+        metadata.staticCatalog?.operations?.some((operation) => operation.id === "hello"),
+      ).toBe(true);
+      expect(
+        metadata.staticCatalog?.operations?.some((operation) => operation.id === "count"),
+      ).toBe(true);
 
-        await expectConnectCode(
-          provider.startProvider(
-            create(StartProviderRequestSchema, {
-              name: `fixture-${label}`,
-              config: {
-                region: "use1",
-              },
-              protocolVersion: CURRENT_PROTOCOL_VERSION + 1,
-            }),
-          ),
-          Code.FailedPrecondition,
-        );
-
-        const started = await provider.startProvider(
+      await expectConnectCode(
+        provider.startProvider(
           create(StartProviderRequestSchema, {
             name: `fixture-${label}`,
             config: {
               region: "use1",
             },
-            protocolVersion: CURRENT_PROTOCOL_VERSION,
+            protocolVersion: CURRENT_PROTOCOL_VERSION + 1,
           }),
-        );
-        expect(started.protocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
+        ),
+        Code.FailedPrecondition,
+      );
 
-        const result = await provider.execute(
-          create(ExecuteRequestSchema, {
-            operation: "hello",
-            params: {
-              name: "Ada",
-            },
-            token: "token-123",
-            connectionParams: {
-              region: "iad",
-            },
-            context: create(RequestContextSchema, {
-              subject: create(SubjectContextSchema, {
-                id: "user:user-123",
-                kind: "user",
-                authSource: "api_token",
-              }),
-              credential: create(CredentialContextSchema, {
-                mode: "identity",
-                subjectId: "identity:__identity__",
-              }),
-              access: create(AccessContextSchema, {
-                policy: "sample_policy",
-                role: "admin",
-              }),
+      const started = await provider.startProvider(
+        create(StartProviderRequestSchema, {
+          name: `fixture-${label}`,
+          config: {
+            region: "use1",
+          },
+          protocolVersion: CURRENT_PROTOCOL_VERSION,
+        }),
+      );
+      expect(started.protocolVersion).toBe(CURRENT_PROTOCOL_VERSION);
+
+      const result = await provider.execute(
+        create(ExecuteRequestSchema, {
+          operation: "hello",
+          params: {
+            name: "Ada",
+          },
+          token: "token-123",
+          connectionParams: {
+            region: "iad",
+          },
+          context: create(RequestContextSchema, {
+            subject: create(SubjectContextSchema, {
+              id: "user:user-123",
+              kind: "user",
+              authSource: "api_token",
+            }),
+            credential: create(CredentialContextSchema, {
+              mode: "identity",
+              subjectId: "identity:__identity__",
+            }),
+            access: create(AccessContextSchema, {
+              policy: "sample_policy",
+              role: "admin",
             }),
           }),
-        );
-        expect(JSON.parse(result.body)).toEqual({
-          message: "Hello, Ada.",
-          configuredName: `fixture-${label}`,
-          region: "iad",
-          configuredRegion: "use1",
-          subjectId: "user:user-123",
-          credentialMode: "identity",
-          accessPolicy: "sample_policy",
-          accessRole: "admin",
-        });
+        }),
+      );
+      expect(JSON.parse(result.body)).toEqual({
+        message: "Hello, Ada.",
+        configuredName: `fixture-${label}`,
+        region: "iad",
+        configuredRegion: "use1",
+        subjectId: "user:user-123",
+        credentialMode: "identity",
+        accessPolicy: "sample_policy",
+        accessRole: "admin",
+      });
 
-        const countResult = await provider.execute(
-          create(ExecuteRequestSchema, {
-            operation: "count",
-            params: {
-              count: 7,
-            },
-          }),
-        );
-        expect(countResult.status).toBe(200);
-        expect(JSON.parse(countResult.body)).toEqual({
-          count: 7,
-        });
+      const countResult = await provider.execute(
+        create(ExecuteRequestSchema, {
+          operation: "count",
+          params: {
+            count: 7,
+          },
+        }),
+      );
+      expect(countResult.status).toBe(200);
+      expect(JSON.parse(countResult.body)).toEqual({
+        count: 7,
+      });
 
-        const decodeError = await provider.execute(
-          create(ExecuteRequestSchema, {
-            operation: "count",
-            params: {
-              count: "oops",
-            },
-          }),
-        );
-        expect(decodeError.status).toBe(400);
-        expect(JSON.parse(decodeError.body)).toEqual({
-          error: "$.count must be an integer",
-        });
+      const decodeError = await provider.execute(
+        create(ExecuteRequestSchema, {
+          operation: "count",
+          params: {
+            count: "oops",
+          },
+        }),
+      );
+      expect(decodeError.status).toBe(400);
+      expect(JSON.parse(decodeError.body)).toEqual({
+        error: "$.count must be an integer",
+      });
 
-        const sessionCatalog = await provider.getSessionCatalog(
-          create(GetSessionCatalogRequestSchema, {
-            token: "token-123",
-            connectionParams: {
-              scope: label,
-            },
-            context: create(RequestContextSchema, {
-              subject: create(SubjectContextSchema, {
-                id: "user:user-123",
-                kind: "user",
-              }),
-              credential: create(CredentialContextSchema, {
-                mode: "identity",
-              }),
-              access: create(AccessContextSchema, {
-                policy: "sample_policy",
-                role: "viewer",
-              }),
+      const sessionCatalog = await provider.getSessionCatalog(
+        create(GetSessionCatalogRequestSchema, {
+          token: "token-123",
+          connectionParams: {
+            scope: label,
+          },
+          context: create(RequestContextSchema, {
+            subject: create(SubjectContextSchema, {
+              id: "user:user-123",
+              kind: "user",
+            }),
+            credential: create(CredentialContextSchema, {
+              mode: "identity",
+            }),
+            access: create(AccessContextSchema, {
+              policy: "sample_policy",
+              role: "viewer",
             }),
           }),
-        );
-        expect(sessionCatalog.catalog?.name).toBe("fixture-session");
-        expect(sessionCatalog.catalog?.operations).toHaveLength(1);
-        const sessionOperation = sessionCatalog.catalog?.operations?.[0];
-        expect(sessionOperation).toBeDefined();
-        expect(sessionOperation?.id).toBe("session-hello");
-        expect(sessionOperation?.allowedRoles).toEqual([
-          "viewer",
-          "admin",
-        ]);
-        expect(sessionOperation?.title).toBe(
-          `Session Hello ${label} user:user-123 identity viewer`,
-        );
-      } finally {
-        if (child) {
-          await stopProcess(child);
-        }
+        }),
+      );
+      expect(sessionCatalog.catalog?.name).toBe("fixture-session");
+      expect(sessionCatalog.catalog?.operations).toHaveLength(1);
+      const sessionOperation = sessionCatalog.catalog?.operations?.[0];
+      expect(sessionOperation).toBeDefined();
+      expect(sessionOperation?.id).toBe("session-hello");
+      expect(sessionOperation?.allowedRoles).toEqual([
+        "viewer",
+        "admin",
+      ]);
+      expect(sessionOperation?.title).toBe(
+        `Session Hello ${label} user:user-123 identity viewer`,
+      );
+    } finally {
+      if (child) {
+        await stopProcess(child);
       }
     }
   } finally {
     removeTempDir(tempDir);
   }
 }, 30_000);
+
+test("buildProviderBinary compiles a plugin provider executable without an explicit export name", async () => {
+  const { goos, goarch, executableSuffix } = hostTarget();
+  const tempDir = makeTempDir("gts-integration-fallback-");
+  const outputPath = join(tempDir, `fixture-fallback${executableSuffix}`);
+  const socketPath = join(tempDir, "provider.sock");
+  let child: ChildProcess | undefined;
+
+  try {
+    buildProviderBinary({
+      root: fixturePath("basic-provider-default-export"),
+      target: "plugin:./provider.ts",
+      outputPath,
+      providerName: "fixture-fallback",
+      goos,
+      goarch,
+    });
+
+    expect(existsSync(outputPath)).toBe(true);
+
+    child = spawn(outputPath, [], {
+      env: {
+        ...process.env,
+        [ENV_PROVIDER_SOCKET]: socketPath,
+      },
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    const stderrText = captureChildStderr(child);
+
+    await waitForSocket(socketPath, stderrText);
+
+    const runtime = createUnixGrpcClient(ProviderLifecycle, socketPath);
+    const provider = createUnixGrpcClient(
+      IntegrationProviderService,
+      socketPath,
+    );
+
+    const identity = await runtime.getProviderIdentity(create(EmptySchema, {}));
+    expect(identity.kind).toBe(ProtoProviderKind.INTEGRATION);
+    expect(identity.name).toBe("fixture-fallback");
+
+    const metadata = await provider.getMetadata(create(EmptySchema, {}));
+    expect(metadata.name).toBe("fixture-fallback");
+    expect(
+      metadata.staticCatalog?.operations?.map((operation) => operation.id),
+    ).toEqual(["hello"]);
+
+    const result = await provider.execute(
+      create(ExecuteRequestSchema, {
+        operation: "hello",
+        params: {
+          name: "Ada",
+        },
+      }),
+    );
+    expect(JSON.parse(result.body)).toEqual({
+      message: "Hello, Ada.",
+    });
+  } finally {
+    if (child) {
+      await stopProcess(child);
+    }
+    removeTempDir(tempDir);
+  }
+}, 15_000);
+
+test("buildProviderBinary falls through null exports to the next plugin candidate", async () => {
+  const { goos, goarch, executableSuffix } = hostTarget();
+  const tempDir = makeTempDir("gts-integration-null-export-");
+  const outputPath = join(tempDir, `fixture-null-export${executableSuffix}`);
+  const socketPath = join(tempDir, "provider.sock");
+  let child: ChildProcess | undefined;
+
+  try {
+    buildProviderBinary({
+      root: fixturePath("basic-provider-null-export"),
+      target: "plugin:./provider.ts",
+      outputPath,
+      providerName: "fixture-null-export",
+      goos,
+      goarch,
+    });
+
+    expect(existsSync(outputPath)).toBe(true);
+
+    child = spawn(outputPath, [], {
+      env: {
+        ...process.env,
+        [ENV_PROVIDER_SOCKET]: socketPath,
+      },
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    const stderrText = captureChildStderr(child);
+
+    await waitForSocket(socketPath, stderrText);
+
+    const runtime = createUnixGrpcClient(ProviderLifecycle, socketPath);
+    const provider = createUnixGrpcClient(
+      IntegrationProviderService,
+      socketPath,
+    );
+
+    const identity = await runtime.getProviderIdentity(create(EmptySchema, {}));
+    expect(identity.kind).toBe(ProtoProviderKind.INTEGRATION);
+    expect(identity.name).toBe("fixture-null-export");
+
+    const result = await provider.execute(
+      create(ExecuteRequestSchema, {
+        operation: "hello",
+        params: {
+          name: "Ada",
+        },
+      }),
+    );
+    expect(JSON.parse(result.body)).toEqual({
+      message: "Hello, Ada.",
+    });
+  } finally {
+    if (child) {
+      await stopProcess(child);
+    }
+    removeTempDir(tempDir);
+  }
+}, 15_000);
 
 test("buildProviderBinary compiles a runnable cache provider executable", async () => {
   const { goos, goarch, executableSuffix } = hostTarget();
@@ -617,4 +737,4 @@ test("buildProviderBinary compiles a runnable s3 provider executable", async () 
     }
     removeTempDir(tempDir);
   }
-});
+}, 15_000);

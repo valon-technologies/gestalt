@@ -3,9 +3,9 @@
  *
  * @example
  * ```ts
- * import { defineIntegrationProvider, ok, operation, s } from "@valon-technologies/gestalt";
+ * import { definePlugin, ok, operation, s } from "@valon-technologies/gestalt";
  *
- * export const provider = defineIntegrationProvider({
+ * export const plugin = definePlugin({
  *   displayName: "Example Provider",
  *   operations: [
  *     operation({
