@@ -220,12 +220,14 @@ fn build_browser_response_html(title: &str, detail: &str) -> String {
 
 pub fn logout() -> Result<()> {
     let store = CredentialStore::new()?;
-    match store.load() {
+    let api::CliAuthInputs {
+        configured_server, ..
+    } = api::load_cli_auth_inputs(None);
+    let configured_url = configured_server.ok().flatten().map(|server| server.url);
+
+    match api::load_stored_credentials() {
         Ok(Some(creds)) => {
-            let revoke_url = creds
-                .api_url()
-                .map(str::to_owned)
-                .or_else(|| api::resolve_url(None).ok());
+            let revoke_url = creds.api_url().map(str::to_owned).or(configured_url);
             if let Some(url) = revoke_url {
                 let client = ApiClient::new(&url, &creds.api_token)?;
                 if let Err(err) = client.revoke_api_token(&creds.api_token_id) {
@@ -253,15 +255,20 @@ pub fn logout() -> Result<()> {
 }
 
 pub fn status(url_override: Option<&str>, format: Format) -> Result<()> {
-    let server_config = api::describe_server_config(url_override);
-    let server_reachable = server_config.as_ref().map(|(url, _)| {
-        api::fetch_auth_info(url)
+    let api::CliAuthInputs {
+        configured_server,
+        env_api_key,
+    } = api::load_cli_auth_inputs(url_override);
+
+    let server_config = configured_server.ok().flatten();
+    let server_reachable = server_config.as_ref().map(|server| {
+        api::fetch_auth_info(&server.url)
             .ok()
             .map(|info| info.login_supported)
     });
 
-    let has_env_key = api::env_api_key_is_set();
-    let (has_stored_credentials, stored_credentials_error) = match CredentialStore::new()?.load() {
+    let has_env_key = env_api_key.is_some();
+    let (has_stored_credentials, stored_credentials_error) = match api::load_stored_credentials() {
         Ok(Some(_)) => (true, None),
         Ok(None) => (false, None),
         Err(err) => (false, Some(err.to_string())),
@@ -278,7 +285,10 @@ pub fn status(url_override: Option<&str>, format: Format) -> Result<()> {
                 "none"
             };
             let (server_url, url_source) = match &server_config {
-                Some((url, src)) => (serde_json::json!(url), serde_json::json!(src)),
+                Some(server) => (
+                    serde_json::json!(server.url),
+                    serde_json::json!(server.source),
+                ),
                 None => (serde_json::json!(null), serde_json::json!(null)),
             };
             let (reachable, login_supported) = match server_reachable {
@@ -299,9 +309,9 @@ pub fn status(url_override: Option<&str>, format: Format) -> Result<()> {
         }
         Format::Table => {
             match &server_config {
-                Some((url, source)) => {
-                    eprintln!("Server:      {}", url);
-                    eprintln!("URL source:  {}", source);
+                Some(server) => {
+                    eprintln!("Server:      {}", server.url);
+                    eprintln!("URL source:  {}", server.source);
                     match server_reachable {
                         Some(Some(login_supported)) => {
                             eprintln!("Reachable:   yes");
