@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -23,7 +22,6 @@ import (
 	telemetryotlp "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/otlp"
 	telemetrystdout "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/stdout"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
-	"github.com/valon-technologies/gestalt/server/internal/operator"
 )
 
 type bootstrapEnv struct {
@@ -35,8 +33,8 @@ type bootstrapEnv struct {
 	prevLogger *slog.Logger
 }
 
-func setupBootstrapWithArtifactsDir(configFlags []string, artifactsDir string, locked bool) (*bootstrapEnv, error) {
-	_, cfg, err := loadConfigForExecutionWithArtifactsDir(configFlags, artifactsDir, locked)
+func setupBootstrapWithConfigPaths(configPaths []string, artifactsDir string, locked bool) (*bootstrapEnv, error) {
+	cfg, err := loadConfigForExecutionAtPathsWithArtifactsDir(configPaths, artifactsDir, locked)
 	if err != nil {
 		return nil, err
 	}
@@ -124,35 +122,6 @@ func buildFactories() *bootstrap.FactoryRegistry {
 	factories.Secrets["file"] = secretsfile.Factory
 	factories.Secrets["provider"] = secretsprovider.Factory
 	return factories
-}
-
-func resolveConfigPaths(flagValues []string) []string {
-	if len(flagValues) > 0 {
-		return append([]string(nil), flagValues...)
-	}
-	if envPath := os.Getenv("GESTALT_CONFIG"); envPath != "" {
-		return []string{envPath}
-	}
-	if _, err := os.Stat("config.yaml"); err == nil {
-		return []string{"config.yaml"}
-	}
-	for _, p := range operator.LocalConfigPaths() {
-		if p == "" {
-			continue
-		}
-		if _, err := os.Stat(p); err == nil {
-			return []string{p}
-		}
-	}
-	return []string{operator.DefaultLocalConfigPath()}
-}
-
-func resolvePrimaryConfigPath(flagValues []string) string {
-	configPaths := resolveConfigPaths(flagValues)
-	if len(configPaths) == 0 {
-		return ""
-	}
-	return configPaths[0]
 }
 
 const gracefulShutdownTimeout = 15 * time.Second
