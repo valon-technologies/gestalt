@@ -1386,7 +1386,7 @@ func TestE2ECLIToServer(t *testing.T) {
 	t.Run("invoke echo operation", func(t *testing.T) {
 		t.Parallel()
 
-		cmd := exec.Command(gestaltCLIBin, "invoke", "example", "echo",
+		cmd := exec.Command(gestaltCLIBin, "plugins", "invoke", "example", "echo",
 			"--format", "json",
 			"--url", baseURL,
 			"-p", "message=hello-e2e",
@@ -1404,7 +1404,7 @@ func TestE2ECLIToServer(t *testing.T) {
 	t.Run("describe operation", func(t *testing.T) {
 		t.Parallel()
 
-		cmd := exec.Command(gestaltCLIBin, "describe", "example", "echo",
+		cmd := exec.Command(gestaltCLIBin, "plugins", "describe", "example", "echo",
 			"--format", "json",
 			"--url", baseURL,
 		)

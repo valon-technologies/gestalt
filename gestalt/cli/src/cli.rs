@@ -44,14 +44,6 @@ pub enum Commands {
         command: PluginCommands,
     },
 
-    #[command(hide = true)]
-    /// Execute a plugin operation
-    Invoke(InvokeArgs),
-
-    #[command(hide = true)]
-    /// Describe a plugin operation
-    Describe(DescribeArgs),
-
     /// Manage API tokens
     Tokens {
         #[command(subcommand)]

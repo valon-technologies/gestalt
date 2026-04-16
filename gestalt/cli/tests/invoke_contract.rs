@@ -304,7 +304,10 @@ fn test_describe_operation() {
     .with_body(catalog_body())
     .create();
 
-    let output = run_cli(&server, &["describe", "test_svc", "do_thing"]);
+    let output = run_cli(
+        &server,
+        &["integrations", "describe", "test_svc", "do_thing"],
+    );
     assert!(
         output.status.success(),
         "stderr: {}",
@@ -533,6 +536,7 @@ fn test_space_separated_segments_invoke() {
     let output = run_cli(
         &server,
         &[
+            "integrations",
             "invoke",
             "test_svc",
             "widgets",
