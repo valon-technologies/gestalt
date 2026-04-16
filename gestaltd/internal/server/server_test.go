@@ -8037,6 +8037,178 @@ func TestExecuteOperation_PinsSessionCatalogConnectionIntoExecution(t *testing.T
 	}
 }
 
+func TestExecuteOperation_UsesBodyInstanceForSessionCatalogResolution(t *testing.T) {
+	t.Parallel()
+
+	var gotToken string
+	var gotParams map[string]any
+	sessionStub := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "sample-int",
+				ConnMode: core.ConnectionModeUser,
+				ExecuteFn: func(_ context.Context, op string, params map[string]any, token string) (*core.OperationResult, error) {
+					gotToken = token
+					gotParams = params
+					return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)}, nil
+				},
+			},
+		},
+		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			switch token {
+			case "tenant-token":
+				return &catalog.Catalog{
+					Name: "sample-int",
+					Operations: []catalog.CatalogOperation{
+						{ID: "run", Description: "Run", Method: http.MethodPost, Transport: catalog.TransportREST},
+					},
+				}, nil
+			default:
+				return nil, fmt.Errorf("unexpected token %q", token)
+			}
+		},
+	}
+
+	svc := coretesting.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	seedToken(t, svc, &core.IntegrationToken{
+		ID: "tok-tenant", UserID: u.ID, Integration: "sample-int",
+		Connection: "catalog-conn", Instance: "tenant-a", AccessToken: "tenant-token",
+	})
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, sessionStub)
+		cfg.Services = svc
+		cfg.CatalogConnection = map[string]string{"sample-int": "catalog-conn"}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/sample-int/run", bytes.NewBufferString(`{"_instance":"tenant-a","foo":"bar"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+	if gotToken != "tenant-token" {
+		t.Fatalf("execute token = %q, want %q", gotToken, "tenant-token")
+	}
+	if gotParams["foo"] != "bar" {
+		t.Fatalf("expected foo=bar, got %v", gotParams["foo"])
+	}
+	if _, ok := gotParams["_instance"]; ok {
+		t.Fatalf("expected _instance to be stripped from params, got %v", gotParams["_instance"])
+	}
+}
+
+func TestExecuteOperation_IgnoresLegacySelectorParams(t *testing.T) {
+	t.Parallel()
+
+	var gotToken string
+	var gotParams map[string]any
+	sessionStub := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "sample-int",
+				ConnMode: core.ConnectionModeUser,
+				ExecuteFn: func(_ context.Context, op string, params map[string]any, token string) (*core.OperationResult, error) {
+					gotToken = token
+					gotParams = params
+					return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)}, nil
+				},
+			},
+		},
+		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			switch token {
+			case "catalog-token", "alt-token":
+				return &catalog.Catalog{
+					Name: "sample-int",
+					Operations: []catalog.CatalogOperation{
+						{ID: "run", Description: "Run", Method: http.MethodGet, Transport: catalog.TransportREST},
+					},
+				}, nil
+			default:
+				return nil, fmt.Errorf("unexpected token %q", token)
+			}
+		},
+	}
+
+	svc := coretesting.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	seedToken(t, svc, &core.IntegrationToken{
+		ID: "tok-catalog", UserID: u.ID, Integration: "sample-int",
+		Connection: "catalog-conn", Instance: "default", AccessToken: "catalog-token",
+	})
+	seedToken(t, svc, &core.IntegrationToken{
+		ID: "tok-alt", UserID: u.ID, Integration: "sample-int",
+		Connection: "alt-conn", Instance: "tenant-a", AccessToken: "alt-token",
+	})
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, sessionStub)
+		cfg.Services = svc
+		cfg.CatalogConnection = map[string]string{"sample-int": "catalog-conn"}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/sample-int/run?connection=alt-conn&instance=tenant-a&foo=bar", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+	if gotToken != "catalog-token" {
+		t.Fatalf("execute token = %q, want %q", gotToken, "catalog-token")
+	}
+	if gotParams["connection"] != "alt-conn" {
+		t.Fatalf("expected legacy connection param to pass through, got %v", gotParams["connection"])
+	}
+	if gotParams["instance"] != "tenant-a" {
+		t.Fatalf("expected legacy instance param to pass through, got %v", gotParams["instance"])
+	}
+	if gotParams["foo"] != "bar" {
+		t.Fatalf("expected foo=bar, got %v", gotParams["foo"])
+	}
+
+	gotToken = ""
+	gotParams = nil
+
+	req, _ = http.NewRequest(http.MethodPost, ts.URL+"/api/v1/sample-int/run?connection=alt-conn&instance=tenant-a", bytes.NewBufferString(`{"foo":"bar"}`))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("post request: %v", err)
+	}
+	defer func(body io.ReadCloser) { _ = body.Close() }(resp.Body)
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200 for POST, got %d: %s", resp.StatusCode, body)
+	}
+	if gotToken != "catalog-token" {
+		t.Fatalf("post execute token = %q, want %q", gotToken, "catalog-token")
+	}
+	if gotParams["foo"] != "bar" {
+		t.Fatalf("expected post foo=bar, got %v", gotParams["foo"])
+	}
+	if _, ok := gotParams["connection"]; ok {
+		t.Fatalf("expected post legacy connection query param to be ignored, got %v", gotParams["connection"])
+	}
+	if _, ok := gotParams["instance"]; ok {
+		t.Fatalf("expected post legacy instance query param to be ignored, got %v", gotParams["instance"])
+	}
+}
+
 func TestExecuteOperation_UsesConfiguredCatalogConnectionWhenInvokerIsWrapped(t *testing.T) {
 	t.Parallel()
 

@@ -430,6 +430,28 @@ func resolveRequestedInstance(w http.ResponseWriter, requested string) (string, 
 	return instance, true
 }
 
+func (s *Server) resolveExplicitSelectors(w http.ResponseWriter, r *http.Request, integration string) (string, string, bool) {
+	requestedConnection := r.URL.Query().Get(httpConnectionParam)
+	if requestedConnection != "" {
+		var ok bool
+		requestedConnection, ok = s.resolveRequestedConnection(w, integration, requestedConnection)
+		if !ok {
+			return "", "", false
+		}
+	}
+
+	requestedInstance := r.URL.Query().Get(httpInstanceParam)
+	if requestedInstance != "" {
+		var ok bool
+		requestedInstance, ok = resolveRequestedInstance(w, requestedInstance)
+		if !ok {
+			return "", "", false
+		}
+	}
+
+	return requestedConnection, requestedInstance, true
+}
+
 func resolveConnectionParams(w http.ResponseWriter, prov core.Provider, provided map[string]string) (map[string]string, bool) {
 	connParams, err := validateConnectionParams(prov.ConnectionParamDefs(), provided)
 	if err != nil {
@@ -453,21 +475,9 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, errOperationAccess.Error())
 		return
 	}
-	requestedConnection := r.URL.Query().Get(httpConnectionParam)
-	if requestedConnection != "" {
-		var ok bool
-		requestedConnection, ok = s.resolveRequestedConnection(w, name, requestedConnection)
-		if !ok {
-			return
-		}
-	}
-	requestedInstance := r.URL.Query().Get(httpInstanceParam)
-	if requestedInstance != "" {
-		var ok bool
-		requestedInstance, ok = resolveRequestedInstance(w, requestedInstance)
-		if !ok {
-			return
-		}
+	requestedConnection, requestedInstance, ok := s.resolveExplicitSelectors(w, r, name)
+	if !ok {
+		return
 	}
 	if err := rejectWorkloadSelectors(w, p, requestedConnection, requestedInstance); err != nil {
 		s.auditHTTPEvent(r.Context(), p, name, operation, false, err)
@@ -486,61 +496,14 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 		discoveryStartedAt = time.Now()
 		discoveryConnectionMode = metricutil.NormalizeConnectionMode(prov.ConnectionMode())
 	}
-	resolveCatalog := invocation.ResolveCatalogWithMetadata
-	strictCatalog := false
-	if requestedConnection != "" || requestedInstance != "" {
-		resolveCatalog = invocation.ResolveCatalogStrictWithMetadata
-		strictCatalog = true
-	} else if core.SupportsSessionCatalog(prov) {
-		resolveCatalog = invocation.ResolveCatalogStrictWithMetadata
-		strictCatalog = true
-	}
 	ctx := invocation.WithAccessContext(r.Context(), s.providerAccessContext(p, name))
-	var cat *catalog.Catalog
-	if strictCatalog && requestedConnection == "" && requestedInstance == "" &&
-		(s.authorizer == nil || !s.authorizer.IsWorkload(p)) {
-		catalogConnections := s.sessionCatalogConnections(name, p, requestedConnection)
-		var firstErr error
-		for _, catalogConnection := range catalogConnections {
-			resolvedConnection, catalogInstance := s.workloadBindingSelectors(p, name, catalogConnection, requestedInstance)
-			var (
-				err      error
-				metadata invocation.CatalogResolutionMetadata
-			)
-			cat, metadata, err = resolveCatalog(ctx, prov, name, resolver, p, resolvedConnection, catalogInstance)
-			if err == nil {
-				discoveryFailed = metadata.SessionFailed
-				break
-			}
-			if firstErr == nil {
-				firstErr = err
-			}
-			cat = nil
+	cat, discoveryFailed, err := s.resolveOperationsCatalog(ctx, prov, name, resolver, p, requestedConnection, requestedInstance)
+	if err != nil {
+		if recordDiscoveryMetrics {
+			metricutil.RecordDiscoveryMetrics(r.Context(), discoveryStartedAt, name, "list_operations", discoveryConnectionMode, discoveryFailed)
 		}
-		if cat == nil && firstErr != nil {
-			discoveryFailed = true
-			if recordDiscoveryMetrics {
-				metricutil.RecordDiscoveryMetrics(r.Context(), discoveryStartedAt, name, "list_operations", discoveryConnectionMode, discoveryFailed)
-			}
-			s.writeInvocationError(w, r, name, "", firstErr)
-			return
-		}
-	} else {
-		catalogConnection := s.sessionCatalogConnections(name, p, requestedConnection)[0]
-		catalogConnection, catalogInstance := s.workloadBindingSelectors(p, name, catalogConnection, requestedInstance)
-		var (
-			err      error
-			metadata invocation.CatalogResolutionMetadata
-		)
-		cat, metadata, err = resolveCatalog(ctx, prov, name, resolver, p, catalogConnection, catalogInstance)
-		discoveryFailed = metadata.SessionFailed || err != nil
-		if err != nil {
-			if recordDiscoveryMetrics {
-				metricutil.RecordDiscoveryMetrics(r.Context(), discoveryStartedAt, name, "list_operations", discoveryConnectionMode, discoveryFailed)
-			}
-			s.writeInvocationError(w, r, name, "", err)
-			return
-		}
+		s.writeInvocationError(w, r, name, "", err)
+		return
 	}
 	if recordDiscoveryMetrics {
 		metricutil.RecordDiscoveryMetrics(r.Context(), discoveryStartedAt, name, "list_operations", discoveryConnectionMode, discoveryFailed)
@@ -580,21 +543,9 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	requestedConnection := r.URL.Query().Get(httpConnectionParam)
-	if requestedConnection != "" {
-		var ok bool
-		requestedConnection, ok = s.resolveRequestedConnection(w, providerName, requestedConnection)
-		if !ok {
-			return
-		}
-	}
-	requestedInstance := r.URL.Query().Get(httpInstanceParam)
-	if requestedInstance != "" {
-		var ok bool
-		requestedInstance, ok = resolveRequestedInstance(w, requestedInstance)
-		if !ok {
-			return
-		}
+	requestedConnection, requestedInstance, ok := s.resolveExplicitSelectors(w, r, providerName)
+	if !ok {
+		return
 	}
 	if err := rejectWorkloadSelectors(w, p, requestedConnection, requestedInstance); err != nil {
 		s.auditHTTPEvent(r.Context(), p, providerName, operationName, false, err)
@@ -665,46 +616,9 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	if tr, ok := s.invoker.(invocation.TokenResolver); ok {
 		resolver = tr
 	}
-	opMeta, ok := invocation.CatalogOperation(prov.Catalog(), operationName)
-	sessionOpFound := false
-	if core.SupportsSessionCatalog(prov) {
-		var firstSessionErr error
-		sessionCatalogResolved := false
-		sessionConnections := s.sessionCatalogConnections(providerName, p, connection)
-		for _, sessionConnection := range sessionConnections {
-			sessionConnection, sessionInstance := s.workloadBindingSelectors(p, providerName, sessionConnection, instance)
-			sessionCat, err := invocation.ResolveSessionCatalog(ctx, prov, providerName, resolver, p, sessionConnection, sessionInstance)
-			if err != nil {
-				if firstSessionErr == nil {
-					firstSessionErr = err
-				}
-				if connection != "" {
-					s.writeInvocationError(w, r, providerName, operationName, err)
-					return
-				}
-				continue
-			}
-			sessionCatalogResolved = true
-			if sessionOp, sessionOK := invocation.CatalogOperation(sessionCat, operationName); sessionOK {
-				opMeta, ok = sessionOp, true
-				sessionOpFound = true
-				if connection == "" {
-					connection = sessionConnection
-				}
-				break
-			}
-		}
-		if firstSessionErr != nil && !sessionCatalogResolved {
-			s.writeInvocationError(w, r, providerName, operationName, firstSessionErr)
-			return
-		}
-		if instance != "" && !sessionOpFound {
-			s.writeInvocationError(w, r, providerName, operationName, fmt.Errorf("%w: %q on provider %q", invocation.ErrOperationNotFound, operationName, providerName))
-			return
-		}
-	}
-	if !ok {
-		s.writeInvocationError(w, r, providerName, operationName, fmt.Errorf("%w: %q on provider %q", invocation.ErrOperationNotFound, operationName, providerName))
+	opMeta, connection, err := s.resolveOperationMetadata(ctx, prov, providerName, resolver, p, connection, instance, operationName)
+	if err != nil {
+		s.writeInvocationError(w, r, providerName, operationName, err)
 		return
 	}
 	if s.authorizer != nil && !s.authorizer.AllowCatalogOperation(p, providerName, opMeta) {
