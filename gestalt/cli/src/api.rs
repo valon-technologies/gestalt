@@ -258,13 +258,6 @@ impl ApiClient {
         self.send(Method::GET, path)
     }
 
-    pub fn get_with_query<T>(&self, path: &str, query: &T) -> Result<serde_json::Value>
-    where
-        T: Serialize + ?Sized,
-    {
-        self.send_request_with_query(Method::GET, path, Some(query), None::<&serde_json::Value>)
-    }
-
     pub fn post<T>(&self, path: &str, body: &T) -> Result<serde_json::Value>
     where
         T: Serialize + ?Sized,
@@ -306,19 +299,14 @@ impl ApiClient {
     }
 
     fn send(&self, method: Method, path: &str) -> Result<serde_json::Value> {
-        self.send_request_with_query(
-            method,
-            path,
-            None::<&serde_json::Value>,
-            None::<&serde_json::Value>,
-        )
+        self.send_request(method, path, None::<&serde_json::Value>)
     }
 
     fn send_json<T>(&self, method: Method, path: &str, body: &T) -> Result<serde_json::Value>
     where
         T: Serialize + ?Sized,
     {
-        self.send_request_with_query(method, path, None::<&serde_json::Value>, Some(body))
+        self.send_request(method, path, Some(body))
     }
 
     fn send_form<T>(&self, method: Method, path: &str, body: &T) -> Result<String>
@@ -341,26 +329,16 @@ impl ApiClient {
         self.handle_text_response(resp)
     }
 
-    fn send_request_with_query<Q, T>(
+    fn send_request<T>(
         &self,
         method: Method,
         path: &str,
-        query: Option<&Q>,
         body: Option<&T>,
     ) -> Result<serde_json::Value>
     where
-        Q: Serialize + ?Sized,
         T: Serialize + ?Sized,
     {
-        let mut url = format!("{}{}", self.base_url, path);
-        if let Some(query) = query {
-            let encoded = serde_urlencoded::to_string(query).context("failed to encode query")?;
-            if !encoded.is_empty() {
-                let separator = if url.contains('?') { '&' } else { '?' };
-                url.push(separator);
-                url.push_str(&encoded);
-            }
-        }
+        let url = format!("{}{}", self.base_url, path);
         let request = self.client.request(method, &url).bearer_auth(&self.token);
         let request = match body {
             Some(body) => request.json(body),

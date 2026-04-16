@@ -3,16 +3,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::api::ApiClient;
 
-#[derive(Default, Serialize)]
-pub struct CatalogSelectors<'a> {
-    #[serde(rename = "_connection")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub connection: Option<&'a str>,
-    #[serde(rename = "_instance")]
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub instance: Option<&'a str>,
-}
-
 pub enum ResolvedOperation<'a> {
     All(&'a [CatalogOperation]),
     Exact(&'a CatalogOperation),
@@ -117,17 +107,9 @@ fn is_valid_operation_query(query: &str) -> bool {
     })
 }
 
-pub fn fetch_catalog(
-    client: &ApiClient,
-    plugin: &str,
-    selectors: CatalogSelectors<'_>,
-) -> Result<OperationsCatalog> {
+pub fn fetch_catalog(client: &ApiClient, plugin: &str) -> Result<OperationsCatalog> {
     let path = format!("/api/v1/integrations/{}/operations", plugin);
-    let resp = if selectors.connection.is_some() || selectors.instance.is_some() {
-        client.get_with_query(&path, &selectors)?
-    } else {
-        client.get(&path)?
-    };
+    let resp = client.get(&path)?;
     let operations: Vec<CatalogOperation> =
         serde_json::from_value(resp).context("failed to parse operations response")?;
     Ok(OperationsCatalog { operations })
