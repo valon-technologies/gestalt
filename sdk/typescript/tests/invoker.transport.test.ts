@@ -162,3 +162,20 @@ test("PluginInvoker forwards request handles from strings and Request objects", 
     removeTempDir(tempDir);
   }
 });
+
+test("PluginInvoker prioritizes request-handle validation over socket configuration", () => {
+  const previousSocket = process.env[ENV_PLUGIN_INVOKER_SOCKET];
+
+  try {
+    delete process.env[ENV_PLUGIN_INVOKER_SOCKET];
+    expect(() => new PluginInvoker("   ")).toThrow(
+      "plugin invoker: request handle is not available",
+    );
+  } finally {
+    if (previousSocket === undefined) {
+      delete process.env[ENV_PLUGIN_INVOKER_SOCKET];
+    } else {
+      process.env[ENV_PLUGIN_INVOKER_SOCKET] = previousSocket;
+    }
+  }
+});
