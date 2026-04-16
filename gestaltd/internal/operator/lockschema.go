@@ -8,11 +8,14 @@ import (
 )
 
 const (
-	providerLockSchemaName    = "gestaltd-provider-lock"
-	providerLockSchemaVersion = 1
-	providerLockRevision      = 0
-	providerLockKindTelemetry = "telemetry"
-	providerLockKindAudit     = "audit"
+	providerLockSchemaName        = "gestaltd-provider-lock"
+	providerLockSchemaVersion     = 2
+	providerLockRevision          = 0
+	providerLockKindWorkflow      = "workflow"
+	providerLockKindTelemetry     = "telemetry"
+	providerLockKindAudit         = "audit"
+	providerLockRuntimeExecutable = "executable"
+	providerLockRuntimeAssets     = "assets"
 )
 
 type providerLockfile struct {
@@ -36,7 +39,11 @@ type providerLockBuckets struct {
 }
 
 type portableLockEntry struct {
-	Fingerprint string                 `json:"fingerprint"`
+	InputDigest string                 `json:"inputDigest,omitempty"`
+	Fingerprint string                 `json:"fingerprint,omitempty"`
+	Package     string                 `json:"package"`
+	Kind        string                 `json:"kind"`
+	Runtime     string                 `json:"runtime"`
 	Source      string                 `json:"source,omitempty"`
 	Version     string                 `json:"version,omitempty"`
 	Archives    map[string]LockArchive `json:"archives,omitempty"`
@@ -150,16 +157,16 @@ func providerLockfileFromLockfile(lock *Lockfile) *providerLockfile {
 		SchemaVersion: providerLockSchemaVersion,
 		Revision:      providerLockRevision,
 		Providers: providerLockBuckets{
-			Plugin:    portableEntriesFromLockEntries(lock.Providers),
-			Auth:      portableEntriesFromLockEntries(lock.Auth),
-			IndexedDB: portableEntriesFromLockEntries(lock.IndexedDBs),
-			Cache:     portableEntriesFromLockEntries(lock.Caches),
-			S3:        portableEntriesFromLockEntries(lock.S3),
-			Workflow:  portableEntriesFromLockEntries(lock.Workflows),
-			Secrets:   portableEntriesFromLockEntries(lock.Secrets),
-			Telemetry: portableEntriesFromLockEntries(lock.Telemetry),
-			Audit:     portableEntriesFromLockEntries(lock.Audit),
-			WebUI:     portableEntriesFromLockEntries(lock.UIs),
+			Plugin:    portableEntriesFromLockEntries(lock.Providers, providermanifestv1.KindPlugin),
+			Auth:      portableEntriesFromLockEntries(lock.Auth, providermanifestv1.KindAuth),
+			IndexedDB: portableEntriesFromLockEntries(lock.IndexedDBs, providermanifestv1.KindIndexedDB),
+			Cache:     portableEntriesFromLockEntries(lock.Caches, providermanifestv1.KindCache),
+			S3:        portableEntriesFromLockEntries(lock.S3, providermanifestv1.KindS3),
+			Workflow:  portableEntriesFromLockEntries(lock.Workflows, providerLockKindWorkflow),
+			Secrets:   portableEntriesFromLockEntries(lock.Secrets, providermanifestv1.KindSecrets),
+			Telemetry: portableEntriesFromLockEntries(lock.Telemetry, providerLockKindTelemetry),
+			Audit:     portableEntriesFromLockEntries(lock.Audit, providerLockKindAudit),
+			WebUI:     portableEntriesFromLockEntries(lock.UIs, providermanifestv1.KindWebUI),
 		},
 	}
 }
@@ -189,21 +196,25 @@ func validateProviderLockfile(lock *providerLockfile) error {
 	if lock.Schema != providerLockSchemaName {
 		return fmt.Errorf("unsupported lockfile schema %q; run `gestaltd init` to upgrade", lock.Schema)
 	}
-	if lock.SchemaVersion != providerLockSchemaVersion {
+	switch lock.SchemaVersion {
+	case 1, providerLockSchemaVersion:
+	default:
 		return fmt.Errorf("unsupported lockfile schema version %d; run `gestaltd init` to upgrade", lock.SchemaVersion)
 	}
 	return nil
 }
 
-func portableEntriesFromLockEntries(entries map[string]LockEntry) map[string]portableLockEntry {
+func portableEntriesFromLockEntries(entries map[string]LockEntry, kind string) map[string]portableLockEntry {
 	if len(entries) == 0 {
 		return nil
 	}
 	portable := make(map[string]portableLockEntry, len(entries))
 	for name, entry := range entries {
 		portable[name] = portableLockEntry{
-			Fingerprint: entry.Fingerprint,
-			Source:      entry.Source,
+			InputDigest: entry.Fingerprint,
+			Package:     entry.Source,
+			Kind:        kind,
+			Runtime:     portableRuntimeForKind(kind),
 			Version:     entry.Version,
 			Archives:    maps.Clone(entry.Archives),
 		}
@@ -217,12 +228,27 @@ func lockEntriesFromPortableEntries(entries map[string]portableLockEntry) map[st
 	}
 	runtimeEntries := make(map[string]LockEntry, len(entries))
 	for name, entry := range entries {
+		fingerprint := entry.InputDigest
+		if fingerprint == "" {
+			fingerprint = entry.Fingerprint
+		}
+		source := entry.Source
+		if source == "" {
+			source = entry.Package
+		}
 		runtimeEntries[name] = LockEntry{
-			Fingerprint: entry.Fingerprint,
-			Source:      entry.Source,
+			Fingerprint: fingerprint,
+			Source:      source,
 			Version:     entry.Version,
 			Archives:    maps.Clone(entry.Archives),
 		}
 	}
 	return runtimeEntries
+}
+
+func portableRuntimeForKind(kind string) string {
+	if kind == providermanifestv1.KindWebUI {
+		return providerLockRuntimeAssets
+	}
+	return providerLockRuntimeExecutable
 }
