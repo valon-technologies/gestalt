@@ -429,7 +429,7 @@ fn test_error_response() {
     .create();
 
     cli_command_for_server(home.path(), &server)
-        .args(["invoke", "auth_svc", "list_items"])
+        .args(["plugins", "invoke", "auth_svc", "list_items"])
         .assert()
         .failure()
         .stderr(predicate::str::contains(
@@ -507,7 +507,7 @@ fn test_list_operations_formats_parameters() {
         )
         .create();
 
-    let output = run_cli(&server, &["invoke", "test_svc"]);
+    let output = run_cli(&server, &["plugins", "invoke", "test_svc"]);
     mock.assert();
     assert!(
         output.status.success(),
@@ -1355,14 +1355,15 @@ fn test_describe_operation() {
     .with_body(catalog_body())
     .create();
 
-    let client = create_client(&server);
-    let result =
-        gestalt::commands::describe::describe(&client, "test_svc", "do_thing", Format::Table);
-
+    let output = run_cli(&server, &["plugins", "describe", "test_svc", "do_thing"]);
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
     mock.assert();
-    assert!(result.is_ok());
 
-    // "plugins describe" subcommand reaches the same handler
+    // Legacy top-level alias still routes to the same handler.
     let mock = json_mock!(
         server,
         Method::GET,
@@ -1372,7 +1373,7 @@ fn test_describe_operation() {
     .with_body(catalog_body())
     .create();
 
-    let output = run_cli(&server, &["plugins", "describe", "test_svc", "do_thing"]);
+    let output = run_cli(&server, &["describe", "test_svc", "do_thing"]);
     assert!(
         output.status.success(),
         "stderr: {}",
@@ -1625,6 +1626,7 @@ fn test_cli_invoke_table_keeps_nested_json_inline() {
     cmd.env("GESTALT_API_KEY", TEST_TOKEN).args([
         "--url",
         &server.url(),
+        "plugins",
         "invoke",
         "test_svc",
         "do_thing",
@@ -1662,6 +1664,7 @@ fn test_cli_invoke_rejects_duplicate_scalar_params() {
     cmd.env("GESTALT_API_KEY", "test-token").args([
         "--url",
         &server.url(),
+        "plugins",
         "invoke",
         "test_svc",
         "do_thing",
@@ -1687,7 +1690,7 @@ fn test_prefix_match_shows_filtered_table() {
     .with_body(multi_operation_catalog())
     .create();
 
-    let output = run_cli(&server, &["invoke", "test_svc", "widgets"]);
+    let output = run_cli(&server, &["plugins", "invoke", "test_svc", "widgets"]);
     assert!(
         output.status.success(),
         "stderr: {}",
@@ -1707,7 +1710,10 @@ fn test_prefix_match_shows_filtered_table() {
     );
 
     // Middle-tier prefix: "widgets.bulk" filters to three-segment operations only
-    let output = run_cli(&server, &["invoke", "test_svc", "widgets", "bulk"]);
+    let output = run_cli(
+        &server,
+        &["plugins", "invoke", "test_svc", "widgets", "bulk"],
+    );
     assert!(
         output.status.success(),
         "stderr: {}",
@@ -1779,7 +1785,7 @@ fn test_space_separated_segments_invoke() {
 
     let output = run_cli(
         &server,
-        &["invoke", "test_svc", "widgets", "bulk", "create"],
+        &["plugins", "invoke", "test_svc", "widgets", "bulk", "create"],
     );
     assert!(
         output.status.success(),
@@ -1788,7 +1794,6 @@ fn test_space_separated_segments_invoke() {
     );
     deep_mock.assert();
 
-    // "plugins invoke" subcommand resolves the same way
     let subcommand_mock = authed_json_mock!(
         server,
         Method::GET,
@@ -1822,7 +1827,7 @@ fn test_no_match_returns_error() {
     .with_body(multi_operation_catalog())
     .create();
 
-    let output = run_cli(&server, &["invoke", "test_svc", "nonexistent"]);
+    let output = run_cli(&server, &["plugins", "invoke", "test_svc", "nonexistent"]);
     assert!(!output.status.success());
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(stderr.contains("no operation matching"), "stderr: {stderr}");
@@ -1842,7 +1847,7 @@ fn test_prefix_match_with_params_warns() {
 
     let output = run_cli(
         &server,
-        &["invoke", "test_svc", "widgets", "-p", "name=foo"],
+        &["plugins", "invoke", "test_svc", "widgets", "-p", "name=foo"],
     );
     assert!(
         output.status.success(),
