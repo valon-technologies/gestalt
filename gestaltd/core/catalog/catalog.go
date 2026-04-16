@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"regexp"
@@ -16,6 +17,27 @@ const (
 	TransportREST           = "rest"
 	TransportPlugin         = "plugin"
 )
+
+type operationContextKey struct{}
+type operationContextValue struct {
+	Provider  string
+	Operation CatalogOperation
+}
+
+func WithOperationContext(ctx context.Context, provider string, op CatalogOperation) context.Context {
+	if ctx == nil {
+		return nil
+	}
+	return context.WithValue(ctx, operationContextKey{}, operationContextValue{Provider: provider, Operation: op})
+}
+func OperationFromContext(ctx context.Context, provider, operation string) (CatalogOperation, bool) {
+	if ctx != nil {
+		if value, ok := ctx.Value(operationContextKey{}).(operationContextValue); ok && value.Provider == provider && value.Operation.ID == operation {
+			return value.Operation, true
+		}
+	}
+	return CatalogOperation{}, false
+}
 
 // Catalog is the normalized on-disk representation for a provider's tool
 // surface. It intentionally carries richer metadata than core.Operation so the

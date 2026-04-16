@@ -3012,6 +3012,62 @@ func TestNewServer_DynamicCatalogProviderListsSessionTools(t *testing.T) {
 	if result.Tools[0].Name != "clickhouse_run_query" {
 		t.Fatalf("expected clickhouse_run_query, got %q", result.Tools[0].Name)
 	}
+
+	prov.cat = &catalog.Catalog{
+		Name: "clickhouse",
+		Operations: []catalog.CatalogOperation{
+			{
+				ID:          "run_query",
+				Method:      http.MethodGet,
+				Path:        "/queries/{queryId}",
+				Transport:   catalog.TransportREST,
+				Description: "Execute a SQL query",
+				Parameters: []catalog.CatalogParameter{
+					{Name: "queryId", Type: "string", Location: "path", WireName: "queryId", Required: true},
+				},
+			},
+		},
+	}
+	coreintegration.CompileSchemas(prov.cat)
+	prov.sessionCatalogFn = func(_ context.Context, token string) (*catalog.Catalog, error) {
+		gotToken = token
+		return &catalog.Catalog{
+			Name: "clickhouse",
+			Operations: []catalog.CatalogOperation{
+				{
+					ID:          "run_query",
+					Method:      http.MethodGet,
+					Transport:   catalog.TransportREST,
+					Description: "Execute a SQL query",
+				},
+			},
+		}, nil
+	}
+
+	sessionResult := listToolsForSession(t, srv, ctxWithPrincipal("stub-user-id"), newTestSessionWithTools())
+	if len(sessionResult.Tools) != 1 {
+		t.Fatalf("expected 1 merged session tool, got %d", len(sessionResult.Tools))
+	}
+
+	rawTool, err := json.Marshal(sessionResult.Tools[0])
+	if err != nil {
+		t.Fatalf("marshal tool: %v", err)
+	}
+	var toolJSON map[string]any
+	if err := json.Unmarshal(rawTool, &toolJSON); err != nil {
+		t.Fatalf("unmarshal tool: %v", err)
+	}
+	inputSchema, ok := toolJSON["inputSchema"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected inputSchema object, got %#v", toolJSON["inputSchema"])
+	}
+	properties, ok := inputSchema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected inputSchema.properties, got %#v", inputSchema["properties"])
+	}
+	if _, ok := properties["queryId"]; !ok {
+		t.Fatalf("expected merged session tool schema to include queryId, got %#v", properties)
+	}
 }
 
 func TestNewServer_DynamicCatalogProviderCallsSessionTool(t *testing.T) {

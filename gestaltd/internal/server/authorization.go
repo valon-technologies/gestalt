@@ -52,15 +52,12 @@ func rejectWorkloadSelectors(w http.ResponseWriter, p *principal.Principal, conn
 }
 
 func (s *Server) workloadBindingSelectors(p *principal.Principal, provider, connection, instance string) (string, string) {
-	resolveConnection := func(connection string) string {
-		return s.sessionCatalogConnections(provider, nil, connection)[0]
-	}
 	if p == nil || p.Kind != principal.KindWorkload {
-		return resolveConnection(connection), instance
+		return s.resolvedSessionCatalogConnection(provider, connection), instance
 	}
 	binding, ok := s.workloadBinding(p, provider)
 	if !ok {
-		return resolveConnection(connection), instance
+		return s.resolvedSessionCatalogConnection(provider, connection), instance
 	}
 	if connection == "" {
 		connection = binding.Connection
@@ -68,7 +65,7 @@ func (s *Server) workloadBindingSelectors(p *principal.Principal, provider, conn
 	if instance == "" {
 		instance = binding.Instance
 	}
-	return resolveConnection(connection), instance
+	return s.resolvedSessionCatalogConnection(provider, connection), instance
 }
 
 func (s *Server) workloadBindingConnected(ctx context.Context, binding authorization.CredentialBinding, provider string) (bool, error) {

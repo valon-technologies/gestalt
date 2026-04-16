@@ -112,9 +112,12 @@ func (r *Restricted) Execute(ctx context.Context, operation string, params map[s
 	if alias, ok := r.aliases[operation]; ok {
 		innerName = alias
 	}
+	if op, ok := catalog.OperationFromContext(ctx, r.Name(), operation); ok {
+		op.ID = innerName
+		ctx = catalog.WithOperationContext(ctx, r.Name(), op)
+	}
 	return r.inner.Execute(ctx, innerName, params, token)
 }
-
 func (r *Restricted) Catalog() *catalog.Catalog {
 	cat := r.inner.Catalog()
 	if cat == nil {
