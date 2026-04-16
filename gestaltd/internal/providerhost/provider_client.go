@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"strings"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	coreintegration "github.com/valon-technologies/gestalt/server/core/integration"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"google.golang.org/grpc/codes"
@@ -206,7 +208,9 @@ func (p *remoteProviderBase) sessionCatalog(ctx context.Context, token string) (
 	if err != nil {
 		return nil, err
 	}
-	return p.decorateCatalog(cat), nil
+	cat = p.decorateCatalog(cat)
+	coreintegration.CompileSchemas(cat)
+	return cat, nil
 }
 
 type remoteProviderWithSessionCatalog struct{ *remoteProviderBase }
@@ -220,6 +224,25 @@ func (p *remoteProviderBase) decorateCatalog(cat *catalog.Catalog) *catalog.Cata
 		return nil
 	}
 	decorated := cat.Clone()
+	if p.catalog != nil {
+		decorated.BaseURL = p.catalog.BaseURL
+		decorated.AuthStyle = p.catalog.AuthStyle
+		if len(p.catalog.Headers) > 0 {
+			headers := maps.Clone(p.catalog.Headers)
+			maps.Copy(headers, decorated.Headers)
+			decorated.Headers = headers
+		}
+		for i := range decorated.Operations {
+			staticOp, ok := invocation.CatalogOperation(p.catalog, decorated.Operations[i].ID)
+			if !ok {
+				continue
+			}
+			if decorated.Operations[i].Transport == "" && decorated.Operations[i].Path == "" && decorated.Operations[i].Query == "" {
+				decorated.Operations[i].Transport = staticOp.Transport
+			}
+			decorated.Operations[i] = invocation.MergeCatalogOperation(staticOp, decorated.Operations[i])
+		}
+	}
 	if decorated.Name == "" {
 		decorated.Name = p.name
 	}

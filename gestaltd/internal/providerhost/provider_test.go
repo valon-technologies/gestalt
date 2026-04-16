@@ -11,6 +11,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	coreintegration "github.com/valon-technologies/gestalt/server/core/integration"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
@@ -61,15 +62,57 @@ func (p *roundTripProvider) Execute(ctx context.Context, operation string, param
 	}, nil
 }
 
-func (p *roundTripProvider) Catalog() *catalog.Catalog {
-	return &catalog.Catalog{
+func roundTripOperation(allowedRoles ...string) catalog.CatalogOperation {
+	return catalog.CatalogOperation{
+		ID:           "echo",
+		ProviderID:   "queries",
+		Method:       http.MethodPost,
+		Path:         "/v1/queries/{queryId}",
+		Query:        "view=full",
+		Title:        "Echo",
+		Description:  "Echo input",
+		AllowedRoles: append([]string(nil), allowedRoles...),
+		Transport:    catalog.TransportREST,
+		Parameters: []catalog.CatalogParameter{
+			{Name: "message", Type: "string", Description: "message", Required: true},
+			{Name: "query_id", WireName: "queryId", Type: "string", Location: "path", Description: "query id", Required: true},
+		},
+	}
+}
+
+func roundTripPluginOperation(allowedRoles ...string) catalog.CatalogOperation {
+	return catalog.CatalogOperation{
+		ID:           "plugin_echo",
+		Method:       http.MethodPost,
+		Description:  "Plugin echo",
+		AllowedRoles: append([]string(nil), allowedRoles...),
+		Parameters: []catalog.CatalogParameter{
+			{Name: "message", Type: "string", Description: "message", Required: true},
+		},
+	}
+}
+
+func roundTripStaticCatalog() *catalog.Catalog {
+	cat := &catalog.Catalog{
 		Name:        "roundtrip",
 		DisplayName: "Round Trip",
 		Description: "test provider",
+		BaseURL:     "https://roundtrip.example.com",
+		AuthStyle:   "bearer",
+		Headers: map[string]string{
+			"X-Env": "test",
+		},
 		Operations: []catalog.CatalogOperation{
-			{ID: "echo", Method: http.MethodPost, AllowedRoles: []string{"admin"}},
+			roundTripOperation("admin"),
+			roundTripPluginOperation("admin"),
 		},
 	}
+	coreintegration.CompileSchemas(cat)
+	return cat
+}
+
+func (p *roundTripProvider) Catalog() *catalog.Catalog {
+	return roundTripStaticCatalog()
 }
 
 func (p *roundTripProvider) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
@@ -97,7 +140,21 @@ func (p *roundTripProvider) CatalogForRequest(ctx context.Context, token string)
 		DisplayName: fmt.Sprintf("%s|%s|%s|%s|%s|%s|%s|%s|%s", token, subjectID, subjectKind, displayName, identityPresent, authSource, credential.Mode, access.Policy, access.Role),
 		Description: "session catalog",
 		Operations: []catalog.CatalogOperation{
-			{ID: "echo", Method: http.MethodPost, AllowedRoles: []string{"viewer"}},
+			{
+				ID:           "echo",
+				AllowedRoles: []string{"viewer"},
+				Parameters: []catalog.CatalogParameter{
+					{Name: "message", Type: "string", Description: "message", Required: true},
+					{Name: "query_id", Type: "string", Description: "query id", Required: true},
+				},
+			},
+			{
+				ID:           "plugin_echo",
+				AllowedRoles: []string{"viewer"},
+				Parameters: []catalog.CatalogParameter{
+					{Name: "message", Type: "string", Description: "message", Required: true},
+				},
+			},
 		},
 	}, nil
 }
@@ -118,15 +175,8 @@ func roundTripStaticSpec() StaticProviderSpec {
 		DisplayName:    "Round Trip",
 		Description:    "test provider",
 		ConnectionMode: core.ConnectionModeEither,
-		Catalog: &catalog.Catalog{
-			Name:        "roundtrip",
-			DisplayName: "Round Trip",
-			Description: "test provider",
-			Operations: []catalog.CatalogOperation{
-				{ID: "echo", Method: http.MethodPost, AllowedRoles: []string{"admin"}},
-			},
-		},
-		AuthTypes: []string{"manual"},
+		Catalog:        roundTripStaticCatalog(),
+		AuthTypes:      []string{"manual"},
 		ConnectionParams: map[string]core.ConnectionParamDef{
 			"tenant":  {Required: true, Description: "Tenant slug"},
 			"team_id": {From: "token_response", Field: "team_id"},
@@ -184,7 +234,7 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 	if got := prov.AuthTypes(); len(got) != 1 || got[0] != "manual" {
 		t.Fatalf("unexpected auth types: %#v", got)
 	}
-	if cat := prov.Catalog(); cat == nil || len(cat.Operations) != 1 || cat.Operations[0].ID != "echo" {
+	if cat := prov.Catalog(); cat == nil || len(cat.Operations) != 2 || cat.Operations[0].ID != "echo" {
 		t.Fatalf("unexpected Catalog result: %+v", cat)
 	}
 
@@ -260,8 +310,40 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 			if sessionCat.Name != "roundtrip-session" || sessionCat.DisplayName != tc.wantSessionCatalog {
 				t.Fatalf("unexpected session catalog: %+v", sessionCat)
 			}
-			if got := sessionCat.Operations[0].AllowedRoles; len(got) != 1 || got[0] != "viewer" {
+			if sessionCat.BaseURL != "https://roundtrip.example.com" || sessionCat.AuthStyle != "bearer" {
+				t.Fatalf("unexpected session catalog transport metadata: %+v", sessionCat)
+			}
+			if got := sessionCat.Headers["X-Env"]; got != "test" {
+				t.Fatalf("unexpected session catalog headers: %+v", sessionCat.Headers)
+			}
+			if len(sessionCat.Operations) != 2 {
+				t.Fatalf("unexpected session catalog operations: %+v", sessionCat.Operations)
+			}
+			opsByID := map[string]catalog.CatalogOperation{}
+			for _, op := range sessionCat.Operations {
+				opsByID[op.ID] = op
+			}
+			echoOp := opsByID["echo"]
+			if got := echoOp.AllowedRoles; len(got) != 1 || got[0] != "viewer" {
 				t.Fatalf("unexpected session catalog allowedRoles: %#v", got)
+			}
+			if echoOp.Transport != catalog.TransportREST {
+				t.Fatalf("unexpected session catalog operation identifiers: %+v", echoOp)
+			}
+			if echoOp.Path != "/v1/queries/{queryId}" || echoOp.Query != "view=full" {
+				t.Fatalf("unexpected session catalog request metadata: %+v", echoOp)
+			}
+			if len(echoOp.InputSchema) == 0 {
+				t.Fatalf("expected synthesized input schema, got %+v", echoOp)
+			}
+			if len(echoOp.Parameters) != 2 {
+				t.Fatalf("unexpected session catalog parameters: %+v", echoOp.Parameters)
+			}
+			if echoOp.Parameters[1].WireName != "queryId" || echoOp.Parameters[1].Location != "path" {
+				t.Fatalf("unexpected session catalog path parameter metadata: %+v", echoOp.Parameters[1])
+			}
+			if pluginOp := opsByID["plugin_echo"]; pluginOp.Transport != catalog.TransportPlugin {
+				t.Fatalf("expected plugin session operation to preserve plugin transport, got %+v", pluginOp)
 			}
 		})
 	}

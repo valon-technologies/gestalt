@@ -59,14 +59,15 @@ func hydrateSessionToolsForInstance(ctx context.Context, cfg Config, providerNam
 		if err != nil {
 			continue
 		}
-		if !core.SupportsSessionCatalog(prov) {
+		scp, ok := prov.(core.SessionCatalogProvider)
+		if !ok {
 			continue
 		}
 		sessionCtx, token, connection, err := resolveSessionToken(ctx, cfg, provName, prov, instance)
 		if err != nil {
 			continue
 		}
-		cat, _, err := core.CatalogForRequest(sessionCtx, prov, token)
+		cat, err := scp.CatalogForRequest(sessionCtx, token)
 		if err != nil {
 			continue
 		}

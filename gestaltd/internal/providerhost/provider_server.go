@@ -50,14 +50,15 @@ func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest)
 }
 
 func (s *ProviderServer) GetSessionCatalog(ctx context.Context, req *proto.GetSessionCatalogRequest) (*proto.GetSessionCatalogResponse, error) {
-	if !core.SupportsSessionCatalog(s.provider) {
+	scp, ok := s.provider.(core.SessionCatalogProvider)
+	if !ok {
 		return nil, status.Error(codes.Unimplemented, "provider does not support session catalogs")
 	}
 	ctx = applyRequestContext(ctx, req.GetContext())
 	if len(req.GetConnectionParams()) > 0 {
 		ctx = core.WithConnectionParams(ctx, req.GetConnectionParams())
 	}
-	cat, _, err := core.CatalogForRequest(ctx, s.provider, req.GetToken())
+	cat, err := scp.CatalogForRequest(ctx, req.GetToken())
 	if err != nil {
 		return nil, status.Errorf(codes.Unknown, "session catalog: %v", err)
 	}

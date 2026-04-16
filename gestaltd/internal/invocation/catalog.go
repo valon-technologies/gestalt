@@ -77,7 +77,8 @@ func ResolveOperation(ctx context.Context, prov core.Provider, provName string, 
 }
 
 func resolveSessionCatalog(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, connection, instance string) (*catalog.Catalog, bool, error) {
-	if !core.SupportsSessionCatalog(prov) || (prov.ConnectionMode() != core.ConnectionModeNone && (resolver == nil || p == nil)) {
+	scp, ok := prov.(core.SessionCatalogProvider)
+	if !ok || (prov.ConnectionMode() != core.ConnectionModeNone && (resolver == nil || p == nil)) {
 		return nil, false, nil
 	}
 	token := ""
@@ -90,10 +91,9 @@ func resolveSessionCatalog(ctx context.Context, prov core.Provider, provName str
 	} else {
 		ctx = WithCredentialContext(ctx, CredentialContext{Mode: core.ConnectionModeNone})
 	}
-	cat, _, err := core.CatalogForRequest(ctx, prov, token)
+	cat, err := scp.CatalogForRequest(ctx, token)
 	return cat, true, err
 }
-
 func resolveSessionOperation(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, operation string, connections []string, instance string) (catalog.CatalogOperation, string, bool, error) {
 	if len(connections) == 0 {
 		connections = []string{""}
