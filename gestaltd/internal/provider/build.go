@@ -331,7 +331,7 @@ func buildAuth(def *Definition, conn config.ConnectionDef, baseURL string, clien
 		return core.NoOAuth{}, nil
 	case "":
 		if def.Auth.AuthorizationURL == "" {
-			return oauth.ManualAuthHandler{}, nil
+			return core.NoOAuth{}, nil
 		}
 	}
 

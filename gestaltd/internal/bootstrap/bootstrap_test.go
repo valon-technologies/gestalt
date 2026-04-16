@@ -649,6 +649,38 @@ func TestBootstrap(t *testing.T) {
 				t.Fatalf("catalog operation order = %v, want %v", got, want)
 			}
 		})
+
+		t.Run("declarative omitted auth remains unauthenticated", func(t *testing.T) {
+			t.Parallel()
+
+			result, _ := bootstrapDeclarative(t, &providermanifestv1.Manifest{
+				Spec: &providermanifestv1.Spec{
+					Surfaces: &providermanifestv1.ProviderSurfaces{
+						REST: &providermanifestv1.RESTSurface{
+							BaseURL:    "https://example.test",
+							Connection: "workspace",
+							Operations: []providermanifestv1.ProviderOperation{
+								{Name: "users.list", Method: http.MethodGet, Path: "/users"},
+							},
+						},
+					},
+					Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+						"workspace": {Mode: providermanifestv1.ConnectionModeUser},
+					},
+				},
+			}, nil)
+
+			prov, err := result.Providers.Get("slack")
+			if err != nil {
+				t.Fatalf("Providers.Get: %v", err)
+			}
+			if got := prov.AuthTypes(); len(got) != 0 {
+				t.Fatalf("auth types = %v, want none", got)
+			}
+			if got := prov.CredentialFields(); len(got) != 0 {
+				t.Fatalf("credential fields = %v, want none", got)
+			}
+		})
 	})
 }
 
