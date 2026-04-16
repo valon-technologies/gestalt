@@ -65,16 +65,7 @@ func isExecutablePlugin(entry *config.ProviderEntry) bool {
 	}
 	manifest := entry.ResolvedManifest
 	spec := entry.ManifestSpec()
-	if manifest == nil || spec == nil {
-		return false
-	}
-	if spec.IsSpecLoaded() && manifest.Entrypoint == nil {
-		return false
-	}
-	if spec.IsDeclarative() && manifest.Entrypoint == nil {
-		return false
-	}
-	return true
+	return manifest != nil && spec != nil && (manifest.Entrypoint != nil || (!spec.IsSpecLoaded() && !spec.IsDeclarative()))
 }
 
 func resolveStaticCatalog(ctx context.Context, name string, entry *config.ProviderEntry) (*catalog.Catalog, bool, error) {
@@ -86,41 +77,25 @@ func resolveStaticCatalog(ctx context.Context, name string, entry *config.Provid
 	allowed := effectiveAllowedOperations(entry, spec)
 	switch {
 	case spec.IsSpecLoaded() && manifest.Entrypoint == nil:
-		return resolveSpecLoadedCatalog(ctx, name, entry, spec, allowed)
+		apiCatalog, err := loadConfiguredAPICatalog(ctx, name, entry, spec, allowed)
+		if err != nil {
+			return nil, false, err
+		}
+		_, hasMCP := resolvedSurfaceURL(entry, spec, config.SpecSurfaceMCP)
+		return apiCatalog, hasMCP && apiCatalog == nil, nil
 	case spec.IsDeclarative() && manifest.Entrypoint == nil:
-		return resolveDeclarativeCatalog(name, manifest, allowed)
+		rawCatalog, err := providerhost.CatalogFromDeclarativeManifest(manifest)
+		if err != nil {
+			return nil, false, fmt.Errorf("plugin %q declarative catalog: %w", name, err)
+		}
+		filtered, err := applyOperationExposure(rawCatalog, allowed)
+		if err != nil {
+			return nil, false, fmt.Errorf("plugin %q declarative catalog: %w", name, err)
+		}
+		return filtered, false, nil
 	default:
 		return resolveExecutableCatalog(ctx, name, entry, manifest, spec, allowed)
 	}
-}
-
-func resolveSpecLoadedCatalog(ctx context.Context, name string, entry *config.ProviderEntry, spec *providermanifestv1.Spec, allowed map[string]*config.OperationOverride) (*catalog.Catalog, bool, error) {
-	apiCatalog, err := loadConfiguredAPICatalog(ctx, name, entry, spec, allowed)
-	if err != nil {
-		return nil, false, err
-	}
-	_, hasMCP := resolvedSurfaceURL(entry, spec, config.SpecSurfaceMCP)
-	return apiCatalog, hasMCP && apiCatalog == nil, nil
-}
-
-func resolveDeclarativeCatalog(name string, manifest *providermanifestv1.Manifest, allowed map[string]*config.OperationOverride) (*catalog.Catalog, bool, error) {
-	rawCatalog, err := loadDeclarativeCatalog(name, manifest)
-	if err != nil {
-		return nil, false, err
-	}
-	filtered, err := applyOperationExposure(rawCatalog, allowed)
-	if err != nil {
-		return nil, false, fmt.Errorf("plugin %q declarative catalog: %w", name, err)
-	}
-	return filtered, false, nil
-}
-
-func loadDeclarativeCatalog(name string, manifest *providermanifestv1.Manifest) (*catalog.Catalog, error) {
-	prov, err := providerhost.NewDeclarativeProvider(manifest, nil)
-	if err != nil {
-		return nil, fmt.Errorf("plugin %q declarative catalog: %w", name, err)
-	}
-	return prov.Catalog(), nil
 }
 
 func resolveExecutableCatalog(ctx context.Context, name string, entry *config.ProviderEntry, manifest *providermanifestv1.Manifest, spec *providermanifestv1.Spec, allowed map[string]*config.OperationOverride) (*catalog.Catalog, bool, error) {
@@ -143,9 +118,9 @@ func resolveExecutableCatalog(ctx context.Context, name string, entry *config.Pr
 	}
 
 	if spec.IsDeclarative() {
-		apiCatalog, err := loadDeclarativeCatalog(name, manifest)
+		apiCatalog, err := providerhost.CatalogFromDeclarativeManifest(manifest)
 		if err != nil {
-			return nil, false, err
+			return nil, false, fmt.Errorf("plugin %q declarative catalog: %w", name, err)
 		}
 		if err := validateAllowedOperationCoverage(name, allowed, pluginCatalog, apiCatalog); err != nil {
 			return nil, false, err
