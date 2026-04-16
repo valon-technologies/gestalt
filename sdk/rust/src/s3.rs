@@ -390,7 +390,7 @@ impl S3 {
 
         let response = self
             .client
-            .write_object(iter(std::iter::once(open).chain(data.into_iter())))
+            .write_object(iter(std::iter::once(open).chain(data)))
             .await
             .map_err(map_status)?;
         required_object_meta(
