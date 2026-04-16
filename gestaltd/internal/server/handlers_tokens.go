@@ -175,35 +175,55 @@ func (s *Server) revokeAllAPITokens(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"status": "revoked", "count": count})
 }
 
-func (s *Server) connectionInfosForPlugin(integration string, plugin *config.ProviderEntry, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo) []connectionDefInfo {
+func (s *Server) connectionInfosForPlugin(integration string, plugin *config.ProviderEntry, integrationAuthTypes []string, defaultCredentialFields []credentialFieldInfo) ([]string, []connectionDefInfo) {
 	if plugin == nil {
-		return []connectionDefInfo{}
+		return integrationAuthTypes, []connectionDefInfo{}
 	}
 	manifestProvider := plugin.ManifestSpec()
-
 	names, err := bootstrap.AdvertisedConnectionNames(plugin)
 	if err != nil {
-		return []connectionDefInfo{}
+		return integrationAuthTypes, []connectionDefInfo{}
 	}
-	infos := make([]connectionDefInfo, 0, len(names))
-	for _, name := range names {
-		infoName, includeWithoutAuth, ok := name, true, true
+	resolve := func(name string) (string, config.ConnectionDef, bool, bool) {
+		infoName, includeWithoutAuth := name, true
 		var conn config.ConnectionDef
+		var ok bool
 		if name == config.PluginConnectionName {
-			conn = config.EffectivePluginConnectionDef(plugin, manifestProvider)
+			conn, ok = config.EffectivePluginConnectionDef(plugin, manifestProvider), true
 			infoName, includeWithoutAuth = config.PluginConnectionAlias, false
 		} else {
 			conn, ok = config.EffectiveNamedConnectionDef(plugin, manifestProvider, name)
 		}
-		if !ok || !userFacingConnection(conn) {
+		if !ok || conn.Mode == providermanifestv1.ConnectionModeIdentity {
+			return "", config.ConnectionDef{}, false, false
+		}
+		return infoName, conn, includeWithoutAuth, true
+	}
+	if len(integrationAuthTypes) == 0 {
+		combined := make([]string, 0, 2)
+		for _, name := range names {
+			infoName, conn, _, ok := resolve(name)
+			if !ok {
+				continue
+			}
+			combined = append(combined, s.supportedConnectionAuthTypes(integration, infoName, connectionAuthTypes(conn.Auth, nil))...)
+		}
+		integrationAuthTypes = userFacingAuthTypes(combined)
+		if integrationAuthTypes == nil {
+			integrationAuthTypes = []string{}
+		}
+	}
+	infos := make([]connectionDefInfo, 0, len(names))
+	for _, name := range names {
+		infoName, conn, includeWithoutAuth, ok := resolve(name)
+		if !ok {
 			continue
 		}
 		if info, ok := s.connectionInfoFromAuth(integration, infoName, conn, integrationAuthTypes, defaultCredentialFields, includeWithoutAuth); ok {
 			infos = append(infos, info)
 		}
 	}
-
-	return infos
+	return integrationAuthTypes, infos
 }
 
 func userFacingConnectionName(name string) string {
@@ -217,11 +237,7 @@ func (s *Server) populateIntegrationSettings(info *integrationInfo, prov core.Pr
 	authTypes := userFacingAuthTypes(prov.AuthTypes())
 	info.ConnectionParams = connectionParamInfosFromProvider(prov)
 	info.CredentialFields = credentialFieldInfosFromProvider(prov, authTypes)
-	info.Connections = s.connectionInfosForPlugin(info.Name, s.pluginDefs[info.Name], authTypes, info.CredentialFields)
-	info.AuthTypes = resolvedIntegrationAuthTypes(authTypes, info.Connections)
-	if len(authTypes) == 0 && len(info.AuthTypes) > 0 {
-		info.Connections = s.connectionInfosForPlugin(info.Name, s.pluginDefs[info.Name], info.AuthTypes, info.CredentialFields)
-	}
+	info.AuthTypes, info.Connections = s.connectionInfosForPlugin(info.Name, s.pluginDefs[info.Name], authTypes, info.CredentialFields)
 }
 
 func credentialFieldInfosFromProvider(prov core.Provider, authTypes []string) []credentialFieldInfo {
@@ -303,10 +319,6 @@ func (s *Server) connectionInfoFromAuth(integration, name string, conn config.Co
 	return info, true
 }
 
-func userFacingConnection(conn config.ConnectionDef) bool {
-	return conn.Mode != providermanifestv1.ConnectionModeIdentity
-}
-
 func defaultManualCredentialFieldInfos() []credentialFieldInfo {
 	return []credentialFieldInfo{{
 		Name:  "credential",
@@ -338,20 +350,6 @@ func removeAuthType(authTypes []string, drop string) []string {
 		}
 	}
 	return filtered
-}
-
-func resolvedIntegrationAuthTypes(authTypes []string, connections []connectionDefInfo) []string {
-	if len(authTypes) > 0 {
-		return authTypes
-	}
-	combined := make([]string, 0, 2)
-	for _, connection := range connections {
-		combined = append(combined, connection.AuthTypes...)
-	}
-	if authTypes = userFacingAuthTypes(combined); len(authTypes) > 0 {
-		return authTypes
-	}
-	return []string{}
 }
 
 func connectionAuthTypes(auth config.ConnectionAuthDef, integrationAuthTypes []string) []string {
