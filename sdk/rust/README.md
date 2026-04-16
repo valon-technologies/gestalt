@@ -70,11 +70,15 @@ Current scope:
 
 ## Codegen strategy
 
-Bindings are checked into [`src/generated`](src/generated) so crate consumers do
-not need a protobuf toolchain when building `gestalt-sdk`.
+Bindings are checked into
+[`src/generated`](https://github.com/valon-technologies/gestalt/tree/main/sdk/rust/src/generated)
+so crate consumers do not need a protobuf toolchain when building
+`gestalt-sdk`.
 
 Maintainers regenerate them from the shared proto definitions in
-[`sdk/proto`](../proto) with a helper binary under `tools/rust-sdk-codegen/`,
+[`sdk/proto`](https://github.com/valon-technologies/gestalt/tree/main/sdk/proto)
+with a helper binary under
+[`tools/rust-sdk-codegen`](https://github.com/valon-technologies/gestalt/tree/main/tools/rust-sdk-codegen),
 which uses a vendored `protoc`.
 
 To regenerate the bindings:
