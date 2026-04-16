@@ -2,7 +2,6 @@ package integration
 
 import (
 	"context"
-	"fmt"
 	"maps"
 	"net/http"
 	"time"
@@ -149,20 +148,14 @@ func (b *Base) Execute(ctx context.Context, operation string, params map[string]
 	if b.ExecuteFunc != nil {
 		return b.ExecuteFunc(ctx, operation, params, token)
 	}
-	var catOp catalog.CatalogOperation
-	if op, ok := catalog.OperationFromContext(ctx, b.IntegrationName, operation); ok {
-		catOp = op
-	} else {
-		found := findCatalogOp(b.catalog, operation)
-		if found == nil {
-			return nil, fmt.Errorf("unknown operation: %s", operation)
-		}
-		catOp = *found
+	catOp, err := lookupCatalogOperation(ctx, b.IntegrationName, b.catalog, operation)
+	if err != nil {
+		return nil, err
 	}
-	if catOp.Transport == transportGraphQL || (catOp.Transport == "" && catOp.Path == "" && catOp.Query != "") {
-		return b.executeGraphQL(ctx, operation, catOp.Query, params, token)
+	if isGraphQLOperation(catOp) {
+		return b.executeGraphQL(ctx, catOp, params, token)
 	}
-	return b.executeREST(ctx, operation, &catOp, params, token)
+	return b.executeREST(ctx, catOp, params, token)
 }
 func (b *Base) egressAuthStyle() egress.AuthStyle {
 	switch b.AuthStyle {

@@ -13,18 +13,15 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/egress"
 )
 
-func (b *Base) executeREST(ctx context.Context, operation string, catOp *catalog.CatalogOperation, params map[string]any, token string) (*core.OperationResult, error) {
-	if catOp == nil {
-		return nil, fmt.Errorf("unknown operation: %s", operation)
-	}
-	method := strings.ToUpper(strings.TrimSpace(catOp.Method))
+func (b *Base) executeREST(ctx context.Context, catOp catalog.CatalogOperation, params map[string]any, token string) (*core.OperationResult, error) {
+	method := operationMethod(catOp)
 	if method == "" {
-		return nil, fmt.Errorf("operation %q is missing method", operation)
+		return nil, fmt.Errorf("operation %q is missing method", catOp.ID)
 	}
 	if strings.TrimSpace(catOp.Path) == "" {
-		return nil, fmt.Errorf("operation %q is missing path", operation)
+		return nil, fmt.Errorf("operation %q is missing path", catOp.ID)
 	}
-	bodyParams, queryParams, headerParams := partitionParams(catOp, params, b.MethodDefaultParamLocations)
+	bodyParams, queryParams, headerParams := partitionParams(&catOp, params, b.MethodDefaultParamLocations)
 
 	baseURL, headers := b.resolvedURLAndHeaders(ctx)
 	for k, v := range headerParams {
@@ -56,7 +53,7 @@ func (b *Base) executeREST(ctx context.Context, operation string, catOp *catalog
 		NoRetry:       b.NoRetry,
 	}
 
-	if pgn, ok := b.Pagination[operation]; ok {
+	if pgn, ok := b.Pagination[catOp.ID]; ok {
 		return apiexec.DoPaginated(ctx, b.httpClient(), req, pgn)
 	}
 
@@ -72,7 +69,7 @@ func (b *Base) executeREST(ctx context.Context, operation string, catOp *catalog
 	return result, nil
 }
 
-func (b *Base) executeGraphQL(ctx context.Context, operation string, query string, params map[string]any, token string) (*core.OperationResult, error) {
+func (b *Base) executeGraphQL(ctx context.Context, catOp catalog.CatalogOperation, params map[string]any, token string) (*core.OperationResult, error) {
 	gqlURL, headers := b.resolvedURLAndHeaders(ctx)
 
 	if err := b.checkEgressHost(gqlURL); err != nil {
@@ -87,7 +84,7 @@ func (b *Base) executeGraphQL(ctx context.Context, operation string, query strin
 
 	gqlReq := apiexec.GraphQLRequest{
 		URL:           gqlURL,
-		Query:         query,
+		Query:         catOp.Query,
 		Variables:     params,
 		AuthHeader:    credential.Authorization,
 		CustomHeaders: headers,
@@ -105,18 +102,6 @@ func (b *Base) checkEgressHost(rawURL string) error {
 		return fmt.Errorf("egress check: parsing URL: %w", err)
 	}
 	return b.CheckEgress(parsed.Host)
-}
-
-func findCatalogOp(cat *catalog.Catalog, id string) *catalog.CatalogOperation {
-	if cat == nil {
-		return nil
-	}
-	for i := range cat.Operations {
-		if cat.Operations[i].ID == id {
-			return &cat.Operations[i]
-		}
-	}
-	return nil
 }
 
 func partitionParams(catOp *catalog.CatalogOperation, params map[string]any, useMethodDefault bool) (body map[string]any, query map[string]any, headers map[string]string) {
