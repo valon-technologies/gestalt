@@ -75,14 +75,14 @@ func (s *StubIntegration) ConnectionMode() core.ConnectionMode {
 	}
 	return s.ConnMode
 }
-func (s *StubIntegration) AuthTypes() []string                           { return nil }
+func (s *StubIntegration) AuthTypes() []string { return nil }
 func (s *StubIntegration) ConnectionParamDefs() map[string]core.ConnectionParamDef {
 	return nil
 }
 func (s *StubIntegration) CredentialFields() []core.CredentialFieldDef { return nil }
 func (s *StubIntegration) DiscoveryConfig() *core.DiscoveryConfig      { return nil }
 func (s *StubIntegration) ConnectionForOperation(string) string        { return "" }
-func (s *StubIntegration) AuthorizationURL(string, []string) string { return "" }
+func (s *StubIntegration) AuthorizationURL(string, []string) string    { return "" }
 func (s *StubIntegration) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
 	if s.ExchangeCodeFn != nil {
 		return s.ExchangeCodeFn(ctx, code)

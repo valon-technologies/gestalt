@@ -9717,8 +9717,8 @@ func (s *stubIntegrationWithSessionCatalog) CatalogForRequest(ctx context.Contex
 	return s.catalog, nil
 }
 
-func (s *stubIntegrationWithSessionCatalog) AuthTypes() []string      { return []string{"manual"} }
-func (s *stubIntegrationWithSessionCatalog) Close() error             { return nil }
+func (s *stubIntegrationWithSessionCatalog) AuthTypes() []string { return []string{"manual"} }
+func (s *stubIntegrationWithSessionCatalog) Close() error        { return nil }
 func (s *stubIntegrationWithSessionCatalog) CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
 	if s.callFn != nil {
 		return s.callFn(ctx, name, args)

@@ -112,7 +112,7 @@ func (u *Upstream) ConnectionParamDefs() map[string]core.ConnectionParamDef {
 func (u *Upstream) CredentialFields() []core.CredentialFieldDef { return nil }
 func (u *Upstream) DiscoveryConfig() *core.DiscoveryConfig      { return nil }
 func (u *Upstream) ConnectionForOperation(string) string        { return "" }
-func (u *Upstream) Catalog() *catalog.Catalog           { return u.decorateCatalog(u.cat) }
+func (u *Upstream) Catalog() *catalog.Catalog                   { return u.decorateCatalog(u.cat) }
 
 func (u *Upstream) SetDisplayName(s string) { u.display = s }
 func (u *Upstream) SetDescription(s string) { u.desc = s }

@@ -35,7 +35,7 @@ func (s *stubProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef 
 func (s *stubProvider) CredentialFields() []core.CredentialFieldDef { return nil }
 func (s *stubProvider) DiscoveryConfig() *core.DiscoveryConfig      { return nil }
 func (s *stubProvider) ConnectionForOperation(string) string        { return "" }
-func (s *stubProvider) Catalog() *catalog.Catalog           { return nil }
+func (s *stubProvider) Catalog() *catalog.Catalog                   { return nil }
 func (s *stubProvider) Execute(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
 	return nil, nil
 }

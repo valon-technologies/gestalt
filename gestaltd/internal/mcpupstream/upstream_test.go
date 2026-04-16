@@ -272,8 +272,8 @@ func TestUpstream_ProviderMetadata(t *testing.T) {
 	if u.ConnectionMode() != core.ConnectionModeUser {
 		t.Fatalf("ConnectionMode = %q", u.ConnectionMode())
 	}
-	if _, ok := any(u).(core.ManualProvider); ok {
-		t.Fatal("expected pure MCP upstream not to implement ManualProvider")
+	if got := u.AuthTypes(); len(got) != 0 {
+		t.Fatalf("AuthTypes = %#v, want nil/empty", got)
 	}
 }
 
