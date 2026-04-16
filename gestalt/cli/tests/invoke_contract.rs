@@ -59,6 +59,38 @@ fn test_invoke_precondition_error_suggests_connect_command() {
 }
 
 #[test]
+fn test_selector_scoped_catalog_precondition_error_suggests_connect_command() {
+    let mut server = Server::new();
+    let home = TempDir::new().unwrap();
+
+    let _catalog_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/auth_svc/operations?_connection=workspace&_instance=team-a",
+        StatusCode::PRECONDITION_FAILED
+    )
+    .with_body(r#"{"error":"no token stored for integration \"auth_svc\" instance \"team-a\""}"#)
+    .create();
+
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "plugins",
+            "invoke",
+            "auth_svc",
+            "list_items",
+            "--connection",
+            "workspace",
+            "--instance",
+            "team-a",
+        ])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains(
+            "failed to load catalog for plugin 'auth_svc': plugin \"auth_svc\" is not connected. Connect it first with `gestalt plugins connect auth_svc --connection workspace --instance team-a`",
+        ));
+}
+
+#[test]
 fn test_list_operations_formats_parameters() {
     let mut server = Server::new();
     let mock = authed_json_mock!(
@@ -145,6 +177,43 @@ fn test_list_operations_json_format() {
 }
 
 #[test]
+fn test_invoke_lists_selector_scoped_catalog() {
+    let mut server = Server::new();
+    let scoped_catalog = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/test_svc/operations?_connection=workspace&_instance=team-a",
+        StatusCode::OK
+    )
+    .with_body(r#"[{"id":"scoped.run","description":"Scoped op","method":"GET","parameters":[]}]"#)
+    .create();
+
+    let output = run_cli(
+        &server,
+        &[
+            "plugins",
+            "invoke",
+            "test_svc",
+            "--connection",
+            "workspace",
+            "--instance",
+            "team-a",
+        ],
+    );
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout).contains("scoped.run"),
+        "stdout: {}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    scoped_catalog.assert();
+}
+
+#[test]
 fn test_list_operations_empty_parameters() {
     let mut server = Server::new();
     let mock = authed_json_mock!(
@@ -172,7 +241,7 @@ fn test_invoke_with_connection_and_instance() {
     let _catalog_mock = json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/test_svc/operations",
+        "/api/v1/integrations/test_svc/operations?_connection=workspace&_instance=team-a",
         StatusCode::OK
     )
     .with_body(catalog_body())
@@ -216,7 +285,7 @@ fn test_invoke_with_connection_and_instance() {
     let _secondary_catalog_mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/other_svc/operations",
+        "/api/v1/integrations/other_svc/operations?_connection=workspace&_instance=team-a",
         StatusCode::OK
     )
     .with_body(single_operation_catalog("check_status"))
@@ -317,8 +386,6 @@ fn test_describe_operation() {
 fn test_cli_invoke_merges_file_params_and_selects_output() {
     let mut server = Server::new();
     let home = TempDir::new().unwrap();
-    let input_file = home.path().join("input.json");
-    std::fs::write(&input_file, r#"{"count":1,"name":"from-file"}"#).unwrap();
 
     let _catalog_mock = authed_json_mock!(
         server,
@@ -361,11 +428,14 @@ fn test_cli_invoke_merges_file_params_and_selects_output() {
         "-p",
         "tags=two",
         "--input-file",
-        input_file.to_str().unwrap(),
+        "-",
         "--select",
         "result.id",
     ]);
-    cmd.assert().success().stdout("\"1\"\n");
+    cmd.write_stdin(r#"{"count":1,"name":"from-file"}"#)
+        .assert()
+        .success()
+        .stdout("\"1\"\n");
 
     invoke_mock.assert();
 }
@@ -385,10 +455,12 @@ fn test_cli_invoke_table_keeps_nested_json_inline() {
 
     let invoke_mock = authed_json_mock!(
         server,
-        Method::GET,
+        Method::POST,
         "/api/v1/test_svc/do_thing",
         StatusCode::OK
     )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString("{}".to_string()))
     .with_body(
         r#"{
                 "id":"abc123",
@@ -421,6 +493,164 @@ fn test_cli_invoke_table_keeps_nested_json_inline() {
         .stdout(predicate::str::contains(
             r#"[{"id":"j1","state":"done"},{"id":"j2","state":"running"}]"#,
         ));
+
+    invoke_mock.assert();
+}
+
+#[test]
+fn test_cli_invoke_uses_get_query_for_get_operations_with_params_and_selectors() {
+    let mut server = Server::new();
+    let _catalog_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/test_svc/operations?_connection=workspace&_instance=team-a",
+        StatusCode::OK
+    )
+    .with_body(
+        r#"[{
+            "id":"list_items",
+            "description":"List items",
+            "method":"GET",
+            "parameters":[
+                {"name":"filter","type":"string","location":"query"},
+                {"name":"cursor","type":"string","location":"query"}
+            ]
+        }]"#,
+    )
+    .create();
+
+    let invoke_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/test_svc/list_items?_connection=workspace&_instance=team-a&cursor=next-page&filter=open",
+        StatusCode::OK
+    )
+    .with_body(r#"{"items":[]}"#)
+    .create();
+
+    let output = run_cli(
+        &server,
+        &[
+            "plugins",
+            "invoke",
+            "test_svc",
+            "list_items",
+            "--connection",
+            "workspace",
+            "--instance",
+            "team-a",
+            "-p",
+            "filter=open",
+            "-p",
+            "cursor=next-page",
+        ],
+    );
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    invoke_mock.assert();
+}
+
+#[test]
+fn test_cli_invoke_posts_typed_get_operation_params_as_json() {
+    let mut server = Server::new();
+    let _catalog_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/test_svc/operations?_connection=workspace&_instance=team-a",
+        StatusCode::OK
+    )
+    .with_body(
+        r#"[{
+            "id":"list_items",
+            "description":"List items",
+            "method":"GET",
+            "parameters":[
+                {"name":"limit","type":"integer","location":"query"}
+            ]
+        }]"#,
+    )
+    .create();
+
+    let invoke_mock = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/test_svc/list_items",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"_connection":"workspace","_instance":"team-a","limit":10}"#.to_string(),
+    ))
+    .with_body(r#"{"items":[]}"#)
+    .create();
+
+    let output = run_cli(
+        &server,
+        &[
+            "plugins",
+            "invoke",
+            "test_svc",
+            "list_items",
+            "--connection",
+            "workspace",
+            "--instance",
+            "team-a",
+            "-p",
+            "limit:=10",
+        ],
+    );
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    invoke_mock.assert();
+}
+
+#[test]
+fn test_cli_invoke_uses_post_transport_for_non_get_catalog_methods() {
+    let mut server = Server::new();
+    let _catalog_mock = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/integrations/test_svc/operations",
+        StatusCode::OK
+    )
+    .with_body(
+        r#"[{
+            "id":"widgets.remove",
+            "description":"Remove widget",
+            "method":"DELETE",
+            "parameters":[]
+        }]"#,
+    )
+    .create();
+
+    let invoke_mock = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/test_svc/widgets.remove",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString("{}".to_string()))
+    .with_body(r#"{"ok":true}"#)
+    .create();
+
+    let output = run_cli(
+        &server,
+        &["plugins", "invoke", "test_svc", "widgets.remove"],
+    );
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
 
     invoke_mock.assert();
 }
@@ -552,10 +782,12 @@ fn test_space_separated_segments_invoke() {
 
     let deep_mock = authed_json_mock!(
         server,
-        Method::GET,
+        Method::POST,
         "/api/v1/test_svc/widgets.bulk.create",
         StatusCode::OK
     )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString("{}".to_string()))
     .with_body(r#"{"ok": true}"#)
     .create();
 
@@ -572,10 +804,12 @@ fn test_space_separated_segments_invoke() {
 
     let subcommand_mock = authed_json_mock!(
         server,
-        Method::GET,
+        Method::POST,
         "/api/v1/test_svc/widgets.delete",
         StatusCode::OK
     )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString("{}".to_string()))
     .with_body(r#"{"ok": true}"#)
     .create();
 
