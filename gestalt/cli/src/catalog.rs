@@ -3,6 +3,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::api::ApiClient;
 
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CatalogSelectors<'a> {
+    pub connection: Option<&'a str>,
+    pub instance: Option<&'a str>,
+}
+
 pub enum ResolvedOperation<'a> {
     All(&'a [CatalogOperation]),
     Exact(&'a CatalogOperation),
@@ -107,8 +113,43 @@ fn is_valid_operation_query(query: &str) -> bool {
     })
 }
 
+pub(crate) fn selector_query_pairs(selectors: CatalogSelectors<'_>) -> Vec<(String, String)> {
+    let mut params = Vec::new();
+    if let Some(connection) = selectors.connection {
+        params.push(("_connection".to_string(), connection.to_string()));
+    }
+    if let Some(instance) = selectors.instance {
+        params.push(("_instance".to_string(), instance.to_string()));
+    }
+    params
+}
+
+pub(crate) fn append_query_pairs(
+    path: &str,
+    params: impl IntoIterator<Item = (String, String)>,
+) -> Result<String> {
+    let params: Vec<_> = params.into_iter().collect();
+    if params.is_empty() {
+        return Ok(path.to_string());
+    }
+
+    let query = serde_urlencoded::to_string(&params).context("failed to encode query")?;
+    Ok(format!("{path}?{query}"))
+}
+
 pub fn fetch_catalog(client: &ApiClient, plugin: &str) -> Result<OperationsCatalog> {
-    let path = format!("/api/v1/integrations/{}/operations", plugin);
+    fetch_catalog_with_selectors(client, plugin, CatalogSelectors::default())
+}
+
+pub fn fetch_catalog_with_selectors(
+    client: &ApiClient,
+    plugin: &str,
+    selectors: CatalogSelectors<'_>,
+) -> Result<OperationsCatalog> {
+    let path = append_query_pairs(
+        &format!("/api/v1/integrations/{}/operations", plugin),
+        selector_query_pairs(selectors),
+    )?;
     let resp = client.get(&path)?;
     let operations: Vec<CatalogOperation> =
         serde_json::from_value(resp).context("failed to parse operations response")?;
