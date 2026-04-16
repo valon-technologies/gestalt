@@ -880,6 +880,39 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 	})
 
+	t.Run("ignores secret refs inside secrets provider config", func(t *testing.T) {
+		t.Parallel()
+
+		factories := validFactories()
+		factories.Secrets["test-secrets"] = func(yaml.Node) (core.SecretManager, error) {
+			return &coretesting.StubSecretManager{
+				Secrets: map[string]string{"enc-key": "resolved-passphrase"},
+			}, nil
+		}
+
+		cfg := validConfig()
+		cfg.Providers.Secrets["default"] = &config.ProviderEntry{
+			Source: config.ProviderSource{Builtin: "test-secrets"},
+			Config: yaml.Node{
+				Kind: yaml.MappingNode,
+				Content: []*yaml.Node{
+					{Kind: yaml.ScalarNode, Value: "prefix", Tag: "!!str"},
+					{Kind: yaml.ScalarNode, Value: transportSecretRef("ignored-provider-secret"), Tag: "!!str"},
+				},
+			},
+		}
+		cfg.Server.EncryptionKey = config.EncodeSecretRefTransport(config.SecretRef{
+			Provider: "default",
+			Name:     "enc-key",
+		})
+
+		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+		if err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		<-result.ProvidersReady
+	})
+
 	t.Run("requires configured provider for programmatic config refs", func(t *testing.T) {
 		t.Parallel()
 

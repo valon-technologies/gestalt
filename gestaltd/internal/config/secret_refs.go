@@ -21,7 +21,7 @@ type SecretRef struct {
 	Name     string `json:"name"`
 }
 
-type SecretRefVisitor func(SecretRef) error
+type ConfigStringTransformer func(string) (string, error)
 
 func IsLegacySecretRefString(value string) bool {
 	return strings.HasPrefix(strings.TrimSpace(value), legacySecretRefPrefix)
@@ -204,24 +204,29 @@ func ReferencedConfigSecretProviders(cfg *Config) (map[string]struct{}, error) {
 	if cfg == nil {
 		return providers, nil
 	}
-	visit := func(ref SecretRef) error {
-		providers[ref.Provider] = struct{}{}
-		return nil
-	}
-	if err := visitConfigSecretRefs(cfg, visit); err != nil {
+	if err := TransformConfigStringFields(cfg, func(value string) (string, error) {
+		ref, ok, err := ParseSecretRefTransport(value)
+		if err != nil {
+			return "", err
+		}
+		if ok {
+			providers[ref.Provider] = struct{}{}
+		}
+		return value, nil
+	}); err != nil {
 		return nil, err
 	}
 	return providers, nil
 }
 
-func visitConfigSecretRefs(cfg *Config, visit SecretRefVisitor) error {
+func TransformConfigStringFields(cfg *Config, transform ConfigStringTransformer) error {
 	if cfg == nil {
 		return nil
 	}
-	if err := visitSecretRefsInStruct(&cfg.Server, visit); err != nil {
+	if err := transformConfigStringFieldsInStruct(&cfg.Server, transform); err != nil {
 		return err
 	}
-	if err := visitSecretRefsInStruct(&cfg.Authorization, visit); err != nil {
+	if err := transformConfigStringFieldsInStruct(&cfg.Authorization, transform); err != nil {
 		return err
 	}
 	for _, entries := range []map[string]*ProviderEntry{
@@ -236,7 +241,7 @@ func visitConfigSecretRefs(cfg *Config, visit SecretRefVisitor) error {
 			if entry == nil {
 				continue
 			}
-			if err := visitSecretRefsInStruct(entry, visit); err != nil {
+			if err := transformConfigStringFieldsInStruct(entry, transform); err != nil {
 				return err
 			}
 		}
@@ -245,18 +250,19 @@ func visitConfigSecretRefs(cfg *Config, visit SecretRefVisitor) error {
 		if entry == nil {
 			continue
 		}
-		if err := visitSecretRefsInStruct(entry, visit); err != nil {
+		if err := transformConfigStringFieldsInStruct(entry, transform); err != nil {
 			return err
 		}
 	}
-	for _, entry := range cfg.Providers.Secrets {
+	for name, entry := range cfg.Providers.Secrets {
 		if entry == nil {
 			continue
 		}
 		savedConfig := entry.Config
 		entry.Config = yaml.Node{}
-		err := visitSecretRefsInStruct(entry, visit)
+		err := transformConfigStringFieldsInStruct(entry, transform)
 		entry.Config = savedConfig
+		cfg.Providers.Secrets[name] = entry
 		if err != nil {
 			return err
 		}
@@ -265,12 +271,12 @@ func visitConfigSecretRefs(cfg *Config, visit SecretRefVisitor) error {
 		if entry == nil {
 			continue
 		}
-		if err := visitSecretRefsInStruct(entry, visit); err != nil {
+		if err := transformConfigStringFieldsInStruct(entry, transform); err != nil {
 			return err
 		}
 		for _, conn := range entry.Connections {
 			if conn != nil {
-				if err := visitSecretRefsInStruct(conn, visit); err != nil {
+				if err := transformConfigStringFieldsInStruct(conn, transform); err != nil {
 					return err
 				}
 			}
@@ -281,9 +287,7 @@ func visitConfigSecretRefs(cfg *Config, visit SecretRefVisitor) error {
 
 var yamlNodeType = reflect.TypeOf(yaml.Node{})
 
-var YAMLNodeType = yamlNodeType
-
-func visitSecretRefsInStruct(ptr any, visit SecretRefVisitor) error {
+func transformConfigStringFieldsInStruct(ptr any, transform ConfigStringTransformer) error {
 	v := reflect.ValueOf(ptr)
 	if !v.IsValid() || v.IsNil() {
 		return nil
@@ -294,23 +298,28 @@ func visitSecretRefsInStruct(ptr any, visit SecretRefVisitor) error {
 		field := v.Field(i)
 		switch field.Kind() {
 		case reflect.String:
-			if err := visitSecretRefString(field.String(), visit); err != nil {
+			if !field.CanSet() {
+				continue
+			}
+			next, err := transform(field.String())
+			if err != nil {
 				return err
 			}
+			field.SetString(next)
 		case reflect.Struct:
 			if field.Type() == yamlNodeType {
 				nodePtr := field.Addr().Interface().(*yaml.Node)
-				if err := visitSecretRefsInYAMLNode(nodePtr, visit); err != nil {
+				if err := transformConfigStringFieldsInYAMLNode(nodePtr, transform); err != nil {
 					return err
 				}
 			} else if field.CanAddr() {
-				if err := visitSecretRefsInStruct(field.Addr().Interface(), visit); err != nil {
+				if err := transformConfigStringFieldsInStruct(field.Addr().Interface(), transform); err != nil {
 					return err
 				}
 			}
 		case reflect.Pointer:
 			if !field.IsNil() && field.Elem().Kind() == reflect.Struct {
-				if err := visitSecretRefsInStruct(field.Interface(), visit); err != nil {
+				if err := transformConfigStringFieldsInStruct(field.Interface(), transform); err != nil {
 					return err
 				}
 			}
@@ -321,18 +330,21 @@ func visitSecretRefsInStruct(ptr any, visit SecretRefVisitor) error {
 			switch field.Type().Elem().Kind() {
 			case reflect.String:
 				for _, key := range field.MapKeys() {
-					if err := visitSecretRefString(field.MapIndex(key).String(), visit); err != nil {
+					next, err := transform(field.MapIndex(key).String())
+					if err != nil {
 						return err
 					}
+					field.SetMapIndex(key, reflect.ValueOf(next))
 				}
 			case reflect.Struct:
 				for _, key := range field.MapKeys() {
 					current := field.MapIndex(key)
 					next := reflect.New(field.Type().Elem())
 					next.Elem().Set(current)
-					if err := visitSecretRefsInStruct(next.Interface(), visit); err != nil {
+					if err := transformConfigStringFieldsInStruct(next.Interface(), transform); err != nil {
 						return err
 					}
+					field.SetMapIndex(key, next.Elem())
 				}
 			case reflect.Pointer:
 				if field.Type().Elem().Elem().Kind() != reflect.Struct {
@@ -343,7 +355,7 @@ func visitSecretRefsInStruct(ptr any, visit SecretRefVisitor) error {
 					if current.IsNil() {
 						continue
 					}
-					if err := visitSecretRefsInStruct(current.Interface(), visit); err != nil {
+					if err := transformConfigStringFieldsInStruct(current.Interface(), transform); err != nil {
 						return err
 					}
 				}
@@ -352,13 +364,15 @@ func visitSecretRefsInStruct(ptr any, visit SecretRefVisitor) error {
 			switch field.Type().Elem().Kind() {
 			case reflect.String:
 				for j := 0; j < field.Len(); j++ {
-					if err := visitSecretRefString(field.Index(j).String(), visit); err != nil {
+					next, err := transform(field.Index(j).String())
+					if err != nil {
 						return err
 					}
+					field.Index(j).SetString(next)
 				}
 			case reflect.Struct:
 				for j := 0; j < field.Len(); j++ {
-					if err := visitSecretRefsInStruct(field.Index(j).Addr().Interface(), visit); err != nil {
+					if err := transformConfigStringFieldsInStruct(field.Index(j).Addr().Interface(), transform); err != nil {
 						return err
 					}
 				}
@@ -368,37 +382,28 @@ func visitSecretRefsInStruct(ptr any, visit SecretRefVisitor) error {
 	return nil
 }
 
-func visitSecretRefString(value string, visit SecretRefVisitor) error {
-	ref, ok, err := ParseSecretRefTransport(value)
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return nil
-	}
-	return visit(ref)
-}
-
-func visitSecretRefsInYAMLNode(node *yaml.Node, visit SecretRefVisitor) error {
+func transformConfigStringFieldsInYAMLNode(node *yaml.Node, transform ConfigStringTransformer) error {
 	if node == nil {
 		return nil
 	}
 	switch node.Kind {
 	case yaml.ScalarNode:
 		if node.Tag == "!!str" || node.Tag == "" {
-			if err := visitSecretRefString(node.Value, visit); err != nil {
+			next, err := transform(node.Value)
+			if err != nil {
 				return err
 			}
+			node.Value = next
 		}
 	case yaml.SequenceNode, yaml.DocumentNode:
 		for _, child := range node.Content {
-			if err := visitSecretRefsInYAMLNode(child, visit); err != nil {
+			if err := transformConfigStringFieldsInYAMLNode(child, transform); err != nil {
 				return err
 			}
 		}
 	case yaml.MappingNode:
 		for i := 1; i < len(node.Content); i += 2 {
-			if err := visitSecretRefsInYAMLNode(node.Content[i], visit); err != nil {
+			if err := transformConfigStringFieldsInYAMLNode(node.Content[i], transform); err != nil {
 				return err
 			}
 		}
