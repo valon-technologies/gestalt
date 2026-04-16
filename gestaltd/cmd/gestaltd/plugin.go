@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -51,10 +50,6 @@ const windowsExecutableSuffix = ".exe"
 type releasePlatform struct {
 	GOOS   string
 	GOARCH string
-}
-
-type releaseBuildTarget struct {
-	Kind string
 }
 
 type releaseArchive struct {
@@ -133,12 +128,12 @@ func runProviderRelease(args []string) error {
 		return fmt.Errorf("create output dir: %w", err)
 	}
 
-	buildTarget, err := resolveReleaseBuildTarget(sourceDir, releaseManifest)
+	buildKind, err := resolveReleaseBuildTarget(sourceDir, releaseManifest)
 	if err != nil {
 		return err
 	}
 
-	buildPlatforms, err := resolveReleaseBuildPlatforms(sourceDir, releaseManifest, buildTarget, *platforms, platformFlagExplicit)
+	buildPlatforms, err := resolveReleaseBuildPlatforms(sourceDir, releaseManifest, buildKind, *platforms, platformFlagExplicit)
 	if err != nil {
 		return err
 	}
@@ -146,7 +141,7 @@ func runProviderRelease(args []string) error {
 	var releaseArchives []releaseArchive
 	if len(buildPlatforms) > 0 {
 		for _, platform := range buildPlatforms {
-			archivePath, err := buildPlatformArchive(manifestPath, pluginName, *version, buildTarget.Kind, platform, *outputDir)
+			archivePath, err := buildPlatformArchive(manifestPath, pluginName, *version, buildKind, platform, *outputDir)
 			if err != nil {
 				return fmt.Errorf("build %s: %w", providerpkg.PlatformString(platform.GOOS, platform.GOARCH), err)
 			}
@@ -179,33 +174,30 @@ func runProviderRelease(args []string) error {
 	return nil
 }
 
-func resolveReleaseBuildTarget(root string, manifest *providermanifestv1.Manifest) (*releaseBuildTarget, error) {
+func resolveReleaseBuildTarget(root string, manifest *providermanifestv1.Manifest) (string, error) {
 	kind, err := providerpkg.ManifestKind(manifest)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	if kind == providermanifestv1.KindWebUI {
-		return nil, nil
-	}
-	hasSource, err := detectReleaseSourceBuildTarget(root, kind)
+	hasSource, err := providerpkg.HasSourceReleaseTarget(root, kind)
 	if err != nil {
-		return nil, fmt.Errorf("detect source %s package: %w", kind, err)
+		return "", fmt.Errorf("detect source %s package: %w", kind, err)
 	}
 	if !hasSource {
-		if releaseRequiresBuildTarget(manifest) {
-			return nil, missingReleaseSourceBuildTargetError(kind)
+		if providerpkg.ReleaseRequiresBuild(manifest) {
+			return "", providerpkg.MissingSourceReleaseTargetError(kind)
 		}
-		return nil, nil
+		return "", nil
 	}
-	return &releaseBuildTarget{Kind: kind}, nil
+	return kind, nil
 }
 
-func resolveReleaseBuildPlatforms(root string, manifest *providermanifestv1.Manifest, target *releaseBuildTarget, value string, explicit bool) ([]releasePlatform, error) {
-	if target == nil {
+func resolveReleaseBuildPlatforms(root string, manifest *providermanifestv1.Manifest, buildKind, value string, explicit bool) ([]releasePlatform, error) {
+	if buildKind == "" {
 		return nil, nil
 	}
 
-	buildRequired := releaseRequiresBuildTarget(manifest)
+	buildRequired := providerpkg.ReleaseRequiresBuild(manifest)
 	if !buildRequired && !explicit {
 		return nil, nil
 	}
@@ -216,7 +208,7 @@ func resolveReleaseBuildPlatforms(root string, manifest *providermanifestv1.Mani
 			return nil, err
 		}
 	} else {
-		value = currentReleasePlatform()
+		value = runtime.GOOS + "/" + runtime.GOARCH
 	}
 	platforms, err := parseReleasePlatforms(value)
 	if err != nil {
@@ -226,21 +218,21 @@ func resolveReleaseBuildPlatforms(root string, manifest *providermanifestv1.Mani
 	builds := make([]releasePlatform, 0, len(platforms))
 	var missingSource bool
 	for _, platform := range platforms {
-		if err := validateReleaseBuildTarget(root, target.Kind, platform.GOOS, platform.GOARCH); err != nil {
-			if isMissingReleaseSourceBuildTarget(err, target.Kind) {
+		if err := providerpkg.ValidateSourceReleaseTarget(root, buildKind, platform.GOOS, platform.GOARCH); err != nil {
+			if providerpkg.IsMissingSourceReleaseTarget(err, buildKind) {
 				missingSource = true
 				continue
 			}
-			return nil, fmt.Errorf("detect source %s package for %s/%s: %w", target.Kind, platform.GOOS, platform.GOARCH, err)
+			return nil, fmt.Errorf("detect source %s package for %s/%s: %w", buildKind, platform.GOOS, platform.GOARCH, err)
 		}
 		builds = append(builds, platform)
 	}
 
 	if len(builds) == 0 {
-		return nil, missingReleaseSourceBuildTargetError(target.Kind)
+		return nil, providerpkg.MissingSourceReleaseTargetError(buildKind)
 	}
 	if missingSource {
-		return nil, missingReleaseSourceBuildTargetError(target.Kind)
+		return nil, providerpkg.MissingSourceReleaseTargetError(buildKind)
 	}
 	return builds, nil
 }
@@ -290,65 +282,6 @@ func createReleaseArchive(outputDir, archiveName string, prepare func(stagingDir
 	return archivePath, nil
 }
 
-func releaseRequiresBuildTarget(manifest *providermanifestv1.Manifest) bool {
-	kind, err := providerpkg.ManifestKind(manifest)
-	if err != nil {
-		return false
-	}
-	switch kind {
-	case providermanifestv1.KindPlugin:
-		return manifest.Entrypoint == nil && (manifest.Spec == nil || !manifest.Spec.IsManifestBacked())
-	case providermanifestv1.KindAuth, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindSecrets:
-		return providerpkg.EntrypointForKind(manifest, kind) == nil
-	default:
-		return false
-	}
-}
-
-func detectReleaseSourceBuildTarget(root, kind string) (bool, error) {
-	switch kind {
-	case providermanifestv1.KindPlugin:
-		return providerpkg.HasSourceProviderPackage(root)
-	case providermanifestv1.KindAuth, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindSecrets:
-		return providerpkg.HasSourceComponentPackage(root, kind)
-	default:
-		return false, fmt.Errorf("unsupported release build target kind %q", kind)
-	}
-}
-
-func validateReleaseBuildTarget(root, kind, goos, goarch string) error {
-	switch kind {
-	case providermanifestv1.KindPlugin:
-		return providerpkg.ValidateSourceProviderRelease(root, goos, goarch)
-	case providermanifestv1.KindAuth, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindSecrets:
-		return providerpkg.ValidateSourceComponentRelease(root, kind, goos, goarch)
-	default:
-		return fmt.Errorf("unsupported release build target kind %q", kind)
-	}
-}
-
-func isMissingReleaseSourceBuildTarget(err error, kind string) bool {
-	switch kind {
-	case providermanifestv1.KindPlugin:
-		return errors.Is(err, providerpkg.ErrNoSourceProviderPackage)
-	case providermanifestv1.KindAuth, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindSecrets:
-		return errors.Is(err, providerpkg.ErrNoSourceComponentPackage)
-	default:
-		return false
-	}
-}
-
-func missingReleaseSourceBuildTargetError(kind string) error {
-	switch kind {
-	case providermanifestv1.KindPlugin:
-		return fmt.Errorf("no Go, Rust, Python, or TypeScript provider package found")
-	case providermanifestv1.KindAuth, providermanifestv1.KindCache, providermanifestv1.KindIndexedDB, providermanifestv1.KindS3, providermanifestv1.KindSecrets:
-		return fmt.Errorf("no Go, Rust, Python, or TypeScript %s source package found", kind)
-	default:
-		return fmt.Errorf("unsupported release build target kind %q", kind)
-	}
-}
-
 func parseReleasePlatforms(value string) ([]releasePlatform, error) {
 	parts := strings.Split(value, ",")
 	platforms := make([]releasePlatform, 0, len(parts))
@@ -364,10 +297,6 @@ func parseReleasePlatforms(value string) ([]releasePlatform, error) {
 		})
 	}
 	return platforms, nil
-}
-
-func currentReleasePlatform() string {
-	return runtime.GOOS + "/" + runtime.GOARCH
 }
 
 func buildSourceArchive(manifestPath, pluginName, version, outputDir string) (string, error) {

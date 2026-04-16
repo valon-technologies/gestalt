@@ -2,7 +2,6 @@ package providerpkg
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -125,7 +124,7 @@ func StagePreparedInstallDir(manifestPath, stagingDir string, opts StagePrepared
 		}
 		binaryName := stagedReleaseBinaryName(pluginName, opts.GOOS)
 		binaryPath := filepath.Join(stagingDir, binaryName)
-		if _, err := buildPreparedInstallBinary(sourceDir, binaryPath, pluginName, buildKind, opts.GOOS, opts.GOARCH); err != nil {
+		if _, err := buildSourceReleaseBinaryResult(sourceDir, binaryPath, pluginName, buildKind, opts.GOOS, opts.GOARCH); err != nil {
 			return nil, err
 		}
 		digest, err := FileSHA256(binaryPath)
@@ -180,13 +179,10 @@ func resolvePreparedInstallBuildKind(root string, manifest *providermanifestv1.M
 			return "", err
 		}
 	}
-	if kind == providermanifestv1.KindWebUI {
-		return "", nil
-	}
 
-	if buildKind, err := resolvePreparedInstallBuildTarget(root, kind); err == nil {
+	if buildKind, err := resolveSourceReleaseBuildTarget(root, kind); err == nil {
 		return buildKind, nil
-	} else if !isMissingPreparedInstallBuildTarget(err, kind) {
+	} else if !IsMissingSourceReleaseTarget(err, kind) {
 		return "", err
 	}
 
@@ -196,67 +192,13 @@ func resolvePreparedInstallBuildKind(root string, manifest *providermanifestv1.M
 	}
 
 	if preparedInstallRequiresBuild(manifest, kind) {
-		return "", missingPreparedInstallBuildTargetError(kind)
+		return "", missingSourceReleaseTargetCause(kind)
 	}
 	return "", nil
 }
 
 func preparedInstallRequiresBuild(manifest *providermanifestv1.Manifest, kind string) bool {
-	switch kind {
-	case providermanifestv1.KindPlugin:
-		return manifest != nil && manifest.Entrypoint == nil && (manifest.Spec == nil || !manifest.Spec.IsManifestBacked())
-	case providermanifestv1.KindAuth, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindSecrets:
-		return EntrypointForKind(manifest, kind) == nil
-	default:
-		return false
-	}
-}
-
-func resolvePreparedInstallBuildTarget(root, kind string) (string, error) {
-	switch kind {
-	case providermanifestv1.KindPlugin:
-		ok, err := HasSourceProviderPackage(root)
-		if err != nil {
-			return "", err
-		}
-		if !ok {
-			return "", ErrNoSourceProviderPackage
-		}
-		return kind, nil
-	case providermanifestv1.KindAuth, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindSecrets:
-		ok, err := HasSourceComponentPackage(root, kind)
-		if err != nil {
-			return "", err
-		}
-		if !ok {
-			return "", ErrNoSourceComponentPackage
-		}
-		return kind, nil
-	default:
-		return "", fmt.Errorf("unsupported release build target kind %q", kind)
-	}
-}
-
-func isMissingPreparedInstallBuildTarget(err error, kind string) bool {
-	switch kind {
-	case providermanifestv1.KindPlugin:
-		return errors.Is(err, ErrNoSourceProviderPackage)
-	case providermanifestv1.KindAuth, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindSecrets:
-		return errors.Is(err, ErrNoSourceComponentPackage)
-	default:
-		return false
-	}
-}
-
-func missingPreparedInstallBuildTargetError(kind string) error {
-	switch kind {
-	case providermanifestv1.KindPlugin:
-		return ErrNoSourceProviderPackage
-	case providermanifestv1.KindAuth, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindSecrets:
-		return ErrNoSourceComponentPackage
-	default:
-		return fmt.Errorf("unsupported release build target kind %q", kind)
-	}
+	return releaseRequiresBuildForKind(manifest, kind)
 }
 
 func artifactExistsForEntrypoint(root string, entry *providermanifestv1.Entrypoint) bool {
@@ -265,17 +207,6 @@ func artifactExistsForEntrypoint(root string, entry *providermanifestv1.Entrypoi
 	}
 	_, err := os.Stat(filepath.Join(root, filepath.FromSlash(entry.ArtifactPath)))
 	return err == nil
-}
-
-func buildPreparedInstallBinary(root, outputPath, pluginName, kind, goos, goarch string) (string, error) {
-	switch kind {
-	case providermanifestv1.KindPlugin:
-		return BuildSourceProviderReleaseBinary(root, outputPath, pluginName, goos, goarch)
-	case providermanifestv1.KindAuth, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindSecrets:
-		return BuildSourceComponentReleaseBinary(root, outputPath, kind, goos, goarch)
-	default:
-		return "", fmt.Errorf("unsupported release build target kind %q", kind)
-	}
 }
 
 func buildPreparedInstallSourceManifest(srcManifest *providermanifestv1.Manifest, version, sourceDir string) (*providermanifestv1.Manifest, error) {
