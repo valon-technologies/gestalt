@@ -253,20 +253,6 @@ export async function loadProviderFromTarget(
 }
 
 /**
- * Loads a plugin provider from a package root and optional target.
- */
-export async function loadPluginFromTarget(
-  root: string,
-  rawTarget?: string,
-): Promise<PluginProvider> {
-  const provider = await loadProviderFromTarget(root, rawTarget);
-  if (!isPluginProvider(provider)) {
-    throw new Error("target did not resolve to a plugin provider");
-  }
-  return provider;
-}
-
-/**
  * Runs a provider that has already been loaded into memory.
  */
 export async function runLoadedProvider(
@@ -289,34 +275,11 @@ export async function runLoadedProvider(
         "static catalog generation is only supported for plugin providers",
       );
     }
-    writeFileSync(catalogPath, pluginCatalogYaml(provider), "utf8");
+    writeFileSync(catalogPath, catalogToYaml(provider.staticCatalog()), "utf8");
     return;
   }
 
   await serve(provider);
-}
-
-/**
- * Runs a plugin provider that has already been loaded into memory.
- */
-export async function runLoadedPlugin(
-  plugin: PluginProvider,
-  options: {
-    root?: string;
-    pluginName?: string;
-  } = {},
-): Promise<void> {
-  const runtimeOptions: {
-    root?: string;
-    providerName?: string;
-  } = {};
-  if (options.root !== undefined) {
-    runtimeOptions.root = options.root;
-  }
-  if (options.pluginName !== undefined) {
-    runtimeOptions.providerName = options.pluginName;
-  }
-  await runLoadedProvider(plugin, runtimeOptions);
 }
 
 /**
@@ -330,16 +293,6 @@ export async function runBundledProvider(
   await runLoadedProvider(resolveLoadedProvider(provider, kind, "bundled target"), {
     providerName,
   });
-}
-
-/**
- * Runs a bundled plugin provider export.
- */
-export async function runBundledPlugin(
-  plugin: unknown,
-  pluginName: string,
-): Promise<void> {
-  await runBundledProvider(plugin, "integration", pluginName);
 }
 
 /**
@@ -476,8 +429,11 @@ export function createRuntimeService(
  * @internal
  */
 export function createProviderService(
-  provider: PluginProvider,
+  provider: LoadedProvider,
 ): Partial<ServiceImpl<typeof IntegrationProviderService>> {
+  if (!isPluginProvider(provider)) {
+    throw new Error("provider is not a plugin provider");
+  }
   return {
     getMetadata() {
       return create(ProviderMetadataSchema, {
@@ -726,13 +682,6 @@ export function createSecretsService(
       });
     },
   };
-}
-
-/**
- * Serializes a plugin provider's static catalog as YAML.
- */
-export function pluginCatalogYaml(plugin: PluginProvider): string {
-  return catalogToYaml(plugin.staticCatalog());
 }
 
 function providerRequest(

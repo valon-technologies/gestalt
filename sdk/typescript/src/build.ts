@@ -82,11 +82,6 @@ export function buildProviderBinary(args: BuildArgs): void {
 }
 
 /**
- * Plugin-specific alias for provider builds.
- */
-export const buildPluginBinary = buildProviderBinary;
-
-/**
  * Constructs the Bun command used to compile a provider binary.
  */
 export function bunBuildCommand(

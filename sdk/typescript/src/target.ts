@@ -87,11 +87,6 @@ export function parseProviderTarget(
 }
 
 /**
- * Parses a plugin module target in the form `./file.ts#namedExport`.
- */
-export const parsePluginTarget = parseModuleTarget;
-
-/**
  * Reads the Gestalt-specific provider metadata from a package directory.
  */
 export function readPackageConfig(root: string): PackageConfig {
@@ -129,28 +124,12 @@ export function readPackageProviderTarget(root: string): ProviderTarget {
 }
 
 /**
- * Reads the plugin-provider target from `package.json`.
- */
-export function readPackagePluginTarget(root: string): string {
-  const target = readPackageProviderTarget(root);
-  if (target.kind !== "integration") {
-    throw new Error(`package.json provider kind ${JSON.stringify(target.kind)} is not a plugin provider`);
-  }
-  return formatModuleTarget(target);
-}
-
-/**
  * Computes a default provider slug from the package name.
  */
 export function defaultProviderName(root: string): string {
   const config = readPackageConfig(root);
   return slugName(config.name ?? "");
 }
-
-/**
- * Computes a default plugin slug from the package name.
- */
-export const defaultPluginName = defaultProviderName;
 
 /**
  * Resolves a provider target to an absolute file path.
@@ -164,21 +143,11 @@ export function resolveProviderModulePath(root: string, target: ProviderTarget |
 }
 
 /**
- * Resolves a plugin target to an absolute file path.
- */
-export const resolvePluginModulePath = resolveProviderModulePath;
-
-/**
  * Resolves a provider target to an importable file URL.
  */
 export function resolveProviderImportUrl(root: string, target: ProviderTarget | ModuleTarget): string {
   return pathToFileURL(resolveProviderModulePath(root, target)).href;
 }
-
-/**
- * Resolves a plugin target to an importable file URL.
- */
-export const resolvePluginImportUrl = resolveProviderImportUrl;
 
 /**
  * Formats a provider target using the public `kind:./path#export` syntax.

@@ -6,7 +6,6 @@ import {
   parseModuleTarget,
   parseProviderTarget,
   readPackageConfig,
-  readPackagePluginTarget,
   readPackageProviderTarget,
   resolveProviderModulePath,
 } from "../src/target.ts";
@@ -73,7 +72,6 @@ test("package config reads provider targets", () => {
   expect(formatProviderTarget(readPackageProviderTarget(pluginRoot))).toBe(
     "plugin:./provider.ts#plugin",
   );
-  expect(readPackagePluginTarget(pluginRoot)).toBe("./provider.ts#plugin");
   expect(defaultProviderName(pluginRoot)).toBe("basic-provider");
   expect(
     resolveProviderModulePath(pluginRoot, readPackageProviderTarget(pluginRoot)),

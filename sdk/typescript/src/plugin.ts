@@ -299,11 +299,6 @@ export class PluginProvider extends RuntimeProvider {
 }
 
 /**
- * Plugin provider implementation consumed by the Gestalt runtime.
- */
-export const Plugin = PluginProvider;
-
-/**
  * Creates a plugin provider.
  */
 export function definePlugin(
