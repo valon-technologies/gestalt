@@ -172,7 +172,7 @@ fn test_invoke_with_connection_and_instance() {
     let _catalog_mock = json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/test_svc/operations",
+        "/api/v1/integrations/test_svc/operations?_connection=workspace&_instance=team-a",
         StatusCode::OK
     )
     .with_body(catalog_body())
@@ -216,7 +216,7 @@ fn test_invoke_with_connection_and_instance() {
     let _secondary_catalog_mock = authed_json_mock!(
         server,
         Method::GET,
-        "/api/v1/integrations/other_svc/operations",
+        "/api/v1/integrations/other_svc/operations?_connection=workspace&_instance=team-a",
         StatusCode::OK
     )
     .with_body(single_operation_catalog("check_status"))

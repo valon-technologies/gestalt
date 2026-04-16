@@ -731,9 +731,21 @@ func (s *Server) boundSessionCatalogConnections(providerName string, p *principa
 }
 
 func (s *Server) resolveCatalogForRequest(ctx context.Context, prov core.Provider, providerName string, resolver invocation.TokenResolver, p *principal.Principal, requestedConnection, requestedInstance string, strict bool, resolveCatalog func(context.Context, core.Provider, string, invocation.TokenResolver, *principal.Principal, string, string) (*catalog.Catalog, invocation.CatalogResolutionMetadata, error)) (*catalog.Catalog, bool, error) {
+	fallbackStaticCatalog := func(err error) (*catalog.Catalog, bool, error) {
+		staticCat := prov.Catalog()
+		if err == nil || staticCat == nil || !shouldFallbackToStaticCatalog(err) {
+			return nil, err != nil, err
+		}
+		slog.WarnContext(ctx, "catalog request falling back to static catalog", "provider", providerName, "error", err)
+		return staticCat.Clone(), true, nil
+	}
+
 	connections, instance := s.boundSessionCatalogConnections(providerName, p, requestedConnection, requestedInstance)
 	if !strict || requestedConnection != "" || requestedInstance != "" || (s.authorizer != nil && s.authorizer.IsWorkload(p)) {
 		cat, metadata, err := resolveCatalog(ctx, prov, providerName, resolver, p, connections[0], instance)
+		if err != nil {
+			return fallbackStaticCatalog(err)
+		}
 		return cat, metadata.SessionFailed || err != nil, err
 	}
 
@@ -747,7 +759,29 @@ func (s *Server) resolveCatalogForRequest(ctx context.Context, prov core.Provide
 			firstErr = err
 		}
 	}
+	if firstErr != nil {
+		return fallbackStaticCatalog(firstErr)
+	}
 	return nil, firstErr != nil, firstErr
+}
+
+func shouldFallbackToStaticCatalog(err error) bool {
+	switch {
+	case errors.Is(err, invocation.ErrNoToken):
+		return false
+	case errors.Is(err, invocation.ErrAmbiguousInstance):
+		return false
+	case errors.Is(err, invocation.ErrAuthorizationDenied):
+		return false
+	case errors.Is(err, invocation.ErrNotAuthenticated):
+		return false
+	case errors.Is(err, invocation.ErrScopeDenied):
+		return false
+	case errors.Is(err, invocation.ErrUserResolution):
+		return false
+	default:
+		return true
+	}
 }
 
 func httpVisibleCatalogOperations(ops []catalog.CatalogOperation) []catalog.CatalogOperation {
