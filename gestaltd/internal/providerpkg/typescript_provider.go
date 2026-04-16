@@ -26,6 +26,7 @@ const (
 	typeScriptCacheKey     = "cache"
 	typeScriptIndexedDBKey = "indexeddb"
 	typeScriptS3Key        = "s3"
+	typeScriptWorkflowKey  = "workflow"
 )
 
 var ErrNoTypeScriptProviderPackage = errors.New("no TypeScript provider package found")
@@ -164,6 +165,8 @@ func typeScriptComponentKind(kind string) (string, error) {
 		return "indexeddb", nil
 	case providermanifestv1.KindS3:
 		return "s3", nil
+	case providermanifestv1.KindWorkflow:
+		return "workflow", nil
 	case providermanifestv1.KindSecrets:
 		return "secrets", nil
 	default:
@@ -303,6 +306,8 @@ func normalizeTypeScriptProviderKind(value string) string {
 		return "indexeddb"
 	case "s3":
 		return "s3"
+	case "workflow":
+		return "workflow"
 	case "secrets":
 		return "secrets"
 	case "telemetry":

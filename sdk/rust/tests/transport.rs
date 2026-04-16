@@ -45,11 +45,18 @@ impl Provider for TestProvider {
         Ok(Some(Catalog {
             name: "session-example".to_string(),
             display_name: format!(
-                "{}|{}|{}|{}",
+                "{}|{}|{}|{}|{}",
                 request.connection_param("tenant").unwrap_or_default(),
                 request.subject.id,
                 request.credential.mode,
                 request.access.role,
+                request
+                    .workflow
+                    .get("trigger")
+                    .and_then(serde_json::Value::as_object)
+                    .and_then(|trigger| trigger.get("kind"))
+                    .and_then(serde_json::Value::as_str)
+                    .unwrap_or_default(),
             ),
             description: String::new(),
             icon_svg: String::new(),
@@ -85,6 +92,11 @@ struct Output {
     credential_mode: String,
     access_role: String,
     request_handle: String,
+    workflow_run_id: String,
+    workflow_trigger_id: String,
+    workflow_event_spec_version: String,
+    workflow_event_data_content_type: String,
+    workflow_created_by_subject_id: String,
 }
 
 #[tokio::test]
@@ -108,6 +120,48 @@ async fn serves_provider_requests_over_unix_socket() {
                     credential_mode,
                     access_role,
                     request_handle,
+                    workflow_run_id: request
+                        .workflow
+                        .get("runId")
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or_default()
+                        .to_string(),
+                    workflow_trigger_id: request
+                        .workflow
+                        .get("trigger")
+                        .and_then(serde_json::Value::as_object)
+                        .and_then(|trigger| trigger.get("triggerId"))
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or_default()
+                        .to_string(),
+                    workflow_event_spec_version: request
+                        .workflow
+                        .get("trigger")
+                        .and_then(serde_json::Value::as_object)
+                        .and_then(|trigger| trigger.get("event"))
+                        .and_then(serde_json::Value::as_object)
+                        .and_then(|event| event.get("specVersion"))
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or_default()
+                        .to_string(),
+                    workflow_event_data_content_type: request
+                        .workflow
+                        .get("trigger")
+                        .and_then(serde_json::Value::as_object)
+                        .and_then(|trigger| trigger.get("event"))
+                        .and_then(serde_json::Value::as_object)
+                        .and_then(|event| event.get("dataContentType"))
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or_default()
+                        .to_string(),
+                    workflow_created_by_subject_id: request
+                        .workflow
+                        .get("createdBy")
+                        .and_then(serde_json::Value::as_object)
+                        .and_then(|created_by| created_by.get("subjectId"))
+                        .and_then(serde_json::Value::as_str)
+                        .unwrap_or_default()
+                        .to_string(),
                 }))
             },
         )
@@ -206,6 +260,26 @@ async fn serves_provider_requests_over_unix_socket() {
                     policy: "sample_policy".to_string(),
                     role: "admin".to_string(),
                 }),
+                workflow: Some(helpers::struct_from_json(serde_json::json!({
+                    "runId": "run-123",
+                    "createdBy": {
+                        "subjectId": "user:user-123",
+                        "subjectKind": "user",
+                        "displayName": "Ada",
+                        "authSource": "api_token"
+                    },
+                    "trigger": {
+                        "kind": "event",
+                        "triggerId": "trigger-1",
+                        "event": {
+                            "id": "evt-1",
+                            "source": "urn:test",
+                            "specVersion": "1.0",
+                            "type": "demo.refresh",
+                            "dataContentType": "application/json"
+                        }
+                    }
+                }))),
             }),
         })
         .await
@@ -215,7 +289,7 @@ async fn serves_provider_requests_over_unix_socket() {
     assert_eq!(response.status, 200);
     assert_eq!(
         response.body,
-        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","credential_mode":"identity","access_role":"admin","request_handle":"handle-123"}"#
+        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","credential_mode":"identity","access_role":"admin","request_handle":"handle-123","workflow_run_id":"run-123","workflow_trigger_id":"trigger-1","workflow_event_spec_version":"1.0","workflow_event_data_content_type":"application/json","workflow_created_by_subject_id":"user:user-123"}"#
     );
 
     let session_catalog = client
@@ -239,6 +313,10 @@ async fn serves_provider_requests_over_unix_socket() {
                     policy: "sample_policy".to_string(),
                     role: "viewer".to_string(),
                 }),
+                workflow: Some(helpers::struct_from_json(serde_json::json!({
+                    "runId": "run-999",
+                    "trigger": {"kind": "schedule"}
+                }))),
             }),
         })
         .await
@@ -246,7 +324,10 @@ async fn serves_provider_requests_over_unix_socket() {
         .into_inner();
     let catalog = session_catalog.catalog.expect("session catalog");
     assert_eq!(catalog.name, "session-example");
-    assert_eq!(catalog.display_name, "acme|user:user-123|identity|viewer");
+    assert_eq!(
+        catalog.display_name,
+        "acme|user:user-123|identity|viewer|schedule"
+    );
 
     let err = client
         .post_connect(PostConnectRequest::default())

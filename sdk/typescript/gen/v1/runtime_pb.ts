@@ -12,9 +12,12 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file v1/runtime.proto.
  */
 export const file_v1_runtime: GenFile = /*@__PURE__*/
-  fileDesc("ChB2MS9ydW50aW1lLnByb3RvEhNnZXN0YWx0LnByb3ZpZGVyLnYxItsBChBQcm92aWRlcklkZW50aXR5Ei8KBGtpbmQYASABKA4yIS5nZXN0YWx0LnByb3ZpZGVyLnYxLlByb3ZpZGVyS2luZBIMCgRuYW1lGAIgASgJEhQKDGRpc3BsYXlfbmFtZRgDIAEoCRITCgtkZXNjcmlwdGlvbhgEIAEoCRIPCgd2ZXJzaW9uGAUgASgJEhAKCHdhcm5pbmdzGAYgAygJEhwKFG1pbl9wcm90b2NvbF92ZXJzaW9uGAogASgFEhwKFG1heF9wcm90b2NvbF92ZXJzaW9uGAsgASgFImsKGENvbmZpZ3VyZVByb3ZpZGVyUmVxdWVzdBIMCgRuYW1lGAEgASgJEicKBmNvbmZpZxgCIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSGAoQcHJvdG9jb2xfdmVyc2lvbhgDIAEoBSI1ChlDb25maWd1cmVQcm92aWRlclJlc3BvbnNlEhgKEHByb3RvY29sX3ZlcnNpb24YASABKAUiNQoTSGVhbHRoQ2hlY2tSZXNwb25zZRINCgVyZWFkeRgBIAEoCBIPCgdtZXNzYWdlGAIgASgJKugBCgxQcm92aWRlcktpbmQSHQoZUFJPVklERVJfS0lORF9VTlNQRUNJRklFRBAAEh0KGVBST1ZJREVSX0tJTkRfSU5URUdSQVRJT04QARIWChJQUk9WSURFUl9LSU5EX0FVVEgQAhIbChdQUk9WSURFUl9LSU5EX0lOREVYRUREQhADEhkKFVBST1ZJREVSX0tJTkRfU0VDUkVUUxAEEhsKF1BST1ZJREVSX0tJTkRfVEVMRU1FVFJZEAUSFwoTUFJPVklERVJfS0lORF9DQUNIRRAGEhQKEFBST1ZJREVSX0tJTkRfUzMQBzKuAgoRUHJvdmlkZXJMaWZlY3ljbGUSVAoTR2V0UHJvdmlkZXJJZGVudGl0eRIWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRolLmdlc3RhbHQucHJvdmlkZXIudjEuUHJvdmlkZXJJZGVudGl0eRJyChFDb25maWd1cmVQcm92aWRlchItLmdlc3RhbHQucHJvdmlkZXIudjEuQ29uZmlndXJlUHJvdmlkZXJSZXF1ZXN0Gi4uZ2VzdGFsdC5wcm92aWRlci52MS5Db25maWd1cmVQcm92aWRlclJlc3BvbnNlEk8KC0hlYWx0aENoZWNrEhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5GiguZ2VzdGFsdC5wcm92aWRlci52MS5IZWFsdGhDaGVja1Jlc3BvbnNlQjtaOWdpdGh1Yi5jb20vdmFsb24tdGVjaG5vbG9naWVzL2dlc3RhbHQvc2RrL2dvL2dlbi92MTtwcm90b2IGcHJvdG8z", [file_google_protobuf_empty, file_google_protobuf_struct]);
+  fileDesc("ChB2MS9ydW50aW1lLnByb3RvEhNnZXN0YWx0LnByb3ZpZGVyLnYxItsBChBQcm92aWRlcklkZW50aXR5Ei8KBGtpbmQYASABKA4yIS5nZXN0YWx0LnByb3ZpZGVyLnYxLlByb3ZpZGVyS2luZBIMCgRuYW1lGAIgASgJEhQKDGRpc3BsYXlfbmFtZRgDIAEoCRITCgtkZXNjcmlwdGlvbhgEIAEoCRIPCgd2ZXJzaW9uGAUgASgJEhAKCHdhcm5pbmdzGAYgAygJEhwKFG1pbl9wcm90b2NvbF92ZXJzaW9uGAogASgFEhwKFG1heF9wcm90b2NvbF92ZXJzaW9uGAsgASgFImsKGENvbmZpZ3VyZVByb3ZpZGVyUmVxdWVzdBIMCgRuYW1lGAEgASgJEicKBmNvbmZpZxgCIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSGAoQcHJvdG9jb2xfdmVyc2lvbhgDIAEoBSI1ChlDb25maWd1cmVQcm92aWRlclJlc3BvbnNlEhgKEHByb3RvY29sX3ZlcnNpb24YASABKAUiNQoTSGVhbHRoQ2hlY2tSZXNwb25zZRINCgVyZWFkeRgBIAEoCBIPCgdtZXNzYWdlGAIgASgJKoQCCgxQcm92aWRlcktpbmQSHQoZUFJPVklERVJfS0lORF9VTlNQRUNJRklFRBAAEh0KGVBST1ZJREVSX0tJTkRfSU5URUdSQVRJT04QARIWChJQUk9WSURFUl9LSU5EX0FVVEgQAhIbChdQUk9WSURFUl9LSU5EX0lOREVYRUREQhADEhkKFVBST1ZJREVSX0tJTkRfU0VDUkVUUxAEEhsKF1BST1ZJREVSX0tJTkRfVEVMRU1FVFJZEAUSFwoTUFJPVklERVJfS0lORF9DQUNIRRAGEhQKEFBST1ZJREVSX0tJTkRfUzMQBxIaChZQUk9WSURFUl9LSU5EX1dPUktGTE9XEAgyrgIKEVByb3ZpZGVyTGlmZWN5Y2xlElQKE0dldFByb3ZpZGVySWRlbnRpdHkSFi5nb29nbGUucHJvdG9idWYuRW1wdHkaJS5nZXN0YWx0LnByb3ZpZGVyLnYxLlByb3ZpZGVySWRlbnRpdHkScgoRQ29uZmlndXJlUHJvdmlkZXISLS5nZXN0YWx0LnByb3ZpZGVyLnYxLkNvbmZpZ3VyZVByb3ZpZGVyUmVxdWVzdBouLmdlc3RhbHQucHJvdmlkZXIudjEuQ29uZmlndXJlUHJvdmlkZXJSZXNwb25zZRJPCgtIZWFsdGhDaGVjaxIWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRooLmdlc3RhbHQucHJvdmlkZXIudjEuSGVhbHRoQ2hlY2tSZXNwb25zZUI7WjlnaXRodWIuY29tL3ZhbG9uLXRlY2hub2xvZ2llcy9nZXN0YWx0L3Nkay9nby9nZW4vdjE7cHJvdG9iBnByb3RvMw", [file_google_protobuf_empty, file_google_protobuf_struct]);
 
 /**
+ * ProviderIdentity describes a provider surface and the protocol versions it
+ * supports.
+ *
  * @generated from message gestalt.provider.v1.ProviderIdentity
  */
 export type ProviderIdentity = Message<"gestalt.provider.v1.ProviderIdentity"> & {
@@ -67,6 +70,9 @@ export const ProviderIdentitySchema: GenMessage<ProviderIdentity> = /*@__PURE__*
   messageDesc(file_v1_runtime, 0);
 
 /**
+ * ConfigureProviderRequest configures a non-integration provider for one
+ * runtime session.
+ *
  * @generated from message gestalt.provider.v1.ConfigureProviderRequest
  */
 export type ConfigureProviderRequest = Message<"gestalt.provider.v1.ConfigureProviderRequest"> & {
@@ -94,6 +100,9 @@ export const ConfigureProviderRequestSchema: GenMessage<ConfigureProviderRequest
   messageDesc(file_v1_runtime, 1);
 
 /**
+ * ConfigureProviderResponse confirms the protocol version the provider is
+ * serving.
+ *
  * @generated from message gestalt.provider.v1.ConfigureProviderResponse
  */
 export type ConfigureProviderResponse = Message<"gestalt.provider.v1.ConfigureProviderResponse"> & {
@@ -111,6 +120,8 @@ export const ConfigureProviderResponseSchema: GenMessage<ConfigureProviderRespon
   messageDesc(file_v1_runtime, 2);
 
 /**
+ * HealthCheckResponse reports runtime readiness for a provider surface.
+ *
  * @generated from message gestalt.provider.v1.HealthCheckResponse
  */
 export type HealthCheckResponse = Message<"gestalt.provider.v1.HealthCheckResponse"> & {
@@ -175,6 +186,11 @@ export enum ProviderKind {
    * @generated from enum value: PROVIDER_KIND_S3 = 7;
    */
   S3 = 7,
+
+  /**
+   * @generated from enum value: PROVIDER_KIND_WORKFLOW = 8;
+   */
+  WORKFLOW = 8,
 }
 
 /**
@@ -184,6 +200,9 @@ export const ProviderKindSchema: GenEnum<ProviderKind> = /*@__PURE__*/
   enumDesc(file_v1_runtime, 0);
 
 /**
+ * ProviderLifecycle is the common lifecycle protocol shared by every provider
+ * kind.
+ *
  * @generated from service gestalt.provider.v1.ProviderLifecycle
  */
 export const ProviderLifecycle: GenService<{

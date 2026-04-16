@@ -2,6 +2,7 @@ package invocation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -49,6 +50,9 @@ func ResolveOperation(ctx context.Context, prov core.Provider, provName string, 
 
 	sessionOp, sessionConnection, sessionFound, err := resolveSessionOperation(ctx, prov, provName, resolver, p, operation, sessionConnections, instance)
 	if err != nil {
+		if staticOK && errors.Is(err, core.ErrSessionCatalogUnavailable) {
+			return staticOp, OperationTransport(staticOp), "", nil
+		}
 		return catalog.CatalogOperation{}, "", "", err
 	}
 	if sessionFound {
@@ -66,6 +70,11 @@ func resolveCatalog(ctx context.Context, prov core.Provider, provName string, re
 
 	sessionCat, attempted, err := resolveSessionCatalog(ctx, prov, provName, resolver, p, defaultConnection, instance)
 	meta.SessionAttempted = attempted
+	if err != nil {
+		if errors.Is(err, core.ErrSessionCatalogUnavailable) && staticCat != nil {
+			err = nil
+		}
+	}
 	if err != nil {
 		meta.SessionFailed = true
 		if strictSession || staticCat == nil {

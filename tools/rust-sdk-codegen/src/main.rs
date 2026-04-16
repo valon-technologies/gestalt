@@ -11,6 +11,7 @@ const PROTO_FILES: &[&str] = &[
     "secrets.proto",
     "datastore.proto",
     "s3.proto",
+    "workflow.proto",
 ];
 
 fn repo_root() -> PathBuf {

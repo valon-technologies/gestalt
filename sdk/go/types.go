@@ -23,6 +23,8 @@ const (
 	ProviderKindSecrets ProviderKind = "secrets"
 	// ProviderKindS3 serves the S3-compatible object storage surface.
 	ProviderKindS3 ProviderKind = "s3"
+	// ProviderKindWorkflow serves the workflow orchestration surface.
+	ProviderKindWorkflow ProviderKind = "workflow"
 )
 
 // ProviderMetadata describes a provider instance independent of its concrete
@@ -106,6 +108,7 @@ type subjectKey struct{}
 type credentialKey struct{}
 type accessKey struct{}
 type requestHandleKey struct{}
+type workflowKey struct{}
 
 // WithConnectionParams returns a child context carrying the given connection
 // parameters. The host calls this before invoking an executable operation so
@@ -167,4 +170,20 @@ func requestHandleFromContext(ctx context.Context) string {
 
 func RequestHandleFromContext(ctx context.Context) string {
 	return requestHandleFromContext(ctx)
+}
+
+// WithWorkflowContext attaches workflow callback metadata to the context.
+// The workflow object uses a JSON-style lowerCamelCase shape such as runId,
+// target.pluginName, trigger.scheduleId, and trigger.event.specVersion.
+func WithWorkflowContext(ctx context.Context, workflow map[string]any) context.Context {
+	return context.WithValue(ctx, workflowKey{}, workflow)
+}
+
+// WorkflowContextFromContext returns workflow callback metadata attached by
+// WithWorkflowContext. The workflow object uses a JSON-style lowerCamelCase
+// shape such as runId, target.pluginName, trigger.scheduleId, and
+// trigger.event.specVersion.
+func WorkflowContextFromContext(ctx context.Context) map[string]any {
+	workflow, _ := ctx.Value(workflowKey{}).(map[string]any)
+	return workflow
 }

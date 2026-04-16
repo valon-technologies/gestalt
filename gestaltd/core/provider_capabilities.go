@@ -2,9 +2,12 @@ package core
 
 import (
 	"context"
+	"errors"
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 )
+
+var ErrSessionCatalogUnavailable = errors.New("session catalog unavailable")
 
 func SupportsSessionCatalog(prov Provider) bool {
 	_, ok := prov.(SessionCatalogProvider)

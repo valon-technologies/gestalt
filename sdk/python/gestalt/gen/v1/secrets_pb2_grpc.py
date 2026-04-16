@@ -6,7 +6,8 @@ from . import secrets_pb2 as v1_dot_secrets__pb2
 
 
 class SecretsProviderStub(object):
-    """Missing associated documentation comment in .proto file."""
+    """SecretsProvider models the shared Gestalt secrets-provider protocol.
+    """
 
     def __init__(self, channel):
         """Constructor.
@@ -22,7 +23,8 @@ class SecretsProviderStub(object):
 
 
 class SecretsProviderServicer(object):
-    """Missing associated documentation comment in .proto file."""
+    """SecretsProvider models the shared Gestalt secrets-provider protocol.
+    """
 
     def GetSecret(self, request, context):
         """Missing associated documentation comment in .proto file."""
@@ -47,7 +49,8 @@ def add_SecretsProviderServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class SecretsProvider(object):
-    """Missing associated documentation comment in .proto file."""
+    """SecretsProvider models the shared Gestalt secrets-provider protocol.
+    """
 
     @staticmethod
     def GetSecret(request,

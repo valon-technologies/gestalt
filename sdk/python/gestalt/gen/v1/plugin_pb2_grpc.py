@@ -27,7 +27,8 @@ if _version_not_supported:
 
 
 class IntegrationProviderStub(object):
-    """Missing associated documentation comment in .proto file."""
+    """IntegrationProvider models the shared Gestalt integration-provider protocol.
+    """
 
     def __init__(self, channel):
         """Constructor.
@@ -63,7 +64,8 @@ class IntegrationProviderStub(object):
 
 
 class IntegrationProviderServicer(object):
-    """Missing associated documentation comment in .proto file."""
+    """IntegrationProvider models the shared Gestalt integration-provider protocol.
+    """
 
     def GetMetadata(self, request, context):
         """Missing associated documentation comment in .proto file."""
@@ -132,7 +134,8 @@ def add_IntegrationProviderServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class IntegrationProvider(object):
-    """Missing associated documentation comment in .proto file."""
+    """IntegrationProvider models the shared Gestalt integration-provider protocol.
+    """
 
     @staticmethod
     def GetMetadata(request,

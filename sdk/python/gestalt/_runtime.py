@@ -36,6 +36,7 @@ from ._providers import (
     S3Provider,
     SecretsProvider,
     SessionTTLProvider,
+    WorkflowProvider,
     WarningsProvider,
 )
 from ._serialization import json_body
@@ -50,6 +51,8 @@ from .gen.v1 import runtime_pb2_grpc as _runtime_pb2_grpc
 from .gen.v1 import s3_pb2_grpc as _s3_pb2_grpc
 from .gen.v1 import secrets_pb2 as _secrets_pb2
 from .gen.v1 import secrets_pb2_grpc as _secrets_pb2_grpc
+from .gen.v1 import workflow_pb2 as _workflow_pb2
+from .gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
 
 empty_pb2: Any = _empty_pb2
 duration_pb2: Any = _duration_pb2
@@ -64,6 +67,8 @@ cache_pb2_grpc: Any = _cache_pb2_grpc
 s3_pb2_grpc: Any = _s3_pb2_grpc
 secrets_pb2: Any = _secrets_pb2
 secrets_pb2_grpc: Any = _secrets_pb2_grpc
+workflow_pb2: Any = _workflow_pb2
+workflow_pb2_grpc: Any = _workflow_pb2_grpc
 
 ENV_PROVIDER_SOCKET: Final[str] = "GESTALT_PLUGIN_SOCKET"
 ENV_WRITE_CATALOG: Final[str] = "GESTALT_PLUGIN_WRITE_CATALOG"
@@ -210,11 +215,13 @@ def _load_target(args: RuntimeArgs) -> Plugin | PluginProviderAdapter | PluginPr
         return _cache_runtime_plugin(target)
     if resolved_kind == ProviderKind.S3 and isinstance(target, S3Provider):
         return _s3_runtime_plugin(target)
+    if resolved_kind == ProviderKind.WORKFLOW and isinstance(target, WorkflowProvider):
+        return _workflow_runtime_plugin(target)
     if resolved_kind == ProviderKind.SECRETS and isinstance(target, SecretsProvider):
         return _secrets_runtime_plugin(target)
     if isinstance(target, PluginProvider):
         raise RuntimeError(
-            "providers must be wrapped in gestalt.PluginProviderAdapter unless runtime_kind is auth, cache, s3, or secrets"
+            "providers must be wrapped in gestalt.PluginProviderAdapter unless runtime_kind is auth, cache, s3, workflow, or secrets"
         )
     raise RuntimeError(f"{args.target} did not resolve to a supported gestalt target")
 
@@ -297,6 +304,8 @@ def _servable_target(
         return _cache_runtime_plugin(target)
     if kind == ProviderKind.S3 and isinstance(target, S3Provider):
         return _s3_runtime_plugin(target)
+    if kind == ProviderKind.WORKFLOW and isinstance(target, WorkflowProvider):
+        return _workflow_runtime_plugin(target)
     if kind == ProviderKind.SECRETS and isinstance(target, SecretsProvider):
         return _secrets_runtime_plugin(target)
     raise RuntimeError("unsupported runtime target")
@@ -335,6 +344,22 @@ def _register_s3_services(server: Any, provider: PluginProvider) -> None:
         server,
     )
     s3_pb2_grpc.add_S3Servicer_to_server(provider, server)
+
+
+def _workflow_runtime_plugin(provider: WorkflowProvider) -> PluginProviderAdapter:
+    return PluginProviderAdapter(
+        kind=ProviderKind.WORKFLOW,
+        provider=provider,
+        register_services=_register_workflow_services,
+    )
+
+
+def _register_workflow_services(server: Any, provider: PluginProvider) -> None:
+    runtime_pb2_grpc.add_ProviderLifecycleServicer_to_server(
+        _runtime_servicer(provider=provider, kind=ProviderKind.WORKFLOW),
+        server,
+    )
+    workflow_pb2_grpc.add_WorkflowProviderServicer_to_server(provider, server)
 
 
 def _secrets_runtime_plugin(provider: SecretsProvider) -> PluginProviderAdapter:
@@ -637,6 +662,7 @@ def _plugin_request(request: Any) -> Request:
         subject=_subject_from_proto(getattr(request, "context", None)),
         credential=_credential_from_proto(getattr(request, "context", None)),
         access=_access_from_proto(getattr(request, "context", None)),
+        workflow=_workflow_from_proto(getattr(request, "context", None)),
         request_handle=getattr(request, "request_handle", ""),
     )
 
@@ -681,6 +707,23 @@ def _access_from_proto(request_context: Any) -> Access:
     )
 
 
+def _workflow_from_proto(request_context: Any) -> dict[str, Any]:
+    if request_context is None:
+        return {}
+    if hasattr(request_context, "HasField") and not request_context.HasField("workflow"):
+        return {}
+    workflow = getattr(request_context, "workflow", None)
+    if workflow is None:
+        return {}
+    return cast(
+        dict[str, Any],
+        json_format.MessageToDict(
+            workflow,
+            preserving_proto_field_name=True,
+        ),
+    )
+
+
 def _message_to_dict(
     *,
     field_name: str,
@@ -719,6 +762,7 @@ def _provider_kind_to_proto(kind: ProviderKind | str) -> Any:
         ProviderKind.AUTH: runtime_pb2.ProviderKind.PROVIDER_KIND_AUTH,
         ProviderKind.CACHE: runtime_pb2.ProviderKind.PROVIDER_KIND_CACHE,
         ProviderKind.S3: runtime_pb2.ProviderKind.PROVIDER_KIND_S3,
+        ProviderKind.WORKFLOW: runtime_pb2.ProviderKind.PROVIDER_KIND_WORKFLOW,
         ProviderKind.SECRETS: runtime_pb2.ProviderKind.PROVIDER_KIND_SECRETS,
         ProviderKind.TELEMETRY: runtime_pb2.ProviderKind.PROVIDER_KIND_TELEMETRY,
     }.get(normalized, runtime_pb2.ProviderKind.PROVIDER_KIND_UNSPECIFIED)

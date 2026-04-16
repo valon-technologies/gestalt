@@ -505,11 +505,13 @@ func (b *Broker) resolveWorkloadToken(ctx context.Context, prov core.Provider, p
 		})
 		return ctx, "", nil
 	case core.ConnectionModeIdentity:
+		connection := binding.Connection
+		instance := binding.Instance
 		if (requestedConnection != "" && requestedConnection != binding.Connection) || (requestedInstance != "" && requestedInstance != binding.Instance) {
 			return ctx, "", fmt.Errorf("%w: workloads may not override connection or instance bindings", ErrAuthorizationDenied)
 		}
-		SetCredentialAudit(ctx, binding.Mode, binding.CredentialSubjectID, binding.Connection, binding.Instance)
-		return b.resolveUserToken(ctx, prov, principal.IdentityPrincipal, providerName, binding.Connection, binding.Instance, core.ConnectionModeIdentity, binding.CredentialSubjectID)
+		SetCredentialAudit(ctx, binding.Mode, binding.CredentialSubjectID, connection, instance)
+		return b.resolveUserToken(ctx, prov, principal.IdentityPrincipal, providerName, connection, instance, core.ConnectionModeIdentity, binding.CredentialSubjectID)
 	default:
 		return ctx, "", fmt.Errorf("%w: workloads may only use identity or none providers", ErrAuthorizationDenied)
 	}

@@ -74,6 +74,14 @@ func buildAuditEntry(ctx context.Context, p *principal.Principal, source, provid
 	if access.Role != "" {
 		entry.AccessRole = access.Role
 	}
+	if workflow := WorkflowContextFromContext(ctx); workflow != nil {
+		if createdBy := WorkflowContextMap(workflow, "createdBy"); createdBy != nil {
+			entry.WorkflowCreatedBySubjectID = WorkflowContextString(createdBy, "subjectId")
+			entry.WorkflowCreatedBySubjectKind = WorkflowContextString(createdBy, "subjectKind")
+			entry.WorkflowCreatedByDisplayName = WorkflowContextString(createdBy, "displayName")
+			entry.WorkflowCreatedByAuthSource = WorkflowContextString(createdBy, "authSource")
+		}
+	}
 	return entry
 }
 
@@ -140,6 +148,18 @@ func (s *SlogAuditSink) Log(ctx context.Context, entry core.AuditEntry) {
 	}
 	if entry.CredentialInstance != "" {
 		attrs = append(attrs, slog.String("credential_instance", entry.CredentialInstance))
+	}
+	if entry.WorkflowCreatedBySubjectID != "" {
+		attrs = append(attrs, slog.String("workflow_created_by_subject_id", entry.WorkflowCreatedBySubjectID))
+	}
+	if entry.WorkflowCreatedBySubjectKind != "" {
+		attrs = append(attrs, slog.String("workflow_created_by_subject_kind", entry.WorkflowCreatedBySubjectKind))
+	}
+	if entry.WorkflowCreatedByDisplayName != "" {
+		attrs = append(attrs, slog.String("workflow_created_by_display_name", entry.WorkflowCreatedByDisplayName))
+	}
+	if entry.WorkflowCreatedByAuthSource != "" {
+		attrs = append(attrs, slog.String("workflow_created_by_auth_source", entry.WorkflowCreatedByAuthSource))
 	}
 	if entry.TargetID != "" {
 		attrs = append(attrs, slog.String("target_id", entry.TargetID))

@@ -27,7 +27,8 @@ if _version_not_supported:
 
 
 class S3Stub(object):
-    """Missing associated documentation comment in .proto file."""
+    """S3 models the shared Gestalt S3-provider protocol.
+    """
 
     def __init__(self, channel):
         """Constructor.
@@ -73,7 +74,8 @@ class S3Stub(object):
 
 
 class S3Servicer(object):
-    """Missing associated documentation comment in .proto file."""
+    """S3 models the shared Gestalt S3-provider protocol.
+    """
 
     def HeadObject(self, request, context):
         """Missing associated documentation comment in .proto file."""
@@ -169,7 +171,8 @@ def add_S3Servicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class S3(object):
-    """Missing associated documentation comment in .proto file."""
+    """S3 models the shared Gestalt S3-provider protocol.
+    """
 
     @staticmethod
     def HeadObject(request,

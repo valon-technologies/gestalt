@@ -85,6 +85,9 @@ func applyRequestContext(ctx context.Context, reqCtx *proto.RequestContext) cont
 			Role:   access.GetRole(),
 		})
 	}
+	if workflow := reqCtx.GetWorkflow(); workflow != nil {
+		ctx = invocation.WithWorkflowContext(ctx, workflow.AsMap())
+	}
 	return ctx
 }
 

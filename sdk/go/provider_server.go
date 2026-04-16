@@ -141,5 +141,8 @@ func withRequestContext(ctx context.Context, reqCtx *proto.RequestContext) conte
 			Role:   access.GetRole(),
 		})
 	}
+	if workflow := reqCtx.GetWorkflow(); workflow != nil {
+		ctx = WithWorkflowContext(ctx, workflow.AsMap())
+	}
 	return ctx
 }

@@ -35,8 +35,9 @@ const (
 	PreparedTelemetryDir = ".gestaltd/telemetry"
 	PreparedAuditDir     = ".gestaltd/audit"
 	PreparedCacheDir     = ".gestaltd/cache"
+	PreparedWorkflowDir  = ".gestaltd/workflow"
 	PreparedUIDir        = ".gestaltd/ui"
-	LockVersion          = 7
+	LockVersion          = 8
 
 	platformKeyGeneric = "generic"
 )
@@ -48,6 +49,7 @@ type Lockfile struct {
 	IndexedDBs map[string]LockEntry         `json:"indexeddbs,omitempty"`
 	Caches     map[string]LockEntry         `json:"cache,omitempty"`
 	S3         map[string]LockEntry         `json:"s3,omitempty"`
+	Workflows  map[string]LockEntry         `json:"workflow,omitempty"`
 	Secrets    map[string]LockEntry         `json:"secrets,omitempty"`
 	Telemetry  map[string]LockEntry         `json:"telemetry,omitempty"`
 	Audit      map[string]LockEntry         `json:"audit,omitempty"`
@@ -238,7 +240,7 @@ func (l *Lifecycle) initAtPaths(configPaths []string, artifactsDir string) (*Loc
 		return nil, nil, err
 	}
 
-	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "auth", len(lock.Auth), "indexeddbs", len(lock.IndexedDBs), "cache", len(lock.Caches), "s3", len(lock.S3), "secrets", len(lock.Secrets), "telemetry", len(lock.Telemetry), "audit", len(lock.Audit), "uis", len(lock.UIs))
+	slog.Info("prepared locked artifacts", "providers", len(lock.Providers), "auth", len(lock.Auth), "indexeddbs", len(lock.IndexedDBs), "cache", len(lock.Caches), "s3", len(lock.S3), "workflow", len(lock.Workflows), "secrets", len(lock.Secrets), "telemetry", len(lock.Telemetry), "audit", len(lock.Audit), "uis", len(lock.UIs))
 	slog.Info("wrote lockfile", "path", paths.lockfilePath)
 	return lock, cfg, nil
 }
@@ -537,6 +539,7 @@ type initPaths struct {
 	telemetryDir string
 	auditDir     string
 	cacheDir     string
+	workflowDir  string
 	uiDir        string
 }
 
@@ -577,6 +580,7 @@ func hostProviderCollections(cfg *config.Config) []struct {
 		{config.HostProviderKindTelemetry, cfg.Providers.Telemetry},
 		{config.HostProviderKindAudit, cfg.Providers.Audit},
 		{config.HostProviderKindCache, cfg.Providers.Cache},
+		{config.HostProviderKindWorkflow, cfg.Providers.Workflow},
 	}
 }
 
@@ -597,6 +601,8 @@ func lockEntriesForKind(lock *Lockfile, kind config.HostProviderKind) map[string
 		return lock.Caches
 	case config.HostProviderKindIndexedDB:
 		return lock.IndexedDBs
+	case config.HostProviderKindWorkflow:
+		return lock.Workflows
 	default:
 		return nil
 	}
@@ -710,6 +716,7 @@ func initPathsForConfigsWithArtifactsDir(configPaths []string, artifactsDir stri
 		telemetryDir: filepath.Join(artifactsDir, filepath.FromSlash(PreparedTelemetryDir)),
 		auditDir:     filepath.Join(artifactsDir, filepath.FromSlash(PreparedAuditDir)),
 		cacheDir:     filepath.Join(artifactsDir, filepath.FromSlash(PreparedCacheDir)),
+		workflowDir:  filepath.Join(artifactsDir, filepath.FromSlash(PreparedWorkflowDir)),
 		uiDir:        filepath.Join(artifactsDir, filepath.FromSlash(PreparedUIDir)),
 	}
 }
@@ -742,6 +749,10 @@ func cacheDestDir(paths initPaths, name string) string {
 	return filepath.Join(paths.cacheDir, name)
 }
 
+func workflowDestDir(paths initPaths, name string) string {
+	return filepath.Join(paths.workflowDir, name)
+}
+
 func indexeddbDestDir(paths initPaths, name string) string {
 	return filepath.Join(paths.artifactsDir, "indexeddb", name)
 }
@@ -764,6 +775,8 @@ func componentDestDir(paths initPaths, kind config.HostProviderKind, name string
 		return cacheDestDir(paths, name)
 	case config.HostProviderKindIndexedDB:
 		return indexeddbDestDir(paths, name)
+	case config.HostProviderKindWorkflow:
+		return workflowDestDir(paths, name)
 	default:
 		return ""
 	}
@@ -814,6 +827,8 @@ func providerManifestKind(kind config.HostProviderKind) string {
 		return providermanifestv1.KindCache
 	case config.HostProviderKindIndexedDB:
 		return providermanifestv1.KindIndexedDB
+	case config.HostProviderKindWorkflow:
+		return providermanifestv1.KindWorkflow
 	default:
 		return ""
 	}
@@ -1000,6 +1015,8 @@ func lockEntryDestDir(paths initPaths, kind, name string) string {
 		return indexeddbDestDir(paths, name)
 	case providermanifestv1.KindS3:
 		return s3DestDir(paths, name)
+	case providermanifestv1.KindWorkflow:
+		return workflowDestDir(paths, name)
 	case providerLockKindTelemetry:
 		return telemetryDestDir(paths, name)
 	case providerLockKindAudit:

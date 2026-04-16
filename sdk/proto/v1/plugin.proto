@@ -152,6 +152,7 @@ message RequestContext {
   SubjectContext subject = 1;
   CredentialContext credential = 2;
   AccessContext access = 3;
+  google.protobuf.Struct workflow = 4;
 }
 
 // ExecuteRequest invokes one executable operation.

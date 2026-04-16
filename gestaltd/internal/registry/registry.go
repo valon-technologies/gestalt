@@ -29,6 +29,22 @@ func (m *ProviderMap[T]) Register(name string, val T) error {
 	return nil
 }
 
+func (m *ProviderMap[T]) Replace(name string, val T) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, exists := m.items[name]; !exists {
+		return fmt.Errorf("%s %q: %w", m.kind, name, core.ErrNotFound)
+	}
+	m.items[name] = val
+	return nil
+}
+
+func (m *ProviderMap[T]) Remove(name string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.items, name)
+}
+
 func (m *ProviderMap[T]) Get(name string) (T, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

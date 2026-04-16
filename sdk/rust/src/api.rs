@@ -31,7 +31,7 @@ pub struct Access {
     pub role: String,
 }
 
-#[derive(Clone, Debug, Default, Eq, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 /// Carries execution-scoped metadata into typed operation handlers.
 pub struct Request {
     pub token: String,
@@ -39,6 +39,10 @@ pub struct Request {
     pub subject: Subject,
     pub credential: Credential,
     pub access: Access,
+    /// Workflow callback metadata uses a JSON-style lowerCamelCase object
+    /// such as `runId`, `target.pluginName`, `trigger.scheduleId`, and
+    /// `trigger.event.specVersion`.
+    pub workflow: serde_json::Map<String, serde_json::Value>,
     pub request_handle: String,
 }
 

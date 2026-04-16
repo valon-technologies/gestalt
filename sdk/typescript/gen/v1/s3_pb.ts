@@ -15,6 +15,8 @@ export const file_v1_s3: GenFile = /*@__PURE__*/
   fileDesc("Cgt2MS9zMy5wcm90bxITZ2VzdGFsdC5wcm92aWRlci52MSI+CgtTM09iamVjdFJlZhIOCgZidWNrZXQYASABKAkSCwoDa2V5GAIgASgJEhIKCnZlcnNpb25faWQYAyABKAkirQIKDFMzT2JqZWN0TWV0YRItCgNyZWYYASABKAsyIC5nZXN0YWx0LnByb3ZpZGVyLnYxLlMzT2JqZWN0UmVmEgwKBGV0YWcYAiABKAkSDAoEc2l6ZRgDIAEoAxIUCgxjb250ZW50X3R5cGUYBCABKAkSMQoNbGFzdF9tb2RpZmllZBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASQQoIbWV0YWRhdGEYBiADKAsyLy5nZXN0YWx0LnByb3ZpZGVyLnYxLlMzT2JqZWN0TWV0YS5NZXRhZGF0YUVudHJ5EhUKDXN0b3JhZ2VfY2xhc3MYByABKAkaLwoNTWV0YWRhdGFFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIkMKCUJ5dGVSYW5nZRISCgVzdGFydBgBIAEoA0gAiAEBEhAKA2VuZBgCIAEoA0gBiAEBQggKBl9zdGFydEIGCgRfZW5kIkIKEUhlYWRPYmplY3RSZXF1ZXN0Ei0KA3JlZhgBIAEoCzIgLmdlc3RhbHQucHJvdmlkZXIudjEuUzNPYmplY3RSZWYiRQoSSGVhZE9iamVjdFJlc3BvbnNlEi8KBG1ldGEYASABKAsyIS5nZXN0YWx0LnByb3ZpZGVyLnYxLlMzT2JqZWN0TWV0YSKZAgoRUmVhZE9iamVjdFJlcXVlc3QSLQoDcmVmGAEgASgLMiAuZ2VzdGFsdC5wcm92aWRlci52MS5TM09iamVjdFJlZhIyCgVyYW5nZRgCIAEoCzIeLmdlc3RhbHQucHJvdmlkZXIudjEuQnl0ZVJhbmdlSACIAQESEAoIaWZfbWF0Y2gYAyABKAkSFQoNaWZfbm9uZV9tYXRjaBgEIAEoCRI1ChFpZl9tb2RpZmllZF9zaW5jZRgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASNwoTaWZfdW5tb2RpZmllZF9zaW5jZRgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXBCCAoGX3JhbmdlIl4KD1JlYWRPYmplY3RDaHVuaxIxCgRtZXRhGAEgASgLMiEuZ2VzdGFsdC5wcm92aWRlci52MS5TM09iamVjdE1ldGFIABIOCgRkYXRhGAIgASgMSABCCAoGcmVzdWx0It4CCg9Xcml0ZU9iamVjdE9wZW4SLQoDcmVmGAEgASgLMiAuZ2VzdGFsdC5wcm92aWRlci52MS5TM09iamVjdFJlZhIUCgxjb250ZW50X3R5cGUYAiABKAkSFQoNY2FjaGVfY29udHJvbBgDIAEoCRIbChNjb250ZW50X2Rpc3Bvc2l0aW9uGAQgASgJEhgKEGNvbnRlbnRfZW5jb2RpbmcYBSABKAkSGAoQY29udGVudF9sYW5ndWFnZRgGIAEoCRJECghtZXRhZGF0YRgHIAMoCzIyLmdlc3RhbHQucHJvdmlkZXIudjEuV3JpdGVPYmplY3RPcGVuLk1ldGFkYXRhRW50cnkSEAoIaWZfbWF0Y2gYCCABKAkSFQoNaWZfbm9uZV9tYXRjaBgJIAEoCRovCg1NZXRhZGF0YUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiYQoSV3JpdGVPYmplY3RSZXF1ZXN0EjQKBG9wZW4YASABKAsyJC5nZXN0YWx0LnByb3ZpZGVyLnYxLldyaXRlT2JqZWN0T3BlbkgAEg4KBGRhdGEYAiABKAxIAEIFCgNtc2ciRgoTV3JpdGVPYmplY3RSZXNwb25zZRIvCgRtZXRhGAEgASgLMiEuZ2VzdGFsdC5wcm92aWRlci52MS5TM09iamVjdE1ldGEiRAoTRGVsZXRlT2JqZWN0UmVxdWVzdBItCgNyZWYYASABKAsyIC5nZXN0YWx0LnByb3ZpZGVyLnYxLlMzT2JqZWN0UmVmIooBChJMaXN0T2JqZWN0c1JlcXVlc3QSDgoGYnVja2V0GAEgASgJEg4KBnByZWZpeBgCIAEoCRIRCglkZWxpbWl0ZXIYAyABKAkSGgoSY29udGludWF0aW9uX3Rva2VuGAQgASgJEhMKC3N0YXJ0X2FmdGVyGAUgASgJEhAKCG1heF9rZXlzGAYgASgFIpUBChNMaXN0T2JqZWN0c1Jlc3BvbnNlEjIKB29iamVjdHMYASADKAsyIS5nZXN0YWx0LnByb3ZpZGVyLnYxLlMzT2JqZWN0TWV0YRIXCg9jb21tb25fcHJlZml4ZXMYAiADKAkSHwoXbmV4dF9jb250aW51YXRpb25fdG9rZW4YAyABKAkSEAoIaGFzX21vcmUYBCABKAgipQEKEUNvcHlPYmplY3RSZXF1ZXN0EjAKBnNvdXJjZRgBIAEoCzIgLmdlc3RhbHQucHJvdmlkZXIudjEuUzNPYmplY3RSZWYSNQoLZGVzdGluYXRpb24YAiABKAsyIC5nZXN0YWx0LnByb3ZpZGVyLnYxLlMzT2JqZWN0UmVmEhAKCGlmX21hdGNoGAMgASgJEhUKDWlmX25vbmVfbWF0Y2gYBCABKAkiRQoSQ29weU9iamVjdFJlc3BvbnNlEi8KBG1ldGEYASABKAsyIS5nZXN0YWx0LnByb3ZpZGVyLnYxLlMzT2JqZWN0TWV0YSK+AgoUUHJlc2lnbk9iamVjdFJlcXVlc3QSLQoDcmVmGAEgASgLMiAuZ2VzdGFsdC5wcm92aWRlci52MS5TM09iamVjdFJlZhIyCgZtZXRob2QYAiABKA4yIi5nZXN0YWx0LnByb3ZpZGVyLnYxLlByZXNpZ25NZXRob2QSFwoPZXhwaXJlc19zZWNvbmRzGAMgASgDEhQKDGNvbnRlbnRfdHlwZRgEIAEoCRIbChNjb250ZW50X2Rpc3Bvc2l0aW9uGAUgASgJEkcKB2hlYWRlcnMYBiADKAsyNi5nZXN0YWx0LnByb3ZpZGVyLnYxLlByZXNpZ25PYmplY3RSZXF1ZXN0LkhlYWRlcnNFbnRyeRouCgxIZWFkZXJzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASKCAgoVUHJlc2lnbk9iamVjdFJlc3BvbnNlEgsKA3VybBgBIAEoCRIyCgZtZXRob2QYAiABKA4yIi5nZXN0YWx0LnByb3ZpZGVyLnYxLlByZXNpZ25NZXRob2QSLgoKZXhwaXJlc19hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASSAoHaGVhZGVycxgEIAMoCzI3Lmdlc3RhbHQucHJvdmlkZXIudjEuUHJlc2lnbk9iamVjdFJlc3BvbnNlLkhlYWRlcnNFbnRyeRouCgxIZWFkZXJzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASqTAQoNUHJlc2lnbk1ldGhvZBIeChpQUkVTSUdOX01FVEhPRF9VTlNQRUNJRklFRBAAEhYKElBSRVNJR05fTUVUSE9EX0dFVBABEhYKElBSRVNJR05fTUVUSE9EX1BVVBACEhkKFVBSRVNJR05fTUVUSE9EX0RFTEVURRADEhcKE1BSRVNJR05fTUVUSE9EX0hFQUQQBDKgBQoCUzMSXQoKSGVhZE9iamVjdBImLmdlc3RhbHQucHJvdmlkZXIudjEuSGVhZE9iamVjdFJlcXVlc3QaJy5nZXN0YWx0LnByb3ZpZGVyLnYxLkhlYWRPYmplY3RSZXNwb25zZRJcCgpSZWFkT2JqZWN0EiYuZ2VzdGFsdC5wcm92aWRlci52MS5SZWFkT2JqZWN0UmVxdWVzdBokLmdlc3RhbHQucHJvdmlkZXIudjEuUmVhZE9iamVjdENodW5rMAESYgoLV3JpdGVPYmplY3QSJy5nZXN0YWx0LnByb3ZpZGVyLnYxLldyaXRlT2JqZWN0UmVxdWVzdBooLmdlc3RhbHQucHJvdmlkZXIudjEuV3JpdGVPYmplY3RSZXNwb25zZSgBElAKDERlbGV0ZU9iamVjdBIoLmdlc3RhbHQucHJvdmlkZXIudjEuRGVsZXRlT2JqZWN0UmVxdWVzdBoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRJgCgtMaXN0T2JqZWN0cxInLmdlc3RhbHQucHJvdmlkZXIudjEuTGlzdE9iamVjdHNSZXF1ZXN0GiguZ2VzdGFsdC5wcm92aWRlci52MS5MaXN0T2JqZWN0c1Jlc3BvbnNlEl0KCkNvcHlPYmplY3QSJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkNvcHlPYmplY3RSZXF1ZXN0GicuZ2VzdGFsdC5wcm92aWRlci52MS5Db3B5T2JqZWN0UmVzcG9uc2USZgoNUHJlc2lnbk9iamVjdBIpLmdlc3RhbHQucHJvdmlkZXIudjEuUHJlc2lnbk9iamVjdFJlcXVlc3QaKi5nZXN0YWx0LnByb3ZpZGVyLnYxLlByZXNpZ25PYmplY3RSZXNwb25zZUI7WjlnaXRodWIuY29tL3ZhbG9uLXRlY2hub2xvZ2llcy9nZXN0YWx0L3Nkay9nby9nZW4vdjE7cHJvdG9iBnByb3RvMw", [file_google_protobuf_empty, file_google_protobuf_timestamp]);
 
 /**
+ * S3ObjectRef identifies one object or object version.
+ *
  * @generated from message gestalt.provider.v1.S3ObjectRef
  */
 export type S3ObjectRef = Message<"gestalt.provider.v1.S3ObjectRef"> & {
@@ -42,6 +44,8 @@ export const S3ObjectRefSchema: GenMessage<S3ObjectRef> = /*@__PURE__*/
   messageDesc(file_v1_s3, 0);
 
 /**
+ * S3ObjectMeta describes one object returned by the provider.
+ *
  * @generated from message gestalt.provider.v1.S3ObjectMeta
  */
 export type S3ObjectMeta = Message<"gestalt.provider.v1.S3ObjectMeta"> & {
@@ -89,6 +93,8 @@ export const S3ObjectMetaSchema: GenMessage<S3ObjectMeta> = /*@__PURE__*/
   messageDesc(file_v1_s3, 1);
 
 /**
+ * ByteRange requests a half-open slice of an object's bytes.
+ *
  * @generated from message gestalt.provider.v1.ByteRange
  */
 export type ByteRange = Message<"gestalt.provider.v1.ByteRange"> & {
@@ -111,6 +117,8 @@ export const ByteRangeSchema: GenMessage<ByteRange> = /*@__PURE__*/
   messageDesc(file_v1_s3, 2);
 
 /**
+ * HeadObjectRequest fetches metadata for one object.
+ *
  * @generated from message gestalt.provider.v1.HeadObjectRequest
  */
 export type HeadObjectRequest = Message<"gestalt.provider.v1.HeadObjectRequest"> & {
@@ -128,6 +136,8 @@ export const HeadObjectRequestSchema: GenMessage<HeadObjectRequest> = /*@__PURE_
   messageDesc(file_v1_s3, 3);
 
 /**
+ * HeadObjectResponse returns object metadata.
+ *
  * @generated from message gestalt.provider.v1.HeadObjectResponse
  */
 export type HeadObjectResponse = Message<"gestalt.provider.v1.HeadObjectResponse"> & {
@@ -145,6 +155,8 @@ export const HeadObjectResponseSchema: GenMessage<HeadObjectResponse> = /*@__PUR
   messageDesc(file_v1_s3, 4);
 
 /**
+ * ReadObjectRequest opens a streaming object read.
+ *
  * @generated from message gestalt.provider.v1.ReadObjectRequest
  */
 export type ReadObjectRequest = Message<"gestalt.provider.v1.ReadObjectRequest"> & {
@@ -187,6 +199,8 @@ export const ReadObjectRequestSchema: GenMessage<ReadObjectRequest> = /*@__PURE_
   messageDesc(file_v1_s3, 5);
 
 /**
+ * ReadObjectChunk is one frame in a streaming object read.
+ *
  * @generated from message gestalt.provider.v1.ReadObjectChunk
  */
 export type ReadObjectChunk = Message<"gestalt.provider.v1.ReadObjectChunk"> & {
@@ -216,6 +230,9 @@ export const ReadObjectChunkSchema: GenMessage<ReadObjectChunk> = /*@__PURE__*/
   messageDesc(file_v1_s3, 6);
 
 /**
+ * WriteObjectOpen carries the metadata frame that must be sent first in a
+ * write-object stream.
+ *
  * @generated from message gestalt.provider.v1.WriteObjectOpen
  */
 export type WriteObjectOpen = Message<"gestalt.provider.v1.WriteObjectOpen"> & {
@@ -273,6 +290,8 @@ export const WriteObjectOpenSchema: GenMessage<WriteObjectOpen> = /*@__PURE__*/
   messageDesc(file_v1_s3, 7);
 
 /**
+ * WriteObjectRequest is one frame in a write-object stream.
+ *
  * @generated from message gestalt.provider.v1.WriteObjectRequest
  */
 export type WriteObjectRequest = Message<"gestalt.provider.v1.WriteObjectRequest"> & {
@@ -302,6 +321,8 @@ export const WriteObjectRequestSchema: GenMessage<WriteObjectRequest> = /*@__PUR
   messageDesc(file_v1_s3, 8);
 
 /**
+ * WriteObjectResponse returns metadata for the committed object.
+ *
  * @generated from message gestalt.provider.v1.WriteObjectResponse
  */
 export type WriteObjectResponse = Message<"gestalt.provider.v1.WriteObjectResponse"> & {
@@ -319,6 +340,8 @@ export const WriteObjectResponseSchema: GenMessage<WriteObjectResponse> = /*@__P
   messageDesc(file_v1_s3, 9);
 
 /**
+ * DeleteObjectRequest removes one object.
+ *
  * @generated from message gestalt.provider.v1.DeleteObjectRequest
  */
 export type DeleteObjectRequest = Message<"gestalt.provider.v1.DeleteObjectRequest"> & {
@@ -336,6 +359,8 @@ export const DeleteObjectRequestSchema: GenMessage<DeleteObjectRequest> = /*@__P
   messageDesc(file_v1_s3, 10);
 
 /**
+ * ListObjectsRequest lists objects in a bucket.
+ *
  * @generated from message gestalt.provider.v1.ListObjectsRequest
  */
 export type ListObjectsRequest = Message<"gestalt.provider.v1.ListObjectsRequest"> & {
@@ -378,6 +403,8 @@ export const ListObjectsRequestSchema: GenMessage<ListObjectsRequest> = /*@__PUR
   messageDesc(file_v1_s3, 11);
 
 /**
+ * ListObjectsResponse is one page of list-objects results.
+ *
  * @generated from message gestalt.provider.v1.ListObjectsResponse
  */
 export type ListObjectsResponse = Message<"gestalt.provider.v1.ListObjectsResponse"> & {
@@ -410,6 +437,8 @@ export const ListObjectsResponseSchema: GenMessage<ListObjectsResponse> = /*@__P
   messageDesc(file_v1_s3, 12);
 
 /**
+ * CopyObjectRequest copies one object to another location.
+ *
  * @generated from message gestalt.provider.v1.CopyObjectRequest
  */
 export type CopyObjectRequest = Message<"gestalt.provider.v1.CopyObjectRequest"> & {
@@ -442,6 +471,8 @@ export const CopyObjectRequestSchema: GenMessage<CopyObjectRequest> = /*@__PURE_
   messageDesc(file_v1_s3, 13);
 
 /**
+ * CopyObjectResponse returns metadata for the copied object.
+ *
  * @generated from message gestalt.provider.v1.CopyObjectResponse
  */
 export type CopyObjectResponse = Message<"gestalt.provider.v1.CopyObjectResponse"> & {
@@ -459,6 +490,8 @@ export const CopyObjectResponseSchema: GenMessage<CopyObjectResponse> = /*@__PUR
   messageDesc(file_v1_s3, 14);
 
 /**
+ * PresignObjectRequest asks the provider to mint a presigned URL.
+ *
  * @generated from message gestalt.provider.v1.PresignObjectRequest
  */
 export type PresignObjectRequest = Message<"gestalt.provider.v1.PresignObjectRequest"> & {
@@ -501,6 +534,8 @@ export const PresignObjectRequestSchema: GenMessage<PresignObjectRequest> = /*@_
   messageDesc(file_v1_s3, 15);
 
 /**
+ * PresignObjectResponse returns a presigned URL plus any required headers.
+ *
  * @generated from message gestalt.provider.v1.PresignObjectResponse
  */
 export type PresignObjectResponse = Message<"gestalt.provider.v1.PresignObjectResponse"> & {
@@ -533,6 +568,8 @@ export const PresignObjectResponseSchema: GenMessage<PresignObjectResponse> = /*
   messageDesc(file_v1_s3, 16);
 
 /**
+ * PresignMethod identifies the HTTP verb encoded into a presigned URL.
+ *
  * @generated from enum gestalt.provider.v1.PresignMethod
  */
 export enum PresignMethod {
@@ -569,6 +606,8 @@ export const PresignMethodSchema: GenEnum<PresignMethod> = /*@__PURE__*/
   enumDesc(file_v1_s3, 0);
 
 /**
+ * S3 models the shared Gestalt S3-provider protocol.
+ *
  * @generated from service gestalt.provider.v1.S3
  */
 export const S3: GenService<{

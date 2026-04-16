@@ -27,7 +27,8 @@ if _version_not_supported:
 
 
 class IndexedDBStub(object):
-    """Missing associated documentation comment in .proto file."""
+    """IndexedDB models the shared Gestalt IndexedDB-provider protocol.
+    """
 
     def __init__(self, channel):
         """Constructor.
@@ -133,7 +134,8 @@ class IndexedDBStub(object):
 
 
 class IndexedDBServicer(object):
-    """Missing associated documentation comment in .proto file."""
+    """IndexedDB models the shared Gestalt IndexedDB-provider protocol.
+    """
 
     def CreateObjectStore(self, request, context):
         """Lifecycle
@@ -361,7 +363,8 @@ def add_IndexedDBServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class IndexedDB(object):
-    """Missing associated documentation comment in .proto file."""
+    """IndexedDB models the shared Gestalt IndexedDB-provider protocol.
+    """
 
     @staticmethod
     def CreateObjectStore(request,

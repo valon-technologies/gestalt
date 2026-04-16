@@ -3533,6 +3533,18 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 				Executable: "indexeddb/archive/artifacts/darwin/arm64/indexeddb-archive",
 			},
 		},
+		Workflows: map[string]LockEntry{
+			"temporal": {
+				Fingerprint: "workflow-temporal-fp",
+				Source:      "github.com/test-org/test-repo/workflow-temporal",
+				Version:     "1.3.0",
+				Archives: map[string]LockArchive{
+					"darwin/arm64": {URL: "https://example.com/workflow-temporal.tar.gz", SHA256: "workflow123"},
+				},
+				Manifest:   "workflow/temporal/manifest.json",
+				Executable: "workflow/temporal/artifacts/darwin/arm64/workflow-temporal",
+			},
+		},
 		UIs: map[string]LockUIEntry{
 			"roadmap": {
 				Fingerprint: "ui-fp",
@@ -3582,6 +3594,12 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	}
 	if got.IndexedDBs["archive"].Executable != "" {
 		t.Fatal("indexeddb executable should not round-trip from portable lock schema")
+	}
+	if got.Workflows["temporal"].Source != want.Workflows["temporal"].Source || got.Workflows["temporal"].Version != want.Workflows["temporal"].Version {
+		t.Fatal("workflow lock entry mismatch")
+	}
+	if got.Workflows["temporal"].Executable != "" {
+		t.Fatal("workflow executable should not round-trip from portable lock schema")
 	}
 	if got.UIs["roadmap"].Source != want.UIs["roadmap"].Source || got.UIs["roadmap"].Version != want.UIs["roadmap"].Version {
 		t.Fatal("ui lock entry mismatch")

@@ -56,6 +56,7 @@ type CredentialContext struct {
 type invocationSurfaceCtxKey struct{}
 type credentialCtxKey struct{}
 type accessCtxKey struct{}
+type workflowCtxKey struct{}
 
 type InvocationSurface string
 
@@ -97,6 +98,33 @@ func WithAccessContext(ctx context.Context, access AccessContext) context.Contex
 func AccessContextFromContext(ctx context.Context) AccessContext {
 	access, _ := ctx.Value(accessCtxKey{}).(AccessContext)
 	return access
+}
+
+func WithWorkflowContext(ctx context.Context, workflow map[string]any) context.Context {
+	return context.WithValue(ctx, workflowCtxKey{}, workflow)
+}
+
+func WorkflowContextFromContext(ctx context.Context) map[string]any {
+	workflow, _ := ctx.Value(workflowCtxKey{}).(map[string]any)
+	return workflow
+}
+
+func WorkflowContextMap(value map[string]any, key string) map[string]any {
+	raw, ok := value[key]
+	if !ok {
+		return nil
+	}
+	typed, _ := raw.(map[string]any)
+	return typed
+}
+
+func WorkflowContextString(value map[string]any, key string) string {
+	raw, ok := value[key]
+	if !ok {
+		return ""
+	}
+	typed, _ := raw.(string)
+	return typed
 }
 
 func WithInvocationSurface(ctx context.Context, surface InvocationSurface) context.Context {

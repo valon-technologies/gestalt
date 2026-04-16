@@ -144,6 +144,10 @@ func (p *remoteProviderBase) Execute(ctx context.Context, operation string, para
 		releaseSnapshot := p.snapshots.Register(ctx, requestHandle)
 		defer releaseSnapshot()
 	}
+	reqCtx, err := requestContextProto(ctx)
+	if err != nil {
+		return nil, err
+	}
 	resp, err := p.client.Execute(ctx, &proto.ExecuteRequest{
 		Operation:        operation,
 		Params:           msg,
@@ -151,7 +155,7 @@ func (p *remoteProviderBase) Execute(ctx context.Context, operation string, para
 		ConnectionParams: core.ConnectionParams(ctx),
 		InvocationId:     invocationIDFromContext(ctx),
 		RequestHandle:    requestHandle,
-		Context:          requestContextProto(ctx),
+		Context:          reqCtx,
 	})
 	if err != nil {
 		return nil, err
@@ -185,11 +189,15 @@ func (p *remoteProviderBase) DiscoveryConfig() *core.DiscoveryConfig {
 func (p *remoteProviderBase) ConnectionForOperation(string) string { return "" }
 
 func (p *remoteProviderBase) sessionCatalog(ctx context.Context, token string) (*catalog.Catalog, error) {
+	reqCtx, err := requestContextProto(ctx)
+	if err != nil {
+		return nil, err
+	}
 	resp, err := p.client.GetSessionCatalog(ctx, &proto.GetSessionCatalogRequest{
 		Token:            token,
 		ConnectionParams: core.ConnectionParams(ctx),
 		InvocationId:     invocationIDFromContext(ctx),
-		Context:          requestContextProto(ctx),
+		Context:          reqCtx,
 	})
 	if err != nil {
 		return nil, err
@@ -270,7 +278,7 @@ func (p *remoteProviderBase) newRequestHandle() string {
 	return uuid.NewString()
 }
 
-func requestContextProto(ctx context.Context) *proto.RequestContext {
+func requestContextProto(ctx context.Context) (*proto.RequestContext, error) {
 	var out proto.RequestContext
 
 	if p := principal.FromContext(ctx); p != nil {
@@ -297,11 +305,18 @@ func requestContextProto(ctx context.Context) *proto.RequestContext {
 			Role:   access.Role,
 		}
 	}
-
-	if out.Subject == nil && out.Credential == nil && out.Access == nil {
-		return nil
+	if workflow := invocation.WorkflowContextFromContext(ctx); workflow != nil {
+		value, err := structFromMap(workflow)
+		if err != nil {
+			return nil, fmt.Errorf("workflow request context: %w", err)
+		}
+		out.Workflow = value
 	}
-	return &out
+
+	if out.Subject == nil && out.Credential == nil && out.Access == nil && out.Workflow == nil {
+		return nil, nil
+	}
+	return &out, nil
 }
 
 func subjectIDForPrincipal(p *principal.Principal) string {

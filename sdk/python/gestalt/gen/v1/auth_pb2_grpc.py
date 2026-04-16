@@ -27,7 +27,8 @@ if _version_not_supported:
 
 
 class AuthProviderStub(object):
-    """Missing associated documentation comment in .proto file."""
+    """AuthProvider models the shared Gestalt auth-provider protocol.
+    """
 
     def __init__(self, channel):
         """Constructor.
@@ -58,7 +59,8 @@ class AuthProviderStub(object):
 
 
 class AuthProviderServicer(object):
-    """Missing associated documentation comment in .proto file."""
+    """AuthProvider models the shared Gestalt auth-provider protocol.
+    """
 
     def BeginLogin(self, request, context):
         """Missing associated documentation comment in .proto file."""
@@ -116,7 +118,8 @@ def add_AuthProviderServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class AuthProvider(object):
-    """Missing associated documentation comment in .proto file."""
+    """AuthProvider models the shared Gestalt auth-provider protocol.
+    """
 
     @staticmethod
     def BeginLogin(request,

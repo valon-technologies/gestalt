@@ -28,6 +28,7 @@ type providerLockBuckets struct {
 	IndexedDB map[string]portableLockEntry `json:"indexeddb,omitempty"`
 	Cache     map[string]portableLockEntry `json:"cache,omitempty"`
 	S3        map[string]portableLockEntry `json:"s3,omitempty"`
+	Workflow  map[string]portableLockEntry `json:"workflow,omitempty"`
 	Secrets   map[string]portableLockEntry `json:"secrets,omitempty"`
 	Telemetry map[string]portableLockEntry `json:"telemetry,omitempty"`
 	Audit     map[string]portableLockEntry `json:"audit,omitempty"`
@@ -49,6 +50,7 @@ func newLockfile() *Lockfile {
 		IndexedDBs: make(map[string]LockEntry),
 		Caches:     make(map[string]LockEntry),
 		S3:         make(map[string]LockEntry),
+		Workflows:  make(map[string]LockEntry),
 		Secrets:    make(map[string]LockEntry),
 		Telemetry:  make(map[string]LockEntry),
 		Audit:      make(map[string]LockEntry),
@@ -78,6 +80,9 @@ func normalizeLockfile(lock *Lockfile) *Lockfile {
 	if lock.S3 == nil {
 		lock.S3 = make(map[string]LockEntry)
 	}
+	if lock.Workflows == nil {
+		lock.Workflows = make(map[string]LockEntry)
+	}
 	if lock.Telemetry == nil {
 		lock.Telemetry = make(map[string]LockEntry)
 	}
@@ -100,6 +105,7 @@ func providerLockKinds() []string {
 		providermanifestv1.KindIndexedDB,
 		providermanifestv1.KindCache,
 		providermanifestv1.KindS3,
+		providermanifestv1.KindWorkflow,
 		providermanifestv1.KindSecrets,
 		providerLockKindTelemetry,
 		providerLockKindAudit,
@@ -122,6 +128,8 @@ func lockEntriesForProviderKind(lock *Lockfile, kind string) map[string]LockEntr
 		return lock.Caches
 	case providermanifestv1.KindS3:
 		return lock.S3
+	case providermanifestv1.KindWorkflow:
+		return lock.Workflows
 	case providermanifestv1.KindSecrets:
 		return lock.Secrets
 	case providerLockKindTelemetry:
@@ -147,6 +155,7 @@ func providerLockfileFromLockfile(lock *Lockfile) *providerLockfile {
 			IndexedDB: portableEntriesFromLockEntries(lock.IndexedDBs),
 			Cache:     portableEntriesFromLockEntries(lock.Caches),
 			S3:        portableEntriesFromLockEntries(lock.S3),
+			Workflow:  portableEntriesFromLockEntries(lock.Workflows),
 			Secrets:   portableEntriesFromLockEntries(lock.Secrets),
 			Telemetry: portableEntriesFromLockEntries(lock.Telemetry),
 			Audit:     portableEntriesFromLockEntries(lock.Audit),
@@ -165,6 +174,7 @@ func (lock *providerLockfile) toLockfile() *Lockfile {
 	runtimeLock.IndexedDBs = lockEntriesFromPortableEntries(lock.Providers.IndexedDB)
 	runtimeLock.Caches = lockEntriesFromPortableEntries(lock.Providers.Cache)
 	runtimeLock.S3 = lockEntriesFromPortableEntries(lock.Providers.S3)
+	runtimeLock.Workflows = lockEntriesFromPortableEntries(lock.Providers.Workflow)
 	runtimeLock.Secrets = lockEntriesFromPortableEntries(lock.Providers.Secrets)
 	runtimeLock.Telemetry = lockEntriesFromPortableEntries(lock.Providers.Telemetry)
 	runtimeLock.Audit = lockEntriesFromPortableEntries(lock.Providers.Audit)

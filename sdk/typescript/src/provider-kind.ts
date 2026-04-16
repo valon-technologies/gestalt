@@ -38,6 +38,12 @@ const PROVIDER_KIND_DEFINITIONS = {
     defaultExportNames: ["s3", "provider"],
     label: "s3 provider",
   },
+  workflow: {
+    tokens: ["workflow"],
+    formatToken: "workflow",
+    defaultExportNames: ["workflow", "provider"],
+    label: "workflow provider",
+  },
   telemetry: {
     tokens: ["telemetry"],
     formatToken: "telemetry",

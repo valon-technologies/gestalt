@@ -21,6 +21,7 @@ import (
 	telemetrynoop "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/noop"
 	telemetryotlp "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/otlp"
 	telemetrystdout "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/stdout"
+	workflowprovider "github.com/valon-technologies/gestalt/server/internal/drivers/workflow/provider"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 )
 
@@ -118,6 +119,7 @@ func buildFactories() *bootstrap.FactoryRegistry {
 	factories.IndexedDB = indexeddbprovider.Factory
 	factories.Cache = cacheprovider.Factory
 	factories.S3 = s3provider.Factory
+	factories.Workflow = workflowprovider.Factory
 	factories.Secrets["env"] = secretsenv.Factory
 	factories.Secrets["file"] = secretsfile.Factory
 	factories.Secrets["provider"] = secretsprovider.Factory

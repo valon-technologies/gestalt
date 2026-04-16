@@ -60,6 +60,7 @@ type ProvidersConfig struct {
 	IndexedDB map[string]*ProviderEntry `yaml:"indexeddb,omitempty"`
 	Cache     map[string]*ProviderEntry `yaml:"cache,omitempty"`
 	S3        map[string]*ProviderEntry `yaml:"s3,omitempty"`
+	Workflow  map[string]*ProviderEntry `yaml:"workflow,omitempty"`
 }
 
 type HostProviderKind string
@@ -71,6 +72,7 @@ const (
 	HostProviderKindAudit     HostProviderKind = "audit"
 	HostProviderKindIndexedDB HostProviderKind = "indexeddb"
 	HostProviderKindCache     HostProviderKind = "cache"
+	HostProviderKindWorkflow  HostProviderKind = "workflow"
 )
 
 type ServerProvidersConfig struct {
@@ -136,6 +138,7 @@ type ProviderEntry struct {
 	IndexedDB         *PluginIndexedDBConfig        `yaml:"indexeddb,omitempty"`
 	Cache             []string                      `yaml:"cache,omitempty"`
 	S3                []string                      `yaml:"s3,omitempty"`
+	Workflow          *PluginWorkflowConfig         `yaml:"workflow,omitempty"`
 	Surfaces          *ProviderSurfaceOverrides     `yaml:"surfaces,omitempty"`
 
 	// Runtime-resolved fields (populated during init/bootstrap, not from YAML)
@@ -166,6 +169,11 @@ type PluginIndexedDBConfig struct {
 	Provider     string   `yaml:"provider,omitempty"`
 	DB           string   `yaml:"db,omitempty"`
 	ObjectStores []string `yaml:"objectStores,omitempty"`
+}
+
+type PluginWorkflowConfig struct {
+	Provider   string   `yaml:"provider,omitempty"`
+	Operations []string `yaml:"operations,omitempty"`
 }
 
 func (c *PluginIndexedDBConfig) UnmarshalYAML(value *yaml.Node) error {
@@ -698,6 +706,7 @@ func OverlayManagedPluginConfigPaths(paths []string, cfg *Config) error {
 		{HostProviderKindAudit, cfg.Providers.Audit},
 		{HostProviderKindIndexedDB, cfg.Providers.IndexedDB},
 		{HostProviderKindCache, cfg.Providers.Cache},
+		{HostProviderKindWorkflow, cfg.Providers.Workflow},
 	} {
 		kindNode := mappingValueNode(providersNode, string(collection.kind))
 		for name, entry := range collection.entries {
@@ -1348,6 +1357,7 @@ func applyDefaults(cfg *Config) {
 	cfg.Providers.IndexedDB = nonNilProviderEntryMap(cfg.Providers.IndexedDB)
 	cfg.Providers.Cache = nonNilProviderEntryMap(cfg.Providers.Cache)
 	cfg.Providers.S3 = nonNilProviderEntryMap(cfg.Providers.S3)
+	cfg.Providers.Workflow = nonNilProviderEntryMap(cfg.Providers.Workflow)
 }
 
 func nonNilProviderEntryMap(entries map[string]*ProviderEntry) map[string]*ProviderEntry {
@@ -1628,6 +1638,9 @@ func resolveRelativePaths(configPath string, cfg *Config) {
 		resolveEntry(entry)
 	}
 	for _, entry := range cfg.Providers.S3 {
+		resolveEntry(entry)
+	}
+	for _, entry := range cfg.Providers.Workflow {
 		resolveEntry(entry)
 	}
 	for _, entry := range cfg.Plugins {

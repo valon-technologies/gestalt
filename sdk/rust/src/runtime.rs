@@ -33,13 +33,16 @@ use crate::generated::v1::provider_lifecycle_server::ProviderLifecycleServer;
 use crate::generated::v1::s3_server::S3Server;
 #[cfg(unix)]
 use crate::generated::v1::secrets_provider_server::SecretsProviderServer;
+#[cfg(unix)]
+use crate::generated::v1::workflow_provider_server::WorkflowProviderServer as WorkflowRpcServer;
 use crate::provider_server::ProviderServer;
-use crate::{AuthProvider, CacheProvider, S3Provider, SecretsProvider};
-use crate::{Provider, Router};
+use crate::{
+    AuthProvider, CacheProvider, Provider, Router, S3Provider, SecretsProvider, WorkflowProvider,
+};
 #[cfg(unix)]
 use crate::{
     auth_server::AuthServer, cache_server::CacheRpcServer, runtime_server::RuntimeServer,
-    secrets_server::SecretsServer,
+    secrets_server::SecretsServer, workflow::WorkflowServer,
 };
 
 fn build_runtime_and_block_on<F, Fut>(f: F) -> Result<()>
@@ -77,6 +80,11 @@ pub fn run_secrets_provider<P: SecretsProvider>(provider: Arc<P>) -> Result<()> 
 /// Runs an S3 provider on the Unix socket exposed by `gestaltd`.
 pub fn run_s3_provider<P: S3Provider>(provider: Arc<P>) -> Result<()> {
     build_runtime_and_block_on(|| serve_s3_provider(provider))
+}
+
+/// Runs a workflow provider on the Unix socket exposed by `gestaltd`.
+pub fn run_workflow_provider<P: WorkflowProvider>(provider: Arc<P>) -> Result<()> {
+    build_runtime_and_block_on(|| serve_workflow_provider(provider))
 }
 
 /// Writes the router's derived catalog to path.
@@ -214,6 +222,28 @@ where
     .await
 }
 
+#[cfg(unix)]
+pub async fn serve_workflow_provider<P>(provider: Arc<P>) -> Result<()>
+where
+    P: WorkflowProvider,
+{
+    serve_unix_provider(
+        provider,
+        move |incoming, provider| {
+            Server::builder()
+                .add_service(ProviderLifecycleServer::new(RuntimeServer::for_workflow(
+                    Arc::clone(&provider),
+                )))
+                .add_service(WorkflowRpcServer::new(WorkflowServer::new(Arc::clone(
+                    &provider,
+                ))))
+                .serve_with_incoming_shutdown(incoming, shutdown_signal(parent_pid()))
+        },
+        |provider| async move { provider.close().await },
+    )
+    .await
+}
+
 #[cfg(not(unix))]
 pub async fn serve_provider<P>(_provider: Arc<P>, router: Router<P>) -> Result<()>
 where
@@ -261,6 +291,16 @@ where
 pub async fn serve_s3_provider<P>(_provider: Arc<P>) -> Result<()>
 where
     P: S3Provider,
+{
+    Err(Error::internal(
+        "unix sockets are unsupported on this platform",
+    ))
+}
+
+#[cfg(not(unix))]
+pub async fn serve_workflow_provider<P>(_provider: Arc<P>) -> Result<()>
+where
+    P: WorkflowProvider,
 {
     Err(Error::internal(
         "unix sockets are unsupported on this platform",
