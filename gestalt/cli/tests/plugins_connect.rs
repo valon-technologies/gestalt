@@ -393,6 +393,73 @@ fn test_connection_selection_uses_selected_connection_auth_type() {
 }
 
 #[test]
+fn test_connect_auto_selects_single_connection_and_uses_its_auth_type() {
+    let mut server = Server::new();
+    let _integrations =
+        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
+            .with_body(
+                r#"[{
+                    "name":"single-svc",
+                    "displayName":"Single Service",
+                    "authTypes":["manual"],
+                    "connections":[
+                        {"name":"workspace","displayName":"Workspace OAuth","authTypes":["oauth"]}
+                    ]
+                }]"#,
+            )
+            .create();
+    let _oauth = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/auth/start-oauth",
+        StatusCode::OK
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"connection":"workspace","integration":"single-svc"}"#.to_string(),
+    ))
+    .with_body(r#"{"url":"https://example.com/oauth","state":"abc123"}"#)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["plugins", "connect", "single-svc"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains("Select a Single Service connection:").not())
+        .stderr(predicate::str::contains(
+            "Opening browser to connect single-svc...",
+        ));
+}
+
+#[test]
+fn test_connect_unknown_connection_lists_normalized_available_names() {
+    let mut server = Server::new();
+    let _integrations =
+        authed_json_mock!(server, Method::GET, "/api/v1/integrations", StatusCode::OK)
+            .with_body(
+                r#"[{
+                    "name":"manual-svc",
+                    "connections":[
+                        {"name":"_plugin","displayName":"Plugin OAuth","authTypes":["oauth"]},
+                        {"name":"workspace","displayName":"Workspace OAuth","authTypes":["manual"]}
+                    ]
+                }]"#,
+            )
+            .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["plugins", "connect", "manual-svc", "--connection", "bogus"])
+        .assert()
+        .failure()
+        .stderr(predicate::str::contains("unknown connection 'bogus'"))
+        .stderr(predicate::str::contains(
+            "available connections: plugin, workspace",
+        ));
+}
+
+#[test]
 fn test_manual_connect_uses_credentials_object_for_multi_field_auth() {
     let mut server = Server::new();
     let _integrations =
