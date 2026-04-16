@@ -505,16 +505,7 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 	var cat *catalog.Catalog
 	if strictCatalog && requestedConnection == "" && requestedInstance == "" &&
 		(s.authorizer == nil || !s.authorizer.IsWorkload(p)) {
-		catalogConnections := make([]string, 0, 2)
-		if conn := s.catalogLookupConnection(name, requestedConnection); conn != "" {
-			catalogConnections = append(catalogConnections, conn)
-		}
-		if conn := s.defaultConnection[name]; conn != "" && (len(catalogConnections) == 0 || catalogConnections[0] != conn) && s.catalogConnection[name] == "" {
-			catalogConnections = append(catalogConnections, conn)
-		}
-		if len(catalogConnections) == 0 {
-			catalogConnections = append(catalogConnections, "")
-		}
+		catalogConnections := s.sessionCatalogConnections(name, p, requestedConnection)
 		var firstErr error
 		for _, catalogConnection := range catalogConnections {
 			resolvedConnection, catalogInstance := s.workloadBindingSelectors(p, name, catalogConnection, requestedInstance)
@@ -541,10 +532,7 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	} else {
-		catalogConnection := requestedConnection
-		if s.authorizer == nil || !s.authorizer.IsWorkload(p) {
-			catalogConnection = s.catalogLookupConnection(name, requestedConnection)
-		}
+		catalogConnection := s.sessionCatalogConnections(name, p, requestedConnection)[0]
 		catalogConnection, catalogInstance := s.workloadBindingSelectors(p, name, catalogConnection, requestedInstance)
 		var (
 			err      error
@@ -688,36 +676,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	if _, sessionCapable := prov.(core.SessionCatalogProvider); sessionCapable {
 		var firstSessionErr error
 		sessionCatalogResolved := false
-		sessionConnections := make([]string, 0, 2)
-		switch {
-		case connection != "":
-			sessionConnections = append(sessionConnections, connection)
-		case s.authorizer != nil && s.authorizer.IsWorkload(p):
-			sessionConnections = append(sessionConnections, "")
-		default:
-			catalogConnection := ""
-			hasCatalogConnection := false
-			if conn := s.catalogConnection[providerName]; conn != "" {
-				catalogConnection = conn
-				hasCatalogConnection = true
-			} else if broker, ok := s.invoker.(interface{ MCPConnection(string) string }); ok {
-				catalogConnection = broker.MCPConnection(providerName)
-			}
-			if catalogConnection == "" {
-				catalogConnection = s.defaultConnection[providerName]
-			}
-			if catalogConnection != "" {
-				sessionConnections = append(sessionConnections, catalogConnection)
-			}
-			if !hasCatalogConnection {
-				if conn := s.defaultConnection[providerName]; conn != "" && (len(sessionConnections) == 0 || sessionConnections[0] != conn) {
-					sessionConnections = append(sessionConnections, conn)
-				}
-			}
-			if len(sessionConnections) == 0 {
-				sessionConnections = append(sessionConnections, "")
-			}
-		}
+		sessionConnections := s.sessionCatalogConnections(providerName, p, connection)
 		for _, sessionConnection := range sessionConnections {
 			sessionConnection, sessionInstance := s.workloadBindingSelectors(p, providerName, sessionConnection, instance)
 			sessionCat, err := invocation.ResolveSessionCatalog(ctx, prov, providerName, resolver, p, sessionConnection, sessionInstance)
@@ -847,6 +806,27 @@ func (s *Server) catalogLookupConnection(providerName, explicit string) string {
 		}
 	}
 	return s.defaultConnection[providerName]
+}
+
+func (s *Server) sessionCatalogConnections(providerName string, p *principal.Principal, explicit string) []string {
+	if explicit != "" {
+		return []string{config.ResolveConnectionAlias(explicit)}
+	}
+	if s.authorizer != nil && s.authorizer.IsWorkload(p) {
+		return []string{""}
+	}
+
+	connections := make([]string, 0, 2)
+	if conn := s.catalogLookupConnection(providerName, ""); conn != "" {
+		connections = append(connections, conn)
+	}
+	if conn := s.defaultConnection[providerName]; conn != "" && (len(connections) == 0 || connections[0] != conn) && s.catalogConnection[providerName] == "" {
+		connections = append(connections, conn)
+	}
+	if len(connections) == 0 {
+		return []string{""}
+	}
+	return connections
 }
 
 func httpVisibleCatalogOperations(ops []catalog.CatalogOperation) []catalog.CatalogOperation {

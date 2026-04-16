@@ -859,7 +859,7 @@ func TestMountedWebUIRoutes_HumanAuthorization(t *testing.T) {
 	}
 }
 
-func TestMountedWebUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUsersAsViewer(t *testing.T) {
+func TestMountedWebUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUsersAsViewerWithPluginName(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -902,6 +902,7 @@ func TestMountedWebUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUs
 		cfg.MountedWebUIs = []server.MountedWebUI{{
 			Name:                "sample_portal",
 			Path:                "/sample-portal",
+			PluginName:          "sample_portal",
 			AuthorizationPolicy: "sample_policy",
 			Routes: []server.MountedWebUIRoute{
 				{Path: "/admin/*", AllowedRoles: []string{"admin"}},
@@ -1064,6 +1065,76 @@ func TestMountedWebUIRoutes_HumanAuthorization_DynamicGrant(t *testing.T) {
 	}
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("static-over-dynamic admin status = %d, want 200", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), "protected-sample-shell") {
+		t.Fatalf("body = %q, want protected sample shell", body)
+	}
+}
+
+func TestMountedWebUIRoutes_HumanAuthorization_DefaultAllowTreatsAuthenticatedUsersAsViewerWithoutPluginName(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>protected-sample-shell</html>"), 0o644); err != nil {
+		t.Fatalf("WriteFile index.html: %v", err)
+	}
+	handler, err := testutilWebUIHandler(dir)
+	if err != nil {
+		t.Fatalf("webui handler: %v", err)
+	}
+
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "allow",
+				Members: []config.HumanPolicyMemberDef{
+					{Email: "admin@example.test", Role: "admin"},
+				},
+			},
+		},
+	}, nil, nil, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				switch token {
+				case "viewer-session":
+					return &core.UserIdentity{Email: "viewer@example.test"}, nil
+				case "admin-session":
+					return &core.UserIdentity{Email: "admin@example.test"}, nil
+				default:
+					return nil, fmt.Errorf("invalid token")
+				}
+			},
+		}
+		cfg.Authorizer = authz
+		cfg.MountedWebUIs = []server.MountedWebUI{{
+			Name:                "sample_portal",
+			Path:                "/sample-portal",
+			AuthorizationPolicy: "sample_policy",
+			Routes: []server.MountedWebUIRoute{
+				{Path: "/admin/*", AllowedRoles: []string{"admin"}},
+				{Path: "/*", AllowedRoles: []string{"viewer", "admin"}},
+			},
+			Handler: handler,
+		}}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/sample-portal/sync", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET default-allow mounted sync without plugin name: %v", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll default-allow mounted sync without plugin name: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("default-allow viewer status without plugin name = %d, want %d", resp.StatusCode, http.StatusOK)
 	}
 	if !strings.Contains(string(body), "protected-sample-shell") {
 		t.Fatalf("body = %q, want protected sample shell", body)
@@ -9874,289 +9945,296 @@ func TestExecuteOperation_RefreshFailsButTokenStillValid(t *testing.T) {
 	}
 }
 
-func TestExecuteOperation_RefreshFailsAndTokenExpired(t *testing.T) {
+func TestExecuteOperation_RefreshPassesThroughStoredTokenWhenRefreshDoesNotApply(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
-	u := seedUser(t, svc, "anonymous@gestalt")
 	expired := time.Now().Add(-1 * time.Hour)
-	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok1", UserID: u.ID, Integration: "fake",
-		Connection: "default", Instance: "default",
-		AccessToken: "expired-access", RefreshToken: "some-refresh", ExpiresAt: &expired,
-	})
-
-	stub := &stubOAuthIntegration{
-		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{N: "fake"},
-			ops:             []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
-		},
-		refreshTokenFn: func(context.Context, string) (*core.TokenResponse, error) {
-			return nil, fmt.Errorf("refresh token revoked")
-		},
-	}
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.DefaultConnection = map[string]string{"fake": testDefaultConnection}
-		cfg.ConnectionAuth = oauthRefreshConnectionAuth("fake", stub.refreshTokenFn)
-		cfg.Services = svc
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusBadGateway {
-		t.Fatalf("expected 502 for expired token + failed refresh, got %d", resp.StatusCode)
-	}
-}
-
-func TestExecuteOperation_NoRefreshTokenSkipsRefresh(t *testing.T) {
-	t.Parallel()
-
-	svc := coretesting.NewStubServices(t)
-	u := seedUser(t, svc, "anonymous@gestalt")
-	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok1", UserID: u.ID, Integration: "fake",
-		Connection: "default", Instance: "default",
-		AccessToken: "no-refresh-token",
-	})
-
-	var usedToken string
-	stub := &stubOAuthIntegration{
-		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{
-				N: "fake",
-				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
-					usedToken = token
-					return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
-				},
+	cases := []struct {
+		name                    string
+		token                   core.IntegrationToken
+		configureConnectionAuth bool
+		wantStatus              int
+		wantUsedToken           string
+	}{
+		{
+			name: "missing refresh token",
+			token: core.IntegrationToken{
+				ID: "tok1", Integration: "fake",
+				Connection: "default", Instance: "default",
+				AccessToken: "no-refresh-token",
 			},
-			ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
+			configureConnectionAuth: true,
+			wantStatus:              http.StatusOK,
+			wantUsedToken:           "no-refresh-token",
 		},
-		refreshTokenFn: func(context.Context, string) (*core.TokenResponse, error) {
-			t.Fatal("RefreshToken should not be called when no refresh token stored")
-			return nil, nil
-		},
-	}
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.DefaultConnection = map[string]string{"fake": testDefaultConnection}
-		cfg.ConnectionAuth = oauthRefreshConnectionAuth("fake", stub.refreshTokenFn)
-		cfg.Services = svc
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-	if usedToken != "no-refresh-token" {
-		t.Fatalf("expected original token, got %q", usedToken)
-	}
-}
-
-func TestExecuteOperation_NoExpiresAtSkipsRefresh(t *testing.T) {
-	t.Parallel()
-
-	svc := coretesting.NewStubServices(t)
-	u := seedUser(t, svc, "anonymous@gestalt")
-	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok1", UserID: u.ID, Integration: "fake",
-		Connection: "default", Instance: "default",
-		AccessToken: "no-expiry-token", RefreshToken: "some-refresh",
-	})
-
-	var usedToken string
-	stub := &stubOAuthIntegration{
-		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{
-				N: "fake",
-				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
-					usedToken = token
-					return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
-				},
+		{
+			name: "missing expiry",
+			token: core.IntegrationToken{
+				ID: "tok1", Integration: "fake",
+				Connection: "default", Instance: "default",
+				AccessToken: "no-expiry-token", RefreshToken: "some-refresh",
 			},
-			ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
+			configureConnectionAuth: true,
+			wantStatus:              http.StatusOK,
+			wantUsedToken:           "no-expiry-token",
 		},
-		refreshTokenFn: func(context.Context, string) (*core.TokenResponse, error) {
-			t.Fatal("RefreshToken should not be called when no expiry info")
-			return nil, nil
-		},
-	}
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.DefaultConnection = map[string]string{"fake": testDefaultConnection}
-		cfg.ConnectionAuth = oauthRefreshConnectionAuth("fake", stub.refreshTokenFn)
-		cfg.Services = svc
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-	if usedToken != "no-expiry-token" {
-		t.Fatalf("expected original token, got %q", usedToken)
-	}
-}
-
-func TestExecuteOperation_NonOAuthProviderSkipsRefresh(t *testing.T) {
-	t.Parallel()
-
-	svc := coretesting.NewStubServices(t)
-	u := seedUser(t, svc, "anonymous@gestalt")
-	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok1", UserID: u.ID, Integration: "manual-api",
-		Connection: "", Instance: "default",
-		AccessToken: "manual-token",
-	})
-
-	var usedToken string
-	stub := &stubNonOAuthProvider{
-		name: "manual-api",
-		ops:  []core.Operation{{Name: "get", Description: "Get", Method: http.MethodGet}},
-		execFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
-			usedToken = token
-			return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
-		},
-	}
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.Services = svc
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/manual-api/get", nil)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-	if usedToken != "manual-token" {
-		t.Fatalf("expected original token, got %q", usedToken)
-	}
-}
-
-func TestExecuteOperation_RefreshTokenRotation(t *testing.T) {
-	t.Parallel()
-
-	svc := coretesting.NewStubServices(t)
-	u := seedUser(t, svc, "anonymous@gestalt")
-	expired := time.Now().Add(-1 * time.Hour)
-	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok1", UserID: u.ID, Integration: "fake",
-		Connection: "default", Instance: "default",
-		AccessToken: "old-access", RefreshToken: "old-refresh", ExpiresAt: &expired,
-	})
-
-	stub := &stubOAuthIntegration{
-		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{
-				N: "fake",
-				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
-					return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
-				},
+		{
+			name: "missing refresher",
+			token: core.IntegrationToken{
+				ID: "tok1", Integration: "fake",
+				Connection: "default", Instance: "default",
+				AccessToken: "no-refresher-token", RefreshToken: "some-refresh", ExpiresAt: &expired,
 			},
-			ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
+			configureConnectionAuth: false,
+			wantStatus:              http.StatusOK,
+			wantUsedToken:           "no-refresher-token",
 		},
-		refreshTokenFn: func(_ context.Context, _ string) (*core.TokenResponse, error) {
-			return &core.TokenResponse{
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			svc := coretesting.NewStubServices(t)
+			u := seedUser(t, svc, "anonymous@gestalt")
+			token := tc.token
+			token.UserID = u.ID
+			seedToken(t, svc, &token)
+
+			refreshCalled := false
+			var usedToken string
+			stub := &stubOAuthIntegration{
+				stubIntegrationWithOps: stubIntegrationWithOps{
+					StubIntegration: coretesting.StubIntegration{
+						N: "fake",
+						ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
+							usedToken = token
+							return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
+						},
+					},
+					ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
+				},
+			}
+
+			var connectionAuth func() map[string]map[string]bootstrap.OAuthHandler
+			if tc.configureConnectionAuth {
+				connectionAuth = testConnectionAuth("fake", &testOAuthHandler{
+					refreshTokenFn: func(context.Context, string) (*core.TokenResponse, error) {
+						refreshCalled = true
+						return nil, fmt.Errorf("unexpected refresh")
+					},
+				})
+			}
+
+			ts := newTestServer(t, func(cfg *server.Config) {
+				cfg.Providers = testutil.NewProviderRegistry(t, stub)
+				cfg.DefaultConnection = map[string]string{"fake": testDefaultConnection}
+				cfg.ConnectionAuth = connectionAuth
+				cfg.Services = svc
+			})
+			testutil.CloseOnCleanup(t, ts)
+
+			req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("request: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+
+			if resp.StatusCode != tc.wantStatus {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, tc.wantStatus)
+			}
+			if usedToken != tc.wantUsedToken {
+				t.Fatalf("used token = %q, want %q", usedToken, tc.wantUsedToken)
+			}
+			if refreshCalled {
+				t.Fatalf("refresh handler should not have been called")
+			}
+		})
+	}
+}
+
+func TestExecuteOperation_RefreshPersistsReturnedTokenFields(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name              string
+		response          *core.TokenResponse
+		wantAccessToken   string
+		wantRefreshToken  string
+		wantHasExpiration bool
+	}{
+		{
+			name: "rotates refresh token and expiry",
+			response: &core.TokenResponse{
 				AccessToken:  "new-access",
 				RefreshToken: "rotated-refresh",
 				ExpiresIn:    7200,
-			}, nil
+			},
+			wantAccessToken:   "new-access",
+			wantRefreshToken:  "rotated-refresh",
+			wantHasExpiration: true,
+		},
+		{
+			name: "clears expiry when omitted",
+			response: &core.TokenResponse{
+				AccessToken: "new-access",
+				ExpiresIn:   0,
+			},
+			wantAccessToken:   "new-access",
+			wantRefreshToken:  "old-refresh",
+			wantHasExpiration: false,
 		},
 	}
 
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.DefaultConnection = map[string]string{"fake": testDefaultConnection}
-		cfg.ConnectionAuth = oauthRefreshConnectionAuth("fake", stub.refreshTokenFn)
-		cfg.Services = svc
-	})
-	testutil.CloseOnCleanup(t, ts)
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
+			svc := coretesting.NewStubServices(t)
+			u := seedUser(t, svc, "anonymous@gestalt")
+			expired := time.Now().Add(-1 * time.Hour)
+			seedToken(t, svc, &core.IntegrationToken{
+				ID: "tok1", UserID: u.ID, Integration: "fake",
+				Connection: "default", Instance: "default",
+				AccessToken: "old-access", RefreshToken: "old-refresh", ExpiresAt: &expired,
+			})
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
+			stub := &stubOAuthIntegration{
+				stubIntegrationWithOps: stubIntegrationWithOps{
+					StubIntegration: coretesting.StubIntegration{
+						N: "fake",
+						ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
+							return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
+						},
+					},
+					ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
+				},
+				refreshTokenFn: func(_ context.Context, _ string) (*core.TokenResponse, error) {
+					return tc.response, nil
+				},
+			}
+
+			ts := newTestServer(t, func(cfg *server.Config) {
+				cfg.Providers = testutil.NewProviderRegistry(t, stub)
+				cfg.DefaultConnection = map[string]string{"fake": testDefaultConnection}
+				cfg.ConnectionAuth = oauthRefreshConnectionAuth("fake", stub.refreshTokenFn)
+				cfg.Services = svc
+			})
+			testutil.CloseOnCleanup(t, ts)
+
+			req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("request: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("expected 200, got %d", resp.StatusCode)
+			}
+
+			stored, err := svc.Tokens.Token(context.Background(), u.ID, "fake", "default", "default")
+			if err != nil {
+				t.Fatalf("Token: %v", err)
+			}
+			if stored.AccessToken != tc.wantAccessToken {
+				t.Fatalf("stored access token = %q, want %q", stored.AccessToken, tc.wantAccessToken)
+			}
+			if stored.RefreshToken != tc.wantRefreshToken {
+				t.Fatalf("stored refresh token = %q, want %q", stored.RefreshToken, tc.wantRefreshToken)
+			}
+			if (stored.ExpiresAt != nil) != tc.wantHasExpiration {
+				t.Fatalf("stored expiry present = %v, want %v", stored.ExpiresAt != nil, tc.wantHasExpiration)
+			}
+		})
 	}
 }
 
-func TestExecuteOperation_RefreshClearsExpiresAtWhenOmitted(t *testing.T) {
+func TestExecuteOperation_RefreshFailureEdgeCases(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
-	u := seedUser(t, svc, "anonymous@gestalt")
-	expired := time.Now().Add(-1 * time.Hour)
-	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok1", UserID: u.ID, Integration: "fake",
-		Connection: "default", Instance: "default",
-		AccessToken: "old-access", RefreshToken: "old-refresh", ExpiresAt: &expired,
-	})
-
-	stub := &stubOAuthIntegration{
-		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{
-				N: "fake",
-				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
-					return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
-				},
+	cases := []struct {
+		name          string
+		expiresAt     time.Time
+		beforeRefresh func(*coredata.Services)
+		wantStatus    int
+		wantUsedToken string
+	}{
+		{
+			name:          "expired token returns bad gateway",
+			expiresAt:     time.Now().Add(-1 * time.Hour),
+			wantStatus:    http.StatusBadGateway,
+			wantUsedToken: "",
+		},
+		{
+			name:      "deleted token falls back to in-memory token when still valid",
+			expiresAt: time.Now().Add(2 * time.Minute),
+			beforeRefresh: func(svc *coredata.Services) {
+				_ = svc.Tokens.DeleteToken(context.Background(), "tok1")
 			},
-			ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
-		},
-		refreshTokenFn: func(_ context.Context, _ string) (*core.TokenResponse, error) {
-			return &core.TokenResponse{AccessToken: "new-access", ExpiresIn: 0}, nil
+			wantStatus:    http.StatusOK,
+			wantUsedToken: "still-valid-token",
 		},
 	}
 
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.DefaultConnection = map[string]string{"fake": testDefaultConnection}
-		cfg.ConnectionAuth = oauthRefreshConnectionAuth("fake", stub.refreshTokenFn)
-		cfg.Services = svc
-	})
-	testutil.CloseOnCleanup(t, ts)
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
+			svc := coretesting.NewStubServices(t)
+			u := seedUser(t, svc, "anonymous@gestalt")
+			seedToken(t, svc, &core.IntegrationToken{
+				ID: "tok1", UserID: u.ID, Integration: "fake",
+				Connection: "default", Instance: "default",
+				AccessToken: "still-valid-token", RefreshToken: "some-refresh", ExpiresAt: &tc.expiresAt,
+			})
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
+			var usedToken string
+			stub := &stubOAuthIntegration{
+				stubIntegrationWithOps: stubIntegrationWithOps{
+					StubIntegration: coretesting.StubIntegration{
+						N: "fake",
+						ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
+							usedToken = token
+							return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+						},
+					},
+					ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
+				},
+				refreshTokenFn: func(context.Context, string) (*core.TokenResponse, error) {
+					if tc.beforeRefresh != nil {
+						tc.beforeRefresh(svc)
+					}
+					return nil, fmt.Errorf("upstream error")
+				},
+			}
+
+			ts := newTestServer(t, func(cfg *server.Config) {
+				cfg.Providers = testutil.NewProviderRegistry(t, stub)
+				cfg.DefaultConnection = map[string]string{"fake": testDefaultConnection}
+				cfg.ConnectionAuth = oauthRefreshConnectionAuth("fake", stub.refreshTokenFn)
+				cfg.Services = svc
+			})
+			testutil.CloseOnCleanup(t, ts)
+
+			req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("request: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+
+			if resp.StatusCode != tc.wantStatus {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, tc.wantStatus)
+			}
+			if usedToken != tc.wantUsedToken {
+				t.Fatalf("used token = %q, want %q", usedToken, tc.wantUsedToken)
+			}
+		})
 	}
 }
 
@@ -10264,54 +10342,6 @@ func TestExecuteOperation_StoreTokenFailureReturnsError(t *testing.T) {
 
 	if resp.StatusCode != http.StatusBadGateway {
 		t.Fatalf("expected 502 when StoreToken fails after refresh, got %d", resp.StatusCode)
-	}
-}
-
-func TestExecuteOperation_RefreshErrorHandlesDeletedToken(t *testing.T) {
-	t.Parallel()
-
-	svc := coretesting.NewStubServices(t)
-	u := seedUser(t, svc, "anonymous@gestalt")
-	almostExpired := time.Now().Add(2 * time.Minute)
-	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok1", UserID: u.ID, Integration: "fake",
-		Connection: "default", Instance: "default",
-		AccessToken: "still-valid-token", RefreshToken: "some-refresh", ExpiresAt: &almostExpired,
-	})
-
-	stub := &stubOAuthIntegration{
-		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{
-				N: "fake",
-				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, _ string) (*core.OperationResult, error) {
-					return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
-				},
-			},
-			ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
-		},
-		refreshTokenFn: func(_ context.Context, _ string) (*core.TokenResponse, error) {
-			_ = svc.Tokens.DeleteToken(context.Background(), "tok1")
-			return nil, fmt.Errorf("upstream error")
-		},
-	}
-
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.DefaultConnection = map[string]string{"fake": testDefaultConnection}
-		cfg.ConnectionAuth = oauthRefreshConnectionAuth("fake", stub.refreshTokenFn)
-		cfg.Services = svc
-	})
-	testutil.CloseOnCleanup(t, ts)
-
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200 (graceful degradation), got %d", resp.StatusCode)
 	}
 }
 
@@ -11146,56 +11176,109 @@ func TestOAuthCallback_UsesStateConnection(t *testing.T) {
 	}
 }
 
-func TestRefresh_UsesConnectionAuth(t *testing.T) {
+func TestRefresh_UsesConnectionAuthHandlers(t *testing.T) {
 	t.Parallel()
 
-	svc := coretesting.NewStubServices(t)
-	u := seedUser(t, svc, "anonymous@gestalt")
-	expired := time.Now().Add(-1 * time.Hour)
-	seedToken(t, svc, &core.IntegrationToken{
-		ID: "tok1", UserID: u.ID, Integration: "fake",
-		Connection: "default", Instance: "default",
-		AccessToken: "old-token", RefreshToken: "old-refresh", ExpiresAt: &expired,
-	})
+	cases := []struct {
+		name             string
+		metadataJSON     string
+		tokenURL         string
+		wantRefreshedURL string
+	}{
+		{
+			name: "direct refresh uses connection handler",
+		},
+		{
+			name:             "resolved token URL uses override refresh handler",
+			metadataJSON:     `{"tenant":"acme"}`,
+			tokenURL:         "https://{tenant}.example.com/oauth/token",
+			wantRefreshedURL: "https://acme.example.com/oauth/token",
+		},
+	}
 
-	var refreshedVia string
-	stub := &stubOAuthIntegration{
-		stubIntegrationWithOps: stubIntegrationWithOps{
-			StubIntegration: coretesting.StubIntegration{
-				N: "fake",
-				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
-					return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			svc := coretesting.NewStubServices(t)
+			u := seedUser(t, svc, "anonymous@gestalt")
+			expired := time.Now().Add(-1 * time.Hour)
+			seedToken(t, svc, &core.IntegrationToken{
+				ID:           "tok1",
+				UserID:       u.ID,
+				Integration:  "fake",
+				Connection:   "default",
+				Instance:     "default",
+				AccessToken:  "old-token",
+				RefreshToken: "old-refresh",
+				ExpiresAt:    &expired,
+				MetadataJSON: tc.metadataJSON,
+			})
+
+			var refreshedToken string
+			var refreshedURL string
+			var usedToken string
+			stub := &stubOAuthIntegration{
+				stubIntegrationWithOps: stubIntegrationWithOps{
+					StubIntegration: coretesting.StubIntegration{
+						N: "fake",
+						ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
+							usedToken = token
+							return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+						},
+					},
+					ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
 				},
-			},
-			ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
-		},
-		refreshTokenFn: func(_ context.Context, rt string) (*core.TokenResponse, error) {
-			refreshedVia = "connection-handler"
-			return &core.TokenResponse{AccessToken: "refreshed-token", ExpiresIn: 3600}, nil
-		},
-	}
+			}
+			handler := &testOAuthHandler{
+				tokenURLVal: tc.tokenURL,
+				refreshTokenFn: func(_ context.Context, rt string) (*core.TokenResponse, error) {
+					if tc.wantRefreshedURL != "" {
+						t.Fatalf("expected refresh to use resolved token URL override")
+					}
+					refreshedToken = rt
+					return &core.TokenResponse{AccessToken: "refreshed-token", ExpiresIn: 3600}, nil
+				},
+				refreshTokenWithURLFn: func(_ context.Context, rt, tokenURL string) (*core.TokenResponse, error) {
+					if tc.wantRefreshedURL == "" {
+						t.Fatalf("expected direct refresh without token URL override")
+					}
+					refreshedToken = rt
+					refreshedURL = tokenURL
+					return &core.TokenResponse{AccessToken: "refreshed-token", ExpiresIn: 3600}, nil
+				},
+			}
 
-	ts := newTestServer(t, func(cfg *server.Config) {
-		cfg.Providers = testutil.NewProviderRegistry(t, stub)
-		cfg.DefaultConnection = map[string]string{"fake": testDefaultConnection}
-		cfg.ConnectionAuth = oauthRefreshConnectionAuth("fake", stub.refreshTokenFn)
-		cfg.Services = svc
-	})
-	testutil.CloseOnCleanup(t, ts)
+			ts := newTestServer(t, func(cfg *server.Config) {
+				cfg.Providers = testutil.NewProviderRegistry(t, stub)
+				cfg.DefaultConnection = map[string]string{"fake": testDefaultConnection}
+				cfg.ConnectionAuth = testConnectionAuth("fake", handler)
+				cfg.Services = svc
+			})
+			testutil.CloseOnCleanup(t, ts)
 
-	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
-	req.Header.Set("X-Dev-User-Email", "dev@example.com")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
+			req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
+			req.Header.Set("X-Dev-User-Email", "dev@example.com")
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatalf("request: %v", err)
+			}
+			defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-	if refreshedVia != "connection-handler" {
-		t.Fatalf("expected refresh via connection handler, got %q", refreshedVia)
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+			}
+			if refreshedToken != "old-refresh" {
+				t.Fatalf("refresh token = %q, want %q", refreshedToken, "old-refresh")
+			}
+			if refreshedURL != tc.wantRefreshedURL {
+				t.Fatalf("resolved token URL = %q, want %q", refreshedURL, tc.wantRefreshedURL)
+			}
+			if usedToken != "refreshed-token" {
+				t.Fatalf("used token = %q, want %q", usedToken, "refreshed-token")
+			}
+		})
 	}
 }
 
