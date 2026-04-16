@@ -382,7 +382,7 @@ func ResolveConfigSecrets(ctx context.Context, cfg *config.Config, factories *Fa
 	if err := config.TransformConfigStringFields(cfg, resolveValue); err != nil {
 		return err
 	}
-	return nil
+	return config.CanonicalizeStructure(cfg)
 }
 
 func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, requireEncryptionKey bool) (*preparedCore, error) {
