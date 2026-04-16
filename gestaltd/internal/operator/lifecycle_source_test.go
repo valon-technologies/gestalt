@@ -366,6 +366,19 @@ func TestSourcePluginEndToEnd(t *testing.T) {
 	if _, ok := written.Providers.Plugin["alpha"]; !ok {
 		t.Fatalf(`written.Providers.Plugin["alpha"] not found`)
 	}
+	writtenEntry := written.Providers.Plugin["alpha"]
+	if writtenEntry.InputDigest == "" {
+		t.Fatal("written plugin inputDigest is empty")
+	}
+	if writtenEntry.Package != source {
+		t.Fatalf("written plugin package = %q, want %q", writtenEntry.Package, source)
+	}
+	if writtenEntry.Kind != providermanifestv1.KindPlugin {
+		t.Fatalf("written plugin kind = %q, want %q", writtenEntry.Kind, providermanifestv1.KindPlugin)
+	}
+	if writtenEntry.Runtime != providerLockRuntimeExecutable {
+		t.Fatalf("written plugin runtime = %q, want %q", writtenEntry.Runtime, providerLockRuntimeExecutable)
+	}
 
 	readBack, err := ReadLockfile(lockPath)
 	if err != nil {
@@ -393,6 +406,33 @@ func TestSourcePluginNilResolver(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "source resolver") {
 		t.Errorf("error = %q, want to contain 'source resolver'", err.Error())
+	}
+}
+
+func TestSourcePluginMetadataURLNotYetSupported(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(configPath, []byte(`
+apiVersion: gestaltd.config/v3
+plugins:
+  alpha:
+    source: https://example.com/providers/alpha/provider-release.yaml?download=1
+    auth:
+      token: test-token
+server:
+  artifactsDir: `+filepath.Join(dir, "prepared-artifacts")+`
+`), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	_, err := NewLifecycle(&fakeResolver{}).InitAtPath(configPath)
+	if err == nil {
+		t.Fatal("expected metadata URL source error")
+	}
+	if !strings.Contains(err.Error(), "metadata URL sources are not supported yet") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -1607,7 +1647,7 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 	if strings.Contains(string(lockData), `"version": 7`) {
 		t.Fatalf("lockfile = %s, want schema-based versioning", lockData)
 	}
-	if strings.Contains(string(lockData), `"manifest"`) || strings.Contains(string(lockData), `"executable"`) {
+	if strings.Contains(string(lockData), `"manifest":`) || strings.Contains(string(lockData), `"executable":`) {
 		t.Fatalf("lockfile = %s, want portable entries only", lockData)
 	}
 	var diskLock providerLockfile
@@ -1617,6 +1657,18 @@ func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 	diskEntry, ok := diskLock.Providers.Plugin["alpha"]
 	if !ok {
 		t.Fatal(`disk lock providers.plugin["alpha"] not found`)
+	}
+	if diskEntry.InputDigest == "" {
+		t.Fatal("disk lock plugin inputDigest is empty")
+	}
+	if diskEntry.Package != testSource {
+		t.Fatalf("disk lock plugin package = %q, want %q", diskEntry.Package, testSource)
+	}
+	if diskEntry.Kind != providermanifestv1.KindPlugin {
+		t.Fatalf("disk lock plugin kind = %q, want %q", diskEntry.Kind, providermanifestv1.KindPlugin)
+	}
+	if diskEntry.Runtime != providerLockRuntimeExecutable {
+		t.Fatalf("disk lock plugin runtime = %q, want %q", diskEntry.Runtime, providerLockRuntimeExecutable)
 	}
 	if diskEntry.Source != testSource || diskEntry.Version != testVersion {
 		t.Fatalf("disk lock plugin entry = %#v", diskEntry)

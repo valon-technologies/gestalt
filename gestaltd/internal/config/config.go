@@ -7,6 +7,7 @@ import (
 	"io"
 	"maps"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -43,8 +44,10 @@ const PluginConnectionName = "_plugin"
 // PluginConnectionName. In hybrid integrations, mcp.connection can be set
 // to "plugin" to reuse the plugin's OAuth token.
 const PluginConnectionAlias = "plugin"
+const APIVersionV3 = "gestaltd.config/v3"
 
 type Config struct {
+	APIVersion    string                    `yaml:"apiVersion,omitempty"`
 	Server        ServerConfig              `yaml:"server"`
 	Authorization AuthorizationConfig       `yaml:"authorization,omitempty"`
 	Providers     ProvidersConfig           `yaml:"providers"`
@@ -86,16 +89,20 @@ type ServerProvidersConfig struct {
 //   - Managed: source: {ref, version} -> ProviderSource{Ref: "...", Version: "..."}
 //   - Local:   source: {path}         -> ProviderSource{Path: "..."}
 type ProviderSource struct {
-	Builtin string         `yaml:"-"`
-	Ref     string         `yaml:"ref,omitempty"`
-	Version string         `yaml:"version,omitempty"`
-	Path    string         `yaml:"path,omitempty"`
-	Auth    *SourceAuthDef `yaml:"auth,omitempty"`
+	Builtin     string         `yaml:"-"`
+	scalar      string         `yaml:"-"`
+	metadataURL string         `yaml:"-"`
+	unsupported string         `yaml:"-"`
+	Ref         string         `yaml:"ref,omitempty"`
+	Version     string         `yaml:"version,omitempty"`
+	Path        string         `yaml:"path,omitempty"`
+	Auth        *SourceAuthDef `yaml:"auth,omitempty"`
 }
 
 func (s *ProviderSource) UnmarshalYAML(value *yaml.Node) error {
+	*s = ProviderSource{}
 	if value.Kind == yaml.ScalarNode {
-		s.Builtin = strings.TrimSpace(value.Value)
+		s.scalar = strings.TrimSpace(value.Value)
 		return nil
 	}
 	type raw ProviderSource
@@ -106,24 +113,36 @@ func (s ProviderSource) MarshalYAML() (any, error) {
 	if s.Builtin != "" {
 		return s.Builtin, nil
 	}
+	if s.metadataURL != "" && s.Ref == "" && s.Version == "" && s.Path == "" && s.Auth == nil {
+		return s.metadataURL, nil
+	}
+	if s.scalar != "" && s.Ref == "" && s.Version == "" && s.Path == "" && s.Auth == nil {
+		return s.scalar, nil
+	}
 	type raw ProviderSource
 	return raw(s), nil
 }
 
-func (s ProviderSource) IsBuiltin() bool { return s.Builtin != "" }
-func (s ProviderSource) IsManaged() bool { return s.Ref != "" }
-func (s ProviderSource) IsLocal() bool   { return s.Path != "" }
+func (s ProviderSource) IsBuiltin() bool     { return s.Builtin != "" }
+func (s ProviderSource) IsManaged() bool     { return s.Ref != "" }
+func (s ProviderSource) IsMetadataURL() bool { return s.metadataURL != "" }
+func (s ProviderSource) IsLocal() bool       { return s.Path != "" }
+func (s ProviderSource) MetadataURL() string { return s.metadataURL }
+func (s ProviderSource) UnsupportedURL() string {
+	return s.unsupported
+}
 
 // ProviderEntry is the universal configuration for any provider.
 type ProviderEntry struct {
-	Source       ProviderSource    `yaml:"source"`
-	Config       yaml.Node         `yaml:"config,omitempty"`
-	Default      bool              `yaml:"default,omitempty"`
-	Env          map[string]string `yaml:"env,omitempty"`
-	AllowedHosts []string          `yaml:"allowedHosts,omitempty"`
-	DisplayName  string            `yaml:"displayName,omitempty"`
-	Description  string            `yaml:"description,omitempty"`
-	IconFile     string            `yaml:"iconFile,omitempty"`
+	Source           ProviderSource    `yaml:"source"`
+	Config           yaml.Node         `yaml:"config,omitempty"`
+	Default          bool              `yaml:"default,omitempty"`
+	Env              map[string]string `yaml:"env,omitempty"`
+	AllowedHosts     []string          `yaml:"allowedHosts,omitempty"`
+	DisplayName      string            `yaml:"displayName,omitempty"`
+	Description      string            `yaml:"description,omitempty"`
+	IconFile         string            `yaml:"iconFile,omitempty"`
+	InlineSourceAuth *SourceAuthDef    `yaml:"auth,omitempty"`
 	// AuthorizationPolicy binds this provider to a shared human access policy.
 	AuthorizationPolicy string `yaml:"authorizationPolicy,omitempty"`
 
@@ -152,6 +171,16 @@ type ProviderEntry struct {
 	Discovery            *providermanifestv1.ProviderDiscovery `yaml:"-"`
 	ResolvedAssetRoot    string                                `yaml:"-"`
 	MCPToolPrefix        string                                `yaml:"-"`
+}
+
+func (e ProviderEntry) MarshalYAML() (any, error) {
+	type raw ProviderEntry
+	if e.Source.IsMetadataURL() && e.Source.Auth != nil && e.InlineSourceAuth == nil {
+		auth := *e.Source.Auth
+		e.InlineSourceAuth = &auth
+		e.Source.Auth = nil
+	}
+	return raw(e), nil
 }
 
 type ProviderSurfaceOverrides struct {
@@ -211,6 +240,14 @@ func (e *ProviderEntry) HasManagedSource() bool {
 	return e != nil && e.Source.IsManaged()
 }
 
+func (e *ProviderEntry) HasMetadataSource() bool {
+	return e != nil && e.Source.IsMetadataURL()
+}
+
+func (e *ProviderEntry) HasRemoteSource() bool {
+	return e != nil && (e.Source.IsManaged() || e.Source.IsMetadataURL())
+}
+
 func (e *ProviderEntry) HasLocalSource() bool {
 	return e != nil && e.Source.IsLocal()
 }
@@ -221,6 +258,26 @@ func (e *ProviderEntry) SourceRef() string {
 
 func (e *ProviderEntry) SourceVersion() string {
 	return e.Source.Version
+}
+
+func (e *ProviderEntry) SourceMetadataURL() string {
+	if e == nil {
+		return ""
+	}
+	return e.Source.MetadataURL()
+}
+
+func (e *ProviderEntry) SourceRemoteLocation() string {
+	if e == nil {
+		return ""
+	}
+	if e.Source.IsManaged() {
+		return e.Source.Ref
+	}
+	if e.Source.IsMetadataURL() {
+		return e.Source.MetadataURL()
+	}
+	return ""
 }
 
 func (e *ProviderEntry) SourcePath() string {
@@ -662,6 +719,7 @@ func LoadAllowMissingEnvPaths(paths []string) (*Config, error) {
 }
 
 func NormalizeCompatibility(cfg *Config) error {
+	normalizeProviderSourceShapes(cfg)
 	if err := normalizeAuthorizationConfig(cfg); err != nil {
 		return err
 	}
@@ -684,7 +742,7 @@ func OverlayManagedPluginConfigPaths(paths []string, cfg *Config) error {
 	providersNode := mappingValueNode(documentValueNode(&root), "providers")
 	pluginsNode := mappingValueNode(doc, "plugins")
 	for name, entry := range cfg.Plugins {
-		if entry == nil || !entry.HasManagedSource() {
+		if entry == nil || !entry.HasRemoteSource() {
 			continue
 		}
 		if err := overlayManagedEntryConfigNode(mappingValueNode(pluginsNode, name), entry, "plugin "+strconv.Quote(name)); err != nil {
@@ -704,7 +762,7 @@ func OverlayManagedPluginConfigPaths(paths []string, cfg *Config) error {
 	} {
 		kindNode := mappingValueNode(providersNode, string(collection.kind))
 		for name, entry := range collection.entries {
-			if entry == nil || !entry.HasManagedSource() {
+			if entry == nil || !entry.HasRemoteSource() {
 				continue
 			}
 			subject := fmt.Sprintf("%s %q", collection.kind, name)
@@ -715,7 +773,7 @@ func OverlayManagedPluginConfigPaths(paths []string, cfg *Config) error {
 	}
 	s3Node := mappingValueNode(providersNode, "s3")
 	for name, entry := range cfg.Providers.S3 {
-		if entry == nil || !entry.HasManagedSource() {
+		if entry == nil || !entry.HasRemoteSource() {
 			continue
 		}
 		if err := overlayManagedEntryConfigNode(mappingValueNode(s3Node, name), entry, "s3 "+strconv.Quote(name)); err != nil {
@@ -724,7 +782,7 @@ func OverlayManagedPluginConfigPaths(paths []string, cfg *Config) error {
 	}
 	uiNode := mappingValueNode(providersNode, "ui")
 	for name, entry := range cfg.Providers.UI {
-		if entry == nil || !entry.HasManagedSource() {
+		if entry == nil || !entry.HasRemoteSource() {
 			continue
 		}
 		if err := overlayManagedEntryConfigNode(mappingValueNode(uiNode, name), &entry.ProviderEntry, "ui "+strconv.Quote(name)); err != nil {
@@ -743,7 +801,7 @@ const (
 )
 
 func overlayManagedEntryConfigNode(raw *yaml.Node, entry *ProviderEntry, subject string) error {
-	if entry == nil || !entry.HasManagedSource() || raw == nil {
+	if entry == nil || !entry.HasRemoteSource() || raw == nil {
 		return nil
 	}
 	configNode := mappingValueNode(raw, "config")
@@ -840,6 +898,7 @@ func loadWithLookupPaths(paths []string, lookup func(string) (string, bool), all
 		return nil, fmt.Errorf("parsing config YAML: %w", err)
 	}
 
+	normalizeProviderSourceShapes(&cfg)
 	applyDefaults(&cfg)
 	if err := NormalizeCompatibility(&cfg); err != nil {
 		return nil, err
@@ -866,9 +925,14 @@ func loadMergedConfigRoot(paths []string, lookup func(string) (string, bool), mo
 		return yaml.Node{}, fmt.Errorf("reading config file: no config files provided")
 	}
 
+	useV3Classification, err := configPathsUseAPIVersion(paths, lookup, mode, sentinelPrefix)
+	if err != nil {
+		return yaml.Node{}, err
+	}
+
 	var merged any
 	for _, path := range paths {
-		value, err := loadConfigValue(path, lookup, mode, sentinelPrefix)
+		value, err := loadConfigValue(path, lookup, mode, sentinelPrefix, useV3Classification)
 		if err != nil {
 			return yaml.Node{}, err
 		}
@@ -895,7 +959,35 @@ func loadMergedConfigRoot(paths []string, lookup func(string) (string, bool), mo
 	return root, nil
 }
 
-func loadConfigValue(path string, lookup func(string) (string, bool), mode envMissingMode, sentinelPrefix string) (any, error) {
+func configPathsUseAPIVersion(paths []string, lookup func(string) (string, bool), mode envMissingMode, sentinelPrefix string) (bool, error) {
+	for _, path := range paths {
+		root, err := loadValidatedConfigRoot(path, lookup, mode, sentinelPrefix)
+		if err != nil {
+			return false, err
+		}
+		doc := documentValueNode(&root)
+		if doc == nil || doc.Kind != yaml.MappingNode {
+			continue
+		}
+		node := mappingValueNode(doc, "apiVersion")
+		if node == nil {
+			continue
+		}
+		value := strings.TrimSpace(node.Value)
+		if value == "" {
+			continue
+		}
+		if !usesV3ConfigSyntax(value) {
+			return false, fmt.Errorf("config validation: unsupported apiVersion %q", value)
+		}
+		if value != "" {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func loadConfigValue(path string, lookup func(string) (string, bool), mode envMissingMode, sentinelPrefix string, useV3Classification bool) (any, error) {
 	root, err := loadValidatedConfigRoot(path, lookup, mode, sentinelPrefix)
 	if err != nil {
 		return nil, err
@@ -919,7 +1011,7 @@ func loadConfigValue(path string, lookup func(string) (string, bool), mode envMi
 		if !ok {
 			return nil, fmt.Errorf("expected mapping document")
 		}
-		resolveRelativePathsInValue(path, root)
+		resolveRelativePathsInValue(path, root, useV3Classification)
 	}
 	return normalized, nil
 }
@@ -1353,6 +1445,127 @@ func applyDefaults(cfg *Config) {
 	cfg.Providers.S3 = nonNilProviderEntryMap(cfg.Providers.S3)
 }
 
+func normalizeProviderSourceShapes(cfg *Config) {
+	if cfg == nil {
+		return
+	}
+	cfg.APIVersion = strings.TrimSpace(cfg.APIVersion)
+	useV3Classification := usesV3ConfigSyntax(cfg.APIVersion)
+
+	normalizeEntry := func(kind string, entry *ProviderEntry) {
+		if entry == nil {
+			return
+		}
+		normalizeProviderSource(kind, &entry.Source, useV3Classification)
+		if entry.Source.IsMetadataURL() && entry.Source.Auth == nil && entry.InlineSourceAuth != nil {
+			auth := *entry.InlineSourceAuth
+			entry.Source.Auth = &auth
+			entry.InlineSourceAuth = nil
+		}
+	}
+
+	for _, entry := range cfg.Plugins {
+		normalizeEntry(providermanifestv1.KindPlugin, entry)
+	}
+	for _, collection := range []struct {
+		kind    string
+		entries map[string]*ProviderEntry
+	}{
+		{providermanifestv1.KindAuth, cfg.Providers.Auth},
+		{providermanifestv1.KindSecrets, cfg.Providers.Secrets},
+		{string(HostProviderKindTelemetry), cfg.Providers.Telemetry},
+		{string(HostProviderKindAudit), cfg.Providers.Audit},
+		{providermanifestv1.KindIndexedDB, cfg.Providers.IndexedDB},
+		{providermanifestv1.KindCache, cfg.Providers.Cache},
+		{providermanifestv1.KindS3, cfg.Providers.S3},
+	} {
+		for _, entry := range collection.entries {
+			normalizeEntry(collection.kind, entry)
+		}
+	}
+	for _, entry := range cfg.Providers.UI {
+		if entry != nil {
+			normalizeEntry(providermanifestv1.KindWebUI, &entry.ProviderEntry)
+		}
+	}
+}
+
+func normalizeProviderSource(kind string, source *ProviderSource, useV3Classification bool) {
+	if source == nil {
+		return
+	}
+	source.scalar = strings.TrimSpace(source.scalar)
+	if source.Builtin != "" || source.Ref != "" || source.Path != "" || source.metadataURL != "" {
+		source.scalar = ""
+		return
+	}
+	if source.scalar == "" {
+		return
+	}
+	switch {
+	case !useV3Classification:
+		source.Builtin = source.scalar
+	case isBuiltinScalarSource(kind, source.scalar):
+		source.Builtin = source.scalar
+	case looksLikeUnsupportedScalarSource(source.scalar):
+		source.unsupported = source.scalar
+	case looksLikeMetadataURL(source.scalar):
+		source.metadataURL = source.scalar
+	default:
+		source.Path = source.scalar
+	}
+	source.scalar = ""
+}
+
+func isBuiltinScalarSource(kind, source string) bool {
+	switch kind {
+	case providermanifestv1.KindSecrets:
+		return source == "env"
+	case string(HostProviderKindTelemetry):
+		return source == "stdout"
+	case string(HostProviderKindAudit):
+		switch source {
+		case "inherit", "noop", "stdout", "otlp":
+			return true
+		}
+	}
+	return false
+}
+
+func looksLikeMetadataURL(value string) bool {
+	parsed, err := url.ParseRequestURI(strings.TrimSpace(value))
+	if err != nil {
+		return false
+	}
+	switch parsed.Scheme {
+	case "http", "https":
+		return parsed.Host != "" && strings.HasSuffix(parsed.Path, "/provider-release.yaml")
+	default:
+		return false
+	}
+}
+
+func looksLikeUnsupportedScalarSource(value string) bool {
+	trimmed := strings.TrimSpace(value)
+	if strings.HasPrefix(strings.ToLower(trimmed), "git+") {
+		return true
+	}
+	parsed, err := url.ParseRequestURI(trimmed)
+	if err != nil {
+		return false
+	}
+	switch parsed.Scheme {
+	case "http", "https":
+		return parsed.Host != "" && !strings.HasSuffix(parsed.Path, "/provider-release.yaml")
+	default:
+		return false
+	}
+}
+
+func usesV3ConfigSyntax(apiVersion string) bool {
+	return strings.TrimSpace(apiVersion) == APIVersionV3
+}
+
 func nonNilProviderEntryMap(entries map[string]*ProviderEntry) map[string]*ProviderEntry {
 	if entries == nil {
 		return make(map[string]*ProviderEntry)
@@ -1377,7 +1590,7 @@ func applyDefaultBuiltinProviderEntries(entries map[string]*ProviderEntry, defau
 		}
 	}
 	for _, entry := range entries {
-		if entry == nil || entry.Source.IsBuiltin() || entry.Source.IsManaged() || entry.Source.IsLocal() {
+		if entry == nil || entry.Source.IsBuiltin() || entry.Source.IsManaged() || entry.Source.IsMetadataURL() || entry.Source.IsLocal() {
 			continue
 		}
 		entry.Source.Builtin = builtin
@@ -1525,7 +1738,7 @@ func resolveBaseURL(cfg *Config) {
 	cfg.Server.Management.BaseURL = strings.TrimRight(strings.TrimSpace(cfg.Server.Management.BaseURL), "/")
 }
 
-func resolveRelativePathsInValue(configPath string, root map[string]any) {
+func resolveRelativePathsInValue(configPath string, root map[string]any, useV3Classification bool) {
 	baseDir := filepath.Dir(configPath)
 	if absPath, err := filepath.Abs(configPath); err == nil {
 		baseDir = filepath.Dir(absPath)
@@ -1538,24 +1751,37 @@ func resolveRelativePathsInValue(configPath string, root map[string]any) {
 	if providers := nestedMap(root, "providers"); providers != nil {
 		for _, kind := range []string{"auth", "secrets", "telemetry", "audit", "ui", "indexeddb", "cache", "s3"} {
 			for _, entry := range mapValues(nestedMap(providers, kind)) {
-				resolveRelativePathsInEntry(entry, baseDir)
+				resolveRelativePathsInEntry(kind, entry, baseDir, useV3Classification)
 			}
 		}
 	}
 
 	for _, entry := range mapValues(nestedMap(root, "plugins")) {
-		resolveRelativePathsInEntry(entry, baseDir)
+		resolveRelativePathsInEntry(providermanifestv1.KindPlugin, entry, baseDir, useV3Classification)
 	}
 }
 
-func resolveRelativePathsInEntry(entry map[string]any, baseDir string) {
+func resolveRelativePathsInEntry(kind string, entry map[string]any, baseDir string, useV3Classification bool) {
 	if entry == nil {
 		return
 	}
 	resolveRelativeStringField(entry, "iconFile", baseDir)
-	if source := nestedMap(entry, "source"); source != nil {
+	if source, ok := entry["source"].(map[string]any); ok {
 		resolveRelativeStringField(source, "path", baseDir)
+		return
 	}
+	if !useV3Classification {
+		return
+	}
+	sourceValue, ok := entry["source"].(string)
+	if !ok {
+		return
+	}
+	sourceValue = strings.TrimSpace(sourceValue)
+	if sourceValue == "" || isBuiltinScalarSource(kind, sourceValue) || looksLikeMetadataURL(sourceValue) || looksLikeUnsupportedScalarSource(sourceValue) {
+		return
+	}
+	entry["source"] = resolveRelativeConfigValue(baseDir, sourceValue)
 }
 
 func resolveRelativeStringField(fields map[string]any, key, baseDir string) {

@@ -857,7 +857,10 @@ authorization:
 func TestLoadSucceedsWithoutRuntimeFields(t *testing.T) {
 	t.Parallel()
 
-	path := mustWriteConfigFile(t, `
+	t.Run("mapping local source path", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
 providers:
 plugins:
     custom_tool:
@@ -865,13 +868,81 @@ plugins:
         path: ./manifest.yaml
 `)
 
-	cfg, err := Load(path)
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
-	if got := cfg.Plugins["custom_tool"].SourcePath(); got != filepath.Join(filepath.Dir(path), "manifest.yaml") {
-		t.Fatalf("unexpected plugin source path: %q", got)
-	}
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if got := cfg.Plugins["custom_tool"].SourcePath(); got != filepath.Join(filepath.Dir(path), "manifest.yaml") {
+			t.Fatalf("unexpected plugin source path: %q", got)
+		}
+	})
+
+	t.Run("apiVersion classifies scalar local sources", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+apiVersion: gestaltd.config/v3
+providers:
+plugins:
+    custom_tool:
+      source: ./manifest.yaml
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if cfg.APIVersion != APIVersionV3 {
+			t.Fatalf("APIVersion = %q, want %q", cfg.APIVersion, APIVersionV3)
+		}
+		if got := cfg.Plugins["custom_tool"].SourcePath(); got != filepath.Join(filepath.Dir(path), "manifest.yaml") {
+			t.Fatalf("unexpected plugin source path: %q", got)
+		}
+	})
+
+	t.Run("apiVersion moves sibling auth onto metadata URL sources", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+apiVersion: gestaltd.config/v3
+providers:
+plugins:
+    custom_tool:
+      source: https://example.com/providers/custom_tool/provider-release.yaml?download=1
+      auth:
+        token: test-token
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		entry := cfg.Plugins["custom_tool"]
+		if got := entry.SourceMetadataURL(); got != "https://example.com/providers/custom_tool/provider-release.yaml?download=1" {
+			t.Fatalf("SourceMetadataURL = %q", got)
+		}
+		if entry.Source.Auth == nil || entry.Source.Auth.Token != "test-token" {
+			t.Fatalf("Source.Auth = %#v", entry.Source.Auth)
+		}
+		if entry.InlineSourceAuth != nil {
+			t.Fatalf("InlineSourceAuth = %#v, want nil", entry.InlineSourceAuth)
+		}
+		marshaled, err := yaml.Marshal(entry)
+		if err != nil {
+			t.Fatalf("yaml.Marshal: %v", err)
+		}
+		var roundTripped map[string]any
+		if err := yaml.Unmarshal(marshaled, &roundTripped); err != nil {
+			t.Fatalf("yaml.Unmarshal: %v", err)
+		}
+		if got, ok := roundTripped["source"].(string); !ok || got != "https://example.com/providers/custom_tool/provider-release.yaml?download=1" {
+			t.Fatalf("round-tripped source = %#v", roundTripped["source"])
+		}
+		auth, ok := roundTripped["auth"].(map[string]any)
+		if !ok || auth["token"] != "test-token" {
+			t.Fatalf("round-tripped auth = %#v", roundTripped["auth"])
+		}
+	})
 }
 
 func TestLoadConfigUIEntries(t *testing.T) {
@@ -2120,6 +2191,28 @@ providers:
         version: 1.0.0
 `,
 		},
+		{
+			name: "apiVersion scalar local source",
+			yaml: `
+apiVersion: gestaltd.config/v3
+providers:
+plugins:
+    external:
+      source: ./plugins/dummy/manifest.yaml
+`,
+		},
+		{
+			name: "apiVersion metadata url with sibling auth",
+			yaml: `
+apiVersion: gestaltd.config/v3
+providers:
+plugins:
+    external:
+      source: https://example.com/providers/external/provider-release.yaml
+      auth:
+        token: test-token
+`,
+		},
 	}
 
 	for _, tc := range cases {
@@ -2182,6 +2275,17 @@ server:
         default: deny
 `,
 			want: `field authorization not found in type config.ServerConfig`,
+		},
+		{
+			name: "unsupported apiVersion is rejected",
+			yaml: `
+apiVersion: gestaltd.config/v99
+providers:
+plugins:
+    external:
+      source: ./plugins/dummy/manifest.yaml
+`,
+			want: `unsupported apiVersion "gestaltd.config/v99"`,
 		},
 	}
 
@@ -2395,6 +2499,70 @@ plugins:
         ref: github.com/acme-corp/tools/widget
         version: 1.2.3
 `,
+		},
+		{
+			name: "apiVersion metadata url with sibling auth is valid",
+			yaml: `
+apiVersion: gestaltd.config/v3
+providers:
+plugins:
+    external:
+      source: https://example.com/providers/external/provider-release.yaml
+      auth:
+        token: test-token
+`,
+		},
+		{
+			name: "apiVersion local source rejects sibling auth",
+			yaml: `
+apiVersion: gestaltd.config/v3
+providers:
+plugins:
+    external:
+      source: ./plugins/dummy/manifest.yaml
+      auth:
+        token: test-token
+`,
+			wantErr: "auth is only valid with metadata URL sources",
+		},
+		{
+			name: "managed ref rejects sibling auth",
+			yaml: `
+apiVersion: gestaltd.config/v3
+providers:
+plugins:
+    external:
+      source:
+        ref: github.com/acme-corp/tools/widget
+        version: 1.2.3
+        auth:
+          token: nested-token
+      auth:
+        token: sibling-token
+`,
+			wantErr: "auth and source.auth are mutually exclusive",
+		},
+		{
+			name: "apiVersion rejects non metadata http source",
+			yaml: `
+apiVersion: gestaltd.config/v3
+providers:
+plugins:
+    external:
+      source: https://example.com/providers/external/archive.tar.gz
+`,
+			wantErr: "only provider-release.yaml metadata URLs are supported for remote sources",
+		},
+		{
+			name: "apiVersion rejects git scalar source",
+			yaml: `
+apiVersion: gestaltd.config/v3
+providers:
+plugins:
+    external:
+      source: git+ssh://git@github.com/example/external.git
+`,
+			wantErr: "git+ sources are not supported in apiVersion v3 configs",
 		},
 		{
 			name: "plugin source with base_url override is rejected",
@@ -2695,6 +2863,48 @@ server:
 	}
 	if got := cfg.Plugins["service-a"].SourcePath(); got != filepath.Join(dir, "bin", "manifest.yaml") {
 		t.Fatalf("integration plugin source path = %q, want %q", got, filepath.Join(dir, "bin", "manifest.yaml"))
+	}
+}
+
+func TestLoadPaths_ResolvesRelativeScalarSourcePathsPerFile(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	basePath := filepath.Join(dir, "base", "gestalt.yaml")
+	if err := os.MkdirAll(filepath.Dir(basePath), 0o755); err != nil {
+		t.Fatalf("MkdirAll base: %v", err)
+	}
+	if err := os.WriteFile(basePath, []byte(`
+apiVersion: gestaltd.config/v3
+providers:
+plugins:
+    sample:
+      source: ../base-plugin/manifest.yaml
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile base: %v", err)
+	}
+
+	overridePath := filepath.Join(dir, "overrides", "gestalt.yaml")
+	if err := os.MkdirAll(filepath.Dir(overridePath), 0o755); err != nil {
+		t.Fatalf("MkdirAll override: %v", err)
+	}
+	if err := os.WriteFile(overridePath, []byte(`
+providers:
+plugins:
+    sample:
+      source: ./override-plugin/manifest.yaml
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile override: %v", err)
+	}
+
+	cfg, err := LoadPaths([]string{basePath, overridePath})
+	if err != nil {
+		t.Fatalf("LoadPaths: %v", err)
+	}
+
+	wantPath := filepath.Join(filepath.Dir(overridePath), "override-plugin", "manifest.yaml")
+	if got := cfg.Plugins["sample"].SourcePath(); got != wantPath {
+		t.Fatalf("SourcePath = %q, want %q", got, wantPath)
 	}
 }
 

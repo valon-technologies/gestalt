@@ -2668,6 +2668,46 @@ func TestReadLockfile_RejectsLegacyUILockShapeBeforeUnmarshal(t *testing.T) {
 	}
 }
 
+func TestReadLockfile_AcceptsSchemaV1PortableEntries(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	lockPath := filepath.Join(dir, InitLockfileName)
+	legacy := `{
+  "schema": "gestaltd-provider-lock",
+  "schemaVersion": 1,
+  "revision": 0,
+  "providers": {
+    "plugin": {
+      "example": {
+        "fingerprint": "provider-fp",
+        "source": "github.com/test-org/test-repo/test-plugin",
+        "version": "1.0.0"
+      }
+    }
+  }
+}
+`
+	if err := os.WriteFile(lockPath, []byte(legacy), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	lock, err := ReadLockfile(lockPath)
+	if err != nil {
+		t.Fatalf("ReadLockfile: %v", err)
+	}
+	entry, ok := lock.Providers["example"]
+	if !ok {
+		t.Fatal(`lock.Providers["example"] not found`)
+	}
+	if entry.Fingerprint != "provider-fp" {
+		t.Fatalf("Fingerprint = %q, want %q", entry.Fingerprint, "provider-fp")
+	}
+	if entry.Source != "github.com/test-org/test-repo/test-plugin" || entry.Version != "1.0.0" {
+		t.Fatalf("entry = %#v", entry)
+	}
+}
+
 func mustBuildManagedProviderPackage(t *testing.T, dir string, manifest *providermanifestv1.Manifest, artifacts map[string]string, includeCatalog bool) string {
 	t.Helper()
 
@@ -2778,6 +2818,18 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 				Executable: ".gestaltd/providers/example/artifacts/darwin/arm64/provider",
 			},
 		},
+		Auth: map[string]LockEntry{
+			"oauth": {
+				Fingerprint: "auth-fp",
+				Source:      "github.com/test-org/test-repo/auth-oauth",
+				Version:     "1.0.1",
+				Archives: map[string]LockArchive{
+					"darwin/arm64": {URL: "https://example.com/auth-oauth.tar.gz", SHA256: "auth123"},
+				},
+				Manifest:   ".gestaltd/providers/auth/oauth/manifest.json",
+				Executable: ".gestaltd/providers/auth/oauth/artifacts/darwin/arm64/auth-oauth",
+			},
+		},
 		IndexedDBs: map[string]LockEntry{
 			"main": {
 				Fingerprint: "indexeddb-main-fp",
@@ -2827,8 +2879,57 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if strings.Contains(string(lockData), `"version": 7`) {
 		t.Fatalf("lockfile = %s, want schema-based versioning", lockData)
 	}
-	if strings.Contains(string(lockData), `"manifest"`) || strings.Contains(string(lockData), `"executable"`) || strings.Contains(string(lockData), `"assetRoot"`) {
+	if strings.Contains(string(lockData), `"manifest":`) || strings.Contains(string(lockData), `"executable":`) || strings.Contains(string(lockData), `"assetRoot":`) {
 		t.Fatalf("lockfile = %s, want portable entries only", lockData)
+	}
+	var diskLock providerLockfile
+	if err := json.Unmarshal(lockData, &diskLock); err != nil {
+		t.Fatalf("Unmarshal lockfile: %v", err)
+	}
+	providerEntry, ok := diskLock.Providers.Plugin["example"]
+	if !ok {
+		t.Fatal(`disk lock providers.plugin["example"] not found`)
+	}
+	if providerEntry.InputDigest != want.Providers["example"].Fingerprint {
+		t.Fatalf("provider inputDigest = %q, want %q", providerEntry.InputDigest, want.Providers["example"].Fingerprint)
+	}
+	if providerEntry.Package != want.Providers["example"].Source {
+		t.Fatalf("provider package = %q, want %q", providerEntry.Package, want.Providers["example"].Source)
+	}
+	if providerEntry.Kind != providermanifestv1.KindPlugin {
+		t.Fatalf("provider kind = %q, want %q", providerEntry.Kind, providermanifestv1.KindPlugin)
+	}
+	if providerEntry.Runtime != providerLockRuntimeExecutable {
+		t.Fatalf("provider runtime = %q, want %q", providerEntry.Runtime, providerLockRuntimeExecutable)
+	}
+	authEntry, ok := diskLock.Providers.Auth["oauth"]
+	if !ok {
+		t.Fatal(`disk lock providers.auth["oauth"] not found`)
+	}
+	if authEntry.InputDigest != want.Auth["oauth"].Fingerprint {
+		t.Fatalf("auth inputDigest = %q, want %q", authEntry.InputDigest, want.Auth["oauth"].Fingerprint)
+	}
+	if authEntry.Package != want.Auth["oauth"].Source {
+		t.Fatalf("auth package = %q, want %q", authEntry.Package, want.Auth["oauth"].Source)
+	}
+	if authEntry.Kind != providermanifestv1.KindAuth {
+		t.Fatalf("auth kind = %q, want %q", authEntry.Kind, providermanifestv1.KindAuth)
+	}
+	if authEntry.Runtime != providerLockRuntimeExecutable {
+		t.Fatalf("auth runtime = %q, want %q", authEntry.Runtime, providerLockRuntimeExecutable)
+	}
+	uiEntry, ok := diskLock.Providers.WebUI["roadmap"]
+	if !ok {
+		t.Fatal(`disk lock providers.webui["roadmap"] not found`)
+	}
+	if uiEntry.InputDigest != want.UIs["roadmap"].Fingerprint {
+		t.Fatalf("ui inputDigest = %q, want %q", uiEntry.InputDigest, want.UIs["roadmap"].Fingerprint)
+	}
+	if uiEntry.Kind != providermanifestv1.KindWebUI {
+		t.Fatalf("ui kind = %q, want %q", uiEntry.Kind, providermanifestv1.KindWebUI)
+	}
+	if uiEntry.Runtime != providerLockRuntimeAssets {
+		t.Fatalf("ui runtime = %q, want %q", uiEntry.Runtime, providerLockRuntimeAssets)
 	}
 
 	got, err := ReadLockfile(lockPath)
@@ -2843,6 +2944,9 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	}
 	if got.Providers["example"].Source != want.Providers["example"].Source || got.Providers["example"].Version != want.Providers["example"].Version {
 		t.Fatal("provider source mismatch")
+	}
+	if got.Auth["oauth"].Fingerprint != want.Auth["oauth"].Fingerprint {
+		t.Fatal("auth fingerprint mismatch")
 	}
 	if got.IndexedDBs["main"].Fingerprint != want.IndexedDBs["main"].Fingerprint {
 		t.Fatal("indexeddb fingerprint mismatch")

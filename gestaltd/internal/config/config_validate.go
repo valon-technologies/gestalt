@@ -22,6 +22,9 @@ import (
 // Called by Load (and therefore by init, validate, and serve). Does not require
 // runtime secrets like encryption_key.
 func ValidateStructure(cfg *Config) error {
+	if err := validateAPIVersion(cfg); err != nil {
+		return err
+	}
 	if err := NormalizeCompatibility(cfg); err != nil {
 		return err
 	}
@@ -111,6 +114,19 @@ func ValidateStructure(cfg *Config) error {
 		}
 	}
 	return nil
+}
+
+func validateAPIVersion(cfg *Config) error {
+	if cfg == nil {
+		return nil
+	}
+	apiVersion := strings.TrimSpace(cfg.APIVersion)
+	switch apiVersion {
+	case "", APIVersionV3:
+		return nil
+	default:
+		return fmt.Errorf("config validation: unsupported apiVersion %q", apiVersion)
+	}
 }
 
 func validateHostProviderEntries(kind HostProviderKind, entries map[string]*ProviderEntry) error {
@@ -205,7 +221,19 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error 
 	}
 	src := entry.Source
 	if src.IsBuiltin() {
+		if entry.InlineSourceAuth != nil {
+			return fmt.Errorf("config validation: %s %q auth is only valid with metadata URL sources", kind, name)
+		}
+		if src.Auth != nil {
+			return fmt.Errorf("config validation: %s %q source.auth is only valid with source.ref or metadata URL sources", kind, name)
+		}
 		return nil
+	}
+	if src.UnsupportedURL() != "" {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(src.UnsupportedURL())), "git+") {
+			return fmt.Errorf("config validation: %s %q git+ sources are not supported in apiVersion v3 configs", kind, name)
+		}
+		return fmt.Errorf("config validation: %s %q only provider-release.yaml metadata URLs are supported for remote sources", kind, name)
 	}
 	modeCount := 0
 	if src.IsLocal() {
@@ -214,11 +242,14 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error 
 	if src.IsManaged() {
 		modeCount++
 	}
+	if src.IsMetadataURL() {
+		modeCount++
+	}
 	if modeCount == 0 {
 		return fmt.Errorf("config validation: %s %q source.path or source.ref is required", kind, name)
 	}
 	if modeCount > 1 {
-		return fmt.Errorf("config validation: %s %q source.path and source.ref are mutually exclusive", kind, name)
+		return fmt.Errorf("config validation: %s %q source.path, source.ref, and metadata URL sources are mutually exclusive", kind, name)
 	}
 	if src.IsManaged() {
 		if _, err := pluginsource.Parse(src.Ref); err != nil {
@@ -231,15 +262,31 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error 
 			return fmt.Errorf("config validation: %s %q source.version: %w", kind, name, err)
 		}
 	}
-	if src.IsLocal() && src.Version != "" {
+	if src.IsMetadataURL() {
+		if parsed, err := url.ParseRequestURI(src.MetadataURL()); err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") || !strings.HasSuffix(parsed.Path, "/provider-release.yaml") {
+			return fmt.Errorf("config validation: %s %q source metadata URL must be an absolute http(s) provider-release.yaml URL", kind, name)
+		}
+	}
+	if !src.IsManaged() && src.Version != "" {
 		return fmt.Errorf("config validation: %s %q source.version is only valid with source.ref", kind, name)
 	}
+	if entry.InlineSourceAuth != nil && src.Auth != nil {
+		return fmt.Errorf("config validation: %s %q auth and source.auth are mutually exclusive", kind, name)
+	}
 	if src.Auth != nil {
-		if !src.IsManaged() {
-			return fmt.Errorf("config validation: %s %q source.auth is only valid with source.ref", kind, name)
+		if !src.IsManaged() && !src.IsMetadataURL() {
+			return fmt.Errorf("config validation: %s %q source.auth is only valid with source.ref or metadata URL sources", kind, name)
 		}
 		if strings.TrimSpace(src.Auth.Token) == "" {
 			return fmt.Errorf("config validation: %s %q source.auth.token is required when source.auth is set", kind, name)
+		}
+	}
+	if entry.InlineSourceAuth != nil {
+		if !src.IsMetadataURL() {
+			return fmt.Errorf("config validation: %s %q auth is only valid with metadata URL sources", kind, name)
+		}
+		if strings.TrimSpace(entry.InlineSourceAuth.Token) == "" {
+			return fmt.Errorf("config validation: %s %q auth.token is required when auth is set", kind, name)
 		}
 	}
 	return nil
