@@ -18,7 +18,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/emailutil"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
-	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
 const (
@@ -816,7 +815,11 @@ func normalizeEmail(email string) string {
 
 func providerMode(provider string, pluginDefs map[string]*config.ProviderEntry, providers *registry.ProviderMap[core.Provider]) (core.ConnectionMode, bool, error) {
 	if entry, ok := pluginDefs[provider]; ok && entry != nil {
-		return pluginConnectionMode(entry), true, nil
+		plan, err := config.BuildStaticConnectionPlan(entry, entry.ManifestSpec())
+		if err != nil {
+			return "", false, err
+		}
+		return plan.ConnectionMode(), true, nil
 	}
 	if providers != nil {
 		prov, err := providers.Get(provider)
@@ -825,76 +828,4 @@ func providerMode(provider string, pluginDefs map[string]*config.ProviderEntry, 
 		}
 	}
 	return "", false, nil
-}
-
-func pluginConnectionMode(entry *config.ProviderEntry) core.ConnectionMode {
-	needUser := false
-	needIdentity := false
-
-	addMode := func(mode core.ConnectionMode) {
-		switch mode {
-		case core.ConnectionModeUser:
-			needUser = true
-		case core.ConnectionModeIdentity:
-			needIdentity = true
-		case core.ConnectionModeEither:
-			needUser = true
-			needIdentity = true
-		}
-	}
-
-	addMode(connectionModeForConnection(config.EffectivePluginConnectionDef(entry, entry.ManifestSpec())))
-
-	for name := range namedConnectionNames(entry) {
-		conn, ok := config.EffectiveNamedConnectionDef(entry, entry.ManifestSpec(), name)
-		if !ok {
-			continue
-		}
-		addMode(connectionModeForConnection(conn))
-	}
-
-	switch {
-	case needUser && needIdentity:
-		return core.ConnectionModeEither
-	case needUser:
-		return core.ConnectionModeUser
-	case needIdentity:
-		return core.ConnectionModeIdentity
-	default:
-		return core.ConnectionModeNone
-	}
-}
-
-func namedConnectionNames(entry *config.ProviderEntry) map[string]struct{} {
-	names := make(map[string]struct{})
-	if entry == nil {
-		return names
-	}
-	if spec := entry.ManifestSpec(); spec != nil {
-		for name := range spec.Connections {
-			resolved := config.ResolveConnectionAlias(name)
-			if resolved != "" && resolved != config.PluginConnectionName {
-				names[resolved] = struct{}{}
-			}
-		}
-	}
-	for name := range entry.Connections {
-		resolved := config.ResolveConnectionAlias(name)
-		if resolved != "" && resolved != config.PluginConnectionName {
-			names[resolved] = struct{}{}
-		}
-	}
-	return names
-}
-
-func connectionModeForConnection(conn config.ConnectionDef) core.ConnectionMode {
-	if conn.Mode != "" {
-		return core.ConnectionMode(conn.Mode)
-	}
-	switch conn.Auth.Type {
-	case "", providermanifestv1.AuthTypeNone:
-		return core.ConnectionModeNone
-	default:
-		return core.ConnectionModeUser
-	}
 }
