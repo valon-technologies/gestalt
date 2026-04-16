@@ -35,14 +35,12 @@ func WithAllowedRoles(roles map[string][]string) RestrictedOption {
 
 // Compile-time interface checks.
 var (
-	_ core.Provider      = (*Restricted)(nil)
-	_ core.OAuthProvider = (*restrictedOAuth)(nil)
+	_ core.Provider = (*Restricted)(nil)
 )
 
 // NewRestricted returns a Provider that gates operations to the allowed set.
 // The ops map maps exposedName -> innerName. If innerName is empty, the
-// exposed name equals the inner name (no alias). If the inner provider
-// implements OAuthProvider, the returned value does too.
+// exposed name equals the inner name (no alias).
 func NewRestricted(inner core.Provider, ops map[string]string, opts ...RestrictedOption) core.Provider {
 	m := make(map[string]struct{}, len(ops))
 	aliases := make(map[string]string)
@@ -69,14 +67,7 @@ func NewRestricted(inner core.Provider, ops map[string]string, opts ...Restricte
 		opt(r)
 	}
 	if scp, ok := inner.(core.SessionCatalogProvider); ok {
-		rs := &restrictedSession{Restricted: r, scp: scp}
-		if oauth, ok := inner.(core.OAuthProvider); ok {
-			return &restrictedOAuth{Restricted: rs.Restricted, inner: oauth, session: rs}
-		}
-		return rs
-	}
-	if oauth, ok := inner.(core.OAuthProvider); ok {
-		return &restrictedOAuth{Restricted: r, inner: oauth}
+		return &restrictedSession{Restricted: r, scp: scp}
 	}
 	return r
 }
@@ -118,6 +109,19 @@ func (r *Restricted) Execute(ctx context.Context, operation string, params map[s
 	}
 	return r.inner.Execute(ctx, innerName, params, token)
 }
+
+func (r *Restricted) AuthorizationURL(state string, scopes []string) string {
+	return r.inner.AuthorizationURL(state, scopes)
+}
+
+func (r *Restricted) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
+	return r.inner.ExchangeCode(ctx, code)
+}
+
+func (r *Restricted) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+	return r.inner.RefreshToken(ctx, refreshToken)
+}
+
 func (r *Restricted) Catalog() *catalog.Catalog {
 	cat := r.inner.Catalog()
 	if cat == nil {
@@ -172,33 +176,6 @@ func (rs *restrictedSession) CatalogForRequest(ctx context.Context, token string
 		return cat, err
 	}
 	return rs.filterCatalog(cat), nil
-}
-
-// restrictedOAuth wraps a Restricted provider and delegates OAuth methods
-// to the inner OAuthProvider.
-type restrictedOAuth struct {
-	*Restricted
-	inner   core.OAuthProvider
-	session *restrictedSession
-}
-
-func (r *restrictedOAuth) AuthorizationURL(state string, scopes []string) string {
-	return r.inner.AuthorizationURL(state, scopes)
-}
-
-func (r *restrictedOAuth) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
-	return r.inner.ExchangeCode(ctx, code)
-}
-
-func (r *restrictedOAuth) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
-	return r.inner.RefreshToken(ctx, refreshToken)
-}
-
-func (r *restrictedOAuth) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
-	if r.session != nil {
-		return r.session.CatalogForRequest(ctx, token)
-	}
-	return nil, nil
 }
 
 func (r *Restricted) AuthTypes() []string {

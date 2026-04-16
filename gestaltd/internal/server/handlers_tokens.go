@@ -218,7 +218,7 @@ func (s *Server) populateIntegrationSettings(info *integrationInfo, prov core.Pr
 	info.ConnectionParams = connectionParamInfosFromProvider(prov)
 	info.CredentialFields = credentialFieldInfosFromProvider(prov, authTypes)
 	info.Connections = s.connectionInfosForPlugin(info.Name, s.pluginDefs[info.Name], authTypes, info.CredentialFields)
-	info.AuthTypes = resolvedIntegrationAuthTypes(prov, authTypes, info.Connections)
+	info.AuthTypes = resolvedIntegrationAuthTypes(authTypes, info.Connections)
 	if len(authTypes) == 0 && len(info.AuthTypes) > 0 {
 		info.Connections = s.connectionInfosForPlugin(info.Name, s.pluginDefs[info.Name], info.AuthTypes, info.CredentialFields)
 	}
@@ -340,7 +340,7 @@ func removeAuthType(authTypes []string, drop string) []string {
 	return filtered
 }
 
-func resolvedIntegrationAuthTypes(prov core.Provider, authTypes []string, connections []connectionDefInfo) []string {
+func resolvedIntegrationAuthTypes(authTypes []string, connections []connectionDefInfo) []string {
 	if len(authTypes) > 0 {
 		return authTypes
 	}
@@ -350,9 +350,6 @@ func resolvedIntegrationAuthTypes(prov core.Provider, authTypes []string, connec
 	}
 	if authTypes = userFacingAuthTypes(combined); len(authTypes) > 0 {
 		return authTypes
-	}
-	if _, ok := prov.(core.OAuthProvider); ok {
-		return []string{"oauth"}
 	}
 	return []string{}
 }

@@ -15,7 +15,7 @@ import (
 )
 
 var (
-	_ core.OAuthProvider = (*Base)(nil)
+	_ core.Provider = (*Base)(nil)
 )
 
 type manualChecker interface{ IsManual() bool }

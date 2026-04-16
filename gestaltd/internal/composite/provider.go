@@ -31,18 +31,14 @@ var (
 	_ core.SessionCatalogProvider = (*Provider)(nil)
 )
 
-// New creates a composite provider. If the API provider implements
-// OAuthProvider, the returned provider does too.
+// New creates a composite provider. Execute goes to the API provider; MCP
+// passthrough and session catalog calls go to the upstream.
 func New(name string, apiProv core.Provider, mcpUp MCPUpstream) core.Provider {
-	p := &Provider{
+	return &Provider{
 		name: name,
 		api:  apiProv,
 		mcp:  mcpUp,
 	}
-	if oauthProv, ok := apiProv.(core.OAuthProvider); ok {
-		return &oauthProvider{Provider: p, auth: oauthProv}
-	}
-	return p
 }
 
 func (p *Provider) Name() string        { return p.name }
@@ -98,6 +94,18 @@ func (p *Provider) AuthTypes() []string {
 	return p.api.AuthTypes()
 }
 
+func (p *Provider) AuthorizationURL(state string, scopes []string) string {
+	return p.api.AuthorizationURL(state, scopes)
+}
+
+func (p *Provider) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
+	return p.api.ExchangeCode(ctx, code)
+}
+
+func (p *Provider) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+	return p.api.RefreshToken(ctx, refreshToken)
+}
+
 func (p *Provider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
 	return p.api.ConnectionParamDefs()
 }
@@ -121,23 +129,6 @@ func (p *Provider) Close() error {
 		}
 	}
 	return firstErr
-}
-
-type oauthProvider struct {
-	*Provider
-	auth core.OAuthProvider
-}
-
-func (p *oauthProvider) AuthorizationURL(state string, scopes []string) string {
-	return p.auth.AuthorizationURL(state, scopes)
-}
-
-func (p *oauthProvider) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
-	return p.auth.ExchangeCode(ctx, code)
-}
-
-func (p *oauthProvider) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
-	return p.auth.RefreshToken(ctx, refreshToken)
 }
 
 func (p *Provider) buildCatalog() *catalog.Catalog {

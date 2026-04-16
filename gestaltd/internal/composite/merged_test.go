@@ -11,6 +11,7 @@ import (
 )
 
 type fakeProvider struct {
+	core.NoOAuth
 	name     string
 	connMode core.ConnectionMode
 	ops      []core.Operation

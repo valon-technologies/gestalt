@@ -16,7 +16,7 @@ import (
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
-type roundTripProvider struct{}
+type roundTripProvider struct{ core.NoOAuth }
 
 func (p *roundTripProvider) Configure(_ context.Context, _ string, _ map[string]any) error {
 	return nil

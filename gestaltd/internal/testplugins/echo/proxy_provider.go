@@ -27,6 +27,15 @@ func (p *proxyProvider) DisplayName() string                 { return p.inner.Di
 func (p *proxyProvider) Description() string                 { return p.inner.Description() }
 func (p *proxyProvider) ConnectionMode() core.ConnectionMode { return p.inner.ConnectionMode() }
 func (p *proxyProvider) AuthTypes() []string                 { return p.inner.AuthTypes() }
+func (p *proxyProvider) AuthorizationURL(state string, scopes []string) string {
+	return p.inner.AuthorizationURL(state, scopes)
+}
+func (p *proxyProvider) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
+	return p.inner.ExchangeCode(ctx, code)
+}
+func (p *proxyProvider) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+	return p.inner.RefreshToken(ctx, refreshToken)
+}
 func (p *proxyProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
 	return p.inner.ConnectionParamDefs()
 }
