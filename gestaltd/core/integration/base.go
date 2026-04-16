@@ -18,8 +18,6 @@ var (
 	_ core.Provider = (*Base)(nil)
 )
 
-type manualChecker interface{ IsManual() bool }
-
 type AuthHandler interface {
 	AuthorizationURL(state string, scopes []string) string
 	ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error)
@@ -83,9 +81,10 @@ func (b *Base) ConnectionMode() core.ConnectionMode {
 }
 
 func (b *Base) AuthTypes() []string {
-	mc, ok := b.Auth.(manualChecker)
-	manualOnly := ok && mc.IsManual()
-	if manualOnly {
+	switch b.Auth.(type) {
+	case core.NoOAuth:
+		return nil
+	case oauth.ManualAuthHandler:
 		return []string{"manual"}
 	}
 	if b.ManualAuthEnabled {

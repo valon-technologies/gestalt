@@ -324,8 +324,15 @@ func setStr(dst *string, val string) {
 }
 
 func buildAuth(def *Definition, conn config.ConnectionDef, baseURL string, client *http.Client) (coreintegration.AuthHandler, error) {
-	if def.Auth.Type == "manual" || (def.Auth.Type == "" && def.Auth.AuthorizationURL == "") {
+	switch def.Auth.Type {
+	case "manual", "bearer":
 		return oauth.ManualAuthHandler{}, nil
+	case "none":
+		return core.NoOAuth{}, nil
+	case "":
+		if def.Auth.AuthorizationURL == "" {
+			return core.NoOAuth{}, nil
+		}
 	}
 
 	upstream, err := BuildOAuthUpstream(def, conn, baseURL, client)
