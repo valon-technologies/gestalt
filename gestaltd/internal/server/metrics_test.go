@@ -30,13 +30,19 @@ func (p *manualMetricsProvider) Name() string                        { return p.
 func (p *manualMetricsProvider) DisplayName() string                 { return p.name }
 func (p *manualMetricsProvider) Description() string                 { return "" }
 func (p *manualMetricsProvider) ConnectionMode() core.ConnectionMode { return core.ConnectionModeUser }
+func (p *manualMetricsProvider) AuthTypes() []string                 { return []string{"manual"} }
+func (p *manualMetricsProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
+	return nil
+}
+func (p *manualMetricsProvider) CredentialFields() []core.CredentialFieldDef { return nil }
+func (p *manualMetricsProvider) DiscoveryConfig() *core.DiscoveryConfig      { return nil }
+func (p *manualMetricsProvider) ConnectionForOperation(string) string        { return "" }
 func (p *manualMetricsProvider) Catalog() *catalog.Catalog {
 	return serverTestCatalogFromOperations(p.name, nil)
 }
 func (p *manualMetricsProvider) Execute(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
 	return &core.OperationResult{Status: http.StatusOK, Body: `{}`}, nil
 }
-func (p *manualMetricsProvider) SupportsManualAuth() bool { return true }
 
 type metricsHostIssuedSessionAuth struct {
 	secret []byte

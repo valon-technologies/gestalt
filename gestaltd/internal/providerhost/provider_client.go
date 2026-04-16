@@ -150,15 +150,6 @@ func (p *remoteProviderBase) Execute(ctx context.Context, operation string, para
 	}, nil
 }
 
-func (p *remoteProviderBase) SupportsManualAuth() bool {
-	for _, authType := range p.authTypes {
-		if authType == "manual" {
-			return true
-		}
-	}
-	return false
-}
-
 func (p *remoteProviderBase) Catalog() *catalog.Catalog {
 	return p.decorateCatalog(p.catalog)
 }
@@ -178,6 +169,8 @@ func (p *remoteProviderBase) CredentialFields() []core.CredentialFieldDef {
 func (p *remoteProviderBase) DiscoveryConfig() *core.DiscoveryConfig {
 	return p.discovery
 }
+
+func (p *remoteProviderBase) ConnectionForOperation(string) string { return "" }
 
 func (p *remoteProviderBase) sessionCatalog(ctx context.Context, token string) (*catalog.Catalog, error) {
 	resp, err := p.client.GetSessionCatalog(ctx, &proto.GetSessionCatalogRequest{

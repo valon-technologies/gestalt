@@ -226,28 +226,12 @@ func userFacingConnectionName(name string) string {
 	return name
 }
 
-func providerSupportsManualAuth(prov core.Provider) bool {
-	return core.SupportsManualAuth(prov)
-}
-
-func providerSupportsOAuth(prov core.Provider) bool {
-	return core.SupportsOAuth(prov)
-}
-
 func integrationAuthTypesForProvider(prov core.Provider) []string {
-	var authTypes []string
-	if core.HasAuthTypes(prov) {
-		authTypes = core.AuthTypes(prov)
-	} else if providerSupportsManualAuth(prov) {
-		authTypes = []string{"manual"}
-	} else if providerSupportsOAuth(prov) {
-		authTypes = []string{"oauth"}
-	}
-	return userFacingAuthTypes(authTypes)
+	return userFacingAuthTypes(prov.AuthTypes())
 }
 
 func credentialFieldInfosFromProvider(prov core.Provider) []credentialFieldInfo {
-	if fields := core.CredentialFields(prov); len(fields) > 0 {
+	if fields := prov.CredentialFields(); len(fields) > 0 {
 		if fields := credentialFieldInfos(fields, func(field core.CredentialFieldDef) credentialFieldInfo {
 			return credentialFieldInfo{
 				Name:        field.Name,
@@ -258,7 +242,7 @@ func credentialFieldInfosFromProvider(prov core.Provider) []credentialFieldInfo 
 			return fields
 		}
 	}
-	if providerSupportsManualAuth(prov) {
+	if authTypesContain(userFacingAuthTypes(prov.AuthTypes()), "manual") {
 		return defaultManualCredentialFieldInfos()
 	}
 	return []credentialFieldInfo{}
@@ -350,16 +334,6 @@ func authTypesFromConnections(connections []connectionDefInfo) []string {
 		combined = append(combined, connection.AuthTypes...)
 	}
 	return userFacingAuthTypes(combined)
-}
-
-func fallbackAuthTypesForProvider(prov core.Provider) []string {
-	if providerSupportsManualAuth(prov) {
-		return []string{"manual"}
-	}
-	if providerSupportsOAuth(prov) {
-		return []string{"oauth"}
-	}
-	return nil
 }
 
 func connectionDisplayName(name, configured string) string {

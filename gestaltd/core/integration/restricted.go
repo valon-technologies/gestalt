@@ -35,15 +35,8 @@ func WithAllowedRoles(roles map[string][]string) RestrictedOption {
 
 // Compile-time interface checks.
 var (
-	_ core.Provider                    = (*Restricted)(nil)
-	_ core.ManualProvider              = (*Restricted)(nil)
-	_ core.AuthTypeLister              = (*Restricted)(nil)
-	_ core.OperationConnectionProvider = (*Restricted)(nil)
-	_ core.ConnectionParamProvider     = (*Restricted)(nil)
-	_ core.CredentialFieldsProvider    = (*Restricted)(nil)
-	_ core.DiscoveryConfigProvider     = (*Restricted)(nil)
-	_ core.OAuthProvider               = (*restrictedOAuth)(nil)
-	_ core.ManualProvider              = (*restrictedOAuth)(nil)
+	_ core.Provider      = (*Restricted)(nil)
+	_ core.OAuthProvider = (*restrictedOAuth)(nil)
 )
 
 // NewRestricted returns a Provider that gates operations to the allowed set.
@@ -120,10 +113,6 @@ func (r *Restricted) Execute(ctx context.Context, operation string, params map[s
 		innerName = alias
 	}
 	return r.inner.Execute(ctx, innerName, params, token)
-}
-
-func (r *Restricted) SupportsManualAuth() bool {
-	return core.SupportsManualAuth(r.inner)
 }
 
 func (r *Restricted) Catalog() *catalog.Catalog {
@@ -210,19 +199,19 @@ func (r *restrictedOAuth) CatalogForRequest(ctx context.Context, token string) (
 }
 
 func (r *Restricted) AuthTypes() []string {
-	return core.AuthTypes(r.inner)
+	return r.inner.AuthTypes()
 }
 
 func (r *Restricted) ConnectionParamDefs() map[string]core.ConnectionParamDef {
-	return core.ConnectionParamDefs(r.inner)
+	return r.inner.ConnectionParamDefs()
 }
 
 func (r *Restricted) CredentialFields() []core.CredentialFieldDef {
-	return core.CredentialFields(r.inner)
+	return r.inner.CredentialFields()
 }
 
 func (r *Restricted) DiscoveryConfig() *core.DiscoveryConfig {
-	return core.DiscoveryConfigFor(r.inner)
+	return r.inner.DiscoveryConfig()
 }
 
 func (r *Restricted) ConnectionForOperation(operation string) string {
@@ -233,5 +222,5 @@ func (r *Restricted) ConnectionForOperation(operation string) string {
 	if alias, ok := r.aliases[operation]; ok {
 		innerOperation = alias
 	}
-	return core.OperationConnection(r.inner, innerOperation)
+	return r.inner.ConnectionForOperation(innerOperation)
 }

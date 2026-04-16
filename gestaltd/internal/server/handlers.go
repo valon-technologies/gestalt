@@ -188,7 +188,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		info.Connected = len(instances) > 0
 		info.Instances = append(make([]instanceInfo, 0, len(instances)), instances...)
 		info.CredentialFields = credentialFieldInfosFromProvider(prov)
-		for name, def := range core.ConnectionParamDefs(prov) {
+		for name, def := range prov.ConnectionParamDefs() {
 			if def.From == "" {
 				info.ConnectionParams[name] = connectionParamInfo{
 					Required:    def.Required,
@@ -201,7 +201,9 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		if len(authTypes) == 0 {
 			authTypes = authTypesFromConnections(info.Connections)
 			if len(authTypes) == 0 {
-				authTypes = fallbackAuthTypesForProvider(prov)
+				if _, ok := prov.(core.OAuthProvider); ok {
+					authTypes = []string{"oauth"}
+				}
 			}
 			info.Connections = s.integrationConnectionInfos(name, authTypes, info.CredentialFields)
 		}
@@ -429,12 +431,7 @@ func resolveRequestedInstance(w http.ResponseWriter, requested string) (string, 
 }
 
 func resolveConnectionParams(w http.ResponseWriter, prov core.Provider, provided map[string]string) (map[string]string, bool) {
-	if !core.HasConnectionParamDefs(prov) {
-		return nil, true
-	}
-
-	defs := core.ConnectionParamDefs(prov)
-	connParams, err := validateConnectionParams(defs, provided)
+	connParams, err := validateConnectionParams(prov.ConnectionParamDefs(), provided)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return nil, false

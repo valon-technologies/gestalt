@@ -26,6 +26,19 @@ func (p *proxyProvider) Name() string                        { return p.inner.Na
 func (p *proxyProvider) DisplayName() string                 { return p.inner.DisplayName() }
 func (p *proxyProvider) Description() string                 { return p.inner.Description() }
 func (p *proxyProvider) ConnectionMode() core.ConnectionMode { return p.inner.ConnectionMode() }
+func (p *proxyProvider) AuthTypes() []string                 { return p.inner.AuthTypes() }
+func (p *proxyProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
+	return p.inner.ConnectionParamDefs()
+}
+func (p *proxyProvider) CredentialFields() []core.CredentialFieldDef {
+	return p.inner.CredentialFields()
+}
+func (p *proxyProvider) DiscoveryConfig() *core.DiscoveryConfig {
+	return p.inner.DiscoveryConfig()
+}
+func (p *proxyProvider) ConnectionForOperation(operation string) string {
+	return p.inner.ConnectionForOperation(operation)
+}
 func (p *proxyProvider) Catalog() *catalog.Catalog {
 	var cat *catalog.Catalog
 	if inner := p.inner.Catalog(); inner != nil {

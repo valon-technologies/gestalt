@@ -6850,10 +6850,10 @@ func TestExecuteOperation_WrappedProvidersPreserveOperationConnectionRouting(t *
 			StubIntegration: coretesting.StubIntegration{N: "svc-mcp", ConnMode: core.ConnectionModeNone},
 		},
 	})
-	if got := core.OperationConnection(apiProv, "find"); got != "workspace" {
+	if got := apiProv.ConnectionForOperation("find"); got != "workspace" {
 		t.Fatalf("restricted op connection = %q, want workspace", got)
 	}
-	if got := core.OperationConnection(prov, "find"); got != "workspace" {
+	if got := prov.ConnectionForOperation("find"); got != "workspace" {
 		t.Fatalf("composite op connection = %q, want workspace", got)
 	}
 
@@ -9717,7 +9717,7 @@ func (s *stubIntegrationWithSessionCatalog) CatalogForRequest(ctx context.Contex
 	return s.catalog, nil
 }
 
-func (s *stubIntegrationWithSessionCatalog) SupportsManualAuth() bool { return true }
+func (s *stubIntegrationWithSessionCatalog) AuthTypes() []string      { return []string{"manual"} }
 func (s *stubIntegrationWithSessionCatalog) Close() error             { return nil }
 func (s *stubIntegrationWithSessionCatalog) CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
 	if s.callFn != nil {
@@ -9900,6 +9900,13 @@ func (s *stubNonOAuthProvider) Name() string                        { return s.n
 func (s *stubNonOAuthProvider) DisplayName() string                 { return s.name }
 func (s *stubNonOAuthProvider) Description() string                 { return "" }
 func (s *stubNonOAuthProvider) ConnectionMode() core.ConnectionMode { return core.ConnectionModeUser }
+func (s *stubNonOAuthProvider) AuthTypes() []string                 { return nil }
+func (s *stubNonOAuthProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
+	return nil
+}
+func (s *stubNonOAuthProvider) CredentialFields() []core.CredentialFieldDef { return nil }
+func (s *stubNonOAuthProvider) DiscoveryConfig() *core.DiscoveryConfig      { return nil }
+func (s *stubNonOAuthProvider) ConnectionForOperation(string) string        { return "" }
 func (s *stubNonOAuthProvider) Catalog() *catalog.Catalog {
 	if s.catalog != nil {
 		return s.catalog
@@ -10693,7 +10700,7 @@ type stubManualProvider struct {
 	coretesting.StubIntegration
 }
 
-func (s *stubManualProvider) SupportsManualAuth() bool { return true }
+func (s *stubManualProvider) AuthTypes() []string { return []string{"manual"} }
 
 type stubNilAuthTypesProvider struct {
 	coretesting.StubIntegration
@@ -10742,8 +10749,7 @@ type stubDualAuthProvider struct {
 	coretesting.StubIntegration
 }
 
-func (s *stubDualAuthProvider) SupportsManualAuth() bool { return true }
-func (s *stubDualAuthProvider) AuthTypes() []string      { return []string{"oauth", "manual"} }
+func (s *stubDualAuthProvider) AuthTypes() []string { return []string{"oauth", "manual"} }
 func (s *stubDualAuthProvider) CredentialFields() []core.CredentialFieldDef {
 	return []core.CredentialFieldDef{{Name: "api_token", Label: "API Token"}}
 }

@@ -22,6 +22,13 @@ func (p *fakeProvider) Name() string                        { return p.name }
 func (p *fakeProvider) DisplayName() string                 { return p.name }
 func (p *fakeProvider) Description() string                 { return "" }
 func (p *fakeProvider) ConnectionMode() core.ConnectionMode { return p.connMode }
+func (p *fakeProvider) AuthTypes() []string                 { return nil }
+func (p *fakeProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
+	return nil
+}
+func (p *fakeProvider) CredentialFields() []core.CredentialFieldDef { return nil }
+func (p *fakeProvider) DiscoveryConfig() *core.DiscoveryConfig      { return nil }
+func (p *fakeProvider) ConnectionForOperation(string) string        { return "" }
 func (p *fakeProvider) Catalog() *catalog.Catalog {
 	cat := &catalog.Catalog{
 		Name:       p.name,

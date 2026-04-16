@@ -16,10 +16,7 @@ import (
 )
 
 var (
-	_ core.OAuthProvider           = (*Base)(nil)
-	_ core.ManualProvider          = (*Base)(nil)
-	_ core.ConnectionParamProvider = (*Base)(nil)
-	_ core.DiscoveryConfigProvider = (*Base)(nil)
+	_ core.OAuthProvider = (*Base)(nil)
 )
 
 type manualChecker interface{ IsManual() bool }
@@ -85,14 +82,6 @@ func (b *Base) ConnectionMode() core.ConnectionMode {
 	return b.ConnMode
 }
 
-func (b *Base) SupportsManualAuth() bool {
-	if b.ManualAuthEnabled {
-		return true
-	}
-	mc, ok := b.Auth.(manualChecker)
-	return ok && mc.IsManual()
-}
-
 func (b *Base) AuthTypes() []string {
 	mc, ok := b.Auth.(manualChecker)
 	manualOnly := ok && mc.IsManual()
@@ -116,6 +105,8 @@ func (b *Base) CredentialFields() []core.CredentialFieldDef {
 func (b *Base) DiscoveryConfig() *core.DiscoveryConfig {
 	return b.DiscoveryDef
 }
+
+func (b *Base) ConnectionForOperation(string) string { return "" }
 
 func (b *Base) SetCatalog(c *catalog.Catalog) { b.catalog = c }
 

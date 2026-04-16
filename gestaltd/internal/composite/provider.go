@@ -27,13 +27,8 @@ type Provider struct {
 }
 
 var (
-	_ core.Provider                    = (*Provider)(nil)
-	_ core.SessionCatalogProvider      = (*Provider)(nil)
-	_ core.OperationConnectionProvider = (*Provider)(nil)
-	_ core.AuthTypeLister              = (*Provider)(nil)
-	_ core.ConnectionParamProvider     = (*Provider)(nil)
-	_ core.CredentialFieldsProvider    = (*Provider)(nil)
-	_ core.DiscoveryConfigProvider     = (*Provider)(nil)
+	_ core.Provider               = (*Provider)(nil)
+	_ core.SessionCatalogProvider = (*Provider)(nil)
 )
 
 // New creates a composite provider. If the API provider implements
@@ -93,7 +88,7 @@ func (p *Provider) CatalogForRequest(ctx context.Context, token string) (*catalo
 }
 
 func (p *Provider) ConnectionForOperation(operation string) string {
-	return core.OperationConnection(p.api, operation)
+	return p.api.ConnectionForOperation(operation)
 }
 
 func (p *Provider) CallTool(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error) {
@@ -102,27 +97,20 @@ func (p *Provider) CallTool(ctx context.Context, name string, args map[string]an
 
 func (p *Provider) Inner() core.Provider { return p.api }
 
-// SupportsManualAuth delegates to the API provider only. The MCP
-// upstream's manual-auth support is irrelevant — the server uses this
-// to decide whether to block the OAuth connection flow.
-func (p *Provider) SupportsManualAuth() bool {
-	return core.SupportsManualAuth(p.api)
-}
-
 func (p *Provider) AuthTypes() []string {
-	return core.AuthTypes(p.api)
+	return p.api.AuthTypes()
 }
 
 func (p *Provider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
-	return core.ConnectionParamDefs(p.api)
+	return p.api.ConnectionParamDefs()
 }
 
 func (p *Provider) CredentialFields() []core.CredentialFieldDef {
-	return core.CredentialFields(p.api)
+	return p.api.CredentialFields()
 }
 
 func (p *Provider) DiscoveryConfig() *core.DiscoveryConfig {
-	return core.DiscoveryConfigFor(p.api)
+	return p.api.DiscoveryConfig()
 }
 
 func (p *Provider) Close() error {

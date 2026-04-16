@@ -25,8 +25,7 @@ type BoundProvider struct {
 }
 
 var (
-	_ core.Provider                    = (*MergedProvider)(nil)
-	_ core.OperationConnectionProvider = (*MergedProvider)(nil)
+	_ core.Provider = (*MergedProvider)(nil)
 )
 
 func NewMergedWithConnections(name, displayName, desc, iconSVG string, providers ...BoundProvider) (*MergedProvider, error) {
@@ -77,6 +76,12 @@ func (m *MergedProvider) Name() string                        { return m.catalog
 func (m *MergedProvider) DisplayName() string                 { return m.catalog.DisplayName }
 func (m *MergedProvider) Description() string                 { return m.catalog.Description }
 func (m *MergedProvider) ConnectionMode() core.ConnectionMode { return m.connMode }
+func (m *MergedProvider) AuthTypes() []string                 { return nil }
+func (m *MergedProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
+	return nil
+}
+func (m *MergedProvider) CredentialFields() []core.CredentialFieldDef { return nil }
+func (m *MergedProvider) DiscoveryConfig() *core.DiscoveryConfig      { return nil }
 func (m *MergedProvider) ConnectionForOperation(op string) string {
 	return m.opConn[op]
 }

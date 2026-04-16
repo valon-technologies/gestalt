@@ -142,6 +142,13 @@ func (p *preparedProviderStub) Name() string                        { return p.n
 func (p *preparedProviderStub) DisplayName() string                 { return p.displayName }
 func (p *preparedProviderStub) Description() string                 { return p.description }
 func (p *preparedProviderStub) ConnectionMode() core.ConnectionMode { return p.connectionMode }
+func (p *preparedProviderStub) AuthTypes() []string                 { return nil }
+func (p *preparedProviderStub) ConnectionParamDefs() map[string]core.ConnectionParamDef {
+	return nil
+}
+func (p *preparedProviderStub) CredentialFields() []core.CredentialFieldDef { return nil }
+func (p *preparedProviderStub) DiscoveryConfig() *core.DiscoveryConfig      { return nil }
+func (p *preparedProviderStub) ConnectionForOperation(string) string        { return "" }
 func (p *preparedProviderStub) Catalog() *catalog.Catalog {
 	return &catalog.Catalog{
 		Name:        p.name,

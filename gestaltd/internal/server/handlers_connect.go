@@ -178,7 +178,7 @@ func buildConnectionMetadata(prov core.Provider, userParams map[string]string, t
 		metadata[k] = v
 	}
 
-	if defs := core.ConnectionParamDefs(prov); tokenResp != nil && tokenResp.Extra != nil {
+	if defs := prov.ConnectionParamDefs(); tokenResp != nil && tokenResp.Extra != nil {
 		for name, def := range defs {
 			if def.From == "token_response" {
 				field := def.Field
@@ -298,7 +298,7 @@ func mergeMetadataJSON(existing string, extra map[string]string) (string, error)
 }
 
 func (s *Server) runPostConnect(ctx context.Context, prov core.Provider, tm tokenMaterial) (*postConnectResult, error) {
-	if cfg := core.DiscoveryConfigFor(prov); cfg != nil {
+	if cfg := prov.DiscoveryConfig(); cfg != nil {
 		client := &http.Client{
 			Timeout:   30 * time.Second,
 			Transport: &bearerTransport{token: tm.AccessToken, base: http.DefaultTransport},
@@ -348,7 +348,7 @@ func manualConnectionAllowed(prov core.Provider, auth config.ConnectionAuthDef) 
 	if authTypesContain(connectionAuthTypes(auth, nil), "manual") {
 		return true
 	}
-	return providerSupportsManualAuth(prov)
+	return authTypesContain(userFacingAuthTypes(prov.AuthTypes()), "manual")
 }
 
 func discoveryCandidateInfos(candidates []core.DiscoveryCandidate) []discoveryCandidateInfo {
