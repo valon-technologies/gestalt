@@ -1,9 +1,6 @@
 use clap::{CommandFactory, Parser};
 use gestalt::api::{self, ApiClient};
-use gestalt::cli::{
-    AuthCommands, Cli, Commands, ConfigCommands, DescribeArgs, InvokeArgs, PluginCommands,
-    TokenCommands,
-};
+use gestalt::cli::{AuthCommands, Cli, Commands, ConfigCommands, PluginCommands, TokenCommands};
 use gestalt::commands;
 use gestalt::output;
 
@@ -31,12 +28,6 @@ fn run() -> anyhow::Result<()> {
             ConfigCommands::List => commands::config::list(format),
         },
         Commands::Plugins { command } => dispatch_plugin_command(command, url, format),
-        Commands::Invoke(args) => {
-            dispatch_plugin_command(PluginCommands::Invoke(args), url, format)
-        }
-        Commands::Describe(args) => {
-            dispatch_plugin_command(PluginCommands::Describe(args), url, format)
-        }
         Commands::Tokens { command } => {
             let client = ApiClient::from_env(url)?;
             match command {
@@ -73,7 +64,7 @@ fn dispatch_plugin_command(
             connection.as_deref(),
             instance.as_deref(),
         ),
-        PluginCommands::Invoke(InvokeArgs {
+        PluginCommands::Invoke(gestalt::cli::InvokeArgs {
             plugin,
             operation,
             params,
@@ -94,7 +85,7 @@ fn dispatch_plugin_command(
             },
             format,
         ),
-        PluginCommands::Describe(DescribeArgs { plugin, operation }) => {
+        PluginCommands::Describe(gestalt::cli::DescribeArgs { plugin, operation }) => {
             commands::describe::describe(&client, &plugin, &operation, format)
         }
     }
