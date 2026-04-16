@@ -49,14 +49,11 @@ func (p *Provider) Name() string        { return p.name }
 func (p *Provider) DisplayName() string { return p.api.DisplayName() }
 func (p *Provider) Description() string { return p.api.Description() }
 func (p *Provider) ConnectionMode() core.ConnectionMode {
-	return stricterConnectionMode(p.api.ConnectionMode(), p.mcpConnectionMode())
-}
-
-func (p *Provider) mcpConnectionMode() core.ConnectionMode {
+	mcpMode := core.ConnectionModeNone
 	if cm, ok := p.mcp.(interface{ ConnectionMode() core.ConnectionMode }); ok {
-		return cm.ConnectionMode()
+		mcpMode = cm.ConnectionMode()
 	}
-	return core.ConnectionModeNone
+	return stricterConnectionMode(p.api.ConnectionMode(), mcpMode)
 }
 
 var connectionModeRank = map[core.ConnectionMode]int{
@@ -84,7 +81,7 @@ func (p *Provider) CatalogForRequest(ctx context.Context, token string) (*catalo
 	if err != nil || cat == nil {
 		return cat, err
 	}
-	return tagMCPCatalog(cat), nil
+	return tagCatalog(cat, catalog.TransportMCPPassthrough), nil
 }
 
 func (p *Provider) ConnectionForOperation(operation string) string {
@@ -151,10 +148,10 @@ func (p *Provider) buildCatalog() *catalog.Catalog {
 		return nil
 	}
 	if apiCat == nil {
-		return tagMCPCatalog(mcpCat)
+		return tagCatalog(mcpCat, catalog.TransportMCPPassthrough)
 	}
 	if mcpCat == nil {
-		return tagRESTCatalog(apiCat)
+		return tagCatalog(apiCat, catalog.TransportREST)
 	}
 
 	merged := &catalog.Catalog{
@@ -183,12 +180,4 @@ func tagCatalog(src *catalog.Catalog, transport string) *catalog.Catalog {
 		out.Operations[i].Transport = transport
 	}
 	return out
-}
-
-func tagRESTCatalog(src *catalog.Catalog) *catalog.Catalog {
-	return tagCatalog(src, catalog.TransportREST)
-}
-
-func tagMCPCatalog(src *catalog.Catalog) *catalog.Catalog {
-	return tagCatalog(src, catalog.TransportMCPPassthrough)
 }

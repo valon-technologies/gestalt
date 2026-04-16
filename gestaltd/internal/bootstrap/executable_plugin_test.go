@@ -386,6 +386,60 @@ paths:
 	if hasOperation("echo") || hasOperation("status") {
 		t.Fatalf("catalog operations = %+v, want original operation ids hidden", cat.Operations)
 	}
+
+	t.Run("without static catalog", func(t *testing.T) {
+		root := t.TempDir()
+		openapiDoc := `openapi: "3.1.0"
+info:
+  title: Hybrid
+  version: "1.0.0"
+paths:
+  /status:
+    get:
+      operationId: status
+      responses:
+        "200":
+          description: OK
+`
+		if err := os.WriteFile(filepath.Join(root, "openapi.yaml"), []byte(openapiDoc), 0o644); err != nil {
+			t.Fatalf("WriteFile(openapi.yaml): %v", err)
+		}
+
+		manifest := newExecutableManifest("Hybrid", "Hybrid provider")
+		manifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: "ignored-for-command-mode"}
+		manifest.Spec.Surfaces = &providermanifestv1.ProviderSurfaces{
+			OpenAPI: &providermanifestv1.OpenAPISurface{Document: "openapi.yaml"},
+		}
+
+		cfg := &config.Config{
+			Plugins: map[string]*config.ProviderEntry{
+				"hybrid": {
+					Command:              bin,
+					Args:                 []string{"provider"},
+					ResolvedManifest:     manifest,
+					ResolvedManifestPath: filepath.Join(root, "manifest.yaml"),
+					AllowedOperations: map[string]*config.OperationOverride{
+						"status": {Alias: "renamed_status"},
+					},
+				},
+			},
+		}
+
+		providers, _, err := buildProvidersStrict(context.Background(), cfg, factories, Deps{})
+		if err != nil {
+			t.Fatalf("buildProvidersStrict: %v", err)
+		}
+		defer func() { _ = CloseProviders(providers) }()
+
+		prov, err := providers.Get("hybrid")
+		if err != nil {
+			t.Fatalf("providers.Get(hybrid): %v", err)
+		}
+		cat := prov.Catalog()
+		if cat == nil || len(cat.Operations) != 1 || cat.Operations[0].ID != "renamed_status" {
+			t.Fatalf("catalog = %+v, want only renamed_status from the OpenAPI surface", cat)
+		}
+	})
 }
 
 func TestSpecLoadedDualSurfaceProviderBuildsMCPOperations(t *testing.T) {

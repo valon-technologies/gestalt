@@ -54,7 +54,7 @@ func (s *ProviderServer) GetSessionCatalog(ctx context.Context, req *proto.GetSe
 	if len(req.GetConnectionParams()) > 0 {
 		ctx = core.WithConnectionParams(ctx, req.GetConnectionParams())
 	}
-	cat, _, err := core.CatalogForRequest(ctx, s.provider, req.GetToken())
+	cat, err := core.CatalogForRequest(ctx, s.provider, req.GetToken())
 	if err != nil {
 		return nil, status.Errorf(codes.Unknown, "session catalog: %v", err)
 	}

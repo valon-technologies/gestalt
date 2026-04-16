@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"testing"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -220,7 +221,13 @@ func TestResolveCatalog_SameIDCollision_SessionWins(t *testing.T) {
 				connMode: core.ConnectionModeUser,
 			},
 			cat: &catalog.Catalog{
-				Name: "clash-api",
+				Name:        "clash-api",
+				DisplayName: "Clash API",
+				Description: "static clash api",
+				IconSVG:     "<svg/>",
+				Headers: map[string]string{
+					"X-Static": "static",
+				},
 				Operations: []catalog.CatalogOperation{
 					{
 						ID:           "shared_op",
@@ -240,6 +247,9 @@ func TestResolveCatalog_SameIDCollision_SessionWins(t *testing.T) {
 		},
 		sessionCat: &catalog.Catalog{
 			Name: "clash-api",
+			Headers: map[string]string{
+				"X-Session": "session",
+			},
 			Operations: []catalog.CatalogOperation{
 				{
 					ID:           "shared_op",
@@ -264,6 +274,12 @@ func TestResolveCatalog_SameIDCollision_SessionWins(t *testing.T) {
 	}
 	if len(cat.Operations) != 1 {
 		t.Fatalf("expected 1 operation after collision, got %d", len(cat.Operations))
+	}
+	if cat.DisplayName != "Clash API" || cat.Description != "static clash api" || cat.IconSVG != "<svg/>" {
+		t.Fatalf("expected static catalog metadata to fill sparse session catalog, got %+v", cat)
+	}
+	if cat.Headers["X-Static"] != "static" || cat.Headers["X-Session"] != "session" {
+		t.Fatalf("expected merged static+session headers, got %#v", cat.Headers)
 	}
 	if cat.Operations[0].Description != "session version" {
 		t.Fatalf("expected session version to win, got %q", cat.Operations[0].Description)
@@ -377,6 +393,8 @@ func TestFilterCatalogForPrincipal_HumanFilteringUsesResolvedRole(t *testing.T) 
 		filtered.Operations[1].ID,
 	}
 	wantIDs := []string{"viewer_op", "session_viewer"}
+	slices.Sort(gotIDs)
+	slices.Sort(wantIDs)
 	if fmt.Sprint(gotIDs) != fmt.Sprint(wantIDs) {
 		t.Fatalf("filtered operation IDs = %#v, want %#v", gotIDs, wantIDs)
 	}
@@ -613,14 +631,11 @@ func TestResolveCatalog_TokenResolutionFailure_NonFatal(t *testing.T) {
 	resolver := &stubTokenResolver{err: fmt.Errorf("token expired")}
 	p := &principal.Principal{UserID: "u1"}
 
-	cat, metadata, err := invocation.ResolveCatalogWithMetadata(context.Background(), prov, "auth-api", resolver, p, "default", "", false)
+	cat, sessionFailed, err := invocation.ResolveCatalogWithMetadata(context.Background(), prov, "auth-api", resolver, p, "default", "", false)
 	if err != nil {
 		t.Fatalf("expected no error on token failure, got: %v", err)
 	}
-	if !metadata.SessionAttempted {
-		t.Fatal("expected session resolution attempt to be reported")
-	}
-	if !metadata.SessionFailed {
+	if !sessionFailed {
 		t.Fatal("expected session resolution failure to be reported")
 	}
 	if len(cat.Operations) != 1 {

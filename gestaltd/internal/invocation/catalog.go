@@ -16,71 +16,55 @@ type TokenResolver interface {
 	ResolveToken(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error)
 }
 
-type CatalogResolutionMetadata struct {
-	SessionAttempted bool
-	SessionFailed    bool
-}
-
-func ResolveCatalogWithMetadata(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, defaultConnection, instance string, strictSession bool) (*catalog.Catalog, CatalogResolutionMetadata, error) {
-	meta := CatalogResolutionMetadata{}
+func ResolveCatalogWithMetadata(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, defaultConnection, instance string, strictSession bool) (*catalog.Catalog, bool, error) {
 	staticCat := prov.Catalog()
-	sessionCat, attempted, err := resolveSessionCatalog(ctx, prov, provName, resolver, p, defaultConnection, instance)
-	meta.SessionAttempted = attempted
+	sessionCat, err := resolveSessionCatalog(ctx, prov, provName, resolver, p, defaultConnection, instance)
 	if err != nil {
-		meta.SessionFailed = true
 		if strictSession || staticCat == nil {
-			return nil, meta, err
+			return nil, true, err
 		}
 		slog.WarnContext(ctx, "catalog session resolution failed", "provider", provName, "error", err)
+		merged, err := mergeCatalogs(provName, staticCat, sessionCat)
+		return merged, true, err
 	}
 	merged, err := mergeCatalogs(provName, staticCat, sessionCat)
-	return merged, meta, err
+	return merged, false, err
 }
+
 func ResolveOperation(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, operation string, sessionConnections []string, instance string) (catalog.CatalogOperation, string, string, error) {
 	staticOp, staticOK := CatalogOperation(providerCatalog(prov), operation)
 	if op, ok := catalog.OperationFromContext(ctx, provName, operation); ok {
-		if staticOK {
-			op = MergeCatalogOperation(staticOp, op)
-		}
 		return op, OperationTransport(op), "", nil
-	}
-	if !core.SupportsSessionCatalog(prov) {
-		if staticOK {
-			return staticOp, OperationTransport(staticOp), "", nil
-		}
-		return catalog.CatalogOperation{}, "", "", fmt.Errorf("%w: %q on provider %q", ErrOperationNotFound, operation, provName)
 	}
 	sessionOp, sessionConnection, sessionFound, err := resolveSessionOperation(ctx, prov, provName, resolver, p, operation, sessionConnections, instance)
 	if err != nil {
 		return catalog.CatalogOperation{}, "", "", err
 	}
 	if sessionFound {
-		if staticOK {
-			sessionOp = MergeCatalogOperation(staticOp, sessionOp)
-		}
 		return sessionOp, OperationTransport(sessionOp), sessionConnection, nil
 	}
-	if instance == "" && staticOK {
+	if staticOK && (!core.SupportsSessionCatalog(prov) || instance == "") {
 		return staticOp, OperationTransport(staticOp), "", nil
 	}
 	return catalog.CatalogOperation{}, "", "", fmt.Errorf("%w: %q on provider %q", ErrOperationNotFound, operation, provName)
 }
-func resolveSessionCatalog(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, connection, instance string) (*catalog.Catalog, bool, error) {
+
+func resolveSessionCatalog(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, connection, instance string) (*catalog.Catalog, error) {
 	if !core.SupportsSessionCatalog(prov) || (prov.ConnectionMode() != core.ConnectionModeNone && (resolver == nil || p == nil)) {
-		return nil, false, nil
+		return nil, nil
 	}
 	token := ""
 	if resolver != nil && p != nil {
 		var err error
 		ctx, token, err = resolver.ResolveToken(ctx, p, provName, connection, instance)
 		if err != nil {
-			return nil, true, err
+			return nil, err
 		}
 	} else {
 		ctx = WithCredentialContext(ctx, CredentialContext{Mode: core.ConnectionModeNone})
 	}
-	cat, _, err := core.CatalogForRequest(ctx, prov, token)
-	return cat, true, err
+	cat, err := core.CatalogForRequest(ctx, prov, token)
+	return cat, err
 }
 
 func resolveSessionOperation(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, operation string, connections []string, instance string) (catalog.CatalogOperation, string, bool, error) {
@@ -89,14 +73,14 @@ func resolveSessionOperation(ctx context.Context, prov core.Provider, provName s
 	}
 	firstErr, resolved := error(nil), false
 	for _, connection := range connections {
-		cat, attempted, err := resolveSessionCatalog(ctx, prov, provName, resolver, p, connection, instance)
+		cat, err := resolveSessionCatalog(ctx, prov, provName, resolver, p, connection, instance)
 		if err != nil {
 			if firstErr == nil {
 				firstErr = err
 			}
 			continue
 		}
-		if !attempted || cat == nil {
+		if cat == nil {
 			continue
 		}
 		resolved = true
@@ -109,69 +93,31 @@ func resolveSessionOperation(ctx context.Context, prov core.Provider, provName s
 	}
 	return catalog.CatalogOperation{}, "", false, nil
 }
+
 func mergeCatalogs(provName string, staticCat, sessionCat *catalog.Catalog) (*catalog.Catalog, error) {
-	merged := staticCat
-	if merged == nil {
-		merged = sessionCat
-	}
-	if merged == nil {
+	if sessionCat == nil && staticCat == nil {
 		return nil, fmt.Errorf("provider %q does not expose a catalog", provName)
 	}
-	merged = merged.Clone()
-	if staticCat != nil && sessionCat != nil {
-		staticIndexes := make(map[string]int, len(merged.Operations))
+	if sessionCat == nil {
+		merged := staticCat.Clone()
+		integration.CompileSchemas(merged)
+		return merged, nil
+	}
+	merged := sessionCat.Clone()
+	if staticCat != nil {
+		sessionIndexes := make(map[string]struct{}, len(merged.Operations))
 		for i := range merged.Operations {
-			staticIndexes[merged.Operations[i].ID] = i
+			sessionIndexes[merged.Operations[i].ID] = struct{}{}
 		}
-		for i := range sessionCat.Operations {
-			op := sessionCat.Operations[i]
-			if idx, exists := staticIndexes[op.ID]; exists {
-				merged.Operations[idx] = MergeCatalogOperation(merged.Operations[idx], op)
+		for i := range staticCat.Operations {
+			if _, exists := sessionIndexes[staticCat.Operations[i].ID]; exists {
 				continue
 			}
-			merged.Operations = append(merged.Operations, op)
+			merged.Operations = append(merged.Operations, staticCat.Operations[i])
 		}
 	}
 	integration.CompileSchemas(merged)
 	return merged, nil
-}
-func MergeCatalogOperation(staticOp, sessionOp catalog.CatalogOperation) catalog.CatalogOperation {
-	sessionOp.Method = firstNonEmpty(sessionOp.Method, staticOp.Method)
-	if sessionOp.Transport == "" && sessionOp.Method == "" && sessionOp.Path == "" {
-		sessionOp.Transport = staticOp.Transport
-	}
-	sessionOp.Path = firstNonEmpty(sessionOp.Path, staticOp.Path)
-	sessionOp.Query = firstNonEmpty(sessionOp.Query, staticOp.Query)
-	if len(staticOp.Parameters) == 0 {
-		return sessionOp
-	}
-	if len(sessionOp.Parameters) == 0 {
-		sessionOp.Parameters = append([]catalog.CatalogParameter(nil), staticOp.Parameters...)
-		return sessionOp
-	}
-	staticParams := make(map[string]catalog.CatalogParameter, len(staticOp.Parameters))
-	for _, param := range staticOp.Parameters {
-		staticParams[param.Name] = param
-	}
-	for i := range sessionOp.Parameters {
-		if staticParam, ok := staticParams[sessionOp.Parameters[i].Name]; ok {
-			delete(staticParams, sessionOp.Parameters[i].Name)
-			sessionOp.Parameters[i].WireName = firstNonEmpty(sessionOp.Parameters[i].WireName, staticParam.WireName)
-			sessionOp.Parameters[i].Location = firstNonEmpty(sessionOp.Parameters[i].Location, staticParam.Location)
-		}
-	}
-	for _, staticParam := range staticOp.Parameters {
-		if _, ok := staticParams[staticParam.Name]; ok {
-			sessionOp.Parameters = append(sessionOp.Parameters, staticParam)
-		}
-	}
-	return sessionOp
-}
-func firstNonEmpty(value, fallback string) string {
-	if value != "" {
-		return value
-	}
-	return fallback
 }
 
 func FilterCatalogForPrincipal(cat *catalog.Catalog, provName string, p *principal.Principal, authorizer *authorization.Authorizer) *catalog.Catalog {

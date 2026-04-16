@@ -10,6 +10,7 @@ import (
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	coreintegration "github.com/valon-technologies/gestalt/server/core/integration"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"google.golang.org/grpc/codes"
@@ -186,7 +187,9 @@ func (p *remoteProviderBase) sessionCatalog(ctx context.Context, token string) (
 	if err != nil {
 		return nil, err
 	}
-	return p.decorateCatalog(cat), nil
+	cat = core.HydrateSessionCatalog(p.Catalog(), cat)
+	coreintegration.CompileSchemas(cat)
+	return cat, nil
 }
 
 type remoteProviderWithSessionCatalog struct{ *remoteProviderBase }

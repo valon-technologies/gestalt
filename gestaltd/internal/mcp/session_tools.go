@@ -66,7 +66,7 @@ func hydrateSessionToolsForInstance(ctx context.Context, cfg Config, providerNam
 		if err != nil {
 			continue
 		}
-		cat, _, err := core.CatalogForRequest(sessionCtx, prov, token)
+		cat, err := core.CatalogForRequest(sessionCtx, prov, token)
 		if err != nil {
 			continue
 		}
@@ -79,17 +79,9 @@ func hydrateSessionToolsForInstance(ctx context.Context, cfg Config, providerNam
 		if cat == nil {
 			continue
 		}
-		effectiveCat := cat.Clone()
-		if staticCat := prov.Catalog(); staticCat != nil {
-			for i := range effectiveCat.Operations {
-				if staticOp, ok := invocation.CatalogOperation(staticCat, effectiveCat.Operations[i].ID); ok {
-					effectiveCat.Operations[i] = invocation.MergeCatalogOperation(staticOp, effectiveCat.Operations[i])
-				}
-			}
-		}
-		coreintegration.CompileSchemas(effectiveCat)
-		storeSessionCatalogOperationMetadata(tools, cfg, provName, effectiveCat, staticToolNames, instance, connection)
-		m := buildToolMap(cfg, provName, effectiveCat)
+		coreintegration.CompileSchemas(cat)
+		storeSessionCatalogOperationMetadata(tools, cfg, provName, cat, staticToolNames, instance, connection)
+		m := buildToolMap(cfg, provName, cat)
 		for name := range m {
 			if _, exists := staticToolNames[name]; exists {
 				continue
