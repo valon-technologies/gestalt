@@ -183,34 +183,10 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		authTypes := integrationAuthTypesForProvider(prov)
 		instances := connected[name]
 		info.Connected = len(instances) > 0
 		info.Instances = append(make([]instanceInfo, 0, len(instances)), instances...)
-		info.CredentialFields = credentialFieldInfosFromProvider(prov)
-		for name, def := range prov.ConnectionParamDefs() {
-			if def.From == "" {
-				info.ConnectionParams[name] = connectionParamInfo{
-					Required:    def.Required,
-					Description: def.Description,
-					Default:     def.Default,
-				}
-			}
-		}
-		info.Connections = s.integrationConnectionInfos(name, authTypes, info.CredentialFields)
-		if len(authTypes) == 0 {
-			authTypes = authTypesFromConnections(info.Connections)
-			if len(authTypes) == 0 {
-				if _, ok := prov.(core.OAuthProvider); ok {
-					authTypes = []string{"oauth"}
-				}
-			}
-			info.Connections = s.integrationConnectionInfos(name, authTypes, info.CredentialFields)
-		}
-		if authTypes == nil {
-			authTypes = []string{}
-		}
-		info.AuthTypes = authTypes
+		s.populateIntegrationSettings(&info, prov)
 		info.MountedPath = s.integrationMountedPathForPrincipal(p, name, info.MountedPath)
 		if !s.integrationHasUsableSurface(p, name, prov, info) {
 			continue
