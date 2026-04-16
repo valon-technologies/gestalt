@@ -477,6 +477,8 @@ test("buildProviderBinary compiles a runnable cache provider executable", async 
   const socketPath = join(tempDir, "p.sock");
   const previousDefaultSocket = process.env.GESTALT_CACHE_SOCKET;
   const previousNamedSocket = process.env[cacheSocketEnv("named")];
+  const previousCafeSocket = process.env[cacheSocketEnv("café")];
+  const previousEmojiSocket = process.env[cacheSocketEnv("😀")];
   let child: ChildProcess | undefined;
 
   try {
@@ -521,11 +523,15 @@ test("buildProviderBinary compiles a runnable cache provider executable", async 
 
     process.env.GESTALT_CACHE_SOCKET = socketPath;
     process.env[cacheSocketEnv("named")] = socketPath;
+    process.env[cacheSocketEnv("café")] = socketPath;
+    process.env[cacheSocketEnv("😀")] = socketPath;
 
     const encoder = new TextEncoder();
     const decoder = new TextDecoder();
     const cache = new Cache();
     const namedCache = new Cache("named");
+    const cafeCache = new Cache("café");
+    const emojiCache = new Cache("😀");
 
     await cache.set("alpha", encoder.encode("one"), {
       ttlMs: 1_500,
@@ -548,6 +554,8 @@ test("buildProviderBinary compiles a runnable cache provider executable", async 
       alpha: "one",
       gamma: "three",
     });
+    await cafeCache.set("unicode", encoder.encode("accent"));
+    expect(decoder.decode((await emojiCache.get("unicode"))!)).toBe("accent");
     const reserved = await namedCache.getMany(["toString", "__proto__", "missing"]);
     expect(Object.keys(reserved).sort()).toEqual(["__proto__", "toString"]);
     expect(decoder.decode(reserved["toString"]!)).toBe("reserved");
@@ -578,6 +586,16 @@ test("buildProviderBinary compiles a runnable cache provider executable", async 
       delete process.env[cacheSocketEnv("named")];
     } else {
       process.env[cacheSocketEnv("named")] = previousNamedSocket;
+    }
+    if (previousCafeSocket === undefined) {
+      delete process.env[cacheSocketEnv("café")];
+    } else {
+      process.env[cacheSocketEnv("café")] = previousCafeSocket;
+    }
+    if (previousEmojiSocket === undefined) {
+      delete process.env[cacheSocketEnv("😀")];
+    } else {
+      process.env[cacheSocketEnv("😀")] = previousEmojiSocket;
     }
     if (child) {
       await stopProcess(child);

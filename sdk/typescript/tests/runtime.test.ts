@@ -85,25 +85,74 @@ test("runtime arg parsing requires root and target", () => {
 });
 
 test("runtime main writes a static catalog in catalog mode", async () => {
-  const root = fixturePath("basic-provider");
-  const tempDir = makeTempDir();
-  const catalogPath = join(tempDir, "catalog.yaml");
+  const root = makeTempDir("gestalt-typescript-runtime-catalog-");
+  const catalogPath = join(root, "catalog.yaml");
   const previousCatalog = process.env[ENV_WRITE_CATALOG];
 
-  process.env[ENV_WRITE_CATALOG] = catalogPath;
   try {
+    const indexPath = join(import.meta.dir, "..", "src", "index.ts");
+    writeFileSync(
+      join(root, "package.json"),
+      JSON.stringify({
+        name: "@scope/catalog provider",
+        gestalt: {
+          provider: {
+            kind: "plugin",
+            target: "./provider.ts#plugin",
+          },
+        },
+      }),
+      "utf8",
+    );
+    writeFileSync(
+      join(root, "provider.ts"),
+      `import { definePlugin, s } from ${JSON.stringify(indexPath)};
+
+export const plugin = definePlugin({
+  displayName: "Catalog Provider",
+  operations: [
+    {
+      id: "ping",
+      readOnly: false,
+      visible: false,
+      input: s.object({
+        projectId: s.string(),
+      }),
+      output: s.object({
+        ok: s.boolean(),
+      }),
+      handler() {
+        return { ok: true };
+      },
+    },
+  ],
+});
+`,
+      "utf8",
+    );
+
+    process.env[ENV_WRITE_CATALOG] = catalogPath;
     const code = await main([root, "plugin:./provider.ts#plugin"]);
     expect(code).toBe(0);
     const catalog = readFileSync(catalogPath, "utf8");
-    expect(catalog).toContain("name: basic-provider");
-    expect(catalog).toContain("id: hello");
+    expect(catalog).toContain("name: catalog-provider");
+    expect(catalog).toContain("displayName: Catalog Provider");
+    expect(catalog).toContain("id: ping");
+    expect(catalog).toContain("readOnly: false");
+    expect(catalog).toContain("visible: false");
+    expect(catalog).toContain("inputSchema:");
+    expect(catalog).toContain("projectId:");
+    expect(catalog).toContain("outputSchema:");
+    expect(catalog).not.toContain("display_name:");
+    expect(catalog).not.toContain("input_schema:");
+    expect(catalog).not.toContain("output_schema:");
   } finally {
     if (previousCatalog === undefined) {
       delete process.env[ENV_WRITE_CATALOG];
     } else {
       process.env[ENV_WRITE_CATALOG] = previousCatalog;
     }
-    removeTempDir(tempDir);
+    removeTempDir(root);
   }
 });
 
@@ -170,6 +219,56 @@ export const plugin = definePlugin({
 
     await expect(loadProviderFromTarget(root, "   ")).rejects.toThrow(
       "auth:./provider.ts#missing did not resolve to a Gestalt auth provider",
+    );
+  } finally {
+    removeTempDir(root);
+  }
+});
+
+test("loadProviderFromTarget rejects duplicate operation identifiers after trimming", async () => {
+  const root = makeTempDir("gestalt-typescript-runtime-duplicate-");
+
+  try {
+    const indexPath = join(import.meta.dir, "..", "src", "index.ts");
+    writeFileSync(
+      join(root, "package.json"),
+      JSON.stringify({
+        name: "duplicate-provider",
+        gestalt: {
+          provider: {
+            kind: "plugin",
+            target: "./provider.ts#plugin",
+          },
+        },
+      }),
+      "utf8",
+    );
+    writeFileSync(
+      join(root, "provider.ts"),
+      `import { definePlugin } from ${JSON.stringify(indexPath)};
+
+export const plugin = definePlugin({
+  operations: [
+    {
+      id: "ping",
+      handler() {
+        return { ok: true };
+      },
+    },
+    {
+      id: " ping ",
+      handler() {
+        return { ok: false };
+      },
+    },
+  ],
+});
+`,
+      "utf8",
+    );
+
+    await expect(loadProviderFromTarget(root)).rejects.toThrow(
+      'duplicate operation id "ping"',
     );
   } finally {
     removeTempDir(root);
@@ -386,6 +485,135 @@ test("integration provider service exposes metadata, configure, execute, and ses
   expect(sessionCatalog.catalog?.operations[0].title).toBe(
     "Session Hello ops user:user-123 identity viewer",
   );
+});
+
+test("integration provider service preserves body-shaped outputs and explicit responses", async () => {
+  const root = makeTempDir("gestalt-typescript-runtime-outputs-");
+
+  try {
+    const indexPath = join(import.meta.dir, "..", "src", "index.ts");
+    writeFileSync(
+      join(root, "package.json"),
+      JSON.stringify({
+        name: "output-provider",
+        gestalt: {
+          provider: {
+            kind: "plugin",
+            target: "./provider.ts#plugin",
+          },
+        },
+      }),
+      "utf8",
+    );
+    writeFileSync(
+      join(root, "provider.ts"),
+      `import { definePlugin, response, s } from ${JSON.stringify(indexPath)};
+
+export const plugin = definePlugin({
+  operations: [
+    {
+      id: "echo-body",
+      output: s.object({
+        body: s.string(),
+      }),
+      handler() {
+        return {
+          body: "hello",
+        };
+      },
+    },
+    {
+      id: "echo-status-body",
+      output: s.object({
+        status: s.integer(),
+        body: s.string(),
+      }),
+      handler() {
+        return {
+          status: 42,
+          body: "payload",
+        };
+      },
+    },
+    {
+      id: "created",
+      output: s.object({
+        id: s.string(),
+      }),
+      handler() {
+        return response(201, {
+          id: "new-id",
+        });
+      },
+    },
+    {
+      id: "explode",
+      handler() {
+        throw new Error("boom");
+      },
+    },
+  ],
+});
+`,
+      "utf8",
+    );
+
+    const plugin = await loadProviderFromTarget(root);
+    const service = createProviderService(plugin);
+
+    const echoedBody = await (service.execute as any)(
+      create(ExecuteRequestSchema, {
+        operation: "echo-body",
+      }),
+    );
+    expect(echoedBody.status).toBe(200);
+    expect(JSON.parse(echoedBody.body)).toEqual({
+      body: "hello",
+    });
+
+    const echoedStatusBody = await (service.execute as any)(
+      create(ExecuteRequestSchema, {
+        operation: "echo-status-body",
+      }),
+    );
+    expect(echoedStatusBody.status).toBe(200);
+    expect(JSON.parse(echoedStatusBody.body)).toEqual({
+      status: 42,
+      body: "payload",
+    });
+
+    const created = await (service.execute as any)(
+      create(ExecuteRequestSchema, {
+        operation: "created",
+      }),
+    );
+    expect(created.status).toBe(201);
+    expect(JSON.parse(created.body)).toEqual({
+      id: "new-id",
+    });
+
+    const unknown = await (service.execute as any)(
+      create(ExecuteRequestSchema, {
+        operation: "missing",
+      }),
+    );
+    expect(unknown.status).toBe(404);
+    expect(JSON.parse(unknown.body)).toEqual({
+      error: "unknown operation",
+    });
+
+    const exploded = await (service.execute as any)(
+      create(ExecuteRequestSchema, {
+        operation: "explode",
+      }),
+    );
+    expect(exploded.status).toBe(500);
+    expect(JSON.parse(exploded.body)).toEqual({
+      error: "boom",
+    });
+  } finally {
+    removeTempDir(root);
+  }
 });
 
 test("auth provider supports runtime metadata, login flows, and token validation", async () => {
