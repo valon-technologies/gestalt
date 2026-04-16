@@ -379,6 +379,14 @@ plugins:
 	if _, err := os.Stat(filepath.Join(dir, ".gestaltd")); !os.IsNotExist(err) {
 		t.Fatalf("validate should not leave prepared artifacts in config dir, got err=%v", err)
 	}
+	overrideLockfilePath := filepath.Join(dir, "state", "validate", operator.InitLockfileName)
+	out, err = exec.Command(gestaltdBin, "validate", "--config", cfgPath, "--lockfile", overrideLockfilePath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("expected validate with --lockfile to succeed: %v\n%s", err, out)
+	}
+	if _, err := os.Stat(overrideLockfilePath); !os.IsNotExist(err) {
+		t.Fatalf("validate should not write override lockfile, got err=%v", err)
+	}
 
 	providedArtifactsDir := filepath.Join(dir, "artifacts", "validate")
 	out, err = exec.Command(gestaltdBin, "validate", "--config", cfgPath, "--artifacts-dir", providedArtifactsDir).CombinedOutput()
@@ -894,10 +902,10 @@ plugins:
 	return cfgPath
 }
 
-func startGestaltdWithConfigs(t *testing.T, cfgPaths []string, locked bool) string {
+func startGestaltdWithConfigsAndArgs(t *testing.T, cfgPaths []string, args []string, requiredPath string) string {
 	t.Helper()
 	if len(cfgPaths) == 0 {
-		t.Fatal("startGestaltdWithConfigs requires at least one config path")
+		t.Fatal("startGestaltdWithConfigsAndArgs requires at least one config path")
 	}
 
 	port, holder := reservePort(t)
@@ -914,16 +922,25 @@ func startGestaltdWithConfigs(t *testing.T, cfgPaths []string, locked bool) stri
 	}
 
 	_ = holder.Close()
-	args := []string{"serve"}
-	if locked {
-		args = append(args, "--locked")
-	}
 	for _, cfgPath := range cfgPaths {
 		args = append(args, "--config", cfgPath)
 	}
 	cmd := exec.Command(gestaltdBin, args...)
-	startCommandAndWaitReady(t, cmd, baseURL)
+	if requiredPath != "" {
+		startCommandAndWaitReadyAndFile(t, cmd, baseURL, requiredPath)
+	} else {
+		startCommandAndWaitReady(t, cmd, baseURL)
+	}
 	return baseURL
+}
+
+func startGestaltdWithConfigs(t *testing.T, cfgPaths []string, locked bool) string {
+	t.Helper()
+	args := []string{"serve"}
+	if locked {
+		args = append(args, "--locked")
+	}
+	return startGestaltdWithConfigsAndArgs(t, cfgPaths, args, "")
 }
 
 func startCommandAndWaitReady(t *testing.T, cmd *exec.Cmd, baseURL string) {
@@ -1260,9 +1277,9 @@ plugins:
 		t.Fatalf("write owned-ui config: %v", err)
 	}
 
-	loadedCfg, _, err := operatorLifecycle().LoadForExecutionAtPathWithArtifactsDir(cfgPath, "", false)
+	loadedCfg, _, err := operatorLifecycle().LoadForExecutionAtPathsWithStatePaths([]string{cfgPath}, operator.StatePaths{}, false)
 	if err != nil {
-		t.Fatalf("LoadForExecutionAtPathWithArtifactsDir(%s): %v", cfgPath, err)
+		t.Fatalf("LoadForExecutionAtPathsWithStatePaths(%s): %v", cfgPath, err)
 	}
 	if got := loadedCfg.Providers.UI["roadmap"].OwnerPlugin; got != "example" {
 		t.Fatalf(`Providers.UI["roadmap"].OwnerPlugin = %q, want %q`, got, "example")
@@ -1397,6 +1414,29 @@ func TestE2EInitLocalProviders(t *testing.T) {
 	}
 }
 
+func TestE2EInitWritesOverrideLockfile(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping E2E init lockfile override test in short mode")
+	}
+
+	dir := t.TempDir()
+	cfgPath := writeServeConfig(t, dir, 0, nil)
+	lockPath := filepath.Join(dir, "state", "local", "gestalt.lock.json")
+
+	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd init with --lockfile failed: %v\noutput: %s", err, out)
+	}
+	if _, err := os.Stat(lockPath); err != nil {
+		t.Fatalf("expected override lockfile at %s: %v", lockPath, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "gestalt.lock.json")); !os.IsNotExist(err) {
+		t.Fatalf("default lockfile should not be written, got err=%v", err)
+	}
+}
+
 func TestE2EInitAndServeLayeredConfigs(t *testing.T) {
 	t.Parallel()
 
@@ -1425,6 +1465,88 @@ func TestE2EInitAndServeLayeredConfigs(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("expected /api/v1/integrations 401 with layered auth override, got %d: %s", resp.StatusCode, body)
+	}
+}
+
+func TestE2EServeAutoInitUsesOverrideLockfile(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping E2E serve lockfile override test in short mode")
+	}
+
+	dir := t.TempDir()
+	cfgPath := writeServeConfig(t, dir, 0, nil)
+	lockPath := filepath.Join(dir, "state", "serve", "gestalt.lock.json")
+
+	baseURL := startGestaltdWithConfigsAndArgs(t, []string{cfgPath}, []string{"serve", "--lockfile", lockPath}, lockPath)
+	resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(baseURL + "/api/v1/integrations")
+	if err != nil {
+		t.Fatalf("GET /api/v1/integrations: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected /api/v1/integrations 200, got %d: %s", resp.StatusCode, body)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "gestalt.lock.json")); !os.IsNotExist(err) {
+		t.Fatalf("default lockfile should not be written, got err=%v", err)
+	}
+}
+
+func TestE2EDefaultServeAutoInitUsesOverrideLockfile(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping default serve lockfile override test in short mode")
+	}
+
+	dir := t.TempDir()
+	cfgPath := writeServeConfig(t, dir, 0, nil)
+	lockPath := filepath.Join(dir, "state", "default-serve", "gestalt.lock.json")
+
+	baseURL := startGestaltdWithConfigsAndArgs(t, []string{cfgPath}, []string{"--lockfile", lockPath}, lockPath)
+	resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(baseURL + "/api/v1/integrations")
+	if err != nil {
+		t.Fatalf("GET /api/v1/integrations: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected /api/v1/integrations 200, got %d: %s", resp.StatusCode, body)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "gestalt.lock.json")); !os.IsNotExist(err) {
+		t.Fatalf("default lockfile should not be written, got err=%v", err)
+	}
+}
+
+func TestE2EServeLockedUsesOverrideLockfile(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping locked serve lockfile override test in short mode")
+	}
+
+	dir := t.TempDir()
+	cfgPath := writeServeConfig(t, dir, 0, nil)
+	lockPath := filepath.Join(dir, "state", "locked-serve", "gestalt.lock.json")
+
+	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath, "--lockfile", lockPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd init with --lockfile failed: %v\noutput: %s", err, out)
+	}
+	baseURL := startGestaltdWithConfigsAndArgs(t, []string{cfgPath}, []string{"serve", "--locked", "--lockfile", lockPath}, "")
+	resp, err := (&http.Client{Timeout: 2 * time.Second}).Get(baseURL + "/api/v1/integrations")
+	if err != nil {
+		t.Fatalf("GET /api/v1/integrations: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected /api/v1/integrations 200, got %d: %s", resp.StatusCode, body)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "gestalt.lock.json")); !os.IsNotExist(err) {
+		t.Fatalf("default lockfile should not be written, got err=%v", err)
 	}
 }
 
@@ -1496,6 +1618,63 @@ func TestE2EServeLockedRejectsGenericArchiveForExecutablePlugin(t *testing.T) {
 	}
 	if !strings.Contains(string(out), "generic release archives are not allowed") {
 		t.Fatalf("expected generic-archive policy error, got: %s", out)
+	}
+}
+
+func TestE2EServeLockedMissingHashMentionsOverrideLockfile(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping locked missing-hash E2E test in short mode")
+	}
+
+	dir := t.TempDir()
+	cfgPath := writeManagedSourceServeConfig(t, dir, 0)
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load(%s): %v", cfgPath, err)
+	}
+
+	fingerprint, err := operator.ProviderFingerprint("example", cfg.Plugins["example"], filepath.Dir(cfgPath))
+	if err != nil {
+		t.Fatalf("ProviderFingerprint(example): %v", err)
+	}
+
+	lockPath := filepath.Join(dir, "state", "locked-missing-hash", "gestalt.lock.json")
+	lock := &operator.Lockfile{
+		Providers: map[string]operator.LockProviderEntry{
+			"example": {
+				Fingerprint: fingerprint,
+				Source:      cfg.Plugins["example"].SourceRef(),
+				Version:     cfg.Plugins["example"].SourceVersion(),
+				Archives: map[string]operator.LockArchive{
+					providerpkg.CurrentPlatformString(): {
+						URL: "https://example.test/gestalt-plugin-provider_v0.0.1-alpha.1.tar.gz",
+					},
+				},
+			},
+		},
+	}
+	if err := operator.WriteLockfile(lockPath, lock); err != nil {
+		t.Fatalf("WriteLockfile(%s): %v", lockPath, err)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, gestaltdBin, "serve", "--locked", "--config", cfgPath, "--lockfile", lockPath)
+	out, err := cmd.CombinedOutput()
+	if ctx.Err() == context.DeadlineExceeded {
+		t.Fatalf("gestaltd serve --locked unexpectedly stayed up with missing-hash lockfile\noutput: %s", out)
+	}
+	if err == nil {
+		t.Fatalf("expected gestaltd serve --locked to fail, output: %s", out)
+	}
+	if !strings.Contains(string(out), "--lockfile "+lockPath) {
+		t.Fatalf("expected locked missing-hash error to mention override lockfile, got: %s", out)
+	}
+	if !strings.Contains(string(out), "--platform "+providerpkg.CurrentPlatformString()) {
+		t.Fatalf("expected locked missing-hash error to mention platform remediation, got: %s", out)
 	}
 }
 

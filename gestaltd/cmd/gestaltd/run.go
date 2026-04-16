@@ -75,6 +75,7 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 	var configPaths repeatedStringFlag
 	fs.Var(&configPaths, "config", "path to config file (repeat to layer overrides)")
 	artifactsDir := fs.String("artifacts-dir", "", "path to writable prepared-artifacts directory")
+	lockfilePath := fs.String("lockfile", "", "path to lockfile; defaults to gestalt.lock.json next to the primary config")
 	var lockedFlag *bool
 	if opts.allowLocked {
 		lockedFlag = fs.Bool("locked", false, "require exact lock state; do not auto-init")
@@ -102,7 +103,10 @@ func runServeCommand(name string, usage func(io.Writer), args []string, opts ser
 		locked = *lockedFlag
 	}
 
-	env, err := setupBootstrapWithConfigPaths(resolvedConfigPaths, *artifactsDir, locked)
+	env, err := setupBootstrapWithConfigPaths(resolvedConfigPaths, operator.StatePaths{
+		ArtifactsDir: *artifactsDir,
+		LockfilePath: *lockfilePath,
+	}, locked)
 	if err != nil {
 		return err
 	}
@@ -120,6 +124,7 @@ func runInit(args []string) error {
 	var configPaths repeatedStringFlag
 	fs.Var(&configPaths, "config", "path to config file (repeat to layer overrides)")
 	artifactsDir := fs.String("artifacts-dir", "", "path to writable prepared-artifacts directory")
+	lockfilePath := fs.String("lockfile", "", "path to lockfile; defaults to gestalt.lock.json next to the primary config")
 	platformFlag := fs.String("platform", "", "additional platforms to verify hashes for (comma-separated os/arch[/libc] or \"all\")")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -128,7 +133,10 @@ func runInit(args []string) error {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
 	}
 
-	return initConfigWithArtifactsDir(configPaths, *artifactsDir, *platformFlag)
+	return initConfigWithStatePaths(configPaths, operator.StatePaths{
+		ArtifactsDir: *artifactsDir,
+		LockfilePath: *lockfilePath,
+	}, *platformFlag)
 }
 
 func runValidate(args []string) error {
@@ -136,6 +144,7 @@ func runValidate(args []string) error {
 	fs.Usage = func() { printValidateUsage(fs.Output()) }
 	var configPaths repeatedStringFlag
 	fs.Var(&configPaths, "config", "path to config file (repeat to layer overrides)")
+	lockfilePath := fs.String("lockfile", "", "path to lockfile; defaults to gestalt.lock.json next to the primary config")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -143,17 +152,20 @@ func runValidate(args []string) error {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
 	}
 
-	return validateConfig(configPaths)
+	return validateConfig(configPaths, *lockfilePath)
 }
 
-func validateConfig(configFlags []string) error {
+func validateConfig(configFlags []string, lockfilePath string) error {
 	scratchDir, err := os.MkdirTemp("", "gestaltd-validate-*")
 	if err != nil {
 		return fmt.Errorf("create validation scratch dir: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(scratchDir) }()
 
-	paths, cfg, err := loadConfigForValidationWithArtifactsDir(configFlags, scratchDir)
+	paths, cfg, err := loadConfigForValidationWithStatePaths(configFlags, operator.StatePaths{
+		ArtifactsDir: scratchDir,
+		LockfilePath: lockfilePath,
+	})
 	if err != nil {
 		return err
 	}
@@ -230,11 +242,11 @@ func maskEmpty(s string) string {
 
 func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd [--config PATH]... [--artifacts-dir PATH]")
-	writeUsageLine(w, "  gestaltd init [--config PATH]... [--artifacts-dir PATH] [--platform PLATFORMS]")
-	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--locked]")
+	writeUsageLine(w, "  gestaltd [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH]")
+	writeUsageLine(w, "  gestaltd init [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--platform PLATFORMS]")
+	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked]")
 	writeUsageLine(w, "  gestaltd provider <command> [flags]")
-	writeUsageLine(w, "  gestaltd validate [--config PATH]...")
+	writeUsageLine(w, "  gestaltd validate [--config PATH]... [--lockfile PATH]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Commands:")
 	writeUsageLine(w, "  init        Resolve providers and plugins and write lock state")
@@ -246,11 +258,12 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "Flags:")
 	writeUsageLine(w, "  --config          Path to a config file; repeat to layer left-to-right")
 	writeUsageLine(w, "  --artifacts-dir   Path to writable prepared-artifacts directory for init/serve")
+	writeUsageLine(w, "  --lockfile        Path to lockfile; defaults to gestalt.lock.json next to the primary config")
 }
 
 func printServeUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--locked]")
+	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--locked]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Start the server. Auto-inits if lock state is missing or stale.")
 	writeUsageLine(w, "For production, strongly prefer --locked so startup uses the pinned")
@@ -262,10 +275,10 @@ func printServeUsage(w io.Writer) {
 
 func printInitUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd init [--config PATH]... [--artifacts-dir PATH] [--platform PLATFORMS]")
+	writeUsageLine(w, "  gestaltd init [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--platform PLATFORMS]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Resolve managed plugin sources and write lock state.")
-	writeUsageLine(w, "Creates gestalt.lock.json in the config directory and prepared artifacts")
+	writeUsageLine(w, "By default, creates gestalt.lock.json in the config directory and prepared artifacts")
 	writeUsageLine(w, "in the artifacts directory. The lockfile records archive URLs for all")
 	writeUsageLine(w, "discovered platforms and verified SHA256 hashes for the current platform.")
 	writeUsageLine(w, "Use --platform to pre-verify hashes for additional deploy targets.")
@@ -275,16 +288,19 @@ func printInitUsage(w io.Writer) {
 	writeUsageLine(w, "Flags:")
 	writeUsageLine(w, "  --config          Path to a config file; repeat to layer left-to-right")
 	writeUsageLine(w, "  --artifacts-dir   Path to writable prepared-artifacts directory")
+	writeUsageLine(w, "  --lockfile        Path to lockfile; defaults to gestalt.lock.json next to the primary config")
 	writeUsageLine(w, "  --platform        Additional platforms to verify (comma-separated os/arch[/libc] or \"all\")")
 }
 
 func printValidateUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd validate [--config PATH]...")
+	writeUsageLine(w, "  gestaltd validate [--config PATH]... [--lockfile PATH]")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Validate configuration without starting the server or running migrations.")
 	writeUsageLine(w, "Validation always stages source-backed providers in a temporary scratch dir.")
 	writeUsageLine(w, "Repeated --config flags merge left-to-right.")
+	writeUsageLine(w, "The --lockfile path follows normal CLI path resolution; --artifacts-dir keeps")
+	writeUsageLine(w, "its existing config-relative behavior on init/serve for backward compatibility.")
 }
 
 func writeUsageLine(w io.Writer, line string) {

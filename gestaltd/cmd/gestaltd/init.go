@@ -15,10 +15,10 @@ func operatorLifecycle() *operator.Lifecycle {
 	})
 }
 
-func initConfigWithArtifactsDir(configFlags []string, artifactsDir, platformFlag string) error {
+func initConfigWithStatePaths(configFlags []string, state operator.StatePaths, platformFlag string) error {
 	configPaths := operator.ResolveConfigPaths(configFlags)
 	if platformFlag == "" {
-		_, err := operatorLifecycle().InitAtPathsWithArtifactsDir(configPaths, artifactsDir)
+		_, err := operatorLifecycle().InitAtPathsWithStatePaths(configPaths, state)
 		return err
 	}
 
@@ -36,21 +36,21 @@ func initConfigWithArtifactsDir(configFlags []string, artifactsDir, platformFlag
 		platArgs[i] = struct{ GOOS, GOARCH, LibC string }{p.GOOS, p.GOARCH, ""}
 	}
 
-	_, err = operatorLifecycle().InitAtPathsWithPlatforms(configPaths, artifactsDir, platArgs)
+	_, err = operatorLifecycle().InitAtPathsWithPlatforms(configPaths, state, platArgs)
 	return err
 }
 
-func loadConfigForExecutionAtPathsWithArtifactsDir(configPaths []string, artifactsDir string, locked bool) (*config.Config, error) {
-	cfg, _, err := operatorLifecycle().LoadForExecutionAtPathsWithArtifactsDir(configPaths, artifactsDir, locked)
+func loadConfigForExecutionAtPathsWithStatePaths(configPaths []string, state operator.StatePaths, locked bool) (*config.Config, error) {
+	cfg, _, err := operatorLifecycle().LoadForExecutionAtPathsWithStatePaths(configPaths, state, locked)
 	if err != nil {
 		return nil, err
 	}
 	return cfg, nil
 }
 
-func loadConfigForValidationWithArtifactsDir(configFlags []string, artifactsDir string) ([]string, *config.Config, error) {
+func loadConfigForValidationWithStatePaths(configFlags []string, state operator.StatePaths) ([]string, *config.Config, error) {
 	configPaths := operator.ResolveConfigPaths(configFlags)
-	cfg, err := operatorLifecycle().LoadForValidationAtPathsWithArtifactsDir(configPaths, artifactsDir)
+	cfg, err := operatorLifecycle().LoadForValidationAtPathsWithStatePaths(configPaths, state)
 	if err != nil {
 		return nil, nil, err
 	}
