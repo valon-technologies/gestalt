@@ -339,27 +339,21 @@ func TestSourceProviderExecutionCommand_TypeScript(t *testing.T) {
 	if command != bunPath {
 		t.Fatalf("command = %q, want %q", command, bunPath)
 	}
-	if len(args) != 7 {
-		t.Fatalf("args len = %d, want 7 (%v)", len(args), args)
+	if len(args) != 6 {
+		t.Fatalf("args len = %d, want 6 (%v)", len(args), args)
 	}
 	if args[0] != "--cwd" || args[1] != root {
 		t.Fatalf("args prefix = %v, want [--cwd %s ...]", args[:2], root)
 	}
-	if args[2] != "run" {
-		t.Fatalf("args[2] = %q, want run", args[2])
+	if args[3] != "--" {
+		t.Fatalf("args[3] = %q, want --", args[3])
 	}
-	if args[4] != "--" {
-		t.Fatalf("args[4] = %q, want --", args[4])
-	}
-	if args[5] != root || args[6] != typeScriptTestPluginTarget {
-		t.Fatalf("args tail = %v, want [%s %s]", args[5:], root, typeScriptTestPluginTarget)
+	if args[4] != root || args[5] != typeScriptTestPluginTarget {
+		t.Fatalf("args tail = %v, want [%s %s]", args[4:], root, typeScriptTestPluginTarget)
 	}
 
-	entry := filepath.Base(args[3])
-	switch entry {
-	case typeScriptRuntimeBin, "runtime.ts":
-	default:
-		t.Fatalf("runtime entry = %q, want %q or local runtime.ts path", args[3], typeScriptRuntimeBin)
+	if got := filepath.Base(args[2]); got != "runtime.ts" {
+		t.Fatalf("runtime entry = %q, want local runtime.ts path", args[2])
 	}
 }
 
@@ -403,11 +397,14 @@ func TestSourceComponentExecutionCommand_TypeScript(t *testing.T) {
 			if command != bunPath {
 				t.Fatalf("command = %q, want %q", command, bunPath)
 			}
-			if len(args) != 7 {
-				t.Fatalf("args len = %d, want 7 (%v)", len(args), args)
+			if len(args) != 6 {
+				t.Fatalf("args len = %d, want 6 (%v)", len(args), args)
 			}
-			if args[5] != root || args[6] != tt.target {
-				t.Fatalf("args tail = %v, want [%s %s]", args[5:], root, tt.target)
+			if got := filepath.Base(args[2]); got != "runtime.ts" {
+				t.Fatalf("runtime entry = %q, want local runtime.ts path", args[2])
+			}
+			if args[4] != root || args[5] != tt.target {
+				t.Fatalf("args tail = %v, want [%s %s]", args[4:], root, tt.target)
 			}
 		})
 	}
@@ -696,12 +693,6 @@ fi
 
 cwd="$2"
 shift 2
-
-if [ "$1" != "run" ]; then
-  echo "unexpected bun subcommand: $1" >&2
-  exit 1
-fi
-shift
 
 entry="$1"
 shift

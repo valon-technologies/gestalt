@@ -83,7 +83,6 @@ func typeScriptExecutionCommand(root, target string) (string, []string, func(), 
 	if sdkPath := localTypeScriptSDKPath(); sdkPath != "" {
 		return bunPath, []string{
 			"--cwd", root,
-			"run",
 			filepath.Join(sdkPath, "src", "runtime.ts"),
 			"--",
 			root,
@@ -121,7 +120,6 @@ func buildTypeScriptBinary(sourceDir, binaryPath, pluginName, target, goos, goar
 	if sdkPath := localTypeScriptSDKPath(); sdkPath != "" {
 		args = []string{
 			"--cwd", sourceDir,
-			"run",
 			filepath.Join(sdkPath, "src", "build.ts"),
 			"--",
 			sourceDir,
