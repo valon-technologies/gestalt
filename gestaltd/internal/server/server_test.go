@@ -5875,11 +5875,12 @@ func TestDisconnectIntegration_NotConnected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusNotFound {
+		_ = resp.Body.Close()
 		t.Fatalf("expected 404, got %d", resp.StatusCode)
 	}
+	_ = resp.Body.Close()
 }
 
 func TestListOperations(t *testing.T) {
@@ -7014,6 +7015,47 @@ func TestExecuteOperation_UnknownOperation(t *testing.T) {
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("expected 404, got %d", resp.StatusCode)
 	}
+
+	sessionStub := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "sample-int", ConnMode: core.ConnectionModeUser},
+		},
+		catalog: serverTestCatalog("sample-int", []catalog.CatalogOperation{
+			{ID: "run", Description: "Run", Method: http.MethodGet, Transport: catalog.TransportREST},
+		}),
+		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			if token != "tok-team-a" {
+				return nil, fmt.Errorf("unexpected token %q", token)
+			}
+			return &catalog.Catalog{Name: "sample-int"}, nil
+		},
+	}
+
+	svc := coretesting.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	seedToken(t, svc, &core.IntegrationToken{
+		ID: "tok-team-a", UserID: u.ID, Integration: "sample-int",
+		Connection: testCatalogConnection, Instance: "team-a", AccessToken: "tok-team-a",
+	})
+
+	ts = newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, sessionStub)
+		cfg.CatalogConnection = map[string]string{"sample-int": testCatalogConnection}
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/sample-int/run?_instance=team-a", nil)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("session request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusNotFound {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 404 for missing session operation, got %d: %s", resp.StatusCode, body)
+	}
 }
 
 func TestExecuteOperation_NoStoredToken(t *testing.T) {
@@ -7951,14 +7993,32 @@ func TestExecuteOperation_UsesFallbackSessionCatalogConnectionAfterEarlierError(
 	if err != nil {
 		t.Fatalf("request: %v", err)
 	}
-	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
 		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
 	}
 	if gotToken != "rest-token" {
+		_ = resp.Body.Close()
 		t.Fatalf("execute token = %q, want %q", gotToken, "rest-token")
+	}
+	_ = resp.Body.Close()
+
+	gotToken = ""
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/sample-int/run?_connection=mcp-conn", nil)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("explicit request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusPreconditionFailed {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 412 for explicit session catalog failure, got %d: %s", resp.StatusCode, body)
+	}
+	if gotToken != "" {
+		t.Fatalf("execute token = %q, want no provider execution", gotToken)
 	}
 }
 

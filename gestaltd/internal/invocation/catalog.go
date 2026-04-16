@@ -26,11 +26,6 @@ func ResolveCatalog(ctx context.Context, prov core.Provider, provName string, re
 	return cat, err
 }
 
-func ResolveCatalogStrict(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, defaultConnection, instance string) (*catalog.Catalog, error) {
-	cat, _, err := ResolveCatalogStrictWithMetadata(ctx, prov, provName, resolver, p, defaultConnection, instance)
-	return cat, err
-}
-
 func ResolveCatalogWithMetadata(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, defaultConnection, instance string) (*catalog.Catalog, CatalogResolutionMetadata, error) {
 	return resolveCatalog(ctx, prov, provName, resolver, p, defaultConnection, instance, false)
 }
@@ -39,9 +34,30 @@ func ResolveCatalogStrictWithMetadata(ctx context.Context, prov core.Provider, p
 	return resolveCatalog(ctx, prov, provName, resolver, p, defaultConnection, instance, true)
 }
 
-func ResolveSessionCatalog(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, connection, instance string) (*catalog.Catalog, error) {
-	cat, _, err := resolveSessionCatalog(ctx, prov, provName, resolver, p, connection, instance)
-	return cat, err
+func ResolveOperation(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, operation string, sessionConnections []string, instance string) (catalog.CatalogOperation, string, string, error) {
+	if op, ok := CatalogOperationFromContext(ctx, provName, operation); ok {
+		return op, OperationTransport(op), "", nil
+	}
+
+	staticOp, staticOK := CatalogOperation(providerCatalog(prov), operation)
+	if !core.SupportsSessionCatalog(prov) {
+		if staticOK {
+			return staticOp, OperationTransport(staticOp), "", nil
+		}
+		return catalog.CatalogOperation{}, "", "", fmt.Errorf("%w: %q on provider %q", ErrOperationNotFound, operation, provName)
+	}
+
+	sessionOp, sessionConnection, sessionFound, err := resolveSessionOperation(ctx, prov, provName, resolver, p, operation, sessionConnections, instance)
+	if err != nil {
+		return catalog.CatalogOperation{}, "", "", err
+	}
+	if sessionFound {
+		return sessionOp, OperationTransport(sessionOp), sessionConnection, nil
+	}
+	if instance == "" && staticOK {
+		return staticOp, OperationTransport(staticOp), "", nil
+	}
+	return catalog.CatalogOperation{}, "", "", fmt.Errorf("%w: %q on provider %q", ErrOperationNotFound, operation, provName)
 }
 
 func resolveCatalog(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, defaultConnection, instance string, strictSession bool) (*catalog.Catalog, CatalogResolutionMetadata, error) {
@@ -89,6 +105,37 @@ func resolveSessionCatalog(ctx context.Context, prov core.Provider, provName str
 	}
 	cat, _, err := core.CatalogForRequest(ctx, prov, token)
 	return cat, true, err
+}
+
+func resolveSessionOperation(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, operation string, connections []string, instance string) (catalog.CatalogOperation, string, bool, error) {
+	if len(connections) == 0 {
+		connections = []string{""}
+	}
+
+	var (
+		firstErr error
+		resolved bool
+	)
+	for _, connection := range connections {
+		cat, attempted, err := resolveSessionCatalog(ctx, prov, provName, resolver, p, connection, instance)
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		if !attempted || cat == nil {
+			continue
+		}
+		resolved = true
+		if op, ok := CatalogOperation(cat, operation); ok {
+			return op, connection, true, nil
+		}
+	}
+	if firstErr != nil && !resolved {
+		return catalog.CatalogOperation{}, "", false, firstErr
+	}
+	return catalog.CatalogOperation{}, "", false, nil
 }
 
 func mergeCatalogs(provName string, staticCat, sessionCat *catalog.Catalog) (*catalog.Catalog, error) {

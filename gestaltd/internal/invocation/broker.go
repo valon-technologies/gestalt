@@ -235,7 +235,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		return fail(fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operation))
 	}
 
-	opMeta, transport, err := b.resolveOperation(ctx, p, prov, providerName, operation, conn, instance)
+	opMeta, transport, resolvedConnection, err := b.resolveOperation(ctx, p, prov, providerName, operation, conn, instance)
 	if err != nil {
 		return fail(err)
 	}
@@ -250,6 +250,9 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		return fail(core.ErrMCPOnly)
 	}
 
+	if conn == "" {
+		conn = resolvedConnection
+	}
 	if conn == "" {
 		if transport == catalog.TransportMCPPassthrough {
 			conn = b.mcpConnection(providerName)
@@ -289,29 +292,16 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	return result, nil
 }
 
-func (b *Broker) resolveOperation(ctx context.Context, p *principal.Principal, prov core.Provider, providerName, operation, connection, instance string) (catalog.CatalogOperation, string, error) {
-	if op, ok := CatalogOperationFromContext(ctx, providerName, operation); ok {
-		return op, catalogOperationTransport(op), nil
-	}
-
-	if op, ok := CatalogOperation(providerCatalog(prov), operation); ok {
-		return op, catalogOperationTransport(op), nil
-	}
-
-	if core.SupportsSessionCatalog(prov) {
-		if connection == "" {
-			connection = b.mcpConnection(providerName)
-		}
-		cat, _, err := resolveSessionCatalog(ctx, prov, providerName, b, p, connection, instance)
-		if err != nil {
-			return catalog.CatalogOperation{}, "", err
-		}
-		if op, ok := CatalogOperation(cat, operation); ok {
-			return op, catalogOperationTransport(op), nil
+func (b *Broker) resolveOperation(ctx context.Context, p *principal.Principal, prov core.Provider, providerName, operation, connection, instance string) (catalog.CatalogOperation, string, string, error) {
+	sessionConnections := []string{connection}
+	if connection == "" {
+		sessionConnections = nil
+		if mcpConnection := b.mcpConnection(providerName); mcpConnection != "" {
+			sessionConnections = []string{mcpConnection}
 		}
 	}
 
-	return catalog.CatalogOperation{}, "", fmt.Errorf("%w: %q on provider %q", ErrOperationNotFound, operation, providerName)
+	return ResolveOperation(ctx, prov, providerName, b, p, operation, sessionConnections, instance)
 }
 
 func (b *Broker) mcpConnection(providerName string) string {
