@@ -86,6 +86,12 @@ pub enum Commands {
         plugin: String,
         /// Operation name
         operation: String,
+        /// Select a named connection when loading the operation contract
+        #[arg(long)]
+        connection: Option<String>,
+        /// Select a stored connection instance when loading the operation contract
+        #[arg(long)]
+        instance: Option<String>,
     },
 
     /// Manage API tokens
@@ -192,6 +198,12 @@ pub enum PluginCommands {
         plugin: String,
         /// Operation name
         operation: String,
+        /// Select a named connection when loading the operation contract
+        #[arg(long)]
+        connection: Option<String>,
+        /// Select a stored connection instance when loading the operation contract
+        #[arg(long)]
+        instance: Option<String>,
     },
 }
 

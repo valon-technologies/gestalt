@@ -258,6 +258,26 @@ impl ApiClient {
         self.send(Method::GET, path)
     }
 
+    pub fn get_with_query<T>(&self, path: &str, query: &T) -> Result<serde_json::Value>
+    where
+        T: Serialize + ?Sized,
+    {
+        let encoded =
+            serde_urlencoded::to_string(query).context("failed to encode query parameters")?;
+        let url = if encoded.is_empty() {
+            format!("{}{}", self.base_url, path)
+        } else {
+            format!("{}{}?{}", self.base_url, path, encoded)
+        };
+        let resp = self
+            .client
+            .request(Method::GET, &url)
+            .bearer_auth(&self.token)
+            .send()
+            .map_err(|e| self.wrap_send_error(e, &url))?;
+        self.handle_response(resp)
+    }
+
     pub fn post<T>(&self, path: &str, body: &T) -> Result<serde_json::Value>
     where
         T: Serialize + ?Sized,

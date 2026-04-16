@@ -51,9 +51,21 @@ fn run() -> anyhow::Result<()> {
             url,
             format,
         ),
-        Commands::Describe { plugin, operation } => {
-            dispatch_plugin_command(PluginCommands::Describe { plugin, operation }, url, format)
-        }
+        Commands::Describe {
+            plugin,
+            operation,
+            connection,
+            instance,
+        } => dispatch_plugin_command(
+            PluginCommands::Describe {
+                plugin,
+                operation,
+                connection,
+                instance,
+            },
+            url,
+            format,
+        ),
         Commands::Tokens { command } => {
             let client = ApiClient::from_env(url)?;
             match command {
@@ -111,9 +123,21 @@ fn dispatch_plugin_command(
             },
             format,
         ),
-        PluginCommands::Describe { plugin, operation } => {
-            commands::describe::describe(&client, &plugin, &operation, format)
-        }
+        PluginCommands::Describe {
+            plugin,
+            operation,
+            connection,
+            instance,
+        } => commands::describe::describe(
+            &client,
+            &plugin,
+            &operation,
+            commands::describe::DescribeOptions {
+                connection: connection.as_deref(),
+                instance: instance.as_deref(),
+            },
+            format,
+        ),
     }
 }
 
