@@ -107,6 +107,40 @@ func TestPartitionParams_MixedLocations(t *testing.T) {
 	}
 }
 
+func TestPartitionParams_MethodDefaultModeKeepsExplicitBodyParams(t *testing.T) {
+	t.Parallel()
+
+	catOp := &catalog.CatalogOperation{
+		ID:     "op1",
+		Method: http.MethodPost,
+		Parameters: []catalog.CatalogParameter{
+			{Name: "channel", Type: "string", Location: "body"},
+			{Name: "text", Type: "string", Location: "body"},
+			{Name: "cursor", Type: "string", Location: "query"},
+		},
+	}
+	params := map[string]any{
+		"channel": "D024BGTKK33",
+		"text":    "hello",
+		"cursor":  "abc",
+	}
+
+	body, query, headers := partitionParams(catOp, params, true)
+
+	if body["channel"] != "D024BGTKK33" {
+		t.Fatalf("body[channel] = %v, want D024BGTKK33", body["channel"])
+	}
+	if body["text"] != "hello" {
+		t.Fatalf("body[text] = %v, want hello", body["text"])
+	}
+	if query["cursor"] != "abc" {
+		t.Fatalf("query[cursor] = %v, want abc", query["cursor"])
+	}
+	if len(headers) != 0 {
+		t.Fatalf("headers = %v, want empty", headers)
+	}
+}
+
 func TestPartitionParams_UnknownParam(t *testing.T) {
 	t.Parallel()
 

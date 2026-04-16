@@ -15,6 +15,7 @@ import (
 )
 
 const declarativeHTTPTimeout = 30 * time.Second
+const declarativeJSONContentType = "application/json; charset=utf-8"
 
 type declarativeOptions struct {
 	displayName    string
@@ -78,6 +79,7 @@ func NewDeclarativeProvider(manifest *providermanifestv1.Manifest, httpClient *h
 		Headers:                     maps.Clone(manifest.Spec.Headers),
 		HTTPClient:                  httpClient,
 		MethodDefaultParamLocations: true,
+		RequestContentType:          declarativeJSONContentType,
 		ConnectionDefs:              ConnectionParamDefsFromManifest(manifest.Spec.ConnectionParams),
 		DiscoveryDef:                DiscoveryConfigFromManifest(manifest.Spec.Discovery),
 		CredentialFieldDefs:         declarativeCredentialFields(auth),

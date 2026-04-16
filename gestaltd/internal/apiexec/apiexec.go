@@ -234,6 +234,10 @@ func doOnce(
 		httpReq.Header.Set(k, v)
 	}
 
+	if contentType != "" {
+		httpReq.Header.Set("Content-Type", contentType)
+	}
+
 	if req.AuthHeader != "" {
 		httpReq.Header.Set("Authorization", req.AuthHeader)
 	} else if req.Token != "" {
