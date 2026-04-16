@@ -217,13 +217,15 @@ func newMCPHandler(cfg *config.Config, connMaps bootstrap.ConnectionMaps, result
 
 	allowedProviders := make([]string, 0, len(names))
 	toolPrefixes := make(map[string]string)
+	includeREST := make(map[string]bool)
 	mcpConnection := make(map[string]string)
 	for _, name := range names {
 		entry := cfg.Plugins[name]
-		if entry == nil || !entry.DeclaresMCP() {
+		if entry == nil || !entry.ExposesMCP() {
 			continue
 		}
 		allowedProviders = append(allowedProviders, name)
+		includeREST[name] = entry.IncludeRESTInMCP()
 		mcpConnection[name] = connMaps.MCPConnection[name]
 		if entry.MCPToolPrefix != "" {
 			toolPrefixes[name] = entry.MCPToolPrefix
@@ -245,6 +247,7 @@ func newMCPHandler(cfg *config.Config, connMaps bootstrap.ConnectionMaps, result
 			Authorizer:       result.Authorizer,
 			AllowedProviders: allowedProviders,
 			ToolPrefixes:     toolPrefixes,
+			IncludeREST:      includeREST,
 			MCPConnection:    mcpConnection,
 		}),
 		mcpserver.WithStateLess(true),

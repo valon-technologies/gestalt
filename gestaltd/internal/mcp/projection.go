@@ -53,8 +53,10 @@ func catalogOperationProjectedToMCP(cfg Config, provName string, op catalog.Cata
 	if op.Visible != nil && !*op.Visible {
 		return false
 	}
-	if cfg.IncludeREST != nil && op.Transport == catalog.TransportREST && !cfg.IncludeREST[provName] {
-		return false
+	if cfg.IncludeREST != nil {
+		if includeProjectedOps, ok := cfg.IncludeREST[provName]; ok && !includeProjectedOps && op.Transport != catalog.TransportMCPPassthrough {
+			return false
+		}
 	}
 	return true
 }

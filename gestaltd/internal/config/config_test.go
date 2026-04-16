@@ -100,6 +100,28 @@ plugins:
 	}
 }
 
+func TestLoadConfigParsesPluginMCPFlag(t *testing.T) {
+	t.Parallel()
+
+	path := mustWriteConfigFile(t, `
+server:
+  encryptionKey: server-key
+plugins:
+  service-a:
+    source:
+      path: /tmp/manifest.yaml
+    mcp: true
+`)
+
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if !cfg.Plugins["service-a"].MCP {
+		t.Fatal("expected plugins.service-a.mcp to be parsed")
+	}
+}
+
 func TestLoadConfigSelectsDefaultProvidersFromNamedMaps(t *testing.T) {
 	t.Parallel()
 
