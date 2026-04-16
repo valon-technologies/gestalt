@@ -46,6 +46,13 @@ func (p *echoProvider) Name() string                        { return "echo" }
 func (p *echoProvider) DisplayName() string                 { return "Echo" }
 func (p *echoProvider) Description() string                 { return "Echoes back the input parameters" }
 func (p *echoProvider) ConnectionMode() core.ConnectionMode { return core.ConnectionModeNone }
+func (p *echoProvider) AuthTypes() []string                 { return nil }
+func (p *echoProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
+	return nil
+}
+func (p *echoProvider) CredentialFields() []core.CredentialFieldDef { return nil }
+func (p *echoProvider) DiscoveryConfig() *core.DiscoveryConfig      { return nil }
+func (p *echoProvider) ConnectionForOperation(string) string        { return "" }
 func (p *echoProvider) Catalog() *catalog.Catalog {
 	return &catalog.Catalog{
 		Name:        p.Name(),

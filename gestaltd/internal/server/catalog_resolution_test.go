@@ -28,7 +28,14 @@ func (s *stubProvider) Name() string                        { return s.name }
 func (s *stubProvider) DisplayName() string                 { return s.displayName }
 func (s *stubProvider) Description() string                 { return s.description }
 func (s *stubProvider) ConnectionMode() core.ConnectionMode { return s.connMode }
-func (s *stubProvider) Catalog() *catalog.Catalog           { return nil }
+func (s *stubProvider) AuthTypes() []string                 { return nil }
+func (s *stubProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
+	return nil
+}
+func (s *stubProvider) CredentialFields() []core.CredentialFieldDef { return nil }
+func (s *stubProvider) DiscoveryConfig() *core.DiscoveryConfig      { return nil }
+func (s *stubProvider) ConnectionForOperation(string) string        { return "" }
+func (s *stubProvider) Catalog() *catalog.Catalog                   { return nil }
 func (s *stubProvider) Execute(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
 	return nil, nil
 }

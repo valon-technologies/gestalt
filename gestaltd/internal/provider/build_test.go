@@ -638,12 +638,7 @@ func TestBuildConnectionParams(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 
-	cpp, ok := prov.(core.ConnectionParamProvider)
-	if !ok {
-		t.Fatal("provider does not implement ConnectionParamProvider")
-	}
-
-	defs := cpp.ConnectionParamDefs()
+	defs := prov.ConnectionParamDefs()
 	if len(defs) != 2 {
 		t.Fatalf("expected 2 connection params, got %d", len(defs))
 	}
@@ -932,12 +927,7 @@ func TestBuildCredentialFields(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 
-	cfp, ok := prov.(core.CredentialFieldsProvider)
-	if !ok {
-		t.Fatal("provider does not implement CredentialFieldsProvider")
-	}
-
-	fields := cfp.CredentialFields()
+	fields := prov.CredentialFields()
 	if len(fields) != 2 {
 		t.Fatalf("got %d credential fields, want 2", len(fields))
 	}
@@ -975,12 +965,7 @@ func TestBuildCredentialFieldsFromConfig(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 
-	cfp, ok := prov.(core.CredentialFieldsProvider)
-	if !ok {
-		t.Fatal("provider does not implement CredentialFieldsProvider")
-	}
-
-	fields := cfp.CredentialFields()
+	fields := prov.CredentialFields()
 	if len(fields) != 1 {
 		t.Fatalf("got %d credential fields, want 1", len(fields))
 	}

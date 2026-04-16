@@ -34,12 +34,18 @@ func (u *stubMCPUpstream) Description() string { return "" }
 func (u *stubMCPUpstream) ConnectionMode() core.ConnectionMode {
 	return core.ConnectionModeNone
 }
-func (u *stubMCPUpstream) Catalog() *catalog.Catalog { return u.cat }
+func (u *stubMCPUpstream) AuthTypes() []string { return nil }
+func (u *stubMCPUpstream) ConnectionParamDefs() map[string]core.ConnectionParamDef {
+	return nil
+}
+func (u *stubMCPUpstream) CredentialFields() []core.CredentialFieldDef { return nil }
+func (u *stubMCPUpstream) DiscoveryConfig() *core.DiscoveryConfig      { return nil }
+func (u *stubMCPUpstream) ConnectionForOperation(string) string        { return "" }
+func (u *stubMCPUpstream) Catalog() *catalog.Catalog                   { return u.cat }
 func (u *stubMCPUpstream) CatalogForRequest(_ context.Context, _ string) (*catalog.Catalog, error) {
 	return u.cat, nil
 }
-func (u *stubMCPUpstream) SupportsManualAuth() bool { return true }
-func (u *stubMCPUpstream) Close() error             { return nil }
+func (u *stubMCPUpstream) Close() error { return nil }
 func (u *stubMCPUpstream) Execute(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
 	return nil, core.ErrMCPOnly
 }

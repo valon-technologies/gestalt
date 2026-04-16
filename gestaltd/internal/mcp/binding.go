@@ -60,7 +60,7 @@ func NewServer(cfg Config) *mcpserver.MCPServer {
 			continue
 		}
 
-		if _, ok := prov.(core.SessionCatalogProvider); ok {
+		if core.SupportsSessionCatalog(prov) {
 			dynamicProviders = append(dynamicProviders, provName)
 		}
 

@@ -23,6 +23,16 @@ func (p *roundTripProvider) Name() string                        { return "round
 func (p *roundTripProvider) DisplayName() string                 { return "Round Trip" }
 func (p *roundTripProvider) Description() string                 { return "test provider" }
 func (p *roundTripProvider) ConnectionMode() core.ConnectionMode { return core.ConnectionModeEither }
+func (p *roundTripProvider) AuthTypes() []string                 { return []string{"manual"} }
+func (p *roundTripProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
+	return map[string]core.ConnectionParamDef{
+		"tenant":  {Required: true, Description: "Tenant slug"},
+		"team_id": {From: "token_response", Field: "team_id"},
+	}
+}
+func (p *roundTripProvider) CredentialFields() []core.CredentialFieldDef { return nil }
+func (p *roundTripProvider) DiscoveryConfig() *core.DiscoveryConfig      { return nil }
+func (p *roundTripProvider) ConnectionForOperation(string) string        { return "" }
 
 func (p *roundTripProvider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
 	subjectID := ""
@@ -167,17 +177,11 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 		t.Fatalf("unexpected connection mode: %q", prov.ConnectionMode())
 	}
 
-	if _, ok := prov.(core.ManualProvider); !ok {
-		t.Fatal("expected remote provider to implement ManualProvider")
-	}
 	if _, ok := prov.(core.SessionCatalogProvider); !ok {
 		t.Fatal("expected remote provider to implement SessionCatalogProvider")
 	}
-	if _, ok := prov.(core.ConnectionParamProvider); !ok {
-		t.Fatal("expected remote provider to implement ConnectionParamProvider")
-	}
-	if _, ok := prov.(core.AuthTypeLister); !ok {
-		t.Fatal("expected remote provider to implement AuthTypeLister")
+	if got := prov.AuthTypes(); len(got) != 1 || got[0] != "manual" {
+		t.Fatalf("unexpected auth types: %#v", got)
 	}
 	if cat := prov.Catalog(); cat == nil || len(cat.Operations) != 1 || cat.Operations[0].ID != "echo" {
 		t.Fatalf("unexpected Catalog result: %+v", cat)
@@ -261,8 +265,7 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 		})
 	}
 
-	cpp := prov.(core.ConnectionParamProvider)
-	if defs := cpp.ConnectionParamDefs(); defs["tenant"].Description != "Tenant slug" || defs["team_id"].Field != "team_id" {
+	if defs := prov.ConnectionParamDefs(); defs["tenant"].Description != "Tenant slug" || defs["team_id"].Field != "team_id" {
 		t.Fatalf("unexpected connection param defs: %+v", defs)
 	}
 }
@@ -322,12 +325,8 @@ func TestRemoteProviderManualAuthOnly(t *testing.T) {
 		t.Fatalf("NewRemoteProvider: %v", err)
 	}
 
-	mp, ok := prov.(core.ManualProvider)
-	if !ok {
-		t.Fatal("expected remote provider to implement core.ManualProvider")
-	}
-	if !mp.SupportsManualAuth() {
-		t.Fatal("expected SupportsManualAuth() == true")
+	if got := prov.AuthTypes(); len(got) != 1 || got[0] != "manual" {
+		t.Fatalf("AuthTypes = %#v, want [manual]", got)
 	}
 	cat := prov.Catalog()
 	if cat == nil || len(cat.Operations) != 1 {

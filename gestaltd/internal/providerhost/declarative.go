@@ -205,13 +205,6 @@ func declarativeParamLocation(op *catalog.CatalogOperation, name string) (string
 	return "", false
 }
 
-func (p *DeclarativeProvider) SupportsManualAuth() bool {
-	if p.auth == nil {
-		return false
-	}
-	return p.auth.Type == providermanifestv1.AuthTypeManual || p.auth.Type == providermanifestv1.AuthTypeBearer
-}
-
 func (p *DeclarativeProvider) CredentialFields() []core.CredentialFieldDef {
 	if p.auth == nil {
 		return nil
@@ -234,6 +227,8 @@ func (p *DeclarativeProvider) AuthTypes() []string {
 		return nil
 	}
 }
+
+func (p *DeclarativeProvider) ConnectionForOperation(string) string { return "" }
 
 func (p *DeclarativeProvider) AuthorizationURL(state string, scopes []string) string {
 	if p.auth == nil || p.auth.Type != providermanifestv1.AuthTypeOAuth2 {

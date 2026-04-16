@@ -63,8 +63,7 @@ func resolveCatalog(ctx context.Context, prov core.Provider, provName string, re
 }
 
 func resolveSessionCatalog(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, connection, instance string) (*catalog.Catalog, bool, error) {
-	scp, ok := prov.(core.SessionCatalogProvider)
-	if !ok {
+	if !core.SupportsSessionCatalog(prov) {
 		return nil, false, nil
 	}
 	if prov.ConnectionMode() == core.ConnectionModeNone {
@@ -73,11 +72,11 @@ func resolveSessionCatalog(ctx context.Context, prov core.Provider, provName str
 			if err != nil {
 				return nil, true, err
 			}
-			cat, err := scp.CatalogForRequest(enrichedCtx, token)
+			cat, _, err := core.CatalogForRequest(enrichedCtx, prov, token)
 			return cat, true, err
 		}
 		ctx = WithCredentialContext(ctx, CredentialContext{Mode: core.ConnectionModeNone})
-		cat, err := scp.CatalogForRequest(ctx, "")
+		cat, _, err := core.CatalogForRequest(ctx, prov, "")
 		return cat, true, err
 	}
 	if resolver == nil || p == nil {
@@ -88,7 +87,7 @@ func resolveSessionCatalog(ctx context.Context, prov core.Provider, provName str
 	if err != nil {
 		return nil, true, err
 	}
-	cat, err := scp.CatalogForRequest(ctx, token)
+	cat, _, err := core.CatalogForRequest(ctx, prov, token)
 	return cat, true, err
 }
 
