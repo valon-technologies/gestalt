@@ -479,7 +479,7 @@ func TestResolveAuthenticatedRequest(t *testing.T) {
 	}
 }
 
-func TestResolveDoesNotUseEnvironmentTokenFallback(t *testing.T) {
+func TestResolveUsesEnvironmentTokenFallback(t *testing.T) {
 	var log requestLog
 	srv := newTestServer(t, currentPlatformAssetName(), withAuthLog(&log))
 	defer srv.Close()
@@ -500,8 +500,8 @@ func TestResolveDoesNotUseEnvironmentTokenFallback(t *testing.T) {
 		t.Fatalf("expected 2 requests, got %d", len(headers))
 	}
 	for i, got := range headers {
-		if got != "" {
-			t.Errorf("request %d: Authorization = %q, want empty header", i, got)
+		if got != authTokenPrefix+"ghp_env_fallback_token" {
+			t.Errorf("request %d: Authorization = %q, want %q", i, got, authTokenPrefix+"ghp_env_fallback_token")
 		}
 	}
 }

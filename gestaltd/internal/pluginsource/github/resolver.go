@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"runtime"
 	"sort"
 	"strings"
@@ -61,6 +62,19 @@ type GitHubResolver struct {
 	HTTPClient *http.Client
 }
 
+func resolveGitHubToken(token string) string {
+	for _, candidate := range []string{
+		strings.TrimSpace(token),
+		strings.TrimSpace(os.Getenv("GITHUB_TOKEN")),
+		strings.TrimSpace(os.Getenv("GH_TOKEN")),
+	} {
+		if candidate != "" {
+			return candidate
+		}
+	}
+	return ""
+}
+
 func (r *GitHubResolver) Resolve(ctx context.Context, src pluginsource.Source, version string) (*pluginsource.ResolvedPackage, error) {
 	baseURL := r.BaseURL
 	if baseURL == "" {
@@ -70,7 +84,7 @@ func (r *GitHubResolver) Resolve(ctx context.Context, src pluginsource.Source, v
 	if client == nil {
 		client = http.DefaultClient
 	}
-	token := strings.TrimSpace(src.Token)
+	token := resolveGitHubToken(src.Token)
 
 	tag := src.ReleaseTag(version)
 	releaseURL := fmt.Sprintf("%s/repos/%s/releases/tags/%s", baseURL, src.RepoSlug(), url.PathEscape(tag))
@@ -109,7 +123,7 @@ func (r *GitHubResolver) ListPlatformArchives(ctx context.Context, src pluginsou
 	if client == nil {
 		client = http.DefaultClient
 	}
-	token := strings.TrimSpace(src.Token)
+	token := resolveGitHubToken(src.Token)
 
 	tag := src.ReleaseTag(version)
 	releaseURL := fmt.Sprintf("%s/repos/%s/releases/tags/%s", baseURL, src.RepoSlug(), url.PathEscape(tag))
@@ -340,7 +354,7 @@ func DownloadResolvedAsset(ctx context.Context, client *http.Client, assetURL, t
 	if client == nil {
 		client = http.DefaultClient
 	}
-	token = strings.TrimSpace(token)
+	token = resolveGitHubToken(token)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, assetURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create asset download request: %w", err)
