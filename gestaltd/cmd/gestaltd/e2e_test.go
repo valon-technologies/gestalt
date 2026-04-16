@@ -879,6 +879,58 @@ func startCommandAndWaitReady(t *testing.T, cmd *exec.Cmd, baseURL string) {
 	}
 }
 
+func startCommandAndWaitReadyAndFile(t *testing.T, cmd *exec.Cmd, baseURL, requiredPath string) {
+	t.Helper()
+
+	cmd.Stdout = os.Stderr
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start gestaltd: %v", err)
+	}
+
+	exited := make(chan struct{})
+	go func() {
+		_ = cmd.Wait()
+		close(exited)
+	}()
+	t.Cleanup(func() {
+		if cmd.Process == nil {
+			return
+		}
+		_ = cmd.Process.Signal(syscall.SIGTERM)
+		select {
+		case <-exited:
+		case <-time.After(15 * time.Second):
+			_ = cmd.Process.Kill()
+			<-exited
+		}
+	})
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	tick := time.NewTicker(250 * time.Millisecond)
+	defer tick.Stop()
+	timeout := time.After(60 * time.Second)
+	for {
+		select {
+		case <-exited:
+			t.Fatal("gestaltd exited before becoming ready")
+		case <-timeout:
+			t.Fatalf("gestaltd did not become ready and write %s within 60 seconds", requiredPath)
+		case <-tick.C:
+			if _, err := os.Stat(requiredPath); err != nil {
+				continue
+			}
+			resp, err := client.Get(baseURL + "/ready")
+			if err == nil {
+				_ = resp.Body.Close()
+				if resp.StatusCode == http.StatusOK {
+					return
+				}
+			}
+		}
+	}
+}
+
 func startGestaltdWithConfig(t *testing.T, cfgPath string) string {
 	t.Helper()
 	return startGestaltdWithConfigs(t, []string{cfgPath}, false)
@@ -944,13 +996,19 @@ func TestE2EDefaultServeAutoGeneratesLocalConfig(t *testing.T) {
 
 	cmd := exec.Command(gestaltdBin)
 	cmd.Dir = workdir
-	cmd.Env = append(os.Environ(),
-		"HOME="+home,
-		"GESTALT_PROVIDERS_DIR="+providersDir,
-	)
-	startCommandAndWaitReady(t, cmd, "http://127.0.0.1:8080")
-
+	cmd.Env = []string{
+		"HOME=" + home,
+		"GESTALT_PROVIDERS_DIR=" + providersDir,
+		"PATH=" + os.Getenv("PATH"),
+	}
+	for _, key := range []string{"TMPDIR", "TMP", "TEMP"} {
+		if value := os.Getenv(key); value != "" {
+			cmd.Env = append(cmd.Env, key+"="+value)
+		}
+	}
 	cfgPath := filepath.Join(home, ".gestaltd", "config.yaml")
+	startCommandAndWaitReadyAndFile(t, cmd, "http://127.0.0.1:8080", cfgPath)
+
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		t.Fatalf("Load(%s): %v", cfgPath, err)
@@ -1112,16 +1170,6 @@ plugins:
 	}
 	if got := loadedCfg.Providers.UI["roadmap"].OwnerPlugin; got != "example" {
 		t.Fatalf(`Providers.UI["roadmap"].OwnerPlugin = %q, want %q`, got, "example")
-	}
-	mountedHandlers, err := resolveMountedWebUIHandlers(loadedCfg)
-	if err != nil {
-		t.Fatalf("resolveMountedWebUIHandlers: %v", err)
-	}
-	if len(mountedHandlers) != 1 {
-		t.Fatalf("len(mountedHandlers) = %d, want 1", len(mountedHandlers))
-	}
-	if got := mountedHandlers[0].PluginName; got != "example" {
-		t.Fatalf(`mountedHandlers[0].PluginName = %q, want %q`, got, "example")
 	}
 	_ = publicHolder.Close()
 

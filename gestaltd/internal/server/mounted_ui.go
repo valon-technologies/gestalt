@@ -6,16 +6,21 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	stdpath "path"
 	"slices"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/server/internal/adminui"
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
+	"github.com/valon-technologies/gestalt/server/internal/webui"
 )
 
 const browserLoginPath = "/api/v1/auth/login"
+const adminUIDirEnv = "GESTALTD_ADMIN_UI_DIR"
 
 type mountedWebUINavigationPathResolver interface {
 	NavigationPathForRequest(string) (string, bool)
@@ -89,6 +94,67 @@ func parseAbsoluteBaseURL(label, raw string) (*url.URL, error) {
 		return nil, fmt.Errorf("%s may not include query or fragment", label)
 	}
 	return parsed, nil
+}
+
+func mountedWebUIsFromEntries(entries map[string]*config.UIEntry) ([]MountedWebUI, error) {
+	names := make([]string, 0, len(entries))
+	for name := range entries {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+
+	mounted := make([]MountedWebUI, 0, len(names))
+	for _, name := range names {
+		entry := entries[name]
+		if entry == nil {
+			continue
+		}
+		if entry.ResolvedAssetRoot == "" {
+			return nil, fmt.Errorf("ui %q configured but asset root not resolved", name)
+		}
+
+		handler, err := webui.DirHandler(entry.ResolvedAssetRoot)
+		if err != nil {
+			return nil, fmt.Errorf("ui %q: %w", name, err)
+		}
+
+		routes := []MountedWebUIRoute(nil)
+		if spec := entry.ManifestSpec(); spec != nil && len(spec.Routes) > 0 {
+			routes = make([]MountedWebUIRoute, 0, len(spec.Routes))
+			for _, route := range spec.Routes {
+				routes = append(routes, MountedWebUIRoute{
+					Path:         route.Path,
+					AllowedRoles: append([]string(nil), route.AllowedRoles...),
+				})
+			}
+		}
+
+		mounted = append(mounted, MountedWebUI{
+			Name:                name,
+			Path:                entry.Path,
+			PluginName:          entry.OwnerPlugin,
+			AuthorizationPolicy: entry.AuthorizationPolicy,
+			Routes:              routes,
+			Handler:             handler,
+		})
+	}
+
+	return mounted, nil
+}
+
+func resolveBuiltinAdminUI(opts BuiltinAdminUIOptions) (http.Handler, error) {
+	adminOpts := adminui.Options{
+		BrandHref: opts.BrandHref,
+		LoginBase: opts.LoginBase,
+	}
+	if dir := strings.TrimSpace(os.Getenv(adminUIDirEnv)); dir != "" {
+		return adminui.DirHandler(dir, adminOpts)
+	}
+	handler := adminui.EmbeddedHandler(adminOpts)
+	if handler == nil {
+		return nil, fmt.Errorf("embedded admin ui assets not found")
+	}
+	return handler, nil
 }
 
 func normalizeMountedWebUIs(mounted []MountedWebUI) ([]MountedWebUI, error) {

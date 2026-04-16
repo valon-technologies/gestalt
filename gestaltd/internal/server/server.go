@@ -18,6 +18,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
+	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/metric"
 )
@@ -35,10 +36,7 @@ const (
 	RouteProfileManagement
 )
 
-type MountedWebUIRoute struct {
-	Path         string
-	AllowedRoles []string
-}
+type MountedWebUIRoute = providermanifestv1.WebUIRoute
 
 type MountedWebUI struct {
 	Name                string
@@ -53,6 +51,11 @@ type MountedWebUI struct {
 type AdminRouteConfig struct {
 	AuthorizationPolicy string
 	AllowedRoles        []string
+}
+
+type BuiltinAdminUIOptions struct {
+	BrandHref string
+	LoginBase string
 }
 
 type Server struct {
@@ -102,6 +105,7 @@ type Config struct {
 	CatalogConnection map[string]string
 	ConnectionAuth    func() map[string]map[string]bootstrap.OAuthHandler
 	PluginDefs        map[string]*config.ProviderEntry
+	ProviderUIs       map[string]*config.UIEntry
 	Authorizer        *authorization.Authorizer
 	PublicBaseURL     string
 	ManagementBaseURL string
@@ -115,6 +119,7 @@ type Config struct {
 	MountedWebUIs     []MountedWebUI
 	Admin             AdminRouteConfig
 	AdminUI           http.Handler
+	BuiltinAdminUI    *BuiltinAdminUIOptions
 	RouteProfile      RouteProfile
 	MeterProvider     metric.MeterProvider
 }
@@ -151,9 +156,23 @@ func New(cfg Config) (*Server, error) {
 	if err := validateAdminRouteRuntime(adminRoute, noAuth, cfg.PublicBaseURL, cfg.ManagementBaseURL, cfg.RouteProfile); err != nil {
 		return nil, fmt.Errorf("validate admin route: %w", err)
 	}
-	mountedWebUIs, err := normalizeMountedWebUIs(cfg.MountedWebUIs)
+	mountedWebUIs := cfg.MountedWebUIs
+	if len(mountedWebUIs) == 0 && len(cfg.ProviderUIs) != 0 {
+		mountedWebUIs, err = mountedWebUIsFromEntries(cfg.ProviderUIs)
+		if err != nil {
+			return nil, fmt.Errorf("resolve mounted ui handlers: %w", err)
+		}
+	}
+	mountedWebUIs, err = normalizeMountedWebUIs(mountedWebUIs)
 	if err != nil {
 		return nil, err
+	}
+	adminUI := cfg.AdminUI
+	if adminUI == nil && cfg.BuiltinAdminUI != nil {
+		adminUI, err = resolveBuiltinAdminUI(*cfg.BuiltinAdminUI)
+		if err != nil {
+			return nil, fmt.Errorf("resolve admin ui: %w", err)
+		}
 	}
 
 	users := cfg.Services.Users
@@ -200,7 +219,7 @@ func New(cfg Config) (*Server, error) {
 		mcpHandler:           cfg.MCPHandler,
 		mountedWebUIs:        mountedWebUIs,
 		adminRoute:           adminRoute,
-		adminUI:              cfg.AdminUI,
+		adminUI:              adminUI,
 		routeProfile:         cfg.RouteProfile,
 	}
 	if noAuth {
