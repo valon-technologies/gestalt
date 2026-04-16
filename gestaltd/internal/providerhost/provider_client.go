@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
@@ -43,6 +44,7 @@ type remoteProviderBase struct {
 	credFields  []core.CredentialFieldDef
 	discovery   *core.DiscoveryConfig
 	closer      io.Closer
+	snapshots   *RequestSnapshotStore
 }
 
 // RemoteProviderOption configures a remote provider returned by NewRemoteProvider.
@@ -52,6 +54,10 @@ type RemoteProviderOption func(*remoteProviderBase)
 // This is used to tie process lifecycle to provider lifecycle.
 func WithCloser(c io.Closer) RemoteProviderOption {
 	return func(b *remoteProviderBase) { b.closer = c }
+}
+
+func WithRequestSnapshots(s *RequestSnapshotStore) RemoteProviderOption {
+	return func(b *remoteProviderBase) { b.snapshots = s }
 }
 
 func NewRemoteProvider(ctx context.Context, client proto.IntegrationProviderClient, spec StaticProviderSpec, config map[string]any, opts ...RemoteProviderOption) (core.Provider, error) {
@@ -133,12 +139,18 @@ func (p *remoteProviderBase) Execute(ctx context.Context, operation string, para
 	if err != nil {
 		return nil, err
 	}
+	requestHandle := p.newRequestHandle()
+	if requestHandle != "" {
+		releaseSnapshot := p.snapshots.Register(ctx, requestHandle)
+		defer releaseSnapshot()
+	}
 	resp, err := p.client.Execute(ctx, &proto.ExecuteRequest{
 		Operation:        operation,
 		Params:           msg,
 		Token:            token,
 		ConnectionParams: core.ConnectionParams(ctx),
 		InvocationId:     invocationIDFromContext(ctx),
+		RequestHandle:    requestHandle,
 		Context:          requestContextProto(ctx),
 	})
 	if err != nil {
@@ -249,6 +261,13 @@ func invocationIDFromContext(ctx context.Context) string {
 		return ""
 	}
 	return meta.RequestID
+}
+
+func (p *remoteProviderBase) newRequestHandle() string {
+	if p == nil || p.snapshots == nil {
+		return ""
+	}
+	return uuid.NewString()
 }
 
 func requestContextProto(ctx context.Context) *proto.RequestContext {

@@ -95,6 +95,17 @@ message OperationResult {
   string body = 2;
 }
 
+// PluginInvokeRequest invokes a declared operation on another plugin through
+// the host-side invoker service.
+message PluginInvokeRequest {
+  string request_handle = 1;
+  string plugin = 2;
+  string operation = 3;
+  google.protobuf.Struct params = 4;
+  string connection = 5;
+  string instance = 6;
+}
+
 // IntegrationToken is the host-managed token payload passed into post-connect
 // hooks.
 message IntegrationToken {
@@ -151,6 +162,7 @@ message ExecuteRequest {
   map<string, string> connection_params = 4;
   string invocation_id = 5;
   RequestContext context = 6;
+  string request_handle = 7;
 }
 
 // GetSessionCatalogRequest asks a provider for request-scoped catalog
@@ -198,4 +210,8 @@ service IntegrationProvider {
   rpc Execute(ExecuteRequest) returns (OperationResult);
   rpc GetSessionCatalog(GetSessionCatalogRequest) returns (GetSessionCatalogResponse);
   rpc PostConnect(PostConnectRequest) returns (PostConnectResponse);
+}
+
+service PluginInvoker {
+  rpc Invoke(PluginInvokeRequest) returns (OperationResult);
 }

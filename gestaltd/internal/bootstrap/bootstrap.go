@@ -134,6 +134,7 @@ type Deps struct {
 	CacheFactory          CacheFactory
 	S3                    map[string]s3store.Client
 	Egress                EgressDeps
+	PluginInvoker         invocation.Invoker
 }
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthProvider, error)
@@ -526,6 +527,9 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		}
 	}()
 
+	pluginInvoker := newLazyInvoker()
+	prepared.Deps.PluginInvoker = pluginInvoker
+
 	providers, providersReady, connAuthResolver, err := buildProviders(ctx, cfg, factories, prepared.Deps)
 	if err != nil {
 		return nil, err
@@ -557,6 +561,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	if err != nil {
 		return nil, err
 	}
+	pluginInvoker.SetTarget(invocation.NewGuarded(sharedInvoker, nil, "plugin", audit, invocation.WithoutRateLimit()))
 	closeAudit := true
 	defer func() {
 		if closeAudit && auditClose != nil {

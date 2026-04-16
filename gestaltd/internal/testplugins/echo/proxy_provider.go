@@ -8,14 +8,25 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 
 	gestalt "github.com/valon-technologies/gestalt/sdk/go"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 )
 
 type proxyProvider struct {
 	inner core.Provider
+}
+
+type invokePluginInput struct {
+	Plugin        string         `json:"plugin"`
+	Operation     string         `json:"operation"`
+	Connection    string         `json:"connection,omitempty"`
+	Instance      string         `json:"instance,omitempty"`
+	RequestHandle string         `json:"request_handle,omitempty"`
+	Params        map[string]any `json:"params,omitempty"`
 }
 
 func newProxyProvider(inner core.Provider) *proxyProvider {
@@ -76,6 +87,19 @@ func (p *proxyProvider) Catalog() *catalog.Catalog {
 			},
 		},
 		catalog.CatalogOperation{
+			ID:        "invoke_plugin",
+			Method:    http.MethodPost,
+			Transport: catalog.TransportPlugin,
+			Parameters: []catalog.CatalogParameter{
+				{Name: "plugin", Type: "string", Description: "Target plugin name", Required: true},
+				{Name: "operation", Type: "string", Description: "Target operation id", Required: true},
+				{Name: "connection", Type: "string", Description: "Optional connection override"},
+				{Name: "instance", Type: "string", Description: "Optional target instance override"},
+				{Name: "request_handle", Type: "string", Description: "Optional request handle override for raw-provider compatibility"},
+				{Name: "params", Type: "object", Description: "Nested params forwarded to the target operation"},
+			},
+		},
+		catalog.CatalogOperation{
 			ID:        "indexeddb_roundtrip",
 			Method:    http.MethodPost,
 			Transport: catalog.TransportPlugin,
@@ -103,6 +127,60 @@ func (p *proxyProvider) Catalog() *catalog.Catalog {
 
 func (p *proxyProvider) Execute(ctx context.Context, operation string, params map[string]any, token string) (*core.OperationResult, error) {
 	switch operation {
+	case "invoke_plugin":
+		input, err := decodeInvokePluginInput(params)
+		if err != nil {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": err.Error()}), nil
+		}
+		if strings.TrimSpace(input.Plugin) == "" {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": "plugin is required"}), nil
+		}
+		if strings.TrimSpace(input.Operation) == "" {
+			return jsonResult(http.StatusBadRequest, map[string]any{"error": "operation is required"}), nil
+		}
+
+		envelope := map[string]any{
+			"ok":                       false,
+			"target_plugin":            input.Plugin,
+			"target_operation":         input.Operation,
+			"used_connection_override": strings.TrimSpace(input.Connection) != "",
+		}
+
+		requestHandle := input.RequestHandle
+		if requestHandle == "" {
+			requestHandle = providerhost.RequestHandleFromContext(ctx)
+		}
+		if requestHandle == "" {
+			envelope["error"] = "request handle is not available"
+			return jsonResult(http.StatusOK, envelope), nil
+		}
+
+		invoker, err := gestalt.Invoker(requestHandle)
+		if err != nil {
+			envelope["error"] = err.Error()
+			return jsonResult(http.StatusOK, envelope), nil
+		}
+		defer func() { _ = invoker.Close() }()
+
+		connection := strings.TrimSpace(input.Connection)
+		instance := strings.TrimSpace(input.Instance)
+		var opts *gestalt.InvokeOptions
+		if connection != "" || instance != "" {
+			opts = &gestalt.InvokeOptions{
+				Connection: connection,
+				Instance:   instance,
+			}
+		}
+		result, err := invoker.Invoke(ctx, input.Plugin, input.Operation, input.Params, opts)
+		if err != nil {
+			envelope["error"] = err.Error()
+			return jsonResult(http.StatusOK, envelope), nil
+		}
+		envelope["ok"] = true
+		envelope["status"] = result.Status
+		envelope["body"] = decodeResultBody(result.Body)
+		return jsonResult(http.StatusOK, envelope), nil
+
 	case "read_env":
 		name, _ := params["name"].(string)
 		val, ok := os.LookupEnv(name)
@@ -240,4 +318,32 @@ func (p *proxyProvider) Execute(ctx context.Context, operation string, params ma
 
 func (p *proxyProvider) Close() error {
 	return nil
+}
+
+func decodeInvokePluginInput(params map[string]any) (invokePluginInput, error) {
+	if params == nil {
+		params = map[string]any{}
+	}
+	var input invokePluginInput
+	data, err := json.Marshal(params)
+	if err != nil {
+		return invokePluginInput{}, err
+	}
+	if err := json.Unmarshal(data, &input); err != nil {
+		return invokePluginInput{}, err
+	}
+	return input, nil
+}
+
+func decodeResultBody(body string) any {
+	var decoded any
+	if err := json.Unmarshal([]byte(body), &decoded); err == nil {
+		return decoded
+	}
+	return body
+}
+
+func jsonResult(status int, body any) *core.OperationResult {
+	data, _ := json.Marshal(body)
+	return &core.OperationResult{Status: status, Body: string(data)}
 }

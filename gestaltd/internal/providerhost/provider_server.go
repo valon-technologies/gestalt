@@ -18,6 +18,8 @@ type ProviderServer struct {
 	provider core.Provider
 }
 
+type requestHandleCtxKey struct{}
+
 func NewProviderServer(provider core.Provider) *ProviderServer {
 	return &ProviderServer{provider: provider}
 }
@@ -33,6 +35,7 @@ func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest)
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
 	ctx = applyRequestContext(ctx, req.GetContext())
+	ctx = WithRequestHandle(ctx, req.GetRequestHandle())
 	if len(req.GetConnectionParams()) > 0 {
 		ctx = core.WithConnectionParams(ctx, req.GetConnectionParams())
 	}
@@ -83,6 +86,15 @@ func applyRequestContext(ctx context.Context, reqCtx *proto.RequestContext) cont
 		})
 	}
 	return ctx
+}
+
+func WithRequestHandle(ctx context.Context, handle string) context.Context {
+	return context.WithValue(ctx, requestHandleCtxKey{}, handle)
+}
+
+func RequestHandleFromContext(ctx context.Context) string {
+	handle, _ := ctx.Value(requestHandleCtxKey{}).(string)
+	return handle
 }
 
 func principalFromProto(subject *proto.SubjectContext) *principal.Principal {

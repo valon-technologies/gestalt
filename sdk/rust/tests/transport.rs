@@ -200,6 +200,7 @@ async fn serves_provider_requests_over_unix_socket() {
                     role: "admin".to_string(),
                 }),
             }),
+            ..ExecuteRequest::default()
         })
         .await
         .expect("execute")

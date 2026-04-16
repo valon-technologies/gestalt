@@ -276,3 +276,105 @@ var IntegrationProvider_ServiceDesc = grpc.ServiceDesc{
 	Streams:  []grpc.StreamDesc{},
 	Metadata: "v1/plugin.proto",
 }
+
+const (
+	PluginInvoker_Invoke_FullMethodName = "/gestalt.provider.v1.PluginInvoker/Invoke"
+)
+
+// PluginInvokerClient is the client API for PluginInvoker service.
+//
+// For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
+type PluginInvokerClient interface {
+	Invoke(ctx context.Context, in *PluginInvokeRequest, opts ...grpc.CallOption) (*OperationResult, error)
+}
+
+type pluginInvokerClient struct {
+	cc grpc.ClientConnInterface
+}
+
+func NewPluginInvokerClient(cc grpc.ClientConnInterface) PluginInvokerClient {
+	return &pluginInvokerClient{cc}
+}
+
+func (c *pluginInvokerClient) Invoke(ctx context.Context, in *PluginInvokeRequest, opts ...grpc.CallOption) (*OperationResult, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(OperationResult)
+	err := c.cc.Invoke(ctx, PluginInvoker_Invoke_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// PluginInvokerServer is the server API for PluginInvoker service.
+// All implementations must embed UnimplementedPluginInvokerServer
+// for forward compatibility.
+type PluginInvokerServer interface {
+	Invoke(context.Context, *PluginInvokeRequest) (*OperationResult, error)
+	mustEmbedUnimplementedPluginInvokerServer()
+}
+
+// UnimplementedPluginInvokerServer must be embedded to have
+// forward compatible implementations.
+//
+// NOTE: this should be embedded by value instead of pointer to avoid a nil
+// pointer dereference when methods are called.
+type UnimplementedPluginInvokerServer struct{}
+
+func (UnimplementedPluginInvokerServer) Invoke(context.Context, *PluginInvokeRequest) (*OperationResult, error) {
+	return nil, status.Error(codes.Unimplemented, "method Invoke not implemented")
+}
+func (UnimplementedPluginInvokerServer) mustEmbedUnimplementedPluginInvokerServer() {}
+func (UnimplementedPluginInvokerServer) testEmbeddedByValue()                       {}
+
+// UnsafePluginInvokerServer may be embedded to opt out of forward compatibility for this service.
+// Use of this interface is not recommended, as added methods to PluginInvokerServer will
+// result in compilation errors.
+type UnsafePluginInvokerServer interface {
+	mustEmbedUnimplementedPluginInvokerServer()
+}
+
+func RegisterPluginInvokerServer(s grpc.ServiceRegistrar, srv PluginInvokerServer) {
+	// If the following call panics, it indicates UnimplementedPluginInvokerServer was
+	// embedded by pointer and is nil.  This will cause panics if an
+	// unimplemented method is ever invoked, so we test this at initialization
+	// time to prevent it from happening at runtime later due to I/O.
+	if t, ok := srv.(interface{ testEmbeddedByValue() }); ok {
+		t.testEmbeddedByValue()
+	}
+	s.RegisterService(&PluginInvoker_ServiceDesc, srv)
+}
+
+func _PluginInvoker_Invoke_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PluginInvokeRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(PluginInvokerServer).Invoke(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: PluginInvoker_Invoke_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(PluginInvokerServer).Invoke(ctx, req.(*PluginInvokeRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+// PluginInvoker_ServiceDesc is the grpc.ServiceDesc for PluginInvoker service.
+// It's only intended for direct use with grpc.RegisterService,
+// and not to be introspected or modified (even as a copy)
+var PluginInvoker_ServiceDesc = grpc.ServiceDesc{
+	ServiceName: "gestalt.provider.v1.PluginInvoker",
+	HandlerType: (*PluginInvokerServer)(nil),
+	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "Invoke",
+			Handler:    _PluginInvoker_Invoke_Handler,
+		},
+	},
+	Streams:  []grpc.StreamDesc{},
+	Metadata: "v1/plugin.proto",
+}

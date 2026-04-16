@@ -75,6 +75,7 @@ func (s *ProviderServer) Execute(ctx context.Context, req *proto.ExecuteRequest)
 		return nil, status.Error(codes.InvalidArgument, "request is required")
 	}
 	ctx = withRequestContext(ctx, req.GetContext())
+	ctx = withRequestHandle(ctx, req.GetRequestHandle())
 	if len(req.GetConnectionParams()) > 0 {
 		ctx = WithConnectionParams(ctx, req.GetConnectionParams())
 	}

@@ -21,6 +21,7 @@ type Request struct {
 	Subject          Subject
 	Credential       Credential
 	Access           Access
+	requestHandle    string
 }
 
 // ConnectionParam returns one resolved connection parameter by name and whether
@@ -31,6 +32,14 @@ func (r Request) ConnectionParam(name string) (string, bool) {
 	}
 	value, ok := r.ConnectionParams[name]
 	return value, ok
+}
+
+func (r Request) RequestHandle() string {
+	return r.requestHandle
+}
+
+func (r Request) Invoker() (*InvokerClient, error) {
+	return Invoker(r.requestHandle)
 }
 
 // Response is the typed handler result marshaled into the provider response body.
@@ -201,6 +210,7 @@ func (r *Router[P]) Execute(ctx context.Context, provider *P, operation string, 
 			Subject:          SubjectFromContext(ctx),
 			Credential:       CredentialFromContext(ctx),
 			Access:           AccessFromContext(ctx),
+			requestHandle:    requestHandleFromContext(ctx),
 		})
 	})
 	if result == nil {

@@ -29,16 +29,17 @@ const (
 )
 
 type ExecConfig struct {
-	Command       string
-	Args          []string
-	Env           map[string]string
-	StaticSpec    StaticProviderSpec
-	Config        map[string]any
-	AllowedHosts  []string
-	DefaultAction egress.PolicyAction
-	HostBinary    string
-	Cleanup       func()
-	HostServices  []HostService
+	Command          string
+	Args             []string
+	Env              map[string]string
+	StaticSpec       StaticProviderSpec
+	Config           map[string]any
+	AllowedHosts     []string
+	DefaultAction    egress.PolicyAction
+	HostBinary       string
+	Cleanup          func()
+	HostServices     []HostService
+	RequestSnapshots *RequestSnapshotStore
 }
 
 type HostService struct {
@@ -68,12 +69,16 @@ func NewExecutableProvider(ctx context.Context, cfg ExecConfig) (core.Provider, 
 	}
 
 	client := proto.NewIntegrationProviderClient(proc.conn)
+	opts := []RemoteProviderOption{WithCloser(proc)}
+	if cfg.RequestSnapshots != nil {
+		opts = append(opts, WithRequestSnapshots(cfg.RequestSnapshots))
+	}
 	prov, err := NewRemoteProvider(
 		ctx,
 		client,
 		cfg.StaticSpec,
 		cfg.Config,
-		WithCloser(proc),
+		opts...,
 	)
 	if err != nil {
 		_ = proc.Close()
