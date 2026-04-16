@@ -21,12 +21,13 @@ export class PluginInvoker {
   constructor(request: Request);
   constructor(requestHandle: string);
   constructor(requestOrHandle: Request | string) {
+    this.requestHandle = normalizeRequestHandle(requestOrHandle);
+
     const socketPath = process.env[ENV_PLUGIN_INVOKER_SOCKET];
     if (!socketPath) {
       throw new Error(`plugin invoker: ${ENV_PLUGIN_INVOKER_SOCKET} is not set`);
     }
 
-    this.requestHandle = normalizeRequestHandle(requestOrHandle);
     const transport = createGrpcTransport({
       baseUrl: "http://localhost",
       nodeOptions: {
@@ -64,7 +65,7 @@ function normalizeRequestHandle(requestOrHandle: Request | string): string {
       : requestOrHandle.requestHandle;
   const trimmed = requestHandle.trim();
   if (!trimmed) {
-    throw new Error("plugin invoker: request handle is required");
+    throw new Error("plugin invoker: request handle is not available");
   }
   return trimmed;
 }
