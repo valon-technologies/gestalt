@@ -131,7 +131,7 @@ func buildProvider(ctx context.Context, name string, entry *config.ProviderEntry
 	case manifestPlugin.IsSpecLoaded() && manifest.Entrypoint == nil:
 		return buildSpecLoadedProvider(ctx, name, entry, manifest, pluginConfig, meta, deps, allowedOperations)
 	case manifestPlugin.IsDeclarative() && manifest.Entrypoint == nil:
-		plan, err := buildPluginConnectionPlan(entry, manifestPlugin)
+		plan, err := config.BuildStaticConnectionPlan(entry, manifestPlugin)
 		if err != nil {
 			return nil, fmt.Errorf("build declarative provider %q: %w", name, err)
 		}
@@ -139,7 +139,7 @@ func buildProvider(ctx context.Context, name string, entry *config.ProviderEntry
 			manifest,
 			nil,
 			providerhost.WithDeclarativeMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
-			providerhost.WithDeclarativeConnectionMode(plan.connectionMode()),
+			providerhost.WithDeclarativeConnectionMode(plan.ConnectionMode()),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("create declarative provider %q: %w", name, err)
@@ -169,10 +169,14 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 	if err != nil {
 		return nil, err
 	}
-	plan, err := buildPluginConnectionPlan(entry, manifestPlugin)
+	plan, err := config.BuildStaticConnectionPlan(entry, manifestPlugin)
 	if err != nil {
 		closeIfPossible(pluginProv)
 		return nil, fmt.Errorf("build executable plugin provider %q: %w", name, err)
+	}
+	mcpURL := ""
+	if resolved, ok := plan.ResolvedSurface(config.SpecSurfaceMCP); ok {
+		mcpURL = resolved.URL
 	}
 	allowedOperations := entry.AllowedOperations
 	if allowedOperations == nil && manifestPlugin != nil {
@@ -191,7 +195,7 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 			manifest,
 			nil,
 			providerhost.WithDeclarativeMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
-			providerhost.WithDeclarativeConnectionMode(plan.connectionMode()),
+			providerhost.WithDeclarativeConnectionMode(plan.ConnectionMode()),
 		)
 		if err != nil {
 			closeIfPossible(pluginProv)
@@ -209,7 +213,7 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 			pluginProv.Description(),
 			firstProviderIconSVG(pluginProv, apiProv),
 			composite.BoundProvider{Provider: pluginProv, Connection: config.PluginConnectionName},
-			composite.BoundProvider{Provider: apiProv, Connection: plan.apiConnection()},
+			composite.BoundProvider{Provider: apiProv, Connection: plan.APIConnection()},
 		)
 		if err != nil {
 			closeIfPossible(apiProv, pluginProv)
@@ -218,7 +222,7 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 		return newProviderBuildResult(name, entry, manifest, pluginConfig, merged, nil, deps)
 	}
 
-	resolved, hasSpecSurface := plan.configuredSpecSurface()
+	resolved, hasSpecSurface := plan.ConfiguredSpecSurface()
 	if !hasSpecSurface {
 		restricted, err := applyAllowedOperations(name, allowedOperations, pluginProv)
 		if err != nil {
@@ -241,7 +245,7 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 		baseURL:              config.EffectiveProviderSpecBaseURL(entry, manifestPlugin),
 		applyResponseMapping: true,
 		providerBuildOptions: func(conn config.ConnectionDef) []provider.BuildOption {
-			return mcpOAuthBuildOpts(conn, manifestPlugin, deps)
+			return mcpOAuthBuildOpts(conn, mcpURL, deps)
 		},
 	}, deps)
 	if err != nil {
@@ -254,7 +258,7 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 		pluginProv.Description(),
 		firstProviderIconSVG(pluginProv, specProv),
 		composite.BoundProvider{Provider: pluginProv, Connection: config.PluginConnectionName},
-		composite.BoundProvider{Provider: specProv, Connection: resolved.connectionName},
+		composite.BoundProvider{Provider: specProv, Connection: resolved.ConnectionName},
 	)
 	if err != nil {
 		closeIfPossible(specProv, pluginProv)
@@ -264,7 +268,7 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 	if specDef != nil {
 		authFallback = &specAuthFallback{
 			definition:     specDef,
-			connectionName: resolved.connectionName,
+			connectionName: resolved.ConnectionName,
 		}
 	}
 	return newProviderBuildResult(name, entry, manifest, pluginConfig, merged, authFallback, deps)
@@ -297,17 +301,21 @@ func newProviderBuildResult(name string, entry *config.ProviderEntry, manifest *
 
 func buildSpecLoadedProvider(ctx context.Context, name string, entry *config.ProviderEntry, manifest *providermanifestv1.Manifest, pluginConfig map[string]any, meta providerMetadata, deps Deps, allowedOperations map[string]*config.OperationOverride) (*ProviderBuildResult, error) {
 	mp := manifest.Spec
-	plan, err := buildPluginConnectionPlan(entry, mp)
+	plan, err := config.BuildStaticConnectionPlan(entry, mp)
 	if err != nil {
 		return nil, fmt.Errorf("build spec-loaded provider %q: %w", name, err)
 	}
-	apiResolved, hasAPI := plan.configuredAPISurface()
-	mcpResolved, hasMCP := plan.resolvedSurface(config.SpecSurfaceMCP)
+	apiResolved, hasAPI := plan.ConfiguredAPISurface()
+	mcpResolved, hasMCP := plan.ResolvedSurface(config.SpecSurfaceMCP)
+	mcpURL := ""
+	if hasMCP {
+		mcpURL = mcpResolved.URL
+	}
 	if !hasAPI && !hasMCP {
 		return nil, fmt.Errorf("build spec-loaded provider %q: no spec URL", name)
 	}
 
-	buildSpec := func(resolved resolvedSpecSurface, allowed map[string]*config.OperationOverride) (core.Provider, *provider.Definition, error) {
+	buildSpec := func(resolved config.ResolvedSpecSurface, allowed map[string]*config.OperationOverride) (core.Provider, *provider.Definition, error) {
 		return buildConfiguredSpecProvider(ctx, name, resolved, meta, specProviderConfig{
 			manifestPlugin:       mp,
 			allowedOperations:    allowed,
@@ -315,7 +323,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, entry *config.Pro
 			baseURL:              config.EffectiveProviderSpecBaseURL(entry, mp),
 			applyResponseMapping: true,
 			providerBuildOptions: func(conn config.ConnectionDef) []provider.BuildOption {
-				return mcpOAuthBuildOpts(conn, mp, deps)
+				return mcpOAuthBuildOpts(conn, mcpURL, deps)
 			},
 		}, deps)
 	}
@@ -334,7 +342,7 @@ func buildSpecLoadedProvider(ctx context.Context, name string, entry *config.Pro
 	}
 	authFallback := &specAuthFallback{
 		definition:     apiDef,
-		connectionName: apiResolved.connectionName,
+		connectionName: apiResolved.ConnectionName,
 	}
 
 	if !hasMCP {
@@ -370,10 +378,10 @@ func buildSpecLoadedProvider(ctx context.Context, name string, entry *config.Pro
 	return newProviderBuildResult(name, entry, manifest, pluginConfig, composite.New(name, apiProv, mcpUp), authFallback, deps)
 }
 
-func loadConfiguredAPIDefinition(ctx context.Context, name string, resolved resolvedSpecSurface, meta providerMetadata, cfg specProviderConfig) (*provider.Definition, error) {
+func loadConfiguredAPIDefinition(ctx context.Context, name string, resolved config.ResolvedSpecSurface, meta providerMetadata, cfg specProviderConfig) (*provider.Definition, error) {
 	def, err := loadSpecDefinition(ctx, name, resolved, cfg.allowedOperations)
 	if err != nil {
-		return nil, fmt.Errorf("load %s definition: %w", resolved.surface, err)
+		return nil, fmt.Errorf("load %s definition: %w", resolved.Surface, err)
 	}
 	if cfg.baseURL != "" {
 		def.BaseURL = cfg.baseURL
@@ -398,33 +406,33 @@ func loadConfiguredAPIDefinition(ctx context.Context, name string, resolved reso
 	return def, nil
 }
 
-func buildConfiguredSpecProvider(ctx context.Context, name string, resolved resolvedSpecSurface, meta providerMetadata, cfg specProviderConfig, deps Deps) (core.Provider, *provider.Definition, error) {
+func buildConfiguredSpecProvider(ctx context.Context, name string, resolved config.ResolvedSpecSurface, meta providerMetadata, cfg specProviderConfig, deps Deps) (core.Provider, *provider.Definition, error) {
 	var buildOpts []provider.BuildOption
 	buildOpts = append(buildOpts, provider.WithEgressCheck(deps.Egress.CheckFunc(cfg.allowedHosts)))
 	if cfg.providerBuildOptions != nil {
-		buildOpts = append(buildOpts, cfg.providerBuildOptions(resolved.connection)...)
+		buildOpts = append(buildOpts, cfg.providerBuildOptions(resolved.Connection)...)
 	}
 
-	switch resolved.surface {
+	switch resolved.Surface {
 	case config.SpecSurfaceOpenAPI, config.SpecSurfaceGraphQL:
 		def, err := loadConfiguredAPIDefinition(ctx, name, resolved, meta, cfg)
 		if err != nil {
 			return nil, nil, err
 		}
-		prov, err := provider.Build(def, resolved.connection, buildOpts...)
+		prov, err := provider.Build(def, resolved.Connection, buildOpts...)
 		if err != nil {
 			return nil, nil, err
 		}
 		return prov, def, nil
 	case config.SpecSurfaceMCP:
-		connMode := core.ConnectionMode(resolved.connection.Mode)
+		connMode := core.ConnectionMode(resolved.Connection.Mode)
 		if connMode == "" {
 			connMode = core.ConnectionModeUser
 		}
 		up, err := mcpupstream.New(
 			ctx,
 			name,
-			resolved.url,
+			resolved.URL,
 			connMode,
 			manifestHeaders(cfg.manifestPlugin),
 			deps.Egress.CheckFunc(cfg.allowedHosts),
@@ -441,18 +449,18 @@ func buildConfiguredSpecProvider(ctx context.Context, name string, resolved reso
 		}
 		return up, nil, nil
 	default:
-		return nil, nil, fmt.Errorf("unsupported spec surface %q", resolved.surface)
+		return nil, nil, fmt.Errorf("unsupported spec surface %q", resolved.Surface)
 	}
 }
 
-func loadSpecDefinition(ctx context.Context, name string, resolved resolvedSpecSurface, allowedOperations map[string]*config.OperationOverride) (*provider.Definition, error) {
-	switch resolved.surface {
+func loadSpecDefinition(ctx context.Context, name string, resolved config.ResolvedSpecSurface, allowedOperations map[string]*config.OperationOverride) (*provider.Definition, error) {
+	switch resolved.Surface {
 	case config.SpecSurfaceOpenAPI:
-		return openapi.LoadDefinition(ctx, name, resolved.url, allowedOperations)
+		return openapi.LoadDefinition(ctx, name, resolved.URL, allowedOperations)
 	case config.SpecSurfaceGraphQL:
-		return graphql.LoadDefinition(ctx, name, resolved.url, allowedOperations)
+		return graphql.LoadDefinition(ctx, name, resolved.URL, allowedOperations)
 	default:
-		return nil, fmt.Errorf("unsupported spec definition surface %q", resolved.surface)
+		return nil, fmt.Errorf("unsupported spec definition surface %q", resolved.Surface)
 	}
 }
 
@@ -854,7 +862,7 @@ func buildPluginStaticSpec(name string, entry *config.ProviderEntry, manifest *p
 	if manifest == nil || manifest.Spec == nil {
 		return providerhost.StaticProviderSpec{}, fmt.Errorf("resolved manifest is required")
 	}
-	plan, err := buildPluginConnectionPlan(entry, manifest.Spec)
+	plan, err := config.BuildStaticConnectionPlan(entry, manifest.Spec)
 	if err != nil {
 		return providerhost.StaticProviderSpec{}, err
 	}
@@ -874,8 +882,8 @@ func buildPluginStaticSpec(name string, entry *config.ProviderEntry, manifest *p
 		}
 	}
 
-	conn := config.EffectivePluginConnectionDef(entry, manifest.Spec)
-	connMode := plan.connectionMode()
+	conn := plan.PluginConnection()
+	connMode := plan.ConnectionMode()
 
 	var staticCatalog *catalog.Catalog
 	if manifestRoot := filepath.Dir(entry.ResolvedManifestPath); entry.ResolvedManifestPath != "" {
@@ -928,12 +936,12 @@ func staticAuthTypes(authType providermanifestv1.AuthType) []string {
 	}
 }
 
-func mcpOAuthBuildOpts(conn config.ConnectionDef, manifestPlugin *providermanifestv1.Spec, deps Deps) []provider.BuildOption {
-	if manifestPlugin == nil || conn.Auth.Type != providermanifestv1.AuthTypeMCPOAuth || manifestPlugin.MCPURL() == "" {
+func mcpOAuthBuildOpts(conn config.ConnectionDef, mcpURL string, deps Deps) []provider.BuildOption {
+	if conn.Auth.Type != providermanifestv1.AuthTypeMCPOAuth || mcpURL == "" {
 		return nil
 	}
 	return []provider.BuildOption{
-		provider.WithAuthHandler(buildMCPOAuthHandler(conn, manifestPlugin.MCPURL(), buildRegistrationStore(deps), deps)),
+		provider.WithAuthHandler(buildMCPOAuthHandler(conn, mcpURL, buildRegistrationStore(deps), deps)),
 	}
 }
 

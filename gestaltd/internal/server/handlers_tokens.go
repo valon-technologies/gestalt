@@ -10,7 +10,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/valon-technologies/gestalt/server/core"
-	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
@@ -187,32 +186,19 @@ func (s *Server) connectionInfosForPlugin(integration string, plugin *config.Pro
 	if plugin == nil {
 		return []connectionDefInfo{}
 	}
-	manifestProvider := plugin.ManifestSpec()
-
-	names, err := bootstrap.AdvertisedConnectionNames(plugin)
+	plan, err := config.BuildStaticConnectionPlan(plugin, plugin.ManifestSpec())
 	if err != nil {
 		return []connectionDefInfo{}
 	}
+	names := plan.AdvertisedConnectionNames()
 	infos := make([]connectionDefInfo, 0, len(names))
 	for _, name := range names {
-		if name == config.PluginConnectionName {
-			effectivePluginConn := config.EffectivePluginConnectionDef(plugin, manifestProvider)
-			if !userFacingConnection(effectivePluginConn) {
-				continue
-			}
-			if info, ok := s.connectionInfoFromAuth(integration, config.PluginConnectionAlias, effectivePluginConn, integrationAuthTypes, defaultCredentialFields, false); ok {
-				infos = append(infos, info)
-			}
+		conn, ok := plan.LookupConnection(name)
+		if !ok || !userFacingConnection(conn) {
 			continue
 		}
-		conn, ok := config.EffectiveNamedConnectionDef(plugin, manifestProvider, name)
-		if ok {
-			if !userFacingConnection(conn) {
-				continue
-			}
-			if info, ok := s.connectionInfoFromAuth(integration, name, conn, integrationAuthTypes, defaultCredentialFields, true); ok {
-				infos = append(infos, info)
-			}
+		if info, ok := s.connectionInfoFromAuth(integration, userFacingConnectionName(name), conn, integrationAuthTypes, defaultCredentialFields, name != config.PluginConnectionName); ok {
+			infos = append(infos, info)
 		}
 	}
 

@@ -831,54 +831,36 @@ func pluginOwnedUIRefs(cfg *Config) map[string]struct{} {
 	return refs
 }
 
-type inlineConnectionReference struct {
-	field    string
-	name     string
-	required bool
-	context  string
-}
-
-func manifestBackedConnectionReferences(plugin *ProviderEntry, provider *providermanifestv1.Spec) []inlineConnectionReference {
-	if provider == nil {
+func validateExecutableConnectionAuthSupport(name string, plan *StaticConnectionPlan, plugin *ProviderEntry, provider *providermanifestv1.Spec) error {
+	supportsMCPOAuth := false
+	if plan != nil {
+		_, supportsMCPOAuth = plan.ResolvedSurface(SpecSurfaceMCP)
+		if conn := plan.PluginConnection(); conn.Auth.Type == providermanifestv1.AuthTypeMCPOAuth && !supportsMCPOAuth {
+			return fmt.Errorf("config validation: integration %q plugin auth type %q requires an MCP surface", name, providermanifestv1.AuthTypeMCPOAuth)
+		}
+		for _, connName := range plan.NamedConnectionNames() {
+			conn, _ := plan.NamedConnectionDef(connName)
+			if conn.Auth.Type != providermanifestv1.AuthTypeMCPOAuth {
+				continue
+			}
+			if !supportsMCPOAuth {
+				return fmt.Errorf("config validation: integration %q connection %q auth type %q requires an MCP surface", name, connName, providermanifestv1.AuthTypeMCPOAuth)
+			}
+		}
 		return nil
 	}
 
-	defaultConnection := provider.DefaultConnection
-	if plugin != nil && plugin.DefaultConnection != "" {
-		defaultConnection = plugin.DefaultConnection
-	}
-	if defaultConnection == "" {
-		return nil
-	}
-	return []inlineConnectionReference{
-		{
-			field: "plugin.defaultConnection",
-			name:  defaultConnection,
-		},
-	}
-}
-
-func validateManifestBackedConnectionReferences(name string, plugin *ProviderEntry, provider *providermanifestv1.Spec) error {
-	return validateConnectionReferences(name, declaredManifestBackedConnections(plugin, provider), manifestBackedConnectionReferences(plugin, provider))
-}
-
-func validateManifestBackedConnectionDefaults(name string, plugin *ProviderEntry, provider *providermanifestv1.Spec) error {
-	return validateConnectionDefaults(name, "integration", len(declaredManifestBackedConnections(plugin, provider)), manifestBackedConnectionReferences(plugin, provider))
-}
-
-func validateExecutableConnectionAuthSupport(name string, plugin *ProviderEntry, provider *providermanifestv1.Spec) error {
-	supportsMCPOAuth := provider != nil && provider.MCPURL() != ""
+	supportsMCPOAuth = provider != nil && provider.MCPURL() != ""
 	if conn := EffectivePluginConnectionDef(plugin, provider); conn.Auth.Type == providermanifestv1.AuthTypeMCPOAuth && !supportsMCPOAuth {
 		return fmt.Errorf("config validation: integration %q plugin auth type %q requires an MCP surface", name, providermanifestv1.AuthTypeMCPOAuth)
 	}
 
-	declared := declaredManifestBackedConnections(plugin, provider)
-	declaredNames := make([]string, 0, len(declared))
-	for connName := range declared {
-		declaredNames = append(declaredNames, connName)
+	names := make([]string, 0, len(namedConnectionNames(plugin, provider)))
+	for connName := range namedConnectionNames(plugin, provider) {
+		names = append(names, connName)
 	}
-	sort.Strings(declaredNames)
-	for _, connName := range declaredNames {
+	sort.Strings(names)
+	for _, connName := range names {
 		conn, ok := EffectiveNamedConnectionDef(plugin, provider, connName)
 		if !ok || conn.Auth.Type != providermanifestv1.AuthTypeMCPOAuth {
 			continue
@@ -890,90 +872,40 @@ func validateExecutableConnectionAuthSupport(name string, plugin *ProviderEntry,
 	return nil
 }
 
-func validateConnectionReferences(name string, declared map[string]struct{}, refs []inlineConnectionReference) error {
-	for _, ref := range refs {
-		if ref.name == "" {
-			continue
-		}
-		resolved := ResolveConnectionAlias(ref.name)
-		if resolved == PluginConnectionName {
-			continue
-		}
-		if _, ok := declared[resolved]; ok {
-			continue
-		}
-		return fmt.Errorf("config validation: integration %q %s references undeclared connection %q", name, ref.field, ref.name)
-	}
-	return nil
-}
-
-func validateConnectionDefaults(name, subject string, declaredCount int, refs []inlineConnectionReference) error {
-	if declaredCount == 0 {
-		return nil
-	}
-	for _, ref := range refs {
-		if ref.required && ref.name == "" {
-			return fmt.Errorf("config validation: %s %q %s is required when %s", subject, name, ref.field, ref.context)
-		}
-	}
-	return nil
-}
-
-func declaredManifestBackedConnections(plugin *ProviderEntry, provider *providermanifestv1.Spec) map[string]struct{} {
-	size := 0
-	if plugin != nil {
-		size += len(plugin.Connections)
-	}
-	if provider != nil {
-		size += len(provider.Connections)
-	}
-	declared := make(map[string]struct{}, size)
-	if provider != nil {
-		for rawName := range provider.Connections {
-			addDeclaredConnection(declared, rawName)
-		}
-	}
-	if plugin != nil {
-		for rawName := range plugin.Connections {
-			addDeclaredConnection(declared, rawName)
-		}
-	}
-	return declared
-}
-
-func addDeclaredConnection(declared map[string]struct{}, rawName string) {
-	resolved := ResolveConnectionAlias(rawName)
-	if resolved == "" {
-		return
-	}
-	declared[resolved] = struct{}{}
-}
-
 func validateManifestBackedIntegration(name string, entry *ProviderEntry) error {
 	if entry == nil {
 		return nil
 	}
 	effectiveProvider := entry.ManifestSpec()
+	var plan *StaticConnectionPlan
 	if effectiveProvider != nil {
-		if err := validateManifestBackedConnectionReferences(name, entry, effectiveProvider); err != nil {
-			return err
+		resolvedPlan, err := BuildStaticConnectionPlan(entry, effectiveProvider)
+		if err != nil {
+			return fmt.Errorf("config validation: integration %q %w", name, err)
 		}
-		if err := validateManifestBackedConnectionDefaults(name, entry, effectiveProvider); err != nil {
-			return err
-		}
+		plan = &resolvedPlan
 	}
-	if err := validateExecutableConnectionAuthSupport(name, entry, effectiveProvider); err != nil {
+	if err := validateExecutableConnectionAuthSupport(name, plan, entry, effectiveProvider); err != nil {
 		return err
 	}
-	if err := validateConnectionAuthMappings(name, EffectivePluginConnectionDef(entry, effectiveProvider).Auth, "plugin"); err != nil {
+	pluginConnection := EffectivePluginConnectionDef(entry, effectiveProvider)
+	if plan != nil {
+		pluginConnection = plan.PluginConnection()
+	}
+	if err := validateConnectionAuthMappings(name, pluginConnection.Auth, "plugin"); err != nil {
 		return err
 	}
-	declared := declaredManifestBackedConnections(entry, effectiveProvider)
-	names := make([]string, 0, len(declared))
-	for connName := range declared {
-		if connName == PluginConnectionName {
-			continue
+	if plan != nil {
+		for _, connName := range plan.NamedConnectionNames() {
+			conn, _ := plan.NamedConnectionDef(connName)
+			if err := validateConnectionAuthMappings(name, conn.Auth, fmt.Sprintf("connection %q", connName)); err != nil {
+				return err
+			}
 		}
+		return nil
+	}
+	names := make([]string, 0, len(namedConnectionNames(entry, effectiveProvider)))
+	for connName := range namedConnectionNames(entry, effectiveProvider) {
 		names = append(names, connName)
 	}
 	sort.Strings(names)

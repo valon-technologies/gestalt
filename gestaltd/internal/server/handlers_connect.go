@@ -370,11 +370,11 @@ func (s *Server) effectiveConnectionAuth(integration, connection string) config.
 	if !ok || entry == nil {
 		return config.ConnectionAuthDef{}
 	}
-	manifestProvider := entry.ManifestSpec()
-	if connection == config.PluginConnectionName {
-		return config.EffectivePluginConnectionDef(entry, manifestProvider).Auth
+	plan, err := config.BuildStaticConnectionPlan(entry, entry.ManifestSpec())
+	if err != nil {
+		return config.ConnectionAuthDef{}
 	}
-	conn, ok := config.EffectiveNamedConnectionDef(entry, manifestProvider, connection)
+	conn, ok := plan.LookupConnection(connection)
 	if !ok {
 		return config.ConnectionAuthDef{}
 	}

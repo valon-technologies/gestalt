@@ -506,6 +506,95 @@ spec:
 	}
 }
 
+func TestLoadForExecutionAtPath_RejectsUndeclaredManifestSurfaceConnections(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name        string
+		surfaceYAML string
+		wantErr     string
+	}{
+		{
+			name: "rest",
+			surfaceYAML: `    rest:
+      baseUrl: https://example.com
+      connection: workspace
+      operations:
+        - name: ping
+          method: GET
+          path: /ping
+`,
+			wantErr: `rest connection references undeclared connection "workspace"`,
+		},
+		{
+			name: "openapi",
+			surfaceYAML: `    openapi:
+      document: https://example.com/openapi.json
+      connection: workspace
+`,
+			wantErr: `openapi_connection references undeclared connection "workspace"`,
+		},
+		{
+			name: "graphql",
+			surfaceYAML: `    graphql:
+      url: https://example.com/graphql
+      connection: workspace
+`,
+			wantErr: `graphql_connection references undeclared connection "workspace"`,
+		},
+		{
+			name: "mcp",
+			surfaceYAML: `    mcp:
+      url: https://example.com/mcp
+      connection: workspace
+`,
+			wantErr: `mcp_connection references undeclared connection "workspace"`,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			manifestPath := filepath.Join(dir, "manifest.yaml")
+			manifest := fmt.Sprintf(`kind: plugin
+source: github.com/testowner/plugins/example
+version: 0.0.1-alpha.1
+displayName: Example
+spec:
+  auth:
+    type: none
+  surfaces:
+%s`, tc.surfaceYAML)
+			if err := os.WriteFile(manifestPath, []byte(manifest), 0o644); err != nil {
+				t.Fatalf("WriteFile manifest: %v", err)
+			}
+
+			cfgPath := filepath.Join(dir, "config.yaml")
+			cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `plugins:
+    example:
+      source:
+        path: ./manifest.yaml
+` + `server:
+` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`
+			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+				t.Fatalf("WriteFile config: %v", err)
+			}
+
+			_, _, err := NewLifecycle(nil).LoadForExecutionAtPath(cfgPath, false)
+			if err == nil {
+				t.Fatalf("LoadForExecutionAtPath: expected error containing %q", tc.wantErr)
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("LoadForExecutionAtPath error = %v, want substring %q", err, tc.wantErr)
+			}
+		})
+	}
+}
+
 func TestInitAtPath_RejectsInvalidPluginInvokesShape(t *testing.T) {
 	t.Parallel()
 

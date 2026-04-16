@@ -922,6 +922,44 @@ func TestPluginManifestNamedOAuthKeepsProviderTokenMode(t *testing.T) {
 	}
 }
 
+func TestPreparedProviderStub_UsesManifestConnectionPlanMode(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"echoauth": {
+				Source: config.ProviderSource{Ref: "github.com/acme/plugins/test", Version: "1.0.0"},
+				ResolvedManifest: &providermanifestv1.Manifest{
+					DisplayName: "Echo Auth",
+					Spec: &providermanifestv1.Spec{
+						ConnectionMode: providermanifestv1.ConnectionModeIdentity,
+						Connections: map[string]*providermanifestv1.ManifestConnectionDef{
+							"workspace": {
+								Mode: providermanifestv1.ConnectionModeUser,
+								Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("echoauth")
+	if err != nil {
+		t.Fatalf("providers.Get(echoauth): %v", err)
+	}
+	if prov.ConnectionMode() != core.ConnectionModeEither {
+		t.Fatalf("ConnectionMode = %q, want %q", prov.ConnectionMode(), core.ConnectionModeEither)
+	}
+}
+
 func TestPluginProcessEnvIsolation(t *testing.T) {
 	t.Parallel()
 	bin := buildEchoPluginBinary(t)

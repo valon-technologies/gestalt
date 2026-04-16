@@ -127,6 +127,10 @@ func newPreparedProviderStub(name string, entry *config.ProviderEntry) (core.Pro
 		return nil, fmt.Errorf("prepared manifest is not resolved")
 	}
 	manifest := entry.ResolvedManifest
+	plan, err := config.BuildStaticConnectionPlan(entry, entry.ManifestSpec())
+	if err != nil {
+		return nil, err
+	}
 	displayName := manifest.DisplayName
 	if displayName == "" {
 		displayName = name
@@ -139,7 +143,7 @@ func newPreparedProviderStub(name string, entry *config.ProviderEntry) (core.Pro
 		name:           name,
 		displayName:    displayName,
 		description:    description,
-		connectionMode: connectionModeFromEntry(entry),
+		connectionMode: plan.ConnectionMode(),
 	}, nil
 }
 
@@ -163,27 +167,4 @@ func (p *preparedProviderStub) Catalog() *catalog.Catalog {
 }
 func (p *preparedProviderStub) Execute(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
 	return nil, fmt.Errorf("prepared validation stub cannot execute operations")
-}
-
-func connectionModeFromEntry(entry *config.ProviderEntry) core.ConnectionMode {
-	if entry == nil {
-		return core.ConnectionModeUser
-	}
-
-	plan := pluginConnectionPlan{
-		namedConnections: make(map[string]config.ConnectionDef, len(entry.Connections)),
-	}
-	if entry.ConnectionMode != "" {
-		plan.pluginConnection.Mode = entry.ConnectionMode
-	}
-	if entry.Auth != nil {
-		plan.pluginConnection.Auth = *entry.Auth
-	}
-	for name, conn := range entry.Connections {
-		if conn == nil {
-			continue
-		}
-		plan.namedConnections[name] = *conn
-	}
-	return plan.connectionMode()
 }
