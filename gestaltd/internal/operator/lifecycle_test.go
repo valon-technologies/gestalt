@@ -558,6 +558,11 @@ plugins:
 				t.Fatalf("AuthorizationPolicy = %q, want %q", got, tc.wantPolicy)
 			}
 			if tc.wantPolicy != "" {
+				if got := entry.OwnerPlugin; got != "roadmap" {
+					t.Fatalf("OwnerPlugin = %q, want %q", got, "roadmap")
+				}
+			}
+			if tc.wantPolicy != "" {
 				plugin := loaded.Plugins["roadmap"]
 				if plugin == nil {
 					t.Fatal(`Plugins["roadmap"] = nil`)
