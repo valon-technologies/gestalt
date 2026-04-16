@@ -50,6 +50,16 @@ type DeclarativeProvider struct {
 	authorizationURL string
 }
 
+func CatalogFromDeclarativeManifest(manifest *providermanifestv1.Manifest) (*catalog.Catalog, error) {
+	if manifest == nil {
+		return nil, fmt.Errorf("manifest is required")
+	}
+	if manifest.Spec == nil || !manifest.Spec.IsDeclarative() {
+		return nil, fmt.Errorf("manifest is not a declarative provider")
+	}
+	return declarativeCatalog(manifest, declarativeOptions{}), nil
+}
+
 func NewDeclarativeProvider(manifest *providermanifestv1.Manifest, httpClient *http.Client, opts ...DeclarativeProviderOption) (*DeclarativeProvider, error) {
 	if manifest == nil {
 		return nil, fmt.Errorf("manifest is required")

@@ -428,6 +428,116 @@ paths:
 	}
 }
 
+func TestHybridExecutableProviderAppliesAllowedOperationsToStaticAndDeclarativeCatalogs(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "hybrid",
+		Operations: []catalog.CatalogOperation{
+			{ID: "echo", Method: http.MethodPost, Parameters: []catalog.CatalogParameter{{Name: "message", Type: "string", Required: true}}},
+		},
+	})
+
+	manifest := newExecutableManifest("Hybrid", "Hybrid provider")
+	manifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: "ignored-for-command-mode"}
+	manifest.Spec.Surfaces = &providermanifestv1.ProviderSurfaces{
+		REST: &providermanifestv1.RESTSurface{
+			BaseURL: "https://api.example.test",
+			Operations: []providermanifestv1.ProviderOperation{
+				{Name: "status", Method: http.MethodGet, Path: "/status"},
+			},
+		},
+	}
+	manifestPath := filepath.Join(manifestRoot, "manifest.yaml")
+
+	cfg := &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"hybrid": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: manifestPath,
+				AllowedOperations: map[string]*config.OperationOverride{
+					"echo":   {Alias: "renamed_echo"},
+					"status": {Alias: "renamed_status"},
+				},
+			},
+		},
+	}
+
+	providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{})
+	if err != nil {
+		t.Fatalf("buildProvidersStrict: %v", err)
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("hybrid")
+	if err != nil {
+		t.Fatalf("providers.Get(hybrid): %v", err)
+	}
+	cat := prov.Catalog()
+	if cat == nil {
+		t.Fatal("Catalog() = nil")
+	}
+
+	hasOperation := func(id string) bool {
+		return slices.ContainsFunc(cat.Operations, func(op catalog.CatalogOperation) bool {
+			return op.ID == id
+		})
+	}
+	if !hasOperation("renamed_echo") || !hasOperation("renamed_status") {
+		t.Fatalf("catalog operations = %+v, want renamed static and declarative operations", cat.Operations)
+	}
+	if hasOperation("echo") || hasOperation("status") {
+		t.Fatalf("catalog operations = %+v, want original operation ids hidden", cat.Operations)
+	}
+
+	t.Run("without static catalog", func(t *testing.T) {
+		root := t.TempDir()
+
+		manifest := newExecutableManifest("Hybrid", "Hybrid provider")
+		manifest.Entrypoint = &providermanifestv1.Entrypoint{ArtifactPath: "ignored-for-command-mode"}
+		manifest.Spec.Surfaces = &providermanifestv1.ProviderSurfaces{
+			REST: &providermanifestv1.RESTSurface{
+				BaseURL: "https://api.example.test",
+				Operations: []providermanifestv1.ProviderOperation{
+					{Name: "status", Method: http.MethodGet, Path: "/status"},
+				},
+			},
+		}
+
+		cfg := &config.Config{
+			Plugins: map[string]*config.ProviderEntry{
+				"hybrid": {
+					Command:              bin,
+					Args:                 []string{"provider"},
+					ResolvedManifest:     manifest,
+					ResolvedManifestPath: filepath.Join(root, "manifest.yaml"),
+					AllowedOperations: map[string]*config.OperationOverride{
+						"status": {Alias: "renamed_status"},
+					},
+				},
+			},
+		}
+
+		providers, _, err := buildProvidersStrict(context.Background(), cfg, NewFactoryRegistry(), Deps{})
+		if err != nil {
+			t.Fatalf("buildProvidersStrict: %v", err)
+		}
+		defer func() { _ = CloseProviders(providers) }()
+
+		prov, err := providers.Get("hybrid")
+		if err != nil {
+			t.Fatalf("providers.Get(hybrid): %v", err)
+		}
+		cat := prov.Catalog()
+		if cat == nil || len(cat.Operations) != 1 || cat.Operations[0].ID != "renamed_status" {
+			t.Fatalf("catalog = %+v, want only renamed_status from the declarative surface", cat)
+		}
+	})
+}
+
 func TestSpecLoadedDualSurfaceProviderBuildsMCPOperations(t *testing.T) {
 	t.Parallel()
 

@@ -270,6 +270,117 @@ func writeLocalMCPSpecPlugin(t *testing.T, dir, name string) string {
 	return manifestPath
 }
 
+func writeLocalDeclarativePlugin(t *testing.T, dir, name string, operations ...string) string {
+	t.Helper()
+
+	root := filepath.Join(dir, name)
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", root, err)
+	}
+	manifestPath := filepath.Join(root, "manifest.yaml")
+	ops := make([]providermanifestv1.ProviderOperation, 0, len(operations))
+	for _, operation := range operations {
+		ops = append(ops, providermanifestv1.ProviderOperation{
+			Name:   operation,
+			Method: http.MethodGet,
+			Path:   "/" + operation,
+		})
+	}
+	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindPlugin,
+		Source:      "github.com/test/plugins/" + name,
+		Version:     "0.0.1-alpha.1",
+		DisplayName: testDisplayName(name),
+		Spec: &providermanifestv1.Spec{
+			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+			Surfaces: &providermanifestv1.ProviderSurfaces{
+				REST: &providermanifestv1.RESTSurface{
+					BaseURL:    "https://api.example.test",
+					Operations: ops,
+				},
+			},
+		},
+	}, providerpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeSourceManifestFormat(%s): %v", name, err)
+	}
+	if err := os.WriteFile(manifestPath, manifest, 0o644); err != nil {
+		t.Fatalf("WriteFile(%s): %v", manifestPath, err)
+	}
+	return manifestPath
+}
+
+func writeLocalExecutableAndDeclarativePlugin(t *testing.T, dir, name string, staticOps, declarativeOps []string) string {
+	t.Helper()
+
+	root := filepath.Join(dir, name)
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", root, err)
+	}
+
+	artifactPath := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "plugin"))
+	artifactFullPath := filepath.Join(root, filepath.FromSlash(artifactPath))
+	if err := os.MkdirAll(filepath.Dir(artifactFullPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s): %v", filepath.Dir(artifactFullPath), err)
+	}
+	artifactContent := []byte(name + "-binary")
+	if err := os.WriteFile(artifactFullPath, artifactContent, 0o755); err != nil {
+		t.Fatalf("WriteFile(%s): %v", artifactFullPath, err)
+	}
+	artifactSum := sha256.Sum256(artifactContent)
+
+	manifestPath := filepath.Join(root, "manifest.yaml")
+	ops := make([]providermanifestv1.ProviderOperation, 0, len(declarativeOps))
+	for _, operation := range declarativeOps {
+		ops = append(ops, providermanifestv1.ProviderOperation{
+			Name:   operation,
+			Method: http.MethodGet,
+			Path:   "/" + operation,
+		})
+	}
+	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindPlugin,
+		Source:      "github.com/test/plugins/" + name,
+		Version:     "0.0.1-alpha.1",
+		DisplayName: testDisplayName(name),
+		Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: artifactPath},
+		Artifacts: []providermanifestv1.Artifact{{
+			OS:     runtime.GOOS,
+			Arch:   runtime.GOARCH,
+			Path:   artifactPath,
+			SHA256: hex.EncodeToString(artifactSum[:]),
+		}},
+		Spec: &providermanifestv1.Spec{
+			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+			Surfaces: &providermanifestv1.ProviderSurfaces{
+				REST: &providermanifestv1.RESTSurface{
+					BaseURL:    "https://api.example.test",
+					Operations: ops,
+				},
+			},
+		},
+	}, providerpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeSourceManifestFormat(%s): %v", name, err)
+	}
+	if err := os.WriteFile(manifestPath, manifest, 0o644); err != nil {
+		t.Fatalf("WriteFile(%s): %v", manifestPath, err)
+	}
+
+	var builder strings.Builder
+	if len(staticOps) > 0 {
+		builder.WriteString("name: " + name + "\noperations:\n")
+		for _, operation := range staticOps {
+			builder.WriteString("  - id: " + operation + "\n")
+			builder.WriteString("    method: GET\n")
+		}
+		if err := os.WriteFile(filepath.Join(root, "catalog.yaml"), []byte(builder.String()), 0o644); err != nil {
+			t.Fatalf("WriteFile(catalog.yaml): %v", err)
+		}
+	}
+	return manifestPath
+}
+
 func writeLocalOpenAPIAndMCPSpecPlugin(t *testing.T, dir, name string) string {
 	t.Helper()
 
@@ -728,33 +839,87 @@ func TestInitAtPath_RejectsInvalidPluginInvokesShape(t *testing.T) {
 func TestInitAtPath_AllowsInvokesAgainstEffectiveAlias(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-	callerManifestPath := writeLocalExecutablePlugin(t, dir, "caller", "invoke")
-	targetManifestPath := writeLocalExecutablePlugin(t, dir, "target", "ping")
+	cases := []struct {
+		name             string
+		buildTarget      func(t *testing.T, dir string) string
+		operation        string
+		targetConfigYAML string
+	}{
+		{
+			name:        "static executable alias",
+			buildTarget: func(t *testing.T, dir string) string { return writeLocalExecutablePlugin(t, dir, "target", "ping") },
+			operation:   "renamed_ping",
+			targetConfigYAML: `      allowedOperations:
+        ping:
+          alias: renamed_ping
+`,
+		},
+		{
+			name: "executable declarative alias",
+			buildTarget: func(t *testing.T, dir string) string {
+				return writeLocalExecutableAndDeclarativePlugin(t, dir, "target", []string{"echo"}, []string{"status"})
+			},
+			operation: "renamed_status",
+			targetConfigYAML: `      allowedOperations:
+        echo:
+          alias: renamed_echo
+        status:
+          alias: renamed_status
+`,
+		},
+		{
+			name:        "declarative-only alias",
+			buildTarget: func(t *testing.T, dir string) string { return writeLocalDeclarativePlugin(t, dir, "target", "status") },
+			operation:   "renamed_status",
+			targetConfigYAML: `      allowedOperations:
+        status:
+          alias: renamed_status
+`,
+		},
+		{
+			name: "executable declarative alias without static catalog",
+			buildTarget: func(t *testing.T, dir string) string {
+				return writeLocalExecutableAndDeclarativePlugin(t, dir, "target", nil, []string{"status"})
+			},
+			operation: "renamed_status",
+			targetConfigYAML: `      allowedOperations:
+        status:
+          alias: renamed_status
+`,
+		},
+	}
 
-	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			callerManifestPath := writeLocalExecutablePlugin(t, dir, "caller", "invoke")
+			targetManifestPath := tc.buildTarget(t, dir)
+
+			cfgPath := filepath.Join(dir, "config.yaml")
+			cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
     caller:
       source:
         path: %q
       invokes:
         - plugin: target
-          operation: renamed_ping
+          operation: %s
     target:
       source:
         path: %q
-      allowedOperations:
-        ping:
-          alias: renamed_ping
-server:
-`, callerManifestPath, targetManifestPath) + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+%sserver:
+`, callerManifestPath, tc.operation, targetManifestPath, tc.targetConfigYAML) + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
+			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+				t.Fatalf("WriteFile config: %v", err)
+			}
 
-	if _, err := NewLifecycle(nil).InitAtPath(cfgPath); err != nil {
-		t.Fatalf("InitAtPath: %v", err)
+			if _, err := NewLifecycle(nil).InitAtPath(cfgPath); err != nil {
+				t.Fatalf("InitAtPath: %v", err)
+			}
+		})
 	}
 }
 
@@ -930,37 +1095,79 @@ server:
 	}
 }
 
-func TestInitAtPath_RejectsHybridMCPTypoAsUnknownOperation(t *testing.T) {
+func TestInitAtPath_RejectsUnknownOperationInvokesTargets(t *testing.T) {
 	t.Parallel()
 
-	dir := t.TempDir()
-	callerManifestPath := writeLocalExecutablePlugin(t, dir, "caller", "invoke")
-	targetManifestPath := writeLocalOpenAPIAndMCPSpecPlugin(t, dir, "target")
+	cases := []struct {
+		name             string
+		buildTarget      func(t *testing.T, dir string) string
+		operation        string
+		targetConfigYAML string
+		wantError        string
+	}{
+		{
+			name:        "hybrid mcp typo",
+			buildTarget: func(t *testing.T, dir string) string { return writeLocalOpenAPIAndMCPSpecPlugin(t, dir, "target") },
+			operation:   "private_search",
+			wantError:   `unknown effective operation "private_search" on plugin "target"`,
+		},
+		{
+			name:        "declarative typo",
+			buildTarget: func(t *testing.T, dir string) string { return writeLocalDeclarativePlugin(t, dir, "target", "status") },
+			operation:   "private_status",
+			wantError:   `unknown effective operation "private_status" on plugin "target"`,
+		},
+		{
+			name: "executable declarative alias mismatch",
+			buildTarget: func(t *testing.T, dir string) string {
+				return writeLocalExecutableAndDeclarativePlugin(t, dir, "target", []string{"echo"}, []string{"status"})
+			},
+			operation: "status",
+			targetConfigYAML: `      allowedOperations:
+        echo:
+          alias: renamed_echo
+        status:
+          alias: renamed_status
+`,
+			wantError: `unknown effective operation "status" on plugin "target"`,
+		},
+	}
 
-	cfgPath := filepath.Join(dir, "config.yaml")
-	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			callerManifestPath := writeLocalExecutablePlugin(t, dir, "caller", "invoke")
+			targetManifestPath := tc.buildTarget(t, dir)
+
+			cfgPath := filepath.Join(dir, "config.yaml")
+			cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
     caller:
       source:
         path: %q
       invokes:
         - plugin: target
-          operation: private_search
+          operation: %s
     target:
       source:
         path: %q
-server:
-`, callerManifestPath, targetManifestPath) + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+%sserver:
+`, callerManifestPath, tc.operation, targetManifestPath, tc.targetConfigYAML) + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 `
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
-		t.Fatalf("WriteFile config: %v", err)
-	}
+			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+				t.Fatalf("WriteFile config: %v", err)
+			}
 
-	_, err := NewLifecycle(nil).InitAtPath(cfgPath)
-	if err == nil || !strings.Contains(err.Error(), `unknown effective operation "private_search" on plugin "target"`) {
-		t.Fatalf("InitAtPath error = %v, want unknown operation error", err)
-	}
-	if strings.Contains(err.Error(), "session-catalog-only operation") {
-		t.Fatalf("InitAtPath error = %v, want unknown operation classification", err)
+			_, err := NewLifecycle(nil).InitAtPath(cfgPath)
+			if err == nil || !strings.Contains(err.Error(), tc.wantError) {
+				t.Fatalf("InitAtPath error = %v, want %q", err, tc.wantError)
+			}
+			if strings.Contains(err.Error(), "session-catalog-only operation") {
+				t.Fatalf("InitAtPath error = %v, want unknown operation classification", err)
+			}
+		})
 	}
 }
 

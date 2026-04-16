@@ -250,18 +250,8 @@ func buildProvider(ctx context.Context, name string, entry *config.ProviderEntry
 		if err != nil {
 			return nil, fmt.Errorf("build declarative provider %q: %w", name, err)
 		}
-		declarative, err := providerhost.NewDeclarativeProvider(
-			manifest,
-			nil,
-			providerhost.WithDeclarativeMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
-			providerhost.WithDeclarativeConnectionMode(plan.ConnectionMode()),
-		)
+		prov, err := buildAllowedDeclarativeProvider(name, manifest, meta, plan, allowedOperations)
 		if err != nil {
-			return nil, fmt.Errorf("create declarative provider %q: %w", name, err)
-		}
-		prov, err := applyAllowedOperations(name, allowedOperations, declarative)
-		if err != nil {
-			closeIfPossible(declarative)
 			return nil, err
 		}
 		return newProviderBuildResult(name, entry, manifest, pluginConfig, prov, nil, deps)
@@ -301,18 +291,13 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 			return nil, err
 		}
 		pluginProv = filteredPluginProv
-		declarative, err := providerhost.NewDeclarativeProvider(
-			manifest,
-			nil,
-			providerhost.WithDeclarativeMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
-			providerhost.WithDeclarativeConnectionMode(plan.ConnectionMode()),
-		)
+		apiCatalog, err := providerhost.CatalogFromDeclarativeManifest(manifest)
 		if err != nil {
 			closeIfPossible(pluginProv)
-			return nil, fmt.Errorf("create declarative provider %q: %w", name, err)
+			return nil, fmt.Errorf("load declarative catalog for %q: %w", name, err)
 		}
-		apiAllowedOperations := operationexposure.MatchingAllowedOperations(allowedOperations, declarative.Catalog())
-		apiProv, err := applyAllowedOperations(name, apiAllowedOperations, declarative)
+		apiAllowedOperations := operationexposure.MatchingAllowedOperations(allowedOperations, apiCatalog)
+		apiProv, err := buildAllowedDeclarativeProvider(name, manifest, meta, plan, apiAllowedOperations)
 		if err != nil {
 			closeIfPossible(apiProv, pluginProv)
 			return nil, err
@@ -382,6 +367,24 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 		}
 	}
 	return newProviderBuildResult(name, entry, manifest, pluginConfig, merged, authFallback, deps)
+}
+
+func buildAllowedDeclarativeProvider(name string, manifest *providermanifestv1.Manifest, meta providerMetadata, plan config.StaticConnectionPlan, allowedOperations map[string]*config.OperationOverride) (core.Provider, error) {
+	declarative, err := providerhost.NewDeclarativeProvider(
+		manifest,
+		nil,
+		providerhost.WithDeclarativeMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
+		providerhost.WithDeclarativeConnectionMode(plan.ConnectionMode()),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create declarative provider %q: %w", name, err)
+	}
+	prov, err := applyAllowedOperations(name, allowedOperations, declarative)
+	if err != nil {
+		closeIfPossible(declarative)
+		return nil, err
+	}
+	return prov, nil
 }
 
 type specProviderConfig struct {
