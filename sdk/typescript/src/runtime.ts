@@ -58,6 +58,7 @@ import {
   type ConfigureProviderRequest,
 } from "../gen/v1/runtime_pb.ts";
 import { S3 as S3Service } from "../gen/v1/s3_pb.ts";
+import { WorkflowProvider as WorkflowProviderService } from "../gen/v1/workflow_pb.ts";
 import { errorMessage, type Request } from "./api.ts";
 import {
   AuthProvider,
@@ -79,6 +80,11 @@ import {
 } from "./provider-kind.ts";
 import { type ProviderKind, slugName } from "./provider.ts";
 import { S3Provider, createS3Service, isS3Provider } from "./s3.ts";
+import {
+  WorkflowProvider,
+  createWorkflowService,
+  isWorkflowProvider,
+} from "./workflow.ts";
 import {
   defaultProviderName,
   formatProviderTarget,
@@ -108,6 +114,7 @@ export const CURRENT_PROTOCOL_VERSION = 2;
  * Command-line usage for the runtime entrypoint.
  */
 export const USAGE = "usage: bun run runtime.ts ROOT PROVIDER_TARGET";
+export { createWorkflowService } from "./workflow.ts";
 
 /**
  * Parsed arguments for the runtime entrypoint.
@@ -125,7 +132,8 @@ export type LoadedProvider =
   | AuthProvider
   | CacheProvider
   | SecretsProvider
-  | S3Provider;
+  | S3Provider
+  | WorkflowProvider;
 
 type ProviderRuntimeEntry = {
   isProvider: (value: unknown) => value is LoadedProvider;
@@ -181,6 +189,16 @@ const PROVIDER_RUNTIME_ENTRIES: Partial<
     protoKind: ProtoProviderKind.S3,
     registerService(router, provider) {
       router.service(S3Service, createS3Service(provider as S3Provider));
+    },
+  },
+  workflow: {
+    isProvider: isWorkflowProvider as (value: unknown) => value is LoadedProvider,
+    protoKind: ProtoProviderKind.WORKFLOW,
+    registerService(router, provider) {
+      router.service(
+        WorkflowProviderService,
+        createWorkflowService(provider as WorkflowProvider),
+      );
     },
   },
 };
@@ -713,6 +731,9 @@ function providerRequest(
     access: {
       policy: access?.policy ?? "",
       role: access?.role ?? "",
+    },
+    workflow: {
+      ...(requestContext?.workflow ?? {}),
     },
     requestHandle,
   };

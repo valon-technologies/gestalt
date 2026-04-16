@@ -21,6 +21,8 @@ func (s ServerProvidersConfig) Selection(kind HostProviderKind) string {
 		return s.IndexedDB
 	case HostProviderKindCache:
 		return ""
+	case HostProviderKindWorkflow:
+		return ""
 	default:
 		return ""
 	}
@@ -43,6 +45,8 @@ func (c *Config) HostProviderEntries(kind HostProviderKind) map[string]*Provider
 		return c.Providers.IndexedDB
 	case HostProviderKindCache:
 		return c.Providers.Cache
+	case HostProviderKindWorkflow:
+		return c.Providers.Workflow
 	default:
 		return nil
 	}
@@ -72,6 +76,10 @@ func (c *Config) SelectedIndexedDBProvider() (string, *ProviderEntry, error) {
 	return ResolveSelectedHostProvider(HostProviderKindIndexedDB, c.Server.Providers.Selection(HostProviderKindIndexedDB), c.HostProviderEntries(HostProviderKindIndexedDB))
 }
 
+func (c *Config) SelectedWorkflowProvider() (string, *ProviderEntry, error) {
+	return ResolveSelectedHostProvider(HostProviderKindWorkflow, "", c.HostProviderEntries(HostProviderKindWorkflow))
+}
+
 type EffectivePluginIndexedDB struct {
 	Enabled      bool
 	ProviderName string
@@ -80,12 +88,31 @@ type EffectivePluginIndexedDB struct {
 	ObjectStores []string
 }
 
+type EffectivePluginWorkflow struct {
+	Enabled      bool
+	ProviderName string
+	Provider     *ProviderEntry
+	Operations   []string
+}
+
 func (c *Config) EffectivePluginIndexedDB(pluginName string, entry *ProviderEntry) (EffectivePluginIndexedDB, error) {
 	selectedName, _, err := c.SelectedIndexedDBProvider()
 	if err != nil {
 		return EffectivePluginIndexedDB{}, err
 	}
 	return ResolveEffectivePluginIndexedDB(pluginName, entry, selectedName, c.Providers.IndexedDB)
+}
+
+func (c *Config) EffectivePluginWorkflow(pluginName string, entry *ProviderEntry) (EffectivePluginWorkflow, error) {
+	selectedName := ""
+	if entry != nil && entry.Workflow != nil && strings.TrimSpace(entry.Workflow.Provider) == "" {
+		var err error
+		selectedName, _, err = c.SelectedWorkflowProvider()
+		if err != nil {
+			return EffectivePluginWorkflow{}, err
+		}
+	}
+	return ResolveEffectivePluginWorkflow(pluginName, entry, selectedName, c.Providers.Workflow)
 }
 
 func ResolveEffectivePluginIndexedDB(pluginName string, entry *ProviderEntry, selectedName string, entries map[string]*ProviderEntry) (EffectivePluginIndexedDB, error) {
@@ -128,6 +155,32 @@ func ResolveEffectivePluginIndexedDB(pluginName string, entry *ProviderEntry, se
 		Provider:     provider,
 		DB:           dbName,
 		ObjectStores: objectStores,
+	}, nil
+}
+
+func ResolveEffectivePluginWorkflow(pluginName string, entry *ProviderEntry, selectedName string, entries map[string]*ProviderEntry) (EffectivePluginWorkflow, error) {
+	if entry == nil || entry.Workflow == nil {
+		return EffectivePluginWorkflow{}, nil
+	}
+
+	providerName := strings.TrimSpace(entry.Workflow.Provider)
+	if providerName == "" {
+		providerName = strings.TrimSpace(selectedName)
+	}
+	if providerName == "" {
+		return EffectivePluginWorkflow{}, fmt.Errorf("config validation: plugins.%s.workflow requires workflow.provider or a selected/default providers.workflow entry", pluginName)
+	}
+
+	provider, ok := entries[providerName]
+	if !ok || provider == nil {
+		return EffectivePluginWorkflow{}, fmt.Errorf("config validation: plugins.%s.workflow.provider references unknown workflow %q", pluginName, providerName)
+	}
+
+	return EffectivePluginWorkflow{
+		Enabled:      true,
+		ProviderName: providerName,
+		Provider:     provider,
+		Operations:   slices.Clone(entry.Workflow.Operations),
 	}, nil
 }
 

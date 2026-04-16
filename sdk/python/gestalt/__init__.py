@@ -77,6 +77,7 @@ from ._providers import (
     SecretsProvider,
     SessionTTLProvider,
     WarningsProvider,
+    WorkflowProvider,
 )
 from ._s3 import (
     ENV_S3_SOCKET,
@@ -98,6 +99,12 @@ from ._s3 import (
     S3ReadStream,
     WriteOptions,
     s3_socket_env,
+)
+from ._workflow import (
+    ENV_WORKFLOW_HOST_SOCKET,
+    ENV_WORKFLOW_SOCKET,
+    Workflow,
+    WorkflowHost,
 )
 
 __all__ = [
@@ -124,6 +131,8 @@ __all__ = [
     "Error",
     "ENV_S3_SOCKET",
     "ENV_PLUGIN_INVOKER_SOCKET",
+    "ENV_WORKFLOW_HOST_SOCKET",
+    "ENV_WORKFLOW_SOCKET",
     "ExternalTokenValidator",
     "HealthChecker",
     "Index",
@@ -164,6 +173,9 @@ __all__ = [
     "Subject",
     "SessionCatalogProvider",
     "SessionTTLProvider",
+    "WorkflowProvider",
+    "Workflow",
+    "WorkflowHost",
     "WarningsProvider",
     "cache_socket_env",
     "WriteOptions",

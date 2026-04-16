@@ -15,6 +15,8 @@ export const file_v1_datastore: GenFile = /*@__PURE__*/
   fileDesc("ChJ2MS9kYXRhc3RvcmUucHJvdG8SE2dlc3RhbHQucHJvdmlkZXIudjEilwIKClR5cGVkVmFsdWUSMAoKbnVsbF92YWx1ZRgBIAEoDjIaLmdvb2dsZS5wcm90b2J1Zi5OdWxsVmFsdWVIABIWCgxzdHJpbmdfdmFsdWUYAiABKAlIABITCglpbnRfdmFsdWUYAyABKANIABIVCgtmbG9hdF92YWx1ZRgEIAEoAUgAEhQKCmJvb2xfdmFsdWUYBSABKAhIABIwCgp0aW1lX3ZhbHVlGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEgAEhUKC2J5dGVzX3ZhbHVlGAcgASgMSAASLAoKanNvbl92YWx1ZRgIIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZUgAQgYKBGtpbmQikQEKBlJlY29yZBI3CgZmaWVsZHMYASADKAsyJy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlY29yZC5GaWVsZHNFbnRyeRpOCgtGaWVsZHNFbnRyeRILCgNrZXkYASABKAkSLgoFdmFsdWUYAiABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLlR5cGVkVmFsdWU6AjgBIncKEU9iamVjdFN0b3JlU2NoZW1hEjEKB2luZGV4ZXMYASADKAsyIC5nZXN0YWx0LnByb3ZpZGVyLnYxLkluZGV4U2NoZW1hEi8KB2NvbHVtbnMYAiADKAsyHi5nZXN0YWx0LnByb3ZpZGVyLnYxLkNvbHVtbkRlZiI9CgtJbmRleFNjaGVtYRIMCgRuYW1lGAEgASgJEhAKCGtleV9wYXRoGAIgAygJEg4KBnVuaXF1ZRgDIAEoCCJeCglDb2x1bW5EZWYSDAoEbmFtZRgBIAEoCRIMCgR0eXBlGAIgASgFEhMKC3ByaW1hcnlfa2V5GAMgASgIEhAKCG5vdF9udWxsGAQgASgIEg4KBnVuaXF1ZRgFIAEoCCKSAQoIS2V5UmFuZ2USLgoFbG93ZXIYASABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLlR5cGVkVmFsdWUSLgoFdXBwZXIYAiABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLlR5cGVkVmFsdWUSEgoKbG93ZXJfb3BlbhgDIAEoCBISCgp1cHBlcl9vcGVuGAQgASgIIksKDVJlY29yZFJlcXVlc3QSDQoFc3RvcmUYASABKAkSKwoGcmVjb3JkGAIgASgLMhsuZ2VzdGFsdC5wcm92aWRlci52MS5SZWNvcmQiPQoOUmVjb3JkUmVzcG9uc2USKwoGcmVjb3JkGAEgASgLMhsuZ2VzdGFsdC5wcm92aWRlci52MS5SZWNvcmQiPwoPUmVjb3Jkc1Jlc3BvbnNlEiwKB3JlY29yZHMYASADKAsyGy5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlY29yZCIcCgxLZXlzUmVzcG9uc2USDAoEa2V5cxgBIAMoCSIvChJPYmplY3RTdG9yZVJlcXVlc3QSDQoFc3RvcmUYASABKAkSCgoCaWQYAiABKAkiJwoWT2JqZWN0U3RvcmVOYW1lUmVxdWVzdBINCgVzdG9yZRgBIAEoCSJlChdPYmplY3RTdG9yZVJhbmdlUmVxdWVzdBINCgVzdG9yZRgBIAEoCRIxCgVyYW5nZRgCIAEoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5UmFuZ2VIAIgBAUIICgZfcmFuZ2UiYAoYQ3JlYXRlT2JqZWN0U3RvcmVSZXF1ZXN0EgwKBG5hbWUYASABKAkSNgoGc2NoZW1hGAIgASgLMiYuZ2VzdGFsdC5wcm92aWRlci52MS5PYmplY3RTdG9yZVNjaGVtYSIoChhEZWxldGVPYmplY3RTdG9yZVJlcXVlc3QSDAoEbmFtZRgBIAEoCSKfAQoRSW5kZXhRdWVyeVJlcXVlc3QSDQoFc3RvcmUYASABKAkSDQoFaW5kZXgYAiABKAkSLwoGdmFsdWVzGAMgAygLMh8uZ2VzdGFsdC5wcm92aWRlci52MS5UeXBlZFZhbHVlEjEKBXJhbmdlGAQgASgLMh0uZ2VzdGFsdC5wcm92aWRlci52MS5LZXlSYW5nZUgAiAEBQggKBl9yYW5nZSIeCg1Db3VudFJlc3BvbnNlEg0KBWNvdW50GAEgASgDIusBChFPcGVuQ3Vyc29yUmVxdWVzdBINCgVzdG9yZRgBIAEoCRIxCgVyYW5nZRgCIAEoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5UmFuZ2VIAIgBARI3CglkaXJlY3Rpb24YAyABKA4yJC5nZXN0YWx0LnByb3ZpZGVyLnYxLkN1cnNvckRpcmVjdGlvbhIRCglrZXlzX29ubHkYBCABKAgSDQoFaW5kZXgYBSABKAkSLwoGdmFsdWVzGAYgAygLMh8uZ2VzdGFsdC5wcm92aWRlci52MS5UeXBlZFZhbHVlQggKBl9yYW5nZSJ6CghLZXlWYWx1ZRIxCgZzY2FsYXIYASABKAsyHy5nZXN0YWx0LnByb3ZpZGVyLnYxLlR5cGVkVmFsdWVIABIzCgVhcnJheRgCIAEoCzIiLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5VmFsdWVBcnJheUgAQgYKBGtpbmQiQAoNS2V5VmFsdWVBcnJheRIvCghlbGVtZW50cxgBIAMoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5VmFsdWUiPQoPQ3Vyc29yS2V5VGFyZ2V0EioKA2tleRgBIAMoCzIdLmdlc3RhbHQucHJvdmlkZXIudjEuS2V5VmFsdWUi0AEKDUN1cnNvckNvbW1hbmQSDgoEbmV4dBgBIAEoCEgAEj8KD2NvbnRpbnVlX3RvX2tleRgCIAEoCzIkLmdlc3RhbHQucHJvdmlkZXIudjEuQ3Vyc29yS2V5VGFyZ2V0SAASEQoHYWR2YW5jZRgDIAEoBUgAEi0KBnVwZGF0ZRgEIAEoCzIbLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkSAASEAoGZGVsZXRlGAUgASgISAASDwoFY2xvc2UYBiABKAhIAEIJCgdjb21tYW5kIosBChNDdXJzb3JDbGllbnRNZXNzYWdlEjYKBG9wZW4YASABKAsyJi5nZXN0YWx0LnByb3ZpZGVyLnYxLk9wZW5DdXJzb3JSZXF1ZXN0SAASNQoHY29tbWFuZBgCIAEoCzIiLmdlc3RhbHQucHJvdmlkZXIudjEuQ3Vyc29yQ29tbWFuZEgAQgUKA21zZyJ7CgtDdXJzb3JFbnRyeRIqCgNrZXkYASADKAsyHS5nZXN0YWx0LnByb3ZpZGVyLnYxLktleVZhbHVlEhMKC3ByaW1hcnlfa2V5GAIgASgJEisKBnJlY29yZBgDIAEoCzIbLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkIl0KDkN1cnNvclJlc3BvbnNlEjEKBWVudHJ5GAEgASgLMiAuZ2VzdGFsdC5wcm92aWRlci52MS5DdXJzb3JFbnRyeUgAEg4KBGRvbmUYAiABKAhIAEIICgZyZXN1bHQiIQoORGVsZXRlUmVzcG9uc2USDwoHZGVsZXRlZBgBIAEoAyIaCgtLZXlSZXNwb25zZRILCgNrZXkYASABKAkqYwoPQ3Vyc29yRGlyZWN0aW9uEg8KC0NVUlNPUl9ORVhUEAASFgoSQ1VSU09SX05FWFRfVU5JUVVFEAESDwoLQ1VSU09SX1BSRVYQAhIWChJDVVJTT1JfUFJFVl9VTklRVUUQAzKKDQoJSW5kZXhlZERCEloKEUNyZWF0ZU9iamVjdFN0b3JlEi0uZ2VzdGFsdC5wcm92aWRlci52MS5DcmVhdGVPYmplY3RTdG9yZVJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkSWgoRRGVsZXRlT2JqZWN0U3RvcmUSLS5nZXN0YWx0LnByb3ZpZGVyLnYxLkRlbGV0ZU9iamVjdFN0b3JlUmVxdWVzdBoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRJTCgNHZXQSJy5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmVxdWVzdBojLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkUmVzcG9uc2USUwoGR2V0S2V5EicuZ2VzdGFsdC5wcm92aWRlci52MS5PYmplY3RTdG9yZVJlcXVlc3QaIC5nZXN0YWx0LnByb3ZpZGVyLnYxLktleVJlc3BvbnNlEkEKA0FkZBIiLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3JkUmVxdWVzdBoWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eRJBCgNQdXQSIi5nZXN0YWx0LnByb3ZpZGVyLnYxLlJlY29yZFJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkSSQoGRGVsZXRlEicuZ2VzdGFsdC5wcm92aWRlci52MS5PYmplY3RTdG9yZVJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkSTAoFQ2xlYXISKy5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlTmFtZVJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkSXAoGR2V0QWxsEiwuZ2VzdGFsdC5wcm92aWRlci52MS5PYmplY3RTdG9yZVJhbmdlUmVxdWVzdBokLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3Jkc1Jlc3BvbnNlEl0KCkdldEFsbEtleXMSLC5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmFuZ2VSZXF1ZXN0GiEuZ2VzdGFsdC5wcm92aWRlci52MS5LZXlzUmVzcG9uc2USWQoFQ291bnQSLC5nZXN0YWx0LnByb3ZpZGVyLnYxLk9iamVjdFN0b3JlUmFuZ2VSZXF1ZXN0GiIuZ2VzdGFsdC5wcm92aWRlci52MS5Db3VudFJlc3BvbnNlEmAKC0RlbGV0ZVJhbmdlEiwuZ2VzdGFsdC5wcm92aWRlci52MS5PYmplY3RTdG9yZVJhbmdlUmVxdWVzdBojLmdlc3RhbHQucHJvdmlkZXIudjEuRGVsZXRlUmVzcG9uc2USVwoISW5kZXhHZXQSJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkluZGV4UXVlcnlSZXF1ZXN0GiMuZ2VzdGFsdC5wcm92aWRlci52MS5SZWNvcmRSZXNwb25zZRJXCgtJbmRleEdldEtleRImLmdlc3RhbHQucHJvdmlkZXIudjEuSW5kZXhRdWVyeVJlcXVlc3QaIC5nZXN0YWx0LnByb3ZpZGVyLnYxLktleVJlc3BvbnNlElsKC0luZGV4R2V0QWxsEiYuZ2VzdGFsdC5wcm92aWRlci52MS5JbmRleFF1ZXJ5UmVxdWVzdBokLmdlc3RhbHQucHJvdmlkZXIudjEuUmVjb3Jkc1Jlc3BvbnNlElwKD0luZGV4R2V0QWxsS2V5cxImLmdlc3RhbHQucHJvdmlkZXIudjEuSW5kZXhRdWVyeVJlcXVlc3QaIS5nZXN0YWx0LnByb3ZpZGVyLnYxLktleXNSZXNwb25zZRJYCgpJbmRleENvdW50EiYuZ2VzdGFsdC5wcm92aWRlci52MS5JbmRleFF1ZXJ5UmVxdWVzdBoiLmdlc3RhbHQucHJvdmlkZXIudjEuQ291bnRSZXNwb25zZRJaCgtJbmRleERlbGV0ZRImLmdlc3RhbHQucHJvdmlkZXIudjEuSW5kZXhRdWVyeVJlcXVlc3QaIy5nZXN0YWx0LnByb3ZpZGVyLnYxLkRlbGV0ZVJlc3BvbnNlEl8KCk9wZW5DdXJzb3ISKC5nZXN0YWx0LnByb3ZpZGVyLnYxLkN1cnNvckNsaWVudE1lc3NhZ2UaIy5nZXN0YWx0LnByb3ZpZGVyLnYxLkN1cnNvclJlc3BvbnNlKAEwAUI7WjlnaXRodWIuY29tL3ZhbG9uLXRlY2hub2xvZ2llcy9nZXN0YWx0L3Nkay9nby9nZW4vdjE7cHJvdG9iBnByb3RvMw", [file_google_protobuf_empty, file_google_protobuf_struct, file_google_protobuf_timestamp]);
 
 /**
+ * TypedValue stores one scalar or structured value in an IndexedDB record.
+ *
  * @generated from message gestalt.provider.v1.TypedValue
  */
 export type TypedValue = Message<"gestalt.provider.v1.TypedValue"> & {
@@ -80,6 +82,8 @@ export const TypedValueSchema: GenMessage<TypedValue> = /*@__PURE__*/
   messageDesc(file_v1_datastore, 0);
 
 /**
+ * Record is one JSON-like row in an object store.
+ *
  * @generated from message gestalt.provider.v1.Record
  */
 export type Record = Message<"gestalt.provider.v1.Record"> & {
@@ -97,6 +101,9 @@ export const RecordSchema: GenMessage<Record> = /*@__PURE__*/
   messageDesc(file_v1_datastore, 1);
 
 /**
+ * ObjectStoreSchema describes the indexes and columns attached to an object
+ * store.
+ *
  * @generated from message gestalt.provider.v1.ObjectStoreSchema
  */
 export type ObjectStoreSchema = Message<"gestalt.provider.v1.ObjectStoreSchema"> & {
@@ -119,6 +126,8 @@ export const ObjectStoreSchemaSchema: GenMessage<ObjectStoreSchema> = /*@__PURE_
   messageDesc(file_v1_datastore, 2);
 
 /**
+ * IndexSchema describes one secondary index on an object store.
+ *
  * @generated from message gestalt.provider.v1.IndexSchema
  */
 export type IndexSchema = Message<"gestalt.provider.v1.IndexSchema"> & {
@@ -146,6 +155,8 @@ export const IndexSchemaSchema: GenMessage<IndexSchema> = /*@__PURE__*/
   messageDesc(file_v1_datastore, 3);
 
 /**
+ * ColumnDef is reserved for providers that preserve SQL-style column metadata.
+ *
  * @generated from message gestalt.provider.v1.ColumnDef
  */
 export type ColumnDef = Message<"gestalt.provider.v1.ColumnDef"> & {
@@ -183,6 +194,8 @@ export const ColumnDefSchema: GenMessage<ColumnDef> = /*@__PURE__*/
   messageDesc(file_v1_datastore, 4);
 
 /**
+ * KeyRange constrains a query or cursor by lower and upper bounds.
+ *
  * @generated from message gestalt.provider.v1.KeyRange
  */
 export type KeyRange = Message<"gestalt.provider.v1.KeyRange"> & {
@@ -215,6 +228,8 @@ export const KeyRangeSchema: GenMessage<KeyRange> = /*@__PURE__*/
   messageDesc(file_v1_datastore, 5);
 
 /**
+ * RecordRequest addresses one object store and carries one row payload.
+ *
  * @generated from message gestalt.provider.v1.RecordRequest
  */
 export type RecordRequest = Message<"gestalt.provider.v1.RecordRequest"> & {
@@ -237,6 +252,8 @@ export const RecordRequestSchema: GenMessage<RecordRequest> = /*@__PURE__*/
   messageDesc(file_v1_datastore, 6);
 
 /**
+ * RecordResponse wraps one row payload.
+ *
  * @generated from message gestalt.provider.v1.RecordResponse
  */
 export type RecordResponse = Message<"gestalt.provider.v1.RecordResponse"> & {
@@ -254,6 +271,8 @@ export const RecordResponseSchema: GenMessage<RecordResponse> = /*@__PURE__*/
   messageDesc(file_v1_datastore, 7);
 
 /**
+ * RecordsResponse wraps repeated row payloads.
+ *
  * @generated from message gestalt.provider.v1.RecordsResponse
  */
 export type RecordsResponse = Message<"gestalt.provider.v1.RecordsResponse"> & {
@@ -271,6 +290,8 @@ export const RecordsResponseSchema: GenMessage<RecordsResponse> = /*@__PURE__*/
   messageDesc(file_v1_datastore, 8);
 
 /**
+ * KeysResponse wraps repeated primary keys.
+ *
  * @generated from message gestalt.provider.v1.KeysResponse
  */
 export type KeysResponse = Message<"gestalt.provider.v1.KeysResponse"> & {
@@ -288,6 +309,8 @@ export const KeysResponseSchema: GenMessage<KeysResponse> = /*@__PURE__*/
   messageDesc(file_v1_datastore, 9);
 
 /**
+ * ObjectStoreRequest addresses one object store row by primary key.
+ *
  * @generated from message gestalt.provider.v1.ObjectStoreRequest
  */
 export type ObjectStoreRequest = Message<"gestalt.provider.v1.ObjectStoreRequest"> & {
@@ -310,6 +333,8 @@ export const ObjectStoreRequestSchema: GenMessage<ObjectStoreRequest> = /*@__PUR
   messageDesc(file_v1_datastore, 10);
 
 /**
+ * ObjectStoreNameRequest addresses an object store without a specific row key.
+ *
  * @generated from message gestalt.provider.v1.ObjectStoreNameRequest
  */
 export type ObjectStoreNameRequest = Message<"gestalt.provider.v1.ObjectStoreNameRequest"> & {
@@ -327,6 +352,8 @@ export const ObjectStoreNameRequestSchema: GenMessage<ObjectStoreNameRequest> = 
   messageDesc(file_v1_datastore, 11);
 
 /**
+ * ObjectStoreRangeRequest addresses an object store plus an optional key range.
+ *
  * @generated from message gestalt.provider.v1.ObjectStoreRangeRequest
  */
 export type ObjectStoreRangeRequest = Message<"gestalt.provider.v1.ObjectStoreRangeRequest"> & {
@@ -349,6 +376,8 @@ export const ObjectStoreRangeRequestSchema: GenMessage<ObjectStoreRangeRequest> 
   messageDesc(file_v1_datastore, 12);
 
 /**
+ * CreateObjectStoreRequest creates a new object store.
+ *
  * @generated from message gestalt.provider.v1.CreateObjectStoreRequest
  */
 export type CreateObjectStoreRequest = Message<"gestalt.provider.v1.CreateObjectStoreRequest"> & {
@@ -371,6 +400,8 @@ export const CreateObjectStoreRequestSchema: GenMessage<CreateObjectStoreRequest
   messageDesc(file_v1_datastore, 13);
 
 /**
+ * DeleteObjectStoreRequest removes an object store.
+ *
  * @generated from message gestalt.provider.v1.DeleteObjectStoreRequest
  */
 export type DeleteObjectStoreRequest = Message<"gestalt.provider.v1.DeleteObjectStoreRequest"> & {
@@ -388,6 +419,9 @@ export const DeleteObjectStoreRequestSchema: GenMessage<DeleteObjectStoreRequest
   messageDesc(file_v1_datastore, 14);
 
 /**
+ * IndexQueryRequest addresses a secondary index plus optional key values and
+ * range constraints.
+ *
  * @generated from message gestalt.provider.v1.IndexQueryRequest
  */
 export type IndexQueryRequest = Message<"gestalt.provider.v1.IndexQueryRequest"> & {
@@ -420,6 +454,8 @@ export const IndexQueryRequestSchema: GenMessage<IndexQueryRequest> = /*@__PURE_
   messageDesc(file_v1_datastore, 15);
 
 /**
+ * CountResponse reports how many rows matched a query.
+ *
  * @generated from message gestalt.provider.v1.CountResponse
  */
 export type CountResponse = Message<"gestalt.provider.v1.CountResponse"> & {
@@ -437,6 +473,8 @@ export const CountResponseSchema: GenMessage<CountResponse> = /*@__PURE__*/
   messageDesc(file_v1_datastore, 16);
 
 /**
+ * OpenCursorRequest starts a streaming cursor over an object store or index.
+ *
  * @generated from message gestalt.provider.v1.OpenCursorRequest
  */
 export type OpenCursorRequest = Message<"gestalt.provider.v1.OpenCursorRequest"> & {
@@ -456,16 +494,22 @@ export type OpenCursorRequest = Message<"gestalt.provider.v1.OpenCursorRequest">
   direction: CursorDirection;
 
   /**
+   * keys_only suppresses row payloads and returns only keys.
+   *
    * @generated from field: bool keys_only = 4;
    */
   keysOnly: boolean;
 
   /**
+   * index selects a secondary index when non-empty.
+   *
    * @generated from field: string index = 5;
    */
   index: string;
 
   /**
+   * values selects a compound index key prefix when index is set.
+   *
    * @generated from field: repeated gestalt.provider.v1.TypedValue values = 6;
    */
   values: TypedValue[];
@@ -528,6 +572,8 @@ export const KeyValueArraySchema: GenMessage<KeyValueArray> = /*@__PURE__*/
   messageDesc(file_v1_datastore, 19);
 
 /**
+ * CursorKeyTarget addresses a specific cursor position.
+ *
  * @generated from message gestalt.provider.v1.CursorKeyTarget
  */
 export type CursorKeyTarget = Message<"gestalt.provider.v1.CursorKeyTarget"> & {
@@ -545,6 +591,8 @@ export const CursorKeyTargetSchema: GenMessage<CursorKeyTarget> = /*@__PURE__*/
   messageDesc(file_v1_datastore, 20);
 
 /**
+ * CursorCommand advances, mutates, or closes an open cursor.
+ *
  * @generated from message gestalt.provider.v1.CursorCommand
  */
 export type CursorCommand = Message<"gestalt.provider.v1.CursorCommand"> & {
@@ -598,6 +646,8 @@ export const CursorCommandSchema: GenMessage<CursorCommand> = /*@__PURE__*/
   messageDesc(file_v1_datastore, 21);
 
 /**
+ * CursorClientMessage is one frame in the bidirectional cursor stream.
+ *
  * @generated from message gestalt.provider.v1.CursorClientMessage
  */
 export type CursorClientMessage = Message<"gestalt.provider.v1.CursorClientMessage"> & {
@@ -627,6 +677,8 @@ export const CursorClientMessageSchema: GenMessage<CursorClientMessage> = /*@__P
   messageDesc(file_v1_datastore, 22);
 
 /**
+ * CursorEntry is one streamed cursor row.
+ *
  * @generated from message gestalt.provider.v1.CursorEntry
  */
 export type CursorEntry = Message<"gestalt.provider.v1.CursorEntry"> & {
@@ -658,6 +710,8 @@ export const CursorEntrySchema: GenMessage<CursorEntry> = /*@__PURE__*/
   messageDesc(file_v1_datastore, 23);
 
 /**
+ * CursorResponse is one streamed cursor frame.
+ *
  * @generated from message gestalt.provider.v1.CursorResponse
  */
 export type CursorResponse = Message<"gestalt.provider.v1.CursorResponse"> & {
@@ -687,6 +741,8 @@ export const CursorResponseSchema: GenMessage<CursorResponse> = /*@__PURE__*/
   messageDesc(file_v1_datastore, 24);
 
 /**
+ * DeleteResponse reports how many rows were deleted.
+ *
  * @generated from message gestalt.provider.v1.DeleteResponse
  */
 export type DeleteResponse = Message<"gestalt.provider.v1.DeleteResponse"> & {
@@ -704,6 +760,8 @@ export const DeleteResponseSchema: GenMessage<DeleteResponse> = /*@__PURE__*/
   messageDesc(file_v1_datastore, 25);
 
 /**
+ * KeyResponse wraps one primary key.
+ *
  * @generated from message gestalt.provider.v1.KeyResponse
  */
 export type KeyResponse = Message<"gestalt.provider.v1.KeyResponse"> & {
@@ -721,6 +779,8 @@ export const KeyResponseSchema: GenMessage<KeyResponse> = /*@__PURE__*/
   messageDesc(file_v1_datastore, 26);
 
 /**
+ * CursorDirection controls IndexedDB cursor traversal order.
+ *
  * @generated from enum gestalt.provider.v1.CursorDirection
  */
 export enum CursorDirection {
@@ -752,6 +812,8 @@ export const CursorDirectionSchema: GenEnum<CursorDirection> = /*@__PURE__*/
   enumDesc(file_v1_datastore, 0);
 
 /**
+ * IndexedDB models the shared Gestalt IndexedDB-provider protocol.
+ *
  * @generated from service gestalt.provider.v1.IndexedDB
  */
 export const IndexedDB: GenService<{

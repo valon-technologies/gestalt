@@ -15,6 +15,8 @@ export const file_v1_cache: GenFile = /*@__PURE__*/
   fileDesc("Cg52MS9jYWNoZS5wcm90bxITZ2VzdGFsdC5wcm92aWRlci52MSIrCg1DYWNoZVNldEVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoDCI4CgtDYWNoZVJlc3VsdBILCgNrZXkYASABKAkSDQoFZm91bmQYAiABKAgSDQoFdmFsdWUYAyABKAwiHgoPQ2FjaGVHZXRSZXF1ZXN0EgsKA2tleRgBIAEoCSIwChBDYWNoZUdldFJlc3BvbnNlEg0KBWZvdW5kGAEgASgIEg0KBXZhbHVlGAIgASgMIiMKE0NhY2hlR2V0TWFueVJlcXVlc3QSDAoEa2V5cxgBIAMoCSJJChRDYWNoZUdldE1hbnlSZXNwb25zZRIxCgdlbnRyaWVzGAEgAygLMiAuZ2VzdGFsdC5wcm92aWRlci52MS5DYWNoZVJlc3VsdCJVCg9DYWNoZVNldFJlcXVlc3QSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgMEiYKA3R0bBgDIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbiJyChNDYWNoZVNldE1hbnlSZXF1ZXN0EjMKB2VudHJpZXMYASADKAsyIi5nZXN0YWx0LnByb3ZpZGVyLnYxLkNhY2hlU2V0RW50cnkSJgoDdHRsGAIgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uIiEKEkNhY2hlRGVsZXRlUmVxdWVzdBILCgNrZXkYASABKAkiJgoTQ2FjaGVEZWxldGVSZXNwb25zZRIPCgdkZWxldGVkGAEgASgIIiYKFkNhY2hlRGVsZXRlTWFueVJlcXVlc3QSDAoEa2V5cxgBIAMoCSIqChdDYWNoZURlbGV0ZU1hbnlSZXNwb25zZRIPCgdkZWxldGVkGAEgASgDIkgKEUNhY2hlVG91Y2hSZXF1ZXN0EgsKA2tleRgBIAEoCRImCgN0dGwYAiABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24iJQoSQ2FjaGVUb3VjaFJlc3BvbnNlEg8KB3RvdWNoZWQYASABKAgy7QQKBUNhY2hlElIKA0dldBIkLmdlc3RhbHQucHJvdmlkZXIudjEuQ2FjaGVHZXRSZXF1ZXN0GiUuZ2VzdGFsdC5wcm92aWRlci52MS5DYWNoZUdldFJlc3BvbnNlEl4KB0dldE1hbnkSKC5nZXN0YWx0LnByb3ZpZGVyLnYxLkNhY2hlR2V0TWFueVJlcXVlc3QaKS5nZXN0YWx0LnByb3ZpZGVyLnYxLkNhY2hlR2V0TWFueVJlc3BvbnNlEkMKA1NldBIkLmdlc3RhbHQucHJvdmlkZXIudjEuQ2FjaGVTZXRSZXF1ZXN0GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5EksKB1NldE1hbnkSKC5nZXN0YWx0LnByb3ZpZGVyLnYxLkNhY2hlU2V0TWFueVJlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkSWwoGRGVsZXRlEicuZ2VzdGFsdC5wcm92aWRlci52MS5DYWNoZURlbGV0ZVJlcXVlc3QaKC5nZXN0YWx0LnByb3ZpZGVyLnYxLkNhY2hlRGVsZXRlUmVzcG9uc2USZwoKRGVsZXRlTWFueRIrLmdlc3RhbHQucHJvdmlkZXIudjEuQ2FjaGVEZWxldGVNYW55UmVxdWVzdBosLmdlc3RhbHQucHJvdmlkZXIudjEuQ2FjaGVEZWxldGVNYW55UmVzcG9uc2USWAoFVG91Y2gSJi5nZXN0YWx0LnByb3ZpZGVyLnYxLkNhY2hlVG91Y2hSZXF1ZXN0GicuZ2VzdGFsdC5wcm92aWRlci52MS5DYWNoZVRvdWNoUmVzcG9uc2VCO1o5Z2l0aHViLmNvbS92YWxvbi10ZWNobm9sb2dpZXMvZ2VzdGFsdC9zZGsvZ28vZ2VuL3YxO3Byb3RvYgZwcm90bzM", [file_google_protobuf_duration, file_google_protobuf_empty]);
 
 /**
+ * CacheSetEntry is one key/value pair written by SetMany.
+ *
  * @generated from message gestalt.provider.v1.CacheSetEntry
  */
 export type CacheSetEntry = Message<"gestalt.provider.v1.CacheSetEntry"> & {
@@ -37,6 +39,8 @@ export const CacheSetEntrySchema: GenMessage<CacheSetEntry> = /*@__PURE__*/
   messageDesc(file_v1_cache, 0);
 
 /**
+ * CacheResult is one lookup result returned by GetMany.
+ *
  * @generated from message gestalt.provider.v1.CacheResult
  */
 export type CacheResult = Message<"gestalt.provider.v1.CacheResult"> & {
@@ -64,6 +68,8 @@ export const CacheResultSchema: GenMessage<CacheResult> = /*@__PURE__*/
   messageDesc(file_v1_cache, 1);
 
 /**
+ * CacheGetRequest loads one cache key.
+ *
  * @generated from message gestalt.provider.v1.CacheGetRequest
  */
 export type CacheGetRequest = Message<"gestalt.provider.v1.CacheGetRequest"> & {
@@ -81,6 +87,8 @@ export const CacheGetRequestSchema: GenMessage<CacheGetRequest> = /*@__PURE__*/
   messageDesc(file_v1_cache, 2);
 
 /**
+ * CacheGetResponse is the result of looking up one cache key.
+ *
  * @generated from message gestalt.provider.v1.CacheGetResponse
  */
 export type CacheGetResponse = Message<"gestalt.provider.v1.CacheGetResponse"> & {
@@ -103,6 +111,8 @@ export const CacheGetResponseSchema: GenMessage<CacheGetResponse> = /*@__PURE__*
   messageDesc(file_v1_cache, 3);
 
 /**
+ * CacheGetManyRequest loads multiple cache keys in one RPC.
+ *
  * @generated from message gestalt.provider.v1.CacheGetManyRequest
  */
 export type CacheGetManyRequest = Message<"gestalt.provider.v1.CacheGetManyRequest"> & {
@@ -120,6 +130,8 @@ export const CacheGetManyRequestSchema: GenMessage<CacheGetManyRequest> = /*@__P
   messageDesc(file_v1_cache, 4);
 
 /**
+ * CacheGetManyResponse returns every lookup result for GetMany.
+ *
  * @generated from message gestalt.provider.v1.CacheGetManyResponse
  */
 export type CacheGetManyResponse = Message<"gestalt.provider.v1.CacheGetManyResponse"> & {
@@ -137,6 +149,8 @@ export const CacheGetManyResponseSchema: GenMessage<CacheGetManyResponse> = /*@_
   messageDesc(file_v1_cache, 5);
 
 /**
+ * CacheSetRequest writes one cache key.
+ *
  * @generated from message gestalt.provider.v1.CacheSetRequest
  */
 export type CacheSetRequest = Message<"gestalt.provider.v1.CacheSetRequest"> & {
@@ -151,6 +165,8 @@ export type CacheSetRequest = Message<"gestalt.provider.v1.CacheSetRequest"> & {
   value: Uint8Array;
 
   /**
+   * ttl applies an optional expiration to the entry.
+   *
    * @generated from field: google.protobuf.Duration ttl = 3;
    */
   ttl?: Duration;
@@ -164,6 +180,8 @@ export const CacheSetRequestSchema: GenMessage<CacheSetRequest> = /*@__PURE__*/
   messageDesc(file_v1_cache, 6);
 
 /**
+ * CacheSetManyRequest writes multiple cache keys in one RPC.
+ *
  * @generated from message gestalt.provider.v1.CacheSetManyRequest
  */
 export type CacheSetManyRequest = Message<"gestalt.provider.v1.CacheSetManyRequest"> & {
@@ -186,6 +204,8 @@ export const CacheSetManyRequestSchema: GenMessage<CacheSetManyRequest> = /*@__P
   messageDesc(file_v1_cache, 7);
 
 /**
+ * CacheDeleteRequest removes one cache key.
+ *
  * @generated from message gestalt.provider.v1.CacheDeleteRequest
  */
 export type CacheDeleteRequest = Message<"gestalt.provider.v1.CacheDeleteRequest"> & {
@@ -203,6 +223,8 @@ export const CacheDeleteRequestSchema: GenMessage<CacheDeleteRequest> = /*@__PUR
   messageDesc(file_v1_cache, 8);
 
 /**
+ * CacheDeleteResponse reports whether one key existed and was deleted.
+ *
  * @generated from message gestalt.provider.v1.CacheDeleteResponse
  */
 export type CacheDeleteResponse = Message<"gestalt.provider.v1.CacheDeleteResponse"> & {
@@ -220,6 +242,8 @@ export const CacheDeleteResponseSchema: GenMessage<CacheDeleteResponse> = /*@__P
   messageDesc(file_v1_cache, 9);
 
 /**
+ * CacheDeleteManyRequest removes multiple cache keys in one RPC.
+ *
  * @generated from message gestalt.provider.v1.CacheDeleteManyRequest
  */
 export type CacheDeleteManyRequest = Message<"gestalt.provider.v1.CacheDeleteManyRequest"> & {
@@ -237,6 +261,8 @@ export const CacheDeleteManyRequestSchema: GenMessage<CacheDeleteManyRequest> = 
   messageDesc(file_v1_cache, 10);
 
 /**
+ * CacheDeleteManyResponse reports how many keys were deleted.
+ *
  * @generated from message gestalt.provider.v1.CacheDeleteManyResponse
  */
 export type CacheDeleteManyResponse = Message<"gestalt.provider.v1.CacheDeleteManyResponse"> & {
@@ -254,6 +280,8 @@ export const CacheDeleteManyResponseSchema: GenMessage<CacheDeleteManyResponse> 
   messageDesc(file_v1_cache, 11);
 
 /**
+ * CacheTouchRequest extends the TTL for one cache key.
+ *
  * @generated from message gestalt.provider.v1.CacheTouchRequest
  */
 export type CacheTouchRequest = Message<"gestalt.provider.v1.CacheTouchRequest"> & {
@@ -276,6 +304,8 @@ export const CacheTouchRequestSchema: GenMessage<CacheTouchRequest> = /*@__PURE_
   messageDesc(file_v1_cache, 12);
 
 /**
+ * CacheTouchResponse reports whether a key existed and had its TTL updated.
+ *
  * @generated from message gestalt.provider.v1.CacheTouchResponse
  */
 export type CacheTouchResponse = Message<"gestalt.provider.v1.CacheTouchResponse"> & {
@@ -293,6 +323,8 @@ export const CacheTouchResponseSchema: GenMessage<CacheTouchResponse> = /*@__PUR
   messageDesc(file_v1_cache, 13);
 
 /**
+ * Cache models the shared Gestalt cache-provider protocol.
+ *
  * @generated from service gestalt.provider.v1.Cache
  */
 export const Cache: GenService<{

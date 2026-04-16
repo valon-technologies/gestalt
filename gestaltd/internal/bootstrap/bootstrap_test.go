@@ -5,22 +5,32 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
 
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
+	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	telemetrynoop "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/noop"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
+	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/test/bufconn"
 	"gopkg.in/yaml.v3"
 )
 
@@ -57,6 +67,62 @@ func stubIndexedDBFactory() bootstrap.IndexedDBFactory {
 		return &coretesting.StubIndexedDB{}, nil
 	}
 }
+
+type stubWorkflowProvider struct{}
+
+func (s *stubWorkflowProvider) StartRun(context.Context, coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
+	return &coreworkflow.Run{}, nil
+}
+func (s *stubWorkflowProvider) GetRun(context.Context, coreworkflow.GetRunRequest) (*coreworkflow.Run, error) {
+	return &coreworkflow.Run{}, nil
+}
+func (s *stubWorkflowProvider) ListRuns(context.Context, coreworkflow.ListRunsRequest) ([]*coreworkflow.Run, error) {
+	return nil, nil
+}
+func (s *stubWorkflowProvider) CancelRun(context.Context, coreworkflow.CancelRunRequest) (*coreworkflow.Run, error) {
+	return &coreworkflow.Run{}, nil
+}
+func (s *stubWorkflowProvider) UpsertSchedule(context.Context, coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error) {
+	return &coreworkflow.Schedule{}, nil
+}
+func (s *stubWorkflowProvider) GetSchedule(context.Context, coreworkflow.GetScheduleRequest) (*coreworkflow.Schedule, error) {
+	return &coreworkflow.Schedule{}, nil
+}
+func (s *stubWorkflowProvider) ListSchedules(context.Context, coreworkflow.ListSchedulesRequest) ([]*coreworkflow.Schedule, error) {
+	return nil, nil
+}
+func (s *stubWorkflowProvider) DeleteSchedule(context.Context, coreworkflow.DeleteScheduleRequest) error {
+	return nil
+}
+func (s *stubWorkflowProvider) PauseSchedule(context.Context, coreworkflow.PauseScheduleRequest) (*coreworkflow.Schedule, error) {
+	return &coreworkflow.Schedule{}, nil
+}
+func (s *stubWorkflowProvider) ResumeSchedule(context.Context, coreworkflow.ResumeScheduleRequest) (*coreworkflow.Schedule, error) {
+	return &coreworkflow.Schedule{}, nil
+}
+func (s *stubWorkflowProvider) UpsertEventTrigger(context.Context, coreworkflow.UpsertEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+	return &coreworkflow.EventTrigger{}, nil
+}
+func (s *stubWorkflowProvider) GetEventTrigger(context.Context, coreworkflow.GetEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+	return &coreworkflow.EventTrigger{}, nil
+}
+func (s *stubWorkflowProvider) ListEventTriggers(context.Context, coreworkflow.ListEventTriggersRequest) ([]*coreworkflow.EventTrigger, error) {
+	return nil, nil
+}
+func (s *stubWorkflowProvider) DeleteEventTrigger(context.Context, coreworkflow.DeleteEventTriggerRequest) error {
+	return nil
+}
+func (s *stubWorkflowProvider) PauseEventTrigger(context.Context, coreworkflow.PauseEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+	return &coreworkflow.EventTrigger{}, nil
+}
+func (s *stubWorkflowProvider) ResumeEventTrigger(context.Context, coreworkflow.ResumeEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+	return &coreworkflow.EventTrigger{}, nil
+}
+func (s *stubWorkflowProvider) PublishEvent(context.Context, coreworkflow.PublishEventRequest) error {
+	return nil
+}
+func (s *stubWorkflowProvider) Ping(context.Context) error { return nil }
+func (s *stubWorkflowProvider) Close() error               { return nil }
 
 type trackedIndexedDB struct {
 	*coretesting.StubIndexedDB
@@ -114,6 +180,70 @@ func validFactories() *bootstrap.FactoryRegistry {
 	f.Secrets["test-secrets"] = stubSecretManagerFactory()
 	f.Telemetry["test-telemetry"] = stubTelemetryFactory()
 	return f
+}
+
+func invokeWorkflowHostCallback(t *testing.T, hostServices []providerhost.HostService, req *proto.InvokeWorkflowOperationRequest) (*proto.InvokeWorkflowOperationResponse, error) {
+	t.Helper()
+
+	if len(hostServices) != 1 {
+		t.Fatalf("workflow host services = %d, want 1", len(hostServices))
+	}
+	if hostServices[0].Register == nil {
+		t.Fatal("workflow host register func is nil")
+	}
+
+	lis := bufconn.Listen(1024 * 1024)
+	srv := grpc.NewServer()
+	hostServices[0].Register(srv)
+	go func() {
+		_ = srv.Serve(lis)
+	}()
+	t.Cleanup(func() {
+		srv.Stop()
+		_ = lis.Close()
+	})
+
+	conn, err := grpc.NewClient("passthrough:///bufnet",
+		grpc.WithContextDialer(func(context.Context, string) (net.Conn, error) {
+			return lis.Dial()
+		}),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	if err != nil {
+		t.Fatalf("grpc.NewClient: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+
+	return proto.NewWorkflowHostClient(conn).InvokeOperation(context.Background(), req)
+}
+
+func workflowStartupCallbackConfig(baseURL string) *config.Config {
+	cfg := validConfig()
+	cfg.Plugins = map[string]*config.ProviderEntry{
+		"roadmap": {
+			ConnectionMode: providermanifestv1.ConnectionModeIdentity,
+			Workflow: &config.PluginWorkflowConfig{
+				Provider:   "temporal",
+				Operations: []string{"sync"},
+			},
+			ResolvedManifest: &providermanifestv1.Manifest{
+				Spec: &providermanifestv1.Spec{
+					Surfaces: &providermanifestv1.ProviderSurfaces{
+						REST: &providermanifestv1.RESTSurface{
+							BaseURL: baseURL,
+							Operations: []providermanifestv1.ProviderOperation{
+								{Name: "sync", Method: http.MethodPost, Path: "/sync"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+	return cfg
 }
 
 func transportSecretRef(name string) string {
@@ -408,6 +538,302 @@ func TestBootstrapPassesConfiguredS3ResourceNamesToProviders(t *testing.T) {
 	}
 }
 
+func TestBootstrapPassesConfiguredWorkflowResourceNamesToProviders(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"cleanup":  {Source: config.ProviderSource{Path: "stub"}},
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	factories := validFactories()
+	seen := make(map[string]struct{}, len(cfg.Providers.Workflow))
+	hostSockets := make(map[string]string, len(cfg.Providers.Workflow))
+	factories.Workflow = func(_ context.Context, name string, node yaml.Node, hostServices []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		var runtime struct {
+			Name string `yaml:"name"`
+		}
+		if err := node.Decode(&runtime); err != nil {
+			return nil, err
+		}
+		seen[runtime.Name] = struct{}{}
+		if len(hostServices) != 1 {
+			return nil, fmt.Errorf("workflow host services = %d, want 1", len(hostServices))
+		}
+		hostSockets[name] = hostServices[0].EnvVar
+		return &stubWorkflowProvider{}, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(seen) != 2 {
+		t.Fatalf("seen workflow runtime names = %v, want 2 entries", seen)
+	}
+	for _, name := range []string{"cleanup", "temporal"} {
+		if _, ok := seen[name]; !ok {
+			t.Fatalf("missing workflow runtime name %q in %v", name, seen)
+		}
+		if got := hostSockets[name]; got != providerhost.DefaultWorkflowHostSocketEnv {
+			t.Fatalf("workflow host env for %q = %q, want %q", name, got, providerhost.DefaultWorkflowHostSocketEnv)
+		}
+	}
+}
+
+func TestBootstrapStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
+	t.Parallel()
+
+	var requestPath atomic.Value
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestPath.Store(r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	cfg := workflowStartupCallbackConfig(srv.URL)
+	factories := validFactories()
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []providerhost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
+		if name != "temporal" {
+			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
+		}
+		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
+			UserID:      principal.IdentityPrincipal,
+			Integration: "roadmap",
+			Connection:  config.PluginConnectionName,
+			Instance:    "default",
+			AccessToken: "workflow-bootstrap-token",
+		}); err != nil {
+			return nil, fmt.Errorf("store identity token: %w", err)
+		}
+		resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
+			PluginName: "roadmap",
+			Target: &proto.BoundWorkflowTarget{
+				PluginName: "roadmap",
+				Operation:  "sync",
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("startup callback: %w", err)
+		}
+		if resp.GetStatus() != http.StatusAccepted || resp.GetBody() != `{"ok":true}` {
+			return nil, fmt.Errorf("startup callback response = %#v", resp)
+		}
+		return &stubWorkflowProvider{}, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if got, _ := requestPath.Load().(string); got != "/sync" {
+		t.Fatalf("request path = %q, want %q", got, "/sync")
+	}
+}
+
+func TestValidateStartsWorkflowProvidersAfterInvokerIsReady(t *testing.T) {
+	t.Parallel()
+
+	var requestPath atomic.Value
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestPath.Store(r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	cfg := workflowStartupCallbackConfig(srv.URL)
+	factories := validFactories()
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []providerhost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
+		if name != "temporal" {
+			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
+		}
+		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
+			UserID:      principal.IdentityPrincipal,
+			Integration: "roadmap",
+			Connection:  config.PluginConnectionName,
+			Instance:    "default",
+			AccessToken: "workflow-validate-token",
+		}); err != nil {
+			return nil, fmt.Errorf("store identity token: %w", err)
+		}
+		resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
+			PluginName: "roadmap",
+			Target: &proto.BoundWorkflowTarget{
+				PluginName: "roadmap",
+				Operation:  "sync",
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("startup callback: %w", err)
+		}
+		if resp.GetStatus() != http.StatusAccepted || resp.GetBody() != `{"ok":true}` {
+			return nil, fmt.Errorf("startup callback response = %#v", resp)
+		}
+		return &stubWorkflowProvider{}, nil
+	}
+
+	if _, err := bootstrap.Validate(context.Background(), cfg, factories); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+	if got, _ := requestPath.Load().(string); got != "/sync" {
+		t.Fatalf("request path = %q, want %q", got, "/sync")
+	}
+}
+
+func TestValidateManagedWorkflowStartupCallbackUsesPreparedProviderStub(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Plugins = map[string]*config.ProviderEntry{
+		"roadmap": {
+			Source:         config.ProviderSource{Ref: "github.com/example/roadmap", Version: "0.0.1"},
+			ConnectionMode: providermanifestv1.ConnectionModeIdentity,
+			Workflow: &config.PluginWorkflowConfig{
+				Provider:   "temporal",
+				Operations: []string{"sync"},
+			},
+			ResolvedManifest: &providermanifestv1.Manifest{
+				DisplayName: "Roadmap",
+				Description: "Managed roadmap plugin",
+				Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: "roadmap"},
+				Spec: &providermanifestv1.Spec{
+					Surfaces: &providermanifestv1.ProviderSurfaces{
+						REST: &providermanifestv1.RESTSurface{
+							BaseURL: "https://example.invalid",
+							Operations: []providermanifestv1.ProviderOperation{
+								{Name: "sync", Method: http.MethodPost, Path: "/sync"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	factories := validFactories()
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []providerhost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
+		if name != "temporal" {
+			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
+		}
+		if err := deps.Services.Tokens.StoreToken(context.Background(), &core.IntegrationToken{
+			UserID:      principal.IdentityPrincipal,
+			Integration: "roadmap",
+			Connection:  config.PluginConnectionName,
+			Instance:    "default",
+			AccessToken: "workflow-validate-token",
+		}); err != nil {
+			return nil, fmt.Errorf("store identity token: %w", err)
+		}
+		resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
+			PluginName: "roadmap",
+			Target: &proto.BoundWorkflowTarget{
+				PluginName: "roadmap",
+				Operation:  "sync",
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("startup callback: %w", err)
+		}
+		if resp.GetStatus() != http.StatusAccepted || resp.GetBody() != `{}` {
+			return nil, fmt.Errorf("startup callback response = %#v", resp)
+		}
+		return &stubWorkflowProvider{}, nil
+	}
+
+	if _, err := bootstrap.Validate(context.Background(), cfg, factories); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+}
+
+func TestValidateManagedWorkflowStartupCallbackSupportsMCPPassthroughPreparedProviders(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	catalogData, err := yaml.Marshal(&catalog.Catalog{
+		Name: "roadmap",
+		Operations: []catalog.CatalogOperation{{
+			ID:        "sync",
+			Method:    http.MethodPost,
+			Transport: catalog.TransportMCPPassthrough,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("yaml.Marshal(catalog): %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "catalog.yaml"), catalogData, 0o644); err != nil {
+		t.Fatalf("WriteFile(catalog.yaml): %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "manifest.yaml"), []byte("kind: plugin\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(manifest.yaml): %v", err)
+	}
+
+	cfg := validConfig()
+	cfg.Plugins = map[string]*config.ProviderEntry{
+		"roadmap": {
+			Source: config.ProviderSource{Ref: "github.com/example/roadmap", Version: "0.0.1"},
+			Workflow: &config.PluginWorkflowConfig{
+				Provider:   "temporal",
+				Operations: []string{"sync"},
+			},
+			ResolvedManifestPath: filepath.Join(root, "manifest.yaml"),
+			ResolvedManifest: &providermanifestv1.Manifest{
+				DisplayName: "Roadmap",
+				Description: "Managed roadmap plugin",
+				Entrypoint:  &providermanifestv1.Entrypoint{ArtifactPath: "roadmap"},
+				Spec: &providermanifestv1.Spec{
+					Surfaces: &providermanifestv1.ProviderSurfaces{
+						MCP: &providermanifestv1.MCPSurface{
+							URL: "https://example.invalid/mcp",
+						},
+					},
+				},
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	factories := validFactories()
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, hostServices []providerhost.HostService, deps bootstrap.Deps) (coreworkflow.Provider, error) {
+		if name != "temporal" {
+			return nil, fmt.Errorf("workflow name = %q, want %q", name, "temporal")
+		}
+		resp, err := invokeWorkflowHostCallback(t, hostServices, &proto.InvokeWorkflowOperationRequest{
+			PluginName: "roadmap",
+			Target: &proto.BoundWorkflowTarget{
+				PluginName: "roadmap",
+				Operation:  "sync",
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("startup callback: %w", err)
+		}
+		if resp.GetStatus() != http.StatusOK || resp.GetBody() != `{}` {
+			return nil, fmt.Errorf("startup callback response = %#v", resp)
+		}
+		return &stubWorkflowProvider{}, nil
+	}
+
+	if _, err := bootstrap.Validate(context.Background(), cfg, factories); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+}
+
 func TestBootstrapS3BuildFailureClosesIndexedDBsOnce(t *testing.T) {
 	t.Parallel()
 
@@ -513,6 +939,108 @@ func TestValidate(t *testing.T) {
 		_, err := bootstrap.Validate(context.Background(), cfg, validFactories())
 		if err == nil || !strings.Contains(err.Error(), `plugins.caller.invokes[0] references unknown plugin "missing"`) {
 			t.Fatalf("Validate error = %v, want unknown plugin invokes error", err)
+		}
+	})
+
+	t.Run("workflow managed workloads reject either providers", func(t *testing.T) {
+		t.Parallel()
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		}))
+		defer srv.Close()
+
+		cfg := validConfig()
+		cfg.Plugins = map[string]*config.ProviderEntry{
+			"svc": {
+				ConnectionMode: providermanifestv1.ConnectionModeEither,
+				Workflow: &config.PluginWorkflowConfig{
+					Provider:   "temporal",
+					Operations: []string{"run"},
+				},
+				ResolvedManifest: &providermanifestv1.Manifest{
+					Spec: &providermanifestv1.Spec{
+						Surfaces: &providermanifestv1.ProviderSurfaces{
+							REST: &providermanifestv1.RESTSurface{
+								BaseURL: srv.URL,
+								Operations: []providermanifestv1.ProviderOperation{
+									{Name: "run", Method: http.MethodPost, Path: "/run"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+			"temporal": {Source: config.ProviderSource{Path: "stub"}},
+		}
+
+		factories := validFactories()
+		factories.Workflow = func(context.Context, string, yaml.Node, []providerhost.HostService, bootstrap.Deps) (coreworkflow.Provider, error) {
+			return &stubWorkflowProvider{}, nil
+		}
+
+		_, err := bootstrap.Validate(context.Background(), cfg, factories)
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `unsupported connection mode "either"`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("workflow managed workload tokens stay unique across similar plugin names", func(t *testing.T) {
+		t.Parallel()
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"ok":true}`))
+		}))
+		defer srv.Close()
+
+		manifest := &providermanifestv1.Manifest{
+			Spec: &providermanifestv1.Spec{
+				Surfaces: &providermanifestv1.ProviderSurfaces{
+					REST: &providermanifestv1.RESTSurface{
+						BaseURL: srv.URL,
+						Operations: []providermanifestv1.ProviderOperation{
+							{Name: "run", Method: http.MethodPost, Path: "/run"},
+						},
+					},
+				},
+			},
+		}
+
+		cfg := validConfig()
+		cfg.Plugins = map[string]*config.ProviderEntry{
+			"foo-bar": {
+				Workflow: &config.PluginWorkflowConfig{
+					Provider:   "temporal",
+					Operations: []string{"run"},
+				},
+				ResolvedManifest: manifest,
+			},
+			"foo_bar": {
+				Workflow: &config.PluginWorkflowConfig{
+					Provider:   "temporal",
+					Operations: []string{"run"},
+				},
+				ResolvedManifest: manifest,
+			},
+		}
+		cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+			"temporal": {Source: config.ProviderSource{Path: "stub"}},
+		}
+
+		factories := validFactories()
+		factories.Workflow = func(context.Context, string, yaml.Node, []providerhost.HostService, bootstrap.Deps) (coreworkflow.Provider, error) {
+			return &stubWorkflowProvider{}, nil
+		}
+
+		if _, err := bootstrap.Validate(context.Background(), cfg, factories); err != nil {
+			t.Fatalf("Validate: %v", err)
 		}
 	})
 }
@@ -1158,6 +1686,56 @@ func TestBootstrapWorkloadAuthorizationRejectsEitherProvider(t *testing.T) {
 	factories := validFactories()
 	factories.Builtins = []core.Provider{
 		&coretesting.StubIntegration{N: "svc", ConnMode: core.ConnectionModeEither},
+	}
+
+	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), `unsupported connection mode "either"`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestBootstrapWorkflowAuthorizationRejectsEitherProvider(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer srv.Close()
+
+	cfg := validConfig()
+	cfg.Plugins = map[string]*config.ProviderEntry{
+		"svc": {
+			ConnectionMode: providermanifestv1.ConnectionModeEither,
+			Workflow: &config.PluginWorkflowConfig{
+				Provider:   "temporal",
+				Operations: []string{"run"},
+			},
+			ResolvedManifest: &providermanifestv1.Manifest{
+				Spec: &providermanifestv1.Spec{
+					Surfaces: &providermanifestv1.ProviderSurfaces{
+						REST: &providermanifestv1.RESTSurface{
+							BaseURL: srv.URL,
+							Operations: []providermanifestv1.ProviderOperation{
+								{Name: "run", Method: http.MethodPost, Path: "/run"},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+	cfg.Authorization = config.AuthorizationConfig{}
+
+	factories := validFactories()
+	factories.Workflow = func(context.Context, string, yaml.Node, []providerhost.HostService, bootstrap.Deps) (coreworkflow.Provider, error) {
+		return &stubWorkflowProvider{}, nil
 	}
 
 	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)

@@ -40,6 +40,11 @@ import {
   ProviderLifecycle,
 } from "../gen/v1/runtime_pb.ts";
 import {
+  PublishWorkflowProviderEventRequestSchema,
+  StartWorkflowProviderRunRequestSchema,
+  UpsertWorkflowProviderScheduleRequestSchema,
+} from "../gen/v1/workflow_pb.ts";
+import {
   CURRENT_PROTOCOL_VERSION,
   createCacheService,
   ENV_WRITE_CATALOG,
@@ -47,11 +52,19 @@ import {
   createAuthService,
   createProviderService,
   createRuntimeService,
+  createWorkflowService,
   loadProviderFromTarget,
   main,
   parseRuntimeArgs,
 } from "../src/runtime.ts";
-import { PresignMethod, S3, defineCacheProvider, defineS3Provider } from "../src/index.ts";
+import {
+  PresignMethod,
+  S3,
+  WorkflowRunStatus,
+  defineCacheProvider,
+  definePlugin,
+  defineS3Provider,
+} from "../src/index.ts";
 import { createS3Service } from "../src/s3.ts";
 import {
   captureChildStderr,
@@ -947,6 +960,200 @@ test("s3 provider target resolves and serves runtime metadata plus object operat
   });
   expect(presigned.url).toContain("method=PUT");
   expect(presigned.headers).toEqual({ "x-test": "1" });
+});
+
+test("workflow provider target resolves and serves runtime metadata plus workflow operations", async () => {
+  const provider = await loadProviderFromTarget(fixturePath("workflow-provider"));
+  const runtime = createRuntimeService(provider);
+  const workflow = createWorkflowService(provider as any);
+
+  await (runtime.configureProvider as any)(
+    create(ConfigureProviderRequestSchema, {
+      name: "fixture-workflow",
+      config: {},
+      protocolVersion: 2,
+    }),
+  );
+
+  const metadata = await (runtime.getProviderIdentity as any)(
+    create(EmptySchema, {}),
+  );
+  expect(metadata.kind).toBe(ProtoProviderKind.WORKFLOW);
+  expect(metadata.displayName).toBe("Fixture Workflow");
+
+  const run = await (workflow.startRun as any)(
+    create(StartWorkflowProviderRunRequestSchema, {
+      idempotencyKey: "req-1",
+      pluginName: "roadmap",
+      createdBy: {
+        subjectId: "user:user-123",
+        subjectKind: "user",
+        displayName: "Ada",
+        authSource: "api_token",
+      },
+      target: {
+        pluginName: "roadmap",
+        operation: "sync",
+        input: {
+          project: "alpha",
+        },
+      },
+    }),
+  );
+  expect(run.target?.pluginName).toBe("roadmap");
+  expect(run.status).toBe(WorkflowRunStatus.PENDING);
+  expect(run.statusMessage).toBe("idempotency:req-1");
+  expect(run.createdBy?.subjectId).toBe("user:user-123");
+
+  const schedule = await (workflow.upsertSchedule as any)(
+    create(UpsertWorkflowProviderScheduleRequestSchema, {
+      scheduleId: "nightly",
+      cron: "*/5 * * * *",
+      timezone: "UTC",
+      pluginName: "roadmap",
+      requestedBy: {
+        subjectId: "workload:planner",
+        subjectKind: "workload",
+        displayName: "Planner",
+        authSource: "workload_token",
+      },
+      target: {
+        pluginName: "roadmap",
+        operation: "sync",
+      },
+    }),
+  );
+  expect(schedule.id).toBe("nightly");
+  expect(schedule.target?.pluginName).toBe("roadmap");
+  expect(schedule.createdBy?.subjectId).toBe("workload:planner");
+
+  const updatedSchedule = await (workflow.upsertSchedule as any)(
+    create(UpsertWorkflowProviderScheduleRequestSchema, {
+      scheduleId: "nightly",
+      cron: "0 * * * *",
+      timezone: "UTC",
+      pluginName: "roadmap",
+      requestedBy: {
+        subjectId: "user:user-999",
+        subjectKind: "user",
+        displayName: "Grace",
+        authSource: "api_token",
+      },
+      target: {
+        pluginName: "roadmap",
+        operation: "sync",
+      },
+    }),
+  );
+  expect(updatedSchedule.createdBy?.subjectId).toBe("workload:planner");
+
+  await (workflow.publishEvent as any)(
+    create(PublishWorkflowProviderEventRequestSchema, {
+      pluginName: "roadmap",
+      event: {
+        id: "evt-1",
+        source: "tests",
+        specVersion: "1.0",
+        type: "roadmap.changed",
+      },
+    }),
+  );
+
+  const refreshedMetadata = await (runtime.getProviderIdentity as any)(
+    create(EmptySchema, {}),
+  );
+  expect(refreshedMetadata.warnings).toEqual(["published-events:1"]);
+});
+
+test("integration provider request context includes workflow metadata", async () => {
+  const plugin = definePlugin({
+    operations: [
+      {
+        id: "inspect",
+        handler(_input, request) {
+          return {
+            workflow: request.workflow,
+          };
+        },
+      },
+    ],
+  });
+  const service = createProviderService(plugin);
+
+  const result = await (service.execute as any)(
+    create(ExecuteRequestSchema, {
+      operation: "inspect",
+      params: {},
+      token: "token-123",
+      context: create(RequestContextSchema, {
+        workflow: {
+          runId: "run-123",
+          provider: "temporal",
+          createdBy: {
+            subjectId: "user:user-123",
+            subjectKind: "user",
+            displayName: "Ada",
+            authSource: "api_token",
+          },
+          target: {
+            pluginName: "demo",
+            operation: "sync",
+          },
+          trigger: {
+            kind: "event",
+            triggerId: "trigger-1",
+            event: {
+              id: "evt-1",
+              source: "urn:test",
+              specVersion: "1.0",
+              type: "demo.refresh",
+              dataContentType: "application/json",
+            },
+          },
+          input: {
+            customerId: "cust_123",
+          },
+          metadata: {
+            attempt: 2,
+          },
+        },
+      }),
+    }),
+  );
+
+  expect(JSON.parse(result.body)).toEqual({
+    workflow: {
+      runId: "run-123",
+      provider: "temporal",
+      createdBy: {
+        subjectId: "user:user-123",
+        subjectKind: "user",
+        displayName: "Ada",
+        authSource: "api_token",
+      },
+      target: {
+        pluginName: "demo",
+        operation: "sync",
+      },
+      trigger: {
+        kind: "event",
+        triggerId: "trigger-1",
+        event: {
+          id: "evt-1",
+          source: "urn:test",
+          specVersion: "1.0",
+          type: "demo.refresh",
+          dataContentType: "application/json",
+        },
+      },
+      input: {
+        customerId: "cust_123",
+      },
+      metadata: {
+        attempt: 2,
+      },
+    },
+  });
 });
 
 test("s3 writeObject closes unread request frames when provider returns early", async () => {

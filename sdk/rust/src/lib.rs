@@ -23,6 +23,7 @@ mod runtime_server;
 pub mod s3;
 mod secrets;
 mod secrets_server;
+mod workflow;
 
 /// Generated protobuf and gRPC bindings for the Gestalt provider protocol.
 pub mod proto {
@@ -48,6 +49,10 @@ pub use router::{Operation, Router};
 pub use s3::{S3, S3Error, S3Provider};
 pub use secrets::SecretsProvider;
 pub use tonic::codegen::async_trait;
+pub use workflow::{
+    ENV_WORKFLOW_HOST_SOCKET, ENV_WORKFLOW_SOCKET, Workflow, WorkflowError, WorkflowHost,
+    WorkflowHostError, WorkflowProvider,
+};
 
 #[doc(hidden)]
 pub trait IntoRouterResult<P> {
@@ -132,6 +137,16 @@ macro_rules! export_s3_provider {
         pub fn __gestalt_serve_s3(_name: &str) -> $crate::Result<()> {
             let provider = std::sync::Arc::new($constructor());
             $crate::runtime::run_s3_provider(provider)
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! export_workflow_provider {
+    (constructor = $constructor:path $(,)?) => {
+        pub fn __gestalt_serve_workflow(_name: &str) -> $crate::Result<()> {
+            let provider = std::sync::Arc::new($constructor());
+            $crate::runtime::run_workflow_provider(provider)
         }
     };
 }

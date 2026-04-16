@@ -55,6 +55,10 @@ class Request:
     credential: Credential = dataclasses.field(default_factory=Credential)
     access: Access = dataclasses.field(default_factory=Access)
     request_handle: str = ""
+    # Workflow callback metadata uses a JSON-style lowerCamelCase object such
+    # as runId, target.pluginName, trigger.scheduleId, and
+    # trigger.event.specVersion.
+    workflow: dict[str, Any] = dataclasses.field(default_factory=dict)
 
     def connection_param(self, name: str) -> str | None:
         """Return a connection parameter by name if the host supplied it."""

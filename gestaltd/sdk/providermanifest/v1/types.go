@@ -10,6 +10,7 @@ const (
 	KindIndexedDB = "indexeddb"
 	KindCache     = "cache"
 	KindS3        = "s3"
+	KindWorkflow  = "workflow"
 	KindSecrets   = "secrets"
 	KindWebUI     = "webui"
 )

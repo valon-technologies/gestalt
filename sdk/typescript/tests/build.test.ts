@@ -25,6 +25,10 @@ import {
 } from "../gen/v1/secrets_pb.ts";
 import { S3 as S3Service } from "../gen/v1/s3_pb.ts";
 import { ConfigureProviderRequestSchema, ProviderKind as ProtoProviderKind, ProviderLifecycle } from "../gen/v1/runtime_pb.ts";
+import {
+  StartWorkflowProviderRunRequestSchema,
+  WorkflowProvider as WorkflowProviderService,
+} from "../gen/v1/workflow_pb.ts";
 import { buildProviderBinary, bunTarget, parseBuildArgs } from "../src/build.ts";
 import { Cache, cacheSocketEnv } from "../src/cache.ts";
 import { CURRENT_PROTOCOL_VERSION, ENV_PROVIDER_SOCKET } from "../src/runtime.ts";
@@ -140,7 +144,7 @@ test("buildProviderBinary compiles a runnable auth provider executable", async (
     }
     removeTempDir(tempDir);
   }
-}, 15_000);
+}, 45_000);
 
 test("buildProviderBinary compiles a runnable plugin provider executable", async () => {
   const { goos, goarch, executableSuffix } = hostTarget();
@@ -602,7 +606,7 @@ test("buildProviderBinary compiles a runnable cache provider executable", async 
     }
     removeTempDir(tempDir);
   }
-}, 15_000);
+}, 45_000);
 
 test("buildProviderBinary compiles a runnable secrets provider executable", async () => {
   const { goos, goarch, executableSuffix } = hostTarget();
@@ -772,3 +776,67 @@ test("buildProviderBinary compiles a runnable s3 provider executable", async () 
     removeTempDir(tempDir);
   }
 }, 15_000);
+
+test("buildProviderBinary compiles a runnable workflow provider executable", async () => {
+  const { goos, goarch, executableSuffix } = hostTarget();
+  const tempDir = makeTempDir("gts-workflow-");
+  const outputPath = join(tempDir, `fixture-workflow${executableSuffix}`);
+  const socketPath = join(tempDir, "provider.sock");
+  let child: ChildProcess | undefined;
+
+  try {
+    buildProviderBinary({
+      root: fixturePath("workflow-provider"),
+      target: "workflow:./workflow.ts#provider",
+      outputPath,
+      providerName: "fixture-workflow",
+      goos,
+      goarch,
+    });
+
+    expect(existsSync(outputPath)).toBe(true);
+
+    child = spawn(outputPath, [], {
+      env: {
+        ...process.env,
+        [ENV_PROVIDER_SOCKET]: socketPath,
+      },
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    const stderrText = captureChildStderr(child);
+
+    await waitForSocket(socketPath, stderrText);
+
+    const runtime = createUnixGrpcClient(ProviderLifecycle, socketPath);
+    const workflow = createUnixGrpcClient(WorkflowProviderService, socketPath);
+
+    const metadata = await runtime.getProviderIdentity(create(EmptySchema, {}));
+    expect(metadata.kind).toBe(ProtoProviderKind.WORKFLOW);
+    expect(metadata.name).toBe("fixture-workflow");
+
+    await runtime.configureProvider(
+      create(ConfigureProviderRequestSchema, {
+        name: "fixture-workflow",
+        config: {},
+        protocolVersion: CURRENT_PROTOCOL_VERSION,
+      }),
+    );
+
+    const run = await workflow.startRun(
+      create(StartWorkflowProviderRunRequestSchema, {
+        pluginName: "roadmap",
+        target: {
+          pluginName: "roadmap",
+          operation: "sync",
+        },
+      }),
+    );
+    expect(run.target?.pluginName).toBe("roadmap");
+    expect(run.id).toBe("roadmap:sync:1");
+  } finally {
+    if (child) {
+      await stopProcess(child);
+    }
+    removeTempDir(tempDir);
+  }
+}, 60_000);

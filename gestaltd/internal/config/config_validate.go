@@ -119,6 +119,9 @@ func ValidateCanonicalStructure(cfg *Config) error {
 	if err := validateCacheConfig(cfg); err != nil {
 		return err
 	}
+	if err := validateWorkflowConfig(cfg); err != nil {
+		return err
+	}
 	if err := validateS3Config(cfg); err != nil {
 		return err
 	}
@@ -375,6 +378,9 @@ func validatePlugin(cfg *Config, name string, entry *ProviderEntry) error {
 	if err := validatePluginCacheBindings(cfg, name, entry); err != nil {
 		return err
 	}
+	if err := validatePluginWorkflowConfig(cfg, name, entry); err != nil {
+		return err
+	}
 	if err := validatePluginS3Bindings(cfg, name, entry); err != nil {
 		return err
 	}
@@ -435,6 +441,29 @@ func validateS3Config(cfg *Config) error {
 	return nil
 }
 
+func validateWorkflowConfig(cfg *Config) error {
+	defaults := make([]string, 0, len(cfg.Providers.Workflow))
+	for name, entry := range cfg.Providers.Workflow {
+		if entry == nil {
+			return fmt.Errorf("config validation: providers.workflow.%s is required", name)
+		}
+		if entry.Default {
+			defaults = append(defaults, name)
+		}
+		if err := validatePluginOnlyProviderFields("providers.workflow."+name, entry); err != nil {
+			return err
+		}
+		if err := validateProviderEntrySource("workflow", name, entry); err != nil {
+			return err
+		}
+	}
+	if len(defaults) > 1 {
+		sort.Strings(defaults)
+		return fmt.Errorf("config validation: providers.workflow declares multiple defaults: %s", strings.Join(defaults, ", "))
+	}
+	return nil
+}
+
 func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) error {
 	if entry == nil {
 		return nil
@@ -456,6 +485,9 @@ func validatePluginOnlyProviderFields(subject string, entry *ProviderEntry) erro
 	}
 	if len(entry.Invokes) > 0 {
 		return fmt.Errorf("config validation: %s.invokes is only supported on plugins.*", subject)
+	}
+	if entry.Workflow != nil {
+		return fmt.Errorf("config validation: %s.workflow is only supported on plugins.*", subject)
 	}
 	if entry.Surfaces != nil {
 		return fmt.Errorf("config validation: %s.surfaces is only supported on plugins.*", subject)
@@ -643,6 +675,32 @@ func validatePluginS3Bindings(cfg *Config, name string, entry *ProviderEntry) er
 		seen[binding] = struct{}{}
 		envNames[envName] = binding
 		entry.S3[i] = binding
+	}
+	return nil
+}
+
+func validatePluginWorkflowConfig(cfg *Config, name string, entry *ProviderEntry) error {
+	if entry == nil || entry.Workflow == nil {
+		return nil
+	}
+	entry.Workflow.Provider = strings.TrimSpace(entry.Workflow.Provider)
+	seenOps := make(map[string]struct{}, len(entry.Workflow.Operations))
+	for i, op := range entry.Workflow.Operations {
+		op = strings.TrimSpace(op)
+		if op == "" {
+			return fmt.Errorf("config validation: plugins.%s.workflow.operations[%d] is required", name, i)
+		}
+		if _, exists := seenOps[op]; exists {
+			return fmt.Errorf("config validation: plugins.%s.workflow.operations[%d] duplicates %q", name, i, op)
+		}
+		seenOps[op] = struct{}{}
+		entry.Workflow.Operations[i] = op
+	}
+	if len(entry.Workflow.Operations) == 0 {
+		return fmt.Errorf("config validation: plugins.%s.workflow.operations must not be empty", name)
+	}
+	if _, err := cfg.EffectivePluginWorkflow(name, entry); err != nil {
+		return err
 	}
 	return nil
 }

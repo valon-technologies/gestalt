@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"reflect"
 	"testing"
 
 	sdkgestalt "github.com/valon-technologies/gestalt/sdk/go"
@@ -265,6 +266,20 @@ func TestRemoteProviderRoundTrip(t *testing.T) {
 		})
 	}
 
+	t.Run("invalid workflow context", func(t *testing.T) {
+		t.Parallel()
+
+		ctx := invocation.WithWorkflowContext(context.Background(), map[string]any{
+			"input": map[string]any{
+				"bad": make(chan int),
+			},
+		})
+
+		if _, err := prov.Execute(ctx, "echo", map[string]any{"message": "hi"}, "secret-token"); err == nil {
+			t.Fatal("expected Execute to fail for unserializable workflow context")
+		}
+	})
+
 	if defs := prov.ConnectionParamDefs(); defs["tenant"].Description != "Tenant slug" || defs["team_id"].Field != "team_id" {
 		t.Fatalf("unexpected connection param defs: %+v", defs)
 	}
@@ -284,7 +299,10 @@ func TestRequestContextProto_PreservesWorkloadDisplayName(t *testing.T) {
 		Role:   "viewer",
 	})
 
-	reqCtx := requestContextProto(ctx)
+	reqCtx, err := requestContextProto(ctx)
+	if err != nil {
+		t.Fatalf("requestContextProto: %v", err)
+	}
 	if reqCtx == nil || reqCtx.GetSubject() == nil {
 		t.Fatal("expected request subject context")
 	}
@@ -293,6 +311,33 @@ func TestRequestContextProto_PreservesWorkloadDisplayName(t *testing.T) {
 	}
 	if reqCtx.GetAccess() == nil || reqCtx.GetAccess().GetPolicy() != "roadmap" || reqCtx.GetAccess().GetRole() != "viewer" {
 		t.Fatalf("unexpected access context: %#v", reqCtx.GetAccess())
+	}
+}
+
+func TestRequestContextProto_PreservesWorkflowContext(t *testing.T) {
+	t.Parallel()
+
+	ctx := invocation.WithWorkflowContext(context.Background(), map[string]any{
+		"runId": "run-123",
+		"trigger": map[string]any{
+			"kind": "event",
+		},
+	})
+
+	reqCtx, err := requestContextProto(ctx)
+	if err != nil {
+		t.Fatalf("requestContextProto: %v", err)
+	}
+	if reqCtx == nil || reqCtx.GetWorkflow() == nil {
+		t.Fatal("expected workflow request context")
+	}
+	if got := reqCtx.GetWorkflow().AsMap(); !reflect.DeepEqual(got, map[string]any{
+		"runId": "run-123",
+		"trigger": map[string]any{
+			"kind": "event",
+		},
+	}) {
+		t.Fatalf("workflow context = %#v", got)
 	}
 }
 

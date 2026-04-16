@@ -7,11 +7,13 @@ import (
 	"log/slog"
 	"sync"
 
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
 	"github.com/valon-technologies/gestalt/server/core"
 	corecache "github.com/valon-technologies/gestalt/server/core/cache"
 	"github.com/valon-technologies/gestalt/server/core/crypto"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
+	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
@@ -19,7 +21,9 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/oauth"
 	"github.com/valon-technologies/gestalt/server/internal/provider"
+	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
+	"google.golang.org/grpc"
 	"gopkg.in/yaml.v3"
 )
 
@@ -133,6 +137,7 @@ type Deps struct {
 	CacheDefs             map[string]*config.ProviderEntry
 	CacheFactory          CacheFactory
 	S3                    map[string]s3store.Client
+	WorkflowRuntime       *workflowRuntime
 	Egress                EgressDeps
 	PluginInvoker         invocation.Invoker
 }
@@ -142,6 +147,7 @@ type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
 type IndexedDBFactory func(node yaml.Node) (indexeddb.IndexedDB, error)
 type CacheFactory func(node yaml.Node) (corecache.Cache, error)
 type S3Factory func(node yaml.Node) (s3store.Client, error)
+type WorkflowFactory func(ctx context.Context, name string, node yaml.Node, hostServices []providerhost.HostService, deps Deps) (coreworkflow.Provider, error)
 type TelemetryFactory func(node yaml.Node) (core.TelemetryProvider, error)
 type AuditFactory func(ctx context.Context, cfg config.ProviderEntry, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error)
 
@@ -151,6 +157,7 @@ type FactoryRegistry struct {
 	IndexedDB IndexedDBFactory
 	Cache     CacheFactory
 	S3        S3Factory
+	Workflow  WorkflowFactory
 	Telemetry map[string]TelemetryFactory
 	Audit     AuditFactory
 	Builtins  []core.Provider
@@ -168,6 +175,7 @@ type Result struct {
 	Services         *coredata.Services
 	ExtraIndexedDBs  []indexeddb.IndexedDB
 	ExtraS3s         []s3store.Client
+	ExtraWorkflows   []coreworkflow.Provider
 	Providers        *registry.ProviderMap[core.Provider]
 	ProvidersReady   <-chan struct{}
 	Authorizer       *authorization.Authorizer
@@ -220,6 +228,7 @@ func (r *Result) Close(ctx context.Context) error {
 		r.Services.Close(),
 		closeIndexedDBs(r.ExtraIndexedDBs...),
 		closeS3s(r.ExtraS3s...),
+		closeWorkflows(r.ExtraWorkflows...),
 		closeSecretManager(r.SecretManager),
 	)
 	if r.auditClose != nil {
@@ -260,6 +269,19 @@ func closeS3s(clients ...s3store.Client) error {
 			continue
 		}
 		if err := client.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func closeWorkflows(providers ...coreworkflow.Provider) error {
+	var errs []error
+	for _, provider := range providers {
+		if provider == nil {
+			continue
+		}
+		if err := provider.Close(); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -421,6 +443,12 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 		BaseURL:       cfg.Server.BaseURL,
 		SecretManager: sm,
 	}
+	workflowRuntime, err := newWorkflowRuntime(cfg)
+	if err != nil {
+		return nil, err
+	}
+	workflowRuntime.InitProviderPlaceholders(cfg.Providers.Workflow)
+	deps.WorkflowRuntime = workflowRuntime
 
 	auth, err := buildAuth(cfg, factories, deps)
 	if err != nil {
@@ -570,12 +598,25 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 
 	connMaps, err := BuildConnectionMaps(cfg)
 	if err != nil {
+		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 		return nil, err
 	}
-	authz, err := authorization.New(cfg.Authorization, cfg.Plugins, providers, connMaps.DefaultConnection, prepared.Services.PluginAuthorizations)
+	authzCfg, err := prepared.Deps.WorkflowRuntime.AugmentAuthorization(cfg.Authorization)
 	if err != nil {
+		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 		return nil, err
 	}
+	authz, err := authorization.New(authzCfg, cfg.Plugins, providers, connMaps.DefaultConnection, prepared.Services.PluginAuthorizations)
+	if err != nil {
+		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
+		return nil, err
+	}
+	closeAuthz := true
+	defer func() {
+		if closeAuthz {
+			_ = authz.Close()
+		}
+	}()
 	authz.SetAdminAuthorizationService(prepared.Services.AdminAuthorizations)
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.Tokens,
 		invocation.WithAuthorizer(authz),
@@ -583,6 +624,17 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
 		invocation.WithConnectionAuth(lazyRefreshers(providersReady, connAuthResolver)),
 	)
+	prepared.Deps.WorkflowRuntime.SetInvoker(sharedInvoker)
+	extraWorkflows, err := buildWorkflows(ctx, cfg, factories, prepared.Deps)
+	if err != nil {
+		return nil, err
+	}
+	closeWorkflowsOnError := true
+	defer func() {
+		if closeWorkflowsOnError {
+			_ = closeWorkflows(extraWorkflows...)
+		}
+	}()
 	audit, auditClose, err := buildAuditSink(ctx, cfg, factories, prepared.Telemetry)
 	if err != nil {
 		return nil, err
@@ -598,11 +650,14 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	closeProviders = false
 	closeCore = false
 	closeAudit = false
+	closeAuthz = false
+	closeWorkflowsOnError = false
 	return &Result{
 		Auth:             prepared.Auth,
 		Services:         prepared.Services,
 		ExtraIndexedDBs:  prepared.ExtraIndexedDBs,
 		ExtraS3s:         prepared.ExtraS3s,
+		ExtraWorkflows:   extraWorkflows,
 		Providers:        providers,
 		ProvidersReady:   providersReady,
 		Authorizer:       authz,
@@ -614,6 +669,29 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		Telemetry:        prepared.Telemetry,
 		auditClose:       auditClose,
 	}, nil
+}
+
+func buildWorkflows(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) ([]coreworkflow.Provider, error) {
+	var extraWorkflows []coreworkflow.Provider
+	for name, entry := range cfg.Providers.Workflow {
+		if entry == nil {
+			continue
+		}
+		value, err := buildWorkflow(ctx, name, entry, factories, deps)
+		if err != nil {
+			if deps.WorkflowRuntime != nil {
+				deps.WorkflowRuntime.FailProvider(name, err)
+				deps.WorkflowRuntime.FailPendingProviders(err)
+			}
+			_ = closeWorkflows(extraWorkflows...)
+			return nil, fmt.Errorf("bootstrap: workflow from resource %q: %w", name, err)
+		}
+		if deps.WorkflowRuntime != nil {
+			deps.WorkflowRuntime.PublishProvider(name, value)
+		}
+		extraWorkflows = append(extraWorkflows, value)
+	}
+	return extraWorkflows, nil
 }
 
 func buildTelemetry(cfg *config.Config, factories *FactoryRegistry) (core.TelemetryProvider, error) {
@@ -840,4 +918,31 @@ func buildS3(name string, entry *config.ProviderEntry, factories *FactoryRegistr
 		return nil, fmt.Errorf("s3 provider: %w", err)
 	}
 	return client, nil
+}
+
+func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry, factories *FactoryRegistry, deps Deps) (coreworkflow.Provider, error) {
+	if entry == nil {
+		return nil, fmt.Errorf("workflow provider is required")
+	}
+	if factories.Workflow == nil {
+		return nil, fmt.Errorf("workflow factory is not registered")
+	}
+	node := entry.Config
+	if !config.IsComponentRuntimeConfigNode(node) {
+		var err error
+		node, err = config.BuildComponentRuntimeConfigNode(name, "workflow", entry, entry.Config)
+		if err != nil {
+			return nil, fmt.Errorf("workflow provider: %w", err)
+		}
+	}
+	provider, err := factories.Workflow(ctx, name, node, []providerhost.HostService{{
+		EnvVar: providerhost.DefaultWorkflowHostSocketEnv,
+		Register: func(srv *grpc.Server) {
+			proto.RegisterWorkflowHostServer(srv, providerhost.NewWorkflowHostServer(name, deps.WorkflowRuntime.Invoke, deps.WorkflowRuntime.Allow))
+		},
+	}}, deps)
+	if err != nil {
+		return nil, fmt.Errorf("workflow provider: %w", err)
+	}
+	return provider, nil
 }

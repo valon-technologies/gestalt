@@ -1,0 +1,626 @@
+import { connect } from "node:net";
+
+import { create, type MessageInitShape } from "@bufbuild/protobuf";
+import { EmptySchema } from "@bufbuild/protobuf/wkt";
+import {
+  Code,
+  ConnectError,
+  createClient,
+  type Client,
+  type ServiceImpl,
+} from "@connectrpc/connect";
+import { createGrpcTransport } from "@connectrpc/connect-node";
+
+import {
+  BoundWorkflowEventTriggerSchema,
+  BoundWorkflowRunSchema,
+  BoundWorkflowScheduleSchema,
+  ListWorkflowProviderEventTriggersResponseSchema,
+  ListWorkflowProviderRunsResponseSchema,
+  ListWorkflowProviderSchedulesResponseSchema,
+  Workflow as WorkflowService,
+  WorkflowHost as WorkflowHostService,
+  WorkflowProvider as WorkflowProviderService,
+  type BoundWorkflowEventTrigger,
+  type BoundWorkflowRun,
+  type BoundWorkflowSchedule,
+  type CancelWorkflowProviderRunRequest,
+  type CancelWorkflowRunRequest,
+  type DeleteWorkflowProviderEventTriggerRequest,
+  type DeleteWorkflowProviderScheduleRequest,
+  type DeleteWorkflowScheduleRequest,
+  type GetWorkflowEventTriggerRequest,
+  type GetWorkflowProviderEventTriggerRequest,
+  type GetWorkflowProviderRunRequest,
+  type GetWorkflowProviderScheduleRequest,
+  type GetWorkflowRunRequest,
+  type GetWorkflowScheduleRequest,
+  type InvokeWorkflowOperationRequest,
+  type InvokeWorkflowOperationResponse,
+  type ListWorkflowProviderEventTriggersRequest,
+  type ListWorkflowProviderRunsRequest,
+  type ListWorkflowProviderSchedulesRequest,
+  type PauseWorkflowEventTriggerRequest,
+  type PauseWorkflowProviderEventTriggerRequest,
+  type PauseWorkflowProviderScheduleRequest,
+  type PauseWorkflowScheduleRequest,
+  type PublishWorkflowEventRequest,
+  type PublishWorkflowProviderEventRequest,
+  type ResumeWorkflowEventTriggerRequest,
+  type ResumeWorkflowProviderEventTriggerRequest,
+  type ResumeWorkflowProviderScheduleRequest,
+  type ResumeWorkflowScheduleRequest,
+  type StartWorkflowProviderRunRequest,
+  type StartWorkflowRunRequest,
+  type UpsertWorkflowEventTriggerRequest,
+  type UpsertWorkflowProviderEventTriggerRequest,
+  type UpsertWorkflowProviderScheduleRequest,
+  type UpsertWorkflowScheduleRequest,
+  type WorkflowEvent,
+  type WorkflowEventTrigger,
+  type WorkflowRun,
+  WorkflowRunStatus,
+  type WorkflowSchedule,
+} from "../gen/v1/workflow_pb.ts";
+import { errorMessage, type MaybePromise } from "./api.ts";
+import { RuntimeProvider, type RuntimeProviderOptions } from "./provider.ts";
+
+export const ENV_WORKFLOW_SOCKET = "GESTALT_WORKFLOW_SOCKET";
+export const ENV_WORKFLOW_HOST_SOCKET = "GESTALT_WORKFLOW_HOST_SOCKET";
+
+export type {
+  BoundWorkflowEventTrigger,
+  BoundWorkflowRun,
+  BoundWorkflowSchedule,
+  CancelWorkflowProviderRunRequest,
+  CancelWorkflowRunRequest,
+  DeleteWorkflowProviderEventTriggerRequest,
+  DeleteWorkflowProviderScheduleRequest,
+  DeleteWorkflowScheduleRequest,
+  GetWorkflowEventTriggerRequest,
+  GetWorkflowProviderEventTriggerRequest,
+  GetWorkflowProviderRunRequest,
+  GetWorkflowProviderScheduleRequest,
+  GetWorkflowRunRequest,
+  GetWorkflowScheduleRequest,
+  InvokeWorkflowOperationRequest,
+  InvokeWorkflowOperationResponse,
+  ListWorkflowProviderEventTriggersRequest,
+  ListWorkflowProviderRunsRequest,
+  ListWorkflowProviderSchedulesRequest,
+  PauseWorkflowEventTriggerRequest,
+  PauseWorkflowProviderEventTriggerRequest,
+  PauseWorkflowProviderScheduleRequest,
+  PauseWorkflowScheduleRequest,
+  PublishWorkflowEventRequest,
+  PublishWorkflowProviderEventRequest,
+  ResumeWorkflowEventTriggerRequest,
+  ResumeWorkflowProviderEventTriggerRequest,
+  ResumeWorkflowProviderScheduleRequest,
+  ResumeWorkflowScheduleRequest,
+  StartWorkflowProviderRunRequest,
+  StartWorkflowRunRequest,
+  UpsertWorkflowEventTriggerRequest,
+  UpsertWorkflowProviderEventTriggerRequest,
+  UpsertWorkflowProviderScheduleRequest,
+  UpsertWorkflowScheduleRequest,
+  WorkflowEvent,
+  WorkflowEventTrigger,
+  WorkflowRun,
+  WorkflowSchedule,
+};
+export { WorkflowRunStatus };
+
+export interface WorkflowProviderOptions extends RuntimeProviderOptions {
+  startRun: (
+    request: StartWorkflowProviderRunRequest,
+  ) => MaybePromise<MessageInitShape<typeof BoundWorkflowRunSchema>>;
+  getRun: (
+    request: GetWorkflowProviderRunRequest,
+  ) => MaybePromise<MessageInitShape<typeof BoundWorkflowRunSchema>>;
+  listRuns: (
+    request: ListWorkflowProviderRunsRequest,
+  ) => MaybePromise<MessageInitShape<typeof BoundWorkflowRunSchema>[]>;
+  cancelRun: (
+    request: CancelWorkflowProviderRunRequest,
+  ) => MaybePromise<MessageInitShape<typeof BoundWorkflowRunSchema>>;
+  upsertSchedule: (
+    request: UpsertWorkflowProviderScheduleRequest,
+  ) => MaybePromise<MessageInitShape<typeof BoundWorkflowScheduleSchema>>;
+  getSchedule: (
+    request: GetWorkflowProviderScheduleRequest,
+  ) => MaybePromise<MessageInitShape<typeof BoundWorkflowScheduleSchema>>;
+  listSchedules: (
+    request: ListWorkflowProviderSchedulesRequest,
+  ) => MaybePromise<MessageInitShape<typeof BoundWorkflowScheduleSchema>[]>;
+  deleteSchedule: (
+    request: DeleteWorkflowProviderScheduleRequest,
+  ) => MaybePromise<void>;
+  pauseSchedule: (
+    request: PauseWorkflowProviderScheduleRequest,
+  ) => MaybePromise<MessageInitShape<typeof BoundWorkflowScheduleSchema>>;
+  resumeSchedule: (
+    request: ResumeWorkflowProviderScheduleRequest,
+  ) => MaybePromise<MessageInitShape<typeof BoundWorkflowScheduleSchema>>;
+  upsertEventTrigger: (
+    request: UpsertWorkflowProviderEventTriggerRequest,
+  ) => MaybePromise<MessageInitShape<typeof BoundWorkflowEventTriggerSchema>>;
+  getEventTrigger: (
+    request: GetWorkflowProviderEventTriggerRequest,
+  ) => MaybePromise<MessageInitShape<typeof BoundWorkflowEventTriggerSchema>>;
+  listEventTriggers: (
+    request: ListWorkflowProviderEventTriggersRequest,
+  ) => MaybePromise<MessageInitShape<typeof BoundWorkflowEventTriggerSchema>[]>;
+  deleteEventTrigger: (
+    request: DeleteWorkflowProviderEventTriggerRequest,
+  ) => MaybePromise<void>;
+  pauseEventTrigger: (
+    request: PauseWorkflowProviderEventTriggerRequest,
+  ) => MaybePromise<MessageInitShape<typeof BoundWorkflowEventTriggerSchema>>;
+  resumeEventTrigger: (
+    request: ResumeWorkflowProviderEventTriggerRequest,
+  ) => MaybePromise<MessageInitShape<typeof BoundWorkflowEventTriggerSchema>>;
+  publishEvent: (
+    request: PublishWorkflowProviderEventRequest,
+  ) => MaybePromise<void>;
+}
+
+export class WorkflowProvider extends RuntimeProvider {
+  readonly kind = "workflow" as const;
+
+  private readonly startRunHandler: WorkflowProviderOptions["startRun"];
+  private readonly getRunHandler: WorkflowProviderOptions["getRun"];
+  private readonly listRunsHandler: WorkflowProviderOptions["listRuns"];
+  private readonly cancelRunHandler: WorkflowProviderOptions["cancelRun"];
+  private readonly upsertScheduleHandler: WorkflowProviderOptions["upsertSchedule"];
+  private readonly getScheduleHandler: WorkflowProviderOptions["getSchedule"];
+  private readonly listSchedulesHandler: WorkflowProviderOptions["listSchedules"];
+  private readonly deleteScheduleHandler: WorkflowProviderOptions["deleteSchedule"];
+  private readonly pauseScheduleHandler: WorkflowProviderOptions["pauseSchedule"];
+  private readonly resumeScheduleHandler: WorkflowProviderOptions["resumeSchedule"];
+  private readonly upsertEventTriggerHandler: WorkflowProviderOptions["upsertEventTrigger"];
+  private readonly getEventTriggerHandler: WorkflowProviderOptions["getEventTrigger"];
+  private readonly listEventTriggersHandler: WorkflowProviderOptions["listEventTriggers"];
+  private readonly deleteEventTriggerHandler: WorkflowProviderOptions["deleteEventTrigger"];
+  private readonly pauseEventTriggerHandler: WorkflowProviderOptions["pauseEventTrigger"];
+  private readonly resumeEventTriggerHandler: WorkflowProviderOptions["resumeEventTrigger"];
+  private readonly publishEventHandler: WorkflowProviderOptions["publishEvent"];
+
+  constructor(options: WorkflowProviderOptions) {
+    super(options);
+    this.startRunHandler = options.startRun;
+    this.getRunHandler = options.getRun;
+    this.listRunsHandler = options.listRuns;
+    this.cancelRunHandler = options.cancelRun;
+    this.upsertScheduleHandler = options.upsertSchedule;
+    this.getScheduleHandler = options.getSchedule;
+    this.listSchedulesHandler = options.listSchedules;
+    this.deleteScheduleHandler = options.deleteSchedule;
+    this.pauseScheduleHandler = options.pauseSchedule;
+    this.resumeScheduleHandler = options.resumeSchedule;
+    this.upsertEventTriggerHandler = options.upsertEventTrigger;
+    this.getEventTriggerHandler = options.getEventTrigger;
+    this.listEventTriggersHandler = options.listEventTriggers;
+    this.deleteEventTriggerHandler = options.deleteEventTrigger;
+    this.pauseEventTriggerHandler = options.pauseEventTrigger;
+    this.resumeEventTriggerHandler = options.resumeEventTrigger;
+    this.publishEventHandler = options.publishEvent;
+  }
+
+  async startRun(
+    request: StartWorkflowProviderRunRequest,
+  ): Promise<MessageInitShape<typeof BoundWorkflowRunSchema>> {
+    return await this.startRunHandler(request);
+  }
+
+  async getRun(
+    request: GetWorkflowProviderRunRequest,
+  ): Promise<MessageInitShape<typeof BoundWorkflowRunSchema>> {
+    return await this.getRunHandler(request);
+  }
+
+  async listRuns(
+    request: ListWorkflowProviderRunsRequest,
+  ): Promise<MessageInitShape<typeof BoundWorkflowRunSchema>[]> {
+    return await this.listRunsHandler(request);
+  }
+
+  async cancelRun(
+    request: CancelWorkflowProviderRunRequest,
+  ): Promise<MessageInitShape<typeof BoundWorkflowRunSchema>> {
+    return await this.cancelRunHandler(request);
+  }
+
+  async upsertSchedule(
+    request: UpsertWorkflowProviderScheduleRequest,
+  ): Promise<MessageInitShape<typeof BoundWorkflowScheduleSchema>> {
+    return await this.upsertScheduleHandler(request);
+  }
+
+  async getSchedule(
+    request: GetWorkflowProviderScheduleRequest,
+  ): Promise<MessageInitShape<typeof BoundWorkflowScheduleSchema>> {
+    return await this.getScheduleHandler(request);
+  }
+
+  async listSchedules(
+    request: ListWorkflowProviderSchedulesRequest,
+  ): Promise<MessageInitShape<typeof BoundWorkflowScheduleSchema>[]> {
+    return await this.listSchedulesHandler(request);
+  }
+
+  async deleteSchedule(
+    request: DeleteWorkflowProviderScheduleRequest,
+  ): Promise<void> {
+    await this.deleteScheduleHandler(request);
+  }
+
+  async pauseSchedule(
+    request: PauseWorkflowProviderScheduleRequest,
+  ): Promise<MessageInitShape<typeof BoundWorkflowScheduleSchema>> {
+    return await this.pauseScheduleHandler(request);
+  }
+
+  async resumeSchedule(
+    request: ResumeWorkflowProviderScheduleRequest,
+  ): Promise<MessageInitShape<typeof BoundWorkflowScheduleSchema>> {
+    return await this.resumeScheduleHandler(request);
+  }
+
+  async upsertEventTrigger(
+    request: UpsertWorkflowProviderEventTriggerRequest,
+  ): Promise<MessageInitShape<typeof BoundWorkflowEventTriggerSchema>> {
+    return await this.upsertEventTriggerHandler(request);
+  }
+
+  async getEventTrigger(
+    request: GetWorkflowProviderEventTriggerRequest,
+  ): Promise<MessageInitShape<typeof BoundWorkflowEventTriggerSchema>> {
+    return await this.getEventTriggerHandler(request);
+  }
+
+  async listEventTriggers(
+    request: ListWorkflowProviderEventTriggersRequest,
+  ): Promise<MessageInitShape<typeof BoundWorkflowEventTriggerSchema>[]> {
+    return await this.listEventTriggersHandler(request);
+  }
+
+  async deleteEventTrigger(
+    request: DeleteWorkflowProviderEventTriggerRequest,
+  ): Promise<void> {
+    await this.deleteEventTriggerHandler(request);
+  }
+
+  async pauseEventTrigger(
+    request: PauseWorkflowProviderEventTriggerRequest,
+  ): Promise<MessageInitShape<typeof BoundWorkflowEventTriggerSchema>> {
+    return await this.pauseEventTriggerHandler(request);
+  }
+
+  async resumeEventTrigger(
+    request: ResumeWorkflowProviderEventTriggerRequest,
+  ): Promise<MessageInitShape<typeof BoundWorkflowEventTriggerSchema>> {
+    return await this.resumeEventTriggerHandler(request);
+  }
+
+  async publishEvent(
+    request: PublishWorkflowProviderEventRequest,
+  ): Promise<void> {
+    await this.publishEventHandler(request);
+  }
+}
+
+export function defineWorkflowProvider(
+  options: WorkflowProviderOptions,
+): WorkflowProvider {
+  return new WorkflowProvider(options);
+}
+
+export function isWorkflowProvider(value: unknown): value is WorkflowProvider {
+  return (
+    value instanceof WorkflowProvider ||
+    (typeof value === "object" &&
+      value !== null &&
+      "kind" in value &&
+      (value as { kind?: unknown }).kind === "workflow" &&
+      "startRun" in value &&
+      "getRun" in value &&
+      "listRuns" in value &&
+      "cancelRun" in value &&
+      "upsertSchedule" in value &&
+      "getSchedule" in value &&
+      "listSchedules" in value &&
+      "deleteSchedule" in value &&
+      "pauseSchedule" in value &&
+      "resumeSchedule" in value &&
+      "upsertEventTrigger" in value &&
+      "getEventTrigger" in value &&
+      "listEventTriggers" in value &&
+      "deleteEventTrigger" in value &&
+      "pauseEventTrigger" in value &&
+      "resumeEventTrigger" in value &&
+      "publishEvent" in value)
+  );
+}
+
+export class Workflow {
+  private readonly client: Client<typeof WorkflowService>;
+
+  constructor() {
+    const socketPath = process.env[ENV_WORKFLOW_SOCKET];
+    if (!socketPath) {
+      throw new Error(`workflow: ${ENV_WORKFLOW_SOCKET} is not set`);
+    }
+    const transport = createGrpcTransport({
+      baseUrl: "http://localhost",
+      nodeOptions: {
+        createConnection: () => connect(socketPath),
+      },
+    });
+    this.client = createClient(WorkflowService, transport);
+  }
+
+  async startRun(request: StartWorkflowRunRequest): Promise<WorkflowRun> {
+    return await this.client.startRun(request);
+  }
+
+  async getRun(runId: string): Promise<WorkflowRun> {
+    return await this.client.getRun({
+      runId,
+    });
+  }
+
+  async listRuns(): Promise<WorkflowRun[]> {
+    return (await this.client.listRuns({})).runs;
+  }
+
+  async cancelRun(runId: string, reason = ""): Promise<WorkflowRun> {
+    return await this.client.cancelRun({
+      runId,
+      reason,
+    });
+  }
+
+  async upsertSchedule(
+    request: UpsertWorkflowScheduleRequest,
+  ): Promise<WorkflowSchedule> {
+    return await this.client.upsertSchedule(request);
+  }
+
+  async getSchedule(scheduleId: string): Promise<WorkflowSchedule> {
+    return await this.client.getSchedule({
+      scheduleId,
+    });
+  }
+
+  async listSchedules(): Promise<WorkflowSchedule[]> {
+    return (await this.client.listSchedules({})).schedules;
+  }
+
+  async deleteSchedule(scheduleId: string): Promise<void> {
+    await this.client.deleteSchedule({
+      scheduleId,
+    });
+  }
+
+  async pauseSchedule(scheduleId: string): Promise<WorkflowSchedule> {
+    return await this.client.pauseSchedule({
+      scheduleId,
+    });
+  }
+
+  async resumeSchedule(scheduleId: string): Promise<WorkflowSchedule> {
+    return await this.client.resumeSchedule({
+      scheduleId,
+    });
+  }
+
+  async upsertEventTrigger(
+    request: UpsertWorkflowEventTriggerRequest,
+  ): Promise<WorkflowEventTrigger> {
+    return await this.client.upsertEventTrigger(request);
+  }
+
+  async getEventTrigger(triggerId: string): Promise<WorkflowEventTrigger> {
+    return await this.client.getEventTrigger({
+      triggerId,
+    });
+  }
+
+  async listEventTriggers(): Promise<WorkflowEventTrigger[]> {
+    return (await this.client.listEventTriggers({})).triggers;
+  }
+
+  async deleteEventTrigger(triggerId: string): Promise<void> {
+    await this.client.deleteEventTrigger({
+      triggerId,
+    });
+  }
+
+  async pauseEventTrigger(triggerId: string): Promise<WorkflowEventTrigger> {
+    return await this.client.pauseEventTrigger({
+      triggerId,
+    });
+  }
+
+  async resumeEventTrigger(triggerId: string): Promise<WorkflowEventTrigger> {
+    return await this.client.resumeEventTrigger({
+      triggerId,
+    });
+  }
+
+  async publishEvent(event: WorkflowEvent): Promise<void> {
+    await this.client.publishEvent({
+      event,
+    });
+  }
+}
+
+export class WorkflowHost {
+  private readonly client: Client<typeof WorkflowHostService>;
+
+  constructor() {
+    const socketPath = process.env[ENV_WORKFLOW_HOST_SOCKET];
+    if (!socketPath) {
+      throw new Error(`workflow host: ${ENV_WORKFLOW_HOST_SOCKET} is not set`);
+    }
+    const transport = createGrpcTransport({
+      baseUrl: "http://localhost",
+      nodeOptions: {
+        createConnection: () => connect(socketPath),
+      },
+    });
+    this.client = createClient(WorkflowHostService, transport);
+  }
+
+  async invokeOperation(
+    request: InvokeWorkflowOperationRequest,
+  ): Promise<InvokeWorkflowOperationResponse> {
+    return await this.client.invokeOperation(request);
+  }
+}
+
+export function createWorkflowService(
+  provider: WorkflowProvider,
+): Partial<ServiceImpl<typeof WorkflowProviderService>> {
+  return {
+    async startRun(request) {
+      return create(
+        BoundWorkflowRunSchema,
+        await invokeWorkflowProvider("start run", () => provider.startRun(request)),
+      );
+    },
+    async getRun(request) {
+      return create(
+        BoundWorkflowRunSchema,
+        await invokeWorkflowProvider("get run", () => provider.getRun(request)),
+      );
+    },
+    async listRuns(request) {
+      return create(ListWorkflowProviderRunsResponseSchema, {
+        runs: await invokeWorkflowProvider("list runs", () =>
+          provider.listRuns(request),
+        ),
+      });
+    },
+    async cancelRun(request) {
+      return create(
+        BoundWorkflowRunSchema,
+        await invokeWorkflowProvider("cancel run", () => provider.cancelRun(request)),
+      );
+    },
+    async upsertSchedule(request) {
+      return create(
+        BoundWorkflowScheduleSchema,
+        await invokeWorkflowProvider("upsert schedule", () =>
+          provider.upsertSchedule(request),
+        ),
+      );
+    },
+    async getSchedule(request) {
+      return create(
+        BoundWorkflowScheduleSchema,
+        await invokeWorkflowProvider("get schedule", () =>
+          provider.getSchedule(request),
+        ),
+      );
+    },
+    async listSchedules(request) {
+      return create(ListWorkflowProviderSchedulesResponseSchema, {
+        schedules: await invokeWorkflowProvider("list schedules", () =>
+          provider.listSchedules(request),
+        ),
+      });
+    },
+    async deleteSchedule(request) {
+      await invokeWorkflowProvider("delete schedule", () =>
+        provider.deleteSchedule(request),
+      );
+      return create(EmptySchema, {});
+    },
+    async pauseSchedule(request) {
+      return create(
+        BoundWorkflowScheduleSchema,
+        await invokeWorkflowProvider("pause schedule", () =>
+          provider.pauseSchedule(request),
+        ),
+      );
+    },
+    async resumeSchedule(request) {
+      return create(
+        BoundWorkflowScheduleSchema,
+        await invokeWorkflowProvider("resume schedule", () =>
+          provider.resumeSchedule(request),
+        ),
+      );
+    },
+    async upsertEventTrigger(request) {
+      return create(
+        BoundWorkflowEventTriggerSchema,
+        await invokeWorkflowProvider("upsert event trigger", () =>
+          provider.upsertEventTrigger(request),
+        ),
+      );
+    },
+    async getEventTrigger(request) {
+      return create(
+        BoundWorkflowEventTriggerSchema,
+        await invokeWorkflowProvider("get event trigger", () =>
+          provider.getEventTrigger(request),
+        ),
+      );
+    },
+    async listEventTriggers(request) {
+      return create(ListWorkflowProviderEventTriggersResponseSchema, {
+        triggers: await invokeWorkflowProvider("list event triggers", () =>
+          provider.listEventTriggers(request),
+        ),
+      });
+    },
+    async deleteEventTrigger(request) {
+      await invokeWorkflowProvider("delete event trigger", () =>
+        provider.deleteEventTrigger(request),
+      );
+      return create(EmptySchema, {});
+    },
+    async pauseEventTrigger(request) {
+      return create(
+        BoundWorkflowEventTriggerSchema,
+        await invokeWorkflowProvider("pause event trigger", () =>
+          provider.pauseEventTrigger(request),
+        ),
+      );
+    },
+    async resumeEventTrigger(request) {
+      return create(
+        BoundWorkflowEventTriggerSchema,
+        await invokeWorkflowProvider("resume event trigger", () =>
+          provider.resumeEventTrigger(request),
+        ),
+      );
+    },
+    async publishEvent(request) {
+      await invokeWorkflowProvider("publish event", () =>
+        provider.publishEvent(request),
+      );
+      return create(EmptySchema, {});
+    },
+  };
+}
+
+async function invokeWorkflowProvider<T>(
+  action: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    if (error instanceof ConnectError) {
+      throw error;
+    }
+    throw new ConnectError(
+      `workflow provider ${action}: ${errorMessage(error)}`,
+      Code.Unknown,
+    );
+  }
+}

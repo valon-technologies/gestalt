@@ -9,6 +9,7 @@ from unittest import mock
 import grpc
 from google.protobuf import duration_pb2 as _duration_pb2
 from google.protobuf import json_format
+from google.protobuf import struct_pb2 as _struct_pb2
 from google.protobuf import timestamp_pb2 as _timestamp_pb2
 
 from gestalt import (
@@ -28,6 +29,7 @@ from gestalt import (
     S3Provider,
     SessionTTLProvider,
     WarningsProvider,
+    WorkflowProvider,
     _bootstrap,
     _runtime,
 )
@@ -36,6 +38,7 @@ from gestalt.gen.v1 import cache_pb2 as _cache_pb2
 from gestalt.gen.v1 import plugin_pb2 as _plugin_pb2
 from gestalt.gen.v1 import runtime_pb2 as _runtime_pb2
 from gestalt.gen.v1 import s3_pb2_grpc as _s3_pb2_grpc
+from gestalt.gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
 
 auth_pb2: Any = _auth_pb2
 cache_pb2: Any = _cache_pb2
@@ -43,7 +46,9 @@ duration_pb2: Any = _duration_pb2
 plugin_pb2: Any = _plugin_pb2
 runtime_pb2: Any = _runtime_pb2
 s3_pb2_grpc: Any = _s3_pb2_grpc
+struct_pb2: Any = _struct_pb2
 timestamp_pb2: Any = _timestamp_pb2
+workflow_pb2_grpc: Any = _workflow_pb2_grpc
 
 UTC = dt.timezone.utc
 
@@ -214,6 +219,8 @@ class RequestTests(unittest.TestCase):
         self.assertEqual(request.credential.mode, "")
         self.assertEqual(request.access.role, "")
         self.assertEqual(request.request_handle, "")
+        self.assertEqual(request.workflow, {})
+        self.assertEqual(request.request_handle, "")
 
 
 class MainEntrypointTests(unittest.TestCase):
@@ -252,7 +259,7 @@ class MainEntrypointTests(unittest.TestCase):
             configured.append((name, dict(config)))
 
         @plugin.operation
-        def whoami(request: Request) -> dict[str, str]:
+        def whoami(request: Request) -> dict[str, Any]:
             return {
                 "token": request.token,
                 "subject_id": request.subject.id,
@@ -262,6 +269,11 @@ class MainEntrypointTests(unittest.TestCase):
                 "access_policy": request.access.policy,
                 "access_role": request.access.role,
                 "request_handle": request.request_handle,
+                "workflow_run_id": str(request.workflow.get("runId", "")),
+                "workflow_trigger_kind": str(
+                    request.workflow.get("trigger", {}).get("kind", "")
+                ),
+                "workflow": request.workflow,
             }
 
         @plugin.session_catalog
@@ -274,12 +286,39 @@ class MainEntrypointTests(unittest.TestCase):
                         request.subject.id,
                         request.credential.mode,
                         request.access.role,
+                        str(request.workflow.get("runId", "")),
                     ]
                 ),
             )
             cat.operations.append(CatalogOperation(id="private_search", method="POST"))
             cat.operations[0].allowed_roles.extend(["viewer", "admin"])
             return cat
+
+        execute_workflow = struct_pb2.Struct()
+        execute_workflow.update(
+            {
+                "runId": "run-123",
+                "createdBy": {
+                    "subjectId": "user:user-123",
+                    "subjectKind": "user",
+                    "displayName": "Ada",
+                    "authSource": "api_token",
+                },
+                "trigger": {
+                    "kind": "event",
+                    "triggerId": "trigger-1",
+                    "event": {
+                        "id": "evt-1",
+                        "source": "urn:test",
+                        "specVersion": "1.0",
+                        "type": "demo.refresh",
+                        "dataContentType": "application/json",
+                    },
+                },
+            }
+        )
+        catalog_workflow = struct_pb2.Struct()
+        catalog_workflow.update({"runId": "run-456"})
 
         servicer = _runtime._provider_servicer(plugin=plugin)
         metadata = servicer.GetMetadata(mock.Mock(), mock.Mock())
@@ -327,6 +366,7 @@ class MainEntrypointTests(unittest.TestCase):
                         policy="sample_policy",
                         role="admin",
                     ),
+                    workflow=execute_workflow,
                 ),
             ),
             mock.Mock(),
@@ -342,6 +382,7 @@ class MainEntrypointTests(unittest.TestCase):
                         policy="sample_policy",
                         role="viewer",
                     ),
+                    workflow=catalog_workflow,
                 ),
             ),
             mock.Mock(),
@@ -374,12 +415,37 @@ class MainEntrypointTests(unittest.TestCase):
                 "credential_subject_id": "identity:__identity__",
                 "access_policy": "sample_policy",
                 "access_role": "admin",
+                "workflow_run_id": "run-123",
+                "workflow_trigger_kind": "event",
+                "workflow": {
+                    "runId": "run-123",
+                    "createdBy": {
+                        "subjectId": "user:user-123",
+                        "subjectKind": "user",
+                        "displayName": "Ada",
+                        "authSource": "api_token",
+                    },
+                    "trigger": {
+                        "kind": "event",
+                        "triggerId": "trigger-1",
+                        "event": {
+                            "id": "evt-1",
+                            "source": "urn:test",
+                            "specVersion": "1.0",
+                            "type": "demo.refresh",
+                            "dataContentType": "application/json",
+                        },
+                    },
+                },
                 "request_handle": "opaque-request-handle",
             },
         )
         catalog = response.catalog
         self.assertEqual(catalog.name, "session-source")
-        self.assertEqual(catalog.display_name, "acme|user:user-123|identity|viewer")
+        self.assertEqual(
+            catalog.display_name,
+            "acme|user:user-123|identity|viewer|run-456",
+        )
         self.assertEqual(len(catalog.operations), 1)
         self.assertEqual(catalog.operations[0].id, "private_search")
         self.assertEqual(catalog.operations[0].method, "POST")
@@ -827,6 +893,70 @@ class S3RuntimeTests(unittest.TestCase):
         self.assertIsInstance(servable, PluginProviderAdapter)
         servable = cast(PluginProviderAdapter, servable)
         self.assertEqual(servable.kind, ProviderKind.S3)
+        self.assertIs(servable.provider, provider)
+
+
+class WorkflowRuntimeTests(unittest.TestCase):
+    class StubWorkflowProvider(
+        WorkflowProvider,
+        MetadataProvider,
+        WarningsProvider,
+        HealthChecker,
+    ):
+        def configure(self, name: str, config: dict[str, Any]) -> None:
+            self.configured = (name, dict(config))
+
+        def metadata(self) -> ProviderMetadata:
+            return ProviderMetadata(
+                kind=ProviderKind.WORKFLOW,
+                name="stub-workflow",
+                display_name="Stub Workflow",
+                description="test workflow provider",
+                version="0.2.0",
+            )
+
+        def warnings(self) -> list[str]:
+            return ["set WORKFLOW_ENDPOINT"]
+
+        def health_check(self) -> None:
+            return None
+
+    def test_normalized_runtime_kind_recognizes_workflow(self) -> None:
+        self.assertEqual(
+            _runtime._normalized_runtime_kind("workflow"),
+            ProviderKind.WORKFLOW,
+        )
+
+    def test_runtime_metadata_and_workflow_registration(self) -> None:
+        provider = self.StubWorkflowProvider()
+
+        runtime_servicer = _runtime._runtime_servicer(
+            provider=provider,
+            kind=ProviderKind.WORKFLOW,
+        )
+        meta = runtime_servicer.GetProviderIdentity(mock.Mock(), mock.Mock())
+        self.assertEqual(meta.kind, runtime_pb2.ProviderKind.PROVIDER_KIND_WORKFLOW)
+        self.assertEqual(meta.name, "stub-workflow")
+        self.assertEqual(list(meta.warnings), ["set WORKFLOW_ENDPOINT"])
+
+        adapter = _runtime._workflow_runtime_plugin(provider)
+        server = mock.Mock()
+        with mock.patch.object(
+            workflow_pb2_grpc,
+            "add_WorkflowProviderServicer_to_server",
+        ) as add_workflow:
+            adapter.register_services(server, provider)
+        add_workflow.assert_called_once_with(provider, server)
+
+    def test_servable_target_wraps_workflow_provider(self) -> None:
+        provider = self.StubWorkflowProvider()
+        servable = _runtime._servable_target(
+            provider,
+            runtime_kind=ProviderKind.WORKFLOW,
+        )
+        self.assertIsInstance(servable, PluginProviderAdapter)
+        servable = cast(PluginProviderAdapter, servable)
+        self.assertEqual(servable.kind, ProviderKind.WORKFLOW)
         self.assertIs(servable.provider, provider)
 
 

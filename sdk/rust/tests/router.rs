@@ -271,6 +271,7 @@ async fn execute_handles_success_decode_errors_handler_errors_and_panics() {
                     ..Default::default()
                 }),
                 access: None,
+                workflow: None,
             }),
         }))
         .await

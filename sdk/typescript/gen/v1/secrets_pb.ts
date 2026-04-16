@@ -13,6 +13,8 @@ export const file_v1_secrets: GenFile = /*@__PURE__*/
   fileDesc("ChB2MS9zZWNyZXRzLnByb3RvEhNnZXN0YWx0LnByb3ZpZGVyLnYxIiAKEEdldFNlY3JldFJlcXVlc3QSDAoEbmFtZRgBIAEoCSIiChFHZXRTZWNyZXRSZXNwb25zZRINCgV2YWx1ZRgBIAEoCTJtCg9TZWNyZXRzUHJvdmlkZXISWgoJR2V0U2VjcmV0EiUuZ2VzdGFsdC5wcm92aWRlci52MS5HZXRTZWNyZXRSZXF1ZXN0GiYuZ2VzdGFsdC5wcm92aWRlci52MS5HZXRTZWNyZXRSZXNwb25zZUI7WjlnaXRodWIuY29tL3ZhbG9uLXRlY2hub2xvZ2llcy9nZXN0YWx0L3Nkay9nby9nZW4vdjE7cHJvdG9iBnByb3RvMw");
 
 /**
+ * GetSecretRequest looks up one named secret.
+ *
  * @generated from message gestalt.provider.v1.GetSecretRequest
  */
 export type GetSecretRequest = Message<"gestalt.provider.v1.GetSecretRequest"> & {
@@ -30,6 +32,8 @@ export const GetSecretRequestSchema: GenMessage<GetSecretRequest> = /*@__PURE__*
   messageDesc(file_v1_secrets, 0);
 
 /**
+ * GetSecretResponse returns the secret value.
+ *
  * @generated from message gestalt.provider.v1.GetSecretResponse
  */
 export type GetSecretResponse = Message<"gestalt.provider.v1.GetSecretResponse"> & {
@@ -47,6 +51,8 @@ export const GetSecretResponseSchema: GenMessage<GetSecretResponse> = /*@__PURE_
   messageDesc(file_v1_secrets, 1);
 
 /**
+ * SecretsProvider models the shared Gestalt secrets-provider protocol.
+ *
  * @generated from service gestalt.provider.v1.SecretsProvider
  */
 export const SecretsProvider: GenService<{

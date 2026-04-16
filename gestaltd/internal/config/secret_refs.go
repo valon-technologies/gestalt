@@ -236,6 +236,7 @@ func TransformConfigStringFields(cfg *Config, transform ConfigStringTransformer)
 		cfg.Providers.IndexedDB,
 		cfg.Providers.Cache,
 		cfg.Providers.S3,
+		cfg.Providers.Workflow,
 	} {
 		for _, entry := range entries {
 			if entry == nil {

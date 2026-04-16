@@ -27,7 +27,8 @@ if _version_not_supported:
 
 
 class CacheStub(object):
-    """Missing associated documentation comment in .proto file."""
+    """Cache models the shared Gestalt cache-provider protocol.
+    """
 
     def __init__(self, channel):
         """Constructor.
@@ -73,7 +74,8 @@ class CacheStub(object):
 
 
 class CacheServicer(object):
-    """Missing associated documentation comment in .proto file."""
+    """Cache models the shared Gestalt cache-provider protocol.
+    """
 
     def Get(self, request, context):
         """Missing associated documentation comment in .proto file."""
@@ -164,7 +166,8 @@ def add_CacheServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class Cache(object):
-    """Missing associated documentation comment in .proto file."""
+    """Cache models the shared Gestalt cache-provider protocol.
+    """
 
     @staticmethod
     def Get(request,

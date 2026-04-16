@@ -12,6 +12,7 @@ from typing import Any, Callable
 from ._cache import CacheEntry
 from .gen.v1 import auth_pb2 as _auth_pb2
 from .gen.v1 import s3_pb2_grpc as _s3_pb2_grpc
+from .gen.v1 import workflow_pb2_grpc as _workflow_pb2_grpc
 
 AuthenticatedUser: Any = _auth_pb2.AuthenticatedUser  # ty: ignore[unresolved-attribute]
 BeginLoginRequest: Any = _auth_pb2.BeginLoginRequest  # ty: ignore[unresolved-attribute]
@@ -26,6 +27,7 @@ class ProviderKind(str, Enum):
     AUTH = "auth"
     CACHE = "cache"
     S3 = "s3"
+    WORKFLOW = "workflow"
     SECRETS = "secrets"
     TELEMETRY = "telemetry"
 
@@ -245,3 +247,10 @@ class S3Provider(PluginProvider, _s3_pb2_grpc.S3Servicer):
         from . import _runtime
 
         _runtime.serve(self, runtime_kind=ProviderKind.S3)
+
+
+class WorkflowProvider(PluginProvider, _workflow_pb2_grpc.WorkflowProviderServicer):
+    def serve(self) -> None:
+        from . import _runtime
+
+        _runtime.serve(self, runtime_kind=ProviderKind.WORKFLOW)

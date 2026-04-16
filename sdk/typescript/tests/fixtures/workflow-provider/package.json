@@ -1,0 +1,10 @@
+{
+  "name": "@fixtures/workflow-provider",
+  "type": "module",
+  "gestalt": {
+    "provider": {
+      "kind": "workflow",
+      "target": "./workflow.ts#provider"
+    }
+  }
+}

@@ -2035,6 +2035,204 @@ server:
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
+
+	t.Run("plugin accepts workflow bindings", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    workflow:
+      provider: temporal
+      operations:
+        - nightly_sync
+        - backfill_items
+providers:
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		want := &PluginWorkflowConfig{
+			Provider:   "temporal",
+			Operations: []string{"nightly_sync", "backfill_items"},
+		}
+		if got := cfg.Plugins["roadmap"].Workflow; !reflect.DeepEqual(got, want) {
+			t.Fatalf("Plugins[roadmap].Workflow = %#v, want %#v", got, want)
+		}
+	})
+
+	t.Run("plugin workflow binding can select an explicit provider when multiple workflow providers exist", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    workflow:
+      provider: temporal
+      operations:
+        - nightly_sync
+providers:
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+    cleanup:
+      source:
+        path: ./providers/workflow/cleanup
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		effective, err := cfg.EffectivePluginWorkflow("roadmap", cfg.Plugins["roadmap"])
+		if err != nil {
+			t.Fatalf("EffectivePluginWorkflow: %v", err)
+		}
+		if effective.ProviderName != "temporal" {
+			t.Fatalf("ProviderName = %q, want %q", effective.ProviderName, "temporal")
+		}
+	})
+
+	t.Run("rejects workflow bindings outside plugins", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  ui:
+    root:
+      source:
+        path: ./web/root/manifest.yaml
+      path: /app
+      workflow:
+        provider: temporal
+        operations:
+          - nightly_sync
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `ui.root.workflow is only supported on plugins.*`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects unknown workflow provider names", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    workflow:
+      provider: missing
+      operations:
+        - nightly_sync
+providers:
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `plugins.roadmap.workflow.provider references unknown workflow "missing"`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects multiple workflow defaults even when plugins bind explicitly", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    workflow:
+      provider: temporal
+      operations:
+        - nightly_sync
+providers:
+  workflow:
+    temporal:
+      default: true
+      source:
+        path: ./providers/workflow/temporal
+    cleanup:
+      default: true
+      source:
+        path: ./providers/workflow/cleanup
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `providers.workflow declares multiple defaults: cleanup, temporal`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 }
 
 func TestLoadRejectsUnknownProviderFields(t *testing.T) {

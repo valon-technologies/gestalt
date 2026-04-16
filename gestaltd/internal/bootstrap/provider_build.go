@@ -18,6 +18,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/core/indexeddb"
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
+	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/composite"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/graphql"
@@ -49,15 +50,27 @@ func buildRegistrationStore(deps Deps) mcpoauth.RegistrationStore {
 }
 
 func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryRegistry, deps Deps) (*registry.ProviderMap[core.Provider], <-chan struct{}, func() map[string]map[string]OAuthHandler, error) {
+	providers, ready, connAuthResolver, _, err := buildProvidersAsync(ctx, cfg, factories, deps, buildProvider)
+	return providers, ready, connAuthResolver, err
+}
+
+func buildProvidersAsync(
+	ctx context.Context,
+	cfg *config.Config,
+	factories *FactoryRegistry,
+	deps Deps,
+	builder func(context.Context, string, *config.ProviderEntry, Deps) (*ProviderBuildResult, error),
+) (*registry.ProviderMap[core.Provider], <-chan struct{}, func() map[string]map[string]OAuthHandler, func() []error, error) {
 	reg := registry.New()
 	connAuth := make(map[string]map[string]OAuthHandler)
+	var buildErrs []error
 	var connMu sync.Mutex
 
 	for _, builtin := range factories.Builtins {
 		if err := reg.Providers.Register(builtin.Name(), builtin); errors.Is(err, core.ErrAlreadyRegistered) {
 			continue
 		} else if err != nil {
-			return nil, nil, nil, fmt.Errorf("bootstrap: registering builtin %q: %w", builtin.Name(), err)
+			return nil, nil, nil, nil, fmt.Errorf("bootstrap: registering builtin %q: %w", builtin.Name(), err)
 		}
 		slog.Info("loaded builtin provider", "provider", builtin.Name(), "operations", catalogOperationCount(builtin.Catalog()))
 	}
@@ -65,24 +78,65 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 	ready := make(chan struct{})
 	if len(cfg.Plugins) == 0 {
 		close(ready)
-		return &reg.Providers, ready, func() map[string]map[string]OAuthHandler { return connAuth }, nil
+		return &reg.Providers, ready, func() map[string]map[string]OAuthHandler { return connAuth }, func() []error { return nil }, nil
 	}
 
 	var wg sync.WaitGroup
+	var errMu sync.Mutex
 	for name := range cfg.Plugins {
 		intgDef := cfg.Plugins[name]
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			result, err := buildProvider(ctx, name, intgDef, deps)
+		var proxy *startupProviderProxy
+		if deps.WorkflowRuntime != nil && deps.WorkflowRuntime.HasBinding(name) {
+			spec, operationConnections, err := buildStartupProviderSpec(name, intgDef)
 			if err != nil {
+				slog.Warn("building startup provider proxy metadata failed", "provider", name, "error", err)
+			} else {
+				proxy = newStartupProviderProxy(spec, operationConnections, deps.WorkflowRuntime.StartupWaitTracker())
+				if err := reg.Providers.Register(name, proxy); err != nil {
+					errMu.Lock()
+					buildErrs = append(buildErrs, fmt.Errorf("integration %q: %w", name, err))
+					errMu.Unlock()
+					slog.Warn("registering startup provider proxy failed", "provider", name, "error", err)
+					proxy = nil
+				}
+			}
+		}
+		wg.Add(1)
+		go func(name string, intgDef *config.ProviderEntry, proxy *startupProviderProxy) {
+			defer wg.Done()
+			result, err := builder(ctx, name, intgDef, deps)
+			if err != nil {
+				errMu.Lock()
+				buildErrs = append(buildErrs, fmt.Errorf("integration %q: %w", name, err))
+				errMu.Unlock()
+				if proxy != nil {
+					proxy.fail(err)
+					reg.Providers.Remove(name)
+				}
 				slog.Warn("skipping provider", "provider", name, "error", err)
 				return
 			}
-			if err := reg.Providers.Register(name, result.Provider); err != nil {
-				closeIfPossible(result.Provider)
-				slog.Warn("registering provider failed", "provider", name, "error", err)
-				return
+			if proxy != nil {
+				if err := reg.Providers.Replace(name, result.Provider); err != nil {
+					errMu.Lock()
+					buildErrs = append(buildErrs, fmt.Errorf("integration %q: %w", name, err))
+					errMu.Unlock()
+					proxy.fail(err)
+					reg.Providers.Remove(name)
+					closeIfPossible(result.Provider)
+					slog.Warn("replacing startup provider proxy failed", "provider", name, "error", err)
+					return
+				}
+				proxy.publish(result.Provider)
+			} else {
+				if err := reg.Providers.Register(name, result.Provider); err != nil {
+					errMu.Lock()
+					buildErrs = append(buildErrs, fmt.Errorf("integration %q: %w", name, err))
+					errMu.Unlock()
+					closeIfPossible(result.Provider)
+					slog.Warn("registering provider failed", "provider", name, "error", err)
+					return
+				}
 			}
 			if len(result.ConnectionAuth) > 0 {
 				connMu.Lock()
@@ -90,7 +144,7 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 				connMu.Unlock()
 			}
 			slog.Info("loaded provider", "provider", name, "operations", catalogOperationCount(result.Provider.Catalog()))
-		}()
+		}(name, intgDef, proxy)
 	}
 
 	go func() {
@@ -102,7 +156,68 @@ func buildProviders(ctx context.Context, cfg *config.Config, factories *FactoryR
 		<-ready
 		return connAuth
 	}
-	return &reg.Providers, ready, resolver, nil
+	errResolver := func() []error {
+		<-ready
+		errMu.Lock()
+		defer errMu.Unlock()
+		return append([]error(nil), buildErrs...)
+	}
+	return &reg.Providers, ready, resolver, errResolver, nil
+}
+
+func buildStartupProviderSpec(name string, entry *config.ProviderEntry) (providerhost.StaticProviderSpec, map[string]string, error) {
+	if entry == nil {
+		return providerhost.StaticProviderSpec{}, nil, fmt.Errorf("integration %q has no plugin defined", name)
+	}
+	manifest := entry.ResolvedManifest
+	manifestPlugin := entry.ManifestSpec()
+	if manifest == nil || manifestPlugin == nil {
+		return providerhost.StaticProviderSpec{}, nil, fmt.Errorf("integration %q must resolve to a provider manifest", name)
+	}
+
+	meta := resolveProviderMetadata(entry)
+	spec, plan, err := buildPluginStaticSpec(name, entry, manifest, meta)
+	if err != nil {
+		return providerhost.StaticProviderSpec{}, nil, err
+	}
+	if spec.Catalog != nil {
+		return spec, operationConnectionsForCatalog(spec.Catalog, plan), nil
+	}
+	if !manifestPlugin.IsDeclarative() && !manifestPlugin.IsSpecLoaded() {
+		return spec, map[string]string{}, nil
+	}
+	declarative, err := providerhost.NewDeclarativeProvider(
+		manifest,
+		nil,
+		providerhost.WithDeclarativeMetadataOverrides(meta.displayName, meta.description, meta.iconSVG),
+		providerhost.WithDeclarativeConnectionMode(plan.ConnectionMode()),
+	)
+	if err != nil {
+		return providerhost.StaticProviderSpec{}, nil, err
+	}
+	spec.Catalog = declarative.Catalog()
+	return spec, operationConnectionsForCatalog(spec.Catalog, plan), nil
+}
+
+func operationConnectionsForCatalog(cat *catalog.Catalog, plan config.StaticConnectionPlan) map[string]string {
+	if cat == nil {
+		return map[string]string{}
+	}
+	operationConnections := make(map[string]string, len(cat.Operations))
+	for i := range cat.Operations {
+		operation := &cat.Operations[i]
+		connection := config.PluginConnectionName
+		switch operation.Transport {
+		case catalog.TransportREST:
+			connection = plan.APIConnection()
+		case catalog.TransportMCPPassthrough:
+			connection = plan.MCPConnection()
+		}
+		if connection != "" {
+			operationConnections[operation.ID] = connection
+		}
+	}
+	return operationConnections
 }
 
 func buildProvider(ctx context.Context, name string, entry *config.ProviderEntry, deps Deps) (*ProviderBuildResult, error) {
@@ -161,18 +276,13 @@ func buildExecutablePluginProvider(ctx context.Context, name string, entry *conf
 	if manifest == nil || manifestPlugin == nil {
 		return nil, fmt.Errorf("build executable plugin provider %q: resolved manifest is required", name)
 	}
-	staticSpec, err := buildPluginStaticSpec(name, entry, manifest, meta)
+	staticSpec, plan, err := buildPluginStaticSpec(name, entry, manifest, meta)
 	if err != nil {
 		return nil, fmt.Errorf("build executable plugin provider %q: %w", name, err)
 	}
 	pluginProv, err := buildPluginProvider(ctx, name, entry, pluginConfig, staticSpec, deps)
 	if err != nil {
 		return nil, err
-	}
-	plan, err := config.BuildStaticConnectionPlan(entry, manifestPlugin)
-	if err != nil {
-		closeIfPossible(pluginProv)
-		return nil, fmt.Errorf("build executable plugin provider %q: %w", name, err)
 	}
 	mcpURL := ""
 	if resolved, ok := plan.ResolvedSurface(config.SpecSurfaceMCP); ok {
@@ -549,6 +659,13 @@ func buildPluginProvider(ctx context.Context, name string, entry *config.Provide
 		execCfg.HostServices = append(execCfg.HostServices, hostServices...)
 		cleanup = chainCleanup(cleanup, cacheCleanup)
 	}
+	if entry.Workflow != nil {
+		hostServices, err := buildPluginWorkflowHostServices(name, deps)
+		if err != nil {
+			return nil, err
+		}
+		execCfg.HostServices = append(execCfg.HostServices, hostServices...)
+	}
 	if len(entry.S3) > 0 {
 		hostServices, err := buildPluginS3HostServices(name, entry, deps)
 		if err != nil {
@@ -665,6 +782,20 @@ func buildPluginS3HostServices(pluginName string, entry *config.ProviderEntry, d
 		})
 	}
 	return hostServices, nil
+}
+
+func buildPluginWorkflowHostServices(pluginName string, deps Deps) ([]providerhost.HostService, error) {
+	if deps.WorkflowRuntime == nil {
+		return nil, fmt.Errorf("workflow host services are not available")
+	}
+	return []providerhost.HostService{{
+		EnvVar: providerhost.DefaultWorkflowSocketEnv,
+		Register: func(srv *grpc.Server) {
+			proto.RegisterWorkflowServer(srv, providerhost.NewWorkflowServer(pluginName, func() (coreworkflow.Provider, map[string]struct{}, error) {
+				return deps.WorkflowRuntime.ResolvePlugin(pluginName)
+			}))
+		},
+	}}, nil
 }
 
 func buildPluginInvokerHostService(pluginName string, entry *config.ProviderEntry, deps Deps) (providerhost.HostService, *providerhost.RequestSnapshotStore) {
@@ -858,13 +989,13 @@ func clonePluginEnv(src map[string]string) map[string]string {
 	return dst
 }
 
-func buildPluginStaticSpec(name string, entry *config.ProviderEntry, manifest *providermanifestv1.Manifest, meta providerMetadata) (providerhost.StaticProviderSpec, error) {
+func buildPluginStaticSpec(name string, entry *config.ProviderEntry, manifest *providermanifestv1.Manifest, meta providerMetadata) (providerhost.StaticProviderSpec, config.StaticConnectionPlan, error) {
 	if manifest == nil || manifest.Spec == nil {
-		return providerhost.StaticProviderSpec{}, fmt.Errorf("resolved manifest is required")
+		return providerhost.StaticProviderSpec{}, config.StaticConnectionPlan{}, fmt.Errorf("resolved manifest is required")
 	}
 	plan, err := config.BuildStaticConnectionPlan(entry, manifest.Spec)
 	if err != nil {
-		return providerhost.StaticProviderSpec{}, err
+		return providerhost.StaticProviderSpec{}, config.StaticConnectionPlan{}, err
 	}
 
 	displayName := meta.displayNameOr(manifest.DisplayName)
@@ -890,14 +1021,14 @@ func buildPluginStaticSpec(name string, entry *config.ProviderEntry, manifest *p
 		var err error
 		staticCatalog, err = providerpkg.ReadStaticCatalog(manifestRoot, name)
 		if err != nil {
-			return providerhost.StaticProviderSpec{}, err
+			return providerhost.StaticProviderSpec{}, config.StaticConnectionPlan{}, err
 		}
 	}
 	if staticCatalog == nil && providerpkg.StaticCatalogRequired(manifest) {
 		if entry.ResolvedManifestPath == "" {
-			return providerhost.StaticProviderSpec{}, fmt.Errorf("resolved manifest path is required for executable provider static catalog")
+			return providerhost.StaticProviderSpec{}, config.StaticConnectionPlan{}, fmt.Errorf("resolved manifest path is required for executable provider static catalog")
 		}
-		return providerhost.StaticProviderSpec{}, fmt.Errorf("executable providers without declarative or spec surfaces must define %s", providerpkg.StaticCatalogFile)
+		return providerhost.StaticProviderSpec{}, config.StaticConnectionPlan{}, fmt.Errorf("executable providers without declarative or spec surfaces must define %s", providerpkg.StaticCatalogFile)
 	}
 	if staticCatalog != nil {
 		if displayName != "" {
@@ -922,7 +1053,7 @@ func buildPluginStaticSpec(name string, entry *config.ProviderEntry, manifest *p
 		ConnectionParams: providerhost.ConnectionParamDefsFromManifest(conn.ConnectionParams),
 		CredentialFields: providerhost.CredentialFieldsFromManifest(conn.Auth.Credentials),
 		DiscoveryConfig:  providerhost.DiscoveryConfigFromManifest(manifest.Spec.Discovery),
-	}, nil
+	}, plan, nil
 }
 
 func staticAuthTypes(authType providermanifestv1.AuthType) []string {

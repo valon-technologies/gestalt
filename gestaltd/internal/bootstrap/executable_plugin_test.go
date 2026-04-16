@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -760,6 +761,55 @@ func storeNestedInvokeToken(t *testing.T, harness *nestedInvokeHarness, ctx cont
 		RefreshToken: "refresh-token",
 	}); err != nil {
 		t.Fatalf("StoreToken(%s,%s,%s): %v", plugin, connection, instance, err)
+	}
+}
+
+func TestBuildStartupProviderSpecPreservesStaticCatalogConnectionRouting(t *testing.T) {
+	t.Parallel()
+
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "roadmap",
+		Operations: []catalog.CatalogOperation{
+			{ID: "status", Method: http.MethodGet, Transport: catalog.TransportREST},
+			{ID: "search", Method: http.MethodPost, Transport: catalog.TransportMCPPassthrough},
+			{ID: "echo", Method: http.MethodPost},
+		},
+	})
+	manifest := newExecutableManifest("Roadmap", "Workflow startup routing")
+	manifest.Spec.DefaultConnection = config.PluginConnectionAlias
+	manifest.Spec.Connections = map[string]*providermanifestv1.ManifestConnectionDef{
+		"api": {
+			Mode: providermanifestv1.ConnectionModeIdentity,
+			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
+		},
+		"mcp": {
+			Mode: providermanifestv1.ConnectionModeIdentity,
+			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeBearer},
+		},
+	}
+	manifest.Spec.Surfaces = &providermanifestv1.ProviderSurfaces{
+		REST: &providermanifestv1.RESTSurface{Connection: "api"},
+		MCP:  &providermanifestv1.MCPSurface{URL: "https://example.invalid/mcp", Connection: "mcp"},
+	}
+
+	spec, operationConnections, err := buildStartupProviderSpec("roadmap", &config.ProviderEntry{
+		ResolvedManifest:     manifest,
+		ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+	})
+	if err != nil {
+		t.Fatalf("buildStartupProviderSpec: %v", err)
+	}
+	if spec.Catalog == nil || len(spec.Catalog.Operations) != 3 {
+		t.Fatalf("unexpected startup catalog: %+v", spec.Catalog)
+	}
+	if got := operationConnections["status"]; got != "api" {
+		t.Fatalf("status connection = %q, want %q", got, "api")
+	}
+	if got := operationConnections["search"]; got != "mcp" {
+		t.Fatalf("search connection = %q, want %q", got, "mcp")
+	}
+	if got := operationConnections["echo"]; got != config.PluginConnectionName {
+		t.Fatalf("echo connection = %q, want %q", got, config.PluginConnectionName)
 	}
 }
 
@@ -1713,6 +1763,75 @@ func TestPluginCacheBindingsExposeHostSocketEnv(t *testing.T) {
 	}
 	if got := checkEnv(t, []string{"session", "rate_limit"}, providerhost.CacheSocketEnv("rate_limit")); !got {
 		t.Fatal(`named cache env for "rate_limit" should be set with multiple plugin cache bindings`)
+	}
+}
+
+func TestPluginWorkflowBindingsExposeHostSocketEnv(t *testing.T) {
+	t.Parallel()
+
+	bin := buildEchoPluginBinary(t)
+	manifestRoot := writeStaticCatalog(t, &catalog.Catalog{
+		Name: "echoext",
+		Operations: []catalog.CatalogOperation{
+			{ID: "read_env", Method: http.MethodGet, Parameters: []catalog.CatalogParameter{{Name: "name", Type: "string", Required: true}}},
+		},
+	})
+	manifest := newExecutableManifest("Echo", "Echoes back the input parameters")
+	cfg := &config.Config{
+		Plugins: map[string]*config.ProviderEntry{
+			"echoext": {
+				Command:              bin,
+				Args:                 []string{"provider"},
+				ResolvedManifest:     manifest,
+				ResolvedManifestPath: filepath.Join(manifestRoot, "manifest.yaml"),
+				Workflow: &config.PluginWorkflowConfig{
+					Provider:   "temporal",
+					Operations: []string{"read_env"},
+				},
+			},
+		},
+	}
+
+	workflowRuntime := &workflowRuntime{
+		bindings: map[string]workflowBinding{
+			"echoext": {
+				providerName: "temporal",
+				operations: map[string]struct{}{
+					"read_env": {},
+				},
+			},
+		},
+	}
+
+	providers, ready, _, errResolver, err := buildProvidersAsync(context.Background(), cfg, NewFactoryRegistry(), Deps{
+		WorkflowRuntime: workflowRuntime,
+	}, buildProvider)
+	if err != nil {
+		t.Fatalf("buildProvidersAsync: %v", err)
+	}
+	<-ready
+	if errs := errResolver(); len(errs) > 0 {
+		t.Fatalf("buildProvidersAsync provider errors: %v", errors.Join(errs...))
+	}
+	defer func() { _ = CloseProviders(providers) }()
+
+	prov, err := providers.Get("echoext")
+	if err != nil {
+		t.Fatalf("providers.Get: %v", err)
+	}
+	result, err := prov.Execute(context.Background(), "read_env", map[string]any{"name": providerhost.DefaultWorkflowSocketEnv}, "")
+	if err != nil {
+		t.Fatalf("Execute read_env: %v", err)
+	}
+	var env struct {
+		Value string `json:"value"`
+		Found bool   `json:"found"`
+	}
+	if err := json.Unmarshal([]byte(result.Body), &env); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !env.Found || env.Value == "" {
+		t.Fatal("default workflow env should be set when plugin workflow binding exists")
 	}
 }
 

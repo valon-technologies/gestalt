@@ -7,9 +7,12 @@ import (
 	"maps"
 	"slices"
 
+	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/catalog"
+	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/metricutil"
 	"github.com/valon-technologies/gestalt/server/internal/plugininvocation"
 	"github.com/valon-technologies/gestalt/server/internal/registry"
@@ -34,12 +37,48 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		warnings = w.Warnings()
 	}
 
-	providers, _, err := buildProvidersStrict(ctx, cfg, factories, prepared.Deps)
+	providers, providersReady, connAuthResolver, errResolver, err := buildProvidersAsync(ctx, cfg, factories, prepared.Deps, buildProviderForValidation)
 	if err != nil {
 		return warnings, err
 	}
-	defer func() { _ = CloseProviders(providers) }()
-
+	defer func() {
+		<-providersReady
+		_ = CloseProviders(providers)
+	}()
+	connMaps, err := BuildConnectionMaps(cfg)
+	if err != nil {
+		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
+		return warnings, err
+	}
+	authzCfg, err := prepared.Deps.WorkflowRuntime.AugmentAuthorization(cfg.Authorization)
+	if err != nil {
+		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
+		return warnings, err
+	}
+	authz, err := authorization.New(authzCfg, cfg.Plugins, providers, connMaps.DefaultConnection, prepared.Services.PluginAuthorizations)
+	if err != nil {
+		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
+		return warnings, err
+	}
+	defer func() { _ = authz.Close() }()
+	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.Tokens,
+		invocation.WithAuthorizer(authz),
+		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
+		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(connMaps.MCPConnection)),
+		invocation.WithConnectionAuth(func() map[string]map[string]invocation.OAuthRefresher {
+			return connectionAuthToRefreshers(connAuthResolver())
+		}),
+	)
+	prepared.Deps.WorkflowRuntime.SetInvoker(sharedInvoker)
+	extraWorkflows, err := buildWorkflows(ctx, cfg, factories, prepared.Deps)
+	if err != nil {
+		return warnings, err
+	}
+	defer func() { _ = closeWorkflows(extraWorkflows...) }()
+	<-providersReady
+	if errs := errResolver(); len(errs) > 0 {
+		return warnings, fmt.Errorf("bootstrap: provider validation failed: %w", errors.Join(errs...))
+	}
 	if err := validateMCPCatalogs(providers); err != nil {
 		return warnings, err
 	}
@@ -120,30 +159,41 @@ type preparedProviderStub struct {
 	displayName    string
 	description    string
 	connectionMode core.ConnectionMode
+	catalog        *catalog.Catalog
+	connections    map[string]string
 }
 
 func newPreparedProviderStub(name string, entry *config.ProviderEntry) (core.Provider, error) {
 	if entry == nil || entry.ResolvedManifest == nil {
 		return nil, fmt.Errorf("prepared manifest is not resolved")
 	}
-	manifest := entry.ResolvedManifest
-	plan, err := config.BuildStaticConnectionPlan(entry, entry.ManifestSpec())
+	spec, operationConnections, err := buildStartupProviderSpec(name, entry)
 	if err != nil {
 		return nil, err
 	}
-	displayName := manifest.DisplayName
+	displayName := spec.DisplayName
 	if displayName == "" {
 		displayName = name
 	}
-	description := manifest.Description
+	description := spec.Description
 	if description == "" {
 		description = fmt.Sprintf("prepared plugin stub for %s", name)
+	}
+	cat := spec.Catalog
+	if cat == nil {
+		cat = &catalog.Catalog{
+			Name:        name,
+			DisplayName: displayName,
+			Description: description,
+		}
 	}
 	return &preparedProviderStub{
 		name:           name,
 		displayName:    displayName,
 		description:    description,
-		connectionMode: plan.ConnectionMode(),
+		connectionMode: spec.ConnectionMode,
+		catalog:        cat,
+		connections:    operationConnections,
 	}, nil
 }
 
@@ -157,14 +207,27 @@ func (p *preparedProviderStub) ConnectionParamDefs() map[string]core.ConnectionP
 }
 func (p *preparedProviderStub) CredentialFields() []core.CredentialFieldDef { return nil }
 func (p *preparedProviderStub) DiscoveryConfig() *core.DiscoveryConfig      { return nil }
-func (p *preparedProviderStub) ConnectionForOperation(string) string        { return "" }
 func (p *preparedProviderStub) Catalog() *catalog.Catalog {
-	return &catalog.Catalog{
-		Name:        p.name,
-		DisplayName: p.displayName,
-		Description: p.description,
+	if p.catalog == nil {
+		return &catalog.Catalog{
+			Name:        p.name,
+			DisplayName: p.displayName,
+			Description: p.description,
+		}
 	}
+	return p.catalog.Clone()
 }
 func (p *preparedProviderStub) Execute(context.Context, string, map[string]any, string) (*core.OperationResult, error) {
-	return nil, fmt.Errorf("prepared validation stub cannot execute operations")
+	return &core.OperationResult{Status: 202, Body: `{}`}, nil
+}
+
+func (p *preparedProviderStub) CallTool(context.Context, string, map[string]any) (*mcpgo.CallToolResult, error) {
+	return mcpgo.NewToolResultText(`{}`), nil
+}
+
+func (p *preparedProviderStub) ConnectionForOperation(operation string) string {
+	if p == nil || p.connections == nil {
+		return ""
+	}
+	return p.connections[operation]
 }

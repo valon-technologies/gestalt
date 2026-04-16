@@ -114,6 +114,7 @@ where
                     subject: request_subject(request.context.as_ref()),
                     credential: request_credential(request.context.as_ref()),
                     access: request_access(request.context.as_ref()),
+                    workflow: request_workflow(request.context.as_ref()),
                     request_handle: request.request_handle,
                 },
             )
@@ -142,6 +143,7 @@ where
             subject: request_subject(request.context.as_ref()),
             credential: request_credential(request.context.as_ref()),
             access: request_access(request.context.as_ref()),
+            workflow: request_workflow(request.context.as_ref()),
             request_handle: String::new(),
         };
         let catalog = self
@@ -204,4 +206,13 @@ fn request_access(context: Option<&crate::generated::v1::RequestContext>) -> Acc
         policy: access.policy.clone(),
         role: access.role.clone(),
     }
+}
+
+fn request_workflow(
+    context: Option<&crate::generated::v1::RequestContext>,
+) -> serde_json::Map<String, serde_json::Value> {
+    let Some(context) = context else {
+        return serde_json::Map::new();
+    };
+    crate::catalog::object_map(context.workflow.clone())
 }

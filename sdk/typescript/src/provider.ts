@@ -9,6 +9,7 @@ export type ProviderKind =
   | "cache"
   | "secrets"
   | "s3"
+  | "workflow"
   | "telemetry";
 
 /**
