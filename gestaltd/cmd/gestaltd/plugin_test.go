@@ -2080,12 +2080,29 @@ server:
 func writeStubIndexedDBManifestForTest(t *testing.T, dir string) string {
 	t.Helper()
 
+	artifactPath := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "indexeddb"))
+	artifactFullPath := filepath.Join(dir, filepath.FromSlash(artifactPath))
+	if err := os.MkdirAll(filepath.Dir(artifactFullPath), 0o755); err != nil {
+		t.Fatalf("mkdir indexeddb artifact dir: %v", err)
+	}
+	artifactContent := []byte("indexeddb-stub-binary")
+	if err := os.WriteFile(artifactFullPath, artifactContent, 0o755); err != nil {
+		t.Fatalf("write indexeddb artifact: %v", err)
+	}
+	artifactSum := sha256.Sum256(artifactContent)
 	manifestPath := filepath.Join(dir, "indexeddb-manifest.yaml")
 	data, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
-		Source:  "github.com/test/providers/indexeddb-stub",
-		Version: "0.0.1-alpha.1",
-		Kind:    providermanifestv1.KindIndexedDB,
-		Spec:    &providermanifestv1.Spec{},
+		Source:     "github.com/test/providers/indexeddb-stub",
+		Version:    "0.0.1-alpha.1",
+		Kind:       providermanifestv1.KindIndexedDB,
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: artifactPath},
+		Artifacts: []providermanifestv1.Artifact{{
+			OS:     runtime.GOOS,
+			Arch:   runtime.GOARCH,
+			Path:   artifactPath,
+			SHA256: hex.EncodeToString(artifactSum[:]),
+		}},
+		Spec: &providermanifestv1.Spec{},
 	}, providerpkg.ManifestFormatYAML)
 	if err != nil {
 		t.Fatalf("encode indexeddb manifest: %v", err)

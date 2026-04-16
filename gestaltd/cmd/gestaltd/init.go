@@ -47,3 +47,12 @@ func loadConfigForExecutionAtPathsWithArtifactsDir(configPaths []string, artifac
 	}
 	return cfg, nil
 }
+
+func loadConfigForValidationWithArtifactsDir(configFlags []string, artifactsDir string) ([]string, *config.Config, error) {
+	configPaths := operator.ResolveConfigPaths(configFlags)
+	cfg, err := operatorLifecycle().LoadForValidationAtPathsWithArtifactsDir(configPaths, artifactsDir)
+	if err != nil {
+		return nil, nil, err
+	}
+	return configPaths, cfg, nil
+}

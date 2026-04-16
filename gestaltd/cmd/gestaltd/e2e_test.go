@@ -338,6 +338,102 @@ plugins:
 	}
 }
 
+func TestE2EValidateUsesScratchPreparedInstallsForLocalSourceConfigs(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	pluginDir := setupPluginDir(t, dir)
+	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := fmt.Sprintf(`server:
+  encryptionKey: test-key
+  providers:
+    indexeddb: sqlite
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: %s
+      config:
+        path: %q
+plugins:
+  example:
+    source:
+      path: %s
+`, indexedDBManifest, filepath.Join(dir, "gestalt.db"), componentProviderManifestPath(t, pluginDir))
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("expected validate to succeed: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "config ok") {
+		t.Fatalf("expected validate output to mention success, got: %s", out)
+	}
+	if _, err := os.Stat(filepath.Join(dir, operator.InitLockfileName)); !os.IsNotExist(err) {
+		t.Fatalf("validate should not write lockfile, got err=%v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".gestaltd")); !os.IsNotExist(err) {
+		t.Fatalf("validate should not leave prepared artifacts in config dir, got err=%v", err)
+	}
+
+	providedArtifactsDir := filepath.Join(dir, "artifacts", "validate")
+	out, err = exec.Command(gestaltdBin, "validate", "--config", cfgPath, "--artifacts-dir", providedArtifactsDir).CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected validate with --artifacts-dir to fail, got success:\n%s", out)
+	}
+	if _, err := os.Stat(providedArtifactsDir); !os.IsNotExist(err) {
+		t.Fatalf("validate should not mutate provided artifacts dir, got err=%v", err)
+	}
+}
+
+func TestE2EValidateRejectsInvalidPluginInvokesDependency(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	callerDir := setupPluginDirWithVersion(t, filepath.Join(dir, "caller"), "0.0.1-alpha.1")
+	targetDir := setupPluginDirWithVersion(t, filepath.Join(dir, "target"), "0.0.1-alpha.1")
+	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := fmt.Sprintf(`server:
+  encryptionKey: test-key
+  providers:
+    indexeddb: sqlite
+providers:
+  indexeddb:
+    sqlite:
+      source:
+        path: %s
+      config:
+        path: %q
+plugins:
+  caller:
+    source:
+      path: %s
+    invokes:
+      - plugin: target
+        operation: missing
+  target:
+    source:
+      path: %s
+`, indexedDBManifest, filepath.Join(dir, "gestalt.db"), componentProviderManifestPath(t, callerDir), componentProviderManifestPath(t, targetDir))
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected validate to fail, got success:\n%s", out)
+	}
+	if !strings.Contains(string(out), `unknown effective operation`) {
+		t.Fatalf("expected validate output to mention missing invokes operation, got: %s", out)
+	}
+}
+
 func setupPluginDir(t *testing.T, baseDir string) string {
 	t.Helper()
 	return setupPluginDirWithVersion(t, baseDir, "0.0.1-alpha.1")

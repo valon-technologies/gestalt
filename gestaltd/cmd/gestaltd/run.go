@@ -473,7 +473,6 @@ func runValidate(args []string) error {
 	fs.Usage = func() { printValidateUsage(fs.Output()) }
 	var configPaths repeatedStringFlag
 	fs.Var(&configPaths, "config", "path to config file (repeat to layer overrides)")
-	artifactsDir := fs.String("artifacts-dir", "", "path to writable prepared-artifacts directory")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -481,12 +480,17 @@ func runValidate(args []string) error {
 		return fmt.Errorf("unexpected arguments: %s", strings.Join(fs.Args(), " "))
 	}
 
-	return validateConfigWithArtifactsDir(configPaths, *artifactsDir)
+	return validateConfig(configPaths)
 }
 
-func validateConfigWithArtifactsDir(configFlags []string, artifactsDir string) error {
-	configPaths := operator.ResolveConfigPaths(configFlags)
-	cfg, err := loadConfigForExecutionAtPathsWithArtifactsDir(configPaths, artifactsDir, true)
+func validateConfig(configFlags []string) error {
+	scratchDir, err := os.MkdirTemp("", "gestaltd-validate-*")
+	if err != nil {
+		return fmt.Errorf("create validation scratch dir: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(scratchDir) }()
+
+	paths, cfg, err := loadConfigForValidationWithArtifactsDir(configFlags, scratchDir)
 	if err != nil {
 		return err
 	}
@@ -496,7 +500,7 @@ func validateConfigWithArtifactsDir(configFlags []string, artifactsDir string) e
 		return err
 	}
 
-	logConfigSummary(configPaths, cfg)
+	logConfigSummary(paths, cfg)
 	for _, w := range warnings {
 		slog.Warn(w)
 	}
@@ -567,7 +571,7 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "  gestaltd init [--config PATH]... [--artifacts-dir PATH] [--platform PLATFORMS]")
 	writeUsageLine(w, "  gestaltd serve [--config PATH]... [--artifacts-dir PATH] [--locked]")
 	writeUsageLine(w, "  gestaltd provider <command> [flags]")
-	writeUsageLine(w, "  gestaltd validate [--config PATH]... [--artifacts-dir PATH]")
+	writeUsageLine(w, "  gestaltd validate [--config PATH]...")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Commands:")
 	writeUsageLine(w, "  init        Resolve providers and plugins and write lock state")
@@ -578,7 +582,7 @@ func printMainUsage(w io.Writer) {
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Flags:")
 	writeUsageLine(w, "  --config          Path to a config file; repeat to layer left-to-right")
-	writeUsageLine(w, "  --artifacts-dir   Path to writable prepared-artifacts directory")
+	writeUsageLine(w, "  --artifacts-dir   Path to writable prepared-artifacts directory for init/serve")
 }
 
 func printServeUsage(w io.Writer) {
@@ -613,9 +617,10 @@ func printInitUsage(w io.Writer) {
 
 func printValidateUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
-	writeUsageLine(w, "  gestaltd validate [--config PATH]... [--artifacts-dir PATH]")
+	writeUsageLine(w, "  gestaltd validate [--config PATH]...")
 	writeUsageLine(w, "")
 	writeUsageLine(w, "Validate configuration without starting the server or running migrations.")
+	writeUsageLine(w, "Validation always stages source-backed providers in a temporary scratch dir.")
 	writeUsageLine(w, "Repeated --config flags merge left-to-right.")
 }
 

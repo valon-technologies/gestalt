@@ -1409,9 +1409,9 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 		t.Fatalf("auth resolver token = %q, want %q", resolver.calls[1].src.Token, "ghp_inline_auth_source_token")
 	}
 
-	secretsRoot := filepath.Join(artifactsDir, ".gestaltd", "secrets")
+	secretsRoot := filepath.Join(artifactsDir, ".gestaltd", "secrets", "secrets")
 	if err := os.RemoveAll(secretsRoot); err != nil {
-		t.Fatalf("RemoveAll secrets root: %v", err)
+		t.Fatalf("RemoveAll secrets provider root: %v", err)
 	}
 	authRoot := filepath.Join(artifactsDir, ".gestaltd", "auth")
 	if err := os.RemoveAll(authRoot); err != nil {
@@ -1457,6 +1457,131 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 	authExecutablePath := resolveLockPath(artifactsDir, authLockEntry.Executable)
 	if authProvider.Command != authExecutablePath {
 		t.Fatalf("auth provider command = %q, want %q", authProvider.Command, authExecutablePath)
+	}
+}
+
+func TestLoadForExecutionAtPath_UnlockedBootstrapInitPreparesOnce(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	bootstrapSource := "github.com/acme/tools/bootstrap-secrets"
+	bootstrapVersion := "0.1.0"
+	authSource := "github.com/acme/tools/auth-widget"
+	authVersion := "2.0.0"
+	bootstrapArtifact := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "bootstrap-secrets"))
+	bootstrapManifestPath := filepath.Join(dir, "bootstrap-secrets-manifest.yaml")
+	bootstrapManifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
+		Kind:    providermanifestv1.KindSecrets,
+		Source:  bootstrapSource,
+		Version: bootstrapVersion,
+		Spec:    &providermanifestv1.Spec{},
+		Artifacts: []providermanifestv1.Artifact{
+			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: bootstrapArtifact},
+		},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: bootstrapArtifact},
+	}, providerpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeSourceManifestFormat bootstrap: %v", err)
+	}
+	if err := os.WriteFile(bootstrapManifestPath, bootstrapManifest, 0o644); err != nil {
+		t.Fatalf("write bootstrap manifest: %v", err)
+	}
+	bootstrapBinaryData, err := os.ReadFile(buildGoSourceSecretsBinary(t))
+	if err != nil {
+		t.Fatalf("read bootstrap binary: %v", err)
+	}
+	bootstrapBinaryPath := filepath.Join(dir, filepath.FromSlash(bootstrapArtifact))
+	if err := os.MkdirAll(filepath.Dir(bootstrapBinaryPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll bootstrap artifact: %v", err)
+	}
+	if err := os.WriteFile(bootstrapBinaryPath, bootstrapBinaryData, 0o755); err != nil {
+		t.Fatalf("write bootstrap artifact: %v", err)
+	}
+
+	authArchivePath := buildExecutableArchive(
+		t,
+		dir,
+		"auth-src",
+		authSource,
+		authVersion,
+		providermanifestv1.KindAuth,
+		"auth-plugin",
+		"fake-auth-binary",
+	)
+	authArchiveData, err := os.ReadFile(authArchivePath)
+	if err != nil {
+		t.Fatalf("read auth archive: %v", err)
+	}
+	authArchiveSum := sha256.Sum256(authArchiveData)
+	resolver := &fakeResolver{
+		archivePath: authArchivePath,
+		resolvedURL: "https://example.test/auth.tar.gz",
+		sha256:      hex.EncodeToString(authArchiveSum[:]),
+	}
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configYAML := strings.Join([]string{
+		requiredIndexedDBConfigYAML(t, dir, filepath.Join(dir, "data.db")),
+		"  secrets:",
+		"    bootstrap:",
+		"      source:",
+		"        path: ./bootstrap-secrets-manifest.yaml",
+		"  auth:",
+		"    auth:",
+		"      source:",
+		"        ref: " + authSource,
+		"        version: " + authVersion,
+		"        auth:",
+		"          token:",
+		"            secret:",
+		"              provider: bootstrap",
+		"              name: source-token",
+		"      config:",
+		"        clientId: managed-auth-client",
+		"server:",
+		"  providers:",
+		"    indexeddb: sqlite",
+		"    secrets: bootstrap",
+		"    auth: auth",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	factories := bootstrap.NewFactoryRegistry()
+	factories.Secrets["provider"] = secretsprovider.Factory
+
+	lc := NewLifecycle(resolver).WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
+		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
+	})
+
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, false)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=false): %v", err)
+	}
+	if got := resolver.calls; got != 1 {
+		t.Fatalf("resolver calls = %d, want 1", got)
+	}
+	if resolver.lastSrc.String() != authSource {
+		t.Fatalf("resolver source = %q, want %q", resolver.lastSrc.String(), authSource)
+	}
+	if resolver.lastVersion != authVersion {
+		t.Fatalf("resolver version = %q, want %q", resolver.lastVersion, authVersion)
+	}
+	if resolver.lastSrc.Token != "ghp_inline_auth_source_token" {
+		t.Fatalf("resolver token = %q, want %q", resolver.lastSrc.Token, "ghp_inline_auth_source_token")
+	}
+
+	authProvider := mustSelectedHostProviderEntry(t, cfg, config.HostProviderKindAuth)
+	if authProvider == nil || authProvider.Source.Auth == nil {
+		t.Fatalf("auth provider source auth = %#v", authProvider)
+	}
+	if authProvider.Source.Auth.Token != "ghp_inline_auth_source_token" {
+		t.Fatalf("resolved auth source token = %q, want %q", authProvider.Source.Auth.Token, "ghp_inline_auth_source_token")
 	}
 }
 
