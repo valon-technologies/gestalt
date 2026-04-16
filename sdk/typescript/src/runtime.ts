@@ -234,12 +234,11 @@ export async function loadProviderFromTarget(
   rawTarget?: string,
 ): Promise<LoadedProvider> {
   const config = readPackageConfig(root);
-  const targetValue =
-    rawTarget?.trim() ||
-    formatProviderTarget(
-      config.providerTarget ?? readPackageProviderTarget(root),
-    );
-  const target = parseProviderTarget(targetValue);
+  const explicitTarget = rawTarget?.trim();
+  const target = explicitTarget
+    ? parseProviderTarget(explicitTarget)
+    : config.providerTarget ?? readPackageProviderTarget(root);
+  const targetValue = explicitTarget ?? formatProviderTarget(target);
   const module = await import(resolveProviderImportUrl(root, target));
   const candidate =
     (target.exportName ? Reflect.get(module, target.exportName) : undefined) ??
