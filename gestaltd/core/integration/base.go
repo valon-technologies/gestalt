@@ -149,17 +149,21 @@ func (b *Base) Execute(ctx context.Context, operation string, params map[string]
 	if b.ExecuteFunc != nil {
 		return b.ExecuteFunc(ctx, operation, params, token)
 	}
-
-	catOp := findCatalogOp(b.catalog, operation)
-	if catOp == nil {
-		return nil, fmt.Errorf("unknown operation: %s", operation)
+	var catOp catalog.CatalogOperation
+	if op, ok := catalog.OperationFromContext(ctx, b.IntegrationName, operation); ok {
+		catOp = op
+	} else {
+		found := findCatalogOp(b.catalog, operation)
+		if found == nil {
+			return nil, fmt.Errorf("unknown operation: %s", operation)
+		}
+		catOp = *found
 	}
-	if catOp.Query != "" {
+	if catOp.Transport == transportGraphQL || (catOp.Transport == "" && catOp.Path == "" && catOp.Query != "") {
 		return b.executeGraphQL(ctx, operation, catOp.Query, params, token)
 	}
-	return b.executeREST(ctx, operation, catOp, params, token)
+	return b.executeREST(ctx, operation, &catOp, params, token)
 }
-
 func (b *Base) egressAuthStyle() egress.AuthStyle {
 	switch b.AuthStyle {
 	case AuthStyleRaw:

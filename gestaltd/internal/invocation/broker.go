@@ -242,6 +242,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	if b.authorizer != nil && !b.authorizer.AllowCatalogOperation(p, providerName, opMeta) {
 		return fail(fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operation))
 	}
+	ctx = catalog.WithOperationContext(ctx, providerName, opMeta)
 	metricOperation = operation
 	metricTransport = metricutil.AttrValue(transport)
 	span.SetAttributes(attrTransport.String(metricTransport))

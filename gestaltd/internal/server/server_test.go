@@ -5994,6 +5994,18 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 		catalog: &catalog.Catalog{
 			Name: "test-int",
 			Operations: []catalog.CatalogOperation{
+				{
+					ID:          "alpha_rest",
+					Description: "Static REST op",
+					Method:      http.MethodGet,
+					Path:        "/items/{id}",
+					Query:       "query StaticItems { items { id } }",
+					Transport:   catalog.TransportREST,
+					Parameters: []catalog.CatalogParameter{
+						{Name: "itemId", Type: "string", Location: "path", WireName: "id", Required: true},
+						{Name: "pageSize", Type: "integer", Location: "query", WireName: "page[size]"},
+					},
+				},
 				{ID: "zeta_rest", Description: "REST op", Method: http.MethodGet, Transport: catalog.TransportREST},
 			},
 		},
@@ -6003,16 +6015,32 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 				return &catalog.Catalog{
 					Name: "test-int",
 					Operations: []catalog.CatalogOperation{
+						{
+							ID:          "alpha_rest",
+							Description: "Session REST op",
+							Method:      http.MethodPost,
+							Transport:   catalog.TransportREST,
+							Parameters: []catalog.CatalogParameter{
+								{Name: "pageSize", Type: "integer"},
+							},
+						},
 						{ID: "alpha_mcp", Description: "Session-only MCP op", Method: http.MethodPost, Transport: catalog.TransportMCPPassthrough},
-						{ID: "alpha_rest", Description: "Session-only REST op", Method: http.MethodPost, Transport: catalog.TransportREST},
 					},
 				}, nil
 			case altCatalogToken:
 				return &catalog.Catalog{
 					Name: "test-int",
 					Operations: []catalog.CatalogOperation{
+						{
+							ID:          "alpha_rest",
+							Description: "Alt session REST op",
+							Method:      http.MethodPatch,
+							Transport:   catalog.TransportREST,
+							Parameters: []catalog.CatalogParameter{
+								{Name: "pageSize", Type: "integer"},
+							},
+						},
 						{ID: "beta_mcp_alt", Description: "Session-only alt MCP op", Method: http.MethodPost, Transport: catalog.TransportMCPPassthrough},
-						{ID: "beta_rest_alt", Description: "Session-only alt REST op", Method: http.MethodPost, Transport: catalog.TransportREST},
 					},
 				}, nil
 			default:
@@ -6052,18 +6080,54 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
 	}
 
-	var ops []map[string]any
+	var ops []struct {
+		ID          string `json:"id"`
+		Method      string `json:"method"`
+		Description string `json:"description"`
+		Path        string `json:"path"`
+		Query       string `json:"query"`
+		Parameters  []struct {
+			Name     string `json:"name"`
+			WireName string `json:"wireName"`
+			Location string `json:"location"`
+			Required bool   `json:"required"`
+		} `json:"parameters"`
+	}
 	if err := json.NewDecoder(resp.Body).Decode(&ops); err != nil {
 		t.Fatalf("decoding response: %v", err)
 	}
 	if len(ops) != 2 {
 		t.Fatalf("expected 2 operations, got %d", len(ops))
 	}
-	if ops[0]["id"] != "alpha_rest" {
-		t.Fatalf("expected first id 'alpha_rest', got %v", ops[0]["id"])
+	if ops[0].ID != "alpha_rest" {
+		t.Fatalf("expected first id 'alpha_rest', got %v", ops[0].ID)
 	}
-	if ops[1]["id"] != "zeta_rest" {
-		t.Fatalf("expected second id 'zeta_rest', got %v", ops[1]["id"])
+	if ops[0].Description != "Session REST op" || ops[0].Method != http.MethodPost {
+		t.Fatalf("expected session collision metadata to win, got %+v", ops[0])
+	}
+	if ops[0].Path != "/items/{id}" || ops[0].Query != "query StaticItems { items { id } }" {
+		t.Fatalf("expected static REST metadata to survive collision, got %+v", ops[0])
+	}
+	if len(ops[0].Parameters) != 2 {
+		t.Fatalf("expected merged parameter metadata, got %+v", ops[0].Parameters)
+	}
+	paramsByName := make(map[string]struct {
+		Name     string `json:"name"`
+		WireName string `json:"wireName"`
+		Location string `json:"location"`
+		Required bool   `json:"required"`
+	}, len(ops[0].Parameters))
+	for _, param := range ops[0].Parameters {
+		paramsByName[param.Name] = param
+	}
+	if got := paramsByName["itemId"]; got.Name != "itemId" || got.Location != "path" || got.WireName != "id" || !got.Required {
+		t.Fatalf("itemId param = %+v", got)
+	}
+	if got := paramsByName["pageSize"]; got.Name != "pageSize" || got.Location != "query" || got.WireName != "page[size]" {
+		t.Fatalf("pageSize param = %+v", got)
+	}
+	if ops[1].ID != "zeta_rest" {
+		t.Fatalf("expected second id 'zeta_rest', got %v", ops[1].ID)
 	}
 
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/test-int/operations?_connection="+altCatalogConnection+"&_instance="+altInstance, nil)
@@ -6084,11 +6148,17 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 	if len(ops) != 2 {
 		t.Fatalf("expected 2 override operations, got %d", len(ops))
 	}
-	if ops[0]["id"] != "beta_rest_alt" {
-		t.Fatalf("expected first id 'beta_rest_alt', got %v", ops[0]["id"])
+	if ops[0].ID != "alpha_rest" {
+		t.Fatalf("expected first id 'alpha_rest', got %v", ops[0].ID)
 	}
-	if ops[1]["id"] != "zeta_rest" {
-		t.Fatalf("expected second id 'zeta_rest', got %v", ops[1]["id"])
+	if ops[0].Description != "Alt session REST op" || ops[0].Method != http.MethodPatch {
+		t.Fatalf("expected alt session collision metadata to win, got %+v", ops[0])
+	}
+	if ops[0].Path != "/items/{id}" || ops[0].Query != "query StaticItems { items { id } }" {
+		t.Fatalf("expected static metadata to survive alt collision, got %+v", ops[0])
+	}
+	if ops[1].ID != "zeta_rest" {
+		t.Fatalf("expected second id 'zeta_rest', got %v", ops[1].ID)
 	}
 	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations/test-int/operations?connection="+altCatalogConnection+"&instance="+altInstance, nil)
 	resp, err = http.DefaultClient.Do(req)
@@ -6108,11 +6178,11 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 	if len(ops) != 2 {
 		t.Fatalf("expected 2 legacy override operations, got %d", len(ops))
 	}
-	if ops[0]["id"] != "alpha_rest" {
-		t.Fatalf("expected first id 'alpha_rest' for legacy override, got %v", ops[0]["id"])
+	if ops[0].ID != "alpha_rest" {
+		t.Fatalf("expected first id 'alpha_rest' for legacy override, got %v", ops[0].ID)
 	}
-	if ops[1]["id"] != "zeta_rest" {
-		t.Fatalf("expected second id 'zeta_rest' for legacy override, got %v", ops[1]["id"])
+	if ops[1].ID != "zeta_rest" {
+		t.Fatalf("expected second id 'zeta_rest' for legacy override, got %v", ops[1].ID)
 	}
 }
 
@@ -8097,6 +8167,327 @@ func TestExecuteOperation_PinsSessionCatalogConnectionIntoExecution(t *testing.T
 	}
 }
 
+func TestExecuteOperation_SparseSessionCollisionUsesStaticPathParamsForBaseProvider(t *testing.T) {
+	t.Parallel()
+
+	t.Run("sparse session uses static path params", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			gotMethod string
+			gotPath   string
+			gotQuery  string
+			gotAuth   string
+		)
+		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotMethod = r.Method
+			gotPath = r.URL.Path
+			gotQuery = r.URL.RawQuery
+			gotAuth = r.Header.Get("Authorization")
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"ok":true}`)
+		}))
+		defer upstream.Close()
+
+		staticCat := &catalog.Catalog{
+			Name: "sample-int",
+			Operations: []catalog.CatalogOperation{
+				{
+					ID:          "run",
+					Method:      http.MethodGet,
+					Path:        "/items/{itemId}",
+					Query:       "query StaticItems { items { id } }",
+					Transport:   catalog.TransportMCPPassthrough,
+					Description: "Run",
+					Parameters: []catalog.CatalogParameter{
+						{Name: "itemId", Type: "string", Location: "path", WireName: "itemId", Required: true},
+						{Name: "pageSize", Type: "integer", Location: "query", WireName: "page[size]"},
+					},
+				},
+			},
+		}
+		coreintegration.CompileSchemas(staticCat)
+
+		base := &coreintegration.Base{
+			IntegrationName: "sample-int",
+			ConnMode:        core.ConnectionModeUser,
+			BaseURL:         upstream.URL,
+			AuthStyle:       coreintegration.AuthStyleBearer,
+		}
+		base.SetCatalog(staticCat)
+
+		prov := &sessionCatalogBaseProvider{
+			Base: base,
+			catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+				if token != "catalog-token" {
+					return nil, fmt.Errorf("unexpected token %q", token)
+				}
+				return &catalog.Catalog{
+					Name: "sample-int",
+					Operations: []catalog.CatalogOperation{
+						{
+							ID:          "run",
+							Transport:   catalog.TransportREST,
+							Description: "Run",
+							Parameters: []catalog.CatalogParameter{
+								{Name: "pageSize", Type: "integer"},
+							},
+						},
+					},
+				}, nil
+			},
+		}
+
+		svc := coretesting.NewStubServices(t)
+		u := seedUser(t, svc, "anonymous@gestalt")
+		seedToken(t, svc, &core.IntegrationToken{
+			ID: "tok-catalog", UserID: u.ID, Integration: "sample-int",
+			Connection: "catalog-conn", Instance: "default", AccessToken: "catalog-token",
+		})
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, prov)
+			cfg.Services = svc
+			cfg.CatalogConnection = map[string]string{"sample-int": "catalog-conn"}
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/sample-int/run?itemId=123&pageSize=10", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+		if gotMethod != http.MethodGet {
+			t.Fatalf("upstream method = %q, want %q", gotMethod, http.MethodGet)
+		}
+		if gotPath != "/items/123" {
+			t.Fatalf("upstream path = %q, want %q", gotPath, "/items/123")
+		}
+		if gotQuery != "page%5Bsize%5D=10" {
+			t.Fatalf("upstream query = %q, want %q", gotQuery, "page%5Bsize%5D=10")
+		}
+		if gotAuth != "Bearer catalog-token" {
+			t.Fatalf("upstream auth = %q, want %q", gotAuth, "Bearer catalog-token")
+		}
+	})
+
+	t.Run("session method and path win when present", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			gotMethod string
+			gotPath   string
+			gotQuery  string
+			gotAuth   string
+		)
+		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotMethod = r.Method
+			gotPath = r.URL.Path
+			gotQuery = r.URL.RawQuery
+			gotAuth = r.Header.Get("Authorization")
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"ok":true}`)
+		}))
+		defer upstream.Close()
+
+		staticCat := &catalog.Catalog{
+			Name: "sample-int",
+			Operations: []catalog.CatalogOperation{
+				{
+					ID:          "run",
+					Method:      http.MethodGet,
+					Path:        "/items/{itemId}",
+					Transport:   catalog.TransportREST,
+					Description: "Run",
+					Parameters: []catalog.CatalogParameter{
+						{Name: "itemId", Type: "string", Location: "path", WireName: "itemId", Required: true},
+						{Name: "pageSize", Type: "integer", Location: "query", WireName: "page[size]"},
+					},
+				},
+			},
+		}
+		coreintegration.CompileSchemas(staticCat)
+
+		base := &coreintegration.Base{
+			IntegrationName: "sample-int",
+			ConnMode:        core.ConnectionModeUser,
+			BaseURL:         upstream.URL,
+			AuthStyle:       coreintegration.AuthStyleBearer,
+		}
+		base.SetCatalog(staticCat)
+
+		prov := &sessionCatalogBaseProvider{
+			Base: base,
+			catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+				if token != "catalog-token" {
+					return nil, fmt.Errorf("unexpected token %q", token)
+				}
+				return &catalog.Catalog{
+					Name: "sample-int",
+					Operations: []catalog.CatalogOperation{
+						{
+							ID:          "run",
+							Method:      http.MethodPost,
+							Path:        "/items/{itemId}/run",
+							Description: "Run",
+						},
+					},
+				}, nil
+			},
+		}
+
+		svc := coretesting.NewStubServices(t)
+		u := seedUser(t, svc, "anonymous@gestalt")
+		seedToken(t, svc, &core.IntegrationToken{
+			ID: "tok-catalog", UserID: u.ID, Integration: "sample-int",
+			Connection: "catalog-conn", Instance: "default", AccessToken: "catalog-token",
+		})
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, prov)
+			cfg.Services = svc
+			cfg.CatalogConnection = map[string]string{"sample-int": "catalog-conn"}
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/sample-int/run?itemId=123&pageSize=10", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+		if gotMethod != http.MethodPost {
+			t.Fatalf("upstream method = %q, want %q", gotMethod, http.MethodPost)
+		}
+		if gotPath != "/items/123/run" {
+			t.Fatalf("upstream path = %q, want %q", gotPath, "/items/123/run")
+		}
+		if gotQuery != "page%5Bsize%5D=10" {
+			t.Fatalf("upstream query = %q, want %q", gotQuery, "page%5Bsize%5D=10")
+		}
+		if gotAuth != "Bearer catalog-token" {
+			t.Fatalf("upstream auth = %q, want %q", gotAuth, "Bearer catalog-token")
+		}
+	})
+
+	t.Run("restricted aliases preserve merged session metadata", func(t *testing.T) {
+		t.Parallel()
+
+		var (
+			gotMethod string
+			gotPath   string
+			gotQuery  string
+			gotAuth   string
+		)
+		upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotMethod = r.Method
+			gotPath = r.URL.Path
+			gotQuery = r.URL.RawQuery
+			gotAuth = r.Header.Get("Authorization")
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = io.WriteString(w, `{"ok":true}`)
+		}))
+		defer upstream.Close()
+
+		staticCat := &catalog.Catalog{
+			Name: "sample-int",
+			Operations: []catalog.CatalogOperation{
+				{
+					ID:          "search",
+					Method:      http.MethodGet,
+					Path:        "/items/{itemId}",
+					Transport:   catalog.TransportREST,
+					Description: "Search",
+					Parameters: []catalog.CatalogParameter{
+						{Name: "itemId", Type: "string", Location: "path", WireName: "itemId", Required: true},
+						{Name: "pageSize", Type: "integer", Location: "query", WireName: "page[size]"},
+					},
+				},
+			},
+		}
+		coreintegration.CompileSchemas(staticCat)
+
+		base := &coreintegration.Base{
+			IntegrationName: "sample-int",
+			ConnMode:        core.ConnectionModeUser,
+			BaseURL:         upstream.URL,
+			AuthStyle:       coreintegration.AuthStyleBearer,
+		}
+		base.SetCatalog(staticCat)
+
+		inner := &sessionCatalogBaseProvider{
+			Base: base,
+			catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+				if token != "catalog-token" {
+					return nil, fmt.Errorf("unexpected token %q", token)
+				}
+				return &catalog.Catalog{
+					Name: "sample-int",
+					Operations: []catalog.CatalogOperation{
+						{
+							ID:          "search",
+							Method:      http.MethodPost,
+							Path:        "/items/{itemId}/run",
+							Transport:   catalog.TransportREST,
+							Description: "Search",
+						},
+					},
+				}, nil
+			},
+		}
+
+		prov := coreintegration.NewRestricted(inner, map[string]string{"find": "search"})
+		svc := coretesting.NewStubServices(t)
+		u := seedUser(t, svc, "anonymous@gestalt")
+		seedToken(t, svc, &core.IntegrationToken{
+			ID: "tok-catalog", UserID: u.ID, Integration: "sample-int",
+			Connection: "catalog-conn", Instance: "default", AccessToken: "catalog-token",
+		})
+
+		ts := newTestServer(t, func(cfg *server.Config) {
+			cfg.Providers = testutil.NewProviderRegistry(t, prov)
+			cfg.Services = svc
+			cfg.CatalogConnection = map[string]string{"sample-int": "catalog-conn"}
+		})
+		testutil.CloseOnCleanup(t, ts)
+
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/sample-int/find?itemId=123&pageSize=10", nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request: %v", err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+		}
+		if gotMethod != http.MethodPost {
+			t.Fatalf("upstream method = %q, want %q", gotMethod, http.MethodPost)
+		}
+		if gotPath != "/items/123/run" {
+			t.Fatalf("upstream path = %q, want %q", gotPath, "/items/123/run")
+		}
+		if gotQuery != "page%5Bsize%5D=10" {
+			t.Fatalf("upstream query = %q, want %q", gotQuery, "page%5Bsize%5D=10")
+		}
+		if gotAuth != "Bearer catalog-token" {
+			t.Fatalf("upstream auth = %q, want %q", gotAuth, "Bearer catalog-token")
+		}
+	})
+}
+
 func TestExecuteOperation_UsesConfiguredCatalogConnectionWhenInvokerIsWrapped(t *testing.T) {
 	t.Parallel()
 
@@ -9887,6 +10278,15 @@ func (s *stubIntegrationWithSessionCatalog) CallTool(ctx context.Context, name s
 		return s.callFn(ctx, name, args)
 	}
 	return mcpgo.NewToolResultText("passthrough:" + name), nil
+}
+
+type sessionCatalogBaseProvider struct {
+	*coreintegration.Base
+	catalogForRequestFn func(context.Context, string) (*catalog.Catalog, error)
+}
+
+func (s *sessionCatalogBaseProvider) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
+	return s.catalogForRequestFn(ctx, token)
 }
 
 type stubAuthWithLoginURL struct {

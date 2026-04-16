@@ -66,6 +66,11 @@ func (s *stubTokenResolver) ResolveToken(ctx context.Context, _ *principal.Princ
 	return ctx, s.token, s.err
 }
 
+func resolveCatalogForTest(ctx context.Context, prov core.Provider, provName string, resolver invocation.TokenResolver, p *principal.Principal, defaultConnection, instance string) (*catalog.Catalog, error) {
+	cat, _, err := invocation.ResolveCatalogWithMetadata(ctx, prov, provName, resolver, p, defaultConnection, instance, false)
+	return cat, err
+}
+
 func TestResolveCatalog_StaticCatalog(t *testing.T) {
 	t.Parallel()
 
@@ -93,7 +98,7 @@ func TestResolveCatalog_StaticCatalog(t *testing.T) {
 		},
 	}
 
-	cat, err := invocation.ResolveCatalog(context.Background(), prov, "widget-api", nil, nil, "", "")
+	cat, err := resolveCatalogForTest(context.Background(), prov, "widget-api", nil, nil, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -149,7 +154,7 @@ func TestResolveCatalog_FlatProviderErrors(t *testing.T) {
 		},
 	}
 
-	cat, err := invocation.ResolveCatalog(context.Background(), prov, "gadget-svc", nil, nil, "", "")
+	cat, err := resolveCatalogForTest(context.Background(), prov, "gadget-svc", nil, nil, "", "")
 	if err == nil {
 		t.Fatalf("expected error for provider without catalog, got catalog %+v", cat)
 	}
@@ -185,7 +190,7 @@ func TestResolveCatalog_SessionAndStaticMerge(t *testing.T) {
 	resolver := &stubTokenResolver{token: "tok_123"}
 	p := &principal.Principal{UserID: "u1"}
 
-	cat, err := invocation.ResolveCatalog(context.Background(), prov, "combo-api", resolver, p, "default", "")
+	cat, err := resolveCatalogForTest(context.Background(), prov, "combo-api", resolver, p, "default", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -220,9 +225,15 @@ func TestResolveCatalog_SameIDCollision_SessionWins(t *testing.T) {
 					{
 						ID:           "shared_op",
 						Method:       http.MethodGet,
+						Path:         "/widgets/{id}",
 						Transport:    catalog.TransportREST,
 						Description:  "static version",
 						AllowedRoles: []string{"admin"},
+						Query:        "query StaticWidget { widget { id } }",
+						Parameters: []catalog.CatalogParameter{
+							{Name: "widgetId", Type: "string", Location: "path", WireName: "id", Required: true},
+							{Name: "pageSize", Type: "integer", Location: "query", WireName: "page[size]"},
+						},
 					},
 				},
 			},
@@ -236,6 +247,9 @@ func TestResolveCatalog_SameIDCollision_SessionWins(t *testing.T) {
 					Transport:    catalog.TransportMCPPassthrough,
 					Description:  "session version",
 					AllowedRoles: []string{"viewer"},
+					Parameters: []catalog.CatalogParameter{
+						{Name: "pageSize", Type: "integer"},
+					},
 				},
 			},
 		},
@@ -244,7 +258,7 @@ func TestResolveCatalog_SameIDCollision_SessionWins(t *testing.T) {
 	resolver := &stubTokenResolver{token: "tok_456"}
 	p := &principal.Principal{UserID: "u1"}
 
-	cat, err := invocation.ResolveCatalog(context.Background(), prov, "clash-api", resolver, p, "default", "")
+	cat, err := resolveCatalogForTest(context.Background(), prov, "clash-api", resolver, p, "default", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -257,8 +271,48 @@ func TestResolveCatalog_SameIDCollision_SessionWins(t *testing.T) {
 	if cat.Operations[0].Method != http.MethodPost {
 		t.Fatalf("expected POST from session, got %q", cat.Operations[0].Method)
 	}
+	if cat.Operations[0].Path != "/widgets/{id}" {
+		t.Fatalf("expected static path to fill sparse session op, got %q", cat.Operations[0].Path)
+	}
+	if cat.Operations[0].Query != "query StaticWidget { widget { id } }" {
+		t.Fatalf("expected static query to fill sparse session op, got %q", cat.Operations[0].Query)
+	}
 	if got := cat.Operations[0].AllowedRoles; len(got) != 1 || got[0] != "viewer" {
 		t.Fatalf("expected session allowedRoles to win, got %#v", got)
+	}
+	if got := cat.Operations[0].Parameters; len(got) != 2 {
+		t.Fatalf("expected merged parameters, got %#v", got)
+	} else {
+		paramsByName := map[string]catalog.CatalogParameter{}
+		for _, param := range got {
+			paramsByName[param.Name] = param
+		}
+		if got := paramsByName["widgetId"]; got.Location != "path" || got.WireName != "id" || !got.Required {
+			t.Fatalf("expected static path param to be appended and preserved, got %#v", got)
+		}
+		if got := paramsByName["pageSize"]; got.Location != "query" || got.WireName != "page[size]" {
+			t.Fatalf("expected static query metadata on pageSize, got %#v", got)
+		}
+	}
+
+	op, transport, connection, err := invocation.ResolveOperation(context.Background(), prov, "clash-api", resolver, p, "shared_op", []string{"default"}, "")
+	if err != nil {
+		t.Fatalf("ResolveOperation: %v", err)
+	}
+	if transport != catalog.TransportMCPPassthrough {
+		t.Fatalf("transport = %q, want %q", transport, catalog.TransportMCPPassthrough)
+	}
+	if connection != "default" {
+		t.Fatalf("connection = %q, want %q", connection, "default")
+	}
+	if op.Method != http.MethodPost {
+		t.Fatalf("resolved method = %q, want %q", op.Method, http.MethodPost)
+	}
+	if op.Path != "/widgets/{id}" {
+		t.Fatalf("resolved path = %q, want %q", op.Path, "/widgets/{id}")
+	}
+	if got := op.Parameters; len(got) != 2 {
+		t.Fatalf("expected merged resolved parameters, got %#v", got)
 	}
 }
 
@@ -310,7 +364,7 @@ func TestFilterCatalogForPrincipal_HumanFilteringUsesResolvedRole(t *testing.T) 
 		UserID:    "u1",
 		SubjectID: principal.UserSubjectID("u1"),
 	}
-	cat, err := invocation.ResolveCatalog(context.Background(), prov, "sample-api", &stubTokenResolver{token: "tok_456"}, p, "default", "")
+	cat, err := resolveCatalogForTest(context.Background(), prov, "sample-api", &stubTokenResolver{token: "tok_456"}, p, "default", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -512,7 +566,7 @@ func TestFilterCatalogForPrincipal_WorkloadFilteringUsesMergedCatalog(t *testing
 		Kind:      principal.KindWorkload,
 		SubjectID: principal.WorkloadSubjectID("triage-bot"),
 	}
-	cat, err := invocation.ResolveCatalog(context.Background(), prov, "clash-api", &stubTokenResolver{token: "tok_456"}, p, "default", "")
+	cat, err := resolveCatalogForTest(context.Background(), prov, "clash-api", &stubTokenResolver{token: "tok_456"}, p, "default", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -559,7 +613,7 @@ func TestResolveCatalog_TokenResolutionFailure_NonFatal(t *testing.T) {
 	resolver := &stubTokenResolver{err: fmt.Errorf("token expired")}
 	p := &principal.Principal{UserID: "u1"}
 
-	cat, metadata, err := invocation.ResolveCatalogWithMetadata(context.Background(), prov, "auth-api", resolver, p, "default", "")
+	cat, metadata, err := invocation.ResolveCatalogWithMetadata(context.Background(), prov, "auth-api", resolver, p, "default", "", false)
 	if err != nil {
 		t.Fatalf("expected no error on token failure, got: %v", err)
 	}
@@ -601,7 +655,7 @@ func TestResolveCatalog_NilResolver(t *testing.T) {
 		},
 	}
 
-	cat, err := invocation.ResolveCatalog(context.Background(), prov, "noauth-api", nil, &principal.Principal{UserID: "u1"}, "default", "")
+	cat, err := resolveCatalogForTest(context.Background(), prov, "noauth-api", nil, &principal.Principal{UserID: "u1"}, "default", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -639,7 +693,7 @@ func TestResolveCatalog_IconOnlyCatalogPreserved(t *testing.T) {
 		},
 	}
 
-	cat, err := invocation.ResolveCatalog(context.Background(), prov, "icon-api", nil, nil, "", "")
+	cat, err := resolveCatalogForTest(context.Background(), prov, "icon-api", nil, nil, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -675,7 +729,7 @@ func TestResolveCatalog_CloneSafety(t *testing.T) {
 		cat: original,
 	}
 
-	_, err := invocation.ResolveCatalog(context.Background(), prov, "clone-api", nil, nil, "", "")
+	_, err := resolveCatalogForTest(context.Background(), prov, "clone-api", nil, nil, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

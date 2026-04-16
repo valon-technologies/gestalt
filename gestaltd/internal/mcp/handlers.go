@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/valon-technologies/gestalt/server/core"
+	"github.com/valon-technologies/gestalt/server/core/catalog"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/mcpupstream"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
@@ -42,7 +43,7 @@ func makeHandler(cfg Config, provName, opName, connection string) mcpserver.Tool
 		}
 		opMeta, sessionConnection, ok := sessionCatalogOperationFromContext(ctx, provName, opName, instance)
 		if ok {
-			ctx = invocation.WithCatalogOperation(ctx, provName, opMeta)
+			ctx = catalog.WithOperationContext(ctx, provName, opMeta)
 			if invocation.ConnectionFromContext(ctx) == "" && sessionConnection != "" {
 				ctx = invocation.WithConnection(ctx, sessionConnection)
 			}

@@ -462,17 +462,29 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 		discoveryStartedAt = time.Now()
 		discoveryConnectionMode = metricutil.NormalizeConnectionMode(prov.ConnectionMode())
 	}
-	resolveCatalog := invocation.ResolveCatalogWithMetadata
-	strictCatalog := false
-	if requestedConnection != "" || requestedInstance != "" {
-		resolveCatalog = invocation.ResolveCatalogStrictWithMetadata
-		strictCatalog = true
-	} else if core.SupportsSessionCatalog(prov) {
-		resolveCatalog = invocation.ResolveCatalogStrictWithMetadata
-		strictCatalog = true
+	strictCatalog := requestedConnection != "" || requestedInstance != "" || core.SupportsSessionCatalog(prov)
+	connections, instance := s.boundSessionCatalogConnections(name, p, requestedConnection, requestedInstance)
+	if !strictCatalog || requestedConnection != "" || requestedInstance != "" || (s.authorizer != nil && s.authorizer.IsWorkload(p)) {
+		connections = connections[:1]
 	}
 	ctx := invocation.WithAccessContext(r.Context(), s.providerAccessContext(p, name))
-	cat, discoveryFailed, err := s.resolveCatalogForRequest(ctx, prov, name, resolver, p, requestedConnection, requestedInstance, strictCatalog, resolveCatalog)
+	var cat *catalog.Catalog
+	var err, firstErr error
+	for _, connection := range connections {
+		var metadata invocation.CatalogResolutionMetadata
+		cat, metadata, err = invocation.ResolveCatalogWithMetadata(ctx, prov, name, resolver, p, connection, instance, strictCatalog)
+		if err == nil {
+			discoveryFailed = metadata.SessionFailed
+			break
+		}
+		if firstErr == nil {
+			firstErr = err
+		}
+	}
+	if firstErr != nil && cat == nil {
+		discoveryFailed = true
+		err = firstErr
+	}
 	if err != nil {
 		if recordDiscoveryMetrics {
 			metricutil.RecordDiscoveryMetrics(r.Context(), discoveryStartedAt, name, "list_operations", discoveryConnectionMode, discoveryFailed)
@@ -618,7 +630,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "operation access denied")
 		return
 	}
-	ctx = invocation.WithCatalogOperation(ctx, providerName, opMeta)
+	ctx = catalog.WithOperationContext(ctx, providerName, opMeta)
 	if connection == "" {
 		connection = resolvedConnection
 	}
@@ -692,35 +704,26 @@ func (s *Server) writeInvocationError(w http.ResponseWriter, r *http.Request, pr
 	}
 }
 
-func (s *Server) sessionCatalogConnections(providerName string, p *principal.Principal, explicit string) []string {
-	if explicit != "" {
-		return []string{config.ResolveConnectionAlias(explicit)}
-	}
-	if s.authorizer != nil && s.authorizer.IsWorkload(p) {
-		return []string{""}
-	}
-
-	connections := make([]string, 0, 2)
-	if conn := s.catalogConnection[providerName]; conn != "" {
-		connections = append(connections, conn)
-	} else if broker, ok := s.invoker.(interface{ MCPConnection(string) string }); ok {
-		if conn := broker.MCPConnection(providerName); conn != "" {
-			connections = append(connections, conn)
-		}
-	} else if conn := s.defaultConnection[providerName]; conn != "" {
-		connections = append(connections, conn)
-	}
-	if conn := s.defaultConnection[providerName]; conn != "" && (len(connections) == 0 || connections[0] != conn) && s.catalogConnection[providerName] == "" {
-		connections = append(connections, conn)
-	}
-	if len(connections) == 0 {
-		return []string{""}
-	}
-	return connections
-}
-
 func (s *Server) boundSessionCatalogConnections(providerName string, p *principal.Principal, explicit, instance string) ([]string, string) {
-	connections := s.sessionCatalogConnections(providerName, p, explicit)
+	var connections []string
+	switch {
+	case explicit != "":
+		connections = []string{config.ResolveConnectionAlias(explicit)}
+	case s.authorizer != nil && s.authorizer.IsWorkload(p):
+		connections = []string{""}
+	default:
+		preferred := s.resolvedSessionCatalogConnection(providerName, "")
+		defaultConnection := s.defaultConnection[providerName]
+		if preferred != "" {
+			connections = append(connections, preferred)
+		}
+		if defaultConnection != "" && preferred != defaultConnection && s.catalogConnection[providerName] == "" {
+			connections = append(connections, defaultConnection)
+		}
+		if len(connections) == 0 {
+			connections = []string{""}
+		}
+	}
 	boundConnections := make([]string, 0, len(connections))
 	boundInstance := instance
 	for _, connection := range connections {
@@ -730,24 +733,19 @@ func (s *Server) boundSessionCatalogConnections(providerName string, p *principa
 	return boundConnections, boundInstance
 }
 
-func (s *Server) resolveCatalogForRequest(ctx context.Context, prov core.Provider, providerName string, resolver invocation.TokenResolver, p *principal.Principal, requestedConnection, requestedInstance string, strict bool, resolveCatalog func(context.Context, core.Provider, string, invocation.TokenResolver, *principal.Principal, string, string) (*catalog.Catalog, invocation.CatalogResolutionMetadata, error)) (*catalog.Catalog, bool, error) {
-	connections, instance := s.boundSessionCatalogConnections(providerName, p, requestedConnection, requestedInstance)
-	if !strict || requestedConnection != "" || requestedInstance != "" || (s.authorizer != nil && s.authorizer.IsWorkload(p)) {
-		cat, metadata, err := resolveCatalog(ctx, prov, providerName, resolver, p, connections[0], instance)
-		return cat, metadata.SessionFailed || err != nil, err
+func (s *Server) resolvedSessionCatalogConnection(providerName, explicit string) string {
+	if explicit != "" {
+		return config.ResolveConnectionAlias(explicit)
 	}
-
-	var firstErr error
-	for _, connection := range connections {
-		cat, metadata, err := resolveCatalog(ctx, prov, providerName, resolver, p, connection, instance)
-		if err == nil {
-			return cat, metadata.SessionFailed, nil
-		}
-		if firstErr == nil {
-			firstErr = err
+	if conn := s.catalogConnection[providerName]; conn != "" {
+		return conn
+	}
+	if broker, ok := s.invoker.(interface{ MCPConnection(string) string }); ok {
+		if conn := broker.MCPConnection(providerName); conn != "" {
+			return conn
 		}
 	}
-	return nil, firstErr != nil, firstErr
+	return s.defaultConnection[providerName]
 }
 
 func httpVisibleCatalogOperations(ops []catalog.CatalogOperation) []catalog.CatalogOperation {
