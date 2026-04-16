@@ -114,6 +114,7 @@ where
                     subject: request_subject(request.context.as_ref()),
                     credential: request_credential(request.context.as_ref()),
                     access: request_access(request.context.as_ref()),
+                    request_handle: request.request_handle,
                 },
             )
             .await;
@@ -141,6 +142,7 @@ where
             subject: request_subject(request.context.as_ref()),
             credential: request_credential(request.context.as_ref()),
             access: request_access(request.context.as_ref()),
+            request_handle: String::new(),
         };
         let catalog = self
             .provider

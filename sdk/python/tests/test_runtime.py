@@ -213,6 +213,7 @@ class RequestTests(unittest.TestCase):
         self.assertEqual(request.subject.id, "")
         self.assertEqual(request.credential.mode, "")
         self.assertEqual(request.access.role, "")
+        self.assertEqual(request.request_handle, "")
 
 
 class MainEntrypointTests(unittest.TestCase):
@@ -260,6 +261,7 @@ class MainEntrypointTests(unittest.TestCase):
                 "credential_subject_id": request.credential.subject_id,
                 "access_policy": request.access.policy,
                 "access_role": request.access.role,
+                "request_handle": request.request_handle,
             }
 
         @plugin.session_catalog
@@ -310,6 +312,7 @@ class MainEntrypointTests(unittest.TestCase):
             plugin_pb2.ExecuteRequest(
                 operation="whoami",
                 token="secret-token",
+                request_handle="opaque-request-handle",
                 context=plugin_pb2.RequestContext(
                     subject=plugin_pb2.SubjectContext(
                         id="user:user-123",
@@ -371,6 +374,7 @@ class MainEntrypointTests(unittest.TestCase):
                 "credential_subject_id": "identity:__identity__",
                 "access_policy": "sample_policy",
                 "access_role": "admin",
+                "request_handle": "opaque-request-handle",
             },
         )
         catalog = response.catalog

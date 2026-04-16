@@ -61,6 +61,9 @@ test("plugin executes operations and exposes catalog metadata", async () => {
     "iad",
   );
   expect(connectionParam(request(), "missing")).toBeUndefined();
+  expect(request("", {}, {}, {}, {}, "request-handle-123").requestHandle).toBe(
+    "request-handle-123",
+  );
 
   const invalid = await plugin.execute("sum", { a: "bad" }, request());
   expect(invalid.status).toBe(400);

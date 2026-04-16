@@ -84,6 +84,7 @@ struct Output {
     subject_id: String,
     credential_mode: String,
     access_role: String,
+    request_handle: String,
 }
 
 #[tokio::test]
@@ -97,11 +98,16 @@ async fn serves_provider_requests_over_unix_socket() {
             Operation::<Input, Output>::new("greet"),
             |provider: Arc<TestProvider>, input: Input, request: Request| async move {
                 let greeting = provider.greeting.lock().expect("lock greeting").clone();
+                let subject_id = request.subject.id.clone();
+                let credential_mode = request.credential.mode.clone();
+                let access_role = request.access.role.clone();
+                let request_handle = request.request_handle().to_string();
                 Ok::<Response<Output>, std::convert::Infallible>(ok(Output {
                     message: format!("{greeting}, {}!", input.name),
-                    subject_id: request.subject.id,
-                    credential_mode: request.credential.mode,
-                    access_role: request.access.role,
+                    subject_id,
+                    credential_mode,
+                    access_role,
+                    request_handle,
                 }))
             },
         )
@@ -185,6 +191,7 @@ async fn serves_provider_requests_over_unix_socket() {
             token: String::new(),
             connection_params: Default::default(),
             invocation_id: String::new(),
+            request_handle: "handle-123".to_string(),
             context: Some(RequestContext {
                 subject: Some(SubjectContext {
                     id: "user:user-123".to_string(),
@@ -200,7 +207,6 @@ async fn serves_provider_requests_over_unix_socket() {
                     role: "admin".to_string(),
                 }),
             }),
-            ..ExecuteRequest::default()
         })
         .await
         .expect("execute")
@@ -209,7 +215,7 @@ async fn serves_provider_requests_over_unix_socket() {
     assert_eq!(response.status, 200);
     assert_eq!(
         response.body,
-        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","credential_mode":"identity","access_role":"admin"}"#
+        r#"{"message":"Hi, Rust!","subject_id":"user:user-123","credential_mode":"identity","access_role":"admin","request_handle":"handle-123"}"#
     );
 
     let session_catalog = client

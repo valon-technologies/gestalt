@@ -1,11 +1,15 @@
 """Core request, response, and model helpers for authored operations."""
+from __future__ import annotations
 
 import dataclasses
 from dataclasses import MISSING
 from http import HTTPStatus
-from typing import Any, Final, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Final, Generic, TypeVar
 
 from typing_extensions import dataclass_transform
+
+if TYPE_CHECKING:
+    from ._invoker import PluginInvoker
 
 FIELD_DESCRIPTION_KEY: Final[str] = "description"
 FIELD_REQUIRED_KEY: Final[str] = "required"
@@ -50,11 +54,17 @@ class Request:
     subject: Subject = dataclasses.field(default_factory=Subject)
     credential: Credential = dataclasses.field(default_factory=Credential)
     access: Access = dataclasses.field(default_factory=Access)
+    request_handle: str = ""
 
     def connection_param(self, name: str) -> str | None:
         """Return a connection parameter by name if the host supplied it."""
 
         return self.connection_params.get(name)
+
+    def invoker(self) -> "PluginInvoker":
+        from ._invoker import PluginInvoker
+
+        return PluginInvoker(self.request_handle)
 
 
 @dataclasses.dataclass(slots=True)

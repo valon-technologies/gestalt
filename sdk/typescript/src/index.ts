@@ -61,6 +61,11 @@ export {
   parseBuildArgs,
 } from "./build.ts";
 export {
+  ENV_PLUGIN_INVOKER_SOCKET,
+  PluginInvoker,
+  type PluginInvokeOptions,
+} from "./invoker.ts";
+export {
   defineAuthProvider,
   isAuthProvider,
   type AuthenticatedUser,

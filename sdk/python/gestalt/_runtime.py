@@ -409,15 +409,7 @@ def _provider_servicer(*, plugin: Plugin) -> Any:
                         message=request.params,
                         request=request,
                     ),
-                    Request(
-                        token=request.token,
-                        connection_params=dict(request.connection_params),
-                        subject=_subject_from_proto(getattr(request, "context", None)),
-                        credential=_credential_from_proto(
-                            getattr(request, "context", None)
-                        ),
-                        access=_access_from_proto(getattr(request, "context", None)),
-                    ),
+                    _plugin_request(request),
                 )
             except Exception as error:
                 traceback.print_exception(error)
@@ -645,6 +637,7 @@ def _plugin_request(request: Any) -> Request:
         subject=_subject_from_proto(getattr(request, "context", None)),
         credential=_credential_from_proto(getattr(request, "context", None)),
         access=_access_from_proto(getattr(request, "context", None)),
+        request_handle=getattr(request, "request_handle", ""),
     )
 
 

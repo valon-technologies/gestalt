@@ -12,6 +12,7 @@ mod error;
 mod generated;
 /// IndexedDB-style datastore client and provider helpers.
 pub mod indexeddb;
+mod invoker;
 mod provider_server;
 mod router;
 mod rpc_status;
@@ -40,6 +41,7 @@ pub use catalog::{Catalog, CatalogOperation};
 pub use env::{CURRENT_PROTOCOL_VERSION, ENV_PROVIDER_SOCKET};
 pub use error::{Error, Result};
 pub use indexeddb::{Cursor, CursorDirection, IndexedDB, IndexedDBError};
+pub use invoker::{ENV_PLUGIN_INVOKER_SOCKET, InvokeOptions, PluginInvoker, PluginInvokerError};
 #[doc(hidden)]
 pub use provider_server::{OperationResult, ProviderServer};
 pub use router::{Operation, Router};
