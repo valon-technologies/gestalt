@@ -1,4 +1,5 @@
 import {
+  array,
   connectionParam,
   definePlugin,
   ok,
@@ -93,6 +94,32 @@ export const plugin = definePlugin({
       handler(input) {
         return ok({
           count: input.count,
+        });
+      },
+    },
+    {
+      id: " summarize ",
+      method: " post ",
+      title: " Summarize ",
+      description: " Echo mixed schema input ",
+      input: s.object({
+        count: s.integer(),
+        ratio: s.number(),
+        values: array(s.number()),
+        enabled: s.optional(s.boolean()),
+      }),
+      output: s.object({
+        count: s.integer(),
+        ratio: s.number(),
+        values: array(s.number()),
+        hasEnabled: s.boolean(),
+      }),
+      handler(input) {
+        return ok({
+          count: input.count,
+          ratio: input.ratio,
+          values: input.values,
+          hasEnabled: "enabled" in input,
         });
       },
     },

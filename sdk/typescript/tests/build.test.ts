@@ -277,11 +277,24 @@ test("buildProviderBinary compiles a runnable plugin provider executable", async
         requestHandle: "",
       });
 
+      const defaultResult = await provider.execute(
+        create(ExecuteRequestSchema, {
+          operation: "hello",
+          params: {
+            excited: "true",
+          },
+        }),
+      );
+      expect(defaultResult.status).toBe(200);
+      expect(JSON.parse(defaultResult.body)).toMatchObject({
+        message: "Hello, World!",
+      });
+
       const countResult = await provider.execute(
         create(ExecuteRequestSchema, {
           operation: "count",
           params: {
-            count: 7,
+            count: "7",
           },
         }),
       );
@@ -290,17 +303,107 @@ test("buildProviderBinary compiles a runnable plugin provider executable", async
         count: 7,
       });
 
+      const summaryResult = await provider.execute(
+        create(ExecuteRequestSchema, {
+          operation: "summarize",
+          params: {
+            count: "7",
+            ratio: "12.5",
+            values: ["1e3", ".25"],
+          },
+        }),
+      );
+      expect(summaryResult.status).toBe(200);
+      expect(JSON.parse(summaryResult.body)).toEqual({
+        count: 7,
+        ratio: 12.5,
+        values: [1000, 0.25],
+        hasEnabled: false,
+      });
+
       const decodeError = await provider.execute(
         create(ExecuteRequestSchema, {
           operation: "count",
           params: {
-            count: "oops",
+            count: "12px",
           },
         }),
       );
       expect(decodeError.status).toBe(400);
       expect(JSON.parse(decodeError.body)).toEqual({
         error: "$.count must be an integer",
+      });
+
+      const integerDecimalError = await provider.execute(
+        create(ExecuteRequestSchema, {
+          operation: "count",
+          params: {
+            count: "12.5",
+          },
+        }),
+      );
+      expect(integerDecimalError.status).toBe(400);
+      expect(JSON.parse(integerDecimalError.body)).toEqual({
+        error: "$.count must be an integer",
+      });
+
+      const missingRequiredError = await provider.execute(
+        create(ExecuteRequestSchema, {
+          operation: "summarize",
+          params: {
+            ratio: 1,
+            values: [1],
+          },
+        }),
+      );
+      expect(missingRequiredError.status).toBe(400);
+      expect(JSON.parse(missingRequiredError.body)).toEqual({
+        error: "$.count is required",
+      });
+
+      const arrayError = await provider.execute(
+        create(ExecuteRequestSchema, {
+          operation: "summarize",
+          params: {
+            count: 1,
+            ratio: 1,
+            values: "bad",
+          },
+        }),
+      );
+      expect(arrayError.status).toBe(400);
+      expect(JSON.parse(arrayError.body)).toEqual({
+        error: "$.values must be an array",
+      });
+
+      const numberError = await provider.execute(
+        create(ExecuteRequestSchema, {
+          operation: "summarize",
+          params: {
+            count: 1,
+            ratio: "Infinity",
+            values: [1],
+          },
+        }),
+      );
+      expect(numberError.status).toBe(400);
+      expect(JSON.parse(numberError.body)).toEqual({
+        error: "$.ratio must be a number",
+      });
+
+      const garbageNumberError = await provider.execute(
+        create(ExecuteRequestSchema, {
+          operation: "summarize",
+          params: {
+            count: 1,
+            ratio: 1,
+            values: ["123abc"],
+          },
+        }),
+      );
+      expect(garbageNumberError.status).toBe(400);
+      expect(JSON.parse(garbageNumberError.body)).toEqual({
+        error: "$.values[0] must be a number",
       });
 
       const sessionCatalog = await provider.getSessionCatalog(
