@@ -40,6 +40,7 @@ func (c *managedMCPClient) Close() error {
 }
 
 type Upstream struct {
+	core.NoOAuth
 	name        string
 	display     string
 	desc        string

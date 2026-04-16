@@ -40,7 +40,7 @@ func run() error {
 
 var _ core.Provider = (*echoProvider)(nil)
 
-type echoProvider struct{}
+type echoProvider struct{ core.NoOAuth }
 
 func (p *echoProvider) Name() string                        { return "echo" }
 func (p *echoProvider) DisplayName() string                 { return "Echo" }

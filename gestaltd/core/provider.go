@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 
 	"github.com/valon-technologies/gestalt/server/core/catalog"
 )
@@ -21,6 +22,9 @@ type Provider interface {
 	Description() string
 	ConnectionMode() ConnectionMode
 	AuthTypes() []string
+	AuthorizationURL(state string, scopes []string) string
+	ExchangeCode(ctx context.Context, code string) (*TokenResponse, error)
+	RefreshToken(ctx context.Context, refreshToken string) (*TokenResponse, error)
 	ConnectionParamDefs() map[string]ConnectionParamDef
 	CredentialFields() []CredentialFieldDef
 	DiscoveryConfig() *DiscoveryConfig
@@ -29,11 +33,18 @@ type Provider interface {
 	Execute(ctx context.Context, operation string, params map[string]any, token string) (*OperationResult, error)
 }
 
-type OAuthProvider interface {
-	Provider
-	AuthorizationURL(state string, scopes []string) string
-	ExchangeCode(ctx context.Context, code string) (*TokenResponse, error)
-	RefreshToken(ctx context.Context, refreshToken string) (*TokenResponse, error)
+var ErrOAuthUnsupported = errors.New("provider does not support OAuth")
+
+type NoOAuth struct{}
+
+func (NoOAuth) AuthorizationURL(string, []string) string { return "" }
+
+func (NoOAuth) ExchangeCode(context.Context, string) (*TokenResponse, error) {
+	return nil, ErrOAuthUnsupported
+}
+
+func (NoOAuth) RefreshToken(context.Context, string) (*TokenResponse, error) {
+	return nil, ErrOAuthUnsupported
 }
 
 // SessionCatalogProvider is an optional interface for providers whose MCP tool

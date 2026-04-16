@@ -75,7 +75,7 @@ func (s *StubIntegration) ConnectionMode() core.ConnectionMode {
 	}
 	return s.ConnMode
 }
-func (s *StubIntegration) AuthTypes() []string { return nil }
+func (s *StubIntegration) AuthTypes() []string { return []string{"oauth"} }
 func (s *StubIntegration) ConnectionParamDefs() map[string]core.ConnectionParamDef {
 	return nil
 }

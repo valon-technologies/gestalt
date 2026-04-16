@@ -34,6 +34,7 @@ type StaticProviderSpec struct {
 }
 
 type remoteProviderBase struct {
+	core.NoOAuth
 	client      proto.IntegrationProviderClient
 	name        string
 	displayName string

@@ -19,6 +19,7 @@ import (
 )
 
 type stubMCPUpstream struct {
+	core.NoOAuth
 	cat    *catalog.Catalog
 	callFn func(ctx context.Context, name string, args map[string]any) (*mcpgo.CallToolResult, error)
 }

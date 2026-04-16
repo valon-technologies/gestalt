@@ -10502,8 +10502,9 @@ func (s *stubOAuthIntegration) RefreshToken(ctx context.Context, token string) (
 	return nil, nil
 }
 
-// stubNonOAuthProvider implements core.Provider but NOT core.OAuthProvider.
+// stubNonOAuthProvider exercises providers that report no OAuth auth types.
 type stubNonOAuthProvider struct {
+	core.NoOAuth
 	name    string
 	ops     []core.Operation
 	catalog *catalog.Catalog

@@ -23,6 +23,7 @@ import (
 )
 
 type manualMetricsProvider struct {
+	core.NoOAuth
 	name string
 }
 

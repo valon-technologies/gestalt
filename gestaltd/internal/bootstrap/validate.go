@@ -155,6 +155,7 @@ func buildProviderForValidation(ctx context.Context, name string, entry *config.
 }
 
 type preparedProviderStub struct {
+	core.NoOAuth
 	name           string
 	displayName    string
 	description    string

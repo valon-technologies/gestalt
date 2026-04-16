@@ -12,6 +12,7 @@ import (
 )
 
 type MergedProvider struct {
+	core.NoOAuth
 	catalog  *catalog.Catalog
 	connMode core.ConnectionMode
 	opConn   map[string]string

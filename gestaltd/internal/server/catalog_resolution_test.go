@@ -17,6 +17,7 @@ import (
 )
 
 type stubProvider struct {
+	core.NoOAuth
 	name        string
 	displayName string
 	description string

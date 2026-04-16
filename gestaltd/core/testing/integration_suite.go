@@ -20,7 +20,7 @@ import (
 //   - "valid-refresh" for RefreshToken (returns a valid TokenResponse)
 //   - "invalid-refresh" for RefreshToken (returns an error)
 //   - "valid-bearer-token" for Execute (succeeds)
-func RunIntegrationTests(t *testing.T, newIntegration func(t *testing.T, mockURL string) core.OAuthProvider, mockServer *httptest.Server) {
+func RunIntegrationTests(t *testing.T, newIntegration func(t *testing.T, mockURL string) core.Provider, mockServer *httptest.Server) {
 	if mockServer == nil {
 		t.Fatal("RunIntegrationTests requires a mock server")
 		return

@@ -223,6 +223,30 @@ func (p *startupProviderProxy) ConnectionForOperation(operation string) string {
 	return p.operationConnections[operation]
 }
 
+func (p *startupProviderProxy) AuthorizationURL(state string, scopes []string) string {
+	provider := p.resolved()
+	if provider == nil {
+		return ""
+	}
+	return provider.AuthorizationURL(state, scopes)
+}
+
+func (p *startupProviderProxy) ExchangeCode(ctx context.Context, code string) (*core.TokenResponse, error) {
+	provider, err := p.await(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return provider.ExchangeCode(ctx, code)
+}
+
+func (p *startupProviderProxy) RefreshToken(ctx context.Context, refreshToken string) (*core.TokenResponse, error) {
+	provider, err := p.await(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return provider.RefreshToken(ctx, refreshToken)
+}
+
 func (p *startupProviderProxy) ConnectionParamDefs() map[string]core.ConnectionParamDef {
 	return maps.Clone(p.spec.ConnectionParams)
 }

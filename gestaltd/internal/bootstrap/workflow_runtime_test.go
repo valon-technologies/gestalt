@@ -40,6 +40,13 @@ func (p *workflowRoundTripProvider) Description() string { return "workflow roun
 func (p *workflowRoundTripProvider) ConnectionMode() core.ConnectionMode {
 	return core.ConnectionModeNone
 }
+func (p *workflowRoundTripProvider) AuthorizationURL(string, []string) string { return "" }
+func (p *workflowRoundTripProvider) ExchangeCode(context.Context, string) (*core.TokenResponse, error) {
+	return nil, core.ErrOAuthUnsupported
+}
+func (p *workflowRoundTripProvider) RefreshToken(context.Context, string) (*core.TokenResponse, error) {
+	return nil, core.ErrOAuthUnsupported
+}
 func (p *workflowRoundTripProvider) AuthTypes() []string { return nil }
 func (p *workflowRoundTripProvider) ConnectionParamDefs() map[string]core.ConnectionParamDef {
 	return nil
