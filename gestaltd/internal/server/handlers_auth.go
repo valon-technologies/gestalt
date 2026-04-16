@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	stdpath "path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -481,10 +482,39 @@ func (s *Server) validateLoginState(r *http.Request, originalState string) (*log
 	if err != nil {
 		return nil, fmt.Errorf("invalid login state cookie: %w", err)
 	}
-	if expected.State != originalState {
+	if !loginStatesMatch(expected.State, originalState) {
 		return nil, fmt.Errorf("login state mismatch")
 	}
 	return expected, nil
+}
+
+func loginStatesMatch(expectedState, originalState string) bool {
+	if expectedState == originalState {
+		return true
+	}
+	if rawState, ok := stripCLIStatePrefix(expectedState); ok && rawState == originalState {
+		return true
+	}
+	if rawState, ok := stripCLIStatePrefix(originalState); ok && rawState == expectedState {
+		return true
+	}
+	return false
+}
+
+func stripCLIStatePrefix(state string) (string, bool) {
+	if !strings.HasPrefix(state, cliStatePrefix) {
+		return "", false
+	}
+	rest := strings.TrimPrefix(state, cliStatePrefix)
+	portText, rawState, ok := strings.Cut(rest, ":")
+	if !ok || portText == "" || rawState == "" {
+		return "", false
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil || port < 1 || port > maxPort {
+		return "", false
+	}
+	return rawState, true
 }
 
 func (s *Server) clearLoginStateCookie(w http.ResponseWriter) {

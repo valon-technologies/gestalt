@@ -8620,6 +8620,57 @@ func TestLoginCallbackForCLI(t *testing.T) {
 	}
 }
 
+func TestLoginCallbackForCLIWithCallbackPortStrippedState(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	u := seedUser(t, svc, "host@example.com")
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &stubHostIssuedSessionAuth{secret: []byte("host-issued-secret")}
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+
+	body := bytes.NewBufferString(`{"state":"test-state","callbackPort":54305}`)
+	loginResp, err := client.Post(ts.URL+"/api/v1/auth/login", "application/json", body)
+	if err != nil {
+		t.Fatalf("start login: %v", err)
+	}
+	_ = loginResp.Body.Close()
+
+	resp, err := client.Get(ts.URL + "/api/v1/auth/login/callback?code=good-code&state=test-state&cli=1")
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	var result map[string]any
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatalf("decoding: %v", err)
+	}
+	if result["id"] == "" {
+		t.Fatal("expected id in CLI login response")
+	}
+	if result["token"] == "" {
+		t.Fatal("expected token in CLI login response")
+	}
+
+	tokens, err := svc.APITokens.ListAPITokens(context.Background(), u.ID)
+	if err != nil {
+		t.Fatalf("list api tokens: %v", err)
+	}
+	if len(tokens) == 0 {
+		t.Fatal("expected API token to be stored")
+	}
+}
+
 func TestLoginCallbackStateMismatch(t *testing.T) {
 	t.Parallel()
 
