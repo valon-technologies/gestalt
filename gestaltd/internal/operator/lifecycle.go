@@ -189,22 +189,22 @@ func (l *Lifecycle) prepareRuntimeLockFromLoadedConfig(ctx context.Context, path
 	for name := range resolvedProviders {
 		lock.Providers[name] = resolvedProviders[name]
 	}
-	for _, collection := range hostProviderCollections(cfg) {
+	for _, collection := range componentProviderCollections(cfg) {
+		lockEntries := lockEntriesForProviderKind(lock, collection.lockKind)
 		for name, entry := range collection.entries {
 			if entry == nil || !sourceBacked(entry) {
 				continue
 			}
-			if collection.kind == config.HostProviderKindSecrets {
+			if collection.manifestKind == providermanifestv1.KindSecrets {
 				if _, alreadyPrepared := secretsEntries[name]; alreadyPrepared {
 					continue
 				}
 			}
-			destDir := componentDestDir(paths, collection.kind, name)
-			lockEntry, err := l.writeComponentArtifact(ctx, paths, providerManifestKind(collection.kind), name, destDir, entry, entry.Config)
+			lockEntry, err := l.writeComponentArtifact(ctx, paths, collection.manifestKind, name, collection.destDir(paths, name), entry, entry.Config)
 			if err != nil {
 				return nil, err
 			}
-			lockEntriesForKind(lock, collection.kind)[name] = lockEntry
+			lockEntries[name] = lockEntry
 		}
 	}
 	if err := l.resolveConfiguredPlugins(paths, lock, cfg, true); err != nil {
@@ -219,24 +219,6 @@ func (l *Lifecycle) prepareRuntimeLockFromLoadedConfig(ctx context.Context, path
 	}
 	for name, lockEntry := range secretsEntries {
 		lock.Secrets[name] = lockEntry
-	}
-	for name, def := range cfg.Providers.IndexedDB {
-		if sourceBacked(def) {
-			entry, err := l.writeComponentArtifact(ctx, paths, providermanifestv1.KindIndexedDB, name, indexeddbDestDir(paths, name), def, def.Config)
-			if err != nil {
-				return nil, err
-			}
-			lock.IndexedDBs[name] = entry
-		}
-	}
-	for name, def := range cfg.Providers.S3 {
-		if sourceBacked(def) {
-			entry, err := l.writeComponentArtifact(ctx, paths, providermanifestv1.KindS3, name, s3DestDir(paths, name), def, def.Config)
-			if err != nil {
-				return nil, err
-			}
-			lock.S3[name] = entry
-		}
 	}
 	for name, entry := range cfg.Providers.UI {
 		if entry != nil && sourceBacked(&entry.ProviderEntry) {
@@ -262,21 +244,11 @@ func buildSourceTokenMap(cfg *config.Config) map[string]string {
 			tokens[entry.SourceRef()] = entry.Source.Auth.Token
 		}
 	}
-	for _, collection := range hostProviderCollections(cfg) {
+	for _, collection := range componentProviderCollections(cfg) {
 		for _, entry := range collection.entries {
 			if entry != nil && entry.Source.Auth != nil {
 				tokens[entry.SourceRef()] = entry.Source.Auth.Token
 			}
-		}
-	}
-	for _, def := range cfg.Providers.IndexedDB {
-		if def != nil && def.Source.Auth != nil {
-			tokens[def.SourceRef()] = def.Source.Auth.Token
-		}
-	}
-	for _, def := range cfg.Providers.S3 {
-		if def != nil && def.Source.Auth != nil {
-			tokens[def.SourceRef()] = def.Source.Auth.Token
 		}
 	}
 	for _, entry := range cfg.Providers.UI {
@@ -638,107 +610,142 @@ func sourceBacked(entry *config.ProviderEntry) bool {
 	return entry != nil && (entry.HasManagedSource() || entry.HasLocalSource())
 }
 
-func hostProviderCollections(cfg *config.Config) []struct {
-	kind    config.HostProviderKind
-	entries map[string]*config.ProviderEntry
-} {
-	return []struct {
-		kind    config.HostProviderKind
-		entries map[string]*config.ProviderEntry
-	}{
-		{config.HostProviderKindAuth, cfg.Providers.Auth},
-		{config.HostProviderKindSecrets, cfg.Providers.Secrets},
-		{config.HostProviderKindTelemetry, cfg.Providers.Telemetry},
-		{config.HostProviderKindAudit, cfg.Providers.Audit},
-		{config.HostProviderKindCache, cfg.Providers.Cache},
-		{config.HostProviderKindWorkflow, cfg.Providers.Workflow},
+type componentProviderCollection struct {
+	manifestKind string
+	lockKind     string
+	entries      map[string]*config.ProviderEntry
+	destDir      func(initPaths, string) string
+}
+
+func componentProviderCollections(cfg *config.Config) []componentProviderCollection {
+	return []componentProviderCollection{
+		{
+			manifestKind: providermanifestv1.KindAuth,
+			lockKind:     providermanifestv1.KindAuth,
+			entries:      cfg.Providers.Auth,
+			destDir:      authDestDir,
+		},
+		{
+			manifestKind: providermanifestv1.KindSecrets,
+			lockKind:     providermanifestv1.KindSecrets,
+			entries:      cfg.Providers.Secrets,
+			destDir:      secretsDestDir,
+		},
+		{
+			manifestKind: providermanifestv1.KindPlugin,
+			lockKind:     providerLockKindTelemetry,
+			entries:      cfg.Providers.Telemetry,
+			destDir:      telemetryDestDir,
+		},
+		{
+			manifestKind: providermanifestv1.KindPlugin,
+			lockKind:     providerLockKindAudit,
+			entries:      cfg.Providers.Audit,
+			destDir:      auditDestDir,
+		},
+		{
+			manifestKind: providermanifestv1.KindCache,
+			lockKind:     providermanifestv1.KindCache,
+			entries:      cfg.Providers.Cache,
+			destDir:      cacheDestDir,
+		},
+		{
+			manifestKind: providermanifestv1.KindWorkflow,
+			lockKind:     providermanifestv1.KindWorkflow,
+			entries:      cfg.Providers.Workflow,
+			destDir:      workflowDestDir,
+		},
+		{
+			manifestKind: providermanifestv1.KindIndexedDB,
+			lockKind:     providermanifestv1.KindIndexedDB,
+			entries:      cfg.Providers.IndexedDB,
+			destDir:      indexeddbDestDir,
+		},
+		{
+			manifestKind: providermanifestv1.KindS3,
+			lockKind:     providermanifestv1.KindS3,
+			entries:      cfg.Providers.S3,
+			destDir:      s3DestDir,
+		},
 	}
 }
 
-func lockEntriesForKind(lock *Lockfile, kind config.HostProviderKind) map[string]LockEntry {
-	if lock == nil {
-		return nil
-	}
-	switch kind {
-	case config.HostProviderKindAuth:
-		return lock.Auth
-	case config.HostProviderKindSecrets:
-		return lock.Secrets
-	case config.HostProviderKindTelemetry:
-		return lock.Telemetry
-	case config.HostProviderKindAudit:
-		return lock.Audit
-	case config.HostProviderKindCache:
-		return lock.Caches
-	case config.HostProviderKindIndexedDB:
-		return lock.IndexedDBs
-	case config.HostProviderKindWorkflow:
-		return lock.Workflows
-	default:
-		return nil
-	}
-}
-
-func configHasProviderLoading(cfg *config.Config) bool {
-	for _, entry := range cfg.Plugins {
-		if sourceBacked(entry) {
-			return true
+func hasSourceBackedProviderEntries(entries map[string]*config.ProviderEntry, managedOnly bool) bool {
+	for _, entry := range entries {
+		if entry == nil {
+			continue
 		}
-	}
-	for _, collection := range hostProviderCollections(cfg) {
-		for _, entry := range collection.entries {
-			if sourceBacked(entry) {
+		if managedOnly {
+			if entry.HasManagedSource() {
 				return true
 			}
+			continue
 		}
-	}
-	for _, entry := range cfg.Providers.UI {
-		if entry != nil && sourceBacked(&entry.ProviderEntry) {
-			return true
-		}
-	}
-	for _, def := range cfg.Providers.IndexedDB {
-		if sourceBacked(def) {
-			return true
-		}
-	}
-	for _, def := range cfg.Providers.S3 {
-		if sourceBacked(def) {
+		if entry.HasManagedSource() || entry.HasLocalSource() {
 			return true
 		}
 	}
 	return false
 }
 
-func configHasLocalProviderSources(cfg *config.Config) bool {
-	for _, entry := range cfg.Plugins {
-		if entry.HasLocalSource() {
-			return true
-		}
-	}
-	for _, collection := range hostProviderCollections(cfg) {
-		for _, entry := range collection.entries {
-			if entry != nil && entry.HasLocalSource() {
-				return true
-			}
-		}
-	}
-	for _, entry := range cfg.Providers.UI {
+func hasLocalSourceBackedProviderEntries(entries map[string]*config.ProviderEntry) bool {
+	for _, entry := range entries {
 		if entry != nil && entry.HasLocalSource() {
 			return true
 		}
 	}
-	for _, def := range cfg.Providers.IndexedDB {
-		if def != nil && def.HasLocalSource() {
-			return true
+	return false
+}
+
+func hasSourceBackedUIEntries(entries map[string]*config.UIEntry, managedOnly bool) bool {
+	for _, entry := range entries {
+		if entry == nil {
+			continue
 		}
-	}
-	for _, def := range cfg.Providers.S3 {
-		if def != nil && def.HasLocalSource() {
+		if managedOnly {
+			if entry.HasManagedSource() {
+				return true
+			}
+			continue
+		}
+		if entry.HasManagedSource() || entry.HasLocalSource() {
 			return true
 		}
 	}
 	return false
+}
+
+func hasLocalSourceBackedUIEntries(entries map[string]*config.UIEntry) bool {
+	for _, entry := range entries {
+		if entry != nil && entry.HasLocalSource() {
+			return true
+		}
+	}
+	return false
+}
+
+func configHasProviderLoading(cfg *config.Config) bool {
+	if hasSourceBackedProviderEntries(cfg.Plugins, false) {
+		return true
+	}
+	for _, collection := range componentProviderCollections(cfg) {
+		if hasSourceBackedProviderEntries(collection.entries, false) {
+			return true
+		}
+	}
+	return hasSourceBackedUIEntries(cfg.Providers.UI, false)
+}
+
+func configHasLocalProviderSources(cfg *config.Config) bool {
+	if hasLocalSourceBackedProviderEntries(cfg.Plugins) {
+		return true
+	}
+	for _, collection := range componentProviderCollections(cfg) {
+		if hasLocalSourceBackedProviderEntries(collection.entries) {
+			return true
+		}
+	}
+	return hasLocalSourceBackedUIEntries(cfg.Providers.UI)
 }
 
 func resolveLockPath(baseDir, provider string) string {
@@ -842,27 +849,6 @@ func s3DestDir(paths initPaths, name string) string {
 	return filepath.Join(paths.artifactsDir, "s3", name)
 }
 
-func componentDestDir(paths initPaths, kind config.HostProviderKind, name string) string {
-	switch kind {
-	case config.HostProviderKindAuth:
-		return authDestDir(paths, name)
-	case config.HostProviderKindSecrets:
-		return secretsDestDir(paths, name)
-	case config.HostProviderKindTelemetry:
-		return telemetryDestDir(paths, name)
-	case config.HostProviderKindAudit:
-		return auditDestDir(paths, name)
-	case config.HostProviderKindCache:
-		return cacheDestDir(paths, name)
-	case config.HostProviderKindIndexedDB:
-		return indexeddbDestDir(paths, name)
-	case config.HostProviderKindWorkflow:
-		return workflowDestDir(paths, name)
-	default:
-		return ""
-	}
-}
-
 type preparedInstall struct {
 	manifestPath   string
 	executablePath string
@@ -894,25 +880,6 @@ func inspectPreparedInstall(destDir string) (*preparedInstall, error) {
 		install.assetRootPath = filepath.Join(destDir, filepath.FromSlash(manifest.Spec.AssetRoot))
 	}
 	return install, nil
-}
-
-func providerManifestKind(kind config.HostProviderKind) string {
-	switch kind {
-	case config.HostProviderKindAuth:
-		return providermanifestv1.KindAuth
-	case config.HostProviderKindSecrets:
-		return providermanifestv1.KindSecrets
-	case config.HostProviderKindTelemetry, config.HostProviderKindAudit:
-		return providermanifestv1.KindPlugin
-	case config.HostProviderKindCache:
-		return providermanifestv1.KindCache
-	case config.HostProviderKindIndexedDB:
-		return providermanifestv1.KindIndexedDB
-	case config.HostProviderKindWorkflow:
-		return providermanifestv1.KindWorkflow
-	default:
-		return ""
-	}
 }
 
 func writeJSONFile(path string, v any) error {
@@ -983,34 +950,16 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 			return false
 		}
 	}
-	for _, collection := range hostProviderCollections(cfg) {
-		lockEntries := lockEntriesForKind(lock, collection.kind)
+	for _, collection := range componentProviderCollections(cfg) {
+		lockEntries := lockEntriesForProviderKind(lock, collection.lockKind)
 		for name, entry := range collection.entries {
 			if entry == nil || !sourceBacked(entry) {
 				continue
 			}
 			lockEntry, found := lockEntries[name]
-			if !lockEntryMatches(paths, providerManifestKind(collection.kind), name, entry, lockEntry, found, componentDestDir(paths, collection.kind, name)) {
+			if !lockEntryMatches(paths, collection.manifestKind, name, entry, lockEntry, found, collection.destDir(paths, name)) {
 				return false
 			}
-		}
-	}
-	for name, entry := range cfg.Providers.IndexedDB {
-		if !sourceBacked(entry) {
-			continue
-		}
-		lockEntry, found := lock.IndexedDBs[name]
-		if !lockEntryMatches(paths, providermanifestv1.KindIndexedDB, name, entry, lockEntry, found, indexeddbDestDir(paths, name)) {
-			return false
-		}
-	}
-	for name, entry := range cfg.Providers.S3 {
-		if !sourceBacked(entry) {
-			continue
-		}
-		lockEntry, found := lock.S3[name]
-		if !lockEntryMatches(paths, providermanifestv1.KindS3, name, entry, lockEntry, found, s3DestDir(paths, name)) {
-			return false
 		}
 	}
 	for name, entry := range cfg.Providers.UI {
@@ -1682,37 +1631,13 @@ func (l *Lifecycle) applyPreparedProviders(paths initPaths, lock *Lockfile, cfg 
 		clearSynthesizedPluginOwnedUIEntries(cfg, synthesizedPluginUIs)
 		return err
 	}
-	for _, collection := range hostProviderCollections(cfg) {
-		lockEntries := lockEntriesForKind(lock, collection.kind)
+	for _, collection := range componentProviderCollections(cfg) {
+		lockEntries := lockEntriesForProviderKind(lock, collection.lockKind)
 		for name, entry := range collection.entries {
 			if entry == nil {
 				continue
 			}
-			if err := l.applyComponentProvider(paths, lockEntries, providerManifestKind(collection.kind), name, entry, entry.Config, &entry.Config, componentDestDir(paths, collection.kind, name), locked); err != nil {
-				clearSynthesizedPluginOwnedUIEntries(cfg, synthesizedPluginUIs)
-				return err
-			}
-		}
-	}
-	indexedDBLocks := map[string]LockEntry(nil)
-	if lock != nil {
-		indexedDBLocks = lock.IndexedDBs
-	}
-	for name, def := range cfg.Providers.IndexedDB {
-		if def != nil {
-			if err := l.applyComponentProvider(paths, indexedDBLocks, providermanifestv1.KindIndexedDB, name, def, def.Config, &def.Config, indexeddbDestDir(paths, name), locked); err != nil {
-				clearSynthesizedPluginOwnedUIEntries(cfg, synthesizedPluginUIs)
-				return err
-			}
-		}
-	}
-	s3Locks := map[string]LockEntry(nil)
-	if lock != nil {
-		s3Locks = lock.S3
-	}
-	for name, def := range cfg.Providers.S3 {
-		if def != nil {
-			if err := l.applyComponentProvider(paths, s3Locks, providermanifestv1.KindS3, name, def, def.Config, &def.Config, s3DestDir(paths, name), locked); err != nil {
+			if err := l.applyComponentProvider(paths, lockEntries, collection.manifestKind, name, entry, entry.Config, &entry.Config, collection.destDir(paths, name), locked); err != nil {
 				clearSynthesizedPluginOwnedUIEntries(cfg, synthesizedPluginUIs)
 				return err
 			}

@@ -954,6 +954,256 @@ func TestManagedIndexedDBSourcesLoadForExecutionWithMultipleBindings(t *testing.
 	}
 }
 
+func TestManagedS3SourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	mainSource := "github.com/acme/providers/s3-main"
+	archiveSource := "github.com/acme/providers/s3-archive"
+	version := "1.0.0"
+
+	mainArchivePath := buildExecutableArchive(t, dir, "s3-main-src", mainSource, version, providermanifestv1.KindS3, "s3-main", "main-s3-binary")
+	archiveArchivePath := buildExecutableArchive(t, dir, "s3-archive-src", archiveSource, version, providermanifestv1.KindS3, "s3-archive", "archive-s3-binary")
+
+	mainArchiveData, err := os.ReadFile(mainArchivePath)
+	if err != nil {
+		t.Fatalf("read main s3 archive: %v", err)
+	}
+	mainArchiveSum := sha256.Sum256(mainArchiveData)
+
+	archiveArchiveData, err := os.ReadFile(archiveArchivePath)
+	if err != nil {
+		t.Fatalf("read archive s3 archive: %v", err)
+	}
+	archiveArchiveSum := sha256.Sum256(archiveArchiveData)
+
+	resolver := &fakeMultiResolver{
+		results: map[string]fakeResolverResult{
+			mainSource: {
+				archivePath: mainArchivePath,
+				resolvedURL: "https://example.com/s3-main.tar.gz",
+				sha256:      hex.EncodeToString(mainArchiveSum[:]),
+			},
+			archiveSource: {
+				archivePath: archiveArchivePath,
+				resolvedURL: "https://example.com/s3-archive.tar.gz",
+				sha256:      hex.EncodeToString(archiveArchiveSum[:]),
+			},
+		},
+	}
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configYAML := strings.Join([]string{
+		"providers:",
+		"  indexeddb:",
+		"    sqlite:",
+		"      source: sqlite",
+		"      config:",
+		`        path: "` + filepath.Join(dir, "system.db") + `"`,
+		"  s3:",
+		"    main:",
+		"      source:",
+		"        ref: " + mainSource,
+		"        version: " + version,
+		"      config:",
+		"        bucket: main-bucket",
+		"    archive:",
+		"      source:",
+		"        ref: " + archiveSource,
+		"        version: " + version,
+		"      config:",
+		"        bucket: archive-bucket",
+		"server:",
+		"  providers:",
+		"    indexeddb: sqlite",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle(resolver)
+	lock, err := lc.InitAtPath(configPath)
+	if err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+	if len(lock.S3) != 2 {
+		t.Fatalf("lock.S3 = %#v, want 2 entries", lock.S3)
+	}
+	if _, ok := lock.S3["main"]; !ok {
+		t.Fatal(`lock.S3["main"] not found`)
+	}
+	if _, ok := lock.S3["archive"]; !ok {
+		t.Fatal(`lock.S3["archive"] not found`)
+	}
+
+	callsBefore := len(resolver.calls)
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
+	}
+	if len(resolver.calls) != callsBefore {
+		t.Fatalf("resolver called during locked load: got %d calls, want %d", len(resolver.calls), callsBefore)
+	}
+
+	wantBuckets := map[string]string{
+		"main":    "main-bucket",
+		"archive": "archive-bucket",
+	}
+	for _, name := range []string{"main", "archive"} {
+		entry := cfg.Providers.S3[name]
+		if entry == nil {
+			t.Fatalf("cfg.Providers.S3[%q] = nil", name)
+		}
+		if entry.ResolvedManifest == nil {
+			t.Fatalf("cfg.Providers.S3[%q].ResolvedManifest = nil", name)
+		}
+		wantCommand := resolveLockPath(artifactsDir, lock.S3[name].Executable)
+		if entry.Command != wantCommand {
+			t.Fatalf("cfg.Providers.S3[%q].Command = %q, want %q", name, entry.Command, wantCommand)
+		}
+		runtimeCfg, err := config.NodeToMap(entry.Config)
+		if err != nil {
+			t.Fatalf("NodeToMap(s3 %q config): %v", name, err)
+		}
+		configMap, ok := runtimeCfg["config"].(map[string]any)
+		if !ok {
+			t.Fatalf("s3 %q runtime config = %#v", name, runtimeCfg["config"])
+		}
+		if got := configMap["bucket"]; got != wantBuckets[name] {
+			t.Fatalf("s3 %q bucket = %#v, want %q", name, got, wantBuckets[name])
+		}
+	}
+}
+
+func TestManagedTelemetryAndAuditSourcesLoadForExecution(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	telemetrySource := "github.com/acme/providers/telemetry-otlp"
+	auditSource := "github.com/acme/providers/audit-stream"
+	version := "1.0.0"
+
+	telemetryArchivePath := buildExecutableArchive(t, dir, "telemetry-src", telemetrySource, version, providermanifestv1.KindPlugin, "telemetry-plugin", "telemetry-binary")
+	auditArchivePath := buildExecutableArchive(t, dir, "audit-src", auditSource, version, providermanifestv1.KindPlugin, "audit-plugin", "audit-binary")
+
+	telemetryArchiveData, err := os.ReadFile(telemetryArchivePath)
+	if err != nil {
+		t.Fatalf("read telemetry archive: %v", err)
+	}
+	telemetryArchiveSum := sha256.Sum256(telemetryArchiveData)
+
+	auditArchiveData, err := os.ReadFile(auditArchivePath)
+	if err != nil {
+		t.Fatalf("read audit archive: %v", err)
+	}
+	auditArchiveSum := sha256.Sum256(auditArchiveData)
+
+	resolver := &fakeMultiResolver{
+		results: map[string]fakeResolverResult{
+			telemetrySource: {
+				archivePath: telemetryArchivePath,
+				resolvedURL: "https://example.com/telemetry.tar.gz",
+				sha256:      hex.EncodeToString(telemetryArchiveSum[:]),
+			},
+			auditSource: {
+				archivePath: auditArchivePath,
+				resolvedURL: "https://example.com/audit.tar.gz",
+				sha256:      hex.EncodeToString(auditArchiveSum[:]),
+			},
+		},
+	}
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configYAML := strings.Join([]string{
+		"providers:",
+		"  indexeddb:",
+		"    sqlite:",
+		"      source: sqlite",
+		"      config:",
+		`        path: "` + filepath.Join(dir, "system.db") + `"`,
+		"  telemetry:",
+		"    otlp:",
+		"      source:",
+		"        ref: " + telemetrySource,
+		"        version: " + version,
+		"      config:",
+		"        endpoint: https://telemetry.example.test",
+		"  audit:",
+		"    stream:",
+		"      source:",
+		"        ref: " + auditSource,
+		"        version: " + version,
+		"      config:",
+		"        endpoint: https://audit.example.test",
+		"server:",
+		"  providers:",
+		"    indexeddb: sqlite",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle(resolver)
+	lock, err := lc.InitAtPath(configPath)
+	if err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+	if len(lock.Telemetry) != 1 {
+		t.Fatalf("lock.Telemetry = %#v, want 1 entry", lock.Telemetry)
+	}
+	if len(lock.Audit) != 1 {
+		t.Fatalf("lock.Audit = %#v, want 1 entry", lock.Audit)
+	}
+
+	callsBefore := len(resolver.calls)
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
+	}
+	if len(resolver.calls) != callsBefore {
+		t.Fatalf("resolver called during locked load: got %d calls, want %d", len(resolver.calls), callsBefore)
+	}
+
+	checkEntry := func(kind, name string, entry *config.ProviderEntry, lockEntry LockEntry, wantEndpoint string) {
+		t.Helper()
+		if entry == nil {
+			t.Fatalf("cfg.Providers.%s[%q] = nil", kind, name)
+		}
+		if entry.ResolvedManifest == nil {
+			t.Fatalf("cfg.Providers.%s[%q].ResolvedManifest = nil", kind, name)
+		}
+		if entry.ResolvedManifest.Kind != providermanifestv1.KindPlugin {
+			t.Fatalf("cfg.Providers.%s[%q].ResolvedManifest.Kind = %q, want %q", kind, name, entry.ResolvedManifest.Kind, providermanifestv1.KindPlugin)
+		}
+		wantCommand := resolveLockPath(artifactsDir, lockEntry.Executable)
+		if entry.Command != wantCommand {
+			t.Fatalf("cfg.Providers.%s[%q].Command = %q, want %q", kind, name, entry.Command, wantCommand)
+		}
+		runtimeCfg, err := config.NodeToMap(entry.Config)
+		if err != nil {
+			t.Fatalf("NodeToMap(%s %q config): %v", kind, name, err)
+		}
+		configMap, ok := runtimeCfg["config"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s %q runtime config = %#v", kind, name, runtimeCfg["config"])
+		}
+		if got := configMap["endpoint"]; got != wantEndpoint {
+			t.Fatalf("%s %q endpoint = %#v, want %q", kind, name, got, wantEndpoint)
+		}
+	}
+
+	checkEntry("telemetry", "otlp", cfg.Providers.Telemetry["otlp"], lock.Telemetry["otlp"], "https://telemetry.example.test")
+	checkEntry("audit", "stream", cfg.Providers.Audit["stream"], lock.Audit["stream"], "https://audit.example.test")
+}
+
 func TestManagedCacheSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
 	t.Parallel()
 
