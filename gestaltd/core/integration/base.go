@@ -57,6 +57,7 @@ type Base struct {
 	HTTPClient                  *http.Client
 	Pagination                  map[string]apiexec.PaginationConfig
 	MethodDefaultParamLocations bool
+	RequestContentType          string
 	NoRetry                     bool
 
 	TokenParser     func(token string) (authHeader string, extraHeaders map[string]string, err error)

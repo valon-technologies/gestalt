@@ -50,6 +50,7 @@ func (b *Base) executeREST(ctx context.Context, operation string, catOp *catalog
 		Path:          catOp.Path,
 		Params:        bodyParams,
 		QueryParams:   queryParams,
+		ContentType:   b.RequestContentType,
 		AuthHeader:    credential.Authorization,
 		CustomHeaders: headers,
 		CheckResponse: b.CheckResponse,
@@ -155,6 +156,8 @@ func partitionParams(catOp *catalog.CatalogOperation, params map[string]any, use
 			httpKey = wn
 		}
 		switch locations[k] {
+		case "body":
+			body[k] = v
 		case "query":
 			query[httpKey] = v
 		case "header":
