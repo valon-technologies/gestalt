@@ -1146,6 +1146,9 @@ server:
 		if got := entry.AuthorizationPolicy; got != "roadmap_policy" {
 			t.Fatalf(`Providers.UI["roadmap"].AuthorizationPolicy = %q, want %q`, got, "roadmap_policy")
 		}
+		if got := entry.OwnerPlugin; got != "roadmap" {
+			t.Fatalf(`Providers.UI["roadmap"].OwnerPlugin = %q, want %q`, got, "roadmap")
+		}
 	})
 
 	t.Run("nested mounted ui provider paths are allowed", func(t *testing.T) {

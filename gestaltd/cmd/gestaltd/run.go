@@ -345,19 +345,6 @@ func resolveUIHandlers(cfg *config.Config) ([]server.MountedWebUI, http.Handler,
 }
 
 func resolveMountedWebUIHandlers(cfg *config.Config) ([]server.MountedWebUI, error) {
-	uiOwners := make(map[string]string, len(cfg.Plugins))
-	for pluginName, entry := range cfg.Plugins {
-		if entry == nil || strings.TrimSpace(entry.MountPath) == "" {
-			continue
-		}
-		switch uiName := strings.TrimSpace(entry.UI); {
-		case uiName != "":
-			uiOwners[uiName] = pluginName
-		case cfg.Providers.UI[pluginName] != nil:
-			uiOwners[pluginName] = pluginName
-		}
-	}
-
 	names := make([]string, 0, len(cfg.Providers.UI))
 	for name := range cfg.Providers.UI {
 		names = append(names, name)
@@ -390,7 +377,7 @@ func resolveMountedWebUIHandlers(cfg *config.Config) ([]server.MountedWebUI, err
 		mounted = append(mounted, server.MountedWebUI{
 			Name:                name,
 			Path:                entry.Path,
-			PluginName:          uiOwners[name],
+			PluginName:          entry.OwnerPlugin,
 			AuthorizationPolicy: entry.AuthorizationPolicy,
 			Routes:              routes,
 			Handler:             handler,

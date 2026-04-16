@@ -206,6 +206,7 @@ type ProviderMCPSurfaceOverride struct {
 type UIEntry struct {
 	ProviderEntry `yaml:",inline"`
 	Path          string `yaml:"path,omitempty"`
+	OwnerPlugin   string `yaml:"-"`
 }
 
 func (e *ProviderEntry) HasManagedSource() bool {
@@ -1518,8 +1519,12 @@ func applyPluginMountBindings(cfg *Config) error {
 		if current := strings.TrimSpace(ui.Path); current != "" && current != plugin.MountPath {
 			return fmt.Errorf("config validation: plugins.%s.ui %q conflicts with providers.ui.%s.path", pluginName, plugin.UI, plugin.UI)
 		}
+		if current := strings.TrimSpace(ui.OwnerPlugin); current != "" && current != pluginName {
+			return fmt.Errorf("config validation: plugins.%s.ui %q conflicts with providers.ui.%s owner", pluginName, plugin.UI, plugin.UI)
+		}
 		ui.AuthorizationPolicy = plugin.AuthorizationPolicy
 		ui.Path = plugin.MountPath
+		ui.OwnerPlugin = pluginName
 		seenUIs[plugin.UI] = pluginName
 	}
 
