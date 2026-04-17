@@ -13,7 +13,6 @@ import (
 
 	cronv3 "github.com/robfig/cron/v3"
 	"github.com/valon-technologies/gestalt/server/internal/emailutil"
-	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	"github.com/valon-technologies/gestalt/server/internal/providerenv"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -254,7 +253,7 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error 
 			return fmt.Errorf("config validation: %s %q auth is only valid with metadata URL sources", kind, name)
 		}
 		if src.Auth != nil {
-			return fmt.Errorf("config validation: %s %q source.auth is only valid with source.ref or metadata URL sources", kind, name)
+			return fmt.Errorf("config validation: %s %q source.auth is only valid with metadata URL sources", kind, name)
 		}
 		return nil
 	}
@@ -268,43 +267,32 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error 
 	if src.IsLocal() {
 		modeCount++
 	}
-	if src.IsManaged() {
-		modeCount++
-	}
 	if src.IsMetadataURL() {
 		modeCount++
 	}
+	if src.IsManaged() {
+		return fmt.Errorf("config validation: %s %q source.ref/source.version are no longer supported; use source: <provider-release.yaml URL>", kind, name)
+	}
+	if src.Version != "" {
+		return fmt.Errorf("config validation: %s %q source.version is no longer supported; use source: <provider-release.yaml URL>", kind, name)
+	}
 	if modeCount == 0 {
-		return fmt.Errorf("config validation: %s %q source.path or source.ref is required", kind, name)
+		return fmt.Errorf("config validation: %s %q source.path or metadata URL is required", kind, name)
 	}
 	if modeCount > 1 {
-		return fmt.Errorf("config validation: %s %q source.path, source.ref, and metadata URL sources are mutually exclusive", kind, name)
-	}
-	if src.IsManaged() {
-		if _, err := pluginsource.Parse(src.Ref); err != nil {
-			return fmt.Errorf("config validation: %s %q source.ref: %w", kind, name, err)
-		}
-		if src.Version == "" {
-			return fmt.Errorf("config validation: %s %q source.version is required when source.ref is set", kind, name)
-		}
-		if err := pluginsource.ValidateVersion(src.Version); err != nil {
-			return fmt.Errorf("config validation: %s %q source.version: %w", kind, name, err)
-		}
+		return fmt.Errorf("config validation: %s %q source.path and metadata URL sources are mutually exclusive", kind, name)
 	}
 	if src.IsMetadataURL() {
 		if parsed, err := url.ParseRequestURI(src.MetadataURL()); err != nil || parsed.Host == "" || (parsed.Scheme != "http" && parsed.Scheme != "https") || !strings.HasSuffix(parsed.Path, "/provider-release.yaml") {
 			return fmt.Errorf("config validation: %s %q source metadata URL must be an absolute http(s) provider-release.yaml URL", kind, name)
 		}
 	}
-	if !src.IsManaged() && src.Version != "" {
-		return fmt.Errorf("config validation: %s %q source.version is only valid with source.ref", kind, name)
-	}
 	if entry.InlineSourceAuth != nil && src.Auth != nil {
 		return fmt.Errorf("config validation: %s %q auth and source.auth are mutually exclusive", kind, name)
 	}
 	if src.Auth != nil {
-		if !src.IsManaged() && !src.IsMetadataURL() {
-			return fmt.Errorf("config validation: %s %q source.auth is only valid with source.ref or metadata URL sources", kind, name)
+		if !src.IsMetadataURL() {
+			return fmt.Errorf("config validation: %s %q source.auth is only valid with metadata URL sources", kind, name)
 		}
 		if strings.TrimSpace(src.Auth.Token) == "" {
 			return fmt.Errorf("config validation: %s %q source.auth.token is required when source.auth is set", kind, name)
