@@ -647,6 +647,7 @@ type providerFingerprintInput struct {
 	Name   string `json:"name"`
 	Source string `json:"source,omitempty"`
 	Path   string `json:"path,omitempty"`
+	Digest string `json:"digest,omitempty"`
 }
 
 func sourceBacked(entry *config.ProviderEntry) bool {
@@ -1079,7 +1080,7 @@ func lockMatchesConfig(cfg *config.Config, paths initPaths, lock *Lockfile) bool
 		if !ok {
 			return false
 		}
-		fingerprint, err := NamedUIProviderFingerprint(name, &entry.ProviderEntry)
+		fingerprint, err := NamedUIProviderFingerprint(name, &entry.ProviderEntry, paths.configDir)
 		if err != nil || lockEntry.Fingerprint != fingerprint {
 			return false
 		}
@@ -1110,7 +1111,12 @@ func ProviderFingerprint(name string, entry *config.ProviderEntry, configDir str
 		Source: entry.SourceRemoteLocation(),
 	}
 	if entry.HasLocalSource() {
-		input.Path = entry.SourcePath()
+		input.Path = fingerprintLocalSourcePath(entry.SourcePath(), configDir)
+		digest, err := fingerprintLocalSourceDigest(entry.SourcePath())
+		if err != nil {
+			return "", err
+		}
+		input.Digest = digest
 	}
 
 	payload, err := json.Marshal(input)
@@ -1121,8 +1127,53 @@ func ProviderFingerprint(name string, entry *config.ProviderEntry, configDir str
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func NamedUIProviderFingerprint(name string, entry *config.ProviderEntry) (string, error) {
-	return ProviderFingerprint("ui:"+name, entry, "")
+func NamedUIProviderFingerprint(name string, entry *config.ProviderEntry, configDir string) (string, error) {
+	return ProviderFingerprint("ui:"+name, entry, configDir)
+}
+
+func fingerprintLocalSourcePath(sourcePath, configDir string) string {
+	path := filepath.Clean(sourcePath)
+	if configDir == "" {
+		return filepath.ToSlash(path)
+	}
+
+	baseDir := filepath.Clean(configDir)
+	if !filepath.IsAbs(baseDir) {
+		if abs, err := filepath.Abs(baseDir); err == nil {
+			baseDir = abs
+		}
+	}
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(baseDir, path)
+	}
+	if rel, err := filepath.Rel(baseDir, path); err == nil {
+		return filepath.ToSlash(filepath.Clean(rel))
+	}
+	return filepath.ToSlash(path)
+}
+
+func fingerprintLocalSourceDigest(sourcePath string) (string, error) {
+	manifestPath := sourcePath
+	sourceDir := sourcePath
+
+	info, err := os.Stat(sourcePath)
+	if err != nil {
+		return "", err
+	}
+	if info.IsDir() {
+		manifestPath, err = providerpkg.FindManifestFile(sourcePath)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		sourceDir = filepath.Dir(sourcePath)
+	}
+
+	_, manifest, err := providerpkg.PrepareSourceManifest(manifestPath)
+	if err != nil {
+		return "", err
+	}
+	return providerpkg.DirectoryDigest(sourceDir, manifestPath, manifest)
 }
 
 func archivePolicyKind(kind string) string {
@@ -1392,7 +1443,7 @@ func localLockEntryFromPreparedInstall(paths initPaths, kind, name string, plugi
 }
 
 func localUILockEntryFromPreparedInstall(paths initPaths, name string, plugin *config.ProviderEntry, install *preparedInstall) (LockUIEntry, error) {
-	fingerprint, err := NamedUIProviderFingerprint(name, plugin)
+	fingerprint, err := NamedUIProviderFingerprint(name, plugin, paths.configDir)
 	if err != nil {
 		return LockUIEntry{}, fmt.Errorf("fingerprinting ui %q: %w", name, err)
 	}
@@ -1623,7 +1674,7 @@ func (l *Lifecycle) writeNamedUIProviderArtifact(ctx context.Context, paths init
 	if err != nil {
 		return LockUIEntry{}, fmt.Errorf("decode %s config: %w", subject, err)
 	}
-	fingerprint, err := NamedUIProviderFingerprint(name, plugin)
+	fingerprint, err := NamedUIProviderFingerprint(name, plugin, paths.configDir)
 	if err != nil {
 		return LockUIEntry{}, fmt.Errorf("fingerprinting %s: %w", subject, err)
 	}
@@ -2039,7 +2090,7 @@ func (l *Lifecycle) applyConfiguredUIProvider(paths initPaths, lockEntry *LockUI
 			}
 			return "", fmt.Errorf("prepared artifact for %s is missing or stale; run `gestaltd init %s`", subject, paths.configFlags)
 		}
-		fingerprint, err := NamedUIProviderFingerprint(logicalName, provider)
+		fingerprint, err := NamedUIProviderFingerprint(logicalName, provider, paths.configDir)
 		if err != nil || lockEntry.Fingerprint != fingerprint {
 			return "", fmt.Errorf("prepared artifact for %s is missing or stale; run `gestaltd init %s`", subject, paths.configFlags)
 		}

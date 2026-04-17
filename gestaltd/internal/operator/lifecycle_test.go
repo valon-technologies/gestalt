@@ -3356,20 +3356,138 @@ func mustFingerprint(t *testing.T, name string, entry *config.ProviderEntry, con
 func TestProviderFingerprint_Stable(t *testing.T) {
 	t.Parallel()
 
-	plugin := &config.ProviderEntry{
-		Source: config.NewMetadataSource("https://example.invalid/github-com-test-org-test-repo-test-plugin/v1.0.0/provider-release.yaml"),
+	writeSourceManifest := func(t *testing.T, rootDir, manifestRel, kind string) string {
+		t.Helper()
+
+		manifestPath := filepath.Join(rootDir, filepath.FromSlash(manifestRel))
+		if err := os.MkdirAll(filepath.Dir(manifestPath), 0o755); err != nil {
+			t.Fatalf("MkdirAll(%q): %v", filepath.Dir(manifestPath), err)
+		}
+		manifest := fmt.Sprintf("source: github.com/test-org/fingerprint-test/component\nversion: 0.0.1\nkind: %s\n", kind)
+		if kind == providermanifestv1.KindWebUI {
+			assetRoot := filepath.Join(filepath.Dir(manifestPath), "assets")
+			if err := os.MkdirAll(assetRoot, 0o755); err != nil {
+				t.Fatalf("MkdirAll(%q): %v", assetRoot, err)
+			}
+			if err := os.WriteFile(filepath.Join(assetRoot, "index.html"), []byte("<html></html>"), 0o644); err != nil {
+				t.Fatalf("WriteFile(asset): %v", err)
+			}
+			manifest += "spec:\n  assetRoot: assets\n"
+		}
+		if err := os.WriteFile(manifestPath, []byte(manifest), 0o644); err != nil {
+			t.Fatalf("WriteFile(%q): %v", manifestPath, err)
+		}
+		return manifestPath
 	}
-	first, err := ProviderFingerprint("example", plugin, ".")
-	if err != nil {
-		t.Fatalf("ProviderFingerprint: %v", err)
-	}
-	second, err := ProviderFingerprint("example", plugin, ".")
-	if err != nil {
-		t.Fatalf("ProviderFingerprint: %v", err)
-	}
-	if first != second {
-		t.Fatalf("fingerprint not stable: %q != %q", first, second)
-	}
+
+	t.Run("metadata source", func(t *testing.T) {
+		t.Parallel()
+
+		plugin := &config.ProviderEntry{
+			Source: config.NewMetadataSource("https://example.invalid/github-com-test-org-test-repo-test-plugin/v1.0.0/provider-release.yaml"),
+		}
+		first, err := ProviderFingerprint("example", plugin, ".")
+		if err != nil {
+			t.Fatalf("ProviderFingerprint: %v", err)
+		}
+		second, err := ProviderFingerprint("example", plugin, ".")
+		if err != nil {
+			t.Fatalf("ProviderFingerprint: %v", err)
+		}
+		if first != second {
+			t.Fatalf("fingerprint not stable: %q != %q", first, second)
+		}
+	})
+
+	t.Run("local source path is stable across copied config trees", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		firstConfigDir := filepath.Join(root, "one", "deploy")
+		secondConfigDir := filepath.Join(root, "two", "deploy")
+		firstManifestPath := writeSourceManifest(t, filepath.Join(root, "one"), "plugins/sample/manifest.yaml", providermanifestv1.KindAuthorization)
+		secondManifestPath := writeSourceManifest(t, filepath.Join(root, "two"), "plugins/sample/manifest.yaml", providermanifestv1.KindAuthorization)
+
+		firstProvider := &config.ProviderEntry{
+			Source: config.ProviderSource{Path: firstManifestPath},
+		}
+		secondProvider := &config.ProviderEntry{
+			Source: config.ProviderSource{Path: secondManifestPath},
+		}
+
+		first, err := ProviderFingerprint("example", firstProvider, firstConfigDir)
+		if err != nil {
+			t.Fatalf("ProviderFingerprint(first): %v", err)
+		}
+		second, err := ProviderFingerprint("example", secondProvider, secondConfigDir)
+		if err != nil {
+			t.Fatalf("ProviderFingerprint(second): %v", err)
+		}
+		if first != second {
+			t.Fatalf("local source fingerprint drifted across copied config trees: %q != %q", first, second)
+		}
+	})
+
+	t.Run("named ui local source path is stable across copied config trees", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		firstConfigDir := filepath.Join(root, "one", "deploy")
+		secondConfigDir := filepath.Join(root, "two", "deploy")
+		firstManifestPath := writeSourceManifest(t, filepath.Join(root, "one"), "web/dashboard/manifest.yaml", providermanifestv1.KindWebUI)
+		secondManifestPath := writeSourceManifest(t, filepath.Join(root, "two"), "web/dashboard/manifest.yaml", providermanifestv1.KindWebUI)
+
+		firstProvider := &config.ProviderEntry{
+			Source: config.ProviderSource{Path: firstManifestPath},
+		}
+		secondProvider := &config.ProviderEntry{
+			Source: config.ProviderSource{Path: secondManifestPath},
+		}
+
+		first, err := NamedUIProviderFingerprint("dashboard", firstProvider, firstConfigDir)
+		if err != nil {
+			t.Fatalf("NamedUIProviderFingerprint(first): %v", err)
+		}
+		second, err := NamedUIProviderFingerprint("dashboard", secondProvider, secondConfigDir)
+		if err != nil {
+			t.Fatalf("NamedUIProviderFingerprint(second): %v", err)
+		}
+		if first != second {
+			t.Fatalf("named ui fingerprint drifted across copied config trees: %q != %q", first, second)
+		}
+	})
+
+	t.Run("local source content changes still change the fingerprint", func(t *testing.T) {
+		t.Parallel()
+
+		root := t.TempDir()
+		firstConfigDir := filepath.Join(root, "one", "deploy")
+		secondConfigDir := filepath.Join(root, "two", "deploy")
+		firstManifestPath := writeSourceManifest(t, filepath.Join(root, "one"), "plugins/sample/manifest.yaml", providermanifestv1.KindAuthorization)
+		secondManifestPath := writeSourceManifest(t, filepath.Join(root, "two"), "plugins/sample/manifest.yaml", providermanifestv1.KindAuthorization)
+		if err := os.WriteFile(secondManifestPath, []byte("source: github.com/test-org/two/component\nversion: 0.0.2\nkind: authorization\n"), 0o644); err != nil {
+			t.Fatalf("WriteFile(%q): %v", secondManifestPath, err)
+		}
+
+		firstProvider := &config.ProviderEntry{
+			Source: config.ProviderSource{Path: firstManifestPath},
+		}
+		secondProvider := &config.ProviderEntry{
+			Source: config.ProviderSource{Path: secondManifestPath},
+		}
+
+		first, err := ProviderFingerprint("example", firstProvider, firstConfigDir)
+		if err != nil {
+			t.Fatalf("ProviderFingerprint(first): %v", err)
+		}
+		second, err := ProviderFingerprint("example", secondProvider, secondConfigDir)
+		if err != nil {
+			t.Fatalf("ProviderFingerprint(second): %v", err)
+		}
+		if first == second {
+			t.Fatalf("local source fingerprint should change when manifest content changes: %q", first)
+		}
+	})
 }
 
 func TestProviderFingerprint_ChangesWithName(t *testing.T) {
