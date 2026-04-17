@@ -820,6 +820,51 @@ func TestResolveOperation_DoesNotFallBackOnSessionCatalogError(t *testing.T) {
 	}
 }
 
+func TestResolveOperation_FallsBackWhenSessionCatalogUnsupported(t *testing.T) {
+	t.Parallel()
+
+	unsupportedErr := core.WrapSessionCatalogUnsupported(fmt.Errorf("provider %q does not support session catalogs", "session-op-api"))
+	prov := &stubSessionProvider{
+		stubCatalogProvider: stubCatalogProvider{
+			stubProvider: stubProvider{
+				name:     "session-op-api",
+				connMode: core.ConnectionModeUser,
+			},
+			cat: &catalog.Catalog{
+				Name: "session-op-api",
+				Operations: []catalog.CatalogOperation{
+					{ID: "static_only", Method: http.MethodGet, Transport: catalog.TransportREST},
+				},
+			},
+		},
+		sessionErr: fmt.Errorf("nested session resolution wrapper: %w", unsupportedErr),
+	}
+
+	resolver := &stubTokenResolver{token: "tok_123"}
+	op, transport, connection, err := invocation.ResolveOperation(
+		context.Background(),
+		prov,
+		"session-op-api",
+		resolver,
+		&principal.Principal{UserID: "u1"},
+		"static_only",
+		[]string{"default"},
+		"default",
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if op.ID != "static_only" {
+		t.Fatalf("operation = %q, want %q", op.ID, "static_only")
+	}
+	if transport != catalog.TransportREST {
+		t.Fatalf("transport = %q, want %q", transport, catalog.TransportREST)
+	}
+	if connection != "" {
+		t.Fatalf("connection = %q, want empty", connection)
+	}
+}
+
 func TestResolveCatalog_NilResolver(t *testing.T) {
 	t.Parallel()
 

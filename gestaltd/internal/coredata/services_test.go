@@ -2,8 +2,10 @@ package coredata_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -218,6 +220,113 @@ func TestNew(t *testing.T) {
 		}
 		if got := raw["normalized_email"]; got != "user@example.com" {
 			t.Fatalf("normalized_email = %v, want %q", got, "user@example.com")
+		}
+	})
+
+	t.Run("backfills_one_canonical_profile_for_case_insensitive_duplicate_legacy_users", func(t *testing.T) {
+		t.Parallel()
+
+		db := &coretesting.StubIndexedDB{}
+		ctx := context.Background()
+		older := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+		newer := older.Add(time.Hour)
+		if err := db.ObjectStore(coredata.StoreUsers).Add(ctx, indexeddb.Record{
+			"id":               "legacy-mixed",
+			"email":            "User@Example.com",
+			"normalized_email": "user@example.com",
+			"display_name":     "",
+			"created_at":       older,
+			"updated_at":       older,
+		}); err != nil {
+			t.Fatalf("seed mixed-case legacy user: %v", err)
+		}
+		if err := db.ObjectStore(coredata.StoreUsers).Add(ctx, indexeddb.Record{
+			"id":               "legacy-canonical",
+			"email":            "user@example.com",
+			"normalized_email": "user@example.com",
+			"display_name":     "",
+			"created_at":       newer,
+			"updated_at":       newer,
+		}); err != nil {
+			t.Fatalf("seed canonical legacy user: %v", err)
+		}
+
+		enc, err := corecrypto.NewAESGCM([]byte(testEncryptionKey))
+		if err != nil {
+			t.Fatalf("NewAESGCM: %v", err)
+		}
+		svc, err := coredata.New(db, enc)
+		if err != nil {
+			t.Fatalf("coredata.New: %v", err)
+		}
+
+		if _, err := svc.UserProfiles.GetProfile(ctx, "legacy-canonical"); err != nil {
+			t.Fatalf("GetProfile(canonical winner): %v", err)
+		}
+		if _, err := svc.UserProfiles.GetProfile(ctx, "legacy-mixed"); err != core.ErrNotFound {
+			t.Fatalf("GetProfile(mixed-case loser) = %v, want ErrNotFound", err)
+		}
+		count, err := svc.DB.ObjectStore(coredata.StoreUserProfiles).Count(ctx, nil)
+		if err != nil {
+			t.Fatalf("Count user_profiles: %v", err)
+		}
+		if count != 1 {
+			t.Fatalf("user_profiles count = %d, want 1", count)
+		}
+	})
+
+	t.Run("backfills_multiple_canonical_profiles_without_blank_auth_subject_keys", func(t *testing.T) {
+		t.Parallel()
+
+		db := &coretesting.StubIndexedDB{}
+		ctx := context.Background()
+		createdAt := time.Date(2026, 1, 2, 12, 0, 0, 0, time.UTC)
+		for _, rec := range []indexeddb.Record{
+			{
+				"id":               "legacy-a",
+				"email":            "alice@example.com",
+				"normalized_email": "alice@example.com",
+				"display_name":     "",
+				"created_at":       createdAt,
+				"updated_at":       createdAt,
+			},
+			{
+				"id":               "legacy-b",
+				"email":            "bob@example.com",
+				"normalized_email": "bob@example.com",
+				"display_name":     "",
+				"created_at":       createdAt.Add(time.Minute),
+				"updated_at":       createdAt.Add(time.Minute),
+			},
+		} {
+			if err := db.ObjectStore(coredata.StoreUsers).Add(ctx, rec); err != nil {
+				t.Fatalf("seed legacy user %q: %v", rec["id"], err)
+			}
+		}
+
+		enc, err := corecrypto.NewAESGCM([]byte(testEncryptionKey))
+		if err != nil {
+			t.Fatalf("NewAESGCM: %v", err)
+		}
+		svc, err := coredata.New(db, enc)
+		if err != nil {
+			t.Fatalf("coredata.New: %v", err)
+		}
+
+		profiles, err := svc.DB.ObjectStore(coredata.StoreUserProfiles).GetAll(ctx, nil)
+		if err != nil {
+			t.Fatalf("GetAll user profiles: %v", err)
+		}
+		if len(profiles) != 2 {
+			t.Fatalf("canonical user profiles len = %d, want 2", len(profiles))
+		}
+		for _, rec := range profiles {
+			if _, ok := rec["auth_provider"]; ok {
+				t.Fatalf("auth_provider unexpectedly present in %+v", rec)
+			}
+			if _, ok := rec["auth_subject"]; ok {
+				t.Fatalf("auth_subject unexpectedly present in %+v", rec)
+			}
 		}
 	})
 }
@@ -445,6 +554,16 @@ func TestTokenService(t *testing.T) {
 		if got.MetadataJSON != `{"key":"val"}` {
 			t.Errorf("MetadataJSON = %q, want %q", got.MetadataJSON, `{"key":"val"}`)
 		}
+		credential, err := svc.ExternalCredentials.GetCredential(ctx, user.ID, "test-svc", "default", "inst-1")
+		if err != nil {
+			t.Fatalf("GetCredential: %v", err)
+		}
+		if credential.AuthType != "oauth2" {
+			t.Errorf("AuthType = %q, want %q", credential.AuthType, "oauth2")
+		}
+		if credential.MetadataJSON != `{"key":"val"}` {
+			t.Errorf("MetadataJSON = %q, want %q", credential.MetadataJSON, `{"key":"val"}`)
+		}
 	})
 
 	t.Run("Token_not_found", func(t *testing.T) {
@@ -556,6 +675,9 @@ func TestTokenService(t *testing.T) {
 		_, err := svc.Tokens.Token(ctx, user.ID, "svc", "default", "i1")
 		if err != core.ErrNotFound {
 			t.Fatalf("Token after delete = %v, want ErrNotFound", err)
+		}
+		if _, err := svc.ExternalCredentials.GetCredential(ctx, user.ID, "svc", "default", "i1"); err != core.ErrNotFound {
+			t.Fatalf("GetCredential after delete = %v, want ErrNotFound", err)
 		}
 	})
 
@@ -682,6 +804,168 @@ func TestTokenService(t *testing.T) {
 		if tokens[0].AccessToken != "newest" {
 			t.Fatalf("AccessToken = %q, want %q", tokens[0].AccessToken, "newest")
 		}
+
+		if err := svc.Tokens.DeleteToken(ctx, newest.ID); err != nil {
+			t.Fatalf("DeleteToken newest: %v", err)
+		}
+		credential, err := svc.ExternalCredentials.GetCredential(ctx, user.ID, "svc", "default", "i1")
+		if err != nil {
+			t.Fatalf("GetCredential after deleting newest duplicate: %v", err)
+		}
+		var payload map[string]string
+		if err := json.Unmarshal([]byte(credential.PayloadEncrypted), &payload); err != nil {
+			t.Fatalf("Unmarshal credential payload: %v", err)
+		}
+		wantAccess, _ := duplicate["access_token_encrypted"].(string)
+		wantRefresh, _ := duplicate["refresh_token_encrypted"].(string)
+		if payload["access_token_encrypted"] != wantAccess {
+			t.Fatalf("access_token_encrypted = %q, want %q", payload["access_token_encrypted"], wantAccess)
+		}
+		if payload["refresh_token_encrypted"] != wantRefresh {
+			t.Fatalf("refresh_token_encrypted = %q, want %q", payload["refresh_token_encrypted"], wantRefresh)
+		}
+	})
+
+	t.Run("startup_backfill_uses_deduped_legacy_winner_for_external_credentials", func(t *testing.T) {
+		t.Parallel()
+
+		svc, db := newTestServicesWithDB(t)
+		ctx := context.Background()
+		user := mustCreateUser(t, svc, "startup-dupes@test.com")
+
+		newest := &core.IntegrationToken{
+			ID:           "tok-startup-primary",
+			UserID:       user.ID,
+			Integration:  "svc",
+			Connection:   "default",
+			Instance:     "i1",
+			AccessToken:  "newest",
+			RefreshToken: "refresh-newest",
+		}
+		if err := svc.Tokens.StoreToken(ctx, newest); err != nil {
+			t.Fatalf("StoreToken newest: %v", err)
+		}
+		legacySource := &core.IntegrationToken{
+			ID:           "tok-startup-legacy",
+			UserID:       user.ID,
+			Integration:  "svc",
+			Connection:   "default",
+			Instance:     "legacy-source",
+			AccessToken:  "legacy",
+			RefreshToken: "refresh-legacy",
+		}
+		if err := svc.Tokens.StoreToken(ctx, legacySource); err != nil {
+			t.Fatalf("StoreToken legacy source: %v", err)
+		}
+
+		store := db.ObjectStore(coredata.StoreIntegrationTokens)
+		primaryRaw, err := store.Get(ctx, newest.ID)
+		if err != nil {
+			t.Fatalf("Get primary raw: %v", err)
+		}
+		legacyRaw, err := store.Get(ctx, legacySource.ID)
+		if err != nil {
+			t.Fatalf("Get legacy raw: %v", err)
+		}
+		if err := store.Delete(ctx, legacySource.ID); err != nil {
+			t.Fatalf("Delete legacy source: %v", err)
+		}
+
+		duplicate := indexeddb.Record{}
+		for k, v := range legacyRaw {
+			duplicate[k] = v
+		}
+		duplicate["id"] = "tok-startup-duplicate"
+		duplicate["user_id"] = user.ID
+		duplicate["integration"] = "svc"
+		duplicate["connection"] = "default"
+		duplicate["instance"] = "i1"
+		duplicate["created_at"] = recOrNow(primaryRaw, "created_at").Add(-time.Minute)
+		duplicate["updated_at"] = recOrNow(primaryRaw, "updated_at").Add(-time.Minute)
+		if err := store.Put(ctx, duplicate); err != nil {
+			t.Fatalf("Put duplicate raw token: %v", err)
+		}
+
+		enc, err := corecrypto.NewAESGCM([]byte(testEncryptionKey))
+		if err != nil {
+			t.Fatalf("NewAESGCM: %v", err)
+		}
+		reloaded, err := coredata.New(db, enc)
+		if err != nil {
+			t.Fatalf("reload services for startup backfill: %v", err)
+		}
+
+		credential, err := reloaded.ExternalCredentials.GetCredential(ctx, user.ID, "svc", "default", "i1")
+		if err != nil {
+			t.Fatalf("GetCredential after reload: %v", err)
+		}
+		var payload map[string]string
+		if err := json.Unmarshal([]byte(credential.PayloadEncrypted), &payload); err != nil {
+			t.Fatalf("Unmarshal credential payload: %v", err)
+		}
+		wantAccess, _ := primaryRaw["access_token_encrypted"].(string)
+		wantRefresh, _ := primaryRaw["refresh_token_encrypted"].(string)
+		if payload["access_token_encrypted"] != wantAccess {
+			t.Fatalf("access_token_encrypted after reload = %q, want %q", payload["access_token_encrypted"], wantAccess)
+		}
+		if payload["refresh_token_encrypted"] != wantRefresh {
+			t.Fatalf("refresh_token_encrypted after reload = %q, want %q", payload["refresh_token_encrypted"], wantRefresh)
+		}
+	})
+
+	t.Run("startup_backfill_preserves_external_credential_auth_type", func(t *testing.T) {
+		t.Parallel()
+
+		tests := []struct {
+			name         string
+			accessToken  string
+			refreshToken string
+			wantAuthType string
+		}{
+			{name: "oauth2", accessToken: "access", refreshToken: "refresh", wantAuthType: "oauth2"},
+			{name: "bearer", accessToken: "access", wantAuthType: "bearer"},
+			{name: "manual", wantAuthType: "manual"},
+		}
+
+		for _, tc := range tests {
+			tc := tc
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				svc, db := newTestServicesWithDB(t)
+				ctx := context.Background()
+				user := mustCreateUser(t, svc, tc.name+"@test.com")
+
+				token := &core.IntegrationToken{
+					ID:           "tok-" + tc.name,
+					UserID:       user.ID,
+					Integration:  "svc",
+					Connection:   "default",
+					Instance:     "i1",
+					AccessToken:  tc.accessToken,
+					RefreshToken: tc.refreshToken,
+				}
+				if err := svc.Tokens.StoreToken(ctx, token); err != nil {
+					t.Fatalf("StoreToken: %v", err)
+				}
+
+				enc, err := corecrypto.NewAESGCM([]byte(testEncryptionKey))
+				if err != nil {
+					t.Fatalf("NewAESGCM: %v", err)
+				}
+				reloaded, err := coredata.New(db, enc)
+				if err != nil {
+					t.Fatalf("reload services for startup backfill: %v", err)
+				}
+
+				credential, err := reloaded.ExternalCredentials.GetCredential(ctx, user.ID, "svc", "default", "i1")
+				if err != nil {
+					t.Fatalf("GetCredential after reload: %v", err)
+				}
+				if credential.AuthType != tc.wantAuthType {
+					t.Fatalf("AuthType after reload = %q, want %q", credential.AuthType, tc.wantAuthType)
+				}
+			})
+		}
 	})
 
 	t.Run("ConcurrentTokenWrites", func(t *testing.T) {
@@ -800,6 +1084,10 @@ func TestAPITokenService(t *testing.T) {
 			Name:        "ci-token",
 			HashedToken: "sha256:abc123",
 			Scopes:      "read:tokens",
+			Permissions: []core.AccessPermission{
+				{Plugin: "sample", Operations: []string{"read"}},
+				{Plugin: "other"},
+			},
 		}
 		if err := svc.APITokens.StoreAPIToken(ctx, token); err != nil {
 			t.Fatalf("StoreAPIToken: %v", err)
@@ -817,6 +1105,19 @@ func TestAPITokenService(t *testing.T) {
 		}
 		if got.Scopes != "read:tokens" {
 			t.Errorf("Scopes = %q, want %q", got.Scopes, "read:tokens")
+		}
+		access, err := svc.APITokenAccess.ListByToken(ctx, token.ID)
+		if err != nil {
+			t.Fatalf("ListByToken: %v", err)
+		}
+		if len(access) != 2 {
+			t.Fatalf("token access len = %d, want 2", len(access))
+		}
+		if access[0].Plugin != "other" || !access[0].InvokeAllOperations {
+			t.Fatalf("first token access = %+v, want plugin other with invoke-all", access[0])
+		}
+		if access[1].Plugin != "sample" || access[1].InvokeAllOperations || !reflect.DeepEqual(access[1].Operations, []string{"read"}) {
+			t.Fatalf("second token access = %+v, want sample [read]", access[1])
 		}
 	})
 
@@ -929,6 +1230,13 @@ func TestAPITokenService(t *testing.T) {
 		if err != core.ErrNotFound {
 			t.Fatalf("ValidateAPIToken after revoke = %v, want ErrNotFound", err)
 		}
+		access, err := svc.APITokenAccess.ListByToken(ctx, token.ID)
+		if err != nil {
+			t.Fatalf("ListByToken after revoke: %v", err)
+		}
+		if len(access) != 0 {
+			t.Fatalf("token access after revoke = %+v, want none", access)
+		}
 	})
 
 	t.Run("RevokeAPIToken_nonexistent", func(t *testing.T) {
@@ -973,6 +1281,69 @@ func TestAPITokenService(t *testing.T) {
 		}
 		if len(tokens) != 0 {
 			t.Errorf("got %d tokens after revoke-all, want 0", len(tokens))
+		}
+	})
+
+	t.Run("RevokeAllAPITokens_preserves_access_for_owner_only_survivors", func(t *testing.T) {
+		t.Parallel()
+		svc := newTestServices(t)
+		ctx := context.Background()
+
+		user := mustCreateUser(t, svc, "alice@test.com")
+		legacy := &core.APIToken{
+			ID:          "legacy-token",
+			UserID:      user.ID,
+			Name:        "legacy",
+			HashedToken: "sha256:legacy",
+			Permissions: []core.AccessPermission{{Plugin: "legacy"}},
+		}
+		if err := svc.APITokens.StoreAPIToken(ctx, legacy); err != nil {
+			t.Fatalf("StoreAPIToken legacy: %v", err)
+		}
+
+		permissionsJSON, err := json.Marshal([]core.AccessPermission{{Plugin: "owner-only"}})
+		if err != nil {
+			t.Fatalf("Marshal permissions: %v", err)
+		}
+		now := time.Now()
+		if err := svc.DB.ObjectStore(coredata.StoreAPITokens).Add(ctx, indexeddb.Record{
+			"id":               "owner-only-token",
+			"owner_kind":       core.APITokenOwnerKindUser,
+			"owner_id":         user.ID,
+			"name":             "owner-only",
+			"hashed_token":     "sha256:owner-only",
+			"permissions_json": string(permissionsJSON),
+			"created_at":       now,
+			"updated_at":       now,
+		}); err != nil {
+			t.Fatalf("seed owner-only token: %v", err)
+		}
+		if err := svc.APITokens.BackfillTokenAccess(ctx); err != nil {
+			t.Fatalf("BackfillTokenAccess: %v", err)
+		}
+
+		deleted, err := svc.APITokens.RevokeAllAPITokens(ctx, user.ID)
+		if err != nil {
+			t.Fatalf("RevokeAllAPITokens: %v", err)
+		}
+		if deleted != 1 {
+			t.Fatalf("deleted = %d, want 1", deleted)
+		}
+
+		tokens, err := svc.APITokens.ListAPITokens(ctx, user.ID)
+		if err != nil {
+			t.Fatalf("ListAPITokens: %v", err)
+		}
+		if len(tokens) != 1 || tokens[0].ID != "owner-only-token" {
+			t.Fatalf("remaining tokens = %+v, want owner-only survivor", tokens)
+		}
+
+		access, err := svc.APITokenAccess.ListByToken(ctx, "owner-only-token")
+		if err != nil {
+			t.Fatalf("ListByToken owner-only-token: %v", err)
+		}
+		if len(access) != 1 || access[0].Plugin != "owner-only" {
+			t.Fatalf("owner-only token access = %+v, want surviving access", access)
 		}
 	})
 

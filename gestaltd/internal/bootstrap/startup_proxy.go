@@ -153,6 +153,13 @@ func (p *startupProviderProxy) Description() string { return p.spec.Description 
 func (p *startupProviderProxy) ConnectionMode() core.ConnectionMode {
 	return p.spec.ConnectionMode
 }
+func (p *startupProviderProxy) SupportsSessionCatalog() bool {
+	provider := p.resolved()
+	if provider == nil {
+		return true
+	}
+	return core.SupportsSessionCatalog(provider)
+}
 func (p *startupProviderProxy) Catalog() *catalog.Catalog {
 	if p.spec.Catalog == nil {
 		return nil
@@ -205,14 +212,11 @@ func (p *startupProviderProxy) CatalogForRequest(ctx context.Context, token stri
 	if err != nil {
 		return nil, err
 	}
-	scoped, ok := provider.(core.SessionCatalogProvider)
-	if !ok {
-		if p.spec.Catalog != nil {
-			return p.spec.Catalog.Clone(), nil
-		}
-		return nil, fmt.Errorf("provider %q does not support session catalogs", p.spec.Name)
+	cat, scoped, err := core.CatalogForRequest(ctx, provider, token)
+	if !scoped {
+		return nil, core.WrapSessionCatalogUnsupported(fmt.Errorf("provider %q does not support session catalogs", p.spec.Name))
 	}
-	return scoped.CatalogForRequest(ctx, token)
+	return cat, err
 }
 
 func (p *startupProviderProxy) ConnectionForOperation(operation string) string {

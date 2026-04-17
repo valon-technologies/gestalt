@@ -93,6 +93,9 @@ func ResolveOperation(ctx context.Context, prov core.Provider, provName string, 
 
 	sessionOp, sessionConnection, sessionFound, err := resolveSessionOperation(ctx, prov, provName, resolver, p, operation, sessionConnections, instance)
 	if err != nil {
+		if staticOK && sessionCatalogUnsupported(err) {
+			return staticOp, OperationTransport(staticOp), "", nil
+		}
 		return catalog.CatalogOperation{}, "", "", err
 	}
 	if sessionFound {
@@ -102,6 +105,10 @@ func ResolveOperation(ctx context.Context, prov core.Provider, provName string, 
 		return staticOp, OperationTransport(staticOp), "", nil
 	}
 	return catalog.CatalogOperation{}, "", "", fmt.Errorf("%w: %q on provider %q", ErrOperationNotFound, operation, provName)
+}
+
+func sessionCatalogUnsupported(err error) bool {
+	return err != nil && errors.Is(err, core.ErrSessionCatalogUnsupported)
 }
 
 func resolveCatalog(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, defaultConnection, instance string, strictSession bool) (*catalog.Catalog, CatalogResolutionMetadata, error) {

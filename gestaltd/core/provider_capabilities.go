@@ -8,13 +8,21 @@ import (
 )
 
 var ErrSessionCatalogUnavailable = errors.New("session catalog unavailable")
+var ErrSessionCatalogUnsupported = errors.New("session catalog unsupported")
 
 type sessionCatalogUnavailableError struct {
-	cause error
+	cause       error
+	unsupported bool
 }
 
 func (e *sessionCatalogUnavailableError) Error() string {
-	if e == nil || e.cause == nil {
+	if e == nil {
+		return ErrSessionCatalogUnavailable.Error()
+	}
+	if e.cause == nil {
+		if e.unsupported {
+			return ErrSessionCatalogUnsupported.Error()
+		}
 		return ErrSessionCatalogUnavailable.Error()
 	}
 	return e.cause.Error()
@@ -28,7 +36,10 @@ func (e *sessionCatalogUnavailableError) Unwrap() error {
 }
 
 func (e *sessionCatalogUnavailableError) Is(target error) bool {
-	return target == ErrSessionCatalogUnavailable
+	if target == ErrSessionCatalogUnavailable {
+		return true
+	}
+	return e.unsupported && target == ErrSessionCatalogUnsupported
 }
 
 func wrapSessionCatalogUnavailable(err error) error {
@@ -38,7 +49,23 @@ func wrapSessionCatalogUnavailable(err error) error {
 	return &sessionCatalogUnavailableError{cause: err}
 }
 
+func WrapSessionCatalogUnsupported(err error) error {
+	if err == nil {
+		err = ErrSessionCatalogUnsupported
+	}
+	if errors.Is(err, ErrSessionCatalogUnavailable) && errors.Is(err, ErrSessionCatalogUnsupported) {
+		return err
+	}
+	return &sessionCatalogUnavailableError{
+		cause:       err,
+		unsupported: true,
+	}
+}
+
 func SupportsSessionCatalog(prov Provider) bool {
+	if aware, ok := prov.(interface{ SupportsSessionCatalog() bool }); ok {
+		return aware.SupportsSessionCatalog()
+	}
 	_, ok := prov.(SessionCatalogProvider)
 	return ok
 }

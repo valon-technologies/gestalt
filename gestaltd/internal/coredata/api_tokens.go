@@ -12,11 +12,15 @@ import (
 )
 
 type APITokenService struct {
-	store indexeddb.ObjectStore
+	store           indexeddb.ObjectStore
+	canonicalAccess *APITokenAccessService
 }
 
-func NewAPITokenService(ds indexeddb.IndexedDB) *APITokenService {
-	return &APITokenService{store: ds.ObjectStore(StoreAPITokens)}
+func NewAPITokenService(ds indexeddb.IndexedDB, canonicalAccess *APITokenAccessService) *APITokenService {
+	return &APITokenService{
+		store:           ds.ObjectStore(StoreAPITokens),
+		canonicalAccess: canonicalAccess,
+	}
 }
 
 func (s *APITokenService) StoreAPIToken(ctx context.Context, token *core.APIToken) error {
@@ -51,6 +55,9 @@ func (s *APITokenService) StoreAPIToken(ctx context.Context, token *core.APIToke
 	}
 	if err := s.store.Add(ctx, rec); err != nil {
 		return fmt.Errorf("store api token: %w", err)
+	}
+	if err := s.syncTokenAccess(ctx, token); err != nil {
+		return err
 	}
 	return nil
 }
@@ -166,6 +173,11 @@ func (s *APITokenService) RevokeAPITokenByOwner(ctx context.Context, ownerKind, 
 	if deleted == 0 {
 		return core.ErrNotFound
 	}
+	if s.canonicalAccess != nil {
+		if err := s.canonicalAccess.ReplaceForToken(ctx, id, nil); err != nil {
+			return fmt.Errorf("delete canonical api token access: %w", err)
+		}
+	}
 	return nil
 }
 
@@ -174,10 +186,15 @@ func (s *APITokenService) RevokeAllAPITokens(ctx context.Context, userID string)
 }
 
 func (s *APITokenService) RevokeAllAPITokensByOwner(ctx context.Context, ownerKind, ownerID string) (int64, error) {
+	var deletedIDs []string
 	var (
 		deleted int64
 		err     error
 	)
+	tokensBefore, listErr := s.ListAPITokensByOwner(ctx, ownerKind, ownerID)
+	if listErr == nil {
+		deletedIDs = collectAPITokenIDs(tokensBefore)
+	}
 	if ownerKind == core.APITokenOwnerKindUser {
 		if deleted, err = s.store.Index("by_user").Delete(ctx, ownerID); err == nil && deleted > 0 {
 			// Prefer the legacy user index when records were created before owner fields existed.
@@ -205,7 +222,38 @@ func (s *APITokenService) RevokeAllAPITokensByOwner(ctx context.Context, ownerKi
 	if err != nil {
 		return 0, fmt.Errorf("revoke all api tokens: %w", err)
 	}
+	if s.canonicalAccess != nil && len(deletedIDs) > 0 {
+		remainingTokens, listErr := s.ListAPITokensByOwner(ctx, ownerKind, ownerID)
+		if listErr != nil {
+			return 0, fmt.Errorf("revoke all api tokens: %w", listErr)
+		}
+		remainingIDs := tokenIDSet(remainingTokens)
+		for _, id := range deletedIDs {
+			if _, ok := remainingIDs[id]; ok {
+				continue
+			}
+			if accessErr := s.canonicalAccess.ReplaceForToken(ctx, id, nil); accessErr != nil {
+				return 0, fmt.Errorf("delete canonical api token access: %w", accessErr)
+			}
+		}
+	}
 	return deleted, nil
+}
+
+func (s *APITokenService) BackfillTokenAccess(ctx context.Context) error {
+	if s.canonicalAccess == nil {
+		return nil
+	}
+	recs, err := s.store.GetAll(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("list api tokens for canonical backfill: %w", err)
+	}
+	for _, rec := range recs {
+		if err := s.syncTokenAccess(ctx, recordToAPIToken(rec)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func recordToAPIToken(rec indexeddb.Record) *core.APIToken {
@@ -234,4 +282,58 @@ func recordToAPIToken(rec indexeddb.Record) *core.APIToken {
 		}
 	}
 	return token
+}
+
+func (s *APITokenService) syncTokenAccess(ctx context.Context, token *core.APIToken) error {
+	if s.canonicalAccess == nil || token == nil || token.ID == "" {
+		return nil
+	}
+	access := make([]core.APITokenAccess, 0, len(token.Permissions))
+	for _, perm := range token.Permissions {
+		plugin := perm.Plugin
+		if plugin == "" {
+			continue
+		}
+		access = append(access, core.APITokenAccess{
+			TokenID:             token.ID,
+			Plugin:              plugin,
+			InvokeAllOperations: len(perm.Operations) == 0,
+			Operations:          append([]string(nil), perm.Operations...),
+			ExpiresAt:           token.ExpiresAt,
+			CreatedAt:           token.CreatedAt,
+			UpdatedAt:           token.UpdatedAt,
+		})
+	}
+	if err := s.canonicalAccess.ReplaceForToken(ctx, token.ID, access); err != nil {
+		return fmt.Errorf("sync canonical api token access %q: %w", token.ID, err)
+	}
+	return nil
+}
+
+func collectAPITokenIDs(tokens []*core.APIToken) []string {
+	if len(tokens) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(tokens))
+	for _, token := range tokens {
+		if token == nil || token.ID == "" {
+			continue
+		}
+		out = append(out, token.ID)
+	}
+	return out
+}
+
+func tokenIDSet(tokens []*core.APIToken) map[string]struct{} {
+	if len(tokens) == 0 {
+		return nil
+	}
+	out := make(map[string]struct{}, len(tokens))
+	for _, token := range tokens {
+		if token == nil || token.ID == "" {
+			continue
+		}
+		out[token.ID] = struct{}{}
+	}
+	return out
 }

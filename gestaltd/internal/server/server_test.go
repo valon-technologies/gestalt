@@ -2277,6 +2277,7 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 	t.Parallel()
 
 	svc := coretesting.NewStubServices(t)
+	ctx := context.Background()
 	seedUser(t, svc, "static-admin@example.test")
 	const adminRole = "owner"
 	authz := mustAuthorizer(t, config.AuthorizationConfig{
@@ -2308,7 +2309,7 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 		cfg.Authorizer = authz
 		cfg.Admin = server.AdminRouteConfig{
 			AuthorizationPolicy: "admin_policy",
-			AllowedRoles:        []string{adminRole},
+			AllowedRoles:        []string{adminRole, "operator"},
 		}
 		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			_, _ = w.Write([]byte("admin"))
@@ -2386,6 +2387,35 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("find dynamic admin user: %v", err)
 	}
+	roles, err := svc.WorkspaceRoles.ListByPrincipal(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("ListByPrincipal(dynamic admin): %v", err)
+	}
+	if len(roles) != 1 || roles[0].Role != "owner" {
+		t.Fatalf("workspace roles = %+v, want [owner]", roles)
+	}
+
+	body = bytes.NewBufferString(`{"email":"dynamic-admin@example.test","role":"operator"}`)
+	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/admins/members", body)
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("PUT dynamic admin role change: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		t.Fatalf("put dynamic admin role change status = %d, want 200: %s", resp.StatusCode, respBody)
+	}
+
+	roles, err = svc.WorkspaceRoles.ListByPrincipal(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("ListByPrincipal(dynamic admin) after role change: %v", err)
+	}
+	if len(roles) != 1 || roles[0].Role != "operator" {
+		t.Fatalf("workspace roles after role change = %+v, want [operator]", roles)
+	}
 	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/admin/api/v1/authorization/admins/members/"+url.PathEscape(user.ID), nil)
 	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err = http.DefaultClient.Do(req)
@@ -2414,6 +2444,13 @@ func TestAdminAPI_AdminAuthorizationCRUD(t *testing.T) {
 	}
 	if len(members) != 1 || members[0]["source"] != "static" {
 		t.Fatalf("admin members after delete = %+v, want only static row", members)
+	}
+	roles, err = svc.WorkspaceRoles.ListByPrincipal(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("ListByPrincipal(dynamic admin) after delete: %v", err)
+	}
+	if len(roles) != 0 {
+		t.Fatalf("workspace roles after delete = %+v, want none", roles)
 	}
 }
 
@@ -14077,8 +14114,9 @@ func TestManagedIdentityCRUDAndMemberships(t *testing.T) {
 	t.Parallel()
 
 	svc := coretesting.NewStubServices(t)
+	ctx := context.Background()
 	admin := seedUser(t, svc, "admin@example.test")
-	seedUser(t, svc, "viewer@example.test")
+	viewer := seedUser(t, svc, "viewer@example.test")
 
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
@@ -14110,9 +14148,50 @@ func TestManagedIdentityCRUDAndMemberships(t *testing.T) {
 	if createResp.DisplayName != "Release Bot" {
 		t.Fatalf("displayName = %q, want %q", createResp.DisplayName, "Release Bot")
 	}
-	createdIdentity, err := svc.ManagedIdentities.GetIdentity(context.Background(), createResp.ID)
+	createdIdentity, err := svc.ManagedIdentities.GetIdentity(ctx, createResp.ID)
 	if err != nil {
 		t.Fatalf("GetIdentity after create: %v", err)
+	}
+	adminPrincipal, err := svc.Principals.GetPrincipal(ctx, admin.ID)
+	if err != nil {
+		t.Fatalf("GetPrincipal(admin): %v", err)
+	}
+	if adminPrincipal.Kind != core.PrincipalKindUser {
+		t.Fatalf("admin principal kind = %q, want %q", adminPrincipal.Kind, core.PrincipalKindUser)
+	}
+	adminProfile, err := svc.UserProfiles.GetProfile(ctx, admin.ID)
+	if err != nil {
+		t.Fatalf("GetProfile(admin): %v", err)
+	}
+	if adminProfile.Email != admin.Email {
+		t.Fatalf("admin profile email = %q, want %q", adminProfile.Email, admin.Email)
+	}
+	serviceAccountPrincipal, err := svc.Principals.GetPrincipal(ctx, createResp.ID)
+	if err != nil {
+		t.Fatalf("GetPrincipal(identity): %v", err)
+	}
+	if serviceAccountPrincipal.Kind != core.PrincipalKindServiceAccount {
+		t.Fatalf("identity principal kind = %q, want %q", serviceAccountPrincipal.Kind, core.PrincipalKindServiceAccount)
+	}
+	if serviceAccountPrincipal.DisplayName != "Release Bot" {
+		t.Fatalf("identity principal display name = %q, want %q", serviceAccountPrincipal.DisplayName, "Release Bot")
+	}
+	serviceAccount, err := svc.ServiceAccounts.GetServiceAccount(ctx, createResp.ID)
+	if err != nil {
+		t.Fatalf("GetServiceAccount(identity): %v", err)
+	}
+	if serviceAccount.Name != createResp.ID {
+		t.Fatalf("service account name = %q, want %q", serviceAccount.Name, createResp.ID)
+	}
+	if serviceAccount.Description != "Release Bot" {
+		t.Fatalf("service account description = %q, want %q", serviceAccount.Description, "Release Bot")
+	}
+	adminGrant, err := svc.ServiceAccountManagementGrants.GetGrant(ctx, admin.ID, createResp.ID)
+	if err != nil {
+		t.Fatalf("GetGrant(admin): %v", err)
+	}
+	if adminGrant.Role != "admin" {
+		t.Fatalf("admin management grant role = %q, want %q", adminGrant.Role, "admin")
 	}
 
 	var listResp []struct {
@@ -14133,6 +14212,13 @@ func TestManagedIdentityCRUDAndMemberships(t *testing.T) {
 	doJSONRequestAndDecode(t, http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/members", "admin-session", `{"email":"viewer@example.test","role":"viewer"}`, http.StatusOK, &memberResp)
 	if memberResp.Role != "viewer" || memberResp.Email != "viewer@example.test" {
 		t.Fatalf("member response = %+v, want viewer@example.test viewer", memberResp)
+	}
+	viewerGrant, err := svc.ServiceAccountManagementGrants.GetGrant(ctx, viewer.ID, createResp.ID)
+	if err != nil {
+		t.Fatalf("GetGrant(viewer): %v", err)
+	}
+	if viewerGrant.Role != "viewer" {
+		t.Fatalf("viewer management grant role = %q, want %q", viewerGrant.Role, "viewer")
 	}
 
 	var viewerList []struct {
@@ -14165,12 +14251,26 @@ func TestManagedIdentityCRUDAndMemberships(t *testing.T) {
 	if updateResp.DisplayName != "Release Automation" {
 		t.Fatalf("updated displayName = %q, want %q", updateResp.DisplayName, "Release Automation")
 	}
-	updatedIdentity, err := svc.ManagedIdentities.GetIdentity(context.Background(), createResp.ID)
+	updatedIdentity, err := svc.ManagedIdentities.GetIdentity(ctx, createResp.ID)
 	if err != nil {
 		t.Fatalf("GetIdentity after update: %v", err)
 	}
 	if !updatedIdentity.CreatedAt.Equal(createdIdentity.CreatedAt) {
 		t.Fatalf("createdAt changed across update: got %v want %v", updatedIdentity.CreatedAt, createdIdentity.CreatedAt)
+	}
+	serviceAccountPrincipal, err = svc.Principals.GetPrincipal(ctx, createResp.ID)
+	if err != nil {
+		t.Fatalf("GetPrincipal(identity) after update: %v", err)
+	}
+	if serviceAccountPrincipal.DisplayName != "Release Automation" {
+		t.Fatalf("identity principal display name after update = %q, want %q", serviceAccountPrincipal.DisplayName, "Release Automation")
+	}
+	serviceAccount, err = svc.ServiceAccounts.GetServiceAccount(ctx, createResp.ID)
+	if err != nil {
+		t.Fatalf("GetServiceAccount(identity) after update: %v", err)
+	}
+	if serviceAccount.Description != "Release Automation" {
+		t.Fatalf("service account description after update = %q, want %q", serviceAccount.Description, "Release Automation")
 	}
 
 	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/identities/"+createResp.ID+"/members/"+admin.Email, nil)
@@ -14195,6 +14295,18 @@ func TestManagedIdentityCRUDAndMemberships(t *testing.T) {
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("get deleted identity status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	}
+	if _, err := svc.Principals.GetPrincipal(ctx, createResp.ID); !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("GetPrincipal(identity) after delete = %v, want not found", err)
+	}
+	if _, err := svc.ServiceAccounts.GetServiceAccount(ctx, createResp.ID); !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("GetServiceAccount(identity) after delete = %v, want not found", err)
+	}
+	if _, err := svc.ServiceAccountManagementGrants.GetGrant(ctx, admin.ID, createResp.ID); !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("GetGrant(admin) after delete = %v, want not found", err)
+	}
+	if _, err := svc.ServiceAccountManagementGrants.GetGrant(ctx, viewer.ID, createResp.ID); !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("GetGrant(viewer) after delete = %v, want not found", err)
 	}
 }
 
@@ -14302,6 +14414,7 @@ func TestManagedIdentityGrantsRespectActorAuthorization(t *testing.T) {
 	t.Parallel()
 
 	svc := coretesting.NewStubServices(t)
+	ctx := context.Background()
 	admin := seedUser(t, svc, "admin@example.test")
 	seedUser(t, svc, "viewer@example.test")
 
@@ -14445,6 +14558,26 @@ func TestManagedIdentityGrantsRespectActorAuthorization(t *testing.T) {
 	if grantResp.Plugin != "gamma" || !reflect.DeepEqual(grantResp.Operations, []string{}) {
 		t.Fatalf("plugin-wide grant response = %+v, want gamma []", grantResp)
 	}
+	alphaAccess, err := svc.PrincipalPluginAccess.GetAccess(ctx, createResp.ID, "alpha")
+	if err != nil {
+		t.Fatalf("GetAccess(alpha): %v", err)
+	}
+	if alphaAccess.InvokeAllOperations {
+		t.Fatal("alpha access invoke_all_operations = true, want false")
+	}
+	if !reflect.DeepEqual(alphaAccess.Operations, []string{"read"}) {
+		t.Fatalf("alpha access operations = %+v, want [read]", alphaAccess.Operations)
+	}
+	gammaAccess, err := svc.PrincipalPluginAccess.GetAccess(ctx, createResp.ID, "gamma")
+	if err != nil {
+		t.Fatalf("GetAccess(gamma): %v", err)
+	}
+	if !gammaAccess.InvokeAllOperations {
+		t.Fatal("gamma access invoke_all_operations = false, want true")
+	}
+	if len(gammaAccess.Operations) != 0 {
+		t.Fatalf("gamma access operations = %+v, want []", gammaAccess.Operations)
+	}
 
 	req, _ = http.NewRequest(http.MethodPut, ts.URL+"/api/v1/identities/"+createResp.ID+"/grants/beta", bytes.NewBufferString(`{"operations":["read"]}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -14545,6 +14678,9 @@ func TestManagedIdentityGrantsRespectActorAuthorization(t *testing.T) {
 
 		if _, err := svc.IdentityGrants.GetGrant(context.Background(), createResp.ID, "removed-plugin"); !errors.Is(err, core.ErrNotFound) {
 			t.Fatalf("GetGrant after delete error = %v, want not found", err)
+		}
+		if _, err := svc.PrincipalPluginAccess.GetAccess(context.Background(), createResp.ID, "removed-plugin"); !errors.Is(err, core.ErrNotFound) {
+			t.Fatalf("GetAccess after delete error = %v, want not found", err)
 		}
 	})
 
