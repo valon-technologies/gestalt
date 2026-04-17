@@ -517,8 +517,7 @@ You configure a declarative plugin the same way as any other. Point the config a
 ```yaml
 plugins:
   slack-readonly:
-    source:
-      path: ./slack-readonly/manifest.yaml
+    source: ./slack-readonly/manifest.yaml
 ```
 
 ```sh
@@ -645,8 +644,7 @@ Point a local config at the source plugin. Gestalt synthesizes the executable wr
 ```yaml
 plugins:
   slack:
-    source:
-      path: ./slack/manifest.yaml
+    source: ./slack/manifest.yaml
     allowedHosts:
       - slack.com
 ```

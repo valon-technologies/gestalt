@@ -352,16 +352,14 @@ Custom S3 providers are wired into Gestalt the same way as first-party ones:
 providers:
   s3:
     assets:
-      source:
-        path: ./providers/s3/custom/manifest.yaml
+      source: ./providers/s3/custom/manifest.yaml
       config:
         endpoint: http://127.0.0.1:9000
         region: us-east-1
 
 plugins:
   media:
-    source:
-      path: ./plugins/media/manifest.yaml
+    source: ./plugins/media/manifest.yaml
     s3:
       - assets
 ```

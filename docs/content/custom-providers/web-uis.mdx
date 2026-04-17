@@ -75,21 +75,18 @@ development, point at the source manifest:
 providers:
   ui:
     dashboard:
-      source:
-        path: ./web-default/manifest.yaml
+      source: ./web-default/manifest.yaml
       path: /dashboard
       authorizationPolicy: dashboard_users
 ```
 
-For production, reference a published release by source and version:
+For production, reference a published release metadata URL:
 
 ```yaml
 providers:
   ui:
     dashboard:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/web/default
-        version: 0.0.1
+      source: https://artifacts.example.com/webui/default/v0.0.1/provider-release.yaml
       path: /dashboard
       authorizationPolicy: dashboard_users
 ```

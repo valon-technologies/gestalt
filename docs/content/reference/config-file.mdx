@@ -40,7 +40,7 @@ When multiple config files are loaded, Gestalt applies these merge rules:
 - `null` deletes an inherited key
 
 Relative file paths resolve relative to the config file that introduced them.
-That includes `source.path`, `iconFile`, and `server.artifactsDir`. Lockfiles
+That includes local `source` paths, `iconFile`, and `server.artifactsDir`. Lockfiles
 and, by default, artifact directories stay rooted at the leftmost config file.
 `--lockfile` overrides only the lockfile path.
 
@@ -59,8 +59,7 @@ server:
     port: 8080
 plugins:
   github:
-    source:
-      path: ./plugins/github/manifest.yaml
+    source: ./plugins/github/manifest.yaml
     allowedHosts:
       - api.github.com
       - uploads.github.com
@@ -187,9 +186,7 @@ Platform auth is optional. Omit the `providers.auth` block entirely to disable p
 providers:
   auth:
     google:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/auth/google
-        version: 0.0.1-alpha.1
+      source: https://artifacts.example.com/auth/google/v0.0.1-alpha.1/provider-release.yaml
       config:
         clientId: ${GOOGLE_CLIENT_ID}
         clientSecret:
@@ -212,9 +209,7 @@ Google checks `email_verified` on every login. Unverified accounts are rejected.
 providers:
   auth:
     oidc:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/auth/oidc
-        version: 0.0.1-alpha.1
+      source: https://artifacts.example.com/auth/oidc/v0.0.1-alpha.1/provider-release.yaml
       config:
         issuerUrl: https://login.example.com
         clientId: ${OIDC_CLIENT_ID}
@@ -256,8 +251,8 @@ Both `google` and `oidc` use the same ProviderEntry shape under `providers.auth.
 | Field | Description |
 | --- | --- |
 | `default` | Marks this named auth entry as the default selection when `server.providers.auth` is omitted. |
-| `source.ref` | Managed provider source address. |
-| `source.version` | Required with `source.ref`. SemVer without a leading `v`. |
+| `source` | Either a published `provider-release.yaml` metadata URL or a local provider manifest path. |
+| `auth` | Optional inline source auth. Only valid for metadata URL sources. |
 | `config` | Provider-specific config passed into the auth provider. |
 | `env` | Extra environment variables passed to the provider process. |
 | `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
@@ -274,9 +269,7 @@ server:
 providers:
   indexeddb:
     main:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
-        version: 0.0.1-alpha.1
+      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
       config:
         dsn: ${DATABASE_URL}
 ```
@@ -285,7 +278,7 @@ The exact config fields depend on the selected external indexeddb provider packa
 
 Common first-party IndexedDB packages:
 
-| Provider | Source ref | Config fields |
+| Provider | Package path | Config fields |
 | --- | --- | --- |
 | RelationalDB | `github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb` | `dsn` |
 | DynamoDB | `github.com/valon-technologies/gestalt-providers/indexeddb/dynamodb` | `table`, `region`, optional `endpoint` |
@@ -301,9 +294,7 @@ Unlike IndexedDB, caches are not selected through `server.providers`.
 providers:
   cache:
     session:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/cache/valkey
-        version: 0.0.1-alpha.1
+      source: https://artifacts.example.com/cache/valkey/v0.0.1-alpha.1/provider-release.yaml
       config:
         address: ${VALKEY_ADDR}
         database: 0
@@ -319,8 +310,8 @@ First-party cache providers are published at
 
 | Field | Description |
 | --- | --- |
-| `source.ref` | Managed provider source address. |
-| `source.version` | Required with `source.ref`. SemVer without a leading `v`. |
+| `source` | Either a published `provider-release.yaml` metadata URL or a local provider manifest path. |
+| `auth` | Optional inline source auth. Only valid for metadata URL sources. |
 | `config` | Arbitrary provider-specific config passed through to the cache provider. |
 | `env` | Extra environment variables passed to the provider process. |
 | `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
@@ -336,8 +327,7 @@ state; they are mounted only for plugin code.
 providers:
   s3:
     assets:
-      source:
-        path: ./providers/s3/minio/manifest.yaml
+      source: ./providers/s3/minio/manifest.yaml
       config:
         endpoint: http://127.0.0.1:9000
         region: us-east-1
@@ -348,8 +338,7 @@ providers:
             name: minio-root-password
 plugins:
   media:
-    source:
-      path: ./plugins/media/manifest.yaml
+    source: ./plugins/media/manifest.yaml
     s3:
       - assets
 ```
@@ -389,20 +378,18 @@ providers:
 
 ### Cloud secret backends
 
-Cloud secret managers are external providers configured with `source.ref` instead of a string `source`:
+Cloud secret managers are external providers configured with a metadata URL source:
 
 ```yaml
 providers:
   secrets:
     gsm:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/secrets/google
-        version: 0.0.1-alpha.13
+      source: https://artifacts.example.com/secrets/google/v0.0.1-alpha.13/provider-release.yaml
       config:
         project: my-gcp-project
 ```
 
-| Provider | Source ref | Config fields |
+| Provider | Package path | Config fields |
 | --- | --- | --- |
 | Google Secret Manager | `github.com/valon-technologies/gestalt-providers/secrets/google` | `project` (required), `version` |
 | AWS Secrets Manager | `github.com/valon-technologies/gestalt-providers/secrets/aws` | `region` (required), `versionStage`, `endpoint` |
@@ -625,9 +612,7 @@ plugins:
     authorizationPolicy: support_staff
     mountPath: /github
     ui: github_console
-    source:
-      ref: github.com/valon-technologies/gestalt-providers/plugins/github
-      version: 1.2.3
+    source: https://artifacts.example.com/plugin/github/v1.2.3/provider-release.yaml
     surfaces:
       openapi:
         baseUrl: https://api.github.com
@@ -675,18 +660,15 @@ binding is configured, Gestalt also sets `GESTALT_S3_SOCKET`.
 Every plugin uses a `source` block to declare its backing provider.
 
 ```yaml
-source:
-  ref: github.com/valon-technologies/gestalt-providers/plugins/github
-  version: 1.2.3
+source: https://artifacts.example.com/plugin/github/v1.2.3/provider-release.yaml
 ```
 
-`source.ref` resolves a versioned provider source during `init` using the format `github.com/<org>/<repo>/<path-after-repo>`, and requires `source.version`. `source.path` loads a local provider manifest instead. `source.path` and `source.ref` are mutually exclusive.
+For published providers, `source` points at a `provider-release.yaml` metadata URL. For local development, `source` can point directly at a provider manifest path instead.
 
 For local development with a source provider package:
 
 ```yaml
-source:
-  path: ./manifest.yaml
+source: ./manifest.yaml
 ```
 
 Gestalt synthesizes Go and Rust executable wrappers automatically when needed and runs Python source providers from the module declared in `[tool.gestalt].provider` or the legacy `[tool.gestalt].plugin`.
@@ -735,9 +717,8 @@ Gestalt synthesizes Go and Rust executable wrappers automatically when needed an
 
 | Field | Description |
 | --- | --- |
-| `source.ref` | Managed provider source address. Mutually exclusive with `source.path`. |
-| `source.version` | Required with `source.ref`. SemVer without a leading `v`. Invalid with `source.path`. |
-| `source.path` | Path to a local provider manifest. Mutually exclusive with `source.ref`. |
+| `source` | A published `provider-release.yaml` metadata URL or a local provider manifest path. |
+| `auth` | Optional inline source auth. Only valid for metadata URL sources. |
 | `env` | Extra environment variables passed to the provider process. |
 | `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
 
@@ -913,8 +894,7 @@ plugins:
       - api.github.com
       - "*.github.com"
   my-plugin:
-    source:
-      path: ./plugins/my-plugin
+    source: ./plugins/my-plugin
     allowedHosts:
       - external-api.com
 ```
@@ -936,9 +916,7 @@ sandboxed runtime rather than relying on host-specific OS wrappers alone.
 providers:
   ui:
     console:
-      source:
-        ref: github.com/your-org/your-repo/web/console
-        version: 1.0.0
+      source: https://artifacts.example.com/webui/console/v1.0.0/provider-release.yaml
       path: /console
       config:
         brandName: Acme
@@ -954,7 +932,8 @@ When `authorizationPolicy` is set on a mounted UI, the referenced web UI manifes
 | --- | --- |
 | `path` | Direct mount prefix for this UI when not bound through `plugins.<name>.mountPath`. |
 | `authorizationPolicy` | Direct policy binding for this UI when not bound through `plugins.<name>.mountPath`. |
-| `source` | A source mapping with `source.path` or `source.ref`. |
+| `source` | A published `provider-release.yaml` metadata URL or a local UI manifest path. |
+| `auth` | Optional inline source auth. Only valid for metadata URL sources. |
 | `config` | Optional UI-provider config validated against the bundle schema when present. |
 
 ## Validation rules
@@ -963,19 +942,19 @@ Structural validation runs at config load time (`init`, `validate`, `serve`). Ru
 
 ### Structural
 
-Each plugin uses a `source` block. Every plugin must use exactly one loading mode: local `source.path` or managed `source.ref`. `source.version` is required with `source.ref` and invalid with `source.path`.
+Each plugin must set `source` to exactly one loading mode: a local manifest path or a published `provider-release.yaml` metadata URL.
 
 Host-provider entries use the same ProviderEntry shape. When
 `providers.auth.<name>`, `providers.cache.<name>`,
-`providers.indexeddb.<name>`, or `providers.s3.<name>` is set, `source.ref` or
-`source.path` must be present.
+`providers.indexeddb.<name>`, or `providers.s3.<name>` is set, `source`
+must be present.
 `providers.auth.<name>.config`, `providers.cache.<name>.config`,
 `providers.indexeddb.<name>.config`, and `providers.s3.<name>.config` are only
 allowed when their corresponding source is set.
 
 Only `connections.default` may define `params` or `discovery`. All connections in a plugin must share the same mode.
 
-Each `providers.ui.<name>` entry must use exactly one loading mode: local `providers.ui.<name>.source.path` or managed `providers.ui.<name>.source.ref`. `providers.ui.<name>.source.version` is required with `providers.ui.<name>.source.ref` and invalid with `providers.ui.<name>.source.path`. `providers.ui.<name>.config` is only allowed when `providers.ui.<name>.source` is set.
+Each `providers.ui.<name>` entry must set `source` to exactly one loading mode: a local UI manifest path or a published `provider-release.yaml` metadata URL. `providers.ui.<name>.config` is only allowed when `providers.ui.<name>.source` is set.
 
 Each `plugins.<name>` entry may set `mountPath` to publish a plugin-backed UI. When `plugins.<name>.ui` is set, it must reference an existing UI bundle. When `plugins.<name>.ui` is omitted and `plugins.<name>.mountPath` is set, the plugin manifest must declare `spec.ui`. A given UI may be bound by at most one plugin entry. `plugins.<name>.mountPath` must use the same path rules as a directly mounted UI.
 

@@ -23,9 +23,7 @@ Auth providers handle platform login. They are configured under `providers.auth.
 providers:
   auth:
     google:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/auth/google
-        version: 0.0.1-alpha.1
+      source: https://artifacts.example.com/auth/google/v0.0.1-alpha.1/provider-release.yaml
       config:
         allowedDomains:
           - example.com
@@ -45,9 +43,7 @@ server:
 providers:
   indexeddb:
     main:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
-        version: 0.0.1-alpha.1
+      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
       config:
         dsn: ${DATABASE_URL}
 ```
@@ -68,9 +64,7 @@ configured under named entries in `providers.s3`, then bound into plugins with
 providers:
   s3:
     assets:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/s3/s3
-        version: 0.0.1-alpha.1
+      source: https://artifacts.example.com/s3/s3/v0.0.1-alpha.1/provider-release.yaml
       config:
         region: us-east-1
         endpoint: https://s3.us-east-1.amazonaws.com
@@ -83,8 +77,7 @@ providers:
 
 plugins:
   media:
-    source:
-      path: ./plugins/media/manifest.yaml
+    source: ./plugins/media/manifest.yaml
     s3:
       - assets
 ```
@@ -126,11 +119,9 @@ Plugins (BigQuery, Jira, Slack, and others) are published separately from [`valo
 ```yaml
 plugins:
   jira:
-    source:
-      ref: github.com/valon-technologies/gestalt-providers/plugins/jira
-      version: 0.0.1-alpha.1
+    source: https://artifacts.example.com/plugin/jira/v0.0.1-alpha.1/provider-release.yaml
 ```
 
 ## Community and Custom Providers
 
-Third-party auth providers, datastore providers, and plugins use the same provider package model as the first-party packages. Package your implementation with a provider manifest that includes the appropriate `kind` and `spec` block, publish it to a Git-accessible source, and reference it in your config the same way you would reference any first-party provider.
+Third-party auth providers, datastore providers, and plugins use the same provider package model as the first-party packages. Package your implementation with a provider manifest that includes the appropriate `kind` and `spec` block, publish a release with `provider-release.yaml`, and reference that metadata URL in config the same way you would reference any first-party provider.

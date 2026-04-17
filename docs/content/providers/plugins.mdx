@@ -12,7 +12,7 @@ fully declarative, and some are hybrid packages that combine both models.
 
 From a deployment point of view, the important pieces are:
 
-- `source.path` or `source.ref` to choose the package
+- `source` to choose the package, using either a local manifest path or a published `provider-release.yaml` metadata URL
 - `config` for provider-specific settings such as OAuth app credentials
 - `allowedOperations` to publish only part of a large catalog
 - `allowedHosts` to declare outbound egress policy
@@ -26,7 +26,7 @@ First-party plugins live under
 [`valon-technologies/gestalt-providers/plugins`](https://github.com/valon-technologies/gestalt-providers/tree/main/plugins).
 Examples include:
 
-| Plugin | Repository | Source ref |
+| Plugin | Repository | Package path |
 | --- | --- | --- |
 | GitHub | [`plugins/github`](https://github.com/valon-technologies/gestalt-providers/tree/main/plugins/github) | `github.com/valon-technologies/gestalt-providers/plugins/github` |
 | Jira | [`plugins/jira`](https://github.com/valon-technologies/gestalt-providers/tree/main/plugins/jira) | `github.com/valon-technologies/gestalt-providers/plugins/jira` |
@@ -41,9 +41,7 @@ their package layouts.
 plugins:
   github:
     displayName: GitHub
-    source:
-      ref: github.com/valon-technologies/gestalt-providers/plugins/github
-      version: 0.0.1-alpha.1
+    source: https://artifacts.example.com/plugin/github/v0.0.1-alpha.1/provider-release.yaml
     config:
       apiBaseUrl: https://api.github.com
       clientId: ${GITHUB_CLIENT_ID}
@@ -58,8 +56,7 @@ During local development, point at a source manifest instead:
 ```yaml
 plugins:
   support:
-    source:
-      path: ./plugins/support/manifest.yaml
+    source: ./plugins/support/manifest.yaml
 ```
 
 ## Connections and credentials
@@ -85,9 +82,7 @@ Use `allowedOperations` to publish only a subset of a large plugin catalog:
 ```yaml
 plugins:
   support:
-    source:
-      ref: github.com/acme/providers/support
-      version: 2.4.0
+    source: https://artifacts.example.com/plugin/support/v2.4.0/provider-release.yaml
     allowedOperations:
       tickets.list:
         alias: list_tickets

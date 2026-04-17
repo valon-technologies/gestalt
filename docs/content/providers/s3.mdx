@@ -46,9 +46,7 @@ The first-party package lives at
 providers:
   s3:
     assets:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/s3/s3
-        version: 0.0.1-alpha.1
+      source: https://artifacts.example.com/s3/s3/v0.0.1-alpha.1/provider-release.yaml
       config:
         region: us-east-1
         endpoint: https://s3.us-east-1.amazonaws.com
@@ -61,8 +59,7 @@ providers:
 
 plugins:
   media:
-    source:
-      path: ./plugins/media/manifest.yaml
+    source: ./plugins/media/manifest.yaml
     s3:
       - assets
 ```
@@ -87,9 +84,7 @@ HMAC credentials:
 providers:
   s3:
     archive:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/s3/s3
-        version: 0.0.1-alpha.1
+      source: https://artifacts.example.com/s3/s3/v0.0.1-alpha.1/provider-release.yaml
       config:
         region: auto
         endpoint: https://storage.googleapis.com
