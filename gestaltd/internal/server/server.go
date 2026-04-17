@@ -60,73 +60,75 @@ type BuiltinAdminUIOptions struct {
 }
 
 type Server struct {
-	router               chi.Router
-	handler              http.Handler
-	auth                 core.AuthProvider
-	auditSink            core.AuditSink
-	users                *coredata.UserService
-	tokens               *coredata.TokenService
-	apiTokens            *coredata.APITokenService
-	managedIdentities    *coredata.ManagedIdentityService
-	identityMemberships  *coredata.ManagedIdentityMembershipService
-	identityGrants       *coredata.ManagedIdentityGrantService
-	pluginAuthorizations *coredata.PluginAuthorizationService
-	adminAuthorizations  *coredata.AdminAuthorizationService
-	managedIdentityMu    sync.Mutex
-	providers            *registry.ProviderMap[core.Provider]
-	resolver             *principal.Resolver
-	invoker              invocation.Invoker
-	defaultConnection    map[string]string
-	catalogConnection    map[string]string
-	connectionAuth       func() map[string]map[string]bootstrap.OAuthHandler
-	pluginDefs           map[string]*config.ProviderEntry
-	authorizer           authorization.RuntimeAuthorizer
-	noAuth               bool
-	anonymousPrincipal   *principal.Principal
-	publicBaseURL        string
-	managementBaseURL    string
-	secureCookies        bool
-	encryptor            *cryptoutil.AESGCMEncryptor
-	sessionIssuer        []byte
-	stateCodec           *integrationOAuthStateCodec
-	apiTokenTTL          time.Duration
-	now                  func() time.Time
-	readiness            ReadinessChecker
-	prometheusMetrics    http.Handler
-	mcpHandler           http.Handler
-	mountedWebUIs        []MountedWebUI
-	adminRoute           AdminRouteConfig
-	adminUI              http.Handler
-	routeProfile         RouteProfile
+	router                chi.Router
+	handler               http.Handler
+	auth                  core.AuthProvider
+	auditSink             core.AuditSink
+	users                 *coredata.UserService
+	tokens                *coredata.TokenService
+	apiTokens             *coredata.APITokenService
+	managedIdentities     *coredata.ManagedIdentityService
+	identityMemberships   *coredata.ManagedIdentityMembershipService
+	identityGrants        *coredata.ManagedIdentityGrantService
+	pluginAuthorizations  *coredata.PluginAuthorizationService
+	adminAuthorizations   *coredata.AdminAuthorizationService
+	authorizationProvider core.AuthorizationProvider
+	managedIdentityMu     sync.Mutex
+	providers             *registry.ProviderMap[core.Provider]
+	resolver              *principal.Resolver
+	invoker               invocation.Invoker
+	defaultConnection     map[string]string
+	catalogConnection     map[string]string
+	connectionAuth        func() map[string]map[string]bootstrap.OAuthHandler
+	pluginDefs            map[string]*config.ProviderEntry
+	authorizer            authorization.RuntimeAuthorizer
+	noAuth                bool
+	anonymousPrincipal    *principal.Principal
+	publicBaseURL         string
+	managementBaseURL     string
+	secureCookies         bool
+	encryptor             *cryptoutil.AESGCMEncryptor
+	sessionIssuer         []byte
+	stateCodec            *integrationOAuthStateCodec
+	apiTokenTTL           time.Duration
+	now                   func() time.Time
+	readiness             ReadinessChecker
+	prometheusMetrics     http.Handler
+	mcpHandler            http.Handler
+	mountedWebUIs         []MountedWebUI
+	adminRoute            AdminRouteConfig
+	adminUI               http.Handler
+	routeProfile          RouteProfile
 }
 
 type Config struct {
-	Auth              core.AuthProvider
-	AuditSink         core.AuditSink
-	Services          *coredata.Services
-	Providers         *registry.ProviderMap[core.Provider]
-	Invoker           invocation.Invoker
-	DefaultConnection map[string]string
-	CatalogConnection map[string]string
-	ConnectionAuth    func() map[string]map[string]bootstrap.OAuthHandler
-	PluginDefs        map[string]*config.ProviderEntry
-	ProviderUIs       map[string]*config.UIEntry
-	Authorizer        authorization.RuntimeAuthorizer
-	PublicBaseURL     string
-	ManagementBaseURL string
-	SecureCookies     bool
-	StateSecret       []byte
-	APITokenTTL       time.Duration
-	Now               func() time.Time
-	Readiness         ReadinessChecker
-	PrometheusMetrics http.Handler
-	MCPHandler        http.Handler
-	MountedWebUIs     []MountedWebUI
-	Admin             AdminRouteConfig
-	AdminUI           http.Handler
-	BuiltinAdminUI    *BuiltinAdminUIOptions
-	RouteProfile      RouteProfile
-	MeterProvider     metric.MeterProvider
+	Auth                  core.AuthProvider
+	AuditSink             core.AuditSink
+	Services              *coredata.Services
+	Providers             *registry.ProviderMap[core.Provider]
+	Invoker               invocation.Invoker
+	DefaultConnection     map[string]string
+	CatalogConnection     map[string]string
+	ConnectionAuth        func() map[string]map[string]bootstrap.OAuthHandler
+	PluginDefs            map[string]*config.ProviderEntry
+	ProviderUIs           map[string]*config.UIEntry
+	Authorizer            authorization.RuntimeAuthorizer
+	AuthorizationProvider core.AuthorizationProvider
+	PublicBaseURL         string
+	ManagementBaseURL     string
+	SecureCookies         bool
+	StateSecret           []byte
+	APITokenTTL           time.Duration
+	Now                   func() time.Time
+	Readiness             ReadinessChecker
+	PrometheusMetrics     http.Handler
+	MCPHandler            http.Handler
+	MountedWebUIs         []MountedWebUI
+	Admin                 AdminRouteConfig
+	AdminUI               http.Handler
+	BuiltinAdminUI        *BuiltinAdminUIOptions
+	RouteProfile          RouteProfile
+	MeterProvider         metric.MeterProvider
 }
 
 func New(cfg Config) (*Server, error) {
@@ -196,42 +198,43 @@ func New(cfg Config) (*Server, error) {
 		otelOptions = append(otelOptions, otelhttp.WithMeterProvider(cfg.MeterProvider))
 	}
 	s := &Server{
-		router:               router,
-		handler:              withRequestMeterProvider(otelhttp.NewHandler(router, "gestaltd", otelOptions...), cfg.MeterProvider),
-		auth:                 cfg.Auth,
-		auditSink:            cfg.AuditSink,
-		users:                users,
-		tokens:               tokens,
-		apiTokens:            apiTokens,
-		managedIdentities:    managedIdentities,
-		identityMemberships:  identityMemberships,
-		identityGrants:       identityGrants,
-		pluginAuthorizations: pluginAuthorizations,
-		adminAuthorizations:  adminAuthorizations,
-		providers:            cfg.Providers,
-		resolver:             resolver,
-		invoker:              cfg.Invoker,
-		defaultConnection:    cfg.DefaultConnection,
-		catalogConnection:    cfg.CatalogConnection,
-		connectionAuth:       cfg.ConnectionAuth,
-		pluginDefs:           cfg.PluginDefs,
-		authorizer:           cfg.Authorizer,
-		noAuth:               noAuth,
-		publicBaseURL:        strings.TrimRight(cfg.PublicBaseURL, "/"),
-		managementBaseURL:    strings.TrimRight(cfg.ManagementBaseURL, "/"),
-		secureCookies:        cfg.SecureCookies,
-		encryptor:            encryptor,
-		sessionIssuer:        cfg.StateSecret,
-		stateCodec:           stateCodec,
-		apiTokenTTL:          cfg.APITokenTTL,
-		now:                  now,
-		readiness:            cfg.Readiness,
-		prometheusMetrics:    cfg.PrometheusMetrics,
-		mcpHandler:           cfg.MCPHandler,
-		mountedWebUIs:        mountedWebUIs,
-		adminRoute:           adminRoute,
-		adminUI:              adminUI,
-		routeProfile:         cfg.RouteProfile,
+		router:                router,
+		handler:               withRequestMeterProvider(otelhttp.NewHandler(router, "gestaltd", otelOptions...), cfg.MeterProvider),
+		auth:                  cfg.Auth,
+		auditSink:             cfg.AuditSink,
+		users:                 users,
+		tokens:                tokens,
+		apiTokens:             apiTokens,
+		managedIdentities:     managedIdentities,
+		identityMemberships:   identityMemberships,
+		identityGrants:        identityGrants,
+		pluginAuthorizations:  pluginAuthorizations,
+		adminAuthorizations:   adminAuthorizations,
+		authorizationProvider: cfg.AuthorizationProvider,
+		providers:             cfg.Providers,
+		resolver:              resolver,
+		invoker:               cfg.Invoker,
+		defaultConnection:     cfg.DefaultConnection,
+		catalogConnection:     cfg.CatalogConnection,
+		connectionAuth:        cfg.ConnectionAuth,
+		pluginDefs:            cfg.PluginDefs,
+		authorizer:            cfg.Authorizer,
+		noAuth:                noAuth,
+		publicBaseURL:         strings.TrimRight(cfg.PublicBaseURL, "/"),
+		managementBaseURL:     strings.TrimRight(cfg.ManagementBaseURL, "/"),
+		secureCookies:         cfg.SecureCookies,
+		encryptor:             encryptor,
+		sessionIssuer:         cfg.StateSecret,
+		stateCodec:            stateCodec,
+		apiTokenTTL:           cfg.APITokenTTL,
+		now:                   now,
+		readiness:             cfg.Readiness,
+		prometheusMetrics:     cfg.PrometheusMetrics,
+		mcpHandler:            cfg.MCPHandler,
+		mountedWebUIs:         mountedWebUIs,
+		adminRoute:            adminRoute,
+		adminUI:               adminUI,
+		routeProfile:          cfg.RouteProfile,
 	}
 	if noAuth {
 		s.anonymousPrincipal = resolver.ResolveEmail(anonymousEmail)

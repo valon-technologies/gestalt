@@ -7,8 +7,8 @@ multiple `--config` flags, Gestalt merges them left-to-right before validation
 and bootstrap. The top-level keys are `server` (listener, encryption, egress,
 and host-provider selection), `authorization` (shared human/workload access
 policy), `providers` (named auth, secrets, telemetry, audit, UI, indexeddb,
-cache, and s3 entries), and `plugins` (executable integrations and optional
-plugin-backed UI mounts):
+authorization, cache, and s3 entries), and `plugins` (executable integrations
+and optional plugin-backed UI mounts):
 
 ```yaml
 server:
@@ -23,6 +23,7 @@ providers:
   audit: {}
   ui: {}
   indexeddb: {}
+  authorization: {}
   cache: {}
   s3: {}
 plugins: {}
@@ -110,6 +111,7 @@ server:
   providers:
     auth: google
     indexeddb: main
+    authorization: indexeddb
 authorization:
   policies:
     support_staff:
@@ -169,7 +171,7 @@ Dynamic human grants are plugin-scoped, not policy-scoped. When a plugin sets `a
 | `encryptionKey` | | **Required.** Root encryption key. Typically a structured secret ref. |
 | `apiTokenTtl` | `30d` | Lifetime of newly issued API tokens. Go durations or day suffixes (`30d`). |
 | `artifactsDir` | config directory | Directory for prepared `init` artifacts. |
-| `providers.auth` / `providers.secrets` / `providers.telemetry` / `providers.audit` / `providers.indexeddb` | | Optional selectors for the named host-provider entries under `providers.*`. Required for IndexedDB whenever more than one entry exists and recommended for other host-provider maps when more than one entry exists. |
+| `providers.auth` / `providers.secrets` / `providers.telemetry` / `providers.audit` / `providers.indexeddb` / `providers.authorization` | | Optional selectors for the named host-provider entries under `providers.*`. Required for IndexedDB whenever more than one entry exists and recommended for other host-provider maps when more than one entry exists. |
 | `admin.authorizationPolicy` | | Shared human access policy applied to the built-in `/admin` route. |
 | `admin.allowedRoles` | `[admin]` | Roles allowed to load the built-in `/admin` route when `admin.authorizationPolicy` is set. |
 | `authorization.policies` | | Shared human access policies resolved by `subjectID` or `email`. |
@@ -290,6 +292,47 @@ Common first-party IndexedDB packages:
 | RelationalDB | `github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb` | `dsn` |
 | DynamoDB | `github.com/valon-technologies/gestalt-providers/indexeddb/dynamodb` | `table`, `region`, optional `endpoint` |
 | MongoDB | `github.com/valon-technologies/gestalt-providers/indexeddb/mongodb` | `uri`, optional `database` |
+
+## `providers.authorization`
+
+Authorization providers are host-scoped policy engines and relationship stores. Configure one or more named entries under `providers.authorization`, then set `server.providers.authorization` to the name Gestalt should use for human authorization decisions, model lifecycle, and built-in admin authorization inspection. First-party authorization providers are published at `github.com/valon-technologies/gestalt-providers/authorization/<name>`.
+
+```yaml
+server:
+  providers:
+    indexeddb: main
+    authorization: indexeddb
+
+providers:
+  indexeddb:
+    main:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
+      config:
+        dsn: ${DATABASE_URL}
+
+  authorization:
+    indexeddb:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/authorization/indexeddb
+        version: 0.0.1-alpha.1
+      config:
+        indexeddb: main
+```
+
+Authorization providers are optional. When omitted, Gestalt keeps using the in-process authorization engine only. When configured, Gestalt mirrors static and dynamic human authorization state into the selected provider and uses that provider for runtime human-access checks plus the built-in admin authorization debug APIs under `/admin/api/v1/authorization/...`.
+
+The exact config fields depend on the selected authorization provider package. The first-party `authorization/indexeddb` provider expects the name of a host IndexedDB provider and stores authorization models plus relationships there.
+
+| Field | Description |
+| --- | --- |
+| `default` | Marks this named authorization entry as the default selection when `server.providers.authorization` is omitted. |
+| `source.ref` | Managed provider source address. |
+| `source.version` | Required with `source.ref`. SemVer without a leading `v`. |
+| `config` | Provider-specific config passed into the authorization provider. |
+| `env` | Extra environment variables passed to the provider process. |
+| `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
 
 ## `providers.cache`
 

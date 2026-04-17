@@ -70,15 +70,16 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		// HTTP routes expose REST-visible operations, so unqualified session-catalog
 		// resolution should follow the API surface by default. The MCP server keeps
 		// its own MCP-specific routing below.
-		CatalogConnection: httpCatalogConnectionMap(connMaps),
-		ConnectionAuth:    result.ConnectionAuth,
-		PluginDefs:        cfg.Plugins,
-		Authorizer:        result.Authorizer,
-		PublicBaseURL:     cfg.Server.BaseURL,
-		ManagementBaseURL: cfg.Server.ManagementBaseURL(),
-		SecureCookies:     strings.HasPrefix(cfg.Server.BaseURL, "https://"),
-		StateSecret:       crypto.DeriveKey(cfg.Server.EncryptionKey),
-		APITokenTTL:       apiTokenTTL,
+		CatalogConnection:     httpCatalogConnectionMap(connMaps),
+		ConnectionAuth:        result.ConnectionAuth,
+		PluginDefs:            cfg.Plugins,
+		Authorizer:            result.Authorizer,
+		AuthorizationProvider: result.AuthorizationProvider,
+		PublicBaseURL:         cfg.Server.BaseURL,
+		ManagementBaseURL:     cfg.Server.ManagementBaseURL(),
+		SecureCookies:         strings.HasPrefix(cfg.Server.BaseURL, "https://"),
+		StateSecret:           crypto.DeriveKey(cfg.Server.EncryptionKey),
+		APITokenTTL:           apiTokenTTL,
 		Readiness: func() string {
 			select {
 			case <-result.ProvidersReady:
