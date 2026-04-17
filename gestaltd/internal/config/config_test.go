@@ -1052,6 +1052,43 @@ plugins:
 			t.Fatalf("config round-tripped auth = %#v", plugin["auth"])
 		}
 	})
+
+	t.Run("apiVersion preserves builtin scalar host provider sources", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+apiVersion: gestaltd.config/v3
+providers:
+  secrets:
+    default:
+      source: file
+      config:
+        dir: /tmp/gestalt-secrets
+  telemetry:
+    default:
+      source: otlp
+      config:
+        endpoint: otel-collector:4317
+plugins:
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		if got := cfg.Providers.Secrets["default"].Source.Builtin; got != "file" {
+			t.Fatalf("secrets builtin = %q, want %q", got, "file")
+		}
+		if got := cfg.Providers.Telemetry["default"].Source.Builtin; got != "otlp" {
+			t.Fatalf("telemetry builtin = %q, want %q", got, "otlp")
+		}
+		if cfg.Providers.Secrets["default"].Source.Path != "" {
+			t.Fatalf("secrets path = %q, want empty", cfg.Providers.Secrets["default"].Source.Path)
+		}
+		if cfg.Providers.Telemetry["default"].Source.Path != "" {
+			t.Fatalf("telemetry path = %q, want empty", cfg.Providers.Telemetry["default"].Source.Path)
+		}
+	})
 }
 
 func TestLoadConfigUIEntries(t *testing.T) {

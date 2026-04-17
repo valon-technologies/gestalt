@@ -1563,7 +1563,10 @@ func normalizeProviderSource(kind string, source *ProviderSource, useV3Classific
 func isBuiltinScalarSource(kind, source string) bool {
 	switch kind {
 	case providermanifestv1.KindSecrets:
-		return source == "env"
+		switch source {
+		case "env", "file":
+			return true
+		}
 	case string(HostProviderKindTelemetry):
 		switch source {
 		case "noop", "stdout", "otlp":
