@@ -14,6 +14,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
+	"gopkg.in/yaml.v3"
 )
 
 func runProvider(args []string) error {
@@ -37,6 +38,13 @@ const defaultPlatforms = "darwin/amd64,darwin/arm64,linux/amd64,linux/arm,linux/
 const allPlatformsValue = "all"
 const defaultReleaseOutputDir = "dist/"
 const releaseBinaryPrefix = "gestalt-plugin-"
+const providerReleaseMetadataFile = "provider-release.yaml"
+const providerReleaseSchemaName = "gestaltd-provider-release"
+const providerReleaseSchemaVersion = 1
+const providerReleaseRuntimeKindExecutable = "executable"
+const providerReleaseRuntimeKindDeclarative = "declarative"
+const providerReleaseRuntimeKindWebUI = "webui"
+const providerReleaseGenericTarget = "generic"
 const windowsOS = "windows"
 const windowsExecutableSuffix = ".exe"
 
@@ -47,6 +55,27 @@ type releasePlatform struct {
 
 type releaseBuildTarget struct {
 	Kind string
+}
+
+type releaseArchive struct {
+	Path     string
+	SHA256   string
+	Platform *releasePlatform
+}
+
+type providerReleaseMetadata struct {
+	Schema        string                             `yaml:"schema"`
+	SchemaVersion int                                `yaml:"schemaVersion"`
+	Package       string                             `yaml:"package"`
+	Kind          string                             `yaml:"kind"`
+	Version       string                             `yaml:"version"`
+	Runtime       string                             `yaml:"runtime"`
+	Artifacts     map[string]providerReleaseArtifact `yaml:"artifacts,omitempty"`
+}
+
+type providerReleaseArtifact struct {
+	Path   string `yaml:"path"`
+	SHA256 string `yaml:"sha256"`
 }
 
 func runProviderRelease(args []string) error {
@@ -114,25 +143,37 @@ func runProviderRelease(args []string) error {
 		return err
 	}
 
-	var archivePaths []string
+	var releaseArchives []releaseArchive
 	if len(buildPlatforms) > 0 {
 		for _, platform := range buildPlatforms {
 			archivePath, err := buildPlatformArchive(manifestPath, pluginName, *version, buildTarget.Kind, platform, *outputDir)
 			if err != nil {
 				return fmt.Errorf("build %s: %w", providerpkg.PlatformString(platform.GOOS, platform.GOARCH), err)
 			}
-			archivePaths = append(archivePaths, archivePath)
+			plat := platform
+			releaseArchive, err := describeReleaseArchive(archivePath, &plat)
+			if err != nil {
+				return err
+			}
+			releaseArchives = append(releaseArchives, releaseArchive)
 		}
 	} else {
 		archivePath, err := buildSourceArchive(manifestPath, pluginName, *version, *outputDir)
 		if err != nil {
 			return err
 		}
-		archivePaths = append(archivePaths, archivePath)
+		releaseArchive, err := describeReleaseArchive(archivePath, nil)
+		if err != nil {
+			return err
+		}
+		releaseArchives = append(releaseArchives, releaseArchive)
 	}
 
-	if err := writeChecksums(*outputDir, archivePaths); err != nil {
+	if err := writeChecksums(*outputDir, releaseArchives); err != nil {
 		return fmt.Errorf("write checksums: %w", err)
+	}
+	if err := writeProviderReleaseMetadata(*outputDir, releaseManifest, *version, releaseArchives); err != nil {
+		return fmt.Errorf("write release metadata: %w", err)
 	}
 
 	return nil
@@ -351,14 +392,10 @@ func releaseBinaryName(pluginName, goos string) string {
 	return binaryName
 }
 
-func writeChecksums(dir string, archivePaths []string) error {
+func writeChecksums(dir string, archives []releaseArchive) error {
 	var lines []string
-	for _, archivePath := range archivePaths {
-		digest, err := providerpkg.ArchiveDigest(archivePath)
-		if err != nil {
-			return err
-		}
-		lines = append(lines, fmt.Sprintf("%s  %s", digest, filepath.Base(archivePath)))
+	for _, archive := range archives {
+		lines = append(lines, fmt.Sprintf("%s  %s", archive.SHA256, filepath.Base(archive.Path)))
 	}
 
 	if len(lines) == 0 {
@@ -374,6 +411,94 @@ func writeChecksums(dir string, archivePaths []string) error {
 	return nil
 }
 
+func describeReleaseArchive(path string, platform *releasePlatform) (releaseArchive, error) {
+	digest, err := providerpkg.ArchiveDigest(path)
+	if err != nil {
+		return releaseArchive{}, fmt.Errorf("hash release archive %s: %w", path, err)
+	}
+	return releaseArchive{
+		Path:     path,
+		SHA256:   digest,
+		Platform: platform,
+	}, nil
+}
+
+func writeProviderReleaseMetadata(dir string, manifest *providermanifestv1.Manifest, version string, archives []releaseArchive) error {
+	metadata, err := buildProviderReleaseMetadata(manifest, version, archives)
+	if err != nil {
+		return err
+	}
+	data, err := yaml.Marshal(metadata)
+	if err != nil {
+		return fmt.Errorf("encode %s: %w", providerReleaseMetadataFile, err)
+	}
+	path := filepath.Join(dir, providerReleaseMetadataFile)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintf(os.Stdout, "created %s\n", path)
+	return nil
+}
+
+func buildProviderReleaseMetadata(manifest *providermanifestv1.Manifest, version string, archives []releaseArchive) (*providerReleaseMetadata, error) {
+	if manifest == nil {
+		return nil, fmt.Errorf("manifest is required")
+	}
+
+	runtime, err := releaseRuntimeMetadata(manifest)
+	if err != nil {
+		return nil, err
+	}
+
+	metadata := &providerReleaseMetadata{
+		Schema:        providerReleaseSchemaName,
+		SchemaVersion: providerReleaseSchemaVersion,
+		Package:       manifest.Source,
+		Kind:          manifest.Kind,
+		Version:       version,
+		Runtime:       runtime,
+		Artifacts:     make(map[string]providerReleaseArtifact, len(archives)),
+	}
+	for _, archive := range archives {
+		metadata.Artifacts[providerReleaseArtifactTarget(manifest, archive)] = providerReleaseArtifact{
+			Path:   filepath.Base(archive.Path),
+			SHA256: archive.SHA256,
+		}
+	}
+	return metadata, nil
+}
+
+func providerReleaseArtifactTarget(manifest *providermanifestv1.Manifest, archive releaseArchive) string {
+	if archive.Platform == nil {
+		if manifest != nil && len(manifest.Artifacts) == 1 {
+			artifact := manifest.Artifacts[0]
+			if artifact.OS != "" && artifact.Arch != "" {
+				return providerpkg.PlatformString(artifact.OS, artifact.Arch)
+			}
+		}
+		return providerReleaseGenericTarget
+	}
+	return providerpkg.PlatformString(archive.Platform.GOOS, archive.Platform.GOARCH)
+}
+
+func releaseRuntimeMetadata(manifest *providermanifestv1.Manifest) (string, error) {
+	kind, err := providerpkg.ManifestKind(manifest)
+	if err != nil {
+		return "", err
+	}
+
+	switch kind {
+	case providermanifestv1.KindPlugin:
+		if manifest.IsDeclarativeOnlyProvider() {
+			return providerReleaseRuntimeKindDeclarative, nil
+		}
+		return providerReleaseRuntimeKindExecutable, nil
+	case providermanifestv1.KindWebUI:
+		return providerReleaseRuntimeKindWebUI, nil
+	default:
+		return providerReleaseRuntimeKindExecutable, nil
+	}
+}
 func validateReleaseOutputDir(manifest *providermanifestv1.Manifest, sourceDir, outputDir string) error {
 	if manifest == nil || manifest.Spec == nil || manifest.Spec.AssetRoot == "" {
 		return nil

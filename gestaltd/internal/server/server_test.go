@@ -12230,6 +12230,82 @@ func TestRefresh_UsesConnectionAuthHandlers(t *testing.T) {
 	}
 }
 
+func TestRefresh_UsesResolvedConnectionTokenURL(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	expired := time.Now().Add(-1 * time.Hour)
+	seedToken(t, svc, &core.IntegrationToken{
+		ID:           "tok1",
+		UserID:       u.ID,
+		Integration:  "fake",
+		Connection:   "default",
+		Instance:     "default",
+		AccessToken:  "old-token",
+		RefreshToken: "old-refresh",
+		ExpiresAt:    &expired,
+		MetadataJSON: `{"tenant":"acme"}`,
+	})
+
+	var refreshedURL string
+	var refreshedToken string
+	var usedToken string
+	stub := &stubOAuthIntegration{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N: "fake",
+				ExecuteFn: func(_ context.Context, _ string, _ map[string]any, token string) (*core.OperationResult, error) {
+					usedToken = token
+					return &core.OperationResult{Status: http.StatusOK, Body: `{"ok":true}`}, nil
+				},
+			},
+			ops: []core.Operation{{Name: "list", Description: "List", Method: http.MethodGet}},
+		},
+	}
+	handler := &testOAuthHandler{
+		tokenURLVal: "https://{tenant}.example.com/oauth/token",
+		refreshTokenFn: func(context.Context, string) (*core.TokenResponse, error) {
+			t.Fatal("expected refresh to use resolved token URL override")
+			return nil, nil
+		},
+		refreshTokenWithURLFn: func(_ context.Context, rt, tokenURL string) (*core.TokenResponse, error) {
+			refreshedToken = rt
+			refreshedURL = tokenURL
+			return &core.TokenResponse{AccessToken: "refreshed-token", ExpiresIn: 3600}, nil
+		},
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.DefaultConnection = map[string]string{"fake": testDefaultConnection}
+		cfg.ConnectionAuth = testConnectionAuth("fake", handler)
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/fake/list", nil)
+	req.Header.Set("X-Dev-User-Email", "dev@example.com")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if refreshedToken != "old-refresh" {
+		t.Fatalf("expected refresh token old-refresh, got %q", refreshedToken)
+	}
+	if refreshedURL != "https://acme.example.com/oauth/token" {
+		t.Fatalf("expected resolved token URL, got %q", refreshedURL)
+	}
+	if usedToken != "refreshed-token" {
+		t.Fatalf("expected operation to use refreshed token, got %q", usedToken)
+	}
+}
+
 func newMCPHandler(t *testing.T, providers *registry.ProviderMap[core.Provider], svc *coredata.Services, auditSink core.AuditSink, authorizer *authorization.Authorizer) http.Handler {
 	t.Helper()
 	brokerOpts := []invocation.BrokerOption{}
