@@ -1369,7 +1369,7 @@ func TestRun_PluginReleaseStagesOwnedWebUIPackage(t *testing.T) {
 
 			configDir := t.TempDir()
 			configPath := writeManagedPluginConfigForTest(t, configDir, "roadmap", releaseServer.URL+"/provider-release.yaml", "/create-customer-roadmap-review")
-			lc := operator.NewLifecycle(nil).WithHTTPClient(releaseServer.Client())
+			lc := operator.NewLifecycle().WithHTTPClient(releaseServer.Client())
 			if _, err := lc.InitAtPath(configPath); err != nil {
 				t.Fatalf("InitAtPath: %v", err)
 			}
@@ -3020,7 +3020,7 @@ func newSourceProviderReleaseFixtureWithOwnedUI(t *testing.T, dir string) string
 	if err != nil {
 		t.Fatalf("ReadSourceManifestFile(%s): %v", providerpkg.ManifestFile, err)
 	}
-	manifest.Spec.UI = &providermanifestv1.OwnedUIRef{Path: "../roadmap-ui/" + providerpkg.ManifestFile}
+	manifest.Spec.UI = &providermanifestv1.OwnedUI{Path: "../roadmap-ui/" + providerpkg.ManifestFile}
 	writeReleaseTestManifest(t, pluginDir, manifest)
 
 	return pluginDir
@@ -3058,7 +3058,7 @@ func newSourceProviderReleaseFixtureWithBuiltOwnedUI(t *testing.T, dir string) s
 	if err != nil {
 		t.Fatalf("ReadSourceManifestFile(%s): %v", providerpkg.ManifestFile, err)
 	}
-	manifest.Spec.UI = &providermanifestv1.OwnedUIRef{Path: "../roadmap-ui/" + providerpkg.ManifestFile}
+	manifest.Spec.UI = &providermanifestv1.OwnedUI{Path: "../roadmap-ui/" + providerpkg.ManifestFile}
 	writeReleaseTestManifest(t, pluginDir, manifest)
 
 	return pluginDir

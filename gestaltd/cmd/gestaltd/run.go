@@ -208,8 +208,8 @@ func providerEntryLabel(entry *config.ProviderEntry) string {
 	switch {
 	case entry == nil:
 		return "(not set)"
-	case entry.Source.IsManaged():
-		return entry.Source.Ref
+	case entry.Source.IsMetadataURL():
+		return entry.Source.MetadataURL()
 	case entry.Source.IsLocal():
 		return entry.Source.Path
 	case entry.Source.IsBuiltin():
@@ -277,7 +277,7 @@ func printInitUsage(w io.Writer) {
 	writeUsageLine(w, "Usage:")
 	writeUsageLine(w, "  gestaltd init [--config PATH]... [--artifacts-dir PATH] [--lockfile PATH] [--platform PLATFORMS]")
 	writeUsageLine(w, "")
-	writeUsageLine(w, "Resolve managed plugin sources and write lock state.")
+	writeUsageLine(w, "Resolve remote plugin sources and write lock state.")
 	writeUsageLine(w, "By default, creates gestalt.lock.json in the config directory and prepared artifacts")
 	writeUsageLine(w, "in the artifacts directory. The lockfile records archive URLs for all")
 	writeUsageLine(w, "discovered platforms and verified SHA256 hashes for the current platform.")

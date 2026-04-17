@@ -932,7 +932,7 @@ func TestPluginManifestNamedOAuthKeepsProviderTokenMode(t *testing.T) {
 			"echoauth": {
 				Command:           bin,
 				Args:              []string{"provider"},
-				Source:            config.ProviderSource{Ref: "github.com/acme/plugins/test", Version: "1.0.0"},
+				Source:            config.NewMetadataSource("https://example.invalid/github-com-acme-plugins-test/v1.0.0/provider-release.yaml"),
 				DefaultConnection: "workspace",
 				Connections: map[string]*config.ConnectionDef{
 					"workspace": {
@@ -978,7 +978,7 @@ func TestPreparedProviderStub_UsesManifestConnectionPlanMode(t *testing.T) {
 	cfg := &config.Config{
 		Plugins: map[string]*config.ProviderEntry{
 			"echoauth": {
-				Source: config.ProviderSource{Ref: "github.com/acme/plugins/test", Version: "1.0.0"},
+				Source: config.NewMetadataSource("https://example.invalid/github-com-acme-plugins-test/v1.0.0/provider-release.yaml"),
 				ResolvedManifest: &providermanifestv1.Manifest{
 					DisplayName: "Echo Auth",
 					Spec: &providermanifestv1.Spec{
@@ -1997,7 +1997,7 @@ func TestPluginIndexedDBBuildScopedConfig(t *testing.T) {
 
 	indexedDBDefs := map[string]*config.ProviderEntry{
 		"postgres": {
-			Source: config.ProviderSource{Ref: "github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb"},
+			Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
 			Config: mustNode(t, map[string]any{
 				"dsn":                 "postgres://db.example.test/gestalt",
 				"schema":              "host_schema",
@@ -2007,7 +2007,7 @@ func TestPluginIndexedDBBuildScopedConfig(t *testing.T) {
 			}),
 		},
 		"sqlite": {
-			Source: config.ProviderSource{Ref: "github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb"},
+			Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
 			Config: mustNode(t, map[string]any{
 				"dsn":                 "sqlite://plugin-state.db",
 				"table_prefix":        "host_",
@@ -2278,7 +2278,7 @@ func TestPluginIndexedDBRouteObjectStoresWithoutTransportPrefix(t *testing.T) {
 		SelectedIndexedDBName: "postgres",
 		IndexedDBDefs: map[string]*config.ProviderEntry{
 			"postgres": {
-				Source: config.ProviderSource{Ref: "github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb"},
+				Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
 				Config: mustNode(t, map[string]any{
 					"dsn":                 "postgres://db.example.test/gestalt",
 					"schema":              "host_schema",

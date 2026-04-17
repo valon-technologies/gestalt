@@ -6,11 +6,10 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
-	github "github.com/valon-technologies/gestalt/server/internal/pluginsource/github"
 )
 
 func operatorLifecycle() *operator.Lifecycle {
-	return operator.NewLifecycle(&github.GitHubResolver{}).WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
+	return operator.NewLifecycle().WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
 		return bootstrap.ResolveConfigSecrets(ctx, cfg, buildFactories())
 	})
 }

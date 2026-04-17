@@ -514,7 +514,7 @@ func validConfig() *config.Config {
 		Providers: config.ProvidersConfig{
 			Auth: map[string]*config.ProviderEntry{
 				"default": {
-					Source: config.ProviderSource{Ref: "github.com/valon-technologies/gestalt-providers/auth/oidc", Version: "0.0.1-alpha.1"},
+					Source: config.NewMetadataSource("https://example.invalid/github-com-valon-technologies-gestalt-providers-auth-oidc/v0.0.1-alpha.1/provider-release.yaml"),
 					Config: yaml.Node{Kind: yaml.MappingNode},
 				},
 			},
@@ -1084,7 +1084,7 @@ func TestBootstrapClosesWorkflowIndexedDBAndAppliesScopedConfig(t *testing.T) {
 
 	cfg := validConfig()
 	cfg.Providers.IndexedDB["workflow_state"] = &config.ProviderEntry{
-		Source: config.ProviderSource{Ref: "github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb"},
+		Source: config.NewMetadataSource("https://example.invalid/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml"),
 		Config: mustYAMLNode(t, map[string]any{
 			"dsn":          "sqlite://workflow.db",
 			"table_prefix": "host_",
@@ -2580,7 +2580,7 @@ func TestValidateManagedWorkflowStartupCallbackUsesPreparedProviderStub(t *testi
 	cfg := validConfig()
 	cfg.Plugins = map[string]*config.ProviderEntry{
 		"roadmap": {
-			Source:         config.ProviderSource{Ref: "github.com/example/roadmap", Version: "0.0.1"},
+			Source:         config.NewMetadataSource("https://example.invalid/github-com-example-roadmap/v0.0.1/provider-release.yaml"),
 			ConnectionMode: providermanifestv1.ConnectionModeIdentity,
 			Workflow: &config.PluginWorkflowConfig{
 				Provider:   "temporal",
@@ -2667,7 +2667,7 @@ func TestValidateManagedWorkflowStartupInvokesMCPPassthroughPreparedProviders(t 
 	cfg := validConfig()
 	cfg.Plugins = map[string]*config.ProviderEntry{
 		"roadmap": {
-			Source:         config.ProviderSource{Ref: "github.com/example/roadmap", Version: "0.0.1"},
+			Source:         config.NewMetadataSource("https://example.invalid/github-com-example-roadmap/v0.0.1/provider-release.yaml"),
 			ConnectionMode: providermanifestv1.ConnectionModeIdentity,
 			Workflow: &config.PluginWorkflowConfig{
 				Provider:   "temporal",
@@ -3276,7 +3276,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		if err := receivedNode.Decode(&decoded); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
-		if decoded.Source == nil || decoded.Source.Ref != "github.com/valon-technologies/gestalt-providers/auth/oidc" {
+		if decoded.Source == nil || decoded.Source.MetadataURL() != "https://example.invalid/github-com-valon-technologies-gestalt-providers-auth-oidc/v0.0.1-alpha.1/provider-release.yaml" {
 			t.Fatalf("source = %+v", decoded.Source)
 		}
 		if decoded.Config["clientSecret"] != "resolved-auth-secret" {
@@ -3634,7 +3634,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 
 		cfg := validConfig()
 		cfg.Providers.Auth = map[string]*config.ProviderEntry{
-			"secondary": {Source: config.ProviderSource{Ref: "github.com/valon-technologies/gestalt-providers/auth/oidc", Version: "0.0.1-alpha.1"}},
+			"secondary": {Source: config.NewMetadataSource("https://example.invalid/github-com-valon-technologies-gestalt-providers-auth-oidc/v0.0.1-alpha.1/provider-release.yaml")},
 		}
 		cfg.Server.Providers.Auth = "secondary"
 		cfg.Providers.Auth["secondary"].Config = yaml.Node{
@@ -3665,7 +3665,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		if err := authNode.Decode(&authCfg); err != nil {
 			t.Fatalf("decode auth node: %v", err)
 		}
-		if authCfg.Source == nil || authCfg.Source.Ref != "github.com/valon-technologies/gestalt-providers/auth/oidc" {
+		if authCfg.Source == nil || authCfg.Source.MetadataURL() != "https://example.invalid/github-com-valon-technologies-gestalt-providers-auth-oidc/v0.0.1-alpha.1/provider-release.yaml" {
 			t.Fatalf("auth source = %+v", authCfg.Source)
 		}
 		if authCfg.Config["issuerUrl"] != "https://issuer.example.test" {

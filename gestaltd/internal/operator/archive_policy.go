@@ -17,24 +17,6 @@ func allowsGenericArchive(kind string, manifest *providermanifestv1.Manifest) bo
 	}
 }
 
-func validateResolvedArchivePolicy(subject, kind string, manifest *providermanifestv1.Manifest, platform, currentURL string, available map[string]LockArchive) error {
-	if allowsGenericArchive(kind, manifest) || currentURL == "" {
-		return nil
-	}
-	exact, exactOK := available[platform]
-	generic, genericOK := available[platformKeyGeneric]
-	if exactOK && genericOK && exact.URL != "" && exact.URL == generic.URL && currentURL == exact.URL {
-		return unsafeGenericArchiveError(subject, platform)
-	}
-	if archive, ok := available[platform]; ok && archive.URL == currentURL {
-		return nil
-	}
-	if archive, ok := available[platformKeyGeneric]; ok && archive.URL == currentURL {
-		return unsafeGenericArchiveError(subject, platform)
-	}
-	return nil
-}
-
 func validateLockedArchivePolicy(subject, kind string, manifest *providermanifestv1.Manifest, entry LockEntry, platform, resolvedKey string) error {
 	if allowsGenericArchive(kind, manifest) {
 		return nil

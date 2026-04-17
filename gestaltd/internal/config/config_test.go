@@ -3356,24 +3356,6 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			wantErr: "source.path or metadata URL is required",
 		},
 		{
-			name: "legacy source ref rejected",
-			cfg: &Config{
-				Plugins: map[string]*ProviderEntry{
-					"sample": {Source: ProviderSource{Ref: "github.com/test-org/test-repo/test-plugin"}},
-				},
-			},
-			wantErr: "source.ref/source.version are no longer supported",
-		},
-		{
-			name: "source version without ref rejected",
-			cfg: &Config{
-				Plugins: map[string]*ProviderEntry{
-					"sample": {Source: ProviderSource{Version: "1.0.0"}},
-				},
-			},
-			wantErr: "source.version is no longer supported",
-		},
-		{
 			name: "auth provider valid",
 			cfg: &Config{
 				Providers: ProvidersConfig{
@@ -3402,21 +3384,6 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 				},
 			},
 			wantErr: `source.path or metadata URL is required`,
-		},
-		{
-			name: "s3 entry rejects legacy source ref",
-			cfg: &Config{
-				Providers: ProvidersConfig{
-					S3: map[string]*ProviderEntry{
-						"assets": {
-							Source: ProviderSource{
-								Ref: "not-a-valid-ref",
-							},
-						},
-					},
-				},
-			},
-			wantErr: `source.ref/source.version are no longer supported`,
 		},
 		{
 			name: "plugin auth rejects mcp oauth early",

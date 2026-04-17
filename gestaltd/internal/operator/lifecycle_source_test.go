@@ -20,7 +20,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	secretsprovider "github.com/valon-technologies/gestalt/server/internal/drivers/secrets/provider"
-	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -36,50 +35,10 @@ const (
 	testBinary  = "fake-binary-content"
 )
 
-type fakeResolverResult struct {
-	archivePath      string
-	resolvedURL      string
-	sha256           string
-	platformArchives []pluginsource.PlatformArchive
-}
-
-type fakeResolverCall struct {
-	src     pluginsource.Source
-	version string
-}
-
-type fakeMultiResolver struct {
-	results map[string]fakeResolverResult
-	calls   []fakeResolverCall
-}
-
 type hostRewriteTransport struct {
 	base   http.RoundTripper
 	target *url.URL
 	hosts  map[string]struct{}
-}
-
-func (f *fakeMultiResolver) Resolve(_ context.Context, src pluginsource.Source, version string) (*pluginsource.ResolvedPackage, error) {
-	f.calls = append(f.calls, fakeResolverCall{src: src, version: version})
-
-	result, ok := f.results[src.String()]
-	if !ok {
-		return nil, fmt.Errorf("unexpected source %q", src.String())
-	}
-	return &pluginsource.ResolvedPackage{
-		LocalPath:     result.archivePath,
-		Cleanup:       func() {},
-		ArchiveSHA256: result.sha256,
-		ResolvedURL:   result.resolvedURL,
-	}, nil
-}
-
-func (f *fakeMultiResolver) ListPlatformArchives(_ context.Context, src pluginsource.Source, _ string) ([]pluginsource.PlatformArchive, error) {
-	result, ok := f.results[src.String()]
-	if !ok {
-		return nil, fmt.Errorf("unexpected source %q", src.String())
-	}
-	return append([]pluginsource.PlatformArchive(nil), result.platformArchives...), nil
 }
 
 func sha256hex(data string) string {
@@ -486,7 +445,7 @@ func TestSourcePluginMetadataURLInitAndLockedLoad(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	lc := NewLifecycle(nil)
+	lc := NewLifecycle()
 	lock, err := lc.InitAtPathWithPlatforms(configPath, "", []struct{ GOOS, GOARCH, LibC string }{
 		{GOOS: extraPlatform.goos, GOARCH: extraPlatform.goarch},
 	})
@@ -698,7 +657,7 @@ func TestSourceWorkflowMetadataURLInitAndLockedLoad(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	lc := NewLifecycle(nil)
+	lc := NewLifecycle()
 	lock, err := lc.InitAtPath(configPath)
 	if err == nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
@@ -875,7 +834,7 @@ func TestSourceWebUIMetadataURLInitAndLockedLoad(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	lc := NewLifecycle(nil)
+	lc := NewLifecycle()
 	lock, err := lc.InitAtPath(configPath)
 	if err == nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
@@ -1022,7 +981,7 @@ func TestSourcePluginInitRejectsMetadataSourceManifestMismatch(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	lc := NewLifecycle(nil)
+	lc := NewLifecycle()
 	_, err = lc.InitAtPath(configPath)
 	if err == nil {
 		t.Fatal("InitAtPath unexpectedly succeeded")
@@ -1133,7 +1092,7 @@ func TestSourcePluginMetadataURLUsesGitHubAssetTransport(t *testing.T) {
 		t.Fatalf("write config: %v", err)
 	}
 
-	lc := NewLifecycle(nil).WithHTTPClient(newGitHubRewriteClient(t, srv.URL))
+	lc := NewLifecycle().WithHTTPClient(newGitHubRewriteClient(t, srv.URL))
 	lock, err := lc.InitAtPath(configPath)
 	if err == nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
@@ -1306,7 +1265,7 @@ func TestSourcePluginMetadataURLUnlockedLoadRefreshesMutableMetadata(t *testing.
 		t.Fatalf("write config: %v", err)
 	}
 
-	lc := NewLifecycle(nil)
+	lc := NewLifecycle()
 	lock, err := lc.InitAtPath(configPath)
 	if err == nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
@@ -1464,7 +1423,7 @@ func TestSourcePluginMetadataURLUsesGitHubTokenFallbackForMetadata(t *testing.T)
 		t.Fatalf("write config: %v", err)
 	}
 
-	lc := NewLifecycle(nil).WithHTTPClient(newGitHubRewriteClient(t, srv.URL))
+	lc := NewLifecycle().WithHTTPClient(newGitHubRewriteClient(t, srv.URL))
 	lock, err := lc.InitAtPath(configPath)
 	if err == nil {
 		if handlerErr := nextHandlerErr(); handlerErr != nil {
@@ -1485,59 +1444,6 @@ func TestSourcePluginMetadataURLUsesGitHubTokenFallbackForMetadata(t *testing.T)
 	}
 	if got := lock.Providers["alpha"].Source; got != metadataURL {
 		t.Fatalf("entry.Source = %q, want %q", got, metadataURL)
-	}
-}
-
-func TestBuildArchivesMap_AllowsGenericDeclarativeTelemetryAndAuditPackages(t *testing.T) {
-	t.Parallel()
-
-	const source = "github.com/acme/providers/declarative"
-	const version = "1.0.0"
-	const archiveURL = "https://example.com/releases/download/provider/declarative.tar.gz"
-
-	src, err := pluginsource.Parse(source)
-	if err != nil {
-		t.Fatalf("Parse source: %v", err)
-	}
-	manifest := &providermanifestv1.Manifest{
-		Kind:    providermanifestv1.KindPlugin,
-		Source:  source,
-		Version: version,
-		Spec: &providermanifestv1.Spec{
-			Surfaces: &providermanifestv1.ProviderSurfaces{
-				REST: &providermanifestv1.RESTSurface{
-					BaseURL: "https://api.example.com",
-					Operations: []providermanifestv1.ProviderOperation{
-						{Name: "ping", Method: "GET", Path: "/ping"},
-					},
-				},
-			},
-		},
-	}
-	resolver := &fakeMultiResolver{
-		results: map[string]fakeResolverResult{
-			src.String(): {
-				platformArchives: []pluginsource.PlatformArchive{
-					{Platform: platformKeyGeneric, URL: archiveURL},
-				},
-			},
-		},
-	}
-	lc := NewLifecycle(resolver)
-
-	for _, kind := range []string{providerLockKindTelemetry, providerLockKindAudit} {
-		kind := kind
-		t.Run(kind, func(t *testing.T) {
-			t.Parallel()
-
-			archives, err := lc.buildArchivesMap(context.Background(), src, version, archiveURL, "", kind, kind+` "default"`, manifest)
-			if err != nil {
-				t.Fatalf("buildArchivesMap: %v", err)
-			}
-			if got := archives[platformKeyGeneric].URL; got != archiveURL {
-				t.Fatalf("generic archive URL = %q, want %q", got, archiveURL)
-			}
-		})
 	}
 }
 
@@ -1569,7 +1475,7 @@ func TestMaterializeLockedComponent_AllowsGenericDeclarativeTelemetryAndAuditPac
 	}
 	pkgSum := sha256.Sum256(pkgData)
 
-	lc := NewLifecycle(nil)
+	lc := NewLifecycle()
 
 	for _, kind := range []string{providerLockKindTelemetry, providerLockKindAudit} {
 		kind := kind
@@ -1593,10 +1499,7 @@ func TestMaterializeLockedComponent_AllowsGenericDeclarativeTelemetryAndAuditPac
 				},
 			}
 			providerEntry := &config.ProviderEntry{
-				Source: config.ProviderSource{
-					Ref:     source,
-					Version: version,
-				},
+				Source: config.NewMetadataSource("https://example.invalid/github-com-acme-providers-declarative/v1.0.0/provider-release.yaml"),
 			}
 			destDir := filepath.Join(dir, kind)
 			if err := lc.materializeLockedComponent(context.Background(), initPaths{}, kind, "default", providerEntry, entry, destDir, true); err != nil {
@@ -1683,7 +1586,7 @@ func TestSourcePluginLoadForExecution_RehydratesWhenCachedManifestVersionMismatc
 		t.Fatalf("write config: %v", err)
 	}
 
-	lc := NewLifecycle(nil)
+	lc := NewLifecycle()
 	if _, err := lc.InitAtPath(configPath); err != nil {
 		t.Fatalf("InitAtPath: %v", err)
 	}
@@ -1838,7 +1741,7 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 
 	factories := bootstrap.NewFactoryRegistry()
 	factories.Secrets["provider"] = secretsprovider.Factory
-	lc := NewLifecycle(nil).WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
+	lc := NewLifecycle().WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
 		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
 	})
 	lc = lc.WithHTTPClient(srv.Client())
@@ -1898,12 +1801,12 @@ func TestSourceAuthPluginLoadForExecution(t *testing.T) {
 	if authCfg["command"] != executablePath {
 		t.Fatalf("auth config command = %v, want %q", authCfg["command"], executablePath)
 	}
-	sourceCfg, ok := authCfg["source"].(map[string]any)
+	sourceCfg, ok := authCfg["source"].(string)
 	if !ok {
 		t.Fatalf("auth source config = %#v", authCfg["source"])
 	}
-	if _, ok := sourceCfg["auth"]; ok {
-		t.Fatalf("auth source config leaked source.auth: %#v", sourceCfg)
+	if want := srv.URL + metadataPath; sourceCfg != want {
+		t.Fatalf("auth source config = %q, want %q", sourceCfg, want)
 	}
 	nested, ok := authCfg["config"].(map[string]any)
 	if !ok || nested["clientId"] != "managed-auth-client" {
@@ -2009,7 +1912,7 @@ func TestSourceAuthPluginInitAllowsMissingEnvPlaceholderInNonStringField(t *test
 
 	factories := bootstrap.NewFactoryRegistry()
 	factories.Secrets["provider"] = secretsprovider.Factory
-	lc := NewLifecycle(nil).WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
+	lc := NewLifecycle().WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
 		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
 	})
 	lc = lc.WithHTTPClient(srv.Client())
@@ -2072,7 +1975,7 @@ func TestManagedIndexedDBSourcesLoadForExecutionWithMultipleBindings(t *testing.
 		t.Fatalf("write config: %v", err)
 	}
 
-	lc := NewLifecycle(nil)
+	lc := NewLifecycle()
 	lock, err := lc.InitAtPath(configPath)
 	if err != nil {
 		t.Fatalf("InitAtPath: %v", err)
@@ -2173,7 +2076,7 @@ func TestManagedCacheSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
 
 	factories := bootstrap.NewFactoryRegistry()
 	factories.Secrets["provider"] = secretsprovider.Factory
-	lc := NewLifecycle(nil).WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
+	lc := NewLifecycle().WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
 		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
 	})
 	lock, err := lc.InitAtPath(configPath)
@@ -2320,7 +2223,7 @@ func TestManagedCacheSourcesInitAtPathWithPlatformsHashesExtraPlatformArchives(t
 		t.Fatalf("write config: %v", err)
 	}
 
-	lc := NewLifecycle(nil).WithHTTPClient(srv.Client())
+	lc := NewLifecycle().WithHTTPClient(srv.Client())
 	lock, err := lc.InitAtPathWithPlatforms(configPath, "", []struct{ GOOS, GOARCH, LibC string }{extraPlatform})
 	if err != nil {
 		t.Fatalf("InitAtPathWithPlatforms: %v", err)
@@ -2544,7 +2447,7 @@ func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
 	factories := bootstrap.NewFactoryRegistry()
 	factories.Secrets["provider"] = secretsprovider.Factory
 
-	lc := NewLifecycle(nil).WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
+	lc := NewLifecycle().WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
 		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
 	})
 	lc = lc.WithHTTPClient(srv.Client())
@@ -2769,7 +2672,7 @@ func TestLoadForExecutionAtPath_UnlockedBootstrapMetadataInitPreparesOnce(t *tes
 	factories := bootstrap.NewFactoryRegistry()
 	factories.Secrets["provider"] = secretsprovider.Factory
 
-	lc := NewLifecycle(nil).WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
+	lc := NewLifecycle().WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
 		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
 	})
 
@@ -2887,7 +2790,7 @@ func TestLoadForExecutionAtPath_UnlockedMetadataSecretsProviderResolvesConfigSec
 	factories := bootstrap.NewFactoryRegistry()
 	factories.Secrets["provider"] = secretsprovider.Factory
 
-	lc := NewLifecycle(nil).WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
+	lc := NewLifecycle().WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
 		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
 	})
 
