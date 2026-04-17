@@ -851,6 +851,72 @@ func TestRun_PluginReleaseBuildsGoSourceSecretsPlugin(t *testing.T) {
 	}
 }
 
+func TestRun_PluginReleaseBuildsGoSourceWorkflowPlugin(t *testing.T) {
+	t.Parallel()
+
+	const workflowReleasePluginName = "workflow-release"
+	const workflowReleaseSource = "github.com/testowner/providers/workflow-release"
+	const workflowReleaseSchemaPath = "workflow.schema.json"
+
+	pluginDir := newSourceComponentReleaseFixture(t, t.TempDir(), sourceComponentReleaseFixtureParams{
+		pluginName: workflowReleasePluginName,
+		schemaPath: workflowReleaseSchemaPath,
+		sourceFile: "workflow.go",
+		sourceCode: testutil.GeneratedWorkflowPackageSource(),
+		manifest: &providermanifestv1.Manifest{
+			Kind:   providermanifestv1.KindWorkflow,
+			Source: workflowReleaseSource, Version: "0.0.1", DisplayName: "Workflow Release",
+			Spec: &providermanifestv1.Spec{ConfigSchemaPath: workflowReleaseSchemaPath},
+		},
+	})
+	outputDir := t.TempDir()
+	const testVersion = "0.0.20-test"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
+		"--output", outputDir,
+	)
+
+	archiveName := platformArchiveNameForTest(workflowReleasePluginName, testVersion, runtime.GOOS, runtime.GOARCH)
+	extractDir := extractReleasedArchive(t, outputDir, archiveName)
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+	binaryName := releaseBinaryName(workflowReleasePluginName, runtime.GOOS)
+
+	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
+		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
+	}
+	assertExpectedGoArtifactPlatform(t, manifest.Artifacts[0], runtime.GOOS, runtime.GOARCH, "")
+	if manifest.Entrypoint == nil || manifest.Entrypoint.ArtifactPath != binaryName {
+		t.Fatalf("workflow entrypoint = %+v, want artifact path %q", manifest.Entrypoint, binaryName)
+	}
+	if _, err := os.Stat(filepath.Join(extractDir, workflowReleaseSchemaPath)); err != nil {
+		t.Fatalf("expected %s in archive: %v", workflowReleaseSchemaPath, err)
+	}
+
+	metadata := readProviderReleaseMetadata(t, outputDir)
+	if metadata.Package != workflowReleaseSource {
+		t.Fatalf("release metadata package = %q, want %q", metadata.Package, workflowReleaseSource)
+	}
+	if metadata.Kind != providermanifestv1.KindWorkflow {
+		t.Fatalf("release metadata kind = %q, want %q", metadata.Kind, providermanifestv1.KindWorkflow)
+	}
+	if metadata.Runtime != providerReleaseRuntimeKindExecutable {
+		t.Fatalf("release metadata runtime = %q, want %q", metadata.Runtime, providerReleaseRuntimeKindExecutable)
+	}
+	workflowArtifact, ok := metadata.Artifacts[providerpkg.CurrentPlatformString()]
+	if !ok {
+		t.Fatalf("release metadata artifacts missing current platform key %q: %+v", providerpkg.CurrentPlatformString(), metadata.Artifacts)
+	}
+	workflowDigest, err := providerpkg.ArchiveDigest(filepath.Join(outputDir, archiveName))
+	if err != nil {
+		t.Fatalf("hash workflow archive: %v", err)
+	}
+	if workflowArtifact.Path != archiveName || workflowArtifact.SHA256 != workflowDigest {
+		t.Fatalf("release metadata workflow artifact = %+v, want path %q sha %q", workflowArtifact, archiveName, workflowDigest)
+	}
+}
+
 //nolint:paralleltest // Uses t.Setenv in table-driven subtests, which cannot run under parallel ancestors.
 func TestRun_PluginReleaseBuildsExecutableAuthProviders(t *testing.T) {
 	goAuthFixture := func(t *testing.T) sourceComponentReleaseFixtureParams {
