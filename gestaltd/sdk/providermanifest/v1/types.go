@@ -5,14 +5,15 @@ import (
 )
 
 const (
-	KindPlugin    = "plugin"
-	KindAuth      = "auth"
-	KindIndexedDB = "indexeddb"
-	KindCache     = "cache"
-	KindS3        = "s3"
-	KindWorkflow  = "workflow"
-	KindSecrets   = "secrets"
-	KindWebUI     = "webui"
+	KindPlugin        = "plugin"
+	KindAuth          = "auth"
+	KindAuthorization = "authorization"
+	KindIndexedDB     = "indexeddb"
+	KindCache         = "cache"
+	KindS3            = "s3"
+	KindWorkflow      = "workflow"
+	KindSecrets       = "secrets"
+	KindWebUI         = "webui"
 )
 
 type Manifest struct {

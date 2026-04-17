@@ -42,6 +42,51 @@ func stubAuthFactory(name string) bootstrap.AuthFactory {
 	}
 }
 
+type stubAuthorizationProvider struct {
+	name string
+}
+
+func (p *stubAuthorizationProvider) Name() string { return p.name }
+func (p *stubAuthorizationProvider) Evaluate(context.Context, *core.AccessEvaluationRequest) (*core.AccessDecision, error) {
+	return &core.AccessDecision{}, nil
+}
+func (p *stubAuthorizationProvider) EvaluateMany(context.Context, *core.AccessEvaluationsRequest) (*core.AccessEvaluationsResponse, error) {
+	return &core.AccessEvaluationsResponse{}, nil
+}
+func (p *stubAuthorizationProvider) SearchResources(context.Context, *core.ResourceSearchRequest) (*core.ResourceSearchResponse, error) {
+	return &core.ResourceSearchResponse{}, nil
+}
+func (p *stubAuthorizationProvider) SearchSubjects(context.Context, *core.SubjectSearchRequest) (*core.SubjectSearchResponse, error) {
+	return &core.SubjectSearchResponse{}, nil
+}
+func (p *stubAuthorizationProvider) SearchActions(context.Context, *core.ActionSearchRequest) (*core.ActionSearchResponse, error) {
+	return &core.ActionSearchResponse{}, nil
+}
+func (p *stubAuthorizationProvider) GetMetadata(context.Context) (*core.AuthorizationMetadata, error) {
+	return &core.AuthorizationMetadata{}, nil
+}
+func (p *stubAuthorizationProvider) ReadRelationships(context.Context, *core.ReadRelationshipsRequest) (*core.ReadRelationshipsResponse, error) {
+	return &core.ReadRelationshipsResponse{}, nil
+}
+func (p *stubAuthorizationProvider) WriteRelationships(context.Context, *core.WriteRelationshipsRequest) error {
+	return nil
+}
+func (p *stubAuthorizationProvider) GetActiveModel(context.Context) (*core.GetActiveModelResponse, error) {
+	return &core.GetActiveModelResponse{}, nil
+}
+func (p *stubAuthorizationProvider) ListModels(context.Context, *core.ListModelsRequest) (*core.ListModelsResponse, error) {
+	return &core.ListModelsResponse{}, nil
+}
+func (p *stubAuthorizationProvider) WriteModel(context.Context, *core.WriteModelRequest) (*core.AuthorizationModelRef, error) {
+	return &core.AuthorizationModelRef{}, nil
+}
+
+func stubAuthorizationFactory(name string) bootstrap.AuthorizationFactory {
+	return func(yaml.Node, bootstrap.Deps) (core.AuthorizationProvider, error) {
+		return &stubAuthorizationProvider{name: name}, nil
+	}
+}
+
 func stubSecretManagerFactory() bootstrap.SecretManagerFactory {
 	return func(yaml.Node) (core.SecretManager, error) {
 		return &coretesting.StubSecretManager{}, nil
@@ -60,6 +105,16 @@ type closableAuthProvider struct {
 }
 
 func (p *closableAuthProvider) Close() error {
+	p.closed.Store(true)
+	return nil
+}
+
+type closableAuthorizationProvider struct {
+	*stubAuthorizationProvider
+	closed *atomic.Bool
+}
+
+func (p *closableAuthorizationProvider) Close() error {
 	p.closed.Store(true)
 	return nil
 }
@@ -651,6 +706,33 @@ func TestBootstrap(t *testing.T) {
 			})
 		}
 	})
+}
+
+func TestBootstrapReturnsAuthorizationProvider(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.Authorization = map[string]*config.ProviderEntry{
+		"indexeddb": {Source: config.ProviderSource{Path: "stub"}},
+	}
+	cfg.Server.Providers.Authorization = "indexeddb"
+
+	factories := validFactories()
+	factories.Authorization = stubAuthorizationFactory("test-authorization")
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if result.AuthorizationProvider == nil {
+		t.Fatal("AuthorizationProvider is nil")
+	}
+	if got := result.AuthorizationProvider.Name(); got != "test-authorization" {
+		t.Fatalf("AuthorizationProvider.Name() = %q, want %q", got, "test-authorization")
+	}
 }
 
 func TestBootstrapPassesConfiguredS3ResourceNamesToProviders(t *testing.T) {
@@ -1953,6 +2035,36 @@ func TestResultCloseClosesAuthProvider(t *testing.T) {
 	}
 	if !closed.Load() {
 		t.Fatal("auth provider was not closed")
+	}
+}
+
+func TestResultCloseClosesAuthorizationProvider(t *testing.T) {
+	t.Parallel()
+
+	cfg := validConfig()
+	cfg.Providers.Authorization = map[string]*config.ProviderEntry{
+		"indexeddb": {Source: config.ProviderSource{Path: "stub"}},
+	}
+	cfg.Server.Providers.Authorization = "indexeddb"
+
+	closed := &atomic.Bool{}
+	factories := validFactories()
+	factories.Authorization = func(yaml.Node, bootstrap.Deps) (core.AuthorizationProvider, error) {
+		return &closableAuthorizationProvider{
+			stubAuthorizationProvider: &stubAuthorizationProvider{name: "test-authorization"},
+			closed:                    closed,
+		}, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	if err := result.Close(context.Background()); err != nil {
+		t.Fatalf("Result.Close: %v", err)
+	}
+	if !closed.Load() {
+		t.Fatal("authorization provider was not closed")
 	}
 }
 

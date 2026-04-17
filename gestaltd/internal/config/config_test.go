@@ -128,6 +128,8 @@ func TestLoadConfigSelectsDefaultProvidersFromNamedMaps(t *testing.T) {
 	path := mustWriteConfigFile(t, `
 server:
   encryptionKey: server-key
+  providers:
+    authorization: indexeddb
 providers:
   auth:
     primary:
@@ -147,6 +149,14 @@ providers:
       default: true
       source:
         path: ./providers/datastore/archive
+  authorization:
+    memory:
+      source:
+        path: ./providers/authorization/memory
+    indexeddb:
+      default: true
+      source:
+        path: ./providers/authorization/indexeddb
 plugins:
   service-a:
     source:
@@ -166,6 +176,10 @@ plugins:
 	indexedDBName, indexedDBEntry := mustSelectedProvider(t, cfg, HostProviderKindIndexedDB)
 	if indexedDBName != "archive" || indexedDBEntry == nil {
 		t.Fatalf("SelectedIndexedDBProvider = (%q, %#v), want archive", indexedDBName, indexedDBEntry)
+	}
+	authorizationName, authorizationEntry := mustSelectedProvider(t, cfg, HostProviderKindAuthorization)
+	if authorizationName != "indexeddb" || authorizationEntry == nil {
+		t.Fatalf("SelectedAuthorizationProvider = (%q, %#v), want indexeddb", authorizationName, authorizationEntry)
 	}
 	wantIndexedDB := &PluginIndexedDBConfig{Provider: "archive"}
 	if got := cfg.Plugins["service-a"].IndexedDB; !reflect.DeepEqual(got, wantIndexedDB) {

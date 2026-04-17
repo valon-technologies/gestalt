@@ -12,6 +12,7 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	authprovider "github.com/valon-technologies/gestalt/server/internal/drivers/auth/provider"
+	authorizationprovider "github.com/valon-technologies/gestalt/server/internal/drivers/authorization/provider"
 	cacheprovider "github.com/valon-technologies/gestalt/server/internal/drivers/cache/provider"
 	indexeddbprovider "github.com/valon-technologies/gestalt/server/internal/drivers/indexeddb/provider"
 	s3provider "github.com/valon-technologies/gestalt/server/internal/drivers/s3/provider"
@@ -117,6 +118,7 @@ func buildFactories() *bootstrap.FactoryRegistry {
 		}
 	}
 	factories.Auth = authprovider.Factory
+	factories.Authorization = authorizationprovider.Factory
 	factories.IndexedDB = indexeddbprovider.Factory
 	factories.Cache = cacheprovider.Factory
 	factories.S3 = s3provider.Factory

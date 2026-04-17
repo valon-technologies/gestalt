@@ -1190,6 +1190,7 @@ pub enum ProviderKind {
     Cache = 6,
     S3 = 7,
     Workflow = 8,
+    Authorization = 9,
 }
 impl ProviderKind {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -1207,6 +1208,7 @@ impl ProviderKind {
             Self::Cache => "PROVIDER_KIND_CACHE",
             Self::S3 => "PROVIDER_KIND_S3",
             Self::Workflow => "PROVIDER_KIND_WORKFLOW",
+            Self::Authorization => "PROVIDER_KIND_AUTHORIZATION",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -1221,6 +1223,7 @@ impl ProviderKind {
             "PROVIDER_KIND_CACHE" => Some(Self::Cache),
             "PROVIDER_KIND_S3" => Some(Self::S3),
             "PROVIDER_KIND_WORKFLOW" => Some(Self::Workflow),
+            "PROVIDER_KIND_AUTHORIZATION" => Some(Self::Authorization),
             _ => None,
         }
     }

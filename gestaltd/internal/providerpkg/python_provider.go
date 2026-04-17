@@ -43,6 +43,9 @@ func DetectPythonComponentTarget(root, kind string) (string, error) {
 	if err := validateSourceComponentKind(kind); err != nil {
 		return "", err
 	}
+	if _, err := pythonRuntimeKind(kind); err != nil {
+		return "", err
+	}
 	return detectPythonProjectTarget(root, kind)
 }
 

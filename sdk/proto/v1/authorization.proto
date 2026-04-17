@@ -1,0 +1,170 @@
+syntax = "proto3";
+
+package gestalt.provider.v1;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/struct.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/valon-technologies/gestalt/sdk/go/gen/v1;proto";
+
+message Subject {
+  string type = 1;
+  string id = 2;
+  google.protobuf.Struct properties = 3;
+}
+
+message Resource {
+  string type = 1;
+  string id = 2;
+  google.protobuf.Struct properties = 3;
+}
+
+message Action {
+  string name = 1;
+  google.protobuf.Struct properties = 2;
+}
+
+message AccessEvaluationRequest {
+  Subject subject = 1;
+  Action action = 2;
+  Resource resource = 3;
+  google.protobuf.Struct context = 4;
+}
+
+message AccessDecision {
+  bool allowed = 1;
+  google.protobuf.Struct context = 2;
+  string model_id = 3;
+}
+
+message AccessEvaluationsRequest {
+  repeated AccessEvaluationRequest requests = 1;
+}
+
+message AccessEvaluationsResponse {
+  repeated AccessDecision decisions = 1;
+}
+
+message ResourceSearchRequest {
+  Subject subject = 1;
+  Action action = 2;
+  string resource_type = 3;
+  google.protobuf.Struct context = 4;
+  int32 page_size = 5;
+  string page_token = 6;
+}
+
+message ResourceSearchResponse {
+  repeated Resource resources = 1;
+  string next_page_token = 2;
+  string model_id = 3;
+}
+
+message SubjectSearchRequest {
+  Resource resource = 1;
+  Action action = 2;
+  string subject_type = 3;
+  google.protobuf.Struct context = 4;
+  int32 page_size = 5;
+  string page_token = 6;
+}
+
+message SubjectSearchResponse {
+  repeated Subject subjects = 1;
+  string next_page_token = 2;
+  string model_id = 3;
+}
+
+message ActionSearchRequest {
+  Subject subject = 1;
+  Resource resource = 2;
+  google.protobuf.Struct context = 3;
+  int32 page_size = 4;
+  string page_token = 5;
+}
+
+message ActionSearchResponse {
+  repeated Action actions = 1;
+  string next_page_token = 2;
+  string model_id = 3;
+}
+
+message AuthorizationMetadata {
+  repeated string capabilities = 1;
+  string active_model_id = 2;
+}
+
+message Relationship {
+  Subject subject = 1;
+  string relation = 2;
+  Resource resource = 3;
+  google.protobuf.Struct properties = 4;
+}
+
+message RelationshipKey {
+  Subject subject = 1;
+  string relation = 2;
+  Resource resource = 3;
+}
+
+message ReadRelationshipsRequest {
+  Subject subject = 1;
+  string relation = 2;
+  Resource resource = 3;
+  int32 page_size = 4;
+  string page_token = 5;
+  string model_id = 6;
+}
+
+message ReadRelationshipsResponse {
+  repeated Relationship relationships = 1;
+  string next_page_token = 2;
+  string model_id = 3;
+}
+
+message WriteRelationshipsRequest {
+  repeated Relationship writes = 1;
+  repeated RelationshipKey deletes = 2;
+  string model_id = 3;
+}
+
+message AuthorizationModelRef {
+  string id = 1;
+  string version = 2;
+  google.protobuf.Timestamp created_at = 3;
+}
+
+message GetActiveModelResponse {
+  AuthorizationModelRef model = 1;
+}
+
+message ListModelsRequest {
+  int32 page_size = 1;
+  string page_token = 2;
+}
+
+message ListModelsResponse {
+  repeated AuthorizationModelRef models = 1;
+  string next_page_token = 2;
+}
+
+message WriteModelRequest {
+  string schema = 1;
+}
+
+service AuthorizationProvider {
+  rpc Evaluate(AccessEvaluationRequest) returns (AccessDecision);
+  rpc EvaluateMany(AccessEvaluationsRequest) returns (AccessEvaluationsResponse);
+  rpc SearchResources(ResourceSearchRequest) returns (ResourceSearchResponse);
+  rpc SearchSubjects(SubjectSearchRequest) returns (SubjectSearchResponse);
+  rpc SearchActions(ActionSearchRequest) returns (ActionSearchResponse);
+  rpc GetMetadata(google.protobuf.Empty) returns (AuthorizationMetadata);
+
+  rpc ReadRelationships(ReadRelationshipsRequest) returns (ReadRelationshipsResponse);
+  rpc WriteRelationships(WriteRelationshipsRequest) returns (google.protobuf.Empty);
+
+  rpc GetActiveModel(google.protobuf.Empty) returns (GetActiveModelResponse);
+  rpc ListModels(ListModelsRequest) returns (ListModelsResponse);
+  rpc WriteModel(WriteModelRequest) returns (AuthorizationModelRef);
+}

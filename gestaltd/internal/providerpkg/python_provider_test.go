@@ -153,6 +153,25 @@ plugin = "provider"
 	}
 }
 
+func TestDetectPythonComponentTarget_RejectsAuthorization(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "pyproject.toml"), []byte(`[tool.gestalt]
+authorization = "provider:authorization_provider"
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile(pyproject.toml): %v", err)
+	}
+
+	_, err := DetectPythonComponentTarget(root, providermanifestv1.KindAuthorization)
+	if err == nil {
+		t.Fatal("expected authorization rejection")
+	}
+	if !strings.Contains(err.Error(), `unsupported Python runtime kind "authorization"`) {
+		t.Fatalf("error = %q, want unsupported Python runtime kind", err)
+	}
+}
+
 func TestPythonComponentExecutionCommand_PassesRuntimeKind(t *testing.T) {
 	t.Parallel()
 

@@ -145,6 +145,22 @@ func TestBuildRustComponentBinary_UsesKindSpecificWrapper(t *testing.T) {
 	}
 }
 
+func TestBuildRustComponentBinary_RejectsAuthorization(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeRustProviderCargoToml(t, root)
+
+	outputPath := filepath.Join(t.TempDir(), "authorization")
+	_, err := BuildRustComponentBinary(root, outputPath, "authorization", runtime.GOOS, runtime.GOARCH)
+	if err == nil {
+		t.Fatal("expected authorization rejection")
+	}
+	if !strings.Contains(err.Error(), `unsupported Rust provider kind "authorization"`) {
+		t.Fatalf("error = %q, want unsupported Rust provider kind", err)
+	}
+}
+
 func TestHasSourceComponentPackage_DetectsRustPackage(t *testing.T) {
 	t.Parallel()
 
@@ -157,6 +173,14 @@ func TestHasSourceComponentPackage_DetectsRustPackage(t *testing.T) {
 	}
 	if !ok {
 		t.Fatal("HasSourceComponentPackage(auth) = false, want true")
+	}
+
+	ok, err = HasSourceComponentPackage(root, "authorization")
+	if err != nil {
+		t.Fatalf("HasSourceComponentPackage(authorization): %v", err)
+	}
+	if ok {
+		t.Fatal("HasSourceComponentPackage(authorization) = true, want false")
 	}
 }
 

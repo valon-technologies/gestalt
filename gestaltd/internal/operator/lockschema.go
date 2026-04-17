@@ -29,16 +29,17 @@ type providerLockfile struct {
 }
 
 type providerLockBuckets struct {
-	Plugin    map[string]portableLockEntry `json:"plugin,omitempty"`
-	Auth      map[string]portableLockEntry `json:"auth,omitempty"`
-	IndexedDB map[string]portableLockEntry `json:"indexeddb,omitempty"`
-	Cache     map[string]portableLockEntry `json:"cache,omitempty"`
-	S3        map[string]portableLockEntry `json:"s3,omitempty"`
-	Workflow  map[string]portableLockEntry `json:"workflow,omitempty"`
-	Secrets   map[string]portableLockEntry `json:"secrets,omitempty"`
-	Telemetry map[string]portableLockEntry `json:"telemetry,omitempty"`
-	Audit     map[string]portableLockEntry `json:"audit,omitempty"`
-	WebUI     map[string]portableLockEntry `json:"webui,omitempty"`
+	Plugin        map[string]portableLockEntry `json:"plugin,omitempty"`
+	Auth          map[string]portableLockEntry `json:"auth,omitempty"`
+	Authorization map[string]portableLockEntry `json:"authorization,omitempty"`
+	IndexedDB     map[string]portableLockEntry `json:"indexeddb,omitempty"`
+	Cache         map[string]portableLockEntry `json:"cache,omitempty"`
+	S3            map[string]portableLockEntry `json:"s3,omitempty"`
+	Workflow      map[string]portableLockEntry `json:"workflow,omitempty"`
+	Secrets       map[string]portableLockEntry `json:"secrets,omitempty"`
+	Telemetry     map[string]portableLockEntry `json:"telemetry,omitempty"`
+	Audit         map[string]portableLockEntry `json:"audit,omitempty"`
+	WebUI         map[string]portableLockEntry `json:"webui,omitempty"`
 }
 
 type portableLockEntry struct {
@@ -53,17 +54,18 @@ type portableLockEntry struct {
 
 func newLockfile() *Lockfile {
 	return &Lockfile{
-		Version:    LockVersion,
-		Providers:  make(map[string]LockProviderEntry),
-		Auth:       make(map[string]LockEntry),
-		IndexedDBs: make(map[string]LockEntry),
-		Caches:     make(map[string]LockEntry),
-		S3:         make(map[string]LockEntry),
-		Workflows:  make(map[string]LockEntry),
-		Secrets:    make(map[string]LockEntry),
-		Telemetry:  make(map[string]LockEntry),
-		Audit:      make(map[string]LockEntry),
-		UIs:        make(map[string]LockUIEntry),
+		Version:       LockVersion,
+		Providers:     make(map[string]LockProviderEntry),
+		Auth:          make(map[string]LockEntry),
+		Authorization: make(map[string]LockEntry),
+		IndexedDBs:    make(map[string]LockEntry),
+		Caches:        make(map[string]LockEntry),
+		S3:            make(map[string]LockEntry),
+		Workflows:     make(map[string]LockEntry),
+		Secrets:       make(map[string]LockEntry),
+		Telemetry:     make(map[string]LockEntry),
+		Audit:         make(map[string]LockEntry),
+		UIs:           make(map[string]LockUIEntry),
 	}
 }
 
@@ -79,6 +81,9 @@ func normalizeLockfile(lock *Lockfile) *Lockfile {
 	}
 	if lock.Auth == nil {
 		lock.Auth = make(map[string]LockEntry)
+	}
+	if lock.Authorization == nil {
+		lock.Authorization = make(map[string]LockEntry)
 	}
 	if lock.Secrets == nil {
 		lock.Secrets = make(map[string]LockEntry)
@@ -111,6 +116,7 @@ func providerLockKinds() []string {
 	return []string{
 		providermanifestv1.KindPlugin,
 		providermanifestv1.KindAuth,
+		providermanifestv1.KindAuthorization,
 		providermanifestv1.KindIndexedDB,
 		providermanifestv1.KindCache,
 		providermanifestv1.KindS3,
@@ -131,6 +137,8 @@ func lockEntriesForProviderKind(lock *Lockfile, kind string) map[string]LockEntr
 		return lock.Providers
 	case providermanifestv1.KindAuth:
 		return lock.Auth
+	case providermanifestv1.KindAuthorization:
+		return lock.Authorization
 	case providermanifestv1.KindIndexedDB:
 		return lock.IndexedDBs
 	case providermanifestv1.KindCache:
@@ -159,16 +167,17 @@ func providerLockfileFromLockfile(lock *Lockfile) *providerLockfile {
 		SchemaVersion: providerLockSchemaVersion,
 		Revision:      providerLockRevision,
 		Providers: providerLockBuckets{
-			Plugin:    portableEntriesFromLockEntries(lock.Providers, providermanifestv1.KindPlugin),
-			Auth:      portableEntriesFromLockEntries(lock.Auth, providermanifestv1.KindAuth),
-			IndexedDB: portableEntriesFromLockEntries(lock.IndexedDBs, providermanifestv1.KindIndexedDB),
-			Cache:     portableEntriesFromLockEntries(lock.Caches, providermanifestv1.KindCache),
-			S3:        portableEntriesFromLockEntries(lock.S3, providermanifestv1.KindS3),
-			Workflow:  portableEntriesFromLockEntries(lock.Workflows, providerLockKindWorkflow),
-			Secrets:   portableEntriesFromLockEntries(lock.Secrets, providermanifestv1.KindSecrets),
-			Telemetry: portableEntriesFromLockEntries(lock.Telemetry, providerLockKindTelemetry),
-			Audit:     portableEntriesFromLockEntries(lock.Audit, providerLockKindAudit),
-			WebUI:     portableEntriesFromLockEntries(lock.UIs, providermanifestv1.KindWebUI),
+			Plugin:        portableEntriesFromLockEntries(lock.Providers, providermanifestv1.KindPlugin),
+			Auth:          portableEntriesFromLockEntries(lock.Auth, providermanifestv1.KindAuth),
+			Authorization: portableEntriesFromLockEntries(lock.Authorization, providermanifestv1.KindAuthorization),
+			IndexedDB:     portableEntriesFromLockEntries(lock.IndexedDBs, providermanifestv1.KindIndexedDB),
+			Cache:         portableEntriesFromLockEntries(lock.Caches, providermanifestv1.KindCache),
+			S3:            portableEntriesFromLockEntries(lock.S3, providermanifestv1.KindS3),
+			Workflow:      portableEntriesFromLockEntries(lock.Workflows, providerLockKindWorkflow),
+			Secrets:       portableEntriesFromLockEntries(lock.Secrets, providermanifestv1.KindSecrets),
+			Telemetry:     portableEntriesFromLockEntries(lock.Telemetry, providerLockKindTelemetry),
+			Audit:         portableEntriesFromLockEntries(lock.Audit, providerLockKindAudit),
+			WebUI:         portableEntriesFromLockEntries(lock.UIs, providermanifestv1.KindWebUI),
 		},
 	}
 }
@@ -180,6 +189,7 @@ func (lock *providerLockfile) toLockfile() *Lockfile {
 	}
 	runtimeLock.Providers = lockEntriesFromPortableEntries(lock.Providers.Plugin)
 	runtimeLock.Auth = lockEntriesFromPortableEntries(lock.Providers.Auth)
+	runtimeLock.Authorization = lockEntriesFromPortableEntries(lock.Providers.Authorization)
 	runtimeLock.IndexedDBs = lockEntriesFromPortableEntries(lock.Providers.IndexedDB)
 	runtimeLock.Caches = lockEntriesFromPortableEntries(lock.Providers.Cache)
 	runtimeLock.S3 = lockEntriesFromPortableEntries(lock.Providers.S3)

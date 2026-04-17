@@ -114,7 +114,7 @@ func BuildRustProviderTempBinary(root, pluginName, goos, goarch string) (string,
 }
 
 func BuildRustComponentTempBinary(root, kind, goos, goarch string) (string, func(), error) {
-	if err := validateSourceComponentKind(kind); err != nil {
+	if err := validateRustComponentKind(kind); err != nil {
 		return "", nil, err
 	}
 	return buildRustTempBinary(root, sourcePluginName(root), kind, goos, goarch)
@@ -138,7 +138,7 @@ func ValidateRustProviderRelease(root, goos, goarch string) error {
 }
 
 func ValidateRustComponentRelease(root, kind, goos, goarch string) error {
-	if err := validateSourceComponentKind(kind); err != nil {
+	if err := validateRustComponentKind(kind); err != nil {
 		return err
 	}
 	if _, err := detectRustPackage(root); err != nil {
@@ -155,10 +155,20 @@ func BuildRustProviderBinary(root, outputPath, pluginName, goos, goarch string) 
 }
 
 func BuildRustComponentBinary(root, outputPath, kind, goos, goarch string) (string, error) {
-	if err := validateSourceComponentKind(kind); err != nil {
+	if err := validateRustComponentKind(kind); err != nil {
 		return "", err
 	}
 	return buildRustBinary(root, outputPath, sourcePluginName(root), kind, goos, goarch)
+}
+
+func validateRustComponentKind(kind string) error {
+	if err := validateSourceComponentKind(kind); err != nil {
+		return err
+	}
+	if kind == providermanifestv1.KindAuthorization {
+		return fmt.Errorf("unsupported Rust provider kind %q", kind)
+	}
+	return nil
 }
 
 func buildRustBinary(root, outputPath, pluginName, kind, goos, goarch string) (string, error) {
