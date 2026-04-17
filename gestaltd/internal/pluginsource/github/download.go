@@ -30,14 +30,14 @@ func ResolveGitHubToken(token string) string {
 	return ""
 }
 
-func DownloadResolvedAsset(ctx context.Context, client *http.Client, assetURL, token string) (*providerpkg.DownloadResult, error) {
+func DownloadGitHubReleaseArchive(ctx context.Context, client *http.Client, archiveURL, token string) (*providerpkg.DownloadResult, error) {
 	if client == nil {
 		client = http.DefaultClient
 	}
 	token = ResolveGitHubToken(token)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, assetURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, archiveURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("create asset download request: %w", err)
+		return nil, fmt.Errorf("create GitHub release download request: %w", err)
 	}
 	req.Header.Set(headerAccept, acceptOctetStream)
 	if token != "" {

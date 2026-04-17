@@ -1439,7 +1439,7 @@ func (l *Lifecycle) installMetadataSourcePackage(ctx context.Context, expectedKi
 	if !ok || archive.URL == "" {
 		return nil, LockEntry{}, fmt.Errorf("no archive for platform %s for %s; publish an explicit %s target or a generic package where allowed", currentPlatform, subject, currentPlatform)
 	}
-	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceLocation, sourceAuthToken(plugin), archive.URL)
+	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(plugin), archive.URL)
 	if err != nil {
 		return nil, LockEntry{}, fmt.Errorf("download metadata source package for %s: %w", subject, err)
 	}
@@ -2304,7 +2304,7 @@ func (l *Lifecycle) materializeLockedProvider(ctx context.Context, paths initPat
 		return fmt.Errorf("no verified hash for platform %s for provider %q; run `gestaltd init %s`", platform, name, formatPlatformInitFlags(paths, platform))
 	}
 
-	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), entry.Source, sourceAuthToken(plugin), archive.URL)
+	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(plugin), archive.URL)
 	if err != nil {
 		return fmt.Errorf("download locked source provider for provider %q: %w", name, err)
 	}
@@ -2344,7 +2344,7 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 		return fmt.Errorf("no verified hash for platform %s for %s %q; run `gestaltd init %s`", platform, kind, name, formatPlatformInitFlags(paths, platform))
 	}
 
-	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), entry.Source, sourceAuthToken(plugin), archive.URL)
+	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(plugin), archive.URL)
 	if err != nil {
 		return fmt.Errorf("download locked source provider for %s %q: %w", kind, name, err)
 	}
@@ -2389,7 +2389,7 @@ func (l *Lifecycle) materializeLockedUIProvider(ctx context.Context, paths initP
 		return fmt.Errorf("no verified hash for platform %s for ui provider; run `gestaltd init %s`", platform, formatPlatformInitFlags(paths, platform))
 	}
 
-	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), entry.Source, sourceAuthToken(plugin), archive.URL)
+	download, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), sourceAuthToken(plugin), archive.URL)
 	if err != nil {
 		return fmt.Errorf("download locked source for ui provider: %w", err)
 	}
@@ -2462,7 +2462,7 @@ func (l *Lifecycle) hashArchiveEntry(ctx context.Context, kind, name string, ent
 		return err
 	}
 	token := tokenForSource[entry.Source]
-	dl, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), entry.Source, token, archive.URL)
+	dl, err := downloadArchiveForSource(ctx, l.metadataHTTPClient(), token, archive.URL)
 	if err != nil {
 		return fmt.Errorf("download archive for platform %s, source %s: %w", platformKey, entry.Source, err)
 	}

@@ -216,31 +216,21 @@ func releaseRuntimeForManifest(manifest *providermanifestv1.Manifest, kind strin
 	return providerReleaseRuntimeExecutable
 }
 
-func usesGitHubAssetTransport(sourceLocation, archiveURL string) bool {
-	if src, err := pluginsource.Parse(sourceLocation); err == nil && src.Host == pluginsource.HostGitHub {
-		return true
-	}
+func usesGitHubReleaseDownloadTransport(archiveURL string) bool {
 	parsed, err := url.Parse(strings.TrimSpace(archiveURL))
 	if err != nil {
 		return false
 	}
-	switch strings.ToLower(parsed.Hostname()) {
-	case "api.github.com":
-		return strings.Contains(parsed.Path, "/releases/assets/")
-	case "github.com":
-		return strings.Contains(parsed.Path, "/releases/download/")
-	default:
-		return false
-	}
+	return strings.EqualFold(parsed.Hostname(), "github.com") && strings.Contains(parsed.Path, "/releases/download/")
 }
 
-func downloadArchiveForSource(ctx context.Context, client *http.Client, sourceLocation, token, archiveURL string) (*providerpkg.DownloadResult, error) {
+func downloadArchiveForSource(ctx context.Context, client *http.Client, token, archiveURL string) (*providerpkg.DownloadResult, error) {
 	if client == nil {
 		client = http.DefaultClient
 	}
 	token = strings.TrimSpace(token)
-	if usesGitHubAssetTransport(sourceLocation, archiveURL) {
-		return ghresolver.DownloadResolvedAsset(ctx, client, archiveURL, token)
+	if usesGitHubReleaseDownloadTransport(archiveURL) {
+		return ghresolver.DownloadGitHubReleaseArchive(ctx, client, archiveURL, token)
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, archiveURL, nil)
 	if err != nil {
