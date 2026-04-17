@@ -127,16 +127,25 @@ func (s *stubWorkflowProvider) Ping(context.Context) error { return nil }
 func (s *stubWorkflowProvider) Close() error               { return nil }
 
 type recordingWorkflowProvider struct {
-	upsertedSchedules     []coreworkflow.UpsertScheduleRequest
-	listedSchedules       []*coreworkflow.Schedule
-	listSchedulesErr      error
-	deletedSchedules      []coreworkflow.DeleteScheduleRequest
-	deleteScheduleErr     error
-	deleteMissingNotFound bool
-	getSchedule           *coreworkflow.Schedule
-	getScheduleErr        error
-	schedules             map[string]*coreworkflow.Schedule
-	closed                *atomic.Bool
+	upsertedSchedules          []coreworkflow.UpsertScheduleRequest
+	listedSchedules            []*coreworkflow.Schedule
+	listSchedulesErr           error
+	deletedSchedules           []coreworkflow.DeleteScheduleRequest
+	deleteScheduleErr          error
+	getSchedule                *coreworkflow.Schedule
+	getScheduleErr             error
+	schedules                  map[string]*coreworkflow.Schedule
+	upsertedEventTriggers      []coreworkflow.UpsertEventTriggerRequest
+	listedEventTriggers        []*coreworkflow.EventTrigger
+	listEventTriggersErr       error
+	deletedEventTriggers       []coreworkflow.DeleteEventTriggerRequest
+	deleteEventTriggerErr      error
+	getEventTrigger            *coreworkflow.EventTrigger
+	getEventTriggerErr         error
+	eventTriggers              map[string]*coreworkflow.EventTrigger
+	deleteMissingNotFound      bool
+	deleteEventMissingNotFound bool
+	closed                     *atomic.Bool
 }
 
 func (p *recordingWorkflowProvider) StartRun(context.Context, coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
@@ -209,16 +218,55 @@ func (p *recordingWorkflowProvider) PauseSchedule(context.Context, coreworkflow.
 func (p *recordingWorkflowProvider) ResumeSchedule(context.Context, coreworkflow.ResumeScheduleRequest) (*coreworkflow.Schedule, error) {
 	return &coreworkflow.Schedule{}, nil
 }
-func (p *recordingWorkflowProvider) UpsertEventTrigger(context.Context, coreworkflow.UpsertEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
-	return &coreworkflow.EventTrigger{}, nil
+func (p *recordingWorkflowProvider) UpsertEventTrigger(_ context.Context, req coreworkflow.UpsertEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+	p.upsertedEventTriggers = append(p.upsertedEventTriggers, req)
+	trigger := &coreworkflow.EventTrigger{
+		ID:        req.TriggerID,
+		Match:     req.Match,
+		Target:    req.Target,
+		Paused:    req.Paused,
+		CreatedBy: req.RequestedBy,
+	}
+	if p.eventTriggers == nil {
+		p.eventTriggers = map[string]*coreworkflow.EventTrigger{}
+	}
+	p.eventTriggers[req.TriggerID] = trigger
+	return trigger, nil
 }
-func (p *recordingWorkflowProvider) GetEventTrigger(context.Context, coreworkflow.GetEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
-	return &coreworkflow.EventTrigger{}, nil
+func (p *recordingWorkflowProvider) GetEventTrigger(_ context.Context, req coreworkflow.GetEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+	if p.getEventTrigger != nil || p.getEventTriggerErr != nil {
+		return p.getEventTrigger, p.getEventTriggerErr
+	}
+	if p.eventTriggers != nil {
+		if trigger, ok := p.eventTriggers[req.TriggerID]; ok {
+			return trigger, nil
+		}
+	}
+	return nil, core.ErrNotFound
 }
 func (p *recordingWorkflowProvider) ListEventTriggers(context.Context, coreworkflow.ListEventTriggersRequest) ([]*coreworkflow.EventTrigger, error) {
-	return nil, nil
+	if p.listEventTriggersErr != nil {
+		return nil, p.listEventTriggersErr
+	}
+	return append([]*coreworkflow.EventTrigger(nil), p.listedEventTriggers...), nil
 }
-func (p *recordingWorkflowProvider) DeleteEventTrigger(context.Context, coreworkflow.DeleteEventTriggerRequest) error {
+func (p *recordingWorkflowProvider) DeleteEventTrigger(_ context.Context, req coreworkflow.DeleteEventTriggerRequest) error {
+	p.deletedEventTriggers = append(p.deletedEventTriggers, req)
+	if p.deleteEventTriggerErr != nil {
+		return p.deleteEventTriggerErr
+	}
+	if p.eventTriggers != nil {
+		if _, ok := p.eventTriggers[req.TriggerID]; ok {
+			delete(p.eventTriggers, req.TriggerID)
+			return nil
+		}
+	}
+	if p.deleteEventMissingNotFound {
+		return core.ErrNotFound
+	}
+	if p.eventTriggers != nil {
+		delete(p.eventTriggers, req.TriggerID)
+	}
 	return nil
 }
 func (p *recordingWorkflowProvider) PauseEventTrigger(context.Context, coreworkflow.PauseEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
@@ -1607,8 +1655,579 @@ func TestBootstrapIgnoresMissingOldScheduleDuringWorkflowProviderMove(t *testing
 	}
 }
 
+func TestBootstrapAppliesConfiguredWorkflowEventTriggers(t *testing.T) {
+	t.Parallel()
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "temporal",
+		Operations: []string{"sync"},
+		EventTriggers: map[string]config.PluginWorkflowEventTrigger{
+			"task_updated": {
+				Match: config.PluginWorkflowEventMatch{
+					Type:   "task.updated",
+					Source: "roadmap",
+				},
+				Operation: "sync",
+				Input: map[string]any{
+					"source": "yaml",
+				},
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	factories := validFactories()
+	recorders := map[string]*recordingWorkflowProvider{}
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		recorder := &recordingWorkflowProvider{}
+		recorders[name] = recorder
+		return recorder, nil
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	recorder := recorders["temporal"]
+	if recorder == nil {
+		t.Fatal("missing workflow recorder for temporal")
+	}
+	if len(recorder.upsertedEventTriggers) != 1 {
+		t.Fatalf("upserted event triggers = %d, want 1", len(recorder.upsertedEventTriggers))
+	}
+	got := recorder.upsertedEventTriggers[0]
+	if got.TriggerID != workflowConfigEventTriggerID("roadmap", "task_updated") {
+		t.Fatalf("trigger id = %q", got.TriggerID)
+	}
+	if got.Match.Type != "task.updated" || got.Match.Source != "roadmap" || got.Match.Subject != "" {
+		t.Fatalf("match = %#v", got.Match)
+	}
+	if got.Target.PluginName != "roadmap" || got.Target.Operation != "sync" {
+		t.Fatalf("target = %#v", got.Target)
+	}
+	if got.Target.Input["source"] != "yaml" {
+		t.Fatalf("target input = %#v", got.Target.Input)
+	}
+	if got.RequestedBy.SubjectID != "config:workflow:roadmap" || got.RequestedBy.SubjectKind != "system" || got.RequestedBy.AuthSource != "config" {
+		t.Fatalf("requestedBy = %#v", got.RequestedBy)
+	}
+}
+
+func TestValidateDoesNotApplyConfiguredWorkflowEventTriggers(t *testing.T) {
+	t.Parallel()
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "temporal",
+		Operations: []string{"sync"},
+		EventTriggers: map[string]config.PluginWorkflowEventTrigger{
+			"task_updated": {
+				Match: config.PluginWorkflowEventMatch{
+					Type: "task.updated",
+				},
+				Operation: "sync",
+				Paused:    true,
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	factories := validFactories()
+	recorders := map[string]*recordingWorkflowProvider{}
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		recorder := &recordingWorkflowProvider{}
+		recorders[name] = recorder
+		return recorder, nil
+	}
+
+	if _, err := bootstrap.Validate(context.Background(), cfg, factories); err != nil {
+		t.Fatalf("Validate: %v", err)
+	}
+
+	recorder := recorders["temporal"]
+	if recorder == nil {
+		t.Fatal("missing workflow recorder for temporal")
+	}
+	if len(recorder.upsertedEventTriggers) != 0 {
+		t.Fatalf("upserted event triggers = %d, want 0", len(recorder.upsertedEventTriggers))
+	}
+	if len(recorder.deletedEventTriggers) != 0 {
+		t.Fatalf("deleted event triggers = %d, want 0", len(recorder.deletedEventTriggers))
+	}
+}
+
+func TestBootstrapDeletesRemovedConfiguredWorkflowEventTriggers(t *testing.T) {
+	t.Parallel()
+
+	db := &coretesting.StubIndexedDB{}
+	factories := validFactories()
+	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
+	recorders := []*recordingWorkflowProvider{}
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		recorder := &recordingWorkflowProvider{}
+		recorders = append(recorders, recorder)
+		return recorder, nil
+	}
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "temporal",
+		Operations: []string{"sync"},
+		EventTriggers: map[string]config.PluginWorkflowEventTrigger{
+			"task_updated": {
+				Match: config.PluginWorkflowEventMatch{
+					Type: "task.updated",
+				},
+				Operation: "sync",
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	if len(recorders) != 1 || len(recorders[0].upsertedEventTriggers) != 1 {
+		t.Fatalf("initial upserts = %#v", recorders)
+	}
+	_ = result.Close(context.Background())
+
+	cfg = workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "temporal",
+		Operations: []string{"sync"},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap remove event trigger: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(recorders) != 2 {
+		t.Fatalf("recorders = %d, want 2", len(recorders))
+	}
+	staleID := workflowConfigEventTriggerID("roadmap", "task_updated")
+	recorder := recorders[1]
+	if len(recorder.deletedEventTriggers) != 1 {
+		t.Fatalf("deleted event triggers = %d, want 1", len(recorder.deletedEventTriggers))
+	}
+	if recorder.deletedEventTriggers[0].TriggerID != staleID || recorder.deletedEventTriggers[0].PluginName != "roadmap" {
+		t.Fatalf("delete request = %#v", recorder.deletedEventTriggers[0])
+	}
+	if len(recorder.upsertedEventTriggers) != 0 {
+		t.Fatalf("upserted event triggers = %d, want 0", len(recorder.upsertedEventTriggers))
+	}
+}
+
+func TestBootstrapMovesConfiguredWorkflowEventTriggersToNewProvider(t *testing.T) {
+	t.Parallel()
+
+	db := &coretesting.StubIndexedDB{}
+	factories := validFactories()
+	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
+	recorders := map[string][]*recordingWorkflowProvider{}
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		recorder := &recordingWorkflowProvider{}
+		recorders[name] = append(recorders[name], recorder)
+		return recorder, nil
+	}
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "temporal",
+		Operations: []string{"sync"},
+		EventTriggers: map[string]config.PluginWorkflowEventTrigger{
+			"task_updated": {
+				Match: config.PluginWorkflowEventMatch{
+					Type: "task.updated",
+				},
+				Operation: "sync",
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+		"backup":   {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap: %v", err)
+	}
+	if len(recorders["temporal"]) != 1 || len(recorders["temporal"][0].upsertedEventTriggers) != 1 {
+		t.Fatalf("initial temporal recorders = %#v", recorders["temporal"])
+	}
+	_ = result.Close(context.Background())
+
+	cfg = workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "backup",
+		Operations: []string{"sync"},
+		EventTriggers: map[string]config.PluginWorkflowEventTrigger{
+			"task_updated": {
+				Match: config.PluginWorkflowEventMatch{
+					Type: "task.updated",
+				},
+				Operation: "sync",
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+		"backup":   {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap move provider: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(recorders["temporal"]) != 2 || len(recorders["backup"]) != 2 {
+		t.Fatalf("recorders = %#v", recorders)
+	}
+	if len(recorders["temporal"][1].deletedEventTriggers) != 1 {
+		t.Fatalf("temporal deleted event triggers = %d, want 1", len(recorders["temporal"][1].deletedEventTriggers))
+	}
+	if len(recorders["backup"][1].upsertedEventTriggers) != 1 {
+		t.Fatalf("backup upserted event triggers = %d, want 1", len(recorders["backup"][1].upsertedEventTriggers))
+	}
+}
+
+func TestBootstrapRejectsExistingUnmanagedWorkflowEventTriggerIDDuringProviderMove(t *testing.T) {
+	t.Parallel()
+
+	db := &coretesting.StubIndexedDB{}
+	factories := validFactories()
+	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
+	recorders := map[string][]*recordingWorkflowProvider{}
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		recorder := &recordingWorkflowProvider{}
+		if name == "backup" && len(recorders[name]) == 1 {
+			recorder.getEventTrigger = &coreworkflow.EventTrigger{ID: workflowConfigEventTriggerID("roadmap", "task_updated")}
+		}
+		recorders[name] = append(recorders[name], recorder)
+		return recorder, nil
+	}
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "temporal",
+		Operations: []string{"sync"},
+		EventTriggers: map[string]config.PluginWorkflowEventTrigger{
+			"task_updated": {
+				Match: config.PluginWorkflowEventMatch{
+					Type: "task.updated",
+				},
+				Operation: "sync",
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+		"backup":   {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap initial: %v", err)
+	}
+	_ = result.Close(context.Background())
+
+	cfg = workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "backup",
+		Operations: []string{"sync"},
+		EventTriggers: map[string]config.PluginWorkflowEventTrigger{
+			"task_updated": {
+				Match: config.PluginWorkflowEventMatch{
+					Type: "task.updated",
+				},
+				Operation: "sync",
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+		"backup":   {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	_, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err == nil || !strings.Contains(err.Error(), "conflicts with existing unmanaged trigger id") {
+		t.Fatalf("Bootstrap error = %v, want ownership conflict", err)
+	}
+	if len(recorders["backup"]) != 2 {
+		t.Fatalf("backup recorders = %d, want 2", len(recorders["backup"]))
+	}
+	if len(recorders["backup"][1].upsertedEventTriggers) != 0 {
+		t.Fatalf("backup upserted event triggers = %d, want 0", len(recorders["backup"][1].upsertedEventTriggers))
+	}
+}
+
+func TestBootstrapRejectsExistingUnmanagedWorkflowEventTriggerID(t *testing.T) {
+	t.Parallel()
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "temporal",
+		Operations: []string{"sync"},
+		EventTriggers: map[string]config.PluginWorkflowEventTrigger{
+			"task_updated": {
+				Match: config.PluginWorkflowEventMatch{
+					Type: "task.updated",
+				},
+				Operation: "sync",
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	recorder := &recordingWorkflowProvider{
+		getEventTrigger: &coreworkflow.EventTrigger{ID: workflowConfigEventTriggerID("roadmap", "task_updated")},
+	}
+	factories := validFactories()
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		return recorder, nil
+	}
+
+	_, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err == nil || !strings.Contains(err.Error(), "conflicts with existing unmanaged trigger id") {
+		t.Fatalf("Bootstrap error = %v, want ownership conflict", err)
+	}
+	if len(recorder.upsertedEventTriggers) != 0 {
+		t.Fatalf("upserted event triggers = %d, want 0", len(recorder.upsertedEventTriggers))
+	}
+}
+
+func TestBootstrapReAdoptsManagedEventTriggersWhenOwnershipStateIsMissing(t *testing.T) {
+	t.Parallel()
+
+	provider := &recordingWorkflowProvider{}
+	db1 := &coretesting.StubIndexedDB{}
+	db2 := &coretesting.StubIndexedDB{}
+	factories := validFactories()
+	currentDB := db1
+	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return currentDB, nil }
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		return provider, nil
+	}
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "temporal",
+		Operations: []string{"sync"},
+		EventTriggers: map[string]config.PluginWorkflowEventTrigger{
+			"task_updated": {
+				Match: config.PluginWorkflowEventMatch{
+					Type: "task.updated",
+				},
+				Operation: "sync",
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap initial: %v", err)
+	}
+	_ = result.Close(context.Background())
+	if len(provider.upsertedEventTriggers) != 1 {
+		t.Fatalf("initial upserted event triggers = %d, want 1", len(provider.upsertedEventTriggers))
+	}
+	provider.eventTriggers[workflowConfigEventTriggerID("roadmap", "task_updated")].Target.Input = map[string]any{
+		"limit": float64(1),
+	}
+
+	currentDB = db2
+	cfg.Plugins["roadmap"].Workflow.EventTriggers["task_updated"] = config.PluginWorkflowEventTrigger{
+		Match: config.PluginWorkflowEventMatch{
+			Type: "task.updated",
+		},
+		Operation: "sync",
+		Input: map[string]any{
+			"limit": 1,
+		},
+	}
+	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap re-adopt: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(provider.upsertedEventTriggers) != 2 {
+		t.Fatalf("upserted event triggers = %d, want 2", len(provider.upsertedEventTriggers))
+	}
+}
+
+func TestBootstrapIgnoresMissingRemovedConfiguredWorkflowEventTrigger(t *testing.T) {
+	t.Parallel()
+
+	db := &coretesting.StubIndexedDB{}
+	provider := &recordingWorkflowProvider{deleteEventMissingNotFound: true}
+	factories := validFactories()
+	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
+	factories.Workflow = func(_ context.Context, _ string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		return provider, nil
+	}
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "temporal",
+		Operations: []string{"sync"},
+		EventTriggers: map[string]config.PluginWorkflowEventTrigger{
+			"task_updated": {
+				Match: config.PluginWorkflowEventMatch{
+					Type: "task.updated",
+				},
+				Operation: "sync",
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap initial: %v", err)
+	}
+	_ = result.Close(context.Background())
+	provider.eventTriggers = map[string]*coreworkflow.EventTrigger{}
+
+	cfg = workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "temporal",
+		Operations: []string{"sync"},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap remove missing event trigger: %v", err)
+	}
+	_ = result.Close(context.Background())
+
+	if len(provider.deletedEventTriggers) != 1 {
+		t.Fatalf("deleted event triggers = %d, want 1", len(provider.deletedEventTriggers))
+	}
+
+	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap remove missing event trigger replay: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(provider.deletedEventTriggers) != 1 {
+		t.Fatalf("deleted event triggers after replay = %d, want 1", len(provider.deletedEventTriggers))
+	}
+}
+
+func TestBootstrapIgnoresMissingOldEventTriggerDuringWorkflowProviderMove(t *testing.T) {
+	t.Parallel()
+
+	db := &coretesting.StubIndexedDB{}
+	temporal := &recordingWorkflowProvider{deleteEventMissingNotFound: true}
+	backup := &recordingWorkflowProvider{}
+	factories := validFactories()
+	factories.IndexedDB = func(yaml.Node) (indexeddb.IndexedDB, error) { return db, nil }
+	factories.Workflow = func(_ context.Context, name string, _ yaml.Node, _ []providerhost.HostService, _ bootstrap.Deps) (coreworkflow.Provider, error) {
+		if name == "backup" {
+			return backup, nil
+		}
+		return temporal, nil
+	}
+
+	cfg := workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "temporal",
+		Operations: []string{"sync"},
+		EventTriggers: map[string]config.PluginWorkflowEventTrigger{
+			"task_updated": {
+				Match: config.PluginWorkflowEventMatch{
+					Type: "task.updated",
+				},
+				Operation: "sync",
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+		"backup":   {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	result, err := bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap initial: %v", err)
+	}
+	_ = result.Close(context.Background())
+	temporal.eventTriggers = map[string]*coreworkflow.EventTrigger{}
+
+	cfg = workflowStartupCallbackConfig("https://example.invalid")
+	cfg.Plugins["roadmap"].Workflow = &config.PluginWorkflowConfig{
+		Provider:   "backup",
+		Operations: []string{"sync"},
+		EventTriggers: map[string]config.PluginWorkflowEventTrigger{
+			"task_updated": {
+				Match: config.PluginWorkflowEventMatch{
+					Type: "task.updated",
+				},
+				Operation: "sync",
+			},
+		},
+	}
+	cfg.Providers.Workflow = map[string]*config.ProviderEntry{
+		"temporal": {Source: config.ProviderSource{Path: "stub"}},
+		"backup":   {Source: config.ProviderSource{Path: "stub"}},
+	}
+
+	result, err = bootstrap.Bootstrap(context.Background(), cfg, factories)
+	if err != nil {
+		t.Fatalf("Bootstrap move provider: %v", err)
+	}
+	defer func() { _ = result.Close(context.Background()) }()
+	<-result.ProvidersReady
+
+	if len(backup.upsertedEventTriggers) != 1 {
+		t.Fatalf("backup upserted event triggers = %d, want 1", len(backup.upsertedEventTriggers))
+	}
+	if len(temporal.deletedEventTriggers) == 0 {
+		t.Fatal("expected temporal cleanup delete to be attempted")
+	}
+}
+
 func workflowConfigScheduleID(pluginName, scheduleKey string) string {
 	sum := sha256.Sum256([]byte(pluginName + "\x00" + scheduleKey))
+	return coreworkflow.ConfigManagedSchedulePrefix + hex.EncodeToString(sum[:])
+}
+
+func workflowConfigEventTriggerID(pluginName, triggerKey string) string {
+	sum := sha256.Sum256([]byte(pluginName + "\x00event_trigger\x00" + triggerKey))
 	return coreworkflow.ConfigManagedSchedulePrefix + hex.EncodeToString(sum[:])
 }
 

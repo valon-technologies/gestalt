@@ -791,12 +791,15 @@ func buildPluginWorkflowHostServices(pluginName string, deps Deps) ([]providerho
 	return []providerhost.HostService{{
 		EnvVar: providerhost.DefaultWorkflowSocketEnv,
 		Register: func(srv *grpc.Server) {
-			proto.RegisterWorkflowServer(srv, providerhost.NewWorkflowServer(pluginName, func() (coreworkflow.Provider, map[string]struct{}, map[string]struct{}, error) {
+			proto.RegisterWorkflowServer(srv, providerhost.NewWorkflowServer(pluginName, func() (coreworkflow.Provider, map[string]struct{}, providerhost.WorkflowManagedIDs, error) {
 				provider, allowed, err := deps.WorkflowRuntime.ResolvePlugin(pluginName)
 				if err != nil {
-					return nil, nil, nil, err
+					return nil, nil, providerhost.WorkflowManagedIDs{}, err
 				}
-				return provider, allowed, deps.WorkflowRuntime.ManagedScheduleIDs(pluginName), nil
+				return provider, allowed, providerhost.WorkflowManagedIDs{
+					Schedules:     deps.WorkflowRuntime.ManagedScheduleIDs(pluginName),
+					EventTriggers: deps.WorkflowRuntime.ManagedEventTriggerIDs(pluginName),
+				}, nil
 			}))
 		},
 	}}, nil

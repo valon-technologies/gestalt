@@ -2272,6 +2272,15 @@ plugins:
           operation: nightly_sync
           input:
             source: yaml
+      eventTriggers:
+        task_updated:
+          match:
+            type: roadmap.task.updated
+            source: roadmap
+          operation: backfill_items
+          paused: true
+          input:
+            source: event
 providers:
   workflow:
     temporal:
@@ -2301,6 +2310,19 @@ server:
 					Operation: "nightly_sync",
 					Input: map[string]any{
 						"source": "yaml",
+					},
+				},
+			},
+			EventTriggers: map[string]PluginWorkflowEventTrigger{
+				"task_updated": {
+					Match: PluginWorkflowEventMatch{
+						Type:   "roadmap.task.updated",
+						Source: "roadmap",
+					},
+					Operation: "backfill_items",
+					Paused:    true,
+					Input: map[string]any{
+						"source": "event",
 					},
 				},
 			},
@@ -2503,6 +2525,88 @@ server:
 			t.Fatal("Load: expected error, got nil")
 		}
 		if !strings.Contains(err.Error(), `workflow.schedules.invalid.operation "backfill_items" must be listed`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects workflow event triggers with operations outside workflow bindings", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    workflow:
+      provider: temporal
+      operations:
+        - nightly_sync
+      eventTriggers:
+        invalid:
+          match:
+            type: roadmap.task.updated
+          operation: backfill_items
+providers:
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `workflow.eventTriggers.invalid.operation "backfill_items" must be listed`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("rejects workflow event triggers without match type", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+plugins:
+  roadmap:
+    source:
+      path: ./plugin/manifest.yaml
+    workflow:
+      provider: temporal
+      operations:
+        - nightly_sync
+      eventTriggers:
+        invalid:
+          match:
+            source: roadmap
+          operation: nightly_sync
+providers:
+  workflow:
+    temporal:
+      source:
+        path: ./providers/workflow/temporal
+  indexeddb:
+    sqlite:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: sqlite
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `workflow.eventTriggers.invalid.match.type is required`) {
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})

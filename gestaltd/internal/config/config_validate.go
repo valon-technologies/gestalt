@@ -833,6 +833,33 @@ func validatePluginWorkflowConfig(cfg *Config, name string, entry *ProviderEntry
 		}
 		entry.Workflow.Schedules = normalized
 	}
+	if len(entry.Workflow.EventTriggers) > 0 {
+		normalized := make(map[string]PluginWorkflowEventTrigger, len(entry.Workflow.EventTriggers))
+		for key, trigger := range entry.Workflow.EventTriggers {
+			key = strings.TrimSpace(key)
+			if key == "" {
+				return fmt.Errorf("config validation: plugins.%s.workflow.eventTriggers keys must not be empty", name)
+			}
+			if _, exists := normalized[key]; exists {
+				return fmt.Errorf("config validation: plugins.%s.workflow.eventTriggers duplicates %q", name, key)
+			}
+			trigger.Match.Type = strings.TrimSpace(trigger.Match.Type)
+			if trigger.Match.Type == "" {
+				return fmt.Errorf("config validation: plugins.%s.workflow.eventTriggers.%s.match.type is required", name, key)
+			}
+			trigger.Match.Source = strings.TrimSpace(trigger.Match.Source)
+			trigger.Match.Subject = strings.TrimSpace(trigger.Match.Subject)
+			trigger.Operation = strings.TrimSpace(trigger.Operation)
+			if trigger.Operation == "" {
+				return fmt.Errorf("config validation: plugins.%s.workflow.eventTriggers.%s.operation is required", name, key)
+			}
+			if _, exists := seenOps[trigger.Operation]; !exists {
+				return fmt.Errorf("config validation: plugins.%s.workflow.eventTriggers.%s.operation %q must be listed in plugins.%s.workflow.operations", name, key, trigger.Operation, name)
+			}
+			normalized[key] = trigger
+		}
+		entry.Workflow.EventTriggers = normalized
+	}
 	if _, err := cfg.EffectivePluginWorkflow(name, entry); err != nil {
 		return err
 	}
