@@ -346,13 +346,14 @@ func TestE2EValidateAcceptsLayeredConfigs(t *testing.T) {
 	}
 
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, rootDir))
-	setupPluginDir(t, overrideDir)
+	authManifest := componentProviderManifestPath(t, setupAuthProviderDir(t, rootDir, "local"))
 
 	baseConfigPath := filepath.Join(baseDir, "base.yaml")
 	baseConfig := fmt.Sprintf(`server:
   encryptionKey: test-key
   providers:
     indexeddb: sqlite
+    auth: local
 providers:
   indexeddb:
     sqlite:
@@ -360,21 +361,26 @@ providers:
         path: %s
       config:
         path: %q
-plugins:
-  example:
-    source:
-      path: ./missing/manifest.yaml
+  auth:
+    local:
+      source:
+        path: ./missing/manifest.yaml
 `, indexedDBManifest, filepath.Join(rootDir, "gestalt.db"))
 	if err := os.WriteFile(baseConfigPath, []byte(baseConfig), 0o644); err != nil {
 		t.Fatalf("WriteFile base config: %v", err)
 	}
 
+	authRel, err := filepath.Rel(overrideDir, authManifest)
+	if err != nil {
+		t.Fatalf("filepath.Rel(auth): %v", err)
+	}
 	overrideConfigPath := filepath.Join(overrideDir, "local.yaml")
-	overrideConfig := `plugins:
-  example:
-    source:
-      path: ./plugin-src/manifest.yaml
-`
+	overrideConfig := fmt.Sprintf(`providers:
+  auth:
+    local:
+      source:
+        path: %s
+`, filepath.ToSlash(authRel))
 	if err := os.WriteFile(overrideConfigPath, []byte(overrideConfig), 0o644); err != nil {
 		t.Fatalf("WriteFile override config: %v", err)
 	}
@@ -1005,7 +1011,7 @@ plugins:
 	}
 }
 
-func TestE2EInitLocalProviders(t *testing.T) {
+func TestE2EInitRejectsLocalPlugins(t *testing.T) {
 	t.Parallel()
 
 	if testing.Short() {
@@ -1016,28 +1022,34 @@ func TestE2EInitLocalProviders(t *testing.T) {
 	cfgPath := writeServeConfig(t, dir, 0, nil)
 
 	out, err := exec.Command(gestaltdBin, "init", "--config", cfgPath).CombinedOutput()
-	if err != nil {
-		t.Fatalf("gestaltd init failed: %v\noutput: %s", err, out)
+	if err == nil {
+		t.Fatalf("gestaltd init unexpectedly succeeded\noutput: %s", out)
 	}
-
 	lockPath := filepath.Join(dir, "gestalt.lock.json")
-	lockData, err := os.ReadFile(lockPath)
-	if err != nil {
-		t.Fatalf("expected lock file at %s: %v", lockPath, err)
+	if !strings.Contains(string(out), "local plugin and UI sources are not supported during init") {
+		t.Fatalf("gestaltd init output = %s, want local source rejection", out)
+	}
+	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
+		t.Fatalf("lockfile should not be created, got err=%v", err)
+	}
+}
+
+func TestE2EValidateAllowsLocalPlugins(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("skipping local plugin validate E2E test in short mode")
 	}
 
-	var lock map[string]any
-	if err := json.Unmarshal(lockData, &lock); err != nil {
-		t.Fatalf("invalid lock file JSON: %v", err)
+	dir := t.TempDir()
+	cfgPath := writeServeConfig(t, dir, 0, nil)
+
+	out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+	if err != nil {
+		t.Fatalf("gestaltd validate failed: %v\noutput: %s", err, out)
 	}
-	if got, _ := lock["schema"].(string); got != "gestaltd-provider-lock" {
-		t.Fatalf("expected provider lock schema, got %v", lock["schema"])
-	}
-	if got, _ := lock["schemaVersion"].(float64); got < 1 {
-		t.Fatalf("expected schemaVersion >= 1, got %v", lock["schemaVersion"])
-	}
-	if _, ok := lock["version"]; ok {
-		t.Fatalf("expected schema-based lockfile, found legacy version field: %v", lock["version"])
+	if !strings.Contains(string(out), "config ok") {
+		t.Fatalf("gestaltd validate output = %s, want config ok", out)
 	}
 }
 
@@ -1296,16 +1308,11 @@ func writeLayeredE2EConfigs(t *testing.T, dir string, port int) (string, string,
 	}
 
 	indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
-	pluginManifest := componentProviderManifestPath(t, setupPrebuiltPluginDir(t, dir))
 	authManifest := componentProviderManifestPath(t, setupAuthProviderDir(t, dir, "local"))
 
 	indexedDBRel, err := filepath.Rel(deployDir, indexedDBManifest)
 	if err != nil {
 		t.Fatalf("filepath.Rel(indexeddb): %v", err)
-	}
-	pluginRel, err := filepath.Rel(deployDir, pluginManifest)
-	if err != nil {
-		t.Fatalf("filepath.Rel(plugin): %v", err)
 	}
 	authRel, err := filepath.Rel(overrideDir, authManifest)
 	if err != nil {
@@ -1325,11 +1332,7 @@ providers:
     inmem:
       source:
         path: %s
-plugins:
-  example:
-    source:
-      path: %s
-`, port, filepath.ToSlash(indexedDBRel), filepath.ToSlash(pluginRel))
+`, port, filepath.ToSlash(indexedDBRel))
 	overrideCfg := fmt.Sprintf(`server:
   providers:
     auth: local

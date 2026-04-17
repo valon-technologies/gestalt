@@ -499,7 +499,7 @@ func runValidate(args []string) error {
 }
 
 func validateConfigWithArtifactsDir(configFlags []string, artifactsDir string) error {
-	paths, cfg, err := loadConfigForExecutionWithArtifactsDir(configFlags, artifactsDir, true)
+	paths, cfg, err := loadConfigForExecutionWithArtifactsDir(configFlags, artifactsDir, false)
 	if err != nil {
 		return err
 	}

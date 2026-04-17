@@ -235,6 +235,22 @@ func TestLoadForExecutionAtPath_ResolvesLocalManifestPluginWithoutLockfile(t *te
 	if _, err := os.Stat(filepath.Join(dir, InitLockfileName)); !os.IsNotExist(err) {
 		t.Fatalf("lockfile should not be created, got err=%v", err)
 	}
+
+	_, _, err = lc.LoadForExecutionAtPath(cfgPath, true)
+	if err == nil {
+		t.Fatal("LoadForExecutionAtPath(locked=true) unexpectedly succeeded")
+	}
+	if !strings.Contains(err.Error(), "local plugin and UI sources are not supported during locked execution") {
+		t.Fatalf("LoadForExecutionAtPath(locked=true) error = %v, want locked local source rejection", err)
+	}
+
+	_, err = lc.InitAtPath(cfgPath)
+	if err == nil {
+		t.Fatal("InitAtPath unexpectedly succeeded")
+	}
+	if !strings.Contains(err.Error(), "local plugin and UI sources are not supported during init") {
+		t.Fatalf("InitAtPath error = %v, want init local source rejection", err)
+	}
 }
 
 func TestLoadForExecutionAtPath_ResolvesLocalMCPOAuthManifestPluginWithoutLockfile(t *testing.T) {
@@ -570,6 +586,73 @@ plugins:
 				t.Fatalf("lockfile should not be created, got err=%v", err)
 			}
 		})
+	}
+}
+
+func TestLoadForExecutionAtPath_RejectsLocalMountedWebUILockedAndDuringInit(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	webUIDir := filepath.Join(dir, "webui")
+	if err := os.MkdirAll(filepath.Join(webUIDir, "dist"), 0o755); err != nil {
+		t.Fatalf("MkdirAll webui dist: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(webUIDir, "dist", "index.html"), []byte("<html>roadmap</html>"), 0o644); err != nil {
+		t.Fatalf("WriteFile index.html: %v", err)
+	}
+	manifestPath := filepath.Join(webUIDir, "manifest.yaml")
+	manifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindWebUI,
+		Source:      "github.com/testowner/web/roadmap",
+		Version:     "0.0.1-alpha.1",
+		DisplayName: "Roadmap UI",
+		Spec: &providermanifestv1.Spec{
+			AssetRoot: "dist",
+		},
+	}, providerpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeManifest: %v", err)
+	}
+	if err := os.WriteFile(manifestPath, manifest, 0o644); err != nil {
+		t.Fatalf("WriteFile manifest: %v", err)
+	}
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + `  ui:
+    roadmap:
+      source:
+        path: ./webui/manifest.yaml
+      path: /create-customer-roadmap-review
+` + `server:
+` + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	lc := NewLifecycle(nil)
+	loaded, _, err := lc.LoadForExecutionAtPath(cfgPath, false)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=false): %v", err)
+	}
+	if loaded.Providers.UI["roadmap"] == nil || loaded.Providers.UI["roadmap"].ResolvedManifest == nil {
+		t.Fatal("resolved local ui manifest missing after unlocked load")
+	}
+
+	_, _, err = lc.LoadForExecutionAtPath(cfgPath, true)
+	if err == nil {
+		t.Fatal("LoadForExecutionAtPath(locked=true) unexpectedly succeeded")
+	}
+	if !strings.Contains(err.Error(), "local plugin and UI sources are not supported during locked execution") {
+		t.Fatalf("LoadForExecutionAtPath(locked=true) error = %v, want locked local ui rejection", err)
+	}
+
+	_, err = lc.InitAtPath(cfgPath)
+	if err == nil {
+		t.Fatal("InitAtPath unexpectedly succeeded")
+	}
+	if !strings.Contains(err.Error(), "local plugin and UI sources are not supported during init") {
+		t.Fatalf("InitAtPath error = %v, want init local ui rejection", err)
 	}
 }
 

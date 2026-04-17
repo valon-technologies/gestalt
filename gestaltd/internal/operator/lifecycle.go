@@ -102,22 +102,22 @@ func (l *Lifecycle) metadataHTTPClient() *http.Client {
 }
 
 func (l *Lifecycle) InitAtPath(configPath string) (*Lockfile, error) {
-	lock, _, err := l.initAtPaths([]string{configPath}, "")
+	lock, _, err := l.initAtPaths([]string{configPath}, "", false)
 	return lock, err
 }
 
 func (l *Lifecycle) InitAtPathWithArtifactsDir(configPath, artifactsDir string) (*Lockfile, error) {
-	lock, _, err := l.initAtPaths([]string{configPath}, artifactsDir)
+	lock, _, err := l.initAtPaths([]string{configPath}, artifactsDir, false)
 	return lock, err
 }
 
 func (l *Lifecycle) InitAtPaths(configPaths []string) (*Lockfile, error) {
-	lock, _, err := l.initAtPaths(configPaths, "")
+	lock, _, err := l.initAtPaths(configPaths, "", false)
 	return lock, err
 }
 
 func (l *Lifecycle) InitAtPathsWithArtifactsDir(configPaths []string, artifactsDir string) (*Lockfile, error) {
-	lock, _, err := l.initAtPaths(configPaths, artifactsDir)
+	lock, _, err := l.initAtPaths(configPaths, artifactsDir, false)
 	return lock, err
 }
 
@@ -130,7 +130,7 @@ func (l *Lifecycle) InitAtPathWithPlatforms(configPath, artifactsDir string, pla
 // InitAtPathsWithPlatforms runs init and additionally downloads and hashes
 // archives for the specified extra platforms.
 func (l *Lifecycle) InitAtPathsWithPlatforms(configPaths []string, artifactsDir string, platforms []struct{ GOOS, GOARCH, LibC string }) (*Lockfile, error) {
-	lock, cfg, err := l.initAtPaths(configPaths, artifactsDir)
+	lock, cfg, err := l.initAtPaths(configPaths, artifactsDir, false)
 	if err != nil {
 		return nil, err
 	}
@@ -152,11 +152,16 @@ func (l *Lifecycle) InitAtPathsWithPlatforms(configPaths []string, artifactsDir 
 	return lock, nil
 }
 
-func (l *Lifecycle) initAtPaths(configPaths []string, artifactsDir string) (*Lockfile, *config.Config, error) {
+func (l *Lifecycle) initAtPaths(configPaths []string, artifactsDir string, allowLocal bool) (*Lockfile, *config.Config, error) {
 	configPath := primaryConfigPath(configPaths)
 	cfg, err := config.LoadAllowMissingEnvPaths(configPaths)
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading config: %v", err)
+	}
+	if !allowLocal {
+		if err := rejectPortableLocalPluginAndUISources(cfg, "init"); err != nil {
+			return nil, nil, err
+		}
 	}
 	if err := config.OverlayManagedPluginConfigPaths(configPaths, cfg); err != nil {
 		return nil, nil, fmt.Errorf("loading config: %v", err)
@@ -252,6 +257,10 @@ func (l *Lifecycle) initAtPaths(configPaths []string, artifactsDir string) (*Loc
 	return lock, cfg, nil
 }
 
+func (l *Lifecycle) initAtPathsAllowLocal(configPaths []string, artifactsDir string) (*Lockfile, *config.Config, error) {
+	return l.initAtPaths(configPaths, artifactsDir, true)
+}
+
 func buildSourceTokenMap(cfg *config.Config) map[string]string {
 	tokens := make(map[string]string)
 	for _, entry := range cfg.Plugins {
@@ -311,6 +320,11 @@ func (l *Lifecycle) LoadForExecutionAtPathsWithArtifactsDir(configPaths []string
 	cfg, err := config.LoadPaths(configPaths)
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading config: %v", err)
+	}
+	if locked {
+		if err := rejectPortableLocalPluginAndUISources(cfg, "locked execution"); err != nil {
+			return nil, nil, err
+		}
 	}
 	if err := synthesizeLocalSourcePluginOwnedUIEntries(cfg); err != nil {
 		return nil, nil, fmt.Errorf("loading config: %v", err)
@@ -431,7 +445,7 @@ func (l *Lifecycle) lockForSecretsBootstrap(configPaths []string, artifactsDir s
 
 	lock, err := ReadLockfile(paths.lockfilePath)
 	if !locked && (err != nil || !lockMatchesConfig(cfg, paths, lock)) {
-		lock, err = l.InitAtPathsWithArtifactsDir(configPaths, artifactsDir)
+		lock, _, err = l.initAtPathsAllowLocal(configPaths, artifactsDir)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("managed providers require prepared artifacts; run `gestaltd init %s`: %w", formatConfigFlags(configPaths), err)
@@ -691,6 +705,33 @@ func configHasManagedProviderSources(cfg *config.Config) bool {
 		}
 	}
 	return false
+}
+
+// Portable init and locked execution only reject top-level local plugin/UI
+// sources in this slice. Local host-provider manifests remain available until
+// they are cut over to the same published metadata contract.
+func firstPortableRejectedLocalSource(cfg *config.Config) string {
+	if cfg == nil {
+		return ""
+	}
+	for name, entry := range cfg.Plugins {
+		if entry != nil && entry.HasLocalSource() {
+			return fmt.Sprintf("plugins.%s", name)
+		}
+	}
+	for name, entry := range cfg.Providers.UI {
+		if entry != nil && entry.HasLocalSource() {
+			return fmt.Sprintf("providers.ui.%s", name)
+		}
+	}
+	return ""
+}
+
+func rejectPortableLocalPluginAndUISources(cfg *config.Config, mode string) error {
+	if source := firstPortableRejectedLocalSource(cfg); source != "" {
+		return fmt.Errorf("local plugin and UI sources are not supported during %s; %s must run unlocked", mode, source)
+	}
+	return nil
 }
 
 func resolveLockPath(baseDir, provider string) string {
@@ -1580,7 +1621,7 @@ func (l *Lifecycle) applyLockedProviders(configPaths []string, artifactsDir stri
 		}
 		if !locked && (err != nil || !lockMatchesConfig(cfg, paths, lock)) {
 			clearSynthesizedPluginOwnedUIEntries(cfg, synthesizedLockedPluginUIs)
-			lock, err = l.InitAtPathsWithArtifactsDir(configPaths, artifactsDir)
+			lock, _, err = l.initAtPathsAllowLocal(configPaths, artifactsDir)
 		}
 		if err != nil {
 			return fmt.Errorf("managed providers require prepared artifacts; run `gestaltd init %s`: %w", formatConfigFlags(configPaths), err)
