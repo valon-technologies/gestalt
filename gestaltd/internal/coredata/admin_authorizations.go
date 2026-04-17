@@ -2,6 +2,7 @@ package coredata
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -21,11 +22,17 @@ type AdminAuthorizationMembership struct {
 }
 
 type AdminAuthorizationService struct {
-	store indexeddb.ObjectStore
+	store          indexeddb.ObjectStore
+	workspaceRoles *WorkspaceRoleService
+	users          *UserService
 }
 
-func NewAdminAuthorizationService(ds indexeddb.IndexedDB) *AdminAuthorizationService {
-	return &AdminAuthorizationService{store: ds.ObjectStore(StoreAdminAuthorizationMemberships)}
+func NewAdminAuthorizationService(ds indexeddb.IndexedDB, workspaceRoles *WorkspaceRoleService, users *UserService) *AdminAuthorizationService {
+	return &AdminAuthorizationService{
+		store:          ds.ObjectStore(StoreAdminAuthorizationMemberships),
+		workspaceRoles: workspaceRoles,
+		users:          users,
+	}
 }
 
 func (s *AdminAuthorizationService) ListAdminAuthorizations(ctx context.Context) ([]*AdminAuthorizationMembership, error) {
@@ -60,8 +67,10 @@ func (s *AdminAuthorizationService) UpsertAdminAuthorization(ctx context.Context
 	id := adminAuthorizationRecordID(userID)
 	now := time.Now()
 	createdAt := now
+	previousRole := ""
 	if existing, err := s.store.Get(ctx, id); err == nil {
 		createdAt = recTime(existing, "created_at")
+		previousRole = strings.TrimSpace(recString(existing, "role"))
 	} else if err != indexeddb.ErrNotFound {
 		return nil, fmt.Errorf("upsert admin authorization: %w", err)
 	}
@@ -81,6 +90,17 @@ func (s *AdminAuthorizationService) UpsertAdminAuthorization(ctx context.Context
 	if err := s.store.Put(ctx, rec); err != nil {
 		return nil, fmt.Errorf("upsert admin authorization: %w", err)
 	}
+	if s.workspaceRoles != nil && previousRole != "" && previousRole != role {
+		identityID, resolveErr := s.resolveIdentityID(ctx, userID)
+		if resolveErr == nil {
+			if err := s.workspaceRoles.DeleteRole(ctx, identityID, previousRole); err != nil && err != core.ErrNotFound {
+				return nil, fmt.Errorf("delete stale canonical workspace role: %w", err)
+			}
+		}
+	}
+	if err := s.syncWorkspaceRole(ctx, recordToAdminAuthorizationMembership(rec)); err != nil {
+		return nil, err
+	}
 	return recordToAdminAuthorizationMembership(rec), nil
 }
 
@@ -89,11 +109,43 @@ func (s *AdminAuthorizationService) DeleteAdminAuthorization(ctx context.Context
 	if userID == "" {
 		return fmt.Errorf("delete admin authorization: userID is required")
 	}
+	existing, err := s.store.Get(ctx, adminAuthorizationRecordID(userID))
+	if err != nil && err != indexeddb.ErrNotFound {
+		return fmt.Errorf("delete admin authorization: %w", err)
+	}
 	if err := s.store.Delete(ctx, adminAuthorizationRecordID(userID)); err != nil {
 		if err == indexeddb.ErrNotFound {
 			return core.ErrNotFound
 		}
 		return fmt.Errorf("delete admin authorization: %w", err)
+	}
+	if s.workspaceRoles != nil {
+		role := core.WorkspaceRoleAdmin
+		if existing != nil && recString(existing, "role") != "" {
+			role = recString(existing, "role")
+		}
+		identityID, resolveErr := s.resolveIdentityID(ctx, userID)
+		if resolveErr == nil {
+			if err := s.workspaceRoles.DeleteRole(ctx, identityID, role); err != nil && err != core.ErrNotFound {
+				return fmt.Errorf("delete canonical workspace role: %w", err)
+			}
+		}
+	}
+	return nil
+}
+
+func (s *AdminAuthorizationService) BackfillCanonicalWorkspaceRoles(ctx context.Context) error {
+	if s.workspaceRoles == nil {
+		return nil
+	}
+	recs, err := s.store.GetAll(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("list admin authorizations for canonical backfill: %w", err)
+	}
+	for _, rec := range recs {
+		if err := s.syncWorkspaceRole(ctx, recordToAdminAuthorizationMembership(rec)); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -111,4 +163,33 @@ func recordToAdminAuthorizationMembership(rec indexeddb.Record) *AdminAuthorizat
 		CreatedAt: recTime(rec, "created_at"),
 		UpdatedAt: recTime(rec, "updated_at"),
 	}
+}
+
+func (s *AdminAuthorizationService) resolveIdentityID(ctx context.Context, userID string) (string, error) {
+	if s.users == nil {
+		return userID, nil
+	}
+	return s.users.CanonicalIdentityIDForUser(ctx, userID)
+}
+
+func (s *AdminAuthorizationService) syncWorkspaceRole(ctx context.Context, membership *AdminAuthorizationMembership) error {
+	if s.workspaceRoles == nil || membership == nil || membership.UserID == "" || membership.Role == "" {
+		return nil
+	}
+	identityID, resolveErr := s.resolveIdentityID(ctx, membership.UserID)
+	if resolveErr != nil {
+		if errors.Is(resolveErr, core.ErrNotFound) {
+			return nil
+		}
+		return resolveErr
+	}
+	if _, err := s.workspaceRoles.UpsertRole(ctx, &core.WorkspaceRole{
+		IdentityID: identityID,
+		Role:       membership.Role,
+		CreatedAt:  membership.CreatedAt,
+		UpdatedAt:  membership.UpdatedAt,
+	}); err != nil {
+		return fmt.Errorf("sync canonical workspace role %q/%q: %w", identityID, membership.Role, err)
+	}
+	return nil
 }

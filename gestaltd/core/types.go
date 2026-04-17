@@ -30,11 +30,18 @@ type IntegrationToken struct {
 	UpdatedAt         time.Time
 }
 
+type AccessPermission struct {
+	Plugin     string   `json:"plugin"`
+	Operations []string `json:"operations,omitempty"`
+}
+
 type APIToken struct {
 	ID          string
+	IdentityID  string
 	UserID      string
 	OwnerKind   string
 	OwnerID     string
+	TokenKind   string
 	Name        string
 	HashedToken string
 	Scopes      string
@@ -49,15 +56,17 @@ const (
 	APITokenOwnerKindManagedIdentity = "managed_identity"
 )
 
-type AccessPermission struct {
-	Plugin     string   `json:"plugin"`
-	Operations []string `json:"operations,omitempty"`
-}
+const (
+	APITokenKindAPI      = "api"
+	APITokenKindWorkload = "workload"
+)
+
 type ManagedIdentity struct {
-	ID          string
-	DisplayName string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID                  string
+	DisplayName         string
+	CreatedByIdentityID string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 type ManagedIdentityMembership struct {
@@ -77,6 +86,112 @@ type ManagedIdentityGrant struct {
 	Operations []string
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
+}
+
+type Identity struct {
+	ID                  string
+	Status              string
+	DisplayName         string
+	CreatedByIdentityID string
+	MetadataJSON        string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+}
+
+type IdentityAuthBinding struct {
+	ID          string
+	IdentityID  string
+	BindingKind string
+	Authority   string
+	LookupKey   string
+	BindingJSON string
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+}
+
+const (
+	IdentityAuthBindingKindOIDCSubject          = "oidc_subject"
+	IdentityAuthBindingKindEmail                = "email"
+	IdentityAuthBindingKindSPIFFE               = "spiffe"
+	IdentityAuthBindingKindKubernetesServiceAcc = "kubernetes_serviceaccount"
+)
+
+const (
+	IdentityManagementRoleViewer = "viewer"
+	IdentityManagementRoleEditor = "editor"
+	IdentityManagementRoleAdmin  = "admin"
+)
+
+type IdentityManagementGrant struct {
+	ID                string
+	ManagerIdentityID string
+	TargetIdentityID  string
+	Role              string
+	ExpiresAt         *time.Time
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+}
+
+const (
+	WorkspaceRoleAdmin    = "admin"
+	WorkspaceRoleOperator = "operator"
+)
+
+type WorkspaceRole struct {
+	ID         string
+	IdentityID string
+	Role       string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
+}
+
+type IdentityPluginAccess struct {
+	ID                  string
+	IdentityID          string
+	Plugin              string
+	InvokeAllOperations bool
+	Operations          []string
+	ExpiresAt           *time.Time
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+}
+
+type IdentityDelegation struct {
+	ID               string
+	ActorIdentityID  string
+	TargetIdentityID string
+	Plugin           string
+	ExpiresAt        *time.Time
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+type APITokenAccess struct {
+	ID                  string
+	TokenID             string
+	Plugin              string
+	InvokeAllOperations bool
+	Operations          []string
+	ExpiresAt           *time.Time
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+}
+
+type ExternalCredential struct {
+	ID                string
+	IdentityID        string
+	Plugin            string
+	Connection        string
+	Instance          string
+	AuthType          string
+	PayloadEncrypted  string
+	Scopes            string
+	ExpiresAt         *time.Time
+	LastRefreshedAt   *time.Time
+	RefreshErrorCount int
+	MetadataJSON      string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 type UserIdentity struct {

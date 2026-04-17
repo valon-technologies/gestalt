@@ -2,6 +2,7 @@ package coredata
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -22,11 +23,17 @@ type PluginAuthorizationMembership struct {
 }
 
 type PluginAuthorizationService struct {
-	store indexeddb.ObjectStore
+	store           indexeddb.ObjectStore
+	canonicalAccess *IdentityPluginAccessService
+	users           *UserService
 }
 
-func NewPluginAuthorizationService(ds indexeddb.IndexedDB) *PluginAuthorizationService {
-	return &PluginAuthorizationService{store: ds.ObjectStore(StorePluginAuthorizationMemberships)}
+func NewPluginAuthorizationService(ds indexeddb.IndexedDB, canonicalAccess *IdentityPluginAccessService, users *UserService) *PluginAuthorizationService {
+	return &PluginAuthorizationService{
+		store:           ds.ObjectStore(StorePluginAuthorizationMemberships),
+		canonicalAccess: canonicalAccess,
+		users:           users,
+	}
 }
 
 func (s *PluginAuthorizationService) ListPluginAuthorizations(ctx context.Context) ([]*PluginAuthorizationMembership, error) {
@@ -102,6 +109,9 @@ func (s *PluginAuthorizationService) UpsertPluginAuthorization(ctx context.Conte
 	if err := s.store.Put(ctx, rec); err != nil {
 		return nil, fmt.Errorf("upsert plugin authorization: %w", err)
 	}
+	if err := s.syncCanonicalAccess(ctx, recordToPluginAuthorizationMembership(rec)); err != nil {
+		return nil, err
+	}
 	return recordToPluginAuthorizationMembership(rec), nil
 }
 
@@ -116,6 +126,30 @@ func (s *PluginAuthorizationService) DeletePluginAuthorization(ctx context.Conte
 			return core.ErrNotFound
 		}
 		return fmt.Errorf("delete plugin authorization: %w", err)
+	}
+	if s.canonicalAccess != nil {
+		identityID, resolveErr := s.resolveIdentityID(ctx, userID)
+		if resolveErr == nil {
+			if err := s.canonicalAccess.DeleteAccess(ctx, identityID, plugin); err != nil && err != core.ErrNotFound {
+				return fmt.Errorf("delete canonical identity plugin access: %w", err)
+			}
+		}
+	}
+	return nil
+}
+
+func (s *PluginAuthorizationService) BackfillCanonicalAccess(ctx context.Context) error {
+	if s.canonicalAccess == nil {
+		return nil
+	}
+	recs, err := s.store.GetAll(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("list plugin authorizations for canonical backfill: %w", err)
+	}
+	for _, rec := range recs {
+		if err := s.syncCanonicalAccess(ctx, recordToPluginAuthorizationMembership(rec)); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -134,4 +168,34 @@ func recordToPluginAuthorizationMembership(rec indexeddb.Record) *PluginAuthoriz
 		CreatedAt: recTime(rec, "created_at"),
 		UpdatedAt: recTime(rec, "updated_at"),
 	}
+}
+
+func (s *PluginAuthorizationService) resolveIdentityID(ctx context.Context, userID string) (string, error) {
+	if s.users == nil {
+		return userID, nil
+	}
+	return s.users.CanonicalIdentityIDForUser(ctx, userID)
+}
+
+func (s *PluginAuthorizationService) syncCanonicalAccess(ctx context.Context, membership *PluginAuthorizationMembership) error {
+	if s.canonicalAccess == nil || membership == nil || membership.UserID == "" || membership.Plugin == "" {
+		return nil
+	}
+	identityID, resolveErr := s.resolveIdentityID(ctx, membership.UserID)
+	if resolveErr != nil {
+		if errors.Is(resolveErr, core.ErrNotFound) {
+			return nil
+		}
+		return resolveErr
+	}
+	if _, err := s.canonicalAccess.UpsertAccess(ctx, &core.IdentityPluginAccess{
+		IdentityID:          identityID,
+		Plugin:              membership.Plugin,
+		InvokeAllOperations: true,
+		CreatedAt:           membership.CreatedAt,
+		UpdatedAt:           membership.UpdatedAt,
+	}); err != nil {
+		return fmt.Errorf("sync canonical identity plugin access %q/%q: %w", identityID, membership.Plugin, err)
+	}
+	return nil
 }

@@ -2,6 +2,7 @@ package coredata
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -11,11 +12,17 @@ import (
 )
 
 type ManagedIdentityMembershipService struct {
-	store indexeddb.ObjectStore
+	store           indexeddb.ObjectStore
+	canonicalGrants *IdentityManagementGrantService
+	users           *UserService
 }
 
-func NewManagedIdentityMembershipService(ds indexeddb.IndexedDB) *ManagedIdentityMembershipService {
-	return &ManagedIdentityMembershipService{store: ds.ObjectStore(StoreManagedIdentityMemberships)}
+func NewManagedIdentityMembershipService(ds indexeddb.IndexedDB, canonicalGrants *IdentityManagementGrantService, users *UserService) *ManagedIdentityMembershipService {
+	return &ManagedIdentityMembershipService{
+		store:           ds.ObjectStore(StoreManagedIdentityMemberships),
+		canonicalGrants: canonicalGrants,
+		users:           users,
+	}
 }
 
 func (s *ManagedIdentityMembershipService) UpsertMembership(ctx context.Context, membership *core.ManagedIdentityMembership) (*core.ManagedIdentityMembership, error) {
@@ -34,6 +41,9 @@ func (s *ManagedIdentityMembershipService) UpsertMembership(ctx context.Context,
 		if err := s.store.Put(ctx, managedIdentityMembershipRecord(existing)); err != nil {
 			return nil, fmt.Errorf("update managed identity membership: %w", err)
 		}
+		if err := s.syncCanonicalGrant(ctx, existing); err != nil {
+			return nil, err
+		}
 		return existing, nil
 	case err != nil && err != indexeddb.ErrNotFound:
 		return nil, fmt.Errorf("lookup managed identity membership: %w", err)
@@ -46,6 +56,9 @@ func (s *ManagedIdentityMembershipService) UpsertMembership(ctx context.Context,
 	membership.UpdatedAt = now
 	if err := s.store.Add(ctx, managedIdentityMembershipRecord(membership)); err != nil {
 		return nil, fmt.Errorf("create managed identity membership: %w", err)
+	}
+	if err := s.syncCanonicalGrant(ctx, membership); err != nil {
+		return nil, err
 	}
 	return membership, nil
 }
@@ -93,6 +106,14 @@ func (s *ManagedIdentityMembershipService) DeleteMembership(ctx context.Context,
 	if deleted == 0 {
 		return core.ErrNotFound
 	}
+	if s.canonicalGrants != nil {
+		managerIdentityID, resolveErr := s.resolveManagerIdentityID(ctx, userID)
+		if resolveErr == nil {
+			if err := s.canonicalGrants.DeleteGrant(ctx, managerIdentityID, identityID); err != nil && err != core.ErrNotFound {
+				return fmt.Errorf("delete canonical identity management grant: %w", err)
+			}
+		}
+	}
 	return nil
 }
 
@@ -102,6 +123,25 @@ func (s *ManagedIdentityMembershipService) RestoreMembership(ctx context.Context
 	}
 	if err := s.store.Put(ctx, managedIdentityMembershipRecord(membership)); err != nil {
 		return fmt.Errorf("restore managed identity membership: %w", err)
+	}
+	if err := s.syncCanonicalGrant(ctx, membership); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *ManagedIdentityMembershipService) BackfillCanonicalGrants(ctx context.Context) error {
+	if s.canonicalGrants == nil {
+		return nil
+	}
+	recs, err := s.store.GetAll(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("list managed identity memberships for canonical backfill: %w", err)
+	}
+	for _, rec := range recs {
+		if err := s.syncCanonicalGrant(ctx, recordToManagedIdentityMembership(rec)); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -128,4 +168,34 @@ func recordToManagedIdentityMembership(rec indexeddb.Record) *core.ManagedIdenti
 		CreatedAt:  recTime(rec, "created_at"),
 		UpdatedAt:  recTime(rec, "updated_at"),
 	}
+}
+
+func (s *ManagedIdentityMembershipService) resolveManagerIdentityID(ctx context.Context, userID string) (string, error) {
+	if s.users == nil {
+		return userID, nil
+	}
+	return s.users.CanonicalIdentityIDForUser(ctx, userID)
+}
+
+func (s *ManagedIdentityMembershipService) syncCanonicalGrant(ctx context.Context, membership *core.ManagedIdentityMembership) error {
+	if s.canonicalGrants == nil || membership == nil || membership.UserID == "" || membership.IdentityID == "" {
+		return nil
+	}
+	managerIdentityID, resolveErr := s.resolveManagerIdentityID(ctx, membership.UserID)
+	if resolveErr != nil {
+		if errors.Is(resolveErr, core.ErrNotFound) {
+			return nil
+		}
+		return resolveErr
+	}
+	if _, err := s.canonicalGrants.UpsertGrant(ctx, &core.IdentityManagementGrant{
+		ManagerIdentityID: managerIdentityID,
+		TargetIdentityID:  membership.IdentityID,
+		Role:              membership.Role,
+		CreatedAt:         membership.CreatedAt,
+		UpdatedAt:         membership.UpdatedAt,
+	}); err != nil {
+		return fmt.Errorf("sync canonical identity management grant %q/%q: %w", managerIdentityID, membership.IdentityID, err)
+	}
+	return nil
 }

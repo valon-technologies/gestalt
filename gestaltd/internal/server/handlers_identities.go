@@ -157,10 +157,11 @@ func (s *Server) createManagedIdentity(w http.ResponseWriter, r *http.Request) {
 
 	now := s.nowUTCSecond()
 	identity := &core.ManagedIdentity{
-		ID:          uuid.NewString(),
-		DisplayName: req.DisplayName,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ID:                  uuid.NewString(),
+		DisplayName:         req.DisplayName,
+		CreatedByIdentityID: userID,
+		CreatedAt:           now,
+		UpdatedAt:           now,
 	}
 	if err := s.managedIdentities.CreateIdentity(r.Context(), identity); err != nil {
 		auditErr = errors.New("failed to create identity")

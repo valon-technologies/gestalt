@@ -37,7 +37,13 @@ func Validate(ctx context.Context, cfg *config.Config, factories *FactoryRegistr
 		warnings = w.Warnings()
 	}
 
-	providers, providersReady, connAuthResolver, errResolver, err := buildProvidersAsync(ctx, cfg, factories, prepared.Deps, buildProviderForValidation)
+	providers, providersReady, connAuthResolver, errResolver, err := buildProvidersAsync(
+		ctx,
+		cfg,
+		factories,
+		prepared.Deps,
+		buildProviderForValidation,
+	)
 	if err != nil {
 		return warnings, err
 	}

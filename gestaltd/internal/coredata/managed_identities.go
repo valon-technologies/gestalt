@@ -11,11 +11,15 @@ import (
 )
 
 type ManagedIdentityService struct {
-	store indexeddb.ObjectStore
+	store      indexeddb.ObjectStore
+	identities *IdentityService
 }
 
-func NewManagedIdentityService(ds indexeddb.IndexedDB) *ManagedIdentityService {
-	return &ManagedIdentityService{store: ds.ObjectStore(StoreManagedIdentities)}
+func NewManagedIdentityService(ds indexeddb.IndexedDB, identities *IdentityService) *ManagedIdentityService {
+	return &ManagedIdentityService{
+		store:      ds.ObjectStore(StoreManagedIdentities),
+		identities: identities,
+	}
 }
 
 func (s *ManagedIdentityService) CreateIdentity(ctx context.Context, identity *core.ManagedIdentity) error {
@@ -30,12 +34,16 @@ func (s *ManagedIdentityService) CreateIdentity(ctx context.Context, identity *c
 		identity.UpdatedAt = identity.CreatedAt
 	}
 	if err := s.store.Add(ctx, indexeddb.Record{
-		"id":           identity.ID,
-		"display_name": identity.DisplayName,
-		"created_at":   identity.CreatedAt,
-		"updated_at":   identity.UpdatedAt,
+		"id":                     identity.ID,
+		"display_name":           identity.DisplayName,
+		"created_by_identity_id": identity.CreatedByIdentityID,
+		"created_at":             identity.CreatedAt,
+		"updated_at":             identity.UpdatedAt,
 	}); err != nil {
 		return fmt.Errorf("create managed identity: %w", err)
+	}
+	if err := s.syncCanonicalIdentity(ctx, identity); err != nil {
+		return err
 	}
 	return nil
 }
@@ -60,16 +68,23 @@ func (s *ManagedIdentityService) UpdateIdentity(ctx context.Context, identity *c
 		return err
 	}
 	identity.CreatedAt = existing.CreatedAt
+	if identity.CreatedByIdentityID == "" {
+		identity.CreatedByIdentityID = existing.CreatedByIdentityID
+	}
 	if identity.UpdatedAt.IsZero() {
 		identity.UpdatedAt = time.Now()
 	}
 	if err := s.store.Put(ctx, indexeddb.Record{
-		"id":           identity.ID,
-		"display_name": identity.DisplayName,
-		"created_at":   identity.CreatedAt,
-		"updated_at":   identity.UpdatedAt,
+		"id":                     identity.ID,
+		"display_name":           identity.DisplayName,
+		"created_by_identity_id": identity.CreatedByIdentityID,
+		"created_at":             identity.CreatedAt,
+		"updated_at":             identity.UpdatedAt,
 	}); err != nil {
 		return fmt.Errorf("update managed identity: %w", err)
+	}
+	if err := s.syncCanonicalIdentity(ctx, identity); err != nil {
+		return err
 	}
 	return nil
 }
@@ -80,6 +95,11 @@ func (s *ManagedIdentityService) DeleteIdentity(ctx context.Context, id string) 
 	}
 	if err := s.store.Delete(ctx, id); err != nil {
 		return fmt.Errorf("delete managed identity: %w", err)
+	}
+	if s.identities != nil {
+		if err := s.identities.DeleteIdentity(ctx, id); err != nil && err != core.ErrNotFound {
+			return fmt.Errorf("delete canonical identity: %w", err)
+		}
 	}
 	return nil
 }
@@ -102,11 +122,50 @@ func (s *ManagedIdentityService) ListIdentitiesByIDs(ctx context.Context, ids []
 	return out, nil
 }
 
+func (s *ManagedIdentityService) BackfillCanonicalIdentities(ctx context.Context) error {
+	if s.identities == nil {
+		return nil
+	}
+	recs, err := s.store.GetAll(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("list managed identities for canonical backfill: %w", err)
+	}
+	for _, rec := range recs {
+		if err := s.syncCanonicalIdentity(ctx, recordToManagedIdentity(rec)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func recordToManagedIdentity(rec indexeddb.Record) *core.ManagedIdentity {
 	return &core.ManagedIdentity{
-		ID:          recString(rec, "id"),
-		DisplayName: recString(rec, "display_name"),
-		CreatedAt:   recTime(rec, "created_at"),
-		UpdatedAt:   recTime(rec, "updated_at"),
+		ID:                  recString(rec, "id"),
+		DisplayName:         recString(rec, "display_name"),
+		CreatedByIdentityID: recString(rec, "created_by_identity_id"),
+		CreatedAt:           recTime(rec, "created_at"),
+		UpdatedAt:           recTime(rec, "updated_at"),
 	}
+}
+
+func (s *ManagedIdentityService) syncCanonicalIdentity(ctx context.Context, identity *core.ManagedIdentity) error {
+	if s.identities == nil || identity == nil || identity.ID == "" {
+		return nil
+	}
+	displayName := identity.DisplayName
+	if displayName == "" {
+		displayName = identity.ID
+	}
+	if _, err := s.identities.UpsertIdentity(ctx, &core.Identity{
+		ID:                  identity.ID,
+		Status:              identityStatusActive,
+		DisplayName:         displayName,
+		CreatedByIdentityID: identity.CreatedByIdentityID,
+		MetadataJSON:        legacyIdentityMetadataJSON("service_account", nil),
+		CreatedAt:           identity.CreatedAt,
+		UpdatedAt:           identity.UpdatedAt,
+	}); err != nil {
+		return fmt.Errorf("sync canonical identity %q: %w", identity.ID, err)
+	}
+	return nil
 }
