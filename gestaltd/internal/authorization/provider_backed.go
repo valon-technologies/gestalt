@@ -500,7 +500,7 @@ func (a *ProviderBackedAuthorizer) resolveRoleVariants(ctx context.Context, subj
 	}
 
 	a.stateMu.RLock()
-	modelID := a.state.modelID
+	expectedModelID := strings.TrimSpace(a.state.modelID)
 	a.stateMu.RUnlock()
 
 	resource := &core.ResourceRef{Type: resourceType, Id: resourceID}
@@ -521,45 +521,50 @@ func (a *ProviderBackedAuthorizer) resolveRoleVariants(ctx context.Context, subj
 			if i >= len(roles) {
 				break
 			}
+			if decisionModelID := strings.TrimSpace(decision.GetModelId()); expectedModelID != "" && decisionModelID != "" && decisionModelID != expectedModelID {
+				return "", false, fmt.Errorf("authorization provider active model changed: expected %q, got %q", expectedModelID, decisionModelID)
+			}
 			if decision != nil && decision.GetAllowed() {
-				if modelID == "" && decision.GetModelId() != "" {
-					a.stateMu.Lock()
-					if a.state.modelID == "" {
-						a.state.modelID = decision.GetModelId()
-					}
-					a.stateMu.Unlock()
-				}
 				return roles[i], true, nil
 			}
 		}
-	}
-	if modelID != "" {
-		a.stateMu.Lock()
-		if a.state.modelID == "" {
-			a.state.modelID = modelID
-		}
-		a.stateMu.Unlock()
 	}
 	return "", false, nil
 }
 
 func (a *ProviderBackedAuthorizer) ensureModel(ctx context.Context) (string, error) {
 	state := a.currentState()
-	if strings.TrimSpace(state.modelID) != "" {
-		return strings.TrimSpace(state.modelID), nil
-	}
+	expectedModelID := strings.TrimSpace(state.modelID)
 	active, err := a.provider.GetActiveModel(ctx)
 	if err != nil {
 		return "", fmt.Errorf("get active authorization model: %w", err)
 	}
-	if model := active.GetModel(); model != nil && strings.TrimSpace(model.GetId()) != "" {
-		modelID := strings.TrimSpace(model.GetId())
-		a.stateMu.Lock()
-		if a.state.modelID == "" {
-			a.state.modelID = modelID
+	activeModelID := ""
+	if model := active.GetModel(); model != nil {
+		activeModelID = strings.TrimSpace(model.GetId())
+	}
+	if expectedModelID != "" {
+		if activeModelID == "" {
+			return "", fmt.Errorf("authorization provider lost active model %q", expectedModelID)
 		}
-		a.stateMu.Unlock()
-		return modelID, nil
+		if activeModelID != expectedModelID {
+			return "", fmt.Errorf("authorization provider active model changed: expected %q, got %q", expectedModelID, activeModelID)
+		}
+		return expectedModelID, nil
+	}
+	if activeModelID != "" {
+		relationships, err := a.readAllRelationships(ctx, activeModelID)
+		if err != nil {
+			return "", err
+		}
+		if _, ok := relationships[relationshipMapKey(ProviderModelSentinelRelationship())]; ok {
+			a.stateMu.Lock()
+			if a.state.modelID == "" {
+				a.state.modelID = activeModelID
+			}
+			a.stateMu.Unlock()
+			return activeModelID, nil
+		}
 	}
 	model, err := a.provider.WriteModel(ctx, &core.WriteModelRequest{Schema: providerAuthzSchema})
 	if err != nil {
@@ -610,6 +615,7 @@ func (a *ProviderBackedAuthorizer) buildDesiredRelationships(modelID string) (ma
 		pluginStaticRoles:  map[string][]string{},
 		pluginDynamicRoles: map[string][]string{},
 	}
+	addDesiredRelationship(desired, ProviderModelSentinelRelationship())
 	policyStaticRoles := map[string]map[string]struct{}{}
 	pluginStaticRoles := map[string]map[string]struct{}{}
 	pluginDynamicRoles := map[string]map[string]struct{}{}

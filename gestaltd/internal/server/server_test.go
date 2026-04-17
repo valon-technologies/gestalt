@@ -134,13 +134,13 @@ type memoryAuthorizationProvider struct {
 	mu            sync.Mutex
 	activeModelID string
 	models        []*core.AuthorizationModelRef
-	rels          map[string]*core.Relationship
+	relsByModel   map[string]map[string]*core.Relationship
 }
 
 func newMemoryAuthorizationProvider(name string) *memoryAuthorizationProvider {
 	return &memoryAuthorizationProvider{
-		name: name,
-		rels: map[string]*core.Relationship{},
+		name:        name,
+		relsByModel: map[string]map[string]*core.Relationship{},
 	}
 }
 
@@ -163,10 +163,11 @@ func (p *memoryAuthorizationProvider) EvaluateMany(_ context.Context, req *core.
 	resp := &core.AccessEvaluationsResponse{
 		Decisions: make([]*core.AccessDecision, 0, len(req.GetRequests())),
 	}
+	rels := p.relsByModel[p.activeModelID]
 	for _, item := range req.GetRequests() {
 		allowed := false
-		if item != nil {
-			_, allowed = p.rels[memoryAuthorizationRelationshipKey(item.GetSubject(), item.GetAction().GetName(), item.GetResource())]
+		if item != nil && rels != nil {
+			_, allowed = rels[memoryAuthorizationRelationshipKey(item.GetSubject(), item.GetAction().GetName(), item.GetResource())]
 		}
 		resp.Decisions = append(resp.Decisions, &core.AccessDecision{
 			Allowed: allowed,
@@ -198,8 +199,13 @@ func (p *memoryAuthorizationProvider) ReadRelationships(_ context.Context, req *
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	keys := make([]string, 0, len(p.rels))
-	for key, rel := range p.rels {
+	modelID := strings.TrimSpace(req.GetModelId())
+	if modelID == "" {
+		modelID = p.activeModelID
+	}
+	rels := p.relsByModel[modelID]
+	keys := make([]string, 0, len(rels))
+	for key, rel := range rels {
 		if !memoryAuthorizationRelationshipMatches(rel, req) {
 			continue
 		}
@@ -230,7 +236,7 @@ func (p *memoryAuthorizationProvider) ReadRelationships(_ context.Context, req *
 
 	out := make([]*core.Relationship, 0, end-start)
 	for _, key := range keys[start:end] {
-		out = append(out, cloneMemoryAuthorizationRelationship(p.rels[key]))
+		out = append(out, cloneMemoryAuthorizationRelationship(rels[key]))
 	}
 	nextPageToken := ""
 	if end < len(keys) {
@@ -239,18 +245,27 @@ func (p *memoryAuthorizationProvider) ReadRelationships(_ context.Context, req *
 	return &core.ReadRelationshipsResponse{
 		Relationships: out,
 		NextPageToken: nextPageToken,
-		ModelId:       p.activeModelID,
+		ModelId:       modelID,
 	}, nil
 }
 
 func (p *memoryAuthorizationProvider) WriteRelationships(_ context.Context, req *core.WriteRelationshipsRequest) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	modelID := strings.TrimSpace(req.GetModelId())
+	if modelID == "" {
+		modelID = p.activeModelID
+	}
+	rels := p.relsByModel[modelID]
+	if rels == nil {
+		rels = map[string]*core.Relationship{}
+		p.relsByModel[modelID] = rels
+	}
 	for _, key := range req.GetDeletes() {
-		delete(p.rels, memoryAuthorizationRelationshipKey(key.GetSubject(), key.GetRelation(), key.GetResource()))
+		delete(rels, memoryAuthorizationRelationshipKey(key.GetSubject(), key.GetRelation(), key.GetResource()))
 	}
 	for _, rel := range req.GetWrites() {
-		p.rels[memoryAuthorizationRelationshipKey(rel.GetSubject(), rel.GetRelation(), rel.GetResource())] = cloneMemoryAuthorizationRelationship(rel)
+		rels[memoryAuthorizationRelationshipKey(rel.GetSubject(), rel.GetRelation(), rel.GetResource())] = cloneMemoryAuthorizationRelationship(rel)
 	}
 	return nil
 }
@@ -281,6 +296,9 @@ func (p *memoryAuthorizationProvider) WriteModel(context.Context, *core.WriteMod
 	}
 	p.models = append(p.models, model)
 	p.activeModelID = model.GetId()
+	if p.relsByModel[model.GetId()] == nil {
+		p.relsByModel[model.GetId()] = map[string]*core.Relationship{}
+	}
 	return model, nil
 }
 
@@ -2499,13 +2517,29 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 		t.Fatalf("authorization.New: %v", err)
 	}
 	authz := authorization.NewProviderBacked(legacy, provider)
+	if err := authz.ReloadDynamic(context.Background()); err != nil {
+		t.Fatalf("ReloadDynamic: %v", err)
+	}
 
 	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				if token != "admin-session" {
+					return nil, fmt.Errorf("invalid token")
+				}
+				return &core.UserIdentity{Email: "static@example.test"}, nil
+			},
+		}
 		cfg.Services = svc
 		cfg.Authorizer = authz
 		cfg.AuthorizationProvider = provider
 		cfg.PluginDefs = map[string]*config.ProviderEntry{
 			"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
+		}
+		cfg.Admin = server.AdminRouteConfig{
+			AuthorizationPolicy: "sample_policy",
+			AllowedRoles:        []string{"admin"},
 		}
 		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			_, _ = w.Write([]byte("admin"))
@@ -2516,6 +2550,7 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 	body := bytes.NewBufferString(`{"email":"dynamic@example.test","role":"viewer"}`)
 	req, _ := http.NewRequest(http.MethodPut, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", body)
 	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("PUT dynamic member: %v", err)
@@ -2534,7 +2569,9 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 		t.Fatalf("DeletePluginAuthorization: %v", err)
 	}
 
-	resp, err = http.Get(ts.URL + "/admin/api/v1/authorization/plugins/sample_plugin/members")
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/plugins/sample_plugin/members", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("GET members: %v", err)
 	}
@@ -2551,7 +2588,9 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 		t.Fatalf("expected provider-backed merged members, got %d (%+v)", len(members), members)
 	}
 
-	resp, err = http.Get(ts.URL + "/admin/api/v1/authorization/provider")
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/provider", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("GET provider summary: %v", err)
 	}
@@ -2574,7 +2613,9 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 		t.Fatal("expected active model id")
 	}
 
-	resp, err = http.Get(ts.URL + "/admin/api/v1/authorization/models")
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/models", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("GET models: %v", err)
 	}
@@ -2595,7 +2636,9 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 		t.Fatalf("models response = %+v, want one active model", modelsResp.Models)
 	}
 
-	resp, err = http.Get(ts.URL + "/admin/api/v1/authorization/relationships?resourceType=plugin_dynamic&resourceId=sample_plugin")
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/admin/api/v1/authorization/relationships?resourceType=plugin_dynamic&resourceId=sample_plugin", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "admin-session"})
+	resp, err = http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("GET relationships: %v", err)
 	}
@@ -2623,6 +2666,63 @@ func TestAdminAPI_PluginAuthorizationProviderBackedReadsAndDebug(t *testing.T) {
 		if !rel.Managed {
 			t.Fatalf("expected managed relationship rows, got %+v", relationshipsResp.Relationships)
 		}
+	}
+}
+
+func TestAdminAPI_AuthorizationProviderDebugRequiresAdminPolicy(t *testing.T) {
+	t.Parallel()
+
+	svc := coretesting.NewStubServices(t)
+	provider := newMemoryAuthorizationProvider("memory-authorization")
+	legacy, err := authorization.New(config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{Email: "static@example.test", Role: "admin"},
+				},
+			},
+		},
+	}, map[string]*config.ProviderEntry{
+		"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
+	}, nil, nil, svc.PluginAuthorizations)
+	if err != nil {
+		t.Fatalf("authorization.New: %v", err)
+	}
+	authz := authorization.NewProviderBacked(legacy, provider)
+	if err := authz.ReloadDynamic(context.Background()); err != nil {
+		t.Fatalf("ReloadDynamic: %v", err)
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.AuthorizationProvider = provider
+		cfg.PluginDefs = map[string]*config.ProviderEntry{
+			"sample_plugin": {AuthorizationPolicy: "sample_policy", MountPath: "/sample"},
+		}
+		cfg.AdminUI = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("admin"))
+		})
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	paths := []string{
+		"/admin/api/v1/authorization/provider",
+		"/admin/api/v1/authorization/models",
+		"/admin/api/v1/authorization/relationships",
+	}
+	for _, path := range paths {
+		resp, err := http.Get(ts.URL + path)
+		if err != nil {
+			t.Fatalf("GET %s: %v", path, err)
+		}
+		if resp.StatusCode != http.StatusServiceUnavailable {
+			body, _ := io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			t.Fatalf("%s status = %d, want 503: %s", path, resp.StatusCode, body)
+		}
+		_ = resp.Body.Close()
 	}
 }
 

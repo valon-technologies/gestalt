@@ -55,7 +55,7 @@ type adminAuthorizationRef struct {
 }
 
 func (s *Server) getAdminAuthorizationProvider(w http.ResponseWriter, r *http.Request) {
-	if !s.ensureAdminAuthorizationProviderAvailable(w) {
+	if !s.ensureAdminAuthorizationProviderDebugAvailable(w) {
 		return
 	}
 
@@ -88,7 +88,7 @@ func (s *Server) getAdminAuthorizationProvider(w http.ResponseWriter, r *http.Re
 }
 
 func (s *Server) listAdminAuthorizationModels(w http.ResponseWriter, r *http.Request) {
-	if !s.ensureAdminAuthorizationProviderAvailable(w) {
+	if !s.ensureAdminAuthorizationProviderDebugAvailable(w) {
 		return
 	}
 
@@ -116,7 +116,7 @@ func (s *Server) listAdminAuthorizationModels(w http.ResponseWriter, r *http.Req
 }
 
 func (s *Server) listAdminAuthorizationRelationships(w http.ResponseWriter, r *http.Request) {
-	if !s.ensureAdminAuthorizationProviderAvailable(w) {
+	if !s.ensureAdminAuthorizationProviderDebugAvailable(w) {
 		return
 	}
 
@@ -308,6 +308,17 @@ func (s *Server) readAllAuthorizationRelationships(ctx context.Context, req *cor
 func (s *Server) ensureAdminAuthorizationProviderAvailable(w http.ResponseWriter) bool {
 	if s.authorizationProvider == nil {
 		writeError(w, http.StatusServiceUnavailable, "authorization provider is unavailable")
+		return false
+	}
+	return true
+}
+
+func (s *Server) ensureAdminAuthorizationProviderDebugAvailable(w http.ResponseWriter) bool {
+	if !s.ensureAdminAuthorizationProviderAvailable(w) {
+		return false
+	}
+	if strings.TrimSpace(s.adminRoute.AuthorizationPolicy) == "" {
+		writeError(w, http.StatusServiceUnavailable, "authorization provider debug is unavailable")
 		return false
 	}
 	return true
