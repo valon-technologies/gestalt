@@ -195,6 +195,100 @@ func (p *Provider) SessionTTL() time.Duration { return 90 * time.Minute }
 `
 }
 
+func GeneratedAuthorizationPackageSource() string {
+	return `package authorization
+
+import (
+	"context"
+
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+)
+
+type Provider struct{}
+
+func New() *Provider { return &Provider{} }
+
+func (p *Provider) Configure(context.Context, string, map[string]any) error { return nil }
+
+func (p *Provider) Metadata() gestalt.ProviderMetadata {
+	return gestalt.ProviderMetadata{
+		Kind:        gestalt.ProviderKindAuthorization,
+		Name:        "generated-authorization",
+		DisplayName: "Generated Authorization",
+	}
+}
+
+func (p *Provider) Evaluate(_ context.Context, _ *gestalt.AccessEvaluationRequest) (*gestalt.AccessDecision, error) {
+	return &gestalt.AccessDecision{Allowed: true, ModelId: "model-v1"}, nil
+}
+
+func (p *Provider) EvaluateMany(_ context.Context, req *gestalt.AccessEvaluationsRequest) (*gestalt.AccessEvaluationsResponse, error) {
+	decisions := make([]*gestalt.AccessDecision, 0, len(req.GetRequests()))
+	for range req.GetRequests() {
+		decisions = append(decisions, &gestalt.AccessDecision{Allowed: true, ModelId: "model-v1"})
+	}
+	return &gestalt.AccessEvaluationsResponse{Decisions: decisions}, nil
+}
+
+func (p *Provider) SearchResources(_ context.Context, _ *gestalt.ResourceSearchRequest) (*gestalt.ResourceSearchResponse, error) {
+	return &gestalt.ResourceSearchResponse{
+		Resources: []*gestalt.AuthorizationResource{{Type: "plugin", Id: "github"}},
+		ModelId:   "model-v1",
+	}, nil
+}
+
+func (p *Provider) SearchSubjects(_ context.Context, _ *gestalt.SubjectSearchRequest) (*gestalt.SubjectSearchResponse, error) {
+	return &gestalt.SubjectSearchResponse{
+		Subjects: []*gestalt.AuthorizationSubject{{Type: "user", Id: "generated-user"}},
+		ModelId:  "model-v1",
+	}, nil
+}
+
+func (p *Provider) SearchActions(_ context.Context, _ *gestalt.ActionSearchRequest) (*gestalt.ActionSearchResponse, error) {
+	return &gestalt.ActionSearchResponse{
+		Actions: []*gestalt.AuthorizationAction{{Name: "invoke"}},
+		ModelId: "model-v1",
+	}, nil
+}
+
+func (p *Provider) GetMetadata(context.Context) (*gestalt.AuthorizationMetadata, error) {
+	return &gestalt.AuthorizationMetadata{
+		Capabilities: []string{"evaluate", "relationships", "models"},
+		ActiveModelId: "model-v1",
+	}, nil
+}
+
+func (p *Provider) ReadRelationships(_ context.Context, _ *gestalt.ReadRelationshipsRequest) (*gestalt.ReadRelationshipsResponse, error) {
+	return &gestalt.ReadRelationshipsResponse{
+		Relationships: []*gestalt.Relationship{{
+			Subject:  &gestalt.AuthorizationSubject{Type: "user", Id: "generated-user"},
+			Relation: "viewer",
+			Resource: &gestalt.AuthorizationResource{Type: "plugin", Id: "github"},
+		}},
+		ModelId: "model-v1",
+	}, nil
+}
+
+func (p *Provider) WriteRelationships(context.Context, *gestalt.WriteRelationshipsRequest) error { return nil }
+
+func (p *Provider) GetActiveModel(context.Context) (*gestalt.GetActiveModelResponse, error) {
+	return &gestalt.GetActiveModelResponse{
+		Model: &gestalt.AuthorizationModelRef{Id: "model-v1", Version: "v1"},
+	}, nil
+}
+
+func (p *Provider) ListModels(_ context.Context, _ *gestalt.ListModelsRequest) (*gestalt.ListModelsResponse, error) {
+	return &gestalt.ListModelsResponse{
+		Models: []*gestalt.AuthorizationModelRef{{Id: "model-v1", Version: "v1"}},
+	}, nil
+}
+
+func (p *Provider) WriteModel(context.Context, *gestalt.WriteModelRequest) (*gestalt.AuthorizationModelRef, error) {
+	return &gestalt.AuthorizationModelRef{Id: "model-v2", Version: "v2"}, nil
+}
+`
+}
+
 func GeneratedSecretsPackageSource() string {
 	return `package secrets
 
