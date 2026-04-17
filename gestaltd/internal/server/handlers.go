@@ -39,11 +39,11 @@ const sessionCookieName = "session_token"
 const defaultSessionCookieTTL = 24 * time.Hour
 
 var (
-	errNotAuthenticated  = errors.New("not authenticated")
-	errResolveUser       = errors.New("failed to resolve user")
-	errWorkloadForbidden = errors.New("workload callers are not allowed on this route")
-	errOperationAccess   = errors.New("operation access denied")
-	errWorkloadSelector  = errors.New("workload callers may not override connection or instance bindings")
+	errNotAuthenticated = errors.New("not authenticated")
+	errResolveUser      = errors.New("failed to resolve user")
+	errNonUserForbidden = errors.New("non-user callers are not allowed on this route")
+	errOperationAccess  = errors.New("operation access denied")
+	errNonUserSelector  = errors.New("non-user callers may not override connection or instance bindings")
 )
 
 var (
@@ -91,9 +91,9 @@ type connectionParamInfo struct {
 }
 
 func (s *Server) resolveUserID(w http.ResponseWriter, r *http.Request) (string, error) {
-	if p := PrincipalFromContext(r.Context()); p != nil && p.Kind == principal.KindWorkload {
-		writeError(w, http.StatusForbidden, "workload callers are not allowed on this route")
-		return "", errWorkloadForbidden
+	if p := PrincipalFromContext(r.Context()); principal.IsNonUserPrincipal(p) {
+		writeError(w, http.StatusForbidden, "non-user callers are not allowed on this route")
+		return "", errNonUserForbidden
 	}
 	user := UserFromContext(r.Context())
 	if user == nil || user.Email == "" {
@@ -128,7 +128,7 @@ func (s *Server) readinessCheck(w http.ResponseWriter, _ *http.Request) {
 func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 	p := PrincipalFromContext(r.Context())
 	connected := map[string][]instanceInfo{}
-	if p == nil || p.Kind != principal.KindWorkload {
+	if p == nil || !principal.IsNonUserPrincipal(p) {
 		var err error
 		connected, err = s.userConnectedIntegrations(r)
 		if err != nil {
@@ -165,7 +165,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		if entry, ok := s.pluginDefs[name]; ok && entry != nil {
 			info.MountedPath = strings.TrimSpace(entry.MountPath)
 		}
-		if p != nil && p.Kind == principal.KindWorkload {
+		if principal.IsNonUserPrincipal(p) {
 			if binding, ok := s.workloadBinding(p, name); ok {
 				bindingConnected, err := s.workloadBindingConnected(r.Context(), binding, name)
 				if err != nil {
@@ -445,7 +445,7 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := rejectWorkloadSelectors(w, p, requestedConnection, requestedInstance); err != nil {
+	if err := rejectNonUserSelectors(w, p, requestedConnection, requestedInstance); err != nil {
 		s.auditHTTPEvent(r.Context(), p, name, operation, false, err)
 		return
 	}
@@ -540,7 +540,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := rejectWorkloadSelectors(w, p, requestedConnection, requestedInstance); err != nil {
+	if err := rejectNonUserSelectors(w, p, requestedConnection, requestedInstance); err != nil {
 		s.auditHTTPEvent(r.Context(), p, providerName, operationName, false, err)
 		return
 	}
@@ -594,7 +594,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("conflicting connection parameter %q in query string and JSON body", httpConnectionParam))
 		return
 	}
-	if err := rejectWorkloadSelectors(w, p, bodyConnection, bodyInstance); err != nil {
+	if err := rejectNonUserSelectors(w, p, bodyConnection, bodyInstance); err != nil {
 		s.auditHTTPEvent(r.Context(), p, providerName, operationName, false, err)
 		return
 	}

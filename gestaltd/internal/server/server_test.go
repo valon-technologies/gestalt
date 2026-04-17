@@ -152,6 +152,58 @@ func (s *putFailingObjectStore) Put(ctx context.Context, record indexeddb.Record
 	return s.ObjectStore.Put(ctx, record)
 }
 
+type getFailingIndexedDB struct {
+	indexeddb.IndexedDB
+	failStoreGets map[string]*getFailureRule
+}
+
+func (d *getFailingIndexedDB) ObjectStore(name string) indexeddb.ObjectStore {
+	store := d.IndexedDB.ObjectStore(name)
+	failGet := d.failStoreGets[name]
+	if failGet == nil {
+		return store
+	}
+	return &getFailingObjectStore{ObjectStore: store, storeName: name, failGet: failGet}
+}
+
+type getFailingObjectStore struct {
+	indexeddb.ObjectStore
+	storeName string
+	failGet   *getFailureRule
+}
+
+func (s *getFailingObjectStore) Get(ctx context.Context, key string) (indexeddb.Record, error) {
+	if s.failGet.shouldFail() {
+		return nil, indexeddb.ErrNotFound
+	}
+	return s.ObjectStore.Get(ctx, key)
+}
+
+type getFailureRule struct {
+	failCalls map[int64]struct{}
+	calls     atomic.Int64
+}
+
+func newGetFailureRule(failCalls ...int64) *getFailureRule {
+	rule := &getFailureRule{failCalls: make(map[int64]struct{}, len(failCalls))}
+	for _, call := range failCalls {
+		if call < 1 {
+			continue
+		}
+		rule.failCalls[call] = struct{}{}
+	}
+	return rule
+}
+
+func (r *getFailureRule) shouldFail() bool {
+	if r == nil {
+		return false
+	}
+	call := r.calls.Add(1)
+	_, ok := r.failCalls[call]
+	return ok
+}
+
 type addFailingIndexedDB struct {
 	indexeddb.IndexedDB
 	failStoreAdds    map[string]*atomic.Bool
@@ -339,6 +391,25 @@ func newTestServicesWithPluginAuthorizationPutFailure(t *testing.T) (*coredata.S
 		t.Fatalf("newTestServicesWithPluginAuthorizationPutFailure: %v", err)
 	}
 	return svc, failPut
+}
+
+func newTestServicesWithUsersGetNotFound(t *testing.T, failCalls ...int64) (*coredata.Services, *getFailureRule) {
+	t.Helper()
+	enc, err := corecrypto.NewAESGCM([]byte("0123456789abcdef0123456789abcdef"))
+	if err != nil {
+		t.Fatalf("newTestServicesWithUsersGetNotFound encryptor: %v", err)
+	}
+	failGet := newGetFailureRule(failCalls...)
+	svc, err := coredata.New(&getFailingIndexedDB{
+		IndexedDB: &coretesting.StubIndexedDB{},
+		failStoreGets: map[string]*getFailureRule{
+			coredata.StoreUsers: failGet,
+		},
+	}, enc)
+	if err != nil {
+		t.Fatalf("newTestServicesWithUsersGetNotFound: %v", err)
+	}
+	return svc, failGet
 }
 
 func newTestServicesWithAdminAuthorizationPutFailure(t *testing.T) (*coredata.Services, *atomic.Bool) {
@@ -1132,6 +1203,81 @@ func TestMountedWebUIRoutes_HumanAuthorization(t *testing.T) {
 	}
 	if !strings.Contains(string(body), "protected-sample") {
 		t.Fatalf("asset body = %q, want protected sample asset", body)
+	}
+}
+
+func TestMountedWebUIRoutes_HumanAuthorization_IgnoresMissingCanonicalIdentity(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "index.html"), []byte("<html>protected-sample-shell</html>"), 0o644); err != nil {
+		t.Fatalf("WriteFile index.html: %v", err)
+	}
+	handler, err := testutilWebUIHandler(dir)
+	if err != nil {
+		t.Fatalf("webui handler: %v", err)
+	}
+
+	svc, failGet := newTestServicesWithUsersGetNotFound(t, 3, 4)
+	viewer := seedUser(t, svc, "viewer@example.test")
+	authz := mustAuthorizer(t, config.AuthorizationConfig{
+		Policies: map[string]config.HumanPolicyDef{
+			"sample_policy": {
+				Default: "deny",
+				Members: []config.HumanPolicyMemberDef{
+					{SubjectID: principal.UserSubjectID(viewer.ID), Role: "viewer"},
+				},
+			},
+		},
+	}, nil, map[string]*config.ProviderEntry{
+		"sample_portal": {AuthorizationPolicy: "sample_policy"},
+	}, nil)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Auth = &coretesting.StubAuthProvider{
+			N: "test",
+			ValidateTokenFn: func(_ context.Context, token string) (*core.UserIdentity, error) {
+				switch token {
+				case "viewer-session":
+					return &core.UserIdentity{Email: "viewer@example.test"}, nil
+				default:
+					return nil, fmt.Errorf("invalid token")
+				}
+			},
+		}
+		cfg.Services = svc
+		cfg.Authorizer = authz
+		cfg.MountedWebUIs = []server.MountedWebUI{{
+			Name:                "sample_portal",
+			Path:                "/sample-portal",
+			AuthorizationPolicy: "sample_policy",
+			Routes: []server.MountedWebUIRoute{
+				{Path: "/*", AllowedRoles: []string{"viewer", "admin"}},
+			},
+			Handler: handler,
+		}}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/sample-portal/sync", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: "viewer-session"})
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET protected mounted sync with viewer session: %v", err)
+	}
+	body, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil {
+		t.Fatalf("ReadAll protected mounted sync: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, want 200", resp.StatusCode)
+	}
+	if !strings.Contains(string(body), "protected-sample-shell") {
+		t.Fatalf("body = %q, want protected sample shell", body)
+	}
+	if failGet.calls.Load() < 4 {
+		t.Fatalf("users store get calls = %d, want at least 4", failGet.calls.Load())
 	}
 }
 
@@ -4479,7 +4625,7 @@ func TestWorkloadAuthorization_ListOperationsFiltersAndRejectsSelectors(t *testi
 	if auditRecord["subject_id"] != "workload:triage-bot" {
 		t.Fatalf("expected workload subject_id, got %v", auditRecord["subject_id"])
 	}
-	if auditRecord["error"] != "workload callers may not override connection or instance bindings" {
+	if auditRecord["error"] != "non-user callers may not override connection or instance bindings" {
 		t.Fatalf("unexpected audit error: %v", auditRecord["error"])
 	}
 
@@ -7626,7 +7772,7 @@ func TestWorkloadAuthorization_ExecuteOperation_UsesBoundIdentityAndRejectsSelec
 	if selectorAudit["subject_id"] != "workload:triage-bot" {
 		t.Fatalf("expected selector audit subject_id workload:triage-bot, got %v", selectorAudit["subject_id"])
 	}
-	if selectorAudit["error"] != "workload callers may not override connection or instance bindings" {
+	if selectorAudit["error"] != "non-user callers may not override connection or instance bindings" {
 		t.Fatalf("unexpected selector audit error: %v", selectorAudit["error"])
 	}
 }
@@ -16094,6 +16240,7 @@ func TestManagedIdentityAPITokenInvocation_ModeNoneOnly(t *testing.T) {
 		t.Fatalf("authorization.New: %v", err)
 	}
 
+	var auditBuf bytes.Buffer
 	ts := newTestServer(t, func(cfg *server.Config) {
 		cfg.Auth = &coretesting.StubAuthProvider{
 			N: "test",
@@ -16107,6 +16254,7 @@ func TestManagedIdentityAPITokenInvocation_ModeNoneOnly(t *testing.T) {
 		cfg.Providers = providers
 		cfg.Services = svc
 		cfg.Authorizer = authz
+		cfg.AuditSink = invocation.NewSlogAuditSink(&auditBuf)
 	})
 	testutil.CloseOnCleanup(t, ts)
 
@@ -16165,6 +16313,72 @@ func TestManagedIdentityAPITokenInvocation_ModeNoneOnly(t *testing.T) {
 		t.Fatal("expected plaintext token for invocation test")
 	}
 
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req.Header.Set("Authorization", "Bearer "+createTokenResp.Token)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("list integrations: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		t.Fatalf("expected 200 from integration list, got %d: %s", resp.StatusCode, body)
+	}
+	var integrations []struct {
+		Name             string                    `json:"name"`
+		Connected        bool                      `json:"connected"`
+		Instances        []map[string]any          `json:"instances"`
+		AuthTypes        []string                  `json:"authTypes"`
+		Connections      []map[string]any          `json:"connections"`
+		CredentialFields []map[string]any          `json:"credentialFields"`
+		ConnectionParams map[string]map[string]any `json:"connectionParams"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&integrations); err != nil {
+		t.Fatalf("decoding integrations: %v", err)
+	}
+	_ = resp.Body.Close()
+	if len(integrations) != 2 {
+		t.Fatalf("expected 2 managed-identity integrations, got %+v", integrations)
+	}
+	for _, integration := range integrations {
+		if integration.Name != "alpha" && integration.Name != "beta" {
+			t.Fatalf("unexpected integration listing %+v", integrations)
+		}
+		if !integration.Connected {
+			t.Fatalf("expected %q to be connected for managed-identity token", integration.Name)
+		}
+		if len(integration.Instances) != 0 || len(integration.AuthTypes) != 0 || len(integration.Connections) != 0 || len(integration.CredentialFields) != 0 || len(integration.ConnectionParams) != 0 {
+			t.Fatalf("managed-identity integration %q should not expose connection affordances: %+v", integration.Name, integration)
+		}
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/integrations", nil)
+	req.AddCookie(&http.Cookie{Name: "session_token", Value: createTokenResp.Token})
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("managed-identity cookie auth request: %v", err)
+	}
+	body, _ = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("managed-identity cookie auth status = %d, want %d: %s", resp.StatusCode, http.StatusUnauthorized, body)
+	}
+
+	req, _ = http.NewRequest(http.MethodGet, ts.URL+"/api/v1/alpha/read?_connection=workspace", nil)
+	req.Header.Set("Authorization", "Bearer "+createTokenResp.Token)
+	resp, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("managed-identity execute selector request: %v", err)
+	}
+	body, _ = io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("managed-identity execute selector status = %d, want %d: %s", resp.StatusCode, http.StatusForbidden, body)
+	}
+	if !strings.Contains(string(body), "non-user callers may not override connection or instance bindings") {
+		t.Fatalf("managed-identity execute selector body = %q", string(body))
+	}
+
 	call := func(path string) int {
 		req, _ := http.NewRequest(http.MethodGet, ts.URL+path, nil)
 		req.Header.Set("Authorization", "Bearer "+createTokenResp.Token)
@@ -16187,6 +16401,34 @@ func TestManagedIdentityAPITokenInvocation_ModeNoneOnly(t *testing.T) {
 	}
 	if status := call("/api/v1/gamma/query"); status != http.StatusForbidden {
 		t.Fatalf("gamma/query status = %d, want 403", status)
+	}
+
+	lines := bytes.Split(bytes.TrimSpace(auditBuf.Bytes()), []byte("\n"))
+	foundInvocationAudit := false
+	for _, line := range lines {
+		if len(bytes.TrimSpace(line)) == 0 {
+			continue
+		}
+		var auditRecord map[string]any
+		if err := json.Unmarshal(line, &auditRecord); err != nil {
+			t.Fatalf("parsing audit record: %v\nraw: %s", err, auditBuf.String())
+		}
+		if auditRecord["provider"] != "alpha" || auditRecord["operation"] != "write" || auditRecord["allowed"] != false {
+			continue
+		}
+		foundInvocationAudit = true
+		if auditRecord["auth_source"] != "api_token" {
+			t.Fatalf("expected managed-identity audit auth_source api_token, got %v", auditRecord["auth_source"])
+		}
+		if auditRecord["subject_kind"] != string(principal.KindServiceAccount) {
+			t.Fatalf("expected managed-identity audit subject_kind %q, got %v", principal.KindServiceAccount, auditRecord["subject_kind"])
+		}
+		if auditRecord["subject_id"] != principal.ManagedIdentitySubjectID(createResp.ID) {
+			t.Fatalf("expected managed-identity audit subject_id %q, got %v", principal.ManagedIdentitySubjectID(createResp.ID), auditRecord["subject_id"])
+		}
+	}
+	if !foundInvocationAudit {
+		t.Fatalf("expected managed-identity invocation audit record, got raw: %s", auditBuf.String())
 	}
 
 	doJSONRequestAndDecode(t, http.MethodDelete, ts.URL+"/api/v1/identities/"+createResp.ID, "admin-session", "", http.StatusOK, nil)

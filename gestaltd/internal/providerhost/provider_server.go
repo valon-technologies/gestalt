@@ -109,11 +109,8 @@ func principalFromProto(subject *proto.SubjectContext) *principal.Principal {
 		DisplayName: subject.GetDisplayName(),
 		Source:      sourceFromString(subject.GetAuthSource()),
 	}
-	switch subject.GetKind() {
-	case string(principal.KindUser):
-		p.Kind = principal.KindUser
-	case string(principal.KindWorkload):
-		p.Kind = principal.KindWorkload
+	if kind := strings.TrimSpace(subject.GetKind()); kind != "" {
+		p.Kind = principal.Kind(kind)
 	}
 	if strings.HasPrefix(subject.GetId(), "user:") {
 		p.UserID = strings.TrimPrefix(subject.GetId(), "user:")
@@ -123,12 +120,18 @@ func principalFromProto(subject *proto.SubjectContext) *principal.Principal {
 	} else if strings.HasPrefix(subject.GetId(), "workload:") && p.Kind == "" {
 		p.Kind = principal.KindWorkload
 	}
+	if identityID := principal.ManagedIdentityIDFromSubjectID(subject.GetId()); identityID != "" {
+		p.IdentityID = identityID
+		if p.Kind == "" {
+			p.Kind = principal.KindServiceAccount
+		}
+	}
 	if p.Kind == principal.KindUser && subject.GetDisplayName() != "" {
 		p.Identity = &core.UserIdentity{
 			DisplayName: subject.GetDisplayName(),
 		}
 	}
-	if p.UserID == "" && p.SubjectID == "" && p.Kind == "" && p.DisplayName == "" && p.Identity == nil && p.Source == principal.SourceUnknown {
+	if p.IdentityID == "" && p.UserID == "" && p.SubjectID == "" && p.Kind == "" && p.DisplayName == "" && p.Identity == nil && p.Source == principal.SourceUnknown {
 		return &principal.Principal{}
 	}
 	return p

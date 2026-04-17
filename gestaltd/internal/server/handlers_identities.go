@@ -1190,7 +1190,7 @@ func (s *Server) managedIdentityGrantCatalogTargets(ctx context.Context, plugin 
 		connection, instance := s.workloadBindingSelectors(p, plugin, connection, "")
 		addTarget(connection, instance)
 	}
-	if p == nil || p.Kind == principal.KindWorkload || strings.TrimSpace(p.UserID) == "" {
+	if p == nil || principal.IsNonUserPrincipal(p) || strings.TrimSpace(p.UserID) == "" {
 		if len(targets) == 0 {
 			addTarget("", "")
 		}

@@ -40,22 +40,22 @@ func (s *Server) workloadBinding(p *principal.Principal, provider string) (autho
 	return s.authorizer.Binding(p, provider)
 }
 
-func rejectWorkloadSelectors(w http.ResponseWriter, p *principal.Principal, connection, instance string) error {
-	if p == nil || p.Kind != principal.KindWorkload {
+func rejectNonUserSelectors(w http.ResponseWriter, p *principal.Principal, connection, instance string) error {
+	if !principal.IsNonUserPrincipal(p) {
 		return nil
 	}
 	if connection == "" && instance == "" {
 		return nil
 	}
-	writeError(w, http.StatusForbidden, errWorkloadSelector.Error())
-	return errWorkloadSelector
+	writeError(w, http.StatusForbidden, errNonUserSelector.Error())
+	return errNonUserSelector
 }
 
 func (s *Server) workloadBindingSelectors(p *principal.Principal, provider, connection, instance string) (string, string) {
 	resolveConnection := func(connection string) string {
 		return s.sessionCatalogConnections(provider, nil, connection)[0]
 	}
-	if p == nil || p.Kind != principal.KindWorkload {
+	if !principal.IsNonUserPrincipal(p) {
 		return resolveConnection(connection), instance
 	}
 	binding, ok := s.workloadBinding(p, provider)

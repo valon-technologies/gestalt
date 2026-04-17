@@ -2034,7 +2034,7 @@ func TestNewServer_WorkloadCallToolRejectsInstanceOverride(t *testing.T) {
 		t.Fatalf("expected MCP error result, got %+v", result)
 	}
 	text, ok := result.Content[0].(mcpgo.TextContent)
-	if !ok || text.Text != "workload callers may not override connection or instance bindings" {
+	if !ok || text.Text != "non-user callers may not override connection or instance bindings" {
 		t.Fatalf("unexpected MCP error content: %+v", result.Content)
 	}
 	if called {

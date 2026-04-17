@@ -323,7 +323,7 @@ func (b *Broker) MCPConnection(providerName string) string {
 }
 
 func (b *Broker) workloadSelectors(p *principal.Principal, providerName, connection, instance string) (string, string) {
-	if b.authorizer == nil || !b.authorizer.IsWorkload(p) {
+	if b.authorizer == nil || !principal.IsNonUserPrincipal(p) {
 		return connection, instance
 	}
 	binding, ok := b.authorizer.Binding(p, providerName)
@@ -458,28 +458,42 @@ func (b *Broker) resolveToken(ctx context.Context, prov core.Provider, p *princi
 }
 
 func (b *Broker) resolveUserPrincipal(ctx context.Context, p *principal.Principal) error {
-	if p == nil || p.UserID != "" || p.Kind == principal.KindWorkload || p.Identity == nil || p.Identity.Email == "" {
+	if p == nil || principal.IsNonUserPrincipal(p) {
 		return nil
 	}
-	if b.users == nil {
+	if p.UserID == "" && (p.Identity == nil || p.Identity.Email == "") {
+		return nil
+	}
+	if b.users == nil && p.UserID == "" {
 		return fmt.Errorf("%w: no user service configured", ErrUserResolution)
 	}
-	dbUser, err := b.users.FindOrCreateUser(ctx, p.Identity.Email)
-	if err != nil {
-		return fmt.Errorf("%w: %v", ErrUserResolution, err)
+	if p.UserID == "" {
+		dbUser, err := b.users.FindOrCreateUser(ctx, p.Identity.Email)
+		if err != nil {
+			return fmt.Errorf("%w: %v", ErrUserResolution, err)
+		}
+		if dbUser == nil || dbUser.ID == "" {
+			return fmt.Errorf("%w: no user record returned", ErrUserResolution)
+		}
+		p.UserID = dbUser.ID
+		if p.Identity != nil && p.Identity.DisplayName == "" {
+			p.Identity.DisplayName = dbUser.DisplayName
+		}
 	}
-	if dbUser == nil || dbUser.ID == "" {
-		return fmt.Errorf("%w: no user record returned", ErrUserResolution)
+	if p.IdentityID == "" && p.UserID != "" && b.users != nil {
+		identityID, err := b.users.CanonicalIdentityIDForUser(ctx, p.UserID)
+		if err != nil && !errors.Is(err, core.ErrNotFound) {
+			return fmt.Errorf("%w: %v", ErrUserResolution, err)
+		}
+		if err == nil {
+			p.IdentityID = identityID
+		}
 	}
-	p.UserID = dbUser.ID
 	if p.Kind == "" {
 		p.Kind = principal.KindUser
 	}
-	if p.SubjectID == "" {
-		p.SubjectID = principal.UserSubjectID(dbUser.ID)
-	}
-	if p.Identity != nil && p.Identity.DisplayName == "" {
-		p.Identity.DisplayName = dbUser.DisplayName
+	if p.SubjectID == "" && p.UserID != "" {
+		p.SubjectID = principal.UserSubjectID(p.UserID)
 	}
 	return nil
 }

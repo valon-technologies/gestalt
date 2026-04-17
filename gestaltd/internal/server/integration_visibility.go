@@ -19,7 +19,7 @@ func (s *Server) integrationHasUsableSurface(p *principal.Principal, provider st
 }
 
 func (s *Server) integrationHasSettingsSurface(p *principal.Principal, info integrationInfo) bool {
-	if p != nil && p.Kind == principal.KindWorkload {
+	if principal.IsNonUserPrincipal(p) {
 		return false
 	}
 	return info.Connected || len(info.AuthTypes) > 0 || len(info.Connections) > 0
@@ -65,10 +65,13 @@ func (s *Server) mountedWebUIForProvider(provider, mountedPath string) (MountedW
 }
 
 func (s *Server) mountedWebUIRootAccessible(p *principal.Principal, mounted MountedWebUI) bool {
+	if principal.IsNonUserPrincipal(p) {
+		return false
+	}
 	if mounted.AuthorizationPolicy == "" {
 		return true
 	}
-	if s.authorizer == nil || p == nil || p.Kind == principal.KindWorkload {
+	if s.authorizer == nil || p == nil {
 		return false
 	}
 

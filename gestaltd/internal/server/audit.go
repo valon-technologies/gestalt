@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -39,36 +40,38 @@ func (s *Server) resolvePrincipalUserID(ctx context.Context, p *principal.Princi
 	if p == nil {
 		return nil, nil
 	}
-	if p.Kind == principal.KindWorkload {
+	if principal.IsNonUserPrincipal(p) {
 		return p, nil
 	}
-	if p.Kind == "" {
-		p.Kind = principal.KindUser
+	clone := *p
+	if clone.Kind == "" {
+		clone.Kind = principal.KindUser
 	}
-	if p.UserID != "" {
-		if p.SubjectID == "" {
-			clone := *p
-			clone.SubjectID = principal.UserSubjectID(p.UserID)
+	if clone.UserID == "" {
+		if clone.Identity == nil || clone.Identity.Email == "" {
 			return &clone, nil
 		}
-		return p, nil
+		dbUser, err := s.users.FindOrCreateUser(ctx, clone.Identity.Email)
+		if err != nil {
+			return nil, err
+		}
+		if dbUser == nil || dbUser.ID == "" {
+			return nil, fmt.Errorf("authenticated principal missing user ID")
+		}
+		clone.UserID = dbUser.ID
 	}
-	if p.Identity == nil || p.Identity.Email == "" {
-		return p, nil
+	if clone.IdentityID == "" && clone.UserID != "" {
+		identityID, err := s.users.CanonicalIdentityIDForUser(ctx, clone.UserID)
+		if err != nil && !errors.Is(err, core.ErrNotFound) {
+			return nil, err
+		}
+		if err == nil {
+			clone.IdentityID = identityID
+		}
 	}
-
-	dbUser, err := s.users.FindOrCreateUser(ctx, p.Identity.Email)
-	if err != nil {
-		return nil, err
+	if clone.SubjectID == "" && clone.UserID != "" {
+		clone.SubjectID = principal.UserSubjectID(clone.UserID)
 	}
-	if dbUser == nil || dbUser.ID == "" {
-		return nil, fmt.Errorf("authenticated principal missing user ID")
-	}
-
-	clone := *p
-	clone.UserID = dbUser.ID
-	clone.Kind = principal.KindUser
-	clone.SubjectID = principal.UserSubjectID(dbUser.ID)
 	return &clone, nil
 }
 

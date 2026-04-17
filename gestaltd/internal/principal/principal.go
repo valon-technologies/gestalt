@@ -24,12 +24,14 @@ const managedIdentitySubjectPrefix = "managed_identity:"
 type Kind string
 
 const (
-	KindUser     Kind = "user"
-	KindWorkload Kind = "workload"
+	KindUser           Kind = "user"
+	KindServiceAccount Kind = "service_account"
+	KindWorkload       Kind = "workload"
 )
 
 type Principal struct {
 	Identity         *core.UserIdentity
+	IdentityID       string
 	UserID           string
 	SubjectID        string
 	DisplayName      string
@@ -60,7 +62,7 @@ func (p *Principal) AuthSource() string {
 	if p == nil {
 		return ""
 	}
-	if p.Identity == nil && p.UserID == "" && p.SubjectID == "" && p.Kind == "" && len(p.Scopes) == 0 && p.TokenPermissions == nil {
+	if p.Identity == nil && p.IdentityID == "" && p.UserID == "" && p.SubjectID == "" && p.Kind == "" && len(p.Scopes) == 0 && p.TokenPermissions == nil {
 		return ""
 	}
 	return p.Source.String()
@@ -96,6 +98,30 @@ func ManagedIdentityIDFromSubjectID(subjectID string) string {
 		return ""
 	}
 	return strings.TrimPrefix(subjectID, managedIdentitySubjectPrefix)
+}
+
+func IsServiceAccountPrincipal(p *Principal) bool {
+	if p == nil {
+		return false
+	}
+	if p.Kind == KindServiceAccount {
+		return true
+	}
+	if ManagedIdentityIDFromSubjectID(strings.TrimSpace(p.SubjectID)) != "" {
+		return true
+	}
+	return p.IdentityID != "" && strings.TrimSpace(p.UserID) == "" && p.Kind != KindWorkload
+}
+
+func IsWorkloadPrincipal(p *Principal) bool {
+	if p == nil {
+		return false
+	}
+	return p.Kind == KindWorkload && !IsServiceAccountPrincipal(p)
+}
+
+func IsNonUserPrincipal(p *Principal) bool {
+	return IsServiceAccountPrincipal(p) || IsWorkloadPrincipal(p)
 }
 
 func CompilePermissions(perms []core.AccessPermission) PermissionSet {
@@ -235,6 +261,28 @@ func CompileManagedIdentityGrants(grants []*core.ManagedIdentityGrant) Permissio
 			Plugin:     grant.Plugin,
 			Operations: append([]string(nil), grant.Operations...),
 		})
+	}
+	compiled := CompilePermissions(perms)
+	if compiled == nil {
+		return PermissionSet{}
+	}
+	return compiled
+}
+
+func CompileIdentityPluginAccess(access []*core.IdentityPluginAccess) PermissionSet {
+	if len(access) == 0 {
+		return PermissionSet{}
+	}
+	perms := make([]core.AccessPermission, 0, len(access))
+	for _, grant := range access {
+		if grant == nil {
+			continue
+		}
+		perm := core.AccessPermission{Plugin: strings.TrimSpace(grant.Plugin)}
+		if !grant.InvokeAllOperations {
+			perm.Operations = append([]string(nil), grant.Operations...)
+		}
+		perms = append(perms, perm)
 	}
 	compiled := CompilePermissions(perms)
 	if compiled == nil {

@@ -338,7 +338,7 @@ func (a *Authorizer) ResolveWorkloadToken(token string) (*principal.ResolvedWork
 }
 
 func (a *Authorizer) IsWorkload(p *principal.Principal) bool {
-	return p != nil && p.Kind == principal.KindWorkload
+	return principal.IsWorkloadPrincipal(p)
 }
 
 func (a *Authorizer) AllowProvider(p *principal.Principal, provider string) bool {
@@ -851,7 +851,7 @@ func normalizeEmail(email string) string {
 }
 
 func (a *Authorizer) isManagedIdentityPrincipal(p *principal.Principal) bool {
-	return a.IsWorkload(p) && principal.ManagedIdentityIDFromSubjectID(strings.TrimSpace(p.SubjectID)) != ""
+	return principal.IsServiceAccountPrincipal(p) && principal.ManagedIdentityIDFromSubjectID(strings.TrimSpace(p.SubjectID)) != ""
 }
 
 func (a *Authorizer) allowManagedIdentityProvider(p *principal.Principal, provider string) bool {

@@ -188,7 +188,7 @@ func New(cfg Config) (*Server, error) {
 	identityGrants := cfg.Services.IdentityGrants
 	pluginAuthorizations := cfg.Services.PluginAuthorizations
 	adminAuthorizations := cfg.Services.AdminAuthorizations
-	resolver := principal.NewResolver(cfg.Auth, users, apiTokens, managedIdentities, identityGrants, cfg.Authorizer)
+	resolver := principal.NewResolver(cfg.Auth, users, cfg.Services.Identities, cfg.Services.IdentityPluginAccess, apiTokens, cfg.Authorizer)
 
 	router := chi.NewRouter()
 	otelOptions := []otelhttp.Option{}
