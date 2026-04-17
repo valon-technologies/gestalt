@@ -13709,6 +13709,52 @@ func TestExecuteOperation_UserFacingErrorMessage(t *testing.T) {
 	}
 }
 
+func TestExecuteOperation_ReconnectRequiredMessage(t *testing.T) {
+	t.Parallel()
+
+	fullStub := &stubIntegrationWithOps{
+		StubIntegration: coretesting.StubIntegration{N: "test-int"},
+		ops: []core.Operation{
+			{Name: "do_thing", Description: "Do a thing", Method: http.MethodGet},
+		},
+	}
+
+	invoker := &testutil.StubInvoker{
+		Err: fmt.Errorf("%w: token endpoint returned 400: {\"error\":\"invalid_grant\"}", invocation.ErrReconnectRequired),
+	}
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, fullStub)
+		cfg.Invoker = invoker
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/test-int/do_thing", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusPreconditionFailed {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("status = %d, want 412: %s", resp.StatusCode, body)
+	}
+
+	body, _ := io.ReadAll(resp.Body)
+	if strings.Contains(string(body), "invalid_grant") {
+		t.Fatalf("response body contains upstream refresh details: %s", body)
+	}
+
+	var errResp map[string]string
+	if err := json.Unmarshal(body, &errResp); err != nil {
+		t.Fatalf("decoding error response: %v", err)
+	}
+	if errResp["error"] != `OAuth token for integration "test-int" expired or was revoked; reconnect it` {
+		t.Fatalf("expected reconnect-required message, got %q", errResp["error"])
+	}
+}
+
 func TestExecuteOperation_WrappedOperationErrorMessage(t *testing.T) {
 	t.Parallel()
 

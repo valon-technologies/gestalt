@@ -8,6 +8,7 @@ var (
 	ErrNotAuthenticated    = errors.New("not authenticated")
 	ErrAuthorizationDenied = errors.New("authorization denied")
 	ErrNoToken             = errors.New("no integration token")
+	ErrReconnectRequired   = errors.New("integration reconnect required")
 	ErrAmbiguousInstance   = errors.New("ambiguous instance")
 	ErrUserResolution      = errors.New("user resolution failed")
 	ErrInternal            = errors.New("internal error")

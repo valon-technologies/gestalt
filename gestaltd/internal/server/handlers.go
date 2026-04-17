@@ -662,6 +662,8 @@ func (s *Server) writeInvocationError(w http.ResponseWriter, r *http.Request, pr
 		writeError(w, http.StatusForbidden, err.Error())
 	case errors.Is(err, invocation.ErrNoToken):
 		writeError(w, http.StatusPreconditionFailed, fmt.Sprintf("no token stored for integration %q; connect via OAuth first", providerName))
+	case errors.Is(err, invocation.ErrReconnectRequired):
+		writeError(w, http.StatusPreconditionFailed, fmt.Sprintf("OAuth token for integration %q expired or was revoked; reconnect it", providerName))
 	case errors.Is(err, invocation.ErrAmbiguousInstance):
 		writeError(w, http.StatusConflict, err.Error())
 	case errors.Is(err, invocation.ErrUserResolution):
