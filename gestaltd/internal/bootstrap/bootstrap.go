@@ -143,6 +143,7 @@ type Deps struct {
 }
 
 type AuthFactory func(node yaml.Node, deps Deps) (core.AuthProvider, error)
+type AuthorizationFactory func(node yaml.Node, deps Deps) (core.AuthorizationProvider, error)
 type SecretManagerFactory func(node yaml.Node) (core.SecretManager, error)
 type IndexedDBFactory func(node yaml.Node) (indexeddb.IndexedDB, error)
 type CacheFactory func(node yaml.Node) (corecache.Cache, error)
@@ -152,15 +153,16 @@ type TelemetryFactory func(node yaml.Node) (core.TelemetryProvider, error)
 type AuditFactory func(ctx context.Context, cfg config.ProviderEntry, telemetry core.TelemetryProvider) (core.AuditSink, func(context.Context) error, error)
 
 type FactoryRegistry struct {
-	Auth      AuthFactory
-	Secrets   map[string]SecretManagerFactory
-	IndexedDB IndexedDBFactory
-	Cache     CacheFactory
-	S3        S3Factory
-	Workflow  WorkflowFactory
-	Telemetry map[string]TelemetryFactory
-	Audit     AuditFactory
-	Builtins  []core.Provider
+	Auth          AuthFactory
+	Authorization AuthorizationFactory
+	Secrets       map[string]SecretManagerFactory
+	IndexedDB     IndexedDBFactory
+	Cache         CacheFactory
+	S3            S3Factory
+	Workflow      WorkflowFactory
+	Telemetry     map[string]TelemetryFactory
+	Audit         AuditFactory
+	Builtins      []core.Provider
 }
 
 func NewFactoryRegistry() *FactoryRegistry {
@@ -171,20 +173,21 @@ func NewFactoryRegistry() *FactoryRegistry {
 }
 
 type Result struct {
-	Auth             core.AuthProvider
-	Services         *coredata.Services
-	ExtraIndexedDBs  []indexeddb.IndexedDB
-	ExtraS3s         []s3store.Client
-	ExtraWorkflows   []coreworkflow.Provider
-	Providers        *registry.ProviderMap[core.Provider]
-	ProvidersReady   <-chan struct{}
-	Authorizer       *authorization.Authorizer
-	ConnectionAuth   func() map[string]map[string]OAuthHandler
-	Invoker          invocation.Invoker
-	CapabilityLister invocation.CapabilityLister
-	AuditSink        core.AuditSink
-	SecretManager    core.SecretManager
-	Telemetry        core.TelemetryProvider
+	Auth                  core.AuthProvider
+	AuthorizationProvider core.AuthorizationProvider
+	Services              *coredata.Services
+	ExtraIndexedDBs       []indexeddb.IndexedDB
+	ExtraS3s              []s3store.Client
+	ExtraWorkflows        []coreworkflow.Provider
+	Providers             *registry.ProviderMap[core.Provider]
+	ProvidersReady        <-chan struct{}
+	Authorizer            *authorization.Authorizer
+	ConnectionAuth        func() map[string]map[string]OAuthHandler
+	Invoker               invocation.Invoker
+	CapabilityLister      invocation.CapabilityLister
+	AuditSink             core.AuditSink
+	SecretManager         core.SecretManager
+	Telemetry             core.TelemetryProvider
 
 	auditClose func(context.Context) error
 	mu         sync.Mutex
@@ -224,6 +227,7 @@ func (r *Result) Close(ctx context.Context) error {
 	errs = append(errs,
 		r.Authorizer.Close(),
 		closeAuth(r.Auth),
+		closeAuthorizationProvider(r.AuthorizationProvider),
 		CloseProviders(r.Providers),
 		r.Services.Close(),
 		closeIndexedDBs(r.ExtraIndexedDBs...),
@@ -307,13 +311,14 @@ func (p *workflowProviderWithCleanup) Close() error {
 }
 
 type preparedCore struct {
-	Auth            core.AuthProvider
-	Services        *coredata.Services
-	ExtraIndexedDBs []indexeddb.IndexedDB
-	ExtraS3s        []s3store.Client
-	SecretManager   core.SecretManager
-	Telemetry       core.TelemetryProvider
-	Deps            Deps
+	Auth                  core.AuthProvider
+	AuthorizationProvider core.AuthorizationProvider
+	Services              *coredata.Services
+	ExtraIndexedDBs       []indexeddb.IndexedDB
+	ExtraS3s              []s3store.Client
+	SecretManager         core.SecretManager
+	Telemetry             core.TelemetryProvider
+	Deps                  Deps
 }
 
 type configSecretManagers struct {
@@ -472,6 +477,17 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	if err != nil {
 		return nil, err
 	}
+	authzProvider, err := buildAuthorization(cfg, factories, deps)
+	if err != nil {
+		_ = closeAuth(auth)
+		return nil, err
+	}
+	closeAuthorizationOnError := true
+	defer func() {
+		if closeAuthorizationOnError {
+			_ = closeAuthorizationProvider(authzProvider)
+		}
+	}()
 
 	selectedIndexedDBName, def, err := cfg.SelectedIndexedDBProvider()
 	if err != nil {
@@ -557,14 +573,16 @@ func prepareCore(ctx context.Context, cfg *config.Config, factories *FactoryRegi
 	closeSvc = false
 	closeExtraStores = false
 	closeExtraS3s = false
+	closeAuthorizationOnError = false
 	return &preparedCore{
-		Auth:            auth,
-		Services:        svc,
-		ExtraIndexedDBs: extraIndexedDBs,
-		ExtraS3s:        extraS3s,
-		SecretManager:   sm,
-		Telemetry:       tp,
-		Deps:            deps,
+		Auth:                  auth,
+		AuthorizationProvider: authzProvider,
+		Services:              svc,
+		ExtraIndexedDBs:       extraIndexedDBs,
+		ExtraS3s:              extraS3s,
+		SecretManager:         sm,
+		Telemetry:             tp,
+		Deps:                  deps,
 	}, nil
 }
 
@@ -576,6 +594,7 @@ func (p *preparedCore) Close(ctx context.Context) error {
 	var errs []error
 	errs = append(errs,
 		closeAuth(p.Auth),
+		closeAuthorizationProvider(p.AuthorizationProvider),
 		p.Services.Close(),
 		closeIndexedDBs(p.ExtraIndexedDBs...),
 		closeS3s(p.ExtraS3s...),
@@ -677,21 +696,22 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	closeAuthz = false
 	closeWorkflowsOnError = false
 	return &Result{
-		Auth:             prepared.Auth,
-		Services:         prepared.Services,
-		ExtraIndexedDBs:  prepared.ExtraIndexedDBs,
-		ExtraS3s:         prepared.ExtraS3s,
-		ExtraWorkflows:   extraWorkflows,
-		Providers:        providers,
-		ProvidersReady:   providersReady,
-		Authorizer:       authz,
-		ConnectionAuth:   connAuthResolver,
-		Invoker:          sharedInvoker,
-		CapabilityLister: sharedInvoker,
-		AuditSink:        audit,
-		SecretManager:    prepared.SecretManager,
-		Telemetry:        prepared.Telemetry,
-		auditClose:       auditClose,
+		Auth:                  prepared.Auth,
+		AuthorizationProvider: prepared.AuthorizationProvider,
+		Services:              prepared.Services,
+		ExtraIndexedDBs:       prepared.ExtraIndexedDBs,
+		ExtraS3s:              prepared.ExtraS3s,
+		ExtraWorkflows:        extraWorkflows,
+		Providers:             providers,
+		ProvidersReady:        providersReady,
+		Authorizer:            authz,
+		ConnectionAuth:        connAuthResolver,
+		Invoker:               sharedInvoker,
+		CapabilityLister:      sharedInvoker,
+		AuditSink:             audit,
+		SecretManager:         prepared.SecretManager,
+		Telemetry:             prepared.Telemetry,
+		auditClose:            auditClose,
 	}, nil
 }
 
@@ -844,6 +864,14 @@ func closeAuth(provider core.AuthProvider) error {
 	return closer.Close()
 }
 
+func closeAuthorizationProvider(provider core.AuthorizationProvider) error {
+	closer, ok := provider.(interface{ Close() error })
+	if !ok {
+		return nil
+	}
+	return closer.Close()
+}
+
 func closeSecretManager(sm core.SecretManager) error {
 	closer, ok := sm.(interface{ Close() error })
 	if !ok {
@@ -876,6 +904,32 @@ func buildAuth(cfg *config.Config, factories *FactoryRegistry, deps Deps) (core.
 		return nil, fmt.Errorf("bootstrap: auth provider: %w", err)
 	}
 	return auth, nil
+}
+
+func buildAuthorization(cfg *config.Config, factories *FactoryRegistry, deps Deps) (core.AuthorizationProvider, error) {
+	_, authzEntry, err := cfg.SelectedAuthorizationProvider()
+	if err != nil {
+		return nil, err
+	}
+	if authzEntry == nil {
+		return nil, nil
+	}
+	if factories.Authorization == nil {
+		return nil, fmt.Errorf("bootstrap: authorization factory is not registered")
+	}
+	node := authzEntry.Config
+	if !config.IsComponentRuntimeConfigNode(node) {
+		var err error
+		node, err = config.BuildComponentRuntimeConfigNode("authorization", "authorization", authzEntry, authzEntry.Config)
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap: authorization provider: %w", err)
+		}
+	}
+	provider, err := factories.Authorization(node, deps)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap: authorization provider: %w", err)
+	}
+	return provider, nil
 }
 
 func buildIndexedDB(entry *config.ProviderEntry, factories *FactoryRegistry) (indexeddb.IndexedDB, error) {

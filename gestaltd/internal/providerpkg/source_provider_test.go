@@ -61,3 +61,18 @@ cache = "provider:cache_provider"
 		t.Fatalf("target = %q, want %q", target, "provider:cache_provider")
 	}
 }
+
+func TestDetectSourceComponent_AuthorizationRequiresGo(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeRustProviderCargoToml(t, root)
+	mustWriteFile(t, filepath.Join(root, pythonProjectFile), []byte(`[tool.gestalt]
+authorization = "provider:authorization_provider"
+`), 0o644)
+
+	_, _, err := detectSourceComponent(root, providermanifestv1.KindAuthorization, runtime.GOOS, runtime.GOARCH)
+	if !errors.Is(err, ErrNoSourceComponentPackage) {
+		t.Fatalf("error = %v, want %v", err, ErrNoSourceComponentPackage)
+	}
+}

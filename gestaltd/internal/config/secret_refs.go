@@ -231,6 +231,7 @@ func TransformConfigStringFields(cfg *Config, transform ConfigStringTransformer)
 	}
 	for _, entries := range []map[string]*ProviderEntry{
 		cfg.Providers.Auth,
+		cfg.Providers.Authorization,
 		cfg.Providers.Telemetry,
 		cfg.Providers.Audit,
 		cfg.Providers.IndexedDB,

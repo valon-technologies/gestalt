@@ -14,6 +14,7 @@
       "enum": [
         "plugin",
         "auth",
+        "authorization",
         "indexeddb",
         "cache",
         "s3",

@@ -73,6 +73,7 @@ func ValidateCanonicalStructure(cfg *Config) error {
 		entries map[string]*ProviderEntry
 	}{
 		{HostProviderKindAuth, cfg.Providers.Auth},
+		{HostProviderKindAuthorization, cfg.Providers.Authorization},
 		{HostProviderKindSecrets, cfg.Providers.Secrets},
 		{HostProviderKindTelemetry, cfg.Providers.Telemetry},
 		{HostProviderKindAudit, cfg.Providers.Audit},
@@ -164,6 +165,13 @@ func validateHostProviderEntries(kind HostProviderKind, entries map[string]*Prov
 				return fmt.Errorf("config validation: auth provider %q does not support builtin providers; use a provider source reference or omit auth", name)
 			}
 			if err := validateProviderEntrySource("auth", name, entry); err != nil {
+				return err
+			}
+		case HostProviderKindAuthorization:
+			if entry.Source.IsBuiltin() {
+				return fmt.Errorf("config validation: authorization provider %q does not support builtin providers; use a provider source reference or omit authorization", name)
+			}
+			if err := validateProviderEntrySource("authorization", name, entry); err != nil {
 				return err
 			}
 		case HostProviderKindSecrets, HostProviderKindTelemetry:
