@@ -299,17 +299,13 @@ server:
 providers:
   indexeddb:
     main:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
-        version: 0.0.1-alpha.1
+      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
       config:
         dsn: ${DATABASE_URL}
 
   authorization:
     indexeddb:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/authorization/indexeddb
-        version: 0.0.1-alpha.1
+      source: https://artifacts.example.com/authorization/indexeddb/v0.0.1-alpha.1/provider-release.yaml
       config:
         indexeddb: main
 ```
@@ -321,8 +317,8 @@ The exact config fields depend on the selected authorization provider package. T
 | Field | Description |
 | --- | --- |
 | `default` | Marks this named authorization entry as the default selection when `server.providers.authorization` is omitted. |
-| `source.ref` | Managed provider source address. |
-| `source.version` | Required with `source.ref`. SemVer without a leading `v`. |
+| `source` | Either a published `provider-release.yaml` metadata URL or a local provider manifest path. |
+| `auth` | Optional inline source auth. Only valid for metadata URL sources. |
 | `config` | Provider-specific config passed into the authorization provider. |
 | `env` | Extra environment variables passed to the provider process. |
 | `allowedHosts` | Outbound host allowlist. For executable plugins, this is only a complete boundary when a supported sandboxed runtime is active. |
