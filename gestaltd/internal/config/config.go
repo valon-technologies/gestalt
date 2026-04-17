@@ -119,6 +119,7 @@ func (s *ProviderSource) UnmarshalYAML(value *yaml.Node) error {
 	if value.Kind == yaml.MappingNode {
 		hasRef := false
 		hasVersion := false
+		hasAuth := false
 		for i := 0; i+1 < len(value.Content); i += 2 {
 			key := strings.TrimSpace(value.Content[i].Value)
 			switch key {
@@ -126,6 +127,8 @@ func (s *ProviderSource) UnmarshalYAML(value *yaml.Node) error {
 				hasRef = true
 			case "version":
 				hasVersion = true
+			case "auth":
+				hasAuth = true
 			}
 		}
 		if hasRef {
@@ -133,6 +136,9 @@ func (s *ProviderSource) UnmarshalYAML(value *yaml.Node) error {
 		}
 		if hasVersion {
 			return fmt.Errorf("source.version is no longer supported; use source: <provider-release.yaml URL>")
+		}
+		if hasAuth {
+			return fmt.Errorf("source.auth is no longer supported; use sibling auth alongside source")
 		}
 	}
 	type raw ProviderSource

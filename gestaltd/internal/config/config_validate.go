@@ -248,12 +248,13 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error 
 		return nil
 	}
 	src := entry.Source
+	auth := src.Auth
+	if auth == nil {
+		auth = entry.InlineSourceAuth
+	}
 	if src.IsBuiltin() {
-		if entry.InlineSourceAuth != nil {
+		if auth != nil {
 			return fmt.Errorf("config validation: %s %q auth is only valid with metadata URL sources", kind, name)
-		}
-		if src.Auth != nil {
-			return fmt.Errorf("config validation: %s %q source.auth is only valid with metadata URL sources", kind, name)
 		}
 		return nil
 	}
@@ -281,22 +282,11 @@ func validateProviderEntrySource(kind, name string, entry *ProviderEntry) error 
 			return fmt.Errorf("config validation: %s %q source metadata URL must be an absolute http(s) provider-release.yaml URL", kind, name)
 		}
 	}
-	if entry.InlineSourceAuth != nil && src.Auth != nil {
-		return fmt.Errorf("config validation: %s %q auth and source.auth are mutually exclusive", kind, name)
-	}
-	if src.Auth != nil {
-		if !src.IsMetadataURL() {
-			return fmt.Errorf("config validation: %s %q source.auth is only valid with metadata URL sources", kind, name)
-		}
-		if strings.TrimSpace(src.Auth.Token) == "" {
-			return fmt.Errorf("config validation: %s %q source.auth.token is required when source.auth is set", kind, name)
-		}
-	}
-	if entry.InlineSourceAuth != nil {
+	if auth != nil {
 		if !src.IsMetadataURL() {
 			return fmt.Errorf("config validation: %s %q auth is only valid with metadata URL sources", kind, name)
 		}
-		if strings.TrimSpace(entry.InlineSourceAuth.Token) == "" {
+		if strings.TrimSpace(auth.Token) == "" {
 			return fmt.Errorf("config validation: %s %q auth.token is required when auth is set", kind, name)
 		}
 	}
