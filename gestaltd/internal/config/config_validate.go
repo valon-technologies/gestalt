@@ -493,7 +493,14 @@ func validateWorkflowConfig(cfg *Config) error {
 		if entry.Default {
 			defaults = append(defaults, name)
 		}
-		if err := validatePluginOnlyProviderFields("providers.workflow."+name, entry); err != nil {
+		if entry.IndexedDB != nil {
+			entry.IndexedDB.Provider = strings.TrimSpace(entry.IndexedDB.Provider)
+			entry.IndexedDB.DB = strings.TrimSpace(entry.IndexedDB.DB)
+			for i, store := range entry.IndexedDB.ObjectStores {
+				entry.IndexedDB.ObjectStores[i] = strings.TrimSpace(store)
+			}
+		}
+		if err := validateWorkflowProviderFields(cfg, name, entry); err != nil {
 			return err
 		}
 		if err := validateProviderEntrySource("workflow", name, entry); err != nil {
@@ -503,6 +510,55 @@ func validateWorkflowConfig(cfg *Config) error {
 	if len(defaults) > 1 {
 		sort.Strings(defaults)
 		return fmt.Errorf("config validation: providers.workflow declares multiple defaults: %s", strings.Join(defaults, ", "))
+	}
+	return nil
+}
+
+func validateWorkflowProviderFields(cfg *Config, name string, entry *ProviderEntry) error {
+	if entry == nil {
+		return nil
+	}
+	subject := "providers.workflow." + name
+	if strings.TrimSpace(entry.MountPath) != "" {
+		return fmt.Errorf("config validation: %s.mountPath is only supported on plugins.*", subject)
+	}
+	if strings.TrimSpace(entry.UI) != "" {
+		return fmt.Errorf("config validation: %s.ui is only supported on plugins.*", subject)
+	}
+	if len(entry.Cache) > 0 {
+		return fmt.Errorf("config validation: %s.cache is only supported on plugins.*", subject)
+	}
+	if len(entry.S3) > 0 {
+		return fmt.Errorf("config validation: %s.s3 is only supported on plugins.*", subject)
+	}
+	if len(entry.Invokes) > 0 {
+		return fmt.Errorf("config validation: %s.invokes is only supported on plugins.*", subject)
+	}
+	if entry.Workflow != nil {
+		return fmt.Errorf("config validation: %s.workflow is only supported on plugins.*", subject)
+	}
+	if entry.Surfaces != nil {
+		return fmt.Errorf("config validation: %s.surfaces is only supported on plugins.*", subject)
+	}
+	if entry.AuthorizationPolicy != "" {
+		return fmt.Errorf("config validation: %s.authorizationPolicy is only supported on plugins.* and ui.*", subject)
+	}
+	if entry.IndexedDB == nil {
+		return nil
+	}
+
+	seenStores := make(map[string]struct{}, len(entry.IndexedDB.ObjectStores))
+	for i, store := range entry.IndexedDB.ObjectStores {
+		if store == "" {
+			return fmt.Errorf("config validation: %s.indexeddb.objectStores[%d] is required", subject, i)
+		}
+		if _, exists := seenStores[store]; exists {
+			return fmt.Errorf("config validation: %s.indexeddb.objectStores[%d] duplicates %q", subject, i, store)
+		}
+		seenStores[store] = struct{}{}
+	}
+	if _, err := cfg.EffectiveWorkflowIndexedDB(name, entry); err != nil {
+		return err
 	}
 	return nil
 }

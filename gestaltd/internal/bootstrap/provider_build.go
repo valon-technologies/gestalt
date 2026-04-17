@@ -802,6 +802,29 @@ func buildPluginWorkflowHostServices(pluginName string, deps Deps) ([]providerho
 	}}, nil
 }
 
+func buildWorkflowIndexedDBHostServices(name string, effective config.EffectiveWorkflowIndexedDB, deps Deps) ([]providerhost.HostService, func(), error) {
+	if deps.IndexedDBFactory == nil || len(deps.IndexedDBDefs) == 0 {
+		return nil, nil, fmt.Errorf("indexeddb host services are not available")
+	}
+
+	ds, err := buildWorkflowScopedIndexedDB(name, effective, deps)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	hostServices := []providerhost.HostService{{
+		EnvVar: providerhost.DefaultIndexedDBSocketEnv,
+		Register: func(srv *grpc.Server) {
+			proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(ds, name, providerhost.IndexedDBServerOptions{
+				AllowedStores: effective.ObjectStores,
+			}))
+		},
+	}}
+	return hostServices, func() {
+		_ = closeIndexedDBs(ds)
+	}, nil
+}
+
 func buildPluginInvokerHostService(pluginName string, entry *config.ProviderEntry, deps Deps) (providerhost.HostService, *providerhost.RequestSnapshotStore) {
 	invoker := deps.PluginInvoker
 	if invoker == nil {
@@ -823,27 +846,64 @@ func (unavailablePluginInvoker) Invoke(context.Context, *principal.Principal, st
 }
 
 func buildPluginScopedIndexedDB(pluginName string, effective config.EffectivePluginIndexedDB, deps Deps) (indexeddb.IndexedDB, error) {
-	def, ok := deps.IndexedDBDefs[effective.ProviderName]
+	return buildScopedIndexedDB(scopedIndexedDBBuildOptions{
+		MetricsName:        effective.ProviderName,
+		ProviderName:       effective.ProviderName,
+		DB:                 effective.DB,
+		AllowedStores:      effective.ObjectStores,
+		LegacyStorePrefix:  legacyPluginIndexedDBPrefix(pluginName),
+		LegacyConfigPrefix: legacyPluginIndexedDBPrefix(pluginName),
+	}, deps)
+}
+
+func buildWorkflowScopedIndexedDB(name string, effective config.EffectiveWorkflowIndexedDB, deps Deps) (indexeddb.IndexedDB, error) {
+	return buildScopedIndexedDB(scopedIndexedDBBuildOptions{
+		MetricsName:   name,
+		ProviderName:  effective.ProviderName,
+		DB:            effective.DB,
+		AllowedStores: effective.ObjectStores,
+	}, deps)
+}
+
+type scopedIndexedDBBuildOptions struct {
+	MetricsName        string
+	ProviderName       string
+	DB                 string
+	AllowedStores      []string
+	LegacyStorePrefix  string
+	LegacyConfigPrefix string
+}
+
+func buildScopedIndexedDB(opts scopedIndexedDBBuildOptions, deps Deps) (indexeddb.IndexedDB, error) {
+	def, ok := deps.IndexedDBDefs[opts.ProviderName]
 	if !ok || def == nil {
-		return nil, fmt.Errorf("indexeddb %q is not available", effective.ProviderName)
+		return nil, fmt.Errorf("indexeddb %q is not available", opts.ProviderName)
 	}
-	scopedDef, transportPrefix, err := newPluginScopedIndexedDBDef(def, pluginName, effective.DB)
+	scopedDef, transportPrefix, err := newScopedIndexedDBDef(def, scopedIndexedDBDefOptions{
+		DB:                 opts.DB,
+		LegacyConfigPrefix: opts.LegacyConfigPrefix,
+	})
 	if err != nil {
-		return nil, fmt.Errorf("indexeddb %q: %w", effective.ProviderName, err)
+		return nil, fmt.Errorf("indexeddb %q: %w", opts.ProviderName, err)
 	}
 	ds, err := buildIndexedDB(scopedDef, &FactoryRegistry{IndexedDB: deps.IndexedDBFactory})
 	if err != nil {
-		return nil, fmt.Errorf("indexeddb %q: %w", effective.ProviderName, err)
+		return nil, fmt.Errorf("indexeddb %q: %w", opts.ProviderName, err)
 	}
 	ds = newPluginIndexedDBTransport(ds, pluginIndexedDBTransportOptions{
 		StorePrefix:       transportPrefix,
-		LegacyStorePrefix: legacyPluginIndexedDBPrefix(pluginName),
-		AllowedStores:     effective.ObjectStores,
+		LegacyStorePrefix: opts.LegacyStorePrefix,
+		AllowedStores:     opts.AllowedStores,
 	})
-	return metricutil.InstrumentIndexedDB(ds, effective.ProviderName), nil
+	return metricutil.InstrumentIndexedDB(ds, opts.MetricsName), nil
 }
 
-func newPluginScopedIndexedDBDef(entry *config.ProviderEntry, pluginName, db string) (*config.ProviderEntry, string, error) {
+type scopedIndexedDBDefOptions struct {
+	DB                 string
+	LegacyConfigPrefix string
+}
+
+func newScopedIndexedDBDef(entry *config.ProviderEntry, opts scopedIndexedDBDefOptions) (*config.ProviderEntry, string, error) {
 	if entry == nil {
 		return nil, "", fmt.Errorf("datastore provider is required")
 	}
@@ -857,22 +917,24 @@ func newPluginScopedIndexedDBDef(entry *config.ProviderEntry, pluginName, db str
 
 	transportPrefix := ""
 	if pluginIndexedDBUsesScopedProviderConfig(entry, cfg) {
-		if legacyPrefix := legacyPluginIndexedDBPrefix(pluginName); legacyPrefix != "" {
-			cfg["legacy_table_prefix"] = legacyPrefix
+		if opts.LegacyConfigPrefix != "" {
+			cfg["legacy_table_prefix"] = opts.LegacyConfigPrefix
+		} else {
+			delete(cfg, "legacy_table_prefix")
 		}
 		delete(cfg, "legacy_prefix")
 		delete(cfg, "namespace")
 		if isSQLiteIndexedDBConfig(cfg) {
 			delete(cfg, "schema")
-			cfg["table_prefix"] = db + "_"
-			cfg["prefix"] = db + "_"
+			cfg["table_prefix"] = opts.DB + "_"
+			cfg["prefix"] = opts.DB + "_"
 		} else {
 			delete(cfg, "table_prefix")
 			delete(cfg, "prefix")
-			cfg["schema"] = db
+			cfg["schema"] = opts.DB
 		}
 	} else {
-		transportPrefix = db + "_"
+		transportPrefix = opts.DB + "_"
 	}
 
 	configNode, err := mapToYAMLNode(cfg)
