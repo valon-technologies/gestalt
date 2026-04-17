@@ -11,25 +11,25 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
 
-func (s *Server) allowProvider(p *principal.Principal, provider string) bool {
+func (s *Server) allowProviderContext(ctx context.Context, p *principal.Principal, provider string) bool {
 	if s.authorizer == nil {
 		return true
 	}
-	return s.authorizer.AllowProvider(p, provider)
+	return s.authorizer.AllowProvider(ctx, p, provider)
 }
 
-func (s *Server) allowOperation(p *principal.Principal, provider, operation string) bool {
+func (s *Server) allowOperationContext(ctx context.Context, p *principal.Principal, provider, operation string) bool {
 	if s.authorizer == nil {
 		return true
 	}
-	return s.authorizer.AllowOperation(p, provider, operation)
+	return s.authorizer.AllowOperation(ctx, p, provider, operation)
 }
 
-func (s *Server) providerAccessContext(p *principal.Principal, provider string) invocation.AccessContext {
+func (s *Server) providerAccessContextWithContext(ctx context.Context, p *principal.Principal, provider string) invocation.AccessContext {
 	if s.authorizer == nil {
 		return invocation.AccessContext{}
 	}
-	access, _ := s.authorizer.ResolveAccess(p, provider)
+	access, _ := s.authorizer.ResolveAccess(ctx, p, provider)
 	return access
 }
 

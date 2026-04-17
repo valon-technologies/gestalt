@@ -41,7 +41,7 @@ func (s *Server) listManagedIdentityTokens(w http.ResponseWriter, r *http.Reques
 	out := make([]apiTokenInfo, 0, len(tokens))
 	for _, token := range tokens {
 		info := apiTokenInfoFromCore(token)
-		info.Permissions = s.filterAccessPermissionsForViewer(effectiveManagedIdentityTokenPermissions(token, grantPermissions), viewer)
+		info.Permissions = s.filterAccessPermissionsForViewer(r.Context(), effectiveManagedIdentityTokenPermissions(token, grantPermissions), viewer)
 		out = append(out, info)
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -184,14 +184,14 @@ func (s *Server) validateManagedIdentityTokenPermissions(ctx context.Context, id
 	}
 	visibleGrants := make(map[string]*core.ManagedIdentityGrant, len(grants))
 	for _, grant := range grants {
-		if grant == nil || !s.allowProvider(viewer, grant.Plugin) {
+		if grant == nil || !s.allowProviderContext(ctx, viewer, grant.Plugin) {
 			continue
 		}
 		visibleGrants[grant.Plugin] = grant
 	}
 
 	for _, permission := range permissions {
-		if !s.managedIdentityGrantPluginVisible(permission.Plugin, viewer) {
+		if !s.managedIdentityGrantPluginVisible(ctx, permission.Plugin, viewer) {
 			return fmt.Errorf("plugin %q is not available", permission.Plugin)
 		}
 		if !s.managedIdentityInvocationSupported(permission.Plugin) {
@@ -295,13 +295,13 @@ func normalizeAccessPermissions(permissions []core.AccessPermission) []core.Acce
 	return out
 }
 
-func (s *Server) filterAccessPermissionsForViewer(permissions []core.AccessPermission, viewer *principal.Principal) []core.AccessPermission {
+func (s *Server) filterAccessPermissionsForViewer(ctx context.Context, permissions []core.AccessPermission, viewer *principal.Principal) []core.AccessPermission {
 	if len(permissions) == 0 {
 		return nil
 	}
 	filtered := make([]core.AccessPermission, 0, len(permissions))
 	for _, permission := range permissions {
-		if viewer != nil && !s.allowProvider(viewer, permission.Plugin) {
+		if viewer != nil && !s.allowProviderContext(ctx, viewer, permission.Plugin) {
 			continue
 		}
 		filtered = append(filtered, core.AccessPermission{

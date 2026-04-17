@@ -81,7 +81,7 @@ func (s *Server) adminAPIAuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		access, allowed := s.authorizer.ResolveAdminAccess(p, s.adminRoute.AuthorizationPolicy)
+		access, allowed := s.authorizer.ResolveAdminAccess(r.Context(), p, s.adminRoute.AuthorizationPolicy)
 		if !allowed || !mountedWebUIRoleAllowed(access.Role, s.adminRoute.AllowedRoles) {
 			writeError(w, http.StatusForbidden, "admin access denied")
 			return

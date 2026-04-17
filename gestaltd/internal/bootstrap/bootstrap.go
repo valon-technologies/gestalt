@@ -181,7 +181,7 @@ type Result struct {
 	ExtraWorkflows        []coreworkflow.Provider
 	Providers             *registry.ProviderMap[core.Provider]
 	ProvidersReady        <-chan struct{}
-	Authorizer            *authorization.Authorizer
+	Authorizer            authorization.RuntimeAuthorizer
 	ConnectionAuth        func() map[string]map[string]OAuthHandler
 	Invoker               invocation.Invoker
 	CapabilityLister      invocation.CapabilityLister
@@ -225,7 +225,7 @@ func (r *Result) Close(ctx context.Context) error {
 
 	var errs []error
 	errs = append(errs,
-		r.Authorizer.Close(),
+		closeAuthorizer(r.Authorizer),
 		closeAuth(r.Auth),
 		closeAuthorizationProvider(r.AuthorizationProvider),
 		CloseProviders(r.Providers),
@@ -643,7 +643,7 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 		return nil, err
 	}
-	authz, err := authorization.New(authzCfg, cfg.Plugins, providers, connMaps.DefaultConnection, prepared.Services.PluginAuthorizations)
+	legacyAuthz, err := authorization.New(authzCfg, cfg.Plugins, providers, connMaps.DefaultConnection, prepared.Services.PluginAuthorizations)
 	if err != nil {
 		prepared.Deps.WorkflowRuntime.FailPendingProviders(err)
 		return nil, err
@@ -651,10 +651,14 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	closeAuthz := true
 	defer func() {
 		if closeAuthz {
-			_ = authz.Close()
+			_ = legacyAuthz.Close()
 		}
 	}()
-	authz.SetAdminAuthorizationService(prepared.Services.AdminAuthorizations)
+	legacyAuthz.SetAdminAuthorizationService(prepared.Services.AdminAuthorizations)
+	var authz authorization.RuntimeAuthorizer = legacyAuthz
+	if prepared.AuthorizationProvider != nil {
+		authz = authorization.NewProviderBacked(legacyAuthz, prepared.AuthorizationProvider)
+	}
 	sharedInvoker := invocation.NewBroker(providers, prepared.Services.Users, prepared.Services.Tokens,
 		invocation.WithAuthorizer(authz),
 		invocation.WithConnectionMapper(invocation.ConnectionMap(connMaps.APIConnection)),
@@ -862,6 +866,13 @@ func closeAuth(provider core.AuthProvider) error {
 		return nil
 	}
 	return closer.Close()
+}
+
+func closeAuthorizer(authorizer authorization.RuntimeAuthorizer) error {
+	if authorizer == nil {
+		return nil
+	}
+	return authorizer.Close()
 }
 
 func closeAuthorizationProvider(provider core.AuthorizationProvider) error {

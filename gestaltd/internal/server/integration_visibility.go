@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"strings"
 
 	"github.com/valon-technologies/gestalt/server/core"
@@ -8,14 +9,14 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
 
-func (s *Server) integrationHasUsableSurface(p *principal.Principal, provider string, prov core.Provider, info integrationInfo) bool {
+func (s *Server) integrationHasUsableSurfaceContext(ctx context.Context, p *principal.Principal, provider string, prov core.Provider, info integrationInfo) bool {
 	if info.MountedPath != "" {
 		return true
 	}
 	if s.integrationHasSettingsSurface(p, info) {
 		return true
 	}
-	return s.integrationHasVisibleHTTPOperations(p, provider, prov)
+	return s.integrationHasVisibleHTTPOperationsContext(ctx, p, provider, prov)
 }
 
 func (s *Server) integrationHasSettingsSurface(p *principal.Principal, info integrationInfo) bool {
@@ -25,22 +26,22 @@ func (s *Server) integrationHasSettingsSurface(p *principal.Principal, info inte
 	return info.Connected || len(info.AuthTypes) > 0 || len(info.Connections) > 0
 }
 
-func (s *Server) integrationHasVisibleHTTPOperations(p *principal.Principal, provider string, prov core.Provider) bool {
+func (s *Server) integrationHasVisibleHTTPOperationsContext(ctx context.Context, p *principal.Principal, provider string, prov core.Provider) bool {
 	cat := prov.Catalog()
 	if cat == nil {
 		return false
 	}
-	cat = invocation.FilterCatalogForPrincipal(cat, provider, p, s.authorizer)
+	cat = invocation.FilterCatalogForPrincipal(ctx, cat, provider, p, s.authorizer)
 	return len(httpVisibleCatalogOperations(cat.Operations)) > 0
 }
 
-func (s *Server) integrationMountedPathForPrincipal(p *principal.Principal, provider, mountedPath string) string {
+func (s *Server) integrationMountedPathForPrincipalContext(ctx context.Context, p *principal.Principal, provider, mountedPath string) string {
 	mountedPath = strings.TrimSpace(mountedPath)
 	if mountedPath == "" {
 		return ""
 	}
 	mounted, ok := s.mountedWebUIForProvider(provider, mountedPath)
-	if !ok || !s.mountedWebUIRootAccessible(p, mounted) {
+	if !ok || !s.mountedWebUIRootAccessibleContext(ctx, p, mounted) {
 		return ""
 	}
 	return mountedPath
@@ -64,7 +65,7 @@ func (s *Server) mountedWebUIForProvider(provider, mountedPath string) (MountedW
 	return MountedWebUI{}, false
 }
 
-func (s *Server) mountedWebUIRootAccessible(p *principal.Principal, mounted MountedWebUI) bool {
+func (s *Server) mountedWebUIRootAccessibleContext(ctx context.Context, p *principal.Principal, mounted MountedWebUI) bool {
 	if mounted.AuthorizationPolicy == "" {
 		return true
 	}
@@ -77,9 +78,9 @@ func (s *Server) mountedWebUIRootAccessible(p *principal.Principal, mounted Moun
 		allowed bool
 	)
 	if mounted.PluginName != "" {
-		access, allowed = s.authorizer.ResolveAccess(p, mounted.PluginName)
+		access, allowed = s.authorizer.ResolveAccess(ctx, p, mounted.PluginName)
 	} else {
-		access, allowed = s.authorizer.ResolvePolicyAccess(p, mounted.AuthorizationPolicy)
+		access, allowed = s.authorizer.ResolvePolicyAccess(ctx, p, mounted.AuthorizationPolicy)
 	}
 	if !allowed {
 		return false

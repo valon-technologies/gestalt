@@ -24,7 +24,7 @@ type Config struct {
 	TokenResolver    invocation.TokenResolver
 	AuditSink        core.AuditSink
 	Providers        *registry.ProviderMap[core.Provider]
-	Authorizer       *authorization.Authorizer
+	Authorizer       authorization.RuntimeAuthorizer
 	AllowedProviders []string
 	ToolPrefixes     map[string]string
 	IncludeREST      map[string]bool

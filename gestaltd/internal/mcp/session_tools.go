@@ -147,7 +147,7 @@ func withSessionAccessContext(ctx context.Context, cfg Config, provName string) 
 	if p == nil || cfg.Authorizer.IsWorkload(p) {
 		return ctx
 	}
-	access, allowed := cfg.Authorizer.ResolveAccess(p, provName)
+	access, allowed := cfg.Authorizer.ResolveAccess(ctx, p, provName)
 	if !allowed || (access.Policy == "" && access.Role == "") {
 		return ctx
 	}
@@ -436,6 +436,6 @@ func normalizedSessionCatalogInstance(value any) string {
 	return strings.TrimSpace(instance)
 }
 
-func workloadInstanceOverrideRequested(authz *authorization.Authorizer, p *principal.Principal, instance string) bool {
+func workloadInstanceOverrideRequested(authz authorization.RuntimeAuthorizer, p *principal.Principal, instance string) bool {
 	return authz != nil && p != nil && authz.IsWorkload(p) && instance != ""
 }

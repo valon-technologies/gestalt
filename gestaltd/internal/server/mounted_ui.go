@@ -326,11 +326,11 @@ func (s *Server) authorizeProtectedUIRequest(w http.ResponseWriter, r *http.Requ
 	)
 	switch {
 	case mounted.PluginName != "":
-		access, allowed = s.authorizer.ResolveAccess(p, mounted.PluginName)
+		access, allowed = s.authorizer.ResolveAccess(r.Context(), p, mounted.PluginName)
 	case mounted.builtInAdmin:
-		access, allowed = s.authorizer.ResolveAdminAccess(p, mounted.AuthorizationPolicy)
+		access, allowed = s.authorizer.ResolveAdminAccess(r.Context(), p, mounted.AuthorizationPolicy)
 	default:
-		access, allowed = s.authorizer.ResolvePolicyAccess(p, mounted.AuthorizationPolicy)
+		access, allowed = s.authorizer.ResolvePolicyAccess(r.Context(), p, mounted.AuthorizationPolicy)
 	}
 	if !allowed {
 		writeError(w, http.StatusForbidden, "app access denied")

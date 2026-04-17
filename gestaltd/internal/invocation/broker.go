@@ -95,7 +95,7 @@ type Broker struct {
 	providers      *registry.ProviderMap[core.Provider]
 	users          *coredata.UserService
 	tokens         *coredata.TokenService
-	authorizer     *authorization.Authorizer
+	authorizer     authorization.RuntimeAuthorizer
 	connMapper     ConnectionMapper
 	mcpMapper      ConnectionMapper
 	connectionAuth RefresherResolver
@@ -116,7 +116,7 @@ func WithConnectionAuth(r RefresherResolver) BrokerOption {
 	return func(b *Broker) { b.connectionAuth = r }
 }
 
-func WithAuthorizer(a *authorization.Authorizer) BrokerOption {
+func WithAuthorizer(a authorization.RuntimeAuthorizer) BrokerOption {
 	return func(b *Broker) { b.authorizer = a }
 }
 
@@ -215,7 +215,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		span.SetAttributes(attrUserID.String(p.UserID))
 	}
 	if b.authorizer != nil {
-		access, allowed := b.authorizer.ResolveAccess(p, providerName)
+		access, allowed := b.authorizer.ResolveAccess(ctx, p, providerName)
 		if access.Policy != "" || access.Role != "" {
 			ctx = WithAccessContext(ctx, access)
 		}
@@ -230,7 +230,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 
 	conn := ConnectionFromContext(ctx)
 	conn, instance = b.workloadSelectors(p, providerName, conn, instance)
-	if b.authorizer != nil && b.authorizer.IsWorkload(p) && !b.authorizer.AllowOperation(p, providerName, operation) {
+	if b.authorizer != nil && b.authorizer.IsWorkload(p) && !b.authorizer.AllowOperation(ctx, p, providerName, operation) {
 		return fail(fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operation))
 	}
 
@@ -238,7 +238,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	if err != nil {
 		return fail(err)
 	}
-	if b.authorizer != nil && !b.authorizer.AllowCatalogOperation(p, providerName, opMeta) {
+	if b.authorizer != nil && !b.authorizer.AllowCatalogOperation(ctx, p, providerName, opMeta) {
 		return fail(fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operation))
 	}
 	if !principal.AllowsOperationPermission(p, providerName, opMeta.ID) {
@@ -393,7 +393,7 @@ func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, provi
 		return ctx, "", err
 	}
 	ctx = withResolvedPrincipal(ctx, p)
-	if b.authorizer != nil && !b.authorizer.AllowProvider(p, providerName) {
+	if b.authorizer != nil && !b.authorizer.AllowProvider(ctx, p, providerName) {
 		return ctx, "", fmt.Errorf("%w: %s", ErrAuthorizationDenied, providerName)
 	}
 	prov, err := b.providers.Get(providerName)

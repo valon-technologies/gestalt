@@ -220,7 +220,7 @@ func mergeCatalogs(provName string, staticCat, sessionCat *catalog.Catalog) (*ca
 	return merged, nil
 }
 
-func FilterCatalogForPrincipal(cat *catalog.Catalog, provName string, p *principal.Principal, authorizer *authorization.Authorizer) *catalog.Catalog {
+func FilterCatalogForPrincipal(ctx context.Context, cat *catalog.Catalog, provName string, p *principal.Principal, authorizer authorization.RuntimeAuthorizer) *catalog.Catalog {
 	if cat == nil || authorizer == nil {
 		return cat
 	}
@@ -228,7 +228,7 @@ func FilterCatalogForPrincipal(cat *catalog.Catalog, provName string, p *princip
 	filtered := cat.Clone()
 	ops := filtered.Operations[:0]
 	for i := range filtered.Operations {
-		if authorizer.AllowCatalogOperation(p, provName, filtered.Operations[i]) {
+		if authorizer.AllowCatalogOperation(ctx, p, provName, filtered.Operations[i]) {
 			ops = append(ops, filtered.Operations[i])
 		}
 	}

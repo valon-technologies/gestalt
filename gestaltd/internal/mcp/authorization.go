@@ -17,13 +17,13 @@ func allowOperation(ctx context.Context, cfg Config, p *principal.Principal, pro
 		return true
 	}
 	if cfg.Authorizer.IsWorkload(p) {
-		return cfg.Authorizer.AllowOperation(p, provider, operation)
+		return cfg.Authorizer.AllowOperation(ctx, p, provider, operation)
 	}
 	op, ok := catalogOperationForTool(ctx, cfg, provider, operation)
 	if !ok {
 		return false
 	}
-	return cfg.Authorizer.AllowCatalogOperation(p, provider, op)
+	return cfg.Authorizer.AllowCatalogOperation(ctx, p, provider, op)
 }
 
 func toolTarget(cfg Config, providers []string, name string) (provider, operation string, ok bool) {

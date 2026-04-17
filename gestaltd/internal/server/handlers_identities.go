@@ -282,7 +282,7 @@ func (s *Server) identitiesProviderHasOperation(ctx context.Context, operation, 
 	if tr, ok := s.invoker.(invocation.TokenResolver); ok {
 		resolver = tr
 	}
-	ctx = invocation.WithAccessContext(ctx, s.providerAccessContext(p, "identities"))
+	ctx = invocation.WithAccessContext(ctx, s.providerAccessContextWithContext(ctx, p, "identities"))
 	targets, err := s.managedIdentityGrantCatalogTargets(ctx, "identities", p)
 	if err != nil {
 		return false
@@ -613,7 +613,7 @@ func (s *Server) listManagedIdentityGrants(w http.ResponseWriter, r *http.Reques
 	p := PrincipalFromContext(r.Context())
 	out := make([]managedIdentityGrantInfo, 0, len(grants))
 	for _, grant := range grants {
-		if !s.managedIdentityGrantVisibleToActor(grant.Plugin, p, actor.Membership.Role) {
+		if !s.managedIdentityGrantVisibleToActor(r.Context(), grant.Plugin, p, actor.Membership.Role) {
 			continue
 		}
 		out = append(out, managedIdentityGrantInfo{
@@ -653,7 +653,7 @@ func (s *Server) putManagedIdentityGrant(w http.ResponseWriter, r *http.Request)
 	}
 
 	p := managedIdentityGrantValidationPrincipal(PrincipalFromContext(r.Context()), actor.UserID)
-	if !s.managedIdentityGrantPluginVisible(plugin, p) {
+	if !s.managedIdentityGrantPluginVisible(r.Context(), plugin, p) {
 		auditErr = errors.New("plugin not found")
 		writeError(w, http.StatusNotFound, "plugin not found")
 		return
@@ -677,7 +677,7 @@ func (s *Server) putManagedIdentityGrant(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	if !s.managedIdentityGrantPluginVisible(plugin, p) {
+	if !s.managedIdentityGrantPluginVisible(r.Context(), plugin, p) {
 		auditErr = errors.New("plugin not found")
 		writeError(w, http.StatusNotFound, "plugin not found")
 		return
@@ -745,7 +745,7 @@ func (s *Server) deleteManagedIdentityGrant(w http.ResponseWriter, r *http.Reque
 			writeError(w, http.StatusInternalServerError, "failed to resolve identity grant")
 			return
 		}
-	} else if !s.allowProvider(PrincipalFromContext(r.Context()), plugin) {
+	} else if !s.allowProviderContext(r.Context(), PrincipalFromContext(r.Context()), plugin) {
 		auditErr = errors.New("plugin not found")
 		writeError(w, http.StatusNotFound, "plugin not found")
 		return
@@ -1040,18 +1040,18 @@ func (s *Server) recoverManagedIdentityCreateMembership(ctx context.Context, ide
 	}
 }
 
-func (s *Server) managedIdentityGrantPluginVisible(plugin string, p *principal.Principal) bool {
+func (s *Server) managedIdentityGrantPluginVisible(ctx context.Context, plugin string, p *principal.Principal) bool {
 	if _, err := s.providers.Get(plugin); err != nil {
 		return false
 	}
-	return s.allowProvider(p, plugin)
+	return s.allowProviderContext(ctx, p, plugin)
 }
 
-func (s *Server) managedIdentityGrantVisibleToActor(plugin string, p *principal.Principal, role string) bool {
+func (s *Server) managedIdentityGrantVisibleToActor(ctx context.Context, plugin string, p *principal.Principal, role string) bool {
 	if _, err := s.providers.Get(plugin); err != nil {
 		return errors.Is(err, core.ErrNotFound) && managedIdentityRoleAllows(role, managedIdentityRoleEditor)
 	}
-	return s.allowProvider(p, plugin)
+	return s.allowProviderContext(ctx, p, plugin)
 }
 
 func (s *Server) managedIdentityInvocationSupported(plugin string) bool {
@@ -1146,7 +1146,7 @@ func (s *Server) managedIdentityGrantCatalog(ctx context.Context, plugin string,
 	if tr, ok := s.invoker.(invocation.TokenResolver); ok {
 		resolver = tr
 	}
-	ctx = invocation.WithAccessContext(ctx, s.providerAccessContext(p, plugin))
+	ctx = invocation.WithAccessContext(ctx, s.providerAccessContextWithContext(ctx, p, plugin))
 	targets, err := s.managedIdentityGrantCatalogTargets(ctx, plugin, p)
 	if err != nil {
 		return nil, err
@@ -1407,7 +1407,7 @@ func (s *Server) validateManagedIdentityGrantOperations(ctx context.Context, plu
 	}
 	allowedVisible := visible
 	if s.authorizer != nil {
-		filtered := invocation.FilterCatalogForPrincipal(cat, plugin, p, s.authorizer)
+		filtered := invocation.FilterCatalogForPrincipal(ctx, cat, plugin, p, s.authorizer)
 		allowedVisible = grantableCatalogOperations(filtered.Operations)
 	}
 	allowed := make(map[string]struct{}, len(allowedVisible))
