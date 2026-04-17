@@ -2797,6 +2797,121 @@ func TestLoadForExecutionAtPath_UnlockedBootstrapMetadataInitPreparesOnce(t *tes
 	}
 }
 
+func TestLoadForExecutionAtPath_UnlockedMetadataSecretsProviderResolvesConfigSecrets(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	secretsSource := "github.com/acme/tools/secrets-widget"
+	secretsVersion := "1.0.0"
+
+	secretsArchivePath := buildExecutableArchiveFromBinaryPath(
+		t,
+		dir,
+		"secrets-metadata-src",
+		secretsSource,
+		secretsVersion,
+		providermanifestv1.KindSecrets,
+		"secrets-plugin",
+		buildGoSourceSecretsBinary(t),
+	)
+	secretsArchiveData, err := os.ReadFile(secretsArchivePath)
+	if err != nil {
+		t.Fatalf("read secrets archive: %v", err)
+	}
+	secretsArchiveSum := sha256.Sum256(secretsArchiveData)
+
+	var metadataCount atomic.Int64
+	var archiveCount atomic.Int64
+	metadataPath := "/providers/secrets/provider-release.yaml"
+	archivePathURL := "/providers/secrets/secrets-current.tar.gz"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case metadataPath:
+			metadataCount.Add(1)
+			metadata := providerReleaseMetadata{
+				Schema:        providerReleaseSchemaName,
+				SchemaVersion: providerReleaseSchemaVersion,
+				Package:       secretsSource,
+				Kind:          providermanifestv1.KindSecrets,
+				Version:       secretsVersion,
+				Runtime:       providerReleaseRuntimeExecutable,
+				Artifacts: map[string]providerReleaseArtifact{
+					providerpkg.CurrentPlatformString(): {
+						Path:   filepath.Base(archivePathURL),
+						SHA256: hex.EncodeToString(secretsArchiveSum[:]),
+					},
+				},
+			}
+			data, err := yaml.Marshal(metadata)
+			if err != nil {
+				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write(data)
+		case archivePathURL:
+			archiveCount.Add(1)
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(secretsArchiveData)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configYAML := strings.Join([]string{
+		"apiVersion: " + config.APIVersionV3,
+		requiredIndexedDBConfigYAML(t, dir, filepath.Join(dir, "data.db")),
+		"  secrets:",
+		"    secrets:",
+		"      source: " + srv.URL + metadataPath + "?download=1",
+		"server:",
+		"  providers:",
+		"    indexeddb: sqlite",
+		"    secrets: secrets",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey:",
+		"    secret:",
+		"      provider: secrets",
+		"      name: source-token",
+	}, "\n") + "\n"
+
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	factories := bootstrap.NewFactoryRegistry()
+	factories.Secrets["provider"] = secretsprovider.Factory
+
+	lc := NewLifecycle(nil).WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
+		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
+	})
+
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, false)
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=false): %v", err)
+	}
+	if got := metadataCount.Load(); got != 1 {
+		t.Fatalf("metadata request count = %d, want 1", got)
+	}
+	if got := archiveCount.Load(); got != 1 {
+		t.Fatalf("archive request count = %d, want 1", got)
+	}
+	if got := cfg.Server.EncryptionKey; got != "ghp_inline_auth_source_token" {
+		t.Fatalf("resolved encryption key = %q, want %q", got, "ghp_inline_auth_source_token")
+	}
+
+	secretsProvider := mustSelectedHostProviderEntry(t, cfg, config.HostProviderKindSecrets)
+	if secretsProvider == nil {
+		t.Fatal("secrets provider is nil after load")
+	}
+	if secretsProvider.Command == "" {
+		t.Fatal("secrets provider command is empty after load")
+	}
+}
+
 func TestSourcePluginGitHubResolverEndToEnd(t *testing.T) {
 	t.Setenv("GITHUB_TOKEN", "wrong-env-token")
 
