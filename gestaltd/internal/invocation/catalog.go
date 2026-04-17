@@ -22,6 +22,11 @@ type CatalogResolutionMetadata struct {
 	SessionFailed    bool
 }
 
+type CatalogResolutionTarget struct {
+	Connection string
+	Instance   string
+}
+
 func ResolveCatalog(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, defaultConnection, instance string) (*catalog.Catalog, error) {
 	cat, _, err := ResolveCatalogWithMetadata(ctx, prov, provName, resolver, p, defaultConnection, instance)
 	return cat, err
@@ -33,6 +38,42 @@ func ResolveCatalogWithMetadata(ctx context.Context, prov core.Provider, provNam
 
 func ResolveCatalogStrictWithMetadata(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, defaultConnection, instance string) (*catalog.Catalog, CatalogResolutionMetadata, error) {
 	return resolveCatalog(ctx, prov, provName, resolver, p, defaultConnection, instance, true)
+}
+
+func ResolveCatalogForTargetsWithMetadata(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, targets []CatalogResolutionTarget, strictSession bool) (*catalog.Catalog, CatalogResolutionMetadata, error) {
+	if len(targets) == 0 {
+		targets = []CatalogResolutionTarget{{}}
+	}
+
+	var (
+		firstErr         error
+		sessionAttempted bool
+	)
+	for _, target := range targets {
+		cat, meta, err := resolveCatalog(ctx, prov, provName, resolver, p, target.Connection, target.Instance, strictSession)
+		if err == nil {
+			return cat, meta, nil
+		}
+		if firstErr == nil {
+			firstErr = err
+		}
+		sessionAttempted = sessionAttempted || meta.SessionAttempted
+	}
+
+	if firstErr != nil && errors.Is(firstErr, core.ErrSessionCatalogUnavailable) {
+		if staticCat := prov.Catalog(); staticCat != nil {
+			slog.WarnContext(ctx, "catalog resolution falling back to static catalog", "provider", provName, "error", firstErr)
+			return staticCat.Clone(), CatalogResolutionMetadata{
+				SessionAttempted: sessionAttempted,
+				SessionFailed:    true,
+			}, nil
+		}
+	}
+
+	return nil, CatalogResolutionMetadata{
+		SessionAttempted: sessionAttempted,
+		SessionFailed:    firstErr != nil,
+	}, firstErr
 }
 
 func ResolveOperation(ctx context.Context, prov core.Provider, provName string, resolver TokenResolver, p *principal.Principal, operation string, sessionConnections []string, instance string) (catalog.CatalogOperation, string, string, error) {
@@ -70,11 +111,6 @@ func resolveCatalog(ctx context.Context, prov core.Provider, provName string, re
 
 	sessionCat, attempted, err := resolveSessionCatalog(ctx, prov, provName, resolver, p, defaultConnection, instance)
 	meta.SessionAttempted = attempted
-	if err != nil {
-		if errors.Is(err, core.ErrSessionCatalogUnavailable) && staticCat != nil {
-			err = nil
-		}
-	}
 	if err != nil {
 		meta.SessionFailed = true
 		if strictSession || staticCat == nil {

@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"testing"
@@ -57,6 +58,18 @@ func (s *stubSessionProvider) CatalogForRequest(_ context.Context, _ string) (*c
 	return s.sessionCat, s.sessionErr
 }
 
+type stubDynamicSessionProvider struct {
+	stubCatalogProvider
+	sessionCatFn func(context.Context, string) (*catalog.Catalog, error)
+}
+
+func (s *stubDynamicSessionProvider) CatalogForRequest(ctx context.Context, token string) (*catalog.Catalog, error) {
+	if s.sessionCatFn == nil {
+		return nil, nil
+	}
+	return s.sessionCatFn(ctx, token)
+}
+
 type stubTokenResolver struct {
 	token string
 	err   error
@@ -64,6 +77,25 @@ type stubTokenResolver struct {
 
 func (s *stubTokenResolver) ResolveToken(ctx context.Context, _ *principal.Principal, _ string, _ string, _ string) (context.Context, string, error) {
 	return ctx, s.token, s.err
+}
+
+type stubConnectionTokenResolver struct {
+	tokens map[string]string
+	errs   map[string]error
+}
+
+func (s *stubConnectionTokenResolver) ResolveToken(ctx context.Context, _ *principal.Principal, _ string, connection, _ string) (context.Context, string, error) {
+	if s != nil && s.errs != nil {
+		if err, ok := s.errs[connection]; ok {
+			return ctx, "", err
+		}
+	}
+	if s != nil && s.tokens != nil {
+		if token, ok := s.tokens[connection]; ok {
+			return ctx, token, nil
+		}
+	}
+	return ctx, "", fmt.Errorf("unexpected connection %q", connection)
 }
 
 func TestResolveCatalog_StaticCatalog(t *testing.T) {
@@ -574,6 +606,117 @@ func TestResolveCatalog_TokenResolutionFailure_NonFatal(t *testing.T) {
 	}
 	if cat.Operations[0].ID != "static_op" {
 		t.Fatalf("expected static_op, got %q", cat.Operations[0].ID)
+	}
+}
+
+func TestResolveCatalogStrict_SessionCatalogUnavailableReturnsTypedError(t *testing.T) {
+	t.Parallel()
+
+	prov := &stubSessionProvider{
+		stubCatalogProvider: stubCatalogProvider{
+			stubProvider: stubProvider{
+				name:     "strict-api",
+				connMode: core.ConnectionModeUser,
+			},
+			cat: &catalog.Catalog{
+				Name: "strict-api",
+				Operations: []catalog.CatalogOperation{
+					{ID: "static_op", Method: http.MethodGet},
+				},
+			},
+		},
+		sessionErr: fmt.Errorf("upstream catalog failed"),
+	}
+
+	resolver := &stubTokenResolver{token: "tok_789"}
+	p := &principal.Principal{UserID: "u1"}
+
+	cat, metadata, err := invocation.ResolveCatalogStrictWithMetadata(context.Background(), prov, "strict-api", resolver, p, "default", "")
+	if err == nil {
+		t.Fatalf("expected strict resolution error, got catalog %+v", cat)
+	}
+	if !errors.Is(err, core.ErrSessionCatalogUnavailable) {
+		t.Fatalf("expected ErrSessionCatalogUnavailable, got %v", err)
+	}
+	if got, want := err.Error(), "upstream catalog failed"; got != want {
+		t.Fatalf("error text = %q, want %q", got, want)
+	}
+	if !metadata.SessionAttempted {
+		t.Fatal("expected session resolution attempt to be reported")
+	}
+	if !metadata.SessionFailed {
+		t.Fatal("expected session resolution failure to be reported")
+	}
+}
+
+func TestResolveCatalogForTargetsWithMetadata_PrefersLaterSuccessfulTarget(t *testing.T) {
+	t.Parallel()
+
+	prov := &stubDynamicSessionProvider{
+		stubCatalogProvider: stubCatalogProvider{
+			stubProvider: stubProvider{
+				name:     "multi-target-api",
+				connMode: core.ConnectionModeUser,
+			},
+			cat: &catalog.Catalog{
+				Name: "multi-target-api",
+				Operations: []catalog.CatalogOperation{
+					{ID: "static_op", Method: http.MethodGet, Transport: catalog.TransportREST},
+				},
+			},
+		},
+		sessionCatFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			switch token {
+			case "catalog-token":
+				return nil, fmt.Errorf("catalog unavailable")
+			case "default-token":
+				return &catalog.Catalog{
+					Name: "multi-target-api",
+					Operations: []catalog.CatalogOperation{
+						{ID: "session_op", Method: http.MethodPost, Transport: catalog.TransportREST},
+					},
+				}, nil
+			default:
+				return nil, fmt.Errorf("unexpected token %q", token)
+			}
+		},
+	}
+
+	resolver := &stubConnectionTokenResolver{
+		tokens: map[string]string{
+			"catalog": "catalog-token",
+			"default": "default-token",
+		},
+	}
+	p := &principal.Principal{UserID: "u1"}
+
+	cat, metadata, err := invocation.ResolveCatalogForTargetsWithMetadata(
+		context.Background(),
+		prov,
+		"multi-target-api",
+		resolver,
+		p,
+		[]invocation.CatalogResolutionTarget{
+			{Connection: "catalog"},
+			{Connection: "default"},
+		},
+		true,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if metadata.SessionFailed {
+		t.Fatal("expected successful later target to suppress fallback failure metadata")
+	}
+	if len(cat.Operations) != 2 {
+		t.Fatalf("expected merged catalog from later target, got %d operations", len(cat.Operations))
+	}
+	got := map[string]bool{}
+	for _, op := range cat.Operations {
+		got[op.ID] = true
+	}
+	if !got["static_op"] || !got["session_op"] {
+		t.Fatalf("expected merged catalog with static_op and session_op, got %#v", got)
 	}
 }
 

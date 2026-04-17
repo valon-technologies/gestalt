@@ -286,10 +286,34 @@ func (s *Server) identitiesProviderHasOperation(ctx context.Context, operation, 
 	if err != nil {
 		return false
 	}
+	var firstErr error
+	sawCatalog := false
 	for _, target := range targets {
 		cat, err := s.managedIdentityGrantCatalogForConnection(ctx, prov, "identities", resolver, p, target.connection, target.instance)
-		if err != nil || cat == nil {
+		if err != nil {
+			if firstErr == nil {
+				firstErr = err
+			}
 			continue
+		}
+		if cat == nil {
+			continue
+		}
+		sawCatalog = true
+		for i := range cat.Operations {
+			op := cat.Operations[i]
+			if op.ID != operation {
+				continue
+			}
+			if strings.TrimSpace(op.Method) == "" || strings.EqualFold(op.Method, method) {
+				return true
+			}
+		}
+	}
+	if !sawCatalog && firstErr != nil && errors.Is(firstErr, core.ErrSessionCatalogUnavailable) {
+		cat := prov.Catalog()
+		if cat == nil {
+			return false
 		}
 		for i := range cat.Operations {
 			op := cat.Operations[i]
@@ -1054,6 +1078,11 @@ func (s *Server) managedIdentityGrantCatalog(ctx context.Context, plugin string,
 		}
 		if err != nil && firstErr == nil {
 			firstErr = err
+		}
+	}
+	if firstErr != nil && errors.Is(firstErr, core.ErrSessionCatalogUnavailable) {
+		if staticCat := prov.Catalog(); staticCat != nil {
+			return staticCat.Clone(), nil
 		}
 	}
 	return nil, firstErr

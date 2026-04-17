@@ -462,17 +462,23 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 		discoveryStartedAt = time.Now()
 		discoveryConnectionMode = metricutil.NormalizeConnectionMode(prov.ConnectionMode())
 	}
-	resolveCatalog := invocation.ResolveCatalogWithMetadata
 	strictCatalog := false
 	if requestedConnection != "" || requestedInstance != "" {
-		resolveCatalog = invocation.ResolveCatalogStrictWithMetadata
 		strictCatalog = true
 	} else if core.SupportsSessionCatalog(prov) {
-		resolveCatalog = invocation.ResolveCatalogStrictWithMetadata
 		strictCatalog = true
 	}
 	ctx := invocation.WithAccessContext(r.Context(), s.providerAccessContext(p, name))
-	cat, discoveryFailed, err := s.resolveCatalogForRequest(ctx, prov, name, resolver, p, requestedConnection, requestedInstance, strictCatalog, resolveCatalog)
+	cat, metadata, err := invocation.ResolveCatalogForTargetsWithMetadata(
+		ctx,
+		prov,
+		name,
+		resolver,
+		p,
+		s.boundSessionCatalogTargets(name, p, requestedConnection, requestedInstance),
+		strictCatalog,
+	)
+	discoveryFailed = metadata.SessionFailed
 	if err != nil {
 		if recordDiscoveryMetrics {
 			metricutil.RecordDiscoveryMetrics(r.Context(), discoveryStartedAt, name, "list_operations", discoveryConnectionMode, discoveryFailed)
@@ -730,58 +736,17 @@ func (s *Server) boundSessionCatalogConnections(providerName string, p *principa
 	return boundConnections, boundInstance
 }
 
-func (s *Server) resolveCatalogForRequest(ctx context.Context, prov core.Provider, providerName string, resolver invocation.TokenResolver, p *principal.Principal, requestedConnection, requestedInstance string, strict bool, resolveCatalog func(context.Context, core.Provider, string, invocation.TokenResolver, *principal.Principal, string, string) (*catalog.Catalog, invocation.CatalogResolutionMetadata, error)) (*catalog.Catalog, bool, error) {
-	fallbackStaticCatalog := func(err error) (*catalog.Catalog, bool, error) {
-		staticCat := prov.Catalog()
-		if err == nil || staticCat == nil || !shouldFallbackToStaticCatalog(err) {
-			return nil, err != nil, err
-		}
-		slog.WarnContext(ctx, "catalog request falling back to static catalog", "provider", providerName, "error", err)
-		return staticCat.Clone(), true, nil
-	}
-
-	connections, instance := s.boundSessionCatalogConnections(providerName, p, requestedConnection, requestedInstance)
-	if !strict || requestedConnection != "" || requestedInstance != "" || (s.authorizer != nil && s.authorizer.IsWorkload(p)) {
-		cat, metadata, err := resolveCatalog(ctx, prov, providerName, resolver, p, connections[0], instance)
-		if err != nil {
-			return fallbackStaticCatalog(err)
-		}
-		return cat, metadata.SessionFailed || err != nil, err
-	}
-
-	var firstErr error
+func (s *Server) boundSessionCatalogTargets(providerName string, p *principal.Principal, explicit, instance string) []invocation.CatalogResolutionTarget {
+	connections := s.sessionCatalogConnections(providerName, p, explicit)
+	targets := make([]invocation.CatalogResolutionTarget, 0, len(connections))
 	for _, connection := range connections {
-		cat, metadata, err := resolveCatalog(ctx, prov, providerName, resolver, p, connection, instance)
-		if err == nil {
-			return cat, metadata.SessionFailed, nil
-		}
-		if firstErr == nil {
-			firstErr = err
-		}
+		boundConnection, boundInstance := s.workloadBindingSelectors(p, providerName, connection, instance)
+		targets = append(targets, invocation.CatalogResolutionTarget{
+			Connection: boundConnection,
+			Instance:   boundInstance,
+		})
 	}
-	if firstErr != nil {
-		return fallbackStaticCatalog(firstErr)
-	}
-	return nil, firstErr != nil, firstErr
-}
-
-func shouldFallbackToStaticCatalog(err error) bool {
-	switch {
-	case errors.Is(err, invocation.ErrNoToken):
-		return false
-	case errors.Is(err, invocation.ErrAmbiguousInstance):
-		return false
-	case errors.Is(err, invocation.ErrAuthorizationDenied):
-		return false
-	case errors.Is(err, invocation.ErrNotAuthenticated):
-		return false
-	case errors.Is(err, invocation.ErrScopeDenied):
-		return false
-	case errors.Is(err, invocation.ErrUserResolution):
-		return false
-	default:
-		return true
-	}
+	return targets
 }
 
 func httpVisibleCatalogOperations(ops []catalog.CatalogOperation) []catalog.CatalogOperation {
