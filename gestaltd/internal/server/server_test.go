@@ -6380,6 +6380,82 @@ func TestListOperations_UsesCatalogConnectionOverride(t *testing.T) {
 	}
 }
 
+func TestListOperations_FallsBackToStaticCatalogWhenSessionCatalogErrors(t *testing.T) {
+	t.Parallel()
+
+	stub := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{N: "notion", ConnMode: core.ConnectionModeUser},
+		},
+		catalog: &catalog.Catalog{
+			Name: "notion",
+			Operations: []catalog.CatalogOperation{
+				{ID: "get_page", Description: "Get page", Method: http.MethodGet, Transport: catalog.TransportREST},
+				{ID: "search", Description: "Search pages", Method: http.MethodPost, Transport: catalog.TransportREST},
+			},
+		},
+		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			switch token {
+			case "mcp-token", "oauth-token":
+				return nil, fmt.Errorf("upstream catalog failed for %s", token)
+			default:
+				return nil, fmt.Errorf("unexpected token %q", token)
+			}
+		},
+	}
+
+	svc := coretesting.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	seedToken(t, svc, &core.IntegrationToken{
+		ID: "tok-mcp", UserID: u.ID, Integration: "notion",
+		Connection: "MCP", Instance: "default", AccessToken: "mcp-token",
+	})
+	seedToken(t, svc, &core.IntegrationToken{
+		ID: "tok-oauth", UserID: u.ID, Integration: "notion",
+		Connection: "OAuth", Instance: "OAuth", AccessToken: "oauth-token",
+	})
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = testutil.NewProviderRegistry(t, stub)
+		cfg.CatalogConnection = map[string]string{"notion": "MCP"}
+		cfg.Services = svc
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	assertListOperations := func(path string) {
+		t.Helper()
+
+		req, _ := http.NewRequest(http.MethodGet, ts.URL+path, nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("request %s: %v", path, err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+
+		if resp.StatusCode != http.StatusOK {
+			body, _ := io.ReadAll(resp.Body)
+			t.Fatalf("%s: expected 200, got %d: %s", path, resp.StatusCode, body)
+		}
+
+		var ops []map[string]any
+		if err := json.NewDecoder(resp.Body).Decode(&ops); err != nil {
+			t.Fatalf("%s: decoding response: %v", path, err)
+		}
+		if len(ops) != 2 {
+			t.Fatalf("%s: expected 2 operations, got %d", path, len(ops))
+		}
+		if ops[0]["id"] != "get_page" {
+			t.Fatalf("%s: expected first id 'get_page', got %v", path, ops[0]["id"])
+		}
+		if ops[1]["id"] != "search" {
+			t.Fatalf("%s: expected second id 'search', got %v", path, ops[1]["id"])
+		}
+	}
+
+	assertListOperations("/api/v1/integrations/notion/operations")
+	assertListOperations("/api/v1/integrations/notion/operations?_connection=OAuth&_instance=OAuth")
+}
+
 func TestListOperations_UsesBrokerCatalogConnectionFallback(t *testing.T) {
 	t.Parallel()
 
