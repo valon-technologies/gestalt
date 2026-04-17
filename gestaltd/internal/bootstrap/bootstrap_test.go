@@ -24,6 +24,7 @@ import (
 	s3store "github.com/valon-technologies/gestalt/server/core/s3"
 	coretesting "github.com/valon-technologies/gestalt/server/core/testing"
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
+	"github.com/valon-technologies/gestalt/server/internal/authorization"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/coredata"
@@ -95,13 +96,13 @@ type memoryAuthorizationProvider struct {
 	mu            sync.Mutex
 	activeModelID string
 	models        []*core.AuthorizationModelRef
-	rels          map[string]*core.Relationship
+	relsByModel   map[string]map[string]*core.Relationship
 }
 
 func newMemoryAuthorizationProvider(name string) *memoryAuthorizationProvider {
 	return &memoryAuthorizationProvider{
-		name: name,
-		rels: map[string]*core.Relationship{},
+		name:        name,
+		relsByModel: map[string]map[string]*core.Relationship{},
 	}
 }
 
@@ -124,10 +125,11 @@ func (p *memoryAuthorizationProvider) EvaluateMany(_ context.Context, req *core.
 	resp := &core.AccessEvaluationsResponse{
 		Decisions: make([]*core.AccessDecision, 0, len(req.GetRequests())),
 	}
+	rels := p.relsByModel[p.activeModelID]
 	for _, item := range req.GetRequests() {
 		allowed := false
-		if item != nil {
-			_, allowed = p.rels[bootstrapRelationshipKey(item.GetSubject(), item.GetAction().GetName(), item.GetResource())]
+		if item != nil && rels != nil {
+			_, allowed = rels[bootstrapRelationshipKey(item.GetSubject(), item.GetAction().GetName(), item.GetResource())]
 		}
 		resp.Decisions = append(resp.Decisions, &core.AccessDecision{
 			Allowed: allowed,
@@ -155,27 +157,40 @@ func (p *memoryAuthorizationProvider) GetMetadata(context.Context) (*core.Author
 	return &core.AuthorizationMetadata{ActiveModelId: p.activeModelID}, nil
 }
 
-func (p *memoryAuthorizationProvider) ReadRelationships(context.Context, *core.ReadRelationshipsRequest) (*core.ReadRelationshipsResponse, error) {
+func (p *memoryAuthorizationProvider) ReadRelationships(_ context.Context, req *core.ReadRelationshipsRequest) (*core.ReadRelationshipsResponse, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	out := make([]*core.Relationship, 0, len(p.rels))
-	for _, rel := range p.rels {
+	modelID := strings.TrimSpace(req.GetModelId())
+	if modelID == "" {
+		modelID = p.activeModelID
+	}
+	out := make([]*core.Relationship, 0, len(p.relsByModel[modelID]))
+	for _, rel := range p.relsByModel[modelID] {
 		out = append(out, cloneRelationship(rel))
 	}
 	return &core.ReadRelationshipsResponse{
 		Relationships: out,
-		ModelId:       p.activeModelID,
+		ModelId:       modelID,
 	}, nil
 }
 
 func (p *memoryAuthorizationProvider) WriteRelationships(_ context.Context, req *core.WriteRelationshipsRequest) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	modelID := req.GetModelId()
+	if modelID == "" {
+		modelID = p.activeModelID
+	}
+	rels := p.relsByModel[modelID]
+	if rels == nil {
+		rels = map[string]*core.Relationship{}
+		p.relsByModel[modelID] = rels
+	}
 	for _, key := range req.GetDeletes() {
-		delete(p.rels, bootstrapRelationshipKey(key.GetSubject(), key.GetRelation(), key.GetResource()))
+		delete(rels, bootstrapRelationshipKey(key.GetSubject(), key.GetRelation(), key.GetResource()))
 	}
 	for _, rel := range req.GetWrites() {
-		p.rels[bootstrapRelationshipKey(rel.GetSubject(), rel.GetRelation(), rel.GetResource())] = cloneRelationship(rel)
+		rels[bootstrapRelationshipKey(rel.GetSubject(), rel.GetRelation(), rel.GetResource())] = cloneRelationship(rel)
 	}
 	return nil
 }
@@ -206,6 +221,9 @@ func (p *memoryAuthorizationProvider) WriteModel(context.Context, *core.WriteMod
 	}
 	p.models = append(p.models, model)
 	p.activeModelID = model.GetId()
+	if p.relsByModel[model.GetId()] == nil {
+		p.relsByModel[model.GetId()] = map[string]*core.Relationship{}
+	}
 	return model, nil
 }
 
@@ -223,6 +241,22 @@ func bootstrapRelationshipKey(subject *core.SubjectRef, relation string, resourc
 		resource.GetType(),
 		resource.GetId(),
 	}, "\x00")
+}
+
+func (p *memoryAuthorizationProvider) putRelationship(modelID string, rel *core.Relationship) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.relsByModel[modelID] == nil {
+		p.relsByModel[modelID] = map[string]*core.Relationship{}
+	}
+	p.relsByModel[modelID][bootstrapRelationshipKey(rel.GetSubject(), rel.GetRelation(), rel.GetResource())] = cloneRelationship(rel)
+}
+
+func (p *memoryAuthorizationProvider) hasRelationship(modelID, key string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	_, ok := p.relsByModel[modelID][key]
+	return ok
 }
 
 func cloneRelationship(rel *core.Relationship) *core.Relationship {
@@ -3455,16 +3489,18 @@ func TestBootstrapSecretResolution(t *testing.T) {
 			Version: "v1",
 		}}
 		provider.activeModelID = "model-existing"
+		provider.relsByModel["model-existing"] = map[string]*core.Relationship{}
 		unmanagedKey := bootstrapRelationshipKey(
 			&core.SubjectRef{Type: "team", Id: "ops"},
 			"owner",
 			&core.ResourceRef{Type: "foreign_resource", Id: "roadmap"},
 		)
-		provider.rels[unmanagedKey] = &core.Relationship{
+		provider.putRelationship("model-existing", &core.Relationship{
 			Subject:  &core.SubjectRef{Type: "team", Id: "ops"},
 			Relation: "owner",
 			Resource: &core.ResourceRef{Type: "foreign_resource", Id: "roadmap"},
-		}
+		})
+		provider.putRelationship("model-existing", authorization.ProviderModelSentinelRelationship())
 		factories := validFactories()
 		factories.Authorization = memoryAuthorizationFactory(provider)
 
@@ -3483,7 +3519,7 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		if len(provider.models) != 1 {
 			t.Fatalf("expected existing model to be reused, got %d models", len(provider.models))
 		}
-		if _, ok := provider.rels[unmanagedKey]; !ok {
+		if _, ok := provider.relsByModel["model-existing"][unmanagedKey]; !ok {
 			t.Fatal("expected unrelated provider relationship to be preserved")
 		}
 
@@ -3542,6 +3578,144 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 		if adminAccess.Role != "admin" {
 			t.Fatalf("dynamic admin role = %q, want %q", adminAccess.Role, "admin")
+		}
+	})
+
+	t.Run("authorization provider provisions a new model when the active model is unmanaged", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := validConfig()
+		cfg.Authorization = config.AuthorizationConfig{
+			Policies: map[string]config.HumanPolicyDef{
+				"calendar-policy": {
+					Default: "deny",
+					Members: []config.HumanPolicyMemberDef{
+						{Email: "static@example.test", Role: "viewer"},
+					},
+				},
+			},
+		}
+		cfg.Plugins = map[string]*config.ProviderEntry{
+			"calendar": {
+				AuthorizationPolicy: "calendar-policy",
+				ResolvedManifest: &providermanifestv1.Manifest{
+					Spec: &providermanifestv1.Spec{},
+				},
+			},
+		}
+		cfg.Providers.Authorization = map[string]*config.ProviderEntry{
+			"indexeddb": {Source: config.ProviderSource{Path: "stub"}},
+		}
+		cfg.Server.Providers.Authorization = "indexeddb"
+
+		provider := newMemoryAuthorizationProvider("memory-authorization")
+		provider.models = []*core.AuthorizationModelRef{{
+			Id:      "model-existing",
+			Version: "v1",
+		}}
+		provider.activeModelID = "model-existing"
+		provider.relsByModel["model-existing"] = map[string]*core.Relationship{}
+		unmanagedKey := bootstrapRelationshipKey(
+			&core.SubjectRef{Type: "team", Id: "ops"},
+			"owner",
+			&core.ResourceRef{Type: "foreign_resource", Id: "roadmap"},
+		)
+		provider.putRelationship("model-existing", &core.Relationship{
+			Subject:  &core.SubjectRef{Type: "team", Id: "ops"},
+			Relation: "owner",
+			Resource: &core.ResourceRef{Type: "foreign_resource", Id: "roadmap"},
+		})
+
+		factories := validFactories()
+		factories.Authorization = memoryAuthorizationFactory(provider)
+
+		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+		if err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		t.Cleanup(func() { _ = result.Close(context.Background()) })
+		<-result.ProvidersReady
+		if err := result.Start(ctx); err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+		if got := provider.activeModelID; got == "model-existing" {
+			t.Fatalf("expected a newly provisioned model, active model remained %q", got)
+		}
+		if len(provider.models) != 2 {
+			t.Fatalf("expected a new model to be written, got %d models", len(provider.models))
+		}
+		if _, ok := provider.relsByModel["model-existing"][unmanagedKey]; !ok {
+			t.Fatal("expected unmanaged relationships on the old model to be preserved")
+		}
+		if !provider.hasRelationship(provider.activeModelID, bootstrapRelationshipKey(
+			authorization.ProviderModelSentinelRelationship().GetSubject(),
+			authorization.ProviderModelSentinelRelationship().GetRelation(),
+			authorization.ProviderModelSentinelRelationship().GetResource(),
+		)) {
+			t.Fatal("expected the new active model to include the Gestalt model sentinel")
+		}
+	})
+
+	t.Run("authorization provider falls back to legacy rules when the active model drifts", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := validConfig()
+		cfg.Authorization = config.AuthorizationConfig{
+			Policies: map[string]config.HumanPolicyDef{
+				"calendar-policy": {
+					Default: "deny",
+					Members: []config.HumanPolicyMemberDef{
+						{Email: "static@example.test", Role: "viewer"},
+					},
+				},
+			},
+		}
+		cfg.Plugins = map[string]*config.ProviderEntry{
+			"calendar": {
+				AuthorizationPolicy: "calendar-policy",
+				ResolvedManifest: &providermanifestv1.Manifest{
+					Spec: &providermanifestv1.Spec{},
+				},
+			},
+		}
+		cfg.Providers.Authorization = map[string]*config.ProviderEntry{
+			"indexeddb": {Source: config.ProviderSource{Path: "stub"}},
+		}
+		cfg.Server.Providers.Authorization = "indexeddb"
+
+		provider := newMemoryAuthorizationProvider("memory-authorization")
+		factories := validFactories()
+		factories.Authorization = memoryAuthorizationFactory(provider)
+
+		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+		if err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		t.Cleanup(func() { _ = result.Close(context.Background()) })
+		<-result.ProvidersReady
+		if err := result.Start(ctx); err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+
+		provider.mu.Lock()
+		provider.models = append(provider.models, &core.AuthorizationModelRef{Id: "model-foreign", Version: "v1"})
+		provider.relsByModel["model-foreign"] = map[string]*core.Relationship{}
+		provider.activeModelID = "model-foreign"
+		provider.mu.Unlock()
+
+		staticPrincipal := &principal.Principal{
+			Identity: &core.UserIdentity{Email: "static@example.test"},
+			Kind:     principal.KindUser,
+		}
+		access, allowed := result.Authorizer.ResolveAccess(ctx, staticPrincipal, "calendar")
+		if !allowed {
+			t.Fatal("expected legacy fallback access to be allowed")
+		}
+		if access.Role != "viewer" {
+			t.Fatalf("legacy fallback role = %q, want %q", access.Role, "viewer")
+		}
+		if err := result.Authorizer.ReloadDynamic(ctx); err == nil {
+			t.Fatal("expected reload to fail after active model drift")
 		}
 	})
 

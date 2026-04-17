@@ -26,6 +26,10 @@ subjects:
 	ProviderSubjectTypeSubject = "subject"
 	ProviderSubjectTypeUser    = "user"
 	ProviderSubjectTypeEmail   = "email"
+
+	ProviderModelSentinelRelation   = "managed"
+	ProviderModelSentinelSubjectID  = "gestalt:authorization"
+	ProviderModelSentinelResourceID = "__gestalt_authorization_model__"
 )
 
 const (
@@ -57,4 +61,29 @@ func IsManagedProviderRelationship(rel *core.Relationship) bool {
 	default:
 		return false
 	}
+}
+
+func ProviderModelSentinelRelationship() *core.Relationship {
+	return &core.Relationship{
+		Subject: &core.SubjectRef{
+			Type: ProviderSubjectTypeSubject,
+			Id:   ProviderModelSentinelSubjectID,
+		},
+		Relation: ProviderModelSentinelRelation,
+		Resource: &core.ResourceRef{
+			Type: ProviderResourceTypePolicyStatic,
+			Id:   ProviderModelSentinelResourceID,
+		},
+	}
+}
+
+func IsProviderModelSentinelRelationship(rel *core.Relationship) bool {
+	if rel == nil || rel.GetSubject() == nil || rel.GetResource() == nil {
+		return false
+	}
+	return rel.GetSubject().GetType() == ProviderSubjectTypeSubject &&
+		rel.GetSubject().GetId() == ProviderModelSentinelSubjectID &&
+		rel.GetRelation() == ProviderModelSentinelRelation &&
+		rel.GetResource().GetType() == ProviderResourceTypePolicyStatic &&
+		rel.GetResource().GetId() == ProviderModelSentinelResourceID
 }
