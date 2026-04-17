@@ -73,6 +73,7 @@ persistence:
 # placeholders at startup, so secrets can be injected via extraEnv when
 # you enable OAuth/OIDC or an external datastore below.
 config:
+  apiVersion: gestaltd.config/v3
   server:
     public:
       port: 8080
@@ -96,9 +97,7 @@ config:
       main:
         # SQLite is appropriate for local development or single-instance
         # deployments with mounted persistent storage at /data.
-        source:
-          ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
-          version: 0.0.1-alpha.1
+        source: https://github.com/valon-technologies/gestalt-providers/releases/download/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
         config:
           dsn: "sqlite:///data/gestalt.db"
     # Add providers.ui.<name> entries when you want to mount public static UI bundles.

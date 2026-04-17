@@ -43,7 +43,6 @@ type providerLockBuckets struct {
 
 type portableLockEntry struct {
 	InputDigest string                 `json:"inputDigest,omitempty"`
-	Fingerprint string                 `json:"fingerprint,omitempty"`
 	Package     string                 `json:"package"`
 	Kind        string                 `json:"kind"`
 	Runtime     string                 `json:"runtime"`
@@ -199,9 +198,7 @@ func validateProviderLockfile(lock *providerLockfile) error {
 	if lock.Schema != providerLockSchemaName {
 		return fmt.Errorf("unsupported lockfile schema %q; run `gestaltd init` to upgrade", lock.Schema)
 	}
-	switch lock.SchemaVersion {
-	case 1, providerLockSchemaVersion:
-	default:
+	if lock.SchemaVersion != providerLockSchemaVersion {
 		return fmt.Errorf("unsupported lockfile schema version %d; run `gestaltd init` to upgrade", lock.SchemaVersion)
 	}
 	return nil
@@ -238,16 +235,12 @@ func lockEntriesFromPortableEntries(entries map[string]portableLockEntry) map[st
 	}
 	runtimeEntries := make(map[string]LockEntry, len(entries))
 	for name, entry := range entries {
-		fingerprint := entry.InputDigest
-		if fingerprint == "" {
-			fingerprint = entry.Fingerprint
-		}
 		source := entry.Source
 		if source == "" {
 			source = entry.Package
 		}
 		runtimeEntries[name] = LockEntry{
-			Fingerprint: fingerprint,
+			Fingerprint: entry.InputDigest,
 			Package:     entry.Package,
 			Kind:        entry.Kind,
 			Runtime:     entry.Runtime,
