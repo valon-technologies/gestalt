@@ -36,15 +36,6 @@ const (
 	testBinary  = "fake-binary-content"
 )
 
-type fakeResolver struct {
-	archivePath string
-	resolvedURL string
-	sha256      string
-	calls       int
-	lastSrc     pluginsource.Source
-	lastVersion string
-}
-
 type fakeResolverResult struct {
 	archivePath      string
 	resolvedURL      string
@@ -66,18 +57,6 @@ type hostRewriteTransport struct {
 	base   http.RoundTripper
 	target *url.URL
 	hosts  map[string]struct{}
-}
-
-func (f *fakeResolver) Resolve(_ context.Context, src pluginsource.Source, version string) (*pluginsource.ResolvedPackage, error) {
-	f.calls++
-	f.lastSrc = src
-	f.lastVersion = version
-	return &pluginsource.ResolvedPackage{
-		LocalPath:     f.archivePath,
-		Cleanup:       func() {},
-		ArchiveSHA256: f.sha256,
-		ResolvedURL:   f.resolvedURL,
-	}, nil
 }
 
 func (f *fakeMultiResolver) Resolve(_ context.Context, src pluginsource.Source, version string) (*pluginsource.ResolvedPackage, error) {
@@ -2129,6 +2108,8 @@ func TestManagedIndexedDBSourcesLoadForExecutionWithMultipleBindings(t *testing.
 }
 
 func TestManagedCacheSourcesLoadForExecutionWithMultipleBindings(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	sessionSource := "github.com/acme/providers/cache-session"
 	rateLimitSource := "github.com/acme/providers/cache-rate-limit"
@@ -2363,6 +2344,8 @@ func TestManagedCacheSourcesInitAtPathWithPlatformsHashesExtraPlatformArchives(t
 }
 
 func TestSourceSecretsPluginBootstrapsManagedAuthSourceToken(t *testing.T) {
+	t.Parallel()
+
 	dir := t.TempDir()
 	secretsSourceToken := "ghp_inline_auth_source_token"
 	bootstrapSource := "github.com/acme/tools/bootstrap-secrets"

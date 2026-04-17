@@ -40,40 +40,6 @@ func (r staticSourceResolver) Resolve(context.Context, pluginsource.Source, stri
 	}, nil
 }
 
-type mappedSourceResolver struct {
-	paths map[string]string
-}
-
-func (r mappedSourceResolver) Resolve(_ context.Context, src pluginsource.Source, _ string) (*pluginsource.ResolvedPackage, error) {
-	localPath, ok := r.paths[src.String()]
-	if !ok {
-		return nil, fmt.Errorf("no test package for %s", src.String())
-	}
-	return &pluginsource.ResolvedPackage{
-		LocalPath: localPath,
-		Cleanup:   func() {},
-	}, nil
-}
-
-type authMappedSourceResolver struct {
-	paths  map[string]string
-	tokens map[string]string
-}
-
-func (r authMappedSourceResolver) Resolve(_ context.Context, src pluginsource.Source, _ string) (*pluginsource.ResolvedPackage, error) {
-	if wantToken, ok := r.tokens[src.String()]; ok && src.Token != wantToken {
-		return nil, fmt.Errorf("source %s token = %q, want %q", src.String(), src.Token, wantToken)
-	}
-	localPath, ok := r.paths[src.String()]
-	if !ok {
-		return nil, fmt.Errorf("no test package for %s", src.String())
-	}
-	return &pluginsource.ResolvedPackage{
-		LocalPath: localPath,
-		Cleanup:   func() {},
-	}, nil
-}
-
 type versionedSourceResolver struct {
 	paths  map[string]map[string]string
 	tokens map[string]string
