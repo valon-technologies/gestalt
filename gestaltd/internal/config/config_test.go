@@ -3145,6 +3145,19 @@ plugins:
 `,
 		},
 		{
+			name: "apiVersion rejects nested source auth compatibility shape",
+			yaml: `
+apiVersion: gestaltd.config/v3
+providers:
+plugins:
+    external:
+      source:
+        auth:
+          token: test-token
+`,
+			wantErr: "source.auth is no longer supported; use sibling auth alongside source",
+		},
+		{
 			name: "apiVersion local source rejects sibling auth",
 			yaml: `
 apiVersion: gestaltd.config/v3
