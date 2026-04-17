@@ -620,7 +620,7 @@ func (b *Broker) refreshTokenIfNeeded(ctx context.Context, token *core.Integrati
 		if time.Now().Before(*token.ExpiresAt) {
 			return token.AccessToken, nil
 		}
-		return "", fmt.Errorf("token expired and refresh failed: %w", err)
+		return "", fmt.Errorf("%w: token expired and refresh failed: %w", ErrReconnectRequired, err)
 	}
 
 	resp := v.(*core.TokenResponse)
