@@ -28,31 +28,34 @@ import (
 )
 
 const (
-	releaseTestPluginName        = "release-test"
-	releaseTestSource            = "github.com/testowner/plugins/catalog/release-test"
-	releaseTestModule            = "example.com/release-test"
-	releaseTestIconPath          = "branding/icon.svg"
-	releaseProviderSchemaPath    = "schemas/provider.schema.json"
-	declarativeReleasePluginName = "declarative-release"
-	declarativeReleaseSource     = "github.com/testowner/plugins/catalog/declarative-release"
-	webUITestPluginName          = "webui-test"
-	webUITestSource              = "github.com/testowner/plugins/catalog/webui-test"
-	webUITestAssetRoot           = "out"
-	prebuiltProviderPluginName   = "prebuilt-provider"
-	prebuiltProviderSource       = "github.com/testowner/plugins/prebuilt-provider"
-	prebuiltProviderBinaryPath   = "bin/provider"
-	authReleasePluginName        = "auth-release"
-	authReleaseSource            = "github.com/testowner/plugins/auth-release"
-	authReleaseSchemaPath        = "schemas/auth.schema.json"
-	secretsReleasePluginName     = "secrets-release"
-	secretsReleaseSource         = "github.com/testowner/plugins/secrets-release"
-	secretsReleaseSchemaPath     = "schemas/secrets.schema.json"
-	rustReleasePluginName        = "provider-rust"
-	rustWrapperBinaryName        = "gestalt-provider-wrapper"
-	pythonAuthReleasePluginName  = "python-auth-release"
-	pythonAuthReleaseSource      = "github.com/testowner/plugins/python-auth-release"
-	authReleaseTypeScriptModule  = "./auth.ts#auth"
-	authReleaseTypeScriptTarget  = "auth:./auth.ts#auth"
+	releaseTestPluginName          = "release-test"
+	releaseTestSource              = "github.com/testowner/plugins/catalog/release-test"
+	releaseTestModule              = "example.com/release-test"
+	releaseTestIconPath            = "branding/icon.svg"
+	releaseProviderSchemaPath      = "schemas/provider.schema.json"
+	declarativeReleasePluginName   = "declarative-release"
+	declarativeReleaseSource       = "github.com/testowner/plugins/catalog/declarative-release"
+	webUITestPluginName            = "webui-test"
+	webUITestSource                = "github.com/testowner/plugins/catalog/webui-test"
+	webUITestAssetRoot             = "out"
+	prebuiltProviderPluginName     = "prebuilt-provider"
+	prebuiltProviderSource         = "github.com/testowner/plugins/prebuilt-provider"
+	prebuiltProviderBinaryPath     = "bin/provider"
+	authReleasePluginName          = "auth-release"
+	authReleaseSource              = "github.com/testowner/plugins/auth-release"
+	authReleaseSchemaPath          = "schemas/auth.schema.json"
+	authorizationReleasePluginName = "authorization-release"
+	authorizationReleaseSource     = "github.com/testowner/plugins/authorization-release"
+	authorizationReleaseSchemaPath = "schemas/authorization.schema.json"
+	secretsReleasePluginName       = "secrets-release"
+	secretsReleaseSource           = "github.com/testowner/plugins/secrets-release"
+	secretsReleaseSchemaPath       = "schemas/secrets.schema.json"
+	rustReleasePluginName          = "provider-rust"
+	rustWrapperBinaryName          = "gestalt-provider-wrapper"
+	pythonAuthReleasePluginName    = "python-auth-release"
+	pythonAuthReleaseSource        = "github.com/testowner/plugins/python-auth-release"
+	authReleaseTypeScriptModule    = "./auth.ts#auth"
+	authReleaseTypeScriptTarget    = "auth:./auth.ts#auth"
 )
 
 func TestRun_ProviderCLIUsageAndErrors(t *testing.T) {
@@ -286,7 +289,6 @@ func TestRun_PluginReleaseBuildsPythonSourcePluginForCurrentPlatform(t *testing.
 
 	runPluginReleaseCommand(t, pluginDir,
 		"--version", testVersion,
-		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
 		"--output", outputDir,
 	)
 
@@ -790,6 +792,107 @@ func TestRun_PluginReleaseBuildsGoSourceAuthPlugin(t *testing.T) {
 		t.Fatalf("validated = %+v", validated)
 	}
 }
+
+func TestRun_PluginReleaseBuildsGoSourceAuthorizationProvider(t *testing.T) {
+	t.Parallel()
+
+	pluginDir := newSourceComponentReleaseFixture(t, t.TempDir(), sourceComponentReleaseFixtureParams{
+		pluginName: authorizationReleasePluginName,
+		schemaPath: authorizationReleaseSchemaPath,
+		sourceFile: "authorization.go",
+		sourceCode: testutil.GeneratedAuthorizationPackageSource(),
+		manifest: &providermanifestv1.Manifest{
+			Kind:   providermanifestv1.KindAuthorization,
+			Source: authorizationReleaseSource, Version: "0.0.1", DisplayName: "Authorization Release",
+			Spec: &providermanifestv1.Spec{ConfigSchemaPath: authorizationReleaseSchemaPath},
+		},
+	})
+	outputDir := t.TempDir()
+	const testVersion = "0.0.18-test"
+
+	runPluginReleaseCommand(t, pluginDir,
+		"--version", testVersion,
+		"--platform", runtime.GOOS+"/"+runtime.GOARCH,
+		"--output", outputDir,
+	)
+
+	archiveName := platformArchiveNameForTest(authorizationReleasePluginName, testVersion, runtime.GOOS, runtime.GOARCH)
+	extractDir := extractReleasedArchive(t, outputDir, archiveName)
+	manifest := readReleasedManifest(t, outputDir, archiveName)
+	binaryName := releaseBinaryName(authorizationReleasePluginName, runtime.GOOS)
+
+	if len(manifest.Artifacts) != 1 || manifest.Artifacts[0].Path != binaryName {
+		t.Fatalf("artifacts = %+v, want path %q", manifest.Artifacts, binaryName)
+	}
+	assertExpectedGoArtifactPlatform(t, manifest.Artifacts[0], runtime.GOOS, runtime.GOARCH, "")
+	if manifest.Entrypoint == nil || manifest.Entrypoint.ArtifactPath != binaryName {
+		t.Fatalf("authorization entrypoint = %+v, want artifact path %q", manifest.Entrypoint, binaryName)
+	}
+	if _, err := os.Stat(filepath.Join(extractDir, authorizationReleaseSchemaPath)); err != nil {
+		t.Fatalf("expected %s in archive: %v", authorizationReleaseSchemaPath, err)
+	}
+
+	metadata := readProviderReleaseMetadata(t, outputDir)
+	if metadata.Package != authorizationReleaseSource {
+		t.Fatalf("release metadata package = %q, want %q", metadata.Package, authorizationReleaseSource)
+	}
+	if metadata.Kind != providermanifestv1.KindAuthorization {
+		t.Fatalf("release metadata kind = %q, want %q", metadata.Kind, providermanifestv1.KindAuthorization)
+	}
+	if metadata.Runtime != providerReleaseRuntimeKindExecutable {
+		t.Fatalf("release metadata runtime = %q, want %q", metadata.Runtime, providerReleaseRuntimeKindExecutable)
+	}
+
+	authz, err := providerhost.NewExecutableAuthorizationProvider(context.Background(), providerhost.AuthorizationExecConfig{
+		Command: filepath.Join(extractDir, binaryName),
+		Name:    "authorization-release",
+	})
+	if err != nil {
+		t.Fatalf("NewExecutableAuthorizationProvider: %v", err)
+	}
+	defer func() {
+		if closer, ok := authz.(interface{ Close() error }); ok {
+			_ = closer.Close()
+		}
+	}()
+
+	decision, err := authz.Evaluate(context.Background(), &core.AccessEvaluationRequest{
+		Subject:  &core.SubjectRef{Type: "user", Id: "generated-user"},
+		Action:   &core.ActionRef{Name: "invoke"},
+		Resource: &core.ResourceRef{Type: "plugin", Id: "github"},
+	})
+	if err != nil {
+		t.Fatalf("Evaluate: %v", err)
+	}
+	if decision == nil || !decision.Allowed || decision.ModelId != "model-v1" {
+		t.Fatalf("decision = %+v", decision)
+	}
+
+	providerMetadata, err := authz.GetMetadata(context.Background())
+	if err != nil {
+		t.Fatalf("GetMetadata: %v", err)
+	}
+	if providerMetadata == nil || providerMetadata.ActiveModelId != "model-v1" {
+		t.Fatalf("metadata = %+v", providerMetadata)
+	}
+
+	activeModel, err := authz.GetActiveModel(context.Background())
+	if err != nil {
+		t.Fatalf("GetActiveModel: %v", err)
+	}
+	if activeModel == nil || activeModel.Model == nil || activeModel.Model.Id != "model-v1" {
+		t.Fatalf("active model = %+v", activeModel)
+	}
+
+	relationships, err := authz.ReadRelationships(context.Background(), &core.ReadRelationshipsRequest{})
+	if err != nil {
+		t.Fatalf("ReadRelationships: %v", err)
+	}
+	if relationships == nil || len(relationships.Relationships) != 1 {
+		t.Fatalf("relationships = %+v", relationships)
+	}
+}
+
 func TestRun_PluginReleaseBuildsGoSourceSecretsPlugin(t *testing.T) {
 	t.Parallel()
 
@@ -1687,6 +1790,17 @@ func TestRun_PluginReleaseRejectsRequiredExecutableKindsWithoutSourceOrEntrypoin
 				Spec:        &providermanifestv1.Spec{},
 			},
 			wantError: "no Go, Rust, Python, or TypeScript auth source package found",
+		},
+		{
+			name: "authorization",
+			manifest: &providermanifestv1.Manifest{
+				Kind:        providermanifestv1.KindAuthorization,
+				Source:      "github.com/testowner/plugins/missing-authorization",
+				Version:     "0.0.1",
+				DisplayName: "Missing Authorization",
+				Spec:        &providermanifestv1.Spec{},
+			},
+			wantError: "no Go authorization source package found",
 		},
 		{
 			name: "secrets",
