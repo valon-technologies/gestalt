@@ -128,7 +128,10 @@ func resolveSessionCatalog(ctx context.Context, prov core.Provider, provName str
 	}
 	if prov.ConnectionMode() == core.ConnectionModeNone {
 		if resolver != nil && p != nil {
-			enrichedCtx, token, err := resolver.ResolveToken(ctx, p, provName, connection, instance)
+			// No-auth providers do not consume connection or instance selectors
+			// when resolving session catalogs. Passing them through here causes
+			// workload callers to trip the override guard before static fallback.
+			enrichedCtx, token, err := resolver.ResolveToken(ctx, p, provName, "", "")
 			if err != nil {
 				return nil, true, err
 			}

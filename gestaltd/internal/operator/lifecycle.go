@@ -257,32 +257,32 @@ func (l *Lifecycle) prepareRuntimeLockFromLoadedConfig(ctx context.Context, path
 
 func buildSourceTokenMap(cfg *config.Config) map[string]string {
 	tokens := make(map[string]string)
-	for _, entry := range cfg.Plugins {
-		if entry != nil && entry.Source.Auth != nil {
-			tokens[entry.SourceRef()] = entry.Source.Auth.Token
+	addEntry := func(entry *config.ProviderEntry) {
+		if entry == nil || entry.Source.Auth == nil {
+			return
 		}
+		location := strings.TrimSpace(entry.SourceRemoteLocation())
+		if location == "" {
+			return
+		}
+		tokens[location] = entry.Source.Auth.Token
+	}
+	for _, entry := range cfg.Plugins {
+		addEntry(entry)
 	}
 	for _, collection := range hostProviderCollections(cfg) {
 		for _, entry := range collection.entries {
-			if entry != nil && entry.Source.Auth != nil {
-				tokens[entry.SourceRef()] = entry.Source.Auth.Token
-			}
+			addEntry(entry)
 		}
 	}
 	for _, def := range cfg.Providers.IndexedDB {
-		if def != nil && def.Source.Auth != nil {
-			tokens[def.SourceRef()] = def.Source.Auth.Token
-		}
+		addEntry(def)
 	}
 	for _, def := range cfg.Providers.S3 {
-		if def != nil && def.Source.Auth != nil {
-			tokens[def.SourceRef()] = def.Source.Auth.Token
-		}
+		addEntry(def)
 	}
 	for _, entry := range cfg.Providers.UI {
-		if entry != nil && entry.Source.Auth != nil {
-			tokens[entry.SourceRef()] = entry.Source.Auth.Token
-		}
+		addEntry(&entry.ProviderEntry)
 	}
 	return tokens
 }
@@ -635,7 +635,7 @@ type providerFingerprintInput struct {
 }
 
 func sourceBacked(entry *config.ProviderEntry) bool {
-	return entry != nil && (entry.HasManagedSource() || entry.HasLocalSource())
+	return entry != nil && (entry.HasRemoteSource() || entry.HasLocalSource())
 }
 
 func hostProviderCollections(cfg *config.Config) []struct {
@@ -1049,7 +1049,7 @@ func ProviderFingerprint(name string, entry *config.ProviderEntry, configDir str
 
 	input := providerFingerprintInput{
 		Name:    name,
-		Source:  entry.SourceRef(),
+		Source:  entry.SourceRemoteLocation(),
 		Version: entry.SourceVersion(),
 	}
 	if entry.HasLocalSource() {
@@ -1143,7 +1143,7 @@ func lockEntryMatches(paths initPaths, kind, name string, providerEntry *config.
 	if err != nil || entry.Fingerprint != fingerprint {
 		return false
 	}
-	if entry.Source != providerEntry.SourceRef() || entry.Version != providerEntry.SourceVersion() {
+	if entry.Source != providerEntry.SourceRemoteLocation() || entry.Version != providerEntry.SourceVersion() {
 		return false
 	}
 	if len(entry.Archives) > 0 {
@@ -1434,16 +1434,17 @@ func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, paths initP
 		return localLockEntryFromPreparedInstall(paths, kind, name, plugin, install)
 	}
 
+	sourceLocation := plugin.SourceRemoteLocation()
 	src, err := sourceForProvider(plugin)
 	if err != nil {
-		return LockEntry{}, fmt.Errorf("%s %q source.ref %q: %w", kind, name, plugin.SourceRef(), err)
+		return LockEntry{}, fmt.Errorf("%s %q source %q: %w", kind, name, sourceLocation, err)
 	}
 	if l.sourceResolver == nil {
 		return LockEntry{}, fmt.Errorf("%s %q: source provider resolution requires a source resolver", kind, name)
 	}
 	resolved, err := l.sourceResolver.Resolve(ctx, src, plugin.SourceVersion())
 	if err != nil {
-		return LockEntry{}, fmt.Errorf("%s %q resolve source %q@%s: %w", kind, name, plugin.SourceRef(), plugin.SourceVersion(), err)
+		return LockEntry{}, fmt.Errorf("%s %q resolve source %q@%s: %w", kind, name, sourceLocation, plugin.SourceVersion(), err)
 	}
 	defer resolved.Cleanup()
 
@@ -1454,8 +1455,8 @@ func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, paths initP
 	if err := validateInstalledManifestKind(kind, name, installed.Manifest); err != nil {
 		return LockEntry{}, err
 	}
-	if installed.Manifest.Source != plugin.SourceRef() {
-		return LockEntry{}, fmt.Errorf("%s %q: manifest source %q does not match config source %q", kind, name, installed.Manifest.Source, plugin.SourceRef())
+	if installed.Manifest.Source != sourceLocation {
+		return LockEntry{}, fmt.Errorf("%s %q: manifest source %q does not match config source %q", kind, name, installed.Manifest.Source, sourceLocation)
 	}
 	if installed.Manifest.Version != plugin.SourceVersion() {
 		return LockEntry{}, fmt.Errorf("%s %q: manifest version %q does not match config version %q", kind, name, installed.Manifest.Version, plugin.SourceVersion())
@@ -1486,7 +1487,7 @@ func (l *Lifecycle) lockComponentEntryForSource(ctx context.Context, paths initP
 	}
 	return LockEntry{
 		Fingerprint: fingerprint,
-		Source:      plugin.SourceRef(),
+		Source:      sourceLocation,
 		Version:     plugin.SourceVersion(),
 		Archives:    archives,
 		Manifest:    filepath.ToSlash(manifestPath),
@@ -1509,16 +1510,17 @@ func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths initPa
 		return localLockEntryFromPreparedInstall(paths, providermanifestv1.KindPlugin, name, plugin, install)
 	}
 
+	sourceLocation := plugin.SourceRemoteLocation()
 	src, err := sourceForProvider(plugin)
 	if err != nil {
-		return LockProviderEntry{}, fmt.Errorf("provider %q source.ref %q: %w", name, plugin.SourceRef(), err)
+		return LockProviderEntry{}, fmt.Errorf("provider %q source %q: %w", name, sourceLocation, err)
 	}
 	if l.sourceResolver == nil {
 		return LockProviderEntry{}, fmt.Errorf("provider %q: source provider resolution requires a source resolver", name)
 	}
 	resolved, err := l.sourceResolver.Resolve(ctx, src, plugin.SourceVersion())
 	if err != nil {
-		return LockProviderEntry{}, fmt.Errorf("provider %q resolve source %q@%s: %w", name, plugin.SourceRef(), plugin.SourceVersion(), err)
+		return LockProviderEntry{}, fmt.Errorf("provider %q resolve source %q@%s: %w", name, sourceLocation, plugin.SourceVersion(), err)
 	}
 	defer resolved.Cleanup()
 
@@ -1531,8 +1533,8 @@ func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths initPa
 		return LockProviderEntry{}, err
 	}
 
-	if installed.Manifest.Source != plugin.SourceRef() {
-		return LockProviderEntry{}, fmt.Errorf("provider %q: manifest source %q does not match config source %q", name, installed.Manifest.Source, plugin.SourceRef())
+	if installed.Manifest.Source != sourceLocation {
+		return LockProviderEntry{}, fmt.Errorf("provider %q: manifest source %q does not match config source %q", name, installed.Manifest.Source, sourceLocation)
 	}
 	if installed.Manifest.Version != plugin.SourceVersion() {
 		return LockProviderEntry{}, fmt.Errorf("provider %q: manifest version %q does not match config version %q", name, installed.Manifest.Version, plugin.SourceVersion())
@@ -1562,7 +1564,7 @@ func (l *Lifecycle) lockProviderEntryForSource(ctx context.Context, paths initPa
 	}
 	return LockProviderEntry{
 		Fingerprint: fingerprint,
-		Source:      plugin.SourceRef(),
+		Source:      sourceLocation,
 		Version:     plugin.SourceVersion(),
 		Archives:    archives,
 		Manifest:    filepath.ToSlash(manifestPath),
@@ -1603,14 +1605,14 @@ func (l *Lifecycle) writeNamedUIProviderArtifact(ctx context.Context, paths init
 
 	src, err := sourceForProvider(plugin)
 	if err != nil {
-		return LockUIEntry{}, fmt.Errorf("%s source.ref %q: %w", subject, plugin.SourceRef(), err)
+		return LockUIEntry{}, fmt.Errorf("%s source %q: %w", subject, plugin.SourceRemoteLocation(), err)
 	}
 	if l.sourceResolver == nil {
 		return LockUIEntry{}, fmt.Errorf("%s: source resolution requires a source resolver", subject)
 	}
 	resolved, err := l.sourceResolver.Resolve(ctx, src, plugin.SourceVersion())
 	if err != nil {
-		return LockUIEntry{}, fmt.Errorf("%s resolve source %q@%s: %w", subject, plugin.SourceRef(), plugin.SourceVersion(), err)
+		return LockUIEntry{}, fmt.Errorf("%s resolve source %q@%s: %w", subject, plugin.SourceRemoteLocation(), plugin.SourceVersion(), err)
 	}
 	defer resolved.Cleanup()
 
@@ -1621,8 +1623,8 @@ func (l *Lifecycle) writeNamedUIProviderArtifact(ctx context.Context, paths init
 	if err := validateInstalledManifestKind(providermanifestv1.KindWebUI, subject, installed.Manifest); err != nil {
 		return LockUIEntry{}, err
 	}
-	if installed.Manifest.Source != plugin.SourceRef() {
-		return LockUIEntry{}, fmt.Errorf("%s manifest source %q does not match config source %q", subject, installed.Manifest.Source, plugin.SourceRef())
+	if installed.Manifest.Source != plugin.SourceRemoteLocation() {
+		return LockUIEntry{}, fmt.Errorf("%s manifest source %q does not match config source %q", subject, installed.Manifest.Source, plugin.SourceRemoteLocation())
 	}
 	if installed.Manifest.Version != plugin.SourceVersion() {
 		return LockUIEntry{}, fmt.Errorf("%s manifest version %q does not match config version %q", subject, installed.Manifest.Version, plugin.SourceVersion())
@@ -1644,7 +1646,7 @@ func (l *Lifecycle) writeNamedUIProviderArtifact(ctx context.Context, paths init
 	}
 	return LockUIEntry{
 		Fingerprint: fingerprint,
-		Source:      plugin.SourceRef(),
+		Source:      plugin.SourceRemoteLocation(),
 		Version:     plugin.SourceVersion(),
 		Archives:    archives,
 		Manifest:    filepath.ToSlash(manifestPath),
@@ -1653,6 +1655,9 @@ func (l *Lifecycle) writeNamedUIProviderArtifact(ctx context.Context, paths init
 }
 
 func sourceForProvider(providerEntry *config.ProviderEntry) (pluginsource.Source, error) {
+	if providerEntry != nil && providerEntry.HasMetadataSource() {
+		return pluginsource.Source{}, fmt.Errorf("metadata URL sources are not supported yet")
+	}
 	src, err := pluginsource.Parse(providerEntry.SourceRef())
 	if err != nil {
 		return pluginsource.Source{}, err
@@ -2135,7 +2140,7 @@ func (l *Lifecycle) applyLockedProviderEntry(paths initPaths, lock *Lockfile, na
 	if err != nil {
 		return fmt.Errorf("fingerprinting provider %q: %w", name, err)
 	}
-	if entry.Fingerprint != fingerprint || entry.Source != plugin.SourceRef() || entry.Version != plugin.SourceVersion() {
+	if entry.Fingerprint != fingerprint || entry.Source != plugin.SourceRemoteLocation() || entry.Version != plugin.SourceVersion() {
 		return fmt.Errorf("prepared artifact for provider %q is missing or stale; run `gestaltd init %s`", name, paths.configFlags)
 	}
 
@@ -2192,7 +2197,7 @@ func (l *Lifecycle) applyLockedComponentEntry(paths initPaths, entry *LockEntry,
 	if err != nil {
 		return fmt.Errorf("fingerprinting %s %q provider: %w", kind, name, err)
 	}
-	if entry.Fingerprint != fingerprint || entry.Source != plugin.SourceRef() || entry.Version != plugin.SourceVersion() {
+	if entry.Fingerprint != fingerprint || entry.Source != plugin.SourceRemoteLocation() || entry.Version != plugin.SourceVersion() {
 		return fmt.Errorf("prepared artifact for %s %q is missing or stale; run `gestaltd init %s`", kind, name, paths.configFlags)
 	}
 
