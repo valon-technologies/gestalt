@@ -287,7 +287,6 @@ func (s *Server) identitiesProviderHasOperation(ctx context.Context, operation, 
 		return false
 	}
 	var firstErr error
-	sawCatalog := false
 	for _, target := range targets {
 		cat, err := s.managedIdentityGrantCatalogForConnection(ctx, prov, "identities", resolver, p, target.connection, target.instance)
 		if err != nil {
@@ -298,22 +297,6 @@ func (s *Server) identitiesProviderHasOperation(ctx context.Context, operation, 
 		}
 		if cat == nil {
 			continue
-		}
-		sawCatalog = true
-		for i := range cat.Operations {
-			op := cat.Operations[i]
-			if op.ID != operation {
-				continue
-			}
-			if strings.TrimSpace(op.Method) == "" || strings.EqualFold(op.Method, method) {
-				return true
-			}
-		}
-	}
-	if !sawCatalog && firstErr != nil && errors.Is(firstErr, core.ErrSessionCatalogUnavailable) {
-		cat := prov.Catalog()
-		if cat == nil {
-			return false
 		}
 		for i := range cat.Operations {
 			op := cat.Operations[i]
@@ -418,10 +401,19 @@ func (s *Server) deleteManagedIdentity(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	response := map[string]any{"status": "deleted"}
+	var warnings []string
+	if _, err := s.apiTokens.RevokeAllAPITokensByOwner(r.Context(), core.APITokenOwnerKindManagedIdentity, actor.Identity.ID); err != nil {
+		warnings = append(warnings, "failed to delete identity api tokens")
+	}
+	if len(warnings) > 0 {
+		response["cleanup"] = "partial"
+		response["warnings"] = warnings
+	}
 	auditAllowed = true
 	auditErr = nil
 
-	writeJSON(w, http.StatusOK, map[string]any{"status": "deleted"})
+	writeJSON(w, http.StatusOK, response)
 }
 
 func (s *Server) listManagedIdentityMembers(w http.ResponseWriter, r *http.Request) {
@@ -646,7 +638,7 @@ func (s *Server) putManagedIdentityGrant(w http.ResponseWriter, r *http.Request)
 	plugin := strings.TrimSpace(chi.URLParam(r, "plugin"))
 
 	s.managedIdentityMu.Lock()
-	_, ok := s.resolveManagedIdentityActor(w, r, managedIdentityRoleEditor)
+	actor, ok := s.resolveManagedIdentityActor(w, r, managedIdentityRoleEditor)
 	s.managedIdentityMu.Unlock()
 	if !ok {
 		return
@@ -659,7 +651,7 @@ func (s *Server) putManagedIdentityGrant(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	p := PrincipalFromContext(r.Context())
+	p := managedIdentityGrantValidationPrincipal(PrincipalFromContext(r.Context()), actor.UserID)
 	if !s.managedIdentityGrantPluginVisible(plugin, p) {
 		auditErr = errors.New("plugin not found")
 		writeError(w, http.StatusNotFound, "plugin not found")
@@ -680,13 +672,18 @@ func (s *Server) putManagedIdentityGrant(w http.ResponseWriter, r *http.Request)
 	s.managedIdentityMu.Lock()
 	defer s.managedIdentityMu.Unlock()
 
-	actor, ok := s.resolveManagedIdentityActor(w, r, managedIdentityRoleEditor)
+	actor, ok = s.resolveManagedIdentityActor(w, r, managedIdentityRoleEditor)
 	if !ok {
 		return
 	}
 	if !s.managedIdentityGrantPluginVisible(plugin, p) {
 		auditErr = errors.New("plugin not found")
 		writeError(w, http.StatusNotFound, "plugin not found")
+		return
+	}
+	if !s.managedIdentityInvocationSupported(plugin) {
+		auditErr = fmt.Errorf("plugin %q does not yet support managed-identity invocation in this phase", plugin)
+		writeError(w, http.StatusBadRequest, auditErr.Error())
 		return
 	}
 	auditTarget = managedIdentityGrantAuditTarget(actor.Identity.ID, plugin)
@@ -1056,6 +1053,89 @@ func (s *Server) managedIdentityGrantVisibleToActor(plugin string, p *principal.
 	return s.allowProvider(p, plugin)
 }
 
+func (s *Server) managedIdentityInvocationSupported(plugin string) bool {
+	if entry, ok := s.pluginDefs[plugin]; ok && entry != nil {
+		return managedIdentityPluginConnectionMode(entry) == core.ConnectionModeNone
+	}
+	prov, err := s.providers.Get(plugin)
+	if err != nil || prov == nil {
+		return false
+	}
+	return prov.ConnectionMode() == core.ConnectionModeNone
+}
+
+func managedIdentityPluginConnectionMode(entry *config.ProviderEntry) core.ConnectionMode {
+	needUser := false
+	needIdentity := false
+
+	addMode := func(mode core.ConnectionMode) {
+		switch mode {
+		case core.ConnectionModeUser:
+			needUser = true
+		case core.ConnectionModeIdentity:
+			needIdentity = true
+		case core.ConnectionModeEither:
+			needUser = true
+			needIdentity = true
+		}
+	}
+
+	addMode(managedIdentityConnectionModeForDef(config.EffectivePluginConnectionDef(entry, entry.ManifestSpec())))
+
+	for name := range managedIdentityGrantNamedConnectionNames(entry) {
+		conn, ok := config.EffectiveNamedConnectionDef(entry, entry.ManifestSpec(), name)
+		if !ok {
+			continue
+		}
+		addMode(managedIdentityConnectionModeForDef(conn))
+	}
+
+	switch {
+	case needUser && needIdentity:
+		return core.ConnectionModeEither
+	case needUser:
+		return core.ConnectionModeUser
+	case needIdentity:
+		return core.ConnectionModeIdentity
+	default:
+		return core.ConnectionModeNone
+	}
+}
+
+func managedIdentityGrantNamedConnectionNames(entry *config.ProviderEntry) map[string]struct{} {
+	names := make(map[string]struct{})
+	if entry == nil {
+		return names
+	}
+	if spec := entry.ManifestSpec(); spec != nil {
+		for name := range spec.Connections {
+			resolved := config.ResolveConnectionAlias(name)
+			if resolved != "" && resolved != config.PluginConnectionName {
+				names[resolved] = struct{}{}
+			}
+		}
+	}
+	for name := range entry.Connections {
+		resolved := config.ResolveConnectionAlias(name)
+		if resolved != "" && resolved != config.PluginConnectionName {
+			names[resolved] = struct{}{}
+		}
+	}
+	return names
+}
+
+func managedIdentityConnectionModeForDef(conn config.ConnectionDef) core.ConnectionMode {
+	if conn.Mode != "" {
+		return core.ConnectionMode(conn.Mode)
+	}
+	switch conn.Auth.Type {
+	case "", "none":
+		return core.ConnectionModeNone
+	default:
+		return core.ConnectionModeUser
+	}
+}
+
 func (s *Server) managedIdentityGrantCatalog(ctx context.Context, plugin string, p *principal.Principal) (*catalog.Catalog, error) {
 	prov, err := s.providers.Get(plugin)
 	if err != nil {
@@ -1078,11 +1158,6 @@ func (s *Server) managedIdentityGrantCatalog(ctx context.Context, plugin string,
 		}
 		if err != nil && firstErr == nil {
 			firstErr = err
-		}
-	}
-	if firstErr != nil && errors.Is(firstErr, core.ErrSessionCatalogUnavailable) {
-		if staticCat := prov.Catalog(); staticCat != nil {
-			return staticCat.Clone(), nil
 		}
 	}
 	return nil, firstErr
@@ -1186,13 +1261,21 @@ func (s *Server) managedIdentityGrantSessionCatalog(
 		return nil, false, nil
 	}
 	if prov.ConnectionMode() == core.ConnectionModeNone {
+		if enrichedCtx, token, ok, err := s.managedIdentityGrantUserSessionContext(ctx, prov, plugin, resolver, p, connection, instance); err != nil {
+			return nil, true, err
+		} else if ok {
+			cat, _, err := core.CatalogForRequest(enrichedCtx, prov, token)
+			return cat, true, err
+		}
 		if resolver != nil && p != nil {
 			enrichedCtx, token, err := resolver.ResolveToken(ctx, p, plugin, connection, instance)
 			if err != nil {
 				return nil, true, err
 			}
-			cat, _, err := core.CatalogForRequest(enrichedCtx, prov, token)
-			return cat, true, err
+			if token != "" {
+				cat, _, err := core.CatalogForRequest(enrichedCtx, prov, token)
+				return cat, true, err
+			}
 		}
 		ctx = invocation.WithCredentialContext(ctx, invocation.CredentialContext{Mode: core.ConnectionModeNone})
 		cat, _, err := core.CatalogForRequest(ctx, prov, "")
@@ -1210,18 +1293,116 @@ func (s *Server) managedIdentityGrantSessionCatalog(
 	return cat, true, err
 }
 
-func (s *Server) validateManagedIdentityGrantOperations(ctx context.Context, plugin string, operations []string, p *principal.Principal) error {
+func managedIdentityGrantValidationPrincipal(p *principal.Principal, userID string) *principal.Principal {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return p
+	}
+	if p == nil {
+		return &principal.Principal{
+			Kind:      principal.KindUser,
+			UserID:    userID,
+			SubjectID: principal.UserSubjectID(userID),
+		}
+	}
+	if p.UserID == userID {
+		return p
+	}
+	clone := *p
+	clone.UserID = userID
+	if strings.TrimSpace(clone.SubjectID) == "" {
+		clone.SubjectID = principal.UserSubjectID(userID)
+	}
+	return &clone
+}
+
+type managedIdentitySessionTokenResolver interface {
+	ResolveUserToken(ctx context.Context, prov core.Provider, userID, providerName, connection, instance string) (context.Context, string, error)
+}
+
+func (s *Server) managedIdentityGrantUserSessionContext(ctx context.Context, prov core.Provider, plugin string, resolver invocation.TokenResolver, p *principal.Principal, connection string, instance string) (context.Context, string, bool, error) {
+	if p == nil || strings.TrimSpace(p.UserID) == "" {
+		return ctx, "", false, nil
+	}
+	if userResolver, ok := resolver.(managedIdentitySessionTokenResolver); ok {
+		enrichedCtx, token, err := userResolver.ResolveUserToken(ctx, prov, p.UserID, plugin, connection, instance)
+		if err != nil {
+			if errors.Is(err, invocation.ErrNoToken) {
+				return ctx, "", false, nil
+			}
+			return ctx, "", true, err
+		}
+		return enrichedCtx, token, true, nil
+	}
+	if s.tokens == nil {
+		return ctx, "", false, nil
+	}
+
+	var (
+		storedToken *core.IntegrationToken
+		err         error
+	)
+	if strings.TrimSpace(instance) != "" {
+		storedToken, err = s.tokens.Token(ctx, p.UserID, plugin, connection, instance)
+		if err != nil {
+			if errors.Is(err, core.ErrNotFound) {
+				return ctx, "", false, nil
+			}
+			return ctx, "", true, err
+		}
+	} else {
+		tokens, listErr := s.tokens.ListTokensForConnection(ctx, p.UserID, plugin, connection)
+		if listErr != nil {
+			return ctx, "", true, listErr
+		}
+		switch len(tokens) {
+		case 0:
+			return ctx, "", false, nil
+		case 1:
+			storedToken = tokens[0]
+		default:
+			return ctx, "", true, fmt.Errorf("integration %q has %d connections; specify which instance to use with the %q parameter", plugin, len(tokens), "_instance")
+		}
+	}
+	if storedToken == nil {
+		return ctx, "", false, nil
+	}
+
+	ctx = invocation.WithCredentialContext(ctx, invocation.CredentialContext{
+		Mode:       core.ConnectionModeUser,
+		SubjectID:  principal.UserSubjectID(p.UserID),
+		Connection: storedToken.Connection,
+		Instance:   storedToken.Instance,
+	})
+	if storedToken.MetadataJSON != "" {
+		var connParams map[string]string
+		if err := json.Unmarshal([]byte(storedToken.MetadataJSON), &connParams); err == nil && len(connParams) > 0 {
+			ctx = core.WithConnectionParams(ctx, connParams)
+		}
+	}
+	return ctx, storedToken.AccessToken, true, nil
+}
+
+func (s *Server) managedIdentityGrantableOperations(ctx context.Context, plugin string, p *principal.Principal) (*catalog.Catalog, []catalog.CatalogOperation, map[string]struct{}, error) {
 	cat, err := s.managedIdentityGrantCatalog(ctx, plugin, p)
 	if err != nil || cat == nil {
-		return fmt.Errorf("plugin %q does not expose operations for validation", plugin)
+		return nil, nil, nil, fmt.Errorf("plugin %q does not expose operations for validation", plugin)
 	}
 	visible := grantableCatalogOperations(cat.Operations)
 	if len(visible) == 0 {
-		return fmt.Errorf("plugin %q does not expose operations for validation", plugin)
+		return nil, nil, nil, fmt.Errorf("plugin %q does not expose operations for validation", plugin)
 	}
 	known := make(map[string]struct{}, len(visible))
 	for i := range visible {
 		known[visible[i].ID] = struct{}{}
+	}
+	return cat, visible, known, nil
+}
+
+func (s *Server) validateManagedIdentityGrantOperations(ctx context.Context, plugin string, operations []string, p *principal.Principal) error {
+	cat, visible, known, err := s.managedIdentityGrantableOperations(ctx, plugin, p)
+	if err != nil {
+		return err
 	}
 	allowedVisible := visible
 	if s.authorizer != nil {
@@ -1246,6 +1427,19 @@ func (s *Server) validateManagedIdentityGrantOperations(ctx context.Context, plu
 		}
 		if _, ok := allowed[operation]; !ok {
 			return fmt.Errorf("operation %q is not authorized for plugin %q", operation, plugin)
+		}
+	}
+	return nil
+}
+
+func (s *Server) validateManagedIdentityPermissionOperations(ctx context.Context, plugin string, operations []string, p *principal.Principal) error {
+	_, _, known, err := s.managedIdentityGrantableOperations(ctx, plugin, p)
+	if err != nil {
+		return err
+	}
+	for _, operation := range operations {
+		if _, ok := known[operation]; !ok {
+			return fmt.Errorf("unknown operation %q for plugin %q", operation, plugin)
 		}
 	}
 	return nil

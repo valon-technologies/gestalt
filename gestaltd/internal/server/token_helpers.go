@@ -17,22 +17,36 @@ func (s *Server) nowUTCSecond() time.Time {
 }
 
 func (s *Server) issueAPIToken(ctx context.Context, userID, name, scopes string, nonExpiring bool) (*core.APIToken, string, error) {
+	return s.issueOwnedAPIToken(ctx, &core.APIToken{
+		UserID:    userID,
+		OwnerKind: core.APITokenOwnerKindUser,
+		OwnerID:   userID,
+		Name:      name,
+		Scopes:    scopes,
+	}, nonExpiring)
+}
+
+func (s *Server) issueManagedIdentityAPIToken(ctx context.Context, identityID, name string, permissions []core.AccessPermission, nonExpiring bool) (*core.APIToken, string, error) {
+	return s.issueOwnedAPIToken(ctx, &core.APIToken{
+		OwnerKind:   core.APITokenOwnerKindManagedIdentity,
+		OwnerID:     identityID,
+		Name:        name,
+		Permissions: append([]core.AccessPermission(nil), permissions...),
+	}, nonExpiring)
+}
+
+func (s *Server) issueOwnedAPIToken(ctx context.Context, apiToken *core.APIToken, nonExpiring bool) (*core.APIToken, string, error) {
 	plaintext, hashed, err := principal.GenerateToken(principal.TokenTypeAPI)
 	if err != nil {
 		return nil, "", err
 	}
 
 	now := s.nowUTCSecond()
-	apiToken := &core.APIToken{
-		ID:          uuid.NewString(),
-		UserID:      userID,
-		Name:        name,
-		HashedToken: hashed,
-		Scopes:      scopes,
-		ExpiresAt:   s.apiTokenExpiry(now, nonExpiring),
-		CreatedAt:   now,
-		UpdatedAt:   now,
-	}
+	apiToken.ID = uuid.NewString()
+	apiToken.HashedToken = hashed
+	apiToken.ExpiresAt = s.apiTokenExpiry(now, nonExpiring)
+	apiToken.CreatedAt = now
+	apiToken.UpdatedAt = now
 	if err := s.apiTokens.StoreAPIToken(ctx, apiToken); err != nil {
 		return nil, "", err
 	}
@@ -53,10 +67,11 @@ func (s *Server) apiTokenExpiry(now time.Time, nonExpiring bool) *time.Time {
 
 func apiTokenInfoFromCore(token *core.APIToken) apiTokenInfo {
 	return apiTokenInfo{
-		ID:        token.ID,
-		Name:      token.Name,
-		Scopes:    token.Scopes,
-		CreatedAt: token.CreatedAt,
-		ExpiresAt: token.ExpiresAt,
+		ID:          token.ID,
+		Name:        token.Name,
+		Scopes:      token.Scopes,
+		Permissions: append([]core.AccessPermission(nil), token.Permissions...),
+		CreatedAt:   token.CreatedAt,
+		ExpiresAt:   token.ExpiresAt,
 	}
 }

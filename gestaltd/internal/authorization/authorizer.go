@@ -87,6 +87,7 @@ type Authorizer struct {
 	workloadsBySubjectID map[string]*Workload
 	policies             map[string]*HumanPolicy
 	providerPolicies     map[string]string
+	providerModes        map[string]core.ConnectionMode
 	dynamicService       *coredata.PluginAuthorizationService
 	adminDynamicService  *coredata.AdminAuthorizationService
 	dynamicReloadEvery   time.Duration
@@ -108,6 +109,7 @@ func New(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderE
 		workloadsBySubjectID: map[string]*Workload{},
 		policies:             map[string]*HumanPolicy{},
 		providerPolicies:     map[string]string{},
+		providerModes:        map[string]core.ConnectionMode{},
 		dynamicService:       dynamicService,
 		dynamicReloadEvery:   defaultDynamicReloadInterval,
 	}
@@ -136,8 +138,25 @@ func New(cfg config.AuthorizationConfig, pluginDefs map[string]*config.ProviderE
 		if entry == nil {
 			continue
 		}
+		if mode, ok, err := providerMode(providerName, pluginDefs, providers); err != nil {
+			return nil, err
+		} else if ok {
+			a.providerModes[providerName] = mode
+		}
 		if policy := strings.TrimSpace(entry.AuthorizationPolicy); policy != "" {
 			a.providerPolicies[providerName] = policy
+		}
+	}
+	if providers != nil {
+		for _, providerName := range providers.List() {
+			if _, ok := a.providerModes[providerName]; ok {
+				continue
+			}
+			prov, err := providers.Get(providerName)
+			if err != nil || prov == nil {
+				continue
+			}
+			a.providerModes[providerName] = prov.ConnectionMode()
 		}
 	}
 
@@ -323,6 +342,9 @@ func (a *Authorizer) IsWorkload(p *principal.Principal) bool {
 }
 
 func (a *Authorizer) AllowProvider(p *principal.Principal, provider string) bool {
+	if a.isManagedIdentityPrincipal(p) {
+		return a.allowManagedIdentityProvider(p, provider)
+	}
 	if !a.IsWorkload(p) {
 		_, allowed := a.ResolveAccess(p, provider)
 		return allowed
@@ -332,6 +354,9 @@ func (a *Authorizer) AllowProvider(p *principal.Principal, provider string) bool
 }
 
 func (a *Authorizer) AllowOperation(p *principal.Principal, provider, operation string) bool {
+	if a.isManagedIdentityPrincipal(p) {
+		return a.allowManagedIdentityProvider(p, provider) && principal.AllowsOperationPermission(p, provider, operation)
+	}
 	if !a.IsWorkload(p) {
 		return a.AllowProvider(p, provider)
 	}
@@ -344,6 +369,12 @@ func (a *Authorizer) AllowOperation(p *principal.Principal, provider, operation 
 }
 
 func (a *Authorizer) Binding(p *principal.Principal, provider string) (CredentialBinding, bool) {
+	if a.isManagedIdentityPrincipal(p) {
+		if !a.allowManagedIdentityProvider(p, provider) {
+			return CredentialBinding{}, false
+		}
+		return CredentialBinding{Mode: core.ConnectionModeNone}, true
+	}
 	if !a.IsWorkload(p) {
 		return CredentialBinding{}, false
 	}
@@ -357,6 +388,9 @@ func (a *Authorizer) Binding(p *principal.Principal, provider string) (Credentia
 func (a *Authorizer) ResolveAccess(p *principal.Principal, provider string) (AccessContext, bool) {
 	if a == nil {
 		return AccessContext{}, true
+	}
+	if a.isManagedIdentityPrincipal(p) {
+		return AccessContext{}, a.allowManagedIdentityProvider(p, provider)
 	}
 	policyName := strings.TrimSpace(a.providerPolicies[provider])
 	if policyName == "" {
@@ -523,6 +557,9 @@ func (a *Authorizer) ResolveAdminAccess(p *principal.Principal, policyName strin
 }
 
 func (a *Authorizer) AllowCatalogOperation(p *principal.Principal, provider string, op catalog.CatalogOperation) bool {
+	if a.isManagedIdentityPrincipal(p) {
+		return a.allowManagedIdentityProvider(p, provider) && principal.AllowsOperationPermission(p, provider, op.ID)
+	}
 	if a.IsWorkload(p) {
 		return a.AllowOperation(p, provider, op.ID)
 	}
@@ -811,6 +848,24 @@ func emptyDynamicSnapshot() *dynamicSnapshot {
 
 func normalizeEmail(email string) string {
 	return emailutil.Normalize(email)
+}
+
+func (a *Authorizer) isManagedIdentityPrincipal(p *principal.Principal) bool {
+	return a.IsWorkload(p) && principal.ManagedIdentityIDFromSubjectID(strings.TrimSpace(p.SubjectID)) != ""
+}
+
+func (a *Authorizer) allowManagedIdentityProvider(p *principal.Principal, provider string) bool {
+	if a == nil || p == nil {
+		return false
+	}
+	if !principal.AllowsProviderPermission(p, provider) {
+		return false
+	}
+	mode, ok := a.providerModes[provider]
+	if !ok {
+		return false
+	}
+	return mode == core.ConnectionModeNone
 }
 
 func providerMode(provider string, pluginDefs map[string]*config.ProviderEntry, providers *registry.ProviderMap[core.Provider]) (core.ConnectionMode, bool, error) {

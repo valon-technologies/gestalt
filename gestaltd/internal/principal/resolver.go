@@ -70,14 +70,23 @@ func ParseTokenType(token string) (TokenType, bool) {
 }
 
 type Resolver struct {
-	auth      core.AuthProvider
-	users     *coredata.UserService
-	apiTokens *coredata.APITokenService
-	workloads WorkloadTokenResolver
+	auth              core.AuthProvider
+	users             *coredata.UserService
+	apiTokens         *coredata.APITokenService
+	managedIdentities *coredata.ManagedIdentityService
+	identityGrants    *coredata.ManagedIdentityGrantService
+	workloads         WorkloadTokenResolver
 }
 
-func NewResolver(auth core.AuthProvider, users *coredata.UserService, apiTokens *coredata.APITokenService, workloads WorkloadTokenResolver) *Resolver {
-	return &Resolver{auth: auth, users: users, apiTokens: apiTokens, workloads: workloads}
+func NewResolver(auth core.AuthProvider, users *coredata.UserService, apiTokens *coredata.APITokenService, managedIdentities *coredata.ManagedIdentityService, identityGrants *coredata.ManagedIdentityGrantService, workloads WorkloadTokenResolver) *Resolver {
+	return &Resolver{
+		auth:              auth,
+		users:             users,
+		apiTokens:         apiTokens,
+		managedIdentities: managedIdentities,
+		identityGrants:    identityGrants,
+		workloads:         workloads,
+	}
 }
 
 func (r *Resolver) ResolveToken(ctx context.Context, token string) (*Principal, error) {
@@ -122,6 +131,14 @@ func (r *Resolver) resolveAPIToken(ctx context.Context, token string) (*Principa
 		return nil, ErrInvalidToken
 	}
 
+	switch ownerKind := r.apiTokenOwnerKind(apiToken); ownerKind {
+	case core.APITokenOwnerKindManagedIdentity:
+		return r.resolveManagedIdentityAPIToken(ctx, apiToken)
+	case "", core.APITokenOwnerKindUser:
+	default:
+		return nil, ErrInvalidToken
+	}
+
 	user, err := r.users.GetUser(ctx, apiToken.UserID)
 	if err != nil {
 		if errors.Is(err, core.ErrNotFound) {
@@ -140,10 +157,52 @@ func (r *Resolver) resolveAPIToken(ctx context.Context, token string) (*Principa
 		Kind:      KindUser,
 		Source:    SourceAPIToken,
 	}
-	if scopes := strings.Fields(apiToken.Scopes); len(scopes) > 0 {
-		p.Scopes = scopes
+	if perms := permissionsForAPIToken(apiToken); perms != nil {
+		p.TokenPermissions = perms
+		p.Scopes = PermissionPlugins(perms)
 	}
 	return p, nil
+}
+
+func (r *Resolver) resolveManagedIdentityAPIToken(ctx context.Context, apiToken *core.APIToken) (*Principal, error) {
+	if r.managedIdentities == nil || r.identityGrants == nil {
+		return nil, ErrInvalidToken
+	}
+	identityID := strings.TrimSpace(apiToken.OwnerID)
+	if identityID == "" {
+		return nil, ErrInvalidToken
+	}
+
+	identity, err := r.managedIdentities.GetIdentity(ctx, identityID)
+	if err != nil {
+		if errors.Is(err, core.ErrNotFound) {
+			return nil, ErrInvalidToken
+		}
+		return nil, err
+	}
+	grants, err := r.identityGrants.ListGrantsByIdentity(ctx, identityID)
+	if err != nil {
+		return nil, err
+	}
+
+	tokenPerms := permissionsForAPIToken(apiToken)
+	if tokenPerms == nil {
+		tokenPerms = PermissionSet{}
+	}
+	grantPerms := CompileManagedIdentityGrants(grants)
+	effectivePerms := IntersectPermissions(tokenPerms, grantPerms)
+	if effectivePerms == nil {
+		effectivePerms = PermissionSet{}
+	}
+
+	return &Principal{
+		SubjectID:        ManagedIdentitySubjectID(identity.ID),
+		DisplayName:      identity.DisplayName,
+		Kind:             KindWorkload,
+		Source:           SourceAPIToken,
+		Scopes:           PermissionPlugins(effectivePerms),
+		TokenPermissions: effectivePerms,
+	}, nil
 }
 
 func (r *Resolver) resolveWorkloadToken(token string) (*Principal, error) {
@@ -173,4 +232,27 @@ func (r *Resolver) ResolveEmail(email string) *Principal {
 func HashToken(token string) string {
 	h := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(h[:])
+}
+
+func permissionsForAPIToken(apiToken *core.APIToken) PermissionSet {
+	if apiToken == nil {
+		return nil
+	}
+	if perms := CompilePermissions(apiToken.Permissions); perms != nil {
+		return perms
+	}
+	return PermissionsFromScopeString(apiToken.Scopes)
+}
+
+func (r *Resolver) apiTokenOwnerKind(apiToken *core.APIToken) string {
+	if apiToken == nil {
+		return ""
+	}
+	if ownerKind := strings.TrimSpace(apiToken.OwnerKind); ownerKind != "" {
+		return ownerKind
+	}
+	if apiToken.UserID != "" {
+		return core.APITokenOwnerKindUser
+	}
+	return ""
 }

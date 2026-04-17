@@ -720,6 +720,106 @@ func TestResolveCatalogForTargetsWithMetadata_PrefersLaterSuccessfulTarget(t *te
 	}
 }
 
+func TestResolveCatalogForTargetsWithMetadata_FallsBackAfterMixedErrors(t *testing.T) {
+	t.Parallel()
+
+	prov := &stubDynamicSessionProvider{
+		stubCatalogProvider: stubCatalogProvider{
+			stubProvider: stubProvider{
+				name:     "mixed-errors-api",
+				connMode: core.ConnectionModeUser,
+			},
+			cat: &catalog.Catalog{
+				Name: "mixed-errors-api",
+				Operations: []catalog.CatalogOperation{
+					{ID: "static_op", Method: http.MethodGet, Transport: catalog.TransportREST},
+				},
+			},
+		},
+		sessionCatFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			switch token {
+			case "session-unavailable-token":
+				return nil, fmt.Errorf("catalog upstream unavailable")
+			default:
+				return nil, fmt.Errorf("unexpected token %q", token)
+			}
+		},
+	}
+
+	resolver := &stubConnectionTokenResolver{
+		errs: map[string]error{
+			"missing": fmt.Errorf("%w: no token stored", invocation.ErrNoToken),
+		},
+		tokens: map[string]string{
+			"default": "session-unavailable-token",
+		},
+	}
+	p := &principal.Principal{UserID: "u1"}
+
+	cat, metadata, err := invocation.ResolveCatalogForTargetsWithMetadata(
+		context.Background(),
+		prov,
+		"mixed-errors-api",
+		resolver,
+		p,
+		[]invocation.CatalogResolutionTarget{
+			{Connection: "missing"},
+			{Connection: "default"},
+		},
+		true,
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !metadata.SessionAttempted {
+		t.Fatal("expected session resolution attempt to be reported")
+	}
+	if !metadata.SessionFailed {
+		t.Fatal("expected fallback metadata to report session failure")
+	}
+	if len(cat.Operations) != 1 || cat.Operations[0].ID != "static_op" {
+		t.Fatalf("catalog operations = %+v, want static fallback", cat.Operations)
+	}
+}
+
+func TestResolveOperation_DoesNotFallBackOnSessionCatalogError(t *testing.T) {
+	t.Parallel()
+
+	prov := &stubSessionProvider{
+		stubCatalogProvider: stubCatalogProvider{
+			stubProvider: stubProvider{
+				name:     "session-op-api",
+				connMode: core.ConnectionModeUser,
+			},
+			cat: &catalog.Catalog{
+				Name: "session-op-api",
+				Operations: []catalog.CatalogOperation{
+					{ID: "static_only", Method: http.MethodGet, Transport: catalog.TransportREST},
+				},
+			},
+		},
+		sessionErr: fmt.Errorf("session catalog failed"),
+	}
+
+	resolver := &stubTokenResolver{token: "tok_123"}
+	_, _, _, err := invocation.ResolveOperation(
+		context.Background(),
+		prov,
+		"session-op-api",
+		resolver,
+		&principal.Principal{UserID: "u1"},
+		"static_only",
+		[]string{"default"},
+		"",
+	)
+	if err == nil {
+		t.Fatal("expected session catalog error")
+	}
+	if !errors.Is(err, core.ErrSessionCatalogUnavailable) {
+		t.Fatalf("expected ErrSessionCatalogUnavailable, got %v", err)
+	}
+}
+
 func TestResolveCatalog_NilResolver(t *testing.T) {
 	t.Parallel()
 

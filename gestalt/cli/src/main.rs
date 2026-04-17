@@ -2,7 +2,8 @@ use clap::{CommandFactory, Parser};
 use gestalt::api::{self, ApiClient};
 use gestalt::cli::{
     AuthCommands, Cli, Commands, ConfigCommands, DescribeArgs, IdentityCommands,
-    IdentityGrantCommands, IdentityMemberCommands, InvokeArgs, PluginCommands, TokenCommands,
+    IdentityGrantCommands, IdentityMemberCommands, IdentityTokenCommands, InvokeArgs,
+    PluginCommands, TokenCommands,
 };
 use gestalt::commands;
 use gestalt::output;
@@ -102,6 +103,25 @@ fn run() -> anyhow::Result<()> {
                     ),
                     IdentityGrantCommands::Revoke { identity, plugin } => {
                         commands::identities::revoke_grant(&client, &identity, &plugin, format)
+                    }
+                },
+                IdentityCommands::Tokens { command } => match command {
+                    IdentityTokenCommands::List { identity } => {
+                        commands::identities::list_tokens(&client, &identity, format)
+                    }
+                    IdentityTokenCommands::Create {
+                        identity,
+                        name,
+                        permissions,
+                    } => commands::identities::create_token(
+                        &client,
+                        &identity,
+                        name.as_deref(),
+                        &permissions,
+                        format,
+                    ),
+                    IdentityTokenCommands::Revoke { identity, id } => {
+                        commands::identities::revoke_token(&client, &identity, &id, format)
                     }
                 },
             }

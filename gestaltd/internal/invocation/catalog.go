@@ -46,8 +46,9 @@ func ResolveCatalogForTargetsWithMetadata(ctx context.Context, prov core.Provide
 	}
 
 	var (
-		firstErr         error
-		sessionAttempted bool
+		firstErr              error
+		sessionAttempted      bool
+		sawSessionUnavailable bool
 	)
 	for _, target := range targets {
 		cat, meta, err := resolveCatalog(ctx, prov, provName, resolver, p, target.Connection, target.Instance, strictSession)
@@ -58,9 +59,10 @@ func ResolveCatalogForTargetsWithMetadata(ctx context.Context, prov core.Provide
 			firstErr = err
 		}
 		sessionAttempted = sessionAttempted || meta.SessionAttempted
+		sawSessionUnavailable = sawSessionUnavailable || errors.Is(err, core.ErrSessionCatalogUnavailable)
 	}
 
-	if firstErr != nil && errors.Is(firstErr, core.ErrSessionCatalogUnavailable) {
+	if firstErr != nil && sawSessionUnavailable {
 		if staticCat := prov.Catalog(); staticCat != nil {
 			slog.WarnContext(ctx, "catalog resolution falling back to static catalog", "provider", provName, "error", firstErr)
 			return staticCat.Clone(), CatalogResolutionMetadata{
@@ -91,9 +93,6 @@ func ResolveOperation(ctx context.Context, prov core.Provider, provName string, 
 
 	sessionOp, sessionConnection, sessionFound, err := resolveSessionOperation(ctx, prov, provName, resolver, p, operation, sessionConnections, instance)
 	if err != nil {
-		if staticOK && errors.Is(err, core.ErrSessionCatalogUnavailable) {
-			return staticOp, OperationTransport(staticOp), "", nil
-		}
 		return catalog.CatalogOperation{}, "", "", err
 	}
 	if sessionFound {

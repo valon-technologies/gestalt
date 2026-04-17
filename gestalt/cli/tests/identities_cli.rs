@@ -186,3 +186,86 @@ fn test_cli_lists_explicit_empty_grant_operations_as_plugin_wide_access() {
         .stdout(predicate::str::contains("github"))
         .stdout(predicate::str::contains("all"));
 }
+
+#[test]
+fn test_cli_lists_identity_tokens() {
+    let mut server = Server::new();
+    let _tokens = authed_json_mock!(
+        server,
+        Method::GET,
+        "/api/v1/identities/agent-1/tokens",
+        StatusCode::OK
+    )
+    .with_body(
+        r#"[{"id":"itok-1","name":"deploy-bot","permissions":[{"plugin":"github"},{"plugin":"slack","operations":["chat.postMessage","channels.history"]}],"createdAt":"2026-04-15T00:00:00Z"}]"#,
+    )
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["identities", "tokens", "list", "agent-1"])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("deploy-bot"))
+        .stdout(predicate::str::contains("github"))
+        .stdout(predicate::str::contains("slack:chat.po"))
+        .stdout(predicate::str::contains("channels.hi"));
+}
+
+#[test]
+fn test_cli_creates_identity_token() {
+    let mut server = Server::new();
+    let _create = authed_json_mock!(
+        server,
+        Method::POST,
+        "/api/v1/identities/agent-1/tokens",
+        StatusCode::CREATED
+    )
+    .match_header(header::CONTENT_TYPE.as_str(), http::APPLICATION_JSON)
+    .match_body(Matcher::JsonString(
+        r#"{"name":"deploy-bot","permissions":[{"plugin":"github"},{"plugin":"slack","operations":["chat.postMessage","channels.history"]}]}"#.to_string(),
+    ))
+    .with_body(r#"{"id":"itok-2","name":"deploy-bot","token":"plaintext-secret"}"#)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args([
+            "identities",
+            "tokens",
+            "create",
+            "agent-1",
+            "--name",
+            "deploy-bot",
+            "--permission",
+            "github",
+            "--permission",
+            "slack:chat.postMessage,channels.history",
+        ])
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("plaintext-secret"))
+        .stderr(predicate::str::contains("Token created"));
+}
+
+#[test]
+fn test_cli_revokes_identity_token() {
+    let mut server = Server::new();
+    let _revoke = authed_json_mock!(
+        server,
+        Method::DELETE,
+        "/api/v1/identities/agent-1/tokens/itok-2",
+        StatusCode::OK
+    )
+    .with_body(r#"{"status":"revoked"}"#)
+    .create();
+
+    let home = tempfile::tempdir().unwrap();
+    cli_command_for_server(home.path(), &server)
+        .args(["identities", "tokens", "revoke", "agent-1", "itok-2"])
+        .assert()
+        .success()
+        .stderr(predicate::str::contains(
+            "Token itok-2 for identity agent-1 revoked.",
+        ));
+}

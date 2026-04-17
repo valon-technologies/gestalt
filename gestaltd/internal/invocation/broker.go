@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"slices"
 	"strings"
 	"time"
 
@@ -205,7 +204,7 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 		span.SetAttributes(attrUserID.String(p.UserID))
 	}
 
-	if p.Scopes != nil && !slices.Contains(p.Scopes, providerName) {
+	if !principal.AllowsProviderPermission(p, providerName) {
 		return fail(fmt.Errorf("%w: %s", ErrScopeDenied, providerName))
 	}
 	if err := b.resolveUserPrincipal(ctx, p); err != nil {
@@ -241,6 +240,9 @@ func (b *Broker) Invoke(ctx context.Context, p *principal.Principal, providerNam
 	}
 	if b.authorizer != nil && !b.authorizer.AllowCatalogOperation(p, providerName, opMeta) {
 		return fail(fmt.Errorf("%w: %s.%s", ErrAuthorizationDenied, providerName, operation))
+	}
+	if !principal.AllowsOperationPermission(p, providerName, opMeta.ID) {
+		return fail(fmt.Errorf("%w: %s.%s", ErrScopeDenied, providerName, opMeta.ID))
 	}
 	metricOperation = operation
 	metricTransport = metricutil.AttrValue(transport)
@@ -384,7 +386,7 @@ func toolResultBody(result *mcpgo.CallToolResult) (string, error) {
 }
 
 func (b *Broker) ResolveToken(ctx context.Context, p *principal.Principal, providerName, connection, instance string) (context.Context, string, error) {
-	if p != nil && p.Scopes != nil && !slices.Contains(p.Scopes, providerName) {
+	if !principal.AllowsProviderPermission(p, providerName) {
 		return ctx, "", fmt.Errorf("%w: %s", ErrScopeDenied, providerName)
 	}
 	if err := b.resolveUserPrincipal(ctx, p); err != nil {
@@ -571,6 +573,17 @@ func (b *Broker) resolveUserToken(ctx context.Context, prov core.Provider, userI
 
 	accessToken, err := b.refreshTokenIfNeeded(ctx, storedToken, providerName, connection, metricutil.NormalizeConnectionMode(prov.ConnectionMode()))
 	return ctx, accessToken, err
+}
+
+// ResolveUserToken exposes the broker's refresh-aware user token lookup for
+// callers that need a user-scoped credential even when the provider runtime
+// connection mode would not normally resolve one.
+func (b *Broker) ResolveUserToken(ctx context.Context, prov core.Provider, userID, providerName, connection, instance string) (context.Context, string, error) {
+	userID = strings.TrimSpace(userID)
+	if userID == "" {
+		return ctx, "", fmt.Errorf("%w: principal has no user ID or email", ErrUserResolution)
+	}
+	return b.resolveUserToken(ctx, prov, userID, providerName, connection, instance, core.ConnectionModeUser, principal.UserSubjectID(userID))
 }
 
 func (b *Broker) refreshTokenIfNeeded(ctx context.Context, token *core.IntegrationToken, providerName, connection, connectionMode string) (string, error) {

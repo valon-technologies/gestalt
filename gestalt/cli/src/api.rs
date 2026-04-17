@@ -26,6 +26,13 @@ pub struct AuthInfo {
     pub login_supported: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TokenPermission {
+    pub plugin: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub operations: Vec<String>,
+}
+
 pub fn normalize_url(url: &str) -> String {
     let trimmed = url.trim().trim_end_matches('/');
     if trimmed.contains("://") {
@@ -296,6 +303,25 @@ impl ApiClient {
 
     pub fn revoke_api_token(&self, id: &str) -> Result<serde_json::Value> {
         self.delete(&format!("/api/v1/tokens/{id}"))
+    }
+
+    pub fn create_identity_api_token(
+        &self,
+        identity: &str,
+        name: &str,
+        permissions: &[TokenPermission],
+    ) -> Result<serde_json::Value> {
+        self.post(
+            &format!("/api/v1/identities/{identity}/tokens"),
+            &serde_json::json!({
+                "name": name,
+                "permissions": permissions,
+            }),
+        )
+    }
+
+    pub fn revoke_identity_api_token(&self, identity: &str, id: &str) -> Result<serde_json::Value> {
+        self.delete(&format!("/api/v1/identities/{identity}/tokens/{id}"))
     }
 
     fn send(&self, method: Method, path: &str) -> Result<serde_json::Value> {

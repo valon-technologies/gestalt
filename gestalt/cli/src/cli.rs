@@ -226,6 +226,11 @@ pub enum IdentityCommands {
         #[command(subcommand)]
         command: IdentityGrantCommands,
     },
+    /// Manage identity-owned API tokens
+    Tokens {
+        #[command(subcommand)]
+        command: IdentityTokenCommands,
+    },
 }
 
 #[derive(Subcommand)]
@@ -287,6 +292,72 @@ pub enum IdentityGrantCommands {
         identity: String,
         /// Plugin name
         plugin: String,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IdentityPermissionArg {
+    pub plugin: String,
+    pub operations: Vec<String>,
+}
+
+impl IdentityPermissionArg {
+    pub fn parse(input: &str) -> Result<Self, String> {
+        let trimmed = input.trim();
+        if trimmed.is_empty() {
+            return Err("permission cannot be empty".to_string());
+        }
+
+        let (plugin, operations) = match trimmed.split_once(':') {
+            Some((plugin, operations)) => {
+                let plugin = plugin.trim();
+                if plugin.is_empty() {
+                    return Err("permission plugin cannot be empty".to_string());
+                }
+                let operations: Vec<String> = operations
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|operation| !operation.is_empty())
+                    .map(String::from)
+                    .collect();
+                if operations.is_empty() {
+                    return Err(format!(
+                        "permission '{trimmed}' must include at least one operation after ':'"
+                    ));
+                }
+                (plugin.to_string(), operations)
+            }
+            None => (trimmed.to_string(), Vec::new()),
+        };
+
+        Ok(Self { plugin, operations })
+    }
+}
+
+#[derive(Subcommand)]
+pub enum IdentityTokenCommands {
+    /// List API tokens for an identity
+    List {
+        /// Identity ID
+        identity: String,
+    },
+    /// Create an API token for an identity
+    Create {
+        /// Identity ID
+        identity: String,
+        /// Display name for the token
+        #[arg(long)]
+        name: Option<String>,
+        /// Permission entry in plugin or plugin:op1,op2 form
+        #[arg(long = "permission", required = true, value_parser = IdentityPermissionArg::parse)]
+        permissions: Vec<IdentityPermissionArg>,
+    },
+    /// Revoke an API token owned by an identity
+    Revoke {
+        /// Identity ID
+        identity: String,
+        /// Token ID
+        id: String,
     },
 }
 
