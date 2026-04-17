@@ -58,6 +58,7 @@ Generate the encryption key once with `openssl rand -hex 32` and use that value 
 Example minimal config:
 
 ```yaml
+apiVersion: gestaltd.config/v3
 server:
   public:
     port: 8080
@@ -68,9 +69,7 @@ server:
 providers:
   indexeddb:
     main:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
-        version: 0.0.1-alpha.1
+      source: https://github.com/valon-technologies/gestalt-providers/releases/download/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
       config:
         dsn: sqlite:///data/gestalt.db
 

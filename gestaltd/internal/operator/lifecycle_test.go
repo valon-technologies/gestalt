@@ -3584,7 +3584,7 @@ func TestReadLockfile_RejectsLegacyUILockShapeBeforeUnmarshal(t *testing.T) {
 	}
 }
 
-func TestReadLockfile_AcceptsSchemaV1PortableEntries(t *testing.T) {
+func TestReadLockfile_RejectsSchemaV1PortableEntries(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -3608,19 +3608,12 @@ func TestReadLockfile_AcceptsSchemaV1PortableEntries(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	lock, err := ReadLockfile(lockPath)
-	if err != nil {
-		t.Fatalf("ReadLockfile: %v", err)
+	_, err := ReadLockfile(lockPath)
+	if err == nil {
+		t.Fatal("expected error for schema v1 portable lockfile")
 	}
-	entry, ok := lock.Providers["example"]
-	if !ok {
-		t.Fatal(`lock.Providers["example"] not found`)
-	}
-	if entry.Fingerprint != "provider-fp" {
-		t.Fatalf("Fingerprint = %q, want %q", entry.Fingerprint, "provider-fp")
-	}
-	if entry.Source != "github.com/test-org/test-repo/test-plugin" || entry.Version != "1.0.0" {
-		t.Fatalf("entry = %#v", entry)
+	if !strings.Contains(err.Error(), "unsupported lockfile schema version 1") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

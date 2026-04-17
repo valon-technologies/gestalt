@@ -553,6 +553,7 @@ func authIndexedDBConfigYAML(t *testing.T, dir, authName, datastoreName, dbPath 
 	t.Helper()
 
 	authBlock := ""
+	indexedDBManifestPath := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
 	serverProvidersBlock := fmt.Sprintf(`  providers:
     indexeddb: %s
 `, datastoreName)
@@ -570,11 +571,10 @@ providers:
 %s  indexeddb:
     %s:
       source:
-        ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
-        version: 0.0.1-alpha.1
+        path: %s
       config:
         dsn: %q
-`, serverProvidersBlock, authBlock, datastoreName, "sqlite://"+dbPath)
+`, serverProvidersBlock, authBlock, datastoreName, indexedDBManifestPath, "sqlite://"+dbPath)
 }
 
 func writeManifestFile(t *testing.T, pluginDir string, manifest *providermanifestv1.Manifest) {

@@ -28,11 +28,9 @@ func TestDefaultManagedConfigIncludesRootWebUI(t *testing.T) {
 	if rootUI == nil {
 		t.Fatal(`Providers.UI["root"] = nil`)
 	}
-	if got := rootUI.SourceRef(); got != config.DefaultWebUIProvider {
-		t.Fatalf(`Providers.UI["root"].Source.Ref = %q, want %q`, got, config.DefaultWebUIProvider)
-	}
-	if got := rootUI.SourceVersion(); got != config.DefaultWebUIVersion {
-		t.Fatalf(`Providers.UI["root"].Source.Version = %q, want %q`, got, config.DefaultWebUIVersion)
+	wantURL := defaultProviderMetadataURL(config.DefaultWebUIProvider, config.DefaultWebUIVersion)
+	if got := rootUI.SourceMetadataURL(); got != wantURL {
+		t.Fatalf(`Providers.UI["root"].SourceMetadataURL() = %q, want %q`, got, wantURL)
 	}
 	if got := rootUI.Path; got != "/" {
 		t.Fatalf(`Providers.UI["root"].Path = %q, want %q`, got, "/")

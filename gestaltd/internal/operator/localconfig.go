@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/valon-technologies/gestalt/server/internal/config"
 )
@@ -109,8 +110,14 @@ func GenerateDefaultConfig(configDir string) (string, error) {
 	return configPath, nil
 }
 
+func defaultProviderMetadataURL(source, version string) string {
+	rel := strings.TrimPrefix(strings.TrimSpace(source), config.DefaultProviderRepo+"/")
+	return fmt.Sprintf("https://github.com/valon-technologies/gestalt-providers/releases/download/%s/v%s/provider-release.yaml", rel, strings.TrimSpace(version))
+}
+
 func defaultManagedConfig(dbPath, encryptionKey string) string {
-	return fmt.Sprintf(`server:
+	return fmt.Sprintf(`apiVersion: gestaltd.config/v3
+server:
   public:
     port: 8080
   encryptionKey: %q
@@ -119,16 +126,12 @@ func defaultManagedConfig(dbPath, encryptionKey string) string {
 providers:
   indexeddb:
     main:
-      source:
-        ref: %s
-        version: %s
+      source: %s
       config:
         dsn: %q
   ui:
     root:
-      source:
-        ref: %s
-        version: %s
+      source: %s
       path: /
   secrets:
     env:
@@ -136,16 +139,19 @@ providers:
 plugins:
   httpbin:
     displayName: HTTPBin
-    source:
-      ref: %s
-      version: %s
+    source: %s
     allowedHosts:
       - httpbin.org
-`, encryptionKey, config.DefaultIndexedDBProvider, config.DefaultIndexedDBVersion, "sqlite://"+dbPath, config.DefaultWebUIProvider, config.DefaultWebUIVersion, defaultHTTPBinProvider, defaultHTTPBinVersion)
+`, encryptionKey,
+		defaultProviderMetadataURL(config.DefaultIndexedDBProvider, config.DefaultIndexedDBVersion),
+		"sqlite://"+dbPath,
+		defaultProviderMetadataURL(config.DefaultWebUIProvider, config.DefaultWebUIVersion),
+		defaultProviderMetadataURL(defaultHTTPBinProvider, defaultHTTPBinVersion))
 }
 
 func defaultLocalSourceConfig(providersDir, dbPath, encryptionKey string) string {
-	return fmt.Sprintf(`server:
+	return fmt.Sprintf(`apiVersion: gestaltd.config/v3
+server:
   public:
     port: 8080
   encryptionKey: %q

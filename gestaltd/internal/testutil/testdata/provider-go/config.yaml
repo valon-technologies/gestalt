@@ -1,3 +1,4 @@
+apiVersion: gestaltd.config/v3
 server:
   encryptionKey: dev-key-for-example-only
   providers:
@@ -6,9 +7,7 @@ server:
 providers:
   indexeddb:
     main:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
-        version: 0.0.1-alpha.1
+      source: https://github.com/valon-technologies/gestalt-providers/releases/download/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
       config:
         dsn: sqlite://./example.db
 
