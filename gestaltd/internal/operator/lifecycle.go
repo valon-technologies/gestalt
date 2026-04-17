@@ -1295,7 +1295,7 @@ func (l *Lifecycle) buildArchivesMap(ctx context.Context, src pluginsource.Sourc
 	}
 	platformArchives, err := enumerator.ListPlatformArchives(ctx, src, version)
 	if err != nil {
-		if !allowsGenericArchive(kind, manifest) {
+		if !allowsGenericArchive(archivePolicyKind(kind), manifest) {
 			return nil, fmt.Errorf("enumerate platform archives for %s: %w", subject, err)
 		}
 		slog.Warn("failed to enumerate platform archives; lockfile will only contain current platform", "error", err)

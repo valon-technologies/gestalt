@@ -1521,6 +1521,8 @@ func TestBuildArchivesMap_AllowsGenericDeclarativeTelemetryAndAuditPackages(t *t
 	for _, kind := range []string{providerLockKindTelemetry, providerLockKindAudit} {
 		kind := kind
 		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+
 			archives, err := lc.buildArchivesMap(context.Background(), src, version, archiveURL, "", kind, kind+` "default"`, manifest)
 			if err != nil {
 				t.Fatalf("buildArchivesMap: %v", err)
@@ -1567,26 +1569,34 @@ func TestMaterializeLockedComponent_AllowsGenericDeclarativeTelemetryAndAuditPac
 	defer srv.Close()
 
 	lc := NewLifecycle(nil)
-	entry := LockEntry{
-		Source:  source,
-		Version: version,
-		Archives: map[string]LockArchive{
-			platformKeyGeneric: {
-				URL:    srv.URL,
-				SHA256: hex.EncodeToString(pkgSum[:]),
-			},
-		},
-	}
-	providerEntry := &config.ProviderEntry{
-		Source: config.ProviderSource{
-			Ref:     source,
-			Version: version,
-		},
-	}
 
 	for _, kind := range []string{providerLockKindTelemetry, providerLockKindAudit} {
 		kind := kind
 		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/octet-stream")
+				_, _ = w.Write(pkgData)
+			}))
+			defer srv.Close()
+
+			entry := LockEntry{
+				Source:  source,
+				Version: version,
+				Archives: map[string]LockArchive{
+					platformKeyGeneric: {
+						URL:    srv.URL,
+						SHA256: hex.EncodeToString(pkgSum[:]),
+					},
+				},
+			}
+			providerEntry := &config.ProviderEntry{
+				Source: config.ProviderSource{
+					Ref:     source,
+					Version: version,
+				},
+			}
 			destDir := filepath.Join(dir, kind)
 			if err := lc.materializeLockedComponent(context.Background(), initPaths{}, kind, "default", providerEntry, entry, destDir, true); err != nil {
 				t.Fatalf("materializeLockedComponent: %v", err)
