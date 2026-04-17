@@ -141,7 +141,7 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 	names := s.providers.List()
 	out := make([]integrationInfo, 0, len(names))
 	for _, name := range names {
-		if !s.allowProvider(p, name) {
+		if !s.allowProviderContext(r.Context(), p, name) {
 			continue
 		}
 		prov, err := s.providers.Get(name)
@@ -175,8 +175,8 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 				}
 				info.Connected = bindingConnected
 			}
-			info.MountedPath = s.integrationMountedPathForPrincipal(p, name, info.MountedPath)
-			if !s.integrationHasUsableSurface(p, name, prov, info) {
+			info.MountedPath = s.integrationMountedPathForPrincipalContext(r.Context(), p, name, info.MountedPath)
+			if !s.integrationHasUsableSurfaceContext(r.Context(), p, name, prov, info) {
 				continue
 			}
 			out = append(out, info)
@@ -187,8 +187,8 @@ func (s *Server) listIntegrations(w http.ResponseWriter, r *http.Request) {
 		info.Connected = len(instances) > 0
 		info.Instances = append(make([]instanceInfo, 0, len(instances)), instances...)
 		s.populateIntegrationSettings(&info, prov)
-		info.MountedPath = s.integrationMountedPathForPrincipal(p, name, info.MountedPath)
-		if !s.integrationHasUsableSurface(p, name, prov, info) {
+		info.MountedPath = s.integrationMountedPathForPrincipalContext(r.Context(), p, name, info.MountedPath)
+		if !s.integrationHasUsableSurfaceContext(r.Context(), p, name, prov, info) {
 			continue
 		}
 		out = append(out, info)
@@ -424,7 +424,7 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p := PrincipalFromContext(r.Context())
-	if !s.allowProvider(p, name) {
+	if !s.allowProviderContext(r.Context(), p, name) {
 		s.auditHTTPEvent(r.Context(), p, name, operation, false, errOperationAccess)
 		writeError(w, http.StatusForbidden, errOperationAccess.Error())
 		return
@@ -468,7 +468,7 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 	} else if core.SupportsSessionCatalog(prov) {
 		strictCatalog = true
 	}
-	ctx := invocation.WithAccessContext(r.Context(), s.providerAccessContext(p, name))
+	ctx := invocation.WithAccessContext(r.Context(), s.providerAccessContextWithContext(r.Context(), p, name))
 	cat, metadata, err := invocation.ResolveCatalogForTargetsWithMetadata(
 		ctx,
 		prov,
@@ -489,7 +489,7 @@ func (s *Server) listOperations(w http.ResponseWriter, r *http.Request) {
 	if recordDiscoveryMetrics {
 		metricutil.RecordDiscoveryMetrics(r.Context(), discoveryStartedAt, name, "list_operations", discoveryConnectionMode, discoveryFailed)
 	}
-	cat = invocation.FilterCatalogForPrincipal(cat, name, p, s.authorizer)
+	cat = invocation.FilterCatalogForPrincipal(ctx, cat, name, p, s.authorizer)
 	ops := httpVisibleCatalogOperations(cat.Operations)
 	sort.Slice(ops, func(i, j int) bool {
 		return ops[i].ID < ops[j].ID
@@ -506,9 +506,9 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	access := s.providerAccessContext(p, providerName)
-	providerAllowed := s.allowProvider(p, providerName)
-	operationAllowed := s.allowOperation(p, providerName, operationName)
+	access := s.providerAccessContextWithContext(r.Context(), p, providerName)
+	providerAllowed := s.allowProviderContext(r.Context(), p, providerName)
+	operationAllowed := s.allowOperationContext(r.Context(), p, providerName, operationName)
 	if !providerAllowed || !operationAllowed {
 		authz := auditAuthorization{
 			Policy: access.Policy,
@@ -615,7 +615,7 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 		s.writeInvocationError(w, r, providerName, operationName, err)
 		return
 	}
-	if s.authorizer != nil && !s.authorizer.AllowCatalogOperation(p, providerName, opMeta) {
+	if s.authorizer != nil && !s.authorizer.AllowCatalogOperation(ctx, p, providerName, opMeta) {
 		s.auditHTTPAuthorizationEvent(ctx, p, providerName, operationName, false, errOperationAccess, auditAuthorization{
 			Policy:   access.Policy,
 			Role:     access.Role,

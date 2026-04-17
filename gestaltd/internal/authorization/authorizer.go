@@ -341,24 +341,24 @@ func (a *Authorizer) IsWorkload(p *principal.Principal) bool {
 	return p != nil && p.Kind == principal.KindWorkload
 }
 
-func (a *Authorizer) AllowProvider(p *principal.Principal, provider string) bool {
+func (a *Authorizer) AllowProvider(ctx context.Context, p *principal.Principal, provider string) bool {
 	if a.isManagedIdentityPrincipal(p) {
 		return a.allowManagedIdentityProvider(p, provider)
 	}
 	if !a.IsWorkload(p) {
-		_, allowed := a.ResolveAccess(p, provider)
+		_, allowed := a.ResolveAccess(ctx, p, provider)
 		return allowed
 	}
 	_, ok := a.bindingForSubject(p, provider)
 	return ok
 }
 
-func (a *Authorizer) AllowOperation(p *principal.Principal, provider, operation string) bool {
+func (a *Authorizer) AllowOperation(ctx context.Context, p *principal.Principal, provider, operation string) bool {
 	if a.isManagedIdentityPrincipal(p) {
 		return a.allowManagedIdentityProvider(p, provider) && principal.AllowsOperationPermission(p, provider, operation)
 	}
 	if !a.IsWorkload(p) {
-		return a.AllowProvider(p, provider)
+		return a.AllowProvider(ctx, p, provider)
 	}
 	binding, ok := a.bindingForSubject(p, provider)
 	if !ok {
@@ -385,7 +385,7 @@ func (a *Authorizer) Binding(p *principal.Principal, provider string) (Credentia
 	return binding.CredentialBinding, true
 }
 
-func (a *Authorizer) ResolveAccess(p *principal.Principal, provider string) (AccessContext, bool) {
+func (a *Authorizer) ResolveAccess(_ context.Context, p *principal.Principal, provider string) (AccessContext, bool) {
 	if a == nil {
 		return AccessContext{}, true
 	}
@@ -397,7 +397,7 @@ func (a *Authorizer) ResolveAccess(p *principal.Principal, provider string) (Acc
 		return AccessContext{}, true
 	}
 	if a.IsWorkload(p) {
-		return a.ResolvePolicyAccess(p, policyName)
+		return a.ResolvePolicyAccess(context.Background(), p, policyName)
 	}
 
 	policy := a.policies[policyName]
@@ -499,7 +499,7 @@ func (a *Authorizer) StaticMembersForProvider(provider string) (string, []Static
 	return policyName, members, true
 }
 
-func (a *Authorizer) ResolvePolicyAccess(p *principal.Principal, policyName string) (AccessContext, bool) {
+func (a *Authorizer) ResolvePolicyAccess(_ context.Context, p *principal.Principal, policyName string) (AccessContext, bool) {
 	if a == nil {
 		return AccessContext{}, true
 	}
@@ -525,7 +525,7 @@ func (a *Authorizer) ResolvePolicyAccess(p *principal.Principal, policyName stri
 	return access, false
 }
 
-func (a *Authorizer) ResolveAdminAccess(p *principal.Principal, policyName string) (AccessContext, bool) {
+func (a *Authorizer) ResolveAdminAccess(_ context.Context, p *principal.Principal, policyName string) (AccessContext, bool) {
 	if a == nil {
 		return AccessContext{}, true
 	}
@@ -556,14 +556,14 @@ func (a *Authorizer) ResolveAdminAccess(p *principal.Principal, policyName strin
 	return access, false
 }
 
-func (a *Authorizer) AllowCatalogOperation(p *principal.Principal, provider string, op catalog.CatalogOperation) bool {
+func (a *Authorizer) AllowCatalogOperation(ctx context.Context, p *principal.Principal, provider string, op catalog.CatalogOperation) bool {
 	if a.isManagedIdentityPrincipal(p) {
 		return a.allowManagedIdentityProvider(p, provider) && principal.AllowsOperationPermission(p, provider, op.ID)
 	}
 	if a.IsWorkload(p) {
-		return a.AllowOperation(p, provider, op.ID)
+		return a.AllowOperation(ctx, p, provider, op.ID)
 	}
-	access, allowed := a.ResolveAccess(p, provider)
+	access, allowed := a.ResolveAccess(ctx, p, provider)
 	if !allowed {
 		return false
 	}

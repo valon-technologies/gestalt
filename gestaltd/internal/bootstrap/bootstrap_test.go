@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -25,6 +26,7 @@ import (
 	coreworkflow "github.com/valon-technologies/gestalt/server/core/workflow"
 	"github.com/valon-technologies/gestalt/server/internal/bootstrap"
 	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/coredata"
 	telemetrynoop "github.com/valon-technologies/gestalt/server/internal/drivers/telemetry/noop"
 	"github.com/valon-technologies/gestalt/server/internal/invocation"
 	"github.com/valon-technologies/gestalt/server/internal/principal"
@@ -84,6 +86,159 @@ func (p *stubAuthorizationProvider) WriteModel(context.Context, *core.WriteModel
 func stubAuthorizationFactory(name string) bootstrap.AuthorizationFactory {
 	return func(yaml.Node, bootstrap.Deps) (core.AuthorizationProvider, error) {
 		return &stubAuthorizationProvider{name: name}, nil
+	}
+}
+
+type memoryAuthorizationProvider struct {
+	name string
+
+	mu            sync.Mutex
+	activeModelID string
+	models        []*core.AuthorizationModelRef
+	rels          map[string]*core.Relationship
+}
+
+func newMemoryAuthorizationProvider(name string) *memoryAuthorizationProvider {
+	return &memoryAuthorizationProvider{
+		name: name,
+		rels: map[string]*core.Relationship{},
+	}
+}
+
+func (p *memoryAuthorizationProvider) Name() string { return p.name }
+
+func (p *memoryAuthorizationProvider) Evaluate(ctx context.Context, req *core.AccessEvaluationRequest) (*core.AccessDecision, error) {
+	resp, err := p.EvaluateMany(ctx, &core.AccessEvaluationsRequest{Requests: []*core.AccessEvaluationRequest{req}})
+	if err != nil {
+		return nil, err
+	}
+	if len(resp.Decisions) == 0 {
+		return &core.AccessDecision{}, nil
+	}
+	return resp.Decisions[0], nil
+}
+
+func (p *memoryAuthorizationProvider) EvaluateMany(_ context.Context, req *core.AccessEvaluationsRequest) (*core.AccessEvaluationsResponse, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	resp := &core.AccessEvaluationsResponse{
+		Decisions: make([]*core.AccessDecision, 0, len(req.GetRequests())),
+	}
+	for _, item := range req.GetRequests() {
+		allowed := false
+		if item != nil {
+			_, allowed = p.rels[bootstrapRelationshipKey(item.GetSubject(), item.GetAction().GetName(), item.GetResource())]
+		}
+		resp.Decisions = append(resp.Decisions, &core.AccessDecision{
+			Allowed: allowed,
+			ModelId: p.activeModelID,
+		})
+	}
+	return resp, nil
+}
+
+func (p *memoryAuthorizationProvider) SearchResources(context.Context, *core.ResourceSearchRequest) (*core.ResourceSearchResponse, error) {
+	return &core.ResourceSearchResponse{}, nil
+}
+
+func (p *memoryAuthorizationProvider) SearchSubjects(context.Context, *core.SubjectSearchRequest) (*core.SubjectSearchResponse, error) {
+	return &core.SubjectSearchResponse{}, nil
+}
+
+func (p *memoryAuthorizationProvider) SearchActions(context.Context, *core.ActionSearchRequest) (*core.ActionSearchResponse, error) {
+	return &core.ActionSearchResponse{}, nil
+}
+
+func (p *memoryAuthorizationProvider) GetMetadata(context.Context) (*core.AuthorizationMetadata, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return &core.AuthorizationMetadata{ActiveModelId: p.activeModelID}, nil
+}
+
+func (p *memoryAuthorizationProvider) ReadRelationships(context.Context, *core.ReadRelationshipsRequest) (*core.ReadRelationshipsResponse, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	out := make([]*core.Relationship, 0, len(p.rels))
+	for _, rel := range p.rels {
+		out = append(out, cloneRelationship(rel))
+	}
+	return &core.ReadRelationshipsResponse{
+		Relationships: out,
+		ModelId:       p.activeModelID,
+	}, nil
+}
+
+func (p *memoryAuthorizationProvider) WriteRelationships(_ context.Context, req *core.WriteRelationshipsRequest) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, key := range req.GetDeletes() {
+		delete(p.rels, bootstrapRelationshipKey(key.GetSubject(), key.GetRelation(), key.GetResource()))
+	}
+	for _, rel := range req.GetWrites() {
+		p.rels[bootstrapRelationshipKey(rel.GetSubject(), rel.GetRelation(), rel.GetResource())] = cloneRelationship(rel)
+	}
+	return nil
+}
+
+func (p *memoryAuthorizationProvider) GetActiveModel(context.Context) (*core.GetActiveModelResponse, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, model := range p.models {
+		if model.GetId() == p.activeModelID {
+			return &core.GetActiveModelResponse{Model: model}, nil
+		}
+	}
+	return &core.GetActiveModelResponse{}, nil
+}
+
+func (p *memoryAuthorizationProvider) ListModels(context.Context, *core.ListModelsRequest) (*core.ListModelsResponse, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return &core.ListModelsResponse{Models: append([]*core.AuthorizationModelRef(nil), p.models...)}, nil
+}
+
+func (p *memoryAuthorizationProvider) WriteModel(context.Context, *core.WriteModelRequest) (*core.AuthorizationModelRef, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	model := &core.AuthorizationModelRef{
+		Id:      fmt.Sprintf("model-%d", len(p.models)+1),
+		Version: "v1",
+	}
+	p.models = append(p.models, model)
+	p.activeModelID = model.GetId()
+	return model, nil
+}
+
+func memoryAuthorizationFactory(provider *memoryAuthorizationProvider) bootstrap.AuthorizationFactory {
+	return func(yaml.Node, bootstrap.Deps) (core.AuthorizationProvider, error) {
+		return provider, nil
+	}
+}
+
+func bootstrapRelationshipKey(subject *core.SubjectRef, relation string, resource *core.ResourceRef) string {
+	return strings.Join([]string{
+		subject.GetType(),
+		subject.GetId(),
+		relation,
+		resource.GetType(),
+		resource.GetId(),
+	}, "\x00")
+}
+
+func cloneRelationship(rel *core.Relationship) *core.Relationship {
+	if rel == nil {
+		return nil
+	}
+	return &core.Relationship{
+		Subject: &core.SubjectRef{
+			Type: rel.GetSubject().GetType(),
+			Id:   rel.GetSubject().GetId(),
+		},
+		Relation: rel.GetRelation(),
+		Resource: &core.ResourceRef{
+			Type: rel.GetResource().GetType(),
+			Id:   rel.GetResource().GetId(),
+		},
 	}
 }
 
@@ -3257,6 +3412,125 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		}
 		if _, ok := result.Authorizer.ResolveWorkloadToken("gst_wld_resolved-workload-token"); !ok {
 			t.Fatal("expected resolved workload token to authenticate")
+		}
+	})
+
+	t.Run("authorization provider backs human access decisions", func(t *testing.T) {
+		t.Parallel()
+
+		cfg := validConfig()
+		cfg.Authorization = config.AuthorizationConfig{
+			Policies: map[string]config.HumanPolicyDef{
+				"calendar-policy": {
+					Default: "deny",
+					Members: []config.HumanPolicyMemberDef{
+						{Email: "static@example.test", Role: "viewer"},
+					},
+				},
+				"admin-policy": {
+					Default: "deny",
+					Members: []config.HumanPolicyMemberDef{
+						{Email: "seed-admin@example.test", Role: "admin"},
+					},
+				},
+			},
+		}
+		cfg.Server.Admin.AuthorizationPolicy = "admin-policy"
+		cfg.Plugins = map[string]*config.ProviderEntry{
+			"calendar": {
+				AuthorizationPolicy: "calendar-policy",
+				ResolvedManifest: &providermanifestv1.Manifest{
+					Spec: &providermanifestv1.Spec{},
+				},
+			},
+		}
+		cfg.Providers.Authorization = map[string]*config.ProviderEntry{
+			"indexeddb": {Source: config.ProviderSource{Path: "stub"}},
+		}
+		cfg.Server.Providers.Authorization = "indexeddb"
+
+		provider := newMemoryAuthorizationProvider("memory-authorization")
+		unmanagedKey := bootstrapRelationshipKey(
+			&core.SubjectRef{Type: "team", Id: "ops"},
+			"owner",
+			&core.ResourceRef{Type: "foreign_resource", Id: "roadmap"},
+		)
+		provider.rels[unmanagedKey] = &core.Relationship{
+			Subject:  &core.SubjectRef{Type: "team", Id: "ops"},
+			Relation: "owner",
+			Resource: &core.ResourceRef{Type: "foreign_resource", Id: "roadmap"},
+		}
+		factories := validFactories()
+		factories.Authorization = memoryAuthorizationFactory(provider)
+
+		result, err := bootstrap.Bootstrap(ctx, cfg, factories)
+		if err != nil {
+			t.Fatalf("Bootstrap: %v", err)
+		}
+		t.Cleanup(func() { _ = result.Close(context.Background()) })
+		<-result.ProvidersReady
+		if err := result.Start(ctx); err != nil {
+			t.Fatalf("Start: %v", err)
+		}
+		if _, ok := provider.rels[unmanagedKey]; !ok {
+			t.Fatal("expected unrelated provider relationship to be preserved")
+		}
+
+		staticPrincipal := &principal.Principal{
+			Identity: &core.UserIdentity{Email: "static@example.test"},
+			Kind:     principal.KindUser,
+		}
+		access, allowed := result.Authorizer.ResolveAccess(ctx, staticPrincipal, "calendar")
+		if !allowed {
+			t.Fatal("expected static plugin access to be allowed")
+		}
+		if access.Role != "viewer" {
+			t.Fatalf("static plugin role = %q, want %q", access.Role, "viewer")
+		}
+
+		dynamicUser, err := result.Services.Users.FindOrCreateUser(ctx, "dynamic@example.test")
+		if err != nil {
+			t.Fatalf("FindOrCreateUser(dynamic): %v", err)
+		}
+		if _, err := result.Services.PluginAuthorizations.UpsertPluginAuthorization(ctx, &coredata.PluginAuthorizationMembership{
+			Plugin: "calendar",
+			UserID: dynamicUser.ID,
+			Email:  dynamicUser.Email,
+			Role:   "editor",
+		}); err != nil {
+			t.Fatalf("UpsertPluginAuthorization: %v", err)
+		}
+		if _, err := result.Services.AdminAuthorizations.UpsertAdminAuthorization(ctx, &coredata.AdminAuthorizationMembership{
+			UserID: dynamicUser.ID,
+			Email:  dynamicUser.Email,
+			Role:   "admin",
+		}); err != nil {
+			t.Fatalf("UpsertAdminAuthorization: %v", err)
+		}
+		if err := result.Authorizer.ReloadDynamic(ctx); err != nil {
+			t.Fatalf("ReloadDynamic: %v", err)
+		}
+
+		dynamicPrincipal := &principal.Principal{
+			UserID:    dynamicUser.ID,
+			SubjectID: principal.UserSubjectID(dynamicUser.ID),
+			Identity:  &core.UserIdentity{Email: dynamicUser.Email},
+			Kind:      principal.KindUser,
+		}
+		access, allowed = result.Authorizer.ResolveAccess(ctx, dynamicPrincipal, "calendar")
+		if !allowed {
+			t.Fatal("expected dynamic plugin access to be allowed")
+		}
+		if access.Role != "editor" {
+			t.Fatalf("dynamic plugin role = %q, want %q", access.Role, "editor")
+		}
+
+		adminAccess, allowed := result.Authorizer.ResolveAdminAccess(ctx, dynamicPrincipal, "admin-policy")
+		if !allowed {
+			t.Fatal("expected dynamic admin access to be allowed")
+		}
+		if adminAccess.Role != "admin" {
+			t.Fatalf("dynamic admin role = %q, want %q", adminAccess.Role, "admin")
 		}
 	})
 

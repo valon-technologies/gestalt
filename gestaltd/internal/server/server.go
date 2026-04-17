@@ -80,7 +80,7 @@ type Server struct {
 	catalogConnection    map[string]string
 	connectionAuth       func() map[string]map[string]bootstrap.OAuthHandler
 	pluginDefs           map[string]*config.ProviderEntry
-	authorizer           *authorization.Authorizer
+	authorizer           authorization.RuntimeAuthorizer
 	noAuth               bool
 	anonymousPrincipal   *principal.Principal
 	publicBaseURL        string
@@ -111,7 +111,7 @@ type Config struct {
 	ConnectionAuth    func() map[string]map[string]bootstrap.OAuthHandler
 	PluginDefs        map[string]*config.ProviderEntry
 	ProviderUIs       map[string]*config.UIEntry
-	Authorizer        *authorization.Authorizer
+	Authorizer        authorization.RuntimeAuthorizer
 	PublicBaseURL     string
 	ManagementBaseURL string
 	SecureCookies     bool

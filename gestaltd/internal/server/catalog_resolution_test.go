@@ -346,7 +346,7 @@ func TestFilterCatalogForPrincipal_HumanFilteringUsesResolvedRole(t *testing.T) 
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	filtered := invocation.FilterCatalogForPrincipal(cat, "sample-api", p, authz)
+	filtered := invocation.FilterCatalogForPrincipal(context.Background(), cat, "sample-api", p, authz)
 	if len(filtered.Operations) != 2 {
 		t.Fatalf("expected 2 operations after human filtering, got %d", len(filtered.Operations))
 	}
@@ -398,7 +398,7 @@ func TestFilterCatalogForPrincipal_HumanDefaultAllowKeepsUnannotatedOperations(t
 		UserID:    "viewer-user",
 		SubjectID: principal.UserSubjectID("viewer-user"),
 	}
-	filtered := invocation.FilterCatalogForPrincipal(prov.Catalog(), "sample-api", p, authz)
+	filtered := invocation.FilterCatalogForPrincipal(context.Background(), prov.Catalog(), "sample-api", p, authz)
 	if len(filtered.Operations) != 1 {
 		t.Fatalf("expected 1 operation after default-allow filtering, got %d", len(filtered.Operations))
 	}
@@ -446,7 +446,7 @@ func TestFilterCatalogForPrincipal_HumanDefaultAllowTreatsUnmatchedUsersAsViewer
 		UserID:    "viewer-user",
 		SubjectID: principal.UserSubjectID("viewer-user"),
 	}
-	filtered := invocation.FilterCatalogForPrincipal(prov.Catalog(), "sample-api", p, authz)
+	filtered := invocation.FilterCatalogForPrincipal(context.Background(), prov.Catalog(), "sample-api", p, authz)
 	if len(filtered.Operations) != 2 {
 		t.Fatalf("expected 2 operations after default-allow filtering, got %d", len(filtered.Operations))
 	}
@@ -484,7 +484,7 @@ func TestFilterCatalogForPrincipal_HumanUnboundProviderKeepsRoleAnnotatedOperati
 		UserID:    "viewer-user",
 		SubjectID: principal.UserSubjectID("viewer-user"),
 	}
-	filtered := invocation.FilterCatalogForPrincipal(prov.Catalog(), "sample-api", p, authz)
+	filtered := invocation.FilterCatalogForPrincipal(context.Background(), prov.Catalog(), "sample-api", p, authz)
 	if len(filtered.Operations) != 2 {
 		t.Fatalf("expected 2 operations after filtering unbound provider, got %d", len(filtered.Operations))
 	}
@@ -549,7 +549,7 @@ func TestFilterCatalogForPrincipal_WorkloadFilteringUsesMergedCatalog(t *testing
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	filtered := invocation.FilterCatalogForPrincipal(cat, "clash-api", p, authz)
+	filtered := invocation.FilterCatalogForPrincipal(context.Background(), cat, "clash-api", p, authz)
 	if len(filtered.Operations) != 2 {
 		t.Fatalf("expected 2 operations after workload filtering, got %d", len(filtered.Operations))
 	}
