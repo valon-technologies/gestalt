@@ -23,7 +23,7 @@ pub fn run(
     options: InvokeOptions<'_>,
     format: Format,
 ) -> Result<()> {
-    let cat = catalog::fetch_catalog(client, plugin)?;
+    let cat = catalog::fetch_catalog(client, plugin, options.connection, options.instance)?;
     let query = segments.join(".");
 
     match cat.resolve(&query)? {
@@ -55,12 +55,12 @@ pub fn invoke(
     options: InvokeOptions<'_>,
     format: Format,
 ) -> Result<()> {
-    let cat = catalog::fetch_catalog(client, plugin)?;
+    let cat = catalog::fetch_catalog(client, plugin, options.connection, options.instance)?;
     execute(client, &cat, plugin, operation, params, options, format)
 }
 
 pub fn list_operations(client: &ApiClient, plugin: &str, format: Format) -> Result<()> {
-    let cat = catalog::fetch_catalog(client, plugin)?;
+    let cat = catalog::fetch_catalog(client, plugin, None, None)?;
     display_operations(cat.operations(), format)
 }
 
