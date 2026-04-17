@@ -21,6 +21,10 @@ import (
 
 const runtimeShutdownTimeout = 15 * time.Second
 
+func httpCatalogConnectionMap(connMaps bootstrap.ConnectionMaps) map[string]string {
+	return connMaps.APIConnection
+}
+
 func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) error {
 	httpInvoker := invocation.NewGuarded(result.Invoker, result.CapabilityLister, "http", result.AuditSink, invocation.WithoutRateLimit())
 	mcpInvoker := invocation.NewGuarded(result.Invoker, result.CapabilityLister, "mcp", result.AuditSink, invocation.WithoutRateLimit())
@@ -63,7 +67,10 @@ func Run(ctx context.Context, cfg *config.Config, result *bootstrap.Result) erro
 		Providers:         result.Providers,
 		Invoker:           httpInvoker,
 		DefaultConnection: connMaps.DefaultConnection,
-		CatalogConnection: connMaps.MCPConnection,
+		// HTTP routes expose REST-visible operations, so unqualified session-catalog
+		// resolution should follow the API surface by default. The MCP server keeps
+		// its own MCP-specific routing below.
+		CatalogConnection: httpCatalogConnectionMap(connMaps),
 		ConnectionAuth:    result.ConnectionAuth,
 		PluginDefs:        cfg.Plugins,
 		Authorizer:        result.Authorizer,
