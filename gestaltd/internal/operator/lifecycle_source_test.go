@@ -1562,12 +1562,6 @@ func TestMaterializeLockedComponent_AllowsGenericDeclarativeTelemetryAndAuditPac
 	}
 	pkgSum := sha256.Sum256(pkgData)
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/octet-stream")
-		_, _ = w.Write(pkgData)
-	}))
-	defer srv.Close()
-
 	lc := NewLifecycle(nil)
 
 	for _, kind := range []string{providerLockKindTelemetry, providerLockKindAudit} {
