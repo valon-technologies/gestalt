@@ -3,19 +3,22 @@ package operator
 import (
 	"fmt"
 	"maps"
+	"strings"
 
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
 )
 
 const (
-	providerLockSchemaName        = "gestaltd-provider-lock"
-	providerLockSchemaVersion     = 2
-	providerLockRevision          = 0
-	providerLockKindWorkflow      = "workflow"
-	providerLockKindTelemetry     = "telemetry"
-	providerLockKindAudit         = "audit"
-	providerLockRuntimeExecutable = "executable"
-	providerLockRuntimeAssets     = "assets"
+	providerLockSchemaName         = "gestaltd-provider-lock"
+	providerLockSchemaVersion      = 2
+	providerLockRevision           = 0
+	providerLockKindWorkflow       = "workflow"
+	providerLockKindTelemetry      = "telemetry"
+	providerLockKindAudit          = "audit"
+	providerLockRuntimeExecutable  = providerReleaseRuntimeExecutable
+	providerLockRuntimeDeclarative = providerReleaseRuntimeDeclarative
+	providerLockRuntimeWebUI       = providerReleaseRuntimeWebUI
+	providerLockRuntimeAssets      = providerLockRuntimeWebUI
 )
 
 type providerLockfile struct {
@@ -209,12 +212,19 @@ func portableEntriesFromLockEntries(entries map[string]LockEntry, kind string) m
 		return nil
 	}
 	portable := make(map[string]portableLockEntry, len(entries))
-	for name, entry := range entries {
+	for name := range entries {
+		entry := entries[name]
+		packageRef := lockEntryPackage(entry)
+		source := strings.TrimSpace(entry.Source)
+		if source == packageRef {
+			source = ""
+		}
 		portable[name] = portableLockEntry{
 			InputDigest: entry.Fingerprint,
-			Package:     entry.Source,
-			Kind:        kind,
-			Runtime:     portableRuntimeForKind(kind),
+			Package:     packageRef,
+			Kind:        lockEntryKind(entry, kind),
+			Runtime:     lockEntryRuntime(entry, kind),
+			Source:      source,
 			Version:     entry.Version,
 			Archives:    maps.Clone(entry.Archives),
 		}
@@ -238,17 +248,13 @@ func lockEntriesFromPortableEntries(entries map[string]portableLockEntry) map[st
 		}
 		runtimeEntries[name] = LockEntry{
 			Fingerprint: fingerprint,
+			Package:     entry.Package,
+			Kind:        entry.Kind,
+			Runtime:     entry.Runtime,
 			Source:      source,
 			Version:     entry.Version,
 			Archives:    maps.Clone(entry.Archives),
 		}
 	}
 	return runtimeEntries
-}
-
-func portableRuntimeForKind(kind string) string {
-	if kind == providermanifestv1.KindWebUI {
-		return providerLockRuntimeAssets
-	}
-	return providerLockRuntimeExecutable
 }

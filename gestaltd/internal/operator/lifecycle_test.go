@@ -2648,7 +2648,7 @@ func TestHashPlatformInEntries_HashesMountedWebUIAndProviderArchives(t *testing.
 		},
 	}
 
-	if err := hashPlatformInEntries(context.Background(), lock, initPaths{}, providerpkg.CurrentPlatformString(), map[string]string{}); err != nil {
+	if err := NewLifecycle(nil).hashPlatformInEntries(context.Background(), lock, initPaths{}, providerpkg.CurrentPlatformString(), map[string]string{}); err != nil {
 		t.Fatalf("hashPlatformInEntries: %v", err)
 	}
 
@@ -3780,6 +3780,30 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 				Executable: "workflow/temporal/artifacts/darwin/arm64/workflow-temporal",
 			},
 		},
+		Telemetry: map[string]LockEntry{
+			"default": {
+				Fingerprint: "telemetry-fp",
+				Source:      "github.com/test-org/test-repo/telemetry-declarative",
+				Kind:        providermanifestv1.KindPlugin,
+				Runtime:     providerReleaseRuntimeDeclarative,
+				Version:     "1.4.0",
+				Archives: map[string]LockArchive{
+					"generic": {URL: "https://example.com/telemetry.tar.gz", SHA256: "telemetry123"},
+				},
+			},
+		},
+		Audit: map[string]LockEntry{
+			"default": {
+				Fingerprint: "audit-fp",
+				Source:      "github.com/test-org/test-repo/audit-declarative",
+				Kind:        providermanifestv1.KindPlugin,
+				Runtime:     providerReleaseRuntimeDeclarative,
+				Version:     "1.5.0",
+				Archives: map[string]LockArchive{
+					"generic": {URL: "https://example.com/audit.tar.gz", SHA256: "audit123"},
+				},
+			},
+		},
 		UIs: map[string]LockUIEntry{
 			"roadmap": {
 				Fingerprint: "ui-fp",
@@ -3852,6 +3876,32 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	if authEntry.Runtime != providerLockRuntimeExecutable {
 		t.Fatalf("auth runtime = %q, want %q", authEntry.Runtime, providerLockRuntimeExecutable)
 	}
+	telemetryEntry, ok := diskLock.Providers.Telemetry["default"]
+	if !ok {
+		t.Fatal(`disk lock providers.telemetry["default"] not found`)
+	}
+	if telemetryEntry.Package != want.Telemetry["default"].Source {
+		t.Fatalf("telemetry package = %q, want %q", telemetryEntry.Package, want.Telemetry["default"].Source)
+	}
+	if telemetryEntry.Kind != providermanifestv1.KindPlugin {
+		t.Fatalf("telemetry kind = %q, want %q", telemetryEntry.Kind, providermanifestv1.KindPlugin)
+	}
+	if telemetryEntry.Runtime != providerReleaseRuntimeDeclarative {
+		t.Fatalf("telemetry runtime = %q, want %q", telemetryEntry.Runtime, providerReleaseRuntimeDeclarative)
+	}
+	auditEntry, ok := diskLock.Providers.Audit["default"]
+	if !ok {
+		t.Fatal(`disk lock providers.audit["default"] not found`)
+	}
+	if auditEntry.Package != want.Audit["default"].Source {
+		t.Fatalf("audit package = %q, want %q", auditEntry.Package, want.Audit["default"].Source)
+	}
+	if auditEntry.Kind != providermanifestv1.KindPlugin {
+		t.Fatalf("audit kind = %q, want %q", auditEntry.Kind, providermanifestv1.KindPlugin)
+	}
+	if auditEntry.Runtime != providerReleaseRuntimeDeclarative {
+		t.Fatalf("audit runtime = %q, want %q", auditEntry.Runtime, providerReleaseRuntimeDeclarative)
+	}
 	uiEntry, ok := diskLock.Providers.WebUI["roadmap"]
 	if !ok {
 		t.Fatal(`disk lock providers.webui["roadmap"] not found`)
@@ -3896,6 +3946,12 @@ func TestReadWriteLockfile_RoundTrip(t *testing.T) {
 	}
 	if got.Workflows["temporal"].Executable != "" {
 		t.Fatal("workflow executable should not round-trip from portable lock schema")
+	}
+	if got.Telemetry["default"].Runtime != providerReleaseRuntimeDeclarative {
+		t.Fatalf("telemetry runtime = %q, want %q", got.Telemetry["default"].Runtime, providerReleaseRuntimeDeclarative)
+	}
+	if got.Audit["default"].Runtime != providerReleaseRuntimeDeclarative {
+		t.Fatalf("audit runtime = %q, want %q", got.Audit["default"].Runtime, providerReleaseRuntimeDeclarative)
 	}
 	if got.UIs["roadmap"].Source != want.UIs["roadmap"].Source || got.UIs["roadmap"].Version != want.UIs["roadmap"].Version {
 		t.Fatal("ui lock entry mismatch")
@@ -3962,7 +4018,7 @@ func TestHashArchiveEntry_HashesFallbackArchive(t *testing.T) {
 		},
 	}
 
-	if err := hashArchiveEntry(context.Background(), providermanifestv1.KindWebUI, "roadmap", &entry, initPaths{}, "linux/amd64", nil); err != nil {
+	if err := NewLifecycle(nil).hashArchiveEntry(context.Background(), providermanifestv1.KindWebUI, "roadmap", &entry, initPaths{}, "linux/amd64", nil); err != nil {
 		t.Fatalf("hashArchiveEntry: %v", err)
 	}
 
