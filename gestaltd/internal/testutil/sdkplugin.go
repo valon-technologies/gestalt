@@ -237,6 +237,103 @@ func (p *Provider) GetSecret(_ context.Context, name string) (string, error) {
 `
 }
 
+func GeneratedWorkflowPackageSource() string {
+	return `package workflow
+
+import (
+	"context"
+
+	gestalt "github.com/valon-technologies/gestalt/sdk/go"
+	proto "github.com/valon-technologies/gestalt/sdk/go/gen/v1"
+	"google.golang.org/protobuf/types/known/emptypb"
+)
+
+type Provider struct {
+	proto.UnimplementedWorkflowProviderServer
+}
+
+func New() *Provider { return &Provider{} }
+
+func (p *Provider) Configure(context.Context, string, map[string]any) error { return nil }
+
+func (p *Provider) Metadata() gestalt.ProviderMetadata {
+	return gestalt.ProviderMetadata{
+		Kind:        gestalt.ProviderKindWorkflow,
+		Name:        "generated-workflow",
+		DisplayName: "Generated Workflow",
+	}
+}
+
+func (p *Provider) StartRun(context.Context, *proto.StartWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
+	return &proto.BoundWorkflowRun{Id: "generated-run", Status: proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING}, nil
+}
+
+func (p *Provider) GetRun(context.Context, *proto.GetWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
+	return &proto.BoundWorkflowRun{Id: "generated-run", Status: proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_PENDING}, nil
+}
+
+func (p *Provider) ListRuns(context.Context, *proto.ListWorkflowProviderRunsRequest) (*proto.ListWorkflowProviderRunsResponse, error) {
+	return &proto.ListWorkflowProviderRunsResponse{}, nil
+}
+
+func (p *Provider) CancelRun(context.Context, *proto.CancelWorkflowProviderRunRequest) (*proto.BoundWorkflowRun, error) {
+	return &proto.BoundWorkflowRun{Id: "generated-run", Status: proto.WorkflowRunStatus_WORKFLOW_RUN_STATUS_CANCELED}, nil
+}
+
+func (p *Provider) UpsertSchedule(context.Context, *proto.UpsertWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
+	return &proto.BoundWorkflowSchedule{Id: "generated-schedule"}, nil
+}
+
+func (p *Provider) GetSchedule(context.Context, *proto.GetWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
+	return &proto.BoundWorkflowSchedule{Id: "generated-schedule"}, nil
+}
+
+func (p *Provider) ListSchedules(context.Context, *proto.ListWorkflowProviderSchedulesRequest) (*proto.ListWorkflowProviderSchedulesResponse, error) {
+	return &proto.ListWorkflowProviderSchedulesResponse{}, nil
+}
+
+func (p *Provider) DeleteSchedule(context.Context, *proto.DeleteWorkflowProviderScheduleRequest) (*emptypb.Empty, error) {
+	return &emptypb.Empty{}, nil
+}
+
+func (p *Provider) PauseSchedule(context.Context, *proto.PauseWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
+	return &proto.BoundWorkflowSchedule{Id: "generated-schedule", Paused: true}, nil
+}
+
+func (p *Provider) ResumeSchedule(context.Context, *proto.ResumeWorkflowProviderScheduleRequest) (*proto.BoundWorkflowSchedule, error) {
+	return &proto.BoundWorkflowSchedule{Id: "generated-schedule"}, nil
+}
+
+func (p *Provider) UpsertEventTrigger(context.Context, *proto.UpsertWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
+	return &proto.BoundWorkflowEventTrigger{Id: "generated-trigger"}, nil
+}
+
+func (p *Provider) GetEventTrigger(context.Context, *proto.GetWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
+	return &proto.BoundWorkflowEventTrigger{Id: "generated-trigger"}, nil
+}
+
+func (p *Provider) ListEventTriggers(context.Context, *proto.ListWorkflowProviderEventTriggersRequest) (*proto.ListWorkflowProviderEventTriggersResponse, error) {
+	return &proto.ListWorkflowProviderEventTriggersResponse{}, nil
+}
+
+func (p *Provider) DeleteEventTrigger(context.Context, *proto.DeleteWorkflowProviderEventTriggerRequest) (*emptypb.Empty, error) {
+	return &emptypb.Empty{}, nil
+}
+
+func (p *Provider) PauseEventTrigger(context.Context, *proto.PauseWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
+	return &proto.BoundWorkflowEventTrigger{Id: "generated-trigger", Paused: true}, nil
+}
+
+func (p *Provider) ResumeEventTrigger(context.Context, *proto.ResumeWorkflowProviderEventTriggerRequest) (*proto.BoundWorkflowEventTrigger, error) {
+	return &proto.BoundWorkflowEventTrigger{Id: "generated-trigger"}, nil
+}
+
+func (p *Provider) PublishEvent(context.Context, *proto.PublishWorkflowProviderEventRequest) (*emptypb.Empty, error) {
+	return &emptypb.Empty{}, nil
+}
+`
+}
+
 func GeneratedCachePackageSource() string {
 	return `package cache
 
