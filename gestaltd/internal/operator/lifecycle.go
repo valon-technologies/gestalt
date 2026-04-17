@@ -1311,7 +1311,7 @@ func (l *Lifecycle) buildArchivesMap(ctx context.Context, src pluginsource.Sourc
 		}
 		archives[pa.Platform] = LockArchive{URL: pa.URL}
 	}
-	if err := validateResolvedArchivePolicy(subject, kind, manifest, currentPlatform, currentURL, available); err != nil {
+	if err := validateResolvedArchivePolicy(subject, archivePolicyKind(kind), manifest, currentPlatform, currentURL, available); err != nil {
 		return nil, err
 	}
 	return archives, nil
@@ -2377,7 +2377,7 @@ func (l *Lifecycle) applyLockedComponentEntry(paths initPaths, entry *LockEntry,
 	if err == nil && !needMaterialize {
 		platform := providerpkg.CurrentPlatformString()
 		if _, resolvedKey, ok := resolveArchiveForPlatform(*entry, platform); ok {
-			if policyErr := validateLockedArchivePolicy(fmt.Sprintf("%s %q", kind, name), kind, install.manifest, *entry, platform, resolvedKey); policyErr != nil {
+			if policyErr := validateLockedArchivePolicy(fmt.Sprintf("%s %q", kind, name), archivePolicyKind(kind), install.manifest, *entry, platform, resolvedKey); policyErr != nil {
 				return policyErr
 			}
 		}
@@ -2560,7 +2560,7 @@ func (l *Lifecycle) materializeLockedComponent(ctx context.Context, paths initPa
 	if installed.Manifest.Version != entry.Version {
 		return fmt.Errorf("locked source provider manifest version mismatch for %s %q: got %q, want %q", kind, name, installed.Manifest.Version, entry.Version)
 	}
-	if err := validateLockedArchivePolicy(fmt.Sprintf("%s %q", kind, name), kind, installed.Manifest, entry, platform, resolvedKey); err != nil {
+	if err := validateLockedArchivePolicy(fmt.Sprintf("%s %q", kind, name), archivePolicyKind(kind), installed.Manifest, entry, platform, resolvedKey); err != nil {
 		return err
 	}
 	if err := commitInstall(); err != nil {

@@ -130,9 +130,8 @@ func fetchProviderReleaseMetadata(ctx context.Context, client *http.Client, meta
 	if err != nil {
 		return nil, fmt.Errorf("create provider release metadata request: %w", err)
 	}
-	token = strings.TrimSpace(token)
-	if token != "" {
-		req.Header.Set(httpAuthorizationHeader, httpBearerAuthorizationPrefix+token)
+	if authHeader := authorizationHeaderForSourceLocation(metadataURL, token); authHeader != "" {
+		req.Header.Set(httpAuthorizationHeader, authHeader)
 	}
 	resp, err := client.Do(req)
 	if err != nil {
@@ -251,4 +250,32 @@ func downloadArchiveForSource(ctx context.Context, client *http.Client, sourceLo
 		req.Header.Set(httpAuthorizationHeader, httpBearerAuthorizationPrefix+token)
 	}
 	return providerpkg.DownloadRequest(client, req)
+}
+
+func authorizationHeaderForSourceLocation(sourceLocation, token string) string {
+	token = strings.TrimSpace(token)
+	if usesGitHubMetadataTransport(sourceLocation) {
+		token = ghresolver.ResolveGitHubToken(token)
+		if token == "" {
+			return ""
+		}
+		return "token " + token
+	}
+	if token == "" {
+		return ""
+	}
+	return httpBearerAuthorizationPrefix + token
+}
+
+func usesGitHubMetadataTransport(sourceLocation string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(sourceLocation))
+	if err != nil {
+		return false
+	}
+	switch strings.ToLower(parsed.Hostname()) {
+	case "github.com", "api.github.com":
+		return true
+	default:
+		return false
+	}
 }

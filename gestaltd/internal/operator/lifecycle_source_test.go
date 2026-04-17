@@ -1358,6 +1358,250 @@ func TestSourcePluginMetadataURLUsesGitHubAssetTransport(t *testing.T) {
 	}
 }
 
+func TestSourcePluginMetadataURLUsesGitHubTokenFallbackForMetadata(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("GITHUB_TOKEN", "env-fallback-token")
+
+	const packageSource = testSource
+	const version = testVersion
+
+	currentArchivePath := buildV2Archive(t, dir, packageSource, version, "metadata-github-fallback-plugin-binary")
+	currentArchiveData, err := os.ReadFile(currentArchivePath)
+	if err != nil {
+		t.Fatalf("read current archive: %v", err)
+	}
+	currentArchiveSHA := sha256.Sum256(currentArchiveData)
+
+	var metadataCount atomic.Int64
+	var archiveCount atomic.Int64
+	handlerErrs := make(chan error, 4)
+	nextHandlerErr := func() error {
+		t.Helper()
+		select {
+		case err := <-handlerErrs:
+			return err
+		default:
+			return nil
+		}
+	}
+
+	metadataPath := "/" + testOwner + "/" + testRepo + "/releases/download/plugin/" + testPlugin + "/" + version + "/provider-release.yaml"
+	metadataURL := "https://github.com" + metadataPath
+	githubArchiveURL := "https://api.github.com/repos/" + testOwner + "/" + testRepo + "/releases/assets/456"
+	githubArchivePath := "/repos/" + testOwner + "/" + testRepo + "/releases/assets/456"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case metadataPath:
+			metadataCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "token env-fallback-token" {
+				handlerErrs <- fmt.Errorf("metadata authorization = %q, want %q", got, "token env-fallback-token")
+				http.Error(w, "bad metadata authorization", http.StatusBadRequest)
+				return
+			}
+			metadata := providerReleaseMetadata{
+				Schema:        providerReleaseSchemaName,
+				SchemaVersion: providerReleaseSchemaVersion,
+				Package:       packageSource,
+				Kind:          providermanifestv1.KindPlugin,
+				Version:       version,
+				Runtime:       providerReleaseRuntimeExecutable,
+				Artifacts: map[string]providerReleaseArtifact{
+					providerpkg.CurrentPlatformString(): {
+						Path:   githubArchiveURL,
+						SHA256: hex.EncodeToString(currentArchiveSHA[:]),
+					},
+				},
+			}
+			data, err := yaml.Marshal(metadata)
+			if err != nil {
+				handlerErrs <- fmt.Errorf("marshal metadata: %v", err)
+				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write(data)
+		case githubArchivePath:
+			archiveCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "token env-fallback-token" {
+				handlerErrs <- fmt.Errorf("archive authorization = %q, want %q", got, "token env-fallback-token")
+				http.Error(w, "bad archive authorization", http.StatusBadRequest)
+				return
+			}
+			if got := r.Header.Get("Accept"); got != "application/octet-stream" {
+				handlerErrs <- fmt.Errorf("archive accept = %q, want %q", got, "application/octet-stream")
+				http.Error(w, "bad archive accept", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(currentArchiveData)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
+		"apiVersion: " + config.APIVersionV3,
+		"plugins:",
+		"  alpha:",
+		"    source: " + metadataURL,
+		"server:",
+		"  providers:",
+		"    indexeddb: sqlite",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle(nil).WithHTTPClient(newGitHubRewriteClient(t, srv.URL))
+	lock, err := lc.InitAtPath(configPath)
+	if err == nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+	}
+	if err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+	if got := metadataCount.Load(); got != 1 {
+		t.Fatalf("metadata request count = %d, want 1", got)
+	}
+	if got := archiveCount.Load(); got != 1 {
+		t.Fatalf("archive request count = %d, want 1", got)
+	}
+	if got := lock.Providers["alpha"].Source; got != metadataURL {
+		t.Fatalf("entry.Source = %q, want %q", got, metadataURL)
+	}
+}
+
+func TestBuildArchivesMap_AllowsGenericDeclarativeTelemetryAndAuditPackages(t *testing.T) {
+	t.Parallel()
+
+	const source = "github.com/acme/providers/declarative"
+	const version = "1.0.0"
+	const archiveURL = "https://example.com/releases/download/provider/declarative.tar.gz"
+
+	src, err := pluginsource.Parse(source)
+	if err != nil {
+		t.Fatalf("Parse source: %v", err)
+	}
+	manifest := &providermanifestv1.Manifest{
+		Kind:    providermanifestv1.KindPlugin,
+		Source:  source,
+		Version: version,
+		Spec: &providermanifestv1.Spec{
+			Surfaces: &providermanifestv1.ProviderSurfaces{
+				REST: &providermanifestv1.RESTSurface{
+					BaseURL: "https://api.example.com",
+					Operations: []providermanifestv1.ProviderOperation{
+						{Name: "ping", Method: "GET", Path: "/ping"},
+					},
+				},
+			},
+		},
+	}
+	resolver := &fakeMultiResolver{
+		results: map[string]fakeResolverResult{
+			src.String(): {
+				platformArchives: []pluginsource.PlatformArchive{
+					{Platform: platformKeyGeneric, URL: archiveURL},
+				},
+			},
+		},
+	}
+	lc := NewLifecycle(resolver)
+
+	for _, kind := range []string{providerLockKindTelemetry, providerLockKindAudit} {
+		kind := kind
+		t.Run(kind, func(t *testing.T) {
+			archives, err := lc.buildArchivesMap(context.Background(), src, version, archiveURL, "", kind, kind+` "default"`, manifest)
+			if err != nil {
+				t.Fatalf("buildArchivesMap: %v", err)
+			}
+			if got := archives[platformKeyGeneric].URL; got != archiveURL {
+				t.Fatalf("generic archive URL = %q, want %q", got, archiveURL)
+			}
+		})
+	}
+}
+
+func TestMaterializeLockedComponent_AllowsGenericDeclarativeTelemetryAndAuditPackages(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	const source = "github.com/acme/providers/declarative"
+	const version = "1.0.0"
+
+	pkgPath := mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
+		Kind:    providermanifestv1.KindPlugin,
+		Source:  source,
+		Version: version,
+		Spec: &providermanifestv1.Spec{
+			Surfaces: &providermanifestv1.ProviderSurfaces{
+				REST: &providermanifestv1.RESTSurface{
+					BaseURL: "https://api.example.com",
+					Operations: []providermanifestv1.ProviderOperation{
+						{Name: "ping", Method: "GET", Path: "/ping"},
+					},
+				},
+			},
+		},
+	}, nil, false)
+	pkgData, err := os.ReadFile(pkgPath)
+	if err != nil {
+		t.Fatalf("read package: %v", err)
+	}
+	pkgSum := sha256.Sum256(pkgData)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		_, _ = w.Write(pkgData)
+	}))
+	defer srv.Close()
+
+	lc := NewLifecycle(nil)
+	entry := LockEntry{
+		Source:  source,
+		Version: version,
+		Archives: map[string]LockArchive{
+			platformKeyGeneric: {
+				URL:    srv.URL,
+				SHA256: hex.EncodeToString(pkgSum[:]),
+			},
+		},
+	}
+	providerEntry := &config.ProviderEntry{
+		Source: config.ProviderSource{
+			Ref:     source,
+			Version: version,
+		},
+	}
+
+	for _, kind := range []string{providerLockKindTelemetry, providerLockKindAudit} {
+		kind := kind
+		t.Run(kind, func(t *testing.T) {
+			destDir := filepath.Join(dir, kind)
+			if err := lc.materializeLockedComponent(context.Background(), initPaths{}, kind, "default", providerEntry, entry, destDir, true); err != nil {
+				t.Fatalf("materializeLockedComponent: %v", err)
+			}
+			install, err := inspectPreparedInstall(destDir)
+			if err != nil {
+				t.Fatalf("inspectPreparedInstall: %v", err)
+			}
+			if install.manifest == nil || !install.manifest.IsDeclarativeOnlyProvider() {
+				t.Fatalf("prepared manifest = %#v, want declarative manifest", install.manifest)
+			}
+		})
+	}
+}
+
 func TestSourcePluginMetadataURLUnlockedLoadRefreshesMutableMetadata(t *testing.T) {
 	t.Parallel()
 
