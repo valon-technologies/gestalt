@@ -23,7 +23,7 @@ Some auth providers also support:
 First-party auth providers live under
 [`valon-technologies/gestalt-providers/auth`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth).
 
-| Provider | Repository | Source ref | Use case |
+| Provider | Repository | Package path | Use case |
 | --- | --- | --- | --- |
 | Google | [`auth/google`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth/google) | `github.com/valon-technologies/gestalt-providers/auth/google` | Google OAuth platform login |
 | OIDC | [`auth/oidc`](https://github.com/valon-technologies/gestalt-providers/tree/main/auth/oidc) | `github.com/valon-technologies/gestalt-providers/auth/oidc` | Generic OpenID Connect providers such as Okta, Auth0, Azure AD, or Keycloak |
@@ -34,9 +34,7 @@ First-party auth providers live under
 providers:
   auth:
     google:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/auth/google
-        version: 0.0.1-alpha.1
+      source: https://artifacts.example.com/auth/google/v0.0.1-alpha.1/provider-release.yaml
       config:
         clientId: ${GOOGLE_CLIENT_ID}
         clientSecret:
@@ -62,8 +60,7 @@ as the same anonymous user.
 providers:
   auth:
     google:
-      source:
-        path: ./google-auth/manifest.yaml
+      source: ./google-auth/manifest.yaml
       config:
         clientId: ${GOOGLE_CLIENT_ID}
         clientSecret:

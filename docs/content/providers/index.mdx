@@ -27,7 +27,7 @@ context it needs.
 
 - Use `source.path` during local development to point at a provider manifest in
   a local source tree.
-- Use `source.ref` and `version` to consume a published provider package.
+- Use `source: https://.../provider-release.yaml` to consume a published provider package.
 - Executable providers run as child processes and connect back to the host over
   gRPC on a temporary Unix socket.
 - Web UI providers are static asset bundles rather than executable processes.
@@ -64,9 +64,7 @@ server:
 providers:
   auth:
     oidc:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/auth/oidc
-        version: 0.0.1-alpha.1
+      source: https://artifacts.example.com/auth/oidc/v0.0.1-alpha.1/provider-release.yaml
       config:
         issuerUrl: https://login.example.com
         clientId: ${OIDC_CLIENT_ID}
@@ -77,24 +75,19 @@ providers:
 
   indexeddb:
     main:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
-        version: 0.0.1-alpha.1
+      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
       config:
         dsn: ${DATABASE_URL}
 
   cache:
     session:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/cache/valkey
-        version: 0.0.1-alpha.1
+      source: https://artifacts.example.com/cache/valkey/v0.0.1-alpha.1/provider-release.yaml
       config:
         address: ${VALKEY_ADDR}
 
   s3:
     assets:
-      source:
-        path: ./providers/s3/minio/manifest.yaml
+      source: ./providers/s3/minio/manifest.yaml
       config:
         endpoint: http://127.0.0.1:9000
         region: us-east-1
@@ -106,15 +99,12 @@ providers:
 
 plugins:
   github:
-    source:
-      ref: github.com/valon-technologies/gestalt-providers/plugins/github
-      version: 0.0.1-alpha.1
+    source: https://artifacts.example.com/plugin/github/v0.0.1-alpha.1/provider-release.yaml
     cache:
       - session
 
   media:
-    source:
-      path: ./plugins/media/manifest.yaml
+    source: ./plugins/media/manifest.yaml
     s3:
       - assets
 ```

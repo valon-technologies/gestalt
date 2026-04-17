@@ -44,20 +44,16 @@ config:
       auth: oidc
       indexeddb: main
   providers:
-    auth:
-      oidc:
-        source:
-          ref: github.com/valon-technologies/gestalt-providers/auth/oidc
-          version: 0.0.1-alpha.1
+      auth:
+        oidc:
+          source: https://artifacts.example.com/auth/oidc/v0.0.1-alpha.1/provider-release.yaml
         config:
           issuerUrl: "${OIDC_ISSUER_URL}"
           clientId: "${OIDC_CLIENT_ID}"
           clientSecret: "${OIDC_CLIENT_SECRET}"
-    indexeddb:
-      main:
-        source:
-          ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
-          version: 0.0.1-alpha.1
+      indexeddb:
+        main:
+          source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
         config:
           dsn: "${DATABASE_URL}"
 
@@ -126,21 +122,17 @@ config:
       auth: oidc
       indexeddb: main
   providers:
-    auth:
-      oidc:
-        source:
-          ref: github.com/valon-technologies/gestalt-providers/auth/oidc
-          version: 0.0.1-alpha.1
+      auth:
+        oidc:
+          source: https://artifacts.example.com/auth/oidc/v0.0.1-alpha.1/provider-release.yaml
         config:
           issuerUrl: "${OIDC_ISSUER_URL}"
           clientId: "${OIDC_CLIENT_ID}"
           clientSecret: "${OIDC_CLIENT_SECRET}"
           redirectUrl: "${OIDC_REDIRECT_URL}"
-    indexeddb:
-      main:
-        source:
-          ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
-          version: 0.0.1-alpha.1
+      indexeddb:
+        main:
+          source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
         config:
           dsn: "${DATABASE_URL}"
 
@@ -184,7 +176,7 @@ Service rather than exposing it on the public ingress.
 
 ## When to enable `pluginInit`
 
-Enable the init container when your config uses `plugins.*.source.ref`, `providers.auth.*.source.ref`, `providers.indexeddb.*.source.ref`, or `providers.ui.*.source.ref` and you want that state prepared before the main container starts. The init container copies the rendered config and runs:
+Enable the init container when your config uses published provider metadata URLs under `plugins.*.source`, `providers.auth.*.source`, `providers.indexeddb.*.source`, or `providers.ui.*.source` and you want that state prepared before the main container starts. The init container copies the rendered config and runs:
 
 `/gestaltd init --config /etc/gestalt/config.yaml`
 

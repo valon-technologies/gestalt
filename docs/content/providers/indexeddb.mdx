@@ -48,22 +48,17 @@ server:
 providers:
   indexeddb:
     main:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
-        version: 0.0.1-alpha.1
+      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
       config:
         dsn: ${SYSTEM_DATABASE_URL}
     workplaceHub:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
-        version: 0.0.1-alpha.1
+      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
       config:
         dsn: ${APP_DATABASE_URL}
 
 plugins:
   workplace_hub:
-    source:
-      path: ./plugin/manifest.yaml
+    source: ./plugin/manifest.yaml
     indexeddb:
       provider: workplaceHub
       db: workplace_hub
@@ -85,7 +80,7 @@ select provider and `db` in YAML and use `new IndexedDB()`.
 First-party storage backends live under
 [`valon-technologies/gestalt-providers/indexeddb`](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb).
 
-| Provider | Repository | Source ref | Notes |
+| Provider | Repository | Package path | Notes |
 | --- | --- | --- | --- |
 | RelationalDB | [`indexeddb/relationaldb`](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb/relationaldb) | `github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb` | Supports PostgreSQL, MySQL, SQLite, and SQL Server through a `dsn` config value |
 | DynamoDB | [`indexeddb/dynamodb`](https://github.com/valon-technologies/gestalt-providers/tree/main/indexeddb/dynamodb) | `github.com/valon-technologies/gestalt-providers/indexeddb/dynamodb` | Uses Amazon DynamoDB with `table`, `region`, and optional `endpoint` config |
@@ -103,13 +98,12 @@ server:
 providers:
   indexeddb:
     main:
-      source:
-        path: ./relationaldb/manifest.yaml
+      source: ./relationaldb/manifest.yaml
       config:
         dsn: sqlite://gestalt.db
 ```
 
-For production, reference a published release:
+For production, reference a published release metadata URL:
 
 ```yaml
 server:
@@ -119,9 +113,7 @@ server:
 providers:
   indexeddb:
     main:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
-        version: 0.0.1-alpha.1
+      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
       config:
         dsn: ${DATABASE_URL}
 ```
@@ -135,9 +127,7 @@ Other first-party IndexedDB providers use their own config blocks:
 providers:
   indexeddb:
     main:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/indexeddb/dynamodb
-        version: 0.0.1-alpha.1
+      source: https://artifacts.example.com/indexeddb/dynamodb/v0.0.1-alpha.1/provider-release.yaml
       config:
         table: gestalt
         region: us-east-1
@@ -148,9 +138,7 @@ providers:
 providers:
   indexeddb:
     main:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/indexeddb/mongodb
-        version: 0.0.1-alpha.1
+      source: https://artifacts.example.com/indexeddb/mongodb/v0.0.1-alpha.1/provider-release.yaml
       config:
         uri: ${MONGODB_URI}
         database: gestalt

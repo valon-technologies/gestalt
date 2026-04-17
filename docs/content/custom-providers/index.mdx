@@ -12,7 +12,7 @@ deployment, start with [Providers](/providers).
 
 - Implementing executable or declarative plugin providers
 - Building custom auth, cache, IndexedDB, S3, secrets, and web UI providers
-- Testing providers from local source with `source.path`
+- Testing providers from local source with `source: ./manifest.yaml`
 - Packaging releases with `gestaltd provider release`
 
 ## Runtime model
@@ -21,7 +21,8 @@ Custom providers use the same packaging and lifecycle model as first-party
 providers:
 
 - A provider package includes a manifest plus executable code or static assets.
-- `gestaltd` resolves the package from `source.path` or `source.ref`.
+- `gestaltd` resolves the package from a local manifest path or a published
+  `provider-release.yaml` metadata URL.
 - Executable providers start as child processes and connect back to the host
   over gRPC on a temporary Unix socket.
 - Web UI providers are static asset bundles served under configured public path

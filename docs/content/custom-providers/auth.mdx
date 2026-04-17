@@ -230,8 +230,7 @@ To use a Google auth provider in a Gestalt deployment, reference it as a named e
 providers:
   auth:
     google:
-      source:
-        path: ./google-auth/manifest.yaml
+      source: ./google-auth/manifest.yaml
       config:
         clientId: ${GOOGLE_CLIENT_ID}
         clientSecret:
@@ -242,7 +241,7 @@ providers:
           - example.com
 ```
 
-`source.path` points at the auth provider's `manifest.yaml` during development. For production, use `source.ref` and `version` to reference a published release. The `config` block is passed to `Configure` at startup and validated against the config schema if one was declared in the manifest.
+`source: ./manifest.yaml` points at the auth provider's `manifest.yaml` during development. For production, use a published `provider-release.yaml` metadata URL. The `config` block is passed to `Configure` at startup and validated against the config schema if one was declared in the manifest.
 
 Structured secret refs like `clientSecret.secret.provider: default` are resolved through the configured secret manager before reaching the provider. Environment variable placeholders like `${GOOGLE_CLIENT_ID}` are expanded during config loading. See [Configuration](/configuration) for details on both.
 

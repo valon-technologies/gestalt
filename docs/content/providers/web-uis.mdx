@@ -17,7 +17,7 @@ starts.
 First-party UI bundles live under
 [`valon-technologies/gestalt-providers/web`](https://github.com/valon-technologies/gestalt-providers/tree/main/web).
 
-| Bundle | Repository | Source ref |
+| Bundle | Repository | Package path |
 | --- | --- | --- |
 | Default Web UI | [`web/default`](https://github.com/valon-technologies/gestalt-providers/tree/main/web/default) | `github.com/valon-technologies/gestalt-providers/web/default` |
 
@@ -34,8 +34,7 @@ Point at a local source bundle during development:
 providers:
   ui:
     roadmap:
-      source:
-        path: ./customer-roadmap-review/ui/manifest.yaml
+      source: ./customer-roadmap-review/ui/manifest.yaml
       path: /create-customer-roadmap-review
       authorizationPolicy: roadmap_review
 ```
@@ -46,13 +45,11 @@ Bind a UI bundle to a plugin-backed app:
 providers:
   ui:
     roadmap:
-      source:
-        path: ./customer-roadmap-review/ui/manifest.yaml
+      source: ./customer-roadmap-review/ui/manifest.yaml
 
 plugins:
   roadmap_review:
-    source:
-      path: ./customer-roadmap-review/plugin/manifest.yaml
+    source: ./customer-roadmap-review/plugin/manifest.yaml
     ui: roadmap
     mountPath: /create-customer-roadmap-review
     authorizationPolicy: roadmap_review
@@ -63,8 +60,7 @@ Or let the plugin manifest own the UI bundle and keep only the deployment bindin
 ```yaml
 plugins:
   roadmap_review:
-    source:
-      path: ./customer-roadmap-review/plugin/manifest.yaml
+    source: ./customer-roadmap-review/plugin/manifest.yaml
     mountPath: /create-customer-roadmap-review
     authorizationPolicy: roadmap_review
 ```
@@ -88,9 +84,7 @@ Reference a published bundle in production:
 providers:
   ui:
     roadmap:
-      source:
-        ref: github.com/your-org/web/customer-roadmap-review
-        version: 0.0.1
+      source: https://artifacts.example.com/webui/customer-roadmap-review/v0.0.1/provider-release.yaml
       path: /create-customer-roadmap-review
       authorizationPolicy: roadmap_review
 ```

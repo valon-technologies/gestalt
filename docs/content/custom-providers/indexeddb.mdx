@@ -391,21 +391,18 @@ server:
 providers:
   indexeddb:
     main:
-      source:
-        path: ./relationaldb/manifest.yaml
+      source: ./relationaldb/manifest.yaml
       config:
         dsn: sqlite://gestalt.db
 ```
 
-For production, use `source.ref` and `version` to reference a published release:
+For production, use a published `provider-release.yaml` metadata URL:
 
 ```yaml
 providers:
   indexeddb:
     main:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
-        version: 0.0.1-alpha.1
+      source: https://artifacts.example.com/indexeddb/relationaldb/v0.0.1-alpha.1/provider-release.yaml
       config:
         dsn: ${DATABASE_URL}
 ```

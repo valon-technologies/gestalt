@@ -4,7 +4,7 @@ import { Tabs } from 'nextra/components'
 
 This page covers packaging and publishing custom providers. If you only need to
 consume an already-published provider package, use [Providers](/providers) and
-reference it with `source.ref` and `version`.
+reference it with a `provider-release.yaml` metadata URL.
 
 Once a provider or UI package works locally, you can publish a release archive
 for distribution. Release archives are self-contained and include a manifest,
@@ -219,8 +219,7 @@ Use `source.path` to point at the source tree directly. Gestalt synthesizes the 
 ```yaml
 plugins:
   my-plugin:
-    source:
-      path: ./plugins/my-plugin/manifest.yaml
+    source: ./plugins/my-plugin/manifest.yaml
 ```
 
 UI bundles work the same way:
@@ -229,21 +228,18 @@ UI bundles work the same way:
 providers:
   ui:
     dashboard:
-      source:
-        path: ./gestalt-ui/manifest.yaml
+      source: ./gestalt-ui/manifest.yaml
       path: /dashboard
 ```
 
 ### For production
 
-Reference a published release by source and version:
+Reference a published release by metadata URL:
 
 ```yaml
 plugins:
   my-plugin:
-    source:
-      ref: github.com/your-org/your-plugins/my-plugin
-      version: 0.0.1-alpha.1
+    source: https://artifacts.example.com/plugin/my-plugin/v0.0.1-alpha.1/provider-release.yaml
 ```
 
 UI bundles use the same pattern under `providers.ui.<name>`:
@@ -252,9 +248,7 @@ UI bundles use the same pattern under `providers.ui.<name>`:
 providers:
   ui:
     dashboard:
-      source:
-        ref: github.com/acme/plugins/web/default
-        version: 1.2.0
+      source: https://artifacts.example.com/webui/default/v1.2.0/provider-release.yaml
       path: /dashboard
       config:
         brand_name: Acme
