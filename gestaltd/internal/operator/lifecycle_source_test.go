@@ -1168,6 +1168,173 @@ func TestSourcePluginMetadataURLUnlockedLoadRefreshesMutableMetadata(t *testing.
 	}
 }
 
+func TestSourcePluginMetadataURLUnlockedLoadAllowsLocalPlugins(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	const (
+		packageSource = testSource
+		version       = "1.0.0"
+	)
+
+	localManifestPath := filepath.Join(dir, "local-manifest.yaml")
+	localManifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
+		Source:      "github.com/testowner/plugins/local-provider",
+		Version:     "0.0.1-alpha.1",
+		DisplayName: "Local Provider",
+		Description: "Local executable provider",
+		Kind:        providermanifestv1.KindPlugin,
+		Spec: &providermanifestv1.Spec{
+			Auth: &providermanifestv1.ProviderAuth{Type: providermanifestv1.AuthTypeNone},
+		},
+	}, providerpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeManifest: %v", err)
+	}
+	if err := os.WriteFile(localManifestPath, localManifest, 0o644); err != nil {
+		t.Fatalf("write local manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "catalog.yaml"), []byte("name: provider\noperations:\n  - id: ping\n    method: GET\n"), 0o644); err != nil {
+		t.Fatalf("write local catalog: %v", err)
+	}
+
+	archivePath := buildV2Archive(t, dir, packageSource, version, "metadata-local-plugin")
+	archiveData, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("read archive: %v", err)
+	}
+	archiveSHA := sha256.Sum256(archiveData)
+
+	var metadataCount atomic.Int64
+	var archiveCount atomic.Int64
+	handlerErrs := make(chan error, 4)
+	nextHandlerErr := func() error {
+		t.Helper()
+		select {
+		case err := <-handlerErrs:
+			return err
+		default:
+			return nil
+		}
+	}
+
+	metadataPath := "/providers/alpha/provider-release.yaml"
+	archivePathURL := "/providers/alpha/alpha-current.tar.gz"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case metadataPath:
+			metadataCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+				handlerErrs <- fmt.Errorf("metadata authorization = %q, want %q", got, "Bearer test-token")
+				http.Error(w, "bad metadata authorization", http.StatusBadRequest)
+				return
+			}
+			metadata := providerReleaseMetadata{
+				Schema:        providerReleaseSchemaName,
+				SchemaVersion: providerReleaseSchemaVersion,
+				Package:       packageSource,
+				Kind:          providermanifestv1.KindPlugin,
+				Version:       version,
+				Runtime:       providerReleaseRuntimeExecutable,
+				Artifacts: map[string]providerReleaseArtifact{
+					providerpkg.CurrentPlatformString(): {
+						Path:   filepath.Base(archivePathURL),
+						SHA256: hex.EncodeToString(archiveSHA[:]),
+					},
+				},
+			}
+			data, err := yaml.Marshal(metadata)
+			if err != nil {
+				handlerErrs <- fmt.Errorf("marshal metadata: %v", err)
+				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write(data)
+		case archivePathURL:
+			archiveCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+				handlerErrs <- fmt.Errorf("archive authorization = %q, want %q", got, "Bearer test-token")
+				http.Error(w, "bad archive authorization", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(archiveData)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
+		"apiVersion: " + config.APIVersionV3,
+		"plugins:",
+		"  alpha:",
+		"    source: " + srv.URL + metadataPath,
+		"    auth:",
+		"      token: test-token",
+		"  local:",
+		"    source: ./local-manifest.yaml",
+		"server:",
+		"  providers:",
+		"    indexeddb: sqlite",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle(nil)
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, false)
+	if err == nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+	}
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=false): %v", err)
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+	if got := metadataCount.Load(); got != 1 {
+		t.Fatalf("metadata request count = %d, want 1", got)
+	}
+	if got := archiveCount.Load(); got != 1 {
+		t.Fatalf("archive request count = %d, want 1", got)
+	}
+
+	if cfg.Plugins["alpha"] == nil || cfg.Plugins["alpha"].ResolvedManifest == nil {
+		t.Fatal("resolved metadata plugin manifest missing after unlocked load")
+	}
+	if got := cfg.Plugins["alpha"].ResolvedManifest.Version; got != version {
+		t.Fatalf("resolved remote plugin version = %q, want %q", got, version)
+	}
+	if cfg.Plugins["local"] == nil || cfg.Plugins["local"].ResolvedManifest == nil {
+		t.Fatal("resolved local plugin manifest missing after unlocked load")
+	}
+	if got := cfg.Plugins["local"].ResolvedManifestPath; got != localManifestPath {
+		t.Fatalf("resolved local manifest path = %q, want %q", got, localManifestPath)
+	}
+
+	lock, err := ReadLockfile(filepath.Join(dir, InitLockfileName))
+	if err != nil {
+		t.Fatalf("ReadLockfile: %v", err)
+	}
+	if len(lock.Providers) != 1 {
+		t.Fatalf("lock provider count = %d, want 1", len(lock.Providers))
+	}
+	if _, ok := lock.Providers["alpha"]; !ok {
+		t.Fatal(`lock.Providers["alpha"] not found`)
+	}
+	if _, ok := lock.Providers["local"]; ok {
+		t.Fatal(`lock.Providers["local"] unexpectedly found`)
+	}
+}
+
 func TestSourcePluginLoadForExecution_RehydratesWhenCachedManifestVersionMismatchesLock(t *testing.T) {
 	t.Parallel()
 
