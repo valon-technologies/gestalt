@@ -612,8 +612,23 @@ func (s *Server) executeOperation(w http.ResponseWriter, r *http.Request) {
 	boundSessionConnections, sessionInstance := s.boundSessionCatalogConnections(providerName, p, connection, instance)
 	opMeta, _, resolvedConnection, err := invocation.ResolveOperation(ctx, prov, providerName, resolver, p, operationName, boundSessionConnections, sessionInstance)
 	if err != nil {
-		s.writeInvocationError(w, r, providerName, operationName, err)
-		return
+		staticOp, ok := staticHTTPFallbackOperation(prov, operationName, err)
+		if !ok {
+			s.writeInvocationError(w, r, providerName, operationName, err)
+			return
+		}
+		slog.WarnContext(
+			ctx,
+			"http operation resolution falling back to static catalog",
+			"provider",
+			providerName,
+			"operation",
+			operationName,
+			"error",
+			err,
+		)
+		opMeta = staticOp
+		resolvedConnection = ""
 	}
 	if s.authorizer != nil && !s.authorizer.AllowCatalogOperation(p, providerName, opMeta) {
 		s.auditHTTPAuthorizationEvent(ctx, p, providerName, operationName, false, errOperationAccess, auditAuthorization{
@@ -759,6 +774,20 @@ func httpVisibleCatalogOperations(ops []catalog.CatalogOperation) []catalog.Cata
 		filtered = append(filtered, op)
 	}
 	return filtered
+}
+
+func staticHTTPFallbackOperation(prov core.Provider, operation string, err error) (catalog.CatalogOperation, bool) {
+	if err == nil || !errors.Is(err, core.ErrSessionCatalogUnavailable) {
+		return catalog.CatalogOperation{}, false
+	}
+	staticOp, ok := invocation.CatalogOperation(prov.Catalog(), operation)
+	if !ok {
+		return catalog.CatalogOperation{}, false
+	}
+	if invocation.OperationTransport(staticOp) == catalog.TransportMCPPassthrough {
+		return catalog.CatalogOperation{}, false
+	}
+	return staticOp, true
 }
 
 func safeOperationErrorMessage(err error) (string, bool) {

@@ -8449,6 +8449,75 @@ func TestExecuteOperation_PinsSessionCatalogConnectionIntoExecution(t *testing.T
 	}
 }
 
+func TestExecuteOperation_FallsBackToStaticRESTWhenSessionCatalogUnavailable(t *testing.T) {
+	t.Parallel()
+
+	var gotToken string
+	sessionStub := &stubIntegrationWithSessionCatalog{
+		stubIntegrationWithOps: stubIntegrationWithOps{
+			StubIntegration: coretesting.StubIntegration{
+				N:        "notion",
+				ConnMode: core.ConnectionModeUser,
+				ExecuteFn: func(_ context.Context, op string, _ map[string]any, token string) (*core.OperationResult, error) {
+					gotToken = token
+					return &core.OperationResult{Status: http.StatusOK, Body: fmt.Sprintf(`{"operation":%q,"token":%q}`, op, token)}, nil
+				},
+			},
+		},
+		catalog: &catalog.Catalog{
+			Name: "notion",
+			Operations: []catalog.CatalogOperation{
+				{ID: "api_get_self", Description: "Retrieve self", Method: http.MethodGet, Transport: catalog.TransportREST},
+			},
+		},
+		catalogForRequestFn: func(_ context.Context, token string) (*catalog.Catalog, error) {
+			if token != "oauth-token" {
+				return nil, fmt.Errorf("unexpected token %q", token)
+			}
+			return nil, fmt.Errorf("mcpupstream notion: initialize: transport error: unauthorized (401)")
+		},
+	}
+
+	providers := testutil.NewProviderRegistry(t, sessionStub)
+	svc := coretesting.NewStubServices(t)
+	u := seedUser(t, svc, "anonymous@gestalt")
+	seedToken(t, svc, &core.IntegrationToken{
+		ID: "tok-oauth", UserID: u.ID, Integration: "notion",
+		Connection: "OAuth", Instance: "default", AccessToken: "oauth-token",
+	})
+
+	broker := invocation.NewBroker(
+		providers,
+		svc.Users,
+		svc.Tokens,
+		invocation.WithConnectionMapper(invocation.ConnectionMap(map[string]string{"notion": "OAuth"})),
+		invocation.WithMCPConnectionMapper(invocation.ConnectionMap(map[string]string{"notion": "MCP"})),
+	)
+
+	ts := newTestServer(t, func(cfg *server.Config) {
+		cfg.Providers = providers
+		cfg.Services = svc
+		cfg.Invoker = broker
+		cfg.CatalogConnection = map[string]string{"notion": "OAuth"}
+	})
+	testutil.CloseOnCleanup(t, ts)
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/v1/notion/api_get_self", nil)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("request: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("expected 200, got %d: %s", resp.StatusCode, body)
+	}
+	if gotToken != "oauth-token" {
+		t.Fatalf("execute token = %q, want %q", gotToken, "oauth-token")
+	}
+}
+
 func TestExecuteOperation_UsesConfiguredCatalogConnectionWhenInvokerIsWrapped(t *testing.T) {
 	t.Parallel()
 
