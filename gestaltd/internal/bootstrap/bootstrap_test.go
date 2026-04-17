@@ -366,7 +366,7 @@ func withIndexedDBHostClient(t *testing.T, hostService providerhost.HostService,
 	if err != nil {
 		t.Fatalf("grpc.NewClient: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	fn(proto.NewIndexedDBClient(conn))
 }
