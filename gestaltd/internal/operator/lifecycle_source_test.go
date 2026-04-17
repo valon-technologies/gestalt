@@ -306,8 +306,7 @@ func newGitHubRewriteClient(t *testing.T, target string) *http.Client {
 			base:   http.DefaultTransport,
 			target: targetURL,
 			hosts: map[string]struct{}{
-				"github.com":     {},
-				"api.github.com": {},
+				"github.com": {},
 			},
 		},
 	}
@@ -991,7 +990,7 @@ func TestSourcePluginInitRejectsMetadataSourceManifestMismatch(t *testing.T) {
 	}
 }
 
-func TestSourcePluginMetadataURLUsesGitHubAssetTransport(t *testing.T) {
+func TestSourcePluginMetadataURLUsesGitHubReleaseDownloadTransport(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -1020,8 +1019,8 @@ func TestSourcePluginMetadataURLUsesGitHubAssetTransport(t *testing.T) {
 	}
 
 	metadataPath := "/providers/alpha/provider-release.yaml"
-	githubArchiveURL := "https://api.github.com/repos/" + testOwner + "/" + testRepo + "/releases/assets/123"
-	githubArchivePath := "/repos/" + testOwner + "/" + testRepo + "/releases/assets/123"
+	githubArchivePath := "/" + testOwner + "/" + testRepo + "/releases/download/plugin/" + testPlugin + "/" + version + "/alpha-current.tar.gz"
+	githubArchiveURL := "https://github.com" + githubArchivePath
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case metadataPath:
@@ -1324,7 +1323,7 @@ func TestSourcePluginMetadataURLUnlockedLoadRefreshesMutableMetadata(t *testing.
 	}
 }
 
-func TestSourcePluginMetadataURLUsesGitHubTokenFallbackForMetadata(t *testing.T) {
+func TestSourcePluginMetadataURLUsesGitHubTokenFallbackForMetadataAndReleaseDownloads(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("GITHUB_TOKEN", "env-fallback-token")
 
@@ -1353,8 +1352,8 @@ func TestSourcePluginMetadataURLUsesGitHubTokenFallbackForMetadata(t *testing.T)
 
 	metadataPath := "/" + testOwner + "/" + testRepo + "/releases/download/plugin/" + testPlugin + "/" + version + "/provider-release.yaml"
 	metadataURL := "https://github.com" + metadataPath
-	githubArchiveURL := "https://api.github.com/repos/" + testOwner + "/" + testRepo + "/releases/assets/456"
-	githubArchivePath := "/repos/" + testOwner + "/" + testRepo + "/releases/assets/456"
+	githubArchivePath := "/" + testOwner + "/" + testRepo + "/releases/download/plugin/" + testPlugin + "/" + version + "/alpha-current.tar.gz"
+	githubArchiveURL := "https://github.com" + githubArchivePath
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case metadataPath:
