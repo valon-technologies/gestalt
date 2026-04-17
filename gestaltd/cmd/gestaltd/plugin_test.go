@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"os/exec"
@@ -16,8 +18,8 @@ import (
 
 	"github.com/valon-technologies/gestalt/server/core"
 	"github.com/valon-technologies/gestalt/server/core/session"
+	"github.com/valon-technologies/gestalt/server/internal/config"
 	"github.com/valon-technologies/gestalt/server/internal/operator"
-	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	"github.com/valon-technologies/gestalt/server/internal/providerhost"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	"github.com/valon-technologies/gestalt/server/internal/testutil"
@@ -1193,13 +1195,12 @@ func TestRun_PluginReleaseStagesOwnedWebUIPackage(t *testing.T) {
 				t.Fatalf("release metadata artifact sha256 = %q, want %q", got, digest)
 			}
 
+			releaseServer := httptest.NewServer(http.FileServer(http.Dir(outputDir)))
+			defer releaseServer.Close()
+
 			configDir := t.TempDir()
-			configPath := writeManagedPluginConfigForTest(t, configDir, "roadmap", releaseTestSource, testVersion, "/create-customer-roadmap-review")
-			lc := operator.NewLifecycle(archiveSourceResolver{
-				paths: map[string]string{
-					releaseTestSource: filepath.Join(outputDir, archiveName),
-				},
-			})
+			configPath := writeManagedPluginConfigForTest(t, configDir, "roadmap", releaseServer.URL+"/provider-release.yaml", "/create-customer-roadmap-review")
+			lc := operator.NewLifecycle(nil).WithHTTPClient(releaseServer.Client())
 			if _, err := lc.InitAtPath(configPath); err != nil {
 				t.Fatalf("InitAtPath: %v", err)
 			}
@@ -2283,33 +2284,12 @@ func providerpkgPythonEnvVar(goos, goarch string) string {
 	return "GESTALT_PYTHON_" + strings.ToUpper(replacer.Replace(goos)) + "_" + strings.ToUpper(replacer.Replace(goarch))
 }
 
-type archiveSourceResolver struct {
-	paths map[string]string
-}
-
-func (r archiveSourceResolver) Resolve(_ context.Context, src pluginsource.Source, _ string) (*pluginsource.ResolvedPackage, error) {
-	path, ok := r.paths[src.String()]
-	if !ok {
-		return nil, fmt.Errorf("unexpected source %q", src.String())
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, fmt.Errorf("read archive %s: %w", path, err)
-	}
-	sum := sha256.Sum256(data)
-	return &pluginsource.ResolvedPackage{
-		LocalPath:     path,
-		Cleanup:       func() {},
-		ArchiveSHA256: hex.EncodeToString(sum[:]),
-		ResolvedURL:   "file://" + filepath.ToSlash(path),
-	}, nil
-}
-
-func writeManagedPluginConfigForTest(t *testing.T, dir, pluginKey, source, version, mountPath string) string {
+func writeManagedPluginConfigForTest(t *testing.T, dir, pluginKey, metadataURL, mountPath string) string {
 	t.Helper()
 
 	indexedDBManifest := writeStubIndexedDBManifestForTest(t, dir)
-	configData := fmt.Sprintf(`providers:
+	configData := fmt.Sprintf(`apiVersion: %s
+providers:
   indexeddb:
     sqlite:
       source:
@@ -2318,16 +2298,14 @@ func writeManagedPluginConfigForTest(t *testing.T, dir, pluginKey, source, versi
         path: %q
 plugins:
   %s:
-    source:
-      ref: %q
-      version: %q
+    source: %q
     mountPath: %q
 server:
   providers:
     indexeddb: sqlite
   artifactsDir: %q
   encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-`, indexedDBManifest, filepath.Join(dir, "gestalt.db"), pluginKey, source, version, mountPath, filepath.Join(dir, "prepared-artifacts"))
+`, config.APIVersionV3, indexedDBManifest, filepath.Join(dir, "gestalt.db"), pluginKey, metadataURL, mountPath, filepath.Join(dir, "prepared-artifacts"))
 	configPath := filepath.Join(dir, "config.yaml")
 	if err := os.WriteFile(configPath, []byte(configData), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)

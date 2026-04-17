@@ -89,10 +89,13 @@ type ServerProvidersConfig struct {
 	IndexedDB     string `yaml:"indexeddb,omitempty"`
 }
 
-// ProviderSource supports three modes via custom UnmarshalYAML:
-//   - Builtin: source: "name"         -> ProviderSource{Builtin: "name"}
-//   - Managed: source: {ref, version} -> ProviderSource{Ref: "...", Version: "..."}
-//   - Local:   source: {path}         -> ProviderSource{Path: "..."}
+// ProviderSource supports handwritten config in three forms via custom UnmarshalYAML:
+//   - Builtin:  source: "name"                             -> ProviderSource{Builtin: "name"}
+//   - Metadata: source: "https://.../provider-release.yaml" -> ProviderSource{metadataURL: "..."}
+//   - Local:    source: {path} or source: "./manifest.yaml" -> ProviderSource{Path: "..."}
+//
+// Ref/version fields remain for internal runtime-managed flows and older lock/runtime
+// representations, but apiVersion v3 config validation rejects handwritten source.ref/version.
 type ProviderSource struct {
 	Builtin     string         `yaml:"-"`
 	scalar      string         `yaml:"-"`

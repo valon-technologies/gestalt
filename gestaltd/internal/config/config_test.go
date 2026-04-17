@@ -53,6 +53,7 @@ func TestLoadConfigGenericFixture(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
+apiVersion: gestaltd.config/v3
 server:
   providers:
     auth: google
@@ -67,9 +68,7 @@ server:
 providers:
   auth:
     google:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/auth/google
-        version: 1.0.0
+      source: https://github.com/valon-technologies/gestalt-providers/releases/download/auth/google/v1.0.0/provider-release.yaml
       config:
         clientId: client-1
         clientSecret: secret-1
@@ -126,6 +125,7 @@ func TestLoadConfigSelectsDefaultProvidersFromNamedMaps(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
+apiVersion: gestaltd.config/v3
 server:
   encryptionKey: server-key
   providers:
@@ -133,14 +133,10 @@ server:
 providers:
   auth:
     primary:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/auth/google
-        version: 1.0.0
+      source: https://github.com/valon-technologies/gestalt-providers/releases/download/auth/google/v1.0.0/provider-release.yaml
     backup:
       default: true
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/auth/github
-        version: 1.0.0
+      source: https://github.com/valon-technologies/gestalt-providers/releases/download/auth/github/v1.0.0/provider-release.yaml
   indexeddb:
     main:
       source:
@@ -229,6 +225,7 @@ func TestLoadConfigDefaultsAndEnv(t *testing.T) {
 	}
 
 	path := mustWriteConfigFile(t, `
+apiVersion: gestaltd.config/v3
 server:
   providers:
     auth: local
@@ -237,9 +234,7 @@ server:
 providers:
   auth:
     local:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/auth/google
-        version: 1.0.0
+      source: https://github.com/valon-technologies/gestalt-providers/releases/download/auth/google/v1.0.0/provider-release.yaml
       config:
         clientId: ${TEST_CLIENT_ID}
   indexeddb:
@@ -2821,12 +2816,11 @@ providers:
 		{
 			name: "external provider source",
 			yaml: `
+apiVersion: gestaltd.config/v3
 providers:
   auth:
     primary:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/auth/google
-        version: 1.0.0
+      source: https://github.com/valon-technologies/gestalt-providers/releases/download/auth/google/v1.0.0/provider-release.yaml
 `,
 		},
 		{
@@ -3016,14 +3010,13 @@ func TestValidConfigurations(t *testing.T) {
 		yaml string
 	}{
 		{
-			name: "managed source plugin only",
+			name: "metadata source plugin only",
 			yaml: `
+apiVersion: gestaltd.config/v3
 providers:
 plugins:
     custom_tool:
-      source:
-        ref: github.com/acme-corp/tools/widget
-        version: 1.2.3
+      source: https://example.com/providers/custom_tool/provider-release.yaml
 `,
 		},
 		{
@@ -3069,7 +3062,7 @@ plugins:
 `,
 		},
 		{
-			name: "plugin source path and ref are mutually exclusive",
+			name: "plugin source ref/version is rejected even when path is present",
 			yaml: `
 providers:
 plugins:
@@ -3079,7 +3072,7 @@ plugins:
         ref: github.com/acme-corp/tools/widget
         version: 1.2.3
 `,
-			wantErr: "mutually exclusive",
+			wantErr: "source.ref/source.version are no longer supported",
 		},
 		{
 			name: "plugin env with local source is valid",
@@ -3113,7 +3106,7 @@ plugins:
     external:
       {}
 `,
-			wantErr: "source.path or source.ref is required",
+			wantErr: "source.path or metadata URL is required",
 		},
 		{
 			name: "plugin source path with version is rejected",
@@ -3125,10 +3118,10 @@ plugins:
         path: ./plugins/dummy/manifest.yaml
         version: 1.0.0
 `,
-			wantErr: "source.version is only valid with source.ref",
+			wantErr: "source.version is no longer supported",
 		},
 		{
-			name: "plugin source with version is valid",
+			name: "plugin source ref/version is rejected",
 			yaml: `
 providers:
 plugins:
@@ -3137,6 +3130,7 @@ plugins:
         ref: github.com/acme-corp/tools/widget
         version: 1.2.3
 `,
+			wantErr: "source.ref/source.version are no longer supported",
 		},
 		{
 			name: "apiVersion metadata url with sibling auth is valid",
@@ -3162,23 +3156,6 @@ plugins:
         token: test-token
 `,
 			wantErr: "auth is only valid with metadata URL sources",
-		},
-		{
-			name: "managed ref rejects sibling auth",
-			yaml: `
-apiVersion: gestaltd.config/v3
-providers:
-plugins:
-    external:
-      source:
-        ref: github.com/acme-corp/tools/widget
-        version: 1.2.3
-        auth:
-          token: nested-token
-      auth:
-        token: sibling-token
-`,
-			wantErr: "auth and source.auth are mutually exclusive",
 		},
 		{
 			name: "apiVersion rejects non metadata http source",
@@ -3254,14 +3231,13 @@ providers:
 plugins:
     external:
       source:
-        ref: github.com/acme-corp/tools/widget
-        version: 1.2.3
+        path: ./plugins/dummy/manifest.yaml
       base_url: https://api.example.com
 `,
 			wantErr: "field base_url not found",
 		},
 		{
-			name: "plugin source without version is rejected",
+			name: "plugin source ref without version is rejected",
 			yaml: `
 providers:
 plugins:
@@ -3269,7 +3245,7 @@ plugins:
       source:
         ref: github.com/acme-corp/tools/widget
 `,
-			wantErr: "source.version is required when source.ref is set",
+			wantErr: "source.ref/source.version are no longer supported",
 		},
 		{
 			name: "non-default connection params are accepted",
@@ -3354,18 +3330,18 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 			},
 		},
 		{
-			name: "source valid",
+			name: "metadata source valid",
 			cfg: &Config{
 				Plugins: map[string]*ProviderEntry{
-					"sample": {Source: ProviderSource{Ref: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}},
+					"sample": {Source: ProviderSource{metadataURL: "https://example.com/providers/sample/provider-release.yaml"}},
 				},
 			},
 		},
 		{
-			name: "source path and ref rejected",
+			name: "source path and metadata url rejected",
 			cfg: &Config{
 				Plugins: map[string]*ProviderEntry{
-					"sample": {Source: ProviderSource{Path: "./manifest.yaml", Ref: "github.com/test-org/test-repo/test-plugin", Version: "1.0.0"}},
+					"sample": {Source: ProviderSource{Path: "./manifest.yaml", metadataURL: "https://example.com/providers/sample/provider-release.yaml"}},
 				},
 			},
 			wantErr: "mutually exclusive",
@@ -3377,16 +3353,16 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 					"sample": {},
 				},
 			},
-			wantErr: "source.path or source.ref is required",
+			wantErr: "source.path or metadata URL is required",
 		},
 		{
-			name: "source without version rejected",
+			name: "legacy source ref rejected",
 			cfg: &Config{
 				Plugins: map[string]*ProviderEntry{
 					"sample": {Source: ProviderSource{Ref: "github.com/test-org/test-repo/test-plugin"}},
 				},
 			},
-			wantErr: "source.version is required when source.ref is set",
+			wantErr: "source.ref/source.version are no longer supported",
 		},
 		{
 			name: "source version without ref rejected",
@@ -3395,13 +3371,13 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 					"sample": {Source: ProviderSource{Version: "1.0.0"}},
 				},
 			},
-			wantErr: "source.path or source.ref is required",
+			wantErr: "source.version is no longer supported",
 		},
 		{
 			name: "auth provider valid",
 			cfg: &Config{
 				Providers: ProvidersConfig{
-					Auth: singletonProviderEntry(&ProviderEntry{Source: ProviderSource{Ref: "github.com/test-org/test-repo/test-auth", Version: "1.0.0"}}),
+					Auth: singletonProviderEntry(&ProviderEntry{Source: ProviderSource{metadataURL: "https://example.com/providers/test-auth/provider-release.yaml"}}),
 				},
 			},
 		},
@@ -3416,7 +3392,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 					Auth: singletonProviderEntry(&ProviderEntry{}),
 				},
 			},
-			wantErr: `source.path or source.ref is required`,
+			wantErr: `source.path or metadata URL is required`,
 		},
 		{
 			name: "auth config requires source",
@@ -3425,10 +3401,10 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 					Auth: singletonProviderEntry(&ProviderEntry{Config: yaml.Node{Kind: yaml.MappingNode}}),
 				},
 			},
-			wantErr: `source.path or source.ref is required`,
+			wantErr: `source.path or metadata URL is required`,
 		},
 		{
-			name: "s3 entry validates source",
+			name: "s3 entry rejects legacy source ref",
 			cfg: &Config{
 				Providers: ProvidersConfig{
 					S3: map[string]*ProviderEntry{
@@ -3440,7 +3416,7 @@ func TestValidateStructure_PluginValidationDirect(t *testing.T) {
 					},
 				},
 			},
-			wantErr: `source.ref`,
+			wantErr: `source.ref/source.version are no longer supported`,
 		},
 		{
 			name: "plugin auth rejects mcp oauth early",
@@ -3595,12 +3571,11 @@ func TestAuthConfigMap(t *testing.T) {
 	t.Parallel()
 
 	path := mustWriteConfigFile(t, `
+apiVersion: gestaltd.config/v3
 providers:
   auth:
     auth:
-      source:
-        ref: github.com/valon-technologies/gestalt-providers/auth/google
-        version: 1.0.0
+      source: https://github.com/valon-technologies/gestalt-providers/releases/download/auth/google/v1.0.0/provider-release.yaml
       config:
         clientId: client-1
         clientSecret: secret-1
