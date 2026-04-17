@@ -2,6 +2,7 @@ package coredata
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -16,13 +17,17 @@ type TokenService struct {
 	store               indexeddb.ObjectStore
 	enc                 *corecrypto.AESGCMEncryptor
 	externalCredentials *ExternalCredentialService
+	users               *UserService
 }
 
-func NewTokenService(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor, externalCredentials *ExternalCredentialService) *TokenService {
+var errUnreadableStoredIntegrationToken = errors.New("unreadable stored integration token")
+
+func NewTokenService(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor, externalCredentials *ExternalCredentialService, users *UserService) *TokenService {
 	return &TokenService{
 		store:               ds.ObjectStore(StoreIntegrationTokens),
 		enc:                 enc,
 		externalCredentials: externalCredentials,
+		users:               users,
 	}
 }
 
@@ -138,8 +143,13 @@ func (s *TokenService) DeleteToken(ctx context.Context, id string) error {
 			if err := s.syncExternalCredentialRecord(ctx, remaining[0]); err != nil {
 				return err
 			}
-		} else if err := s.externalCredentials.DeleteCredential(ctx, recString(rec, "user_id"), recString(rec, "integration"), recString(rec, "connection"), recString(rec, "instance")); err != nil && err != core.ErrNotFound {
-			return fmt.Errorf("delete canonical external credential: %w", err)
+		} else {
+			identityID, resolveErr := s.resolveIdentityID(ctx, recString(rec, "user_id"))
+			if resolveErr == nil {
+				if err := s.externalCredentials.DeleteCredential(ctx, identityID, recString(rec, "integration"), recString(rec, "connection"), recString(rec, "instance")); err != nil && err != core.ErrNotFound {
+					return fmt.Errorf("delete canonical external credential: %w", err)
+				}
+			}
 		}
 	}
 	return nil
@@ -151,7 +161,7 @@ func (s *TokenService) recordToToken(rec indexeddb.Record) (*core.IntegrationTok
 		recString(rec, "refresh_token_encrypted"),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("decrypt token pair: %w", err)
+		return nil, fmt.Errorf("%w: decrypt token pair: %v", errUnreadableStoredIntegrationToken, err)
 	}
 	return &core.IntegrationToken{
 		ID:                recString(rec, "id"),
@@ -223,6 +233,9 @@ func (s *TokenService) BackfillCanonicalCredentials(ctx context.Context) error {
 	}
 	for _, rec := range dedupeTokenRecords(recs) {
 		if err := s.syncExternalCredentialRecord(ctx, rec); err != nil {
+			if errors.Is(err, errUnreadableStoredIntegrationToken) {
+				continue
+			}
 			return err
 		}
 	}
@@ -276,9 +289,23 @@ func tokenRecordLess(a, b indexeddb.Record) bool {
 	return recString(a, "id") < recString(b, "id")
 }
 
+func (s *TokenService) resolveIdentityID(ctx context.Context, userID string) (string, error) {
+	if s.users == nil {
+		return userID, nil
+	}
+	return s.users.CanonicalIdentityIDForUser(ctx, userID)
+}
+
 func (s *TokenService) syncExternalCredential(ctx context.Context, token *core.IntegrationToken, accessTokenEncrypted, refreshTokenEncrypted string) error {
 	if s.externalCredentials == nil || token == nil || token.UserID == "" || token.Integration == "" || token.Connection == "" {
 		return nil
+	}
+	identityID, resolveErr := s.resolveIdentityID(ctx, token.UserID)
+	if resolveErr != nil {
+		if errors.Is(resolveErr, core.ErrNotFound) {
+			return nil
+		}
+		return resolveErr
 	}
 	payloadEncrypted, err := encodeLegacyCredentialPayload(accessTokenEncrypted, refreshTokenEncrypted)
 	if err != nil {
@@ -286,7 +313,7 @@ func (s *TokenService) syncExternalCredential(ctx context.Context, token *core.I
 	}
 	if _, err := s.externalCredentials.UpsertCredential(ctx, &core.ExternalCredential{
 		ID:                token.ID,
-		PrincipalID:       token.UserID,
+		IdentityID:        identityID,
 		Plugin:            token.Integration,
 		Connection:        token.Connection,
 		Instance:          token.Instance,
@@ -300,7 +327,7 @@ func (s *TokenService) syncExternalCredential(ctx context.Context, token *core.I
 		CreatedAt:         token.CreatedAt,
 		UpdatedAt:         token.UpdatedAt,
 	}); err != nil {
-		return fmt.Errorf("sync canonical external credential %q/%q/%q/%q: %w", token.UserID, token.Integration, token.Connection, token.Instance, err)
+		return fmt.Errorf("sync canonical external credential %q/%q/%q/%q: %w", identityID, token.Integration, token.Connection, token.Instance, err)
 	}
 	return nil
 }
@@ -322,10 +349,16 @@ func (s *TokenService) syncExternalCredentialRecord(ctx context.Context, rec ind
 	if s.externalCredentials == nil {
 		return nil
 	}
-	principalID := recString(rec, "user_id")
+	identityID, resolveErr := s.resolveIdentityID(ctx, recString(rec, "user_id"))
+	if resolveErr != nil {
+		if errors.Is(resolveErr, core.ErrNotFound) {
+			return nil
+		}
+		return resolveErr
+	}
 	plugin := recString(rec, "integration")
 	connection := recString(rec, "connection")
-	if principalID == "" || plugin == "" || connection == "" {
+	if identityID == "" || plugin == "" || connection == "" {
 		return nil
 	}
 	accessTokenEncrypted := recString(rec, "access_token_encrypted")
@@ -336,11 +369,11 @@ func (s *TokenService) syncExternalCredentialRecord(ctx context.Context, rec ind
 	}
 	token, err := s.recordToToken(rec)
 	if err != nil {
-		return fmt.Errorf("decode token for canonical external credential %q/%q/%q/%q: %w", principalID, plugin, connection, recString(rec, "instance"), err)
+		return fmt.Errorf("decode token for canonical external credential %q/%q/%q/%q: %w", identityID, plugin, connection, recString(rec, "instance"), err)
 	}
 	if _, err := s.externalCredentials.UpsertCredential(ctx, &core.ExternalCredential{
 		ID:                recString(rec, "id"),
-		PrincipalID:       principalID,
+		IdentityID:        identityID,
 		Plugin:            plugin,
 		Connection:        connection,
 		Instance:          recString(rec, "instance"),
@@ -354,7 +387,7 @@ func (s *TokenService) syncExternalCredentialRecord(ctx context.Context, rec ind
 		CreatedAt:         recTime(rec, "created_at"),
 		UpdatedAt:         recTime(rec, "updated_at"),
 	}); err != nil {
-		return fmt.Errorf("sync canonical external credential record %q/%q/%q/%q: %w", principalID, plugin, connection, recString(rec, "instance"), err)
+		return fmt.Errorf("sync canonical external credential record %q/%q/%q/%q: %w", identityID, plugin, connection, recString(rec, "instance"), err)
 	}
 	return nil
 }

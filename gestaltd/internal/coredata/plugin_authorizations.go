@@ -2,6 +2,7 @@ package coredata
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -23,13 +24,15 @@ type PluginAuthorizationMembership struct {
 
 type PluginAuthorizationService struct {
 	store           indexeddb.ObjectStore
-	canonicalAccess *PrincipalPluginAccessService
+	canonicalAccess *IdentityPluginAccessService
+	users           *UserService
 }
 
-func NewPluginAuthorizationService(ds indexeddb.IndexedDB, canonicalAccess *PrincipalPluginAccessService) *PluginAuthorizationService {
+func NewPluginAuthorizationService(ds indexeddb.IndexedDB, canonicalAccess *IdentityPluginAccessService, users *UserService) *PluginAuthorizationService {
 	return &PluginAuthorizationService{
 		store:           ds.ObjectStore(StorePluginAuthorizationMemberships),
 		canonicalAccess: canonicalAccess,
+		users:           users,
 	}
 }
 
@@ -125,8 +128,11 @@ func (s *PluginAuthorizationService) DeletePluginAuthorization(ctx context.Conte
 		return fmt.Errorf("delete plugin authorization: %w", err)
 	}
 	if s.canonicalAccess != nil {
-		if err := s.canonicalAccess.DeleteAccess(ctx, userID, plugin); err != nil && err != core.ErrNotFound {
-			return fmt.Errorf("delete canonical principal plugin access: %w", err)
+		identityID, resolveErr := s.resolveIdentityID(ctx, userID)
+		if resolveErr == nil {
+			if err := s.canonicalAccess.DeleteAccess(ctx, identityID, plugin); err != nil && err != core.ErrNotFound {
+				return fmt.Errorf("delete canonical identity plugin access: %w", err)
+			}
 		}
 	}
 	return nil
@@ -164,20 +170,32 @@ func recordToPluginAuthorizationMembership(rec indexeddb.Record) *PluginAuthoriz
 	}
 }
 
+func (s *PluginAuthorizationService) resolveIdentityID(ctx context.Context, userID string) (string, error) {
+	if s.users == nil {
+		return userID, nil
+	}
+	return s.users.CanonicalIdentityIDForUser(ctx, userID)
+}
+
 func (s *PluginAuthorizationService) syncCanonicalAccess(ctx context.Context, membership *PluginAuthorizationMembership) error {
 	if s.canonicalAccess == nil || membership == nil || membership.UserID == "" || membership.Plugin == "" {
 		return nil
 	}
-	// Dynamic plugin roles remain authoritative for runtime in v1. The canonical
-	// store records the broad plugin-level invocation relationship only.
-	if _, err := s.canonicalAccess.UpsertAccess(ctx, &core.PrincipalPluginAccess{
-		PrincipalID:         membership.UserID,
+	identityID, resolveErr := s.resolveIdentityID(ctx, membership.UserID)
+	if resolveErr != nil {
+		if errors.Is(resolveErr, core.ErrNotFound) {
+			return nil
+		}
+		return resolveErr
+	}
+	if _, err := s.canonicalAccess.UpsertAccess(ctx, &core.IdentityPluginAccess{
+		IdentityID:          identityID,
 		Plugin:              membership.Plugin,
 		InvokeAllOperations: true,
 		CreatedAt:           membership.CreatedAt,
 		UpdatedAt:           membership.UpdatedAt,
 	}); err != nil {
-		return fmt.Errorf("sync canonical principal plugin access %q/%q: %w", membership.UserID, membership.Plugin, err)
+		return fmt.Errorf("sync canonical identity plugin access %q/%q: %w", identityID, membership.Plugin, err)
 	}
 	return nil
 }

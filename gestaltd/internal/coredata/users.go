@@ -15,16 +15,16 @@ import (
 )
 
 type UserService struct {
-	store      indexeddb.ObjectStore
-	principals *PrincipalService
-	profiles   *UserProfileService
+	store        indexeddb.ObjectStore
+	identities   *IdentityService
+	authBindings *IdentityAuthBindingService
 }
 
-func NewUserService(ds indexeddb.IndexedDB, principals *PrincipalService, profiles *UserProfileService) *UserService {
+func NewUserService(ds indexeddb.IndexedDB, identities *IdentityService, authBindings *IdentityAuthBindingService) *UserService {
 	return &UserService{
-		store:      ds.ObjectStore(StoreUsers),
-		principals: principals,
-		profiles:   profiles,
+		store:        ds.ObjectStore(StoreUsers),
+		identities:   identities,
+		authBindings: authBindings,
 	}
 }
 
@@ -58,8 +58,8 @@ func (s *UserService) GetUser(ctx context.Context, id string) (*core.User, error
 	return recordToUser(rec), nil
 }
 
-func (s *UserService) BackfillCanonicalPrincipals(ctx context.Context) error {
-	if s.principals == nil || s.profiles == nil {
+func (s *UserService) BackfillCanonicalIdentities(ctx context.Context) error {
+	if s.identities == nil || s.authBindings == nil {
 		return nil
 	}
 	recs, err := s.store.GetAll(ctx, nil)
@@ -68,11 +68,19 @@ func (s *UserService) BackfillCanonicalPrincipals(ctx context.Context) error {
 	}
 	winners := preferredCanonicalUserRecords(recs)
 	for _, rec := range winners {
-		if err := s.syncCanonicalUser(ctx, recordToUser(rec)); err != nil {
+		if err := s.syncCanonicalIdentity(ctx, recordToUser(rec)); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func (s *UserService) CanonicalIdentityIDForUser(ctx context.Context, userID string) (string, error) {
+	rec, err := s.canonicalUserRecordForUserID(ctx, strings.TrimSpace(userID))
+	if err != nil {
+		return "", err
+	}
+	return recString(rec, "id"), nil
 }
 
 func (s *UserService) FindOrCreateUser(ctx context.Context, email string) (*core.User, error) {
@@ -85,7 +93,7 @@ func (s *UserService) FindOrCreateUser(ctx context.Context, email string) (*core
 	user, err := s.findUserByNormalizedEmail(ctx, rawEmail, email)
 	switch {
 	case err == nil:
-		if err := s.syncCanonicalUser(ctx, user); err != nil {
+		if err := s.syncCanonicalIdentity(ctx, user); err != nil {
 			return nil, err
 		}
 		return user, nil
@@ -107,13 +115,13 @@ func (s *UserService) FindOrCreateUser(ctx context.Context, email string) (*core
 		if retryErr != nil {
 			return nil, fmt.Errorf("create user: %w", err)
 		}
-		if err := s.syncCanonicalUser(ctx, user); err != nil {
+		if err := s.syncCanonicalIdentity(ctx, user); err != nil {
 			return nil, err
 		}
 		return user, nil
 	}
 	user = recordToUser(newRec)
-	if err := s.syncCanonicalUser(ctx, user); err != nil {
+	if err := s.syncCanonicalIdentity(ctx, user); err != nil {
 		return nil, err
 	}
 	return user, nil
@@ -171,8 +179,6 @@ func (s *UserService) findUserByNormalizedEmail(ctx context.Context, rawEmail, n
 		return nil, core.ErrNotFound
 	}
 	if len(recs) == 1 && (recString(match, "email") != normalizedEmail || recString(match, "normalized_email") != normalizedEmail) {
-		// Best-effort repair for legacy mixed-case rows. Reads should not fail
-		// if the canonicalizing write cannot be completed.
 		updated := cloneRecord(match)
 		updated["email"] = normalizedEmail
 		updated["normalized_email"] = normalizedEmail
@@ -182,6 +188,38 @@ func (s *UserService) findUserByNormalizedEmail(ctx context.Context, rawEmail, n
 		}
 	}
 	return recordToUser(match), nil
+}
+
+func (s *UserService) canonicalUserRecordForUserID(ctx context.Context, userID string) (indexeddb.Record, error) {
+	if userID == "" {
+		return nil, core.ErrNotFound
+	}
+	rec, err := s.store.Get(ctx, userID)
+	if err != nil {
+		if err == indexeddb.ErrNotFound {
+			return nil, core.ErrNotFound
+		}
+		return nil, fmt.Errorf("lookup canonical user record: %w", err)
+	}
+	normalizedEmail := emailutil.Normalize(recString(rec, "normalized_email"))
+	if normalizedEmail == "" {
+		normalizedEmail = emailutil.Normalize(recString(rec, "email"))
+	}
+	if normalizedEmail == "" {
+		return rec, nil
+	}
+	recs, err := s.store.Index("by_normalized_email").GetAll(ctx, nil, normalizedEmail)
+	if err != nil {
+		return nil, fmt.Errorf("lookup canonical user record: %w", err)
+	}
+	if len(recs) == 0 {
+		return rec, nil
+	}
+	winner := preferredCanonicalUserRecord(recs, normalizedEmail)
+	if winner == nil {
+		return rec, nil
+	}
+	return winner, nil
 }
 
 func preferUserRecord(candidate, current indexeddb.Record) bool {
@@ -216,32 +254,45 @@ func recordToUser(rec indexeddb.Record) *core.User {
 	}
 }
 
-func (s *UserService) syncCanonicalUser(ctx context.Context, user *core.User) error {
-	if s.principals == nil || s.profiles == nil || user == nil || user.ID == "" {
+func (s *UserService) syncCanonicalIdentity(ctx context.Context, user *core.User) error {
+	if s.identities == nil || s.authBindings == nil || user == nil || user.ID == "" {
 		return nil
 	}
-	displayName := strings.TrimSpace(user.DisplayName)
+	canonicalRec, err := s.canonicalUserRecordForUserID(ctx, user.ID)
+	if err != nil {
+		return err
+	}
+	canonicalUser := recordToUser(canonicalRec)
+	displayName := strings.TrimSpace(canonicalUser.DisplayName)
 	if displayName == "" {
-		displayName = user.Email
+		displayName = canonicalUser.Email
 	}
-	if _, err := s.principals.UpsertPrincipal(ctx, &core.Principal{
-		ID:          user.ID,
-		Kind:        core.PrincipalKindUser,
-		Status:      principalStatusActive,
+	if _, err := s.identities.UpsertIdentity(ctx, &core.Identity{
+		ID:          canonicalUser.ID,
+		Status:      identityStatusActive,
 		DisplayName: displayName,
-		CreatedAt:   user.CreatedAt,
-		UpdatedAt:   user.UpdatedAt,
+		MetadataJSON: legacyIdentityMetadataJSON("user", map[string]string{
+			"email": emailutil.Normalize(canonicalUser.Email),
+		}),
+		CreatedAt: canonicalUser.CreatedAt,
+		UpdatedAt: canonicalUser.UpdatedAt,
 	}); err != nil {
-		return fmt.Errorf("sync canonical user principal %q: %w", user.ID, err)
+		return fmt.Errorf("sync canonical identity %q: %w", canonicalUser.ID, err)
 	}
-	if _, err := s.profiles.UpsertProfile(ctx, &core.UserProfile{
-		PrincipalID:     user.ID,
-		Email:           user.Email,
-		NormalizedEmail: user.Email,
-		CreatedAt:       user.CreatedAt,
-		UpdatedAt:       user.UpdatedAt,
+	lookupKey := emailutil.Normalize(canonicalUser.Email)
+	if lookupKey == "" {
+		return nil
+	}
+	if _, err := s.authBindings.UpsertBinding(ctx, &core.IdentityAuthBinding{
+		IdentityID:  canonicalUser.ID,
+		BindingKind: core.IdentityAuthBindingKindEmail,
+		Authority:   legacyIdentityBindingAuthority,
+		LookupKey:   lookupKey,
+		BindingJSON: legacyIdentityMetadataJSON("email", map[string]string{"email": lookupKey}),
+		CreatedAt:   canonicalUser.CreatedAt,
+		UpdatedAt:   canonicalUser.UpdatedAt,
 	}); err != nil {
-		return fmt.Errorf("sync canonical user profile %q: %w", user.ID, err)
+		return fmt.Errorf("sync canonical identity auth binding %q: %w", canonicalUser.ID, err)
 	}
 	return nil
 }

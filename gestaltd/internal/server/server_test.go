@@ -14152,41 +14152,31 @@ func TestManagedIdentityCRUDAndMemberships(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetIdentity after create: %v", err)
 	}
-	adminPrincipal, err := svc.Principals.GetPrincipal(ctx, admin.ID)
+	adminIdentity, err := svc.Identities.GetIdentity(ctx, admin.ID)
 	if err != nil {
-		t.Fatalf("GetPrincipal(admin): %v", err)
+		t.Fatalf("GetIdentity(admin): %v", err)
 	}
-	if adminPrincipal.Kind != core.PrincipalKindUser {
-		t.Fatalf("admin principal kind = %q, want %q", adminPrincipal.Kind, core.PrincipalKindUser)
+	if adminIdentity.DisplayName != admin.Email {
+		t.Fatalf("admin identity display name = %q, want %q", adminIdentity.DisplayName, admin.Email)
 	}
-	adminProfile, err := svc.UserProfiles.GetProfile(ctx, admin.ID)
+	adminBindings, err := svc.IdentityAuthBindings.ListByIdentity(ctx, admin.ID)
 	if err != nil {
-		t.Fatalf("GetProfile(admin): %v", err)
+		t.Fatalf("ListByIdentity(admin): %v", err)
 	}
-	if adminProfile.Email != admin.Email {
-		t.Fatalf("admin profile email = %q, want %q", adminProfile.Email, admin.Email)
+	if len(adminBindings) != 1 || adminBindings[0].LookupKey != admin.Email {
+		t.Fatalf("admin bindings = %+v, want single email binding %q", adminBindings, admin.Email)
 	}
-	serviceAccountPrincipal, err := svc.Principals.GetPrincipal(ctx, createResp.ID)
+	serviceAccountIdentity, err := svc.Identities.GetIdentity(ctx, createResp.ID)
 	if err != nil {
-		t.Fatalf("GetPrincipal(identity): %v", err)
+		t.Fatalf("GetIdentity(identity): %v", err)
 	}
-	if serviceAccountPrincipal.Kind != core.PrincipalKindServiceAccount {
-		t.Fatalf("identity principal kind = %q, want %q", serviceAccountPrincipal.Kind, core.PrincipalKindServiceAccount)
+	if serviceAccountIdentity.DisplayName != "Release Bot" {
+		t.Fatalf("identity display name = %q, want %q", serviceAccountIdentity.DisplayName, "Release Bot")
 	}
-	if serviceAccountPrincipal.DisplayName != "Release Bot" {
-		t.Fatalf("identity principal display name = %q, want %q", serviceAccountPrincipal.DisplayName, "Release Bot")
+	if serviceAccountIdentity.CreatedByIdentityID != admin.ID {
+		t.Fatalf("identity created_by_identity_id = %q, want %q", serviceAccountIdentity.CreatedByIdentityID, admin.ID)
 	}
-	serviceAccount, err := svc.ServiceAccounts.GetServiceAccount(ctx, createResp.ID)
-	if err != nil {
-		t.Fatalf("GetServiceAccount(identity): %v", err)
-	}
-	if serviceAccount.Name != createResp.ID {
-		t.Fatalf("service account name = %q, want %q", serviceAccount.Name, createResp.ID)
-	}
-	if serviceAccount.Description != "Release Bot" {
-		t.Fatalf("service account description = %q, want %q", serviceAccount.Description, "Release Bot")
-	}
-	adminGrant, err := svc.ServiceAccountManagementGrants.GetGrant(ctx, admin.ID, createResp.ID)
+	adminGrant, err := svc.IdentityManagementGrants.GetGrant(ctx, admin.ID, createResp.ID)
 	if err != nil {
 		t.Fatalf("GetGrant(admin): %v", err)
 	}
@@ -14213,7 +14203,7 @@ func TestManagedIdentityCRUDAndMemberships(t *testing.T) {
 	if memberResp.Role != "viewer" || memberResp.Email != "viewer@example.test" {
 		t.Fatalf("member response = %+v, want viewer@example.test viewer", memberResp)
 	}
-	viewerGrant, err := svc.ServiceAccountManagementGrants.GetGrant(ctx, viewer.ID, createResp.ID)
+	viewerGrant, err := svc.IdentityManagementGrants.GetGrant(ctx, viewer.ID, createResp.ID)
 	if err != nil {
 		t.Fatalf("GetGrant(viewer): %v", err)
 	}
@@ -14258,19 +14248,12 @@ func TestManagedIdentityCRUDAndMemberships(t *testing.T) {
 	if !updatedIdentity.CreatedAt.Equal(createdIdentity.CreatedAt) {
 		t.Fatalf("createdAt changed across update: got %v want %v", updatedIdentity.CreatedAt, createdIdentity.CreatedAt)
 	}
-	serviceAccountPrincipal, err = svc.Principals.GetPrincipal(ctx, createResp.ID)
+	serviceAccountIdentity, err = svc.Identities.GetIdentity(ctx, createResp.ID)
 	if err != nil {
-		t.Fatalf("GetPrincipal(identity) after update: %v", err)
+		t.Fatalf("GetIdentity(identity) after update: %v", err)
 	}
-	if serviceAccountPrincipal.DisplayName != "Release Automation" {
-		t.Fatalf("identity principal display name after update = %q, want %q", serviceAccountPrincipal.DisplayName, "Release Automation")
-	}
-	serviceAccount, err = svc.ServiceAccounts.GetServiceAccount(ctx, createResp.ID)
-	if err != nil {
-		t.Fatalf("GetServiceAccount(identity) after update: %v", err)
-	}
-	if serviceAccount.Description != "Release Automation" {
-		t.Fatalf("service account description after update = %q, want %q", serviceAccount.Description, "Release Automation")
+	if serviceAccountIdentity.DisplayName != "Release Automation" {
+		t.Fatalf("identity display name after update = %q, want %q", serviceAccountIdentity.DisplayName, "Release Automation")
 	}
 
 	req, _ = http.NewRequest(http.MethodDelete, ts.URL+"/api/v1/identities/"+createResp.ID+"/members/"+admin.Email, nil)
@@ -14296,16 +14279,13 @@ func TestManagedIdentityCRUDAndMemberships(t *testing.T) {
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("get deleted identity status = %d, want %d", resp.StatusCode, http.StatusNotFound)
 	}
-	if _, err := svc.Principals.GetPrincipal(ctx, createResp.ID); !errors.Is(err, core.ErrNotFound) {
-		t.Fatalf("GetPrincipal(identity) after delete = %v, want not found", err)
+	if _, err := svc.Identities.GetIdentity(ctx, createResp.ID); !errors.Is(err, core.ErrNotFound) {
+		t.Fatalf("GetIdentity(identity) after delete = %v, want not found", err)
 	}
-	if _, err := svc.ServiceAccounts.GetServiceAccount(ctx, createResp.ID); !errors.Is(err, core.ErrNotFound) {
-		t.Fatalf("GetServiceAccount(identity) after delete = %v, want not found", err)
-	}
-	if _, err := svc.ServiceAccountManagementGrants.GetGrant(ctx, admin.ID, createResp.ID); !errors.Is(err, core.ErrNotFound) {
+	if _, err := svc.IdentityManagementGrants.GetGrant(ctx, admin.ID, createResp.ID); !errors.Is(err, core.ErrNotFound) {
 		t.Fatalf("GetGrant(admin) after delete = %v, want not found", err)
 	}
-	if _, err := svc.ServiceAccountManagementGrants.GetGrant(ctx, viewer.ID, createResp.ID); !errors.Is(err, core.ErrNotFound) {
+	if _, err := svc.IdentityManagementGrants.GetGrant(ctx, viewer.ID, createResp.ID); !errors.Is(err, core.ErrNotFound) {
 		t.Fatalf("GetGrant(viewer) after delete = %v, want not found", err)
 	}
 }
@@ -14558,7 +14538,7 @@ func TestManagedIdentityGrantsRespectActorAuthorization(t *testing.T) {
 	if grantResp.Plugin != "gamma" || !reflect.DeepEqual(grantResp.Operations, []string{}) {
 		t.Fatalf("plugin-wide grant response = %+v, want gamma []", grantResp)
 	}
-	alphaAccess, err := svc.PrincipalPluginAccess.GetAccess(ctx, createResp.ID, "alpha")
+	alphaAccess, err := svc.IdentityPluginAccess.GetAccess(ctx, createResp.ID, "alpha")
 	if err != nil {
 		t.Fatalf("GetAccess(alpha): %v", err)
 	}
@@ -14568,7 +14548,7 @@ func TestManagedIdentityGrantsRespectActorAuthorization(t *testing.T) {
 	if !reflect.DeepEqual(alphaAccess.Operations, []string{"read"}) {
 		t.Fatalf("alpha access operations = %+v, want [read]", alphaAccess.Operations)
 	}
-	gammaAccess, err := svc.PrincipalPluginAccess.GetAccess(ctx, createResp.ID, "gamma")
+	gammaAccess, err := svc.IdentityPluginAccess.GetAccess(ctx, createResp.ID, "gamma")
 	if err != nil {
 		t.Fatalf("GetAccess(gamma): %v", err)
 	}
@@ -14679,7 +14659,7 @@ func TestManagedIdentityGrantsRespectActorAuthorization(t *testing.T) {
 		if _, err := svc.IdentityGrants.GetGrant(context.Background(), createResp.ID, "removed-plugin"); !errors.Is(err, core.ErrNotFound) {
 			t.Fatalf("GetGrant after delete error = %v, want not found", err)
 		}
-		if _, err := svc.PrincipalPluginAccess.GetAccess(context.Background(), createResp.ID, "removed-plugin"); !errors.Is(err, core.ErrNotFound) {
+		if _, err := svc.IdentityPluginAccess.GetAccess(context.Background(), createResp.ID, "removed-plugin"); !errors.Is(err, core.ErrNotFound) {
 			t.Fatalf("GetAccess after delete error = %v, want not found", err)
 		}
 	})

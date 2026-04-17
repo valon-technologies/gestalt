@@ -2,6 +2,7 @@ package coredata
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -12,13 +13,15 @@ import (
 
 type ManagedIdentityMembershipService struct {
 	store           indexeddb.ObjectStore
-	canonicalGrants *ServiceAccountManagementGrantService
+	canonicalGrants *IdentityManagementGrantService
+	users           *UserService
 }
 
-func NewManagedIdentityMembershipService(ds indexeddb.IndexedDB, canonicalGrants *ServiceAccountManagementGrantService) *ManagedIdentityMembershipService {
+func NewManagedIdentityMembershipService(ds indexeddb.IndexedDB, canonicalGrants *IdentityManagementGrantService, users *UserService) *ManagedIdentityMembershipService {
 	return &ManagedIdentityMembershipService{
 		store:           ds.ObjectStore(StoreManagedIdentityMemberships),
 		canonicalGrants: canonicalGrants,
+		users:           users,
 	}
 }
 
@@ -104,8 +107,11 @@ func (s *ManagedIdentityMembershipService) DeleteMembership(ctx context.Context,
 		return core.ErrNotFound
 	}
 	if s.canonicalGrants != nil {
-		if err := s.canonicalGrants.DeleteGrant(ctx, userID, identityID); err != nil && err != core.ErrNotFound {
-			return fmt.Errorf("delete canonical service account management grant: %w", err)
+		managerIdentityID, resolveErr := s.resolveManagerIdentityID(ctx, userID)
+		if resolveErr == nil {
+			if err := s.canonicalGrants.DeleteGrant(ctx, managerIdentityID, identityID); err != nil && err != core.ErrNotFound {
+				return fmt.Errorf("delete canonical identity management grant: %w", err)
+			}
 		}
 	}
 	return nil
@@ -164,18 +170,32 @@ func recordToManagedIdentityMembership(rec indexeddb.Record) *core.ManagedIdenti
 	}
 }
 
+func (s *ManagedIdentityMembershipService) resolveManagerIdentityID(ctx context.Context, userID string) (string, error) {
+	if s.users == nil {
+		return userID, nil
+	}
+	return s.users.CanonicalIdentityIDForUser(ctx, userID)
+}
+
 func (s *ManagedIdentityMembershipService) syncCanonicalGrant(ctx context.Context, membership *core.ManagedIdentityMembership) error {
 	if s.canonicalGrants == nil || membership == nil || membership.UserID == "" || membership.IdentityID == "" {
 		return nil
 	}
-	if _, err := s.canonicalGrants.UpsertGrant(ctx, &core.ServiceAccountManagementGrant{
-		MemberPrincipalID:               membership.UserID,
-		TargetServiceAccountPrincipalID: membership.IdentityID,
-		Role:                            membership.Role,
-		CreatedAt:                       membership.CreatedAt,
-		UpdatedAt:                       membership.UpdatedAt,
+	managerIdentityID, resolveErr := s.resolveManagerIdentityID(ctx, membership.UserID)
+	if resolveErr != nil {
+		if errors.Is(resolveErr, core.ErrNotFound) {
+			return nil
+		}
+		return resolveErr
+	}
+	if _, err := s.canonicalGrants.UpsertGrant(ctx, &core.IdentityManagementGrant{
+		ManagerIdentityID: managerIdentityID,
+		TargetIdentityID:  membership.IdentityID,
+		Role:              membership.Role,
+		CreatedAt:         membership.CreatedAt,
+		UpdatedAt:         membership.UpdatedAt,
 	}); err != nil {
-		return fmt.Errorf("sync canonical service account management grant %q/%q: %w", membership.UserID, membership.IdentityID, err)
+		return fmt.Errorf("sync canonical identity management grant %q/%q: %w", managerIdentityID, membership.IdentityID, err)
 	}
 	return nil
 }

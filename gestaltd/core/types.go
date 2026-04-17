@@ -30,11 +30,18 @@ type IntegrationToken struct {
 	UpdatedAt         time.Time
 }
 
+type AccessPermission struct {
+	Plugin     string   `json:"plugin"`
+	Operations []string `json:"operations,omitempty"`
+}
+
 type APIToken struct {
 	ID          string
+	IdentityID  string
 	UserID      string
 	OwnerKind   string
 	OwnerID     string
+	TokenKind   string
 	Name        string
 	HashedToken string
 	Scopes      string
@@ -49,15 +56,17 @@ const (
 	APITokenOwnerKindManagedIdentity = "managed_identity"
 )
 
-type AccessPermission struct {
-	Plugin     string   `json:"plugin"`
-	Operations []string `json:"operations,omitempty"`
-}
+const (
+	APITokenKindAPI      = "api"
+	APITokenKindWorkload = "workload"
+)
+
 type ManagedIdentity struct {
-	ID          string
-	DisplayName string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID                  string
+	DisplayName         string
+	CreatedByIdentityID string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 type ManagedIdentityMembership struct {
@@ -79,54 +88,48 @@ type ManagedIdentityGrant struct {
 	UpdatedAt  time.Time
 }
 
-const (
-	PrincipalKindUser           = "user"
-	PrincipalKindServiceAccount = "service_account"
-)
+type Identity struct {
+	ID                  string
+	Status              string
+	DisplayName         string
+	CreatedByIdentityID string
+	MetadataJSON        string
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+}
 
-type Principal struct {
+type IdentityAuthBinding struct {
 	ID          string
-	Kind        string
-	Status      string
-	DisplayName string
+	IdentityID  string
+	BindingKind string
+	Authority   string
+	LookupKey   string
+	BindingJSON string
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
 }
 
-type UserProfile struct {
-	PrincipalID     string
-	Email           string
-	NormalizedEmail string
-	AuthProvider    string
-	AuthSubject     string
-	AvatarURL       string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
-}
-
-type ServiceAccount struct {
-	PrincipalID          string
-	Name                 string
-	Description          string
-	CreatedByPrincipalID string
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
-}
-
 const (
-	ServiceAccountManagementRoleViewer = "viewer"
-	ServiceAccountManagementRoleEditor = "editor"
-	ServiceAccountManagementRoleAdmin  = "admin"
+	IdentityAuthBindingKindOIDCSubject          = "oidc_subject"
+	IdentityAuthBindingKindEmail                = "email"
+	IdentityAuthBindingKindSPIFFE               = "spiffe"
+	IdentityAuthBindingKindKubernetesServiceAcc = "kubernetes_serviceaccount"
 )
 
-type ServiceAccountManagementGrant struct {
-	ID                              string
-	MemberPrincipalID               string
-	TargetServiceAccountPrincipalID string
-	Role                            string
-	ExpiresAt                       *time.Time
-	CreatedAt                       time.Time
-	UpdatedAt                       time.Time
+const (
+	IdentityManagementRoleViewer = "viewer"
+	IdentityManagementRoleEditor = "editor"
+	IdentityManagementRoleAdmin  = "admin"
+)
+
+type IdentityManagementGrant struct {
+	ID                string
+	ManagerIdentityID string
+	TargetIdentityID  string
+	Role              string
+	ExpiresAt         *time.Time
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 const (
@@ -135,16 +138,16 @@ const (
 )
 
 type WorkspaceRole struct {
-	ID          string
-	PrincipalID string
-	Role        string
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID         string
+	IdentityID string
+	Role       string
+	CreatedAt  time.Time
+	UpdatedAt  time.Time
 }
 
-type PrincipalPluginAccess struct {
+type IdentityPluginAccess struct {
 	ID                  string
-	PrincipalID         string
+	IdentityID          string
 	Plugin              string
 	InvokeAllOperations bool
 	Operations          []string
@@ -153,14 +156,42 @@ type PrincipalPluginAccess struct {
 	UpdatedAt           time.Time
 }
 
-type ServiceAccountDelegation struct {
-	ID                              string
-	ActorUserPrincipalID            string
-	TargetServiceAccountPrincipalID string
-	Plugin                          string
-	ExpiresAt                       *time.Time
-	CreatedAt                       time.Time
-	UpdatedAt                       time.Time
+type IdentityDelegation struct {
+	ID               string
+	ActorIdentityID  string
+	TargetIdentityID string
+	Plugin           string
+	ExpiresAt        *time.Time
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+type APITokenAccess struct {
+	ID                  string
+	TokenID             string
+	Plugin              string
+	InvokeAllOperations bool
+	Operations          []string
+	ExpiresAt           *time.Time
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
+}
+
+type ExternalCredential struct {
+	ID                string
+	IdentityID        string
+	Plugin            string
+	Connection        string
+	Instance          string
+	AuthType          string
+	PayloadEncrypted  string
+	Scopes            string
+	ExpiresAt         *time.Time
+	LastRefreshedAt   *time.Time
+	RefreshErrorCount int
+	MetadataJSON      string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 type UserIdentity struct {
@@ -190,49 +221,6 @@ type Parameter struct {
 	Description string
 	Required    bool
 	Default     any
-}
-
-const (
-	APITokenKindAPI      = "api"
-	APITokenKindWorkload = "workload"
-)
-
-type APITokenAccess struct {
-	ID                  string
-	TokenID             string
-	Plugin              string
-	InvokeAllOperations bool
-	Operations          []string
-	ExpiresAt           *time.Time
-	CreatedAt           time.Time
-	UpdatedAt           time.Time
-}
-
-type ExternalCredential struct {
-	ID                string
-	PrincipalID       string
-	Plugin            string
-	Connection        string
-	Instance          string
-	AuthType          string
-	PayloadEncrypted  string
-	Scopes            string
-	ExpiresAt         *time.Time
-	LastRefreshedAt   *time.Time
-	RefreshErrorCount int
-	MetadataJSON      string
-	CreatedAt         time.Time
-	UpdatedAt         time.Time
-}
-
-type ServiceAccountAuthBinding struct {
-	ID                        string
-	ServiceAccountPrincipalID string
-	BindingKind               string
-	LookupKey                 string
-	BindingJSON               string
-	CreatedAt                 time.Time
-	UpdatedAt                 time.Time
 }
 
 type OperationResult struct {

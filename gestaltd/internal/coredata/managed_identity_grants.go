@@ -3,6 +3,7 @@ package coredata
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -13,10 +14,12 @@ import (
 
 type ManagedIdentityGrantService struct {
 	store           indexeddb.ObjectStore
-	canonicalAccess *PrincipalPluginAccessService
+	canonicalAccess *IdentityPluginAccessService
 }
 
-func NewManagedIdentityGrantService(ds indexeddb.IndexedDB, canonicalAccess *PrincipalPluginAccessService) *ManagedIdentityGrantService {
+var errMalformedStoredManagedIdentityGrant = errors.New("malformed stored managed identity grant")
+
+func NewManagedIdentityGrantService(ds indexeddb.IndexedDB, canonicalAccess *IdentityPluginAccessService) *ManagedIdentityGrantService {
 	return &ManagedIdentityGrantService{
 		store:           ds.ObjectStore(StoreManagedIdentityGrants),
 		canonicalAccess: canonicalAccess,
@@ -112,7 +115,7 @@ func (s *ManagedIdentityGrantService) DeleteGrant(ctx context.Context, identityI
 	}
 	if s.canonicalAccess != nil {
 		if err := s.canonicalAccess.DeleteAccess(ctx, identityID, plugin); err != nil && err != core.ErrNotFound {
-			return fmt.Errorf("delete canonical principal plugin access: %w", err)
+			return fmt.Errorf("delete canonical identity plugin access: %w", err)
 		}
 	}
 	return nil
@@ -146,6 +149,9 @@ func (s *ManagedIdentityGrantService) BackfillCanonicalAccess(ctx context.Contex
 	for _, rec := range recs {
 		grant, err := recordToManagedIdentityGrant(rec)
 		if err != nil {
+			if errors.Is(err, errMalformedStoredManagedIdentityGrant) {
+				continue
+			}
 			return err
 		}
 		if err := s.syncCanonicalAccess(ctx, grant); err != nil {
@@ -184,7 +190,7 @@ func recordToManagedIdentityGrant(rec indexeddb.Record) (*core.ManagedIdentityGr
 	}
 	if raw := recString(rec, "operations_json"); raw != "" {
 		if err := json.Unmarshal([]byte(raw), &grant.Operations); err != nil {
-			return nil, fmt.Errorf("decode managed identity grant operations: %w", err)
+			return nil, fmt.Errorf("%w: decode managed identity grant operations: %v", errMalformedStoredManagedIdentityGrant, err)
 		}
 	}
 	return grant, nil
@@ -194,15 +200,15 @@ func (s *ManagedIdentityGrantService) syncCanonicalAccess(ctx context.Context, g
 	if s.canonicalAccess == nil || grant == nil || grant.IdentityID == "" || grant.Plugin == "" {
 		return nil
 	}
-	if _, err := s.canonicalAccess.UpsertAccess(ctx, &core.PrincipalPluginAccess{
-		PrincipalID:         grant.IdentityID,
+	if _, err := s.canonicalAccess.UpsertAccess(ctx, &core.IdentityPluginAccess{
+		IdentityID:          grant.IdentityID,
 		Plugin:              grant.Plugin,
 		InvokeAllOperations: len(grant.Operations) == 0,
 		Operations:          append([]string(nil), grant.Operations...),
 		CreatedAt:           grant.CreatedAt,
 		UpdatedAt:           grant.UpdatedAt,
 	}); err != nil {
-		return fmt.Errorf("sync canonical principal plugin access %q/%q: %w", grant.IdentityID, grant.Plugin, err)
+		return fmt.Errorf("sync canonical identity plugin access %q/%q: %w", grant.IdentityID, grant.Plugin, err)
 	}
 	return nil
 }

@@ -223,7 +223,7 @@ func TestNew(t *testing.T) {
 		}
 	})
 
-	t.Run("backfills_one_canonical_profile_for_case_insensitive_duplicate_legacy_users", func(t *testing.T) {
+	t.Run("backfills_one_canonical_identity_for_case_insensitive_duplicate_legacy_users", func(t *testing.T) {
 		t.Parallel()
 
 		db := &coretesting.StubIndexedDB{}
@@ -260,22 +260,147 @@ func TestNew(t *testing.T) {
 			t.Fatalf("coredata.New: %v", err)
 		}
 
-		if _, err := svc.UserProfiles.GetProfile(ctx, "legacy-canonical"); err != nil {
-			t.Fatalf("GetProfile(canonical winner): %v", err)
+		if _, err := svc.Identities.GetIdentity(ctx, "legacy-canonical"); err != nil {
+			t.Fatalf("GetIdentity(canonical winner): %v", err)
 		}
-		if _, err := svc.UserProfiles.GetProfile(ctx, "legacy-mixed"); err != core.ErrNotFound {
-			t.Fatalf("GetProfile(mixed-case loser) = %v, want ErrNotFound", err)
+		if _, err := svc.Identities.GetIdentity(ctx, "legacy-mixed"); err != core.ErrNotFound {
+			t.Fatalf("GetIdentity(mixed-case loser) = %v, want ErrNotFound", err)
 		}
-		count, err := svc.DB.ObjectStore(coredata.StoreUserProfiles).Count(ctx, nil)
+		binding, err := svc.IdentityAuthBindings.GetBinding(ctx, core.IdentityAuthBindingKindEmail, "legacy", "user@example.com")
 		if err != nil {
-			t.Fatalf("Count user_profiles: %v", err)
+			t.Fatalf("GetBinding(canonical email): %v", err)
+		}
+		if binding.IdentityID != "legacy-canonical" {
+			t.Fatalf("binding.IdentityID = %q, want %q", binding.IdentityID, "legacy-canonical")
+		}
+		count, err := svc.DB.ObjectStore(coredata.StoreIdentities).Count(ctx, nil)
+		if err != nil {
+			t.Fatalf("Count identities: %v", err)
 		}
 		if count != 1 {
-			t.Fatalf("user_profiles count = %d, want 1", count)
+			t.Fatalf("identities count = %d, want 1", count)
 		}
 	})
 
-	t.Run("backfills_multiple_canonical_profiles_without_blank_auth_subject_keys", func(t *testing.T) {
+	t.Run("skips_unreadable_legacy_integration_tokens_during_canonical_backfill", func(t *testing.T) {
+		t.Parallel()
+
+		db := &coretesting.StubIndexedDB{}
+		ctx := context.Background()
+		createdAt := time.Date(2026, 1, 2, 12, 0, 0, 0, time.UTC)
+		seedLegacyUserRecord(t, &coredata.Services{DB: db}, "legacy-user", "user@example.com", createdAt)
+
+		enc, err := corecrypto.NewAESGCM([]byte(testEncryptionKey))
+		if err != nil {
+			t.Fatalf("NewAESGCM: %v", err)
+		}
+		accessEnc, refreshEnc, err := enc.EncryptTokenPair("plaintext-access", "")
+		if err != nil {
+			t.Fatalf("EncryptTokenPair: %v", err)
+		}
+		if err := db.ObjectStore(coredata.StoreIntegrationTokens).Add(ctx, indexeddb.Record{
+			"id":                      "good-token",
+			"user_id":                 "legacy-user",
+			"integration":             "slack",
+			"connection":              "workspace",
+			"instance":                "",
+			"access_token_encrypted":  accessEnc,
+			"refresh_token_encrypted": refreshEnc,
+			"scopes":                  "channels:read",
+			"created_at":              createdAt,
+			"updated_at":              createdAt,
+		}); err != nil {
+			t.Fatalf("seed valid integration token: %v", err)
+		}
+		if err := db.ObjectStore(coredata.StoreIntegrationTokens).Add(ctx, indexeddb.Record{
+			"id":                      "bad-token",
+			"user_id":                 "legacy-user",
+			"integration":             "github",
+			"connection":              "workspace",
+			"instance":                "",
+			"access_token_encrypted":  "not-valid-ciphertext",
+			"refresh_token_encrypted": "",
+			"created_at":              createdAt,
+			"updated_at":              createdAt,
+		}); err != nil {
+			t.Fatalf("seed invalid integration token: %v", err)
+		}
+
+		svc, err := coredata.New(db, enc)
+		if err != nil {
+			t.Fatalf("coredata.New: %v", err)
+		}
+
+		good, err := svc.ExternalCredentials.GetCredential(ctx, "legacy-user", "slack", "workspace", "")
+		if err != nil {
+			t.Fatalf("GetCredential valid token: %v", err)
+		}
+		if good.IdentityID != "legacy-user" {
+			t.Fatalf("valid credential identity_id = %q, want %q", good.IdentityID, "legacy-user")
+		}
+		if _, err := svc.ExternalCredentials.GetCredential(ctx, "legacy-user", "github", "workspace", ""); !errors.Is(err, core.ErrNotFound) {
+			t.Fatalf("GetCredential invalid token err = %v, want ErrNotFound", err)
+		}
+	})
+
+	t.Run("skips_malformed_managed_identity_grants_during_canonical_backfill", func(t *testing.T) {
+		t.Parallel()
+
+		db := &coretesting.StubIndexedDB{}
+		ctx := context.Background()
+		createdAt := time.Date(2026, 1, 3, 12, 0, 0, 0, time.UTC)
+		if err := db.ObjectStore(coredata.StoreManagedIdentities).Add(ctx, indexeddb.Record{
+			"id":                     "mi-1",
+			"display_name":           "Deploy Bot",
+			"created_by_identity_id": "legacy-user",
+			"created_at":             createdAt,
+			"updated_at":             createdAt,
+		}); err != nil {
+			t.Fatalf("seed managed identity: %v", err)
+		}
+		if err := db.ObjectStore(coredata.StoreManagedIdentityGrants).Add(ctx, indexeddb.Record{
+			"id":              "grant-good",
+			"identity_id":     "mi-1",
+			"plugin":          "slack",
+			"operations_json": `["read"]`,
+			"created_at":      createdAt,
+			"updated_at":      createdAt,
+		}); err != nil {
+			t.Fatalf("seed valid managed identity grant: %v", err)
+		}
+		if err := db.ObjectStore(coredata.StoreManagedIdentityGrants).Add(ctx, indexeddb.Record{
+			"id":              "grant-bad",
+			"identity_id":     "mi-1",
+			"plugin":          "github",
+			"operations_json": `{`,
+			"created_at":      createdAt,
+			"updated_at":      createdAt,
+		}); err != nil {
+			t.Fatalf("seed invalid managed identity grant: %v", err)
+		}
+
+		enc, err := corecrypto.NewAESGCM([]byte(testEncryptionKey))
+		if err != nil {
+			t.Fatalf("NewAESGCM: %v", err)
+		}
+		svc, err := coredata.New(db, enc)
+		if err != nil {
+			t.Fatalf("coredata.New: %v", err)
+		}
+
+		access, err := svc.IdentityPluginAccess.GetAccess(ctx, "mi-1", "slack")
+		if err != nil {
+			t.Fatalf("GetAccess valid grant: %v", err)
+		}
+		if access.Plugin != "slack" {
+			t.Fatalf("valid access plugin = %q, want %q", access.Plugin, "slack")
+		}
+		if _, err := svc.IdentityPluginAccess.GetAccess(ctx, "mi-1", "github"); !errors.Is(err, core.ErrNotFound) {
+			t.Fatalf("GetAccess invalid grant err = %v, want ErrNotFound", err)
+		}
+	})
+
+	t.Run("backfills_multiple_identity_bindings_without_blank_auth_subject_keys", func(t *testing.T) {
 		t.Parallel()
 
 		db := &coretesting.StubIndexedDB{}
@@ -313,19 +438,19 @@ func TestNew(t *testing.T) {
 			t.Fatalf("coredata.New: %v", err)
 		}
 
-		profiles, err := svc.DB.ObjectStore(coredata.StoreUserProfiles).GetAll(ctx, nil)
+		bindings, err := svc.DB.ObjectStore(coredata.StoreIdentityAuthBindings).GetAll(ctx, nil)
 		if err != nil {
-			t.Fatalf("GetAll user profiles: %v", err)
+			t.Fatalf("GetAll identity auth bindings: %v", err)
 		}
-		if len(profiles) != 2 {
-			t.Fatalf("canonical user profiles len = %d, want 2", len(profiles))
+		if len(bindings) != 2 {
+			t.Fatalf("identity auth bindings len = %d, want 2", len(bindings))
 		}
-		for _, rec := range profiles {
-			if _, ok := rec["auth_provider"]; ok {
-				t.Fatalf("auth_provider unexpectedly present in %+v", rec)
+		for _, rec := range bindings {
+			if got := rec["binding_kind"]; got != core.IdentityAuthBindingKindEmail {
+				t.Fatalf("binding_kind = %v, want %q", got, core.IdentityAuthBindingKindEmail)
 			}
-			if _, ok := rec["auth_subject"]; ok {
-				t.Fatalf("auth_subject unexpectedly present in %+v", rec)
+			if got := rec["authority"]; got != "legacy" {
+				t.Fatalf("authority = %v, want %q", got, "legacy")
 			}
 		}
 	})
@@ -1344,6 +1469,44 @@ func TestAPITokenService(t *testing.T) {
 		}
 		if len(access) != 1 || access[0].Plugin != "owner-only" {
 			t.Fatalf("owner-only token access = %+v, want surviving access", access)
+		}
+	})
+
+	t.Run("BackfillTokenAccess_uses_scopes_when_permissions_are_empty", func(t *testing.T) {
+		t.Parallel()
+		svc := newTestServices(t)
+		ctx := context.Background()
+
+		user := mustCreateUser(t, svc, "scoped@test.com")
+		now := time.Now().UTC()
+		if err := svc.DB.ObjectStore(coredata.StoreAPITokens).Add(ctx, indexeddb.Record{
+			"id":           "scoped-token",
+			"user_id":      user.ID,
+			"name":         "scoped",
+			"hashed_token": "sha256:scoped",
+			"scopes":       "alpha beta alpha",
+			"created_at":   now,
+			"updated_at":   now,
+		}); err != nil {
+			t.Fatalf("seed scoped api token: %v", err)
+		}
+		if err := svc.APITokens.BackfillTokenAccess(ctx); err != nil {
+			t.Fatalf("BackfillTokenAccess: %v", err)
+		}
+
+		access, err := svc.APITokenAccess.ListByToken(ctx, "scoped-token")
+		if err != nil {
+			t.Fatalf("ListByToken: %v", err)
+		}
+		if len(access) != 2 {
+			t.Fatalf("scope-backed access len = %d, want 2: %+v", len(access), access)
+		}
+		got := make(map[string]bool, len(access))
+		for _, row := range access {
+			got[row.Plugin] = row.InvokeAllOperations
+		}
+		if !reflect.DeepEqual(got, map[string]bool{"alpha": true, "beta": true}) {
+			t.Fatalf("scope-backed access = %+v, want alpha/beta invoke-all", got)
 		}
 	})
 

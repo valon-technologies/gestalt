@@ -9,25 +9,23 @@ import (
 )
 
 type Services struct {
-	Users                          *UserService
-	Tokens                         *TokenService
-	APITokens                      *APITokenService
-	ManagedIdentities              *ManagedIdentityService
-	IdentityMemberships            *ManagedIdentityMembershipService
-	IdentityGrants                 *ManagedIdentityGrantService
-	PluginAuthorizations           *PluginAuthorizationService
-	AdminAuthorizations            *AdminAuthorizationService
-	Principals                     *PrincipalService
-	UserProfiles                   *UserProfileService
-	ServiceAccounts                *ServiceAccountService
-	ServiceAccountManagementGrants *ServiceAccountManagementGrantService
-	WorkspaceRoles                 *WorkspaceRoleService
-	PrincipalPluginAccess          *PrincipalPluginAccessService
-	ServiceAccountDelegations      *ServiceAccountDelegationService
-	APITokenAccess                 *APITokenAccessService
-	ExternalCredentials            *ExternalCredentialService
-	ServiceAccountAuthBindings     *ServiceAccountAuthBindingService
-	DB                             indexeddb.IndexedDB
+	Users                    *UserService
+	Tokens                   *TokenService
+	APITokens                *APITokenService
+	ManagedIdentities        *ManagedIdentityService
+	IdentityMemberships      *ManagedIdentityMembershipService
+	IdentityGrants           *ManagedIdentityGrantService
+	PluginAuthorizations     *PluginAuthorizationService
+	AdminAuthorizations      *AdminAuthorizationService
+	Identities               *IdentityService
+	IdentityAuthBindings     *IdentityAuthBindingService
+	IdentityManagementGrants *IdentityManagementGrantService
+	IdentityDelegations      *IdentityDelegationService
+	WorkspaceRoles           *WorkspaceRoleService
+	IdentityPluginAccess     *IdentityPluginAccessService
+	APITokenAccess           *APITokenAccessService
+	ExternalCredentials      *ExternalCredentialService
+	DB                       indexeddb.IndexedDB
 }
 
 func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, error) {
@@ -56,26 +54,23 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	if err := ds.CreateObjectStore(ctx, StoreAdminAuthorizationMemberships, AdminAuthorizationMembershipsSchema); err != nil {
 		return nil, fmt.Errorf("create admin_authorization_memberships store: %w", err)
 	}
-	if err := ds.CreateObjectStore(ctx, StorePrincipals, PrincipalsSchema); err != nil {
-		return nil, fmt.Errorf("create principals store: %w", err)
+	if err := ds.CreateObjectStore(ctx, StoreIdentities, IdentitiesSchema); err != nil {
+		return nil, fmt.Errorf("create identities store: %w", err)
 	}
-	if err := ds.CreateObjectStore(ctx, StoreUserProfiles, UserProfilesSchema); err != nil {
-		return nil, fmt.Errorf("create user_profiles store: %w", err)
+	if err := ds.CreateObjectStore(ctx, StoreIdentityAuthBindings, IdentityAuthBindingsSchema); err != nil {
+		return nil, fmt.Errorf("create identity_auth_bindings store: %w", err)
 	}
-	if err := ds.CreateObjectStore(ctx, StoreServiceAccounts, ServiceAccountsSchema); err != nil {
-		return nil, fmt.Errorf("create service_accounts store: %w", err)
+	if err := ds.CreateObjectStore(ctx, StoreIdentityManagementGrants, IdentityManagementGrantsSchema); err != nil {
+		return nil, fmt.Errorf("create identity_management_grants store: %w", err)
 	}
-	if err := ds.CreateObjectStore(ctx, StoreServiceAccountManagementGrants, ServiceAccountManagementGrantsSchema); err != nil {
-		return nil, fmt.Errorf("create service_account_management_grants store: %w", err)
+	if err := ds.CreateObjectStore(ctx, StoreIdentityDelegations, IdentityDelegationsSchema); err != nil {
+		return nil, fmt.Errorf("create identity_delegations store: %w", err)
 	}
 	if err := ds.CreateObjectStore(ctx, StoreWorkspaceRoles, WorkspaceRolesSchema); err != nil {
 		return nil, fmt.Errorf("create workspace_roles store: %w", err)
 	}
-	if err := ds.CreateObjectStore(ctx, StorePrincipalPluginAccess, PrincipalPluginAccessSchema); err != nil {
-		return nil, fmt.Errorf("create principal_plugin_access store: %w", err)
-	}
-	if err := ds.CreateObjectStore(ctx, StoreServiceAccountDelegations, ServiceAccountDelegationsSchema); err != nil {
-		return nil, fmt.Errorf("create service_account_delegations store: %w", err)
+	if err := ds.CreateObjectStore(ctx, StoreIdentityPluginAccess, IdentityPluginAccessSchema); err != nil {
+		return nil, fmt.Errorf("create identity_plugin_access store: %w", err)
 	}
 	if err := ds.CreateObjectStore(ctx, StoreAPITokenAccess, APITokenAccessSchema); err != nil {
 		return nil, fmt.Errorf("create api_token_access store: %w", err)
@@ -83,44 +78,45 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	if err := ds.CreateObjectStore(ctx, StoreExternalCredentials, ExternalCredentialsSchema); err != nil {
 		return nil, fmt.Errorf("create external_credentials store: %w", err)
 	}
-	if err := ds.CreateObjectStore(ctx, StoreServiceAccountAuthBindings, ServiceAccountAuthBindingsSchema); err != nil {
-		return nil, fmt.Errorf("create service_account_auth_bindings store: %w", err)
-	}
-	principals := NewPrincipalService(ds)
-	userProfiles := NewUserProfileService(ds)
-	serviceAccounts := NewServiceAccountService(ds)
-	serviceAccountManagementGrants := NewServiceAccountManagementGrantService(ds)
+
+	identities := NewIdentityService(ds)
+	authBindings := NewIdentityAuthBindingService(ds)
+	identityManagementGrants := NewIdentityManagementGrantService(ds)
+	identityDelegations := NewIdentityDelegationService(ds)
 	workspaceRoles := NewWorkspaceRoleService(ds)
-	principalPluginAccess := NewPrincipalPluginAccessService(ds)
-	serviceAccountDelegations := NewServiceAccountDelegationService(ds)
+	identityPluginAccess := NewIdentityPluginAccessService(ds)
 	apiTokenAccess := NewAPITokenAccessService(ds)
 	externalCredentials := NewExternalCredentialService(ds)
-	serviceAccountAuthBindings := NewServiceAccountAuthBindingService(ds)
-	if err := ensureLegacySharedServiceAccount(ctx, principals, serviceAccounts); err != nil {
-		return nil, fmt.Errorf("seed legacy shared service account: %w", err)
-	}
-	users := NewUserService(ds, principals, userProfiles)
+
+	users := NewUserService(ds, identities, authBindings)
 	if err := users.BackfillNormalizedEmails(ctx); err != nil {
 		return nil, fmt.Errorf("backfill users store: %w", err)
 	}
-	managedIdentities := NewManagedIdentityService(ds, principals, serviceAccounts)
-	identityMemberships := NewManagedIdentityMembershipService(ds, serviceAccountManagementGrants)
-	identityGrants := NewManagedIdentityGrantService(ds, principalPluginAccess)
-	apiTokens := NewAPITokenService(ds, apiTokenAccess)
-	pluginAuthorizations := NewPluginAuthorizationService(ds, nil)
-	adminAuthorizations := NewAdminAuthorizationService(ds, workspaceRoles)
-	tokens := NewTokenService(ds, enc, externalCredentials)
-	if err := users.BackfillCanonicalPrincipals(ctx); err != nil {
-		return nil, fmt.Errorf("backfill canonical user principals: %w", err)
+	managedIdentities := NewManagedIdentityService(ds, identities)
+	identityMemberships := NewManagedIdentityMembershipService(ds, identityManagementGrants, users)
+	identityGrants := NewManagedIdentityGrantService(ds, identityPluginAccess)
+	pluginAuthorizations := NewPluginAuthorizationService(ds, identityPluginAccess, users)
+	adminAuthorizations := NewAdminAuthorizationService(ds, workspaceRoles, users)
+	apiTokens := NewAPITokenService(ds, apiTokenAccess, users)
+	tokens := NewTokenService(ds, enc, externalCredentials, users)
+
+	if err := rebuildCanonicalIdentityGraph(ctx, identities, authBindings, identityManagementGrants, workspaceRoles, identityPluginAccess, apiTokenAccess, externalCredentials); err != nil {
+		return nil, err
 	}
-	if err := managedIdentities.BackfillCanonicalServiceAccounts(ctx); err != nil {
-		return nil, fmt.Errorf("backfill canonical service accounts: %w", err)
+	if err := users.BackfillCanonicalIdentities(ctx); err != nil {
+		return nil, fmt.Errorf("backfill canonical identities from users: %w", err)
+	}
+	if err := managedIdentities.BackfillCanonicalIdentities(ctx); err != nil {
+		return nil, fmt.Errorf("backfill canonical identities from managed identities: %w", err)
 	}
 	if err := identityMemberships.BackfillCanonicalGrants(ctx); err != nil {
-		return nil, fmt.Errorf("backfill canonical service account management grants: %w", err)
+		return nil, fmt.Errorf("backfill canonical identity management grants: %w", err)
 	}
 	if err := identityGrants.BackfillCanonicalAccess(ctx); err != nil {
 		return nil, fmt.Errorf("backfill canonical identity grants: %w", err)
+	}
+	if err := pluginAuthorizations.BackfillCanonicalAccess(ctx); err != nil {
+		return nil, fmt.Errorf("backfill canonical plugin authorizations: %w", err)
 	}
 	if err := adminAuthorizations.BackfillCanonicalWorkspaceRoles(ctx); err != nil {
 		return nil, fmt.Errorf("backfill canonical workspace roles: %w", err)
@@ -131,27 +127,43 @@ func New(ds indexeddb.IndexedDB, enc *corecrypto.AESGCMEncryptor) (*Services, er
 	if err := tokens.BackfillCanonicalCredentials(ctx); err != nil {
 		return nil, fmt.Errorf("backfill canonical external credentials: %w", err)
 	}
+
 	return &Services{
-		Users:                          users,
-		Tokens:                         tokens,
-		APITokens:                      apiTokens,
-		ManagedIdentities:              managedIdentities,
-		IdentityMemberships:            identityMemberships,
-		IdentityGrants:                 identityGrants,
-		PluginAuthorizations:           pluginAuthorizations,
-		AdminAuthorizations:            adminAuthorizations,
-		Principals:                     principals,
-		UserProfiles:                   userProfiles,
-		ServiceAccounts:                serviceAccounts,
-		ServiceAccountManagementGrants: serviceAccountManagementGrants,
-		WorkspaceRoles:                 workspaceRoles,
-		PrincipalPluginAccess:          principalPluginAccess,
-		ServiceAccountDelegations:      serviceAccountDelegations,
-		APITokenAccess:                 apiTokenAccess,
-		ExternalCredentials:            externalCredentials,
-		ServiceAccountAuthBindings:     serviceAccountAuthBindings,
-		DB:                             ds,
+		Users:                    users,
+		Tokens:                   tokens,
+		APITokens:                apiTokens,
+		ManagedIdentities:        managedIdentities,
+		IdentityMemberships:      identityMemberships,
+		IdentityGrants:           identityGrants,
+		PluginAuthorizations:     pluginAuthorizations,
+		AdminAuthorizations:      adminAuthorizations,
+		Identities:               identities,
+		IdentityAuthBindings:     authBindings,
+		IdentityManagementGrants: identityManagementGrants,
+		IdentityDelegations:      identityDelegations,
+		WorkspaceRoles:           workspaceRoles,
+		IdentityPluginAccess:     identityPluginAccess,
+		APITokenAccess:           apiTokenAccess,
+		ExternalCredentials:      externalCredentials,
+		DB:                       ds,
 	}, nil
+}
+
+func rebuildCanonicalIdentityGraph(ctx context.Context, identities *IdentityService, authBindings *IdentityAuthBindingService, managementGrants *IdentityManagementGrantService, workspaceRoles *WorkspaceRoleService, pluginAccess *IdentityPluginAccessService, apiTokenAccess *APITokenAccessService, externalCredentials *ExternalCredentialService) error {
+	for _, store := range []indexeddb.ObjectStore{
+		identities.store,
+		authBindings.store,
+		managementGrants.store,
+		workspaceRoles.store,
+		pluginAccess.store,
+		apiTokenAccess.store,
+		externalCredentials.store,
+	} {
+		if err := store.Clear(ctx); err != nil {
+			return fmt.Errorf("clear canonical identity graph store: %w", err)
+		}
+	}
+	return nil
 }
 
 func (s *Services) Ping(ctx context.Context) error {
