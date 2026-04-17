@@ -125,6 +125,70 @@ func TestE2EValidateRejectsInvalidAuditSettings(t *testing.T) {
 	}
 }
 
+func TestE2EValidateAcceptsV3TelemetryBuiltins(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name           string
+		source         string
+		telemetryBlock string
+	}{
+		{
+			name:   "otlp",
+			source: "otlp",
+			telemetryBlock: `      config:
+        endpoint: localhost:4317
+        protocol: grpc
+        insecure: true`,
+		},
+		{
+			name:   "noop",
+			source: "noop",
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			dir := t.TempDir()
+			indexedDBManifest := componentProviderManifestPath(t, setupIndexedDBProviderDir(t, dir))
+			pluginManifest := componentProviderManifestPath(t, setupPrebuiltPluginDir(t, dir))
+
+			cfgPath := filepath.Join(dir, "config.yaml")
+			cfg := fmt.Sprintf(`apiVersion: %s
+server:
+  encryptionKey: valid-config-e2e-key
+  providers:
+    telemetry: primary
+    indexeddb: inmem
+providers:
+  telemetry:
+    primary:
+      source: %s
+%s
+  indexeddb:
+    inmem:
+      source:
+        path: %s
+plugins:
+  example:
+    source:
+      path: %s
+`, config.APIVersionV3, tc.source, tc.telemetryBlock, indexedDBManifest, pluginManifest)
+			if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+				t.Fatalf("write config: %v", err)
+			}
+
+			out, err := exec.Command(gestaltdBin, "validate", "--config", cfgPath).CombinedOutput()
+			if err != nil {
+				t.Fatalf("gestaltd validate failed: %v\noutput: %s", err, out)
+			}
+		})
+	}
+}
+
 func TestE2EValidateRejectsInvalidConfigInput(t *testing.T) {
 	t.Parallel()
 

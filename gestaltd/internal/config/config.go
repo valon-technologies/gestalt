@@ -1565,7 +1565,10 @@ func isBuiltinScalarSource(kind, source string) bool {
 	case providermanifestv1.KindSecrets:
 		return source == "env"
 	case string(HostProviderKindTelemetry):
-		return source == "stdout"
+		switch source {
+		case "noop", "stdout", "otlp":
+			return true
+		}
 	case string(HostProviderKindAudit):
 		switch source {
 		case "inherit", "noop", "stdout", "otlp":

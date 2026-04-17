@@ -784,7 +784,7 @@ func buildNamedSecretManager(name string, secrets *config.ProviderEntry, factori
 		logicalName = "secrets"
 	}
 
-	if secrets != nil && (secrets.Source.IsManaged() || secrets.Source.IsLocal()) {
+	if secrets != nil && (secrets.HasRemoteSource() || secrets.HasLocalSource()) {
 		factory, ok := factories.Secrets["provider"]
 		if !ok {
 			return nil, fmt.Errorf("bootstrap: secrets provider factory is not registered")
