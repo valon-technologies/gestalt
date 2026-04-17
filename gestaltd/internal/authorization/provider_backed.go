@@ -16,32 +16,6 @@ import (
 	"github.com/valon-technologies/gestalt/server/internal/principal"
 )
 
-const (
-	providerAuthzSchema = `version: gestalt.authorization.v1
-resources:
-  - policy_static
-  - plugin_static
-  - plugin_dynamic
-  - admin_policy_static
-  - admin_dynamic
-subjects:
-  - subject
-  - user
-  - email
-`
-
-	resourceTypePolicyStatic      = "policy_static"
-	resourceTypePluginStatic      = "plugin_static"
-	resourceTypePluginDynamic     = "plugin_dynamic"
-	resourceTypeAdminPolicyStatic = "admin_policy_static"
-	resourceTypeAdminDynamic      = "admin_dynamic"
-	resourceIDAdminDynamicGlobal  = "global"
-
-	subjectTypeSubject = "subject"
-	subjectTypeUser    = "user"
-	subjectTypeEmail   = "email"
-)
-
 type providerBackedRoleState struct {
 	modelID            string
 	policyStaticRoles  map[string][]string
@@ -574,6 +548,19 @@ func (a *ProviderBackedAuthorizer) ensureModel(ctx context.Context) (string, err
 	if strings.TrimSpace(state.modelID) != "" {
 		return strings.TrimSpace(state.modelID), nil
 	}
+	active, err := a.provider.GetActiveModel(ctx)
+	if err != nil {
+		return "", fmt.Errorf("get active authorization model: %w", err)
+	}
+	if model := active.GetModel(); model != nil && strings.TrimSpace(model.GetId()) != "" {
+		modelID := strings.TrimSpace(model.GetId())
+		a.stateMu.Lock()
+		if a.state.modelID == "" {
+			a.state.modelID = modelID
+		}
+		a.stateMu.Unlock()
+		return modelID, nil
+	}
 	model, err := a.provider.WriteModel(ctx, &core.WriteModelRequest{Schema: providerAuthzSchema})
 	if err != nil {
 		return "", fmt.Errorf("write authorization model: %w", err)
@@ -947,17 +934,5 @@ func (a *ProviderBackedAuthorizer) currentDynamicSnapshot() *dynamicSnapshot {
 }
 
 func managedRelationship(rel *core.Relationship) bool {
-	if rel == nil || rel.GetResource() == nil {
-		return false
-	}
-	switch rel.GetResource().GetType() {
-	case resourceTypePolicyStatic,
-		resourceTypePluginStatic,
-		resourceTypePluginDynamic,
-		resourceTypeAdminPolicyStatic,
-		resourceTypeAdminDynamic:
-		return true
-	default:
-		return false
-	}
+	return IsManagedProviderRelationship(rel)
 }

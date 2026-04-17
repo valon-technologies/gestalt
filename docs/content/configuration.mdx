@@ -16,6 +16,7 @@ server:
     telemetry: ...          # optional selected telemetry provider
     audit: ...              # optional selected audit provider
     indexeddb: ...          # selected storage provider
+    authorization: ...      # optional selected authorization provider
   public:                   # public listener (default port 8080)
     host: ...
     port: ...
@@ -42,6 +43,8 @@ providers:
     <name>: ...             # each is a UIEntry
   indexeddb:                # named storage providers
     <name>: ...             # each is a ProviderEntry
+  authorization:            # named authorization providers
+    <name>: ...             # each is a ProviderEntry
   cache:                    # named cache providers
     <name>: ...             # each is a ProviderEntry
   s3:                       # named S3 object-store providers
@@ -59,6 +62,7 @@ Gestalt has seven core concepts you configure in YAML:
 - **[Plugin.](/providers/plugins)** A tool backed by a provider package. Plugins expose operations that agents and users invoke over HTTP, MCP, or the CLI. Plugins can come from published packages or local source.
 - **Connection.** How Gestalt authenticates to an upstream API on behalf of a user or service. Connections handle OAuth flows, API keys, and manual credentials.
 - **[IndexedDB.](/providers/indexeddb)** The persistent storage layer. Stores users, sessions, tokens, and credentials through a provider that implements the IndexedDB interface.
+- **Authorization provider.** Optional host-scoped policy storage and decision engine for shared human authorization state. The first-party `authorization/indexeddb` provider persists models and relationships in the selected host IndexedDB provider.
 - **[S3.](/providers/s3)** Plugin-bound object storage. The provider config chooses the backend, credentials, and endpoint; plugin code chooses buckets, keys, and versions at runtime.
 - **[Auth.](/providers/auth)** Platform login for the Gestalt server. Separate from connection auth, which is per-plugin and per-upstream.
 - **[Secrets.](/providers/secrets)** Resolves structured secret refs in the config at startup. Backed by environment variables, files, or cloud secret managers.
@@ -332,6 +336,36 @@ providers:
 ```
 
 SQLite works for single-instance deployments. For production, use a networked IndexedDB provider such as `indexeddb/relationaldb` with Postgres or MySQL, `indexeddb/dynamodb`, or `indexeddb/mongodb`. See [IndexedDB](/providers/indexeddb) for the full provider model.
+
+## Configuring authorization storage
+
+The `providers.authorization` block is optional. When configured, `server.providers.authorization` selects the host authorization provider Gestalt uses for human authorization relationships and model storage:
+
+```yaml
+server:
+  providers:
+    indexeddb: main
+    authorization: indexeddb
+
+providers:
+  indexeddb:
+    main:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/indexeddb/relationaldb
+        version: 0.0.1-alpha.1
+      config:
+        dsn: sqlite://./gestalt.db
+
+  authorization:
+    indexeddb:
+      source:
+        ref: github.com/valon-technologies/gestalt-providers/authorization/indexeddb
+        version: 0.0.1-alpha.1
+      config:
+        indexeddb: main
+```
+
+If `providers.authorization` is omitted, Gestalt keeps using its in-process authorization engine only. When it is present, Gestalt seeds the provider from configured static policy members and dynamic admin/plugin grants, then uses that provider for human authorization checks and the built-in admin authorization inspection APIs.
 
 ## Telemetry and audit
 

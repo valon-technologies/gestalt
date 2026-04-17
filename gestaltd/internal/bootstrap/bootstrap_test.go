@@ -3450,6 +3450,11 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		cfg.Server.Providers.Authorization = "indexeddb"
 
 		provider := newMemoryAuthorizationProvider("memory-authorization")
+		provider.models = []*core.AuthorizationModelRef{{
+			Id:      "model-existing",
+			Version: "v1",
+		}}
+		provider.activeModelID = "model-existing"
 		unmanagedKey := bootstrapRelationshipKey(
 			&core.SubjectRef{Type: "team", Id: "ops"},
 			"owner",
@@ -3471,6 +3476,12 @@ func TestBootstrapSecretResolution(t *testing.T) {
 		<-result.ProvidersReady
 		if err := result.Start(ctx); err != nil {
 			t.Fatalf("Start: %v", err)
+		}
+		if got := provider.activeModelID; got != "model-existing" {
+			t.Fatalf("active model id = %q, want %q", got, "model-existing")
+		}
+		if len(provider.models) != 1 {
+			t.Fatalf("expected existing model to be reused, got %d models", len(provider.models))
 		}
 		if _, ok := provider.rels[unmanagedKey]; !ok {
 			t.Fatal("expected unrelated provider relationship to be preserved")
