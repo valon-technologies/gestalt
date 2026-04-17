@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -10,6 +11,8 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/valon-technologies/gestalt/server/internal/config"
+	"github.com/valon-technologies/gestalt/server/internal/plugininvocation"
 	"github.com/valon-technologies/gestalt/server/internal/pluginsource"
 	"github.com/valon-technologies/gestalt/server/internal/providerpkg"
 	providermanifestv1 "github.com/valon-technologies/gestalt/server/sdk/providermanifest/v1"
@@ -127,6 +130,12 @@ func runProviderRelease(args []string) error {
 		return fmt.Errorf("invalid source in manifest: %w", err)
 	}
 	pluginName := src.PluginName()
+	if err := plugininvocation.ValidateEffectiveCatalog(context.Background(), pluginName, &config.ProviderEntry{
+		ResolvedManifestPath: manifestPath,
+		ResolvedManifest:     releaseManifest,
+	}); err != nil {
+		return err
+	}
 
 	if err := os.MkdirAll(*outputDir, 0755); err != nil {
 		return fmt.Errorf("create output dir: %w", err)
@@ -258,26 +267,29 @@ func expandReleasePlatformValue(value string) (string, error) {
 
 func buildPlatformArchive(manifestPath, pluginName, version, buildKind string, platform releasePlatform, outputDir string) (string, error) {
 	archiveName := platformArchiveName(pluginName, version, platform)
-	return createReleaseArchive(outputDir, archiveName, func(stagingDir string) error {
-		_, err := providerpkg.StagePreparedInstallDir(manifestPath, stagingDir, providerpkg.StagePreparedInstallOptions{
+	return createReleaseArchive(outputDir, archiveName, func(stagingDir string) (*providerpkg.StagedPreparedInstall, error) {
+		return providerpkg.StagePreparedInstallDir(manifestPath, stagingDir, providerpkg.StagePreparedInstallOptions{
 			VersionOverride: version,
 			BuildKind:       buildKind,
 			PluginName:      pluginName,
 			GOOS:            platform.GOOS,
 			GOARCH:          platform.GOARCH,
 		})
-		return err
 	})
 }
 
-func createReleaseArchive(outputDir, archiveName string, prepare func(stagingDir string) error) (string, error) {
+func createReleaseArchive(outputDir, archiveName string, prepare func(stagingDir string) (*providerpkg.StagedPreparedInstall, error)) (string, error) {
 	stagingDir, err := os.MkdirTemp("", "gestalt-release-*")
 	if err != nil {
 		return "", err
 	}
 	defer func() { _ = os.RemoveAll(stagingDir) }()
 
-	if err := prepare(stagingDir); err != nil {
+	staged, err := prepare(stagingDir)
+	if err != nil {
+		return "", err
+	}
+	if err := validateStagedReleaseCatalog(staged); err != nil {
 		return "", err
 	}
 	archivePath := filepath.Join(outputDir, archiveName)
@@ -312,11 +324,24 @@ func currentReleasePlatform() string {
 
 func buildSourceArchive(manifestPath, pluginName, version, outputDir string) (string, error) {
 	archiveName := fmt.Sprintf("gestalt-plugin-%s_v%s.tar.gz", pluginName, version)
-	return createReleaseArchive(outputDir, archiveName, func(stagingDir string) error {
-		_, err := providerpkg.StagePreparedInstallDir(manifestPath, stagingDir, providerpkg.StagePreparedInstallOptions{
+	return createReleaseArchive(outputDir, archiveName, func(stagingDir string) (*providerpkg.StagedPreparedInstall, error) {
+		return providerpkg.StagePreparedInstallDir(manifestPath, stagingDir, providerpkg.StagePreparedInstallOptions{
 			VersionOverride: version,
 		})
-		return err
+	})
+}
+
+func validateStagedReleaseCatalog(staged *providerpkg.StagedPreparedInstall) error {
+	if staged == nil || staged.Manifest == nil || staged.Manifest.Kind != providermanifestv1.KindPlugin {
+		return nil
+	}
+	src, err := pluginsource.Parse(staged.Manifest.Source)
+	if err != nil {
+		return fmt.Errorf("invalid source in staged manifest: %w", err)
+	}
+	return plugininvocation.ValidateEffectiveCatalog(context.Background(), src.PluginName(), &config.ProviderEntry{
+		ResolvedManifestPath: staged.ManifestPath,
+		ResolvedManifest:     staged.Manifest,
 	})
 }
 

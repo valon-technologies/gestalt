@@ -1726,6 +1726,55 @@ func TestRun_PluginReleaseRejectsOutputInsideWebUIAssetRoot(t *testing.T) {
 	}
 }
 
+func TestRun_PluginReleaseRejectsHybridExecutableDuplicateEffectiveOperation(t *testing.T) {
+	t.Parallel()
+
+	pluginDir := newSourceProviderReleaseFixture(t, t.TempDir())
+	manifestPath := filepath.Join(pluginDir, providerpkg.ManifestFile)
+	_, manifest, err := providerpkg.ReadSourceManifestFile(manifestPath)
+	if err != nil {
+		t.Fatalf("ReadSourceManifestFile(%s): %v", providerpkg.ManifestFile, err)
+	}
+	if manifest.Spec == nil {
+		manifest.Spec = &providermanifestv1.Spec{}
+	}
+	manifest.Spec.Surfaces = &providermanifestv1.ProviderSurfaces{
+		OpenAPI: &providermanifestv1.OpenAPISurface{Document: "openapi.yaml"},
+	}
+	manifest.Spec.AllowedOperations = map[string]*providermanifestv1.ManifestOperationOverride{
+		"external_op": {Alias: "generated_op"},
+	}
+	manifestData, err := providerpkg.EncodeSourceManifestFormat(manifest, providerpkg.ManifestFormatFromPath(manifestPath))
+	if err != nil {
+		t.Fatalf("EncodeSourceManifestFormat: %v", err)
+	}
+	if err := os.WriteFile(manifestPath, manifestData, 0o644); err != nil {
+		t.Fatalf("WriteFile manifest: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(pluginDir, "openapi.yaml"), []byte(`openapi: "3.1.0"
+info:
+  title: Hybrid Duplicate
+  version: "1.0.0"
+paths:
+  /external-op:
+    get:
+      operationId: external_op
+      responses:
+        "200":
+          description: OK
+`), 0o644); err != nil {
+		t.Fatalf("WriteFile openapi.yaml: %v", err)
+	}
+
+	out, err := runPluginReleaseCommandResult(pluginDir, "--version", "0.0.4-source.1", "--platform", runtime.GOOS+"/"+runtime.GOARCH, "--output", t.TempDir())
+	if err == nil {
+		t.Fatalf("expected provider release to fail, got output: %s", out)
+	}
+	if !strings.Contains(string(out), `duplicate operation \"generated_op\" across static and API catalogs`) {
+		t.Fatalf("expected duplicate effective operation error, got: %s", out)
+	}
+}
+
 func TestRun_PluginReleaseCompilesProviderWithoutSourceArtifacts(t *testing.T) {
 	t.Parallel()
 

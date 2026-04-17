@@ -836,6 +836,33 @@ server:
 	}
 }
 
+func TestInitAtPath_RejectsHybridExecutableDuplicateEffectiveOperation(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	targetManifestPath := writeLocalExecutableOpenAPIPlugin(t, dir, "target", []string{"ping"}, []string{"status"})
+
+	cfgPath := filepath.Join(dir, "config.yaml")
+	cfg := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "gestalt.db")) + fmt.Sprintf(`plugins:
+    target:
+      source:
+        path: %q
+      allowedOperations:
+        status:
+          alias: ping
+server:
+`, targetManifestPath) + requiredServerDatastoreYAML() + `  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+`
+	if err := os.WriteFile(cfgPath, []byte(cfg), 0o644); err != nil {
+		t.Fatalf("WriteFile config: %v", err)
+	}
+
+	_, err := NewLifecycle().InitAtPath(cfgPath)
+	if err == nil || !strings.Contains(err.Error(), `duplicate operation "ping" across static and API catalogs`) {
+		t.Fatalf("InitAtPath error = %v, want duplicate operation error", err)
+	}
+}
+
 func TestInitAtPath_AllowsManagedPluginInvokesOnFirstInit(t *testing.T) {
 	t.Parallel()
 
