@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -61,6 +63,12 @@ type fakeResolverCall struct {
 type fakeMultiResolver struct {
 	results map[string]fakeResolverResult
 	calls   []fakeResolverCall
+}
+
+type hostRewriteTransport struct {
+	base   http.RoundTripper
+	target *url.URL
+	hosts  map[string]struct{}
 }
 
 func (f *fakeResolver) Resolve(_ context.Context, src pluginsource.Source, version string) (*pluginsource.ResolvedPackage, error) {
@@ -390,6 +398,33 @@ func TestSourcePluginEndToEnd(t *testing.T) {
 	}
 }
 
+func (t *hostRewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	clone := req.Clone(req.Context())
+	if _, ok := t.hosts[strings.ToLower(req.URL.Hostname())]; ok {
+		clone.URL.Scheme = t.target.Scheme
+		clone.URL.Host = t.target.Host
+	}
+	return t.base.RoundTrip(clone)
+}
+
+func newGitHubRewriteClient(t *testing.T, target string) *http.Client {
+	t.Helper()
+	targetURL, err := url.Parse(target)
+	if err != nil {
+		t.Fatalf("parse rewrite target URL: %v", err)
+	}
+	return &http.Client{
+		Transport: &hostRewriteTransport{
+			base:   http.DefaultTransport,
+			target: targetURL,
+			hosts: map[string]struct{}{
+				"github.com":     {},
+				"api.github.com": {},
+			},
+		},
+	}
+}
+
 func TestSourcePluginNilResolver(t *testing.T) {
 	t.Parallel()
 
@@ -409,30 +444,604 @@ func TestSourcePluginNilResolver(t *testing.T) {
 	}
 }
 
-func TestSourcePluginMetadataURLNotYetSupported(t *testing.T) {
+func TestSourcePluginMetadataURLInitAndLockedLoad(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
+	packageSource := "github.com/acme/tools/alpha"
+	version := "1.2.3"
+	currentArchivePath := buildV2Archive(t, dir, packageSource, version, "metadata-url-plugin-binary")
+	currentArchiveData, err := os.ReadFile(currentArchivePath)
+	if err != nil {
+		t.Fatalf("read current archive: %v", err)
+	}
+	currentArchiveSHA := sha256.Sum256(currentArchiveData)
+
+	extraPlatform := struct {
+		goos   string
+		goarch string
+	}{
+		goos:   "linux",
+		goarch: "amd64",
+	}
+	for _, candidate := range []struct {
+		goos   string
+		goarch string
+	}{
+		{goos: "linux", goarch: "amd64"},
+		{goos: "linux", goarch: "arm64"},
+		{goos: "darwin", goarch: "amd64"},
+		{goos: "darwin", goarch: "arm64"},
+	} {
+		if candidate.goos != runtime.GOOS || candidate.goarch != runtime.GOARCH {
+			extraPlatform = candidate
+			break
+		}
+	}
+	extraPlatformKey := providerpkg.PlatformString(extraPlatform.goos, extraPlatform.goarch)
+	extraArchiveData := []byte("metadata-extra-platform-archive")
+	extraArchiveSHA := sha256.Sum256(extraArchiveData)
+
+	var metadataCount atomic.Int64
+	var currentArchiveCount atomic.Int64
+	var extraArchiveCount atomic.Int64
+	handlerErrs := make(chan error, 4)
+	nextHandlerErr := func() error {
+		t.Helper()
+		select {
+		case err := <-handlerErrs:
+			return err
+		default:
+			return nil
+		}
+	}
+	metadataPath := "/providers/alpha/provider-release.yaml"
+	currentArchivePathURL := "/providers/alpha/alpha-current.tar.gz"
+	extraArchivePathURL := "/providers/alpha/alpha-extra.tar.gz"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case metadataPath:
+			metadataCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+				handlerErrs <- fmt.Errorf("metadata authorization = %q, want %q", got, "Bearer test-token")
+				http.Error(w, "bad metadata authorization", http.StatusBadRequest)
+				return
+			}
+			metadata := providerReleaseMetadata{
+				Schema:        providerReleaseSchemaName,
+				SchemaVersion: providerReleaseSchemaVersion,
+				Package:       packageSource,
+				Kind:          providermanifestv1.KindPlugin,
+				Version:       version,
+				Runtime:       providerReleaseRuntimeExecutable,
+				Artifacts: map[string]providerReleaseArtifact{
+					providerpkg.CurrentPlatformString(): {
+						Path:   filepath.Base(currentArchivePathURL),
+						SHA256: hex.EncodeToString(currentArchiveSHA[:]),
+					},
+					extraPlatformKey: {
+						Path:   filepath.Base(extraArchivePathURL),
+						SHA256: hex.EncodeToString(extraArchiveSHA[:]),
+					},
+				},
+			}
+			data, err := yaml.Marshal(metadata)
+			if err != nil {
+				handlerErrs <- fmt.Errorf("marshal metadata: %v", err)
+				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write(data)
+		case currentArchivePathURL:
+			currentArchiveCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+				handlerErrs <- fmt.Errorf("current archive authorization = %q, want %q", got, "Bearer test-token")
+				http.Error(w, "bad archive authorization", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(currentArchiveData)
+		case extraArchivePathURL:
+			extraArchiveCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+				handlerErrs <- fmt.Errorf("extra archive authorization = %q, want %q", got, "Bearer test-token")
+				http.Error(w, "bad archive authorization", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(extraArchiveData)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
 	configPath := filepath.Join(dir, "gestalt.yaml")
-	if err := os.WriteFile(configPath, []byte(`
-apiVersion: gestaltd.config/v3
-plugins:
-  alpha:
-    source: https://example.com/providers/alpha/provider-release.yaml?download=1
-    auth:
-      token: test-token
-server:
-  artifactsDir: `+filepath.Join(dir, "prepared-artifacts")+`
-`), 0o644); err != nil {
+	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
+		"apiVersion: " + config.APIVersionV3,
+		"plugins:",
+		"  alpha:",
+		"    source: " + srv.URL + metadataPath + "?download=1",
+		"    auth:",
+		"      token: test-token",
+		"server:",
+		"  providers:",
+		"    indexeddb: sqlite",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
 
-	_, err := NewLifecycle(&fakeResolver{}).InitAtPath(configPath)
+	lc := NewLifecycle(nil)
+	lock, err := lc.InitAtPathWithPlatforms(configPath, "", []struct{ GOOS, GOARCH, LibC string }{
+		{GOOS: extraPlatform.goos, GOARCH: extraPlatform.goarch},
+	})
 	if err == nil {
-		t.Fatal("expected metadata URL source error")
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
 	}
-	if !strings.Contains(err.Error(), "metadata URL sources are not supported yet") {
-		t.Fatalf("unexpected error: %v", err)
+	if err != nil {
+		t.Fatalf("InitAtPathWithPlatforms: %v", err)
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+
+	entry, ok := lock.Providers["alpha"]
+	if !ok {
+		t.Fatal(`lock.Providers["alpha"] not found`)
+	}
+	if entry.Source != srv.URL+metadataPath+"?download=1" {
+		t.Fatalf("entry.Source = %q, want %q", entry.Source, srv.URL+metadataPath+"?download=1")
+	}
+	if entry.Package != packageSource {
+		t.Fatalf("entry.Package = %q, want %q", entry.Package, packageSource)
+	}
+	if entry.Kind != providermanifestv1.KindPlugin {
+		t.Fatalf("entry.Kind = %q, want %q", entry.Kind, providermanifestv1.KindPlugin)
+	}
+	if entry.Runtime != providerReleaseRuntimeExecutable {
+		t.Fatalf("entry.Runtime = %q, want %q", entry.Runtime, providerReleaseRuntimeExecutable)
+	}
+	if entry.Version != version {
+		t.Fatalf("entry.Version = %q, want %q", entry.Version, version)
+	}
+	if got := entry.Archives[providerpkg.CurrentPlatformString()].URL; got != srv.URL+currentArchivePathURL {
+		t.Fatalf("current archive URL = %q, want %q", got, srv.URL+currentArchivePathURL)
+	}
+	if got := entry.Archives[extraPlatformKey].SHA256; got != hex.EncodeToString(extraArchiveSHA[:]) {
+		t.Fatalf("extra platform SHA256 = %q, want %q", got, hex.EncodeToString(extraArchiveSHA[:]))
+	}
+	if got := metadataCount.Load(); got != 1 {
+		t.Fatalf("metadata request count = %d, want 1", got)
+	}
+	if got := currentArchiveCount.Load(); got != 1 {
+		t.Fatalf("current archive request count = %d, want 1", got)
+	}
+	if got := extraArchiveCount.Load(); got != 0 {
+		t.Fatalf("extra archive request count = %d, want 0", got)
+	}
+
+	lockData, err := os.ReadFile(filepath.Join(dir, InitLockfileName))
+	if err != nil {
+		t.Fatalf("ReadFile lockfile: %v", err)
+	}
+	var diskLock providerLockfile
+	if err := json.Unmarshal(lockData, &diskLock); err != nil {
+		t.Fatalf("Unmarshal lockfile: %v", err)
+	}
+	diskEntry, ok := diskLock.Providers.Plugin["alpha"]
+	if !ok {
+		t.Fatal(`disk lock providers.plugin["alpha"] not found`)
+	}
+	if diskEntry.Package != packageSource {
+		t.Fatalf("disk lock package = %q, want %q", diskEntry.Package, packageSource)
+	}
+	if diskEntry.Source != srv.URL+metadataPath+"?download=1" {
+		t.Fatalf("disk lock source = %q, want %q", diskEntry.Source, srv.URL+metadataPath+"?download=1")
+	}
+	if diskEntry.Runtime != providerReleaseRuntimeExecutable {
+		t.Fatalf("disk lock runtime = %q, want %q", diskEntry.Runtime, providerReleaseRuntimeExecutable)
+	}
+	if diskEntry.Kind != providermanifestv1.KindPlugin {
+		t.Fatalf("disk lock kind = %q, want %q", diskEntry.Kind, providermanifestv1.KindPlugin)
+	}
+	if got := diskEntry.Archives[extraPlatformKey].URL; got != srv.URL+extraArchivePathURL {
+		t.Fatalf("disk lock extra archive URL = %q, want %q", got, srv.URL+extraArchivePathURL)
+	}
+
+	pluginRoot := filepath.Join(artifactsDir, ".gestaltd", "providers", "alpha")
+	if err := os.RemoveAll(pluginRoot); err != nil {
+		t.Fatalf("RemoveAll plugin root: %v", err)
+	}
+
+	metadataBefore := metadataCount.Load()
+	currentBefore := currentArchiveCount.Load()
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	if err != nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+	if got := metadataCount.Load(); got != metadataBefore {
+		t.Fatalf("metadata request count during locked load = %d, want %d", got, metadataBefore)
+	}
+	if got := currentArchiveCount.Load() - currentBefore; got != 1 {
+		t.Fatalf("current archive request count during locked load = %d, want 1", got)
+	}
+	if got := extraArchiveCount.Load(); got != 0 {
+		t.Fatalf("extra archive request count after locked load = %d, want 0", got)
+	}
+	if cfg.Plugins["alpha"] == nil {
+		t.Fatal(`cfg.Plugins["alpha"] = nil`)
+	}
+	if cfg.Plugins["alpha"].ResolvedManifest == nil {
+		t.Fatal(`cfg.Plugins["alpha"].ResolvedManifest = nil`)
+	}
+	if cfg.Plugins["alpha"].ResolvedManifest.Source != packageSource {
+		t.Fatalf("ResolvedManifest.Source = %q, want %q", cfg.Plugins["alpha"].ResolvedManifest.Source, packageSource)
+	}
+	executablePath := resolveLockPath(artifactsDir, entry.Executable)
+	if cfg.Plugins["alpha"].Command != executablePath {
+		t.Fatalf("plugin command = %q, want %q", cfg.Plugins["alpha"].Command, executablePath)
+	}
+}
+
+func TestSourceWorkflowMetadataURLInitAndLockedLoad(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	packageSource := "github.com/acme/tools/workflow-runner"
+	version := "2.3.4"
+	archivePath := buildExecutableArchive(t, dir, "workflow-metadata-src", packageSource, version, providermanifestv1.KindWorkflow, "workflow-runner", "metadata-workflow-binary")
+	archiveData, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("read workflow archive: %v", err)
+	}
+	archiveSHA := sha256.Sum256(archiveData)
+
+	var metadataCount atomic.Int64
+	var archiveCount atomic.Int64
+	handlerErrs := make(chan error, 4)
+	nextHandlerErr := func() error {
+		t.Helper()
+		select {
+		case err := <-handlerErrs:
+			return err
+		default:
+			return nil
+		}
+	}
+
+	metadataPath := "/providers/workflow/provider-release.yaml"
+	archivePathURL := "/providers/workflow/workflow-runner.tar.gz"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case metadataPath:
+			metadataCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+				handlerErrs <- fmt.Errorf("metadata authorization = %q, want %q", got, "Bearer test-token")
+				http.Error(w, "bad metadata authorization", http.StatusBadRequest)
+				return
+			}
+			metadata := providerReleaseMetadata{
+				Schema:        providerReleaseSchemaName,
+				SchemaVersion: providerReleaseSchemaVersion,
+				Package:       packageSource,
+				Kind:          providermanifestv1.KindWorkflow,
+				Version:       version,
+				Runtime:       providerReleaseRuntimeExecutable,
+				Artifacts: map[string]providerReleaseArtifact{
+					providerpkg.CurrentPlatformString(): {
+						Path:   filepath.Base(archivePathURL),
+						SHA256: hex.EncodeToString(archiveSHA[:]),
+					},
+				},
+			}
+			data, err := yaml.Marshal(metadata)
+			if err != nil {
+				handlerErrs <- fmt.Errorf("marshal metadata: %v", err)
+				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write(data)
+		case archivePathURL:
+			archiveCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+				handlerErrs <- fmt.Errorf("archive authorization = %q, want %q", got, "Bearer test-token")
+				http.Error(w, "bad archive authorization", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(archiveData)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	configYAML := "apiVersion: " + config.APIVersionV3 + "\n" + requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
+		"  workflow:",
+		"    runner:",
+		"      source: " + srv.URL + metadataPath,
+		"      auth:",
+		"        token: test-token",
+		"server:",
+		"  providers:",
+		"    indexeddb: sqlite",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle(nil)
+	lock, err := lc.InitAtPath(configPath)
+	if err == nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+	}
+	if err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+
+	entry, ok := lock.Workflows["runner"]
+	if !ok {
+		t.Fatal(`lock.Workflows["runner"] not found`)
+	}
+	if entry.Package != packageSource {
+		t.Fatalf("entry.Package = %q, want %q", entry.Package, packageSource)
+	}
+	if entry.Kind != providermanifestv1.KindWorkflow {
+		t.Fatalf("entry.Kind = %q, want %q", entry.Kind, providermanifestv1.KindWorkflow)
+	}
+	if entry.Runtime != providerReleaseRuntimeExecutable {
+		t.Fatalf("entry.Runtime = %q, want %q", entry.Runtime, providerReleaseRuntimeExecutable)
+	}
+	if entry.Version != version {
+		t.Fatalf("entry.Version = %q, want %q", entry.Version, version)
+	}
+	if got := metadataCount.Load(); got != 1 {
+		t.Fatalf("metadata request count = %d, want 1", got)
+	}
+	if got := archiveCount.Load(); got != 1 {
+		t.Fatalf("archive request count = %d, want 1", got)
+	}
+
+	workflowRoot := filepath.Join(artifactsDir, filepath.FromSlash(PreparedWorkflowDir), "runner")
+	if err := os.RemoveAll(workflowRoot); err != nil {
+		t.Fatalf("RemoveAll workflow root: %v", err)
+	}
+
+	metadataBefore := metadataCount.Load()
+	archiveBefore := archiveCount.Load()
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	if err == nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+	}
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+	if got := metadataCount.Load(); got != metadataBefore {
+		t.Fatalf("metadata request count during locked load = %d, want %d", got, metadataBefore)
+	}
+	if got := archiveCount.Load() - archiveBefore; got != 1 {
+		t.Fatalf("archive request count during locked load = %d, want 1", got)
+	}
+	workflow := cfg.Providers.Workflow["runner"]
+	if workflow == nil || workflow.ResolvedManifest == nil {
+		t.Fatalf("workflow resolved manifest = %+v", workflow)
+	}
+	if got := workflow.ResolvedManifest.Kind; got != providermanifestv1.KindWorkflow {
+		t.Fatalf("workflow manifest kind = %q, want %q", got, providermanifestv1.KindWorkflow)
+	}
+	if got := workflow.Command; got != resolveLockPath(artifactsDir, entry.Executable) {
+		t.Fatalf("workflow command = %q, want %q", got, resolveLockPath(artifactsDir, entry.Executable))
+	}
+}
+
+func TestSourceWebUIMetadataURLInitAndLockedLoad(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	packageSource := "github.com/acme/tools/roadmap-ui"
+	version := "0.9.1"
+	archivePath := mustBuildManagedProviderPackage(t, dir, &providermanifestv1.Manifest{
+		Kind:        providermanifestv1.KindWebUI,
+		Source:      packageSource,
+		Version:     version,
+		DisplayName: "Roadmap UI",
+		Spec: &providermanifestv1.Spec{
+			AssetRoot: "dist",
+		},
+	}, map[string]string{
+		"dist/index.html": "<html>roadmap</html>",
+	}, false)
+	archiveData, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("read webui archive: %v", err)
+	}
+	archiveSHA := sha256.Sum256(archiveData)
+
+	var metadataCount atomic.Int64
+	var archiveCount atomic.Int64
+	handlerErrs := make(chan error, 4)
+	nextHandlerErr := func() error {
+		t.Helper()
+		select {
+		case err := <-handlerErrs:
+			return err
+		default:
+			return nil
+		}
+	}
+
+	metadataPath := "/providers/roadmap/provider-release.yaml"
+	archivePathURL := "/providers/roadmap/roadmap-ui.tar.gz"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case metadataPath:
+			metadataCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+				handlerErrs <- fmt.Errorf("metadata authorization = %q, want %q", got, "Bearer test-token")
+				http.Error(w, "bad metadata authorization", http.StatusBadRequest)
+				return
+			}
+			metadata := providerReleaseMetadata{
+				Schema:        providerReleaseSchemaName,
+				SchemaVersion: providerReleaseSchemaVersion,
+				Package:       packageSource,
+				Kind:          providermanifestv1.KindWebUI,
+				Version:       version,
+				Runtime:       providerReleaseRuntimeWebUI,
+				Artifacts: map[string]providerReleaseArtifact{
+					providerpkg.CurrentPlatformString(): {
+						Path:   filepath.Base(archivePathURL),
+						SHA256: hex.EncodeToString(archiveSHA[:]),
+					},
+				},
+			}
+			data, err := yaml.Marshal(metadata)
+			if err != nil {
+				handlerErrs <- fmt.Errorf("marshal metadata: %v", err)
+				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write(data)
+		case archivePathURL:
+			archiveCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+				handlerErrs <- fmt.Errorf("archive authorization = %q, want %q", got, "Bearer test-token")
+				http.Error(w, "bad archive authorization", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(archiveData)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	configYAML := "apiVersion: " + config.APIVersionV3 + "\n" + requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
+		"  ui:",
+		"    roadmap:",
+		"      source: " + srv.URL + metadataPath + "?download=1",
+		"      auth:",
+		"        token: test-token",
+		"      path: /roadmap",
+		"server:",
+		"  providers:",
+		"    indexeddb: sqlite",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle(nil)
+	lock, err := lc.InitAtPath(configPath)
+	if err == nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+	}
+	if err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+
+	entry, ok := lock.UIs["roadmap"]
+	if !ok {
+		t.Fatal(`lock.UIs["roadmap"] not found`)
+	}
+	if entry.Source != srv.URL+metadataPath+"?download=1" {
+		t.Fatalf("entry.Source = %q, want %q", entry.Source, srv.URL+metadataPath+"?download=1")
+	}
+	if entry.Package != packageSource {
+		t.Fatalf("entry.Package = %q, want %q", entry.Package, packageSource)
+	}
+	if entry.Kind != providermanifestv1.KindWebUI {
+		t.Fatalf("entry.Kind = %q, want %q", entry.Kind, providermanifestv1.KindWebUI)
+	}
+	if entry.Runtime != providerReleaseRuntimeWebUI {
+		t.Fatalf("entry.Runtime = %q, want %q", entry.Runtime, providerReleaseRuntimeWebUI)
+	}
+	if entry.Version != version {
+		t.Fatalf("entry.Version = %q, want %q", entry.Version, version)
+	}
+	if got := metadataCount.Load(); got != 1 {
+		t.Fatalf("metadata request count = %d, want 1", got)
+	}
+	if got := archiveCount.Load(); got != 1 {
+		t.Fatalf("archive request count = %d, want 1", got)
+	}
+
+	uiRoot := filepath.Join(artifactsDir, filepath.FromSlash(PreparedUIDir), "roadmap")
+	if err := os.RemoveAll(uiRoot); err != nil {
+		t.Fatalf("RemoveAll ui root: %v", err)
+	}
+
+	metadataBefore := metadataCount.Load()
+	archiveBefore := archiveCount.Load()
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	if err == nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+	}
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+	if got := metadataCount.Load(); got != metadataBefore {
+		t.Fatalf("metadata request count during locked load = %d, want %d", got, metadataBefore)
+	}
+	if got := archiveCount.Load() - archiveBefore; got != 1 {
+		t.Fatalf("archive request count during locked load = %d, want 1", got)
+	}
+	ui := cfg.Providers.UI["roadmap"]
+	if ui == nil || ui.ResolvedManifest == nil {
+		t.Fatalf("ui resolved manifest = %+v", ui)
+	}
+	if got := ui.ResolvedManifest.Kind; got != providermanifestv1.KindWebUI {
+		t.Fatalf("ui manifest kind = %q, want %q", got, providermanifestv1.KindWebUI)
+	}
+	if got := ui.ResolvedManifest.Source; got != packageSource {
+		t.Fatalf("ui manifest source = %q, want %q", got, packageSource)
+	}
+	if got := ui.ResolvedAssetRoot; got != resolveLockPath(artifactsDir, entry.AssetRoot) {
+		t.Fatalf("ui asset root = %q, want %q", got, resolveLockPath(artifactsDir, entry.AssetRoot))
 	}
 }
 
@@ -537,6 +1146,389 @@ func TestSourcePluginLoadForExecution(t *testing.T) {
 	}
 	if cfg.Plugins["gadget"].Command != install.executablePath {
 		t.Fatalf("plugin command = %q, want %q", cfg.Plugins["gadget"].Command, install.executablePath)
+	}
+}
+
+func TestSourcePluginInitRejectsRefSourceManifestMismatch(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	source := "github.com/acme/tools/gadget"
+	version := "2.0.0"
+
+	archivePath := buildV2Archive(t, dir, "github.com/acme/tools/other-gadget", version, "fake-gadget-binary")
+	archiveData, err := os.ReadFile(archivePath)
+	if err != nil {
+		t.Fatalf("read archive: %v", err)
+	}
+	archiveSum := sha256.Sum256(archiveData)
+	archiveSHA := hex.EncodeToString(archiveSum[:])
+
+	resolver := &fakeResolver{
+		archivePath: archivePath,
+		resolvedURL: "https://example.com/plugin.tar.gz",
+		sha256:      archiveSHA,
+	}
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	yaml := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
+		"plugins:",
+		"  gadget:",
+		"    source:",
+		"      ref: " + source,
+		"      version: " + version,
+		"server:",
+		"  providers:",
+		"    indexeddb: sqlite",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(configPath, []byte(yaml), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle(resolver)
+	_, err = lc.InitAtPath(configPath)
+	if err == nil {
+		t.Fatal("InitAtPath unexpectedly succeeded")
+	}
+	if !strings.Contains(err.Error(), `manifest source "github.com/acme/tools/other-gadget" does not match expected package "github.com/acme/tools/gadget"`) {
+		t.Fatalf("InitAtPath error = %v, want manifest source mismatch", err)
+	}
+}
+
+func TestSourcePluginMetadataURLUsesGitHubAssetTransport(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	const packageSource = testSource
+	const version = testVersion
+
+	currentArchivePath := buildV2Archive(t, dir, packageSource, version, "metadata-github-asset-plugin-binary")
+	currentArchiveData, err := os.ReadFile(currentArchivePath)
+	if err != nil {
+		t.Fatalf("read current archive: %v", err)
+	}
+	currentArchiveSHA := sha256.Sum256(currentArchiveData)
+
+	var metadataCount atomic.Int64
+	var archiveCount atomic.Int64
+	handlerErrs := make(chan error, 4)
+	nextHandlerErr := func() error {
+		t.Helper()
+		select {
+		case err := <-handlerErrs:
+			return err
+		default:
+			return nil
+		}
+	}
+
+	metadataPath := "/providers/alpha/provider-release.yaml"
+	githubArchiveURL := "https://api.github.com/repos/" + testOwner + "/" + testRepo + "/releases/assets/123"
+	githubArchivePath := "/repos/" + testOwner + "/" + testRepo + "/releases/assets/123"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case metadataPath:
+			metadataCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+				handlerErrs <- fmt.Errorf("metadata authorization = %q, want %q", got, "Bearer test-token")
+				http.Error(w, "bad metadata authorization", http.StatusBadRequest)
+				return
+			}
+			metadata := providerReleaseMetadata{
+				Schema:        providerReleaseSchemaName,
+				SchemaVersion: providerReleaseSchemaVersion,
+				Package:       packageSource,
+				Kind:          providermanifestv1.KindPlugin,
+				Version:       version,
+				Runtime:       providerReleaseRuntimeExecutable,
+				Artifacts: map[string]providerReleaseArtifact{
+					providerpkg.CurrentPlatformString(): {
+						Path:   githubArchiveURL,
+						SHA256: hex.EncodeToString(currentArchiveSHA[:]),
+					},
+				},
+			}
+			data, err := yaml.Marshal(metadata)
+			if err != nil {
+				handlerErrs <- fmt.Errorf("marshal metadata: %v", err)
+				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write(data)
+		case githubArchivePath:
+			archiveCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "token test-token" {
+				handlerErrs <- fmt.Errorf("archive authorization = %q, want %q", got, "token test-token")
+				http.Error(w, "bad archive authorization", http.StatusBadRequest)
+				return
+			}
+			if got := r.Header.Get("Accept"); got != "application/octet-stream" {
+				handlerErrs <- fmt.Errorf("archive accept = %q, want %q", got, "application/octet-stream")
+				http.Error(w, "bad archive accept", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(currentArchiveData)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
+		"apiVersion: " + config.APIVersionV3,
+		"plugins:",
+		"  alpha:",
+		"    source: " + srv.URL + metadataPath,
+		"    auth:",
+		"      token: test-token",
+		"server:",
+		"  providers:",
+		"    indexeddb: sqlite",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle(nil).WithHTTPClient(newGitHubRewriteClient(t, srv.URL))
+	lock, err := lc.InitAtPath(configPath)
+	if err == nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+	}
+	if err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+
+	entry, ok := lock.Providers["alpha"]
+	if !ok {
+		t.Fatal(`lock.Providers["alpha"] not found`)
+	}
+	if got := entry.Archives[providerpkg.CurrentPlatformString()].URL; got != githubArchiveURL {
+		t.Fatalf("current archive URL = %q, want %q", got, githubArchiveURL)
+	}
+	if got := metadataCount.Load(); got != 1 {
+		t.Fatalf("metadata request count = %d, want 1", got)
+	}
+	if got := archiveCount.Load(); got != 1 {
+		t.Fatalf("archive request count = %d, want 1", got)
+	}
+
+	pluginRoot := filepath.Join(artifactsDir, ".gestaltd", "providers", "alpha")
+	if err := os.RemoveAll(pluginRoot); err != nil {
+		t.Fatalf("RemoveAll plugin root: %v", err)
+	}
+
+	metadataBefore := metadataCount.Load()
+	archiveBefore := archiveCount.Load()
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, true)
+	if err == nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+	}
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=true): %v", err)
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+	if got := metadataCount.Load(); got != metadataBefore {
+		t.Fatalf("metadata request count during locked load = %d, want %d", got, metadataBefore)
+	}
+	if got := archiveCount.Load() - archiveBefore; got != 1 {
+		t.Fatalf("archive request count during locked load = %d, want 1", got)
+	}
+	if cfg.Plugins["alpha"] == nil || cfg.Plugins["alpha"].ResolvedManifest == nil {
+		t.Fatal("resolved metadata plugin manifest missing after locked load")
+	}
+}
+
+func TestSourcePluginMetadataURLUnlockedLoadRefreshesMutableMetadata(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	const packageSource = testSource
+	const initialVersion = "1.0.0"
+	const updatedVersion = "1.0.1"
+
+	initialArchivePath := buildV2Archive(t, dir, packageSource, initialVersion, "metadata-mutable-plugin-v1")
+	initialArchiveData, err := os.ReadFile(initialArchivePath)
+	if err != nil {
+		t.Fatalf("read initial archive: %v", err)
+	}
+	initialArchiveSHA := sha256.Sum256(initialArchiveData)
+
+	updatedArchivePath := buildV2Archive(t, dir, packageSource, updatedVersion, "metadata-mutable-plugin-v2")
+	updatedArchiveData, err := os.ReadFile(updatedArchivePath)
+	if err != nil {
+		t.Fatalf("read updated archive: %v", err)
+	}
+	updatedArchiveSHA := sha256.Sum256(updatedArchiveData)
+
+	var metadataCount atomic.Int64
+	var archiveCount atomic.Int64
+	var currentMu sync.RWMutex
+	currentVersion := initialVersion
+	currentArchiveData := initialArchiveData
+	currentArchiveSHA := initialArchiveSHA
+
+	handlerErrs := make(chan error, 4)
+	nextHandlerErr := func() error {
+		t.Helper()
+		select {
+		case err := <-handlerErrs:
+			return err
+		default:
+			return nil
+		}
+	}
+
+	metadataPath := "/providers/alpha/provider-release.yaml"
+	currentArchivePathURL := "/providers/alpha/alpha-current.tar.gz"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case metadataPath:
+			metadataCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+				handlerErrs <- fmt.Errorf("metadata authorization = %q, want %q", got, "Bearer test-token")
+				http.Error(w, "bad metadata authorization", http.StatusBadRequest)
+				return
+			}
+			currentMu.RLock()
+			version := currentVersion
+			archiveSHA := currentArchiveSHA
+			currentMu.RUnlock()
+			metadata := providerReleaseMetadata{
+				Schema:        providerReleaseSchemaName,
+				SchemaVersion: providerReleaseSchemaVersion,
+				Package:       packageSource,
+				Kind:          providermanifestv1.KindPlugin,
+				Version:       version,
+				Runtime:       providerReleaseRuntimeExecutable,
+				Artifacts: map[string]providerReleaseArtifact{
+					providerpkg.CurrentPlatformString(): {
+						Path:   filepath.Base(currentArchivePathURL),
+						SHA256: hex.EncodeToString(archiveSHA[:]),
+					},
+				},
+			}
+			data, err := yaml.Marshal(metadata)
+			if err != nil {
+				handlerErrs <- fmt.Errorf("marshal metadata: %v", err)
+				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write(data)
+		case currentArchivePathURL:
+			archiveCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "Bearer test-token" {
+				handlerErrs <- fmt.Errorf("archive authorization = %q, want %q", got, "Bearer test-token")
+				http.Error(w, "bad archive authorization", http.StatusBadRequest)
+				return
+			}
+			currentMu.RLock()
+			archiveData := currentArchiveData
+			currentMu.RUnlock()
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(archiveData)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	configYAML := requiredComponentConfigYAML(t, dir, filepath.Join(dir, "data.db")) + strings.Join([]string{
+		"apiVersion: " + config.APIVersionV3,
+		"plugins:",
+		"  alpha:",
+		"    source: " + srv.URL + metadataPath,
+		"    auth:",
+		"      token: test-token",
+		"server:",
+		"  providers:",
+		"    indexeddb: sqlite",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	lc := NewLifecycle(nil)
+	lock, err := lc.InitAtPath(configPath)
+	if err == nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+	}
+	if err != nil {
+		t.Fatalf("InitAtPath: %v", err)
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+	if got := lock.Providers["alpha"].Version; got != initialVersion {
+		t.Fatalf("initial lock version = %q, want %q", got, initialVersion)
+	}
+
+	currentMu.Lock()
+	currentVersion = updatedVersion
+	currentArchiveData = updatedArchiveData
+	currentArchiveSHA = updatedArchiveSHA
+	currentMu.Unlock()
+
+	metadataBefore := metadataCount.Load()
+	archiveBefore := archiveCount.Load()
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, false)
+	if err == nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+	}
+	if err != nil {
+		t.Fatalf("LoadForExecutionAtPath(locked=false): %v", err)
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+	if got := metadataCount.Load(); got <= metadataBefore {
+		t.Fatalf("metadata request count after unlocked load = %d, want > %d", got, metadataBefore)
+	}
+	if got := archiveCount.Load(); got <= archiveBefore {
+		t.Fatalf("archive request count after unlocked load = %d, want > %d", got, archiveBefore)
+	}
+	if cfg.Plugins["alpha"] == nil || cfg.Plugins["alpha"].ResolvedManifest == nil {
+		t.Fatal("resolved metadata plugin manifest missing after unlocked refresh")
+	}
+	if got := cfg.Plugins["alpha"].ResolvedManifest.Version; got != updatedVersion {
+		t.Fatalf("resolved manifest version after unlocked refresh = %q, want %q", got, updatedVersion)
+	}
+
+	updatedLock, err := ReadLockfile(filepath.Join(dir, InitLockfileName))
+	if err != nil {
+		t.Fatalf("ReadLockfile: %v", err)
+	}
+	if got := updatedLock.Providers["alpha"].Version; got != updatedVersion {
+		t.Fatalf("updated lock version = %q, want %q", got, updatedVersion)
 	}
 }
 
@@ -1614,6 +2606,186 @@ func TestLoadForExecutionAtPath_UnlockedBootstrapInitPreparesOnce(t *testing.T) 
 	}
 	if resolver.lastSrc.Token != "ghp_inline_auth_source_token" {
 		t.Fatalf("resolver token = %q, want %q", resolver.lastSrc.Token, "ghp_inline_auth_source_token")
+	}
+
+	authProvider := mustSelectedHostProviderEntry(t, cfg, config.HostProviderKindAuth)
+	if authProvider == nil || authProvider.Source.Auth == nil {
+		t.Fatalf("auth provider source auth = %#v", authProvider)
+	}
+	if authProvider.Source.Auth.Token != "ghp_inline_auth_source_token" {
+		t.Fatalf("resolved auth source token = %q, want %q", authProvider.Source.Auth.Token, "ghp_inline_auth_source_token")
+	}
+}
+
+func TestLoadForExecutionAtPath_UnlockedBootstrapMetadataInitPreparesOnce(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	bootstrapSource := "github.com/acme/tools/bootstrap-secrets"
+	bootstrapVersion := "0.1.0"
+	authSource := "github.com/acme/tools/auth-widget"
+	authVersion := "2.0.0"
+	bootstrapArtifact := filepath.ToSlash(filepath.Join("artifacts", runtime.GOOS, runtime.GOARCH, "bootstrap-secrets"))
+	bootstrapManifestPath := filepath.Join(dir, "bootstrap-secrets-manifest.yaml")
+	bootstrapManifest, err := providerpkg.EncodeSourceManifestFormat(&providermanifestv1.Manifest{
+		Kind:    providermanifestv1.KindSecrets,
+		Source:  bootstrapSource,
+		Version: bootstrapVersion,
+		Spec:    &providermanifestv1.Spec{},
+		Artifacts: []providermanifestv1.Artifact{
+			{OS: runtime.GOOS, Arch: runtime.GOARCH, Path: bootstrapArtifact},
+		},
+		Entrypoint: &providermanifestv1.Entrypoint{ArtifactPath: bootstrapArtifact},
+	}, providerpkg.ManifestFormatYAML)
+	if err != nil {
+		t.Fatalf("EncodeSourceManifestFormat bootstrap: %v", err)
+	}
+	if err := os.WriteFile(bootstrapManifestPath, bootstrapManifest, 0o644); err != nil {
+		t.Fatalf("write bootstrap manifest: %v", err)
+	}
+	bootstrapBinaryData, err := os.ReadFile(buildGoSourceSecretsBinary(t))
+	if err != nil {
+		t.Fatalf("read bootstrap binary: %v", err)
+	}
+	bootstrapBinaryPath := filepath.Join(dir, filepath.FromSlash(bootstrapArtifact))
+	if err := os.MkdirAll(filepath.Dir(bootstrapBinaryPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll bootstrap artifact: %v", err)
+	}
+	if err := os.WriteFile(bootstrapBinaryPath, bootstrapBinaryData, 0o755); err != nil {
+		t.Fatalf("write bootstrap artifact: %v", err)
+	}
+
+	authArchivePath := buildExecutableArchive(
+		t,
+		dir,
+		"auth-metadata-src",
+		authSource,
+		authVersion,
+		providermanifestv1.KindAuth,
+		"auth-plugin",
+		"fake-auth-binary",
+	)
+	authArchiveData, err := os.ReadFile(authArchivePath)
+	if err != nil {
+		t.Fatalf("read auth archive: %v", err)
+	}
+	authArchiveSum := sha256.Sum256(authArchiveData)
+
+	var metadataCount atomic.Int64
+	var archiveCount atomic.Int64
+	handlerErrs := make(chan error, 4)
+	nextHandlerErr := func() error {
+		t.Helper()
+		select {
+		case err := <-handlerErrs:
+			return err
+		default:
+			return nil
+		}
+	}
+
+	metadataPath := "/providers/auth/provider-release.yaml"
+	archivePathURL := "/providers/auth/auth-current.tar.gz"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case metadataPath:
+			metadataCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "Bearer ghp_inline_auth_source_token" {
+				handlerErrs <- fmt.Errorf("metadata authorization = %q, want %q", got, "Bearer ghp_inline_auth_source_token")
+				http.Error(w, "bad metadata authorization", http.StatusBadRequest)
+				return
+			}
+			metadata := providerReleaseMetadata{
+				Schema:        providerReleaseSchemaName,
+				SchemaVersion: providerReleaseSchemaVersion,
+				Package:       authSource,
+				Kind:          providermanifestv1.KindAuth,
+				Version:       authVersion,
+				Runtime:       providerReleaseRuntimeExecutable,
+				Artifacts: map[string]providerReleaseArtifact{
+					providerpkg.CurrentPlatformString(): {
+						Path:   filepath.Base(archivePathURL),
+						SHA256: hex.EncodeToString(authArchiveSum[:]),
+					},
+				},
+			}
+			data, err := yaml.Marshal(metadata)
+			if err != nil {
+				handlerErrs <- fmt.Errorf("marshal metadata: %v", err)
+				http.Error(w, "metadata marshal failed", http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/yaml")
+			_, _ = w.Write(data)
+		case archivePathURL:
+			archiveCount.Add(1)
+			if got := r.Header.Get("Authorization"); got != "Bearer ghp_inline_auth_source_token" {
+				handlerErrs <- fmt.Errorf("archive authorization = %q, want %q", got, "Bearer ghp_inline_auth_source_token")
+				http.Error(w, "bad archive authorization", http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write(authArchiveData)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	artifactsDir := filepath.Join(dir, "prepared-artifacts")
+	configYAML := strings.Join([]string{
+		"apiVersion: " + config.APIVersionV3,
+		requiredIndexedDBConfigYAML(t, dir, filepath.Join(dir, "data.db")),
+		"  secrets:",
+		"    bootstrap:",
+		"      source:",
+		"        path: ./bootstrap-secrets-manifest.yaml",
+		"  auth:",
+		"    auth:",
+		"      source: " + srv.URL + metadataPath + "?download=1",
+		"      auth:",
+		"        token:",
+		"          secret:",
+		"            provider: bootstrap",
+		"            name: source-token",
+		"      config:",
+		"        clientId: managed-auth-client",
+		"server:",
+		"  providers:",
+		"    indexeddb: sqlite",
+		"    secrets: bootstrap",
+		"    auth: auth",
+		"  artifactsDir: " + artifactsDir,
+		"  encryptionKey: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+	}, "\n") + "\n"
+
+	configPath := filepath.Join(dir, "gestalt.yaml")
+	if err := os.WriteFile(configPath, []byte(configYAML), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	factories := bootstrap.NewFactoryRegistry()
+	factories.Secrets["provider"] = secretsprovider.Factory
+
+	lc := NewLifecycle(nil).WithConfigSecretResolver(func(ctx context.Context, cfg *config.Config) error {
+		return bootstrap.ResolveConfigSecrets(ctx, cfg, factories)
+	})
+
+	cfg, _, err := lc.LoadForExecutionAtPath(configPath, false)
+	if err != nil {
+		if handlerErr := nextHandlerErr(); handlerErr != nil {
+			t.Fatal(handlerErr)
+		}
+		t.Fatalf("LoadForExecutionAtPath(locked=false): %v", err)
+	}
+	if handlerErr := nextHandlerErr(); handlerErr != nil {
+		t.Fatal(handlerErr)
+	}
+	if got := metadataCount.Load(); got != 1 {
+		t.Fatalf("metadata request count = %d, want 1", got)
+	}
+	if got := archiveCount.Load(); got != 1 {
+		t.Fatalf("archive request count = %d, want 1", got)
 	}
 
 	authProvider := mustSelectedHostProviderEntry(t, cfg, config.HostProviderKindAuth)

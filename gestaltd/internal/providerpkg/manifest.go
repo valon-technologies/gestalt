@@ -81,6 +81,7 @@ var validManifestKinds = map[string]bool{
 	providermanifestv1.KindIndexedDB: true,
 	providermanifestv1.KindCache:     true,
 	providermanifestv1.KindS3:        true,
+	providermanifestv1.KindWorkflow:  true,
 	providermanifestv1.KindSecrets:   true,
 	providermanifestv1.KindWebUI:     true,
 }
@@ -93,7 +94,7 @@ func ManifestKind(manifest *providermanifestv1.Manifest) (string, error) {
 		return "", fmt.Errorf("manifest kind is required")
 	}
 	if !validManifestKinds[manifest.Kind] {
-		return "", fmt.Errorf("manifest kind %q is not valid; expected one of plugin, auth, indexeddb, cache, s3, secrets, or webui", manifest.Kind)
+		return "", fmt.Errorf("manifest kind %q is not valid; expected one of plugin, auth, indexeddb, cache, s3, workflow, secrets, or webui", manifest.Kind)
 	}
 	return manifest.Kind, nil
 }
@@ -136,7 +137,7 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 	switch kind {
 	case providermanifestv1.KindPlugin:
 		needsArtifacts = needsArtifacts || manifest.Entrypoint != nil
-	case providermanifestv1.KindAuth, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindSecrets:
+	case providermanifestv1.KindAuth, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindSecrets:
 		needsArtifacts = needsArtifacts || !allowsSourceEntrypointOmission
 	}
 
@@ -198,7 +199,7 @@ func validateManifest(manifest *providermanifestv1.Manifest, sourceMode bool) er
 		default:
 			return fmt.Errorf("entrypoint is required")
 		}
-	case providermanifestv1.KindAuth, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindSecrets:
+	case providermanifestv1.KindAuth, providermanifestv1.KindIndexedDB, providermanifestv1.KindCache, providermanifestv1.KindS3, providermanifestv1.KindWorkflow, providermanifestv1.KindSecrets:
 		if manifest.Entrypoint == nil && !allowsSourceEntrypointOmission {
 			return fmt.Errorf("entrypoint is required")
 		}
