@@ -89,6 +89,14 @@ type EffectivePluginIndexedDB struct {
 	ObjectStores []string
 }
 
+type EffectiveWorkflowIndexedDB struct {
+	Enabled      bool
+	ProviderName string
+	Provider     *ProviderEntry
+	DB           string
+	ObjectStores []string
+}
+
 type EffectivePluginWorkflow struct {
 	Enabled      bool
 	ProviderName string
@@ -115,6 +123,10 @@ func (c *Config) EffectivePluginWorkflow(pluginName string, entry *ProviderEntry
 		}
 	}
 	return ResolveEffectivePluginWorkflow(pluginName, entry, selectedName, c.Providers.Workflow)
+}
+
+func (c *Config) EffectiveWorkflowIndexedDB(name string, entry *ProviderEntry) (EffectiveWorkflowIndexedDB, error) {
+	return ResolveEffectiveWorkflowIndexedDB(name, entry, c.Providers.IndexedDB)
 }
 
 func ResolveEffectivePluginIndexedDB(pluginName string, entry *ProviderEntry, selectedName string, entries map[string]*ProviderEntry) (EffectivePluginIndexedDB, error) {
@@ -157,6 +169,35 @@ func ResolveEffectivePluginIndexedDB(pluginName string, entry *ProviderEntry, se
 		Provider:     provider,
 		DB:           dbName,
 		ObjectStores: objectStores,
+	}, nil
+}
+
+func ResolveEffectiveWorkflowIndexedDB(name string, entry *ProviderEntry, entries map[string]*ProviderEntry) (EffectiveWorkflowIndexedDB, error) {
+	if entry == nil || entry.IndexedDB == nil {
+		return EffectiveWorkflowIndexedDB{}, nil
+	}
+
+	providerName := strings.TrimSpace(entry.IndexedDB.Provider)
+	if providerName == "" {
+		return EffectiveWorkflowIndexedDB{}, fmt.Errorf("config validation: providers.workflow.%s.indexeddb.provider is required", name)
+	}
+
+	provider, ok := entries[providerName]
+	if !ok || provider == nil {
+		return EffectiveWorkflowIndexedDB{}, fmt.Errorf("config validation: providers.workflow.%s.indexeddb.provider references unknown indexeddb %q", name, providerName)
+	}
+
+	dbName := strings.TrimSpace(entry.IndexedDB.DB)
+	if dbName == "" {
+		dbName = name
+	}
+
+	return EffectiveWorkflowIndexedDB{
+		Enabled:      true,
+		ProviderName: providerName,
+		Provider:     provider,
+		DB:           dbName,
+		ObjectStores: slices.Clone(entry.IndexedDB.ObjectStores),
 	}, nil
 }
 

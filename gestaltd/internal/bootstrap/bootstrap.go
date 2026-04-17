@@ -288,6 +288,24 @@ func closeWorkflows(providers ...coreworkflow.Provider) error {
 	return errors.Join(errs...)
 }
 
+type workflowProviderWithCleanup struct {
+	coreworkflow.Provider
+	cleanup func()
+}
+
+func (p *workflowProviderWithCleanup) Close() error {
+	var errs []error
+	if p != nil && p.Provider != nil {
+		if err := p.Provider.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if p != nil && p.cleanup != nil {
+		p.cleanup()
+	}
+	return errors.Join(errs...)
+}
+
 type preparedCore struct {
 	Auth            core.AuthProvider
 	Services        *coredata.Services
@@ -938,14 +956,40 @@ func buildWorkflow(ctx context.Context, name string, entry *config.ProviderEntry
 			return nil, fmt.Errorf("workflow provider: %w", err)
 		}
 	}
-	provider, err := factories.Workflow(ctx, name, node, []providerhost.HostService{{
+	hostServices := []providerhost.HostService{{
 		EnvVar: providerhost.DefaultWorkflowHostSocketEnv,
 		Register: func(srv *grpc.Server) {
 			proto.RegisterWorkflowHostServer(srv, providerhost.NewWorkflowHostServer(name, deps.WorkflowRuntime.Invoke, deps.WorkflowRuntime.Allow))
 		},
-	}}, deps)
+	}}
+	var cleanup func()
+	defer func() {
+		if cleanup != nil {
+			cleanup()
+		}
+	}()
+	effectiveIndexedDB, err := config.ResolveEffectiveWorkflowIndexedDB(name, entry, deps.IndexedDBDefs)
 	if err != nil {
 		return nil, fmt.Errorf("workflow provider: %w", err)
+	}
+	if effectiveIndexedDB.Enabled {
+		indexedDBHostServices, indexedDBCleanup, err := buildWorkflowIndexedDBHostServices(name, effectiveIndexedDB, deps)
+		if err != nil {
+			return nil, fmt.Errorf("workflow provider: %w", err)
+		}
+		hostServices = append(hostServices, indexedDBHostServices...)
+		cleanup = chainCleanup(cleanup, indexedDBCleanup)
+	}
+	provider, err := factories.Workflow(ctx, name, node, hostServices, deps)
+	if err != nil {
+		return nil, fmt.Errorf("workflow provider: %w", err)
+	}
+	if cleanup != nil {
+		provider = &workflowProviderWithCleanup{
+			Provider: provider,
+			cleanup:  cleanup,
+		}
+		cleanup = nil
 	}
 	return provider, nil
 }

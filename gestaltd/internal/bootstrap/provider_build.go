@@ -802,6 +802,29 @@ func buildPluginWorkflowHostServices(pluginName string, deps Deps) ([]providerho
 	}}, nil
 }
 
+func buildWorkflowIndexedDBHostServices(name string, effective config.EffectiveWorkflowIndexedDB, deps Deps) ([]providerhost.HostService, func(), error) {
+	if deps.IndexedDBFactory == nil || len(deps.IndexedDBDefs) == 0 {
+		return nil, nil, fmt.Errorf("indexeddb host services are not available")
+	}
+
+	ds, err := buildWorkflowScopedIndexedDB(name, effective, deps)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	hostServices := []providerhost.HostService{{
+		EnvVar: providerhost.DefaultIndexedDBSocketEnv,
+		Register: func(srv *grpc.Server) {
+			proto.RegisterIndexedDBServer(srv, providerhost.NewIndexedDBServer(ds, name, providerhost.IndexedDBServerOptions{
+				AllowedStores: effective.ObjectStores,
+			}))
+		},
+	}}
+	return hostServices, func() {
+		_ = closeIndexedDBs(ds)
+	}, nil
+}
+
 func buildPluginInvokerHostService(pluginName string, entry *config.ProviderEntry, deps Deps) (providerhost.HostService, *providerhost.RequestSnapshotStore) {
 	invoker := deps.PluginInvoker
 	if invoker == nil {
@@ -843,6 +866,26 @@ func buildPluginScopedIndexedDB(pluginName string, effective config.EffectivePlu
 	return metricutil.InstrumentIndexedDB(ds, effective.ProviderName), nil
 }
 
+func buildWorkflowScopedIndexedDB(name string, effective config.EffectiveWorkflowIndexedDB, deps Deps) (indexeddb.IndexedDB, error) {
+	def, ok := deps.IndexedDBDefs[effective.ProviderName]
+	if !ok || def == nil {
+		return nil, fmt.Errorf("indexeddb %q is not available", effective.ProviderName)
+	}
+	scopedDef, transportPrefix, err := newWorkflowScopedIndexedDBDef(def, effective.DB)
+	if err != nil {
+		return nil, fmt.Errorf("indexeddb %q: %w", effective.ProviderName, err)
+	}
+	ds, err := buildIndexedDB(scopedDef, &FactoryRegistry{IndexedDB: deps.IndexedDBFactory})
+	if err != nil {
+		return nil, fmt.Errorf("indexeddb %q: %w", effective.ProviderName, err)
+	}
+	ds = newPluginIndexedDBTransport(ds, pluginIndexedDBTransportOptions{
+		StorePrefix:   transportPrefix,
+		AllowedStores: effective.ObjectStores,
+	})
+	return metricutil.InstrumentIndexedDB(ds, name), nil
+}
+
 func newPluginScopedIndexedDBDef(entry *config.ProviderEntry, pluginName, db string) (*config.ProviderEntry, string, error) {
 	if entry == nil {
 		return nil, "", fmt.Errorf("datastore provider is required")
@@ -860,6 +903,46 @@ func newPluginScopedIndexedDBDef(entry *config.ProviderEntry, pluginName, db str
 		if legacyPrefix := legacyPluginIndexedDBPrefix(pluginName); legacyPrefix != "" {
 			cfg["legacy_table_prefix"] = legacyPrefix
 		}
+		delete(cfg, "legacy_prefix")
+		delete(cfg, "namespace")
+		if isSQLiteIndexedDBConfig(cfg) {
+			delete(cfg, "schema")
+			cfg["table_prefix"] = db + "_"
+			cfg["prefix"] = db + "_"
+		} else {
+			delete(cfg, "table_prefix")
+			delete(cfg, "prefix")
+			cfg["schema"] = db
+		}
+	} else {
+		transportPrefix = db + "_"
+	}
+
+	configNode, err := mapToYAMLNode(cfg)
+	if err != nil {
+		return nil, "", fmt.Errorf("encode config: %w", err)
+	}
+
+	cloned := *entry
+	cloned.Config = configNode
+	return &cloned, transportPrefix, nil
+}
+
+func newWorkflowScopedIndexedDBDef(entry *config.ProviderEntry, db string) (*config.ProviderEntry, string, error) {
+	if entry == nil {
+		return nil, "", fmt.Errorf("datastore provider is required")
+	}
+	cfg, err := config.NodeToMap(entry.Config)
+	if err != nil {
+		return nil, "", fmt.Errorf("decode config: %w", err)
+	}
+	if cfg == nil {
+		cfg = make(map[string]any)
+	}
+
+	transportPrefix := ""
+	if pluginIndexedDBUsesScopedProviderConfig(entry, cfg) {
+		delete(cfg, "legacy_table_prefix")
 		delete(cfg, "legacy_prefix")
 		delete(cfg, "namespace")
 		if isSQLiteIndexedDBConfig(cfg) {

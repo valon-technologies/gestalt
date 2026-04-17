@@ -2352,6 +2352,82 @@ server:
 			t.Fatalf("unexpected error: %v", err)
 		}
 	})
+
+	t.Run("workflow provider accepts indexeddb bindings", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  workflow:
+    basic:
+      source:
+        path: ./providers/workflow/indexeddb
+      indexeddb:
+        provider: workflow_state
+        db: workflow
+        objectStores:
+          - workflow_schedules
+          - workflow_runs
+  indexeddb:
+    workflow_state:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: workflow_state
+  encryptionKey: server-key
+`)
+
+		cfg, err := Load(path)
+		if err != nil {
+			t.Fatalf("Load: %v", err)
+		}
+		want := &PluginIndexedDBConfig{
+			Provider:     "workflow_state",
+			DB:           "workflow",
+			ObjectStores: []string{"workflow_schedules", "workflow_runs"},
+		}
+		if got := cfg.Providers.Workflow["basic"].IndexedDB; !reflect.DeepEqual(got, want) {
+			t.Fatalf("Providers.Workflow[basic].IndexedDB = %#v, want %#v", got, want)
+		}
+		effective, err := cfg.EffectiveWorkflowIndexedDB("basic", cfg.Providers.Workflow["basic"])
+		if err != nil {
+			t.Fatalf("EffectiveWorkflowIndexedDB: %v", err)
+		}
+		if effective.ProviderName != "workflow_state" || effective.DB != "workflow" {
+			t.Fatalf("effective = %#v", effective)
+		}
+	})
+
+	t.Run("rejects unknown indexeddb bindings on workflow providers", func(t *testing.T) {
+		t.Parallel()
+
+		path := mustWriteConfigFile(t, `
+providers:
+  workflow:
+    basic:
+      source:
+        path: ./providers/workflow/indexeddb
+      indexeddb:
+        provider: missing
+  indexeddb:
+    workflow_state:
+      source:
+        path: ./providers/datastore/sqlite
+server:
+  providers:
+    indexeddb: workflow_state
+  encryptionKey: server-key
+`)
+
+		_, err := Load(path)
+		if err == nil {
+			t.Fatal("Load: expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), `providers.workflow.basic.indexeddb.provider references unknown indexeddb "missing"`) {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
 }
 
 func TestLoadRejectsUnknownProviderFields(t *testing.T) {
