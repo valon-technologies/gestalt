@@ -37,6 +37,9 @@ type workflowProviderFunc struct {
 	pauseSchedule      func(context.Context, coreworkflow.PauseScheduleRequest) (*coreworkflow.Schedule, error)
 	resumeSchedule     func(context.Context, coreworkflow.ResumeScheduleRequest) (*coreworkflow.Schedule, error)
 	upsertEventTrigger func(context.Context, coreworkflow.UpsertEventTriggerRequest) (*coreworkflow.EventTrigger, error)
+	deleteEventTrigger func(context.Context, coreworkflow.DeleteEventTriggerRequest) error
+	pauseEventTrigger  func(context.Context, coreworkflow.PauseEventTriggerRequest) (*coreworkflow.EventTrigger, error)
+	resumeEventTrigger func(context.Context, coreworkflow.ResumeEventTriggerRequest) (*coreworkflow.EventTrigger, error)
 }
 
 func (p workflowProviderFunc) StartRun(ctx context.Context, req coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
@@ -112,15 +115,24 @@ func (p workflowProviderFunc) ListEventTriggers(context.Context, coreworkflow.Li
 	return nil, nil
 }
 
-func (p workflowProviderFunc) DeleteEventTrigger(context.Context, coreworkflow.DeleteEventTriggerRequest) error {
+func (p workflowProviderFunc) DeleteEventTrigger(ctx context.Context, req coreworkflow.DeleteEventTriggerRequest) error {
+	if p.deleteEventTrigger != nil {
+		return p.deleteEventTrigger(ctx, req)
+	}
 	return nil
 }
 
-func (p workflowProviderFunc) PauseEventTrigger(context.Context, coreworkflow.PauseEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+func (p workflowProviderFunc) PauseEventTrigger(ctx context.Context, req coreworkflow.PauseEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+	if p.pauseEventTrigger != nil {
+		return p.pauseEventTrigger(ctx, req)
+	}
 	return &coreworkflow.EventTrigger{}, nil
 }
 
-func (p workflowProviderFunc) ResumeEventTrigger(context.Context, coreworkflow.ResumeEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+func (p workflowProviderFunc) ResumeEventTrigger(ctx context.Context, req coreworkflow.ResumeEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+	if p.resumeEventTrigger != nil {
+		return p.resumeEventTrigger(ctx, req)
+	}
 	return &coreworkflow.EventTrigger{}, nil
 }
 
@@ -264,13 +276,20 @@ func mustStruct(t *testing.T, value map[string]any) *structpb.Struct {
 	return got
 }
 
+func staticWorkflowResolver(provider coreworkflow.Provider, allowed, managedSchedules, managedEventTriggers map[string]struct{}, err error) workflowProviderResolver {
+	return func() (coreworkflow.Provider, map[string]struct{}, WorkflowManagedIDs, error) {
+		return provider, allowed, WorkflowManagedIDs{
+			Schedules:     managedSchedules,
+			EventTriggers: managedEventTriggers,
+		}, err
+	}
+}
+
 func TestWorkflowServerStartRunScopesTargetToPlugin(t *testing.T) {
 	t.Parallel()
 
 	provider := &recordingWorkflowProvider{}
-	srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, map[string]struct{}, error) {
-		return provider, map[string]struct{}{"refresh": {}}, nil, nil
-	})
+	srv := NewWorkflowServer("roadmap", staticWorkflowResolver(provider, map[string]struct{}{"refresh": {}}, nil, nil, nil))
 	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
 		SubjectID:   principal.UserSubjectID("user-123"),
 		Kind:        principal.KindUser,
@@ -321,9 +340,7 @@ func TestWorkflowServerRejectsDisabledScheduleOperations(t *testing.T) {
 	t.Parallel()
 
 	provider := &recordingWorkflowProvider{}
-	srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, map[string]struct{}, error) {
-		return provider, map[string]struct{}{"refresh": {}}, nil, nil
-	})
+	srv := NewWorkflowServer("roadmap", staticWorkflowResolver(provider, map[string]struct{}{"refresh": {}}, nil, nil, nil))
 
 	_, err := srv.UpsertSchedule(context.Background(), &proto.UpsertWorkflowScheduleRequest{
 		ScheduleId: "sched-1",
@@ -392,26 +409,24 @@ func TestWorkflowServerRejectsConfigManagedScheduleMutations(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, map[string]struct{}, error) {
-				return workflowProviderFunc{
-					upsertSchedule: func(context.Context, coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error) {
-						t.Fatal("provider UpsertSchedule should not be called for config-managed ids")
-						return nil, nil
-					},
-					deleteSchedule: func(context.Context, coreworkflow.DeleteScheduleRequest) error {
-						t.Fatal("provider DeleteSchedule should not be called for config-managed ids")
-						return nil
-					},
-					pauseSchedule: func(context.Context, coreworkflow.PauseScheduleRequest) (*coreworkflow.Schedule, error) {
-						t.Fatal("provider PauseSchedule should not be called for config-managed ids")
-						return nil, nil
-					},
-					resumeSchedule: func(context.Context, coreworkflow.ResumeScheduleRequest) (*coreworkflow.Schedule, error) {
-						t.Fatal("provider ResumeSchedule should not be called for config-managed ids")
-						return nil, nil
-					},
-				}, map[string]struct{}{"refresh": {}}, map[string]struct{}{managedID: {}}, nil
-			})
+			srv := NewWorkflowServer("roadmap", staticWorkflowResolver(workflowProviderFunc{
+				upsertSchedule: func(context.Context, coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error) {
+					t.Fatal("provider UpsertSchedule should not be called for config-managed ids")
+					return nil, nil
+				},
+				deleteSchedule: func(context.Context, coreworkflow.DeleteScheduleRequest) error {
+					t.Fatal("provider DeleteSchedule should not be called for config-managed ids")
+					return nil
+				},
+				pauseSchedule: func(context.Context, coreworkflow.PauseScheduleRequest) (*coreworkflow.Schedule, error) {
+					t.Fatal("provider PauseSchedule should not be called for config-managed ids")
+					return nil, nil
+				},
+				resumeSchedule: func(context.Context, coreworkflow.ResumeScheduleRequest) (*coreworkflow.Schedule, error) {
+					t.Fatal("provider ResumeSchedule should not be called for config-managed ids")
+					return nil, nil
+				},
+			}, map[string]struct{}{"refresh": {}}, map[string]struct{}{managedID: {}}, nil, nil))
 
 			err := tc.run(t, srv)
 			if status.Code(err) != codes.PermissionDenied {
@@ -425,9 +440,7 @@ func TestWorkflowServerAllowsUserScheduleIDsThatOnlyShareCfgPrefix(t *testing.T)
 	t.Parallel()
 
 	provider := &recordingWorkflowProvider{}
-	srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, map[string]struct{}, error) {
-		return provider, map[string]struct{}{"refresh": {}}, nil, nil
-	})
+	srv := NewWorkflowServer("roadmap", staticWorkflowResolver(provider, map[string]struct{}{"refresh": {}}, nil, nil, nil))
 
 	_, err := srv.UpsertSchedule(context.Background(), &proto.UpsertWorkflowScheduleRequest{
 		ScheduleId: "cfg_backup",
@@ -446,13 +459,111 @@ func TestWorkflowServerAllowsUserScheduleIDsThatOnlyShareCfgPrefix(t *testing.T)
 	}
 }
 
+func TestWorkflowServerRejectsConfigManagedEventTriggerMutations(t *testing.T) {
+	t.Parallel()
+
+	managedID := coreworkflow.ConfigManagedSchedulePrefix + strings.Repeat("b", 64)
+	for _, tc := range []struct {
+		name string
+		run  func(t *testing.T, srv *WorkflowServer) error
+	}{
+		{
+			name: "upsert",
+			run: func(t *testing.T, srv *WorkflowServer) error {
+				_, err := srv.UpsertEventTrigger(context.Background(), &proto.UpsertWorkflowEventTriggerRequest{
+					TriggerId: managedID,
+					Match: &proto.WorkflowEventMatch{
+						Type: "roadmap.task.updated",
+					},
+					Target: &proto.WorkflowTarget{Operation: "refresh"},
+				})
+				return err
+			},
+		},
+		{
+			name: "delete",
+			run: func(t *testing.T, srv *WorkflowServer) error {
+				_, err := srv.DeleteEventTrigger(context.Background(), &proto.DeleteWorkflowEventTriggerRequest{
+					TriggerId: managedID,
+				})
+				return err
+			},
+		},
+		{
+			name: "pause",
+			run: func(t *testing.T, srv *WorkflowServer) error {
+				_, err := srv.PauseEventTrigger(context.Background(), &proto.PauseWorkflowEventTriggerRequest{
+					TriggerId: managedID,
+				})
+				return err
+			},
+		},
+		{
+			name: "resume",
+			run: func(t *testing.T, srv *WorkflowServer) error {
+				_, err := srv.ResumeEventTrigger(context.Background(), &proto.ResumeWorkflowEventTriggerRequest{
+					TriggerId: managedID,
+				})
+				return err
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			srv := NewWorkflowServer("roadmap", staticWorkflowResolver(workflowProviderFunc{
+				upsertEventTrigger: func(context.Context, coreworkflow.UpsertEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+					t.Fatal("provider UpsertEventTrigger should not be called for config-managed ids")
+					return nil, nil
+				},
+				deleteEventTrigger: func(context.Context, coreworkflow.DeleteEventTriggerRequest) error {
+					t.Fatal("provider DeleteEventTrigger should not be called for config-managed ids")
+					return nil
+				},
+				pauseEventTrigger: func(context.Context, coreworkflow.PauseEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+					t.Fatal("provider PauseEventTrigger should not be called for config-managed ids")
+					return nil, nil
+				},
+				resumeEventTrigger: func(context.Context, coreworkflow.ResumeEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+					t.Fatal("provider ResumeEventTrigger should not be called for config-managed ids")
+					return nil, nil
+				},
+			}, map[string]struct{}{"refresh": {}}, nil, map[string]struct{}{managedID: {}}, nil))
+
+			err := tc.run(t, srv)
+			if status.Code(err) != codes.PermissionDenied {
+				t.Fatalf("status code = %v, want %v", status.Code(err), codes.PermissionDenied)
+			}
+		})
+	}
+}
+
+func TestWorkflowServerAllowsUserEventTriggerIDsThatOnlyShareCfgPrefix(t *testing.T) {
+	t.Parallel()
+
+	provider := &recordingWorkflowProvider{}
+	srv := NewWorkflowServer("roadmap", staticWorkflowResolver(provider, map[string]struct{}{"refresh": {}}, nil, nil, nil))
+
+	_, err := srv.UpsertEventTrigger(context.Background(), &proto.UpsertWorkflowEventTriggerRequest{
+		TriggerId: "cfg_backup",
+		Match: &proto.WorkflowEventMatch{
+			Type: "roadmap.task.updated",
+		},
+		Target: &proto.WorkflowTarget{Operation: "refresh"},
+	})
+	if err != nil {
+		t.Fatalf("UpsertEventTrigger: %v", err)
+	}
+	if provider.upsertEventTriggerReq.TriggerID != "cfg_backup" {
+		t.Fatalf("trigger id = %q, want cfg_backup", provider.upsertEventTriggerReq.TriggerID)
+	}
+}
+
 func TestWorkflowServerPrefersWorkflowCreatorForWorkflowMutations(t *testing.T) {
 	t.Parallel()
 
 	provider := &recordingWorkflowProvider{}
-	srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, map[string]struct{}, error) {
-		return provider, map[string]struct{}{"refresh": {}}, nil, nil
-	})
+	srv := NewWorkflowServer("roadmap", staticWorkflowResolver(provider, map[string]struct{}{"refresh": {}}, nil, nil, nil))
 	ctx := principal.WithPrincipal(context.Background(), &principal.Principal{
 		SubjectID:   principal.WorkloadSubjectID("planner"),
 		Kind:        principal.KindWorkload,
@@ -527,20 +638,18 @@ func TestWorkflowServerRejectsCrossPluginProviderResponses(t *testing.T) {
 	t.Run("run", func(t *testing.T) {
 		t.Parallel()
 
-		srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, map[string]struct{}, error) {
-			return workflowProviderFunc{
-				startRun: func(context.Context, coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
-					return &coreworkflow.Run{
-						ID:     "run-1",
-						Status: coreworkflow.RunStatusPending,
-						Target: coreworkflow.Target{
-							PluginName: "analytics",
-							Operation:  "refresh",
-						},
-					}, nil
-				},
-			}, map[string]struct{}{"refresh": {}}, nil, nil
-		})
+		srv := NewWorkflowServer("roadmap", staticWorkflowResolver(workflowProviderFunc{
+			startRun: func(context.Context, coreworkflow.StartRunRequest) (*coreworkflow.Run, error) {
+				return &coreworkflow.Run{
+					ID:     "run-1",
+					Status: coreworkflow.RunStatusPending,
+					Target: coreworkflow.Target{
+						PluginName: "analytics",
+						Operation:  "refresh",
+					},
+				}, nil
+			},
+		}, map[string]struct{}{"refresh": {}}, nil, nil, nil))
 
 		_, err := srv.StartRun(context.Background(), &proto.StartWorkflowRunRequest{
 			Target: &proto.WorkflowTarget{Operation: "refresh"},
@@ -553,21 +662,19 @@ func TestWorkflowServerRejectsCrossPluginProviderResponses(t *testing.T) {
 	t.Run("schedule", func(t *testing.T) {
 		t.Parallel()
 
-		srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, map[string]struct{}, error) {
-			return workflowProviderFunc{
-				upsertSchedule: func(context.Context, coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error) {
-					return &coreworkflow.Schedule{
-						ID:       "sched-1",
-						Cron:     "*/5 * * * *",
-						Timezone: "UTC",
-						Target: coreworkflow.Target{
-							PluginName: "analytics",
-							Operation:  "refresh",
-						},
-					}, nil
-				},
-			}, map[string]struct{}{"refresh": {}}, nil, nil
-		})
+		srv := NewWorkflowServer("roadmap", staticWorkflowResolver(workflowProviderFunc{
+			upsertSchedule: func(context.Context, coreworkflow.UpsertScheduleRequest) (*coreworkflow.Schedule, error) {
+				return &coreworkflow.Schedule{
+					ID:       "sched-1",
+					Cron:     "*/5 * * * *",
+					Timezone: "UTC",
+					Target: coreworkflow.Target{
+						PluginName: "analytics",
+						Operation:  "refresh",
+					},
+				}, nil
+			},
+		}, map[string]struct{}{"refresh": {}}, nil, nil, nil))
 
 		_, err := srv.UpsertSchedule(context.Background(), &proto.UpsertWorkflowScheduleRequest{
 			ScheduleId: "sched-1",
@@ -585,22 +692,20 @@ func TestWorkflowServerRejectsCrossPluginProviderResponses(t *testing.T) {
 	t.Run("event trigger", func(t *testing.T) {
 		t.Parallel()
 
-		srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, map[string]struct{}, error) {
-			return workflowProviderFunc{
-				upsertEventTrigger: func(context.Context, coreworkflow.UpsertEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
-					return &coreworkflow.EventTrigger{
-						ID: "trigger-1",
-						Match: coreworkflow.EventMatch{
-							Type: "roadmap.task.updated",
-						},
-						Target: coreworkflow.Target{
-							PluginName: "analytics",
-							Operation:  "refresh",
-						},
-					}, nil
-				},
-			}, map[string]struct{}{"refresh": {}}, nil, nil
-		})
+		srv := NewWorkflowServer("roadmap", staticWorkflowResolver(workflowProviderFunc{
+			upsertEventTrigger: func(context.Context, coreworkflow.UpsertEventTriggerRequest) (*coreworkflow.EventTrigger, error) {
+				return &coreworkflow.EventTrigger{
+					ID: "trigger-1",
+					Match: coreworkflow.EventMatch{
+						Type: "roadmap.task.updated",
+					},
+					Target: coreworkflow.Target{
+						PluginName: "analytics",
+						Operation:  "refresh",
+					},
+				}, nil
+			},
+		}, map[string]struct{}{"refresh": {}}, nil, nil, nil))
 
 		_, err := srv.UpsertEventTrigger(context.Background(), &proto.UpsertWorkflowEventTriggerRequest{
 			TriggerId: "trigger-1",
@@ -621,9 +726,7 @@ func TestWorkflowServerListCallsScopeToPlugin(t *testing.T) {
 	t.Parallel()
 
 	provider := &recordingWorkflowProvider{}
-	srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, map[string]struct{}, error) {
-		return provider, map[string]struct{}{"refresh": {}}, nil, nil
-	})
+	srv := NewWorkflowServer("roadmap", staticWorkflowResolver(provider, map[string]struct{}{"refresh": {}}, nil, nil, nil))
 
 	runs, err := srv.ListRuns(context.Background(), &proto.ListWorkflowRunsRequest{})
 	if err != nil {
@@ -810,9 +913,7 @@ func TestWorkflowServerPublishEventScopesPlugin(t *testing.T) {
 	t.Parallel()
 
 	provider := &recordingWorkflowProvider{}
-	srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, map[string]struct{}, error) {
-		return provider, map[string]struct{}{"refresh": {}}, nil, nil
-	})
+	srv := NewWorkflowServer("roadmap", staticWorkflowResolver(provider, map[string]struct{}{"refresh": {}}, nil, nil, nil))
 
 	_, err := srv.PublishEvent(context.Background(), &proto.PublishWorkflowEventRequest{
 		Event: &proto.WorkflowEvent{
@@ -834,13 +935,11 @@ func TestWorkflowServerPublishEventScopesPlugin(t *testing.T) {
 func TestWorkflowServerPreservesProviderStatusCodes(t *testing.T) {
 	t.Parallel()
 
-	srv := NewWorkflowServer("roadmap", func() (coreworkflow.Provider, map[string]struct{}, map[string]struct{}, error) {
-		return workflowProviderFunc{
-			getRun: func(context.Context, coreworkflow.GetRunRequest) (*coreworkflow.Run, error) {
-				return nil, status.Error(codes.NotFound, "missing run")
-			},
-		}, map[string]struct{}{"refresh": {}}, nil, nil
-	})
+	srv := NewWorkflowServer("roadmap", staticWorkflowResolver(workflowProviderFunc{
+		getRun: func(context.Context, coreworkflow.GetRunRequest) (*coreworkflow.Run, error) {
+			return nil, status.Error(codes.NotFound, "missing run")
+		},
+	}, map[string]struct{}{"refresh": {}}, nil, nil, nil))
 
 	_, err := srv.GetRun(context.Background(), &proto.GetWorkflowRunRequest{RunId: "run-123"})
 	if status.Code(err) != codes.NotFound {

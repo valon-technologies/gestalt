@@ -23,22 +23,24 @@ type workflowBinding struct {
 }
 
 type workflowRuntime struct {
-	mu             sync.RWMutex
-	bindings       map[string]workflowBinding
-	managedIDs     map[string]map[string]struct{}
-	workloadTokens map[string]string
-	providers      map[string]coreworkflow.Provider
-	startupWaits   *startupWaitTracker
-	invoker        invocation.Invoker
+	mu                     sync.RWMutex
+	bindings               map[string]workflowBinding
+	managedScheduleIDs     map[string]map[string]struct{}
+	managedEventTriggerIDs map[string]map[string]struct{}
+	workloadTokens         map[string]string
+	providers              map[string]coreworkflow.Provider
+	startupWaits           *startupWaitTracker
+	invoker                invocation.Invoker
 }
 
 func newWorkflowRuntime(cfg *config.Config) (*workflowRuntime, error) {
 	runtime := &workflowRuntime{
-		bindings:       make(map[string]workflowBinding, len(cfg.Plugins)),
-		managedIDs:     make(map[string]map[string]struct{}, len(cfg.Plugins)),
-		workloadTokens: make(map[string]string, len(cfg.Plugins)),
-		providers:      map[string]coreworkflow.Provider{},
-		startupWaits:   newStartupWaitTracker(),
+		bindings:               make(map[string]workflowBinding, len(cfg.Plugins)),
+		managedScheduleIDs:     make(map[string]map[string]struct{}, len(cfg.Plugins)),
+		managedEventTriggerIDs: make(map[string]map[string]struct{}, len(cfg.Plugins)),
+		workloadTokens:         make(map[string]string, len(cfg.Plugins)),
+		providers:              map[string]coreworkflow.Provider{},
+		startupWaits:           newStartupWaitTracker(),
 	}
 	for pluginName, entry := range cfg.Plugins {
 		effective, err := cfg.EffectivePluginWorkflow(pluginName, entry)
@@ -56,11 +58,16 @@ func newWorkflowRuntime(cfg *config.Config) (*workflowRuntime, error) {
 			providerName: effective.ProviderName,
 			operations:   allowed,
 		}
-		managed := make(map[string]struct{}, len(effective.Schedules))
+		managedSchedules := make(map[string]struct{}, len(effective.Schedules))
 		for scheduleKey := range effective.Schedules {
-			managed[workflowConfigScheduleID(pluginName, scheduleKey)] = struct{}{}
+			managedSchedules[workflowConfigScheduleID(pluginName, scheduleKey)] = struct{}{}
 		}
-		runtime.managedIDs[pluginName] = managed
+		runtime.managedScheduleIDs[pluginName] = managedSchedules
+		managedEventTriggers := make(map[string]struct{}, len(effective.EventTriggers))
+		for triggerKey := range effective.EventTriggers {
+			managedEventTriggers[workflowConfigEventTriggerID(pluginName, triggerKey)] = struct{}{}
+		}
+		runtime.managedEventTriggerIDs[pluginName] = managedEventTriggers
 		runtime.workloadTokens[pluginName], err = workflowWorkloadToken()
 		if err != nil {
 			return nil, err
@@ -193,7 +200,16 @@ func (r *workflowRuntime) ManagedScheduleIDs(pluginName string) map[string]struc
 	}
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return maps.Clone(r.managedIDs[pluginName])
+	return maps.Clone(r.managedScheduleIDs[pluginName])
+}
+
+func (r *workflowRuntime) ManagedEventTriggerIDs(pluginName string) map[string]struct{} {
+	if r == nil {
+		return nil
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return maps.Clone(r.managedEventTriggerIDs[pluginName])
 }
 
 func (r *workflowRuntime) Allow(providerName, pluginName, operation string) bool {

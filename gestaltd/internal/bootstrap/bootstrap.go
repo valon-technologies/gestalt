@@ -667,6 +667,9 @@ func Bootstrap(ctx context.Context, cfg *config.Config, factories *FactoryRegist
 	if err := reconcileWorkflowConfigSchedules(ctx, cfg, prepared.Deps.WorkflowRuntime, prepared.Services.DB); err != nil {
 		return nil, err
 	}
+	if err := reconcileWorkflowConfigEventTriggers(ctx, cfg, prepared.Deps.WorkflowRuntime, prepared.Services.DB); err != nil {
+		return nil, err
+	}
 
 	closeProviders = false
 	closeCore = false

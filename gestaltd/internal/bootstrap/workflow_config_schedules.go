@@ -80,7 +80,7 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 			PluginName: prev.PluginName,
 			ScheduleID: prev.ScheduleID,
 		}); err != nil {
-			if isWorkflowScheduleNotFound(err) {
+			if isWorkflowObjectNotFound(err) {
 				if err := store.Delete(ctx, rowID); err != nil {
 					return fmt.Errorf("bootstrap: delete workflow schedule state %q: %w", rowID, err)
 				}
@@ -125,7 +125,7 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 						!isAdoptableWorkflowSchedule(existing, pluginName, schedule, desiredEntry.state.ScheduleID) {
 						return fmt.Errorf("bootstrap: workflow schedule %q for plugin %q conflicts with existing unmanaged schedule id %q", scheduleKey, pluginName, desiredEntry.state.ScheduleID)
 					}
-				case isWorkflowScheduleNotFound(err):
+				case isWorkflowObjectNotFound(err):
 				default:
 					return fmt.Errorf("bootstrap: get workflow schedule %q for plugin %q: %w", desiredEntry.state.ScheduleID, pluginName, err)
 				}
@@ -148,7 +148,7 @@ func reconcileWorkflowConfigSchedules(ctx context.Context, cfg *config.Config, r
 				if err := oldProvider.DeleteSchedule(ctx, coreworkflow.DeleteScheduleRequest{
 					PluginName: prev.PluginName,
 					ScheduleID: prev.ScheduleID,
-				}); err != nil && !isWorkflowScheduleNotFound(err) {
+				}); err != nil && !isWorkflowObjectNotFound(err) {
 					return fmt.Errorf("bootstrap: delete workflow schedule %q for plugin %q: %w", prev.ScheduleID, prev.PluginName, err)
 				}
 			}
@@ -244,7 +244,7 @@ func workflowConfigScheduleRecordTime(rec indexeddb.Record, key string) time.Tim
 	return value
 }
 
-func isWorkflowScheduleNotFound(err error) bool {
+func isWorkflowObjectNotFound(err error) bool {
 	return errors.Is(err, core.ErrNotFound) || status.Code(err) == codes.NotFound
 }
 
@@ -258,7 +258,7 @@ func isAdoptableWorkflowSchedule(existing *coreworkflow.Schedule, pluginName str
 		existing.Paused == schedule.Paused &&
 		existing.Target.PluginName == pluginName &&
 		existing.Target.Operation == schedule.Operation &&
-		workflowScheduleInputsEqual(existing.Target.Input, schedule.Input)
+		workflowTargetInputsEqual(existing.Target.Input, schedule.Input)
 }
 
 func isWorkflowConfigOwnedSchedule(existing *coreworkflow.Schedule, pluginName, scheduleID string) bool {
@@ -273,7 +273,7 @@ func isWorkflowConfigOwnedSchedule(existing *coreworkflow.Schedule, pluginName, 
 		existing.CreatedBy.AuthSource == actor.AuthSource
 }
 
-func workflowScheduleInputsEqual(left, right map[string]any) bool {
+func workflowTargetInputsEqual(left, right map[string]any) bool {
 	leftJSON, leftErr := json.Marshal(left)
 	rightJSON, rightErr := json.Marshal(right)
 	return leftErr == nil && rightErr == nil && bytes.Equal(leftJSON, rightJSON)

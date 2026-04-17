@@ -98,11 +98,12 @@ type EffectiveWorkflowIndexedDB struct {
 }
 
 type EffectivePluginWorkflow struct {
-	Enabled      bool
-	ProviderName string
-	Provider     *ProviderEntry
-	Operations   []string
-	Schedules    map[string]PluginWorkflowSchedule
+	Enabled       bool
+	ProviderName  string
+	Provider      *ProviderEntry
+	Operations    []string
+	Schedules     map[string]PluginWorkflowSchedule
+	EventTriggers map[string]PluginWorkflowEventTrigger
 }
 
 func (c *Config) EffectivePluginIndexedDB(pluginName string, entry *ProviderEntry) (EffectivePluginIndexedDB, error) {
@@ -220,11 +221,12 @@ func ResolveEffectivePluginWorkflow(pluginName string, entry *ProviderEntry, sel
 	}
 
 	return EffectivePluginWorkflow{
-		Enabled:      true,
-		ProviderName: providerName,
-		Provider:     provider,
-		Operations:   slices.Clone(entry.Workflow.Operations),
-		Schedules:    clonePluginWorkflowSchedules(entry.Workflow.Schedules),
+		Enabled:       true,
+		ProviderName:  providerName,
+		Provider:      provider,
+		Operations:    slices.Clone(entry.Workflow.Operations),
+		Schedules:     clonePluginWorkflowSchedules(entry.Workflow.Schedules),
+		EventTriggers: clonePluginWorkflowEventTriggers(entry.Workflow.EventTriggers),
 	}, nil
 }
 
@@ -236,6 +238,18 @@ func clonePluginWorkflowSchedules(src map[string]PluginWorkflowSchedule) map[str
 	for key, schedule := range src {
 		schedule.Input = maps.Clone(schedule.Input)
 		dst[key] = schedule
+	}
+	return dst
+}
+
+func clonePluginWorkflowEventTriggers(src map[string]PluginWorkflowEventTrigger) map[string]PluginWorkflowEventTrigger {
+	if len(src) == 0 {
+		return nil
+	}
+	dst := make(map[string]PluginWorkflowEventTrigger, len(src))
+	for key, trigger := range src {
+		trigger.Input = maps.Clone(trigger.Input)
+		dst[key] = trigger
 	}
 	return dst
 }
